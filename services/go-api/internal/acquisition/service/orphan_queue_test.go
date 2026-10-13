@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/adapters/catalogbridge"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
@@ -29,7 +30,7 @@ func TestExecuteReplace_FailedOldAudioDeleteIsQueuedForTheSweep(t *testing.T) {
 	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
 	store.deleteErr = errors.New("object storage unavailable")
 	queue := &recordingOrphanQueue{}
-	svc := NewAcquireTrackAudioService(repo, NewSourceRegistry(newAudioSource{}), store, WithAcquireOrphanQueue(queue))
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store, WithAcquireOrphanQueue(queue))
 
 	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
@@ -45,7 +46,7 @@ func TestExecuteReplace_QueueFailureDoesNotFailTheJob(t *testing.T) {
 	repo, store, userId, trackId, _ := seedReadyTrack(t)
 	store.deleteErr = errors.New("object storage unavailable")
 	queue := &recordingOrphanQueue{err: errors.New("queue down")}
-	svc := NewAcquireTrackAudioService(repo, NewSourceRegistry(newAudioSource{}), store, WithAcquireOrphanQueue(queue))
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store, WithAcquireOrphanQueue(queue))
 
 	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
 		t.Fatalf("ExecuteReplace: %v, want success despite the queue failing", err)
@@ -55,7 +56,7 @@ func TestExecuteReplace_QueueFailureDoesNotFailTheJob(t *testing.T) {
 func TestExecuteReplace_SuccessfulOldAudioDeleteQueuesNothing(t *testing.T) {
 	repo, store, userId, trackId, _ := seedReadyTrack(t)
 	queue := &recordingOrphanQueue{}
-	svc := NewAcquireTrackAudioService(repo, NewSourceRegistry(newAudioSource{}), store, WithAcquireOrphanQueue(queue))
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store, WithAcquireOrphanQueue(queue))
 
 	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
@@ -70,7 +71,7 @@ func TestExecuteReplace_FailedRollbackDeleteIsQueuedForTheSweep(t *testing.T) {
 	repo.updateErr = errors.New("transient db error")
 	store.deleteErr = errors.New("object storage unavailable")
 	queue := &recordingOrphanQueue{}
-	svc := NewAcquireTrackAudioService(repo, NewSourceRegistry(newAudioSource{}), store, WithAcquireOrphanQueue(queue))
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store, WithAcquireOrphanQueue(queue))
 
 	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err == nil {
 		t.Fatal("expected the replace to fail")

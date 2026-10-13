@@ -133,6 +133,7 @@ linters:
         layer-service-inward:
           files:
             - "**/internal/*/service/**"
+            - "!$test"
           deny:
             - pkg: altune/go-api/internal/catalog/adapters
               desc: service is driven by ports, it never imports adapters

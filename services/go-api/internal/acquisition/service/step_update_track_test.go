@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/adapters/catalogbridge"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
@@ -22,7 +23,7 @@ func TestUpdateTrackStep_Execute(t *testing.T) {
 	repo := newFakeTrackRepository()
 	repo.tracks[track.ID.String()+":"+userId.String()] = track
 
-	step := NewUpdateTrackStep(repo, userId, track.ID)
+	step := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID)
 	ac := &AcquisitionContext{
 		AudioRef: "user/artist/album/song.mp3",
 	}
@@ -50,7 +51,7 @@ func TestUpdateTrackStep_Execute_InfiniteProbeLeavesDurationUnknown(t *testing.T
 	}
 	repo := newFakeTrackRepository()
 	repo.tracks[track.ID.String()+":"+userId.String()] = track
-	step := NewUpdateTrackStep(repo, userId, track.ID)
+	step := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID)
 	ac := &AcquisitionContext{AudioRef: "user/artist/album/song.mp3", ProbedDuration: math.Inf(1)}
 
 	if _, execErr := step.Execute(context.Background(), ac, afterStore{}); execErr != nil {
@@ -74,7 +75,7 @@ func TestUpdateTrackStep_Execute_TrackNotFound(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	trackId := domain.NewTrackId()
 
-	step := NewUpdateTrackStep(repo, userId, trackId)
+	step := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, trackId)
 	ac := &AcquisitionContext{
 		AudioRef: "some/audio/ref.mp3",
 	}
@@ -96,7 +97,7 @@ func TestUpdateTrackStep_Execute_EmptyAudioRef(t *testing.T) {
 	repo := newFakeTrackRepository()
 	repo.tracks[track.ID.String()+":"+userId.String()] = track
 
-	step := NewUpdateTrackStep(repo, userId, track.ID)
+	step := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID)
 	ac := &AcquisitionContext{
 		AudioRef: "",
 	}
@@ -120,7 +121,7 @@ func TestUpdateTrackStep_Rollback_RevertsToPending(t *testing.T) {
 	repo := newFakeTrackRepository()
 	repo.tracks[track.ID.String()+":"+userId.String()] = track
 
-	step := NewUpdateTrackStep(repo, userId, track.ID)
+	step := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID)
 	ac := &AcquisitionContext{}
 
 	if err := step.Rollback(context.Background(), ac); err != nil {
@@ -143,7 +144,7 @@ func TestUpdateTrackStep_DuplicateCompletionUnderSameRefSucceeds(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	repo := newFakeTrackRepository()
 	track := seedTrackInRepo(t, repo, userId, markReadyWith("u/a/b/song.opus"))
-	step := NewUpdateTrackStep(repo, userId, track.ID)
+	step := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID)
 
 	if _, err := step.Execute(context.Background(), &AcquisitionContext{AudioRef: "u/a/b/song.opus"}, afterStore{}); err != nil {
 		t.Fatalf("duplicate completion under the same ref: %v", err)
@@ -158,7 +159,7 @@ func TestUpdateTrackStep_DuplicateCompletionUnderOtherRefIsRefused(t *testing.T)
 	userId := shared.NewUserId(uuid.New())
 	repo := newFakeTrackRepository()
 	track := seedTrackInRepo(t, repo, userId, markReadyWith("u/a/b/first.opus"))
-	step := NewUpdateTrackStep(repo, userId, track.ID)
+	step := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID)
 
 	_, err := step.Execute(context.Background(), &AcquisitionContext{AudioRef: "u/a/b/second.opus"}, afterStore{})
 
@@ -175,7 +176,7 @@ func TestUpdateTrackStep_ReplaceSwapsReadyAudio(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	repo := newFakeTrackRepository()
 	track := seedTrackInRepo(t, repo, userId, markReadyWith("u/a/b/old.opus"))
-	step := NewUpdateTrackStep(repo, userId, track.ID)
+	step := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID)
 	ac := &AcquisitionContext{AudioRef: "u/a/b/new.opus", Replace: ReplaceState{PreservedRef: "u/a/b/old.opus"}}
 
 	if _, err := step.Execute(context.Background(), ac, afterStore{}); err != nil {
@@ -197,7 +198,7 @@ func TestUpdateTrackStep_Execute_StoresVerdictScoreAndSourceTitleAsEvidence(t *t
 		Verdict:  AudioVerdict{Kind: VerdictHard, Score: 0.93},
 	}
 
-	if _, err := NewUpdateTrackStep(repo, userId, track.ID).Execute(context.Background(), ac, afterStore{}); err != nil {
+	if _, err := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID).Execute(context.Background(), ac, afterStore{}); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 
@@ -219,7 +220,7 @@ func TestUpdateTrackStep_Execute_NoStoredCandidateLeavesEvidenceEmpty(t *testing
 	repo := newFakeTrackRepository()
 	track := seedTrackInRepo(t, repo, userId, nil)
 
-	if _, err := NewUpdateTrackStep(repo, userId, track.ID).Execute(context.Background(), &AcquisitionContext{AudioRef: "a.mp3"}, afterStore{}); err != nil {
+	if _, err := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID).Execute(context.Background(), &AcquisitionContext{AudioRef: "a.mp3"}, afterStore{}); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	if updated := storedTrack(t, repo, track); updated.AcquisitionEvidence() != nil {
@@ -232,7 +233,7 @@ func TestUpdateTrackStep_RollbackOnPendingTrackIsANoOp(t *testing.T) {
 	repo := newFakeTrackRepository()
 	track := seedTrackInRepo(t, repo, userId, nil)
 	marker := track.AcquisitionStartedAt
-	step := NewUpdateTrackStep(repo, userId, track.ID)
+	step := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID)
 
 	if err := step.Rollback(context.Background(), &AcquisitionContext{}); err != nil {
 		t.Fatalf("rollback of a pending track: %v", err)

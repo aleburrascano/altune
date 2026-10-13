@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/adapters/catalogbridge"
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
@@ -109,7 +110,7 @@ func TestExecute_SourceThatCouldNotAnswer_IsNotReportedAsNoMatch(t *testing.T) {
 			repo := newFakeTrackRepository()
 			repo.tracks[track.ID.String()+":"+userId.String()] = track
 			finder := &fakeAudioSearcher{searchErr: tt.searchErr}
-			svc := NewAcquireTrackAudioService(repo, fakeRegistry(finder), newFakeAudioStore())
+			svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(finder), newFakeAudioStore())
 
 			_ = svc.Execute(context.Background(), userId, track.ID)
 

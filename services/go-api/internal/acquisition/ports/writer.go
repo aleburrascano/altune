@@ -1,7 +1,6 @@
 package ports
 
 import (
-	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"context"
 )
@@ -13,11 +12,5 @@ type AudioWriter interface {
 }
 
 type AudioRefLookup interface {
-	AudioRefInUse(ctx context.Context, audioRef string, excludeTrackID domain.TrackId) (bool, error)
-}
-
-type TrackRepository interface {
-	AudioRefLookup
-	GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error)
-	Update(ctx context.Context, track *domain.Track, expectedVersion int) error
+	AudioRefInUse(ctx context.Context, audioRef string, excludeTrackID shared.TrackId) (bool, error)
 }

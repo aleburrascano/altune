@@ -2,27 +2,26 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/catalog/domain"
 	"context"
 	"fmt"
 	"log/slog"
 )
 
 type reacquirePolicy struct {
-	trackRepo  ports.TrackRepository
+	ledger     ports.TrackLedger
 	audioStore ports.AudioWriter
 }
 
-func (p reacquirePolicy) reconcile(ctx context.Context, track *domain.Track) (proceed bool, err error) {
-	switch track.AcquisitionStatus {
-	case domain.AcquisitionReady:
+func (p reacquirePolicy) reconcile(ctx context.Context, track *ports.TrackSnapshot) (proceed bool, err error) {
+	switch track.Status {
+	case ports.TrackReady:
 		if proceed, err := p.reconcileReady(ctx, track); !proceed {
 			return false, err
 		}
 		if err := p.revertToPending(ctx, track); err != nil {
 			return false, err
 		}
-	case domain.AcquisitionFailed:
+	case ports.TrackFailed:
 		slog.InfoContext(ctx, "acquire_retrying_failed", "track_id", track.ID.String())
 		if err := p.revertToPending(ctx, track); err != nil {
 			return false, err
@@ -31,7 +30,7 @@ func (p reacquirePolicy) reconcile(ctx context.Context, track *domain.Track) (pr
 	return true, nil
 }
 
-func (p reacquirePolicy) reconcileReady(ctx context.Context, track *domain.Track) (proceed bool, err error) {
+func (p reacquirePolicy) reconcileReady(ctx context.Context, track *ports.TrackSnapshot) (proceed bool, err error) {
 	if track.AudioRef == nil {
 		return true, nil
 	}
@@ -51,12 +50,8 @@ func (p reacquirePolicy) reconcileReady(ctx context.Context, track *domain.Track
 	}
 }
 
-func (p reacquirePolicy) revertToPending(ctx context.Context, track *domain.Track) error {
-	expectedVersion := track.Version
-	if err := track.RevertToPending(); err != nil {
-		return fmt.Errorf("revert to pending: %w", err)
-	}
-	if err := p.trackRepo.Update(ctx, track, expectedVersion); err != nil {
+func (p reacquirePolicy) revertToPending(ctx context.Context, track *ports.TrackSnapshot) error {
+	if err := p.ledger.RevertAt(ctx, *track); err != nil {
 		return fmt.Errorf("revert to pending: %w", err)
 	}
 	return nil

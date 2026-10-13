@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/adapters/catalogbridge"
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	acqports "altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
@@ -190,7 +191,7 @@ func TestBackgroundScheduler_Schedule(t *testing.T) {
 	searcher := &fakeAudioSearcher{}
 	store := newFakeAudioStore()
 
-	svc := NewAcquireTrackAudioService(repo, fakeRegistry(searcher), store)
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), store)
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 2)
@@ -215,7 +216,7 @@ func TestBackgroundScheduler_ScheduleMultiple_RespectsSemaphore(t *testing.T) {
 	searcher := &fakeAudioSearcher{}
 	store := newFakeAudioStore()
 
-	svc := NewAcquireTrackAudioService(repo, fakeRegistry(searcher), store)
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), store)
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 1)
@@ -252,7 +253,7 @@ func TestBackgroundScheduler_ShutdownMidSearch_ReleasesTheJobForAnotherWorker(t 
 	key := track.ID.String() + ":" + userId.String()
 	repo.tracks[key] = track
 	source := newBlockingSource()
-	svc := NewAcquireTrackAudioService(liveCtxTrackRepository{repo}, NewSourceRegistry(source), newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(liveCtxTrackRepository{repo}), NewSourceRegistry(source), newFakeAudioStore())
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithDrainBudget(10*time.Millisecond))
 	if err := scheduler.Schedule(context.Background(), userId, track.ID, ""); err != nil {
@@ -282,7 +283,7 @@ func TestBackgroundScheduler_ShutdownMidSearch_ReleasesTheReplaceJobForAnotherWo
 	key := track.ID.String() + ":" + userId.String()
 	repo.tracks[key] = track
 	source := newBlockingSource()
-	svc := NewAcquireTrackAudioService(liveCtxTrackRepository{repo}, NewSourceRegistry(source), newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(liveCtxTrackRepository{repo}), NewSourceRegistry(source), newFakeAudioStore())
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithDrainBudget(10*time.Millisecond))
 	if err := scheduler.ScheduleReplace(context.Background(), userId, track.ID); err != nil {
@@ -316,7 +317,7 @@ func TestBackgroundScheduler_FailedJob_KeepsTheCookiePathOutOfTheReasonAndTheLog
 	repo := newFakeTrackRepository()
 	repo.tracks[track.ID.String()+":"+userId.String()] = track
 	leaking := &fakeAudioSearcher{searchErr: errors.New("yt-dlp exited 1: --cookies " + cookieJarPath + ": permission denied")}
-	svc := NewAcquireTrackAudioService(repo, fakeRegistry(leaking), newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(leaking), newFakeAudioStore())
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1))
 	t.Cleanup(func() {
@@ -364,7 +365,7 @@ func TestBackgroundScheduler_ScheduleRacingShutdown_NeverLosesAnAcceptedJob(t *t
 }
 
 func scheduleWhileShuttingDown() (accepted []string, settled map[string]acqports.JobRecord, remaining map[string]struct{}) {
-	svc := NewAcquireTrackAudioService(&countingRepo{}, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(&countingRepo{}), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	var jobs sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &jobs, make(chan struct{}, 4))
 	userId := shared.NewUserId(uuid.New())
@@ -495,7 +496,7 @@ func settledJob(s *BackgroundAcquisitionScheduler, trackID string) (acqports.Job
 func trackHeldByJob(t *testing.T, hold func(*BackgroundAcquisitionScheduler) error) (*BackgroundAcquisitionScheduler, func()) {
 	t.Helper()
 	repo := &burstRepo{started: make(chan struct{}), release: make(chan struct{})}
-	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 2))
 	t.Cleanup(func() {
@@ -554,7 +555,7 @@ func TestNewBackgroundAcquisitionScheduler_ReturnsNonNil(t *testing.T) {
 	repo := newFakeTrackRepository()
 	searcher := &fakeAudioSearcher{}
 	store := newFakeAudioStore()
-	svc := NewAcquireTrackAudioService(repo, fakeRegistry(searcher), store)
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), store)
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 1)
@@ -659,7 +660,7 @@ func (r *burstRepo) AudioRefInUse(_ context.Context, _ string, _ domain.TrackId)
 
 func TestBackgroundScheduler_BoundsQueueDepthUnderBurst(t *testing.T) {
 	repo := &burstRepo{started: make(chan struct{}), release: make(chan struct{})}
-	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 1)
@@ -690,7 +691,7 @@ func TestBackgroundScheduler_BoundsQueueDepthUnderBurst(t *testing.T) {
 func TestBackgroundScheduler_StatusQueueDrainsAndCountsShutdownRejections(t *testing.T) {
 	repo := &burstRepo{started: make(chan struct{}), release: make(chan struct{})}
 	close(repo.release)
-	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 1)
@@ -737,7 +738,7 @@ func (r *corrCapturingRepo) GetByID(ctx context.Context, id domain.TrackId, user
 
 func TestBackgroundScheduler_ThreadsCorrelationIDIntoJobContext(t *testing.T) {
 	repo := &corrCapturingRepo{fakeTrackRepository: newFakeTrackRepository()}
-	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 1)
@@ -784,7 +785,7 @@ func TestBackgroundScheduler_DispatchesToTheMatchingServiceEntryPoint(t *testing
 			store := newFakeAudioStore()
 			store.stored["u/a/b/c.mp3"] = true
 			searcher := &fakeAudioSearcher{}
-			svc := NewAcquireTrackAudioService(repo, fakeRegistry(searcher), store)
+			svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), store)
 
 			var wg sync.WaitGroup
 			scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1))
@@ -826,7 +827,7 @@ func (r *blockingRepo) AudioRefInUse(_ context.Context, _ string, _ domain.Track
 
 func TestBackgroundScheduler_Schedule_DedupsConcurrentRun_ButReplaysAfterSettle(t *testing.T) {
 	repo := &blockingRepo{started: make(chan struct{}), release: make(chan struct{})}
-	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 4)
@@ -873,7 +874,7 @@ func (r *countingRepo) AudioRefInUse(_ context.Context, _ string, _ domain.Track
 
 func TestBackgroundScheduler_Schedule_AfterShutdown_NoOp(t *testing.T) {
 	repo := &countingRepo{}
-	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 1)
@@ -903,7 +904,7 @@ func (r *panicRepo) AudioRefInUse(_ context.Context, _ string, _ domain.TrackId)
 }
 
 func TestBackgroundScheduler_Schedule_RecoversFromPanic(t *testing.T) {
-	svc := NewAcquireTrackAudioService(&panicRepo{}, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(&panicRepo{}), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 1)
@@ -1014,7 +1015,7 @@ func TestBackgroundScheduler_Schedule_PanickingJobAtTheRunCapFailsTheTrack(t *te
 
 func TestBackgroundScheduler_OnePrincipalCannotStarveAnother(t *testing.T) {
 	repo := &burstRepo{started: make(chan struct{}), release: make(chan struct{})}
-	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 1)
@@ -1128,7 +1129,7 @@ func TestBackgroundScheduler_ResumeClaimsWithoutWaitingAPollInterval(t *testing.
 
 func TestBackgroundScheduler_PauseLeavesInflightRunning(t *testing.T) {
 	repo := &burstRepo{started: make(chan struct{}), release: make(chan struct{})}
-	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 1)
@@ -1324,7 +1325,7 @@ func TestBackgroundScheduler_ShutdownCancellation_LeavesTheQueuedJobUnclaimed(t 
 
 	repo := &holdOneTrackRepo{fakeTrackRepository: base, hold: running.ID, holding: make(chan struct{}), release: make(chan struct{})}
 	pub := newRecordingPublisher()
-	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), WithAcquireEvents(pub))
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), WithAcquireEvents(pub))
 
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithDrainBudget(10*time.Millisecond))
@@ -1378,7 +1379,7 @@ func TestBackgroundScheduler_ScheduleDuringShutdown_Refuses(t *testing.T) {
 
 	repo := &holdOneTrackRepo{fakeTrackRepository: base, hold: running.ID, holding: make(chan struct{}), release: make(chan struct{})}
 	pub := newRecordingPublisher()
-	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), WithAcquireEvents(pub))
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), WithAcquireEvents(pub))
 
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithDrainBudget(10*time.Millisecond))
@@ -1428,7 +1429,7 @@ func TestAcquireTrackAudioService_RefuseQueued_AlreadySettledTrack_IsQuietNoOp(t
 	}
 
 	pub := newRecordingPublisher()
-	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), WithAcquireEvents(pub))
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), WithAcquireEvents(pub))
 
 	svc.RefuseQueued(context.Background(), userId, track.ID)
 
@@ -1448,7 +1449,7 @@ func scheduleQueued() error { return nil }
 
 func TestBackgroundScheduler_InflightDedupIsNotARefusal(t *testing.T) {
 	repo := &blockingRepo{started: make(chan struct{}), release: make(chan struct{})}
-	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1))
 	t.Cleanup(func() {
@@ -1468,7 +1469,7 @@ func TestBackgroundScheduler_InflightDedupIsNotARefusal(t *testing.T) {
 }
 
 func TestBackgroundScheduler_AfterShutdownRefuses(t *testing.T) {
-	svc := NewAcquireTrackAudioService(&countingRepo{}, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(&countingRepo{}), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1))
 	scheduler.Shutdown(context.Background())
@@ -1618,7 +1619,7 @@ func assertExactlyOneOutcome(t *testing.T, calls chan acqports.AcquisitionOutcom
 func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 	t.Run("succeeded", func(t *testing.T) {
 		recorder := newFakeOutcomeRecorder()
-		svc := NewAcquireTrackAudioService(newFakeTrackRepository(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+		svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(newFakeTrackRepository()), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 		var wg sync.WaitGroup
 		scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
 		t.Cleanup(func() {
@@ -1653,7 +1654,7 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 		repo := newFakeTrackRepository()
 		repo.tracks[track.ID.String()+":"+userId.String()] = track
 		leaking := &fakeAudioSearcher{searchErr: errors.New("boom")}
-		svc := NewAcquireTrackAudioService(repo, fakeRegistry(leaking), newFakeAudioStore())
+		svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(leaking), newFakeAudioStore())
 		var wg sync.WaitGroup
 		scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
 		t.Cleanup(func() {
@@ -1682,7 +1683,7 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 
 	t.Run("panicked", func(t *testing.T) {
 		recorder := newFakeOutcomeRecorder()
-		svc := NewAcquireTrackAudioService(&panicRepo{}, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+		svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(&panicRepo{}), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 		var wg sync.WaitGroup
 		scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
 		t.Cleanup(func() {
@@ -1764,7 +1765,7 @@ func TestBackgroundScheduler_OutcomeRecorderFailure_DoesNotAffectTheJob(t *testi
 	t.Run("erroring recorder leaves the job succeeded", func(t *testing.T) {
 		recorder := newFakeOutcomeRecorder()
 		recorder.err = errors.New("outcome store unavailable")
-		svc := NewAcquireTrackAudioService(newFakeTrackRepository(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+		svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(newFakeTrackRepository()), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 		var wg sync.WaitGroup
 		scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
 		t.Cleanup(func() {
@@ -1825,7 +1826,7 @@ func TestBackgroundScheduler_OutcomeRecorderFailure_DoesNotAffectTheJob(t *testi
 
 func TestBackgroundScheduler_RecordOutcome_GivesTheRecorderAWorkingMargin(t *testing.T) {
 	recorder := newFakeOutcomeRecorder()
-	svc := NewAcquireTrackAudioService(newFakeTrackRepository(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(newFakeTrackRepository()), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
 	t.Cleanup(func() {
@@ -1909,7 +1910,7 @@ func TestBackgroundScheduler_RecordOutcome_LogsWarnOnlyWhenRecordFails(t *testin
 		logs := captureJSONLogSync(t)
 		recorder := newFakeOutcomeRecorder()
 		recorder.err = errors.New("outcome store unavailable")
-		svc := NewAcquireTrackAudioService(newFakeTrackRepository(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+		svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(newFakeTrackRepository()), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 		var wg sync.WaitGroup
 		scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
 		t.Cleanup(func() {
@@ -1934,7 +1935,7 @@ func TestBackgroundScheduler_RecordOutcome_LogsWarnOnlyWhenRecordFails(t *testin
 	t.Run("success logs no warning", func(t *testing.T) {
 		logs := captureJSONLogSync(t)
 		recorder := newFakeOutcomeRecorder()
-		svc := NewAcquireTrackAudioService(newFakeTrackRepository(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+		svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(newFakeTrackRepository()), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 		var wg sync.WaitGroup
 		scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
 		t.Cleanup(func() {
@@ -1982,7 +1983,7 @@ func TestBackgroundScheduler_ShutdownMidRun_RecordsTheOutcomeOnALiveContext(t *t
 	repo.tracks[track.ID.String()+":"+userId.String()] = track
 	source := newBlockingSource()
 	recorder := newCtxAtRecordRecorder()
-	svc := NewAcquireTrackAudioService(liveCtxTrackRepository{repo}, NewSourceRegistry(source), newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(liveCtxTrackRepository{repo}), NewSourceRegistry(source), newFakeAudioStore())
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder), WithDrainBudget(10*time.Millisecond))
 	if err := scheduler.Schedule(context.Background(), userId, track.ID, ""); err != nil {
@@ -2014,7 +2015,7 @@ func TestBackgroundScheduler_ShutdownBeforeStart_LeavesTheQueuedJobWithNoOutcome
 	running := newPendingTrack(t, userId, base)
 	queued := newPendingTrack(t, userId, base)
 	repo := &holdOneTrackRepo{fakeTrackRepository: base, hold: running.ID, holding: make(chan struct{}), release: make(chan struct{})}
-	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	recorder := newCtxAtRecordRecorder()
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder), WithDrainBudget(10*time.Millisecond))
@@ -2061,7 +2062,7 @@ func TestBackgroundScheduler_ShutdownBeforeStart_LeavesTheQueuedJobWithNoOutcome
 func TestBackgroundScheduler_Shutdown_WaitsForTheInFlightOutcomeWrite(t *testing.T) {
 	recorder := newFakeOutcomeRecorder()
 	recorder.delay = 300 * time.Millisecond
-	svc := NewAcquireTrackAudioService(newFakeTrackRepository(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(newFakeTrackRepository()), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
 
@@ -2123,7 +2124,7 @@ func TestBackgroundScheduler_RecordedFailureReason_KeepsTheCookiePathOut(t *test
 	repo := newFakeTrackRepository()
 	repo.tracks[track.ID.String()+":"+userId.String()] = track
 	leaking := &fakeAudioSearcher{searchErr: errors.New("yt-dlp exited 1: --cookies " + cookieJarPath + ": permission denied")}
-	svc := NewAcquireTrackAudioService(repo, fakeRegistry(leaking), newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(leaking), newFakeAudioStore())
 	recorder := newFakeOutcomeRecorder()
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
@@ -2384,7 +2385,7 @@ func TestBackgroundScheduler_TransientFailure_ReleasesTheJobWithBackoffAndKeepsT
 	track := newPendingTrack(t, userId, repo)
 	searcher := &fakeAudioSearcher{searchErr: &acqdomain.SourceUnavailableError{Source: "fake", Err: errors.New("http error 503")}}
 	pub := newRecordingPublisher()
-	svc := NewAcquireTrackAudioService(repo, fakeRegistry(searcher), newFakeAudioStore(), WithAcquireEvents(pub))
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore(), WithAcquireEvents(pub))
 	wake := make(chan struct{}, 1)
 	queue := &releaseRecordingQueue{memJobQueue: newMemJobQueue(wake), releases: make(chan releaseRecord, 1)}
 	queue.rememberUser(track.ID, userId)
@@ -2553,7 +2554,7 @@ func TestBackgroundScheduler_Schedule_RejectedEnqueueLeavesNoCorrelationID(t *te
 
 func TestBackgroundScheduler_Schedule_RejectedSecondRequestKeepsTheQueuedJobsCorrelationID(t *testing.T) {
 	repo := &corrCapturingRepo{fakeTrackRepository: newFakeTrackRepository()}
-	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	queue := &conflictingQueue{memJobQueue: newMemJobQueue(make(chan struct{}, 1)), gate: make(chan struct{})}
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1),
@@ -2674,7 +2675,7 @@ func TestBackgroundScheduler_StartedPausedNeverClaimsASeededJobUntilResume(t *te
 
 func TestBackgroundScheduler_OutcomeCarriesStageTimesSourceHostAndFileFacts(t *testing.T) {
 	recorder := newFakeOutcomeRecorder()
-	svc := NewAcquireTrackAudioService(newFakeTrackRepository(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(newFakeTrackRepository()), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })

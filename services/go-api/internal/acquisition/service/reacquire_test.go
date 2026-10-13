@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/adapters/catalogbridge"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"context"
@@ -47,15 +48,20 @@ func TestReacquirePolicy_Reconcile(t *testing.T) {
 			track.AcquisitionStatus = tt.status
 			track.AudioRef = tt.audioRef
 
-			repo := newFakeTrackRepository()
-			repo.err = tt.updateErr
+			repo := &updateRecorder{fakeTrackRepository: newFakeTrackRepository(), err: tt.updateErr}
+			repo.tracks[track.ID.String()+":"+track.UserId.String()] = track
+			ledger := catalogbridge.NewTrackLedger(repo)
+			snapshot, err := ledger.Get(context.Background(), track.ID, track.UserId)
+			if err != nil || snapshot == nil {
+				t.Fatalf("snapshot: %v, %v", snapshot, err)
+			}
 			store := newFakeAudioStore()
 			store.err = tt.existsErr
 			if tt.stored {
 				store.stored[audioRef] = true
 			}
 
-			proceed, err := reacquirePolicy{trackRepo: repo, audioStore: store}.reconcile(context.Background(), track)
+			proceed, err := reacquirePolicy{ledger: ledger, audioStore: store}.reconcile(context.Background(), snapshot)
 
 			if !errors.Is(err, tt.wantErrIs) || (tt.wantErrIs == nil && err != nil) {
 				t.Fatalf("err = %v, want %v", err, tt.wantErrIs)
@@ -66,11 +72,25 @@ func TestReacquirePolicy_Reconcile(t *testing.T) {
 			if track.AcquisitionStatus != tt.wantStatus {
 				t.Errorf("status = %v, want %v", track.AcquisitionStatus, tt.wantStatus)
 			}
-			if got := len(repo.tracks) == 1; got != tt.wantUpdated {
+			if got := repo.updates == 1; got != tt.wantUpdated {
 				t.Errorf("persisted = %v, want %v", got, tt.wantUpdated)
 			}
 		})
 	}
+}
+
+type updateRecorder struct {
+	*fakeTrackRepository
+	err     error
+	updates int
+}
+
+func (r *updateRecorder) Update(ctx context.Context, track *domain.Track, expectedVersion int) error {
+	if r.err != nil {
+		return r.err
+	}
+	r.updates++
+	return r.fakeTrackRepository.Update(ctx, track, expectedVersion)
 }
 
 func refPtr(s string) *string { return &s }

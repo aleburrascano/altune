@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/adapters/catalogbridge"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
@@ -791,7 +792,7 @@ func acquirableFixture(t *testing.T) (*AcquireTrackAudioService, *domain.Track, 
 		}},
 		downloadPath: audio,
 	}
-	svc := NewAcquireTrackAudioService(repo, fakeRegistry(searcher), newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore())
 	ac := &AcquisitionContext{Track: TrackRef{
 		ID: track.ID.String(), UserID: userId.String(),
 		Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours", Duration: 200,

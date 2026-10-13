@@ -282,10 +282,10 @@ func (s *AcquireTrackAudioService) buildSteps(userId shared.UserId, trackId shar
 			WithConfidenceFloor(s.confidenceFloor),
 			WithStepVerifySkips(s.verifySkips),
 		},
-		WithStoreAudioRefGuard(s.trackRepo, trackId),
+		WithStoreAudioRefGuard(s.ledger, trackId),
 		WithStoreOrphanQueue(s.orphans, userId),
 		WithStoreKeyPrefix(s.storeKeyPrefix)).
-		withUpdateTrack(NewUpdateTrackStep(s.trackRepo, userId, trackId))
+		withUpdateTrack(NewUpdateTrackStep(s.ledger, userId, trackId))
 }
 
 func CoreSteps(

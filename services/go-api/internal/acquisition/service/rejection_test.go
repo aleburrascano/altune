@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/adapters/catalogbridge"
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
@@ -25,7 +26,7 @@ func TestExecuteReplace_SeedsExclusionsFromMemoryAndTheCurrentSource(t *testing.
 	store.stored["u/a/b/c.mp3"] = true
 
 	captured := &capturingSource{}
-	svc := NewAcquireTrackAudioService(repo, NewSourceRegistry(captured), store)
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(captured), store)
 
 	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
 
@@ -55,7 +56,7 @@ func TestUpdateTrackStep_PersistsTheRejectedSources(t *testing.T) {
 		Selected: &ports.AudioCandidate{URL: "https://youtube.com/watch?v=freshAAAAAA"},
 	}
 
-	if _, err := NewUpdateTrackStep(repo, userId, track.ID).Execute(context.Background(), ac, afterStore{}); err != nil {
+	if _, err := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID).Execute(context.Background(), ac, afterStore{}); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 
@@ -238,7 +239,7 @@ func TestExecute_PersistsRejectionSummaryInFailureReason(t *testing.T) {
 		URL:     "yt:cooking",
 		Channel: "CookingChannel",
 	}}}
-	svc := NewAcquireTrackAudioService(repo, fakeRegistry(searcher), newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore())
 
 	_ = svc.Execute(context.Background(), userId, track.ID)
 
@@ -275,7 +276,7 @@ func TestExecute_AttemptCapLeavesUntriedCandidatesInTheSummary(t *testing.T) {
 		})
 	}
 	searcher := &fakeAudioSearcher{searchResults: candidates, downloadErr: errors.New("boom")}
-	svc := NewAcquireTrackAudioService(repo, fakeRegistry(searcher), newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore())
 
 	_ = svc.Execute(context.Background(), userId, track.ID)
 

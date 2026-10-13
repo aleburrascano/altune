@@ -2,8 +2,6 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/catalog/domain"
-	catalogports "altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/redact"
@@ -15,7 +13,7 @@ import (
 )
 
 type AcquireTrackAudioService struct {
-	trackRepo       ports.TrackRepository
+	ledger          ports.TrackLedger
 	sources         *SourceRegistry
 	audioStore      ports.AudioWriter
 	audioProber     ports.AudioProber
@@ -33,13 +31,13 @@ type AcquireTrackAudioService struct {
 }
 
 func NewAcquireTrackAudioService(
-	trackRepo ports.TrackRepository,
+	ledger ports.TrackLedger,
 	sources *SourceRegistry,
 	audioStore ports.AudioWriter,
 	opts ...func(*AcquireTrackAudioService),
 ) *AcquireTrackAudioService {
 	s := &AcquireTrackAudioService{
-		trackRepo:  trackRepo,
+		ledger:     ledger,
 		sources:    sources,
 		audioStore: audioStore,
 		recordings: ports.NoopRecordingResolver(),
@@ -135,11 +133,10 @@ func schedulerCancelledJobContext(ctx context.Context) bool {
 	return ownedByScheduler && ctx.Err() != nil
 }
 
-func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
+func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.UserId, trackId shared.TrackId) error {
 	jobCtx := ctx
 	ctx, cancel := context.WithTimeout(ctx, acquireTimeout)
 	defer cancel()
-
 	track, err := s.loadTrack(ctx, userId, trackId)
 	if err != nil || track == nil {
 		return err
@@ -148,47 +145,52 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 	if err != nil || !proceed {
 		return err
 	}
-
 	ac := s.startAcquisition(ctx, userId, trackId, track)
 	defer CleanupTemp(ctx, s.workspace, ac)
 	s.loadPriorRejections(ctx, ac)
 	if err := s.runAcquisition(ctx, userId, trackId, ac); err != nil {
-		if schedulerCancelledJobContext(jobCtx) {
-			return s.reportSchedulerCancelledWithoutMarkingFailed(ctx, userId, trackId, err)
-		}
-		if willRetry(jobCtx, err) {
-			return s.reportRetryableFailure(ctx, userId, trackId, err)
-		}
-		return s.reportAcquireFailure(ctx, userId, trackId, err, ac)
+		return s.settleExecuteFailure(ctx, jobCtx, userId, trackId, err, ac)
 	}
 	return nil
 }
 
-func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
+func (s *AcquireTrackAudioService) settleExecuteFailure(ctx, jobCtx context.Context, userId shared.UserId, trackId shared.TrackId, err error, ac *AcquisitionContext) error {
+	if schedulerCancelledJobContext(jobCtx) {
+		return s.reportSchedulerCancelledWithoutMarkingFailed(ctx, userId, trackId, err)
+	}
+	if willRetry(jobCtx, err) {
+		return s.reportRetryableFailure(ctx, userId, trackId, err)
+	}
+	return s.reportAcquireFailure(ctx, userId, trackId, err, ac)
+}
+
+func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId shared.UserId, trackId shared.TrackId) error {
 	jobCtx := ctx
 	ctx, cancel := context.WithTimeout(ctx, acquireTimeout)
 	defer cancel()
-
 	track, err := s.loadTrack(ctx, userId, trackId)
 	if err != nil || track == nil {
 		return err
 	}
-
 	ac := s.startAcquisition(ctx, userId, trackId, track)
 	defer CleanupTemp(ctx, s.workspace, ac)
 	configureReplaceExclusion(ctx, ac, track, trackId)
 	s.loadPriorRejections(ctx, ac)
 	if err := s.runAcquisition(ctx, userId, trackId, ac); err != nil {
-		if schedulerCancelledJobContext(jobCtx) {
-			return s.reportSchedulerCancelledWithoutMarkingFailed(ctx, userId, trackId, err)
-		}
-		return s.reportReplaceFailure(ctx, userId, trackId, err, ac)
+		return s.settleReplaceFailure(ctx, jobCtx, userId, trackId, err, ac)
 	}
 	s.deleteSupersededAudio(ctx, userId, trackId, ac)
 	return nil
 }
 
-func (s *AcquireTrackAudioService) deleteSupersededAudio(ctx context.Context, userId shared.UserId, trackId domain.TrackId, ac *AcquisitionContext) {
+func (s *AcquireTrackAudioService) settleReplaceFailure(ctx, jobCtx context.Context, userId shared.UserId, trackId shared.TrackId, err error, ac *AcquisitionContext) error {
+	if schedulerCancelledJobContext(jobCtx) {
+		return s.reportSchedulerCancelledWithoutMarkingFailed(ctx, userId, trackId, err)
+	}
+	return s.reportReplaceFailure(ctx, userId, trackId, err, ac)
+}
+
+func (s *AcquireTrackAudioService) deleteSupersededAudio(ctx context.Context, userId shared.UserId, trackId shared.TrackId, ac *AcquisitionContext) {
 	old := ac.Replace.PreservedRef
 	if old == "" || old == ac.AudioRef {
 		return
@@ -205,8 +207,8 @@ func (s *AcquireTrackAudioService) deleteSupersededAudio(ctx context.Context, us
 	}
 }
 
-func (s *AcquireTrackAudioService) servedByAnotherTrack(ctx context.Context, trackId domain.TrackId, audioRef string) bool {
-	inUse, err := s.trackRepo.AudioRefInUse(ctx, audioRef, trackId)
+func (s *AcquireTrackAudioService) servedByAnotherTrack(ctx context.Context, trackId shared.TrackId, audioRef string) bool {
+	inUse, err := s.ledger.AudioRefInUse(ctx, audioRef, trackId)
 	if err != nil {
 		slog.ErrorContext(ctx, "acquisition.replace_audio_usage_unknown",
 			"track_id", trackId.String(), "audio_ref", audioRef, "error", redact.LogError(err))
@@ -219,8 +221,8 @@ func (s *AcquireTrackAudioService) servedByAnotherTrack(ctx context.Context, tra
 	return inUse
 }
 
-func (s *AcquireTrackAudioService) loadTrack(ctx context.Context, userId shared.UserId, trackId domain.TrackId) (*domain.Track, error) {
-	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
+func (s *AcquireTrackAudioService) loadTrack(ctx context.Context, userId shared.UserId, trackId shared.TrackId) (*ports.TrackSnapshot, error) {
+	track, err := s.ledger.Get(ctx, trackId, userId)
 	if err != nil {
 		return nil, fmt.Errorf("get track: %w", err)
 	}
@@ -231,7 +233,7 @@ func (s *AcquireTrackAudioService) loadTrack(ctx context.Context, userId shared.
 	return track, nil
 }
 
-func (s *AcquireTrackAudioService) startAcquisition(ctx context.Context, userId shared.UserId, trackId domain.TrackId, track *domain.Track) *AcquisitionContext {
+func (s *AcquireTrackAudioService) startAcquisition(ctx context.Context, userId shared.UserId, trackId shared.TrackId, track *ports.TrackSnapshot) *AcquisitionContext {
 	jobReporterFrom(ctx).meta(track.Title, track.Artist, track.Album)
 
 	slog.InfoContext(ctx, "track_acquisition_started",
@@ -245,7 +247,7 @@ func (s *AcquireTrackAudioService) startAcquisition(ctx context.Context, userId 
 	return &AcquisitionContext{Track: buildTrackRef(track)}
 }
 
-func (s *AcquireTrackAudioService) runAcquisition(ctx context.Context, userId shared.UserId, trackId domain.TrackId, ac *AcquisitionContext) error {
+func (s *AcquireTrackAudioService) runAcquisition(ctx context.Context, userId shared.UserId, trackId shared.TrackId, ac *AcquisitionContext) error {
 	defer s.recordRejections(ctx, ac)
 	identityStart := time.Now()
 	s.resolveIdentity(ctx, ac)
@@ -260,7 +262,7 @@ func (s *AcquireTrackAudioService) runAcquisition(ctx context.Context, userId sh
 	return nil
 }
 
-func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, track *domain.Track, trackId domain.TrackId) {
+func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, track *ports.TrackSnapshot, trackId shared.TrackId) {
 	ac.Replace.PreservedRef = deref(track.AudioRef)
 	ac.Replace.ExcludeKeys = mergeSourceKeys(
 		track.RejectedSourceKeys,
@@ -288,7 +290,7 @@ func settleContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	return detachedTimeout(ctx, settleBudget)
 }
 
-func (s *AcquireTrackAudioService) reportReplaceFailure(ctx context.Context, userId shared.UserId, trackId domain.TrackId, err error, ac *AcquisitionContext) error {
+func (s *AcquireTrackAudioService) reportReplaceFailure(ctx context.Context, userId shared.UserId, trackId shared.TrackId, err error, ac *AcquisitionContext) error {
 	slog.WarnContext(ctx, "track_acquisition_failed",
 		"track_id", trackId.String(),
 		"user_id", userId.String(),
@@ -305,7 +307,7 @@ func (s *AcquireTrackAudioService) reportReplaceFailure(ctx context.Context, use
 	return err
 }
 
-func (s *AcquireTrackAudioService) reportSchedulerCancelledWithoutMarkingFailed(ctx context.Context, userId shared.UserId, trackId domain.TrackId, err error) error {
+func (s *AcquireTrackAudioService) reportSchedulerCancelledWithoutMarkingFailed(ctx context.Context, userId shared.UserId, trackId shared.TrackId, err error) error {
 	slog.WarnContext(ctx, "track_acquisition_cancelled",
 		"track_id", trackId.String(),
 		"user_id", userId.String(),
@@ -319,7 +321,7 @@ func willRetry(jobCtx context.Context, err error) bool {
 	return attempt > 0 && attempt < maxAcquisitionAttempts && isTransientFailure(err)
 }
 
-func (s *AcquireTrackAudioService) reportRetryableFailure(ctx context.Context, userId shared.UserId, trackId domain.TrackId, err error) error {
+func (s *AcquireTrackAudioService) reportRetryableFailure(ctx context.Context, userId shared.UserId, trackId shared.TrackId, err error) error {
 	slog.WarnContext(ctx, "track_acquisition_retryable",
 		"track_id", trackId.String(),
 		"user_id", userId.String(),
@@ -328,7 +330,7 @@ func (s *AcquireTrackAudioService) reportRetryableFailure(ctx context.Context, u
 	return fmt.Errorf("%w: %w", ErrAcquisitionRetryable, err)
 }
 
-func (s *AcquireTrackAudioService) reportAcquireFailure(ctx context.Context, userId shared.UserId, trackId domain.TrackId, err error, ac *AcquisitionContext) error {
+func (s *AcquireTrackAudioService) reportAcquireFailure(ctx context.Context, userId shared.UserId, trackId shared.TrackId, err error, ac *AcquisitionContext) error {
 	slog.WarnContext(ctx, "track_acquisition_failed",
 		"track_id", trackId.String(),
 		"user_id", userId.String(),
@@ -346,21 +348,21 @@ func (s *AcquireTrackAudioService) reportAcquireFailure(ctx context.Context, use
 	return err
 }
 
-func rejectionAwareReason(ctx context.Context, trackId domain.TrackId, err error, ac *AcquisitionContext) string {
+func rejectionAwareReason(ctx context.Context, trackId shared.TrackId, err error, ac *AcquisitionContext) string {
 	summary := summarizeRejections(ac.Rejections)
 	if summary == "" {
 		return failureReason(err)
 	}
 	slog.InfoContext(ctx, "acquisition.rejection_summary",
 		"track_id", trackId.String(), "summary", summary)
-	return domain.JoinFailureReason(failureCode(err), summary)
+	return shared.JoinFailureReason(failureCode(err), summary)
 }
 
-func (s *AcquireTrackAudioService) reconcileForReacquire(ctx context.Context, track *domain.Track) (proceed bool, err error) {
-	return reacquirePolicy{trackRepo: s.trackRepo, audioStore: s.audioStore}.reconcile(ctx, track)
+func (s *AcquireTrackAudioService) reconcileForReacquire(ctx context.Context, track *ports.TrackSnapshot) (proceed bool, err error) {
+	return reacquirePolicy{ledger: s.ledger, audioStore: s.audioStore}.reconcile(ctx, track)
 }
 
-func (s *AcquireTrackAudioService) onAcquireCompleted(ctx context.Context, userId shared.UserId, trackId domain.TrackId, audioRef string) {
+func (s *AcquireTrackAudioService) onAcquireCompleted(ctx context.Context, userId shared.UserId, trackId shared.TrackId, audioRef string) {
 	slog.InfoContext(ctx, "track_acquisition_completed",
 		"track_id", trackId.String(),
 		"user_id", userId.String(),
@@ -372,11 +374,9 @@ func (s *AcquireTrackAudioService) onAcquireCompleted(ctx context.Context, userI
 	})
 }
 
-func (s *AcquireTrackAudioService) markFailed(ctx context.Context, trackId domain.TrackId, userId shared.UserId, reason string) bool {
-	err := loadAndUpdate(ctx, s.trackRepo, trackId, userId, nil, func(track *domain.Track) error {
-		return track.FailAcquisition(reason)
-	})
-	if errors.Is(err, domain.ErrIllegalAcquisitionTransition) {
+func (s *AcquireTrackAudioService) markFailed(ctx context.Context, trackId shared.TrackId, userId shared.UserId, reason string) bool {
+	err := s.ledger.Fail(ctx, trackId, userId, reason)
+	if errors.Is(err, ports.ErrIllegalTransition) {
 		slog.InfoContext(ctx, "mark_failed: track already settled, failure ignored",
 			"track_id", trackId.String(), "error", redact.LogError(err))
 		return false
@@ -389,15 +389,15 @@ func (s *AcquireTrackAudioService) markFailed(ctx context.Context, trackId domai
 	return true
 }
 
-func (s *AcquireTrackAudioService) RefuseQueued(ctx context.Context, userId shared.UserId, trackId domain.TrackId) {
+func (s *AcquireTrackAudioService) RefuseQueued(ctx context.Context, userId shared.UserId, trackId shared.TrackId) {
 	settleCtx, cancel := settleContext(ctx)
 	defer cancel()
-	if !s.markFailed(settleCtx, trackId, userId, string(domain.FailureAcquisitionRefused)) {
+	if !s.markFailed(settleCtx, trackId, userId, string(shared.FailureAcquisitionRefused)) {
 		return
 	}
 	s.events.Publish(settleCtx, userId, events.TypeTrackAcquisitionFailed, map[string]any{
 		"track_id": trackId.String(),
-		"reason":   string(domain.FailureAcquisitionRefused),
+		"reason":   string(shared.FailureAcquisitionRefused),
 	})
 }
 
@@ -409,34 +409,7 @@ func deref[T any](p *T) T {
 	return *p
 }
 
-const loadAndUpdateMaxAttempts = 5
-
-func loadAndUpdate(ctx context.Context, repo ports.TrackRepository, id domain.TrackId, userId shared.UserId, notFound error, mutate func(*domain.Track) error) error {
-	var lastErr error
-	for attempt := 0; attempt < loadAndUpdateMaxAttempts; attempt++ {
-		track, err := repo.GetByID(ctx, id, userId)
-		if err != nil {
-			return fmt.Errorf("get track: %w", err)
-		}
-		if track == nil {
-			return notFound
-		}
-		expectedVersion := track.Version
-		if err := mutate(track); err != nil {
-			return err
-		}
-		lastErr = repo.Update(ctx, track, expectedVersion)
-		if lastErr == nil {
-			return nil
-		}
-		if !errors.Is(lastErr, catalogports.ErrTrackVersionConflict) {
-			return fmt.Errorf("update track: %w", lastErr)
-		}
-	}
-	return fmt.Errorf("update track: exhausted %d CAS attempts: %w", loadAndUpdateMaxAttempts, lastErr)
-}
-
-func buildTrackRef(track *domain.Track) TrackRef {
+func buildTrackRef(track *ports.TrackSnapshot) TrackRef {
 	return TrackRef{
 		ID:          track.ID.String(),
 		UserID:      track.UserId.String(),
