@@ -6,7 +6,7 @@ import { reportPlaybackError } from '@features/playback/hooks/usePlaybackErrorSt
 import { recordPlaybackFailure } from '@features/playback/domain/playbackHealth';
 import { warnPlayback } from '@features/playback/domain/playbackError';
 
-export type NativeQueueFailureKind = 'transient' | 'permanent';
+type NativeQueueFailureKind = 'transient' | 'permanent';
 
 const INDEX_OUT_OF_BOUNDS_CODE = 'index_out_of_bounds';
 
@@ -17,8 +17,8 @@ const PERMANENT_NATIVE_CODES: ReadonlySet<string> = new Set([
   'invalid_track_object',
 ]);
 
-export const QUEUE_UPDATE_FAILED_MESSAGE = "Couldn't update the queue. Tap retry to resync.";
-export const QUEUE_OUT_OF_SYNC_MESSAGE = 'The queue fell out of sync. Tap retry to reload it.';
+const QUEUE_UPDATE_FAILED_MESSAGE = "Couldn't update the queue. Tap retry to resync.";
+const QUEUE_OUT_OF_SYNC_MESSAGE = 'The queue fell out of sync. Tap retry to reload it.';
 
 const QUEUE_FAILURE_REPORT: Record<
   NativeQueueFailureKind,
@@ -37,7 +37,7 @@ function nativeErrorCode(err: unknown): string | null {
   return typeof err.code === 'string' ? err.code : null;
 }
 
-export function classifyNativeQueueFailure(err: unknown): NativeQueueFailureKind {
+function classifyNativeQueueFailure(err: unknown): NativeQueueFailureKind {
   if (err instanceof NativeQueueTimeoutError) return 'transient';
   const code = nativeErrorCode(err);
   return code !== null && PERMANENT_NATIVE_CODES.has(code) ? 'permanent' : 'transient';

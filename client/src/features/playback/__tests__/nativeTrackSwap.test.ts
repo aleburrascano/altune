@@ -19,10 +19,7 @@ import {
 } from '@features/playback/domain/playbackHealth';
 import { resetPlaybackForSignOut } from '@features/playback/native/playbackService';
 import '@features/playback/native/loadNativeTrack';
-import {
-  NATIVE_QUEUE_OP_TIMEOUT_MS,
-  withNativeQueue,
-} from '@features/playback/native/nativeQueueLock';
+import { withNativeQueue } from '@features/playback/native/nativeQueueLock';
 
 import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
 import type { PlaybackPort } from '@features/playback/ports/playbackPort';
@@ -39,6 +36,8 @@ import {
 } from '@features/playback/__tests__/memoryPlaybackPort';
 import { httpPlaybackPort } from '@features/playback/adapters/http/httpPlaybackPort';
 import { signInTestUser } from '@testing/signInTestUser';
+
+const NATIVE_QUEUE_OP_TIMEOUT_MS = 15_000;
 
 beforeAll(() => {
   installPlaybackPort(httpPlaybackPort);

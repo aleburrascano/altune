@@ -4,7 +4,7 @@ import { orderedQueueTracks, type QueueStore } from '@shared/playback/queueStore
 
 import { libraryTrackId } from '@features/playback/domain/playerStatus';
 
-export const MAX_SAVED_QUEUE_IDS = 10_000;
+const MAX_SAVED_QUEUE_IDS = 10_000;
 
 function libraryIds(tracks: readonly PlaybackTrack[]): string[] {
   const ids: string[] = [];

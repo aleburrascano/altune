@@ -1,5 +1,7 @@
 import type * as InitPlayer from '@features/playback/native/initPlayer';
 
+const PLAYER_SETUP_TIMEOUT_MS = 15_000;
+
 const trackPlayerDouble = jest.requireMock('react-native-track-player');
 const { __player } = trackPlayerDouble;
 
@@ -68,8 +70,7 @@ describe('ensurePlayerSetup', () => {
     afterEach(() => jest.useRealTimers());
 
     it('rejects the caller once setup outlives its budget instead of waiting forever', async () => {
-      const { ensurePlayerSetup, PLAYER_SETUP_TIMEOUT_MS, PlayerSetupTimeoutError } =
-        freshInitPlayer();
+      const { ensurePlayerSetup } = freshInitPlayer();
       hangNextSetupPlayer();
 
       const settlement = settlementOf(ensurePlayerSetup());
@@ -78,11 +79,11 @@ describe('ensurePlayerSetup', () => {
       expect(settlement()).toBe(STILL_PENDING);
 
       await jest.advanceTimersByTimeAsync(1);
-      expect(settlement()).toBeInstanceOf(PlayerSetupTimeoutError);
+      expect(settlement()).toMatchObject({ name: 'PlayerSetupTimeoutError' });
     });
 
     it('starts a fresh attempt after a timed-out one instead of caching the hung call', async () => {
-      const { ensurePlayerSetup, PLAYER_SETUP_TIMEOUT_MS } = freshInitPlayer();
+      const { ensurePlayerSetup } = freshInitPlayer();
       hangNextSetupPlayer();
       const timedOut = ensurePlayerSetup().catch((err: unknown) => err);
       await jest.advanceTimersByTimeAsync(PLAYER_SETUP_TIMEOUT_MS);

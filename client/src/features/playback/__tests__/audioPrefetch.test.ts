@@ -16,11 +16,7 @@ import {
   cacheDir,
   findCached,
 } from '@features/playback/native/audioCache';
-import {
-  PREFETCH_STALL_TIMEOUT_MS,
-  evictCached,
-  prefetchNext,
-} from '@features/playback/native/audioPrefetch';
+import { evictCached, prefetchNext } from '@features/playback/native/audioPrefetch';
 import { forgetAllSwaps, wasSwappedToLocal } from '@features/playback/native/nativeTrackSwap';
 import {
   _resetPlaybackHealthForTest,
@@ -38,6 +34,8 @@ import {
 } from '@features/playback/__tests__/memoryPlaybackPort';
 import { httpPlaybackPort } from '@features/playback/adapters/http/httpPlaybackPort';
 import { signInTestUser } from '@testing/signInTestUser';
+
+const PREFETCH_STALL_TIMEOUT_MS = 15_000;
 
 beforeAll(() => {
   installPlaybackPort(httpPlaybackPort);

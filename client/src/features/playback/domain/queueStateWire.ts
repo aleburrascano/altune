@@ -48,7 +48,7 @@ export function asRepeatMode(value: unknown): RepeatMode | null {
   return value === 'off' || value === 'all' || value === 'one' ? value : null;
 }
 
-export function asAcquisitionStatus(value: unknown, at: string): AcquisitionStatus {
+function asAcquisitionStatus(value: unknown, at: string): AcquisitionStatus {
   const status = asString(value, at);
   return status === 'pending' || status === 'ready' ? status : 'failed';
 }

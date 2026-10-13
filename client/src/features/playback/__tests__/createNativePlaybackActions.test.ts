@@ -12,14 +12,16 @@ import {
 } from '@features/playback/native/nativeQueueLock';
 import { usePlaybackErrorStore } from '@features/playback/hooks/usePlaybackErrorStore';
 import {
-  classifyNativeQueueFailure,
   isIndexOutOfBounds,
-  QUEUE_OUT_OF_SYNC_MESSAGE,
-  QUEUE_UPDATE_FAILED_MESSAGE,
   reportingQueueFailure,
+  reportQueueFailure,
 } from '@features/playback/native/queueFailureReport';
 
 import { previewTrack } from '@features/playback/__tests__/fixtures';
+
+const QUEUE_OUT_OF_SYNC_MESSAGE = 'The queue fell out of sync. Tap retry to reload it.';
+const QUEUE_UPDATE_FAILED_MESSAGE = "Couldn't update the queue. Tap retry to resync.";
+const QUEUE_OP_TIMEOUT_MS = 15_000;
 
 const { __player } = jest.requireMock('react-native-track-player');
 
@@ -124,6 +126,12 @@ describe('createNativePlaybackActions', () => {
 
       await expect(controls.skipNext()).resolves.toBeUndefined();
     });
+
+    function classifiedAs(err: unknown): unknown {
+      warn.mockClear();
+      reportQueueFailure(null, 'probe', err);
+      return warn.mock.calls[0]?.[1]?.kind;
+    }
 
     function nativeError(code: string, message: string): Error {
       return Object.assign(new Error(message), { code });
@@ -231,9 +239,9 @@ describe('createNativePlaybackActions', () => {
     });
 
     it('classifies a native queue timeout as transient', () => {
-      expect(classifyNativeQueueFailure(new NativeQueueTimeoutError(15_000))).toBe('transient');
-      expect(classifyNativeQueueFailure(nativeError('no_current_item', 'none'))).toBe('permanent');
-      expect(classifyNativeQueueFailure('not an error')).toBe('transient');
+      expect(classifiedAs(new NativeQueueTimeoutError(QUEUE_OP_TIMEOUT_MS))).toBe('transient');
+      expect(classifiedAs(nativeError('no_current_item', 'none'))).toBe('permanent');
+      expect(classifiedAs('not an error')).toBe('transient');
     });
 
     it('does not pin a stale failure on a track loaded after the op was issued', async () => {

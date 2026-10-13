@@ -15,7 +15,7 @@ export const usePlaybackRateStore = create<PlaybackRateState>((set) => ({
   setRate: (rate) => set({ rate }),
 }));
 
-export function rateLabel(rate: number): string {
+function rateLabel(rate: number): string {
   return `${String(rate)}×`;
 }
 

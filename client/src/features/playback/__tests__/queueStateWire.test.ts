@@ -3,7 +3,6 @@ import { asPlaylistId } from '@shared/apiClient/ids';
 import { canPlay } from '@shared/playback/canPlay';
 
 import {
-  asAcquisitionStatus,
   asRepeatMode,
   fromWireSource,
   parseQueueState,
@@ -174,20 +173,42 @@ describe('parseQueueState — the queue-state parse boundary', () => {
   });
 });
 
+function acquisitionStatusParsedFrom(value: unknown) {
+  const result = parseQueueState({
+    track_ids: ['t1'],
+    current_index: 0,
+    position_ms: 0,
+    shuffled: false,
+    repeat_mode: 'off',
+    source: null,
+    natural_order: [],
+    current_track: {
+      id: 't1',
+      title: 'One',
+      artist: 'Artist',
+      artwork_url: null,
+      duration_seconds: 120,
+      acquisition_status: value,
+    },
+  });
+  if (!result.ok) throw result.error;
+  return result.state.current_track?.acquisition_status;
+}
+
 describe('asAcquisitionStatus', () => {
   it('keeps the known statuses', () => {
-    expect(asAcquisitionStatus('ready', 'x')).toBe('ready');
-    expect(asAcquisitionStatus('pending', 'x')).toBe('pending');
-    expect(asAcquisitionStatus('failed', 'x')).toBe('failed');
+    expect(acquisitionStatusParsedFrom('ready')).toBe('ready');
+    expect(acquisitionStatusParsedFrom('pending')).toBe('pending');
+    expect(acquisitionStatusParsedFrom('failed')).toBe('failed');
   });
 
   it('carries an unrecognized status as not playable instead of throwing', () => {
-    const status = asAcquisitionStatus('transcoding', 'x');
+    const status = acquisitionStatusParsedFrom('transcoding');
     expect(status).toBe('failed');
-    expect(canPlay(status)).toBe(false);
+    expect(status !== undefined && canPlay(status)).toBe(false);
   });
 
   it('rejects a non-string status', () => {
-    expect(() => asAcquisitionStatus(3, 'x')).toThrow();
+    expect(() => acquisitionStatusParsedFrom(null)).toThrow();
   });
 });

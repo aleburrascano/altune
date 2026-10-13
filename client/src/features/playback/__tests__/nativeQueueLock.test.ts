@@ -1,9 +1,10 @@
 import {
-  NATIVE_QUEUE_OP_TIMEOUT_MS,
   NativeQueueTimeoutError,
   onNativeQueueTimeout,
   withNativeQueue,
 } from '@features/playback/native/nativeQueueLock';
+
+const NATIVE_QUEUE_OP_TIMEOUT_MS = 15_000;
 
 function deferred<T>(): {
   promise: Promise<T>;

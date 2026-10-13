@@ -1,12 +1,12 @@
 import type { TrackKey } from '@shared/playback/playbackTrack';
 
-export const RECOVERY_ATTEMPTS_PER_TRACK = 2;
+const RECOVERY_ATTEMPTS_PER_TRACK = 2;
 
-export const RECOVERY_COOLDOWN_BASE_MS = 30_000;
+const RECOVERY_COOLDOWN_BASE_MS = 30_000;
 
 const RECOVERY_MEMORY_MS = 10 * 60_000;
 
-export const MAX_TRACKED_RECOVERIES = 64;
+const MAX_TRACKED_RECOVERIES = 64;
 
 type RecoveryRun = { attempts: number; lastAttemptAt: number };
 

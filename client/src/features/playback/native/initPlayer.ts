@@ -2,9 +2,9 @@ import TrackPlayer, { Capability } from 'react-native-track-player';
 
 import { warnPlayback } from '@features/playback/domain/playbackError';
 
-export const PLAYER_SETUP_TIMEOUT_MS = 15_000;
+const PLAYER_SETUP_TIMEOUT_MS = 15_000;
 
-export class PlayerSetupTimeoutError extends Error {
+class PlayerSetupTimeoutError extends Error {
   constructor(timeoutMs: number) {
     super(`Playback setup timed out after ${timeoutMs / 1000}s`);
     this.name = 'PlayerSetupTimeoutError';

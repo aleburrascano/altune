@@ -1,40 +1,46 @@
 import { asPlaylistId } from '@shared/apiClient/ids';
 import type { QueueSource } from '@shared/playback/queueOrder';
 
-import {
-  buildTrackPayload,
-  hasCrossedListenThreshold,
-  LISTEN_THRESHOLD_MS,
-  listenThresholdMs,
-} from '@features/playback/domain/signals';
+import { buildTrackPayload, hasCrossedListenThreshold } from '@features/playback/domain/signals';
 
 import {
   libraryTrack as buildLibraryTrack,
   previewTrack as buildPreviewTrack,
 } from '@features/playback/__tests__/fixtures';
 
+const LISTEN_THRESHOLD_MS = 30_000;
+const SHORT_TRACK_MS = 40_000;
+const HALF_SHORT_TRACK_MS = 20_000;
+const CAP_MEETS_HALF_MS = 60_000;
+const LONG_TRACK_MS = 600_000;
+
+function expectListenThreshold(durationMs: number, thresholdMs: number): void {
+  expect(hasCrossedListenThreshold(thresholdMs - 1, durationMs)).toBe(false);
+  expect(hasCrossedListenThreshold(thresholdMs, durationMs)).toBe(true);
+}
+
 const libraryTrack = buildLibraryTrack();
 const previewTrack = buildPreviewTrack();
 
 describe('listenThresholdMs — the dwell that counts as a listen', () => {
   it('is the flat threshold when the duration is unknown (zero)', () => {
-    expect(listenThresholdMs(0)).toBe(LISTEN_THRESHOLD_MS);
+    expectListenThreshold(0, LISTEN_THRESHOLD_MS);
   });
 
   it('is the flat threshold for a negative duration', () => {
-    expect(listenThresholdMs(-1)).toBe(LISTEN_THRESHOLD_MS);
+    expectListenThreshold(-1, LISTEN_THRESHOLD_MS);
   });
 
   it('is half the duration for a short track below twice the threshold', () => {
-    expect(listenThresholdMs(40_000)).toBe(20_000);
+    expectListenThreshold(SHORT_TRACK_MS, HALF_SHORT_TRACK_MS);
   });
 
   it('caps at the flat threshold exactly where half-duration meets it', () => {
-    expect(listenThresholdMs(60_000)).toBe(LISTEN_THRESHOLD_MS);
+    expectListenThreshold(CAP_MEETS_HALF_MS, LISTEN_THRESHOLD_MS);
   });
 
   it('stays capped at the flat threshold for a long track', () => {
-    expect(listenThresholdMs(600_000)).toBe(LISTEN_THRESHOLD_MS);
+    expectListenThreshold(LONG_TRACK_MS, LISTEN_THRESHOLD_MS);
   });
 });
 

@@ -16,10 +16,7 @@ import {
 import { signInTestUser } from '@testing/signInTestUser';
 import { reorderUpcomingNative } from '@features/playback/native/rebuildNativeTail';
 import { claimLoad } from '@features/playback/domain/loadToken';
-import {
-  NATIVE_QUEUE_OP_TIMEOUT_MS,
-  withNativeQueue,
-} from '@features/playback/native/nativeQueueLock';
+import { withNativeQueue } from '@features/playback/native/nativeQueueLock';
 import { forgetAllSwaps } from '@features/playback/native/nativeTrackSwap';
 import { toNativeTrack } from '@features/playback/native/nativeTrack';
 import { usePlaybackErrorStore } from '@features/playback/hooks/usePlaybackErrorStore';
@@ -45,6 +42,8 @@ import {
   type MemoryPlaybackSeed,
 } from '@features/playback/__tests__/memoryPlaybackPort';
 import { httpPlaybackPort } from '@features/playback/adapters/http/httpPlaybackPort';
+
+const NATIVE_QUEUE_OP_TIMEOUT_MS = 15_000;
 
 const FIRST_TRACK_BUILD_LOADS_IMAGE_AND_ARTWORK_TIMEOUT_MS = 30_000;
 

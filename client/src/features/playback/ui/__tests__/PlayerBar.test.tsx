@@ -5,12 +5,13 @@ import type { ReactTestInstance } from 'react-test-renderer';
 import { asTrackId } from '@shared/apiClient/ids';
 import { PlaybackContext } from '@shared/playback/usePlayback';
 import { useQueueStore } from '@shared/playback/queueStore';
-import { RESTART_THRESHOLD_MS } from '@features/playback/domain/restartOnPrevious';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
 import { makeIdlePlayback } from '@testing/factories';
 
 import { libraryTrack } from '@features/playback/__tests__/fixtures';
 import { PlayerBar } from '@features/playback/ui/PlayerBar';
+
+const RESTART_THRESHOLD_MS = 3_000;
 
 const mockPush = jest.fn();
 

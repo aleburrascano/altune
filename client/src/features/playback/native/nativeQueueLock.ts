@@ -1,6 +1,6 @@
 import { warnPlayback } from '@features/playback/domain/playbackError';
 
-export const NATIVE_QUEUE_OP_TIMEOUT_MS = 15_000;
+const NATIVE_QUEUE_OP_TIMEOUT_MS = 15_000;
 
 export class NativeQueueTimeoutError extends Error {
   constructor(timeoutMs: number) {

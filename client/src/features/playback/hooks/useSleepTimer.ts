@@ -21,7 +21,7 @@ export const useSleepTimerStore = create<SleepTimerState>((set) => ({
   cancel: () => set({ endsAt: null, monoDeadline: null, minutes: null }),
 }));
 
-export function minutesRemaining(endsAt: number | null, now: number): number {
+function minutesRemaining(endsAt: number | null, now: number): number {
   if (endsAt === null) return 0;
   return Math.max(0, Math.ceil((endsAt - now) / 60_000));
 }

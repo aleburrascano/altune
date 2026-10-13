@@ -3,9 +3,9 @@ import type { QueueSource } from '@shared/playback/queueOrder';
 
 import { libraryTrackId } from '@features/playback/domain/playerStatus';
 
-export const LISTEN_THRESHOLD_MS = 30000;
+const LISTEN_THRESHOLD_MS = 30000;
 
-export function listenThresholdMs(durationMs: number): number {
+function listenThresholdMs(durationMs: number): number {
   if (durationMs > 0) return Math.min(LISTEN_THRESHOLD_MS, durationMs * 0.5);
   return LISTEN_THRESHOLD_MS;
 }

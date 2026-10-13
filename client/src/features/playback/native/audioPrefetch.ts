@@ -48,7 +48,7 @@ function evictAgainstLiveQueue(): void {
   evict(orderedQueueTracks(s), s.currentIndex);
 }
 
-export const PREFETCH_STALL_TIMEOUT_MS = 15_000;
+const PREFETCH_STALL_TIMEOUT_MS = 15_000;
 
 function deleteQuietly(file: File): void {
   try {

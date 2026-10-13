@@ -6,22 +6,12 @@ import {
   invalidateAudioCaches,
 } from '@shared/acquisition/audioCacheInvalidation';
 import { asTrackId, type TrackId } from '@shared/apiClient/ids';
-import { RESTART_THRESHOLD_MS } from '@features/playback/domain/restartOnPrevious';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
 import { setSignedInUser } from '@shared/session/signOutCleanup';
 
-import {
-  QUEUE_OUT_OF_SYNC_MESSAGE,
-  QUEUE_UPDATE_FAILED_MESSAGE,
-} from '@features/playback/native/queueFailureReport';
 import { usePlaybackErrorStore } from '@features/playback/hooks/usePlaybackErrorStore';
 import { redactPlaybackErrorMessage } from '@features/playback/domain/playbackError';
-import {
-  MAX_TRACKED_RECOVERIES,
-  RECOVERY_ATTEMPTS_PER_TRACK,
-  RECOVERY_COOLDOWN_BASE_MS,
-} from '@features/playback/native/recoveryBudget';
 import * as nativeTrackSwap from '@features/playback/native/nativeTrackSwap';
 import {
   playbackService,
@@ -32,6 +22,13 @@ import { previewTrack, libraryTrackWithId } from '@features/playback/__tests__/f
 import { httpPlaybackPort } from '@features/playback/adapters/http/httpPlaybackPort';
 import { signInTestUser } from '@testing/signInTestUser';
 import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
+
+const RESTART_THRESHOLD_MS = 3_000;
+const QUEUE_OUT_OF_SYNC_MESSAGE = 'The queue fell out of sync. Tap retry to reload it.';
+const QUEUE_UPDATE_FAILED_MESSAGE = "Couldn't update the queue. Tap retry to resync.";
+const MAX_TRACKED_RECOVERIES = 64;
+const RECOVERY_ATTEMPTS_PER_TRACK = 2;
+const RECOVERY_COOLDOWN_BASE_MS = 30_000;
 
 beforeAll(() => {
   installPlaybackPort(httpPlaybackPort);

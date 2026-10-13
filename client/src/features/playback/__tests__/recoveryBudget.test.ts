@@ -1,12 +1,13 @@
 import type { TrackKey } from '@shared/playback/playbackTrack';
 
 import {
-  MAX_TRACKED_RECOVERIES,
-  RECOVERY_ATTEMPTS_PER_TRACK,
-  RECOVERY_COOLDOWN_BASE_MS,
   claimRecoveryAttempt,
   resetRecoveryBudget,
 } from '@features/playback/native/recoveryBudget';
+
+const MAX_TRACKED_RECOVERIES = 64;
+const RECOVERY_ATTEMPTS_PER_TRACK = 2;
+const RECOVERY_COOLDOWN_BASE_MS = 30_000;
 
 const KEY = 'library:trk-1' as TrackKey;
 const OTHER_KEY = 'library:trk-2' as TrackKey;
