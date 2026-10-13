@@ -10,7 +10,6 @@ import {
   clearRecoveryUnlock,
   isRecoveryUnlocked,
   markRecoveryUnlocked,
-  RECOVERY_UNLOCK_WINDOW_MS,
   subscribeRecoveryUnlock,
 } from '@features/auth/domain/passwordRecovery';
 import { useRecoveryUnlocked } from '@features/auth/hooks/useRecoveryUnlocked';
@@ -33,6 +32,8 @@ beforeEach(() => {
 afterEach(() => {
   clearRecoveryUnlock();
 });
+
+const RECOVERY_UNLOCK_WINDOW_MS = 300_000;
 
 describe('recoveryUnlock marker', () => {
   it('is locked by default', () => {

@@ -17,8 +17,6 @@ import { useOAuthFlow } from '@features/auth/hooks/useOAuthFlow';
 
 WebBrowser.maybeCompleteAuthSession();
 
-export { OAUTH_BROWSER_TIMEOUT_MS } from '@features/auth/domain/oauthResult';
-
 async function redirectToProvider(provider: OAuthProvider): Promise<OAuthFailure | null> {
   const { error } = await withAuthDeadline(
     startOAuth({

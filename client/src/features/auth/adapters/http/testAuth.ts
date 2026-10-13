@@ -4,7 +4,7 @@ import { apiBase } from '@shared/apiClient/config';
 import { injectTestSession } from '@shared/auth/injectTestSession';
 import { isTestAuthEnabled, markTestAuthBootSettled } from '@shared/auth/testAuthBoot';
 
-export { isTestAuthEnabled, injectTestSession };
+export { isTestAuthEnabled };
 
 const TEST_LOGIN_PATH = '/test/login';
 

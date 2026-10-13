@@ -1,9 +1,4 @@
 import {
-  EMAIL_NOT_CONFIRMED_COPY,
-  INVALID_SIGN_IN_COPY,
-  NETWORK_ERROR_COPY,
-  SIGNUP_DISABLED_COPY,
-  TOO_MANY_ATTEMPTS_COPY,
   authErrorText,
   classifyAuthError,
   isInvalidCredentialsError,
@@ -13,6 +8,12 @@ import {
 } from '@features/auth/domain/authError';
 
 const GENERIC = "Couldn't sign you in. Please try again.";
+const NETWORK_ERROR_COPY = "Can't reach the server. Check your connection and try again.";
+const INVALID_SIGN_IN_COPY = 'Email or password is incorrect.';
+const EMAIL_NOT_CONFIRMED_COPY =
+  'Confirm your email first. Check your inbox for the confirmation link.';
+const TOO_MANY_ATTEMPTS_COPY = 'Too many attempts. Wait a moment and try again.';
+const SIGNUP_DISABLED_COPY = 'Sign-ups are closed on staging.';
 
 describe('authErrorText: the reasons that need their own words', () => {
   it('explains an unreachable server rather than blaming the credentials', () => {

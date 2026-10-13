@@ -3,11 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Text } from 'react-native';
 
 import { AuthGate } from '@features/auth/ui/AuthGate';
-import {
-  clearRecoveryUnlock,
-  markRecoveryUnlocked,
-  RECOVERY_UNLOCK_WINDOW_MS,
-} from '@features/auth/domain/passwordRecovery';
+import { clearRecoveryUnlock, markRecoveryUnlocked } from '@features/auth/domain/passwordRecovery';
 
 import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
 
@@ -65,6 +61,8 @@ beforeEach(() => {
 afterEach(() => {
   act(() => clearRecoveryUnlock());
 });
+
+const RECOVERY_UNLOCK_WINDOW_MS = 300_000;
 
 describe('AuthGate: reset-password route is gated by a verified recovery exchange (#656)', () => {
   it('shows the invalid-link notice, not the password form, for a bare deep link with no recovery exchange', async () => {

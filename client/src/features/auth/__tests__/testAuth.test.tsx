@@ -6,10 +6,10 @@ import {
   bootstrapTestAuth,
   buildTestSession,
   fetchTestLoginToken,
-  injectTestSession,
   isTestAuthEnabled,
   type TestLoginResponse,
 } from '@features/auth/adapters/http/testAuth';
+import { injectTestSession } from '@shared/auth/injectTestSession';
 import { supabase } from '@shared/auth/supabaseClient';
 import { markTestAuthBootSettled } from '@shared/auth/testAuthBoot';
 import { useSession } from '@shared/auth/useSession';

@@ -1,8 +1,9 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import * as WebBrowser from 'expo-web-browser';
 
-import { NETWORK_ERROR_COPY } from '@features/auth/domain/authError';
 import { OAuthButtons } from '@features/auth/ui/OAuthButtons';
+
+const NETWORK_ERROR_COPY = "Can't reach the server. Check your connection and try again.";
 
 import {
   authPortWrapper,

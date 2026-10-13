@@ -18,16 +18,16 @@ export type SignInFailureReason = Extract<
   'invalid_credentials' | 'email_not_confirmed' | 'network' | 'unknown' | 'too_many_attempts'
 >;
 
-export const NETWORK_ERROR_COPY = "Can't reach the server. Check your connection and try again.";
+const NETWORK_ERROR_COPY = "Can't reach the server. Check your connection and try again.";
 
-export const INVALID_SIGN_IN_COPY = 'Email or password is incorrect.';
+const INVALID_SIGN_IN_COPY = 'Email or password is incorrect.';
 
-export const EMAIL_NOT_CONFIRMED_COPY =
+const EMAIL_NOT_CONFIRMED_COPY =
   'Confirm your email first. Check your inbox for the confirmation link.';
 
-export const TOO_MANY_ATTEMPTS_COPY = 'Too many attempts. Wait a moment and try again.';
+const TOO_MANY_ATTEMPTS_COPY = 'Too many attempts. Wait a moment and try again.';
 
-export const SIGNUP_DISABLED_COPY = 'Sign-ups are closed on staging.';
+const SIGNUP_DISABLED_COPY = 'Sign-ups are closed on staging.';
 
 export function authErrorText(reason: AuthErrorReason, generic: string): string {
   if (reason === 'network') return NETWORK_ERROR_COPY;

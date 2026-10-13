@@ -1,8 +1,4 @@
 import {
-  FAILURE_RUN_MEMORY_MS,
-  LOCKOUT_AFTER_FAILURES,
-  LOCKOUT_BASE_MS,
-  MAX_TRACKED_ACCOUNTS,
   clearFailedAttempts,
   isLockedOut,
   lockoutOnRepeatedFailure,
@@ -12,6 +8,10 @@ import {
 } from '@features/auth/domain/attemptLockout';
 
 const START = 1_000_000;
+const LOCKOUT_AFTER_FAILURES = 5;
+const LOCKOUT_BASE_MS = 15_000;
+const FAILURE_RUN_MEMORY_MS = 300_000;
+const MAX_TRACKED_ACCOUNTS = 64;
 
 function failTimes(email: string, times: number, at: number = START): void {
   for (let i = 0; i < times; i += 1) recordFailedAttempt('sign-in', email, at);

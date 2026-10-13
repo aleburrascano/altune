@@ -1,4 +1,3 @@
-import { LOCKOUT_AFTER_FAILURES } from '@features/auth/domain/attemptLockout';
 import { useSignIn } from '@features/auth/hooks/useSignIn';
 
 import {
@@ -32,6 +31,8 @@ const WRONG_PASSWORD = {
 };
 
 const SIGNED_IN = { data: { user: {}, session: {} }, error: null };
+
+const LOCKOUT_AFTER_FAILURES = 5;
 
 describe('useSignIn: mapping the resolved { error } of signInWithPassword', () => {
   it('maps a swallowed AuthRetryableFetchError to network, never invalid_credentials', async () => {

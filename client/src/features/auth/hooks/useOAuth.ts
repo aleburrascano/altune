@@ -20,8 +20,6 @@ import type { AuthPort } from '@features/auth/ports/authPort';
 
 import { useOAuthFlow } from '@features/auth/hooks/useOAuthFlow';
 
-export { OAUTH_BROWSER_TIMEOUT_MS } from '@features/auth/domain/oauthResult';
-
 type AuthorizationRequest = { kind: 'authorization_url'; url: string } | OAuthFailure;
 
 async function requestAuthorizationUrl(provider: OAuthProvider): Promise<AuthorizationRequest> {

@@ -1,6 +1,5 @@
 import { Platform } from 'react-native';
 
-import { LOCKOUT_AFTER_FAILURES } from '@features/auth/domain/attemptLockout';
 import { useResetPassword } from '@features/auth/hooks/useResetPassword';
 import * as nativeWebOrigin from '@shared/device/webOrigin';
 import * as browserWebOrigin from '@shared/device/webOrigin.web';
@@ -28,6 +27,8 @@ const REJECTED = {
 };
 
 const ACCEPTED = { data: {}, error: null };
+
+const LOCKOUT_AFTER_FAILURES = 5;
 
 describe('useResetPassword: mapping the resolved { error } of resetPasswordForEmail', () => {
   it('maps a swallowed AuthRetryableFetchError to network instead of falsely reporting sent', async () => {

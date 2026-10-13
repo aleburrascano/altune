@@ -9,7 +9,8 @@ import {
   completeAuthIntent,
 } from '@features/auth/domain/completeAuthIntent';
 import { parseAuthLink } from '@features/auth/domain/parseAuthLink';
-import { OAUTH_BROWSER_TIMEOUT_MS, useOAuth } from '@features/auth/hooks/useOAuth';
+import { OAUTH_BROWSER_TIMEOUT_MS } from '@features/auth/domain/oauthResult';
+import { useOAuth } from '@features/auth/hooks/useOAuth';
 
 import {
   authPortWrapper,
