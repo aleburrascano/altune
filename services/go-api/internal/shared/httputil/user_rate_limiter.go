@@ -1,6 +1,8 @@
 package httputil
 
 import (
+	"altune/go-api/internal/shared"
+	"context"
 	"net/http"
 	"sync"
 	"time"
@@ -14,6 +16,13 @@ type RateLimit struct {
 }
 
 type UserKeyFunc func(*http.Request) (string, bool)
+
+func UserKey(userID func(context.Context) (shared.UserId, bool)) UserKeyFunc {
+	return func(r *http.Request) (string, bool) {
+		id, ok := userID(r.Context())
+		return id.String(), ok
+	}
+}
 
 type UserRateLimiter struct {
 	mu        sync.Mutex

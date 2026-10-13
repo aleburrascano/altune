@@ -54,10 +54,5 @@ func newWriteRateLimiter(limit AudioRateLimit, now func() time.Time) rateLimitMi
 }
 
 func newUserRateLimiter(limit AudioRateLimit, now func() time.Time, refused error) rateLimitMiddleware {
-	return httputil.NewUserRateLimiter(limit, now).Middleware(requestUserKey, refused, nil)
-}
-
-func requestUserKey(r *http.Request) (string, bool) {
-	userId, ok := authbridge.UserIDFromContext(r.Context())
-	return userId.String(), ok
+	return httputil.NewUserRateLimiter(limit, now).Middleware(httputil.UserKey(authbridge.UserIDFromContext), refused, nil)
 }

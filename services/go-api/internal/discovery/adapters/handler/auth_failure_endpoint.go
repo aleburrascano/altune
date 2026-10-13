@@ -1,8 +1,6 @@
 package handler
 
 import (
-	"altune/go-api/internal/discovery/adapters/authbridge"
-	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/httputil"
 	"encoding/json"
 	"errors"
@@ -37,20 +35,8 @@ type authFailureRequest struct {
 	AppVersion *string `json:"app_version"`
 }
 
-func (l *userRateLimiter) clientMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if wait, admitted := l.admit(authbridge.ClientKey(r)); !admitted {
-			w.Header().Set("Retry-After", httputil.RetryAfterSeconds(wait))
-			httputil.HandleServiceError(w, r, domain.ErrRateLimited)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
 func (h *DiscoveryHandler) PublicRoutes(r chi.Router, limit RequestLimit) {
-	limiter := newUserRateLimiter(limit, time.Now)
-	r.With(limiter.clientMiddleware, httputil.MaxBodySize(maxAuthFailureBodyBytes)).
+	r.With(newClientRateLimiter(limit, time.Now), httputil.MaxBodySize(maxAuthFailureBodyBytes)).
 		Post("/public/auth-failures", h.handleAuthFailure)
 }
 

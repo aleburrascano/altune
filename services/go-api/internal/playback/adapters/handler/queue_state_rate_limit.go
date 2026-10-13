@@ -25,10 +25,5 @@ func WithQueueStateRateLimitMetrics(m ports.RateLimitMetrics) QueueHandlerOption
 }
 
 func newUserRateLimiter(limit QueueStateRateLimit, now func() time.Time, metrics ports.RateLimitMetrics) func(http.Handler) http.Handler {
-	return httputil.NewUserRateLimiter(limit, now).Middleware(requestUserKey, domain.QueueRateLimitedError{}, metrics.QueueStateRateLimited)
-}
-
-func requestUserKey(r *http.Request) (string, bool) {
-	userId, ok := authbridge.UserIDFromContext(r.Context())
-	return userId.String(), ok
+	return httputil.NewUserRateLimiter(limit, now).Middleware(httputil.UserKey(authbridge.UserIDFromContext), domain.QueueRateLimitedError{}, metrics.QueueStateRateLimited)
 }

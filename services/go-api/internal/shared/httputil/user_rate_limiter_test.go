@@ -1,6 +1,8 @@
 package httputil
 
 import (
+	"altune/go-api/internal/shared"
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -101,6 +103,24 @@ func TestUserRateLimiter_MiddlewareRefusesWithRetryAfter(t *testing.T) {
 
 	if first.Code != http.StatusNoContent || second.Header().Get("Retry-After") != "2" || refusals != 1 {
 		t.Fatalf("first=%d retry-after=%q refusals=%d, want 204, 2, 1", first.Code, second.Header().Get("Retry-After"), refusals)
+	}
+}
+
+type limiterCtxKey struct{}
+
+func TestUserKey_ReadsTheUserFromTheRequestContext(t *testing.T) {
+	id := shared.NewUserId(uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))
+	fromContext := func(ctx context.Context) (shared.UserId, bool) { return id, ctx.Value(limiterCtxKey{}) != nil }
+	key := UserKey(fromContext)
+
+	signedIn := httptest.NewRequest(http.MethodGet, "/", nil)
+	signedIn = signedIn.WithContext(context.WithValue(signedIn.Context(), limiterCtxKey{}, true))
+	got, ok := key(signedIn)
+	if !ok || got != id.String() {
+		t.Fatalf("signed-in key = %q, %v, want %q, true", got, ok, id.String())
+	}
+	if _, ok := key(httptest.NewRequest(http.MethodGet, "/", nil)); ok {
+		t.Fatal("anonymous request produced a key")
 	}
 }
 

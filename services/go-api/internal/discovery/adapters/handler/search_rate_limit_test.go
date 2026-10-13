@@ -18,6 +18,7 @@ import (
 
 	authdomain "altune/go-api/internal/auth/domain"
 	authports "altune/go-api/internal/auth/ports"
+	authservice "altune/go-api/internal/auth/service"
 
 	discdomain "altune/go-api/internal/discovery/domain"
 
@@ -159,37 +160,31 @@ func TestSearchRateLimit_UnauthenticatedStillGets401(t *testing.T) {
 	discAssertStatus(t, discServeNoAuth(t, r, http.MethodGet, "/discovery/search?q=a"), http.StatusUnauthorized)
 }
 
-func TestUserRateLimiter_WindowSlidesAndIdleUsersArePruned(t *testing.T) {
+func TestRequestLimit_BucketAdmitsBurstThenRefillsAtTheWindowRate(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
-	l := newUserRateLimiter(RequestLimit{Max: 2, Window: time.Minute}, func() time.Time { return now })
-
-	mustAdmit(t, l, "u1")
-	now = now.Add(20 * time.Second)
-	mustAdmit(t, l, "u1")
-
-	now = now.Add(10 * time.Second)
-	wait, ok := l.admit("u1")
-	if ok {
-		t.Fatal("third request inside the window was admitted")
-	}
-	if wait != 30*time.Second {
-		t.Fatalf("wait = %v, want 30s (until the first request leaves the window)", wait)
-	}
-	if got := httputil.RetryAfterSeconds(wait); got != "30" {
-		t.Fatalf("Retry-After = %q, want %q", got, "30")
+	limiter := newUserRateLimiter(RequestLimit{Max: 2, Window: time.Minute}, func() time.Time { return now })
+	serve := func() int {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req = req.WithContext(authservice.ContextWithUserID(req.Context(), otherTestUserId))
+		rec := httptest.NewRecorder()
+		limiter(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })).ServeHTTP(rec, req)
+		return rec.Code
 	}
 
+	for i := range 2 {
+		if got := serve(); got != http.StatusNoContent {
+			t.Fatalf("burst request %d = %d, want 204", i+1, got)
+		}
+	}
+	if got := serve(); got != http.StatusTooManyRequests {
+		t.Fatalf("request past the burst = %d, want 429", got)
+	}
 	now = now.Add(30 * time.Second)
-	mustAdmit(t, l, "u1")
-
-	mustAdmit(t, l, "u2")
-	now = now.Add(2 * time.Minute)
-	mustAdmit(t, l, "u3")
-	if _, kept := l.logs["u2"]; kept {
-		t.Fatal("idle user u2 was not pruned after its window passed")
+	if got := serve(); got != http.StatusNoContent {
+		t.Fatalf("after Window/Max the bucket refilled one token, got %d", got)
 	}
-	if len(l.logs) != 1 {
-		t.Fatalf("logs holds %d users, want only the active u3", len(l.logs))
+	if got := serve(); got != http.StatusTooManyRequests {
+		t.Fatalf("only one token refilled, second request = %d, want 429", got)
 	}
 }
 
@@ -216,13 +211,6 @@ func buildRateLimitedRouter(limits DiscoveryRateLimits) chi.Router {
 	r.Use(middleware.Middleware(discVerifyAsTestUser))
 	r.Mount("/discovery", h.Routes())
 	return r
-}
-
-func mustAdmit(t *testing.T, l *userRateLimiter, key string) {
-	t.Helper()
-	if _, ok := l.admit(key); !ok {
-		t.Fatalf("request for %s rejected inside its budget", key)
-	}
 }
 
 func serveAs(t *testing.T, router chi.Router, token, path string) *httptest.ResponseRecorder {
@@ -302,7 +290,7 @@ func TestSearchRateLimit_AdmitsAgainAfterWindowResets(t *testing.T) {
 	h := NewDiscoveryHandler(DiscoveryServices{
 		Search: search.NewService(nil, providercall.NewCircuitBreaker()),
 	}).WithRateLimits(DiscoveryRateLimits{Search: RequestLimit{Max: 1, Window: time.Minute}})
-	h.searchLimiter.now = func() time.Time { return now }
+	h.searchLimiter = newUserRateLimiter(RequestLimit{Max: 1, Window: time.Minute}, func() time.Time { return now })
 	r := chi.NewRouter()
 	r.Use(middleware.Middleware(discVerifyAsTestUser))
 	r.Mount("/discovery", h.Routes())

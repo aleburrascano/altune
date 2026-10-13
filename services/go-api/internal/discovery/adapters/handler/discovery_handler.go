@@ -35,12 +35,12 @@ type DiscoveryHandler struct {
 
 	ownership *ownership.OwnershipEnrichmentService
 
-	searchLimiter    *userRateLimiter
-	suggestLimiter   *userRateLimiter
-	eventLimiter     *userRateLimiter
-	contentLimiter   *userRateLimiter
-	favoritesLimiter *userRateLimiter
-	historyLimiter   *userRateLimiter
+	searchLimiter    func(http.Handler) http.Handler
+	suggestLimiter   func(http.Handler) http.Handler
+	eventLimiter     func(http.Handler) http.Handler
+	contentLimiter   func(http.Handler) http.Handler
+	favoritesLimiter func(http.Handler) http.Handler
+	historyLimiter   func(http.Handler) http.Handler
 }
 
 type DetailEnrichers struct {
@@ -103,21 +103,21 @@ const maxHistoryBodyBytes = 4 << 10
 
 func (h *DiscoveryHandler) Routes() chi.Router {
 	r := chi.NewRouter()
-	r.With(noStorePerUser, h.searchLimiter.middleware).Get("/search", h.handleSearch)
-	r.With(h.suggestLimiter.middleware).Get("/suggest", h.handleSuggest)
-	r.With(noStorePerUser, h.historyLimiter.middleware).Get("/search-history", h.handleSearchHistory)
-	r.With(h.historyLimiter.middleware, httputil.MaxBodySize(maxHistoryBodyBytes)).Post("/search-history", h.handleRecordSearchHistory)
-	r.With(h.historyLimiter.middleware).Delete("/search-history", h.handleClearSearchHistory)
-	r.With(h.eventLimiter.middleware, httputil.MaxBodySize(maxEventBodyBytes)).Post("/events", h.handleRecordEvent)
-	r.With(noStorePerUser, h.favoritesLimiter.middleware).Get("/favorites", h.handleListFavorites)
-	r.With(h.favoritesLimiter.middleware, httputil.MaxBodySize(maxFavoriteBodyBytes)).Put("/favorites", h.handleAddFavorite)
-	r.With(h.favoritesLimiter.middleware, httputil.MaxBodySize(maxFavoriteBodyBytes)).Delete("/favorites", h.handleRemoveFavorite)
+	r.With(noStorePerUser, h.searchLimiter).Get("/search", h.handleSearch)
+	r.With(h.suggestLimiter).Get("/suggest", h.handleSuggest)
+	r.With(noStorePerUser, h.historyLimiter).Get("/search-history", h.handleSearchHistory)
+	r.With(h.historyLimiter, httputil.MaxBodySize(maxHistoryBodyBytes)).Post("/search-history", h.handleRecordSearchHistory)
+	r.With(h.historyLimiter).Delete("/search-history", h.handleClearSearchHistory)
+	r.With(h.eventLimiter, httputil.MaxBodySize(maxEventBodyBytes)).Post("/events", h.handleRecordEvent)
+	r.With(noStorePerUser, h.favoritesLimiter).Get("/favorites", h.handleListFavorites)
+	r.With(h.favoritesLimiter, httputil.MaxBodySize(maxFavoriteBodyBytes)).Put("/favorites", h.handleAddFavorite)
+	r.With(h.favoritesLimiter, httputil.MaxBodySize(maxFavoriteBodyBytes)).Delete("/favorites", h.handleRemoveFavorite)
 	r.Group(h.contentRoutes)
 	return r
 }
 
 func (h *DiscoveryHandler) contentRoutes(r chi.Router) {
-	r.Use(requireUser, h.contentLimiter.middleware)
+	r.Use(requireUser, h.contentLimiter)
 	r.Get("/albums/{provider}/{externalId}/tracks", h.handleAlbumTracks)
 	r.Get("/artists/{provider}/{externalId}/content", h.handleArtistContent)
 	r.Get("/artists/{provider}/{externalId}/top-tracks", h.handleArtistTopTracks)
