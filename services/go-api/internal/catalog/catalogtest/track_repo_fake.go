@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared"
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -20,8 +21,6 @@ type TrackRepo struct {
 	ErrOnList   error
 	ErrOnUpdate error
 	ErrOnDelete error
-
-	EnforceVersionCAS bool
 
 	LastAlbumsQuery  domain.LibraryQuery
 	LastArtistsQuery domain.LibraryQuery
@@ -125,6 +124,12 @@ func (r *TrackRepo) ListForUser(_ context.Context, userId shared.UserId, limit, 
 			all = append(all, t)
 		}
 	}
+	sort.Slice(all, func(i, j int) bool {
+		if !all[i].AddedAt.Equal(all[j].AddedAt) {
+			return all[i].AddedAt.After(all[j].AddedAt)
+		}
+		return all[i].ID.String() > all[j].ID.String()
+	})
 	total := len(all)
 	if offset >= len(all) {
 		return nil, total, nil
@@ -233,11 +238,13 @@ func (r *TrackRepo) Update(_ context.Context, track *domain.Track, expectedVersi
 	if r.ErrOnUpdate != nil {
 		return r.ErrOnUpdate
 	}
-	if r.EnforceVersionCAS {
-		if existing, ok := r.Tracks[track.ID.String()]; ok && existing.Version != expectedVersion {
-			return fmt.Errorf("%w: track %s expected version %d, found %d",
-				ports.ErrTrackVersionConflict, track.ID.String(), expectedVersion, existing.Version)
-		}
+	existing, ok := r.Tracks[track.ID.String()]
+	if !ok || existing.UserId != track.UserId {
+		return fmt.Errorf("track %s not found or was deleted", track.ID.String())
+	}
+	if existing.Version != expectedVersion {
+		return fmt.Errorf("%w: track %s expected version %d, found %d",
+			ports.ErrTrackVersionConflict, track.ID.String(), expectedVersion, existing.Version)
 	}
 	track.Version = expectedVersion + 1
 	r.Tracks[track.ID.String()] = track
