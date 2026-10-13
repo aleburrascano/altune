@@ -67,8 +67,7 @@ describe('resolveEntityQuery', () => {
       },
     };
     const { unmount } = render(port, 'radiohead');
-    await waitFor(() => expect(seen).toBeDefined());
-    expect(seen?.aborted).toBe(false);
+    await waitFor(() => expect(seen?.aborted).toBe(false));
 
     unmount();
 

@@ -41,7 +41,7 @@ describe('useEnrichment', () => {
       it('aborts the in-flight request when the screen unmounts', async () => {
         __http.hang(spec);
         const { unmount } = renderHook(useHook, { wrapper });
-        await waitFor(() => expect(__http.last()).toBeDefined());
+        await waitFor(() => expect(__http.countFor(spec)).toBeGreaterThan(0));
         const { signal } = __http.last() as { signal: AbortSignal };
         expect(signal.aborted).toBe(false);
 
@@ -80,7 +80,7 @@ describe('useDeezerEnrichment', () => {
       it('aborts the in-flight request when the screen unmounts', async () => {
         __http.hang(spec);
         const { unmount } = renderHook(useHook, { wrapper });
-        await waitFor(() => expect(__http.last()).toBeDefined());
+        await waitFor(() => expect(__http.countFor(spec)).toBeGreaterThan(0));
         const { signal } = __http.last() as { signal: AbortSignal };
         expect(signal.aborted).toBe(false);
 
@@ -119,7 +119,7 @@ describe('useLastFmEnrichment', () => {
       it('aborts the in-flight request when the screen unmounts', async () => {
         __http.hang(spec);
         const { unmount } = renderHook(useHook, { wrapper });
-        await waitFor(() => expect(__http.last()).toBeDefined());
+        await waitFor(() => expect(__http.countFor(spec)).toBeGreaterThan(0));
         const { signal } = __http.last() as { signal: AbortSignal };
         expect(signal.aborted).toBe(false);
 
