@@ -3,6 +3,14 @@ package release
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/textnorm"
+	"regexp"
+	"sort"
+	"strings"
+)
+
+var (
+	bracketRe = regexp.MustCompile(`[\(\[\{]([^\)\]\}]*)[\)\]\}]`)
+	creditRe  = regexp.MustCompile(`(?i)^\s*(?:feat|ft|featuring|with)\b`)
 )
 
 type ReleaseGroup struct {
@@ -22,7 +30,7 @@ func MergeReleases(groups []ReleaseGroup) []MergedRelease {
 	var order []string
 	for _, group := range groups {
 		for _, variant := range group.Releases {
-			key := textnorm.NormalizeForMatch(variant.Title)
+			key := releaseKey(variant.Title)
 			if key == "" {
 				continue
 			}
@@ -51,6 +59,24 @@ func MergeReleases(groups []ReleaseGroup) []MergedRelease {
 		out = append(out, *byKey[key])
 	}
 	return out
+}
+
+func releaseKey(title string) string {
+	base := textnorm.NormalizeForMatch(title)
+	if base == "" {
+		return ""
+	}
+	var qualifiers []string
+	for _, m := range bracketRe.FindAllStringSubmatch(title, -1) {
+		if creditRe.MatchString(m[1]) {
+			continue
+		}
+		if q := textnorm.NormalizeForMatch(m[1]); q != "" {
+			qualifiers = append(qualifiers, q)
+		}
+	}
+	sort.Strings(qualifiers)
+	return strings.Join(append([]string{base}, qualifiers...), textnorm.KeySeparator)
 }
 
 func bestOfRelease(a, b domain.SearchResult) domain.SearchResult {

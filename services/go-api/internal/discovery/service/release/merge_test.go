@@ -87,6 +87,57 @@ func TestMergeReleases_bestOfAcrossProviders(t *testing.T) {
 	}
 }
 
+func TestMergeReleases_editionStaysItsOwnRelease(t *testing.T) {
+	groups := []ReleaseGroup{
+		idGroup(
+			albumVariant(domain.ProviderDeezer, "d-base", "2 Alivë"),
+			albumVariant(domain.ProviderDeezer, "d-pack", "2 Alivë (Geëk Pack)"),
+		),
+		idGroup(
+			albumVariant(domain.ProviderITunes, "i-base", "2 Alivë", withTracks(20)),
+			albumVariant(domain.ProviderITunes, "i-pack", "2 Alivë (Geëk Pack)", withTracks(29)),
+		),
+	}
+
+	merged := MergeReleases(groups)
+
+	if len(merged) != 2 {
+		t.Fatalf("merged %d releases, want 2 (base and edition apart)", len(merged))
+	}
+	if got := findRelease(t, merged, "2 Alivë").Result.TrackCount; got != 20 {
+		t.Errorf("base TrackCount = %d, want 20 (the edition's 29 leaked in)", got)
+	}
+	if got := findRelease(t, merged, "2 Alivë (Geëk Pack)").Result.TrackCount; got != 29 {
+		t.Errorf("edition TrackCount = %d, want 29", got)
+	}
+}
+
+func TestMergeReleases_versionQualifierSplitsButCreditDoesNot(t *testing.T) {
+	groups := []ReleaseGroup{
+		idGroup(
+			albumVariant(domain.ProviderDeezer, "d1", "MELTDOWN (feat. Drake)"),
+			albumVariant(domain.ProviderDeezer, "d2", "MELTDOWN (feat. Drake) (Instrumental)"),
+			albumVariant(domain.ProviderDeezer, "d3", "Iris Green (feat. Future)"),
+		),
+		idGroup(
+			albumVariant(domain.ProviderITunes, "i1", "MELTDOWN (feat. Drake)"),
+			albumVariant(domain.ProviderITunes, "i2", "MELTDOWN [Instrumental] (feat. Drake)"),
+			albumVariant(domain.ProviderITunes, "i3", "Iris Green (with Future)"),
+		),
+	}
+
+	merged := MergeReleases(groups)
+
+	if len(merged) != 3 {
+		t.Fatalf("merged %d releases, want 3 (song, its instrumental, Iris Green)", len(merged))
+	}
+	for _, title := range []string{"MELTDOWN (feat. Drake)", "MELTDOWN (feat. Drake) (Instrumental)", "Iris Green (feat. Future)"} {
+		if got := len(findRelease(t, merged, title).Providers); got != 2 {
+			t.Errorf("%q providers = %d, want 2 (same release on both)", title, got)
+		}
+	}
+}
+
 func TestMergeReleases_singleProviderReleaseSurvivesIntact(t *testing.T) {
 	groups := []ReleaseGroup{
 		idGroup(albumVariant(domain.ProviderDeezer, "enc", "REST IN BASS: ENCORE", withDate("2025-12-25"), withCover("c"), withType("album"))),
