@@ -73,7 +73,7 @@ function isGridKind(kind: DiscoveryKind): boolean {
   return kind === 'album' || kind === 'artist';
 }
 
-export const SECTION_ITEM_CAP = 20;
+const SECTION_ITEM_CAP = 20;
 
 type SectionRowsProps = { items: DiscoveryResult[]; onPress: ResultTapHandler };
 

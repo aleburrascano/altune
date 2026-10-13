@@ -10,7 +10,7 @@ import { isSearchableQuery, normalizeQuery } from '@features/discovery/domain/se
 import { useDiscoverPort } from '@features/discovery/ports/DiscoverPortProvider';
 import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
 
-export const SUGGEST_DEBOUNCE_MS = 150;
+const SUGGEST_DEBOUNCE_MS = 150;
 export const SEARCH_DEBOUNCE_MS = 300;
 
 const SUGGESTION_LIMIT = 5;

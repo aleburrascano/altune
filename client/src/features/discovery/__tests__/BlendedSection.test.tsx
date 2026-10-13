@@ -1,13 +1,15 @@
 import React from 'react';
 import { fireEvent, render as renderBare, screen } from '@testing-library/react-native';
 
-import { BlendedSection, SECTION_ITEM_CAP } from '@features/discovery/ui/BlendedSection';
+import { BlendedSection } from '@features/discovery/ui/BlendedSection';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 
 import type { DiscoveryResult, ResultSection } from '@shared/apiClient/discovery';
 import type { ResultsCommonProps } from '@features/discovery/ui/ResultsList';
 import { PlaybackContext } from '@shared/playback/usePlayback';
 import { idlePlayback } from '@testing/queryHarness';
+
+const SECTION_ITEM_CAP = 20;
 
 function render(ui: React.ReactElement): ReturnType<typeof renderBare> {
   return renderBare(ui, {

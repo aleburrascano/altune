@@ -5,9 +5,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { NetworkError } from '@shared/apiClient';
 import { CORRELATION_HEADER } from '@shared/apiClient/correlationId';
 import { transientRetryOptions } from '@shared/query/retryDelay';
-import { MIN_QUERY_LENGTH } from '@features/discovery/domain/searchPaging';
 import {
-  SUGGEST_DEBOUNCE_MS,
   useAutocompleteSuggestions,
   useSuggestionVisibility,
 } from '@features/discovery/hooks/useSuggestions';
@@ -18,6 +16,8 @@ import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 const { __http } = require('@testing/doubles/fetch.js');
 
 const SUGGEST = 'GET /v1/discovery/suggest';
+const MIN_QUERY_LENGTH = 2;
+const SUGGEST_DEBOUNCE_MS = 150;
 const EVENTS = 'POST /v1/discovery/events';
 const EVENTS_PATH = '/v1/discovery/events';
 

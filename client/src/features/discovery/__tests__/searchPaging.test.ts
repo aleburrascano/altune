@@ -1,11 +1,12 @@
 import {
   MAX_SEARCH_OFFSET,
-  MIN_QUERY_LENGTH,
   clampQueryWords,
   isSearchableQuery,
   normalizeQuery,
   sliceCodePoints,
 } from '@features/discovery/domain/searchPaging';
+
+const MIN_QUERY_LENGTH = 2;
 
 describe('isSearchableQuery', () => {
   it('rejects text whose trimmed length is below the minimum', () => {

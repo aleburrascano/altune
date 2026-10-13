@@ -5,11 +5,7 @@ import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-li
 import { ApiError, NetworkError } from '@shared/failure/errors';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { useDiscoverLogic } from '@features/discovery/hooks/useDiscoverLogic';
-import {
-  MAX_QUERY_LENGTH,
-  MIN_QUERY_LENGTH,
-  SEARCH_PAGE_SIZE,
-} from '@features/discovery/domain/searchPaging';
+import { MAX_QUERY_LENGTH, SEARCH_PAGE_SIZE } from '@features/discovery/domain/searchPaging';
 import { setSearchState } from '@features/discovery/domain/searchState';
 import { DiscoverBody } from '@features/discovery/ui/DiscoverBody';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
@@ -34,6 +30,7 @@ const SERVER_ERROR = 500;
 const TWO_SEARCHES = 2;
 const FOUR_SEARCHES = 4;
 const SHORT_WAIT_MS = 50;
+const MIN_QUERY_LENGTH = 2;
 
 type SearchParams = { q: string };
 
