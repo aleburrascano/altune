@@ -1199,3 +1199,30 @@ func TestSettleContext_SurvivesParentCancelWithinBudget(t *testing.T) {
 		t.Fatalf("deadline should fall within %v, got %v remaining", settleBudget, remaining)
 	}
 }
+
+type m4aAudioSource struct{ newAudioSource }
+
+func (m4aAudioSource) Fetch(_ context.Context, _ ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+	path := filepath.Join(outDir, "audio.m4a")
+	return fetchedAt(path, os.WriteFile(path, []byte("aac bytes"), 0o600))
+}
+
+func TestExecuteReplace_AnM4AReplacesAnOldMP3AndDropsIt(t *testing.T) {
+	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(m4aAudioSource{}), store)
+
+	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
+		t.Fatalf("ExecuteReplace: %v", err)
+	}
+
+	row := repo.committed(trackId, userId)
+	if row.AudioRef == nil || filepath.Ext(*row.AudioRef) != ".m4a" {
+		t.Fatalf("audio_ref = %v, want an .m4a key", row.AudioRef)
+	}
+	if got := store.objects[*row.AudioRef]; got != "aac bytes" {
+		t.Errorf("object at the committed ref = %q, want the m4a audio", got)
+	}
+	if _, stillThere := store.objects[originalRef]; stillThere {
+		t.Errorf("old mp3 %q still stored, want it deleted after the swap", originalRef)
+	}
+}

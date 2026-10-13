@@ -31,7 +31,9 @@ const (
 
 const maxSourceFileSize = "200M"
 
-const audioFormatSelector = "bestaudio/best[height<=480][protocol=https]/best[height<=480]/best"
+const audioFormatSelector = "140/bestaudio[ext=m4a]/bestaudio/best[height<=480][protocol=https]/best[height<=480]/best"
+
+const aacEncodeKbps = 128
 
 const maxDownloadedFileBytes = 200 * 1024 * 1024
 
@@ -306,8 +308,8 @@ func (s *YtDlpAudioSearcher) fetchAudio(
 	args := []string{
 		"-f", audioFormatSelector,
 		"-x",
-		"--audio-format", "mp3",
-		"--audio-quality", "0",
+		"--audio-format", "m4a",
+		"--audio-quality", fmt.Sprintf("%dK", aacEncodeKbps),
 		"--max-filesize", maxSourceFileSize,
 		"--no-progress",
 		"--print", "after_move:" + sourceFormatPrefix + "%(format_id)s|%(acodec)s|%(abr)s",
@@ -333,17 +335,17 @@ func (s *YtDlpAudioSearcher) fetchAudio(
 		return ports.FetchedAudio{}, s.classifiedFailure(fmt.Errorf("yt-dlp download: %w (stderr: %s)", err, embeddedStderr(stderr)), stderr, ports.RunTimedOut(ctx, runCtx))
 	}
 
-	path, err := largestMP3(outDir)
+	path, err := largestM4A(outDir)
 	if err != nil {
 		return ports.FetchedAudio{}, err
 	}
 	return ports.FetchedAudio{Path: path, Format: parseSourceFormat(stdout)}, nil
 }
 
-func largestMP3(outDir string) (string, error) {
-	matches, err := filepath.Glob(filepath.Join(outDir, "*.mp3"))
+func largestM4A(outDir string) (string, error) {
+	matches, err := filepath.Glob(filepath.Join(outDir, "*.m4a"))
 	if err != nil || len(matches) == 0 {
-		return "", fmt.Errorf("no mp3 file produced in %s", outDir)
+		return "", fmt.Errorf("no m4a file produced in %s", outDir)
 	}
 
 	best, bestSize := largestReadable(matches)
