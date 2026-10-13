@@ -250,8 +250,8 @@ func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServices
 	var reacquireH *acqHandler.ReacquireHandler
 	if audio.scheduler != nil {
 		cooldowns := acqPersistence.NewFallbackCooldownStore(acqPersistence.NewPgxCooldownStore(a.pool))
-		retryH = acqHandler.NewRetryHandler(audio.trackRepo, audio.scheduler, acqService.NewRetryAdmission(cooldowns))
-		reacquireH = acqHandler.NewReacquireHandler(audio.trackRepo, audio.background, acqService.NewReacquireAdmission(cooldowns))
+		retryH = acqHandler.NewRetryHandler(acqCatalogBridge.NewTrackLedger(audio.trackRepo), audio.scheduler, acqService.NewRetryAdmission(cooldowns))
+		reacquireH = acqHandler.NewReacquireHandler(acqCatalogBridge.NewTrackLedger(audio.trackRepo), audio.background, acqService.NewReacquireAdmission(cooldowns))
 	}
 
 	return catalogWiring{

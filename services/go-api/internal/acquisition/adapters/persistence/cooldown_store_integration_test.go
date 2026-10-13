@@ -16,8 +16,6 @@ import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service"
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
 )
 
 func newPool(t *testing.T) *pgxpool.Pool {
@@ -34,16 +32,10 @@ func newPool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-func insertFailedTrack(t *testing.T, pool *pgxpool.Pool) *domain.Track {
+func insertFailedTrack(t *testing.T, pool *pgxpool.Pool) *ports.TrackSnapshot {
 	t.Helper()
-	track, err := domain.NewTrack(shared.NewUserId(uuid.New()), "Blinding Lights", "The Weeknd", "After Hours")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	if err := track.MarkFailed("boom"); err != nil {
-		t.Fatalf("mark failed: %v", err)
-	}
-	_, err = pool.Exec(context.Background(),
+	track := failedTrack(t)
+	_, err := pool.Exec(context.Background(),
 		`INSERT INTO tracks (id, user_id, title, artist, album, dedup_key, acquisition_status) VALUES ($1, $2, $3, $4, $5, $6, 'failed')`,
 		track.ID.UUID(), track.UserId.UUID(), track.Title, track.Artist, track.Album, uuid.NewString())
 	if err != nil {

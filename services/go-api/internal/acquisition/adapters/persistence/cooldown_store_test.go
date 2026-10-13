@@ -4,7 +4,6 @@ import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service"
-	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
@@ -35,7 +34,7 @@ func (s *scriptedCooldownStore) setErr(err error) {
 	s.err = err
 }
 
-func (s *scriptedCooldownStore) Reserve(_ context.Context, trackID domain.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, time.Duration, error) {
+func (s *scriptedCooldownStore) Reserve(_ context.Context, trackID shared.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, time.Duration, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.err != nil {
@@ -50,7 +49,7 @@ func (s *scriptedCooldownStore) Reserve(_ context.Context, trackID domain.TrackI
 	return now, true, 0, nil
 }
 
-func (s *scriptedCooldownStore) Release(_ context.Context, trackID domain.TrackId, kind ports.CooldownKind, at time.Time) error {
+func (s *scriptedCooldownStore) Release(_ context.Context, trackID shared.TrackId, kind ports.CooldownKind, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.err != nil {
@@ -71,16 +70,15 @@ func missingTableErr() error {
 	})
 }
 
-func failedTrack(t *testing.T) *domain.Track {
-	t.Helper()
-	track, err := domain.NewTrack(shared.NewUserId(uuid.New()), "Blinding Lights", "The Weeknd", "After Hours")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
+func failedTrack(_ *testing.T) *ports.TrackSnapshot {
+	return &ports.TrackSnapshot{
+		ID:     shared.NewTrackId(),
+		UserId: shared.NewUserId(uuid.New()),
+		Title:  "Blinding Lights",
+		Artist: "The Weeknd",
+		Album:  "After Hours",
+		Status: ports.TrackFailed,
 	}
-	if err := track.MarkFailed("boom"); err != nil {
-		t.Fatalf("mark failed: %v", err)
-	}
-	return track
 }
 
 func TestFallbackCooldownStore_MissingTableStillEnforcesCooldown(t *testing.T) {

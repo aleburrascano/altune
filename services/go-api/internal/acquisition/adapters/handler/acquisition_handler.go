@@ -3,7 +3,6 @@ package handler
 import (
 	"altune/go-api/internal/acquisition/adapters/authbridge"
 	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
 	"context"
@@ -14,14 +13,14 @@ import (
 )
 
 type trackAdmission interface {
-	Admit(ctx context.Context, track *domain.Track, schedule func() error) error
+	Admit(ctx context.Context, track *ports.TrackSnapshot, schedule func() error) error
 }
 
 type acquisitionCommand struct {
-	trackRepo ports.TrackRepository
+	trackRepo ports.TrackLedger
 	admission trackAdmission
 	logMsg    string
-	schedule  func(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
+	schedule  func(ctx context.Context, userId shared.UserId, trackId shared.TrackId) error
 }
 
 func (c acquisitionCommand) serve(w http.ResponseWriter, r *http.Request) {
@@ -44,8 +43,8 @@ func (c acquisitionCommand) serve(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 }
 
-func (c acquisitionCommand) resolveTrack(w http.ResponseWriter, r *http.Request, userId shared.UserId) (domain.TrackId, *domain.Track, bool) {
-	trackId, err := domain.ParseTrackId(chi.URLParam(r, "trackId"))
+func (c acquisitionCommand) resolveTrack(w http.ResponseWriter, r *http.Request, userId shared.UserId) (shared.TrackId, *ports.TrackSnapshot, bool) {
+	trackId, err := shared.ParseTrackId(chi.URLParam(r, "trackId"))
 	if err != nil {
 		httputil.BadRequest(w, "invalid track ID")
 		return trackId, nil, false
@@ -54,8 +53,8 @@ func (c acquisitionCommand) resolveTrack(w http.ResponseWriter, r *http.Request,
 	return trackId, track, ok
 }
 
-func (c acquisitionCommand) loadTrack(w http.ResponseWriter, r *http.Request, userId shared.UserId, trackId domain.TrackId) (*domain.Track, bool) {
-	track, err := c.trackRepo.GetByID(r.Context(), trackId, userId)
+func (c acquisitionCommand) loadTrack(w http.ResponseWriter, r *http.Request, userId shared.UserId, trackId shared.TrackId) (*ports.TrackSnapshot, bool) {
+	track, err := c.trackRepo.Get(r.Context(), trackId, userId)
 	if err != nil {
 		slog.ErrorContext(r.Context(), c.logMsg, "error", err, "track_id", trackId.String())
 		httputil.InternalError(w)
@@ -69,16 +68,16 @@ func (c acquisitionCommand) loadTrack(w http.ResponseWriter, r *http.Request, us
 }
 
 type replaceScheduler interface {
-	ScheduleReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
+	ScheduleReplace(ctx context.Context, userId shared.UserId, trackId shared.TrackId) error
 }
 
 type ReacquireHandler struct {
-	trackRepo ports.TrackRepository
+	trackRepo ports.TrackLedger
 	scheduler replaceScheduler
 	admission trackAdmission
 }
 
-func NewReacquireHandler(trackRepo ports.TrackRepository, scheduler replaceScheduler, admission trackAdmission) *ReacquireHandler {
+func NewReacquireHandler(trackRepo ports.TrackLedger, scheduler replaceScheduler, admission trackAdmission) *ReacquireHandler {
 	return &ReacquireHandler{
 		trackRepo: trackRepo,
 		scheduler: scheduler,
@@ -91,24 +90,24 @@ func (h *ReacquireHandler) HandleReacquire(w http.ResponseWriter, r *http.Reques
 		trackRepo: h.trackRepo,
 		admission: h.admission,
 		logMsg:    "reacquire: get track failed",
-		schedule: func(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
+		schedule: func(ctx context.Context, userId shared.UserId, trackId shared.TrackId) error {
 			return h.scheduler.ScheduleReplace(ctx, userId, trackId)
 		},
 	}.serve(w, r)
 }
 
 type acquisitionScheduler interface {
-	Schedule(ctx context.Context, userId shared.UserId, trackId domain.TrackId, sourceURL string) error
+	Schedule(ctx context.Context, userId shared.UserId, trackId shared.TrackId, sourceURL string) error
 }
 
 type RetryHandler struct {
-	trackRepo ports.TrackRepository
+	trackRepo ports.TrackLedger
 	scheduler acquisitionScheduler
 	admission trackAdmission
 }
 
 func NewRetryHandler(
-	trackRepo ports.TrackRepository,
+	trackRepo ports.TrackLedger,
 	scheduler acquisitionScheduler,
 	admission trackAdmission,
 ) *RetryHandler {
@@ -124,7 +123,7 @@ func (h *RetryHandler) HandleRetryAcquisition(w http.ResponseWriter, r *http.Req
 		trackRepo: h.trackRepo,
 		admission: h.admission,
 		logMsg:    "retry acquisition: get track failed",
-		schedule: func(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
+		schedule: func(ctx context.Context, userId shared.UserId, trackId shared.TrackId) error {
 			return h.scheduler.Schedule(ctx, userId, trackId, "")
 		},
 	}.serve(w, r)

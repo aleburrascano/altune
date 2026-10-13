@@ -1,9 +1,7 @@
-G3 internal/acquisition/adapters/handler/acquisition_handler.go:6 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/ports/writer.go:4 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/acquire.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/acquire.go:6 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/reacquire.go:5 imports catalog outside adapters/catalogbridge
-G3 internal/acquisition/service/retry_admission.go:6 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/step_update_track.go:5 imports catalog outside adapters/catalogbridge
 G8 internal/acquisition/service/acquire.go sits directly in service/
 G8 internal/acquisition/service/audio_ref.go sits directly in service/

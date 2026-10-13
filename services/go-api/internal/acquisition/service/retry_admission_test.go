@@ -3,7 +3,6 @@ package service
 import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
@@ -14,37 +13,28 @@ import (
 	"github.com/google/uuid"
 )
 
-func failedTrack(t *testing.T) *domain.Track {
-	t.Helper()
-	track, err := domain.NewTrack(shared.NewUserId(uuid.New()), "Blinding Lights", "The Weeknd", "After Hours")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
+func snapshotWith(status ports.TrackStatus, streamable bool) *ports.TrackSnapshot {
+	return &ports.TrackSnapshot{
+		ID:         shared.NewTrackId(),
+		UserId:     shared.NewUserId(uuid.New()),
+		Title:      "Blinding Lights",
+		Artist:     "The Weeknd",
+		Album:      "After Hours",
+		Status:     status,
+		Streamable: streamable,
 	}
-	if err := track.MarkFailed("yt-dlp exited 1"); err != nil {
-		t.Fatalf("mark failed: %v", err)
-	}
-	return track
 }
 
-func readyTrack(t *testing.T) *domain.Track {
-	t.Helper()
-	track, err := domain.NewTrack(shared.NewUserId(uuid.New()), "Blinding Lights", "The Weeknd", "After Hours")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	if err := track.MarkReady("audio-ref"); err != nil {
-		t.Fatalf("mark ready: %v", err)
-	}
-	return track
+func failedTrack(_ *testing.T) *ports.TrackSnapshot {
+	return snapshotWith(ports.TrackFailed, false)
 }
 
-func pendingTrackOnly(t *testing.T) *domain.Track {
-	t.Helper()
-	track, err := domain.NewTrack(shared.NewUserId(uuid.New()), "Blinding Lights", "The Weeknd", "After Hours")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	return track
+func readyTrack(_ *testing.T) *ports.TrackSnapshot {
+	return snapshotWith(ports.TrackReady, true)
+}
+
+func pendingTrackOnly(_ *testing.T) *ports.TrackSnapshot {
+	return snapshotWith(ports.TrackPending, false)
 }
 
 type fakeCooldownStore struct {
@@ -60,11 +50,11 @@ func newFakeCooldownStore() *fakeCooldownStore {
 	return &fakeCooldownStore{now: time.Now, lastAt: make(map[string]time.Time)}
 }
 
-func cooldownKey(trackID domain.TrackId, kind ports.CooldownKind) string {
+func cooldownKey(trackID shared.TrackId, kind ports.CooldownKind) string {
 	return string(kind) + "/" + trackID.String()
 }
 
-func (s *fakeCooldownStore) Reserve(_ context.Context, trackID domain.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, time.Duration, error) {
+func (s *fakeCooldownStore) Reserve(_ context.Context, trackID shared.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, time.Duration, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.reserveErr != nil {
@@ -78,7 +68,7 @@ func (s *fakeCooldownStore) Reserve(_ context.Context, trackID domain.TrackId, k
 	return now, true, 0, nil
 }
 
-func (s *fakeCooldownStore) Release(_ context.Context, trackID domain.TrackId, kind ports.CooldownKind, at time.Time) error {
+func (s *fakeCooldownStore) Release(_ context.Context, trackID shared.TrackId, kind ports.CooldownKind, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.released++
@@ -120,7 +110,7 @@ func TestCooldownGate_RetryAndReacquireWindowsAreIndependent(t *testing.T) {
 	if err := NewRetryAdmission(store).Admit(context.Background(), track, scheduleQueued); err != nil {
 		t.Fatalf("retry Admit = %v, want nil", err)
 	}
-	_ = track.MarkReady("audio-ref")
+	track.Status, track.Streamable = ports.TrackReady, true
 	if err := NewReacquireAdmission(store).Admit(context.Background(), track, scheduleQueued); err != nil {
 		t.Errorf("reacquire Admit after retry = %v, want nil (separate kinds)", err)
 	}
@@ -261,27 +251,15 @@ func TestReacquireAdmission_Admit(t *testing.T) {
 }
 
 func TestReacquireAdmission(t *testing.T) {
-	userId := shared.NewUserId(uuid.New())
-
-	pending, _ := domain.NewTrack(userId, "T", "A", "B")
-	if err := NewReacquireAdmission(newFakeCooldownStore()).Admit(context.Background(), pending, scheduleQueued); !errors.Is(err, acqdomain.ErrReacquireNotReady) {
+	if err := NewReacquireAdmission(newFakeCooldownStore()).Admit(context.Background(), pendingTrackOnly(t), scheduleQueued); !errors.Is(err, acqdomain.ErrReacquireNotReady) {
 		t.Errorf("pending track: err = %v, want ErrReacquireNotReady", err)
 	}
 
-	failed, err := domain.NewTrack(userId, "T", "A", "B")
-	if err != nil {
-		t.Fatalf("NewTrack: %v", err)
-	}
-	_ = failed.MarkFailed("boom")
-	if err := NewReacquireAdmission(newFakeCooldownStore()).Admit(context.Background(), failed, scheduleQueued); !errors.Is(err, acqdomain.ErrReacquireNotReady) {
+	if err := NewReacquireAdmission(newFakeCooldownStore()).Admit(context.Background(), failedTrack(t), scheduleQueued); !errors.Is(err, acqdomain.ErrReacquireNotReady) {
 		t.Errorf("failed track: err = %v, want ErrReacquireNotReady", err)
 	}
 
-	ready, err := domain.NewTrack(userId, "T", "A", "B")
-	if err != nil {
-		t.Fatalf("NewTrack: %v", err)
-	}
-	_ = ready.MarkReady("u/a/b/c.mp3")
+	ready := readyTrack(t)
 	admission := NewReacquireAdmission(newFakeCooldownStore())
 	if err := admission.Admit(context.Background(), ready, scheduleQueued); err != nil {
 		t.Fatalf("ready track: err = %v, want admitted", err)
@@ -292,22 +270,11 @@ func TestReacquireAdmission(t *testing.T) {
 }
 
 func TestRetryAdmission_StillFailedOnlyWithCooldown(t *testing.T) {
-	userId := shared.NewUserId(uuid.New())
-
-	ready, err := domain.NewTrack(userId, "T", "A", "B")
-	if err != nil {
-		t.Fatalf("NewTrack: %v", err)
-	}
-	_ = ready.MarkReady("u/a/b/c.mp3")
-	if err := NewRetryAdmission(newFakeCooldownStore()).Admit(context.Background(), ready, scheduleQueued); !errors.Is(err, acqdomain.ErrRetryNotFailed) {
+	if err := NewRetryAdmission(newFakeCooldownStore()).Admit(context.Background(), readyTrack(t), scheduleQueued); !errors.Is(err, acqdomain.ErrRetryNotFailed) {
 		t.Errorf("ready track: err = %v, want ErrRetryNotFailed", err)
 	}
 
-	failed, err := domain.NewTrack(userId, "T", "A", "B")
-	if err != nil {
-		t.Fatalf("NewTrack: %v", err)
-	}
-	_ = failed.MarkFailed("boom")
+	failed := failedTrack(t)
 	admission := NewRetryAdmission(newFakeCooldownStore())
 	if err := admission.Admit(context.Background(), failed, scheduleQueued); err != nil {
 		t.Fatalf("failed track: err = %v, want admitted", err)
