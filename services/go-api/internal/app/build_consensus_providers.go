@@ -125,10 +125,6 @@ func discogsReleasesToSearchResults(releases []discoveryPorts.DiscogsRelease) []
 	return results
 }
 
-func BuildArtworkChain(cfg *config.Config) discoveryPorts.TaggingArtworkResolver {
-	return buildArtworkChain(newClientFactory(nil), cfg)
-}
-
 func buildArtworkChain(cf clientFactory, cfg *config.Config) discoveryPorts.TaggingArtworkResolver {
 	coverArtArchive := providers.NewCoverArtArchiveResolver(cf.discovery())
 	artworkResolvers := []discoveryPorts.ArtworkResolver{
