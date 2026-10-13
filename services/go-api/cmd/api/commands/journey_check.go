@@ -55,7 +55,7 @@ func runJourneyCheckWithConfig(cfg *config.Config) error {
 	defer removeCookieJar()
 
 	searcher := app.BuildRankingOnlySearchService(ctx, cfg, pool, nil, nil)
-	downloader := ytdlp.NewYtDlpAudioSearcher(cfg.FFmpegLocation, cookieJar, cfg.YtDLPJSRuntime)
+	downloader := ytdlp.NewYtDlpAudioSearcher(cfg.FFmpegLocation, cookieJar, cfg.YtDLPJSRuntime).WithPOTokenURL(cfg.YtDLPPOTokenURL)
 	return runJourneyCheck(ctx, searcher, downloader, os.Stdout)
 }
 

@@ -13,6 +13,7 @@ x-go-api: &go-api
   environment:
     - EVAL_METER_ENABLED=false
     - DB_POOL_MAX_CONNS=6
+    - YTDLP_POT_URL=http://altune-staging-pot:4416
   volumes:
     - ../../../cookies.txt:/data/cookies.txt:ro
   tmpfs:
@@ -63,6 +64,18 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  pot:
+    image: brainicism/bgutil-ytdlp-pot-provider:2.0.2
+    container_name: altune-staging-pot
+    restart: unless-stopped
+    init: true
+    mem_limit: 512m
+    cpus: 0.5
+    expose:
+      - "4416"
+    networks:
+      - staging
 
   redis:
     image: redis:7-alpine

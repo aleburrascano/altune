@@ -12,6 +12,7 @@ x-go-api: &go-api
     - ../.env.production
   environment:
     - EVAL_METER_ENABLED=true
+    - YTDLP_POT_URL=http://altune-pot:4416
   volumes:
     - ../../../cookies.txt:/data/cookies.txt
   tmpfs:
@@ -52,6 +53,15 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  pot:
+    image: brainicism/bgutil-ytdlp-pot-provider:2.0.2
+    container_name: altune-pot
+    restart: unless-stopped
+    init: true
+    mem_limit: 512m
+    expose:
+      - "4416"
 
   redis:
     image: redis:7-alpine

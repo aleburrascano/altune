@@ -161,7 +161,7 @@ STUB_TRACKS=t setup_case "$FULL_ENV"
 expect_rc 0
 expect_out "adopting existing staging schema"
 grep -qE "applying staging migration [0-9]" "$WORK/out.log" && fail "re-ran a migration on an already-migrated DB"
-expect_action "compose -f deploy/compose.staging.yml up -d --build go-api-blue overseer redis"
+expect_action "compose -f deploy/compose.staging.yml up -d --build go-api-blue overseer redis pot"
 expect_out "deployed staging"
 expect_action "curl https://staging.example.test/health"
 

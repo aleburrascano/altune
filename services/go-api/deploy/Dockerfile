@@ -14,7 +14,7 @@ RUN apk add --no-cache \
     nodejs \
     python3 \
     py3-pip \
-    && pip3 install --no-cache-dir --break-system-packages yt-dlp==2026.7.4 \
+    && pip3 install --no-cache-dir --break-system-packages "yt-dlp[default]==2026.8.19" bgutil-ytdlp-pot-provider==2.0.2 \
     && adduser -D -u 1000 altune
 
 USER altune

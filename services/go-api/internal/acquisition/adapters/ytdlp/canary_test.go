@@ -231,6 +231,37 @@ func TestCanary_SelectsFormatsTheSameWayDownloadDoes(t *testing.T) {
 	}
 }
 
+func videoOnlyYtDlp(t *testing.T) string {
+	t.Helper()
+	return withYtDlpScript(t, "#!/bin/sh\n"+
+		"prev=\"\"\n"+
+		"for arg in \"$@\"; do\n"+
+		"  if [ \"$prev\" = \"-f\" ] && [ \"$arg\" = \"bestaudio\" ]; then\n"+
+		"    echo 'ERROR: [youtube] jNQXAC9IVRw: Requested format is not available' >&2; exit 1\n"+
+		"  fi\n"+
+		"  prev=\"$arg\"\n"+
+		"done\n"+
+		"echo '19'\n")
+}
+
+func TestCanary_YTMusicIsDarkWhenOnlyVideoFormatsAreOffered(t *testing.T) {
+	s := NewYtDlpAudioSearcher("", "", "")
+	s.binary = videoOnlyYtDlp(t)
+
+	if err := s.Canary(context.Background(), YTMusicCanary); err == nil {
+		t.Fatal("Canary(ytmusic) = nil, want dark when no audio-only format is offered")
+	}
+}
+
+func TestCanary_YouTubeStaysOkOnVideoFormatsBecauseDownloadsStillWork(t *testing.T) {
+	s := NewYtDlpAudioSearcher("", "", "")
+	s.binary = videoOnlyYtDlp(t)
+
+	if err := s.Canary(context.Background(), YouTubeCanary); err != nil {
+		t.Fatalf("Canary(youtube) = %v, want nil", err)
+	}
+}
+
 func TestCopyToTempFile_LivesInAReapableDirectoryRemovedByCleanup(t *testing.T) {
 	source := filepath.Join(t.TempDir(), "cookies.txt")
 	if err := os.WriteFile(source, []byte("jar"), 0o600); err != nil {

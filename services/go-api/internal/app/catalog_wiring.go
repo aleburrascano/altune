@@ -287,7 +287,8 @@ func (a *App) sourceCanarySearcher() *ytdlp.YtDlpAudioSearcher {
 
 func (a *App) newYtDlpSearcher() *ytdlp.YtDlpAudioSearcher {
 	return ytdlp.NewYtDlpAudioSearcher(a.cfg.FFmpegLocation, a.cfg.YtDLPCookieFile, a.cfg.YtDLPJSRuntime).
-		WithRemoteComponents(a.cfg.YtDLPRemoteComponents)
+		WithRemoteComponents(a.cfg.YtDLPRemoteComponents).
+		WithPOTokenURL(a.cfg.YtDLPPOTokenURL)
 }
 
 func (a *App) audioSourcesFor(ctx context.Context, searcher *ytdlp.YtDlpAudioSearcher) []acqPorts.AudioSource {

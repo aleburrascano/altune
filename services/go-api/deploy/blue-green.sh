@@ -10,7 +10,7 @@ capture_upstream
 
 log "active=$ACTIVE target=$TARGET"
 
-compose up -d redis caddy
+compose up -d redis caddy pot
 
 log "building $TARGET"
 compose build "go-api-$TARGET"

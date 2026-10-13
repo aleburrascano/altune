@@ -61,6 +61,7 @@ type Config struct {
 	YtDLPCookieFile        string `env:"YTDLP_COOKIE_FILE"`
 	YtDLPJSRuntime         string `env:"YTDLP_JS_RUNTIME"`
 	YtDLPRemoteComponents  string `env:"YTDLP_REMOTE_COMPONENTS"`
+	YtDLPPOTokenURL        string `env:"YTDLP_POT_URL"`
 	AcquisitionConcurrency int    `env:"ACQUISITION_CONCURRENCY" envDefault:"5"`
 
 	AcquisitionDownloadConcurrency int `env:"ACQUISITION_DOWNLOAD_CONCURRENCY" envDefault:"6"`

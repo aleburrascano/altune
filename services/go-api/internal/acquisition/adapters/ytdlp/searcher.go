@@ -46,6 +46,7 @@ type YtDlpAudioSearcher struct {
 	cookieFile       string
 	jsRuntime        string
 	remoteComponents string
+	potURL           string
 	binary           string
 	runSearch        searchRunner
 	inspect          inspectRunner
@@ -60,6 +61,11 @@ const defaultRemoteComponents = "ejs:github"
 
 func (s *YtDlpAudioSearcher) WithRemoteComponents(spec string) *YtDlpAudioSearcher {
 	s.remoteComponents = spec
+	return s
+}
+
+func (s *YtDlpAudioSearcher) WithPOTokenURL(url string) *YtDlpAudioSearcher {
+	s.potURL = url
 	return s
 }
 
@@ -202,6 +208,9 @@ func (s *YtDlpAudioSearcher) authFlags(args []string, cookieFile string) []strin
 			prefix = append(prefix, "--remote-components", s.remoteComponents)
 		}
 		args = append(prefix, args...)
+	}
+	if s.potURL != "" {
+		args = append([]string{"--extractor-args", "youtubepot-bgutilhttp:base_url=" + s.potURL}, args...)
 	}
 	if cookieFile != "" {
 		args = append([]string{"--cookies", cookieFile}, args...)

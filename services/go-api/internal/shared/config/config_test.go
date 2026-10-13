@@ -1666,6 +1666,30 @@ func TestLoad_YtDLPRemoteComponents(t *testing.T) {
 	}
 }
 
+func TestLoad_YtDLPPOTokenURL(t *testing.T) {
+	env := validConfigEnv(nil)
+	setEnv(t, env)
+	cfg, err := Load()
+	if err != nil || cfg.YtDLPPOTokenURL != "" {
+		t.Fatalf("unset: got %q, %v; want empty", cfg.YtDLPPOTokenURL, err)
+	}
+
+	env["YTDLP_POT_URL"] = "http://altune-pot:4416"
+	setEnv(t, env)
+	cfg, err = Load()
+	if err != nil || cfg.YtDLPPOTokenURL != "http://altune-pot:4416" {
+		t.Fatalf("set: got %q, %v; want http://altune-pot:4416", cfg.YtDLPPOTokenURL, err)
+	}
+
+	for _, bad := range []string{"altune-pot:4416", "ftp://altune-pot", "http://", "http://pot:4416 --exec"} {
+		env["YTDLP_POT_URL"] = bad
+		setEnv(t, env)
+		if _, err = Load(); err == nil || !searchString(err.Error(), "YTDLP_POT_URL") {
+			t.Fatalf("%q: want error naming YTDLP_POT_URL, got %v", bad, err)
+		}
+	}
+}
+
 func TestLoad_PlaybackQueueRateDefaults(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
 

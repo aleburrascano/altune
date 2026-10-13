@@ -140,7 +140,7 @@ MIGRATE_DATABASE_URL=$(read_env_var DATABASE_URL)
 apply_migrations staging
 
 log "building and recreating the staging stack"
-compose up -d --build go-api-blue overseer redis
+compose up -d --build go-api-blue overseer redis pot
 
 if ! wait_staging_healthy; then
     log "FAILED: $PUBLIC_HEALTH_URL not healthy after ${HEALTH_TIMEOUT}s"

@@ -27,13 +27,16 @@ const (
 )
 
 type CanarySource struct {
-	Name string
-	URL  string
+	Name   string
+	URL    string
+	Format string
 }
+
+const audioOnlyFormat = "bestaudio"
 
 var (
 	YouTubeCanary    = CanarySource{Name: youtubeCanaryName, URL: "https://www.youtube.com/watch?v=jNQXAC9IVRw"}
-	YTMusicCanary    = CanarySource{Name: ytMusicCanaryName, URL: "https://music.youtube.com/watch?v=jNQXAC9IVRw"}
+	YTMusicCanary    = CanarySource{Name: ytMusicCanaryName, URL: "https://music.youtube.com/watch?v=jNQXAC9IVRw", Format: audioOnlyFormat}
 	SoundCloudCanary = CanarySource{Name: soundCloudCanaryName, URL: "https://api.soundcloud.com/tracks/soundcloud%3Atracks%3A157015344"}
 )
 
@@ -51,8 +54,12 @@ func (s *YtDlpAudioSearcher) Canary(ctx context.Context, source CanarySource) er
 }
 
 func (s *YtDlpAudioSearcher) runCanaryProbe(ctx context.Context, source CanarySource, cookieFile string) error {
+	format := source.Format
+	if format == "" {
+		format = audioFormatSelector
+	}
 	args := s.authFlags([]string{
-		"--no-warnings", "--simulate", "-f", audioFormatSelector, "--print", "%(duration)s", "--", source.URL,
+		"--no-warnings", "--simulate", "-f", format, "--print", "%(duration)s", "--", source.URL,
 	}, cookieFile)
 
 	stdout, stderr, err := execcmd.Run(ctx, s.binary, args...)

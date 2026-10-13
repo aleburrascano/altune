@@ -84,6 +84,9 @@ expect_upstream "reverse_proxy altune-go-api-green:8000"
 expect_action "build go-api-green"
 expect_action "stop go-api-blue"
 
+CASE="the token provider starts with redis and caddy"
+expect_action "up -d redis caddy pot"
+
 CASE="the public check hits PUBLIC_HEALTH_URL from .env.production"
 expect_action "curl https://prod.example.test/health"
 

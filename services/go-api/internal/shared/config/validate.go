@@ -248,6 +248,8 @@ func (c *Config) validateCookieFile() error {
 
 var allowedJSRuntimes = map[string]bool{"node": true, "deno": true}
 
+var potURLPattern = regexp.MustCompile(`^https?://[A-Za-z0-9.-]+(:\d+)?/?$`)
+
 var remoteComponentsPattern = regexp.MustCompile(`^[A-Za-z0-9_.:@/-]+(,[A-Za-z0-9_.:@/-]+)*$`)
 
 func (c *Config) validateYtDLPRuntime() error {
@@ -256,6 +258,9 @@ func (c *Config) validateYtDLPRuntime() error {
 	}
 	if c.YtDLPRemoteComponents != "" && !remoteComponentsPattern.MatchString(c.YtDLPRemoteComponents) {
 		return fmt.Errorf("YTDLP_REMOTE_COMPONENTS must be a comma-separated list of component names (or empty), got %q", c.YtDLPRemoteComponents)
+	}
+	if c.YtDLPPOTokenURL != "" && !potURLPattern.MatchString(c.YtDLPPOTokenURL) {
+		return fmt.Errorf("YTDLP_POT_URL must be an http(s) URL (or empty), got %q", c.YtDLPPOTokenURL)
 	}
 	return nil
 }

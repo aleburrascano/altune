@@ -854,3 +854,35 @@ func TestYtDlpAudioSearcher_Download_AsksForTheFormatOnlyOnceTheFileIsFinal(t *t
 		t.Fatalf("argv = %q, want --print after_move:altune-source-format:... before --", argv)
 	}
 }
+
+func TestYtDlpAudioSearcher_POTokenURL_ReachesEveryCaller(t *testing.T) {
+	const potURL = "http://altune-pot:4416"
+	for caller, call := range ytDlpCallers {
+		t.Run(caller, func(t *testing.T) {
+			argv := recordedArgv(t, NewYtDlpAudioSearcher("", "", "node").WithPOTokenURL(potURL), call)
+			if !hasFlagValue(argv, "--extractor-args", "youtubepot-bgutilhttp:base_url="+potURL) {
+				t.Fatalf("argv = %q, want --extractor-args youtubepot-bgutilhttp:base_url=%s", argv, potURL)
+			}
+		})
+	}
+}
+
+func TestYtDlpAudioSearcher_NoPOTokenURLEmitsNoExtractorArgs(t *testing.T) {
+	for caller, call := range ytDlpCallers {
+		t.Run(caller, func(t *testing.T) {
+			argv := recordedArgv(t, NewYtDlpAudioSearcher("", "", "node"), call)
+			if strings.Contains(strings.Join(argv, " "), "youtubepot") {
+				t.Fatalf("argv = %q, want no token provider flag", argv)
+			}
+		})
+	}
+}
+
+func hasFlagValue(argv []string, flag, value string) bool {
+	for i := 0; i+1 < len(argv); i++ {
+		if argv[i] == flag && argv[i+1] == value {
+			return true
+		}
+	}
+	return false
+}
