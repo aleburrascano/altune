@@ -106,5 +106,8 @@
   },
   "github-mirror.yml#mirror#push main to github": {
     "allow": "delivery: pushes gitea main to the github mirror, and checks nothing"
+  },
+  "github-bridge.yml#bridge#carry pull requests to github": {
+    "allow": "delivery: carries pull requests to GitHub and reports pr-checks back, and checks nothing itself"
   }
 }

@@ -1,0 +1,32 @@
+name: github-bridge
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '* * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: github-bridge
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  GITEA_API: ${{ github.server_url }}/api/v1
+  GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+  REPO: ${{ github.repository }}
+  CHECKOUT: /home/ubuntu/projects/altune
+  MIRROR_KEY: /home/ubuntu/.ssh/altune-github-mirror.key
+  GITHUB_REMOTE: git@github.com:aleburrascano/altune.git
+
+jobs:
+  bridge:
+    runs-on: host
+    timeout-minutes: 3
+    steps:
+      - name: carry pull requests to github
+        run: bash "$CHECKOUT/scripts/ci/github-bridge.sh"
