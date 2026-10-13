@@ -2,7 +2,7 @@ import { Animated, StyleSheet, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 
 import { Text } from '@shared/ui/primitives/Text';
-import { useTheme } from '@shared/ui/theme';
+import { useTheme, halved, touchTarget } from '@shared/ui/theme';
 import { spacing } from '@shared/ui/theme/tokens';
 
 import { useScrubberGesture } from '@features/playback/hooks/useScrubberGesture';
@@ -80,35 +80,38 @@ export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
   );
 }
 
+const TRACK_THICKNESS = 3;
+const THUMB_SIZE = 14;
+
 const styles = StyleSheet.create({
   container: {
     width: '100%',
     paddingHorizontal: spacing['2xl'],
   },
   trackOuter: {
-    height: 44,
+    height: touchTarget,
     justifyContent: 'center',
   },
   trackBg: {
     position: 'absolute',
     left: 0,
     right: 0,
-    height: 3,
-    borderRadius: 1.5,
+    height: TRACK_THICKNESS,
+    borderRadius: halved(TRACK_THICKNESS),
   },
   trackFill: {
     position: 'absolute',
     left: 0,
-    height: 3,
-    borderRadius: 1.5,
+    height: TRACK_THICKNESS,
+    borderRadius: halved(TRACK_THICKNESS),
   },
   thumb: {
     position: 'absolute',
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    marginLeft: -7,
-    top: 15,
+    width: THUMB_SIZE,
+    height: THUMB_SIZE,
+    borderRadius: halved(THUMB_SIZE),
+    marginLeft: -halved(THUMB_SIZE),
+    top: halved(touchTarget - THUMB_SIZE),
   },
   times: {
     flexDirection: 'row',

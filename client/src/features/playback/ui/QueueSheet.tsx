@@ -16,7 +16,7 @@ import { IconButton } from '@shared/ui/primitives/IconButton';
 import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Text } from '@shared/ui/primitives/Text';
 import type { Theme } from '@shared/ui/theme';
-import { useTheme } from '@shared/ui/theme';
+import { useTheme, halved } from '@shared/ui/theme';
 import { fontFamily, radius, spacing } from '@shared/ui/theme/tokens';
 
 import {
@@ -110,6 +110,9 @@ export function QueueRow({ item, onSkip, onRemove, onOpenMenu }: QueueRowProps):
   );
 }
 
+const PLAY_BADGE_SIZE = 16;
+const SECTION_LABEL_LETTER_SPACING = 0.5;
+
 const rowStyles = StyleSheet.create({
   row: {
     flexDirection: 'row',
@@ -118,7 +121,7 @@ const rowStyles = StyleSheet.create({
     paddingVertical: spacing.sm,
     gap: spacing.sm,
   },
-  rowInfo: { flex: 1, gap: 2 },
+  rowInfo: { flex: 1, gap: spacing['2xs'] },
   removeAction: {
     justifyContent: 'center',
     alignItems: 'center',
@@ -277,18 +280,18 @@ const styles = StyleSheet.create({
   artworkWrap: { position: 'relative' },
   playBadge: {
     position: 'absolute',
-    bottom: -2,
-    right: -2,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    bottom: -spacing['2xs'],
+    right: -spacing['2xs'],
+    width: PLAY_BADGE_SIZE,
+    height: PLAY_BADGE_SIZE,
+    borderRadius: halved(PLAY_BADGE_SIZE),
     alignItems: 'center',
     justifyContent: 'center',
   },
   nowPlayingInfo: { flex: 1, gap: 1 },
   nowPlayingLabel: {
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: SECTION_LABEL_LETTER_SPACING,
     fontFamily: fontFamily.bodySemiBold,
   },
   sectionHeader: {
@@ -298,7 +301,7 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: SECTION_LABEL_LETTER_SPACING,
     fontFamily: fontFamily.bodySemiBold,
   },
   list: { paddingBottom: spacing['3xl'] },

@@ -45,7 +45,12 @@ export function LibraryRowFailure({
 }
 
 const styles = StyleSheet.create({
-  failedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 2 },
+  failedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing['2xs'],
+  },
   failed: { flexShrink: 1 },
 });
 

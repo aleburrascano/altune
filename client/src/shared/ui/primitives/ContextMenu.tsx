@@ -106,10 +106,12 @@ export function ContextMenu({
   );
 }
 
+const MENU_MIN_WIDTH = 180;
+
 const styles = StyleSheet.create({
   menu: {
     position: 'absolute',
-    minWidth: 180,
+    minWidth: MENU_MIN_WIDTH,
     borderRadius: radius.lg,
     borderWidth: 1,
     overflow: 'hidden',

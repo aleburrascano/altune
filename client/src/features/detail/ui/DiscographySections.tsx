@@ -103,10 +103,12 @@ function RecordTypeChips(props: RecordTypeChipsProps): ReactElement | null {
   );
 }
 
+const DISCOGRAPHY_ROW_MIN_HEIGHT = 36;
+
 const styles = StyleSheet.create({
   chips: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, flexWrap: 'wrap' },
   chip: {
-    minHeight: 36,
+    minHeight: DISCOGRAPHY_ROW_MIN_HEIGHT,
     paddingHorizontal: spacing.md,
     justifyContent: 'center',
     borderRadius: radius.full,

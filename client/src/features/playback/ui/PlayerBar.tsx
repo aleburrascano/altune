@@ -341,6 +341,9 @@ export function PlayerBar() {
   return <BarShell state={state} />;
 }
 
+const PLAYER_BAR_MIN_HEIGHT = 64;
+const INFO_WIDTH = 160;
+
 const styles = StyleSheet.create({
   bar: {
     flexDirection: 'row',
@@ -349,7 +352,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     gap: spacing.md,
-    minHeight: 64,
+    minHeight: PLAYER_BAR_MIN_HEIGHT,
   },
   header: {
     flexDirection: 'row',
@@ -357,8 +360,8 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   info: {
-    width: 160,
-    gap: 2,
+    width: INFO_WIDTH,
+    gap: spacing['2xs'],
   },
   transport: {
     flexDirection: 'row',

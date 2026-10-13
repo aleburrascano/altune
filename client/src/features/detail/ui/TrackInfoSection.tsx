@@ -159,12 +159,14 @@ function NavRowText({ overline, title }: { overline: string; title: string }): R
   );
 }
 
+const TRACK_INFO_MIN_HEIGHT = 56;
+
 const styles = StyleSheet.create({
   navRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    minHeight: 56,
+    minHeight: TRACK_INFO_MIN_HEIGHT,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   navText: { flex: 1 },

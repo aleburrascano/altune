@@ -6,6 +6,7 @@ import { phaseLabel } from '@shared/acquisition/stagePhase';
 import { Text, radius, spacing, useTheme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { ModalFrame } from '@shared/ui/primitives/ModalFrame';
+import { sheetGrabber } from '@shared/ui/theme';
 
 interface DownloadsSheetProps {
   visible: boolean;
@@ -75,6 +76,8 @@ export function DownloadsSheet({ visible, items, onClose }: DownloadsSheetProps)
   );
 }
 
+const ROW_BODY_GAP = 3;
+
 const styles = StyleSheet.create({
   sheet: {
     position: 'absolute',
@@ -89,7 +92,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing['3xl'],
     maxHeight: '70%',
   },
-  grabber: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: spacing.lg },
+  grabber: { ...sheetGrabber, alignSelf: 'center', marginBottom: spacing.lg },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -98,5 +101,5 @@ const styles = StyleSheet.create({
   },
   list: { flexGrow: 0 },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },
-  rowBody: { flex: 1, gap: 3 },
+  rowBody: { flex: 1, gap: ROW_BODY_GAP },
 });

@@ -6,6 +6,7 @@ import { Row, useTheme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { rowSurfaceStyle } from '@features/library/ui/libraryRowStyle';
 import type { TrackResponse } from '@shared/apiClient/trackResponse';
+import { halved } from '@shared/ui/theme';
 
 export function LibraryRowSelection({
   track,
@@ -60,12 +61,15 @@ export function LibraryRowSelection({
   );
 }
 
+const CHECKBOX_SIZE = 22;
+const CHECKBOX_BORDER_WIDTH = 1.5;
+
 const styles = StyleSheet.create({
   checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 1.5,
+    width: CHECKBOX_SIZE,
+    height: CHECKBOX_SIZE,
+    borderRadius: halved(CHECKBOX_SIZE),
+    borderWidth: CHECKBOX_BORDER_WIDTH,
     alignItems: 'center',
     justifyContent: 'center',
   },

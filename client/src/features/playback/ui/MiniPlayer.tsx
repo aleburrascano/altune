@@ -128,15 +128,17 @@ export function MiniPlayer() {
   );
 }
 
+const PROGRESS_HEIGHT = 2;
+
 const styles = StyleSheet.create({
   container: {
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   progressTrack: {
-    height: 2,
+    height: PROGRESS_HEIGHT,
   },
   progressFill: {
-    height: 2,
+    height: PROGRESS_HEIGHT,
   },
   content: {
     flexDirection: 'row',
@@ -147,6 +149,6 @@ const styles = StyleSheet.create({
   },
   info: {
     flex: 1,
-    gap: 2,
+    gap: spacing['2xs'],
   },
 });

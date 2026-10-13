@@ -76,7 +76,9 @@ export function AlbumTrackRow({
   );
 }
 
+const POSITION_COLUMN_WIDTH = 24;
+
 const styles = StyleSheet.create({
-  position: { width: 24, textAlign: 'center' },
+  position: { width: POSITION_COLUMN_WIDTH, textAlign: 'center' },
   duration: { marginRight: spacing.xs, fontVariant: ['tabular-nums'] },
 });

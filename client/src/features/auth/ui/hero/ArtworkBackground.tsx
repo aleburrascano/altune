@@ -4,12 +4,14 @@ import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { radius, useTheme, withAlpha } from '@shared/ui/theme';
 
+const ARTWORK_ZOOM = 1.06;
+
 const styles = StyleSheet.create({
   grid: {
     position: 'absolute',
     flexDirection: 'row',
     flexWrap: 'wrap',
-    transform: [{ rotate: '-8deg' }, { scale: 1.06 }],
+    transform: [{ rotate: '-8deg' }, { scale: ARTWORK_ZOOM }],
   },
 });
 

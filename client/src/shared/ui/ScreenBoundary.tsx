@@ -82,6 +82,8 @@ export class ScreenBoundary extends Component<ScreenBoundaryProps, ScreenBoundar
   }
 }
 
+const DEV_BOX_MAX_HEIGHT = 220;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -92,7 +94,7 @@ const styles = StyleSheet.create({
   },
   title: { textAlign: 'center' },
   body: { textAlign: 'center' },
-  devBox: { maxHeight: 220, marginTop: spacing.lg, alignSelf: 'stretch' },
+  devBox: { maxHeight: DEV_BOX_MAX_HEIGHT, marginTop: spacing.lg, alignSelf: 'stretch' },
   devContent: { gap: spacing.sm },
   devText: { textAlign: 'left' },
 });

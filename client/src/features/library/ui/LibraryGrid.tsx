@@ -12,6 +12,7 @@ import { LibraryEmptyMessage, ListLoadingMoreFooter } from '@features/library/ui
 import { listContent } from '@features/library/ui/listContentStyles';
 import { GRID_GAP } from '@features/library/hooks/useLibraryGridLayout';
 import type { ListPaging, ListRefresh } from '@features/library/domain/libraryView';
+import { doubled } from '@shared/ui/theme';
 
 type LibraryGridProps<TItem> = {
   testID: string;
@@ -74,5 +75,5 @@ export function LibraryGrid<TItem>({
 
 const styles = StyleSheet.create({
   gridRow: { gap: GRID_GAP },
-  gridRowWide: { gap: GRID_GAP * 2 },
+  gridRowWide: { gap: doubled(GRID_GAP) },
 });

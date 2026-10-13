@@ -20,6 +20,7 @@ import { CreatePlaylistModal } from '@shared/playlists/ui/CreatePlaylistModal';
 import { usePlaylistsPort } from '@shared/playlists/ports/PlaylistsPortProvider';
 import { useAddTracksToPlaylist, useCreatePlaylistWithTracks } from '@shared/playlists/mutations';
 import { useSingleFlightAction } from '@shared/playlists/useSingleFlightAction';
+import { radius, sheetGrabber, sheetTopRadius } from '@shared/ui/theme';
 
 const SHEET_PLAYLIST_CAP = 2000;
 
@@ -76,7 +77,7 @@ export function AddToPlaylistSheet({
           {
             onSuccess: () => {
               setAddedTo(playlistId);
-              closeAfter(700, () => setAddedTo(null));
+              closeAfter(ADDED_CONFIRMATION_MS, () => setAddedTo(null));
             },
           },
         ),
@@ -216,19 +217,20 @@ export function AddToPlaylistSheet({
   );
 }
 
+const ADDED_CONFIRMATION_MS = 700;
+const PLAYLIST_ICON_SIZE = 40;
+
 const styles = StyleSheet.create({
   sheet: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: sheetTopRadius,
+    borderTopRightRadius: sheetTopRadius,
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing['3xl'],
     paddingTop: spacing.md,
     maxHeight: '70%',
   },
   handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
+    ...sheetGrabber,
     alignSelf: 'center',
     marginBottom: spacing.lg,
   },
@@ -249,16 +251,16 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   createIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
+    width: PLAYLIST_ICON_SIZE,
+    height: PLAYLIST_ICON_SIZE,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
   playlistIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
+    width: PLAYLIST_ICON_SIZE,
+    height: PLAYLIST_ICON_SIZE,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },

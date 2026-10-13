@@ -82,12 +82,14 @@ export function PlaylistTopBar(props: DetailProps): ReactElement {
   );
 }
 
+const HERO_BACKDROP_HEIGHT = 350;
+
 const styles = StyleSheet.create({
   gradient: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: 350,
+    height: HERO_BACKDROP_HEIGHT,
   },
 });

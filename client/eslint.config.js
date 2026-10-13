@@ -271,6 +271,7 @@ const localPlugin = {
     'one-alias-per-folder': require('./eslint/rules/one-alias-per-folder'),
     'no-parent-relative-imports': require('./eslint/rules/no-parent-relative-imports'),
     'top-level-function-declarations': require('./eslint/rules/top-level-function-declarations'),
+    'no-raw-style-numbers': require('./eslint/rules/no-raw-style-numbers'),
   },
 };
 
@@ -309,6 +310,13 @@ const topLevelFunctionDeclarations = {
   ignores: TEST_FILES,
   plugins: { local: localPlugin },
   rules: { 'local/top-level-function-declarations': 'error' },
+};
+
+const noRawStyleNumbers = {
+  files: ['src/**/*.{ts,tsx}'],
+  ignores: [...TEST_FILES, 'src/shared/ui/theme/**'],
+  plugins: { local: localPlugin },
+  rules: { 'local/no-raw-style-numbers': 'error' },
 };
 
 const SRC_ONLY = 'src/**/*';
@@ -357,6 +365,7 @@ module.exports = [
   oneAliasPerFolder,
   noParentRelativeImports,
   topLevelFunctionDeclarations,
+  noRawStyleNumbers,
   {
     ignores: ['node_modules/**', '.expo/**', 'dist/**', 'web-build/**', 'coverage/**'],
   },

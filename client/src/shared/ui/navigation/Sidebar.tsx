@@ -135,9 +135,11 @@ export function Sidebar({ activeRoute, onNavigate, playlists }: SidebarProps) {
   );
 }
 
+const SIDEBAR_WIDTH = 240;
+
 const styles = StyleSheet.create({
   sidebar: {
-    width: 240,
+    width: SIDEBAR_WIDTH,
     borderRightWidth: StyleSheet.hairlineWidth,
     paddingTop: spacing.lg,
     paddingHorizontal: spacing.sm,

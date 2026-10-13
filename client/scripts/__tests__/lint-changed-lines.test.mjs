@@ -15,6 +15,7 @@ const MOBILE_LINT_SETUP = [
   'eslint/rules/one-alias-per-folder.js',
   'eslint/rules/no-parent-relative-imports.js',
   'eslint/rules/top-level-function-declarations.js',
+  'eslint/rules/no-raw-style-numbers.js',
   'tsconfig.json',
 ];
 

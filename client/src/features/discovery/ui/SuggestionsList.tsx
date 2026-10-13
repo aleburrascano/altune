@@ -6,7 +6,7 @@ import { pressedStyle } from '@shared/ui/primitives/pressedStyle';
 import { Text } from '@shared/ui/primitives/Text';
 import { Tappable } from '@shared/ui/primitives/Tappable';
 import { useTheme } from '@shared/ui/theme/useTheme';
-import { spacing, radius } from '@shared/ui/theme/tokens';
+import { spacing, radius, touchTarget, zLayer } from '@shared/ui/theme/tokens';
 import type { DiscoverySuggestion } from '@shared/apiClient/discovery';
 
 interface SuggestionsListProps {
@@ -55,6 +55,9 @@ export function SuggestionsList({ suggestions, onSelect }: SuggestionsListProps)
   );
 }
 
+const VISIBLE_SUGGESTION_ROWS = 5;
+const SUGGESTION_ICON_SIZE = 28;
+
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
@@ -65,8 +68,8 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: radius.md,
     borderTopWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
-    maxHeight: 5 * 44,
-    zIndex: 20,
+    maxHeight: VISIBLE_SUGGESTION_ROWS * touchTarget,
+    zIndex: zLayer.suggestions,
   },
   row: {
     flexDirection: 'row',
@@ -74,11 +77,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     gap: spacing.md,
-    minHeight: 44,
+    minHeight: touchTarget,
   },
   iconWrap: {
-    width: 28,
-    height: 28,
+    width: SUGGESTION_ICON_SIZE,
+    height: SUGGESTION_ICON_SIZE,
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',

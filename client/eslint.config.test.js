@@ -212,3 +212,36 @@ describe('mobile eslint config makes top-level functions declarations', () => {
     assert.strictEqual((await arrowConstErrors(file, 'export const f = () => 1;\n')).length, 0);
   });
 });
+
+describe('mobile eslint config keeps raw style numbers out of StyleSheet.create', () => {
+  async function rawStyleErrors(filePath, code) {
+    const [result] = await eslint.lintText(code, { filePath });
+    return result.messages.filter(
+      (m) => m.ruleId === 'local/no-raw-style-numbers' && m.severity === 2,
+    );
+  }
+  it('reports a raw number in a stylesheet in src', async () => {
+    const code =
+      "import { StyleSheet } from 'react-native';\nexport const styles = StyleSheet.create({ a: { width: 44 } });\n";
+    assert.strictEqual(
+      (await rawStyleErrors('src/shared/ui/primitives/TextField.tsx', code)).length,
+      1,
+    );
+  });
+  it('allows 0, 1 and flex', async () => {
+    const code =
+      "import { StyleSheet } from 'react-native';\nexport const styles = StyleSheet.create({ a: { flex: 3, margin: 0, opacity: 1 } });\n";
+    assert.strictEqual(
+      (await rawStyleErrors('src/shared/ui/primitives/TextField.tsx', code)).length,
+      0,
+    );
+  });
+  it('leaves the theme folder alone', async () => {
+    const code =
+      "import { StyleSheet } from 'react-native';\nexport const styles = StyleSheet.create({ a: { width: 44 } });\n";
+    assert.strictEqual(
+      (await rawStyleErrors('src/shared/ui/theme/ThemeProvider.tsx', code)).length,
+      0,
+    );
+  });
+});

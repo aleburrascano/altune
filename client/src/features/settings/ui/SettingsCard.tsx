@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { IconBadge, Text, minInteractiveHeight, radius, spacing, useTheme } from '@shared/ui';
 import { Tappable } from '@shared/ui/primitives/Tappable';
+import { opacity } from '@shared/ui/theme';
 
 type SettingsCardProps = {
   label?: string;
@@ -162,5 +163,5 @@ const rowStyles = StyleSheet.create({
   },
   text: { flex: 1 },
   detail: { marginTop: spacing.xs },
-  disabled: { opacity: 0.5 },
+  disabled: { opacity: opacity.disabled },
 });

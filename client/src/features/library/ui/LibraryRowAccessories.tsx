@@ -8,6 +8,7 @@ import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 import type { PinnedStatus } from '@shared/offline/pinnedStore';
 import { PINNED_GLYPH, PINNED_GLYPH_LABEL } from '@features/library/ui/pinnedGlyphs';
 import { pinnedStatusDisplay } from '@features/library/domain/pinnedStatusDisplay';
+import { touchTarget } from '@shared/ui/theme';
 
 export function LibraryRowMoreButton({
   trackId,
@@ -52,8 +53,8 @@ export function LibraryRowMoreButton({
 
 const styles = StyleSheet.create({
   moreBtn: {
-    minWidth: 44,
-    minHeight: 44,
+    minWidth: touchTarget,
+    minHeight: touchTarget,
     alignItems: 'center',
     justifyContent: 'center',
   },

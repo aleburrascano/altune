@@ -13,6 +13,7 @@ import type { ResultTapHandler } from '@features/discovery/hooks/useResultTap';
 
 import { resultSecondaryLine } from '@features/discovery/domain/resultDisplay';
 import { usePreviewPlayback } from '@features/discovery/hooks/usePreviewPlayback';
+import { halved } from '@shared/ui/theme';
 
 type DiscoverRowProps = {
   result: DiscoveryResult;
@@ -92,6 +93,8 @@ export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): Re
   );
 }
 
+const PREVIEW_SIZE = 36;
+
 const styles = StyleSheet.create({
   row: {
     paddingVertical: spacing.md,
@@ -105,9 +108,9 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   previewWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: PREVIEW_SIZE,
+    height: PREVIEW_SIZE,
+    borderRadius: halved(PREVIEW_SIZE),
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     overflow: 'hidden' as const,

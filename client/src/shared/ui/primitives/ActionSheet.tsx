@@ -5,7 +5,7 @@ import { ModalFrame } from '@shared/ui/primitives/ModalFrame';
 import { pressedStyle } from '@shared/ui/primitives/pressedStyle';
 import { Text } from '@shared/ui/primitives/Text';
 import { useTheme } from '@shared/ui/theme/useTheme';
-import { radius, spacing } from '@shared/ui/theme/tokens';
+import { radius, spacing, sheetGrabber, sheetTopRadius } from '@shared/ui/theme/tokens';
 
 export type ActionSheetOption = {
   label: string;
@@ -95,16 +95,14 @@ export function ActionSheet({
 
 const styles = StyleSheet.create({
   sheet: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: sheetTopRadius,
+    borderTopRightRadius: sheetTopRadius,
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing['3xl'],
     paddingTop: spacing.md,
   },
   handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
+    ...sheetGrabber,
     alignSelf: 'center',
     marginBottom: spacing.lg,
   },

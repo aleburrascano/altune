@@ -10,6 +10,7 @@ import { kindLabel, resultKey } from '@features/discovery/domain/resultDisplay';
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import type { ResultTapHandler } from '@features/discovery/hooks/useResultTap';
+import { borderWidth } from '@shared/ui/theme';
 
 function gridColumnsFor(contentWidth: number): number {
   if (contentWidth >= 1080) return 6;
@@ -115,6 +116,6 @@ export function SectionGrid({ items, columns, onPress }: SectionGridProps): Reac
 const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   gridCardSlot: { padding: spacing.xs },
-  gridCard: { alignItems: 'center', borderWidth: 2, borderColor: 'transparent' },
+  gridCard: { alignItems: 'center', borderWidth: borderWidth.emphasis, borderColor: 'transparent' },
   gridTitle: { marginTop: spacing.sm, textAlign: 'center' },
 });

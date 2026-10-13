@@ -56,6 +56,8 @@ export function SortControl({
   );
 }
 
+const SORT_CONTROL_MIN_HEIGHT = 32;
+
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
@@ -64,5 +66,10 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
   },
-  sort: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: 32 },
+  sort: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    minHeight: SORT_CONTROL_MIN_HEIGHT,
+  },
 });

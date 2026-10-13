@@ -15,7 +15,7 @@ import { Text } from '@shared/ui/primitives/Text';
 import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Skeleton } from '@shared/ui/primitives/Skeleton';
 import { useReduceMotion } from '@shared/ui/motion/useMotion';
-import { spacing } from '@shared/ui/theme/tokens';
+import { spacing, doubled } from '@shared/ui/theme/tokens';
 
 import { useLyrics } from '@features/playback/hooks/useLyrics';
 import { activeLineIndex, _lyricsView } from '@features/playback/domain/lyricsSync';
@@ -200,17 +200,19 @@ function Credits({ query }: { query: ReturnType<typeof useLyrics> }): ReactEleme
   );
 }
 
+const PLAIN_LYRICS_LINE_HEIGHT = 28;
+
 const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing['2xl'],
-    paddingBottom: spacing['3xl'] * 2,
+    paddingBottom: doubled(spacing['3xl']),
   },
   states: { paddingHorizontal: spacing['2xl'], gap: spacing.lg, paddingTop: spacing.xl },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing['2xl'] },
   centeredText: { textAlign: 'center' },
   line: { paddingVertical: spacing.sm },
   activeLine: { opacity: 1 },
-  plain: { lineHeight: 28 },
+  plain: { lineHeight: PLAIN_LYRICS_LINE_HEIGHT },
   credits: {
     paddingHorizontal: spacing['2xl'],
     paddingVertical: spacing.lg,

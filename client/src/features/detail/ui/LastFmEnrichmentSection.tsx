@@ -97,6 +97,8 @@ function SimilarArtists({ names }: { names: string[] }): ReactElement {
   );
 }
 
+const ENRICHMENT_MIN_HEIGHT = 52;
+
 const styles = StyleSheet.create({
   section: { gap: spacing.lg },
   block: { gap: spacing.sm },
@@ -105,7 +107,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    minHeight: 52,
+    minHeight: ENRICHMENT_MIN_HEIGHT,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   simName: { flex: 1 },

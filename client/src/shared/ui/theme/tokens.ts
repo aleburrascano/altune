@@ -1,5 +1,6 @@
 export const spacing = {
   none: 0,
+  '2xs': 2,
   xs: 4,
   sm: 8,
   md: 12,
@@ -60,3 +61,29 @@ export const typography: Record<
 };
 
 export const minInteractiveHeight = 48;
+
+const TWO = 2;
+
+export function halved(size: number) {
+  return size / TWO;
+}
+
+export function doubled(size: number) {
+  return size * TWO;
+}
+
+export const borderWidth = { emphasis: 2 } as const;
+
+export const opacity = { pressed: 0.6, pressedSubtle: 0.85, dimmed: 0.7, disabled: 0.5 } as const;
+
+export const touchTarget = 44;
+
+export const sheetGrabber = { width: 36, height: 4, borderRadius: 2 } as const;
+
+export const sheetTopRadius = 20;
+
+export const pillPaddingVertical = 10;
+
+export const zLayer = { searchField: 10, suggestions: 20 } as const;
+
+export const shadow = { cover: '0px 8px 24px rgba(0, 0, 0, 0.45)' } as const;

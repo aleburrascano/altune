@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@shared/ui/primitives/Text';
-import { spacing } from '@shared/ui/theme/tokens';
+import { spacing, opacity } from '@shared/ui/theme/tokens';
 import { useTheme } from '@shared/ui/theme/useTheme';
 import {
   TAB_ROUTE_INFO_BY_ROUTE,
@@ -83,6 +83,9 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   );
 }
 
+const INDICATOR_WIDTH = 28;
+const INDICATOR_HEIGHT = 2;
+
 const styles = StyleSheet.create({
   bar: {
     flexDirection: 'row',
@@ -96,12 +99,12 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   tabPressed: {
-    opacity: 0.7,
+    opacity: opacity.dimmed,
   },
   indicator: {
-    width: 28,
-    height: 2,
-    borderRadius: 2,
+    width: INDICATOR_WIDTH,
+    height: INDICATOR_HEIGHT,
+    borderRadius: INDICATOR_HEIGHT,
     marginBottom: spacing.sm,
   },
 });

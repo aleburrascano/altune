@@ -5,7 +5,7 @@ import { ChevronLeft, MoreHorizontal, type LucideIcon } from 'lucide-react-nativ
 import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Text } from '@shared/ui/primitives/Text';
 import { ContextMenu, type ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
-import { spacing, useTheme, withAlpha } from '@shared/ui/theme';
+import { spacing, useTheme, withAlpha, halved } from '@shared/ui/theme';
 
 import { sharedStyles } from '@features/detail/ui/detailStyles';
 
@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
   glass: {
     width: GLASS,
     height: GLASS,
-    borderRadius: GLASS / 2,
+    borderRadius: halved(GLASS),
     alignItems: 'center',
     justifyContent: 'center',
   },

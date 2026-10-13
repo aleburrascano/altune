@@ -11,7 +11,7 @@ import { Text, pressedStyle, spacing, useTheme } from '@shared/ui';
 import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Tappable } from '@shared/ui/primitives/Tappable';
-import { radius } from '@shared/ui/theme/tokens';
+import { radius, halved } from '@shared/ui/theme/tokens';
 
 interface DownloadsBarProps {
   items: DownloadEntry[];
@@ -103,6 +103,8 @@ export function DownloadsBar({ items, onPress }: DownloadsBarProps): ReactElemen
   );
 }
 
+const SEGMENT_HEIGHT = 4;
+
 const styles = StyleSheet.create({
   bar: {
     flexDirection: 'row',
@@ -115,6 +117,6 @@ const styles = StyleSheet.create({
   body: { flex: 1, gap: spacing.xs },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   heading: { flex: 1 },
-  segments: { flexDirection: 'row', gap: spacing.xs, marginTop: 2 },
-  segment: { flex: 1, height: 4, borderRadius: 2 },
+  segments: { flexDirection: 'row', gap: spacing.xs, marginTop: spacing['2xs'] },
+  segment: { flex: 1, height: SEGMENT_HEIGHT, borderRadius: halved(SEGMENT_HEIGHT) },
 });

@@ -8,6 +8,7 @@ import {
   radius,
   spacing,
   typography,
+  touchTarget,
 } from '@shared/ui/theme/tokens';
 import { useTheme } from '@shared/ui/theme/useTheme';
 
@@ -104,12 +105,12 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.bodyRegular,
     fontSize: typography.body.fontSize,
   },
-  inputSecure: { paddingRight: 44 },
+  inputSecure: { paddingRight: touchTarget },
   reveal: {
     position: 'absolute',
     right: spacing.xs,
-    width: 44,
-    height: 44,
+    width: touchTarget,
+    height: touchTarget,
     alignItems: 'center',
     justifyContent: 'center',
   },

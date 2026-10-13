@@ -1,7 +1,7 @@
 import type { PressableStateCallbackType, StyleProp, ViewStyle } from 'react-native';
 import { StyleSheet } from 'react-native';
 
-import { spacing } from '@shared/ui/theme/tokens';
+import { spacing, borderWidth, radius } from '@shared/ui/theme/tokens';
 import type { Theme } from '@shared/ui/theme/theme';
 
 type PressableWebState = PressableStateCallbackType & {
@@ -13,8 +13,8 @@ const itemStyles = StyleSheet.create({
   item: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 8,
-    borderWidth: 2,
+    borderRadius: radius.sm,
+    borderWidth: borderWidth.emphasis,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.sm,
     marginBottom: spacing.xs,

@@ -12,7 +12,7 @@ import {
   usePressableInteraction,
   type PressableInteractionState,
 } from '@shared/ui/primitives/usePressableInteraction';
-import { radius, spacing, useTheme } from '@shared/ui/theme';
+import { radius, spacing, useTheme, borderWidth } from '@shared/ui/theme';
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
@@ -375,7 +375,7 @@ const styles = StyleSheet.create({
     width: DISCOGRAPHY_CARD_SIZE,
   },
   gridCard: {
-    borderWidth: 2,
+    borderWidth: borderWidth.emphasis,
     borderRadius: radius.md,
   },
   cardTitle: { marginTop: spacing.xs },

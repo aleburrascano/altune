@@ -217,7 +217,9 @@ function ArtistTopTrackRow(props: ArtistTopTrackRowProps): ReactElement {
   );
 }
 
+const RANK_COLUMN_WIDTH = 14;
+
 const styles = StyleSheet.create({
-  rank: { width: 14, textAlign: 'center' },
+  rank: { width: RANK_COLUMN_WIDTH, textAlign: 'center' },
   trackDuration: { marginRight: spacing.xs, fontVariant: ['tabular-nums'] },
 });

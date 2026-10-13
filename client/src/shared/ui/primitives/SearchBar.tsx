@@ -2,7 +2,16 @@ import type { ReactElement, ReactNode, Ref } from 'react';
 import { Pressable, StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
 import { Search, X } from 'lucide-react-native';
 
-import { fontFamily, radius, spacing, typography } from '@shared/ui/theme/tokens';
+import {
+  fontFamily,
+  radius,
+  spacing,
+  typography,
+  halved,
+  opacity,
+  touchTarget,
+  zLayer,
+} from '@shared/ui/theme/tokens';
 
 interface SearchBarTheme {
   color: {
@@ -153,9 +162,12 @@ const CLEAR_BUTTON_PROPS = {
   ],
 };
 
+const CLEAR_BUTTON_SIZE = 32;
+const PENDING_BAR_HEIGHT = 2;
+
 const styles = StyleSheet.create({
-  wrapper: { paddingTop: spacing.md, paddingBottom: spacing.md, zIndex: 10 },
-  inputAnchor: { position: 'relative', zIndex: 10 },
+  wrapper: { paddingTop: spacing.md, paddingBottom: spacing.md, zIndex: zLayer.searchField },
+  inputAnchor: { position: 'relative', zIndex: zLayer.searchField },
   inputWrapper: { position: 'relative', justifyContent: 'center' },
   searchIcon: {
     position: 'absolute',
@@ -164,8 +176,8 @@ const styles = StyleSheet.create({
   },
   input: {
     borderRadius: radius.md,
-    paddingLeft: 44,
-    paddingRight: 44,
+    paddingLeft: touchTarget,
+    paddingRight: touchTarget,
     paddingVertical: spacing.md,
     fontFamily: fontFamily.bodyRegular,
     fontSize: typography.body.fontSize,
@@ -173,16 +185,16 @@ const styles = StyleSheet.create({
   clearButton: {
     position: 'absolute',
     right: spacing.md,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: CLEAR_BUTTON_SIZE,
+    height: CLEAR_BUTTON_SIZE,
+    borderRadius: halved(CLEAR_BUTTON_SIZE),
     alignItems: 'center',
     justifyContent: 'center',
   },
   pendingBar: {
-    height: 2,
-    borderRadius: 1,
+    height: PENDING_BAR_HEIGHT,
+    borderRadius: halved(PENDING_BAR_HEIGHT),
     marginTop: spacing.xs,
-    opacity: 0.6,
+    opacity: opacity.pressed,
   },
 });

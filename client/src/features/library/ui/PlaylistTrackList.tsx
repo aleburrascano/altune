@@ -191,6 +191,8 @@ export function PlaylistTrackList(props: DetailProps): ReactElement {
   );
 }
 
+const WIDE_HERO_WIDTH = 320;
+
 const styles = StyleSheet.create({
   emptyTracks: {
     alignItems: 'center',
@@ -198,6 +200,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing['2xl'],
   },
   wideRow: { flexDirection: 'row', flex: 1 },
-  wideHero: { width: 320 },
+  wideHero: { width: WIDE_HERO_WIDTH },
   wideTracks: { flex: 1 },
 });

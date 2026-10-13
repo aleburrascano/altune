@@ -1,7 +1,7 @@
 import { StyleSheet } from 'react-native';
 
 import { clamp } from '@shared/math';
-import { spacing } from '@shared/ui/theme/tokens';
+import { spacing, minInteractiveHeight, opacity } from '@shared/ui/theme/tokens';
 
 export const sharedStyles = StyleSheet.create({
   trackRow: {
@@ -9,12 +9,12 @@ export const sharedStyles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: spacing.md,
     gap: spacing.md,
-    minHeight: 48,
+    minHeight: minInteractiveHeight,
   },
   trackInfo: { flex: 1 },
   retryButton: { marginTop: spacing.sm },
   sectionTitle: { marginBottom: spacing.sm },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: opacity.pressed },
 });
 
 export const DETAIL_GUTTER = spacing.lg;

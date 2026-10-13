@@ -27,7 +27,7 @@ import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
 import { Button } from '@shared/ui/primitives/Button';
 import { IconButton } from '@shared/ui/primitives/IconButton';
-import { useTheme } from '@shared/ui/theme';
+import { useTheme, halved, touchTarget } from '@shared/ui/theme';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 
 function getStatusDisplay(
@@ -238,6 +238,8 @@ export function FullPlayer() {
   );
 }
 
+const PLAY_BUTTON_SIZE = 64;
+
 const styles = StyleSheet.create({
   artworkContainer: {
     alignItems: 'center',
@@ -257,16 +259,16 @@ const styles = StyleSheet.create({
     gap: spacing.xl,
   },
   controlSpacer: {
-    width: 44,
+    width: touchTarget,
   },
   errorControls: {
     alignItems: 'center',
     paddingTop: spacing['2xl'],
   },
   playButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: PLAY_BUTTON_SIZE,
+    height: PLAY_BUTTON_SIZE,
+    borderRadius: halved(PLAY_BUTTON_SIZE),
     alignItems: 'center',
     justifyContent: 'center',
   },

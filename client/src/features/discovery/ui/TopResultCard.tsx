@@ -13,6 +13,7 @@ import { SectionLabel } from '@features/discovery/ui/SectionLabel';
 import { kindLabel } from '@features/discovery/domain/resultDisplay';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import type { ResultTapHandler } from '@features/discovery/hooks/useResultTap';
+import { opacity } from '@shared/ui/theme';
 
 function pressedStyle({ pressed }: PressableInteractionState) {
   return pressed ? styles.pressed : null;
@@ -81,7 +82,7 @@ export function TopResultCard({
 const styles = StyleSheet.create({
   topResultWrap: { marginBottom: spacing.lg },
   sectionHeaderSpacing: { marginBottom: spacing.md },
-  pressed: { opacity: 0.85 },
+  pressed: { opacity: opacity.pressedSubtle },
   topCard: { paddingVertical: spacing.xl },
   subtext: { marginTop: spacing.xs },
 });

@@ -11,6 +11,7 @@ import type {
 import { FlatList, StyleSheet, View, type ListRenderItemInfo } from 'react-native';
 import { Tappable, type TappableProps } from '@shared/ui/primitives/Tappable';
 import { Text, minInteractiveHeight, radius, spacing, useTheme } from '@shared/ui';
+import { opacity } from '@shared/ui/theme';
 
 type TrackSelectionOverlayProps = {
   controller: TrackSelectionController;
@@ -271,5 +272,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     borderRadius: radius.full,
   },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: opacity.pressed },
 });

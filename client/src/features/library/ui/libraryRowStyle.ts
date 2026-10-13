@@ -5,6 +5,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { pressedStyle, spacing, type Theme } from '@shared/ui';
+import { borderWidth } from '@shared/ui/theme';
 
 export function rowSurfaceStyle(
   theme: Theme,
@@ -68,7 +69,7 @@ const wideStyles = StyleSheet.create({
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderWidth: 2,
+    borderWidth: borderWidth.emphasis,
   },
 });
 

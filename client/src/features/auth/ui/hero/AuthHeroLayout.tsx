@@ -26,8 +26,15 @@ const EQ_BAR_WIDTH = 3;
 const EQ_BAR_RADIUS = 2;
 const EQ_GLYPH_HEIGHT = 16;
 
+const EQ_GLYPH_BAR_GAP = 3;
+
 const eqStyles = StyleSheet.create({
-  glyph: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: EQ_GLYPH_HEIGHT },
+  glyph: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: EQ_GLYPH_BAR_GAP,
+    height: EQ_GLYPH_HEIGHT,
+  },
   bar: { width: EQ_BAR_WIDTH, borderRadius: EQ_BAR_RADIUS },
 });
 

@@ -14,6 +14,7 @@ import { kindLabel, resultKey } from '@features/discovery/domain/resultDisplay';
 
 import type { ResultTapHandler } from '@features/discovery/hooks/useResultTap';
 import type { DiscoveryKind, DiscoveryResult, ResultSection } from '@shared/apiClient/discovery';
+import { touchTarget } from '@shared/ui/theme';
 
 type SeeAllLinkProps = {
   kind: DiscoveryKind;
@@ -65,7 +66,7 @@ const seeAllStyles = StyleSheet.create({
     gap: spacing.xs,
     paddingVertical: spacing.md,
     alignSelf: 'flex-start',
-    minHeight: 44,
+    minHeight: touchTarget,
   },
 });
 

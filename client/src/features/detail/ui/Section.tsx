@@ -47,6 +47,8 @@ export function Section({
   );
 }
 
+const SECTION_HEADER_MIN_HEIGHT = 20;
+
 const styles = StyleSheet.create({
   section: { marginTop: spacing['2xl'] },
   head: {
@@ -54,7 +56,7 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
     justifyContent: 'space-between',
     marginBottom: spacing.md,
-    minHeight: 20,
+    minHeight: SECTION_HEADER_MIN_HEIGHT,
   },
 });
 

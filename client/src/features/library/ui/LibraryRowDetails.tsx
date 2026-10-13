@@ -6,6 +6,7 @@ import { Text } from '@shared/ui';
 import { LibraryRowFailure } from '@features/library/ui/LibraryRowFailure';
 import { acquisitionProgressLabel, albumSuffix } from '@features/library/ui/libraryRowLabels';
 import type { TrackResponse } from '@shared/apiClient/trackResponse';
+import { spacing } from '@shared/ui/theme';
 
 export function LibraryRowDetails({
   track,
@@ -51,6 +52,6 @@ export function LibraryRowDetails({
 }
 
 const styles = StyleSheet.create({
-  subtitle: { marginTop: 2 },
-  pending: { marginTop: 2 },
+  subtitle: { marginTop: spacing['2xs'] },
+  pending: { marginTop: spacing['2xs'] },
 });

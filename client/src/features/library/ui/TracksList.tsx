@@ -12,6 +12,7 @@ import { listContent } from '@features/library/ui/listContentStyles';
 import { LibraryRow } from '@features/library/ui/LibraryRow';
 import { WideTrackHeader } from '@features/library/ui/WideTrackHeader';
 import type { ListPaging, ListRefresh } from '@features/library/domain/libraryView';
+import { pillPaddingVertical, radius } from '@shared/ui/theme';
 
 type TracksListHeaderProps = {
   isWide: boolean;
@@ -220,9 +221,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
-    paddingVertical: spacing.sm + 2,
+    paddingVertical: pillPaddingVertical,
     marginBottom: spacing.sm,
-    borderRadius: 999,
+    borderRadius: radius.full,
     borderWidth: 1,
   },
 });

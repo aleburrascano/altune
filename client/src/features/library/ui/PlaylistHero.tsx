@@ -5,7 +5,14 @@ import { Play, Plus, Shuffle } from 'lucide-react-native';
 
 import { countLabel } from '@shared/ui/displayFormat';
 import { Text, spacing, useTheme } from '@shared/ui';
-import { fontFamily } from '@shared/ui/theme/tokens';
+import {
+  fontFamily,
+  borderWidth,
+  pillPaddingVertical,
+  radius,
+  shadow,
+  touchTarget,
+} from '@shared/ui/theme/tokens';
 
 import { PlaylistCover } from '@features/library/ui/PlaylistCover';
 
@@ -137,6 +144,10 @@ export function PlaylistHero({
   );
 }
 
+const RENAME_FONT_SIZE = 20;
+const RENAME_INPUT_MIN_WIDTH = 200;
+const BUTTONS_MAX_WIDTH = 290;
+
 const styles = StyleSheet.create({
   wrapper: {
     position: 'relative',
@@ -148,7 +159,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   coverShadow: {
-    boxShadow: '0px 8px 24px rgba(0, 0, 0, 0.45)',
+    boxShadow: shadow.cover,
   },
   name: {
     textAlign: 'center',
@@ -156,18 +167,18 @@ const styles = StyleSheet.create({
   },
   renameInput: {
     fontFamily: fontFamily.displaySemiBold,
-    fontSize: 20,
+    fontSize: RENAME_FONT_SIZE,
     textAlign: 'center',
-    borderBottomWidth: 2,
-    paddingBottom: 4,
-    minWidth: 200,
+    borderBottomWidth: borderWidth.emphasis,
+    paddingBottom: spacing.xs,
+    minWidth: RENAME_INPUT_MIN_WIDTH,
   },
   buttons: {
     flexDirection: 'row',
     gap: spacing.sm,
     marginTop: spacing.sm,
     width: '100%',
-    maxWidth: 290,
+    maxWidth: BUTTONS_MAX_WIDTH,
   },
   playBtn: {
     flex: 1,
@@ -175,15 +186,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
-    paddingVertical: spacing.sm + 2,
-    borderRadius: 999,
+    paddingVertical: pillPaddingVertical,
+    borderRadius: radius.full,
   },
   addBtn: {
     alignItems: 'center',
     justifyContent: 'center',
-    width: 44,
-    paddingVertical: spacing.sm + 2,
-    borderRadius: 999,
+    width: touchTarget,
+    paddingVertical: pillPaddingVertical,
+    borderRadius: radius.full,
     borderWidth: 1,
   },
   shuffleBtn: {
@@ -192,8 +203,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
-    paddingVertical: spacing.sm + 2,
-    borderRadius: 999,
+    paddingVertical: pillPaddingVertical,
+    borderRadius: radius.full,
     borderWidth: 1,
   },
 });
