@@ -1,6 +1,9 @@
 import { StyleSheet } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
+import type * as KeyboardModuleExports from '@shared/ui/keyboard/keyboard';
 import type * as ModalFrameExports from '@features/settings/ui/ConfirmModal';
+
+type KeyboardExports = typeof KeyboardModuleExports;
 
 const sharedReact = jest.requireActual('react');
 const sharedReactNative = jest.requireActual('react-native');
@@ -11,6 +14,17 @@ function keyboardAvoidingStyleOn(os: 'ios' | 'android'): Record<string, unknown>
     jest.doMock('react', () => sharedReact);
     jest.doMock('react-native', () => sharedReactNative);
     sharedReactNative.Platform.OS = os;
+    if (os === 'android') {
+      const platformKeyboard = jest.requireActual<KeyboardExports>('@shared/ui/keyboard/keyboard');
+      const androidKeyboard = jest.requireActual<KeyboardExports>(
+        '@shared/ui/keyboard/keyboard.tsx',
+      );
+      jest.replaceProperty(
+        platformKeyboard,
+        'keyboardAvoidingBehavior',
+        androidKeyboard.keyboardAvoidingBehavior,
+      );
+    }
     loaded = jest.requireActual<typeof ModalFrameExports>('@features/settings/ui/ConfirmModal');
   });
   render(

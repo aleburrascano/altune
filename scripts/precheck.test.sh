@@ -560,6 +560,60 @@ expect_rc 1
 expect_out "FAIL  mobile tests (related)"
 expect_out "jest did not exit within 2s and was killed"
 
+add_thresholded_jest_stub() {
+    (
+        cd "$WORK/repo" || exit 1
+        printf 'module.exports = { coverageThreshold: { "src/shared/apiClient/**": { lines: 100 }, global: { lines: 0 } } };\n' >client/jest.config.js
+        git add -A
+        git commit -qm "jest config fixture"
+        git update-ref refs/remotes/gitea/main HEAD
+    )
+    cat >"$WORK/bin/npx" <<'STUB'
+#!/usr/bin/env bash
+printf 'npx %s\n' "$*" >>"$NPX_LOG"
+case " $* " in *" jest "*) ;; *) exit 0 ;; esac
+case " $* " in
+    *" --coverage "*)
+        echo "Jest: coverage threshold for lines (100%) not met: 50%"
+        exit 1
+        ;;
+esac
+exit 0
+STUB
+    chmod +x "$WORK/bin/npx"
+}
+
+CASE="a change that drops a thresholded file below its threshold turns the mobile jest step red"
+new_repo
+add_mobile_stubs
+add_thresholded_jest_stub
+(
+    cd "$WORK/repo" || exit 1
+    mkdir -p client/src/shared/apiClient
+    printf 'export const x = 1;\n' >client/src/shared/apiClient/x.ts
+    git add -A
+    git commit -qm "thresholded change"
+)
+NPX_LOG="$WORK/npx.log" run_script_with_stubs
+expect_rc 1
+expect_out "FAIL  mobile tests (related)"
+expect_npx "--collectCoverageFrom=src/shared/apiClient/x.ts"
+
+CASE="a change outside every thresholded glob runs the mobile jest step without coverage"
+new_repo
+add_mobile_stubs
+add_thresholded_jest_stub
+(
+    cd "$WORK/repo" || exit 1
+    mkdir -p client/src/ui
+    printf 'export const x = 1;\n' >client/src/ui/x.ts
+    git add -A
+    git commit -qm "unthresholded change"
+)
+NPX_LOG="$WORK/npx.log" run_script_with_stubs
+expect_out "ok    mobile tests (related)"
+grep -qF -- "--coverage" "$WORK/npx.log" && fail "no coverage flag expected outside thresholded globs"
+
 add_migrations() {
     (
         cd "$WORK/repo" || exit 1

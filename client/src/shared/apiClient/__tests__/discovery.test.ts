@@ -3,6 +3,7 @@ import {
   suggestDiscovery,
   listSearchHistory,
   clearSearchHistory,
+  recordSearchHistory,
   parseDiscoverySearchResponse,
 } from '@shared/apiClient/discovery';
 import type {
@@ -714,6 +715,17 @@ describe('clearSearchHistory', () => {
     await expect(clearSearchHistory()).resolves.toBeUndefined();
     expect(__http.last().method).toBe('DELETE');
     expect(__http.last().path).toBe('/v1/discovery/search-history');
+  });
+});
+
+describe('recordSearchHistory', () => {
+  it('POSTs the query as a JSON body and resolves to undefined via the 204 short-circuit', async () => {
+    __http.reply('POST /v1/discovery/search-history', { status: 204 });
+
+    await expect(recordSearchHistory('radiohead')).resolves.toBeUndefined();
+    expect(__http.last().method).toBe('POST');
+    expect(__http.last().path).toBe('/v1/discovery/search-history');
+    expect(JSON.parse(__http.last().body)).toEqual({ query: 'radiohead' });
   });
 });
 
