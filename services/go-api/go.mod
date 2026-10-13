@@ -15,7 +15,7 @@ require (
 	github.com/moby/buildkit v0.33.0
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/pganalyze/pg_query_go/v6 v6.2.2
-	github.com/redis/go-redis/v9 v9.22.0
+	github.com/redis/go-redis/v9 v9.23.0
 	github.com/tdewolff/parse/v2 v2.8.16
 	github.com/wasilibs/go-pgquery v0.0.0-20260915022521-81f99195012b
 	github.com/yuin/goldmark v1.8.6
@@ -56,7 +56,7 @@ require (
 	github.com/tinylib/msgp v1.6.4 // indirect
 	github.com/wasilibs/wazero-helpers v0.0.0-20250123031827-cd30c44769bb // indirect
 	github.com/zeebo/xxh3 v1.1.0 // indirect
-	go.uber.org/atomic v1.11.0 // indirect
+	go.uber.org/atomic v1.12.0 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
