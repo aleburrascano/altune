@@ -3,13 +3,9 @@ import { renderHook, waitFor } from '@testing-library/react-native';
 
 import type { DiscoverySource } from '@shared/apiClient/discovery';
 
-import { _resetDetailHealthForTest } from '@/features/detail/domain/detailHealth';
-import { useRelatedTracks } from '@/features/detail/hooks/useRelatedTracks';
-import {
-  createTestQueryClient,
-  createWrapper,
-  signInTestUser,
-} from '@/features/detail/__tests__/support/queryHarness';
+import { _resetDetailHealthForTest } from '@features/detail/domain/detailHealth';
+import { useRelatedTracks } from '@features/detail/hooks/useRelatedTracks';
+import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 

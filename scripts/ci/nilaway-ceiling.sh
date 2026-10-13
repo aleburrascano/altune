@@ -14,7 +14,7 @@ fi
 REPORT=$(mktemp)
 trap 'rm -f "$REPORT"' EXIT
 STATUS=0
-GOMEMLIMIT="${GOMEMLIMIT:-4GiB}" nilaway ./... > "$REPORT" 2>&1 || STATUS=$?
+GOMEMLIMIT="${GOMEMLIMIT:-4GiB}" nilaway $(go list ./... | grep -v /node_modules/) > "$REPORT" 2>&1 || STATUS=$?
 COUNT=$(sed 's/\x1b\[[0-9;]*m//g' "$REPORT" | grep -c 'Potential nil panic detected' || true)
 if [ "$STATUS" -ne 0 ] && [ "$COUNT" -eq 0 ]; then
   echo "::error::nilaway exited ${STATUS} without reporting findings"

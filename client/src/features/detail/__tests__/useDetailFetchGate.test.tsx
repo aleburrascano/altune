@@ -6,22 +6,18 @@ import type { DiscoverySource } from '@shared/apiClient/discovery';
 import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
 
-import { useAlbumTracks } from '@/features/detail/hooks/useAlbumTracks';
-import { useArtistContent } from '@/features/detail/hooks/useArtistContent';
-import { useRelatedTracks } from '@/features/detail/hooks/useRelatedTracks';
-import {
-  createWrapper,
-  signInTestUser,
-  createTestQueryClient,
-} from '@/features/detail/__tests__/support/queryHarness';
-import { useAlbumDiscovery, useArtistDiscovery } from '@/features/detail/hooks/useEntityDiscovery';
+import { useAlbumTracks } from '@features/detail/hooks/useAlbumTracks';
+import { useArtistContent } from '@features/detail/hooks/useArtistContent';
+import { useRelatedTracks } from '@features/detail/hooks/useRelatedTracks';
+import { createWrapper, signInTestUser, createTestQueryClient } from '@testing/queryHarness';
+import { useAlbumDiscovery, useArtistDiscovery } from '@features/detail/hooks/useEntityDiscovery';
 import {
   useDeezerEnrichment,
   useEnrichment,
   useLastFmEnrichment,
-} from '@/features/detail/hooks/useDetailEnrichments';
-import { useLateralNav } from '@/features/detail/hooks/useDetailNavigation';
-import { useResolveMissingSources } from '@/features/detail/hooks/useResolveMissingSources';
+} from '@features/detail/hooks/useDetailEnrichments';
+import { useLateralNav } from '@features/detail/hooks/useDetailNavigation';
+import { useResolveMissingSources } from '@features/detail/hooks/useResolveMissingSources';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 

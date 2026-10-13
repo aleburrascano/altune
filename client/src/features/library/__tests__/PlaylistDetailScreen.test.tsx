@@ -6,7 +6,7 @@ import { asTrackId } from '@shared/apiClient/ids';
 import { PlaybackContext } from '@shared/playback/usePlayback';
 import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';
-import { idlePlayback } from '@/features/detail/__tests__/support/queryHarness';
+import { idlePlayback } from '@testing/queryHarness';
 import { PlaylistDetailScreen } from '../ui/PlaylistDetailScreen';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 import { FeaturePorts } from '@/chrome/FeaturePorts';

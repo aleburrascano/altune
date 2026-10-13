@@ -3,23 +3,23 @@ import { useState, type Dispatch, type SetStateAction } from 'react';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { trackToDiscoveryResult } from '@shared/apiClient/trackToDiscoveryResult';
 
-import type { OwnedSplit, OwnedTrack } from '@/features/detail/domain/ownedTrack';
-import { type ContentFailure } from '@/features/detail/domain/contentStatus';
+import type { OwnedSplit, OwnedTrack } from '@features/detail/domain/ownedTrack';
+import { type ContentFailure } from '@features/detail/domain/contentStatus';
 
-import { type DetailRoute } from '@/features/detail/domain/detailNavigation';
-import { useOpenDetail } from '@/features/detail/hooks/useDetailNavigation';
-import { useAlbumDiscovery } from '@/features/detail/hooks/useEntityDiscovery';
-import { useAlbumTracks } from '@/features/detail/hooks/useAlbumTracks';
-import { useLibraryTracksForAlbum } from '@/features/detail/hooks/useLibraryMatches';
-import { useSaveTrack } from '@/features/detail/hooks/useSaveTrack';
+import { type DetailRoute } from '@features/detail/domain/detailNavigation';
+import { useOpenDetail } from '@features/detail/hooks/useDetailNavigation';
+import { useAlbumDiscovery } from '@features/detail/hooks/useEntityDiscovery';
+import { useAlbumTracks } from '@features/detail/hooks/useAlbumTracks';
+import { useLibraryTracksForAlbum } from '@features/detail/hooks/useLibraryMatches';
+import { useSaveTrack } from '@features/detail/hooks/useSaveTrack';
 import {
   enrichAlbumTrack,
   useAlbumSaveAll,
   type LastBatch,
-} from '@/features/detail/hooks/useAlbumSaveAll';
-import { useOwnedPlayback } from '@/features/detail/hooks/useOwnedPlayback';
-import { trackExtras } from '@/features/detail/domain/trackExtras';
-import { normalizeForCompare } from '@/features/detail/domain/normalizeForCompare';
+} from '@features/detail/hooks/useAlbumSaveAll';
+import { useOwnedPlayback } from '@features/detail/hooks/useOwnedPlayback';
+import { trackExtras } from '@features/detail/domain/trackExtras';
+import { normalizeForCompare } from '@features/detail/domain/normalizeForCompare';
 
 function _isTrackOwned(title: string, ownedTitles: Set<string>): boolean {
   return ownedTitles.has(normalizeForCompare(title));

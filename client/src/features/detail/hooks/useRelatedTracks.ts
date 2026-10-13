@@ -7,14 +7,14 @@ import {
   contentFailure,
   DETAIL_CONTENT_STALE_MS,
   type ContentFailure,
-} from '@/features/detail/domain/contentStatus';
-import { fetchTallyingOutcome } from '@/features/detail/domain/detailHealth';
-import type { DetailPort } from '@/features/detail/ports/detailPort';
-import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
+} from '@features/detail/domain/contentStatus';
+import { fetchTallyingOutcome } from '@features/detail/domain/detailHealth';
+import type { DetailPort } from '@features/detail/ports/detailPort';
+import { useDetailPort } from '@features/detail/ports/DetailPortProvider';
 import {
   useDetailFetchEnabled,
   useContentFetchRetry,
-} from '@/features/detail/hooks/useDetailFetchGate';
+} from '@features/detail/hooks/useDetailFetchGate';
 
 type UseRelatedTracksParams = {
   sources: DiscoverySource[];

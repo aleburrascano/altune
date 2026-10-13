@@ -1,6 +1,6 @@
 # Ubiquitous language
 
-Shared vocabulary across code, tests, conversation, and documentation. When a term is used in `services/api/src/altune/domain/`, it lives here with a precise meaning.
+Shared vocabulary across code, tests, conversation, and documentation. When a term is used in the domain code under `services/go-api/internal/` or `client/src/`, it lives here with a precise meaning.
 
 Reference: `[vault: wiki/concepts/Ubiquitous Language.md]`, `[vault: wiki/concepts/Domain-Driven Design.md]`.
 
@@ -63,7 +63,6 @@ When `/feature-spec` or domain modeling introduces a new term:
 - **session_id** — a rotating correlation id on every behavioral event's payload, grouping a search arc (search→click→play). Rotates on app foreground or 30 min idle. Client-managed in `client/src/shared/telemetry/eventSession.ts`.
 - **abandoned_search** — a `search_performed` with no click, reformulated (same `session_id` fires another search within 60s). Defined in `PgxEventStore.AbandonedSearches` (`services/go-api/internal/discovery/adapters/persistence/event_repo.go`), exposed on `ports.EventQuery` and consumed by `CoverageSignalAService` as the `Abandoned` gap category alongside zero-result and no-click queries.
 - **event_id** / **two-tier reliability** — label-critical events (`library_add`, `wrong_album`) carry a client-minted idempotency key (`event_id`) via a client outbox; insert dedups on `ON CONFLICT DO NOTHING`. Everything else is fire-and-forget. Dual timestamps: `client_occurred_at` vs. `received_at`. Client outbox in `client/src/shared/telemetry/outbox.ts`.
-- **discovery_metrics** — nightly rollup table: one row per `(as_of day, metric)` for `zero_result_rate`, `ctr`, `tail_noise_top5_avg`, `searches`. Aggregates only, no `user_id`. Feeds the `ALERT_ZERO_RESULT_THRESHOLD` coverage alert. Defined in `services/go-api/internal/discovery/adapters/persistence/metrics_rollup_repo.go`.
 
 - **Observe** — the operator-facing health, metrics, alert and live-tap surface of the backend: dependency health, live metrics, alert conditions with their notifiers, and the event and log taps that stream to admins. Bounded context in `services/go-api/internal/observe/`.
 - **Auth** — verifies bearer tokens, gates HTTP requests on them and carries the request user id and token-expiry context to other modules. Bounded context in `services/go-api/internal/auth/`.

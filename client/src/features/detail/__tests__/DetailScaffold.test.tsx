@@ -2,8 +2,8 @@ import { Text } from 'react-native';
 
 import { fireEvent, render, screen, within } from '@testing-library/react-native';
 
-import { DetailScaffold, DetailBodyLayout } from '@/features/detail/ui/DetailScaffold';
-import { DiscographySections } from '@/features/detail/ui/DiscographySections';
+import { DetailScaffold, DetailBodyLayout } from '@features/detail/ui/DetailScaffold';
+import { DiscographySections } from '@features/detail/ui/DiscographySections';
 import { setPlatformOS } from '@testing/setPlatformOS';
 
 jest.mock('react-native-safe-area-context', () => ({

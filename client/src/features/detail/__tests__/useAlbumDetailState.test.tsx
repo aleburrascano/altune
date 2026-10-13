@@ -9,19 +9,15 @@ import { PlaybackContext } from '@shared/playback/usePlayback';
 import { libraryKeys } from '@shared/query/queryKeys';
 import { readDetailHandoff } from '@shared/navigation/detailHandoff';
 
-import { useAlbumDetailState } from '@/features/detail/hooks/useAlbumDetailState';
-import { SAVE_ALL_CONCURRENCY } from '@/features/detail/domain/saveTrack';
-import { LOOKUP_LIMIT, LOOKUP_MAX_PAGES } from '@/features/detail/hooks/useLibraryMatches';
-import type { DetailPort } from '@/features/detail/ports/detailPort';
+import { useAlbumDetailState } from '@features/detail/hooks/useAlbumDetailState';
+import { SAVE_ALL_CONCURRENCY } from '@features/detail/domain/saveTrack';
+import { LOOKUP_LIMIT, LOOKUP_MAX_PAGES } from '@features/detail/hooks/useLibraryMatches';
+import type { DetailPort } from '@features/detail/ports/detailPort';
 import {
   createMemoryDetailPort,
   type MemoryDetailSeed,
-} from '@/features/detail/__tests__/memoryDetailPort';
-import {
-  createPortWrapper,
-  createTestQueryClient,
-  idlePlayback,
-} from '@/features/detail/__tests__/support/queryHarness';
+} from '@features/detail/__tests__/memoryDetailPort';
+import { createPortWrapper, createTestQueryClient, idlePlayback } from '@testing/queryHarness';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),

@@ -266,8 +266,9 @@ const mechanicalStyleEnforcedOnChangedCodeOnly =
 
 const localPlugin = {
   rules: {
-    'no-comments': require('./eslint-rules/no-comments'),
-    'no-banned-noun': require('./eslint-rules/no-banned-noun'),
+    'no-comments': require('./eslint/rules/no-comments'),
+    'no-banned-noun': require('./eslint/rules/no-banned-noun'),
+    'one-alias-per-folder': require('./eslint/rules/one-alias-per-folder'),
   },
 };
 
@@ -287,6 +288,12 @@ const theNounIsTrackNeverSong = {
   ignores: TEST_FILES,
   plugins: { local: localPlugin },
   rules: { 'local/no-banned-noun': 'error' },
+};
+
+const oneAliasPerFolder = {
+  files: ['{src,jest,__tests__,e2e}/**/*.{ts,tsx,js,mjs}'],
+  plugins: { local: localPlugin },
+  rules: { 'local/one-alias-per-folder': 'error' },
 };
 
 const SRC_ONLY = 'src/**/*';
@@ -332,6 +339,7 @@ module.exports = [
   ...styleRulesConfig.map(onlyWithinSrc),
   noCommentsAnywhere,
   theNounIsTrackNeverSong,
+  oneAliasPerFolder,
   {
     ignores: ['node_modules/**', '.expo/**', 'dist/**', 'web-build/**', 'coverage/**'],
   },

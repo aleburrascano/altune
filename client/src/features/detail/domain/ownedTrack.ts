@@ -3,7 +3,7 @@ import type { AcquisitionStatus } from '@shared/apiClient/trackResponse';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
-import { trackExtras, type TrackExtras } from '@/features/detail/domain/trackExtras';
+import { trackExtras, type TrackExtras } from '@features/detail/domain/trackExtras';
 
 export type OwnedTrack = { trackId: TrackId } & (
   | { acquisitionStatus: 'failed'; failureMessage: string | null; retryable: boolean }

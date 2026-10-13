@@ -3,8 +3,8 @@ import { asTrackId, type TrackId } from '@shared/apiClient/ids';
 import type { CreateTrackRequest, TrackResponse } from '@shared/apiClient/trackResponse';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
-import { trackExtras } from '@/features/detail/domain/trackExtras';
-import type { OwnedTrack } from '@/features/detail/domain/ownedTrack';
+import { trackExtras } from '@features/detail/domain/trackExtras';
+import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
 
 export function toCreateTrackRequest(result: DiscoveryResult): CreateTrackRequest {
   const te = trackExtras(result.extras);

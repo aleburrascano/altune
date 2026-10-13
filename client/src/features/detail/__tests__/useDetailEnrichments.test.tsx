@@ -3,18 +3,14 @@ import type { QueryClient } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
-import { _resetDetailHealthForTest } from '@/features/detail/domain/detailHealth';
+import { _resetDetailHealthForTest } from '@features/detail/domain/detailHealth';
 import {
   useEnrichment,
   useDeezerEnrichment,
   useLastFmEnrichment,
   useDetailEnrichments,
-} from '@/features/detail/hooks/useDetailEnrichments';
-import {
-  createTestQueryClient,
-  createWrapper,
-  signInTestUser,
-} from '@/features/detail/__tests__/support/queryHarness';
+} from '@features/detail/hooks/useDetailEnrichments';
+import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 

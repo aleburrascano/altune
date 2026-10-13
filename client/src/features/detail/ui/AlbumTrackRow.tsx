@@ -9,7 +9,7 @@ import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { formatDuration } from '@shared/ui/displayFormat';
 
-import { trackExtras } from '@/features/detail/domain/trackExtras';
+import { trackExtras } from '@features/detail/domain/trackExtras';
 import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
 import { sharedStyles } from '@features/detail/ui/detailStyles';
 import { TrackSaveControl } from '@features/detail/ui/SaveControls';

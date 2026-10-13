@@ -7,11 +7,11 @@
 > tracks, artist top/albums), **ISRC fetch** (`/track/{id}` → `isrc`), and — as of 2026-06-22 — the
 > **detail-open enrichment** (cap 7 track audio fields `bpm`/`gain`/explicit; cap 8 album liner data
 > `label`/`genres`/`upc`/`record_type`) via `DeezerEnricher` → `DeezerEnrichmentService` →
-> `GET /discovery/enrichment/deezer` → mobile `useDeezerEnrichment` → `DeezerEnrichmentSection`.
-> Display-only, off the ranking path, no eval gate. As of 2026-06-22, **lyrics (cap 6) are now
+> `GET /discovery/enrichment/deezer` → mobile `useDeezerEnrichment`. The app shows only its featured
+> artists today. Off the ranking path, no eval gate. As of 2026-06-22, **lyrics (cap 6) are now
 > built** — synced + plain lyrics, writers, copyright via the anonymous-JWT `pipe.deezer.com` GraphQL,
-> surfaced on track detail (`LyricsProvider` → `LyricsService` → `GET /discovery/lyrics` → mobile
-> `useLyrics` → `LyricsSection`). **Deezer is now fully maximized — every capability (1–8) is built.**
+> surfaced in the player (`LyricsProvider` → `LyricsService` → `GET /discovery/lyrics` → mobile
+> `useLyrics` → `LyricsSheet`). **Deezer is now fully maximized — every capability (1–8) is built.**
 
 ## 1. Why this provider matters
 
@@ -152,10 +152,10 @@ sync during playback once that surface exists). **Detail-open only, off the rank
 value object; a `LyricsProvider` port (`ResolveTrackID` via public-API search + `Lookup` via the pipe
 GraphQL); the `DeezerLyricsAdapter` with a self-healing anonymous-JWT resolver (cached, singleflight-
 deduped, `401` re-bootstrap — lighter than SoundCloud's `client_id`: one GET, no JS scraping); a
-read-through `RedisDeezerLyricsCache` (90d positive — lyrics are static; 24h negative — region/catalog
+read-through Redis lyrics cache (90d positive — lyrics are static; 24h negative — region/catalog
 dependent); a `LyricsService` (best-effort, name-keyed, negative-caches a definitive miss); the
-`GET /discovery/lyrics?title=&subtitle=` endpoint; and mobile `useLyrics` + `LyricsSection` (synced
-lines preferred, plain fallback, writers + copyright footer; track-only). **ToS: reverse-engineered —
+`GET /discovery/lyrics?title=&subtitle=` endpoint; and mobile `useLyrics` + `LyricsSheet`, the
+player's lyrics sheet. **ToS: reverse-engineered —
 named explicitly** (§6). Track-id resolution reuses the public-API `DeezerAdapter` search; the auth-
 response JWT field name is `[INFERRED]` (the body was not field-dumped in the audit) — corrected on the
 next live probe if wrong. **Not verifiable in this dev environment** (no live `pipe`/`auth` access) —
@@ -164,15 +164,14 @@ covered by httptest fixtures of the documented shapes.
 ### 7. **Rich track metadata** (bpm/gain/explicit) — ✅ BUILT (2026-06-22)
 `Lookup(track)` fetches `/track/{id}` and maps `bpm` (rounded; 0 = unknown, rendered only when `> 0`),
 `gain` (ReplayGain — carried in the payload but **not displayed**: a volume-normalization value, not
-user-facing), and `explicit_lyrics`. `DeezerEnrichmentSection` shows "172 BPM · Explicit" on track
-detail. **Contributors are deliberately excluded** — the detail screen's existing three-tier
+user-facing), and `explicit_lyrics`. The app does not display these fields today. **Contributors are deliberately excluded** — the detail screen's existing three-tier
 featured-artists path already fetches `/track/{id}` contributors, so re-surfacing them here would
 duplicate. Display-only; if `bpm` ever feeds *order*, that increment must clear `discoveryeval --top-k 3`.
 
 ### 8. **Album liner data** (label/genres/upc/record_type) — ✅ BUILT (2026-06-22)
 `Lookup(album)` fetches `/album/{id}` and maps `label`, `genres{data[]}` (deduped/capped),
-`record_type`, and `upc` (payload only — a barcode, not user-facing). `DeezerEnrichmentSection` shows
-the label line + genre pills on album detail. A light album-enrichment surface — thinner than Discogs's
+`record_type`, and `upc` (payload only — a barcode, not user-facing). The app does not display these
+fields today. A light album-enrichment surface — thinner than Discogs's
 catalog/companies data, but free and fast from a provider already in the fan-out. Display-only, off the
 ranking path.
 
@@ -213,49 +212,43 @@ no key):
   `artistProviders`/content (line ~192), and the chart set (line ~453). No config gate.
 - Covered by httptest fixtures in `deezer_test.go`.
 
-Detail-open enrichment (caps 7–8), built 2026-06-22, mirroring the MB/Discogs/Last.fm enrichers:
+Detail-open enrichment (caps 7–8), mirroring the Last.fm enricher. Paths are under
+`services/go-api/internal/discovery/` unless noted:
 
-- `domain/enrichment.go` — the `DeezerEnrichment` value object (+ `Empty`/`IsZero`).
-- `ports/ports.go` — `DeezerEnricher` (`ResolveID` + `Lookup`) + `DeezerEnrichmentCache`.
-- `adapters/providers/deezer_enrichment.go` — name-resolve via search, then `/track/{id}` (bpm round /
-  gain / explicit) or `/album/{id}` (label / genres dedup / upc / record_type) lookup. Also bumped the
-  `Resolve` artwork to 1000px `_xl` (cap 2). Response shapes from the live probe.
-- `adapters/cache/deezer_enrichment_cache.go` — `RedisDeezerEnrichmentCache`, read-through, name-keyed
-  (positive 30d, negative 24h); nil client = no-op.
-- `service/deezer_enrichment.go` — `DeezerEnrichmentService` (cache → resolve → lookup; track/album
-  only; best-effort, always nil error).
-- `adapters/handler/discovery_handler.go` — `GET /discovery/enrichment/deezer?kind=&title=&subtitle=`
-  (`WithDeezerEnrichment` setter) + DTO.
-- `internal/app/app.go` — wired unconditionally (public API needs no key); nil cache degrades to uncached.
-- Mobile: `shared/apiClient/discovery.ts` (`getDeezerEnrichment` + `DeezerEnrichmentResponse`),
-  `features/detail/hooks/useDeezerEnrichment.ts` (track/album-gated),
-  `features/detail/ui/DeezerEnrichmentSection.tsx` (tempo/explicit for tracks, label/genres for albums),
-  wired into `DetailScreen` below the track/album bodies.
-- Covered by httptest fixtures (adapter), fakes (service), and RNTL (hook + section). Backend discovery
-  tests green (576); mobile detail tests green (130).
+- `domain/enrichment.go`: the `DeezerEnrichment` value object (+ `Empty`/`IsZero`).
+- `ports/enrichment.go`: `DeezerEnricher` (`ResolveID` + `Lookup`) + `DeezerEnrichmentCache`.
+- `adapters/providers/deezer/deezer_enrichment.go`: name-resolve via search, then `/track/{id}` (bpm round /
+  gain / explicit) or `/album/{id}` (label / genres dedup / upc / record_type) lookup. Response shapes
+  from the live probe.
+- `adapters/cache/name_keyed_cache.go`: `NewRedisDeezerEnrichmentCache`, read-through, name-keyed
+  (positive 30d, negative 24h).
+- `service/enrich/deezer_enrichment.go`: `DeezerEnrichmentService` (cache → resolve → lookup;
+  track/album only; best-effort).
+- `adapters/handler/enrichment_endpoints.go`: `GET /discovery/enrichment/deezer?kind=&title=&subtitle=`
+  + DTO, set through `WithDetailEnrichers`.
+- `internal/app/build_consensus_providers.go`: `buildDetailEnrichers` wires it unconditionally (the
+  public API needs no key).
+- Mobile: `client/src/shared/apiClient/enrichment.ts` (`getDeezerEnrichment` + `DeezerEnrichmentResponse`)
+  and `useDeezerEnrichment` in `client/src/features/detail/hooks/useDetailEnrichments.ts`
+  (track/album-gated). The detail screen reads only its `featured_artists` today.
 
-Lyrics (cap 6), built 2026-06-22 — distinct from the public-API enrichment (the `pipe` GraphQL path):
+Lyrics (cap 6), distinct from the public-API enrichment (the `pipe` GraphQL path):
 
-- `domain/enrichment.go` — the `DeezerLyrics` value object + `SyncedLyricLine` (+ `Empty`/`IsZero`).
-- `ports/ports.go` — `LyricsProvider` (`ResolveTrackID` + `Lookup`) + `LyricsCache`.
-- `adapters/providers/deezer_lyrics.go` — `DeezerLyricsAdapter`: delegates track-id resolution to the
+- `domain/enrichment.go`: the `DeezerLyrics` value object + `SyncedLyricLine` (+ `Empty`/`IsZero`).
+- `ports/enrichment.go`: `LyricsProvider` (`ResolveTrackID` + `Lookup`) + `LyricsCache`.
+- `adapters/providers/deezer/deezer_lyrics.go`: `DeezerLyricsAdapter`: delegates track-id resolution to the
   public-API `DeezerAdapter`, fetches lyrics via `pipe.deezer.com` `SynchronizedLyrics`, gated by the
-  self-healing anonymous-JWT resolver (`deezerJWTResolver` — singleflight, `401` re-bootstrap). A null
+  self-healing anonymous-JWT resolver (`deezerJWTResolver`, `401` re-bootstrap). A null
   `lyrics` / GraphQL error is a definitive miss (empty + nil); auth/network is a transient error.
-- `adapters/cache/deezer_lyrics_cache.go` — `RedisDeezerLyricsCache`, read-through, name-keyed
-  (positive 90d, negative 24h); nil client = no-op.
-- `service/lyrics.go` — `LyricsService` (cache → resolve → lookup; track-only; best-effort, always nil
-  error; negative-caches an unresolved/lyric-less track).
-- `adapters/handler/discovery_handler.go` — `GET /discovery/lyrics?title=&subtitle=`
-  (`WithLyrics` setter) + `LyricsResponseDTO`/`SyncedLineDTO`.
-- `internal/app/app.go` — wired unconditionally (no key needed); nil cache degrades to uncached.
-- Mobile: `shared/apiClient/discovery.ts` (`getLyrics` + `LyricsResponse`/`SyncedLyricLine`),
-  `features/detail/hooks/useLyrics.ts` (track-gated), `features/detail/ui/LyricsSection.tsx` (synced
-  lines preferred, plain fallback, writers + copyright), wired into `DetailScreen` below the Deezer
-  enrichment for tracks.
-- Covered by httptest fixtures of the documented `auth`/`pipe`/`search` shapes (adapter — incl. JWT
-  caching + `401` self-heal + no-lyrics miss), a fake provider (service), and RNTL (hook + section).
-  Backend discovery tests green (587); mobile detail tests green (139).
+- `adapters/cache/name_keyed_cache.go`: `NewRedisDeezerLyricsCache`, read-through, name-keyed
+  (positive 90d, negative 24h).
+- `service/enrich/lyrics.go`: `LyricsService` (cache → resolve → lookup; track-only; best-effort).
+- `adapters/handler/enrichment_endpoints.go`: `GET /discovery/lyrics?title=&subtitle=` +
+  `LyricsResponseDTO`.
+- `internal/app/build_consensus_providers.go`: `buildDetailEnrichers` wires it unconditionally.
+- Mobile: `client/src/shared/apiClient/lyrics.ts` (`getLyrics` + `LyricsResponse`),
+  `client/src/features/playback/hooks/useLyrics.ts`, and
+  `client/src/features/playback/ui/LyricsSheet.tsx`, the player's lyrics sheet.
 
 ## 8. Next steps
 

@@ -11,7 +11,7 @@ import {
   createTestQueryClient,
   createPlaybackWrapper,
   signInTestUser,
-} from '@/features/detail/__tests__/support/queryHarness';
+} from '@testing/queryHarness';
 import { setPlatformOS } from '@testing/setPlatformOS';
 export type ArtistDetailBodyLastfmFixture = LastFmEnrichmentResponse;
 

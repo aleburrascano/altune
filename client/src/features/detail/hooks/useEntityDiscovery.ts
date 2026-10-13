@@ -8,16 +8,16 @@ import {
   contentFailure,
   DETAIL_CONTENT_STALE_MS,
   DETAIL_LIST_CAP,
-} from '@/features/detail/domain/contentStatus';
-import { fetchTallyingOutcome } from '@/features/detail/domain/detailHealth';
-import { resolveEntityQuery } from '@/features/detail/domain/resolveEntityQuery';
-import { realPhotoUrl } from '@/features/detail/domain/artistPhoto';
-import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
+} from '@features/detail/domain/contentStatus';
+import { fetchTallyingOutcome } from '@features/detail/domain/detailHealth';
+import { resolveEntityQuery } from '@features/detail/domain/resolveEntityQuery';
+import { realPhotoUrl } from '@features/detail/domain/artistPhoto';
+import { useDetailPort } from '@features/detail/ports/DetailPortProvider';
 import {
   useDetailFetchEnabled,
   useGatedRefetch,
   useContentFetchRetry,
-} from '@/features/detail/hooks/useDetailFetchGate';
+} from '@features/detail/hooks/useDetailFetchGate';
 
 type SearchedEntity = {
   kind: DiscoveryKind;

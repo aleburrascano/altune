@@ -59,7 +59,7 @@ So all three kinds are reachable — you map `user → artist` and `album-playli
 ### 1. Track search — ✅ BUILT
 `/search/tracks`, paginated to ~40 (vs yt-dlp's 5). Maps to `SearchProvider` (track). Rich `extras`
 (genre, playback/likes/reposts) carried but **not** wired into ranking (coverage, not ranking).
-Code: `soundcloud_apiv2.go`.
+Code: `soundcloud_search.go`.
 
 ### 2. Album + artist search — ✅ BUILT
 `SupportedKinds` now includes `album` (`/search/albums`, typed playlists) and `artist`
@@ -153,13 +153,15 @@ Capabilities 1–4 are **built and committed** on branch `refactor/discovery-pip
 | 3. Artwork resolver | `4762c91` |
 | 4. Artist discography | `6751b84` |
 
-- `services/go-api/internal/discovery/adapters/providers/soundcloud_apiv2.go` — the direct api-v2
-  client: `client_id` resolver (self-healing), paginated track search, album/artist/track search,
-  `ArtworkResolver`, `ArtistContentProvider`, `ResolvePermalink`, 500px artwork.
-- `soundcloud.go` — the original yt-dlp adapter, retained as **fallback** when `client_id`
+- `services/go-api/internal/discovery/adapters/providers/` holds the direct api-v2 client,
+  `SoundCloudAPIAdapter`: `soundcloud.go` (the adapter), `soundcloud_auth.go` (self-healing
+  `client_id` resolver), `soundcloud_search.go` (paginated track search, album/artist search, and the
+  500px `ArtworkResolver`), `soundcloud_content.go` (`ArtistContentProvider`) and `soundcloud_types.go`.
+- `soundcloud_ytdlp.go`: the original yt-dlp adapter, retained as **fallback** when `client_id`
   resolution is down.
-- Wired in `internal/app/app.go` (`buildDiscoveryProviders` as search provider; `artistProviders`
-  map for discography) and `search_wiring.go` (`buildArtworkChain`, last).
+- Wired in `internal/app/build_search_service.go` (search provider), `internal/app/discovery_wiring.go`
+  (album content and related tracks), `internal/app/build_artist_content_service.go` (artist content) and `internal/app/build_consensus_providers.go`
+  (`buildArtworkChain`, last).
 - Verified: live "Ken Carson Olympics" head-to-head (old: 0 SC results; new: leak surfaces) and
   full v2 eval **99.1% top-3** (≥ 99.0% baseline, 17 vs 18 failures, no new regressions).
 

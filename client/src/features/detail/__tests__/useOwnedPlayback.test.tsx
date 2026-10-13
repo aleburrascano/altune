@@ -13,7 +13,7 @@ import {
   createTestQueryClient,
   idlePlayback,
   signInTestUser,
-} from '@/features/detail/__tests__/support/queryHarness';
+} from '@testing/queryHarness';
 
 const mockRetryAcquisition = jest.fn<Promise<void>, [unknown]>();
 const mockCreateTrack = jest.fn<Promise<never>, []>();

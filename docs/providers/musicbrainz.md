@@ -157,9 +157,9 @@ Built and on `main` (search + identity/consensus), thin projection only:
   `ResolveArtistIdentity`, `fetchReleaseGroups`, `ListArtistDiscography`. Maps
   `mbid` into `extras` on every result — the seed the artwork chain already depends on.
 - `services/go-api/internal/discovery/adapters/providers/coverartarchive/coverartarchive.go` — `ArtworkResolver`,
-  wired **first** in `buildArtworkChain` (`build_consensus_providers.go`). Already consumes release-group MBIDs.
+  wired **first** in `buildArtworkChain` (`internal/app/build_consensus_providers.go`). Already consumes release-group MBIDs.
 - Wired in `internal/app/build_search_service.go`: `sharedMB` as a `SearchProvider` and in the content options;
-  `BuildConsensusProviders` (for `discoveryeval -mode signal-b`) uses `ListArtistDiscography`. Config-gated by `cfg.HasMusicBrainz()`
+  `BuildConsensusProviders` in `internal/app/build_consensus_providers.go` (for `discoveryeval -mode signal-b`) uses `ListArtistDiscography`. Config-gated by `cfg.HasMusicBrainz()`
   (`MUSICBRAINZ_USER_AGENT`).
 - `rateLimit()` enforces 1 req/sec across all calls.
 

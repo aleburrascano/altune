@@ -5,7 +5,7 @@ import {
   compactCount,
   formatRuntime,
   trackSubtitleWithFeaturing,
-} from '@/features/detail/ui/formatters';
+} from '@features/detail/ui/formatters';
 
 function album(extras: Record<string, unknown>): DiscoveryResult {
   return {

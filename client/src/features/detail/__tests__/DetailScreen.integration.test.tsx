@@ -8,7 +8,7 @@ import {
   createTestQueryClient,
   createPlaybackWrapper,
   signInTestUser,
-} from '@/features/detail/__tests__/support/queryHarness';
+} from '@testing/queryHarness';
 
 let mockParams: { handoff?: string } = {};
 jest.mock('expo-router', () => {

@@ -8,7 +8,7 @@ import { CorrectionBanner } from '@features/discovery/ui/CorrectionBanner';
 import { DiscoverRow } from '@features/discovery/ui/DiscoverRow';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { PlaybackContext } from '@shared/playback/usePlayback';
-import { idlePlayback } from '@/features/detail/__tests__/support/queryHarness';
+import { idlePlayback } from '@testing/queryHarness';
 
 function render(ui: React.ReactElement): ReturnType<typeof renderBare> {
   return renderBare(ui, {

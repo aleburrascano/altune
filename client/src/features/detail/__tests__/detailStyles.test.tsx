@@ -8,12 +8,8 @@ import { AlbumCardsSkeleton } from '../ui/DetailSkeleton';
 import { DetailScaffold } from '../ui/DetailScaffold';
 import { DiscographySections } from '../ui/DiscographySections';
 import { RelatedTracksSection } from '../ui/RelatedTracksSection';
-import { gridCellWidthFor } from '@/features/detail/ui/detailStyles';
-import {
-  createTestQueryClient,
-  createWrapper,
-  signInTestUser,
-} from '@/features/detail/__tests__/support/queryHarness';
+import { gridCellWidthFor } from '@features/detail/ui/detailStyles';
+import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 

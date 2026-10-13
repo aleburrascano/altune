@@ -106,7 +106,7 @@ vocabulary/chart surface; `GetArtistTopTracks` / `GetArtistAlbums` implement `Ar
 projection; the per-track `playcount`/`listeners` are mapped but the richer detail is ignored here.
 
 ### 3. Detail-open enrichment via `*.getInfo` — ✅ BUILT (2026-06-22, the headline)
-The highest-value addition, mirroring `musicbrainz-enrichment` / the Discogs enricher. One lookup per
+The highest-value addition, mirroring `musicbrainz-enrichment`. One lookup per
 opened entity yields:
 - **`listeners` + `playcount`** — the listen-based popularity signal (verified accurate, §1).
 - **Weighted `tags[]` / `toptags[]`** — genre/mood folksonomy with counts.
@@ -119,7 +119,7 @@ opened entity yields:
 - **Built:** `LastFmEnrichment` domain value object; `LastFmEnricher` port (`Lookup(kind, artist,
   title)` — kind-dispatched `*.getInfo`, `autocorrect=1`, no separate resolve step);
   `lastfm_enrichment.go` adapter (getInfo mappers + HTML/`Read more` bio cleaner, tolerant of the
-  empty-collection-as-`""` quirk); `RedisLastFmEnrichmentCache` (read-through, 30d positive / 24h
+  empty-collection-as-`""` quirk); a Redis cache (read-through, 30d positive / 24h
   negative); `LastFmEnrichmentService` (best-effort, name-keyed); `GET /discovery/enrichment/lastfm`;
   mobile `useLastFmEnrichment` + `LastFmEnrichmentSection`. The MBID is surfaced in the payload (the
   MB-bridge seed) but artwork stays MB-keyed (§5.6) — not threaded into the artwork chain.
@@ -155,8 +155,8 @@ artwork MB-keyed.**
 - **Per-result lookups vs ~5/sec.** Maximizing (caps 3–5) means a `getInfo`/`getSimilar` lookup per
   opened entity. Same mitigations as MB/Discogs, in order: (a) **only enrich what the user opens**
   (detail-open, never the fan-out); (b) **cache by `(method, artist[, track/album])` with a long
-  TTL** (Redis — Last.fm data drifts slowly; mirror the `RedisEnrichmentCache` /
-  `RedisDiscogsEnrichmentCache` pattern, positive ~30d / negative ~24h); (c) the rate ceiling is not
+  TTL** (Redis — Last.fm data drifts slowly; the shared name-keyed Redis cache
+  in `adapters/cache/name_keyed_cache.go`, positive ~30d / negative ~24h); (c) the rate ceiling is not
   header-exposed, so the circuit breaker must key off `429`/`5xx` bodies, not headers. **No blocking
   Last.fm call on the hot search path.**
 - **Popularity into ranking → eval gate.** `playcount`/`listeners` is a real listen-based signal, but
@@ -177,34 +177,32 @@ Thin projection (caps 1–2), built and on `main`:
   (track/album/artist via `*.search`), `GetArtistTopTracks` / `GetArtistAlbums`
   (`ArtistContentProvider`), `FetchCharts` (`ChartProvider`), `lastfmExternalID` (url → id),
   `parseListeners` (string→int64 normalizer). Maps the thin fields + `listeners` into `extras`.
-- Wired in `internal/app/app.go` (`buildDiscoveryProviders` as search provider; `artistProviders`
-  map for discography; `FetchCharts` in the chart set) and `search_wiring.go` (artist-content
-  dispatch). Config-gated by `cfg.HasLastFM()` (`LASTFM_API_KEY`).
+- Wired in `internal/app/build_search_service.go` (search provider), `internal/app/background_jobs.go`
+  (`FetchCharts` in the chart set) and `internal/app/build_consensus_providers.go` (`GetArtistAlbums`
+  as a consensus provider). Config-gated by `cfg.HasLastFM()` (`LASTFM_API_KEY`).
 - Covered by httptest fixtures in `lastfm_test.go` (search track/artist, missing-listeners,
   HTTP-error paths).
 
-Detail-open enrichment (cap 3 + cap-4 similar artists), built 2026-06-22, mirroring
-`musicbrainz-enrichment` / the Discogs enricher:
+Detail-open enrichment (cap 3 + cap-4 similar artists). Paths are under
+`services/go-api/internal/discovery/` unless noted:
 
-- `domain/enrichment.go` — the `LastFmEnrichment` value object (+ `Empty`/`IsZero`).
-- `ports/ports.go` — `LastFmEnricher` (single `Lookup(kind, artist, title)`) + `LastFmEnrichmentCache`.
-- `adapters/providers/lastfm_enrichment.go` — the kind-dispatched `*.getInfo` lookups (`autocorrect=1`),
+- `domain/enrichment.go`: the `LastFmEnrichment` value object (+ `Empty`/`IsZero`).
+- `ports/enrichment.go`: `LastFmEnricher` (single `Lookup(kind, artist, title)`) + `LastFmEnrichmentCache`.
+- `adapters/providers/lastfm/lastfm_enrichment.go`: the kind-dispatched `*.getInfo` lookups (`autocorrect=1`),
   tag/similar parsers tolerant of the empty-collection-as-`""` quirk, and `cleanLastFmBio` (strips the
   trailing `Read more on Last.fm` anchor + remaining HTML, unescapes entities). Shapes from the live probe.
-- `adapters/cache/lastfm_enrichment_cache.go` — `RedisLastFmEnrichmentCache`, read-through, name-keyed
-  (positive 30d, negative 24h); nil client = no-op.
-- `service/lastfm_enrichment.go` — `LastFmEnrichmentService` (translates the wire `(kind, title,
-  subtitle)` to Last.fm's `(artist, entityTitle)`; cache → lookup → cache; best-effort, always nil error).
-- `adapters/handler/discovery_handler.go` — `GET /discovery/enrichment/lastfm?kind=&title=&subtitle=`
-  (`WithLastFmEnrichment` setter) + DTO.
-- `internal/app/app.go` — wired, config-gated by `cfg.HasLastFM()`; nil degrades to an empty DTO.
-- Mobile: `shared/apiClient/discovery.ts` (`getLastFmEnrichment` + `LastFmEnrichmentResponse`),
-  `features/detail/hooks/useLastFmEnrichment.ts`, `features/detail/ui/LastFmEnrichmentSection.tsx`
-  (compact popularity + tag pills + similar-artists line for artists + bio/blurb for tracks/albums —
-  the artist bio is left to the Discogs section to avoid duplication), wired into `DetailScreen` below
-  the hero next to the MB `EnrichmentSection`.
-- Covered by httptest fixtures (adapter), fakes (service), and RNTL (hook + section). Backend 1023
-  tests green; mobile 276 tests green.
+- `adapters/cache/name_keyed_cache.go`: `NewRedisLastFmEnrichmentCache`, read-through, name-keyed
+  (positive 30d, negative 24h).
+- `service/enrich/lastfm_enrichment.go`: `LastFmEnrichmentService` (translates the wire `(kind, title,
+  subtitle)` to Last.fm's `(artist, entityTitle)`; cache → lookup → cache; best-effort).
+- `adapters/handler/enrichment_endpoints.go`: `GET /discovery/enrichment/lastfm?kind=&title=&subtitle=`
+  + DTO, set through `WithDetailEnrichers`.
+- `internal/app/build_consensus_providers.go`: `buildDetailEnrichers` wires it, config-gated by
+  `cfg.HasLastFM()`.
+- Mobile: `client/src/shared/apiClient/enrichment.ts` (`getLastFmEnrichment` + `LastFmEnrichmentResponse`),
+  `useLastFmEnrichment` in `client/src/features/detail/hooks/useDetailEnrichments.ts` (artist-gated), and
+  `client/src/features/detail/ui/LastFmEnrichmentSection.tsx` (artist bio + similar artists), rendered by
+  `ArtistDetailBody`.
 
 ## 8. Next steps
 

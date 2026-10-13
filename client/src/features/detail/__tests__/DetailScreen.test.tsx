@@ -3,13 +3,13 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { clearDetailHandoffs, detailHref } from '@shared/navigation/detailHandoff';
 
-import { DetailScreen } from '@/features/detail/ui/DetailScreen';
+import { DetailScreen } from '@features/detail/ui/DetailScreen';
 import {
   createTestQueryClient,
   createPlaybackWrapper,
   idlePlayback,
   signInTestUser,
-} from '@/features/detail/__tests__/support/queryHarness';
+} from '@testing/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 

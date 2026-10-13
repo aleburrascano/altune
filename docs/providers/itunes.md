@@ -194,9 +194,10 @@ like Deezer):
   (album-contamination consensus → verdict + `artistId`), `upscaleArtwork` (the
   `100x100`→`NxN` URL rewrite). Maps `previewUrl`/`duration`/`genre` into
   `extras`.
-- Wired in `internal/app/search_wiring.go`: `buildArtworkChain` appends iTunes **after** the
-  MBID-keyed sources (CAA → Fanart → Genius → TheAudioDB → Deezer → **iTunes** → YouTube →
-  SoundCloud); also constructed as a search provider + album validator in `app.go`. No config gate.
+- Wired in `internal/app/build_consensus_providers.go`: `buildArtworkChain` appends iTunes **after**
+  the CAA and key-gated sources (CAA → Spotify → Discogs → Fanart → Genius → TheAudioDB → Deezer →
+  **iTunes** → YouTube Music → SoundCloud). Also a consensus provider there, and an album content
+  provider in `internal/app/discovery_wiring.go`. No config gate.
 - Covered by httptest fixtures in `itunes_test.go` (search track/artist, `LookupAlbum` table,
   HTTP-error path, and the new `Resolve` high-res assertion). Discovery suite green (build + vet
   clean, full `internal/discovery/...` tests pass).
@@ -208,7 +209,7 @@ iTunes adds, and it's built. Remaining items are **optional, not coverage gaps**
 
 1. **Cache the artwork fallback** (cap 2 follow-on). The ~20 req/min ceiling makes a read-through
    cache (name-keyed, long positive TTL) worthwhile if iTunes-fallback resolves become frequent —
-   mirror `RedisEnrichmentCache`. Not blocking; the chain already runs iTunes last.
+   mirror `RedisEnrichmentCache`. Not blocking; the chain already runs iTunes after the ID-keyed sources.
 2. **Raise the hero constant toward 3000px** if a sharper full-screen hero is wanted and the
    mobile-data cost (~2.4MB/open) is acceptable. One-line change to `iTunesHeroArtworkSize`.
 3. **`/lookup` content ports** (cap 5) — ✅ **BUILT** (2026-06-22). A second mainstream discography/

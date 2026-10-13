@@ -10,7 +10,7 @@ import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { formatDuration } from '@shared/ui/displayFormat';
 
-import { trackExtras } from '@/features/detail/domain/trackExtras';
+import { trackExtras } from '@features/detail/domain/trackExtras';
 import type { ArtistDetailState } from '@features/detail/hooks/useArtistDetailState';
 import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
 

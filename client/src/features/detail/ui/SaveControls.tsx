@@ -14,7 +14,7 @@ import {
   saveControlState,
   saveControlText,
   saveDisplayState,
-} from '@/features/detail/domain/saveTrack';
+} from '@features/detail/domain/saveTrack';
 import { sharedStyles } from '@features/detail/ui/detailStyles';
 import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
 import { useResolvedOwnedTrack, type TrackIdentity } from '@features/detail/hooks/useOwnedTrack';

@@ -8,7 +8,7 @@ import type {
 import { httpDetailPort } from '@features/detail/adapters/http/httpDetailPort';
 import { createMemoryDetailPort } from '@features/detail/__tests__/memoryDetailPort';
 import type { DetailPort } from '@features/detail/ports/detailPort';
-import { signInTestUser } from '@features/detail/__tests__/support/queryHarness';
+import { signInTestUser } from '@testing/queryHarness';
 
 const { __http, fakeFetch } = require('../../../../jest/doubles/fetch.js');
 

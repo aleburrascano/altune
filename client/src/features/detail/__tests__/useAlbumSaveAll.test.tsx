@@ -4,8 +4,8 @@ import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
-import { useAlbumSaveAll } from '@/features/detail/hooks/useAlbumSaveAll';
-import { SAVE_ALL_CONCURRENCY } from '@/features/detail/domain/saveTrack';
+import { useAlbumSaveAll } from '@features/detail/hooks/useAlbumSaveAll';
+import { SAVE_ALL_CONCURRENCY } from '@features/detail/domain/saveTrack';
 
 const SENT_TWICE = 2;
 

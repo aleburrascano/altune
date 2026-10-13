@@ -2,49 +2,66 @@
 
 ## Backend deploy
 
-From commit to live: PR gate, staging, human approval, blue-green swap. Red boxes are the automatic fallbacks.
+From commit to live: PR precheck, merge, then a deploy someone starts by hand. Nothing deploys on merge. Red boxes are the automatic fallbacks.
 
 ```mermaid
 flowchart TD
     commit["git commit<br/>husky: block secrets · lint changed files"] --> pr["Pull request to main"]
-    pr --> gate["Required checks<br/>gate: backend · mobile · overseer tests + module-cycle check<br/>review: status posted by the review skill"]
-    gate -->|green| mq["Merge queue<br/>re-runs every suite"]
-    mq --> main(["main"])
-    main --> changed{"go-api / overseer<br/>code changed?"}
-    changed -->|no| skip(["no deploy"])
-    changed -->|yes| retest["Re-test the exact commit<br/>test-backend · test-overseer"]
+    pr --> precheck["precheck.yml · one precheck job"]
+
+    subgraph gate [PR gate · precheck.yml]
+        trusted{"factory-precheck status green<br/>for this commit and base?"}
+        full["scripts/precheck.sh"]
+        integ["scripts/ci/integration.sh"]
+        shape["scripts/ci/pr-shape.sh"]
+        trusted -->|yes| integ
+        trusted -->|no| full --> integ --> shape
+    end
+
+    precheck --> trusted
+    shape -->|green| main(["merge to main<br/>no merge queue"])
+    main --> ci["ci.yml on push to main<br/>backend · overseer · mobile jobs for the paths that changed"]
+
+    dispatch(["deploy.yml · workflow_dispatch only<br/>run by hand on a main commit"])
 
     subgraph staging [Staging · same VM, own compose project + Supabase]
-        st_deploy["SSH: git reset --hard origin/main<br/>staging.sh: migrate · compose up --build in place"]
-        st_health["poll public /health up to 180s"]
-        smoke["smoke.sh<br/>/health · /overseer · overseer buckets_ok"]
-        st_deploy --> st_health --> smoke
+        st_release["release.sh staging sha<br/>git reset --hard sha · staging.sh"]
+        st_up["migrate · compose up --build<br/>/health within 180s"]
+        drill["rollback drill<br/>previous build boots on the new schema"]
+        smoke["smoke.sh staging<br/>/health version = sha · /overseer · buckets_ok · journey-check"]
+        st_release --> st_up --> drill --> smoke
     end
 
-    retest --> st_deploy
-    smoke --> approve{{"approval job<br/>human reviewer on the production environment"}}
+    dispatch --> st_release
 
-    subgraph live_env [Production · deploy job never cancelled mid-run]
-        migrate["migrations via psql to Supabase<br/>forward only, before the swap"]
-        build["build + start idle color<br/>blue ↔ green"]
+    subgraph live_env [Production · release.sh prod sha]
+        migrate["prod-migrate.sh<br/>psql to Supabase, forward only, before the swap"]
+        build["blue-green.sh<br/>build + start idle color"]
         healthy{"idle color healthy<br/>within 180s?"}
-        flip["write Caddy upstream.conf · caddy reload"]
+        flip["write Caddy upstream · caddy reload"]
         verify{"public /health ok?"}
-        drain["drain 20s · stop old color<br/>kept for rollback.sh"]
+        drain["drain 20s · stop old color"]
         overseer["overseer.sh<br/>rebuild in place · 22s log watch"]
-        prune["docker image prune"]
+        psmoke["smoke.sh prod<br/>on the active color"]
         migrate --> build --> healthy
         healthy -->|yes| flip --> verify
-        verify -->|yes| drain --> overseer --> prune
+        verify -->|yes| drain --> overseer --> psmoke
     end
 
-    approve --> migrate
+    smoke --> migrate
+    psmoke --> version{"verify prod version<br/>/health version = sha?"}
+    version -->|yes| done(["live"])
+
+    st_fail(["staging step fails · job stops<br/>prod untouched"])
+    smoke -.->|any staging step fails| st_fail
     healthy -->|no| keep(["stop idle · live color keeps serving"])
     verify -->|no| restore(["restore old upstream · stop new color"])
-    prune --> done(["live"])
+    rollback(["rollback.sh<br/>flip back to the previous color"])
+    psmoke -.->|any release prod failure| rollback
+    version -->|no| vfail(["deploy job fails"])
 
     classDef fail fill:#fde2e2,stroke:#c0392b,color:#000
-    class keep,restore fail
+    class keep,restore,rollback,st_fail,vfail fail
 ```
 
 ## Mobile release

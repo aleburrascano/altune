@@ -2,9 +2,9 @@ import { asTrackId } from '@shared/apiClient/ids';
 import type { PlaybackContextValue, PlaybackStatus } from '@shared/playback/playbackContextValue';
 import type { PlaybackSource } from '@shared/playback/playbackTrack';
 
-import { trackExtras } from '@/features/detail/domain/trackExtras';
-import type { OwnedTrack } from '@/features/detail/domain/ownedTrack';
-import { isResultPlaying, resolvePlaySource } from '@/features/detail/domain/playSource';
+import { trackExtras } from '@features/detail/domain/trackExtras';
+import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
+import { isResultPlaying, resolvePlaySource } from '@features/detail/domain/playSource';
 
 type Playback = Pick<PlaybackContextValue, 'status' | 'track'>;
 

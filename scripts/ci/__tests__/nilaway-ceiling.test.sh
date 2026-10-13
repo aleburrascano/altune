@@ -4,10 +4,15 @@ script=$PWD/nilaway-ceiling.sh
 fail=0
 work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
 
-printf '#!/usr/bin/env bash\nexit 0\n' > "$work/go"
+cat > "$work/go" <<'STUB'
+#!/usr/bin/env bash
+[ "$1" = list ] && printf 'altune/overseer\naltune/overseer/web/node_modules/flatted/golang/pkg/flatted\n'
+exit 0
+STUB
 cat > "$work/nilaway" <<'STUB'
 #!/usr/bin/env bash
 echo "${GOMEMLIMIT-unset}" >> "$MEMLOG"
+echo "$*" >> "$MEMLOG.args"
 for _ in $(seq "${FINDINGS:-0}"); do echo "x.go:1: Potential nil panic detected"; done
 STUB
 chmod +x "$work/go" "$work/nilaway"
@@ -37,6 +42,10 @@ grep -q '^::error::' <<<"$out" || { echo "FAIL no ::error:: line"; fail=1; }
 echo 2 > "$work/base"
 run "$work/base"
 check "count at ceiling exits 0" "0" "$got"
+
+: > "$work/mem.log.args"
+run
+check "node_modules packages stay out of scope" "altune/overseer" "$(cat "$work/mem.log.args")"
 
 [ "$fail" = 0 ] && echo "nilaway-ceiling tests ok"
 [ "$fail" = 0 ]

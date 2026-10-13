@@ -10,8 +10,9 @@ const script = join(dirname(fileURLToPath(import.meta.url)), '..', 'lint-changed
 const mobile = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const MOBILE_LINT_SETUP = [
   'eslint.config.js',
-  'eslint-rules/no-comments.js',
-  'eslint-rules/no-banned-noun.js',
+  'eslint/rules/no-comments.js',
+  'eslint/rules/no-banned-noun.js',
+  'eslint/rules/one-alias-per-folder.js',
   'tsconfig.json',
 ];
 

@@ -9,11 +9,11 @@ import {
   openDetail,
   type DetailRoute,
   featuringHref,
-} from '@/features/detail/domain/detailNavigation';
-import { resolveEntityQuery } from '@/features/detail/domain/resolveEntityQuery';
-import type { DetailPort } from '@/features/detail/ports/detailPort';
-import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
-import { useDetailFetchEnabled } from '@/features/detail/hooks/useDetailFetchGate';
+} from '@features/detail/domain/detailNavigation';
+import { resolveEntityQuery } from '@features/detail/domain/resolveEntityQuery';
+import type { DetailPort } from '@features/detail/ports/detailPort';
+import { useDetailPort } from '@features/detail/ports/DetailPortProvider';
+import { useDetailFetchEnabled } from '@features/detail/hooks/useDetailFetchGate';
 
 export function useOpenDetail(detailRoute: DetailRoute): (picked: DiscoveryResult) => void {
   const navigator = useNavigator();

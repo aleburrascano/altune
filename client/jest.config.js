@@ -31,11 +31,15 @@ const PREBUILT_COMMONJS_RENDERER_BABEL_WOULD_NOT_CHANGE =
 
 const WEB_INTEGRATION_TESTS = '\\.web\\.integration\\.test\\.tsx?$';
 
+const tsconfigAliases = Object.fromEntries(
+  Object.entries(require('./tsconfig.json').compilerOptions.paths).map(([alias, [target]]) => [
+    `^${alias.replace('/*', '/(.*)')}$`,
+    `<rootDir>/${target.replace('./', '').replace('/*', '/$1')}`,
+  ]),
+);
+
 const houseModuleNameMapper = {
-  '^@/(.*)$': '<rootDir>/src/$1',
-  '^@features/(.*)$': '<rootDir>/src/features/$1',
-  '^@shared/(.*)$': '<rootDir>/src/shared/$1',
-  '^@testing/(.*)$': '<rootDir>/jest/$1',
+  ...tsconfigAliases,
   '^expo/virtual/env$': '<rootDir>/jest/expo-virtual-env.js',
 };
 

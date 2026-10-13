@@ -57,9 +57,9 @@ Checked on a throwaway branch against the live repo: `internal/observe/adapters/
 
 Follow-up tickets, in order:
 
-1. (done) Move `internal/auth/context.go` and its test to `internal/auth/service/`; point `middleware.go` at it.
-2. `observe/adapters/authbridge/`, then move `observe/handler` imports to it. Clears the `G3 ... imports auth outside adapters/authbridge` lines for `observe/handler/gate.go`, `sse.go` and `streams.go` (baseline lines 96, 100 and 101 as re-recorded by tickets 2 and 3).
-3. (done) `eventstream` bridge. Clears `internal/eventstream/handler.go` (line 94, same re-recording).
+1. (done) Move `internal/auth/context.go` and its test to `internal/auth/service/request_identity.go`; point `middleware.go` at it.
+2. `observe/adapters/authbridge/`, then move `observe/handler` imports to it. Clears the `G3 ... imports auth outside adapters/authbridge` lines for `observe/adapters/handler/gate.go`, `sse.go` and `streams.go` (baseline lines 96, 100 and 101 as re-recorded by tickets 2 and 3).
+3. (done) `eventstream` bridge. Clears `internal/eventstream/adapters/handler/event_stream_handler.go` (line 94, same re-recording).
 4. One bridge each for catalog, discovery, playback and acquisition. Clears the other 17 auth lines.
 
 Each ticket removes its baseline lines in the same commit; the check fails if it does not.
@@ -77,7 +77,7 @@ What the code does today, read before choosing: every `errgroup.Group` in discov
 | (c) id-generator port | 10 files, plus a port, an adapter and wiring in `app/` | low, but a port with one implementer that only calls `uuid.New()`; the cleanliness-over-applied tell. It also fixes nothing for uuid used as a type (`uuid.Nil`, parameters) or for errgroup | none |
 | (d) checker allow-list for three packages | `scripts/moduleshape/check.go` and the baseline | none | yes, an owner call; it makes G2 say "stdlib and shared only, except these", which lets the next import in |
 
-**Chosen: (a).** `shared/userid.go` already wraps uuid behind `shared.UserId` and `shared/textnorm` already wraps `x/text/unicode/norm`, so the kernel holding thin wrappers over third-party types is the existing pattern. (a) needs no checker change, no port and no rewrite of concurrency code.
+**Chosen: (a).** `shared/user_id.go` already wraps uuid behind `shared.UserId` and `shared/textnorm` already wraps `x/text/unicode/norm`, so the kernel holding thin wrappers over third-party types is the existing pattern. (a) needs no checker change, no port and no rewrite of concurrency code.
 
 The three pieces:
 

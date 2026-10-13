@@ -8,7 +8,7 @@ import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import type { DiscoverView } from '@features/discovery/domain/discoverView';
 import type { ResultSection } from '@shared/apiClient/discovery';
 import { PlaybackContext } from '@shared/playback/usePlayback';
-import { idlePlayback } from '@/features/detail/__tests__/support/queryHarness';
+import { idlePlayback } from '@testing/queryHarness';
 import { setPlatformOS } from '@testing/setPlatformOS';
 
 const NATIVE_OS = Platform.OS;

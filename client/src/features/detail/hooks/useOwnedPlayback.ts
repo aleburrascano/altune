@@ -2,7 +2,7 @@ import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import type { RetryEntryPoint } from '@shared/acquisition/acquisitionTelemetry';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 
-import { trackExtras } from '@/features/detail/domain/trackExtras';
+import { trackExtras } from '@features/detail/domain/trackExtras';
 import {
   playButtonState,
   splitOwned,
@@ -10,16 +10,16 @@ import {
   type OwnedSplit,
   ownedFromExtras,
   type OwnedTrack,
-} from '@/features/detail/domain/ownedTrack';
+} from '@features/detail/domain/ownedTrack';
 import {
   ownedRetryTrackId,
   saveControlInteractive,
   saveControlState,
   toCreateTrackRequest,
-} from '@/features/detail/domain/saveTrack';
-import { resolveOwnedTrackAtActionTime } from '@/features/detail/hooks/useOwnedTrack';
-import { useRetryTrack } from '@/features/detail/hooks/useRetryTrack';
-import type { SaveTrack } from '@/features/detail/hooks/useSaveTrack';
+} from '@features/detail/domain/saveTrack';
+import { resolveOwnedTrackAtActionTime } from '@features/detail/hooks/useOwnedTrack';
+import { useRetryTrack } from '@features/detail/hooks/useRetryTrack';
+import type { SaveTrack } from '@features/detail/hooks/useSaveTrack';
 
 export type OwnedPlaybackContext = {
   title: string | null;

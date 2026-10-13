@@ -14,7 +14,7 @@ import * as detailHandoff from '@shared/navigation/detailHandoff';
 import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';
 import { PlaybackContext } from '@shared/playback/usePlayback';
-import { idlePlayback } from '@/features/detail/__tests__/support/queryHarness';
+import { idlePlayback } from '@testing/queryHarness';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

@@ -2,12 +2,12 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { createElement, type ReactElement, type ReactNode } from 'react';
 
-import { DetailHandoffProvider } from '@/features/detail/hooks/useDetailHandoff';
-import { useReportWrongAlbum } from '@/features/detail/hooks/useReportWrongAlbum';
+import { DetailHandoffProvider } from '@features/detail/hooks/useDetailHandoff';
+import { useReportWrongAlbum } from '@features/detail/hooks/useReportWrongAlbum';
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
-import { signInTestUser } from '@/features/detail/__tests__/support/queryHarness';
+import { signInTestUser } from '@testing/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 

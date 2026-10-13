@@ -3,13 +3,10 @@ import { act, renderHook } from '@testing-library/react-native';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { readDetailHandoff } from '@shared/navigation/detailHandoff';
 
-import { useLateralNav } from '@/features/detail/hooks/useDetailNavigation';
-import type { DetailPort } from '@/features/detail/ports/detailPort';
-import { createMemoryDetailPort } from '@/features/detail/__tests__/memoryDetailPort';
-import {
-  createPortWrapper,
-  createTestQueryClient,
-} from '@/features/detail/__tests__/support/queryHarness';
+import { useLateralNav } from '@features/detail/hooks/useDetailNavigation';
+import type { DetailPort } from '@features/detail/ports/detailPort';
+import { createMemoryDetailPort } from '@features/detail/__tests__/memoryDetailPort';
+import { createPortWrapper, createTestQueryClient } from '@testing/queryHarness';
 
 const mockPush = jest.fn();
 

@@ -22,9 +22,8 @@ carries is **duplicative**. Its **one genuinely non-duplicative contribution is 
 
 - **It is the keyless, quota-free artist-image source.** iTunes — our highest-resolution keyless
   artwork source — carries **no artist images at all** (its `musicArtist` entity has no artwork).
-  The only YouTube artist-art path we had was the **official YouTube Data API** resolver
-  (`youtube.go`), which is **key-gated** (`YOUTUBE_API_KEY`) and **quota-crippled** (a `search.list`
-  costs 100 of the 10k default daily units → ~100 lookups/day — unusable in production). The internal
+  The official YouTube Data API is **key-gated** and **quota-crippled** (a `search.list` costs 100 of
+  the 10k default daily units → ~100 lookups/day, unusable in production). The internal
   YouTube Music API returns **real, high-resolution artist photos with no key and no quota** (verified:
   Kendrick's artist image resizes to a 13.9MB master at `=s0`; 1000px ≈ 134KB). This is the cap that
   earned a build (§5.3).
@@ -102,7 +101,7 @@ Code: `ytmusic.go` (`mapYTMusicTrack` / `mapYTMusicVideo` / `mapYTMusicAlbum` / 
 ### 2. Artist content (discography + top tracks) — ✅ BUILT
 `GetArtistAlbums` (`AlbumSearch`, artist-name filtered) and `GetArtistTopTracks` (`TrackSearch`,
 artist-name filtered, capped at 10) implement the content ports. Wired as `"ytmusic"` in the
-consensus providers (`search_wiring.go`) and the artist-content dispatch. Off the ranking path; the
+consensus providers (`internal/app/build_consensus_providers.go`). Off the ranking path; the
 album set feeds the MB-validated consensus union alongside Deezer/iTunes/SoundCloud.
 
 ### 3. Keyless artist artwork (internal API, hi-res resize) — ✅ BUILT (2026-06-22, the headline)
@@ -110,10 +109,9 @@ The single non-duplicative metadata win. `YouTubeMusicArtworkResolver.Resolve` (
 `ArtistSearch`, picks the best artist image (`pickArtistArtwork`: exact case-insensitive name match
 preferred, top result as fallback), and rewrites it to a **1000px hero** (`resizeYTThumbnail`,
 preserving the `-p-` smart-crop flag). Returns `""` on miss so the chain falls through. Wired in
-`buildArtworkChain` **after** the ID-keyed sources and **before** the key-gated official-API
-`YouTubeArtworkResolver` — which is now a deeper fallback (kept, not deleted; largely redundant).
+`buildArtworkChain` **after** iTunes and **before** SoundCloud.
 **Why it earns a build where lyrics/popularity/bio don't:** iTunes (our best keyless artwork source)
-has no artist images, Fanart.tv is MBID-gated, and the official Data-API resolver is quota-crippled
+has no artist images, Fanart.tv is MBID-gated, and the official Data API is quota-crippled
 (~100 lookups/day) — so for an artist with no MBID and no Fanart/Deezer/Discogs hit, this is the only
 keyless hi-res artist photo we can get. **Display-only, off the ranking path, no eval gate** — mirrors
 the iTunes/Deezer/SoundCloud artwork-fallback pattern exactly. Album/track art is **deliberately
@@ -184,14 +182,10 @@ Search + content (the original projection) and the new keyless artist-artwork re
   `fetchYTMusic` retry + `nextWithContext` context-bridge; mappers) **and**
   `YouTubeMusicArtworkResolver` (`Resolve` artist-only; `pickArtistArtwork` / `largestYTThumbnail` /
   `resizeYTThumbnail` pure helpers; `ytArtworkHeroSize` = 1000).
-- `services/go-api/internal/discovery/adapters/providers/youtube.go` — the **official YouTube Data
-  API** `YouTubeArtworkResolver` (artist channel thumbnails), key-gated by `cfg.HasYouTube()`. Now a
-  deeper fallback behind the keyless resolver; **retained, not deleted** (still the only path that
-  uses the official API; trivially removable if the keyless resolver proves sufficient on live data).
-- Wired in `internal/app/search_wiring.go`: `NewYouTubeMusicAdapter` as a consensus provider + the
-  artist-content dispatch; `NewYouTubeMusicArtworkResolver()` in `buildArtworkChain` after iTunes,
-  before the key-gated official resolver. `internal/app/app.go` adds the search adapter to the
-  provider list. The search adapter is **unconditionally wired** (the internal API needs no key).
+- Wired in `internal/app/build_consensus_providers.go`: `NewYouTubeMusicAdapter` as a consensus
+  provider, and `NewYouTubeMusicArtworkResolver` in `buildArtworkChain` after iTunes, before
+  SoundCloud. `internal/app/build_search_service.go` adds the search adapter to the provider list.
+  All three are gated by `cfg.HasYouTubeMusic()` (`YTMUSIC_ENABLED`, default on). The internal API needs no key.
 - Tests: `ytmusic_test.go` covers the context-cancel guard, `mapYTMusicVideo`, and the new pure
   artwork helpers (`resizeYTThumbnail` table, `pickArtistArtwork` exact/fallback/empty cases, and the
   artist-only no-op guard for non-artist kinds). Full `internal/discovery/...` suite green (600).
@@ -206,10 +200,7 @@ deferred-by-design or skipped (§5), not a coverage gap:
    `GetWatchPlaylist` mapper. Deferred exactly like the SoundCloud/Last.fm related surfaces.
 2. **Artwork cache (cap 3 follow-on).** Name-keyed read-through cache (long positive TTL) if
    YT-fallback artwork resolves become frequent — mirror `RedisEnrichmentCache`. Not blocking.
-3. **Retire the official-API resolver (`youtube.go`).** Once the keyless resolver is confirmed
-   sufficient on live data, the key-gated Data-API resolver and the `YOUTUBE_API_KEY` config can be
-   removed. Kept for now (surgical change; no deletion of working code without live confirmation).
-4. **Public-key self-heal.** Add a player-JS key resolver (like SoundCloud's `client_id`) **only if**
+3. **Public-key self-heal.** Add a player-JS key resolver (like SoundCloud's `client_id`) **only if**
    the hardcoded `WEB_REMIX` key starts rotating. Not needed today.
 
 **Not verifiable in this dev environment:** the real-world artist-artwork coverage lift on live

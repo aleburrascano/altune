@@ -7,18 +7,18 @@ import type { PlaybackSource } from '@shared/playback/playbackTrack';
 
 import { usePlayback } from '@shared/playback/usePlayback';
 
-import { resolveFeatured, trackExtras } from '@/features/detail/domain/trackExtras';
-import { useDetailHandoff } from '@/features/detail/hooks/useDetailHandoff';
+import { resolveFeatured, trackExtras } from '@features/detail/domain/trackExtras';
+import { useDetailHandoff } from '@features/detail/hooks/useDetailHandoff';
 import {
   type LateralNavHandle,
   useOpenFeaturing,
-} from '@/features/detail/hooks/useDetailNavigation';
-import { useOwnedTrack } from '@/features/detail/hooks/useOwnedTrack';
-import { useReportWrongAlbum } from '@/features/detail/hooks/useReportWrongAlbum';
-import { useSaveTrack, useTrackSave, type TrackSave } from '@/features/detail/hooks/useSaveTrack';
-import { type DetailRoute } from '@/features/detail/domain/detailNavigation';
-import { isResultPlaying, resolvePlaySource } from '@/features/detail/domain/playSource';
-import { isOptimisticTrackId, toCreateTrackRequest } from '@/features/detail/domain/saveTrack';
+} from '@features/detail/hooks/useDetailNavigation';
+import { useOwnedTrack } from '@features/detail/hooks/useOwnedTrack';
+import { useReportWrongAlbum } from '@features/detail/hooks/useReportWrongAlbum';
+import { useSaveTrack, useTrackSave, type TrackSave } from '@features/detail/hooks/useSaveTrack';
+import { type DetailRoute } from '@features/detail/domain/detailNavigation';
+import { isResultPlaying, resolvePlaySource } from '@features/detail/domain/playSource';
+import { isOptimisticTrackId, toCreateTrackRequest } from '@features/detail/domain/saveTrack';
 
 export type { LateralNavHandle };
 

@@ -10,16 +10,16 @@ import {
   useTrackStatusStore,
 } from '@shared/acquisition/trackStatusStore';
 
-import { optimisticTrackId, toCreateTrackRequest } from '@/features/detail/domain/saveTrack';
-import type { LateralNavHandle } from '@/features/detail/hooks/useTrackDetailActions';
-import { RelatedTracksSection } from '@/features/detail/ui/RelatedTracksSection';
-import { TrackDetailBody } from '@/features/detail/ui/TrackDetailBody';
+import { optimisticTrackId, toCreateTrackRequest } from '@features/detail/domain/saveTrack';
+import type { LateralNavHandle } from '@features/detail/hooks/useTrackDetailActions';
+import { RelatedTracksSection } from '@features/detail/ui/RelatedTracksSection';
+import { TrackDetailBody } from '@features/detail/ui/TrackDetailBody';
 import { readDetailHandoff } from '@shared/navigation/detailHandoff';
 import {
   createTestQueryClient,
   createPlaybackWrapper,
   signInTestUser,
-} from '@/features/detail/__tests__/support/queryHarness';
+} from '@testing/queryHarness';
 
 const { __http } = require('../../../../../jest/doubles/fetch.js');
 

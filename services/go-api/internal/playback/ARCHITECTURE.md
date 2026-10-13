@@ -25,11 +25,9 @@ only through bridges.
 | domain | `stale_write_error.go` | `StaleWriteError`, `ErrStaleQueueWrite`, `ErrQueuePositionMismatch` (409) |
 | domain | `unavailable_error.go` | `UnavailableError`, `ErrQueueStateUnavailable` (503, `Retry-After: 1`) |
 | domain | `queue_rate_limited_error.go` | `QueueRateLimitedError` (429, `playback.rate_limited`) |
-| ports | `queue_state_repository.go` | `QueueStateRepository`, `ErrCorruptStoredState` |
-| ports | `now_playing_reader.go` | `NowPlayingReader`, `NowPlayingTrack` |
-| ports | `deleted_identity_lister.go` | `DeletedIdentityLister`, `ErrIdentityStoreUnavailable` |
-| ports | `erased_state_reaper.go` | `ErasedStateReaper` |
-| ports | `enrichment_metrics.go`, `queue_state_metrics.go`, `rate_limit_metrics.go`, `erasure_sweep_metrics.go` | One metrics interface each, with a noop |
+| ports | `queue_state.go` | `QueueStateRepository`, `ErrCorruptStoredState`, and the `QueueStateMetrics` and `RateLimitMetrics` interfaces with their noops |
+| ports | `now_playing.go` | `NowPlayingReader`, `NowPlayingTrack`, and the `EnrichmentMetrics` interface with its noop |
+| ports | `erasure.go` | `DeletedIdentityLister`, `OwnerScanPage`, `ErrIdentityStoreUnavailable`, `ErasedStateReaper`, and the `ErasureSweepMetrics` interface with its noop |
 | service | `queue/service.go` | Save, update position, get, enrich the current track |
 | service | `erasure/sweeper.go` | Erasure sweep |
 | adapters/handler | `queue_handler.go` | HTTP routes for the queue snapshot |

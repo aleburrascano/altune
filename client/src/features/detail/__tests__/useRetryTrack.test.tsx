@@ -6,11 +6,7 @@ import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 import { useRetryTrack } from '../hooks/useRetryTrack';
 import { createMemoryDetailPort } from './memoryDetailPort';
-import {
-  createPortWrapper,
-  createTestQueryClient,
-  signInTestUser,
-} from '@/features/detail/__tests__/support/queryHarness';
+import { createPortWrapper, createTestQueryClient, signInTestUser } from '@testing/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 

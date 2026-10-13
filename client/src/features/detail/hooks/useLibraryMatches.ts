@@ -5,10 +5,10 @@ import { libraryKeys } from '@shared/query/queryKeys';
 import type { AlbumGroup } from '@shared/apiClient/library';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
-import type { DetailPort } from '@/features/detail/ports/detailPort';
-import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
-import { normalizeForCompare } from '@/features/detail/domain/normalizeForCompare';
-import { DETAIL_LIST_CAP } from '@/features/detail/domain/contentStatus';
+import type { DetailPort } from '@features/detail/ports/detailPort';
+import { useDetailPort } from '@features/detail/ports/DetailPortProvider';
+import { normalizeForCompare } from '@features/detail/domain/normalizeForCompare';
+import { DETAIL_LIST_CAP } from '@features/detail/domain/contentStatus';
 
 export const LOOKUP_LIMIT = 200;
 export const LOOKUP_MAX_PAGES = 5;

@@ -12,11 +12,11 @@ import type {
 import {
   recordEnrichmentOutcome,
   type EnrichmentProvider,
-} from '@/features/detail/domain/detailHealth';
-import type { DetailPort } from '@/features/detail/ports/detailPort';
-import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
-import { useDetailFetchEnabled } from '@/features/detail/hooks/useDetailFetchGate';
-import { trackExtras } from '@/features/detail/domain/trackExtras';
+} from '@features/detail/domain/detailHealth';
+import type { DetailPort } from '@features/detail/ports/detailPort';
+import { useDetailPort } from '@features/detail/ports/DetailPortProvider';
+import { useDetailFetchEnabled } from '@features/detail/hooks/useDetailFetchGate';
+import { trackExtras } from '@features/detail/domain/trackExtras';
 
 const ONE_DAY_MS = 86_400_000;
 const ENRICHMENT_STALE_TIME = ONE_DAY_MS;

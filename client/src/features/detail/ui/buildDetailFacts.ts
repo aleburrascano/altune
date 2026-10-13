@@ -1,7 +1,7 @@
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { formatDuration } from '@shared/ui/displayFormat';
 
-import { trackExtras } from '@/features/detail/domain/trackExtras';
+import { trackExtras } from '@features/detail/domain/trackExtras';
 import type { DetailFact } from '@features/detail/ui/DetailFacts';
 import { formatRuntime } from '@features/detail/ui/formatters';
 import type { TrackDetailActions } from '@features/detail/hooks/useTrackDetailActions';

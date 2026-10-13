@@ -8,7 +8,7 @@ import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import type { SearchCorrection } from '@features/discovery/domain/discoverView';
 import type { ResultsCommonProps } from '@features/discovery/ui/ResultsList';
 import { PlaybackContext } from '@shared/playback/usePlayback';
-import { idlePlayback } from '@/features/detail/__tests__/support/queryHarness';
+import { idlePlayback } from '@testing/queryHarness';
 
 function render(ui: React.ReactElement): ReturnType<typeof renderBare> {
   return renderBare(ui, {

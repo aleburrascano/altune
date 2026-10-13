@@ -3,7 +3,7 @@ import globals from "globals";
 import jsxA11y from "eslint-plugin-jsx-a11y";
 import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";
-import noComments from "../../../client/eslint-rules/no-comments.js";
+import noComments from "../../../client/eslint/rules/no-comments.js";
 
 const unsafeHtml = {
   selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']",

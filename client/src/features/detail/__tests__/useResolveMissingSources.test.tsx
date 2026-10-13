@@ -4,13 +4,10 @@ import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { applyKillSwitches } from '@shared/killSwitch/killSwitch';
 
-import { useResolveMissingSources } from '@/features/detail/hooks/useResolveMissingSources';
-import type { DetailPort } from '@/features/detail/ports/detailPort';
-import { createMemoryDetailPort } from '@/features/detail/__tests__/memoryDetailPort';
-import {
-  createPortWrapper,
-  createTestQueryClient,
-} from '@/features/detail/__tests__/support/queryHarness';
+import { useResolveMissingSources } from '@features/detail/hooks/useResolveMissingSources';
+import type { DetailPort } from '@features/detail/ports/detailPort';
+import { createMemoryDetailPort } from '@features/detail/__tests__/memoryDetailPort';
+import { createPortWrapper, createTestQueryClient } from '@testing/queryHarness';
 
 function track(overrides: Partial<DiscoveryResult> = {}): DiscoveryResult {
   return {

@@ -4,16 +4,12 @@ import { renderHook, waitFor } from '@testing-library/react-native';
 import type { DiscoverySource } from '@shared/apiClient/discovery';
 import type { ArtistContentResponse } from '@shared/apiClient/enrichment';
 
-import { useArtistContent } from '@/features/detail/hooks/useArtistContent';
-import { _resetDetailHealthForTest } from '@/features/detail/domain/detailHealth';
-import { DetailPortProvider } from '@/features/detail/ports/DetailPortProvider';
-import type { DetailPort } from '@/features/detail/ports/detailPort';
-import { createMemoryDetailPort } from '@/features/detail/__tests__/memoryDetailPort';
-import {
-  createTestQueryClient,
-  createWrapper,
-  signInTestUser,
-} from '@/features/detail/__tests__/support/queryHarness';
+import { useArtistContent } from '@features/detail/hooks/useArtistContent';
+import { _resetDetailHealthForTest } from '@features/detail/domain/detailHealth';
+import { DetailPortProvider } from '@features/detail/ports/DetailPortProvider';
+import type { DetailPort } from '@features/detail/ports/detailPort';
+import { createMemoryDetailPort } from '@features/detail/__tests__/memoryDetailPort';
+import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 

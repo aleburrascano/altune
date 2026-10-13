@@ -3,11 +3,11 @@ import { useQuery } from '@tanstack/react-query';
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
-import { resolveEntityQuery } from '@/features/detail/domain/resolveEntityQuery';
-import { normalizeForCompare } from '@/features/detail/domain/normalizeForCompare';
-import { realPhotoUrl } from '@/features/detail/domain/artistPhoto';
-import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
-import { useDetailFetchEnabled } from '@/features/detail/hooks/useDetailFetchGate';
+import { resolveEntityQuery } from '@features/detail/domain/resolveEntityQuery';
+import { normalizeForCompare } from '@features/detail/domain/normalizeForCompare';
+import { realPhotoUrl } from '@features/detail/domain/artistPhoto';
+import { useDetailPort } from '@features/detail/ports/DetailPortProvider';
+import { useDetailFetchEnabled } from '@features/detail/hooks/useDetailFetchGate';
 
 function useLoggedResolveFailure(result: DiscoveryResult, error: Error | null): void {
   useEffect(() => {

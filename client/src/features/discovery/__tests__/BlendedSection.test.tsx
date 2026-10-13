@@ -7,7 +7,7 @@ import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import type { DiscoveryResult, ResultSection } from '@shared/apiClient/discovery';
 import type { ResultsCommonProps } from '@features/discovery/ui/ResultsList';
 import { PlaybackContext } from '@shared/playback/usePlayback';
-import { idlePlayback } from '@/features/detail/__tests__/support/queryHarness';
+import { idlePlayback } from '@testing/queryHarness';
 
 function render(ui: React.ReactElement): ReturnType<typeof renderBare> {
   return renderBare(ui, {

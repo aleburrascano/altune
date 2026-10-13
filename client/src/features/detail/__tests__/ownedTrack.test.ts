@@ -3,7 +3,7 @@ import type { AcquisitionStatus } from '@shared/apiClient/trackResponse';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { canPlay } from '@shared/playback/canPlay';
 
-import { playButtonState, splitOwned, toPlaybackQueue } from '@/features/detail/domain/ownedTrack';
+import { playButtonState, splitOwned, toPlaybackQueue } from '@features/detail/domain/ownedTrack';
 
 describe('owned playback', () => {
   type ResultOverrides = {

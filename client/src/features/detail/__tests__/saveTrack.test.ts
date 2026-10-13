@@ -15,8 +15,8 @@ import {
   ownedRetryTrackId,
   saveControlInteractive,
   saveDisplayState,
-} from '@/features/detail/domain/saveTrack';
-import { ownedTrack, type OwnedTrack } from '@/features/detail/domain/ownedTrack';
+} from '@features/detail/domain/saveTrack';
+import { ownedTrack, type OwnedTrack } from '@features/detail/domain/ownedTrack';
 
 describe('save cache', () => {
   type ResultOverrides = {

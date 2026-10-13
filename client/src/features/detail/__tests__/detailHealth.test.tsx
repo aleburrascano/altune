@@ -9,15 +9,11 @@ import {
   fetchTallyingOutcome,
   flushDetailHealth,
   recordContentFetchOutcome,
-} from '@/features/detail/domain/detailHealth';
-import { useAlbumTracks } from '@/features/detail/hooks/useAlbumTracks';
-import { useDetailEnrichments, useEnrichment } from '@/features/detail/hooks/useDetailEnrichments';
-import { useArtistContent } from '@/features/detail/hooks/useArtistContent';
-import {
-  createTestQueryClient,
-  createWrapper,
-  signInTestUser,
-} from '@/features/detail/__tests__/support/queryHarness';
+} from '@features/detail/domain/detailHealth';
+import { useAlbumTracks } from '@features/detail/hooks/useAlbumTracks';
+import { useDetailEnrichments, useEnrichment } from '@features/detail/hooks/useDetailEnrichments';
+import { useArtistContent } from '@features/detail/hooks/useArtistContent';
+import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 

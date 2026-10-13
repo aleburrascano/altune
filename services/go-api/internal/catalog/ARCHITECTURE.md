@@ -61,7 +61,7 @@ catalog/
 This document records the retention/deletion story for catalog's personal data and
 the explicit design decision about a bulk per-user erasure path. It is the written
 companion to the playback module's erasure precedent
-(`internal/playback/ports/queue_state_repo.go`, `DeleteForUser`).
+(`internal/playback/ports/queue_state.go`, `DeleteForUser`).
 
 ### What personal data catalog holds
 

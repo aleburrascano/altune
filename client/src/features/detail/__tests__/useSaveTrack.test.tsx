@@ -8,15 +8,11 @@ import { libraryKeys } from '@shared/query/queryKeys';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
-import { useSaveTrack, useTrackSave } from '@/features/detail/hooks/useSaveTrack';
-import type { DetailPort } from '@/features/detail/ports/detailPort';
-import { createMemoryDetailPort } from '@/features/detail/__tests__/memoryDetailPort';
-import {
-  createPortWrapper,
-  createTestQueryClient,
-  signInTestUser,
-} from '@/features/detail/__tests__/support/queryHarness';
-import { ownedTrack } from '@/features/detail/domain/ownedTrack';
+import { useSaveTrack, useTrackSave } from '@features/detail/hooks/useSaveTrack';
+import type { DetailPort } from '@features/detail/ports/detailPort';
+import { createMemoryDetailPort } from '@features/detail/__tests__/memoryDetailPort';
+import { createPortWrapper, createTestQueryClient, signInTestUser } from '@testing/queryHarness';
+import { ownedTrack } from '@features/detail/domain/ownedTrack';
 
 const mockCreateTrack = jest.fn<Promise<TrackResponse>, [unknown]>();
 

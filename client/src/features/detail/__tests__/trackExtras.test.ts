@@ -5,7 +5,7 @@ import {
   trackExtras,
   extractFeaturedFromText,
   resolveFeatured,
-} from '@/features/detail/domain/trackExtras';
+} from '@features/detail/domain/trackExtras';
 
 describe('extras accessors', () => {
   describe('trackExtras', () => {

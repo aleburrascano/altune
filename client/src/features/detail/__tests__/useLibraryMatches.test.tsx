@@ -9,12 +9,8 @@ import {
   useLibraryTracksForAlbum,
   useLibraryTracksForArtist,
   useLibraryAlbumsForArtist,
-} from '@/features/detail/hooks/useLibraryMatches';
-import {
-  createTestQueryClient,
-  createWrapper,
-  signInTestUser,
-} from '@/features/detail/__tests__/support/queryHarness';
+} from '@features/detail/hooks/useLibraryMatches';
+import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 

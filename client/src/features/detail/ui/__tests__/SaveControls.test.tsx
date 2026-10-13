@@ -18,24 +18,24 @@ import {
   type SavePillShellProps,
   TrackSaveControl,
   TrackSavePill,
-} from '@/features/detail/ui/SaveControls';
+} from '@features/detail/ui/SaveControls';
 import {
   useOwnedPlayback,
   type OwnedPlaybackContext,
-} from '@/features/detail/hooks/useOwnedPlayback';
-import { useSaveTrack } from '@/features/detail/hooks/useSaveTrack';
-import { useResolvedOwnedTrack, type TrackIdentity } from '@/features/detail/hooks/useOwnedTrack';
-import type { OwnedTrack } from '@/features/detail/domain/ownedTrack';
+} from '@features/detail/hooks/useOwnedPlayback';
+import { useSaveTrack } from '@features/detail/hooks/useSaveTrack';
+import { useResolvedOwnedTrack, type TrackIdentity } from '@features/detail/hooks/useOwnedTrack';
+import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
 import {
   saveControlLabel,
   saveControlState,
   type SaveState,
-} from '@/features/detail/domain/saveTrack';
+} from '@features/detail/domain/saveTrack';
 import {
   createTestQueryClient,
   createPlaybackWrapper,
   signInTestUser,
-} from '@/features/detail/__tests__/support/queryHarness';
+} from '@testing/queryHarness';
 
 const { __http } = require('../../../../../jest/doubles/fetch.js');
 

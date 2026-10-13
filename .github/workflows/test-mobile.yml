@@ -62,7 +62,7 @@ jobs:
           node scripts/lint-changed-lines.mjs "$BASE"
       - name: script and rule tests
         run: |
-          files=$(git ls-files 'scripts/__tests__/*.test.mjs' 'eslint-rules/__tests__/*.test.js' 'eslint.config.test.js')
+          files=$(git ls-files 'scripts/__tests__/*.test.mjs' 'eslint/rules/__tests__/*.test.js' 'eslint.config.test.js')
           [ -z "$files" ] || node --test $files
 
   architecture:
