@@ -1,0 +1,7 @@
+self-hosted-runner:
+  labels: [ci, host, precheck, macos-26]
+paths:
+  .gitea/workflows/e2e.yml:
+    ignore: ['SC1090']
+  .gitea/workflows/github-bridge.yml:
+    ignore: ['scheduled job runs too frequently']

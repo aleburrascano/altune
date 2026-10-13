@@ -47,7 +47,8 @@ jobs:
       - name: nilaway ceiling
         working-directory: services/go-api
         run: |
-          export PATH="$(go env GOPATH)/bin:$PATH"
+          gopath=$(go env GOPATH)
+          export PATH="$gopath/bin:$PATH"
           bash ../../scripts/ci/nilaway-ceiling.sh nilaway-baseline.txt
 
   backend-tests:
@@ -144,8 +145,21 @@ jobs:
         working-directory: client
         run: bash ../scripts/ci/test-mobile-complexity.sh
 
+  workflow-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/go-api/go.mod
+      - name: install actionlint
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+      - name: actionlint
+        run: '"$(go env GOPATH)/bin/actionlint" -config-file .github/actionlint.yaml .github/workflows/*.yml .gitea/workflows/*.yml'
+
   pr-checks:
-    needs: [changes, backend-static, backend-tests, mobile-tests, mobile-quality]
+    needs: [changes, backend-static, backend-tests, mobile-tests, mobile-quality, workflow-lint]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
