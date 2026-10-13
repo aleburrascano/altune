@@ -128,7 +128,7 @@ describe('AuthCallbackScreen: web auth completion (#2924)', () => {
 
     render(<AuthCallbackScreen />);
 
-    await waitFor(() => expect(mockRouter.replace).toHaveBeenCalled());
+    await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/library'));
     expect(replaceState).toHaveBeenCalledWith(null, '', '/auth/callback');
   });
 
@@ -188,7 +188,7 @@ describe('AuthCallbackScreen: web auth completion (#2924)', () => {
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
 
     const { unmount } = render(<AuthCallbackScreen />);
-    await waitFor(() => expect(exchangeCodeForSession).toHaveBeenCalled());
+    await waitFor(() => expect(exchangeCodeForSession).toHaveBeenCalledWith('abc123'));
     unmount();
     release(rejectedBy('flow_state_expired', BAD_REQUEST));
     await Promise.resolve();
@@ -231,7 +231,7 @@ describe('AuthCallbackScreen: what a caller can hand the page beyond the happy p
 
     await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/library'));
     expect(exchangeCodeForSession).toHaveBeenCalledWith('code-secret-1');
-    expect(replaceState).toHaveBeenCalled();
+    expect(replaceState).toHaveBeenCalledWith(null, '', expect.any(String));
     expect(addressBarWrites(replaceState)).not.toContain('code-secret-1');
     expect(replaceState.mock.invocationCallOrder[0]).toBeLessThan(
       mockRouter.replace.mock.invocationCallOrder[0] ?? 0,
@@ -259,7 +259,7 @@ describe('AuthCallbackScreen: what a caller can hand the page beyond the happy p
     render(<AuthCallbackScreen />);
 
     await waitFor(() => expect(screen.getByTestId('auth-callback-error')).toBeTruthy());
-    expect(replaceState).toHaveBeenCalled();
+    expect(replaceState).toHaveBeenCalledWith(null, '', expect.any(String));
     expect(addressBarWrites(replaceState)).not.toContain('code-secret-3');
   });
 
@@ -271,7 +271,7 @@ describe('AuthCallbackScreen: what a caller can hand the page beyond the happy p
     render(<AuthCallbackScreen />);
 
     await waitFor(() => expect(screen.getByTestId('auth-callback-error')).toBeTruthy());
-    expect(replaceState).toHaveBeenCalled();
+    expect(replaceState).toHaveBeenCalledWith(null, '', expect.any(String));
     expect(addressBarWrites(replaceState)).not.toMatch(/at-secret-4|rt-secret-4/);
   });
 
@@ -282,7 +282,7 @@ describe('AuthCallbackScreen: what a caller can hand the page beyond the happy p
 
     render(<AuthCallbackScreen />);
 
-    await waitFor(() => expect(replaceState).toHaveBeenCalled());
+    await waitFor(() => expect(replaceState).toHaveBeenCalledWith(null, '', expect.any(String)));
     expect(addressBarWrites(replaceState)).not.toContain('hash-secret-5');
   });
 
