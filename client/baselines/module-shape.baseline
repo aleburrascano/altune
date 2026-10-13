@@ -1,4 +1,3 @@
-M10 src/shared/acquisition/acquisitionTelemetry.ts not a layer folder or index.ts
 M10 src/shared/acquisition/audioCacheInvalidation.ts not a layer folder or index.ts
 M10 src/shared/acquisition/downloadStore.ts not a layer folder or index.ts
 M10 src/shared/acquisition/stagePhase.ts not a layer folder or index.ts

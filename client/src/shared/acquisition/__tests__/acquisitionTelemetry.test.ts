@@ -10,7 +10,7 @@ import {
   recordRetryTapped,
   recordStatusChanged,
   retryFailureOutcome,
-} from '@shared/acquisition/acquisitionTelemetry';
+} from '@shared/acquisition/state/acquisitionTelemetry';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

@@ -32,7 +32,7 @@ import {
   recordRetryTapped,
   type RetryEntryPoint,
   type RetrySkipReason,
-} from '@shared/acquisition/acquisitionTelemetry';
+} from '@shared/acquisition/state/acquisitionTelemetry';
 import { useSharedRetryAcquisition } from '@shared/acquisition/useRetryAcquisition';
 
 const trackMutationKeys = {

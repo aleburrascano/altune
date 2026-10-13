@@ -7,7 +7,7 @@ import { onSignOut } from '@shared/session/signOutCleanup';
 import {
   recordStatusChanged,
   type StatusChangeSource,
-} from '@shared/acquisition/acquisitionTelemetry';
+} from '@shared/acquisition/state/acquisitionTelemetry';
 
 export type TrackStatus =
   | Exclude<AcquisitionTrackStatus, { acquisitionStatus: 'failed' }>
