@@ -4,7 +4,7 @@ import { render, screen, fireEvent } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
-import { AlbumMoreTracks } from '../ui/AlbumMoreTracks';
+import { AlbumMoreTracks } from '@features/detail/ui/AlbumMoreTracks';
 
 function track(title: string): DiscoveryResult {
   return {

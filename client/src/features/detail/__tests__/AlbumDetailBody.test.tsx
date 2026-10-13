@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react-nativ
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
-import { AlbumDetailBody } from '../ui/AlbumDetailBody';
+import { AlbumDetailBody } from '@features/detail/ui/AlbumDetailBody';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 import {
   createTestQueryClient,
@@ -11,7 +11,7 @@ import {
   signInTestUser,
 } from '@testing/queryHarness';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn() }),

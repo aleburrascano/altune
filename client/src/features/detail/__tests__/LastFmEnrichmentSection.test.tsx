@@ -3,7 +3,7 @@ import { fireEvent, render } from '@testing-library/react-native';
 
 import type { LastFmEnrichmentResponse } from '@shared/apiClient/enrichment';
 
-import { LastFmEnrichmentSection } from '../ui/LastFmEnrichmentSection';
+import { LastFmEnrichmentSection } from '@features/detail/ui/LastFmEnrichmentSection';
 
 function emptyEnrichment(): LastFmEnrichmentResponse {
   return {

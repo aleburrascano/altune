@@ -12,7 +12,7 @@ import {
   restoreTrackPlacements,
 } from '@shared/events/trackCachePatch';
 
-import { TRACKS_PAGE_SIZE, useLibraryTracks } from '../hooks/useLibraryTracks';
+import { TRACKS_PAGE_SIZE, useLibraryTracks } from '@features/library/hooks/useLibraryTracks';
 import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
 import { track as seededTrack } from '@features/library/__tests__/trackMutationFixtures';
 import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';

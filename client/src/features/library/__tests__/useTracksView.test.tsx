@@ -15,8 +15,8 @@ import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibra
 import { track } from '@features/library/__tests__/trackMutationFixtures';
 import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
-import { useSelection } from '../hooks/useSelection';
-import { useTracksView } from '../hooks/useTracksView';
+import { useSelection } from '@features/library/hooks/useSelection';
+import { useTracksView } from '@features/library/hooks/useTracksView';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 
 const noop = () => undefined;

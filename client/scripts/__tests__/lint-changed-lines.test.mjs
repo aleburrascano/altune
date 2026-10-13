@@ -13,6 +13,7 @@ const MOBILE_LINT_SETUP = [
   'eslint/rules/no-comments.js',
   'eslint/rules/no-banned-noun.js',
   'eslint/rules/one-alias-per-folder.js',
+  'eslint/rules/no-parent-relative-imports.js',
   'tsconfig.json',
 ];
 

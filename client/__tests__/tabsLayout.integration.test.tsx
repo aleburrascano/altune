@@ -7,13 +7,13 @@ import { PlaybackContext } from '@shared/playback/usePlayback';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
 import { asTrackId } from '@shared/apiClient/ids';
 
-import TabsLayout from '../src/app/(tabs)/_layout';
-import DiscoverLayout from '../src/app/(tabs)/discover/_layout';
-import LibraryLayout from '../src/app/(tabs)/library/_layout';
-import SettingsLayout from '../src/app/(tabs)/settings/_layout';
+import TabsLayout from '@/app/(tabs)/_layout';
+import DiscoverLayout from '@/app/(tabs)/discover/_layout';
+import LibraryLayout from '@/app/(tabs)/library/_layout';
+import SettingsLayout from '@/app/(tabs)/settings/_layout';
 import { setPlatformOS } from '@testing/setPlatformOS';
 
-const { __http } = require('../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('decode-uri-component', () => ({
   __esModule: true,

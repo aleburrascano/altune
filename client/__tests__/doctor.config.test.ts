@@ -1,7 +1,7 @@
 import { readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
-import doctorConfig from '../doctor.config';
+import doctorConfig from '@/../doctor.config';
 
 type Override = { files: string[]; rules: string[] };
 

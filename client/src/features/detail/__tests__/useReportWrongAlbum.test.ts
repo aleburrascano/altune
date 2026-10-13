@@ -9,7 +9,7 @@ import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { signInTestUser } from '@testing/queryHarness';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 const EVENTS = 'POST /v1/discovery/events';
 

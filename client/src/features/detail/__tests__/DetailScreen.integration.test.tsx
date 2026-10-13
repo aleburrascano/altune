@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { clearDetailHandoffs, detailHref } from '@shared/navigation/detailHandoff';
 
-import { DetailScreen } from '../ui/DetailScreen';
+import { DetailScreen } from '@features/detail/ui/DetailScreen';
 import {
   createTestQueryClient,
   createPlaybackWrapper,
@@ -26,7 +26,7 @@ jest.mock('expo-router', () => {
   };
 });
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 const SEARCH = 'GET /v1/discovery/search';
 const ALBUM_TRACKS = 'GET /v1/discovery/albums/deezer/d1/tracks';

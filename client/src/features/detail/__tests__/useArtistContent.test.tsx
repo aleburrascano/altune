@@ -11,7 +11,7 @@ import type { DetailPort } from '@features/detail/ports/detailPort';
 import { createMemoryDetailPort } from '@features/detail/__tests__/memoryDetailPort';
 import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 const ARTIST_CONTENT_PATH = 'GET /v1/discovery/artists/spotify/artist-1/content';
 

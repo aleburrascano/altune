@@ -7,7 +7,7 @@ import {
 } from '@shared/offline/__tests__/memoryOfflinePort';
 import type { OfflinePort } from '@shared/offline/ports/offlinePort';
 
-const { __http, fakeFetch } = require('../../../../jest/doubles/fetch.js');
+const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 

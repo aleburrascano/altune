@@ -8,8 +8,8 @@ import { notifyIdentityChange } from '@shared/session/signOutCleanup';
 import { readOwner } from '@shared/offline/pinnedIndex';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { OfflineReconcileBridge } from '@shared/offline/ui/OfflineReconcileBridge';
-import { FeaturePorts } from '../../src/chrome/FeaturePorts';
-import { httpFeaturePorts } from '../../src/chrome/httpFeaturePorts';
+import { FeaturePorts } from '@/chrome/FeaturePorts';
+import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 import { SettingsScreen } from '@features/settings/ui/SettingsScreen';
 
 const INDEX_URI = 'file:///document/offline/pinned.json';

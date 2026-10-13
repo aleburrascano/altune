@@ -12,7 +12,7 @@ import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibra
 import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 
-import { SidebarPlaylists } from '../ui/SidebarPlaylists';
+import { SidebarPlaylists } from '@features/library/ui/SidebarPlaylists';
 
 const mockPush = jest.fn();
 

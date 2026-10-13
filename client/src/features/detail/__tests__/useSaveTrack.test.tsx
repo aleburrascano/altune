@@ -18,7 +18,7 @@ const mockCreateTrack = jest.fn<Promise<TrackResponse>, [unknown]>();
 
 const mockRetryAcquisition = jest.fn<Promise<void>, [unknown]>();
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 const EVENTS = 'POST /v1/discovery/events';
 

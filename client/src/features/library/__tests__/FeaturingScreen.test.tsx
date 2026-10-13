@@ -7,9 +7,9 @@ import { asTrackId } from '@shared/apiClient/ids';
 import { ApiError, NetworkError } from '@shared/failure/errors';
 
 import { createMemoryLibraryPort } from './memoryLibraryPort';
-import { LibraryPortProvider } from '../ports/LibraryPortProvider';
-import type { LibraryPort } from '../ports/libraryPort';
-import { FeaturingScreen } from '../ui/FeaturingScreen';
+import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
+import type { LibraryPort } from '@features/library/ports/libraryPort';
+import { FeaturingScreen } from '@features/library/ui/FeaturingScreen';
 import * as detailHandoff from '@shared/navigation/detailHandoff';
 import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';

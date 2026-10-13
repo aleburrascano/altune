@@ -12,7 +12,7 @@ import { idlePlayback } from '@testing/queryHarness';
 import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 
-import { LibraryScreen } from '../ui/LibraryScreen';
+import { LibraryScreen } from '@features/library/ui/LibraryScreen';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 
 const SKELETON_TILES = 4;

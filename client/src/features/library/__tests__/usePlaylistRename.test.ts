@@ -7,7 +7,7 @@ import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
 import { playlistKeys } from '@shared/query/queryKeys';
 import { signInTestUser } from '@testing/signInTestUser';
 
-import { usePlaylistRename } from '../hooks/usePlaylistRename';
+import { usePlaylistRename } from '@features/library/hooks/usePlaylistRename';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

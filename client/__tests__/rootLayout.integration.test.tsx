@@ -10,17 +10,17 @@ import { PlaybackContext, usePlayback } from '@shared/playback/usePlayback';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
 import { useKeyboardShortcuts } from '@shared/ui/keyboard/useKeyboardShortcuts';
 
-import { AppChrome } from '../src/chrome/AppChrome';
-import TabsLayout from '../src/app/(tabs)/_layout';
-import DiscoverLayout from '../src/app/(tabs)/discover/_layout';
-import LibraryLayout from '../src/app/(tabs)/library/_layout';
-import SettingsLayout from '../src/app/(tabs)/settings/_layout';
-import PlayerLayout from '../src/app/player/_layout';
-import { FeaturePorts } from '../src/chrome/FeaturePorts';
-import { httpFeaturePorts } from '../src/chrome/httpFeaturePorts';
+import { AppChrome } from '@/chrome/AppChrome';
+import TabsLayout from '@/app/(tabs)/_layout';
+import DiscoverLayout from '@/app/(tabs)/discover/_layout';
+import LibraryLayout from '@/app/(tabs)/library/_layout';
+import SettingsLayout from '@/app/(tabs)/settings/_layout';
+import PlayerLayout from '@/app/player/_layout';
+import { FeaturePorts } from '@/chrome/FeaturePorts';
+import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 import { setPlatformOS } from '@testing/setPlatformOS';
 
-const { __http } = require('../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('decode-uri-component', () => ({
   __esModule: true,

@@ -7,12 +7,12 @@ import { PlaybackContext } from '@shared/playback/usePlayback';
 import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';
 import { idlePlayback } from '@testing/queryHarness';
-import { PlaylistDetailScreen } from '../ui/PlaylistDetailScreen';
+import { PlaylistDetailScreen } from '@features/library/ui/PlaylistDetailScreen';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 import { FeaturePorts } from '@/chrome/FeaturePorts';
 import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 let mockParams: { id?: string } = {};
 const mockReplace = jest.fn();

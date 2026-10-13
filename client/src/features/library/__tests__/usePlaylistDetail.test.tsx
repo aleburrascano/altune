@@ -7,7 +7,7 @@ import { playlistKeys } from '@shared/query/queryKeys';
 import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
 import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
-import { usePlaylistDetail } from '../hooks/usePlaylistDetail';
+import { usePlaylistDetail } from '@features/library/hooks/usePlaylistDetail';
 
 const detail: PlaylistDetailResponse = {
   id: asPlaylistId('p1'),

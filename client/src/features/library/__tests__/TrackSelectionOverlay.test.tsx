@@ -9,8 +9,8 @@ import {
   useTrackSelection,
   type TrackSelectionController,
   type TrackSelectionOptions,
-} from '../hooks/useTrackSelection';
-import { TrackSelectionOverlay } from '../ui/TrackSelectionOverlay';
+} from '@features/library/hooks/useTrackSelection';
+import { TrackSelectionOverlay } from '@features/library/ui/TrackSelectionOverlay';
 import { FeaturePorts } from '@/chrome/FeaturePorts';
 import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 

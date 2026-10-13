@@ -1,6 +1,6 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
-import type { FileStore, StoredDirectory, StoredFile } from '../fileStore';
+import type { FileStore, StoredDirectory, StoredFile } from '@shared/files/fileStore';
 
 function fileSize(file: File): number | null {
   return file.exists ? file.size : null;

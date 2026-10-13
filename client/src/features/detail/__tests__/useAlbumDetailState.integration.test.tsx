@@ -3,14 +3,14 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 
-import { useAlbumDetailState } from '../hooks/useAlbumDetailState';
+import { useAlbumDetailState } from '@features/detail/hooks/useAlbumDetailState';
 import {
   createTestQueryClient,
   createPlaybackWrapper,
   signInTestUser,
 } from '@testing/queryHarness';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),

@@ -4,7 +4,7 @@ import type { tapFeedback as tapFeedbackType } from '@shared/ui/haptics';
 
 import { impactAsync, selectionAsync } from 'expo-haptics';
 
-import { tapFeedback as tapFeedbackWeb } from '../haptics.web';
+import { tapFeedback as tapFeedbackWeb } from '@shared/ui/haptics.web';
 
 jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn().mockResolvedValue(undefined),

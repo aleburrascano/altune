@@ -5,7 +5,7 @@ import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse'
 import type { TrackResponse } from '@shared/apiClient/trackResponse';
 import { trackResponseFactory } from '@testing/factories';
 
-import { usePlaylistPlayback } from '../hooks/usePlaylistPlayback';
+import { usePlaylistPlayback } from '@features/library/hooks/usePlaylistPlayback';
 
 const PLAYLIST_ID = asPlaylistId('pl1');
 

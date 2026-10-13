@@ -19,7 +19,7 @@ import {
 import { useLateralNav } from '@features/detail/hooks/useDetailNavigation';
 import { useResolveMissingSources } from '@features/detail/hooks/useResolveMissingSources';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),

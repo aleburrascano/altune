@@ -5,7 +5,11 @@ import type { TrackResponse } from '@shared/apiClient/trackResponse';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { trackResponseFactory } from '@testing/factories';
 
-import { offlineEligibility, useLibraryOffline, usePinnedStatus } from '../hooks/useLibraryOffline';
+import {
+  offlineEligibility,
+  useLibraryOffline,
+  usePinnedStatus,
+} from '@features/library/hooks/useLibraryOffline';
 
 function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {
   return trackResponseFactory.build({
@@ -155,8 +159,8 @@ function loadOnWeb(): OfflineHooks {
     jest.spyOn(isWebPlatformModule, 'isWebPlatform').mockReturnValue(true);
     loaded = {
       renderHook: require('@testing-library/react-native').renderHook,
-      useLibraryOffline: require('../hooks/useLibraryOffline').useLibraryOffline,
-      usePinnedStatus: require('../hooks/useLibraryOffline').usePinnedStatus,
+      useLibraryOffline: require('@features/library/hooks/useLibraryOffline').useLibraryOffline,
+      usePinnedStatus: require('@features/library/hooks/useLibraryOffline').usePinnedStatus,
       usePinnedStore: require('@shared/offline/pinnedStore').usePinnedStore,
     };
   });

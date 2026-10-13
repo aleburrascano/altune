@@ -6,9 +6,9 @@ import { act, renderRouter, screen } from 'expo-router/testing-library';
 import { PlaybackContext } from '@shared/playback/usePlayback';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
 
-import PlayerLayout from '../src/app/player/_layout';
+import PlayerLayout from '@/app/player/_layout';
 
-const { __http } = require('../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('decode-uri-component', () => ({
   __esModule: true,
@@ -127,8 +127,8 @@ describe('player layout: renders no sidebar or player bar chrome on its own', ()
 
 describe('player layout: does not mount keyboard shortcuts on its own', () => {
   const { router } = require('expo-router');
-  const TabsLayout = require('../src/app/(tabs)/_layout').default;
-  const LibraryLayout = require('../src/app/(tabs)/library/_layout').default;
+  const TabsLayout = require('@/app/(tabs)/_layout').default;
+  const LibraryLayout = require('@/app/(tabs)/library/_layout').default;
   const { Stack } = require('expo-router');
   const RootStack = () => <Stack screenOptions={{ headerShown: false }} />;
 

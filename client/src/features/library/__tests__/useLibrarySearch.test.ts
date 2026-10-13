@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react-native';
 
-import { useLibrarySearch } from '../hooks/useLibrarySearch';
+import { useLibrarySearch } from '@features/library/hooks/useLibrarySearch';
 
 describe('useLibrarySearch — a 300ms debounce over a 2-character minimum', () => {
   beforeEach(() => jest.useFakeTimers());

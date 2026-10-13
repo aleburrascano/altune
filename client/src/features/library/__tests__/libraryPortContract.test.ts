@@ -8,7 +8,7 @@ import { track } from '@features/library/__tests__/trackMutationFixtures';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 import { signInTestUser } from '@testing/signInTestUser';
 
-const { __http, fakeFetch } = require('../../../../jest/doubles/fetch.js');
+const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
 const TRACKS_PATH = '/v1/tracks';
 const TRACK_PATH_PATTERN = /^\/v1\/tracks\/([^/]+)$/;

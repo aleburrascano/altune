@@ -15,7 +15,7 @@ import { useDetailEnrichments, useEnrichment } from '@features/detail/hooks/useD
 import { useArtistContent } from '@features/detail/hooks/useArtistContent';
 import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 type AppStateChangeHandler = (state: string) => void;
 

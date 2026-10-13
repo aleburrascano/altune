@@ -37,7 +37,7 @@ import {
   signInTestUser,
 } from '@testing/queryHarness';
 
-const { __http } = require('../../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 describe('SaveAllPill', () => {
   function renderPill(unownedCount: number, saving: boolean): jest.Mock {

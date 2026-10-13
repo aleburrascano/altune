@@ -12,7 +12,7 @@ import {
 } from '@features/detail/hooks/useLibraryMatches';
 import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 describe('useLibraryTracks', () => {
   const TRACKS = 'GET /v1/tracks';

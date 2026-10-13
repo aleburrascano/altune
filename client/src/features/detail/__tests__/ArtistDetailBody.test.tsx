@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
-import { ArtistDetailBody } from '../ui/ArtistDetailBody';
+import { ArtistDetailBody } from '@features/detail/ui/ArtistDetailBody';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 import type { LastFmEnrichmentResponse } from '@shared/apiClient/enrichment';
 import { readDetailHandoff } from '@shared/navigation/detailHandoff';
@@ -15,7 +15,7 @@ import {
 import { setPlatformOS } from '@testing/setPlatformOS';
 export type ArtistDetailBodyLastfmFixture = LastFmEnrichmentResponse;
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn() }),

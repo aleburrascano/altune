@@ -1,5 +1,5 @@
-const config = require('../jest.config');
-const tsconfig = require('../tsconfig.json');
+const config = require('@/../jest.config');
+const tsconfig = require('@/../tsconfig.json');
 
 describe('the mobile jest config', () => {
   it('runs tests in random order', () => {

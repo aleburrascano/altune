@@ -269,6 +269,7 @@ const localPlugin = {
     'no-comments': require('./eslint/rules/no-comments'),
     'no-banned-noun': require('./eslint/rules/no-banned-noun'),
     'one-alias-per-folder': require('./eslint/rules/one-alias-per-folder'),
+    'no-parent-relative-imports': require('./eslint/rules/no-parent-relative-imports'),
   },
 };
 
@@ -294,6 +295,12 @@ const oneAliasPerFolder = {
   files: ['{src,jest,__tests__,e2e}/**/*.{ts,tsx,js,mjs}'],
   plugins: { local: localPlugin },
   rules: { 'local/one-alias-per-folder': 'error' },
+};
+
+const noParentRelativeImports = {
+  files: ['{src,__tests__}/**/*.{ts,tsx,js,mjs}'],
+  plugins: { local: localPlugin },
+  rules: { 'local/no-parent-relative-imports': 'error' },
 };
 
 const SRC_ONLY = 'src/**/*';
@@ -340,6 +347,7 @@ module.exports = [
   noCommentsAnywhere,
   theNounIsTrackNeverSong,
   oneAliasPerFolder,
+  noParentRelativeImports,
   {
     ignores: ['node_modules/**', '.expo/**', 'dist/**', 'web-build/**', 'coverage/**'],
   },

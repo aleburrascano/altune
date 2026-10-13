@@ -10,7 +10,7 @@ import { createMemoryDetailPort } from '@features/detail/__tests__/memoryDetailP
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { signInTestUser } from '@testing/queryHarness';
 
-const { __http, fakeFetch } = require('../../../../jest/doubles/fetch.js');
+const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
 const TRACKS_PATH = '/v1/tracks';
 const PAGE_LIMIT = 10;

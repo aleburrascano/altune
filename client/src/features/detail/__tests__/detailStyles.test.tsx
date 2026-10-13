@@ -4,14 +4,14 @@ import type { ReactTestRendererJSON } from 'react-test-renderer';
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
-import { AlbumCardsSkeleton } from '../ui/DetailSkeleton';
-import { DetailScaffold } from '../ui/DetailScaffold';
-import { DiscographySections } from '../ui/DiscographySections';
-import { RelatedTracksSection } from '../ui/RelatedTracksSection';
+import { AlbumCardsSkeleton } from '@features/detail/ui/DetailSkeleton';
+import { DetailScaffold } from '@features/detail/ui/DetailScaffold';
+import { DiscographySections } from '@features/detail/ui/DiscographySections';
+import { RelatedTracksSection } from '@features/detail/ui/RelatedTracksSection';
 import { gridCellWidthFor } from '@features/detail/ui/detailStyles';
 import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
 

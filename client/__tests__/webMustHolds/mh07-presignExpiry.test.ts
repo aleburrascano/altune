@@ -7,8 +7,8 @@ import { supabase } from '@shared/auth/supabaseClient';
 import { asTrackId } from '@shared/apiClient/ids';
 import { usePlayback } from '@shared/playback/usePlayback';
 
-import { libraryTrack } from '../../src/features/playback/__tests__/fixtures';
-import { WebPlaybackProvider } from '../../src/features/playback/web/WebPlaybackProvider';
+import { libraryTrack } from '@features/playback/__tests__/fixtures';
+import { WebPlaybackProvider } from '@features/playback/web/WebPlaybackProvider';
 import { httpPlaybackPort } from '@features/playback/adapters/http/httpPlaybackPort';
 import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
 
@@ -16,7 +16,7 @@ beforeAll(() => {
   installPlaybackPort(httpPlaybackPort);
 });
 
-const { __http } = require('../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 const PRESIGN_ROUTE = 'POST /v1/audio-urls';
 

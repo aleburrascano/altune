@@ -7,13 +7,13 @@ import { act, renderRouter, screen } from 'expo-router/testing-library';
 
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { AuthGate } from '../src/features/auth/ui/AuthGate';
-import { useAuthDeepLink } from '../src/features/auth/hooks/useAuthDeepLink';
-import { clearRecoveryUnlock } from '../src/features/auth/domain/passwordRecovery';
-import IndexScreen from '../src/app/index';
-import AuthCallbackRoute from '../src/app/auth/callback';
-import AuthConfirmRoute from '../src/app/auth/confirm';
-import AuthRecoveryRoute from '../src/app/auth/recovery';
+import { AuthGate } from '@features/auth/ui/AuthGate';
+import { useAuthDeepLink } from '@features/auth/hooks/useAuthDeepLink';
+import { clearRecoveryUnlock } from '@features/auth/domain/passwordRecovery';
+import IndexScreen from '@/app/index';
+import AuthCallbackRoute from '@/app/auth/callback';
+import AuthConfirmRoute from '@/app/auth/confirm';
+import AuthRecoveryRoute from '@/app/auth/recovery';
 
 jest.mock('decode-uri-component', () => ({
   __esModule: true,

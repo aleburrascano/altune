@@ -4,11 +4,11 @@ import { asTrackId } from '@shared/apiClient/ids';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
-import { useRetryTrack } from '../hooks/useRetryTrack';
+import { useRetryTrack } from '@features/detail/hooks/useRetryTrack';
 import { createMemoryDetailPort } from './memoryDetailPort';
 import { createPortWrapper, createTestQueryClient, signInTestUser } from '@testing/queryHarness';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 interface PostedEvent {
   type: string;

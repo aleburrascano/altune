@@ -6,7 +6,7 @@ import type { TrackResponse } from '@shared/apiClient/trackResponse';
 import { usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
 import { trackResponseFactory } from '@testing/factories';
 
-import { LibraryRow } from '../ui/LibraryRow';
+import { LibraryRow } from '@features/library/ui/LibraryRow';
 import { setPlatformOS } from '@testing/setPlatformOS';
 
 let mockWindowWidth = 390;

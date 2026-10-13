@@ -21,7 +21,7 @@ import {
   signInTestUser,
 } from '@testing/queryHarness';
 
-const { __http } = require('../../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.setTimeout(20000);
 

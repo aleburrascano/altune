@@ -134,3 +134,31 @@ describe('browser globals', () => {
     assert.strictEqual(offenders.length, 0);
   });
 });
+
+describe('mobile eslint config bans relative parent imports', () => {
+  async function parentImportErrors(filePath, code) {
+    const [result] = await eslint.lintText(code, { filePath });
+    return result.messages.filter(
+      (m) => m.ruleId === 'local/no-parent-relative-imports' && m.severity === 2,
+    );
+  }
+
+  for (const file of [
+    'src/shared/failure/errors.ts',
+    'src/features/library/__tests__/gridColumns.test.ts',
+    '__tests__/rootLayout.integration.test.tsx',
+  ]) {
+    it(`reports a relative parent import in ${file}`, async () => {
+      assert.strictEqual((await parentImportErrors(file, "import x from '../y';\nexport const a = x;\n")).length, 1);
+    });
+
+    it(`reports jest.mock of a relative parent path in ${file}`, async () => {
+      assert.strictEqual((await parentImportErrors(file, "jest.mock('../y');\n")).length, 1);
+    });
+  }
+
+  it('allows an alias and a sibling import', async () => {
+    const code = "import a from '@shared/failure/errors';\nimport b from './b';\nexport const c = [a, b];\n";
+    assert.strictEqual((await parentImportErrors('src/shared/failure/x.ts', code)).length, 0);
+  });
+});

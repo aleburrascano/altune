@@ -7,7 +7,7 @@ import { _resetDetailHealthForTest } from '@features/detail/domain/detailHealth'
 import { useRelatedTracks } from '@features/detail/hooks/useRelatedTracks';
 import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 describe('aborting on unmount', () => {
   let client: QueryClient;

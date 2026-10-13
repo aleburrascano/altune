@@ -5,8 +5,11 @@ import { asTrackId } from '@shared/apiClient/ids';
 import { PlaybackContext } from '@shared/playback/usePlayback';
 import { trackIdentityKey, useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 
-import { useOwnedPlayback, type OwnedPlaybackContext } from '../hooks/useOwnedPlayback';
-import { useSaveTrack, type SaveTrack } from '../hooks/useSaveTrack';
+import {
+  useOwnedPlayback,
+  type OwnedPlaybackContext,
+} from '@features/detail/hooks/useOwnedPlayback';
+import { useSaveTrack, type SaveTrack } from '@features/detail/hooks/useSaveTrack';
 import { createMemoryDetailPort } from './memoryDetailPort';
 import {
   createPortWrapper,
@@ -18,7 +21,7 @@ import {
 const mockRetryAcquisition = jest.fn<Promise<void>, [unknown]>();
 const mockCreateTrack = jest.fn<Promise<never>, []>();
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 let wrapper: ReturnType<typeof createPortWrapper>;
 

@@ -7,7 +7,7 @@ import { useLibraryTracks } from '@features/library/hooks/useLibraryTracks';
 import { FeaturePorts } from '@/chrome/FeaturePorts';
 import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 let client: QueryClient;
 function wrapper({ children }: { children: ReactNode }) {

@@ -17,7 +17,7 @@ import {
   deleteOne,
   useDeleteTracks,
   useDeleteTrack,
-} from '../hooks/useDeleteTracks';
+} from '@features/library/hooks/useDeleteTracks';
 import {
   track,
   page,

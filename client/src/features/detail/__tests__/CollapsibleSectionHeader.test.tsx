@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet } from 'react-native';
 import { render, screen, fireEvent } from '@testing-library/react-native';
 
-import { CollapsibleSectionHeader } from '../ui/CollapsibleSectionHeader';
+import { CollapsibleSectionHeader } from '@features/detail/ui/CollapsibleSectionHeader';
 
 describe('CollapsibleSectionHeader with a toggle', () => {
   it('shows its label and calls onToggle once per press', () => {

@@ -5,7 +5,7 @@ import { _resetAcquisitionTelemetryForTest } from '@shared/acquisition/acquisiti
 import type { FailedAcquisition, TrackFields } from '@shared/apiClient/trackResponse';
 import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';
-import { LibraryRowFailure } from '../LibraryRowFailure';
+import { LibraryRowFailure } from '@features/library/ui/LibraryRowFailure';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

@@ -10,7 +10,7 @@ const RULE_ERROR = 2;
 const eslint = new ESLint({
   cwd: CWD,
   overrideConfigFile: true,
-  baseConfig: require('../../eslint.config.js'),
+  baseConfig: require('@/../eslint.config.js'),
 });
 
 async function ruleErrorsFor(text: string, filePath = LOGIC_FILE) {

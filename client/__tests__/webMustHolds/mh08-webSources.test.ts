@@ -13,7 +13,7 @@ beforeAll(() => {
   installPlaybackPort(httpPlaybackPort);
 });
 
-const { __http } = require('../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 const PRESIGNED_URL = 'https://bucket.example/track-1.mp3?X-Amz-Signature=abc';
 

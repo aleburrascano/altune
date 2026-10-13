@@ -3,7 +3,7 @@ import { renderHook } from '@testing-library/react-native';
 import { asPlaylistId } from '@shared/apiClient/ids';
 import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
 
-import { useLibraryNavigation } from '../hooks/useLibraryNavigation';
+import { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
 
 function makeRouter() {
   return { push: jest.fn() } as unknown as Parameters<typeof useLibraryNavigation>[0];

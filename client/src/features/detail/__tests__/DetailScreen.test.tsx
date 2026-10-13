@@ -11,7 +11,7 @@ import {
   signInTestUser,
 } from '@testing/queryHarness';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 let mockParams: { handoff?: string } = {};
 let mockCanGoBack = true;

@@ -118,8 +118,8 @@ describe('mh09: the settings screen omits the offline downloads card on web', ()
       os,
       () => ({
         QueryClientProvider: require('@tanstack/react-query').QueryClientProvider,
-        FeaturePorts: require('../../src/chrome/FeaturePorts').FeaturePorts,
-        httpFeaturePorts: require('../../src/chrome/httpFeaturePorts').httpFeaturePorts,
+        FeaturePorts: require('@/chrome/FeaturePorts').FeaturePorts,
+        httpFeaturePorts: require('@/chrome/httpFeaturePorts').httpFeaturePorts,
         SettingsScreen: require('@features/settings/ui/SettingsScreen').SettingsScreen,
       }),
     );
