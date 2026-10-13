@@ -306,6 +306,10 @@ if [ -f scripts/gate-parity.mjs ] && need node "gate parity" && link_deps .; the
   check "gate parity with main" . node scripts/gate-parity.mjs
 fi
 
+if [ -f scripts/ci/pr-ci-dupes.mjs ] && need node "duplicate PR CI work" && link_deps .; then
+  check "no duplicate PR CI work" . node scripts/ci/pr-ci-dupes.mjs
+fi
+
 if changes_imports && need npx "cycles"; then
   if link_deps .; then
     check "no dependency cycles" . "${heavy[@]}" sh -c 'node_modules/.bin/graft build >/dev/null && node scripts/check-cycles.mjs'
