@@ -1189,7 +1189,7 @@ describe('queue save and restore failures move playback_health counters', () => 
     });
     await settle();
 
-    expect(saveQueueState).toHaveBeenCalled();
+    expect(saveQueueState).toHaveBeenCalledTimes(1);
     expect(await flushedPayloads()).toEqual([expect.objectContaining({ queue_save_failed: 1 })]);
   });
 
@@ -1331,14 +1331,14 @@ describe('a queue save the server rejects as a client fault', () => {
   it('does not report a 5xx', async () => {
     await saveRejectedWith(new ApiError(SERVICE_UNAVAILABLE, 'down', 'server.unavailable'));
 
-    expect(saveQueueState).toHaveBeenCalled();
+    expect(saveQueueState).toHaveBeenCalledTimes(1);
     expect(await reportedMessages()).toEqual([]);
   });
 
   it('does not report a network failure', async () => {
     await saveRejectedWith(new NetworkError('transport', 'offline'));
 
-    expect(saveQueueState).toHaveBeenCalled();
+    expect(saveQueueState).toHaveBeenCalledTimes(1);
     expect(await reportedMessages()).toEqual([]);
   });
 
@@ -1346,7 +1346,7 @@ describe('a queue save the server rejects as a client fault', () => {
     const unauthorized = 401;
     await saveRejectedWith(new ApiError(unauthorized, 'expired', 'auth.expired'));
 
-    expect(saveQueueState).toHaveBeenCalled();
+    expect(saveQueueState).toHaveBeenCalledTimes(1);
     expect(await reportedMessages()).toEqual([]);
   });
 
@@ -1354,7 +1354,7 @@ describe('a queue save the server rejects as a client fault', () => {
     const tooManyRequests = 429;
     await saveRejectedWith(new ApiError(tooManyRequests, 'slow down', 'rate.limited'));
 
-    expect(saveQueueState).toHaveBeenCalled();
+    expect(saveQueueState).toHaveBeenCalledTimes(1);
     expect(await reportedMessages()).toEqual([]);
   });
 });

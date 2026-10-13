@@ -39,11 +39,13 @@ function useFailingPresign(error: Error): void {
   });
 }
 
+const REDACTION_MARKER_PATTERN = /\[redacted/;
+const LEAKED_SECRET_PATTERN = /deadbeef|X-Amz|abc\.def|cdn\.example/;
+
 function expectLoggedClean(): void {
-  expect(warn).toHaveBeenCalled();
-  expect(inspect(warn.mock.calls, { depth: 6 })).not.toMatch(
-    /deadbeef|X-Amz|abc\.def|cdn\.example/,
-  );
+  const logged = inspect(warn.mock.calls, { depth: 6 });
+  expect(logged).toMatch(REDACTION_MARKER_PATTERN);
+  expect(logged).not.toMatch(LEAKED_SECRET_PATTERN);
 }
 
 beforeEach(async () => {

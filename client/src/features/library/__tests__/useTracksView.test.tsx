@@ -78,7 +78,7 @@ function renderTracks(port: LibraryPort, queue: unknown = {}) {
 warmUpFirstRender(async () => {
   const port = spiedPort([]);
   renderTracks(port);
-  await waitFor(() => expect(port.getTracks).toHaveBeenCalled());
+  await waitFor(() => expect(port.getTracks).toHaveBeenCalledTimes(1));
 });
 
 describe('a library list whose next page fails to load', () => {
@@ -125,7 +125,7 @@ describe('playing a row from a library larger than the whole-library cap', () =>
 
     fireEvent.press(screen.getByTestId('library-row-tapped'));
 
-    await waitFor(() => expect(playFromList).toHaveBeenCalled());
+    await waitFor(() => expect(playFromList).toHaveBeenCalledTimes(1));
     const [playable, startIndex] = playFromList.mock.calls[0] as [
       { source: { trackId: string } }[],
       number,

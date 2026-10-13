@@ -666,7 +666,11 @@ describe('presign failure trace', () => {
         trackIds: ['t0', 't1'],
         error: { kind: 'unknown', message: 'presign 503' },
       });
-      expect(player.add).toHaveBeenCalled();
+      expect(player.add).toHaveBeenCalledTimes(1);
+      expect(player.add).toHaveBeenCalledWith([
+        expect.objectContaining({ id: trackKey(tracks[0]!) }),
+        expect.objectContaining({ id: trackKey(tracks[1]!) }),
+      ]);
     });
   });
 });
