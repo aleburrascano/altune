@@ -1,0 +1,276 @@
+M10 src/shared/acquisition/acquisitionTelemetry.ts not a layer folder or index.ts
+M10 src/shared/acquisition/audioCacheInvalidation.ts not a layer folder or index.ts
+M10 src/shared/acquisition/downloadStore.ts not a layer folder or index.ts
+M10 src/shared/acquisition/stagePhase.ts not a layer folder or index.ts
+M10 src/shared/acquisition/trackStatusStore.ts not a layer folder or index.ts
+M10 src/shared/acquisition/useRetryAcquisition.ts not a layer folder or index.ts
+M10 src/shared/math.ts file at the shared root
+M10 src/shared/offline/offlineSupport.ts not a layer folder or index.ts
+M10 src/shared/offline/pinnedDownloadWorker.ts not a layer folder or index.ts
+M10 src/shared/offline/pinnedFiles.ts not a layer folder or index.ts
+M10 src/shared/offline/pinnedIndex.ts not a layer folder or index.ts
+M10 src/shared/offline/pinnedStore.ts not a layer folder or index.ts
+M10 src/shared/playlists/mutations.ts not a layer folder or index.ts
+M10 src/shared/playlists/useSingleFlightAction.ts not a layer folder or index.ts
+M10 src/shared/runBounded.ts file at the shared root
+M10 src/shared/time.ts file at the shared root
+M10 src/shared/ui/AsyncSection.tsx loose file in shared/ui
+M10 src/shared/ui/ScreenBoundary.tsx loose file in shared/ui
+M10 src/shared/ui/announce.android.ts loose file in shared/ui
+M10 src/shared/ui/announce.ts loose file in shared/ui
+M10 src/shared/ui/asyncView.ts loose file in shared/ui
+M10 src/shared/ui/displayFormat.ts loose file in shared/ui
+M10 src/shared/ui/haptics.ts loose file in shared/ui
+M10 src/shared/ui/haptics.web.ts loose file in shared/ui
+M10 src/shared/ui/useAnnounceChange.ts loose file in shared/ui
+M11 src/chrome not an allowed top-level entry
+M8 src/features/auth/hooks/useAsyncAuthAction.ts loose file in hooks/
+M8 src/features/auth/hooks/useAuthDeepLink.ts loose file in hooks/
+M8 src/features/auth/hooks/useAuthDeepLink.web.ts loose file in hooks/
+M8 src/features/auth/hooks/useEmailPasswordFields.ts loose file in hooks/
+M8 src/features/auth/hooks/useOAuth.ts loose file in hooks/
+M8 src/features/auth/hooks/useOAuth.web.ts loose file in hooks/
+M8 src/features/auth/hooks/useOAuthFlow.ts loose file in hooks/
+M8 src/features/auth/hooks/useRecoveryUnlocked.ts loose file in hooks/
+M8 src/features/auth/hooks/useResetPassword.ts loose file in hooks/
+M8 src/features/auth/hooks/useSignIn.ts loose file in hooks/
+M8 src/features/auth/hooks/useSignUp.ts loose file in hooks/
+M8 src/features/auth/hooks/useUpdatePassword.ts loose file in hooks/
+M8 src/features/auth/ui/AuthCallbackScreen.tsx loose file in ui/
+M8 src/features/auth/ui/AuthCallbackScreen.web.tsx loose file in ui/
+M8 src/features/auth/ui/AuthErrorBanner.tsx loose file in ui/
+M8 src/features/auth/ui/AuthFields.tsx loose file in ui/
+M8 src/features/auth/ui/AuthForm.tsx loose file in ui/
+M8 src/features/auth/ui/AuthGate.tsx loose file in ui/
+M8 src/features/auth/ui/AuthNotices.tsx loose file in ui/
+M8 src/features/auth/ui/BackToSignInLink.tsx loose file in ui/
+M8 src/features/auth/ui/CheckEmailNotice.tsx loose file in ui/
+M8 src/features/auth/ui/ForgotPasswordScreen.tsx loose file in ui/
+M8 src/features/auth/ui/OAuthButtons.tsx loose file in ui/
+M8 src/features/auth/ui/SetNewPasswordScreen.tsx loose file in ui/
+M8 src/features/auth/ui/SignInScreen.tsx loose file in ui/
+M8 src/features/auth/ui/SignUpScreen.tsx loose file in ui/
+M8 src/features/auth/ui/TestAuthBridge.tsx loose file in ui/
+M8 src/features/detail/hooks/useAlbumDetailState.ts loose file in hooks/
+M8 src/features/detail/hooks/useAlbumSaveAll.ts loose file in hooks/
+M8 src/features/detail/hooks/useAlbumTracks.ts loose file in hooks/
+M8 src/features/detail/hooks/useArtistContent.ts loose file in hooks/
+M8 src/features/detail/hooks/useArtistDetailState.ts loose file in hooks/
+M8 src/features/detail/hooks/useDetailEnrichments.ts loose file in hooks/
+M8 src/features/detail/hooks/useDetailFetchGate.ts loose file in hooks/
+M8 src/features/detail/hooks/useDetailHandoff.ts loose file in hooks/
+M8 src/features/detail/hooks/useDetailNavigation.ts loose file in hooks/
+M8 src/features/detail/hooks/useDiscographyFilter.ts loose file in hooks/
+M8 src/features/detail/hooks/useEntityDiscovery.ts loose file in hooks/
+M8 src/features/detail/hooks/useLibraryMatches.ts loose file in hooks/
+M8 src/features/detail/hooks/useOwnedPlayback.ts loose file in hooks/
+M8 src/features/detail/hooks/useOwnedTrack.ts loose file in hooks/
+M8 src/features/detail/hooks/useRelatedTracks.ts loose file in hooks/
+M8 src/features/detail/hooks/useReportWrongAlbum.ts loose file in hooks/
+M8 src/features/detail/hooks/useResolveMissingSources.ts loose file in hooks/
+M8 src/features/detail/hooks/useRetryTrack.ts loose file in hooks/
+M8 src/features/detail/hooks/useSaveTrack.ts loose file in hooks/
+M8 src/features/detail/hooks/useTrackDetailActions.ts loose file in hooks/
+M8 src/features/detail/ui/AlbumDetailBody.tsx loose file in ui/
+M8 src/features/detail/ui/AlbumMoreTracks.tsx loose file in ui/
+M8 src/features/detail/ui/AlbumRail.tsx loose file in ui/
+M8 src/features/detail/ui/AlbumTrackList.tsx loose file in ui/
+M8 src/features/detail/ui/AlbumTrackRow.tsx loose file in ui/
+M8 src/features/detail/ui/ArtistDetailBody.tsx loose file in ui/
+M8 src/features/detail/ui/ArtistExploreDiscography.tsx loose file in ui/
+M8 src/features/detail/ui/ArtistTopTracks.tsx loose file in ui/
+M8 src/features/detail/ui/CollapsibleSectionHeader.tsx loose file in ui/
+M8 src/features/detail/ui/DetailActions.tsx loose file in ui/
+M8 src/features/detail/ui/DetailFacts.tsx loose file in ui/
+M8 src/features/detail/ui/DetailScaffold.tsx loose file in ui/
+M8 src/features/detail/ui/DetailScreen.tsx loose file in ui/
+M8 src/features/detail/ui/DetailSkeleton.tsx loose file in ui/
+M8 src/features/detail/ui/DetailTopBar.tsx loose file in ui/
+M8 src/features/detail/ui/DiscographySections.tsx loose file in ui/
+M8 src/features/detail/ui/LastFmEnrichmentSection.tsx loose file in ui/
+M8 src/features/detail/ui/RelatedTracksSection.tsx loose file in ui/
+M8 src/features/detail/ui/SaveControls.tsx loose file in ui/
+M8 src/features/detail/ui/Section.tsx loose file in ui/
+M8 src/features/detail/ui/TrackDetailBody.tsx loose file in ui/
+M8 src/features/detail/ui/TrackInfoSection.tsx loose file in ui/
+M8 src/features/detail/ui/TrackStatusBanners.tsx loose file in ui/
+M8 src/features/detail/ui/buildDetailFacts.ts loose file in ui/
+M8 src/features/detail/ui/detailStyles.ts loose file in ui/
+M8 src/features/detail/ui/formatters.ts loose file in ui/
+M8 src/features/detail/ui/secondaryLine.tsx loose file in ui/
+M8 src/features/discovery/adapters/registerSearchStateSignOutReset.ts loose file in adapters/
+M8 src/features/discovery/hooks/useDebouncedSearch.ts loose file in hooks/
+M8 src/features/discovery/hooks/useDegradedSearchTelemetry.ts loose file in hooks/
+M8 src/features/discovery/hooks/useDiscoverFetchGate.ts loose file in hooks/
+M8 src/features/discovery/hooks/useDiscoverLogic.ts loose file in hooks/
+M8 src/features/discovery/hooks/useDiscoverSearch.ts loose file in hooks/
+M8 src/features/discovery/hooks/useFavorites.ts loose file in hooks/
+M8 src/features/discovery/hooks/useImpressionLogger.ts loose file in hooks/
+M8 src/features/discovery/hooks/usePreviewPlayback.ts loose file in hooks/
+M8 src/features/discovery/hooks/useReportQueryFailure.ts loose file in hooks/
+M8 src/features/discovery/hooks/useResultTap.ts loose file in hooks/
+M8 src/features/discovery/hooks/useResultsFilter.ts loose file in hooks/
+M8 src/features/discovery/hooks/useSearchHistory.ts loose file in hooks/
+M8 src/features/discovery/hooks/useSearchRefresh.ts loose file in hooks/
+M8 src/features/discovery/hooks/useSuggestions.ts loose file in hooks/
+M8 src/features/discovery/ui/BlendedSection.tsx loose file in ui/
+M8 src/features/discovery/ui/CorrectionBanner.tsx loose file in ui/
+M8 src/features/discovery/ui/DiscoverBody.tsx loose file in ui/
+M8 src/features/discovery/ui/DiscoverBodyStates.tsx loose file in ui/
+M8 src/features/discovery/ui/DiscoverRow.tsx loose file in ui/
+M8 src/features/discovery/ui/DiscoverScreen.tsx loose file in ui/
+M8 src/features/discovery/ui/FavoriteButton.tsx loose file in ui/
+M8 src/features/discovery/ui/FilterChips.tsx loose file in ui/
+M8 src/features/discovery/ui/FilteredResults.tsx loose file in ui/
+M8 src/features/discovery/ui/RecentSearches.tsx loose file in ui/
+M8 src/features/discovery/ui/ResultNotices.tsx loose file in ui/
+M8 src/features/discovery/ui/ResultsList.tsx loose file in ui/
+M8 src/features/discovery/ui/SectionGrid.tsx loose file in ui/
+M8 src/features/discovery/ui/SectionLabel.tsx loose file in ui/
+M8 src/features/discovery/ui/SuggestionsList.tsx loose file in ui/
+M8 src/features/discovery/ui/TopResultCard.tsx loose file in ui/
+M8 src/features/library/hooks/useActiveLibraryView.ts loose file in hooks/
+M8 src/features/library/hooks/useAddableTracks.ts loose file in hooks/
+M8 src/features/library/hooks/useDeleteTracks.ts loose file in hooks/
+M8 src/features/library/hooks/useFeaturing.ts loose file in hooks/
+M8 src/features/library/hooks/useGroupViews.tsx loose file in hooks/
+M8 src/features/library/hooks/useLibraryGridLayout.ts loose file in hooks/
+M8 src/features/library/hooks/useLibraryGroups.ts loose file in hooks/
+M8 src/features/library/hooks/useLibraryIsEmpty.ts loose file in hooks/
+M8 src/features/library/hooks/useLibraryNavigation.ts loose file in hooks/
+M8 src/features/library/hooks/useLibraryOffline.ts loose file in hooks/
+M8 src/features/library/hooks/useLibrarySearch.ts loose file in hooks/
+M8 src/features/library/hooks/useLibraryTrackSelection.ts loose file in hooks/
+M8 src/features/library/hooks/useLibraryTracks.ts loose file in hooks/
+M8 src/features/library/hooks/useLoggedLibraryQueryFailure.ts loose file in hooks/
+M8 src/features/library/hooks/usePlaylistActions.ts loose file in hooks/
+M8 src/features/library/hooks/usePlaylistDetail.ts loose file in hooks/
+M8 src/features/library/hooks/usePlaylistMenu.ts loose file in hooks/
+M8 src/features/library/hooks/usePlaylistPlayback.ts loose file in hooks/
+M8 src/features/library/hooks/usePlaylistRename.ts loose file in hooks/
+M8 src/features/library/hooks/usePlaylistTrackRemoval.ts loose file in hooks/
+M8 src/features/library/hooks/usePlaylistsView.tsx loose file in hooks/
+M8 src/features/library/hooks/useRetryAcquisition.ts loose file in hooks/
+M8 src/features/library/hooks/useSelection.ts loose file in hooks/
+M8 src/features/library/hooks/useTrackMenu.ts loose file in hooks/
+M8 src/features/library/hooks/useTrackSelection.ts loose file in hooks/
+M8 src/features/library/hooks/useTracksView.tsx loose file in hooks/
+M8 src/features/library/ui/AddTracksControls.tsx loose file in ui/
+M8 src/features/library/ui/AddTracksToPlaylistModal.tsx loose file in ui/
+M8 src/features/library/ui/BackHeader.tsx loose file in ui/
+M8 src/features/library/ui/FeaturingScreen.tsx loose file in ui/
+M8 src/features/library/ui/GroupGrids.tsx loose file in ui/
+M8 src/features/library/ui/LibraryChips.tsx loose file in ui/
+M8 src/features/library/ui/LibraryGrid.tsx loose file in ui/
+M8 src/features/library/ui/LibraryListParts.tsx loose file in ui/
+M8 src/features/library/ui/LibraryRow.tsx loose file in ui/
+M8 src/features/library/ui/LibraryRowAccessories.tsx loose file in ui/
+M8 src/features/library/ui/LibraryRowDetails.tsx loose file in ui/
+M8 src/features/library/ui/LibraryRowFailure.tsx loose file in ui/
+M8 src/features/library/ui/LibraryRowPlayback.tsx loose file in ui/
+M8 src/features/library/ui/LibraryRowSelection.tsx loose file in ui/
+M8 src/features/library/ui/LibraryScreen.tsx loose file in ui/
+M8 src/features/library/ui/LibraryStateScreens.tsx loose file in ui/
+M8 src/features/library/ui/PlaylistCover.tsx loose file in ui/
+M8 src/features/library/ui/PlaylistDetailContent.tsx loose file in ui/
+M8 src/features/library/ui/PlaylistDetailScreen.tsx loose file in ui/
+M8 src/features/library/ui/PlaylistHero.tsx loose file in ui/
+M8 src/features/library/ui/PlaylistTopBar.tsx loose file in ui/
+M8 src/features/library/ui/PlaylistTrackList.tsx loose file in ui/
+M8 src/features/library/ui/PlaylistTrackRow.tsx loose file in ui/
+M8 src/features/library/ui/PlaylistsGrid.tsx loose file in ui/
+M8 src/features/library/ui/SidebarPlaylists.tsx loose file in ui/
+M8 src/features/library/ui/SortControl.tsx loose file in ui/
+M8 src/features/library/ui/TrackSelectionOverlay.tsx loose file in ui/
+M8 src/features/library/ui/TracksList.tsx loose file in ui/
+M8 src/features/library/ui/WideTrackHeader.tsx loose file in ui/
+M8 src/features/library/ui/libraryRowLabels.ts loose file in ui/
+M8 src/features/library/ui/libraryRowStyle.ts loose file in ui/
+M8 src/features/library/ui/listContentStyles.ts loose file in ui/
+M8 src/features/library/ui/pinnedGlyphs.ts loose file in ui/
+M8 src/features/library/ui/playlistDetailTypes.ts loose file in ui/
+M8 src/features/library/ui/playlistMenuItems.ts loose file in ui/
+M8 src/features/playback/adapters/PlaybackProvider.tsx loose file in adapters/
+M8 src/features/playback/adapters/PlaybackProvider.web.tsx loose file in adapters/
+M8 src/features/playback/adapters/startPlaybackService.ts loose file in adapters/
+M8 src/features/playback/hooks/useLyrics.ts loose file in hooks/
+M8 src/features/playback/hooks/useMediaSession.ts loose file in hooks/
+M8 src/features/playback/hooks/usePlaybackErrorStore.ts loose file in hooks/
+M8 src/features/playback/hooks/usePlaybackPosition.ts loose file in hooks/
+M8 src/features/playback/hooks/usePlaybackRate.ts loose file in hooks/
+M8 src/features/playback/hooks/usePlaybackSignals.ts loose file in hooks/
+M8 src/features/playback/hooks/usePlaybackTransport.ts loose file in hooks/
+M8 src/features/playback/hooks/useQueueResume.ts loose file in hooks/
+M8 src/features/playback/hooks/useScrubberGesture.ts loose file in hooks/
+M8 src/features/playback/hooks/useSleepTimer.ts loose file in hooks/
+M8 src/features/playback/ui/FullPlayer.tsx loose file in ui/
+M8 src/features/playback/ui/LyricsSheet.tsx loose file in ui/
+M8 src/features/playback/ui/MiniPlayer.tsx loose file in ui/
+M8 src/features/playback/ui/PlayerBar.tsx loose file in ui/
+M8 src/features/playback/ui/PlayerOptionsSheets.tsx loose file in ui/
+M8 src/features/playback/ui/QueueSheet.tsx loose file in ui/
+M8 src/features/playback/ui/Scrubber.tsx loose file in ui/
+M8 src/features/playback/ui/SheetHeader.tsx loose file in ui/
+M8 src/features/playback/ui/SleepTimerBridge.tsx loose file in ui/
+M8 src/features/playback/ui/TransportControls.tsx loose file in ui/
+M8 src/features/settings/hooks/useAccountEmail.ts loose file in hooks/
+M8 src/features/settings/hooks/useBackfillFeatured.ts loose file in hooks/
+M8 src/features/settings/hooks/useDownloads.ts loose file in hooks/
+M8 src/features/settings/hooks/useSettingsClearSearchHistory.ts loose file in hooks/
+M8 src/features/settings/ui/AppearanceCard.tsx loose file in ui/
+M8 src/features/settings/ui/ConfirmModal.tsx loose file in ui/
+M8 src/features/settings/ui/DangerZoneCard.tsx loose file in ui/
+M8 src/features/settings/ui/LibraryCard.tsx loose file in ui/
+M8 src/features/settings/ui/OfflineDownloadsCard.tsx loose file in ui/
+M8 src/features/settings/ui/SettingsCard.tsx loose file in ui/
+M8 src/features/settings/ui/SettingsScreen.tsx loose file in ui/
+M8 src/shared/acquisition/ui/DownloadsBar.tsx loose file in ui/
+M8 src/shared/acquisition/ui/DownloadsSheet.tsx loose file in ui/
+M8 src/shared/acquisition/ui/barDisplay.ts loose file in ui/
+M8 src/shared/offline/ui/OfflineReconcileBridge.tsx loose file in ui/
+M8 src/shared/playlists/ui/AddToPlaylistSheet.tsx loose file in ui/
+M8 src/shared/playlists/ui/CreatePlaylistModal.tsx loose file in ui/
+M9 src/features/auth/ui holds both files and folders
+M9 src/features/detail/hooks holds more than 16 source files
+M9 src/features/detail/ui holds more than 16 source files
+M9 src/features/discovery/adapters holds both files and folders
+M9 src/features/library/hooks holds more than 16 source files
+M9 src/features/library/ui holds more than 16 source files
+M9 src/features/playback/adapters holds both files and folders
+M9 src/shared/acquisition holds both files and folders
+M9 src/shared/apiClient holds more than 16 source files
+M9 src/shared/offline holds both files and folders
+M9 src/shared/playlists holds both files and folders
+M9 src/shared/ui holds both files and folders
+M9 src/shared/ui/primitives holds more than 16 source files
+N4 src/features/detail/domain/ownedTrack.ts exports ownedFromExtras with the word Extras
+N4 src/features/detail/domain/trackExtras.ts exports AlbumExtrasResult with the word Extras
+N4 src/features/detail/domain/trackExtras.ts exports TrackExtras with the word Extras
+N4 src/features/detail/domain/trackExtras.ts exports albumExtras with the word Extras
+N4 src/features/detail/domain/trackExtras.ts exports trackExtras with the word Extras
+N4 src/features/detail/domain/trackExtras.ts name has the word Extras
+N4 src/features/discovery/hooks/useDiscoverLogic.ts exports DiscoverLogic with the word Logic
+N4 src/features/discovery/hooks/useDiscoverLogic.ts exports useDiscoverLogic with the word Logic
+N4 src/features/discovery/hooks/useDiscoverLogic.ts name has the word Logic
+N4 src/features/discovery/hooks/useImpressionLogger.ts exports ImpressionHandlers with the word Handlers
+N4 src/features/discovery/hooks/useResultTap.ts exports ResultTapHandler with the word Handler
+N4 src/features/discovery/ui/ResultsList.tsx exports ResultsCommonProps with the word Common
+N4 src/features/library/ui/LibraryListParts.tsx name has the word Parts
+N4 src/shared/apiClient/featuredArtists.ts exports featuredArtistsFromExtras with the word Extras
+N4 src/shared/auth/userLocalData.ts exports forgetPreviousUsersLocalData with the word Data
+N4 src/shared/auth/userLocalData.ts name has the word Data
+N4 src/shared/events/acquisitionEvents.ts exports ACQUISITION_HANDLERS with the word HANDLERS
+N4 src/shared/events/playlistEvents.ts exports PLAYLIST_HANDLERS with the word HANDLERS
+N4 src/shared/events/resyncEvents.ts exports RESYNC_HANDLERS with the word HANDLERS
+N4 src/shared/events/serverEventTypes.ts exports ServerEventHandler with the word Handler
+N4 src/shared/events/serverEventTypes.ts exports ServerEventHandlers with the word Handlers
+N4 src/shared/events/sseClient.ts exports ServerEventHandlerError with the word Handler
+N4 src/shared/telemetry/errorUtils.d.ts name has the word Utils
+N4 src/shared/telemetry/native/uncaughtErrors.ts exports chainUncaughtErrorHandler with the word Handler
+N5 src/features/auth/ui/hero word hero is not in the glossary
+N5 src/features/detail word detail is not in the glossary
+N5 src/features/settings word settings is not in the glossary
+N5 src/shared/killSwitch word Switch is not in the glossary
+N5 src/shared/killSwitch word kill is not in the glossary
+N5 src/shared/offline word offline is not in the glossary
+N5 src/shared/timing word timing is not in the glossary

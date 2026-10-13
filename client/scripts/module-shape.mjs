@@ -224,18 +224,277 @@ function checkN3(root) {
   return found;
 }
 
+const LAYER_FOLDERS = ['domain', 'ports', 'adapters', 'hooks', 'ui', 'state', 'native', 'web'];
+const SPLIT_LAYERS = ['hooks', 'ui', 'adapters'];
+const FLAT_EXEMPT_FOLDERS = new Set(['__tests__', 'native', 'web']);
+const SRC_TOP_LEVEL = new Set(['app', 'shell', 'wiring', 'features', 'shared']);
+const SOURCE_CAP = 16;
+const N4_WORDS = new Set([
+  'manager',
+  'helper',
+  'util',
+  'common',
+  'misc',
+  'stuff',
+  'data',
+  'info',
+  'process',
+  'processor',
+  'logic',
+  'parts',
+  'extras',
+  'wrapper',
+  'thing',
+  'handler',
+]);
+const EXPORTED_NAME =
+  /^export\s+(?:default\s+)?(?:async\s+)?(?:function\*?|const|let|class|interface|type|enum)\s+(\w+)/gm;
+
+const isSourceFile = (entry) =>
+  entry.isFile() && SOURCE_FILE.test(entry.name) && !TEST_FILE.test(entry.name);
+const isPlatformFolder = (entry) => entry.isDirectory() && FLAT_EXEMPT_FOLDERS.has(entry.name);
+const isFolder = (entry) => entry.isDirectory() && entry.name !== 'node_modules';
+
+function wordsOf(name) {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean);
+}
+
+const nameWords = (entryName) => wordsOf(entryName.split('.')[0]);
+
+function singularForms(word) {
+  const lower = word.toLowerCase();
+  return [lower, lower.replace(/es$/, ''), lower.replace(/s$/, '')];
+}
+
+const matchesAny = (set, word) => singularForms(word).some((form) => set.has(form));
+
+function sharedFolders(root) {
+  return listDir(path.join(root, 'src/shared')).filter(
+    (entry) => isFolder(entry) && entry.name !== '__tests__',
+  );
+}
+
+function isLayeredShared(root, name) {
+  return fs.existsSync(path.join(root, 'src/shared', name, 'ports'));
+}
+
+function layerScopes(root) {
+  return [
+    ...featureNames(root).map((feature) => ({ base: `src/features/${feature}`, isFeature: true })),
+    ...sharedFolders(root)
+      .filter((entry) => isLayeredShared(root, entry.name))
+      .map((entry) => ({ base: `src/shared/${entry.name}`, isFeature: false })),
+  ];
+}
+
+function nestedSourceFiles(root, folder, depthFromLayer) {
+  return walk(folder).filter((file) => {
+    const relative = rel(root, file);
+    const depth = relative.slice(rel(root, folder).length).split('/').length - 1;
+    return (
+      depth > depthFromLayer &&
+      !inTests(relative) &&
+      SOURCE_FILE.test(file) &&
+      !TEST_FILE.test(file) &&
+      fs.statSync(file).isFile()
+    );
+  });
+}
+
+function checkM8(root) {
+  const reserved = new Set([...LAYER_FOLDERS, ...featureNames(root)]);
+  const found = [];
+  for (const { base, isFeature } of layerScopes(root)) {
+    for (const layer of SPLIT_LAYERS) {
+      const layerDir = path.join(root, base, layer);
+      for (const entry of listDir(layerDir)) {
+        if (entry.name === '__tests__') continue;
+        const where = `${base}/${layer}/${entry.name}`;
+        if (entry.isFile()) {
+          if (entry.name !== 'index.ts' && !TEST_FILE.test(entry.name))
+            found.push(`M8 ${where} loose file in ${layer}/`);
+          continue;
+        }
+        if (reserved.has(entry.name)) found.push(`M8 ${where} folder named for a layer or feature`);
+        for (const file of nestedSourceFiles(root, path.join(layerDir, entry.name), 1)) {
+          found.push(`M8 ${rel(root, file)} nested more than one folder below ${layer}/`);
+        }
+        const hasUiTwin = fs.existsSync(path.join(root, base, 'ui', entry.name));
+        if (isFeature && layer === 'hooks' && !hasUiTwin)
+          found.push(`M8 ${where} has no ui/${entry.name}/`);
+      }
+    }
+  }
+  return found;
+}
+
+function sourceFolders(root) {
+  return ['src/features', 'src/shared'].flatMap((top) =>
+    walkEntries(path.join(root, top))
+      .filter(({ full, entry }) => isFolder(entry) && !inTests(rel(root, full)))
+      .filter(({ entry }) => !FLAT_EXEMPT_FOLDERS.has(entry.name))
+      .map(({ full }) => full),
+  );
+}
+
+function checkM9(root) {
+  const found = [];
+  for (const folder of sourceFolders(root)) {
+    const relative = rel(root, folder);
+    const entries = listDir(folder);
+    const files = entries.filter((e) => isSourceFile(e) && e.name !== 'index.ts');
+    const folders = entries.filter((e) => isFolder(e) && !isPlatformFolder(e));
+    const stems = new Set(files.map((e) => stem(e.name)));
+    if (files.length > 0 && folders.length > 0)
+      found.push(`M9 ${relative} holds both files and folders`);
+    if (stems.size > SOURCE_CAP)
+      found.push(`M9 ${relative} holds more than ${SOURCE_CAP} source files`);
+  }
+  return found;
+}
+
+function checkM10(root) {
+  const found = [];
+  for (const entry of listDir(path.join(root, 'src/shared'))) {
+    if (entry.isFile()) found.push(`M10 src/shared/${entry.name} file at the shared root`);
+  }
+  for (const entry of sharedFolders(root)) {
+    const base = `src/shared/${entry.name}`;
+    const children = listDir(path.join(root, base));
+    if (isLayeredShared(root, entry.name)) {
+      for (const child of children) {
+        const allowed = child.isFile()
+          ? child.name === 'index.ts'
+          : LAYER_FOLDERS.includes(child.name) || child.name === '__tests__';
+        if (!allowed) found.push(`M10 ${base}/${child.name} not a layer folder or index.ts`);
+      }
+      continue;
+    }
+    for (const child of children) {
+      if (entry.name === 'ui' && child.isFile() && child.name !== 'index.ts')
+        found.push(`M10 ${base}/${child.name} loose file in shared/ui`);
+      if (entry.name !== 'ui' && isFolder(child) && !FLAT_EXEMPT_FOLDERS.has(child.name))
+        found.push(`M10 ${base}/${child.name} folder inside a flat shared folder`);
+    }
+  }
+  return found;
+}
+
+function checkM11(root) {
+  return listDir(path.join(root, 'src'))
+    .filter((entry) => !SRC_TOP_LEVEL.has(entry.name) && entry.name !== '__tests__')
+    .filter((entry) => !entry.name.startsWith('.'))
+    .map((entry) => `M11 src/${entry.name} not an allowed top-level entry`);
+}
+
+function sectionOf(markdown, heading) {
+  const start = markdown.search(new RegExp(`^## ${heading}\\s*$`, 'm'));
+  if (start < 0) return '';
+  const rest = markdown.slice(start).split('\n').slice(1);
+  const end = rest.findIndex((line) => /^## /.test(line));
+  return (end < 0 ? rest : rest.slice(0, end)).join('\n');
+}
+
+function boldWords(section) {
+  return section
+    .split('\n')
+    .filter((line) => line.startsWith('- '))
+    .flatMap((line) => [...line.matchAll(/\*\*([^*]+)\*\*/g)].flatMap((m) => wordsOf(m[1])))
+    .map((word) => word.toLowerCase());
+}
+
+function readGlossary(file) {
+  const markdown = fs.readFileSync(file, 'utf8');
+  const structural = [...sectionOf(markdown, 'Structural words').matchAll(/`([^`]+)`/g)].map((m) =>
+    m[1].toLowerCase(),
+  );
+  return {
+    terms: new Set([...boldWords(sectionOf(markdown, 'Glossary')), ...structural]),
+    banned: new Set(boldWords(sectionOf(markdown, 'Banned terms'))),
+  };
+}
+
+function bannedNameWord(name, glossary) {
+  const words = nameWords(name);
+  const word = words.find(
+    (candidate) => matchesAny(N4_WORDS, candidate) && !matchesAny(glossary.terms, candidate),
+  );
+  if (word) return word;
+  const last = words[words.length - 1];
+  if (words.length < 2) return null;
+  return /^v\d+$/i.test(last) || /^[AB]$/.test(last) ? last : null;
+}
+
+function checkN4(root, glossary) {
+  const found = [];
+  for (const top of ['src/features', 'src/shared']) {
+    for (const { full, entry } of walkEntries(path.join(root, top))) {
+      const relative = rel(root, full);
+      if (entry.name.startsWith('.') || inTests(relative) || TEST_FILE.test(entry.name)) continue;
+      const bad = bannedNameWord(entry.name, glossary);
+      if (bad) found.push(`N4 ${relative} name has the word ${bad}`);
+      if (!entry.isFile() || !SOURCE_FILE.test(entry.name)) continue;
+      for (const match of fs.readFileSync(full, 'utf8').matchAll(EXPORTED_NAME)) {
+        const badExport = bannedNameWord(match[1], glossary);
+        if (badExport) found.push(`N4 ${relative} exports ${match[1]} with the word ${badExport}`);
+      }
+    }
+  }
+  return found;
+}
+
+function structuralFolders(root) {
+  const features = featureNames(root).map((feature) => `src/features/${feature}`);
+  const shared = sharedFolders(root).map((entry) => `src/shared/${entry.name}`);
+  const capabilities = layerScopes(root).flatMap(({ base }) =>
+    SPLIT_LAYERS.flatMap((layer) =>
+      listDir(path.join(root, base, layer))
+        .filter((entry) => isFolder(entry) && entry.name !== '__tests__')
+        .map((entry) => `${base}/${layer}/${entry.name}`),
+    ),
+  );
+  return [...features, ...shared, ...capabilities];
+}
+
+function checkN5(root, glossary) {
+  const found = [];
+  for (const folder of structuralFolders(root)) {
+    for (const word of nameWords(path.basename(folder))) {
+      if (matchesAny(glossary.banned, word)) found.push(`N5 ${folder} uses banned term ${word}`);
+      else if (!matchesAny(glossary.terms, word))
+        found.push(`N5 ${folder} word ${word} is not in the glossary`);
+    }
+  }
+  return found;
+}
+
 export function checkModuleShape(
   root = defaultRoot,
   goApiDir = path.join(root, '../services/go-api/internal'),
+  glossaryFile = path.join(root, '../docs/ubiquitous-language.md'),
 ) {
+  const hasGlossary = fs.existsSync(glossaryFile);
+  const glossary = hasGlossary
+    ? readGlossary(glossaryFile)
+    : { terms: new Set(), banned: new Set() };
   return [
     ...checkM1(root),
     ...checkM2(root),
     ...checkM4(root),
+    ...checkM8(root),
+    ...checkM9(root),
+    ...checkM10(root),
+    ...checkM11(root),
     ...checkM7(root),
     ...checkN1(root),
     ...checkN2(root, goApiDir),
     ...checkN3(root),
+    ...checkN4(root, glossary),
+    ...(hasGlossary ? checkN5(root, glossary) : []),
   ]
     .filter((line, index, all) => all.indexOf(line) === index)
     .sort();
@@ -254,8 +513,9 @@ function main() {
   const option = (flag) => (args.includes(flag) ? args[args.indexOf(flag) + 1] : undefined);
   const root = option('--root') ? path.resolve(option('--root')) : defaultRoot;
   const goApiDir = option('--go-api') ? path.resolve(option('--go-api')) : undefined;
+  const glossaryFile = option('--glossary') ? path.resolve(root, option('--glossary')) : undefined;
   const baselineFile = path.join(root, 'baselines', 'module-shape.baseline');
-  const violations = checkModuleShape(root, goApiDir);
+  const violations = checkModuleShape(root, goApiDir, glossaryFile);
 
   if (args.includes('--write')) {
     fs.mkdirSync(path.dirname(baselineFile), { recursive: true });

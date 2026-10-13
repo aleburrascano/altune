@@ -129,3 +129,9 @@ _(empty — populated when context divergence happens)_
 Terms that **must not** appear in altune code (caught by the `terminology-drift` hook and by code review):
 
 - **Song** — synonym of `Track`. The legacy `music-manager` used "song" as its primary noun (`songs` table, `Song` class). altune uses `Track` exclusively. Appears only as source-data naming during the legacy-library import — never as a type or column in altune.
+
+## Structural words
+
+Words a folder name may use without a glossary term; each names a part of a screen or an outside technology, never a domain concept.
+
+- `screen`, `http`, `platform`, `wire`, `api`, `client`, `ui`, `files`, `device`, `lifecycle`, `navigation`, `telemetry`
