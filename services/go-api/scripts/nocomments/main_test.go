@@ -382,6 +382,22 @@ func TestWalkSkipsNodeModulesVendorAndGit(t *testing.T) {
 	}
 }
 
+func TestWalkSkipsCoverageReports(t *testing.T) {
+	dir := t.TempDir()
+	report := filepath.Join(dir, "client", "coverage", "lcov-report")
+	if err := os.MkdirAll(report, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	writeFile(t, report, "a.sh", "echo hi # x\n")
+
+	var stdout strings.Builder
+	code := run([]string{"check", dir}, &stdout)
+
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0; output:\n%s", code, stdout.String())
+	}
+}
+
 func TestWalkSkipsSymlinkedDirectories(t *testing.T) {
 	dir := t.TempDir()
 	target := t.TempDir()

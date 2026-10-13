@@ -470,7 +470,7 @@ func isRegularFile(d fs.DirEntry) bool {
 
 func skipUnwanted(d fs.DirEntry) error {
 	switch d.Name() {
-	case "node_modules", "vendor", ".git":
+	case "node_modules", "vendor", ".git", "coverage":
 		return filepath.SkipDir
 	}
 	return nil
