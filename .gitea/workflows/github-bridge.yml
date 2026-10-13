@@ -19,7 +19,8 @@ env:
   GITEA_API: ${{ github.server_url }}/api/v1
   GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
   REPO: ${{ github.repository }}
-  CHECKOUT: /home/ubuntu/projects/altune
+  GITEA_GIT: ${{ github.server_url }}/${{ github.repository }}.git
+  BRIDGE_GIT: /home/ubuntu/.cache/altune-github-bridge.git
   MIRROR_KEY: /home/ubuntu/.ssh/altune-github-mirror.key
   GITHUB_REMOTE: git@github.com:aleburrascano/altune.git
 
@@ -29,4 +30,10 @@ jobs:
     timeout-minutes: 3
     steps:
       - name: carry pull requests to github
-        run: bash "$CHECKOUT/scripts/ci/github-bridge.sh"
+        run: |
+          set -euo pipefail
+          [ -e "$BRIDGE_GIT/HEAD" ] || git init -q --bare "$BRIDGE_GIT"
+          GIT_TERMINAL_PROMPT=0 GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.extraHeader \
+            GIT_CONFIG_VALUE_0="Authorization: token $GITEA_TOKEN" \
+            git --git-dir "$BRIDGE_GIT" fetch -q "$GITEA_GIT" '+refs/heads/main:refs/heads/main'
+          git --git-dir "$BRIDGE_GIT" show main:scripts/ci/github-bridge.sh | bash
