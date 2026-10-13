@@ -52,7 +52,7 @@ Done when: `curl -s https://<tier-host>/health` reports the sha you meant to shi
 - Prod go-api: `bash deploy/rollback.sh` flips Caddy to the previous colour, health-gates it and stops the bad one. `blue-green.sh` already reverts on a post-flip health failure.
 - Overseer, either tier: release the prior sha. It holds no schema.
 - Staging: `bash deploy/release.sh staging <prior-sha>`.
-- A migration: no automatic schema rollback. Undo it by hand with `psql`.
+- A migration: no automatic schema rollback. Restore the pre-migration snapshot with `bash deploy/restore-snapshot.sh <staging|prod> <dump file>`, or undo it by hand with `psql`.
 
 Done when: `/health` reports the prior sha and `bash deploy/smoke.sh` passes for that tier.
 
