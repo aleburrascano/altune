@@ -886,3 +886,43 @@ func hasFlagValue(argv []string, flag, value string) bool {
 	}
 	return false
 }
+
+func TestYtDlpURL_SendsYouTubeWatchLinksThroughYouTubeMusic(t *testing.T) {
+	cases := map[string]string{
+		"https://www.youtube.com/watch?v=XDC3uH1FSgw":                "https://music.youtube.com/watch?v=XDC3uH1FSgw",
+		"https://youtube.com/watch?v=XDC3uH1FSgw":                    "https://music.youtube.com/watch?v=XDC3uH1FSgw",
+		"https://m.youtube.com/watch?v=XDC3uH1FSgw":                  "https://music.youtube.com/watch?v=XDC3uH1FSgw",
+		"https://youtu.be/XDC3uH1FSgw":                               "https://music.youtube.com/watch?v=XDC3uH1FSgw",
+		"https://www.youtube.com/watch?v=XDC3uH1FSgw&list=RDXDC&t=4": "https://music.youtube.com/watch?v=XDC3uH1FSgw",
+		"https://music.youtube.com/watch?v=XDC3uH1FSgw":              "https://music.youtube.com/watch?v=XDC3uH1FSgw",
+		"https://soundcloud.com/prettifun/rollacoasta":               "https://soundcloud.com/prettifun/rollacoasta",
+		"https://www.youtube.com/playlist?list=PL123":                "https://www.youtube.com/playlist?list=PL123",
+		"https://www.youtube.com/watch?v=short":                      "https://www.youtube.com/watch?v=short",
+		"https://notyoutube.com/watch?v=XDC3uH1FSgw":                 "https://notyoutube.com/watch?v=XDC3uH1FSgw",
+	}
+	for in, want := range cases {
+		if got := ytDlpURL(in); got != want {
+			t.Errorf("ytDlpURL(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestYtDlpAudioSearcher_DownloadPreviewAndCanaryFetchYouTubeThroughYouTubeMusic(t *testing.T) {
+	for caller, call := range map[string]func(ctx context.Context, s *YtDlpAudioSearcher, outDir string){
+		"download": func(ctx context.Context, s *YtDlpAudioSearcher, outDir string) {
+			_, _ = s.Download(ctx, "https://www.youtube.com/watch?v=XDC3uH1FSgw", outDir)
+		},
+		"preview": func(ctx context.Context, s *YtDlpAudioSearcher, outDir string) {
+			_, _ = s.DownloadPreview(ctx, "https://youtu.be/XDC3uH1FSgw", outDir, 30)
+		},
+		"canary": ytDlpCallers["canary"],
+	} {
+		t.Run(caller, func(t *testing.T) {
+			argv := recordedArgv(t, NewYtDlpAudioSearcher("", "", ""), call)
+			last := argv[len(argv)-1]
+			if !strings.HasPrefix(last, "https://music.youtube.com/watch?v=") {
+				t.Fatalf("yt-dlp got %q, want a music.youtube.com watch URL", last)
+			}
+		})
+	}
+}

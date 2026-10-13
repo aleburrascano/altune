@@ -314,7 +314,7 @@ func (s *YtDlpAudioSearcher) fetchAudio(
 		"-o", outTemplate,
 	}
 	args = append(args, sectionArgs...)
-	args = append(args, "--", url)
+	args = append(args, "--", ytDlpURL(url))
 
 	if s.ffmpegLocation != "" {
 		args = append([]string{"--ffmpeg-location", s.ffmpegLocation}, args...)

@@ -36,7 +36,7 @@ const audioOnlyFormat = "bestaudio"
 
 var (
 	YouTubeCanary    = CanarySource{Name: youtubeCanaryName, URL: "https://www.youtube.com/watch?v=jNQXAC9IVRw"}
-	YTMusicCanary    = CanarySource{Name: ytMusicCanaryName, URL: "https://music.youtube.com/watch?v=jNQXAC9IVRw", Format: audioOnlyFormat}
+	YTMusicCanary    = CanarySource{Name: ytMusicCanaryName, URL: "https://music.youtube.com/watch?v=dQw4w9WgXcQ", Format: audioOnlyFormat}
 	SoundCloudCanary = CanarySource{Name: soundCloudCanaryName, URL: "https://api.soundcloud.com/tracks/soundcloud%3Atracks%3A157015344"}
 )
 
@@ -59,7 +59,7 @@ func (s *YtDlpAudioSearcher) runCanaryProbe(ctx context.Context, source CanarySo
 		format = audioFormatSelector
 	}
 	args := s.authFlags([]string{
-		"--no-warnings", "--simulate", "-f", format, "--print", "%(duration)s", "--", source.URL,
+		"--no-warnings", "--simulate", "-f", format, "--print", "%(duration)s", "--", ytDlpURL(source.URL),
 	}, cookieFile)
 
 	stdout, stderr, err := execcmd.Run(ctx, s.binary, args...)

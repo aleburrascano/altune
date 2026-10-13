@@ -86,7 +86,7 @@ func TestCanary_CarriesTheSameAuthFlagsAsSearchAndDownload(t *testing.T) {
 		t.Fatal(err)
 	}
 	argv := string(raw)
-	for _, want := range []string{"--simulate", "--print", "--js-runtimes", "deno", "--remote-components", "ejs:github", "--cookies", YouTubeCanary.URL} {
+	for _, want := range []string{"--simulate", "--print", "--js-runtimes", "deno", "--remote-components", "ejs:github", "--cookies", ytDlpURL(YouTubeCanary.URL)} {
 		if !strings.Contains(argv, want) {
 			t.Errorf("argv = %q, want it to contain %q", argv, want)
 		}
