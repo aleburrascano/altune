@@ -126,8 +126,7 @@ The operator opens a PR that adds `// note` to a mobile test file and to an over
    - Example: linting `const a = 1; // x` → one `no-comments` error; linting `const url = 'https://x.dev';` → none.
 2. No Go file in go-api or overseer, tests included, contains a comment other than `//go:embed`. [repo-test: services/go-api/scripts/lintcomments/main_test.go]
    - Example: a file containing `// hello` → exit 1 naming file and line; a file whose only comment is `//go:embed clip.mp3` → exit 0.
-3. The removal tools change nothing but comments. [repo-test: client/scripts/__tests__/strip-comments.test.mjs]
-   - Example: `const s = "// not a comment"; /* gone */ f();` → `const s = "// not a comment";\nf();`, AST otherwise identical.
+3. Retired: the removal tools were deleted once the whole-tree checks enforced the rule.
 4. An artwork provider failure still degrades, never fails the search, and is now counted. [repo-test: services/go-api/internal/discovery/adapters/providers/discogs_test.go]
    - Example: Discogs artwork endpoint answers 500 → the lookup returns `ErrArtworkUnavailable`, and the search result still returns with empty artwork and no error.
 5. Integration tests still run in CI after the build tags go. [operator: gh run view <latest test-backend run> --log | grep -c -- '--- PASS: TestPgxSearchHistoryRepo']

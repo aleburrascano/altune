@@ -26,14 +26,6 @@ link_deps() {
 heavy=()
 [ -f "$HOME/.claude/bin/heavy.sh" ] && heavy=(bash "$HOME/.claude/bin/heavy.sh")
 
-hash_comments() {
-  git diff -U0 --diff-filter=ACMR "$base" -- "$@" | awk '
-    /^\+\+\+ b\// { file = substr($0, 7); next }
-    /^@@/ { split($3, a, ","); line = substr(a[1], 2) - 1; next }
-    /^\+/ { line++; if ($0 ~ /^\+[[:space:]]*#([[:space:]]|$)/ || $0 ~ /^\+.*[[:space:]]#([[:space:]]|$)/) { print file ":" line ": " substr($0, 2); hits++ } }
-    END { exit hits > 0 }'
-}
-
 failed=0
 missing=0
 log=$(mktemp)
@@ -111,7 +103,6 @@ if touches '^services/go-api/'; then
     check "go-api vet" $m "${heavy[@]}" go vet ./...
     check "go-api import direction" $m "${heavy[@]}" golangci-lint run --allow-serial-runners
     check "go-api strict linters (new code)" $m "${heavy[@]}" golangci-lint run --config .golangci.strict.yml --new-from-rev="$base" --allow-serial-runners
-    check "go-api no new comments" $m go run ./scripts/lintcomments "$base"
     check "go-api no comments (whole tree)" $m go run ./scripts/lintcomments --all .
     check "go-api no new vague names" $m go run ./scripts/lintnames "$base"
     check "go-api module shape" $m go run ./scripts/moduleshape
@@ -165,7 +156,6 @@ if touches '^services/overseer/'; then
     check "overseer build" $m "${heavy[@]}" go build ./...
     check "overseer vet" $m "${heavy[@]}" go vet ./...
     check "overseer strict linters" $m "${heavy[@]}" golangci-lint run --config "$root/services/go-api/.golangci.strict.yml" --disable=funlen,revive --allow-serial-runners
-    check "overseer no new comments" services/go-api go run ./scripts/lintcomments "$base" ../overseer
     check "overseer no comments (whole tree)" services/go-api go run ./scripts/lintcomments --all ../overseer
     test_check "overseer tests (race)" $m "${heavy[@]}" env CGO_ENABLED=1 go test -race -shuffle=on -count=1 ./...
     need govulncheck "overseer govulncheck" && check "overseer govulncheck" $m "${heavy[@]}" govulncheck ./...
@@ -175,53 +165,10 @@ if touches '^services/overseer/'; then
     if link_deps $m/web; then
       check "overseer web typecheck" $m/web "${heavy[@]}" npm run --silent typecheck
       check "overseer web lint" $m/web "${heavy[@]}" npm run --silent lint
-      check "overseer web no new comments" $m/web node scripts/lint-changed-comments.mjs "$base"
       test_check "overseer web test" $m/web "${heavy[@]}" npm run --silent test
       check "overseer web build and bundle budget" $m/web "${heavy[@]}" sh -c 'out=$(mktemp -d) && npx tsc --noEmit && npx vite build --outDir "$out" --emptyOutDir >/dev/null && node scripts/size.mjs "$out"; rc=$?; rm -rf "$out"; exit $rc'
     else
       echo "SKIP  overseer web: no node_modules here or in $main_tree"; missing=1
-    fi
-  fi
-fi
-
-if touches '^(services/go-api|services/overseer)/.*\.go$'; then
-  m=services/go-api
-  go_pin $m
-  if need go "stripcomments"; then
-    test_check "stripcomments self-tests" $m "${heavy[@]}" go test -count=1 ./scripts/stripcomments/...
-    strip_dir=$(mktemp -d)
-    strip_bin="$strip_dir/stripcomments"
-    if (cd $m && go build -o "$strip_bin" ./scripts/stripcomments) >"$log" 2>&1; then
-      mismatches=""
-      while IFS= read -r f; do
-        [ -f "$f" ] || continue
-        work=$(mktemp -d)
-        if git show "$base:$f" >"$work/base.go" 2>/dev/null; then
-          cp "$f" "$work/pr.go"
-          cp "$work/pr.go" "$work/pr.orig"
-          if "$strip_bin" "$work/pr.go" >/dev/null 2>&1 && cmp -s "$work/pr.orig" "$work/pr.go"; then
-            cp "$work/base.go" "$work/base.orig"
-            if "$strip_bin" "$work/base.go" >/dev/null 2>&1 && ! cmp -s "$work/base.orig" "$work/base.go" && ! cmp -s "$work/base.go" "$work/pr.orig"; then
-              base_nows=$(tr -d '[:space:]' <"$work/base.go")
-              pr_nows=$(tr -d '[:space:]' <"$work/pr.orig")
-              [ "$base_nows" = "$pr_nows" ] && mismatches="$mismatches $f"
-            fi
-          fi
-        fi
-        rm -rf "$work"
-      done < <(grep -E '^(services/go-api|services/overseer)/.*\.go$' <<<"$changed")
-      rm -rf "$strip_dir"
-      if [ -n "$mismatches" ]; then
-        echo "FAIL  strip PRs match the strip tool   ($mismatches)"
-        failed=1
-      else
-        echo "ok    strip PRs match the strip tool"
-      fi
-    else
-      echo "FAIL  strip PRs match the strip tool   (build stripcomments)"
-      tail -n 40 "$log" | sed 's/^/      /'
-      rm -rf "$strip_dir"
-      failed=1
     fi
   fi
 fi
@@ -299,20 +246,6 @@ if touches '\.(go|ts|tsx)$' && need npx "cycles"; then
   else
     echo "SKIP  cycles: no root node_modules"; missing=1
   fi
-fi
-
-if touches '^(scripts/[^/]*|[^/]+)\.[cm]?[jt]sx?$' && need node "repo scripts comments"; then
-  if link_deps services/overseer/web; then
-    check "repo scripts no new comments" . node services/overseer/web/scripts/lint-changed-comments.mjs "$base" \
-      ':(top,glob)*.js' ':(top,glob)*.jsx' ':(top,glob)*.ts' ':(top,glob)*.tsx' ':(top,glob)*.mjs' ':(top,glob)*.cjs' \
-      ':(top,glob)scripts/*.js' ':(top,glob)scripts/*.jsx' ':(top,glob)scripts/*.ts' ':(top,glob)scripts/*.tsx' ':(top,glob)scripts/*.mjs' ':(top,glob)scripts/*.cjs'
-  else
-    echo "SKIP  repo scripts comments: no services/overseer/web/node_modules here or in $main_tree"; missing=1
-  fi
-fi
-
-if touches '^\.(github|gitea)/workflows/.*\.ya?ml$|\.sh$'; then
-  check "workflows and shell no new comments" . hash_comments '.github/workflows/*.yml' '.github/workflows/*.yaml' '.gitea/workflows/*.yml' '.gitea/workflows/*.yaml' '*.sh'
 fi
 
 if [ -d services/go-api/scripts/nocomments ] && need go "nocomments"; then
