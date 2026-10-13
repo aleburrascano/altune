@@ -242,7 +242,7 @@ describe('the discover hooks run on the port the provider was given', () => {
 
     const { result } = renderHook(() => useSearchHistory(), { wrapper: wrapperWith(port) });
 
-    await waitFor(() => expect(result.current.data).toBeDefined());
+    await waitFor(() => expect(result.current.data?.items).toHaveLength(SEEDED_COUNT));
     expect(result.current.data?.items.map((item) => item.query)).toEqual(['first', 'second']);
     expect(__http.requests).toHaveLength(0);
   });
@@ -254,7 +254,7 @@ describe('the discover hooks run on the port the provider was given', () => {
       wrapper: wrapperWith(port),
     });
 
-    await waitFor(() => expect(result.current.data).toBeDefined());
+    await waitFor(() => expect(result.current.data?.results).toHaveLength(SEEDED_COUNT));
     expect(result.current.data?.results.map((found) => found.title)).toEqual([
       'title 0',
       'title 1',

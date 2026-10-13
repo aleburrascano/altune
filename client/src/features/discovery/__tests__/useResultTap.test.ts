@@ -102,7 +102,7 @@ describe('useResultTap records result_clicked and hands off to the detail screen
 
     result.current(tapped, 0);
 
-    expect(dismiss).toHaveBeenCalled();
+    expect(dismiss).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(sentEvents()).toHaveLength(1));
     expect(sentEvents()[0]).toEqual({
       type: 'result_clicked',

@@ -165,8 +165,8 @@ describe('useDiscoverLogic leaves the suggestion and history lists empty when th
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
     act(() => result.current.setIsFocused(true));
 
-    await waitFor(() => expect(portSuggest).toHaveBeenCalled());
-    await waitFor(() => expect(portHistory).toHaveBeenCalled());
+    await waitFor(() => expect(portSuggest).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(portHistory).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     expect(result.current.suggestionItems).toEqual([]);
     expect(result.current.history.items).toEqual([]);
@@ -179,8 +179,8 @@ describe('useDiscoverLogic leaves the suggestion and history lists empty when th
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
     act(() => result.current.setIsFocused(true));
 
-    await waitFor(() => expect(portSuggest).toHaveBeenCalled());
-    await waitFor(() => expect(portHistory).toHaveBeenCalled());
+    await waitFor(() => expect(portSuggest).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(portHistory).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     expect(result.current.suggestionItems).toEqual([]);
     expect(result.current.showSuggestions).toBe(false);
@@ -308,7 +308,9 @@ describe('useDiscoverLogic recovers from failures', () => {
       .mockRejectedValueOnce(new ApiError(502, 'bad gateway'))
       .mockResolvedValueOnce(page(SEARCH_PAGE_SIZE));
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
-    await waitFor(() => expect(result.current.results.searchData).toBeDefined());
+    await waitFor(() =>
+      expect(result.current.results.searchData?.search_id).toEqual(expect.any(String)),
+    );
     await act(async () => result.current.pagination.onEndReached());
     await waitFor(() => expect(result.current.pagination.nextPageFailed).toBe(true), {
       timeout: 4000,
@@ -356,7 +358,9 @@ describe('useDiscoverLogic history invalidation', () => {
 
   it('loading another page does not refetch history', async () => {
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
-    await waitFor(() => expect(result.current.results.searchData).toBeDefined());
+    await waitFor(() =>
+      expect(result.current.results.searchData?.search_id).toEqual(expect.any(String)),
+    );
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     const historyCalls = portHistory.mock.calls.length;
 
@@ -417,7 +421,7 @@ describe('useDiscoverLogic history tap', () => {
       result.current.onSubmit();
     });
 
-    await waitFor(() => expect(portSearch).toHaveBeenCalled());
+    await waitFor(() => expect(portSearch).toHaveBeenCalledTimes(1));
     for (const [args] of portSearch.mock.calls) {
       expect((args as { q: string }).q.length).toBeLessThanOrEqual(MAX_QUERY_LENGTH);
     }
@@ -446,7 +450,9 @@ describe('useDiscoverLogic refresh failure', () => {
       .mockReset()
       .mockImplementation(({ offset }: PageRequest) => Promise.resolve(page(offset)));
     const hook = renderHook(() => useDiscoverLogic(), { wrapper });
-    await waitFor(() => expect(hook.result.current.results.searchData).toBeDefined());
+    await waitFor(() =>
+      expect(hook.result.current.results.searchData?.search_id).toEqual(expect.any(String)),
+    );
     await act(async () => hook.result.current.pagination.onEndReached());
     await waitFor(() =>
       expect(hook.result.current.results.searchData?.results).toHaveLength(SEARCH_PAGE_SIZE * 2),
@@ -555,7 +561,7 @@ describe('a direct account switch with Discover still mounted', () => {
     const hook = renderHook(() => useDiscoverLogic(), { wrapper });
     act(() => hook.result.current.onChangeText('radiohead'));
     act(() => hook.result.current.onSubmit());
-    await waitFor(() => expect(portSearch).toHaveBeenCalled());
+    await waitFor(() => expect(portSearch).toHaveBeenCalledTimes(1));
     return hook;
   }
 
@@ -646,7 +652,9 @@ describe('useDiscoverLogic submit and history', () => {
   it('pressing Enter after the debounced search does not search again', async () => {
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
     act(() => result.current.onChangeText('radiohead'));
-    await waitFor(() => expect(result.current.results.searchData).toBeDefined());
+    await waitFor(() =>
+      expect(result.current.results.searchData?.search_id).toEqual(expect.any(String)),
+    );
 
     act(() => result.current.onSubmit());
     await settle();
@@ -704,7 +712,9 @@ describe('useDiscoverLogic submit and history', () => {
   it('typing without submitting never saves history', async () => {
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
     act(() => result.current.onChangeText('radiohead'));
-    await waitFor(() => expect(result.current.results.searchData).toBeDefined());
+    await waitFor(() =>
+      expect(result.current.results.searchData?.search_id).toEqual(expect.any(String)),
+    );
     await settle();
 
     expect(portRecordHistory).not.toHaveBeenCalled();
@@ -734,11 +744,13 @@ describe('useDiscoverLogic submit and history', () => {
 
   it('refreshes the history list after a save, not after each search', async () => {
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
-    await waitFor(() => expect(portHistory).toHaveBeenCalled());
+    await waitFor(() => expect(portHistory).toHaveBeenCalledTimes(1));
     portHistory.mockClear();
 
     act(() => result.current.onChangeText('radiohead'));
-    await waitFor(() => expect(result.current.results.searchData).toBeDefined());
+    await waitFor(() =>
+      expect(result.current.results.searchData?.search_id).toEqual(expect.any(String)),
+    );
     await settle();
     expect(portHistory).not.toHaveBeenCalled();
 

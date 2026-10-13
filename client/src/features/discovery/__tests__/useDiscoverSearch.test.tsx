@@ -263,7 +263,7 @@ describe('held-slate paging', () => {
   it('sends page 1 search_id on the page 2 request, not a fresh search', async () => {
     servePages(page(0, 'search-1'), page(SEARCH_PAGE_SIZE, 'search-1'));
     const { result } = renderHook(() => useDiscoverSearch('q'), { wrapper });
-    await waitFor(() => expect(result.current.data).toBeDefined());
+    await waitFor(() => expect(result.current.data?.search_id).toEqual(expect.any(String)));
 
     await act(async () => {
       await result.current.fetchNextPage();
@@ -280,7 +280,7 @@ describe('held-slate paging', () => {
   it('sends no search_id on the first page', async () => {
     servePages(page(0, 'search-1'));
     const { result } = renderHook(() => useDiscoverSearch('q'), { wrapper });
-    await waitFor(() => expect(result.current.data).toBeDefined());
+    await waitFor(() => expect(result.current.data?.search_id).toEqual(expect.any(String)));
 
     expect(searchRequests()).toHaveLength(1);
     expect(paramsOf(searchRequests()[0]).has('search_id')).toBe(false);
@@ -349,7 +349,7 @@ describe('next page failure', () => {
     servePages(page(0));
     __http.reply(SEARCH, { status: 502, json: { detail: 'bad gateway' } });
     const { result } = renderHook(() => useDiscoverSearch('q'), { wrapper });
-    await waitFor(() => expect(result.current.data).toBeDefined());
+    await waitFor(() => expect(result.current.data?.search_id).toEqual(expect.any(String)));
     await act(async () => {
       await result.current.fetchNextPage();
     });
@@ -467,7 +467,7 @@ describe('useDiscoverSearch history saving', () => {
     __http.replyOnce(SEARCH, { status: 503, json: { detail: 'unavailable' } });
     __http.reply(SEARCH, { json: singlePage() });
     const { result } = renderHook(() => useDiscoverSearch('radiohead'), { wrapper });
-    await waitFor(() => expect(result.current.data).toBeDefined());
+    await waitFor(() => expect(result.current.data?.search_id).toEqual(expect.any(String)));
 
     await act(async () => {
       await result.current.refetch();
