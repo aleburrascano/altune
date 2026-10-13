@@ -91,6 +91,12 @@ jobs:
         env:
           MIN: 65
         run: bash ../../scripts/ci/test-backend-coverage.sh
+      - name: integration tests really ran
+        working-directory: services/go-api
+        env:
+          INTEGRATION: "1"
+        run: |
+          go test -count=1 -v -run 'TestPgxSearchHistoryRepo' ./internal/discovery/adapters/persistence/ | grep -E '^--- PASS: TestPgxSearchHistoryRepo'
 
   mobile-tests:
     needs: changes

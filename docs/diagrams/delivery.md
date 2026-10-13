@@ -12,13 +12,18 @@ flowchart TD
     subgraph gate [PR gate · precheck.yml]
         trusted{"factory-precheck status green<br/>for this commit and base?"}
         full["scripts/precheck.sh"]
-        integ["scripts/ci/integration.sh"]
         shape["scripts/ci/pr-shape.sh"]
-        trusted -->|yes| integ
-        trusted -->|no| full --> integ --> shape
+        trusted -->|yes| shape
+        trusted -->|no| full --> shape
+    end
+
+    subgraph ghgate [PR gate · GitHub pr-checks]
+        ghtests["pr-checks · backend-tests<br/>migrations · INTEGRATION=1 go test · coverage ratchet"]
     end
 
     precheck --> trusted
+    pr --> ghtests
+    ghtests -->|green| main
     shape -->|green| main(["merge to main<br/>no merge queue"])
     main --> ci["ci.yml on push to main<br/>backend · overseer · mobile jobs for the paths that changed"]
 

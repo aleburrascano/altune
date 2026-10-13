@@ -76,5 +76,23 @@ t 0 "a jest_check name counts as a gate"
 manifest '{"ci.yml#build#checkout":{"allow":"plumbing"},"ci.yml#build#unit tests":{"gate":"integration.sh"}}'
 t 0 "a script the gate workflow runs counts as a gate"
 
+mkdir -p "$repo/.github/workflows"
+cat >"$repo/.github/workflows/pr-checks.yml" <<'YML'
+on:
+  push:
+    branches: ["pr/**"]
+jobs:
+  backend-tests:
+    steps:
+      - name: tests
+        run: true
+YML
+
+manifest '{"ci.yml#build#checkout":{"allow":"plumbing"},"ci.yml#build#unit tests":{"gate":"pr-checks/backend-tests"}}'
+t 0 "a pr-checks job counts as a gate"
+
+manifest '{"ci.yml#build#checkout":{"allow":"plumbing"},"ci.yml#build#unit tests":{"gate":"pr-checks/nope"}}'
+t 1 "a pr-checks job that does not exist is named" 'names gate "pr-checks/nope", which precheck does not define'
+
 [ $fail = 0 ] && echo "gate-parity.test.sh: all cases pass"
 exit $fail

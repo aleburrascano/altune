@@ -7,6 +7,7 @@ import yaml from "js-yaml";
 const WORKFLOWS = ".gitea/workflows";
 const MANIFEST = "scripts/ci/gate-parity.json";
 const PRECHECK = "scripts/precheck.sh";
+const PR_CHECKS = ".github/workflows/pr-checks.yml";
 const GATE_WORKFLOW = `${WORKFLOWS}/precheck.yml`;
 const CHECK_NAME = /\b(?:test_|jest_)?check "([^"]+)"/g;
 const GATE_SCRIPT = /bash scripts\/ci\/([\w.-]+\.sh)/g;
@@ -38,6 +39,10 @@ export function gateNames(root) {
   for (const m of read(root, PRECHECK).matchAll(CHECK_NAME)) names.add(m[1]);
   if (existsSync(join(root, GATE_WORKFLOW))) {
     for (const m of read(root, GATE_WORKFLOW).matchAll(GATE_SCRIPT)) names.add(m[1]);
+  }
+  if (existsSync(join(root, PR_CHECKS))) {
+    const doc = yaml.load(read(root, PR_CHECKS));
+    for (const job of Object.keys(doc?.jobs ?? {})) names.add(`pr-checks/${job}`);
   }
   return names;
 }

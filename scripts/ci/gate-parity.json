@@ -36,16 +36,16 @@
     "allow": "plumbing: checks out, installs or cleans up, and checks nothing"
   },
   "ci.yml#ci-backend-tests#postgres": {
-    "gate": "integration.sh"
+    "gate": "pr-checks/backend-tests"
   },
   "ci.yml#ci-backend-tests#apply migrations": {
-    "gate": "integration.sh"
+    "gate": "pr-checks/backend-tests"
   },
   "ci.yml#ci-backend-tests#go test with integration tests": {
-    "gate": "integration.sh"
+    "gate": "pr-checks/backend-tests"
   },
   "ci.yml#ci-backend-tests#coverage ratchet": {
-    "gate": "integration.sh"
+    "gate": "pr-checks/backend-tests"
   },
   "ci.yml#ci-backend-tests#acquisition selection gate": {
     "gate": "go-api acquisition selection gate"

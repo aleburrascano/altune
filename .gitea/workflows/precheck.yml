@@ -38,5 +38,4 @@ jobs:
           else
             bash scripts/precheck.sh "gitea/$BASE"
           fi
-          bash scripts/ci/integration.sh "gitea/$BASE"
           bash scripts/ci/pr-shape.sh "$PR"
