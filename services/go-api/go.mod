@@ -14,7 +14,7 @@ require (
 	github.com/minio/minio-go/v7 v7.3.0
 	github.com/moby/buildkit v0.33.0
 	github.com/pelletier/go-toml/v2 v2.4.3
-	github.com/pganalyze/pg_query_go/v6 v6.2.2
+	github.com/pganalyze/pg_query_go/v6 v6.2.5
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/tdewolff/parse/v2 v2.8.16
 	github.com/wasilibs/go-pgquery v0.0.0-20260915022521-81f99195012b
