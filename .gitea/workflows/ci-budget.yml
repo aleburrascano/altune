@@ -1,0 +1,34 @@
+name: ci-budget
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  GITEA_API: ${{ github.server_url }}/api/v1
+  GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+  REPO: ${{ github.repository }}
+  GITEA_GIT: ${{ github.server_url }}/${{ github.repository }}.git
+  BUDGET_GIT: /home/ubuntu/.cache/altune-ci-budget.git
+
+jobs:
+  budget:
+    runs-on: host
+    timeout-minutes: 5
+    steps:
+      - name: flag workflows over their time budget
+        run: |
+          set -euo pipefail
+          [ -e "$BUDGET_GIT/HEAD" ] || git init -q --bare "$BUDGET_GIT"
+          GIT_TERMINAL_PROMPT=0 GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.extraHeader \
+            GIT_CONFIG_VALUE_0="Authorization: token $GITEA_TOKEN" \
+            git --git-dir "$BUDGET_GIT" fetch -q "$GITEA_GIT" '+refs/heads/main:refs/heads/main'
+          tmp=$(mktemp -d)
+          trap 'rm -rf "$tmp"' EXIT
+          git --git-dir "$BUDGET_GIT" archive main scripts/ci | tar -x -C "$tmp"
+          node "$tmp/scripts/ci/ci-budget.mjs"
