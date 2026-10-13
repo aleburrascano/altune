@@ -4,7 +4,8 @@ import type { StyleProp, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '@shared/ui/theme/useTheme';
-import { CONTENT_MAX_WIDTH, useLayoutMode } from '@shared/ui/layout/useLayoutMode';
+import { CONTENT_MAX_WIDTH } from '@shared/ui/layout/breakpoints';
+import { useLayoutMode } from '@shared/ui/layout/useLayoutMode';
 import { spacing } from '@shared/ui/theme/tokens';
 
 export const SCREEN_HORIZONTAL_PADDING = spacing.lg;

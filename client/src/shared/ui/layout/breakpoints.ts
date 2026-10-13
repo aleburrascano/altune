@@ -1,0 +1,3 @@
+export const TABLET_LAYOUT_MIN_WIDTH = 700;
+export const WIDE_LAYOUT_MIN_WIDTH = 1000;
+export const CONTENT_MAX_WIDTH = 1200;

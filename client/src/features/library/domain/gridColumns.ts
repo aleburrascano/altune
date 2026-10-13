@@ -1,7 +1,7 @@
 import {
   TABLET_LAYOUT_MIN_WIDTH as TABLET_MIN_WIDTH,
   WIDE_LAYOUT_MIN_WIDTH as WIDE_MIN_WIDTH,
-} from '@shared/ui/layout/useLayoutMode';
+} from '@shared/ui/layout/breakpoints';
 
 const WIDE_CONTENT_5COL_MIN_WIDTH = 900;
 

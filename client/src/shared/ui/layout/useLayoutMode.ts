@@ -1,12 +1,9 @@
 import { useWindowDimensions } from 'react-native';
 
 import { isWebPlatform } from '@shared/device/isWebPlatform';
+import { WIDE_LAYOUT_MIN_WIDTH } from '@shared/ui/layout/breakpoints';
 
 export type LayoutMode = 'compact' | 'wide';
-
-export const TABLET_LAYOUT_MIN_WIDTH = 700;
-export const WIDE_LAYOUT_MIN_WIDTH = 1000;
-export const CONTENT_MAX_WIDTH = 1200;
 
 export function layoutModeFor(width: number): LayoutMode {
   return width >= WIDE_LAYOUT_MIN_WIDTH ? 'wide' : 'compact';

@@ -2,7 +2,7 @@ import { Text } from 'react-native';
 import { render, screen, within } from '@testing-library/react-native';
 import type { ReactTestRendererJSON } from 'react-test-renderer';
 
-import { CONTENT_MAX_WIDTH } from '@shared/ui/layout/useLayoutMode';
+import { CONTENT_MAX_WIDTH } from '@shared/ui/layout/breakpoints';
 import { Screen } from '@shared/ui/primitives/Screen';
 
 function singleChild(

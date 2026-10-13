@@ -1,12 +1,7 @@
 import { renderHook } from '@testing-library/react-native';
 
-import {
-  CONTENT_MAX_WIDTH,
-  WIDE_LAYOUT_MIN_WIDTH,
-  layoutModeFor,
-  useLayoutMode,
-  useWideWebLayout,
-} from '@shared/ui/layout/useLayoutMode';
+import { CONTENT_MAX_WIDTH, WIDE_LAYOUT_MIN_WIDTH } from '@shared/ui/layout/breakpoints';
+import { layoutModeFor, useLayoutMode, useWideWebLayout } from '@shared/ui/layout/useLayoutMode';
 
 let mockWindowWidth = 390;
 
