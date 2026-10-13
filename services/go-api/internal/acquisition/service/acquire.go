@@ -23,7 +23,7 @@ type AcquireTrackAudioService struct {
 	identifier      ports.AudioIdentifier
 	recordings      ports.RecordingResolver
 	events          events.Publisher
-	orphans         catalogports.OrphanedAudioRecorder
+	orphans         ports.OrphanedAudioRecorder
 	storeKeyPrefix  string
 	rejections      ports.RejectionStore
 	downloadLimiter *DownloadLimiter
@@ -76,7 +76,7 @@ func WithAcquireEvents(pub events.Publisher) func(*AcquireTrackAudioService) {
 	}
 }
 
-func WithAcquireOrphanQueue(q catalogports.OrphanedAudioRecorder) func(*AcquireTrackAudioService) {
+func WithAcquireOrphanQueue(q ports.OrphanedAudioRecorder) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.orphans = q }
 }
 

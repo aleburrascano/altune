@@ -1,8 +1,8 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
-	catalogports "altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
@@ -13,11 +13,11 @@ import (
 )
 
 type recordingOrphanQueue struct {
-	recorded []catalogports.OrphanedAudio
+	recorded []ports.OrphanedAudio
 	err      error
 }
 
-func (q *recordingOrphanQueue) RecordOrphanedAudio(_ context.Context, o catalogports.OrphanedAudio) error {
+func (q *recordingOrphanQueue) RecordOrphanedAudio(_ context.Context, o ports.OrphanedAudio) error {
 	if q.err != nil {
 		return q.err
 	}
@@ -35,7 +35,7 @@ func TestExecuteReplace_FailedOldAudioDeleteIsQueuedForTheSweep(t *testing.T) {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
-	want := catalogports.OrphanedAudio{AudioRef: originalRef, UserId: userId, TrackId: trackId}
+	want := ports.OrphanedAudio{AudioRef: originalRef, UserId: userId, TrackId: trackId}
 	if len(queue.recorded) != 1 || queue.recorded[0] != want {
 		t.Errorf("recorded = %+v, want exactly %+v", queue.recorded, want)
 	}
@@ -96,7 +96,7 @@ func TestStoreRollback_ExhaustedDeleteQueuesTheOrphan(t *testing.T) {
 		t.Fatal("want the delete failure surfaced")
 	}
 
-	want := catalogports.OrphanedAudio{AudioRef: "u/new.mp3", UserId: userId, TrackId: trackId}
+	want := ports.OrphanedAudio{AudioRef: "u/new.mp3", UserId: userId, TrackId: trackId}
 	if len(queue.recorded) != 1 || queue.recorded[0] != want {
 		t.Errorf("recorded = %+v, want exactly %+v", queue.recorded, want)
 	}

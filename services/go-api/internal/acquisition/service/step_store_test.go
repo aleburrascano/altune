@@ -1,8 +1,8 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
-	catalogports "altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
@@ -489,7 +489,7 @@ func TestStoreRollback_HandedOver(t *testing.T) {
 		if err := newStep(store, queue).Rollback(ctx, ac); err != nil {
 			t.Fatalf("Rollback: %v", err)
 		}
-		want := catalogports.OrphanedAudio{AudioRef: "u/a/b/new.mp3", UserId: userId, TrackId: acquiring}
+		want := ports.OrphanedAudio{AudioRef: "u/a/b/new.mp3", UserId: userId, TrackId: acquiring}
 		if !store.stored["u/a/b/new.mp3"] || store.deleteCalls != 0 {
 			t.Errorf("stored = %v, deletes = %d, want kept without a delete", store.stored, store.deleteCalls)
 		}

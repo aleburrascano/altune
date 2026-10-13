@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	acqCatalogBridge "altune/go-api/internal/acquisition/adapters/catalogbridge"
 	acqDiscoveryBridge "altune/go-api/internal/acquisition/adapters/discoverybridge"
 	acqHandler "altune/go-api/internal/acquisition/adapters/handler"
 	acqPersistence "altune/go-api/internal/acquisition/adapters/persistence"
@@ -139,7 +140,7 @@ func (a *App) buildAcquisitionScheduler(
 
 	acquireOpts := []func(*acqService.AcquireTrackAudioService){
 		acqService.WithAcquireEvents(tap),
-		acqService.WithAcquireOrphanQueue(persistence.NewPgxOrphanedAudioRepository(a.pool)),
+		acqService.WithAcquireOrphanQueue(acqCatalogBridge.NewOrphanedAudioRecorder(persistence.NewPgxOrphanedAudioRepository(a.pool))),
 		acqService.WithAudioProber(audioProber),
 		acqService.WithVerifySkips(skips),
 		acqService.WithAudioTagger(id3.NewTagger()),

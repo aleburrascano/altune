@@ -3,7 +3,6 @@ package service
 import (
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
-	catalogports "altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"bytes"
 	"context"
@@ -720,7 +719,7 @@ func TestRunPipeline_LeaseLossKeepsTheStoredAudioAndQueuesItForTheSweep(t *testi
 	if !store.stored[ac.AudioRef] {
 		t.Errorf("rollback deleted %q, which the new lease owner may be serving", ac.AudioRef)
 	}
-	want := catalogports.OrphanedAudio{AudioRef: ac.AudioRef, UserId: userId, TrackId: acquiring}
+	want := ports.OrphanedAudio{AudioRef: ac.AudioRef, UserId: userId, TrackId: acquiring}
 	if len(queue.recorded) != 1 || queue.recorded[0] != want {
 		t.Errorf("recorded = %+v, want exactly %+v", queue.recorded, want)
 	}

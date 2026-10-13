@@ -2,8 +2,6 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/catalog/domain"
-	catalogports "altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/redact"
 	"context"
@@ -20,9 +18,9 @@ type StoreStep struct {
 	audioStore  ports.AudioWriter
 	prober      ports.AudioProber
 	trackRefs   ports.AudioRefLookup
-	ownTrackID  domain.TrackId
+	ownTrackID  shared.TrackId
 	attemptID   func() string
-	orphans     catalogports.OrphanedAudioRecorder
+	orphans     ports.OrphanedAudioRecorder
 	userID      shared.UserId
 	keyPrefix   string
 	deleteTries int
@@ -47,14 +45,14 @@ func WithStoreProber(p ports.AudioProber) func(*StoreStep) {
 	return func(s *StoreStep) { s.prober = p }
 }
 
-func WithStoreAudioRefGuard(refs ports.AudioRefLookup, ownTrackID domain.TrackId) func(*StoreStep) {
+func WithStoreAudioRefGuard(refs ports.AudioRefLookup, ownTrackID shared.TrackId) func(*StoreStep) {
 	return func(s *StoreStep) {
 		s.trackRefs = refs
 		s.ownTrackID = ownTrackID
 	}
 }
 
-func WithStoreOrphanQueue(q catalogports.OrphanedAudioRecorder, userID shared.UserId) func(*StoreStep) {
+func WithStoreOrphanQueue(q ports.OrphanedAudioRecorder, userID shared.UserId) func(*StoreStep) {
 	return func(s *StoreStep) {
 		s.orphans = q
 		s.userID = userID
