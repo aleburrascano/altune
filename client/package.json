@@ -12,7 +12,7 @@
     "lint": "eslint .",
     "test": "jest",
     "mutate": "stryker run",
-    "fallow": "fallow dead-code --baseline baselines/fallow-baseline.json --fail-on-issues && fallow dupes --fail-on-issues",
+    "fallow": "fallow dead-code --baseline baselines/fallow-baseline.json --fail-on-issues && node scripts/fallow-baseline-stale.mjs && fallow dupes --fail-on-issues",
     "fallow:health": "fallow health",
     "doctor:ci": "react-doctor --no-score --json --json-compact"
   },
