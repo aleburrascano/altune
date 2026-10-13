@@ -235,7 +235,7 @@ describe('session restore across process death', () => {
     beforeEach(() => {
       const { __secureStore } = require('expo-secure-store');
       __secureStore.reset();
-      delete require.cache[require.resolve('../supabaseClient')];
+      delete require.cache[require.resolve('@shared/auth/supabaseClient')];
     });
 
     it('restores the previously written session after the app "restarts" — no re-authentication is asked of the user', async () => {
@@ -244,7 +244,7 @@ describe('session restore across process death', () => {
       await first.supabase.auth._saveSession(seedSession());
       await first.supabase.auth.stopAutoRefresh();
 
-      delete require.cache[require.resolve('../supabaseClient')];
+      delete require.cache[require.resolve('@shared/auth/supabaseClient')];
 
       const { useSession } = require('@shared/auth/useSession');
       const queryClient = new QueryClient();

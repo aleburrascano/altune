@@ -1,11 +1,13 @@
 jest.mock('decode-uri-component', () => ({ __esModule: true, default: (s: string) => s }));
 
 describe('@features/library public surface', () => {
-  it('exports exactly the three route screens', () => {
+  it('exports exactly the three route screens and the chrome sidebar pieces', () => {
     expect(Object.keys(require('@features/library')).sort()).toEqual([
       'FeaturingScreen',
       'LibraryScreen',
       'PlaylistDetailScreen',
+      'SidebarPlaylists',
+      'usePlaylistActions',
     ]);
   });
 

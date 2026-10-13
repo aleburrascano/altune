@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { SidebarPlaylists } from '@features/library/ui/SidebarPlaylists';
+import { SidebarPlaylists } from '@features/library';
 import { PlayerBar } from '@features/playback';
 import { Sidebar } from '@shared/ui/navigation/Sidebar';
 import type { TabRoute } from '@shared/ui/navigation/tabRoutes';
