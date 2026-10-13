@@ -5,7 +5,8 @@
     "doctor.config.ts",
     "fingerprint.config.js",
     "scripts/**/*.mjs",
-    "eslint/rules/**/*.js"
+    "eslint/rules/**/*.js",
+    "targets/*/expo-target.config.js"
   ],
   "ignorePatterns": ["**/*.test.{ts,tsx}", "**/__tests__/**", "**/__mocks__/**", "jest/**"],
   "ignoreDependencies": [
@@ -17,7 +18,8 @@
     "@stryker-mutator/core",
     "@stryker-mutator/jest-runner",
     "@faker-js/faker",
-    "fishery"
+    "fishery",
+    "@bacons/apple-targets"
   ],
   "dynamicallyLoaded": ["eslint/consistency/*.js"],
   "ignoreUnresolvedImports": ["@react-navigation/bottom-tabs"],

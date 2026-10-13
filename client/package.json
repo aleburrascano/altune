@@ -81,6 +81,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",
+    "@bacons/apple-targets": "^5.0.0",
     "@faker-js/faker": "9.9.0",
     "@playwright/test": "^1.63.0",
     "@react-native/jest-preset": "^0.86.3",
