@@ -11,11 +11,6 @@ concurrency:
   group: precheck-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-  issues: read
-  pull-requests: read
-
 jobs:
   precheck:
     runs-on: precheck
@@ -25,6 +20,8 @@ jobs:
         env:
           PR: ${{ github.event.pull_request.number }}
           BASE: ${{ github.base_ref }}
+          PR_SHAPE_TOKEN: ${{ secrets.PR_SHAPE_TOKEN }}
+          SERVER_URL: ${{ github.server_url }}
         run: |
           set -euo pipefail
           repo=${ALTUNE_REPO:?the runner sets ALTUNE_REPO to its checkout}
@@ -43,4 +40,4 @@ jobs:
           else
             bash scripts/precheck.sh "gitea/$BASE"
           fi
-          bash scripts/ci/pr-shape.sh "$PR"
+          GITEA_URL="$SERVER_URL" GITEA_TOKEN="$PR_SHAPE_TOKEN" bash scripts/ci/pr-shape.sh "$PR"
