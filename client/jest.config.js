@@ -48,7 +48,6 @@ const nativeProject = {
   displayName: 'native',
   rootDir: __dirname,
   restoreMocks: true,
-  workerIdleMemoryLimit: '1GB',
   transformIgnorePatterns: [
     ...preset.transformIgnorePatterns,
     PREBUILT_COMMONJS_RENDERER_BABEL_WOULD_NOT_CHANGE,
@@ -65,7 +64,6 @@ const webProject = {
   displayName: 'web',
   rootDir: __dirname,
   restoreMocks: true,
-  workerIdleMemoryLimit: '1GB',
   testMatch: [
     '**/__tests__/**/*.web.integration.test.ts',
     '**/__tests__/**/*.web.integration.test.tsx',
