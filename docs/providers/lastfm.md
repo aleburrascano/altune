@@ -173,7 +173,7 @@ artwork MB-keyed.**
 
 Thin projection (caps 1–2), built and on `main`:
 
-- `services/go-api/internal/discovery/adapters/providers/lastfm.go` — `LastFmAdapter`: `Search`
+- `services/go-api/internal/discovery/adapters/providers/lastfm/lastfm.go` — `LastFmAdapter`: `Search`
   (track/album/artist via `*.search`), `GetArtistTopTracks` / `GetArtistAlbums`
   (`ArtistContentProvider`), `FetchCharts` (`ChartProvider`), `lastfmExternalID` (url → id),
   `parseListeners` (string→int64 normalizer). Maps the thin fields + `listeners` into `extras`.

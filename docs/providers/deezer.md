@@ -204,7 +204,7 @@ Built and on `main` (search + artwork + charts + content), thin projection only 
 **unconditionally wired** (no `cfg.HasDeezer()` gate, unlike MB/Discogs/Last.fm; the public API needs
 no key):
 
-- `services/go-api/internal/discovery/adapters/providers/deezer.go` — `DeezerAdapter`: `Search` /
+- `services/go-api/internal/discovery/adapters/providers/deezer/deezer.go` — `DeezerAdapter`: `Search` /
   `SearchStructured` / `searchKind` (track/album/artist), `Resolve` (`ArtworkResolver`, 1000px `_xl`,
   placeholder-skipping), `GetAlbumTracks` / `GetArtistTopTracks` / `GetArtistAlbums`
   (`Album/ArtistContentProvider`), `FetchCharts` (`ChartProvider`). Maps

@@ -1,8 +1,17 @@
 package app
 
 import (
-	"altune/go-api/internal/discovery/adapters/providers"
+	"altune/go-api/internal/discovery/adapters/providers/artworkchain"
+	"altune/go-api/internal/discovery/adapters/providers/coverartarchive"
+	"altune/go-api/internal/discovery/adapters/providers/deezer"
+	"altune/go-api/internal/discovery/adapters/providers/discogs"
+	"altune/go-api/internal/discovery/adapters/providers/fanarttv"
+	"altune/go-api/internal/discovery/adapters/providers/genius"
+	"altune/go-api/internal/discovery/adapters/providers/itunes"
+	"altune/go-api/internal/discovery/adapters/providers/lastfm"
+	"altune/go-api/internal/discovery/adapters/providers/spotify"
 	"altune/go-api/internal/discovery/adapters/providers/theaudiodb"
+	"altune/go-api/internal/discovery/adapters/providers/ytmusic"
 	"altune/go-api/internal/discovery/service/providercall"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/phonetics"
@@ -31,12 +40,12 @@ func (a *App) buildDetailEnrichers(cf clientFactory) discoveryHandler.DetailEnri
 	}
 
 	enrichers.Deezer = discoveryEnrich.NewDeezerEnrichmentService(
-		providers.NewDeezerAdapter(cf.discovery()),
+		deezer.NewDeezerAdapter(cf.discovery()),
 		discoveryCacheAdapters.NewRedisDeezerEnrichmentCache(a.redisClient, cacheSignalOption()),
 	)
 
 	enrichers.Lyrics = discoveryEnrich.NewLyricsService(
-		providers.NewDeezerLyricsAdapter(cf.discovery()),
+		deezer.NewDeezerLyricsAdapter(cf.discovery()),
 		discoveryCacheAdapters.NewRedisDeezerLyricsCache(a.redisClient, cacheSignalOption()),
 	)
 
@@ -58,7 +67,7 @@ func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []
 
 func addCatalogConsensusProviders(cf clientFactory, cfg *config.Config, add consensusAdder) {
 	if cfg.HasLastFM() {
-		lfm := providers.NewLastFmAdapter(cf.discovery(), cfg.LastFMAPIKey)
+		lfm := lastfm.NewLastFmAdapter(cf.discovery(), cfg.LastFMAPIKey)
 		add(discoveryDomain.ProviderKeyLastFM, discoveryDomain.ProviderLastFM, func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
 			return lfm.GetArtistAlbums(ctx, discoveryDomain.ProviderLastFM, artistName)
 		})
@@ -69,17 +78,17 @@ func addCatalogConsensusProviders(cf clientFactory, cfg *config.Config, add cons
 		})
 	}
 	if cfg.HasDiscogs() {
-		discogs := providers.NewDiscogsAdapter(cf.discovery(), cfg.DiscogsToken, cfg.MusicBrainzUserAgent)
-		add(discoveryDomain.ProviderKeyDiscogs, discoveryDomain.ProviderDiscogs, discogsConsensusFetcher(discogs))
+		discogsAdapter := discogs.NewDiscogsAdapter(cf.discovery(), cfg.DiscogsToken, cfg.MusicBrainzUserAgent)
+		add(discoveryDomain.ProviderKeyDiscogs, discoveryDomain.ProviderDiscogs, discogsConsensusFetcher(discogsAdapter))
 	}
 }
 
 func addStreamingConsensusProviders(cf clientFactory, cfg *config.Config, add consensusAdder) {
-	add(discoveryDomain.ProviderKeyITunes, discoveryDomain.ProviderITunes, albumSearchFetcher(providers.NewITunesAdapter(cf.discovery())))
+	add(discoveryDomain.ProviderKeyITunes, discoveryDomain.ProviderITunes, albumSearchFetcher(itunes.NewITunesAdapter(cf.discovery())))
 	if cfg.HasYouTubeMusic() {
-		ytmusic := providers.NewYouTubeMusicAdapter(cf.roundTripper())
+		ytmusicAdapter := ytmusic.NewYouTubeMusicAdapter(cf.roundTripper())
 		add(discoveryDomain.ProviderKeyYTMusic, discoveryDomain.ProviderYouTube, func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
-			return ytmusic.GetArtistAlbums(ctx, discoveryDomain.ProviderYouTube, artistName)
+			return ytmusicAdapter.GetArtistAlbums(ctx, discoveryDomain.ProviderYouTube, artistName)
 		})
 	}
 	if sc := buildSoundCloudAdapter(cf, cfg); sc != nil {
@@ -96,47 +105,47 @@ func albumSearchFetcher(p interface {
 	}
 }
 
-func discogsConsensusFetcher(discogs *providers.DiscogsAdapter) func(context.Context, string) ([]discoveryDomain.SearchResult, error) {
+func discogsConsensusFetcher(adapter *discogs.DiscogsAdapter) func(context.Context, string) ([]discoveryDomain.SearchResult, error) {
 	return func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
-		info, err := discogs.ResolveDiscogsArtist(ctx, artistName, nil)
+		info, err := adapter.ResolveDiscogsArtist(ctx, artistName, nil)
 		if err != nil || info == nil {
 			return nil, err
 		}
-		releases, err := discogs.FetchArtistReleases(ctx, info.ID)
+		releases, err := adapter.FetchArtistReleases(ctx, info.ID)
 		if err != nil {
 			return nil, err
 		}
-		return providers.DiscogsReleasesToSearchResults(releases), nil
+		return discogs.DiscogsReleasesToSearchResults(releases), nil
 	}
 }
 
 func buildArtworkChain(cf clientFactory, cfg *config.Config) discoveryPorts.TaggingArtworkResolver {
-	coverArtArchive := providers.NewCoverArtArchiveResolver(cf.discovery())
+	coverArtArchive := coverartarchive.NewCoverArtArchiveResolver(cf.discovery())
 	artworkResolvers := []discoveryPorts.ArtworkResolver{
 		coverArtArchive,
-		providers.NewCoverArtArchiveIdentityResolver(coverArtArchive),
+		coverartarchive.NewCoverArtArchiveIdentityResolver(coverArtArchive),
 	}
 	artworkResolvers = append(artworkResolvers, keyedArtworkResolvers(cf, cfg)...)
 	artworkResolvers = append(artworkResolvers, openArtworkResolvers(cf, cfg)...)
-	return providers.NewChainedArtworkResolver(artworkResolvers...)
+	return artworkchain.NewChainedArtworkResolver(artworkResolvers...)
 }
 
 func keyedArtworkResolvers(cf clientFactory, cfg *config.Config) []discoveryPorts.ArtworkResolver {
 	var resolvers []discoveryPorts.ArtworkResolver
 	if cfg.HasSpotify() {
-		resolvers = append(resolvers, providers.NewSpotifyArtworkResolver(cf.discovery()))
+		resolvers = append(resolvers, spotify.NewSpotifyArtworkResolver(cf.discovery()))
 	}
 	if cfg.HasDiscogs() {
 		resolvers = append(resolvers,
-			providers.NewDiscogsAdapter(cf.discovery(), cfg.DiscogsToken, cfg.MusicBrainzUserAgent))
+			discogs.NewDiscogsAdapter(cf.discovery(), cfg.DiscogsToken, cfg.MusicBrainzUserAgent))
 	}
 	if cfg.HasFanartTV() {
 		resolvers = append(resolvers,
-			providers.NewFanartTvArtworkResolver(cf.discovery(), cfg.FanartTVAPIKey))
+			fanarttv.NewFanartTvArtworkResolver(cf.discovery(), cfg.FanartTVAPIKey))
 	}
 	if cfg.HasGenius() {
 		resolvers = append(resolvers,
-			providers.NewGeniusArtworkResolver(cf.discovery(), cfg.GeniusAccessToken))
+			genius.NewGeniusArtworkResolver(cf.discovery(), cfg.GeniusAccessToken))
 	}
 	return resolvers
 }
@@ -144,11 +153,11 @@ func keyedArtworkResolvers(cf clientFactory, cfg *config.Config) []discoveryPort
 func openArtworkResolvers(cf clientFactory, cfg *config.Config) []discoveryPorts.ArtworkResolver {
 	resolvers := []discoveryPorts.ArtworkResolver{
 		theaudiodb.New(cf.discovery()),
-		providers.NewDeezerAdapter(cf.discovery()),
-		providers.NewITunesAdapter(cf.discovery()),
+		deezer.NewDeezerAdapter(cf.discovery()),
+		itunes.NewITunesAdapter(cf.discovery()),
 	}
 	if cfg.HasYouTubeMusic() {
-		resolvers = append(resolvers, providers.NewYouTubeMusicArtworkResolver(cf.roundTripper()))
+		resolvers = append(resolvers, ytmusic.NewYouTubeMusicArtworkResolver(cf.roundTripper()))
 	}
 	if sc := buildSoundCloudAdapter(cf, cfg); sc != nil {
 		resolvers = append(resolvers, sc)

@@ -112,7 +112,7 @@ service/     the pipeline + use cases (search orchestration, merge, rank, divers
              detail/discography, consensus, enrichment, correction, telemetry, eval/)
 adapters/
   handler/     inbound HTTP (chi) — thin: parse → call service → DTO
-  providers/   outbound third-party clients (one file per provider + shared http)
+  providers/   outbound third-party clients (one package per provider; providerhttp and providersearch are shared)
   persistence/ Postgres repos (identity, events, history, metrics rollup)
   cache/       Redis read-through caches (each a Proxy with a Null-Object fallback)
 ```

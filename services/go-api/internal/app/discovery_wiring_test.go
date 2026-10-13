@@ -3,7 +3,9 @@ package app
 import (
 	authservice "altune/go-api/internal/auth/service"
 	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
-	"altune/go-api/internal/discovery/adapters/providers"
+	"altune/go-api/internal/discovery/adapters/providers/artworkchain"
+	"altune/go-api/internal/discovery/adapters/providers/coverartarchive"
+	"altune/go-api/internal/discovery/adapters/providers/discogs"
 	discoveryDomain "altune/go-api/internal/discovery/domain"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryEnrich "altune/go-api/internal/discovery/service/enrich"
@@ -161,8 +163,8 @@ func TestEnrichmentService_CallerSuppliedMBID_RealChainReachesCoverArtArchive(t 
 	}))
 	defer caaServer.Close()
 
-	caa := providers.NewCoverArtArchiveResolver(rewrittenClient(caaServer.URL))
-	chain := providers.NewChainedArtworkResolver(caa, providers.NewCoverArtArchiveIdentityResolver(caa))
+	caa := coverartarchive.NewCoverArtArchiveResolver(rewrittenClient(caaServer.URL))
+	chain := artworkchain.NewChainedArtworkResolver(caa, coverartarchive.NewCoverArtArchiveIdentityResolver(caa))
 
 	enr := &enrichRealChainFakeEnricher{enrichment: enrichRealChainSampleEnrichment()}
 	svc := discoveryEnrich.NewEnrichmentService(enr, chain, newEnrichRealChainMemCache())
@@ -190,8 +192,8 @@ func TestEnrichmentService_CallerSuppliedMBID_RealChainForwardsBridgedExternalID
 	}))
 	defer discogsServer.Close()
 
-	discogs := providers.NewDiscogsAdapter(rewrittenClient(discogsServer.URL), "test-token", "altune-test/1.0")
-	chain := providers.NewChainedArtworkResolver(discogs)
+	discogsAdapter := discogs.NewDiscogsAdapter(rewrittenClient(discogsServer.URL), "test-token", "altune-test/1.0")
+	chain := artworkchain.NewChainedArtworkResolver(discogsAdapter)
 
 	e := discoveryDomain.EmptyEnrichment()
 	e.MBID = "mbid-artist-1"

@@ -1,0 +1,94 @@
+package fanarttv
+
+import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
+	"altune/go-api/internal/discovery/adapters/providers/providersearch"
+	"altune/go-api/internal/discovery/domain"
+	"context"
+	"fmt"
+	"net/http"
+	"net/url"
+)
+
+type FanartTvArtworkResolver struct {
+	client *http.Client
+	apiKey string
+}
+
+func NewFanartTvArtworkResolver(client *http.Client, apiKey string) *FanartTvArtworkResolver {
+	return &FanartTvArtworkResolver{client: client, apiKey: apiKey}
+}
+
+func (r *FanartTvArtworkResolver) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, error) {
+	if mbid == "" {
+		return "", nil
+	}
+
+	path := "music/" + url.PathEscape(mbid)
+	if kind == domain.ResultKindAlbum {
+		path = "music/albums/" + url.PathEscape(mbid)
+	}
+	u := fmt.Sprintf("https://webservice.fanart.tv/v3/%s?api_key=%s", path, r.apiKey)
+	var payload map[string]any
+	if err := providerhttp.GetJSON(ctx, r.client, u, &payload); err != nil {
+		return providerhttp.ArtworkFailure(domain.ProviderKeyFanart, err)
+	}
+
+	if kind == domain.ResultKindArtist {
+		if img := bestFanartImage(payload, "artistthumb"); img != "" {
+			return img, nil
+		}
+		if img := bestFanartImage(payload, "artistbackground"); img != "" {
+			return img, nil
+		}
+		return "", nil
+	}
+
+	return albumCoverURL(payload, mbid), nil
+}
+
+func albumCoverURL(payload map[string]any, mbid string) string {
+	albums, ok := payload["albums"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	entry, ok := albums[mbid].(map[string]any)
+	if !ok {
+		return ""
+	}
+	return bestFanartImage(entry, "albumcover")
+}
+
+func bestFanartImage(doc map[string]any, key string) string {
+	images, ok := doc[key].([]any)
+	if !ok || len(images) == 0 {
+		return ""
+	}
+	bestURL := ""
+	bestScore := int64(-1)
+	for _, it := range images {
+		m, ok := it.(map[string]any)
+		u, _ := m["url"].(string)
+		if !ok || u == "" {
+			continue
+		}
+		if score := fanartImageScore(m); score > bestScore {
+			bestScore = score
+			bestURL = u
+		}
+	}
+	return bestURL
+}
+
+func fanartImageScore(m map[string]any) int64 {
+	var score int64
+	if likes, ok := m["likes"].(string); ok {
+		score = providersearch.ParseListeners(likes)
+	}
+	if lang, _ := m["lang"].(string); lang == "en" || lang == "" {
+		score += 1_000_000
+	}
+	return score
+}
+
+func (*FanartTvArtworkResolver) ArtworkSource() domain.ProviderKey { return domain.ProviderKeyFanart }

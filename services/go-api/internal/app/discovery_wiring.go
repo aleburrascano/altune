@@ -2,7 +2,9 @@ package app
 
 import (
 	"altune/go-api/internal/catalog/adapters/discoverybridge"
-	"altune/go-api/internal/discovery/adapters/providers"
+	"altune/go-api/internal/discovery/adapters/providers/deezer"
+	"altune/go-api/internal/discovery/adapters/providers/itunes"
+	"altune/go-api/internal/discovery/adapters/providers/musicbrainz"
 	"altune/go-api/internal/discovery/service/content"
 	"altune/go-api/internal/discovery/service/favorites"
 	"altune/go-api/internal/discovery/service/history"
@@ -29,7 +31,7 @@ type discoveryWiring struct {
 	handler        *discoveryHandler.DiscoveryHandler
 	searchSvc      *search.Service
 	featuredBridge *discoverybridge.FeaturedResolver
-	musicBrainz    *providers.MusicBrainzAdapter
+	musicBrainz    *musicbrainz.MusicBrainzAdapter
 }
 
 type discoveryContentStaging struct {
@@ -42,7 +44,7 @@ type discoveryContentStaging struct {
 
 func (a *App) wireDiscoveryContent(
 	cf clientFactory,
-	sharedMB *providers.MusicBrainzAdapter,
+	sharedMB *musicbrainz.MusicBrainzAdapter,
 	vocabStore discoveryPorts.VocabularyStore,
 	breaker *providercall.CircuitBreaker,
 	eventStore discoveryPorts.EventStore,
@@ -57,8 +59,8 @@ func (a *App) wireDiscoveryContent(
 	}
 }
 
-func buildFeaturedBridge(cf clientFactory, sharedMB *providers.MusicBrainzAdapter) *discoverybridge.FeaturedResolver {
-	featuredDeezer := providers.NewDeezerAdapter(cf.discovery())
+func buildFeaturedBridge(cf clientFactory, sharedMB *musicbrainz.MusicBrainzAdapter) *discoverybridge.FeaturedResolver {
+	featuredDeezer := deezer.NewDeezerAdapter(cf.discovery())
 	featuredResolver := content.NewFeaturedArtistResolver(nil, featuredDeezer)
 	if sharedMB != nil {
 		featuredResolver = content.NewFeaturedArtistResolver(sharedMB, featuredDeezer)
@@ -70,7 +72,7 @@ func (a *App) buildAlbumAndRelatedServices(
 	cf clientFactory,
 	breaker *providercall.CircuitBreaker,
 ) (*content.GetAlbumTracksService, *related.GetRelatedTracksService) {
-	deezerContent := providers.NewDeezerAdapter(cf.discovery())
+	deezerContent := deezer.NewDeezerAdapter(cf.discovery())
 	albumProviders, relatedProviders := a.buildAlbumContentProviders(cf, deezerContent)
 
 	relatedSvc := related.NewGetRelatedTracksService(relatedProviders,
@@ -86,9 +88,9 @@ func (a *App) buildAlbumAndRelatedServices(
 
 func (a *App) buildAlbumContentProviders(
 	cf clientFactory,
-	deezerContent *providers.DeezerAdapter,
+	deezerContent *deezer.DeezerAdapter,
 ) (map[discoveryDomain.ProviderName]discoveryPorts.AlbumContentProvider, map[string]discoveryPorts.RelatedTracksProvider) {
-	itunesContent := providers.NewITunesAdapter(cf.discovery())
+	itunesContent := itunes.NewITunesAdapter(cf.discovery())
 	albumProviders := map[discoveryDomain.ProviderName]discoveryPorts.AlbumContentProvider{
 		discoveryDomain.ProviderDeezer: deezerContent,
 		discoveryDomain.ProviderITunes: itunesContent,
@@ -109,7 +111,7 @@ func (a *App) buildAlbumContentProviders(
 
 func (a *App) buildArtistContentService(
 	cf clientFactory,
-	sharedMB *providers.MusicBrainzAdapter,
+	sharedMB *musicbrainz.MusicBrainzAdapter,
 	breaker *providercall.CircuitBreaker,
 	eventStore discoveryPorts.EventStore,
 ) *content.GetArtistContentService {
@@ -119,7 +121,7 @@ func (a *App) buildArtistContentService(
 }
 
 func (a *App) buildArtistContentOptions(
-	sharedMB *providers.MusicBrainzAdapter,
+	sharedMB *musicbrainz.MusicBrainzAdapter,
 	breaker *providercall.CircuitBreaker,
 	eventStore discoveryPorts.EventStore,
 ) []content.ArtistContentOption {
@@ -151,7 +153,7 @@ func (a *App) contentIdentityStoreOption() content.ArtistContentOption {
 	)
 }
 
-func (a *App) wireDiscoveryEnrichment(cf clientFactory, sharedMB *providers.MusicBrainzAdapter) *discoveryEnrich.EnrichmentService {
+func (a *App) wireDiscoveryEnrichment(cf clientFactory, sharedMB *musicbrainz.MusicBrainzAdapter) *discoveryEnrich.EnrichmentService {
 	if sharedMB == nil {
 		return nil
 	}

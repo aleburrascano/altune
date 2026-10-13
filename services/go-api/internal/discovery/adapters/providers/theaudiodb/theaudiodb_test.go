@@ -362,3 +362,17 @@ func TestTheAudioDBAdapter_Resolve_CancelledMidRequestIsUnavailable(t *testing.T
 		})
 	}
 }
+
+func TestArtworkSourceTags(t *testing.T) {
+	tests := []struct {
+		got  domain.ProviderKey
+		want string
+	}{
+		{(&Adapter{}).ArtworkSource(), "theaudiodb"},
+	}
+	for _, tt := range tests {
+		if tt.got.String() != tt.want {
+			t.Errorf("ArtworkSource = %q, want %q", tt.got, tt.want)
+		}
+	}
+}

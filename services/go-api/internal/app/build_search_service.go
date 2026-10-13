@@ -1,7 +1,14 @@
 package app
 
 import (
-	"altune/go-api/internal/discovery/adapters/providers"
+	"altune/go-api/internal/discovery/adapters/providers/amazonmusic"
+	"altune/go-api/internal/discovery/adapters/providers/applemusic"
+	"altune/go-api/internal/discovery/adapters/providers/deezer"
+	"altune/go-api/internal/discovery/adapters/providers/lastfm"
+	"altune/go-api/internal/discovery/adapters/providers/musicbrainz"
+	"altune/go-api/internal/discovery/adapters/providers/soundcloud"
+	"altune/go-api/internal/discovery/adapters/providers/spotify"
+	"altune/go-api/internal/discovery/adapters/providers/ytmusic"
 	"altune/go-api/internal/discovery/service/identity"
 	"altune/go-api/internal/discovery/service/providercall"
 	"altune/go-api/internal/discovery/service/rank"
@@ -62,7 +69,7 @@ func BuildRankingOnlySearchService(
 
 type searchWiring struct {
 	cf        clientFactory
-	sharedMB  *providers.MusicBrainzAdapter
+	sharedMB  *musicbrainz.MusicBrainzAdapter
 	providers []discoveryPorts.SearchProvider
 	breaker   *providercall.CircuitBreaker
 }
@@ -146,10 +153,10 @@ func contentSearchOptions(
 	cfg *config.Config,
 	pool *pgxpool.Pool,
 	redisClient *goredis.Client,
-	sharedMB *providers.MusicBrainzAdapter,
+	sharedMB *musicbrainz.MusicBrainzAdapter,
 	breaker *providercall.CircuitBreaker,
 ) []search.Option {
-	deezerContent := providers.NewDeezerAdapter(cf.discovery())
+	deezerContent := deezer.NewDeezerAdapter(cf.discovery())
 	relationshipQuerier := discoveryPersistence.NewPgxRelationshipQuerier(pool)
 	findRelatedSvc := related.NewFindRelatedService(
 		relationshipQuerier, deezerContent, deezerContent,
@@ -248,26 +255,20 @@ func BuildDiscoveryProviders(ctx context.Context, cfg *config.Config, transport 
 	return buildSearchProviderList(ctx, cf, cfg, mb)
 }
 
-func buildSearchProviderList(ctx context.Context, cf clientFactory, cfg *config.Config, mb *providers.MusicBrainzAdapter) []discoveryPorts.SearchProvider {
+func buildSearchProviderList(ctx context.Context, cf clientFactory, cfg *config.Config, mb *musicbrainz.MusicBrainzAdapter) []discoveryPorts.SearchProvider {
 	var providerList []discoveryPorts.SearchProvider
-
-	providerList = append(providerList, providers.NewDeezerAdapter(cf.discovery()))
-
+	providerList = append(providerList, deezer.NewDeezerAdapter(cf.discovery()))
 	if am := buildAppleMusicAdapter(cf, cfg); am != nil {
 		providerList = append(providerList, am)
 	}
-
 	if mb != nil {
 		providerList = append(providerList, mb)
 	}
-
 	if lfm := buildLastFMAdapter(cfg, cf.discovery()); lfm != nil {
 		providerList = append(providerList, lfm)
 	}
-
 	providerList = append(providerList, buildScrapedSearchProviders(cf, cfg)...)
 	providerList = onlyChosenSearchProviders(providerList, cfg.DiscoverySearchProviders)
-
 	slog.InfoContext(ctx, "discovery providers configured", "count", len(providerList))
 	return providerList
 }
@@ -287,10 +288,10 @@ func buildScrapedSearchProviders(cf clientFactory, cfg *config.Config) []discove
 		list = append(list, sc)
 	}
 	if cfg.HasYouTubeMusic() {
-		list = append(list, providers.NewYouTubeMusicAdapter(cf.roundTripper()))
+		list = append(list, ytmusic.NewYouTubeMusicAdapter(cf.roundTripper()))
 	}
 	if cfg.HasAmazonMusic() {
-		list = append(list, providers.NewAmazonMusicAdapter(cf.discovery()))
+		list = append(list, amazonmusic.NewAmazonMusicAdapter(cf.discovery()))
 	}
 	if sp := buildSpotifyAdapter(cf, cfg); sp != nil {
 		list = append(list, sp)
@@ -298,49 +299,49 @@ func buildScrapedSearchProviders(cf clientFactory, cfg *config.Config) []discove
 	return list
 }
 
-func buildLastFMAdapter(cfg *config.Config, client *http.Client) *providers.LastFmAdapter {
+func buildLastFMAdapter(cfg *config.Config, client *http.Client) *lastfm.LastFmAdapter {
 	if !cfg.HasLastFM() {
 		return nil
 	}
-	return providers.NewLastFmAdapter(client, cfg.LastFMAPIKey)
+	return lastfm.NewLastFmAdapter(client, cfg.LastFMAPIKey)
 }
 
-func buildMusicBrainzAdapter(cf clientFactory, cfg *config.Config) *providers.MusicBrainzAdapter {
+func buildMusicBrainzAdapter(cf clientFactory, cfg *config.Config) *musicbrainz.MusicBrainzAdapter {
 	if !cfg.HasMusicBrainz() {
 		return nil
 	}
-	return providers.NewMusicBrainzAdapter(cf.discovery(), cfg.MusicBrainzUserAgent)
+	return musicbrainz.NewMusicBrainzAdapter(cf.discovery(), cfg.MusicBrainzUserAgent)
 }
 
-func buildAppleMusicAdapter(cf clientFactory, cfg *config.Config) *providers.AppleMusicAdapter {
+func buildAppleMusicAdapter(cf clientFactory, cfg *config.Config) *applemusic.AppleMusicAdapter {
 	if !cfg.HasAppleMusic() {
 		return nil
 	}
-	return providers.NewAppleMusicAdapter(cf.discovery())
+	return applemusic.NewAppleMusicAdapter(cf.discovery())
 }
 
-func buildSpotifyAdapter(cf clientFactory, cfg *config.Config) *providers.SpotifyAdapter {
+func buildSpotifyAdapter(cf clientFactory, cfg *config.Config) *spotify.SpotifyAdapter {
 	if !cfg.HasSpotify() {
 		return nil
 	}
-	return providers.NewSpotifyAdapter(cf.discovery())
+	return spotify.NewSpotifyAdapter(cf.discovery())
 }
 
-func buildSoundCloudAdapter(cf clientFactory, cfg *config.Config) *providers.SoundCloudAPIAdapter {
+func buildSoundCloudAdapter(cf clientFactory, cfg *config.Config) *soundcloud.SoundCloudAPIAdapter {
 	return newSoundCloudAdapter(cf, cfg, nil)
 }
 
-func buildSoundCloudSearchAdapter(cf clientFactory, cfg *config.Config) *providers.SoundCloudAPIAdapter {
-	return newSoundCloudAdapter(cf, cfg, providers.NewSoundCloudAdapter())
+func buildSoundCloudSearchAdapter(cf clientFactory, cfg *config.Config) *soundcloud.SoundCloudAPIAdapter {
+	return newSoundCloudAdapter(cf, cfg, soundcloud.NewSoundCloudAdapter())
 }
 
 type soundCloudSearchFallback interface {
 	Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error)
 }
 
-func newSoundCloudAdapter(cf clientFactory, cfg *config.Config, fallback soundCloudSearchFallback) *providers.SoundCloudAPIAdapter {
+func newSoundCloudAdapter(cf clientFactory, cfg *config.Config, fallback soundCloudSearchFallback) *soundcloud.SoundCloudAPIAdapter {
 	if !cfg.HasSoundCloud() {
 		return nil
 	}
-	return providers.NewSoundCloudAPIAdapter(cf.discovery(), fallback)
+	return soundcloud.NewSoundCloudAPIAdapter(cf.discovery(), fallback)
 }

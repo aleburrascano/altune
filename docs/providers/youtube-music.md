@@ -179,7 +179,7 @@ needs a `/feature-spec` if a typeahead surface is ever wanted.
 
 Search + content (the original projection) and the new keyless artist-artwork resolver:
 
-- `services/go-api/internal/discovery/adapters/providers/ytmusic.go` — `YouTubeMusicAdapter`
+- `services/go-api/internal/discovery/adapters/providers/ytmusic/ytmusic.go` — `YouTubeMusicAdapter`
   (`Search` over track/video/album/artist; `GetArtistAlbums` / `GetArtistTopTracks`; the
   `fetchYTMusic` retry + `nextWithContext` context-bridge; mappers) **and**
   `YouTubeMusicArtworkResolver` (`Resolve` artist-only; `pickArtistArtwork` / `largestYTThumbnail` /

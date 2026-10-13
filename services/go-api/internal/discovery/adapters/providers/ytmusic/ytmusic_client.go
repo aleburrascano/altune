@@ -1,0 +1,375 @@
+package ytmusic
+
+import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"math"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+)
+
+var errYTMUnexpectedShape = errors.New("ytmusic: response is not a JSON object")
+
+const (
+	ytmEndpoint        = "https://music.youtube.com/youtubei/v1/search"
+	ytmClientName      = "WEB_REMIX"
+	ytmClientVersion   = "1.20220715.04.00"
+	ytmSearchKey       = "AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30"
+	ytmResponseBodyCap = 16 << 20
+	ytmUserAgent       = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36"
+)
+
+type ytmFilter string
+
+const (
+	ytmNoFilter     ytmFilter = ""
+	ytmAlbumFilter  ytmFilter = "EgWKAQIYAWoMEA4QChADEAQQCRAF"
+	ytmArtistFilter ytmFilter = "EgWKAQIgAWoMEA4QChADEAQQCRAF"
+)
+
+type ytmThumbnail struct {
+	URL    string
+	Width  int
+	Height int
+}
+
+type ytmArtistRef struct {
+	Name string
+	ID   string
+}
+
+type ytmAlbumRef struct {
+	Name string
+	ID   string
+}
+
+type ytmTrack struct {
+	VideoID    string
+	Title      string
+	Artists    []ytmArtistRef
+	Album      ytmAlbumRef
+	Duration   int
+	IsExplicit bool
+	Thumbnails []ytmThumbnail
+}
+
+type ytmVideo struct {
+	VideoID    string
+	Title      string
+	Artists    []ytmArtistRef
+	Duration   int
+	Thumbnails []ytmThumbnail
+}
+
+type ytmAlbum struct {
+	BrowseID   string
+	Title      string
+	Type       string
+	Artists    []ytmArtistRef
+	Year       string
+	IsExplicit bool
+	Thumbnails []ytmThumbnail
+}
+
+type ytmArtistItem struct {
+	BrowseID   string
+	Artist     string
+	Thumbnails []ytmThumbnail
+}
+
+type ytmResult struct {
+	Tracks  []*ytmTrack
+	Videos  []*ytmVideo
+	Albums  []*ytmAlbum
+	Artists []*ytmArtistItem
+}
+
+func ytmSearch(ctx context.Context, client *http.Client, query string, filter ytmFilter) (*ytmResult, error) {
+	body := map[string]any{
+		"context": map[string]any{
+			"client": map[string]any{
+				"clientName":    ytmClientName,
+				"clientVersion": ytmClientVersion,
+				"hl":            "en",
+				"gl":            "US",
+			},
+			"user": map[string]any{"lockedSafetyMode": false},
+		},
+		"query": query,
+	}
+	if filter != ytmNoFilter {
+		body["params"] = string(filter)
+	}
+
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("ytmusic marshal: %w", err)
+	}
+
+	params := url.Values{}
+	params.Add("key", ytmSearchKey)
+	_, raw, err := providerhttp.PostBytesCappedOK(ctx, client, ytmEndpoint+"?"+params.Encode(), bytes.NewReader(payload), ytmResponseBodyCap,
+		providerhttp.WithHeader("Content-Type", "application/json; charset=utf-8"),
+		providerhttp.WithHeader("Referer", "https://music.youtube.com/search"),
+		providerhttp.WithHeader("User-Agent", ytmUserAgent))
+	if err != nil {
+		return nil, fmt.Errorf("ytmusic do: %w", err)
+	}
+
+	var page any
+	if err := json.Unmarshal(raw, &page); err != nil {
+		return nil, fmt.Errorf("ytmusic decode: %w", err)
+	}
+	if _, ok := page.(map[string]any); !ok {
+		return nil, errYTMUnexpectedShape
+	}
+
+	return parseYTMSearch(page), nil
+}
+
+type ytmPath []any
+
+func ytmGet(source any, path ytmPath) any {
+	cur := source
+	for _, step := range path {
+		switch key := step.(type) {
+		case string:
+			m, ok := cur.(map[string]any)
+			if !ok {
+				return nil
+			}
+			cur = m[key]
+		case int:
+			items, ok := cur.([]any)
+			if !ok || key >= len(items) {
+				return nil
+			}
+			cur = items[key]
+		}
+		if cur == nil {
+			return nil
+		}
+	}
+	return cur
+}
+
+func ytmStr(source any, path ytmPath) string {
+	if s, ok := ytmGet(source, path).(string); ok {
+		return s
+	}
+	return ""
+}
+
+func ytmList(v any) []any {
+	if items, ok := v.([]any); ok {
+		return items
+	}
+	return nil
+}
+
+func parseYTMSearch(page any) *ytmResult {
+	res := &ytmResult{}
+	sections := ytmList(ytmGet(page, ytmPath{
+		"contents", "tabbedSearchResultsRenderer", "tabs", 0, "tabRenderer",
+		"content", "sectionListRenderer", "contents",
+	}))
+
+	for _, sec := range sections {
+		if card := ytmGet(sec, ytmPath{"musicCardShelfRenderer"}); card != nil {
+			res.addCardHeader(card)
+			for _, it := range ytmList(ytmGet(card, ytmPath{"contents"})) {
+				res.addItem(it)
+			}
+			continue
+		}
+		var items any
+		switch {
+		case ytmGet(sec, ytmPath{"musicShelfRenderer", "contents"}) != nil:
+			items = ytmGet(sec, ytmPath{"musicShelfRenderer", "contents"})
+		case ytmGet(sec, ytmPath{"itemSectionRenderer", "contents"}) != nil:
+			items = ytmGet(sec, ytmPath{"itemSectionRenderer", "contents"})
+		}
+		for _, it := range ytmList(items) {
+			res.addItem(it)
+		}
+	}
+	return res
+}
+
+func (r *ytmResult) addCardHeader(card any) {
+	pageType := ytmStr(card, ytmPath{"title", "runs", 0, "navigationEndpoint", "browseEndpoint", "browseEndpointContextSupportedConfigs", "browseEndpointContextMusicConfig", "pageType"})
+	title := ytmStr(card, ytmPath{"title", "runs", 0, "text"})
+	browseID := ytmStr(card, ytmPath{"title", "runs", 0, "navigationEndpoint", "browseEndpoint", "browseId"})
+	thumbs := parseYTMThumbnails(ytmGet(card, ytmPath{"thumbnail", "musicThumbnailRenderer", "thumbnail", "thumbnails"}))
+	switch pageType {
+	case "MUSIC_PAGE_TYPE_ARTIST":
+		r.Artists = append(r.Artists, &ytmArtistItem{BrowseID: browseID, Artist: title, Thumbnails: thumbs})
+	case "MUSIC_PAGE_TYPE_ALBUM":
+		r.Albums = append(r.Albums, &ytmAlbum{BrowseID: browseID, Title: title, Thumbnails: thumbs})
+	}
+}
+
+func (r *ytmResult) addItem(item any) {
+	mr := ytmGet(item, ytmPath{"musicResponsiveListItemRenderer"})
+	if mr == nil {
+		return
+	}
+	if pageType := ytmStr(mr, ytmPath{"navigationEndpoint", "browseEndpoint", "browseEndpointContextSupportedConfigs", "browseEndpointContextMusicConfig", "pageType"}); pageType != "" {
+		switch pageType {
+		case "MUSIC_PAGE_TYPE_ARTIST":
+			r.Artists = append(r.Artists, parseYTMArtist(mr))
+		case "MUSIC_PAGE_TYPE_ALBUM":
+			r.Albums = append(r.Albums, parseYTMAlbum(mr))
+		}
+		return
+	}
+	switch ytmStr(mr, ytmPath{"overlay", "musicItemThumbnailOverlayRenderer", "content", "musicPlayButtonRenderer", "playNavigationEndpoint", "watchEndpoint", "watchEndpointMusicSupportedConfigs", "watchEndpointMusicConfig", "musicVideoType"}) {
+	case "MUSIC_VIDEO_TYPE_ATV":
+		r.Tracks = append(r.Tracks, parseYTMTrack(mr))
+	case "MUSIC_VIDEO_TYPE_OMV", "MUSIC_VIDEO_TYPE_UGC":
+		r.Videos = append(r.Videos, parseYTMVideo(mr))
+	}
+}
+
+func parseYTMTrack(mr any) *ytmTrack {
+	t := &ytmTrack{}
+	info1 := ytmGet(mr, ytmPath{"flexColumns", 0, "musicResponsiveListItemFlexColumnRenderer", "text", "runs", 0})
+	t.Title = ytmStr(info1, ytmPath{"text"})
+	t.VideoID = ytmStr(info1, ytmPath{"navigationEndpoint", "watchEndpoint", "videoId"})
+
+	info2 := ytmList(ytmGet(mr, ytmPath{"flexColumns", 1, "musicResponsiveListItemFlexColumnRenderer", "text", "runs"}))
+	t.Artists, t.Album = parseYTMByline(info2)
+	t.Duration = parseYTMTrailingDuration(info2)
+	if len(t.Artists) == 0 {
+		t.Artists = fallbackByline(info2)
+	}
+	t.IsExplicit = ytmHasExplicitBadge(mr)
+	t.Thumbnails = parseYTMThumbnails(ytmGet(mr, ytmPath{"thumbnail", "musicThumbnailRenderer", "thumbnail", "thumbnails"}))
+	return t
+}
+
+func parseYTMVideo(mr any) *ytmVideo {
+	v := &ytmVideo{}
+	info1 := ytmGet(mr, ytmPath{"flexColumns", 0, "musicResponsiveListItemFlexColumnRenderer", "text", "runs", 0})
+	v.Title = ytmStr(info1, ytmPath{"text"})
+	v.VideoID = ytmStr(info1, ytmPath{"navigationEndpoint", "watchEndpoint", "videoId"})
+
+	info2 := ytmList(ytmGet(mr, ytmPath{"flexColumns", 1, "musicResponsiveListItemFlexColumnRenderer", "text", "runs"}))
+	v.Artists, _ = parseYTMByline(info2)
+	v.Duration = parseYTMTrailingDuration(info2)
+	v.Thumbnails = parseYTMThumbnails(ytmGet(mr, ytmPath{"thumbnail", "musicThumbnailRenderer", "thumbnail", "thumbnails"}))
+	return v
+}
+
+func parseYTMAlbum(mr any) *ytmAlbum {
+	a := &ytmAlbum{}
+	a.Title = ytmStr(mr, ytmPath{"flexColumns", 0, "musicResponsiveListItemFlexColumnRenderer", "text", "runs", 0, "text"})
+	a.BrowseID = ytmStr(mr, ytmPath{"navigationEndpoint", "browseEndpoint", "browseId"})
+
+	runs := ytmList(ytmGet(mr, ytmPath{"flexColumns", 1, "musicResponsiveListItemFlexColumnRenderer", "text", "runs"}))
+	if len(runs) > 0 {
+		a.Type = ytmStr(runs[0], ytmPath{"text"})
+		a.Artists, _ = parseYTMByline(runs)
+		if len(a.Artists) == 0 && len(runs) > 2 {
+			if name := ytmStr(runs[2], ytmPath{"text"}); name != "" {
+				a.Artists = []ytmArtistRef{{Name: name}}
+			}
+		}
+		a.Year = ytmStr(runs[len(runs)-1], ytmPath{"text"})
+	}
+	a.IsExplicit = ytmHasExplicitBadge(mr)
+	a.Thumbnails = parseYTMThumbnails(ytmGet(mr, ytmPath{"thumbnail", "musicThumbnailRenderer", "thumbnail", "thumbnails"}))
+	return a
+}
+
+func parseYTMArtist(mr any) *ytmArtistItem {
+	return &ytmArtistItem{
+		BrowseID:   ytmStr(mr, ytmPath{"navigationEndpoint", "browseEndpoint", "browseId"}),
+		Artist:     ytmStr(mr, ytmPath{"flexColumns", 0, "musicResponsiveListItemFlexColumnRenderer", "text", "runs", 0, "text"}),
+		Thumbnails: parseYTMThumbnails(ytmGet(mr, ytmPath{"thumbnail", "musicThumbnailRenderer", "thumbnail", "thumbnails"})),
+	}
+}
+
+func parseYTMByline(runs []any) ([]ytmArtistRef, ytmAlbumRef) {
+	var artists []ytmArtistRef
+	var album ytmAlbumRef
+	for _, run := range runs {
+		pageType := ytmStr(run, ytmPath{"navigationEndpoint", "browseEndpoint", "browseEndpointContextSupportedConfigs", "browseEndpointContextMusicConfig", "pageType"})
+		switch pageType {
+		case "MUSIC_PAGE_TYPE_ARTIST":
+			artists = append(artists, ytmArtistRef{
+				Name: ytmStr(run, ytmPath{"text"}),
+				ID:   ytmStr(run, ytmPath{"navigationEndpoint", "browseEndpoint", "browseId"}),
+			})
+		case "MUSIC_PAGE_TYPE_ALBUM":
+			album = ytmAlbumRef{
+				Name: ytmStr(run, ytmPath{"text"}),
+				ID:   ytmStr(run, ytmPath{"navigationEndpoint", "browseEndpoint", "browseId"}),
+			}
+		}
+	}
+	return artists, album
+}
+
+func fallbackByline(runs []any) []ytmArtistRef {
+	if len(runs) <= 2 {
+		return nil
+	}
+	name := ytmStr(runs[2], ytmPath{"text"})
+	if name == "" || name == " • " {
+		return nil
+	}
+	return []ytmArtistRef{{Name: name}}
+}
+
+func parseYTMTrailingDuration(runs []any) int {
+	if len(runs) == 0 {
+		return 0
+	}
+	return ytmDurationToSeconds(ytmStr(runs[len(runs)-1], ytmPath{"text"}))
+}
+
+func ytmHasExplicitBadge(mr any) bool {
+	return ytmStr(mr, ytmPath{"badges", 0, "musicInlineBadgeRenderer", "icon", "iconType"}) == "MUSIC_EXPLICIT_BADGE"
+}
+
+func parseYTMThumbnails(v any) []ytmThumbnail {
+	raw := ytmList(v)
+	if len(raw) == 0 {
+		return nil
+	}
+	thumbs := make([]ytmThumbnail, 0, len(raw))
+	for _, t := range raw {
+		thumb := ytmThumbnail{URL: ytmStr(t, ytmPath{"url"})}
+		if w, ok := ytmGet(t, ytmPath{"width"}).(float64); ok {
+			thumb.Width = int(w)
+		}
+		if h, ok := ytmGet(t, ytmPath{"height"}).(float64); ok {
+			thumb.Height = int(h)
+		}
+		thumbs = append(thumbs, thumb)
+	}
+	return thumbs
+}
+
+func ytmDurationToSeconds(duration string) int {
+	if duration == "" || !strings.Contains(duration, ":") {
+		return 0
+	}
+	parts := strings.Split(duration, ":")
+	total := 0
+	for i, p := range parts {
+		n, err := strconv.Atoi(strings.TrimSpace(p))
+		if err != nil {
+			return 0
+		}
+		total += n * int(math.Pow(60, float64(len(parts)-i-1)))
+	}
+	return total
+}

@@ -1,7 +1,7 @@
 package app
 
 import (
-	"altune/go-api/internal/discovery/adapters/providers"
+	"altune/go-api/internal/discovery/adapters/providers/deezer"
 	"altune/go-api/internal/discovery/service/content"
 	"altune/go-api/internal/shared/config"
 	"net/http"
@@ -15,7 +15,7 @@ func buildArtistContentProviders(
 	cfg *config.Config,
 ) map[discoveryDomain.ProviderName]discoveryPorts.ArtistContentProvider {
 	artistProviders := map[discoveryDomain.ProviderName]discoveryPorts.ArtistContentProvider{
-		discoveryDomain.ProviderDeezer: providers.NewDeezerAdapter(cf.discovery()),
+		discoveryDomain.ProviderDeezer: deezer.NewDeezerAdapter(cf.discovery()),
 	}
 	if am := buildAppleMusicAdapter(cf, cfg); am != nil {
 		artistProviders[discoveryDomain.ProviderAppleMusic] = am

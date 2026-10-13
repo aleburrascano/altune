@@ -188,7 +188,7 @@ becomes worth the membership + key-management cost. **Out of scope for the keyle
 Built and on `main`, **unconditionally wired** (no config gate — the public API needs no key,
 like Deezer):
 
-- `services/go-api/internal/discovery/adapters/providers/itunes.go` — `ITunesAdapter`: `Search`
+- `services/go-api/internal/discovery/adapters/providers/itunes/itunes.go` — `ITunesAdapter`: `Search`
   (track/album/artist via `/search`), `Resolve` (`ArtworkResolver`, **now 1500px hero** via
   `iTunesHeroArtworkSize`; search-list thumbnails at `iTunesListArtworkSize` = 600), `LookupAlbum`
   (album-contamination consensus → verdict + `artistId`), `upscaleArtwork` (the

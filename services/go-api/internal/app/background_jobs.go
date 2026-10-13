@@ -1,7 +1,7 @@
 package app
 
 import (
-	"altune/go-api/internal/discovery/adapters/providers"
+	"altune/go-api/internal/discovery/adapters/providers/deezer"
 	"altune/go-api/internal/discovery/service/eval"
 	"altune/go-api/internal/discovery/service/vocabulary"
 	"context"
@@ -203,7 +203,7 @@ func (a *App) startVocabularyRefresh(ctx context.Context, cf clientFactory, voca
 func (a *App) buildChartProviders(cf clientFactory) []discoveryPorts.ChartProvider {
 	var charts []discoveryPorts.ChartProvider
 	deezerClient := cf.chart()
-	charts = append(charts, providers.NewDeezerAdapter(deezerClient))
+	charts = append(charts, deezer.NewDeezerAdapter(deezerClient))
 	if lfm := buildLastFMAdapter(a.cfg, cf.chart()); lfm != nil {
 		charts = append(charts, lfm)
 	}

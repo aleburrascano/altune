@@ -2,8 +2,16 @@ package app
 
 import (
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
-	"altune/go-api/internal/discovery/adapters/providers"
+	"altune/go-api/internal/discovery/adapters/providers/amazonmusic"
+	"altune/go-api/internal/discovery/adapters/providers/applemusic"
+	"altune/go-api/internal/discovery/adapters/providers/itunes"
+	"altune/go-api/internal/discovery/adapters/providers/lastfm"
+	"altune/go-api/internal/discovery/adapters/providers/musicbrainz"
+	"altune/go-api/internal/discovery/adapters/providers/soundcloud"
+	"altune/go-api/internal/discovery/adapters/providers/spotify"
+	"altune/go-api/internal/discovery/adapters/providers/ytmusic"
 	discoveryDomain "altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service/search"
 	"altune/go-api/internal/shared/config"
 	"context"
@@ -138,29 +146,29 @@ func TestScrapedProviderWiringCollections(t *testing.T) {
 			name:    "switches on",
 			enabled: true,
 			artist: []string{
-				"applemusic=*providers.AppleMusicAdapter", "deezer=*providers.DeezerAdapter",
-				"soundcloud=*providers.SoundCloudAPIAdapter", "spotify=*providers.SpotifyAdapter",
+				"applemusic=*applemusic.AppleMusicAdapter", "deezer=*deezer.DeezerAdapter",
+				"soundcloud=*soundcloud.SoundCloudAPIAdapter", "spotify=*spotify.SpotifyAdapter",
 			},
 			search: []string{
-				"*providers.DeezerAdapter", "*providers.AppleMusicAdapter",
-				"*providers.SoundCloudAPIAdapter", "*providers.YouTubeMusicAdapter", "*providers.SpotifyAdapter",
+				"*deezer.DeezerAdapter", "*applemusic.AppleMusicAdapter",
+				"*soundcloud.SoundCloudAPIAdapter", "*ytmusic.YouTubeMusicAdapter", "*spotify.SpotifyAdapter",
 			},
 			consens: []string{"itunes", "ytmusic", "soundcloud"},
 			artwork: []string{
-				"*providers.CoverArtArchiveResolver", "providers.CoverArtArchiveIdentityResolver", "*providers.SpotifyArtworkResolver",
-				"*theaudiodb.Adapter", "*providers.DeezerAdapter", "*providers.ITunesAdapter",
-				"*providers.YouTubeMusicArtworkResolver", "*providers.SoundCloudAPIAdapter",
+				"*coverartarchive.CoverArtArchiveResolver", "coverartarchive.CoverArtArchiveIdentityResolver", "*spotify.SpotifyArtworkResolver",
+				"*theaudiodb.Adapter", "*deezer.DeezerAdapter", "*itunes.ITunesAdapter",
+				"*ytmusic.YouTubeMusicArtworkResolver", "*soundcloud.SoundCloudAPIAdapter",
 			},
 		},
 		{
 			name:    "switches off",
 			enabled: false,
-			artist:  []string{"deezer=*providers.DeezerAdapter"},
-			search:  []string{"*providers.DeezerAdapter", "*providers.YouTubeMusicAdapter"},
+			artist:  []string{"deezer=*deezer.DeezerAdapter"},
+			search:  []string{"*deezer.DeezerAdapter", "*ytmusic.YouTubeMusicAdapter"},
 			consens: []string{"itunes", "ytmusic"},
 			artwork: []string{
-				"*providers.CoverArtArchiveResolver", "providers.CoverArtArchiveIdentityResolver", "*theaudiodb.Adapter",
-				"*providers.DeezerAdapter", "*providers.ITunesAdapter", "*providers.YouTubeMusicArtworkResolver",
+				"*coverartarchive.CoverArtArchiveResolver", "coverartarchive.CoverArtArchiveIdentityResolver", "*theaudiodb.Adapter",
+				"*deezer.DeezerAdapter", "*itunes.ITunesAdapter", "*ytmusic.YouTubeMusicArtworkResolver",
 			},
 		},
 	}
@@ -179,7 +187,7 @@ func TestScrapedProviderWiringCollections(t *testing.T) {
 			var search []string
 			for _, p := range BuildDiscoveryProviders(t.Context(), cfg, nil) {
 				search = append(search, typeName(reflect.ValueOf(p)))
-				if typeName(reflect.ValueOf(p)) == "*providers.SoundCloudAPIAdapter" && soundCloudFallbackIsNil(t, p) {
+				if typeName(reflect.ValueOf(p)) == "*soundcloud.SoundCloudAPIAdapter" && soundCloudFallbackIsNil(t, p) {
 					t.Error("search SoundCloud adapter lost its yt-dlp fallback")
 				}
 			}
@@ -342,11 +350,11 @@ func TestAllKeysProviderOrder(t *testing.T) {
 		artwork = append(artwork, typeName(resolvers.Index(i)))
 	}
 	assertEqual(t, "artwork chain", artwork, []string{
-		"*providers.CoverArtArchiveResolver", "providers.CoverArtArchiveIdentityResolver",
-		"*providers.SpotifyArtworkResolver", "*providers.DiscogsAdapter",
-		"*providers.FanartTvArtworkResolver", "*providers.GeniusArtworkResolver",
-		"*theaudiodb.Adapter", "*providers.DeezerAdapter", "*providers.ITunesAdapter",
-		"*providers.YouTubeMusicArtworkResolver", "*providers.SoundCloudAPIAdapter",
+		"*coverartarchive.CoverArtArchiveResolver", "coverartarchive.CoverArtArchiveIdentityResolver",
+		"*spotify.SpotifyArtworkResolver", "*discogs.DiscogsAdapter",
+		"*fanarttv.FanartTvArtworkResolver", "*genius.GeniusArtworkResolver",
+		"*theaudiodb.Adapter", "*deezer.DeezerAdapter", "*itunes.ITunesAdapter",
+		"*ytmusic.YouTubeMusicArtworkResolver", "*soundcloud.SoundCloudAPIAdapter",
 	})
 }
 
@@ -377,11 +385,28 @@ func TestSearchProviders_EveryProviderCanBeChosenByEnvName(t *testing.T) {
 	cfg.YtMusicEnabled = true
 	cfg.AmazonMusicEnabled = true
 	cfg.LastFMAPIKey = "key"
-	mb := providers.NewMusicBrainzAdapter(http.DefaultClient, "altune-test")
+	mb := musicbrainz.NewMusicBrainzAdapter(http.DefaultClient, "altune-test")
 
 	for _, p := range buildSearchProviderList(context.Background(), newClientFactory(nil), cfg, mb) {
 		if !slices.Contains(config.DiscoverySearchProviderNames, p.Name().String()) {
 			t.Errorf("search provider %q is missing from config.DiscoverySearchProviderNames", p.Name())
 		}
+	}
+}
+
+func TestAdaptersImplementSearchTimeouter(t *testing.T) {
+	adapters := []ports.SearchTimeouter{
+		(*ytmusic.YouTubeMusicAdapter)(nil),
+		(*amazonmusic.AmazonMusicAdapter)(nil),
+		(*soundcloud.SoundCloudAPIAdapter)(nil),
+		(*soundcloud.SoundCloudAdapter)(nil),
+		(*spotify.SpotifyAdapter)(nil),
+		(*itunes.ITunesAdapter)(nil),
+		(*applemusic.AppleMusicAdapter)(nil),
+		(*lastfm.LastFmAdapter)(nil),
+		(*musicbrainz.MusicBrainzAdapter)(nil),
+	}
+	if len(adapters) != 9 {
+		t.Errorf("SearchTimeouter adapters = %d, want 9", len(adapters))
 	}
 }

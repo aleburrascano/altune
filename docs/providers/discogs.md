@@ -157,7 +157,7 @@ The cross-provider ids in `urls[]` remain available to a future identity-graph w
 
 Artwork + identity (the original thin projection):
 
-- `services/go-api/internal/discovery/adapters/providers/discogs.go` — `DiscogsAdapter`:
+- `services/go-api/internal/discovery/adapters/providers/discogs/discogs.go` — `DiscogsAdapter`:
   `Resolve` (`ArtworkResolver`, artist images), `ResolveDiscogsArtist` (identity consensus via
   album-overlap), `FetchArtistReleases` (thin discography), `searchArtists` / `fetchArtistDetail` /
   `fetchArtistReleases`. `rateLimit()` enforces ~1 req/sec locally (well under the 60/min ceiling);

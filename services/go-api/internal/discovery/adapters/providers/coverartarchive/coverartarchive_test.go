@@ -1,0 +1,294 @@
+package coverartarchive
+
+import (
+	"altune/go-api/internal/discovery/adapters/providers/providertest"
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+func TestCoverArtArchiveResolver_Resolve(t *testing.T) {
+	t.Run("empty mbid is a silent miss with no request", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			t.Error("no HTTP request expected without an mbid")
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		r := NewCoverArtArchiveResolver(providertest.NewClient(server.URL))
+		url, err := r.Resolve(context.Background(), domain.ResultKindAlbum, "OK Computer", "Radiohead", "")
+		if err != nil || url != "" {
+			t.Errorf("Resolve = (%q, %v), want (\"\", nil)", url, err)
+		}
+	})
+
+	t.Run("artist kind never resolves (CAA is release art)", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			t.Error("no HTTP request expected for an artist kind")
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		r := NewCoverArtArchiveResolver(providertest.NewClient(server.URL))
+		url, err := r.Resolve(context.Background(), domain.ResultKindArtist, "Radiohead", "", "mbid-1")
+		if err != nil || url != "" {
+			t.Errorf("Resolve = (%q, %v), want (\"\", nil)", url, err)
+		}
+	})
+
+	t.Run("redirect returns the CDN Location", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodHead {
+				t.Errorf("method = %q, want HEAD (no body download)", r.Method)
+			}
+			if !strings.Contains(r.URL.Path, "/release-group/rg-1/front-1200") {
+				t.Errorf("path = %q, want the front-1200 hero tier", r.URL.Path)
+			}
+			w.Header().Set("Location", "https://archive.org/img/front-1200.jpg")
+			w.WriteHeader(http.StatusTemporaryRedirect)
+		}))
+		defer server.Close()
+
+		r := NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
+		url, err := r.Resolve(context.Background(), domain.ResultKindAlbum, "OK Computer", "Radiohead", "rg-1")
+		if err != nil {
+			t.Fatalf("Resolve: %v", err)
+		}
+		if url != "https://archive.org/img/front-1200.jpg" {
+			t.Errorf("url = %q, want the redirect Location", url)
+		}
+	})
+
+	t.Run("200 returns the canonical url", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		r := NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
+		url, err := r.Resolve(context.Background(), domain.ResultKindAlbum, "OK Computer", "Radiohead", "rg-1")
+		if err != nil {
+			t.Fatalf("Resolve: %v", err)
+		}
+		if url != "https://coverartarchive.org/release-group/rg-1/front-1200" {
+			t.Errorf("url = %q, want the canonical front-1200 URL", url)
+		}
+	})
+
+	t.Run("404 is a clean miss", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+
+		r := NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
+		url, err := r.Resolve(context.Background(), domain.ResultKindAlbum, "X", "Y", "rg-miss")
+		if err != nil || url != "" {
+			t.Errorf("Resolve on 404 = (%q, %v), want (\"\", nil)", url, err)
+		}
+	})
+
+	t.Run("unexpected status is a classified failure", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		r := NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
+		url, err := r.Resolve(context.Background(), domain.ResultKindAlbum, "X", "Y", "rg-1")
+		if !errors.Is(err, ports.ErrArtworkUnavailable) || url != "" {
+			t.Errorf("Resolve on 500 = (%q, %v), want (\"\", ErrArtworkUnavailable) — the chain degrades", url, err)
+		}
+	})
+}
+
+func TestCoverArtArchiveIdentityResolver_ResolveByIdentity(t *testing.T) {
+	t.Run("title-blind: an unrelated title/subtitle never changes the answer", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !strings.Contains(r.URL.Path, "/release-group/rg-1/front-1200") {
+				t.Errorf("path = %q, want the mbid-keyed front-1200 endpoint", r.URL.Path)
+			}
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		r := NewCoverArtArchiveIdentityResolver(NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL)))
+		url, err := r.ResolveByIdentity(context.Background(), domain.ResultKindAlbum,
+			ports.ArtworkIdentity{MBID: "rg-1"})
+		if err != nil {
+			t.Fatalf("ResolveByIdentity: %v", err)
+		}
+		if url != "https://coverartarchive.org/release-group/rg-1/front-1200" {
+			t.Errorf("url = %q, want the canonical front-1200 URL from the mbid alone", url)
+		}
+	})
+
+	t.Run("empty mbid is a silent miss with no request", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			t.Error("no HTTP request expected without an mbid")
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		r := NewCoverArtArchiveIdentityResolver(NewCoverArtArchiveResolver(providertest.NewClient(server.URL)))
+		url, err := r.ResolveByIdentity(context.Background(), domain.ResultKindAlbum, ports.ArtworkIdentity{})
+		if err != nil || url != "" {
+			t.Errorf("ResolveByIdentity = (%q, %v), want (\"\", nil)", url, err)
+		}
+	})
+
+	t.Run("artist kind never resolves (CAA is release art)", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			t.Error("no HTTP request expected for an artist kind")
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		r := NewCoverArtArchiveIdentityResolver(NewCoverArtArchiveResolver(providertest.NewClient(server.URL)))
+		url, err := r.ResolveByIdentity(context.Background(), domain.ResultKindArtist,
+			ports.ArtworkIdentity{MBID: "mbid-1"})
+		if err != nil || url != "" {
+			t.Errorf("ResolveByIdentity = (%q, %v), want (\"\", nil)", url, err)
+		}
+	})
+}
+
+func TestCoverArtArchiveResolver_ArtworkSource(t *testing.T) {
+	if (&CoverArtArchiveResolver{}).ArtworkSource() != "coverartarchive" {
+		t.Error("ArtworkSource mismatch")
+	}
+}
+
+func TestCoverArtArchiveResolver_EscapesMBIDInRequestURL(t *testing.T) {
+	var got *http.Request
+	r := NewCoverArtArchiveResolver(providertest.CapturingClient(&got))
+	if _, err := r.Resolve(context.Background(), domain.ResultKindAlbum, "X", "Y", providertest.HostileMBID); err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if got == nil {
+		t.Fatal("no request was made")
+	}
+	if got.URL.Host != "coverartarchive.org" {
+		t.Errorf("host = %q, want coverartarchive.org", got.URL.Host)
+	}
+	if want := "/release-group/a%2Fb%3Fc%23d/front-1200"; got.URL.EscapedPath() != want {
+		t.Errorf("escaped path = %q, want %q", got.URL.EscapedPath(), want)
+	}
+	if got.URL.RawQuery != "" || got.URL.Fragment != "" {
+		t.Errorf("query = %q fragment = %q, want both empty; the mbid leaked out of its path segment",
+			got.URL.RawQuery, got.URL.Fragment)
+	}
+}
+
+func TestCoverArtArchiveResolver_ServerErrorIsArtworkUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	r := NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
+	url, err := r.Resolve(context.Background(), domain.ResultKindAlbum, "X", "Y", "rg-1")
+	if url != "" {
+		t.Errorf("url = %q, want empty on a 503", url)
+	}
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("err = %v, want errors.Is(err, ports.ErrArtworkUnavailable)", err)
+	}
+}
+
+func TestCoverArtArchiveResolver_BadRequestIsAVerifiedMiss(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	r := NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
+	url, err := r.Resolve(context.Background(), domain.ResultKindAlbum, "X", "Y", "not-a-uuid")
+	if err != nil || url != "" {
+		t.Errorf("Resolve on 400 = (%q, %v), want (\"\", nil)", url, err)
+	}
+}
+
+func TestCoverArtArchiveResolver_TransportErrorIsArtworkUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	serverURL := server.URL
+	server.Close()
+
+	r := NewCoverArtArchiveResolver(providertest.NewNoFollowClient(serverURL))
+	url, err := r.Resolve(context.Background(), domain.ResultKindAlbum, "X", "Y", "rg-1")
+	if url != "" {
+		t.Errorf("url = %q, want empty when the provider is unreachable", url)
+	}
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("err = %v, want errors.Is(err, ports.ErrArtworkUnavailable)", err)
+	}
+}
+
+func TestCoverArtArchiveResolver_RateLimitIsArtworkUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	r := NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
+	url, err := r.Resolve(context.Background(), domain.ResultKindAlbum, "X", "Y", "rg-1")
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("Resolve on 429 = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
+	}
+}
+
+func TestCoverArtArchiveResolver_CancelledContextIsUnavailableAndKeepsTheCause(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	r := NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
+	url, err := r.Resolve(ctx, domain.ResultKindAlbum, "X", "Y", "rg-1")
+	if url != "" {
+		t.Errorf("url = %q, want empty on a cancelled lookup", url)
+	}
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("err = %v, want errors.Is(err, ports.ErrArtworkUnavailable)", err)
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v, want the context.Canceled cause kept in the chain", err)
+	}
+}
+
+func TestCoverArtArchiveResolver_FailureNamesItsSource(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer server.Close()
+
+	r := NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
+	_, err := r.Resolve(context.Background(), domain.ResultKindAlbum, "X", "Y", "rg-1")
+	if err == nil || !strings.Contains(err.Error(), "coverartarchive") {
+		t.Errorf("err = %v, want a failure that names coverartarchive", err)
+	}
+}
+
+func TestArtworkSourceTags(t *testing.T) {
+	tests := []struct {
+		got  domain.ProviderKey
+		want string
+	}{
+		{(&CoverArtArchiveResolver{}).ArtworkSource(), "coverartarchive"},
+	}
+	for _, tt := range tests {
+		if tt.got.String() != tt.want {
+			t.Errorf("ArtworkSource = %q, want %q", tt.got, tt.want)
+		}
+	}
+}
