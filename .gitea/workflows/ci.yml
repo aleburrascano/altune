@@ -179,8 +179,6 @@ jobs:
       - name: architecture, dead code and duplication (fallow)
         run: cd "$WT/client" && npm run fallow
       - name: complexity ratchet (fallow)
-        env:
-          MAX: 218
         run: cd "$WT/client" && bash "$WT/scripts/ci/test-mobile-complexity.sh"
       - name: clean up
         if: always()

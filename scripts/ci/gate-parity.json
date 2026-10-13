@@ -99,7 +99,7 @@
     "gate": "mobile fallow"
   },
   "ci.yml#ci-mobile-quality#complexity ratchet (fallow)": {
-    "allow": "continue-on-error in ci.yml, so it never fails main"
+    "gate": "mobile complexity ratchet (fallow)"
   },
   "ci.yml#ci-mobile-quality#clean up": {
     "allow": "plumbing: checks out, installs or cleans up, and checks nothing"

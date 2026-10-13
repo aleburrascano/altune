@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+MAX=${MAX:-$(cat "$(dirname "${BASH_SOURCE[0]}")/../../client/baselines/complexity-ceiling")}
+
 OUT=$(npm run --silent fallow:health 2>&1 | sed 's/\x1b\[[0-9;]*m//g' || true)
 echo "$OUT" | tail -3
 SUMMARY=$(echo "$OUT" | grep -E 'above threshold|No issues found' | tail -1 || true)

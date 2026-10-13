@@ -275,6 +275,7 @@ if touches '^client/'; then
     check "mobile consistency ratchet" $m node scripts/consistency-ratchet.mjs
     check "mobile own-module mock ratchet" $m node scripts/mock-ratchet.mjs
     check "mobile fallow" $m npm run --silent fallow
+    check "mobile complexity ratchet (fallow)" $m bash "$root/scripts/ci/test-mobile-complexity.sh"
     check "mobile react-doctor (changed lines)" $m node scripts/react-doctor-changed-lines.mjs "$base"
     check "mobile module shape" $m node scripts/module-shape.mjs
   elif [ -n "$(command -v npx)" ]; then
