@@ -184,7 +184,7 @@ require_every_table_has_a_rule() {
         fi
     done
     for table in "${MANIFEST_TABLES[@]}"; do
-        if ! printf '%s\n' "$live_tables" | grep -qx "$table"; then
+        if ! grep -qx "$table" <<<"$live_tables"; then
             log "FAILED: $MANIFEST_NAME lists public.$table, which exists on neither tier"
             exit 1
         fi

@@ -527,6 +527,17 @@ test_same_columns_in_a_different_order_copy_by_name() {
     check "reordered columns land by name" "one,two" "$(staging_value "SELECT first_col || ',' || second_col FROM tracks WHERE id = '$T1'")"
 }
 
+test_a_long_table_list_does_not_abort_a_ruled_table() {
+    reset_databases
+    write_env
+    sql prod -c "DO \$\$ BEGIN FOR i IN 1..1200 LOOP EXECUTE format('CREATE TABLE %I (id int)', 'pad_' || lpad(i::text, 59, '0')); END LOOP; END \$\$"
+    awk 'BEGIN { for (i = 1; i <= 1200; i++) printf "pad_%059d skip bulk padding table\n", i }' >>"$WORK/api/deploy/staging-sync.tables"
+    run_sync
+    check "a long live table list does not abort the sync" 0 "$?"
+    check "a long live table list still lets the matched track cross" "$S1" "$(staging_value "SELECT user_id FROM tracks WHERE id = '$T1'")"
+    restore_manifest
+}
+
 start_postgres
 install_docker_stub
 build_schema_template
@@ -563,6 +574,7 @@ test_type_modifier_drift_on_a_global_table_aborts_sync
 test_column_drift_on_a_skip_table_still_syncs
 test_a_dropped_column_on_one_tier_is_not_drift
 test_same_columns_in_a_different_order_copy_by_name
+test_a_long_table_list_does_not_abort_a_ruled_table
 
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed; last script output:\n' "$FAILURES"
