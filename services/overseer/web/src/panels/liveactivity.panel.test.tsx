@@ -108,7 +108,7 @@ describe("LiveActivityPanel", () => {
     );
 
     const chart = await screen.findByRole("figure", { name: "Events" });
-    expect(chart).toHaveTextContent("4");
+    await waitFor(() => expect(chart).toHaveTextContent("4"));
     expect(String(fetchMock.mock.calls[0][0])).toMatch(/api\/buckets\/liveactivity\/series\?range=1h$/);
     await waitFor(() => expect(plots).toHaveLength(1));
     expect(plots[0].data[1]).toEqual([4]);
