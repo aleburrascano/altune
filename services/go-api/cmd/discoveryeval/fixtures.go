@@ -3,8 +3,8 @@ package main
 import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/egress"
 	"altune/go-api/internal/shared/httptrace"
-	"altune/go-api/internal/shared/providerhttp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -81,7 +81,7 @@ func recordCorpus(
 	concurrency, topK int,
 	progress func(done, total int),
 ) (discoveryEval.HarnessReport, error) {
-	rec := httptrace.NewRecorder(providerhttp.NewLiveTransport())
+	rec := httptrace.NewRecorder(egress.NewLiveTransport())
 	svc := app.BuildRankingOnlySearchService(ctx, cfg, pool, nil, rec)
 	searcher := searchAdapter{svc: svc}
 
@@ -105,7 +105,7 @@ func recordArtistCorpus(
 	concurrency, topK int,
 	progress func(done, total int),
 ) (discoveryEval.HarnessReport, error) {
-	rec := httptrace.NewRecorder(providerhttp.NewLiveTransport())
+	rec := httptrace.NewRecorder(egress.NewLiveTransport())
 	svc := app.BuildRankingOnlySearchService(ctx, cfg, pool, nil, rec)
 	searcher := searchAdapter{svc: svc}
 

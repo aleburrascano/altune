@@ -1,4 +1,4 @@
-package providerhttp
+package egress
 
 import (
 	"context"

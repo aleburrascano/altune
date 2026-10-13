@@ -2,8 +2,8 @@ package app
 
 import (
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/egress"
 	"altune/go-api/internal/shared/httptrace"
-	"altune/go-api/internal/shared/providerhttp"
 	"context"
 	"errors"
 	"io"
@@ -129,7 +129,7 @@ func TestDiscoveryClientRefusesALoopbackUpstream(t *testing.T) {
 		_ = resp.Body.Close()
 		t.Fatal("a loopback upstream was fetched through the discovery client")
 	}
-	if !errors.Is(err, providerhttp.ErrNonPublicAddr) {
+	if !errors.Is(err, egress.ErrNonPublicAddr) {
 		t.Errorf("error = %v, want the non-public address refusal", err)
 	}
 	if connections != 0 {
@@ -142,7 +142,7 @@ func allowLoopbackThenGuard(ctx context.Context, network, address string) (net.C
 		if strings.HasPrefix(address, "127.0.0.1:") {
 			return nil
 		}
-		return providerhttp.RefuseNonPublicDial(network, address, c)
+		return egress.RefuseNonPublicDial(network, address, c)
 	}}
 	return guarded.DialContext(ctx, network, address)
 }
@@ -159,7 +159,7 @@ func TestDiscoveryClientRefusesARedirectToTheMetadataAddress(t *testing.T) {
 		_ = resp.Body.Close()
 		t.Fatal("the redirect to the metadata address was followed")
 	}
-	if !errors.Is(err, providerhttp.ErrNonPublicAddr) {
+	if !errors.Is(err, egress.ErrNonPublicAddr) {
 		t.Errorf("error = %v, want the non-public address refusal", err)
 	}
 }

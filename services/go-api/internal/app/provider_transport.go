@@ -2,8 +2,8 @@ package app
 
 import (
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/egress"
 	"altune/go-api/internal/shared/httptrace"
-	"altune/go-api/internal/shared/providerhttp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -89,7 +89,7 @@ func countedProviderTransport(base http.RoundTripper) http.RoundTripper {
 }
 
 var sharedLiveTransport = sync.OnceValue(func() http.RoundTripper {
-	return countedProviderTransport(providerhttp.NewLiveTransport(providerhttp.WithRetryRecorder(providermetrics.RecordRetry)))
+	return countedProviderTransport(egress.NewLiveTransport(egress.WithRetryRecorder(providermetrics.RecordRetry)))
 })
 
 type clientFactory struct {
