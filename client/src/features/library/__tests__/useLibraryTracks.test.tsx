@@ -377,7 +377,6 @@ describe('useLibraryTracks pending poll', () => {
     const cached = client.getQueryData<{ pages: ListTracksResponse[] }>(
       libraryKeys.tracks('', 'recent'),
     );
-    expect(cached).toBeDefined();
     expect(cached?.pages.flatMap((p) => p.items)[3]?.acquisition_status).toBe('pending');
   });
 });

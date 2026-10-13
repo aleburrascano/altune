@@ -99,7 +99,7 @@ warmUpFirstRender(async () => {
       </LibraryPortProvider>
     </QueryClientProvider>,
   );
-  await waitFor(() => expect(warmUpPort.getPlaylists).toHaveBeenCalled());
+  await waitFor(() => expect(warmUpPort.getPlaylists).toHaveBeenCalledTimes(1));
 });
 
 beforeEach(() => {

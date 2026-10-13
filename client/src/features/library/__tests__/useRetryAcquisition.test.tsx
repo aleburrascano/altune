@@ -313,7 +313,7 @@ describe('useReacquireTrack', () => {
       mockReacquireTrack.mockReturnValue(request.promise);
       const { result } = renderHook(() => useReacquireTrack(), { wrapper });
       act(() => result.current.mutate(asTrackId('a1')));
-      await waitFor(() => expect(mockReacquireTrack).toHaveBeenCalled());
+      await waitFor(() => expect(mockReacquireTrack).toHaveBeenCalledWith(asTrackId('a1')));
 
       signOutThenLoadUserB(queryClient, [track('a1'), track('b1')]);
       await act(async () => request.resolve());
@@ -328,7 +328,7 @@ describe('useReacquireTrack', () => {
       mockReacquireTrack.mockReturnValue(request.promise);
       const { result } = renderHook(() => useReacquireTrack(), { wrapper });
       act(() => result.current.mutate(asTrackId('a1')));
-      await waitFor(() => expect(mockReacquireTrack).toHaveBeenCalled());
+      await waitFor(() => expect(mockReacquireTrack).toHaveBeenCalledWith(asTrackId('a1')));
 
       signOutThenLoadUserB(queryClient, [track('a1'), track('b1')]);
       await act(async () => request.reject(new ApiError(404, 'not found')));
@@ -545,7 +545,7 @@ describe('useRetryAcquisition', () => {
 
       const { result } = renderHook(() => useRetryAcquisition(), { wrapper });
       act(() => result.current.mutate(asTrackId('t1')));
-      await waitFor(() => expect(mockRetryAcquisition).toHaveBeenCalled());
+      await waitFor(() => expect(mockRetryAcquisition).toHaveBeenCalledTimes(1));
       queryClient.setQueryData(
         PLAYLIST_KEY,
         playlist([track('t1', { acquisition_status: 'ready' })]),
@@ -630,7 +630,7 @@ describe('useRetryAcquisition', () => {
       mockRetryAcquisition.mockReturnValue(request.promise);
       const { result } = renderHook(() => useRetryAcquisition(), { wrapper });
       act(() => result.current.mutate(asTrackId('a1')));
-      await waitFor(() => expect(mockRetryAcquisition).toHaveBeenCalled());
+      await waitFor(() => expect(mockRetryAcquisition).toHaveBeenCalledTimes(1));
 
       const userBTracks = [track('a1', { acquisition_status: 'pending' }), track('b1')];
       signOutThenLoadUserB(queryClient, userBTracks);

@@ -43,7 +43,7 @@ describe('useAlbumsView', () => {
         </LibraryPortProvider>
       </QueryClientProvider>,
     );
-    await waitFor(() => expect(port.getLibraryAlbums).toHaveBeenCalled());
+    await waitFor(() => expect(port.getLibraryAlbums).toHaveBeenCalledTimes(1));
   });
 
   describe('a library grid holding more rows than one page', () => {
@@ -230,7 +230,7 @@ describe('useArtistsView', () => {
         </LibraryPortProvider>
       </QueryClientProvider>,
     );
-    await waitFor(() => expect(port.getLibraryArtists).toHaveBeenCalled());
+    await waitFor(() => expect(port.getLibraryArtists).toHaveBeenCalledTimes(1));
   });
 
   describe('a library grid holding more rows than one page', () => {
