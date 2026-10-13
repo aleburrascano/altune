@@ -21,7 +21,6 @@ import { parseErrorBody } from '@shared/apiClient/wireDecoders';
 import { apiBase, REQUEST_TIMEOUT_MS } from '@shared/apiClient/config';
 
 export { ApiError, NetworkError, ContractError } from '@shared/failure/errors';
-export type { NetworkFailure } from '@shared/failure/errors';
 
 export { apiBase, REQUEST_TIMEOUT_MS, LONG_REQUEST_TIMEOUT_MS } from '@shared/apiClient/config';
 

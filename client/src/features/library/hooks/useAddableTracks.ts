@@ -6,7 +6,7 @@ import { useLibraryTracks } from '@features/library/hooks/useLibraryTracks';
 import { useSelection, type Selection } from '@features/library/hooks/useSelection';
 
 export type SearchApi = ReturnType<typeof useLibrarySearch>;
-export type TracksQuery = ReturnType<typeof useLibraryTracks>;
+type TracksQuery = ReturnType<typeof useLibraryTracks>;
 
 export type AddableTracksProps = {
   visible: boolean;

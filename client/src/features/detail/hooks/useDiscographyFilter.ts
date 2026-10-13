@@ -6,7 +6,7 @@ import { albumExtras } from '@/features/detail/domain/trackExtras';
 
 const SECTION_CAP = 10;
 
-export const RECORD_TYPES: readonly { type: string; label: string }[] = [
+const RECORD_TYPES: readonly { type: string; label: string }[] = [
   { type: 'album', label: 'Albums' },
   { type: 'single', label: 'Singles' },
   { type: 'ep', label: 'EPs' },

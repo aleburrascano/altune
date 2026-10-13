@@ -5,7 +5,7 @@ import type { ActionSheetOption } from '@shared/ui/primitives/ActionSheet';
 
 export const monotonicNow = (): number => performance.now();
 
-export type SleepTimerState = {
+type SleepTimerState = {
   endsAt: number | null;
   monoDeadline: number | null;
   minutes: number | null;

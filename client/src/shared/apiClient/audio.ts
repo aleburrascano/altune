@@ -61,7 +61,7 @@ export function isAudioPrefetchEnabled(): boolean {
   return prefetchEnabled;
 }
 
-export const AUDIO_URLS_TIMEOUT_MS = 2500;
+const AUDIO_URLS_TIMEOUT_MS = 2500;
 
 interface AudioUrlsResponse {
   urls: ResolvedAudioUrl[];
