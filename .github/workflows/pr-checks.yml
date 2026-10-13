@@ -1,0 +1,154 @@
+name: pr-checks
+
+on:
+  push:
+    branches: ["pr/**"]
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: pr-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      mobile: ${{ steps.filter.outputs.mobile }}
+      overseer: ${{ steps.filter.outputs.overseer }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: fetch main
+        run: git fetch origin main:refs/remotes/origin/main
+      - name: paths
+        id: filter
+        run: bash scripts/ci/changes.sh origin/main
+
+  backend-static:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/go-api/go.mod
+      - name: nilaway ceiling
+        working-directory: services/go-api
+        run: |
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          bash ../../scripts/ci/nilaway-ceiling.sh nilaway-baseline.txt
+
+  backend-tests:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: altune
+          POSTGRES_PASSWORD: altune_dev
+          POSTGRES_DB: altune
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U altune -d altune"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://altune:altune_dev@localhost:5432/altune?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/go-api/go.mod
+      - name: psql client
+        run: command -v psql > /dev/null || (sudo apt-get update -q && sudo apt-get install -y -q postgresql-client)
+      - name: apply migrations
+        working-directory: services/go-api
+        run: bash ../../scripts/ci/test-backend-migrate.sh
+      - name: go test with integration tests
+        working-directory: services/go-api
+        env:
+          INTEGRATION: "1"
+        run: go test -shuffle=on -count=1 -coverprofile=coverage.out ./...
+      - name: coverage ratchet
+        working-directory: services/go-api
+        env:
+          MIN: 65
+        run: bash ../../scripts/ci/test-backend-coverage.sh
+
+  mobile-tests:
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: client/.nvmrc
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - name: dependencies
+        working-directory: client
+        run: npm ci
+      - name: jest with coverage ratchet
+        working-directory: client
+        env:
+          NODE_OPTIONS: --max-old-space-size=3072
+        run: npx jest --coverage --ci --maxWorkers=2 --workerIdleMemoryLimit=1GB --testTimeout=30000
+
+  mobile-quality:
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: client/.nvmrc
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - name: dependencies
+        working-directory: client
+        run: npm ci
+      - name: react-doctor
+        working-directory: client
+        run: bash ../scripts/ci/test-mobile-react-doctor.sh
+      - name: architecture, dead code and duplication (fallow)
+        working-directory: client
+        run: npm run fallow
+      - name: complexity ratchet (fallow)
+        working-directory: client
+        run: bash ../scripts/ci/test-mobile-complexity.sh
+
+  pr-checks:
+    needs: [changes, backend-static, backend-tests, mobile-tests, mobile-quality]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: summarise
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          case " $RESULTS " in
+            *" failure "*|*" cancelled "*) exit 1 ;;
+          esac
