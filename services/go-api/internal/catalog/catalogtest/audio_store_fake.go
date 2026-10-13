@@ -4,7 +4,8 @@ import (
 	"altune/go-api/internal/catalog/ports"
 	"bytes"
 	"context"
-	"io"
+	"io/fs"
+	"os"
 )
 
 type AudioStore struct {
@@ -30,11 +31,15 @@ func (s *AudioStore) Exists(_ context.Context, audioRef string) (bool, error) {
 	return ok, nil
 }
 
-func (s *AudioStore) Store(_ context.Context, _, audioRef string) error {
+func (s *AudioStore) Store(_ context.Context, sourcePath, audioRef string) error {
 	if s.ErrOnStore != nil {
 		return s.ErrOnStore
 	}
-	s.Files[audioRef] = []byte("audio-data")
+	content, err := os.ReadFile(sourcePath)
+	if err != nil {
+		return err
+	}
+	s.Files[audioRef] = content
 	return nil
 }
 
@@ -44,7 +49,7 @@ func (s *AudioStore) Stream(_ context.Context, audioRef string) (ports.AudioStre
 	}
 	data, ok := s.Files[audioRef]
 	if !ok {
-		return nil, 0, io.EOF
+		return nil, 0, &fs.PathError{Op: "open", Path: audioRef, Err: fs.ErrNotExist}
 	}
 	return audioStream{bytes.NewReader(data)}, int64(len(data)), nil
 }
