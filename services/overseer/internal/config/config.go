@@ -34,6 +34,8 @@ type Config struct {
 	CostSpendInterval time.Duration
 
 	HistoryPath string
+
+	HistorySchemaTimeout time.Duration
 }
 
 func Load() (*Config, error) {

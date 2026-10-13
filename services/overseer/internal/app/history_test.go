@@ -32,12 +32,13 @@ func (nopSeries) Query(string, string, time.Time, time.Time) ([]core.Point, erro
 
 func historyConfig(path string) *config.Config {
 	return &config.Config{
-		Host:          "127.0.0.1",
-		Port:          0,
-		SupabaseURL:   "https://x.supabase.co",
-		TickInterval:  time.Second,
-		BucketTimeout: time.Second,
-		HistoryPath:   path,
+		Host:                 "127.0.0.1",
+		Port:                 0,
+		SupabaseURL:          "https://x.supabase.co",
+		TickInterval:         time.Second,
+		BucketTimeout:        time.Second,
+		HistoryPath:          path,
+		HistorySchemaTimeout: time.Minute,
 	}
 }
 

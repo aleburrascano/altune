@@ -66,7 +66,7 @@ func newApp(cfg *config.Config, registry *core.Registry) *App {
 		slog.Error("overseer: embedded SPA unavailable", "error", err)
 	}
 
-	store := history.Open(cfg.HistoryPath)
+	store := history.Open(cfg.HistoryPath, history.WithSchemaTimeout(cfg.HistorySchemaTimeout))
 	wireSeries(registry, store)
 
 	a := &App{cfg: cfg, registry: registry, history: store, rings: ringJournal{log: store}, down: map[string]bool{}}

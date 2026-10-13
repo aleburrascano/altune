@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	opTimeout    = 5 * time.Second
-	checkTimeout = time.Minute
+	opTimeout     = 5 * time.Second
+	schemaTimeout = opTimeout
+	checkTimeout  = time.Minute
 )
 
 const schema = `
@@ -112,17 +113,26 @@ func WithRetention(age time.Duration) Option {
 	}
 }
 
+func WithSchemaTimeout(timeout time.Duration) Option {
+	return func(d *disk) {
+		if timeout > 0 {
+			d.schemaTimeout = timeout
+		}
+	}
+}
+
 func WithClock(now func() time.Time) Option {
 	return func(d *disk) { d.now = now }
 }
 
 type disk struct {
-	db           *sql.DB
-	checkTimeout time.Duration
-	rowCap       int
-	retention    time.Duration
-	now          func() time.Time
-	writeFailing atomic.Bool
+	db            *sql.DB
+	checkTimeout  time.Duration
+	schemaTimeout time.Duration
+	rowCap        int
+	retention     time.Duration
+	now           func() time.Time
+	writeFailing  atomic.Bool
 }
 
 func openDisk(path string, opts ...Option) (*disk, error) {
@@ -131,7 +141,7 @@ func openDisk(path string, opts ...Option) (*disk, error) {
 		return nil, fmt.Errorf("open %s: %w", path, err)
 	}
 	db.SetMaxOpenConns(1)
-	d := &disk{db: db, checkTimeout: checkTimeout, rowCap: DefaultCap, retention: DefaultRetention, now: time.Now}
+	d := &disk{db: db, checkTimeout: checkTimeout, schemaTimeout: schemaTimeout, rowCap: DefaultCap, retention: DefaultRetention, now: time.Now}
 	for _, opt := range opts {
 		opt(d)
 	}
@@ -145,7 +155,7 @@ func (d *disk) prepare() error {
 	if err := d.checkIntegrity(); err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), opTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), d.schemaTimeout)
 	defer cancel()
 	if _, err := d.db.ExecContext(ctx, schema+signalsSchema); err != nil {
 		return fmt.Errorf("create schema: %w", err)

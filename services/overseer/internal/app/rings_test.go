@@ -88,7 +88,7 @@ func bootAndStop(t *testing.T, path string, b *ringBucket) []core.Signal {
 
 func storedEvents(t *testing.T, path string) []core.Signal {
 	t.Helper()
-	store := history.Open(path)
+	store := history.Open(path, history.WithSchemaTimeout(time.Minute))
 	t.Cleanup(func() { _ = store.Close() })
 	signals, err := store.LoadSignals(context.Background(), "ringed", eventsRing, 1_000_000)
 	if err != nil {
@@ -184,7 +184,7 @@ func corruptSignalTimes(t *testing.T, path string) {
 
 func TestStoredRowsPerRingNeverExceedItsCapacityAcrossPersists(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "history.db")
-	store := history.Open(path)
+	store := history.Open(path, history.WithSchemaTimeout(time.Minute))
 	t.Cleanup(func() { _ = store.Close() })
 	b := newRingBucket(4)
 	reg := core.NewRegistry()
@@ -205,7 +205,7 @@ func TestStoredRowsPerRingNeverExceedItsCapacityAcrossPersists(t *testing.T) {
 
 func TestAPanickingRingsHookDoesNotStopTheOtherBucketsRestoring(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "history.db")
-	store := history.Open(path)
+	store := history.Open(path, history.WithSchemaTimeout(time.Minute))
 	t.Cleanup(func() { _ = store.Close() })
 	store.AppendSignals("ringed", eventsRing, 10, []core.Signal{event(0, "a")})
 	b := newRingBucket(10)
@@ -221,7 +221,7 @@ func TestAPanickingRingsHookDoesNotStopTheOtherBucketsRestoring(t *testing.T) {
 
 func TestShutdownFlushesSignalsAddedSinceTheLastCycle(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "history.db")
-	store := history.Open(path)
+	store := history.Open(path, history.WithSchemaTimeout(time.Minute))
 	b := newRingBucket(10)
 	reg := core.NewRegistry()
 	reg.Register(b)

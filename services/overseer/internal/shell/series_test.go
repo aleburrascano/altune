@@ -250,7 +250,7 @@ func TestSevenDaySeriesFromAReaderWithoutMinutesServesItsPoints(t *testing.T) {
 }
 
 func TestSevenDaySeriesFromTheHistoryStoreCarriesMinAndMax(t *testing.T) {
-	store := history.Open(filepath.Join(t.TempDir(), "history.db"))
+	store := history.Open(filepath.Join(t.TempDir(), "history.db"), history.WithSchemaTimeout(time.Minute))
 	t.Cleanup(func() { _ = store.Close() })
 	minute := time.Now().UTC().Add(-time.Hour).Truncate(time.Minute)
 	for i, value := range []float64{20, 60, 40} {
