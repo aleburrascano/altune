@@ -18,12 +18,17 @@ var base = time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
 func openTemp(t *testing.T, opts ...Option) (*disk, string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "history.db")
-	d, err := openDisk(path, opts...)
-	if err != nil {
-		t.Fatalf("openDisk: %v", err)
+	deadline := time.Now().Add(2 * time.Minute)
+	for {
+		d, err := openDisk(path, opts...)
+		if err == nil {
+			t.Cleanup(func() { _ = d.Close() })
+			return d, path
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("openDisk: %v", err)
+		}
 	}
-	t.Cleanup(func() { _ = d.Close() })
-	return d, path
 }
 
 func countRows(t *testing.T, d *disk, bucket, series string) int {

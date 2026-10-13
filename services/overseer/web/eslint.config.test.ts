@@ -1,6 +1,8 @@
 import { ESLint } from "eslint";
 import { describe, expect, test } from "vitest";
 
+const coldEslintLoadMs = 30000;
+
 const eslint = new ESLint();
 
 async function noCommentsErrors(filePath: string, code: string) {
@@ -9,9 +11,13 @@ async function noCommentsErrors(filePath: string, code: string) {
 }
 
 describe("overseer web eslint config bans comments in every file", () => {
-  test.each(["src/api.test.ts", "vite.config.ts"])("reports one error for a comment in %s", async (file) => {
-    expect(await noCommentsErrors(file, "export const a = 1;\n// x\n")).toHaveLength(1);
-  });
+  test.each(["src/api.test.ts", "vite.config.ts"])(
+    "reports one error for a comment in %s",
+    async (file) => {
+      expect(await noCommentsErrors(file, "export const a = 1;\n// x\n")).toHaveLength(1);
+    },
+    coldEslintLoadMs,
+  );
 
   test("reports nothing for a string that only looks like a comment", async () => {
     expect(await noCommentsErrors("src/api.ts", "export const url = 'https://x.dev';\n")).toHaveLength(0);
