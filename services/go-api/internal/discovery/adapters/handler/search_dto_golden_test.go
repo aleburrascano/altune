@@ -2,7 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/rank"
 	"encoding/json"
 	"testing"
 )
@@ -36,10 +36,10 @@ func TestSearchResultToDTO_typedRecordTypeAndTierKeepWireBytes(t *testing.T) {
 	}
 
 	results := make([]domain.SearchResult, 0, 3)
-	for _, e := range service.Merge([][]domain.SearchResult{{dz, solo}, {am}}) {
+	for _, e := range rank.Merge([][]domain.SearchResult{{dz, solo}, {am}}) {
 		results = append(results, e.Result)
 	}
-	results = append(results, service.CollapseArtistDuplicates([]domain.SearchResult{primary, dup})...)
+	results = append(results, rank.CollapseArtistDuplicates([]domain.SearchResult{primary, dup})...)
 
 	got, err := json.Marshal(searchResultsToDTOs(results))
 	if err != nil {

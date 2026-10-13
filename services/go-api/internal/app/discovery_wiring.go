@@ -3,6 +3,14 @@ package app
 import (
 	"altune/go-api/internal/catalog/adapters/discoverybridge"
 	"altune/go-api/internal/discovery/adapters/providers"
+	"altune/go-api/internal/discovery/service/content"
+	"altune/go-api/internal/discovery/service/favorites"
+	"altune/go-api/internal/discovery/service/history"
+	"altune/go-api/internal/discovery/service/interaction"
+	"altune/go-api/internal/discovery/service/providercall"
+	"altune/go-api/internal/discovery/service/related"
+	"altune/go-api/internal/discovery/service/search"
+	"altune/go-api/internal/discovery/service/vocabulary"
 	"context"
 	"expvar"
 	"log/slog"
@@ -14,30 +22,29 @@ import (
 
 	discoveryDomain "altune/go-api/internal/discovery/domain"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
-	discoveryService "altune/go-api/internal/discovery/service"
 	discoveryEnrich "altune/go-api/internal/discovery/service/enrich"
 )
 
 type discoveryWiring struct {
 	handler        *discoveryHandler.DiscoveryHandler
-	searchSvc      *discoveryService.Service
+	searchSvc      *search.Service
 	featuredBridge *discoverybridge.FeaturedResolver
 	musicBrainz    *providers.MusicBrainzAdapter
 }
 
 type discoveryContentStaging struct {
 	featuredBridge *discoverybridge.FeaturedResolver
-	albumSvc       *discoveryService.GetAlbumTracksService
-	artistSvc      *discoveryService.GetArtistContentService
-	relatedSvc     *discoveryService.GetRelatedTracksService
-	suggestSvc     *discoveryService.SuggestService
+	albumSvc       *content.GetAlbumTracksService
+	artistSvc      *content.GetArtistContentService
+	relatedSvc     *related.GetRelatedTracksService
+	suggestSvc     *vocabulary.SuggestService
 }
 
 func (a *App) wireDiscoveryContent(
 	cf clientFactory,
 	sharedMB *providers.MusicBrainzAdapter,
 	vocabStore discoveryPorts.VocabularyStore,
-	breaker *discoveryService.CircuitBreaker,
+	breaker *providercall.CircuitBreaker,
 	eventStore discoveryPorts.EventStore,
 ) discoveryContentStaging {
 	albumSvc, relatedSvc := a.buildAlbumAndRelatedServices(cf, breaker)
@@ -46,33 +53,33 @@ func (a *App) wireDiscoveryContent(
 		albumSvc:       albumSvc,
 		artistSvc:      a.buildArtistContentService(cf, sharedMB, breaker, eventStore),
 		relatedSvc:     relatedSvc,
-		suggestSvc:     discoveryService.NewSuggestService(vocabStore),
+		suggestSvc:     vocabulary.NewSuggestService(vocabStore),
 	}
 }
 
 func buildFeaturedBridge(cf clientFactory, sharedMB *providers.MusicBrainzAdapter) *discoverybridge.FeaturedResolver {
 	featuredDeezer := providers.NewDeezerAdapter(cf.discovery())
-	featuredResolver := discoveryService.NewFeaturedArtistResolver(nil, featuredDeezer)
+	featuredResolver := content.NewFeaturedArtistResolver(nil, featuredDeezer)
 	if sharedMB != nil {
-		featuredResolver = discoveryService.NewFeaturedArtistResolver(sharedMB, featuredDeezer)
+		featuredResolver = content.NewFeaturedArtistResolver(sharedMB, featuredDeezer)
 	}
 	return discoverybridge.NewFeaturedResolver(featuredResolver)
 }
 
 func (a *App) buildAlbumAndRelatedServices(
 	cf clientFactory,
-	breaker *discoveryService.CircuitBreaker,
-) (*discoveryService.GetAlbumTracksService, *discoveryService.GetRelatedTracksService) {
+	breaker *providercall.CircuitBreaker,
+) (*content.GetAlbumTracksService, *related.GetRelatedTracksService) {
 	deezerContent := providers.NewDeezerAdapter(cf.discovery())
 	albumProviders, relatedProviders := a.buildAlbumContentProviders(cf, deezerContent)
 
-	relatedSvc := discoveryService.NewGetRelatedTracksService(relatedProviders,
-		discoveryService.WithRelatedCircuitBreaker(breaker))
-	albumSvc := discoveryService.NewGetAlbumTracksService(
+	relatedSvc := related.NewGetRelatedTracksService(relatedProviders,
+		related.WithRelatedCircuitBreaker(breaker))
+	albumSvc := content.NewGetAlbumTracksService(
 		albumProviders,
-		discoveryService.WithTrackFeatured(deezerContent),
-		discoveryService.WithAlbumFallbackSearcher(deezerContent),
-		discoveryService.WithAlbumCircuitBreaker(breaker),
+		content.WithTrackFeatured(deezerContent),
+		content.WithAlbumFallbackSearcher(deezerContent),
+		content.WithAlbumCircuitBreaker(breaker),
 	)
 	return albumSvc, relatedSvc
 }
@@ -103,39 +110,39 @@ func (a *App) buildAlbumContentProviders(
 func (a *App) buildArtistContentService(
 	cf clientFactory,
 	sharedMB *providers.MusicBrainzAdapter,
-	breaker *discoveryService.CircuitBreaker,
+	breaker *providercall.CircuitBreaker,
 	eventStore discoveryPorts.EventStore,
-) *discoveryService.GetArtistContentService {
+) *content.GetArtistContentService {
 	artistProviders := buildArtistContentProviders(cf, a.cfg)
 	artistContentOpts := a.buildArtistContentOptions(sharedMB, breaker, eventStore)
-	return discoveryService.NewGetArtistContentService(artistProviders, artistContentOpts...)
+	return content.NewGetArtistContentService(artistProviders, artistContentOpts...)
 }
 
 func (a *App) buildArtistContentOptions(
 	sharedMB *providers.MusicBrainzAdapter,
-	breaker *discoveryService.CircuitBreaker,
+	breaker *providercall.CircuitBreaker,
 	eventStore discoveryPorts.EventStore,
-) []discoveryService.ArtistContentOption {
-	artistContentOpts := []discoveryService.ArtistContentOption{
-		discoveryService.WithContentCircuitBreaker(breaker),
+) []content.ArtistContentOption {
+	artistContentOpts := []content.ArtistContentOption{
+		content.WithContentCircuitBreaker(breaker),
 	}
 	if eventStore != nil {
-		artistContentOpts = append(artistContentOpts, discoveryService.WithContentEventStore(eventStore))
+		artistContentOpts = append(artistContentOpts, content.WithContentEventStore(eventStore))
 	}
 	if opt := a.contentIdentityStoreOption(); opt != nil {
 		artistContentOpts = append(artistContentOpts, opt)
 	}
 	if sharedMB != nil {
-		artistContentOpts = append(artistContentOpts, discoveryService.WithMBAnchor(sharedMB))
+		artistContentOpts = append(artistContentOpts, content.WithMBAnchor(sharedMB))
 	}
 	return artistContentOpts
 }
 
-func (a *App) contentIdentityStoreOption() discoveryService.ArtistContentOption {
+func (a *App) contentIdentityStoreOption() content.ArtistContentOption {
 	if a.pool == nil {
 		return nil
 	}
-	return discoveryService.WithContentIdentityStore(
+	return content.WithContentIdentityStore(
 		discoveryCacheAdapters.NewRedisIdentityStore(
 			discoveryPersistence.NewPgxIdentityStore(a.pool),
 			a.redisClient,
@@ -160,7 +167,7 @@ func (a *App) wireDiscoveryEnrichment(cf clientFactory, sharedMB *providers.Musi
 func (a *App) startDiscoveryBackgroundJobs(
 	ctx context.Context,
 	cf clientFactory,
-	searchSvc *discoveryService.Service,
+	searchSvc *search.Service,
 	eventStore *discoveryPersistence.PgxEventStore,
 	vocabStore discoveryPorts.VocabularyStore,
 ) {
@@ -178,18 +185,18 @@ func (a *App) startDiscoveryBackgroundJobs(
 	a.startVocabularyRefresh(ctx, cf, vocabStore)
 }
 
-func (a *App) searchActivityOptions() []discoveryService.Option {
+func (a *App) searchActivityOptions() []search.Option {
 	if a.eventTap == nil {
 		return nil
 	}
-	return []discoveryService.Option{discoveryService.WithSearchActivityFeed(a.eventTap)}
+	return []search.Option{search.WithSearchActivityFeed(a.eventTap)}
 }
 
-func (a *App) recordEventActivityOptions() []func(*discoveryService.RecordEventService) {
+func (a *App) recordEventActivityOptions() []func(*interaction.RecordEventService) {
 	if a.eventTap == nil {
 		return nil
 	}
-	return []func(*discoveryService.RecordEventService){discoveryService.WithRecordEventActivityFeed(a.eventTap)}
+	return []func(*interaction.RecordEventService){interaction.WithRecordEventActivityFeed(a.eventTap)}
 }
 
 func (a *App) buildDiscoveryHandler(cf clientFactory, services discoveryHandler.DiscoveryServices) *discoveryHandler.DiscoveryHandler {
@@ -205,8 +212,8 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 
 	vocabStore := BuildVocabularyStore(a.redisClient)
 
-	historySvc := discoveryService.NewListSearchHistoryService(historyRepo)
-	clearHistorySvc := discoveryService.NewClearSearchHistoryService(historyRepo)
+	historySvc := history.NewListSearchHistoryService(historyRepo)
+	clearHistorySvc := history.NewClearSearchHistoryService(historyRepo)
 
 	searchSvc := BuildSearchServiceWithTransport(
 		ctx,
@@ -220,8 +227,8 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 	)
 	content := a.wireDiscoveryContent(cf, sharedMB, vocabStore, searchSvc.CircuitBreaker(), eventStore)
 
-	eventSvc := discoveryService.NewRecordEventService(eventStore, a.recordEventActivityOptions()...)
-	favoritesSvc := discoveryService.NewFavoritesService(
+	eventSvc := interaction.NewRecordEventService(eventStore, a.recordEventActivityOptions()...)
+	favoritesSvc := favorites.NewFavoritesService(
 		discoveryPersistence.NewPgxFavoritesRepository(a.pool),
 	)
 
@@ -230,7 +237,7 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 	discoveryH := a.buildDiscoveryHandler(cf, discoveryHandler.DiscoveryServices{
 		Search:        searchSvc,
 		History:       historySvc,
-		RecordHistory: discoveryService.NewRecordSearchHistoryService(historyRepo),
+		RecordHistory: history.NewRecordSearchHistoryService(historyRepo),
 		ClearHistory:  clearHistorySvc,
 		Album:         content.albumSvc,
 		Artist:        content.artistSvc,

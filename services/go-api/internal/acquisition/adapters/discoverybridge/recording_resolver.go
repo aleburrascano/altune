@@ -1,6 +1,9 @@
 package discoverybridge
 
 import (
+	"altune/go-api/internal/discovery/service/search"
+	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"fmt"
 	"log/slog"
@@ -10,9 +13,6 @@ import (
 	acqports "altune/go-api/internal/acquisition/ports"
 	discoverydomain "altune/go-api/internal/discovery/domain"
 	discoveryports "altune/go-api/internal/discovery/ports"
-	discoveryservice "altune/go-api/internal/discovery/service"
-	"altune/go-api/internal/shared"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 const (
@@ -25,7 +25,7 @@ const (
 var _ acqports.RecordingResolver = (*RecordingResolver)(nil)
 
 type recordingSearcher interface {
-	Execute(ctx context.Context, userId shared.UserId, query *discoverydomain.SearchQuery, saveHistory bool) (*discoveryservice.SearchOutput, error)
+	Execute(ctx context.Context, userId shared.UserId, query *discoverydomain.SearchQuery, saveHistory bool) (*search.SearchOutput, error)
 }
 
 type isrcAuthority interface {

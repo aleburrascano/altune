@@ -2,8 +2,15 @@ package handler
 
 import (
 	"altune/go-api/internal/discovery/adapters/authbridge"
-	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/content"
 	"altune/go-api/internal/discovery/service/enrich"
+	"altune/go-api/internal/discovery/service/favorites"
+	"altune/go-api/internal/discovery/service/history"
+	"altune/go-api/internal/discovery/service/interaction"
+	"altune/go-api/internal/discovery/service/ownership"
+	"altune/go-api/internal/discovery/service/related"
+	"altune/go-api/internal/discovery/service/search"
+	"altune/go-api/internal/discovery/service/vocabulary"
 	"altune/go-api/internal/shared/httputil"
 	"net/http"
 	"time"
@@ -12,21 +19,21 @@ import (
 )
 
 type DiscoveryHandler struct {
-	searchSvc       *service.Service
-	historySvc      *service.ListSearchHistoryService
-	recordHistory   *service.RecordSearchHistoryService
-	clearHistorySvc *service.ClearSearchHistoryService
-	albumSvc        *service.GetAlbumTracksService
-	artistSvc       *service.GetArtistContentService
-	relatedSvc      *service.GetRelatedTracksService
+	searchSvc       *search.Service
+	historySvc      *history.ListSearchHistoryService
+	recordHistory   *history.RecordSearchHistoryService
+	clearHistorySvc *history.ClearSearchHistoryService
+	albumSvc        *content.GetAlbumTracksService
+	artistSvc       *content.GetArtistContentService
+	relatedSvc      *related.GetRelatedTracksService
 	enrichSvc       *enrich.EnrichmentService
-	suggestSvc      *service.SuggestService
-	eventSvc        *service.RecordEventService
-	favoritesSvc    *service.FavoritesService
+	suggestSvc      *vocabulary.SuggestService
+	eventSvc        *interaction.RecordEventService
+	favoritesSvc    *favorites.FavoritesService
 
 	enrichers DetailEnrichers
 
-	ownership *service.OwnershipEnrichmentService
+	ownership *ownership.OwnershipEnrichmentService
 
 	searchLimiter    *userRateLimiter
 	suggestLimiter   *userRateLimiter
@@ -48,17 +55,17 @@ func (h *DiscoveryHandler) WithDetailEnrichers(e DetailEnrichers) *DiscoveryHand
 }
 
 type DiscoveryServices struct {
-	Search        *service.Service
-	History       *service.ListSearchHistoryService
-	RecordHistory *service.RecordSearchHistoryService
-	ClearHistory  *service.ClearSearchHistoryService
-	Album         *service.GetAlbumTracksService
-	Artist        *service.GetArtistContentService
-	Related       *service.GetRelatedTracksService
+	Search        *search.Service
+	History       *history.ListSearchHistoryService
+	RecordHistory *history.RecordSearchHistoryService
+	ClearHistory  *history.ClearSearchHistoryService
+	Album         *content.GetAlbumTracksService
+	Artist        *content.GetArtistContentService
+	Related       *related.GetRelatedTracksService
 	Enrich        *enrich.EnrichmentService
-	Suggest       *service.SuggestService
-	Event         *service.RecordEventService
-	Favorites     *service.FavoritesService
+	Suggest       *vocabulary.SuggestService
+	Event         *interaction.RecordEventService
+	Favorites     *favorites.FavoritesService
 }
 
 func (h *DiscoveryHandler) WithRateLimits(limits DiscoveryRateLimits) *DiscoveryHandler {

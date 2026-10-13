@@ -1,9 +1,9 @@
 package app
 
 import (
-	acqPersistence "altune/go-api/internal/acquisition/adapters/persistence"
 	"altune/go-api/internal/auth/adapters/testauth"
-	authports "altune/go-api/internal/auth/ports"
+	"altune/go-api/internal/discovery/service/search"
+	"altune/go-api/internal/discovery/service/vocabulary"
 	"altune/go-api/internal/observe/service/evalmeter"
 	"altune/go-api/internal/observe/service/eventtap"
 	"altune/go-api/internal/shared/config"
@@ -23,10 +23,12 @@ import (
 	"syscall"
 	"time"
 
+	acqPersistence "altune/go-api/internal/acquisition/adapters/persistence"
+
+	authports "altune/go-api/internal/auth/ports"
+
 	acqService "altune/go-api/internal/acquisition/service"
 	observeAlert "altune/go-api/internal/observe/service/alert"
-
-	discoveryService "altune/go-api/internal/discovery/service"
 
 	sharedRedis "altune/go-api/internal/shared/redis"
 
@@ -47,8 +49,8 @@ type App struct {
 	wg              sync.WaitGroup
 	sem             chan struct{}
 	scheduler       *acqService.BackgroundAcquisitionScheduler
-	vocabRefresh    *discoveryService.VocabularyRefreshService
-	searchSvc       *discoveryService.Service
+	vocabRefresh    *vocabulary.VocabularyRefreshService
+	searchSvc       *search.Service
 	eventBus        *events.InProcessBus
 	eventTap        *eventtap.Tap
 	alertMonitor    *observeAlert.Monitor

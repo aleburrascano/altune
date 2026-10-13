@@ -6,8 +6,9 @@ import (
 	"altune/go-api/internal/discovery/adapters/providers"
 	discoveryDomain "altune/go-api/internal/discovery/domain"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
-	discoveryService "altune/go-api/internal/discovery/service"
 	discoveryEnrich "altune/go-api/internal/discovery/service/enrich"
+	"altune/go-api/internal/discovery/service/rank"
+	"altune/go-api/internal/discovery/service/search"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/runloop"
@@ -223,8 +224,8 @@ func TestBehavioralRankingRefresh_LogsOnFailure(t *testing.T) {
 	defer slog.SetDefault(restore)
 
 	boom := errors.New("boom")
-	consumer := discoveryService.NewSatisfactionConsumer(failingBehavioralStore{err: boom})
-	searchSvc := discoveryService.NewService(nil, nil, discoveryService.WithBehavioralRanking(consumer))
+	consumer := rank.NewSatisfactionConsumer(failingBehavioralStore{err: boom})
+	searchSvc := search.NewService(nil, nil, search.WithBehavioralRanking(consumer))
 
 	a := &App{cfg: &config.Config{BehavioralRankingEnabled: true}}
 	ctx, cancel := context.WithCancel(context.Background())

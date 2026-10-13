@@ -1,17 +1,18 @@
 package handler
 
 import (
-	"net/http"
-
 	"altune/go-api/internal/discovery/adapters/authbridge"
-	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/ownership"
+	"altune/go-api/internal/discovery/service/providercall"
+	"altune/go-api/internal/discovery/service/search"
 	"altune/go-api/internal/shared/httputil"
+	"net/http"
 )
 
 func (h *DiscoveryHandler) writeContentFetch(
 	w http.ResponseWriter,
 	r *http.Request,
-	resp *service.ContentFetchResponse,
+	resp *providercall.ContentFetchResponse,
 ) {
 	dto := contentFetchToDTO(resp)
 	if userId, ok := authbridge.UserIDFromContext(r.Context()); ok {
@@ -21,13 +22,13 @@ func (h *DiscoveryHandler) writeContentFetch(
 	httputil.WriteJSON(w, status, dto)
 }
 
-func (h *DiscoveryHandler) WithOwnershipEnrichment(svc *service.OwnershipEnrichmentService) *DiscoveryHandler {
+func (h *DiscoveryHandler) WithOwnershipEnrichment(svc *ownership.OwnershipEnrichmentService) *DiscoveryHandler {
 	h.ownership = svc
 	return h
 }
 
-func ownableItems(slates ...[]SearchResultDTO) []service.OwnableItem {
-	var out []service.OwnableItem
+func ownableItems(slates ...[]SearchResultDTO) []ownership.OwnableItem {
+	var out []ownership.OwnableItem
 	for _, items := range slates {
 		for i := range items {
 			out = append(out, ownableItem(&items[i]))
@@ -36,15 +37,15 @@ func ownableItems(slates ...[]SearchResultDTO) []service.OwnableItem {
 	return out
 }
 
-func ownableItem(dto *SearchResultDTO) service.OwnableItem {
-	return service.OwnableItem{Kind: dto.Kind, Title: dto.Title, Artist: dto.Subtitle, Extras: &dto.Extras}
+func ownableItem(dto *SearchResultDTO) ownership.OwnableItem {
+	return ownership.OwnableItem{Kind: dto.Kind, Title: dto.Title, Artist: dto.Subtitle, Extras: &dto.Extras}
 }
 
 func ownershipTargets(
 	results []SearchResultDTO,
 	topResult *SearchResultDTO,
 	sections []ResultSectionDTO,
-) []service.OwnableItem {
+) []ownership.OwnableItem {
 	targets := ownableItems(results)
 	if topResult != nil {
 		targets = append(targets, ownableItem(topResult))
@@ -55,7 +56,7 @@ func ownershipTargets(
 	return targets
 }
 
-func blendedSlateToDTOs(slate service.BlendedSlate) (*SearchResultDTO, []ResultSectionDTO) {
+func blendedSlateToDTOs(slate search.BlendedSlate) (*SearchResultDTO, []ResultSectionDTO) {
 	sections := make([]ResultSectionDTO, 0, len(slate.Sections))
 	for _, s := range slate.Sections {
 		sections = append(sections, ResultSectionDTO{

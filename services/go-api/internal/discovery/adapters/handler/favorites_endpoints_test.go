@@ -2,9 +2,8 @@ package handler
 
 import (
 	"altune/go-api/internal/auth/adapters/middleware"
-	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/favorites"
 	"altune/go-api/internal/shared"
-	shareddomain "altune/go-api/internal/shared/domain"
 	"context"
 	"errors"
 	"io"
@@ -12,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	shareddomain "altune/go-api/internal/shared/domain"
 
 	discdomain "altune/go-api/internal/discovery/domain"
 
@@ -33,7 +34,7 @@ func (r erroringFavoritesRepo) ListForUser(context.Context, shared.UserId) ([]di
 }
 
 func buildFavoritesRouter(err error) chi.Router {
-	svc := service.NewFavoritesService(erroringFavoritesRepo{err: err})
+	svc := favorites.NewFavoritesService(erroringFavoritesRepo{err: err})
 	h := NewDiscoveryHandler(DiscoveryServices{Favorites: svc})
 	r := chi.NewRouter()
 	r.Use(middleware.Middleware(discVerifyAsTestUser))
@@ -101,7 +102,7 @@ func TestFavoritesEndpoints_ServiceErrorsUseTypedContract(t *testing.T) {
 
 func buildFavoritesLimitedRouter(limits DiscoveryRateLimits) chi.Router {
 	h := NewDiscoveryHandler(DiscoveryServices{
-		Favorites: service.NewFavoritesService(erroringFavoritesRepo{}),
+		Favorites: favorites.NewFavoritesService(erroringFavoritesRepo{}),
 	}).WithRateLimits(limits)
 	r := chi.NewRouter()
 	r.Use(middleware.Middleware(discVerifyAsTestUser))

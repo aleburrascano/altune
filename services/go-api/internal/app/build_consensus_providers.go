@@ -3,6 +3,7 @@ package app
 import (
 	"altune/go-api/internal/discovery/adapters/providers"
 	"altune/go-api/internal/discovery/adapters/providers/theaudiodb"
+	"altune/go-api/internal/discovery/service/providercall"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/phonetics"
 	"altune/go-api/internal/shared/textnorm"
@@ -14,7 +15,6 @@ import (
 
 	discoveryDomain "altune/go-api/internal/discovery/domain"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
-	discoveryService "altune/go-api/internal/discovery/service"
 	discoveryEnrich "altune/go-api/internal/discovery/service/enrich"
 
 	goredis "github.com/redis/go-redis/v9"
@@ -45,11 +45,11 @@ func (a *App) buildDetailEnrichers(cf clientFactory) discoveryHandler.DetailEnri
 
 type consensusAdder func(key discoveryDomain.ProviderKey, provider discoveryDomain.ProviderName, fetcher func(context.Context, string) ([]discoveryDomain.SearchResult, error))
 
-func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []discoveryService.ConsensusProvider {
+func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []providercall.ConsensusProvider {
 	cf := newClientFactory(transport)
-	var consensusProviders []discoveryService.ConsensusProvider
+	var consensusProviders []providercall.ConsensusProvider
 	add := func(key discoveryDomain.ProviderKey, provider discoveryDomain.ProviderName, fetcher func(context.Context, string) ([]discoveryDomain.SearchResult, error)) {
-		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{Name: string(key), Provider: provider, Fetcher: fetcher})
+		consensusProviders = append(consensusProviders, providercall.ConsensusProvider{Name: string(key), Provider: provider, Fetcher: fetcher})
 	}
 	addCatalogConsensusProviders(cf, cfg, add)
 	addStreamingConsensusProviders(cf, cfg, add)

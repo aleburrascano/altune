@@ -1,0 +1,658 @@
+package content
+
+import (
+	"altune/go-api/internal/discovery/discoverytest"
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/service/providercall"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"net/url"
+	"strings"
+	"testing"
+)
+
+func TestGetArtistContentService_GetTopTracks(t *testing.T) {
+	sampleTracks := []domain.SearchResult{
+		{Kind: domain.ResultKindTrack, Title: "Blinding Lights", Subtitle: "The Weeknd", Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "t1"}}},
+		{Kind: domain.ResultKindTrack, Title: "Save Your Tears", Subtitle: "The Weeknd", Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "t2"}}},
+		{Kind: domain.ResultKindTrack, Title: "Starboy", Subtitle: "The Weeknd", Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "t3"}}},
+	}
+
+	tests := []struct {
+		name          string
+		providerName  domain.ProviderName
+		externalID    string
+		limit         int
+		providers     map[domain.ProviderName]ports.ArtistContentProvider
+		wantStatus    domain.ProviderStatus
+		wantItemCount int
+	}{
+		{
+			name:         "valid provider returns top tracks",
+			providerName: domain.ProviderDeezer,
+			externalID:   "artist-42",
+			limit:        0,
+			providers: map[domain.ProviderName]ports.ArtistContentProvider{
+				domain.ProviderDeezer: &discoverytest.ArtistContentProvider{
+					GetTopTracksFn: func(_ context.Context, pn domain.ProviderName, extID string) ([]domain.SearchResult, error) {
+						if pn != domain.ProviderDeezer {
+							t.Errorf("expected provider deezer, got %s", pn.String())
+						}
+						if extID != "artist-42" {
+							t.Errorf("expected externalID artist-42, got %s", extID)
+						}
+						return sampleTracks, nil
+					},
+				},
+			},
+			wantStatus:    domain.ProviderStatusOK,
+			wantItemCount: 3,
+		},
+		{
+			name:          "unknown provider returns error status",
+			providerName:  domain.ProviderSoundCloud,
+			externalID:    "artist-42",
+			limit:         0,
+			providers:     map[domain.ProviderName]ports.ArtistContentProvider{},
+			wantStatus:    domain.ProviderStatusError,
+			wantItemCount: 0,
+		},
+		{
+			name:         "provider error returns error status",
+			providerName: domain.ProviderDeezer,
+			externalID:   "artist-err",
+			limit:        0,
+			providers: map[domain.ProviderName]ports.ArtistContentProvider{
+				domain.ProviderDeezer: &discoverytest.ArtistContentProvider{
+					GetTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+						return nil, errors.New("network error")
+					},
+				},
+			},
+			wantStatus:    domain.ProviderStatusError,
+			wantItemCount: 0,
+		},
+		{
+			name:         "limit truncates results",
+			providerName: domain.ProviderDeezer,
+			externalID:   "artist-42",
+			limit:        2,
+			providers: map[domain.ProviderName]ports.ArtistContentProvider{
+				domain.ProviderDeezer: &discoverytest.ArtistContentProvider{
+					GetTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+						return sampleTracks, nil
+					},
+				},
+			},
+			wantStatus:    domain.ProviderStatusOK,
+			wantItemCount: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := NewGetArtistContentService(tt.providers)
+
+			resp, err := svc.GetTopTracks(context.Background(), tt.providerName, tt.externalID, nil, tt.limit)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if resp.Status != tt.wantStatus {
+				t.Errorf("expected status %s, got %s", tt.wantStatus.String(), resp.Status.String())
+			}
+			if len(resp.Items) != tt.wantItemCount {
+				t.Errorf("expected %d items, got %d", tt.wantItemCount, len(resp.Items))
+			}
+			if resp.ProviderName != tt.providerName {
+				t.Errorf("expected provider name %q, got %q", tt.providerName, resp.ProviderName)
+			}
+		})
+	}
+}
+
+func TestGetArtistContentService_GetAlbums(t *testing.T) {
+	tests := []struct {
+		name          string
+		providerName  domain.ProviderName
+		externalID    string
+		limit         int
+		providers     map[domain.ProviderName]ports.ArtistContentProvider
+		wantStatus    domain.ProviderStatus
+		wantItemCount int
+	}{
+		{
+			name:         "valid provider returns albums",
+			providerName: domain.ProviderDeezer,
+			externalID:   "artist-42",
+			limit:        0,
+			providers: map[domain.ProviderName]ports.ArtistContentProvider{
+				domain.ProviderDeezer: &discoverytest.ArtistContentProvider{
+					GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+						return []domain.SearchResult{
+							{Kind: domain.ResultKindAlbum, Title: "After Hours", Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "a1"}}},
+							{Kind: domain.ResultKindAlbum, Title: "Starboy", Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "a2"}}},
+						}, nil
+					},
+				},
+			},
+			wantStatus:    domain.ProviderStatusOK,
+			wantItemCount: 2,
+		},
+		{
+			name:          "unknown provider returns error status",
+			providerName:  domain.ProviderSoundCloud,
+			externalID:    "artist-42",
+			limit:         0,
+			providers:     map[domain.ProviderName]ports.ArtistContentProvider{},
+			wantStatus:    domain.ProviderStatusError,
+			wantItemCount: 0,
+		},
+		{
+			name:         "dedup by normalized title keeps album with higher track_count",
+			providerName: domain.ProviderDeezer,
+			externalID:   "artist-42",
+			limit:        0,
+			providers: map[domain.ProviderName]ports.ArtistContentProvider{
+				domain.ProviderDeezer: &discoverytest.ArtistContentProvider{
+					GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+						return []domain.SearchResult{
+							{
+								Kind:       domain.ResultKindAlbum,
+								Title:      "After Hours",
+								Sources:    []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "a1"}},
+								TrackCount: 14,
+							},
+							{
+								Kind:       domain.ResultKindAlbum,
+								Title:      "After Hours (Deluxe)",
+								Sources:    []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "a2"}},
+								TrackCount: 18,
+							},
+							{
+								Kind:       domain.ResultKindAlbum,
+								Title:      "Starboy",
+								Sources:    []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "a3"}},
+								TrackCount: 18,
+							},
+						}, nil
+					},
+				},
+			},
+			wantStatus:    domain.ProviderStatusOK,
+			wantItemCount: 2,
+		},
+		{
+			name:         "dedup keeps higher track_count version",
+			providerName: domain.ProviderDeezer,
+			externalID:   "artist-42",
+			limit:        0,
+			providers: map[domain.ProviderName]ports.ArtistContentProvider{
+				domain.ProviderDeezer: &discoverytest.ArtistContentProvider{
+					GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+						return []domain.SearchResult{
+							{
+								Kind:       domain.ResultKindAlbum,
+								Title:      "Dawn FM",
+								Sources:    []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "a1"}},
+								TrackCount: 10,
+							},
+							{
+								Kind:       domain.ResultKindAlbum,
+								Title:      "Dawn FM (Alternate World)",
+								Sources:    []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "a2"}},
+								TrackCount: 20,
+							},
+						}, nil
+					},
+				},
+			},
+			wantStatus:    domain.ProviderStatusOK,
+			wantItemCount: 1,
+		},
+		{
+			name:         "provider error returns error status",
+			providerName: domain.ProviderDeezer,
+			externalID:   "artist-err",
+			limit:        0,
+			providers: map[domain.ProviderName]ports.ArtistContentProvider{
+				domain.ProviderDeezer: &discoverytest.ArtistContentProvider{
+					GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+						return nil, errors.New("api failure")
+					},
+				},
+			},
+			wantStatus:    domain.ProviderStatusError,
+			wantItemCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := NewGetArtistContentService(tt.providers)
+
+			resp, err := svc.GetAlbums(context.Background(), tt.providerName, tt.externalID, nil, tt.limit)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if resp.Status != tt.wantStatus {
+				t.Errorf("expected status %s, got %s", tt.wantStatus.String(), resp.Status.String())
+			}
+			if len(resp.Items) != tt.wantItemCount {
+				t.Errorf("expected %d items, got %d", tt.wantItemCount, len(resp.Items))
+			}
+		})
+	}
+}
+
+func TestGetArtistContentService_GetAlbums_OrderingAndYear(t *testing.T) {
+	album := func(title, releaseDate, extID string) domain.SearchResult {
+		return domain.SearchResult{
+			Kind:        domain.ResultKindAlbum,
+			Title:       title,
+			Sources:     []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: extID}},
+			ReleaseDate: releaseDate,
+		}
+	}
+
+	t.Run("sorts newest-first and normalizes year from release_date", func(t *testing.T) {
+		providers := map[domain.ProviderName]ports.ArtistContentProvider{
+			domain.ProviderDeezer: &discoverytest.ArtistContentProvider{
+				GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+					return []domain.SearchResult{
+						album("Older", "2016-09-09", "a1"),
+						album("Newest", "2022-01-07", "a3"),
+						album("Middle", "2020-03-20", "a2"),
+					}, nil
+				},
+			},
+		}
+		svc := NewGetArtistContentService(providers)
+
+		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "artist-1", nil, 0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		wantOrder := []string{"Newest", "Middle", "Older"}
+		wantYear := map[string]int{"Newest": 2022, "Middle": 2020, "Older": 2016}
+		if len(resp.Items) != len(wantOrder) {
+			t.Fatalf("expected %d items, got %d", len(wantOrder), len(resp.Items))
+		}
+		for i, want := range wantOrder {
+			got := resp.Items[i]
+			if got.Title != want {
+				t.Errorf("position %d: expected %q, got %q", i, want, got.Title)
+			}
+			if got.Year != wantYear[want] {
+				t.Errorf("%q: expected year %d, got %d", want, wantYear[want], got.Year)
+			}
+		}
+	})
+
+	t.Run("albums with no date sort to the end", func(t *testing.T) {
+		providers := map[domain.ProviderName]ports.ArtistContentProvider{
+			domain.ProviderDeezer: &discoverytest.ArtistContentProvider{
+				GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+					return []domain.SearchResult{
+						album("NoDate", "", "a1"),
+						album("Dated", "2019-05-01", "a2"),
+					}, nil
+				},
+			},
+		}
+		svc := NewGetArtistContentService(providers)
+
+		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "artist-1", nil, 0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(resp.Items) != 2 || resp.Items[0].Title != "Dated" || resp.Items[1].Title != "NoDate" {
+			t.Errorf("expected [Dated, NoDate], got %v", discoverytest.AlbumTitles(resp.Items))
+		}
+	})
+
+	t.Run("limit keeps the newest after sorting", func(t *testing.T) {
+		providers := map[domain.ProviderName]ports.ArtistContentProvider{
+			domain.ProviderDeezer: &discoverytest.ArtistContentProvider{
+				GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+					return []domain.SearchResult{
+						album("Old", "2010-01-01", "a1"),
+						album("New", "2024-01-01", "a2"),
+						album("Mid", "2017-01-01", "a3"),
+					}, nil
+				},
+			},
+		}
+		svc := NewGetArtistContentService(providers)
+
+		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "artist-1", nil, 2)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(resp.Items) != 2 || resp.Items[0].Title != "New" || resp.Items[1].Title != "Mid" {
+			t.Errorf("expected [New, Mid], got %v", discoverytest.AlbumTitles(resp.Items))
+		}
+	})
+}
+
+const fanOutFailedEvent = "artist_content.fanout.provider_failed"
+
+func fanOutFailureRecords(t *testing.T, buf *bytes.Buffer) []map[string]any {
+	t.Helper()
+	var out []map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+		if line == "" {
+			continue
+		}
+		var rec map[string]any
+		if err := json.Unmarshal([]byte(line), &rec); err != nil {
+			t.Fatalf("unparseable log line %q: %v", line, err)
+		}
+		if rec["msg"] == fanOutFailedEvent {
+			out = append(out, rec)
+		}
+	}
+	return out
+}
+
+func TestIdentityFanOut_ProviderFailuresWarnOnceAtProductionLevel(t *testing.T) {
+	const secret = "0123456789abcdef0123456789abcdef"
+	leaky := &url.Error{Op: "Get", URL: "https://ws.audioscrobbler.com/2.0/?api_key=" + secret, Err: errors.New("connection refused")}
+	for name, fetch := range identityContentFetchers {
+		t.Run(name, func(t *testing.T) {
+			svc := identityFanOutWithErr(func(pn domain.ProviderName) error {
+				if pn == domain.ProviderLastFM || pn == domain.ProviderSpotify {
+					return leaky
+				}
+				return nil
+			})
+			buf := discoverytest.CaptureProductionLogs(t)
+
+			if _, err := fetch(svc); err != nil {
+				t.Fatalf("error = %v", err)
+			}
+
+			recs := fanOutFailureRecords(t, buf)
+			if len(recs) != 1 {
+				t.Fatalf("got %d %s records at Info level, want exactly 1 summary:\n%s", len(recs), fanOutFailedEvent, buf)
+			}
+			rec := recs[0]
+			if rec["level"] != "WARN" {
+				t.Errorf("level = %v, want WARN", rec["level"])
+			}
+			failed, _ := rec["failed"].(map[string]any)
+			if len(failed) != 2 {
+				t.Fatalf("failed = %v, want exactly lastfm and spotify", rec["failed"])
+			}
+			for _, pn := range []domain.ProviderName{domain.ProviderLastFM, domain.ProviderSpotify} {
+				entry, _ := failed[pn.String()].(map[string]any)
+				if entry["external_id"] != "id-"+pn.String() {
+					t.Errorf("%s external_id = %v, want %q", pn, entry["external_id"], "id-"+pn.String())
+				}
+				if errText, _ := entry["error"].(string); !strings.Contains(errText, "connection refused") {
+					t.Errorf("%s error = %q, want the provider's failure", pn, errText)
+				}
+			}
+			if strings.Contains(buf.String(), secret) {
+				t.Errorf("provider credential leaked into logs:\n%s", buf)
+			}
+		})
+	}
+}
+
+func TestIdentityFanOut_NoFailureWarnWhenAllAnswer(t *testing.T) {
+	svc := identityFanOutWithErr(func(domain.ProviderName) error { return nil })
+	buf := discoverytest.CaptureProductionLogs(t)
+
+	if _, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "id-deezer", nil, 10); err != nil {
+		t.Fatalf("error = %v", err)
+	}
+	if recs := fanOutFailureRecords(t, buf); len(recs) != 0 {
+		t.Errorf("got %d failure records, want none:\n%s", len(recs), buf)
+	}
+}
+
+func TestIdentityFanOut_NoFailureWarnWhenCallerCancels(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	svc := identityFanOutWithErr(func(pn domain.ProviderName) error {
+		if pn == domain.ProviderDeezer {
+			return nil
+		}
+		cancel()
+		return context.Canceled
+	})
+	buf := discoverytest.CaptureProductionLogs(t)
+
+	if _, err := svc.GetTopTracks(ctx, domain.ProviderDeezer, "id-deezer", nil, 10); err != nil {
+		t.Fatalf("error = %v", err)
+	}
+	if recs := fanOutFailureRecords(t, buf); len(recs) != 0 {
+		t.Errorf("got %d failure records for a cancelled request, want none:\n%s", len(recs), buf)
+	}
+}
+
+func TestIdentityFanOut_NoFailureWarnForCircuitOpenSkip(t *testing.T) {
+	cb := providercall.NewCircuitBreaker()
+	tripCircuit(t, cb, domain.ProviderSpotify)
+	svc := identityFanOutWithErr(func(domain.ProviderName) error { return nil }, WithContentCircuitBreaker(cb))
+	buf := discoverytest.CaptureProductionLogs(t)
+
+	if _, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "id-deezer", nil, 10); err != nil {
+		t.Fatalf("error = %v", err)
+	}
+	if recs := fanOutFailureRecords(t, buf); len(recs) != 0 {
+		t.Errorf("got %d failure records for a circuit-open skip, want none:\n%s", len(recs), buf)
+	}
+}
+
+func identityFanOutWithErr(errFor func(domain.ProviderName) error, opts ...ArtistContentOption) *GetArtistContentService {
+	providers := make(map[domain.ProviderName]ports.ArtistContentProvider, len(everyContentProvider))
+	xref := make(map[domain.ProviderKey]string, len(everyContentProvider))
+	for _, name := range everyContentProvider {
+		xref[name.Key()] = "id-" + name.String()
+		providers[name] = &discoverytest.ArtistContentProvider{
+			GetTopTracksFn: func(_ context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
+				if err := errFor(pn); err != nil {
+					return nil, err
+				}
+				return []domain.SearchResult{discoverytest.TrackFrom(pn, id, "Real Song", "Che")}, nil
+			},
+			GetAlbumsFn: func(_ context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
+				if err := errFor(pn); err != nil {
+					return nil, err
+				}
+				return []domain.SearchResult{discoverytest.V2Album(pn, id, "Fully Loaded", withDate("2026-04-01"))}, nil
+			},
+		}
+	}
+	store := &discoverytest.FakeIdentityStore{Mbid: "mbid-che", Xref: xref}
+	return NewGetArtistContentService(providers, append(opts, WithContentIdentityStore(store))...)
+}
+
+var everyContentProvider = []domain.ProviderName{
+	domain.ProviderDeezer, domain.ProviderMusicBrainz, domain.ProviderSoundCloud,
+	domain.ProviderLastFM, domain.ProviderITunes, domain.ProviderTheAudioDB,
+	domain.ProviderDiscogs, domain.ProviderYouTube, domain.ProviderAmazonMusic,
+	domain.ProviderAppleMusic, domain.ProviderSpotify,
+}
+
+func identityFanOut(fail func(domain.ProviderName) bool, opts ...ArtistContentOption) *GetArtistContentService {
+	return identityFanOutWithErr(func(pn domain.ProviderName) error {
+		if fail(pn) {
+			return discoverytest.UpstreamDown
+		}
+		return nil
+	}, opts...)
+}
+
+type contentFetcher func(*GetArtistContentService) (*providercall.ContentFetchResponse, error)
+
+var identityContentFetchers = map[string]contentFetcher{
+	"top tracks": func(s *GetArtistContentService) (*providercall.ContentFetchResponse, error) {
+		return s.GetTopTracks(context.Background(), domain.ProviderDeezer, "id-deezer", nil, 10)
+	},
+	"albums": func(s *GetArtistContentService) (*providercall.ContentFetchResponse, error) {
+		return s.GetAlbums(context.Background(), domain.ProviderDeezer, "id-deezer", nil, 50)
+	},
+}
+
+func TestIdentityFanOut_MostProvidersFailedReportsPartial(t *testing.T) {
+	for name, fetch := range identityContentFetchers {
+		t.Run(name, func(t *testing.T) {
+			svc := identityFanOut(func(pn domain.ProviderName) bool { return pn != domain.ProviderDeezer })
+
+			resp, err := fetch(svc)
+			if err != nil {
+				t.Fatalf("error = %v", err)
+			}
+			if resp.Status != domain.ProviderStatusOK || len(resp.Items) != 1 {
+				t.Fatalf("status = %s, items = %d, want ok with the one surviving provider's item", resp.Status, len(resp.Items))
+			}
+			if !resp.Partial {
+				t.Errorf("partial = false, want true: %d of %d providers failed", len(everyContentProvider)-1, len(everyContentProvider))
+			}
+		})
+	}
+}
+
+func TestIdentityFanOut_AllProvidersAnsweredIsNotPartial(t *testing.T) {
+	for name, fetch := range identityContentFetchers {
+		t.Run(name, func(t *testing.T) {
+			resp, err := fetch(identityFanOut(func(domain.ProviderName) bool { return false }))
+			if err != nil {
+				t.Fatalf("error = %v", err)
+			}
+			if len(resp.Items) == 0 || resp.Partial {
+				t.Errorf("items = %d, partial = %v, want merged items and partial = false", len(resp.Items), resp.Partial)
+			}
+		})
+	}
+}
+
+func TestIdentityFanOut_CircuitOpenProviderReportsPartial(t *testing.T) {
+	cb := providercall.NewCircuitBreaker()
+	tripCircuit(t, cb, domain.ProviderSpotify)
+	svc := identityFanOut(func(domain.ProviderName) bool { return false }, WithContentCircuitBreaker(cb))
+
+	resp, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "id-deezer", nil, 10)
+	if err != nil {
+		t.Fatalf("error = %v", err)
+	}
+	if !resp.Partial {
+		t.Error("partial = false, want true (spotify's circuit is open)")
+	}
+}
+
+func TestIdentityFanOut_ProviderWithoutIDDoesNotMakePartial(t *testing.T) {
+	answer := &discoverytest.ArtistContentProvider{
+		GetTopTracksFn: func(_ context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
+			return []domain.SearchResult{discoverytest.TrackFrom(pn, id, "Real Song", "Che")}, nil
+		},
+	}
+	unreachable := &discoverytest.ArtistContentProvider{
+		GetTopTracksFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+			t.Error("provider without a stored ID was called")
+			return nil, discoverytest.UpstreamDown
+		},
+	}
+	cb := providercall.NewCircuitBreaker()
+	tripCircuit(t, cb, domain.ProviderYouTube)
+	svc := NewGetArtistContentService(
+		map[domain.ProviderName]ports.ArtistContentProvider{
+			domain.ProviderDeezer:  answer,
+			domain.ProviderDiscogs: unreachable,
+			domain.ProviderYouTube: unreachable,
+		},
+		WithContentIdentityStore(&discoverytest.FakeIdentityStore{Mbid: "mbid-che", Xref: map[domain.ProviderKey]string{"deezer": "d1"}}),
+		WithContentCircuitBreaker(cb),
+	)
+
+	resp, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "d1", nil, 10)
+	if err != nil {
+		t.Fatalf("error = %v", err)
+	}
+	if len(resp.Items) != 1 || resp.Partial {
+		t.Errorf("items = %d, partial = %v, want 1 item and partial = false", len(resp.Items), resp.Partial)
+	}
+}
+
+func TestFanOutByIdentity_PanickingFetchIsContained(t *testing.T) {
+	svc := NewGetArtistContentService(map[domain.ProviderName]ports.ArtistContentProvider{
+		domain.ProviderDeezer: &discoverytest.ArtistContentProvider{},
+		domain.ProviderITunes: &discoverytest.ArtistContentProvider{},
+	})
+	identity := ResolvedArtistIdentity{ProviderIDs: map[domain.ProviderName]string{
+		domain.ProviderDeezer: "dz",
+		domain.ProviderITunes: "it",
+	}}
+	fetch := func(_ context.Context, _ ports.ArtistContentProvider, provider domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+		if provider == domain.ProviderDeezer {
+			panic("deezer exploded")
+		}
+		return []domain.SearchResult{discoverytest.TrackResult(provider, "t1", "Track", "Artist", nil)}, nil
+	}
+
+	groups, partial := svc.fanOutByIdentity(context.Background(), identity, fetch)
+
+	if len(groups) != 1 {
+		t.Fatalf("groups = %d, want 1 (the non-panicking provider)", len(groups))
+	}
+	if !partial {
+		t.Error("partial = false, want true (the panicking provider failed to answer)")
+	}
+}
+
+func TestGetArtistContent_LaterPageFailureReportsPartial(t *testing.T) {
+	truncated := &domain.PartialResultError{Page: 2, Err: discoverytest.UpstreamDown}
+	for name, fetch := range identityContentFetchers {
+		t.Run("identity fan-out "+name, func(t *testing.T) {
+			svc := identityFanOutWithErr(func(pn domain.ProviderName) error {
+				if pn == domain.ProviderDeezer {
+					return truncated
+				}
+				return nil
+			})
+			resp, err := fetch(svc)
+			if err != nil {
+				t.Fatalf("error = %v", err)
+			}
+			if resp.Status != domain.ProviderStatusOK || len(resp.Items) == 0 {
+				t.Fatalf("status = %s, items = %d, want ok with the merged items", resp.Status, len(resp.Items))
+			}
+			if !resp.Partial {
+				t.Error("partial = false, want true: a provider's later page failed")
+			}
+		})
+	}
+
+	t.Run("single provider albums", func(t *testing.T) {
+		svc := NewGetArtistContentService(map[domain.ProviderName]ports.ArtistContentProvider{
+			domain.ProviderDeezer: &discoverytest.ArtistContentProvider{
+				GetAlbumsFn: func(_ context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
+					return []domain.SearchResult{discoverytest.V2Album(pn, id, "Fully Loaded", withDate("2026-04-01"))}, truncated
+				},
+			},
+		})
+		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "id-deezer", nil, 50)
+		if err != nil {
+			t.Fatalf("error = %v", err)
+		}
+		if resp.Status != domain.ProviderStatusOK || len(resp.Items) != 1 || !resp.Partial {
+			t.Errorf("status = %s, items = %d, partial = %v, want ok, the page-0 item, partial", resp.Status, len(resp.Items), resp.Partial)
+		}
+	})
+}
+
+func tripCircuit(t *testing.T, cb *providercall.CircuitBreaker, provider domain.ProviderName) {
+	t.Helper()
+	for i := 0; i < providercall.FailureThreshold; i++ {
+		cb.RecordFailure(context.Background(), provider)
+	}
+	if cb.GetStatus(provider) != domain.ProviderStatusCircuitOpen {
+		t.Fatalf("setup: %s circuit not open after %d failures", provider, providercall.FailureThreshold)
+	}
+}

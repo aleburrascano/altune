@@ -3,6 +3,8 @@ package main
 import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/service/content"
+	"altune/go-api/internal/discovery/service/providercall"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
@@ -15,7 +17,6 @@ import (
 	"time"
 
 	discoveryPorts "altune/go-api/internal/discovery/ports"
-	discoveryService "altune/go-api/internal/discovery/service"
 	discoveryEval "altune/go-api/internal/discovery/service/eval"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -81,7 +82,7 @@ func (s *seededIdentityStore) LookupByProviderID(_ context.Context, kind domain.
 }
 
 type detailServiceAdapter struct {
-	svc *discoveryService.GetArtistContentService
+	svc *content.GetArtistContentService
 }
 
 func (a detailServiceAdapter) Albums(ctx context.Context, seedProvider, seedID, name string) []discoveryEval.DetailItem {
@@ -98,7 +99,7 @@ func (a detailServiceAdapter) fetch(ctx context.Context, seedProvider, seedID, n
 		fmt.Fprintf(os.Stderr, "detail-eval: skip %q: %v\n", name, err)
 		return nil
 	}
-	var resp *discoveryService.ContentFetchResponse
+	var resp *providercall.ContentFetchResponse
 	var fetchErr error
 	if albums {
 		resp, fetchErr = a.svc.GetAlbums(ctx, pn, seedID, nil, 100)

@@ -1,12 +1,11 @@
 package eval
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/service/vocabulary"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/service"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 type VocabularyLookup interface {
@@ -31,8 +30,8 @@ func IsRecognizedTerm(ctx context.Context, v VocabularyLookup, term string) bool
 }
 
 type Corrector interface {
-	Correct(ctx context.Context, query string) *service.CorrectionResult
-	CorrectAggressive(ctx context.Context, query string) *service.CorrectionResult
+	Correct(ctx context.Context, query string) *vocabulary.CorrectionResult
+	CorrectAggressive(ctx context.Context, query string) *vocabulary.CorrectionResult
 }
 
 type CorrectionReport struct {

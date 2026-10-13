@@ -5,7 +5,7 @@ import (
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/discovery/domain"
-	discoveryService "altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/search"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/redact"
@@ -29,7 +29,7 @@ var (
 )
 
 type journeySearcher interface {
-	Execute(ctx context.Context, userId shared.UserId, query *domain.SearchQuery, saveHistory bool) (*discoveryService.SearchOutput, error)
+	Execute(ctx context.Context, userId shared.UserId, query *domain.SearchQuery, saveHistory bool) (*search.SearchOutput, error)
 }
 
 type journeyDownloader interface {

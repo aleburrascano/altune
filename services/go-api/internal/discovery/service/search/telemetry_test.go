@@ -1,0 +1,168 @@
+package search
+
+import (
+	"altune/go-api/internal/discovery/discoverytest"
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/service/providercall"
+	"context"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestService_EmitsSearchTelemetryV2(t *testing.T) {
+	store := &discoverytest.FakeEventStore{}
+	p := &discoverytest.FakeProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	svc := NewService([]ports.SearchProvider{p}, providercall.NewCircuitBreaker(), WithEventStore(store))
+
+	runSearch(t, svc, "humble")
+	svc.WaitForBackground()
+
+	events := store.Snapshot()
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
+	e := events[0]
+	if e.Type != domain.EventTypeSearchPerformed {
+		t.Errorf("type = %v, want search_performed", e.Type)
+	}
+	if e.Payload["pipeline_version"] != "v2" {
+		t.Errorf("pipeline_version = %v, want v2", e.Payload["pipeline_version"])
+	}
+	if e.Payload["result_count"] != 1 {
+		t.Errorf("result_count = %v, want 1", e.Payload["result_count"])
+	}
+	if e.Payload["zero_result"] != false {
+		t.Errorf("zero_result = %v, want false", e.Payload["zero_result"])
+	}
+	if _, ok := e.Payload["top"]; !ok {
+		t.Error("payload missing top")
+	}
+	if e.SearchId == "" {
+		t.Error("search_performed event missing the minted search_id keystone")
+	}
+}
+
+func TestService_SearchTelemetryCarriesStageTimes(t *testing.T) {
+	store := &discoverytest.FakeEventStore{}
+	p := &discoverytest.FakeProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}, Delay: 30 * time.Millisecond}
+	svc := NewService([]ports.SearchProvider{p}, providercall.NewCircuitBreaker(), WithEventStore(store))
+
+	runSearch(t, svc, "humble")
+	svc.WaitForBackground()
+
+	payload := store.Snapshot()[0].Payload
+	ms := map[string]int64{}
+	for _, key := range []string{"fanout_ms", "identity_ms", "rank_ms", "artwork_ms", "favorites_ms", "related_ms", "total_ms"} {
+		v, ok := payload[key].(int64)
+		if !ok {
+			t.Fatalf("payload[%q] = %#v, want milliseconds", key, payload[key])
+		}
+		ms[key] = v
+	}
+	if ms["fanout_ms"] < 30 || ms["total_ms"] < ms["fanout_ms"] {
+		t.Errorf("fanout_ms = %d, total_ms = %d, want fan-out at least the 30ms provider wait and total at least that", ms["fanout_ms"], ms["total_ms"])
+	}
+	if payload["cached"] != false || payload["partial"] != false {
+		t.Errorf("cached = %v, partial = %v, want false for a fresh search every provider answered", payload["cached"], payload["partial"])
+	}
+}
+
+func TestService_TelemetryFailureDoesNotSurface(t *testing.T) {
+	store := &discoverytest.FakeEventStore{Err: errors.New("db down")}
+	p := &discoverytest.FakeProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	svc := NewService([]ports.SearchProvider{p}, providercall.NewCircuitBreaker(), WithEventStore(store))
+
+	out, err := svc.Execute(context.Background(), discoverytest.NewUser(), discoverytest.NewQuery(t, "humble"), false)
+	svc.WaitForBackground()
+
+	if err != nil {
+		t.Fatalf("Execute returned error %v; telemetry failure must not surface", err)
+	}
+	if out == nil || len(out.Results) != 1 {
+		t.Fatalf("search result unaffected by telemetry failure, got %v", out)
+	}
+}
+
+func TestService_NoEventStoreNoEmit(t *testing.T) {
+	p := &discoverytest.FakeProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	svc := NewService([]ports.SearchProvider{p}, providercall.NewCircuitBreaker())
+	runSearch(t, svc, "humble")
+	svc.WaitForBackground()
+}
+
+func TestService_SearchTelemetryRecordsShownSignatures(t *testing.T) {
+	store := &discoverytest.FakeEventStore{}
+	p := &discoverytest.FakeProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{
+		discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80),
+		discoverytest.DeezerTrack("Humble Pie", "Other Artist", 60),
+		discoverytest.DeezerTrack("Humble Beginnings", "Third Artist", 40),
+	}}
+	svc := NewService([]ports.SearchProvider{p}, providercall.NewCircuitBreaker(), WithEventStore(store))
+	q, err := domain.NewSearchQuery("humble", map[domain.ResultKind]bool{domain.ResultKindTrack: true}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := svc.Execute(context.Background(), discoverytest.NewUser(), q, false)
+	svc.WaitForBackground()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	events := store.Snapshot()
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
+	shown, ok := events[0].Payload["shown_signatures"].([]string)
+	if !ok {
+		t.Fatalf("shown_signatures = %T, want []string", events[0].Payload["shown_signatures"])
+	}
+	if len(out.Results) != 1 || len(shown) != out.Total {
+		t.Errorf("len(shown_signatures) = %d, page = %d, want %d (the whole slate, not just the page)", len(shown), len(out.Results), out.Total)
+	}
+	set := map[string]bool{}
+	for _, s := range shown {
+		set[s] = true
+	}
+	surfaced := append([]domain.SearchResult(nil), out.Results...)
+	for _, sec := range out.Slate.Sections {
+		surfaced = append(surfaced, sec.Items...)
+	}
+	for _, r := range surfaced {
+		sig := r.Signature
+		if sig == "" {
+			sig = domain.ResultSignature(r)
+		}
+		if !set[sig] {
+			t.Errorf("surfaced result %q signature %q missing from shown_signatures %v", r.Title, sig, shown)
+		}
+	}
+}
+
+func TestSearchTelemetry_DroppedEventLogsSearchAndUser(t *testing.T) {
+	store := &discoverytest.FakeEventStore{Err: errors.New("db down")}
+	p := &discoverytest.FakeProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	svc := NewService([]ports.SearchProvider{p}, providercall.NewCircuitBreaker(), WithEventStore(store))
+	user := discoverytest.NewUser()
+	ring := discoverytest.CaptureDetachedLogs(t)
+
+	out, err := svc.Execute(context.Background(), user, discoverytest.NewQuery(t, "humble"), false)
+	svc.WaitForBackground()
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	rec := discoverytest.OnlyRecord(t, ring, "search.v2.telemetry_emit_failed")
+	if rec.Attrs["search_id"] != out.SearchId {
+		t.Errorf("search_id = %q, want %q: the dropped event is unfindable without it", rec.Attrs["search_id"], out.SearchId)
+	}
+	if rec.Attrs["user_id"] != user.String() {
+		t.Errorf("user_id = %q, want %q", rec.Attrs["user_id"], user.String())
+	}
+	if !strings.Contains(rec.Attrs["error"], "db down") {
+		t.Errorf("error = %q, want the store's failure", rec.Attrs["error"])
+	}
+}

@@ -1,13 +1,13 @@
 package discoverybridge
 
 import (
+	"altune/go-api/internal/discovery/service/content"
 	"context"
 	"log/slog"
 
 	catalogdomain "altune/go-api/internal/catalog/domain"
 	catalogports "altune/go-api/internal/catalog/ports"
 	discoverydomain "altune/go-api/internal/discovery/domain"
-	discoveryservice "altune/go-api/internal/discovery/service"
 )
 
 var _ catalogports.FeaturedArtistResolver = (*FeaturedResolver)(nil)
@@ -20,7 +20,7 @@ type FeaturedResolver struct {
 	inner featuredArtistResolver
 }
 
-func NewFeaturedResolver(inner *discoveryservice.FeaturedArtistResolver) *FeaturedResolver {
+func NewFeaturedResolver(inner *content.FeaturedArtistResolver) *FeaturedResolver {
 	return &FeaturedResolver{inner: inner}
 }
 

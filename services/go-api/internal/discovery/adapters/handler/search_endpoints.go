@@ -3,7 +3,8 @@ package handler
 import (
 	"altune/go-api/internal/discovery/adapters/authbridge"
 	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/history"
+	"altune/go-api/internal/discovery/service/interaction"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
 	"fmt"
@@ -197,7 +198,7 @@ func (h *DiscoveryHandler) handleClearSearchHistory(w http.ResponseWriter, r *ht
 
 	if err := h.clearHistorySvc.Execute(r.Context(), userId); err != nil {
 		slog.ErrorContext(r.Context(), "clear search history failed",
-			"action", service.ClearSearchHistoryAction,
+			"action", history.ClearSearchHistoryAction,
 			"user_id", userId.String(),
 			"error", err)
 		httputil.HandleServiceError(w, r, err)
@@ -236,7 +237,7 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	input := service.RecordEventInput{
+	input := interaction.RecordEventInput{
 		Type:             eventType,
 		SearchId:         req.SearchID,
 		EventId:          req.EventID,

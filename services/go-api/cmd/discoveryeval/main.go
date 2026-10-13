@@ -3,6 +3,8 @@ package main
 import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/service/search"
+	"altune/go-api/internal/discovery/service/vocabulary"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/database"
@@ -19,7 +21,6 @@ import (
 
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 
-	discoveryService "altune/go-api/internal/discovery/service"
 	discoveryEval "altune/go-api/internal/discovery/service/eval"
 
 	sharedRedis "altune/go-api/internal/shared/redis"
@@ -255,7 +256,7 @@ func corpusEntities(entities []discoveryEval.LibraryEntity, corpus string) ([]di
 }
 
 type variantSearchAdapter struct {
-	svc *discoveryService.Service
+	svc *search.Service
 }
 
 func (a variantSearchAdapter) SearchVariants(ctx context.Context, query string) ([]domain.SearchResult, []domain.SearchResult) {
@@ -271,7 +272,7 @@ func runCorrection(ctx context.Context, pool *pgxpool.Pool, redisClient *goredis
 	if vocab == nil {
 		return fmt.Errorf("correction mode needs a vocabulary store (set REDIS_URL)")
 	}
-	corrector := discoveryService.NewCorrectionService(vocab)
+	corrector := vocabulary.NewCorrectionService(vocab)
 
 	terms, err := resolveTerms(ctx, pool, opts)
 	if err != nil {
@@ -434,7 +435,7 @@ func evalQuery(query string) (*domain.SearchQuery, error) {
 }
 
 type searchAdapter struct {
-	svc *discoveryService.Service
+	svc *search.Service
 }
 
 func (a searchAdapter) Search(ctx context.Context, query string) ([]domain.SearchResult, error) {
@@ -564,7 +565,7 @@ func runSignalA(ctx context.Context, pool *pgxpool.Pool, redisClient *goredis.Cl
 
 	var svc *discoveryEval.CoverageSignalAService
 	if vocab := app.BuildVocabularyStore(redisClient); vocab != nil {
-		svc = discoveryEval.NewCoverageSignalAService(eventStore, discoveryService.NewCorrectionService(vocab))
+		svc = discoveryEval.NewCoverageSignalAService(eventStore, vocabulary.NewCorrectionService(vocab))
 	} else {
 		svc = discoveryEval.NewCoverageSignalAService(eventStore, nil)
 	}

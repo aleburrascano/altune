@@ -4,8 +4,11 @@ import (
 	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/content"
 	"altune/go-api/internal/discovery/service/enrich"
+	"altune/go-api/internal/discovery/service/history"
+	"altune/go-api/internal/discovery/service/providercall"
+	"altune/go-api/internal/discovery/service/search"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -32,13 +35,13 @@ func paramValidationRouter(t *testing.T) chi.Router {
 	}
 	historyRepo := &fakeSearchHistoryRepo{}
 	h := NewDiscoveryHandler(DiscoveryServices{
-		Search: service.NewService(
+		Search: search.NewService(
 			[]ports.SearchProvider{&fakeSearchProvider{name: discdomain.ProviderDeezer}},
-			service.NewCircuitBreaker(), service.WithHistoryRepository(historyRepo)),
-		History:      service.NewListSearchHistoryService(historyRepo),
-		ClearHistory: service.NewClearSearchHistoryService(historyRepo),
-		Album:        service.NewGetAlbumTracksService(albumProviders),
-		Artist:       service.NewGetArtistContentService(artistProviders),
+			providercall.NewCircuitBreaker(), search.WithHistoryRepository(historyRepo)),
+		History:      history.NewListSearchHistoryService(historyRepo),
+		ClearHistory: history.NewClearSearchHistoryService(historyRepo),
+		Album:        content.NewGetAlbumTracksService(albumProviders),
+		Artist:       content.NewGetArtistContentService(artistProviders),
 		Enrich:       enrich.NewEnrichmentService(&fakeMetadataEnricher{}, nil, nil),
 	})
 	r := chi.NewRouter()

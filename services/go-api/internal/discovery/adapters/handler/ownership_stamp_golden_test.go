@@ -4,7 +4,11 @@ import (
 	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/content"
+	"altune/go-api/internal/discovery/service/ownership"
+	"altune/go-api/internal/discovery/service/providercall"
+	"altune/go-api/internal/discovery/service/related"
+	"altune/go-api/internal/discovery/service/search"
 	"altune/go-api/internal/shared"
 	"context"
 	"net/http"
@@ -89,7 +93,7 @@ func goldenRouter(svcs DiscoveryServices, filler ports.TrackNumberFiller) chi.Ro
 }
 
 func wireGoldenOwnership(h *DiscoveryHandler, reader ports.OwnershipReader, filler ports.TrackNumberFiller) *DiscoveryHandler {
-	return h.WithOwnershipEnrichment(service.NewOwnershipEnrichmentService(reader, filler))
+	return h.WithOwnershipEnrichment(ownership.NewOwnershipEnrichmentService(reader, filler))
 }
 
 var searchIDPattern = regexp.MustCompile(`"search_id":"[^"]*"`)
@@ -114,7 +118,7 @@ const (
 func TestOwnershipGolden_Search(t *testing.T) {
 	provider := &fakeSearchProvider{name: discdomain.ProviderDeezer, results: goldenTracks()}
 	router := goldenRouter(DiscoveryServices{
-		Search: service.NewService([]ports.SearchProvider{provider}, service.NewCircuitBreaker()),
+		Search: search.NewService([]ports.SearchProvider{provider}, providercall.NewCircuitBreaker()),
 	}, &recordingTrackNumberFiller{done: make(chan struct{})})
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/search?q=song&save_history=false", nil)
@@ -123,7 +127,7 @@ func TestOwnershipGolden_Search(t *testing.T) {
 }
 
 func TestOwnershipGolden_AlbumTracksStampsAndFills(t *testing.T) {
-	albumSvc := service.NewGetAlbumTracksService(map[discdomain.ProviderName]ports.AlbumContentProvider{
+	albumSvc := content.NewGetAlbumTracksService(map[discdomain.ProviderName]ports.AlbumContentProvider{
 		discdomain.ProviderDeezer: &discoverytest.AlbumContentProvider{Results: goldenTracks()},
 	})
 	filler := &recordingTrackNumberFiller{done: make(chan struct{}), want: 1}
@@ -147,8 +151,8 @@ func TestOwnershipGolden_AlbumTracksStampsAndFills(t *testing.T) {
 	}
 }
 
-func goldenArtistSvc() *service.GetArtistContentService {
-	return service.NewGetArtistContentService(map[discdomain.ProviderName]ports.ArtistContentProvider{
+func goldenArtistSvc() *content.GetArtistContentService {
+	return content.NewGetArtistContentService(map[discdomain.ProviderName]ports.ArtistContentProvider{
 		discdomain.ProviderDeezer: &discoverytest.ArtistContentProvider{TopTracks: goldenTracks(), Albums: goldenTracks()},
 	})
 }
@@ -181,7 +185,7 @@ func TestOwnershipGolden_ArtistEndpoints(t *testing.T) {
 }
 
 func TestOwnershipGolden_Related(t *testing.T) {
-	relatedSvc := service.NewGetRelatedTracksService(map[string]ports.RelatedTracksProvider{
+	relatedSvc := related.NewGetRelatedTracksService(map[string]ports.RelatedTracksProvider{
 		"soundcloud": &fakeRelatedTracksProvider{results: goldenTracks()},
 	})
 	router := goldenRouter(DiscoveryServices{Related: relatedSvc}, &recordingTrackNumberFiller{done: make(chan struct{})})

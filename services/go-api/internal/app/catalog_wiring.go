@@ -10,6 +10,7 @@ import (
 	"altune/go-api/internal/catalog/adapters/discoverybridge"
 	"altune/go-api/internal/catalog/adapters/persistence"
 	"altune/go-api/internal/catalog/adapters/storage"
+	"altune/go-api/internal/discovery/service/ownership"
 	"altune/go-api/internal/observe/service/eventtap"
 	"altune/go-api/internal/shared/config"
 	"context"
@@ -38,7 +39,6 @@ import (
 	trackservice "altune/go-api/internal/catalog/service/track"
 
 	discoveryCatalogBridge "altune/go-api/internal/discovery/adapters/catalogbridge"
-	discoveryService "altune/go-api/internal/discovery/service"
 )
 
 type catalogWiring struct {
@@ -388,8 +388,8 @@ func missingAudioStoreError(cfg *config.Config) error {
 	)
 }
 
-func newOwnershipEnrichment(cat catalogWiring) *discoveryService.OwnershipEnrichmentService {
-	return discoveryService.NewOwnershipEnrichmentService(
+func newOwnershipEnrichment(cat catalogWiring) *ownership.OwnershipEnrichmentService {
+	return ownership.NewOwnershipEnrichmentService(
 		discoveryCatalogBridge.NewOwnershipReader(cat.trackRepo),
 		discoveryCatalogBridge.NewTrackNumberWriter(cat.setTrackNumberSvc),
 	)

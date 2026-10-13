@@ -3,7 +3,8 @@ package handler
 import (
 	"altune/go-api/internal/discovery/adapters/authbridge"
 	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/content"
+	"altune/go-api/internal/discovery/service/providercall"
 	"altune/go-api/internal/shared/httputil"
 	"context"
 	"errors"
@@ -23,7 +24,7 @@ type ContentFetchResponseDTO struct {
 	Code     string            `json:"code,omitempty"`
 }
 
-func contentFetchToDTO(resp *service.ContentFetchResponse) ContentFetchResponseDTO {
+func contentFetchToDTO(resp *providercall.ContentFetchResponse) ContentFetchResponseDTO {
 	items := make([]SearchResultDTO, len(resp.Items))
 	for i, r := range resp.Items {
 		items[i] = searchResultToDTO(r)
@@ -46,7 +47,7 @@ const (
 	contentCodeProviderError   = "discovery.provider_error"
 )
 
-func contentFetchOutcome(resp *service.ContentFetchResponse) (int, string) {
+func contentFetchOutcome(resp *providercall.ContentFetchResponse) (int, string) {
 	if resp.Unserved {
 		return http.StatusNotFound, contentCodeUnserved
 	}
@@ -132,7 +133,7 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 				return
 			}
 
-			resp, err := h.albumSvc.ExecuteRequest(r.Context(), service.AlbumTracksRequest{
+			resp, err := h.albumSvc.ExecuteRequest(r.Context(), content.AlbumTracksRequest{
 				Provider:     pn,
 				ExternalID:   externalID,
 				Title:        albumTitle,
@@ -220,7 +221,7 @@ type ArtistContentResponseDTO struct {
 	Albums    ContentFetchResponseDTO `json:"albums"`
 }
 
-func artistContentOutcome(tracks, albums *service.ContentFetchResponse) (int, string) {
+func artistContentOutcome(tracks, albums *providercall.ContentFetchResponse) (int, string) {
 	tracksStatus, tracksCode := contentFetchOutcome(tracks)
 	albumsStatus, albumsCode := contentFetchOutcome(albums)
 	if tracksStatus == http.StatusOK || albumsStatus == http.StatusOK {
@@ -244,7 +245,7 @@ func runRecovered(ctx context.Context, event string, fetch func() error) (err er
 
 func (h *DiscoveryHandler) fetchTopTracksAndAlbums(
 	ctx context.Context, pn domain.ProviderName, externalID string, known map[domain.ProviderName]string, tracksLimit, albumsLimit int,
-) (tracksResp, albumsResp *service.ContentFetchResponse, tracksErr, albumsErr error) {
+) (tracksResp, albumsResp *providercall.ContentFetchResponse, tracksErr, albumsErr error) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {

@@ -3,7 +3,8 @@ package smokeeval
 import (
 	domain "altune/go-api/internal/discovery/domain"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
-	discoveryService "altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/providercall"
+	"altune/go-api/internal/discovery/service/search"
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
@@ -77,10 +78,10 @@ func (stubSearchProvider) SupportedKinds() map[domain.ResultKind]bool {
 func runSmokeEvalRecording(t *testing.T, user shared.UserId) int {
 	t.Helper()
 	store := &recordingEventStore{}
-	svc := discoveryService.NewService(
+	svc := search.NewService(
 		[]discoveryPorts.SearchProvider{stubSearchProvider{}},
-		discoveryService.NewCircuitBreaker(),
-		discoveryService.WithEventStore(store),
+		providercall.NewCircuitBreaker(),
+		search.WithEventStore(store),
 	)
 	if _, err := Run(context.Background(), svc, user); err != nil {
 		t.Fatalf("Run: %v", err)
@@ -126,11 +127,11 @@ func (s scriptedSearcher) Execute(
 	_ shared.UserId,
 	query *domain.SearchQuery,
 	_ bool,
-) (*discoveryService.SearchOutput, error) {
+) (*search.SearchOutput, error) {
 	if s.failing[query.Raw] {
 		return nil, errors.New("transient upstream failure")
 	}
-	return &discoveryService.SearchOutput{
+	return &search.SearchOutput{
 		Results: []domain.SearchResult{{Title: query.Raw}},
 	}, nil
 }

@@ -4,7 +4,10 @@ import (
 	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/interaction"
+	"altune/go-api/internal/discovery/service/providercall"
+	"altune/go-api/internal/discovery/service/search"
+	"altune/go-api/internal/discovery/service/vocabulary"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/logging"
@@ -335,7 +338,7 @@ func (s *recordingEventStore) Append(_ context.Context, e discdomain.Interaction
 }
 
 func buildSuggestRouter(vocab *fakeVocabStore) chi.Router {
-	h := NewDiscoveryHandler(DiscoveryServices{Suggest: service.NewSuggestService(vocab)})
+	h := NewDiscoveryHandler(DiscoveryServices{Suggest: vocabulary.NewSuggestService(vocab)})
 	r := chi.NewRouter()
 	r.Use(middleware.Middleware(discVerifyAsTestUser))
 	r.Mount("/discovery", h.Routes())
@@ -343,7 +346,7 @@ func buildSuggestRouter(vocab *fakeVocabStore) chi.Router {
 }
 
 func buildEventRouter(store *recordingEventStore) chi.Router {
-	h := NewDiscoveryHandler(DiscoveryServices{Event: service.NewRecordEventService(store)})
+	h := NewDiscoveryHandler(DiscoveryServices{Event: interaction.NewRecordEventService(store)})
 	r := chi.NewRouter()
 	r.Use(middleware.Middleware(discVerifyAsTestUser))
 	r.Use(httputil.MaxBodySize(1 << 20))
@@ -1004,7 +1007,7 @@ func (s *recordingVocabStore) written() []string {
 }
 
 func buildQueryCapRouter(p ports.SearchProvider, vocab ports.VocabularyStore) chi.Router {
-	svc := service.NewService([]ports.SearchProvider{p}, service.NewCircuitBreaker(), service.WithVocabularyStore(vocab))
+	svc := search.NewService([]ports.SearchProvider{p}, providercall.NewCircuitBreaker(), search.WithVocabularyStore(vocab))
 	h := NewDiscoveryHandler(DiscoveryServices{Search: svc})
 	r := chi.NewRouter()
 	r.Use(middleware.Middleware(discVerifyAsTestUser))
@@ -1093,8 +1096,8 @@ func buildQueryNormRouter(history *fakeSearchHistoryRepo) chi.Router {
 			},
 		}},
 	}
-	svc := service.NewService([]ports.SearchProvider{p}, service.NewCircuitBreaker(),
-		service.WithHistoryRepository(history))
+	svc := search.NewService([]ports.SearchProvider{p}, providercall.NewCircuitBreaker(),
+		search.WithHistoryRepository(history))
 	h := NewDiscoveryHandler(DiscoveryServices{Search: svc})
 	r := chi.NewRouter()
 	r.Use(middleware.Middleware(discVerifyAsTestUser))
@@ -1486,10 +1489,10 @@ func searchSlate(prefix string, n int) []discdomain.SearchResult {
 
 func pagingRouter(provider ports.SearchProvider) chi.Router {
 	down := &fakeSearchProvider{name: discdomain.ProviderITunes, err: context.DeadlineExceeded}
-	searchSvc := service.NewService(
+	searchSvc := search.NewService(
 		[]ports.SearchProvider{provider, down},
-		service.NewCircuitBreaker(),
-		service.WithResultCache(&mapResultCache{entries: map[string][]discdomain.SearchResult{}}),
+		providercall.NewCircuitBreaker(),
+		search.WithResultCache(&mapResultCache{entries: map[string][]discdomain.SearchResult{}}),
 	)
 	h := NewDiscoveryHandler(DiscoveryServices{Search: searchSvc})
 	r := chi.NewRouter()
@@ -1639,10 +1642,10 @@ func TestHandleRecordEvent_NearMissUserTelemetryTypesAreRejected(t *testing.T) {
 
 func TestHandleSearch_CacheHitReflectsTheResultCache(t *testing.T) {
 	provider := &fakeSearchProvider{name: discdomain.ProviderDeezer, results: searchSlate("c-", 3)}
-	searchSvc := service.NewService(
+	searchSvc := search.NewService(
 		[]ports.SearchProvider{provider},
-		service.NewCircuitBreaker(),
-		service.WithResultCache(&mapResultCache{entries: map[string][]discdomain.SearchResult{}}),
+		providercall.NewCircuitBreaker(),
+		search.WithResultCache(&mapResultCache{entries: map[string][]discdomain.SearchResult{}}),
 	)
 	h := NewDiscoveryHandler(DiscoveryServices{Search: searchSvc})
 	router := chi.NewRouter()

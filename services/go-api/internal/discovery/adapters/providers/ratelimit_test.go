@@ -3,7 +3,8 @@ package providers
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/providercall"
+	"altune/go-api/internal/discovery/service/search"
 	"context"
 	"errors"
 	"net/http"
@@ -134,11 +135,11 @@ func healthyMBServer(t *testing.T) *httptest.Server {
 	return srv
 }
 
-func inspect(t *testing.T, svc *service.Service) {
+func inspect(t *testing.T, svc *search.Service) {
 	inspectKinds(t, svc, trackOnly)
 }
 
-func inspectKinds(t *testing.T, svc *service.Service, kinds map[domain.ResultKind]bool) {
+func inspectKinds(t *testing.T, svc *search.Service, kinds map[domain.ResultKind]bool) {
 	q, err := domain.NewSearchQuery("humble", kinds, 10)
 	if err != nil {
 		t.Errorf("query: %v", err)
@@ -147,7 +148,7 @@ func inspectKinds(t *testing.T, svc *service.Service, kinds map[domain.ResultKin
 	_, _ = svc.InspectSearchWithStatuses(context.Background(), q)
 }
 
-func searchConcurrently(t *testing.T, svc *service.Service, n int) {
+func searchConcurrently(t *testing.T, svc *search.Service, n int) {
 	var wg sync.WaitGroup
 	for i := 0; i < n; i++ {
 		wg.Add(1)
@@ -162,8 +163,8 @@ func searchConcurrently(t *testing.T, svc *service.Service, n int) {
 func TestRateLimitQueueTimeoutsDoNotOpenCircuit(t *testing.T) {
 	srv := healthyMBServer(t)
 	mb := newShortBudgetMB(srv.URL, 200*time.Millisecond, 50*time.Millisecond)
-	cb := service.NewCircuitBreaker()
-	svc := service.NewService([]ports.SearchProvider{mb}, cb)
+	cb := providercall.NewCircuitBreaker()
+	svc := search.NewService([]ports.SearchProvider{mb}, cb)
 	inspect(t, svc)
 
 	searchConcurrently(t, svc, 10)
@@ -203,8 +204,8 @@ func TestRealUpstreamTimeoutStillOpensCircuit(t *testing.T) {
 	t.Cleanup(srv.Close)
 	t.Cleanup(func() { close(release) })
 	mb := newShortBudgetMB(srv.URL, time.Millisecond, 30*time.Millisecond)
-	cb := service.NewCircuitBreaker()
-	svc := service.NewService([]ports.SearchProvider{mb}, cb)
+	cb := providercall.NewCircuitBreaker()
+	svc := search.NewService([]ports.SearchProvider{mb}, cb)
 
 	allKinds := map[domain.ResultKind]bool{
 		domain.ResultKindTrack: true, domain.ResultKindAlbum: true, domain.ResultKindArtist: true,
@@ -224,8 +225,8 @@ func TestUpstream5xxStillOpensCircuit(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	mb := newShortBudgetMB(srv.URL, time.Millisecond, time.Second)
-	cb := service.NewCircuitBreaker()
-	svc := service.NewService([]ports.SearchProvider{mb}, cb)
+	cb := providercall.NewCircuitBreaker()
+	svc := search.NewService([]ports.SearchProvider{mb}, cb)
 
 	for i := 0; i < 5; i++ {
 		inspect(t, svc)
@@ -239,8 +240,8 @@ func TestUpstream5xxStillOpensCircuit(t *testing.T) {
 func TestRateLimitQueueFullShedsDoNotOpenCircuit(t *testing.T) {
 	srv := healthyMBServer(t)
 	mb := newShortBudgetMB(srv.URL, 100*time.Millisecond, time.Minute)
-	cb := service.NewCircuitBreaker()
-	svc := service.NewService([]ports.SearchProvider{mb}, cb)
+	cb := providercall.NewCircuitBreaker()
+	svc := search.NewService([]ports.SearchProvider{mb}, cb)
 	q, err := domain.NewSearchQuery("humble", trackOnly, 10)
 	if err != nil {
 		t.Fatalf("query: %v", err)

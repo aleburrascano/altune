@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/interaction"
 	"altune/go-api/internal/shared"
 	"net/http"
 	"net/http/httptest"
@@ -18,7 +18,7 @@ import (
 const validAuthFailureBody = `{"reason":"invalid_credentials","app_version":"1.2.3"}`
 
 func buildAuthFailureRouter(store *recordingEventStore, limit RequestLimit) chi.Router {
-	h := NewDiscoveryHandler(DiscoveryServices{Event: service.NewRecordEventService(store)})
+	h := NewDiscoveryHandler(DiscoveryServices{Event: interaction.NewRecordEventService(store)})
 	r := chi.NewRouter()
 	h.PublicRoutes(r, limit)
 	return r

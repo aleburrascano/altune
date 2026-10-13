@@ -1,16 +1,15 @@
 package eval
 
 import (
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/service/vocabulary"
 	"context"
 	"fmt"
 	"time"
-
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/discovery/service"
 )
 
 type queryCorrector interface {
-	Correct(ctx context.Context, query string) *service.CorrectionResult
+	Correct(ctx context.Context, query string) *vocabulary.CorrectionResult
 }
 
 type GapStrength int

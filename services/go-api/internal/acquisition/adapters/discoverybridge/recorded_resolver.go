@@ -1,12 +1,12 @@
 package discoverybridge
 
 import (
+	"altune/go-api/internal/discovery/service/search"
 	"altune/go-api/internal/shared"
 	"context"
 
 	discoverydomain "altune/go-api/internal/discovery/domain"
 	discoveryports "altune/go-api/internal/discovery/ports"
-	discoveryservice "altune/go-api/internal/discovery/service"
 )
 
 type RecordedSearchHit struct {
@@ -30,11 +30,11 @@ type recordedSearch struct {
 	hit *RecordedSearchHit
 }
 
-func (s recordedSearch) Execute(context.Context, shared.UserId, *discoverydomain.SearchQuery, bool) (*discoveryservice.SearchOutput, error) {
+func (s recordedSearch) Execute(context.Context, shared.UserId, *discoverydomain.SearchQuery, bool) (*search.SearchOutput, error) {
 	if s.hit == nil {
-		return &discoveryservice.SearchOutput{}, nil
+		return &search.SearchOutput{}, nil
 	}
-	return &discoveryservice.SearchOutput{Results: []discoverydomain.SearchResult{{
+	return &search.SearchOutput{Results: []discoverydomain.SearchResult{{
 		Kind:     discoverydomain.ResultKindTrack,
 		Title:    s.hit.Title,
 		Subtitle: s.hit.Artist,

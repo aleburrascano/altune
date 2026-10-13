@@ -2,9 +2,11 @@ package handler
 
 import (
 	"altune/go-api/internal/auth/adapters/middleware"
-	authdomain "altune/go-api/internal/auth/domain"
-	authports "altune/go-api/internal/auth/ports"
-	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/favorites"
+	"altune/go-api/internal/discovery/service/history"
+	"altune/go-api/internal/discovery/service/providercall"
+	"altune/go-api/internal/discovery/service/search"
+	"altune/go-api/internal/discovery/service/vocabulary"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
 	"context"
@@ -13,6 +15,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	authdomain "altune/go-api/internal/auth/domain"
+	authports "altune/go-api/internal/auth/ports"
 
 	discdomain "altune/go-api/internal/discovery/domain"
 
@@ -117,8 +122,8 @@ func TestEventRateLimit_DefaultBudgetThenRejects(t *testing.T) {
 
 func TestSearchRateLimit_BudgetsArePerUserAndPerRoute(t *testing.T) {
 	h := NewDiscoveryHandler(DiscoveryServices{
-		Search:  service.NewService(nil, service.NewCircuitBreaker()),
-		Suggest: service.NewSuggestService(&fakeVocabStore{}),
+		Search:  search.NewService(nil, providercall.NewCircuitBreaker()),
+		Suggest: vocabulary.NewSuggestService(&fakeVocabStore{}),
 	}).WithRateLimits(DiscoveryRateLimits{
 		Search:  RequestLimit{Max: 2, Window: time.Hour},
 		Suggest: RequestLimit{Max: 2, Window: time.Hour},
@@ -205,7 +210,7 @@ var otherTestUserId = shared.NewUserId(uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-b
 
 func buildRateLimitedRouter(limits DiscoveryRateLimits) chi.Router {
 	h := NewDiscoveryHandler(DiscoveryServices{
-		Search: service.NewService(nil, service.NewCircuitBreaker()),
+		Search: search.NewService(nil, providercall.NewCircuitBreaker()),
 	}).WithRateLimits(limits)
 	r := chi.NewRouter()
 	r.Use(middleware.Middleware(discVerifyAsTestUser))
@@ -256,9 +261,9 @@ func TestUnmeteredUserRoutes_AreThrottledPerUser(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			historyRepo := &fakeSearchHistoryRepo{}
 			h := NewDiscoveryHandler(DiscoveryServices{
-				History:      service.NewListSearchHistoryService(historyRepo),
-				ClearHistory: service.NewClearSearchHistoryService(historyRepo),
-				Favorites:    service.NewFavoritesService(erroringFavoritesRepo{}),
+				History:      history.NewListSearchHistoryService(historyRepo),
+				ClearHistory: history.NewClearSearchHistoryService(historyRepo),
+				Favorites:    favorites.NewFavoritesService(erroringFavoritesRepo{}),
 			}).WithRateLimits(DiscoveryRateLimits{
 				History:   RequestLimit{Max: 1, Window: time.Hour},
 				Favorites: RequestLimit{Max: 1, Window: time.Hour},
@@ -295,7 +300,7 @@ func TestUnmeteredUserRoutes_AreThrottledPerUser(t *testing.T) {
 func TestSearchRateLimit_AdmitsAgainAfterWindowResets(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	h := NewDiscoveryHandler(DiscoveryServices{
-		Search: service.NewService(nil, service.NewCircuitBreaker()),
+		Search: search.NewService(nil, providercall.NewCircuitBreaker()),
 	}).WithRateLimits(DiscoveryRateLimits{Search: RequestLimit{Max: 1, Window: time.Minute}})
 	h.searchLimiter.now = func() time.Time { return now }
 	r := chi.NewRouter()

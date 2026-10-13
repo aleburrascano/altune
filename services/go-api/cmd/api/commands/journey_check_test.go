@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/acquisition/adapters/ytdlp"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/discovery/domain"
-	discoveryService "altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/search"
 	"altune/go-api/internal/shared"
 	"bytes"
 	"context"
@@ -23,17 +23,17 @@ type fakeJourneySearcher struct {
 	gotSaved bool
 }
 
-func (f *fakeJourneySearcher) Execute(_ context.Context, userId shared.UserId, _ *domain.SearchQuery, saveHistory bool) (*discoveryService.SearchOutput, error) {
+func (f *fakeJourneySearcher) Execute(_ context.Context, userId shared.UserId, _ *domain.SearchQuery, saveHistory bool) (*search.SearchOutput, error) {
 	f.gotUser, f.gotSaved = userId, saveHistory
 	if f.err != nil {
 		return nil, f.err
 	}
-	return &discoveryService.SearchOutput{Results: make([]domain.SearchResult, f.results)}, nil
+	return &search.SearchOutput{Results: make([]domain.SearchResult, f.results)}, nil
 }
 
 type nilOutputJourneySearcher struct{}
 
-func (nilOutputJourneySearcher) Execute(_ context.Context, _ shared.UserId, _ *domain.SearchQuery, _ bool) (*discoveryService.SearchOutput, error) {
+func (nilOutputJourneySearcher) Execute(_ context.Context, _ shared.UserId, _ *domain.SearchQuery, _ bool) (*search.SearchOutput, error) {
 	return nil, nil
 }
 
@@ -134,7 +134,7 @@ type deadlineRecordingSearcher struct {
 	hasDeadline bool
 }
 
-func (d *deadlineRecordingSearcher) Execute(ctx context.Context, userId shared.UserId, query *domain.SearchQuery, saveHistory bool) (*discoveryService.SearchOutput, error) {
+func (d *deadlineRecordingSearcher) Execute(ctx context.Context, userId shared.UserId, query *domain.SearchQuery, saveHistory bool) (*search.SearchOutput, error) {
 	deadline, ok := ctx.Deadline()
 	d.hasDeadline, d.remaining = ok, time.Until(deadline)
 	return d.fakeJourneySearcher.Execute(ctx, userId, query, saveHistory)

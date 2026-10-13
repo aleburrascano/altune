@@ -2,12 +2,15 @@ package handler
 
 import (
 	"altune/go-api/internal/auth/adapters/middleware"
-	authdomain "altune/go-api/internal/auth/domain"
-	authports "altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/content"
 	"altune/go-api/internal/discovery/service/enrich"
+	"altune/go-api/internal/discovery/service/history"
+	"altune/go-api/internal/discovery/service/interaction"
+	"altune/go-api/internal/discovery/service/providercall"
+	"altune/go-api/internal/discovery/service/related"
+	"altune/go-api/internal/discovery/service/search"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
 	"bytes"
@@ -19,6 +22,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	authdomain "altune/go-api/internal/auth/domain"
+	authports "altune/go-api/internal/auth/ports"
 
 	discdomain "altune/go-api/internal/discovery/domain"
 
@@ -156,29 +162,29 @@ func buildDiscoveryRouter(
 		providers = append(providers, searchProvider)
 	}
 
-	cb := service.NewCircuitBreaker()
-	var searchOpts []service.Option
+	cb := providercall.NewCircuitBreaker()
+	var searchOpts []search.Option
 	if historyRepo != nil {
-		searchOpts = append(searchOpts, service.WithHistoryRepository(historyRepo))
+		searchOpts = append(searchOpts, search.WithHistoryRepository(historyRepo))
 	}
-	searchSvc := service.NewService(providers, cb, searchOpts...)
-	historySvc := service.NewListSearchHistoryService(historyRepo)
-	clearHistorySvc := service.NewClearSearchHistoryService(historyRepo)
+	searchSvc := search.NewService(providers, cb, searchOpts...)
+	historySvc := history.NewListSearchHistoryService(historyRepo)
+	clearHistorySvc := history.NewClearSearchHistoryService(historyRepo)
 
-	var albumSvc *service.GetAlbumTracksService
+	var albumSvc *content.GetAlbumTracksService
 	if albumProviders != nil {
-		albumSvc = service.NewGetAlbumTracksService(albumProviders)
+		albumSvc = content.NewGetAlbumTracksService(albumProviders)
 	}
 
-	var artistSvc *service.GetArtistContentService
+	var artistSvc *content.GetArtistContentService
 	if artistProviders != nil {
-		artistSvc = service.NewGetArtistContentService(artistProviders)
+		artistSvc = content.NewGetArtistContentService(artistProviders)
 	}
 
 	h := NewDiscoveryHandler(DiscoveryServices{
 		Search:        searchSvc,
 		History:       historySvc,
-		RecordHistory: service.NewRecordSearchHistoryService(historyRepo),
+		RecordHistory: history.NewRecordSearchHistoryService(historyRepo),
 		ClearHistory:  clearHistorySvc,
 		Album:         albumSvc,
 		Artist:        artistSvc,
@@ -217,8 +223,8 @@ func (nopEventStore) Append(context.Context, discdomain.InteractionEvent) error 
 
 func TestHandleRecordEvent_ServiceValidation(t *testing.T) {
 	h := NewDiscoveryHandler(DiscoveryServices{
-		Search: service.NewService(nil, service.NewCircuitBreaker()),
-		Event:  service.NewRecordEventService(nopEventStore{}),
+		Search: search.NewService(nil, providercall.NewCircuitBreaker()),
+		Event:  interaction.NewRecordEventService(nopEventStore{}),
 	})
 	router := chi.NewRouter()
 	router.Use(middleware.Middleware(discVerifyAsTestUser))
@@ -677,7 +683,7 @@ func (p *fakeRelatedTracksProvider) GetRelatedTracks(_ context.Context, _ discdo
 }
 
 func buildRelatedRouter(provider *fakeRelatedTracksProvider) chi.Router {
-	svc := service.NewGetRelatedTracksService(map[string]ports.RelatedTracksProvider{
+	svc := related.NewGetRelatedTracksService(map[string]ports.RelatedTracksProvider{
 		"soundcloud": provider,
 	})
 	h := NewDiscoveryHandler(DiscoveryServices{Related: svc})

@@ -2,12 +2,12 @@ package app
 
 import (
 	"altune/go-api/internal/discovery/adapters/providers"
+	"altune/go-api/internal/discovery/service/content"
 	"altune/go-api/internal/shared/config"
 	"net/http"
 
 	discoveryDomain "altune/go-api/internal/discovery/domain"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
-	discoveryService "altune/go-api/internal/discovery/service"
 )
 
 func buildArtistContentProviders(
@@ -33,16 +33,16 @@ func BuildArtistContentService(
 	cfg *config.Config,
 	transport http.RoundTripper,
 	store discoveryPorts.IdentityStore,
-) *discoveryService.GetArtistContentService {
+) *content.GetArtistContentService {
 	cf := newClientFactory(transport)
 
 	artistProviders := buildArtistContentProviders(cf, cfg)
 
-	opts := []discoveryService.ArtistContentOption{
-		discoveryService.WithContentIdentityStore(store),
+	opts := []content.ArtistContentOption{
+		content.WithContentIdentityStore(store),
 	}
 	if mb := buildMusicBrainzAdapter(cf, cfg); mb != nil {
-		opts = append(opts, discoveryService.WithMBAnchor(mb))
+		opts = append(opts, content.WithMBAnchor(mb))
 	}
-	return discoveryService.NewGetArtistContentService(artistProviders, opts...)
+	return content.NewGetArtistContentService(artistProviders, opts...)
 }

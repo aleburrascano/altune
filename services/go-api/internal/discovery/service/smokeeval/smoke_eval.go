@@ -2,7 +2,7 @@ package smokeeval
 
 import (
 	domain "altune/go-api/internal/discovery/domain"
-	discoveryService "altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/search"
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
@@ -32,7 +32,7 @@ type searcher interface {
 		userId shared.UserId,
 		query *domain.SearchQuery,
 		saveHistory bool,
-	) (*discoveryService.SearchOutput, error)
+	) (*search.SearchOutput, error)
 }
 
 var smokeChecks = []struct{ query, expect string }{

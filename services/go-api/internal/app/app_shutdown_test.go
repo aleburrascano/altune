@@ -2,7 +2,8 @@ package app
 
 import (
 	discoveryDomain "altune/go-api/internal/discovery/domain"
-	discoveryService "altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/providercall"
+	"altune/go-api/internal/discovery/service/search"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
 	"bytes"
@@ -36,8 +37,8 @@ func (s *gatedStore) Append(ctx context.Context, _ discoveryDomain.InteractionEv
 
 func TestDrainSearchBackground_WaitsForInFlightWork(t *testing.T) {
 	store := &gatedStore{entered: make(chan struct{}), release: make(chan struct{})}
-	svc := discoveryService.NewService(nil, discoveryService.NewCircuitBreaker(),
-		discoveryService.WithEventStore(store))
+	svc := search.NewService(nil, providercall.NewCircuitBreaker(),
+		search.WithEventStore(store))
 
 	query, err := discoveryDomain.NewSearchQuery("humble", discoveryDomain.AllKinds(), 10)
 	if err != nil {

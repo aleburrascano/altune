@@ -1,12 +1,11 @@
 package eval
 
 import (
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/service/vocabulary"
 	"context"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/discovery/service"
 )
 
 type fakeEventQuery struct {
@@ -31,9 +30,9 @@ type fakeCorrector struct {
 	typos map[string]bool
 }
 
-func (f *fakeCorrector) Correct(_ context.Context, query string) *service.CorrectionResult {
+func (f *fakeCorrector) Correct(_ context.Context, query string) *vocabulary.CorrectionResult {
 	if f.typos[query] {
-		return &service.CorrectionResult{Corrected: query + " (fixed)", Confidence: 0.9}
+		return &vocabulary.CorrectionResult{Corrected: query + " (fixed)", Confidence: 0.9}
 	}
 	return nil
 }

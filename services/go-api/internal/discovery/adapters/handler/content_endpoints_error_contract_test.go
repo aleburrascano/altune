@@ -3,7 +3,9 @@ package handler
 import (
 	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/content"
+	"altune/go-api/internal/discovery/service/providercall"
+	"altune/go-api/internal/discovery/service/related"
 	"context"
 	"encoding/json"
 	"errors"
@@ -42,7 +44,7 @@ func (p timingOutContentProvider) GetRelatedTracks(context.Context, discdomain.P
 
 func errorContractRouter(t *testing.T) chi.Router {
 	t.Helper()
-	breaker := service.NewCircuitBreaker()
+	breaker := providercall.NewCircuitBreaker()
 	for i := 0; breaker.AllowRequest(context.Background(), discdomain.ProviderSoundCloud); i++ {
 		if i > 100 {
 			t.Fatal("circuit breaker never opened for soundcloud")
@@ -52,15 +54,15 @@ func errorContractRouter(t *testing.T) chi.Router {
 	timingOut := timingOutContentProvider{}
 	healthy := stubContentProvider{provider: discdomain.ProviderSoundCloud}
 	h := NewDiscoveryHandler(DiscoveryServices{
-		Album: service.NewGetAlbumTracksService(map[discdomain.ProviderName]ports.AlbumContentProvider{
+		Album: content.NewGetAlbumTracksService(map[discdomain.ProviderName]ports.AlbumContentProvider{
 			discdomain.ProviderITunes: timingOut, discdomain.ProviderSoundCloud: healthy,
-		}, service.WithAlbumCircuitBreaker(breaker)),
-		Artist: service.NewGetArtistContentService(map[discdomain.ProviderName]ports.ArtistContentProvider{
+		}, content.WithAlbumCircuitBreaker(breaker)),
+		Artist: content.NewGetArtistContentService(map[discdomain.ProviderName]ports.ArtistContentProvider{
 			discdomain.ProviderITunes: timingOut, discdomain.ProviderSoundCloud: healthy,
-		}, service.WithContentCircuitBreaker(breaker)),
-		Related: service.NewGetRelatedTracksService(map[string]ports.RelatedTracksProvider{
+		}, content.WithContentCircuitBreaker(breaker)),
+		Related: related.NewGetRelatedTracksService(map[string]ports.RelatedTracksProvider{
 			discdomain.ProviderITunes.String(): timingOut, discdomain.ProviderSoundCloud.String(): healthy,
-		}, service.WithRelatedCircuitBreaker(breaker)),
+		}, related.WithRelatedCircuitBreaker(breaker)),
 	})
 	router := chi.NewRouter()
 	router.Use(middleware.Middleware(discVerifyAsTestUser))
@@ -126,15 +128,15 @@ func decodeContentFailure(t *testing.T, httpCode int, raw json.RawMessage) conte
 }
 
 func TestArtistContentOutcome(t *testing.T) {
-	ok := &service.ContentFetchResponse{Status: discdomain.ProviderStatusOK}
-	partial := &service.ContentFetchResponse{Status: discdomain.ProviderStatusOK, Partial: true}
-	timeout := &service.ContentFetchResponse{Status: discdomain.ProviderStatusTimeout}
-	broken := &service.ContentFetchResponse{Status: discdomain.ProviderStatusError}
-	throttled := &service.ContentFetchResponse{Status: discdomain.ProviderStatusRateLimited}
-	unserved := &service.ContentFetchResponse{Status: discdomain.ProviderStatusError, Unserved: true}
+	ok := &providercall.ContentFetchResponse{Status: discdomain.ProviderStatusOK}
+	partial := &providercall.ContentFetchResponse{Status: discdomain.ProviderStatusOK, Partial: true}
+	timeout := &providercall.ContentFetchResponse{Status: discdomain.ProviderStatusTimeout}
+	broken := &providercall.ContentFetchResponse{Status: discdomain.ProviderStatusError}
+	throttled := &providercall.ContentFetchResponse{Status: discdomain.ProviderStatusRateLimited}
+	unserved := &providercall.ContentFetchResponse{Status: discdomain.ProviderStatusError, Unserved: true}
 	cases := []struct {
 		name           string
-		tracks, albums *service.ContentFetchResponse
+		tracks, albums *providercall.ContentFetchResponse
 		wantHTTP       int
 		wantCode       string
 	}{

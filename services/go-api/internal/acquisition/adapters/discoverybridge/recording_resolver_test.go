@@ -1,18 +1,18 @@
 package discoverybridge
 
 import (
+	"altune/go-api/internal/discovery/service/search"
 	"altune/go-api/internal/shared"
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
+	"strings"
 	"testing"
 
 	acqports "altune/go-api/internal/acquisition/ports"
 	discoverydomain "altune/go-api/internal/discovery/domain"
 	discoveryports "altune/go-api/internal/discovery/ports"
-	discoveryservice "altune/go-api/internal/discovery/service"
-	"bytes"
-	"log/slog"
-	"strings"
 )
 
 func captureDefaultLog(t *testing.T) *bytes.Buffer {
@@ -25,10 +25,10 @@ func captureDefaultLog(t *testing.T) *bytes.Buffer {
 }
 
 type stubSearcher struct {
-	out *discoveryservice.SearchOutput
+	out *search.SearchOutput
 }
 
-func (s stubSearcher) Execute(context.Context, shared.UserId, *discoverydomain.SearchQuery, bool) (*discoveryservice.SearchOutput, error) {
+func (s stubSearcher) Execute(context.Context, shared.UserId, *discoverydomain.SearchQuery, bool) (*search.SearchOutput, error) {
 	return s.out, nil
 }
 
@@ -41,7 +41,7 @@ func TestProviderKey_IsByteIdenticalToDiscoveryString(t *testing.T) {
 }
 
 func TestResolve_SourcesAreKeyedBySharedProviderConstants(t *testing.T) {
-	resolver := NewRecordingResolver(stubSearcher{out: &discoveryservice.SearchOutput{
+	resolver := NewRecordingResolver(stubSearcher{out: &search.SearchOutput{
 		Results: []discoverydomain.SearchResult{{
 			Kind:     discoverydomain.ResultKindTrack,
 			Title:    "Song",
@@ -84,12 +84,12 @@ func (s *stubISRCAuthority) RecordingsByISRC(context.Context, string) ([]discove
 
 type failingSearcher struct{}
 
-func (failingSearcher) Execute(context.Context, shared.UserId, *discoverydomain.SearchQuery, bool) (*discoveryservice.SearchOutput, error) {
+func (failingSearcher) Execute(context.Context, shared.UserId, *discoverydomain.SearchQuery, bool) (*search.SearchOutput, error) {
 	return nil, errors.New("search down")
 }
 
 func drinkingInLA() stubSearcher {
-	return stubSearcher{out: &discoveryservice.SearchOutput{
+	return stubSearcher{out: &search.SearchOutput{
 		Results: []discoverydomain.SearchResult{{
 			Kind:     discoverydomain.ResultKindTrack,
 			Title:    "Drinking in L.A.",
@@ -237,7 +237,7 @@ func TestResolve_ISRCAnchor_DurationEdges(t *testing.T) {
 }
 
 func TestResolve_ISRCAnchorsIdentityWhenSearchFindsNothing(t *testing.T) {
-	empty := stubSearcher{out: &discoveryservice.SearchOutput{}}
+	empty := stubSearcher{out: &search.SearchOutput{}}
 	authority := &stubISRCAuthority{recordings: []discoveryports.ISRCRecording{{MBID: "album-version", Duration: 237}}}
 	resolver := NewRecordingResolver(empty, WithISRCAuthority(authority))
 
@@ -310,7 +310,7 @@ func TestResolve_FailedISRCLookupYieldsSearchMBIDAsTheOnlyReference(t *testing.T
 }
 
 func TestResolve_NoISRCRecordingsYieldsEmptyMBIDsWhenSearchFindsNothing(t *testing.T) {
-	empty := stubSearcher{out: &discoveryservice.SearchOutput{}}
+	empty := stubSearcher{out: &search.SearchOutput{}}
 	resolver := NewRecordingResolver(empty, WithISRCAuthority(&stubISRCAuthority{}))
 
 	identity, err := resolver.Resolve(context.Background(), drinkingQuery)

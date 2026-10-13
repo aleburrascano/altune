@@ -1,13 +1,12 @@
 package eval
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/service/vocabulary"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"errors"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/service"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 type vocabCorrector struct {
@@ -15,27 +14,28 @@ type vocabCorrector struct {
 	corruptOnValid bool
 }
 
-func (f *vocabCorrector) nearest(query string) *service.CorrectionResult {
+func (f *vocabCorrector) nearest(query string) *vocabulary.CorrectionResult {
 	q := textnorm.NormalizeForMatch(query)
 	for _, term := range f.vocab {
 		tn := textnorm.NormalizeForMatch(term)
 		if tn == q {
 			if f.corruptOnValid {
-				return &service.CorrectionResult{Corrected: term + " x", Confidence: 0.5}
+				return &vocabulary.CorrectionResult{Corrected: term + " x", Confidence: 0.5}
 			}
 			return nil
 		}
 		if textnorm.LevenshteinDistance(q, tn) == 1 {
-			return &service.CorrectionResult{Corrected: term, Confidence: 0.9}
+			return &vocabulary.CorrectionResult{Corrected: term, Confidence: 0.9}
 		}
 	}
 	return nil
 }
 
-func (f *vocabCorrector) Correct(_ context.Context, q string) *service.CorrectionResult {
+func (f *vocabCorrector) Correct(_ context.Context, q string) *vocabulary.CorrectionResult {
 	return f.nearest(q)
 }
-func (f *vocabCorrector) CorrectAggressive(_ context.Context, q string) *service.CorrectionResult {
+
+func (f *vocabCorrector) CorrectAggressive(_ context.Context, q string) *vocabulary.CorrectionResult {
 	return f.nearest(q)
 }
 

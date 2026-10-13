@@ -1,11 +1,10 @@
 package eval
 
 import (
-	"context"
-
 	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/providercall"
 	"altune/go-api/internal/shared/textnorm"
+	"context"
 )
 
 const signalBTitleMatchMinTSR = 85
@@ -26,10 +25,10 @@ type CoverageReportB struct {
 }
 
 type CoverageSignalBService struct {
-	providers []service.ConsensusProvider
+	providers []providercall.ConsensusProvider
 }
 
-func NewCoverageSignalBService(providers []service.ConsensusProvider) *CoverageSignalBService {
+func NewCoverageSignalBService(providers []providercall.ConsensusProvider) *CoverageSignalBService {
 	return &CoverageSignalBService{providers: providers}
 }
 
@@ -115,7 +114,7 @@ func countEntitiesMissing(entities []map[string]bool, prov string) int {
 }
 
 func (s *CoverageSignalBService) fanOut(ctx context.Context, artist string) map[string]provResult {
-	return service.FanOutConsensus(ctx, s.providers, func(ctx context.Context, p service.ConsensusProvider) provResult {
+	return providercall.FanOutConsensus(ctx, s.providers, func(ctx context.Context, p providercall.ConsensusProvider) provResult {
 		albums, err := p.Fetcher(ctx, artist)
 		if err != nil {
 			return provResult{ok: false}

@@ -4,7 +4,8 @@ import (
 	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/content"
+	"altune/go-api/internal/discovery/service/related"
 	"context"
 	"encoding/json"
 	"errors"
@@ -145,7 +146,7 @@ func TestContentEndpoints_NilServiceDegradedEnvelope(t *testing.T) {
 
 func TestHandleRelatedTracks_LimitClamping(t *testing.T) {
 	provider := &fakeRelatedTracksProvider{results: seedTracks(5)}
-	svc := service.NewGetRelatedTracksService(map[string]ports.RelatedTracksProvider{
+	svc := related.NewGetRelatedTracksService(map[string]ports.RelatedTracksProvider{
 		"soundcloud": provider,
 	})
 	h := NewDiscoveryHandler(DiscoveryServices{Related: svc})
@@ -218,8 +219,8 @@ func identityContentRouter(down map[discdomain.ProviderName]bool) chi.Router {
 		providers[pn] = partialContentProvider{provider: pn, down: down[pn]}
 		xref[pn.Key()] = "id-" + pn.String()
 	}
-	svc := service.NewGetArtistContentService(providers,
-		service.WithContentIdentityStore(stubIdentityStore{xref: xref}))
+	svc := content.NewGetArtistContentService(providers,
+		content.WithContentIdentityStore(stubIdentityStore{xref: xref}))
 	h := NewDiscoveryHandler(DiscoveryServices{Artist: svc})
 	router := chi.NewRouter()
 	router.Use(middleware.Middleware(discVerifyAsTestUser))
@@ -333,7 +334,7 @@ func unauthenticatedDiscoveryRouter(h *DiscoveryHandler) chi.Router {
 func TestHandleArtistContent_NoIdentityIs401AndSkipsService(t *testing.T) {
 	provider := &countingArtistContentProvider{}
 	h := NewDiscoveryHandler(DiscoveryServices{
-		Artist: service.NewGetArtistContentService(map[discdomain.ProviderName]ports.ArtistContentProvider{
+		Artist: content.NewGetArtistContentService(map[discdomain.ProviderName]ports.ArtistContentProvider{
 			discdomain.ProviderDeezer: provider,
 		}),
 	})
@@ -373,7 +374,7 @@ func TestArtistContentEndpoints_AskTheProvidersTheSearchCardKnows(t *testing.T) 
 		}
 		return &discoverytest.ArtistContentProvider{GetAlbumsFn: record, GetTopTracksFn: record}
 	}
-	svc := service.NewGetArtistContentService(map[discdomain.ProviderName]ports.ArtistContentProvider{
+	svc := content.NewGetArtistContentService(map[discdomain.ProviderName]ports.ArtistContentProvider{
 		discdomain.ProviderDeezer:  recording(discdomain.ProviderDeezer),
 		discdomain.ProviderSpotify: recording(discdomain.ProviderSpotify),
 	})
@@ -393,7 +394,7 @@ func TestArtistContentEndpoints_AskTheProvidersTheSearchCardKnows(t *testing.T) 
 }
 
 func TestArtistContentEndpoints_IgnoreTheArtistName(t *testing.T) {
-	svc := service.NewGetArtistContentService(map[discdomain.ProviderName]ports.ArtistContentProvider{
+	svc := content.NewGetArtistContentService(map[discdomain.ProviderName]ports.ArtistContentProvider{
 		discdomain.ProviderDeezer: &discoverytest.ArtistContentProvider{Albums: seedTracks(1), TopTracks: seedTracks(1)},
 	})
 	router := chi.NewRouter()
@@ -414,7 +415,7 @@ func TestAlbumTracks_ServesLongAlbumsWholeAndPassesTheCardIDs(t *testing.T) {
 		gotSpotifyID = id
 		return nil, nil
 	}}
-	svc := service.NewGetAlbumTracksService(map[discdomain.ProviderName]ports.AlbumContentProvider{
+	svc := content.NewGetAlbumTracksService(map[discdomain.ProviderName]ports.AlbumContentProvider{
 		discdomain.ProviderDeezer:  deezer,
 		discdomain.ProviderSpotify: spotify,
 	})
@@ -454,7 +455,7 @@ func TestHandleArtistAlbums_LimitClamping(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			svc := service.NewGetArtistContentService(map[discdomain.ProviderName]ports.ArtistContentProvider{
+			svc := content.NewGetArtistContentService(map[discdomain.ProviderName]ports.ArtistContentProvider{
 				discdomain.ProviderDeezer: &discoverytest.ArtistContentProvider{Albums: numberedAlbums(120)},
 			})
 			router := chi.NewRouter()

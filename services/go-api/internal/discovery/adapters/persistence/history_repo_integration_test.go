@@ -2,7 +2,7 @@ package persistence
 
 import (
 	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/history"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
@@ -152,7 +152,7 @@ func storedSearchTextsOf(t *testing.T, pool *pgxpool.Pool, owner shared.UserId) 
 
 func clearSearchHistoryOf(t *testing.T, pool *pgxpool.Pool, owner shared.UserId) {
 	t.Helper()
-	svc := service.NewClearSearchHistoryService(NewPgxSearchHistoryRepository(pool))
+	svc := history.NewClearSearchHistoryService(NewPgxSearchHistoryRepository(pool))
 	if err := svc.Execute(context.Background(), owner); err != nil {
 		t.Fatalf("ClearSearchHistoryService.Execute: %v", err)
 	}
@@ -248,7 +248,7 @@ func TestClearSearchHistory_ASearchBeginningAfterTheEraseStillRecords(t *testing
 		t.Fatalf("NewSearchQuery: %v", err)
 	}
 
-	service.NewRecordSearchHistoryService(NewPgxSearchHistoryRepository(pool)).
+	history.NewRecordSearchHistoryService(NewPgxSearchHistoryRepository(pool)).
 		Record(context.Background(), owner, query, "after erase", true, time.Now().UTC())
 	appendOrFatal(t, NewPgxEventStore(pool), domain.InteractionEvent{
 		UserId: owner, Type: domain.EventTypeSearchPerformed, OccurredAt: time.Now().UTC(),

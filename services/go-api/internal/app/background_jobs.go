@@ -3,6 +3,7 @@ package app
 import (
 	"altune/go-api/internal/discovery/adapters/providers"
 	"altune/go-api/internal/discovery/service/eval"
+	"altune/go-api/internal/discovery/service/vocabulary"
 	"context"
 	"errors"
 	"fmt"
@@ -15,7 +16,6 @@ import (
 
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
-	discoveryService "altune/go-api/internal/discovery/service"
 
 	playbackErasure "altune/go-api/internal/playback/service/erasure"
 )
@@ -192,7 +192,7 @@ func (a *App) startVocabularyRefresh(ctx context.Context, cf clientFactory, voca
 		return
 	}
 	const vocabRefreshInterval = 6 * time.Hour
-	a.vocabRefresh = discoveryService.NewVocabularyRefreshService(
+	a.vocabRefresh = vocabulary.NewVocabularyRefreshService(
 		charts, vocabStore, 50,
 	)
 	a.startSimpleJob(jobVocabularyRefresh, vocabRefreshInterval, func(ctx context.Context) error {

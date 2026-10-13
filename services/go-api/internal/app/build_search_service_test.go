@@ -4,7 +4,7 @@ import (
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 	"altune/go-api/internal/discovery/adapters/providers"
 	discoveryDomain "altune/go-api/internal/discovery/domain"
-	discoveryService "altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/search"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"fmt"
@@ -37,7 +37,7 @@ func TestSearchServiceOptionSets(t *testing.T) {
 
 	tests := []struct {
 		name string
-		opts []discoveryService.Option
+		opts []search.Option
 		want []string
 	}{
 		{
@@ -86,7 +86,7 @@ func TestSearchServiceOptionSets(t *testing.T) {
 	}
 }
 
-func optionNames(opts []discoveryService.Option) []string {
+func optionNames(opts []search.Option) []string {
 	names := make([]string, 0, len(opts))
 	for _, opt := range opts {
 		full := runtime.FuncForPC(reflect.ValueOf(opt).Pointer()).Name()
