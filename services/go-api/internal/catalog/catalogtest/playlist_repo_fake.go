@@ -11,8 +11,8 @@ import (
 )
 
 type PlaylistRepo struct {
-	Playlists      map[string]*domain.Playlist
-	PlaylistTracks map[string][]*domain.Track
+	Playlists map[string]*domain.Playlist
+	Tracks    *TrackRepo
 
 	ErrOnCreate        error
 	ErrOnCount         error
@@ -40,8 +40,8 @@ var (
 
 func NewPlaylistRepo() *PlaylistRepo {
 	return &PlaylistRepo{
-		Playlists:      make(map[string]*domain.Playlist),
-		PlaylistTracks: make(map[string][]*domain.Track),
+		Playlists: make(map[string]*domain.Playlist),
+		Tracks:    NewTrackRepo(),
 	}
 }
 
@@ -85,7 +85,7 @@ func (r *PlaylistRepo) summariesOwnedBy(userId shared.UserId) []domain.PlaylistW
 		if p.UserId != userId {
 			continue
 		}
-		tracks := r.PlaylistTracks[p.ID.String()]
+		tracks := r.membersOf(p)
 		owned = append(owned, domain.PlaylistWithSummary{
 			Playlist: p,
 			Summary: domain.PlaylistSummary{
@@ -119,7 +119,17 @@ func (r *PlaylistRepo) GetByID(_ context.Context, id domain.PlaylistId, userId s
 	if !ok || p.UserId != userId {
 		return nil, domain.PlaylistSummary{}, nil
 	}
-	return p, domain.PlaylistSummary{}, nil
+	return p, domain.PlaylistSummary{TrackCount: len(r.membersOf(p))}, nil
+}
+
+func (r *PlaylistRepo) membersOf(p *domain.Playlist) []*domain.Track {
+	var members []*domain.Track
+	for _, pt := range p.Tracks {
+		if t, ok := r.Tracks.Tracks[pt.TrackId.String()]; ok {
+			members = append(members, t)
+		}
+	}
+	return members
 }
 
 func (r *PlaylistRepo) GetWithTracks(_ context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, []*domain.Track, error) {
@@ -130,7 +140,7 @@ func (r *PlaylistRepo) GetWithTracks(_ context.Context, id domain.PlaylistId, us
 	if !ok || p.UserId != userId {
 		return nil, nil, nil
 	}
-	return p, r.PlaylistTracks[id.String()], nil
+	return p, r.membersOf(p), nil
 }
 
 func (r *PlaylistRepo) Exists(_ context.Context, id domain.PlaylistId, userId shared.UserId) (bool, error) {
@@ -299,5 +309,11 @@ func (r *PlaylistRepo) Seed(playlist *domain.Playlist) {
 
 func (r *PlaylistRepo) SeedWithTracks(playlist *domain.Playlist, tracks []*domain.Track) {
 	r.Playlists[playlist.ID.String()] = playlist
-	r.PlaylistTracks[playlist.ID.String()] = tracks
+	held := trackIdSet(playlist.Tracks)
+	for _, t := range tracks {
+		r.Tracks.Tracks[t.ID.String()] = t
+		if !held[t.ID] {
+			_ = playlist.AddTrack(t.ID, playlist.UpdatedAt)
+		}
+	}
 }
