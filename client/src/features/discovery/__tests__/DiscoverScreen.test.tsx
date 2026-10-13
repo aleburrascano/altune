@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { asTrackId } from '@shared/apiClient/ids';
 import { PlaybackContext } from '@shared/playback/usePlayback';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
+import { makeIdlePlayback } from '@testing/factories';
 import { useKeyboardShortcuts } from '@shared/ui/keyboard/useKeyboardShortcuts';
 import { DiscoverPortProvider } from '@features/discovery/ports/DiscoverPortProvider';
 import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
@@ -60,7 +61,7 @@ function createFakeWindow(): FakeWindow {
 }
 
 function playbackFixture(): PlaybackContextValue {
-  return {
+  return makeIdlePlayback({
     status: 'paused',
     track: {
       source: { kind: 'library', trackId: asTrackId('track-1') },
@@ -68,26 +69,8 @@ function playbackFixture(): PlaybackContextValue {
       artist: 'Test Artist',
       artworkUrl: null,
     },
-    positionMs: 0,
     durationMs: 200_000,
-    errorMessage: null,
-    errorKind: null,
-    play: jest.fn(),
-    startQueue: jest.fn(),
-    skipToQueueIndex: jest.fn(),
-    reorderUpcoming: jest.fn(),
-    appendToQueue: jest.fn(),
-    insertNext: jest.fn(),
-    skipNext: jest.fn().mockResolvedValue(undefined),
-    skipPrevious: jest.fn().mockResolvedValue(undefined),
-    removeQueueIndex: jest.fn(),
-    pause: jest.fn(),
-    resume: jest.fn(),
-    seekTo: jest.fn(),
-    setRate: jest.fn(),
-    stop: jest.fn(),
-    retry: jest.fn(),
-  };
+  });
 }
 
 function renderShortcuts(win: FakeWindow) {

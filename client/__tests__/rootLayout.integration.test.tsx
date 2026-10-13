@@ -8,6 +8,7 @@ import { supabase } from '@shared/auth/supabaseClient';
 import { useWideWebLayout } from '@shared/ui/layout/useLayoutMode';
 import { PlaybackContext, usePlayback } from '@shared/playback/usePlayback';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
+import { makeIdlePlayback } from '@testing/factories';
 import { useKeyboardShortcuts } from '@shared/ui/keyboard/useKeyboardShortcuts';
 
 import { AppChrome } from '@/chrome/AppChrome';
@@ -42,14 +43,7 @@ jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
 const RN = require('react-native');
 const NATIVE_OS: string = RN.Platform.OS;
 
-const IDLE = {
-  status: 'idle',
-  track: null,
-  positionMs: 0,
-  durationMs: 0,
-  errorMessage: null,
-  errorKind: null,
-} as unknown as PlaybackContextValue;
+const IDLE = makeIdlePlayback();
 
 const PLAYING = {
   status: 'playing',

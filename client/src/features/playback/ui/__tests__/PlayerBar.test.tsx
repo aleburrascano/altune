@@ -7,6 +7,7 @@ import { PlaybackContext } from '@shared/playback/usePlayback';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { RESTART_THRESHOLD_MS } from '@features/playback/domain/restartOnPrevious';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
+import { makeIdlePlayback } from '@testing/factories';
 
 import { libraryTrack } from '@features/playback/__tests__/fixtures';
 import { PlayerBar } from '@features/playback/ui/PlayerBar';
@@ -21,29 +22,7 @@ const TRACK = libraryTrack();
 const NEXT_TRACK = libraryTrack({ source: { kind: 'library', trackId: asTrackId('trk-2') } });
 
 function idleFixture(): PlaybackContextValue {
-  return {
-    status: 'idle',
-    track: null,
-    positionMs: 0,
-    durationMs: 0,
-    errorMessage: null,
-    errorKind: null,
-    play: jest.fn(),
-    startQueue: jest.fn(),
-    skipToQueueIndex: jest.fn(),
-    reorderUpcoming: jest.fn(),
-    appendToQueue: jest.fn(),
-    insertNext: jest.fn(),
-    skipNext: jest.fn(),
-    skipPrevious: jest.fn(),
-    removeQueueIndex: jest.fn(),
-    pause: jest.fn(),
-    resume: jest.fn(),
-    seekTo: jest.fn(),
-    setRate: jest.fn(),
-    stop: jest.fn(),
-    retry: jest.fn(),
-  };
+  return makeIdlePlayback();
 }
 
 function renderBar(value: Partial<PlaybackContextValue>) {

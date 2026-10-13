@@ -7,6 +7,7 @@ import { asTrackId } from '@shared/apiClient/ids';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { PlaybackContext } from '@shared/playback/usePlayback';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
+import { makeIdlePlayback } from '@testing/factories';
 
 import { usePreviewPlayback } from '@features/discovery/hooks/usePreviewPlayback';
 
@@ -31,30 +32,7 @@ function resultFixture(overrides: Partial<DiscoveryResult> = {}): DiscoveryResul
 }
 
 function makePlayback(overrides: Partial<PlaybackContextValue> = {}): PlaybackContextValue {
-  return {
-    status: 'idle',
-    track: null,
-    positionMs: 0,
-    durationMs: 0,
-    errorMessage: null,
-    errorKind: null,
-    play: jest.fn().mockResolvedValue(undefined),
-    startQueue: jest.fn().mockResolvedValue(undefined),
-    skipToQueueIndex: jest.fn().mockResolvedValue(undefined),
-    reorderUpcoming: jest.fn().mockResolvedValue(undefined),
-    appendToQueue: jest.fn().mockResolvedValue(undefined),
-    insertNext: jest.fn().mockResolvedValue(undefined),
-    skipNext: jest.fn().mockResolvedValue(undefined),
-    skipPrevious: jest.fn().mockResolvedValue(undefined),
-    removeQueueIndex: jest.fn().mockResolvedValue(undefined),
-    pause: jest.fn(),
-    resume: jest.fn(),
-    seekTo: jest.fn(),
-    setRate: jest.fn(),
-    stop: jest.fn(),
-    retry: jest.fn(),
-    ...overrides,
-  };
+  return makeIdlePlayback(overrides);
 }
 
 function playingPreview(previewUrl: string): Partial<PlaybackContextValue> {

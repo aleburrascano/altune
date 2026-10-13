@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AcquisitionPortProvider } from '@shared/acquisition/ports/AcquisitionPortProvider';
 import type { AcquisitionPort } from '@shared/acquisition/ports/acquisitionPort';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
+import { makeIdlePlayback } from '@testing/factories';
 import { PlaybackContext } from '@shared/playback/usePlayback';
 
 import { DetailPortProvider } from '@features/detail/ports/DetailPortProvider';
@@ -15,29 +16,7 @@ interface WrapperProps {
   children: React.ReactNode;
 }
 
-export const idlePlayback: PlaybackContextValue = {
-  status: 'idle',
-  track: null,
-  positionMs: 0,
-  durationMs: 0,
-  errorMessage: null,
-  errorKind: null,
-  play: async () => {},
-  startQueue: async () => {},
-  skipToQueueIndex: async () => {},
-  reorderUpcoming: async () => {},
-  appendToQueue: async () => {},
-  insertNext: async () => {},
-  skipNext: async () => {},
-  skipPrevious: async () => {},
-  removeQueueIndex: async () => {},
-  pause: () => {},
-  resume: () => {},
-  seekTo: () => {},
-  setRate: () => {},
-  stop: () => {},
-  retry: () => {},
-};
+export const idlePlayback = makeIdlePlayback();
 
 export function createTestQueryClient({ mutations = false }: { mutations?: boolean } = {}) {
   return new QueryClient({

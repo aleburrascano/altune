@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 
 import { asPlaylistId } from '@shared/apiClient/ids';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
+import { makeIdlePlayback } from '@testing/factories';
 import { PlaybackContext } from '@shared/playback/usePlayback';
 import { pageTitleFor } from '@shared/ui/navigation/tabRoutes';
 import * as base from '@/chrome/platformExtras';
@@ -64,29 +65,7 @@ function Providers({ children }: ProvidersProps) {
 }
 
 function playingWith(pause: () => void): PlaybackContextValue {
-  return {
-    status: 'playing',
-    track: null,
-    positionMs: 0,
-    durationMs: 0,
-    errorMessage: null,
-    errorKind: null,
-    play: jest.fn(),
-    startQueue: jest.fn(),
-    skipToQueueIndex: jest.fn(),
-    reorderUpcoming: jest.fn(),
-    appendToQueue: jest.fn(),
-    insertNext: jest.fn(),
-    skipNext: jest.fn(),
-    skipPrevious: jest.fn(),
-    removeQueueIndex: jest.fn(),
-    pause,
-    resume: jest.fn(),
-    seekTo: jest.fn(),
-    setRate: jest.fn(),
-    stop: jest.fn(),
-    retry: jest.fn(),
-  };
+  return makeIdlePlayback({ status: 'playing', pause });
 }
 
 function installWindowListeners(): jest.Mock {

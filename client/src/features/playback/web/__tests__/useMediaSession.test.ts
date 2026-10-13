@@ -3,6 +3,7 @@ import { act, renderHook } from '@testing-library/react-native';
 import { usePlaybackRateStore } from '@features/playback/hooks/usePlaybackRate';
 import { libraryTrack } from '@features/playback/__tests__/fixtures';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
+import { makeIdlePlayback } from '@testing/factories';
 import { useMediaSession } from '@features/playback/hooks/useMediaSession';
 
 class FakeMediaSession {
@@ -25,30 +26,12 @@ function fakeMetadataInit(this: MediaMetadata, init: MediaMetadataInit) {
 }
 
 function playbackFixture(overrides: Partial<PlaybackContextValue> = {}): PlaybackContextValue {
-  return {
+  return makeIdlePlayback({
     status: 'playing',
     track: libraryTrack(),
-    positionMs: 0,
     durationMs: 200_000,
-    errorMessage: null,
-    errorKind: null,
-    play: jest.fn(),
-    startQueue: jest.fn(),
-    skipToQueueIndex: jest.fn(),
-    reorderUpcoming: jest.fn(),
-    appendToQueue: jest.fn(),
-    insertNext: jest.fn(),
-    skipNext: jest.fn(),
-    skipPrevious: jest.fn(),
-    removeQueueIndex: jest.fn(),
-    pause: jest.fn(),
-    resume: jest.fn(),
-    seekTo: jest.fn(),
-    setRate: jest.fn(),
-    stop: jest.fn(),
-    retry: jest.fn(),
     ...overrides,
-  };
+  });
 }
 
 beforeEach(() => {

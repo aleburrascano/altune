@@ -5,6 +5,7 @@ import { act, renderRouter, screen, within } from 'expo-router/testing-library';
 
 import { PlaybackContext } from '@shared/playback/usePlayback';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
+import { makeIdlePlayback } from '@testing/factories';
 import { asTrackId } from '@shared/apiClient/ids';
 
 import TabsLayout from '@/app/(tabs)/_layout';
@@ -36,14 +37,7 @@ const { supabase } = require('@shared/auth/supabaseClient');
 const RN = require('react-native');
 const NATIVE_OS: string = RN.Platform.OS;
 
-const IDLE = {
-  status: 'idle',
-  track: null,
-  positionMs: 0,
-  durationMs: 0,
-  errorMessage: null,
-  errorKind: null,
-} as unknown as PlaybackContextValue;
+const IDLE = makeIdlePlayback();
 
 let client: QueryClient;
 

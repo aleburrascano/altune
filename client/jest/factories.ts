@@ -3,6 +3,7 @@ import { Factory } from 'fishery';
 
 import { asTrackId } from '@shared/apiClient/ids';
 import type { TrackResponse } from '@shared/apiClient/trackResponse';
+import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
 
 const REFERENCE_DATE = new Date('2026-01-01T00:00:00Z');
 
@@ -23,3 +24,32 @@ export const trackResponseFactory = Factory.define<TrackResponse>(() => ({
   isrc: faker.string.alphanumeric({ length: 12, casing: 'upper' }),
   audio_ref: null,
 }));
+
+export function makeIdlePlayback(
+  overrides: Partial<PlaybackContextValue> = {},
+): PlaybackContextValue {
+  return {
+    status: 'idle',
+    track: null,
+    positionMs: 0,
+    durationMs: 0,
+    errorMessage: null,
+    errorKind: null,
+    play: jest.fn().mockResolvedValue(undefined),
+    startQueue: jest.fn().mockResolvedValue(undefined),
+    skipToQueueIndex: jest.fn().mockResolvedValue(undefined),
+    reorderUpcoming: jest.fn().mockResolvedValue(undefined),
+    appendToQueue: jest.fn().mockResolvedValue(undefined),
+    insertNext: jest.fn().mockResolvedValue(undefined),
+    skipNext: jest.fn().mockResolvedValue(undefined),
+    skipPrevious: jest.fn().mockResolvedValue(undefined),
+    removeQueueIndex: jest.fn().mockResolvedValue(undefined),
+    pause: jest.fn(),
+    resume: jest.fn(),
+    seekTo: jest.fn(),
+    setRate: jest.fn(),
+    stop: jest.fn(),
+    retry: jest.fn(),
+    ...overrides,
+  };
+}

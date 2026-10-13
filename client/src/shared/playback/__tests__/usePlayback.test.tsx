@@ -5,9 +5,10 @@ import { asTrackId } from '@shared/apiClient/ids';
 
 import { usePlayback, PlaybackContext } from '@shared/playback/usePlayback';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
+import { makeIdlePlayback } from '@testing/factories';
 
 function buildContextValue(): PlaybackContextValue {
-  return {
+  return makeIdlePlayback({
     status: 'playing',
     track: {
       source: { kind: 'library', trackId: asTrackId('track-1') },
@@ -17,24 +18,7 @@ function buildContextValue(): PlaybackContextValue {
     },
     positionMs: 1_000,
     durationMs: 200_000,
-    errorMessage: null,
-    errorKind: null,
-    play: jest.fn(),
-    startQueue: jest.fn(),
-    skipToQueueIndex: jest.fn(),
-    reorderUpcoming: jest.fn(),
-    appendToQueue: jest.fn(),
-    insertNext: jest.fn(),
-    skipNext: jest.fn(),
-    skipPrevious: jest.fn(),
-    removeQueueIndex: jest.fn(),
-    pause: jest.fn(),
-    resume: jest.fn(),
-    seekTo: jest.fn(),
-    setRate: jest.fn(),
-    stop: jest.fn(),
-    retry: jest.fn(),
-  };
+  });
 }
 
 describe('usePlayback', () => {
