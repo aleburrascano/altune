@@ -19,12 +19,15 @@ function defaultFilesOfPlatformPairs(directory: string): string[] {
       return entry.name === '__tests__' ? [] : defaultFilesOfPlatformPairs(path);
     }
     const pairMatch = /^(.*)\.(?:web|android|ios)(\.tsx?)$/.exec(entry.name);
-    return pairMatch ? [relative(mobileRoot, join(directory, pairMatch[1] + pairMatch[2]))] : [];
+    if (!pairMatch) return [];
+    const defaultFile = relative(mobileRoot, join(directory, pairMatch[1] + pairMatch[2]));
+    const isIosVariantDoctorCannotResolve = entry.name.includes('.ios.');
+    return isIosVariantDoctorCannotResolve ? [defaultFile, relative(mobileRoot, path)] : [defaultFile];
   });
 }
 
 describe('doctor.config', () => {
-  it('silences unused-export on the default file of every platform-split pair', () => {
+  it('silences unused-export on the default file of every platform-split pair and on its .ios variant', () => {
     const silenced = overridesFor('deslop/unused-export').flatMap((override) => override.files);
 
     expect(silenced.sort()).toEqual(
