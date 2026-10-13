@@ -30,7 +30,7 @@ function ratchet(root, ...args) {
 }
 
 function baselineOf(root) {
-  return readFileSync(join(root, 'mock-ratchet.baseline'), 'utf8');
+  return readFileSync(join(root, 'baselines', 'mock-ratchet.baseline'), 'utf8');
 }
 
 test('--write records one line per own-module mock, path relative to the root', (t) => {
@@ -47,7 +47,7 @@ test('--write records one line per own-module mock, path relative to the root', 
 test('a count equal to the baseline passes', (t) => {
   const root = fixture(t, {
     'src/a.test.ts': ONE_OWN_MOCK,
-    'mock-ratchet.baseline': 'src/a.test.ts ../store\n',
+    'baselines/mock-ratchet.baseline': 'src/a.test.ts ../store\n',
   });
 
   assert.equal(ratchet(root).status, 0);
@@ -56,7 +56,7 @@ test('a count equal to the baseline passes', (t) => {
 test('a count above the baseline fails and names the new mock', (t) => {
   const root = fixture(t, {
     'src/a.test.ts': TWO_OWN_MOCKS,
-    'mock-ratchet.baseline': 'src/a.test.ts ../store\n',
+    'baselines/mock-ratchet.baseline': 'src/a.test.ts ../store\n',
   });
 
   const { status, out } = ratchet(root);
@@ -68,7 +68,7 @@ test('a count above the baseline fails and names the new mock', (t) => {
 test('a lower count passes once its baseline line is removed with --write', (t) => {
   const root = fixture(t, {
     'src/a.test.ts': ONE_OWN_MOCK,
-    'mock-ratchet.baseline': 'src/a.test.ts ../store\nsrc/a.test.ts @shared/api\n',
+    'baselines/mock-ratchet.baseline': 'src/a.test.ts ../store\nsrc/a.test.ts @shared/api\n',
   });
   assert.equal(ratchet(root, '--write').status, 0);
 
@@ -79,7 +79,7 @@ test('a lower count passes once its baseline line is removed with --write', (t) 
 test('a removed mock whose baseline line stays fails, so the count cannot creep back up', (t) => {
   const root = fixture(t, {
     'src/a.test.ts': ONE_OWN_MOCK,
-    'mock-ratchet.baseline': 'src/a.test.ts ../store\nsrc/a.test.ts @shared/api\n',
+    'baselines/mock-ratchet.baseline': 'src/a.test.ts ../store\nsrc/a.test.ts @shared/api\n',
   });
 
   const { status, out } = ratchet(root);
@@ -92,7 +92,7 @@ test('a removed mock whose baseline line stays fails, so the count cannot creep 
 test('a mock swapped for another fails without the --write hint, so the new one is not baselined', (t) => {
   const root = fixture(t, {
     'src/a.test.ts': ONE_OWN_MOCK,
-    'mock-ratchet.baseline': 'src/a.test.ts @shared/api\n',
+    'baselines/mock-ratchet.baseline': 'src/a.test.ts @shared/api\n',
   });
 
   const { status, out } = ratchet(root);
@@ -107,7 +107,7 @@ test('--write with a new mock refuses, lists it and leaves the baseline unchange
   const baseline = 'src/a.test.ts ../store\n';
   const root = fixture(t, {
     'src/a.test.ts': TWO_OWN_MOCKS,
-    'mock-ratchet.baseline': baseline,
+    'baselines/mock-ratchet.baseline': baseline,
   });
 
   const { status, out } = ratchet(root, '--write');
@@ -121,7 +121,7 @@ test('third-party mocks do not count', (t) => {
   const root = fixture(t, {
     'src/a.test.ts': "jest.mock('expo-router');\njest.mock(\n  '@supabase/supabase-js',\n);\n",
     'jest/setup.js': "jest.doMock('react-native-safe-area-context', () => ({}));\n",
-    'mock-ratchet.baseline': '',
+    'baselines/mock-ratchet.baseline': '',
   });
 
   assert.equal(ratchet(root).status, 0);
@@ -160,7 +160,7 @@ test('a node:test file holding jest.mock text as a fixture does not count', (t) 
   const root = fixture(t, {
     'scripts/__tests__/tool.test.mjs': `const FIXTURE = "${ONE_OWN_MOCK.trim()}";\n`,
     'scripts/tool.mjs': "jest.mock('./x');\n",
-    'mock-ratchet.baseline': '',
+    'baselines/mock-ratchet.baseline': '',
   });
 
   assert.equal(ratchet(root).status, 0);

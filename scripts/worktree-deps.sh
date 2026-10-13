@@ -96,4 +96,11 @@ for dir in "$@"; do
     log "$dir: npm ci failed"
     exit 1
   fi
+  natives=$(cd "$dir" && ls -d node_modules/@nanonets/graft/node_modules/tree-sitter* 2>/dev/null | xargs -rn1 basename)
+  [ -z "$natives" ] && continue
+  log "$dir: building graft's parsers, which --ignore-scripts skipped"
+  if ! (cd "$dir" && npm rebuild $natives) 1>&2; then
+    log "$dir: npm rebuild failed"
+    exit 1
+  fi
 done

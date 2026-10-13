@@ -21,7 +21,7 @@ Read the sibling for its branch:
 
 ## 1. Read where the release stands
 
-The repo is on the self-hosted Gitea now (remote `gitea`, CLI `forge`, the gh-shaped wrapper). Gitea Actions reads `.gitea/workflows/` and ignores `.github/workflows/` once that folder exists, and it holds `precheck.yml`, `deploy.yml`, `deploy-web.yml` and `staging-sync.yml`, among others. `.github/workflows/deploy-backend.yml` (tests, `deploy-staging`, `smoke-staging`, `approve-prod`, `deploy-prod`) is the GitHub-era pipeline, kept for reference only. `deploy.yml` releases staging, smokes it, then releases prod. It runs only when started by hand (`workflow_dispatch`), so a merge to `main` never releases. The by-hand path in section 2, `deploy/release.sh <tier> <sha>` on the VM, stays for reruns and rollbacks.
+The repo is on the self-hosted Gitea now (remote `gitea`, CLI `forge`, the gh-shaped wrapper). Gitea Actions reads `.gitea/workflows/` and ignores `.github/workflows/` once that folder exists, and it holds `precheck.yml`, `deploy.yml`, `deploy-web.yml` and `staging-sync.yml`, among others. `.github/workflows/` holds only the iOS release, which needs GitHub's macOS runner. Every script a workflow runs lives in `scripts/ci/`. `deploy.yml` releases staging, smokes it, then releases prod. It runs only when started by hand (`workflow_dispatch`), so a merge to `main` never releases. The by-hand path in section 2, `deploy/release.sh <tier> <sha>` on the VM, stays for reruns and rollbacks.
 
 Where `main` stands, and what the VM runs:
 
@@ -79,4 +79,4 @@ Set in the tier's env file, then release the running sha again so go-api picks i
 
 - `supabase`: logged in, for staging Supabase project ops.
 - `deploy/duckdns`: A and TXT records for `*.duckdns.org`; `duckdns help` lists commands. New subdomains are made on the duckdns.org site.
-- Script self-tests: `bash deploy/<script>_test.sh`.
+- Script self-tests: `bash deploy/__tests__/<script>.test.sh`.

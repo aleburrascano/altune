@@ -33,17 +33,17 @@ jobs:
       - name: checkout
         run: |
           git -C "$REPO" fetch -q gitea || { sleep 5; git -C "$REPO" fetch -q gitea; } || { sleep 5; git -C "$REPO" fetch -q gitea; }
-          git -C "$REPO" show "${{ github.sha }}:.gitea/workflows/ci-checkout.sh" | bash -s "${{ github.sha }}"
+          git -C "$REPO" show "${{ github.sha }}:scripts/ci/checkout.sh" | bash -s "${{ github.sha }}"
       - name: ${{ matrix.mode }}
         env:
           MODE: ${{ matrix.mode }}
           RETRY_DELAY: 60
-        run: bash "$WT/.gitea/workflows/discovery-eval-run.sh"
+        run: bash "$WT/scripts/ci/discovery-eval-run.sh"
       - name: clean up
         if: always()
         run: |
           [ -n "${WT:-}" ] || exit 0
-          bash "$WT/.gitea/workflows/ci-cleanup.sh"
+          bash "$WT/scripts/ci/cleanup.sh"
 
   cheap:
     strategy:
@@ -56,17 +56,17 @@ jobs:
       - name: checkout
         run: |
           git -C "$REPO" fetch -q gitea || { sleep 5; git -C "$REPO" fetch -q gitea; } || { sleep 5; git -C "$REPO" fetch -q gitea; }
-          git -C "$REPO" show "${{ github.sha }}:.gitea/workflows/ci-checkout.sh" | bash -s "${{ github.sha }}"
+          git -C "$REPO" show "${{ github.sha }}:scripts/ci/checkout.sh" | bash -s "${{ github.sha }}"
       - name: ${{ matrix.mode }}
         env:
           MODE: ${{ matrix.mode }}
           RETRY_DELAY: 20
-        run: bash "$WT/.gitea/workflows/discovery-eval-run.sh"
+        run: bash "$WT/scripts/ci/discovery-eval-run.sh"
       - name: clean up
         if: always()
         run: |
           [ -n "${WT:-}" ] || exit 0
-          bash "$WT/.gitea/workflows/ci-cleanup.sh"
+          bash "$WT/scripts/ci/cleanup.sh"
 
   report:
     needs: [heavy, cheap]
@@ -77,7 +77,7 @@ jobs:
       - name: checkout
         run: |
           git -C "$REPO" fetch -q gitea || { sleep 5; git -C "$REPO" fetch -q gitea; } || { sleep 5; git -C "$REPO" fetch -q gitea; }
-          git -C "$REPO" show "${{ github.sha }}:.gitea/workflows/ci-checkout.sh" | bash -s "${{ github.sha }}"
+          git -C "$REPO" show "${{ github.sha }}:scripts/ci/checkout.sh" | bash -s "${{ github.sha }}"
       - name: aggregate
         run: |
           set -euo pipefail
@@ -86,10 +86,10 @@ jobs:
             exit 0
           fi
           cd "$WT/services/go-api"
-          . "$WT/.gitea/workflows/eval-env.sh" production || exit 0
+          . "$WT/scripts/ci/eval-env.sh" production || exit 0
           go run ./cmd/discoveryeval -mode report -reports "$RUN_DIR"
       - name: clean up
         if: always()
         run: |
           [ -n "${WT:-}" ] || exit 0
-          bash "$WT/.gitea/workflows/ci-cleanup.sh"
+          bash "$WT/scripts/ci/cleanup.sh"

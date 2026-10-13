@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 const scriptRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const mobileRoot = process.env.MOCK_RATCHET_ROOT ?? scriptRoot;
 const baselinePath =
-  process.env.MOCK_RATCHET_BASELINE_FILE ?? path.join(mobileRoot, 'mock-ratchet.baseline');
+  process.env.MOCK_RATCHET_BASELINE_FILE ?? path.join(mobileRoot, 'baselines', 'mock-ratchet.baseline');
 
 const SCAN_DIRS = ['src', 'jest'];
 // The other folders jest's testMatch reaches; only its test files are read there,
@@ -98,6 +98,7 @@ function writeBaseline(found, added) {
     console.log('mock-ratchet: --write only removes fixed lines; remove the new mocks first');
     process.exit(1);
   }
+  fs.mkdirSync(path.dirname(baselinePath), { recursive: true });
   fs.writeFileSync(baselinePath, found.map((line) => `${line}\n`).join(''));
   console.log(`mock-ratchet: wrote ${found.length} own-module mocks to the baseline`);
 }

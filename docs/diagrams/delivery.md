@@ -6,7 +6,7 @@ From commit to live: PR gate, staging, human approval, blue-green swap. Red boxe
 
 ```mermaid
 flowchart TD
-    commit["git commit<br/>husky: block secrets · commitlint"] --> pr["Pull request to main"]
+    commit["git commit<br/>husky: block secrets · lint changed files"] --> pr["Pull request to main"]
     pr --> gate["Required checks<br/>gate: backend · mobile · overseer tests + module-cycle check<br/>review: status posted by the review skill"]
     gate -->|green| mq["Merge queue<br/>re-runs every suite"]
     mq --> main(["main"])

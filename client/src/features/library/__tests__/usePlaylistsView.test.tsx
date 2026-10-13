@@ -10,7 +10,7 @@ import { GROUP_PAGE_SIZE } from '@features/library/domain/listPaging';
 import { usePlaylistActions } from '@features/library/hooks/usePlaylistActions';
 import { usePlaylistsView } from '@features/library/hooks/usePlaylistsView';
 import { SortControl } from '@features/library/ui/SortControl';
-import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
+import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 
 const FULL_PAGES = 2;
 const PARTIAL_PAGE = 20;

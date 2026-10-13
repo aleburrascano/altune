@@ -50,11 +50,11 @@ Staging has `disable_signup: true`, so nobody can register on their own. To add 
 
 ## Auth settings as code
 
-`supabase/auth/base.json` holds the settings both tiers share. `prod.json` and `staging.json` hold the per-tier keys (the sign-up lock, `uri_allow_list`). To change a setting, edit the JSON, then run both:
+`services/supabase/auth/base.json` holds the settings both tiers share. `prod.json` and `staging.json` hold the per-tier keys (the sign-up lock, `uri_allow_list`). To change a setting, edit the JSON, then run both:
 
 ```bash
-scripts/supabase-auth.sh apply prod
-scripts/supabase-auth.sh apply staging
+services/supabase/supabase-auth.sh apply prod
+services/supabase/supabase-auth.sh apply staging
 ```
 
 `diff <tier>` shows the drift without changing anything. It needs a Supabase access token (`SUPABASE_ACCESS_TOKEN`, or `~/.supabase/access-token`). Secrets (provider secrets, SMTP password, hook secrets) are set in the dashboard, never in the repo; `apply` reports one as `unset` but cannot set it.

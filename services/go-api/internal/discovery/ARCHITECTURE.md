@@ -709,7 +709,7 @@ the eval harness.
 `cmd/discoveryeval` runs the *real* pipeline in-process (`app.BuildSearchService`,
 the single construction site so eval never drifts from production) against cloned
 prod data, nightly rather than per-commit — the scheduled runner is
-`.github/workflows/discovery-eval-nightly.yml` (the gated modes vs
+`.gitea/workflows/discovery-eval-nightly.yml` (the gated modes vs
 `baselines.json`, failing the run on regression); the per-PR
 `discovery-eval-gate.yml` runs only the deterministic provider-free tests. Every gated mode flows through one
 spine: run → write JSON → render → gate headline metrics against a committed

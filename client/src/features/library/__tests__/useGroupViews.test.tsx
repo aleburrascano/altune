@@ -18,7 +18,7 @@ import { GROUP_PAGE_SIZE } from '@features/library/domain/listPaging';
 import type { ActiveView } from '@features/library/domain/libraryView';
 import { useAlbumsView, useArtistsView } from '@features/library/hooks/useGroupViews';
 import { SortControl } from '@features/library/ui/SortControl';
-import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
+import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 
 describe('useAlbumsView', () => {
   const noop = () => undefined;

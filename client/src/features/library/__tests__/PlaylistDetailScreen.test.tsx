@@ -8,7 +8,7 @@ import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';
 import { idlePlayback } from '@/features/detail/__tests__/support/queryHarness';
 import { PlaylistDetailScreen } from '../ui/PlaylistDetailScreen';
-import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
+import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 import { FeaturePorts } from '@/chrome/FeaturePorts';
 import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 

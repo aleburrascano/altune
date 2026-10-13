@@ -8,11 +8,9 @@ on:
       - "services/overseer/**"
       - "client/**"
       - "scripts/uptime/**"
-      - "scripts/supabase-auth*"
-      - "supabase/auth/**"
-      - ".gitea/workflows/ci*"
-      - ".github/workflows/test-*"
-      - ".github/workflows/nilaway*"
+      - "services/supabase/**"
+      - ".gitea/workflows/ci.yml"
+      - "scripts/ci/**"
   workflow_dispatch:
 
 defaults:
@@ -39,15 +37,15 @@ jobs:
       - name: checkout
         run: |
           git -C "$ALTUNE_REPO" fetch -q gitea main || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; } || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; }
-          git -C "$ALTUNE_REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
+          git -C "$ALTUNE_REPO" show "$SHA:scripts/ci/checkout.sh" | bash -s "$SHA"
       - name: paths
         id: filter
-        run: cd "$WT" && bash .gitea/workflows/ci-changes.sh "$BEFORE"
+        run: cd "$WT" && bash scripts/ci/changes.sh "$BEFORE"
       - name: clean up
         if: always()
         run: |
           [ -n "${WT:-}" ] || exit 0
-          bash "$WT/.gitea/workflows/ci-cleanup.sh"
+          bash "$WT/scripts/ci/cleanup.sh"
 
 
   ci-backend-static:
@@ -59,30 +57,30 @@ jobs:
       - name: checkout
         run: |
           git -C "$ALTUNE_REPO" fetch -q gitea main || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; } || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; }
-          git -C "$ALTUNE_REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
+          git -C "$ALTUNE_REPO" show "$SHA:scripts/ci/checkout.sh" | bash -s "$SHA"
       - name: govulncheck
         run: cd "$WT/services/go-api" && govulncheck ./...
       - name: nilaway ceiling
-        run: cd "$WT/services/go-api" && bash "$WT/.github/workflows/nilaway-ceiling.sh" nilaway-baseline.txt
+        run: cd "$WT/services/go-api" && bash "$WT/scripts/ci/nilaway-ceiling.sh" nilaway-baseline.txt
       - name: shellcheck deploy scripts
-        run: cd "$WT/services/go-api" && bash "$WT/.github/workflows/test-backend-shellcheck.sh"
+        run: cd "$WT/services/go-api" && bash "$WT/scripts/ci/test-backend-shellcheck.sh"
       - name: deploy script self-tests
         run: |
           cd "$WT/services/go-api"
-          for t in deploy/*_test.sh; do echo "== $t"; bash "$t"; done
+          for t in deploy/__tests__/*.test.sh; do echo "== $t"; bash "$t"; done
           bash deploy/migration-safety.sh
       - name: uptime probe self-tests
         run: |
           cd "$WT"
-          bash scripts/uptime/journey_test.sh
-          bash scripts/uptime/check_test.sh
+          bash scripts/uptime/__tests__/journey.test.sh
+          bash scripts/uptime/__tests__/check.test.sh
       - name: supabase auth config self-tests
-        run: cd "$WT" && bash scripts/supabase-auth_test.sh
+        run: cd "$WT" && bash services/supabase/__tests__/supabase-auth.test.sh
       - name: clean up
         if: always()
         run: |
           [ -n "${WT:-}" ] || exit 0
-          bash "$WT/.gitea/workflows/ci-cleanup.sh"
+          bash "$WT/scripts/ci/cleanup.sh"
 
   ci-backend-tests:
     needs: ci-changes
@@ -93,11 +91,11 @@ jobs:
       - name: checkout
         run: |
           git -C "$ALTUNE_REPO" fetch -q gitea main || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; } || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; }
-          git -C "$ALTUNE_REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
+          git -C "$ALTUNE_REPO" show "$SHA:scripts/ci/checkout.sh" | bash -s "$SHA"
       - name: postgres
-        run: bash "$WT/.gitea/workflows/ci-postgres.sh"
+        run: bash "$WT/scripts/ci/postgres.sh"
       - name: apply migrations
-        run: cd "$WT/services/go-api" && bash "$WT/.github/workflows/test-backend-migrate.sh"
+        run: cd "$WT/services/go-api" && bash "$WT/scripts/ci/test-backend-migrate.sh"
       - name: go test with integration tests
         env:
           INTEGRATION: "1"
@@ -105,14 +103,14 @@ jobs:
       - name: coverage ratchet
         env:
           MIN: 65
-        run: cd "$WT/services/go-api" && bash "$WT/.github/workflows/test-backend-coverage.sh"
+        run: cd "$WT/services/go-api" && bash "$WT/scripts/ci/test-backend-coverage.sh"
       - name: acquisition selection gate
         run: cd "$WT/services/go-api" && go run ./cmd/acquisitioneval -baseline ./cmd/acquisitioneval/baselines.json
       - name: clean up
         if: always()
         run: |
           [ -n "${WT:-}" ] || exit 0
-          bash "$WT/.gitea/workflows/ci-cleanup.sh"
+          bash "$WT/scripts/ci/cleanup.sh"
 
   ci-overseer:
     needs: ci-changes
@@ -123,7 +121,7 @@ jobs:
       - name: checkout
         run: |
           git -C "$ALTUNE_REPO" fetch -q gitea main || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; } || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; }
-          git -C "$ALTUNE_REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
+          git -C "$ALTUNE_REPO" show "$SHA:scripts/ci/checkout.sh" | bash -s "$SHA"
       - name: go test -race
         env:
           CGO_ENABLED: "1"
@@ -131,16 +129,16 @@ jobs:
       - name: govulncheck
         run: cd "$WT/services/overseer" && govulncheck ./...
       - name: nilaway ceiling
-        run: cd "$WT/services/overseer" && bash "$WT/.github/workflows/nilaway-ceiling.sh"
+        run: cd "$WT/services/overseer" && bash "$WT/scripts/ci/nilaway-ceiling.sh"
       - name: web dependencies
-        run: bash "$WT/.gitea/workflows/ci-node-deps.sh" services/overseer/web
+        run: bash "$WT/scripts/ci/node-deps.sh" services/overseer/web
       - name: web build and bundle budget
         run: cd "$WT/services/overseer/web" && npm run build && npm run size
       - name: clean up
         if: always()
         run: |
           [ -n "${WT:-}" ] || exit 0
-          bash "$WT/.gitea/workflows/ci-cleanup.sh"
+          bash "$WT/scripts/ci/cleanup.sh"
 
   ci-mobile-tests:
     needs: ci-changes
@@ -151,9 +149,9 @@ jobs:
       - name: checkout
         run: |
           git -C "$ALTUNE_REPO" fetch -q gitea main || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; } || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; }
-          git -C "$ALTUNE_REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
+          git -C "$ALTUNE_REPO" show "$SHA:scripts/ci/checkout.sh" | bash -s "$SHA"
       - name: dependencies
-        run: bash "$WT/.gitea/workflows/ci-node-deps.sh" client
+        run: bash "$WT/scripts/ci/node-deps.sh" client
       - name: jest with coverage ratchet
         env:
           NODE_OPTIONS: --max-old-space-size=3072
@@ -162,7 +160,7 @@ jobs:
         if: always()
         run: |
           [ -n "${WT:-}" ] || exit 0
-          bash "$WT/.gitea/workflows/ci-cleanup.sh"
+          bash "$WT/scripts/ci/cleanup.sh"
 
   ci-mobile-quality:
     needs: ci-changes
@@ -173,20 +171,20 @@ jobs:
       - name: checkout
         run: |
           git -C "$ALTUNE_REPO" fetch -q gitea main || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; } || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; }
-          git -C "$ALTUNE_REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
+          git -C "$ALTUNE_REPO" show "$SHA:scripts/ci/checkout.sh" | bash -s "$SHA"
       - name: dependencies
-        run: bash "$WT/.gitea/workflows/ci-node-deps.sh" client
+        run: bash "$WT/scripts/ci/node-deps.sh" client
       - name: react-doctor
-        run: cd "$WT/client" && bash "$WT/.github/workflows/test-mobile-react-doctor.sh"
+        run: cd "$WT/client" && bash "$WT/scripts/ci/test-mobile-react-doctor.sh"
       - name: architecture, dead code and duplication (fallow)
         run: cd "$WT/client" && npm run fallow
       - name: complexity ratchet (fallow)
         continue-on-error: true
         env:
           MAX: 137
-        run: cd "$WT/client" && bash "$WT/.github/workflows/test-mobile-complexity.sh"
+        run: cd "$WT/client" && bash "$WT/scripts/ci/test-mobile-complexity.sh"
       - name: clean up
         if: always()
         run: |
           [ -n "${WT:-}" ] || exit 0
-          bash "$WT/.gitea/workflows/ci-cleanup.sh"
+          bash "$WT/scripts/ci/cleanup.sh"

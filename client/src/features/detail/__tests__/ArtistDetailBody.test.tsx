@@ -4,7 +4,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { ArtistDetailBody } from '../ui/ArtistDetailBody';
-import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
+import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 import type { LastFmEnrichmentResponse } from '@shared/apiClient/enrichment';
 import { readDetailHandoff } from '@shared/navigation/detailHandoff';
 import {

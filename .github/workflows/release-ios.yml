@@ -35,7 +35,7 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           INPUT_VERSION: ${{ github.event.inputs.version }}
-        run: bash .github/workflows/release-ios-version.sh
+        run: bash scripts/ci/release-ios-version.sh
 
       - uses: actions/setup-node@v7
         with:
@@ -61,7 +61,7 @@ jobs:
         env:
           VERSION: ${{ steps.meta.outputs.version }}
           BUILD_NUMBER: ${{ github.run_number }}
-        run: bash "$GITHUB_WORKSPACE/.github/workflows/release-ios-stamp.sh"
+        run: bash "$GITHUB_WORKSPACE/scripts/ci/release-ios-stamp.sh"
 
       - name: Expo prebuild (generate native iOS project)
         working-directory: client
@@ -73,11 +73,11 @@ jobs:
 
       - name: Build unsigned archive
         working-directory: client/ios
-        run: bash "$GITHUB_WORKSPACE/.github/workflows/release-ios-build.sh"
+        run: bash "$GITHUB_WORKSPACE/scripts/ci/release-ios-build.sh"
 
       - name: Package .ipa
         id: pack
-        run: bash .github/workflows/release-ios-package.sh
+        run: bash scripts/ci/release-ios-package.sh
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3
@@ -116,4 +116,4 @@ jobs:
       - name: Publish to altstore branch
         env:
           VERSION: ${{ needs.build.outputs.version }}
-        run: bash .github/workflows/release-ios-publish-source.sh
+        run: bash scripts/ci/release-ios-publish-source.sh

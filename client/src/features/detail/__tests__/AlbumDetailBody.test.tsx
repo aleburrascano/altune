@@ -4,7 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react-nativ
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { AlbumDetailBody } from '../ui/AlbumDetailBody';
-import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
+import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 import {
   createTestQueryClient,
   createPlaybackWrapper,

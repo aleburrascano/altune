@@ -126,27 +126,27 @@ if touches '^services/go-api/migrations/|^scripts/migration-prefixes\.sh$'; then
   check "go-api migration numbers are unique" . bash scripts/migration-prefixes.sh services/go-api/migrations "$base_ref"
 fi
 
-script_tests=$(grep -E '^(scripts/(worktree-deps|e2e-stack|web-export-check|migration-prefixes|gate-parity|violations)|\.gitea/workflows/ci-node-deps)(\.test\.sh|\.sh|\.mjs)$' <<<"$changed" | sed -E 's/(\.test\.sh|\.sh|\.mjs)$/.test.sh/' | sort -u)
+script_tests=$(grep -E '^scripts/(ci/)?(__tests__/)?[a-z0-9-]+(\.test)?\.(sh|mjs)$' <<<"$changed" | grep -vE '/(precheck|test-home)(\.test)?\.(sh|mjs)$' | sed -E 's#^(scripts/(ci/)?)(__tests__/)?([a-z0-9-]+)(\.test)?\.(sh|mjs)$#\1__tests__/\4.test.sh#' | sort -u)
 if [ -n "$script_tests" ] && [ $lint_only = 0 ] && ! link_deps .; then
   echo "SKIP  repo script self-tests: no root node_modules here or in $main_tree"; missing=1
 elif [ -n "$script_tests" ]; then
   test_check "repo script self-tests" . bash -c 'for t in "$@"; do [ -f "$t" ] || continue; bash "$t" || exit 1; done' _ $script_tests
 fi
 
-if touches '^services/go-api/deploy/|^\.github/workflows/test-backend-shellcheck\.sh$' && need shellcheck "go-api deploy shellcheck"; then
-  check "go-api deploy shellcheck" services/go-api bash "$root/.github/workflows/test-backend-shellcheck.sh"
+if touches '^services/go-api/deploy/|^scripts/ci/test-backend-shellcheck\.sh$' && need shellcheck "go-api deploy shellcheck"; then
+  check "go-api deploy shellcheck" services/go-api bash "$root/scripts/ci/test-backend-shellcheck.sh"
 fi
 
 if touches '^(services/go-api/(deploy|migrations)/|client/src/shared/killSwitch/killSwitchPoll\.ts$)' && need docker "go-api deploy self-tests"; then
-  test_check "go-api deploy self-tests" services/go-api bash -c 'for t in deploy/*_test.sh; do bash "$t" || exit 1; done; bash deploy/migration-safety.sh'
+  test_check "go-api deploy self-tests" services/go-api bash -c 'for t in deploy/__tests__/*.test.sh; do bash "$t" || exit 1; done; bash deploy/migration-safety.sh'
 fi
 
 if touches '^scripts/uptime/'; then
-  test_check "uptime probe self-tests" . sh -c 'bash scripts/uptime/journey_test.sh && bash scripts/uptime/check_test.sh'
+  test_check "uptime probe self-tests" . sh -c 'bash scripts/uptime/__tests__/journey.test.sh && bash scripts/uptime/__tests__/check.test.sh'
 fi
 
-if touches '^(scripts/supabase-auth|supabase/auth/)'; then
-  test_check "supabase auth config self-tests" . bash scripts/supabase-auth_test.sh
+if touches '^services/supabase/'; then
+  test_check "supabase auth config self-tests" . bash services/supabase/__tests__/supabase-auth.test.sh
 fi
 
 if touches '^(docs/features/[^/]+/notes\.md|services/go-api/internal/app/)' && need go "capability notes"; then
@@ -165,7 +165,7 @@ if touches '^services/overseer/'; then
     check "overseer no comments (whole tree)" services/go-api go run ./scripts/lintcomments --all ../overseer
     test_check "overseer tests (race)" $m "${heavy[@]}" env CGO_ENABLED=1 go test -race -shuffle=on -count=1 ./...
     need govulncheck "overseer govulncheck" && check "overseer govulncheck" $m "${heavy[@]}" govulncheck ./...
-    need nilaway "overseer nilaway ceiling" && check "overseer nilaway ceiling" $m "${heavy[@]}" bash "$root/.github/workflows/nilaway-ceiling.sh"
+    need nilaway "overseer nilaway ceiling" && check "overseer nilaway ceiling" $m "${heavy[@]}" bash "$root/scripts/ci/nilaway-ceiling.sh"
   fi
   if touches '^services/overseer/web/' && need npm "overseer web"; then
     if link_deps $m/web; then
@@ -258,7 +258,7 @@ if touches '^client/'; then
     check "mobile consistency ratchet" $m node scripts/consistency-ratchet.mjs
     check "mobile own-module mock ratchet" $m node scripts/mock-ratchet.mjs
     check "mobile fallow" $m npm run --silent fallow
-    check "mobile react-doctor" $m "${heavy[@]}" bash "$root/.github/workflows/test-mobile-react-doctor.sh" "$base"
+    check "mobile react-doctor" $m "${heavy[@]}" bash "$root/scripts/ci/test-mobile-react-doctor.sh" "$base"
     check "mobile react-doctor (changed lines)" $m node scripts/react-doctor-changed-lines.mjs "$base" doctor-report.json
     check "mobile module shape" $m node scripts/module-shape.mjs
   elif [ -n "$(command -v npx)" ]; then
@@ -281,12 +281,8 @@ if touches '(_test\.go|\.(test|spec)\.[cm]?[jt]sx?)$|^scripts/test-home' && need
   fi
 fi
 
-if touches '^\.gitea/workflows/precheck-trusted'; then
-  test_check "precheck-trusted tests" . bash .gitea/workflows/precheck-trusted.test.sh
-fi
-
-if touches '^\.gitea/workflows/pr-shape'; then
-  test_check "pr-shape tests" . bash .gitea/workflows/pr-shape.test.sh
+if touches '^scripts/(__tests__/)?precheck(\.test)?\.sh$'; then
+  test_check "precheck self-tests" . bash scripts/__tests__/precheck.test.sh
 fi
 
 if [ -f scripts/gate-parity.mjs ] && need node "gate parity" && link_deps .; then

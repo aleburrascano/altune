@@ -2,7 +2,7 @@
 
 Rules that keep business logic consistent across `client`, checked mechanically
 rather than by LLM judgment. Each rule has an ID, a reason, and a deterministic check.
-Known violations are listed one per line in `client/consistency.baseline`
+Known violations are listed one per line in `client/baselines/consistency.baseline`
 (`<rule-id> <path> <short reason>`, sorted, no line numbers). The list may only shrink: new
 code must comply, old code only has to improve. See epic #2857.
 
@@ -28,10 +28,10 @@ cd client && node scripts/consistency-ratchet.mjs
 ```
 
 Prints one `MC-n: <count>` line per rule module and exits 1 when a violation is not listed in
-`client/consistency.baseline` (`new violation: <line>`), even if the total is unchanged, or
+`client/baselines/consistency.baseline` (`new violation: <line>`), even if the total is unchanged, or
 when a listed violation no longer occurs (`fixed: remove it from the baseline: <line>`). When
 the only change is fixed lines, it also names the command that rewrites the baseline:
 `node scripts/consistency-ratchet.mjs --write`. `--write` only removes fixed lines: while a
 new violation exists it lists it, exits 1 and leaves the baseline unchanged. The same holds
-for `node scripts/mock-ratchet.mjs --write` and `client/mock-ratchet.baseline`.
+for `node scripts/mock-ratchet.mjs --write` and `client/baselines/mock-ratchet.baseline`.
 `scripts/precheck.sh` runs it on every change under `client/`.

@@ -21,7 +21,7 @@ const cleanTree = (): Tree => cleanFeature('library');
 
 function run(tree: Tree, args: string[] = [], baseline = '') {
   const root = fs.mkdtempSync(path.join(process.env.TMPDIR ?? os.tmpdir(), 'module-shape-'));
-  for (const [file, content] of Object.entries({ ...tree, 'module-shape.baseline': baseline })) {
+  for (const [file, content] of Object.entries({ ...tree, 'baselines/module-shape.baseline': baseline })) {
     fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
     fs.writeFileSync(path.join(root, file), content);
   }
@@ -290,7 +290,7 @@ describe('baseline', () => {
   test('--write regenerates the baseline, sorted', () => {
     const { status, root } = run(drift, ['--write']);
     expect(status).toBe(0);
-    expect(fs.readFileSync(path.join(root, 'module-shape.baseline'), 'utf8')).toBe(`${line}\n`);
+    expect(fs.readFileSync(path.join(root, 'baselines', 'module-shape.baseline'), 'utf8')).toBe(`${line}\n`);
   });
 });
 

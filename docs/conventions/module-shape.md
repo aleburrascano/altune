@@ -228,5 +228,5 @@ Decisions:
 ## Where the checks live
 
 - go-api: one Go test walks `internal/` with `go/parser` for G1 to G7, N1 and N2. G8's check lands in #2265. Baseline: `services/go-api/module-shape.baseline`.
-- mobile: one jest test walks `src/features/` and `src/shared/` for M1, M2, M4 and N1 to N3. ESLint zones carry M3 and M5. M8 to M11, N4 and N5 land in #2306. Baseline: `client/module-shape.baseline`.
+- mobile: one jest test walks `src/features/` and `src/shared/` for M1, M2, M4 and N1 to N3. ESLint zones carry M3 and M5. M8 to M11, N4 and N5 land in #2306. Baseline: `client/baselines/module-shape.baseline`.
 - Both run in `scripts/precheck.sh`, so a PR that adds drift fails before review.

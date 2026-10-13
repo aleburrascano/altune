@@ -17,7 +17,7 @@ import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 import { useSelection } from '../hooks/useSelection';
 import { useTracksView } from '../hooks/useTracksView';
-import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
+import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 
 const noop = () => undefined;
 

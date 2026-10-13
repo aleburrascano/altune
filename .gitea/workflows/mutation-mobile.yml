@@ -25,13 +25,13 @@ jobs:
       - name: checkout
         run: |
           git -C "$ALTUNE_REPO" fetch -q gitea || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea; } || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea; }
-          git -C "$ALTUNE_REPO" show "${{ github.sha }}:.gitea/workflows/ci-checkout.sh" | bash -s "${{ github.sha }}"
+          git -C "$ALTUNE_REPO" show "${{ github.sha }}:scripts/ci/checkout.sh" | bash -s "${{ github.sha }}"
       - name: dependencies
-        run: bash "$WT/.gitea/workflows/ci-node-deps.sh" client
+        run: bash "$WT/scripts/ci/node-deps.sh" client
       - name: mutation test
         env:
           MUTATE: ${{ github.event.inputs.mutate }}
-        run: cd "$WT/client" && bash "$WT/.gitea/workflows/mutation-mobile.sh"
+        run: cd "$WT/client" && bash "$WT/scripts/ci/mutation-mobile.sh"
       - name: keep the report
         if: always()
         run: |
@@ -44,4 +44,4 @@ jobs:
         if: always()
         run: |
           [ -n "${WT:-}" ] || exit 0
-          bash "$WT/.gitea/workflows/ci-cleanup.sh"
+          bash "$WT/scripts/ci/cleanup.sh"

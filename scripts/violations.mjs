@@ -5,9 +5,9 @@ import { fileURLToPath } from 'node:url'
 const root = resolve(process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), '..'))
 
 const baselines = [
-  { path: 'client/consistency.baseline', pattern: /^(MC-\S+) (src\/\S+) /, prefix: 'client/' },
-  { path: 'client/module-shape.baseline', pattern: /^(\S+) (src\/\S+)( |$)/, prefix: 'client/' },
-  { path: 'client/mock-ratchet.baseline', pattern: /^(\S+) (\S+)$/, prefix: 'client/', rule: 'MOCK', fileGroup: 1 },
+  { path: 'client/baselines/consistency.baseline', pattern: /^(MC-\S+) (src\/\S+) /, prefix: 'client/' },
+  { path: 'client/baselines/module-shape.baseline', pattern: /^(\S+) (src\/\S+)( |$)/, prefix: 'client/' },
+  { path: 'client/baselines/mock-ratchet.baseline', pattern: /^(\S+) (\S+)$/, prefix: 'client/', rule: 'MOCK', fileGroup: 1 },
   { path: 'services/go-api/module-shape.baseline', pattern: /^(G\d+) (internal\/[^:\s]+)/, prefix: 'services/go-api/' },
 ]
 

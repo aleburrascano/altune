@@ -28,14 +28,16 @@ cd client && npm start
 ├── services/go-api/     # Go API; hexagonal, deploy/ holds everything Docker
 ├── docs/                # decisions and history (see docs/README.md)
 ├── scripts/             # the pre-commit staleness checks + AltStore source update
-└── .github/workflows/   # all CI — a nested .github/ elsewhere is never read
+├── scripts/ci/          # every script the CI workflows run
+├── .gitea/workflows/    # all CI, on the self-hosted Gitea
+└── .github/workflows/   # the iOS release only (needs a macOS runner)
 ```
 
 **`client/` and `services/go-api/` are comment-free.** If code needs explaining, it gets renamed or split — durable rationale goes in `docs/`.
 
 ## Conventions
 
-- Commits: [Conventional Commits](https://www.conventionalcommits.org/), scopes in `commitlint.config.js`
+- PR titles: `type(scope): subject`, checked by `scripts/ci/pr-shape.sh`
 - Go formatting: `bash services/go-api/scripts/guardrails.sh fmt` is the formatter of record — golangci-lint's bundled gofumpt, the exact formatter the CI gate enforces, across both Go modules. **Never run standalone `gofumpt -w`:** it splits stdlib from local imports while the gate wants a single alphabetical group (local `altune/...` first), so its output is rejected by CI.
 - Domain vocabulary is fixed by [`docs/ubiquitous-language.md`](docs/ubiquitous-language.md) — "Song" is banned; the noun is `Track`
 - Features are planned and tracked as GitHub issues — one ticket per unit of work, closed by its PR

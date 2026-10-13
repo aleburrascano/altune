@@ -254,12 +254,13 @@ function main() {
   const option = (flag) => (args.includes(flag) ? args[args.indexOf(flag) + 1] : undefined);
   const root = option('--root') ? path.resolve(option('--root')) : defaultRoot;
   const goApiDir = option('--go-api') ? path.resolve(option('--go-api')) : undefined;
-  const baselineFile = path.join(root, 'module-shape.baseline');
+  const baselineFile = path.join(root, 'baselines', 'module-shape.baseline');
   const violations = checkModuleShape(root, goApiDir);
 
   if (args.includes('--write')) {
+    fs.mkdirSync(path.dirname(baselineFile), { recursive: true });
     fs.writeFileSync(baselineFile, violations.length ? `${violations.join('\n')}\n` : '');
-    console.log(`module-shape: wrote ${violations.length} violations to module-shape.baseline`);
+    console.log(`module-shape: wrote ${violations.length} violations to baselines/module-shape.baseline`);
     return;
   }
 

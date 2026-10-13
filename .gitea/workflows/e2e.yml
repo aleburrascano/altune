@@ -29,7 +29,7 @@ jobs:
           fetch() { git -C "$ALTUNE_REPO" fetch -q gitea "+refs/heads/main:refs/remotes/gitea/main" ${PR:+"+refs/pull/$PR/head:refs/remotes/gitea/pr/$PR"}; }
           fetch || { sleep 5; fetch; } || { sleep 5; fetch; }
           ref=${PR:+gitea/pr/$PR}
-          git -C "$ALTUNE_REPO" show "${ref:-${{ github.sha }}}:.gitea/workflows/ci-checkout.sh" | bash -s "${ref:-${{ github.sha }}}"
+          git -C "$ALTUNE_REPO" show "${ref:-${{ github.sha }}}:scripts/ci/checkout.sh" | bash -s "${ref:-${{ github.sha }}}"
       - name: scope
         env:
           PR: ${{ github.event.pull_request.number }}
@@ -43,7 +43,7 @@ jobs:
           fi
       - name: dependencies
         if: env.E2E_SKIP != 'true'
-        run: bash "$WT/.gitea/workflows/ci-node-deps.sh" client
+        run: bash "$WT/scripts/ci/node-deps.sh" client
       - name: browser
         if: env.E2E_SKIP != 'true'
         run: cd "$WT/client" && npx playwright install chromium
@@ -69,4 +69,4 @@ jobs:
         if: always()
         run: |
           [ -n "${WT:-}" ] || exit 0
-          bash "$WT/.gitea/workflows/ci-cleanup.sh"
+          bash "$WT/scripts/ci/cleanup.sh"

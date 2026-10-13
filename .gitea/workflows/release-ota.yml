@@ -26,10 +26,10 @@ jobs:
       - name: checkout
         run: |
           git -C "$REPO" fetch -q gitea main || { sleep 5; git -C "$REPO" fetch -q gitea main; } || { sleep 5; git -C "$REPO" fetch -q gitea main; }
-          git -C "$REPO" show "${{ github.sha }}:.gitea/workflows/ci-checkout.sh" | bash -s "${{ github.sha }}"
+          git -C "$REPO" show "${{ github.sha }}:scripts/ci/checkout.sh" | bash -s "${{ github.sha }}"
 
       - name: install dependencies
-        run: bash "$WT/.gitea/workflows/ci-node-deps.sh" client
+        run: bash "$WT/scripts/ci/node-deps.sh" client
 
       - name: build and sign the ios update
         id: build
@@ -37,17 +37,17 @@ jobs:
           EXPO_PUBLIC_API_URL: https://altune.duckdns.org
           EXPO_PUBLIC_SUPABASE_URL: https://ellvexundmgvbbfqbzau.supabase.co
           EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_aAtjkl3gujVDjTRKWp4q0A_Y17qqnaN
-        run: bash "$WT/.gitea/workflows/ota-build.sh"
+        run: bash "$WT/scripts/ci/ota-build.sh"
 
       - name: release to prod
-        run: bash "$WT/.gitea/workflows/ota-ship.sh"
+        run: bash "$WT/scripts/ci/ota-ship.sh"
 
       - name: smoke prod
         env:
           RUNTIME: ${{ steps.build.outputs.runtime }}
           RELEASE_VERSION: ${{ steps.build.outputs.version }}
-        run: bash "$WT/.gitea/workflows/ota-smoke.sh"
+        run: bash "$WT/scripts/ci/ota-smoke.sh"
 
       - name: clean up
         if: always()
-        run: bash "$WT/.gitea/workflows/ci-cleanup.sh"
+        run: bash "$WT/scripts/ci/cleanup.sh"

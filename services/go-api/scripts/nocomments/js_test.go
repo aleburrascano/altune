@@ -7,7 +7,7 @@ func TestJsMatchExtensionsAndExcludedTrees(t *testing.T) {
 		path string
 		want bool
 	}{
-		{"commitlint.config.js", true},
+		{"tool.config.js", true},
 		{"scripts/check-cycles.mjs", true},
 		{"a.cjs", true},
 		{"../../dangerfile.js", true},

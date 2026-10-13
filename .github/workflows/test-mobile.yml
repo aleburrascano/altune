@@ -81,7 +81,7 @@ jobs:
         continue-on-error: true
         env:
           MAX: 137
-        run: bash "$GITHUB_WORKSPACE/.github/workflows/test-mobile-complexity.sh"
+        run: bash "$GITHUB_WORKSPACE/scripts/ci/test-mobile-complexity.sh"
 
   test:
     runs-on: ubuntu-latest
@@ -124,7 +124,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/mobile-setup
       - name: react quality gate (react-doctor)
-        run: bash "$GITHUB_WORKSPACE/.github/workflows/test-mobile-react-doctor.sh"
+        run: bash "$GITHUB_WORKSPACE/scripts/ci/test-mobile-react-doctor.sh"
       - name: upload react-doctor report
         if: always()
         uses: actions/upload-artifact@v7

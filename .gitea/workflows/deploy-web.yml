@@ -26,10 +26,10 @@ jobs:
       - name: checkout
         run: |
           git -C "$REPO" fetch -q gitea main || { sleep 5; git -C "$REPO" fetch -q gitea main; } || { sleep 5; git -C "$REPO" fetch -q gitea main; }
-          git -C "$REPO" show "${{ github.sha }}:.gitea/workflows/ci-checkout.sh" | bash -s "${{ github.sha }}"
+          git -C "$REPO" show "${{ github.sha }}:scripts/ci/checkout.sh" | bash -s "${{ github.sha }}"
 
       - name: install dependencies
-        run: bash "$WT/.gitea/workflows/ci-node-deps.sh" client
+        run: bash "$WT/scripts/ci/node-deps.sh" client
 
       - name: build staging
         id: staging_build
@@ -37,17 +37,17 @@ jobs:
           EXPO_PUBLIC_API_URL: https://altune-staging.duckdns.org
           EXPO_PUBLIC_SUPABASE_URL: https://ijyjoyxhwmbmriwzazbx.supabase.co
           EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_Gy-pQWa3S9wIkmwqOitl_A_KwFCR6TL
-        run: bash "$WT/.gitea/workflows/web-build.sh"
+        run: bash "$WT/scripts/ci/web-build.sh"
 
       - name: release staging
-        run: bash "$WT/.gitea/workflows/web-ship.sh" staging ${{ github.sha }}
+        run: bash "$WT/scripts/ci/web-ship.sh" staging ${{ github.sha }}
 
       - name: smoke staging
         env:
           BASE_URL: ${{ env.STAGING_URL }}
           ENTRY: ${{ steps.staging_build.outputs.entry }}
           SHA: ${{ github.sha }}
-        run: bash "$WT/.github/workflows/deploy-web-smoke.sh"
+        run: bash "$WT/scripts/ci/deploy-web-smoke.sh"
 
       - name: build prod
         id: prod_build
@@ -55,7 +55,7 @@ jobs:
           EXPO_PUBLIC_API_URL: https://altune.duckdns.org
           EXPO_PUBLIC_SUPABASE_URL: https://ellvexundmgvbbfqbzau.supabase.co
           EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_aAtjkl3gujVDjTRKWp4q0A_Y17qqnaN
-        run: bash "$WT/.gitea/workflows/web-build.sh"
+        run: bash "$WT/scripts/ci/web-build.sh"
 
       - name: record the live prod release
         id: previous
@@ -65,7 +65,7 @@ jobs:
           echo "prod serves ${prev##*/}"
 
       - name: release prod
-        run: bash "$WT/.gitea/workflows/web-ship.sh" prod ${{ github.sha }}
+        run: bash "$WT/scripts/ci/web-ship.sh" prod ${{ github.sha }}
 
       - name: smoke prod
         id: smoke_prod
@@ -73,7 +73,7 @@ jobs:
           BASE_URL: ${{ env.PROD_URL }}
           ENTRY: ${{ steps.prod_build.outputs.entry }}
           SHA: ${{ github.sha }}
-        run: bash "$WT/.github/workflows/deploy-web-smoke.sh"
+        run: bash "$WT/scripts/ci/deploy-web-smoke.sh"
 
       - name: roll back prod
         if: failure() && steps.previous.outputs.sha != '' && steps.previous.outputs.sha != github.sha
@@ -87,11 +87,11 @@ jobs:
           entry=$(ssh -i "$VM_KEY" -o BatchMode=yes -o ConnectTimeout=15 "$VM" \
             "grep -oE '_expo/static/js/web/entry-[0-9a-f]+\\.js' ~/altune-web/prod/current/index.html | head -1")
           [ -n "$entry" ] || { echo "::error::rolled-back release $prev has no entry bundle in index.html"; exit 1; }
-          BASE_URL=$PROD_URL ENTRY=$entry SHA=$prev bash "$WT/.github/workflows/deploy-web-smoke.sh"
+          BASE_URL=$PROD_URL ENTRY=$entry SHA=$prev bash "$WT/scripts/ci/deploy-web-smoke.sh"
           echo "::warning::prod smoke failed for ${{ github.sha }}; prod is rolled back to $prev and its smoke passed"
 
       - name: clean up
         if: always()
         run: |
           [ -n "${WT:-}" ] || exit 0
-          bash "$WT/.gitea/workflows/ci-cleanup.sh"
+          bash "$WT/scripts/ci/cleanup.sh"

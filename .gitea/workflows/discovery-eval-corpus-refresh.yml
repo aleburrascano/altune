@@ -26,18 +26,18 @@ jobs:
       - name: checkout
         run: |
           git -C "$REPO" fetch -q gitea || { sleep 5; git -C "$REPO" fetch -q gitea; } || { sleep 5; git -C "$REPO" fetch -q gitea; }
-          git -C "$REPO" show "${{ github.sha }}:.gitea/workflows/ci-checkout.sh" | bash -s "${{ github.sha }}"
+          git -C "$REPO" show "${{ github.sha }}:scripts/ci/checkout.sh" | bash -s "${{ github.sha }}"
       - name: snapshot corpus
         run: |
           set -euo pipefail
           cd "$WT/services/go-api"
-          . "$WT/.gitea/workflows/eval-env.sh" production || exit 0
+          . "$WT/scripts/ci/eval-env.sh" production || exit 0
           go run ./cmd/discoveryeval -mode corpus-snapshot -corpus-file cmd/discoveryeval/corpus-library.json
       - name: open the corpus PR
         env:
           OPEN_PR: ${{ github.event.inputs.open-pr }}
         run: |
-          bash "$WT/.gitea/workflows/discovery-eval-pr.sh" "eval-corpus-refresh-${{ github.run_id }}" \
+          bash "$WT/scripts/ci/discovery-eval-pr.sh" "eval-corpus-refresh-${{ github.run_id }}" \
             "chore(tooling): refresh the frozen discoveryeval corpus" \
             "Rebuilt from the live tracks table. Merging this moves the denominator for every corpus-derived metric: re-baseline each gated mode with discovery-eval-rebaseline afterwards. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             services/go-api/cmd/discoveryeval/corpus-library.json
@@ -45,4 +45,4 @@ jobs:
         if: always()
         run: |
           [ -n "${WT:-}" ] || exit 0
-          bash "$WT/.gitea/workflows/ci-cleanup.sh"
+          bash "$WT/scripts/ci/cleanup.sh"

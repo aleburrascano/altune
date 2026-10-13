@@ -8,7 +8,7 @@ import { loadRules } from '../eslint/consistency/index.js';
 
 const mobileRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const baselinePath =
-  process.env.CONSISTENCY_BASELINE_FILE ?? path.join(mobileRoot, 'consistency.baseline');
+  process.env.CONSISTENCY_BASELINE_FILE ?? path.join(mobileRoot, 'baselines', 'consistency.baseline');
 // The tree the CLI scans; tests point it at a temp copy so they never write under src.
 const scanRoot = process.env.CONSISTENCY_ROOT ?? mobileRoot;
 const UPDATE_BASELINE_HINT =

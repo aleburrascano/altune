@@ -5,11 +5,11 @@ import { fileURLToPath } from "node:url";
 import yaml from "js-yaml";
 
 const WORKFLOWS = ".gitea/workflows";
-const MANIFEST = `${WORKFLOWS}/gate-parity.json`;
+const MANIFEST = "scripts/ci/gate-parity.json";
 const PRECHECK = "scripts/precheck.sh";
 const GATE_WORKFLOW = `${WORKFLOWS}/precheck.yml`;
 const CHECK_NAME = /\b(?:test_|jest_)?check "([^"]+)"/g;
-const GATE_SCRIPT = /bash \.gitea\/workflows\/([\w.-]+\.sh)/g;
+const GATE_SCRIPT = /bash scripts\/ci\/([\w.-]+\.sh)/g;
 
 function read(root, path) {
   return readFileSync(join(root, path), "utf8");
