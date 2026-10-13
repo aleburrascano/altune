@@ -11,6 +11,11 @@ concurrency:
   group: precheck-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
 jobs:
   precheck:
     runs-on: precheck
