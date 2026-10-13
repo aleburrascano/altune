@@ -443,6 +443,380 @@ new_repo
 run_script
 expect_out "ok    repo script self-tests"
 
+REAL_GO=$(command -v go)
+GO_VERSION=$(go env GOVERSION | sed 's/^go//')
+export GOCACHE=${GOCACHE:-$(go env GOCACHE)}
+export GOPATH=$(go env GOPATH)
+
+forbid_out() {
+    ! grep -qF -- "$1" "$WORK/out.log" || fail "expected output not to mention '$1'"
+}
+
+expect_log() {
+    grep -qF -- "$1" "$WORK/tools.log" 2>/dev/null || fail "expected a tool call including '$1'"
+}
+
+forbid_log() {
+    ! grep -qF -- "$1" "$WORK/tools.log" 2>/dev/null || fail "expected no tool call including '$1'"
+}
+
+commit_as_base() {
+    (
+        cd "$WORK/repo" || exit 1
+        git add -A
+        git commit -qm "base"
+        git update-ref refs/remotes/gitea/main HEAD
+    )
+}
+
+add_go_fixture() {
+    mkdir -p "$WORK/bin" "$WORK/home"
+    printf '#!/usr/bin/env bash\nprintf "go %%s\\n" "$*" >>"%s/tools.log"\nexec "%s" "$@"\n' "$WORK" "$REAL_GO" >"$WORK/bin/go"
+    printf '#!/usr/bin/env bash\nprintf "golangci-lint %%s\\n" "$*" >>"%s/tools.log"\n' "$WORK" >"$WORK/bin/golangci-lint"
+    printf '#!/usr/bin/env bash\nprintf "govulncheck %%s\\n" "$*" >>"%s/tools.log"\n' "$WORK" >"$WORK/bin/govulncheck"
+    chmod +x "$WORK/bin/go" "$WORK/bin/golangci-lint" "$WORK/bin/govulncheck"
+    (
+        cd "$WORK/repo" || exit 1
+        api=services/go-api
+        mkdir -p $api/internal/shared/s $api/internal/acq $api/internal/discovery/adapters/x $api/cmd/acquisitioneval
+        printf 'module altune/go-api\n\ngo %s\n' "$GO_VERSION" >$api/go.mod
+        printf 'package s\n\nfunc S() int { return 1 }\n' >$api/internal/shared/s/s.go
+        printf 'package acq\n\nimport "altune/go-api/internal/shared/s"\n\nfunc A() int { return s.S() }\n' >$api/internal/acq/a.go
+        printf 'package x\n\nfunc X() int { return 1 }\n' >$api/internal/discovery/adapters/x/x.go
+        printf 'package main\n\nimport "altune/go-api/internal/acq"\n\nfunc main() { _ = acq.A() }\n' >$api/cmd/acquisitioneval/main.go
+    )
+    commit_as_base
+}
+
+edit_go_file() {
+    (
+        cd "$WORK/repo" || exit 1
+        printf '\nvar edited = 1\n' >>"services/go-api/$1"
+        git add -A
+        git commit -qm "edit $1"
+    )
+}
+
+run_with_tools() {
+    (
+        cd "$WORK/repo" || exit 1
+        HOME="$WORK/home" PATH="$WORK/bin:$PATH" NPX_LOG="$WORK/npx.log" bash scripts/precheck.sh "$@" >"$WORK/out.log" 2>&1
+    )
+    RC=$?
+}
+
+CASE="a go-api change in a package the selection gate does not import skips the gate and govulncheck, and vets only that package"
+new_repo
+add_go_fixture
+edit_go_file internal/discovery/adapters/x/x.go
+run_with_tools
+forbid_log "run ./cmd/acquisitioneval"
+forbid_log "govulncheck"
+expect_log "vet altune/go-api/internal/discovery/adapters/x"
+forbid_log "vet ./..."
+
+CASE="a go-api change in a package the selection gate imports runs the gate and vets every importer"
+new_repo
+add_go_fixture
+edit_go_file internal/shared/s/s.go
+run_with_tools
+expect_log "run ./cmd/acquisitioneval"
+forbid_log "govulncheck"
+expect_log "vet altune/go-api/internal/shared/s altune/go-api/internal/acq altune/go-api/cmd/acquisitioneval"
+
+CASE="a change to the selection gate command runs the gate"
+new_repo
+add_go_fixture
+edit_go_file cmd/acquisitioneval/main.go
+run_with_tools
+expect_log "run ./cmd/acquisitioneval"
+
+CASE="a change to go.mod runs govulncheck, the whole-module vet and the selection gate"
+new_repo
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    printf '\nexclude example.invalid/none v1.0.0\n' >>services/go-api/go.mod
+    git add -A
+    git commit -qm "touch go.mod"
+)
+run_with_tools
+expect_log "govulncheck ./..."
+expect_log "vet ./..."
+expect_log "run ./cmd/acquisitioneval"
+
+CASE="a change to go.sum runs govulncheck"
+new_repo
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    : >services/go-api/go.sum
+    git add -A
+    git commit -qm "add go.sum"
+)
+run_with_tools
+expect_log "govulncheck ./..."
+
+CASE="a deleted go file still vets its package and the packages that import it"
+new_repo
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    printf 'package s\n\nfunc T() int { return 2 }\n' >services/go-api/internal/shared/s/t.go
+    git add -A
+    git commit -qm "second file"
+    git update-ref refs/remotes/gitea/main HEAD
+    git rm -q services/go-api/internal/shared/s/t.go
+    printf 'notes\n' >services/go-api/NOTES.md
+    git add -A
+    git commit -qm "delete second file"
+)
+run_with_tools
+expect_log "vet altune/go-api/internal/shared/s altune/go-api/internal/acq"
+forbid_log "vet ./..."
+
+CASE="a go file that no longer parses fails the scoped vet"
+new_repo
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    printf 'package x\n\nfunc broken( {\n' >services/go-api/internal/discovery/adapters/x/x.go
+    git add -A
+    git commit -qm "break x"
+)
+run_with_tools
+expect_rc 1
+expect_out "FAIL  go-api vet"
+expect_log "vet altune/go-api/internal/discovery/adapters/x"
+
+CASE="the import-direction lint reads only new lines against the base"
+new_repo
+add_go_fixture
+edit_go_file internal/discovery/adapters/x/x.go
+run_with_tools
+expect_log "golangci-lint run --new-from-rev="
+
+CASE="a change to the golangci config lints the whole tree"
+new_repo
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    printf 'version: "2"\n' >services/go-api/.golangci.yml
+    git add -A
+    git commit -qm "config"
+)
+run_with_tools
+expect_log "golangci-lint run --allow-serial-runners"
+
+CASE="a renamed go file lints the whole tree"
+new_repo
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    git mv services/go-api/internal/discovery/adapters/x/x.go services/go-api/internal/discovery/adapters/x/y.go
+    git commit -qm "rename"
+)
+run_with_tools
+expect_log "golangci-lint run --allow-serial-runners"
+
+CASE="an overseer change skips its govulncheck unless go.mod or go.sum changed"
+new_repo
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    mkdir -p services/overseer
+    printf 'module altune/overseer\n\ngo %s\n' "$GO_VERSION" >services/overseer/go.mod
+    printf 'package main\n\nfunc main() {}\n' >services/overseer/main.go
+)
+commit_as_base
+(
+    cd "$WORK/repo" || exit 1
+    printf '\nvar edited = 1\n' >>services/overseer/main.go
+    git add -A
+    git commit -qm "edit overseer"
+)
+run_with_tools
+forbid_log "govulncheck"
+(
+    cd "$WORK/repo" || exit 1
+    : >services/overseer/go.sum
+    git add -A
+    git commit -qm "overseer go.sum"
+)
+run_with_tools
+expect_log "govulncheck ./..."
+
+add_react_doctor_stubs() {
+    (
+        cd "$WORK/repo" || exit 1
+        mkdir -p client/scripts scripts/ci client/src
+        printf 'import { appendFileSync } from "node:fs";\nappendFileSync(process.env.TOOLS_LOG, "changed-lines " + process.argv.slice(2).join(" ") + "\\n");\n' >client/scripts/react-doctor-changed-lines.mjs
+        printf 'echo whole-tree >>"$TOOLS_LOG"\n' >scripts/ci/test-mobile-react-doctor.sh
+    )
+    commit_as_base
+}
+
+CASE="a client-only change runs only the changed-lines react-doctor, scanning for itself"
+new_repo
+add_mobile_stubs
+add_react_doctor_stubs
+(
+    cd "$WORK/repo" || exit 1
+    printf 'export const x = 1;\n' >client/src/x.ts
+    git add -A
+    git commit -qm "client change"
+)
+TOOLS_LOG="$WORK/tools.log" run_script_with_stubs
+expect_log "changed-lines "
+forbid_log "whole-tree"
+forbid_log "doctor-report.json"
+
+add_client_base() {
+    (
+        cd "$WORK/repo" || exit 1
+        mkdir -p client/src
+        printf "import { a } from './a';\nexport const x = a;\n" >client/src/x.ts
+        printf 'export const a = 1;\n' >client/src/a.ts
+    )
+    commit_as_base
+}
+
+edit_client_file() {
+    (
+        cd "$WORK/repo" || exit 1
+        printf '%s\n' "$2" >"client/src/$1"
+        git add -A
+        git commit -qm "edit $1"
+    )
+}
+
+CASE="a ts change that leaves every import line alone skips the cycle check"
+new_repo
+add_mobile_stubs
+add_client_base
+edit_client_file x.ts "import { a } from './a';
+export const x = a + 1;"
+run_script_with_stubs
+forbid_out "no dependency cycles"
+
+CASE="a ts change that edits an import line runs the cycle check"
+new_repo
+add_mobile_stubs
+add_client_base
+edit_client_file x.ts "import { a } from './b';
+export const x = a;"
+run_script_with_stubs
+expect_out "no dependency cycles"
+
+CASE="a ts change that adds a multi-line export-from runs the cycle check"
+new_repo
+add_mobile_stubs
+add_client_base
+edit_client_file x.ts "import { a } from './a';
+export {
+  a,
+} from './c';"
+run_script_with_stubs
+expect_out "no dependency cycles"
+
+CASE="a new ts file runs the cycle check"
+new_repo
+add_mobile_stubs
+add_client_base
+edit_client_file z.ts "export const z = 1;"
+run_script_with_stubs
+expect_out "no dependency cycles"
+
+CASE="a deleted ts file runs the cycle check"
+new_repo
+add_mobile_stubs
+add_client_base
+(
+    cd "$WORK/repo" || exit 1
+    git rm -q client/src/a.ts
+    git commit -qm "delete a"
+)
+run_script_with_stubs
+expect_out "no dependency cycles"
+
+CASE="a go change that leaves the import block alone skips the cycle check, and one that edits it runs the check"
+new_repo
+add_mobile_stubs
+add_go_fixture
+edit_go_file internal/acq/a.go
+run_with_tools
+forbid_out "no dependency cycles"
+(
+    cd "$WORK/repo" || exit 1
+    git update-ref refs/remotes/gitea/main HEAD
+    printf 'package acq\n\nimport (\n\t"altune/go-api/internal/shared/s"\n\t"fmt"\n)\n\nvar _ = fmt.Sprint\n\nfunc A() int { return s.S() }\n' >services/go-api/internal/acq/a.go
+    git add -A
+    git commit -qm "import fmt"
+)
+run_with_tools
+expect_out "no dependency cycles"
+
+add_contract_tests() {
+    (
+        cd "$WORK/repo" || exit 1
+        mkdir -p client/src/shared/a/__tests__ client/src/shared/b/__tests__
+        printf "const dir = 'go-api';\n" >client/src/shared/a/__tests__/aContract.test.ts
+        printf "const dir = 'go-api';\n" >client/src/shared/b/__tests__/bContract.test.tsx
+        printf "const dir = 'elsewhere';\n" >client/src/shared/b/__tests__/other.test.ts
+        printf "const dir = 'go-api';\n" >client/src/shared/b/notATest.ts
+    )
+    commit_as_base
+}
+
+CASE="a go-api change runs the client test files that mention go-api, found at run time"
+new_repo
+add_mobile_stubs
+add_jest_stub
+add_contract_tests
+add_go_fixture
+edit_go_file internal/discovery/adapters/x/x.go
+run_with_tools
+expect_out "ok    mobile contract tests (go-api changed)"
+expect_npx "src/shared/a/__tests__/aContract.test.ts src/shared/b/__tests__/bContract.test.tsx"
+grep -qF "other.test.ts" "$WORK/npx.log" && fail "a test file that does not mention go-api should not run"
+grep -qF "notATest.ts" "$WORK/npx.log" && fail "a non-test file that mentions go-api should not run"
+
+CASE="a go-api change that breaks a client contract test fails precheck"
+new_repo
+add_mobile_stubs
+add_jest_stub
+add_contract_tests
+add_go_fixture
+edit_go_file internal/discovery/adapters/x/x.go
+STUB_JEST=fail run_with_tools
+expect_rc 1
+expect_out "FAIL  mobile contract tests (go-api changed)"
+
+CASE="a client-only change does not run the contract tests"
+new_repo
+add_mobile_stubs
+add_jest_stub
+add_contract_tests
+mobile_src_change
+run_with_tools
+forbid_out "mobile contract tests"
+
+CASE="a client with no test file mentioning go-api fails the contract step loudly"
+new_repo
+add_mobile_stubs
+add_jest_stub
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    mkdir -p client/src
+    printf 'export const a = 1;\n' >client/src/a.ts
+)
+commit_as_base
+edit_go_file internal/discovery/adapters/x/x.go
+run_with_tools
+expect_rc 1
+expect_out "FAIL  mobile contract tests (go-api changed): no client test file mentions 'go-api'"
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
     exit 1

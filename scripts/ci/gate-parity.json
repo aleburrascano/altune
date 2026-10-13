@@ -93,7 +93,7 @@
     "allow": "plumbing: checks out, installs or cleans up, and checks nothing"
   },
   "ci.yml#ci-mobile-quality#react-doctor": {
-    "gate": "mobile react-doctor"
+    "allow": "the whole-tree scan and warning ceiling are slow, so precheck holds changed lines to zero warnings in mobile react-doctor (changed lines) and leaves the ceiling to CI"
   },
   "ci.yml#ci-mobile-quality#architecture, dead code and duplication (fallow)": {
     "gate": "mobile fallow"

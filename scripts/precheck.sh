@@ -14,7 +14,16 @@ PATH="$PATH:$(go env GOPATH 2>/dev/null)/bin"
 
 untracked() { [ $lint_only = 1 ] || git ls-files --others --exclude-standard; }
 changed=$( { git diff --name-only --diff-filter=ACMR "$base"; untracked; } | sort -u)
+deleted=$(git diff --name-only --no-renames --diff-filter=D "$base")
 touches() { grep -qE "$1" <<<"$changed"; }
+
+import_line='^[+-][[:space:]]*(import[[:space:](]|([A-Za-z_.][A-Za-z0-9_]*[[:space:]]+)?"[^"]+"[[:space:]]*$|export[[:space:]].*[[:space:]]from[[:space:]]|\}[[:space:]]*from[[:space:]]+[^[:space:]]|from[[:space:]]+[^[:space:]])|require\(|import\('
+changes_imports() {
+  local sources='\.(go|ts|tsx)$'
+  [ -n "$(git diff --name-status --no-renames --diff-filter=AD "$base" | grep -E "$sources")" ] && return 0
+  [ -n "$(untracked | grep -E "$sources")" ] && return 0
+  [ -n "$(git diff -U0 --no-color "$base" -- '*.go' '*.ts' '*.tsx' | grep -E "$import_line")" ]
+}
 
 main_tree=$(git worktree list --porcelain | awk '/^worktree /{print $2; exit}')
 link_deps() {
@@ -96,20 +105,66 @@ go_pkgs() {
     done
 }
 
+go_affected() {
+  local m=$1 mod files
+  mod=$(cd "$m" && go list -m) || return 1
+  files=$(printf '%s\n%s\n' "$changed" "$deleted" | grep -E "^$m/" | sed "s#^$m/##")
+  (cd "$m" && go list -f '{{.ImportPath}} {{join .Imports " "}} {{join .TestImports " "}} {{join .XTestImports " "}}' ./... 2>/dev/null) | awk -v files="$files" -v mod="$mod" '
+    function rel(p) { return p == mod ? "." : substr(p, length(mod) + 2) }
+    { for (i = 2; i <= NF; i++) importers[$i] = importers[$i] " " $1; byDir[rel($1)] = $1 }
+    END {
+      n = split(files, list, "\n")
+      for (k = 1; k <= n; k++) {
+        d = list[k]
+        if (d == "") continue
+        while (1) {
+          if (d ~ /\//) sub(/\/[^\/]*$/, "", d); else d = "."
+          if (d in byDir) { queue[++tail] = byDir[d]; break }
+          if (d == ".") break
+        }
+      }
+      for (head = 1; head <= tail; head++) {
+        p = queue[head]
+        if (p in seen) continue
+        seen[p] = 1
+        print p
+        count = split(importers[p], who, " ")
+        for (j = 1; j <= count; j++) queue[++tail] = who[j]
+      }
+    }'
+}
+
 if touches '^services/go-api/'; then
   m=services/go-api
   go_pin $m
   if need go "go-api" && need golangci-lint "go-api lint"; then
-    check "go-api vet" $m "${heavy[@]}" go vet ./...
-    check "go-api import direction" $m "${heavy[@]}" golangci-lint run --allow-serial-runners
+    affected=()
+    if touches "^$m/go\.(mod|sum)\$" || ! affected_out=$(go_affected $m); then
+      whole_module=1
+    else
+      whole_module=0
+      [ -n "$affected_out" ] && mapfile -t affected <<<"$affected_out"
+    fi
+    if [ $whole_module = 1 ]; then
+      check "go-api vet" $m "${heavy[@]}" go vet ./...
+    elif [ ${#affected[@]} -gt 0 ]; then
+      check "go-api vet" $m "${heavy[@]}" go vet "${affected[@]}"
+    fi
+    import_scope=(--new-from-rev="$base")
+    if touches '(^|/)\.golangci[^/]*\.yml$' || [ -n "$(git diff -M --name-only --diff-filter=RC "$base")" ] || [ -n "$(untracked | grep -E '\.go$')" ]; then
+      import_scope=()
+    fi
+    check "go-api import direction" $m "${heavy[@]}" golangci-lint run "${import_scope[@]}" --allow-serial-runners
     check "go-api strict linters (new code)" $m "${heavy[@]}" golangci-lint run --config .golangci.strict.yml --new-from-rev="$base" --allow-serial-runners
     check "go-api no comments (whole tree)" $m go run ./scripts/lintcomments --all .
     check "go-api no new vague names" $m go run ./scripts/lintnames "$base"
     check "go-api module shape" $m go run ./scripts/moduleshape
     mapfile -t pkgs < <(go_pkgs $m)
     [ ${#pkgs[@]} -gt 0 ] && test_check "go-api tests (changed packages)" $m "${heavy[@]}" go test -shuffle=on -count=1 "${pkgs[@]}"
-    test_check "go-api acquisition selection gate" $m "${heavy[@]}" go run ./cmd/acquisitioneval -baseline ./cmd/acquisitioneval/baselines.json
-    need govulncheck "go-api govulncheck" && check "go-api govulncheck" $m "${heavy[@]}" govulncheck ./...
+    if [ $whole_module = 1 ] || grep -qE '(^| )[^ ]*/cmd/acquisitioneval( |$)' <<<"${affected[*]}"; then
+      test_check "go-api acquisition selection gate" $m "${heavy[@]}" go run ./cmd/acquisitioneval -baseline ./cmd/acquisitioneval/baselines.json
+    fi
+    touches "^$m/go\.(mod|sum)\$" && need govulncheck "go-api govulncheck" && check "go-api govulncheck" $m "${heavy[@]}" govulncheck ./...
   fi
 fi
 
@@ -158,7 +213,7 @@ if touches '^services/overseer/'; then
     check "overseer strict linters" $m "${heavy[@]}" golangci-lint run --config "$root/services/go-api/.golangci.strict.yml" --disable=funlen,revive --allow-serial-runners
     check "overseer no comments (whole tree)" services/go-api go run ./scripts/lintcomments --all ../overseer
     test_check "overseer tests (race)" $m "${heavy[@]}" env CGO_ENABLED=1 go test -race -shuffle=on -count=1 ./...
-    need govulncheck "overseer govulncheck" && check "overseer govulncheck" $m "${heavy[@]}" govulncheck ./...
+    touches '^services/overseer/go\.(mod|sum)$' && need govulncheck "overseer govulncheck" && check "overseer govulncheck" $m "${heavy[@]}" govulncheck ./...
     need nilaway "overseer nilaway ceiling" && check "overseer nilaway ceiling" $m "${heavy[@]}" bash "$root/scripts/ci/nilaway-ceiling.sh"
   fi
   if touches '^services/overseer/web/' && need npm "overseer web"; then
@@ -178,6 +233,17 @@ if touches '^services/go-api/internal/(shared/events/|discovery/domain/events\.g
     jest_check "mobile event contracts (go-api events changed)" client npx jest --ci --forceExit --watchman=false --cacheDirectory "$HOME/.cache/altune-ci/jest" src/shared/events/__tests__/eventContract.test.ts src/shared/telemetry/__tests__/eventContract.test.ts
   else
     echo "SKIP  mobile event contracts: no node_modules here or in $main_tree"; missing=1
+  fi
+fi
+
+if touches '^services/go-api/' && [ -d client/src ] && need npx "mobile contract tests"; then
+  contract_tests=$(grep -rlF --include='*.test.ts' --include='*.test.tsx' "'go-api'" client/src | sed 's#^client/##' | sort)
+  if [ -z "$contract_tests" ]; then
+    [ $lint_only = 1 ] || { echo "FAIL  mobile contract tests (go-api changed): no client test file mentions 'go-api'"; failed=1; }
+  elif link_deps client; then
+    jest_check "mobile contract tests (go-api changed)" client npx jest --ci --forceExit --watchman=false --testTimeout=30000 --cacheDirectory "$HOME/.cache/altune-ci/jest" $contract_tests
+  else
+    echo "SKIP  mobile contract tests: no node_modules here or in $main_tree"; missing=1
   fi
 fi
 
@@ -209,8 +275,7 @@ if touches '^client/'; then
     check "mobile consistency ratchet" $m node scripts/consistency-ratchet.mjs
     check "mobile own-module mock ratchet" $m node scripts/mock-ratchet.mjs
     check "mobile fallow" $m npm run --silent fallow
-    check "mobile react-doctor" $m "${heavy[@]}" bash "$root/scripts/ci/test-mobile-react-doctor.sh" "$base"
-    check "mobile react-doctor (changed lines)" $m node scripts/react-doctor-changed-lines.mjs "$base" doctor-report.json
+    check "mobile react-doctor (changed lines)" $m node scripts/react-doctor-changed-lines.mjs "$base"
     check "mobile module shape" $m node scripts/module-shape.mjs
   elif [ -n "$(command -v npx)" ]; then
     echo "SKIP  mobile: no node_modules here or in $main_tree"; missing=1
@@ -240,7 +305,7 @@ if [ -f scripts/gate-parity.mjs ] && need node "gate parity" && link_deps .; the
   check "gate parity with main" . node scripts/gate-parity.mjs
 fi
 
-if touches '\.(go|ts|tsx)$' && need npx "cycles"; then
+if changes_imports && need npx "cycles"; then
   if link_deps .; then
     check "no dependency cycles" . "${heavy[@]}" sh -c 'node_modules/.bin/graft build >/dev/null && node scripts/check-cycles.mjs'
   else
