@@ -8,7 +8,7 @@ import {
   splitOwned,
   toPlaybackQueue,
   type OwnedSplit,
-  ownedFromExtras,
+  ownedFromTrackInfo,
   type OwnedTrack,
 } from '@features/detail/domain/ownedTrack';
 import {
@@ -37,7 +37,7 @@ export type OwnedPlayback = {
 };
 
 function ownedFor(track: DiscoveryResult): OwnedTrack | null {
-  return ownedFromExtras(trackExtras(track.extras));
+  return ownedFromTrackInfo(trackExtras(track.extras));
 }
 
 export function useOwnedPlayback(

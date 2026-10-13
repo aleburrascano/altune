@@ -8,7 +8,11 @@ import {
   type TrackStatus,
 } from '@shared/acquisition/trackStatusStore';
 
-import { ownedFromExtras, ownedTrack, type OwnedTrack } from '@features/detail/domain/ownedTrack';
+import {
+  ownedFromTrackInfo,
+  ownedTrack,
+  type OwnedTrack,
+} from '@features/detail/domain/ownedTrack';
 import type { TrackExtras } from '@features/detail/domain/trackExtras';
 
 export type TrackIdentity = {
@@ -17,7 +21,7 @@ export type TrackIdentity = {
 };
 
 export function useOwnedTrack(te: TrackExtras, identity?: TrackIdentity): OwnedTrack | null {
-  return useResolvedOwnedTrack(ownedFromExtras(te), identity);
+  return useResolvedOwnedTrack(ownedFromTrackInfo(te), identity);
 }
 
 function ownedFromLiveStatus(

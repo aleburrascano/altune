@@ -21,7 +21,7 @@ export function ownedTrack(
     : { trackId, acquisitionStatus };
 }
 
-export function ownedFromExtras(te: TrackExtras): OwnedTrack | null {
+export function ownedFromTrackInfo(te: TrackExtras): OwnedTrack | null {
   if (te.trackId === null || te.acquisitionStatus === null) {
     return null;
   }
@@ -30,7 +30,7 @@ export function ownedFromExtras(te: TrackExtras): OwnedTrack | null {
 
 export type PlayableTrack = {
   owned: OwnedTrack;
-  result: DiscoveryResult;
+  discovery: DiscoveryResult;
 };
 
 export type OwnedSplit = {
@@ -44,12 +44,12 @@ export function splitOwned(tracks: readonly DiscoveryResult[]): OwnedSplit {
   let unownedCount = 0;
   let acquiringCount = 0;
 
-  for (const result of tracks) {
-    const owned = ownedFromExtras(trackExtras(result.extras));
+  for (const discovery of tracks) {
+    const owned = ownedFromTrackInfo(trackExtras(discovery.extras));
     if (owned === null) {
       unownedCount += 1;
     } else if (owned.acquisitionStatus === 'ready') {
-      playable.push({ owned, result });
+      playable.push({ owned, discovery });
     } else {
       acquiringCount += 1;
     }
@@ -63,12 +63,12 @@ export function toPlaybackQueue(
   fallbackArtist: string | null,
   fallbackArtwork: string | null,
 ): PlaybackTrack[] {
-  return playable.map(({ owned, result }) => ({
+  return playable.map(({ owned, discovery }) => ({
     source: { kind: 'library' as const, trackId: owned.trackId },
-    title: result.title,
-    artist: result.subtitle ?? fallbackArtist ?? '',
-    artworkUrl: result.image_url ?? fallbackArtwork,
-    durationSeconds: trackExtras(result.extras).durationSeconds ?? undefined,
+    title: discovery.title,
+    artist: discovery.subtitle ?? fallbackArtist ?? '',
+    artworkUrl: discovery.image_url ?? fallbackArtwork,
+    durationSeconds: trackExtras(discovery.extras).durationSeconds ?? undefined,
   }));
 }
 

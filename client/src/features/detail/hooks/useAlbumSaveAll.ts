@@ -9,7 +9,7 @@ import { runBounded, type BatchOutcome } from '@shared/runBounded';
 
 import { toCreateTrackRequest, SAVE_ALL_CONCURRENCY } from '@features/detail/domain/saveTrack';
 import { trackExtras } from '@features/detail/domain/trackExtras';
-import { ownedFromExtras } from '@features/detail/domain/ownedTrack';
+import { ownedFromTrackInfo } from '@features/detail/domain/ownedTrack';
 import type { useSaveTrack } from '@features/detail/hooks/useSaveTrack';
 
 function _albumExtras(track: DiscoveryResult, album: DiscoveryResult): DiscoveryResult['extras'] {
@@ -30,11 +30,11 @@ export function enrichAlbumTrack(track: DiscoveryResult, album: DiscoveryResult)
 }
 
 function _unownedTracks(tracks: readonly DiscoveryResult[]): DiscoveryResult[] {
-  return tracks.filter((t) => ownedFromExtras(trackExtras(t.extras)) === null);
+  return tracks.filter((t) => ownedFromTrackInfo(trackExtras(t.extras)) === null);
 }
 
 function _ownedTracks(tracks: readonly DiscoveryResult[]): DiscoveryResult[] {
-  return tracks.filter((t) => ownedFromExtras(trackExtras(t.extras)) !== null);
+  return tracks.filter((t) => ownedFromTrackInfo(trackExtras(t.extras)) !== null);
 }
 
 function _trackIdentity(track: DiscoveryResult): string | null {
