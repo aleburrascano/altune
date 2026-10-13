@@ -12,11 +12,8 @@ import (
 	"altune/go-api/internal/catalog/adapters/storage"
 	"altune/go-api/internal/discovery/service/ownership"
 	"altune/go-api/internal/observe/service/eventtap"
-	"altune/go-api/internal/shared/config"
 	"context"
-	"fmt"
 	"log/slog"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -103,7 +100,7 @@ func (a *App) wireAudioSources(
 	tap *eventtap.Tap,
 	disc discoveryWiring,
 ) (audioSourcesStaging, error) {
-	audioStore, err := a.buildAudioStore(ctx)
+	audioStore, err := storage.FromConfig(a.cfg, slog.Default())
 	if err != nil {
 		return audioSourcesStaging{}, err
 	}
@@ -308,84 +305,6 @@ func (a *App) audioSourcesFor(ctx context.Context, searcher *ytdlp.YtDlpAudioSea
 		slog.InfoContext(ctx, "acquisition: yt-dlp source disabled via YTDLP_ENABLED")
 	}
 	return sources
-}
-
-func (a *App) buildAudioStore(ctx context.Context) (catalogPorts.AudioStore, error) {
-	if missing := len(missingOCIS3Keys(a.cfg)); missing > 0 && missing < ociS3ConfigKeys {
-		return nil, missingAudioStoreError(a.cfg)
-	}
-	if a.cfg.HasOCIS3() {
-		store, err := a.buildOCIAudioStore(ctx)
-		if err == nil {
-			return store, nil
-		}
-		if a.cfg.MusicDir == "" {
-			return nil, fmt.Errorf("audio store: OCI S3 is configured but failed to initialize and no MUSIC_DIR fallback is set: %w", err)
-		}
-		slog.WarnContext(ctx, "OCI S3 store failed to initialize, falling back to filesystem", "error", err)
-	}
-
-	if a.cfg.MusicDir != "" {
-		slog.InfoContext(ctx, "audio store: filesystem", "dir", a.cfg.MusicDir)
-		return a.scopeAudioStore(ctx, storage.NewFilesystemAudioStore(a.cfg.MusicDir)), nil
-	}
-
-	return nil, missingAudioStoreError(a.cfg)
-}
-
-func (a *App) buildOCIAudioStore(ctx context.Context) (catalogPorts.AudioStore, error) {
-	store, err := storage.NewObjectStorageAudioStore(storage.ObjectStorageConfig{
-		Endpoint:  a.cfg.OCIS3Endpoint,
-		AccessKey: a.cfg.OCIS3AccessKey,
-		SecretKey: a.cfg.OCIS3SecretKey,
-		Bucket:    a.cfg.OCIS3Bucket,
-		Region:    a.cfg.OCIS3Region,
-	})
-	if err != nil {
-		return nil, err
-	}
-	slog.InfoContext(ctx, "audio store: OCI Object Storage")
-	return a.scopeAudioStore(ctx, store), nil
-}
-
-func (a *App) scopeAudioStore(ctx context.Context, store catalogPorts.AudioStore) catalogPorts.AudioStore {
-	if a.cfg.AudioKeyPrefix == "" {
-		return store
-	}
-	slog.InfoContext(ctx, "audio store: scoped to key prefix", "prefix", a.cfg.AudioKeyPrefix)
-	return storage.NewScopedAudioStore(store, a.cfg.AudioKeyPrefix)
-}
-
-const ociS3ConfigKeys = 4
-
-func missingOCIS3Keys(cfg *config.Config) []string {
-	var missing []string
-	if cfg.OCIS3Endpoint == "" {
-		missing = append(missing, "OCI_S3_ENDPOINT")
-	}
-	if cfg.OCIS3AccessKey == "" {
-		missing = append(missing, "OCI_S3_ACCESS_KEY")
-	}
-	if cfg.OCIS3SecretKey == "" {
-		missing = append(missing, "OCI_S3_SECRET_KEY")
-	}
-	if cfg.OCIS3Bucket == "" {
-		missing = append(missing, "OCI_S3_BUCKET")
-	}
-	return missing
-}
-
-func missingAudioStoreError(cfg *config.Config) error {
-	missing := missingOCIS3Keys(cfg)
-	if len(missing) > 0 && len(missing) < ociS3ConfigKeys {
-		return fmt.Errorf(
-			"audio store: incomplete OCI S3 configuration, missing %s (set these for object storage, or set MUSIC_DIR for a filesystem store)",
-			strings.Join(missing, ", "),
-		)
-	}
-	return fmt.Errorf(
-		"audio store: no backend configured; set MUSIC_DIR for a filesystem store, or all of OCI_S3_ENDPOINT, OCI_S3_ACCESS_KEY, OCI_S3_SECRET_KEY, OCI_S3_BUCKET for object storage",
-	)
 }
 
 func newOwnershipEnrichment(cat catalogWiring) *ownership.OwnershipEnrichmentService {

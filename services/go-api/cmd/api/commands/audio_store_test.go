@@ -1,12 +1,14 @@
 package commands
 
 import (
+	"altune/go-api/internal/catalog/adapters/storage"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,9 +30,9 @@ func TestNewAudioStoreFromConfigKeepsCommandsInsideTheKeyPrefix(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	store, err := NewAudioStoreFromConfig(&config.Config{MusicDir: musicDir, AudioKeyPrefix: "staging/"})
+	store, err := storage.FromConfig(&config.Config{MusicDir: musicDir, AudioKeyPrefix: "staging/"}, slog.Default())
 	if err != nil {
-		t.Fatalf("NewAudioStoreFromConfig: %v", err)
+		t.Fatalf("storage.FromConfig: %v", err)
 	}
 	ctx := context.Background()
 
@@ -54,9 +56,9 @@ func TestNewAudioStoreFromConfigLeavesAnUnprefixedStoreUnscoped(t *testing.T) {
 	if err := os.WriteFile(source, []byte("new audio"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	store, err := NewAudioStoreFromConfig(&config.Config{MusicDir: musicDir})
+	store, err := storage.FromConfig(&config.Config{MusicDir: musicDir}, slog.Default())
 	if err != nil {
-		t.Fatalf("NewAudioStoreFromConfig: %v", err)
+		t.Fatalf("storage.FromConfig: %v", err)
 	}
 	if err := store.Store(context.Background(), source, "33333333-3333-3333-3333-333333333333/A/B/C.mp3"); err != nil {
 		t.Fatalf("Store without a prefix = %v, want nil", err)
@@ -74,9 +76,9 @@ func TestNewAudioStoreFromConfigForwardsAudioAgeListerForSweep(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	store, err := NewAudioStoreFromConfig(&config.Config{MusicDir: musicDir, AudioKeyPrefix: "staging/"})
+	store, err := storage.FromConfig(&config.Config{MusicDir: musicDir, AudioKeyPrefix: "staging/"}, slog.Default())
 	if err != nil {
-		t.Fatalf("NewAudioStoreFromConfig: %v", err)
+		t.Fatalf("storage.FromConfig: %v", err)
 	}
 
 	lister, ok := store.(ports.AudioAgeLister)

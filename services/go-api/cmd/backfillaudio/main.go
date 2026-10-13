@@ -11,6 +11,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -72,7 +73,7 @@ func run(opts options) error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	audioStore, err := buildAudioStore(cfg)
+	audioStore, err := storage.FromConfig(cfg, slog.Default())
 	if err != nil {
 		return err
 	}
@@ -157,22 +158,6 @@ func markFailed(ctx context.Context, repo trackWriter, c candidate) error {
 		return fmt.Errorf("mark failed: %w", err)
 	}
 	return repo.Update(ctx, track, track.Version)
-}
-
-func buildAudioStore(cfg *config.Config) (catalogPorts.AudioStore, error) {
-	if cfg.HasOCIS3() {
-		return storage.NewObjectStorageAudioStore(storage.ObjectStorageConfig{
-			Endpoint:  cfg.OCIS3Endpoint,
-			AccessKey: cfg.OCIS3AccessKey,
-			SecretKey: cfg.OCIS3SecretKey,
-			Bucket:    cfg.OCIS3Bucket,
-			Region:    cfg.OCIS3Region,
-		})
-	}
-	if cfg.MusicDir != "" {
-		return storage.NewFilesystemAudioStore(cfg.MusicDir), nil
-	}
-	return nil, errors.New("no audio store configured: set OCI_S3_* or MUSIC_DIR")
 }
 
 func listStorage(ctx context.Context, store catalogPorts.AudioStore) error {

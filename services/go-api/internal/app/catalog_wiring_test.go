@@ -26,6 +26,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -326,9 +327,7 @@ func TestBuildAudioStoreFailsFastWhenMisconfigured(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			a := &App{cfg: tt.cfg}
-
-			store, err := a.buildAudioStore(t.Context())
+			store, err := storage.FromConfig(tt.cfg, slog.Default())
 			if err == nil {
 				t.Fatalf("expected startup error for misconfigured audio store, got store=%v", store)
 			}
@@ -345,9 +344,7 @@ func TestBuildAudioStoreFailsFastWhenMisconfigured(t *testing.T) {
 }
 
 func TestBuildAudioStoreFilesystemSucceeds(t *testing.T) {
-	a := &App{cfg: &config.Config{MusicDir: t.TempDir()}}
-
-	store, err := a.buildAudioStore(t.Context())
+	store, err := storage.FromConfig(&config.Config{MusicDir: t.TempDir()}, slog.Default())
 	if err != nil {
 		t.Fatalf("filesystem audio store should resolve, got error: %v", err)
 	}
@@ -358,9 +355,7 @@ func TestBuildAudioStoreFilesystemSucceeds(t *testing.T) {
 
 func TestBuildAudioStoreScopesWhenKeyPrefixSet(t *testing.T) {
 	dir := t.TempDir()
-	a := &App{cfg: &config.Config{MusicDir: dir, AudioKeyPrefix: "staging/"}}
-
-	store, err := a.buildAudioStore(t.Context())
+	store, err := storage.FromConfig(&config.Config{MusicDir: dir, AudioKeyPrefix: "staging/"}, slog.Default())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -384,9 +379,7 @@ func TestBuildAudioStoreScopesWhenKeyPrefixSet(t *testing.T) {
 
 func TestBuildAudioStoreUnscopedWhenKeyPrefixEmpty(t *testing.T) {
 	dir := t.TempDir()
-	a := &App{cfg: &config.Config{MusicDir: dir}}
-
-	store, err := a.buildAudioStore(t.Context())
+	store, err := storage.FromConfig(&config.Config{MusicDir: dir}, slog.Default())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
