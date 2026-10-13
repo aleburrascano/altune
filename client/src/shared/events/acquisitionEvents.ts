@@ -16,7 +16,7 @@ import {
   type DownloadMeta,
   type DownloadPhase,
 } from '@shared/acquisition/downloadStore';
-import { invalidateAudioCaches } from '@shared/acquisition/audioCacheInvalidation';
+import { invalidateAudioCaches } from '@shared/acquisition/state/audioCacheInvalidation';
 import { stageToPhase } from '@shared/acquisition/stagePhase';
 import { offlineDownloadsSupported } from '@shared/offline/offlineSupport';
 import { repinIfPinned } from '@shared/offline/pinnedStore';

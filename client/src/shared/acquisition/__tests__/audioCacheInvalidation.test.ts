@@ -5,7 +5,7 @@ import {
   registerAudioCacheInvalidator,
   invalidateAudioCaches,
   _resetAudioCacheInvalidatorsForTest,
-} from '@shared/acquisition/audioCacheInvalidation';
+} from '@shared/acquisition/state/audioCacheInvalidation';
 
 let warnSpy: jest.SpyInstance;
 

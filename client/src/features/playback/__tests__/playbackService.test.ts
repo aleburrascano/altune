@@ -4,7 +4,7 @@ import TrackPlayer, { Event, type RemoteDuckEvent } from 'react-native-track-pla
 import {
   _resetAudioCacheInvalidatorsForTest,
   invalidateAudioCaches,
-} from '@shared/acquisition/audioCacheInvalidation';
+} from '@shared/acquisition/state/audioCacheInvalidation';
 import { asTrackId, type TrackId } from '@shared/apiClient/ids';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';

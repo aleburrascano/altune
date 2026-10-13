@@ -3,7 +3,7 @@ import { QueryClient, type InfiniteData } from '@tanstack/react-query';
 import {
   registerAudioCacheInvalidator,
   _resetAudioCacheInvalidatorsForTest,
-} from '@shared/acquisition/audioCacheInvalidation';
+} from '@shared/acquisition/state/audioCacheInvalidation';
 import { useDownloadStore } from '@shared/acquisition/downloadStore';
 import { trackIdentityKey, useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { asPlaylistId, asTrackId } from '@shared/apiClient/ids';

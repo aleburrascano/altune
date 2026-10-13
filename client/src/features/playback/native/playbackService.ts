@@ -9,7 +9,7 @@ import { shouldRestartOnPrevious } from '@features/playback/domain/restartOnPrev
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { type TrackKey, trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
 
-import { registerAudioCacheInvalidator } from '@shared/acquisition/audioCacheInvalidation';
+import { registerAudioCacheInvalidator } from '@shared/acquisition/state/audioCacheInvalidation';
 import { parseTrackId } from '@shared/apiClient/ids';
 import { playbackPort } from '@features/playback/ports/activePlaybackPort';
 import { hasSignedInUser, onSignOut } from '@shared/session/signOutCleanup';

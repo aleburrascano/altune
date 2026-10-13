@@ -38,7 +38,7 @@
     "src/features/playback/ui/QueueSheet.tsx:QueueRow",
     "src/features/settings/hooks/useAccountEmail.ts:accountEmail",
     "src/shared/acquisition/state/acquisitionTelemetry.ts:_resetAcquisitionTelemetryForTest",
-    "src/shared/acquisition/audioCacheInvalidation.ts:_resetAudioCacheInvalidatorsForTest",
+    "src/shared/acquisition/state/audioCacheInvalidation.ts:_resetAudioCacheInvalidatorsForTest",
     "src/shared/acquisition/downloadStore.ts:FINISHING_DWELL_MS",
     "src/shared/acquisition/downloadStore.ts:DONE_HOLD_MS",
     "src/shared/acquisition/downloadStore.ts:FAILED_HOLD_MS",
