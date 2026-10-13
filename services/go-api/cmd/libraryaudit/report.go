@@ -1,0 +1,105 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"time"
+)
+
+type summary struct {
+	ReadyTracks         int `json:"ready_tracks"`
+	Checked             int `json:"checked"`
+	NoISRC              int `json:"no_isrc"`
+	UnknownISRC         int `json:"unknown_isrc"`
+	LookupFailed        int `json:"lookup_failed"`
+	WrongSong           int `json:"wrong_song"`
+	LengthShorter       int `json:"length_shorter"`
+	LengthLonger        int `json:"length_longer"`
+	YearFillable        int `json:"year_fillable"`
+	AlbumArtistFillable int `json:"album_artist_fillable"`
+	ISRCFillable        int `json:"isrc_fillable"`
+	ISRCAmbiguous       int `json:"isrc_ambiguous"`
+	CoverURLDiffers     int `json:"cover_url_differs"`
+	CoverImageDiffers   int `json:"cover_image_differs"`
+	CoverUnreadable     int `json:"cover_unreadable"`
+}
+
+type report struct {
+	GeneratedAt time.Time `json:"generated_at"`
+	Aborted     bool      `json:"aborted"`
+	AbortReason string    `json:"abort_reason,omitempty"`
+	Summary     summary   `json:"summary"`
+	Findings    []finding `json:"findings"`
+}
+
+func countCategories(findings []finding) map[category]int {
+	counts := map[category]int{}
+	for _, f := range findings {
+		counts[f.Category]++
+	}
+	return counts
+}
+
+func summarize(outcome auditOutcome) summary {
+	counts := countCategories(outcome.Findings)
+	return summary{
+		ReadyTracks:         outcome.Total,
+		Checked:             outcome.Checked,
+		NoISRC:              counts[categoryNoISRC],
+		UnknownISRC:         counts[categoryUnknownISRC],
+		LookupFailed:        counts[categoryLookupFailed],
+		WrongSong:           counts[categoryWrongSong],
+		LengthShorter:       counts[categoryLengthShorter],
+		LengthLonger:        counts[categoryLengthLonger],
+		YearFillable:        counts[categoryYearFillable],
+		AlbumArtistFillable: counts[categoryAlbumArtistFillable],
+		ISRCFillable:        counts[categoryISRCFillable],
+		ISRCAmbiguous:       counts[categoryISRCAmbiguous],
+		CoverURLDiffers:     counts[categoryCoverURLDiffers],
+		CoverImageDiffers:   counts[categoryCoverImageDiffers],
+		CoverUnreadable:     counts[categoryCoverUnreadable],
+	}
+}
+
+func buildReport(outcome auditOutcome, now time.Time) report {
+	findings := outcome.Findings
+	if findings == nil {
+		findings = []finding{}
+	}
+	return report{
+		GeneratedAt: now.UTC(),
+		Aborted:     outcome.AbortReason != "",
+		AbortReason: outcome.AbortReason,
+		Summary:     summarize(outcome),
+		Findings:    findings,
+	}
+}
+
+func writeJSON(w io.Writer, r report) error {
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(r); err != nil {
+		return fmt.Errorf("write report: %w", err)
+	}
+	return nil
+}
+
+func writeSummary(w io.Writer, r report) {
+	s := r.Summary
+	if r.Aborted {
+		_, _ = fmt.Fprintf(w, "ABORTED, partial report: %s\n", r.AbortReason)
+	}
+	_, _ = fmt.Fprintf(w, "%d ready tracks\n", s.ReadyTracks)
+	_, _ = fmt.Fprintf(w, "  checked by ISRC:            %d\n", s.Checked)
+	_, _ = fmt.Fprintf(w, "  no ISRC:                    %d (search found one ISRC for %d, ambiguous for %d)\n", s.NoISRC, s.ISRCFillable, s.ISRCAmbiguous)
+	_, _ = fmt.Fprintf(w, "  unknown ISRC:               %d\n", s.UnknownISRC)
+	_, _ = fmt.Fprintf(w, "  lookup failed:              %d\n", s.LookupFailed)
+	_, _ = fmt.Fprintf(w, "  ISRC is a different song:   %d\n", s.WrongSong)
+	_, _ = fmt.Fprintf(w, "  audio >10s shorter:         %d\n", s.LengthShorter)
+	_, _ = fmt.Fprintf(w, "  audio >10s longer:          %d\n", s.LengthLonger)
+	_, _ = fmt.Fprintf(w, "  year fillable:              %d\n", s.YearFillable)
+	_, _ = fmt.Fprintf(w, "  album artist fillable:      %d\n", s.AlbumArtistFillable)
+	_, _ = fmt.Fprintf(w, "  cover URL differs:          %d\n", s.CoverURLDiffers)
+	_, _ = fmt.Fprintf(w, "  cover image differs:        %d (unreadable: %d)\n", s.CoverImageDiffers, s.CoverUnreadable)
+}
