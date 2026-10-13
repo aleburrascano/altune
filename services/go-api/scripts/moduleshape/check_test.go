@@ -71,6 +71,7 @@ func runCases(t *testing.T, cases []checkCase) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := collect(writeTree(t, tc.files))
+			got = withoutG8(got)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -212,6 +213,7 @@ func TestCollectN2(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := collect(conceptTree(t, tc.files))
+			got = withoutG8(got)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -244,4 +246,57 @@ func TestCollectFixtureTree(t *testing.T) {
 			t.Errorf("unexpected %q", line)
 		}
 	}
+}
+
+func capabilityModule(extra map[string]string) map[string]string {
+	files := moduleFiles("m", "domain", "ports")
+	files["internal/m/service/run/run.go"] = goSource()
+	files["internal/m/adapters/store/store.go"] = goSource()
+	return join(files, extra)
+}
+
+func capabilityFiles(dir string, count int) map[string]string {
+	files := map[string]string{}
+	for i := range count {
+		files[dir+"/f"+string(rune('a'+i))+".go"] = goSource()
+	}
+	return files
+}
+
+func TestCollectG8(t *testing.T) {
+	cases := []checkCase{
+		{"observe shaped", capabilityModule(map[string]string{
+			"internal/m/service/run/run_test.go":        goSource(),
+			"internal/m/adapters/handler/testdata/x.go": goSource(),
+			"internal/m/service/_scratch/old.go":        goSource(),
+			"internal/m/adapters/.cache/old.go":         goSource(),
+		}), nil},
+		{"file directly in service", capabilityModule(map[string]string{"internal/m/service/search.go": goSource()}), []string{"G8 internal/m/service/search.go sits directly in service/"}},
+		{"file directly in adapters", capabilityModule(map[string]string{"internal/m/adapters/client.go": goSource()}), []string{"G8 internal/m/adapters/client.go sits directly in adapters/"}},
+		{"test file directly in service", capabilityModule(map[string]string{"internal/m/service/search_test.go": goSource()}), nil},
+		{"files beside packages", capabilityModule(map[string]string{"internal/m/adapters/providers/deezer.go": goSource(), "internal/m/adapters/providers/spotify/spotify.go": goSource()}), []string{"G8 internal/m/adapters/providers/deezer.go sits beside packages"}},
+		{"folder of only packages", capabilityModule(map[string]string{"internal/m/adapters/providers/spotify/spotify.go": goSource()}), nil},
+		{"too many files", capabilityModule(capabilityFiles("internal/m/service/big", capabilityFileCap+1)), []string{"G8 internal/m/service/big holds more than 16 files"}},
+		{"cap is inclusive", capabilityModule(capabilityFiles("internal/m/service/big", capabilityFileCap)), nil},
+		{"module name as package", capabilityModule(map[string]string{"internal/m/service/m/m.go": goSource()}), []string{"G8 internal/m/service/m bad package name"}},
+		{"layer name as package", capabilityModule(map[string]string{"internal/m/service/ports/p.go": goSource()}), []string{"G8 internal/m/service/ports bad package name"}},
+		{"underscore package", capabilityModule(map[string]string{"internal/m/service/foo_bar/f.go": goSource()}), []string{"G8 internal/m/service/foo_bar bad package name"}},
+		{"app and shared are not modules", map[string]string{"internal/app/service/a.go": goSource(), "internal/shared/service/a.go": goSource()}, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			collected, err := collect(writeTree(t, tc.files))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := slices.DeleteFunc(collected, func(line string) bool { return !strings.HasPrefix(line, "G8 ") })
+			if !slices.Equal(got, normalize(tc.want)) {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func withoutG8(lines []string) []string {
+	return slices.DeleteFunc(lines, func(line string) bool { return strings.HasPrefix(line, "G8 ") })
 }

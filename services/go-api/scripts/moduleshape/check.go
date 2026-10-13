@@ -45,7 +45,7 @@ type importRef struct {
 
 func collect(root string) ([]string, error) {
 	var found []string
-	steps := []func(string) ([]string, error){checkModules, checkNames, checkSources, checkConcepts}
+	steps := []func(string) ([]string, error){checkModules, checkNames, checkSources, checkConcepts, checkCapabilities}
 	for _, step := range steps {
 		lines, err := step(root)
 		if err != nil {
