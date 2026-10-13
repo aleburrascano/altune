@@ -1,7 +1,5 @@
-import { subscribeAppState } from '@shared/lifecycle/appState';
-
 import { isAbort } from '@shared/failure/errors';
-import { recordEvent } from '@shared/telemetry/recordEvent';
+import { HEALTH_BATCH, createHealthTally } from '@shared/telemetry/healthTally';
 import type { DiscoveryProviderStatus } from '@shared/apiClient/discovery';
 
 import { hasDegradedStatus } from '@features/detail/domain/contentStatus';
@@ -10,48 +8,34 @@ export type EnrichmentProvider = 'musicbrainz' | 'deezer' | 'lastfm';
 
 export type ContentFetch = 'album_tracks' | 'artist_content' | 'related_tracks';
 
-export const DETAIL_HEALTH_BATCH = 25;
+const HEALTH_KEYS = [
+  'enrichment_musicbrainz_ok',
+  'enrichment_musicbrainz_failed',
+  'enrichment_deezer_ok',
+  'enrichment_deezer_failed',
+  'enrichment_lastfm_ok',
+  'enrichment_lastfm_failed',
+  'content_album_tracks_ok',
+  'content_album_tracks_failed',
+  'content_artist_content_ok',
+  'content_artist_content_failed',
+  'content_related_tracks_ok',
+  'content_related_tracks_failed',
+] as const;
 
-type Tally = {
-  enrichment_musicbrainz_ok: number;
-  enrichment_musicbrainz_failed: number;
-  enrichment_deezer_ok: number;
-  enrichment_deezer_failed: number;
-  enrichment_lastfm_ok: number;
-  enrichment_lastfm_failed: number;
-  content_album_tracks_ok: number;
-  content_album_tracks_failed: number;
-  content_artist_content_ok: number;
-  content_artist_content_failed: number;
-  content_related_tracks_ok: number;
-  content_related_tracks_failed: number;
-};
+type HealthKey = (typeof HEALTH_KEYS)[number];
 
-const emptyTally = (): Tally => ({
-  enrichment_musicbrainz_ok: 0,
-  enrichment_musicbrainz_failed: 0,
-  enrichment_deezer_ok: 0,
-  enrichment_deezer_failed: 0,
-  enrichment_lastfm_ok: 0,
-  enrichment_lastfm_failed: 0,
-  content_album_tracks_ok: 0,
-  content_album_tracks_failed: 0,
-  content_artist_content_ok: 0,
-  content_artist_content_failed: 0,
-  content_related_tracks_ok: 0,
-  content_related_tracks_failed: 0,
+const health = createHealthTally<HealthKey>({
+  eventType: 'detail_health',
+  keys: HEALTH_KEYS,
+  onFlushFailure: (error: unknown) => {
+    console.warn('[detail] health flush failed', { error });
+  },
 });
 
-let tally = emptyTally();
-let outcomes = 0;
-let listening = false;
+export const DETAIL_HEALTH_BATCH = HEALTH_BATCH;
 
-function count(key: keyof Tally): void {
-  ensureFlushOnBackground();
-  tally[key] += 1;
-  outcomes += 1;
-  if (outcomes >= DETAIL_HEALTH_BATCH) flushDetailHealth();
-}
+const { count } = health;
 
 export function recordEnrichmentOutcome(provider: EnrichmentProvider, ok: boolean): void {
   count(`enrichment_${provider}_${ok ? 'ok' : 'failed'}`);
@@ -75,25 +59,6 @@ export async function fetchTallyingOutcome<T extends { status: DiscoveryProvider
   }
 }
 
-export function flushDetailHealth(): void {
-  if (outcomes === 0) return;
-  const payload = tally;
-  tally = emptyTally();
-  outcomes = 0;
-  recordEvent({ type: 'detail_health', payload }).catch((error: unknown) => {
-    console.warn('[detail] health flush failed', { error });
-  });
-}
+export const flushDetailHealth = health.flush;
 
-function ensureFlushOnBackground(): void {
-  if (listening) return;
-  listening = true;
-  subscribeAppState((status) => {
-    if (status === 'background') flushDetailHealth();
-  });
-}
-
-export function _resetDetailHealthForTest(): void {
-  tally = emptyTally();
-  outcomes = 0;
-}
+export const _resetDetailHealthForTest = health.reset;
