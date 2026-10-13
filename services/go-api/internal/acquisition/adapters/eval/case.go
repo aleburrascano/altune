@@ -2,7 +2,7 @@ package eval
 
 import (
 	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -362,7 +362,7 @@ func validateCaseExtensions(c Case) error {
 }
 
 func validateExpectProvenance(c Case) error {
-	if c.ExpectProvenance != "" && !domain.AcquisitionProvenance(c.ExpectProvenance).Valid() {
+	if c.ExpectProvenance != "" && !shared.AcquisitionProvenance(c.ExpectProvenance).Valid() {
 		return fmt.Errorf("case %q expects unknown provenance %q", c.ID, c.ExpectProvenance)
 	}
 	return nil

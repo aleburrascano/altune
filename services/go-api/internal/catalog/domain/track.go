@@ -197,21 +197,13 @@ func (t *Track) SetAlbumArtist(albumArtist string) {
 	t.AlbumArtist = &canonical
 }
 
-type AcquisitionProvenance string
+type AcquisitionProvenance = shared.AcquisitionProvenance
 
 const (
-	ProvenanceVerified     AcquisitionProvenance = "verified"
-	ProvenanceCorroborated AcquisitionProvenance = "corroborated"
-	ProvenanceBestEffort   AcquisitionProvenance = "best_effort"
+	ProvenanceVerified     = shared.ProvenanceVerified
+	ProvenanceCorroborated = shared.ProvenanceCorroborated
+	ProvenanceBestEffort   = shared.ProvenanceBestEffort
 )
-
-func (p AcquisitionProvenance) Valid() bool {
-	switch p {
-	case ProvenanceVerified, ProvenanceCorroborated, ProvenanceBestEffort:
-		return true
-	}
-	return false
-}
 
 var ErrIllegalAcquisitionTransition = errors.New("illegal acquisition status transition")
 

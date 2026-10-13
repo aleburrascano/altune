@@ -2,7 +2,6 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/redact"
 	"context"
@@ -239,16 +238,16 @@ func (ac *AcquisitionContext) priorRejected(url string) bool {
 	return false
 }
 
-func (ac *AcquisitionContext) Provenance() domain.AcquisitionProvenance {
+func (ac *AcquisitionContext) Provenance() shared.AcquisitionProvenance {
 	switch {
 	case ac.BestEffort:
-		return domain.ProvenanceBestEffort
+		return shared.ProvenanceBestEffort
 	case ac.IdentityVerified:
-		return domain.ProvenanceVerified
+		return shared.ProvenanceVerified
 	case ac.DurationVerified && ac.lengthCorroborated():
-		return domain.ProvenanceCorroborated
+		return shared.ProvenanceCorroborated
 	default:
-		return domain.ProvenanceBestEffort
+		return shared.ProvenanceBestEffort
 	}
 }
 
@@ -276,7 +275,7 @@ type TrackRef struct {
 	Genre       string
 }
 
-func (s *AcquireTrackAudioService) buildSteps(userId shared.UserId, trackId domain.TrackId) Pipeline {
+func (s *AcquireTrackAudioService) buildSteps(userId shared.UserId, trackId shared.TrackId) Pipeline {
 	return CoreSteps(s.sources, s.audioTagger, s.audioStore, s.audioProber, s.identifier, s.workspace,
 		[]func(*DownloadStep){
 			WithStepDownloadLimiter(s.downloadLimiter),

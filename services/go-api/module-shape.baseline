@@ -2,10 +2,8 @@ G3 internal/acquisition/adapters/handler/acquisition_handler.go:6 imports catalo
 G3 internal/acquisition/ports/writer.go:4 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/acquire.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/acquire.go:6 imports catalog outside adapters/catalogbridge
-G3 internal/acquisition/adapters/eval/case.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/orphan_queue.go:4 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/orphan_queue.go:5 imports catalog outside adapters/catalogbridge
-G3 internal/acquisition/service/pipeline.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/reacquire.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/retry_admission.go:6 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/step_store.go:5 imports catalog outside adapters/catalogbridge
