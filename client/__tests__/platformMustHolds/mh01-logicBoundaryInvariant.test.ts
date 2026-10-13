@@ -5,6 +5,7 @@ import * as path from 'node:path';
 const CWD = path.join(__dirname, '..', '..');
 const LOGIC_FILE = 'src/features/discovery/domain/searchPaging.ts';
 const RULE = 'no-restricted-imports';
+const RULE_ERROR = 2;
 
 const eslint = new ESLint({
   cwd: CWD,
@@ -91,7 +92,7 @@ describe('shared logic stays platform-free', () => {
   ])('applies the rule to the look-alike %s', async (filePath) => {
     const config = await eslint.calculateConfigForFile(path.join(CWD, filePath));
 
-    expect(config.rules?.[RULE]).toBeDefined();
+    expect(config.rules?.[RULE]?.[0]).toBe(RULE_ERROR);
   });
 
   it('refuses a deep react-native import in telemetry', async () => {
@@ -126,7 +127,7 @@ describe('shared logic stays platform-free', () => {
       path.join(CWD, 'src/shared/auth/supabaseClient.ts'),
     );
 
-    expect(config.rules?.[RULE]).toBeDefined();
+    expect(config.rules?.[RULE]?.[0]).toBe(RULE_ERROR);
   });
 
   it('finds no platform import anywhere in the real src/shared tree', () => {
