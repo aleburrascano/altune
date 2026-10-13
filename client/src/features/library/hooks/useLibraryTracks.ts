@@ -25,15 +25,19 @@ const MAX_PENDING_POLLS = 10;
 
 type TracksData = InfiniteData<ListTracksResponse, number>;
 
-const hasPending = (page: ListTracksResponse) =>
-  page.items.some((t) => t.acquisition_status === 'pending');
+function hasPending(page: ListTracksResponse) {
+  return page.items.some((t) => t.acquisition_status === 'pending');
+}
 
-const mergePage = (old: TracksData | undefined, fresh: ListTracksResponse) =>
-  old ? { ...old, pages: old.pages.map((p) => (p.offset === fresh.offset ? fresh : p)) } : old;
+function mergePage(old: TracksData | undefined, fresh: ListTracksResponse) {
+  return old
+    ? { ...old, pages: old.pages.map((p) => (p.offset === fresh.offset ? fresh : p)) }
+    : old;
+}
 
-const logPollFailure = (offset: number, cause: unknown) => {
+function logPollFailure(offset: number, cause: unknown) {
   console.warn('[library] pending poll refresh failed', { offset, ...failureLogFields(cause) });
-};
+}
 
 type FallbackHandler = (failure: LibraryFailure, loaded: number) => void;
 
@@ -65,13 +69,13 @@ async function fetchUnlessSuperseded(target: PollTarget, offset: number) {
   return superseded ? undefined : fresh;
 }
 
-const writeFresh =
-  ({ queryClient, query, sort }: PollTarget) =>
-  (fresh?: ListTracksResponse) =>
+function writeFresh({ queryClient, query, sort }: PollTarget) {
+  return (fresh?: ListTracksResponse) =>
     fresh &&
     queryClient.setQueryData<TracksData>(libraryKeys.tracks(query, sort), (old) =>
       mergePage(old, fresh),
     );
+}
 
 function refreshPage(target: PollTarget, offset: number) {
   return fetchUnlessSuperseded(target, offset)

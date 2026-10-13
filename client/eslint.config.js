@@ -270,6 +270,7 @@ const localPlugin = {
     'no-banned-noun': require('./eslint/rules/no-banned-noun'),
     'one-alias-per-folder': require('./eslint/rules/one-alias-per-folder'),
     'no-parent-relative-imports': require('./eslint/rules/no-parent-relative-imports'),
+    'top-level-function-declarations': require('./eslint/rules/top-level-function-declarations'),
   },
 };
 
@@ -301,6 +302,13 @@ const noParentRelativeImports = {
   files: ['{src,__tests__}/**/*.{ts,tsx,js,mjs}'],
   plugins: { local: localPlugin },
   rules: { 'local/no-parent-relative-imports': 'error' },
+};
+
+const topLevelFunctionDeclarations = {
+  files: ['src/**/*.{ts,tsx}'],
+  ignores: TEST_FILES,
+  plugins: { local: localPlugin },
+  rules: { 'local/top-level-function-declarations': 'error' },
 };
 
 const SRC_ONLY = 'src/**/*';
@@ -348,6 +356,7 @@ module.exports = [
   theNounIsTrackNeverSong,
   oneAliasPerFolder,
   noParentRelativeImports,
+  topLevelFunctionDeclarations,
   {
     ignores: ['node_modules/**', '.expo/**', 'dist/**', 'web-build/**', 'coverage/**'],
   },

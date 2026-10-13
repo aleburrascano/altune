@@ -50,13 +50,13 @@ export type TrackMutation<TData, TContext> = Omit<
   isInFlight: (trackId: TrackId) => boolean;
 };
 
-const pendingRunsOf = (mutationKey: TrackMutationKey): MutationFilters => ({
-  mutationKey,
-  status: 'pending',
-});
+function pendingRunsOf(mutationKey: TrackMutationKey): MutationFilters {
+  return { mutationKey, status: 'pending' };
+}
 
-const trackIdOf = (run: Mutation<unknown, Error, unknown, unknown>): TrackId =>
-  run.state.variables as TrackId;
+function trackIdOf(run: Mutation<unknown, Error, unknown, unknown>): TrackId {
+  return run.state.variables as TrackId;
+}
 
 function hasPendingRun(
   cache: MutationCache,
@@ -85,7 +85,9 @@ export function useOneRunPerTrack<TData, TContext>(
   };
 }
 
-const reacquireEndpoint = (trackId: TrackId) => `POST /v1/tracks/${trackId}/reacquire`;
+function reacquireEndpoint(trackId: TrackId) {
+  return `POST /v1/tracks/${trackId}/reacquire`;
+}
 
 const REACQUIRE_FAILED = 'Could not start a re-acquisition. Your current audio is unchanged.';
 
@@ -135,7 +137,9 @@ type EntryPoint = RetryEntryPoint | undefined;
 type InFlightCheck = (trackId: TrackId) => boolean;
 type MutateFn = (trackId: TrackId) => void;
 
-const retryEndpoint = (trackId: TrackId) => `POST /v1/tracks/${trackId}/retry`;
+function retryEndpoint(trackId: TrackId) {
+  return `POST /v1/tracks/${trackId}/retry`;
+}
 
 function markPending(queryClient: QueryClient) {
   return (trackId: TrackId): PriorAcquisition => {

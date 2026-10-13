@@ -25,7 +25,9 @@ import {
 import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
 import { useDiscoverPort } from '@features/discovery/ports/DiscoverPortProvider';
 
-const noPageToFetch = (): Promise<void> => Promise.resolve();
+function noPageToFetch(): Promise<void> {
+  return Promise.resolve();
+}
 
 const firstPageParam: SearchPageParam = { offset: 0, searchId: undefined };
 

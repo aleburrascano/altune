@@ -11,7 +11,9 @@ import {
   artistToDiscoveryResult,
 } from '@features/library/domain/libraryToDiscovery';
 
-const toDetail = (item: DiscoveryResult) => detailHref('/library/detail', item);
+function toDetail(item: DiscoveryResult) {
+  return detailHref('/library/detail', item);
+}
 
 function buildNavigation(navigator: Navigator) {
   return {

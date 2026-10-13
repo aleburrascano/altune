@@ -224,7 +224,9 @@ function stillOurs(entry: OutboxEntry): boolean {
   return _queue.some((e) => e.event_id === entry.event_id) && ownedByCurrentUser(entry);
 }
 
-const flushEnabled = (): boolean => isLoopEnabled('telemetryFlush');
+function flushEnabled(): boolean {
+  return isLoopEnabled('telemetryFlush');
+}
 
 export async function flushOutbox(): Promise<void> {
   ensureRestored();

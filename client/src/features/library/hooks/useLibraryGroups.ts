@@ -42,20 +42,24 @@ const PAGING = {
   placeholderData: keepPreviousData,
 };
 
-const queryStatus = <T>(q: PagedQuery<T>) => ({
-  isLoading: q.isLoading,
-  isRefetching: q.isRefetching,
-  error: q.error,
-  isFetchingNextPage: q.isFetchingNextPage,
-});
+function queryStatus<T>(q: PagedQuery<T>) {
+  return {
+    isLoading: q.isLoading,
+    isRefetching: q.isRefetching,
+    error: q.error,
+    isFetchingNextPage: q.isFetchingNextPage,
+  };
+}
 
-const pageItems = <T>(q: PagedQuery<T>) => ({
-  items: q.data?.pages.flatMap((page) => page.items) ?? [],
-  nextPageFailed: q.isFetchNextPageError,
-  onRetryNextPage: () => {
-    void q.fetchNextPage();
-  },
-});
+function pageItems<T>(q: PagedQuery<T>) {
+  return {
+    items: q.data?.pages.flatMap((page) => page.items) ?? [],
+    nextPageFailed: q.isFetchNextPageError,
+    onRetryNextPage: () => {
+      void q.fetchNextPage();
+    },
+  };
+}
 
 function useGroupPages<T>(options: PagedGroupQueryOptions<T>) {
   const { queryKey, query, sort, enabled, fetchPage } = options;

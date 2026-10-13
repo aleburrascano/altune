@@ -33,7 +33,9 @@ export type ServerEventsClientFactory = (
   ...args: ConstructorParameters<typeof SSEClient>
 ) => ServerEventsClient;
 
-const createSSEClient: ServerEventsClientFactory = (...args) => new SSEClient(...args);
+function createSSEClient(...args: ConstructorParameters<typeof SSEClient>): ServerEventsClient {
+  return new SSEClient(...args);
+}
 
 export function useServerEvents(createClient: ServerEventsClientFactory = createSSEClient): void {
   const queryClient = useQueryClient();

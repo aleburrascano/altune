@@ -22,12 +22,18 @@ describe('mobile eslint config bans comments in every file', () => {
   }
 
   it('reports nothing for a string that only looks like a comment', async () => {
-    const errors = await noCommentsErrors('src/shared/failure/errors.ts', "export const u = 'https://x.dev';\n");
+    const errors = await noCommentsErrors(
+      'src/shared/failure/errors.ts',
+      "export const u = 'https://x.dev';\n",
+    );
     assert.strictEqual(errors.length, 0);
   });
 
   it('still reports a comment under a whole-file eslint-disable', async () => {
-    const errors = await noCommentsErrors('src/shared/failure/errors.ts', '/* eslint-disable */\nexport const a = 1;\n');
+    const errors = await noCommentsErrors(
+      'src/shared/failure/errors.ts',
+      '/* eslint-disable */\nexport const a = 1;\n',
+    );
     assert.strictEqual(errors.length, 1);
   });
 });
@@ -103,11 +109,18 @@ describe('browser globals', () => {
   });
 
   it('flags typeof document in a feature hook', async () => {
-    const errors = await globalErrors('src/features/library/hooks/y.ts', 'export const t = typeof document;\n');
+    const errors = await globalErrors(
+      'src/features/library/hooks/y.ts',
+      'export const t = typeof document;\n',
+    );
     assert.strictEqual(errors.length, 1);
   });
 
-  for (const file of ['src/shared/x.web.ts', 'src/shared/x.web.tsx', 'src/features/playback/web/y.ts']) {
+  for (const file of [
+    'src/shared/x.web.ts',
+    'src/shared/x.web.tsx',
+    'src/features/playback/web/y.ts',
+  ]) {
     it(`allows window in ${file}`, async () => {
       assert.strictEqual((await globalErrors(file, alertCode)).length, 0);
     });
@@ -117,7 +130,11 @@ describe('browser globals', () => {
     assert.strictEqual((await globalErrors('src/shared/__tests__/x.test.ts', alertCode)).length, 0);
   });
 
-  for (const file of ['src/shared/webby.ts', 'src/shared/website/x.ts', 'src/shared/x.webview.ts']) {
+  for (const file of [
+    'src/shared/webby.ts',
+    'src/shared/website/x.ts',
+    'src/shared/x.webview.ts',
+  ]) {
     it(`refuses window in look-alike ${file}`, async () => {
       assert.strictEqual((await globalErrors(file, alertCode)).length, 1);
     });
@@ -130,7 +147,9 @@ describe('browser globals', () => {
 
   it('finds no offender anywhere under src', async () => {
     const results = await eslint.lintFiles(['src/**/*.{ts,tsx}']);
-    const offenders = results.flatMap((r) => r.messages.filter((m) => m.ruleId === 'no-restricted-globals'));
+    const offenders = results.flatMap((r) =>
+      r.messages.filter((m) => m.ruleId === 'no-restricted-globals'),
+    );
     assert.strictEqual(offenders.length, 0);
   });
 });
@@ -149,7 +168,10 @@ describe('mobile eslint config bans relative parent imports', () => {
     '__tests__/rootLayout.integration.test.tsx',
   ]) {
     it(`reports a relative parent import in ${file}`, async () => {
-      assert.strictEqual((await parentImportErrors(file, "import x from '../y';\nexport const a = x;\n")).length, 1);
+      assert.strictEqual(
+        (await parentImportErrors(file, "import x from '../y';\nexport const a = x;\n")).length,
+        1,
+      );
     });
 
     it(`reports jest.mock of a relative parent path in ${file}`, async () => {
@@ -158,7 +180,35 @@ describe('mobile eslint config bans relative parent imports', () => {
   }
 
   it('allows an alias and a sibling import', async () => {
-    const code = "import a from '@shared/failure/errors';\nimport b from './b';\nexport const c = [a, b];\n";
+    const code =
+      "import a from '@shared/failure/errors';\nimport b from './b';\nexport const c = [a, b];\n";
     assert.strictEqual((await parentImportErrors('src/shared/failure/x.ts', code)).length, 0);
+  });
+});
+
+describe('mobile eslint config makes top-level functions declarations', () => {
+  async function arrowConstErrors(filePath, code) {
+    const [result] = await eslint.lintText(code, { filePath });
+    return result.messages.filter(
+      (m) => m.ruleId === 'local/top-level-function-declarations' && m.severity === 2,
+    );
+  }
+
+  it('reports a top-level arrow const in src', async () => {
+    const errors = await arrowConstErrors(
+      'src/shared/failure/errors.ts',
+      'export const f = () => 1;\n',
+    );
+    assert.strictEqual(errors.length, 1);
+  });
+
+  it('allows a nested arrow const inside a declaration', async () => {
+    const code = 'export function f() {\n  const g = () => 1;\n  return g();\n}\n';
+    assert.strictEqual((await arrowConstErrors('src/shared/failure/errors.ts', code)).length, 0);
+  });
+
+  it('ignores test files', async () => {
+    const file = 'src/features/library/__tests__/gridColumns.test.ts';
+    assert.strictEqual((await arrowConstErrors(file, 'export const f = () => 1;\n')).length, 0);
   });
 });

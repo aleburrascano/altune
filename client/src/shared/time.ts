@@ -1,1 +1,3 @@
-export const monotonicNow = (): number => performance.now();
+export function monotonicNow(): number {
+  return performance.now();
+}

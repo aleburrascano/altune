@@ -80,12 +80,14 @@ function reportExploreFailure(artist: string, error: unknown): void {
   );
 }
 
-const topMatchQuery = (artist: string) => ({
-  q: artist,
-  kinds: ['artist', 'track'] as ('artist' | 'track')[],
-  limit: 1,
-  saveHistory: false,
-});
+function topMatchQuery(artist: string) {
+  return {
+    q: artist,
+    kinds: ['artist', 'track'] as ('artist' | 'track')[],
+    limit: 1,
+    saveHistory: false,
+  };
+}
 
 async function searchTopMatch(
   port: LibraryPort,

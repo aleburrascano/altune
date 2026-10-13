@@ -49,7 +49,11 @@ function NoHistory(): ReactElement {
   );
 }
 
-const clearStyle = ({ pressed }: { pressed: boolean }) => pressedStyle(pressed);
+type PressState = { pressed: boolean };
+
+function clearStyle({ pressed }: PressState) {
+  return pressedStyle(pressed);
+}
 const CLEAR_A11Y = {
   accessibilityRole: 'button',
   accessibilityLabel: 'Clear search history',

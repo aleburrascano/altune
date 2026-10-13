@@ -13,8 +13,9 @@ import { libraryTrackId } from '@features/playback/domain/playerStatus';
 import { MAX_PRESIGN } from '@features/playback/domain/presignWindow';
 import { ContractError } from '@shared/failure/errors';
 
-const artworkPlaceholder = (): string =>
-  Image.resolveAssetSource(require('@assets/artwork-placeholder.png')).uri;
+function artworkPlaceholder(): string {
+  return Image.resolveAssetSource(require('@assets/artwork-placeholder.png')).uri;
+}
 
 function playablePreviewUrl(previewUrl: string): string {
   if (!isPlayablePreviewUrl(previewUrl)) throw new ContractError('PreviewUrl', 'not an https url');

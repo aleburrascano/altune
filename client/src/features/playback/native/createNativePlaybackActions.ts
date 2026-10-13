@@ -48,15 +48,16 @@ export async function ignoringNativeRejection(op: () => Promise<unknown>): Promi
 
 type LoadCommands = Pick<PlaybackControls, 'play' | 'startQueue' | 'retry'>;
 
-const startQueue: PlaybackControls['startQueue'] = async (orderedTracks, startIndex, options) => {
+async function startQueue(...args: Parameters<PlaybackControls['startQueue']>): Promise<void> {
+  const [orderedTracks, startIndex] = args;
   clearPlaybackError();
   try {
-    await loadNativeQueue(orderedTracks, startIndex, options);
+    await loadNativeQueue(...args);
   } catch (err) {
     const failed = orderedTracks[startIndex];
     if (failed) reportLoadFailure(failed, err);
   }
-};
+}
 
 function createLoadCommands(setTrack: SetDisplayedTrack, memory: PlaybackMemory): LoadCommands {
   const play: PlaybackControls['play'] = async (newTrack) => {

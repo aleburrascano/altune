@@ -16,8 +16,9 @@ interface PagedListState {
   refetch: () => unknown;
 }
 
-const canFetchMore = (s: PagedListState) =>
-  s.hasNextPage && !s.isFetchingNextPage && !s.isFetchNextPageError;
+function canFetchMore(s: PagedListState) {
+  return s.hasNextPage && !s.isFetchingNextPage && !s.isFetchNextPageError;
+}
 
 export function pagedListControls(state: PagedListState) {
   return {

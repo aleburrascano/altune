@@ -27,12 +27,14 @@ async function backfillFrom(
   return backfillFrom(port, nextBackfillOffset(page, offset), { ...page, scanned, updated });
 }
 
-const backfillWholeLibrary = (port: SettingsPort) =>
-  backfillFrom(port, 0, { scanned: 0, updated: 0, truncated: true, nextOffset: 0 });
+function backfillWholeLibrary(port: SettingsPort) {
+  return backfillFrom(port, 0, { scanned: 0, updated: 0, truncated: true, nextOffset: 0 });
+}
 
-const retryTransientExceptTimeout: typeof transientRetryOptions.retry = (count, error) =>
-  !(error instanceof NetworkError && error.failure === 'timeout') &&
-  transientRetryOptions.retry(count, error);
+function retryTransientExceptTimeout(count: number, error: unknown): boolean {
+  const isTimeout = error instanceof NetworkError && error.failure === 'timeout';
+  return !isTimeout && transientRetryOptions.retry(count, error);
+}
 
 export function useBackfillFeatured() {
   const queryClient = useQueryClient();

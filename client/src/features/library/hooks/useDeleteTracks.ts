@@ -32,7 +32,9 @@ import {
   type TrackStatus,
 } from '@shared/acquisition/trackStatusStore';
 
-const deleteEndpoint = (trackId: TrackId) => `DELETE /v1/tracks/${trackId}`;
+function deleteEndpoint(trackId: TrackId) {
+  return `DELETE /v1/tracks/${trackId}`;
+}
 
 export const BULK_DELETE_CONCURRENCY = 4;
 export const BULK_DELETE_DEADLINE_MS = 60_000;
