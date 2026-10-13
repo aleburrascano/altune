@@ -22,7 +22,6 @@ import {
 import { track } from '@features/library/__tests__/trackMutationFixtures';
 import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
-import { TRACKS_PAGE_SIZE } from '@features/library/hooks/useLibraryTracks';
 import { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
 import type { Navigator } from '@shared/navigation/navigator';
 
@@ -34,6 +33,7 @@ const SEEDED_TRACKS = 7;
 const SEEDED_ALBUMS = 3;
 const SEEDED_ARTISTS = 2;
 const BEYOND_FIRST_PAGE = 50;
+const TRACKS_PAGE_SIZE = 200;
 
 const SORTS: Sorts = { playlists: 'recent', tracks: 'recent', albums: 'az', artists: 'az' };
 

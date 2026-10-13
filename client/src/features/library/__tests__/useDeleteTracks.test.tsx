@@ -11,13 +11,7 @@ import type { ReactNode } from 'react';
 import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
 import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
-import {
-  BULK_DELETE_CONCURRENCY,
-  BULK_DELETE_DEADLINE_MS,
-  deleteOne,
-  useDeleteTracks,
-  useDeleteTrack,
-} from '@features/library/hooks/useDeleteTracks';
+import { useDeleteTracks, useDeleteTrack } from '@features/library/hooks/useDeleteTracks';
 import {
   track,
   page,
@@ -58,6 +52,8 @@ function failCleanupOfB(trackId: TrackId): boolean {
 }
 
 const EVENTS = 'POST /v1/discovery/events';
+const BULK_DELETE_CONCURRENCY = 4;
+const BULK_DELETE_DEADLINE_MS = 60_000;
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -542,10 +538,14 @@ describe('useDeleteTracks', () => {
 
     it('deleteOne sends one delete request for the track', async () => {
       mockDeleteTrack.mockResolvedValue(undefined);
+      const { wrapper } = setup(ports);
 
-      await deleteOne({ ...createMemoryLibraryPort(), ...ports.library }, asTrackId('t9'));
+      const { result } = renderHook(() => useDeleteTrack(), { wrapper });
+      act(() => result.current.mutate(asTrackId('t9')));
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockDeleteTrack).toHaveBeenCalledWith('t9');
+      expect(mockDeleteTrack).toHaveBeenCalledTimes(1);
+      expect(mockDeleteTrack.mock.calls[0]?.[0]).toBe('t9');
     });
   });
 
@@ -626,22 +626,34 @@ describe('useDeleteTracks', () => {
     });
 
     it('deleteOne deletes the track through the port passed to it', async () => {
+      const { queryClient } = setup(ports);
       const port = createMemoryLibraryPort({ tracks: [track('t1'), track('t2')] });
 
-      await deleteOne(port, asTrackId('t1'));
+      const { result } = renderHook(() => useDeleteTrack(), {
+        wrapper: portWrapper(queryClient, port),
+      });
+      act(() => result.current.mutate(asTrackId('t1')));
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(await idsLeftIn(port)).toEqual(['t2']);
       expect(mockDeleteTrack).not.toHaveBeenCalled();
     });
 
     it('deleteOne rejects with the error the port gives, without falling back to HTTP', async () => {
+      const { queryClient } = setup(ports);
       const refusal = new ApiError(500, 'boom');
       const port: LibraryPort = {
         ...createMemoryLibraryPort(),
         deleteTrack: () => Promise.reject(refusal),
       };
 
-      await expect(deleteOne(port, asTrackId('t1'))).rejects.toBe(refusal);
+      const { result } = renderHook(() => useDeleteTrack(), {
+        wrapper: portWrapper(queryClient, port),
+      });
+      act(() => result.current.mutate(asTrackId('t1')));
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      expect(result.current.error).toBe(refusal);
       expect(mockDeleteTrack).not.toHaveBeenCalled();
     });
   });

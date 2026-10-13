@@ -36,8 +36,8 @@ function deleteEndpoint(trackId: TrackId) {
   return `DELETE /v1/tracks/${trackId}`;
 }
 
-export const BULK_DELETE_CONCURRENCY = 4;
-export const BULK_DELETE_DEADLINE_MS = 60_000;
+const BULK_DELETE_CONCURRENCY = 4;
+const BULK_DELETE_DEADLINE_MS = 60_000;
 
 type DeleteTrackFailure = { trackId: TrackId; error: unknown };
 
@@ -55,7 +55,7 @@ type Outcome = { sent: number; failures: DeleteTrackFailure[] };
 type RunHandle = { stopped: () => boolean; inStartingSession: () => boolean; finish: () => void };
 type RemoveTrack = (trackId: TrackId) => Promise<void>;
 
-export function deleteOne(port: LibraryPort, trackId: TrackId): Promise<void> {
+function deleteOne(port: LibraryPort, trackId: TrackId): Promise<void> {
   return port.deleteTrack(trackId);
 }
 

@@ -19,7 +19,7 @@ import {
 import { pagedListControls } from '@features/library/domain/listPaging';
 import { useLoggedLibraryQueryFailure } from '@features/library/hooks/useLoggedLibraryQueryFailure';
 
-export const TRACKS_PAGE_SIZE = 200;
+const TRACKS_PAGE_SIZE = 200;
 const PENDING_POLL_MS = 60_000;
 const MAX_PENDING_POLLS = 10;
 

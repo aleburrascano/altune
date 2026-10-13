@@ -12,7 +12,7 @@ import {
   restoreTrackPlacements,
 } from '@shared/events/trackCachePatch';
 
-import { TRACKS_PAGE_SIZE, useLibraryTracks } from '@features/library/hooks/useLibraryTracks';
+import { useLibraryTracks } from '@features/library/hooks/useLibraryTracks';
 import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
 import { track as seededTrack } from '@features/library/__tests__/trackMutationFixtures';
 import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
@@ -20,6 +20,7 @@ import type { LibraryPort } from '@features/library/ports/libraryPort';
 
 const SERVICE_UNAVAILABLE = 503;
 const MAX_PENDING_POLLS = 10;
+const TRACKS_PAGE_SIZE = 200;
 
 function track(i: number): TrackResponse {
   return seededTrack(`t${i}`);
