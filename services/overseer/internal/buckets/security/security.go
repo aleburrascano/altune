@@ -117,8 +117,8 @@ func (b *Bucket) markStale() {
 }
 
 func clientFromEnv() prober {
-	base := strings.TrimSpace(os.Getenv("OVERSEER_GOAPI_URL"))
-	if base == "" {
+	base, ok := goapi.BaseURLFromEnv()
+	if !ok {
 		return nullProber{}
 	}
 	c, err := newFencedClient(base, allowlistFromEnv(base))

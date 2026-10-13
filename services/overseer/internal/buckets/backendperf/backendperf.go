@@ -7,9 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 )
@@ -338,8 +336,8 @@ func throughputSignal(w window) core.Signal {
 }
 
 func readerFromEnv() metricsReader {
-	base := strings.TrimSpace(os.Getenv("OVERSEER_GOAPI_URL"))
-	if base == "" {
+	base, ok := goapi.BaseURLFromEnv()
+	if !ok {
 		return nullReader{}
 	}
 	c, err := goapi.New(base, goapi.SharedTokenSource())

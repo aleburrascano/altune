@@ -7,8 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
-	"strings"
 	"sync"
 	"time"
 )
@@ -485,8 +483,8 @@ func discoTrendSignal(d goapi.DiscographyQuality) (core.Signal, bool) {
 }
 
 func readerFromEnv() reader {
-	base := strings.TrimSpace(os.Getenv("OVERSEER_GOAPI_URL"))
-	if base == "" {
+	base, ok := goapi.BaseURLFromEnv()
+	if !ok {
 		return nullReader{}
 	}
 	c, err := goapi.New(base, goapi.SharedTokenSource())

@@ -314,8 +314,8 @@ func spendReaderFromEnv() spendReader {
 }
 
 func usageReaderFromEnv() usageReader {
-	base := strings.TrimSpace(os.Getenv("OVERSEER_GOAPI_URL"))
-	if base == "" {
+	base, ok := goapi.BaseURLFromEnv()
+	if !ok {
 		return nullUsageReader{}
 	}
 	c, err := goapi.New(base, goapi.SharedTokenSource())

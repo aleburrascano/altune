@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -123,8 +122,8 @@ func eventText(ev goapi.Event) string {
 }
 
 func sourceFromEnv() source {
-	base := strings.TrimSpace(os.Getenv("OVERSEER_GOAPI_URL"))
-	if base == "" {
+	base, ok := goapi.BaseURLFromEnv()
+	if !ok {
 		return newNullSource()
 	}
 	c, err := goapi.NewConsumer(base, goapi.SharedTokenSource())
@@ -135,16 +134,8 @@ func sourceFromEnv() source {
 	return c
 }
 
-type nullSource struct{ events chan goapi.Event }
+type nullSource = goapi.NullEventSource
 
-func newNullSource() *nullSource { return &nullSource{events: make(chan goapi.Event)} }
-
-func (n *nullSource) Run(ctx context.Context) error { <-ctx.Done(); return ctx.Err() }
-func (n *nullSource) Events() <-chan goapi.Event    { return n.events }
-func (n *nullSource) Status() goapi.Status          { return goapi.StatusDown }
-
-func (n *nullSource) LastError() error {
-	return &goapi.SourceDownError{Op: "stream", Err: errSourceDown}
-}
+func newNullSource() *nullSource { return goapi.NewNullEventSource(errSourceDown) }
 
 func init() { core.Register(New()) }

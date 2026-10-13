@@ -233,8 +233,8 @@ func healthSignal(h goapi.OperatorHealth) core.Signal {
 }
 
 func clientFromEnv() (healthReader, reachChecker) {
-	base := strings.TrimSpace(os.Getenv("OVERSEER_GOAPI_URL"))
-	if base == "" {
+	base, ok := goapi.BaseURLFromEnv()
+	if !ok {
 		n := nullClient{}
 		return n, n
 	}

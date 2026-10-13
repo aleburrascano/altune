@@ -180,8 +180,8 @@ func decodeRecord(s core.Signal) goapi.LogRecord {
 }
 
 func sourceFromEnv() source {
-	base := strings.TrimSpace(os.Getenv("OVERSEER_GOAPI_URL"))
-	if base == "" {
+	base, ok := goapi.BaseURLFromEnv()
+	if !ok {
 		return newNullSource()
 	}
 	c, err := goapi.NewLogsConsumer(base, goapi.SharedTokenSource())
