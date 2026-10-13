@@ -1,0 +1,74 @@
+{
+  "generated_at": "2026-10-13T00:00:00Z",
+  "aborted": false,
+  "summary": {
+    "ready_tracks": 3,
+    "checked": 2,
+    "no_isrc": 0,
+    "unknown_isrc": 0,
+    "lookup_failed": 0,
+    "wrong_song": 1,
+    "length_shorter": 0,
+    "length_longer": 0,
+    "year_fillable": 1,
+    "album_artist_fillable": 1,
+    "isrc_fillable": 1,
+    "isrc_ambiguous": 0,
+    "year_other_release": 0,
+    "album_artist_other_release": 0,
+    "cover_url_differs": 0,
+    "cover_image_differs": 0,
+    "cover_unreadable": 0
+  },
+  "findings": [
+    {
+      "track_id": "t1",
+      "artist": "Daniel Caesar",
+      "title": "Valentina",
+      "category": "year_fillable",
+      "detail": "2019",
+      "fix": {
+        "user_id": "u1",
+        "version": 7,
+        "field": "year",
+        "old_value": null,
+        "new_value": "2019"
+      }
+    },
+    {
+      "track_id": "t1",
+      "artist": "Daniel Caesar",
+      "title": "Valentina",
+      "category": "album_artist_fillable",
+      "detail": "Daniel Caesar",
+      "fix": {
+        "user_id": "u1",
+        "version": 7,
+        "field": "album_artist",
+        "old_value": null,
+        "new_value": "Daniel Caesar"
+      }
+    },
+    {
+      "track_id": "t2",
+      "artist": "Lil Tecca",
+      "title": "TEC",
+      "category": "wrong_song",
+      "detail": "catalog says Lil Tecca - Ransom",
+      "fix": {
+        "user_id": "u2",
+        "version": 3,
+        "field": "isrc",
+        "old_value": "USWRONG00001",
+        "new_value": null
+      }
+    },
+    {
+      "track_id": "t3",
+      "artist": "Artist",
+      "title": "Song",
+      "category": "isrc_fillable",
+      "detail": "USFOUND00001"
+    }
+  ]
+}

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -64,5 +65,43 @@ func TestBuildReport_AbortedRunSaysWhyAndKeepsTheSummary(t *testing.T) {
 	writeSummary(&text, result)
 	if !strings.Contains(text.String(), "ABORTED") {
 		t.Fatalf("got %s", text.String())
+	}
+}
+
+func goldenOutcome() auditOutcome {
+	base := libraryTrack{ID: "t1", UserID: "u1", Version: 7, Title: "Valentina", Artist: "Daniel Caesar"}
+	year := about(base, categoryYearFillable, "2019")
+	year.Fix = fixing(base, "year", "", "2019")
+	albumArtist := about(base, categoryAlbumArtistFillable, "Daniel Caesar")
+	albumArtist.Fix = fixing(base, "album_artist", "", "Daniel Caesar")
+	wrongTrack := libraryTrack{ID: "t2", UserID: "u2", Version: 3, Title: "TEC", Artist: "Lil Tecca", ISRC: "USWRONG00001"}
+	wrong := about(wrongTrack, categoryWrongSong, "catalog says Lil Tecca - Ransom")
+	wrong.Fix = fixing(wrongTrack, "isrc", wrongTrack.ISRC, "")
+	searched := about(libraryTrack{ID: "t3", UserID: "u3", Version: 1, Title: "Song", Artist: "Artist"}, categoryISRCFillable, "USFOUND00001")
+	return auditOutcome{Total: 3, Checked: 2, Findings: []finding{year, albumArtist, wrong, searched}}
+}
+
+func TestWriteJSON_MatchesTheReportFileLibraryreconcileReads(t *testing.T) {
+	var out bytes.Buffer
+	if err := writeJSON(&out, buildReport(goldenOutcome(), time.Date(2026, 10, 13, 0, 0, 0, 0, time.UTC))); err != nil {
+		t.Fatal(err)
+	}
+	want, err := os.ReadFile("testdata/report.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != string(want) {
+		t.Fatalf("got:\n%s", out.String())
+	}
+}
+
+func TestAuditTrack_AnISRCFoundBySearchIsReportedWithoutAFix(t *testing.T) {
+	cat := fakeCatalog{
+		search: []catalogTrack{{ID: 2, Title: "Valentina", Artist: "Daniel Caesar", DurationSeconds: 236}},
+		byID:   map[int64]catalogTrack{2: {ID: 2, ISRC: "USFOUND"}},
+	}
+	found := findingOf(audited(cat, fakeCovers{}, libTrack()).Findings, categoryISRCFillable)
+	if found.Detail != "USFOUND" || found.Fix != nil {
+		t.Fatalf("got %+v", found)
 	}
 }

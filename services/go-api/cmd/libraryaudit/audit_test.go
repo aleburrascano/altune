@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -241,5 +242,58 @@ func TestAuditTrack_SearchWithNoCandidateOfFittingLengthFillsNothing(t *testing.
 	got := audited(cat, fakeCovers{}, libTrack())
 	if len(got.Findings) != 1 || got.Findings[0].Category != categoryNoISRC {
 		t.Fatalf("got %+v", got)
+	}
+}
+
+func strPtr(s string) *string { return &s }
+
+func findingOf(findings []finding, want category) finding {
+	for _, f := range findings {
+		if f.Category == want {
+			return f
+		}
+	}
+	return finding{}
+}
+
+func withLib(lib libraryTrack, edit func(*libraryTrack)) libraryTrack {
+	edit(&lib)
+	return lib
+}
+
+func TestAuditTrack_FindingsCarryTheExactFixAndTheVersionSeen(t *testing.T) {
+	base := libTrack()
+	base.UserID, base.Version = "u1", 7
+	cases := []struct {
+		name     string
+		category category
+		lib      libraryTrack
+		cat      fakeCatalog
+		want     fix
+	}{
+		{
+			"year", categoryYearFillable, withLib(base, func(l *libraryTrack) { l.ISRC, l.Year = "X", 0 }),
+			fakeCatalog{byISRC: map[string]catalogTrack{"X": catTrack()}},
+			fix{UserID: "u1", Version: 7, Field: "year", NewValue: strPtr("2019")},
+		},
+		{
+			"album artist", categoryAlbumArtistFillable, withLib(base, func(l *libraryTrack) { l.ISRC, l.AlbumArtist = "X", "" }),
+			fakeCatalog{byISRC: map[string]catalogTrack{"X": catTrack()}},
+			fix{UserID: "u1", Version: 7, Field: "album_artist", NewValue: strPtr("Daniel Caesar")},
+		},
+		{
+			"wrong song clears isrc", categoryWrongSong, withLib(base, func(l *libraryTrack) { l.ISRC = "X" }),
+			fakeCatalog{byISRC: map[string]catalogTrack{"X": {Title: "Ransom", Artist: "Lil Tecca"}}},
+			fix{UserID: "u1", Version: 7, Field: "isrc", OldValue: strPtr("X")},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := audited(tc.cat, fakeCovers{}, tc.lib)
+			found := findingOf(got.Findings, tc.category)
+			if found.Fix == nil || !reflect.DeepEqual(*found.Fix, tc.want) {
+				t.Fatalf("got %+v", found)
+			}
+		})
 	}
 }

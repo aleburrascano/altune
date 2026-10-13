@@ -32,7 +32,7 @@ func openReadOnlyPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, e
 }
 
 const readyTracksQuery = `SELECT id, user_id, title, artist, COALESCE(album, ''), COALESCE(album_artist, ''),
-	COALESCE(isrc, ''), COALESCE(artwork_url, ''), COALESCE(year, 0), COALESCE(duration_seconds, 0)
+	COALESCE(isrc, ''), COALESCE(artwork_url, ''), COALESCE(year, 0), COALESCE(duration_seconds, 0), version
 	FROM tracks
 	WHERE acquisition_status = 'ready'
 	  AND ($1 = '' OR user_id::text = $1)
@@ -49,7 +49,7 @@ func loadReadyTracks(ctx context.Context, pool *pgxpool.Pool, userID string, lim
 	for rows.Next() {
 		var t libraryTrack
 		if err := rows.Scan(&t.ID, &t.UserID, &t.Title, &t.Artist, &t.Album, &t.AlbumArtist,
-			&t.ISRC, &t.ArtworkURL, &t.Year, &t.DurationSeconds); err != nil {
+			&t.ISRC, &t.ArtworkURL, &t.Year, &t.DurationSeconds, &t.Version); err != nil {
 			return nil, fmt.Errorf("scan ready track: %w", err)
 		}
 		tracks = append(tracks, t)

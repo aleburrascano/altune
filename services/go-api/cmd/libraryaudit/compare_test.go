@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"reflect"
+	"strings"
+	"testing"
+)
 
 func libTrack() libraryTrack {
 	return libraryTrack{ID: "t1", Title: "Valentina", Artist: "Daniel Caesar", Year: 2019, AlbumArtist: "Daniel Caesar", DurationSeconds: 236}
@@ -129,5 +133,47 @@ func TestNamesAgree_SymbolOnlyNamesCompareByFoldedRawText(t *testing.T) {
 		if got := namesAgree(tc.a, tc.b); got != tc.want {
 			t.Fatalf("namesAgree(%q, %q) = %v", tc.a, tc.b, got)
 		}
+	}
+}
+
+func TestMetadataFindings_FillsOnlyFromTheTracksOwnAlbum(t *testing.T) {
+	cases := []struct {
+		name         string
+		libraryAlbum string
+		catalogAlbum string
+		want         []category
+		wantFix      bool
+	}{
+		{"same album", "Stardust", "Stardust", []category{categoryYearFillable, categoryAlbumArtistFillable}, true},
+		{"case and diacritics fold", "Étoile (Deluxe)", "etoile (deluxe)", []category{categoryYearFillable, categoryAlbumArtistFillable}, true},
+		{"single", "stardust", "petty", []category{categoryYearOtherRelease, categoryAlbumArtistOtherRelease}, false},
+		{"compilation", "stardust", "Cafe Chill Vibes", []category{categoryYearOtherRelease, categoryAlbumArtistOtherRelease}, false},
+		{"brackets are kept", "Stardust", "Stardust (Deluxe)", []category{categoryYearOtherRelease, categoryAlbumArtistOtherRelease}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			lib, cat := libTrack(), catTrack()
+			lib.Year, lib.AlbumArtist, lib.Album = 0, "", tc.libraryAlbum
+			cat.Album = tc.catalogAlbum
+			got := metadataFindings(lib, cat)
+			if !reflect.DeepEqual(categoriesOf(got), tc.want) {
+				t.Fatalf("got %v", categoriesOf(got))
+			}
+			for _, f := range got {
+				if (f.Fix != nil) != tc.wantFix {
+					t.Fatalf("finding %+v: fix present = %v, want %v", f, f.Fix != nil, tc.wantFix)
+				}
+			}
+		})
+	}
+}
+
+func TestMetadataFindings_OtherReleaseNamesTheCatalogAlbum(t *testing.T) {
+	lib, cat := libTrack(), catTrack()
+	lib.Year, lib.Album = 0, "stardust"
+	cat.Album = "Cafe Chill Vibes"
+	got := metadataFindings(lib, cat)
+	if len(got) != 1 || !strings.Contains(got[0].Detail, "Cafe Chill Vibes") || !strings.Contains(got[0].Detail, "2019") {
+		t.Fatalf("got %+v", got)
 	}
 }

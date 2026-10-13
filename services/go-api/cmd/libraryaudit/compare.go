@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/textnorm"
 	"math"
 	"strconv"
 	"strings"
@@ -15,19 +16,21 @@ const lengthToleranceSeconds = 10.0
 type category string
 
 const (
-	categoryWrongSong           category = "wrong_song"
-	categoryLengthShorter       category = "length_shorter"
-	categoryLengthLonger        category = "length_longer"
-	categoryYearFillable        category = "year_fillable"
-	categoryAlbumArtistFillable category = "album_artist_fillable"
-	categoryISRCFillable        category = "isrc_fillable"
-	categoryISRCAmbiguous       category = "isrc_ambiguous"
-	categoryCoverURLDiffers     category = "cover_url_differs"
-	categoryCoverImageDiffers   category = "cover_image_differs"
-	categoryCoverUnreadable     category = "cover_unreadable"
-	categoryNoISRC              category = "no_isrc"
-	categoryUnknownISRC         category = "unknown_isrc"
-	categoryLookupFailed        category = "lookup_failed"
+	categoryWrongSong               category = "wrong_song"
+	categoryLengthShorter           category = "length_shorter"
+	categoryLengthLonger            category = "length_longer"
+	categoryYearFillable            category = "year_fillable"
+	categoryAlbumArtistFillable     category = "album_artist_fillable"
+	categoryISRCFillable            category = "isrc_fillable"
+	categoryYearOtherRelease        category = "year_other_release"
+	categoryAlbumArtistOtherRelease category = "album_artist_other_release"
+	categoryISRCAmbiguous           category = "isrc_ambiguous"
+	categoryCoverURLDiffers         category = "cover_url_differs"
+	categoryCoverImageDiffers       category = "cover_image_differs"
+	categoryCoverUnreadable         category = "cover_unreadable"
+	categoryNoISRC                  category = "no_isrc"
+	categoryUnknownISRC             category = "unknown_isrc"
+	categoryLookupFailed            category = "lookup_failed"
 )
 
 type libraryTrack struct {
@@ -41,6 +44,7 @@ type libraryTrack struct {
 	ArtworkURL      string
 	Year            int
 	DurationSeconds float64
+	Version         int
 }
 
 type finding struct {
@@ -49,6 +53,15 @@ type finding struct {
 	Title    string   `json:"title"`
 	Category category `json:"category"`
 	Detail   string   `json:"detail,omitempty"`
+	Fix      *fix     `json:"fix,omitempty"`
+}
+
+type fix struct {
+	UserID   string  `json:"user_id"`
+	Version  int     `json:"version"`
+	Field    string  `json:"field"`
+	OldValue *string `json:"old_value"`
+	NewValue *string `json:"new_value"`
 }
 
 func normalizeName(s string) string {
@@ -127,19 +140,42 @@ func lengthCategory(lib libraryTrack, cat catalogTrack) (category, bool) {
 
 func metadataFindings(lib libraryTrack, cat catalogTrack) []finding {
 	if !isSameSong(lib, cat) {
-		return []finding{about(lib, categoryWrongSong, "catalog says "+cat.Artist+" - "+cat.Title)}
+		wrong := about(lib, categoryWrongSong, "catalog says "+cat.Artist+" - "+cat.Title)
+		wrong.Fix = fixing(lib, "isrc", lib.ISRC, "")
+		return []finding{wrong}
 	}
 	var found []finding
 	if kind, off := lengthCategory(lib, cat); off {
 		found = append(found, about(lib, kind, lengthDetail(lib, cat)))
 	}
+	sameAlbum := textnorm.NormalizeForIdentity(lib.Album) == textnorm.NormalizeForIdentity(cat.Album)
 	if lib.Year == 0 && cat.ReleaseYear > 0 {
-		found = append(found, about(lib, categoryYearFillable, strconv.Itoa(cat.ReleaseYear)))
+		found = append(found, fillFinding(lib, cat, sameAlbum, categoryYearFillable, categoryYearOtherRelease, "year", "", strconv.Itoa(cat.ReleaseYear)))
 	}
 	if strings.TrimSpace(lib.AlbumArtist) == "" && cat.Artist != "" {
-		found = append(found, about(lib, categoryAlbumArtistFillable, cat.Artist))
+		found = append(found, fillFinding(lib, cat, sameAlbum, categoryAlbumArtistFillable, categoryAlbumArtistOtherRelease, "album_artist", lib.AlbumArtist, cat.Artist))
 	}
 	return found
+}
+
+func fillFinding(lib libraryTrack, cat catalogTrack, sameAlbum bool, fillable, otherRelease category, fieldName, oldValue, newValue string) finding {
+	if !sameAlbum {
+		return about(lib, otherRelease, newValue+" from catalog album "+strconv.Quote(cat.Album)+" vs library album "+strconv.Quote(lib.Album))
+	}
+	filled := about(lib, fillable, newValue)
+	filled.Fix = fixing(lib, fieldName, oldValue, newValue)
+	return filled
+}
+
+func fixing(lib libraryTrack, field, oldValue, newValue string) *fix {
+	return &fix{UserID: lib.UserID, Version: lib.Version, Field: field, OldValue: nullIfEmpty(oldValue), NewValue: nullIfEmpty(newValue)}
+}
+
+func nullIfEmpty(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 func about(lib libraryTrack, kind category, detail string) finding {
