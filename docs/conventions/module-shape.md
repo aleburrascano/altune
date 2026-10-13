@@ -18,6 +18,7 @@ A module is every folder under `internal/` except `app/` (the composition root, 
 | G6 | Fakes used by more than one test file live in the module's test package, `<module>/<module>test/`, as `catalog/catalogtest/` does. |
 | G7 | Logs use the `slog.*Context` calls only. |
 | G8 | `service/` and `adapters/` hold packages, never files. Every non-test `.go` file under them sits in a package below: `service/<capability>/` named for a use case, `adapters/<adapter>/` named for the outside system or technology it talks to. A folder under them holds `.go` files or packages, never both. No package under them holds more than 16 non-test `.go` files. A package name is `^[a-z][a-z0-9]*$` and is not the module name or a layer name. `domain/` and `ports/` stay flat. `_test.go` files stay beside their source. |
+| G9 | Every <x>_fake.go in a module test package has a <x>_contract.go beside it: one suite that the fake and the real adapter both run. |
 
 ## Capability packages (G8)
 
