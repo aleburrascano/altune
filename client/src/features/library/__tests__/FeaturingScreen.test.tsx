@@ -142,7 +142,14 @@ describe('a failed "Explore artist" search', () => {
 
     await tapExplore();
 
-    await waitFor(() => expect(mockSearchDiscovery).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(mockSearchDiscovery).toHaveBeenCalledWith({
+        q: 'Guest Star',
+        kinds: ['artist', 'track'],
+        limit: 1,
+        saveHistory: false,
+      }),
+    );
     expect(warnSpy).not.toHaveBeenCalled();
     expect(alertSpy).not.toHaveBeenCalled();
   });
@@ -179,7 +186,11 @@ describe('a failed featuring load', () => {
   it('logs nothing while the load keeps answering', async () => {
     render(<FeaturingScreen />, { wrapper });
 
-    await waitFor(() => expect(mockListTracksFeaturing).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(mockListTracksFeaturing).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Guest Star' }),
+      ),
+    );
     expect(warnSpy).not.toHaveBeenCalled();
   });
 });
@@ -226,8 +237,9 @@ describe('the detail route under the library tab', () => {
 
     await tapExplore();
 
-    await waitFor(() => expect(detailHrefSpy).toHaveBeenCalled());
-    expect(detailHrefSpy).toHaveBeenCalledWith('/library/detail', expect.anything());
+    await waitFor(() =>
+      expect(detailHrefSpy).toHaveBeenCalledWith('/library/detail', expect.anything()),
+    );
     detailHrefSpy.mockRestore();
   });
 });
@@ -333,12 +345,13 @@ describe('featuring route params', () => {
     router.useLocalSearchParams = () => ({ name: ['a', 'b'], mbid: ['x', 'y'] });
     render(<FeaturingScreen />, { wrapper });
 
-    await waitFor(() => expect(mockListTracksFeaturing).toHaveBeenCalled());
-    expect((mockListTracksFeaturing.mock.calls[0] as unknown[])[0]).toEqual({
-      name: 'a',
-      mbid: 'x',
-      deezer_id: null,
-    });
+    await waitFor(() =>
+      expect(mockListTracksFeaturing).toHaveBeenCalledWith({
+        name: 'a',
+        mbid: 'x',
+        deezer_id: null,
+      }),
+    );
   });
 
   it('shows an incomplete-link state and no empty-name search when no param is usable', async () => {

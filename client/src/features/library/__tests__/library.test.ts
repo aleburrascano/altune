@@ -24,7 +24,9 @@ describe('@features/library public surface', () => {
   });
 
   it('keeps listContent in its own styles module', () => {
-    expect(require('@features/library/ui/listContentStyles').listContent.padded).toBeDefined();
+    expect(require('@features/library/ui/listContentStyles').listContent.padded).toEqual({
+      paddingBottom: expect.any(Number),
+    });
     expect(require('@features/library/ui/LibraryListParts').listContent).toBeUndefined();
   });
 });

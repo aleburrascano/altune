@@ -127,7 +127,9 @@ describe('useAutocompleteSuggestions keys a query by its canonical spacing', () 
       rendered.rerender({ text: 'A  b' });
     });
     settle();
-    await waitFor(() => expect(rendered.result.current.data).toBeDefined());
+    await waitFor(() =>
+      expect(rendered.result.current.data?.suggestions.map((s) => s.text)).toEqual(['radiohead']),
+    );
     act(() => {
       rendered.rerender({ text: 'A b' });
     });
@@ -267,7 +269,7 @@ describe('useSuggestionVisibility allows suggestions only while the user is typi
     act(() => result.current.setIsFocused(true));
 
     act(() => result.current.onSubmit());
-    expect(search.onSubmit).toHaveBeenCalled();
+    expect(search.onSubmit).toHaveBeenCalledTimes(1);
     expect(result.current.canShowSuggestions).toBe(false);
 
     act(() => result.current.onChangeText('radioh'));

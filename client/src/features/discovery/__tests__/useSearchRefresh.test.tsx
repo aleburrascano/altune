@@ -76,7 +76,9 @@ describe('held-slate expiry', () => {
       pageOf(0, 'search-3', ['C1', 'C2', 'C3']),
     );
     const { result } = renderHook(() => useDiscoverSearch('q'), { wrapper });
-    await waitFor(() => expect(result.current.data).toBeDefined());
+    await waitFor(() =>
+      expect(result.current.data?.results.map((r) => r.title)).toEqual(['A1', 'A2', 'A3']),
+    );
 
     await act(async () => {
       await result.current.fetchNextPage();
@@ -104,7 +106,9 @@ describe('held-slate expiry when the restart fails', () => {
     );
     __http.reply(SEARCH, { status: 503, json: { detail: 'search unavailable' } });
     const { result } = renderHook(() => useDiscoverSearch('q'), { wrapper });
-    await waitFor(() => expect(result.current.data).toBeDefined());
+    await waitFor(() =>
+      expect(result.current.data?.results.map((r) => r.title)).toEqual(['A1', 'A2', 'A3']),
+    );
 
     await act(async () => {
       await result.current.fetchNextPage();
