@@ -44,7 +44,7 @@ export async function recordEvent(event: DiscoveryEvent): Promise<void> {
     ...event,
     payload: { ...(event.payload ?? {}), session_id: getSessionId() },
   };
-  await apiFetch<void>('/v1/discovery/events', {
+  await apiFetch('/v1/discovery/events', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

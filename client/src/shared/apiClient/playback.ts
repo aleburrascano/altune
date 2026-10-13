@@ -38,10 +38,10 @@ export interface SaveQueueStateRequest {
   natural_order: string[];
 }
 
-export async function getQueueState(): Promise<QueueStateResponse> {
-  return apiFetch<QueueStateResponse>('/v1/playback/queue-state');
+export async function getQueueState(): Promise<unknown> {
+  return apiFetch('/v1/playback/queue-state');
 }
 
 export async function saveQueueState(body: SaveQueueStateRequest): Promise<void> {
-  await apiSend<void>('/v1/playback/queue-state', 'PUT', body);
+  await apiSend('/v1/playback/queue-state', 'PUT', body);
 }

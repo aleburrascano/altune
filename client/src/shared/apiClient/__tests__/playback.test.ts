@@ -1,5 +1,5 @@
 import { getQueueState, saveQueueState } from '@shared/apiClient/playback';
-import type { SaveQueueStateRequest } from '@shared/apiClient/playback';
+import type { QueueStateResponse, SaveQueueStateRequest } from '@shared/apiClient/playback';
 import { ApiError, NetworkError } from '@shared/apiClient/index';
 import { supabase } from '@shared/auth/supabaseClient';
 
@@ -91,7 +91,7 @@ describe('getQueueState', () => {
       };
       __http.reply('GET /v1/playback/queue-state', { status: 200, json: wire });
 
-      const result = await getQueueState();
+      const result = (await getQueueState()) as QueueStateResponse;
       expect(result.natural_order).toBeUndefined();
       expect(result.track_ids).toEqual(['t1']);
     });
@@ -108,7 +108,7 @@ describe('getQueueState', () => {
       delete wire.current_track;
       __http.reply('GET /v1/playback/queue-state', { status: 200, json: wire });
 
-      const result = await getQueueState();
+      const result = (await getQueueState()) as QueueStateResponse;
       expect(result.current_track).toBeUndefined();
     });
 

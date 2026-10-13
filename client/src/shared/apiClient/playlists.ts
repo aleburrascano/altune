@@ -95,29 +95,26 @@ export async function getPlaylists(
   signal?: AbortSignal,
 ): Promise<ListPlaylistsResponse> {
   return parseListPlaylistsResponse(
-    await apiFetch<unknown>(
-      withQuery('/v1/playlists', playlistPageParams(page)),
-      signalInit(signal),
-    ),
+    await apiFetch(withQuery('/v1/playlists', playlistPageParams(page)), signalInit(signal)),
   );
 }
 
 export async function getPlaylist(id: PlaylistId): Promise<PlaylistDetailResponse> {
-  return parsePlaylistDetailResponse(await apiFetch<unknown>(`/v1/playlists/${idPathSegment(id)}`));
+  return parsePlaylistDetailResponse(await apiFetch(`/v1/playlists/${idPathSegment(id)}`));
 }
 
 export async function createPlaylist(body: CreatePlaylistRequest): Promise<PlaylistResponse> {
-  return parsePlaylistResponse(await apiSend<unknown>('/v1/playlists', 'POST', body));
+  return parsePlaylistResponse(await apiSend('/v1/playlists', 'POST', body));
 }
 
 export async function renamePlaylist(id: PlaylistId, name: string): Promise<PlaylistResponse> {
   return parsePlaylistResponse(
-    await apiSend<unknown>(`/v1/playlists/${idPathSegment(id)}`, 'PATCH', { name }),
+    await apiSend(`/v1/playlists/${idPathSegment(id)}`, 'PATCH', { name }),
   );
 }
 
 export async function deletePlaylist(id: PlaylistId): Promise<void> {
-  await apiFetch<void>(`/v1/playlists/${idPathSegment(id)}`, { method: 'DELETE' });
+  await apiFetch(`/v1/playlists/${idPathSegment(id)}`, { method: 'DELETE' });
 }
 
 export async function addTracksToPlaylist(
@@ -125,7 +122,7 @@ export async function addTracksToPlaylist(
   body: AddTracksToPlaylistRequest,
 ): Promise<AddTracksToPlaylistResponse> {
   return parseAddTracksToPlaylistResponse(
-    await apiSend<unknown>(`/v1/playlists/${idPathSegment(playlistId)}/tracks/batch`, 'POST', body),
+    await apiSend(`/v1/playlists/${idPathSegment(playlistId)}/tracks/batch`, 'POST', body),
   );
 }
 
@@ -134,6 +131,6 @@ export async function removeTracksFromPlaylist(
   body: RemoveTracksFromPlaylistRequest,
 ): Promise<RemoveTracksFromPlaylistResponse> {
   return parseRemoveTracksFromPlaylistResponse(
-    await apiSend<unknown>(`/v1/playlists/${idPathSegment(playlistId)}/tracks`, 'DELETE', body),
+    await apiSend(`/v1/playlists/${idPathSegment(playlistId)}/tracks`, 'DELETE', body),
   );
 }

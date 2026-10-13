@@ -282,7 +282,7 @@ export async function searchDiscovery(
   if (params.searchId !== undefined) {
     qs.set('search_id', params.searchId);
   }
-  const body = await apiFetch<unknown>(withQuery('/v1/discovery/search', qs), signalInit(signal));
+  const body = await apiFetch(withQuery('/v1/discovery/search', qs), signalInit(signal));
   return parseDiscoverySearchResponse(body);
 }
 
@@ -297,7 +297,7 @@ export async function suggestDiscovery(
   if (params.limit !== undefined) {
     qs.set('limit', String(params.limit));
   }
-  const body = await apiFetch<unknown>(withQuery('/v1/discovery/suggest', qs), signalInit(signal));
+  const body = await apiFetch(withQuery('/v1/discovery/suggest', qs), signalInit(signal));
   return parseDiscoverySuggestResponse(body);
 }
 
@@ -308,14 +308,14 @@ export async function listSearchHistory(params?: {
   if (params?.limit !== undefined) {
     qs.set('limit', String(params.limit));
   }
-  const body = await apiFetch<unknown>(withQuery('/v1/discovery/search-history', qs));
+  const body = await apiFetch(withQuery('/v1/discovery/search-history', qs));
   return parseDiscoverySearchHistoryResponse(body);
 }
 
 export async function recordSearchHistory(query: string): Promise<void> {
-  await apiSend<void>('/v1/discovery/search-history', 'POST', { query });
+  await apiSend('/v1/discovery/search-history', 'POST', { query });
 }
 
 export async function clearSearchHistory(): Promise<void> {
-  await apiFetch<void>('/v1/discovery/search-history', { method: 'DELETE' });
+  await apiFetch('/v1/discovery/search-history', { method: 'DELETE' });
 }

@@ -50,7 +50,7 @@ export interface ResolvedAudioUrl {
 }
 
 export async function recoverAudio(trackId: TrackId): Promise<void> {
-  await apiFetch<undefined>(`/v1/tracks/${idPathSegment(trackId)}/audio/recover`, {
+  await apiFetch(`/v1/tracks/${idPathSegment(trackId)}/audio/recover`, {
     method: 'POST',
   });
 }
@@ -94,7 +94,7 @@ function decodeAudioUrls(value: unknown, at: string): AudioUrlsResponse {
 }
 
 function postAudioUrls(trackIds: string[], signal: AbortSignal): Promise<unknown> {
-  return apiSend<unknown>('/v1/audio-urls', 'POST', { track_ids: trackIds }, { signal });
+  return apiSend('/v1/audio-urls', 'POST', { track_ids: trackIds }, { signal });
 }
 
 function acceptAudioUrls(body: unknown): ResolvedAudioUrl[] {

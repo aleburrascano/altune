@@ -44,13 +44,13 @@ function parseFavoritesResponse(value: unknown, at = 'FavoritesResponse'): Favor
 }
 
 export async function listFavorites(): Promise<FavoritesResponse> {
-  return parseFavoritesResponse(await apiFetch<unknown>('/v1/discovery/favorites'));
+  return parseFavoritesResponse(await apiFetch('/v1/discovery/favorites'));
 }
 
 export async function addFavorite(ref: FavoriteRef): Promise<Favorite> {
-  return parseFavorite(await apiSend<unknown>('/v1/discovery/favorites', 'PUT', ref));
+  return parseFavorite(await apiSend('/v1/discovery/favorites', 'PUT', ref));
 }
 
 export async function removeFavorite(ref: FavoriteRef): Promise<void> {
-  await apiSend<void>('/v1/discovery/favorites', 'DELETE', ref);
+  await apiSend('/v1/discovery/favorites', 'DELETE', ref);
 }
