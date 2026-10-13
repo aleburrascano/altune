@@ -34,7 +34,7 @@ func TestUpdateTrackStep_Execute(t *testing.T) {
 		t.Fatalf("expected no error, got %v", execErr)
 	}
 
-	updated := repo.tracks[track.ID.String()+":"+userId.String()]
+	updated := storedTrack(t, repo, track)
 	if updated.AcquisitionStatus != domain.AcquisitionReady {
 		t.Errorf("track status = %v, want %v", updated.AcquisitionStatus, domain.AcquisitionReady)
 	}
@@ -92,7 +92,10 @@ func TestUpdateTrackStep_Execute_TrackNotFound(t *testing.T) {
 
 func TestUpdateTrackStep_Execute_EmptyAudioRef(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	track, _ := domain.NewTrack(userId, "Song", "Artist", "Album")
+	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("NewTrack: %v", err)
+	}
 
 	repo := newFakeTrackRepository()
 	repo.tracks[track.ID.String()+":"+userId.String()] = track
@@ -102,7 +105,7 @@ func TestUpdateTrackStep_Execute_EmptyAudioRef(t *testing.T) {
 		AudioRef: "",
 	}
 
-	_, err := step.Execute(context.Background(), ac, afterStore{})
+	_, err = step.Execute(context.Background(), ac, afterStore{})
 
 	if err == nil {
 		t.Fatal("expected error when audioRef is empty, got nil")
@@ -127,7 +130,7 @@ func TestUpdateTrackStep_Rollback_RevertsToPending(t *testing.T) {
 	if err := step.Rollback(context.Background(), ac); err != nil {
 		t.Fatalf("expected no error on rollback, got %v", err)
 	}
-	reverted := repo.tracks[track.ID.String()+":"+userId.String()]
+	reverted := storedTrack(t, repo, track)
 	if reverted.AcquisitionStatus != domain.AcquisitionPending {
 		t.Errorf("track status after rollback = %v, want %v", reverted.AcquisitionStatus, domain.AcquisitionPending)
 	}

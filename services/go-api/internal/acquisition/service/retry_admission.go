@@ -63,7 +63,7 @@ func NewRetryAdmission(store ports.CooldownStore) *RetryAdmission {
 }
 
 func (a *RetryAdmission) Admit(ctx context.Context, track *ports.TrackSnapshot, schedule func() error) error {
-	if track.Status != ports.TrackFailed {
+	if track == nil || track.Status != ports.TrackFailed {
 		return acqdomain.ErrRetryNotFailed
 	}
 	return a.gate.run(ctx, track.ID, schedule)
@@ -78,7 +78,7 @@ func NewReacquireAdmission(store ports.CooldownStore) *ReacquireAdmission {
 }
 
 func (a *ReacquireAdmission) Admit(ctx context.Context, track *ports.TrackSnapshot, schedule func() error) error {
-	if !track.Streamable {
+	if track == nil || !track.Streamable {
 		return acqdomain.ErrReacquireNotReady
 	}
 	return a.gate.run(ctx, track.ID, schedule)

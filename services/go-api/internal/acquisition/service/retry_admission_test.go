@@ -283,3 +283,25 @@ func TestRetryAdmission_StillFailedOnlyWithCooldown(t *testing.T) {
 		t.Errorf("second call: err = %v, want ErrCooldownActive", err)
 	}
 }
+
+func TestRetryAdmission_NilSnapshotRefused(t *testing.T) {
+	scheduled := false
+	err := NewRetryAdmission(newFakeCooldownStore()).Admit(context.Background(), nil, func() error { scheduled = true; return nil })
+	if !errors.Is(err, acqdomain.ErrRetryNotFailed) {
+		t.Errorf("err = %v, want ErrRetryNotFailed", err)
+	}
+	if scheduled {
+		t.Error("scheduled a retry for a nil snapshot")
+	}
+}
+
+func TestReacquireAdmission_NilSnapshotRefused(t *testing.T) {
+	scheduled := false
+	err := NewReacquireAdmission(newFakeCooldownStore()).Admit(context.Background(), nil, func() error { scheduled = true; return nil })
+	if !errors.Is(err, acqdomain.ErrReacquireNotReady) {
+		t.Errorf("err = %v, want ErrReacquireNotReady", err)
+	}
+	if scheduled {
+		t.Error("scheduled a reacquire for a nil snapshot")
+	}
+}

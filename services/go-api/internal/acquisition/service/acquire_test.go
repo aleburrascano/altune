@@ -814,8 +814,8 @@ func seedTrackInRepo(t *testing.T, repo *fakeTrackRepository, userId shared.User
 
 func storedTrack(t *testing.T, repo *fakeTrackRepository, track *domain.Track) *domain.Track {
 	t.Helper()
-	got := repo.tracks[track.ID.String()+":"+track.UserId.String()]
-	if got == nil {
+	got, ok := repo.tracks[track.ID.String()+":"+track.UserId.String()]
+	if !ok || got == nil {
 		t.Fatal("track missing from repository")
 	}
 	return got
@@ -978,6 +978,9 @@ func TestExecute_FailingRejectionStoreNeverChangesTheOutcome(t *testing.T) {
 		t.Errorf("download attempts = %v, want the candidate still tried", searcher.downloadURLs)
 	}
 	for _, track := range repo.tracks {
+		if track == nil {
+			t.Fatal("nil track in repository")
+		}
 		if track.AcquisitionStatus != domain.AcquisitionFailed {
 			t.Errorf("status = %v, want failed from the download, not the store", track.AcquisitionStatus)
 		}
@@ -1031,6 +1034,9 @@ func executeOnAttempt(t *testing.T, searcher *fakeAudioSearcher, attempt int) (*
 func TestExecute_TransientFailureBelowTheAttemptCap_ReturnsRetryableAndLeavesTheTrackPending(t *testing.T) {
 	for attempt := 1; attempt < maxAcquisitionAttempts; attempt++ {
 		stored, pub, execErr := executeOnAttempt(t, transientSearchFailure(), attempt)
+		if stored == nil || pub == nil {
+			t.Fatal("no stored track or publisher")
+		}
 
 		if !errors.Is(execErr, ErrAcquisitionRetryable) {
 			t.Errorf("attempt %d: err = %v, want ErrAcquisitionRetryable", attempt, execErr)
@@ -1046,6 +1052,9 @@ func TestExecute_TransientFailureBelowTheAttemptCap_ReturnsRetryableAndLeavesThe
 
 func TestExecute_TransientFailureOnTheLastAttempt_SettlesFailedAsSourceUnavailable(t *testing.T) {
 	stored, pub, execErr := executeOnAttempt(t, transientSearchFailure(), maxAcquisitionAttempts)
+	if stored == nil || pub == nil {
+		t.Fatal("no stored track or publisher")
+	}
 
 	if errors.Is(execErr, ErrAcquisitionRetryable) {
 		t.Errorf("err = %v, want a terminal failure", execErr)
@@ -1063,6 +1072,9 @@ func TestExecute_TransientFailureOnTheLastAttempt_SettlesFailedAsSourceUnavailab
 
 func TestExecute_PermanentFailureOnTheFirstAttempt_SettlesFailedAsNoMatch(t *testing.T) {
 	stored, _, execErr := executeOnAttempt(t, &fakeAudioSearcher{}, 1)
+	if stored == nil {
+		t.Fatal("no stored track")
+	}
 
 	if errors.Is(execErr, ErrAcquisitionRetryable) {
 		t.Errorf("err = %v, want a terminal failure", execErr)
@@ -1146,6 +1158,9 @@ func TestExecute_ReportsStageTimesSourceFormatAndStoredFile(t *testing.T) {
 
 func TestExecute_FloorAboveTheCandidatesConfidenceFailsAsNoConfidentMatch(t *testing.T) {
 	track, err := acquireUnknownTopicWithFloor(t, WithAcquireConfidenceFloor(0.9))
+	if track == nil {
+		t.Fatal("no stored track")
+	}
 
 	if !errors.Is(err, ErrNoConfidentMatch) {
 		t.Fatalf("err = %v, want ErrNoConfidentMatch", err)

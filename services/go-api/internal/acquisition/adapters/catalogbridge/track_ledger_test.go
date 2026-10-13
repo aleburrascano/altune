@@ -28,6 +28,15 @@ func newFakeStore(tracks ...*domain.Track) *fakeStore {
 	return s
 }
 
+func storedTrack(t *testing.T, s *fakeStore, id domain.TrackId) *domain.Track {
+	t.Helper()
+	got, ok := s.tracks[id]
+	if !ok || got == nil {
+		t.Fatalf("track %v not stored", id)
+	}
+	return got
+}
+
 func (s *fakeStore) GetByID(_ context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error) {
 	s.gets++
 	t, ok := s.tracks[id]
@@ -44,7 +53,10 @@ func (s *fakeStore) Update(_ context.Context, track *domain.Track, expectedVersi
 		s.conflicts--
 		return catalogports.ErrTrackVersionConflict
 	}
-	cur := s.tracks[track.ID]
+	cur, ok := s.tracks[track.ID]
+	if !ok || cur == nil {
+		return catalogports.ErrTrackMissing
+	}
 	if cur.Version != expectedVersion {
 		return catalogports.ErrTrackVersionConflict
 	}
@@ -82,6 +94,9 @@ func TestGetMapsFieldsAndReturnsNilWhenMissing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if snap == nil {
+		t.Fatal("want snapshot, got nil")
+	}
 	if snap.ID != track.ID || snap.UserId != userId || snap.Title != "Title" || snap.Artist != "Artist" || snap.Album != "Album" {
 		t.Fatalf("identity fields not mapped: %+v", snap)
 	}
@@ -118,7 +133,7 @@ func TestCompleteMarksPendingTrackReady(t *testing.T) {
 	if len(store.updates) != 1 || store.updates[0] != 4 {
 		t.Fatalf("want one update at version 4, got %v", store.updates)
 	}
-	got := store.tracks[track.ID]
+	got := storedTrack(t, store, track.ID)
 	if got.AcquisitionStatus != domain.AcquisitionReady || got.AudioRef == nil || *got.AudioRef != "ref-1" {
 		t.Fatalf("track not ready: %+v", got)
 	}
@@ -150,7 +165,7 @@ func TestCompleteWithReplaceAudioReplacesReadyTrack(t *testing.T) {
 	if err := ledger.Complete(context.Background(), track.ID, userId, ports.Completion{AudioRef: "new-ref", ReplaceAudio: true}); err != nil {
 		t.Fatal(err)
 	}
-	got := store.tracks[track.ID]
+	got := storedTrack(t, store, track.ID)
 	if got.AudioRef == nil || *got.AudioRef != "new-ref" || got.AcquisitionStatus != domain.AcquisitionReady {
 		t.Fatalf("audio not replaced: %+v", got)
 	}
@@ -215,13 +230,13 @@ func TestFailAndRevertTransition(t *testing.T) {
 	if err := ledger.Fail(context.Background(), track.ID, userId, "boom"); err != nil {
 		t.Fatal(err)
 	}
-	if got := store.tracks[track.ID]; got.AcquisitionStatus != domain.AcquisitionFailed {
+	if got := storedTrack(t, store, track.ID); got.AcquisitionStatus != domain.AcquisitionFailed {
 		t.Fatalf("want failed, got %v", got.AcquisitionStatus)
 	}
 	if err := ledger.Revert(context.Background(), track.ID, userId); err != nil {
 		t.Fatal(err)
 	}
-	if got := store.tracks[track.ID]; got.AcquisitionStatus != domain.AcquisitionPending {
+	if got := storedTrack(t, store, track.ID); got.AcquisitionStatus != domain.AcquisitionPending {
 		t.Fatalf("want pending, got %v", got.AcquisitionStatus)
 	}
 }
@@ -238,7 +253,7 @@ func TestVersionConflictIsRetried(t *testing.T) {
 	if len(store.updates) != 2 {
 		t.Fatalf("want 2 update attempts, got %v", store.updates)
 	}
-	if got := store.tracks[track.ID]; got.AcquisitionStatus != domain.AcquisitionFailed {
+	if got := storedTrack(t, store, track.ID); got.AcquisitionStatus != domain.AcquisitionFailed {
 		t.Fatalf("want failed, got %v", got.AcquisitionStatus)
 	}
 }
@@ -289,7 +304,7 @@ func TestRevertAtRevertsAtSnapshotVersion(t *testing.T) {
 	if len(store.updates) != 1 || store.updates[0] != 5 {
 		t.Fatalf("want one update at version 5, got %v", store.updates)
 	}
-	if got := store.tracks[track.ID]; got.AcquisitionStatus != domain.AcquisitionPending {
+	if got := storedTrack(t, store, track.ID); got.AcquisitionStatus != domain.AcquisitionPending {
 		t.Fatalf("want pending, got %v", got.AcquisitionStatus)
 	}
 }
