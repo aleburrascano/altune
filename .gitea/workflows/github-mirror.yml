@@ -1,0 +1,32 @@
+name: github-mirror
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: github-mirror
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  REPO: /home/ubuntu/projects/altune
+  MIRROR_KEY: /home/ubuntu/.ssh/altune-github-mirror.key
+  GITHUB_REMOTE: git@github.com:aleburrascano/altune.git
+
+jobs:
+  mirror:
+    runs-on: host
+    timeout-minutes: 10
+    steps:
+      - name: push main to github
+        run: |
+          set -euo pipefail
+          git -C "$REPO" fetch -q gitea main || { sleep 5; git -C "$REPO" fetch -q gitea main; }
+          GIT_SSH_COMMAND="ssh -i $MIRROR_KEY -o IdentitiesOnly=yes" \
+            git -C "$REPO" push --force "$GITHUB_REMOTE" refs/remotes/gitea/main:refs/heads/main
+          echo "github main is $(git -C "$REPO" rev-parse --short refs/remotes/gitea/main)"

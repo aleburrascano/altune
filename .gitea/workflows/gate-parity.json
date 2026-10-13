@@ -103,5 +103,8 @@
   },
   "ci.yml#ci-mobile-quality#clean up": {
     "allow": "plumbing: checks out, installs or cleans up, and checks nothing"
+  },
+  "github-mirror.yml#mirror#push main to github": {
+    "allow": "delivery: pushes gitea main to the github mirror, and checks nothing"
   }
 }
