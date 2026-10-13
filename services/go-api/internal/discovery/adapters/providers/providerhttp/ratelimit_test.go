@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 )
@@ -97,20 +98,44 @@ func TestRateLimiterAdmittedCallersStaySpaced(t *testing.T) {
 	const interval = 60 * time.Millisecond
 	l := NewRateLimiter(interval, 1, 3)
 
-	got := providertest.FireBurst(t, l.Wait, 10, 2*time.Second)
-
-	var admits []time.Duration
-	for _, r := range got {
-		if r.Err == nil {
-			admits = append(admits, r.Elapsed)
+	var mu sync.Mutex
+	var starts []time.Time
+	reserveAndRecord := func(ctx context.Context) error {
+		start, err := l.reserve(ctx)
+		if err != nil {
+			return err
+		}
+		mu.Lock()
+		starts = append(starts, start)
+		mu.Unlock()
+		select {
+		case <-time.After(time.Until(start)):
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
 		}
 	}
-	if len(admits) != 4 {
-		t.Fatalf("admitted %d callers, want 1 immediate + 3 queued", len(admits))
+
+	got := providertest.FireBurst(t, reserveAndRecord, 10, 2*time.Second)
+
+	admitted := 0
+	for _, r := range got {
+		if r.Err == nil {
+			admitted++
+		}
 	}
-	slices.Sort(admits)
+	if admitted != 4 {
+		t.Fatalf("admitted %d callers, want 1 immediate + 3 queued", admitted)
+	}
+	mu.Lock()
+	admits := slices.Clone(starts)
+	mu.Unlock()
+	if len(admits) != 4 {
+		t.Fatalf("limiter reserved %d slots, want 4", len(admits))
+	}
+	slices.SortFunc(admits, func(a, b time.Time) int { return a.Compare(b) })
 	for i := 1; i < len(admits); i++ {
-		if gap := admits[i] - admits[i-1]; gap < interval-10*time.Millisecond {
+		if gap := admits[i].Sub(admits[i-1]); gap < interval-10*time.Millisecond {
 			t.Errorf("admits %d and %d only %v apart, want >= %v", i-1, i, gap, interval)
 		}
 	}
