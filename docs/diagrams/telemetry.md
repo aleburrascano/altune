@@ -30,7 +30,7 @@ flowchart LR
     corpusfile[/"behavioral corpus<br/>JSON on disk"/]
     observem(["GET /observe/metrics"])
     logs[("process log<br/>alert.signal")]
-    nightly["GitHub Actions nightly eval<br/>coverage signal A · report"]
+    nightly["Gitea Actions nightly eval<br/>coverage signal A · report"]
 
     session -.-> ff & outbox
     emitters --> ff --> ingest
@@ -65,7 +65,7 @@ flowchart LR
     end
 
     docker[("Docker json-file logs<br/>on the VM, not shipped")]
-    uptime["GitHub Actions<br/>uptime check every 5 min"]
+    uptime["Host cron<br/>uptime check every 5 min"]
 
     subgraph overseer [Overseer]
         buckets["buckets<br/>logs · liveactivity · usage · backendperf<br/>cost · domainquality · reliability"]
