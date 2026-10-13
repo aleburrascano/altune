@@ -3,7 +3,7 @@ package handler
 import (
 	"altune/go-api/internal/catalog/adapters/authbridge"
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/service"
+	trackservice "altune/go-api/internal/catalog/service/track"
 	"altune/go-api/internal/shared/httputil"
 	"log/slog"
 	"net/http"
@@ -15,11 +15,11 @@ import (
 )
 
 type TrackHandler struct {
-	addTrack       *service.AddTrackService
-	listTracks     *service.ListTracksService
-	getTrackStatus *service.GetTrackStatusService
-	deleteTrack    *service.DeleteTrackService
-	setTrackNumber *service.SetTrackNumberService
+	addTrack       *trackservice.AddTrackService
+	listTracks     *trackservice.ListTracksService
+	getTrackStatus *trackservice.GetTrackStatusService
+	deleteTrack    *trackservice.DeleteTrackService
+	setTrackNumber *trackservice.SetTrackNumberService
 	featuredArtist *FeaturedArtistHandler
 	writeLimit     AudioRateLimit
 	now            func() time.Time
@@ -27,11 +27,11 @@ type TrackHandler struct {
 }
 
 func NewTrackHandler(
-	addTrack *service.AddTrackService,
-	listTracks *service.ListTracksService,
-	getTrackStatus *service.GetTrackStatusService,
-	deleteTrack *service.DeleteTrackService,
-	setTrackNumber *service.SetTrackNumberService,
+	addTrack *trackservice.AddTrackService,
+	listTracks *trackservice.ListTracksService,
+	getTrackStatus *trackservice.GetTrackStatusService,
+	deleteTrack *trackservice.DeleteTrackService,
+	setTrackNumber *trackservice.SetTrackNumberService,
 	featuredArtist *FeaturedArtistHandler,
 	opts ...func(*TrackHandler),
 ) *TrackHandler {
@@ -105,21 +105,21 @@ type SetTrackNumberRequest struct {
 }
 
 type CreateTrackRequest struct {
-	Title           string                      `json:"title"`
-	Artist          string                      `json:"artist"`
-	Album           *string                     `json:"album,omitempty"`
-	DurationSeconds *float64                    `json:"duration_seconds,omitempty"`
-	ArtworkURL      *string                     `json:"artwork_url,omitempty"`
-	ISRC            *string                     `json:"isrc,omitempty"`
-	Year            *int                        `json:"year,omitempty"`
-	Genre           *string                     `json:"genre,omitempty"`
-	AlbumArtist     *string                     `json:"album_artist,omitempty"`
-	TrackNumber     *int                        `json:"track_number,omitempty"`
-	FeaturedArtists []service.FeaturedArtistDTO `json:"featured_artists,omitempty"`
-	SourceURL       *string                     `json:"source_url,omitempty"`
+	Title           string                           `json:"title"`
+	Artist          string                           `json:"artist"`
+	Album           *string                          `json:"album,omitempty"`
+	DurationSeconds *float64                         `json:"duration_seconds,omitempty"`
+	ArtworkURL      *string                          `json:"artwork_url,omitempty"`
+	ISRC            *string                          `json:"isrc,omitempty"`
+	Year            *int                             `json:"year,omitempty"`
+	Genre           *string                          `json:"genre,omitempty"`
+	AlbumArtist     *string                          `json:"album_artist,omitempty"`
+	TrackNumber     *int                             `json:"track_number,omitempty"`
+	FeaturedArtists []trackservice.FeaturedArtistDTO `json:"featured_artists,omitempty"`
+	SourceURL       *string                          `json:"source_url,omitempty"`
 }
 
-type TrackResponse = service.TrackDTO
+type TrackResponse = trackservice.TrackDTO
 
 type ListTracksResponse struct {
 	Items   []TrackResponse `json:"items"`
@@ -132,7 +132,7 @@ type ListTracksResponse struct {
 func tracksToDTO(tracks []*domain.Track) []TrackResponse {
 	out := make([]TrackResponse, len(tracks))
 	for i, t := range tracks {
-		out[i] = service.TrackToDTO(t)
+		out[i] = trackservice.TrackToDTO(t)
 	}
 	return out
 }
@@ -180,7 +180,7 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 		album = *req.Album
 	}
 
-	input := service.AddTrackInput{
+	input := trackservice.AddTrackInput{
 		IdempotencyKey:  idempotencyKey(r),
 		Title:           req.Title,
 		Artist:          req.Artist,
@@ -219,7 +219,7 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 		)
 	}
 
-	httputil.WriteJSON(w, status, service.TrackToDTO(result.Track))
+	httputil.WriteJSON(w, status, trackservice.TrackToDTO(result.Track))
 }
 
 func idempotencyKey(r *http.Request) *string {
@@ -283,7 +283,7 @@ func (h *TrackHandler) handleDeleteTrack(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func domainFeaturedFromDTOs(dtos []service.FeaturedArtistDTO) []domain.FeaturedArtist {
+func domainFeaturedFromDTOs(dtos []trackservice.FeaturedArtistDTO) []domain.FeaturedArtist {
 	if len(dtos) == 0 {
 		return nil
 	}

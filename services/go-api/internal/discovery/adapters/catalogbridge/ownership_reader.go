@@ -2,7 +2,7 @@ package catalogbridge
 
 import (
 	catalogdomain "altune/go-api/internal/catalog/domain"
-	catalogservice "altune/go-api/internal/catalog/service"
+	trackservice "altune/go-api/internal/catalog/service/track"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
@@ -53,7 +53,7 @@ func (r *OwnershipReader) OwnedByTitleArtist(
 
 var (
 	_ ports.TrackNumberFiller = (*TrackNumberWriter)(nil)
-	_ trackNumberSetter       = (*catalogservice.SetTrackNumberService)(nil)
+	_ trackNumberSetter       = (*trackservice.SetTrackNumberService)(nil)
 )
 
 type trackNumberSetter interface {

@@ -3,7 +3,7 @@ package persistence
 import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
-	"altune/go-api/internal/catalog/service"
+	playlistservice "altune/go-api/internal/catalog/service/playlist"
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
@@ -1175,7 +1175,7 @@ func TestPlaylistMembership_SingleTrackMutationCost_IsBoundedByTheChange(t *test
 
 	const n = 40
 	pl, ids := seedPlaylistWithTracks(ctx, t, pool, userId, n)
-	svc := service.NewPlaylistMembershipService(NewPgxPlaylistRepository(countedPool), NewPgxTrackRepository(pool))
+	svc := playlistservice.NewPlaylistMembershipService(NewPgxPlaylistRepository(countedPool), NewPgxTrackRepository(pool))
 	trackRepo := NewPgxTrackRepository(pool)
 
 	parent := t

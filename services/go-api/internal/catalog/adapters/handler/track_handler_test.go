@@ -2,7 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/catalog/service"
+	trackservice "altune/go-api/internal/catalog/service/track"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/logging"
 	"encoding/json"
@@ -280,7 +280,7 @@ func TestHandleCreateTrack_NulByteRejected(t *testing.T) {
 			CreateTrackRequest{
 				Title:           "Title",
 				Artist:          "Artist",
-				FeaturedArtists: []service.FeaturedArtistDTO{{Name: withNul}},
+				FeaturedArtists: []trackservice.FeaturedArtistDTO{{Name: withNul}},
 			},
 		},
 		{
@@ -455,10 +455,10 @@ func TestHandleSetTrackNumber_NotFound(t *testing.T) {
 	}
 }
 
-func featuredDTOs(n int) []service.FeaturedArtistDTO {
-	out := make([]service.FeaturedArtistDTO, n)
+func featuredDTOs(n int) []trackservice.FeaturedArtistDTO {
+	out := make([]trackservice.FeaturedArtistDTO, n)
 	for i := range out {
-		out[i] = service.FeaturedArtistDTO{Name: fmt.Sprintf("Guest %d", i)}
+		out[i] = trackservice.FeaturedArtistDTO{Name: fmt.Sprintf("Guest %d", i)}
 	}
 	return out
 }
@@ -467,7 +467,7 @@ func TestHandleCreateTrack_RejectsTooManyFeaturedArtists(t *testing.T) {
 	repo := catalogtest.NewTrackRepo()
 	sched := &catalogtest.Scheduler{}
 	_, router := buildTrackHandler(repo, sched)
-	body := CreateTrackRequest{Title: "Posse Cut", Artist: "Everyone", FeaturedArtists: featuredDTOs(service.MaxFeaturedArtistsPerTrack + 1)}
+	body := CreateTrackRequest{Title: "Posse Cut", Artist: "Everyone", FeaturedArtists: featuredDTOs(trackservice.MaxFeaturedArtistsPerTrack + 1)}
 
 	rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
 
@@ -483,21 +483,21 @@ func TestHandleCreateTrack_RejectsTooManyFeaturedArtists(t *testing.T) {
 func TestHandleCreateTrack_AcceptsFeaturedArtistsAtCap(t *testing.T) {
 	repo := catalogtest.NewTrackRepo()
 	_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
-	body := CreateTrackRequest{Title: "Posse Cut", Artist: "Everyone", FeaturedArtists: featuredDTOs(service.MaxFeaturedArtistsPerTrack)}
+	body := CreateTrackRequest{Title: "Posse Cut", Artist: "Everyone", FeaturedArtists: featuredDTOs(trackservice.MaxFeaturedArtistsPerTrack)}
 
 	rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
 
 	assertStatus(t, rec, http.StatusCreated)
 	for _, tr := range repo.Tracks {
-		if got := len(tr.FeaturedArtists); got != service.MaxFeaturedArtistsPerTrack {
-			t.Errorf("stored %d featured artists, want %d", got, service.MaxFeaturedArtistsPerTrack)
+		if got := len(tr.FeaturedArtists); got != trackservice.MaxFeaturedArtistsPerTrack {
+			t.Errorf("stored %d featured artists, want %d", got, trackservice.MaxFeaturedArtistsPerTrack)
 		}
 	}
 }
 
 func TestHandleCreateTrack_RejectsOversizedFeaturedArtistFields(t *testing.T) {
 	longMBID := strings.Repeat("a", 37)
-	cases := map[string]service.FeaturedArtistDTO{
+	cases := map[string]trackservice.FeaturedArtistDTO{
 		"name": {Name: strings.Repeat("n", 301)},
 		"mbid": {Name: "Guest", MBID: &longMBID},
 	}
@@ -506,7 +506,7 @@ func TestHandleCreateTrack_RejectsOversizedFeaturedArtistFields(t *testing.T) {
 			repo := catalogtest.NewTrackRepo()
 			sched := &catalogtest.Scheduler{}
 			_, router := buildTrackHandler(repo, sched)
-			body := CreateTrackRequest{Title: "Song", Artist: "Artist", FeaturedArtists: []service.FeaturedArtistDTO{dto}}
+			body := CreateTrackRequest{Title: "Song", Artist: "Artist", FeaturedArtists: []trackservice.FeaturedArtistDTO{dto}}
 
 			rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
 
@@ -549,7 +549,7 @@ func TestHandleCreateTrack_AcceptsFeaturedArtistFieldsAtCap(t *testing.T) {
 	_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
 	mbid := "f27ec8db-af05-4f36-916e-3d57f91ecf5e"
 	name := strings.Repeat("n", 300)
-	body := CreateTrackRequest{Title: "Song", Artist: "Artist", FeaturedArtists: []service.FeaturedArtistDTO{{Name: name, MBID: &mbid}}}
+	body := CreateTrackRequest{Title: "Song", Artist: "Artist", FeaturedArtists: []trackservice.FeaturedArtistDTO{{Name: name, MBID: &mbid}}}
 
 	rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
 

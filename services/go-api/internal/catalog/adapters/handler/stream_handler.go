@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/catalog/adapters/authbridge"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
-	"altune/go-api/internal/catalog/service"
+	audioservice "altune/go-api/internal/catalog/service/audio"
 	"altune/go-api/internal/shared/httputil"
 	"context"
 	"errors"
@@ -19,14 +19,14 @@ import (
 const audioWriteIdleTimeout = 30 * time.Second
 
 type StreamHandler struct {
-	svc              *service.StreamTrackService
+	svc              *audioservice.StreamTrackService
 	writeIdleTimeout time.Duration
 	rateLimit        AudioRateLimit
 	now              func() time.Time
 	limiter          rateLimitMiddleware
 }
 
-func NewStreamHandler(svc *service.StreamTrackService, opts ...func(*StreamHandler)) *StreamHandler {
+func NewStreamHandler(svc *audioservice.StreamTrackService, opts ...func(*StreamHandler)) *StreamHandler {
 	h := &StreamHandler{svc: svc, writeIdleTimeout: audioWriteIdleTimeout, rateLimit: DefaultStreamRateLimit, now: time.Now}
 	for _, opt := range opts {
 		opt(h)

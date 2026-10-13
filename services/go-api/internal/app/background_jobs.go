@@ -11,7 +11,7 @@ import (
 
 	catalogMetrics "altune/go-api/internal/catalog/adapters/metrics"
 	catalogPorts "altune/go-api/internal/catalog/ports"
-	catalogService "altune/go-api/internal/catalog/service"
+	audioservice "altune/go-api/internal/catalog/service/audio"
 
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
@@ -52,9 +52,9 @@ func (a *App) startOrphanedAudioReconcile(ctx context.Context, queue catalogPort
 	if audioStore == nil {
 		return
 	}
-	svc := catalogService.NewReconcileOrphanedAudioService(queue, audioStore,
-		catalogService.WithReconcileSwitch(a.jobSwitch(jobOrphanedAudioReconcile)),
-		catalogService.WithReconcileMetrics(catalogMetrics.NewExpvarAudioStoreMetrics()),
+	svc := audioservice.NewReconcileOrphanedAudioService(queue, audioStore,
+		audioservice.WithReconcileSwitch(a.jobSwitch(jobOrphanedAudioReconcile)),
+		audioservice.WithReconcileMetrics(catalogMetrics.NewExpvarAudioStoreMetrics()),
 	)
 	a.startSimpleJob(jobOrphanedAudioReconcile, orphanedAudioReconcileInterval, func(ctx context.Context) error {
 		_, err := svc.Execute(ctx)

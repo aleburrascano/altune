@@ -31,7 +31,11 @@ import (
 	catalogMetrics "altune/go-api/internal/catalog/adapters/metrics"
 
 	catalogPorts "altune/go-api/internal/catalog/ports"
-	catalogService "altune/go-api/internal/catalog/service"
+	audioservice "altune/go-api/internal/catalog/service/audio"
+	featuredservice "altune/go-api/internal/catalog/service/featured"
+	libraryservice "altune/go-api/internal/catalog/service/library"
+	playlistservice "altune/go-api/internal/catalog/service/playlist"
+	trackservice "altune/go-api/internal/catalog/service/track"
 
 	discoveryCatalogBridge "altune/go-api/internal/discovery/adapters/catalogbridge"
 	discoveryService "altune/go-api/internal/discovery/service"
@@ -41,7 +45,7 @@ type catalogWiring struct {
 	trackRepo         *persistence.PgxTrackRepository
 	audioStore        catalogPorts.AudioStore
 	orphanedAudio     *persistence.PgxOrphanedAudioRepository
-	setTrackNumberSvc *catalogService.SetTrackNumberService
+	setTrackNumberSvc *trackservice.SetTrackNumberService
 	trackHandler      *catalogHandler.TrackHandler
 	libraryHandler    *catalogHandler.LibraryHandler
 	playlistHandler   *catalogHandler.PlaylistHandler
@@ -66,17 +70,17 @@ type audioSourcesStaging struct {
 type catalogServicesStaging struct {
 	catalogTrackRepo      *persistence.PgxCatalogTrackRepository
 	orphanedAudio         *persistence.PgxOrphanedAudioRepository
-	addTrackSvc           *catalogService.AddTrackService
-	listTracksSvc         *catalogService.ListTracksService
-	deleteTrackSvc        *catalogService.DeleteTrackService
-	setTrackNumberSvc     *catalogService.SetTrackNumberService
-	playlistLifecycleSvc  *catalogService.PlaylistLifecycleService
-	playlistMembershipSvc *catalogService.PlaylistMembershipService
-	backfillFeaturedSvc   *catalogService.BackfillFeaturedService
-	listFeaturingSvc      *catalogService.ListFeaturingService
-	getTrackStatusSvc     *catalogService.GetTrackStatusService
-	streamTrackSvc        *catalogService.StreamTrackService
-	audioURLSvc           *catalogService.AudioURLService
+	addTrackSvc           *trackservice.AddTrackService
+	listTracksSvc         *trackservice.ListTracksService
+	deleteTrackSvc        *trackservice.DeleteTrackService
+	setTrackNumberSvc     *trackservice.SetTrackNumberService
+	playlistLifecycleSvc  *playlistservice.PlaylistLifecycleService
+	playlistMembershipSvc *playlistservice.PlaylistMembershipService
+	backfillFeaturedSvc   *featuredservice.BackfillFeaturedService
+	listFeaturingSvc      *featuredservice.ListFeaturingService
+	getTrackStatusSvc     *trackservice.GetTrackStatusService
+	streamTrackSvc        *audioservice.StreamTrackService
+	audioURLSvc           *audioservice.AudioURLService
 }
 
 func (a *App) wireCatalog(
@@ -221,21 +225,21 @@ func (a *App) wireCatalogServices(
 	return catalogServicesStaging{
 		catalogTrackRepo: catalogTrackRepo,
 		orphanedAudio:    orphanedAudio,
-		addTrackSvc: catalogService.NewAddTrackService(
+		addTrackSvc: trackservice.NewAddTrackService(
 			catalogTrackRepo,
-			catalogService.WithAddTrackEvents(tap),
-			catalogService.WithAcquisitionScheduler(audio.scheduler),
+			trackservice.WithAddTrackEvents(tap),
+			trackservice.WithAcquisitionScheduler(audio.scheduler),
 		),
-		listTracksSvc:         catalogService.NewListTracksService(catalogTrackRepo),
-		deleteTrackSvc:        catalogService.NewDeleteTrackService(catalogTrackRepo, audio.audioStore, catalogService.WithDeleteTrackEvents(tap), catalogService.WithDeleteTrackMetrics(audioStoreMetrics), catalogService.WithDeleteTrackOrphanQueue(orphanedAudio)),
-		setTrackNumberSvc:     catalogService.NewSetTrackNumberService(catalogTrackRepo),
-		playlistLifecycleSvc:  catalogService.NewPlaylistLifecycleService(playlistRepo, catalogService.WithPlaylistLifecycleEvents(tap)),
-		playlistMembershipSvc: catalogService.NewPlaylistMembershipService(playlistRepo, catalogTrackRepo, catalogService.WithPlaylistMembershipEvents(tap)),
-		backfillFeaturedSvc:   catalogService.NewBackfillFeaturedService(catalogTrackRepo, catalogTrackRepo, featuredBridge),
-		listFeaturingSvc:      catalogService.NewListFeaturingService(catalogTrackRepo),
-		getTrackStatusSvc:     catalogService.NewGetTrackStatusService(catalogTrackRepo),
-		streamTrackSvc:        catalogService.NewStreamTrackService(catalogTrackRepo, audio.audioStore, catalogService.WithStreamScheduler(audio.scheduler), catalogService.WithStreamMetrics(audioStoreMetrics), catalogService.WithStreamRecoverySwitch(a.jobSwitch(jobStreamRecovery))),
-		audioURLSvc:           catalogService.NewAudioURLService(catalogTrackRepo, audio.audioStore, catalogService.WithAudioURLMetrics(audioStoreMetrics)),
+		listTracksSvc:         trackservice.NewListTracksService(catalogTrackRepo),
+		deleteTrackSvc:        trackservice.NewDeleteTrackService(catalogTrackRepo, audio.audioStore, trackservice.WithDeleteTrackEvents(tap), trackservice.WithDeleteTrackMetrics(audioStoreMetrics), trackservice.WithDeleteTrackOrphanQueue(orphanedAudio)),
+		setTrackNumberSvc:     trackservice.NewSetTrackNumberService(catalogTrackRepo),
+		playlistLifecycleSvc:  playlistservice.NewPlaylistLifecycleService(playlistRepo, playlistservice.WithPlaylistLifecycleEvents(tap)),
+		playlistMembershipSvc: playlistservice.NewPlaylistMembershipService(playlistRepo, catalogTrackRepo, playlistservice.WithPlaylistMembershipEvents(tap)),
+		backfillFeaturedSvc:   featuredservice.NewBackfillFeaturedService(catalogTrackRepo, catalogTrackRepo, featuredBridge),
+		listFeaturingSvc:      featuredservice.NewListFeaturingService(catalogTrackRepo),
+		getTrackStatusSvc:     trackservice.NewGetTrackStatusService(catalogTrackRepo),
+		streamTrackSvc:        audioservice.NewStreamTrackService(catalogTrackRepo, audio.audioStore, audioservice.WithStreamScheduler(audio.scheduler), audioservice.WithStreamMetrics(audioStoreMetrics), audioservice.WithStreamRecoverySwitch(a.jobSwitch(jobStreamRecovery))),
+		audioURLSvc:           audioservice.NewAudioURLService(catalogTrackRepo, audio.audioStore, audioservice.WithAudioURLMetrics(audioStoreMetrics)),
 	}
 }
 
@@ -256,7 +260,7 @@ func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServices
 		orphanedAudio:     svc.orphanedAudio,
 		setTrackNumberSvc: svc.setTrackNumberSvc,
 		trackHandler:      catalogHandler.NewTrackHandler(svc.addTrackSvc, svc.listTracksSvc, svc.getTrackStatusSvc, svc.deleteTrackSvc, svc.setTrackNumberSvc, featuredArtistHandler),
-		libraryHandler:    catalogHandler.NewLibraryHandler(catalogService.NewLibraryLensService(svc.catalogTrackRepo)),
+		libraryHandler:    catalogHandler.NewLibraryHandler(libraryservice.NewLibraryLensService(svc.catalogTrackRepo)),
 		playlistHandler:   catalogHandler.NewPlaylistHandler(svc.playlistLifecycleSvc, svc.playlistMembershipSvc),
 		streamHandler:     catalogHandler.NewStreamHandler(svc.streamTrackSvc),
 		audioURLHandler:   catalogHandler.NewAudioURLHandler(svc.audioURLSvc, catalogHandler.WithPrefetchEnabled(a.cfg.AudioPrefetchEnabled)),

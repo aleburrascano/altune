@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/service"
+	featuredservice "altune/go-api/internal/catalog/service/featured"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -146,8 +146,8 @@ func TestHandleListFeaturing_AcceptsAPositiveDeezerID(t *testing.T) {
 
 func backfillRouter(repo *listFailsAfterFirstPage) chi.Router {
 	featured := NewFeaturedArtistHandler(
-		service.NewBackfillFeaturedService(repo, repo, catalogtest.FeaturedResolver{}),
-		service.NewListFeaturingService(repo),
+		featuredservice.NewBackfillFeaturedService(repo, repo, catalogtest.FeaturedResolver{}),
+		featuredservice.NewListFeaturingService(repo),
 	)
 	router := chi.NewRouter()
 	router.Use(middleware.Middleware(verifyAsTestUser))
@@ -191,9 +191,9 @@ func TestHandleBackfillFeatured_AnswersWithinTheBudgetAndResumesWithoutCooldown(
 		trackRepo.Seed(makeTrack(testUserId, title, "Artist", "Album"))
 	}
 	featured := NewFeaturedArtistHandler(
-		service.NewBackfillFeaturedService(trackRepo, trackRepo, &stallsAfterFirstResolver{},
-			service.WithBackfillTimeBudget(50*time.Millisecond)),
-		service.NewListFeaturingService(trackRepo),
+		featuredservice.NewBackfillFeaturedService(trackRepo, trackRepo, &stallsAfterFirstResolver{},
+			featuredservice.WithBackfillTimeBudget(50*time.Millisecond)),
+		featuredservice.NewListFeaturingService(trackRepo),
 	)
 	router := chi.NewRouter()
 	router.Use(middleware.Middleware(verifyAsTestUser))

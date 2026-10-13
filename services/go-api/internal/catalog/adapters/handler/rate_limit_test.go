@@ -7,7 +7,7 @@ import (
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
-	"altune/go-api/internal/catalog/service"
+	audioservice "altune/go-api/internal/catalog/service/audio"
 	"altune/go-api/internal/shared"
 	"bytes"
 	"context"
@@ -82,8 +82,8 @@ type audioRig struct {
 func newAudioRig(streamOpts []func(*StreamHandler), urlOpts []func(*AudioURLHandler)) *audioRig {
 	repo := catalogtest.NewTrackRepo()
 	store := &countingAudioStore{AudioStore: catalogtest.NewAudioStore()}
-	streamSvc := service.NewStreamTrackService(repo, store)
-	urlSvc := service.NewAudioURLService(repo, store)
+	streamSvc := audioservice.NewStreamTrackService(repo, store)
+	urlSvc := audioservice.NewAudioURLService(repo, store)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Middleware(verifyBearerAsUser))

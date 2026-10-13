@@ -3,7 +3,7 @@ package handler
 import (
 	"altune/go-api/internal/catalog/adapters/authbridge"
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/service"
+	featuredservice "altune/go-api/internal/catalog/service/featured"
 	"altune/go-api/internal/shared/httputil"
 	"log/slog"
 	"net/http"
@@ -14,13 +14,13 @@ import (
 )
 
 type FeaturedArtistHandler struct {
-	backfillFeatured *service.BackfillFeaturedService
-	listFeaturing    *service.ListFeaturingService
+	backfillFeatured *featuredservice.BackfillFeaturedService
+	listFeaturing    *featuredservice.ListFeaturingService
 }
 
 func NewFeaturedArtistHandler(
-	backfillFeatured *service.BackfillFeaturedService,
-	listFeaturing *service.ListFeaturingService,
+	backfillFeatured *featuredservice.BackfillFeaturedService,
+	listFeaturing *featuredservice.ListFeaturingService,
 ) *FeaturedArtistHandler {
 	return &FeaturedArtistHandler{
 		backfillFeatured: backfillFeatured,
@@ -48,7 +48,7 @@ func (h *FeaturedArtistHandler) handleBackfillFeatured(w http.ResponseWriter, r 
 	httputil.WriteJSON(w, http.StatusOK, result)
 }
 
-func logPartialBackfill(r *http.Request, result *service.BackfillFeaturedResult) {
+func logPartialBackfill(r *http.Request, result *featuredservice.BackfillFeaturedResult) {
 	if result == nil || result.Scanned == 0 {
 		return
 	}

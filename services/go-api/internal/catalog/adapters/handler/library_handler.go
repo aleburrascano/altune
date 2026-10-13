@@ -3,7 +3,7 @@ package handler
 import (
 	"altune/go-api/internal/catalog/adapters/authbridge"
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/service"
+	libraryservice "altune/go-api/internal/catalog/service/library"
 	"altune/go-api/internal/shared/httputil"
 	"net/http"
 	"strconv"
@@ -14,10 +14,10 @@ import (
 )
 
 type LibraryHandler struct {
-	lenses *service.LibraryLensService
+	lenses *libraryservice.LibraryLensService
 }
 
-func NewLibraryHandler(lenses *service.LibraryLensService) *LibraryHandler {
+func NewLibraryHandler(lenses *libraryservice.LibraryLensService) *LibraryHandler {
 	return &LibraryHandler{lenses: lenses}
 }
 

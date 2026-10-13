@@ -1,5 +1,5 @@
 package ports
 
-import "errors"
+import "altune/go-api/internal/catalog/domain"
 
-var ErrDBTransient = errors.New("catalog database temporarily unavailable")
+var ErrDBTransient = domain.ErrDBTransient

@@ -1,6 +1,10 @@
 package domain
 
-import "testing"
+import (
+	"altune/go-api/internal/shared/sharedtest"
+	"strings"
+	"testing"
+)
 
 func TestParseLibrarySort(t *testing.T) {
 	tests := []struct {
@@ -70,5 +74,46 @@ func TestTotalDurationSeconds(t *testing.T) {
 
 	if got := TotalDurationSeconds(tracks); got != 120.5 {
 		t.Errorf("TotalDurationSeconds() = %v, want 120.5", got)
+	}
+}
+
+func TestNormalizePage(t *testing.T) {
+	cases := []struct {
+		name      string
+		limit     int
+		offset    int
+		wantLimit int
+		wantErr   bool
+	}{
+		{name: "zero limit becomes the default page", limit: 0, wantLimit: 50},
+		{name: "negative limit becomes the default page", limit: -5, wantLimit: 50},
+		{name: "limit in range passes through", limit: 30, offset: 10, wantLimit: 30},
+		{name: "limit at the cap passes through", limit: 2000, wantLimit: 2000},
+		{name: "limit over the cap clamps to the cap", limit: 9000, wantLimit: 2000},
+		{name: "negative offset is refused", limit: 30, offset: -1, wantErr: true},
+		{name: "negative offset is refused before the limit is clamped", limit: 9000, offset: -3, wantErr: true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			limit, err := NormalizePage(c.limit, c.offset)
+
+			if c.wantErr {
+				if err == nil {
+					t.Fatalf("expected a validation error, got limit = %d", limit)
+				}
+				sharedtest.AssertValidationError(t, err)
+				if !strings.Contains(err.Error(), "offset") {
+					t.Fatalf("error = %q, want it to mention %q", err.Error(), "offset")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if limit != c.wantLimit {
+				t.Errorf("limit = %d, want %d", limit, c.wantLimit)
+			}
+		})
 	}
 }

@@ -43,20 +43,6 @@ G8 internal/acquisition/service/step_update_track.go sits directly in service/
 G8 internal/acquisition/service/temp_workspace.go sits directly in service/
 G8 internal/acquisition/service/title_qualifiers.go sits directly in service/
 G8 internal/auth/service/request_identity.go sits directly in service/
-G8 internal/catalog/service/add_track.go sits directly in service/
-G8 internal/catalog/service/audio_url.go sits directly in service/
-G8 internal/catalog/service/delete_track.go sits directly in service/
-G8 internal/catalog/service/errors.go sits directly in service/
-G8 internal/catalog/service/featured_artist.go sits directly in service/
-G8 internal/catalog/service/library_lenses.go sits directly in service/
-G8 internal/catalog/service/options.go sits directly in service/
-G8 internal/catalog/service/playlist_lifecycle.go sits directly in service/
-G8 internal/catalog/service/playlist_membership.go sits directly in service/
-G8 internal/catalog/service/reconcile_orphaned_audio.go sits directly in service/
-G8 internal/catalog/service/set_track_number.go sits directly in service/
-G8 internal/catalog/service/stream_track.go sits directly in service/
-G8 internal/catalog/service/track_dto.go sits directly in service/
-G8 internal/catalog/service/track_reads.go sits directly in service/
 G8 internal/discovery/adapters/providers holds more than 16 files
 G8 internal/discovery/adapters/providers/amazonmusic.go sits beside packages
 G8 internal/discovery/adapters/providers/amazonmusic_session.go sits beside packages

@@ -3,7 +3,7 @@ package handler
 import (
 	"altune/go-api/internal/catalog/adapters/authbridge"
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/service"
+	playlistservice "altune/go-api/internal/catalog/service/playlist"
 	"altune/go-api/internal/shared/httputil"
 	"net/http"
 	"time"
@@ -13,14 +13,14 @@ import (
 )
 
 type PlaylistHandler struct {
-	lifecycle    *service.PlaylistLifecycleService
-	membership   *service.PlaylistMembershipService
+	lifecycle    *playlistservice.PlaylistLifecycleService
+	membership   *playlistservice.PlaylistMembershipService
 	writeLimit   AudioRateLimit
 	now          func() time.Time
 	writeLimiter rateLimitMiddleware
 }
 
-func NewPlaylistHandler(lifecycle *service.PlaylistLifecycleService, membership *service.PlaylistMembershipService, opts ...func(*PlaylistHandler)) *PlaylistHandler {
+func NewPlaylistHandler(lifecycle *playlistservice.PlaylistLifecycleService, membership *playlistservice.PlaylistMembershipService, opts ...func(*PlaylistHandler)) *PlaylistHandler {
 	h := &PlaylistHandler{
 		lifecycle:  lifecycle,
 		membership: membership,

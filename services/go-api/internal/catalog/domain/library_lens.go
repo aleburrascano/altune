@@ -39,6 +39,34 @@ const MaxLibraryPageSize = 2000
 
 const MaxLibrarySearchLength = maxTrackTextLength
 
+const defaultCatalogPageSize = 50
+
+func clampPageSize(limit int) int {
+	if limit <= 0 {
+		return defaultCatalogPageSize
+	}
+	if limit > MaxLibraryPageSize {
+		return MaxLibraryPageSize
+	}
+	return limit
+}
+
+func NormalizePage(limit, offset int) (int, error) {
+	if offset < 0 {
+		return 0, NewValidationError("offset must not be negative")
+	}
+	return clampPageSize(limit), nil
+}
+
+func NormalizeLibraryPage(query LibraryQuery) (LibraryQuery, error) {
+	limit, err := NormalizePage(query.Limit, query.Offset)
+	if err != nil {
+		return LibraryQuery{}, err
+	}
+	query.Limit = limit
+	return query, nil
+}
+
 type LibraryQuery struct {
 	Search string
 	Sort   LibrarySort

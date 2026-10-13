@@ -6,7 +6,10 @@ import (
 	authports "altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/ports"
-	"altune/go-api/internal/catalog/service"
+	audioservice "altune/go-api/internal/catalog/service/audio"
+	featuredservice "altune/go-api/internal/catalog/service/featured"
+	playlistservice "altune/go-api/internal/catalog/service/playlist"
+	trackservice "altune/go-api/internal/catalog/service/track"
 	"altune/go-api/internal/shared"
 	"bytes"
 	"context"
@@ -87,18 +90,18 @@ func makePlaylist(userId shared.UserId, name string) *catdomain.Playlist {
 }
 
 func buildTrackHandler(trackRepo *catalogtest.TrackRepo, scheduler *catalogtest.Scheduler) (*TrackHandler, chi.Router) {
-	var addOpts []func(*service.AddTrackService)
+	var addOpts []func(*trackservice.AddTrackService)
 	if scheduler != nil {
-		addOpts = append(addOpts, service.WithAcquisitionScheduler(scheduler))
+		addOpts = append(addOpts, trackservice.WithAcquisitionScheduler(scheduler))
 	}
-	addSvc := service.NewAddTrackService(trackRepo, addOpts...)
-	listSvc := service.NewListTracksService(trackRepo)
-	deleteSvc := service.NewDeleteTrackService(trackRepo, catalogtest.NewAudioStore())
-	setTrackNumberSvc := service.NewSetTrackNumberService(trackRepo)
+	addSvc := trackservice.NewAddTrackService(trackRepo, addOpts...)
+	listSvc := trackservice.NewListTracksService(trackRepo)
+	deleteSvc := trackservice.NewDeleteTrackService(trackRepo, catalogtest.NewAudioStore())
+	setTrackNumberSvc := trackservice.NewSetTrackNumberService(trackRepo)
 
-	getStatusSvc := service.NewGetTrackStatusService(trackRepo)
-	backfillSvc := service.NewBackfillFeaturedService(trackRepo, trackRepo, catalogtest.FeaturedResolver{})
-	listFeaturingSvc := service.NewListFeaturingService(trackRepo)
+	getStatusSvc := trackservice.NewGetTrackStatusService(trackRepo)
+	backfillSvc := featuredservice.NewBackfillFeaturedService(trackRepo, trackRepo, catalogtest.FeaturedResolver{})
+	listFeaturingSvc := featuredservice.NewListFeaturingService(trackRepo)
 	featuredH := NewFeaturedArtistHandler(backfillSvc, listFeaturingSvc)
 	h := NewTrackHandler(addSvc, listSvc, getStatusSvc, deleteSvc, setTrackNumberSvc, featuredH)
 	r := chi.NewRouter()
@@ -110,8 +113,8 @@ func buildTrackHandler(trackRepo *catalogtest.TrackRepo, scheduler *catalogtest.
 }
 
 func buildPlaylistHandler(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (*PlaylistHandler, chi.Router) {
-	lifecycleSvc := service.NewPlaylistLifecycleService(plRepo)
-	membershipSvc := service.NewPlaylistMembershipService(plRepo, trRepo)
+	lifecycleSvc := playlistservice.NewPlaylistLifecycleService(plRepo)
+	membershipSvc := playlistservice.NewPlaylistMembershipService(plRepo, trRepo)
 	h := NewPlaylistHandler(lifecycleSvc, membershipSvc)
 	r := chi.NewRouter()
 	r.Use(middleware.Middleware(verifyAsTestUser))
@@ -124,7 +127,7 @@ func buildStreamHandler(trackRepo *catalogtest.TrackRepo, audioStore *catalogtes
 	if scheduler != nil {
 		sched = scheduler
 	}
-	streamSvc := service.NewStreamTrackService(trackRepo, audioStore, service.WithStreamScheduler(sched))
+	streamSvc := audioservice.NewStreamTrackService(trackRepo, audioStore, audioservice.WithStreamScheduler(sched))
 	h := NewStreamHandler(streamSvc)
 	r := chi.NewRouter()
 	r.Use(middleware.Middleware(verifyAsTestUser))
@@ -168,21 +171,21 @@ func newWriteRig(trackOpts []func(*TrackHandler), playlistOpts []func(*PlaylistH
 	tracks := catalogtest.NewTrackRepo()
 	playlists := catalogtest.NewPlaylistRepo()
 	featured := NewFeaturedArtistHandler(
-		service.NewBackfillFeaturedService(tracks, tracks, catalogtest.FeaturedResolver{}),
-		service.NewListFeaturingService(tracks),
+		featuredservice.NewBackfillFeaturedService(tracks, tracks, catalogtest.FeaturedResolver{}),
+		featuredservice.NewListFeaturingService(tracks),
 	)
 	trackH := NewTrackHandler(
-		service.NewAddTrackService(tracks),
-		service.NewListTracksService(tracks),
-		service.NewGetTrackStatusService(tracks),
-		service.NewDeleteTrackService(tracks, catalogtest.NewAudioStore()),
-		service.NewSetTrackNumberService(tracks),
+		trackservice.NewAddTrackService(tracks),
+		trackservice.NewListTracksService(tracks),
+		trackservice.NewGetTrackStatusService(tracks),
+		trackservice.NewDeleteTrackService(tracks, catalogtest.NewAudioStore()),
+		trackservice.NewSetTrackNumberService(tracks),
 		featured,
 		trackOpts...,
 	)
 	playlistH := NewPlaylistHandler(
-		service.NewPlaylistLifecycleService(playlists),
-		service.NewPlaylistMembershipService(playlists, tracks),
+		playlistservice.NewPlaylistLifecycleService(playlists),
+		playlistservice.NewPlaylistMembershipService(playlists, tracks),
 		playlistOpts...,
 	)
 

@@ -3,7 +3,7 @@ package app
 import (
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
-	catalogService "altune/go-api/internal/catalog/service"
+	audioservice "altune/go-api/internal/catalog/service/audio"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/runloop"
 	"context"
@@ -112,9 +112,9 @@ func TestStreamRecovery_AdminKillSwitchSuppressesReschedule(t *testing.T) {
 	store := catalogtest.NewAudioStore()
 	store.ErrOnStream = errors.New("not found")
 	sched := &catalogtest.Scheduler{}
-	svc := catalogService.NewStreamTrackService(repo, store,
-		catalogService.WithStreamScheduler(sched),
-		catalogService.WithStreamRecoverySwitch(a.jobSwitch(jobStreamRecovery)))
+	svc := audioservice.NewStreamTrackService(repo, store,
+		audioservice.WithStreamScheduler(sched),
+		audioservice.WithStreamRecoverySwitch(a.jobSwitch(jobStreamRecovery)))
 
 	track, err := domain.NewTrack(user, "Track", "Artist", "Album")
 	if err != nil {
@@ -127,7 +127,7 @@ func TestStreamRecovery_AdminKillSwitchSuppressesReschedule(t *testing.T) {
 
 	flipNamedJob(t, a, jobStreamRecovery, "disable")
 
-	if _, err := svc.Execute(ctx, user, track.ID); !errors.Is(err, catalogService.ErrAudioTemporarilyUnavailable) {
+	if _, err := svc.Execute(ctx, user, track.ID); !errors.Is(err, domain.ErrAudioTemporarilyUnavailable) {
 		t.Fatalf("disabled recovery stream err = %v, want ErrAudioTemporarilyUnavailable", err)
 	}
 	if err := svc.RecoverIfMissing(ctx, user, track.ID); err != nil {
@@ -145,7 +145,7 @@ func TestStreamRecovery_AdminKillSwitchSuppressesReschedule(t *testing.T) {
 
 	flipNamedJob(t, a, jobStreamRecovery, "enable")
 
-	if _, err := svc.Execute(ctx, user, track.ID); !errors.Is(err, catalogService.ErrAudioNotAvailable) {
+	if _, err := svc.Execute(ctx, user, track.ID); !errors.Is(err, domain.ErrAudioNotAvailable) {
 		t.Fatalf("re-enabled recovery stream err = %v, want ErrAudioNotAvailable", err)
 	}
 	if len(sched.TrackIds) != 1 {

@@ -3,7 +3,7 @@ package handler
 import (
 	"altune/go-api/internal/catalog/adapters/authbridge"
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/service"
+	audioservice "altune/go-api/internal/catalog/service/audio"
 	"altune/go-api/internal/shared/httputil"
 	"log/slog"
 	"net/http"
@@ -15,14 +15,14 @@ import (
 const maxAudioURLBatch = 200
 
 type AudioURLHandler struct {
-	svc             *service.AudioURLService
+	svc             *audioservice.AudioURLService
 	prefetchEnabled bool
 	rateLimit       AudioRateLimit
 	now             func() time.Time
 	limiter         rateLimitMiddleware
 }
 
-func NewAudioURLHandler(svc *service.AudioURLService, opts ...func(*AudioURLHandler)) *AudioURLHandler {
+func NewAudioURLHandler(svc *audioservice.AudioURLService, opts ...func(*AudioURLHandler)) *AudioURLHandler {
 	h := &AudioURLHandler{svc: svc, prefetchEnabled: true, rateLimit: DefaultAudioURLRateLimit, now: time.Now}
 	for _, opt := range opts {
 		opt(h)

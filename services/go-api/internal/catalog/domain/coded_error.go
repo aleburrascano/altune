@@ -12,6 +12,15 @@ func (e *CodedError) Error() string     { return e.Msg }
 func (e *CodedError) HTTPStatus() int   { return e.Status }
 func (e *CodedError) ErrorCode() string { return e.Code }
 
+var (
+	ErrTrackNotFound                 = &CodedError{Msg: "track not found", Status: 404, Code: "catalog.track_not_found"}
+	ErrPlaylistNotFound              = &CodedError{Msg: "playlist not found", Status: 404, Code: "catalog.playlist_not_found"}
+	ErrAudioNotAvailable             = &CodedError{Msg: "audio not available", Status: 404, Code: "catalog.audio_not_available"}
+	ErrAudioTemporarilyUnavailable   = &CodedError{Msg: "audio temporarily unavailable", Status: 503, Code: "catalog.audio_temporarily_unavailable"}
+	ErrCatalogTemporarilyUnavailable = &CodedError{Msg: "catalog temporarily unavailable", Status: 503, Code: "catalog.temporarily_unavailable"}
+	ErrAudioOrphaned                 = &CodedError{Msg: "track deleted but audio file orphaned", Status: 500, Code: "catalog.audio_orphaned"}
+)
+
 var ErrTrackAlreadyInPlaylist = &CodedError{Msg: "track already in playlist", Status: 409, Code: "catalog.track_already_in_playlist"}
 
 var (

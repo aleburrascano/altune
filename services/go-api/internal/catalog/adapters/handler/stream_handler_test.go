@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/ports"
-	"altune/go-api/internal/catalog/service"
+	audioservice "altune/go-api/internal/catalog/service/audio"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/httputil/httputiltest"
@@ -198,7 +198,7 @@ func mountStreamRoutes(store ports.AudioStore, opts ...func(*StreamHandler)) (*c
 	repo := catalogtest.NewTrackRepo()
 	router := chi.NewRouter()
 	router.Use(middleware.Middleware(verifyAsTestUser))
-	NewStreamHandler(service.NewStreamTrackService(repo, store), opts...).Routes(router)
+	NewStreamHandler(audioservice.NewStreamTrackService(repo, store), opts...).Routes(router)
 	return repo, router
 }
 
@@ -413,7 +413,7 @@ func serveAudioBehindRouteDeadline(t *testing.T, idle time.Duration) (get func()
 	repo.Seed(track)
 	store.Seed("audio/long.opus", bytes.Repeat([]byte{0xAB}, audioSize))
 
-	h := NewStreamHandler(service.NewStreamTrackService(repo, store))
+	h := NewStreamHandler(audioservice.NewStreamTrackService(repo, store))
 	h.writeIdleTimeout = idle
 	r := chi.NewRouter()
 	r.Use(httputil.WriteDeadline(audioRouteDeadline))

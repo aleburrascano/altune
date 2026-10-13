@@ -3,7 +3,7 @@ package handler
 import (
 	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/catalog/service"
+	audioservice "altune/go-api/internal/catalog/service/audio"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -24,7 +24,7 @@ func resolvePrefetchFlag(t *testing.T, opts ...func(*AudioURLHandler)) any {
 	repo := catalogtest.NewTrackRepo()
 	track := makeReadyTrack(testUserId, "Track", "Artist", "Album", "audio/ok.opus")
 	repo.Seed(track)
-	svc := service.NewAudioURLService(repo, catalogtest.NewAudioStore())
+	svc := audioservice.NewAudioURLService(repo, catalogtest.NewAudioStore())
 
 	router := chi.NewRouter()
 	router.Use(middleware.Middleware(verifyAsTestUser))
@@ -58,7 +58,7 @@ func TestAudioURLs_ReportPrefetchKillSwitch(t *testing.T) {
 }
 
 func audioURLRouter() chi.Router {
-	svc := service.NewAudioURLService(catalogtest.NewTrackRepo(), catalogtest.NewAudioStore())
+	svc := audioservice.NewAudioURLService(catalogtest.NewTrackRepo(), catalogtest.NewAudioStore())
 	router := chi.NewRouter()
 	router.Use(middleware.Middleware(verifyAsTestUser))
 	NewAudioURLHandler(svc).Routes(router)
@@ -90,7 +90,7 @@ func TestAudioURLs_ResponseIsNeverCached(t *testing.T) {
 	repo := catalogtest.NewTrackRepo()
 	track := makeReadyTrack(testUserId, "Track", "Artist", "Album", "audio/ok.opus")
 	repo.Seed(track)
-	svc := service.NewAudioURLService(repo, catalogtest.NewAudioStore())
+	svc := audioservice.NewAudioURLService(repo, catalogtest.NewAudioStore())
 
 	router := chi.NewRouter()
 	router.Use(middleware.Middleware(verifyAsTestUser))
@@ -119,7 +119,7 @@ func TestCorrelationID_ReachesCatalogServiceLogs(t *testing.T) {
 	repo := catalogtest.NewTrackRepo()
 	track := makeReadyTrack(testUserId, "Track", "Artist", "Album", "audio/ok.opus")
 	repo.Seed(track)
-	svc := service.NewAudioURLService(repo, failingSigner{catalogtest.NewAudioStore()})
+	svc := audioservice.NewAudioURLService(repo, failingSigner{catalogtest.NewAudioStore()})
 
 	router := chi.NewRouter()
 	router.Use(httputil.CorrelationID)
