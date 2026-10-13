@@ -1,7 +1,7 @@
 import { StyleSheet } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
 import type * as KeyboardModuleExports from '@shared/ui/keyboard/keyboard';
-import type * as ModalFrameExports from '@features/settings/ui/ConfirmModal';
+import type * as ModalFrameExports from '@shared/ui/primitives/ModalFrame';
 
 type KeyboardExports = typeof KeyboardModuleExports;
 
@@ -25,10 +25,15 @@ function keyboardAvoidingStyleOn(os: 'ios' | 'android'): Record<string, unknown>
         androidKeyboard.keyboardAvoidingBehavior,
       );
     }
-    loaded = jest.requireActual<typeof ModalFrameExports>('@features/settings/ui/ConfirmModal');
+    loaded = jest.requireActual<typeof ModalFrameExports>('@shared/ui/primitives/ModalFrame');
   });
   render(
-    <loaded.ModalFrame visible onClose={() => undefined} testID="modal">
+    <loaded.ModalFrame
+      visible
+      onClose={() => undefined}
+      closeAction="settings.modal.close"
+      testID="modal"
+    >
       {null}
     </loaded.ModalFrame>,
   );

@@ -1,7 +1,8 @@
 import { useCallback, type ReactElement } from 'react';
-import { Modal, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ModalFrame } from '@shared/ui/primitives/ModalFrame';
 import { Text } from '@shared/ui/primitives/Text';
 import { resolveMenuPlacement, type MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 import { useTheme } from '@shared/ui/theme/useTheme';
@@ -55,15 +56,13 @@ export function ContextMenu({
     : { right: anchorRight, top: anchorTop };
 
   return (
-    <Modal transparent animationType="fade" visible onRequestClose={onClose}>
-      <Pressable
-        style={styles.backdrop}
-        onPress={onClose}
-        accessibilityRole="button"
-        accessibilityLabel="Close menu"
-      >
-        <View />
-      </Pressable>
+    <ModalFrame
+      visible
+      variant="popover"
+      onClose={onClose}
+      closeAction="ui.context_menu.close"
+      closeLabel="Close menu"
+    >
       <View
         style={[
           styles.menu,
@@ -103,14 +102,11 @@ export function ContextMenu({
           </Pressable>
         ))}
       </View>
-    </Modal>
+    </ModalFrame>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-  },
   menu: {
     position: 'absolute',
     minWidth: 180,

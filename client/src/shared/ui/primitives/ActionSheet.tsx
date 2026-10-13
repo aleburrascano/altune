@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
+import { ModalFrame } from '@shared/ui/primitives/ModalFrame';
 import { pressedStyle } from '@shared/ui/primitives/pressedStyle';
 import { Text } from '@shared/ui/primitives/Text';
 import { useTheme } from '@shared/ui/theme/useTheme';
@@ -33,20 +34,13 @@ export function ActionSheet({
   const theme = useTheme();
 
   return (
-    <Modal
+    <ModalFrame
       testID={testID}
       visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
+      variant="sheet"
+      onClose={onClose}
+      closeAction="ui.action_sheet.close"
     >
-      <Pressable
-        style={[styles.backdrop, { backgroundColor: theme.color.scrim }]}
-        onPress={onClose}
-        accessibilityRole="button"
-        accessibilityLabel="Close"
-      />
-
       <View style={[styles.sheet, { backgroundColor: theme.color.surface1 }]}>
         <View style={[styles.handle, { backgroundColor: theme.color.border }]} />
         {title != null ? (
@@ -95,12 +89,11 @@ export function ActionSheet({
           <Text variant="bodyStrong">Cancel</Text>
         </Pressable>
       </View>
-    </Modal>
+    </ModalFrame>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1 },
   sheet: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,

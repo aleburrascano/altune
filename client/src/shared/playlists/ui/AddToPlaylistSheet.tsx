@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   FlatList,
   type ListRenderItemInfo,
-  Modal,
   StyleSheet,
   View,
 } from 'react-native';
@@ -14,6 +13,7 @@ import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
 import { countLabel } from '@shared/ui/displayFormat';
 import { playlistKeys } from '@shared/query/queryKeys';
 import { Text, pressedStyle, spacing, useTheme } from '@shared/ui';
+import { ModalFrame } from '@shared/ui/primitives/ModalFrame';
 import { Tappable } from '@shared/ui/primitives/Tappable';
 
 import { CreatePlaylistModal } from '@shared/playlists/ui/CreatePlaylistModal';
@@ -148,22 +148,13 @@ export function AddToPlaylistSheet({
 
   return (
     <>
-      <Modal
+      <ModalFrame
         testID="add-to-playlist-sheet"
         visible={visible && !createVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={handleClose}
+        variant="sheet"
+        onClose={handleClose}
+        closeAction="playlists.add_to_playlist.close"
       >
-        <Tappable
-          action="playlists.add_to_playlist.close"
-          style={[styles.backdrop, { backgroundColor: theme.color.scrim }]}
-          onPress={handleClose}
-          accessibilityRole="button"
-          accessibilityLabel="Close"
-        >
-          <View />
-        </Tappable>
         <View style={[styles.sheet, { backgroundColor: theme.color.surface1 }]}>
           <View style={[styles.handle, { backgroundColor: theme.color.border }]} />
           <Text variant="title" style={styles.sheetTitle}>
@@ -213,7 +204,7 @@ export function AddToPlaylistSheet({
             }
           />
         </View>
-      </Modal>
+      </ModalFrame>
 
       <CreatePlaylistModal
         visible={createVisible}
@@ -226,7 +217,6 @@ export function AddToPlaylistSheet({
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1 },
   sheet: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,

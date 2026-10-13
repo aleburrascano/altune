@@ -1,9 +1,9 @@
 import { useState, type ReactElement } from 'react';
-import { Modal, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
-import { Button, Text, radius, spacing, useTheme } from '@shared/ui';
+import { Button, Text, spacing } from '@shared/ui';
+import { ModalFrame } from '@shared/ui/primitives/ModalFrame';
 import { TextField } from '@shared/ui/primitives/TextField';
-import { Tappable } from '@shared/ui/primitives/Tappable';
 
 type CreatePlaylistModalProps = {
   visible: boolean;
@@ -18,7 +18,6 @@ export function CreatePlaylistModal({
   onCreate,
   loading = false,
 }: CreatePlaylistModalProps): ReactElement {
-  const theme = useTheme();
   const [name, setName] = useState('');
 
   const handleCreate = () => {
@@ -36,77 +35,49 @@ export function CreatePlaylistModal({
   };
 
   return (
-    <Modal
-      testID="create-playlist-modal"
+    <ModalFrame
       visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={handleClose}
+      onClose={handleClose}
+      closeAction="playlists.create_playlist.close"
+      testID="create-playlist-modal"
     >
-      <Tappable
-        action="playlists.create_playlist.close"
-        style={[styles.backdrop, { backgroundColor: theme.color.scrim }]}
-        onPress={handleClose}
-        accessibilityRole="button"
-        accessibilityLabel="Close"
-      >
-        <View />
-      </Tappable>
-      <View style={styles.centered}>
-        <View style={[styles.card, { backgroundColor: theme.color.surface1 }]}>
-          <Text variant="title" style={styles.title}>
-            New Playlist
-          </Text>
-          <View style={styles.field}>
-            <TextField
-              testID="create-playlist-input"
-              value={name}
-              onChangeText={setName}
-              placeholder="Playlist name"
-              maxLength={100}
-              autoFocus
-              returnKeyType="done"
-              onSubmitEditing={handleCreate}
-              surface="surface2"
-            />
-          </View>
-          <View style={styles.actions}>
-            <Button
-              action="playlists.create.cancel"
-              label="Cancel"
-              variant="ghost"
-              onPress={handleClose}
-            />
-            <Button
-              action="playlists.create.confirm"
-              testID="create-playlist-confirm"
-              label="Create"
-              onPress={handleCreate}
-              disabled={name.trim().length === 0}
-              loading={loading}
-            />
-          </View>
-        </View>
+      <Text variant="title" style={styles.title}>
+        New Playlist
+      </Text>
+      <View style={styles.field}>
+        <TextField
+          testID="create-playlist-input"
+          value={name}
+          onChangeText={setName}
+          placeholder="Playlist name"
+          maxLength={100}
+          autoFocus
+          returnKeyType="done"
+          onSubmitEditing={handleCreate}
+          surface="surface2"
+        />
       </View>
-    </Modal>
+      <View style={styles.actions}>
+        <Button
+          action="playlists.create.cancel"
+          label="Cancel"
+          variant="ghost"
+          onPress={handleClose}
+        />
+        <Button
+          action="playlists.create.confirm"
+          testID="create-playlist-confirm"
+          label="Create"
+          onPress={handleCreate}
+          disabled={name.trim().length === 0}
+          loading={loading}
+        />
+      </View>
+    </ModalFrame>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-  },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing['2xl'],
-  },
-  card: {
-    width: '100%',
-    borderRadius: radius.lg,
-    padding: spacing.xl,
-  },
   title: { marginBottom: spacing.lg },
   field: { marginBottom: spacing.lg },
   actions: {

@@ -1,11 +1,11 @@
 import type { ReactElement } from 'react';
-import { FlatList, Modal, StyleSheet, View, type ListRenderItemInfo } from 'react-native';
+import { FlatList, StyleSheet, View, type ListRenderItemInfo } from 'react-native';
 
 import { useDownloadPhase, type DownloadEntry } from '@shared/acquisition/downloadStore';
 import { phaseLabel } from '@shared/acquisition/stagePhase';
 import { Text, radius, spacing, useTheme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
-import { Tappable } from '@shared/ui/primitives/Tappable';
+import { ModalFrame } from '@shared/ui/primitives/ModalFrame';
 
 interface DownloadsSheetProps {
   visible: boolean;
@@ -44,14 +44,13 @@ function downloadKey(item: DownloadEntry): string {
 export function DownloadsSheet({ visible, items, onClose }: DownloadsSheetProps): ReactElement {
   const theme = useTheme();
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Tappable
-        action="acquisition.downloads_sheet.close"
-        style={[styles.scrim, { backgroundColor: theme.color.scrim }]}
-        accessibilityRole="button"
-        accessibilityLabel="Close downloads"
-        onPress={onClose}
-      />
+    <ModalFrame
+      visible={visible}
+      variant="sheet"
+      onClose={onClose}
+      closeAction="acquisition.downloads_sheet.close"
+      closeLabel="Close downloads"
+    >
       <View
         style={[
           styles.sheet,
@@ -72,12 +71,11 @@ export function DownloadsSheet({ visible, items, onClose }: DownloadsSheetProps)
           renderItem={renderDownloadRow}
         />
       </View>
-    </Modal>
+    </ModalFrame>
   );
 }
 
 const styles = StyleSheet.create({
-  scrim: { flex: 1 },
   sheet: {
     position: 'absolute',
     left: 0,

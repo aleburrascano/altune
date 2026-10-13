@@ -1,9 +1,10 @@
 import type { ComponentProps, ReactElement } from 'react';
-import { ActivityIndicator, FlatList, Modal, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { TrackId } from '@shared/apiClient/ids';
 import type { TrackResponse } from '@shared/apiClient/trackResponse';
 import { Text, spacing, useTheme, type Theme } from '@shared/ui';
+import { ModalFrame } from '@shared/ui/primitives/ModalFrame';
 import { SearchBar } from '@shared/ui/primitives/SearchBar';
 import type { Selection } from '@features/library/hooks/useSelection';
 import {
@@ -39,13 +40,7 @@ const TRACK_LIST_CONFIG = {
   onEndReachedThreshold: 0.5,
   keyboardShouldPersistTaps: 'handled' as const,
 };
-const MODAL_CONFIG = { testID: 'add-tracks-modal', animationType: 'slide' as const };
-
-type ModalUIProps = ComponentProps<typeof Modal>;
-
-function modalProps(props: AddTracksToPlaylistModalProps, close: () => void): ModalUIProps {
-  return { ...MODAL_CONFIG, visible: props.visible, onRequestClose: close };
-}
+const MODAL_TEST_ID = 'add-tracks-modal';
 
 function useScreenStyle() {
   const theme = useTheme();
@@ -190,9 +185,15 @@ function ModalContent({ props, state }: SectionProps): ReactElement {
 export function AddTracksToPlaylistModal(props: AddTracksToPlaylistModalProps): ReactElement {
   const state = useAddableTracks(props);
   return (
-    <Modal {...modalProps(props, state.close)}>
+    <ModalFrame
+      testID={MODAL_TEST_ID}
+      visible={props.visible}
+      variant="sheet"
+      onClose={state.close}
+      closeAction="library.add_tracks.close"
+    >
       <ModalContent props={props} state={state} />
-    </Modal>
+    </ModalFrame>
   );
 }
 

@@ -85,7 +85,6 @@
     "src/features/playback/ui/QueueSheet.tsx:QueueRow",
     "src/features/settings/domain/downloadStatsModel.ts:downloadUsage",
     "src/features/settings/hooks/useAccountEmail.ts:accountEmail",
-    "src/features/settings/ui/ConfirmModal.tsx:ModalFrame",
     "src/shared/acquisition/acquisitionTelemetry.ts:_resetAcquisitionTelemetryForTest",
     "src/shared/acquisition/audioCacheInvalidation.ts:_resetAudioCacheInvalidatorsForTest",
     "src/shared/acquisition/downloadStore.ts:FINISHING_DWELL_MS",
