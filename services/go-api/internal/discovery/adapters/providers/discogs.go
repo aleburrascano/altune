@@ -278,3 +278,18 @@ func urlPathOnly(rawURL string) string {
 	}
 	return u.Path
 }
+
+func DiscogsReleasesToSearchResults(releases []ports.DiscogsRelease) []domain.SearchResult {
+	results := make([]domain.SearchResult, 0, len(releases))
+	for _, r := range releases {
+		results = append(results, domain.SearchResult{
+			Kind:       domain.ResultKindAlbum,
+			Title:      r.Title,
+			RecordType: domain.RecordType(r.Type),
+			Extras: map[string]any{
+				"year": r.Year,
+			},
+		})
+	}
+	return results
+}

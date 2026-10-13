@@ -106,23 +106,8 @@ func discogsConsensusFetcher(discogs *providers.DiscogsAdapter) func(context.Con
 		if err != nil {
 			return nil, err
 		}
-		return discogsReleasesToSearchResults(releases), nil
+		return providers.DiscogsReleasesToSearchResults(releases), nil
 	}
-}
-
-func discogsReleasesToSearchResults(releases []discoveryPorts.DiscogsRelease) []discoveryDomain.SearchResult {
-	results := make([]discoveryDomain.SearchResult, 0, len(releases))
-	for _, r := range releases {
-		results = append(results, discoveryDomain.SearchResult{
-			Kind:       discoveryDomain.ResultKindAlbum,
-			Title:      r.Title,
-			RecordType: discoveryDomain.RecordType(r.Type),
-			Extras: map[string]any{
-				"year": r.Year,
-			},
-		})
-	}
-	return results
 }
 
 func buildArtworkChain(cf clientFactory, cfg *config.Config) discoveryPorts.TaggingArtworkResolver {

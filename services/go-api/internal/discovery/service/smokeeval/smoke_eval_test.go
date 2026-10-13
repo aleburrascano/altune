@@ -1,4 +1,4 @@
-package app
+package smokeeval
 
 import (
 	domain "altune/go-api/internal/discovery/domain"
@@ -82,15 +82,15 @@ func runSmokeEvalRecording(t *testing.T, user shared.UserId) int {
 		discoveryService.NewCircuitBreaker(),
 		discoveryService.WithEventStore(store),
 	)
-	if _, err := runSmokeEval(context.Background(), svc, user); err != nil {
-		t.Fatalf("runSmokeEval: %v", err)
+	if _, err := Run(context.Background(), svc, user); err != nil {
+		t.Fatalf("Run: %v", err)
 	}
 	svc.WaitForBackground()
 	return store.count()
 }
 
 func TestSmokeEval_RunsUnderSyntheticIdentity(t *testing.T) {
-	if !evalUserId().IsSystem() {
+	if !shared.SystemUserId().IsSystem() {
 		t.Fatal("smoke eval must run under the synthetic system identity")
 	}
 
@@ -98,7 +98,7 @@ func TestSmokeEval_RunsUnderSyntheticIdentity(t *testing.T) {
 		t.Fatal("real identity should persist InteractionEvents (control)")
 	}
 
-	if n := runSmokeEvalRecording(t, evalUserId()); n != 0 {
+	if n := runSmokeEvalRecording(t, shared.SystemUserId()); n != 0 {
 		t.Fatalf("smoke eval persisted %d InteractionEvents under its identity; want 0", n)
 	}
 }
@@ -114,8 +114,8 @@ func searcherFailing(queries ...string) scriptedSearcher {
 }
 
 func searcherFailingEveryQuery() scriptedSearcher {
-	queries := make([]string, len(evalSmokeChecks))
-	for i, check := range evalSmokeChecks {
+	queries := make([]string, len(smokeChecks))
+	for i, check := range smokeChecks {
 		queries[i] = check.query
 	}
 	return searcherFailing(queries...)
@@ -139,13 +139,13 @@ func TestSmokeEval_OneErroringQueryDoesNotDiscardOthers(t *testing.T) {
 	const failing = "Drake"
 	svc := searcherFailing(failing)
 
-	res, err := runSmokeEval(context.Background(), svc, evalUserId())
+	res, err := Run(context.Background(), svc, shared.SystemUserId())
 	if err != nil {
 		t.Fatalf("one erroring query made the whole eval fatal: %v", err)
 	}
 
-	if len(res.Queries) != len(evalSmokeChecks) {
-		t.Fatalf("recorded %d query results, want all %d", len(res.Queries), len(evalSmokeChecks))
+	if len(res.Queries) != len(smokeChecks) {
+		t.Fatalf("recorded %d query results, want all %d", len(res.Queries), len(smokeChecks))
 	}
 	if res.Errored != 1 {
 		t.Errorf("Errored = %d, want 1", res.Errored)
@@ -161,12 +161,12 @@ func TestSmokeEval_OneErroringQueryDoesNotDiscardOthers(t *testing.T) {
 		}
 	}
 
-	wantPassed := len(evalSmokeChecks) - 1
+	wantPassed := len(smokeChecks) - 1
 	if passed != wantPassed {
 		t.Errorf("passed = %d, want %d (every non-erroring query still scored)", passed, wantPassed)
 	}
 
-	wantScore := float64(wantPassed) / float64(len(evalSmokeChecks))
+	wantScore := float64(wantPassed) / float64(len(smokeChecks))
 	if res.Score != wantScore {
 		t.Errorf("Score = %v, want partial %v (not collapsed to 0)", res.Score, wantScore)
 	}
@@ -175,10 +175,10 @@ func TestSmokeEval_OneErroringQueryDoesNotDiscardOthers(t *testing.T) {
 func TestSmokeEval_EveryQueryErroringIsAFailedRunNotAZeroScore(t *testing.T) {
 	svc := searcherFailingEveryQuery()
 
-	res, err := runSmokeEval(context.Background(), svc, evalUserId())
+	res, err := Run(context.Background(), svc, shared.SystemUserId())
 
-	if !errors.Is(err, errEveryEvalQueryErrored) {
-		t.Fatalf("err = %v, want errEveryEvalQueryErrored so the meter reports an error state", err)
+	if !errors.Is(err, errEveryQueryErrored) {
+		t.Fatalf("err = %v, want errEveryQueryErrored so the meter reports an error state", err)
 	}
 	if res.Regressed {
 		t.Error("a run that scored no query must not claim a ranking regression")
@@ -188,7 +188,7 @@ func TestSmokeEval_EveryQueryErroringIsAFailedRunNotAZeroScore(t *testing.T) {
 func TestSmokeEval_PartialOutageIsNotReportedAsARegression(t *testing.T) {
 	svc := searcherFailing("Drake", "Bad Bunny")
 
-	res, err := runSmokeEval(context.Background(), svc, evalUserId())
+	res, err := Run(context.Background(), svc, shared.SystemUserId())
 	if err != nil {
 		t.Fatalf("a partial outage must still return a scorecard: %v", err)
 	}
