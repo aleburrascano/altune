@@ -24,6 +24,8 @@ export { ApiError, NetworkError, ContractError } from '@shared/failure/errors';
 
 export { apiBase, REQUEST_TIMEOUT_MS, LONG_REQUEST_TIMEOUT_MS } from '@shared/apiClient/config';
 
+type CorrelationId = string | undefined;
+
 declare global {
   interface RequestInit {
     timeoutMs?: number;
@@ -90,18 +92,26 @@ async function errorCode(response: Response): Promise<string | undefined> {
   }
 }
 
-async function readBody<T>(
-  response: Response,
-  path: string,
-  correlationId: string | undefined,
-): Promise<T> {
-  if (response.status === 202 || response.status === 204 || response.status === 304) {
-    return undefined as T;
-  }
+const HTTP_ACCEPTED = 202;
+const HTTP_NO_CONTENT = 204;
+const HTTP_NOT_MODIFIED = 304;
+
+const BODYLESS_STATUSES: ReadonlySet<number> = new Set([
+  HTTP_ACCEPTED,
+  HTTP_NO_CONTENT,
+  HTTP_NOT_MODIFIED,
+]);
+
+function truncated(path: string, id: CorrelationId): NetworkError {
+  return new NetworkError('transport', `API ${path} returned a truncated response`, id);
+}
+
+async function readBody(response: Response, path: string, id: CorrelationId): Promise<unknown> {
+  if (BODYLESS_STATUSES.has(response.status)) return undefined;
   try {
-    return (await response.json()) as T;
+    return await response.json();
   } catch {
-    throw new NetworkError('transport', `API ${path} returned a truncated response`, correlationId);
+    throw truncated(path, id);
   }
 }
 
@@ -148,51 +158,60 @@ async function requestHeaders(
   };
 }
 
-async function receive<T>(
-  response: Response,
-  path: string,
-  correlationId: string | undefined,
-  sentWith: CredentialStamp,
-): Promise<T> {
-  if (response.status === HTTP_UNAUTHORIZED) markSessionExpired(sentWith);
-  if (!response.ok) {
-    throw new ApiError(
-      response.status,
-      `API ${path} returned ${response.status}`,
-      await errorCode(response),
-      correlationId,
-    );
-  }
-  return readBody<T>(response, path, correlationId);
+async function apiError(response: Response, path: string, id: CorrelationId): Promise<ApiError> {
+  const code = await errorCode(response);
+  return new ApiError(response.status, `API ${path} returned ${response.status}`, code, id);
 }
 
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const correlationId = newCorrelationId() ?? undefined;
-  const route = path.replace(/\?.*/s, '');
+async function receive(
+  response: Response,
+  path: string,
+  id: CorrelationId,
+  sentWith: CredentialStamp,
+): Promise<unknown> {
+  if (response.status === HTTP_UNAUTHORIZED) markSessionExpired(sentWith);
+  if (!response.ok) throw await apiError(response, path, id);
+  return readBody(response, path, id);
+}
+
+const QUERY_SUFFIX_PATTERN = /\?.*/s;
+
+function routeOf(path: string): string {
+  return path.replace(QUERY_SUFFIX_PATTERN, '');
+}
+
+function timeoutOf(init: RequestInit | undefined): number {
+  return init?.timeoutMs ?? REQUEST_TIMEOUT_MS;
+}
+
+async function transmit(
+  path: string,
+  id: CorrelationId,
+  init: RequestInit | undefined,
+  deadline: Deadline,
+): Promise<Response> {
+  const route = routeOf(path);
+  const headers = await requestHeaders(route, id, init);
+  return send(`${apiBase}${path}`, route, { ...init, headers }, deadline, timeoutOf(init), id);
+}
+
+async function dispatch(path: string, id: CorrelationId, init?: RequestInit): Promise<unknown> {
   const sentWith = stampCredentials();
-  const timeoutMs = init?.timeoutMs ?? REQUEST_TIMEOUT_MS;
+  const deadline = startDeadline(init?.signal ?? undefined, timeoutOf(init));
   try {
-    const deadline = startDeadline(init?.signal ?? undefined, timeoutMs);
-    try {
-      const headers = await requestHeaders(route, correlationId, init);
-      return await receive<T>(
-        await send(
-          `${apiBase}${path}`,
-          route,
-          { ...init, headers },
-          deadline,
-          timeoutMs,
-          correlationId,
-        ),
-        route,
-        correlationId,
-        sentWith,
-      );
-    } finally {
-      deadline.release();
-    }
+    const response = await transmit(path, id, init, deadline);
+    return await receive(response, routeOf(path), id, sentWith);
+  } finally {
+    deadline.release();
+  }
+}
+
+export async function apiFetch(path: string, init?: RequestInit): Promise<unknown> {
+  const id = newCorrelationId() ?? undefined;
+  try {
+    return await dispatch(path, id, init);
   } catch (error) {
-    logFailure((init?.method ?? 'GET').toUpperCase(), path, correlationId, error);
+    logFailure((init?.method ?? 'GET').toUpperCase(), path, id, error);
     throw error;
   }
 }
@@ -208,18 +227,22 @@ type MutationInit = {
   signal?: AbortSignal;
 };
 
-export function apiSend<T>(
-  path: string,
-  method: MutationMethod,
-  body: unknown,
-  init?: MutationInit,
-): Promise<T> {
-  return apiFetch<T>(path, {
+function jsonRequest(method: MutationMethod, body: unknown, init?: MutationInit): RequestInit {
+  return {
     ...init,
     method,
     headers: { ...init?.headers, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-  });
+  };
+}
+
+export function apiSend(
+  path: string,
+  method: MutationMethod,
+  body: unknown,
+  init?: MutationInit,
+): Promise<unknown> {
+  return apiFetch(path, jsonRequest(method, body, init));
 }
 
 export function withQuery(path: string, params: URLSearchParams): string {

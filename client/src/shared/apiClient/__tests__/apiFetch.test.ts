@@ -305,9 +305,9 @@ describe('readBody adversarial payloads', () => {
 
   it('resolves an array where a record was expected as-is (no shape validation)', async () => {
     withSession();
-    __http.reply('GET /v1/library/tracks', { status: 200, json: [1, 2, 3] });
+    __http.reply('GET /v1/library/tracks', { status: 200, json: ['a', 'b'] });
 
-    await expect(apiFetch<{ id: string }>('/v1/library/tracks')).resolves.toEqual([1, 2, 3]);
+    await expect(apiFetch('/v1/library/tracks')).resolves.toEqual(['a', 'b']);
   });
 
   it('throws NetworkError(transport) for a truncated/malformed body (e.g. an ngrok warning page)', async () => {

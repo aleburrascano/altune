@@ -46,5 +46,5 @@ export async function getLyrics(params: {
   if (params.subtitle != null && params.subtitle.length > 0) {
     qs.set('subtitle', params.subtitle);
   }
-  return parseLyricsResponse(await apiFetch<unknown>(withQuery('/v1/discovery/lyrics', qs)));
+  return parseLyricsResponse(await apiFetch(withQuery('/v1/discovery/lyrics', qs)));
 }

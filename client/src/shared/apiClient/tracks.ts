@@ -147,9 +147,7 @@ export async function getTracks(
   });
   if (params.q) qs.set('q', params.q);
   if (params.sort) qs.set('sort', params.sort);
-  return parseListTracksResponse(
-    await apiFetch<unknown>(withQuery('/v1/tracks', qs), signalInit(signal)),
-  );
+  return parseListTracksResponse(await apiFetch(withQuery('/v1/tracks', qs), signalInit(signal)));
 }
 
 const MAX_PAGE = 2000;
@@ -182,18 +180,18 @@ export async function createTrack(
   idempotencyKey: string = makeIdempotencyKey(),
 ): Promise<TrackResponse> {
   return parseTrackResponse(
-    await apiSend<unknown>('/v1/tracks', 'POST', body, {
+    await apiSend('/v1/tracks', 'POST', body, {
       headers: { 'Idempotency-Key': idempotencyKey },
     }),
   );
 }
 
 export async function deleteTrack(trackId: TrackId): Promise<void> {
-  await apiFetch<void>(`/v1/tracks/${idPathSegment(trackId)}`, { method: 'DELETE' });
+  await apiFetch(`/v1/tracks/${idPathSegment(trackId)}`, { method: 'DELETE' });
 }
 
 export async function retryAcquisition(trackId: TrackId): Promise<void> {
-  await apiFetch<void>(`/v1/tracks/${idPathSegment(trackId)}/retry`, { method: 'POST' });
+  await apiFetch(`/v1/tracks/${idPathSegment(trackId)}/retry`, { method: 'POST' });
 }
 
 export async function listTracksFeaturing(fa: FeaturedArtist): Promise<ListTracksResponse> {
@@ -201,7 +199,7 @@ export async function listTracksFeaturing(fa: FeaturedArtist): Promise<ListTrack
   if (fa.mbid) qs.set('mbid', fa.mbid);
   if (fa.deezer_id != null) qs.set('deezer_id', String(fa.deezer_id));
   if (fa.name) qs.set('name', fa.name);
-  return parseListTracksResponse(await apiFetch<unknown>(withQuery('/v1/tracks/featuring', qs)));
+  return parseListTracksResponse(await apiFetch(withQuery('/v1/tracks/featuring', qs)));
 }
 
 export type BackfillFeaturedResult = {
@@ -228,7 +226,7 @@ export async function backfillFeaturedArtists(offset?: number): Promise<Backfill
   const qs = new URLSearchParams();
   if (offset != null) qs.set('offset', String(offset));
   return parseBackfillFeaturedResult(
-    await apiFetch<unknown>(withQuery('/v1/tracks/featured-backfill', qs), {
+    await apiFetch(withQuery('/v1/tracks/featured-backfill', qs), {
       method: 'POST',
       timeoutMs: LONG_REQUEST_TIMEOUT_MS,
     }),
@@ -236,5 +234,5 @@ export async function backfillFeaturedArtists(offset?: number): Promise<Backfill
 }
 
 export async function reacquireTrack(trackId: TrackId): Promise<void> {
-  await apiFetch<void>(`/v1/tracks/${idPathSegment(trackId)}/reacquire`, { method: 'POST' });
+  await apiFetch(`/v1/tracks/${idPathSegment(trackId)}/reacquire`, { method: 'POST' });
 }

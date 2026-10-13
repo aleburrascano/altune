@@ -99,10 +99,7 @@ export async function getLibraryAlbums(
   signal?: AbortSignal,
 ): Promise<ListAlbumsResponse> {
   return parseListAlbumsResponse(
-    await apiFetch<unknown>(
-      withQuery('/v1/library/albums', libraryParams(query)),
-      signalInit(signal),
-    ),
+    await apiFetch(withQuery('/v1/library/albums', libraryParams(query)), signalInit(signal)),
   );
 }
 
@@ -111,9 +108,6 @@ export async function getLibraryArtists(
   signal?: AbortSignal,
 ): Promise<ListArtistsResponse> {
   return parseListArtistsResponse(
-    await apiFetch<unknown>(
-      withQuery('/v1/library/artists', libraryParams(query)),
-      signalInit(signal),
-    ),
+    await apiFetch(withQuery('/v1/library/artists', libraryParams(query)), signalInit(signal)),
   );
 }

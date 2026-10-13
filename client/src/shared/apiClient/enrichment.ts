@@ -75,9 +75,7 @@ export async function getAlbumTracks({
   if (mbExternalId) params.set('mbid', mbExternalId);
   if (knownIds?.length) params.set('ids', sourceIdList(knownIds));
   const path = discoveryEntityPath('albums', provider, externalId, 'tracks');
-  return parseContentFetchResponse(
-    await apiFetch<unknown>(withQuery(path, params), signalInit(signal)),
-  );
+  return parseContentFetchResponse(await apiFetch(withQuery(path, params), signalInit(signal)));
 }
 
 export async function getRelatedTracks(
@@ -89,9 +87,7 @@ export async function getRelatedTracks(
   const params = new URLSearchParams();
   if (limit !== undefined) params.set('limit', String(limit));
   const path = discoveryEntityPath('tracks', provider, externalId, 'related');
-  return parseContentFetchResponse(
-    await apiFetch<unknown>(withQuery(path, params), signalInit(signal)),
-  );
+  return parseContentFetchResponse(await apiFetch(withQuery(path, params), signalInit(signal)));
 }
 
 export type EnrichmentResponse = {
@@ -135,7 +131,7 @@ export async function getEnrichment(params: {
   if (params.subtitle) qs.set('subtitle', params.subtitle);
   if (params.mbid) qs.set('mbid', params.mbid);
   return parseEnrichmentResponse(
-    await apiFetch<unknown>(withQuery('/v1/discovery/enrichment', qs), signalInit(params.signal)),
+    await apiFetch(withQuery('/v1/discovery/enrichment', qs), signalInit(params.signal)),
   );
 }
 
@@ -186,7 +182,7 @@ export async function getLastFmEnrichment(params: {
   signal?: AbortSignal | undefined;
 }): Promise<LastFmEnrichmentResponse> {
   return parseLastFmEnrichmentResponse(
-    await apiFetch<unknown>(
+    await apiFetch(
       withQuery(
         '/v1/discovery/enrichment/lastfm',
         kindTitleQs(params.kind, params.title, params.subtitle),
@@ -235,7 +231,7 @@ export async function getDeezerEnrichment(params: {
   signal?: AbortSignal | undefined;
 }): Promise<DeezerEnrichmentResponse> {
   return parseDeezerEnrichmentResponse(
-    await apiFetch<unknown>(
+    await apiFetch(
       withQuery(
         '/v1/discovery/enrichment/deezer',
         kindTitleQs(params.kind, params.title, params.subtitle),
@@ -278,7 +274,5 @@ export async function getArtistContent(
   if (opts.albumsLimit !== undefined) params.set('albums_limit', String(opts.albumsLimit));
   if (opts.knownIds?.length) params.set('ids', sourceIdList(opts.knownIds));
   const path = discoveryEntityPath('artists', provider, externalId, 'content');
-  return parseArtistContentResponse(
-    await apiFetch<unknown>(withQuery(path, params), signalInit(signal)),
-  );
+  return parseArtistContentResponse(await apiFetch(withQuery(path, params), signalInit(signal)));
 }
