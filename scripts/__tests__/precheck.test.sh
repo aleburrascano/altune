@@ -817,6 +817,23 @@ run_with_tools
 expect_rc 1
 expect_out "FAIL  mobile contract tests (go-api changed): no client test file mentions 'go-api'"
 
+CASE="a change that only deletes a go-api go file still vets and tests the package it left"
+new_repo
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    printf 'package x\n\nfunc Y() int { return 1 }\n' >services/go-api/internal/discovery/adapters/x/y.go
+)
+commit_as_base
+(
+    cd "$WORK/repo" || exit 1
+    git rm -q services/go-api/internal/discovery/adapters/x/y.go
+    git commit -qm "delete y"
+)
+run_with_tools
+expect_log "vet altune/go-api/internal/discovery/adapters/x"
+expect_log "test -shuffle=on -count=1 ./internal/discovery/adapters/x"
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
     exit 1

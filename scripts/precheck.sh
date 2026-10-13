@@ -15,7 +15,7 @@ PATH="$PATH:$(go env GOPATH 2>/dev/null)/bin"
 untracked() { [ $lint_only = 1 ] || git ls-files --others --exclude-standard; }
 changed=$( { git diff --name-only --diff-filter=ACMR "$base"; untracked; } | sort -u)
 deleted=$(git diff --name-only --no-renames --diff-filter=D "$base")
-touches() { grep -qE "$1" <<<"$changed"; }
+touches() { grep -qE "$1" <<<"$changed"$'\n'"$deleted"; }
 
 import_line='^[+-][[:space:]]*(import[[:space:](]|([A-Za-z_.][A-Za-z0-9_]*[[:space:]]+)?"[^"]+"[[:space:]]*$|export[[:space:]].*[[:space:]]from[[:space:]]|\}[[:space:]]*from[[:space:]]+[^[:space:]]|from[[:space:]]+[^[:space:]])|require\(|import\('
 changes_imports() {
@@ -98,7 +98,7 @@ go_pin() {
 
 go_pkgs() {
   local m=$1 d
-  grep -E "^$m/.*\.go$" <<<"$changed" | xargs -r -n1 dirname | sort -u \
+  printf '%s\n%s\n' "$changed" "$deleted" | grep -E "^$m/.*\.go$" | xargs -r -n1 dirname | sort -u \
     | sed "s#^$m#.#" | while read -r d; do
       [ -d "$m/$d" ] || continue
       (cd "$m" && go list "$d") >/dev/null 2>&1 && echo "$d"
