@@ -10,7 +10,7 @@ jobs:
       run:
         working-directory: services/go-api
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: actions/setup-go@v7
@@ -73,7 +73,7 @@ jobs:
       run:
         working-directory: services/go-api
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: shellcheck deploy scripts
         run: bash "$GITHUB_WORKSPACE/.github/workflows/test-backend-shellcheck.sh"
       - name: deploy smoke self-test
@@ -129,7 +129,7 @@ jobs:
     env:
       DATABASE_URL: postgres://altune:altune_dev@localhost:5432/altune?sslmode=disable
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version-file: services/go-api/go.mod
