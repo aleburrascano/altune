@@ -246,3 +246,18 @@ func TestUpdateTrackStep_RollbackOnPendingTrackIsANoOp(t *testing.T) {
 		t.Error("rollback refreshed the in-flight marker of a track that was never marked ready")
 	}
 }
+
+func TestUpdateTrackStep_Execute_PersistsTheISRCAcquisitionResolved(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track := seedTrackInRepo(t, repo, userId, nil)
+	ac := &AcquisitionContext{AudioRef: "a.mp3", Track: TrackRef{ISRC: "GBAYE0601498"}}
+
+	if _, err := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID).Execute(context.Background(), ac, afterStore{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if got := storedTrack(t, repo, track).ISRC; got == nil || *got != "GBAYE0601498" {
+		t.Errorf("ISRC = %v, want GBAYE0601498", got)
+	}
+}

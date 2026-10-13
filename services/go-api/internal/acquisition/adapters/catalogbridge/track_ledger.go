@@ -20,14 +20,25 @@ type TrackStore interface {
 	AudioRefInUse(ctx context.Context, audioRef string, excludeTrackID domain.TrackId) (bool, error)
 }
 
+const DefaultLengthToleranceSeconds = 10.0
+
 type TrackLedger struct {
-	store TrackStore
+	store           TrackStore
+	lengthTolerance float64
 }
 
 var _ ports.TrackLedger = (*TrackLedger)(nil)
 
-func NewTrackLedger(store TrackStore) *TrackLedger {
-	return &TrackLedger{store: store}
+func WithLengthTolerance(seconds float64) func(*TrackLedger) {
+	return func(l *TrackLedger) { l.lengthTolerance = seconds }
+}
+
+func NewTrackLedger(store TrackStore, opts ...func(*TrackLedger)) *TrackLedger {
+	l := &TrackLedger{store: store, lengthTolerance: DefaultLengthToleranceSeconds}
+	for _, opt := range opts {
+		opt(l)
+	}
+	return l
 }
 
 type illegalTransitionError struct {
@@ -97,16 +108,30 @@ func mapStatus(s domain.AcquisitionStatus) ports.TrackStatus {
 
 func (l *TrackLedger) Complete(ctx context.Context, id shared.TrackId, userId shared.UserId, c ports.Completion) error {
 	return l.loadAndUpdate(ctx, id, userId, func(track *domain.Track) error {
-		return complete(ctx, track, c)
+		return complete(ctx, track, c, l.lengthTolerance)
 	})
 }
 
-func complete(ctx context.Context, track *domain.Track, c ports.Completion) error {
+func complete(ctx context.Context, track *domain.Track, c ports.Completion, lengthTolerance float64) error {
 	if err := settleAudio(track, c); err != nil {
 		return err
 	}
 	recordMetadata(ctx, track, c)
+	track.AdoptISRC(c.ISRC)
+	recordLengthCheck(ctx, track, c.Duration, lengthTolerance)
 	return nil
+}
+
+func recordLengthCheck(ctx context.Context, track *domain.Track, measuredSeconds, toleranceSeconds float64) {
+	if measuredSeconds <= 0 {
+		return
+	}
+	track.RecordAudioLength(measuredSeconds, toleranceSeconds)
+	if track.AudioLengthMismatch {
+		slog.WarnContext(ctx, "acquisition.audio_length_mismatch",
+			"track_id", track.ID.String(), "catalog_seconds", *track.CatalogDurationSeconds,
+			"audio_seconds", measuredSeconds, "tolerance_seconds", toleranceSeconds)
+	}
 }
 
 func settleAudio(track *domain.Track, c ports.Completion) error {

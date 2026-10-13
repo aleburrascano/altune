@@ -173,7 +173,7 @@ func (a *App) buildAcquisitionScheduler(
 		acqService.WithAcquireConfidenceFloor(a.cfg.AcquisitionConfidenceFloor),
 		acqService.WithAcquireTempWorkspace(tempfs.New()))
 	acquireSvc := acqService.NewAcquireTrackAudioService(
-		acqCatalogBridge.NewTrackLedger(trackRepo),
+		acqCatalogBridge.NewTrackLedger(trackRepo, acqCatalogBridge.WithLengthTolerance(a.cfg.AcquisitionLengthToleranceSeconds)),
 		acqService.NewSourceRegistry(audioSources...),
 		audioStore,
 		acquireOpts...,

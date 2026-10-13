@@ -1098,3 +1098,48 @@ func TestPgxTrackRepo_AudioRefsUnderPrefix_DropsRefsThatChangeAway(t *testing.T)
 		t.Errorf("%q still listed after audio_ref moved out of staging/", staged)
 	}
 }
+
+func TestPgxTrackRepo_UpdateKeepsISRCCatalogLengthAndLengthFlag(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+	track := newTestTrackForDB(t, userId)
+	if err := track.SetCatalogDuration(235); err != nil {
+		t.Fatal(err)
+	}
+	stored, _, err := repo.Add(ctx, track)
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	cleanupTrack(t, pool, stored.ID, userId)
+
+	if err := stored.MarkReady("ref"); err != nil {
+		t.Fatal(err)
+	}
+	if err := stored.SetDuration(137); err != nil {
+		t.Fatal(err)
+	}
+	stored.AdoptISRC("GBAYE0601498")
+	stored.RecordAudioLength(137, 10)
+	if err := repo.Update(ctx, stored, stored.Version); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	got, err := repo.GetByID(ctx, stored.ID, userId)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got.CatalogDurationSeconds == nil || *got.CatalogDurationSeconds != 235 {
+		t.Errorf("catalog length = %v, want 235", got.CatalogDurationSeconds)
+	}
+	if got.DurationSeconds == nil || *got.DurationSeconds != 137 {
+		t.Errorf("file length = %v, want 137", got.DurationSeconds)
+	}
+	if got.ISRC == nil || *got.ISRC != "GBAYE0601498" {
+		t.Errorf("ISRC = %v, want GBAYE0601498", got.ISRC)
+	}
+	if !got.AudioLengthMismatch {
+		t.Error("AudioLengthMismatch = false, want true")
+	}
+}

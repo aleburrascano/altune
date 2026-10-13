@@ -104,7 +104,7 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 		return nil, err
 	}
 	if input.DurationSeconds != nil {
-		if err := track.SetDuration(*input.DurationSeconds); err != nil {
+		if err := track.SetCatalogDuration(*input.DurationSeconds); err != nil {
 			return nil, err
 		}
 	}

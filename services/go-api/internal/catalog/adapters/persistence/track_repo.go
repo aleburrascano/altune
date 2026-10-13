@@ -19,7 +19,7 @@ import (
 
 const trackColumns = `id, user_id, title, artist, album, duration_seconds,
 	added_at, artwork_url, acquisition_status, dedup_key,
-	year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url, rejected_source_keys, audio_version, acquisition_started_at, acquisition_confidence, acquisition_evidence, version`
+	year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url, rejected_source_keys, audio_version, acquisition_started_at, acquisition_confidence, acquisition_evidence, catalog_duration_seconds, audio_length_mismatch, version`
 
 var trackColumnsPrefixed = prefixColumns(trackColumns, "t.")
 
@@ -58,8 +58,8 @@ func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*dom
 			added_at, artwork_url, acquisition_status, dedup_key,
 			year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url,
 			rejected_source_keys, audio_version, acquisition_started_at, idempotency_key,
-			acquisition_confidence, acquisition_evidence, acquisition_available_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,
+			acquisition_confidence, acquisition_evidence, catalog_duration_seconds, acquisition_available_at
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,
 			CASE WHEN $9::text = 'pending' THEN now() END)
 		ON CONFLICT DO NOTHING
 		RETURNING id`,
@@ -69,7 +69,7 @@ func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*dom
 		track.Year, track.Genre, track.TrackNumber, track.AlbumArtist,
 		track.ISRC, track.AudioRef, track.FailureReason, track.AcquisitionProvenance, track.AudioSourceURL,
 		track.RejectedSourceKeys, track.AudioVersion, track.AcquisitionStartedAt, track.IdempotencyKey,
-		track.ConfidenceScore, track.EvidenceJSON,
+		track.ConfidenceScore, track.EvidenceJSON, track.CatalogDurationSeconds,
 	).Scan(&returnedID)
 
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -202,14 +202,16 @@ func (r *PgxTrackRepository) Update(ctx context.Context, track *domain.Track, ex
 			failure_reason=$6, acquisition_provenance=$7, audio_source_url=$8,
 			rejected_source_keys=$9, audio_version=$10, acquisition_started_at=$11,
 			acquisition_confidence=$12, acquisition_evidence=$13,
+			isrc=$14, audio_length_mismatch=$15,
 			version = version + 1
-		WHERE id = $1 AND user_id = $2 AND version = $14
+		WHERE id = $1 AND user_id = $2 AND version = $16
 		RETURNING version`,
 		track.ID.UUID(), track.UserId.UUID(),
 		track.DurationSeconds, track.AcquisitionStatus.String(), track.AudioRef,
 		track.FailureReason, track.AcquisitionProvenance, track.AudioSourceURL,
 		track.RejectedSourceKeys, track.AudioVersion, track.AcquisitionStartedAt,
 		track.ConfidenceScore, track.EvidenceJSON,
+		track.ISRC, track.AudioLengthMismatch,
 		expectedVersion,
 	).Scan(&newVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -495,37 +497,39 @@ type scanner interface {
 
 func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 	var (
-		id            uuid.UUID
-		userId        uuid.UUID
-		title, artist string
-		album         *string
-		durSecs       *float64
-		addedAt       time.Time
-		artworkURL    *string
-		acqStatus     string
-		dedupKey      string
-		year          *int
-		genre         *string
-		trackNumber   *int
-		albumArtist   *string
-		isrc          *string
-		audioRef      *string
-		failureReason *string
-		provenance    *string
-		sourceURL     *string
-		rejectedKeys  []string
-		audioVersion  *string
-		startedAt     *time.Time
-		confidence    *float64
-		evidence      json.RawMessage
-		version       int
+		id             uuid.UUID
+		userId         uuid.UUID
+		title, artist  string
+		album          *string
+		durSecs        *float64
+		addedAt        time.Time
+		artworkURL     *string
+		acqStatus      string
+		dedupKey       string
+		year           *int
+		genre          *string
+		trackNumber    *int
+		albumArtist    *string
+		isrc           *string
+		audioRef       *string
+		failureReason  *string
+		provenance     *string
+		sourceURL      *string
+		rejectedKeys   []string
+		audioVersion   *string
+		startedAt      *time.Time
+		confidence     *float64
+		evidence       json.RawMessage
+		catalogDurSecs *float64
+		lengthMismatch bool
+		version        int
 	)
 
 	dest = []any{
 		&id, &userId, &title, &artist, &album, &durSecs,
 		&addedAt, &artworkURL, &acqStatus, &dedupKey,
 		&year, &genre, &trackNumber, &albumArtist, &isrc, &audioRef, &failureReason, &provenance, &sourceURL,
-		&rejectedKeys, &audioVersion, &startedAt, &confidence, &evidence, &version,
+		&rejectedKeys, &audioVersion, &startedAt, &confidence, &evidence, &catalogDurSecs, &lengthMismatch, &version,
 	}
 
 	build = func() (*domain.Track, error) {
@@ -545,31 +549,33 @@ func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 		}
 
 		return &domain.Track{
-			ID:                    domain.TrackIdFromUUID(id),
-			UserId:                shared.NewUserId(userId),
-			Title:                 title,
-			Artist:                artist,
-			Album:                 albumVal,
-			DurationSeconds:       durSecs,
-			AddedAt:               addedAt,
-			ArtworkURL:            artworkURL,
-			AcquisitionStatus:     status,
-			DedupKey:              dedupKey,
-			Year:                  year,
-			Genre:                 genre,
-			TrackNumber:           trackNumber,
-			AlbumArtist:           albumArtist,
-			ISRC:                  isrc,
-			AudioRef:              audioRef,
-			AudioVersion:          versionVal,
-			FailureReason:         failureReason,
-			AcquisitionProvenance: provenance,
-			AudioSourceURL:        sourceURL,
-			RejectedSourceKeys:    rejectedKeys,
-			AcquisitionStartedAt:  startedAt,
-			ConfidenceScore:       confidence,
-			EvidenceJSON:          evidence,
-			Version:               version,
+			ID:                     domain.TrackIdFromUUID(id),
+			UserId:                 shared.NewUserId(userId),
+			Title:                  title,
+			Artist:                 artist,
+			Album:                  albumVal,
+			DurationSeconds:        durSecs,
+			AddedAt:                addedAt,
+			ArtworkURL:             artworkURL,
+			AcquisitionStatus:      status,
+			DedupKey:               dedupKey,
+			Year:                   year,
+			Genre:                  genre,
+			TrackNumber:            trackNumber,
+			AlbumArtist:            albumArtist,
+			ISRC:                   isrc,
+			AudioRef:               audioRef,
+			AudioVersion:           versionVal,
+			FailureReason:          failureReason,
+			AcquisitionProvenance:  provenance,
+			AudioSourceURL:         sourceURL,
+			RejectedSourceKeys:     rejectedKeys,
+			AcquisitionStartedAt:   startedAt,
+			ConfidenceScore:        confidence,
+			EvidenceJSON:           evidence,
+			CatalogDurationSeconds: catalogDurSecs,
+			AudioLengthMismatch:    lengthMismatch,
+			Version:                version,
 		}, nil
 	}
 	return dest, build

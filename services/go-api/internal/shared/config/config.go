@@ -88,17 +88,18 @@ type Config struct {
 
 	OverseerPrincipalID string `env:"OVERSEER_PRINCIPAL_ID"`
 
-	EvalMeterEnabled           bool    `env:"EVAL_METER_ENABLED" envDefault:"false"`
-	TailDemotionEnabled        bool    `env:"TAIL_DEMOTION_ENABLED" envDefault:"false"`
-	CrossKindProminenceEnabled bool    `env:"CROSS_KIND_PROMINENCE_ENABLED" envDefault:"true"`
-	BehavioralRankingEnabled   bool    `env:"BEHAVIORAL_RANKING_ENABLED" envDefault:"false"`
-	BehavioralCorpusPath       string  `env:"BEHAVIORAL_CORPUS_PATH"`
-	ExplorationEnabled         bool    `env:"EXPLORATION_ENABLED" envDefault:"false"`
-	ExplorationRate            float64 `env:"EXPLORATION_RATE" envDefault:"0.03"`
-	AcquisitionConfidenceFloor float64 `env:"ACQUISITION_CONFIDENCE_FLOOR" envDefault:"0.5"`
-	AlertZeroResultThreshold   int     `env:"ALERT_ZERO_RESULT_THRESHOLD" envDefault:"0"`
-	AlertWebhookURL            string  `env:"ALERT_WEBHOOK_URL"`
-	IdentityVerifyOnPersist    bool    `env:"IDENTITY_VERIFY_ON_PERSIST" envDefault:"false"`
+	EvalMeterEnabled                  bool    `env:"EVAL_METER_ENABLED" envDefault:"false"`
+	TailDemotionEnabled               bool    `env:"TAIL_DEMOTION_ENABLED" envDefault:"false"`
+	CrossKindProminenceEnabled        bool    `env:"CROSS_KIND_PROMINENCE_ENABLED" envDefault:"true"`
+	BehavioralRankingEnabled          bool    `env:"BEHAVIORAL_RANKING_ENABLED" envDefault:"false"`
+	BehavioralCorpusPath              string  `env:"BEHAVIORAL_CORPUS_PATH"`
+	ExplorationEnabled                bool    `env:"EXPLORATION_ENABLED" envDefault:"false"`
+	ExplorationRate                   float64 `env:"EXPLORATION_RATE" envDefault:"0.03"`
+	AcquisitionConfidenceFloor        float64 `env:"ACQUISITION_CONFIDENCE_FLOOR" envDefault:"0.5"`
+	AcquisitionLengthToleranceSeconds float64 `env:"ACQUISITION_LENGTH_TOLERANCE_SECONDS" envDefault:"10"`
+	AlertZeroResultThreshold          int     `env:"ALERT_ZERO_RESULT_THRESHOLD" envDefault:"0"`
+	AlertWebhookURL                   string  `env:"ALERT_WEBHOOK_URL"`
+	IdentityVerifyOnPersist           bool    `env:"IDENTITY_VERIFY_ON_PERSIST" envDefault:"false"`
 
 	DiscoverySearchProviders     []string      `env:"DISCOVERY_SEARCH_PROVIDERS" envSeparator:"," envDefault:"deezer,applemusic,spotify,youtube,soundcloud"`
 	DiscoverySearchDeadline      time.Duration `env:"DISCOVERY_SEARCH_DEADLINE" envDefault:"1500ms"`

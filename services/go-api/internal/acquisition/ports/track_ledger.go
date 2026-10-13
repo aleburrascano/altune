@@ -44,6 +44,7 @@ type Completion struct {
 	AudioRef           string
 	ReplaceAudio       bool
 	Duration           float64
+	ISRC               string
 	Provenance         shared.AcquisitionProvenance
 	RejectedSourceKeys []string
 	SourceURL          string

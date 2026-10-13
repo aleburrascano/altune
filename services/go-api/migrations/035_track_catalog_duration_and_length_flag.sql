@@ -1,0 +1,2 @@
+ALTER TABLE tracks ADD COLUMN IF NOT EXISTS catalog_duration_seconds DOUBLE PRECISION;
+ALTER TABLE tracks ADD COLUMN IF NOT EXISTS audio_length_mismatch BOOLEAN NOT NULL DEFAULT false;

@@ -754,3 +754,22 @@ func TestApplyOptions_ANilClockKeepsTheWallClock(t *testing.T) {
 		}
 	}
 }
+
+func TestAddTrackService_Execute_KeepsTheClientDurationAsCatalogLength(t *testing.T) {
+	repo := catalogtest.NewTrackRepo()
+	duration := 235.0
+
+	out, err := NewAddTrackService(repo).Execute(context.Background(), catalogtest.UserId(), AddTrackInput{
+		Title: "Track", Artist: "Artist", Album: "Album", DurationSeconds: &duration,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if out.Track.CatalogDurationSeconds == nil || *out.Track.CatalogDurationSeconds != duration {
+		t.Errorf("CatalogDurationSeconds = %v, want %v", out.Track.CatalogDurationSeconds, duration)
+	}
+	if out.Track.DurationSeconds == nil || *out.Track.DurationSeconds != duration {
+		t.Errorf("DurationSeconds = %v, want %v", out.Track.DurationSeconds, duration)
+	}
+}

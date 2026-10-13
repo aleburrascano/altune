@@ -30,6 +30,7 @@ func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext, _
 		AudioRef:           ac.AudioRef,
 		ReplaceAudio:       ac.Replace.PreservedRef != "",
 		Duration:           ac.MeasuredDuration(),
+		ISRC:               ac.Track.ISRC,
 		Provenance:         ac.Provenance(),
 		RejectedSourceKeys: ac.Replace.ExcludeKeys,
 	}

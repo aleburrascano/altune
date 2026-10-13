@@ -87,6 +87,9 @@ type Track struct {
 	ConfidenceScore *float64
 	EvidenceJSON    json.RawMessage
 
+	CatalogDurationSeconds *float64
+	AudioLengthMismatch    bool
+
 	AcquisitionStartedAt *time.Time
 
 	Version int
@@ -302,6 +305,30 @@ func (t *Track) SetDuration(seconds float64) error {
 		t.DurationSeconds = &seconds
 	}
 	return nil
+}
+
+func (t *Track) SetCatalogDuration(seconds float64) error {
+	if err := ValidateDurationSeconds(seconds); err != nil {
+		return err
+	}
+	if seconds > 0 {
+		t.CatalogDurationSeconds = &seconds
+		t.DurationSeconds = &seconds
+	}
+	return nil
+}
+
+func (t *Track) RecordAudioLength(measuredSeconds, toleranceSeconds float64) {
+	t.AudioLengthMismatch = t.CatalogDurationSeconds != nil &&
+		measuredSeconds > 0 &&
+		math.Abs(measuredSeconds-*t.CatalogDurationSeconds) > toleranceSeconds
+}
+
+func (t *Track) AdoptISRC(isrc string) {
+	if isrc == "" || (t.ISRC != nil && *t.ISRC != "") {
+		return
+	}
+	t.ISRC = &isrc
 }
 
 func (t *Track) MarkFailed(reason string) error {

@@ -308,3 +308,126 @@ func TestRevertAtRevertsAtSnapshotVersion(t *testing.T) {
 		t.Fatalf("want pending, got %v", got.AcquisitionStatus)
 	}
 }
+
+func completeWithAudioLength(t *testing.T, catalogSeconds, audioSeconds float64, opts ...func(*TrackLedger)) *domain.Track {
+	t.Helper()
+	track, userId := newTrack(t, 1)
+	if err := track.SetCatalogDuration(catalogSeconds); err != nil {
+		t.Fatal(err)
+	}
+	store := newFakeStore(track)
+	err := NewTrackLedger(store, opts...).Complete(context.Background(), track.ID, userId, ports.Completion{AudioRef: "ref", Duration: audioSeconds})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return storedTrack(t, store, track.ID)
+}
+
+func TestCompleteKeepsTheCatalogLengthBesideTheFileLength(t *testing.T) {
+	got := completeWithAudioLength(t, 235, 137)
+
+	if got.CatalogDurationSeconds == nil || *got.CatalogDurationSeconds != 235 {
+		t.Errorf("catalog length = %v, want 235", got.CatalogDurationSeconds)
+	}
+	if got.DurationSeconds == nil || *got.DurationSeconds != 137 {
+		t.Errorf("file length = %v, want 137", got.DurationSeconds)
+	}
+}
+
+func TestCompleteFlagsAudioOffTheCatalogLengthBeyondTheTolerance(t *testing.T) {
+	tests := []struct {
+		name     string
+		catalog  float64
+		audio    float64
+		opts     []func(*TrackLedger)
+		wantFlag bool
+	}{
+		{name: "short by more than the default", catalog: 235, audio: 137, wantFlag: true},
+		{name: "long by more than the default", catalog: 125, audio: 172, wantFlag: true},
+		{name: "inside the default", catalog: 200, audio: 207, wantFlag: false},
+		{name: "exactly at the tolerance", catalog: 200, audio: 210, wantFlag: false},
+		{name: "configured tolerance widens", catalog: 200, audio: 230, opts: []func(*TrackLedger){WithLengthTolerance(45)}, wantFlag: false},
+		{name: "configured tolerance narrows", catalog: 200, audio: 204, opts: []func(*TrackLedger){WithLengthTolerance(2)}, wantFlag: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := completeWithAudioLength(t, tt.catalog, tt.audio, tt.opts...)
+
+			if got.AudioLengthMismatch != tt.wantFlag {
+				t.Errorf("AudioLengthMismatch = %v, want %v", got.AudioLengthMismatch, tt.wantFlag)
+			}
+		})
+	}
+}
+
+func TestCompleteDoesNotFlagATrackWithoutACatalogLength(t *testing.T) {
+	track, userId := newTrack(t, 1)
+	store := newFakeStore(track)
+
+	err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, ports.Completion{AudioRef: "ref", Duration: 137})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if storedTrack(t, store, track.ID).AudioLengthMismatch {
+		t.Error("a track with no catalog length must not be flagged")
+	}
+}
+
+func TestCompleteClearsTheFlagWhenReplacementAudioMatches(t *testing.T) {
+	track, userId := newTrack(t, 1)
+	if err := track.SetCatalogDuration(235); err != nil {
+		t.Fatal(err)
+	}
+	if err := track.MarkReady("old"); err != nil {
+		t.Fatal(err)
+	}
+	track.AudioLengthMismatch = true
+	store := newFakeStore(track)
+
+	err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, ports.Completion{AudioRef: "new", ReplaceAudio: true, Duration: 236})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if storedTrack(t, store, track.ID).AudioLengthMismatch {
+		t.Error("flag must clear once the replacement audio is in tolerance")
+	}
+}
+
+func TestCompletePersistsTheResolvedISRCOnlyWhenTheTrackHasNone(t *testing.T) {
+	existing := "USUM71100001"
+	tests := []struct {
+		name string
+		have *string
+		got  string
+		want string
+	}{
+		{name: "adopts the resolved isrc", have: nil, got: "GBAYE0601498", want: "GBAYE0601498"},
+		{name: "keeps the isrc the track has", have: &existing, got: "GBAYE0601498", want: existing},
+		{name: "ignores an empty resolution", have: nil, got: "", want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			track, userId := newTrack(t, 1)
+			track.ISRC = tt.have
+			store := newFakeStore(track)
+
+			err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, ports.Completion{AudioRef: "ref", ISRC: tt.got})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			stored := storedTrack(t, store, track.ID).ISRC
+			if tt.want == "" {
+				if stored != nil {
+					t.Errorf("ISRC = %q, want none", *stored)
+				}
+				return
+			}
+			if stored == nil || *stored != tt.want {
+				t.Errorf("ISRC = %v, want %q", stored, tt.want)
+			}
+		})
+	}
+}
