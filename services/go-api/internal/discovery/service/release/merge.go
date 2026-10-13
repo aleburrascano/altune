@@ -54,15 +54,15 @@ func MergeReleases(groups []ReleaseGroup) []MergedRelease {
 }
 
 func bestOfRelease(a, b domain.SearchResult) domain.SearchResult {
-	a.Subtitle = firstNonEmpty(a.Subtitle, b.Subtitle)
+	a.Subtitle = FirstNonEmpty(a.Subtitle, b.Subtitle)
 	a.ReleaseDate = bestReleaseDate(a.ReleaseDate, b.ReleaseDate)
-	a.Year = firstNonZero(a.Year, b.Year)
+	a.Year = FirstNonZero(a.Year, b.Year)
 	a.TrackCount = maxInt(a.TrackCount, b.TrackCount)
-	a.Duration = firstNonZero(a.Duration, b.Duration)
-	a.Album = firstNonEmpty(a.Album, b.Album)
-	a.ISRC = firstNonEmpty(a.ISRC, b.ISRC)
-	a.UPC = firstNonEmpty(a.UPC, b.UPC)
-	a.MBID = firstNonEmpty(a.MBID, b.MBID)
+	a.Duration = FirstNonZero(a.Duration, b.Duration)
+	a.Album = FirstNonEmpty(a.Album, b.Album)
+	a.ISRC = FirstNonEmpty(a.ISRC, b.ISRC)
+	a.UPC = FirstNonEmpty(a.UPC, b.UPC)
+	a.MBID = FirstNonEmpty(a.MBID, b.MBID)
 	a.ImageURL, a.ArtworkSource = bestArtwork(a, b)
 	a.Sources = UnionSources(a.Sources, b.Sources)
 	a.RecordType = mergeReleaseRecordType(a.RecordType, b.RecordType)
@@ -142,14 +142,14 @@ func SourceKey(provider domain.ProviderName, id string) string {
 	return provider.String() + ":" + id
 }
 
-func firstNonEmpty[T ~string](a, b T) T {
+func FirstNonEmpty[T ~string](a, b T) T {
 	if a != "" {
 		return a
 	}
 	return b
 }
 
-func firstNonZero[T int | int64](a, b T) T {
+func FirstNonZero[T int | int64](a, b T) T {
 	if a != 0 {
 		return a
 	}

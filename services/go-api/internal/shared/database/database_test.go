@@ -13,9 +13,35 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.yaml.in/yaml/v3"
 )
+
+func TestWrapUnreadable_MarksMissingOrDeniedStoreWithSentinel(t *testing.T) {
+	sentinel := errors.New("identity store unavailable")
+	cases := map[string]struct {
+		err      error
+		wantFlag bool
+	}{
+		"relation missing":      {&pgconn.PgError{Code: "42P01"}, true},
+		"privilege denied":      {&pgconn.PgError{Code: "42501"}, true},
+		"other sql state":       {&pgconn.PgError{Code: "23505"}, false},
+		"non postgres failure":  {errors.New("boom"), false},
+		"wrapped relation miss": {fmt.Errorf("x: %w", &pgconn.PgError{Code: "42P01"}), true},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			got := WrapUnreadable("op", sentinel, tc.err)
+			if errors.Is(got, sentinel) != tc.wantFlag || IsUnreadable(tc.err) != tc.wantFlag {
+				t.Fatalf("sentinel flag = %v, want %v (%v)", errors.Is(got, sentinel), tc.wantFlag, got)
+			}
+			if !errors.Is(got, tc.err) {
+				t.Fatalf("cause lost: %v", got)
+			}
+		})
+	}
+}
 
 func TestNewPool_UnresponsiveHostFailsFastWithNamedError(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")

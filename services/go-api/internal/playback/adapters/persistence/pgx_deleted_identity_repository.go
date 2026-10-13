@@ -3,14 +3,13 @@ package persistence
 import (
 	"altune/go-api/internal/playback/ports"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/database"
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -48,6 +47,8 @@ func (r *PgxDeletedIdentityRepository) opTimeout() time.Duration {
 	return DefaultOwnerScanPageTimeout
 }
 
+const listOwnersWithoutIdentityOp = "list owners without identity"
+
 const ownersWithoutIdentitySQL = `
 	WITH page AS (
 	  SELECT q.user_id
@@ -69,7 +70,7 @@ func (r *PgxDeletedIdentityRepository) ListOwnersWithoutIdentity(ctx context.Con
 
 	rows, err := r.pool.Query(ctx, ownersWithoutIdentitySQL, after.UUID(), window)
 	if err != nil {
-		return ports.OwnerScanPage{}, identityStoreErr(err)
+		return ports.OwnerScanPage{}, database.WrapUnreadable(listOwnersWithoutIdentityOp, ports.ErrIdentityStoreUnavailable, err)
 	}
 	defer rows.Close()
 	return scanOwnerPage(rows, after, window)
@@ -91,25 +92,8 @@ func scanOwnerPage(rows pgx.Rows, after shared.UserId, window int) (ports.OwnerS
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return ports.OwnerScanPage{}, identityStoreErr(err)
+		return ports.OwnerScanPage{}, database.WrapUnreadable(listOwnersWithoutIdentityOp, ports.ErrIdentityStoreUnavailable, err)
 	}
 	page.Done = scanned < window
 	return page, nil
-}
-
-func identityStoreErr(err error) error {
-	const op = "list owners without identity"
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && isIdentityStoreUnreadable(pgErr.Code) {
-		return fmt.Errorf("%s: %w: %w", op, ports.ErrIdentityStoreUnavailable, err)
-	}
-	return fmt.Errorf("%s: %w", op, err)
-}
-
-func isIdentityStoreUnreadable(sqlState string) bool {
-	switch sqlState {
-	case undefinedTableCode, insufficientPrivCode:
-		return true
-	}
-	return false
 }

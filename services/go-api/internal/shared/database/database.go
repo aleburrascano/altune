@@ -7,6 +7,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -93,4 +94,24 @@ type HealthStatus struct {
 func CheckHealth(ctx context.Context, pool *pgxpool.Pool) HealthStatus {
 	err := pool.Ping(ctx)
 	return HealthStatus{OK: err == nil, Err: err}
+}
+
+const (
+	undefinedTableCode   = "42P01"
+	insufficientPrivCode = "42501"
+)
+
+func WrapUnreadable(op string, sentinel, err error) error {
+	if IsUnreadable(err) {
+		return fmt.Errorf("%s: %w: %w", op, sentinel, err)
+	}
+	return fmt.Errorf("%s: %w", op, err)
+}
+
+func IsUnreadable(err error) bool {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return false
+	}
+	return pgErr.Code == undefinedTableCode || pgErr.Code == insufficientPrivCode
 }

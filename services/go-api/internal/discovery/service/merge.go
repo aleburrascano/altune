@@ -269,20 +269,20 @@ func carryIdentity(merged *domain.SearchResult, canonical, other domain.SearchRe
 }
 
 func carryFields(merged *domain.SearchResult, canonical, other domain.SearchResult) {
-	merged.RecordType = firstNonEmpty(canonical.RecordType, other.RecordType)
-	merged.UPC = firstNonEmpty(canonical.UPC, other.UPC)
+	merged.RecordType = release.FirstNonEmpty(canonical.RecordType, other.RecordType)
+	merged.UPC = release.FirstNonEmpty(canonical.UPC, other.UPC)
 	merged.Xref = canonical.Xref
 	if len(merged.Xref) == 0 {
 		merged.Xref = other.Xref
 	}
-	merged.Year = firstNonZero(canonical.Year, other.Year)
-	merged.ReleaseDate = firstNonEmpty(canonical.ReleaseDate, other.ReleaseDate)
-	merged.TrackCount = firstNonZero(canonical.TrackCount, other.TrackCount)
+	merged.Year = release.FirstNonZero(canonical.Year, other.Year)
+	merged.ReleaseDate = release.FirstNonEmpty(canonical.ReleaseDate, other.ReleaseDate)
+	merged.TrackCount = release.FirstNonZero(canonical.TrackCount, other.TrackCount)
 	merged.ProviderRank = max(canonical.ProviderRank, other.ProviderRank)
 	merged.FanCount = max(canonical.FanCount, other.FanCount)
-	merged.Album = firstNonEmpty(canonical.Album, other.Album)
-	merged.Duration = firstNonZero(canonical.Duration, other.Duration)
-	merged.DeezerAlbumID = firstNonEmpty(canonical.DeezerAlbumID, other.DeezerAlbumID)
+	merged.Album = release.FirstNonEmpty(canonical.Album, other.Album)
+	merged.Duration = release.FirstNonZero(canonical.Duration, other.Duration)
+	merged.DeezerAlbumID = release.FirstNonEmpty(canonical.DeezerAlbumID, other.DeezerAlbumID)
 }
 
 func mergeExtras(canonical, other domain.SearchResult) map[string]any {
@@ -317,20 +317,6 @@ func confidenceFor(tier domain.EntityResolutionTier, sourceCount int) domain.Con
 	return domain.ConfidenceLow
 }
 
-func firstNonEmpty[T ~string](a, b T) T {
-	if a != "" {
-		return a
-	}
-	return b
-}
-
-func firstNonZero[T int | int64](a, b T) T {
-	if a != 0 {
-		return a
-	}
-	return b
-}
-
 func provenIdentity(a, b domain.SearchResult) (isrc, mbid string, ok bool) {
 	aProven := a.ResolutionTier.Stamped && a.ResolutionTier.Tier != domain.EntityResolutionNone
 	bProven := b.ResolutionTier.Stamped && b.ResolutionTier.Tier != domain.EntityResolutionNone
@@ -348,7 +334,7 @@ func identityCarriedField(canonicalVal, otherVal string, identityAgrees bool) st
 	if !identityAgrees {
 		return canonicalVal
 	}
-	return firstNonEmpty(canonicalVal, otherVal)
+	return release.FirstNonEmpty(canonicalVal, otherVal)
 }
 
 func sameVersionIdentity(a, b domain.SearchResult) bool {

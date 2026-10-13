@@ -4,14 +4,13 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/database"
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -24,33 +23,12 @@ var (
 
 const historyResendWindow = time.Minute
 
-const (
-	undefinedTableCode   = "42P01"
-	insufficientPrivCode = "42501"
-)
-
 func eraseRowsOfDeletedIdentities(ctx context.Context, pool *pgxpool.Pool, op, deleteSQL string) (int64, error) {
 	tag, err := pool.Exec(ctx, deleteSQL, shared.SystemUserId().UUID())
 	if err != nil {
-		return 0, identityStoreErr(op, err)
+		return 0, database.WrapUnreadable(op, ports.ErrIdentityStoreUnavailable, err)
 	}
 	return tag.RowsAffected(), nil
-}
-
-func identityStoreErr(op string, err error) error {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && isIdentityStoreUnreadable(pgErr.Code) {
-		return fmt.Errorf("%s: %w: %w", op, ports.ErrIdentityStoreUnavailable, err)
-	}
-	return fmt.Errorf("%s: %w", op, err)
-}
-
-func isIdentityStoreUnreadable(sqlState string) bool {
-	switch sqlState {
-	case undefinedTableCode, insufficientPrivCode:
-		return true
-	}
-	return false
 }
 
 type PgxSearchHistoryRepository struct {
