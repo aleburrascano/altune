@@ -1,8 +1,10 @@
-import { downloadStats, downloadUsage } from '@features/settings/domain/downloadStatsModel';
+import { downloadStats } from '@features/settings/domain/downloadStatsModel';
 import {
   buildDangerZoneActions,
   type ClearHistoryState,
 } from '@features/settings/domain/dangerZoneActions';
+
+const LEFTOVER_BYTES = 2048;
 
 type PinnedEntry = Parameters<typeof downloadStats>[0][string];
 
@@ -17,6 +19,13 @@ const clearHistory: ClearHistoryState = {
   error: undefined,
 };
 
+function usageOf(count: number, bytes: number) {
+  const ready = Object.fromEntries(
+    Array.from({ length: count }, (_, i) => [`t${i}`, { trackId: `t${i}`, status: 'ready' }]),
+  ) as Parameters<typeof downloadStats>[0];
+  return downloadStats(ready, bytes).usage;
+}
+
 function removeDownloadsRow(count: number, bytes: number, size: string) {
   const [downloads] = buildDangerZoneActions({
     downloads: {
@@ -24,7 +33,7 @@ function removeDownloadsRow(count: number, bytes: number, size: string) {
         downloadCount: count,
         downloadBytes: bytes,
         downloadSize: size,
-        usage: downloadUsage(count, bytes),
+        usage: usageOf(count, bytes),
         usageLabel: '',
         usageDetail: undefined,
       },
@@ -39,15 +48,15 @@ function removeDownloadsRow(count: number, bytes: number, size: string) {
 
 describe('downloadUsage', () => {
   it('is none with no ready track and no bytes on disk', () => {
-    expect(downloadUsage(0, 0)).toBe('none');
+    expect(usageOf(0, 0)).toBe('none');
   });
 
   it('is leftover with no ready track but bytes on disk', () => {
-    expect(downloadUsage(0, 2048)).toBe('leftover');
+    expect(usageOf(0, LEFTOVER_BYTES)).toBe('leftover');
   });
 
   it('is tracks once at least one track is ready', () => {
-    expect(downloadUsage(1, 2048)).toBe('tracks');
+    expect(usageOf(1, LEFTOVER_BYTES)).toBe('tracks');
   });
 });
 
@@ -115,7 +124,7 @@ describe('download usage at the count and byte boundaries', () => {
     ({ count, bytes, usage, label, hidden }) => {
       const stats = downloadStats(readyEntries(count), bytes);
 
-      expect(downloadUsage(count, bytes)).toBe(usage);
+      expect(usageOf(count, bytes)).toBe(usage);
       expect(stats.usage).toBe(usage);
       expect(stats.usageLabel).toBe(label);
       expect(stats.usageDetail).toBe(usage === 'none' ? undefined : stats.downloadSize);
@@ -181,6 +190,6 @@ describe('download usage at the count and byte boundaries', () => {
   });
 
   it('a very large leftover total with no ready track stays leftover', () => {
-    expect(downloadUsage(0, Number.MAX_SAFE_INTEGER)).toBe('leftover');
+    expect(usageOf(0, Number.MAX_SAFE_INTEGER)).toBe('leftover');
   });
 });

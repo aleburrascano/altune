@@ -83,7 +83,6 @@
     "src/features/playback/native/recoveryBudget.ts:RECOVERY_COOLDOWN_BASE_MS",
     "src/features/playback/native/recoveryBudget.ts:MAX_TRACKED_RECOVERIES",
     "src/features/playback/ui/QueueSheet.tsx:QueueRow",
-    "src/features/settings/domain/downloadStatsModel.ts:downloadUsage",
     "src/features/settings/hooks/useAccountEmail.ts:accountEmail",
     "src/shared/acquisition/state/acquisitionTelemetry.ts:_resetAcquisitionTelemetryForTest",
     "src/shared/acquisition/audioCacheInvalidation.ts:_resetAudioCacheInvalidatorsForTest",

@@ -12,7 +12,7 @@ import { asTrackId } from '@shared/apiClient/ids';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 
 import { useRemoveDownloads } from '@features/settings/hooks/useDownloads';
-import { downloadUsage } from '@features/settings/domain/downloadStatsModel';
+import { downloadStats } from '@features/settings/domain/downloadStatsModel';
 import type { ClearHistoryState } from '@features/settings/domain/dangerZoneActions';
 import { DangerZoneCard } from '@features/settings/ui/DangerZoneCard';
 
@@ -36,6 +36,13 @@ jest.mock('@supabase/supabase-js', () => {
   };
 });
 
+function usageOf(count: number, bytes: number) {
+  const ready = Object.fromEntries(
+    Array.from({ length: count }, (_, i) => [`t${i}`, { trackId: `t${i}`, status: 'ready' }]),
+  ) as Parameters<typeof downloadStats>[0];
+  return downloadStats(ready, bytes).usage;
+}
+
 function makeProps(
   over: {
     downloadCount?: number;
@@ -52,7 +59,7 @@ function makeProps(
         downloadCount,
         downloadBytes,
         downloadSize: '12 MB',
-        usage: downloadUsage(downloadCount, downloadBytes),
+        usage: usageOf(downloadCount, downloadBytes),
         usageLabel: '',
         usageDetail: undefined,
       },

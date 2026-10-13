@@ -7,7 +7,7 @@ import { usePinnedStore } from '@shared/offline/pinnedStore';
 
 import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 
-import { downloadUsage } from '@features/settings/domain/downloadStatsModel';
+import { downloadStats } from '@features/settings/domain/downloadStatsModel';
 import type { RemoveDownloads } from '@features/settings/hooks/useDownloads';
 import {
   buildDangerZoneActions,
@@ -17,8 +17,15 @@ import {
 
 type Opts = Parameters<typeof buildDangerZoneActions>[0];
 
+function usageOf(count: number, bytes: number) {
+  const ready = Object.fromEntries(
+    Array.from({ length: count }, (_, i) => [`t${i}`, { trackId: `t${i}`, status: 'ready' }]),
+  ) as Parameters<typeof downloadStats>[0];
+  return downloadStats(ready, bytes).usage;
+}
+
 function statsFor(count: number, bytes: number, size: string): RemoveDownloads['stats'] {
-  const usage = downloadUsage(count, bytes);
+  const usage = usageOf(count, bytes);
   return {
     downloadCount: count,
     downloadBytes: bytes,

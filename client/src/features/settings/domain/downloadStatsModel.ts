@@ -15,7 +15,7 @@ export type DownloadStats = {
 
 export const LEFTOVER_FILES_LABEL = 'Leftover download files';
 
-export function downloadUsage(count: number, bytes: number): DownloadUsage {
+function downloadUsage(count: number, bytes: number): DownloadUsage {
   if (count > 0) return 'tracks';
   return bytes > 0 ? 'leftover' : 'none';
 }
