@@ -902,7 +902,7 @@ describe('useDeleteTrack', () => {
       mockDeleteTrack.mockReturnValue(request.promise);
       const { result } = renderHook(() => useDeleteTrack(), { wrapper });
       act(() => result.current.mutate(asTrackId('a1')));
-      await waitFor(() => expect(mockDeleteTrack).toHaveBeenCalled());
+      await waitFor(() => expect(mockDeleteTrack).toHaveBeenCalledWith('a1'));
 
       signOutThenLoadUserB(queryClient, [track('b1')]);
       await act(async () => request.reject(new ApiError(500, 'internal')));

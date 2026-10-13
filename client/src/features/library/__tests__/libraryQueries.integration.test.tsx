@@ -41,10 +41,10 @@ describe.each([
       wrapper,
       initialProps: { q: 'da' },
     });
-    await waitFor(() => expect(requestFor('da')).toBeDefined());
+    await waitFor(() => expect(requestFor('da')?.signal.aborted).toBe(false));
 
     rerender({ q: 'daft' });
-    await waitFor(() => expect(requestFor('daft')).toBeDefined());
+    await waitFor(() => expect(requestFor('daft')?.signal.aborted).toBe(false));
 
     expect(requestFor('da')?.signal.aborted).toBe(true);
     expect(requestFor('daft')?.signal.aborted).toBe(false);

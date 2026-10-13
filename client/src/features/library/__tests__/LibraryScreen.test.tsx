@@ -108,7 +108,9 @@ describe('LibraryScreen states', () => {
     port = createMemoryLibraryPort({ tracks: [track('t1')] });
     render(<LibraryScreen />, { wrapper });
 
-    await waitFor(() => expect(client.getQueryData(libraryKeys.summary)).toBeDefined());
+    await waitFor(() =>
+      expect(client.getQueryData<{ total: number }>(libraryKeys.summary)?.total).toBe(1),
+    );
     expect(screen.queryByTestId('library-empty')).toBeNull();
     expect(screen.getByTestId('library-search-input')).toBeTruthy();
   });

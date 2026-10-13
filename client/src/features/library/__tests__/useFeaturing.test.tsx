@@ -72,19 +72,20 @@ describe('useTracksFeaturing', () => {
     const fa: FeaturedArtist = { name: 'Guest', mbid: null, deezer_id: parseDeezerIdParam('abc') };
     renderHook(() => useTracksFeaturing(fa), { wrapper });
 
-    await waitFor(() => expect(mockListTracksFeaturing).toHaveBeenCalled());
-    expect(mockListTracksFeaturing).toHaveBeenCalledWith({
-      name: 'Guest',
-      mbid: null,
-      deezer_id: null,
-    });
+    await waitFor(() =>
+      expect(mockListTracksFeaturing).toHaveBeenCalledWith({
+        name: 'Guest',
+        mbid: null,
+        deezer_id: null,
+      }),
+    );
   });
 
   it('drops a non-finite deezer_id instead of querying with it', async () => {
     const fa: FeaturedArtist = { name: 'Guest', mbid: null, deezer_id: Number.NaN };
     renderHook(() => useTracksFeaturing(fa), { wrapper });
 
-    await waitFor(() => expect(mockListTracksFeaturing).toHaveBeenCalled());
+    await waitFor(() => expect(mockListTracksFeaturing.mock.calls).toHaveLength(1));
     expect(mockListTracksFeaturing.mock.calls[0]?.[0].deezer_id).toBeNull();
   });
 
@@ -92,11 +93,12 @@ describe('useTracksFeaturing', () => {
     const fa: FeaturedArtist = { name: 'Guest', mbid: null, deezer_id: parseDeezerIdParam('42') };
     renderHook(() => useTracksFeaturing(fa), { wrapper });
 
-    await waitFor(() => expect(mockListTracksFeaturing).toHaveBeenCalled());
-    expect(mockListTracksFeaturing).toHaveBeenCalledWith({
-      name: 'Guest',
-      mbid: null,
-      deezer_id: 42,
-    });
+    await waitFor(() =>
+      expect(mockListTracksFeaturing).toHaveBeenCalledWith({
+        name: 'Guest',
+        mbid: null,
+        deezer_id: 42,
+      }),
+    );
   });
 });
