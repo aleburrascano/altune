@@ -71,7 +71,7 @@ func withDecoyYtDlp(t *testing.T) {
 func stubDownloaderAt(t *testing.T, outDir string) string {
 	t.Helper()
 	binary := filepath.Join(t.TempDir(), "custom-yt-dlp")
-	script := "#!/bin/sh\nhead -c 20480 /dev/zero > " + filepath.Join(outDir, "stub.mp3") + "\n"
+	script := "#!/bin/sh\nhead -c 20480 /dev/zero > " + filepath.Join(outDir, "stub.m4a") + "\n"
 	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestYtDlpAudioSearcher_Download_RunsTheConfiguredBinary(t *testing.T) {
 		t.Fatalf("Download error: %v", err)
 	}
 
-	if want := filepath.Join(outDir, "stub.mp3"); got.Path != want {
+	if want := filepath.Join(outDir, "stub.m4a"); got.Path != want {
 		t.Fatalf("Download = %q, want the file the configured binary produced (%q)", got.Path, want)
 	}
 }
@@ -99,7 +99,7 @@ func argvRecordingDownloaderAt(t *testing.T, outDir string) (binary, argvFile st
 	dir := t.TempDir()
 	binary, argvFile = filepath.Join(dir, "recording-yt-dlp"), filepath.Join(dir, "argv")
 	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"" + argvFile + "\"\n" +
-		"head -c 20480 /dev/zero > \"" + filepath.Join(outDir, "stub.mp3") + "\"\n"
+		"head -c 20480 /dev/zero > \"" + filepath.Join(outDir, "stub.m4a") + "\"\n"
 	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -383,7 +383,7 @@ func TestYtDlpAudioSearcher_Search_BothEnginesFail(t *testing.T) {
 func TestYtDlpAudioSearcher_Download_RejectsAnOversizeOutput(t *testing.T) {
 	outDir := t.TempDir()
 	binary := filepath.Join(t.TempDir(), "big-yt-dlp")
-	script := "#!/bin/sh\ntruncate -s 210M \"" + filepath.Join(outDir, "big.mp3") + "\"\n"
+	script := "#!/bin/sh\ntruncate -s 210M \"" + filepath.Join(outDir, "big.m4a") + "\"\n"
 	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -409,25 +409,25 @@ func downloadWithScript(t *testing.T, body string) (ports.FetchedAudio, error) {
 	return s.Download(context.Background(), "https://youtube.com/watch?v=1", outDir)
 }
 
-func TestYtDlpAudioSearcher_Download_RejectsWhenNoMP3IsProduced(t *testing.T) {
+func TestYtDlpAudioSearcher_Download_RejectsWhenNothingIsProduced(t *testing.T) {
 	_, err := downloadWithScript(t, "true")
-	if err == nil || !strings.Contains(err.Error(), "no mp3 file produced in ") {
-		t.Fatalf("Download error = %v, want a no-mp3 rejection", err)
+	if err == nil || !strings.Contains(err.Error(), "no m4a file produced in ") {
+		t.Fatalf("Download error = %v, want a no-m4a rejection", err)
 	}
 }
 
 func TestYtDlpAudioSearcher_Download_RejectsAnUndersizeOutput(t *testing.T) {
-	_, err := downloadWithScript(t, "truncate -s 100 OUT/tiny.mp3")
+	_, err := downloadWithScript(t, "truncate -s 100 OUT/tiny.m4a")
 	want := "downloaded file too small (100 bytes), likely corrupt"
 	if err == nil || err.Error() != want {
 		t.Fatalf("Download error = %v, want %q", err, want)
 	}
 }
 
-func TestYtDlpAudioSearcher_Download_ReturnsTheLargestMP3(t *testing.T) {
-	got, err := downloadWithScript(t, "truncate -s 20K OUT/small.mp3; truncate -s 40K OUT/large.mp3")
-	if err != nil || filepath.Base(got.Path) != "large.mp3" {
-		t.Fatalf("Download = %q, %v, want large.mp3", got.Path, err)
+func TestYtDlpAudioSearcher_Download_ReturnsTheLargestM4A(t *testing.T) {
+	got, err := downloadWithScript(t, "truncate -s 20K OUT/small.m4a; truncate -s 40K OUT/large.m4a")
+	if err != nil || filepath.Base(got.Path) != "large.m4a" {
+		t.Fatalf("Download = %q, %v, want large.m4a", got.Path, err)
 	}
 }
 
@@ -470,7 +470,7 @@ func formatArgRecorder(t *testing.T, outDir, stdout string) (binary, argsFile st
 	argsFile = filepath.Join(t.TempDir(), "args")
 	script := "#!/bin/sh\nfor a in \"$@\"; do echo \"$a\"; done > \"" + argsFile + "\"\n"
 	if outDir != "" {
-		script += "truncate -s 1M \"" + filepath.Join(outDir, "out.mp3") + "\"\n"
+		script += "truncate -s 1M \"" + filepath.Join(outDir, "out.m4a") + "\"\n"
 	}
 	if stdout != "" {
 		script += "echo '" + stdout + "'\n"
@@ -505,12 +505,12 @@ func TestDownload_FallsBackToACombinedFormatWhenNoAudioOnlyStreamExists(t *testi
 	}
 
 	got := formatFlag(t, argsFile)
-	alternatives := strings.Split(got, "/")
-	if alternatives[0] != "bestaudio" {
-		t.Errorf("-f %q, want audio-only streams preferred first", got)
+	audioOnly, combined, ok := strings.Cut(got, "/best[")
+	if !ok || !strings.HasSuffix(audioOnly, "/bestaudio") {
+		t.Errorf("-f %q, want audio-only streams preferred before any combined format", got)
 	}
-	if len(alternatives) < 2 || !strings.HasPrefix(alternatives[1], "best") || alternatives[1] == "bestaudio" {
-		t.Errorf("-f %q, want a combined-format fallback after bestaudio", got)
+	if !strings.HasSuffix(combined, "/best") {
+		t.Errorf("-f %q, want a combined-format fallback after the audio-only streams", got)
 	}
 }
 
@@ -525,7 +525,7 @@ func jarWritingYtDlpAt(t *testing.T, path, outDir string) {
 		"  prev=\"$arg\"\n" +
 		"done\n" +
 		"echo '{\"title\":\"Song\",\"webpage_url\":\"https://www.youtube.com/watch?v=aaaaaaaaaaa\"}'\n" +
-		"head -c 20480 /dev/zero > \"" + filepath.Join(outDir, "stub.mp3") + "\"\n"
+		"head -c 20480 /dev/zero > \"" + filepath.Join(outDir, "stub.m4a") + "\"\n"
 	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -815,7 +815,7 @@ func TestYtDlpAudioSearcher_Download_ReportsTheFormatYtDlpFetched(t *testing.T) 
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := downloadWithScript(t, "echo 'altune-source-format:"+tc.line+"'; truncate -s 20K OUT/a.mp3")
+			got, err := downloadWithScript(t, "echo 'altune-source-format:"+tc.line+"'; truncate -s 20K OUT/a.m4a")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -827,9 +827,9 @@ func TestYtDlpAudioSearcher_Download_ReportsTheFormatYtDlpFetched(t *testing.T) 
 }
 
 func TestYtDlpAudioSearcher_Download_WithoutAFormatLineStillReturnsTheFile(t *testing.T) {
-	got, err := downloadWithScript(t, "truncate -s 20K OUT/a.mp3")
-	if err != nil || filepath.Base(got.Path) != "a.mp3" || got.Format != (ports.SourceFormat{}) {
-		t.Fatalf("Download = %+v, %v, want a.mp3 with an unknown format", got, err)
+	got, err := downloadWithScript(t, "truncate -s 20K OUT/a.m4a")
+	if err != nil || filepath.Base(got.Path) != "a.m4a" || got.Format != (ports.SourceFormat{}) {
+		t.Fatalf("Download = %+v, %v, want a.m4a with an unknown format", got, err)
 	}
 }
 
@@ -924,5 +924,35 @@ func TestYtDlpAudioSearcher_DownloadPreviewAndCanaryFetchYouTubeThroughYouTubeMu
 				t.Fatalf("yt-dlp got %q, want a music.youtube.com watch URL", last)
 			}
 		})
+	}
+}
+
+func TestYtDlpAudioSearcher_Download_AsksForAACIntoM4AWithAFixedEncodeBitrate(t *testing.T) {
+	argv := strings.Join(recordedArgv(t, NewYtDlpAudioSearcher("", "", ""), ytDlpCallers["download"]), "\n")
+	for _, want := range []string{
+		"-f\n140/bestaudio[ext=m4a]/bestaudio/",
+		"--audio-format\nm4a",
+		"--audio-quality\n" + fmt.Sprintf("%dK", aacEncodeKbps),
+	} {
+		if !strings.Contains(argv, want) {
+			t.Errorf("argv = %q, want it to contain %q", argv, want)
+		}
+	}
+	if strings.Contains(argv, "mp3") {
+		t.Errorf("argv = %q, want no mp3 output", argv)
+	}
+}
+
+func TestYtDlpAudioSearcher_Download_ReturnsTheM4AAndIgnoresLeftovers(t *testing.T) {
+	got, err := downloadWithScript(t, "truncate -s 20K OUT/a.m4a; truncate -s 80K OUT/a.webm; truncate -s 90K OUT/a.m4a.part; truncate -s 70K OUT/a.mp4")
+	if err != nil || filepath.Base(got.Path) != "a.m4a" {
+		t.Fatalf("Download = %q, %v, want a.m4a", got.Path, err)
+	}
+}
+
+func TestYtDlpAudioSearcher_Download_RejectsWhenNoM4AIsProduced(t *testing.T) {
+	_, err := downloadWithScript(t, "truncate -s 40K OUT/a.mp3")
+	if err == nil || !strings.Contains(err.Error(), "no m4a file produced in ") {
+		t.Fatalf("Download error = %v, want a no-m4a rejection", err)
 	}
 }

@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/acquisition/adapters/chromaprint"
+	"altune/go-api/internal/acquisition/adapters/ffmpegtag"
 	"altune/go-api/internal/acquisition/adapters/fixture"
 	"altune/go-api/internal/acquisition/adapters/id3"
 	"altune/go-api/internal/acquisition/adapters/tempfs"
@@ -12,6 +13,7 @@ import (
 	"altune/go-api/internal/catalog/adapters/storage"
 	"altune/go-api/internal/discovery/service/ownership"
 	"altune/go-api/internal/observe/service/eventtap"
+	"altune/go-api/internal/shared/binpath"
 	"context"
 	"log/slog"
 	"sync/atomic"
@@ -144,7 +146,7 @@ func (a *App) buildAcquisitionScheduler(
 		acqService.WithAcquireOrphanQueue(acqCatalogBridge.NewOrphanedAudioRecorder(persistence.NewPgxOrphanedAudioRepository(a.pool))),
 		acqService.WithAudioProber(audioProber),
 		acqService.WithVerifySkips(skips),
-		acqService.WithAudioTagger(id3.NewTagger()),
+		acqService.WithAudioTagger(ffmpegtag.NewTagger(binpath.Resolve("ffmpeg", a.cfg.FFmpegLocation), id3.NewTagger())),
 		acqService.WithAcquireStoreKeyPrefix(a.cfg.AudioKeyPrefix),
 		acqService.WithRejectionStore(acqPersistence.NewPgxRejectionStore(a.pool)),
 	}
