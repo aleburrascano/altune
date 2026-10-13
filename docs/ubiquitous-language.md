@@ -95,6 +95,10 @@ When `/feature-spec` or domain modeling introduces a new term:
 - **Playback** — the bounded context that persists a user's Queue snapshot for resume-on-reopen and enriches its current track. Code in services/go-api/internal/playback/.
 - **QueuePosition** — a position-only save of the persisted queue snapshot: `(CurrentIdx, CurrentTrackId, PositionMs)`, no track lists. Applies only when the stored queue holds `CurrentTrackId` at `CurrentIdx`; ordered against full saves by the same stale-write guard. Sent via `PUT /v1/playback/queue-state/position`. Defined in `services/go-api/internal/playback/domain/queue_position.go`.
 - **RepeatMode** — three-state enum: `off` (stop at end), `all` (loop queue), `one` (loop current track). Defined in `client/src/shared/playback/queueOrder.ts`.
+- **Detail** — the client screen for one artist, album or track: its header, tracks or albums, and the MusicBrainz, Last.fm and lyrics enrichments read live on open. Code in `client/src/features/detail/`.
+- **Settings** — the client screen for a user's preferences (appearance, library, offline downloads) and sign-out. Code in `client/src/features/settings/`.
+- **KillSwitch** — a remote flag that turns off one client background loop (`serverEvents`, `telemetryFlush`, `offlineDownloads`, `detailEnrichment`, `discovery`) without an app release. The last fetched flags persist on the device. Defined in `client/src/shared/killSwitch/killSwitch.ts`.
+- **Offline** — playback with no network, from tracks the user pinned and the app downloaded to the device. Native only; web has no offline downloads. Code in `client/src/shared/offline/`.
 
 
 ### Future (illustrative — to be added when the spec that introduces them ships)
@@ -134,4 +138,4 @@ Terms that **must not** appear in altune code (caught by the `terminology-drift`
 
 Words a folder name may use without a glossary term; each names a part of a screen or an outside technology, never a domain concept.
 
-- `screen`, `http`, `platform`, `wire`, `api`, `client`, `ui`, `files`, `device`, `lifecycle`, `navigation`, `telemetry`
+- `screen`, `http`, `platform`, `wire`, `api`, `client`, `ui`, `files`, `device`, `lifecycle`, `navigation`, `telemetry`, `hero`, `timing`

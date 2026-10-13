@@ -267,10 +267,3 @@ N4 src/shared/events/serverEventTypes.ts exports ServerEventHandlers with the wo
 N4 src/shared/events/sseClient.ts exports ServerEventHandlerError with the word Handler
 N4 src/shared/telemetry/errorUtils.d.ts name has the word Utils
 N4 src/shared/telemetry/native/uncaughtErrors.ts exports chainUncaughtErrorHandler with the word Handler
-N5 src/features/auth/ui/hero word hero is not in the glossary
-N5 src/features/detail word detail is not in the glossary
-N5 src/features/settings word settings is not in the glossary
-N5 src/shared/killSwitch word Switch is not in the glossary
-N5 src/shared/killSwitch word kill is not in the glossary
-N5 src/shared/offline word offline is not in the glossary
-N5 src/shared/timing word timing is not in the glossary
