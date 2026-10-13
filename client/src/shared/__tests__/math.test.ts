@@ -1,4 +1,4 @@
-import { clamp } from '@features/playback/domain/clamp';
+import { clamp } from '@shared/math';
 
 describe('clamp — holding a value inside its bounds', () => {
   it('returns the value when it is already inside the bounds', () => {

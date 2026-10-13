@@ -6,11 +6,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { useWideWebLayout } from '@shared/ui/layout';
 import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
-import { useTheme, type Theme, spacing } from '@shared/ui/theme';
+import { useTheme, type Theme, spacing, withAlpha } from '@shared/ui/theme';
 import { Text } from '@shared/ui/primitives/Text';
 
 import { DetailTopBar, type DetailTopBarProps } from '@features/detail/ui/DetailTopBar';
-import { DETAIL_GUTTER, WIDE_LEFT_COLUMN_WIDTH, withAlpha } from '@features/detail/ui/detailStyles';
+import { DETAIL_GUTTER, WIDE_LEFT_COLUMN_WIDTH } from '@features/detail/ui/detailStyles';
 
 const BANNER_HEIGHT = 318;
 const BAR_HEIGHT = 52;

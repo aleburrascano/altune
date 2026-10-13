@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 
+import { clamp } from '@shared/math';
+
 import {
   ascending,
   currentAfterMove,
@@ -112,8 +114,7 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
   },
 
   restoreQueue: ({ tracks, playOrder, currentIndex, source, shuffled }) => {
-    const clampedIdx =
-      playOrder.length === 0 ? -1 : Math.max(0, Math.min(currentIndex, playOrder.length - 1));
+    const clampedIdx = playOrder.length === 0 ? -1 : clamp(currentIndex, 0, playOrder.length - 1);
     set(
       freshQueue({
         tracks,

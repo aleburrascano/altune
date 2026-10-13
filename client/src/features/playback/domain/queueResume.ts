@@ -9,7 +9,7 @@ import {
   recordQueueRebuildOutcome,
   type QueueRebuildRung,
 } from '@features/playback/domain/playbackHealth';
-import { clamp } from '@features/playback/domain/clamp';
+import { clamp } from '@shared/math';
 import { fromWireSource } from '@features/playback/domain/queueStateWire';
 
 function savedCursor(savedTrackIds: readonly string[], savedCurrentIndex: number): number {

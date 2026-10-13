@@ -1,10 +1,9 @@
 import { onSignOut } from '@shared/session/signOutCleanup';
+import { monotonicNow } from '@shared/time';
 
 export const RESET_PASSWORD_ROUTE_SEGMENT = 'reset-password';
 
 export const RECOVERY_UNLOCK_WINDOW_MS = 5 * 60 * 1000;
-
-const monotonicNow = (): number => performance.now();
 
 type RecoveryUnlock = { userId: string; openedAt: number; openedTick: number };
 

@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 import { create } from 'zustand';
 
 import type { ActionSheetOption } from '@shared/ui/primitives/ActionSheet';
-
-export const monotonicNow = (): number => performance.now();
+import { monotonicNow } from '@shared/time';
 
 type SleepTimerState = {
   endsAt: number | null;

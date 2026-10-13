@@ -1,5 +1,6 @@
 import { StyleSheet } from 'react-native';
 
+import { clamp } from '@shared/math';
 import { spacing } from '@shared/ui/theme/tokens';
 
 export const sharedStyles = StyleSheet.create({
@@ -36,18 +37,10 @@ const GRID_MIN_CELL_WIDTH = 150;
 
 export function gridColumnsFor(containerWidth: number): number {
   const fit = Math.floor((containerWidth + GRID_GAP) / (GRID_MIN_CELL_WIDTH + GRID_GAP));
-  return Math.min(GRID_MAX_COLUMNS, Math.max(GRID_MIN_COLUMNS, fit));
+  return clamp(fit, GRID_MIN_COLUMNS, GRID_MAX_COLUMNS);
 }
 
 export function gridCellWidthFor(containerWidth: number, columns: number): number {
   const gaps = GRID_GAP * (columns - 1);
   return Math.max(1, Math.floor((containerWidth - gaps) / columns));
-}
-
-export function withAlpha(hex: string, alpha: number): string {
-  const value = hex.replace('#', '');
-  const r = parseInt(value.slice(0, 2), 16);
-  const g = parseInt(value.slice(2, 4), 16);
-  const b = parseInt(value.slice(4, 6), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
 }

@@ -2,15 +2,7 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
-import { radius, useTheme } from '@shared/ui/theme';
-
-function withAlpha(hex: string, alpha: number): string {
-  const n = hex.replace('#', '');
-  const r = parseInt(n.slice(0, 2), 16);
-  const g = parseInt(n.slice(2, 4), 16);
-  const b = parseInt(n.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
+import { radius, useTheme, withAlpha } from '@shared/ui/theme';
 
 const styles = StyleSheet.create({
   grid: {

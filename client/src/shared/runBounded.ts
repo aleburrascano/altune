@@ -1,7 +1,9 @@
+import { clamp } from '@shared/math';
+
 export type BatchOutcome<T> = { succeeded: readonly T[]; failed: readonly T[] };
 
 function laneCount(limit: number, itemCount: number): number {
-  return Math.max(1, Math.min(limit, itemCount));
+  return clamp(limit, 1, itemCount);
 }
 
 export async function runBounded<T>(

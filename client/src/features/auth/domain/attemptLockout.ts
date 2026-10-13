@@ -1,3 +1,5 @@
+import { monotonicNow } from '@shared/time';
+
 export const LOCKOUT_AFTER_FAILURES = 5;
 
 export const LOCKOUT_BASE_MS = 15_000;
@@ -7,8 +9,6 @@ export const FAILURE_RUN_MEMORY_MS = 5 * 60_000;
 export const MAX_TRACKED_ACCOUNTS = 64;
 
 export type LockoutAction = 'sign-in' | 'reset-request';
-
-const monotonicNow = (): number => performance.now();
 
 type FailureRun = { count: number; lastFailureAt: number; lastFailureTick: number };
 

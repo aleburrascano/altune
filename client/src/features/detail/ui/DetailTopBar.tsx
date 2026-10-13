@@ -5,9 +5,9 @@ import { ChevronLeft, MoreHorizontal, type LucideIcon } from 'lucide-react-nativ
 import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Text } from '@shared/ui/primitives/Text';
 import { ContextMenu, type ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
-import { spacing, useTheme } from '@shared/ui/theme';
+import { spacing, useTheme, withAlpha } from '@shared/ui/theme';
 
-import { withAlpha, sharedStyles } from '@features/detail/ui/detailStyles';
+import { sharedStyles } from '@features/detail/ui/detailStyles';
 
 type GlassButtonProps = {
   action: string;
