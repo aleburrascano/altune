@@ -102,7 +102,7 @@ describe('cross-surface contract: FeaturedArtist (TS write side) <-> FeaturedArt
 
   it('the mobile client can only send keys the Go ingest DTO declares, and vice versa', () => {
     const goDtoSource = readGoSource(
-      path.join('services', 'go-api', 'internal', 'catalog', 'service', 'track_dto.go'),
+      path.join('services', 'go-api', 'internal', 'catalog', 'service', 'track', 'track_dto.go'),
     );
     const goDtoKeys = deriveGoFeaturedArtistDTOKeys(goDtoSource);
     expect(goDtoKeys.size).toBeGreaterThan(0);

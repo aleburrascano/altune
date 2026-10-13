@@ -441,7 +441,7 @@ describe('routes contract, derived from services/go-api and the apiClient source
 
 describe('TrackResponse (trackResponse.ts) <-> service.TrackDTO (aliased TrackResponse in track_handler.go)', () => {
   const trackDtoSource = fs.readFileSync(
-    goPath('internal', 'catalog', 'service', 'track_dto.go'),
+    goPath('internal', 'catalog', 'service', 'track', 'track_dto.go'),
     'utf8',
   );
   const goFields = deriveGoFields(trackDtoSource, extractGoStruct(trackDtoSource, 'TrackDTO'));

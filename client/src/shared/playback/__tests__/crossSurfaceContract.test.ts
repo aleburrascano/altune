@@ -59,7 +59,7 @@ describe('cross-surface contract, derived from services/go-api at test time', ()
 
   it('toPlaybackTrack reads only fields the catalog TrackDTO actually sends', () => {
     const trackDtoSource = fs.readFileSync(
-      path.join(GO_API_ROOT!, 'internal', 'catalog', 'service', 'track_dto.go'),
+      path.join(GO_API_ROOT!, 'internal', 'catalog', 'service', 'track', 'track_dto.go'),
       'utf8',
     );
     const goFields = deriveGoFieldTypes(extractGoStruct(trackDtoSource, 'TrackDTO'));
@@ -79,7 +79,7 @@ describe('cross-surface contract, derived from services/go-api at test time', ()
 
   it('the artwork_url and duration_seconds fields toPlaybackTrack coerces are nullable on the Go side', () => {
     const trackDtoSource = fs.readFileSync(
-      path.join(GO_API_ROOT!, 'internal', 'catalog', 'service', 'track_dto.go'),
+      path.join(GO_API_ROOT!, 'internal', 'catalog', 'service', 'track', 'track_dto.go'),
       'utf8',
     );
     const goFields = deriveGoFieldTypes(extractGoStruct(trackDtoSource, 'TrackDTO'));

@@ -265,7 +265,7 @@ describe('envelope field names: every field the mobile client sends is one searc
 describe('payload value types: the key this slice writes into payload satisfies the type Go requires', () => {
   it('session_id is derived as a Go string-constrained payload key', () => {
     const constraints = deriveGoPayloadTypeConstraints(
-      readGoFile('internal/discovery/service/record_event.go'),
+      readGoFile('internal/discovery/service/interaction/record_event.go'),
       readGoFile(EVENTS_GO),
     );
     const key = deriveSessionKeyWrittenByTelemetry(fs.readFileSync(RECORD_EVENT_TS, 'utf8'));
@@ -285,7 +285,7 @@ describe('payload value types: the key this slice writes into payload satisfies 
 
   it('no mobile call site sends a Go string-constrained payload key as null, which the server 400s', () => {
     const constraints = deriveGoPayloadTypeConstraints(
-      readGoFile('internal/discovery/service/record_event.go'),
+      readGoFile('internal/discovery/service/interaction/record_event.go'),
       readGoFile(EVENTS_GO),
     );
     const offenders: string[] = [];
