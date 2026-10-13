@@ -2,7 +2,7 @@ import { QueryClient } from '@tanstack/react-query';
 
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { isRetryable } from '@shared/failure/errors';
-import type { DiscoverySource } from '@shared/apiClient/discovery';
+import type { DiscoveryResult, DiscoverySource } from '@shared/apiClient/discovery';
 import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
 
@@ -11,11 +11,8 @@ import { useArtistContent } from '@features/detail/hooks/useArtistContent';
 import { useRelatedTracks } from '@features/detail/hooks/useRelatedTracks';
 import { createWrapper, signInTestUser, createTestQueryClient } from '@testing/queryHarness';
 import { useAlbumDiscovery, useArtistDiscovery } from '@features/detail/hooks/useEntityDiscovery';
-import {
-  useDeezerEnrichment,
-  useEnrichment,
-  useLastFmEnrichment,
-} from '@features/detail/hooks/useDetailEnrichments';
+import { useDetailEnrichments } from '@features/detail/hooks/useDetailEnrichments';
+import type { EnrichmentProvider } from '@features/detail/domain/detailHealth';
 import { useLateralNav } from '@features/detail/hooks/useDetailNavigation';
 import { useResolveMissingSources } from '@features/detail/hooks/useResolveMissingSources';
 
@@ -25,6 +22,19 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),
   useSegments: () => ['(tabs)', 'discover'],
 }));
+
+function enrichmentTarget(
+  kind: 'album' | 'artist',
+  title: string,
+  subtitle: string | null,
+): DiscoveryResult {
+  return { kind, title, subtitle, image_url: null, confidence: 'high', sources: [], extras: {} };
+}
+
+function useProviderEnrichment(result: DiscoveryResult, provider: EnrichmentProvider) {
+  const enrichments = useDetailEnrichments(result);
+  return { enrichment: enrichments[provider], isError: enrichments.errors[provider] };
+}
 
 describe('useContentFetchRetry', () => {
   function appQueryClient() {
@@ -183,19 +193,19 @@ describe('detail fetch gate', () => {
     {
       hook: 'useEnrichment',
       useGatedHook: () =>
-        useEnrichment({ kind: 'album', title: 'Rumours', subtitle: 'Fleetwood Mac' }),
+        useProviderEnrichment(enrichmentTarget('album', 'Rumours', 'Fleetwood Mac'), 'musicbrainz'),
       emptyResult: { enrichment: null, isError: false },
     },
     {
       hook: 'useDeezerEnrichment',
       useGatedHook: () =>
-        useDeezerEnrichment({ kind: 'album', title: 'Rumours', subtitle: 'Fleetwood Mac' }),
+        useProviderEnrichment(enrichmentTarget('album', 'Rumours', 'Fleetwood Mac'), 'deezer'),
       emptyResult: { enrichment: null, isError: false },
     },
     {
       hook: 'useLastFmEnrichment',
       useGatedHook: () =>
-        useLastFmEnrichment({ kind: 'artist', title: 'Fleetwood Mac', subtitle: null }),
+        useProviderEnrichment(enrichmentTarget('artist', 'Fleetwood Mac', null), 'lastfm'),
       emptyResult: { enrichment: null, isError: false },
     },
     {

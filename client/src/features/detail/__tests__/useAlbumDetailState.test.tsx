@@ -11,7 +11,6 @@ import { readDetailHandoff } from '@shared/navigation/detailHandoff';
 
 import { useAlbumDetailState } from '@features/detail/hooks/useAlbumDetailState';
 import { SAVE_ALL_CONCURRENCY } from '@features/detail/domain/saveTrack';
-import { LOOKUP_LIMIT, LOOKUP_MAX_PAGES } from '@features/detail/hooks/useLibraryMatches';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import {
   createMemoryDetailPort,
@@ -57,6 +56,8 @@ function libraryTrack(i: number): TrackResponse {
   } as TrackResponse;
 }
 
+const LOOKUP_LIMIT = 200;
+const LOOKUP_MAX_PAGES = 5;
 const LARGE_ALBUM_SIZE = 20;
 const MAX_ROUNDS = 50;
 

@@ -10,8 +10,8 @@ import { useDetailPort } from '@features/detail/ports/DetailPortProvider';
 import { normalizeForCompare } from '@features/detail/domain/normalizeForCompare';
 import { DETAIL_LIST_CAP } from '@features/detail/domain/contentStatus';
 
-export const LOOKUP_LIMIT = 200;
-export const LOOKUP_MAX_PAGES = 5;
+const LOOKUP_LIMIT = 200;
+const LOOKUP_MAX_PAGES = 5;
 
 type Lookup = { items: TrackResponse[]; complete: boolean };
 export type LibraryMatches = TrackResponse[] & { complete?: boolean };

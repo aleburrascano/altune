@@ -2,16 +2,16 @@ import type { QueryClient } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
 import type { DiscoveryResult, DiscoverySource } from '@shared/apiClient/discovery';
+import { HEALTH_BATCH } from '@shared/telemetry/healthTally';
 
 import {
-  DETAIL_HEALTH_BATCH,
   _resetDetailHealthForTest,
   fetchTallyingOutcome,
   flushDetailHealth,
   recordContentFetchOutcome,
 } from '@features/detail/domain/detailHealth';
 import { useAlbumTracks } from '@features/detail/hooks/useAlbumTracks';
-import { useDetailEnrichments, useEnrichment } from '@features/detail/hooks/useDetailEnrichments';
+import { useDetailEnrichments } from '@features/detail/hooks/useDetailEnrichments';
 import { useArtistContent } from '@features/detail/hooks/useArtistContent';
 import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
 
@@ -111,6 +111,7 @@ function emptyEnrichmentResponse(): Record<string, unknown> {
 
 const SETTLE_TICKS = 5;
 const BATCHES_SENT = 2;
+const IN_FLIGHT_REQUESTS = 3;
 const PARTIAL_BATCH = 3;
 
 async function settle(): Promise<void> {
@@ -195,7 +196,7 @@ describe('detail health metric', () => {
   });
 
   it('sends one aggregate event per batch, not one per fetch', async () => {
-    for (let i = 0; i < DETAIL_HEALTH_BATCH * BATCHES_SENT + PARTIAL_BATCH; i++) {
+    for (let i = 0; i < HEALTH_BATCH * BATCHES_SENT + PARTIAL_BATCH; i++) {
       recordContentFetchOutcome('related_tracks', i % 5 !== 0);
     }
 
@@ -261,17 +262,18 @@ describe('an aborted fetch', () => {
   describe('a fetch aborted by leaving the screen', () => {
     it('is tallied as neither success nor failure', async () => {
       __http.hang('GET /v1/discovery/enrichment');
+      __http.hang('GET /v1/discovery/enrichment/deezer');
       __http.hang('GET /v1/discovery/artists/spotify/a-1/content');
       const { unmount } = renderHook(
         () => {
-          useEnrichment({ kind: 'album', title: 'OK Computer' });
+          useDetailEnrichments(albumResult());
           useArtistContent({
             sources: [{ provider: 'spotify', external_id: 'a-1' } as DiscoverySource],
           });
         },
         { wrapper },
       );
-      await waitFor(() => expect(__http.requests).toHaveLength(2));
+      await waitFor(() => expect(__http.requests).toHaveLength(IN_FLIGHT_REQUESTS));
 
       unmount();
       await waitFor(() =>

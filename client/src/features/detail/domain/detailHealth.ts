@@ -1,5 +1,5 @@
 import { isAbort } from '@shared/failure/errors';
-import { HEALTH_BATCH, createHealthTally } from '@shared/telemetry/healthTally';
+import { createHealthTally } from '@shared/telemetry/healthTally';
 import type { DiscoveryProviderStatus } from '@shared/apiClient/discovery';
 
 import { hasDegradedStatus } from '@features/detail/domain/contentStatus';
@@ -32,8 +32,6 @@ const health = createHealthTally<HealthKey>({
     console.warn('[detail] health flush failed', { error });
   },
 });
-
-export const DETAIL_HEALTH_BATCH = HEALTH_BATCH;
 
 const { count } = health;
 

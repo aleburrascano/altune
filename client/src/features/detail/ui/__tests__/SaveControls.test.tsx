@@ -12,13 +12,7 @@ import {
 } from '@shared/acquisition/trackStatusStore';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
-import {
-  SaveAllPill,
-  SavePillShell,
-  type SavePillShellProps,
-  TrackSaveControl,
-  TrackSavePill,
-} from '@features/detail/ui/SaveControls';
+import { SaveAllPill, TrackSaveControl, TrackSavePill } from '@features/detail/ui/SaveControls';
 import {
   useOwnedPlayback,
   type OwnedPlaybackContext,
@@ -81,54 +75,39 @@ describe('SaveAllPill', () => {
 });
 
 describe('SavePillShell', () => {
-  function renderShell(overrides: Partial<SavePillShellProps> = {}): jest.Mock {
-    const onPress = jest.fn();
-    render(
-      <SavePillShell
-        onPress={onPress}
-        disabled={false}
-        interactive
-        accessibilityLabel="Save everything"
-        testID="shell"
-        {...overrides}
-      >
-        <Text>Save 4</Text>
-      </SavePillShell>,
-    );
-    return onPress;
-  }
-
   describe('SavePillShell', () => {
     it('exposes the caller label, testID and content', () => {
-      renderShell();
+      render(<SaveAllPill unownedCount={4} saving={false} onSave={jest.fn()} />);
 
-      expect(screen.getByLabelText('Save everything')).toBeTruthy();
-      expect(screen.getByTestId('shell')).toBeTruthy();
+      expect(screen.getByLabelText('Save 4 tracks to your library')).toBeTruthy();
+      expect(screen.getByTestId('detail-save-all')).toBeTruthy();
       expect(screen.getByText('Save 4')).toBeTruthy();
     });
 
     it('announces exactly the accessibility state the caller passes', () => {
-      renderShell({ disabled: true, accessibilityState: { disabled: true, busy: true } });
+      render(<TrackSavePill save="saving" onSave={jest.fn()} title="Midnight City" />);
 
-      const state = screen.getByTestId('shell').props.accessibilityState;
+      const state = screen.getByTestId('detail-save').props.accessibilityState;
       expect(state?.disabled).toBe(true);
       expect(state?.busy).toBe(true);
     });
 
     it('calls onPress when tapped while enabled and interactive', () => {
-      const onPress = renderShell();
+      const onSave = jest.fn();
+      render(<SaveAllPill unownedCount={2} saving={false} onSave={onSave} />);
 
-      fireEvent.press(screen.getByTestId('shell'));
+      fireEvent.press(screen.getByTestId('detail-save-all'));
 
-      expect(onPress).toHaveBeenCalledTimes(1);
+      expect(onSave).toHaveBeenCalledTimes(1);
     });
 
     it('ignores taps while disabled', () => {
-      const onPress = renderShell({ disabled: true, accessibilityState: { disabled: true } });
+      const onSave = jest.fn();
+      render(<SaveAllPill unownedCount={2} saving onSave={onSave} />);
 
-      fireEvent.press(screen.getByTestId('shell'));
+      fireEvent.press(screen.getByTestId('detail-save-all'));
 
-      expect(onPress).not.toHaveBeenCalled();
+      expect(onSave).not.toHaveBeenCalled();
     });
   });
 });

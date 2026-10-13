@@ -4,15 +4,26 @@ import { renderHook, waitFor } from '@testing-library/react-native';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { _resetDetailHealthForTest } from '@features/detail/domain/detailHealth';
-import {
-  useEnrichment,
-  useDeezerEnrichment,
-  useLastFmEnrichment,
-  useDetailEnrichments,
-} from '@features/detail/hooks/useDetailEnrichments';
+import { useDetailEnrichments } from '@features/detail/hooks/useDetailEnrichments';
 import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
 
 const { __http } = require('@testing/doubles/fetch.js');
+
+function resultOf(
+  kind: 'album' | 'artist',
+  title: string,
+  subtitle: string | null,
+): DiscoveryResult {
+  return { kind, title, subtitle, image_url: null, confidence: 'high', sources: [], extras: {} };
+}
+
+type AbortableRequest = { path: string; signal: AbortSignal };
+
+function requestFor(spec: string): AbortableRequest {
+  const path = spec.slice(spec.indexOf(' ') + 1);
+  const requests = __http.requests as AbortableRequest[];
+  return requests.find((request) => request.path === path)!;
+}
 
 describe('useEnrichment', () => {
   describe('aborting on unmount', () => {
@@ -29,16 +40,20 @@ describe('useEnrichment', () => {
 
     afterEach(() => client.clear());
 
-    const album = { kind: 'album', title: 'OK Computer', subtitle: 'Radiohead' } as const;
+    const album = resultOf('album', 'OK Computer', 'Radiohead');
 
     describe.each([
-      ['useEnrichment', 'GET /v1/discovery/enrichment', (): void => void useEnrichment(album)],
+      [
+        'useEnrichment',
+        'GET /v1/discovery/enrichment',
+        (): void => void useDetailEnrichments(album),
+      ],
     ] as const)('%s, left before its request resolves', (_name, spec, useHook) => {
       it('aborts the in-flight request when the screen unmounts', async () => {
         __http.hang(spec);
         const { unmount } = renderHook(useHook, { wrapper });
         await waitFor(() => expect(__http.countFor(spec)).toBeGreaterThan(0));
-        const { signal } = __http.last() as { signal: AbortSignal };
+        const { signal } = requestFor(spec);
         expect(signal.aborted).toBe(false);
 
         unmount();
@@ -64,20 +79,20 @@ describe('useDeezerEnrichment', () => {
 
     afterEach(() => client.clear());
 
-    const album = { kind: 'album', title: 'OK Computer', subtitle: 'Radiohead' } as const;
+    const album = resultOf('album', 'OK Computer', 'Radiohead');
 
     describe.each([
       [
         'useDeezerEnrichment',
         'GET /v1/discovery/enrichment/deezer',
-        (): void => void useDeezerEnrichment(album),
+        (): void => void useDetailEnrichments(album),
       ],
     ] as const)('%s, left before its request resolves', (_name, spec, useHook) => {
       it('aborts the in-flight request when the screen unmounts', async () => {
         __http.hang(spec);
         const { unmount } = renderHook(useHook, { wrapper });
         await waitFor(() => expect(__http.countFor(spec)).toBeGreaterThan(0));
-        const { signal } = __http.last() as { signal: AbortSignal };
+        const { signal } = requestFor(spec);
         expect(signal.aborted).toBe(false);
 
         unmount();
@@ -103,20 +118,20 @@ describe('useLastFmEnrichment', () => {
 
     afterEach(() => client.clear());
 
-    const album = { kind: 'album', title: 'OK Computer', subtitle: 'Radiohead' } as const;
+    const artist = resultOf('artist', 'Radiohead', null);
 
     describe.each([
       [
         'useLastFmEnrichment',
         'GET /v1/discovery/enrichment/lastfm',
-        (): void => void useLastFmEnrichment(album),
+        (): void => void useDetailEnrichments(artist),
       ],
     ] as const)('%s, left before its request resolves', (_name, spec, useHook) => {
       it('aborts the in-flight request when the screen unmounts', async () => {
         __http.hang(spec);
         const { unmount } = renderHook(useHook, { wrapper });
         await waitFor(() => expect(__http.countFor(spec)).toBeGreaterThan(0));
-        const { signal } = __http.last() as { signal: AbortSignal };
+        const { signal } = requestFor(spec);
         expect(signal.aborted).toBe(false);
 
         unmount();

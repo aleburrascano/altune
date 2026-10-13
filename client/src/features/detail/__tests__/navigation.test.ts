@@ -7,7 +7,6 @@ import { clearDetailHandoffs, readDetailHandoff } from '@shared/navigation/detai
 import {
   detailRouteFor,
   featuringHref,
-  featuringRouteFor,
   openDetail,
 } from '@features/detail/domain/detailNavigation';
 import { useOpenDetail, useOpenFeaturing } from '@features/detail/hooks/useDetailNavigation';
@@ -39,11 +38,15 @@ describe('detailRouteFor', () => {
 
 describe('featuringRouteFor', () => {
   it('builds the featuring route matching the library detail route', () => {
-    expect(featuringRouteFor('/library/detail')).toBe('/library/featuring');
+    expect(
+      featuringHref('/library/detail', { name: 'Kid', mbid: null, deezer_id: null }),
+    ).toMatchObject({ pathname: '/library/featuring' });
   });
 
   it('builds the featuring route matching the discover detail route', () => {
-    expect(featuringRouteFor('/discover/detail')).toBe('/discover/featuring');
+    expect(
+      featuringHref('/discover/detail', { name: 'Kid', mbid: null, deezer_id: null }),
+    ).toMatchObject({ pathname: '/discover/featuring' });
   });
 });
 

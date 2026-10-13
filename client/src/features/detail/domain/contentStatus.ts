@@ -7,7 +7,7 @@ export const DETAIL_LIST_CAP = 100;
 
 export const DETAIL_CONTENT_STALE_MS = 30 * 60 * 1000;
 
-export function isContentError(
+function isContentError(
   queryFailed: boolean,
   response: { status: DiscoveryProviderStatus } | null | undefined,
 ): boolean {
@@ -23,7 +23,7 @@ export function hasDegradedStatus(
 const CONTENT_UNSERVED_CODE = 'discovery.content_unserved';
 const PROVIDER_FAILURE_CODE_PREFIX = 'discovery.provider_';
 
-export function isSettledContentFailure(error: unknown): boolean {
+function isSettledContentFailure(error: unknown): boolean {
   if (!(error instanceof ApiError) || error.code === undefined) return false;
   return (
     error.code === CONTENT_UNSERVED_CODE || error.code.startsWith(PROVIDER_FAILURE_CODE_PREFIX)

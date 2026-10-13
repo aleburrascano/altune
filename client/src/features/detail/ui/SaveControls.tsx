@@ -38,7 +38,7 @@ function SaveGlyph({ state, addSize }: SaveGlyphProps): ReactElement {
   return <Icon size={size} color={color[tone]} />;
 }
 
-export type SavePillShellProps = {
+type SavePillShellProps = {
   onPress: () => void;
   disabled: boolean;
   interactive: boolean;
@@ -75,7 +75,7 @@ function shellProps(props: SavePillShellProps, theme: Theme) {
   };
 }
 
-export function SavePillShell(props: SavePillShellProps): ReactElement {
+function SavePillShell(props: SavePillShellProps): ReactElement {
   const theme = useTheme();
   return <Tappable {...shellProps(props, theme)}>{props.children}</Tappable>;
 }

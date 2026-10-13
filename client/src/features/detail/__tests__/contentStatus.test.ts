@@ -3,8 +3,6 @@ import { ApiError, NetworkError } from '@shared/failure/errors';
 import {
   contentFailure,
   failFastOnSettledContentFailure,
-  isContentError,
-  isSettledContentFailure,
 } from '@features/detail/domain/contentStatus';
 
 describe('isSettledContentFailure', () => {
@@ -15,7 +13,7 @@ describe('isSettledContentFailure', () => {
     [503, 'discovery.provider_circuit_open'],
     [502, 'discovery.provider_error'],
   ])('is settled for %i %s', (status, code) => {
-    expect(isSettledContentFailure(new ApiError(status, 'x', code))).toBe(true);
+    expect(contentFailure(true, new ApiError(status, 'x', code), undefined)).toBe('settled');
   });
 
   it.each([
@@ -24,7 +22,7 @@ describe('isSettledContentFailure', () => {
     ['a network failure', new NetworkError('timeout', 'x')],
     ['a non-error value', 'boom'],
   ])('is not settled for %s', (_label, error) => {
-    expect(isSettledContentFailure(error)).toBe(false);
+    expect(contentFailure(true, error, undefined)).toBe('transient');
   });
 });
 
@@ -57,24 +55,24 @@ describe('failFastOnSettledContentFailure', () => {
 
 describe('isContentError', () => {
   it('is an error when the query itself failed, whatever the response', () => {
-    expect(isContentError(true, undefined)).toBe(true);
-    expect(isContentError(true, { status: 'ok' })).toBe(true);
+    expect(contentFailure(true, undefined, undefined)).not.toBeNull();
+    expect(contentFailure(true, undefined, { status: 'ok' })).not.toBeNull();
   });
 
   it.each(['timeout', 'rate_limited', 'circuit_open', 'error'] as const)(
     'treats a %s provider status as an error',
     (status) => {
-      expect(isContentError(false, { status })).toBe(true);
+      expect(contentFailure(false, undefined, { status })).not.toBeNull();
     },
   );
 
   it('is not an error for a healthy response', () => {
-    expect(isContentError(false, { status: 'ok' })).toBe(false);
+    expect(contentFailure(false, undefined, { status: 'ok' })).toBeNull();
   });
 
   it('is not an error before a response arrives', () => {
-    expect(isContentError(false, undefined)).toBe(false);
-    expect(isContentError(false, null)).toBe(false);
+    expect(contentFailure(false, undefined, undefined)).toBeNull();
+    expect(contentFailure(false, undefined, null)).toBeNull();
   });
 });
 

@@ -4,13 +4,13 @@ import { detailHref } from '@shared/navigation/detailHandoff';
 import type { Href, Navigator, TabRoot } from '@shared/navigation';
 
 export type DetailRoute = `/${TabRoot}/detail`;
-export type FeaturingRoute = `/${TabRoot}/featuring`;
+type FeaturingRoute = `/${TabRoot}/featuring`;
 
 export function detailRouteFor(tabRoot: TabRoot): DetailRoute {
   return `/${tabRoot}/detail`;
 }
 
-export function featuringRouteFor(detailRoute: DetailRoute): FeaturingRoute {
+function featuringRouteFor(detailRoute: DetailRoute): FeaturingRoute {
   return detailRoute === '/library/detail' ? '/library/featuring' : '/discover/featuring';
 }
 

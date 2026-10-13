@@ -21,7 +21,7 @@ import { trackExtras } from '@features/detail/domain/trackExtras';
 const ONE_DAY_MS = 86_400_000;
 const ENRICHMENT_STALE_TIME = ONE_DAY_MS;
 
-export type EnrichmentParams = {
+type EnrichmentParams = {
   kind: DiscoveryKind;
   title: string;
   subtitle?: string | null | undefined;
@@ -144,7 +144,7 @@ const MUSICBRAINZ_CONFIG: EnrichmentHookConfig<MusicBrainzEnrichment> = {
   mbidAware: true,
 };
 
-export function useEnrichment(params: EnrichmentParams) {
+function useEnrichment(params: EnrichmentParams) {
   return useProviderEnrichment(MUSICBRAINZ_CONFIG, params);
 }
 
@@ -157,7 +157,7 @@ const DEEZER_CONFIG: EnrichmentHookConfig<DeezerEnrichment> = {
   mbidAware: false,
 };
 
-export function useDeezerEnrichment(params: EnrichmentParams) {
+function useDeezerEnrichment(params: EnrichmentParams) {
   return useProviderEnrichment(DEEZER_CONFIG, params);
 }
 
@@ -170,7 +170,7 @@ const LASTFM_CONFIG: EnrichmentHookConfig<LastFmEnrichment> = {
   mbidAware: false,
 };
 
-export function useLastFmEnrichment(params: EnrichmentParams) {
+function useLastFmEnrichment(params: EnrichmentParams) {
   return useProviderEnrichment(LASTFM_CONFIG, params);
 }
 

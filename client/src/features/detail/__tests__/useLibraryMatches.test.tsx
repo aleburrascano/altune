@@ -4,8 +4,6 @@ import { renderHook, waitFor } from '@testing-library/react-native';
 import { libraryKeys } from '@shared/query/queryKeys';
 
 import {
-  LOOKUP_LIMIT,
-  LOOKUP_MAX_PAGES,
   useLibraryTracksForAlbum,
   useLibraryTracksForArtist,
   useLibraryAlbumsForArtist,
@@ -13,6 +11,9 @@ import {
 import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
 
 const { __http } = require('@testing/doubles/fetch.js');
+
+const LOOKUP_LIMIT = 200;
+const LOOKUP_MAX_PAGES = 5;
 
 describe('useLibraryTracks', () => {
   const TRACKS = 'GET /v1/tracks';
