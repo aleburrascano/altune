@@ -4,7 +4,7 @@ import (
 	authservice "altune/go-api/internal/auth/service"
 	"altune/go-api/internal/playback/domain"
 	"altune/go-api/internal/playback/ports"
-	"altune/go-api/internal/playback/service"
+	"altune/go-api/internal/playback/service/queue"
 	"altune/go-api/internal/shared"
 	"context"
 	"encoding/json"
@@ -56,7 +56,7 @@ func (nilNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string) (*port
 }
 
 func newHandler(repo ports.QueueStateRepository) *QueueHandler {
-	return NewQueueHandler(service.NewQueueService(repo, nilNowPlaying{}))
+	return NewQueueHandler(queue.New(repo, nilNowPlaying{}))
 }
 
 func savePut(body string) *http.Request {
@@ -281,14 +281,14 @@ func (failingNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string) (*
 	return nil, errors.New("lookup now-playing track: context deadline exceeded")
 }
 
-func getResume(t *testing.T, nowPlaying ports.NowPlayingReader, opts ...service.QueueServiceOption) (int, map[string]json.RawMessage) {
+func getResume(t *testing.T, nowPlaying ports.NowPlayingReader, opts ...queue.Option) (int, map[string]json.RawMessage) {
 	t.Helper()
 	repo := &recordingRepo{saved: &domain.QueueState{
 		TrackIds:     []string{"00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"},
 		CurrentIdx:   1,
 		NaturalOrder: []string{"00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"},
 	}}
-	h := NewQueueHandler(service.NewQueueService(repo, nowPlaying, opts...))
+	h := NewQueueHandler(queue.New(repo, nowPlaying, opts...))
 	req := httptest.NewRequest(http.MethodGet, "/queue-state", nil)
 	req = req.WithContext(authservice.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
 	rec := httptest.NewRecorder()
@@ -331,7 +331,7 @@ func (p panickingNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string
 }
 
 func TestHandleGet_DisabledNowPlayingEnrichmentSkipsLookupAndStillResumes(t *testing.T) {
-	code, body := getResume(t, panickingNowPlaying{t: t}, service.WithNowPlayingEnrichment(false))
+	code, body := getResume(t, panickingNowPlaying{t: t}, queue.WithNowPlayingEnrichment(false))
 
 	if code != http.StatusOK {
 		t.Fatalf("resume must still succeed with 200 when enrichment is disabled, got %d", code)
@@ -415,7 +415,7 @@ func TestHandleSavePosition_UnappliedSaveIsConflictWithItsCode(t *testing.T) {
 }
 
 func TestHandleSavePosition_SharesTheQueueStateRateLimit(t *testing.T) {
-	h := NewQueueHandler(service.NewQueueService(&recordingRepo{}, nilNowPlaying{}),
+	h := NewQueueHandler(queue.New(&recordingRepo{}, nilNowPlaying{}),
 		WithQueueStateRateLimit(QueueStateRateLimit{Every: time.Hour, Burst: 1}))
 	user := shared.NewUserId(uuid.New())
 	as := func(req *http.Request) *http.Request {
@@ -433,7 +433,7 @@ func TestHandleSavePosition_SharesTheQueueStateRateLimit(t *testing.T) {
 }
 
 func TestHandleGet_ResponseIsUncachedAndNotSniffable(t *testing.T) {
-	h := NewQueueHandler(service.NewQueueService(&recordingRepo{saved: &domain.QueueState{
+	h := NewQueueHandler(queue.New(&recordingRepo{saved: &domain.QueueState{
 		TrackIds:     []string{"00000000-0000-4000-8000-000000000001"},
 		NaturalOrder: []string{"00000000-0000-4000-8000-000000000001"},
 	}}, nilNowPlaying{}))

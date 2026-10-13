@@ -5,7 +5,7 @@ import (
 	authdomain "altune/go-api/internal/auth/domain"
 	authports "altune/go-api/internal/auth/ports"
 	authservice "altune/go-api/internal/auth/service"
-	"altune/go-api/internal/eventstream/service"
+	"altune/go-api/internal/eventstream/service/connlimit"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
@@ -619,7 +619,7 @@ func TestSSEHandler_PerUserConnectionCapRejectsOverflow(t *testing.T) {
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
 	h := NewEventStreamHandler(bus, 0)
-	h.limiter = service.NewConnLimiter(2, 0)
+	h.limiter = connlimit.New(2, 0)
 	h.heartbeat = time.Hour
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -787,7 +787,7 @@ func TestSSEHandler_StreamEndingAtTokenExpiryFreesUserSlot(t *testing.T) {
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
 	h := NewEventStreamHandler(bus, 0)
-	h.limiter = service.NewConnLimiter(1, 0)
+	h.limiter = connlimit.New(1, 0)
 	srv := serveSSEWithTokenExpiry(t, h, uid, time.Now().Add(200*time.Millisecond))
 
 	first, err := http.Get(srv.URL)

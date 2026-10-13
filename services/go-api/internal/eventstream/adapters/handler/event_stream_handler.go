@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/eventstream/adapters/authbridge"
 	"altune/go-api/internal/eventstream/domain"
 	"altune/go-api/internal/eventstream/ports"
-	"altune/go-api/internal/eventstream/service"
+	"altune/go-api/internal/eventstream/service/connlimit"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/httputil"
@@ -27,7 +27,7 @@ type EventStreamHandler struct {
 	bus          ports.EventSubscriber
 	heartbeat    time.Duration
 	writeTimeout time.Duration
-	limiter      *service.ConnLimiter
+	limiter      *connlimit.Limiter
 	shutdown     <-chan struct{}
 }
 
@@ -39,7 +39,7 @@ func NewEventStreamHandler(bus ports.EventSubscriber, maxConnsTotal int) *EventS
 		bus:          bus,
 		heartbeat:    defaultHeartbeatInterval,
 		writeTimeout: defaultSSEWriteTimeout,
-		limiter:      service.NewConnLimiter(defaultMaxConnsPerUser, maxConnsTotal),
+		limiter:      connlimit.New(defaultMaxConnsPerUser, maxConnsTotal),
 	}
 }
 

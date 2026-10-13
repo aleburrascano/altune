@@ -30,8 +30,8 @@ only through bridges.
 | ports | `deleted_identity_lister.go` | `DeletedIdentityLister`, `ErrIdentityStoreUnavailable` |
 | ports | `erased_state_reaper.go` | `ErasedStateReaper` |
 | ports | `enrichment_metrics.go`, `queue_state_metrics.go`, `rate_limit_metrics.go`, `erasure_sweep_metrics.go` | One metrics interface each, with a noop |
-| service | `queue_service.go` | Save, update position, get, enrich the current track |
-| service | `forget_deleted_identities_service.go` | Erasure sweep |
+| service | `queue/service.go` | Save, update position, get, enrich the current track |
+| service | `erasure/sweeper.go` | Erasure sweep |
 | adapters/handler | `queue_handler.go` | HTTP routes for the queue snapshot |
 | adapters/handler | `queue_state_rate_limit.go` | Per-user queue-state rate limiter middleware |
 | adapters/authbridge | `require_user_id.go` | Request user from `internal/auth` |
@@ -54,7 +54,7 @@ Queue-state requests are limited per user: one token every 2s, burst 20
 
 ## 4. Erasure sweep
 
-`service/forget_deleted_identities_service.go` lists owners whose identity no longer
+`service/erasure/sweeper.go` lists owners whose identity no longer
 exists and deletes their queue state, so a deleted account leaves no snapshot behind.
 An unavailable identity store ends the sweep idle and is counted, not treated as
 "nobody to erase".

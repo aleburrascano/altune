@@ -1,4 +1,4 @@
-package service
+package connlimit
 
 import (
 	"altune/go-api/internal/eventstream/domain"
@@ -11,7 +11,7 @@ import (
 )
 
 func TestConnLimiter(t *testing.T) {
-	l := NewConnLimiter(2, 0)
+	l := New(2, 0)
 	if err := l.Acquire("u"); err != nil {
 		t.Fatalf("first acquire should succeed: %v", err)
 	}
@@ -31,7 +31,7 @@ func TestConnLimiter(t *testing.T) {
 }
 
 func TestConnLimiter_GlobalCapAcrossUsers(t *testing.T) {
-	l := NewConnLimiter(1, 2)
+	l := New(1, 2)
 	if err := l.Acquire("a"); err != nil {
 		t.Fatalf("a: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestConnLimiter_GlobalCapAcrossUsers(t *testing.T) {
 
 func TestConnLimiter_GlobalCapHoldsUnderConcurrency(t *testing.T) {
 	const limit, attempts = 5, 200
-	l := NewConnLimiter(8, limit)
+	l := New(8, limit)
 	var granted atomic.Int64
 	var wg sync.WaitGroup
 	for i := 0; i < attempts; i++ {
@@ -75,7 +75,7 @@ func TestConnLimiter_GlobalCapHoldsUnderConcurrency(t *testing.T) {
 }
 
 func TestConnLimiter_ReleaseOfUserWithNoSlotsLeavesTotalUnchanged(t *testing.T) {
-	l := NewConnLimiter(2, 1)
+	l := New(2, 1)
 	if err := l.Acquire("a"); err != nil {
 		t.Fatalf("a: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestConnLimiter_ReleaseOfUserWithNoSlotsLeavesTotalUnchanged(t *testing.T) 
 }
 
 func TestConnLimiter_AcquireThenReleaseLeavesBothCountsZero(t *testing.T) {
-	l := NewConnLimiter(1, 1)
+	l := New(1, 1)
 	if err := l.Acquire("a"); err != nil {
 		t.Fatalf("acquire: %v", err)
 	}

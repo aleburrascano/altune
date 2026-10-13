@@ -11,12 +11,13 @@ import (
 	playbackHandler "altune/go-api/internal/playback/adapters/handler"
 	playbackMetrics "altune/go-api/internal/playback/adapters/metrics"
 	playbackPersistence "altune/go-api/internal/playback/adapters/persistence"
-	playbackService "altune/go-api/internal/playback/service"
+	playbackErasure "altune/go-api/internal/playback/service/erasure"
+	playbackQueue "altune/go-api/internal/playback/service/queue"
 )
 
 type playbackWiring struct {
 	handler                 *playbackHandler.QueueHandler
-	forgetDeletedIdentities *playbackService.ForgetDeletedIdentitiesService
+	forgetDeletedIdentities *playbackErasure.Sweeper
 }
 
 func (a *App) wirePlayback(ctx context.Context, trackRepo *persistence.PgxTrackRepository) playbackWiring {
@@ -25,11 +26,11 @@ func (a *App) wirePlayback(ctx context.Context, trackRepo *persistence.PgxTrackR
 	queueSvc := newQueueService(ctx, queueStateRepo, trackRepo, metrics, a.cfg.HasNowPlayingEnrichment())
 	return playbackWiring{
 		handler: newQueueHandler(queueSvc, metrics, queueRateLimit(a.cfg)),
-		forgetDeletedIdentities: playbackService.NewForgetDeletedIdentitiesService(
+		forgetDeletedIdentities: playbackErasure.NewSweeper(
 			playbackPersistence.NewPgxDeletedIdentityRepository(a.pool), queueSvc,
-			playbackService.WithSweepRunBudget(a.cfg.PlaybackErasureScanTimeout),
-			playbackService.WithErasureSweepMetrics(metrics),
-			playbackService.WithErasedStateReaper(queueStateRepo)),
+			playbackErasure.WithSweepRunBudget(a.cfg.PlaybackErasureScanTimeout),
+			playbackErasure.WithErasureSweepMetrics(metrics),
+			playbackErasure.WithErasedStateReaper(queueStateRepo)),
 	}
 }
 
@@ -44,16 +45,16 @@ func newQueueService(
 	trackRepo *persistence.PgxTrackRepository,
 	metrics playbackMetricsSink,
 	enrichmentEnabled bool,
-) *playbackService.QueueService {
+) *playbackQueue.Service {
 	if !enrichmentEnabled {
 		slog.InfoContext(ctx, "playback: now-playing enrichment disabled via PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED")
 	}
 	nowPlayingReader := catalogbridge.NewNowPlayingReader(trackRepo, catalogbridge.WithNowPlayingMetrics(metrics))
-	return playbackService.NewQueueService(queueStateRepo, nowPlayingReader,
-		playbackService.WithNowPlayingEnrichment(enrichmentEnabled))
+	return playbackQueue.New(queueStateRepo, nowPlayingReader,
+		playbackQueue.WithNowPlayingEnrichment(enrichmentEnabled))
 }
 
-func newQueueHandler(queueSvc *playbackService.QueueService, metrics playbackMetricsSink, limit playbackHandler.QueueStateRateLimit) *playbackHandler.QueueHandler {
+func newQueueHandler(queueSvc *playbackQueue.Service, metrics playbackMetricsSink, limit playbackHandler.QueueStateRateLimit) *playbackHandler.QueueHandler {
 	return playbackHandler.NewQueueHandler(queueSvc,
 		playbackHandler.WithQueueStateRateLimit(limit),
 		playbackHandler.WithQueueStateRateLimitMetrics(metrics))

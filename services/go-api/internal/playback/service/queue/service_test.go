@@ -1,81 +1,17 @@
-package service
+package queue
 
 import (
 	"altune/go-api/internal/playback/domain"
+	"altune/go-api/internal/playback/playbacktest"
 	"altune/go-api/internal/playback/ports"
 	"altune/go-api/internal/shared"
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
 )
-
-func captureLogs(t *testing.T) *bytes.Buffer {
-	t.Helper()
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
-}
-
-type inMemoryQueueRepo struct {
-	states map[uuid.UUID]*domain.QueueState
-}
-
-func newInMemoryQueueRepo() *inMemoryQueueRepo {
-	return &inMemoryQueueRepo{states: map[uuid.UUID]*domain.QueueState{}}
-}
-
-func (r *inMemoryQueueRepo) Upsert(_ context.Context, state *domain.QueueState) error {
-	r.states[state.UserId.UUID()] = state
-	return nil
-}
-
-func (r *inMemoryQueueRepo) UpdatePosition(_ context.Context, position *domain.QueuePosition) error {
-	stored := r.states[position.UserId.UUID()]
-	if stored == nil || position.CurrentIdx >= len(stored.TrackIds) || stored.TrackIds[position.CurrentIdx] != position.CurrentTrackId {
-		return domain.ErrQueuePositionMismatch
-	}
-	next := *stored
-	next.CurrentIdx = position.CurrentIdx
-	next.PositionMs = position.PositionMs
-	next.UpdatedAt = position.UpdatedAt
-	r.states[position.UserId.UUID()] = &next
-	return nil
-}
-
-func (r *inMemoryQueueRepo) GetForUser(_ context.Context, userId shared.UserId) (*domain.QueueState, error) {
-	return r.states[userId.UUID()], nil
-}
-
-func (r *inMemoryQueueRepo) DeleteForUser(_ context.Context, userId shared.UserId) error {
-	delete(r.states, userId.UUID())
-	return nil
-}
-
-func trk(name string) string {
-	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(name)).String()
-}
-
-func testUser() shared.UserId {
-	return shared.NewUserId(uuid.New())
-}
-
-type fakeNowPlaying struct {
-	tracks map[string]*ports.NowPlayingTrack
-}
-
-func (f *fakeNowPlaying) Lookup(_ context.Context, _ shared.UserId, trackId string) (*ports.NowPlayingTrack, error) {
-	return f.tracks[trackId], nil
-}
 
 type erroringNowPlaying struct {
 	err error
@@ -86,15 +22,15 @@ func (f *erroringNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string
 }
 
 func TestQueueService_ResumeView_EmbedsCurrentTrack(t *testing.T) {
-	repo := newInMemoryQueueRepo()
-	reader := &fakeNowPlaying{tracks: map[string]*ports.NowPlayingTrack{
-		trk("y"): {Id: trk("y"), Title: "Track Y", Artist: "Artist", AcquisitionStatus: "ready"},
+	repo := playbacktest.NewInMemoryQueueRepo()
+	reader := &playbacktest.FakeNowPlaying{Tracks: map[string]*ports.NowPlayingTrack{
+		playbacktest.Trk("y"): {Id: playbacktest.Trk("y"), Title: "Track Y", Artist: "Artist", AcquisitionStatus: "ready"},
 	}}
-	svc := NewQueueService(repo, reader)
-	user := testUser()
+	svc := New(repo, reader)
+	user := playbacktest.TestUser()
 
 	if err := svc.Save(context.Background(), user, SaveQueueStateInput{
-		TrackIds:   []string{trk("x"), trk("y")},
+		TrackIds:   []string{playbacktest.Trk("x"), playbacktest.Trk("y")},
 		CurrentIdx: 1,
 		RepeatMode: "off",
 	}); err != nil {
@@ -108,19 +44,19 @@ func TestQueueService_ResumeView_EmbedsCurrentTrack(t *testing.T) {
 	if view.CurrentTrack == nil {
 		t.Fatal("expected current track to be embedded")
 	}
-	if view.CurrentTrack.Id != trk("y") || view.CurrentTrack.Title != "Track Y" {
+	if view.CurrentTrack.Id != playbacktest.Trk("y") || view.CurrentTrack.Title != "Track Y" {
 		t.Errorf("wrong current track embedded: %+v", view.CurrentTrack)
 	}
 }
 
 func TestQueueService_ResumeView_UnknownTrackOmitsCurrentTrackWithoutFailing(t *testing.T) {
-	repo := newInMemoryQueueRepo()
-	readerKnowingNoTracks := &fakeNowPlaying{tracks: map[string]*ports.NowPlayingTrack{}}
-	svc := NewQueueService(repo, readerKnowingNoTracks)
-	user := testUser()
+	repo := playbacktest.NewInMemoryQueueRepo()
+	readerKnowingNoTracks := &playbacktest.FakeNowPlaying{Tracks: map[string]*ports.NowPlayingTrack{}}
+	svc := New(repo, readerKnowingNoTracks)
+	user := playbacktest.TestUser()
 
 	if err := svc.Save(context.Background(), user, SaveQueueStateInput{
-		TrackIds:   []string{trk("x"), trk("y")},
+		TrackIds:   []string{playbacktest.Trk("x"), playbacktest.Trk("y")},
 		CurrentIdx: 1,
 		RepeatMode: "off",
 	}); err != nil {
@@ -143,13 +79,13 @@ func TestQueueService_ResumeView_UnknownTrackOmitsCurrentTrackWithoutFailing(t *
 }
 
 func TestQueueService_ResumeView_CatalogErrorDegradesButKeepsResume(t *testing.T) {
-	repo := newInMemoryQueueRepo()
+	repo := playbacktest.NewInMemoryQueueRepo()
 	catalogTimingOut := &erroringNowPlaying{err: errors.New("catalog db timeout")}
-	svc := NewQueueService(repo, catalogTimingOut)
-	user := testUser()
+	svc := New(repo, catalogTimingOut)
+	user := playbacktest.TestUser()
 
 	if err := svc.Save(context.Background(), user, SaveQueueStateInput{
-		TrackIds:   []string{trk("x"), trk("y")},
+		TrackIds:   []string{playbacktest.Trk("x"), playbacktest.Trk("y")},
 		CurrentIdx: 1,
 		RepeatMode: "off",
 	}); err != nil {
@@ -172,14 +108,14 @@ func TestQueueService_ResumeView_CatalogErrorDegradesButKeepsResume(t *testing.T
 }
 
 func TestQueueService_ResumeView_EnrichmentFailureLogsUserId(t *testing.T) {
-	logs := captureLogs(t)
-	repo := newInMemoryQueueRepo()
-	svc := NewQueueService(repo, &erroringNowPlaying{err: errors.New("catalog db timeout")})
-	user := testUser()
+	logs := playbacktest.CaptureLogs(t)
+	repo := playbacktest.NewInMemoryQueueRepo()
+	svc := New(repo, &erroringNowPlaying{err: errors.New("catalog db timeout")})
+	user := playbacktest.TestUser()
 	const nowPlayingId = "5f0c1a52-8d3e-4b6a-9f21-0c7e4d2a9b18"
 
 	if err := svc.Save(context.Background(), user, SaveQueueStateInput{
-		TrackIds:   []string{trk("x"), nowPlayingId},
+		TrackIds:   []string{playbacktest.Trk("x"), nowPlayingId},
 		CurrentIdx: 1,
 		RepeatMode: "off",
 	}); err != nil {
@@ -203,13 +139,13 @@ func TestQueueService_ResumeView_EnrichmentFailureLogsUserId(t *testing.T) {
 }
 
 func TestQueueService_ResumeView_CanceledLookupDegradesButKeepsResume(t *testing.T) {
-	repo := newInMemoryQueueRepo()
+	repo := playbacktest.NewInMemoryQueueRepo()
 	clientDisconnected := &erroringNowPlaying{err: context.Canceled}
-	svc := NewQueueService(repo, clientDisconnected)
-	user := testUser()
+	svc := New(repo, clientDisconnected)
+	user := playbacktest.TestUser()
 
 	if err := svc.Save(context.Background(), user, SaveQueueStateInput{
-		TrackIds:   []string{trk("x"), trk("y")},
+		TrackIds:   []string{playbacktest.Trk("x"), playbacktest.Trk("y")},
 		CurrentIdx: 1,
 		RepeatMode: "off",
 	}); err != nil {
@@ -226,10 +162,10 @@ func TestQueueService_ResumeView_CanceledLookupDegradesButKeepsResume(t *testing
 }
 
 func TestQueueService_ResumeView_UnsavedEmptyQueueOmitsCurrentTrack(t *testing.T) {
-	repo := newInMemoryQueueRepo()
-	reader := &fakeNowPlaying{tracks: map[string]*ports.NowPlayingTrack{}}
-	svc := NewQueueService(repo, reader)
-	userWithNoSavedQueue := testUser()
+	repo := playbacktest.NewInMemoryQueueRepo()
+	reader := &playbacktest.FakeNowPlaying{Tracks: map[string]*ports.NowPlayingTrack{}}
+	svc := New(repo, reader)
+	userWithNoSavedQueue := playbacktest.TestUser()
 
 	view, err := svc.ResumeView(context.Background(), userWithNoSavedQueue)
 	if err != nil {
@@ -247,15 +183,15 @@ func TestQueueService_ResumeView_OutOfRangeIdxOmitsCurrentTrack(t *testing.T) {
 		idx      int
 	}{
 		{name: "empty queue non-zero idx", trackIds: []string{}, idx: 3},
-		{name: "idx past end", trackIds: []string{trk("x")}, idx: 1},
-		{name: "negative idx", trackIds: []string{trk("x")}, idx: -1},
+		{name: "idx past end", trackIds: []string{playbacktest.Trk("x")}, idx: 1},
+		{name: "negative idx", trackIds: []string{playbacktest.Trk("x")}, idx: -1},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := newInMemoryQueueRepo()
+			repo := playbacktest.NewInMemoryQueueRepo()
 			failIfLookedUp := &erroringNowPlaying{err: errors.New("lookup must not be called")}
-			svc := NewQueueService(repo, failIfLookedUp)
-			user := testUser()
-			repo.states[user.UUID()] = &domain.QueueState{UserId: user, TrackIds: tt.trackIds, CurrentIdx: tt.idx}
+			svc := New(repo, failIfLookedUp)
+			user := playbacktest.TestUser()
+			repo.States[user.UUID()] = &domain.QueueState{UserId: user, TrackIds: tt.trackIds, CurrentIdx: tt.idx}
 
 			view, err := svc.ResumeView(context.Background(), user)
 			if err != nil {
@@ -269,12 +205,12 @@ func TestQueueService_ResumeView_OutOfRangeIdxOmitsCurrentTrack(t *testing.T) {
 }
 
 func TestQueueService_Save_PersistsValidState(t *testing.T) {
-	repo := newInMemoryQueueRepo()
-	svc := NewQueueService(repo, &fakeNowPlaying{})
-	user := testUser()
+	repo := playbacktest.NewInMemoryQueueRepo()
+	svc := New(repo, &playbacktest.FakeNowPlaying{})
+	user := playbacktest.TestUser()
 
 	err := svc.Save(context.Background(), user, SaveQueueStateInput{
-		TrackIds:       []string{trk("a"), trk("b"), trk("c")},
+		TrackIds:       []string{playbacktest.Trk("a"), playbacktest.Trk("b"), playbacktest.Trk("c")},
 		CurrentIdx:     2,
 		PositionMs:     1000,
 		RepeatMode:     "all",
@@ -294,9 +230,9 @@ func TestQueueService_Save_PersistsValidState(t *testing.T) {
 }
 
 func TestQueueService_Save_RejectsInvalidRepeatMode(t *testing.T) {
-	svc := NewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{})
-	err := svc.Save(context.Background(), testUser(), SaveQueueStateInput{
-		TrackIds:   []string{trk("a")},
+	svc := New(playbacktest.NewInMemoryQueueRepo(), &playbacktest.FakeNowPlaying{})
+	err := svc.Save(context.Background(), playbacktest.TestUser(), SaveQueueStateInput{
+		TrackIds:   []string{playbacktest.Trk("a")},
 		RepeatMode: "bogus",
 	})
 	if err == nil {
@@ -305,9 +241,9 @@ func TestQueueService_Save_RejectsInvalidRepeatMode(t *testing.T) {
 }
 
 func TestQueueService_Save_FormatsTheStructuredSource(t *testing.T) {
-	repo := newInMemoryQueueRepo()
-	svc := NewQueueService(repo, &fakeNowPlaying{})
-	user := testUser()
+	repo := playbacktest.NewInMemoryQueueRepo()
+	svc := New(repo, &playbacktest.FakeNowPlaying{})
+	user := playbacktest.TestUser()
 
 	err := svc.Save(context.Background(), user, SaveQueueStateInput{
 		RepeatMode:     "off",
@@ -325,32 +261,32 @@ func TestQueueService_Save_FormatsTheStructuredSource(t *testing.T) {
 }
 
 func TestQueueService_Save_RejectsAMalformedSourceBeforeTheRepeatMode(t *testing.T) {
-	repo := newInMemoryQueueRepo()
-	svc := NewQueueService(repo, &fakeNowPlaying{})
+	repo := playbacktest.NewInMemoryQueueRepo()
+	svc := New(repo, &playbacktest.FakeNowPlaying{})
 
-	err := svc.Save(context.Background(), testUser(), SaveQueueStateInput{RepeatMode: "sideways", LegacySourceId: "mixtape:7"})
+	err := svc.Save(context.Background(), playbacktest.TestUser(), SaveQueueStateInput{RepeatMode: "sideways", LegacySourceId: "mixtape:7"})
 
 	var coded interface{ ErrorCode() string }
 	if !errors.As(err, &coded) || coded.ErrorCode() != "playback.unrecognized_source_id" {
 		t.Fatalf("Save = %v, want the source error to win over the repeat-mode error", err)
 	}
-	if len(repo.states) != 0 {
-		t.Fatalf("a rejected source was stored: %+v", repo.states)
+	if len(repo.States) != 0 {
+		t.Fatalf("a rejected source was stored: %+v", repo.States)
 	}
 }
 
 func TestQueueService_SavePosition_MovesPositionWithinStoredQueue(t *testing.T) {
-	repo := newInMemoryQueueRepo()
-	svc := NewQueueService(repo, &fakeNowPlaying{})
-	user := testUser()
+	repo := playbacktest.NewInMemoryQueueRepo()
+	svc := New(repo, &playbacktest.FakeNowPlaying{})
+	user := playbacktest.TestUser()
 	ctx := context.Background()
 	if err := svc.Save(ctx, user, SaveQueueStateInput{
-		TrackIds: []string{trk("a"), trk("b"), trk("c")}, NaturalOrder: []string{trk("c"), trk("b"), trk("a")}, CurrentIdx: 0, PositionMs: 1000, RepeatMode: "all",
+		TrackIds: []string{playbacktest.Trk("a"), playbacktest.Trk("b"), playbacktest.Trk("c")}, NaturalOrder: []string{playbacktest.Trk("c"), playbacktest.Trk("b"), playbacktest.Trk("a")}, CurrentIdx: 0, PositionMs: 1000, RepeatMode: "all",
 	}); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 
-	if err := svc.SavePosition(ctx, user, SaveQueuePositionInput{CurrentIdx: 1, CurrentTrackId: trk("b"), PositionMs: 42000}); err != nil {
+	if err := svc.SavePosition(ctx, user, SaveQueuePositionInput{CurrentIdx: 1, CurrentTrackId: playbacktest.Trk("b"), PositionMs: 42000}); err != nil {
 		t.Fatalf("SavePosition: %v", err)
 	}
 
@@ -361,7 +297,7 @@ func TestQueueService_SavePosition_MovesPositionWithinStoredQueue(t *testing.T) 
 	if got.CurrentIdx != 1 || got.PositionMs != 42000 {
 		t.Errorf("position not saved: idx=%d position=%d", got.CurrentIdx, got.PositionMs)
 	}
-	if strings.Join(got.TrackIds, ",") != strings.Join([]string{trk("a"), trk("b"), trk("c")}, ",") || strings.Join(got.NaturalOrder, ",") != strings.Join([]string{trk("c"), trk("b"), trk("a")}, ",") || got.RepeatMode != domain.RepeatAll {
+	if strings.Join(got.TrackIds, ",") != strings.Join([]string{playbacktest.Trk("a"), playbacktest.Trk("b"), playbacktest.Trk("c")}, ",") || strings.Join(got.NaturalOrder, ",") != strings.Join([]string{playbacktest.Trk("c"), playbacktest.Trk("b"), playbacktest.Trk("a")}, ",") || got.RepeatMode != domain.RepeatAll {
 		t.Errorf("a position-only save changed the rest of the queue: %+v", got)
 	}
 }
@@ -372,16 +308,16 @@ func TestQueueService_SavePosition_RejectsInvalidInputWithoutWriting(t *testing.
 		input SaveQueuePositionInput
 	}{
 		{name: "missing track id", input: SaveQueuePositionInput{CurrentIdx: 0, PositionMs: 1}},
-		{name: "negative position", input: SaveQueuePositionInput{CurrentTrackId: trk("a"), PositionMs: -1}},
-		{name: "negative index", input: SaveQueuePositionInput{CurrentIdx: -1, CurrentTrackId: trk("a")}},
-		{name: "index past max queue", input: SaveQueuePositionInput{CurrentIdx: domain.MaxQueueLength, CurrentTrackId: trk("a")}},
+		{name: "negative position", input: SaveQueuePositionInput{CurrentTrackId: playbacktest.Trk("a"), PositionMs: -1}},
+		{name: "negative index", input: SaveQueuePositionInput{CurrentIdx: -1, CurrentTrackId: playbacktest.Trk("a")}},
+		{name: "index past max queue", input: SaveQueuePositionInput{CurrentIdx: domain.MaxQueueLength, CurrentTrackId: playbacktest.Trk("a")}},
 		{name: "NUL in track id", input: SaveQueuePositionInput{CurrentTrackId: "a\x00"}},
 		{name: "oversized track id", input: SaveQueuePositionInput{CurrentTrackId: strings.Repeat("a", domain.MaxQueueStringBytes+1)}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := NewQueueService(&panickingRepo{}, &fakeNowPlaying{})
-			err := svc.SavePosition(context.Background(), testUser(), tt.input)
+			svc := New(&panickingRepo{}, &playbacktest.FakeNowPlaying{})
+			err := svc.SavePosition(context.Background(), playbacktest.TestUser(), tt.input)
 			var ve *domain.ValidationError
 			if !errors.As(err, &ve) {
 				t.Fatalf("SavePosition(%+v) = %v, want a validation error", tt.input, err)
@@ -391,25 +327,25 @@ func TestQueueService_SavePosition_RejectsInvalidInputWithoutWriting(t *testing.
 }
 
 func TestQueueService_SavePosition_UnmatchedQueueIsConflict(t *testing.T) {
-	svc := NewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{})
+	svc := New(playbacktest.NewInMemoryQueueRepo(), &playbacktest.FakeNowPlaying{})
 
-	err := svc.SavePosition(context.Background(), testUser(), SaveQueuePositionInput{CurrentTrackId: trk("a"), PositionMs: 1})
+	err := svc.SavePosition(context.Background(), playbacktest.TestUser(), SaveQueuePositionInput{CurrentTrackId: playbacktest.Trk("a"), PositionMs: 1})
 
 	if !errors.Is(err, domain.ErrQueuePositionMismatch) {
 		t.Fatalf("SavePosition with nothing stored = %v, want ErrQueuePositionMismatch", err)
 	}
 }
 
-type panickingRepo struct{ inMemoryQueueRepo }
+type panickingRepo struct{ playbacktest.InMemoryQueueRepo }
 
 func (*panickingRepo) UpdatePosition(context.Context, *domain.QueuePosition) error {
 	panic("an invalid position reached the repository")
 }
 
 func TestQueueService_Resume_ReturnsEmptyWhenNoneStored(t *testing.T) {
-	svc := NewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{})
+	svc := New(playbacktest.NewInMemoryQueueRepo(), &playbacktest.FakeNowPlaying{})
 
-	state, err := svc.Resume(context.Background(), testUser())
+	state, err := svc.Resume(context.Background(), playbacktest.TestUser())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -422,12 +358,12 @@ func TestQueueService_Resume_ReturnsEmptyWhenNoneStored(t *testing.T) {
 }
 
 func TestQueueService_Forget_ErasesPersistedState(t *testing.T) {
-	repo := newInMemoryQueueRepo()
-	svc := NewQueueService(repo, &fakeNowPlaying{})
-	user := testUser()
+	repo := playbacktest.NewInMemoryQueueRepo()
+	svc := New(repo, &playbacktest.FakeNowPlaying{})
+	user := playbacktest.TestUser()
 
 	if err := svc.Save(context.Background(), user, SaveQueueStateInput{
-		TrackIds:       []string{trk("a"), trk("b")},
+		TrackIds:       []string{playbacktest.Trk("a"), playbacktest.Trk("b")},
 		CurrentIdx:     1,
 		RepeatMode:     "off",
 		LegacySourceId: "search:mac demarco",
@@ -452,39 +388,20 @@ func TestQueueService_Forget_ErasesPersistedState(t *testing.T) {
 }
 
 func TestQueueService_Forget_IsIdempotentForUnknownUser(t *testing.T) {
-	svc := NewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{})
-	if err := svc.Forget(context.Background(), testUser()); err != nil {
+	svc := New(playbacktest.NewInMemoryQueueRepo(), &playbacktest.FakeNowPlaying{})
+	if err := svc.Forget(context.Background(), playbacktest.TestUser()); err != nil {
 		t.Fatalf("erasing a user with no stored state must not error: %v", err)
 	}
 }
 
-func auditRecord(t *testing.T, logs *bytes.Buffer, msg string) map[string]any {
-	t.Helper()
-	var found map[string]any
-	for _, line := range strings.Split(strings.TrimSpace(logs.String()), "\n") {
-		var rec map[string]any
-		if err := json.Unmarshal([]byte(line), &rec); err != nil || rec["msg"] != msg {
-			continue
-		}
-		if found != nil {
-			t.Fatalf("%q emitted more than once; logs=%s", msg, logs.String())
-		}
-		found = rec
-	}
-	if found == nil {
-		t.Fatalf("no %q audit record; logs=%s", msg, logs.String())
-	}
-	return found
-}
-
 func TestQueueService_Forget_LeavesAnAuditRecord(t *testing.T) {
-	logs := captureLogs(t)
-	svc := NewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{})
-	user := testUser()
+	logs := playbacktest.CaptureLogs(t)
+	svc := New(playbacktest.NewInMemoryQueueRepo(), &playbacktest.FakeNowPlaying{})
+	user := playbacktest.TestUser()
 	const privateSourceId = "search:mac demarco"
 	const privateTrackId = "3b9c77e4-5d1a-4f0e-9c2b-7a6e1f4d8c30"
 	if err := svc.Save(context.Background(), user, SaveQueueStateInput{
-		TrackIds:       []string{trk("a"), privateTrackId},
+		TrackIds:       []string{playbacktest.Trk("a"), privateTrackId},
 		CurrentIdx:     1,
 		RepeatMode:     "off",
 		LegacySourceId: privateSourceId,
@@ -497,7 +414,7 @@ func TestQueueService_Forget_LeavesAnAuditRecord(t *testing.T) {
 		t.Fatalf("Forget: %v", err)
 	}
 
-	rec := auditRecord(t, logs, "playback.queue_state_forgotten")
+	rec := playbacktest.AuditRecord(t, logs, "playback.queue_state_forgotten")
 	if rec["action"] != "queue_state.forget" {
 		t.Errorf("action = %v, want queue_state.forget", rec["action"])
 	}
@@ -522,21 +439,12 @@ func TestQueueService_Forget_LeavesAnAuditRecord(t *testing.T) {
 	}
 }
 
-type undeletableQueueRepo struct {
-	inMemoryQueueRepo
-	err error
-}
-
-func (r *undeletableQueueRepo) DeleteForUser(_ context.Context, _ shared.UserId) error {
-	return r.err
-}
-
 func TestQueueService_Forget_FailedErasureIsNotAudited(t *testing.T) {
-	logs := captureLogs(t)
+	logs := playbacktest.CaptureLogs(t)
 	dbDown := errors.New("connection refused")
-	svc := NewQueueService(&undeletableQueueRepo{err: dbDown}, &fakeNowPlaying{})
+	svc := New(&playbacktest.UndeletableQueueRepo{Err: dbDown}, &playbacktest.FakeNowPlaying{})
 
-	if err := svc.Forget(context.Background(), testUser()); !errors.Is(err, dbDown) {
+	if err := svc.Forget(context.Background(), playbacktest.TestUser()); !errors.Is(err, dbDown) {
 		t.Fatalf("a failed delete must propagate, got %v", err)
 	}
 
@@ -546,12 +454,12 @@ func TestQueueService_Forget_FailedErasureIsNotAudited(t *testing.T) {
 }
 
 func TestQueueService_Resume_ReturnsStored(t *testing.T) {
-	repo := newInMemoryQueueRepo()
-	svc := NewQueueService(repo, &fakeNowPlaying{})
-	user := testUser()
+	repo := playbacktest.NewInMemoryQueueRepo()
+	svc := New(repo, &playbacktest.FakeNowPlaying{})
+	user := playbacktest.TestUser()
 
 	if err := svc.Save(context.Background(), user, SaveQueueStateInput{
-		TrackIds:   []string{trk("x"), trk("y")},
+		TrackIds:   []string{playbacktest.Trk("x"), playbacktest.Trk("y")},
 		CurrentIdx: 1,
 		RepeatMode: "one",
 	}); err != nil {
@@ -568,7 +476,7 @@ func TestQueueService_Resume_ReturnsStored(t *testing.T) {
 }
 
 type failingQueueRepo struct {
-	inMemoryQueueRepo
+	playbacktest.InMemoryQueueRepo
 	err error
 }
 
@@ -581,8 +489,8 @@ func corruptStoredRow() error {
 }
 
 func TestQueueService_Resume_CorruptStoredRowFallsBackToEmpty(t *testing.T) {
-	svc := NewQueueService(&failingQueueRepo{err: corruptStoredRow()}, &fakeNowPlaying{})
-	user := testUser()
+	svc := New(&failingQueueRepo{err: corruptStoredRow()}, &playbacktest.FakeNowPlaying{})
+	user := playbacktest.TestUser()
 
 	state, err := svc.Resume(context.Background(), user)
 	if err != nil {
@@ -594,9 +502,9 @@ func TestQueueService_Resume_CorruptStoredRowFallsBackToEmpty(t *testing.T) {
 }
 
 func TestQueueService_ResumeView_CorruptStoredRowFallsBackToEmpty(t *testing.T) {
-	svc := NewQueueService(&failingQueueRepo{err: corruptStoredRow()}, &fakeNowPlaying{})
+	svc := New(&failingQueueRepo{err: corruptStoredRow()}, &playbacktest.FakeNowPlaying{})
 
-	view, err := svc.ResumeView(context.Background(), testUser())
+	view, err := svc.ResumeView(context.Background(), playbacktest.TestUser())
 	if err != nil {
 		t.Fatalf("corrupt stored row must not 500 the resume endpoint: %v", err)
 	}
@@ -607,9 +515,9 @@ func TestQueueService_ResumeView_CorruptStoredRowFallsBackToEmpty(t *testing.T) 
 
 func TestQueueService_Resume_InfrastructureErrorStillFails(t *testing.T) {
 	dbDown := errors.New("connection refused")
-	svc := NewQueueService(&failingQueueRepo{err: dbDown}, &fakeNowPlaying{})
+	svc := New(&failingQueueRepo{err: dbDown}, &playbacktest.FakeNowPlaying{})
 
-	if _, err := svc.Resume(context.Background(), testUser()); !errors.Is(err, dbDown) {
+	if _, err := svc.Resume(context.Background(), playbacktest.TestUser()); !errors.Is(err, dbDown) {
 		t.Fatalf("non-corruption repo errors must still propagate, got %v", err)
 	}
 }
@@ -626,21 +534,21 @@ func (c *countingNowPlaying) Lookup(_ context.Context, _ shared.UserId, trackId 
 func TestQueueService_ResumeView_NowPlayingEnrichmentKillSwitch(t *testing.T) {
 	tests := []struct {
 		name      string
-		opts      []QueueServiceOption
+		opts      []Option
 		wantCalls int
 		wantTrack bool
 	}{
 		{name: "default enabled", opts: nil, wantCalls: 1, wantTrack: true},
-		{name: "explicitly enabled", opts: []QueueServiceOption{WithNowPlayingEnrichment(true)}, wantCalls: 1, wantTrack: true},
-		{name: "disabled", opts: []QueueServiceOption{WithNowPlayingEnrichment(false)}, wantCalls: 0, wantTrack: false},
+		{name: "explicitly enabled", opts: []Option{WithNowPlayingEnrichment(true)}, wantCalls: 1, wantTrack: true},
+		{name: "disabled", opts: []Option{WithNowPlayingEnrichment(false)}, wantCalls: 0, wantTrack: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			reader := &countingNowPlaying{}
-			svc := NewQueueService(newInMemoryQueueRepo(), reader, tt.opts...)
-			user := testUser()
+			svc := New(playbacktest.NewInMemoryQueueRepo(), reader, tt.opts...)
+			user := playbacktest.TestUser()
 			if err := svc.Save(context.Background(), user, SaveQueueStateInput{
-				TrackIds: []string{trk("x"), trk("y")}, CurrentIdx: 1, RepeatMode: "off",
+				TrackIds: []string{playbacktest.Trk("x"), playbacktest.Trk("y")}, CurrentIdx: 1, RepeatMode: "off",
 			}); err != nil {
 				t.Fatalf("save: %v", err)
 			}

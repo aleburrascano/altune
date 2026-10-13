@@ -17,7 +17,7 @@ import (
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
 
-	playbackService "altune/go-api/internal/playback/service"
+	playbackErasure "altune/go-api/internal/playback/service/erasure"
 )
 
 func (a *App) startSimpleJob(
@@ -64,7 +64,7 @@ func (a *App) startOrphanedAudioReconcile(ctx context.Context, queue catalogPort
 
 const deletedIdentityErasureInterval = time.Hour
 
-func (a *App) startDeletedIdentityErasure(ctx context.Context, svc *playbackService.ForgetDeletedIdentitiesService) {
+func (a *App) startDeletedIdentityErasure(ctx context.Context, svc *playbackErasure.Sweeper) {
 	discoveryErasers := a.discoveryDeletedIdentityErasers()
 	a.startSimpleJob(jobDeletedIdentityErasure, deletedIdentityErasureInterval, func(ctx context.Context) error {
 		_, queueErr := svc.Execute(ctx)

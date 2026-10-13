@@ -1,7 +1,8 @@
-package service
+package erasure
 
 import (
 	"altune/go-api/internal/playback/ports"
+	"altune/go-api/internal/playback/service/queue"
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
@@ -18,9 +19,9 @@ const (
 	DefaultSweepRunBudget = 30 * time.Second
 )
 
-type ForgetDeletedIdentitiesService struct {
+type Sweeper struct {
 	identities ports.DeletedIdentityLister
-	queue      *QueueService
+	queue      *queue.Service
 	metrics    ports.ErasureSweepMetrics
 	reaper     ports.ErasedStateReaper
 	scanWindow int
@@ -32,28 +33,28 @@ type ForgetDeletedIdentitiesService struct {
 	retryOwners []shared.UserId
 }
 
-type ForgetDeletedIdentitiesOption func(*ForgetDeletedIdentitiesService)
+type Option func(*Sweeper)
 
-func WithErasureSweepMetrics(m ports.ErasureSweepMetrics) ForgetDeletedIdentitiesOption {
-	return func(s *ForgetDeletedIdentitiesService) { s.metrics = m }
+func WithErasureSweepMetrics(m ports.ErasureSweepMetrics) Option {
+	return func(s *Sweeper) { s.metrics = m }
 }
 
-func WithErasedStateReaper(r ports.ErasedStateReaper) ForgetDeletedIdentitiesOption {
-	return func(s *ForgetDeletedIdentitiesService) { s.reaper = r }
+func WithErasedStateReaper(r ports.ErasedStateReaper) Option {
+	return func(s *Sweeper) { s.reaper = r }
 }
 
-func WithSweepRunBudget(d time.Duration) ForgetDeletedIdentitiesOption {
-	return func(s *ForgetDeletedIdentitiesService) {
+func WithSweepRunBudget(d time.Duration) Option {
+	return func(s *Sweeper) {
 		if d > 0 {
 			s.runBudget = d
 		}
 	}
 }
 
-func NewForgetDeletedIdentitiesService(identities ports.DeletedIdentityLister, queue *QueueService, opts ...ForgetDeletedIdentitiesOption) *ForgetDeletedIdentitiesService {
-	s := &ForgetDeletedIdentitiesService{
+func NewSweeper(identities ports.DeletedIdentityLister, queues *queue.Service, opts ...Option) *Sweeper {
+	s := &Sweeper{
 		identities: identities,
-		queue:      queue,
+		queue:      queues,
 		metrics:    ports.NoopErasureSweepMetrics(),
 		scanWindow: ownerScanWindow,
 		runBudget:  DefaultSweepRunBudget,
@@ -82,7 +83,7 @@ func (o eraseOutcome) interrupted() bool {
 	return len(o.unattempted) > 0
 }
 
-func (s *ForgetDeletedIdentitiesService) Execute(ctx context.Context) (int, error) {
+func (s *Sweeper) Execute(ctx context.Context) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	run := &sweepRun{cursor: s.resumeAfter}
@@ -99,7 +100,7 @@ func (s *ForgetDeletedIdentitiesService) Execute(ctx context.Context) (int, erro
 	return run.forgotten, errors.Join(run.failures...)
 }
 
-func (s *ForgetDeletedIdentitiesService) retryFailedOwners(ctx, runCtx context.Context, run *sweepRun) bool {
+func (s *Sweeper) retryFailedOwners(ctx, runCtx context.Context, run *sweepRun) bool {
 	owners := s.retryOwners
 	s.retryOwners = nil
 	outcome := s.forgetAll(runCtx, owners)
@@ -114,7 +115,7 @@ func (s *ForgetDeletedIdentitiesService) retryFailedOwners(ctx, runCtx context.C
 	return true
 }
 
-func (s *ForgetDeletedIdentitiesService) scanOwners(ctx, runCtx context.Context, run *sweepRun) {
+func (s *Sweeper) scanOwners(ctx, runCtx context.Context, run *sweepRun) {
 	for {
 		page, err := s.identities.ListOwnersWithoutIdentity(runCtx, run.cursor, s.scanWindow)
 		if err != nil {
@@ -132,7 +133,7 @@ func (s *ForgetDeletedIdentitiesService) scanOwners(ctx, runCtx context.Context,
 	}
 }
 
-func (s *ForgetDeletedIdentitiesService) erasePage(ctx, runCtx context.Context, run *sweepRun, page ports.OwnerScanPage) bool {
+func (s *Sweeper) erasePage(ctx, runCtx context.Context, run *sweepRun, page ports.OwnerScanPage) bool {
 	outcome := s.forgetAll(runCtx, page.Orphaned)
 	run.forgotten += outcome.forgotten
 	run.failures = append(run.failures, outcome.failures...)
@@ -144,7 +145,7 @@ func (s *ForgetDeletedIdentitiesService) erasePage(ctx, runCtx context.Context, 
 	return true
 }
 
-func (s *ForgetDeletedIdentitiesService) keepForRetry(ctx context.Context, owners []shared.UserId) {
+func (s *Sweeper) keepForRetry(ctx context.Context, owners []shared.UserId) {
 	for _, owner := range owners {
 		if slices.Contains(s.retryOwners, owner) {
 			continue
@@ -158,7 +159,7 @@ func (s *ForgetDeletedIdentitiesService) keepForRetry(ctx context.Context, owner
 	}
 }
 
-func (s *ForgetDeletedIdentitiesService) recordScanFailure(ctx, runCtx context.Context, run *sweepRun, err error) {
+func (s *Sweeper) recordScanFailure(ctx, runCtx context.Context, run *sweepRun, err error) {
 	switch {
 	case errors.Is(err, ports.ErrIdentityStoreUnavailable):
 		slog.WarnContext(ctx, "playback.deleted_identity_sweep_idle", "error", err)
@@ -172,7 +173,7 @@ func (s *ForgetDeletedIdentitiesService) recordScanFailure(ctx, runCtx context.C
 	}
 }
 
-func (s *ForgetDeletedIdentitiesService) recordRunInterrupted(ctx, runCtx context.Context, run *sweepRun) {
+func (s *Sweeper) recordRunInterrupted(ctx, runCtx context.Context, run *sweepRun) {
 	if err := ctx.Err(); err != nil {
 		run.failures = append(run.failures, fmt.Errorf("forget deleted identities: %w", err))
 		return
@@ -184,7 +185,7 @@ func logRunBudgetSpent(ctx context.Context, run *sweepRun) {
 	slog.InfoContext(ctx, "playback.deleted_identity_sweep_budget_spent", "accounts", run.forgotten)
 }
 
-func (s *ForgetDeletedIdentitiesService) recordOwnerScanTimeout(ctx context.Context, err error) {
+func (s *Sweeper) recordOwnerScanTimeout(ctx context.Context, err error) {
 	if !errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
 		return
 	}
@@ -192,7 +193,7 @@ func (s *ForgetDeletedIdentitiesService) recordOwnerScanTimeout(ctx context.Cont
 	s.metrics.OwnerScanTimedOut()
 }
 
-func (s *ForgetDeletedIdentitiesService) reapErasedStates(ctx context.Context) error {
+func (s *Sweeper) reapErasedStates(ctx context.Context) error {
 	if s.reaper == nil {
 		return nil
 	}
@@ -206,7 +207,7 @@ func (s *ForgetDeletedIdentitiesService) reapErasedStates(ctx context.Context) e
 	return nil
 }
 
-func (s *ForgetDeletedIdentitiesService) forgetAll(ctx context.Context, owners []shared.UserId) eraseOutcome {
+func (s *Sweeper) forgetAll(ctx context.Context, owners []shared.UserId) eraseOutcome {
 	var outcome eraseOutcome
 	for i, owner := range owners {
 		if ctx.Err() != nil {

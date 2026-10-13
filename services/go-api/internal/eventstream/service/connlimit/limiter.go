@@ -1,11 +1,11 @@
-package service
+package connlimit
 
 import (
 	"altune/go-api/internal/eventstream/domain"
 	"sync"
 )
 
-type ConnLimiter struct {
+type Limiter struct {
 	mu        sync.Mutex
 	maxPerKey int
 	maxTotal  int
@@ -13,11 +13,11 @@ type ConnLimiter struct {
 	count     map[string]int
 }
 
-func NewConnLimiter(maxPerKey, maxTotal int) *ConnLimiter {
-	return &ConnLimiter{maxPerKey: maxPerKey, maxTotal: maxTotal, count: make(map[string]int)}
+func New(maxPerKey, maxTotal int) *Limiter {
+	return &Limiter{maxPerKey: maxPerKey, maxTotal: maxTotal, count: make(map[string]int)}
 }
 
-func (l *ConnLimiter) Acquire(key string) error {
+func (l *Limiter) Acquire(key string) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.maxPerKey > 0 && l.count[key] >= l.maxPerKey {
@@ -31,7 +31,7 @@ func (l *ConnLimiter) Acquire(key string) error {
 	return nil
 }
 
-func (l *ConnLimiter) Release(key string) {
+func (l *Limiter) Release(key string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	n, ok := l.count[key]

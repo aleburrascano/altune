@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/playback/adapters/authbridge"
 	"altune/go-api/internal/playback/domain"
 	"altune/go-api/internal/playback/ports"
-	"altune/go-api/internal/playback/service"
+	"altune/go-api/internal/playback/service/queue"
 	"altune/go-api/internal/shared/httputil"
 	"context"
 	"errors"
@@ -16,7 +16,7 @@ import (
 )
 
 type QueueHandler struct {
-	svc     *service.QueueService
+	svc     *queue.Service
 	limiter func(http.Handler) http.Handler
 }
 
@@ -36,7 +36,7 @@ func withClock(now func() time.Time) QueueHandlerOption {
 	return func(c *queueHandlerConfig) { c.now = now }
 }
 
-func NewQueueHandler(svc *service.QueueService, opts ...QueueHandlerOption) *QueueHandler {
+func NewQueueHandler(svc *queue.Service, opts ...QueueHandlerOption) *QueueHandler {
 	cfg := queueHandlerConfig{
 		rateLimit:        DefaultQueueStateRateLimit,
 		now:              time.Now,
@@ -114,7 +114,7 @@ func (h *QueueHandler) handleSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.svc.Save(r.Context(), userId, service.SaveQueueStateInput{
+	err := h.svc.Save(r.Context(), userId, queue.SaveQueueStateInput{
 		TrackIds:       body.TrackIds,
 		CurrentIdx:     body.CurrentIdx,
 		PositionMs:     body.PositionMs,
@@ -143,7 +143,7 @@ func (h *QueueHandler) handleSavePosition(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	err := h.svc.SavePosition(r.Context(), userId, service.SaveQueuePositionInput{
+	err := h.svc.SavePosition(r.Context(), userId, queue.SaveQueuePositionInput{
 		CurrentIdx:     body.CurrentIdx,
 		CurrentTrackId: body.CurrentTrackId,
 		PositionMs:     body.PositionMs,
@@ -199,7 +199,7 @@ func writeQueueError(w http.ResponseWriter, r *http.Request, err error) {
 	httputil.HandleServiceError(w, r, err)
 }
 
-func toResponse(view *service.ResumeView) queueStateResponse {
+func toResponse(view *queue.ResumeView) queueStateResponse {
 	state := view.State
 	resp := queueStateResponse{
 		TrackIds:     state.TrackIds,
@@ -214,16 +214,20 @@ func toResponse(view *service.ResumeView) queueStateResponse {
 		CurrentTrackUnavailable: view.CurrentTrackUnavailable,
 	}
 	if c := view.CurrentTrack; c != nil {
-		resp.CurrentTrack = &currentTrackResponse{
-			Id:                c.Id,
-			Title:             c.Title,
-			Artist:            c.Artist,
-			ArtworkURL:        c.ArtworkURL,
-			DurationSeconds:   c.DurationSeconds,
-			AcquisitionStatus: c.AcquisitionStatus,
-		}
+		resp.CurrentTrack = toCurrentTrackResponse(c)
 	}
 	return resp
+}
+
+func toCurrentTrackResponse(c *ports.NowPlayingTrack) *currentTrackResponse {
+	return &currentTrackResponse{
+		Id:                c.Id,
+		Title:             c.Title,
+		Artist:            c.Artist,
+		ArtworkURL:        c.ArtworkURL,
+		DurationSeconds:   c.DurationSeconds,
+		AcquisitionStatus: c.AcquisitionStatus,
+	}
 }
 
 func sourceFromDTO(dto *queueSourceDTO) domain.QueueSource {
