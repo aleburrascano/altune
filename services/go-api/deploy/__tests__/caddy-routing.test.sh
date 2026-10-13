@@ -247,7 +247,7 @@ SCRIPT_SRC=$(printf '%s' "$CSP" | tr ';' '\n' | sed -n 's/^ *script-src//p')
 case "$SCRIPT_SRC" in
     *"'unsafe-inline'"* | *"'unsafe-eval'"*) fail "script-src allows inline or eval: '$SCRIPT_SRC'" ;;
 esac
-printf '%s' "$CSP" | grep -q "frame-ancestors 'none'" || fail "CSP lacks frame-ancestors 'none'"
+grep -q "frame-ancestors 'none'" <<<"$CSP" || fail "CSP lacks frame-ancestors 'none'"
 [ "$(header_of X-Content-Type-Options)" = nosniff ] || fail "web response lacks X-Content-Type-Options: nosniff"
 [ "$(header_of Referrer-Policy)" = strict-origin-when-cross-origin ] || fail "web response lacks the Referrer-Policy"
 
@@ -263,8 +263,8 @@ KILL_SWITCH_URL=$(sed -n "s|^ *'\(https://raw\.githubusercontent\.com/[^']*\)';$
     "$HERE/../../../client/src/shared/killSwitch/killSwitchPoll.ts")
 [ -n "$KILL_SWITCH_URL" ] || fail "could not read DEFAULT_KILL_SWITCH_URL from killSwitchPoll.ts"
 CONNECT_SRC=$(header_of Content-Security-Policy | tr ';' '\n' | sed -n 's/^ *connect-src//p')
-tr ' ' '\n' <<<"$CONNECT_SRC" | grep -qxF "$KILL_SWITCH_URL" || fail "connect-src '$CONNECT_SRC' lacks $KILL_SWITCH_URL"
-tr ' ' '\n' <<<"$CONNECT_SRC" | grep '^https://raw\.githubusercontent\.com' | grep -vqxF "$KILL_SWITCH_URL" &&
+grep -qxF "$KILL_SWITCH_URL" < <(tr ' ' '\n' <<<"$CONNECT_SRC") || fail "connect-src '$CONNECT_SRC' lacks $KILL_SWITCH_URL"
+grep -vqxF "$KILL_SWITCH_URL" < <(tr ' ' '\n' <<<"$CONNECT_SRC" | grep '^https://raw\.githubusercontent\.com') &&
     fail "connect-src '$CONNECT_SRC' opens raw.githubusercontent.com beyond the kill-switch file"
 
 CASE="the internal :8082 listener still reaches staging go-api with the export published"
@@ -323,15 +323,15 @@ SCRIPT_SRC=$(printf '%s' "$CSP" | tr ';' '\n' | sed -n 's/^ *script-src//p')
 case "$SCRIPT_SRC" in
     *"'unsafe-inline'"* | *"'unsafe-eval'"*) fail "prod script-src allows inline or eval: '$SCRIPT_SRC'" ;;
 esac
-printf '%s' "$CSP" | grep -q "frame-ancestors 'none'" || fail "prod CSP lacks frame-ancestors 'none'"
+grep -q "frame-ancestors 'none'" <<<"$CSP" || fail "prod CSP lacks frame-ancestors 'none'"
 
 CASE="prod connect-src opens the prod Supabase project, not staging's"
 publish_export_prod
 fetch "$PROD" / >/dev/null
 CONNECT_SRC=$(header_of Content-Security-Policy | tr ';' '\n' | sed -n 's/^ *connect-src//p')
-tr ' ' '\n' <<<"$CONNECT_SRC" | grep -qxF "https://ellvexundmgvbbfqbzau.supabase.co" ||
+grep -qxF "https://ellvexundmgvbbfqbzau.supabase.co" < <(tr ' ' '\n' <<<"$CONNECT_SRC") ||
     fail "prod connect-src '$CONNECT_SRC' lacks the prod Supabase host"
-tr ' ' '\n' <<<"$CONNECT_SRC" | grep -qxF "https://ijyjoyxhwmbmriwzazbx.supabase.co" &&
+grep -qxF "https://ijyjoyxhwmbmriwzazbx.supabase.co" < <(tr ' ' '\n' <<<"$CONNECT_SRC") &&
     fail "prod connect-src '$CONNECT_SRC' leaks the staging Supabase host"
 
 CASE="mh05: a hard reload on a dynamic deep link renders that screen on prod"
@@ -357,9 +357,9 @@ STAGING_SCRIPT_SRC=$(header_of Content-Security-Policy | tr ';' '\n' | sed -n 's
 publish_export_with_inline_script_prod "$INLINE_SCRIPT"
 fetch "$PROD" / >/dev/null
 PROD_SCRIPT_SRC=$(header_of Content-Security-Policy | tr ';' '\n' | sed -n 's/^ *script-src//p')
-printf '%s' "$STAGING_SCRIPT_SRC" | grep -qF "'sha256-$DIGEST'" ||
+grep -qF "'sha256-$DIGEST'" <<<"$STAGING_SCRIPT_SRC" ||
     fail "staging script-src '$STAGING_SCRIPT_SRC' lacks the served export's inline-script hash 'sha256-$DIGEST' (script: $INLINE_SCRIPT)"
-printf '%s' "$PROD_SCRIPT_SRC" | grep -qF "'sha256-$DIGEST'" ||
+grep -qF "'sha256-$DIGEST'" <<<"$PROD_SCRIPT_SRC" ||
     fail "prod script-src '$PROD_SCRIPT_SRC' lacks the served export's inline-script hash 'sha256-$DIGEST' (script: $INLINE_SCRIPT)"
 
 CASE="ota: a published update is served to the shell of its runtime and platform"

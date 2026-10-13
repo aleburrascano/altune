@@ -12,7 +12,7 @@ if [ ! -d "$MIGRATIONS_DIR" ]; then
 fi
 
 is_contract_file() {
-    printf '%s' "$1" | grep -qE '^[0-9]{3,}_contract_'
+    grep -qE '^[0-9]{3,}_contract_' <<<"$1"
 }
 
 report() {

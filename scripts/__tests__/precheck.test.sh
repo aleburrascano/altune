@@ -300,7 +300,7 @@ run_script
 expect_rc 1
 expect_out "FAIL  strip PRs match the strip tool"
 expect_out "services/overseer/main.go"
-grep "^FAIL  strip PRs match the strip tool" "$WORK/out.log" | grep -q "widget.go" \
+grep -q "widget.go" < <(grep "^FAIL  strip PRs match the strip tool" "$WORK/out.log") \
     && fail "expected widget.go to not be named in the strip-matches failure"
 
 CASE="deleting a commented Go file does not fail the strip-matches check"

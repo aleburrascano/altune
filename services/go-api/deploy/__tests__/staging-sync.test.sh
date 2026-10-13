@@ -35,7 +35,7 @@ install_docker_stub() {
 #!/usr/bin/env bash
 case "$1" in
   ps)
-    if printf '%s' "$*" | grep -q "altune-staging-go-api-"; then
+    if grep -q "altune-staging-go-api-" <<<"$*"; then
         echo altune-staging-go-api-blue
     else
         echo altune-go-api-blue

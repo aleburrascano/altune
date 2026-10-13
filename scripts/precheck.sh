@@ -126,6 +126,10 @@ if touches '^services/go-api/migrations/|^scripts/migration-prefixes\.sh$'; then
   check "go-api migration numbers are unique" . bash scripts/migration-prefixes.sh services/go-api/migrations "$base_ref"
 fi
 
+if touches '\.sh$'; then
+  check "no pipefail script pipes into grep -q" . bash scripts/pipefail-grep-q.sh
+fi
+
 script_tests=$(grep -E '^scripts/(ci/)?(__tests__/)?[a-z0-9-]+(\.test)?\.(sh|mjs)$' <<<"$changed" | grep -vE '/(precheck|test-home)(\.test)?\.(sh|mjs)$' | sed -E 's#^(scripts/(ci/)?)(__tests__/)?([a-z0-9-]+)(\.test)?\.(sh|mjs)$#\1__tests__/\4.test.sh#' | sort -u)
 if [ -n "$script_tests" ] && [ $lint_only = 0 ] && ! link_deps .; then
   echo "SKIP  repo script self-tests: no root node_modules here or in $main_tree"; missing=1

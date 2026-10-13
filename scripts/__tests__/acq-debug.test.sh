@@ -189,7 +189,7 @@ WORK=$WORK run_script export-tracks 30
 expect_rc 0
 [ "$(cat "$WORK/out.log")" = '{"id":"t1"}' ] || fail "rows not passed through: $(cat "$WORK/out.log")"
 grep -qF "days=30" "$WORK/psql.args" || fail "window not passed to psql: $(cat "$WORK/psql.args")"
-head -1 "$WORK/psql.sql" | grep -qF "default_transaction_read_only = on" || fail "session not forced read-only"
+grep -qF "default_transaction_read_only = on" < <(head -1 "$WORK/psql.sql") || fail "session not forced read-only"
 grep -qiE '\b(insert|update|delete|drop)\b' "$WORK/psql.sql" && fail "export query must be read-only"
 
 if [ "$FAILURES" -gt 0 ]; then

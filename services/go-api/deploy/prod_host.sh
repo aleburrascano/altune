@@ -41,7 +41,7 @@ seed_upstream_if_missing() {
         mv "$LEGACY_UPSTREAM_FILE" "$UPSTREAM_FILE"
         return 0
     fi
-    if docker ps --format '{{.Names}}' | grep -qx altune-go-api; then
+    if grep -qx altune-go-api < <(docker ps --format '{{.Names}}'); then
         log "first blue-green deploy: holding Caddy on the legacy container during the swap"
         printf 'reverse_proxy altune-go-api:8000\n' >"$UPSTREAM_FILE"
     else

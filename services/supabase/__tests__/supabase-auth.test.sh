@@ -335,7 +335,7 @@ CASE="apply prod targets the prod project, never staging"
 tier_live_with prod '.disable_signup = true'
 answer y
 run_tool apply prod
-grep -F 'PATCH' "$WORK/argv.log" | grep -qF '/projects/ellvexundmgvbbfqbzau/config/auth' ||
+grep -qF '/projects/ellvexundmgvbbfqbzau/config/auth' < <(grep -F 'PATCH' "$WORK/argv.log") ||
     fail "apply prod did not PATCH the prod project: $(cat "$WORK/argv.log")"
 ! grep -qF 'ijyjoyxhwmbmriwzazbx' "$WORK/argv.log" || fail "apply prod touched the staging project: $(cat "$WORK/argv.log")"
 answer ""

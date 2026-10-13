@@ -265,7 +265,7 @@ sql)
   [ $# -ge 1 ] || { echo "usage: sql <select>"; exit 3; }
   q=$(printf '%s' "$*" | sed -E 's/[[:space:];]+$//')
   case $q in *\;*|*\\*) echo "acq-debug: sql takes one statement, no ';' or backslash" >&2; exit 3 ;; esac
-  printf '%s' "$q" | grep -qiE '^[[:space:]]*(select|with|explain|show|table|values)[[:space:](]' ||
+  grep -qiE '^[[:space:]]*(select|with|explain|show|table|values)[[:space:](]' <<<"$q" ||
     { echo "acq-debug: sql only runs SELECT / WITH / EXPLAIN / SHOW / TABLE / VALUES" >&2; exit 3; }
   printf '%s;\n' "$q" | db
   ;;

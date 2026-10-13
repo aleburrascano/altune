@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 base=$(git merge-base "$1" HEAD)
-if ! git diff --name-only "$base" HEAD | grep -qE '^services/go-api/|^scripts/ci/(integration|postgres|test-backend-migrate)\.sh$|^\.gitea/workflows/precheck\.yml$'; then
+if ! grep -qE '^services/go-api/|^scripts/ci/(integration|postgres|test-backend-migrate)\.sh$|^\.gitea/workflows/precheck\.yml$' < <(git diff --name-only "$base" HEAD); then
   echo "no go-api change; the Postgres integration tests have nothing to check"
   exit 0
 fi
@@ -22,7 +22,7 @@ else
     /^FAIL\t/ { if ($0 ~ /\[/ || names == "") { print "HARD"; exit } print $2 " " names; names = ""; next }
   ' "$log")
   rm -f "$log"
-  if [ "${#reruns[@]}" -eq 0 ] || printf '%s\n' "${reruns[@]}" | grep -qx HARD; then
+  if [ "${#reruns[@]}" -eq 0 ] || grep -qx HARD < <(printf '%s\n' "${reruns[@]}"); then
     exit 1
   fi
   for r in "${reruns[@]}"; do
