@@ -8,7 +8,7 @@ export function isSameSession(epoch: number | undefined): boolean {
   return epoch === sessionEpoch;
 }
 
-export function bumpSessionEpoch(): void {
+function bumpSessionEpoch(): void {
   sessionEpoch += 1;
 }
 

@@ -38,7 +38,7 @@ function saveScheme(scheme: ColorScheme): void {
   }
 }
 
-export type ThemePreferenceState = {
+type ThemePreferenceState = {
   scheme: ColorScheme;
   setScheme: (scheme: ColorScheme) => void;
   toggle: () => void;

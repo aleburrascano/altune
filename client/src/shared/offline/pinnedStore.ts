@@ -177,7 +177,7 @@ function warnUnpinIncomplete(requested: number, run: UnpinRun): void {
   if (run.untried > 0) warnDeadlineStopped(requested, run.untried);
 }
 
-export type PinnedState = {
+type PinnedState = {
   entries: Record<string, PinnedEntry>;
   queue: TrackId[];
   isWorking: boolean;

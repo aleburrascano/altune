@@ -20,7 +20,7 @@ import {
 import type { QueueSource, QueueState, RepeatMode } from '@shared/playback/queueOrder';
 import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
-export interface QueueView {
+interface QueueView {
   ordered: PlaybackTrack[];
   currentIndex: number;
 }
