@@ -1,4 +1,4 @@
-import type { UseMutationResult } from '@tanstack/react-query';
+import type { MutationKey, UseMutationResult } from '@tanstack/react-query';
 
 import { useAppMutation } from '@shared/query/useAppMutation';
 import type { TrackId } from '@shared/apiClient/ids';
@@ -14,7 +14,7 @@ import { guardedMutationOptions } from '@shared/session/guardedMutation';
 export type SharedRetryOptions<TContext extends object> = {
   action: string;
   entryPoint: RetryEntryPoint | undefined;
-  mutationKey?: readonly unknown[];
+  mutationKey?: MutationKey;
   onMutate: (trackId: TrackId) => TContext;
   onError: (error: Error, trackId: TrackId, context: TContext) => void;
 };

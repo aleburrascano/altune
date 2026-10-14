@@ -427,7 +427,7 @@ describe('MC-8 features reach the API only through their own adapters', () => {
 
 describe('MC-11 baseline', () => {
   const baselinePath = path.join(__dirname, '..', '..', 'baselines', 'consistency.baseline');
-  const clearedFolders = ['src/shared/files/', 'src/shared/events/', 'src/features/'];
+  const clearedFolders = ['src/features/', 'src/shared/'];
 
   function mc11Files(): string[] {
     return fs

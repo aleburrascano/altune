@@ -34,6 +34,8 @@ export function onlyWhileTheStartingSessionLasts<TData, TVariables>(
 
 type SessionFenced<TContext> = TContext & { epoch: number };
 
+type SettleResult = ReturnType<NonNullable<UseMutationOptions['onSuccess']>>;
+
 type GuardedMutation<TData, TVariables, TContext extends object> = {
   mutationFn: (variables: TVariables) => Promise<TData>;
   onMutate?: (variables: TVariables) => TContext;
@@ -41,12 +43,12 @@ type GuardedMutation<TData, TVariables, TContext extends object> = {
     data: TData,
     variables: TVariables,
     context: SessionFenced<TContext>,
-  ) => Promise<unknown> | unknown;
+  ) => SettleResult;
   onError?: (
     error: DefaultError,
     variables: TVariables,
     context: SessionFenced<TContext>,
-  ) => Promise<unknown> | unknown;
+  ) => SettleResult;
 };
 
 export function guardedMutationOptions<
@@ -81,7 +83,7 @@ function onlyInTheSameSession<TSettleArg, TVariables, TContext>(
     settleArg: TSettleArg,
     variables: TVariables,
     context: SessionFenced<TContext>,
-  ) => Promise<unknown> | unknown,
+  ) => SettleResult,
 ) {
   return (
     settleArg: TSettleArg,

@@ -6,20 +6,24 @@ import { supabase } from '@shared/auth/supabaseClient';
 type SessionStore = {
   storageKey: string;
   storage: { setItem: (key: string, value: string) => Promise<void> };
-  stopAutoRefresh?: () => unknown;
+  stopAutoRefresh?: () => Promise<void>;
   _notifyAllSubscribers?: (event: AuthChangeEvent, session: Session) => Promise<void>;
 };
 
-function assertSessionStoreShape(store: SessionStore): void {
+function isSessionStore(auth: object): auth is SessionStore {
+  const store = auth as Partial<SessionStore>;
   const hasKey = typeof store.storageKey === 'string' && store.storageKey.length > 0;
   const hasStorage = typeof store.storage?.setItem === 'function';
-  if (!hasKey || !hasStorage) {
-    throw new Error(
-      'test-auth: Supabase auth session-store internals changed ' +
-        '(expected string `storageKey` and `storage.setItem`); the injection ' +
-        'path must be updated for this @supabase/supabase-js version',
-    );
-  }
+  return hasKey && hasStorage;
+}
+
+function asSessionStore(auth: object): SessionStore {
+  if (isSessionStore(auth)) return auth;
+  throw new Error(
+    'test-auth: Supabase auth session-store internals changed ' +
+      '(expected string `storageKey` and `storage.setItem`); the injection ' +
+      'path must be updated for this @supabase/supabase-js version',
+  );
 }
 
 export async function injectTestSession(session: Session): Promise<void> {
@@ -28,8 +32,7 @@ export async function injectTestSession(session: Session): Promise<void> {
       'test-auth is disabled: available only in a non-production build with EXPO_PUBLIC_TEST_AUTH=1',
     );
   }
-  const store = supabase.auth as unknown as SessionStore;
-  assertSessionStoreShape(store);
+  const store = asSessionStore(supabase.auth);
   await store.storage.setItem(store.storageKey, JSON.stringify(session));
   if (typeof store.stopAutoRefresh === 'function') {
     void store.stopAutoRefresh();

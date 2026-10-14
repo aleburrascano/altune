@@ -1,4 +1,5 @@
 import { apiFetch } from '@shared/apiClient';
+import type { JsonObject } from '@shared/files/json';
 import { isLoopEnabled } from '@shared/killSwitch/killSwitch';
 
 import { getSessionId } from '@shared/telemetry/eventSession';
@@ -24,12 +25,14 @@ export type DiscoveryEventType =
   | 'download_failed'
   | 'screen_view';
 
+export type EventPayload = JsonObject;
+
 export type DiscoveryEvent = {
   type: DiscoveryEventType;
   search_id?: string | undefined;
   event_id?: string | undefined;
   client_occurred_at?: string | undefined;
-  payload?: Record<string, unknown>;
+  payload?: EventPayload;
 };
 
 class TelemetryGatedError extends Error {

@@ -20,6 +20,8 @@ type PlaylistList = { items: PlaylistResponse[] };
 type PlaylistDetail = { name: string; tracks: { id: TrackId }[] };
 type AlertContent = { title: string; message: string };
 type StartedIn = { epoch: number } | undefined;
+type CreateSettled = PlaylistResponse | CreateWithTracksResult | undefined;
+type CreateVariables = string | CreateWithTracksVariables;
 type CreatedInSession = { playlist: PlaylistResponse; trackIds: TrackId[]; epoch: number };
 
 type CreateWithTracksResult =
@@ -127,7 +129,12 @@ function alertCreatedWithTracks(
 }
 
 function refreshPlaylistsInSameSession(queryClient: QueryClient) {
-  return (_settled: unknown, _error: unknown, _variables: unknown, startedIn: StartedIn) =>
+  return (
+    _settled: CreateSettled,
+    _error: Error | null,
+    _variables: CreateVariables,
+    startedIn: StartedIn,
+  ) =>
     isSameSession(startedIn?.epoch)
       ? queryClient.invalidateQueries({ queryKey: playlistKeys.list })
       : undefined;

@@ -67,7 +67,7 @@ const OUTBOX_SCHEMA: SchemaSpec = {
   migrations: [(bareArray) => ({ schemaVersion: 1, entries: bareArray })],
 };
 
-function keepPersistedEntries(entries: readonly unknown[]): OutboxEntry[] {
+function parsePersistedEntries(entries: readonly unknown[]): OutboxEntry[] {
   const kept = entries.filter(isPersistedEntry);
   const dropped = entries.length - kept.length;
   if (dropped > 0) console.warn(`[telemetry] dropped ${dropped} malformed outbox entries at load`);
@@ -81,7 +81,7 @@ export function loadPersistedOutbox(): OutboxEntry[] {
     console.warn(`[telemetry] ${OUTBOX_FILE} is not an outbox; treating it as empty`);
     return [];
   }
-  return keepPersistedEntries(read.entries);
+  return parsePersistedEntries(read.entries);
 }
 
 export function persistOutbox(entries: readonly OutboxEntry[]): void {

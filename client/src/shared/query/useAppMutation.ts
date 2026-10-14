@@ -18,7 +18,7 @@ import {
 } from '@shared/session/guardedMutation';
 import { isSameSession } from '@shared/session/signOutCleanup';
 import { reportClientError } from '@shared/telemetry/clientErrorReporting';
-import { recordUserAction } from '@shared/telemetry/userTelemetry';
+import { recordUserAction, type UserActionPayload } from '@shared/telemetry/userTelemetry';
 import { showFailureAlert } from '@shared/ui';
 
 export type AppMutationOptions<TData, TError extends Error, TVars, TCtx> = UseMutationOptions<
@@ -39,7 +39,9 @@ function optionally<K extends string, V>(key: K, value: V | undefined): { [P in 
   return value === undefined ? {} : ({ [key]: value } as { [P in K]?: V });
 }
 
-function failureFields(failure: Error): Record<string, unknown> {
+type FailureFields = Pick<UserActionPayload, 'status' | 'correlation_id' | 'error'>;
+
+function failureFields(failure: Error): FailureFields {
   return {
     ...optionally('status', failure instanceof ApiError ? failure.status : undefined),
     ...optionally('correlation_id', correlationIdOf(failure)),

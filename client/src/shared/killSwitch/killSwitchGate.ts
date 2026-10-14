@@ -19,7 +19,10 @@ export function useLoopEnabled(loop: KillSwitchLoop): boolean {
   return useSyncExternalStore(subscribe, isEnabled, isEnabled);
 }
 
-export function useGatedCallback(loop: KillSwitchLoop, action: () => unknown): () => void {
+export function useGatedCallback(
+  loop: KillSwitchLoop,
+  action: () => void | Promise<unknown>,
+): () => void {
   const isEnabled = useLoopEnabled(loop);
   return () => {
     if (isEnabled) void action();

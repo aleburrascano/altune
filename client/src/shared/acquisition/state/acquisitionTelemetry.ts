@@ -1,6 +1,7 @@
 import { ApiError, correlationIdOf } from '@shared/failure/errors';
 import type { TrackId } from '@shared/apiClient/ids';
 import { enqueueCritical } from '@shared/telemetry/outbox';
+import type { EventPayload } from '@shared/telemetry/recordEvent';
 
 const MAX_MESSAGE_LENGTH = 500;
 
@@ -21,18 +22,14 @@ export type RetryRequestOutcome =
 
 export type StatusChangeSource = 'optimistic' | 'response' | 'sse' | 'poll';
 
-function recordAcquisitionUi(
-  trackId: TrackId,
-  action: string,
-  payload: Record<string, unknown>,
-): void {
+function recordAcquisitionUi(trackId: TrackId, action: string, payload: EventPayload): void {
   void enqueueCritical({
     type: 'acquisition_ui',
     payload: { track_id: trackId, action, ...payload },
   });
 }
 
-function entryPointPayload(entryPoint: RetryEntryPoint | undefined): Record<string, unknown> {
+function entryPointPayload(entryPoint: RetryEntryPoint | undefined): EventPayload {
   return entryPoint === undefined ? {} : { entry_point: entryPoint };
 }
 
@@ -40,7 +37,7 @@ export function recordRetryTapped(trackId: TrackId, entryPoint: RetryEntryPoint 
   recordAcquisitionUi(trackId, 'retry_tapped', entryPointPayload(entryPoint));
 }
 
-function failedPayload(status?: number, correlationId?: string): Record<string, unknown> {
+function failedPayload(status?: number, correlationId?: string): EventPayload {
   return {
     outcome: 'failed',
     ...(status === undefined ? {} : { status }),
@@ -48,7 +45,7 @@ function failedPayload(status?: number, correlationId?: string): Record<string, 
   };
 }
 
-function outcomePayload(outcome: RetryRequestOutcome): Record<string, unknown> {
+function outcomePayload(outcome: RetryRequestOutcome): EventPayload {
   switch (outcome.kind) {
     case 'skipped':
       return { outcome: 'skipped', reason: outcome.reason };

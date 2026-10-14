@@ -282,6 +282,7 @@
           "shared-apiClient",
           "shared-auth",
           "shared-errors",
+          "shared-files",
           "shared-killSwitch",
           "shared-lifecycle",
           "shared-navigation",

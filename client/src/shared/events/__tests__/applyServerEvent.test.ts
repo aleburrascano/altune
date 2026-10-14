@@ -17,7 +17,7 @@ import { libraryKeys, playlistKeys } from '@shared/query/queryKeys';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 
 import { applyServerEvent } from '@shared/events/applyServerEvent';
-import type { JsonObject } from '@shared/apiClient/jsonValue';
+import type { JsonObject } from '@shared/files/json';
 import type { ServerEvent } from '@shared/events/sseFrames';
 import { settleTrackPatches } from '@shared/events/__tests__/settleTrackPatches';
 
@@ -558,8 +558,7 @@ describe('track_acquisition_progress', () => {
     [undefined, undefined],
   ])('routes stage %s to download phase %s', (stage, expectedPhase) => {
     const queryClient = makeClient();
-    const data: JsonObject = { track_id: 't1' };
-    if (stage !== undefined) data.stage = stage;
+    const data: JsonObject = stage === undefined ? { track_id: 't1' } : { track_id: 't1', stage };
 
     applyServerEvent(queryClient, serverEvent('track_acquisition_progress', data));
 

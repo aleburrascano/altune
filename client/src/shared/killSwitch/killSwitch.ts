@@ -1,11 +1,14 @@
 import { readDocument, writeDocumentAtomically } from '@shared/files/durableDocument';
 import { defaultFileStore } from '@shared/files/defaultFileStore';
 import { createFileStoreSlot, type FileStore, type StoredDirectory } from '@shared/files/fileStore';
+import type { JsonValue } from '@shared/files/json';
 
 export type KillSwitchLoop =
   'serverEvents' | 'telemetryFlush' | 'offlineDownloads' | 'detailEnrichment' | 'discovery';
 
 type LoopFlags = Readonly<Record<KillSwitchLoop, boolean>>;
+
+type SwitchDocument = Record<string, number | boolean>;
 
 const KILL_SWITCH_KEYS: Readonly<Record<KillSwitchLoop, string>> = {
   serverEvents: 'sse_enabled',
@@ -49,8 +52,8 @@ function parseSwitches(document: unknown): LoopFlags | null {
   return parsed;
 }
 
-function toDocument(next: LoopFlags): Record<string, unknown> {
-  const document: Record<string, unknown> = { schemaVersion: 1 };
+function toDocument(next: LoopFlags): SwitchDocument {
+  const document: SwitchDocument = { schemaVersion: 1 };
   for (const loop of LOOPS) document[KILL_SWITCH_KEYS[loop]] = next[loop];
   return document;
 }
@@ -89,13 +92,7 @@ export function onKillSwitchChange(
   };
 }
 
-export function applyKillSwitches(document: unknown): void {
-  ensureRestored();
-  const next = parseSwitches(document);
-  if (next === null) {
-    console.warn(`${TAG} ignored a switch document that is not an object`);
-    return;
-  }
+function adoptSwitches(next: LoopFlags): void {
   const flipped = LOOPS.filter((loop) => next[loop] !== flags[loop]);
   if (flipped.length === 0) return;
   flags = next;
@@ -104,6 +101,16 @@ export function applyKillSwitches(document: unknown): void {
     console.warn(`${TAG} ${loop} ${next[loop] ? 'enabled' : 'disabled'} remotely`);
     for (const listener of [...listeners]) listener(loop, next[loop]);
   }
+}
+
+export function applyKillSwitches(document: JsonValue): void {
+  ensureRestored();
+  const next = parseSwitches(document);
+  if (next === null) {
+    console.warn(`${TAG} ignored a switch document that is not an object`);
+    return;
+  }
+  adoptSwitches(next);
 }
 
 export function setKillSwitchFileStore(store?: FileStore): void {

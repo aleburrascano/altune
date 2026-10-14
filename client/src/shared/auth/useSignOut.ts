@@ -13,7 +13,7 @@ export type SignOutResult =
   | { status: 'ok' }
   | { status: 'error'; error: unknown };
 
-function classifySignOutFailure(error: unknown): unknown {
+function asSignOutFailure(error: unknown): unknown {
   if (isSessionFetchFailure(error)) {
     return new NetworkError('transport', 'sign-out could not reach the auth server');
   }
@@ -29,7 +29,7 @@ function signOutFailureFields(cause: unknown): { status: number } | { failure: s
 }
 
 function signOutFailed(error: unknown): SignOutResult {
-  const cause = classifySignOutFailure(error);
+  const cause = asSignOutFailure(error);
   console.warn('[auth] sign out failed', signOutFailureFields(cause));
   return { status: 'error', error: cause };
 }

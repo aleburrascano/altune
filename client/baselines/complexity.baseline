@@ -180,9 +180,8 @@ src/shared/apiClient/tracks.ts tryParseTrackResponse
 src/shared/apiClient/trackToDiscoveryResult.ts trackToDiscoveryResult
 src/shared/apiClient/wireDecoders.ts parseErrorBody
 src/shared/auth/authStorage.web.ts readWebStorage
-src/shared/auth/injectTestSession.ts assertSessionStoreShape
 src/shared/auth/useSession.ts apply
-src/shared/auth/useSignOut.ts classifySignOutFailure
+src/shared/auth/useSignOut.ts asSignOutFailure
 src/shared/events/acquisitionEvents.ts handleTrackAcquisitionFailed
 src/shared/events/acquisitionEvents.ts progressPhase
 src/shared/events/sseClient.ts <arrow>
@@ -190,7 +189,7 @@ src/shared/events/sseClient.ts openStream
 src/shared/events/trackPatchBatch.ts unsubscribe
 src/shared/failure/describeError.ts describeError
 src/shared/files/durableDocument.ts schemaVersionOf
-src/shared/killSwitch/killSwitch.ts applyKillSwitches
+src/shared/killSwitch/killSwitch.ts adoptSwitches
 src/shared/offline/pinnedFiles.ts deletePinnedMany
 src/shared/offline/pinnedFiles.ts downloadPinned
 src/shared/offline/pinnedFiles.ts formatBytes

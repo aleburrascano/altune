@@ -1,6 +1,7 @@
 import { appVersion } from '@shared/device/device';
 
 import { enqueueCritical } from '@shared/telemetry/outbox';
+import type { EventPayload } from '@shared/telemetry/recordEvent';
 import { chainUncaughtErrorHandler } from '@shared/telemetry/native/uncaughtErrors';
 
 const MAX_MESSAGE_LENGTH = 500;
@@ -23,7 +24,7 @@ function messageAndStackOf(error: unknown): { message: string; stack: string | u
   return { message: String(error), stack: undefined };
 }
 
-type ClientErrorPayload = Record<string, unknown>;
+type ClientErrorPayload = EventPayload;
 
 type SeenError = {
   windowStart: number;

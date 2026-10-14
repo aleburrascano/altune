@@ -8,7 +8,7 @@ import type {
 import type { TrackResponse } from '@shared/apiClient/trackResponse';
 import { playlistKeys } from '@shared/query/queryKeys';
 import { PLAYLIST_HANDLERS } from '@shared/events/playlistEvents';
-import type { JsonObject } from '@shared/apiClient/jsonValue';
+import type { JsonObject } from '@shared/files/json';
 import type { ServerEvent } from '@shared/events/sseFrames';
 
 const PATCHED_CACHES = 3;
