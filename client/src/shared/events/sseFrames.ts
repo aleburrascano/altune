@@ -73,12 +73,22 @@ function collectFields(block: string): BlockFields {
   return fields;
 }
 
-function parsePayload(id: string, type: string, payload: string): ParsedBlock {
+function isJsonObject(value: unknown): value is JsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseJson(payload: string): unknown {
   try {
-    return { id, type, data: JSON.parse(payload) as JsonObject };
+    return JSON.parse(payload) as unknown;
   } catch {
-    return new MalformedSSEEventError(id, type, payload.length);
+    return undefined;
   }
+}
+
+function parsePayload(id: string, type: string, payload: string): ParsedBlock {
+  const parsed = parseJson(payload);
+  if (isJsonObject(parsed)) return { id, type, data: parsed };
+  return new MalformedSSEEventError(id, type, payload.length);
 }
 
 function parseBlock(block: string): ParsedBlock | null {

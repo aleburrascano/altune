@@ -44,6 +44,23 @@ describe('parseChunk', () => {
     expect(parsed.lastEventId).toBe('4');
   });
 
+  it.each([['null'], ['[1]'], ['42'], ['"x"']])(
+    'reports a non-object payload %s without advancing lastEventId',
+    (payload) => {
+      const parsed = parseChunk('', `id: 9\nevent: resync\ndata: ${payload}\n\n`, '4');
+      expect(parsed.blocks).toHaveLength(1);
+      const block = parsed.blocks[0] as ParsedBlock;
+      expect(block).toMatchObject({
+        name: 'MalformedSSEEventError',
+        eventId: '9',
+        eventType: 'resync',
+        payloadLength: payload.length,
+      });
+      expect(isServerEvent(block)).toBe(false);
+      expect(parsed.lastEventId).toBe('4');
+    },
+  );
+
   it('completes an event split across two calls', () => {
     const first = parseChunk('', 'data: {"a"', '');
     expect(first.blocks).toEqual([]);
