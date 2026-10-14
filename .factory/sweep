@@ -9,3 +9,4 @@ platform-branch
 weak-test
 M10
 trusted-boundary
+silent-failure
