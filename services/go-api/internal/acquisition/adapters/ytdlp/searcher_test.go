@@ -956,3 +956,11 @@ func TestYtDlpAudioSearcher_Download_RejectsWhenNoM4AIsProduced(t *testing.T) {
 		t.Fatalf("Download error = %v, want a no-m4a rejection", err)
 	}
 }
+
+func TestYtDlpEntry_ASearchResultIsAnUpload(t *testing.T) {
+	c := ytDlpEntry{Title: "Bruno Mars - Finesse", WebpageURL: "https://www.youtube.com/watch?v=x"}.candidate()
+
+	if c.Kind != ports.KindUpload {
+		t.Errorf("Kind = %q, want an upload", c.Kind)
+	}
+}

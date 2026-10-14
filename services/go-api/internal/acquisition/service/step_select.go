@@ -2,6 +2,8 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service/judge"
+	"altune/go-api/internal/acquisition/service/judgeshadow"
 	"context"
 	"fmt"
 	"log/slog"
@@ -28,7 +30,12 @@ func (s *SelectStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afte
 	ac.Ranked = ranked
 	best := ranked[0]
 	ac.Selected = &best
+	judgeshadow.Log(ctx, shadowTarget(ac.Track), ac.Track.ID, best, ac.Candidates)
 	return afterSelect{}, nil
+}
+
+func shadowTarget(t TrackRef) judge.Target {
+	return judge.Target{Title: t.Title, Artist: t.Artist, Album: t.Album, Length: t.CatalogDuration, Explicit: t.CatalogExplicit}
 }
 
 func skipTopUpload(ctx context.Context, trackID string, ranked []ports.AudioCandidate) []ports.AudioCandidate {

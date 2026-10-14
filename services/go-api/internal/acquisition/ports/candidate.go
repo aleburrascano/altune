@@ -11,6 +11,14 @@ const (
 	UnplayablePreview = "preview"
 )
 
+type CandidateKind string
+
+const (
+	KindArtTrack    CandidateKind = "art_track"
+	KindPinnedVideo CandidateKind = "pinned_video"
+	KindUpload      CandidateKind = "upload"
+)
+
 type AudioCandidate struct {
 	Title      string
 	Duration   float64
@@ -22,6 +30,9 @@ type AudioCandidate struct {
 	Resolved   bool
 	Explicit   bool
 	Unplayable string
+	Artists    []string
+	Album      string
+	Kind       CandidateKind
 }
 
 func DedupeCandidatesBySourceKey(merged, results []AudioCandidate, positionByKey map[string]int) []AudioCandidate {

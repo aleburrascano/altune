@@ -422,5 +422,8 @@ func buildTrackRef(track *ports.TrackSnapshot) TrackRef {
 		TrackNumber: deref(track.TrackNumber),
 		AlbumArtist: deref(track.AlbumArtist),
 		Genre:       deref(track.Genre),
+
+		CatalogDuration: deref(track.CatalogDurationSeconds),
+		CatalogExplicit: track.CatalogExplicit,
 	}
 }
