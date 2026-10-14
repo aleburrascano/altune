@@ -311,3 +311,23 @@ func TestAlbumGenres_ASharedFailureReachesEveryWaiterAndIsNotCached(t *testing.T
 		t.Fatalf("retry: %v %v", got, err)
 	}
 }
+
+func TestDeezerClient_AlbumTracksReadsTheMatchingAlbumOnly(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/2.0/search/album":
+			_, _ = w.Write([]byte(`{"data":[
+				{"id":6164468,"title":"Stay (Unapologetic) - Nonstop Music Tribute to Rihanna & Mikky Ekko","artist":{"name":"NonStop Music"}},
+				{"id":6120368,"title":"Unapologetic","artist":{"name":"Rihanna"}}]}`))
+		case "/2.0/album/6120368/tracks":
+			_, _ = w.Write([]byte(`{"data":[{"id":62376270,"title":"Diamonds","duration":225,"artist":{"name":"Rihanna"}}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	tracks, err := newDeezerClient(server.Client(), server.URL, 1000).AlbumTracks(context.Background(), "Rihanna", "Unapologetic")
+	if err != nil || len(tracks) != 1 || tracks[0].ID != 62376270 || tracks[0].Album != "Unapologetic" || tracks[0].DurationSeconds != 225 {
+		t.Fatalf("got %+v, %v", tracks, err)
+	}
+}

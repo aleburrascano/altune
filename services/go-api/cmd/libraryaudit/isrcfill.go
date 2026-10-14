@@ -13,6 +13,22 @@ const (
 	sourceMusicBrainz = "musicbrainz"
 )
 
+type albumTracklist interface {
+	AlbumTracks(ctx context.Context, artist, album string) ([]catalogTrack, error)
+}
+
+func albumTracklistCandidates(ctx context.Context, cat catalog, lib libraryTrack) ([]catalogTrack, error) {
+	albums, ok := cat.(albumTracklist)
+	if !ok || strings.TrimSpace(lib.Album) == "" {
+		return nil, nil
+	}
+	tracks, err := albums.AlbumTracks(ctx, lib.Artist, lib.Album)
+	if err != nil {
+		return nil, err
+	}
+	return fittingCandidates(lib, tracks), nil
+}
+
 type isrcResolution struct {
 	findings []finding
 	reason   string
@@ -24,6 +40,11 @@ func resolveMissingISRC(ctx context.Context, cat catalog, lib libraryTrack) (isr
 		return isrcResolution{}, ignoreUnblocked(err)
 	}
 	fitting := fittingCandidates(lib, candidates)
+	if len(fitting) == 0 {
+		if fitting, err = albumTracklistCandidates(ctx, cat, lib); err != nil {
+			return isrcResolution{}, ignoreUnblocked(err)
+		}
+	}
 	switch len(fitting) {
 	case 0:
 		return isrcResolution{reason: "deezer search has no same-song candidate on the library album"}, nil
