@@ -126,3 +126,35 @@ func TestMusicBrainz_BacksOffOnA503ThenSucceeds(t *testing.T) {
 		t.Fatalf("err=%v calls=%d", err, calls)
 	}
 }
+
+func TestMusicBrainz_RemembersTheReleaseOfAGroupAndTheFirstOneWithFrontArt(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		group := `"release-group":{"id":"rg-a","title":"Make It Big","primary-type":"Album","secondary-types":[],"first-release-date":"1984"}`
+		_, _ = w.Write([]byte(`{"release-count":2,"releases":[` +
+			`{"id":"rel-bare",` + group + `,"cover-art-archive":{"front":false}},` +
+			`{"id":"rel-art",` + group + `,"cover-art-archive":{"front":true}}]}`))
+	}))
+	defer srv.Close()
+	got, err := fastMusicBrainz(srv).ReleaseGroups(t.Context(), "rec-1")
+	if err != nil || len(got) != 1 || got[0].ReleaseID != "rel-bare" || got[0].FrontReleaseID != "rel-art" {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+}
+
+func TestMusicBrainz_ReadsTheRecordingsLengthOnAReleaseInWholeSeconds(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/ws/2/release/rel-1" || r.URL.Query().Get("inc") != "recordings" {
+			t.Errorf("request %s", r.URL)
+		}
+		_, _ = w.Write([]byte(`{"media":[{"tracks":[{"length":180000,"recording":{"id":"other"}}]},` +
+			`{"tracks":[{"length":297600,"recording":{"id":"rec-1"}}]}]}`))
+	}))
+	defer srv.Close()
+	m := fastMusicBrainz(srv)
+	if got, err := m.ReleaseTrackSeconds(t.Context(), "rel-1", "rec-1"); err != nil || got != 298 {
+		t.Fatalf("got %v, %v", got, err)
+	}
+	if _, err := m.ReleaseTrackSeconds(t.Context(), "rel-1", "absent"); !errors.Is(err, errCatalogUnknown) {
+		t.Fatalf("a recording missing from the release: %v", err)
+	}
+}

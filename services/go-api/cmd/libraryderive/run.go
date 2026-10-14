@@ -6,7 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 )
+
+const coverArtBaseURL = "https://coverartarchive.org"
 
 type skipped struct {
 	Category category
@@ -18,10 +21,11 @@ func (s skipped) Error() string { return string(s.Category) + ": " + s.Detail }
 type deriver struct {
 	recordings recordingSource
 	checker    crossChecker
+	covers     coverProbe
 }
 
 func newDeriver(recordings recordingSource, deezer deezerCatalog) *deriver {
-	return &deriver{recordings: recordings, checker: crossChecker{deezer: deezer}}
+	return &deriver{recordings: recordings, checker: crossChecker{deezer: deezer}, covers: trustedCovers{}}
 }
 
 type derivation struct {
@@ -59,6 +63,7 @@ func (d *deriver) deriveTrack(ctx context.Context, t boundTrack) ([]finding, err
 }
 
 func (d *deriver) findingsFor(ctx context.Context, t boundTrack) ([]finding, error) {
+	t = d.withCoverVerdict(ctx, t)
 	rec, err := d.recordingOf(ctx, t)
 	var unknown skipped
 	if errors.As(err, &unknown) && unknown.Category == categoryRecordingUnknown {
@@ -76,6 +81,15 @@ func (d *deriver) findingsFor(ctx context.Context, t boundTrack) ([]finding, err
 	if err != nil {
 		return nil, err
 	}
+	own, err := d.withOwnRelease(ctx, rec, chosen.Group, check.Match)
+	if err != nil {
+		return nil, err
+	}
+	if !isProvenISRC(rec, t, a.ISRC) {
+		own.Withheld.ISRC = "the isrc is not listed on the musicbrainz recording and bind did not confirm it on deezer or apple"
+		a.ISRC = ""
+	}
+	check.Match = own
 	head := about(t, categoryReleaseChosen, chosen.Group.describe()+" by "+string(chosen.Rule)+"; deezer "+string(check.Outcome))
 	return append([]finding{head}, changesFor(t, a, chosen, check)...), nil
 }
@@ -139,9 +153,106 @@ func (d *deriver) crossCheckOf(ctx context.Context, rec recording, a anchor, cho
 	})
 }
 
+func (d *deriver) withOwnRelease(ctx context.Context, rec recording, group releaseGroup, match *deezerMatch) (*deezerMatch, error) {
+	own := deezerMatch{}
+	if match != nil {
+		own = *match
+	}
+	own.Withheld = withheld{}
+	if match == nil {
+		own.Withheld.TrackNumber = "no deezer album matches the chosen release"
+		own.Withheld.Genre = own.Withheld.TrackNumber
+	}
+	own.CoverURL, own.Withheld.ArtworkURL = d.ownCover(ctx, own.CoverURL, group)
+	seconds, err := d.ownLength(ctx, rec, group, own.DurationSeconds)
+	if own.DurationSeconds = seconds; seconds == 0 {
+		own.Withheld.CatalogDuration = "no track length on the chosen release"
+	}
+	return &own, err
+}
+
+func (d *deriver) ownLength(ctx context.Context, rec recording, group releaseGroup, deezerSeconds float64) (float64, error) {
+	releaseID := cmp.Or(group.FrontReleaseID, group.ReleaseID)
+	if deezerSeconds != 0 || releaseID == "" {
+		return deezerSeconds, nil
+	}
+	seconds, err := d.recordings.ReleaseTrackSeconds(ctx, releaseID, rec.ID)
+	if errors.Is(err, errCatalogBlocked) {
+		return 0, err
+	}
+	return seconds, nil
+}
+
+type coverVerdict int
+
+const (
+	coverGenuine coverVerdict = iota
+	coverBlank
+	coverUnchecked
+)
+
+func (d *deriver) verdictOf(ctx context.Context, coverURL string) coverVerdict {
+	switch placeholder, err := d.covers.IsPlaceholder(ctx, coverURL); {
+	case coverURL == "":
+		return coverGenuine
+	case strings.Contains(coverURL, deezerPlaceholderImageID):
+		return coverBlank
+	case err != nil:
+		return coverUnchecked
+	case placeholder:
+		return coverBlank
+	}
+	return coverGenuine
+}
+
+func (d *deriver) withCoverVerdict(ctx context.Context, t boundTrack) boundTrack {
+	switch d.verdictOf(ctx, t.ArtworkURL) {
+	case coverBlank:
+		t.CoverIsPlaceholder = true
+	case coverUnchecked:
+		t.CoverCheckFailed = "the stored cover could not be checked: the cover lookup failed"
+	}
+	return t
+}
+
+func isProvenISRC(rec recording, t boundTrack, isrc string) bool {
+	return canonicalISRC(isrc) == canonicalISRC(t.ISRC) || rec.hasISRC(isrc) || t.CatalogConfirmed
+}
+
+func (d *deriver) ownCover(ctx context.Context, deezerCover string, group releaseGroup) (string, string) {
+	verdict := d.verdictOf(ctx, deezerCover)
+	if deezerCover != "" && verdict == coverGenuine {
+		return deezerCover, ""
+	}
+	if verdict == coverUnchecked {
+		return "", "the deezer cover could not be checked: the cover lookup failed"
+	}
+	if group.FrontReleaseID != "" {
+		if cover := d.resolvingCover(ctx, coverArtFrontURL(group.FrontReleaseID)); cover != "" {
+			return cover, ""
+		}
+		return "", "the cover art archive front of the chosen release does not resolve"
+	}
+	if verdict == coverBlank {
+		return "", "deezer cover is the blank placeholder and the chosen release has no cover art archive front"
+	}
+	return "", "the chosen release has no cover"
+}
+
+func (d *deriver) resolvingCover(ctx context.Context, coverURL string) string {
+	if resolves, err := d.covers.Resolves(ctx, coverURL); err != nil || !resolves {
+		return ""
+	}
+	return coverURL
+}
+
+func coverArtFrontURL(releaseID string) string {
+	return coverArtBaseURL + "/release/" + releaseID + "/front"
+}
+
 func changesFor(t boundTrack, a anchor, chosen pick, check crossCheck) []finding {
 	if check.Outcome == outcomeOtherMaster {
-		return otherMasterFindings(t, a, chosen, *check.OtherMaster)
+		return otherMasterWith(t, a, chosen, check.Match, *check.OtherMaster)
 	}
 	return differenceFindings(t, a, chosen.Group, check.Match)
 }
@@ -155,12 +266,11 @@ func differenceFindings(t boundTrack, a anchor, group releaseGroup, match *deeze
 }
 
 func otherMasterFindings(t boundTrack, a anchor, chosen pick, master deezerTrack) []finding {
-	var found []finding
-	for _, d := range diff(t.libraryTrack, derive(a, chosen.Group, nil)) {
-		if d.Mode == modeReportOnly || d.isIdentity() {
-			found = append(found, findingOf(t, d.reportOnly()))
-		}
-	}
+	return otherMasterWith(t, a, chosen, nil, master)
+}
+
+func otherMasterWith(t boundTrack, a anchor, chosen pick, own *deezerMatch, master deezerTrack) []finding {
+	found := differenceFindings(t, a, chosen.Group, own)
 	detail := "isrc " + t.ISRC + " -> " + master.ISRC + " on " + master.AlbumTitle + ", " + strconv.Itoa(int(master.DurationSeconds)) + "s for the " + strconv.Itoa(int(t.FileSeconds)) + "s file"
 	if t.ISRC == "" || !fitsFile(t.FileSeconds, master.DurationSeconds) {
 		return append(found, about(t, categoryOtherMasterUnfit, detail))

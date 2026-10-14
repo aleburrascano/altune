@@ -67,6 +67,7 @@ type deezerMatch struct {
 	TrackPosition   int
 	DurationSeconds float64
 	ISRC            string
+	Withheld        withheld
 }
 
 type crossCheck struct {

@@ -127,7 +127,30 @@ func decideInTx(ctx context.Context, tx pgx.Tx, plan trackPlan, lock bool) ([]de
 	if row.Version != plan.Version {
 		return allStale(plan), nil, nil
 	}
-	return settleDedupKey(ctx, tx, plan, row, decideTrack(plan, row))
+	decisions, key, err := settleDedupKey(ctx, tx, plan, row, decideTrack(plan, row))
+	if err != nil {
+		return decisions, key, err
+	}
+	decisions, err = refuseHeldISRC(ctx, tx, plan, decisions)
+	return decisions, key, err
+}
+
+func refuseHeldISRC(ctx context.Context, tx pgx.Tx, plan trackPlan, decisions []decision) ([]decision, error) {
+	for i, d := range decisions {
+		if d.Verdict != verdictApplied || d.Change.Field != fieldISRC || d.Change.NewValue == nil {
+			continue
+		}
+		var other string
+		err := tx.QueryRow(ctx, "SELECT id::text FROM tracks WHERE user_id = $1 AND upper(replace(replace(isrc, '-', ''), ' ', '')) = $2 AND id <> $3 LIMIT 1", plan.UserID, canonicalISRC(*d.Change.NewValue), plan.TrackID).Scan(&other)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+		case err != nil:
+			return allFailed(plan), fmt.Errorf("check isrc holder: %w", err)
+		default:
+			decisions[i].Verdict, decisions[i].Other = verdictSkippedDuplicate, other
+		}
+	}
+	return decisions, nil
 }
 
 func settleDedupKey(ctx context.Context, tx pgx.Tx, plan trackPlan, row trackRow, decisions []decision) ([]decision, *keyChange, error) {

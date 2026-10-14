@@ -550,3 +550,68 @@ func TestRunReconcile_ATitleCorrectionThatClashesWithAnotherTrackIsSkipped(t *te
 		t.Fatalf("err=%v got=%+v out=%s", err, got, out)
 	}
 }
+
+func setISRC(t *testing.T, s store, row seeded, isrc string) {
+	t.Helper()
+	if _, err := s.pool.Exec(context.Background(), "UPDATE tracks SET isrc = $2 WHERE id = $1", row.trackID, isrc); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRunReconcile_CorrectsAnISRCToTheBoundOneAndUndoRestoresIt(t *testing.T) {
+	s := testStore(t)
+	row := seedSong(t, s, uuid.NewString(), "Careless Whisper", "Wham!", "Make It Big", "careless whisper|wham|make it big")
+	setISRC(t, s, row, "GBAYE8400001")
+	correct := plannedChange{Mode: modeCorrect, Field: fieldISRC, AuditedOld: text("GBAYE8400001"), NewValue: text("GBAYE8400002")}
+	runID, out, err := reconcile(t, s, true, planFor(row, 4, correct))
+	if got := snapshot(t, s, row); err != nil || *got.isrc != "GBAYE8400002" || logRows(t, s, runID) != 1 {
+		t.Fatalf("err=%v got=%+v out=%s", err, got, out)
+	}
+	var undone bytes.Buffer
+	if err := runUndo(context.Background(), s, runID, &undone); err != nil || *snapshot(t, s, row).isrc != "GBAYE8400001" {
+		t.Fatalf("err=%v out=%s", err, undone.String())
+	}
+}
+
+func TestRunReconcile_RefusesAnISRCAnotherTrackOfTheSameUserAlreadyHolds(t *testing.T) {
+	s := testStore(t)
+	user := uuid.NewString()
+	row := seedSong(t, s, user, "Careless Whisper", "Wham!", "Make It Big", "careless whisper|wham|make it big")
+	holder := seedSong(t, s, user, "Careless Whisper", "Wham!", "Greatest Hits", "careless whisper|wham|greatest hits")
+	setISRC(t, s, row, "GBAYE8400001")
+	setISRC(t, s, holder, "GBAYE8400002")
+	correct := plannedChange{Mode: modeCorrect, Field: fieldISRC, AuditedOld: text("GBAYE8400001"), NewValue: text("GBAYE8400002")}
+	runID, out, err := reconcile(t, s, true, planFor(row, 4, correct))
+	if got := snapshot(t, s, row); err != nil || *got.isrc != "GBAYE8400001" || logRows(t, s, runID) != 0 ||
+		!strings.Contains(out, "skipped-duplicate: 1") || !strings.Contains(out, holder.trackID) {
+		t.Fatalf("err=%v got=%+v out=%s", err, got, out)
+	}
+}
+
+func TestRunReconcile_RefusesAnISRCHeldInAnotherSpellingByTheSameUser(t *testing.T) {
+	s := testStore(t)
+	user := uuid.NewString()
+	row := seedSong(t, s, user, "Careless Whisper", "Wham!", "Make It Big", "careless whisper|wham|make it big")
+	holder := seedSong(t, s, user, "Careless Whisper", "Wham!", "Greatest Hits", "careless whisper|wham|greatest hits")
+	setISRC(t, s, row, "GBAYE8400001")
+	setISRC(t, s, holder, "gb-aye-84 00002")
+	correct := plannedChange{Mode: modeCorrect, Field: fieldISRC, AuditedOld: text("GBAYE8400001"), NewValue: text("GBAYE8400002")}
+	_, out, err := reconcile(t, s, true, planFor(row, 4, correct))
+	if got := snapshot(t, s, row); err != nil || *got.isrc != "GBAYE8400001" || !strings.Contains(out, "skipped-duplicate: 1") || !strings.Contains(out, holder.trackID) {
+		t.Fatalf("err=%v got=%+v out=%s", err, got, out)
+	}
+}
+
+func TestRunReconcile_FillsAnEmptyCoverAndAnEmptyAlbumAndRecomputesTheKey(t *testing.T) {
+	s := testStore(t)
+	row := seedSong(t, s, uuid.NewString(), "Careless Whisper", "Wham!", "", "careless whisper|wham|")
+	if _, err := s.pool.Exec(context.Background(), "UPDATE tracks SET artwork_url = NULL WHERE id = $1", row.trackID); err != nil {
+		t.Fatal(err)
+	}
+	cover := plannedChange{Mode: modeFill, Field: fieldArtworkURL, NewValue: text("https://cdn/mib.jpg")}
+	album := plannedChange{Mode: modeFill, Field: fieldAlbum, NewValue: text("Make It Big")}
+	_, out, err := reconcile(t, s, true, planFor(row, 4, cover, album))
+	if got := readSong(t, s, row); err != nil || got.ArtworkURL != "https://cdn/mib.jpg" || got.Album != "Make It Big" || got.DedupKey != "careless whisper|wham|make it big" {
+		t.Fatalf("err=%v got=%+v out=%s", err, got, out)
+	}
+}

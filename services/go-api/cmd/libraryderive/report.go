@@ -20,6 +20,8 @@ const (
 	categoryOtherMasterUnfit   category = "other_master_unfit"
 )
 
+const sourceTrackIdentity = "track_identity"
+
 type fix struct {
 	UserID   string     `json:"user_id"`
 	Version  int        `json:"version"`
@@ -28,6 +30,7 @@ type fix struct {
 	OldValue *string    `json:"old_value"`
 	NewValue *string    `json:"new_value"`
 	Group    string     `json:"group,omitempty"`
+	Sources  []string   `json:"sources,omitempty"`
 }
 
 type lengthPlan struct {
@@ -68,8 +71,13 @@ func about(t boundTrack, kind category, detail string) finding {
 
 func findingOf(t boundTrack, d difference) finding {
 	f := about(t, d.category(), valueText(d.Old)+" -> "+valueText(d.New))
-	if d.Mode != modeReportOnly {
-		f.Fix = &fix{UserID: t.UserID, Version: t.Version, Field: d.Field, Mode: d.Mode, OldValue: d.Old, NewValue: d.New, Group: d.Group}
+	if d.Mode == modeReportOnly {
+		f.Detail += ": " + d.Reason
+		return f
+	}
+	f.Fix = &fix{UserID: t.UserID, Version: t.Version, Field: d.Field, Mode: d.Mode, OldValue: d.Old, NewValue: d.New, Group: d.Group}
+	if d.Field == "isrc" {
+		f.Fix.Sources = []string{sourceTrackIdentity}
 	}
 	return f
 }

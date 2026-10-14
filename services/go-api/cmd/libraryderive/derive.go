@@ -2,6 +2,7 @@ package main
 
 import (
 	"altune/go-api/internal/shared/textnorm"
+	"cmp"
 	"math"
 	"strconv"
 	"strings"
@@ -24,6 +25,7 @@ type desired struct {
 	CatalogDurationSeconds float64
 	ArtworkURL             string
 	ISRC                   string
+	WhyNot                 withheld
 }
 
 func derive(a anchor, chosen releaseGroup, match *deezerMatch) desired {
@@ -33,7 +35,7 @@ func derive(a anchor, chosen releaseGroup, match *deezerMatch) desired {
 	}
 	if match != nil {
 		want.TrackNumber, want.Genre = match.TrackPosition, match.Genre
-		want.CatalogDurationSeconds, want.ArtworkURL = match.DurationSeconds, match.CoverURL
+		want.CatalogDurationSeconds, want.ArtworkURL, want.WhyNot = match.DurationSeconds, match.CoverURL, match.Withheld
 	}
 	return want
 }
@@ -57,12 +59,15 @@ type libraryTrack struct {
 	CatalogDurationSeconds float64
 	FileSeconds            float64
 	Version                int
+	CoverIsPlaceholder     bool
+	CoverCheckFailed       string
 }
 
 type boundTrack struct {
 	libraryTrack
-	IdentityISRC  string
-	MBRecordingID string
+	IdentityISRC     string
+	CatalogConfirmed bool
+	MBRecordingID    string
 }
 
 type changeMode string
@@ -74,11 +79,12 @@ const (
 )
 
 type difference struct {
-	Field string
-	Mode  changeMode
-	Old   *string
-	New   *string
-	Group string
+	Field  string
+	Mode   changeMode
+	Old    *string
+	New    *string
+	Group  string
+	Reason string
 }
 
 func (d difference) category() category {
@@ -88,82 +94,111 @@ func (d difference) category() category {
 	return category(d.Field + "_" + string(d.Mode))
 }
 
+type withheld struct {
+	TrackNumber     string
+	Genre           string
+	ArtworkURL      string
+	CatalogDuration string
+	ISRC            string
+}
+
+func (w withheld) of(field string) string {
+	switch field {
+	case "track_number":
+		return w.TrackNumber
+	case "genre":
+		return w.Genre
+	case "artwork_url":
+		return w.ArtworkURL
+	case "catalog_duration_seconds":
+		return w.CatalogDuration
+	case "isrc":
+		return w.ISRC
+	}
+	return ""
+}
+
+const reasonNoValue = "no trustworthy value on the chosen release"
+
 func diff(stored libraryTrack, want desired) []difference {
 	moved := albumDiffers(stored.Album, want.Album)
 	group := ""
 	if moved && stored.Album != "" {
 		group = "album-move:" + stored.ID
 	}
+	stance := stanceToward(stored.Album, want.Album, moved)
 	var found []difference
-	found = appendIdentity(found, "album", stored.Album, want.Album, moved, true, group)
-	found = appendIdentity(found, "title", stored.Title, want.Title, !sameSongTitle(stored.Title, want.Title), sameVariant(stored.Title, want.Title), group)
-	found = appendIdentity(found, "artist", stored.Artist, want.Artist, !isCredited(stored.Artist, want.Artist), true, group)
-	found = appendWritable(found, "year", intText(stored.Year), intText(want.Year), true, group)
-	found = appendWritable(found, "album_artist", stored.AlbumArtist, want.AlbumArtist, !isSameName(stored.AlbumArtist, want.AlbumArtist), group)
-	found = appendAlbumBound(found, "track_number", intText(stored.TrackNumber), intText(want.TrackNumber), moved, group)
-	found = appendAlbumBound(found, "genre", stored.Genre, want.Genre, moved, group)
-	found = appendWritable(found, "catalog_duration_seconds", secondsText(stored.CatalogDurationSeconds), secondsText(want.CatalogDurationSeconds),
-		math.Abs(stored.CatalogDurationSeconds-want.CatalogDurationSeconds) > catalogLengthSlack, "")
-	return appendArtwork(found, stored.ArtworkURL, want.ArtworkURL, moved, group)
+	found = appendField(found, "album", stored.Album, want.Album, moved, group, want.WhyNot)
+	found = appendField(found, "title", stored.Title, want.Title, !sameSongTitle(stored.Title, want.Title), group, want.WhyNot)
+	found = appendField(found, "artist", stored.Artist, want.Artist, !isCredited(stored.Artist, want.Artist), group, want.WhyNot)
+	found = appendField(found, "year", intText(stored.Year), intText(want.Year), stored.Year != want.Year, group, want.WhyNot)
+	found = appendField(found, "album_artist", stored.AlbumArtist, want.AlbumArtist, !isSameName(stored.AlbumArtist, want.AlbumArtist), group, want.WhyNot)
+	found = appendAlbumBound(found, "track_number", intText(stored.TrackNumber), intText(want.TrackNumber), stance, group, want.WhyNot)
+	found = appendAlbumBound(found, "genre", stored.Genre, want.Genre, stance, group, want.WhyNot)
+	found = appendField(found, "catalog_duration_seconds", secondsText(stored.CatalogDurationSeconds), secondsText(want.CatalogDurationSeconds),
+		math.Abs(stored.CatalogDurationSeconds-want.CatalogDurationSeconds) > catalogLengthSlack, "", want.WhyNot)
+	found = appendField(found, "isrc", stored.ISRC, canonicalISRC(want.ISRC), canonicalISRC(stored.ISRC) != canonicalISRC(want.ISRC), "", want.WhyNot)
+	return appendArtwork(found, stored, want, stance, group)
 }
 
-func appendArtwork(found []difference, stored, want string, albumMoved bool, group string) []difference {
-	if stored == "" {
-		return appendReportOnly(found, "artwork_url", stored, want, true)
+type albumStance int
+
+const (
+	albumMoves albumStance = iota
+	albumSameEdition
+	albumOtherEdition
+)
+
+func stanceToward(stored, want string, moved bool) albumStance {
+	switch {
+	case moved:
+		return albumMoves
+	case normalizeName(stored) == normalizeName(want):
+		return albumSameEdition
 	}
-	return appendAlbumBound(found, "artwork_url", stored, want, albumMoved, group)
+	return albumOtherEdition
 }
 
-func (d difference) isIdentity() bool {
-	return d.Field == "album" || d.Field == "title" || d.Field == "artist"
+func appendArtwork(found []difference, track libraryTrack, want desired, stance albumStance, group string) []difference {
+	if track.CoverCheckFailed != "" && track.ArtworkURL != want.ArtworkURL {
+		return append(found, unknown("artwork_url", track.ArtworkURL, want.ArtworkURL, track.CoverCheckFailed))
+	}
+	if track.CoverIsPlaceholder {
+		return appendField(found, "artwork_url", track.ArtworkURL, want.ArtworkURL, true, group, want.WhyNot)
+	}
+	return appendAlbumBound(found, "artwork_url", track.ArtworkURL, want.ArtworkURL, stance, group, want.WhyNot)
 }
 
-func (d difference) reportOnly() difference {
-	d.Mode, d.Group = modeReportOnly, ""
-	return d
+func appendAlbumBound(found []difference, field, stored, want string, stance albumStance, group string, whyNot withheld) []difference {
+	if stance == albumOtherEdition && stored != "" && want != "" && stored != want {
+		return append(found, unknown(field, stored, want, "the stored album is another edition of the chosen release"))
+	}
+	if stance == albumSameEdition {
+		group = ""
+	}
+	return appendField(found, field, stored, want, stored != want, group, whyNot)
 }
 
-func appendIdentity(found []difference, field, stored, want string, differs, safeToWrite bool, group string) []difference {
-	if want == "" || !differs {
+func appendField(found []difference, field, stored, want string, differs bool, group string, whyNot withheld) []difference {
+	switch {
+	case want == "" && stored == "":
 		return found
-	}
-	if stored == "" || !safeToWrite {
-		return append(found, difference{Field: field, Mode: modeReportOnly, Old: optional(stored), New: &want})
+	case want == "":
+		return append(found, unknown(field, stored, want, cmp.Or(whyNot.of(field), reasonNoValue)))
+	case !differs || stored == want:
+		return found
+	case stored == "":
+		return append(found, difference{Field: field, Mode: modeFill, New: &want, Group: group})
 	}
 	return append(found, difference{Field: field, Mode: modeCorrect, Old: &stored, New: &want, Group: group})
 }
 
-func appendAlbumBound(found []difference, field, stored, want string, albumMoved bool, group string) []difference {
-	switch {
-	case !albumMoved:
-		return appendWritable(found, field, stored, want, false, "")
-	case group == "":
-		return appendReportOnly(found, field, stored, want, stored != want)
-	}
-	return appendWritable(found, field, stored, want, true, group)
+func unknown(field, stored, want, reason string) difference {
+	return difference{Field: field, Mode: modeReportOnly, Old: optional(stored), New: optional(want), Reason: reason}
 }
 
 func albumDiffers(stored, want string) bool {
 	return want != "" && normalizeName(baseTitle(stored)) != normalizeName(baseTitle(want))
-}
-
-func appendReportOnly(found []difference, field, stored, want string, differs bool) []difference {
-	if want == "" || !differs {
-		return found
-	}
-	return append(found, difference{Field: field, Mode: modeReportOnly, Old: optional(stored), New: &want})
-}
-
-func appendWritable(found []difference, field, stored, want string, mayCorrect bool, group string) []difference {
-	switch {
-	case want == "" || stored == want:
-		return found
-	case stored == "":
-		return append(found, difference{Field: field, Mode: modeFill, New: &want, Group: group})
-	case mayCorrect:
-		return append(found, difference{Field: field, Mode: modeCorrect, Old: &stored, New: &want, Group: group})
-	}
-	return found
 }
 
 func optional(value string) *string {

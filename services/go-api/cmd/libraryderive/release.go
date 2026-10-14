@@ -12,6 +12,8 @@ type releaseGroup struct {
 	PrimaryType      string
 	SecondaryTypes   []string
 	FirstReleaseDate string
+	ReleaseID        string
+	FrontReleaseID   string
 }
 
 type rule string

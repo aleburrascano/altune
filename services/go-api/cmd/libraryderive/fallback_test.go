@@ -31,8 +31,11 @@ func TestDeriveAll_WithoutAMusicBrainzRecordingTheDeezerAlbumOfTheIsrcIsTheRelea
 			got := newDeriver(&fakeMusicBrainz{}, luckiDeezer(recordType)).deriveAll(t.Context(), []boundTrack{luckiTrack()})
 			byKind := byCategory(got.Findings)
 			year := byKind["year_fill"]
+			album, position := byKind["album_fill"], byKind["track_number_fill"]
 			if !strings.Contains(byKind[categoryReleaseChosen].Detail, "Alone in the Dark") || year.Fix == nil || *year.Fix.NewValue != "2023" ||
-				byKind["album_differs"].Category == "" || byKind["track_number_differs"].Category == "" {
+				album.Fix == nil || album.Fix.Mode != modeFill || *album.Fix.NewValue != "Alone in the Dark" ||
+				position.Fix == nil || position.Fix.Mode != modeFill || *position.Fix.NewValue != "3" ||
+				byKind["album_differs"].Category != "" || byKind["track_number_differs"].Category != "" {
 				t.Fatalf("got %+v", got.Findings)
 			}
 			for _, f := range got.Findings {
@@ -83,5 +86,26 @@ func TestDeriveAll_ADeezerAlbumByVariousArtistsOrAnotherArtistIsNeverTheRelease(
 				t.Fatalf("got %+v", got.Findings)
 			}
 		})
+	}
+}
+
+func TestDeriveAll_TheDeezerOnlyPathExplainsEveryStoredFieldItCannotDerive(t *testing.T) {
+	dz := luckiDeezer("album")
+	album := dz.albums["55"]
+	album.CoverURL = ""
+	dz.albums["55"] = album
+	track := dz.byISRC[luckiISRC]
+	track.DurationSeconds = 0
+	dz.byISRC[luckiISRC] = track
+	stored := luckiTrack()
+	stored.ArtworkURL, stored.CatalogDurationSeconds = "https://cdn/old.jpg", 151
+	byKind := byCategory(newDeriver(&fakeMusicBrainz{}, dz).deriveAll(t.Context(), []boundTrack{stored}).Findings)
+	for kind, reason := range map[category]string{
+		"artwork_url_differs":              "no usable cover",
+		"catalog_duration_seconds_differs": "no track length",
+	} {
+		if f := byKind[kind]; f.Fix != nil || f.Source != sourceDeezer || !strings.Contains(f.Detail, reason) {
+			t.Errorf("%s: %+v", kind, f)
+		}
 	}
 }

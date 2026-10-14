@@ -115,7 +115,7 @@ func (c plannedChange) clearsWrongCatalogLength() bool {
 }
 
 func (c plannedChange) replacesAuditedValue() bool {
-	return c.Mode == modeCorrect || c.clearsWrongISRC() || c.clearsWrongCatalogLength() || c.Field == fieldArtworkURL
+	return c.Mode == modeCorrect || c.clearsWrongISRC() || c.clearsWrongCatalogLength() || (c.Field == fieldArtworkURL && c.AuditedOld != nil)
 }
 
 type trackPlan struct {
@@ -257,8 +257,9 @@ const (
 	maxTrackNumber    = 999
 	maxCatalogSeconds = 24 * 60 * 60
 
-	sourceDeezer      = "deezer"
-	sourceMusicBrainz = "musicbrainz"
+	sourceDeezer        = "deezer"
+	sourceMusicBrainz   = "musicbrainz"
+	sourceTrackIdentity = "track_identity"
 )
 
 func toChange(finding reportFinding, currentYear int) (plannedChange, error) {
@@ -288,13 +289,13 @@ func toChange(finding reportFinding, currentYear int) (plannedChange, error) {
 
 func checkChange(mode changeMode, f field, fix *reportFix, currentYear int) error {
 	if mode != modeCorrect {
-		if isIdentity(f) {
+		if isIdentity(f) && (fix.OldValue != nil || f != fieldAlbum) {
 			return fmt.Errorf("a %s fix must be correct-mode", f)
 		}
+		if f == fieldISRC && fix.OldValue != nil && fix.NewValue != nil {
+			return errors.New("isrc fill needs a null old_value")
+		}
 		return checkValues(f, fix, currentYear)
-	}
-	if f == fieldISRC {
-		return errors.New("an isrc correction goes through libraryrelength, not a correct-mode fix")
 	}
 	if fix.OldValue == nil || isBlank(f, fix.OldValue) {
 		return errors.New("a correct-mode fix needs the old_value the derive saw")
@@ -399,16 +400,22 @@ func checkISRCClear(fix *reportFix) error {
 }
 
 func checkISRCFill(fix *reportFix) error {
-	if fix.OldValue != nil {
-		return errors.New("isrc fill needs a null old_value")
-	}
 	if !isCanonicalISRC(*fix.NewValue) {
 		return fmt.Errorf("isrc fill value %q is not 12 upper-case letters and digits", *fix.NewValue)
 	}
-	if !slices.Contains(fix.Sources, sourceDeezer) || !slices.Contains(fix.Sources, sourceMusicBrainz) {
-		return errors.New("isrc fill needs both deezer and musicbrainz in sources")
+	if fix.OldValue != nil {
+		if err := checkISRCClear(fix); err != nil {
+			return err
+		}
+	}
+	if !isProvenISRC(fix.Sources) {
+		return errors.New("isrc fill needs both deezer and musicbrainz, or the bound track_identity, in sources")
 	}
 	return nil
+}
+
+func isProvenISRC(sources []string) bool {
+	return slices.Contains(sources, sourceTrackIdentity) || (slices.Contains(sources, sourceDeezer) && slices.Contains(sources, sourceMusicBrainz))
 }
 
 func isCanonicalISRC(value string) bool {
@@ -424,8 +431,8 @@ func isCanonicalISRC(value string) bool {
 }
 
 func checkArtworkReplacement(fix *reportFix) error {
-	if fix.OldValue == nil || strings.TrimSpace(*fix.OldValue) == "" {
-		return errors.New("artwork_url fix needs the old_value the audit saw")
+	if fix.OldValue != nil && strings.TrimSpace(*fix.OldValue) == "" {
+		return errors.New("artwork_url fix has a blank old_value")
 	}
 	if fix.NewValue == nil {
 		return errors.New("artwork_url fix has no new_value")
@@ -435,4 +442,8 @@ func checkArtworkReplacement(fix *reportFix) error {
 		return fmt.Errorf("artwork_url %q is not an https URL", *fix.NewValue)
 	}
 	return nil
+}
+
+func canonicalISRC(value string) string {
+	return strings.ToUpper(strings.NewReplacer("-", "", " ", "").Replace(strings.TrimSpace(value)))
 }

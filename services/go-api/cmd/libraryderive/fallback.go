@@ -22,6 +22,9 @@ func (d *deriver) deezerOnlyFindings(ctx context.Context, t boundTrack, unknown 
 	if err != nil || album.RecordType == "" {
 		return nil, unknown
 	}
+	if d.verdictOf(ctx, album.CoverURL) != coverGenuine {
+		album.CoverURL = ""
+	}
 	return deezerReleaseFindings(t, isrc, track, album)
 }
 
@@ -36,11 +39,22 @@ func deezerReleaseFindings(t boundTrack, isrc string, track deezerTrack, album d
 	group := releaseGroup{ID: "deezer:" + album.ID, Title: album.Title, Artist: album.Artist, PrimaryType: primary, FirstReleaseDate: album.ReleaseDate}
 	a := anchor{ISRC: isrc, Title: track.Title, Artist: track.Artist}
 	head := about(t, categoryReleaseChosen, group.describe()+" by deezer_album; deezer "+string(outcomeSameISRC))
-	found := append([]finding{head}, differenceFindings(t, a, group, newMatch(album, track))...)
+	found := append([]finding{head}, differenceFindings(t, a, group, deezerOnlyMatch(album, track))...)
 	for i := range found {
 		found[i].Source = sourceDeezer
 	}
 	return found, nil
+}
+
+func deezerOnlyMatch(album deezerAlbum, track deezerTrack) *deezerMatch {
+	match := newMatch(album, track)
+	if match.CoverURL == "" {
+		match.Withheld.ArtworkURL = "deezer has no usable cover for the album (missing, the blank placeholder or not verifiable) and there is no musicbrainz release to fall back on"
+	}
+	if match.DurationSeconds == 0 {
+		match.Withheld.CatalogDuration = "deezer has no track length for the track"
+	}
+	return match
 }
 
 func (d *deriver) deezerAlbumOfISRC(ctx context.Context, isrc string) (deezerTrack, deezerAlbum, error) {

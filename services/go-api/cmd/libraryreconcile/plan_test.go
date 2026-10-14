@@ -203,15 +203,17 @@ func TestDecide_CatalogFieldsFillOnlyWhenEmpty(t *testing.T) {
 	}
 }
 
-func TestReadPlan_AcceptsAnArtworkReplacementOnlyWithTheAuditedOldUrlAndAnHTTPSNewOne(t *testing.T) {
+func TestReadPlan_AcceptsAnArtworkFillOrReplacementOnlyWithAnHTTPSNewUrlAndNeverABlankOldOne(t *testing.T) {
 	fix := func(old, value string) string {
 		return `{"findings":[{"track_id":"t1","fix":{"user_id":"u","version":1,"field":"artwork_url","old_value":` + old + `,"new_value":` + value + `}}]}`
 	}
 	if plans, err := readPlan(strings.NewReader(fix(`"https://lib/a.jpg"`, `"https://cdn/b.jpg"`)), testYear); err != nil || len(plans) != 1 {
 		t.Fatalf("err=%v plans=%+v", err, plans)
 	}
+	if plans, err := readPlan(strings.NewReader(fix(`null`, `"https://cdn/b.jpg"`)), testYear); err != nil || len(plans) != 1 || plans[0].Changes[0].Mode != modeFill || plans[0].Changes[0].AuditedOld != nil {
+		t.Fatalf("a missing old url is a fill: err=%v plans=%+v", err, plans)
+	}
 	refused := map[string]string{
-		"no old url":    fix(`null`, `"https://cdn/b.jpg"`),
 		"blank old url": fix(`" "`, `"https://cdn/b.jpg"`),
 		"no new url":    fix(`"https://lib/a.jpg"`, `null`),
 		"http":          fix(`"https://lib/a.jpg"`, `"http://cdn/b.jpg"`),
@@ -264,12 +266,13 @@ func TestCheckValues_ACatalogLengthClearNeedsTheOldValue(t *testing.T) {
 	}
 }
 
-func TestReadPlan_CorrectModeNeedsTheValueTheDeriveSawAndNeverTouchesTheISRC(t *testing.T) {
+func TestReadPlan_CorrectModeNeedsTheValueTheDeriveSawAndAcceptsAnISRCCorrectionOnlyWithBothValues(t *testing.T) {
 	cases := map[string]string{
 		"no old value":    `{"findings":[{"track_id":"t1","fix":{"user_id":"u","version":1,"field":"year","mode":"correct","new_value":"1984"}}]}`,
 		"blank old value": `{"findings":[{"track_id":"t1","fix":{"user_id":"u","version":1,"field":"genre","mode":"correct","old_value":" ","new_value":"Pop"}}]}`,
 		"no new value":    `{"findings":[{"track_id":"t1","fix":{"user_id":"u","version":1,"field":"year","mode":"correct","old_value":"2024","new_value":null}}]}`,
-		"isrc":            `{"findings":[{"track_id":"t1","fix":{"user_id":"u","version":1,"field":"isrc","mode":"correct","old_value":"USAAA0000001","new_value":"USAAA0000002","sources":["deezer","musicbrainz"]}}]}`,
+		"isrc no old":     `{"findings":[{"track_id":"t1","fix":{"user_id":"u","version":1,"field":"isrc","mode":"correct","new_value":"USAAA0000002"}}]}`,
+		"isrc no new":     `{"findings":[{"track_id":"t1","fix":{"user_id":"u","version":1,"field":"isrc","mode":"correct","old_value":"USAAA0000001","new_value":null}}]}`,
 		"year too early":  `{"findings":[{"track_id":"t1","fix":{"user_id":"u","version":1,"field":"year","mode":"correct","old_value":"2024","new_value":"1850"}}]}`,
 		"unknown mode":    `{"findings":[{"track_id":"t1","fix":{"user_id":"u","version":1,"field":"year","mode":"overwrite","old_value":"2024","new_value":"1984"}}]}`,
 	}
@@ -279,6 +282,14 @@ func TestReadPlan_CorrectModeNeedsTheValueTheDeriveSawAndNeverTouchesTheISRC(t *
 				t.Fatal("expected an error")
 			}
 		})
+	}
+}
+
+func TestReadPlan_ReadsAnISRCCorrection(t *testing.T) {
+	report := `{"findings":[{"track_id":"t1","fix":{"user_id":"u","version":1,"field":"isrc","mode":"correct","old_value":"USAAA0000001","new_value":"USAAA0000002","sources":["deezer","musicbrainz"]}}]}`
+	plans, err := readPlan(strings.NewReader(report), testYear)
+	if err != nil || len(plans) != 1 || plans[0].Changes[0].Mode != modeCorrect || plans[0].Changes[0].Field != "isrc" || *plans[0].Changes[0].NewValue != "USAAA0000002" {
+		t.Fatalf("got %+v, %v", plans, err)
 	}
 }
 
@@ -335,5 +346,27 @@ func TestReadPlan_ReadsAnAlbumMoveGroupAndRefusesWhatCouldBreakTheDedupKeyContra
 		if plans, err := readPlan(strings.NewReader(`{"findings":[`+fix+`]}`), testYear); err == nil {
 			t.Errorf("%s: expected an error, got %+v", name, plans)
 		}
+	}
+}
+
+func TestReadPlan_AcceptsTheDeriveFixesThatFillACoverFillAnAlbumAndCorrectAnISRC(t *testing.T) {
+	fix := func(field, mode, old, value, sources string) string {
+		return `{"findings":[{"track_id":"t1","fix":{"user_id":"u","version":1,"field":"` + field + `","mode":"` + mode +
+			`","old_value":` + old + `,"new_value":` + value + `,"sources":` + sources + `}}]}`
+	}
+	accepted := map[string]string{
+		"cover fill":     fix("artwork_url", "fill", `null`, `"https://cdn/b.jpg"`, `[]`),
+		"album fill":     fix("album", "fill", `null`, `"Make It Big"`, `[]`),
+		"isrc fill":      fix("isrc", "fill", `null`, `"GBAYE8400002"`, `["track_identity"]`),
+		"isrc correct":   fix("isrc", "correct", `"GBAYE8400001"`, `"GBAYE8400002"`, `["track_identity"]`),
+		"cover replaced": fix("artwork_url", "correct", `"https://cdn/a.jpg"`, `"https://cdn/b.jpg"`, `[]`),
+	}
+	for name, report := range accepted {
+		if plans, err := readPlan(strings.NewReader(report), testYear); err != nil || len(plans) != 1 {
+			t.Errorf("%s: err=%v plans=%+v", name, err, plans)
+		}
+	}
+	if _, err := readPlan(strings.NewReader(fix("isrc", "correct", `"GBAYE8400001"`, `"GBAYE8400002"`, `[]`)), testYear); err == nil {
+		t.Error("an isrc correction with no proof in sources was accepted")
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"slices"
@@ -37,6 +38,7 @@ type recordingSource interface {
 	RecordingsByISRC(ctx context.Context, isrc string) ([]recording, error)
 	Recording(ctx context.Context, id string) (recording, error)
 	ReleaseGroups(ctx context.Context, recordingID string) ([]releaseGroup, error)
+	ReleaseTrackSeconds(ctx context.Context, releaseID, recordingID string) (float64, error)
 }
 
 type musicBrainz struct{ client *catalogClient }
@@ -92,9 +94,24 @@ type releaseGroupBody struct {
 type releasePageBody struct {
 	ReleaseCount int `json:"release-count"`
 	Releases     []struct {
+		ID           string           `json:"id"`
 		ArtistCredit artistCredit     `json:"artist-credit"`
 		ReleaseGroup releaseGroupBody `json:"release-group"`
+		CoverArt     struct {
+			Front bool `json:"front"`
+		} `json:"cover-art-archive"`
 	} `json:"releases"`
+}
+
+type releaseTracksBody struct {
+	Media []struct {
+		Tracks []struct {
+			LengthMillis int `json:"length"`
+			Recording    struct {
+				ID string `json:"id"`
+			} `json:"recording"`
+		} `json:"tracks"`
+	} `json:"media"`
 }
 
 func (m musicBrainz) RecordingsByISRC(ctx context.Context, isrc string) ([]recording, error) {
@@ -121,8 +138,8 @@ func (m musicBrainz) Recording(ctx context.Context, id string) (recording, error
 }
 
 func (m musicBrainz) ReleaseGroups(ctx context.Context, recordingID string) ([]releaseGroup, error) {
-	var groups []releaseGroup
-	seen := map[string]bool{}
+	groups := []releaseGroup{}
+	indexOf := map[string]int{}
 	for offset := 0; ; {
 		path := "/ws/2/release?recording=" + url.QueryEscape(recordingID) + "&inc=release-groups+artist-credits&status=official&fmt=json&limit=" +
 			strconv.Itoa(musicBrainzPageSize) + "&offset=" + strconv.Itoa(offset)
@@ -131,9 +148,15 @@ func (m musicBrainz) ReleaseGroups(ctx context.Context, recordingID string) ([]r
 			return nil, err
 		}
 		for _, release := range page.Releases {
-			if group := release.ReleaseGroup; !seen[group.ID] {
-				seen[group.ID] = true
-				groups = append(groups, toReleaseGroup(group, release.ArtistCredit))
+			index, known := indexOf[release.ReleaseGroup.ID]
+			if !known {
+				index = len(groups)
+				indexOf[release.ReleaseGroup.ID] = index
+				groups = append(groups, toReleaseGroup(release.ReleaseGroup, release.ArtistCredit))
+				groups[index].ReleaseID = release.ID
+			}
+			if release.CoverArt.Front && groups[index].FrontReleaseID == "" {
+				groups[index].FrontReleaseID = release.ID
 			}
 		}
 		offset += len(page.Releases)
@@ -141,6 +164,21 @@ func (m musicBrainz) ReleaseGroups(ctx context.Context, recordingID string) ([]r
 			return groups, nil
 		}
 	}
+}
+
+func (m musicBrainz) ReleaseTrackSeconds(ctx context.Context, releaseID, recordingID string) (float64, error) {
+	var body releaseTracksBody
+	if err := m.getJSON(ctx, "/ws/2/release/"+url.PathEscape(releaseID)+"?inc=recordings&fmt=json", &body); err != nil {
+		return 0, err
+	}
+	for _, medium := range body.Media {
+		for _, track := range medium.Tracks {
+			if track.Recording.ID == recordingID && track.LengthMillis > 0 {
+				return math.Round(float64(track.LengthMillis) / millisPerSecond), nil
+			}
+		}
+	}
+	return 0, errCatalogUnknown
 }
 
 func toReleaseGroup(body releaseGroupBody, releaseCredit artistCredit) releaseGroup {

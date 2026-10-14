@@ -17,10 +17,6 @@ func sameSongTitle(a, b string) bool {
 	return normalizeName(baseTitle(keysA.Title)) == normalizeName(baseTitle(keysB.Title)) && slices.Equal(keysA.VariantQualifiers(), keysB.VariantQualifiers())
 }
 
-func sameVariant(a, b string) bool {
-	return slices.Equal(titleKeys(a).VariantQualifiers(), titleKeys(b).VariantQualifiers())
-}
-
 func isCredited(stored, credit string) bool {
 	wanted := normalizeName(stored)
 	if wanted == "" {

@@ -19,16 +19,19 @@ func TestFindingOf_AGroupedCorrectionCarriesItsGroupIntoTheFixJSON(t *testing.T)
 	}
 }
 
-func TestOtherMasterFindings_AnAlbumOrTitleDifferenceIsReportedNotFixedWhileTheMasterChanges(t *testing.T) {
+func TestOtherMasterFindings_AnAlbumOrTitleDifferenceIsFixedWhileTheMasterChangesAndOnlyTheISRCStaysAPlan(t *testing.T) {
 	stored := boundTrack{libraryTrack: libraryTrack{ID: "t1", UserID: "u1", Title: "Careless Whispers", Artist: "Wham!", Album: "Greatest Hits", ISRC: "GBAYE8400001", FileSeconds: 300}}
 	master := deezerTrack{ISRC: "GBAYE8400002", AlbumTitle: "Make It Big", DurationSeconds: 300}
 	found := otherMasterFindings(stored, anchor{Title: "Careless Whisper", Artist: "Wham!"}, pick{Group: makeItBig()}, master)
 	byKind := byCategory(found)
-	if byKind["album_differs"].Category == "" || byKind["title_differs"].Category == "" || byKind[categoryISRCOtherMaster].LengthPlan == nil {
+	album, title := byKind["album_correct"].Fix, byKind["title_correct"].Fix
+	if album == nil || album.Mode != modeCorrect || *album.NewValue != "Make It Big" || *album.OldValue != "Greatest Hits" ||
+		title == nil || title.Mode != modeCorrect || *title.NewValue != "Careless Whisper" || *title.OldValue != "Careless Whispers" ||
+		byKind[categoryISRCOtherMaster].LengthPlan == nil {
 		t.Fatalf("got %+v", found)
 	}
 	for _, f := range found {
-		if f.Fix != nil {
+		if (f.Category == categoryISRCOtherMaster || strings.HasSuffix(string(f.Category), "_differs")) && f.Fix != nil {
 			t.Errorf("%s carries a fix", f.Category)
 		}
 	}

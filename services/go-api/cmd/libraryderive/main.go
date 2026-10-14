@@ -73,6 +73,7 @@ func run(opts options, env func(string) string) error {
 	}
 	httpClient := &http.Client{Timeout: httpTimeout}
 	d := newDeriver(newMusicBrainz(httpClient, musicBrainzBaseURL, musicBrainzRequestsSec), newDeezer(httpClient, deezerBaseURL, deezerRequestsPerSec))
+	d.covers = newHTTPCoverProbe(httpClient, coverCDNRequestsPerSec)
 	result := d.deriveAll(ctx, tracks)
 	return saveReport(opts.reportPath, len(tracks), result)
 }

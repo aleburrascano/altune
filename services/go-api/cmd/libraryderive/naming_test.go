@@ -95,12 +95,12 @@ func TestDiff_AnAlbumArtistAbsentFromTheCreditIsStillCorrected(t *testing.T) {
 	}
 }
 
-func TestDiff_ATitleVariantStillDiffersAndIsReportOnly(t *testing.T) {
+func TestDiff_ATitleVariantIsCorrectedToTheBoundRecordingTitle(t *testing.T) {
 	stored := libraryTrack{Title: "Song (Slowed)", Artist: "A", Album: "LP", AlbumArtist: "A", Year: 2000}
 	g := group("lp", "LP", "Album", "2000")
 	g.Artist = "A"
 	got := diff(stored, derive(anchor{Title: "Song", Artist: "A"}, g, nil))
-	if len(got) != 1 || got[0].category() != "title_differs" || got[0].Mode != modeReportOnly {
+	if len(got) != 1 || got[0].category() != "title_correct" || got[0].Mode != modeCorrect || *got[0].Old != "Song (Slowed)" || *got[0].New != "Song" {
 		t.Fatalf("got %+v", got)
 	}
 }
