@@ -364,7 +364,8 @@ describe('failure injection — a disk failure degrades to in-memory-only, never
     persistOutbox([entry({ event_id: 'e1' })]);
 
     expect(warn).toHaveBeenCalledWith(
-      '[telemetry] failed to persist outbox; keeping in-memory only',
+      '[telemetry] failed to persist outbox (1 entries) to critical-outbox.json; keeping in-memory only',
+      expect.objectContaining({ message: 'disk full' }),
     );
     warn.mockRestore();
   });

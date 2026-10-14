@@ -93,7 +93,10 @@ export function persistOutbox(entries: readonly OutboxEntry[]): void {
     }
     const document = { schemaVersion: OUTBOX_SCHEMA_VERSION, entries };
     writeDocumentAtomically(dir, OUTBOX_FILE, JSON.stringify(document));
-  } catch {
-    console.warn('[telemetry] failed to persist outbox; keeping in-memory only');
+  } catch (error) {
+    console.warn(
+      `[telemetry] failed to persist outbox (${entries.length} entries) to ${OUTBOX_FILE}; keeping in-memory only`,
+      error,
+    );
   }
 }
