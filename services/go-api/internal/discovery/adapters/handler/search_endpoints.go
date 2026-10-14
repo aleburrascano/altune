@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/discovery/service/interaction"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/telemetry"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -249,7 +250,22 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	h.emitClientEvent(r, eventType, userId, req)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *DiscoveryHandler) emitClientEvent(r *http.Request, eventType domain.EventType, userId shared.UserId, req DiscoveryEventRequest) {
+	if h.clientEvents == nil || !telemetry.AnalyticsAllowed(r) {
+		return
+	}
+	h.clientEvents.Emit(r.Context(), telemetry.ClientEvent{
+		Type:       eventType.String(),
+		EventID:    req.EventID,
+		AppVersion: r.Header.Get(telemetry.AppVersionHeader),
+		Platform:   r.Header.Get(telemetry.PlatformHeader),
+		UserID:     userId.String(),
+		Payload:    req.Payload,
+	})
 }
 
 func searchOutcome(statuses []domain.ProviderSearchResponse) (int, string) {

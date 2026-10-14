@@ -11,12 +11,14 @@ import (
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"sync"
@@ -28,6 +30,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/log"
+	"go.opentelemetry.io/otel/log/embedded"
 )
 
 type classifiedTestError struct{}
@@ -1659,5 +1663,70 @@ func TestHandleSearch_CacheHitReflectsTheResultCache(t *testing.T) {
 	second := searchPageOverHTTP(t, router, "/discovery/search?q=humble")
 	if !second.Cache.Hit {
 		t.Error("repeated query reported cache.hit = false")
+	}
+}
+
+type recordingLogger struct {
+	embedded.Logger
+	records []log.Record
+}
+
+func (l *recordingLogger) Emit(_ context.Context, r log.Record) { l.records = append(l.records, r) }
+func (l *recordingLogger) Enabled(context.Context, log.EnabledParameters) bool {
+	return true
+}
+
+func buildClientEventRouter(logger *recordingLogger) chi.Router {
+	h := NewDiscoveryHandler(DiscoveryServices{Event: interaction.NewRecordEventService(&recordingEventStore{})}).
+		WithClientEvents(telemetry.NewClientEvents("k", logger))
+	r := chi.NewRouter()
+	r.Use(middleware.Middleware(discVerifyAsTestUser))
+	r.Mount("/discovery", h.Routes())
+	return r
+}
+
+func serveClientEvent(t *testing.T, router chi.Router, analytics string) *httptest.ResponseRecorder {
+	t.Helper()
+	body := discJsonBody(t, map[string]any{"type": "play", "payload": map[string]any{"surface": "search"}})
+	req := httptest.NewRequest(http.MethodPost, "/discovery/events", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer fake-token")
+	if analytics != "" {
+		req.Header.Set(telemetry.AnalyticsHeader, analytics)
+	}
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestHandleRecordEvent_ClientEventEmittedOnce(t *testing.T) {
+	logger := &recordingLogger{}
+	rec := serveClientEvent(t, buildClientEventRouter(logger), "")
+	discAssertStatus(t, rec, http.StatusNoContent)
+	if len(logger.records) != 1 {
+		t.Fatalf("records = %d, want 1", len(logger.records))
+	}
+}
+
+func TestHandleRecordEvent_ClientEventHonoursOptOut(t *testing.T) {
+	logger := &recordingLogger{}
+	rec := serveClientEvent(t, buildClientEventRouter(logger), telemetry.AnalyticsOff)
+	discAssertStatus(t, rec, http.StatusNoContent)
+	if len(logger.records) != 0 {
+		t.Fatalf("records = %d, want 0", len(logger.records))
+	}
+}
+
+func TestHandleRecordEvent_ClientEventSkippedWhenStoreFails(t *testing.T) {
+	logger := &recordingLogger{}
+	h := NewDiscoveryHandler(DiscoveryServices{Event: interaction.NewRecordEventService(&recordingEventStore{err: context.DeadlineExceeded})}).
+		WithClientEvents(telemetry.NewClientEvents("k", logger))
+	r := chi.NewRouter()
+	r.Use(middleware.Middleware(discVerifyAsTestUser))
+	r.Mount("/discovery", h.Routes())
+	rec := serveClientEvent(t, r, "")
+	discAssertStatus(t, rec, http.StatusInternalServerError)
+	if len(logger.records) != 0 {
+		t.Fatalf("records = %d, want 0", len(logger.records))
 	}
 }

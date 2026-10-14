@@ -13,10 +13,13 @@ import (
 	"altune/go-api/internal/discovery/service/related"
 	"altune/go-api/internal/discovery/service/search"
 	"altune/go-api/internal/discovery/service/vocabulary"
+	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"expvar"
 	"log/slog"
 	"time"
+
+	"go.opentelemetry.io/otel"
 
 	discoveryCacheAdapters "altune/go-api/internal/discovery/adapters/cache"
 	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
@@ -204,6 +207,9 @@ func (a *App) recordEventActivityOptions() []func(*interaction.RecordEventServic
 func (a *App) buildDiscoveryHandler(cf clientFactory, services discoveryHandler.DiscoveryServices) *discoveryHandler.DiscoveryHandler {
 	discoveryH := discoveryHandler.NewDiscoveryHandler(services)
 	discoveryH.WithDetailEnrichers(a.buildDetailEnrichers(cf))
+	if telemetry.Enabled() {
+		discoveryH.WithClientEvents(telemetry.NewClientEvents(a.cfg.TelemetryUserKey, otel.GetLoggerProvider().Logger(telemetry.ScopeName)))
+	}
 	return discoveryH
 }
 

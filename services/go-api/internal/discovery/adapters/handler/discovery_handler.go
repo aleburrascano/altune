@@ -12,6 +12,7 @@ import (
 	"altune/go-api/internal/discovery/service/search"
 	"altune/go-api/internal/discovery/service/vocabulary"
 	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/telemetry"
 	"net/http"
 	"time"
 
@@ -30,6 +31,7 @@ type DiscoveryHandler struct {
 	suggestSvc      *vocabulary.SuggestService
 	eventSvc        *interaction.RecordEventService
 	favoritesSvc    *favorites.FavoritesService
+	clientEvents    *telemetry.ClientEvents
 
 	enrichers DetailEnrichers
 
@@ -75,6 +77,11 @@ func (h *DiscoveryHandler) WithRateLimits(limits DiscoveryRateLimits) *Discovery
 	h.contentLimiter = newUserRateLimiter(limits.Content, time.Now)
 	h.favoritesLimiter = newUserRateLimiter(limits.Favorites, time.Now)
 	h.historyLimiter = newUserRateLimiter(limits.History, time.Now)
+	return h
+}
+
+func (h *DiscoveryHandler) WithClientEvents(c *telemetry.ClientEvents) *DiscoveryHandler {
+	h.clientEvents = c
 	return h
 }
 

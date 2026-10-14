@@ -14,8 +14,9 @@ import (
 type Config struct {
 	envDefaulted bool
 
-	Env      string `env:"ENV"`
-	LogLevel string `env:"LOG_LEVEL" envDefault:"INFO"`
+	Env              string `env:"ENV"`
+	TelemetryUserKey string `env:"TELEMETRY_USER_KEY"`
+	LogLevel         string `env:"LOG_LEVEL" envDefault:"INFO"`
 
 	TestAuthOptIn bool `env:"TEST_AUTH_ENABLED" envDefault:"false"`
 
