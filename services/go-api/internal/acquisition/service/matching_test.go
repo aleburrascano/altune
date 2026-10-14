@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service/versiontag"
 	"context"
 	"strings"
 	"testing"
@@ -956,10 +957,7 @@ func FuzzUnrequestedQualifiers(f *testing.F) {
 	f.Add("Rollacoasta", "prettifun", "prettifun - Rollacoasta (Instrumental) [100% Accurate]")
 	f.Add("8AM In Charlotte", "Drake", "ImDontai Reacts To Drake 8AM In Charlotte")
 	f.Add("Song", "Someone", "Song （feat. Other） （Radio Edit） a")
-	labels := make(map[string]bool)
-	for _, entry := range qualifierLexicon {
-		labels[entry.label] = true
-	}
+	labels := versiontag.KnownLabels()
 	f.Fuzz(func(t *testing.T, title, artist, candidate string) {
 		veto, fallback := UnrequestedQualifiers(title, artist, candidate)
 		seen := make(map[string]bool)
