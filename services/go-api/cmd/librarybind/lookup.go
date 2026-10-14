@@ -190,7 +190,15 @@ func newAppleLookup(songs appleSongs, requestsPerSecond float64) appleLookup {
 	return appleLookup{songs: songs, limiter: rate.NewLimiter(rate.Limit(requestsPerSecond), 1)}
 }
 
-func newAppleAdapter(httpClient *http.Client) appleSongs {
+func appleFailure(err error) error {
+	var statusErr providerhttp.StatusError
+	if errors.As(err, &statusErr) && (statusErr.Status == http.StatusForbidden || statusErr.Status == http.StatusTooManyRequests) {
+		return blocked("apple music HTTP %d", statusErr.Status)
+	}
+	return err
+}
+
+func newAppleAdapter(httpClient *http.Client) *applemusic.AppleMusicAdapter {
 	return applemusic.NewAppleMusicAdapter(httpClient)
 }
 
@@ -201,12 +209,8 @@ func (a appleLookup) ByISRC(ctx context.Context, isrc string) ([]candidate, erro
 		return nil, err
 	}
 	songs, err := a.songs.SongsByISRC(ctx, canonicalISRC(isrc))
-	var statusErr providerhttp.StatusError
-	if errors.As(err, &statusErr) && (statusErr.Status == http.StatusForbidden || statusErr.Status == http.StatusTooManyRequests) {
-		return nil, blocked("apple music HTTP %d", statusErr.Status)
-	}
 	if err != nil {
-		return nil, err
+		return nil, appleFailure(err)
 	}
 	found := make([]candidate, 0, len(songs))
 	for _, song := range songs {

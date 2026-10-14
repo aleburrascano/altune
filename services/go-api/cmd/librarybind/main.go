@@ -26,6 +26,7 @@ var (
 	errApplyAndUndo     = errors.New("-apply and -undo are separate modes")
 	errUndoWithFilters  = errors.New("-undo takes no -user or -limit")
 	errNegativeLimit    = errors.New("-limit must not be negative")
+	errReportWithUndo   = errors.New("-report belongs to a bind run, not -undo")
 )
 
 type options struct {
@@ -34,6 +35,7 @@ type options struct {
 	undoRunID uuid.UUID
 	userID    string
 	limit     int
+	report    string
 }
 
 func parseOptions(args []string, output io.Writer) (options, error) {
@@ -45,6 +47,7 @@ func parseOptions(args []string, output io.Writer) (options, error) {
 	flags.StringVar(&rawRunID, "undo", "", "delete the identity rows of this run id whose track version is unchanged")
 	flags.StringVar(&opts.userID, "user", "", "only this user id")
 	flags.IntVar(&opts.limit, "limit", 0, "stop after this many tracks (0 means all)")
+	flags.StringVar(&opts.report, "report", "", "write a libraryrelength fix_isrc plan for the wrong ISRCs this run replaced")
 	if err := flags.Parse(args); err != nil {
 		return options{}, err
 	}
@@ -64,6 +67,8 @@ func (o options) check() error {
 		return errApplyAndUndo
 	case o.undo && (o.userID != "" || o.limit != 0):
 		return errUndoWithFilters
+	case o.undo && o.report != "":
+		return errReportWithUndo
 	case o.limit < 0:
 		return errNegativeLimit
 	}
@@ -137,18 +142,26 @@ func runBind(ctx context.Context, s store, opts options, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	httpClient := &http.Client{Timeout: httpTimeout}
-	lookups := []isrcLookup{
-		newDeezerLookup(httpClient, deezerBaseURL, deezerRequestsPerSec),
-		newMusicBrainzLookup(httpClient, musicBrainzBaseURL, musicBrainzRequestsSec),
-		newAppleLookup(newAppleAdapter(httpClient), appleRequestsPerSec),
+	held, err := s.loadHeld(ctx, opts.userID)
+	if err != nil {
+		return err
 	}
+	httpClient := &http.Client{Timeout: httpTimeout}
+	deezer := newDeezerLookup(httpClient, deezerBaseURL, deezerRequestsPerSec)
+	musicBrainz := newMusicBrainzLookup(httpClient, musicBrainzBaseURL, musicBrainzRequestsSec)
+	adapter := newAppleAdapter(httpClient)
+	apple := newAppleLookup(adapter, appleRequestsPerSec)
+	lookups := []isrcLookup{deezer, musicBrainz, apple}
+	artistSources := []artistSource{deezerArtistSource(deezer), appleArtistSource{api: adapter, limiter: apple.limiter}}
 	var sink identitySink
 	if opts.apply {
 		sink = s
 	}
 	runID := uuid.New()
-	done, runErr := bindTracks(ctx, tracks, lookups, sink, runID)
+	done, runErr := bindTracks(ctx, tracks, lookups, sink, runID, newArtistFirst(artistSources, musicBrainz, held).refine)
 	writeReport(out, done, opts.apply, runID)
+	if opts.report != "" {
+		runErr = errors.Join(runErr, writeRelengthPlan(opts.report, relengthPlan(done.Decisions, runErr != nil)))
+	}
 	return runErr
 }

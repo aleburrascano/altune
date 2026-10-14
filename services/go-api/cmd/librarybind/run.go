@@ -42,14 +42,33 @@ func gather(ctx context.Context, lookups []isrcLookup, t libraryTrack) ([]source
 	return outcomes, nil
 }
 
-func bindTracks(ctx context.Context, tracks []libraryTrack, lookups []isrcLookup, sink identitySink, runID uuid.UUID) (tally, error) {
+type refineFunc func(ctx context.Context, t libraryTrack, found identity) (identity, error)
+
+func refineAll(ctx context.Context, t libraryTrack, found identity, refiners []refineFunc) (identity, error) {
+	for _, refine := range refiners {
+		var err error
+		if found, err = refine(ctx, t, found); err != nil {
+			return found, err
+		}
+	}
+	return found, nil
+}
+
+func identify(ctx context.Context, t libraryTrack, lookups []isrcLookup, refiners []refineFunc) (identity, error) {
+	outcomes, err := gather(ctx, lookups, t)
+	if err != nil {
+		return identity{}, err
+	}
+	return refineAll(ctx, t, decide(t, outcomes), refiners)
+}
+
+func bindTracks(ctx context.Context, tracks []libraryTrack, lookups []isrcLookup, sink identitySink, runID uuid.UUID, refiners ...refineFunc) (tally, error) {
 	var done tally
 	for _, t := range tracks {
-		outcomes, err := gather(ctx, lookups, t)
+		found, err := identify(ctx, t, lookups, refiners)
 		if err != nil {
 			return done, fmt.Errorf("aborted after %d of %d tracks: %w", len(done.Decisions), len(tracks), err)
 		}
-		found := decide(t, outcomes)
 		done.Decisions = append(done.Decisions, decided{Track: t, Found: found})
 		if sink == nil {
 			continue

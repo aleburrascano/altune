@@ -31,6 +31,16 @@ func TestParseOptions(t *testing.T) {
 	}
 }
 
+func TestParseOptions_ReportBelongsToABindRun(t *testing.T) {
+	got, err := parseOptions([]string{"-report", "plan.json"}, io.Discard)
+	if err != nil || got.report != "plan.json" {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+	if _, err := parseOptions([]string{"-undo", "6f1c1f0e-6a52-4a3c-9d3e-0b1f2a3b4c5d", "-report", "plan.json"}, io.Discard); !errors.Is(err, errReportWithUndo) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestParseOptions_RejectsAMalformedRunID(t *testing.T) {
 	if _, err := parseOptions([]string{"-undo", "nope"}, io.Discard); err == nil {
 		t.Fatal("expected an error")

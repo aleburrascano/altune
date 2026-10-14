@@ -39,6 +39,8 @@ type evidence struct {
 	Album       string          `json:"album"`
 	FileSeconds float64         `json:"file_seconds"`
 	Sources     []sourceOutcome `json:"sources"`
+	ArtistFirst []sourceOutcome `json:"artist_first,omitempty"`
+	Replaced    *replacedISRC   `json:"replaced_isrc,omitempty"`
 }
 
 type identity struct {
