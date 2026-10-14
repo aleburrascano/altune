@@ -111,18 +111,18 @@ func musicBrainzConfirms(ctx context.Context, recordings recordingSource, lib li
 		return false, err
 	}
 	for _, rec := range found {
-		if rec.hasISRC(version.ISRC) && recordingMatches(lib, rec) {
+		if rec.hasISRC(version.ISRC) && recordingMatches(lib, version, rec) {
 			return true, nil
 		}
 	}
 	return false, nil
 }
 
-func recordingMatches(lib libraryTrack, rec recording) bool {
-	if rec.DurationSeconds <= 0 || !titlesAgree(lib.Title, rec.Title) {
+func recordingMatches(lib libraryTrack, version catalogTrack, rec recording) bool {
+	if !titlesAgree(lib.Title, rec.Title) {
 		return false
 	}
-	return fitsLength(lib, catalogTrack{DurationSeconds: rec.DurationSeconds}) && anyNameAgrees(lib.Artist, rec.Artists)
+	return lengthsAgree(version, catalogTrack{DurationSeconds: rec.DurationSeconds}) && anyNameAgrees(lib.Artist, rec.Artists)
 }
 
 func anyNameAgrees(name string, others []string) bool {

@@ -7,11 +7,11 @@ import (
 )
 
 func libTrack() libraryTrack {
-	return libraryTrack{ID: "t1", Title: "Valentina", Artist: "Daniel Caesar", Year: 2019, AlbumArtist: "Daniel Caesar", DurationSeconds: 236}
+	return libraryTrack{ID: "t1", Title: "Valentina", Artist: "Daniel Caesar", Album: "Freudian", Year: 2019, AlbumArtist: "Daniel Caesar", DurationSeconds: 236}
 }
 
 func catTrack() catalogTrack {
-	return catalogTrack{Title: "Valentina", Artist: "Daniel Caesar", DurationSeconds: 236, ReleaseYear: 2019}
+	return catalogTrack{Title: "Valentina", Artist: "Daniel Caesar", Album: "Freudian", DurationSeconds: 236, ReleaseYear: 2019}
 }
 
 func categoriesOf(found []finding) []category {
@@ -175,5 +175,24 @@ func TestMetadataFindings_OtherReleaseNamesTheCatalogAlbum(t *testing.T) {
 	got := metadataFindings(lib, cat)
 	if len(got) != 1 || !strings.Contains(got[0].Detail, "Cafe Chill Vibes") || !strings.Contains(got[0].Detail, "2019") {
 		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestIsSameSong_AnotherVersionIsNotTheSameSong(t *testing.T) {
+	cases := []struct{ libTitle, catTitle string }{
+		{"Diamonds", "Diamonds (Remix)"},
+		{"Finesse", "Finesse (Remix)"},
+		{"Cold Heart (PNAU Remix)", "Cold Heart"},
+		{"Take on Me", "Take On Me (2017 Acoustic)"},
+		{"Everybody Wants To Rule The World", "Everybody Wants To Rule The World (Live From Franklin, TN)"},
+	}
+	for _, tc := range cases {
+		lib := libTrack()
+		lib.Title = tc.libTitle
+		cat := catTrack()
+		cat.Title, cat.Artist = tc.catTitle, lib.Artist
+		if isSameSong(lib, cat) {
+			t.Errorf("isSameSong(%q, %q) = true, want false: another version", tc.libTitle, tc.catTitle)
+		}
 	}
 }

@@ -24,15 +24,15 @@ func (f isrcRecordings) RecordingsByISRC(_ context.Context, isrc string) ([]reco
 }
 
 func radioEditTrack() libraryTrack {
-	return libraryTrack{ID: "t1", UserID: "u1", Version: 3, Title: "1999", Artist: "Prince", ISRC: "USALBUM", DurationSeconds: 226}
+	return libraryTrack{ID: "t1", UserID: "u1", Version: 3, Title: "1999", Artist: "Prince", Album: "The Hits 1", ISRC: "USALBUM", DurationSeconds: 226}
 }
 
 func albumVersion() catalogTrack {
-	return catalogTrack{ID: 1, Title: "1999", Artist: "Prince", DurationSeconds: 379, ISRC: "USALBUM"}
+	return catalogTrack{ID: 1, Title: "1999", Artist: "Prince", Album: "1999", DurationSeconds: 379, ISRC: "USALBUM"}
 }
 
 func radioEditVersion(id int64, isrc string) catalogTrack {
-	return catalogTrack{ID: id, Title: "1999", Artist: "Prince", DurationSeconds: 225, ISRC: isrc}
+	return catalogTrack{ID: id, Title: "1999", Artist: "Prince", Album: "The Hits 1", DurationSeconds: 225, ISRC: isrc}
 }
 
 func triaged(t *testing.T, cat fakeCatalog, recordings isrcRecordings, lib libraryTrack) []finding {
@@ -52,7 +52,7 @@ func princeMusicBrainz(isrc string) isrcRecordings {
 
 func TestTriageLengthFindings_OneFittingVersionConfirmedByMusicBrainzFixesTheISRC(t *testing.T) {
 	cat := fakeCatalog{
-		search: []catalogTrack{albumVersion(), {ID: 2, Title: "1999", Artist: "Prince", DurationSeconds: 225}},
+		search: []catalogTrack{albumVersion(), {ID: 2, Title: "1999", Artist: "Prince", Album: "The Hits 1", DurationSeconds: 225}},
 		byID:   map[int64]catalogTrack{2: radioEditVersion(2, "USRADIO")},
 	}
 	got := triaged(t, cat, princeMusicBrainz("USRADIO"), radioEditTrack())
@@ -75,7 +75,7 @@ func TestTriageLengthFindings_NoFittingVersionMeansReacquire(t *testing.T) {
 
 func TestTriageLengthFindings_TwoFittingVersionsMeansReacquire(t *testing.T) {
 	cat := fakeCatalog{
-		search: []catalogTrack{{ID: 2, Title: "1999", Artist: "Prince", DurationSeconds: 225}, {ID: 4, Title: "1999", Artist: "Prince", DurationSeconds: 228}},
+		search: []catalogTrack{{ID: 2, Title: "1999", Artist: "Prince", Album: "The Hits 1", DurationSeconds: 225}, {ID: 4, Title: "1999", Artist: "Prince", Album: "The Hits 1", DurationSeconds: 228}},
 		byID:   map[int64]catalogTrack{2: radioEditVersion(2, "USRADIO"), 4: radioEditVersion(4, "USOTHER")},
 	}
 	recordings := isrcRecordings{
@@ -90,7 +90,7 @@ func TestTriageLengthFindings_TwoFittingVersionsMeansReacquire(t *testing.T) {
 
 func TestTriageLengthFindings_SameISRCUnderTwoDeezerIDsIsOneVersion(t *testing.T) {
 	cat := fakeCatalog{
-		search: []catalogTrack{{ID: 2, Title: "1999", Artist: "Prince", DurationSeconds: 225}, {ID: 5, Title: "1999", Artist: "Prince", DurationSeconds: 225}},
+		search: []catalogTrack{{ID: 2, Title: "1999", Artist: "Prince", Album: "The Hits 1", DurationSeconds: 225}, {ID: 5, Title: "1999", Artist: "Prince", Album: "The Hits 1", DurationSeconds: 225}},
 		byID:   map[int64]catalogTrack{2: radioEditVersion(2, "USRADIO"), 5: radioEditVersion(5, "usradio")},
 	}
 	got := triaged(t, cat, princeMusicBrainz("USRADIO"), radioEditTrack())
@@ -111,7 +111,7 @@ func TestTriageLengthFindings_MusicBrainzDisagreeingMeansReacquire(t *testing.T)
 	for name, recordings := range cases {
 		t.Run(name, func(t *testing.T) {
 			cat := fakeCatalog{
-				search: []catalogTrack{{ID: 2, Title: "1999", Artist: "Prince", DurationSeconds: 225}},
+				search: []catalogTrack{{ID: 2, Title: "1999", Artist: "Prince", Album: "The Hits 1", DurationSeconds: 225}},
 				byID:   map[int64]catalogTrack{2: radioEditVersion(2, "USRADIO")},
 			}
 			got := triaged(t, cat, recordings, radioEditTrack())
@@ -132,7 +132,7 @@ func TestTriageLengthFindings_BlockedMusicBrainzAbortsInsteadOfGuessing(t *testi
 	lib := radioEditTrack()
 	cat := fakeCatalog{
 		byISRC: map[string]catalogTrack{lib.ISRC: albumVersion()},
-		search: []catalogTrack{{ID: 2, Title: "1999", Artist: "Prince", DurationSeconds: 225}},
+		search: []catalogTrack{{ID: 2, Title: "1999", Artist: "Prince", Album: "The Hits 1", DurationSeconds: 225}},
 		byID:   map[int64]catalogTrack{2: radioEditVersion(2, "USRADIO")},
 	}
 	got, err := triageLengthFindings(context.Background(), cat, blockedRecordings{}, []libraryTrack{lib}, []finding{about(lib, categoryLengthShorter, "")})
@@ -156,5 +156,16 @@ func TestTriageLengthFindings_LeavesOtherFindingsUntouched(t *testing.T) {
 	got, err := triageLengthFindings(context.Background(), fakeCatalog{}, isrcRecordings{}, []libraryTrack{lib}, []finding{other})
 	if err != nil || len(got) != 1 || got[0] != other {
 		t.Fatalf("got %+v, %v", got, err)
+	}
+}
+
+func TestTriageLengthFindings_AVersionThatOnlyFitsOurFileIsNotTheUsersPick(t *testing.T) {
+	cat := fakeCatalog{
+		search: []catalogTrack{albumVersion(), {ID: 2, Title: "1999", Artist: "Prince", Album: "Ultimate", DurationSeconds: 225}},
+		byID:   map[int64]catalogTrack{2: radioEditVersion(2, "USRADIO")},
+	}
+	got := triaged(t, cat, princeMusicBrainz("USRADIO"), radioEditTrack())
+	if got[1].Category != categoryLengthReacquire {
+		t.Fatalf("got %+v", got)
 	}
 }

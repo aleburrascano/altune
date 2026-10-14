@@ -29,6 +29,7 @@ var lexicon = []Entry{
 	{"", false, []string{"stereo", "mix"}},
 	{"", false, []string{"mono", "mix"}},
 	{"", false, []string{"album", "mix"}},
+	{"", false, []string{"album", "version"}},
 	{"live", true, []string{"live"}},
 	{"cover", true, []string{"cover"}},
 	{"slowed", true, []string{"slowed"}},
@@ -154,6 +155,10 @@ func Labels(title string) []string {
 	}
 	slices.Sort(labels)
 	return labels
+}
+
+func RecordingLabels(title string) []string {
+	return slices.DeleteFunc(Labels(title), func(label string) bool { return label == "remaster" })
 }
 
 var versionPhrases = slices.Concat(lexicon, releaseVariants)

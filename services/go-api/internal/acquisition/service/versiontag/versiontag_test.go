@@ -42,3 +42,17 @@ func TestWithoutVersionPhrases_KeepsTitleWords(t *testing.T) {
 		}
 	}
 }
+
+func TestRecordingLabels_NameADifferentRecording(t *testing.T) {
+	for title, want := range map[string]string{
+		"Wanna Be Startin' Somethin' (Album Version)":                "",
+		"Con te partirò (2016 Version)":                              "version",
+		"Take On Me (2017 Acoustic)":                                 "acoustic",
+		"Hotel California (2013 Remaster)":                           "",
+		"Everybody Wants To Rule The World (Live From Franklin, TN)": "live",
+	} {
+		if got := strings.Join(RecordingLabels(title), " "); got != want {
+			t.Errorf("RecordingLabels(%q) = %q, want %q", title, got, want)
+		}
+	}
+}

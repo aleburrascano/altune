@@ -97,7 +97,7 @@ func TestWriteJSON_MatchesTheReportFileLibraryreconcileReads(t *testing.T) {
 
 func TestAuditTrack_AnISRCFoundBySearchIsReportedWithoutAFix(t *testing.T) {
 	cat := fakeCatalog{
-		search: []catalogTrack{{ID: 2, Title: "Valentina", Artist: "Daniel Caesar", DurationSeconds: 236}},
+		search: []catalogTrack{{ID: 2, Title: "Valentina", Artist: "Daniel Caesar", Album: "Freudian", DurationSeconds: 236}},
 		byID:   map[int64]catalogTrack{2: {ID: 2, ISRC: "USFOUND"}},
 	}
 	found := findingOf(audited(cat, fakeCovers{}, libTrack()).Findings, categoryISRCFillable)
