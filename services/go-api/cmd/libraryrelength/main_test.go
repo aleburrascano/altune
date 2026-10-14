@@ -3,6 +3,8 @@ package main
 import (
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -51,5 +53,18 @@ func TestMaxPerRun(t *testing.T) {
 		if got != tc.want || (err != nil) != tc.wantErr {
 			t.Errorf("%q: got %d, %v", tc.raw, got, err)
 		}
+	}
+}
+
+func TestLoadPlan_ApplyRefusesAnAbortedReportFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "report.json")
+	if err := os.WriteFile(path, []byte(`{"aborted":true,"findings":[`+fixFinding+`]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadPlan(path, true); !errors.Is(err, errReportAborted) {
+		t.Fatalf("apply: %v", err)
+	}
+	if got, err := loadPlan(path, false); err != nil || len(got) != 1 {
+		t.Fatalf("dry run: %+v, %v", got, err)
 	}
 }

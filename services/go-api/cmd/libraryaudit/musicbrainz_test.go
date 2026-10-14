@@ -68,12 +68,10 @@ func TestMusicBrainzClient_RetriesAThrottleThenSucceeds(t *testing.T) {
 	}
 }
 
-func TestMusicBrainzClient_PersistentThrottleAndForbiddenAreBlocks(t *testing.T) {
-	for name, status := range map[string]int{"throttle": http.StatusServiceUnavailable, "forbidden": http.StatusForbidden} {
-		client := musicBrainzFor(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(status) })
-		if _, err := client.RecordingsByISRC(context.Background(), "USX0000001"); !errors.Is(err, errCatalogBlocked) {
-			t.Fatalf("%s: got %v", name, err)
-		}
+func TestMusicBrainzClient_ForbiddenIsABlock(t *testing.T) {
+	client := musicBrainzFor(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusForbidden) })
+	if _, err := client.RecordingsByISRC(context.Background(), "USX0000001"); !errors.Is(err, errCatalogBlocked) {
+		t.Fatalf("got %v", err)
 	}
 }
 
@@ -109,5 +107,47 @@ func TestRecordingsWithReleases_AnISRCMusicBrainzDoesNotKnowIsNoRecordings(t *te
 	client := musicBrainzFor(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`{"recordings":[]}`)) })
 	if got, err := client.RecordingsWithReleases(context.Background(), "USX0000001"); err != nil || len(got) != 0 {
 		t.Fatalf("err=%v got=%+v", err, got)
+	}
+}
+
+func TestMusicBrainzClient_ThrottleOnOneLookupIsAnOrdinaryFailureUntilItRepeats(t *testing.T) {
+	var calls atomic.Int32
+	client := musicBrainzFor(t, func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	for lookup := 1; lookup < musicBrainzMaxThrottledInARow; lookup++ {
+		if _, err := client.RecordingsByISRC(context.Background(), "USX0000001"); err == nil || errors.Is(err, errCatalogBlocked) {
+			t.Fatalf("lookup %d: got %v", lookup, err)
+		}
+	}
+	if _, err := client.RecordingsByISRC(context.Background(), "USX0000001"); !errors.Is(err, errCatalogBlocked) {
+		t.Fatalf("after %d lookups: got %v", musicBrainzMaxThrottledInARow, err)
+	}
+	if calls.Load() != musicBrainzMaxThrottledInARow*musicBrainzMaxAttempts {
+		t.Fatalf("calls %d", calls.Load())
+	}
+}
+
+func TestMusicBrainzClient_ASuccessResetsTheThrottleStreak(t *testing.T) {
+	var throttle atomic.Bool
+	throttle.Store(true)
+	client := musicBrainzFor(t, func(w http.ResponseWriter, _ *http.Request) {
+		if throttle.Load() {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		_, _ = w.Write([]byte(recordingJSON))
+	})
+	for range musicBrainzMaxThrottledInARow - 1 {
+		_, _ = client.RecordingsByISRC(context.Background(), "USX0000001")
+	}
+	throttle.Store(false)
+	if _, err := client.RecordingsByISRC(context.Background(), "USX0000001"); err != nil {
+		t.Fatal(err)
+	}
+	throttle.Store(true)
+	if _, err := client.RecordingsByISRC(context.Background(), "USX0000001"); err == nil || errors.Is(err, errCatalogBlocked) {
+		t.Fatalf("streak was not reset: %v", err)
 	}
 }

@@ -23,14 +23,23 @@ func detail(c change) string {
 	return fmt.Sprintf(": file %ds vs catalog %ds", int(c.FileSeconds), int(c.CatalogSeconds))
 }
 
+const maxConsecutiveEnqueueFailures = 3
+
 func runPlan(ctx context.Context, s store, changes []change, limit int, write bool, runID uuid.UUID, out io.Writer) error {
 	counts := map[verdict]int{}
-	enqueued := 0
-	for _, c := range changes {
+	enqueued, failedInARow := 0, 0
+	for i, c := range changes {
 		v := applyWithinCap(ctx, s, runID, c, write, enqueued >= limit, out)
 		counts[v]++
 		if c.Action == actionReacquire && v == verdictApplied {
 			enqueued++
+			failedInARow = 0
+		}
+		if v == verdictEnqueueFailed {
+			failedInARow++
+		}
+		if failedInARow >= maxConsecutiveEnqueueFailures {
+			return stopAfterEnqueueFailures(out, counts, limit, write, runID, len(changes)-i-1)
 		}
 	}
 	writeTally(out, counts, limit, write, runID)
@@ -38,6 +47,12 @@ func runPlan(ctx context.Context, s store, changes []change, limit int, write bo
 		return fmt.Errorf("%d changes failed", bad)
 	}
 	return nil
+}
+
+func stopAfterEnqueueFailures(out io.Writer, counts map[verdict]int, limit int, write bool, runID uuid.UUID, notAttempted int) error {
+	writeTally(out, counts, limit, write, runID)
+	_, _ = fmt.Fprintf(out, "  not attempted:   %d\n", notAttempted)
+	return fmt.Errorf("stopped after %d enqueue failures in a row, %d changes not attempted", maxConsecutiveEnqueueFailures, notAttempted)
 }
 
 func applyWithinCap(ctx context.Context, s store, runID uuid.UUID, c change, write, capReached bool, out io.Writer) verdict {

@@ -50,7 +50,7 @@ func replacementCover(ctx context.Context, cat catalog, judge blankJudge, lib li
 	if !slices.Contains(ownAlbumRecordTypes, recordType) {
 		return "", fmt.Sprintf("catalog album is a %q, not an album or ep", recordType), nil
 	}
-	if isBlankOrUnreadable(ctx, judge, found.CoverURL) {
+	if isBlankOrUnreadable(ctx, judge, found.FullCoverURL) {
 		return "", "catalog cover is blank or unreadable", nil
 	}
 	return found.FullCoverURL, "", nil

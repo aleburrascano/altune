@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -259,5 +260,54 @@ func TestTrackByISRC_PrefersTheLargestAlbumCoverForReplacement(t *testing.T) {
 	got, err := client.TrackByISRC(context.Background(), "USX")
 	if err != nil || got.FullCoverURL != "xl" || got.CoverURL != "m" {
 		t.Fatalf("err=%v got=%+v", err, got)
+	}
+}
+
+func TestAlbumGenres_ConcurrentCallsForOneAlbumFetchItOnce(t *testing.T) {
+	var calls atomic.Int32
+	client := clientFor(t, func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		time.Sleep(100 * time.Millisecond)
+		_, _ = w.Write([]byte(`{"genres":{"data":[{"id":1,"name":"R&B"}]}}`))
+	})
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			if got, err := client.AlbumGenres(context.Background(), 99); err != nil || len(got) != 1 {
+				t.Errorf("err=%v got=%v", err, got)
+			}
+		})
+	}
+	wg.Wait()
+	if calls.Load() != 1 {
+		t.Fatalf("fetched %d times", calls.Load())
+	}
+}
+
+func TestAlbumGenres_ASharedFailureReachesEveryWaiterAndIsNotCached(t *testing.T) {
+	var calls atomic.Int32
+	client := clientFor(t, func(w http.ResponseWriter, _ *http.Request) {
+		if calls.Add(1) == 1 {
+			time.Sleep(100 * time.Millisecond)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write([]byte(`{"genres":{"data":[{"id":1,"name":"Pop"}]}}`))
+	})
+	var wg sync.WaitGroup
+	var failed atomic.Int32
+	for range 4 {
+		wg.Go(func() {
+			if _, err := client.AlbumGenres(context.Background(), 99); err != nil {
+				failed.Add(1)
+			}
+		})
+	}
+	wg.Wait()
+	if failed.Load() != 4 {
+		t.Fatalf("failed %d", failed.Load())
+	}
+	if got, err := client.AlbumGenres(context.Background(), 99); err != nil || got[0] != "Pop" {
+		t.Fatalf("retry: %v %v", got, err)
 	}
 }

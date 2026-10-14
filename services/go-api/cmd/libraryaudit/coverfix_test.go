@@ -93,7 +93,7 @@ func TestAuditTrack_NeverReplacesACoverFromASingleCompilationOrAnotherAlbum(t *t
 }
 
 func TestAuditTrack_DoesNotReplaceACoverWithABlankCatalogCover(t *testing.T) {
-	covers := fakeBlankCovers{blank: map[string]bool{"https://cdn/cover/medium.jpg": true}}
+	covers := fakeBlankCovers{blank: map[string]bool{catalogCover: true}}
 	got := coverAudit(coverCatalogTrack(), fakeAlbumKinds{}, covers, coverLibrary())
 	if findingOf(got.Findings, categoryCoverImageDiffers).Fix != nil || !hasCategory(got.Findings, categoryCoverNotReplaceable) {
 		t.Fatalf("got %+v", got.Findings)
@@ -143,5 +143,21 @@ func TestAuditTrack_AnAlbumTypeBlockIsABlock(t *testing.T) {
 	got := coverAudit(coverCatalogTrack(), fakeAlbumKinds{err: blocked("deezer 403")}, fakeBlankCovers{}, coverLibrary())
 	if !errors.Is(got.Blocked, errCatalogBlocked) {
 		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestAuditTrack_ChecksBlankOnTheCoverUrlItWouldWrite(t *testing.T) {
+	covers := fakeBlankCovers{blank: map[string]bool{catalogCover: true}}
+	got := coverAudit(coverCatalogTrack(), fakeAlbumKinds{}, covers, coverLibrary())
+	if findingOf(got.Findings, categoryCoverImageDiffers).Fix != nil || !strings.Contains(findingOf(got.Findings, categoryCoverNotReplaceable).Detail, "blank or unreadable") {
+		t.Fatalf("got %+v", got.Findings)
+	}
+}
+
+func TestAuditTrack_AMediumCoverThatIsBlankDoesNotBlockAGoodWrittenCover(t *testing.T) {
+	covers := fakeBlankCovers{blank: map[string]bool{"https://cdn/cover/medium.jpg": true}}
+	got := coverAudit(coverCatalogTrack(), fakeAlbumKinds{}, covers, coverLibrary())
+	if fix := findingOf(got.Findings, categoryCoverImageDiffers).Fix; fix == nil || *fix.NewValue != catalogCover {
+		t.Fatalf("got %+v", got.Findings)
 	}
 }

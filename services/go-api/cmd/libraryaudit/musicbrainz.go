@@ -8,18 +8,20 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/time/rate"
 )
 
 const (
-	musicBrainzBaseURL           = "https://musicbrainz.org"
-	musicBrainzRequestsPerSecond = 1.0
-	musicBrainzUserAgent         = "altune-libraryaudit/1.0 ( https://github.com/aleburrascano/altune )"
-	musicBrainzMaxAttempts       = 5
-	musicBrainzRetryBackoff      = 2 * time.Second
-	musicBrainzResultLimit       = 25
+	musicBrainzBaseURL            = "https://musicbrainz.org"
+	musicBrainzRequestsPerSecond  = 1.0
+	musicBrainzUserAgent          = "altune-libraryaudit/1.0 ( https://github.com/aleburrascano/altune )"
+	musicBrainzMaxAttempts        = 5
+	musicBrainzRetryBackoff       = 2 * time.Second
+	musicBrainzResultLimit        = 25
+	musicBrainzMaxThrottledInARow = 3
 )
 
 type recording struct {
@@ -67,10 +69,11 @@ type recordingCatalog interface {
 }
 
 type musicBrainzClient struct {
-	http    *http.Client
-	baseURL string
-	limiter *rate.Limiter
-	backoff time.Duration
+	http            *http.Client
+	baseURL         string
+	limiter         *rate.Limiter
+	backoff         time.Duration
+	throttledInARow atomic.Int32
 }
 
 func newMusicBrainzClient(httpClient *http.Client, baseURL string, requestsPerSecond float64) *musicBrainzClient {
@@ -176,18 +179,26 @@ func (c *musicBrainzClient) getJSON(ctx context.Context, path string, into any) 
 		case err != nil:
 			return err
 		case status == http.StatusOK:
+			c.throttledInARow.Store(0)
 			return nil
 		case status == http.StatusNotFound:
 			return errCatalogUnknown
 		case !isMusicBrainzThrottle(status):
 			return fmt.Errorf("musicbrainz %s: status %d", path, status)
 		case attempt >= musicBrainzMaxAttempts:
-			return blocked("musicbrainz still throttled (HTTP %d) after %d attempts", status, attempt)
+			return c.giveUpThrottled(status, attempt)
 		}
 		if err := sleepContext(ctx, c.backoff<<(attempt-1)); err != nil {
 			return err
 		}
 	}
+}
+
+func (c *musicBrainzClient) giveUpThrottled(status, attempts int) error {
+	if c.throttledInARow.Add(1) >= musicBrainzMaxThrottledInARow {
+		return blocked("musicbrainz still throttled (HTTP %d) after %d attempts, %d lookups in a row", status, attempts, musicBrainzMaxThrottledInARow)
+	}
+	return fmt.Errorf("musicbrainz still throttled (HTTP %d) after %d attempts", status, attempts)
 }
 
 func isMusicBrainzThrottle(status int) bool {

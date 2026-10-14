@@ -151,18 +151,21 @@ func dispatch(ctx context.Context, opts options, s store, limit int, out io.Writ
 	case opts.undo:
 		return runUndo(ctx, s, opts.undoRunID, out)
 	}
-	changes, err := loadPlan(opts.reportPath)
+	changes, err := loadPlan(opts.reportPath, opts.apply)
 	if err != nil {
 		return err
 	}
 	return runPlan(ctx, s, changes, limit, opts.apply, uuid.New(), out)
 }
 
-func loadPlan(path string) ([]change, error) {
+func loadPlan(path string, apply bool) ([]change, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open report: %w", err)
 	}
 	defer func() { _ = file.Close() }()
+	if apply {
+		return readApplyPlan(file)
+	}
 	return readPlan(file)
 }

@@ -4,8 +4,10 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 type albumCatalog interface {
@@ -32,8 +34,11 @@ func enrichmentFindings(ctx context.Context, cat catalog, lib libraryTrack, foun
 }
 
 func catalogDurationFinding(lib libraryTrack, found catalogTrack) []finding {
-	if lib.CatalogDurationSeconds > 0 || found.DurationSeconds <= 0 {
+	if lib.CatalogDurationSeconds > 0 {
 		return nil
+	}
+	if found.DurationSeconds <= 0 {
+		return []finding{about(lib, categoryCatalogDurationUnfillable, "catalog lists no duration for this track")}
 	}
 	seconds := strconv.FormatFloat(found.DurationSeconds, 'f', -1, 64)
 	filled := about(lib, categoryCatalogDurationFillable, seconds)
@@ -42,8 +47,11 @@ func catalogDurationFinding(lib libraryTrack, found catalogTrack) []finding {
 }
 
 func trackNumberFinding(lib libraryTrack, found catalogTrack) []finding {
-	if lib.TrackNumber > 0 || found.TrackPosition <= 0 {
+	if lib.TrackNumber > 0 {
 		return nil
+	}
+	if found.TrackPosition <= 0 {
+		return []finding{about(lib, categoryTrackNumberUnfillable, "catalog lists no track position")}
 	}
 	switch {
 	case !sharesLibraryAlbum(lib, found):
@@ -61,36 +69,49 @@ func genreFinding(ctx context.Context, cat catalog, lib libraryTrack, found cata
 	if strings.TrimSpace(lib.Genre) != "" {
 		return nil, nil
 	}
-	genres, reason, err := ownAlbumGenres(ctx, cat, lib, found)
+	genre, reason, err := ownAlbumGenre(ctx, cat, lib, found)
 	if err != nil {
 		return nil, err
 	}
 	if reason != "" {
 		return []finding{about(lib, categoryGenreUnfillable, reason)}, nil
 	}
-	filled := about(lib, categoryGenreFillable, genres[0])
-	filled.Fix = fixing(lib, "genre", "", genres[0])
+	filled := about(lib, categoryGenreFillable, genre)
+	filled.Fix = fixing(lib, "genre", "", genre)
 	return []finding{filled}, nil
 }
 
-func ownAlbumGenres(ctx context.Context, cat catalog, lib libraryTrack, found catalogTrack) ([]string, string, error) {
+func ownAlbumGenre(ctx context.Context, cat catalog, lib libraryTrack, found catalogTrack) (string, string, error) {
 	albums, ok := cat.(albumCatalog)
 	switch {
 	case !sharesLibraryAlbum(lib, found):
-		return nil, fmt.Sprintf("catalog album %q is not the library album %q", found.Album, lib.Album), nil
+		return "", fmt.Sprintf("catalog album %q is not the library album %q", found.Album, lib.Album), nil
 	case found.AlbumID == 0:
-		return nil, "catalog track has no album id", nil
+		return "", "catalog track has no album id", nil
 	case !ok:
-		return nil, "album genres were not consulted", nil
+		return "", "album genres were not consulted", nil
 	}
 	genres, err := albums.AlbumGenres(ctx, found.AlbumID)
 	if err != nil {
-		return nil, "album genre lookup failed: " + err.Error(), blockingOnly(err)
+		return "", "album genre lookup failed: " + err.Error(), blockingOnly(err)
 	}
-	if len(genres) != 1 || strings.TrimSpace(genres[0]) == "" {
-		return nil, fmt.Sprintf("catalog album lists %d genres, need exactly one", len(genres)), nil
+	if len(genres) != 1 {
+		return "", fmt.Sprintf("catalog album lists %d genres, need exactly one", len(genres)), nil
 	}
-	return genres, "", nil
+	if isGenrePlaceholder(genres[0]) {
+		return "", fmt.Sprintf("catalog album genre %q is a placeholder", genres[0]), nil
+	}
+	return genres[0], "", nil
+}
+
+var genrePlaceholders = []string{"n/a", "na", "unknown", "none", "null", "undefined", "tbd", "not available", "not applicable", "unclassified"}
+
+func isGenrePlaceholder(genre string) bool {
+	folded := strings.ToLower(strings.TrimSpace(genre))
+	if !strings.ContainsFunc(folded, unicode.IsLetter) {
+		return true
+	}
+	return slices.Contains(genrePlaceholders, folded)
 }
 
 func resolveOtherReleases(ctx context.Context, cat catalog, lib libraryTrack, findings []finding) ([]finding, error) {
@@ -133,7 +154,7 @@ func fromRelease(lib libraryTrack, f finding, chosen release, reason string) fin
 func valueFromRelease(kind category, chosen release) string {
 	switch {
 	case kind == categoryYearOtherRelease && !hasYear(chosen.Date):
-		return "musicbrainz release " + chosen.ID + " has no full year"
+		return "musicbrainz release " + chosen.ID + " has no plausible year"
 	case kind == categoryAlbumArtistOtherRelease && strings.TrimSpace(chosen.Artist) == "":
 		return "musicbrainz release " + chosen.ID + " has no artist credit"
 	}
@@ -145,7 +166,7 @@ func hasYear(date string) bool {
 		return false
 	}
 	year, err := strconv.Atoi(date[:4])
-	return err == nil && year > 0
+	return err == nil && isPlausibleYear(year)
 }
 
 func libraryAlbumRelease(ctx context.Context, cat catalog, lib libraryTrack) (release, string, error) {
@@ -153,6 +174,8 @@ func libraryAlbumRelease(ctx context.Context, cat catalog, lib libraryTrack) (re
 	switch {
 	case strings.TrimSpace(lib.Album) == "":
 		return release{}, "library track has no album", nil
+	case strings.TrimSpace(lib.ISRC) == "":
+		return release{}, "library track has no isrc", nil
 	case !ok:
 		return release{}, "musicbrainz was not consulted", nil
 	}

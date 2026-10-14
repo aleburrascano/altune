@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -198,5 +199,99 @@ func TestAuditTrack_AMusicBrainzBlockWhileResolvingReleasesIsABlock(t *testing.T
 	got := enrichedBy(singleRelease(), func(f *fakeEnriching) { f.recsErr = blocked("musicbrainz 503") }, otherReleaseLibrary())
 	if !errors.Is(got.Blocked, errCatalogBlocked) {
 		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestAuditTrack_GenrePlaceholdersAreNeverFilled(t *testing.T) {
+	for _, placeholder := range []string{"N/A", "Unknown", "  none ", "-", "?", "", "Not Available"} {
+		t.Run(placeholder, func(t *testing.T) {
+			got := enrichedBy(freudianTrack(), func(f *fakeEnriching) { f.genres = map[int64][]string{9: {placeholder}} }, libraryOnFreudian())
+			if hasCategory(got.Findings, categoryGenreFillable) || findingOf(got.Findings, categoryGenreUnfillable).Fix != nil || !hasCategory(got.Findings, categoryGenreUnfillable) {
+				t.Fatalf("got %+v", got.Findings)
+			}
+		})
+	}
+}
+
+func TestAuditTrack_ARealGenreThatContainsAPlaceholderWordIsStillFilled(t *testing.T) {
+	got := enrichedBy(freudianTrack(), func(f *fakeEnriching) { f.genres = map[int64][]string{9: {"Unknown Pleasures Post-Punk"}} }, libraryOnFreudian())
+	if filled := findingOf(got.Findings, categoryGenreFillable); filled.Fix == nil || *filled.Fix.NewValue != "Unknown Pleasures Post-Punk" {
+		t.Fatalf("got %+v", got.Findings)
+	}
+}
+
+func TestAuditTrack_ImplausibleCatalogYearGivesNoFixAndNamesTheReason(t *testing.T) {
+	for _, year := range []int{1, 1850, 9999} {
+		found := freudianTrack()
+		found.ReleaseYear = year
+		got := enrichedBy(found, nil, otherReleaseLibrary())
+		unfilled := findingOf(got.Findings, categoryYearUnfillable)
+		if unfilled.Category != categoryYearUnfillable || unfilled.Fix != nil || hasCategory(got.Findings, categoryYearFillable) {
+			t.Fatalf("year %d: %+v", year, got.Findings)
+		}
+	}
+}
+
+func TestAuditTrack_ACatalogYearInRangeIsStillFilled(t *testing.T) {
+	for _, year := range []int{1900, 2019} {
+		found := freudianTrack()
+		found.ReleaseYear = year
+		got := enrichedBy(found, nil, otherReleaseLibrary())
+		if filled := findingOf(got.Findings, categoryYearFillable); filled.Fix == nil || *filled.Fix.NewValue != strconv.Itoa(year) {
+			t.Fatalf("year %d: %+v", year, got.Findings)
+		}
+	}
+}
+
+func TestAuditTrack_ImplausibleMusicBrainzReleaseYearStaysReportOnly(t *testing.T) {
+	for _, date := range []string{"0001-01-01", "9999-12-31", "1066"} {
+		releases := recordingOn(release{ID: "r1", Title: "Freudian", Date: date, Artist: "Daniel Caesar"})
+		got := enrichedBy(singleRelease(), func(f *fakeEnriching) { f.recs = releases }, otherReleaseLibrary())
+		other := findingOf(got.Findings, categoryYearOtherRelease)
+		if hasCategory(got.Findings, categoryYearFromRelease) || other.Fix != nil || !strings.Contains(other.Detail, "no plausible year") {
+			t.Fatalf("%s: %+v", date, got.Findings)
+		}
+	}
+}
+
+func TestAuditTrack_CatalogWithoutDurationOrPositionGivesUnfillableFindings(t *testing.T) {
+	for name, edit := range map[string]func(*catalogTrack){
+		"zero":     func(c *catalogTrack) { c.DurationSeconds, c.TrackPosition = 0, 0 },
+		"negative": func(c *catalogTrack) { c.DurationSeconds, c.TrackPosition = -1, -3 },
+	} {
+		t.Run(name, func(t *testing.T) {
+			found := freudianTrack()
+			edit(&found)
+			got := enrichedBy(found, nil, libraryOnFreudian())
+			duration, position := findingOf(got.Findings, categoryCatalogDurationUnfillable), findingOf(got.Findings, categoryTrackNumberUnfillable)
+			if duration.Category == "" || duration.Fix != nil || position.Category == "" || position.Fix != nil ||
+				hasCategory(got.Findings, categoryCatalogDurationFillable) || hasCategory(got.Findings, categoryTrackNumberFillable) {
+				t.Fatalf("got %+v", got.Findings)
+			}
+		})
+	}
+}
+
+type countingReleases struct {
+	fakeEnriching
+	calls *int
+}
+
+func (c countingReleases) RecordingsWithReleases(ctx context.Context, isrc string) ([]recording, error) {
+	*c.calls++
+	return c.fakeEnriching.RecordingsWithReleases(ctx, isrc)
+}
+
+func TestResolveOtherReleases_NeverAsksMusicBrainzForAnEmptyISRC(t *testing.T) {
+	for _, isrc := range []string{"", "   "} {
+		calls := 0
+		cat := countingReleases{calls: &calls}
+		lib := otherReleaseLibrary()
+		lib.ISRC = isrc
+		pending := []finding{about(lib, categoryYearOtherRelease, "2017")}
+		got, err := resolveOtherReleases(context.Background(), cat, lib, pending)
+		if err != nil || calls != 0 || len(got) != 1 || got[0].Category != categoryYearOtherRelease || !strings.Contains(got[0].Detail, "no isrc") {
+			t.Fatalf("isrc %q: calls %d, %v, %+v", isrc, calls, err, got)
+		}
 	}
 }

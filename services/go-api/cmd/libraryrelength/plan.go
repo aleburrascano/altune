@@ -31,7 +31,10 @@ type change struct {
 	CatalogSeconds float64
 }
 
+var errReportAborted = errors.New("report is from an aborted audit run and is partial")
+
 type reportFile struct {
+	Aborted  bool            `json:"aborted"`
 	Findings []reportFinding `json:"findings"`
 }
 
@@ -53,10 +56,33 @@ type reportPlan struct {
 }
 
 func readPlan(r io.Reader) ([]change, error) {
+	file, err := readReport(r)
+	if err != nil {
+		return nil, err
+	}
+	return file.changes()
+}
+
+func readApplyPlan(r io.Reader) ([]change, error) {
+	file, err := readReport(r)
+	if err != nil {
+		return nil, err
+	}
+	if file.Aborted {
+		return nil, errReportAborted
+	}
+	return file.changes()
+}
+
+func readReport(r io.Reader) (reportFile, error) {
 	var file reportFile
 	if err := json.NewDecoder(r).Decode(&file); err != nil {
-		return nil, fmt.Errorf("read report: %w", err)
+		return reportFile{}, fmt.Errorf("read report: %w", err)
 	}
+	return file, nil
+}
+
+func (file reportFile) changes() ([]change, error) {
 	var changes []change
 	seen := map[string]bool{}
 	for _, finding := range file.Findings {

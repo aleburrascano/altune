@@ -2,45 +2,58 @@ package main
 
 import (
 	"altune/go-api/internal/shared/textnorm"
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/unicode/norm"
 )
 
-const lengthToleranceSeconds = 10.0
+const (
+	lengthToleranceSeconds = 10.0
+	earliestPlausibleYear  = 1900
+)
+
+func latestPlausibleYear() int { return time.Now().Year() + 1 }
+
+func isPlausibleYear(year int) bool {
+	return year >= earliestPlausibleYear && year <= latestPlausibleYear()
+}
 
 type category string
 
 const (
-	categoryWrongSong               category = "wrong_song"
-	categoryLengthShorter           category = "length_shorter"
-	categoryLengthLonger            category = "length_longer"
-	categoryYearFillable            category = "year_fillable"
-	categoryAlbumArtistFillable     category = "album_artist_fillable"
-	categoryISRCFillable            category = "isrc_fillable"
-	categoryYearOtherRelease        category = "year_other_release"
-	categoryAlbumArtistOtherRelease category = "album_artist_other_release"
-	categoryISRCAmbiguous           category = "isrc_ambiguous"
-	categoryCoverURLDiffers         category = "cover_url_differs"
-	categoryCoverImageDiffers       category = "cover_image_differs"
-	categoryCoverUnreadable         category = "cover_unreadable"
-	categoryNoISRC                  category = "no_isrc"
-	categoryUnknownISRC             category = "unknown_isrc"
-	categoryISRCConfirmed           category = "isrc_confirmed"
-	categoryTrackNumberFillable     category = "track_number_fillable"
-	categoryTrackNumberUnfillable   category = "track_number_unfillable"
-	categoryGenreFillable           category = "genre_fillable"
-	categoryGenreUnfillable         category = "genre_unfillable"
-	categoryCatalogDurationFillable category = "catalog_duration_fillable"
-	categoryCoverBlank              category = "cover_blank"
-	categoryCoverNotReplaceable     category = "cover_not_replaceable"
-	categoryYearFromRelease         category = "year_from_release"
-	categoryAlbumArtistFromRelease  category = "album_artist_from_release"
-	categoryLookupFailed            category = "lookup_failed"
+	categoryWrongSong                 category = "wrong_song"
+	categoryLengthShorter             category = "length_shorter"
+	categoryLengthLonger              category = "length_longer"
+	categoryYearFillable              category = "year_fillable"
+	categoryAlbumArtistFillable       category = "album_artist_fillable"
+	categoryISRCFillable              category = "isrc_fillable"
+	categoryYearOtherRelease          category = "year_other_release"
+	categoryAlbumArtistOtherRelease   category = "album_artist_other_release"
+	categoryISRCAmbiguous             category = "isrc_ambiguous"
+	categoryCoverURLDiffers           category = "cover_url_differs"
+	categoryCoverImageDiffers         category = "cover_image_differs"
+	categoryCoverUnreadable           category = "cover_unreadable"
+	categoryNoISRC                    category = "no_isrc"
+	categoryUnknownISRC               category = "unknown_isrc"
+	categoryISRCConfirmed             category = "isrc_confirmed"
+	categoryTrackNumberFillable       category = "track_number_fillable"
+	categoryTrackNumberUnfillable     category = "track_number_unfillable"
+	categoryGenreFillable             category = "genre_fillable"
+	categoryGenreUnfillable           category = "genre_unfillable"
+	categoryCatalogDurationFillable   category = "catalog_duration_fillable"
+	categoryCoverBlank                category = "cover_blank"
+	categoryCoverNotReplaceable       category = "cover_not_replaceable"
+	categoryYearFromRelease           category = "year_from_release"
+	categoryAlbumArtistFromRelease    category = "album_artist_from_release"
+	categoryLookupFailed              category = "lookup_failed"
+	categoryYearUnfillable            category = "year_unfillable"
+	categoryCatalogDurationUnfillable category = "catalog_duration_unfillable"
 )
 
 type libraryTrack struct {
@@ -165,7 +178,9 @@ func metadataFindings(lib libraryTrack, cat catalogTrack) []finding {
 		found = append(found, about(lib, kind, lengthDetail(lib, cat)))
 	}
 	sameAlbum := textnorm.NormalizeForIdentity(lib.Album) == textnorm.NormalizeForIdentity(cat.Album)
-	if lib.Year == 0 && cat.ReleaseYear > 0 {
+	if lib.Year == 0 && cat.ReleaseYear > 0 && sameAlbum && !isPlausibleYear(cat.ReleaseYear) {
+		found = append(found, about(lib, categoryYearUnfillable, fmt.Sprintf("catalog year %d is outside %d to %d", cat.ReleaseYear, earliestPlausibleYear, latestPlausibleYear())))
+	} else if lib.Year == 0 && cat.ReleaseYear > 0 {
 		found = append(found, fillFinding(lib, cat, sameAlbum, categoryYearFillable, categoryYearOtherRelease, "year", "", strconv.Itoa(cat.ReleaseYear)))
 	}
 	if strings.TrimSpace(lib.AlbumArtist) == "" && cat.Artist != "" {

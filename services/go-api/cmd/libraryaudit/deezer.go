@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
 	"golang.org/x/time/rate"
 )
 
@@ -59,6 +60,7 @@ type deezerClient struct {
 	backoff time.Duration
 	ceiling time.Duration
 	albums  albumCache
+	fetches singleflight.Group
 }
 
 type albumInfo struct {
@@ -174,6 +176,19 @@ func (c *deezerClient) AlbumRecordType(ctx context.Context, albumID int64) (stri
 }
 
 func (c *deezerClient) albumInfo(ctx context.Context, albumID int64) (albumInfo, error) {
+	if cached, hit := c.albums.get(albumID); hit {
+		return cached, nil
+	}
+	fetched, err, _ := c.fetches.Do(strconv.FormatInt(albumID, 10), func() (any, error) {
+		return c.fetchAlbumInfo(ctx, albumID)
+	})
+	if err != nil {
+		return albumInfo{}, err
+	}
+	return fetched.(albumInfo), nil
+}
+
+func (c *deezerClient) fetchAlbumInfo(ctx context.Context, albumID int64) (albumInfo, error) {
 	if cached, hit := c.albums.get(albumID); hit {
 		return cached, nil
 	}

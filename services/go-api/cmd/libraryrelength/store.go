@@ -13,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+const restoreTimeout = 30 * time.Second
+
 type jobEnqueuer interface {
 	Enqueue(ctx context.Context, trackID shared.TrackId, kind acqports.JobKind, delay time.Duration) error
 }
@@ -270,6 +272,8 @@ func restoreAndStamp(ctx context.Context, tx pgx.Tx, runID uuid.UUID, f loggedFi
 }
 
 func (s store) restoreUnqueued(ctx context.Context, runID uuid.UUID, trackID string) error {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), restoreTimeout)
+	defer cancel()
 	fixes, err := s.loggedFixes(ctx, runID, trackID)
 	if err != nil || len(fixes) != 1 {
 		return errors.Join(err, fmt.Errorf("restoring track %s: found %d logged changes", trackID, len(fixes)))

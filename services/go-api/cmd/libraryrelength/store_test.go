@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -233,6 +234,28 @@ func TestStore_ReacquireThatCannotEnqueueRestoresTheTrack(t *testing.T) {
 	row := seedReady(t, s, "USALBUM", 226)
 	got, err := s.apply(context.Background(), uuid.New(), changeFor(row, actionReacquire, "", 226, 379), true)
 	if got != verdictEnqueueFailed || err == nil {
+		t.Fatalf("got %s, %v", got, err)
+	}
+	if after := stateOf(t, s, row); *after.duration != 226 || after.catalog != nil || after.mismatch || after.jobQueued {
+		t.Fatalf("after failed enqueue %+v", after)
+	}
+}
+
+type cancellingQueue struct{ cancel context.CancelFunc }
+
+func (q cancellingQueue) Enqueue(context.Context, shared.TrackId, ports.JobKind, time.Duration) error {
+	q.cancel()
+	return errors.New("queue down")
+}
+
+func TestStore_RestoreAfterAFailedEnqueueSurvivesTheRunContextEnding(t *testing.T) {
+	s := testStore(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s.queue = cancellingQueue{cancel: cancel}
+	row := seedReady(t, s, "USALBUM", 226)
+	got, err := s.apply(ctx, uuid.New(), changeFor(row, actionReacquire, "", 226, 379), true)
+	if got != verdictEnqueueFailed || err == nil || strings.Contains(err.Error(), "restoring track") {
 		t.Fatalf("got %s, %v", got, err)
 	}
 	if after := stateOf(t, s, row); *after.duration != 226 || after.catalog != nil || after.mismatch || after.jobQueued {

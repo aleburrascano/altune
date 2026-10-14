@@ -123,3 +123,22 @@ func TestLoadStatus_ReportsEachEnqueuedTrackOutcome(t *testing.T) {
 		t.Fatalf("listen lengths %v %v %v", kept.listenFileSeconds(), off.listenFileSeconds(), off.CatalogSeconds)
 	}
 }
+
+func TestRunPlan_StopsAfterConsecutiveEnqueueFailuresAndLeavesTheRestUntouched(t *testing.T) {
+	s := testStore(t)
+	s.queue = failingQueue{}
+	changes := seedReacquires(t, s, 6)
+	var out bytes.Buffer
+	err := runPlan(context.Background(), s, changes, 10, true, uuid.New(), &out)
+	if err == nil || !strings.Contains(err.Error(), "3 changes not attempted") {
+		t.Fatalf("err %v\n%s", err, out.String())
+	}
+	if strings.Count(out.String(), "enqueue-failed") != 3 || !strings.Contains(out.String(), "not attempted:   3") {
+		t.Fatalf("output:\n%s", out.String())
+	}
+	for _, c := range changes[3:] {
+		if got := stateOf(t, s, seeded{trackID: c.TrackID}); got.loggedFixes != 0 || got.catalog != nil {
+			t.Fatalf("untouched track changed %+v", got)
+		}
+	}
+}

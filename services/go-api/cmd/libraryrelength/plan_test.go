@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -43,6 +44,30 @@ func TestReadPlan_RejectsPlansItCannotTrust(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			if got, err := readPlan(strings.NewReader(report)); err == nil {
 				t.Fatalf("expected an error, got %+v", got)
+			}
+		})
+	}
+}
+
+func TestReadApplyPlan_RefusesAnAbortedReportButDryRunStillReadsIt(t *testing.T) {
+	aborted := `{"aborted":true,"abort_reason":"deezer blocked","findings":[` + fixFinding + `]}`
+	if got, err := readApplyPlan(strings.NewReader(aborted)); !errors.Is(err, errReportAborted) || got != nil {
+		t.Fatalf("apply: got %+v, %v", got, err)
+	}
+	if got, err := readPlan(strings.NewReader(aborted)); err != nil || len(got) != 1 {
+		t.Fatalf("dry run: got %+v, %v", got, err)
+	}
+}
+
+func TestReadApplyPlan_AcceptsReportsWrittenBeforeTheAbortedFieldExisted(t *testing.T) {
+	for name, report := range map[string]string{
+		"no aborted key":    `{"findings":[` + fixFinding + `]}`,
+		"aborted is false":  `{"aborted":false,"findings":[` + fixFinding + `]}`,
+		"aborted with none": `{"aborted":false,"findings":[]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := readApplyPlan(strings.NewReader(report)); err != nil {
+				t.Fatal(err)
 			}
 		})
 	}
