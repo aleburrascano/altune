@@ -2,7 +2,7 @@ name: pr-checks
 
 on:
   push:
-    branches: ["pr/**"]
+    branches: ["pr/**", "main"]
   workflow_dispatch:
 
 defaults:
@@ -32,7 +32,12 @@ jobs:
         run: git fetch origin main:refs/remotes/origin/main
       - name: paths
         id: filter
-        run: bash scripts/ci/changes.sh origin/main
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          base=origin/main
+          if [ "$GITHUB_REF" = refs/heads/main ]; then base=$BEFORE; fi
+          bash scripts/ci/changes.sh "$base"
 
   backend-static:
     needs: changes
@@ -159,6 +164,7 @@ jobs:
         run: '"$(go env GOPATH)/bin/actionlint" -config-file .github/actionlint.yaml .github/workflows/*.yml .gitea/workflows/*.yml'
 
   precheck:
+    if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
