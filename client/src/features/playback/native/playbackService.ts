@@ -25,6 +25,7 @@ import {
   resetRecoveryBudget,
 } from '@features/playback/native/recoveryBudget';
 import { claimSessionReset } from '@features/playback/domain/loadToken';
+import { startWidgetCommands } from '@features/playback/native/widgetCommands';
 import { withNativeQueue } from '@features/playback/native/nativeQueueLock';
 import { shouldApplyActiveIndex } from '@features/playback/native/nativeSyncGuard';
 import { activeNativeTrackId } from '@features/playback/native/nativeTrack';
@@ -185,6 +186,7 @@ function evictCachedIfParsable(trackId: string): void {
 export async function playbackService() {
   registerAudioCacheInvalidator(evictCachedIfParsable);
   void primeSignedInUser();
+  startWidgetCommands({ playPrevious: playPreviousRemotely });
 
   TrackPlayer.addEventListener(Event.RemoteDuck, handleRemoteDuck);
 
