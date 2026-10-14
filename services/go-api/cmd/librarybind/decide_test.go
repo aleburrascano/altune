@@ -282,8 +282,8 @@ func TestDecide_BindRule(t *testing.T) {
 			outcomes: []sourceOutcome{
 				outcomeOf(celebration(), sourceDeezer, []candidate{catalogCelebration("77")}, nil),
 				outcomeOf(celebration(), sourceMusicBrainz, []candidate{
-					with(catalogCelebration("r0"), func(c *candidate) { c.LengthSeconds = 297.5 }),
-					with(catalogCelebration("r1"), func(c *candidate) { c.LengthSeconds = 298.5 }),
+					with(catalogCelebration("r0"), func(c *candidate) { c.LengthSeconds = 295.5 }),
+					with(catalogCelebration("r1"), func(c *candidate) { c.LengthSeconds = 300.5 }),
 				}, nil),
 			},
 			wantStatus: statusUnbound,
@@ -327,7 +327,7 @@ func TestDecide_BindRecordsTheWinningIDs(t *testing.T) {
 	}
 }
 
-func TestOutcomeOf_RefusesWhenTheBestTwoAreClose(t *testing.T) {
+func TestOutcomeOf_RefusesWhenCandidatesDifferByMoreThanTheTolerance(t *testing.T) {
 	track := celebration()
 	cases := []struct {
 		name        string
@@ -335,7 +335,7 @@ func TestOutcomeOf_RefusesWhenTheBestTwoAreClose(t *testing.T) {
 		wantWinner  string
 		wantAmbigus bool
 	}{
-		{"two recordings half a second apart are ambiguous", []float64{297.5, 298.5}, "", true},
+		{"two recordings five seconds apart, both within the guard, are ambiguous", []float64{295.5, 300.5}, "", true},
 		{"a clearly closer recording wins", []float64{298, 295.5}, "r0", false},
 		{"a lone recording wins", []float64{296}, "r0", false},
 	}
@@ -349,6 +349,139 @@ func TestOutcomeOf_RefusesWhenTheBestTwoAreClose(t *testing.T) {
 			got := outcomeOf(track, sourceMusicBrainz, found, nil)
 			if got.Winner != tc.wantWinner || got.Ambiguous != tc.wantAmbigus {
 				t.Fatalf("winner %q ambiguous %v", got.Winner, got.Ambiguous)
+			}
+		})
+	}
+}
+
+func listing(id, title string, artists []string, album string, length float64) candidate {
+	return candidate{ID: id, ISRC: celebrationISRC, Title: title, Artists: artists, Album: album, LengthSeconds: length}
+}
+
+func TestOutcomeOf_ListingsBehindOneISRCAreOneRecording(t *testing.T) {
+	witDaRacks := libraryTrack{ID: "t", Title: "Wit Da Racks (feat. Yak Gotti, Travis Scott & 21 Savage)", Artist: "Future", ISRC: celebrationISRC, FileSeconds: 174}
+	superpowers := libraryTrack{ID: "t", Title: "Superpowers", Artist: "Daniel Caesar", ISRC: celebrationISRC, FileSeconds: 174.4}
+	cases := []struct {
+		name       string
+		track      libraryTrack
+		found      []candidate
+		wantWinner string
+		wantAmbig  bool
+	}{
+		{
+			name:  "playlists and a reordered feat credit",
+			track: witDaRacks,
+			found: []candidate{
+				listing("1", "Wit Da Racks (feat. Yak Gotti, Travis Scott & 21 Savage)", []string{"Future"}, "Rap That Slaps", 174),
+				listing("2", "Wit Da Racks (feat. 21 Savage, Travis Scott & Yak Gotti)", []string{"Future"}, "BUSINESS IS BUSINESS", 174),
+				listing("3", "Wit Da Racks (feat. Travis Scott, 21 Savage & Yak Gotti)", []string{"Future"}, "Hip Hop Hits", 174),
+				listing("4", "Wit Da Racks", []string{"Future"}, "Wit Da Racks", 174),
+			},
+			wantWinner: "1",
+		},
+		{
+			name:  "musicbrainz recordings a fraction of a second apart",
+			track: superpowers,
+			found: []candidate{
+				listing("a", "Superpowers", []string{"Daniel Caesar"}, "", 174),
+				listing("b", "Superpowers", []string{"Daniel Caesar"}, "", 174.512),
+				listing("c", "Superpowers", []string{"Daniel Caesar"}, "", 175),
+			},
+			wantWinner: "b",
+		},
+		{
+			name:  "lengths further apart than the tolerance are different versions",
+			track: with2(superpowers, func(tr *libraryTrack) { tr.FileSeconds = 210 }),
+			found: []candidate{
+				listing("a", "Superpowers", []string{"Daniel Caesar"}, "", 207.5),
+				listing("b", "Superpowers", []string{"Daniel Caesar"}, "", 212.5),
+			},
+			wantAmbig: true,
+		},
+		{
+			name:  "lengths exactly at the tolerance apart are one recording",
+			track: with2(superpowers, func(tr *libraryTrack) { tr.FileSeconds = 210 }),
+			found: []candidate{
+				listing("a", "Superpowers", []string{"Daniel Caesar"}, "", 208.5),
+				listing("b", "Superpowers", []string{"Daniel Caesar"}, "", 211.5),
+			},
+			wantWinner: "a",
+		},
+		{
+			name:  "lengths just past the tolerance apart are different versions",
+			track: with2(superpowers, func(tr *libraryTrack) { tr.FileSeconds = 210 }),
+			found: []candidate{
+				listing("a", "Superpowers", []string{"Daniel Caesar"}, "", 208.4),
+				listing("b", "Superpowers", []string{"Daniel Caesar"}, "", 211.5),
+			},
+			wantAmbig: true,
+		},
+		{
+			name:  "a plain track never picks the remix behind the same isrc",
+			track: superpowers,
+			found: []candidate{
+				listing("remix", "Superpowers (Remix)", []string{"Daniel Caesar"}, "", 174.4),
+				listing("plain", "Superpowers", []string{"Daniel Caesar"}, "", 174.4),
+			},
+			wantWinner: "plain",
+		},
+		{
+			name:  "a remix track never picks the plain recording behind the same isrc",
+			track: with2(superpowers, func(tr *libraryTrack) { tr.Title = "Superpowers (Remix)" }),
+			found: []candidate{
+				listing("plain", "Superpowers", []string{"Daniel Caesar"}, "", 174.4),
+				listing("remix", "Superpowers (Remix)", []string{"Daniel Caesar"}, "", 174.4),
+			},
+			wantWinner: "remix",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := outcomeOf(tc.track, sourceApple, tc.found, nil)
+			if got.Winner != tc.wantWinner || got.Ambiguous != tc.wantAmbig {
+				t.Fatalf("winner %q ambiguous %v", got.Winner, got.Ambiguous)
+			}
+		})
+	}
+}
+
+func TestOutcomeOf_CandidatesFarFromTheFileAreRefusedNotAmbiguous(t *testing.T) {
+	track := with2(celebration(), func(tr *libraryTrack) { tr.FileSeconds = 210 })
+	got := decide(track, []sourceOutcome{outcomeOf(track, sourceDeezer, []candidate{
+		with(catalogCelebration("a"), func(c *candidate) { c.LengthSeconds = 180 }),
+		with(catalogCelebration("b"), func(c *candidate) { c.LengthSeconds = 240 }),
+	}, nil)})
+	if got.Status != statusUnbound || got.Reason != "refused-length" {
+		t.Fatalf("got %s %q", got.Status, got.Reason)
+	}
+}
+
+func TestDecide_SameSuffixInDashOrBracketForm(t *testing.T) {
+	cases := []struct {
+		name      string
+		ours      string
+		catalog   string
+		wantBound bool
+	}{
+		{"bonus track", "Black Boy Fly - Bonus Track", "Black Boy Fly (Bonus Track)", true},
+		{"intro", "Today - Intro", "Today (Intro)", true},
+		{"intro the other way round", "Today (Intro)", "Today - Intro", true},
+		{"film label", "Sunflower - Spider-Man: Into the Spider-Verse", "Sunflower (Spider-Man: Into the Spider-Verse)", true},
+		{"sub title", "Lady - Hear Me Tonight", "Lady (Hear Me Tonight)", true},
+		{"bonus track after a feat credit", "Two Tens (feat. Anderson .Paak) - Bonus Track", "Two Tens (feat. Anderson .Paak) (Bonus Track)", true},
+		{"live in both forms", "Song - Live", "Song (Live)", true},
+		{"a suffix the catalog does not carry", "Hate - I Love You", "Hate", false},
+		{"a live suffix against the plain title", "Song - Live", "Song", false},
+		{"a different suffix", "Today - Intro", "Today (Outro)", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			track := with2(celebration(), func(tr *libraryTrack) { tr.Title = tc.ours })
+			got := decide(track, []sourceOutcome{outcomeOf(track, sourceDeezer, []candidate{
+				with(catalogCelebration("77"), func(c *candidate) { c.Title = tc.catalog }),
+			}, nil)})
+			if (got.Status == statusBound) != tc.wantBound {
+				t.Fatalf("%q vs %q: %s %q", tc.ours, tc.catalog, got.Status, got.Reason)
 			}
 		})
 	}

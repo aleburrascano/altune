@@ -6,12 +6,10 @@ import (
 	"math"
 	"regexp"
 	"slices"
-	"strings"
 )
 
 const (
 	lengthToleranceSeconds = 3.0
-	rankMargin             = 0.04
 	idWeight               = 5.0
 	artistWeight           = 3.0
 	titleWeight            = 3.0
@@ -29,6 +27,11 @@ const (
 )
 
 var artistSeparatorRe = regexp.MustCompile(`(?i)\s*(?:,|;|&|\band\b|\bfeat\.?(?:\s|$)|\bft\.?(?:\s|$)|\bfeaturing\b|\bwith\b|\bx\b)\s*`)
+
+var (
+	bracketGroupRe = regexp.MustCompile(`[(\[{（【]([^)\]}）】]*)[)\]}）】]`)
+	firstDashRe    = regexp.MustCompile(`^(.*?\S)\s[-–—]\s+(.+)$`)
+)
 
 var versionSuffixRe = regexp.MustCompile(`(?i)^(.*\S)\s[-–—]\s+([^-–—|]*\b(?:original|album|single|mono|stereo|deluxe|bonus|version|edition)\b[^-–—|]*)$`)
 
@@ -49,7 +52,7 @@ func failedGuards(t libraryTrack, c candidate) []guard {
 	if !artistMatches(t.Artist, c.Artists) {
 		failed = append(failed, guardArtist)
 	}
-	if titleKey(t.Title) != titleKey(c.Title) {
+	if !titlesAgree(t.Title, c.Title) {
 		failed = append(failed, guardTitle)
 	}
 	if math.Abs(t.FileSeconds-c.LengthSeconds) > lengthToleranceSeconds {
@@ -69,9 +72,34 @@ func bracketVersionSuffix(title string) string {
 	return m[1] + " (" + m[2] + ")"
 }
 
-func titleKey(title string) string {
+type titleParts struct {
+	base     string
+	variants []string
+	dash     string
+	brackets []string
+}
+
+func splitTitle(title string) titleParts {
 	keys := domain.CleanSearchKeys(bracketVersionSuffix(title), "", "")
-	return strings.Join(append([]string{textnorm.NormalizeForMatch(keys.Title)}, keys.VariantQualifiers()...), textnorm.KeySeparator)
+	cleaned := keys.Title
+	parts := titleParts{variants: keys.VariantQualifiers()}
+	for _, group := range bracketGroupRe.FindAllStringSubmatch(cleaned, -1) {
+		parts.brackets = append(parts.brackets, textnorm.NormalizeForMatch(group[1]))
+	}
+	if m := firstDashRe.FindStringSubmatch(cleaned); m != nil {
+		cleaned, parts.dash = m[1], textnorm.NormalizeForMatch(m[2])
+	}
+	parts.base = textnorm.NormalizeForMatch(cleaned)
+	return parts
+}
+
+func titlesAgree(a, b string) bool {
+	left, right := splitTitle(a), splitTitle(b)
+	return left.base == right.base && slices.Equal(left.variants, right.variants) && left.dashAccepted(right) && right.dashAccepted(left)
+}
+
+func (p titleParts) dashAccepted(other titleParts) bool {
+	return p.dash == "" || p.dash == other.dash || slices.Contains(other.brackets, p.dash)
 }
 
 func artistKey(name string) string {

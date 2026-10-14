@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"math"
 	"slices"
-	"strconv"
 	"strings"
 )
 
@@ -61,42 +60,35 @@ func outcomeOf(t libraryTrack, from source, found []candidate, lookupErr error) 
 	for _, c := range found {
 		outcome.Candidates = append(outcome.Candidates, judge(t, c))
 	}
-	winner, ambiguous := pickWinner(outcome.Candidates)
+	winner, ambiguous := pickWinner(t.FileSeconds, outcome.Candidates)
 	outcome.Winner, outcome.Ambiguous = winner, ambiguous
 	return outcome
 }
 
-func pickWinner(all []judged) (winnerID string, ambiguous bool) {
+func pickWinner(fileSeconds float64, all []judged) (winnerID string, ambiguous bool) {
 	guarded := slices.DeleteFunc(slices.Clone(all), func(j judged) bool { return !j.isGuarded() })
-	slices.SortFunc(guarded, func(a, b judged) int {
-		return cmp.Or(cmp.Compare(a.Distance, b.Distance), strings.Compare(a.ID, b.ID))
-	})
-	ranked := distinctRecordings(guarded)
-	switch {
-	case len(ranked) == 0:
+	if len(guarded) == 0 {
 		return "", false
-	case len(ranked) > 1 && ranked[1].Distance-ranked[0].Distance < rankMargin:
+	}
+	slices.SortFunc(guarded, func(a, b judged) int {
+		return cmp.Or(
+			cmp.Compare(math.Abs(a.LengthSeconds-fileSeconds), math.Abs(b.LengthSeconds-fileSeconds)),
+			cmp.Compare(a.Distance, b.Distance),
+			strings.Compare(a.ID, b.ID),
+		)
+	})
+	if lengthSpread(guarded) > lengthToleranceSeconds {
 		return "", true
 	}
-	return ranked[0].ID, false
+	return guarded[0].ID, false
 }
 
-func distinctRecordings(guarded []judged) []judged {
-	seen := map[string]bool{}
-	var distinct []judged
-	for _, j := range guarded {
-		key := recordingKey(j)
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		distinct = append(distinct, j)
+func lengthSpread(candidates []judged) float64 {
+	shortest, longest := candidates[0].LengthSeconds, candidates[0].LengthSeconds
+	for _, c := range candidates {
+		shortest, longest = min(shortest, c.LengthSeconds), max(longest, c.LengthSeconds)
 	}
-	return distinct
-}
-
-func recordingKey(j judged) string {
-	return strings.Join([]string{titleKey(j.Title), strings.ToLower(strings.Join(j.Artists, "|")), strconv.Itoa(int(math.Round(j.LengthSeconds)))}, "\x1f")
+	return longest - shortest
 }
 
 func decide(t libraryTrack, outcomes []sourceOutcome) identity {
