@@ -606,3 +606,30 @@ describe('playbackService — handler rejections are reported, not left unhandle
     expect(JSON.stringify(warn.mock.calls)).not.toMatch(/deadbeef|X-Amz-Signature/);
   });
 });
+
+describe('the widget snapshot publisher the service starts at boot', () => {
+  it('publishes the now-playing track to the widget once the service has booted', async () => {
+    const widget = jest.requireActual('@modules/altune-widget');
+    const writeSnapshot = jest.spyOn(widget, 'writeSnapshot').mockImplementation(() => undefined);
+    notifyIdentityChange('user-1');
+    await playbackService();
+
+    useQueueStore
+      .getState()
+      .loadQueue(
+        [{ ...libraryTrackWithId('boot-1'), title: 'Midnight City', artworkUrl: null }],
+        0,
+        null,
+      );
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const published = writeSnapshot.mock.calls.map(([json]) => JSON.parse(json as string));
+    expect(published).toContainEqual(
+      expect.objectContaining({
+        signedIn: true,
+        nowPlaying: expect.objectContaining({ title: 'Midnight City' }),
+      }),
+    );
+    writeSnapshot.mockRestore();
+  });
+});

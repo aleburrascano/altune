@@ -26,6 +26,7 @@ import {
 } from '@features/playback/native/recoveryBudget';
 import { claimSessionReset } from '@features/playback/domain/loadToken';
 import { startWidgetCommands } from '@features/playback/native/widgetCommands';
+import { startWidgetSnapshotPublisher } from '@features/playback/native/widgetSnapshot';
 import { withNativeQueue } from '@features/playback/native/nativeQueueLock';
 import { shouldApplyActiveIndex } from '@features/playback/native/nativeSyncGuard';
 import { activeNativeTrackId } from '@features/playback/native/nativeTrack';
@@ -187,6 +188,7 @@ export async function playbackService() {
   registerAudioCacheInvalidator(evictCachedIfParsable);
   void primeSignedInUser();
   startWidgetCommands({ playPrevious: playPreviousRemotely });
+  startWidgetSnapshotPublisher();
 
   TrackPlayer.addEventListener(Event.RemoteDuck, handleRemoteDuck);
 
