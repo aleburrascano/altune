@@ -981,3 +981,14 @@ func TestProviderLimiterBurstShedsBeyondQueueDepth(t *testing.T) {
 		})
 	}
 }
+
+func TestMapMBRecording_ALiveRecordingDoesNotPassAsTheStudioCut(t *testing.T) {
+	live := mbRecording{ID: "rec-1", Title: "Tom Sawyer", Disambiguation: "live, 2015‐06‐17 & 19: Air Canada Centre, Toronto, ON, Canada", LengthMs: 300000, ISRCs: []string{"CAA311502074"}}
+	if got := mapMBRecording(live); got.Title != "Tom Sawyer (live, 2015‐06‐17 & 19: Air Canada Centre, Toronto, ON, Canada)" {
+		t.Errorf("Title = %q, want the disambiguation shown", got.Title)
+	}
+	studio := mbRecording{ID: "rec-2", Title: "Tom Sawyer", LengthMs: 276000}
+	if got := mapMBRecording(studio); got.Title != "Tom Sawyer" {
+		t.Errorf("Title = %q, want the plain title", got.Title)
+	}
+}
