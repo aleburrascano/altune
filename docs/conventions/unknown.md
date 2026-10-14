@@ -1,6 +1,6 @@
 # Where `unknown` is allowed in client code
 
-**Status: decided (#2291).** Enforcement and the sweep are #2364.
+**Status: decided (#2291), enforced by MC-11 with a baseline (#2364).** The sweep that empties the baseline is #2364.
 
 `unknown` says "I have not checked this value yet". It is right at a boundary, where a value
 arrives unchecked and gets narrowed on the spot. Anywhere else the code knows the type,
@@ -73,7 +73,8 @@ It follows the MC-n pattern in [mobile-consistency.md](mobile-consistency.md): a
 ```
 
 A prototype of this config, run with `eslint` against `client/src` (499 files, about 20s, no
-type information), flags **85 sites in 39 files**: features 39, shared 46.
+type information), flags **85 sites in 39 files**: features 39, shared 46. The shipped rule, on
+gitea/main 186d00d69, baselined **87 sites in 39 files**: features 39 (20 files), shared 48 (19 files).
 
 ## Follow-up
 

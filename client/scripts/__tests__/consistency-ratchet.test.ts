@@ -244,6 +244,11 @@ describe.each([
     path.join('src', 'features', 'library', 'hooks', '__mc10_fixture__.ts'),
     "export const k = { queryKey: ['x'] };\n",
   ],
+  [
+    'MC-11',
+    path.join('src', 'features', 'library', 'hooks', '__mc11_fixture__.ts'),
+    'export type Listener = () => unknown;\n',
+  ],
 ])('running the script for %s', (ruleId, relativePath, source) => {
   test.concurrent(`exits 1 and names ${relativePath} when it is added`, async () => {
     const { status, stdout } = await runRatchetOnFixtureTree({ [relativePath]: source });
