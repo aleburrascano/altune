@@ -2,6 +2,7 @@ package versiontag
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -24,15 +25,20 @@ func TestLabels_RealLibraryTitles(t *testing.T) {
 	}
 }
 
-func TestIsVersionWord_KeepsTitleWords(t *testing.T) {
-	for _, word := range []string{"reprise", "interlude", "pt", "away"} {
-		if IsVersionWord(word) {
-			t.Errorf("IsVersionWord(%q) = true, want false: it belongs to the title", word)
-		}
+func TestWithoutVersionPhrases_KeepsTitleWords(t *testing.T) {
+	cases := map[string]string{
+		"Devil In A New Dress":      "devil in a new dress",
+		"Cake By The Ocean":         "cake by the ocean",
+		"Put On A Smile":            "put on a smile",
+		"Solo (Reprise)":            "solo reprise",
+		"Human (2003 Remastered)":   "human 2003",
+		"Cold Heart (PNAU Remix)":   "cold heart pnau",
+		"Hold Up (Sped Up Version)": "hold up",
+		"Pt. 2 (Live in the Booth)": "pt 2",
 	}
-	for _, word := range []string{"remix", "remastered", "live", "extended"} {
-		if !IsVersionWord(word) {
-			t.Errorf("IsVersionWord(%q) = false, want true", word)
+	for title, want := range cases {
+		if got := strings.Join(WithoutVersionPhrases(Tokens(title)), " "); got != want {
+			t.Errorf("WithoutVersionPhrases(%q) = %q, want %q", title, got, want)
 		}
 	}
 }

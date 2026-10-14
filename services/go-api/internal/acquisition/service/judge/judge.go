@@ -142,7 +142,7 @@ func lengthsAgree(want, got float64) bool {
 
 func titleIdentity(title string) string {
 	tokens := versiontag.Tokens(creditOnlyBrackets.ReplaceAllString(versiontag.WithoutFeatureCredits(title), ""))
-	return strings.Join(slices.DeleteFunc(tokens, versiontag.IsVersionWord), " ")
+	return strings.Join(versiontag.WithoutVersionPhrases(tokens), " ")
 }
 
 func exactTitle(want, got string) bool {

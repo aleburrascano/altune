@@ -140,3 +140,49 @@ func TestEvaluate_UploadsNeedAFingerprintMatch(t *testing.T) {
 		t.Errorf("decision = %+v, want verify", d)
 	}
 }
+
+func TestEvaluate_RejectsWithTheReason(t *testing.T) {
+	devil := Target{Title: "Devil In A New Dress", Artist: "Kanye West", Album: "My Beautiful Dark Twisted Fantasy"}
+	cases := []struct {
+		name string
+		t    Target
+		c    Candidate
+		want string
+	}{
+		{
+			"common words are part of the title", devil,
+			Candidate{Kind: ArtTrack, Title: "Devil New Dress", Artists: []string{"Kanye West"}, Album: devil.Album},
+			"different title",
+		},
+		{
+			"another artist", devil,
+			Candidate{Kind: ArtTrack, Title: "Devil In A New Dress", Artists: []string{"Rick Ross"}, Album: devil.Album},
+			"artist not credited",
+		},
+		{
+			"another version",
+			Target{Title: "Finesse", Artist: "Bruno Mars", Length: 191},
+			Candidate{Kind: ArtTrack, Title: "Finesse (Remix)", Artists: []string{"Bruno Mars", "Cardi B"}, Length: 218},
+			"different version: want none, got remix",
+		},
+		{
+			"catalog length disagrees",
+			Target{Title: "I Ran (So Far Away)", Artist: "A Flock of Seagulls", Length: 238},
+			Candidate{Kind: ArtTrack, Title: "I Ran (So Far Away)", Artists: []string{"A Flock of Seagulls"}, Length: 305},
+			"length disagrees with the catalog length",
+		},
+		{
+			"no catalog length and another album",
+			Target{Title: "More Than a Feeling", Artist: "Boston", Album: "Greatest Hits"},
+			Candidate{Kind: ArtTrack, Title: "More Than a Feeling", Artists: []string{"Boston"}, Album: "Boston", Length: 286},
+			"no catalog length and another album: cannot confirm the cut",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if d := Evaluate(tc.t, tc.c); d.Outcome != Reject || d.Reason != tc.want {
+				t.Errorf("decision = %+v, want reject %q", d, tc.want)
+			}
+		})
+	}
+}
