@@ -22,13 +22,6 @@ function baseName(uri: string): string {
   return uri.split('/').pop() ?? '';
 }
 
-export function extFromUrl(url: string): string {
-  const path = url.split('?')[0] ?? '';
-  const slash = path.lastIndexOf('/');
-  const dot = path.lastIndexOf('.');
-  return dot > slash ? path.slice(dot) : '.mp3';
-}
-
 export function buildCacheFileName(trackId: string, version: string, ext: string): string {
   return `${trackId}.${version}${ext}`;
 }

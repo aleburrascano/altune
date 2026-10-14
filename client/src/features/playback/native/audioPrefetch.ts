@@ -14,9 +14,9 @@ import {
   evict,
   evictAllCached,
   evictCachedFile,
-  extFromUrl,
   findCached,
 } from '@features/playback/native/audioCache';
+import { extFromUrl } from '@shared/files/urlExtension';
 import {
   forgetSwap,
   swapUpcomingToLocal,

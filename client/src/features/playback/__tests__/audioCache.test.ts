@@ -8,7 +8,6 @@ import {
   evict,
   evictAllCached,
   evictCachedFile,
-  extFromUrl,
   findCached,
 } from '@features/playback/native/audioCache';
 
@@ -40,16 +39,6 @@ describe('cacheDir', () => {
     const dir = cacheDir();
     expect(dir.uri).toBe(CACHE_DIR_URI);
     expect(dir.exists).toBe(true);
-  });
-});
-
-describe('extFromUrl', () => {
-  it.each<[string, string]>([
-    ['https://cdn.example/a/track.flac?sig=v1.2', '.flac'],
-    ['https://cdn.example/a.v2/track?sig=v1.2', '.mp3'],
-    ['', '.mp3'],
-  ])('%s -> %s', (url, expected) => {
-    expect(extFromUrl(url)).toBe(expected);
   });
 });
 

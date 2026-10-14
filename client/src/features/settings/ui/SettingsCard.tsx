@@ -165,3 +165,84 @@ const rowStyles = StyleSheet.create({
   detail: { marginTop: spacing.xs },
   disabled: { opacity: opacity.disabled },
 });
+
+export type SettingsSegmentOption<T> = {
+  value: T;
+  label: string;
+  testID: string;
+  accessibilityLabel: string;
+};
+
+type SettingsSegmentProps<T> = {
+  action: string;
+  options: readonly SettingsSegmentOption<T>[];
+  value: T;
+  onSelect: (value: T) => void;
+};
+
+type SegmentOptionProps<T> = Omit<SettingsSegmentProps<T>, 'options'> & {
+  option: SettingsSegmentOption<T>;
+};
+
+function isSegmentSelected<T>({ option, value }: SegmentOptionProps<T>): boolean {
+  return option.value === value;
+}
+
+function segmentOptionStyle(selected: boolean, canvas: string) {
+  return [segmentStyles.option, selected ? { backgroundColor: canvas } : null];
+}
+
+function segmentOptionIdentityProps<T>({ action, option, onSelect }: SegmentOptionProps<T>) {
+  return {
+    action,
+    testID: option.testID,
+    onPress: () => onSelect(option.value),
+    accessibilityLabel: option.accessibilityLabel,
+  };
+}
+
+function segmentOptionProps<T>(props: SegmentOptionProps<T>, canvas: string) {
+  const selected = isSegmentSelected(props);
+  return {
+    ...segmentOptionIdentityProps(props),
+    accessibilityRole: 'radio' as const,
+    accessibilityState: { selected },
+    style: segmentOptionStyle(selected, canvas),
+  };
+}
+
+function SegmentOption<T>(props: SegmentOptionProps<T>): ReactElement {
+  const { color } = useTheme();
+  return (
+    <Tappable {...segmentOptionProps(props, color.canvas)}>
+      <Text variant="caption" tone={isSegmentSelected(props) ? 'primary' : 'tertiary'}>
+        {props.option.label}
+      </Text>
+    </Tappable>
+  );
+}
+
+export function SettingsSegment<T>({ options, ...rest }: SettingsSegmentProps<T>): ReactElement {
+  const { color } = useTheme();
+  return (
+    <View style={[segmentStyles.track, { backgroundColor: color.surface2 }]}>
+      {options.map((option) => (
+        <SegmentOption key={option.testID} option={option} {...rest} />
+      ))}
+    </View>
+  );
+}
+
+const SEGMENT_PADDING = 2;
+const SEGMENT_MIN_HEIGHT = 32;
+
+const segmentStyles = StyleSheet.create({
+  track: { flexDirection: 'row', borderRadius: radius.sm, padding: SEGMENT_PADDING },
+  option: {
+    minHeight: SEGMENT_MIN_HEIGHT,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

@@ -1,6 +1,7 @@
 import { defaultFileStore } from '@shared/files/defaultFileStore';
 import { NetworkError } from '@shared/failure/errors';
 import { startDeadline } from '@shared/timing/deadline';
+import { extFromUrl } from '@shared/files/urlExtension';
 import { isSafeId, type TrackId } from '@shared/apiClient/ids';
 import {
   createFileStoreSlot,
@@ -28,13 +29,6 @@ function pinnedDir(): StoredDirectory {
 
 function baseName(uri: string): string {
   return uri.split('/').pop() ?? '';
-}
-
-function extFromUrl(url: string): string {
-  const path = url.split('?')[0] ?? '';
-  const slash = path.lastIndexOf('/');
-  const dot = path.lastIndexOf('.');
-  return dot > slash && dot < path.length - 1 ? path.slice(dot) : '.mp3';
 }
 
 function pinnedFilesOnDisk(): readonly StoredFile[] {
