@@ -124,7 +124,10 @@ func (q *memJobQueue) Claim(_ context.Context, lease time.Duration) (ports.Job, 
 	best.fence++
 	best.run++
 	best.reenqueued = false
-	return ports.Job{TrackID: bestID, UserID: best.userID, Kind: best.kind, Attempts: best.attempts, Run: best.run, Fence: ports.Fence(best.fence)}, nil
+	return ports.Job{
+		TrackID: bestID, UserID: best.userID, Kind: best.kind, Attempts: best.attempts, Run: best.run, Fence: ports.Fence(best.fence),
+		Waited: max(now.Sub(best.availableAt), 0),
+	}, nil
 }
 
 func (q *memJobQueue) PendingDepth(_ context.Context) (int, time.Duration, error) {

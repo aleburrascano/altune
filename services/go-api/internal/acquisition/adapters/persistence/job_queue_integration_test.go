@@ -86,6 +86,22 @@ func TestPgxJobQueue_ClaimSkipsUnavailableAndLeasedRows(t *testing.T) {
 	}
 }
 
+func TestPgxJobQueue_ClaimReportsHowLongTheJobWaited(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	queue := NewPgxJobQueue(pool)
+
+	insertPendingTrack(t, pool, time.Now().Add(-90*time.Second))
+
+	job, err := queue.Claim(context.Background(), 2*time.Minute)
+	if err != nil {
+		t.Fatalf("Claim = %v, want a job", err)
+	}
+	if job.Waited < 89*time.Second || job.Waited > 2*time.Minute {
+		t.Errorf("Waited = %v, want about 90s", job.Waited)
+	}
+}
+
 func TestPgxJobQueue_ConcurrentClaimersNeverDoubleClaim(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)

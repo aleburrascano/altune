@@ -215,20 +215,20 @@ func (s *BackgroundAcquisitionScheduler) runClaimedJob(job ports.Job) {
 	heartbeatDone := make(chan struct{})
 	go s.heartbeatLoop(jobCtx, job, cancelJob, heartbeatDone)
 
-	reportedCtx := s.startClaimedJob(jobCtx, key, job.UserID)
+	reportedCtx := s.startClaimedJob(jobCtx, key, job)
 	jobErr := s.execClaimedJob(reportedCtx, key, run, job)
 	s.stopClaimedJob(cancelJob, heartbeatDone)
 
 	s.finishJob(job, jobErr)
 }
 
-func (s *BackgroundAcquisitionScheduler) startClaimedJob(jobCtx context.Context, key string, userId shared.UserId) context.Context {
+func (s *BackgroundAcquisitionScheduler) startClaimedJob(jobCtx context.Context, key string, job ports.Job) context.Context {
 	s.inflightCount.Add(1)
 	s.log.register(key, "")
 	s.log.markRunning(key)
-	return withJobReporter(jobCtx, schedulerJobReporter{
-		ctx: jobCtx, log: s.log, events: s.events, trackID: key, userId: userId,
-	})
+	reporter := schedulerJobReporter{ctx: jobCtx, log: s.log, events: s.events, trackID: key, userId: job.UserID}
+	reporter.timing("queue", job.Waited)
+	return withJobReporter(jobCtx, reporter)
 }
 
 func (s *BackgroundAcquisitionScheduler) stopClaimedJob(cancelJob context.CancelFunc, heartbeatDone <-chan struct{}) {
