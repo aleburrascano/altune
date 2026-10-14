@@ -215,6 +215,7 @@ M8 src/features/settings/hooks/useAccountEmail.ts loose file in hooks/
 M8 src/features/settings/hooks/useBackfillFeatured.ts loose file in hooks/
 M8 src/features/settings/hooks/useDownloads.ts loose file in hooks/
 M8 src/features/settings/hooks/useSettingsClearSearchHistory.ts loose file in hooks/
+M8 src/features/settings/ui/AnalyticsCard.tsx loose file in ui/
 M8 src/features/settings/ui/AppearanceCard.tsx loose file in ui/
 M8 src/features/settings/ui/ConfirmModal.tsx loose file in ui/
 M8 src/features/settings/ui/DangerZoneCard.tsx loose file in ui/
