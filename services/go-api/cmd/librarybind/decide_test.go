@@ -121,6 +121,51 @@ func TestDecide_BindRule(t *testing.T) {
 			wantReason: "refused-title",
 		},
 		{
+			name:  "a symbol-only artist name matches on its folded raw form",
+			track: with2(celebration(), func(t *libraryTrack) { t.Artist = "¥$" }),
+			outcomes: []sourceOutcome{outcomeOf(with2(celebration(), func(t *libraryTrack) { t.Artist = "¥$" }), sourceDeezer, []candidate{
+				with(catalogCelebration("77"), func(c *candidate) { c.Artists = []string{"¥$", "Kanye West"} }),
+			}, nil)},
+			wantStatus: statusBound,
+			wantReason: "isrc confirmed by deezer",
+		},
+		{
+			name:  "a different symbol-only artist does not match",
+			track: with2(celebration(), func(t *libraryTrack) { t.Artist = "¥$" }),
+			outcomes: []sourceOutcome{outcomeOf(with2(celebration(), func(t *libraryTrack) { t.Artist = "¥$" }), sourceDeezer, []candidate{
+				with(catalogCelebration("77"), func(c *candidate) { c.Artists = []string{"$$$"} }),
+			}, nil)},
+			wantStatus: statusUnbound,
+			wantReason: "refused-artist",
+		},
+		{
+			name:  "a dash version suffix compares like the bracket form",
+			track: with2(celebration(), func(t *libraryTrack) { t.Title = "California Love - Original Version" }),
+			outcomes: []sourceOutcome{outcomeOf(with2(celebration(), func(t *libraryTrack) { t.Title = "California Love - Original Version" }), sourceDeezer, []candidate{
+				with(catalogCelebration("77"), func(c *candidate) { c.Title = "California Love (Original Version)" }),
+			}, nil)},
+			wantStatus: statusBound,
+			wantReason: "isrc confirmed by deezer",
+		},
+		{
+			name:  "a dash live suffix is refused against the plain title",
+			track: with2(celebration(), func(t *libraryTrack) { t.Title = "Celebration - Live" }),
+			outcomes: []sourceOutcome{outcomeOf(with2(celebration(), func(t *libraryTrack) { t.Title = "Celebration - Live" }), sourceDeezer, []candidate{
+				catalogCelebration("77"),
+			}, nil)},
+			wantStatus: statusUnbound,
+			wantReason: "refused-title",
+		},
+		{
+			name:  "a dash suffix that is part of the name is not dropped",
+			track: with2(celebration(), func(t *libraryTrack) { t.Title = "Celebration - I Love You" }),
+			outcomes: []sourceOutcome{outcomeOf(with2(celebration(), func(t *libraryTrack) { t.Title = "Celebration - I Love You" }), sourceDeezer, []candidate{
+				catalogCelebration("77"),
+			}, nil)},
+			wantStatus: statusUnbound,
+			wantReason: "refused-title",
+		},
+		{
 			name:  "a featured credit in brackets is not a qualifier",
 			track: celebration(),
 			outcomes: []sourceOutcome{outcomeOf(celebration(), sourceDeezer, []candidate{

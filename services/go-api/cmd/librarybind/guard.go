@@ -30,6 +30,8 @@ const (
 
 var artistSeparatorRe = regexp.MustCompile(`(?i)\s*(?:,|;|&|\band\b|\bfeat\.?(?:\s|$)|\bft\.?(?:\s|$)|\bfeaturing\b|\bwith\b|\bx\b)\s*`)
 
+var versionSuffixRe = regexp.MustCompile(`(?i)^(.*\S)\s[-–—]\s+([^-–—|]*\b(?:original|album|single|mono|stereo|deluxe|bonus|version|edition)\b[^-–—|]*)$`)
+
 type judged struct {
 	candidate
 	Failures []guard `json:"failures,omitempty"`
@@ -59,15 +61,30 @@ func failedGuards(t libraryTrack, c candidate) []guard {
 	return failed
 }
 
+func bracketVersionSuffix(title string) string {
+	m := versionSuffixRe.FindStringSubmatch(title)
+	if m == nil {
+		return title
+	}
+	return m[1] + " (" + m[2] + ")"
+}
+
 func titleKey(title string) string {
-	keys := domain.CleanSearchKeys(title, "", "")
+	keys := domain.CleanSearchKeys(bracketVersionSuffix(title), "", "")
 	return strings.Join(append([]string{textnorm.NormalizeForMatch(keys.Title)}, keys.VariantQualifiers()...), textnorm.KeySeparator)
 }
 
+func artistKey(name string) string {
+	if key := textnorm.NormalizeForMatch(name); key != "" {
+		return key
+	}
+	return textnorm.FoldName(name)
+}
+
 func artistKeys(name string) []string {
-	keys := []string{textnorm.NormalizeForMatch(name)}
+	keys := []string{artistKey(name)}
 	for _, part := range artistSeparatorRe.Split(name, -1) {
-		keys = append(keys, textnorm.NormalizeForMatch(part))
+		keys = append(keys, artistKey(part))
 	}
 	return slices.DeleteFunc(keys, func(key string) bool { return key == "" })
 }
