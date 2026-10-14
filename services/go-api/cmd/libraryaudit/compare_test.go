@@ -126,6 +126,8 @@ func TestNamesAgree_SymbolOnlyNamesCompareByFoldedRawText(t *testing.T) {
 		{"¥$", "¥$ ", true},
 		{"＄", "$", true},
 		{"¥$", "Kanye West", false},
+		{"KC and The Sunshine Band", "KC & The Sunshine Band", true},
+		{"Simon & Garfunkel", "Simon and Garfunkel", true},
 		{"¥$", "$", false},
 		{"", "", false},
 	}
