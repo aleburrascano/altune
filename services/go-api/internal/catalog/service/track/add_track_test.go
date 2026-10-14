@@ -773,3 +773,71 @@ func TestAddTrackService_Execute_KeepsTheClientDurationAsCatalogLength(t *testin
 		t.Errorf("DurationSeconds = %v, want %v", out.Track.DurationSeconds, duration)
 	}
 }
+
+func TestAddTrackService_PinsTheCatalogIdentity(t *testing.T) {
+	repo := catalogtest.NewTrackRepo()
+	explicit := false
+	mbid := "5B11F4CE-A62D-471E-81FC-A69A8278C7DA"
+	input := AddTrackInput{
+		Title: "Diamonds", Artist: "Rihanna", Album: "Unapologetic",
+		CatalogMBID: &mbid, CatalogExplicit: &explicit,
+		CatalogSources: []domain.CatalogSource{
+			{Provider: "deezer", ExternalID: "1"},
+			{Provider: "deezer", ExternalID: "1"},
+			{Provider: "spotify", ExternalID: "s"},
+		},
+	}
+
+	out, err := NewAddTrackService(repo).Execute(context.Background(), catalogtest.UserId(), input)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	got := out.Track
+	if got.CatalogMBID == nil || *got.CatalogMBID != "5b11f4ce-a62d-471e-81fc-a69a8278c7da" {
+		t.Errorf("CatalogMBID = %v, want the lowercased uuid", got.CatalogMBID)
+	}
+	if got.CatalogExplicit == nil || *got.CatalogExplicit {
+		t.Errorf("CatalogExplicit = %v, want false", got.CatalogExplicit)
+	}
+	if len(got.CatalogSources) != 2 {
+		t.Errorf("CatalogSources = %+v, want 2 after dropping the duplicate", got.CatalogSources)
+	}
+}
+
+func TestAddTrackService_RejectsInvalidCatalogIdentity(t *testing.T) {
+	badMBID := "not-a-uuid"
+	tooMany := make([]domain.CatalogSource, domain.MaxCatalogSources+1)
+	for i := range tooMany {
+		tooMany[i] = domain.CatalogSource{Provider: "deezer", ExternalID: fmt.Sprint(i)}
+	}
+	tests := []struct {
+		name   string
+		mutate func(*AddTrackInput)
+	}{
+		{"bad mbid", func(in *AddTrackInput) { in.CatalogMBID = &badMBID }},
+		{"unknown provider", func(in *AddTrackInput) {
+			in.CatalogSources = []domain.CatalogSource{{Provider: "napster", ExternalID: "1"}}
+		}},
+		{"too many sources", func(in *AddTrackInput) { in.CatalogSources = tooMany }},
+		{"empty external id", func(in *AddTrackInput) {
+			in.CatalogSources = []domain.CatalogSource{{Provider: "deezer"}}
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := catalogtest.NewTrackRepo()
+			input := AddTrackInput{Title: "T", Artist: "A", Album: "B"}
+			tt.mutate(&input)
+
+			out, err := NewAddTrackService(repo).Execute(context.Background(), catalogtest.UserId(), input)
+
+			var validation *domain.ValidationError
+			if !errors.As(err, &validation) {
+				t.Fatalf("err = %v, want a validation error", err)
+			}
+			if out != nil || len(repo.Tracks) != 0 {
+				t.Fatalf("a refused save must not insert: out=%v stored=%d", out, len(repo.Tracks))
+			}
+		})
+	}
+}

@@ -45,3 +45,18 @@ func TestFeaturedResolver_SkipsOversizedCredits(t *testing.T) {
 		t.Errorf("resolved = %+v, want only the two in-cap credits", got)
 	}
 }
+
+func TestKnownCatalogProviders_MatchDiscoveryProviderNames(t *testing.T) {
+	known := map[string]bool{}
+	for _, name := range catalogdomain.KnownCatalogProviders() {
+		if _, err := discoverydomain.ParseProviderName(name); err != nil {
+			t.Errorf("catalog accepts provider %q that discovery does not know", name)
+		}
+		known[name] = true
+	}
+	for p := discoverydomain.ProviderUnknown + 1; p <= discoverydomain.ProviderSpotify; p++ {
+		if !known[p.String()] {
+			t.Errorf("discovery provider %q is rejected by catalog source validation", p.String())
+		}
+	}
+}

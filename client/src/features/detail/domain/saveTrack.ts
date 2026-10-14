@@ -1,27 +1,77 @@
 import { trackIdentityKey } from '@shared/acquisition/trackStatusStore';
 import { asTrackId, type TrackId } from '@shared/apiClient/ids';
-import type { CreateTrackRequest, TrackResponse } from '@shared/apiClient/trackResponse';
+import type {
+  CatalogSourceRef,
+  CreateTrackRequest,
+  TrackResponse,
+} from '@shared/apiClient/trackResponse';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
-import { trackExtras } from '@features/detail/domain/trackExtras';
+import { trackExtras, type TrackExtras } from '@features/detail/domain/trackExtras';
 import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
 
-export function toCreateTrackRequest(result: DiscoveryResult): CreateTrackRequest {
-  const te = trackExtras(result.extras);
-  const soundcloudUrl = result.sources.find((s) => s.provider === 'soundcloud')?.url ?? null;
+const MAX_CATALOG_SOURCES = 16;
+
+function catalogSources(picked: DiscoveryResult): CatalogSourceRef[] {
+  return picked.sources
+    .filter((s) => s.external_id !== '')
+    .slice(0, MAX_CATALOG_SOURCES)
+    .map((s) => ({ provider: s.provider, external_id: s.external_id }));
+}
+
+type PinnedRecording = Pick<CreateTrackRequest, 'mbid' | 'explicit' | 'sources'>;
+
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === 'boolean';
+}
+
+function nonEmptyOrUndefined<T extends string | unknown[]>(value: T | null): T | undefined {
+  return value !== null && value.length > 0 ? value : undefined;
+}
+
+const MBID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function canonicalMbid(mbid: string | null): string | undefined {
+  return mbid !== null && MBID.test(mbid) ? mbid : undefined;
+}
+
+function pinnedRecording(picked: DiscoveryResult, te: TrackExtras): PinnedRecording {
+  const explicit = picked.extras['explicit'];
   return {
-    title: result.title,
-    artist: result.subtitle ?? '',
-    album: te.album,
+    mbid: canonicalMbid(te.mbid),
+    explicit: isBoolean(explicit) ? explicit : undefined,
+    sources: nonEmptyOrUndefined(catalogSources(picked)),
+  };
+}
+
+function displayFields(picked: DiscoveryResult, te: TrackExtras) {
+  return {
+    title: picked.title,
+    artist: picked.subtitle ?? '',
     duration_seconds: te.durationSeconds != null ? Math.floor(te.durationSeconds) : null,
-    artwork_url: result.image_url,
+    artwork_url: picked.image_url,
+  };
+}
+
+function tagFields(te: TrackExtras) {
+  return {
+    album: te.album,
     isrc: te.isrc,
     year: te.year,
     genre: te.genre,
     album_artist: te.albumArtist,
     track_number: te.trackPosition,
+  };
+}
+
+export function toCreateTrackRequest(picked: DiscoveryResult): CreateTrackRequest {
+  const te = trackExtras(picked.extras);
+  return {
+    ...displayFields(picked, te),
+    ...tagFields(te),
     ...(te.featuredArtists.length > 0 ? { featured_artists: te.featuredArtists } : {}),
-    source_url: soundcloudUrl,
+    source_url: picked.sources.find((s) => s.provider === 'soundcloud')?.url ?? null,
+    ...pinnedRecording(picked, te),
   };
 }
 

@@ -117,6 +117,22 @@ type CreateTrackRequest struct {
 	TrackNumber     *int                             `json:"track_number,omitempty"`
 	FeaturedArtists []trackservice.FeaturedArtistDTO `json:"featured_artists,omitempty"`
 	SourceURL       *string                          `json:"source_url,omitempty"`
+	MBID            *string                          `json:"mbid,omitempty"`
+	Explicit        *bool                            `json:"explicit,omitempty"`
+	Sources         []CatalogSourceRequest           `json:"sources,omitempty"`
+}
+
+type CatalogSourceRequest struct {
+	Provider   string `json:"provider"`
+	ExternalID string `json:"external_id"`
+}
+
+func catalogSourcesFromRequest(sources []CatalogSourceRequest) []domain.CatalogSource {
+	out := make([]domain.CatalogSource, len(sources))
+	for i, s := range sources {
+		out[i] = domain.CatalogSource{Provider: s.Provider, ExternalID: s.ExternalID}
+	}
+	return out
 }
 
 type TrackResponse = trackservice.TrackDTO
@@ -194,6 +210,9 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 		TrackNumber:     req.TrackNumber,
 		FeaturedArtists: domainFeaturedFromDTOs(req.FeaturedArtists),
 		SourceURL:       req.SourceURL,
+		CatalogMBID:     req.MBID,
+		CatalogExplicit: req.Explicit,
+		CatalogSources:  catalogSourcesFromRequest(req.Sources),
 	}
 
 	result, err := h.addTrack.Execute(r.Context(), userId, input)

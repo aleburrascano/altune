@@ -82,24 +82,39 @@ func targetLength(track *domain.Track) *float64 {
 
 func snapshotOf(track *domain.Track) *ports.TrackSnapshot {
 	return &ports.TrackSnapshot{
-		ID:                 track.ID,
-		UserId:             track.UserId,
-		Title:              track.Title,
-		Artist:             track.Artist,
-		Album:              track.Album,
-		DurationSeconds:    targetLength(track),
-		ISRC:               track.ISRC,
-		Year:               track.Year,
-		TrackNumber:        track.TrackNumber,
-		AlbumArtist:        track.AlbumArtist,
-		Genre:              track.Genre,
-		AudioRef:           track.AudioRef,
-		AudioSourceURL:     track.AudioSourceURL,
-		RejectedSourceKeys: track.RejectedSourceKeys,
-		Status:             mapStatus(track.AcquisitionStatus),
-		Streamable:         track.IsStreamable(),
-		Version:            track.Version,
+		ID:                     track.ID,
+		UserId:                 track.UserId,
+		Title:                  track.Title,
+		Artist:                 track.Artist,
+		Album:                  track.Album,
+		DurationSeconds:        targetLength(track),
+		CatalogDurationSeconds: track.CatalogDurationSeconds,
+		CatalogMBID:            track.CatalogMBID,
+		CatalogExplicit:        track.CatalogExplicit,
+		CatalogSources:         snapshotSources(track.CatalogSources),
+		ISRC:                   track.ISRC,
+		Year:                   track.Year,
+		TrackNumber:            track.TrackNumber,
+		AlbumArtist:            track.AlbumArtist,
+		Genre:                  track.Genre,
+		AudioRef:               track.AudioRef,
+		AudioSourceURL:         track.AudioSourceURL,
+		RejectedSourceKeys:     track.RejectedSourceKeys,
+		Status:                 mapStatus(track.AcquisitionStatus),
+		Streamable:             track.IsStreamable(),
+		Version:                track.Version,
 	}
+}
+
+func snapshotSources(sources []domain.CatalogSource) []ports.CatalogSource {
+	if len(sources) == 0 {
+		return nil
+	}
+	out := make([]ports.CatalogSource, len(sources))
+	for i, s := range sources {
+		out[i] = ports.CatalogSource{Provider: s.Provider, ExternalID: s.ExternalID}
+	}
+	return out
 }
 
 func mapStatus(s domain.AcquisitionStatus) ports.TrackStatus {

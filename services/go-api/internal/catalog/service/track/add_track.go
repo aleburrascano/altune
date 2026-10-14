@@ -41,6 +41,9 @@ type AddTrackInput struct {
 	FeaturedArtists []domain.FeaturedArtist
 	SourceURL       *string
 	IdempotencyKey  *string
+	CatalogMBID     *string
+	CatalogExplicit *bool
+	CatalogSources  []domain.CatalogSource
 }
 
 type AddTrackOutput struct {
@@ -107,6 +110,9 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 		if err := track.SetCatalogDuration(*input.DurationSeconds); err != nil {
 			return nil, err
 		}
+	}
+	if err := track.SetCatalogIdentity(input.CatalogMBID, input.CatalogExplicit, input.CatalogSources); err != nil {
+		return nil, err
 	}
 	track.ArtworkURL = input.ArtworkURL
 	track.Year = input.Year
@@ -210,6 +216,9 @@ func validateAddTrackInput(input AddTrackInput, now time.Time) error {
 	if err := domain.ValidateFeaturedArtists(input.FeaturedArtists); err != nil {
 		return err
 	}
+	if err := validateCatalogIdentity(input); err != nil {
+		return err
+	}
 	if input.SourceURL != nil {
 		if err := domain.ValidateSourceURL(*input.SourceURL); err != nil {
 			return err
@@ -219,6 +228,16 @@ func validateAddTrackInput(input AddTrackInput, now time.Time) error {
 		return err
 	}
 	return nil
+}
+
+func validateCatalogIdentity(input AddTrackInput) error {
+	if input.CatalogMBID != nil {
+		if _, err := domain.NormalizeCatalogMBID(*input.CatalogMBID); err != nil {
+			return err
+		}
+	}
+	_, err := domain.NormalizeCatalogSources(input.CatalogSources)
+	return err
 }
 
 const maxIdempotencyKeyLength = 200

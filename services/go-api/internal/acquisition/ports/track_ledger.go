@@ -20,24 +20,33 @@ var (
 	ErrTrackNotFound     = errors.New("track not found")
 )
 
+type CatalogSource struct {
+	Provider   string
+	ExternalID string
+}
+
 type TrackSnapshot struct {
-	ID                 shared.TrackId
-	UserId             shared.UserId
-	Title              string
-	Artist             string
-	Album              string
-	DurationSeconds    *float64
-	ISRC               *string
-	Year               *int
-	TrackNumber        *int
-	AlbumArtist        *string
-	Genre              *string
-	AudioRef           *string
-	AudioSourceURL     *string
-	RejectedSourceKeys []string
-	Status             TrackStatus
-	Streamable         bool
-	Version            int
+	ID                     shared.TrackId
+	UserId                 shared.UserId
+	Title                  string
+	Artist                 string
+	Album                  string
+	DurationSeconds        *float64
+	CatalogDurationSeconds *float64
+	CatalogMBID            *string
+	CatalogExplicit        *bool
+	CatalogSources         []CatalogSource
+	ISRC                   *string
+	Year                   *int
+	TrackNumber            *int
+	AlbumArtist            *string
+	Genre                  *string
+	AudioRef               *string
+	AudioSourceURL         *string
+	RejectedSourceKeys     []string
+	Status                 TrackStatus
+	Streamable             bool
+	Version                int
 }
 
 type Completion struct {
