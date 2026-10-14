@@ -67,8 +67,12 @@ func (c plannedChange) clearsWrongISRC() bool {
 	return c.Field == fieldISRC && c.NewValue == nil
 }
 
+func (c plannedChange) clearsWrongCatalogLength() bool {
+	return c.Field == fieldCatalogLen && c.NewValue == nil
+}
+
 func (c plannedChange) replacesAuditedValue() bool {
-	return c.clearsWrongISRC() || c.Field == fieldArtworkURL
+	return c.clearsWrongISRC() || c.clearsWrongCatalogLength() || c.Field == fieldArtworkURL
 }
 
 type trackPlan struct {
@@ -225,6 +229,9 @@ func checkValues(f field, fix *reportFix, currentYear int) error {
 			return errors.New("genre fix has a blank new_value")
 		}
 	case fieldCatalogLen:
+		if fix.NewValue == nil {
+			return checkCatalogLengthClear(fix.OldValue)
+		}
 		return checkCatalogLength(fix.NewValue)
 	case fieldArtworkURL:
 		return checkArtworkReplacement(fix)
@@ -252,6 +259,13 @@ func checkCatalogLength(value *string) error {
 		return fmt.Errorf("catalog length %q is outside 0 to %d seconds", *value, maxCatalogSeconds)
 	}
 	return nil
+}
+
+func checkCatalogLengthClear(old *string) error {
+	if old == nil {
+		return errors.New("catalog length clear needs the old_value the audit saw")
+	}
+	return checkCatalogLength(old)
 }
 
 func checkYear(value *string, currentYear int) error {

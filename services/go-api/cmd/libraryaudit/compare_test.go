@@ -196,3 +196,22 @@ func TestIsSameSong_AnotherVersionIsNotTheSameSong(t *testing.T) {
 		}
 	}
 }
+
+func TestMetadataFindings_AWrongVersionsLengthIsClearedWithItsISRC(t *testing.T) {
+	lib := libraryTrack{ID: "t1", UserID: "u1", Version: 4, Title: "Diamonds", Artist: "Rihanna", Album: "Unapologetic", ISRC: "USUM71215492", DurationSeconds: 283, CatalogDurationSeconds: 287}
+	remix := catalogTrack{Title: "Diamonds (Remix)", Artist: "Rihanna", DurationSeconds: 287}
+	got := metadataFindings(lib, remix)
+	cleared := findingOf(got, categoryCatalogDurationFromWrongSong)
+	want := fix{UserID: "u1", Version: 4, Field: "catalog_duration_seconds", OldValue: strPtr("287")}
+	if findingOf(got, categoryWrongSong).Fix == nil || cleared.Fix == nil || !reflect.DeepEqual(*cleared.Fix, want) {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestMetadataFindings_AnIndependentLengthSurvivesAWrongISRC(t *testing.T) {
+	lib := libraryTrack{ID: "t1", Title: "Take on Me", Artist: "a-ha", ISRC: "NOG841707010", CatalogDurationSeconds: 225}
+	acoustic := catalogTrack{Title: "Take On Me (2017 Acoustic)", Artist: "a-ha", DurationSeconds: 185}
+	if got := metadataFindings(lib, acoustic); hasCategory(got, categoryCatalogDurationFromWrongSong) {
+		t.Fatalf("cleared a catalog length the wrong recording did not give: %+v", got)
+	}
+}
