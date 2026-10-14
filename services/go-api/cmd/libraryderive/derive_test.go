@@ -39,7 +39,7 @@ func fields(found []difference) map[string]difference {
 	return byField
 }
 
-func TestDiff_ABobbyMcFerrinTrackStoredOnACompilationReportsItsAlbumAndOnlyCorrectsAlbumIndependentFields(t *testing.T) {
+func TestDiff_ABobbyMcFerrinTrackStoredOnACompilationCorrectsItsAlbumAndEveryAlbumBoundField(t *testing.T) {
 	stored := libraryTrack{
 		Title: "Don't Worry, Be Happy", Artist: "Bobby McFerrin", Album: "Now That's What I Call Music! 14", AlbumArtist: "Various Artists",
 		ISRC: "USEM38800146", ArtworkURL: "https://cdn/now14.jpg", Year: 1999, Genre: "Pop", TrackNumber: 12, CatalogDurationSeconds: 240,
@@ -54,13 +54,13 @@ func TestDiff_ABobbyMcFerrinTrackStoredOnACompilationReportsItsAlbumAndOnlyCorre
 		old  string
 		new  string
 	}{
-		"album":                    {modeReportOnly, "Now That's What I Call Music! 14", "Simple Pleasures"},
+		"album":                    {modeCorrect, "Now That's What I Call Music! 14", "Simple Pleasures"},
 		"year":                     {modeCorrect, "1999", "1988"},
 		"album_artist":             {modeCorrect, "Various Artists", "Bobby McFerrin"},
-		"track_number":             {modeReportOnly, "12", "2"},
-		"genre":                    {modeReportOnly, "Pop", "Jazz"},
+		"track_number":             {modeCorrect, "12", "2"},
+		"genre":                    {modeCorrect, "Pop", "Jazz"},
 		"catalog_duration_seconds": {modeCorrect, "240", "292"},
-		"artwork_url":              {modeReportOnly, "https://cdn/now14.jpg", "https://cdn/sp.jpg"},
+		"artwork_url":              {modeCorrect, "https://cdn/now14.jpg", "https://cdn/sp.jpg"},
 	}
 	if len(got) != len(cases) {
 		t.Fatalf("got %+v", got)
@@ -103,14 +103,14 @@ func TestDiff_ARemasterYearIsCorrectedToTheOriginalYear(t *testing.T) {
 	}
 }
 
-func TestDiff_TitleAndArtistDifferencesAreReportOnly(t *testing.T) {
+func TestDiff_TitleAndArtistDifferencesAreCorrectFixes(t *testing.T) {
 	stored := libraryTrack{Title: "Wham! - Careless Whisper (Official Video)", Artist: "WhamVEVO", Album: "Make It Big", AlbumArtist: "Wham!", Year: 1984}
 	got := diff(stored, derive(anchor{Title: "Careless Whisper", Artist: "Wham!"}, makeItBig(), nil))
 	byField := fields(got)
-	if len(got) != 2 || byField["title"].Mode != modeReportOnly || byField["artist"].Mode != modeReportOnly {
+	if len(got) != 2 || byField["title"].Mode != modeCorrect || byField["artist"].Mode != modeCorrect {
 		t.Fatalf("got %+v", got)
 	}
-	if !slices.Equal([]category{byField["title"].category(), byField["artist"].category()}, []category{"title_differs", "artist_differs"}) {
+	if !slices.Equal([]category{byField["title"].category(), byField["artist"].category()}, []category{"title_correct", "artist_correct"}) {
 		t.Fatalf("categories %v", got)
 	}
 }
