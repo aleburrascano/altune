@@ -1,0 +1,45 @@
+name: mutation-mobile
+
+on:
+  schedule:
+    - cron: "20 3 * * 0"
+  workflow_dispatch:
+    inputs:
+      mutate:
+        description: Glob to mutate; empty picks this week's slice of stryker.config.json
+        required: false
+
+concurrency:
+  group: mutation-mobile
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  mutate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: client/.nvmrc
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - name: dependencies
+        working-directory: client
+        run: npm ci
+      - name: mutation test
+        working-directory: client
+        env:
+          MUTATE: ${{ github.event.inputs.mutate }}
+        run: bash ../scripts/ci/mutation-mobile.sh
+      - name: keep the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report
+          path: client/reports/mutation/mutation.json
+          if-no-files-found: ignore
