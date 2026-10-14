@@ -1143,3 +1143,50 @@ func TestPgxTrackRepo_UpdateKeepsISRCCatalogLengthAndLengthFlag(t *testing.T) {
 		t.Error("AudioLengthMismatch = false, want true")
 	}
 }
+
+func TestPgxTrackRepo_RoundTripsTheCatalogIdentity(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	pinned := newTestTrackForDB(t, userId)
+	cleanupTrack(t, pool, pinned.ID, userId)
+	mbid := "5b11f4ce-a62d-471e-81fc-a69a8278c7da"
+	explicit := true
+	sources := []domain.CatalogSource{{Provider: "deezer", ExternalID: "42"}, {Provider: "spotify", ExternalID: "abc"}}
+	if err := pinned.SetCatalogIdentity(&mbid, &explicit, sources); err != nil {
+		t.Fatal(err)
+	}
+	bare := newTestTrackForDB(t, userId)
+	cleanupTrack(t, pool, bare.ID, userId)
+
+	for _, track := range []*domain.Track{pinned, bare} {
+		if _, created, err := repo.Add(ctx, track); err != nil || !created {
+			t.Fatalf("Add() created=%v err=%v", created, err)
+		}
+	}
+
+	got, err := repo.GetByID(ctx, pinned.ID, userId)
+	if err != nil || got == nil {
+		t.Fatalf("GetByID() = %v, %v", got, err)
+	}
+	if got.CatalogMBID == nil || *got.CatalogMBID != mbid {
+		t.Errorf("CatalogMBID = %v, want %q", got.CatalogMBID, mbid)
+	}
+	if got.CatalogExplicit == nil || !*got.CatalogExplicit {
+		t.Errorf("CatalogExplicit = %v, want true", got.CatalogExplicit)
+	}
+	if len(got.CatalogSources) != 2 || got.CatalogSources[0] != sources[0] || got.CatalogSources[1] != sources[1] {
+		t.Errorf("CatalogSources = %+v, want %+v", got.CatalogSources, sources)
+	}
+
+	unpinned, err := repo.GetByID(ctx, bare.ID, userId)
+	if err != nil || unpinned == nil {
+		t.Fatalf("GetByID(bare) = %v, %v", unpinned, err)
+	}
+	if unpinned.CatalogMBID != nil || unpinned.CatalogExplicit != nil || len(unpinned.CatalogSources) != 0 {
+		t.Errorf("a track added without identity must read back empty, got %+v %+v %+v",
+			unpinned.CatalogMBID, unpinned.CatalogExplicit, unpinned.CatalogSources)
+	}
+}

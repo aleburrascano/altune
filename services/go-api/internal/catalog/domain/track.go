@@ -88,6 +88,9 @@ type Track struct {
 	EvidenceJSON    json.RawMessage
 
 	CatalogDurationSeconds *float64
+	CatalogMBID            *string
+	CatalogExplicit        *bool
+	CatalogSources         []CatalogSource
 	AudioLengthMismatch    bool
 
 	AcquisitionStartedAt *time.Time
@@ -315,6 +318,23 @@ func (t *Track) SetCatalogDuration(seconds float64) error {
 		t.CatalogDurationSeconds = &seconds
 		t.DurationSeconds = &seconds
 	}
+	return nil
+}
+
+func (t *Track) SetCatalogIdentity(mbid *string, explicit *bool, sources []CatalogSource) error {
+	if mbid != nil {
+		normalized, err := NormalizeCatalogMBID(*mbid)
+		if err != nil {
+			return err
+		}
+		t.CatalogMBID = &normalized
+	}
+	unique, err := NormalizeCatalogSources(sources)
+	if err != nil {
+		return err
+	}
+	t.CatalogExplicit = explicit
+	t.CatalogSources = unique
 	return nil
 }
 

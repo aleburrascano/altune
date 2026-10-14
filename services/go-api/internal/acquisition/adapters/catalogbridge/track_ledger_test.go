@@ -460,3 +460,33 @@ func TestCompletePersistsTheResolvedISRCOnlyWhenTheTrackHasNone(t *testing.T) {
 		})
 	}
 }
+
+func TestGetExposesTheCatalogIdentity(t *testing.T) {
+	track, userId := newTrack(t, 1)
+	mbid := "5b11f4ce-a62d-471e-81fc-a69a8278c7da"
+	explicit := true
+	sources := []domain.CatalogSource{{Provider: "deezer", ExternalID: "42"}}
+	if err := track.SetCatalogIdentity(&mbid, &explicit, sources); err != nil {
+		t.Fatal(err)
+	}
+	if err := track.SetCatalogDuration(226); err != nil {
+		t.Fatal(err)
+	}
+
+	snap, err := NewTrackLedger(newFakeStore(track)).Get(context.Background(), track.ID, userId)
+	if err != nil || snap == nil {
+		t.Fatalf("Get = %v, %v", snap, err)
+	}
+	if snap.CatalogMBID == nil || *snap.CatalogMBID != mbid {
+		t.Errorf("CatalogMBID = %v, want %q", snap.CatalogMBID, mbid)
+	}
+	if snap.CatalogExplicit == nil || !*snap.CatalogExplicit {
+		t.Errorf("CatalogExplicit = %v, want true", snap.CatalogExplicit)
+	}
+	if len(snap.CatalogSources) != 1 || snap.CatalogSources[0] != (ports.CatalogSource{Provider: "deezer", ExternalID: "42"}) {
+		t.Errorf("CatalogSources = %+v", snap.CatalogSources)
+	}
+	if snap.CatalogDurationSeconds == nil || *snap.CatalogDurationSeconds != 226 {
+		t.Errorf("CatalogDurationSeconds = %v, want 226", snap.CatalogDurationSeconds)
+	}
+}

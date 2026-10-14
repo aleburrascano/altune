@@ -49,3 +49,23 @@ func TestSearchResultToDTO_typedRecordTypeAndTierKeepWireBytes(t *testing.T) {
 		t.Errorf("search DTO JSON drifted.\n got: %s\nwant: %s", got, searchDTOTypedExtrasGolden)
 	}
 }
+
+func TestSearchResultToDTO_FillsExtrasDurationFromTheResult(t *testing.T) {
+	tests := []struct {
+		name   string
+		result domain.SearchResult
+		want   any
+	}{
+		{"result duration fills a missing extra", domain.SearchResult{Kind: domain.ResultKindTrack, Title: "T", Duration: 226}, 226},
+		{"an existing extra wins", domain.SearchResult{Kind: domain.ResultKindTrack, Title: "T", Duration: 226, Extras: map[string]any{"duration": 300}}, 300},
+		{"no duration leaves the extra absent", domain.SearchResult{Kind: domain.ResultKindTrack, Title: "T"}, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := searchResultToDTO(tt.result).Extras[domain.ExtraDuration]
+			if got != tt.want {
+				t.Errorf("extras.duration = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

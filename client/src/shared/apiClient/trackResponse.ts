@@ -61,6 +61,14 @@ export type CreateTrackRequest = {
   track_number: number | null;
   featured_artists?: FeaturedArtist[];
   source_url?: string | null;
+  mbid?: string | undefined;
+  explicit?: boolean | undefined;
+  sources?: CatalogSourceRef[] | undefined;
+};
+
+export type CatalogSourceRef = {
+  provider: string;
+  external_id: string;
 };
 
 export type ListTracksResponse = {

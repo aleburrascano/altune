@@ -19,7 +19,7 @@ import (
 
 const trackColumns = `id, user_id, title, artist, album, duration_seconds,
 	added_at, artwork_url, acquisition_status, dedup_key,
-	year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url, rejected_source_keys, audio_version, acquisition_started_at, acquisition_confidence, acquisition_evidence, catalog_duration_seconds, audio_length_mismatch, version`
+	year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url, rejected_source_keys, audio_version, acquisition_started_at, acquisition_confidence, acquisition_evidence, catalog_duration_seconds, catalog_mbid, catalog_explicit, catalog_sources, audio_length_mismatch, version`
 
 var trackColumnsPrefixed = prefixColumns(trackColumns, "t.")
 
@@ -58,8 +58,8 @@ func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*dom
 			added_at, artwork_url, acquisition_status, dedup_key,
 			year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url,
 			rejected_source_keys, audio_version, acquisition_started_at, idempotency_key,
-			acquisition_confidence, acquisition_evidence, catalog_duration_seconds, acquisition_available_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,
+			acquisition_confidence, acquisition_evidence, catalog_duration_seconds, catalog_mbid, catalog_explicit, catalog_sources, acquisition_available_at
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,
 			CASE WHEN $9::text = 'pending' THEN now() END)
 		ON CONFLICT DO NOTHING
 		RETURNING id`,
@@ -70,6 +70,7 @@ func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*dom
 		track.ISRC, track.AudioRef, track.FailureReason, track.AcquisitionProvenance, track.AudioSourceURL,
 		track.RejectedSourceKeys, track.AudioVersion, track.AcquisitionStartedAt, track.IdempotencyKey,
 		track.ConfidenceScore, track.EvidenceJSON, track.CatalogDurationSeconds,
+		track.CatalogMBID, track.CatalogExplicit, catalogSourcesJSON(track.CatalogSources),
 	).Scan(&returnedID)
 
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -497,39 +498,42 @@ type scanner interface {
 
 func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 	var (
-		id             uuid.UUID
-		userId         uuid.UUID
-		title, artist  string
-		album          *string
-		durSecs        *float64
-		addedAt        time.Time
-		artworkURL     *string
-		acqStatus      string
-		dedupKey       string
-		year           *int
-		genre          *string
-		trackNumber    *int
-		albumArtist    *string
-		isrc           *string
-		audioRef       *string
-		failureReason  *string
-		provenance     *string
-		sourceURL      *string
-		rejectedKeys   []string
-		audioVersion   *string
-		startedAt      *time.Time
-		confidence     *float64
-		evidence       json.RawMessage
-		catalogDurSecs *float64
-		lengthMismatch bool
-		version        int
+		id              uuid.UUID
+		userId          uuid.UUID
+		title, artist   string
+		album           *string
+		durSecs         *float64
+		addedAt         time.Time
+		artworkURL      *string
+		acqStatus       string
+		dedupKey        string
+		year            *int
+		genre           *string
+		trackNumber     *int
+		albumArtist     *string
+		isrc            *string
+		audioRef        *string
+		failureReason   *string
+		provenance      *string
+		sourceURL       *string
+		rejectedKeys    []string
+		audioVersion    *string
+		startedAt       *time.Time
+		confidence      *float64
+		evidence        json.RawMessage
+		catalogDurSecs  *float64
+		catalogMBID     *string
+		catalogExplicit *bool
+		catalogSources  []byte
+		lengthMismatch  bool
+		version         int
 	)
 
 	dest = []any{
 		&id, &userId, &title, &artist, &album, &durSecs,
 		&addedAt, &artworkURL, &acqStatus, &dedupKey,
 		&year, &genre, &trackNumber, &albumArtist, &isrc, &audioRef, &failureReason, &provenance, &sourceURL,
-		&rejectedKeys, &audioVersion, &startedAt, &confidence, &evidence, &catalogDurSecs, &lengthMismatch, &version,
+		&rejectedKeys, &audioVersion, &startedAt, &confidence, &evidence, &catalogDurSecs, &catalogMBID, &catalogExplicit, &catalogSources, &lengthMismatch, &version,
 	}
 
 	build = func() (*domain.Track, error) {
@@ -546,6 +550,11 @@ func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 		versionVal := ""
 		if audioVersion != nil {
 			versionVal = *audioVersion
+		}
+
+		sources, err := decodeCatalogSources(catalogSources)
+		if err != nil {
+			return nil, err
 		}
 
 		return &domain.Track{
@@ -574,6 +583,9 @@ func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 			ConfidenceScore:        confidence,
 			EvidenceJSON:           evidence,
 			CatalogDurationSeconds: catalogDurSecs,
+			CatalogMBID:            catalogMBID,
+			CatalogExplicit:        catalogExplicit,
+			CatalogSources:         sources,
 			AudioLengthMismatch:    lengthMismatch,
 			Version:                version,
 		}, nil
@@ -625,4 +637,23 @@ func pageTotal(ctx context.Context, pool pgxPool, limit, offset, got int, countS
 		total = offset + got
 	}
 	return total, nil
+}
+
+func catalogSourcesJSON(sources []domain.CatalogSource) []byte {
+	if len(sources) == 0 {
+		return []byte("[]")
+	}
+	encoded, _ := json.Marshal(sources)
+	return encoded
+}
+
+func decodeCatalogSources(raw []byte) ([]domain.CatalogSource, error) {
+	var sources []domain.CatalogSource
+	if err := json.Unmarshal(raw, &sources); err != nil {
+		return nil, fmt.Errorf("decode catalog_sources: %w", err)
+	}
+	if len(sources) == 0 {
+		return nil, nil
+	}
+	return sources, nil
 }

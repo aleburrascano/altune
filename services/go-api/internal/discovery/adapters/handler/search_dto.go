@@ -117,6 +117,9 @@ func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 	if sr.MBID != "" {
 		extras[domain.ExtraMBID] = sr.MBID
 	}
+	if _, set := extras[domain.ExtraDuration]; !set && sr.Duration > 0 {
+		extras[domain.ExtraDuration] = sr.Duration
+	}
 	if sr.Year != 0 {
 		extras["year"] = sr.Year
 	}
