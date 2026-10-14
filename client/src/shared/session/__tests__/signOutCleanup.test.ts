@@ -1,5 +1,7 @@
 import { QueryClient } from '@tanstack/react-query';
 
+import type * as signOutCleanup from '@shared/session/signOutCleanup';
+
 import {
   currentSessionEpoch,
   hasSignedInUser,
@@ -186,5 +188,109 @@ describe('identity change', () => {
       expect(calls).toHaveLength(2);
       expect(hasSignedInUser()).toBe(false);
     });
+  });
+});
+
+describe('primeSignedInState', () => {
+  function freshRegistry(): Registry {
+    let registry!: Registry;
+    jest.isolateModules(() => {
+      registry = jest.requireActual('@shared/session/signOutCleanup');
+    });
+    return registry;
+  }
+
+  type Registry = typeof signOutCleanup;
+
+  it('reads as signed-in when primed signed-in while unknown', () => {
+    const registry = freshRegistry();
+    expect(registry.hasSignedInUser()).toBe(false);
+
+    registry.primeSignedInState(true);
+
+    expect(registry.hasSignedInUser()).toBe(true);
+  });
+
+  it('reads as signed-out when primed signed-out while unknown', () => {
+    const registry = freshRegistry();
+
+    registry.primeSignedInState(false);
+
+    expect(registry.hasSignedInUser()).toBe(false);
+  });
+
+  it('keeps a real signed-out identity change over a later signed-in prime', () => {
+    const registry = freshRegistry();
+    registry.notifyIdentityChange(null);
+
+    registry.primeSignedInState(true);
+
+    expect(registry.hasSignedInUser()).toBe(false);
+  });
+
+  it('keeps a real signed-in identity change over a later signed-out prime', () => {
+    const registry = freshRegistry();
+    registry.notifyIdentityChange('user-1');
+
+    registry.primeSignedInState(false);
+
+    expect(registry.hasSignedInUser()).toBe(true);
+  });
+});
+
+describe('primeSignedInState, after the first answer', () => {
+  function freshRegistry(): typeof signOutCleanup {
+    let registry!: typeof signOutCleanup;
+    jest.isolateModules(() => {
+      registry = jest.requireActual('@shared/session/signOutCleanup');
+    });
+    return registry;
+  }
+
+  it('ignores a second prime once a first prime has answered signed-in', () => {
+    const registry = freshRegistry();
+    registry.primeSignedInState(true);
+
+    registry.primeSignedInState(false);
+
+    expect(registry.hasSignedInUser()).toBe(true);
+  });
+
+  it('ignores a second prime once a first prime has answered signed-out', () => {
+    const registry = freshRegistry();
+    registry.primeSignedInState(false);
+
+    registry.primeSignedInState(true);
+
+    expect(registry.hasSignedInUser()).toBe(false);
+  });
+
+  it('reads as signed-out when the user signs out after a signed-in prime', () => {
+    const registry = freshRegistry();
+    registry.primeSignedInState(true);
+
+    registry.notifyIdentityChange(null);
+
+    expect(registry.hasSignedInUser()).toBe(false);
+  });
+
+  it('reads as signed-in when the user signs in after a signed-out prime', () => {
+    const registry = freshRegistry();
+    registry.primeSignedInState(false);
+
+    registry.notifyIdentityChange('user-1');
+
+    expect(registry.hasSignedInUser()).toBe(true);
+  });
+
+  it('does not read as signed-in when primed signed-in after a sign-out cleanup ran', () => {
+    const registry = freshRegistry();
+    registry.notifyIdentityChange('user-1');
+    registry.runSignOutCleanups();
+    registry.notifyIdentityChange(null);
+
+    registry.primeSignedInState(true);
+
+    expect(registry.hasSignedInUser()).toBe(false);
   });
 });

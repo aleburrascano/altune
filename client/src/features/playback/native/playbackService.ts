@@ -12,6 +12,7 @@ import { type TrackKey, trackKey, type PlaybackTrack } from '@shared/playback/pl
 import { registerAudioCacheInvalidator } from '@shared/acquisition/state/audioCacheInvalidation';
 import { parseTrackId } from '@shared/apiClient/ids';
 import { playbackPort } from '@features/playback/ports/activePlaybackPort';
+import { primeSignedInUser } from '@shared/auth/primeSignedInUser';
 import { hasSignedInUser, onSignOut } from '@shared/session/signOutCleanup';
 import {
   discardPrefetchedAudio,
@@ -183,6 +184,7 @@ function evictCachedIfParsable(trackId: string): void {
 
 export async function playbackService() {
   registerAudioCacheInvalidator(evictCachedIfParsable);
+  void primeSignedInUser();
 
   TrackPlayer.addEventListener(Event.RemoteDuck, handleRemoteDuck);
 

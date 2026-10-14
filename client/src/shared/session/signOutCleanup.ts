@@ -17,7 +17,9 @@ export type SignOutCleanup = () => void | Promise<void>;
 export type IdentityListener = (userId: string | null) => void;
 
 const cleanups = new Set<SignOutCleanup>();
-let signedIn = false;
+type SignedInState = 'unknown' | 'signed-in' | 'signed-out';
+
+let signedInState: SignedInState = 'unknown';
 
 export function onSignOut(cleanup: SignOutCleanup): () => void {
   cleanups.add(cleanup);
@@ -60,9 +62,13 @@ function warnCleanupFailed(error: unknown): void {
 }
 
 export function hasSignedInUser(): boolean {
-  return signedIn;
+  return signedInState === 'signed-in';
 }
 
 function setSignedInUser(isSignedIn: boolean): void {
-  signedIn = isSignedIn;
+  signedInState = isSignedIn ? 'signed-in' : 'signed-out';
+}
+
+export function primeSignedInState(isSignedIn: boolean): void {
+  if (signedInState === 'unknown') setSignedInUser(isSignedIn);
 }
