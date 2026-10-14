@@ -1,4 +1,4 @@
-import ExpoModulesCore
+public import ExpoModulesCore
 import UIKit
 import WidgetKit
 
