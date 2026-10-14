@@ -5,7 +5,7 @@ import {
   toPending,
   toReady,
   toTrackStatus,
-  type TrackStatus,
+  type WireTrackStatus,
 } from '@shared/apiClient/trackAcquisition';
 
 describe('track acquisition transitions (#933)', () => {
@@ -65,7 +65,9 @@ describe('the per-track status the store keeps (#1758)', () => {
     const settled = { acquisitionStatus: 'ready', failureMessage: 'No source found' };
 
     expectType<
-      Not<IsExactlyAssignable<{ acquisitionStatus: 'ready'; failureMessage: string }, TrackStatus>>
+      Not<
+        IsExactlyAssignable<{ acquisitionStatus: 'ready'; failureMessage: string }, WireTrackStatus>
+      >
     >();
     expect(toTrackStatus(toReady())).not.toEqual(settled);
   });

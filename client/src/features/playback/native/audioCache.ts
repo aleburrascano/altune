@@ -73,7 +73,7 @@ function deleteEach(entries: readonly (Directory | File)[]): void {
   }
 }
 
-export function evictCached(trackId: TrackId): void {
+export function evictCachedFile(trackId: TrackId): void {
   deleteEach(cachedFiles().filter((file) => trackIdOf(file) === trackId));
 }
 

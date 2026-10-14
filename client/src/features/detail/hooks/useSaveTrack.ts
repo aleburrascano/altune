@@ -8,7 +8,7 @@ import {
   toFailed,
   toReady,
   toTrackStatus,
-  type TrackStatus,
+  type WireTrackStatus,
 } from '@shared/apiClient/trackAcquisition';
 import type { CreateTrackRequest, TrackResponse } from '@shared/apiClient/trackResponse';
 import { rememberDownloadMeta } from '@shared/acquisition/downloadStore';
@@ -119,7 +119,7 @@ function recordLibraryAdd(body: CreateTrackRequest, handoff: Handoff): void {
   });
 }
 
-function withStatus(saved: TrackResponse, status: TrackStatus): TrackResponse {
+function withStatus(saved: TrackResponse, status: WireTrackStatus): TrackResponse {
   if (status.acquisitionStatus === 'pending') return saved;
   if (status.acquisitionStatus === 'ready') return { ...saved, ...toReady() };
   return { ...saved, ...toFailed(null, status.failureMessage) };

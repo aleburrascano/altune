@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 import type { TrackId } from '@shared/apiClient/ids';
-import type { TrackStatus as AcquisitionTrackStatus } from '@shared/apiClient/trackAcquisition';
+import type { WireTrackStatus } from '@shared/apiClient/trackAcquisition';
 import { isRetryable } from '@shared/failure/errors';
 import { onSignOut } from '@shared/session/signOutCleanup';
 import {
@@ -10,8 +10,8 @@ import {
 } from '@shared/acquisition/state/acquisitionTelemetry';
 
 export type TrackStatus =
-  | Exclude<AcquisitionTrackStatus, { acquisitionStatus: 'failed' }>
-  | (Extract<AcquisitionTrackStatus, { acquisitionStatus: 'failed' }> & { retryable?: boolean });
+  | Exclude<WireTrackStatus, { acquisitionStatus: 'failed' }>
+  | (Extract<WireTrackStatus, { acquisitionStatus: 'failed' }> & { retryable?: boolean });
 
 export function failedTrackStatus(error: Error): TrackStatus {
   return {

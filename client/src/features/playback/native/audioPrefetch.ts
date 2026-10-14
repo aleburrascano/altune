@@ -13,7 +13,7 @@ import {
   cacheDir,
   evict,
   evictAllCached,
-  evictCached as evictCachedFiles,
+  evictCachedFile,
   extFromUrl,
   findCached,
 } from '@features/playback/native/audioCache';
@@ -40,7 +40,7 @@ export function evictCached(trackId: TrackId): void {
     invalidatedInflight.add(trackId);
     return;
   }
-  evictCachedFiles(trackId);
+  evictCachedFile(trackId);
 }
 
 function evictAgainstLiveQueue(): void {
@@ -268,7 +268,7 @@ function traceStageFailure(trackId: TrackId, err: unknown): void {
 
 function releaseInflight(trackId: TrackId): void {
   inflight.delete(trackId);
-  if (invalidatedInflight.delete(trackId)) evictCachedFiles(trackId);
+  if (invalidatedInflight.delete(trackId)) evictCachedFile(trackId);
 }
 
 async function settlePrefetch(claimed: ClaimedPrefetch): Promise<void> {

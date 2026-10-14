@@ -82,10 +82,7 @@
   "unused_load_data_keys": [],
   "unresolved_imports": [],
   "unlisted_dependencies": [],
-  "duplicate_exports": [
-    "TrackStatus|src/shared/acquisition/trackStatusStore.ts|src/shared/apiClient/trackAcquisition.ts",
-    "evictCached|src/features/playback/native/audioCache.ts|src/features/playback/native/audioPrefetch.ts"
-  ],
+  "duplicate_exports": [],
   "type_only_dependencies": [],
   "test_only_dependencies": [],
   "dev_dependencies_in_production": [],

@@ -7,7 +7,7 @@ import {
   cacheDir,
   evict,
   evictAllCached,
-  evictCached,
+  evictCachedFile,
   extFromUrl,
   findCached,
 } from '@features/playback/native/audioCache';
@@ -63,10 +63,10 @@ describe('buildCacheFileName', () => {
     expect(findCached(asTrackId('t1'), version)?.uri).toBe(cachedUri(name));
   });
 
-  it('writes a name evictCached deletes', () => {
+  it('writes a name evictCachedFile deletes', () => {
     __fs.seedFile(cachedUri(buildCacheFileName('t1', 'v2', '.flac')), 'audio');
 
-    evictCached(asTrackId('t1'));
+    evictCachedFile(asTrackId('t1'));
 
     expect(cachedNames()).toEqual([]);
   });
@@ -82,13 +82,13 @@ describe('findCached', () => {
   });
 });
 
-describe('evictCached', () => {
+describe('evictCachedFile', () => {
   it('deletes every version of one track and leaves other tracks', () => {
     __fs.seedFile(cachedUri('t1.v1.mp3'), 'a');
     __fs.seedFile(cachedUri('t1.v2.flac'), 'b');
     __fs.seedFile(cachedUri('t10.v1.mp3'), 'c');
 
-    evictCached(asTrackId('t1'));
+    evictCachedFile(asTrackId('t1'));
 
     expect(cachedNames()).toEqual(['t10.v1.mp3']);
   });
@@ -96,7 +96,7 @@ describe('evictCached', () => {
   it('swallows a filesystem listing failure', () => {
     __fs.seedDirectory(CACHE_DIR_URI);
     __fs.failNext('list');
-    expect(() => evictCached(asTrackId('t1'))).not.toThrow();
+    expect(() => evictCachedFile(asTrackId('t1'))).not.toThrow();
   });
 
   it('keeps deleting the remaining versions when one delete fails', () => {
@@ -105,7 +105,7 @@ describe('evictCached', () => {
     __fs.seedFile(cachedUri('t1.v3.mp3'), 'c');
     __fs.failNext('delete', new Error('EBUSY'));
 
-    expect(() => evictCached(asTrackId('t1'))).not.toThrow();
+    expect(() => evictCachedFile(asTrackId('t1'))).not.toThrow();
 
     expect(cachedNames()).toEqual(['t1.v1.mp3']);
   });

@@ -12,7 +12,7 @@ type TrackStatusOf<T extends AcquisitionTransition> = T extends unknown
   ? { acquisitionStatus: T['acquisition_status']; failureMessage: T['failure_message'] }
   : never;
 
-export type TrackStatus = TrackStatusOf<AcquisitionTransition>;
+export type WireTrackStatus = TrackStatusOf<AcquisitionTransition>;
 
 export function toPending(): Required<PendingAcquisition> {
   return { acquisition_status: 'pending', failure_reason: null, failure_message: null };
@@ -29,7 +29,7 @@ export function toFailed(
   return { acquisition_status: 'failed', failure_reason: reason, failure_message: message };
 }
 
-export function toTrackStatus(transition: AcquisitionTransition): TrackStatus {
+export function toTrackStatus(transition: AcquisitionTransition): WireTrackStatus {
   switch (transition.acquisition_status) {
     case 'failed':
       return { acquisitionStatus: 'failed', failureMessage: transition.failure_message };
