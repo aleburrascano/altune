@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"slices"
 	"testing"
 )
 
@@ -45,7 +46,7 @@ func TestFind_TheCandidateCarriesWhatThePinnedVideoIs(t *testing.T) {
 	if err != nil || len(got) != 1 {
 		t.Fatalf("Find = %+v, %v", got, err)
 	}
-	if got[0].Title != "2021 Vibes" || got[0].Duration != 0 {
+	if got[0].Title != "2021 Vibes" || got[0].Duration != 0 || !slices.Contains(got[0].Artists, "LUCKI") {
 		t.Errorf("candidate = %+v, want the pinned video's own title and no copied length", got[0])
 	}
 }
@@ -184,7 +185,7 @@ func TestFind_TheCatalogLinkIsThePinnedVideo(t *testing.T) {
 		Identity: ports.RecordingIdentity{Sources: []ports.ProviderRef{{Provider: "youtube", ExternalID: "dQw4w9WgXcQ"}}},
 	}
 
-	got, err := NewSource(&recordingFetcher{}).Find(context.Background(), req)
+	got, err := NewSource(&recordingFetcher{}, stubLookup{}).Find(context.Background(), req)
 	if err != nil || len(got) != 1 {
 		t.Fatalf("Find = %v, %v", got, err)
 	}

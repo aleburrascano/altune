@@ -57,6 +57,7 @@ func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.Audio
 
 	return []ports.AudioCandidate{{
 		Title:      observed.Title,
+		Artists:    observed.Artists,
 		Explicit:   observed.Explicit,
 		URL:        watchURLPrefix + source.ExternalID,
 		Channel:    catalogChannel,
