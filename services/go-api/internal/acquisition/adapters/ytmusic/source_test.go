@@ -1,10 +1,62 @@
 package ytmusic
 
 import (
+	"altune/go-api/internal/acquisition/adapters/ytmsearch"
 	"altune/go-api/internal/acquisition/ports"
 	"context"
+	"errors"
+	"os"
 	"testing"
 )
+
+type stubLookup struct {
+	watch ytmsearch.Watch
+	err   error
+}
+
+func (l stubLookup) Watch(context.Context, string) (ytmsearch.Watch, error) {
+	return l.watch, l.err
+}
+
+func observedFixture(t *testing.T, videoID string) stubLookup {
+	t.Helper()
+	raw, err := os.ReadFile("../ytmsearch/testdata/next_" + videoID + ".json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	watch, err := ytmsearch.ParseWatch(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return stubLookup{watch: watch}
+}
+
+func pinnedTo(title, videoID string) ports.FindRequest {
+	return ports.FindRequest{
+		Title:    title,
+		Artist:   "slayr",
+		Identity: ports.RecordingIdentity{Duration: 151, Sources: []ports.ProviderRef{{Provider: "youtube", ExternalID: videoID}}},
+	}
+}
+
+func TestFind_TheCandidateCarriesWhatThePinnedVideoIs(t *testing.T) {
+	src := NewSource(&recordingFetcher{}, observedFixture(t, "88oFlVnMEsc"))
+	got, err := src.Find(context.Background(), pinnedTo("remember them days", "88oFlVnMEsc"))
+	if err != nil || len(got) != 1 {
+		t.Fatalf("Find = %+v, %v", got, err)
+	}
+	if got[0].Title != "2021 Vibes" || got[0].Duration != 0 {
+		t.Errorf("candidate = %+v, want the pinned video's own title and no copied length", got[0])
+	}
+}
+
+func TestFind_AFailedLookupLeavesTheFactsUnknown(t *testing.T) {
+	src := NewSource(&recordingFetcher{}, stubLookup{err: errors.New("ytm down")})
+	got, err := src.Find(context.Background(), pinnedTo("remember them days", "88oFlVnMEsc"))
+	if err != nil || len(got) != 1 || got[0].Title != "" || got[0].Duration != 0 {
+		t.Fatalf("Find = %+v, %v", got, err)
+	}
+}
 
 type recordingFetcher struct {
 	gotURL string
@@ -17,7 +69,7 @@ func (f *recordingFetcher) Download(_ context.Context, url, outDir string) (port
 }
 
 func TestFind_ResolvesFromTheIdentityVideoID(t *testing.T) {
-	src := NewSource(&recordingFetcher{})
+	src := NewSource(&recordingFetcher{}, stubLookup{})
 	req := ports.FindRequest{
 		Title:  "Blinding Lights",
 		Artist: "The Weeknd",
@@ -40,8 +92,8 @@ func TestFind_ResolvesFromTheIdentityVideoID(t *testing.T) {
 	if !got[0].Resolved {
 		t.Error("a catalog-resolved candidate must be marked Resolved so it skips the resemblance gate")
 	}
-	if got[0].Duration != 200 {
-		t.Errorf("Duration = %v, want the catalog duration", got[0].Duration)
+	if got[0].Duration != 0 || got[0].Title != "" {
+		t.Errorf("candidate = %+v, want no facts copied from the request", got[0])
 	}
 }
 
@@ -58,7 +110,7 @@ func TestFind_RejectsAVideoIDThatIsNotAWatchID(t *testing.T) {
 
 	for _, videoID := range hostile {
 		t.Run(videoID, func(t *testing.T) {
-			src := NewSource(&recordingFetcher{})
+			src := NewSource(&recordingFetcher{}, stubLookup{})
 			got, err := src.Find(context.Background(), ports.FindRequest{
 				Title: "Song",
 				Identity: ports.RecordingIdentity{
@@ -76,7 +128,7 @@ func TestFind_RejectsAVideoIDThatIsNotAWatchID(t *testing.T) {
 }
 
 func TestFind_NoIdentityMeansNoCandidates(t *testing.T) {
-	src := NewSource(&recordingFetcher{})
+	src := NewSource(&recordingFetcher{}, stubLookup{})
 
 	got, err := src.Find(context.Background(), ports.FindRequest{Title: "T", Artist: "A"})
 	if err != nil {
@@ -88,7 +140,7 @@ func TestFind_NoIdentityMeansNoCandidates(t *testing.T) {
 }
 
 func TestFind_IgnoresNonYouTubeSources(t *testing.T) {
-	src := NewSource(&recordingFetcher{})
+	src := NewSource(&recordingFetcher{}, stubLookup{})
 	req := ports.FindRequest{
 		Title:  "T",
 		Artist: "A",
@@ -105,7 +157,7 @@ func TestFind_IgnoresNonYouTubeSources(t *testing.T) {
 
 func TestFetch_DelegatesToTheDownloader(t *testing.T) {
 	fetcher := &recordingFetcher{}
-	src := NewSource(fetcher)
+	src := NewSource(fetcher, stubLookup{})
 
 	fetched, err := src.Fetch(context.Background(),
 		ports.AudioCandidate{URL: "https://music.youtube.com/watch?v=xyz"}, "/tmp/out")
@@ -121,7 +173,7 @@ func TestFetch_DelegatesToTheDownloader(t *testing.T) {
 }
 
 func TestName(t *testing.T) {
-	if got := NewSource(nil).Name(); got != SourceName {
+	if got := NewSource(nil, nil).Name(); got != SourceName {
 		t.Errorf("Name() = %q, want %q", got, SourceName)
 	}
 }

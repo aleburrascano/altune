@@ -1,6 +1,7 @@
 package ytmusic
 
 import (
+	"altune/go-api/internal/acquisition/adapters/ytmsearch"
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"context"
@@ -21,14 +22,19 @@ type audioFetcher interface {
 	Download(ctx context.Context, url string, outDir string) (ports.FetchedAudio, error)
 }
 
+type videoLookup interface {
+	Watch(ctx context.Context, videoID string) (ytmsearch.Watch, error)
+}
+
 var _ ports.AudioSource = (*Source)(nil)
 
 type Source struct {
 	fetcher audioFetcher
+	lookup  videoLookup
 }
 
-func NewSource(fetcher audioFetcher) *Source {
-	return &Source{fetcher: fetcher}
+func NewSource(fetcher audioFetcher, lookup videoLookup) *Source {
+	return &Source{fetcher: fetcher, lookup: lookup}
 }
 
 func (s *Source) Name() acqdomain.SourceName { return SourceName }
@@ -47,14 +53,25 @@ func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.Audio
 	slog.InfoContext(ctx, "acquisition.ytmusic_resolved",
 		"video_id", source.ExternalID, "title", req.Title)
 
+	observed := s.observe(ctx, source.ExternalID)
+
 	return []ports.AudioCandidate{{
-		Title:      req.Title,
-		Duration:   req.Identity.Duration,
+		Title:      observed.Title,
+		Explicit:   observed.Explicit,
 		URL:        watchURLPrefix + source.ExternalID,
 		Channel:    catalogChannel,
 		Categories: []string{"Music"},
 		Resolved:   true,
 	}}, nil
+}
+
+func (s *Source) observe(ctx context.Context, videoID string) ytmsearch.Watch {
+	watch, err := s.lookup.Watch(ctx, videoID)
+	if err != nil {
+		slog.WarnContext(ctx, "acquisition.ytmusic_lookup_failed", "video_id", videoID, "error", err)
+		return ytmsearch.Watch{}
+	}
+	return watch
 }
 
 func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
