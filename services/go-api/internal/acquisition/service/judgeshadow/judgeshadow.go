@@ -7,6 +7,8 @@ import (
 	"log/slog"
 )
 
+var choose = judge.Choose
+
 func Log(ctx context.Context, target judge.Target, trackID string, pipelinePick ports.AudioCandidate, candidates []ports.AudioCandidate) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -14,7 +16,7 @@ func Log(ctx context.Context, target judge.Target, trackID string, pipelinePick 
 		}
 	}()
 	judgeURL, reason := "", "no candidate accepted"
-	if best, decision, found := judge.Choose(target, observed(candidates)); found {
+	if best, decision, found := choose(target, observed(candidates)); found {
 		judgeURL, reason = best.URL, decision.Reason
 	}
 	slog.InfoContext(ctx, "acquisition.judge_shadow",
