@@ -28,7 +28,7 @@ func deezerArtistServer(t *testing.T) *httptest.Server {
 		case "/2.0/artist/6/top":
 			_, _ = w.Write([]byte(`{"data":[{"title":"Limelight"}]}`))
 		case "/2.0/search/track":
-			if !strings.Contains(r.URL.Query().Get("q"), `artist:"Rush" track:"Tom Sawyer"`) {
+			if r.URL.Query().Get("q") != "Rush Tom Sawyer" {
 				t.Errorf("q = %q", r.URL.Query().Get("q"))
 			}
 			_, _ = w.Write([]byte(`{"data":[
@@ -78,6 +78,22 @@ func TestDeezerArtistSource_SixPlausibleRecordingsAreTooManyToTellApart(t *testi
 	_, err := fastDeezerArtists(srv).Songs(t.Context(), providerArtist{ID: "6", Name: "Rush"}, catalogView{}, rushTomSawyer(), domain.CleanSearchKeys("Tom Sawyer", "Rush", ""))
 	if !errors.Is(err, errTooManyMatches) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestDeezerArtistSource_SearchesSongsWithAPlainQueryNotFieldSyntax(t *testing.T) {
+	var query string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		query = r.URL.Query().Get("q")
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}))
+	defer srv.Close()
+	keys := domain.CleanSearchKeys("Slow Down", "LUCKI", "")
+	if _, err := fastDeezerArtists(srv).Songs(t.Context(), providerArtist{ID: "1", Name: "LUCKI"}, catalogView{}, rushTomSawyer(), keys); err != nil {
+		t.Fatal(err)
+	}
+	if query != "LUCKI Slow Down" || strings.ContainsAny(query, `:"`) {
+		t.Errorf("q = %q, want the plain artist and title", query)
 	}
 }
 

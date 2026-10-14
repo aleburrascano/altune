@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"slices"
 	"strconv"
-	"strings"
 )
 
 const (
@@ -100,7 +99,7 @@ func titlesOf(hits []deezerTitleHit) []string {
 }
 
 func (d deezerArtistSource) Songs(ctx context.Context, artist providerArtist, _ catalogView, t libraryTrack, keys domain.SearchKeys) ([]candidate, error) {
-	query := `artist:"` + withoutQuotes(keys.Artist) + `" track:"` + withoutQuotes(keys.Title) + `"`
+	query := keys.Artist + " " + keys.Title
 	hits, err := deezerList[deezerSongHit](ctx, d.client, "/2.0/search/track?q="+url.QueryEscape(query)+"&limit="+strconv.Itoa(deezerSongSearchLimit))
 	if err != nil {
 		return nil, err
@@ -150,5 +149,3 @@ func (d deezerArtistSource) fullTrack(ctx context.Context, id int64) ([]candidat
 	}
 	return []candidate{deezerCandidate(body)}, nil
 }
-
-func withoutQuotes(text string) string { return strings.ReplaceAll(text, `"`, " ") }

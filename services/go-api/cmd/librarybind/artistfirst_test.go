@@ -312,6 +312,15 @@ func TestArtistFirst_ASourceWithTooManyMatchesRefusesTheBind(t *testing.T) {
 	}
 }
 
+func TestArtistFirst_ASourceNamingTwoISRCsForTheFileRefusesTheBind(t *testing.T) {
+	twoISRCs := rushSource(sourceDeezer, rushSong("d1", nil), rushSong("d2", func(c *candidate) { c.ISRC = "CAR198100777" }))
+	got, err := bindWithArtistFirst(t, rushTomSawyer(), rushHeld(), musicBrainzKnowing(rushSong("mb-1", nil)),
+		twoISRCs, rushSource(sourceApple, rushSong("a1", nil)))
+	if err != nil || got.Found.Status != statusUnbound {
+		t.Fatalf("got %+v, %v", got.Found, err)
+	}
+}
+
 func TestChooseArtist_CountsEachHeldTrackOnce(t *testing.T) {
 	owned := holdings{{Album: "live", Title: "intro"}}
 	namesake := artistOption{providerArtist: providerArtist{ID: "1", Name: "Rush Band"}, view: catalogView{Albums: []string{"Live"}, Titles: []string{"Intro"}}}

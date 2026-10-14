@@ -63,8 +63,21 @@ func outcomeIgnoringISRC(t libraryTrack, from source, found []candidate, lookupE
 	for _, c := range identified {
 		outcome.Candidates = append(outcome.Candidates, ignoringISRC(t, c))
 	}
-	outcome.Winner, outcome.Ambiguous = pickWinner(outcome.Candidates)
+	outcome.Winner, outcome.Ambiguous = pickWinner(t.FileSeconds, outcome.Candidates)
+	if namesSeveralISRCs(outcome.Candidates) {
+		outcome.Winner, outcome.Ambiguous = "", true
+	}
 	return outcome
+}
+
+func namesSeveralISRCs(all []judged) bool {
+	var isrcs []string
+	for _, j := range all {
+		if isrc := canonicalISRC(j.ISRC); j.isGuarded() && !slices.Contains(isrcs, isrc) {
+			isrcs = append(isrcs, isrc)
+		}
+	}
+	return len(isrcs) > 1
 }
 
 var errTooManyMatches = errors.New("more plausible recordings than can be told apart")
