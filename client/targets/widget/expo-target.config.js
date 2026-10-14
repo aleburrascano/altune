@@ -1,6 +1,7 @@
 module.exports = {
   type: 'widget',
-  name: 'AltuneCarWidget',
+  name: 'AltuneWidget',
   displayName: 'Altune',
   deploymentTarget: '17.0',
+  entitlements: {},
 };
