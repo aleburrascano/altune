@@ -49,6 +49,7 @@ func TestRecordingLabels_NameADifferentRecording(t *testing.T) {
 		"Con te partirò (2016 Version)":                              "version",
 		"Take On Me (2017 Acoustic)":                                 "acoustic",
 		"Hotel California (2013 Remaster)":                           "",
+		"Novacane (Explicit Version)":                                "",
 		"Everybody Wants To Rule The World (Live From Franklin, TN)": "live",
 	} {
 		if got := strings.Join(RecordingLabels(title), " "); got != want {
