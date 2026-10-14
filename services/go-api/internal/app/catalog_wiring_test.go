@@ -300,6 +300,16 @@ func TestAudioSources_YouTubeMusicSearchRunsFirstAndYtDlpIsTheFallback(t *testin
 	}
 }
 
+func TestAudioSources_TheSongsSearchOutranksTheCatalogLinkForTheSameVideo(t *testing.T) {
+	a := &App{cfg: &config.Config{YtMusicEnabled: true, YtDLPEnabled: true}}
+	first := sourceNames(a.audioSourcesFor(t.Context(), ytdlp.NewYtDlpAudioSearcher("", "", "")).first)
+
+	if len(first) != 2 || first[0] != ytmsearch.SourceName || first[1] != ytmusic.SourceName {
+		t.Errorf("first tier = %v, want [%s %s]: duplicates keep the earlier source, and only the songs search carries the video's own length",
+			first, ytmsearch.SourceName, ytmusic.SourceName)
+	}
+}
+
 func sourceNames(sources []acqPorts.AudioSource) []acqdomain.SourceName {
 	names := make([]acqdomain.SourceName, 0, len(sources))
 	for _, s := range sources {

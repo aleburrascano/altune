@@ -308,7 +308,7 @@ func (a *App) audioSourcesFor(ctx context.Context, searcher *ytdlp.YtDlpAudioSea
 	var tiers sourceTiers
 	if a.cfg.YtMusicEnabled {
 		songs := ytmsearch.New(ytmsearch.Config{MinInterval: ytmSearchMinInterval, Timeout: ytmSearchTimeout})
-		tiers.first = append(tiers.first, ytmusic.NewSource(searcher), ytmsearch.NewSource(songs, searcher))
+		tiers.first = append(tiers.first, ytmsearch.NewSource(songs, searcher), ytmusic.NewSource(searcher))
 	} else {
 		slog.InfoContext(ctx, "acquisition: ytmusic source disabled via YTMUSIC_ENABLED")
 	}
