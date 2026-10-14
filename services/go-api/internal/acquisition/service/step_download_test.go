@@ -485,6 +485,36 @@ func TestDownloadStep_AllCandidatesWrongDuration_Errors(t *testing.T) {
 	}
 }
 
+func TestDownloadStep_AnOfficialTrackIsCheckedAgainstItsOwnLength(t *testing.T) {
+	cases := map[string]struct {
+		fileSeconds float64
+		accepted    bool
+	}{
+		"file matches the official length, saved length is stale": {fileSeconds: 168, accepted: true},
+		"file is shorter than the official length":                {fileSeconds: 122, accepted: false},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			step := NewDownloadStep(&fileWritingSearcher{writeFile: true},
+				WithDownloadProber(&queueProber{durations: []float64{tc.fileSeconds}}))
+			ac := &AcquisitionContext{
+				Track: TrackRef{Title: "Demigod", Artist: "SLAYR", Duration: 122},
+				Ranked: []ports.AudioCandidate{
+					{URL: "https://music.youtube.com/watch?v=official", Duration: 168, Resolved: true},
+				},
+			}
+
+			_, err := step.Execute(context.Background(), ac, afterSelect{})
+			if ac.TempPath != "" {
+				defer os.RemoveAll(filepath.Dir(ac.TempPath))
+			}
+			if accepted := err == nil && ac.TempPath != ""; accepted != tc.accepted {
+				t.Fatalf("accepted = %v (err %v), want %v", accepted, err, tc.accepted)
+			}
+		})
+	}
+}
+
 func TestDownloadStep_NoExpectedDuration_SkipsVerification(t *testing.T) {
 	searcher := &fileWritingSearcher{writeFile: true}
 	prober := &queueProber{durations: []float64{840}}

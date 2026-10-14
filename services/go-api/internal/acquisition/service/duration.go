@@ -41,6 +41,20 @@ func (ac *AcquisitionContext) candidateDurationPlausible(candidate ports.AudioCa
 	return ac.durationAcceptable(candidate.Duration)
 }
 
+func expectedLength(ac *AcquisitionContext, candidate ports.AudioCandidate) float64 {
+	if candidate.Resolved && candidate.Duration > 0 {
+		return candidate.Duration
+	}
+	return ac.Track.Duration
+}
+
+func (ac *AcquisitionContext) fileLengthAcceptable(candidate ports.AudioCandidate, actual float64) bool {
+	if candidate.Resolved && candidate.Duration > 0 {
+		return durationWithinAuthoritativeTolerance(candidate.Duration, actual)
+	}
+	return ac.durationAcceptable(actual)
+}
+
 func (ac *AcquisitionContext) durationAcceptable(actual float64) bool {
 	saved, resolved := ac.Track.Duration, ac.Identity.Duration
 	if ac.lengthCorroborated() {

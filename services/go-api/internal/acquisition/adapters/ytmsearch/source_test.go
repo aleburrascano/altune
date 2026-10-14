@@ -59,12 +59,11 @@ func TestSource_AStrongArtTrackHitIsOneResolvedCandidate(t *testing.T) {
 
 func TestSource_NoCandidateUnlessEveryCheckPasses(t *testing.T) {
 	cases := map[string]Song{
-		"music video":         {VideoID: "u4GAeAYGAqE", Title: "2021 Vibes", Artists: []string{"LUCKI"}, DurationSeconds: 125, Type: VideoTypeOMV},
-		"user upload":         {VideoID: "abcdefghijk", Title: "2021 Vibes", Artists: []string{"LUCKI"}, DurationSeconds: 125, Type: VideoTypeUGC},
-		"other title":         atv("aaaaaaaaaaa", "Karma A Bitch", []string{"LUCKI"}, 125, true),
-		"remix of the title":  atv("bbbbbbbbbbb", "2021 Vibes (Remix)", []string{"LUCKI"}, 125, true),
-		"other artist":        atv("ccccccccccc", "2021 Vibes", []string{"Someone Else"}, 125, true),
-		"duration 4 s longer": atv("ddddddddddd", "2021 Vibes", []string{"LUCKI"}, 129, true),
+		"music video":        {VideoID: "u4GAeAYGAqE", Title: "2021 Vibes", Artists: []string{"LUCKI"}, DurationSeconds: 125, Type: VideoTypeOMV},
+		"user upload":        {VideoID: "abcdefghijk", Title: "2021 Vibes", Artists: []string{"LUCKI"}, DurationSeconds: 125, Type: VideoTypeUGC},
+		"other title":        atv("aaaaaaaaaaa", "Karma A Bitch", []string{"LUCKI"}, 125, true),
+		"remix of the title": atv("bbbbbbbbbbb", "2021 Vibes (Remix)", []string{"LUCKI"}, 125, true),
+		"other artist":       atv("ccccccccccc", "2021 Vibes", []string{"Someone Else"}, 125, true),
 	}
 	for name, song := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -124,10 +123,28 @@ func TestSource_OnlyTheTopFiveResultsAreConsidered(t *testing.T) {
 	}
 }
 
-func TestSource_AnUnknownTrackDurationYieldsNothing(t *testing.T) {
-	req := ports.FindRequest{Title: "2021 Vibes", Artist: "LUCKI"}
-	if got := find(t, []Song{atv("LMDLNLM6Ji8", "2021 Vibes", []string{"LUCKI"}, 125, true)}, req); len(got) != 0 {
-		t.Errorf("candidates = %+v, want none without a duration to check", got)
+func TestSource_TheSavedLengthDoesNotGateTheMatch(t *testing.T) {
+	cases := map[string]float64{
+		"saved length from an old bad download": 122,
+		"no saved length":                       0,
+	}
+	for name, saved := range cases {
+		t.Run(name, func(t *testing.T) {
+			req := ports.FindRequest{Title: "Demigod", Artist: "SLAYR", Duration: saved}
+			if got := find(t, []Song{atv("jjjjjjjjjjj", "Demigod", []string{"slayr"}, 168, true)}, req); len(got) != 1 {
+				t.Errorf("candidates = %+v, want the official track", got)
+			}
+		})
+	}
+}
+
+func TestSource_TheClosestLengthBreaksATie(t *testing.T) {
+	got := find(t, []Song{
+		atv("kkkkkkkkkkk", "Human", []string{"The Human League"}, 300, false),
+		atv("lllllllllll", "Human", []string{"The Human League"}, 266, false),
+	}, ports.FindRequest{Title: "Human", Artist: "The Human League", Duration: 264})
+	if len(got) != 1 || got[0].URL != "https://music.youtube.com/watch?v=lllllllllll" {
+		t.Errorf("candidates = %+v, want the 266 s track closest to the saved length", got)
 	}
 }
 

@@ -471,7 +471,7 @@ func (s *DownloadStep) verifyDuration(
 	if s.prober == nil {
 		return false, 0, nil
 	}
-	if ac.Track.Duration <= 0 {
+	if expectedLength(ac, candidate) <= 0 {
 		s.recordSkip(ports.SkipNoDuration)
 		return false, 0, nil
 	}
@@ -492,7 +492,7 @@ func (s *DownloadStep) probeDuration(
 			"error", redact.LogError(err))
 		s.recordSkip(ports.SkipProbeFailed)
 		return false, 0, nil
-	case !ac.durationAcceptable(actual):
+	case !ac.fileLengthAcceptable(candidate, actual):
 		return false, 0, durationRejection(ctx, ac, candidate, actual)
 	default:
 		return true, actual, nil
@@ -510,14 +510,14 @@ func durationRejection(
 		"url", candidate.URL,
 		"source", candidate.Source,
 		"actual_duration", actual,
-		"expected_duration", ac.Track.Duration,
+		"expected_duration", expectedLength(ac, candidate),
 		"authoritative", ac.Identity.Duration > 0,
 	)
 	return &downloadRejection{
 		stage:  RejectionDuration,
-		reason: fmt.Sprintf("duration %.0fs vs expected %.0fs", actual, ac.Track.Duration),
+		reason: fmt.Sprintf("duration %.0fs vs expected %.0fs", actual, expectedLength(ac, candidate)),
 		err: fmt.Errorf("candidate %q duration %.0fs != expected %.0fs",
-			candidate.URL, actual, ac.Track.Duration),
+			candidate.URL, actual, expectedLength(ac, candidate)),
 	}
 }
 
