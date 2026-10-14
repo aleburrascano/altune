@@ -21,7 +21,6 @@ M10 src/shared/ui/displayFormat.ts loose file in shared/ui
 M10 src/shared/ui/haptics.ts loose file in shared/ui
 M10 src/shared/ui/haptics.web.ts loose file in shared/ui
 M10 src/shared/ui/useAnnounceChange.ts loose file in shared/ui
-M11 src/chrome not an allowed top-level entry
 M8 src/features/auth/hooks/useAsyncAuthAction.ts loose file in hooks/
 M8 src/features/auth/hooks/useAuthDeepLink.ts loose file in hooks/
 M8 src/features/auth/hooks/useAuthDeepLink.web.ts loose file in hooks/

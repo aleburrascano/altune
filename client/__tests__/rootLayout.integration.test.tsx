@@ -11,14 +11,14 @@ import type { PlaybackContextValue } from '@shared/playback/playbackContextValue
 import { makeIdlePlayback } from '@testing/factories';
 import { useKeyboardShortcuts } from '@shared/ui/keyboard/useKeyboardShortcuts';
 
-import { AppChrome } from '@/chrome/AppChrome';
+import { AppChrome } from '@/shell/AppChrome';
 import TabsLayout from '@/app/(tabs)/_layout';
 import DiscoverLayout from '@/app/(tabs)/discover/_layout';
 import LibraryLayout from '@/app/(tabs)/library/_layout';
 import SettingsLayout from '@/app/(tabs)/settings/_layout';
 import PlayerLayout from '@/app/player/_layout';
-import { FeaturePorts } from '@/chrome/FeaturePorts';
-import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
+import { FeaturePorts } from '@/wiring/FeaturePorts';
+import { httpFeaturePorts } from '@/wiring/httpFeaturePorts';
 import { setPlatformOS } from '@testing/setPlatformOS';
 
 const { __http } = require('@testing/doubles/fetch.js');

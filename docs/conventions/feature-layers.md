@@ -29,8 +29,9 @@ React or the platform. Library (`client/src/features/library`) is the worked exa
 3. Write the HTTP adapter as an object literal that forwards each call, as in
    `adapters/http/httpLibraryPort.ts`.
 4. Put a context in `ports/LibraryPortProvider.tsx` with no default: `useLibraryPort()` throws
-   when no provider is mounted. Add the port to `FeaturePortSet` in `client/src/chrome/FeaturePorts.tsx`
-   and its HTTP adapter to `httpFeaturePorts`; the root layout passes that set to `FeaturePorts`,
+   when no provider is mounted. Add the port to `FeaturePortSet` in `client/src/wiring/httpFeaturePorts.ts`
+   and its HTTP adapter to `httpFeaturePorts`; the root layout passes that set to `FeaturePorts`
+   (`client/src/wiring/FeaturePorts.tsx`),
    and tests pass a fake through the same `port` prop on `LibraryPortProvider`.
 5. Write a memory fake, `__tests__/memoryLibraryPort.ts`.
 6. Write a `describe.each` contract test, `__tests__/libraryPortContract.test.ts`, that runs the

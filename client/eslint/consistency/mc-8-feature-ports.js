@@ -25,7 +25,8 @@ module.exports = {
       ignores: [
         'src/shared/**',
         'src/app/**',
-        'src/chrome/**',
+        'src/wiring/**',
+        'src/shell/**',
         'src/features/*/adapters/**',
         '**/__tests__/**',
       ],

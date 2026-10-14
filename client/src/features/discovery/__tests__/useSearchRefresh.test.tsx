@@ -7,8 +7,8 @@ import { useDiscoverSearch } from '@features/discovery/hooks/useDiscoverSearch';
 import { useRefreshFromFirstPage } from '@features/discovery/hooks/useSearchRefresh';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { signInTestUser } from '@testing/signInTestUser';
-import { FeaturePorts } from '@/chrome/FeaturePorts';
-import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
+import { FeaturePorts } from '@/wiring/FeaturePorts';
+import { httpFeaturePorts } from '@/wiring/httpFeaturePorts';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

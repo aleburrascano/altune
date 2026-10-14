@@ -9,8 +9,8 @@ import { PlaybackContext } from '@shared/playback/usePlayback';
 
 import { DetailPortProvider } from '@features/detail/ports/DetailPortProvider';
 import type { DetailPort } from '@features/detail/ports/detailPort';
-import { FeaturePorts } from '@/chrome/FeaturePorts';
-import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
+import { FeaturePorts } from '@/wiring/FeaturePorts';
+import { httpFeaturePorts } from '@/wiring/httpFeaturePorts';
 
 interface WrapperProps {
   children: React.ReactNode;

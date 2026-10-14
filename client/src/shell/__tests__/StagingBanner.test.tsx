@@ -5,7 +5,7 @@ import type { ComponentType, ReactNode } from 'react';
 import { supabase } from '@shared/auth/supabaseClient';
 import { ThemeProvider } from '@shared/ui/theme';
 
-import { StagingBanner } from '@/chrome/StagingBanner';
+import { StagingBanner } from '@/shell/StagingBanner';
 
 jest.mock('expo-router', () => {
   const { View } = require('react-native');

@@ -10,8 +10,8 @@ import {
   useSuggestionVisibility,
 } from '@features/discovery/hooks/useSuggestions';
 import { signInTestUser } from '@testing/signInTestUser';
-import { FeaturePorts } from '@/chrome/FeaturePorts';
-import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
+import { FeaturePorts } from '@/wiring/FeaturePorts';
+import { httpFeaturePorts } from '@/wiring/httpFeaturePorts';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

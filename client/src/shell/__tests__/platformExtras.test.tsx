@@ -7,9 +7,9 @@ import type { PlaybackContextValue } from '@shared/playback/playbackContextValue
 import { makeIdlePlayback } from '@testing/factories';
 import { PlaybackContext } from '@shared/playback/usePlayback';
 import { pageTitleFor } from '@shared/ui/navigation/tabRoutes';
-import * as base from '@/chrome/platformExtras';
-import * as android from '@/chrome/platformExtras.android';
-import * as web from '@/chrome/platformExtras.web';
+import * as base from '@/shell/platformExtras';
+import * as android from '@/shell/platformExtras.android';
+import * as web from '@/shell/platformExtras.web';
 
 import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
 import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';

@@ -10,7 +10,7 @@ import { DownloadsSheet } from '@shared/acquisition/ui/DownloadsSheet';
 import { MiniPlayer } from '@features/playback';
 import { useWideWebLayout } from '@shared/ui/layout/useLayoutMode';
 import { TabBar } from '@shared/ui/navigation/TabBar';
-import { TabsTitle } from '@/chrome/platformExtras';
+import { TabsTitle } from '@/shell/platformExtras';
 
 function ActivityDock() {
   const downloads = useActiveDownloadItems();

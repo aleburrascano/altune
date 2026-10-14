@@ -128,7 +128,7 @@ export default {
     overrides: [
       {
         files: [
-          'src/chrome/platformExtras.tsx',
+          'src/shell/platformExtras.tsx',
           'src/features/auth/hooks/useAuthDeepLink.ts',
           'src/features/auth/hooks/useOAuth.ts',
           'src/features/auth/ui/AuthCallbackScreen.tsx',

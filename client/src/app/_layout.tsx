@@ -13,7 +13,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { createQueryClient } from '@shared/query/createQueryClient';
-import { StagingBanner } from '@/chrome/StagingBanner';
+import { StagingBanner } from '@/shell/StagingBanner';
 import {
   AuthGate,
   AuthPortProvider,
@@ -32,10 +32,10 @@ import { useWideWebLayout } from '@shared/ui/layout/useLayoutMode';
 import { ScreenBoundary } from '@shared/ui/ScreenBoundary';
 import { ThemeProvider, themes } from '@shared/ui/theme';
 import { useThemePreference } from '@shared/ui/theme/themePreference';
-import { AppChrome } from '@/chrome/AppChrome';
-import { FeaturePorts } from '@/chrome/FeaturePorts';
-import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
-import { PlaybackShortcuts, SystemNavigationBar } from '@/chrome/platformExtras';
+import { AppChrome } from '@/shell/AppChrome';
+import { FeaturePorts } from '@/wiring/FeaturePorts';
+import { httpFeaturePorts } from '@/wiring/httpFeaturePorts';
+import { PlaybackShortcuts, SystemNavigationBar } from '@/shell/platformExtras';
 
 startPlaybackService();
 

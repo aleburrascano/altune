@@ -12,8 +12,8 @@ import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 import { createMemorySettingsPort } from '@features/settings/__tests__/memorySettingsPort';
 import { useSettingsPort } from '@features/settings/ports/SettingsPortProvider';
 
-import { FeaturePorts } from '@/chrome/FeaturePorts';
-import { httpFeaturePorts, type FeaturePortSet } from '@/chrome/httpFeaturePorts';
+import { FeaturePorts } from '@/wiring/FeaturePorts';
+import { httpFeaturePorts, type FeaturePortSet } from '@/wiring/httpFeaturePorts';
 
 function useEveryPort(): FeaturePortSet {
   return {

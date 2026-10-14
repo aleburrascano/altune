@@ -6,7 +6,7 @@ import { FavoritesPortProvider } from '@features/discovery/ports/FavoritesPortPr
 import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
 import { SettingsPortProvider } from '@features/settings/ports/SettingsPortProvider';
 
-import type { FeaturePortSet } from '@/chrome/httpFeaturePorts';
+import type { FeaturePortSet } from '@/wiring/httpFeaturePorts';
 
 interface FeaturePortsProps {
   ports: FeaturePortSet;

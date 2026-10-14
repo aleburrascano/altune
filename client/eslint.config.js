@@ -52,11 +52,13 @@ const featureIsolationZones = [
     from: './src/features',
     message: 'src/shared must not import from src/features.',
   },
-  ...['shared', 'features'].map((layer) => ({
-    target: `./src/${layer}`,
-    from: './src/chrome',
-    message: `src/${layer} must not import from src/chrome: layering is app, chrome, features, shared.`,
-  })),
+  ...['shared', 'features'].flatMap((layer) =>
+    ['shell', 'wiring'].map((upper) => ({
+      target: `./src/${layer}`,
+      from: `./src/${upper}`,
+      message: `src/${layer} must not import from src/${upper}: layering is app, shell/wiring, features, shared.`,
+    })),
+  ),
 ];
 
 const typeScriptPluginRegisteredDirectlyRatherThanViaExpoConfig = {

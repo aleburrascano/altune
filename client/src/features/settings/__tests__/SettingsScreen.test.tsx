@@ -7,8 +7,8 @@ import { NetworkError } from '@shared/apiClient';
 import { signInTestUser } from '@testing/signInTestUser';
 
 import { SettingsScreen } from '@features/settings/ui/SettingsScreen';
-import { FeaturePorts } from '@/chrome/FeaturePorts';
-import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
+import { FeaturePorts } from '@/wiring/FeaturePorts';
+import { httpFeaturePorts } from '@/wiring/httpFeaturePorts';
 
 const RETRY_BACKOFF_BASE_MS = 1_000;
 
