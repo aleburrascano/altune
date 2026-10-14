@@ -29,10 +29,16 @@ function nonEmptyOrUndefined<T extends string | unknown[]>(value: T | null): T |
   return value !== null && value.length > 0 ? value : undefined;
 }
 
+const MBID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function canonicalMbid(mbid: string | null): string | undefined {
+  return mbid !== null && MBID.test(mbid) ? mbid : undefined;
+}
+
 function pinnedRecording(picked: DiscoveryResult, te: TrackExtras): PinnedRecording {
   const explicit = picked.extras['explicit'];
   return {
-    mbid: nonEmptyOrUndefined(te.mbid),
+    mbid: canonicalMbid(te.mbid),
     explicit: isBoolean(explicit) ? explicit : undefined,
     sources: nonEmptyOrUndefined(catalogSources(picked)),
   };

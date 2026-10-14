@@ -18,6 +18,8 @@ import {
 } from '@features/detail/domain/saveTrack';
 import { ownedTrack, type OwnedTrack } from '@features/detail/domain/ownedTrack';
 
+const MAX_PINNED_SOURCES = 16;
+
 describe('save cache', () => {
   type ResultOverrides = {
     title?: string;
@@ -122,6 +124,63 @@ describe('save cache', () => {
         { name: 'Guest', mbid: null, deezer_id: null },
       ]);
       expect('featured_artists' in withoutFeatured).toBe(false);
+    });
+
+    it('pins the recording the user picked: mbid, explicit and every provider id', () => {
+      const req = toCreateTrackRequest(
+        result({
+          extras: { mbid: '0f6ab2b4-6d4a-4ec4-9a64-3f2b9c3b6a1e', explicit: true },
+          sources: [
+            {
+              provider: 'spotify',
+              external_id: '6jG2YzhxptolDzLHTGLt7S',
+              url: 'https://spotify/x',
+            },
+            { provider: 'deezer', external_id: '1909297867', url: 'https://deezer/x' },
+          ],
+        }),
+      );
+
+      expect(req.mbid).toBe('0f6ab2b4-6d4a-4ec4-9a64-3f2b9c3b6a1e');
+      expect(req.explicit).toBe(true);
+      expect(req.sources).toEqual([
+        { provider: 'spotify', external_id: '6jG2YzhxptolDzLHTGLt7S' },
+        { provider: 'deezer', external_id: '1909297867' },
+      ]);
+    });
+
+    it('keeps a clean pick clean and drops an explicit flag that is not a boolean', () => {
+      expect(toCreateTrackRequest(result({ extras: { explicit: false } })).explicit).toBe(false);
+      expect(
+        toCreateTrackRequest(result({ extras: { explicit: 'yes' } })).explicit,
+      ).toBeUndefined();
+    });
+
+    it('drops provider entries without an id and caps the list at 16', () => {
+      const many = Array.from({ length: 20 }, (_, i) => ({
+        provider: 'deezer' as const,
+        external_id: i === 0 ? '' : `id${i}`,
+        url: `https://deezer/${i}`,
+      }));
+
+      const { sources } = toCreateTrackRequest(result({ sources: many }));
+
+      expect(sources).toHaveLength(MAX_PINNED_SOURCES);
+      expect(sources?.[0]).toEqual({ provider: 'deezer', external_id: 'id1' });
+    });
+
+    it('drops an mbid that is not a uuid so the song still saves', () => {
+      expect(
+        toCreateTrackRequest(result({ extras: { mbid: 'not-an-mbid' } })).mbid,
+      ).toBeUndefined();
+    });
+
+    it('omits the pin fields when the result carries none', () => {
+      const req = toCreateTrackRequest(result());
+
+      expect(req.mbid).toBeUndefined();
+      expect(req.explicit).toBeUndefined();
+      expect(req.sources).toBeUndefined();
     });
   });
 
