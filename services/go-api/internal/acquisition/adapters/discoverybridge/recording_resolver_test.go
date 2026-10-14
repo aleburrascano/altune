@@ -602,3 +602,15 @@ func TestResolve_ISRCAnchoredAfterSearchFailureReferencesTheISRCRecording(t *tes
 	}
 	assertMBIDs(t, identity.MBIDs, []string{"album-version"})
 }
+
+func TestPickRecording_AnotherVersionIsNotTheSavedSong(t *testing.T) {
+	acoustic := discoverydomain.SearchResult{Kind: discoverydomain.ResultKindTrack, Title: "Take On Me (2017 Acoustic)", Subtitle: "a-ha", ISRC: "DEUM71724939"}
+	studio := discoverydomain.SearchResult{Kind: discoverydomain.ResultKindTrack, Title: "Take on Me", Subtitle: "a-ha", ISRC: "USWB19901214"}
+	got, ok := pickRecording([]discoverydomain.SearchResult{acoustic, studio}, acqports.RecordingQuery{Title: "Take on Me", Artist: "a-ha"})
+	if !ok || got.ISRC != studio.ISRC {
+		t.Fatalf("picked %q (%s), want the studio recording", got.Title, got.ISRC)
+	}
+	if _, ok := pickRecording([]discoverydomain.SearchResult{acoustic}, acqports.RecordingQuery{Title: "Take on Me", Artist: "a-ha"}); ok {
+		t.Fatal("picked the acoustic recording for a plain title")
+	}
+}
