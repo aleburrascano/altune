@@ -87,3 +87,27 @@ func TestCoverURLContainsImage(t *testing.T) {
 		t.Fatal("empty md5 must not match")
 	}
 }
+
+func TestCoverComparer_IsBlankSeparatesFlatPlaceholdersFromArtwork(t *testing.T) {
+	images := map[string]image.Image{"/flat": flat(80, 200), "/plain": gradient(80, false)}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		img, ok := images[r.URL.Path]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		if err := png.Encode(w, img); err != nil {
+			t.Error(err)
+		}
+	}))
+	t.Cleanup(server.Close)
+	comparer := newCoverComparer(server.Client())
+	for path, want := range map[string]bool{"/flat": true, "/plain": false} {
+		if blank, err := comparer.IsBlank(context.Background(), server.URL+path); err != nil || blank != want {
+			t.Fatalf("%s: blank %v err %v", path, blank, err)
+		}
+	}
+	if _, err := comparer.IsBlank(context.Background(), server.URL+"/missing"); err == nil {
+		t.Fatal("an unreadable cover is an error, not blank")
+	}
+}

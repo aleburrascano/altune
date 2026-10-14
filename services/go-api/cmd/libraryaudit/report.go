@@ -34,6 +34,8 @@ type summary struct {
 	CatalogDurationFillable int `json:"catalog_duration_fillable,omitempty"`
 	YearFromRelease         int `json:"year_from_release,omitempty"`
 	AlbumArtistFromRelease  int `json:"album_artist_from_release,omitempty"`
+	CoverBlank              int `json:"cover_blank,omitempty"`
+	CoverNotReplaceable     int `json:"cover_not_replaceable,omitempty"`
 }
 
 type report struct {
@@ -80,6 +82,8 @@ func summarize(outcome auditOutcome) summary {
 		CatalogDurationFillable: counts[categoryCatalogDurationFillable],
 		YearFromRelease:         counts[categoryYearFromRelease],
 		AlbumArtistFromRelease:  counts[categoryAlbumArtistFromRelease],
+		CoverBlank:              counts[categoryCoverBlank],
+		CoverNotReplaceable:     counts[categoryCoverNotReplaceable],
 	}
 }
 
@@ -129,5 +133,6 @@ func writeSummary(w io.Writer, r report) {
 	_, _ = fmt.Fprintf(w, "  genre fillable:             %d (unfillable: %d)\n", s.GenreFillable, s.GenreUnfillable)
 	_, _ = fmt.Fprintf(w, "  catalog length fillable:    %d\n", s.CatalogDurationFillable)
 	_, _ = fmt.Fprintf(w, "  cover URL differs:          %d\n", s.CoverURLDiffers)
-	_, _ = fmt.Fprintf(w, "  cover image differs:        %d (unreadable: %d)\n", s.CoverImageDiffers, s.CoverUnreadable)
+	_, _ = fmt.Fprintf(w, "  cover image differs:        %d (unreadable: %d, not replaceable: %d)\n", s.CoverImageDiffers, s.CoverUnreadable, s.CoverNotReplaceable)
+	_, _ = fmt.Fprintf(w, "  blank cover image:          %d\n", s.CoverBlank)
 }

@@ -302,3 +302,28 @@ func TestRunReconcile_DryRunOfCatalogFieldsWritesNothing(t *testing.T) {
 		t.Fatalf("err=%v out=%s", err, out)
 	}
 }
+
+func TestRunReconcile_ReplacesAnArtworkUrlOnlyWhileItMatchesTheAuditAndUndoRestoresIt(t *testing.T) {
+	s := testStore(t)
+	matching := seedTrack(t, s, nil, nil, nil)
+	changed := seedTrack(t, s, nil, nil, nil)
+	for row, url := range map[seeded]string{matching: "https://lib/a.jpg", changed: "https://lib/edited.jpg"} {
+		if _, err := s.pool.Exec(context.Background(), "UPDATE tracks SET artwork_url = $2 WHERE id = $1", row.trackID, url); err != nil {
+			t.Fatal(err)
+		}
+	}
+	replace := plannedChange{Field: fieldArtworkURL, AuditedOld: text("https://lib/a.jpg"), NewValue: text("https://cdn/b.jpg")}
+	artwork := func(row seeded) string {
+		var url string
+		_ = s.pool.QueryRow(context.Background(), "SELECT artwork_url FROM tracks WHERE id = $1", row.trackID).Scan(&url)
+		return url
+	}
+	runID, out, err := reconcile(t, s, true, planFor(matching, 4, replace), planFor(changed, 4, replace))
+	if err != nil || artwork(matching) != "https://cdn/b.jpg" || artwork(changed) != "https://lib/edited.jpg" || logRows(t, s, runID) != 1 {
+		t.Fatalf("err=%v out=%s", err, out)
+	}
+	var undone bytes.Buffer
+	if err := runUndo(context.Background(), s, runID, &undone); err != nil || artwork(matching) != "https://lib/a.jpg" {
+		t.Fatalf("err=%v out=%s", err, undone.String())
+	}
+}

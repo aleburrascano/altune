@@ -36,6 +36,8 @@ const (
 	categoryGenreFillable           category = "genre_fillable"
 	categoryGenreUnfillable         category = "genre_unfillable"
 	categoryCatalogDurationFillable category = "catalog_duration_fillable"
+	categoryCoverBlank              category = "cover_blank"
+	categoryCoverNotReplaceable     category = "cover_not_replaceable"
 	categoryYearFromRelease         category = "year_from_release"
 	categoryAlbumArtistFromRelease  category = "album_artist_from_release"
 	categoryLookupFailed            category = "lookup_failed"

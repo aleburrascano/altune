@@ -72,7 +72,11 @@ func auditTrackWithFills(ctx context.Context, cat catalog, covers coverJudge, li
 	if err != nil {
 		return lookupFailure(ctx, lib, err)
 	}
-	result.Findings = slices.Concat(resolved, enriched)
+	withCoverFixes, err := coverFixFindings(ctx, cat, covers, lib, *result.Matched, slices.Concat(resolved, enriched))
+	if err != nil {
+		return lookupFailure(ctx, lib, err)
+	}
+	result.Findings = withCoverFixes
 	return result
 }
 

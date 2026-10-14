@@ -202,3 +202,45 @@ func TestDecide_CatalogFieldsFillOnlyWhenEmpty(t *testing.T) {
 		})
 	}
 }
+
+func TestReadPlan_AcceptsAnArtworkReplacementOnlyWithTheAuditedOldUrlAndAnHTTPSNewOne(t *testing.T) {
+	fix := func(old, value string) string {
+		return `{"findings":[{"track_id":"t1","fix":{"user_id":"u","version":1,"field":"artwork_url","old_value":` + old + `,"new_value":` + value + `}}]}`
+	}
+	if plans, err := readPlan(strings.NewReader(fix(`"https://lib/a.jpg"`, `"https://cdn/b.jpg"`)), testYear); err != nil || len(plans) != 1 {
+		t.Fatalf("err=%v plans=%+v", err, plans)
+	}
+	refused := map[string]string{
+		"no old url":    fix(`null`, `"https://cdn/b.jpg"`),
+		"blank old url": fix(`" "`, `"https://cdn/b.jpg"`),
+		"no new url":    fix(`"https://lib/a.jpg"`, `null`),
+		"http":          fix(`"https://lib/a.jpg"`, `"http://cdn/b.jpg"`),
+		"not a url":     fix(`"https://lib/a.jpg"`, `"cover.jpg"`),
+		"no host":       fix(`"https://lib/a.jpg"`, `"https:///b.jpg"`),
+	}
+	for name, report := range refused {
+		if plans, err := readPlan(strings.NewReader(report), testYear); err == nil {
+			t.Fatalf("%s: expected an error, got %+v", name, plans)
+		}
+	}
+}
+
+func TestDecide_ArtworkIsReplacedOnlyWhileItIsStillWhatTheAuditSaw(t *testing.T) {
+	replace := plannedChange{Field: fieldArtworkURL, AuditedOld: text("https://lib/a.jpg"), NewValue: text("https://cdn/b.jpg")}
+	cases := []struct {
+		name    string
+		current *string
+		want    verdict
+	}{
+		{"still the audited cover", text("https://lib/a.jpg"), verdictApplied},
+		{"changed since the audit", text("https://lib/other.jpg"), verdictSkippedNotEmpty},
+		{"cover removed since the audit", nil, verdictSkippedNotEmpty},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := decide(replace, tc.current); got != tc.want {
+				t.Fatalf("decide = %s, want %s", got, tc.want)
+			}
+		})
+	}
+}

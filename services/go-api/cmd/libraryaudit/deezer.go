@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -42,6 +43,7 @@ type catalogTrack struct {
 	Album           string
 	AlbumImageMD5   string
 	CoverURL        string
+	FullCoverURL    string
 	DurationSeconds float64
 	ReleaseYear     int
 	ISRC            string
@@ -56,28 +58,33 @@ type deezerClient struct {
 	limiter *rate.Limiter
 	backoff time.Duration
 	ceiling time.Duration
-	genres  genreCache
+	albums  albumCache
 }
 
-type genreCache struct {
+type albumInfo struct {
+	Genres     []string
+	RecordType string
+}
+
+type albumCache struct {
 	mu      sync.Mutex
-	byAlbum map[int64][]string
+	byAlbum map[int64]albumInfo
 }
 
-func (g *genreCache) get(albumID int64) ([]string, bool) {
+func (g *albumCache) get(albumID int64) (albumInfo, bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	genres, hit := g.byAlbum[albumID]
-	return genres, hit
+	info, hit := g.byAlbum[albumID]
+	return info, hit
 }
 
-func (g *genreCache) put(albumID int64, genres []string) {
+func (g *albumCache) put(albumID int64, info albumInfo) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.byAlbum == nil {
-		g.byAlbum = map[int64][]string{}
+		g.byAlbum = map[int64]albumInfo{}
 	}
-	g.byAlbum[albumID] = genres
+	g.byAlbum[albumID] = info
 }
 
 func newDeezerClient(httpClient *http.Client, baseURL string, requestsPerSecond float64) *deezerClient {
@@ -109,6 +116,8 @@ type deezerTrackBody struct {
 		Title    string `json:"title"`
 		MD5Image string `json:"md5_image"`
 		Cover    string `json:"cover_medium"`
+		CoverBig string `json:"cover_big"`
+		CoverXL  string `json:"cover_xl"`
 	} `json:"album"`
 }
 
@@ -146,7 +155,8 @@ func (c *deezerClient) TrackByID(ctx context.Context, id int64) (catalogTrack, e
 }
 
 type deezerAlbumBody struct {
-	Genres struct {
+	RecordType string `json:"record_type"`
+	Genres     struct {
 		Data []struct {
 			Name string `json:"name"`
 		} `json:"data"`
@@ -154,19 +164,30 @@ type deezerAlbumBody struct {
 }
 
 func (c *deezerClient) AlbumGenres(ctx context.Context, albumID int64) ([]string, error) {
-	if cached, hit := c.genres.get(albumID); hit {
+	info, err := c.albumInfo(ctx, albumID)
+	return info.Genres, err
+}
+
+func (c *deezerClient) AlbumRecordType(ctx context.Context, albumID int64) (string, error) {
+	info, err := c.albumInfo(ctx, albumID)
+	return info.RecordType, err
+}
+
+func (c *deezerClient) albumInfo(ctx context.Context, albumID int64) (albumInfo, error) {
+	if cached, hit := c.albums.get(albumID); hit {
 		return cached, nil
 	}
 	var body deezerAlbumBody
 	if err := c.getJSON(ctx, "/2.0/album/"+strconv.FormatInt(albumID, 10), &body); err != nil {
-		return nil, err
+		return albumInfo{}, err
 	}
 	names := make([]string, 0, len(body.Genres.Data))
 	for _, genre := range body.Genres.Data {
 		names = append(names, genre.Name)
 	}
-	c.genres.put(albumID, names)
-	return names, nil
+	info := albumInfo{Genres: names, RecordType: body.RecordType}
+	c.albums.put(albumID, info)
+	return info, nil
 }
 
 func toCatalogTrack(body deezerTrackBody) catalogTrack {
@@ -186,6 +207,7 @@ func toCatalogTrack(body deezerTrackBody) catalogTrack {
 		Album:           body.Album.Title,
 		AlbumImageMD5:   body.Album.MD5Image,
 		CoverURL:        body.Album.Cover,
+		FullCoverURL:    cmp.Or(body.Album.CoverXL, body.Album.CoverBig, body.Album.Cover),
 		DurationSeconds: float64(body.Duration),
 		ReleaseYear:     year,
 		ISRC:            body.ISRC,

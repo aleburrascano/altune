@@ -2,6 +2,7 @@ package main
 
 import (
 	"image"
+	"math"
 	"math/bits"
 
 	_ "image/gif"
@@ -69,4 +70,33 @@ func hashDistance(a, b uint64) int {
 
 func isSameImage(a, b uint64) bool {
 	return hashDistance(a, b) <= sameImageDistance
+}
+
+const blankSpread = 0.01
+
+func luminanceSpread(cells []float64) float64 {
+	mean := 0.0
+	for _, cell := range cells {
+		mean += cell
+	}
+	mean /= float64(len(cells))
+	variance := 0.0
+	for _, cell := range cells {
+		variance += (cell - mean) * (cell - mean)
+	}
+	return math.Sqrt(variance/float64(len(cells))) / math.MaxUint16
+}
+
+func signatureOf(img image.Image) (uint64, float64) {
+	bounds := img.Bounds()
+	width, height := bounds.Dx(), bounds.Dy()
+	if width == 0 || height == 0 {
+		return 0, 0
+	}
+	cells := gridLuminance(img, bounds, width, height)
+	return bitsAboveMean(cells), luminanceSpread(cells)
+}
+
+func isBlank(spread float64) bool {
+	return spread < blankSpread
 }

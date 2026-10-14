@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -21,6 +22,7 @@ const (
 	fieldTrackNumber field = "track_number"
 	fieldGenre       field = "genre"
 	fieldCatalogLen  field = "catalog_duration_seconds"
+	fieldArtworkURL  field = "artwork_url"
 )
 
 var columnOf = map[field]string{
@@ -30,6 +32,7 @@ var columnOf = map[field]string{
 	fieldTrackNumber: "track_number",
 	fieldGenre:       "genre",
 	fieldCatalogLen:  "catalog_duration_seconds",
+	fieldArtworkURL:  "artwork_url",
 }
 
 var castOf = map[field]string{
@@ -64,6 +67,10 @@ func (c plannedChange) clearsWrongISRC() bool {
 	return c.Field == fieldISRC && c.NewValue == nil
 }
 
+func (c plannedChange) replacesAuditedValue() bool {
+	return c.clearsWrongISRC() || c.Field == fieldArtworkURL
+}
+
 type trackPlan struct {
 	TrackID string
 	UserID  string
@@ -89,7 +96,7 @@ func isBlank(f field, value *string) bool {
 }
 
 func decide(change plannedChange, current *string) verdict {
-	if change.clearsWrongISRC() {
+	if change.replacesAuditedValue() {
 		if current != nil && change.AuditedOld != nil && *current == *change.AuditedOld {
 			return verdictApplied
 		}
@@ -219,6 +226,8 @@ func checkValues(f field, fix *reportFix, currentYear int) error {
 		}
 	case fieldCatalogLen:
 		return checkCatalogLength(fix.NewValue)
+	case fieldArtworkURL:
+		return checkArtworkReplacement(fix)
 	}
 	return nil
 }
@@ -293,4 +302,18 @@ func isCanonicalISRC(value string) bool {
 		}
 	}
 	return true
+}
+
+func checkArtworkReplacement(fix *reportFix) error {
+	if fix.OldValue == nil || strings.TrimSpace(*fix.OldValue) == "" {
+		return errors.New("artwork_url fix needs the old_value the audit saw")
+	}
+	if fix.NewValue == nil {
+		return errors.New("artwork_url fix has no new_value")
+	}
+	parsed, err := url.Parse(*fix.NewValue)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+		return fmt.Errorf("artwork_url %q is not an https URL", *fix.NewValue)
+	}
+	return nil
 }

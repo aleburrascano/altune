@@ -29,22 +29,22 @@ type trackRow struct {
 	Version int
 }
 
-const selectTrackSQL = `SELECT year::text, album_artist, isrc, track_number::text, genre, catalog_duration_seconds::text, version FROM tracks WHERE id = $1 AND user_id = $2`
+const selectTrackSQL = `SELECT year::text, album_artist, isrc, track_number::text, genre, catalog_duration_seconds::text, artwork_url, version FROM tracks WHERE id = $1 AND user_id = $2`
 
 func loadTrack(ctx context.Context, tx pgx.Tx, plan trackPlan, lock bool) (trackRow, error) {
 	query := selectTrackSQL
 	if lock {
 		query += " FOR UPDATE"
 	}
-	var year, albumArtist, isrc, trackNumber, genre, catalogLength *string
+	var year, albumArtist, isrc, trackNumber, genre, catalogLength, artworkURL *string
 	var version int
-	if err := tx.QueryRow(ctx, query, plan.TrackID, plan.UserID).Scan(&year, &albumArtist, &isrc, &trackNumber, &genre, &catalogLength, &version); err != nil {
+	if err := tx.QueryRow(ctx, query, plan.TrackID, plan.UserID).Scan(&year, &albumArtist, &isrc, &trackNumber, &genre, &catalogLength, &artworkURL, &version); err != nil {
 		return trackRow{}, err
 	}
 	return trackRow{
 		Values: map[field]*string{
 			fieldYear: year, fieldAlbumArtist: albumArtist, fieldISRC: isrc,
-			fieldTrackNumber: trackNumber, fieldGenre: genre, fieldCatalogLen: catalogLength,
+			fieldTrackNumber: trackNumber, fieldGenre: genre, fieldCatalogLen: catalogLength, fieldArtworkURL: artworkURL,
 		},
 		Version: version,
 	}, nil

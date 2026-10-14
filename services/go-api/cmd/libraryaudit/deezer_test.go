@@ -238,3 +238,26 @@ func TestAlbumGenres_AFailedLookupIsNotCached(t *testing.T) {
 		t.Fatalf("err=%v got=%v", err, got)
 	}
 }
+
+func TestAlbumRecordType_ReadsTheRecordTypeFromTheCachedAlbum(t *testing.T) {
+	var calls atomic.Int32
+	client := clientFor(t, func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		_, _ = w.Write([]byte(`{"record_type":"single","genres":{"data":[{"name":"Pop"}]}}`))
+	})
+	recordType, err := client.AlbumRecordType(context.Background(), 5)
+	genres, genresErr := client.AlbumGenres(context.Background(), 5)
+	if err != nil || genresErr != nil || recordType != "single" || len(genres) != 1 || calls.Load() != 1 {
+		t.Fatalf("type=%q err=%v genres=%v genresErr=%v calls=%d", recordType, err, genres, genresErr, calls.Load())
+	}
+}
+
+func TestTrackByISRC_PrefersTheLargestAlbumCoverForReplacement(t *testing.T) {
+	client := clientFor(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"id":7,"album":{"cover_medium":"m","cover_big":"b","cover_xl":"xl"}}`))
+	})
+	got, err := client.TrackByISRC(context.Background(), "USX")
+	if err != nil || got.FullCoverURL != "xl" || got.CoverURL != "m" {
+		t.Fatalf("err=%v got=%+v", err, got)
+	}
+}
