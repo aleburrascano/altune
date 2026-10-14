@@ -1,1 +1,1 @@
-{"gitea": {"precheck.yml": 480, "e2e.yml": 600}, "github": {"pr-checks.yml": 360}}
+{"gitea": {"precheck.yml": 480}, "github": {"pr-checks.yml": 360, "e2e.yml": 600}}
