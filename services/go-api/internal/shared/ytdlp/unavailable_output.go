@@ -20,6 +20,7 @@ var unavailableMarkers = []string{
 	"network is unreachable",
 	"no route to host",
 	"timed out",
+	"not a bot",
 }
 
 func OutputShowsSourceUnavailable(output string) bool {
