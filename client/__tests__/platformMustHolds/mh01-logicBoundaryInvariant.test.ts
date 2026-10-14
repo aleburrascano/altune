@@ -59,7 +59,6 @@ describe('feature logic stays platform-free', () => {
 });
 
 describe('shared logic stays platform-free', () => {
-  // lintText needs a file the typed parser's project knows, so these paths exist on disk.
   const SHARED_FILE = 'src/shared/events/serverEventTypes.ts';
 
   it.each([
@@ -131,7 +130,6 @@ describe('shared logic stays platform-free', () => {
   });
 
   it('finds no platform import anywhere in the real src/shared tree', () => {
-    // ESLint.lintFiles dynamic-imports its glob walker, which Jest's VM refuses, so it runs in plain node.
     const script = `
       const { ESLint } = require('eslint');
       new ESLint({ cwd: process.cwd(), overrideConfigFile: true, baseConfig: require('./eslint.config.js') })

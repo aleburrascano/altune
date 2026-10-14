@@ -165,3 +165,11 @@ test('a node:test file holding jest.mock text as a fixture does not count', (t) 
 
   assert.equal(ratchet(root).status, 0);
 });
+
+test('the ratchet script carries no line comments', () => {
+  const commentLines = readFileSync(script, 'utf8')
+    .split('\n')
+    .filter((line) => line.trimStart().startsWith('//'));
+
+  assert.deepEqual(commentLines, []);
+});

@@ -1,9 +1,3 @@
-// Counts jest.mock / jest.doMock calls whose target is the project's own code
-// (relative paths and the jest.config.js path aliases). The count may only go
-// down: a call not in the baseline fails, and so does a baseline line whose
-// call is gone. Third-party modules are not counted. No third-party imports:
-// this runs before `npm ci`. --write only removes fixed lines: it refuses while a
-// new mock exists, unless there is no baseline file yet to protect.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,13 +14,10 @@ const baselinePath =
   path.join(mobileRoot, 'baselines', 'mock-ratchet.baseline');
 
 const SCAN_DIRS = ['src', 'jest'];
-// The other folders jest's testMatch reaches; only its test files are read there,
-// so a node:test file that holds jest.mock text as a fixture is not counted.
 const JEST_TEST_DIRS = ['__tests__', 'scripts'];
 const JEST_TEST_FILE = /(^|\/)__tests__\/(.+\/)?[^/]+\.test\.tsx?$/;
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.mjs']);
 const SKIP_DIRS = new Set(['node_modules']);
-// Mirrors the moduleNameMapper aliases in client/jest.config.js.
 const OWN_PREFIXES = ['./', '../', '@shared/', '@features/', '@/', '@testing/'];
 const MOCK_CALL = /jest\.(?:mock|doMock)\(\s*(['"`])([^'"`]*)\1/g;
 const UPDATE_BASELINE_HINT =
