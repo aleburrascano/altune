@@ -61,3 +61,13 @@ func TestComputeDedupKey(t *testing.T) {
 		})
 	}
 }
+
+func TestTrackDedupKey_AnEmptyAlbumKeysAsTheTitleLikeANewTrack(t *testing.T) {
+	t.Parallel()
+	if got := TrackDedupKey("Song", "Artist", ""); got != "song|artist|song" {
+		t.Errorf("empty album: %q", got)
+	}
+	if got := TrackDedupKey("Song", "Artist", "  LP "); got != "song|artist|lp" {
+		t.Errorf("album LP: %q", got)
+	}
+}

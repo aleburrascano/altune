@@ -310,3 +310,30 @@ func TestDecide_CorrectModeReplacesOnlyTheValueTheDeriveSaw(t *testing.T) {
 		})
 	}
 }
+
+func identityFix(field, mode, old, value, group string) string {
+	return `{"track_id":"t1","fix":{"user_id":"u","version":2,"field":"` + field + `","mode":"` + mode + `","old_value":` + old + `,"new_value":` + value + `,"group":"` + group + `"}}`
+}
+
+func TestReadPlan_ReadsAnAlbumMoveGroupAndRefusesWhatCouldBreakTheDedupKeyContract(t *testing.T) {
+	album := identityFix("album", "correct", `"Now 14"`, `"Simple Pleasures"`, "g1")
+	genre := identityFix("genre", "correct", `"Pop"`, `"Jazz"`, "g1")
+	plans, err := readPlan(strings.NewReader(`{"findings":[`+album+`,`+genre+`]}`), testYear)
+	if err != nil || len(plans) != 1 || len(plans[0].Changes) != 2 || plans[0].Changes[0].Group != "g1" || plans[0].Changes[1].Group != "g1" {
+		t.Fatalf("got %+v, %v", plans, err)
+	}
+	refused := map[string]string{
+		"a dedup key":             identityFix("dedup_key", "correct", `"a|b|c"`, `"d|e|f"`, ""),
+		"a filled title":          identityFix("title", "fill", `null`, `"Song"`, ""),
+		"a blank album":           identityFix("album", "correct", `"Now 14"`, `" "`, ""),
+		"a NUL in the artist":     identityFix("artist", "correct", `"A"`, `"B\u0000"`, ""),
+		"a padded title":          identityFix("title", "correct", `"A"`, `" Song  Two"`, ""),
+		"a full-width artist":     identityFix("artist", "correct", `"A"`, `"Ｂ"`, ""),
+		"an artist outside group": identityFix("artist", "correct", `"A"`, `"B"`, "") + "," + album,
+	}
+	for name, fix := range refused {
+		if plans, err := readPlan(strings.NewReader(`{"findings":[`+fix+`]}`), testYear); err == nil {
+			t.Errorf("%s: expected an error, got %+v", name, plans)
+		}
+	}
+}

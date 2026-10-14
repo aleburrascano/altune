@@ -16,6 +16,10 @@ func computeDedupKey(title, artist, album string) string {
 	return strings.Join(parts, "|")
 }
 
+func TrackDedupKey(title, artist, album string) string {
+	return computeDedupKey(title, artist, resolveAlbum(album, title))
+}
+
 func normalizeForDedup(s string) string {
 	s = strings.ToLower(canonicalizeField(s))
 	s = stripNonAlphanumeric(s)

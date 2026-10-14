@@ -157,8 +157,8 @@ func differenceFindings(t boundTrack, a anchor, group releaseGroup, match *deeze
 func otherMasterFindings(t boundTrack, a anchor, chosen pick, master deezerTrack) []finding {
 	var found []finding
 	for _, d := range diff(t.libraryTrack, derive(a, chosen.Group, nil)) {
-		if d.Mode == modeReportOnly {
-			found = append(found, findingOf(t, d))
+		if d.Mode == modeReportOnly || d.isIdentity() {
+			found = append(found, findingOf(t, d.reportOnly()))
 		}
 	}
 	detail := "isrc " + t.ISRC + " -> " + master.ISRC + " on " + master.AlbumTitle + ", " + strconv.Itoa(int(master.DurationSeconds)) + "s for the " + strconv.Itoa(int(t.FileSeconds)) + "s file"

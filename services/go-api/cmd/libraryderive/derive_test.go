@@ -31,6 +31,15 @@ func TestDerive_WithoutADeezerAlbumFillsNothingFromDeezer(t *testing.T) {
 	}
 }
 
+func TestDerive_WritesTitleArtistAndAlbumInTheFormTheAppStores(t *testing.T) {
+	g := makeItBig()
+	g.Title = "Make  It Big "
+	got := derive(anchor{Title: " Careless\u00a0Whisper", Artist: "\uff37ham!"}, g, nil)
+	if got.Title != "Careless Whisper" || got.Artist != "Wham!" || got.Album != "Make It Big" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
 func fields(found []difference) map[string]difference {
 	byField := map[string]difference{}
 	for _, d := range found {
@@ -39,7 +48,7 @@ func fields(found []difference) map[string]difference {
 	return byField
 }
 
-func TestDiff_ABobbyMcFerrinTrackStoredOnACompilationReportsItsAlbumAndOnlyCorrectsAlbumIndependentFields(t *testing.T) {
+func TestDiff_ABobbyMcFerrinTrackStoredOnACompilationCorrectsItsAlbumAndEveryAlbumBoundField(t *testing.T) {
 	stored := libraryTrack{
 		Title: "Don't Worry, Be Happy", Artist: "Bobby McFerrin", Album: "Now That's What I Call Music! 14", AlbumArtist: "Various Artists",
 		ISRC: "USEM38800146", ArtworkURL: "https://cdn/now14.jpg", Year: 1999, Genre: "Pop", TrackNumber: 12, CatalogDurationSeconds: 240,
@@ -54,13 +63,13 @@ func TestDiff_ABobbyMcFerrinTrackStoredOnACompilationReportsItsAlbumAndOnlyCorre
 		old  string
 		new  string
 	}{
-		"album":                    {modeReportOnly, "Now That's What I Call Music! 14", "Simple Pleasures"},
+		"album":                    {modeCorrect, "Now That's What I Call Music! 14", "Simple Pleasures"},
 		"year":                     {modeCorrect, "1999", "1988"},
 		"album_artist":             {modeCorrect, "Various Artists", "Bobby McFerrin"},
-		"track_number":             {modeReportOnly, "12", "2"},
-		"genre":                    {modeReportOnly, "Pop", "Jazz"},
+		"track_number":             {modeCorrect, "12", "2"},
+		"genre":                    {modeCorrect, "Pop", "Jazz"},
 		"catalog_duration_seconds": {modeCorrect, "240", "292"},
-		"artwork_url":              {modeReportOnly, "https://cdn/now14.jpg", "https://cdn/sp.jpg"},
+		"artwork_url":              {modeCorrect, "https://cdn/now14.jpg", "https://cdn/sp.jpg"},
 	}
 	if len(got) != len(cases) {
 		t.Fatalf("got %+v", got)
@@ -103,14 +112,14 @@ func TestDiff_ARemasterYearIsCorrectedToTheOriginalYear(t *testing.T) {
 	}
 }
 
-func TestDiff_TitleAndArtistDifferencesAreReportOnly(t *testing.T) {
+func TestDiff_TitleAndArtistDifferencesAreCorrectFixes(t *testing.T) {
 	stored := libraryTrack{Title: "Wham! - Careless Whisper (Official Video)", Artist: "WhamVEVO", Album: "Make It Big", AlbumArtist: "Wham!", Year: 1984}
 	got := diff(stored, derive(anchor{Title: "Careless Whisper", Artist: "Wham!"}, makeItBig(), nil))
 	byField := fields(got)
-	if len(got) != 2 || byField["title"].Mode != modeReportOnly || byField["artist"].Mode != modeReportOnly {
+	if len(got) != 2 || byField["title"].Mode != modeCorrect || byField["artist"].Mode != modeCorrect {
 		t.Fatalf("got %+v", got)
 	}
-	if !slices.Equal([]category{byField["title"].category(), byField["artist"].category()}, []category{"title_differs", "artist_differs"}) {
+	if !slices.Equal([]category{byField["title"].category(), byField["artist"].category()}, []category{"title_correct", "artist_correct"}) {
 		t.Fatalf("categories %v", got)
 	}
 }
@@ -122,6 +131,65 @@ func TestDiff_ASameTrackProducesNoDifference(t *testing.T) {
 	}
 	want := derive(anchor{Title: "Careless Whisper", Artist: "Wham!"}, makeItBig(), &deezerMatch{CoverURL: "https://cdn/mib.jpg", Genre: "Pop", TrackPosition: 4, DurationSeconds: 300})
 	if got := diff(stored, want); len(got) != 0 {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestDiff_AnAlbumMoveIsACorrectFixWhoseDependentsShareItsGroup(t *testing.T) {
+	stored := libraryTrack{
+		ID: "t1", Title: "Don't Worry, Be Happy", Artist: "Bobby McFerrin", Album: "Now That's What I Call Music! 14", AlbumArtist: "Various Artists",
+		ArtworkURL: "https://cdn/now14.jpg", Year: 1999, Genre: "Pop", TrackNumber: 12, CatalogDurationSeconds: 240,
+	}
+	g := group("lp", "Simple Pleasures", "Album", "1988-06-01")
+	g.Artist = "Bobby McFerrin"
+	want := derive(anchor{Title: "Don't Worry, Be Happy", Artist: "Bobby McFerrin"}, g,
+		&deezerMatch{CoverURL: "https://cdn/sp.jpg", Genre: "Jazz", TrackPosition: 2, DurationSeconds: 292})
+	got := fields(diff(stored, want))
+	grouped := []string{"album", "year", "album_artist", "track_number", "genre", "artwork_url"}
+	for _, field := range grouped {
+		if got[field].Mode != modeCorrect || got[field].Group != "album-move:t1" {
+			t.Errorf("%s: got %+v", field, got[field])
+		}
+	}
+	if length := got["catalog_duration_seconds"]; len(got) != len(grouped)+1 || length.Mode != modeCorrect || length.Group != "" {
+		t.Errorf("the catalog length stays outside the group: %+v", got)
+	}
+}
+
+func TestDiff_AGroupOnlyExistsAlongsideAnAlbumFix(t *testing.T) {
+	stored := libraryTrack{ID: "t1", Title: "Careless Whisper", Artist: "Wham!", Album: "Make It Big", AlbumArtist: "Wham!", Year: 2024, Genre: "Pop"}
+	got := diff(stored, derive(anchor{Title: "Careless Whisper", Artist: "Wham!"}, makeItBig(), &deezerMatch{Genre: "Rock"}))
+	for _, d := range got {
+		if d.Group != "" {
+			t.Errorf("%s carries group %q without an album move", d.Field, d.Group)
+		}
+	}
+}
+
+func TestDiff_AMovedAlbumCarriesTheTitleAndArtistCorrectionsInItsGroup(t *testing.T) {
+	stored := libraryTrack{ID: "t1", Title: "Wham! - Careless Whisper (Official Video)", Artist: "WhamVEVO", Album: "Greatest Hits", AlbumArtist: "Wham!", Year: 1984}
+	got := fields(diff(stored, derive(anchor{Title: "Careless Whisper", Artist: "Wham!"}, makeItBig(), nil)))
+	for _, field := range []string{"album", "title", "artist"} {
+		if got[field].Mode != modeCorrect || got[field].Group != "album-move:t1" {
+			t.Errorf("%s: got %+v", field, got[field])
+		}
+	}
+}
+
+func TestDiff_AnAlbumMoveFromNoAlbumStaysReportOnlyWithItsDependents(t *testing.T) {
+	stored := libraryTrack{ID: "t1", Title: "Careless Whisper", Artist: "Wham!", AlbumArtist: "Wham!", Year: 1984, Genre: "Pop"}
+	got := fields(diff(stored, derive(anchor{Title: "Careless Whisper", Artist: "Wham!"}, makeItBig(), &deezerMatch{Genre: "Rock", TrackPosition: 4})))
+	for _, field := range []string{"album", "genre"} {
+		if got[field].Mode != modeReportOnly || got[field].Group != "" {
+			t.Errorf("%s: got %+v", field, got[field])
+		}
+	}
+}
+
+func TestDiff_AMissingCoverIsReportedNotFixedBecauseReconcileOnlyReplacesAKnownCover(t *testing.T) {
+	stored := libraryTrack{ID: "t1", Title: "Careless Whisper", Artist: "Wham!", Album: "Make It Big", AlbumArtist: "Wham!", Year: 1984}
+	got := fields(diff(stored, derive(anchor{Title: "Careless Whisper", Artist: "Wham!"}, makeItBig(), &deezerMatch{CoverURL: "https://cdn/mib.jpg"})))
+	if got["artwork_url"].Mode != modeReportOnly {
 		t.Fatalf("got %+v", got)
 	}
 }

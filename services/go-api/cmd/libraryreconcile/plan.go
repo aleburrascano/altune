@@ -1,6 +1,8 @@
 package main
 
 import (
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared/textnorm"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,7 +25,14 @@ const (
 	fieldGenre       field = "genre"
 	fieldCatalogLen  field = "catalog_duration_seconds"
 	fieldArtworkURL  field = "artwork_url"
+
+	fieldTitle    field = "title"
+	fieldArtist   field = "artist"
+	fieldAlbum    field = "album"
+	fieldDedupKey field = "dedup_key"
 )
+
+const identityGroup = "identity"
 
 var columnOf = map[field]string{
 	fieldYear:        "year",
@@ -33,12 +42,20 @@ var columnOf = map[field]string{
 	fieldGenre:       "genre",
 	fieldCatalogLen:  "catalog_duration_seconds",
 	fieldArtworkURL:  "artwork_url",
+	fieldTitle:       "title",
+	fieldArtist:      "artist",
+	fieldAlbum:       "album",
+	fieldDedupKey:    "dedup_key",
 }
 
 var castOf = map[field]string{
 	fieldYear:        "::text::int",
 	fieldTrackNumber: "::text::int",
 	fieldCatalogLen:  "::text::double precision",
+}
+
+func isIdentity(f field) bool {
+	return f == fieldTitle || f == fieldArtist || f == fieldAlbum
 }
 
 func isNumeric(f field) bool {
@@ -79,6 +96,14 @@ type plannedChange struct {
 	TrackID     string
 	UserID      string
 	SeenVersion int
+	Group       string
+}
+
+func (c plannedChange) effectiveGroup() string {
+	if c.Group == "" && isIdentity(c.Field) {
+		return identityGroup
+	}
+	return c.Group
 }
 
 func (c plannedChange) clearsWrongISRC() bool {
@@ -107,6 +132,9 @@ const (
 	verdictSkippedNotEmpty verdict = "skipped-not-empty"
 	verdictStale           verdict = "stale"
 	verdictFailed          verdict = "failed"
+
+	verdictSkippedGroup     verdict = "skipped-group"
+	verdictSkippedDuplicate verdict = "skipped-duplicate"
 )
 
 func isBlank(f field, value *string) bool {
@@ -147,6 +175,7 @@ type reportFix struct {
 	OldValue *string  `json:"old_value"`
 	NewValue *string  `json:"new_value"`
 	Sources  []string `json:"sources"`
+	Group    string   `json:"group"`
 }
 
 func readPlan(r io.Reader, currentYear int) ([]trackPlan, error) {
@@ -167,7 +196,26 @@ func readPlan(r io.Reader, currentYear int) ([]trackPlan, error) {
 			return nil, err
 		}
 	}
+	for _, track := range plans.tracks {
+		if err := track.checkIdentityGroup(); err != nil {
+			return nil, err
+		}
+	}
 	return plans.tracks, nil
+}
+
+func (p trackPlan) checkIdentityGroup() error {
+	group := ""
+	for _, change := range p.Changes {
+		if !isIdentity(change.Field) {
+			continue
+		}
+		if group != "" && change.effectiveGroup() != group {
+			return fmt.Errorf("track %s: title, artist and album fixes must share one group", p.TrackID)
+		}
+		group = change.effectiveGroup()
+	}
+	return nil
 }
 
 type planBook struct {
@@ -222,6 +270,9 @@ func toChange(finding reportFinding, currentYear int) (plannedChange, error) {
 	if finding.TrackID == "" || fix.UserID == "" {
 		return plannedChange{}, fmt.Errorf("track %q: fix without track_id or user_id", finding.TrackID)
 	}
+	if f == fieldDedupKey {
+		return plannedChange{}, fmt.Errorf("track %s: the dedup key is recomputed, never planned", finding.TrackID)
+	}
 	mode, err := parseMode(fix.Mode)
 	if err != nil {
 		return plannedChange{}, fmt.Errorf("track %s: %w", finding.TrackID, err)
@@ -231,12 +282,15 @@ func toChange(finding reportFinding, currentYear int) (plannedChange, error) {
 	}
 	return plannedChange{
 		Mode: mode, Field: f, AuditedOld: fix.OldValue, NewValue: fix.NewValue,
-		TrackID: finding.TrackID, UserID: fix.UserID, SeenVersion: fix.Version,
+		TrackID: finding.TrackID, UserID: fix.UserID, SeenVersion: fix.Version, Group: fix.Group,
 	}, nil
 }
 
 func checkChange(mode changeMode, f field, fix *reportFix, currentYear int) error {
 	if mode != modeCorrect {
+		if isIdentity(f) {
+			return fmt.Errorf("a %s fix must be correct-mode", f)
+		}
 		return checkValues(f, fix, currentYear)
 	}
 	if f == fieldISRC {
@@ -274,8 +328,20 @@ func checkValues(f field, fix *reportFix, currentYear int) error {
 		return checkCatalogLength(fix.NewValue)
 	case fieldArtworkURL:
 		return checkArtworkReplacement(fix)
+	case fieldTitle, fieldArtist, fieldAlbum:
+		return checkIdentityText(f, fix.NewValue)
 	}
 	return nil
+}
+
+func checkIdentityText(f field, value *string) error {
+	if value == nil || strings.TrimSpace(*value) == "" {
+		return fmt.Errorf("%s fix has a blank new_value", f)
+	}
+	if canonical := strings.Join(strings.Fields(textnorm.NFKC(*value)), " "); canonical != *value {
+		return fmt.Errorf("%s fix new_value %q is not canonical, want %q", f, *value, canonical)
+	}
+	return domain.ValidateOptionalTrackText(value, string(f))
 }
 
 func checkTrackNumber(value *string) error {

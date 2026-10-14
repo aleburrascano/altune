@@ -27,6 +27,7 @@ type fix struct {
 	Mode     changeMode `json:"mode"`
 	OldValue *string    `json:"old_value"`
 	NewValue *string    `json:"new_value"`
+	Group    string     `json:"group,omitempty"`
 }
 
 type lengthPlan struct {
@@ -68,7 +69,7 @@ func about(t boundTrack, kind category, detail string) finding {
 func findingOf(t boundTrack, d difference) finding {
 	f := about(t, d.category(), valueText(d.Old)+" -> "+valueText(d.New))
 	if d.Mode != modeReportOnly {
-		f.Fix = &fix{UserID: t.UserID, Version: t.Version, Field: d.Field, Mode: d.Mode, OldValue: d.Old, NewValue: d.New}
+		f.Fix = &fix{UserID: t.UserID, Version: t.Version, Field: d.Field, Mode: d.Mode, OldValue: d.Old, NewValue: d.New, Group: d.Group}
 	}
 	return f
 }
