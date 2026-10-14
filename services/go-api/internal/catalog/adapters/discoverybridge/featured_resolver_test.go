@@ -1,6 +1,9 @@
 package discoverybridge
 
 import (
+	"altune/go-api/internal/catalog/catalogtest"
+	catalogdomain "altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/ports"
 	discoverydomain "altune/go-api/internal/discovery/domain"
 	"context"
 	"strings"
@@ -9,10 +12,21 @@ import (
 
 type stubFeaturedResolver struct {
 	feats []discoverydomain.FeaturedArtist
+	err   error
 }
 
 func (s stubFeaturedResolver) Resolve(context.Context, string, string) ([]discoverydomain.FeaturedArtist, error) {
-	return s.feats, nil
+	return s.feats, s.err
+}
+
+func TestFeaturedResolver_Contract(t *testing.T) {
+	catalogtest.FeaturedResolverContract(t, func(_ *testing.T, feats []catalogdomain.FeaturedArtist, err error) ports.FeaturedArtistResolver {
+		upstream := make([]discoverydomain.FeaturedArtist, 0, len(feats))
+		for _, f := range feats {
+			upstream = append(upstream, discoverydomain.FeaturedArtist{Name: f.Name, MBID: f.MBID, DeezerID: f.DeezerID})
+		}
+		return &FeaturedResolver{inner: stubFeaturedResolver{feats: upstream, err: err}}
+	})
 }
 
 func TestFeaturedResolver_SkipsOversizedCredits(t *testing.T) {

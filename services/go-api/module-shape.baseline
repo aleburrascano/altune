@@ -36,6 +36,5 @@ G8 internal/acquisition/service/step_update_track.go sits directly in service/
 G8 internal/acquisition/service/temp_workspace.go sits directly in service/
 G8 internal/acquisition/service/title_qualifiers.go sits directly in service/
 G8 internal/auth/service/request_identity.go sits directly in service/
-G9 internal/catalog/catalogtest/featured_resolver_fake.go has no featured_resolver_contract.go
 G9 internal/catalog/catalogtest/metrics_fake.go has no metrics_contract.go
 G9 internal/catalog/catalogtest/scheduler_fake.go has no scheduler_contract.go
