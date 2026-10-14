@@ -50,6 +50,7 @@ const (
 	categoryGenreFillable                category = "genre_fillable"
 	categoryGenreUnfillable              category = "genre_unfillable"
 	categoryCatalogDurationFillable      category = "catalog_duration_fillable"
+	categoryCatalogDurationCorrectable   category = "catalog_duration_correctable"
 	categoryCoverBlank                   category = "cover_blank"
 	categoryCoverNotReplaceable          category = "cover_not_replaceable"
 	categoryYearFromRelease              category = "year_from_release"
@@ -91,6 +92,7 @@ type fix struct {
 	UserID   string   `json:"user_id"`
 	Version  int      `json:"version"`
 	Field    string   `json:"field"`
+	Mode     string   `json:"mode,omitempty"`
 	OldValue *string  `json:"old_value"`
 	NewValue *string  `json:"new_value"`
 	Sources  []string `json:"sources,omitempty"`

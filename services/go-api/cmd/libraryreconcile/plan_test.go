@@ -370,3 +370,15 @@ func TestReadPlan_AcceptsTheDeriveFixesThatFillACoverFillAnAlbumAndCorrectAnISRC
 		t.Error("an isrc correction with no proof in sources was accepted")
 	}
 }
+
+func TestReadPlan_ACatalogLengthCorrectionReplacesOnlyTheSavedLength(t *testing.T) {
+	report := `{"findings":[{"track_id":"t1","fix":{"user_id":"u","version":3,"field":"catalog_duration_seconds","mode":"correct","old_value":"230","new_value":"237"}}]}`
+	plans, err := readPlan(strings.NewReader(report), testYear)
+	if err != nil || len(plans) != 1 {
+		t.Fatalf("got %+v, %v", plans, err)
+	}
+	change := plans[0].Changes[0]
+	if decide(change, text("230")) != verdictApplied || decide(change, text("233")) != verdictSkippedNotEmpty {
+		t.Fatalf("got %+v", change)
+	}
+}

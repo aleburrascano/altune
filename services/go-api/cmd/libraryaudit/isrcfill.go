@@ -29,19 +29,26 @@ func albumTracklistCandidates(ctx context.Context, cat catalog, lib libraryTrack
 	return fittingCandidates(lib, tracks), nil
 }
 
-func catalogRecord(ctx context.Context, cat catalog, lib libraryTrack) (catalogTrack, error) {
+type recordSource int
+
+const (
+	recordFromISRCLookup recordSource = iota
+	recordFromLibraryAlbum
+)
+
+func catalogRecord(ctx context.Context, cat catalog, lib libraryTrack) (catalogTrack, recordSource, error) {
 	found, err := cat.TrackByISRC(ctx, lib.ISRC)
 	if err != nil {
-		return catalogTrack{}, err
+		return catalogTrack{}, recordFromISRCLookup, err
 	}
 	onAlbum, err := albumTrackWithISRC(ctx, cat, lib)
 	if err != nil {
-		return catalogTrack{}, err
+		return catalogTrack{}, recordFromISRCLookup, err
 	}
 	if onAlbum != nil {
-		return *onAlbum, nil
+		return *onAlbum, recordFromLibraryAlbum, nil
 	}
-	return found, nil
+	return found, recordFromISRCLookup, nil
 }
 
 func albumTrackWithISRC(ctx context.Context, cat catalog, lib libraryTrack) (*catalogTrack, error) {
