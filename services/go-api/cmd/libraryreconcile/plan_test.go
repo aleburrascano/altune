@@ -263,3 +263,50 @@ func TestCheckValues_ACatalogLengthClearNeedsTheOldValue(t *testing.T) {
 		t.Error("clear without old value was accepted")
 	}
 }
+
+func TestReadPlan_CorrectModeNeedsTheValueTheDeriveSawAndNeverTouchesTheISRC(t *testing.T) {
+	cases := map[string]string{
+		"no old value":    `{"findings":[{"track_id":"t1","fix":{"user_id":"u","version":1,"field":"year","mode":"correct","new_value":"1984"}}]}`,
+		"blank old value": `{"findings":[{"track_id":"t1","fix":{"user_id":"u","version":1,"field":"genre","mode":"correct","old_value":" ","new_value":"Pop"}}]}`,
+		"no new value":    `{"findings":[{"track_id":"t1","fix":{"user_id":"u","version":1,"field":"year","mode":"correct","old_value":"2024","new_value":null}}]}`,
+		"isrc":            `{"findings":[{"track_id":"t1","fix":{"user_id":"u","version":1,"field":"isrc","mode":"correct","old_value":"USAAA0000001","new_value":"USAAA0000002","sources":["deezer","musicbrainz"]}}]}`,
+		"year too early":  `{"findings":[{"track_id":"t1","fix":{"user_id":"u","version":1,"field":"year","mode":"correct","old_value":"2024","new_value":"1850"}}]}`,
+		"unknown mode":    `{"findings":[{"track_id":"t1","fix":{"user_id":"u","version":1,"field":"year","mode":"overwrite","old_value":"2024","new_value":"1984"}}]}`,
+	}
+	for name, report := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, err := readPlan(strings.NewReader(report), testYear); err == nil {
+				t.Fatal("expected an error")
+			}
+		})
+	}
+}
+
+func TestReadPlan_ReadsACorrectModeFix(t *testing.T) {
+	report := `{"findings":[{"track_id":"t1","fix":{"user_id":"u","version":2,"field":"year","mode":"correct","old_value":"2024","new_value":"1984"}}]}`
+	plans, err := readPlan(strings.NewReader(report), testYear)
+	if err != nil || len(plans) != 1 || plans[0].Changes[0].Mode != modeCorrect {
+		t.Fatalf("got %+v, %v", plans, err)
+	}
+}
+
+func TestDecide_CorrectModeReplacesOnlyTheValueTheDeriveSaw(t *testing.T) {
+	correct := plannedChange{Mode: modeCorrect, Field: fieldYear, AuditedOld: text("2024"), NewValue: text("1984")}
+	cases := []struct {
+		name    string
+		current *string
+		want    verdict
+	}{
+		{"still the audited value", text("2024"), verdictApplied},
+		{"edited since", text("2001"), verdictSkippedNotEmpty},
+		{"already the new value", text("1984"), verdictSkippedNotEmpty},
+		{"emptied since", nil, verdictSkippedNotEmpty},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := decide(correct, tc.current); got != tc.want {
+				t.Fatalf("got %s want %s", got, tc.want)
+			}
+		})
+	}
+}

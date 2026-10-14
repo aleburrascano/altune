@@ -327,3 +327,36 @@ func TestRunReconcile_ReplacesAnArtworkUrlOnlyWhileItMatchesTheAuditAndUndoResto
 		t.Fatalf("err=%v out=%s", err, undone.String())
 	}
 }
+
+func TestRunReconcile_CorrectModeOverwritesOnlyTheDerivedValueAndUndoRestoresIt(t *testing.T) {
+	s := testStore(t)
+	remaster, edited := 2024, 2024
+	matching := seedTrack(t, s, &remaster, nil, nil)
+	changed := seedTrack(t, s, &edited, nil, nil)
+	if _, err := s.pool.Exec(context.Background(), "UPDATE tracks SET year = 2010 WHERE id = $1", changed.trackID); err != nil {
+		t.Fatal(err)
+	}
+	correct := plannedChange{Mode: modeCorrect, Field: fieldYear, AuditedOld: text("2024"), NewValue: text("1984")}
+	runID, out, err := reconcile(t, s, true, planFor(matching, 4, correct), planFor(changed, 4, correct))
+	if err != nil || *snapshot(t, s, matching).year != 1984 || *snapshot(t, s, changed).year != 2010 || logRows(t, s, runID) != 1 {
+		t.Fatalf("err=%v out=%s", err, out)
+	}
+	if got := snapshot(t, s, matching); got.version != 5 {
+		t.Fatalf("version %d", got.version)
+	}
+	var undone bytes.Buffer
+	if err := runUndo(context.Background(), s, runID, &undone); err != nil || *snapshot(t, s, matching).year != 2024 {
+		t.Fatalf("err=%v out=%s", err, undone.String())
+	}
+}
+
+func TestRunReconcile_CorrectModeDryRunWritesNothing(t *testing.T) {
+	s := testStore(t)
+	year := 2024
+	row := seedTrack(t, s, &year, nil, nil)
+	correct := plannedChange{Mode: modeCorrect, Field: fieldYear, AuditedOld: text("2024"), NewValue: text("1984")}
+	runID, out, err := reconcile(t, s, false, planFor(row, 4, correct))
+	if err != nil || *snapshot(t, s, row).year != 2024 || logRows(t, s, runID) != 0 || !strings.Contains(out, "would apply:") {
+		t.Fatalf("err=%v out=%s", err, out)
+	}
+}

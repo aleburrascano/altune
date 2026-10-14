@@ -54,7 +54,25 @@ func parseField(raw string) (field, error) {
 	return f, nil
 }
 
+type changeMode string
+
+const (
+	modeFill    changeMode = "fill"
+	modeCorrect changeMode = "correct"
+)
+
+func parseMode(raw string) (changeMode, error) {
+	switch changeMode(raw) {
+	case "", modeFill:
+		return modeFill, nil
+	case modeCorrect:
+		return modeCorrect, nil
+	}
+	return "", fmt.Errorf("unknown mode %q", raw)
+}
+
 type plannedChange struct {
+	Mode        changeMode
 	Field       field
 	AuditedOld  *string
 	NewValue    *string
@@ -72,7 +90,7 @@ func (c plannedChange) clearsWrongCatalogLength() bool {
 }
 
 func (c plannedChange) replacesAuditedValue() bool {
-	return c.clearsWrongISRC() || c.clearsWrongCatalogLength() || c.Field == fieldArtworkURL
+	return c.Mode == modeCorrect || c.clearsWrongISRC() || c.clearsWrongCatalogLength() || c.Field == fieldArtworkURL
 }
 
 type trackPlan struct {
@@ -125,6 +143,7 @@ type reportFix struct {
 	UserID   string   `json:"user_id"`
 	Version  int      `json:"version"`
 	Field    string   `json:"field"`
+	Mode     string   `json:"mode"`
 	OldValue *string  `json:"old_value"`
 	NewValue *string  `json:"new_value"`
 	Sources  []string `json:"sources"`
@@ -203,13 +222,33 @@ func toChange(finding reportFinding, currentYear int) (plannedChange, error) {
 	if finding.TrackID == "" || fix.UserID == "" {
 		return plannedChange{}, fmt.Errorf("track %q: fix without track_id or user_id", finding.TrackID)
 	}
-	if err := checkValues(f, fix, currentYear); err != nil {
+	mode, err := parseMode(fix.Mode)
+	if err != nil {
+		return plannedChange{}, fmt.Errorf("track %s: %w", finding.TrackID, err)
+	}
+	if err := checkChange(mode, f, fix, currentYear); err != nil {
 		return plannedChange{}, fmt.Errorf("track %s: %w", finding.TrackID, err)
 	}
 	return plannedChange{
-		Field: f, AuditedOld: fix.OldValue, NewValue: fix.NewValue,
+		Mode: mode, Field: f, AuditedOld: fix.OldValue, NewValue: fix.NewValue,
 		TrackID: finding.TrackID, UserID: fix.UserID, SeenVersion: fix.Version,
 	}, nil
+}
+
+func checkChange(mode changeMode, f field, fix *reportFix, currentYear int) error {
+	if mode != modeCorrect {
+		return checkValues(f, fix, currentYear)
+	}
+	if f == fieldISRC {
+		return errors.New("an isrc correction goes through libraryrelength, not a correct-mode fix")
+	}
+	if fix.OldValue == nil || isBlank(f, fix.OldValue) {
+		return errors.New("a correct-mode fix needs the old_value the derive saw")
+	}
+	if fix.NewValue == nil {
+		return errors.New("a correct-mode fix needs a new_value")
+	}
+	return checkValues(f, fix, currentYear)
 }
 
 func checkValues(f field, fix *reportFix, currentYear int) error {
