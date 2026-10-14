@@ -53,10 +53,45 @@ func auditTrack(ctx context.Context, cat catalog, covers coverJudge, lib library
 	}
 	findings := metadataFindings(lib, found)
 	if hasCategory(findings, categoryWrongSong) {
+		confirmed, kept, err := musicBrainzKeepsISRC(ctx, cat, lib, found)
+		switch {
+		case err != nil:
+			return trackResult{Checked: true, Findings: withoutFixes(findings)}
+		case kept:
+			return trackResult{Checked: true, Findings: []finding{confirmed}}
+		}
 		return trackResult{Checked: true, Findings: findings}
 	}
 	findings = append(findings, coverFindings(ctx, covers, lib, found)...)
 	return trackResult{Checked: true, Findings: findings, Matched: &found}
+}
+
+func musicBrainzKeepsISRC(ctx context.Context, cat catalog, lib libraryTrack, deezer catalogTrack) (finding, bool, error) {
+	recordings, ok := cat.(recordingCatalog)
+	if !ok {
+		return finding{}, false, errors.New("musicbrainz was not consulted")
+	}
+	found, err := recordings.RecordingsByISRC(ctx, lib.ISRC)
+	if errors.Is(err, errCatalogUnknown) {
+		return finding{}, false, nil
+	}
+	if err != nil {
+		return finding{}, false, err
+	}
+	same := sameSongRecordings(lib, found)
+	if len(same) == 0 {
+		return finding{}, false, nil
+	}
+	return about(lib, categoryISRCConfirmed, "musicbrainz recording "+same[0].ID+"; deezer returned "+deezer.Title), true, nil
+}
+
+func withoutFixes(findings []finding) []finding {
+	out := make([]finding, 0, len(findings))
+	for _, f := range findings {
+		f.Fix = nil
+		out = append(out, f)
+	}
+	return out
 }
 
 func auditTrackWithFills(ctx context.Context, cat catalog, covers coverJudge, lib libraryTrack) trackResult {

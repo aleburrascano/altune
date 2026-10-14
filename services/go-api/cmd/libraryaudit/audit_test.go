@@ -268,7 +268,7 @@ func TestAuditTrack_FindingsCarryTheExactFixAndTheVersionSeen(t *testing.T) {
 		name     string
 		category category
 		lib      libraryTrack
-		cat      fakeCatalog
+		cat      catalog
 		want     fix
 	}{
 		{
@@ -283,17 +283,48 @@ func TestAuditTrack_FindingsCarryTheExactFixAndTheVersionSeen(t *testing.T) {
 		},
 		{
 			"wrong song clears isrc", categoryWrongSong, withLib(base, func(l *libraryTrack) { l.ISRC = "X" }),
-			fakeCatalog{byISRC: map[string]catalogTrack{"X": {Title: "Ransom", Artist: "Lil Tecca"}}},
+			fakeRecordings{
+				fakeCatalog: fakeCatalog{byISRC: map[string]catalogTrack{"X": {Title: "Ransom", Artist: "Lil Tecca"}}},
+				byISRC:      map[string][]recording{"X": {{ID: "m", Title: "Ransom", Artists: []string{"Lil Tecca"}}}},
+			},
 			fix{UserID: "u1", Version: 7, Field: "isrc", OldValue: strPtr("X")},
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := audited(tc.cat, fakeCovers{}, tc.lib)
+			got := auditTrack(context.Background(), tc.cat, fakeCovers{}, tc.lib)
 			found := findingOf(got.Findings, tc.category)
 			if found.Fix == nil || !reflect.DeepEqual(*found.Fix, tc.want) {
 				t.Fatalf("got %+v", found)
 			}
 		})
+	}
+}
+
+func TestAuditTrack_AWrongSongNeedsMusicBrainzToAgree(t *testing.T) {
+	lib := libraryTrack{ID: "t1", UserID: "u1", Title: "Stronger", Artist: "Kanye West", Album: "Graduation", ISRC: "USUM70741299", DurationSeconds: 312}
+	deezerPicksTheInstrumental := fakeCatalog{byISRC: map[string]catalogTrack{"USUM70741299": {Title: "Stronger (instrumental)", Artist: "Kanye West", DurationSeconds: 313}}}
+	studio := recording{ID: "mb-stronger", Title: "Stronger", Artists: []string{"Kanye West"}, DurationSeconds: 311, ISRCs: []string{"USUM70741299"}}
+
+	kept := auditTrack(context.Background(), fakeRecordings{fakeCatalog: deezerPicksTheInstrumental, byISRC: map[string][]recording{"USUM70741299": {studio}}}, fakeCovers{}, lib)
+	if hasCategory(kept.Findings, categoryWrongSong) || !hasCategory(kept.Findings, categoryISRCConfirmed) {
+		t.Errorf("musicbrainz lists the ISRC on the same song, got %+v", kept.Findings)
+	}
+
+	instrumental := recording{ID: "mb-inst", Title: "Stronger (instrumental)", Artists: []string{"Kanye West"}, DurationSeconds: 313, ISRCs: []string{"USUM70741299"}}
+	cleared := auditTrack(context.Background(), fakeRecordings{fakeCatalog: deezerPicksTheInstrumental, byISRC: map[string][]recording{"USUM70741299": {instrumental}}}, fakeCovers{}, lib)
+	if !hasCategory(cleared.Findings, categoryWrongSong) {
+		t.Errorf("musicbrainz agrees it is another version, got %+v", cleared.Findings)
+	}
+}
+
+func TestAuditTrack_AWrongSongIsReportOnlyWhenMusicBrainzCannotBeAsked(t *testing.T) {
+	lib := libraryTrack{ID: "t1", Title: "Stronger", Artist: "Kanye West", ISRC: "USUM70741299", CatalogDurationSeconds: 313}
+	deezer := fakeCatalog{byISRC: map[string]catalogTrack{"USUM70741299": {Title: "Stronger (instrumental)", Artist: "Kanye West", DurationSeconds: 313}}}
+	got := auditTrack(context.Background(), fakeRecordings{fakeCatalog: deezer, err: errors.New("musicbrainz 503")}, fakeCovers{}, lib)
+	for _, f := range got.Findings {
+		if f.Fix != nil {
+			t.Fatalf("cleared without musicbrainz agreeing: %+v", got.Findings)
+		}
 	}
 }
