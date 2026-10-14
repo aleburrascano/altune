@@ -40,6 +40,30 @@ func TestSelectStep_SkipTopRankedWithOneCandidateFails(t *testing.T) {
 	}
 }
 
+func TestSelectStep_SkipTopRankedKeepsTheOfficialTrack(t *testing.T) {
+	ac := &AcquisitionContext{
+		Track:   TrackRef{Title: "Demigod", Artist: "SLAYR", Duration: 168},
+		Replace: ReplaceState{SkipTopRanked: true},
+		Candidates: []ports.AudioCandidate{
+			{Title: "Demigod", URL: "official", Channel: "YouTube Music Art Track", Duration: 168, Resolved: true},
+			{Title: "SLAYR - Demigod", URL: "old-upload", Channel: "SLAYR - Topic", Duration: 122},
+			{Title: "SLAYR - Demigod (audio)", URL: "other-upload", Channel: "Someone", Duration: 167},
+		},
+	}
+
+	if _, err := NewSelectStep().Execute(context.Background(), ac, afterSearch{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if ac.Selected == nil || ac.Selected.URL != "official" {
+		t.Fatalf("selected = %+v, want the official track", ac.Selected)
+	}
+	for _, c := range ac.Ranked {
+		if c.URL == "old-upload" {
+			t.Fatalf("the leading upload must still be skipped, ranked = %+v", ac.Ranked)
+		}
+	}
+}
+
 func TestSelectStep_SkipTopRankedOffByDefault(t *testing.T) {
 	ac := &AcquisitionContext{
 		Track: TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200},
