@@ -18,7 +18,6 @@ const (
 	musicWatchURLPrefix = "https://music.youtube.com/watch?v="
 	artTrackChannel     = "YouTube Music Art Track"
 	topResults          = 5
-	maxDurationDriftSec = 3
 )
 
 var ignorableTitleBrackets = regexp.MustCompile(`(?i)\s*[\(\[](feat\.?|ft\.?|with|bonus)\b[^\)\]]*[\)\]]`)
@@ -45,7 +44,7 @@ func NewSource(search songSearch, downloader audioDownloader) *Source {
 func (s *Source) Name() acqdomain.SourceName { return SourceName }
 
 func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
-	if req.Title == "" || req.Artist == "" || req.Duration <= 0 {
+	if req.Title == "" || req.Artist == "" {
 		return nil, nil
 	}
 	songs, err := s.search.SearchSongs(ctx, req.Title+" "+req.Artist)
@@ -85,18 +84,28 @@ func strongHit(songs []Song, req ports.FindRequest) (Song, bool) {
 		if !matches(song, req) {
 			continue
 		}
-		if !found || (song.Explicit && !best.Explicit) {
+		if !found || better(song, best, req.Duration) {
 			best, found = song, true
 		}
 	}
 	return best, found
 }
 
+func better(song, best Song, savedLength float64) bool {
+	if song.Explicit != best.Explicit {
+		return song.Explicit
+	}
+	return savedLength > 0 && lengthGap(song, savedLength) < lengthGap(best, savedLength)
+}
+
+func lengthGap(song Song, savedLength float64) float64 {
+	return math.Abs(float64(song.DurationSeconds) - savedLength)
+}
+
 func matches(song Song, req ports.FindRequest) bool {
 	return song.Type == VideoTypeATV &&
 		comparableTitle(song.Title) == comparableTitle(req.Title) &&
-		credits(song.Artists, req.Artist) &&
-		math.Abs(float64(song.DurationSeconds)-req.Duration) <= maxDurationDriftSec
+		credits(song.Artists, req.Artist)
 }
 
 func comparableTitle(title string) string {
