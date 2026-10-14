@@ -156,13 +156,30 @@ func Labels(title string) []string {
 	return labels
 }
 
-func IsVersionWord(token string) bool {
-	for _, entry := range slices.Concat(lexicon, releaseVariants) {
-		if slices.Contains(entry.tokens, token) {
-			return true
+var versionPhrases = slices.Concat(lexicon, releaseVariants)
+
+func versionPhraseAt(tokens []string, pos int) int {
+	longest := 0
+	for _, entry := range versionPhrases {
+		n := len(entry.tokens)
+		if n > longest && pos+n <= len(tokens) && slices.Equal(tokens[pos:pos+n], entry.tokens) {
+			longest = n
 		}
 	}
-	return false
+	return longest
+}
+
+func WithoutVersionPhrases(tokens []string) []string {
+	var kept []string
+	for pos := 0; pos < len(tokens); {
+		if n := versionPhraseAt(tokens, pos); n > 0 {
+			pos += n
+			continue
+		}
+		kept = append(kept, tokens[pos])
+		pos++
+	}
+	return kept
 }
 
 func KnownLabels() map[string]bool {
