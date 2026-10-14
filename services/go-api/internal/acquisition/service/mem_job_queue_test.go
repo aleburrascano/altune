@@ -225,6 +225,24 @@ func TestMemJobQueue_ReleaseWithADelayIsClaimableOnlyOnceTheQueueClockPassesIt(t
 	}
 }
 
+func TestMemJobQueue_ClaimReportsHowLongTheJobWaited(t *testing.T) {
+	clock := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	q := newMemJobQueueWithClock(nil, func() time.Time { return clock })
+	ctx := context.Background()
+	if err := q.Enqueue(ctx, domain.NewTrackId(), ports.JobKindAcquire, 0); err != nil {
+		t.Fatalf("Enqueue = %v", err)
+	}
+
+	clock = clock.Add(45 * time.Second)
+	job, err := q.Claim(ctx, time.Minute)
+	if err != nil {
+		t.Fatalf("Claim = %v", err)
+	}
+	if job.Waited != 45*time.Second {
+		t.Errorf("Waited = %v, want 45s", job.Waited)
+	}
+}
+
 func TestMemJobQueue_SettleWithAnExpiredClaimsFenceKeepsAJobEnqueuedAfterTheLeaseExpired(t *testing.T) {
 	clock := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	q := newMemJobQueueWithClock(nil, func() time.Time { return clock })

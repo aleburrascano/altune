@@ -2673,6 +2673,21 @@ func TestBackgroundScheduler_StartedPausedNeverClaimsASeededJobUntilResume(t *te
 	}
 }
 
+func TestBackgroundScheduler_AClaimedJobRecordsItsQueueWait(t *testing.T) {
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(newFakeTrackRepository()), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1))
+	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
+
+	job := acqports.Job{TrackID: domain.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Waited: 3 * time.Second}
+	scheduler.startClaimedJob(context.Background(), job.TrackID.String(), job)
+	record := scheduler.log.complete(job.TrackID.String(), acqports.JobSucceeded, "")
+
+	if got := record.StageMs["queue"]; got != 3000 {
+		t.Errorf("queue stage = %dms, want 3000", got)
+	}
+}
+
 func TestBackgroundScheduler_OutcomeCarriesStageTimesSourceHostAndFileFacts(t *testing.T) {
 	recorder := newFakeOutcomeRecorder()
 	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(newFakeTrackRepository()), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())

@@ -20,6 +20,7 @@ type Job struct {
 	Attempts int
 	Run      int
 	Fence    Fence
+	Waited   time.Duration
 }
 
 type Fence int
