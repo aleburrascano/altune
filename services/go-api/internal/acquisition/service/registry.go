@@ -52,6 +52,10 @@ func (r *SourceRegistry) FindReportingOutage(ctx context.Context, req ports.Find
 		return nil, nil, ErrNoAudioSources
 	}
 
+	if req.FallbackOnly {
+		slots, errs := findAll(ctx, req, r.fallback)
+		return mergeSlotsReportingOutage(ctx, r.fallback, slots, errs)
+	}
 	slots, errs := findAll(ctx, req, r.sources)
 	if len(r.fallback) == 0 || anyResolved(slots) {
 		return mergeSlotsReportingOutage(ctx, r.sources, slots, errs)
@@ -59,6 +63,8 @@ func (r *SourceRegistry) FindReportingOutage(ctx context.Context, req ports.Find
 	fallbackSlots, fallbackErrs := findAll(ctx, req, r.fallback)
 	return mergeSlotsReportingOutage(ctx, r.all(), append(slots, fallbackSlots...), append(errs, fallbackErrs...))
 }
+
+func (r *SourceRegistry) HasFallback() bool { return len(r.fallback) > 0 }
 
 func findAll(ctx context.Context, req ports.FindRequest, sources []ports.AudioSource) ([][]ports.AudioCandidate, []error) {
 	slots := make([][]ports.AudioCandidate, len(sources))

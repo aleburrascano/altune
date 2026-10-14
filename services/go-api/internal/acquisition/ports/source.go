@@ -13,6 +13,8 @@ type FindRequest struct {
 	ISRC     string
 	Duration float64
 	Identity RecordingIdentity
+
+	FallbackOnly bool
 }
 
 type AudioSource interface {

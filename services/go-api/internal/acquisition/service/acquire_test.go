@@ -1172,7 +1172,6 @@ func TestExecute_FloorAboveTheCandidatesConfidenceFailsAsNoConfidentMatch(t *tes
 
 func TestExecute_DefaultFloorStoresTheSameCandidate(t *testing.T) {
 	track, err := acquireUnknownTopicWithFloor(t)
-
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -1224,5 +1223,55 @@ func TestExecuteReplace_AnM4AReplacesAnOldMP3AndDropsIt(t *testing.T) {
 	}
 	if _, stillThere := store.objects[originalRef]; stillThere {
 		t.Errorf("old mp3 %q still stored, want it deleted after the swap", originalRef)
+	}
+}
+
+type brokenArtTrackSource struct{ finds int }
+
+func (*brokenArtTrackSource) Name() acqdomain.SourceName { return "ytmsearch" }
+
+func (s *brokenArtTrackSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
+	s.finds++
+	return []ports.AudioCandidate{{
+		Title:    "Blinding Lights",
+		URL:      "https://music.youtube.com/watch?v=artTrackAAA",
+		Channel:  "YouTube Music Art Track",
+		Resolved: true,
+	}}, nil
+}
+
+func (*brokenArtTrackSource) Fetch(_ context.Context, _ ports.AudioCandidate, _ string) (ports.FetchedAudio, error) {
+	return ports.FetchedAudio{}, errors.New("yt-dlp download: exit status 1")
+}
+
+func TestExecuteReplace_AFailedFirstTierDownloadFallsBackToTheTextSearch(t *testing.T) {
+	repo, store, userId, trackId, _ := seedReadyTrack(t)
+	first := &brokenArtTrackSource{}
+	registry := NewSourceRegistry(first).WithFallback(newAudioSource{})
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), registry, store)
+
+	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
+		t.Fatalf("ExecuteReplace: %v, want the fallback candidate to succeed", err)
+	}
+	row := repo.committed(trackId, userId)
+	if row.AudioRef == nil || store.objects[*row.AudioRef] != "new bytes" {
+		t.Fatalf("stored audio = %v, want the fallback source's audio", row.AudioRef)
+	}
+	if first.finds != 1 {
+		t.Errorf("first tier searched %d times, want 1 (the retry asks only the fallback)", first.finds)
+	}
+}
+
+func TestExecuteReplace_NoFallbackRetryWhenTheFallbackAlreadyRan(t *testing.T) {
+	repo, store, userId, trackId, _ := seedReadyTrack(t)
+	unresolvedBroken := &stubSource{name: "ytdlp", found: []ports.AudioCandidate{candidate("https://www.youtube.com/watch?v=brokenAAAAA")}, fetchErr: errors.New("exit status 1")}
+	first := &stubSource{name: "ytmsearch"}
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(first).WithFallback(unresolvedBroken), store)
+
+	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err == nil {
+		t.Fatal("ExecuteReplace = nil, want the download failure")
+	}
+	if unresolvedBroken.finds != 1 {
+		t.Errorf("fallback searched %d times, want exactly 1", unresolvedBroken.finds)
 	}
 }

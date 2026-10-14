@@ -30,8 +30,10 @@ type memJob struct {
 	reenqueued  bool
 }
 
-var _ ports.JobQueue = (*memJobQueue)(nil)
-var _ ports.QueueDepthReader = (*memJobQueue)(nil)
+var (
+	_ ports.JobQueue         = (*memJobQueue)(nil)
+	_ ports.QueueDepthReader = (*memJobQueue)(nil)
+)
 
 func newMemJobQueue(wake chan<- struct{}) *memJobQueue {
 	return newMemJobQueueWithClock(wake, time.Now)
