@@ -70,6 +70,7 @@ func candidateFor(hit Song) ports.AudioCandidate {
 		Channel:    artTrackChannel,
 		Categories: []string{"Music"},
 		Resolved:   true,
+		Explicit:   hit.Explicit,
 	}
 }
 
