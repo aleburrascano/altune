@@ -6,11 +6,11 @@ import type {
   TrackResponse,
 } from '@shared/apiClient/trackResponse';
 import type { PlaylistDetailResponse, PlaylistResponse } from '@shared/apiClient/playlistResponse';
-import { MAX_ALL_TRACKS } from '@shared/apiClient/tracks';
 import { ApiError } from '@shared/failure/errors';
 
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 
+const MAX_ALL_TRACKS = 10_000;
 const NOT_FOUND_STATUS = 404;
 
 export interface MemoryLibrarySeed {

@@ -1,5 +1,4 @@
 import {
-  INDEX_SCHEMA_VERSION,
   downloadingEntry,
   failedEntry,
   loadIndex,
@@ -17,6 +16,8 @@ import type { StoredDirectory } from '@shared/files/fileStore';
 import { asTrackId, type TrackId } from '@shared/apiClient/ids';
 
 import { expectType, type IsExactlyAssignable, type Not } from '@testing/typeAssertions';
+
+const INDEX_SCHEMA_VERSION = 1;
 
 const INDEX_URI = 'memory://document/offline/pinned.json';
 const TEMP_URI = `${INDEX_URI}.tmp`;

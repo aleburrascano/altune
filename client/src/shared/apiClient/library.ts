@@ -69,18 +69,12 @@ function parseArtistGroup(value: unknown, at: string): ArtistGroup {
   };
 }
 
-export function parseListAlbumsResponse(
-  value: unknown,
-  at = 'ListAlbumsResponse',
-): ListAlbumsResponse {
+function parseListAlbumsResponse(value: unknown, at = 'ListAlbumsResponse'): ListAlbumsResponse {
   const r = asRecord(value, at);
   return parseListEnvelope(r, at, parseAlbumGroup);
 }
 
-export function parseListArtistsResponse(
-  value: unknown,
-  at = 'ListArtistsResponse',
-): ListArtistsResponse {
+function parseListArtistsResponse(value: unknown, at = 'ListArtistsResponse'): ListArtistsResponse {
   const r = asRecord(value, at);
   return parseListEnvelope(r, at, parseArtistGroup);
 }

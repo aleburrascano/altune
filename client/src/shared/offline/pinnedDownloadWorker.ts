@@ -92,7 +92,7 @@ async function downloadOne(
 }
 
 const MAX_DOWNLOAD_ATTEMPTS = 3;
-export const DOWNLOAD_RETRY_BASE_MS = 2_000;
+const DOWNLOAD_RETRY_BASE_MS = 2_000;
 
 function downloadBackoffMs(retry: number, random: number): number {
   return equalJitterMs(DOWNLOAD_RETRY_BASE_MS, Infinity, retry - 1, random);

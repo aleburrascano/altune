@@ -2,9 +2,6 @@ import { act, renderHook } from '@testing-library/react-native';
 import fc from 'fast-check';
 
 import {
-  DONE_HOLD_MS,
-  FAILED_HOLD_MS,
-  FINISHING_DWELL_MS,
   aggregatePhase,
   isStaleDownloadPhase,
   useActiveDownloadItems,
@@ -14,6 +11,10 @@ import {
 } from '@shared/acquisition/downloadStore';
 import { asTrackId } from '@shared/apiClient/ids';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+
+const FINISHING_DWELL_MS = 500;
+const DONE_HOLD_MS = 1_200;
+const FAILED_HOLD_MS = 4_000;
 
 function entry(trackId: string, phase: DownloadPhase): DownloadEntry {
   return { trackId: asTrackId(trackId), phase, title: null, artist: null, artworkUrl: null };

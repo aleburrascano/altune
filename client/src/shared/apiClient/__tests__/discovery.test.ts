@@ -4,14 +4,14 @@ import {
   listSearchHistory,
   clearSearchHistory,
   recordSearchHistory,
-  parseDiscoverySearchResponse,
 } from '@shared/apiClient/discovery';
 import type {
   DiscoveryKind,
   DiscoveryResult,
   DiscoverySearchResponse,
 } from '@shared/apiClient/discovery';
-import { apiBase, ApiError, ContractError } from '@shared/apiClient/index';
+import { apiBase, ApiError } from '@shared/apiClient/index';
+import { ContractError } from '@shared/failure/errors';
 import { supabase } from '@shared/auth/supabaseClient';
 
 const { __http } = require('@testing/doubles/fetch.js');
@@ -863,29 +863,38 @@ describe('wire parsing', () => {
     };
   }
 
-  describe('parseDiscoverySearchResponse — the full, structured shape', () => {
-    const parsed = parseDiscoverySearchResponse({
-      query: 'radiohead',
-      query_norm: 'radiohead',
-      results: [fullResult()],
-      sections: [{ kind: 'album', items: [fullResult()], has_more: true }],
-      providers: [{ provider: 'musicbrainz', status: 'ok', result_count: 3, latency_ms: 12 }],
-      partial: false,
-      cache: { hit: true, fetched_at: '2024-01-01T00:00:00Z' },
-      total: 500,
-      offset: 20,
-      has_more: true,
-      search_id: 'srch-1',
-      top_result: fullResult({ kind: 'artist', title: 'Radiohead' }),
-      corrected_query: 'radiohead',
-      original_query: 'radiohed',
-      related: [
-        {
-          relationship: 'similar',
-          related_to: 'Radiohead',
-          items: [fullResult({ kind: 'artist' })],
-        },
-      ],
+  async function parsedSearch(json: unknown): Promise<DiscoverySearchResponse> {
+    __http.reply('GET /v1/discovery/search', { status: 200, json });
+    return searchDiscovery({ q: 'q' });
+  }
+
+  describe('the search page searchDiscovery parses — the full, structured shape', () => {
+    let parsed: DiscoverySearchResponse;
+
+    beforeEach(async () => {
+      parsed = await parsedSearch({
+        query: 'radiohead',
+        query_norm: 'radiohead',
+        results: [fullResult()],
+        sections: [{ kind: 'album', items: [fullResult()], has_more: true }],
+        providers: [{ provider: 'musicbrainz', status: 'ok', result_count: 3, latency_ms: 12 }],
+        partial: false,
+        cache: { hit: true, fetched_at: '2024-01-01T00:00:00Z' },
+        total: 500,
+        offset: 20,
+        has_more: true,
+        search_id: 'srch-1',
+        top_result: fullResult({ kind: 'artist', title: 'Radiohead' }),
+        corrected_query: 'radiohead',
+        original_query: 'radiohed',
+        related: [
+          {
+            relationship: 'similar',
+            related_to: 'Radiohead',
+            items: [fullResult({ kind: 'artist' })],
+          },
+        ],
+      });
     });
 
     it('carries the structured optional fields through', () => {
@@ -906,13 +915,17 @@ describe('wire parsing', () => {
     });
   });
 
-  describe('parseDiscoverySearchResponse — legacy server omitting newer fields', () => {
-    const parsed = parseDiscoverySearchResponse({
-      query: 'q',
-      query_norm: 'q',
-      providers: [],
-      partial: false,
-      cache: { hit: false, fetched_at: null },
+  describe('the search page searchDiscovery parses — legacy server omitting newer fields', () => {
+    let parsed: DiscoverySearchResponse;
+
+    beforeEach(async () => {
+      parsed = await parsedSearch({
+        query: 'q',
+        query_norm: 'q',
+        providers: [],
+        partial: false,
+        cache: { hit: false, fetched_at: null },
+      });
     });
 
     it('defaults results, sections, offset, has_more, and total (to results.length) rather than throwing', () => {
@@ -932,7 +945,7 @@ describe('wire parsing', () => {
     });
   });
 
-  describe('parseDiscoverySearchResponse — off-contract enum values are tolerated, other bodies fail as a ContractError', () => {
+  describe('the search page searchDiscovery parses — off-contract enum values are tolerated, other bodies fail as a ContractError', () => {
     function base(): Record<string, unknown> {
       return {
         query: 'q',
@@ -948,12 +961,12 @@ describe('wire parsing', () => {
       };
     }
 
-    it('rejects a null body', () => {
-      expect(() => parseDiscoverySearchResponse(null)).toThrow(ContractError);
+    it('rejects a null body', async () => {
+      await expect(parsedSearch(null)).rejects.toThrow(ContractError);
     });
 
-    it("coerces an off-contract result confidence to 'low'", () => {
-      const parsed = parseDiscoverySearchResponse({
+    it("coerces an off-contract result confidence to 'low'", async () => {
+      const parsed = await parsedSearch({
         ...base(),
         results: [fullResult({ confidence: 'extreme' })],
       });
@@ -961,16 +974,16 @@ describe('wire parsing', () => {
       expect(parsed.results[0]?.confidence).toBe('low');
     });
 
-    it('drops a result with an off-contract kind', () => {
-      const parsed = parseDiscoverySearchResponse({
+    it('drops a result with an off-contract kind', async () => {
+      const parsed = await parsedSearch({
         ...base(),
         results: [fullResult({ kind: 'playlist' })],
       });
       expect(parsed.results).toEqual([]);
     });
 
-    it("coerces an off-contract provider status to 'error'", () => {
-      const parsed = parseDiscoverySearchResponse({
+    it("coerces an off-contract provider status to 'error'", async () => {
+      const parsed = await parsedSearch({
         ...base(),
         providers: [{ provider: 'mb', status: 'exploded', result_count: 0, latency_ms: 1 }],
       });

@@ -5,7 +5,6 @@ import {
   isTrackStatusReady,
   linkTrackIdentity,
   patchTrackStatus,
-  READY_STATUS_LIMIT,
   removeTrackStatus,
   trackIdentityKey,
   useTrackIdForIdentity,
@@ -21,6 +20,8 @@ import { flushOutbox } from '@shared/telemetry/outbox';
 import { signInTestUser } from '@testing/signInTestUser';
 
 const { __http } = require('@testing/doubles/fetch.js');
+
+const READY_STATUS_LIMIT = 512;
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 

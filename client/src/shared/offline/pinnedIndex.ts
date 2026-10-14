@@ -69,7 +69,7 @@ function offlineFile(name: string): StoredFile {
   return offlineDir().openFile(name);
 }
 
-export const INDEX_SCHEMA_VERSION = 1;
+const INDEX_SCHEMA_VERSION = 1;
 
 const INDEX_SCHEMA: SchemaSpec = {
   current: INDEX_SCHEMA_VERSION,
@@ -142,7 +142,7 @@ export function loadIndex(): Record<string, PinnedEntry> {
   return narrowIndex(read.entries);
 }
 
-export const INDEX_WRITE_DELAY_MS = 2_000;
+const INDEX_WRITE_DELAY_MS = 2_000;
 
 let pendingEntries: Record<string, PinnedEntry> | null = null;
 let pendingTimer: ReturnType<typeof setTimeout> | null = null;

@@ -11,14 +11,8 @@ import {
 import type { StoredDirectory, StoredFile } from '@shared/files/fileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
 import { notifyIdentityChange, runSignOutCleanups } from '@shared/session/signOutCleanup';
+import { setPinnedFileStore } from '@shared/offline/pinnedFiles';
 import {
-  setPinnedFileStore,
-  MAX_PINNED_BYTES,
-  MIN_FREE_BYTES,
-  PIN_DOWNLOAD_TIMEOUT_MS,
-} from '@shared/offline/pinnedFiles';
-import {
-  INDEX_WRITE_DELAY_MS,
   flushIndex,
   loadIndex,
   readOwner,
@@ -34,6 +28,11 @@ import {
   resolvePinnedUri,
   repinIfPinned,
 } from '@shared/offline/pinnedStore';
+
+const PIN_DOWNLOAD_TIMEOUT_MS = 120_000;
+const MAX_PINNED_BYTES = 8_589_934_592;
+const MIN_FREE_BYTES = 536_870_912;
+const INDEX_WRITE_DELAY_MS = 2_000;
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 

@@ -11,9 +11,9 @@ import {
 
 const PINNED_SUBDIR = 'offline-audio';
 
-export const PIN_DOWNLOAD_TIMEOUT_MS = 120_000;
-export const MAX_PINNED_BYTES = 8 * 1024 ** 3;
-export const MIN_FREE_BYTES = 512 * 1024 ** 2;
+const PIN_DOWNLOAD_TIMEOUT_MS = 120_000;
+const MAX_PINNED_BYTES = 8_589_934_592;
+const MIN_FREE_BYTES = 536_870_912;
 
 const fileStore = createFileStoreSlot(defaultFileStore);
 
@@ -22,7 +22,7 @@ export function setPinnedFileStore(store?: FileStore): void {
   forgetRunningTotal();
 }
 
-export function pinnedDir(): StoredDirectory {
+function pinnedDir(): StoredDirectory {
   return fileStore.ensureDir(PINNED_SUBDIR);
 }
 
@@ -30,7 +30,7 @@ function baseName(uri: string): string {
   return uri.split('/').pop() ?? '';
 }
 
-export function extFromUrl(url: string): string {
+function extFromUrl(url: string): string {
   const path = url.split('?')[0] ?? '';
   const slash = path.lastIndexOf('/');
   const dot = path.lastIndexOf('.');
@@ -78,7 +78,7 @@ export function pinnedFilesByTrackId(): ReadonlyMap<string, StoredFile> | null {
   return byTrackId;
 }
 
-export function findPinned(trackId: TrackId): StoredFile | null {
+function findPinned(trackId: TrackId): StoredFile | null {
   if (!isSafeId(trackId)) return null;
   for (const file of pinnedFilesOnDisk()) {
     if (trackIdOfFile(file) === trackId) return file;

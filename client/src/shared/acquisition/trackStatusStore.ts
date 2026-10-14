@@ -33,7 +33,7 @@ type TrackStatusState = {
 
 type TrackStatusEntries = Pick<TrackStatusState, 'statuses' | 'identities' | 'readyTrackIds'>;
 
-export const READY_STATUS_LIMIT = 512;
+const READY_STATUS_LIMIT = 512;
 
 function isReady(status: TrackStatus | undefined): boolean {
   return status?.acquisitionStatus === 'ready';

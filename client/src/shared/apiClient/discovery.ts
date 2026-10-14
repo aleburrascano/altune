@@ -189,38 +189,79 @@ function topResult(parsed: DiscoveryResult | null): { top_result?: DiscoveryResu
   return parsed === null ? {} : { top_result: parsed };
 }
 
-export function parseDiscoverySearchResponse(value: unknown): DiscoverySearchResponse {
-  const at = 'DiscoverySearchResponse';
-  const r = asRecord(value, at);
-  const results = r.results == null ? [] : parseResultArray(r.results, `${at}.results`);
+const SEARCH_AT = 'DiscoverySearchResponse';
+
+type WireRecord = Record<string, unknown>;
+type OptionalSearchText = 'search_id' | 'corrected_query' | 'original_query';
+type SearchPaging = Pick<DiscoverySearchResponse, 'total' | 'offset' | 'has_more'>;
+type SearchBody = SearchPaging & Pick<DiscoverySearchResponse, 'results' | 'sections'>;
+type OptionalTopResult = Pick<DiscoverySearchResponse, 'top_result'>;
+type OptionalRelated = Pick<DiscoverySearchResponse, 'related'>;
+
+function searchHeader(r: WireRecord): Omit<DiscoverySearchResponse, keyof SearchBody> {
   return {
-    query: asString(r.query, `${at}.query`),
-    query_norm: asString(r.query_norm, `${at}.query_norm`),
-    results,
-    sections:
-      r.sections == null
-        ? []
-        : parseArray(r.sections, `${at}.sections`, parseSection).filter((s) => s !== null),
-    providers: parseArray(r.providers, `${at}.providers`, parseProvider),
-    partial: asBoolean(r.partial, `${at}.partial`),
-    cache: parseCache(r.cache, `${at}.cache`),
-    total: r.total == null ? results.length : asNumber(r.total, `${at}.total`),
-    offset: r.offset == null ? 0 : asNumber(r.offset, `${at}.offset`),
-    has_more: r.has_more == null ? false : asBoolean(r.has_more, `${at}.has_more`),
-    ...(r.search_id != null ? { search_id: asString(r.search_id, `${at}.search_id`) } : {}),
-    ...(r.top_result != null ? topResult(parseSearchResult(r.top_result, `${at}.top_result`)) : {}),
-    ...(r.corrected_query != null
-      ? { corrected_query: asString(r.corrected_query, `${at}.corrected_query`) }
-      : {}),
-    ...(r.original_query != null
-      ? { original_query: asString(r.original_query, `${at}.original_query`) }
-      : {}),
-    ...(r.related != null
-      ? {
-          related: parseArray(r.related, `${at}.related`, parseRelated),
-        }
-      : {}),
+    query: asString(r.query, `${SEARCH_AT}.query`),
+    query_norm: asString(r.query_norm, `${SEARCH_AT}.query_norm`),
+    providers: parseArray(r.providers, `${SEARCH_AT}.providers`, parseProvider),
+    partial: asBoolean(r.partial, `${SEARCH_AT}.partial`),
+    cache: parseCache(r.cache, `${SEARCH_AT}.cache`),
   };
+}
+
+function searchSections(r: WireRecord): ResultSection[] {
+  if (r.sections == null) return [];
+  return parseArray(r.sections, `${SEARCH_AT}.sections`, parseSection).filter((s) => s !== null);
+}
+
+function searchResults(r: WireRecord): DiscoveryResult[] {
+  if (r.results == null) return [];
+  return parseResultArray(r.results, `${SEARCH_AT}.results`);
+}
+
+function searchPaging(r: WireRecord, resultCount: number): SearchPaging {
+  return {
+    total: r.total == null ? resultCount : asNumber(r.total, `${SEARCH_AT}.total`),
+    offset: r.offset == null ? 0 : asNumber(r.offset, `${SEARCH_AT}.offset`),
+    has_more: r.has_more == null ? false : asBoolean(r.has_more, `${SEARCH_AT}.has_more`),
+  };
+}
+
+function searchBody(r: WireRecord): SearchBody {
+  const results = searchResults(r);
+  return { results, sections: searchSections(r), ...searchPaging(r, results.length) };
+}
+
+function optionalText(
+  r: WireRecord,
+  key: OptionalSearchText,
+): Partial<Record<OptionalSearchText, string>> {
+  if (r[key] == null) return {};
+  return { [key]: asString(r[key], `${SEARCH_AT}.${key}`) };
+}
+
+function optionalTopResult(r: WireRecord): OptionalTopResult {
+  if (r.top_result == null) return {};
+  return topResult(parseSearchResult(r.top_result, `${SEARCH_AT}.top_result`));
+}
+
+function optionalRelated(r: WireRecord): OptionalRelated {
+  if (r.related == null) return {};
+  return { related: parseArray(r.related, `${SEARCH_AT}.related`, parseRelated) };
+}
+
+function searchExtras(r: WireRecord): Partial<DiscoverySearchResponse> {
+  return {
+    ...optionalText(r, 'search_id'),
+    ...optionalTopResult(r),
+    ...optionalText(r, 'corrected_query'),
+    ...optionalText(r, 'original_query'),
+    ...optionalRelated(r),
+  };
+}
+
+function parseDiscoverySearchResponse(value: unknown): DiscoverySearchResponse {
+  const r = asRecord(value, SEARCH_AT);
+  return { ...searchBody(r), ...searchHeader(r), ...searchExtras(r) };
 }
 
 function parseSuggestion(value: unknown, at: string): DiscoverySuggestion {

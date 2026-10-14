@@ -11,12 +11,8 @@ import { useBackfillFeatured } from '@features/settings/hooks/useBackfillFeature
 import { SettingsPortProvider } from '@features/settings/ports/SettingsPortProvider';
 import type { SettingsPort } from '@features/settings/ports/settingsPort';
 import { useSettingsPort } from '@features/settings/ports/SettingsPortProvider';
-import {
-  ApiError,
-  LONG_REQUEST_TIMEOUT_MS,
-  NetworkError,
-  REQUEST_TIMEOUT_MS,
-} from '@shared/apiClient';
+import { ApiError, LONG_REQUEST_TIMEOUT_MS, NetworkError } from '@shared/apiClient';
+import { REQUEST_TIMEOUT_MS } from '@shared/apiClient/config';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 

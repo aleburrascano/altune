@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system';
 
 import { asTrackId, type TrackId } from '@shared/apiClient/ids';
+import * as pinnedFilesModule from '@shared/offline/pinnedFiles';
 
 import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 
@@ -8,12 +9,8 @@ import {
   deleteAllPinned,
   deletePinned,
   downloadPinned,
-  extFromUrl,
-  findPinned,
   formatBytes,
-  PIN_DOWNLOAD_TIMEOUT_MS,
   pinnedBytes,
-  pinnedDir,
   pinnedFilesByTrackId,
   setPinnedFileStore,
   withPinnedBytesCached,
@@ -38,12 +35,18 @@ const { __fs } = FileSystem as unknown as {
 };
 
 const PINNED_DIR_URI = 'file:///document/offline-audio';
+const PIN_DOWNLOAD_TIMEOUT_MS = 120_000;
 
 function pinnedUri(name: string): string {
   return `${PINNED_DIR_URI}/${name}`;
 }
 
-describe('extFromUrl', () => {
+async function pinnedExtension(url: string): Promise<string> {
+  const uri = await downloadPinned(asTrackId('t1'), url);
+  return uri.slice(pinnedUri('t1').length);
+}
+
+describe('the extension a pinned file takes from its url', () => {
   it.each<[string, string, string]>([
     [
       'strips the query string before parsing, so a dot in the signature does not leak into the extension',
@@ -67,30 +70,30 @@ describe('extFromUrl', () => {
     ],
     ['a dotless path falls back to the default', 'https://cdn.example.com/audio/track123', '.mp3'],
     ['an empty string falls back to the default', '', '.mp3'],
-  ])('%s', (_label, url, expected) => {
-    expect(extFromUrl(url)).toBe(expected);
+  ])('%s', async (_label, url, expected) => {
+    expect(await pinnedExtension(url)).toBe(expected);
   });
 });
 
-describe('extFromUrl — malformed or hostile presigned urls degrade safely', () => {
-  it('a bare filename with no path still yields its extension', () => {
-    expect(extFromUrl('track123.wav')).toBe('.wav');
+describe('the pinned extension — malformed or hostile presigned urls degrade safely', () => {
+  it('a bare filename with no path still yields its extension', async () => {
+    expect(await pinnedExtension('track123.wav')).toBe('.wav');
   });
 
-  it('a bare filename with neither path nor extension falls back to the default', () => {
-    expect(extFromUrl('track123')).toBe('.mp3');
+  it('a bare filename with neither path nor extension falls back to the default', async () => {
+    expect(await pinnedExtension('track123')).toBe('.mp3');
   });
 
-  it('a dot only inside the query signature is ignored, falling back to the default', () => {
-    expect(extFromUrl('https://cdn.example.com/audio/track123?sig=a.b.c')).toBe('.mp3');
+  it('a dot only inside the query signature is ignored, falling back to the default', async () => {
+    expect(await pinnedExtension('https://cdn.example.com/audio/track123?sig=a.b.c')).toBe('.mp3');
   });
 
-  it('a bare "?" with nothing before it falls back to the default', () => {
-    expect(extFromUrl('?')).toBe('.mp3');
+  it('a bare "?" with nothing before it falls back to the default', async () => {
+    expect(await pinnedExtension('?')).toBe('.mp3');
   });
 
-  it('a trailing dot with no characters after it falls back to the default instead of reporting an empty extension', () => {
-    expect(extFromUrl('https://cdn.example.com/audio/track123.')).toBe('.mp3');
+  it('a trailing dot with no characters after it falls back to the default instead of reporting an empty extension', async () => {
+    expect(await pinnedExtension('https://cdn.example.com/audio/track123.')).toBe('.mp3');
   });
 });
 
@@ -114,20 +117,17 @@ describe('formatBytes', () => {
   });
 });
 
-describe('pinnedDir', () => {
-  it('creates the pinned directory under the document root when absent, on first run', () => {
-    const dir = pinnedDir();
-
-    expect(dir.uri).toBe(PINNED_DIR_URI);
-    expect(dir.exists).toBe(true);
+describe('the pinned directory', () => {
+  it('is created under the document root when absent, on the first lookup', () => {
+    expect(pinnedFilesByTrackId()).toEqual(new Map());
+    expect(new FileSystem.Directory(PINNED_DIR_URI).exists).toBe(true);
   });
 
-  it('does not attempt to recreate the directory once it already exists', () => {
+  it('is not created again once it already exists', () => {
     __fs.seedDirectory(PINNED_DIR_URI);
     __fs.failNext('createDirectory', new Error('create() should not have been called'));
 
-    expect(() => pinnedDir()).not.toThrow();
-    expect(pinnedDir().uri).toBe(PINNED_DIR_URI);
+    expect(pinnedFilesByTrackId()).toEqual(new Map());
   });
 });
 
@@ -154,50 +154,60 @@ describe('pinnedFilesByTrackId', () => {
     expect(byTrackId?.has('t10')).toBe(false);
   });
 
-  it('agrees with findPinned on which file a track owns when two files share its id', () => {
+  it('agrees with deletePinned on which file a track owns when two files share its id', () => {
     __fs.seedFile(pinnedUri('t1.mp3'), 'audio');
     __fs.seedFile(pinnedUri('t1.flac'), 'audio');
+    const owned = pinnedFilesByTrackId()?.get('t1')?.uri ?? '';
 
-    expect(pinnedFilesByTrackId()?.get('t1')?.uri).toBe(findPinned(asTrackId('t1'))?.uri);
+    deletePinned(asTrackId('t1'));
+
+    expect(__fs.readFile(owned)).toBeUndefined();
+    expect(Object.keys(__fs.allFiles())).toHaveLength(1);
   });
 });
 
-describe('findPinned', () => {
+describe('the file deletePinned finds for a track', () => {
   it('matches a pinned file by trackId prefix', () => {
     __fs.seedFile(pinnedUri('t1.mp3'), 'audio-bytes');
 
-    expect(findPinned(asTrackId('t1'))?.uri).toBe(pinnedUri('t1.mp3'));
+    expect(deletePinned(asTrackId('t1'))).toBe(true);
+    expect(__fs.allFiles()).toEqual({});
   });
 
   it('does not match a filename that merely contains the trackId elsewhere, only one that starts with it', () => {
     __fs.seedFile(pinnedUri('other-t1.mp3'), 'audio-bytes');
 
-    expect(findPinned(asTrackId('t1'))).toBeNull();
+    deletePinned(asTrackId('t1'));
+
+    expect(__fs.readFile(pinnedUri('other-t1.mp3'))).toBe('audio-bytes');
   });
 
-  it('returns null when no file matches the trackId', () => {
+  it('leaves another track alone when no file matches the trackId', () => {
     __fs.seedFile(pinnedUri('t2.mp3'), 'audio-bytes');
 
-    expect(findPinned(asTrackId('t1'))).toBeNull();
+    expect(deletePinned(asTrackId('t1'))).toBe(true);
+    expect(__fs.readFile(pinnedUri('t2.mp3'))).toBe('audio-bytes');
   });
 
   it('does not treat a stray subdirectory as a pinned file, even when its name matches the track id', () => {
     __fs.seedDirectory(PINNED_DIR_URI);
     __fs.seedDirectory(pinnedUri('t1.leftover'));
 
-    expect(findPinned(asTrackId('t1'))).toBeNull();
+    expect(deletePinned(asTrackId('t1'))).toBe(true);
+    expect(new FileSystem.Directory(pinnedUri('t1.leftover')).exists).toBe(true);
   });
 
   it('an empty trackId is refused instead of prefix-matching a dotfile (#944)', () => {
     __fs.seedFile(pinnedUri('.DS_Store'), 'junk');
 
-    expect(findPinned('' as TrackId)).toBeNull();
+    expect(deletePinned('' as TrackId)).toBe(true);
+    expect(__fs.readFile(pinnedUri('.DS_Store'))).toBe('junk');
   });
 
-  it('returns null instead of throwing when the pinned directory cannot be created', () => {
+  it('finds nothing instead of throwing when the pinned directory cannot be created', () => {
     __fs.failNext('createDirectory', new Error('disk full'));
 
-    expect(findPinned(asTrackId('t1'))).toBeNull();
+    expect(deletePinned(asTrackId('t1'))).toBe(true);
   });
 });
 
@@ -312,7 +322,7 @@ describe('downloadPinned', () => {
     await expect(
       downloadPinned(asTrackId('t1'), 'https://cdn.example.com/audio/t1.mp3'),
     ).rejects.toThrow('network drop mid-transfer');
-    expect(findPinned(asTrackId('t1'))).toBeNull();
+    expect(pinnedFilesByTrackId()?.has('t1')).toBe(false);
   });
 
   it('propagates a directory-creation failure instead of resolving with no file written', async () => {
@@ -328,14 +338,7 @@ describe('track id shape guard (#944)', () => {
   const hostile = ['', '.', '..', '../evil', 'a/b', '../../document/x'];
 
   it('refuses a bare string where a TrackId belongs', () => {
-    expectType<Not<IsAssignable<string, Parameters<typeof findPinned>[0]>>>();
-  });
-
-  it.each(hostile)('findPinned refuses %p', (trackId) => {
-    __fs.seedFile(pinnedUri('.hidden'), 'junk');
-    __fs.seedFile(pinnedUri('t1.mp3'), 'audio');
-
-    expect(findPinned(trackId as TrackId)).toBeNull();
+    expectType<Not<IsAssignable<string, Parameters<typeof deletePinned>[0]>>>();
   });
 
   it.each(hostile)('deletePinned refuses %p and removes nothing', (trackId) => {
@@ -373,7 +376,7 @@ describe('an injected FileStore scopes the pinned files to it', () => {
     const uri = await downloadPinned(asTrackId('t1'), 'https://cdn.example.com/audio/t1.flac');
 
     expect(uri).toBe('memory://document/offline-audio/t1.flac');
-    expect(findPinned(asTrackId('t1'))?.uri).toBe(uri);
+    expect(pinnedFilesByTrackId()?.get('t1')?.uri).toBe(uri);
     expect(pinnedBytes()).toBe(store.files.get(uri)?.length);
     expect(__fs.allFiles()).toEqual({});
 
@@ -536,7 +539,6 @@ describe('a pinned download in progress', () => {
     void downloadPinned(T1, T1_URL);
 
     expect(partialWritten).toBe(true);
-    expect(findPinned(T1)).toBeNull();
     expect(pinnedFilesByTrackId()?.has('t1')).toBe(false);
   });
 
@@ -552,7 +554,7 @@ describe('a pinned download in progress', () => {
 
     await expect(downloadPinned(T1, T1_URL)).rejects.toThrow('EXDEV: rename failed');
 
-    expect(findPinned(T1)).toBeNull();
+    expect(pinnedFilesByTrackId()?.has('t1')).toBe(false);
     expect([...store.files.keys()]).toEqual([]);
   });
 
@@ -571,6 +573,25 @@ describe('a pinned download in progress', () => {
     await jest.advanceTimersByTimeAsync(PIN_DOWNLOAD_TIMEOUT_MS * 2);
     await outcome;
 
-    expect(findPinned(T1)).toBeNull();
+    expect(pinnedFilesByTrackId()?.has('t1')).toBe(false);
+  });
+});
+
+describe('pinnedFiles module surface', () => {
+  it('exposes the pinned-file API and keeps its directory, lookup, extension and limits private', () => {
+    expect(Object.keys(pinnedFilesModule).sort()).toEqual([
+      'deleteAbandonedDownloads',
+      'deleteAllPinned',
+      'deletePinned',
+      'deletePinnedMany',
+      'downloadPinned',
+      'formatBytes',
+      'pinStorageFull',
+      'pinnedBytes',
+      'pinnedFilesByTrackId',
+      'setPinnedFileStore',
+      'unsignedUrl',
+      'withPinnedBytesCached',
+    ]);
   });
 });

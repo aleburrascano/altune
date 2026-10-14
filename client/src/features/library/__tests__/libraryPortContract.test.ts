@@ -1,6 +1,5 @@
 import { asTrackId } from '@shared/apiClient/ids';
 import type { ListTracksResponse, TrackResponse } from '@shared/apiClient/trackResponse';
-import { MAX_ALL_TRACKS } from '@shared/apiClient/tracks';
 
 import { httpLibraryPort } from '@features/library/adapters/http/httpLibraryPort';
 import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
@@ -10,6 +9,7 @@ import { signInTestUser } from '@testing/signInTestUser';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
+const MAX_ALL_TRACKS = 10_000;
 const TRACKS_PATH = '/v1/tracks';
 const TRACK_PATH_PATTERN = /^\/v1\/tracks\/([^/]+)$/;
 const NO_CONTENT_STATUS = 204;

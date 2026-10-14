@@ -7,16 +7,16 @@ import {
 } from '@shared/files/__tests__/memoryFileStore';
 
 import { createMemoryOfflinePort } from '@shared/offline/__tests__/memoryOfflinePort';
-import { DOWNLOAD_RETRY_BASE_MS, runDownloadQueue } from '@shared/offline/pinnedDownloadWorker';
-import {
-  MIN_FREE_BYTES,
-  PIN_DOWNLOAD_TIMEOUT_MS,
-  setPinnedFileStore,
-} from '@shared/offline/pinnedFiles';
+import { runDownloadQueue } from '@shared/offline/pinnedDownloadWorker';
+import { setPinnedFileStore } from '@shared/offline/pinnedFiles';
 import type { OfflinePort } from '@shared/offline/ports/offlinePort';
 import type { PinnedEntry } from '@shared/offline/pinnedIndex';
 import { signInTestUser } from '@testing/signInTestUser';
 import { asTrackId, type TrackId } from '@shared/apiClient/ids';
+
+const DOWNLOAD_RETRY_BASE_MS = 2_000;
+const PIN_DOWNLOAD_TIMEOUT_MS = 120_000;
+const MIN_FREE_BYTES = 536_870_912;
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 

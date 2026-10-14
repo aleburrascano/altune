@@ -5,8 +5,6 @@ import { act, fireEvent, render, renderHook, screen } from '@testing-library/rea
 import { DownloadsBar } from '@shared/acquisition/ui/DownloadsBar';
 import { deriveBarDisplay } from '@shared/acquisition/ui/barDisplay';
 import {
-  FAILED_HOLD_MS,
-  FINISHING_DWELL_MS,
   useActiveDownloadItems,
   useDownloadStore,
   type DownloadEntry,
@@ -14,6 +12,9 @@ import {
 import { ACQUISITION_PHASES } from '@shared/acquisition/stagePhase';
 import * as announceModule from '@shared/ui/announce';
 import { asTrackId } from '@shared/apiClient/ids';
+
+const FINISHING_DWELL_MS = 500;
+const FAILED_HOLD_MS = 4_000;
 
 function entry(overrides: Partial<DownloadEntry>): DownloadEntry {
   return {

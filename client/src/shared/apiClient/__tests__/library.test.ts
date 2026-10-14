@@ -1,9 +1,4 @@
-import {
-  getLibraryAlbums,
-  getLibraryArtists,
-  parseListAlbumsResponse,
-  parseListArtistsResponse,
-} from '@shared/apiClient/library';
+import { getLibraryAlbums, getLibraryArtists } from '@shared/apiClient/library';
 import type {
   LibraryQuery,
   LibrarySort,
@@ -143,38 +138,50 @@ describe('getLibraryAlbums / getLibraryArtists forward a caller abort signal', (
 });
 
 describe('wire parsing', () => {
-  describe('parseListAlbumsResponse and parseListArtistsResponse', () => {
-    it('parses an album group lens', () => {
-      const albums = parseListAlbumsResponse({
-        items: [
-          {
-            key: 'a1',
-            album: 'OK Computer',
-            artist: 'Radiohead',
-            artwork_url: 'https://img/ok.png',
-            year: 1997,
-            track_count: 12,
-            most_recent_added_at: '2024-01-01T00:00:00Z',
-          },
-        ],
-        total: 1,
+  describe('the album and artist pages getLibraryAlbums and getLibraryArtists parse', () => {
+    it('parses an album group lens', async () => {
+      __http.reply('GET /v1/library/albums', {
+        status: 200,
+        json: {
+          items: [
+            {
+              key: 'a1',
+              album: 'OK Computer',
+              artist: 'Radiohead',
+              artwork_url: 'https://img/ok.png',
+              year: 1997,
+              track_count: 12,
+              most_recent_added_at: '2024-01-01T00:00:00Z',
+            },
+          ],
+          total: 1,
+        },
       });
+
+      const albums = await getLibraryAlbums();
+
       expect(albums.items[0]!.album).toBe('OK Computer');
     });
 
-    it('parses an artist group lens', () => {
-      const artists = parseListArtistsResponse({
-        items: [
-          {
-            key: 'ar1',
-            artist: 'Radiohead',
-            artwork_url: null,
-            track_count: 40,
-            most_recent_added_at: '2024-01-01T00:00:00Z',
-          },
-        ],
-        total: 1,
+    it('parses an artist group lens', async () => {
+      __http.reply('GET /v1/library/artists', {
+        status: 200,
+        json: {
+          items: [
+            {
+              key: 'ar1',
+              artist: 'Radiohead',
+              artwork_url: null,
+              track_count: 40,
+              most_recent_added_at: '2024-01-01T00:00:00Z',
+            },
+          ],
+          total: 1,
+        },
       });
+
+      const artists = await getLibraryArtists();
+
       expect(artists.items[0]!.artist).toBe('Radiohead');
     });
   });

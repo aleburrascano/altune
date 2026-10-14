@@ -119,10 +119,7 @@ export function tryParseTrackResponse(value: unknown, at = 'TrackResponse'): Tra
   }
 }
 
-export function parseListTracksResponse(
-  value: unknown,
-  at = 'ListTracksResponse',
-): ListTracksResponse {
+function parseListTracksResponse(value: unknown, at = 'ListTracksResponse'): ListTracksResponse {
   const r = asRecord(value, at);
   return {
     ...parseListEnvelope(r, at, parseTrackResponse),
@@ -152,7 +149,7 @@ export async function getTracks(
 
 const MAX_PAGE = 2000;
 
-export const MAX_ALL_TRACKS = 10_000;
+const MAX_ALL_TRACKS = 10_000;
 
 export async function getAllTracks(params: {
   q?: string;
@@ -171,7 +168,7 @@ export async function getAllTracks(params: {
   return { items: items.slice(0, MAX_ALL_TRACKS), truncated: true };
 }
 
-export function makeIdempotencyKey(): string {
+function makeIdempotencyKey(): string {
   return randomUuid();
 }
 

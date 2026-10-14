@@ -4,7 +4,7 @@ import * as path from 'path';
 
 import { asTrackId } from '@shared/apiClient/ids';
 
-import { downloadPinned, pinnedDir } from '@shared/offline/pinnedFiles';
+import { downloadPinned } from '@shared/offline/pinnedFiles';
 
 const OFFLINE_DIR = path.resolve(__dirname, '..');
 const FILE_STORE_DIR = path.resolve(__dirname, '..', '..', 'files');
@@ -80,13 +80,6 @@ describe('pinned audio lives under the document root, never the cache root', () 
         expect(offenders).toEqual([path.join(dir, 'sneakyCache.ts')]);
       },
     );
-  });
-
-  it('pinnedDir() resolves under the document root, not the cache root', () => {
-    const dir = pinnedDir();
-
-    expect(dir.uri.startsWith(DOCUMENT_ROOT)).toBe(true);
-    expect(dir.uri.startsWith(CACHE_ROOT)).toBe(false);
   });
 
   it('downloadPinned resolves a uri under the document root, not the cache root', async () => {

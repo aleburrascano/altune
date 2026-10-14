@@ -2,11 +2,11 @@ import { ApiError } from '@shared/failure/errors';
 import type { ResolvedAudioUrl } from '@shared/apiClient/audio';
 import type { LyricsResponse } from '@shared/apiClient/lyrics';
 import type { QueueStateResponse } from '@shared/apiClient/playback';
-import { MAX_ALL_TRACKS } from '@shared/apiClient/tracks';
 import type { TrackResponse } from '@shared/apiClient/trackResponse';
 
 import type { PlaybackPort } from '@features/playback/ports/playbackPort';
 
+const MAX_ALL_TRACKS = 10_000;
 const NOT_FOUND_STATUS = 404;
 const MEMORY_API_BASE = 'https://memory.test';
 

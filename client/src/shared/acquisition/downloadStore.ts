@@ -21,9 +21,9 @@ export interface DownloadMeta {
   artworkUrl?: string | null;
 }
 
-export const FINISHING_DWELL_MS = 500;
-export const DONE_HOLD_MS = 1_200;
-export const FAILED_HOLD_MS = 4_000;
+const FINISHING_DWELL_MS = 500;
+const DONE_HOLD_MS = 1_200;
+const FAILED_HOLD_MS = 4_000;
 
 const PHASE_RANK: Record<DownloadPhase, number> = {
   finding: 0,

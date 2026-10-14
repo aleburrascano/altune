@@ -2,12 +2,16 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import type { AcquisitionPhase } from '@shared/acquisition/stagePhase';
-import {
-  ACQUISITION_PHASES,
-  STAGE_TO_PHASE,
-  phaseLabel,
-  stageToPhase,
-} from '@shared/acquisition/stagePhase';
+import { ACQUISITION_PHASES, phaseLabel, stageToPhase } from '@shared/acquisition/stagePhase';
+
+const STAGE_PHASES = [
+  ['search', 'finding'],
+  ['select', 'finding'],
+  ['download', 'downloading'],
+  ['tag', 'finishing'],
+  ['store', 'finishing'],
+  ['update_track', 'finishing'],
+] as const;
 
 function findGoApiRoot(): string | null {
   let dir = __dirname;
@@ -96,14 +100,7 @@ describe('stageToPhase', () => {
     expect(stageToPhase('probe_new_step')).toBe('working');
   });
 
-  it.each([
-    ['search', 'finding'],
-    ['select', 'finding'],
-    ['download', 'downloading'],
-    ['tag', 'finishing'],
-    ['store', 'finishing'],
-    ['update_track', 'finishing'],
-  ] as const)('maps stage %s to phase %s', (stage, phase) => {
+  it.each(STAGE_PHASES)('maps stage %s to phase %s', (stage, phase) => {
     expect(stageToPhase(stage)).toBe(phase);
   });
 });
@@ -158,10 +155,11 @@ describe('acquisition stage names, derived from services/go-api at test time', (
     expect(GO_API_ROOT).not.toBeNull();
   });
 
-  it('matches STAGE_TO_PHASE exactly, with no step unmapped and no mapping without a step', () => {
+  it('matches the mapped stages exactly, with no step unmapped and no mapping without a step', () => {
     const stepNames = deriveAcquisitionStepNames(GO_API_ROOT!);
+    const mappedStages = STAGE_PHASES.map(([stage]) => stage);
 
     expect(stepNames.size).toBeGreaterThan(0);
-    expect(Object.keys(STAGE_TO_PHASE).sort()).toEqual([...stepNames].sort());
+    expect(mappedStages.sort()).toEqual([...stepNames].sort());
   });
 });

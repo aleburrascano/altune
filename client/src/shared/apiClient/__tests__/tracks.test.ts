@@ -5,12 +5,9 @@ import {
   deleteTrack,
   getAllTracks,
   getTracks,
-  MAX_ALL_TRACKS,
   listTracksFeaturing,
-  makeIdempotencyKey,
   reacquireTrack,
   retryAcquisition,
-  parseListTracksResponse,
   parseTrackResponse,
   tryParseTrackResponse,
 } from '@shared/apiClient/tracks';
@@ -26,6 +23,9 @@ import type {
 const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
+
+const MAX_ALL_TRACKS = 10_000;
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 type LooseSession = { getSession: () => Promise<unknown> };
 
@@ -205,15 +205,17 @@ describe('createTrack', () => {
     expect(key).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   });
 
-  it('mints a key no observer of Math.random can predict', () => {
+  it('mints a key no observer of Math.random can predict', async () => {
     jest.spyOn(Math, 'random').mockReturnValue(0.5);
+    __http.reply('POST /v1/tracks', { status: 201, json: trackResponse() });
 
-    const keys = [makeIdempotencyKey(), makeIdempotencyKey()];
+    await createTrack(baseCreateBody());
+    const first = __http.last().headers['Idempotency-Key'];
+    await createTrack(baseCreateBody());
+    const second = __http.last().headers['Idempotency-Key'];
 
-    expect(keys[0]).not.toBe(keys[1]);
-    expect(keys[0]).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-    );
+    expect(first).not.toBe(second);
+    expect(first).toMatch(UUID_V4);
   });
 
   it('forwards a caller-supplied idempotency key unchanged', async () => {
@@ -628,23 +630,26 @@ describe('wire parsing', () => {
     });
   });
 
-  describe('parseListTracksResponse', () => {
-    it('parses a page and maps each item through the track parser', () => {
-      const page = parseListTracksResponse({
-        items: [fullTrack()],
-        total: 1,
-        limit: 20,
-        offset: 0,
-        has_more: false,
+  describe('the list tracks page getTracks parses', () => {
+    it('parses a page and maps each item through the track parser', async () => {
+      __http.reply('GET /v1/tracks', {
+        status: 200,
+        json: { items: [fullTrack()], total: 1, limit: 20, offset: 0, has_more: false },
       });
+
+      const page = await getTracks({ limit: 20, offset: 0 });
+
       expect(page.items).toHaveLength(1);
       expect(page.total).toBe(1);
     });
 
-    it('rejects a body whose items field is not an array', () => {
-      expect(() =>
-        parseListTracksResponse({ items: 'nope', total: 0, limit: 0, offset: 0, has_more: false }),
-      ).toThrow(ContractError);
+    it('rejects a body whose items field is not an array', async () => {
+      __http.reply('GET /v1/tracks', {
+        status: 200,
+        json: { items: 'nope', total: 0, limit: 0, offset: 0, has_more: false },
+      });
+
+      await expect(getTracks({ limit: 20, offset: 0 })).rejects.toThrow(ContractError);
     });
   });
 });
@@ -762,14 +767,13 @@ describe('getAllTracks truncation and cancellation', () => {
   });
 });
 
-describe('makeIdempotencyKey via the uuid port', () => {
+describe('the Idempotency-Key via the uuid port', () => {
   it('sends the id minted by the uuid port as the Idempotency-Key', async () => {
     jest.spyOn(Crypto, 'randomUUID').mockReturnValue('fixed-track-id');
     __http.reply('POST /v1/tracks', { status: 201, json: trackResponse() });
 
     await createTrack(baseCreateBody());
 
-    expect(makeIdempotencyKey()).toBe('fixed-track-id');
     expect(__http.last().headers['Idempotency-Key']).toBe('fixed-track-id');
   });
 });

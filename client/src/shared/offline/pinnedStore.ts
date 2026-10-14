@@ -29,7 +29,7 @@ import {
   writeOwner,
 } from '@shared/offline/pinnedIndex';
 
-export { formatBytes, pinnedBytes as pinnedByteTotal } from '@shared/offline/pinnedFiles';
+export { pinnedBytes as pinnedByteTotal } from '@shared/offline/pinnedFiles';
 
 export type { PinnedEntry, PinnedStatus } from '@shared/offline/pinnedIndex';
 
