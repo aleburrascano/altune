@@ -192,8 +192,6 @@ describe('non-2xx status ladder throws ApiError(status)', () => {
     withSession();
     __http.reply(spec, { status, json: { message: 'nope' } });
     const parts = spec.split(' ');
-    expect(parts[0]).toBeDefined();
-    expect(parts[1]).toBeDefined();
     const method = parts[0] as string;
     const path = parts[1] as string;
 
@@ -1054,7 +1052,7 @@ describe('platform-dependent request headers', () => {
 
     const { headers } = __http.last();
     expect(headers['ngrok-skip-browser-warning']).toBe('1');
-    expect(headers['X-Correlation-ID']).toBeDefined();
+    expect(headers['X-Correlation-ID']).toEqual(expect.any(String));
   });
 });
 

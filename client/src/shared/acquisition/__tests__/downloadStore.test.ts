@@ -186,7 +186,6 @@ describe('complete', () => {
     jest.advanceTimersByTime(FINISHING_DWELL_MS + DONE_HOLD_MS);
 
     expect(useDownloadStore.getState().entries['t1']).toBeUndefined();
-    expect(useDownloadStore.getState().entries['t2']).toBeDefined();
     expect(useDownloadStore.getState().entries['t2']?.phase).toBe('finding');
   });
 
@@ -198,7 +197,7 @@ describe('complete', () => {
     useDownloadStore.getState().complete(asTrackId('t1'));
 
     jest.advanceTimersByTime(FINISHING_DWELL_MS + DONE_HOLD_MS - 100 + 1);
-    expect(useDownloadStore.getState().entries['t1']).toBeDefined();
+    expect(useDownloadStore.getState().entries['t1']?.phase).toBe('done');
 
     jest.advanceTimersByTime(100);
     expect(useDownloadStore.getState().entries['t1']).toBeUndefined();
@@ -214,7 +213,6 @@ describe('complete', () => {
     jest.advanceTimersByTime(FINISHING_DWELL_MS + DONE_HOLD_MS);
 
     const current = useDownloadStore.getState().entries['t1'];
-    expect(current).toBeDefined();
     expect(current?.phase).toBe('finding');
   });
 });
@@ -257,7 +255,6 @@ describe('fail', () => {
     useDownloadStore.getState().fail(asTrackId('unknown-track'));
 
     const current = useDownloadStore.getState().entries['unknown-track'];
-    expect(current).toBeDefined();
     expect(current?.phase).toBe('failed');
     expect(current?.title).toBeNull();
     expect(current?.artist).toBeNull();
@@ -267,7 +264,7 @@ describe('fail', () => {
     useDownloadStore.getState().fail(asTrackId('t1'));
 
     jest.advanceTimersByTime(FAILED_HOLD_MS - 1);
-    expect(useDownloadStore.getState().entries['t1']).toBeDefined();
+    expect(useDownloadStore.getState().entries['t1']?.phase).toBe('failed');
 
     jest.advanceTimersByTime(1);
     expect(useDownloadStore.getState().entries['t1']).toBeUndefined();
@@ -302,7 +299,6 @@ describe('reset', () => {
     jest.advanceTimersByTime(FINISHING_DWELL_MS + DONE_HOLD_MS);
 
     const current = useDownloadStore.getState().entries['t1'];
-    expect(current).toBeDefined();
     expect(current?.phase).toBe('finding');
   });
 });

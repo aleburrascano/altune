@@ -106,7 +106,7 @@ function deriveRejectTokenStatus(source: string): number {
   const match = GO_WRITE_JSON_STATUS_PATTERN.exec(body);
   expect(match).not.toBeNull();
   const status = GO_HTTP_STATUS_CONSTANTS[match![1]!];
-  expect(status).toBeDefined();
+  expect(status).toEqual(expect.any(Number));
   return status!;
 }
 
@@ -118,7 +118,7 @@ function deriveVerifierUnavailableStatus(source: string): number {
   const match = GO_WRITE_JSON_STATUS_PATTERN.exec(body);
   expect(match).not.toBeNull();
   const status = GO_HTTP_STATUS_CONSTANTS[match![1]!];
-  expect(status).toBeDefined();
+  expect(status).toEqual(expect.any(Number));
   return status!;
 }
 

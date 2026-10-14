@@ -144,7 +144,7 @@ describe('real tree', () => {
     const relFiles = allFiles.map(rel);
     for (const f of ['pinnedFiles', 'pinnedStore', 'pinnedIndex']) {
       const file = allFiles.find((p) => rel(p) === `offline/${f}.ts`);
-      expect(file).toBeDefined();
+      expect(file && rel(file)).toBe(`offline/${f}.ts`);
       expect(fs.readFileSync(file!, 'utf8')).toContain(IDS_SPECIFIER);
     }
     expect(relFiles).toContain('acquisition/adapters/http/httpAcquisitionPort.ts');
