@@ -24,10 +24,18 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.altune.app",
+      "entitlements": {
+        "com.apple.security.application-groups": [
+          "group.com.altune.app"
+        ]
+      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "UIBackgroundModes": [
           "audio"
+        ],
+        "ALTAppGroups": [
+          "group.com.altune.app"
         ]
       }
     },
