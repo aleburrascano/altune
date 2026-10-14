@@ -29,33 +29,34 @@ func isPlausibleYear(year int) bool {
 type category string
 
 const (
-	categoryWrongSong                 category = "wrong_song"
-	categoryLengthShorter             category = "length_shorter"
-	categoryLengthLonger              category = "length_longer"
-	categoryYearFillable              category = "year_fillable"
-	categoryAlbumArtistFillable       category = "album_artist_fillable"
-	categoryISRCFillable              category = "isrc_fillable"
-	categoryYearOtherRelease          category = "year_other_release"
-	categoryAlbumArtistOtherRelease   category = "album_artist_other_release"
-	categoryISRCAmbiguous             category = "isrc_ambiguous"
-	categoryCoverURLDiffers           category = "cover_url_differs"
-	categoryCoverImageDiffers         category = "cover_image_differs"
-	categoryCoverUnreadable           category = "cover_unreadable"
-	categoryNoISRC                    category = "no_isrc"
-	categoryUnknownISRC               category = "unknown_isrc"
-	categoryISRCConfirmed             category = "isrc_confirmed"
-	categoryTrackNumberFillable       category = "track_number_fillable"
-	categoryTrackNumberUnfillable     category = "track_number_unfillable"
-	categoryGenreFillable             category = "genre_fillable"
-	categoryGenreUnfillable           category = "genre_unfillable"
-	categoryCatalogDurationFillable   category = "catalog_duration_fillable"
-	categoryCoverBlank                category = "cover_blank"
-	categoryCoverNotReplaceable       category = "cover_not_replaceable"
-	categoryYearFromRelease           category = "year_from_release"
-	categoryAlbumArtistFromRelease    category = "album_artist_from_release"
-	categoryLookupFailed              category = "lookup_failed"
-	categoryYearUnfillable            category = "year_unfillable"
-	categoryCatalogDurationUnfillable category = "catalog_duration_unfillable"
+	categoryWrongSong                    category = "wrong_song"
+	categoryCatalogDurationFromWrongSong category = "catalog_duration_from_wrong_song"
+	categoryLengthShorter                category = "length_shorter"
+	categoryLengthLonger                 category = "length_longer"
+	categoryYearFillable                 category = "year_fillable"
+	categoryAlbumArtistFillable          category = "album_artist_fillable"
+	categoryISRCFillable                 category = "isrc_fillable"
+	categoryYearOtherRelease             category = "year_other_release"
+	categoryAlbumArtistOtherRelease      category = "album_artist_other_release"
+	categoryISRCAmbiguous                category = "isrc_ambiguous"
+	categoryCoverURLDiffers              category = "cover_url_differs"
+	categoryCoverImageDiffers            category = "cover_image_differs"
+	categoryCoverUnreadable              category = "cover_unreadable"
+	categoryNoISRC                       category = "no_isrc"
+	categoryUnknownISRC                  category = "unknown_isrc"
+	categoryISRCConfirmed                category = "isrc_confirmed"
+	categoryTrackNumberFillable          category = "track_number_fillable"
+	categoryTrackNumberUnfillable        category = "track_number_unfillable"
+	categoryGenreFillable                category = "genre_fillable"
+	categoryGenreUnfillable              category = "genre_unfillable"
+	categoryCatalogDurationFillable      category = "catalog_duration_fillable"
+	categoryCoverBlank                   category = "cover_blank"
+	categoryCoverNotReplaceable          category = "cover_not_replaceable"
+	categoryYearFromRelease              category = "year_from_release"
+	categoryAlbumArtistFromRelease       category = "album_artist_from_release"
+	categoryLookupFailed                 category = "lookup_failed"
+	categoryYearUnfillable               category = "year_unfillable"
+	categoryCatalogDurationUnfillable    category = "catalog_duration_unfillable"
 )
 
 type libraryTrack struct {
@@ -173,11 +174,21 @@ func lengthCategory(lib libraryTrack, cat catalogTrack) (category, bool) {
 	}
 }
 
+func wrongSongLength(lib libraryTrack, cat catalogTrack) []finding {
+	if lib.CatalogDurationSeconds <= 0 || lib.CatalogDurationSeconds != cat.DurationSeconds {
+		return nil
+	}
+	seconds := strconv.FormatFloat(lib.CatalogDurationSeconds, 'f', -1, 64)
+	cleared := about(lib, categoryCatalogDurationFromWrongSong, seconds+"s came from "+cat.Title)
+	cleared.Fix = fixing(lib, "catalog_duration_seconds", seconds, "")
+	return []finding{cleared}
+}
+
 func metadataFindings(lib libraryTrack, cat catalogTrack) []finding {
 	if !isSameSong(lib, cat) {
 		wrong := about(lib, categoryWrongSong, "catalog says "+cat.Artist+" - "+cat.Title)
 		wrong.Fix = fixing(lib, "isrc", lib.ISRC, "")
-		return []finding{wrong}
+		return append([]finding{wrong}, wrongSongLength(lib, cat)...)
 	}
 	var found []finding
 	if kind, off := lengthCategory(lib, cat); off {

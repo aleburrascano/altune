@@ -244,3 +244,22 @@ func TestDecide_ArtworkIsReplacedOnlyWhileItIsStillWhatTheAuditSaw(t *testing.T)
 		})
 	}
 }
+
+func TestDecide_ClearsAWrongCatalogLengthOnlyWhileItIsTheValueTheAuditSaw(t *testing.T) {
+	change := plannedChange{Field: fieldCatalogLen, AuditedOld: text("287")}
+	if got := decide(change, text("287")); got != verdictApplied {
+		t.Errorf("same value: got %s", got)
+	}
+	if got := decide(change, text("226")); got != verdictSkippedNotEmpty {
+		t.Errorf("changed since the audit: got %s", got)
+	}
+}
+
+func TestCheckValues_ACatalogLengthClearNeedsTheOldValue(t *testing.T) {
+	if err := checkValues(fieldCatalogLen, &reportFix{OldValue: text("287")}, 2026); err != nil {
+		t.Errorf("clear with old value: %v", err)
+	}
+	if err := checkValues(fieldCatalogLen, &reportFix{}, 2026); err == nil {
+		t.Error("clear without old value was accepted")
+	}
+}
