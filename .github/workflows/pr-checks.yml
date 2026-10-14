@@ -158,8 +158,41 @@ jobs:
       - name: actionlint
         run: '"$(go env GOPATH)/bin/actionlint" -config-file .github/actionlint.yaml .github/workflows/*.yml .gitea/workflows/*.yml'
 
+  precheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: fetch main
+        run: git fetch origin main:refs/remotes/origin/main
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/go-api/go.mod
+          cache-dependency-path: |
+            services/go-api/go.sum
+            services/overseer/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: client/.nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            client/package-lock.json
+            services/overseer/web/package-lock.json
+      - name: go tools
+        run: bash scripts/ci/go-tools.sh
+      - name: node dependencies
+        run: |
+          npm ci
+          npm ci --prefix client
+          npm ci --prefix services/overseer/web
+      - name: precheck
+        run: bash scripts/precheck.sh origin/main
+
   pr-checks:
-    needs: [changes, backend-static, backend-tests, mobile-tests, mobile-quality, workflow-lint]
+    needs: [changes, backend-static, backend-tests, mobile-tests, mobile-quality, workflow-lint, precheck]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

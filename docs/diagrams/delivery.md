@@ -7,23 +7,22 @@ From commit to live: PR precheck, merge, then a deploy someone starts by hand. N
 ```mermaid
 flowchart TD
     commit["git commit<br/>husky: block secrets · lint changed files"] --> pr["Pull request to main"]
-    pr --> precheck["precheck.yml · one precheck job"]
+    pr --> precheck["precheck.yml · pr-shape job"]
 
     subgraph gate [PR gate · precheck.yml]
-        trusted{"factory-precheck status green<br/>for this commit and base?"}
-        full["scripts/precheck.sh"]
         shape["scripts/ci/pr-shape.sh"]
-        trusted -->|yes| shape
-        trusted -->|no| full --> shape
     end
 
     subgraph ghgate [PR gate · GitHub pr-checks]
         ghtests["pr-checks · backend-tests<br/>migrations · INTEGRATION=1 go test · coverage ratchet"]
+        ghprecheck["pr-checks · precheck<br/>scripts/precheck.sh origin/main"]
     end
 
-    precheck --> trusted
+    precheck --> shape
     pr --> ghtests
+    pr --> ghprecheck
     ghtests -->|green| main
+    ghprecheck -->|green| main
     shape -->|green| main(["merge to main<br/>no merge queue"])
     main --> ci["ci.yml on push to main<br/>backend · overseer · mobile jobs for the paths that changed"]
 
