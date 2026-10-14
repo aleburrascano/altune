@@ -72,7 +72,7 @@ func run(opts options, env func(string) string) error {
 		return err
 	}
 	httpClient := &http.Client{Timeout: httpTimeout}
-	d := newDeriver(newMusicBrainz(httpClient, musicBrainzBaseURL, musicBrainzRequestsSec), offlineDeezer{})
+	d := newDeriver(newMusicBrainz(httpClient, musicBrainzBaseURL, musicBrainzRequestsSec), newDeezer(httpClient, deezerBaseURL, deezerRequestsPerSec))
 	result := d.deriveAll(ctx, tracks)
 	return saveReport(opts.reportPath, len(tracks), result)
 }
@@ -94,22 +94,4 @@ func saveReport(path string, tracks int, result derivation) error {
 		return fmt.Errorf("close report: %w", err)
 	}
 	return result.Aborted
-}
-
-type offlineDeezer struct{}
-
-func (offlineDeezer) TrackByISRC(context.Context, string) (deezerTrack, error) {
-	return deezerTrack{}, errCatalogUnknown
-}
-
-func (offlineDeezer) TrackByID(context.Context, string) (deezerTrack, error) {
-	return deezerTrack{}, errCatalogUnknown
-}
-
-func (offlineDeezer) SearchAlbums(context.Context, string, string) ([]deezerAlbum, error) {
-	return nil, errCatalogUnknown
-}
-
-func (offlineDeezer) Album(context.Context, string) (deezerAlbum, error) {
-	return deezerAlbum{}, errCatalogUnknown
 }

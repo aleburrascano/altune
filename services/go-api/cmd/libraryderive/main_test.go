@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"io"
-	"strings"
 	"testing"
 )
 
@@ -28,9 +27,8 @@ func TestParseOptions(t *testing.T) {
 	}
 }
 
-func TestOfflineDeezer_LeavesEveryDeezerFieldUnfilled(t *testing.T) {
-	got := byCategory(newDeriver(celebrationMusicBrainz(), offlineDeezer{}).deriveAll(t.Context(), []boundTrack{celebrationTrack()}).Findings)
-	if !strings.Contains(got[categoryReleaseChosen].Detail, "deezer no_album") || got["year_correct"].Fix == nil || got["genre_correct"].Fix != nil {
-		t.Fatalf("got %+v", got)
+func TestOpenReadOnlyPool_RefusesAnEmptyDatabaseURL(t *testing.T) {
+	if _, err := openReadOnlyPool(t.Context(), ""); !errors.Is(err, errEmptyDatabaseURL) {
+		t.Fatalf("err = %v", err)
 	}
 }
