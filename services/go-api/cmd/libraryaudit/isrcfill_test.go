@@ -204,3 +204,46 @@ func TestAuditTrack_CatalogRecordFallsBackToTheISRCLookupWhenTheAlbumHasNoSuchTr
 		t.Fatalf("got %+v", got.Matched)
 	}
 }
+
+func pokerFaceLibrary(savedCatalogSeconds float64) libraryTrack {
+	return libraryTrack{ID: "t1", UserID: "u1", Version: 3, Title: "Poker Face", Artist: "Lady Gaga", Album: "The Fame Monster (Deluxe Edition)", ISRC: "USUM70824409", DurationSeconds: 237, CatalogDurationSeconds: savedCatalogSeconds}
+}
+
+func pokerFaceCatalog(withAlbumTrack bool) fakeAlbums {
+	const album = "The Fame Monster (Deluxe Edition)"
+	compilation := catalogTrack{ID: 1, Title: "Poker Face", Artist: "Lady Gaga", Album: "Papeete 10 Years", ISRC: "USUM70824409", DurationSeconds: 230}
+	albumCut := catalogTrack{ID: 107876612, Title: "Poker Face", Artist: "Lady Gaga", Album: album, ISRC: "USUM70824409", DurationSeconds: 237}
+	cat := fakeAlbums{
+		fakeRecordings: fakeRecordings{fakeCatalog: fakeCatalog{byISRC: map[string]catalogTrack{"USUM70824409": compilation}, byID: map[int64]catalogTrack{107876612: albumCut}}},
+		tracks:         map[string][]catalogTrack{album: {{ID: 5, Title: "Bad Romance", Artist: "Lady Gaga", Album: album}}},
+	}
+	if withAlbumTrack {
+		cat.tracks[album] = []catalogTrack{{ID: 107876612, Title: "Poker Face", Artist: "Lady Gaga", Album: album, DurationSeconds: 237}}
+	}
+	return cat
+}
+
+func TestAuditTrackWithFills_AlbumTrackLengthCorrectsADifferingSavedCatalogLength(t *testing.T) {
+	got := auditTrackWithFills(context.Background(), pokerFaceCatalog(true), fakeCovers{}, pokerFaceLibrary(230))
+	found := findingOf(got.Findings, categoryCatalogDurationCorrectable)
+	want := fix{UserID: "u1", Version: 3, Field: "catalog_duration_seconds", Mode: "correct", OldValue: strPtr("230"), NewValue: strPtr("237")}
+	if found.Fix == nil || !reflect.DeepEqual(*found.Fix, want) {
+		t.Fatalf("got %+v", got.Findings)
+	}
+}
+
+func TestAuditTrackWithFills_ISRCLookupLengthNeverCorrectsASavedCatalogLength(t *testing.T) {
+	got := auditTrackWithFills(context.Background(), pokerFaceCatalog(false), fakeCovers{}, pokerFaceLibrary(237))
+	if found := findingOf(got.Findings, categoryCatalogDurationCorrectable); found.Category != "" {
+		t.Fatalf("got %+v", found)
+	}
+}
+
+func TestAuditTrackWithFills_AnAlbumTrackLengthEqualToTheSavedCatalogLengthYieldsNothing(t *testing.T) {
+	got := auditTrackWithFills(context.Background(), pokerFaceCatalog(true), fakeCovers{}, pokerFaceLibrary(237))
+	for _, f := range got.Findings {
+		if strings.HasPrefix(string(f.Category), "catalog_duration") {
+			t.Fatalf("got %+v", f)
+		}
+	}
+}

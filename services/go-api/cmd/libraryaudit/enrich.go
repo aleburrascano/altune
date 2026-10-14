@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"fmt"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -22,9 +23,9 @@ func sharesLibraryAlbum(lib libraryTrack, cat catalogTrack) bool {
 	return strings.TrimSpace(lib.Album) != "" && textnorm.NormalizeForIdentity(lib.Album) == textnorm.NormalizeForIdentity(cat.Album)
 }
 
-func enrichmentFindings(ctx context.Context, cat catalog, lib libraryTrack, found catalogTrack) ([]finding, error) {
+func enrichmentFindings(ctx context.Context, cat catalog, lib libraryTrack, found catalogTrack, source recordSource) ([]finding, error) {
 	var out []finding
-	out = append(out, catalogDurationFinding(lib, found)...)
+	out = append(out, catalogDurationFinding(lib, found, source)...)
 	out = append(out, trackNumberFinding(lib, found)...)
 	genre, err := genreFinding(ctx, cat, lib, found)
 	if err != nil {
@@ -33,9 +34,9 @@ func enrichmentFindings(ctx context.Context, cat catalog, lib libraryTrack, foun
 	return append(out, genre...), nil
 }
 
-func catalogDurationFinding(lib libraryTrack, found catalogTrack) []finding {
+func catalogDurationFinding(lib libraryTrack, found catalogTrack, source recordSource) []finding {
 	if lib.CatalogDurationSeconds > 0 {
-		return nil
+		return catalogDurationCorrection(lib, found, source)
 	}
 	if found.DurationSeconds <= 0 {
 		return []finding{about(lib, categoryCatalogDurationUnfillable, "catalog lists no duration for this track")}
@@ -44,6 +45,18 @@ func catalogDurationFinding(lib libraryTrack, found catalogTrack) []finding {
 	filled := about(lib, categoryCatalogDurationFillable, seconds)
 	filled.Fix = fixing(lib, "catalog_duration_seconds", "", seconds)
 	return []finding{filled}
+}
+
+func catalogDurationCorrection(lib libraryTrack, found catalogTrack, source recordSource) []finding {
+	if source != recordFromLibraryAlbum || found.DurationSeconds <= 0 || math.Round(lib.CatalogDurationSeconds) == math.Round(found.DurationSeconds) {
+		return nil
+	}
+	saved := strconv.FormatFloat(lib.CatalogDurationSeconds, 'f', -1, 64)
+	seconds := strconv.FormatFloat(found.DurationSeconds, 'f', -1, 64)
+	corrected := about(lib, categoryCatalogDurationCorrectable, saved+"s saved, library album lists "+seconds+"s")
+	corrected.Fix = fixing(lib, "catalog_duration_seconds", saved, seconds)
+	corrected.Fix.Mode = "correct"
+	return []finding{corrected}
 }
 
 func trackNumberFinding(lib libraryTrack, found catalogTrack) []finding {

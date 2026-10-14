@@ -27,17 +27,18 @@ type summary struct {
 	CoverImageDiffers       int `json:"cover_image_differs"`
 	CoverUnreadable         int `json:"cover_unreadable"`
 
-	TrackNumberFillable       int `json:"track_number_fillable,omitempty"`
-	TrackNumberUnfillable     int `json:"track_number_unfillable,omitempty"`
-	GenreFillable             int `json:"genre_fillable,omitempty"`
-	GenreUnfillable           int `json:"genre_unfillable,omitempty"`
-	CatalogDurationFillable   int `json:"catalog_duration_fillable,omitempty"`
-	YearFromRelease           int `json:"year_from_release,omitempty"`
-	AlbumArtistFromRelease    int `json:"album_artist_from_release,omitempty"`
-	CoverBlank                int `json:"cover_blank,omitempty"`
-	CoverNotReplaceable       int `json:"cover_not_replaceable,omitempty"`
-	YearUnfillable            int `json:"year_unfillable,omitempty"`
-	CatalogDurationUnfillable int `json:"catalog_duration_unfillable,omitempty"`
+	TrackNumberFillable        int `json:"track_number_fillable,omitempty"`
+	TrackNumberUnfillable      int `json:"track_number_unfillable,omitempty"`
+	GenreFillable              int `json:"genre_fillable,omitempty"`
+	GenreUnfillable            int `json:"genre_unfillable,omitempty"`
+	CatalogDurationFillable    int `json:"catalog_duration_fillable,omitempty"`
+	CatalogDurationCorrectable int `json:"catalog_duration_correctable,omitempty"`
+	YearFromRelease            int `json:"year_from_release,omitempty"`
+	AlbumArtistFromRelease     int `json:"album_artist_from_release,omitempty"`
+	CoverBlank                 int `json:"cover_blank,omitempty"`
+	CoverNotReplaceable        int `json:"cover_not_replaceable,omitempty"`
+	YearUnfillable             int `json:"year_unfillable,omitempty"`
+	CatalogDurationUnfillable  int `json:"catalog_duration_unfillable,omitempty"`
 }
 
 type report struct {
@@ -59,35 +60,36 @@ func countCategories(findings []finding) map[category]int {
 func summarize(outcome auditOutcome) summary {
 	counts := countCategories(outcome.Findings)
 	return summary{
-		ReadyTracks:               outcome.Total,
-		Checked:                   outcome.Checked,
-		NoISRC:                    counts[categoryNoISRC],
-		UnknownISRC:               counts[categoryUnknownISRC],
-		ISRCConfirmed:             counts[categoryISRCConfirmed],
-		LookupFailed:              counts[categoryLookupFailed],
-		WrongSong:                 counts[categoryWrongSong],
-		LengthShorter:             counts[categoryLengthShorter],
-		LengthLonger:              counts[categoryLengthLonger],
-		YearFillable:              counts[categoryYearFillable],
-		AlbumArtistFillable:       counts[categoryAlbumArtistFillable],
-		ISRCFillable:              counts[categoryISRCFillable],
-		ISRCAmbiguous:             counts[categoryISRCAmbiguous],
-		YearOtherRelease:          counts[categoryYearOtherRelease],
-		AlbumArtistOtherRelease:   counts[categoryAlbumArtistOtherRelease],
-		CoverURLDiffers:           counts[categoryCoverURLDiffers],
-		CoverImageDiffers:         counts[categoryCoverImageDiffers],
-		CoverUnreadable:           counts[categoryCoverUnreadable],
-		TrackNumberFillable:       counts[categoryTrackNumberFillable],
-		TrackNumberUnfillable:     counts[categoryTrackNumberUnfillable],
-		GenreFillable:             counts[categoryGenreFillable],
-		GenreUnfillable:           counts[categoryGenreUnfillable],
-		CatalogDurationFillable:   counts[categoryCatalogDurationFillable],
-		YearFromRelease:           counts[categoryYearFromRelease],
-		AlbumArtistFromRelease:    counts[categoryAlbumArtistFromRelease],
-		CoverBlank:                counts[categoryCoverBlank],
-		CoverNotReplaceable:       counts[categoryCoverNotReplaceable],
-		YearUnfillable:            counts[categoryYearUnfillable],
-		CatalogDurationUnfillable: counts[categoryCatalogDurationUnfillable],
+		ReadyTracks:                outcome.Total,
+		Checked:                    outcome.Checked,
+		NoISRC:                     counts[categoryNoISRC],
+		UnknownISRC:                counts[categoryUnknownISRC],
+		ISRCConfirmed:              counts[categoryISRCConfirmed],
+		LookupFailed:               counts[categoryLookupFailed],
+		WrongSong:                  counts[categoryWrongSong],
+		LengthShorter:              counts[categoryLengthShorter],
+		LengthLonger:               counts[categoryLengthLonger],
+		YearFillable:               counts[categoryYearFillable],
+		AlbumArtistFillable:        counts[categoryAlbumArtistFillable],
+		ISRCFillable:               counts[categoryISRCFillable],
+		ISRCAmbiguous:              counts[categoryISRCAmbiguous],
+		YearOtherRelease:           counts[categoryYearOtherRelease],
+		AlbumArtistOtherRelease:    counts[categoryAlbumArtistOtherRelease],
+		CoverURLDiffers:            counts[categoryCoverURLDiffers],
+		CoverImageDiffers:          counts[categoryCoverImageDiffers],
+		CoverUnreadable:            counts[categoryCoverUnreadable],
+		TrackNumberFillable:        counts[categoryTrackNumberFillable],
+		TrackNumberUnfillable:      counts[categoryTrackNumberUnfillable],
+		GenreFillable:              counts[categoryGenreFillable],
+		GenreUnfillable:            counts[categoryGenreUnfillable],
+		CatalogDurationFillable:    counts[categoryCatalogDurationFillable],
+		CatalogDurationCorrectable: counts[categoryCatalogDurationCorrectable],
+		YearFromRelease:            counts[categoryYearFromRelease],
+		AlbumArtistFromRelease:     counts[categoryAlbumArtistFromRelease],
+		CoverBlank:                 counts[categoryCoverBlank],
+		CoverNotReplaceable:        counts[categoryCoverNotReplaceable],
+		YearUnfillable:             counts[categoryYearUnfillable],
+		CatalogDurationUnfillable:  counts[categoryCatalogDurationUnfillable],
 	}
 }
 
@@ -138,7 +140,7 @@ func writeSummary(w io.Writer, r report) {
 	_, _ = fmt.Fprintf(w, "  track number fillable:      %d (unfillable: %d)\n", s.TrackNumberFillable, s.TrackNumberUnfillable)
 	_, _ = fmt.Fprintf(w, "  genre fillable:             %d (unfillable: %d)\n", s.GenreFillable, s.GenreUnfillable)
 	_, _ = fmt.Fprintf(w, "  year unfillable:            %d\n", s.YearUnfillable)
-	_, _ = fmt.Fprintf(w, "  catalog length fillable:    %d (unfillable: %d)\n", s.CatalogDurationFillable, s.CatalogDurationUnfillable)
+	_, _ = fmt.Fprintf(w, "  catalog length fillable:    %d (unfillable: %d, corrected: %d)\n", s.CatalogDurationFillable, s.CatalogDurationUnfillable, s.CatalogDurationCorrectable)
 	_, _ = fmt.Fprintf(w, "  cover URL differs:          %d\n", s.CoverURLDiffers)
 	_, _ = fmt.Fprintf(w, "  cover image differs:        %d (unreadable: %d, not replaceable: %d)\n", s.CoverImageDiffers, s.CoverUnreadable, s.CoverNotReplaceable)
 	_, _ = fmt.Fprintf(w, "  blank cover image:          %d\n", s.CoverBlank)

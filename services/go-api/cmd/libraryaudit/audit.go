@@ -23,6 +23,7 @@ type trackResult struct {
 	Findings []finding
 	Blocked  error
 	Matched  *catalogTrack
+	Source   recordSource
 }
 
 func lookupFailure(ctx context.Context, lib libraryTrack, err error) trackResult {
@@ -44,7 +45,7 @@ func auditTrack(ctx context.Context, cat catalog, covers coverJudge, lib library
 		}
 		return trackResult{Findings: append([]finding{about(lib, categoryNoISRC, resolved.reason)}, resolved.findings...)}
 	}
-	found, err := catalogRecord(ctx, cat, lib)
+	found, source, err := catalogRecord(ctx, cat, lib)
 	switch {
 	case errors.Is(err, errCatalogUnknown):
 		return confirmUnknownISRC(ctx, cat, lib)
@@ -63,7 +64,7 @@ func auditTrack(ctx context.Context, cat catalog, covers coverJudge, lib library
 		return trackResult{Checked: true, Findings: findings}
 	}
 	findings = append(findings, coverFindings(ctx, covers, lib, found)...)
-	return trackResult{Checked: true, Findings: findings, Matched: &found}
+	return trackResult{Checked: true, Findings: findings, Matched: &found, Source: source}
 }
 
 func musicBrainzKeepsISRC(ctx context.Context, cat catalog, lib libraryTrack, deezer catalogTrack) (finding, bool, error) {
@@ -103,7 +104,7 @@ func auditTrackWithFills(ctx context.Context, cat catalog, covers coverJudge, li
 	if err != nil {
 		return lookupFailure(ctx, lib, err)
 	}
-	enriched, err := enrichmentFindings(ctx, cat, lib, *result.Matched)
+	enriched, err := enrichmentFindings(ctx, cat, lib, *result.Matched, result.Source)
 	if err != nil {
 		return lookupFailure(ctx, lib, err)
 	}
