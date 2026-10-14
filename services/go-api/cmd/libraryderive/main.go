@@ -26,6 +26,7 @@ type options struct {
 	userID     string
 	limit      int
 	reportPath string
+	since      time.Time
 }
 
 func parseOptions(args []string, output io.Writer) (options, error) {
@@ -35,11 +36,19 @@ func parseOptions(args []string, output io.Writer) (options, error) {
 	flags.StringVar(&opts.userID, "user", "", "only this user id")
 	flags.IntVar(&opts.limit, "limit", 0, "stop after this many tracks (0 means all)")
 	flags.StringVar(&opts.reportPath, "report", defaultReportPath, "where to write the JSON report")
+	var rawSince string
+	flags.StringVar(&rawSince, "since", "", "only tracks added, or whose identity was written, since this RFC3339 time")
 	if err := flags.Parse(args); err != nil {
 		return options{}, err
 	}
 	if opts.limit < 0 {
 		return options{}, errNegativeLimit
+	}
+	if rawSince != "" {
+		var err error
+		if opts.since, err = time.Parse(time.RFC3339, rawSince); err != nil {
+			return options{}, fmt.Errorf("-since: %w", err)
+		}
 	}
 	return opts, nil
 }
@@ -67,7 +76,7 @@ func run(opts options, env func(string) string) error {
 		return err
 	}
 	defer pool.Close()
-	tracks, err := loadBoundTracks(ctx, pool, opts.userID, opts.limit)
+	tracks, err := loadBoundTracksSince(ctx, pool, opts.userID, opts.limit, opts.since)
 	if err != nil {
 		return err
 	}

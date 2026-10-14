@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -71,5 +72,37 @@ func TestLoadBoundTracks_HonorsTheLimit(t *testing.T) {
 	got, err := loadBoundTracks(t.Context(), pool, user, 1)
 	if err != nil || len(got) != 1 {
 		t.Fatalf("got %d, %v", len(got), err)
+	}
+}
+
+func TestLoadBoundTracksSince_KeepsOnlyTracksAddedOrBoundAfterThatTime(t *testing.T) {
+	pool := testPool(t)
+	user := uuid.NewString()
+	old := seedIdentity(t, pool, user, "bound", "ready")
+	newlyAdded := seedIdentity(t, pool, user, "bound", "ready")
+	newlyBound := seedIdentity(t, pool, user, "bound", "ready")
+	cutoff := time.Now().UTC().Truncate(time.Second)
+	before, after := cutoff.Add(-time.Hour), cutoff.Add(time.Hour)
+	mustExec(t, pool, "UPDATE tracks SET added_at = $2 WHERE id = ANY($1::uuid[])", []string{old, newlyBound}, before)
+	mustExec(t, pool, "UPDATE tracks SET added_at = $2 WHERE id = $1::uuid", newlyAdded, after)
+	mustExec(t, pool, "UPDATE track_identity SET bound_at = $2 WHERE track_id = ANY($1::uuid[])", []string{old, newlyAdded}, before)
+	mustExec(t, pool, "UPDATE track_identity SET bound_at = $2 WHERE track_id = $1::uuid", newlyBound, after)
+	got, err := loadBoundTracksSince(t.Context(), pool, user, 0, cutoff)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := map[string]bool{}
+	for _, track := range got {
+		ids[track.ID] = true
+	}
+	if len(ids) != 2 || !ids[newlyAdded] || !ids[newlyBound] || ids[old] {
+		t.Fatalf("got %v, want only %s and %s", ids, newlyAdded, newlyBound)
+	}
+}
+
+func mustExec(t *testing.T, pool *pgxpool.Pool, sql string, args ...any) {
+	t.Helper()
+	if _, err := pool.Exec(t.Context(), sql, args...); err != nil {
+		t.Fatalf("%s: %v", sql, err)
 	}
 }

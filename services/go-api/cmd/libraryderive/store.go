@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -40,11 +41,20 @@ const boundTracksSQL = `SELECT t.id::text, t.user_id::text, t.title, t.artist, C
 	WHERE i.status = 'bound'
 	  AND t.acquisition_status = 'ready'
 	  AND ($1 = '' OR t.user_id::text = $1)
+	  AND ($3::timestamptz IS NULL OR t.added_at >= $3 OR i.bound_at >= $3)
 	ORDER BY t.user_id, t.artist, t.album, t.title
 	LIMIT NULLIF($2, 0)`
 
 func loadBoundTracks(ctx context.Context, pool *pgxpool.Pool, userID string, limit int) ([]boundTrack, error) {
-	rows, err := pool.Query(ctx, boundTracksSQL, userID, limit)
+	return loadBoundTracksSince(ctx, pool, userID, limit, time.Time{})
+}
+
+func loadBoundTracksSince(ctx context.Context, pool *pgxpool.Pool, userID string, limit int, since time.Time) ([]boundTrack, error) {
+	var sinceArg *time.Time
+	if !since.IsZero() {
+		sinceArg = &since
+	}
+	rows, err := pool.Query(ctx, boundTracksSQL, userID, limit, sinceArg)
 	if err != nil {
 		return nil, fmt.Errorf("query bound tracks: %w", err)
 	}
