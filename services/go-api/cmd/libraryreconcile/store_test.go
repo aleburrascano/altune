@@ -360,3 +360,193 @@ func TestRunReconcile_CorrectModeDryRunWritesNothing(t *testing.T) {
 		t.Fatalf("err=%v out=%s", err, out)
 	}
 }
+
+type songRow struct {
+	Title, Artist, Album, Genre, TrackNumber, ArtworkURL, AlbumArtist, Year, DedupKey string
+	Version                                                                           int
+}
+
+func seedSong(t *testing.T, s store, userID, title, artist, album, key string) seeded {
+	t.Helper()
+	row := seeded{trackID: uuid.NewString(), userID: userID}
+	_, err := s.pool.Exec(context.Background(),
+		`INSERT INTO tracks (id, user_id, title, artist, album, dedup_key, genre, track_number, artwork_url, album_artist, year, version)
+		 VALUES ($1, $2, $3, $4, $5, $6, 'Pop', 12, 'https://cdn/now.jpg', 'Various Artists', 1999, 4)`,
+		row.trackID, row.userID, title, artist, album, key)
+	if err != nil {
+		t.Fatalf("seed song: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = s.pool.Exec(context.Background(), "DELETE FROM track_metadata_changes WHERE track_id = $1", row.trackID)
+		_, _ = s.pool.Exec(context.Background(), "DELETE FROM tracks WHERE id = $1", row.trackID)
+	})
+	return row
+}
+
+func readSong(t *testing.T, s store, row seeded) songRow {
+	t.Helper()
+	var got songRow
+	err := s.pool.QueryRow(context.Background(),
+		`SELECT title, artist, album, genre, track_number::text, artwork_url, album_artist, year::text, dedup_key, version FROM tracks WHERE id = $1`, row.trackID).
+		Scan(&got.Title, &got.Artist, &got.Album, &got.Genre, &got.TrackNumber, &got.ArtworkURL, &got.AlbumArtist, &got.Year, &got.DedupKey, &got.Version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return got
+}
+
+func albumMove(group string) []plannedChange {
+	correct := func(f field, old, value string) plannedChange {
+		return plannedChange{Mode: modeCorrect, Field: f, AuditedOld: text(old), NewValue: text(value), Group: group}
+	}
+	return []plannedChange{
+		correct(fieldAlbum, "Now 14", "Simple Pleasures"),
+		correct(fieldTrackNumber, "12", "2"),
+		correct(fieldGenre, "Pop", "Jazz"),
+		correct(fieldArtworkURL, "https://cdn/now.jpg", "https://cdn/sp.jpg"),
+		correct(fieldAlbumArtist, "Various Artists", "Bobby McFerrin"),
+		correct(fieldYear, "1999", "1988"),
+	}
+}
+
+const (
+	nowKey = "dont worry be happy|bobby mcferrin|now 14"
+	spKey  = "dont worry be happy|bobby mcferrin|simple pleasures"
+)
+
+func movedSong() songRow {
+	return songRow{
+		Title: "Don't Worry, Be Happy", Artist: "Bobby McFerrin", Album: "Simple Pleasures", Genre: "Jazz", TrackNumber: "2",
+		ArtworkURL: "https://cdn/sp.jpg", AlbumArtist: "Bobby McFerrin", Year: "1988", DedupKey: spKey, Version: 5,
+	}
+}
+
+func originalSong() songRow {
+	return songRow{
+		Title: "Don't Worry, Be Happy", Artist: "Bobby McFerrin", Album: "Now 14", Genre: "Pop", TrackNumber: "12",
+		ArtworkURL: "https://cdn/now.jpg", AlbumArtist: "Various Artists", Year: "1999", DedupKey: nowKey, Version: 4,
+	}
+}
+
+func TestRunReconcile_AnAlbumMoveAppliesItsDependentsAndRecomputesTheDedupKeyInOneStep(t *testing.T) {
+	s := testStore(t)
+	row := seedSong(t, s, uuid.NewString(), "Don't Worry, Be Happy", "Bobby McFerrin", "Now 14", nowKey)
+	runID, out, err := reconcile(t, s, true, planFor(row, 4, albumMove("album-move:1")...))
+	if got := readSong(t, s, row); err != nil || got != movedSong() || logRows(t, s, runID) != 7 {
+		t.Fatalf("err=%v got=%+v out=%s", err, readSong(t, s, row), out)
+	}
+}
+
+func TestRunReconcile_ADedupClashSkipsTheWholeGroupAndNamesTheOtherTrack(t *testing.T) {
+	s := testStore(t)
+	user := uuid.NewString()
+	row := seedSong(t, s, user, "Don't Worry, Be Happy", "Bobby McFerrin", "Now 14", nowKey)
+	other := seedSong(t, s, user, "Don't Worry, Be Happy", "Bobby McFerrin", "Simple Pleasures", spKey)
+	for _, write := range []bool{false, true} {
+		runID, out, err := reconcile(t, s, write, planFor(row, 4, albumMove("album-move:1")...))
+		if err != nil || readSong(t, s, row) != originalSong() || logRows(t, s, runID) != 0 {
+			t.Fatalf("write=%v err=%v got=%+v out=%s", write, err, readSong(t, s, row), out)
+		}
+		if !strings.Contains(out, "skipped-duplicate: 6") || !strings.Contains(out, "same song as track "+other.trackID) {
+			t.Fatalf("write=%v out=%s", write, out)
+		}
+	}
+	if readSong(t, s, other).DedupKey != spKey {
+		t.Fatal("the other track must stay untouched")
+	}
+}
+
+func TestRunReconcile_ASameKeyInAnotherLibraryIsNotAClash(t *testing.T) {
+	s := testStore(t)
+	row := seedSong(t, s, uuid.NewString(), "Don't Worry, Be Happy", "Bobby McFerrin", "Now 14", nowKey)
+	seedSong(t, s, uuid.NewString(), "Don't Worry, Be Happy", "Bobby McFerrin", "Simple Pleasures", spKey)
+	_, out, err := reconcile(t, s, true, planFor(row, 4, albumMove("album-move:1")...))
+	if err != nil || readSong(t, s, row) != movedSong() {
+		t.Fatalf("err=%v out=%s", err, out)
+	}
+}
+
+func TestRunReconcile_AStaleOldValueInTheGroupSkipsEveryMember(t *testing.T) {
+	s := testStore(t)
+	row := seedSong(t, s, uuid.NewString(), "Don't Worry, Be Happy", "Bobby McFerrin", "Now 14", nowKey)
+	if _, err := s.pool.Exec(context.Background(), "UPDATE tracks SET genre = 'Rock' WHERE id = $1", row.trackID); err != nil {
+		t.Fatal(err)
+	}
+	runID, out, err := reconcile(t, s, true, planFor(row, 4, albumMove("album-move:1")...))
+	want := originalSong()
+	want.Genre = "Rock"
+	if err != nil || readSong(t, s, row) != want || logRows(t, s, runID) != 0 {
+		t.Fatalf("err=%v got=%+v out=%s", err, readSong(t, s, row), out)
+	}
+	if !strings.Contains(out, "skipped-group:     5") || !strings.Contains(out, "skipped-not-empty: 1") {
+		t.Fatalf("out=%s", out)
+	}
+}
+
+func TestRunUndo_AGroupRestoresEveryFieldAndTheDedupKey(t *testing.T) {
+	s := testStore(t)
+	row := seedSong(t, s, uuid.NewString(), "Don't Worry, Be Happy", "Bobby McFerrin", "Now 14", nowKey)
+	runID, _, _ := reconcile(t, s, true, planFor(row, 4, albumMove("album-move:1")...))
+	var out bytes.Buffer
+	err := runUndo(context.Background(), s, runID, &out)
+	want := originalSong()
+	want.Version = 5 + 7
+	if got := readSong(t, s, row); err != nil || got != want || !strings.Contains(out.String(), "restored:        7") {
+		t.Fatalf("err=%v got=%+v out=%s", err, got, out.String())
+	}
+}
+
+func TestRunUndo_AGroupWithOneMemberEditedSinceRestoresNothing(t *testing.T) {
+	s := testStore(t)
+	row := seedSong(t, s, uuid.NewString(), "Don't Worry, Be Happy", "Bobby McFerrin", "Now 14", nowKey)
+	runID, _, _ := reconcile(t, s, true, planFor(row, 4, albumMove("album-move:1")...))
+	if _, err := s.pool.Exec(context.Background(), "UPDATE tracks SET genre = 'Soul' WHERE id = $1", row.trackID); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	err := runUndo(context.Background(), s, runID, &out)
+	want := movedSong()
+	want.Genre = "Soul"
+	if got := readSong(t, s, row); err != nil || got != want || !strings.Contains(out.String(), "skipped-changed: 7") {
+		t.Fatalf("err=%v got=%+v out=%s", err, got, out.String())
+	}
+}
+
+func TestRunReconcile_TitleAndArtistCorrectionsRecomputeTheKeyAndUndoRestoresIt(t *testing.T) {
+	s := testStore(t)
+	row := seedSong(t, s, uuid.NewString(), "Wham! - Careless Whisper (Official Video)", "WhamVEVO", "Make It Big", "wham careless whisper official video|whamvevo|make it big")
+	changes := []plannedChange{
+		{Mode: modeCorrect, Field: fieldTitle, AuditedOld: text("Wham! - Careless Whisper (Official Video)"), NewValue: text("Careless Whisper")},
+		{Mode: modeCorrect, Field: fieldArtist, AuditedOld: text("WhamVEVO"), NewValue: text("Wham!")},
+	}
+	runID, out, err := reconcile(t, s, true, planFor(row, 4, changes...))
+	got := readSong(t, s, row)
+	if err != nil || got.Title != "Careless Whisper" || got.Artist != "Wham!" || got.DedupKey != "careless whisper|wham|make it big" || logRows(t, s, runID) != 3 {
+		t.Fatalf("err=%v got=%+v out=%s", err, got, out)
+	}
+	var undone bytes.Buffer
+	got = readSong(t, s, row)
+	if got.Version != 5 {
+		t.Fatalf("version %d, want 5", got.Version)
+	}
+	if err := runUndo(context.Background(), s, runID, &undone); err != nil {
+		t.Fatalf("err=%v out=%s", err, undone.String())
+	}
+	got = readSong(t, s, row)
+	if got.Title != "Wham! - Careless Whisper (Official Video)" || got.Artist != "WhamVEVO" || got.DedupKey != "wham careless whisper official video|whamvevo|make it big" {
+		t.Fatalf("got=%+v", got)
+	}
+}
+
+func TestRunReconcile_ATitleCorrectionThatClashesWithAnotherTrackIsSkipped(t *testing.T) {
+	s := testStore(t)
+	user := uuid.NewString()
+	row := seedSong(t, s, user, "Careless Whisper (Official Video)", "Wham!", "Make It Big", "careless whisper official video|wham|make it big")
+	other := seedSong(t, s, user, "Careless Whisper", "Wham!", "Make It Big", "careless whisper|wham|make it big")
+	change := plannedChange{Mode: modeCorrect, Field: fieldTitle, AuditedOld: text("Careless Whisper (Official Video)"), NewValue: text("Careless Whisper")}
+	runID, out, err := reconcile(t, s, true, planFor(row, 4, change))
+	if got := readSong(t, s, row); err != nil || got.Title != "Careless Whisper (Official Video)" || logRows(t, s, runID) != 0 ||
+		!strings.Contains(out, "skipped-duplicate: 1") || !strings.Contains(out, other.trackID) {
+		t.Fatalf("err=%v got=%+v out=%s", err, got, out)
+	}
+}

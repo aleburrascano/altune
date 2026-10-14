@@ -20,7 +20,11 @@ func describe(d decision, write bool) string {
 	if d.Verdict == verdictApplied && !write {
 		label = "would apply:"
 	}
-	return fmt.Sprintf("%-18s track %s %s: %s -> %s", label, d.Change.TrackID, d.Change.Field, valueText(d.Current), valueText(d.Change.NewValue))
+	line := fmt.Sprintf("%-18s track %s %s: %s -> %s", label, d.Change.TrackID, d.Change.Field, valueText(d.Current), valueText(d.Change.NewValue))
+	if d.Other != "" {
+		line += " (same song as track " + d.Other + ")"
+	}
+	return line
 }
 
 type tally map[verdict]int
@@ -51,8 +55,9 @@ func writeTally(out io.Writer, counts tally, write bool, runID uuid.UUID) {
 	if write {
 		mode, applied = "run_id "+runID.String(), "applied:"
 	}
-	_, _ = fmt.Fprintf(out, "%s\n  %-19s%d\n  skipped-not-empty: %d\n  stale:             %d\n  failed:            %d\n",
-		mode, applied, counts[verdictApplied], counts[verdictSkippedNotEmpty], counts[verdictStale], counts[verdictFailed])
+	_, _ = fmt.Fprintf(out, "%s\n  %-19s%d\n  skipped-not-empty: %d\n  stale:             %d\n  skipped-duplicate: %d\n  skipped-group:     %d\n  failed:            %d\n",
+		mode, applied, counts[verdictApplied], counts[verdictSkippedNotEmpty], counts[verdictStale],
+		counts[verdictSkippedDuplicate], counts[verdictSkippedGroup], counts[verdictFailed])
 }
 
 func runUndo(ctx context.Context, s store, runID uuid.UUID, out io.Writer) error {

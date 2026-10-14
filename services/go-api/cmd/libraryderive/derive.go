@@ -72,6 +72,7 @@ type difference struct {
 	Mode  changeMode
 	Old   *string
 	New   *string
+	Group string
 }
 
 func (d difference) category() category {
@@ -83,24 +84,57 @@ func (d difference) category() category {
 
 func diff(stored libraryTrack, want desired) []difference {
 	moved := albumDiffers(stored.Album, want.Album)
+	group := ""
+	if moved && stored.Album != "" {
+		group = "album-move:" + stored.ID
+	}
 	var found []difference
-	found = appendReportOnly(found, "album", stored.Album, want.Album, moved)
-	found = appendReportOnly(found, "title", stored.Title, want.Title, !sameSongTitle(stored.Title, want.Title))
-	found = appendReportOnly(found, "artist", stored.Artist, want.Artist, !isCredited(stored.Artist, want.Artist))
-	found = appendWritable(found, "year", intText(stored.Year), intText(want.Year), true)
-	found = appendWritable(found, "album_artist", stored.AlbumArtist, want.AlbumArtist, !isSameName(stored.AlbumArtist, want.AlbumArtist))
-	found = appendAlbumBound(found, "track_number", intText(stored.TrackNumber), intText(want.TrackNumber), moved)
-	found = appendAlbumBound(found, "genre", stored.Genre, want.Genre, moved)
+	found = appendIdentity(found, "album", stored.Album, want.Album, moved, true, group)
+	found = appendIdentity(found, "title", stored.Title, want.Title, !sameSongTitle(stored.Title, want.Title), sameVariant(stored.Title, want.Title), group)
+	found = appendIdentity(found, "artist", stored.Artist, want.Artist, !isCredited(stored.Artist, want.Artist), true, group)
+	found = appendWritable(found, "year", intText(stored.Year), intText(want.Year), true, group)
+	found = appendWritable(found, "album_artist", stored.AlbumArtist, want.AlbumArtist, !isSameName(stored.AlbumArtist, want.AlbumArtist), group)
+	found = appendAlbumBound(found, "track_number", intText(stored.TrackNumber), intText(want.TrackNumber), moved, group)
+	found = appendAlbumBound(found, "genre", stored.Genre, want.Genre, moved, group)
 	found = appendWritable(found, "catalog_duration_seconds", secondsText(stored.CatalogDurationSeconds), secondsText(want.CatalogDurationSeconds),
-		math.Abs(stored.CatalogDurationSeconds-want.CatalogDurationSeconds) > catalogLengthSlack)
-	return appendAlbumBound(found, "artwork_url", stored.ArtworkURL, want.ArtworkURL, moved)
+		math.Abs(stored.CatalogDurationSeconds-want.CatalogDurationSeconds) > catalogLengthSlack, "")
+	return appendArtwork(found, stored.ArtworkURL, want.ArtworkURL, moved, group)
 }
 
-func appendAlbumBound(found []difference, field, stored, want string, albumMoved bool) []difference {
-	if albumMoved {
+func appendArtwork(found []difference, stored, want string, albumMoved bool, group string) []difference {
+	if stored == "" {
+		return appendReportOnly(found, "artwork_url", stored, want, true)
+	}
+	return appendAlbumBound(found, "artwork_url", stored, want, albumMoved, group)
+}
+
+func (d difference) isIdentity() bool {
+	return d.Field == "album" || d.Field == "title" || d.Field == "artist"
+}
+
+func (d difference) reportOnly() difference {
+	d.Mode, d.Group = modeReportOnly, ""
+	return d
+}
+
+func appendIdentity(found []difference, field, stored, want string, differs, safeToWrite bool, group string) []difference {
+	if want == "" || !differs {
+		return found
+	}
+	if stored == "" || !safeToWrite {
+		return append(found, difference{Field: field, Mode: modeReportOnly, Old: optional(stored), New: &want})
+	}
+	return append(found, difference{Field: field, Mode: modeCorrect, Old: &stored, New: &want, Group: group})
+}
+
+func appendAlbumBound(found []difference, field, stored, want string, albumMoved bool, group string) []difference {
+	switch {
+	case !albumMoved:
+		return appendWritable(found, field, stored, want, false, "")
+	case group == "":
 		return appendReportOnly(found, field, stored, want, stored != want)
 	}
-	return appendWritable(found, field, stored, want, false)
+	return appendWritable(found, field, stored, want, true, group)
 }
 
 func albumDiffers(stored, want string) bool {
@@ -114,14 +148,14 @@ func appendReportOnly(found []difference, field, stored, want string, differs bo
 	return append(found, difference{Field: field, Mode: modeReportOnly, Old: optional(stored), New: &want})
 }
 
-func appendWritable(found []difference, field, stored, want string, mayCorrect bool) []difference {
+func appendWritable(found []difference, field, stored, want string, mayCorrect bool, group string) []difference {
 	switch {
 	case want == "" || stored == want:
 		return found
 	case stored == "":
-		return append(found, difference{Field: field, Mode: modeFill, New: &want})
+		return append(found, difference{Field: field, Mode: modeFill, New: &want, Group: group})
 	case mayCorrect:
-		return append(found, difference{Field: field, Mode: modeCorrect, Old: &stored, New: &want})
+		return append(found, difference{Field: field, Mode: modeCorrect, Old: &stored, New: &want, Group: group})
 	}
 	return found
 }
