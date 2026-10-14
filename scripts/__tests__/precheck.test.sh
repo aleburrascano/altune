@@ -188,6 +188,19 @@ run_script_with_stubs
 expect_npx "--findRelatedTests"
 expect_npx "--cacheDirectory $WORK/home/.cache/altune-ci/jest"
 
+CASE="a changed client script outside src is linted too"
+new_repo
+add_mobile_stubs
+(
+    cd "$WORK/repo" || exit 1
+    mkdir -p client/scripts
+    printf 'export const x = 1;\n' >client/scripts/tool.mjs
+    git add -A
+    git commit -qm "client script change"
+)
+run_script_with_stubs
+expect_npx "eslint scripts/tool.mjs"
+
 CASE="mobile event contracts keep the jest cache under HOME, not the /tmp tmpfs"
 new_repo
 add_mobile_stubs

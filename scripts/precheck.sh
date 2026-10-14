@@ -266,7 +266,8 @@ if touches '^client/'; then
   if need npx "mobile" && link_deps $m; then
     src=$(grep -E '^client/src/.*\.(ts|tsx)$' <<<"$changed" | sed 's#^client/##')
     check "mobile typecheck" $m "${heavy[@]}" npx tsc --noEmit
-    [ -n "$src" ] && check "mobile lint (changed files)" $m "${heavy[@]}" npx eslint $src
+    linted=$(grep -E '^client/.*\.(ts|tsx|js|jsx|mjs|cjs)$' <<<"$changed" | sed 's#^client/##')
+    [ -n "$linted" ] && check "mobile lint (changed files)" $m "${heavy[@]}" npx eslint $linted
     check "mobile mechanical style (changed lines)" $m node scripts/lint-changed-lines.mjs "$base"
     check "mobile prettier (changed files)" $m node scripts/prettier-changed.mjs "$base"
     test_check "mobile script and rule tests" $m bash -c 'files=$(git ls-files "scripts/__tests__/*.test.mjs" "eslint/rules/__tests__/*.test.js"); [ -z "$files" ] || node --test $files'
