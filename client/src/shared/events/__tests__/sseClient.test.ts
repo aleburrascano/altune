@@ -15,6 +15,7 @@ const { __http } = require('@testing/doubles/fetch.js');
 const HEARTBEAT_WATCHDOG_MS = 60_000;
 const MAX_RESPONSE_BYTES = 524_288;
 const EVENTS_PATH = '/v1/discovery/events';
+const CORRELATION_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
 type SentRequest = { path: string };
 
@@ -140,8 +141,8 @@ describe('SSEClient', () => {
 
       const first = xhrAt(0).requestHeaders['X-Correlation-ID'];
       const second = xhrAt(1).requestHeaders['X-Correlation-ID'];
-      expect(first).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
-      expect(second).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
+      expect(first).toMatch(CORRELATION_ID_PATTERN);
+      expect(second).toMatch(CORRELATION_ID_PATTERN);
       expect(second).not.toBe(first);
     });
 
@@ -152,7 +153,7 @@ describe('SSEClient', () => {
       xhrAt(0).triggerError();
 
       const sent = xhrAt(0).requestHeaders['X-Correlation-ID'];
-      expect(sent).toBeDefined();
+      expect(sent).toMatch(CORRELATION_ID_PATTERN);
       expect(onError).toHaveBeenCalledWith(
         expect.objectContaining({ name: 'SSEConnectionError', correlationId: sent }),
       );

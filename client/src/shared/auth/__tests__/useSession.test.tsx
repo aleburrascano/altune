@@ -623,9 +623,9 @@ describe('Invalidation: an identity change clears the exact cache entries and em
     renderSession(queryClient);
     act(() => auth.emit('SIGNED_IN', makeSession('user-a')));
     seedLocalData(queryClient);
-    expect(queryClient.getQueryData(LIBRARY_KEY)).toBeDefined();
-    expect(queryClient.getQueryData(PLAYLIST_KEY)).toBeDefined();
-    expect(queryClient.getQueryData(LOOKUP_KEY)).toBeDefined();
+    expect(queryClient.getQueryData(LIBRARY_KEY)).toEqual(['seed']);
+    expect(queryClient.getQueryData(PLAYLIST_KEY)).toEqual({ id: 'p1' });
+    expect(queryClient.getQueryData(LOOKUP_KEY)).toEqual({ id: 'tracks-lookup' });
 
     act(() => auth.emit('SIGNED_IN', makeSession('user-b')));
 

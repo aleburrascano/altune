@@ -58,7 +58,7 @@ function runAction(action: Action): void {
 function assertQueueEntriesConsistent(): void {
   const { entries, queue } = usePinnedStore.getState();
   for (const id of queue) {
-    expect(entries[id]).toBeDefined();
+    expect(Object.keys(entries)).toContain(id);
   }
 }
 

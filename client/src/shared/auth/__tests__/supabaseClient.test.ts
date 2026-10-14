@@ -330,7 +330,7 @@ describe('required configuration', () => {
 
       expect(() => require('@shared/auth/supabaseClient')).not.toThrow();
       const { supabase } = require('@shared/auth/supabaseClient') as { supabase: unknown };
-      expect(supabase).toBeDefined();
+      expect(supabase).toEqual({ __fake: true });
     });
   });
 
