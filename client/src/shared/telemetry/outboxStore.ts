@@ -32,6 +32,7 @@ const DISCOVERY_EVENT_TYPES: Record<DiscoveryEventType, true> = {
   sse_reconnect: true,
   outbox_flush_failed: true,
   download_failed: true,
+  screen_view: true,
 };
 
 function isDiscoveryEventType(value: unknown): value is DiscoveryEventType {

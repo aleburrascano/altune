@@ -283,6 +283,7 @@
           "shared-errors",
           "shared-killSwitch",
           "shared-lifecycle",
+          "shared-navigation",
           "shared-offline",
           "shared-query",
           "shared-session",

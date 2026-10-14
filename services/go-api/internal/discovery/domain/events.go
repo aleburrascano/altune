@@ -30,6 +30,7 @@ const (
 	EventTypeOutboxFlushFailed
 	EventTypeDownloadFailed
 	EventTypeAuthFailed
+	EventTypeScreenView
 )
 
 var eventTypeNames = map[EventType]string{
@@ -54,6 +55,7 @@ var eventTypeNames = map[EventType]string{
 	EventTypeOutboxFlushFailed:   "outbox_flush_failed",
 	EventTypeDownloadFailed:      "download_failed",
 	EventTypeAuthFailed:          "auth_failed",
+	EventTypeScreenView:          "screen_view",
 }
 
 func (e EventType) String() string {
@@ -69,7 +71,8 @@ func (e EventType) ClientSubmittable() bool {
 		EventTypeCompleted, EventTypeLibraryAdd, EventTypeWrongAlbum, EventTypeSearchFailed,
 		EventTypeSearchDegraded, EventTypePlaybackHealth, EventTypeDetailHealth,
 		EventTypeAcquisitionUi, EventTypeClientError, EventTypeUserAction, EventTypeFailureShown,
-		EventTypeSseReconnect, EventTypeOutboxFlushFailed, EventTypeDownloadFailed:
+		EventTypeSseReconnect, EventTypeOutboxFlushFailed, EventTypeDownloadFailed,
+		EventTypeScreenView:
 		return true
 	}
 	return false

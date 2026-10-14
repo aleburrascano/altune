@@ -24,6 +24,7 @@ import {
 import { registerSearchStateSignOutReset } from '@features/discovery';
 import { useServerEvents } from '@shared/events/useServerEvents';
 import { startKillSwitchPolling } from '@shared/killSwitch/killSwitchPoll';
+import { useScreenViews } from '@shared/events/useScreenViews';
 import { installGlobalErrorReporting } from '@shared/telemetry/clientErrorReporting';
 import { PlaybackProvider, SleepTimerBridge, startPlaybackService } from '@features/playback';
 import { OfflineReconcileBridge } from '@shared/offline/ui/OfflineReconcileBridge';
@@ -46,6 +47,11 @@ installGlobalErrorReporting();
 
 function ServerEventsBridge() {
   useServerEvents();
+  return null;
+}
+
+function ScreenViewsBridge() {
+  useScreenViews();
   return null;
 }
 
@@ -105,6 +111,7 @@ export default function RootLayout() {
                 <StagingBanner />
                 <AuthGate>
                   <ServerEventsBridge />
+                  <ScreenViewsBridge />
                   <PlaybackProvider>
                     <SleepTimerBridge />
                     <OfflineReconcileBridge />

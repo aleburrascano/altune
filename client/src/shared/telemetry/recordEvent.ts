@@ -21,7 +21,8 @@ export type DiscoveryEventType =
   | 'failure_shown'
   | 'sse_reconnect'
   | 'outbox_flush_failed'
-  | 'download_failed';
+  | 'download_failed'
+  | 'screen_view';
 
 export type DiscoveryEvent = {
   type: DiscoveryEventType;
