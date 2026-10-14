@@ -4,7 +4,6 @@ import { Text } from 'react-native';
 
 import { ApiError, NetworkError } from '@shared/failure/errors';
 import { createQueryClient } from '@shared/query/createQueryClient';
-import { RETRY_BACKOFF_CAP_MS } from '@shared/query/retryDelay';
 
 const FIRST_TRY_PLUS_FIVE_RETRIES = 6;
 const REQUESTS_FOR_A_TRANSIENT_FAILURE = FIRST_TRY_PLUS_FIVE_RETRIES;
@@ -13,6 +12,7 @@ const STATUS_SERVICE_UNAVAILABLE = 503;
 const STATUS_NOT_FOUND = 404;
 const STATUS_TOO_MANY_REQUESTS = 429;
 const MORE_TICKS_THAN_RETRIES = 20;
+const RETRY_BACKOFF_CAP_MS = 30_000;
 
 let serverAnswer: Error = new Error('unset');
 let requestsMade = 0;

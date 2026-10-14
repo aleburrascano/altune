@@ -8,7 +8,7 @@ import {
 import { asTrackId, type TrackId } from '@shared/apiClient/ids';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
-import { setSignedInUser } from '@shared/session/signOutCleanup';
+import { notifyIdentityChange } from '@shared/session/signOutCleanup';
 
 import { usePlaybackErrorStore } from '@features/playback/hooks/usePlaybackErrorStore';
 import { redactPlaybackErrorMessage } from '@features/playback/domain/playbackError';
@@ -324,12 +324,12 @@ describe('RemoteDuck interruption handling', () => {
 
   describe('playbackService — RemoteDuck resumes playback after an interruption', () => {
     beforeEach(() => {
-      setSignedInUser(true);
+      notifyIdentityChange('user-1');
     });
 
     it('does not resume when no user is signed in (#827)', async () => {
       const handler = await remoteDuckHandler();
-      setSignedInUser(false);
+      notifyIdentityChange(null);
 
       handler({ paused: false, permanent: false });
 
@@ -411,7 +411,7 @@ describe('remote skip commands', () => {
   let warn: jest.SpyInstance;
 
   beforeEach(() => {
-    setSignedInUser(true);
+    notifyIdentityChange('user-1');
     player.getProgress.mockResolvedValue({ position: 0, duration: 200, buffered: 0 });
     warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
@@ -531,7 +531,7 @@ describe('playbackService — handler rejections are reported, not left unhandle
   }
 
   beforeEach(() => {
-    setSignedInUser(true);
+    notifyIdentityChange('user-1');
     unhandled.length = 0;
     process.on('unhandledRejection', onUnhandled);
     warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);

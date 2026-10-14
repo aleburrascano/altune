@@ -2,7 +2,8 @@ import { renderHook } from '@testing-library/react-native';
 import type { ImperativeRouter } from 'expo-router';
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import { clearDetailHandoffs, readDetailHandoff } from '@shared/navigation/detailHandoff';
+import { readDetailHandoff } from '@shared/navigation/detailHandoff';
+import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 import {
   detailRouteFor,
@@ -26,7 +27,7 @@ function track(title: string): DiscoveryResult {
 }
 
 beforeEach(() => {
-  clearDetailHandoffs();
+  runSignOutCleanups();
 });
 
 describe('detailRouteFor', () => {

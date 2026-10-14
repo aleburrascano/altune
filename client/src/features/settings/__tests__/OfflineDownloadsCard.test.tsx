@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, within } from '@testing-library/react-native';
 
-import { darkTheme } from '@shared/ui';
+import { darkTheme } from '@shared/ui/theme/theme';
 
 import type { DownloadStats } from '@features/settings/domain/downloadStatsModel';
 import { OfflineDownloadsCard } from '@features/settings/ui/OfflineDownloadsCard';

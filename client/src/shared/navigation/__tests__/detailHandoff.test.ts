@@ -1,8 +1,5 @@
-import {
-  clearDetailHandoffs,
-  detailHref,
-  readDetailHandoff,
-} from '@shared/navigation/detailHandoff';
+import { detailHref, readDetailHandoff } from '@shared/navigation/detailHandoff';
+import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
@@ -20,7 +17,7 @@ function makeResult(overrides: Partial<DiscoveryResult> = {}): DiscoveryResult {
 }
 
 beforeEach(() => {
-  clearDetailHandoffs();
+  runSignOutCleanups();
 });
 
 describe('detail-handoff — href carries a keyed handoff to the detail route', () => {
@@ -84,7 +81,7 @@ describe('detail-handoff — rapid and re-entrant navigation', () => {
 
   it('never reuses an id after the registry is cleared', () => {
     const before = detailHref('/discover/detail', makeResult({ title: 'Old' }));
-    clearDetailHandoffs();
+    runSignOutCleanups();
     const after = detailHref('/discover/detail', makeResult({ title: 'New' }));
     expect(after.params.handoff).not.toBe(before.params.handoff);
     expect(readDetailHandoff(before.params.handoff)).toBeNull();

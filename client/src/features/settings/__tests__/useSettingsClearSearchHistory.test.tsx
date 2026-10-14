@@ -7,11 +7,12 @@ import { supabase } from '@shared/auth/supabaseClient';
 import { useSession } from '@shared/auth/useSession';
 import { useSignOut } from '@shared/auth/useSignOut';
 import { discoveryKeys, libraryKeys } from '@shared/query/queryKeys';
-import { RETRY_BACKOFF_BASE_MS } from '@shared/query/retryDelay';
 
 import { makeWrapper } from '@testing/makeWrapper';
 import { useBackfillFeatured } from '@features/settings/hooks/useBackfillFeatured';
 import { useSettingsClearSearchHistory } from '@features/settings/hooks/useSettingsClearSearchHistory';
+
+const RETRY_BACKOFF_BASE_MS = 1_000;
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 

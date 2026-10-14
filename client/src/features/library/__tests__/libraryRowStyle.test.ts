@@ -1,5 +1,7 @@
-import { lightTheme } from '@shared/ui';
+import { themes } from '@shared/ui/theme/theme';
 import { libraryRowWideStyle } from '@features/library/ui/libraryRowStyle';
+
+const lightTheme = themes.light;
 
 describe('libraryRowWideStyle', () => {
   it('paints a hover background when the row reports hovered', () => {

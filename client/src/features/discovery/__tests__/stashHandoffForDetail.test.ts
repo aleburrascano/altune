@@ -1,10 +1,11 @@
-import { clearDetailHandoffs, readDetailHandoff } from '@shared/navigation/detailHandoff';
+import { readDetailHandoff } from '@shared/navigation/detailHandoff';
+import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 import { stashHandoffForDetail } from '@features/discovery/domain/stashHandoffForDetail';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 
 beforeEach(() => {
-  clearDetailHandoffs();
+  runSignOutCleanups();
 });
 
 describe('stashHandoffForDetail is the discover to detail navigation seam', () => {

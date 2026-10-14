@@ -3,13 +3,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 
 import { NetworkError } from '@shared/apiClient';
-import { RETRY_BACKOFF_BASE_MS } from '@shared/query/retryDelay';
 
 import { signInTestUser } from '@testing/signInTestUser';
 
 import { SettingsScreen } from '@features/settings/ui/SettingsScreen';
 import { FeaturePorts } from '@/chrome/FeaturePorts';
 import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
+
+const RETRY_BACKOFF_BASE_MS = 1_000;
 
 const { __http } = require('@testing/doubles/fetch.js');
 

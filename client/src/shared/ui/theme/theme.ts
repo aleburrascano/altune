@@ -68,7 +68,7 @@ export const darkTheme: Theme = {
   },
 };
 
-export const lightTheme: Theme = {
+const lightTheme: Theme = {
   scheme: 'light',
   color: {
     canvas: '#FFFFFF',

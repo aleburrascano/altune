@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { TopResultCard } from '@features/discovery/ui/TopResultCard';
-import { darkTheme } from '@shared/ui/theme';
+import { darkTheme } from '@shared/ui/theme/theme';
 
 function renderCard() {
   render(<TopResultCard result={resultFixture({ title: 'Top Hit' })} onPress={jest.fn()} />);

@@ -2,7 +2,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 
-import { darkTheme, spacing } from '@shared/ui/theme';
+import { darkTheme } from '@shared/ui/theme/theme';
+import { spacing } from '@shared/ui/theme';
 
 import { AuthGate } from '@features/auth/ui/AuthGate';
 import { InvalidRecoveryLinkNotice, SessionExpiredNotice } from '@features/auth/ui/AuthNotices';

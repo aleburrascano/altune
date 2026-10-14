@@ -1,7 +1,7 @@
 import { renderHook } from '@testing-library/react-native';
 
 import { CONTENT_MAX_WIDTH, WIDE_LAYOUT_MIN_WIDTH } from '@shared/ui/layout/breakpoints';
-import { layoutModeFor, useLayoutMode, useWideWebLayout } from '@shared/ui/layout/useLayoutMode';
+import { useLayoutMode, useWideWebLayout, type LayoutMode } from '@shared/ui/layout/useLayoutMode';
 
 let mockWindowWidth = 390;
 
@@ -9,6 +9,11 @@ jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
   __esModule: true,
   default: () => ({ width: mockWindowWidth, height: 800, scale: 2, fontScale: 1 }),
 }));
+
+function layoutModeFor(width: number): LayoutMode {
+  mockWindowWidth = width;
+  return renderHook(() => useLayoutMode()).result.current;
+}
 
 describe('layoutModeFor', () => {
   it('stays compact just below the wide breakpoint', () => {

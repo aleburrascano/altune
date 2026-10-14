@@ -1,7 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import { clearDetailHandoffs, detailHref } from '@shared/navigation/detailHandoff';
+import { detailHref } from '@shared/navigation/detailHandoff';
+import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 import { DetailScreen } from '@features/detail/ui/DetailScreen';
 import {
@@ -166,7 +167,7 @@ function renderDetail(result: DiscoveryResult): void {
 }
 
 beforeEach(async () => {
-  clearDetailHandoffs();
+  runSignOutCleanups();
   mockParams = {};
   await signInTestUser();
   replyWithCatalogue();

@@ -5,7 +5,6 @@ import {
   appVersion,
   appVersionLabel,
   declaredAppScheme,
-  deviceInfo,
   isExpoGoRuntime,
   isWebPlatform,
   webOrigin,
@@ -101,18 +100,6 @@ describe('appVersionLabel', () => {
   it('is the bare version when updates are off', () => {
     setConfig({ version: '2.1.1' });
     expect(appVersionLabel()).toBe('2.1.1');
-  });
-});
-
-describe('deviceInfo', () => {
-  it('reports platform, stringified os version and app version', () => {
-    setConfig({ version: '4.5.6' });
-    setOS('android');
-    expect(deviceInfo()).toEqual({
-      platform: 'android',
-      osVersion: String(Platform.Version),
-      appVersion: '4.5.6',
-    });
   });
 });
 

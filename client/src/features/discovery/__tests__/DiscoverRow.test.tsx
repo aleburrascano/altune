@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet } from 'react-native';
 import { fireEvent, render as renderBare, screen } from '@testing-library/react-native';
 
-import { darkTheme } from '@shared/ui/theme';
+import { darkTheme } from '@shared/ui/theme/theme';
 
 import { CorrectionBanner } from '@features/discovery/ui/CorrectionBanner';
 import { DiscoverRow } from '@features/discovery/ui/DiscoverRow';

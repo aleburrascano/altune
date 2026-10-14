@@ -22,7 +22,7 @@ interface SearchBarTheme {
   };
 }
 
-export interface SearchBarProps {
+interface SearchBarProps {
   value: string;
   onChangeText: (text: string) => void;
   onSubmitEditing: () => void;

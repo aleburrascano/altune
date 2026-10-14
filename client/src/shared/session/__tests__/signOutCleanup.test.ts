@@ -6,7 +6,6 @@ import {
   isSameSession,
   onSignOut,
   runSignOutCleanups,
-  setSignedInUser,
   notifyIdentityChange,
   onIdentityChange,
 } from '@shared/session/signOutCleanup';
@@ -81,9 +80,9 @@ describe('signOutCleanup registry', () => {
 
   it('reports whether a user is signed in, defaulting to no one', () => {
     expect(hasSignedInUser()).toBe(false);
-    setSignedInUser(true);
+    notifyIdentityChange('user-1');
     expect(hasSignedInUser()).toBe(true);
-    setSignedInUser(false);
+    notifyIdentityChange(null);
     expect(hasSignedInUser()).toBe(false);
   });
 

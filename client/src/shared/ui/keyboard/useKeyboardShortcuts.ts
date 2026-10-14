@@ -3,7 +3,7 @@ import { useRouter, type ImperativeRouter } from 'expo-router';
 
 const SEEK_STEP_MS = 10_000;
 const DISCOVER_ROUTE = '/discover';
-export const FOCUS_REQUEST_TTL_MS = 5_000;
+const FOCUS_REQUEST_TTL_MS = 5_000;
 
 let registeredFocus: (() => void) | null = null;
 let pendingFocusTimer: ReturnType<typeof setTimeout> | null = null;

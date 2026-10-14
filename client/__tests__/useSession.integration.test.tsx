@@ -25,11 +25,8 @@ import { startDownload, useDownloadStore } from '@shared/acquisition/downloadSto
 import { getSearchState, setSearchState } from '@features/discovery/domain/searchState';
 import { registerSearchStateSignOutReset } from '@features/discovery/adapters/registerSearchStateSignOutReset';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import {
-  clearDetailHandoffs,
-  detailHref,
-  readDetailHandoff,
-} from '@shared/navigation/detailHandoff';
+import { detailHref, readDetailHandoff } from '@shared/navigation/detailHandoff';
+import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import type * as PinnedStoreModule from '@shared/offline/pinnedStore';
 
 import { useSession } from '@shared/auth/useSession';
@@ -691,7 +688,7 @@ describe('search state across an identity change', () => {
     authCallbacks = [];
     jest.restoreAllMocks();
     setSearchState('', '');
-    clearDetailHandoffs();
+    runSignOutCleanups();
   });
 
   describe('search text and last-tapped result do not survive an identity change', () => {

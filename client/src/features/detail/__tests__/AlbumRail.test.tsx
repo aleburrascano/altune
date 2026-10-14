@@ -2,7 +2,7 @@ import { StyleSheet } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import { darkTheme } from '@shared/ui/theme';
+import { darkTheme } from '@shared/ui/theme/theme';
 
 import { AlbumRail } from '@features/detail/ui/AlbumRail';
 import { setPlatformOS } from '@testing/setPlatformOS';

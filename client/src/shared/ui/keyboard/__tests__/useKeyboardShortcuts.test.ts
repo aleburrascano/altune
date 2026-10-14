@@ -7,10 +7,11 @@ import type { PlaybackContextValue } from '@shared/playback/playbackContextValue
 import { makeIdlePlayback } from '@testing/factories';
 
 import {
-  FOCUS_REQUEST_TTL_MS,
   registerSearchFocus,
   useKeyboardShortcuts,
 } from '@shared/ui/keyboard/useKeyboardShortcuts';
+
+const FOCUS_REQUEST_TTL_MS = 5_000;
 
 const mockPush = jest.fn();
 

@@ -63,6 +63,6 @@ export function hasSignedInUser(): boolean {
   return signedIn;
 }
 
-export function setSignedInUser(isSignedIn: boolean): void {
+function setSignedInUser(isSignedIn: boolean): void {
   signedIn = isSignedIn;
 }

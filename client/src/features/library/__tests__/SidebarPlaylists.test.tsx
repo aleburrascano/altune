@@ -6,7 +6,7 @@ import { StyleSheet } from 'react-native';
 import { asPlaylistId } from '@shared/apiClient/ids';
 import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
 import { Sidebar } from '@shared/ui/navigation/Sidebar';
-import { darkTheme } from '@shared/ui/theme';
+import { darkTheme } from '@shared/ui/theme/theme';
 
 import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
 import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';

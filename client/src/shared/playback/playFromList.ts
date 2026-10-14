@@ -2,7 +2,6 @@ import type { TrackResponse } from '@shared/apiClient/trackResponse';
 
 import { canPlay } from '@shared/playback/canPlay';
 import { toPlaybackTrack, type PlaybackTrack } from '@shared/playback/playbackTrack';
-import type { QueueSource } from '@shared/playback/queueOrder';
 
 export function buildPlayableQueue(
   tracks: readonly TrackResponse[],
@@ -17,5 +16,3 @@ export function buildPlayableQueue(
   );
   return { playable, startIndex: Math.max(0, startIndex) };
 }
-
-export type { QueueSource };

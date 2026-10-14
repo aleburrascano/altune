@@ -2,7 +2,8 @@ import React from 'react';
 import { StyleSheet, type TextStyle } from 'react-native';
 import { render as renderBare, screen } from '@testing-library/react-native';
 
-import { darkTheme, spacing } from '@shared/ui/theme';
+import { darkTheme } from '@shared/ui/theme/theme';
+import { spacing } from '@shared/ui/theme';
 
 import { BlendedSection } from '@features/discovery/ui/BlendedSection';
 import { DiscoverBody } from '@features/discovery/ui/DiscoverBody';

@@ -5,7 +5,7 @@ import { WIDE_LAYOUT_MIN_WIDTH } from '@shared/ui/layout/breakpoints';
 
 export type LayoutMode = 'compact' | 'wide';
 
-export function layoutModeFor(width: number): LayoutMode {
+function layoutModeFor(width: number): LayoutMode {
   return width >= WIDE_LAYOUT_MIN_WIDTH ? 'wide' : 'compact';
 }
 

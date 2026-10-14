@@ -3,7 +3,8 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { Keyboard } from 'react-native';
 
 import { useResultTap } from '@features/discovery/hooks/useResultTap';
-import { clearDetailHandoffs, readDetailHandoff } from '@shared/navigation/detailHandoff';
+import { readDetailHandoff } from '@shared/navigation/detailHandoff';
+import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { makeWrapper } from '@testing/makeWrapper';
 import { signInTestUser } from '@testing/signInTestUser';
@@ -79,7 +80,7 @@ function responseFixture(
 
 beforeEach(async () => {
   jest.clearAllMocks();
-  clearDetailHandoffs();
+  runSignOutCleanups();
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });

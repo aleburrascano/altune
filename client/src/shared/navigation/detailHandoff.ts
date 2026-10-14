@@ -42,7 +42,7 @@ export function readDetailHandoff(id: string | string[] | undefined): DetailHand
   return handoffs.get(id) ?? null;
 }
 
-export function clearDetailHandoffs(): void {
+function clearDetailHandoffs(): void {
   handoffs.clear();
 }
 
