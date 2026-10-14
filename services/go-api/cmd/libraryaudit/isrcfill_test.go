@@ -25,7 +25,7 @@ func (f fakeRecordings) RecordingsByISRC(_ context.Context, isrc string) ([]reco
 
 func deezerFinds(isrc string) fakeCatalog {
 	return fakeCatalog{
-		search: []catalogTrack{{ID: 2, Title: "Valentina", Artist: "Daniel Caesar", DurationSeconds: 236}},
+		search: []catalogTrack{{ID: 2, Title: "Valentina", Artist: "Daniel Caesar", Album: "Freudian", DurationSeconds: 236}},
 		byID:   map[int64]catalogTrack{2: {ID: 2, ISRC: isrc}},
 	}
 }
@@ -74,8 +74,8 @@ func TestAuditTrack_NoISRCStaysReportOnlyWithTheReasonWhenMusicBrainzDoesNotAgre
 
 func TestAuditTrack_NoISRCWithoutAUniqueDeezerCandidateNeverReachesAFix(t *testing.T) {
 	two := fakeCatalog{search: []catalogTrack{
-		{ID: 1, Title: "Valentina", Artist: "Daniel Caesar", DurationSeconds: 236},
-		{ID: 2, Title: "Valentina - Remastered", Artist: "Daniel Caesar", DurationSeconds: 238},
+		{ID: 1, Title: "Valentina", Artist: "Daniel Caesar", Album: "Freudian", DurationSeconds: 236},
+		{ID: 2, Title: "Valentina - Remastered", Artist: "Daniel Caesar", Album: "Freudian", DurationSeconds: 238},
 	}}
 	for name, cat := range map[string]fakeCatalog{"ambiguous": two, "none": {}} {
 		got := auditTrack(context.Background(), fakeRecordings{fakeCatalog: cat, searched: []recording{valentina("ISRC1", "ISRC2")}}, fakeCovers{}, libTrack())
@@ -132,5 +132,19 @@ func TestAuditTrack_UnknownISRCIsReportedWhenMusicBrainzDoesNotConfirmIt(t *test
 				t.Fatalf("got %+v", got.Findings)
 			}
 		})
+	}
+}
+
+func TestAuditTrack_NoISRCIsFilledFromTheLibraryAlbumNotFromOurDownloadLength(t *testing.T) {
+	cat := fakeRecordings{fakeCatalog: deezerFinds("USFOUND00001"), searched: []recording{valentina("USFOUND00001")}}
+	wrongDownload := libTrack()
+	wrongDownload.DurationSeconds = 283
+	if findingOf(auditTrack(context.Background(), cat, fakeCovers{}, wrongDownload).Findings, categoryISRCFillable).Fix == nil {
+		t.Error("a same-album candidate was refused because our download has another length")
+	}
+	otherAlbum := libTrack()
+	otherAlbum.Album = "Valentina (Remixes)"
+	if findingOf(auditTrack(context.Background(), cat, fakeCovers{}, otherAlbum).Findings, categoryISRCFillable).Fix != nil {
+		t.Error("a candidate on another album was filled because its length fits our download")
 	}
 }

@@ -76,7 +76,7 @@ func TestAuditTrack_LookupFailureIsReportedNotChecked(t *testing.T) {
 func TestAuditTrack_NoIsrcFindsIsrcFromSearchWhenSongAgrees(t *testing.T) {
 	lib := libTrack()
 	cat := fakeCatalog{
-		search: []catalogTrack{{ID: 1, Title: "Other", Artist: "Someone"}, {ID: 2, Title: "Valentina", Artist: "Daniel Caesar", DurationSeconds: 236}},
+		search: []catalogTrack{{ID: 1, Title: "Other", Artist: "Someone"}, {ID: 2, Title: "Valentina", Artist: "Daniel Caesar", Album: "Freudian", DurationSeconds: 236}},
 		byID:   map[int64]catalogTrack{2: {ID: 2, ISRC: "USFOUND"}},
 	}
 	got := audited(cat, fakeCovers{}, lib)
@@ -212,10 +212,10 @@ func searchFor(candidates ...catalogTrack) fakeCatalog {
 	return fakeCatalog{search: candidates, byID: byID}
 }
 
-func TestAuditTrack_SearchPicksTheOneCandidateWithTheRightLength(t *testing.T) {
+func TestAuditTrack_SearchPicksTheOneCandidateOnTheLibraryAlbum(t *testing.T) {
 	cat := searchFor(
-		catalogTrack{ID: 1, Title: "Valentina", Artist: "Daniel Caesar", DurationSeconds: 120},
-		catalogTrack{ID: 2, Title: "Valentina", Artist: "Daniel Caesar", DurationSeconds: 240},
+		catalogTrack{ID: 1, Title: "Valentina", Artist: "Daniel Caesar", Album: "Valentina (Remixes)", DurationSeconds: 236},
+		catalogTrack{ID: 2, Title: "Valentina", Artist: "Daniel Caesar", Album: "Freudian", DurationSeconds: 210},
 	)
 	got := audited(cat, fakeCovers{}, libTrack())
 	if len(got.Findings) != 2 || got.Findings[1].Category != categoryISRCFillable || got.Findings[1].Detail != "ISRC2" {
@@ -225,8 +225,8 @@ func TestAuditTrack_SearchPicksTheOneCandidateWithTheRightLength(t *testing.T) {
 
 func TestAuditTrack_SearchWithTwoFittingCandidatesIsAmbiguousAndFillsNothing(t *testing.T) {
 	cat := searchFor(
-		catalogTrack{ID: 1, Title: "Valentina", Artist: "Daniel Caesar", DurationSeconds: 236},
-		catalogTrack{ID: 2, Title: "Valentina - Remastered", Artist: "Daniel Caesar", DurationSeconds: 238},
+		catalogTrack{ID: 1, Title: "Valentina", Artist: "Daniel Caesar", Album: "Freudian", DurationSeconds: 236},
+		catalogTrack{ID: 2, Title: "Valentina - Remastered", Artist: "Daniel Caesar", Album: "Freudian", DurationSeconds: 238},
 	)
 	got := audited(cat, fakeCovers{}, libTrack())
 	if len(got.Findings) != 2 || got.Findings[1].Category != categoryISRCAmbiguous {
@@ -237,8 +237,8 @@ func TestAuditTrack_SearchWithTwoFittingCandidatesIsAmbiguousAndFillsNothing(t *
 	}
 }
 
-func TestAuditTrack_SearchWithNoCandidateOfFittingLengthFillsNothing(t *testing.T) {
-	cat := searchFor(catalogTrack{ID: 1, Title: "Valentina", Artist: "Daniel Caesar", DurationSeconds: 90})
+func TestAuditTrack_SearchWithNoCandidateOnTheLibraryAlbumFillsNothing(t *testing.T) {
+	cat := searchFor(catalogTrack{ID: 1, Title: "Valentina", Artist: "Daniel Caesar", Album: "Valentina (Remixes)", DurationSeconds: 236})
 	got := audited(cat, fakeCovers{}, libTrack())
 	if len(got.Findings) != 1 || got.Findings[0].Category != categoryNoISRC {
 		t.Fatalf("got %+v", got)

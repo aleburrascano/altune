@@ -1,9 +1,11 @@
 package main
 
 import (
+	"altune/go-api/internal/acquisition/service/versiontag"
 	"altune/go-api/internal/shared/textnorm"
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -142,7 +144,11 @@ func artistsAgree(library string, catalog catalogTrack) bool {
 }
 
 func isSameSong(lib libraryTrack, cat catalogTrack) bool {
-	return titlesAgree(lib.Title, cat.Title) && artistsAgree(lib.Artist, cat)
+	return titlesAgree(lib.Title, cat.Title) && versionsAgree(lib.Title, cat.Title) && artistsAgree(lib.Artist, cat)
+}
+
+func versionsAgree(library, catalog string) bool {
+	return slices.Equal(versiontag.RecordingLabels(library), versiontag.RecordingLabels(catalog))
 }
 
 func fitsLength(lib libraryTrack, cat catalogTrack) bool {

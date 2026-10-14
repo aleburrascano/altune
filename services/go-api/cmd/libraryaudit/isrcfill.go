@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -25,7 +26,7 @@ func resolveMissingISRC(ctx context.Context, cat catalog, lib libraryTrack) (isr
 	fitting := fittingCandidates(lib, candidates)
 	switch len(fitting) {
 	case 0:
-		return isrcResolution{reason: "deezer search has no same-song candidate of fitting length"}, nil
+		return isrcResolution{reason: "deezer search has no same-song candidate on the library album"}, nil
 	case 1:
 		return resolveFromCandidate(ctx, cat, lib, fitting[0])
 	default:
@@ -45,7 +46,7 @@ func resolveFromCandidate(ctx context.Context, cat catalog, lib libraryTrack, ca
 		return isrcResolution{reason: "deezer candidate carries no ISRC"}, nil
 	}
 	fillable := about(lib, categoryISRCFillable, full.ISRC)
-	agreed, reason, err := musicBrainzListsISRC(ctx, cat, lib, full.ISRC)
+	agreed, reason, err := musicBrainzListsISRC(ctx, cat, lib, candidate, full.ISRC)
 	if err != nil {
 		return isrcResolution{}, err
 	}
@@ -57,7 +58,7 @@ func resolveFromCandidate(ctx context.Context, cat catalog, lib libraryTrack, ca
 	return isrcResolution{findings: []finding{fillable}, reason: reason}, nil
 }
 
-func musicBrainzListsISRC(ctx context.Context, cat catalog, lib libraryTrack, isrc string) (bool, string, error) {
+func musicBrainzListsISRC(ctx context.Context, cat catalog, lib libraryTrack, candidate catalogTrack, isrc string) (bool, string, error) {
 	recordings, ok := cat.(recordingCatalog)
 	if !ok {
 		return false, "musicbrainz was not consulted", nil
@@ -66,23 +67,26 @@ func musicBrainzListsISRC(ctx context.Context, cat catalog, lib libraryTrack, is
 	if err != nil {
 		return false, "musicbrainz lookup failed: " + err.Error(), blockingOnly(err)
 	}
-	for _, match := range fittingRecordings(lib, found) {
-		if match.hasISRC(isrc) {
+	for _, match := range sameSongRecordings(lib, found) {
+		if match.hasISRC(isrc) && lengthsAgree(candidate, match.asTrack()) {
 			return true, "", nil
 		}
 	}
-	return false, "musicbrainz has no same-song recording of fitting length listing " + isrc, nil
+	return false, "musicbrainz has no same-song recording of the deezer length listing " + isrc, nil
 }
 
-func fittingRecordings(lib libraryTrack, found []recording) []recording {
-	var fitting []recording
+func sameSongRecordings(lib libraryTrack, found []recording) []recording {
+	var same []recording
 	for _, candidate := range found {
-		track := candidate.asTrack()
-		if isSameSong(lib, track) && fitsLength(lib, track) {
-			fitting = append(fitting, candidate)
+		if isSameSong(lib, candidate.asTrack()) {
+			same = append(same, candidate)
 		}
 	}
-	return fitting
+	return same
+}
+
+func lengthsAgree(a, b catalogTrack) bool {
+	return a.DurationSeconds > 0 && b.DurationSeconds > 0 && math.Abs(a.DurationSeconds-b.DurationSeconds) <= lengthToleranceSeconds
 }
 
 func confirmUnknownISRC(ctx context.Context, cat catalog, lib libraryTrack) trackResult {
@@ -99,10 +103,10 @@ func confirmUnknownISRC(ctx context.Context, cat catalog, lib libraryTrack) trac
 		unknown.Detail += "; musicbrainz lookup failed: " + err.Error()
 		return trackResult{Findings: []finding{unknown}}
 	}
-	if matches := fittingRecordings(lib, found); len(matches) > 0 {
+	if matches := sameSongRecordings(lib, found); len(matches) > 0 {
 		return trackResult{Findings: []finding{about(lib, categoryISRCConfirmed, "musicbrainz recording "+matches[0].ID)}}
 	}
-	unknown.Detail += "; musicbrainz has no same-song recording of fitting length with this ISRC"
+	unknown.Detail += "; musicbrainz has no same-song recording with this ISRC"
 	return trackResult{Findings: []finding{unknown}}
 }
 
@@ -116,7 +120,7 @@ func blockingOnly(err error) error {
 func fittingCandidates(lib libraryTrack, candidates []catalogTrack) []catalogTrack {
 	var fitting []catalogTrack
 	for _, candidate := range candidates {
-		if isSameSong(lib, candidate) && fitsLength(lib, candidate) {
+		if isSameSong(lib, candidate) && sharesLibraryAlbum(lib, candidate) {
 			fitting = append(fitting, candidate)
 		}
 	}
