@@ -15,6 +15,14 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "2.2.0",
+          "date": "2026-10-14",
+          "localizedDescription": "Altune v2.2.0",
+          "downloadURL": "https://github.com/aleburrascano/altune/releases/download/v2.2.0/Altune.ipa",
+          "size": 19318811,
+          "minOSVersion": "15.1"
+        },
+        {
           "version": "2.1.2",
           "date": "2026-10-13",
           "localizedDescription": "Altune v2.1.2",
@@ -223,11 +231,11 @@
           "minOSVersion": "15.1"
         }
       ],
-      "version": "2.1.2",
-      "versionDate": "2026-10-13",
-      "versionDescription": "Altune v2.1.2",
-      "downloadURL": "https://github.com/aleburrascano/altune/releases/download/v2.1.2/Altune.ipa",
-      "size": 19249799,
+      "version": "2.2.0",
+      "versionDate": "2026-10-14",
+      "versionDescription": "Altune v2.2.0",
+      "downloadURL": "https://github.com/aleburrascano/altune/releases/download/v2.2.0/Altune.ipa",
+      "size": 19318811,
       "minOSVersion": "15.1"
     }
   ]
