@@ -10,13 +10,14 @@ STAGING=altune-staging.duckdns.org
 PROD=altune.duckdns.org
 API_PATHS="/v1/library /v1/ /health /test/reset /observe/health"
 WORK=$(mktemp -d)
+CURL_IMAGE=curlimages/curl:8.17.0
 
 caddy_image() {
     sed -n '/^  caddy:/,/^  [a-z]/ s/^ *image: *//p' "$HERE/compose.prod.yml" | head -1
 }
 
 cleanup() {
-    docker rm -fv "$RUN_ID-edge" "$RUN_ID-stub" >/dev/null 2>&1
+    docker rm -fv "$RUN_ID-edge" "$RUN_ID-stub" "$RUN_ID-client" >/dev/null 2>&1
     docker network rm "$RUN_ID" >/dev/null 2>&1
     rm -rf "$WORK"
 }
@@ -54,13 +55,14 @@ start_containers() {
         --network-alias altune-go-api-blue --network-alias altune-staging-go-api-blue \
         --network-alias altune-overseer --network-alias altune-staging-overseer \
         -v "$WORK/stub.Caddyfile:/etc/caddy/Caddyfile:ro" "$image" >/dev/null || exit 1
-    docker run -d --rm --label altune-ci=1 --name "$RUN_ID-edge" --network "$RUN_ID" -p 127.0.0.1::443 \
+    docker run -d --rm --label altune-ci=1 --name "$RUN_ID-edge" --network "$RUN_ID" \
         -v "$WORK/edge.Caddyfile:/etc/caddy/Caddyfile:ro" \
         -v "$HERE/Caddyfile:/etc/caddy/Caddyfile.sites:ro" \
         -v "$WORK/upstream.conf:/etc/caddy/upstream.conf:ro" \
         -v "$HERE/caddy/staging-upstream.conf:/etc/caddy/staging-upstream.conf:ro" \
         -v "$WORK/web:/srv/web:ro" "$image" >/dev/null || exit 1
-    EDGE_PORT=$(docker port "$RUN_ID-edge" 443/tcp | head -1 | sed 's/.*://')
+    docker run -d --rm --label altune-ci=1 --name "$RUN_ID-client" --network "$RUN_ID" \
+        --user "$(id -u):$(id -g)" -v "$WORK:$WORK" --entrypoint sleep "$CURL_IMAGE" infinity >/dev/null || exit 1
 }
 
 wait_for_edge() {
@@ -74,15 +76,17 @@ wait_for_edge() {
     exit 1
 }
 
+edge_curl() {
+    docker exec "$RUN_ID-client" curl --connect-to "::$RUN_ID-edge:443" "$@"
+}
+
 fetch() {
     local host=$1 path=$2 method=${3:-GET}
-    curl -sk --max-time 10 -X "$method" -D "$WORK/headers" \
-        --resolve "$host:$EDGE_PORT:127.0.0.1" "https://$host:$EDGE_PORT$path"
+    edge_curl -sk --max-time 10 -X "$method" -D "$WORK/headers" "https://$host$path"
 }
 
 fetch_status() {
-    curl -sk --max-time 5 -o /dev/null -w '%{http_code}' \
-        --resolve "$1:$EDGE_PORT:127.0.0.1" "https://$1:$EDGE_PORT$2"
+    edge_curl -sk --max-time 5 -o /dev/null -w '%{http_code}' "https://$1$2"
 }
 
 header_of() {
@@ -158,9 +162,9 @@ publish_update() {
 }
 
 fetch_update() {
-    curl -sk --max-time 10 -o "$WORK/body" -D "$WORK/headers" -w '%{http_code}' \
+    edge_curl -sk --max-time 10 -o "$WORK/body" -D "$WORK/headers" -w '%{http_code}' \
         -H 'expo-protocol-version: 1' -H "expo-runtime-version: $1" -H "expo-platform: $2" \
-        --resolve "$PROD:$EDGE_PORT:127.0.0.1" "https://$PROD:$EDGE_PORT/updates/manifest"
+        "https://$PROD/updates/manifest"
 }
 
 inline_script_digest() {
