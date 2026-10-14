@@ -18,11 +18,13 @@ type stubSource struct {
 	fetchPath  string
 	fetchErr   error
 	fetched    []ports.AudioCandidate
+	finds      int
 }
 
 func (s *stubSource) Name() acqdomain.SourceName { return s.name }
 
 func (s *stubSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
+	s.finds++
 	if s.panicValue != nil {
 		panic(s.panicValue)
 	}
@@ -310,4 +312,57 @@ func mergeSlots(
 
 func fetchedAt(path string, err error) (ports.FetchedAudio, error) {
 	return ports.FetchedAudio{Path: path}, err
+}
+
+func TestSourceRegistry_AResolvedFirstTierHitSkipsTheFallback(t *testing.T) {
+	first := &stubSource{name: "ytmsearch", found: []ports.AudioCandidate{resolvedCandidate("https://music.youtube.com/watch?v=abc")}}
+	fallback := &stubSource{name: "ytdlp", found: []ports.AudioCandidate{candidate("u1")}}
+	reg := NewSourceRegistry(first).WithFallback(fallback)
+
+	got, err := reg.Find(context.Background(), ports.FindRequest{})
+	if err != nil {
+		t.Fatalf("Find returned error: %v", err)
+	}
+	if fallback.finds != 0 {
+		t.Errorf("fallback searched %d times, want 0 after a resolved first-tier hit", fallback.finds)
+	}
+	if len(got) != 1 || got[0].Source != "ytmsearch" {
+		t.Errorf("Find = %v, want only the resolved first-tier candidate", got)
+	}
+}
+
+func TestSourceRegistry_TheFallbackRunsWhenTheFirstTierHasNoResolvedHit(t *testing.T) {
+	for name, first := range map[string]*stubSource{
+		"unresolved only": {name: "ytmsearch", found: []ports.AudioCandidate{candidate("u0")}},
+		"nothing":         {name: "ytmsearch"},
+		"error":           {name: "ytmsearch", findErr: errors.New("innertube 503")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fallback := &stubSource{name: "ytdlp", found: []ports.AudioCandidate{candidate("u1")}}
+			reg := NewSourceRegistry(first).WithFallback(fallback)
+
+			got, err := reg.Find(context.Background(), ports.FindRequest{})
+			if err != nil {
+				t.Fatalf("Find returned error: %v", err)
+			}
+			if fallback.finds != 1 {
+				t.Errorf("fallback searched %d times, want 1", fallback.finds)
+			}
+			if len(got) == 0 || got[len(got)-1].URL != "u1" || got[len(got)-1].Source != "ytdlp" {
+				t.Errorf("Find = %v, want the fallback's candidate merged in", got)
+			}
+		})
+	}
+}
+
+func TestSourceRegistry_FetchReachesFallbackSources(t *testing.T) {
+	fallback := &stubSource{name: "ytdlp", fetchPath: "/tmp/a.m4a"}
+	reg := NewSourceRegistry(&stubSource{name: "ytmsearch"}).WithFallback(fallback)
+
+	if _, err := reg.Fetch(context.Background(), ports.AudioCandidate{Source: "ytdlp", URL: "u1"}, t.TempDir()); err != nil {
+		t.Fatalf("Fetch returned error: %v", err)
+	}
+	if len(fallback.fetched) != 1 {
+		t.Errorf("fallback fetched %d times, want 1", len(fallback.fetched))
+	}
 }

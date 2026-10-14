@@ -1,0 +1,117 @@
+package ytmsearch
+
+import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
+	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/textnorm"
+	"context"
+	"fmt"
+	"log/slog"
+	"math"
+	"regexp"
+	"strings"
+)
+
+const SourceName acqdomain.SourceName = "ytmsearch"
+
+const (
+	musicWatchURLPrefix = "https://music.youtube.com/watch?v="
+	artTrackChannel     = "YouTube Music Art Track"
+	topResults          = 5
+	maxDurationDriftSec = 3
+)
+
+var ignorableTitleBrackets = regexp.MustCompile(`(?i)\s*[\(\[](feat\.?|ft\.?|with|bonus)\b[^\)\]]*[\)\]]`)
+
+type songSearch interface {
+	SearchSongs(ctx context.Context, query string) ([]Song, error)
+}
+
+type audioDownloader interface {
+	Download(ctx context.Context, url string, outDir string) (ports.FetchedAudio, error)
+}
+
+var _ ports.AudioSource = (*Source)(nil)
+
+type Source struct {
+	search     songSearch
+	downloader audioDownloader
+}
+
+func NewSource(search songSearch, downloader audioDownloader) *Source {
+	return &Source{search: search, downloader: downloader}
+}
+
+func (s *Source) Name() acqdomain.SourceName { return SourceName }
+
+func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
+	if req.Title == "" || req.Artist == "" || req.Duration <= 0 {
+		return nil, nil
+	}
+	songs, err := s.search.SearchSongs(ctx, req.Title+" "+req.Artist)
+	if err != nil {
+		return nil, fmt.Errorf("ytmsearch songs: %w", err)
+	}
+	hit, ok := strongHit(songs, req)
+	if !ok {
+		slog.InfoContext(ctx, "acquisition.ytmsearch_no_strong_hit", "title", req.Title, "results", len(songs))
+		return nil, nil
+	}
+	slog.InfoContext(ctx, "acquisition.ytmsearch_strong_hit",
+		"video_id", hit.VideoID, "title", req.Title, "explicit", hit.Explicit)
+	return []ports.AudioCandidate{candidateFor(hit)}, nil
+}
+
+func candidateFor(hit Song) ports.AudioCandidate {
+	return ports.AudioCandidate{
+		Title:      hit.Title,
+		Duration:   float64(hit.DurationSeconds),
+		URL:        musicWatchURLPrefix + hit.VideoID,
+		Channel:    artTrackChannel,
+		Categories: []string{"Music"},
+		Resolved:   true,
+	}
+}
+
+func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+	return s.downloader.Download(ctx, candidate.URL, outDir)
+}
+
+func strongHit(songs []Song, req ports.FindRequest) (Song, bool) {
+	var best Song
+	found := false
+	for _, song := range songs[:min(len(songs), topResults)] {
+		if !matches(song, req) {
+			continue
+		}
+		if !found || (song.Explicit && !best.Explicit) {
+			best, found = song, true
+		}
+	}
+	return best, found
+}
+
+func matches(song Song, req ports.FindRequest) bool {
+	return song.Type == VideoTypeATV &&
+		comparableTitle(song.Title) == comparableTitle(req.Title) &&
+		credits(song.Artists, req.Artist) &&
+		math.Abs(float64(song.DurationSeconds)-req.Duration) <= maxDurationDriftSec
+}
+
+func comparableTitle(title string) string {
+	return textnorm.NormalizeForIdentity(ignorableTitleBrackets.ReplaceAllString(title, ""))
+}
+
+func credits(artists []string, artist string) bool {
+	want := comparableArtist(artist)
+	for _, credited := range artists {
+		if comparableArtist(credited) == want {
+			return true
+		}
+	}
+	return false
+}
+
+func comparableArtist(name string) string {
+	return textnorm.NormalizeForIdentity(strings.ReplaceAll(name, "$", "s"))
+}

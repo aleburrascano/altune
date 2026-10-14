@@ -80,8 +80,8 @@ func TestParseSongs_ReturnsCleanAndExplicitTwinsInRankOrder(t *testing.T) {
 		t.Fatalf("songs = %d, want at least the clean/explicit pair", len(songs))
 	}
 
-	wantClean := Song{VideoID: "88oFlVnMEsc", Title: "2021 Vibes", Artists: []string{"LUCKI"}, Type: VideoTypeATV}
-	wantExplicit := Song{VideoID: "LMDLNLM6Ji8", Title: "2021 Vibes", Artists: []string{"LUCKI"}, Type: VideoTypeATV, Explicit: true}
+	wantClean := Song{VideoID: "88oFlVnMEsc", Title: "2021 Vibes", Artists: []string{"LUCKI"}, Album: "s*x m*ney dr*gs", DurationSeconds: 125, Type: VideoTypeATV}
+	wantExplicit := Song{VideoID: "LMDLNLM6Ji8", Title: "2021 Vibes", Artists: []string{"LUCKI"}, Album: "s*x m*ney dr*gs", DurationSeconds: 125, Type: VideoTypeATV, Explicit: true}
 	if !reflect.DeepEqual(songs[0], wantClean) {
 		t.Errorf("songs[0] = %+v, want %+v", songs[0], wantClean)
 	}

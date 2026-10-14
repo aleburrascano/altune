@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/acquisition/adapters/id3"
 	"altune/go-api/internal/acquisition/adapters/tempfs"
 	"altune/go-api/internal/acquisition/adapters/ytdlp"
+	"altune/go-api/internal/acquisition/adapters/ytmsearch"
 	"altune/go-api/internal/acquisition/adapters/ytmusic"
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	acqPorts "altune/go-api/internal/acquisition/ports"
@@ -194,7 +195,7 @@ func TestAcquisitionSources_FixtureNeverWiredOutsideOptedInNonProd(t *testing.T)
 	}
 	for _, c := range cases {
 		sources, _ := (&App{cfg: &c}).acquisitionSources(t.Context())
-		names := sourceNames(sources)
+		names := sourceNames(sources.all())
 		if containsSource(names, fixture.SourceName) || !containsSource(names, ytdlp.SourceName) {
 			t.Fatalf("cfg env=%q optIn=%v: sources %v, want live sources and no fixture", c.Env, c.AcquisitionFixtureOptIn, names)
 		}
@@ -204,7 +205,7 @@ func TestAcquisitionSources_FixtureNeverWiredOutsideOptedInNonProd(t *testing.T)
 func TestAcquisitionSources_OptedInTestEnvUsesOnlyFixture(t *testing.T) {
 	cfg := &config.Config{Env: "test", AcquisitionFixtureOptIn: true, YtMusicEnabled: true, YtDLPEnabled: true}
 	sources, _ := (&App{cfg: cfg}).acquisitionSources(t.Context())
-	if names := sourceNames(sources); len(names) != 1 || names[0] != fixture.SourceName {
+	if names := sourceNames(sources.all()); len(names) != 1 || names[0] != fixture.SourceName {
 		t.Fatalf("sources = %v, want only %q", names, fixture.SourceName)
 	}
 }
@@ -235,7 +236,7 @@ func acquireWithFixture(t *testing.T, musicDir string, opts ...func(*acqService.
 	}
 	repo := &fixtureTrackRepo{track: track}
 	opts = append(opts, acqService.WithAudioTagger(id3.NewTagger()), acqService.WithAcquireTempWorkspace(tempfs.New()))
-	svc := acqService.NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), acqService.NewSourceRegistry(sources...), storage.NewFilesystemAudioStore(musicDir), opts...)
+	svc := acqService.NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), acqService.NewSourceRegistry(sources.first...).WithFallback(sources.fallback...), storage.NewFilesystemAudioStore(musicDir), opts...)
 	if err := svc.Execute(context.Background(), userID, track.ID); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
@@ -274,7 +275,7 @@ func TestAudioSourcesToggle(t *testing.T) {
 			a := &App{cfg: &config.Config{YtMusicEnabled: tt.ytMusic, YtDLPEnabled: tt.ytDlp}}
 
 			sources := a.audioSourcesFor(t.Context(), searcher)
-			names := sourceNames(sources)
+			names := sourceNames(sources.all())
 
 			if got := containsSource(names, ytmusic.SourceName); got != tt.wantYtMusic {
 				t.Errorf("ytmusic present = %v, want %v (sources=%v)", got, tt.wantYtMusic, names)
@@ -283,6 +284,19 @@ func TestAudioSourcesToggle(t *testing.T) {
 				t.Errorf("ytdlp present = %v, want %v (sources=%v)", got, tt.wantYtDlp, names)
 			}
 		})
+	}
+}
+
+func TestAudioSources_YouTubeMusicSearchRunsFirstAndYtDlpIsTheFallback(t *testing.T) {
+	a := &App{cfg: &config.Config{YtMusicEnabled: true, YtDLPEnabled: true}}
+	tiers := a.audioSourcesFor(t.Context(), ytdlp.NewYtDlpAudioSearcher("", "", ""))
+
+	first, fallback := sourceNames(tiers.first), sourceNames(tiers.fallback)
+	if !containsSource(first, ytmusic.SourceName) || !containsSource(first, ytmsearch.SourceName) {
+		t.Errorf("first tier = %v, want the catalog id and the songs search", first)
+	}
+	if len(fallback) != 1 || fallback[0] != ytdlp.SourceName {
+		t.Errorf("fallback = %v, want only ytdlp", fallback)
 	}
 }
 
@@ -603,7 +617,7 @@ func TestWireCatalogRejectsPartialOCIS3EvenWithMusicDir(t *testing.T) {
 func TestAcquisitionSources_ProviderReplayUsesOnlyFixture(t *testing.T) {
 	cfg := &config.Config{Env: "test", ProviderReplayOptIn: true, ProviderReplayDir: t.TempDir(), YtDLPEnabled: true}
 	sources, _ := (&App{cfg: cfg}).acquisitionSources(t.Context())
-	if names := sourceNames(sources); len(names) != 1 || names[0] != fixture.SourceName {
+	if names := sourceNames(sources.all()); len(names) != 1 || names[0] != fixture.SourceName {
 		t.Fatalf("sources = %v, want only %q", names, fixture.SourceName)
 	}
 }
