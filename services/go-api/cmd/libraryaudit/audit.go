@@ -44,7 +44,7 @@ func auditTrack(ctx context.Context, cat catalog, covers coverJudge, lib library
 		}
 		return trackResult{Findings: append([]finding{about(lib, categoryNoISRC, resolved.reason)}, resolved.findings...)}
 	}
-	found, err := cat.TrackByISRC(ctx, lib.ISRC)
+	found, err := catalogRecord(ctx, cat, lib)
 	switch {
 	case errors.Is(err, errCatalogUnknown):
 		return confirmUnknownISRC(ctx, cat, lib)

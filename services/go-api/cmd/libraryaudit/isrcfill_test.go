@@ -174,3 +174,33 @@ func TestAuditTrack_NoISRCFallsBackToTheLibraryAlbumsTracklist(t *testing.T) {
 		t.Fatalf("got %+v", found)
 	}
 }
+
+func TestAuditTrack_CatalogRecordIsTheLibraryAlbumsTrackSharingTheISRC(t *testing.T) {
+	lib := libraryTrack{ID: "t1", UserID: "u1", Version: 3, Title: "Poker Face", Artist: "Lady Gaga", Album: "The Fame Monster (Deluxe Edition)", ISRC: "USUM70824409", DurationSeconds: 237}
+	compilation := catalogTrack{ID: 1, Title: "Poker Face", Artist: "Lady Gaga", Album: "Papeete 10 Years", ISRC: "USUM70824409", DurationSeconds: 230}
+	albumCut := catalogTrack{ID: 2, Title: "Poker Face", Artist: "Lady Gaga", Album: "The Fame Monster (Deluxe Edition)", ISRC: "USUM70824409", DurationSeconds: 237}
+	cat := fakeAlbums{
+		fakeRecordings: fakeRecordings{fakeCatalog: fakeCatalog{
+			byISRC: map[string]catalogTrack{"USUM70824409": compilation},
+			byID:   map[int64]catalogTrack{2: albumCut},
+		}},
+		tracks: map[string][]catalogTrack{"The Fame Monster (Deluxe Edition)": {{ID: 2, Title: "Poker Face", Artist: "Lady Gaga", Album: "The Fame Monster (Deluxe Edition)", DurationSeconds: 237}}},
+	}
+	got := auditTrack(context.Background(), cat, fakeCovers{}, lib)
+	if got.Matched == nil || got.Matched.ID != 2 || got.Matched.DurationSeconds != 237 {
+		t.Fatalf("got %+v", got.Matched)
+	}
+}
+
+func TestAuditTrack_CatalogRecordFallsBackToTheISRCLookupWhenTheAlbumHasNoSuchTrack(t *testing.T) {
+	lib := libraryTrack{ID: "t1", Title: "Poker Face", Artist: "Lady Gaga", Album: "The Fame Monster (Deluxe Edition)", ISRC: "USUM70824409", DurationSeconds: 230}
+	compilation := catalogTrack{ID: 1, Title: "Poker Face", Artist: "Lady Gaga", Album: "Papeete 10 Years", ISRC: "USUM70824409", DurationSeconds: 230}
+	cat := fakeAlbums{
+		fakeRecordings: fakeRecordings{fakeCatalog: fakeCatalog{byISRC: map[string]catalogTrack{"USUM70824409": compilation}}},
+		tracks:         map[string][]catalogTrack{"The Fame Monster (Deluxe Edition)": {{ID: 5, Title: "Bad Romance", Artist: "Lady Gaga", Album: "The Fame Monster (Deluxe Edition)"}}},
+	}
+	got := auditTrack(context.Background(), cat, fakeCovers{}, lib)
+	if got.Matched == nil || got.Matched.ID != 1 {
+		t.Fatalf("got %+v", got.Matched)
+	}
+}

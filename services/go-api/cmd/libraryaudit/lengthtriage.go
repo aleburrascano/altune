@@ -59,7 +59,7 @@ func triageLengthFindings(ctx context.Context, cat catalog, recordings recording
 }
 
 func triageTrack(ctx context.Context, cat catalog, recordings recordingSource, lib libraryTrack) (finding, error) {
-	reference, err := cat.TrackByISRC(ctx, lib.ISRC)
+	reference, err := catalogRecord(ctx, cat, lib)
 	if err != nil {
 		return finding{}, err
 	}

@@ -29,6 +29,38 @@ func albumTracklistCandidates(ctx context.Context, cat catalog, lib libraryTrack
 	return fittingCandidates(lib, tracks), nil
 }
 
+func catalogRecord(ctx context.Context, cat catalog, lib libraryTrack) (catalogTrack, error) {
+	found, err := cat.TrackByISRC(ctx, lib.ISRC)
+	if err != nil {
+		return catalogTrack{}, err
+	}
+	onAlbum, err := albumTrackWithISRC(ctx, cat, lib)
+	if err != nil {
+		return catalogTrack{}, err
+	}
+	if onAlbum != nil {
+		return *onAlbum, nil
+	}
+	return found, nil
+}
+
+func albumTrackWithISRC(ctx context.Context, cat catalog, lib libraryTrack) (*catalogTrack, error) {
+	candidates, err := albumTracklistCandidates(ctx, cat, lib)
+	if err != nil {
+		return nil, err
+	}
+	for _, candidate := range candidates {
+		full, err := cat.TrackByID(ctx, candidate.ID)
+		if err != nil {
+			return nil, err
+		}
+		if canonicalISRC(full.ISRC) == canonicalISRC(lib.ISRC) {
+			return &full, nil
+		}
+	}
+	return nil, nil
+}
+
 type isrcResolution struct {
 	findings []finding
 	reason   string
