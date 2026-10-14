@@ -21,7 +21,15 @@ names() {
     [ -f "$f" ] && basename "$f"
   done
   if [ -n "$ref" ]; then
-    git ls-tree --name-only "$ref" -- "$dir/" 2>/dev/null | grep -E '\.sql$' | xargs -r -n1 basename
+    local base
+    base=$(git merge-base HEAD "$ref" 2>/dev/null)
+    git ls-tree --name-only "$ref" -- "$dir/" 2>/dev/null | grep -E '\.sql$' | while read -r f; do
+      if [ ! -f "$f" ] && [ -n "$base" ] && git cat-file -e "$base:$f" 2>/dev/null &&
+        name=${f##*/} && compgen -G "$dir/[0-9]*_${name#*_}" >/dev/null; then
+        continue
+      fi
+      basename "$f"
+    done
   fi
 }
 

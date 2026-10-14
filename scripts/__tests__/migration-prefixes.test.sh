@@ -65,6 +65,45 @@ rm "$repo/$mig/034_from_this_branch.sql"
 run "$mig" other
 check 0 "the base ref's own files do not collide with themselves"
 
+git -C "$repo" checkout -q other
+: >"$repo/$mig/035_clash.sql"
+git -C "$repo" add -A && git -C "$repo" commit -qm "main has 035_clash"
+git -C "$repo" checkout -qb renamer
+git -C "$repo" mv "$mig/035_clash.sql" "$mig/036_clash.sql"
+: >"$repo/$mig/035_other.sql"
+git -C "$repo" add -A && git -C "$repo" commit -qm "renumber 035_clash"
+run "$mig" other
+check 0 "a file this branch renamed away does not count at the base ref"
+git -C "$repo" checkout -q other
+: >"$repo/$mig/037_new_on_main.sql"
+git -C "$repo" add -A && git -C "$repo" commit -qm "main took 037 after the branch point"
+git -C "$repo" checkout -q renamer
+: >"$repo/$mig/037_mine.sql"
+run "$mig" other
+check 1 "a file added to the ref after the branch point still counts"
+expect_out "037_mine.sql 037_new_on_main.sql"
+rm "$repo/$mig/037_mine.sql"
+git -C "$repo" checkout -q other
+git -C "$repo" checkout -qb deleter
+git -C "$repo" rm -q "$mig/035_clash.sql"
+: >"$repo/$mig/035_sneaky.sql"
+git -C "$repo" add -A && git -C "$repo" commit -qm "delete 035_clash, add 035_sneaky"
+run "$mig" other
+check 1 "deleting a base migration without renaming it does not hide a clash"
+expect_out "035_clash.sql 035_sneaky.sql"
+git -C "$repo" checkout -q other
+git -C "$repo" checkout -qb lookalike
+: >"$repo/$mig/038_track_identity.sql"
+git -C "$repo" add -A && git -C "$repo" commit -qm "main has 038_track_identity"
+git -C "$repo" checkout -qb lookalike-branch
+git -C "$repo" rm -q "$mig/038_track_identity.sql"
+: >"$repo/$mig/038_new.sql"
+: >"$repo/$mig/039_other_identity.sql"
+git -C "$repo" add -A && git -C "$repo" commit -qm "delete, reuse 038, add a file sharing the last word"
+run "$mig" lookalike
+check 1 "a file sharing only the last word of the name is not a rename"
+git -C "$repo" checkout -q other
+
 run
 check 2 "no argument prints usage and exits 2"
 run no/such/dir
