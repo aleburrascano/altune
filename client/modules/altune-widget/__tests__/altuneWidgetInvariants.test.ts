@@ -8,6 +8,7 @@ const moduleRoot = path.join(__dirname, '..');
 const sharedSwiftDir = path.join(appRoot, 'targets', '_shared');
 const moduleSwiftPath = path.join(moduleRoot, 'ios', 'AltuneWidgetModule.swift');
 const intentBridgePath = path.join(sharedSwiftDir, 'IntentBridge.swift');
+const altuneIntentsPath = path.join(sharedSwiftDir, 'AltuneIntents.swift');
 
 const FILES_THAT_MAKE_AUTOLINKING_BUILD_A_SEPARATE_POD = ['expo-module.config.json'];
 const POD_SPEC_EXTENSION = '.podspec';
@@ -111,5 +112,30 @@ describe('IntentBridge is shared by the intents and the module', () => {
 
     expect(sharedEntries).toContain('IntentBridge.swift');
     expect(sharedEntries.filter((entry) => !entry.endsWith('.swift'))).toEqual([]);
+  });
+});
+
+describe('the widget buttons are audio playback intents that forward one pinned command', () => {
+  it.each([
+    ['PlayPauseIntent', 'play-pause'],
+    ['NextIntent', 'next'],
+    ['PreviousIntent', 'previous'],
+    ['ShuffleIntent', 'shuffle'],
+    ['RepeatIntent', 'repeat'],
+  ])('%s sends "%s" through IntentBridge and returns a result', (intentName, command) => {
+    const altuneIntents = readIfPresent(altuneIntentsPath);
+
+    expect(altuneIntents).toContain(`struct ${intentName}: AudioPlaybackIntent {`);
+    expect(altuneIntents).toContain(
+      `await IntentBridge.send("${command}")\n    return .result()`,
+    );
+  });
+
+  it('gives every intent a title and an init, and imports AppIntents', () => {
+    const altuneIntents = readIfPresent(altuneIntentsPath);
+
+    expect(altuneIntents).toContain('import AppIntents');
+    expect(altuneIntents.match(/static var title: LocalizedStringResource/g)).toHaveLength(5);
+    expect(altuneIntents.match(/^ {2}init\(\) \{\}$/gm)).toHaveLength(5);
   });
 });
