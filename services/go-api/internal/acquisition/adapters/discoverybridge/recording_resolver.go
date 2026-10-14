@@ -1,6 +1,7 @@
 package discoverybridge
 
 import (
+	"altune/go-api/internal/acquisition/service/versiontag"
 	"altune/go-api/internal/discovery/service/search"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/textnorm"
@@ -8,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"slices"
 	"strings"
 
 	acqports "altune/go-api/internal/acquisition/ports"
@@ -221,11 +223,12 @@ func pickRecording(results []discoverydomain.SearchResult, q acqports.RecordingQ
 
 	wantTitle := textnorm.NormalizeForMatch(q.Title)
 	wantArtist := textnorm.NormalizeForMatch(q.Artist)
+	wantLabels := versiontag.RecordingLabels(q.Title)
 	for _, res := range results {
 		if res.Kind != discoverydomain.ResultKindTrack {
 			continue
 		}
-		if textnorm.NormalizeForMatch(res.Title) != wantTitle {
+		if textnorm.NormalizeForMatch(res.Title) != wantTitle || !slices.Equal(versiontag.RecordingLabels(res.Title), wantLabels) {
 			continue
 		}
 		if wantArtist != "" && textnorm.NormalizeForMatch(res.Subtitle) != wantArtist {
