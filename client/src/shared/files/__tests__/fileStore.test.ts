@@ -3,30 +3,16 @@ import { File } from 'expo-file-system';
 import { type FileStore, createFileStoreSlot } from '@shared/files/fileStore';
 import { deviceFileStore } from '@shared/files/native/deviceFileStore';
 import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
-import { createWebFileStore, WebDownloadUnsupportedError } from '@shared/files/web/webFileStore';
-
-function fakeLocalStorage(): Storage {
-  const data = new Map<string, string>();
-  return {
-    getItem: (key) => data.get(key) ?? null,
-    setItem: (key, value) => {
-      data.set(key, value);
-    },
-    removeItem: (key) => {
-      data.delete(key);
-    },
-    clear: () => data.clear(),
-    key: (index) => [...data.keys()][index] ?? null,
-    get length() {
-      return data.size;
-    },
-  };
-}
+import {
+  WEB_DOWNLOAD_UNSUPPORTED,
+  fakeLocalStorage,
+  webFileStoreOver,
+} from '@shared/files/__tests__/webStorage';
 
 describe.each<[string, () => FileStore]>([
   ['deviceFileStore', () => deviceFileStore],
   ['createMemoryFileStore', createMemoryFileStore],
-  ['createWebFileStore', () => createWebFileStore(fakeLocalStorage())],
+  ['webFileStore', () => webFileStoreOver(fakeLocalStorage())],
 ])('%s satisfies the FileStore contract', (_name, makeStore) => {
   let store: FileStore;
 
@@ -163,16 +149,16 @@ describe.each<[string, () => FileStore]>([
   });
 });
 
-describe('createWebFileStore download() is unsupported', () => {
+describe('webFileStore download() is unsupported', () => {
   it('download() rejects with WebDownloadUnsupportedError and writes nothing', async () => {
-    const store = createWebFileStore(fakeLocalStorage());
+    const store = webFileStoreOver(fakeLocalStorage());
     const dir = store.openDirectory('contract');
     dir.create();
     const dest = dir.openFile('t1.mp3');
 
     await expect(
       store.download('https://cdn.example.com/t1.mp3', dest, new AbortController().signal),
-    ).rejects.toBeInstanceOf(WebDownloadUnsupportedError);
+    ).rejects.toMatchObject(WEB_DOWNLOAD_UNSUPPORTED);
     expect(dest.exists).toBe(false);
   });
 });

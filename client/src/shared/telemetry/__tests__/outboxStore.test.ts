@@ -4,14 +4,15 @@ import {
   loadPersistedOutbox,
   persistOutbox,
   setOutboxFileStore,
-  OUTBOX_SCHEMA_VERSION,
 } from '@shared/telemetry/outboxStore';
 import {
   createMemoryFileStore,
   type MemoryFileStore,
 } from '@shared/files/__tests__/memoryFileStore';
-import type { OutboxEntry } from '@shared/telemetry/outbox';
+import type { OutboxEntry } from '@shared/telemetry/outboxEntries';
 import type { StoredDirectory } from '@shared/files/fileStore';
+
+const OUTBOX_SCHEMA_VERSION = 1;
 
 type FsFailureKind = 'write' | 'read' | 'delete' | 'createDirectory';
 

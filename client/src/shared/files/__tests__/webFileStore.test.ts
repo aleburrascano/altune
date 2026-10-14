@@ -1,27 +1,13 @@
 import type { FileStore } from '@shared/files/fileStore';
-import { createWebFileStore, WebDownloadUnsupportedError } from '@shared/files/web/webFileStore';
+import {
+  WEB_DOWNLOAD_UNSUPPORTED,
+  fakeLocalStorage,
+  webFileStoreOver,
+} from '@shared/files/__tests__/webStorage';
 
-function fakeLocalStorage(): Storage {
-  const data = new Map<string, string>();
-  return {
-    getItem: (key) => data.get(key) ?? null,
-    setItem: (key, value) => {
-      data.set(key, value);
-    },
-    removeItem: (key) => {
-      data.delete(key);
-    },
-    clear: () => data.clear(),
-    key: (index) => [...data.keys()][index] ?? null,
-    get length() {
-      return data.size;
-    },
-  };
-}
-
-describe('createWebFileStore', () => {
+describe('a webFileStore over localStorage', () => {
   it('opens a directory without creating it, and create() makes it exist', () => {
-    const store = createWebFileStore(fakeLocalStorage());
+    const store = webFileStoreOver(fakeLocalStorage());
     const dir = store.openDirectory('contract');
 
     expect(dir.exists).toBe(false);
@@ -31,13 +17,13 @@ describe('createWebFileStore', () => {
   });
 
   it('list() throws for a directory that does not exist', () => {
-    const store = createWebFileStore(fakeLocalStorage());
+    const store = webFileStoreOver(fakeLocalStorage());
 
     expect(() => store.openDirectory('missing').list()).toThrow();
   });
 
   it('opens a file without creating it; write, read, size and delete round-trip', () => {
-    const store = createWebFileStore(fakeLocalStorage());
+    const store = webFileStoreOver(fakeLocalStorage());
     const dir = store.openDirectory('contract');
     dir.create();
     const file = dir.openFile('a.json');
@@ -61,7 +47,7 @@ describe('createWebFileStore', () => {
   });
 
   it('moveTo() renames a file onto another, replacing what was there', () => {
-    const store = createWebFileStore(fakeLocalStorage());
+    const store = webFileStoreOver(fakeLocalStorage());
     const dir = store.openDirectory('contract');
     dir.create();
     const temp = dir.openFile('a.json.tmp');
@@ -75,7 +61,7 @@ describe('createWebFileStore', () => {
   });
 
   it('moveTo() throws for a source file that does not exist', () => {
-    const store = createWebFileStore(fakeLocalStorage());
+    const store = webFileStoreOver(fakeLocalStorage());
     const dir = store.openDirectory('contract');
     dir.create();
 
@@ -83,7 +69,7 @@ describe('createWebFileStore', () => {
   });
 
   it('list() returns only the files directly inside the directory', () => {
-    const store = createWebFileStore(fakeLocalStorage());
+    const store = webFileStoreOver(fakeLocalStorage());
     const dir = store.openDirectory('contract');
     dir.create();
     dir.openFile('a.mp3').write('a');
@@ -105,7 +91,7 @@ describe('createWebFileStore', () => {
 
   it('keys every write under the altune:file: prefix so it never collides with unrelated storage', () => {
     const storage = fakeLocalStorage();
-    const store = createWebFileStore(storage);
+    const store = webFileStoreOver(storage);
     const dir = store.openDirectory('kill-switch');
     dir.create();
     dir.openFile('switches.json').write('{}');
@@ -115,30 +101,28 @@ describe('createWebFileStore', () => {
 
   it('persists a write made through one store into a second store over the same storage', () => {
     const storage = fakeLocalStorage();
-    createWebFileStore(storage).openDirectory('preferences').create();
-    createWebFileStore(storage).openDirectory('preferences').openFile('theme.json').write('"dark"');
+    webFileStoreOver(storage).openDirectory('preferences').create();
+    webFileStoreOver(storage).openDirectory('preferences').openFile('theme.json').write('"dark"');
 
-    const reopened = createWebFileStore(storage)
-      .openDirectory('preferences')
-      .openFile('theme.json');
+    const reopened = webFileStoreOver(storage).openDirectory('preferences').openFile('theme.json');
 
     expect(reopened.textSync()).toBe('"dark"');
   });
 
   it('download() rejects with a typed unsupported error and writes nothing', async () => {
-    const store = createWebFileStore(fakeLocalStorage());
+    const store = webFileStoreOver(fakeLocalStorage());
     const dir = store.openDirectory('contract');
     dir.create();
     const dest = dir.openFile('t1.mp3');
 
     await expect(
       store.download('https://cdn.example.com/t1.mp3', dest, new AbortController().signal),
-    ).rejects.toBeInstanceOf(WebDownloadUnsupportedError);
+    ).rejects.toMatchObject(WEB_DOWNLOAD_UNSUPPORTED);
     expect(dest.exists).toBe(false);
   });
 
   it('availableBytes() reports a non-negative byte count', () => {
-    const store = createWebFileStore(fakeLocalStorage());
+    const store = webFileStoreOver(fakeLocalStorage());
 
     const bytes = store.availableBytes();
 
@@ -174,11 +158,9 @@ describe('the webFileStore singleton', () => {
   it('degrades to an in-memory store instead of throwing when localStorage is unreachable', async () => {
     await withThrowingLocalStorage(async () => {
       let webFileStore!: FileStore;
-      let IsolatedUnsupportedError!: typeof WebDownloadUnsupportedError;
       jest.isolateModules(() => {
         const isolated = require('@shared/files/web/webFileStore');
         webFileStore = isolated.webFileStore;
-        IsolatedUnsupportedError = isolated.WebDownloadUnsupportedError;
       });
 
       const dir = webFileStore.openDirectory('contract');
@@ -195,7 +177,7 @@ describe('the webFileStore singleton', () => {
       expect(webFileStore.availableBytes()).toBeGreaterThan(0);
       await expect(
         webFileStore.download('https://cdn.example.com/a.mp3', file, new AbortController().signal),
-      ).rejects.toBeInstanceOf(IsolatedUnsupportedError);
+      ).rejects.toMatchObject(WEB_DOWNLOAD_UNSUPPORTED);
     });
   });
 

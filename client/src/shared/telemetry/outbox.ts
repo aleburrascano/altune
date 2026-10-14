@@ -7,68 +7,19 @@ import { isLoopEnabled, onKillSwitchChange } from '@shared/killSwitch/killSwitch
 import { onSignOut } from '@shared/session/signOutCleanup';
 
 import { loadPersistedOutbox, persistOutbox } from '@shared/telemetry/outboxStore';
+import {
+  capOutbox,
+  dedupeById,
+  withEnvelope,
+  type OutboxEntry,
+} from '@shared/telemetry/outboxEntries';
 import { recordEvent, type DiscoveryEvent } from '@shared/telemetry/recordEvent';
-
-export type OutboxEntry = DiscoveryEvent & {
-  event_id: string;
-  client_occurred_at: string;
-  owner_user_id?: string;
-};
 
 const MAX_ENTRIES = 50;
 const MAX_DIAGNOSTIC_ENTRIES = 20;
-const DIAGNOSTIC_TYPES: ReadonlySet<DiscoveryEvent['type']> = new Set([
-  'acquisition_ui',
-  'client_error',
-]);
 
-export const FLUSH_BACKOFF_BASE_MS = 2_000;
-export const FLUSH_BACKOFF_CAP_MS = 5 * 60 * 1000;
-
-export function makeEventId(): string {
-  return randomUuid();
-}
-
-export function withEnvelope(
-  event: DiscoveryEvent,
-  eventId: string,
-  clientOccurredAt: string,
-): OutboxEntry {
-  return { ...event, event_id: eventId, client_occurred_at: clientOccurredAt };
-}
-
-export function dedupeById(entries: readonly OutboxEntry[]): OutboxEntry[] {
-  const byId = new Map<string, OutboxEntry>();
-  for (const e of entries) byId.set(e.event_id, e);
-  return [...byId.values()];
-}
-
-export function capEntries(entries: readonly OutboxEntry[], max: number): OutboxEntry[] {
-  return entries.length <= max ? [...entries] : entries.slice(entries.length - max);
-}
-
-function isDiagnostic(entry: OutboxEntry): boolean {
-  return DIAGNOSTIC_TYPES.has(entry.type);
-}
-
-function keptIds(entries: readonly OutboxEntry[], max: number, maxDiagnostic: number): Set<string> {
-  const labels = capEntries(
-    entries.filter((e) => !isDiagnostic(e)),
-    max,
-  );
-  const diagnosticRoom = Math.min(maxDiagnostic, max - labels.length);
-  const diagnostics = capEntries(entries.filter(isDiagnostic), Math.max(0, diagnosticRoom));
-  return new Set([...labels, ...diagnostics].map((e) => e.event_id));
-}
-
-export function capOutbox(
-  entries: readonly OutboxEntry[],
-  max: number,
-  maxDiagnostic: number,
-): OutboxEntry[] {
-  const kept = keptIds(entries, max, maxDiagnostic);
-  return entries.filter((e) => kept.has(e.event_id));
-}
+const FLUSH_BACKOFF_BASE_MS = 2_000;
+const FLUSH_BACKOFF_CAP_MS = 300_000;
 
 let _queue: OutboxEntry[] = [];
 let _flushing = false;
@@ -79,10 +30,6 @@ let _failedPasses = 0;
 let _retryAt = 0;
 let _retryTimer: ReturnType<typeof setTimeout> | null = null;
 let _owner: string | null = null;
-
-export function droppedCriticalCount(): number {
-  return _droppedCritical;
-}
 
 function capCritical(entries: readonly OutboxEntry[]): OutboxEntry[] {
   const capped = capOutbox(entries, MAX_ENTRIES, MAX_DIAGNOSTIC_ENTRIES);
@@ -140,12 +87,12 @@ export function setOutboxOwner(userId: string | null): void {
 export async function enqueueCritical(event: DiscoveryEvent): Promise<void> {
   ensureRestored();
   ensureFlushOnForeground();
-  const entry = withOwner(withEnvelope(event, makeEventId(), new Date().toISOString()), _owner);
+  const entry = withOwner(withEnvelope(event, randomUuid(), new Date().toISOString()), _owner);
   commit(capCritical(dedupeById([..._queue, entry])));
   await requestFlush();
 }
 
-export function flushBackoffMs(failedPasses: number, random: number): number {
+function flushBackoffMs(failedPasses: number, random: number): number {
   const exponent = clampedExponent(failedPasses, 1) - 1;
   return equalJitterMs(FLUSH_BACKOFF_BASE_MS, FLUSH_BACKOFF_CAP_MS, exponent, random);
 }
@@ -273,7 +220,7 @@ onKillSwitchChange((loop, enabled) => {
   if (loop === 'telemetryFlush' && enabled) void flushOutbox();
 });
 
-export function clearOutbox(): void {
+function clearOutbox(): void {
   _restored = true;
   resetBackoff();
   commit([]);

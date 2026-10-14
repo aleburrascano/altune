@@ -4,7 +4,7 @@ const KEY_PREFIX = 'altune:file:';
 const ROOT = 'localstorage://document';
 const CONSERVATIVE_AVAILABLE_BYTES = 5 * 1024 * 1024;
 
-export class WebDownloadUnsupportedError extends Error {
+class WebDownloadUnsupportedError extends Error {
   constructor() {
     super('download() is not supported on web');
     this.name = 'WebDownloadUnsupportedError';
@@ -113,7 +113,7 @@ function directoryHandle(storage: Storage, uri: string): StoredDirectory {
   return handle;
 }
 
-export function createWebFileStore(storage: Storage): FileStore {
+function createWebFileStore(storage: Storage): FileStore {
   return {
     openDirectory: (name) => directoryHandle(storage, `${ROOT}/${name}`),
     download: () => Promise.reject(new WebDownloadUnsupportedError()),

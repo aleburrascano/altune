@@ -19,8 +19,11 @@ jest.mock('react-native/Libraries/AppState/AppState', () => {
   };
 });
 
-const { advanceSession, makeSessionId, SESSION_INACTIVITY_MS } = SessionNamespace;
-type SessionState = SessionNamespace.SessionState;
+const SESSION_INACTIVITY_MS = 1_800_000;
+const SESSION_ID_SHAPE = /^[0-9a-z]+-[0-9a-z]{1,8}$/;
+const START = 1_000_000;
+const LONGEST_GAP = 5_400_000;
+const BASE36 = 36;
 
 type MockAppStateModule = {
   default: { addEventListener: jest.Mock; currentState: string };
@@ -63,9 +66,7 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-describe('advanceSession — the inactivity boundary at SESSION_INACTIVITY_MS', () => {
-  const state: SessionState = { sessionId: 'base-session', lastActivity: 1_000_000 };
-
+describe('getSessionId — the inactivity boundary at SESSION_INACTIVITY_MS', () => {
   it.each([
     ['one ms under the threshold keeps the session', SESSION_INACTIVITY_MS - 1, false],
     ['exactly at the threshold keeps the session (> not >=)', SESSION_INACTIVITY_MS, false],
@@ -73,116 +74,32 @@ describe('advanceSession — the inactivity boundary at SESSION_INACTIVITY_MS', 
     ['a zero-length gap keeps the session', 0, false],
     ['a clock that moved backwards keeps the session', -1000, false],
   ])('%s', (_label, gap, shouldRotate) => {
-    const now = state.lastActivity + gap;
-    const result = advanceSession(state, now);
-    expect(result.lastActivity).toBe(now);
-    if (shouldRotate) {
-      expect(result.sessionId).not.toBe(state.sessionId);
-    } else {
-      expect(result.sessionId).toBe(state.sessionId);
-    }
+    const { session, clock } = loadFreshSession(START);
+    const before = session.getSessionId();
+
+    clock.set(START + gap);
+
+    expect(session.getSessionId() !== before).toBe(shouldRotate);
   });
 });
 
-describe('advanceSession — reducer arms', () => {
-  it('keep arm returns a new object with the same sessionId but an advanced lastActivity', () => {
-    const state: SessionState = { sessionId: 'stable-id', lastActivity: 0 };
-
-    const result = advanceSession(state, 1000);
-
-    expect(result).not.toBe(state);
-    expect(result.sessionId).toBe(state.sessionId);
-    expect(result.lastActivity).toBe(1000);
-  });
-
-  it('rotate arm returns a fresh sessionId alongside the new lastActivity', () => {
-    const state: SessionState = { sessionId: 'stale-id', lastActivity: 0 };
-    const now = SESSION_INACTIVITY_MS + 1;
-
-    const result = advanceSession(state, now);
-
-    expect(result.sessionId).not.toBe(state.sessionId);
-    expect(result.lastActivity).toBe(now);
-  });
-
-  it('does not mutate the state object it was given, in either arm', () => {
-    const keepState: SessionState = { sessionId: 'id-a', lastActivity: 0 };
-    const keepSnapshot = { ...keepState };
-    advanceSession(keepState, 1000);
-    expect(keepState).toEqual(keepSnapshot);
-
-    const rotateState: SessionState = { sessionId: 'id-b', lastActivity: 0 };
-    const rotateSnapshot = { ...rotateState };
-    advanceSession(rotateState, SESSION_INACTIVITY_MS + 1);
-    expect(rotateState).toEqual(rotateSnapshot);
-  });
-});
-
-describe('law: advanceSession(s, now).lastActivity === now for every input', () => {
-  it('holds regardless of whether the session rotates or is kept', () => {
+describe('law: the sessionId rotates if and only if the gap since the last read exceeds SESSION_INACTIVITY_MS', () => {
+  it('holds across generated sequences of gaps between reads', () => {
+    const { session, clock } = loadFreshSession(START);
+    let now = START;
     fc.assert(
       fc.property(
-        fc.record({ sessionId: fc.string(), lastActivity: fc.integer() }),
-        fc.integer(),
-        (state, now) => {
-          expect(advanceSession(state, now).lastActivity).toBe(now);
-        },
-      ),
-      { numRuns: 300 },
-    );
-  });
-});
-
-describe('law: the sessionId rotates if and only if now - lastActivity > SESSION_INACTIVITY_MS', () => {
-  it('holds across generated states and clock values', () => {
-    fc.assert(
-      fc.property(
-        fc.record({ sessionId: fc.string({ minLength: 1 }), lastActivity: fc.integer() }),
-        fc.integer(),
-        (state, now) => {
-          const result = advanceSession(state, now);
-          const rotated = result.sessionId !== state.sessionId;
-          expect(rotated).toBe(now - state.lastActivity > SESSION_INACTIVITY_MS);
-        },
-      ),
-      { numRuns: 300 },
-    );
-  });
-});
-
-describe('law: advanceSession never mutates the state it was given', () => {
-  it('leaves the input object unchanged for every generated state/now pair', () => {
-    fc.assert(
-      fc.property(
-        fc.record({ sessionId: fc.string(), lastActivity: fc.integer() }),
-        fc.integer(),
-        (state, now) => {
-          const before = { ...state };
-          advanceSession(state, now);
-          expect(state).toEqual(before);
-        },
-      ),
-      { numRuns: 300 },
-    );
-  });
-});
-
-describe('law: repeated application within the window is stable', () => {
-  it('chaining any number of in-window advances never rotates the sessionId', () => {
-    fc.assert(
-      fc.property(
-        fc.string({ minLength: 1 }),
-        fc.integer({ min: 0, max: 1e9 }),
-        fc.array(fc.integer({ min: 0, max: SESSION_INACTIVITY_MS }), {
+        fc.array(fc.integer({ min: -SESSION_INACTIVITY_MS, max: LONGEST_GAP }), {
           minLength: 1,
           maxLength: 20,
         }),
-        (sessionId, startLastActivity, deltas) => {
-          let state: SessionState = { sessionId, lastActivity: startLastActivity };
-          for (const delta of deltas) {
-            state = advanceSession(state, state.lastActivity + delta);
+        (gaps) => {
+          for (const gap of gaps) {
+            const before = session.getSessionId();
+            now += gap;
+            clock.set(now);
+            expect(session.getSessionId() !== before).toBe(gap > SESSION_INACTIVITY_MS);
           }
-          expect(state.sessionId).toBe(sessionId);
         },
       ),
       { numRuns: 200 },
@@ -190,15 +107,20 @@ describe('law: repeated application within the window is stable', () => {
   });
 });
 
-describe('law: makeSessionId(seed) prefixes the base36 seed and separator, and varies per call', () => {
-  it('holds for generated seeds, and two calls with the same seed differ', () => {
+describe('law: a rotated session id prefixes the base36 time of the rotation, and varies per rotation', () => {
+  it('holds for generated rotation times', () => {
+    const { session, clock } = loadFreshSession(0);
+    let now = 0;
     fc.assert(
-      fc.property(fc.integer({ min: 0, max: Number.MAX_SAFE_INTEGER }), (seed) => {
-        const first = makeSessionId(seed);
-        expect(first.startsWith(`${seed.toString(36)}-`)).toBe(true);
+      fc.property(fc.integer({ min: SESSION_INACTIVITY_MS + 1, max: 1e9 }), (gap) => {
+        const before = session.getSessionId();
+        now += gap;
+        clock.set(now);
 
-        const second = makeSessionId(seed);
-        expect(second).not.toBe(first);
+        const rotated = session.getSessionId();
+        expect(rotated.startsWith(`${now.toString(BASE36)}-`)).toBe(true);
+        expect(rotated).toMatch(SESSION_ID_SHAPE);
+        expect(rotated).not.toBe(before);
       }),
       { numRuns: 200 },
     );
@@ -315,16 +237,6 @@ describe('getSessionId rotates on inactivity alone, with no AppState transition'
 });
 
 describe('every id this module hands out is a well-formed session id, never a degenerate value', () => {
-  const SESSION_ID_SHAPE = /^[0-9a-z]+-[0-9a-z]{1,8}$/;
-
-  it('makeSessionId produces a base36 seed, one separator, and a base36 suffix with nothing else in it', () => {
-    for (const seed of [0, 1, 1000, Date.now()]) {
-      const id = makeSessionId(seed);
-      expect(id).toMatch(SESSION_ID_SHAPE);
-      expect(id.startsWith(`${seed.toString(36)}-`)).toBe(true);
-    }
-  });
-
   it('the id a foreground rotation installs is a well-formed string, not an empty or absent one', () => {
     const { session, appState, clock } = loadFreshSession(1000);
     const before = session.getSessionId();
@@ -430,5 +342,11 @@ describe('a wall-clock jump neither triggers nor suppresses a rotation', () => {
     require('@shared/session/signOutCleanup').runSignOutCleanups();
 
     expect(session.getSessionId()).not.toBe(before);
+  });
+});
+
+describe('eventSession module surface', () => {
+  it('exposes only getSessionId, keeping the inactivity window and rotation private', () => {
+    expect(Object.keys(SessionNamespace)).toEqual(['getSessionId']);
   });
 });

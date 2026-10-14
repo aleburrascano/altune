@@ -80,26 +80,30 @@ export type SchemaSpec = {
   migrations: readonly Migration[];
 };
 
-export function schemaVersionOf(document: unknown): number {
+function schemaVersionOf(document: unknown): number {
   if (typeof document !== 'object' || document === null || Array.isArray(document)) return 0;
   const version = (document as Record<string, unknown>)['schemaVersion'];
   return typeof version === 'number' && Number.isInteger(version) && version >= 0 ? version : 0;
 }
 
-export type MigrateResult =
+type MigrateResult =
   | { status: 'current'; document: unknown }
   | { status: 'newer'; version: number; document: unknown };
 
-export function migrateDocument(document: unknown, spec: SchemaSpec): MigrateResult {
-  const version = schemaVersionOf(document);
-  if (version > spec.current) return { status: 'newer', version, document };
+function migrateFrom(version: number, document: unknown, spec: SchemaSpec): unknown {
   let migrated = document;
   for (let v = version; v < spec.current; v += 1) {
     const migrate = spec.migrations[v];
     if (migrate === undefined) throw new Error(`no migration from schema version ${v}`);
     migrated = migrate(migrated);
   }
-  return { status: 'current', document: migrated };
+  return migrated;
+}
+
+function migrateDocument(document: unknown, spec: SchemaSpec): MigrateResult {
+  const version = schemaVersionOf(document);
+  if (version > spec.current) return { status: 'newer', version, document };
+  return { status: 'current', document: migrateFrom(version, document, spec) };
 }
 
 export type ReadEntriesResult =

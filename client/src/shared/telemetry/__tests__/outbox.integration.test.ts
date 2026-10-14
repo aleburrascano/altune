@@ -1,7 +1,6 @@
 import type * as OutboxNamespace from '@shared/telemetry/outbox';
+import type { OutboxEntry } from '@shared/telemetry/outboxEntries';
 import type { DiscoveryEvent } from '@shared/telemetry/recordEvent';
-
-type OutboxEntry = OutboxNamespace.OutboxEntry;
 
 const { __http } = require('@testing/doubles/fetch.js');
 

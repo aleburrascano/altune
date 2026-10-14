@@ -2,17 +2,17 @@ import { isAppActive, subscribeAppState } from '@shared/lifecycle/appState';
 
 import { onSignOut } from '@shared/session/signOutCleanup';
 
-export const SESSION_INACTIVITY_MS = 30 * 60 * 1000;
+const SESSION_INACTIVITY_MS = 1_800_000;
 
-export type SessionState = { sessionId: string; lastActivity: number };
+type SessionState = { sessionId: string; lastActivity: number };
 
 export type Clock = () => number;
 
-export function makeSessionId(seed: number): string {
+function makeSessionId(seed: number): string {
   return `${seed.toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export function advanceSession(state: SessionState, now: number): SessionState {
+function advanceSession(state: SessionState, now: number): SessionState {
   if (now - state.lastActivity > SESSION_INACTIVITY_MS) {
     return { sessionId: makeSessionId(now), lastActivity: now };
   }

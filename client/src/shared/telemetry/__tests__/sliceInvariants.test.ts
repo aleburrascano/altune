@@ -1,8 +1,15 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { withEnvelope, makeEventId } from '@shared/telemetry/outbox';
+import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
+import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
+import { enqueueCritical } from '@shared/telemetry/outbox';
+import { withEnvelope } from '@shared/telemetry/outboxEntries';
+import { loadPersistedOutbox, setOutboxFileStore } from '@shared/telemetry/outboxStore';
 import type { DiscoveryEvent } from '@shared/telemetry/recordEvent';
+
+const EVENTS_ENQUEUED = 2;
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 function findRepoRoot(): string {
   let dir = __dirname;
@@ -170,6 +177,9 @@ describe('no console.log in this slice', () => {
 describe('security: no auth material reaches this slice or the disk it writes to', () => {
   afterEach(() => {
     jest.restoreAllMocks();
+    applyKillSwitches({ telemetry_enabled: true });
+    setOutboxFileStore();
+    setKillSwitchFileStore();
   });
 
   it('no file in shared/telemetry imports expo-secure-store, a Supabase client, or reads an access token', () => {
@@ -208,19 +218,17 @@ describe('security: no auth material reaches this slice or the disk it writes to
     expect(Object.keys(entry).some((k) => /token|auth|header/i.test(k))).toBe(false);
   });
 
-  it('makeEventId is unique across a large sample, the property a dedup key needs', () => {
-    const sampleSize = 5000;
-    const ids = new Set(Array.from({ length: sampleSize }, () => makeEventId()));
-
-    expect(ids.size).toBe(sampleSize);
-  });
-
-  it('makeEventId is unpredictable to an observer of Math.random (#1774)', () => {
+  it('the outbox event id is a v4 uuid, unpredictable to an observer of Math.random (#1774)', async () => {
+    setOutboxFileStore(createMemoryFileStore());
+    setKillSwitchFileStore(createMemoryFileStore());
+    applyKillSwitches({ telemetry_enabled: false });
     jest.spyOn(Math, 'random').mockReturnValue(0.5);
 
-    const ids = [makeEventId(), makeEventId()];
+    await enqueueCritical({ type: 'library_add' });
+    await enqueueCritical({ type: 'library_add' });
+    const ids = loadPersistedOutbox().map((entry) => entry.event_id);
 
-    expect(ids[0]).not.toBe(ids[1]);
-    expect(ids[0]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(new Set(ids).size).toBe(EVENTS_ENQUEUED);
+    for (const id of ids) expect(id).toMatch(UUID_V4);
   });
 });

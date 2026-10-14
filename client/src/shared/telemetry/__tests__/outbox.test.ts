@@ -3,22 +3,15 @@ import * as Crypto from 'expo-crypto';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { signInTestUser } from '@testing/signInTestUser';
 
-import type { OutboxEntry } from '@shared/telemetry/outbox';
+import type { OutboxEntry } from '@shared/telemetry/outboxEntries';
+import * as outboxModule from '@shared/telemetry/outbox';
 import {
   enqueueCritical,
   flushOutbox,
-  clearOutbox,
-  droppedCriticalCount,
-  flushBackoffMs,
-  FLUSH_BACKOFF_BASE_MS,
-  FLUSH_BACKOFF_CAP_MS,
   setOutboxOwner,
   _resetOutboxForTest,
-  capEntries,
-  capOutbox,
-  dedupeById,
-  withEnvelope,
 } from '@shared/telemetry/outbox';
+import { capOutbox, dedupeById, withEnvelope } from '@shared/telemetry/outboxEntries';
 import {
   loadPersistedOutbox,
   persistOutbox,
@@ -115,6 +108,26 @@ async function settle(): Promise<void> {
 }
 
 const MAX_ENTRIES = 50;
+const FLUSH_BACKOFF_BASE_MS = 2_000;
+const FLUSH_BACKOFF_CAP_MS = 300_000;
+
+function warnings(): string[] {
+  return (console.warn as jest.Mock).mock.calls.map((call) => String(call[0]));
+}
+
+function lastWarningMatch(pattern: RegExp): RegExpMatchArray | undefined {
+  return warnings()
+    .map((message) => message.match(pattern))
+    .filter((match): match is RegExpMatchArray => match !== null)
+    .at(-1);
+}
+
+const DROPPED_SINCE_LAUNCH = /\((\d+) since launch\)/;
+const RETRY_DELAY_MS = /retry \d+ in (\d+)ms/;
+
+function droppedCriticalCount(): number {
+  return Number(lastWarningMatch(DROPPED_SINCE_LAUNCH)?.[1] ?? 0);
+}
 
 function event(overrides: Partial<DiscoveryEvent> = {}): DiscoveryEvent {
   return { type: 'library_add', ...overrides };
@@ -380,13 +393,13 @@ describe('Backpressure: shedding a label-critical entry at the cap is recorded, 
   });
 });
 
-describe('Security: clearOutbox drops queued telemetry on sign-out / account switch', () => {
+describe('Security: sign-out drops queued telemetry on sign-out / account switch', () => {
   it('empties the in-memory queue and deletes the persisted outbox on disk', async () => {
     serverReplies(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'user-a-report' }));
     expect(lastPersisted()).toHaveLength(1);
 
-    clearOutbox();
+    runSignOutCleanups();
 
     expect(lastPersisted()).toEqual([]);
   });
@@ -395,7 +408,7 @@ describe('Security: clearOutbox drops queued telemetry on sign-out / account swi
     serverReplies(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'user-a-report' }));
 
-    clearOutbox();
+    runSignOutCleanups();
     resetServer();
     await flushOutbox();
 
@@ -766,7 +779,7 @@ describe('Security: entries are owned by the user who queued them', () => {
     const release = holdNextRequest();
     const flushing = flushOutbox();
 
-    clearOutbox();
+    runSignOutCleanups();
     setOutboxOwner('user-b');
     release();
     await flushing;
@@ -932,11 +945,11 @@ describe('Backoff: the flush loop retries on its own capped, jittered schedule',
     random.mockRestore();
   });
 
-  it('clearOutbox cancels the pending retry, so the next account neither inherits the wait nor a stale timer', async () => {
+  it('sign-out cancels the pending retry, so the next account neither inherits the wait nor a stale timer', async () => {
     serverReplies(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'user-a' }));
 
-    clearOutbox();
+    runSignOutCleanups();
     resetServer();
     await jest.advanceTimersByTimeAsync(FLUSH_BACKOFF_CAP_MS);
     expect(sentEntries()).toHaveLength(0);
@@ -957,26 +970,47 @@ describe('Backoff: the flush loop retries on its own capped, jittered schedule',
   });
 });
 
-describe('law: flushBackoffMs is exponential, jittered into [ceiling/2, ceiling], and capped', () => {
-  it('starts at the base ceiling and doubles per failed pass', () => {
-    expect(flushBackoffMs(1, 0)).toBe(FLUSH_BACKOFF_BASE_MS / 2);
-    expect(flushBackoffMs(1, 1)).toBe(FLUSH_BACKOFF_BASE_MS);
-    expect(flushBackoffMs(3, 1)).toBe(FLUSH_BACKOFF_BASE_MS * 4);
+describe('law: the flush backoff is exponential, jittered into [ceiling/2, ceiling], and capped', () => {
+  const HALF = 0.5;
+  const QUADRUPLE = 4;
+  const THIRD_PASS = 3;
+  const FIRST_CAPPED_PASS = 9;
+  const MANY_PASSES = 20;
+  const PAST_THE_CAP = [FIRST_CAPPED_PASS, MANY_PASSES];
+  const TOP_JITTER = 0.999999;
+
+  async function backoffAfterFailedPasses(passes: number, random: number): Promise<number> {
+    jest.spyOn(Math, 'random').mockReturnValue(random);
+    serverReplies(HTTP_UNAVAILABLE);
+    await enqueueCritical(event());
+    for (let pass = 1; pass < passes; pass += 1) await flushOutbox();
+    return Number(lastWarningMatch(RETRY_DELAY_MS)?.[1]);
+  }
+
+  it.each<[number, number, number]>([
+    [1, 0, FLUSH_BACKOFF_BASE_MS * HALF],
+    [1, 1, FLUSH_BACKOFF_BASE_MS],
+    [THIRD_PASS, 1, FLUSH_BACKOFF_BASE_MS * QUADRUPLE],
+  ])('after %i failed passes at jitter %d it waits %i ms', async (passes, random, wait) => {
+    expect(await backoffAfterFailedPasses(passes, random)).toBe(wait);
   });
 
-  it('treats a non-positive pass count as the first pass', () => {
-    expect(flushBackoffMs(0, 1)).toBe(FLUSH_BACKOFF_BASE_MS);
+  it.each(PAST_THE_CAP)('never exceeds the cap after %i failed passes', async (passes) => {
+    expect(await backoffAfterFailedPasses(passes, 0)).toBe(FLUSH_BACKOFF_CAP_MS * HALF);
   });
 
-  it('never exceeds the cap however many passes have failed', () => {
-    for (const passes of [20, 31, 1000]) {
-      expect(flushBackoffMs(passes, 0)).toBe(FLUSH_BACKOFF_CAP_MS / 2);
-      expect(flushBackoffMs(passes, 0.999999)).toBeLessThanOrEqual(FLUSH_BACKOFF_CAP_MS);
-    }
+  it('never exceeds the cap at the top of the jitter range', async () => {
+    expect(await backoffAfterFailedPasses(MANY_PASSES, TOP_JITTER)).toBeLessThanOrEqual(
+      FLUSH_BACKOFF_CAP_MS,
+    );
   });
 });
 
 describe('pure helpers', () => {
+  function capLabels(xs: readonly OutboxEntry[], max: number): OutboxEntry[] {
+    return capOutbox(xs, max, 0);
+  }
+
   function entry(eventId: string, overrides: Partial<OutboxEntry> = {}): OutboxEntry {
     return {
       type: 'play',
@@ -986,14 +1020,14 @@ describe('pure helpers', () => {
     };
   }
 
-  describe('capEntries at the length<=max boundary', () => {
+  describe('capLabels at the length<=max boundary', () => {
     it.each<[string, number, number]>([
       ['one below max keeps every entry', 3, 2],
       ['exactly at max keeps every entry', 3, 3],
       ['one above max drops only the oldest entry', 3, 4],
     ])('%s', (_label, max, length) => {
       const xs = Array.from({ length }, (_, i) => entry(`id-${i}`));
-      const result = capEntries(xs, max);
+      const result = capLabels(xs, max);
 
       if (length <= max) {
         expect(result).toEqual(xs);
@@ -1005,14 +1039,14 @@ describe('pure helpers', () => {
     });
   });
 
-  describe('capEntries with max === 0', () => {
+  describe('capLabels with max === 0', () => {
     it('leaves an already-empty queue empty', () => {
-      expect(capEntries([], 0)).toEqual([]);
+      expect(capLabels([], 0)).toEqual([]);
     });
 
     it('drops every entry regardless of how many there are', () => {
       const xs = [entry('a'), entry('b'), entry('c')];
-      expect(capEntries(xs, 0)).toEqual([]);
+      expect(capLabels(xs, 0)).toEqual([]);
     });
   });
 
@@ -1156,5 +1190,16 @@ describe('outbox_flush_failed telemetry', () => {
 
     const passes = flushFailures().map((e) => e.payload?.['failed_passes']);
     expect(passes.slice(0, 2)).toEqual([1, 2]);
+  });
+});
+
+describe('outbox module surface', () => {
+  it('exposes the queue API and keeps its caps, backoff and helpers private', () => {
+    expect(Object.keys(outboxModule).sort()).toEqual([
+      '_resetOutboxForTest',
+      'enqueueCritical',
+      'flushOutbox',
+      'setOutboxOwner',
+    ]);
   });
 });

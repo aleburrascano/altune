@@ -31,7 +31,7 @@ export type DiscoveryEvent = {
   payload?: Record<string, unknown>;
 };
 
-export class TelemetryGatedError extends Error {
+class TelemetryGatedError extends Error {
   constructor() {
     super('telemetry flush disabled by kill switch');
     this.name = 'TelemetryGatedError';

@@ -3,11 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 
 import { signInTestUser } from '@testing/signInTestUser';
 
-import {
-  recordEvent,
-  type DiscoveryEvent,
-  TelemetryGatedError,
-} from '@shared/telemetry/recordEvent';
+import { recordEvent, type DiscoveryEvent } from '@shared/telemetry/recordEvent';
 import { getSessionId } from '@shared/telemetry/eventSession';
 import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
@@ -15,6 +11,11 @@ import { _resetOutboxForTest, enqueueCritical, flushOutbox } from '@shared/telem
 import { loadPersistedOutbox, setOutboxFileStore } from '@shared/telemetry/outboxStore';
 
 const { __http } = require('@testing/doubles/fetch.js');
+
+const TELEMETRY_GATED = {
+  name: 'TelemetryGatedError',
+  message: 'telemetry flush disabled by kill switch',
+};
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
@@ -211,7 +212,7 @@ describe('remote kill switch', () => {
     it('sends nothing while the switch is off', async () => {
       applyKillSwitches({ telemetry_enabled: false });
 
-      await expect(recordEvent({ type: 'results_shown' })).rejects.toThrow(TelemetryGatedError);
+      await expect(recordEvent({ type: 'results_shown' })).rejects.toMatchObject(TELEMETRY_GATED);
 
       expect(__http.requests.length).toBe(0);
     });
@@ -219,14 +220,14 @@ describe('remote kill switch', () => {
     it('rejects with the gated error while the switch is off, without sending', async () => {
       applyKillSwitches({ telemetry_enabled: false });
 
-      await expect(recordEvent({ type: 'result_clicked' })).rejects.toThrow(TelemetryGatedError);
+      await expect(recordEvent({ type: 'result_clicked' })).rejects.toMatchObject(TELEMETRY_GATED);
     });
 
     it('sends again once the switch is turned back on', async () => {
       __http.reply('POST /v1/discovery/events', { status: 202 });
       applyKillSwitches({ telemetry_enabled: false });
 
-      await expect(recordEvent({ type: 'play' })).rejects.toThrow(TelemetryGatedError);
+      await expect(recordEvent({ type: 'play' })).rejects.toMatchObject(TELEMETRY_GATED);
       expect(__http.requests.length).toBe(0);
 
       applyKillSwitches({ telemetry_enabled: true });

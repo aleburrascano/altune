@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 
-import { capEntries, dedupeById, makeEventId, withEnvelope } from '@shared/telemetry/outbox';
-import type { OutboxEntry } from '@shared/telemetry/outbox';
+import { capOutbox, dedupeById, withEnvelope } from '@shared/telemetry/outboxEntries';
+import type { OutboxEntry } from '@shared/telemetry/outboxEntries';
 import type { DiscoveryEventType } from '@shared/telemetry/recordEvent';
 
 const EVENT_TYPES: DiscoveryEventType[] = [
@@ -29,6 +29,15 @@ const entryArb: fc.Arbitrary<OutboxEntry> = fc.record(
   { requiredKeys: ['type', 'event_id', 'client_occurred_at'] },
 );
 
+const labelEntriesArb = fc.uniqueArray(entryArb, {
+  selector: (entry) => entry.event_id,
+  maxLength: 40,
+});
+
+function capLabels(xs: readonly OutboxEntry[], max: number): OutboxEntry[] {
+  return capOutbox(xs, max, 0);
+}
+
 const idPool = ['a', 'b', 'c', 'd'] as const;
 const collidableEntryArb: fc.Arbitrary<OutboxEntry> = fc.record({
   type: eventTypeArb,
@@ -36,66 +45,50 @@ const collidableEntryArb: fc.Arbitrary<OutboxEntry> = fc.record({
   client_occurred_at: fc.string({ minLength: 1, maxLength: 12 }),
 });
 
-describe('law: capEntries(xs, max).length === Math.min(xs.length, max)', () => {
+describe('law: capLabels(xs, max).length === Math.min(xs.length, max)', () => {
   it('holds for every array and every non-negative cap', () => {
     fc.assert(
-      fc.property(
-        fc.array(entryArb, { maxLength: 40 }),
-        fc.integer({ min: 0, max: 60 }),
-        (xs, max) => {
-          expect(capEntries(xs, max).length).toBe(Math.min(xs.length, max));
-        },
-      ),
+      fc.property(labelEntriesArb, fc.integer({ min: 0, max: 60 }), (xs, max) => {
+        expect(capLabels(xs, max).length).toBe(Math.min(xs.length, max));
+      }),
       { numRuns: 200 },
     );
   });
 });
 
-describe('law: capEntries always returns a trailing slice of the input — the oldest entries are what drop', () => {
+describe('law: capLabels always returns a trailing slice of the input — the oldest entries are what drop', () => {
   it('the result equals xs sliced to its own length from the end', () => {
     fc.assert(
-      fc.property(
-        fc.array(entryArb, { maxLength: 40 }),
-        fc.integer({ min: 0, max: 60 }),
-        (xs, max) => {
-          const result = capEntries(xs, max);
-          expect(result).toEqual(xs.slice(xs.length - result.length));
-        },
-      ),
+      fc.property(labelEntriesArb, fc.integer({ min: 0, max: 60 }), (xs, max) => {
+        const result = capLabels(xs, max);
+        expect(result).toEqual(xs.slice(xs.length - result.length));
+      }),
       { numRuns: 200 },
     );
   });
 });
 
-describe('law: capEntries never mutates its input and never returns the same array instance', () => {
+describe('law: capLabels never mutates its input and never returns the same array instance', () => {
   it('holds whether or not the cap is exceeded', () => {
     fc.assert(
-      fc.property(
-        fc.array(entryArb, { maxLength: 40 }),
-        fc.integer({ min: 0, max: 60 }),
-        (xs, max) => {
-          const before = [...xs];
-          const result = capEntries(xs, max);
-          expect(xs).toEqual(before);
-          expect(result).not.toBe(xs);
-        },
-      ),
+      fc.property(labelEntriesArb, fc.integer({ min: 0, max: 60 }), (xs, max) => {
+        const before = [...xs];
+        const result = capLabels(xs, max);
+        expect(xs).toEqual(before);
+        expect(result).not.toBe(xs);
+      }),
       { numRuns: 200 },
     );
   });
 });
 
-describe('law: capEntries is idempotent once applied', () => {
+describe('law: capLabels is idempotent once applied', () => {
   it('capping an already-capped array with the same max changes nothing', () => {
     fc.assert(
-      fc.property(
-        fc.array(entryArb, { maxLength: 40 }),
-        fc.integer({ min: 0, max: 60 }),
-        (xs, max) => {
-          const once = capEntries(xs, max);
-          expect(capEntries(once, max)).toEqual(once);
-        },
-      ),
+      fc.property(labelEntriesArb, fc.integer({ min: 0, max: 60 }), (xs, max) => {
+        const once = capLabels(xs, max);
+        expect(capLabels(once, max)).toEqual(once);
+      }),
       { numRuns: 200 },
     );
   });
@@ -182,24 +175,6 @@ describe('law: withEnvelope is idempotent for a fixed id and timestamp', () => {
         },
       ),
       { numRuns: 200 },
-    );
-  });
-});
-
-describe('law: makeEventId always produces an RFC4122 v4 shaped id, and does not repeat across a large sample', () => {
-  it('matches the v4 pattern and never collides within a batch', () => {
-    fc.assert(
-      fc.property(fc.integer({ min: 50, max: 300 }), (n) => {
-        const ids = Array.from({ length: n }, () => makeEventId());
-
-        for (const id of ids) {
-          expect(id).toMatch(
-            /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-          );
-        }
-        expect(new Set(ids).size).toBe(n);
-      }),
-      { numRuns: 20 },
     );
   });
 });

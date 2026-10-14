@@ -7,7 +7,7 @@ import {
 import { defaultFileStore } from '@shared/files/defaultFileStore';
 import { createFileStoreSlot, type FileStore, type StoredDirectory } from '@shared/files/fileStore';
 
-import type { OutboxEntry } from '@shared/telemetry/outbox';
+import type { OutboxEntry } from '@shared/telemetry/outboxEntries';
 import type { DiscoveryEventType } from '@shared/telemetry/recordEvent';
 
 const OUTBOX_DIR = 'telemetry';
@@ -59,7 +59,7 @@ function outboxDir(): StoredDirectory {
   return fileStore.ensureDir(OUTBOX_DIR);
 }
 
-export const OUTBOX_SCHEMA_VERSION = 1;
+const OUTBOX_SCHEMA_VERSION = 1;
 
 const OUTBOX_SCHEMA: SchemaSpec = {
   current: OUTBOX_SCHEMA_VERSION,

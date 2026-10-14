@@ -1,9 +1,7 @@
 import {
   deleteDocument,
-  migrateDocument,
   readDocument,
   readVersionedEntries,
-  schemaVersionOf,
   writeDocumentAtomically,
   type SchemaSpec,
 } from '@shared/files/durableDocument';
@@ -175,58 +173,60 @@ describe('readDocument', () => {
   });
 });
 
-describe('schemaVersionOf', () => {
-  it.each<[string, unknown, number]>([
-    ['a stamped document', { schemaVersion: 3 }, 3],
-    ['a bare array', [1, 2], 0],
-    ['null', null, 0],
-    ['a number', 7, 0],
-    ['an object with no version', { t1: {} }, 0],
-    ['a non-integer version', { schemaVersion: 1.5 }, 0],
-    ['a negative version', { schemaVersion: -1 }, 0],
-    ['a string version', { schemaVersion: '1' }, 0],
-  ])('%s', (_label, document, expected) => {
-    expect(schemaVersionOf(document)).toBe(expected);
-  });
-});
-
-describe('migrateDocument', () => {
+describe('reading a versioned document', () => {
   const spec: SchemaSpec = {
     current: 2,
     migrations: [
-      (bare) => ({ schemaVersion: 1, items: bare }),
-      (v1) => ({ ...(v1 as object), schemaVersion: 2, extra: true }),
+      (bare) => ({ schemaVersion: 1, entries: { items: bare } }),
+      (v1) => {
+        const doc = v1 as { entries: object };
+        return { ...doc, schemaVersion: 2, entries: { ...doc.entries, extra: true } };
+      },
     ],
   };
 
-  it('runs every migration from an unversioned document, preserving its data', () => {
-    expect(migrateDocument(['a', 'b'], spec)).toEqual({
-      status: 'current',
-      document: { schemaVersion: 2, items: ['a', 'b'], extra: true },
+  function readStored(document: unknown, schema: SchemaSpec = spec) {
+    store.files.set(FILE_URI, JSON.stringify(document));
+    return readVersionedEntries('[test]', 'doc.json', () => dir, schema);
+  }
+
+  it.each<[string, unknown]>([
+    ['a bare array', ['a', 'b']],
+    ['null', null],
+    ['a number', 'not-a-document'.length],
+    ['an object with no version', { t1: {} }],
+    ['a non-integer version', { schemaVersion: 1.5 }],
+    ['a negative version', { schemaVersion: -1 }],
+    ['a string version', { schemaVersion: '1' }],
+  ])('treats %s as unversioned and migrates it from version 0', (_label, document) => {
+    expect(readStored(document)).toEqual({
+      status: 'read',
+      entries: { items: document, extra: true },
     });
   });
 
+  it('reads the version a document is stamped with', () => {
+    readStored({ schemaVersion: 3, entries: [] });
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('has schema version 3'));
+  });
+
   it('runs only the remaining migrations from an intermediate version', () => {
-    expect(migrateDocument({ schemaVersion: 1, items: ['a'] }, spec)).toEqual({
-      status: 'current',
-      document: { schemaVersion: 2, items: ['a'], extra: true },
+    expect(readStored({ schemaVersion: 1, entries: { items: ['a'] } })).toEqual({
+      status: 'read',
+      entries: { items: ['a'], extra: true },
     });
   });
 
   it('returns a current document untouched', () => {
-    const document = { schemaVersion: 2, items: [] };
-
-    expect(migrateDocument(document, spec)).toEqual({ status: 'current', document });
-  });
-
-  it('returns a document from a newer build as-is, flagged with its version', () => {
-    const document = { schemaVersion: 5, items: [] };
-
-    expect(migrateDocument(document, spec)).toEqual({ status: 'newer', version: 5, document });
+    expect(readStored({ schemaVersion: 2, entries: { items: [] } })).toEqual({
+      status: 'read',
+      entries: { items: [] },
+    });
   });
 
   it('throws when a spec is missing a migration step', () => {
-    expect(() => migrateDocument([], { current: 1, migrations: [] })).toThrow(
+    expect(() => readStored([], { current: 1, migrations: [] })).toThrow(
       'no migration from schema version 0',
     );
   });
