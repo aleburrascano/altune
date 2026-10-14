@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import yaml from "js-yaml";
 
 const WORKFLOWS = ".gitea/workflows";
+const SCANNED = [WORKFLOWS, ".github/workflows"];
 const MANIFEST = "scripts/ci/gate-parity.json";
 const PRECHECK = "scripts/precheck.sh";
 const PR_CHECKS = ".github/workflows/pr-checks.yml";
@@ -16,19 +17,27 @@ function read(root, path) {
   return readFileSync(join(root, path), "utf8");
 }
 
-function runsOnMain(doc) {
+function pushBranches(doc) {
   const branches = doc?.on?.push?.branches;
-  return Array.isArray(branches) && branches.includes("main");
+  return Array.isArray(branches) ? branches : [];
+}
+
+function needsGate(doc) {
+  const branches = pushBranches(doc);
+  return branches.includes("main") && !branches.includes("pr/**");
 }
 
 export function mainSteps(root) {
   const keys = [];
-  const files = readdirSync(join(root, WORKFLOWS)).filter((f) => /\.ya?ml$/.test(f)).sort();
-  for (const file of files) {
-    const doc = yaml.load(read(root, `${WORKFLOWS}/${file}`));
-    if (!runsOnMain(doc)) continue;
-    for (const [job, spec] of Object.entries(doc.jobs ?? {})) {
-      for (const step of spec.steps ?? []) keys.push(`${file}#${job}#${step.name ?? step.uses ?? step.run}`);
+  for (const dir of SCANNED) {
+    if (!existsSync(join(root, dir))) continue;
+    const files = readdirSync(join(root, dir)).filter((f) => /\.ya?ml$/.test(f)).sort();
+    for (const file of files) {
+      const doc = yaml.load(read(root, `${dir}/${file}`));
+      if (!needsGate(doc)) continue;
+      for (const [job, spec] of Object.entries(doc.jobs ?? {})) {
+        for (const step of spec.steps ?? []) keys.push(`${file}#${job}#${step.name ?? step.uses ?? step.run}`);
+      }
     }
   }
   return keys;

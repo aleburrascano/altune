@@ -24,7 +24,7 @@ flowchart TD
     ghtests -->|green| main
     ghprecheck -->|green| main
     shape -->|green| main(["merge to main<br/>no merge queue"])
-    main --> ci["ci.yml on push to main<br/>backend · overseer · mobile jobs for the paths that changed"]
+    main --> ci["GitHub pr-checks on push to main<br/>backend · overseer · mobile jobs for the paths that changed"]
 
     dispatch(["deploy.yml · workflow_dispatch only<br/>run by hand on a main commit"])
 

@@ -151,11 +151,10 @@ run_tool diff prod
 expect_rc 1
 expect_line 'disable_signup: true → false'
 
-CASE="CI runs this suite on changes to the script or the auth config"
-ci_dir="$HERE/../../.gitea/workflows"
+CASE="precheck runs this suite on changes to the script or the auth config"
 ci_scripts="$HERE/../../scripts/ci"
-grep -qE '^ +run: .*bash services/supabase/__tests__/supabase-auth\.test\.sh$' "$ci_dir/ci.yml" ||
-    fail "ci.yml has no step running services/supabase/__tests__/supabase-auth.test.sh"
+grep -qF 'bash services/supabase/__tests__/supabase-auth.test.sh' "$HERE/../../scripts/precheck.sh" ||
+    fail "precheck.sh has no step running services/supabase/__tests__/supabase-auth.test.sh"
 for path in services/supabase/supabase-auth.sh services/supabase/auth/base.json; do
     flags=$(cd "$WORK" && git init -q ci && cd ci && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m base &&
         mkdir -p "$(dirname "$path")" && : >"$path" && git add . &&

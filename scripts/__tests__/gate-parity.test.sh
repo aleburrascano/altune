@@ -94,5 +94,32 @@ t 0 "a pr-checks job counts as a gate"
 manifest '{"ci.yml#build#checkout":{"allow":"plumbing"},"ci.yml#build#unit tests":{"gate":"pr-checks/nope"}}'
 t 1 "a pr-checks job that does not exist is named" 'names gate "pr-checks/nope", which precheck does not define'
 
+cat >"$repo/.github/workflows/pr-checks.yml" <<'YML'
+on:
+  push:
+    branches: ["pr/**", main]
+jobs:
+  backend-tests:
+    steps:
+      - name: tests
+        run: true
+YML
+
+manifest '{"ci.yml#build#checkout":{"allow":"plumbing"},"ci.yml#build#unit tests":{"gate":"pr-checks/backend-tests"}}'
+t 0 "a github workflow that also runs on pr/** needs no manifest entry"
+
+cat >"$repo/.github/workflows/main-only.yml" <<'YML'
+on:
+  push:
+    branches: [main]
+jobs:
+  ship:
+    steps:
+      - name: deploy
+        run: true
+YML
+
+t 1 "a github workflow that runs only on main needs an entry" "main-only.yml#ship#deploy has no gate counterpart or allow reason"
+
 [ $fail = 0 ] && echo "gate-parity.test.sh: all cases pass"
 exit $fail
