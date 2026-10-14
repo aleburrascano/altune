@@ -62,6 +62,7 @@ func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.Audio
 		Channel:    catalogChannel,
 		Categories: []string{"Music"},
 		Resolved:   true,
+		Kind:       ports.KindPinnedVideo,
 	}}, nil
 }
 

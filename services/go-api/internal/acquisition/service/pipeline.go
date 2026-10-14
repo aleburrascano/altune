@@ -288,6 +288,9 @@ type TrackRef struct {
 	TrackNumber int
 	AlbumArtist string
 	Genre       string
+
+	CatalogDuration float64
+	CatalogExplicit *bool
 }
 
 func (s *AcquireTrackAudioService) buildSteps(userId shared.UserId, trackId shared.TrackId) Pipeline {

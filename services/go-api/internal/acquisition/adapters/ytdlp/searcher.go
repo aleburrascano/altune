@@ -394,5 +394,6 @@ func (e ytDlpEntry) candidate() ports.AudioCandidate {
 		Channel:    e.Channel,
 		Categories: e.Categories,
 		ViewCount:  e.ViewCount,
+		Kind:       ports.KindUpload,
 	}
 }

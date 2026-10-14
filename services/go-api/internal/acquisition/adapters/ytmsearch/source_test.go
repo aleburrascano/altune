@@ -165,3 +165,17 @@ func TestSource_FetchDownloadsTheCandidateURL(t *testing.T) {
 		t.Errorf("downloaded %q, want the candidate URL", downloader.gotURL)
 	}
 }
+
+func TestSource_TheArtTrackCarriesWhatTheSearchObserved(t *testing.T) {
+	song := atv("abc12345678", "Finesse", []string{"Bruno Mars"}, 191, false)
+	song.Album = "24K Magic"
+	req := ports.FindRequest{Title: "Finesse", Artist: "Bruno Mars", Duration: 191}
+
+	got := find(t, []Song{song}, req)
+	if len(got) != 1 {
+		t.Fatalf("candidates = %v, want 1", got)
+	}
+	if got[0].Kind != ports.KindArtTrack || got[0].Album != "24K Magic" || len(got[0].Artists) != 1 || got[0].Artists[0] != "Bruno Mars" {
+		t.Errorf("candidate = %+v, want the art track with its observed artists and album", got[0])
+	}
+}

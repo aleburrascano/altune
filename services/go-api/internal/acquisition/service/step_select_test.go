@@ -4,7 +4,9 @@ import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -248,5 +250,69 @@ func TestSelectStep_WrappedOutageOnFinalAttempt_DoesNotRetry(t *testing.T) {
 
 	if willRetry(withJobAttempt(context.Background(), maxAcquisitionAttempts), err) {
 		t.Fatal("willRetry at the final attempt must be false")
+	}
+}
+
+const (
+	finesseRemixURL = "https://music.youtube.com/watch?v=remix"
+	finesseAlbumURL = "https://music.youtube.com/watch?v=album"
+)
+
+func finesseRemix() ports.AudioCandidate {
+	return ports.AudioCandidate{
+		Title: "Finesse (Remix)", URL: finesseRemixURL, Channel: "YouTube Music Art Track", Duration: 218, Resolved: true,
+		Artists: []string{"Bruno Mars", "Cardi B"}, Album: "Finesse (Remix)", Kind: ports.KindArtTrack,
+	}
+}
+
+func finesseAlbumTrack() ports.AudioCandidate {
+	return ports.AudioCandidate{
+		Title: "Finesse", URL: finesseAlbumURL, Channel: "YouTube Music Art Track", Duration: 191, Resolved: true,
+		Artists: []string{"Bruno Mars"}, Album: "24K Magic", Kind: ports.KindArtTrack,
+	}
+}
+
+func finesseTrack() TrackRef {
+	return TrackRef{ID: "track-1", Title: "Finesse", Artist: "Bruno Mars", Album: "24K Magic", CatalogDuration: 191}
+}
+
+func shadowLine(t *testing.T, logs string) map[string]any {
+	t.Helper()
+	for _, raw := range strings.Split(logs, "\n") {
+		var line map[string]any
+		if json.Unmarshal([]byte(raw), &line) == nil && line["msg"] == "acquisition.judge_shadow" {
+			return line
+		}
+	}
+	t.Fatalf("no acquisition.judge_shadow line in %s", logs)
+	return nil
+}
+
+func TestSelectStep_ShadowLogsDisagreementWithoutChangingThePick(t *testing.T) {
+	logs := captureJSONLogSync(t)
+	ac := &AcquisitionContext{Track: finesseTrack(), Candidates: []ports.AudioCandidate{finesseRemix(), finesseAlbumTrack()}}
+	ac.Track.Duration = 223
+
+	if _, err := NewSelectStep().Execute(context.Background(), ac, afterSearch{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	line := shadowLine(t, logs.String())
+	if line["agree"] != false || line["judge_url"] != finesseAlbumURL || line["pipeline_url"] != ac.Selected.URL || ac.Selected.URL != finesseRemixURL {
+		t.Fatalf("shadow line = %v, selected = %s, want the pipeline on the remix and the judge on the album track", line, ac.Selected.URL)
+	}
+}
+
+func TestSelectStep_ShadowLogsAgreement(t *testing.T) {
+	logs := captureJSONLogSync(t)
+	ac := &AcquisitionContext{Track: finesseTrack(), Candidates: []ports.AudioCandidate{finesseAlbumTrack()}}
+
+	if _, err := NewSelectStep().Execute(context.Background(), ac, afterSearch{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	line := shadowLine(t, logs.String())
+	if line["agree"] != true || ac.Selected.URL != finesseAlbumURL {
+		t.Fatalf("shadow line = %v, selected = %s, want agreement on the album track", line, ac.Selected.URL)
 	}
 }

@@ -70,6 +70,9 @@ func candidateFor(hit Song) ports.AudioCandidate {
 		Categories: []string{"Music"},
 		Resolved:   true,
 		Explicit:   hit.Explicit,
+		Artists:    hit.Artists,
+		Album:      hit.Album,
+		Kind:       ports.KindArtTrack,
 	}
 }
 

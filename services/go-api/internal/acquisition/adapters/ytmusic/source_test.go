@@ -177,3 +177,18 @@ func TestName(t *testing.T) {
 		t.Errorf("Name() = %q, want %q", got, SourceName)
 	}
 }
+
+func TestFind_TheCatalogLinkIsThePinnedVideo(t *testing.T) {
+	req := ports.FindRequest{
+		Title:    "Finesse",
+		Identity: ports.RecordingIdentity{Sources: []ports.ProviderRef{{Provider: "youtube", ExternalID: "dQw4w9WgXcQ"}}},
+	}
+
+	got, err := NewSource(&recordingFetcher{}).Find(context.Background(), req)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("Find = %v, %v", got, err)
+	}
+	if got[0].Kind != ports.KindPinnedVideo {
+		t.Errorf("Kind = %q, want the pinned video", got[0].Kind)
+	}
+}
