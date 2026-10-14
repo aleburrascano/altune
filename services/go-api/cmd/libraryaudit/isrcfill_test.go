@@ -148,3 +148,29 @@ func TestAuditTrack_NoISRCIsFilledFromTheLibraryAlbumNotFromOurDownloadLength(t 
 		t.Error("a candidate on another album was filled because its length fits our download")
 	}
 }
+
+type fakeAlbums struct {
+	fakeRecordings
+	tracks map[string][]catalogTrack
+}
+
+func (f fakeAlbums) AlbumTracks(_ context.Context, _, album string) ([]catalogTrack, error) {
+	return f.tracks[album], nil
+}
+
+func TestAuditTrack_NoISRCFallsBackToTheLibraryAlbumsTracklist(t *testing.T) {
+	lib := libraryTrack{ID: "t1", UserID: "u1", Version: 2, Title: "Diamonds", Artist: "Rihanna", Album: "Unapologetic", DurationSeconds: 283}
+	remix := catalogTrack{ID: 9, Title: "Diamonds (Remix)", Artist: "Rihanna", Album: "Diamonds (Remix)", DurationSeconds: 287}
+	albumCut := catalogTrack{ID: 62376270, Title: "Diamonds", Artist: "Rihanna", Album: "Unapologetic", DurationSeconds: 225}
+	cat := fakeAlbums{
+		fakeRecordings: fakeRecordings{
+			fakeCatalog: fakeCatalog{search: []catalogTrack{remix}, byID: map[int64]catalogTrack{62376270: {ID: 62376270, ISRC: "USUM71211793"}}},
+			searched:    []recording{{ID: "mb", Title: "Diamonds", Artists: []string{"Rihanna"}, DurationSeconds: 225, ISRCs: []string{"USUM71211793"}}},
+		},
+		tracks: map[string][]catalogTrack{"Unapologetic": {albumCut}},
+	}
+	found := findingOf(auditTrack(context.Background(), cat, fakeCovers{}, lib).Findings, categoryISRCFillable)
+	if found.Fix == nil || *found.Fix.NewValue != "USUM71211793" {
+		t.Fatalf("got %+v", found)
+	}
+}

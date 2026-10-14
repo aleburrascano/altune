@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/textnorm"
 	"cmp"
 	"context"
 	"encoding/json"
@@ -154,6 +155,44 @@ func (c *deezerClient) TrackByID(ctx context.Context, id int64) (catalogTrack, e
 		return catalogTrack{}, err
 	}
 	return toCatalogTrack(body), nil
+}
+
+type deezerAlbumSearchBody struct {
+	Data []struct {
+		ID     int64  `json:"id"`
+		Title  string `json:"title"`
+		Artist struct {
+			Name string `json:"name"`
+		} `json:"artist"`
+	} `json:"data"`
+}
+
+func (c *deezerClient) AlbumTracks(ctx context.Context, artist, album string) ([]catalogTrack, error) {
+	var albums deezerAlbumSearchBody
+	if err := c.getJSON(ctx, "/2.0/search/album?q="+url.QueryEscape(artist+" "+album)+"&limit=10", &albums); err != nil {
+		return nil, err
+	}
+	for _, found := range albums.Data {
+		if textnorm.NormalizeForIdentity(found.Title) != textnorm.NormalizeForIdentity(album) || !namesAgree(artist, found.Artist.Name) {
+			continue
+		}
+		return c.albumTracklist(ctx, found.ID, found.Title)
+	}
+	return nil, nil
+}
+
+func (c *deezerClient) albumTracklist(ctx context.Context, albumID int64, albumTitle string) ([]catalogTrack, error) {
+	var tracks deezerSearchBody
+	if err := c.getJSON(ctx, "/2.0/album/"+strconv.FormatInt(albumID, 10)+"/tracks?limit=100", &tracks); err != nil {
+		return nil, err
+	}
+	out := make([]catalogTrack, 0, len(tracks.Data))
+	for _, item := range tracks.Data {
+		track := toCatalogTrack(item)
+		track.Album = albumTitle
+		out = append(out, track)
+	}
+	return out, nil
 }
 
 type deezerAlbumBody struct {
