@@ -651,6 +651,11 @@ describe('the pinned index is written through to disk and loaded back on relaunc
 
       expect(warn).toHaveBeenCalledWith(
         '[offline] failed to persist pinned index; keeping in-memory only',
+        expect.objectContaining({
+          file: expect.any(String),
+          entryCount: 1,
+          error: expect.objectContaining({ message: 'disk full' }),
+        }),
       );
       expect(usePinnedStore.getState().entries['t1']).toMatchObject({
         trackId: 't1',
@@ -3477,7 +3482,13 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
       notifyIdentityChange('user-a');
 
       expect(__fs.readFile(OWNER_URI)).toBeUndefined();
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining('pinned owner'));
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('pinned owner'),
+        expect.objectContaining({
+          userId: 'user-a',
+          error: expect.objectContaining({ message: 'ENOSPC' }),
+        }),
+      );
       write.mockRestore();
       warn.mockRestore();
     });

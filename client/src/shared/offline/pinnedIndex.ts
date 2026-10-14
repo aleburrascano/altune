@@ -167,8 +167,12 @@ export function saveIndex(entries: Record<string, PinnedEntry>): void {
   try {
     const document = { schemaVersion: INDEX_SCHEMA_VERSION, entries };
     writeDocumentAtomically(offlineDir(), INDEX_FILE, JSON.stringify(document));
-  } catch {
-    console.warn('[offline] failed to persist pinned index; keeping in-memory only');
+  } catch (error) {
+    console.warn('[offline] failed to persist pinned index; keeping in-memory only', {
+      file: INDEX_FILE,
+      entryCount: Object.keys(entries).length,
+      error,
+    });
   }
 }
 
@@ -184,7 +188,14 @@ export function readOwner(): string | null {
 export function writeOwner(userId: string): void {
   try {
     offlineFile(OWNER_FILE).write(userId);
-  } catch {
-    console.warn('[offline] failed to persist pinned owner; downloads will be cleared next launch');
+  } catch (error) {
+    console.warn(
+      '[offline] failed to persist pinned owner; downloads will be cleared next launch',
+      {
+        file: OWNER_FILE,
+        userId,
+        error,
+      },
+    );
   }
 }
