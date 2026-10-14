@@ -14,6 +14,8 @@ const healthCacheTTL = 2 * time.Second
 
 var buildCommit = "unknown"
 
+func BuildCommit() string { return buildCommit }
+
 type healthCache struct {
 	mu        sync.Mutex
 	result    observeHandler.DependencyHealth

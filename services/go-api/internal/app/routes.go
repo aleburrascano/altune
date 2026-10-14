@@ -5,6 +5,7 @@ import (
 	eventstream "altune/go-api/internal/eventstream/adapters/handler"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/reqmetrics"
+	"altune/go-api/internal/shared/telemetry"
 	"net/http"
 	"strings"
 	"time"
@@ -27,6 +28,10 @@ func (a *App) requestBudget() time.Duration {
 		return a.requestTimeout
 	}
 	return apiRequestTimeout
+}
+
+func untraced(r *http.Request) bool {
+	return r.URL.Path == "/health" || isLongLivedRoute(r)
 }
 
 func isLongLivedRoute(r *http.Request) bool {
@@ -101,13 +106,14 @@ func (a *App) newRouter(writeTimeout time.Duration) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(httputil.CorrelationID)
+	r.Use(telemetry.Middleware(untraced))
 	r.Use(reqmetrics.Middleware(reqmetrics.Observe))
 	r.Use(httputil.WriteDeadline(writeTimeout))
 	r.Use(v1RequestTimeout(a.requestBudget()))
 	r.Use(httputil.RequestLogger)
 	r.Use(httputil.Recoverer)
 	r.Use(httputil.MaxBodySize(1 << 20))
-	corsHeaders := []string{"Accept", "Authorization", "Content-Type", "Idempotency-Key"}
+	corsHeaders := []string{"Accept", "Authorization", "Content-Type", "Idempotency-Key", telemetry.AppVersionHeader, telemetry.PlatformHeader, telemetry.AnalyticsHeader}
 	if a.cfg.IsDevelopment() {
 		corsHeaders = append(corsHeaders, "ngrok-skip-browser-warning")
 	}

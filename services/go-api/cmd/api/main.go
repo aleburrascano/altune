@@ -5,11 +5,15 @@ import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"flag"
 	"fmt"
 	"os"
+	"time"
 )
+
+const telemetryFlushTimeout = 5 * time.Second
 
 func main() {
 	cfg, err := config.Load()
@@ -42,9 +46,21 @@ func main() {
 }
 
 func runServer(cfg *config.Config, logRing *logging.RingBuffer) {
+	shutdown, err := telemetry.Setup(context.Background(), telemetry.Service{Name: "altune-api", Version: app.BuildCommit(), Environment: cfg.Env})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "telemetry setup: %v\n", err)
+		os.Exit(1)
+	}
 	a := app.New(cfg, logRing)
-	if err := a.Run(context.Background()); err != nil {
-		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
+	runErr := a.Run(context.Background())
+	flushCtx, cancel := context.WithTimeout(context.Background(), telemetryFlushTimeout)
+	defer cancel()
+	if err := shutdown(flushCtx); err != nil {
+		fmt.Fprintf(os.Stderr, "telemetry flush: %v\n", err)
+	}
+	if runErr != nil {
+		fmt.Fprintf(os.Stderr, "server error: %v\n", runErr)
+		cancel()
 		os.Exit(1)
 	}
 }
