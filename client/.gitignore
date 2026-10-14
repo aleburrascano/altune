@@ -4,7 +4,7 @@ web-build/
 expo-env.d.ts
 
 android/
-ios/
+/ios/
 *.orig.*
 *.jks
 *.p8

@@ -43,6 +43,9 @@
       ],
       "@testing/*": [
         "./jest/*"
+      ],
+      "@modules/*": [
+        "./modules/*"
       ]
     },
     "types": [
@@ -52,6 +55,7 @@
   },
   "include": [
     "src/**/*",
+    "modules/**/*",
     "jest/*.ts",
     "jest/__tests__/**/*.ts",
     ".expo/types/**/*.ts",

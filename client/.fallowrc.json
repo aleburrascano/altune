@@ -6,7 +6,8 @@
     "fingerprint.config.js",
     "scripts/**/*.mjs",
     "eslint/rules/**/*.js",
-    "targets/*/expo-target.config.js"
+    "targets/*/expo-target.config.js",
+    "modules/*/index.ts"
   ],
   "ignorePatterns": ["**/*.test.{ts,tsx}", "**/__tests__/**", "**/__mocks__/**", "jest/**"],
   "ignoreDependencies": [
