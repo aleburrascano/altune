@@ -8,6 +8,7 @@ import {
 } from '@shared/auth/sessionExpired';
 import { ContractError } from '@shared/failure/errors';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+import { useAnalyticsPreference } from '@shared/device/analyticsPreference';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -1128,5 +1129,41 @@ describe('a hung request is aborted at the deadline', () => {
 
     expect(signal.aborted).toBe(true);
     await expect(caught).resolves.toMatchObject({ name: 'NetworkError', failure: 'timeout' });
+  });
+});
+
+const DEV_VERSION_PATTERN = /^dev\//;
+
+describe('telemetry headers', () => {
+  beforeEach(() => {
+    withSession();
+    __http.reply('GET /v1/library/tracks', { status: 200, json: [] });
+    useAnalyticsPreference.getState().setShareAnalytics(true);
+  });
+
+  afterEach(() => {
+    useAnalyticsPreference.getState().setShareAnalytics(true);
+  });
+
+  it('sends the platform and a dev-prefixed app version', async () => {
+    await apiFetch('/v1/library/tracks');
+
+    const { headers } = __http.last();
+    expect(headers['X-Altune-Platform']).toBe(Platform.OS);
+    expect(headers['X-Altune-App-Version']).toMatch(DEV_VERSION_PATTERN);
+  });
+
+  it('omits the analytics header by default', async () => {
+    await apiFetch('/v1/library/tracks');
+
+    expect(__http.last().headers).not.toHaveProperty('X-Altune-Analytics');
+  });
+
+  it('sends X-Altune-Analytics: off once the user opts out', async () => {
+    useAnalyticsPreference.getState().setShareAnalytics(false);
+
+    await apiFetch('/v1/library/tracks');
+
+    expect(__http.last().headers['X-Altune-Analytics']).toBe('off');
   });
 });

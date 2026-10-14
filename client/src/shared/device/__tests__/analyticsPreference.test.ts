@@ -7,7 +7,7 @@ import {
   setAnalyticsPreferenceFileStore,
   shareAnalytics,
   useAnalyticsPreference,
-} from '@shared/telemetry/analyticsPreference';
+} from '@shared/device/analyticsPreference';
 
 const PREF_URI = 'memory://document/preferences/analytics.json';
 const DISK_FULL = new Error('ENOSPC: no space left on device');

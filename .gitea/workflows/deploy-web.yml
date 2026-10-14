@@ -34,6 +34,7 @@ jobs:
       - name: build staging
         id: staging_build
         env:
+          EXPO_PUBLIC_BUILD_COMMIT: ${{ github.sha }}
           EXPO_PUBLIC_API_URL: https://altune-staging.duckdns.org
           EXPO_PUBLIC_SUPABASE_URL: https://ijyjoyxhwmbmriwzazbx.supabase.co
           EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_Gy-pQWa3S9wIkmwqOitl_A_KwFCR6TL
@@ -52,6 +53,7 @@ jobs:
       - name: build prod
         id: prod_build
         env:
+          EXPO_PUBLIC_BUILD_COMMIT: ${{ github.sha }}
           EXPO_PUBLIC_API_URL: https://altune.duckdns.org
           EXPO_PUBLIC_SUPABASE_URL: https://ellvexundmgvbbfqbzau.supabase.co
           EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_aAtjkl3gujVDjTRKWp4q0A_Y17qqnaN

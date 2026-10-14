@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, render, screen, fireEvent } from '@testing-library/react-native';
 
-import { useAnalyticsPreference } from '@shared/telemetry/analyticsPreference';
+import { useAnalyticsPreference } from '@shared/device/analyticsPreference';
 import { AnalyticsCard } from '@features/settings/ui/AnalyticsCard';
 
 describe('AnalyticsCard', () => {

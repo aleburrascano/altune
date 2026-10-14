@@ -2,7 +2,7 @@ import { ShieldCheck } from 'lucide-react-native';
 import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { useAnalyticsPreference } from '@shared/telemetry/analyticsPreference';
+import { useAnalyticsPreference } from '@shared/device/analyticsPreference';
 import { Text, radius, spacing, useTheme } from '@shared/ui';
 import { Tappable } from '@shared/ui/primitives/Tappable';
 import { SettingsCard, SettingsRow } from '@features/settings/ui/SettingsCard';
