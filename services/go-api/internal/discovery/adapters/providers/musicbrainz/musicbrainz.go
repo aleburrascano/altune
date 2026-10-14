@@ -157,7 +157,7 @@ func mapMBRecording(rec mbRecording) domain.SearchResult {
 		extras[domain.ExtraFeaturedArtists] = feats
 	}
 
-	r := domain.NewProviderResult(domain.ResultKindTrack, rec.Title, subtitle, "",
+	r := domain.NewProviderResult(domain.ResultKindTrack, recordingTitle(rec), subtitle, "",
 		domain.SourceRef{Provider: domain.ProviderMusicBrainz, ExternalID: rec.ID, URL: "https://musicbrainz.org/recording/" + rec.ID},
 		extras)
 	r.MBID = rec.ID
@@ -169,6 +169,13 @@ func mapMBRecording(rec mbRecording) domain.SearchResult {
 		extras[domain.ExtraDuration] = r.Duration
 	}
 	return r
+}
+
+func recordingTitle(rec mbRecording) string {
+	if note := strings.TrimSpace(rec.Disambiguation); note != "" {
+		return rec.Title + " (" + note + ")"
+	}
+	return rec.Title
 }
 
 func mapMBArtist(art mbArtistItem) domain.SearchResult {
@@ -227,11 +234,12 @@ type mbRecordingResponse struct {
 }
 
 type mbRecording struct {
-	ID           string        `json:"id"`
-	Title        string        `json:"title"`
-	LengthMs     int           `json:"length"`
-	ISRCs        []string      `json:"isrcs"`
-	ArtistCredit []mbArtistRef `json:"artist-credit"`
+	ID             string        `json:"id"`
+	Title          string        `json:"title"`
+	Disambiguation string        `json:"disambiguation"`
+	LengthMs       int           `json:"length"`
+	ISRCs          []string      `json:"isrcs"`
+	ArtistCredit   []mbArtistRef `json:"artist-credit"`
 }
 
 type mbArtistRef struct {
