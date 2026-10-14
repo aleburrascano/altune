@@ -28,6 +28,14 @@ type recording struct {
 	Artists         []string
 	DurationSeconds float64
 	ISRCs           []string
+	Releases        []release
+}
+
+type release struct {
+	ID     string
+	Title  string
+	Date   string
+	Artist string
 }
 
 func (r recording) asTrack() catalogTrack {
@@ -75,15 +83,26 @@ func newMusicBrainzClient(httpClient *http.Client, baseURL string, requestsPerSe
 }
 
 type musicBrainzRecordingBody struct {
-	ID           string   `json:"id"`
-	Title        string   `json:"title"`
-	Length       int      `json:"length"`
-	ISRCs        []string `json:"isrcs"`
+	ID           string                   `json:"id"`
+	Title        string                   `json:"title"`
+	Length       int                      `json:"length"`
+	ISRCs        []string                 `json:"isrcs"`
+	Releases     []musicBrainzReleaseBody `json:"releases"`
 	ArtistCredit []struct {
 		Name   string `json:"name"`
 		Artist struct {
 			Name string `json:"name"`
 		} `json:"artist"`
+	} `json:"artist-credit"`
+}
+
+type musicBrainzReleaseBody struct {
+	ID           string `json:"id"`
+	Title        string `json:"title"`
+	Date         string `json:"date"`
+	ArtistCredit []struct {
+		Name       string `json:"name"`
+		JoinPhrase string `json:"joinphrase"`
 	} `json:"artist-credit"`
 }
 
@@ -124,13 +143,47 @@ func toRecording(body musicBrainzRecordingBody) recording {
 			artists = append(artists, credit.Artist.Name)
 		}
 	}
+	releases := make([]release, 0, len(body.Releases))
+	for _, item := range body.Releases {
+		releases = append(releases, toRelease(item))
+	}
 	return recording{
+		Releases:        releases,
 		ID:              body.ID,
 		Title:           body.Title,
 		Artists:         artists,
 		DurationSeconds: float64(body.Length) / 1000,
 		ISRCs:           body.ISRCs,
 	}
+}
+
+func toRelease(body musicBrainzReleaseBody) release {
+	var artist strings.Builder
+	for _, credit := range body.ArtistCredit {
+		artist.WriteString(credit.Name + credit.JoinPhrase)
+	}
+	return release{ID: body.ID, Title: body.Title, Date: body.Date, Artist: strings.TrimSpace(artist.String())}
+}
+
+type musicBrainzISRCBody struct {
+	Recordings []musicBrainzRecordingBody `json:"recordings"`
+}
+
+func (c *musicBrainzClient) RecordingsWithReleases(ctx context.Context, isrc string) ([]recording, error) {
+	var body musicBrainzISRCBody
+	path := "/ws/2/isrc/" + url.PathEscape(canonicalISRC(isrc)) + "?inc=releases+artist-credits&fmt=json"
+	err := c.getJSON(ctx, path, &body)
+	if errors.Is(err, errCatalogUnknown) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	found := make([]recording, 0, len(body.Recordings))
+	for _, item := range body.Recordings {
+		found = append(found, toRecording(item))
+	}
+	return found, nil
 }
 
 func (c *musicBrainzClient) getJSON(ctx context.Context, path string, into any) error {
@@ -141,6 +194,8 @@ func (c *musicBrainzClient) getJSON(ctx context.Context, path string, into any) 
 			return err
 		case status == http.StatusOK:
 			return nil
+		case status == http.StatusNotFound:
+			return errCatalogUnknown
 		case !isMusicBrainzThrottle(status):
 			return fmt.Errorf("musicbrainz %s: status %d", path, status)
 		case attempt >= musicBrainzMaxAttempts:

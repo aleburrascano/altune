@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -21,6 +22,7 @@ type trackResult struct {
 	Checked  bool
 	Findings []finding
 	Blocked  error
+	Matched  *catalogTrack
 }
 
 func lookupFailure(ctx context.Context, lib libraryTrack, err error) trackResult {
@@ -50,10 +52,28 @@ func auditTrack(ctx context.Context, cat catalog, covers coverJudge, lib library
 		return lookupFailure(ctx, lib, err)
 	}
 	findings := metadataFindings(lib, found)
-	if !hasCategory(findings, categoryWrongSong) {
-		findings = append(findings, coverFindings(ctx, covers, lib, found)...)
+	if hasCategory(findings, categoryWrongSong) {
+		return trackResult{Checked: true, Findings: findings}
 	}
-	return trackResult{Checked: true, Findings: findings}
+	findings = append(findings, coverFindings(ctx, covers, lib, found)...)
+	return trackResult{Checked: true, Findings: findings, Matched: &found}
+}
+
+func auditTrackWithFills(ctx context.Context, cat catalog, covers coverJudge, lib libraryTrack) trackResult {
+	result := auditTrack(ctx, cat, covers, lib)
+	if result.Matched == nil {
+		return result
+	}
+	resolved, err := resolveOtherReleases(ctx, cat, lib, result.Findings)
+	if err != nil {
+		return lookupFailure(ctx, lib, err)
+	}
+	enriched, err := enrichmentFindings(ctx, cat, lib, *result.Matched)
+	if err != nil {
+		return lookupFailure(ctx, lib, err)
+	}
+	result.Findings = slices.Concat(resolved, enriched)
+	return result
 }
 
 func hasCategory(findings []finding, want category) bool {
@@ -118,7 +138,7 @@ func auditEach(ctx context.Context, cat catalog, covers coverJudge, tracks []lib
 	for range max(workers, 1) {
 		wg.Go(func() {
 			for i := range jobs {
-				results[i] = auditTrack(ctx, cat, covers, tracks[i])
+				results[i] = auditTrackWithFills(ctx, cat, covers, tracks[i])
 				if results[i].Blocked != nil {
 					cancel(results[i].Blocked)
 				}

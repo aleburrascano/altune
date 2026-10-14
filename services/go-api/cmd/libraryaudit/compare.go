@@ -31,21 +31,31 @@ const (
 	categoryNoISRC                  category = "no_isrc"
 	categoryUnknownISRC             category = "unknown_isrc"
 	categoryISRCConfirmed           category = "isrc_confirmed"
+	categoryTrackNumberFillable     category = "track_number_fillable"
+	categoryTrackNumberUnfillable   category = "track_number_unfillable"
+	categoryGenreFillable           category = "genre_fillable"
+	categoryGenreUnfillable         category = "genre_unfillable"
+	categoryCatalogDurationFillable category = "catalog_duration_fillable"
+	categoryYearFromRelease         category = "year_from_release"
+	categoryAlbumArtistFromRelease  category = "album_artist_from_release"
 	categoryLookupFailed            category = "lookup_failed"
 )
 
 type libraryTrack struct {
-	ID              string
-	UserID          string
-	Title           string
-	Artist          string
-	Album           string
-	AlbumArtist     string
-	ISRC            string
-	ArtworkURL      string
-	Year            int
-	DurationSeconds float64
-	Version         int
+	ID                     string
+	UserID                 string
+	Title                  string
+	Artist                 string
+	Album                  string
+	AlbumArtist            string
+	ISRC                   string
+	ArtworkURL             string
+	Year                   int
+	Genre                  string
+	TrackNumber            int
+	CatalogDurationSeconds float64
+	DurationSeconds        float64
+	Version                int
 }
 
 type finding struct {

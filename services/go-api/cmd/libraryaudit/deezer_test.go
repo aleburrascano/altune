@@ -192,3 +192,49 @@ func TestDelayBefore_DoublesEachAttemptUpToTheCeiling(t *testing.T) {
 		}
 	}
 }
+
+func TestTrackByISRC_MapsTheAlbumIdAndTrackPosition(t *testing.T) {
+	client := clientFor(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"id":7,"title":"Valentina","track_position":4,"disk_number":2,"album":{"id":99,"title":"Freudian"}}`))
+	})
+	got, err := client.TrackByISRC(context.Background(), "USX")
+	if err != nil || got.AlbumID != 99 || got.TrackPosition != 4 || got.DiskNumber != 2 {
+		t.Fatalf("err=%v got=%+v", err, got)
+	}
+}
+
+func TestAlbumGenres_ReadsTheGenreNamesAndAsksOncePerAlbum(t *testing.T) {
+	var calls atomic.Int32
+	var path string
+	client := clientFor(t, func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		path = r.URL.Path
+		_, _ = w.Write([]byte(`{"genres":{"data":[{"id":1,"name":"R&B"},{"id":2,"name":"Pop"}]}}`))
+	})
+	for range 3 {
+		got, err := client.AlbumGenres(context.Background(), 99)
+		if err != nil || len(got) != 2 || got[0] != "R&B" {
+			t.Fatalf("err=%v got=%v", err, got)
+		}
+	}
+	if path != "/2.0/album/99" || calls.Load() != 1 {
+		t.Fatalf("path %s calls %d", path, calls.Load())
+	}
+}
+
+func TestAlbumGenres_AFailedLookupIsNotCached(t *testing.T) {
+	var calls atomic.Int32
+	client := clientFor(t, func(w http.ResponseWriter, _ *http.Request) {
+		if calls.Add(1) == 1 {
+			_, _ = w.Write([]byte(`{"error":{"code":800}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"genres":{"data":[{"name":"Pop"}]}}`))
+	})
+	if _, err := client.AlbumGenres(context.Background(), 5); !errors.Is(err, errCatalogUnknown) {
+		t.Fatalf("got %v", err)
+	}
+	if got, err := client.AlbumGenres(context.Background(), 5); err != nil || len(got) != 1 {
+		t.Fatalf("err=%v got=%v", err, got)
+	}
+}

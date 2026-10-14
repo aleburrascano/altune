@@ -256,3 +256,49 @@ func TestRunReconcile_FillsAnISRCAndUndoRestoresItToEmpty(t *testing.T) {
 		t.Fatalf("err=%v out=%s", err, undone.String())
 	}
 }
+
+func TestRunReconcile_FillsTrackNumberGenreAndCatalogLengthThenUndoRestoresThem(t *testing.T) {
+	s := testStore(t)
+	empty := seedTrack(t, s, nil, nil, nil)
+	filled := seedTrack(t, s, nil, nil, nil)
+	_, err := s.pool.Exec(context.Background(), "UPDATE tracks SET track_number = 2, genre = 'Pop', catalog_duration_seconds = 100 WHERE id = $1", filled.trackID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changes := func() []plannedChange {
+		return []plannedChange{
+			{Field: fieldTrackNumber, NewValue: text("4")},
+			{Field: fieldGenre, NewValue: text("R&B")},
+			{Field: fieldCatalogLen, NewValue: text("236.5")},
+		}
+	}
+	runID, out, err := reconcile(t, s, true, planFor(empty, 4, changes()...), planFor(filled, 4, changes()...))
+	if err != nil || logRows(t, s, runID) != 3 {
+		t.Fatalf("err=%v rows=%d out=%s", err, logRows(t, s, runID), out)
+	}
+	stored := func(row seeded) (number *int, genre *string, length *float64) {
+		_ = s.pool.QueryRow(context.Background(), "SELECT track_number, genre, catalog_duration_seconds FROM tracks WHERE id = $1", row.trackID).Scan(&number, &genre, &length)
+		return number, genre, length
+	}
+	number, genre, length := stored(empty)
+	keptNumber, keptGenre, keptLength := stored(filled)
+	if *number != 4 || *genre != "R&B" || *length != 236.5 || *keptNumber != 2 || *keptGenre != "Pop" || *keptLength != 100 {
+		t.Fatalf("filled=%v %v %v kept=%v %v %v", *number, *genre, *length, *keptNumber, *keptGenre, *keptLength)
+	}
+	var undone bytes.Buffer
+	if err := runUndo(context.Background(), s, runID, &undone); err != nil {
+		t.Fatalf("err=%v out=%s", err, undone.String())
+	}
+	if number, genre, length = stored(empty); number != nil || genre != nil || length != nil {
+		t.Fatalf("undo left %v %v %v", number, genre, length)
+	}
+}
+
+func TestRunReconcile_DryRunOfCatalogFieldsWritesNothing(t *testing.T) {
+	s := testStore(t)
+	row := seedTrack(t, s, nil, nil, nil)
+	runID, out, err := reconcile(t, s, false, planFor(row, 4, plannedChange{Field: fieldGenre, NewValue: text("R&B")}))
+	if err != nil || logRows(t, s, runID) != 0 || snapshot(t, s, row).version != 4 || !strings.Contains(out, "would apply:") {
+		t.Fatalf("err=%v out=%s", err, out)
+	}
+}

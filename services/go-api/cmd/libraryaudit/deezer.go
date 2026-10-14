@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -44,6 +45,9 @@ type catalogTrack struct {
 	DurationSeconds float64
 	ReleaseYear     int
 	ISRC            string
+	AlbumID         int64
+	TrackPosition   int
+	DiskNumber      int
 }
 
 type deezerClient struct {
@@ -52,6 +56,28 @@ type deezerClient struct {
 	limiter *rate.Limiter
 	backoff time.Duration
 	ceiling time.Duration
+	genres  genreCache
+}
+
+type genreCache struct {
+	mu      sync.Mutex
+	byAlbum map[int64][]string
+}
+
+func (g *genreCache) get(albumID int64) ([]string, bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	genres, hit := g.byAlbum[albumID]
+	return genres, hit
+}
+
+func (g *genreCache) put(albumID int64, genres []string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.byAlbum == nil {
+		g.byAlbum = map[int64][]string{}
+	}
+	g.byAlbum[albumID] = genres
 }
 
 func newDeezerClient(httpClient *http.Client, baseURL string, requestsPerSecond float64) *deezerClient {
@@ -70,6 +96,8 @@ type deezerTrackBody struct {
 	ISRC        string `json:"isrc"`
 	Duration    int    `json:"duration"`
 	ReleaseDate string `json:"release_date"`
+	Position    int    `json:"track_position"`
+	Disk        int    `json:"disk_number"`
 	Artist      struct {
 		Name string `json:"name"`
 	} `json:"artist"`
@@ -77,6 +105,7 @@ type deezerTrackBody struct {
 		Name string `json:"name"`
 	} `json:"contributors"`
 	Album struct {
+		ID       int64  `json:"id"`
 		Title    string `json:"title"`
 		MD5Image string `json:"md5_image"`
 		Cover    string `json:"cover_medium"`
@@ -116,6 +145,30 @@ func (c *deezerClient) TrackByID(ctx context.Context, id int64) (catalogTrack, e
 	return toCatalogTrack(body), nil
 }
 
+type deezerAlbumBody struct {
+	Genres struct {
+		Data []struct {
+			Name string `json:"name"`
+		} `json:"data"`
+	} `json:"genres"`
+}
+
+func (c *deezerClient) AlbumGenres(ctx context.Context, albumID int64) ([]string, error) {
+	if cached, hit := c.genres.get(albumID); hit {
+		return cached, nil
+	}
+	var body deezerAlbumBody
+	if err := c.getJSON(ctx, "/2.0/album/"+strconv.FormatInt(albumID, 10), &body); err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(body.Genres.Data))
+	for _, genre := range body.Genres.Data {
+		names = append(names, genre.Name)
+	}
+	c.genres.put(albumID, names)
+	return names, nil
+}
+
 func toCatalogTrack(body deezerTrackBody) catalogTrack {
 	contributors := make([]string, 0, len(body.Contributors))
 	for _, contributor := range body.Contributors {
@@ -136,6 +189,9 @@ func toCatalogTrack(body deezerTrackBody) catalogTrack {
 		DurationSeconds: float64(body.Duration),
 		ReleaseYear:     year,
 		ISRC:            body.ISRC,
+		AlbumID:         body.Album.ID,
+		TrackPosition:   body.Position,
+		DiskNumber:      body.Disk,
 	}
 }
 

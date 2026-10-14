@@ -26,6 +26,14 @@ type summary struct {
 	CoverURLDiffers         int `json:"cover_url_differs"`
 	CoverImageDiffers       int `json:"cover_image_differs"`
 	CoverUnreadable         int `json:"cover_unreadable"`
+
+	TrackNumberFillable     int `json:"track_number_fillable,omitempty"`
+	TrackNumberUnfillable   int `json:"track_number_unfillable,omitempty"`
+	GenreFillable           int `json:"genre_fillable,omitempty"`
+	GenreUnfillable         int `json:"genre_unfillable,omitempty"`
+	CatalogDurationFillable int `json:"catalog_duration_fillable,omitempty"`
+	YearFromRelease         int `json:"year_from_release,omitempty"`
+	AlbumArtistFromRelease  int `json:"album_artist_from_release,omitempty"`
 }
 
 type report struct {
@@ -65,6 +73,13 @@ func summarize(outcome auditOutcome) summary {
 		CoverURLDiffers:         counts[categoryCoverURLDiffers],
 		CoverImageDiffers:       counts[categoryCoverImageDiffers],
 		CoverUnreadable:         counts[categoryCoverUnreadable],
+		TrackNumberFillable:     counts[categoryTrackNumberFillable],
+		TrackNumberUnfillable:   counts[categoryTrackNumberUnfillable],
+		GenreFillable:           counts[categoryGenreFillable],
+		GenreUnfillable:         counts[categoryGenreUnfillable],
+		CatalogDurationFillable: counts[categoryCatalogDurationFillable],
+		YearFromRelease:         counts[categoryYearFromRelease],
+		AlbumArtistFromRelease:  counts[categoryAlbumArtistFromRelease],
 	}
 }
 
@@ -108,6 +123,11 @@ func writeSummary(w io.Writer, r report) {
 	_, _ = fmt.Fprintf(w, "  album artist fillable:      %d\n", s.AlbumArtistFillable)
 	_, _ = fmt.Fprintf(w, "  year from other release:    %d\n", s.YearOtherRelease)
 	_, _ = fmt.Fprintf(w, "  album artist other release: %d\n", s.AlbumArtistOtherRelease)
+	_, _ = fmt.Fprintf(w, "  year via musicbrainz:       %d\n", s.YearFromRelease)
+	_, _ = fmt.Fprintf(w, "  album artist via musicbrainz: %d\n", s.AlbumArtistFromRelease)
+	_, _ = fmt.Fprintf(w, "  track number fillable:      %d (unfillable: %d)\n", s.TrackNumberFillable, s.TrackNumberUnfillable)
+	_, _ = fmt.Fprintf(w, "  genre fillable:             %d (unfillable: %d)\n", s.GenreFillable, s.GenreUnfillable)
+	_, _ = fmt.Fprintf(w, "  catalog length fillable:    %d\n", s.CatalogDurationFillable)
 	_, _ = fmt.Fprintf(w, "  cover URL differs:          %d\n", s.CoverURLDiffers)
 	_, _ = fmt.Fprintf(w, "  cover image differs:        %d (unreadable: %d)\n", s.CoverImageDiffers, s.CoverUnreadable)
 }

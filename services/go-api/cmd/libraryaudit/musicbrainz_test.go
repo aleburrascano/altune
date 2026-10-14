@@ -83,3 +83,31 @@ func TestMusicBrainzClient_OtherStatusIsAnOrdinaryFailure(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+const isrcLookupJSON = `{"recordings":[{"id":"rec-1","title":"Valentina","artist-credit":[{"name":"Daniel Caesar","joinphrase":"","artist":{"name":"Daniel Caesar"}}],
+"releases":[{"id":"rel-1","title":"Freudian","date":"2017-08-25","artist-credit":[{"name":"Daniel Caesar","joinphrase":" & "},{"name":"Kali Uchis","joinphrase":""}]}]}]}`
+
+func TestRecordingsWithReleases_LooksUpTheISRCWithReleasesAndArtistCredits(t *testing.T) {
+	var request *http.Request
+	client := musicBrainzFor(t, func(w http.ResponseWriter, r *http.Request) {
+		request = r
+		_, _ = w.Write([]byte(isrcLookupJSON))
+	})
+	got, err := client.RecordingsWithReleases(context.Background(), "usx-0000001")
+	if err != nil || len(got) != 1 || len(got[0].Releases) != 1 {
+		t.Fatalf("err=%v got=%+v", err, got)
+	}
+	if request.URL.Path != "/ws/2/isrc/USX0000001" || request.URL.Query().Get("inc") != "releases artist-credits" || request.URL.Query().Get("fmt") != "json" {
+		t.Fatalf("request %s", request.URL)
+	}
+	if want := (release{ID: "rel-1", Title: "Freudian", Date: "2017-08-25", Artist: "Daniel Caesar & Kali Uchis"}); got[0].Releases[0] != want {
+		t.Fatalf("got %+v", got[0].Releases[0])
+	}
+}
+
+func TestRecordingsWithReleases_AnISRCMusicBrainzDoesNotKnowIsNoRecordings(t *testing.T) {
+	client := musicBrainzFor(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) })
+	if got, err := client.RecordingsWithReleases(context.Background(), "USX0000001"); err != nil || len(got) != 0 {
+		t.Fatalf("err=%v got=%+v", err, got)
+	}
+}

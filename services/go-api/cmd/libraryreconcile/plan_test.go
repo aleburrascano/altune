@@ -140,3 +140,65 @@ func TestDecide_ISRCFillOnlyIntoAnEmptyISRC(t *testing.T) {
 		t.Fatalf("set isrc: %s", got)
 	}
 }
+
+func TestReadPlan_AcceptsTheCatalogFieldsOnlyWithUsableValues(t *testing.T) {
+	fix := func(field, value string) string {
+		return `{"findings":[{"track_id":"t1","fix":{"user_id":"u","version":1,"field":"` + field + `","old_value":null,"new_value":` + value + `}}]}`
+	}
+	accepted := map[string]string{
+		"track number": fix("track_number", `"4"`),
+		"genre":        fix("genre", `"R&B"`),
+		"catalog len":  fix("catalog_duration_seconds", `"236.5"`),
+	}
+	for name, report := range accepted {
+		if plans, err := readPlan(strings.NewReader(report), testYear); err != nil || len(plans) != 1 {
+			t.Fatalf("%s: err=%v plans=%+v", name, err, plans)
+		}
+	}
+	refused := map[string]string{
+		"track number zero":      fix("track_number", `"0"`),
+		"track number negative":  fix("track_number", `"-2"`),
+		"track number not whole": fix("track_number", `"4.5"`),
+		"track number huge":      fix("track_number", `"5000"`),
+		"track number null":      fix("track_number", `null`),
+		"genre blank":            fix("genre", `"  "`),
+		"genre null":             fix("genre", `null`),
+		"length zero":            fix("catalog_duration_seconds", `"0"`),
+		"length negative":        fix("catalog_duration_seconds", `"-3"`),
+		"length not a number":    fix("catalog_duration_seconds", `"long"`),
+		"length NaN":             fix("catalog_duration_seconds", `"NaN"`),
+		"length a day and more":  fix("catalog_duration_seconds", `"90000"`),
+		"length null":            fix("catalog_duration_seconds", `null`),
+	}
+	for name, report := range refused {
+		if plans, err := readPlan(strings.NewReader(report), testYear); err == nil {
+			t.Fatalf("%s: expected an error, got %+v", name, plans)
+		}
+	}
+}
+
+func TestDecide_CatalogFieldsFillOnlyWhenEmpty(t *testing.T) {
+	cases := []struct {
+		name    string
+		field   field
+		current *string
+		want    verdict
+	}{
+		{"null track number", fieldTrackNumber, nil, verdictApplied},
+		{"zero track number", fieldTrackNumber, text("0"), verdictApplied},
+		{"set track number", fieldTrackNumber, text("3"), verdictSkippedNotEmpty},
+		{"null genre", fieldGenre, nil, verdictApplied},
+		{"blank genre", fieldGenre, text(" "), verdictApplied},
+		{"set genre", fieldGenre, text("Pop"), verdictSkippedNotEmpty},
+		{"null length", fieldCatalogLen, nil, verdictApplied},
+		{"zero length", fieldCatalogLen, text("0"), verdictApplied},
+		{"set length", fieldCatalogLen, text("236"), verdictSkippedNotEmpty},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := decide(plannedChange{Field: tc.field, NewValue: text("1")}, tc.current); got != tc.want {
+				t.Fatalf("decide = %s, want %s", got, tc.want)
+			}
+		})
+	}
+}

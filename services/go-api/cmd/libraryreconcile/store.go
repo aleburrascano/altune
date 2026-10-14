@@ -29,20 +29,23 @@ type trackRow struct {
 	Version int
 }
 
-const selectTrackSQL = `SELECT year::text, album_artist, isrc, version FROM tracks WHERE id = $1 AND user_id = $2`
+const selectTrackSQL = `SELECT year::text, album_artist, isrc, track_number::text, genre, catalog_duration_seconds::text, version FROM tracks WHERE id = $1 AND user_id = $2`
 
 func loadTrack(ctx context.Context, tx pgx.Tx, plan trackPlan, lock bool) (trackRow, error) {
 	query := selectTrackSQL
 	if lock {
 		query += " FOR UPDATE"
 	}
-	var year, albumArtist, isrc *string
+	var year, albumArtist, isrc, trackNumber, genre, catalogLength *string
 	var version int
-	if err := tx.QueryRow(ctx, query, plan.TrackID, plan.UserID).Scan(&year, &albumArtist, &isrc, &version); err != nil {
+	if err := tx.QueryRow(ctx, query, plan.TrackID, plan.UserID).Scan(&year, &albumArtist, &isrc, &trackNumber, &genre, &catalogLength, &version); err != nil {
 		return trackRow{}, err
 	}
 	return trackRow{
-		Values:  map[field]*string{fieldYear: year, fieldAlbumArtist: albumArtist, fieldISRC: isrc},
+		Values: map[field]*string{
+			fieldYear: year, fieldAlbumArtist: albumArtist, fieldISRC: isrc,
+			fieldTrackNumber: trackNumber, fieldGenre: genre, fieldCatalogLen: catalogLength,
+		},
 		Version: version,
 	}, nil
 }
@@ -120,10 +123,7 @@ func updateStatement(applied []decision) (string, []any) {
 	assignments := make([]string, 0, len(applied))
 	for _, d := range applied {
 		args = append(args, d.Change.NewValue)
-		placeholder := "$" + strconv.Itoa(len(args))
-		if d.Change.Field == fieldYear {
-			placeholder += "::text::int"
-		}
+		placeholder := "$" + strconv.Itoa(len(args)) + castOf[d.Change.Field]
 		assignments = append(assignments, columnOf[d.Change.Field]+" = "+placeholder)
 	}
 	statement := "UPDATE tracks SET " + strings.Join(assignments, ", ") +
@@ -245,10 +245,7 @@ func (s store) undoRun(ctx context.Context, runID uuid.UUID) ([]undoResult, erro
 }
 
 func restoreAndStamp(ctx context.Context, tx pgx.Tx, runID uuid.UUID, change loggedChange) error {
-	placeholder := "$3"
-	if change.Field == fieldYear {
-		placeholder = "$3::text::int"
-	}
+	placeholder := "$3" + castOf[change.Field]
 	restore := "UPDATE tracks SET " + columnOf[change.Field] + " = " + placeholder + ", version = version + 1 WHERE id = $1 AND user_id = $2"
 	if _, err := tx.Exec(ctx, restore, change.TrackID, change.UserID, change.OldValue); err != nil {
 		return fmt.Errorf("restore track: %w", err)

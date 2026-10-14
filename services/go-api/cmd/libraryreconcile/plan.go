@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,12 +17,30 @@ const (
 	fieldYear        field = "year"
 	fieldAlbumArtist field = "album_artist"
 	fieldISRC        field = "isrc"
+
+	fieldTrackNumber field = "track_number"
+	fieldGenre       field = "genre"
+	fieldCatalogLen  field = "catalog_duration_seconds"
 )
 
 var columnOf = map[field]string{
 	fieldYear:        "year",
 	fieldAlbumArtist: "album_artist",
 	fieldISRC:        "isrc",
+	fieldTrackNumber: "track_number",
+	fieldGenre:       "genre",
+	fieldCatalogLen:  "catalog_duration_seconds",
+}
+
+var castOf = map[field]string{
+	fieldYear:        "::text::int",
+	fieldTrackNumber: "::text::int",
+	fieldCatalogLen:  "::text::double precision",
+}
+
+func isNumeric(f field) bool {
+	_, numeric := castOf[f]
+	return numeric
 }
 
 func parseField(raw string) (field, error) {
@@ -66,7 +85,7 @@ func isBlank(f field, value *string) bool {
 		return true
 	}
 	trimmed := strings.TrimSpace(*value)
-	return trimmed == "" || (f == fieldYear && trimmed == "0")
+	return trimmed == "" || (isNumeric(f) && trimmed == "0")
 }
 
 func decide(change plannedChange, current *string) verdict {
@@ -157,6 +176,9 @@ const (
 	earliestYear = 1900
 	isrcLength   = 12
 
+	maxTrackNumber    = 999
+	maxCatalogSeconds = 24 * 60 * 60
+
 	sourceDeezer      = "deezer"
 	sourceMusicBrainz = "musicbrainz"
 )
@@ -189,6 +211,36 @@ func checkValues(f field, fix *reportFix, currentYear int) error {
 		}
 	case fieldISRC:
 		return checkISRC(fix)
+	case fieldTrackNumber:
+		return checkTrackNumber(fix.NewValue)
+	case fieldGenre:
+		if fix.NewValue == nil || strings.TrimSpace(*fix.NewValue) == "" {
+			return errors.New("genre fix has a blank new_value")
+		}
+	case fieldCatalogLen:
+		return checkCatalogLength(fix.NewValue)
+	}
+	return nil
+}
+
+func checkTrackNumber(value *string) error {
+	if value == nil {
+		return errors.New("track_number fix has no new_value")
+	}
+	number, err := strconv.Atoi(*value)
+	if err != nil || strconv.Itoa(number) != *value || number < 1 || number > maxTrackNumber {
+		return fmt.Errorf("track number %q is outside 1 to %d", *value, maxTrackNumber)
+	}
+	return nil
+}
+
+func checkCatalogLength(value *string) error {
+	if value == nil {
+		return errors.New("catalog_duration_seconds fix has no new_value")
+	}
+	seconds, err := strconv.ParseFloat(*value, 64)
+	if err != nil || math.IsNaN(seconds) || seconds <= 0 || seconds > maxCatalogSeconds {
+		return fmt.Errorf("catalog length %q is outside 0 to %d seconds", *value, maxCatalogSeconds)
 	}
 	return nil
 }
