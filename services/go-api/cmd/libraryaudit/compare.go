@@ -30,6 +30,7 @@ const (
 	categoryCoverUnreadable         category = "cover_unreadable"
 	categoryNoISRC                  category = "no_isrc"
 	categoryUnknownISRC             category = "unknown_isrc"
+	categoryISRCConfirmed           category = "isrc_confirmed"
 	categoryLookupFailed            category = "lookup_failed"
 )
 
@@ -57,11 +58,12 @@ type finding struct {
 }
 
 type fix struct {
-	UserID   string  `json:"user_id"`
-	Version  int     `json:"version"`
-	Field    string  `json:"field"`
-	OldValue *string `json:"old_value"`
-	NewValue *string `json:"new_value"`
+	UserID   string   `json:"user_id"`
+	Version  int      `json:"version"`
+	Field    string   `json:"field"`
+	OldValue *string  `json:"old_value"`
+	NewValue *string  `json:"new_value"`
+	Sources  []string `json:"sources,omitempty"`
 }
 
 func normalizeName(s string) string {

@@ -1,0 +1,132 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"strconv"
+	"strings"
+)
+
+const (
+	sourceDeezer      = "deezer"
+	sourceMusicBrainz = "musicbrainz"
+)
+
+type isrcResolution struct {
+	findings []finding
+	reason   string
+}
+
+func resolveMissingISRC(ctx context.Context, cat catalog, lib libraryTrack) (isrcResolution, error) {
+	candidates, err := cat.Search(ctx, lib.Artist, lib.Title)
+	if err != nil {
+		return isrcResolution{}, ignoreUnblocked(err)
+	}
+	fitting := fittingCandidates(lib, candidates)
+	switch len(fitting) {
+	case 0:
+		return isrcResolution{reason: "deezer search has no same-song candidate of fitting length"}, nil
+	case 1:
+		return resolveFromCandidate(ctx, cat, lib, fitting[0])
+	default:
+		return isrcResolution{
+			findings: []finding{about(lib, categoryISRCAmbiguous, ambiguousDetail(fitting))},
+			reason:   "deezer search is ambiguous",
+		}, nil
+	}
+}
+
+func resolveFromCandidate(ctx context.Context, cat catalog, lib libraryTrack, candidate catalogTrack) (isrcResolution, error) {
+	full, err := cat.TrackByID(ctx, candidate.ID)
+	if err != nil {
+		return isrcResolution{}, ignoreUnblocked(err)
+	}
+	if full.ISRC == "" {
+		return isrcResolution{reason: "deezer candidate carries no ISRC"}, nil
+	}
+	fillable := about(lib, categoryISRCFillable, full.ISRC)
+	agreed, reason, err := musicBrainzListsISRC(ctx, cat, lib, full.ISRC)
+	if err != nil {
+		return isrcResolution{}, err
+	}
+	if agreed {
+		fillable.Fix = fixing(lib, "isrc", "", full.ISRC)
+		fillable.Fix.Sources = []string{sourceDeezer, sourceMusicBrainz}
+		return isrcResolution{findings: []finding{fillable}}, nil
+	}
+	return isrcResolution{findings: []finding{fillable}, reason: reason}, nil
+}
+
+func musicBrainzListsISRC(ctx context.Context, cat catalog, lib libraryTrack, isrc string) (bool, string, error) {
+	recordings, ok := cat.(recordingCatalog)
+	if !ok {
+		return false, "musicbrainz was not consulted", nil
+	}
+	found, err := recordings.SearchRecordings(ctx, lib.Artist, lib.Title)
+	if err != nil {
+		return false, "musicbrainz lookup failed: " + err.Error(), blockingOnly(err)
+	}
+	for _, match := range fittingRecordings(lib, found) {
+		if match.hasISRC(isrc) {
+			return true, "", nil
+		}
+	}
+	return false, "musicbrainz has no same-song recording of fitting length listing " + isrc, nil
+}
+
+func fittingRecordings(lib libraryTrack, found []recording) []recording {
+	var fitting []recording
+	for _, candidate := range found {
+		track := candidate.asTrack()
+		if isSameSong(lib, track) && fitsLength(lib, track) {
+			fitting = append(fitting, candidate)
+		}
+	}
+	return fitting
+}
+
+func confirmUnknownISRC(ctx context.Context, cat catalog, lib libraryTrack) trackResult {
+	unknown := about(lib, categoryUnknownISRC, lib.ISRC)
+	recordings, ok := cat.(recordingCatalog)
+	if !ok {
+		return trackResult{Findings: []finding{unknown}}
+	}
+	found, err := recordings.RecordingsByISRC(ctx, lib.ISRC)
+	if err != nil {
+		if blockErr := blockingOnly(err); blockErr != nil {
+			return lookupFailure(ctx, lib, blockErr)
+		}
+		unknown.Detail += "; musicbrainz lookup failed: " + err.Error()
+		return trackResult{Findings: []finding{unknown}}
+	}
+	if matches := fittingRecordings(lib, found); len(matches) > 0 {
+		return trackResult{Findings: []finding{about(lib, categoryISRCConfirmed, "musicbrainz recording "+matches[0].ID)}}
+	}
+	unknown.Detail += "; musicbrainz has no same-song recording of fitting length with this ISRC"
+	return trackResult{Findings: []finding{unknown}}
+}
+
+func blockingOnly(err error) error {
+	if errors.Is(err, errCatalogBlocked) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	return nil
+}
+
+func fittingCandidates(lib libraryTrack, candidates []catalogTrack) []catalogTrack {
+	var fitting []catalogTrack
+	for _, candidate := range candidates {
+		if isSameSong(lib, candidate) && fitsLength(lib, candidate) {
+			fitting = append(fitting, candidate)
+		}
+	}
+	return fitting
+}
+
+func ambiguousDetail(fitting []catalogTrack) string {
+	ids := make([]string, 0, len(fitting))
+	for _, candidate := range fitting {
+		ids = append(ids, strconv.FormatInt(candidate.ID, 10))
+	}
+	return "deezer track ids " + strings.Join(ids, ", ")
+}

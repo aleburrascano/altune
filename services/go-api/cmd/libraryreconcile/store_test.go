@@ -241,3 +241,18 @@ func TestRunUndo_AnUnknownOrAlreadyUndoneRunIsAnError(t *testing.T) {
 		}
 	}
 }
+
+func TestRunReconcile_FillsAnISRCAndUndoRestoresItToEmpty(t *testing.T) {
+	s := testStore(t)
+	empty := seedTrack(t, s, nil, nil, nil)
+	taken := seedTrack(t, s, nil, nil, text("USOTHER00001"))
+	fill := plannedChange{Field: fieldISRC, NewValue: text("USFOUND00001")}
+	runID, out, err := reconcile(t, s, true, planFor(empty, 4, fill), planFor(taken, 4, fill))
+	if err != nil || *snapshot(t, s, empty).isrc != "USFOUND00001" || *snapshot(t, s, taken).isrc != "USOTHER00001" || logRows(t, s, runID) != 1 {
+		t.Fatalf("err=%v out=%s", err, out)
+	}
+	var undone bytes.Buffer
+	if err := runUndo(context.Background(), s, runID, &undone); err != nil || snapshot(t, s, empty).isrc != nil {
+		t.Fatalf("err=%v out=%s", err, undone.String())
+	}
+}

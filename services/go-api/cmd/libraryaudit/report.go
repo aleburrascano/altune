@@ -12,6 +12,7 @@ type summary struct {
 	Checked                 int `json:"checked"`
 	NoISRC                  int `json:"no_isrc"`
 	UnknownISRC             int `json:"unknown_isrc"`
+	ISRCConfirmed           int `json:"isrc_confirmed,omitempty"`
 	LookupFailed            int `json:"lookup_failed"`
 	WrongSong               int `json:"wrong_song"`
 	LengthShorter           int `json:"length_shorter"`
@@ -50,6 +51,7 @@ func summarize(outcome auditOutcome) summary {
 		Checked:                 outcome.Checked,
 		NoISRC:                  counts[categoryNoISRC],
 		UnknownISRC:             counts[categoryUnknownISRC],
+		ISRCConfirmed:           counts[categoryISRCConfirmed],
 		LookupFailed:            counts[categoryLookupFailed],
 		WrongSong:               counts[categoryWrongSong],
 		LengthShorter:           counts[categoryLengthShorter],
@@ -96,8 +98,8 @@ func writeSummary(w io.Writer, r report) {
 	}
 	_, _ = fmt.Fprintf(w, "%d ready tracks\n", s.ReadyTracks)
 	_, _ = fmt.Fprintf(w, "  checked by ISRC:            %d\n", s.Checked)
-	_, _ = fmt.Fprintf(w, "  no ISRC:                    %d (search found one ISRC for %d, ambiguous for %d)\n", s.NoISRC, s.ISRCFillable, s.ISRCAmbiguous)
-	_, _ = fmt.Fprintf(w, "  unknown ISRC:               %d\n", s.UnknownISRC)
+	_, _ = fmt.Fprintf(w, "  no ISRC:                    %d (deezer found one ISRC for %d, ambiguous for %d)\n", s.NoISRC, s.ISRCFillable, s.ISRCAmbiguous)
+	_, _ = fmt.Fprintf(w, "  unknown ISRC:               %d (musicbrainz confirms %d)\n", s.UnknownISRC+s.ISRCConfirmed, s.ISRCConfirmed)
 	_, _ = fmt.Fprintf(w, "  lookup failed:              %d\n", s.LookupFailed)
 	_, _ = fmt.Fprintf(w, "  ISRC is a different song:   %d\n", s.WrongSong)
 	_, _ = fmt.Fprintf(w, "  audio >10s shorter:         %d\n", s.LengthShorter)

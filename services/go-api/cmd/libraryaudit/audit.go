@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"strconv"
 	"strings"
 	"sync"
 )
@@ -37,16 +36,16 @@ func lookupFailure(ctx context.Context, lib libraryTrack, err error) trackResult
 
 func auditTrack(ctx context.Context, cat catalog, covers coverJudge, lib libraryTrack) trackResult {
 	if strings.TrimSpace(lib.ISRC) == "" {
-		fillable, err := isrcFromSearch(ctx, cat, lib)
+		resolved, err := resolveMissingISRC(ctx, cat, lib)
 		if err != nil {
 			return lookupFailure(ctx, lib, err)
 		}
-		return trackResult{Findings: append([]finding{about(lib, categoryNoISRC, "")}, fillable...)}
+		return trackResult{Findings: append([]finding{about(lib, categoryNoISRC, resolved.reason)}, resolved.findings...)}
 	}
 	found, err := cat.TrackByISRC(ctx, lib.ISRC)
 	switch {
 	case errors.Is(err, errCatalogUnknown):
-		return trackResult{Findings: []finding{about(lib, categoryUnknownISRC, lib.ISRC)}}
+		return confirmUnknownISRC(ctx, cat, lib)
 	case err != nil:
 		return lookupFailure(ctx, lib, err)
 	}
@@ -64,51 +63,6 @@ func hasCategory(findings []finding, want category) bool {
 		}
 	}
 	return false
-}
-
-func isrcFromSearch(ctx context.Context, cat catalog, lib libraryTrack) ([]finding, error) {
-	candidates, err := cat.Search(ctx, lib.Artist, lib.Title)
-	if err != nil {
-		return nil, ignoreUnblocked(err)
-	}
-	fitting := fittingCandidates(lib, candidates)
-	switch len(fitting) {
-	case 0:
-		return nil, nil
-	case 1:
-		return isrcOf(ctx, cat, lib, fitting[0])
-	default:
-		return []finding{about(lib, categoryISRCAmbiguous, ambiguousDetail(fitting))}, nil
-	}
-}
-
-func fittingCandidates(lib libraryTrack, candidates []catalogTrack) []catalogTrack {
-	var fitting []catalogTrack
-	for _, candidate := range candidates {
-		if isSameSong(lib, candidate) && fitsLength(lib, candidate) {
-			fitting = append(fitting, candidate)
-		}
-	}
-	return fitting
-}
-
-func ambiguousDetail(fitting []catalogTrack) string {
-	ids := make([]string, 0, len(fitting))
-	for _, candidate := range fitting {
-		ids = append(ids, strconv.FormatInt(candidate.ID, 10))
-	}
-	return "deezer track ids " + strings.Join(ids, ", ")
-}
-
-func isrcOf(ctx context.Context, cat catalog, lib libraryTrack, candidate catalogTrack) ([]finding, error) {
-	full, err := cat.TrackByID(ctx, candidate.ID)
-	if err != nil {
-		return nil, ignoreUnblocked(err)
-	}
-	if full.ISRC == "" {
-		return nil, nil
-	}
-	return []finding{about(lib, categoryISRCFillable, full.ISRC)}, nil
 }
 
 func ignoreUnblocked(err error) error {

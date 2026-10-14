@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -41,7 +42,7 @@ type plannedChange struct {
 }
 
 func (c plannedChange) clearsWrongISRC() bool {
-	return c.Field == fieldISRC
+	return c.Field == fieldISRC && c.NewValue == nil
 }
 
 type trackPlan struct {
@@ -91,11 +92,12 @@ type reportFinding struct {
 }
 
 type reportFix struct {
-	UserID   string  `json:"user_id"`
-	Version  int     `json:"version"`
-	Field    string  `json:"field"`
-	OldValue *string `json:"old_value"`
-	NewValue *string `json:"new_value"`
+	UserID   string   `json:"user_id"`
+	Version  int      `json:"version"`
+	Field    string   `json:"field"`
+	OldValue *string  `json:"old_value"`
+	NewValue *string  `json:"new_value"`
+	Sources  []string `json:"sources"`
 }
 
 func readPlan(r io.Reader, currentYear int) ([]trackPlan, error) {
@@ -154,6 +156,9 @@ func (p *trackPlan) addUnique(change plannedChange) {
 const (
 	earliestYear = 1900
 	isrcLength   = 12
+
+	sourceDeezer      = "deezer"
+	sourceMusicBrainz = "musicbrainz"
 )
 
 func toChange(finding reportFinding, currentYear int) (plannedChange, error) {
@@ -183,7 +188,7 @@ func checkValues(f field, fix *reportFix, currentYear int) error {
 			return errors.New("album_artist fix has a blank new_value")
 		}
 	case fieldISRC:
-		return checkISRCClear(fix)
+		return checkISRC(fix)
 	}
 	return nil
 }
@@ -199,12 +204,41 @@ func checkYear(value *string, currentYear int) error {
 	return nil
 }
 
-func checkISRCClear(fix *reportFix) error {
-	if fix.NewValue != nil {
-		return errors.New("isrc fix may only clear, new_value must be null")
+func checkISRC(fix *reportFix) error {
+	if fix.NewValue == nil {
+		return checkISRCClear(fix)
 	}
+	return checkISRCFill(fix)
+}
+
+func checkISRCClear(fix *reportFix) error {
 	if fix.OldValue == nil || len(strings.ReplaceAll(*fix.OldValue, "-", "")) != isrcLength {
 		return errors.New("isrc clear needs the 12 character old_value the audit saw")
 	}
 	return nil
+}
+
+func checkISRCFill(fix *reportFix) error {
+	if fix.OldValue != nil {
+		return errors.New("isrc fill needs a null old_value")
+	}
+	if !isCanonicalISRC(*fix.NewValue) {
+		return fmt.Errorf("isrc fill value %q is not 12 upper-case letters and digits", *fix.NewValue)
+	}
+	if !slices.Contains(fix.Sources, sourceDeezer) || !slices.Contains(fix.Sources, sourceMusicBrainz) {
+		return errors.New("isrc fill needs both deezer and musicbrainz in sources")
+	}
+	return nil
+}
+
+func isCanonicalISRC(value string) bool {
+	if len(value) != isrcLength {
+		return false
+	}
+	for _, r := range value {
+		if (r < 'A' || r > 'Z') && (r < '0' || r > '9') {
+			return false
+		}
+	}
+	return true
 }

@@ -105,8 +105,16 @@ func run(env func(string) string) error {
 
 func auditLibrary(ctx context.Context, cfg settings, tracks []libraryTrack) auditOutcome {
 	httpClient := &http.Client{Timeout: httpTimeout}
-	cat := newDeezerClient(httpClient, deezerBaseURL, cfg.requestsPerSecond)
+	cat := combinedCatalog{
+		deezerClient:      newDeezerClient(httpClient, deezerBaseURL, cfg.requestsPerSecond),
+		musicBrainzClient: newMusicBrainzClient(httpClient, musicBrainzBaseURL, musicBrainzRequestsPerSecond),
+	}
 	return auditAll(ctx, cat, newCoverComparer(httpClient), tracks, cfg.workers)
+}
+
+type combinedCatalog struct {
+	*deezerClient
+	*musicBrainzClient
 }
 
 func readTracks(ctx context.Context, cfg settings) ([]libraryTrack, error) {

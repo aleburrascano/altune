@@ -103,3 +103,40 @@ func TestDecide(t *testing.T) {
 		})
 	}
 }
+
+func TestReadPlan_AcceptsAnISRCFillOnlyWhenBothCatalogsAgreed(t *testing.T) {
+	fill := func(sources string) string {
+		return `{"findings":[{"track_id":"t1","fix":{"user_id":"u","version":1,"field":"isrc","old_value":null,"new_value":"USFOUND00001"` + sources + `}}]}`
+	}
+	accepted := map[string]string{"both sources": fill(`,"sources":["deezer","musicbrainz"]`)}
+	for name, report := range accepted {
+		plans, err := readPlan(strings.NewReader(report), testYear)
+		if err != nil || len(plans) != 1 || plans[0].Changes[0].clearsWrongISRC() || *plans[0].Changes[0].NewValue != "USFOUND00001" {
+			t.Fatalf("%s: err=%v plans=%+v", name, err, plans)
+		}
+	}
+	refused := map[string]string{
+		"no sources":           fill(``),
+		"deezer only":          fill(`,"sources":["deezer"]`),
+		"musicbrainz only":     fill(`,"sources":["musicbrainz"]`),
+		"unrelated sources":    fill(`,"sources":["deezer","itunes"]`),
+		"lower case isrc":      `{"findings":[{"track_id":"t1","fix":{"user_id":"u","version":1,"field":"isrc","new_value":"usfound00001","sources":["deezer","musicbrainz"]}}]}`,
+		"short isrc":           `{"findings":[{"track_id":"t1","fix":{"user_id":"u","version":1,"field":"isrc","new_value":"US1","sources":["deezer","musicbrainz"]}}]}`,
+		"replaces an old isrc": `{"findings":[{"track_id":"t1","fix":{"user_id":"u","version":1,"field":"isrc","old_value":"USOLD0000001","new_value":"USFOUND00001","sources":["deezer","musicbrainz"]}}]}`,
+	}
+	for name, report := range refused {
+		if plans, err := readPlan(strings.NewReader(report), testYear); err == nil {
+			t.Fatalf("%s: expected an error, got %+v", name, plans)
+		}
+	}
+}
+
+func TestDecide_ISRCFillOnlyIntoAnEmptyISRC(t *testing.T) {
+	fill := plannedChange{Field: fieldISRC, NewValue: text("USFOUND00001")}
+	if got := decide(fill, nil); got != verdictApplied {
+		t.Fatalf("empty isrc: %s", got)
+	}
+	if got := decide(fill, text("USOTHER00001")); got != verdictSkippedNotEmpty {
+		t.Fatalf("set isrc: %s", got)
+	}
+}
