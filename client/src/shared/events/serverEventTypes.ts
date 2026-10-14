@@ -62,6 +62,6 @@ export function asPlaylistIdOrNull(value: unknown): PlaylistId | null {
   return parsed.ok ? parsed.id : null;
 }
 
-export function stringArray(value: unknown): string[] | null {
+export function asStringArray(value: unknown): string[] | null {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : null;
 }

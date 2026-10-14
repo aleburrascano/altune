@@ -1,5 +1,8 @@
 import type { StoredDirectory, StoredFile } from '@shared/files/fileStore';
 
+type DocumentValue =
+  string | number | boolean | null | DocumentValue[] | { [key: string]: DocumentValue };
+
 type OpenDir = () => StoredDirectory;
 
 function tempName(name: string): string {
@@ -23,7 +26,7 @@ export function deleteDocument(dir: StoredDirectory, name: string): void {
 }
 
 export type ReadDocumentResult =
-  { status: 'absent' } | { status: 'unreadable' } | { status: 'read'; document: unknown };
+  { status: 'absent' } | { status: 'unreadable' } | { status: 'read'; document: DocumentValue };
 
 const UNREADABLE: ReadDocumentResult = { status: 'unreadable' };
 
@@ -50,7 +53,7 @@ function parseFile(tag: string, file: StoredFile, next: string): ReadDocumentRes
   try {
     const text = file.textSync();
     failure = 'is corrupt';
-    return { status: 'read', document: JSON.parse(text) as unknown };
+    return { status: 'read', document: JSON.parse(text) as DocumentValue };
   } catch (error) {
     console.warn(`${tag} ${fileName(file)} ${failure} (${errorName(error)}); ${next}`);
     return UNREADABLE;
@@ -73,24 +76,24 @@ export function readDocument(tag: string, name: string, openDir: OpenDir): ReadD
   return firstReadable(tag, name, files);
 }
 
-export type Migration = (document: unknown) => unknown;
+export type Migration = (document: DocumentValue) => DocumentValue;
 
 export type SchemaSpec = {
   current: number;
   migrations: readonly Migration[];
 };
 
-function schemaVersionOf(document: unknown): number {
+function schemaVersionOf(document: DocumentValue): number {
   if (typeof document !== 'object' || document === null || Array.isArray(document)) return 0;
-  const version = (document as Record<string, unknown>)['schemaVersion'];
+  const version = document['schemaVersion'];
   return typeof version === 'number' && Number.isInteger(version) && version >= 0 ? version : 0;
 }
 
 type MigrateResult =
-  | { status: 'current'; document: unknown }
-  | { status: 'newer'; version: number; document: unknown };
+  | { status: 'current'; document: DocumentValue }
+  | { status: 'newer'; version: number; document: DocumentValue };
 
-function migrateFrom(version: number, document: unknown, spec: SchemaSpec): unknown {
+function migrateFrom(version: number, document: DocumentValue, spec: SchemaSpec): DocumentValue {
   let migrated = document;
   for (let v = version; v < spec.current; v += 1) {
     const migrate = spec.migrations[v];
@@ -100,14 +103,14 @@ function migrateFrom(version: number, document: unknown, spec: SchemaSpec): unkn
   return migrated;
 }
 
-function migrateDocument(document: unknown, spec: SchemaSpec): MigrateResult {
+function migrateDocument(document: DocumentValue, spec: SchemaSpec): MigrateResult {
   const version = schemaVersionOf(document);
   if (version > spec.current) return { status: 'newer', version, document };
   return { status: 'current', document: migrateFrom(version, document, spec) };
 }
 
 export type ReadEntriesResult =
-  { status: 'absent' | 'unreadable' } | { status: 'read'; entries: unknown };
+  { status: 'absent' | 'unreadable' } | { status: 'read'; entries: DocumentValue | undefined };
 
 export function readVersionedEntries(
   tag: string,
@@ -123,5 +126,5 @@ export function readVersionedEntries(
       `${tag} ${name} has schema version ${migrated.version}, newer than ${spec.current}; reading what this version understands`,
     );
   }
-  return { status: 'read', entries: (migrated.document as { entries?: unknown }).entries };
+  return { status: 'read', entries: (migrated.document as { entries?: DocumentValue }).entries };
 }

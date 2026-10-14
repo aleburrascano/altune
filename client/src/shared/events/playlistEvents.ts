@@ -5,8 +5,8 @@ import { playlistKeys } from '@shared/query/queryKeys';
 import {
   asPlaylistIdOrNull,
   asString,
+  asStringArray,
   asTrackIdOrNull,
-  stringArray,
   type ServerEventHandler,
   type ServerEventHandlers,
 } from '@shared/events/serverEventTypes';
@@ -50,14 +50,14 @@ function handleTrackRemovedFromPlaylist(queryClient: QueryClient, event: ServerE
 
 function handleTracksRemovedFromPlaylist(queryClient: QueryClient, event: ServerEvent): void {
   const playlistId = asPlaylistIdOrNull(event.data.playlist_id);
-  const trackIds = stringArray(event.data.track_ids);
+  const trackIds = asStringArray(event.data.track_ids);
   if (!playlistId || !trackIds) return;
   removeTracksFromPlaylistCache(queryClient, playlistId, trackIds);
 }
 
 function handlePlaylistReordered(queryClient: QueryClient, event: ServerEvent): void {
   const playlistId = asPlaylistIdOrNull(event.data.playlist_id);
-  const trackIds = stringArray(event.data.track_ids);
+  const trackIds = asStringArray(event.data.track_ids);
   if (playlistId && trackIds) reorderPlaylistCache(queryClient, playlistId, trackIds);
 }
 

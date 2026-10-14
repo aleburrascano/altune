@@ -1,7 +1,9 @@
+import type { JsonObject } from '@shared/apiClient/jsonValue';
+
 export interface ServerEvent {
   id: string;
   type: string;
-  data: Record<string, unknown>;
+  data: JsonObject;
 }
 
 class MalformedSSEEventError extends Error {
@@ -73,7 +75,7 @@ function collectFields(block: string): BlockFields {
 
 function parsePayload(id: string, type: string, payload: string): ParsedBlock {
   try {
-    return { id, type, data: JSON.parse(payload) as Record<string, unknown> };
+    return { id, type, data: JSON.parse(payload) as JsonObject };
   } catch {
     return new MalformedSSEEventError(id, type, payload.length);
   }

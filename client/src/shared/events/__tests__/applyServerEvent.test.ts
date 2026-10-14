@@ -17,6 +17,7 @@ import { libraryKeys, playlistKeys } from '@shared/query/queryKeys';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 
 import { applyServerEvent } from '@shared/events/applyServerEvent';
+import type { JsonObject } from '@shared/apiClient/jsonValue';
 import type { ServerEvent } from '@shared/events/sseFrames';
 import { settleTrackPatches } from '@shared/events/__tests__/settleTrackPatches';
 
@@ -28,7 +29,7 @@ function makeClient(): QueryClient {
   });
 }
 
-function serverEvent(type: string, data: Record<string, unknown> = {}): ServerEvent {
+function serverEvent(type: string, data: JsonObject = {}): ServerEvent {
   return { id: '1', type, data };
 }
 
@@ -265,7 +266,7 @@ describe('track_added_to_library', () => {
     expect(readTrackPages(queryClient, key).items[0]!.duration_seconds).toBeNull();
   });
 
-  it.each<[string, Record<string, unknown>]>([
+  it.each<[string, JsonObject]>([
     [
       'both id and track_id',
       { title: 't', artist: 'a', added_at: 'd', acquisition_status: 'pending' },
@@ -557,7 +558,7 @@ describe('track_acquisition_progress', () => {
     [undefined, undefined],
   ])('routes stage %s to download phase %s', (stage, expectedPhase) => {
     const queryClient = makeClient();
-    const data: Record<string, unknown> = { track_id: 't1' };
+    const data: JsonObject = { track_id: 't1' };
     if (stage !== undefined) data.stage = stage;
 
     applyServerEvent(queryClient, serverEvent('track_acquisition_progress', data));
@@ -873,7 +874,7 @@ describe('playlist_renamed', () => {
     ).toBe('');
   });
 
-  it.each<[string, Record<string, unknown>]>([
+  it.each<[string, JsonObject]>([
     ['name', { playlist_id: 'p1' }],
     ['playlist_id', { name: 'New Name' }],
   ])('leaves the cache untouched when %s is missing', (_label, payload) => {
@@ -946,7 +947,7 @@ describe('track_removed_from_playlist', () => {
     ).toBe(0);
   });
 
-  it.each<[string, Record<string, unknown>]>([
+  it.each<[string, JsonObject]>([
     ['track_id', { playlist_id: 'p1' }],
     ['playlist_id', { track_id: 't1' }],
   ])('leaves the cache untouched when %s is missing', (_label, payload) => {
@@ -1033,7 +1034,7 @@ describe('tracks_removed_from_playlist', () => {
     ).toBe(0);
   });
 
-  it.each<[string, Record<string, unknown>]>([
+  it.each<[string, JsonObject]>([
     ['track_ids', { playlist_id: 'p1' }],
     ['playlist_id', { track_ids: ['t1'] }],
   ])('leaves the cache untouched when %s is missing', (_label, payload) => {
@@ -1176,7 +1177,7 @@ describe('invalidate-only events', () => {
 });
 
 describe('downloads bar title', () => {
-  function addedToLibraryEvent(overrides: Record<string, unknown> = {}): ServerEvent {
+  function addedToLibraryEvent(overrides: JsonObject = {}): ServerEvent {
     return serverEvent('track_added_to_library', {
       id: 't1',
       title: 'Song Title',

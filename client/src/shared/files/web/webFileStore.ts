@@ -4,6 +4,14 @@ const KEY_PREFIX = 'altune:file:';
 const ROOT = 'localstorage://document';
 const CONSERVATIVE_AVAILABLE_BYTES = 5 * 1024 * 1024;
 
+type KeyValueStore = {
+  readonly length: number;
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+  key(index: number): string | null | undefined;
+};
+
 class WebDownloadUnsupportedError extends Error {
   constructor() {
     super('download() is not supported on web');
@@ -11,8 +19,8 @@ class WebDownloadUnsupportedError extends Error {
   }
 }
 
-type FileCtx = { storage: Storage; key: string; uri: string };
-type DirCtx = { storage: Storage; uri: string; path: string; marker: string };
+type FileCtx = { storage: KeyValueStore; key: string; uri: string };
+type DirCtx = { storage: KeyValueStore; uri: string; path: string; marker: string };
 
 function relativePath(uri: string): string {
   return uri.slice(ROOT.length + 1);
@@ -26,18 +34,18 @@ function dirMarkerKey(path: string): string {
   return fileKey(`${path}/.dir`);
 }
 
-function fileSize(storage: Storage, key: string): number | null {
+function fileSize(storage: KeyValueStore, key: string): number | null {
   const contents = storage.getItem(key);
   return contents === null ? null : contents.length;
 }
 
-function readFileText(storage: Storage, key: string, uri: string): string {
+function readFileText(storage: KeyValueStore, key: string, uri: string): string {
   const contents = storage.getItem(key);
   if (contents === null) throw new Error(`ENOENT: ${uri}`);
   return contents;
 }
 
-function moveFile(storage: Storage, sourceKey: string, destPath: string, uri: string): void {
+function moveFile(storage: KeyValueStore, sourceKey: string, destPath: string, uri: string): void {
   const contents = storage.getItem(sourceKey);
   if (contents === null) throw new Error(`ENOENT: ${uri}`);
   storage.setItem(fileKey(destPath), contents);
@@ -61,7 +69,7 @@ function fileMethods({ storage, key, uri }: FileCtx) {
   };
 }
 
-function fileHandle(storage: Storage, uri: string): StoredFile {
+function fileHandle(storage: KeyValueStore, uri: string): StoredFile {
   const ctx: FileCtx = { storage, key: fileKey(relativePath(uri)), uri };
   const handle = { uri, ...fileMethods(ctx) } as StoredFile;
   attachFileGetters(handle, ctx);
@@ -74,7 +82,7 @@ function directChildName(key: string, prefix: string): string | null {
   return rest !== '.dir' && !rest.includes('/') ? rest : null;
 }
 
-function namesDirectlyUnder(storage: Storage, path: string): readonly string[] {
+function namesDirectlyUnder(storage: KeyValueStore, path: string): readonly string[] {
   const prefix = fileKey(`${path}/`);
   const keys = Array.from({ length: storage.length }, (_, i) => storage.key(i) as string);
   const names: string[] = [];
@@ -105,7 +113,7 @@ function dirMethods(ctx: DirCtx) {
   };
 }
 
-function directoryHandle(storage: Storage, uri: string): StoredDirectory {
+function directoryHandle(storage: KeyValueStore, uri: string): StoredDirectory {
   const path = relativePath(uri);
   const ctx: DirCtx = { storage, uri, path, marker: dirMarkerKey(path) };
   const handle = { uri, ...dirMethods(ctx) } as StoredDirectory;
@@ -113,7 +121,7 @@ function directoryHandle(storage: Storage, uri: string): StoredDirectory {
   return handle;
 }
 
-function createWebFileStore(storage: Storage): FileStore {
+function createWebFileStore(storage: KeyValueStore): FileStore {
   return {
     openDirectory: (name) => directoryHandle(storage, `${ROOT}/${name}`),
     download: () => Promise.reject(new WebDownloadUnsupportedError()),
@@ -121,29 +129,37 @@ function createWebFileStore(storage: Storage): FileStore {
   };
 }
 
-function inMemoryStorageMethods(entries: Map<string, string>) {
-  return {
-    getItem: (key: string) => entries.get(key) ?? null,
-    setItem: (key: string, value: string) => entries.set(key, value),
-    removeItem: (key: string) => entries.delete(key),
-    key: (index: number) => [...entries.keys()][index],
-  };
+class InMemoryStore implements KeyValueStore {
+  private readonly entries = new Map<string, string>();
+
+  get length(): number {
+    return this.entries.size;
+  }
+
+  getItem(key: string): string | null {
+    return this.entries.get(key) ?? null;
+  }
+
+  setItem(key: string, value: string): void {
+    this.entries.set(key, value);
+  }
+
+  removeItem(key: string): void {
+    this.entries.delete(key);
+  }
+
+  key(index: number): string | undefined {
+    return [...this.entries.keys()][index];
+  }
 }
 
-function inMemoryStorage(): Storage {
-  const entries = new Map<string, string>();
-  const methods = inMemoryStorageMethods(entries);
-  Object.defineProperty(methods, 'length', { enumerable: true, get: () => entries.size });
-  return methods as unknown as Storage;
-}
-
-function resolveBrowserOrFallbackStorage(): Storage {
+function resolveBrowserOrFallbackStorage(): KeyValueStore {
   try {
     return typeof window !== 'undefined' && window.localStorage
       ? window.localStorage
-      : inMemoryStorage();
+      : new InMemoryStore();
   } catch {
-    return inMemoryStorage();
+    return new InMemoryStore();
   }
 }
 

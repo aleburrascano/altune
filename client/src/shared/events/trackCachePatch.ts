@@ -14,6 +14,7 @@ import {
   TRACK_SHAPES,
   writeFamily,
   type MapItems,
+  type TrackCacheValue,
   type TrackCacheFamily,
   type TrackCacheShape,
   type TrackPages,
@@ -39,7 +40,7 @@ export function getTrackFromCaches(
 ): TrackResponse | undefined {
   const cached = TRACK_CACHE_FAMILY_LIST.flatMap((family) =>
     queryClient
-      .getQueriesData({ queryKey: family.prefix })
+      .getQueriesData<TrackCacheValue>({ queryKey: family.prefix })
       .flatMap(([, data]) => TRACK_SHAPES[family.shape].items(data)),
   );
   const found = cached.find((t) => t.id === trackId);
@@ -141,14 +142,16 @@ function pagedLists(queryKey: QueryKey, cached: TrackPages): TrackList[] {
   }));
 }
 
-function listsOf(queryKey: QueryKey, shape: TrackCacheShape, cached: unknown): TrackList[] {
+function listsOf(queryKey: QueryKey, shape: TrackCacheShape, cached: TrackCacheValue): TrackList[] {
   if (shape === 'paged') return pagedLists(queryKey, cached as TrackPages);
   return [{ queryKey, shape, pageIndex: 0, items: TRACK_SHAPES[shape].items(cached) }];
 }
 
 function listsInFamily(queryClient: QueryClient, family: TrackCacheFamily): TrackList[] {
   const lists: TrackList[] = [];
-  for (const [queryKey, cached] of queryClient.getQueriesData({ queryKey: family.prefix })) {
+  for (const [queryKey, cached] of queryClient.getQueriesData<TrackCacheValue>({
+    queryKey: family.prefix,
+  })) {
     if (cached) lists.push(...listsOf(queryKey, family.shape, cached));
   }
   return lists;
@@ -189,7 +192,7 @@ function reinsertOnPage(placement: TrackCachePlacement): MapItems {
     pageIndex === placement.pageIndex ? reinsert(items, placement) : items;
 }
 
-function canReinsert(placement: TrackCachePlacement, prev: unknown): boolean {
+function canReinsert(placement: TrackCachePlacement, prev: TrackCacheValue | undefined): boolean {
   const present = TRACK_SHAPES[placement.shape]
     .items(prev)
     .some((t) => t.id === placement.track.id);
@@ -201,7 +204,7 @@ function canReinsert(placement: TrackCachePlacement, prev: unknown): boolean {
 
 function restoreOne(queryClient: QueryClient, placement: TrackCachePlacement): void {
   const accessor = TRACK_SHAPES[placement.shape];
-  queryClient.setQueryData<unknown>(placement.queryKey, (prev: unknown) =>
+  queryClient.setQueryData<TrackCacheValue>(placement.queryKey, (prev) =>
     canReinsert(placement, prev)
       ? accessor.write(prev, reinsertOnPage(placement), RESIZE_POLICY)
       : prev,

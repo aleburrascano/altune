@@ -8,6 +8,7 @@ import type {
 import type { TrackResponse } from '@shared/apiClient/trackResponse';
 import { playlistKeys } from '@shared/query/queryKeys';
 import { PLAYLIST_HANDLERS } from '@shared/events/playlistEvents';
+import type { JsonObject } from '@shared/apiClient/jsonValue';
 import type { ServerEvent } from '@shared/events/sseFrames';
 
 const PATCHED_CACHES = 3;
@@ -68,7 +69,7 @@ function cachedDetail(queryClient: QueryClient): PlaylistDetailResponse {
   return queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail(asPlaylistId('p1')))!;
 }
 
-function serverEvent(type: string, data: Record<string, unknown>): ServerEvent {
+function serverEvent(type: string, data: JsonObject): ServerEvent {
   return { id: '1', type, data };
 }
 

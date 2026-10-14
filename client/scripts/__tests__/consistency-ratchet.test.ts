@@ -424,3 +424,20 @@ describe('MC-8 features reach the API only through their own adapters', () => {
     },
   );
 });
+
+describe('MC-11 baseline', () => {
+  const baselinePath = path.join(__dirname, '..', '..', 'baselines', 'consistency.baseline');
+  const clearedFolders = ['src/shared/files/', 'src/shared/events/'];
+
+  function mc11Files(): string[] {
+    return fs
+      .readFileSync(baselinePath, 'utf8')
+      .split('\n')
+      .filter((line) => line.startsWith('MC-11 '))
+      .map((line) => line.split(' ')[1] ?? '');
+  }
+
+  test.concurrent.each(clearedFolders)('%s has no baselined MC-11 unknown site', async (folder) => {
+    expect(mc11Files().filter((file) => file.startsWith(folder))).toEqual([]);
+  });
+});

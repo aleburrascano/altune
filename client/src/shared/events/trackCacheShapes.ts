@@ -8,6 +8,8 @@ export type TrackPages = InfiniteData<ListTracksResponse>;
 
 export type TrackCacheShape = 'paged' | 'flat' | 'playlistDetails';
 
+export type TrackCacheValue = TrackPages | ListTracksResponse | PlaylistDetailResponse;
+
 export interface TrackCacheFamily {
   readonly prefix: readonly string[];
   readonly shape: TrackCacheShape;
@@ -63,9 +65,9 @@ export function reflowOffsets(before: Pages, after: Pages): ListTracksResponse[]
 
 const NO_TRACKS: readonly TrackResponse[] = [];
 
-export interface ShapeAccessor<D> {
-  readonly items: (data: D | undefined) => readonly TrackResponse[];
-  readonly write: (prev: D | undefined, mapItems: MapItems, policy: WritePolicy) => D | undefined;
+export interface ShapeAccessor<D extends TrackCacheValue> {
+  items(data: D | undefined): readonly TrackResponse[];
+  write(prev: D | undefined, mapItems: MapItems, policy: WritePolicy): D | undefined;
 }
 
 function resizePage(
@@ -110,14 +112,14 @@ const playlistDetailsAccessor: ShapeAccessor<PlaylistDetailResponse> = {
   },
 };
 
-export const TRACK_SHAPES: Record<TrackCacheShape, ShapeAccessor<unknown>> = {
-  paged: pagedAccessor as ShapeAccessor<unknown>,
-  flat: flatAccessor as ShapeAccessor<unknown>,
-  playlistDetails: playlistDetailsAccessor as ShapeAccessor<unknown>,
+export const TRACK_SHAPES: Record<TrackCacheShape, ShapeAccessor<TrackCacheValue>> = {
+  paged: pagedAccessor,
+  flat: flatAccessor,
+  playlistDetails: playlistDetailsAccessor,
 };
 
 function updaterFor(shape: TrackCacheShape, mapItems: MapItems, policy: WritePolicy) {
-  return (prev: unknown) => TRACK_SHAPES[shape].write(prev, mapItems, policy);
+  return (prev: TrackCacheValue | undefined) => TRACK_SHAPES[shape].write(prev, mapItems, policy);
 }
 
 export function writeFamily(
@@ -127,5 +129,5 @@ export function writeFamily(
   mapItems: MapItems,
   policy: WritePolicy,
 ): void {
-  queryClient.setQueriesData<unknown>(filters, updaterFor(family.shape, mapItems, policy));
+  queryClient.setQueriesData<TrackCacheValue>(filters, updaterFor(family.shape, mapItems, policy));
 }
