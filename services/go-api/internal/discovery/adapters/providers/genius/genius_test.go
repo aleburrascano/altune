@@ -242,3 +242,26 @@ func TestArtworkSourceTags(t *testing.T) {
 		}
 	}
 }
+
+func TestGeniusArtworkResolver_Resolve_MalformedHitFailsTheResponse(t *testing.T) {
+	for name, body := range map[string]string{
+		"non-object result":         `{"response": {"hits": [{"result": "oops"}, {"result": {"song_art_image_url": "https://images.genius.com/ok.jpg"}}]}}`,
+		"non-object primary_artist": `{"response": {"hits": [{"result": {"primary_artist": 3}}, {"result": {"song_art_image_url": "https://images.genius.com/ok.jpg"}}]}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Write([]byte(body))
+			}))
+			defer server.Close()
+
+			resolver := NewGeniusArtworkResolver(providertest.NewClient(server.URL), "t")
+			got, err := resolver.Resolve(context.Background(), domain.ResultKindTrack, "Creep", "Radiohead", "")
+			if err == nil {
+				t.Fatalf("Resolve: got %q and no error, want an error", got)
+			}
+			if got != "" {
+				t.Errorf("resolve URL: got %q, want empty", got)
+			}
+		})
+	}
+}

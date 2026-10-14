@@ -295,3 +295,47 @@ func TestArtworkSourceTags(t *testing.T) {
 		}
 	}
 }
+
+func TestFanartTvArtworkResolver_Resolve_RanksByEnglishThenLikes(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"artistthumb": [
+			{"url": "https://x/fr-popular.jpg", "likes": "900", "lang": "fr"},
+			{"url": "https://x/en-few.jpg", "likes": "2", "lang": "en"},
+			{"url": "https://x/en-many.jpg", "likes": "7", "lang": "en"},
+			{"url": "", "likes": "9999", "lang": "en"}
+		]}`))
+	}))
+	defer server.Close()
+
+	resolver := NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "k")
+	got, err := resolver.Resolve(context.Background(), domain.ResultKindArtist, "A", "", "mbid")
+	if err != nil {
+		t.Fatalf("Resolve returned error: %v", err)
+	}
+	if got != "https://x/en-many.jpg" {
+		t.Errorf("resolve URL: got %q, want en-many.jpg", got)
+	}
+}
+
+func TestFanartTvArtworkResolver_Resolve_MalformedImageEntryFailsTheResponse(t *testing.T) {
+	for name, body := range map[string]string{
+		"non-string likes": `{"artistthumb": [{"url": "https://x/good.jpg"}, {"url": "https://x/bad.jpg", "likes": 5}]}`,
+		"non-object item":  `{"artistthumb": [{"url": "https://x/good.jpg"}, "oops"]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Write([]byte(body))
+			}))
+			defer server.Close()
+
+			resolver := NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "k")
+			got, err := resolver.Resolve(context.Background(), domain.ResultKindArtist, "A", "", "mbid")
+			if err == nil {
+				t.Fatalf("Resolve: got %q and no error, want an error", got)
+			}
+			if got != "" {
+				t.Errorf("resolve URL: got %q, want empty", got)
+			}
+		})
+	}
+}

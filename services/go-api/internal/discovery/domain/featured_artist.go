@@ -49,15 +49,16 @@ func FeaturedArtistsToExtras(fs []FeaturedArtist) []map[string]any {
 }
 
 func FeaturedArtistsFromExtras(extras map[string]any) []FeaturedArtist {
-	raw, ok := extras[ExtraFeaturedArtists].([]map[string]any)
-	if !ok {
+	switch raw := extras[ExtraFeaturedArtists].(type) {
+	case []map[string]any:
+		out := make([]FeaturedArtist, 0, len(raw))
+		for _, m := range raw {
+			out = append(out, FeaturedArtistFromMap(m))
+		}
+		return out
+	default:
 		return nil
 	}
-	out := make([]FeaturedArtist, 0, len(raw))
-	for _, m := range raw {
-		out = append(out, FeaturedArtistFromMap(m))
-	}
-	return out
 }
 
 func FeaturedArtistFromMap(m map[string]any) FeaturedArtist {

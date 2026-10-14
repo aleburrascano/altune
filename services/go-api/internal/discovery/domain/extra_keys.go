@@ -26,11 +26,19 @@ const (
 )
 
 func BoolExtra(extras map[string]any, key string) bool {
-	v, _ := extras[key].(bool)
-	return v
+	switch v := extras[key].(type) {
+	case bool:
+		return v
+	default:
+		return false
+	}
 }
 
 func StringExtra(extras map[string]any, key string) string {
-	v, _ := extras[key].(string)
-	return v
+	switch v := extras[key].(type) {
+	case string:
+		return v
+	default:
+		return ""
+	}
 }

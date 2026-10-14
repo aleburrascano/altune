@@ -10,6 +10,19 @@ import (
 	"net/url"
 )
 
+type fanartImage struct {
+	URL   string `json:"url"`
+	Likes string `json:"likes"`
+	Lang  string `json:"lang"`
+}
+
+type fanartDoc struct {
+	ArtistThumb      []fanartImage        `json:"artistthumb"`
+	ArtistBackground []fanartImage        `json:"artistbackground"`
+	AlbumCover       []fanartImage        `json:"albumcover"`
+	Albums           map[string]fanartDoc `json:"albums"`
+}
+
 type FanartTvArtworkResolver struct {
 	client *http.Client
 	apiKey string
@@ -29,16 +42,16 @@ func (r *FanartTvArtworkResolver) Resolve(ctx context.Context, kind domain.Resul
 		path = "music/albums/" + url.PathEscape(mbid)
 	}
 	u := fmt.Sprintf("https://webservice.fanart.tv/v3/%s?api_key=%s", path, r.apiKey)
-	var payload map[string]any
+	var payload fanartDoc
 	if err := providerhttp.GetJSON(ctx, r.client, u, &payload); err != nil {
 		return providerhttp.ArtworkFailure(domain.ProviderKeyFanart, err)
 	}
 
 	if kind == domain.ResultKindArtist {
-		if img := bestFanartImage(payload, "artistthumb"); img != "" {
+		if img := bestFanartImage(payload.ArtistThumb); img != "" {
 			return img, nil
 		}
-		if img := bestFanartImage(payload, "artistbackground"); img != "" {
+		if img := bestFanartImage(payload.ArtistBackground); img != "" {
 			return img, nil
 		}
 		return "", nil
@@ -47,45 +60,28 @@ func (r *FanartTvArtworkResolver) Resolve(ctx context.Context, kind domain.Resul
 	return albumCoverURL(payload, mbid), nil
 }
 
-func albumCoverURL(payload map[string]any, mbid string) string {
-	albums, ok := payload["albums"].(map[string]any)
-	if !ok {
-		return ""
-	}
-	entry, ok := albums[mbid].(map[string]any)
-	if !ok {
-		return ""
-	}
-	return bestFanartImage(entry, "albumcover")
+func albumCoverURL(payload fanartDoc, mbid string) string {
+	return bestFanartImage(payload.Albums[mbid].AlbumCover)
 }
 
-func bestFanartImage(doc map[string]any, key string) string {
-	images, ok := doc[key].([]any)
-	if !ok || len(images) == 0 {
-		return ""
-	}
+func bestFanartImage(images []fanartImage) string {
 	bestURL := ""
 	bestScore := int64(-1)
-	for _, it := range images {
-		m, ok := it.(map[string]any)
-		u, _ := m["url"].(string)
-		if !ok || u == "" {
+	for _, img := range images {
+		if img.URL == "" {
 			continue
 		}
-		if score := fanartImageScore(m); score > bestScore {
+		if score := fanartImageScore(img); score > bestScore {
 			bestScore = score
-			bestURL = u
+			bestURL = img.URL
 		}
 	}
 	return bestURL
 }
 
-func fanartImageScore(m map[string]any) int64 {
-	var score int64
-	if likes, ok := m["likes"].(string); ok {
-		score = providersearch.ParseListeners(likes)
-	}
-	if lang, _ := m["lang"].(string); lang == "en" || lang == "" {
+func fanartImageScore(img fanartImage) int64 {
+	score := providersearch.ParseListeners(img.Likes)
+	if img.Lang == "en" || img.Lang == "" {
 		score += 1_000_000
 	}
 	return score

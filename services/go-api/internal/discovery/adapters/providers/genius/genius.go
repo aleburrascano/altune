@@ -12,6 +12,17 @@ import (
 
 const maxHintSearches = 3
 
+type geniusHit struct {
+	Result struct {
+		SongArtImageURL string `json:"song_art_image_url"`
+		HeaderImageURL  string `json:"header_image_url"`
+		PrimaryArtist   struct {
+			Name     string `json:"name"`
+			ImageURL string `json:"image_url"`
+		} `json:"primary_artist"`
+	} `json:"result"`
+}
+
 type GeniusArtworkResolver struct {
 	client      *http.Client
 	accessToken string
@@ -43,13 +54,9 @@ func (r *GeniusArtworkResolver) resolveSongImage(ctx context.Context, title, art
 	}
 
 	for _, hit := range hits {
-		result, ok := hit["result"].(map[string]any)
-		if !ok {
-			continue
-		}
-		img := stringOr(result, "song_art_image_url", "")
+		img := hit.Result.SongArtImageURL
 		if img == "" {
-			img = stringOr(result, "header_image_url", "")
+			img = hit.Result.HeaderImageURL
 		}
 		if img != "" && !strings.Contains(img, "default") && !strings.Contains(img, "no_image") {
 			return img, nil
@@ -81,11 +88,11 @@ func (r *GeniusArtworkResolver) resolveArtistImage(ctx context.Context, artistNa
 	return "", nil
 }
 
-func (r *GeniusArtworkResolver) searchGenius(ctx context.Context, query string) ([]map[string]any, error) {
+func (r *GeniusArtworkResolver) searchGenius(ctx context.Context, query string) ([]geniusHit, error) {
 	u := fmt.Sprintf("https://api.genius.com/search?q=%s", url.QueryEscape(query))
 	var body struct {
 		Response struct {
-			Hits []map[string]any `json:"hits"`
+			Hits []geniusHit `json:"hits"`
 		} `json:"response"`
 	}
 	if err := providerhttp.GetJSON(ctx, r.client, u, &body, providerhttp.WithHeader("Authorization", "Bearer "+r.accessToken)); err != nil {
@@ -95,37 +102,18 @@ func (r *GeniusArtworkResolver) searchGenius(ctx context.Context, query string) 
 	return body.Response.Hits, nil
 }
 
-func findArtistImageInHits(hits []map[string]any, artistName string) string {
+func findArtistImageInHits(hits []geniusHit, artistName string) string {
 	for _, hit := range hits {
-		result, ok := hit["result"].(map[string]any)
-		if !ok {
-			continue
-		}
-		artist, ok := result["primary_artist"].(map[string]any)
-		if !ok {
-			continue
-		}
-		name := strings.TrimSpace(stringOr(artist, "name", ""))
+		artist := hit.Result.PrimaryArtist
+		name := strings.TrimSpace(artist.Name)
 		if strings.EqualFold(name, artistName) {
-			img := stringOr(artist, "image_url", "")
+			img := artist.ImageURL
 			if img != "" && !strings.Contains(img, "default") && !strings.Contains(img, "no_image") {
 				return img
 			}
 		}
 	}
 	return ""
-}
-
-func stringOr(m map[string]any, key, fallback string) string {
-	v, ok := m[key]
-	if !ok {
-		return fallback
-	}
-	s, ok := v.(string)
-	if !ok {
-		return fallback
-	}
-	return s
 }
 
 func (*GeniusArtworkResolver) ArtworkSource() domain.ProviderKey { return domain.ProviderKeyGenius }
