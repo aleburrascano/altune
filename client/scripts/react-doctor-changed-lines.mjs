@@ -12,12 +12,10 @@ import {
 } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { addedLinesSince, DIFF_DETECT_FLAGS } from './changed-lines.mjs';
 
-const DIFF_DETECT_FLAGS = ['-M', '-C', '--find-copies-harder'];
 const GIT_MAX_BUFFER = 256 << 20;
 const USAGE_EXIT = 2;
-const HUNK = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
-const FILE_HEADER = /^diff --git a\/.* b\/(.*)$/gm;
 const LIST_NEW = '--list-new';
 const BASE_SCAN_TIMEOUT_MS = Number(process.env.REACT_DOCTOR_BASE_TIMEOUT_MS ?? 240_000);
 const FULL_REPORT_HINT =
@@ -57,54 +55,9 @@ function prefixOf() {
   return git(['rev-parse', '--show-prefix']).trim();
 }
 
-function removedText(patch) {
-  const removed = new Set();
-  for (const line of patch.split('\n')) {
-    if (!line.startsWith('-') || line.startsWith('---')) continue;
-    const text = line.slice(1).trim();
-    if (text) removed.add(text);
-  }
-  return removed;
-}
-
-function addedLinesOf(block, moved) {
-  const added = new Set();
-  let next = null;
-  for (const line of block.split('\n')) {
-    const hunk = HUNK.exec(line);
-    if (hunk) {
-      next = Number(hunk[1]);
-      continue;
-    }
-    if (next === null || !line.startsWith('+')) continue;
-    if (!moved.has(line.slice(1).trim())) added.add(next);
-    next += 1;
-  }
-  return added;
-}
-
 function addedLinesByFile(base) {
   const prefix = prefixOf();
-  const patch = git([
-    'diff',
-    '--text',
-    '--diff-filter=ACMR',
-    ...DIFF_DETECT_FLAGS,
-    '-U0',
-    base,
-    '--',
-    ':/',
-  ]);
-  const moved = removedText(git(['diff', '--text', ...DIFF_DETECT_FLAGS, '-U0', base, '--', ':/']));
-  const headers = [...patch.matchAll(FILE_HEADER)];
-  const byFile = new Map();
-  headers.forEach((header, i) => {
-    const file = header[1];
-    if (!file.startsWith(prefix)) return;
-    const block = patch.slice(header.index, headers[i + 1]?.index ?? patch.length);
-    byFile.set(file.slice(prefix.length), addedLinesOf(block, moved));
-  });
-  return byFile;
+  return addedLinesSince(git, base, prefix, (file) => file.startsWith(prefix));
 }
 
 function renamesSince(base) {

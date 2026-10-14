@@ -1,10 +1,8 @@
+scripts/changed-lines.mjs addedLinesOf
+scripts/changed-lines.mjs removedText
 scripts/complexity-ratchet.mjs compareToBaseline
 scripts/complexity-ratchet.mjs main
-scripts/consistency-ratchet.mjs diffAgainstBaseline
 scripts/consistency-ratchet.mjs main
-scripts/lint-changed-lines.mjs addedLinesOf
-scripts/mock-ratchet.mjs diffAgainstBaseline
-scripts/mock-ratchet.mjs main
 scripts/module-shape.mjs <arrow>
 scripts/module-shape.mjs <arrow>
 scripts/module-shape.mjs bannedNameWord
@@ -16,12 +14,11 @@ scripts/module-shape.mjs checkM7
 scripts/module-shape.mjs checkM8
 scripts/module-shape.mjs checkM9
 scripts/module-shape.mjs checkN1
-scripts/module-shape.mjs checkN3
 scripts/module-shape.mjs checkN4
 scripts/module-shape.mjs checkN5
 scripts/module-shape.mjs main
+scripts/ratchet-baseline.mjs diffAgainstBaseline
 scripts/react-doctor-changed-lines.mjs <arrow>
-scripts/react-doctor-changed-lines.mjs addedLinesOf
 scripts/react-doctor-changed-lines.mjs enclosingNodeRange
 scripts/react-doctor-changed-lines.mjs isWideningNode
 scripts/react-doctor-changed-lines.mjs listNew
@@ -29,7 +26,6 @@ scripts/react-doctor-changed-lines.mjs main
 scripts/react-doctor-changed-lines.mjs newWarnings
 scripts/react-doctor-changed-lines.mjs rangeOf
 scripts/react-doctor-changed-lines.mjs readReport
-scripts/react-doctor-changed-lines.mjs removedText
 scripts/react-doctor-changed-lines.mjs renamesSince
 scripts/react-doctor-changed-lines.mjs scanBase
 scripts/react-doctor-changed-lines.mjs visit
@@ -54,10 +50,8 @@ src/features/detail/domain/saveTrack.ts optimisticTrack
 src/features/detail/domain/saveTrack.ts saveControlLabel
 src/features/detail/domain/saveTrack.ts saveControlText
 src/features/detail/domain/saveTrack.ts toCreateTrackRequest
-src/features/detail/domain/trackExtras.ts albumExtras
 src/features/detail/domain/trackExtras.ts extractFeaturedFromText
 src/features/detail/domain/trackExtras.ts resolveFeatured
-src/features/detail/domain/trackExtras.ts trackExtras
 src/features/detail/hooks/useAlbumDetailState.ts useAlbumDetailState
 src/features/detail/hooks/useAlbumTracks.ts useAlbumTracks
 src/features/detail/hooks/useArtistContent.ts useArtistContent
@@ -164,7 +158,6 @@ src/features/settings/domain/failureCopyForAction.ts failureCopyForAction
 src/features/settings/ui/SettingsCard.tsx SettingsRow
 src/features/settings/ui/SettingsCard.tsx toneColor
 src/shared/acquisition/ui/barDisplay.ts deriveBarDisplay
-src/shared/apiClient/discovery.ts parseDiscoverySearchResponse
 src/shared/apiClient/discovery.ts searchDiscovery
 src/shared/apiClient/enrichment.ts getAlbumTracks
 src/shared/apiClient/enrichment.ts getArtistContent

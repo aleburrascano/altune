@@ -211,15 +211,18 @@ function walkEntries(dir) {
   });
 }
 
+function namedEntries(root) {
+  return ['src/features', 'src/shared']
+    .flatMap((top) => walkEntries(path.join(root, top)))
+    .map(({ full, entry }) => ({ full, entry, relative: rel(root, full) }))
+    .filter(({ entry, relative }) => !entry.name.startsWith('.') && !inTests(relative));
+}
+
 function checkN3(root) {
   const found = [];
-  for (const top of ['src/features', 'src/shared']) {
-    for (const { full, entry } of walkEntries(path.join(root, top))) {
-      const relative = rel(root, full);
-      if (entry.name.startsWith('.') || inTests(relative)) continue;
-      const wanted = casingOf(full, entry);
-      if (wanted) found.push(`N3 ${relative} is not ${wanted}`);
-    }
+  for (const { full, entry, relative } of namedEntries(root)) {
+    const wanted = casingOf(full, entry);
+    if (wanted) found.push(`N3 ${relative} is not ${wanted}`);
   }
   return found;
 }
@@ -431,17 +434,14 @@ function bannedNameWord(name, glossary) {
 
 function checkN4(root, glossary) {
   const found = [];
-  for (const top of ['src/features', 'src/shared']) {
-    for (const { full, entry } of walkEntries(path.join(root, top))) {
-      const relative = rel(root, full);
-      if (entry.name.startsWith('.') || inTests(relative) || TEST_FILE.test(entry.name)) continue;
-      const bad = bannedNameWord(entry.name, glossary);
-      if (bad) found.push(`N4 ${relative} name has the word ${bad}`);
-      if (!entry.isFile() || !SOURCE_FILE.test(entry.name)) continue;
-      for (const match of fs.readFileSync(full, 'utf8').matchAll(EXPORTED_NAME)) {
-        const badExport = bannedNameWord(match[1], glossary);
-        if (badExport) found.push(`N4 ${relative} exports ${match[1]} with the word ${badExport}`);
-      }
+  for (const { full, entry, relative } of namedEntries(root)) {
+    if (TEST_FILE.test(entry.name)) continue;
+    const bad = bannedNameWord(entry.name, glossary);
+    if (bad) found.push(`N4 ${relative} name has the word ${bad}`);
+    if (!entry.isFile() || !SOURCE_FILE.test(entry.name)) continue;
+    for (const match of fs.readFileSync(full, 'utf8').matchAll(EXPORTED_NAME)) {
+      const badExport = bannedNameWord(match[1], glossary);
+      if (badExport) found.push(`N4 ${relative} exports ${match[1]} with the word ${badExport}`);
     }
   }
   return found;
@@ -520,7 +520,9 @@ function main() {
   if (args.includes('--write')) {
     fs.mkdirSync(path.dirname(baselineFile), { recursive: true });
     fs.writeFileSync(baselineFile, violations.length ? `${violations.join('\n')}\n` : '');
-    console.log(`module-shape: wrote ${violations.length} violations to baselines/module-shape.baseline`);
+    console.log(
+      `module-shape: wrote ${violations.length} violations to baselines/module-shape.baseline`,
+    );
     return;
   }
 

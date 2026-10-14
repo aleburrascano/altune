@@ -5,10 +5,16 @@ import { ESLint } from 'eslint';
 import { globSync } from 'glob';
 import tsParser from '@typescript-eslint/parser';
 import { loadRules } from '../eslint/consistency/index.js';
+import {
+  diffAgainstBaseline,
+  exitWithBaselineReport,
+  readBaselineLines,
+} from './ratchet-baseline.mjs';
 
 const mobileRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const baselinePath =
-  process.env.CONSISTENCY_BASELINE_FILE ?? path.join(mobileRoot, 'baselines', 'consistency.baseline');
+  process.env.CONSISTENCY_BASELINE_FILE ??
+  path.join(mobileRoot, 'baselines', 'consistency.baseline');
 // The tree the CLI scans; tests point it at a temp copy so they never write under src.
 const scanRoot = process.env.CONSISTENCY_ROOT ?? mobileRoot;
 const UPDATE_BASELINE_HINT =
@@ -54,24 +60,7 @@ export function violationLine(rule, violation) {
 }
 
 export function readBaseline(file = baselinePath) {
-  return fs
-    .readFileSync(file, 'utf8')
-    .split('\n')
-    .filter((line) => line !== '');
-}
-
-// Multiset difference: a line listed once permits one occurrence.
-export function diffAgainstBaseline(found, baseline) {
-  const remaining = new Map();
-  for (const line of baseline) remaining.set(line, (remaining.get(line) ?? 0) + 1);
-  const added = [];
-  for (const line of found) {
-    const left = remaining.get(line) ?? 0;
-    if (left === 0) added.push(line);
-    else remaining.set(line, left - 1);
-  }
-  const fixed = [...remaining].flatMap(([line, count]) => Array(count).fill(line));
-  return { added, fixed };
+  return readBaselineLines(file);
 }
 
 export async function lintSource(rule, source, filename) {
@@ -113,18 +102,13 @@ async function main() {
   }
 
   found.sort();
-  const { added, fixed } = diffAgainstBaseline(found, readBaseline());
+  const diff = diffAgainstBaseline(found, readBaseline());
   if (process.argv.includes('--write')) {
-    writeBaseline(found, added);
+    writeBaseline(found, diff.added);
     return;
   }
 
-  for (const line of added) console.log(`new violation: ${line}`);
-  for (const line of fixed) console.log(`fixed: remove it from the baseline: ${line}`);
-  if (fixed.length > 0 && added.length === 0) console.log(UPDATE_BASELINE_HINT);
-  const failed = added.length > 0 || fixed.length > 0;
-
-  process.exit(failed ? 1 : 0);
+  exitWithBaselineReport(diff, UPDATE_BASELINE_HINT);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
