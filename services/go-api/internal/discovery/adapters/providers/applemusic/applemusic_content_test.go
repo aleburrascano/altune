@@ -10,6 +10,39 @@ import (
 	"time"
 )
 
+func TestAppleMusicAdapter_SongsByISRC(t *testing.T) {
+	const songsJSON = `{"data":[
+		{"id":"s1","attributes":{"name":"Celebration","artistName":"Kool & The Gang","albumName":"Celebrate!","durationInMillis":298000,"isrc":"USPR18000001"}},
+		{"id":"s2","attributes":{"name":"Celebration","artistName":"Kool & The Gang","albumName":"Greatest Hits","durationInMillis":221000,"isrc":"USPR18000001"}}
+	]}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+			t.Errorf("Authorization = %q, want Bearer test-token", got)
+		}
+		if r.URL.Path != "/songs" || r.URL.Query().Get("filter[isrc]") != "USPR18000001" {
+			t.Errorf("request = %q, want /songs?filter[isrc]=USPR18000001", r.URL.String())
+		}
+		_, _ = w.Write([]byte(songsJSON))
+	}))
+	defer srv.Close()
+
+	a := NewAppleMusicAdapter(srv.Client())
+	a.catalogBase = srv.URL
+	a.resolver.Cached = "test-token"
+	a.resolver.Expiry = providertest.FarFuture
+
+	songs, err := a.SongsByISRC(t.Context(), "USPR18000001")
+	if err != nil {
+		t.Fatalf("SongsByISRC error = %v", err)
+	}
+	if len(songs) != 2 {
+		t.Fatalf("songs = %d, want 2", len(songs))
+	}
+	if songs[0].Sources[0].ExternalID != "s1" || songs[0].Duration != 298 || songs[0].Album != "Celebrate!" || songs[0].ISRC != "USPR18000001" {
+		t.Errorf("song[0] = %+v", songs[0])
+	}
+}
+
 func TestAppleMusicAdapter_GetArtistAlbums(t *testing.T) {
 	const albumsJSON = `{"data":[
 		{"id":"a1","attributes":{"name":"After Hours","artistName":"The Weeknd","releaseDate":"2020-03-20","trackCount":14,"artwork":{"url":"https://ex/{w}x{h}.jpg"}}},

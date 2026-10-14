@@ -88,6 +88,17 @@ func CleanSearchKeys(title, artist, uploader string) SearchKeys {
 	return keys
 }
 
+func (k SearchKeys) VariantQualifiers() []string {
+	var variants []string
+	for _, rule := range qualifierRules {
+		if rule.variant && slices.Contains(k.Qualifiers, rule.name) {
+			variants = append(variants, rule.name)
+		}
+	}
+	slices.Sort(variants)
+	return variants
+}
+
 func initialKeys(rawArtist, storedArtist, channelName string) SearchKeys {
 	keys := SearchKeys{Artist: storedArtist, ArtistIsChannel: looksLikeChannel(rawArtist)}
 	if storedArtist == "" {

@@ -36,6 +36,19 @@ func (a *AppleMusicAdapter) GetArtistTopTracks(ctx context.Context, _ domain.Pro
 	return out, nil
 }
 
+func (a *AppleMusicAdapter) SongsByISRC(ctx context.Context, isrc string) ([]domain.SearchResult, error) {
+	u := fmt.Sprintf("%s/songs?filter[isrc]=%s", a.catalogBase, url.QueryEscape(isrc))
+	var body appleMusicResultGroup[appleMusicSong]
+	if err := a.fetchCatalog(ctx, u, &body); err != nil {
+		return nil, err
+	}
+	out := make([]domain.SearchResult, 0, len(body.Data))
+	for _, s := range body.Data {
+		out = append(out, mapAppleMusicSong(s))
+	}
+	return out, nil
+}
+
 func (a *AppleMusicAdapter) fetchCatalog(ctx context.Context, u string, out any) error {
 	_, err := providerhttp.WithAuthRetry(ctx, a.resolver.CachedResolver,
 		func(ctx context.Context, token string) (struct{}, int, error) {

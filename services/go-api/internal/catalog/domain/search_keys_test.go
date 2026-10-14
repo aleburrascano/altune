@@ -5,6 +5,30 @@ import (
 	"testing"
 )
 
+func TestSearchKeys_VariantQualifiers(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		title string
+		want  []string
+	}{
+		{"Song (2013 Remaster)", nil},
+		{"Song (Clean)", nil},
+		{"Song (Explicit)", nil},
+		{"Song (Live)", []string{"live"}},
+		{"Song (Slowed + Reverb) (Remastered)", []string{"reverb", "slowed"}},
+		{"Song (Spider-Man: Into the Spider-Verse)", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.title, func(t *testing.T) {
+			t.Parallel()
+			got := CleanSearchKeys(tt.title, "", "").VariantQualifiers()
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("VariantQualifiers(%q) = %v, want %v", tt.title, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestCleanSearchKeys(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
