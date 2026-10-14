@@ -652,7 +652,10 @@ describe('the pinned index is written through to disk and loaded back on relaunc
       expect(warn).toHaveBeenCalledWith(
         '[offline] failed to persist pinned index; keeping in-memory only',
       );
-      expect(usePinnedStore.getState().entries['t1']).toBeDefined();
+      expect(usePinnedStore.getState().entries['t1']).toMatchObject({
+        trackId: 't1',
+        status: 'downloading',
+      });
       warn.mockRestore();
     });
   });
@@ -963,7 +966,7 @@ describe('loading, validating and coalescing writes of the pinned index', () => 
         usePinnedStore.getState().unpin('' as TrackId);
 
         expect(usePinnedStore.getState().entries['']).toBeUndefined();
-        expect(usePinnedStore.getState().entries['t1']).toBeDefined();
+        expect(usePinnedStore.getState().entries['t1']).toEqual(readyEntry('t1'));
       });
     });
 
@@ -1323,7 +1326,7 @@ describe('reconcile squares the index with the files on disk', () => {
       usePinnedStore.getState().reconcile();
 
       const raw = __fs.readFile(INDEX_URI);
-      expect(raw).toBeDefined();
+      expect(raw).toEqual(expect.any(String));
       expect(JSON.parse(raw as string)).toEqual({
         schemaVersion: 1,
         entries: {

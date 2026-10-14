@@ -774,7 +774,12 @@ describe('AddToPlaylistSheet(): createAndAdd (:92-104)', () => {
     fireEvent.changeText(screen.getByTestId('create-playlist-input'), 'Road Trip Mix');
     fireEvent.press(screen.getByTestId('create-playlist-confirm'));
 
-    await waitFor(() => expect(alertSpy).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Error',
+        'Could not create the playlist. Please try again.',
+      ),
+    );
 
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByTestId('create-playlist-modal').props.visible).toBe(true);

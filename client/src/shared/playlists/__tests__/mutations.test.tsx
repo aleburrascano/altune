@@ -985,7 +985,6 @@ describe('useRemoveTracksFromPlaylist(): onMutate filter', () => {
         (r: { method: string; path: string }) =>
           r.method === 'DELETE' && r.path === '/v1/playlists/p1/tracks',
       )!;
-      expect(request).toBeDefined();
       expect(request.method).toBe('DELETE');
       expect(request.path).toBe('/v1/playlists/p1/tracks');
       expect(JSON.parse(request.body)).toEqual({ track_ids: removeIds });
@@ -1570,7 +1569,7 @@ describe('create', () => {
         }
       });
 
-      expect(caught).toBeDefined();
+      expect(caught).toBeInstanceOf(Error);
       await waitFor(() => expect(result.current.isError).toBe(true));
       expect(alertSpy).toHaveBeenCalledWith(
         'Error',
@@ -1594,7 +1593,7 @@ describe('create', () => {
         }
       });
 
-      expect(caught).toBeDefined();
+      expect(caught).toBeInstanceOf(Error);
       await waitFor(() => expect(result.current.isError).toBe(true));
       expect(alertSpy).toHaveBeenCalledWith(
         'Error',
@@ -1785,7 +1784,7 @@ describe('after sign-out', () => {
       mockCreatePlaylist.mockReturnValue(request.promise);
       const { result } = renderHook(() => useCreatePlaylist(), { wrapper });
       act(() => result.current.mutate('A Mix'));
-      await waitFor(() => expect(mockCreatePlaylist).toHaveBeenCalled());
+      await waitFor(() => expect(mockCreatePlaylist).toHaveBeenCalledTimes(1));
 
       signOutThenLoadUserB(queryClient);
       await act(async () => request.reject(new Error('offline')));
@@ -1803,7 +1802,7 @@ describe('after sign-out', () => {
       mockAddTracks.mockResolvedValue({ added: 1 });
       const { result } = renderHook(() => useCreatePlaylistWithTracks(), { wrapper });
       act(() => result.current.mutate({ name: 'A Mix', trackIds: [asTrackId('a1')] }));
-      await waitFor(() => expect(mockCreatePlaylist).toHaveBeenCalled());
+      await waitFor(() => expect(mockCreatePlaylist).toHaveBeenCalledTimes(1));
 
       signOutThenLoadUserB(queryClient);
       await act(async () => create.resolve(playlist('a-new', 'A Mix')));
@@ -1821,7 +1820,7 @@ describe('after sign-out', () => {
       mockAddTracks.mockReturnValue(add.promise);
       const { result } = renderHook(() => useCreatePlaylistWithTracks(), { wrapper });
       act(() => result.current.mutate({ name: 'A Mix', trackIds: [asTrackId('a1')] }));
-      await waitFor(() => expect(mockAddTracks).toHaveBeenCalled());
+      await waitFor(() => expect(mockAddTracks).toHaveBeenCalledTimes(1));
 
       signOutThenLoadUserB(queryClient);
       await act(async () => add.reject(new Error('offline')));
@@ -1837,7 +1836,7 @@ describe('after sign-out', () => {
       mockDeletePlaylist.mockReturnValue(request.promise);
       const { result } = renderHook(() => useDeletePlaylist(asPlaylistId('a1')), { wrapper });
       act(() => result.current.mutate());
-      await waitFor(() => expect(mockDeletePlaylist).toHaveBeenCalled());
+      await waitFor(() => expect(mockDeletePlaylist).toHaveBeenCalledTimes(1));
 
       signOutThenLoadUserB(queryClient);
       await act(async () => request.reject(new Error('offline')));
@@ -1852,7 +1851,7 @@ describe('after sign-out', () => {
       mockDeletePlaylist.mockReturnValue(request.promise);
       const { result } = renderHook(() => useDeletePlaylist(asPlaylistId('a1')), { wrapper });
       act(() => result.current.mutate());
-      await waitFor(() => expect(mockDeletePlaylist).toHaveBeenCalled());
+      await waitFor(() => expect(mockDeletePlaylist).toHaveBeenCalledTimes(1));
 
       signOutThenLoadUserB(queryClient);
       await act(async () => request.resolve());
@@ -1869,7 +1868,7 @@ describe('after sign-out', () => {
       const { result } = renderHook(() => useAddTracksToPlaylist(), { wrapper });
       const trackIds = [asTrackId('t1'), asTrackId('t2')];
       act(() => result.current.mutate({ playlistId: asPlaylistId('a1'), trackIds }));
-      await waitFor(() => expect(mockAddTracks).toHaveBeenCalled());
+      await waitFor(() => expect(mockAddTracks).toHaveBeenCalledTimes(1));
 
       signOutThenLoadUserB(queryClient);
       await act(async () => request.resolve({ added: 0 }));

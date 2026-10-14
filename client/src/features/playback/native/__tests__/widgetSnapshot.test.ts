@@ -89,7 +89,7 @@ describe('startWidgetSnapshotPublisher', () => {
       },
     });
     expect(writeCoverFromUrl).toHaveBeenCalledWith('https://art/1.jpg', 'cover.jpg');
-    expect(reloadWidget).toHaveBeenCalled();
+    expect(reloadWidget).toHaveBeenCalledTimes(writtenSnapshots().length);
   });
 
   it('republishes with isPlaying when the player state changes', async () => {
@@ -150,7 +150,7 @@ describe('startWidgetSnapshotPublisher', () => {
     await settle();
 
     expect(writtenSnapshots()).toContainEqual({ signedIn: false });
-    expect(reloadWidget).toHaveBeenCalled();
+    expect(reloadWidget).toHaveBeenCalledTimes(writtenSnapshots().length);
   });
 });
 
@@ -470,7 +470,7 @@ describe('startWidgetSnapshotPublisher, from a caller', () => {
     stopPublisher();
 
     expect(subscriptionRemovals.length).toBeGreaterThan(0);
-    for (const remove of subscriptionRemovals) expect(remove).toHaveBeenCalled();
+    for (const remove of subscriptionRemovals) expect(remove).toHaveBeenCalledTimes(1);
   });
 
   it('publishes a numeric duration for a track whose length is not known yet', async () => {
