@@ -47,6 +47,7 @@ type finding struct {
 	Title      string      `json:"title"`
 	Category   category    `json:"category"`
 	Detail     string      `json:"detail,omitempty"`
+	Source     string      `json:"source,omitempty"`
 	Fix        *fix        `json:"fix,omitempty"`
 	LengthPlan *lengthPlan `json:"length_plan,omitempty"`
 }

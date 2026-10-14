@@ -21,6 +21,7 @@ type deezerTrack struct {
 	ID              string
 	ISRC            string
 	Title           string
+	Artist          string
 	Position        int
 	DurationSeconds float64
 	AlbumID         string
@@ -33,11 +34,14 @@ type deezerAlbumTrack struct {
 }
 
 type deezerAlbum struct {
-	ID       string
-	Title    string
-	CoverURL string
-	Genre    string
-	Tracks   []deezerAlbumTrack
+	ID          string
+	Title       string
+	CoverURL    string
+	Genre       string
+	RecordType  string
+	ReleaseDate string
+	Artist      string
+	Tracks      []deezerAlbumTrack
 }
 
 type deezerCatalog interface {
@@ -114,7 +118,7 @@ func (c crossChecker) check(ctx context.Context, in crossCheckInput) (crossCheck
 	if err != nil && !errors.Is(err, errCatalogUnknown) {
 		return crossCheck{}, err
 	}
-	if err == nil && sameTitle(byISRC.AlbumTitle, in.Group.Title) {
+	if err == nil && canonicalISRC(byISRC.ISRC) == canonicalISRC(in.ISRC) && sameTitle(byISRC.AlbumTitle, in.Group.Title) {
 		return c.matchOf(ctx, byISRC)
 	}
 	return c.searchArtistAlbums(ctx, in)
@@ -125,10 +129,14 @@ func (c crossChecker) matchOf(ctx context.Context, track deezerTrack) (crossChec
 	if err != nil {
 		return crossCheck{}, err
 	}
-	return crossCheck{Outcome: outcomeSameISRC, Match: &deezerMatch{
+	return crossCheck{Outcome: outcomeSameISRC, Match: newMatch(album, track)}, nil
+}
+
+func newMatch(album deezerAlbum, track deezerTrack) *deezerMatch {
+	return &deezerMatch{
 		AlbumID: album.ID, AlbumTitle: album.Title, CoverURL: album.CoverURL, Genre: album.Genre,
 		TrackPosition: track.Position, DurationSeconds: track.DurationSeconds, ISRC: track.ISRC,
-	}}, nil
+	}
 }
 
 func (c crossChecker) searchArtistAlbums(ctx context.Context, in crossCheckInput) (crossCheck, error) {

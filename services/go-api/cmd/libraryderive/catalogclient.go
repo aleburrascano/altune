@@ -14,6 +14,7 @@ import (
 const (
 	maxAttempts      = 4
 	retryBackoff     = 2 * time.Second
+	maxServerErrors  = 5
 	maxResponseBytes = 4 << 20
 )
 
@@ -27,12 +28,13 @@ func blocked(format string, args ...any) error {
 }
 
 type catalogClient struct {
-	http        *http.Client
-	baseURL     string
-	userAgent   string
-	limiter     *rate.Limiter
-	backoff     time.Duration
-	isThrottled func(status int, body []byte) bool
+	http         *http.Client
+	baseURL      string
+	userAgent    string
+	limiter      *rate.Limiter
+	backoff      time.Duration
+	isThrottled  func(status int, body []byte) bool
+	serverErrors int
 }
 
 func newCatalogClient(httpClient *http.Client, baseURL, userAgent string, requestsPerSecond float64, isThrottled func(int, []byte) bool) *catalogClient {
@@ -53,8 +55,9 @@ func (c *catalogClient) get(ctx context.Context, path string) ([]byte, error) {
 			return nil, err
 		}
 		if !c.isThrottled(status, body) {
-			return body, statusError(status, path)
+			return body, c.checkServerErrors(status, path)
 		}
+		c.serverErrors = 0
 		if attempt >= maxAttempts {
 			return nil, blocked("still throttled after %d attempts on %s", attempt, path)
 		}
@@ -62,6 +65,18 @@ func (c *catalogClient) get(ctx context.Context, path string) ([]byte, error) {
 			return nil, err
 		}
 	}
+}
+
+func (c *catalogClient) checkServerErrors(status int, path string) error {
+	if status < http.StatusInternalServerError {
+		c.serverErrors = 0
+		return statusError(status, path)
+	}
+	c.serverErrors++
+	if c.serverErrors >= maxServerErrors {
+		return blocked("%d server errors in a row, last HTTP %d on %s", c.serverErrors, status, path)
+	}
+	return statusError(status, path)
 }
 
 func statusError(status int, path string) error {

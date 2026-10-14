@@ -90,3 +90,101 @@ func TestDeezer_RetriesTheQuotaErrorThenSucceeds(t *testing.T) {
 		t.Fatalf("err=%v calls=%d", err, calls)
 	}
 }
+
+func TestDeezer_QuotaExhaustionIsBlockedAfterFourAttempts(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		_, _ = w.Write([]byte(`{"error":{"type":"Exception","code":4}}`))
+	}))
+	defer srv.Close()
+	if _, err := fastDeezer(srv).TrackByID(t.Context(), "1"); !errors.Is(err, errCatalogBlocked) || calls != 4 {
+		t.Fatalf("err=%v calls=%d", err, calls)
+	}
+}
+
+func TestDeezer_AnHTTP429IsRetriedThenBlocked(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+	if _, err := fastDeezer(srv).TrackByID(t.Context(), "1"); !errors.Is(err, errCatalogBlocked) || calls != 4 {
+		t.Fatalf("err=%v calls=%d", err, calls)
+	}
+}
+
+func TestDeezer_FiveServerErrorsInARowAbortAndASuccessResetsTheCount(t *testing.T) {
+	status := http.StatusInternalServerError
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(status)
+		if status == http.StatusOK {
+			_, _ = w.Write([]byte(deezerTrackJSON))
+		}
+	}))
+	defer srv.Close()
+	d := fastDeezer(srv)
+	for range 4 {
+		if _, err := d.TrackByID(t.Context(), "1"); err == nil || errors.Is(err, errCatalogBlocked) {
+			t.Fatalf("err = %v", err)
+		}
+	}
+	status = http.StatusOK
+	if _, err := d.TrackByID(t.Context(), "1"); err != nil {
+		t.Fatal(err)
+	}
+	status = http.StatusInternalServerError
+	for range 4 {
+		_, _ = d.TrackByID(t.Context(), "1")
+	}
+	if _, err := d.TrackByID(t.Context(), "1"); !errors.Is(err, errCatalogBlocked) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestDeezer_AQuoteInAnArtistOrTitleDoesNotBreakTheAlbumQuery(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("q") != `artist:"Guns N  Roses" album:"Appetite  For  Destruction"` {
+			t.Errorf("query %q", r.URL.Query().Get("q"))
+		}
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}))
+	defer srv.Close()
+	if _, err := fastDeezer(srv).SearchAlbums(t.Context(), `Guns N" Roses`, `Appetite "For" Destruction`); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDeezer_AThrottleAnswerResetsTheServerErrorCount(t *testing.T) {
+	status, throttledOnce := http.StatusInternalServerError, false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if status == http.StatusTooManyRequests && !throttledOnce {
+			throttledOnce = true
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		if status == http.StatusTooManyRequests {
+			status = http.StatusOK
+		}
+		w.WriteHeader(status)
+		if status == http.StatusOK {
+			_, _ = w.Write([]byte(deezerTrackJSON))
+		}
+	}))
+	defer srv.Close()
+	d := fastDeezer(srv)
+	for range 4 {
+		_, _ = d.TrackByID(t.Context(), "1")
+	}
+	status = http.StatusTooManyRequests
+	if _, err := d.TrackByID(t.Context(), "1"); err != nil {
+		t.Fatal(err)
+	}
+	status = http.StatusInternalServerError
+	for range 4 {
+		if _, err := d.TrackByID(t.Context(), "1"); errors.Is(err, errCatalogBlocked) {
+			t.Fatalf("err = %v", err)
+		}
+	}
+}

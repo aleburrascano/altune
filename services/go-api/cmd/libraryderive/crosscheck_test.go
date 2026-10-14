@@ -132,3 +132,12 @@ func TestCrossCheck_ABlockedDeezerStopsTheCheck(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestCrossCheck_AByIsrcTrackWithAnotherIsrcIsNotAccepted(t *testing.T) {
+	dz := celebrationDeezer()
+	dz.byISRC[celebrationISRC] = deezerTrack{ID: compilationTrack, ISRC: "USXXX0000000", Title: "Celebration", Position: 4, DurationSeconds: 221, AlbumID: "70", AlbumTitle: "Celebrate!"}
+	got, err := crossChecker{deezer: dz}.check(t.Context(), celebrationInput())
+	if err != nil || got.Outcome != outcomeSameISRC || got.Match.AlbumID != "80" {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+}

@@ -85,10 +85,10 @@ func diff(stored libraryTrack, want desired) []difference {
 	moved := albumDiffers(stored.Album, want.Album)
 	var found []difference
 	found = appendReportOnly(found, "album", stored.Album, want.Album, moved)
-	found = appendReportOnly(found, "title", stored.Title, want.Title, normalizeName(stored.Title) != normalizeName(want.Title))
-	found = appendReportOnly(found, "artist", stored.Artist, want.Artist, normalizeName(stored.Artist) != normalizeName(want.Artist))
+	found = appendReportOnly(found, "title", stored.Title, want.Title, !sameSongTitle(stored.Title, want.Title))
+	found = appendReportOnly(found, "artist", stored.Artist, want.Artist, !isCredited(stored.Artist, want.Artist))
 	found = appendWritable(found, "year", intText(stored.Year), intText(want.Year), true)
-	found = appendWritable(found, "album_artist", stored.AlbumArtist, want.AlbumArtist, normalizeName(stored.AlbumArtist) != normalizeName(want.AlbumArtist))
+	found = appendWritable(found, "album_artist", stored.AlbumArtist, want.AlbumArtist, !isSameName(stored.AlbumArtist, want.AlbumArtist))
 	found = appendAlbumBound(found, "track_number", intText(stored.TrackNumber), intText(want.TrackNumber), moved)
 	found = appendAlbumBound(found, "genre", stored.Genre, want.Genre, moved)
 	found = appendWritable(found, "catalog_duration_seconds", secondsText(stored.CatalogDurationSeconds), secondsText(want.CatalogDurationSeconds),

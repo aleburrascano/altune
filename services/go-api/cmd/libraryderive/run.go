@@ -60,6 +60,10 @@ func (d *deriver) deriveTrack(ctx context.Context, t boundTrack) ([]finding, err
 
 func (d *deriver) findingsFor(ctx context.Context, t boundTrack) ([]finding, error) {
 	rec, err := d.recordingOf(ctx, t)
+	var unknown skipped
+	if errors.As(err, &unknown) && unknown.Category == categoryRecordingUnknown {
+		return d.deezerOnlyFindings(ctx, t, unknown)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +77,7 @@ func (d *deriver) findingsFor(ctx context.Context, t boundTrack) ([]finding, err
 		return nil, err
 	}
 	head := about(t, categoryReleaseChosen, chosen.Group.describe()+" by "+string(chosen.Rule)+"; deezer "+string(check.Outcome))
-	return append([]finding{head}, changesFor(t, rec, a, chosen, check)...), nil
+	return append([]finding{head}, changesFor(t, a, chosen, check)...), nil
 }
 
 func (d *deriver) recordingOf(ctx context.Context, t boundTrack) (recording, error) {
@@ -119,7 +123,7 @@ func (d *deriver) chooseFor(ctx context.Context, rec recording) (pick, error) {
 	if err != nil && !errors.Is(err, errCatalogUnknown) {
 		return pick{}, err
 	}
-	chosen, ok := chooseRelease(groups)
+	chosen, ok := chooseRelease(ownSingles(groups, rec.Title))
 	if !ok {
 		return pick{}, skipped{categoryReleaseUnchosen, strconv.Itoa(len(groups)) + " release groups, none an original album or single"}
 	}
@@ -135,12 +139,16 @@ func (d *deriver) crossCheckOf(ctx context.Context, rec recording, a anchor, cho
 	})
 }
 
-func changesFor(t boundTrack, rec recording, a anchor, chosen pick, check crossCheck) []finding {
+func changesFor(t boundTrack, a anchor, chosen pick, check crossCheck) []finding {
 	if check.Outcome == outcomeOtherMaster {
 		return otherMasterFindings(t, a, chosen, *check.OtherMaster)
 	}
+	return differenceFindings(t, a, chosen.Group, check.Match)
+}
+
+func differenceFindings(t boundTrack, a anchor, group releaseGroup, match *deezerMatch) []finding {
 	var found []finding
-	for _, d := range diff(t.libraryTrack, derive(a, chosen.Group, check.Match)) {
+	for _, d := range diff(t.libraryTrack, derive(a, group, match)) {
 		found = append(found, findingOf(t, d))
 	}
 	return found

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -43,7 +44,10 @@ type deezerTrackBody struct {
 	ISRC     string `json:"isrc"`
 	Duration int    `json:"duration"`
 	Position int    `json:"track_position"`
-	Album    struct {
+	Artist   struct {
+		Name string `json:"name"`
+	} `json:"artist"`
+	Album struct {
 		ID    int64  `json:"id"`
 		Title string `json:"title"`
 	} `json:"album"`
@@ -51,11 +55,16 @@ type deezerTrackBody struct {
 
 type deezerAlbumBody struct {
 	deezerErrorBody
-	ID      int64  `json:"id"`
-	Title   string `json:"title"`
-	CoverXL string `json:"cover_xl"`
-	Cover   string `json:"cover_big"`
-	Genres  struct {
+	ID          int64  `json:"id"`
+	Title       string `json:"title"`
+	CoverXL     string `json:"cover_xl"`
+	Cover       string `json:"cover_big"`
+	RecordType  string `json:"record_type"`
+	ReleaseDate string `json:"release_date"`
+	Artist      struct {
+		Name string `json:"name"`
+	} `json:"artist"`
+	Genres struct {
 		Data []struct {
 			Name string `json:"name"`
 		} `json:"data"`
@@ -87,13 +96,13 @@ func (d deezer) track(ctx context.Context, path string) (deezerTrack, error) {
 		return deezerTrack{}, err
 	}
 	return deezerTrack{
-		ID: strconv.FormatInt(body.ID, 10), ISRC: body.ISRC, Title: body.Title, Position: body.Position,
+		ID: strconv.FormatInt(body.ID, 10), ISRC: body.ISRC, Title: body.Title, Artist: body.Artist.Name, Position: body.Position,
 		DurationSeconds: float64(body.Duration), AlbumID: strconv.FormatInt(body.Album.ID, 10), AlbumTitle: body.Album.Title,
 	}, nil
 }
 
 func (d deezer) SearchAlbums(ctx context.Context, artist, title string) ([]deezerAlbum, error) {
-	query := `artist:"` + artist + `" album:"` + title + `"`
+	query := `artist:"` + withoutQuotes(artist) + `" album:"` + withoutQuotes(title) + `"`
 	var body deezerSearchBody
 	if err := d.getJSON(ctx, "/2.0/search/album?q="+url.QueryEscape(query)+"&limit="+strconv.Itoa(deezerAlbumLimit), &body, &body.deezerErrorBody); err != nil {
 		return nil, err
@@ -114,7 +123,10 @@ func (d deezer) Album(ctx context.Context, id string) (deezerAlbum, error) {
 }
 
 func toDeezerAlbum(body deezerAlbumBody) deezerAlbum {
-	album := deezerAlbum{ID: strconv.FormatInt(body.ID, 10), Title: body.Title, CoverURL: cmp.Or(body.CoverXL, body.Cover)}
+	album := deezerAlbum{
+		ID: strconv.FormatInt(body.ID, 10), Title: body.Title, CoverURL: cmp.Or(body.CoverXL, body.Cover),
+		RecordType: body.RecordType, ReleaseDate: body.ReleaseDate, Artist: body.Artist.Name,
+	}
 	if len(body.Genres.Data) > 0 {
 		album.Genre = body.Genres.Data[0].Name
 	}
@@ -139,4 +151,8 @@ func (d deezer) getJSON(ctx context.Context, path string, into any, failure *dee
 		return errCatalogUnknown
 	}
 	return fmt.Errorf("deezer error code %d on %s", failure.Error.Code, path)
+}
+
+func withoutQuotes(value string) string {
+	return strings.ReplaceAll(value, `"`, " ")
 }
