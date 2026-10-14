@@ -10,7 +10,7 @@ import {
 } from '@features/settings/domain/dangerZoneActions';
 import { SettingsCard, SettingsRow } from '@features/settings/ui/SettingsCard';
 
-type TaggedIconProps = LucideProps & { ref?: Ref<unknown> };
+type TaggedIconProps = LucideProps & { ref?: Ref<SVGSVGElement> };
 
 function taggedIcon(Icon: LucideIcon, testID: string): LucideIcon {
   function Tagged({ ref: _ref, ...props }: TaggedIconProps): ReactElement {

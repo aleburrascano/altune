@@ -9,8 +9,10 @@ function reportUnrecognizedFailure(err: unknown): void {
   console.warn('[auth] an auth action failed for an unrecognized reason', thrownErrorDetail(err));
 }
 
+type ThrownAuthFailure = { kind: 'error'; reason: 'network' | 'unknown' };
+
 export function useAsyncAuthAction<
-  S extends { kind: 'idle' } | { kind: 'pending' } | { kind: string },
+  S extends { kind: 'idle' } | { kind: 'pending' } | ThrownAuthFailure | { kind: string },
   A extends unknown[],
 >(
   attempt: (...args: A) => Promise<Exclude<S, { kind: 'idle' } | { kind: 'pending' }>>,
@@ -32,7 +34,8 @@ export function useAsyncAuthAction<
       if (reason === 'unknown') {
         reportUnrecognizedFailure(err);
       }
-      setState({ kind: 'error', reason } as unknown as S);
+      const failure: ThrownAuthFailure = { kind: 'error', reason };
+      setState(failure as S);
     } finally {
       const release = () => {
         inFlight.current = false;

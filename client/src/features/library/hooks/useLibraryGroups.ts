@@ -34,10 +34,13 @@ interface PagedGroupQueryOptions<T> {
 
 type PagedQuery<T> = UseInfiniteQueryResult<InfiniteData<GroupPage<T>>>;
 
+function nextPageOffset<T>(lastPage: GroupPage<T>, _pages: GroupPage<T>[], lastOffset: number) {
+  return nextGroupPageOffset(lastPage.items.length, lastOffset);
+}
+
 const PAGING = {
   initialPageParam: 0,
-  getNextPageParam: (lastPage: GroupPage<unknown>, _pages: unknown, lastOffset: number) =>
-    nextGroupPageOffset(lastPage.items.length, lastOffset),
+  getNextPageParam: nextPageOffset,
   staleTime: Infinity,
   placeholderData: keepPreviousData,
 };

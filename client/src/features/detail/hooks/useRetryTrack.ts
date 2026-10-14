@@ -8,7 +8,7 @@ import {
 import { failedTrackStatus, patchTrackStatus } from '@shared/acquisition/trackStatusStore';
 import { useSharedRetryAcquisition } from '@shared/acquisition/useRetryAcquisition';
 
-export type RetryTrack = Pick<UseMutationResult<void, unknown, TrackId>, 'mutate' | 'isPending'>;
+export type RetryTrack = Pick<UseMutationResult<void, Error, TrackId>, 'mutate' | 'isPending'>;
 
 type RetryMutateOptions = Parameters<RetryTrack['mutate']>[1];
 

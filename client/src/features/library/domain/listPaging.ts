@@ -12,8 +12,8 @@ interface PagedListState {
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   isFetchNextPageError: boolean;
-  fetchNextPage: () => unknown;
-  refetch: () => unknown;
+  fetchNextPage: () => Promise<unknown>;
+  refetch: () => Promise<unknown>;
 }
 
 function canFetchMore(s: PagedListState) {

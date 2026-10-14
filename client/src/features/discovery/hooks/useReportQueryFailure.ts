@@ -8,6 +8,12 @@ import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
 export type QueryFailureSource =
   'search' | 'suggest' | 'history' | 'record_history' | 'clear_history';
 
+type SearchFailedPayload = {
+  source: QueryFailureSource;
+  status?: number;
+  correlationId?: string;
+};
+
 const reported = new WeakSet<Error>();
 
 export function useReportQueryFailure(error: Error | null, source: QueryFailureSource): void {
@@ -21,10 +27,10 @@ export function useReportQueryFailure(error: Error | null, source: QueryFailureS
   useEffect(() => {
     if (error === null || isCancelledError(error) || reported.has(error)) return;
     reported.add(error);
-    const payload: Record<string, unknown> = { source };
-    if (error instanceof ApiError) payload['status'] = error.status;
+    const payload: SearchFailedPayload = { source };
+    if (error instanceof ApiError) payload.status = error.status;
     const correlationId = correlationIdOf(error);
-    if (correlationId !== undefined) payload['correlationId'] = correlationId;
+    if (correlationId !== undefined) payload.correlationId = correlationId;
     recordRef.current.mutate({ type: 'search_failed', payload });
   }, [error, source]);
 }

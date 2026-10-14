@@ -84,10 +84,10 @@ export function redactedPlaybackFailure(err: unknown): RedactedPlaybackFailure {
   };
 }
 
-export function warnPlayback(
-  message: string,
-  context: Record<string, unknown>,
-  err: unknown,
-): void {
+type PlaybackLogValue = string | number | boolean | null | undefined | readonly string[];
+
+type PlaybackLogContext = Readonly<Record<string, PlaybackLogValue>>;
+
+export function warnPlayback(message: string, context: PlaybackLogContext, err: unknown): void {
   console.warn(`[playback] ${message}`, { ...context, error: redactedPlaybackFailure(err) });
 }

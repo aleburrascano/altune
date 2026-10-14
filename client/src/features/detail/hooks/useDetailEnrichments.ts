@@ -49,10 +49,11 @@ type EnrichmentFetchParams = Required<Pick<EnrichmentParams, 'kind' | 'title'>> 
   Pick<EnrichmentParams, 'subtitle' | 'mbid'> &
   EnrichmentSignal;
 
-type EnrichmentHookConfig<T> = {
+type MbidAwareness = { mbidAware: boolean };
+
+type EnrichmentHookConfig<T> = MbidAwareness & {
   provider: EnrichmentProvider;
   fetch: (port: DetailPort, params: EnrichmentFetchParams) => Promise<T>;
-  mbidAware: boolean;
 };
 
 type EnrichmentRequest<T> = {
@@ -81,15 +82,15 @@ async function fetchReportingOutcome<T>(fetch: () => Promise<T>, ctx: Enrichment
   }
 }
 
-function enrichmentMbid(config: EnrichmentHookConfig<unknown>, params: EnrichmentParams) {
+function enrichmentMbid(config: MbidAwareness, params: EnrichmentParams) {
   return config.mbidAware && params.mbid ? params.mbid : null;
 }
 
-function enrichmentCacheKey(config: EnrichmentHookConfig<unknown>, params: EnrichmentParams) {
+function enrichmentCacheKey(config: MbidAwareness, params: EnrichmentParams) {
   return enrichmentMbid(config, params) ?? `${params.title}|${params.subtitle ?? ''}`;
 }
 
-function hasLookupKey(config: EnrichmentHookConfig<unknown>, params: EnrichmentParams) {
+function hasLookupKey(config: MbidAwareness, params: EnrichmentParams) {
   return params.title.trim() !== '' || enrichmentMbid(config, params) !== null;
 }
 

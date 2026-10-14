@@ -43,7 +43,7 @@ export function useRecordSearchHistory(): (query: string) => void {
   };
 }
 
-function useRecordHistoryMutation(): UseMutationResult<void, Error, string, unknown> {
+function useRecordHistoryMutation(): UseMutationResult<void, Error, string, undefined> {
   const port = useDiscoverPort();
   const queryClient = useQueryClient();
   return useAppMutation({

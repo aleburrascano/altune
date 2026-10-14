@@ -5,9 +5,13 @@ import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
 import { buildImpressionRows } from '@features/discovery/domain/buildImpressionRows';
 import type { DiscoverySearchResponse } from '@shared/apiClient/discovery';
 
+type ViewableItem = { key: string; isViewable: boolean };
+
+type ViewableItemsChange = { viewableItems: readonly ViewableItem[] };
+
 export type ImpressionHandlers = {
   viewabilityConfig: { itemVisiblePercentThreshold: number };
-  onViewableItemsChanged: (info: { viewableItems: readonly unknown[] }) => void;
+  onViewableItemsChanged: (info: ViewableItemsChange) => void;
 };
 
 export function useImpressionLogger(

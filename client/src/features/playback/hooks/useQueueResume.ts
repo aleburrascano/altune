@@ -51,7 +51,15 @@ function readConsistentSnapshot(): Promise<ConsistentSnapshot | null> {
   });
 }
 
-type SaveFingerprint = readonly unknown[];
+type SaveFingerprint = readonly [
+  QueueStore['tracks'],
+  QueueStore['playOrder'],
+  QueueStore['source'],
+  QueueStore['currentIndex'],
+  QueueStore['shuffled'],
+  QueueStore['repeatMode'],
+  number,
+];
 
 function fingerprintOf(s: QueueStore, positionMs: number): SaveFingerprint {
   return [s.tracks, s.playOrder, s.source, s.currentIndex, s.shuffled, s.repeatMode, positionMs];

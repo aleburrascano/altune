@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 
 import type { DiscoveryProviderInfo, DiscoverySearchResponse } from '@shared/apiClient/discovery';
 
@@ -78,20 +78,14 @@ function retryTransientOnce(failureCount: number, error: Error): boolean {
 
 type SearchQueryArgs = {
   port: DiscoverPort;
-  queryKey: readonly unknown[];
+  queryKey: QueryKey;
   queryClient: ReturnType<typeof useQueryClient>;
   trimmed: string;
   isSearchEnabled: boolean;
 };
 
 function useSearchInfiniteQuery(args: SearchQueryArgs) {
-  return useInfiniteQuery<
-    DiscoverySearchResponse,
-    Error,
-    SearchPages,
-    readonly unknown[],
-    SearchPageParam
-  >({
+  return useInfiniteQuery<DiscoverySearchResponse, Error, SearchPages, QueryKey, SearchPageParam>({
     queryKey: args.queryKey,
     initialPageParam: firstPageParam,
     queryFn: searchQueryFn(args.port, args.queryClient, args.trimmed),

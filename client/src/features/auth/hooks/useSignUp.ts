@@ -24,7 +24,7 @@ type SignUpResult =
 
 type SettledSignUp = Exclude<SignUpResult, { kind: 'idle' | 'pending' }>;
 
-type SignUpResponseData = { user?: { identities?: unknown } | null; session?: unknown } | null;
+type SignUpResponseData = Awaited<ReturnType<typeof signUp>>['data'];
 
 function signUpOutcome(data: SignUpResponseData): SettledSignUp {
   if (data?.session) return { kind: 'ok' };

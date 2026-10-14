@@ -4,6 +4,6 @@ export function useDiscoverFetchEnabled(): boolean {
   return useLoopEnabled('discovery');
 }
 
-export function useGatedDiscoverCall(action: () => unknown): () => void {
+export function useGatedDiscoverCall(action: () => void | Promise<unknown>): () => void {
   return useGatedCallback('discovery', action);
 }

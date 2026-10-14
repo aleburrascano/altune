@@ -54,7 +54,7 @@ function pendingRunsOf(mutationKey: TrackMutationKey): MutationFilters {
   return { mutationKey, status: 'pending' };
 }
 
-function trackIdOf(run: Mutation<unknown, Error, unknown, unknown>): TrackId {
+function asRunTrackId(run: Mutation<unknown, Error, unknown, unknown>): TrackId {
   return run.state.variables as TrackId;
 }
 
@@ -63,7 +63,7 @@ function hasPendingRun(
   mutationKey: TrackMutationKey,
   trackId: TrackId,
 ): boolean {
-  return cache.findAll(pendingRunsOf(mutationKey)).some((run) => trackIdOf(run) === trackId);
+  return cache.findAll(pendingRunsOf(mutationKey)).some((run) => asRunTrackId(run) === trackId);
 }
 
 export function useOneRunPerTrack<TData, TContext>(
@@ -71,7 +71,10 @@ export function useOneRunPerTrack<TData, TContext>(
   mutationKey: TrackMutationKey,
 ): TrackMutation<TData, TContext> {
   const mutationCache = useQueryClient().getMutationCache();
-  const pendingIds = useMutationState({ filters: pendingRunsOf(mutationKey), select: trackIdOf });
+  const pendingIds = useMutationState({
+    filters: pendingRunsOf(mutationKey),
+    select: asRunTrackId,
+  });
   const inFlight = useMemo(() => new Set<TrackId>(pendingIds), [pendingIds]);
   const { mutate, ...run } = mutation;
 
@@ -84,6 +87,8 @@ export function useOneRunPerTrack<TData, TContext>(
     isInFlight: (trackId: TrackId) => inFlight.has(trackId),
   };
 }
+
+type ReacquireContext = { epoch: number };
 
 function reacquireEndpoint(trackId: TrackId) {
   return `POST /v1/tracks/${trackId}/reacquire`;
@@ -119,16 +124,19 @@ function reacquireOptions(queryClient: QueryClient, port: LibraryPort) {
   });
 }
 
-export function useReacquireTrack(): TrackMutation<void, unknown> {
+function useReacquireMutation() {
   const queryClient = useQueryClient();
   const port = useLibraryPort();
-  const mutation = useAppMutation({
+  return useAppMutation({
     action: 'library.reacquire',
     trackIdOf: (trackId: TrackId) => trackId,
     mutationKey: trackMutationKeys.reacquire,
     ...reacquireOptions(queryClient, port),
   });
-  return useOneRunPerTrack(mutation, trackMutationKeys.reacquire);
+}
+
+export function useReacquireTrack(): TrackMutation<void, ReacquireContext> {
+  return useOneRunPerTrack(useReacquireMutation(), trackMutationKeys.reacquire);
 }
 
 type PriorAcquisition = { prior: AcquisitionTransition | undefined };

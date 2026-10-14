@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
   ListMusic,
@@ -88,9 +88,11 @@ function ErrorControl({ errorKind, hasNext, onRetry, onSkip }: ErrorControlProps
   return <RetryOrSkip hasNext={hasNext} onSkip={onSkip} />;
 }
 
-function EmptyBar({ barStyle }: { barStyle: unknown }) {
+type EmptyBarProps = { barStyle: StyleProp<ViewStyle> };
+
+function EmptyBar({ barStyle }: EmptyBarProps) {
   return (
-    <View testID="player-bar" style={barStyle as never}>
+    <View testID="player-bar" style={barStyle}>
       <Text variant="label" tone="secondary">
         Pick something to play
       </Text>

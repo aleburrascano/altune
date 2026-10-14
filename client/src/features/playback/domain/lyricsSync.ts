@@ -6,8 +6,8 @@ export function activeLineIndex(lines: SyncedLine[], positionMs: number): number
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
     if (line === undefined) break;
-    const ms: unknown = line.milliseconds;
-    if (typeof ms !== 'number' || !Number.isFinite(ms)) continue;
+    const ms = line.milliseconds;
+    if (!Number.isFinite(ms)) continue;
     if (ms > positionMs) break;
     active = i;
   }

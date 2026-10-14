@@ -1,5 +1,6 @@
 import { parseTrackId, type TrackId } from '@shared/apiClient/ids';
 import type { AcquisitionStatus, FeaturedArtist } from '@shared/apiClient/trackResponse';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { featuredArtistsFromExtras } from '@shared/apiClient/featuredArtists';
 
 export type TrackExtras = {
@@ -17,45 +18,66 @@ export type TrackExtras = {
   trackPosition: number | null;
 };
 
+type DiscoveryExtras = DiscoveryResult['extras'];
+
 function trackIdOrNull(value: string): TrackId | null {
   const parsed = parseTrackId(value);
   return parsed.ok ? parsed.id : null;
 }
 
-export function trackExtras(extras: Record<string, unknown>): TrackExtras {
-  const duration = extras['duration'] ?? extras['duration_seconds'];
-  const album = extras['album'];
-  const isrc = extras['isrc'];
-  const year = extras['year'];
-  const genre = extras['genre'];
-  const albumArtist = extras['album_artist'];
-  const featured = extras['featured_artists'];
-  const trackId = extras['track_id'] ?? extras['owned_track_id'];
-  const status = extras['acquisition_status'] ?? extras['owned_acquisition_status'];
-  const preview = extras['preview_url'];
-  const mbid = extras['mbid'];
-  const trackPosition = extras['track_position'];
+function asNonEmptyText(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
 
+function asText(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
+function asFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function asDuration(value: unknown): number | null {
+  const seconds = asFiniteNumber(value);
+  return seconds !== null && seconds >= 0 ? seconds : null;
+}
+
+function asAcquisitionStatus(value: unknown): AcquisitionStatus | null {
+  return value === 'ready' || value === 'pending' || value === 'failed' ? value : null;
+}
+
+function asTrackId(value: unknown): TrackId | null {
+  return typeof value === 'string' ? trackIdOrNull(value) : null;
+}
+
+function trackFacts(extras: DiscoveryExtras) {
   return {
-    durationSeconds:
-      typeof duration === 'number' && Number.isFinite(duration) && duration >= 0 ? duration : null,
-    album: typeof album === 'string' && album.length > 0 ? album : null,
-    isrc: typeof isrc === 'string' && isrc.length > 0 ? isrc : null,
-    year: typeof year === 'number' && Number.isFinite(year) ? year : null,
-    genre: typeof genre === 'string' && genre.length > 0 ? genre : null,
-    albumArtist: typeof albumArtist === 'string' && albumArtist.length > 0 ? albumArtist : null,
-    featuredArtists: featuredArtistsFromExtras(featured),
-    trackId: typeof trackId === 'string' ? trackIdOrNull(trackId) : null,
-    acquisitionStatus:
-      typeof status === 'string' &&
-      (status === 'ready' || status === 'pending' || status === 'failed')
-        ? status
-        : null,
-    previewUrl: typeof preview === 'string' && preview.length > 0 ? preview : null,
-    mbid: typeof mbid === 'string' ? mbid : null,
-    trackPosition:
-      typeof trackPosition === 'number' && Number.isFinite(trackPosition) ? trackPosition : null,
+    durationSeconds: asDuration(extras['duration'] ?? extras['duration_seconds']),
+    album: asNonEmptyText(extras['album']),
+    isrc: asNonEmptyText(extras['isrc']),
+    year: asFiniteNumber(extras['year']),
+    genre: asNonEmptyText(extras['genre']),
+    albumArtist: asNonEmptyText(extras['album_artist']),
   };
+}
+
+function ownedAcquisitionStatus(extras: DiscoveryExtras): AcquisitionStatus | null {
+  return asAcquisitionStatus(extras['acquisition_status'] ?? extras['owned_acquisition_status']);
+}
+
+function trackOwnership(extras: DiscoveryExtras) {
+  return {
+    featuredArtists: featuredArtistsFromExtras(extras['featured_artists']),
+    trackId: asTrackId(extras['track_id'] ?? extras['owned_track_id']),
+    acquisitionStatus: ownedAcquisitionStatus(extras),
+    previewUrl: asNonEmptyText(extras['preview_url']),
+    mbid: asText(extras['mbid']),
+    trackPosition: asFiniteNumber(extras['track_position']),
+  };
+}
+
+export function trackExtras(extras: DiscoveryExtras): TrackExtras {
+  return { ...trackFacts(extras), ...trackOwnership(extras) };
 }
 
 export type AlbumExtrasResult = {
@@ -65,17 +87,17 @@ export type AlbumExtrasResult = {
   recordType: string | null;
 };
 
-export function albumExtras(extras: Record<string, unknown>): AlbumExtrasResult {
-  const releaseDate = extras['release_date'];
-  const year = extras['year'];
-  const trackCount = extras['track_count'];
-  const recordType = extras['record_type'];
+function asYearText(value: unknown): string | null {
+  return typeof value === 'number' ? String(value) : asText(value);
+}
 
+export function albumExtras(extras: DiscoveryExtras): AlbumExtrasResult {
+  const trackCount = extras['track_count'];
   return {
-    releaseDate: typeof releaseDate === 'string' && releaseDate.length > 0 ? releaseDate : null,
-    year: typeof year === 'number' ? String(year) : typeof year === 'string' ? year : null,
+    releaseDate: asNonEmptyText(extras['release_date']),
+    year: asYearText(extras['year']),
     trackCount: typeof trackCount === 'number' ? trackCount : null,
-    recordType: typeof recordType === 'string' ? recordType : null,
+    recordType: asText(extras['record_type']),
   };
 }
 
@@ -93,7 +115,7 @@ export function extractFeaturedFromText(title: string, subtitle: string | null):
 }
 
 export function resolveFeatured(
-  extras: Record<string, unknown>,
+  extras: DiscoveryExtras,
   deezerFeatured: FeaturedArtist[] | undefined,
   title: string,
   subtitle: string | null,
