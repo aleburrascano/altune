@@ -1588,7 +1588,6 @@ func TestDownloadStep_WindowedPanickingAttemptIsRejectedAndOthersStillWin(t *tes
 	ac := &AcquisitionContext{Ranked: []ports.AudioCandidate{{URL: "rank1"}, {URL: "rank2"}}}
 
 	_, err := NewDownloadStep(fetcher, WithVerifyWidth(2)).Execute(context.Background(), ac, afterSelect{})
-
 	if err != nil {
 		t.Fatalf("Execute error: %v", err)
 	}

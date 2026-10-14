@@ -89,15 +89,15 @@ func RunPipeline(ctx context.Context, p Pipeline, ac *AcquisitionContext) (err e
 		}
 	}()
 
-	searched, err := runStage(ctx, run, p.search, pipelineStart{})
-	if err != nil {
-		return err
+	downloaded, err := searchAndDownload(ctx, run, p)
+	if err != nil && ac.FallbackSkipped && ctx.Err() == nil {
+		slog.InfoContext(ctx, "acquisition.first_tier_failed_trying_fallback",
+			"track_id", ac.Track.ID, "error", redact.LogError(err))
+		ac.FallbackSkipped, ac.FallbackOnly = false, true
+		ac.Candidates, ac.Ranked, ac.Selected = nil, nil, nil
+		run.completed = nil
+		downloaded, err = searchAndDownload(ctx, run, p)
 	}
-	selected, err := runStage(ctx, run, p.selectBest, searched)
-	if err != nil {
-		return err
-	}
-	downloaded, err := runStage(ctx, run, p.download, selected)
 	if err != nil {
 		return err
 	}
@@ -114,6 +114,18 @@ func RunPipeline(ctx context.Context, p Pipeline, ac *AcquisitionContext) (err e
 	}
 	_, err = runStage(ctx, run, p.updateTrack, stored)
 	return err
+}
+
+func searchAndDownload(ctx context.Context, run *pipelineRun, p Pipeline) (afterDownload, error) {
+	searched, err := runStage(ctx, run, p.search, pipelineStart{})
+	if err != nil {
+		return afterDownload{}, err
+	}
+	selected, err := runStage(ctx, run, p.selectBest, searched)
+	if err != nil {
+		return afterDownload{}, err
+	}
+	return runStage(ctx, run, p.download, selected)
 }
 
 func runStage[In, Out any](ctx context.Context, run *pipelineRun, s stage[In, Out], prev In) (Out, error) {
@@ -203,6 +215,9 @@ type AcquisitionContext struct {
 	Attempted  []AttemptedCandidate
 
 	Replace ReplaceState
+
+	FallbackSkipped bool
+	FallbackOnly    bool
 
 	PriorRejectedKeys []string
 }

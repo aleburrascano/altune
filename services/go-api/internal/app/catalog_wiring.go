@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/acquisition/adapters/id3"
 	"altune/go-api/internal/acquisition/adapters/tempfs"
 	"altune/go-api/internal/acquisition/adapters/ytdlp"
+	"altune/go-api/internal/acquisition/adapters/ytmsearch"
 	"altune/go-api/internal/acquisition/adapters/ytmusic"
 	"altune/go-api/internal/catalog/adapters/discoverybridge"
 	"altune/go-api/internal/catalog/adapters/persistence"
@@ -108,7 +109,7 @@ func (a *App) wireAudioSources(
 	}
 	trackRepo := persistence.NewPgxTrackRepository(a.pool)
 
-	var audioSources []acqPorts.AudioSource
+	var audioSources sourceTiers
 	var tools acqPorts.AcquisitionVerification
 	if audioStore != nil {
 		audioSources, tools = a.acquisitionSources(ctx)
@@ -120,7 +121,7 @@ func (a *App) wireAudioSources(
 		ytDlpSearcher:  a.sourceCanarySearcher(),
 		ytDlpAvailable: tools.YtDlp,
 	}
-	if len(audioSources) > 0 && audioStore != nil {
+	if len(audioSources.all()) > 0 && audioStore != nil {
 		bgScheduler := a.buildAcquisitionScheduler(ctx, tap, disc, trackRepo, audioStore, audioSources, tools)
 		staging.background = bgScheduler
 		staging.scheduler = bgScheduler
@@ -134,7 +135,7 @@ func (a *App) buildAcquisitionScheduler(
 	disc discoveryWiring,
 	trackRepo *persistence.PgxTrackRepository,
 	audioStore catalogPorts.AudioStore,
-	audioSources []acqPorts.AudioSource,
+	audioSources sourceTiers,
 	verification acqPorts.AcquisitionVerification,
 ) *acqService.BackgroundAcquisitionScheduler {
 	skips := &acqService.VerifySkipCounter{}
@@ -174,7 +175,7 @@ func (a *App) buildAcquisitionScheduler(
 		acqService.WithAcquireTempWorkspace(tempfs.New()))
 	acquireSvc := acqService.NewAcquireTrackAudioService(
 		acqCatalogBridge.NewTrackLedger(trackRepo, acqCatalogBridge.WithLengthTolerance(a.cfg.AcquisitionLengthToleranceSeconds)),
-		acqService.NewSourceRegistry(audioSources...),
+		acqService.NewSourceRegistry(audioSources.first...).WithFallback(audioSources.fallback...),
 		audioStore,
 		acquireOpts...,
 	)
@@ -271,10 +272,19 @@ func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServices
 	}
 }
 
-func (a *App) acquisitionSources(ctx context.Context) ([]acqPorts.AudioSource, acqPorts.AcquisitionVerification) {
+type sourceTiers struct {
+	first    []acqPorts.AudioSource
+	fallback []acqPorts.AudioSource
+}
+
+func (t sourceTiers) all() []acqPorts.AudioSource {
+	return append(append([]acqPorts.AudioSource{}, t.first...), t.fallback...)
+}
+
+func (a *App) acquisitionSources(ctx context.Context) (sourceTiers, acqPorts.AcquisitionVerification) {
 	if a.cfg.AcquisitionFixtureEnabled() {
 		slog.WarnContext(ctx, "acquisition: fixture audio source replaces every live source", "env", a.cfg.Env)
-		return []acqPorts.AudioSource{fixture.NewSource()}, acqPorts.AcquisitionVerification{}
+		return sourceTiers{first: []acqPorts.AudioSource{fixture.NewSource()}}, acqPorts.AcquisitionVerification{}
 	}
 	searcher := a.newYtDlpSearcher()
 	tools := acqPorts.AcquisitionVerification{YtDlp: searcher.Available()}
@@ -294,20 +304,26 @@ func (a *App) newYtDlpSearcher() *ytdlp.YtDlpAudioSearcher {
 		WithPOTokenURL(a.cfg.YtDLPPOTokenURL)
 }
 
-func (a *App) audioSourcesFor(ctx context.Context, searcher *ytdlp.YtDlpAudioSearcher) []acqPorts.AudioSource {
-	var sources []acqPorts.AudioSource
+func (a *App) audioSourcesFor(ctx context.Context, searcher *ytdlp.YtDlpAudioSearcher) sourceTiers {
+	var tiers sourceTiers
 	if a.cfg.YtMusicEnabled {
-		sources = append(sources, ytmusic.NewSource(searcher))
+		songs := ytmsearch.New(ytmsearch.Config{MinInterval: ytmSearchMinInterval, Timeout: ytmSearchTimeout})
+		tiers.first = append(tiers.first, ytmusic.NewSource(searcher), ytmsearch.NewSource(songs, searcher))
 	} else {
 		slog.InfoContext(ctx, "acquisition: ytmusic source disabled via YTMUSIC_ENABLED")
 	}
 	if a.cfg.YtDLPEnabled {
-		sources = append(sources, ytdlp.NewSource(searcher))
+		tiers.fallback = append(tiers.fallback, ytdlp.NewSource(searcher))
 	} else {
 		slog.InfoContext(ctx, "acquisition: yt-dlp source disabled via YTDLP_ENABLED")
 	}
-	return sources
+	return tiers
 }
+
+const (
+	ytmSearchMinInterval = 200 * time.Millisecond
+	ytmSearchTimeout     = 10 * time.Second
+)
 
 func newOwnershipEnrichment(cat catalogWiring) *ownership.OwnershipEnrichmentService {
 	return ownership.NewOwnershipEnrichmentService(

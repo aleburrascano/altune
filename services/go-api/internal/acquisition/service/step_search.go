@@ -46,6 +46,7 @@ func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext, _ pipe
 
 	ac.Candidates = kept
 	ac.SearchUnavailable = outage
+	ac.FallbackSkipped = s.skippedFallback(ac, candidates)
 	return afterSearch{}, nil
 }
 
@@ -78,6 +79,23 @@ func (s *SearchStep) Rollback(_ context.Context, _ *AcquisitionContext) error {
 	return nil
 }
 
+func (s *SearchStep) skippedFallback(ac *AcquisitionContext, candidates []ports.AudioCandidate) bool {
+	tiered, ok := s.finder.(fallbackAware)
+	if !ok || !tiered.HasFallback() || ac.FallbackOnly {
+		return false
+	}
+	for _, c := range candidates {
+		if c.Resolved {
+			return true
+		}
+	}
+	return false
+}
+
+type fallbackAware interface {
+	HasFallback() bool
+}
+
 func findRequestFor(ac *AcquisitionContext) ports.FindRequest {
 	return ports.FindRequest{
 		Title:    ac.Track.Title,
@@ -86,5 +104,7 @@ func findRequestFor(ac *AcquisitionContext) ports.FindRequest {
 		ISRC:     ac.Track.ISRC,
 		Duration: ac.Track.Duration,
 		Identity: ac.Identity,
+
+		FallbackOnly: ac.FallbackOnly,
 	}
 }

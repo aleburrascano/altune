@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -18,9 +20,12 @@ const (
 const (
 	explicitBadgeIcon      = "MUSIC_EXPLICIT_BADGE"
 	artistPageType         = "MUSIC_PAGE_TYPE_ARTIST"
+	albumPageType          = "MUSIC_PAGE_TYPE_ALBUM"
 	userChannelPageType    = "MUSIC_PAGE_TYPE_USER_CHANNEL"
 	bylineSeparatorRunText = " • "
 )
+
+var clockDuration = regexp.MustCompile(`^\d+(:\d{2}){1,2}$`)
 
 var (
 	ErrNoWatchTrack    = errors.New("ytmsearch: next response has no track")
@@ -36,11 +41,13 @@ type Watch struct {
 }
 
 type Song struct {
-	VideoID  string
-	Title    string
-	Artists  []string
-	Type     VideoType
-	Explicit bool
+	VideoID         string
+	Title           string
+	Artists         []string
+	Album           string
+	DurationSeconds int
+	Type            VideoType
+	Explicit        bool
 }
 
 type OEmbed struct {
@@ -147,12 +154,15 @@ func songFromListItem(item node) (Song, bool) {
 	if videoID == "" {
 		return Song{}, false
 	}
+	byline := item.at("flexColumns", 1, "musicResponsiveListItemFlexColumnRenderer", "text", "runs").items()
 	return Song{
-		VideoID:  videoID,
-		Title:    joinedRuns(item.at("flexColumns", 0, "musicResponsiveListItemFlexColumnRenderer", "text", "runs")),
-		Artists:  bylineArtists(item.at("flexColumns", 1, "musicResponsiveListItemFlexColumnRenderer", "text", "runs").items()),
-		Type:     VideoType(play.at("watchEndpointMusicSupportedConfigs", "watchEndpointMusicConfig", "musicVideoType").text()),
-		Explicit: hasExplicitBadge(item.at("badges")),
+		VideoID:         videoID,
+		Title:           joinedRuns(item.at("flexColumns", 0, "musicResponsiveListItemFlexColumnRenderer", "text", "runs")),
+		Artists:         bylineArtists(byline),
+		Album:           bylineAlbum(byline),
+		DurationSeconds: bylineDuration(byline),
+		Type:            VideoType(play.at("watchEndpointMusicSupportedConfigs", "watchEndpointMusicConfig", "musicVideoType").text()),
+		Explicit:        hasExplicitBadge(item.at("badges")),
 	}, true
 }
 
@@ -175,11 +185,15 @@ func joinedRuns(runs node) string {
 	return b.String()
 }
 
+func runPageType(run node) string {
+	return run.at("navigationEndpoint", "browseEndpoint", "browseEndpointContextSupportedConfigs",
+		"browseEndpointContextMusicConfig", "pageType").text()
+}
+
 func bylineArtists(runs []node) []string {
 	var artists []string
 	for _, run := range runs {
-		pageType := run.at("navigationEndpoint", "browseEndpoint", "browseEndpointContextSupportedConfigs",
-			"browseEndpointContextMusicConfig", "pageType").text()
+		pageType := runPageType(run)
 		if pageType == artistPageType || pageType == userChannelPageType {
 			artists = append(artists, run.at("text").text())
 		}
@@ -190,6 +204,31 @@ func bylineArtists(runs []node) []string {
 		}
 	}
 	return artists
+}
+
+func bylineAlbum(runs []node) string {
+	for _, run := range runs {
+		if runPageType(run) == albumPageType {
+			return run.at("text").text()
+		}
+	}
+	return ""
+}
+
+func bylineDuration(runs []node) int {
+	if len(runs) == 0 {
+		return 0
+	}
+	match := clockDuration.FindStringSubmatch(runs[len(runs)-1].at("text").text())
+	if match == nil {
+		return 0
+	}
+	seconds := 0
+	for _, part := range strings.Split(match[0], ":") {
+		n, _ := strconv.Atoi(part)
+		seconds = seconds*60 + n
+	}
+	return seconds
 }
 
 func hasExplicitBadge(badges node) bool {

@@ -11,8 +11,10 @@ import (
 
 const maxAcquisitionAttempts = 3
 
-var ErrAcquisitionRetryable = errors.New("acquisition failed transiently, job released for retry")
-var ErrNoConfidentMatch = errors.New("no candidate met the confidence floor")
+var (
+	ErrAcquisitionRetryable = errors.New("acquisition failed transiently, job released for retry")
+	ErrNoConfidentMatch     = errors.New("no candidate met the confidence floor")
+)
 
 func retryBackoff(attempts int) time.Duration {
 	return 30 * time.Second << (2 * (max(attempts, 1) - 1))

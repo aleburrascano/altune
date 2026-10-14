@@ -1,13 +1,12 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"errors"
 	"slices"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/acquisition/ports"
 )
 
 type recordingReporter struct {
