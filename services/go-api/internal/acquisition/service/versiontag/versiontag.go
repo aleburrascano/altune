@@ -30,6 +30,7 @@ var lexicon = []Entry{
 	{"", false, []string{"mono", "mix"}},
 	{"", false, []string{"album", "mix"}},
 	{"", false, []string{"album", "version"}},
+	{"", false, []string{"explicit", "version"}},
 	{"live", true, []string{"live"}},
 	{"cover", true, []string{"cover"}},
 	{"slowed", true, []string{"slowed"}},
