@@ -98,7 +98,7 @@ type fix struct {
 
 func normalizeName(s string) string {
 	var out strings.Builder
-	for _, r := range strings.ToLower(s) {
+	for _, r := range strings.ReplaceAll(strings.ToLower(s), "&", "and") {
 		if unicode.IsLetter(r) || unicode.IsDigit(r) {
 			out.WriteRune(r)
 		}
