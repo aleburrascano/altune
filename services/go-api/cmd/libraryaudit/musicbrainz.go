@@ -165,25 +165,8 @@ func toRelease(body musicBrainzReleaseBody) release {
 	return release{ID: body.ID, Title: body.Title, Date: body.Date, Artist: strings.TrimSpace(artist.String())}
 }
 
-type musicBrainzISRCBody struct {
-	Recordings []musicBrainzRecordingBody `json:"recordings"`
-}
-
 func (c *musicBrainzClient) RecordingsWithReleases(ctx context.Context, isrc string) ([]recording, error) {
-	var body musicBrainzISRCBody
-	path := "/ws/2/isrc/" + url.PathEscape(canonicalISRC(isrc)) + "?inc=releases+artist-credits&fmt=json"
-	err := c.getJSON(ctx, path, &body)
-	if errors.Is(err, errCatalogUnknown) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	found := make([]recording, 0, len(body.Recordings))
-	for _, item := range body.Recordings {
-		found = append(found, toRecording(item))
-	}
-	return found, nil
+	return c.RecordingsByISRC(ctx, isrc)
 }
 
 func (c *musicBrainzClient) getJSON(ctx context.Context, path string, into any) error {
