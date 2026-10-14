@@ -2,7 +2,6 @@ import { renderHook, act } from '@testing-library/react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 
-import { AUTH_ACTION_TIMEOUT_MS } from '@shared/auth/authDeadline';
 import { useOAuth } from '@features/auth/hooks/useOAuth.web';
 import * as nativeWebOrigin from '@shared/device/webOrigin';
 import * as browserWebOrigin from '@shared/device/webOrigin.web';
@@ -12,6 +11,8 @@ import {
   createAuthPortMock,
   createSupabaseAuthMock,
 } from '@features/auth/__tests__/testUtils/authTestUtils';
+
+const AUTH_ACTION_TIMEOUT_MS = 20_000;
 
 const mockStateUpdates: unknown[] = [];
 

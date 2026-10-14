@@ -2,10 +2,11 @@ import 'react-native-gesture-handler/jestSetup';
 import { act, render } from '@testing-library/react-native';
 import type { ComponentType, ReactNode } from 'react';
 
-import { DEFAULT_KILL_SWITCH_URL, KILL_SWITCH_POLL_MS } from '@shared/killSwitch/killSwitchPoll';
-
 const { __http } = require('@testing/doubles/fetch.js');
 
+const DEFAULT_KILL_SWITCH_URL =
+  'https://raw.githubusercontent.com/aleburrascano/altune/main/kill-switches.json';
+const KILL_SWITCH_POLL_MS = 300_000;
 const SLOW_ROOT_LAYOUT_LOAD_TIMEOUT_MS = 60_000;
 const SWITCH_DOCUMENT = `GET ${new URL(DEFAULT_KILL_SWITCH_URL).pathname}`;
 

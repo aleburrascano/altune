@@ -1,13 +1,14 @@
 import { act, render, screen, waitFor } from '@testing-library/react-native';
 import { Platform } from 'react-native';
 
-import { AUTH_ACTION_TIMEOUT_MS } from '@shared/auth/authDeadline';
 import { _resetConsumedCredentialForTest } from '@features/auth/domain/completeAuthIntent';
 import { AuthCallbackScreen } from '@features/auth/ui/AuthCallbackScreen.web';
 import * as nativeWebOrigin from '@shared/device/webOrigin';
 import * as browserWebOrigin from '@shared/device/webOrigin.web';
 
 import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
+
+const AUTH_ACTION_TIMEOUT_MS = 20_000;
 
 const mockRouter = { replace: jest.fn() };
 

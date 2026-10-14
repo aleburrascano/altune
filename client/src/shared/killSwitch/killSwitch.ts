@@ -7,7 +7,7 @@ export type KillSwitchLoop =
 
 type LoopFlags = Readonly<Record<KillSwitchLoop, boolean>>;
 
-export const KILL_SWITCH_KEYS: Readonly<Record<KillSwitchLoop, string>> = {
+const KILL_SWITCH_KEYS: Readonly<Record<KillSwitchLoop, string>> = {
   serverEvents: 'sse_enabled',
   telemetryFlush: 'telemetry_enabled',
   offlineDownloads: 'offline_downloads_enabled',

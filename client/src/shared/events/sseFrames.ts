@@ -4,7 +4,7 @@ export interface ServerEvent {
   data: Record<string, unknown>;
 }
 
-export class MalformedSSEEventError extends Error {
+class MalformedSSEEventError extends Error {
   readonly eventId: string;
   readonly eventType: string;
   readonly payloadLength: number;

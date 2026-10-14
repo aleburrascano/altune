@@ -1,10 +1,10 @@
+import * as killSwitchModule from '@shared/killSwitch/killSwitch';
 import {
   createMemoryFileStore,
   type MemoryFileStore,
 } from '@shared/files/__tests__/memoryFileStore';
 
 import {
-  KILL_SWITCH_KEYS,
   applyKillSwitches,
   isLoopEnabled,
   onKillSwitchChange,
@@ -91,11 +91,11 @@ describe('kill switches', () => {
     expect(allLoops()).toEqual([true, true, false, true, true]);
     expect(JSON.parse(store.files.get(SWITCH_URI) ?? '{}')).toEqual({
       schemaVersion: 1,
-      [KILL_SWITCH_KEYS.serverEvents]: true,
-      [KILL_SWITCH_KEYS.telemetryFlush]: true,
-      [KILL_SWITCH_KEYS.offlineDownloads]: false,
-      [KILL_SWITCH_KEYS.detailEnrichment]: true,
-      [KILL_SWITCH_KEYS.discovery]: true,
+      sse_enabled: true,
+      telemetry_enabled: true,
+      offline_downloads_enabled: false,
+      detail_enrichment_enabled: true,
+      discovery_enabled: true,
     });
   });
 
@@ -138,5 +138,16 @@ describe('kill switches', () => {
     unsubscribe();
     applyKillSwitches({});
     expect(listener).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('killSwitch module surface', () => {
+  it('exposes the switch API and keeps its keys, URL and timings private', () => {
+    expect(Object.keys(killSwitchModule).sort()).toEqual([
+      'applyKillSwitches',
+      'isLoopEnabled',
+      'onKillSwitchChange',
+      'setKillSwitchFileStore',
+    ]);
   });
 });

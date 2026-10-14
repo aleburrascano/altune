@@ -58,7 +58,7 @@ function deleteFromWebStorage(fallback: Map<string, string>, key: string): Promi
   return Promise.resolve();
 }
 
-export function createLocalStorageWebStorage(): AuthStorage {
+function createLocalStorageWebStorage(): AuthStorage {
   const unreachableFallback = new Map<string, string>();
 
   return {

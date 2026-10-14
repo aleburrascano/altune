@@ -5,8 +5,8 @@ import { isServerEvent, parseChunk } from '@shared/events/sseFrames';
 import type { ServerEvent } from '@shared/events/sseFrames';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
-export const HEARTBEAT_WATCHDOG_MS = 60_000;
-export const MAX_RESPONSE_BYTES = 512 * 1024;
+const HEARTBEAT_WATCHDOG_MS = 60_000;
+const MAX_RESPONSE_BYTES = 524_288;
 
 const BASE_RECONNECT_MS = 1_000;
 const MAX_RECONNECT_MS = 30_000;
@@ -17,7 +17,7 @@ function reconnectDelayMs(attempt: number, minimumDelayMs: number): number {
   return Math.max(base + Math.random() * base, minimumDelayMs);
 }
 
-export class ServerEventHandlerError extends Error {
+class ServerEventHandlerError extends Error {
   readonly eventId: string;
   readonly eventType: string;
 
@@ -43,7 +43,7 @@ class SSEConnectionError extends Error {
   }
 }
 
-export class SSEHttpError extends Error {
+class SSEHttpError extends Error {
   readonly status: number;
   readonly correlationId: string | null;
 

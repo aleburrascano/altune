@@ -1,6 +1,8 @@
 import { NetworkError } from '@shared/failure/errors';
 
-import { AUTH_CALL_TIMEOUT_MS, withinAuthDeadline } from '@shared/auth/authDeadline';
+import { withinAuthDeadline } from '@shared/auth/authDeadline';
+
+const AUTH_CALL_TIMEOUT_MS = 15_000;
 
 beforeEach(() => {
   jest.useFakeTimers();

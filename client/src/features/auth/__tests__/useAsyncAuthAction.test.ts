@@ -1,7 +1,8 @@
 import { renderHook, act } from '@testing-library/react-native';
 
-import { AUTH_ACTION_TIMEOUT_MS } from '@shared/auth/authDeadline';
 import { useAsyncAuthAction } from '@features/auth/hooks/useAsyncAuthAction';
+
+const AUTH_ACTION_TIMEOUT_MS = 20_000;
 
 type Result =
   | { kind: 'idle' }

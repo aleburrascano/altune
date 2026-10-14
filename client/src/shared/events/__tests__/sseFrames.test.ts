@@ -1,4 +1,4 @@
-import { MalformedSSEEventError, isServerEvent, parseChunk } from '@shared/events/sseFrames';
+import { isServerEvent, parseChunk } from '@shared/events/sseFrames';
 import type { ParsedBlock } from '@shared/events/sseFrames';
 
 describe('parseChunk', () => {
@@ -33,12 +33,14 @@ describe('parseChunk', () => {
     const parsed = parseChunk('', 'id: 9\nevent: resync\ndata: {not json}\n\n', '4');
     expect(parsed.blocks).toHaveLength(1);
     const block = parsed.blocks[0] as ParsedBlock;
-    expect(block).toBeInstanceOf(MalformedSSEEventError);
+    expect(block).toBeInstanceOf(Error);
+    expect(block).toMatchObject({
+      name: 'MalformedSSEEventError',
+      eventId: '9',
+      eventType: 'resync',
+      payloadLength: '{not json}'.length,
+    });
     expect(isServerEvent(block)).toBe(false);
-    const error = block as MalformedSSEEventError;
-    expect(error.eventId).toBe('9');
-    expect(error.eventType).toBe('resync');
-    expect(error.payloadLength).toBe('{not json}'.length);
     expect(parsed.lastEventId).toBe('4');
   });
 

@@ -1,7 +1,6 @@
 import { Platform } from 'react-native';
 import { act, renderHook } from '@testing-library/react-native';
 
-import { AUTH_ACTION_TIMEOUT_MS } from '@shared/auth/authDeadline';
 import * as nativeWebOrigin from '@shared/device/webOrigin';
 import * as browserWebOrigin from '@shared/device/webOrigin.web';
 
@@ -11,6 +10,8 @@ import {
   createSupabaseAuthMock,
   runAsyncAuthHook,
 } from '@features/auth/__tests__/testUtils/authTestUtils';
+
+const AUTH_ACTION_TIMEOUT_MS = 20_000;
 
 const { signUp: supabaseSignUp } = createSupabaseAuthMock('signUp');
 

@@ -260,6 +260,5 @@ N4 src/shared/events/playlistEvents.ts exports PLAYLIST_HANDLERS with the word H
 N4 src/shared/events/resyncEvents.ts exports RESYNC_HANDLERS with the word HANDLERS
 N4 src/shared/events/serverEventTypes.ts exports ServerEventHandler with the word Handler
 N4 src/shared/events/serverEventTypes.ts exports ServerEventHandlers with the word Handlers
-N4 src/shared/events/sseClient.ts exports ServerEventHandlerError with the word Handler
 N4 src/shared/telemetry/errorUtils.d.ts name has the word Utils
 N4 src/shared/telemetry/native/uncaughtErrors.ts exports chainUncaughtErrorHandler with the word Handler

@@ -1,13 +1,7 @@
 import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 
 import { isLoopEnabled, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
-import {
-  DEFAULT_KILL_SWITCH_URL,
-  KILL_SWITCH_POLL_MS,
-  KILL_SWITCH_TIMEOUT_MS,
-  refreshKillSwitches,
-  startKillSwitchPolling,
-} from '@shared/killSwitch/killSwitchPoll';
+import { refreshKillSwitches, startKillSwitchPolling } from '@shared/killSwitch/killSwitchPoll';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -36,6 +30,10 @@ const { __listeners: appStateListeners } = jest.requireMock(
   'react-native/Libraries/AppState/AppState',
 ) as { __listeners: AppStateChangeHandler[] };
 
+const DEFAULT_KILL_SWITCH_URL =
+  'https://raw.githubusercontent.com/aleburrascano/altune/main/kill-switches.json';
+const KILL_SWITCH_TIMEOUT_MS = 5_000;
+const KILL_SWITCH_POLL_MS = 300_000;
 const SWITCH_GET = 'GET /aleburrascano/altune/main/kill-switches.json';
 
 let warn: jest.SpyInstance;

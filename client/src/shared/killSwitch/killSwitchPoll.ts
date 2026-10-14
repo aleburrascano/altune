@@ -4,11 +4,11 @@ import { startDeadline } from '@shared/timing/deadline';
 
 import { applyKillSwitches } from '@shared/killSwitch/killSwitch';
 
-export const DEFAULT_KILL_SWITCH_URL =
+const DEFAULT_KILL_SWITCH_URL =
   'https://raw.githubusercontent.com/aleburrascano/altune/main/kill-switches.json';
 
-export const KILL_SWITCH_TIMEOUT_MS = 5_000;
-export const KILL_SWITCH_POLL_MS = 5 * 60 * 1000;
+const KILL_SWITCH_TIMEOUT_MS = 5_000;
+const KILL_SWITCH_POLL_MS = 300_000;
 
 function killSwitchUrl(): string {
   const configured = process.env.EXPO_PUBLIC_KILL_SWITCH_URL;

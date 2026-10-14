@@ -1,4 +1,6 @@
-import { AUTH_FETCH_TIMEOUT_MS, fetchWithinAuthDeadline } from '@shared/auth/authDeadline';
+import { fetchWithinAuthDeadline } from '@shared/auth/authDeadline';
+
+const AUTH_FETCH_TIMEOUT_MS = 10_000;
 
 const { __http } = require('@testing/doubles/fetch.js');
 

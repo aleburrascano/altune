@@ -1,11 +1,4 @@
-import {
-  SSEClient,
-  HEARTBEAT_WATCHDOG_MS,
-  MAX_RESPONSE_BYTES,
-  ServerEventHandlerError,
-  SSEHttpError,
-} from '@shared/events/sseClient';
-import { MalformedSSEEventError } from '@shared/events/sseFrames';
+import { SSEClient } from '@shared/events/sseClient';
 import type { ServerEvent } from '@shared/events/sseFrames';
 import {
   clearSessionExpired,
@@ -19,6 +12,8 @@ jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.j
 
 const { __http } = require('@testing/doubles/fetch.js');
 
+const HEARTBEAT_WATCHDOG_MS = 60_000;
+const MAX_RESPONSE_BYTES = 524_288;
 const EVENTS_PATH = '/v1/discovery/events';
 
 type SentRequest = { path: string };
@@ -281,8 +276,8 @@ describe('SSEClient', () => {
       expect(onEvent).not.toHaveBeenCalled();
       expect(onError).toHaveBeenCalledTimes(1);
       const error = onError.mock.calls[0]?.[0];
-      expect(error).toBeInstanceOf(MalformedSSEEventError);
       expect(error).toMatchObject({
+        name: 'MalformedSSEEventError',
         eventId: '7',
         eventType: 'track_added_to_library',
         payloadLength: 21,
@@ -321,8 +316,11 @@ describe('SSEClient', () => {
 
       expect(onError).toHaveBeenCalledTimes(1);
       const error = onError.mock.calls[0]?.[0];
-      expect(error).toBeInstanceOf(ServerEventHandlerError);
-      expect(error).toMatchObject({ eventId: '7', eventType: 'resync' });
+      expect(error).toMatchObject({
+        name: 'ServerEventHandlerError',
+        eventId: '7',
+        eventType: 'resync',
+      });
       expect((error as Error).cause).toBe(thrown);
     });
 
@@ -964,8 +962,7 @@ describe('HTTP status handling', () => {
 
       expect(onError).toHaveBeenCalledTimes(1);
       const error = onError.mock.calls[0]?.[0];
-      expect(error).toBeInstanceOf(SSEHttpError);
-      expect(error).toMatchObject({ status: 502, correlationId: sent });
+      expect(error).toMatchObject({ name: 'SSEHttpError', status: 502, correlationId: sent });
     });
 
     it('does not feed an error body to the event parser', async () => {
@@ -975,7 +972,9 @@ describe('HTTP status handling', () => {
       latest().respond(500, 'id: 9\ndata: {"leak":true}\n\n');
 
       expect(onEvent).not.toHaveBeenCalled();
-      expect(onError.mock.calls.map(([error]) => error)).toEqual([expect.any(SSEHttpError)]);
+      expect(onError.mock.calls.map(([error]) => error)).toEqual([
+        expect.objectContaining({ name: 'SSEHttpError' }),
+      ]);
     });
 
     it('marks the session expired on a 401', async () => {
