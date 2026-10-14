@@ -57,7 +57,7 @@ A fifth (sign-out / auth-gate redirect) only if the four are stable.
 
 ### 5. CI shape
 
-- Workflow `.gitea/workflows/e2e.yml` with `client/e2e/playwright.config.ts`,
+- Workflow `.github/workflows/e2e.yml` with `client/e2e/playwright.config.ts`,
   path-filtered to `client/**`, `services/go-api/**` and
   `client/e2e/**`; runs on PRs and nightly.
 - Informational for two weeks, then a required `gate` input once flake rate is under 2%.

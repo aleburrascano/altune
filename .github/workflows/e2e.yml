@@ -1,0 +1,74 @@
+name: e2e
+
+on:
+  push:
+    branches: ["pr/**"]
+  schedule:
+    - cron: "40 4 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      E2E_STACK_DIR: /tmp/altune-e2e-stack-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: fetch main
+        run: git fetch origin main:refs/remotes/origin/main
+      - name: scope
+        if: startsWith(github.ref, 'refs/heads/pr/')
+        run: |
+          if ! git diff --name-only origin/main...HEAD | grep -qE '^(client/|services/go-api/|scripts/e2e-stack\.sh$|\.github/workflows/e2e\.yml$)'; then
+            echo "E2E_SKIP=true" >>"$GITHUB_ENV"
+            echo "no mobile or backend change, skipping e2e"
+          fi
+      - uses: actions/setup-go@v5
+        if: env.E2E_SKIP != 'true'
+        with:
+          go-version-file: services/go-api/go.mod
+          cache-dependency-path: services/go-api/go.sum
+      - uses: actions/setup-node@v4
+        if: env.E2E_SKIP != 'true'
+        with:
+          node-version-file: client/.nvmrc
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - name: dependencies
+        if: env.E2E_SKIP != 'true'
+        working-directory: client
+        run: npm ci
+      - name: browser
+        if: env.E2E_SKIP != 'true'
+        working-directory: client
+        run: npx playwright install --with-deps chromium
+      - name: journeys
+        if: env.E2E_SKIP != 'true'
+        run: |
+          set -euo pipefail
+          bash scripts/e2e-stack.sh up
+          set -a && . "$GITHUB_ENV" && set +a
+          cd client && npx playwright test -c e2e/playwright.config.ts
+      - name: keep the evidence
+        if: failure() && env.E2E_SKIP != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-evidence
+          path: |
+            client/e2e/test-results
+            ${{ env.E2E_STACK_DIR }}/api.log
+          if-no-files-found: ignore
+      - name: stack down
+        if: always() && env.E2E_SKIP != 'true'
+        run: bash scripts/e2e-stack.sh down
