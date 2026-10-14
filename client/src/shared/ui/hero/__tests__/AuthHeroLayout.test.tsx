@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react-native';
 
 import { adjustsKeyboardInsets } from '@shared/ui/keyboard/keyboard';
 
-import { AuthHeroLayout } from '@features/auth/ui/hero/AuthHeroLayout';
+import { AuthHeroLayout } from '@shared/ui/hero/AuthHeroLayout';
 
 describe('AuthHeroLayout', () => {
   it('hands the platform keyboard-inset setting to its scroll view', () => {

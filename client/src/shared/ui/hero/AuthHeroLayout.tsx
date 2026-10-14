@@ -7,7 +7,7 @@ import { Text } from '@shared/ui/primitives/Text';
 import { Wordmark } from '@shared/ui/primitives/Wordmark';
 import { spacing, useTheme } from '@shared/ui/theme';
 
-import { ArtworkBackground } from '@features/auth/ui/hero/ArtworkBackground';
+import { ArtworkBackground } from '@shared/ui/hero/ArtworkBackground';
 
 const EQ_BARS = [
   { id: 'a', height: 7 },

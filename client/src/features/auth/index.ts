@@ -1,4 +1,3 @@
-export { ArtworkBackground } from '@features/auth/ui/hero/ArtworkBackground';
 export { AuthCallbackScreen } from '@features/auth/ui/AuthCallbackScreen';
 export { AuthGate } from '@features/auth/ui/AuthGate';
 export { ForgotPasswordScreen } from '@features/auth/ui/ForgotPasswordScreen';

@@ -11,7 +11,7 @@ import { useUpdatePassword } from '@features/auth/hooks/useUpdatePassword';
 import { clearRecoveryUnlock } from '@features/auth/domain/passwordRecovery';
 import { PASSWORD_REQUIREMENTS_HINT, newPasswordFormState } from '@features/auth/domain/validation';
 import { AuthErrorBanner } from '@features/auth/ui/AuthErrorBanner';
-import { AuthHeroLayout } from '@features/auth/ui/hero/AuthHeroLayout';
+import { AuthHeroLayout } from '@shared/ui/hero/AuthHeroLayout';
 import { FieldError, NewPasswordField } from '@features/auth/ui/AuthFields';
 
 const OTHERS_NOT_REVOKED_TITLE = 'Password updated';
