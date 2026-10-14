@@ -109,7 +109,16 @@ func auditLibrary(ctx context.Context, cfg settings, tracks []libraryTrack) audi
 		deezerClient:      newDeezerClient(httpClient, deezerBaseURL, cfg.requestsPerSecond),
 		musicBrainzClient: newMusicBrainzClient(httpClient, musicBrainzBaseURL, musicBrainzRequestsPerSecond),
 	}
-	return auditAll(ctx, cat, newCoverComparer(httpClient), tracks, cfg.workers)
+	outcome := auditAll(ctx, cat, newCoverComparer(httpClient), tracks, cfg.workers)
+	if outcome.AbortReason != "" {
+		return outcome
+	}
+	triaged, err := triageLengthFindings(ctx, cat, cat.musicBrainzClient, tracks, outcome.Findings)
+	outcome.Findings = triaged
+	if err != nil {
+		outcome.AbortReason = err.Error()
+	}
+	return outcome
 }
 
 type combinedCatalog struct {

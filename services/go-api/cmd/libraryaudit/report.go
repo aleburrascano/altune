@@ -123,6 +123,8 @@ func writeSummary(w io.Writer, r report) {
 	_, _ = fmt.Fprintf(w, "  ISRC is a different song:   %d\n", s.WrongSong)
 	_, _ = fmt.Fprintf(w, "  audio >10s shorter:         %d\n", s.LengthShorter)
 	_, _ = fmt.Fprintf(w, "  audio >10s longer:          %d\n", s.LengthLonger)
+	triage := countCategories(r.Findings)
+	_, _ = fmt.Fprintf(w, "    ISRC is another version:  %d, to re-acquire: %d\n", triage[categoryLengthVersionFix], triage[categoryLengthReacquire])
 	_, _ = fmt.Fprintf(w, "  year fillable:              %d\n", s.YearFillable)
 	_, _ = fmt.Fprintf(w, "  album artist fillable:      %d\n", s.AlbumArtistFillable)
 	_, _ = fmt.Fprintf(w, "  year from other release:    %d\n", s.YearOtherRelease)

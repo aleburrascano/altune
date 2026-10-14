@@ -67,6 +67,8 @@ type finding struct {
 	Category category `json:"category"`
 	Detail   string   `json:"detail,omitempty"`
 	Fix      *fix     `json:"fix,omitempty"`
+
+	LengthPlan *lengthPlan `json:"length_plan,omitempty"`
 }
 
 type fix struct {
