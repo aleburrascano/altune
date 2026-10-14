@@ -112,7 +112,7 @@ func TestStore_FixISRCChangesTheLabelAndKeepsTheAudioAndUndoRestoresIt(t *testin
 	}
 }
 
-func TestStore_ReacquireJudgesAgainstTheCatalogLengthAndQueuesAReplaceJob(t *testing.T) {
+func TestStore_ReacquireKeepsTheFileLengthAndQueuesAReplaceJob(t *testing.T) {
 	s := testStore(t)
 	row := seedReady(t, s, "USALBUM", 226)
 	got, err := s.apply(context.Background(), uuid.New(), changeFor(row, actionReacquire, "", 226, 379), true)
@@ -120,7 +120,7 @@ func TestStore_ReacquireJudgesAgainstTheCatalogLengthAndQueuesAReplaceJob(t *tes
 		t.Fatalf("got %s, %v", got, err)
 	}
 	after := stateOf(t, s, row)
-	if *after.catalog != 379 || *after.duration != 379 || !after.mismatch || after.jobKind != "replace" || !after.jobQueued ||
+	if *after.catalog != 379 || *after.duration != 226 || !after.mismatch || after.jobKind != "replace" || !after.jobQueued ||
 		after.status != "ready" || *after.audioVersion != "v1" || after.loggedFixes != 1 {
 		t.Fatalf("after enqueue %+v", after)
 	}
@@ -148,7 +148,7 @@ func TestStore_ReacquireSkipsATrackAlreadyEnqueuedOrInFlight(t *testing.T) {
 	if got, err := s.apply(context.Background(), uuid.New(), c, true); err != nil || got != verdictApplied {
 		t.Fatalf("first: %s, %v", got, err)
 	}
-	c.Version, c.FileSeconds = 5, 379
+	c.Version = 5
 	if got, err := s.apply(context.Background(), uuid.New(), c, true); err != nil || got != verdictInFlight {
 		t.Fatalf("while queued: %s, %v", got, err)
 	}

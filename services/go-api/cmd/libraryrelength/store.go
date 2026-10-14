@@ -43,7 +43,7 @@ func loadTrack(ctx context.Context, tx pgx.Tx, c change, lock bool) (trackRow, e
 const fixISRCSQL = `UPDATE tracks SET isrc = $3, catalog_duration_seconds = $4, audio_length_mismatch = false, version = version + 1
 	WHERE id = $1 AND user_id = $2 AND version = $5`
 
-const markForReplaceSQL = `UPDATE tracks SET catalog_duration_seconds = $3, duration_seconds = $3, audio_length_mismatch = true, version = version + 1
+const markForReplaceSQL = `UPDATE tracks SET catalog_duration_seconds = $3, audio_length_mismatch = true, version = version + 1
 	WHERE id = $1 AND user_id = $2 AND version = $4`
 
 const insertFixSQL = `INSERT INTO track_length_fixes (run_id, track_id, user_id, action, old_isrc, new_isrc, old_duration_seconds,

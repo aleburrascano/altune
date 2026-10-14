@@ -334,6 +334,35 @@ func TestCompleteKeepsTheCatalogLengthBesideTheFileLength(t *testing.T) {
 	}
 }
 
+func TestGetAimsADownloadAtTheCatalogLengthNotTheStoredFile(t *testing.T) {
+	tests := []struct {
+		name    string
+		catalog float64
+		want    float64
+	}{
+		{"catalog length known", 235, 235},
+		{"no catalog length", 0, 137},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			track, userId := newTrack(t, 1)
+			if err := track.SetCatalogDuration(tt.catalog); err != nil {
+				t.Fatal(err)
+			}
+			if err := track.SetDuration(137); err != nil {
+				t.Fatal(err)
+			}
+			snap, err := NewTrackLedger(newFakeStore(track)).Get(context.Background(), track.ID, userId)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if snap.DurationSeconds == nil || *snap.DurationSeconds != tt.want {
+				t.Fatalf("target length = %v, want %v", snap.DurationSeconds, tt.want)
+			}
+		})
+	}
+}
+
 func TestCompleteFlagsAudioOffTheCatalogLengthBeyondTheTolerance(t *testing.T) {
 	tests := []struct {
 		name     string
