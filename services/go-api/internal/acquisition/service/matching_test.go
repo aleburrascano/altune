@@ -1172,3 +1172,13 @@ func TestUnrequestedQualifiers_TitleWithoutBracketHasNoVeto(t *testing.T) {
 	assertQualifiers(t, "veto", veto, nil)
 	assertQualifiers(t, "fallback", fallback, nil)
 }
+
+func TestSelectBest_AnExplicitResolvedTrackBeatsACloserCleanOne(t *testing.T) {
+	track := TrackRef{Title: "Matches", Artist: "Tezzus", Duration: 180}
+	clean := ports.AudioCandidate{Title: "Matches", URL: "https://music.youtube.com/watch?v=cleanAAAAAA", Duration: 180, Resolved: true}
+	explicit := ports.AudioCandidate{Title: "Matches", URL: "https://music.youtube.com/watch?v=explicitAAA", Duration: 182, Resolved: true, Explicit: true}
+
+	if got := selectBest(track, []ports.AudioCandidate{clean, explicit}); got == nil || got.URL != explicit.URL {
+		t.Fatalf("selected %v, want the explicit track even though the clean one is closer in length", got)
+	}
+}

@@ -20,6 +20,7 @@ type AudioCandidate struct {
 	ViewCount  int64
 	Source     acqdomain.SourceName
 	Resolved   bool
+	Explicit   bool
 	Unplayable string
 }
 

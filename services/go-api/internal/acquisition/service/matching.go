@@ -18,6 +18,9 @@ func breakTie(a, b candidateEntry) bool {
 }
 
 func lessResolved(a, b candidateEntry) bool {
+	if a.candidate.Explicit != b.candidate.Explicit {
+		return a.candidate.Explicit
+	}
 	return breakTie(a, b)
 }
 
