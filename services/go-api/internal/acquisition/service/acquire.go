@@ -300,6 +300,8 @@ func (s *AcquireTrackAudioService) startAcquisition(ctx context.Context, userId 
 	)
 	s.events.Publish(ctx, userId, events.TypeTrackAcquisitionStarted, map[string]any{
 		"track_id": trackId.String(),
+		"title":    track.Title,
+		"artist":   track.Artist,
 	})
 	return &AcquisitionContext{
 		Track:   buildTrackRef(track),

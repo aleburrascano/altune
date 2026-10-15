@@ -241,6 +241,27 @@ func TestStore_ReacquireThatCannotEnqueueRestoresTheTrack(t *testing.T) {
 	}
 }
 
+type kindRecordingQueue struct{ kinds *[]ports.JobKind }
+
+func (q kindRecordingQueue) Enqueue(_ context.Context, _ shared.TrackId, kind ports.JobKind, _ time.Duration) error {
+	*q.kinds = append(*q.kinds, kind)
+	return nil
+}
+
+func TestStore_ReacquireGoesThroughTheSilentRatchetedUpgradeLane(t *testing.T) {
+	var kinds []ports.JobKind
+	s := store{queue: kindRecordingQueue{kinds: &kinds}}
+
+	got, err := s.enqueueReplace(context.Background(), uuid.New(), change{TrackID: uuid.NewString()})
+
+	if got != verdictApplied || err != nil {
+		t.Fatalf("got %s, %v", got, err)
+	}
+	if !reflect.DeepEqual(kinds, []ports.JobKind{ports.JobKindUpgrade}) {
+		t.Fatalf("enqueued kinds = %v, want only the upgrade kind", kinds)
+	}
+}
+
 type cancellingQueue struct{ cancel context.CancelFunc }
 
 func (q cancellingQueue) Enqueue(context.Context, shared.TrackId, ports.JobKind, time.Duration) error {
