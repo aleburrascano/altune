@@ -151,12 +151,6 @@ var copiedSongFactDefinitionRe = regexp.MustCompile(`func (?:canonicalISRC|norma
 
 var compiledPatternLiteralRe = regexp.MustCompile("regexp\\.MustCompile\\(`([^`]*)`\\)")
 
-var acquisitionEditionDebt = map[string]bool{
-	"internal/acquisition/service/judge/judge.go":       true,
-	"internal/acquisition/adapters/ytmsearch/source.go": true,
-	"cmd/acquisitioneval/liveflags.go":                  true,
-}
-
 func hasEditionWordPattern(source []byte) bool {
 	for _, literal := range compiledPatternLiteralRe.FindAllSubmatch(source, -1) {
 		pattern := strings.ToLower(string(literal[1]))
@@ -196,7 +190,7 @@ func TestNoSongFactIsDefinedOutsideThePackage(t *testing.T) {
 			return err
 		}
 		relative = filepath.ToSlash(relative)
-		if !strings.HasSuffix(path, "_test.go") && !acquisitionEditionDebt[relative] && hasEditionWordPattern(source) {
+		if !strings.HasSuffix(path, "_test.go") && hasEditionWordPattern(source) {
 			copies = append(copies, path+": keeps its own edition word list")
 		}
 		return nil

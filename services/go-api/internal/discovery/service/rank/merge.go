@@ -3,11 +3,11 @@ package rank
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/service/release"
+	"altune/go-api/internal/shared/songfacts"
 	"altune/go-api/internal/shared/textnorm"
 	"altune/go-api/internal/shared/versiontag"
 	"math"
 	"slices"
-	"strings"
 )
 
 type Entity struct {
@@ -194,7 +194,7 @@ func sameEntity(ke, kc keyedResult) (domain.EntityResolutionTier, bool) {
 }
 
 func sameIdentity(e, c domain.SearchResult) (domain.EntityResolutionTier, bool, bool) {
-	if eISRC := canonicalISRC(e.ISRC); eISRC != "" && eISRC == canonicalISRC(c.ISRC) {
+	if eISRC := songfacts.CanonicalISRC(e.ISRC); eISRC != "" && eISRC == songfacts.CanonicalISRC(c.ISRC) {
 		return domain.EntityResolutionISRC, true, true
 	}
 	if e.Kind == domain.ResultKindAlbum && e.UPC != "" && c.UPC != "" && e.UPC == c.UPC &&
@@ -213,12 +213,8 @@ func sameIdentity(e, c domain.SearchResult) (domain.EntityResolutionTier, bool, 
 	return domain.EntityResolutionNone, false, false
 }
 
-func canonicalISRC(isrc string) string {
-	return strings.ToUpper(strings.NewReplacer("-", "", " ", "").Replace(strings.TrimSpace(isrc)))
-}
-
 func hasConflictingISRCs(a, b domain.SearchResult) bool {
-	aISRC, bISRC := canonicalISRC(a.ISRC), canonicalISRC(b.ISRC)
+	aISRC, bISRC := songfacts.CanonicalISRC(a.ISRC), songfacts.CanonicalISRC(b.ISRC)
 	return aISRC != "" && bISRC != "" && aISRC != bISRC
 }
 
@@ -293,7 +289,7 @@ func alignExplicitWithISRC(merged *domain.SearchResult, canonical, other domain.
 		return
 	}
 	source := canonical
-	if canonicalISRC(merged.ISRC) == canonicalISRC(other.ISRC) {
+	if songfacts.CanonicalISRC(merged.ISRC) == songfacts.CanonicalISRC(other.ISRC) {
 		source = other
 	}
 	if explicit, ok := source.Extras[domain.ExtraExplicit]; ok {

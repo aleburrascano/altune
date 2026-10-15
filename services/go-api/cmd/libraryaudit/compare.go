@@ -1,9 +1,9 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/service/versiontag"
 	"altune/go-api/internal/shared/songfacts"
 	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/versiontag"
 	"fmt"
 	"math"
 	"slices"
