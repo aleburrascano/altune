@@ -18,6 +18,31 @@ const (
 	actionReacquire action = "reacquire"
 )
 
+type reason string
+
+const reasonWrongAudio reason = "wrong_audio"
+
+type evidence struct {
+	Verdict      string   `json:"verdict"`
+	TopRecording string   `json:"acoustid_top_recording"`
+	PreviewScore *float64 `json:"preview_score"`
+}
+
+func (e evidence) isComplete() bool {
+	return strings.TrimSpace(e.Verdict) != "" && (strings.TrimSpace(e.TopRecording) != "" || e.PreviewScore != nil)
+}
+
+func (e evidence) summary() string {
+	parts := []string{e.Verdict}
+	if e.TopRecording != "" {
+		parts = append(parts, "acoustid top "+e.TopRecording)
+	}
+	if e.PreviewScore != nil {
+		parts = append(parts, fmt.Sprintf("preview score %.2f", *e.PreviewScore))
+	}
+	return strings.Join(parts, ", ")
+}
+
 type change struct {
 	TrackID        string
 	UserID         string
@@ -29,6 +54,8 @@ type change struct {
 	NewISRC        string
 	FileSeconds    float64
 	CatalogSeconds float64
+	Reason         reason
+	Evidence       evidence
 }
 
 var errReportAborted = errors.New("report is from an aborted audit run and is partial")
@@ -46,13 +73,15 @@ type reportFinding struct {
 }
 
 type reportPlan struct {
-	Action         string  `json:"action"`
-	UserID         string  `json:"user_id"`
-	Version        int     `json:"version"`
-	OldISRC        string  `json:"old_isrc"`
-	NewISRC        string  `json:"new_isrc"`
-	FileSeconds    float64 `json:"file_seconds"`
-	CatalogSeconds float64 `json:"catalog_seconds"`
+	Action         string    `json:"action"`
+	UserID         string    `json:"user_id"`
+	Version        int       `json:"version"`
+	OldISRC        string    `json:"old_isrc"`
+	NewISRC        string    `json:"new_isrc"`
+	FileSeconds    float64   `json:"file_seconds"`
+	CatalogSeconds float64   `json:"catalog_seconds"`
+	Reason         string    `json:"reason"`
+	Evidence       *evidence `json:"evidence"`
 }
 
 func readPlan(r io.Reader) ([]change, error) {
@@ -104,7 +133,10 @@ func toChange(finding reportFinding) (change, error) {
 	c := change{
 		TrackID: finding.TrackID, UserID: p.UserID, Artist: finding.Artist, Title: finding.Title,
 		Version: p.Version, Action: action(p.Action), OldISRC: p.OldISRC, NewISRC: p.NewISRC,
-		FileSeconds: p.FileSeconds, CatalogSeconds: p.CatalogSeconds,
+		FileSeconds: p.FileSeconds, CatalogSeconds: p.CatalogSeconds, Reason: reason(p.Reason),
+	}
+	if p.Evidence != nil {
+		c.Evidence = *p.Evidence
 	}
 	if err := validate(c); err != nil {
 		return change{}, err
@@ -134,7 +166,7 @@ func validateFix(c change) error {
 	switch {
 	case strings.TrimSpace(c.NewISRC) == "" || strings.EqualFold(c.NewISRC, c.OldISRC):
 		return errors.New("fix_isrc needs a new_isrc different from old_isrc")
-	case math.Abs(c.FileSeconds-c.CatalogSeconds) > fitToleranceSeconds:
+	case !fitsCatalog(c):
 		return errors.New("fix_isrc whose catalog length does not fit the file")
 	}
 	return nil
@@ -144,8 +176,29 @@ func validateReacquire(c change) error {
 	if c.NewISRC != "" {
 		return errors.New("reacquire must not carry a new_isrc")
 	}
-	if math.Abs(c.FileSeconds-c.CatalogSeconds) <= fitToleranceSeconds {
+	switch c.Reason {
+	case reasonWrongAudio:
+		return validateWrongAudio(c)
+	case "":
+		return validateLengthMiss(c)
+	}
+	return fmt.Errorf("unknown reacquire reason %q", c.Reason)
+}
+
+func validateLengthMiss(c change) error {
+	if fitsCatalog(c) {
 		return errors.New("reacquire of a file that already fits the catalog")
 	}
 	return nil
+}
+
+func validateWrongAudio(c change) error {
+	if !c.Evidence.isComplete() {
+		return errors.New("wrong_audio reacquire without evidence: needs a verdict and an acoustid_top_recording or preview_score")
+	}
+	return nil
+}
+
+func fitsCatalog(c change) bool {
+	return math.Abs(c.FileSeconds-c.CatalogSeconds) <= fitToleranceSeconds
 }

@@ -20,6 +20,9 @@ func detail(c change) string {
 	if c.Action == actionFixISRC {
 		return fmt.Sprintf(": isrc %s -> %s, catalog %ds", c.OldISRC, c.NewISRC, int(c.CatalogSeconds))
 	}
+	if c.Reason == reasonWrongAudio {
+		return fmt.Sprintf(": wrong audio (%s), file %ds vs catalog %ds", c.Evidence.summary(), int(c.FileSeconds), int(c.CatalogSeconds))
+	}
 	return fmt.Sprintf(": file %ds vs catalog %ds", int(c.FileSeconds), int(c.CatalogSeconds))
 }
 
