@@ -18,6 +18,11 @@ const (
 	maxResponseBytes = 4 << 20
 )
 
+type throttlePolicy struct {
+	Attempts int
+	MaxWait  time.Duration
+}
+
 var (
 	errCatalogUnknown = errors.New("catalog does not know this id")
 	errCatalogBlocked = errors.New("catalog is blocking requests")
@@ -33,6 +38,8 @@ type catalogClient struct {
 	userAgent    string
 	limiter      *rate.Limiter
 	backoff      time.Duration
+	attempts     int
+	maxWait      time.Duration
 	isThrottled  func(status int, body []byte) bool
 	serverErrors int
 }
@@ -44,6 +51,7 @@ func newCatalogClient(httpClient *http.Client, baseURL, userAgent string, reques
 		userAgent:   userAgent,
 		limiter:     rate.NewLimiter(rate.Limit(requestsPerSecond), 1),
 		backoff:     retryBackoff,
+		attempts:    maxAttempts,
 		isThrottled: isThrottled,
 	}
 }
@@ -58,13 +66,25 @@ func (c *catalogClient) get(ctx context.Context, path string) ([]byte, error) {
 			return body, c.checkServerErrors(status, path)
 		}
 		c.serverErrors = 0
-		if attempt >= maxAttempts {
+		if attempt >= c.attempts {
 			return nil, blocked("still throttled after %d attempts on %s", attempt, path)
 		}
-		if err := sleepContext(ctx, c.backoff<<(attempt-1)); err != nil {
+		if err := sleepContext(ctx, c.waitBefore(attempt)); err != nil {
 			return nil, err
 		}
 	}
+}
+
+func (c *catalogClient) waitBefore(attempt int) time.Duration {
+	wait := c.backoff << (attempt - 1)
+	if c.maxWait > 0 {
+		return min(wait, c.maxWait)
+	}
+	return wait
+}
+
+func (c *catalogClient) withThrottle(policy throttlePolicy) {
+	c.attempts, c.maxWait = policy.Attempts, policy.MaxWait
 }
 
 func (c *catalogClient) checkServerErrors(status int, path string) error {

@@ -20,6 +20,7 @@ type rule string
 
 const (
 	ruleStudioAlbum rule = "studio_album"
+	ruleMixtape     rule = "mixtape"
 	ruleSingleOrEP  rule = "single_or_ep"
 	ruleOnlyHome    rule = "only_home"
 )
@@ -29,6 +30,8 @@ const (
 	primarySingle = "Single"
 	primaryEP     = "EP"
 	yearDigits    = 4
+
+	secondaryMixtape = "Mixtape/Street"
 )
 
 type pick struct {
@@ -38,6 +41,10 @@ type pick struct {
 
 func (g releaseGroup) isPlainAlbum() bool {
 	return g.PrimaryType == primaryAlbum && len(g.SecondaryTypes) == 0
+}
+
+func (g releaseGroup) isMixtape() bool {
+	return g.PrimaryType == primaryAlbum && len(g.SecondaryTypes) == 1 && g.SecondaryTypes[0] == secondaryMixtape
 }
 
 func (g releaseGroup) isPlainSingleOrEP() bool {
@@ -88,6 +95,9 @@ func earliest(groups []releaseGroup, qualifies func(releaseGroup) bool) (release
 func chooseRelease(groups []releaseGroup) (pick, bool) {
 	if album, ok := earliest(groups, releaseGroup.isPlainAlbum); ok {
 		return pick{Group: album, Rule: ruleStudioAlbum}, true
+	}
+	if mixtape, ok := earliest(groups, releaseGroup.isMixtape); ok {
+		return pick{Group: mixtape, Rule: ruleMixtape}, true
 	}
 	if single, ok := earliest(groups, releaseGroup.isPlainSingleOrEP); ok {
 		return pick{Group: single, Rule: ruleSingleOrEP}, true

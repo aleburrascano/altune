@@ -49,10 +49,11 @@ func isSameName(a, b string) bool {
 }
 
 const (
-	reasonAlbumLacksTrack      = "the deezer tracklist of the chosen album does not list the recording"
-	reasonStoredIsOriginal     = "the stored album is an official release group of the recording and the chosen one is not earlier"
-	reasonTitleUncorroborated  = "the deezer track does not carry this title"
-	reasonArtistUncorroborated = "the catalogs disagree on the artist"
+	reasonAlbumLacksTrack         = "the deezer tracklist of the chosen album does not list the recording"
+	reasonStoredIsOriginal        = "the stored album is an official release group of the recording and the chosen one is not earlier"
+	reasonStoredListsTrackEarlier = "deezer lists the track on the stored album, which is earlier than the chosen release"
+	reasonTitleUncorroborated     = "the deezer track does not carry this title"
+	reasonArtistUncorroborated    = "the catalogs disagree on the artist"
 )
 
 func albumHold(storedAlbum string, chosen releaseGroup, homes []releaseGroup, check crossCheck) string {
@@ -79,4 +80,11 @@ func artistHold(artist string, deezer deezerTrack) string {
 		return ""
 	}
 	return reasonArtistUncorroborated
+}
+
+func bindHold(artist string, deezer deezerTrack) string {
+	if deezer.Artist == "" {
+		return ""
+	}
+	return artistHold(artist, deezer)
 }

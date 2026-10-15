@@ -193,3 +193,20 @@ func TestMusicBrainz_ACreditReadsAsTheCanonicalArtistAndStopsAtTheFirstFeatureJo
 		})
 	}
 }
+
+func TestMusicBrainz_ATenAttemptPolicyRidesOutNineThrottledAnswers(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if calls++; calls < 10 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = w.Write([]byte(releaseGroupJSON))
+	}))
+	defer srv.Close()
+	m := fastMusicBrainz(srv)
+	m.client.withThrottle(throttlePolicy{Attempts: 10, MaxWait: time.Millisecond})
+	if _, err := m.ReleaseGroups(t.Context(), "rec-1"); err != nil || calls != 10 {
+		t.Fatalf("err=%v calls=%d", err, calls)
+	}
+}

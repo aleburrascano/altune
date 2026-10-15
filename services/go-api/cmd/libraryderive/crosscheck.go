@@ -62,6 +62,7 @@ const (
 type deezerMatch struct {
 	AlbumID         string
 	AlbumTitle      string
+	ReleaseDate     string
 	CoverURL        string
 	Genre           string
 	TrackPosition   int
@@ -123,7 +124,7 @@ func (c crossChecker) matchOf(ctx context.Context, track deezerTrack) (crossChec
 
 func newMatch(album deezerAlbum, track deezerTrack) *deezerMatch {
 	return &deezerMatch{
-		AlbumID: album.ID, AlbumTitle: album.Title, CoverURL: album.CoverURL, Genre: album.Genre,
+		AlbumID: album.ID, AlbumTitle: album.Title, ReleaseDate: album.ReleaseDate, CoverURL: album.CoverURL, Genre: album.Genre,
 		TrackPosition: track.Position, DurationSeconds: track.DurationSeconds, ISRC: track.ISRC,
 	}
 }
@@ -217,4 +218,13 @@ func listsISRC(isrcs []string, isrc string) bool {
 
 func fitsFile(fileSeconds, catalogSeconds float64) bool {
 	return fileSeconds > 0 && catalogSeconds > 0 && math.Abs(fileSeconds-catalogSeconds) <= masterFitSeconds
+}
+
+func (c crossChecker) storedAlbumListing(ctx context.Context, in crossCheckInput, storedAlbum string) (*deezerMatch, error) {
+	in.Group = releaseGroup{Title: storedAlbum}
+	listing, err := c.searchArtistAlbums(ctx, in)
+	if err != nil || listing.Outcome != outcomeSameISRC {
+		return nil, err
+	}
+	return listing.Match, nil
 }

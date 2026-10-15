@@ -43,3 +43,28 @@ func TestParseOptions_Since(t *testing.T) {
 		t.Fatal("a non-RFC3339 -since was accepted")
 	}
 }
+
+func TestThrottlePolicyFromEnv(t *testing.T) {
+	env := func(vars map[string]string) func(string) string {
+		return func(name string) string { return vars[name] }
+	}
+	cases := []struct {
+		name    string
+		vars    map[string]string
+		want    throttlePolicy
+		wantErr error
+	}{
+		{"defaults ride out minutes of throttling", nil, throttlePolicy{Attempts: 10, MaxWait: time.Minute}, nil},
+		{"both set", map[string]string{"LIBRARYDERIVE_THROTTLE_ATTEMPTS": "3", "LIBRARYDERIVE_THROTTLE_MAX_WAIT": "90s"}, throttlePolicy{Attempts: 3, MaxWait: 90 * time.Second}, nil},
+		{"zero attempts", map[string]string{"LIBRARYDERIVE_THROTTLE_ATTEMPTS": "0"}, throttlePolicy{}, errBadThrottleAttempts},
+		{"unparsable wait", map[string]string{"LIBRARYDERIVE_THROTTLE_MAX_WAIT": "soon"}, throttlePolicy{}, errBadThrottleMaxWait},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := throttlePolicyFromEnv(env(tc.vars))
+			if !errors.Is(err, tc.wantErr) || got != tc.want {
+				t.Fatalf("got %+v, %v", got, err)
+			}
+		})
+	}
+}

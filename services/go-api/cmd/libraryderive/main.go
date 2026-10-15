@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -16,9 +17,19 @@ const (
 	runTimeout         = 4 * time.Hour
 	defaultReportPath  = "libraryderive-report.json"
 	databaseURLVarName = "LIBRARYDERIVE_DATABASE_URL"
+
+	throttleAttemptsVarName = "LIBRARYDERIVE_THROTTLE_ATTEMPTS"
+	throttleMaxWaitVarName  = "LIBRARYDERIVE_THROTTLE_MAX_WAIT"
+	defaultThrottleAttempts = 10
+	defaultThrottleMaxWait  = time.Minute
 )
 
 const usageNotice = "libraryderive: do not run this from the prod VM, Deezer rate-blocks the prod IP and the app shares it; run it from another host with a read-only LIBRARYDERIVE_DATABASE_URL. It never writes the database."
+
+var (
+	errBadThrottleAttempts = errors.New(throttleAttemptsVarName + " must be a whole number of at least 1")
+	errBadThrottleMaxWait  = errors.New(throttleMaxWaitVarName + " must be a duration above zero, like 90s")
+)
 
 var errNegativeLimit = errors.New("-limit must not be negative")
 
@@ -80,11 +91,38 @@ func run(opts options, env func(string) string) error {
 	if err != nil {
 		return err
 	}
+	policy, err := throttlePolicyFromEnv(env)
+	if err != nil {
+		return err
+	}
 	httpClient := &http.Client{Timeout: httpTimeout}
-	d := newDeriver(newMusicBrainz(httpClient, musicBrainzBaseURL, musicBrainzRequestsSec), newDeezer(httpClient, deezerBaseURL, deezerRequestsPerSec))
+	musicBrainz := newMusicBrainz(httpClient, musicBrainzBaseURL, musicBrainzRequestsSec)
+	deezer := newDeezer(httpClient, deezerBaseURL, deezerRequestsPerSec)
+	musicBrainz.client.withThrottle(policy)
+	deezer.client.withThrottle(policy)
+	d := newDeriver(musicBrainz, deezer)
 	d.covers = newHTTPCoverProbe(httpClient, coverCDNRequestsPerSec)
 	result := d.deriveAll(ctx, tracks)
 	return saveReport(opts.reportPath, len(tracks), result)
+}
+
+func throttlePolicyFromEnv(env func(string) string) (throttlePolicy, error) {
+	policy := throttlePolicy{Attempts: defaultThrottleAttempts, MaxWait: defaultThrottleMaxWait}
+	if raw := env(throttleAttemptsVarName); raw != "" {
+		attempts, err := strconv.Atoi(raw)
+		if err != nil || attempts < 1 {
+			return throttlePolicy{}, errBadThrottleAttempts
+		}
+		policy.Attempts = attempts
+	}
+	if raw := env(throttleMaxWaitVarName); raw != "" {
+		wait, err := time.ParseDuration(raw)
+		if err != nil || wait <= 0 {
+			return throttlePolicy{}, errBadThrottleMaxWait
+		}
+		policy.MaxWait = wait
+	}
+	return policy, nil
 }
 
 func saveReport(path string, tracks int, result derivation) error {

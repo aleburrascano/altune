@@ -90,12 +90,27 @@ func (d *deriver) findingsFor(ctx context.Context, t boundTrack) ([]finding, err
 		own.Withheld.ISRC = "the isrc is not listed on the musicbrainz recording and bind did not confirm it on deezer or apple"
 		a.ISRC = ""
 	}
-	own.Withheld.Album = albumHold(t.Album, chosen.Group, homes, check)
+	own.Withheld.Bind = bindHold(a.Artist, check.Track)
+	if own.Withheld.Album, err = d.heldAlbumReason(ctx, t, rec, a, chosen.Group, homes, check, own.Withheld.Bind); err != nil {
+		return nil, err
+	}
 	own.Withheld.Title = titleHold(a.Title, check.Track)
 	own.Withheld.Artist = artistHold(a.Artist, check.Track)
 	check.Match = own
 	head := about(t, categoryReleaseChosen, chosen.Group.describe()+" by "+string(chosen.Rule)+"; deezer "+string(check.Outcome))
 	return append([]finding{head}, changesFor(t, a, chosen, check)...), nil
+}
+
+func (d *deriver) heldAlbumReason(ctx context.Context, t boundTrack, rec recording, a anchor, chosen releaseGroup, homes []releaseGroup, check crossCheck, bindDoubt string) (string, error) {
+	if reason := albumHold(t.Album, chosen, homes, check); reason != "" || bindDoubt != "" || t.Album == "" || a.ISRC == "" || !albumDiffers(t.Album, chosen.Title) {
+		return reason, nil
+	}
+	in := crossCheckInput{ISRC: a.ISRC, Artist: cmp.Or(rec.Primary, rec.Artist), SongTitle: rec.Title, RecordingISRCs: rec.ISRCs}
+	listing, err := d.checker.storedAlbumListing(ctx, in, t.Album)
+	if err != nil || listing == nil || !isEarlier(listing.ReleaseDate, chosen.FirstReleaseDate) {
+		return "", err
+	}
+	return reasonStoredListsTrackEarlier, nil
 }
 
 func (d *deriver) recordingOf(ctx context.Context, t boundTrack) (recording, error) {

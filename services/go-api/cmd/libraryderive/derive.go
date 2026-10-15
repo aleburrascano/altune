@@ -99,6 +99,7 @@ type withheld struct {
 	Title           string
 	Artist          string
 	Album           string
+	Bind            string
 	TrackNumber     string
 	Genre           string
 	ArtworkURL      string
@@ -136,7 +137,7 @@ func diff(stored libraryTrack, want desired) []difference {
 	if moved && stored.Album != "" {
 		group = "album-move:" + stored.ID
 	}
-	held := moved && stored.Album != "" && want.WhyNot.Album != ""
+	held := moved && stored.Album != "" && (want.WhyNot.Album != "" || want.WhyNot.Bind != "")
 	stance := stanceToward(stored.Album, want.Album, moved, held)
 	if held {
 		group = ""
@@ -145,7 +146,7 @@ func diff(stored libraryTrack, want desired) []difference {
 	found = appendHeldOr(found, "album", stored.Album, want.Album, moved, stance, group, want.WhyNot)
 	found = appendCorroborated(found, "title", stored.Title, want.Title, !sameSongTitle(stored.Title, want.Title), group, want.WhyNot)
 	found = appendCorroborated(found, "artist", stored.Artist, want.Artist, !isCredited(stored.Artist, want.Artist), group, want.WhyNot)
-	found = appendHeldOr(found, "year", intText(stored.Year), intText(want.Year), stored.Year != want.Year, stance, group, want.WhyNot)
+	found = appendAlbumBound(found, "year", intText(stored.Year), intText(want.Year), stance, group, want.WhyNot)
 	found = appendHeldOr(found, "album_artist", stored.AlbumArtist, want.AlbumArtist, !isSameName(stored.AlbumArtist, want.AlbumArtist), stance, group, want.WhyNot)
 	found = appendAlbumBound(found, "track_number", intText(stored.TrackNumber), intText(want.TrackNumber), stance, group, want.WhyNot)
 	found = appendAlbumBound(found, "genre", stored.Genre, want.Genre, stance, group, want.WhyNot)
@@ -181,7 +182,7 @@ func appendArtwork(found []difference, track libraryTrack, want desired, stance 
 		return append(found, unknown("artwork_url", track.ArtworkURL, want.ArtworkURL, track.CoverCheckFailed))
 	}
 	if track.CoverIsPlaceholder {
-		return appendField(found, "artwork_url", track.ArtworkURL, want.ArtworkURL, true, group, want.WhyNot)
+		return appendHeldOr(found, "artwork_url", track.ArtworkURL, want.ArtworkURL, true, stance, group, want.WhyNot)
 	}
 	return appendAlbumBound(found, "artwork_url", track.ArtworkURL, want.ArtworkURL, stance, group, want.WhyNot)
 }
@@ -198,7 +199,7 @@ func appendAlbumBound(found []difference, field, stored, want string, stance alb
 
 func appendHeldOr(found []difference, field, stored, want string, differs bool, stance albumStance, group string, whyNot withheld) []difference {
 	if stance == albumHeld && differs && want != "" {
-		return append(found, unknown(field, stored, want, whyNot.Album))
+		return append(found, unknown(field, stored, want, cmp.Or(whyNot.Bind, whyNot.Album)))
 	}
 	return appendField(found, field, stored, want, differs, group, whyNot)
 }

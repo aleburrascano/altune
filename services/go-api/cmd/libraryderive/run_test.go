@@ -842,3 +842,78 @@ func TestDeriveAll_RealProdCasesKeepTheirOutcomePerField(t *testing.T) {
 		})
 	}
 }
+
+func ouiRecording(isrc string) recording {
+	return recording{ID: "rec", Title: "oui", Artist: "Jeremih", Primary: "Jeremih", ISRCs: []string{isrc}}
+}
+
+func TestDeriveAll_JeremihOuiStaysOnLateNightsWhenDeezerListsItOnTheEarlierStoredAlbum(t *testing.T) {
+	const isrc = "USDJ21500001"
+	homes := []releaseGroup{
+		group("rg-oui", "Oui", "Single", "2015-10-09"),
+		group("rg-say-oui", "Jeremih: Say Oui", "Album", "2026-08-14"),
+	}
+	dz := deezerCrediting(isrc, "oui", "Jeremih", "Jeremih: Say Oui")
+	dz.search = map[string][]deezerAlbum{"Late Nights: The Album": {{ID: "20", Title: "Late Nights: The Album"}}}
+	dz.albums["20"] = deezerAlbum{ID: "20", Title: "Late Nights: The Album", ReleaseDate: "2015-12-04", Tracks: []deezerAlbumTrack{{ID: "21", Title: "oui"}}}
+	dz.byID = map[string]deezerTrack{"21": {ID: "21", ISRC: isrc, Title: "oui", Artist: "Jeremih", Position: 4}}
+	stored := libraryTrack{ID: "t", Title: "oui", Artist: "Jeremih", Album: "Late Nights: The Album", ISRC: isrc, Year: 2015, TrackNumber: 4, ArtworkURL: "https://cdn/late.jpg"}
+	got := deriveSong(t, ouiRecording(isrc), homes, dz, stored)
+	for _, kind := range []category{"album_correct", "year_correct", "track_number_correct", "artwork_url_correct"} {
+		if _, moved := got[kind]; moved {
+			t.Errorf("%s: %+v", kind, got[kind])
+		}
+	}
+	for _, kind := range []category{"album_differs", "year_differs", "track_number_differs", "artwork_url_differs"} {
+		if d := got[kind]; d.Fix != nil || !strings.Contains(d.Detail, reasonStoredListsTrackEarlier) {
+			t.Errorf("%s: %+v", kind, d)
+		}
+	}
+}
+
+func TestDeriveAll_Jace556StaysPutWhenTheCatalogsDisagreeOnTheArtist(t *testing.T) {
+	const isrc = "USUM72100002"
+	rec := recording{ID: "rec", Title: "556 (Green Tip)", Artist: "iayze", Primary: "iayze", ISRCs: []string{isrc}}
+	homes := []releaseGroup{group("rg", "Virtuous", "Album", "2022-03-02")}
+	stored := libraryTrack{ID: "t", Title: "556 (Green Tip)", Artist: "Jace!", Album: "556 (Green Tip)", ISRC: isrc, Year: 2021}
+	got := deriveSong(t, rec, homes, deezerCrediting(isrc, "556 (Green Tip)", "Jace!", "Virtuous"), stored)
+	for _, kind := range []category{"album_correct", "year_correct", "artist_correct", "track_number_fill", "genre_fill"} {
+		if _, applied := got[kind]; applied {
+			t.Errorf("%s: %+v", kind, got[kind])
+		}
+	}
+	if d := got["album_differs"]; d.Fix != nil || !strings.Contains(d.Detail, reasonArtistUncorroborated) {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestDeriveAll_AnEstateSaleTracksYearIsHeldWithItsEdition(t *testing.T) {
+	const isrc = "USSM12100001"
+	rec := recording{ID: "rec", Title: "WHAT A DAY", Artist: "Tyler, The Creator", Primary: "Tyler, The Creator", ISRCs: []string{isrc}}
+	homes := []releaseGroup{group("rg", "CALL ME IF YOU GET LOST", "Album", "2021-06-25")}
+	stored := libraryTrack{ID: "t", Title: "WHAT A DAY", Artist: "Tyler, The Creator", Album: "CALL ME IF YOU GET LOST: The Estate Sale", ISRC: isrc, Year: 2023}
+	got := deriveSong(t, rec, homes, deezerCrediting(isrc, "WHAT A DAY", "Tyler, The Creator", "CALL ME IF YOU GET LOST"), stored)
+	if _, corrected := got["year_correct"]; corrected {
+		t.Fatalf("year rewritten: %+v", got["year_correct"])
+	}
+	if d := got["year_differs"]; d.Fix != nil || !strings.Contains(d.Detail, "another edition") {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestDeriveAll_ATravisScottMixtapeOutranksTheSingleOfTheSameSong(t *testing.T) {
+	const isrc = "USSM11400001"
+	rec := recording{ID: "rec", Title: "Don't Play", Artist: "Travis Scott feat. The 1975 & Big Sean", Primary: "Travis Scott", ISRCs: []string{isrc}}
+	homes := []releaseGroup{
+		group("rg-dbr", "DAYS BEFORE RODEO", "Album", "2014-08-18", "Mixtape/Street"),
+		group("rg-single", "Don't Play", "Single", "2021-01-01"),
+	}
+	stored := libraryTrack{ID: "t", Title: "Don't Play", Artist: "Travis Scott", Album: "DAYS BEFORE RODEO", ISRC: isrc, Year: 2014}
+	got := deriveSong(t, rec, homes, &fakeDeezer{}, stored)
+	if _, moved := got["album_correct"]; moved {
+		t.Fatalf("album moved: %+v", got["album_correct"])
+	}
+	if !strings.Contains(got["release_chosen"].Detail, "DAYS BEFORE RODEO") {
+		t.Fatalf("got %+v", got["release_chosen"])
+	}
+}
