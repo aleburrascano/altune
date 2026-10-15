@@ -587,3 +587,31 @@ func TestStore_UndoLeavesACatalogMBIDThatChangedAfterTheReplace(t *testing.T) {
 		t.Errorf("catalog_mbid after undo = %v, want %s", pin, later)
 	}
 }
+
+func TestStore_AReplaceWithoutARecordingIdClearsACatalogMBIDOnTheReplacedRecordingAndUndoRestoresIt(t *testing.T) {
+	s := testStore(t)
+	oldRecording := uuid.NewString()
+	track := seedReady(t, s, uuid.NewString())
+	if _, err := s.save(t.Context(), uuid.New(), track, boundToRecording(track, oldRecording)); err != nil {
+		t.Fatal(err)
+	}
+	runID := uuid.New()
+	raw := []byte(`[{"track_id":"` + track.ID + `","track_version":4,"status":"bound","isrc":"` + replacementISRC +
+		`","note":"studio release, no MB id","evidence":{"url":"https://example.test/studio"},"replaces":{"mb_recording_id":"` + oldRecording + `"}}]`)
+	if err := runPins(t.Context(), raw, s.loadPinTargets, s, runID, newReport()); err != nil {
+		t.Fatal(err)
+	}
+
+	if pin := catalogMBIDOf(t, s, track.ID); pin != nil {
+		t.Fatalf("catalog_mbid = %s, want NULL", *pin)
+	}
+	if was, now := loggedCatalogChange(t, s, runID, track.ID); was == nil || *was != oldRecording || now != nil {
+		t.Errorf("logged change = %v -> %v", was, now)
+	}
+	if tally, err := s.undoRun(t.Context(), runID); err != nil || tally.Unpinned != 1 || tally.Restored != 1 {
+		t.Fatalf("undo: %+v, %v", tally, err)
+	}
+	if pin := catalogMBIDOf(t, s, track.ID); pin == nil || *pin != oldRecording {
+		t.Errorf("catalog_mbid after undo = %v, want %s", pin, oldRecording)
+	}
+}
