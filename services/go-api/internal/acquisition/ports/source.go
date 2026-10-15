@@ -17,6 +17,8 @@ type FindRequest struct {
 	CatalogSources  []CatalogSource
 	CatalogExplicit *bool
 
+	KnownSourceURL string
+
 	FallbackOnly bool
 }
 

@@ -105,3 +105,34 @@ func TestName(t *testing.T) {
 		t.Errorf("Name() = %q, want %q", got, SourceName)
 	}
 }
+
+func TestFind_EmitsTheKnownSource(t *testing.T) {
+	const known = "https://music.youtube.com/watch?v=NxTPVbk-FZQ"
+	src := NewSource(&recordingFetcher{})
+	req := requestPinning()
+	req.KnownSourceURL = known
+
+	got, err := src.Find(context.Background(), req)
+
+	if err != nil || len(got) != 1 {
+		t.Fatalf("Find = %+v, %v; want the known source", got, err)
+	}
+	if got[0].URL != known || !got[0].Resolved || got[0].Kind != ports.KindCatalogPin {
+		t.Errorf("candidate = %+v, want the known source as a resolved catalog pin", got[0])
+	}
+
+	picked := requestPinning(ports.CatalogSource{Provider: "soundcloud", ExternalID: "1", URL: pickedUpload})
+	picked.KnownSourceURL = known
+	withPick, err := src.Find(context.Background(), picked)
+	if err != nil || len(withPick) != 1 || withPick[0].URL != pickedUpload {
+		t.Errorf("with a picked upload Find = %+v, %v; want only the user's pick", withPick, err)
+	}
+
+	for _, unusable := range []string{"", "file:///etc/passwd", "not a url"} {
+		req.KnownSourceURL = unusable
+		none, err := src.Find(context.Background(), req)
+		if err != nil || len(none) != 0 {
+			t.Errorf("known source %q: Find = %+v, %v; want nothing", unusable, none, err)
+		}
+	}
+}

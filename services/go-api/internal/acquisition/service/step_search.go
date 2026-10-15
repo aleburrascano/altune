@@ -108,6 +108,8 @@ func findRequestFor(ac *AcquisitionContext) ports.FindRequest {
 		CatalogSources:  ac.Track.CatalogSources,
 		CatalogExplicit: ac.Track.CatalogExplicit,
 
+		KnownSourceURL: ac.Track.AudioSourceURL,
+
 		FallbackOnly: ac.FallbackOnly,
 	}
 }

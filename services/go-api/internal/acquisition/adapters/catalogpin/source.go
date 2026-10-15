@@ -47,6 +47,9 @@ func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.Audio
 		}
 		pinned = append(pinned, pinnedCandidate(req, pin.URL))
 	}
+	if len(pinned) == 0 && isHTTPSURL(req.KnownSourceURL) {
+		return []ports.AudioCandidate{pinnedCandidate(req, req.KnownSourceURL)}, nil
+	}
 	return pinned, nil
 }
 
@@ -60,12 +63,20 @@ func pinnedCandidate(req ports.FindRequest, pinURL string) ports.AudioCandidate 
 	}
 }
 
-func isSoundCloudURL(rawURL string) bool {
+func httpsHost(rawURL string) string {
 	u, err := url.Parse(rawURL)
-	if err != nil || u.Scheme != "https" {
-		return false
+	if err != nil || u == nil || u.Scheme != "https" {
+		return ""
 	}
-	host := strings.ToLower(u.Hostname())
+	return strings.ToLower(u.Hostname())
+}
+
+func isHTTPSURL(rawURL string) bool {
+	return httpsHost(rawURL) != ""
+}
+
+func isSoundCloudURL(rawURL string) bool {
+	host := httpsHost(rawURL)
 	return host == "soundcloud.com" || strings.HasSuffix(host, ".soundcloud.com")
 }
 

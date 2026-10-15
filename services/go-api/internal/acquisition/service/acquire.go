@@ -280,6 +280,7 @@ func (s *AcquireTrackAudioService) runAcquisition(ctx context.Context, userId sh
 
 func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, track *ports.TrackSnapshot, trackId shared.TrackId) error {
 	ac.Replace.PreservedRef = deref(track.AudioRef)
+	ac.Track.AudioSourceURL = ""
 	ac.Replace.ExcludeKeys = mergeSourceKeys(
 		ac.Replace.ExcludeKeys,
 		sourceKey(deref(track.AudioSourceURL)),
@@ -450,6 +451,8 @@ func buildTrackRef(track *ports.TrackSnapshot) TrackRef {
 		CatalogExplicit: track.CatalogExplicit,
 		CatalogMBID:     deref(track.CatalogMBID),
 		CatalogSources:  track.CatalogSources,
+
+		AudioSourceURL: deref(track.AudioSourceURL),
 	}
 }
 

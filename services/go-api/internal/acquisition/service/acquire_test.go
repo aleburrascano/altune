@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/adapters/catalogbridge"
+	"altune/go-api/internal/acquisition/adapters/catalogpin"
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
@@ -1837,5 +1838,72 @@ func TestExecuteReplace_StillExcludesTheUsersRejectedSourcesAndTheCurrentOne(t *
 
 	if len(searcher.downloadURLs) != 1 || searcher.downloadURLs[0] != other.URL {
 		t.Errorf("download attempts = %v, want only %q", searcher.downloadURLs, other.URL)
+	}
+}
+
+type searcherDownloads struct{ searcher *fakeAudioSearcher }
+
+func (d searcherDownloads) Download(ctx context.Context, url, outDir string) (ports.FetchedAudio, error) {
+	return fetchedAt(d.searcher.Download(ctx, url, outDir))
+}
+
+func TestExecute_AMissingFileTriesItsStoredSourceFirst(t *testing.T) {
+	const storedSource = "https://music.youtube.com/watch?v=NxTPVbk-FZQ"
+	rivals := []string{
+		"https://music.youtube.com/watch?v=aaaaaaaaaaa",
+		"https://music.youtube.com/watch?v=aaaaaaaaaab",
+		"https://music.youtube.com/watch?v=aaaaaaaaaac",
+	}
+	tests := []struct {
+		name     string
+		rejected []string
+		inWindow bool
+	}{
+		{"the stored source goes in the first window", nil, true},
+		{"a rejected stored source is never tried", []string{sourceKey(storedSource)}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			userId := shared.NewUserId(uuid.New())
+			repo := newFakeTrackRepository()
+			track := readyTrackWithSource(t, repo, userId, "u/a/b/c.mp3", storedSource)
+			track.RejectedSourceKeys = tt.rejected
+			var found []ports.AudioCandidate
+			for _, u := range rivals {
+				found = append(found, ports.AudioCandidate{Title: "Blinding Lights", URL: u, Channel: "The Weeknd", Artists: []string{"The Weeknd"}, Resolved: true, Kind: ports.KindArtTrack, Source: "fake"})
+			}
+			searcher := &fakeAudioSearcher{searchResults: found, downloadErr: errors.New("boom")}
+			registry := NewSourceRegistry(catalogpin.NewSource(searcherDownloads{searcher}), searcher)
+			svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), registry, newFakeAudioStore())
+
+			_ = svc.Execute(context.Background(), userId, track.ID)
+
+			firstWindow := searcher.downloadURLs[:min(2, len(searcher.downloadURLs))]
+			if got := slices.Contains(firstWindow, storedSource); got != tt.inWindow {
+				t.Errorf("first window = %v, stored source in it = %v, want %v", firstWindow, got, tt.inWindow)
+			}
+			if !tt.inWindow && slices.Contains(searcher.downloadURLs, storedSource) {
+				t.Errorf("download attempts = %v, want the rejected stored source never tried", searcher.downloadURLs)
+			}
+		})
+	}
+}
+
+func TestExecuteReplace_NeverOffersTheCurrentSourceAsTheKnownOne(t *testing.T) {
+	const storedSource = "https://music.youtube.com/watch?v=NxTPVbk-FZQ"
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track := readyTrackWithSource(t, repo, userId, "u/a/b/c.mp3", storedSource)
+	store := newFakeAudioStore()
+	store.stored["u/a/b/c.mp3"] = true
+	rival := ports.AudioCandidate{Title: "Blinding Lights", URL: "https://music.youtube.com/watch?v=aaaaaaaaaaa", Resolved: true, Kind: ports.KindArtTrack, Artists: []string{"The Weeknd"}, Source: "fake"}
+	searcher := &fakeAudioSearcher{searchResults: []ports.AudioCandidate{rival}, downloadErr: errors.New("boom")}
+	registry := NewSourceRegistry(catalogpin.NewSource(searcherDownloads{searcher}), searcher)
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), registry, store)
+
+	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
+
+	if len(searcher.downloadURLs) != 1 || searcher.downloadURLs[0] != rival.URL {
+		t.Errorf("download attempts = %v, want only %q", searcher.downloadURLs, rival.URL)
 	}
 }

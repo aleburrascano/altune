@@ -311,6 +311,8 @@ type TrackRef struct {
 	CatalogExplicit *bool
 	CatalogMBID     string
 	CatalogSources  []ports.CatalogSource
+
+	AudioSourceURL string
 }
 
 func (s *AcquireTrackAudioService) buildSteps(userId shared.UserId, trackId shared.TrackId) Pipeline {
