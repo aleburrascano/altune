@@ -2,6 +2,7 @@ package main
 
 import (
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared/songfacts"
 	"altune/go-api/internal/shared/textnorm"
 	"math"
 	"regexp"
@@ -26,14 +27,10 @@ const (
 	guardLength guard = "length"
 )
 
-var artistSeparatorRe = regexp.MustCompile(`(?i)\s*(?:,|;|&|\band\b|\bfeat\.?(?:\s|$)|\bft\.?(?:\s|$)|\bfeaturing\b|\bwith\b|\bx\b)\s*`)
-
 var (
 	bracketGroupRe = regexp.MustCompile(`[(\[{（【]([^)\]}）】]*)[)\]}）】]`)
 	firstDashRe    = regexp.MustCompile(`^(.*?\S)\s[-–—]\s+(.+)$`)
 )
-
-var versionSuffixRe = regexp.MustCompile(`(?i)^(.*\S)\s[-–—]\s+([^-–—|]*\b(?:original|album|single|mono|stereo|deluxe|bonus|version|edition)\b[^-–—|]*)$`)
 
 type judged struct {
 	candidate
@@ -58,18 +55,10 @@ func failedGuards(t libraryTrack, c candidate) []guard {
 	if math.Abs(t.FileSeconds-c.LengthSeconds) > lengthToleranceSeconds {
 		failed = append(failed, guardLength)
 	}
-	if canonicalISRC(t.ISRC) != canonicalISRC(c.ISRC) {
+	if songfacts.CanonicalISRC(t.ISRC) != songfacts.CanonicalISRC(c.ISRC) {
 		failed = append(failed, guardISRC)
 	}
 	return failed
-}
-
-func bracketVersionSuffix(title string) string {
-	m := versionSuffixRe.FindStringSubmatch(title)
-	if m == nil {
-		return title
-	}
-	return m[1] + " (" + m[2] + ")"
 }
 
 type titleParts struct {
@@ -80,7 +69,7 @@ type titleParts struct {
 }
 
 func splitTitle(title string) titleParts {
-	keys := domain.CleanSearchKeys(bracketVersionSuffix(title), "", "")
+	keys := domain.CleanSearchKeys(songfacts.BracketEditionSuffix(title), "", "")
 	cleaned := keys.Title
 	parts := titleParts{variants: keys.VariantQualifiers()}
 	for _, group := range bracketGroupRe.FindAllStringSubmatch(cleaned, -1) {
@@ -111,7 +100,7 @@ func artistKey(name string) string {
 
 func artistKeys(name string) []string {
 	keys := []string{artistKey(name)}
-	for _, part := range artistSeparatorRe.Split(name, -1) {
+	for _, part := range songfacts.SplitCredit(name) {
 		keys = append(keys, artistKey(part))
 	}
 	return slices.DeleteFunc(keys, func(key string) bool { return key == "" })
@@ -131,7 +120,7 @@ func artistMatches(stored string, providerNames []string) bool {
 
 func distance(t libraryTrack, c candidate) float64 {
 	idGap := 0.0
-	if canonicalISRC(t.ISRC) != canonicalISRC(c.ISRC) {
+	if songfacts.CanonicalISRC(t.ISRC) != songfacts.CanonicalISRC(c.ISRC) {
 		idGap = 1
 	}
 	lengthGap := min(math.Abs(t.FileSeconds-c.LengthSeconds)/lengthToleranceSeconds, 1)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/songfacts"
 	"altune/go-api/internal/shared/textnorm"
 	"cmp"
 	"math"
@@ -150,7 +151,7 @@ func diff(stored libraryTrack, want desired) []difference {
 	found = appendAlbumBound(found, "genre", stored.Genre, want.Genre, stance, group, want.WhyNot)
 	found = appendField(found, "catalog_duration_seconds", secondsText(stored.CatalogDurationSeconds), secondsText(want.CatalogDurationSeconds),
 		math.Abs(stored.CatalogDurationSeconds-want.CatalogDurationSeconds) > catalogLengthSlack, "", want.WhyNot)
-	found = appendField(found, "isrc", stored.ISRC, canonicalISRC(want.ISRC), canonicalISRC(stored.ISRC) != canonicalISRC(want.ISRC), "", want.WhyNot)
+	found = appendField(found, "isrc", stored.ISRC, songfacts.CanonicalISRC(want.ISRC), songfacts.CanonicalISRC(stored.ISRC) != songfacts.CanonicalISRC(want.ISRC), "", want.WhyNot)
 	return appendArtwork(found, stored, want, stance, group)
 }
 
@@ -169,7 +170,7 @@ func stanceToward(stored, want string, moved, held bool) albumStance {
 		return albumHeld
 	case moved:
 		return albumMoves
-	case normalizeName(stored) == normalizeName(want):
+	case songfacts.NameKey(stored) == songfacts.NameKey(want):
 		return albumSameEdition
 	}
 	return albumOtherEdition
@@ -232,7 +233,7 @@ func albumDiffers(stored, want string) bool {
 }
 
 func sameAlbumGroup(a, b string) bool {
-	return normalizeName(baseTitle(a)) == normalizeName(baseTitle(b)) || isColonEdition(a, b) || isColonEdition(b, a)
+	return songfacts.NameKey(baseTitle(a)) == songfacts.NameKey(baseTitle(b)) || isColonEdition(a, b) || isColonEdition(b, a)
 }
 
 func isColonEdition(edition, group string) bool {

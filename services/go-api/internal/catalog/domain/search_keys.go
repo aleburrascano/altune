@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"altune/go-api/internal/shared/songfacts"
 	"altune/go-api/internal/shared/textnorm"
 	"regexp"
 	"slices"
@@ -76,7 +77,6 @@ var (
 var noiseGroupRes = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)^(?:\s|official|of+icial|lyrics?|music|hd|hq|audio|video|visuali[sz]er|stream|track|full|album|clip|4k|1080p|720p)+$`),
 	regexp.MustCompile(`(?i)^(?:prod\.|prod\s|produced\s)`),
-	regexp.MustCompile(`(?i)^\s*(?:album|single|mono|stereo|deluxe|bonus track)(?:\s+(?:edition|version))?\s*$`),
 	regexp.MustCompile(`^\s*\d{4}\s*$`),
 	regexp.MustCompile(`(?i)re-?issue|^\s*expanded|^\s*re-?recorded\s*$|^\d+th\s+anniversary`),
 	regexp.MustCompile(`(?i)album\s+track\s*$`),
@@ -221,7 +221,7 @@ func matchQualifiers(text string) []string {
 }
 
 func isDroppableGroup(prefix, inner string) bool {
-	if creditGroupRe.MatchString(inner) || (isNonLatinText(inner) && endsWithLatin(prefix)) {
+	if creditGroupRe.MatchString(inner) || songfacts.IsEditionLabel(inner) || (isNonLatinText(inner) && endsWithLatin(prefix)) {
 		return true
 	}
 	for _, re := range noiseGroupRes {

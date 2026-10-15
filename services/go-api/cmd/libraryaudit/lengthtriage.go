@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/songfacts"
 	"context"
 	"errors"
 	"strconv"
@@ -85,7 +86,7 @@ func otherFittingVersions(ctx context.Context, cat catalog, lib libraryTrack, re
 		return nil, err
 	}
 	var versions []catalogTrack
-	seen := map[string]bool{canonicalISRC(lib.ISRC): true}
+	seen := map[string]bool{songfacts.CanonicalISRC(lib.ISRC): true}
 	for _, candidate := range fittingCandidates(lib, candidates) {
 		if candidate.ID == reference.ID {
 			continue
@@ -94,7 +95,7 @@ func otherFittingVersions(ctx context.Context, cat catalog, lib libraryTrack, re
 		if err != nil {
 			return nil, err
 		}
-		if key := canonicalISRC(full.ISRC); key != "" && !seen[key] {
+		if key := songfacts.CanonicalISRC(full.ISRC); key != "" && !seen[key] {
 			seen[key] = true
 			versions = append(versions, full)
 		}

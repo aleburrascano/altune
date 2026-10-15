@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/songfacts"
 	"cmp"
 	"context"
 	"errors"
@@ -219,7 +220,7 @@ func (d *deriver) withCoverVerdict(ctx context.Context, t boundTrack) boundTrack
 }
 
 func isProvenISRC(rec recording, t boundTrack, isrc string) bool {
-	return canonicalISRC(isrc) == canonicalISRC(t.ISRC) || rec.hasISRC(isrc) || t.CatalogConfirmed
+	return songfacts.CanonicalISRC(isrc) == songfacts.CanonicalISRC(t.ISRC) || rec.hasISRC(isrc) || t.CatalogConfirmed
 }
 
 func (d *deriver) ownCover(ctx context.Context, deezerCover string, group releaseGroup) (string, string) {
@@ -280,7 +281,7 @@ func otherMasterWith(t boundTrack, a anchor, chosen pick, own *deezerMatch, mast
 	}
 	plan := about(t, categoryISRCOtherMaster, detail)
 	plan.LengthPlan = &lengthPlan{
-		Action: actionFixISRC, UserID: t.UserID, Version: t.Version, OldISRC: t.ISRC, NewISRC: canonicalISRC(master.ISRC),
+		Action: actionFixISRC, UserID: t.UserID, Version: t.Version, OldISRC: t.ISRC, NewISRC: songfacts.CanonicalISRC(master.ISRC),
 		FileSeconds: t.FileSeconds, CatalogSeconds: master.DurationSeconds,
 	}
 	return append(found, plan)

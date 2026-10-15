@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/songfacts"
 	"cmp"
 	"context"
 	"errors"
@@ -62,7 +63,7 @@ func (d *deriver) deezerAlbumOfISRC(ctx context.Context, isrc string) (deezerTra
 	if err != nil {
 		return deezerTrack{}, deezerAlbum{}, err
 	}
-	if canonicalISRC(track.ISRC) != canonicalISRC(isrc) {
+	if songfacts.CanonicalISRC(track.ISRC) != songfacts.CanonicalISRC(isrc) {
 		return deezerTrack{}, deezerAlbum{}, errCatalogUnknown
 	}
 	album, err := d.checker.deezer.Album(ctx, track.AlbumID)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/songfacts"
 	"cmp"
 	"context"
 	"encoding/json"
@@ -32,7 +33,7 @@ type recording struct {
 }
 
 func (r recording) hasISRC(isrc string) bool {
-	return slices.ContainsFunc(r.ISRCs, func(listed string) bool { return canonicalISRC(listed) == canonicalISRC(isrc) })
+	return slices.ContainsFunc(r.ISRCs, func(listed string) bool { return songfacts.CanonicalISRC(listed) == songfacts.CanonicalISRC(isrc) })
 }
 
 type recordingSource interface {
@@ -125,7 +126,7 @@ type releaseTracksBody struct {
 }
 
 func (m musicBrainz) RecordingsByISRC(ctx context.Context, isrc string) ([]recording, error) {
-	query := `isrc:"` + canonicalISRC(isrc) + `"`
+	query := `isrc:"` + songfacts.CanonicalISRC(isrc) + `"`
 	path := "/ws/2/recording?query=" + url.QueryEscape(query) + "&inc=isrcs&fmt=json&limit=" + strconv.Itoa(musicBrainzResultLimit)
 	var body recordingSearchBody
 	if err := m.getJSON(ctx, path, &body); err != nil {

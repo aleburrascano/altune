@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/songfacts"
 	"context"
 	"errors"
 	"math"
@@ -61,7 +62,7 @@ func albumTrackWithISRC(ctx context.Context, cat catalog, lib libraryTrack) (*ca
 		if err != nil {
 			return nil, err
 		}
-		if canonicalISRC(full.ISRC) == canonicalISRC(lib.ISRC) {
+		if songfacts.CanonicalISRC(full.ISRC) == songfacts.CanonicalISRC(lib.ISRC) {
 			return &full, nil
 		}
 	}

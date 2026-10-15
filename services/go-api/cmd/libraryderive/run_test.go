@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/songfacts"
 	"context"
 	"encoding/json"
 	"errors"
@@ -35,7 +36,7 @@ func (f *fakeMusicBrainz) ReleaseTrackSeconds(_ context.Context, releaseID, reco
 }
 
 func (f *fakeMusicBrainz) RecordingsByISRC(_ context.Context, isrc string) ([]recording, error) {
-	return f.byISRC[canonicalISRC(isrc)], nil
+	return f.byISRC[songfacts.CanonicalISRC(isrc)], nil
 }
 
 func (f *fakeMusicBrainz) Recording(_ context.Context, id string) (recording, error) {

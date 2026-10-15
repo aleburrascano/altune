@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/songfacts"
 	"cmp"
 	"context"
 	"encoding/json"
@@ -83,7 +84,7 @@ type deezerSearchBody struct {
 }
 
 func (d deezer) TrackByISRC(ctx context.Context, isrc string) (deezerTrack, error) {
-	return d.track(ctx, "/2.0/track/isrc:"+url.PathEscape(canonicalISRC(isrc)))
+	return d.track(ctx, "/2.0/track/isrc:"+url.PathEscape(songfacts.CanonicalISRC(isrc)))
 }
 
 func (d deezer) TrackByID(ctx context.Context, id string) (deezerTrack, error) {

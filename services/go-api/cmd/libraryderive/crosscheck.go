@@ -1,12 +1,12 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/songfacts"
 	"context"
 	"errors"
 	"math"
 	"slices"
 	"strings"
-	"unicode"
 )
 
 const (
@@ -78,20 +78,6 @@ type crossCheck struct {
 	AlbumLacksTrack bool
 }
 
-func canonicalISRC(isrc string) string {
-	return strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(isrc), "-", ""))
-}
-
-func normalizeName(s string) string {
-	var out strings.Builder
-	for _, r := range strings.ToLower(s) {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			out.WriteRune(r)
-		}
-	}
-	return out.String()
-}
-
 func baseTitle(s string) string {
 	for _, open := range []string{" (", " [", albumTitleSeparator} {
 		if i := strings.Index(s, open); i > 0 {
@@ -102,7 +88,7 @@ func baseTitle(s string) string {
 }
 
 func sameTitle(a, b string) bool {
-	na, nb := normalizeName(baseTitle(a)), normalizeName(baseTitle(b))
+	na, nb := songfacts.NameKey(baseTitle(a)), songfacts.NameKey(baseTitle(b))
 	return na != "" && na == nb
 }
 
@@ -121,7 +107,7 @@ func (c crossChecker) check(ctx context.Context, in crossCheckInput) (crossCheck
 	if err != nil && !errors.Is(err, errCatalogUnknown) {
 		return crossCheck{}, err
 	}
-	if err == nil && canonicalISRC(byISRC.ISRC) == canonicalISRC(in.ISRC) && sameTitle(byISRC.AlbumTitle, in.Group.Title) {
+	if err == nil && songfacts.CanonicalISRC(byISRC.ISRC) == songfacts.CanonicalISRC(in.ISRC) && sameTitle(byISRC.AlbumTitle, in.Group.Title) {
 		return c.matchOf(ctx, byISRC)
 	}
 	return c.searchArtistAlbums(ctx, in)
@@ -216,7 +202,7 @@ func (c crossChecker) findRecordingTrack(ctx context.Context, album deezerAlbum,
 		}
 		track.AlbumID, track.AlbumTitle = album.ID, album.Title
 		switch {
-		case canonicalISRC(track.ISRC) == canonicalISRC(in.ISRC):
+		case songfacts.CanonicalISRC(track.ISRC) == songfacts.CanonicalISRC(in.ISRC):
 			return &track, nil, nil
 		case otherMaster == nil && listsISRC(in.RecordingISRCs, track.ISRC):
 			otherMaster = &track
@@ -226,7 +212,7 @@ func (c crossChecker) findRecordingTrack(ctx context.Context, album deezerAlbum,
 }
 
 func listsISRC(isrcs []string, isrc string) bool {
-	return isrc != "" && slices.ContainsFunc(isrcs, func(listed string) bool { return canonicalISRC(listed) == canonicalISRC(isrc) })
+	return isrc != "" && slices.ContainsFunc(isrcs, func(listed string) bool { return songfacts.CanonicalISRC(listed) == songfacts.CanonicalISRC(isrc) })
 }
 
 func fitsFile(fileSeconds, catalogSeconds float64) bool {

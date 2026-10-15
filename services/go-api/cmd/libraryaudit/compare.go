@@ -2,6 +2,7 @@ package main
 
 import (
 	"altune/go-api/internal/acquisition/service/versiontag"
+	"altune/go-api/internal/shared/songfacts"
 	"altune/go-api/internal/shared/textnorm"
 	"fmt"
 	"math"
@@ -9,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/unicode/norm"
@@ -98,16 +98,6 @@ type fix struct {
 	Sources  []string `json:"sources,omitempty"`
 }
 
-func normalizeName(s string) string {
-	var out strings.Builder
-	for _, r := range strings.ReplaceAll(strings.ToLower(s), "&", "and") {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			out.WriteRune(r)
-		}
-	}
-	return out.String()
-}
-
 func baseTitle(s string) string {
 	for _, open := range []string{" (", " [", " - "} {
 		if i := strings.Index(s, open); i > 0 {
@@ -122,7 +112,7 @@ func foldedKey(s string) string {
 }
 
 func namesAgree(a, b string) bool {
-	na, nb := normalizeName(a), normalizeName(b)
+	na, nb := songfacts.NameKey(a), songfacts.NameKey(b)
 	if na == "" || nb == "" {
 		ka, kb := foldedKey(a), foldedKey(b)
 		return ka != "" && ka == kb

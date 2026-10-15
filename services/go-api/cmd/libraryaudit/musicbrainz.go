@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/songfacts"
 	"context"
 	"encoding/json"
 	"errors"
@@ -50,17 +51,13 @@ func (r recording) asTrack() catalogTrack {
 }
 
 func (r recording) hasISRC(isrc string) bool {
-	want := canonicalISRC(isrc)
+	want := songfacts.CanonicalISRC(isrc)
 	for _, listed := range r.ISRCs {
-		if canonicalISRC(listed) == want {
+		if songfacts.CanonicalISRC(listed) == want {
 			return true
 		}
 	}
 	return false
-}
-
-func canonicalISRC(isrc string) string {
-	return strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(isrc), "-", ""))
 }
 
 type recordingCatalog interface {
@@ -122,7 +119,7 @@ func (c *musicBrainzClient) SearchRecordings(ctx context.Context, artist, title 
 }
 
 func (c *musicBrainzClient) RecordingsByISRC(ctx context.Context, isrc string) ([]recording, error) {
-	return c.search(ctx, "isrc:"+luceneQuote(canonicalISRC(isrc)))
+	return c.search(ctx, "isrc:"+luceneQuote(songfacts.CanonicalISRC(isrc)))
 }
 
 func (c *musicBrainzClient) search(ctx context.Context, query string) ([]recording, error) {

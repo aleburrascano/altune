@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/songfacts"
 	"cmp"
 	"math"
 	"slices"
@@ -94,7 +95,7 @@ func lengthSpread(candidates []judged) float64 {
 }
 
 func decide(t libraryTrack, outcomes []sourceOutcome) identity {
-	found := identity{ISRC: canonicalISRC(t.ISRC), Evidence: evidence{
+	found := identity{ISRC: songfacts.CanonicalISRC(t.ISRC), Evidence: evidence{
 		Title: t.Title, Artist: t.Artist, Album: t.Album, FileSeconds: t.FileSeconds, Sources: outcomes,
 	}}
 	confirming := confirmingOutcomes(outcomes)

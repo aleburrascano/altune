@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/discovery/adapters/providers/applemusic"
 	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/songfacts"
 	"context"
 	"encoding/json"
 	"errors"
@@ -74,7 +75,7 @@ func isDeezerThrottle(status int, body []byte) bool {
 }
 
 func (d deezerLookup) ByISRC(ctx context.Context, isrc string) ([]candidate, error) {
-	raw, err := d.client.get(ctx, "/2.0/track/isrc:"+url.PathEscape(canonicalISRC(isrc)))
+	raw, err := d.client.get(ctx, "/2.0/track/isrc:"+url.PathEscape(songfacts.CanonicalISRC(isrc)))
 	if errors.Is(err, errCatalogUnknown) {
 		return nil, nil
 	}
@@ -140,7 +141,7 @@ type musicBrainzSearch struct {
 }
 
 func (m musicBrainzLookup) ByISRC(ctx context.Context, isrc string) ([]candidate, error) {
-	query := `isrc:"` + canonicalISRC(isrc) + `"`
+	query := `isrc:"` + songfacts.CanonicalISRC(isrc) + `"`
 	path := "/ws/2/recording?query=" + url.QueryEscape(query) + "&inc=isrcs&fmt=json&limit=" + strconv.Itoa(musicBrainzResultLimit)
 	raw, err := m.client.get(ctx, path)
 	if errors.Is(err, errCatalogUnknown) {
@@ -170,7 +171,7 @@ func musicBrainzCandidate(rec musicBrainzRecording, wanted string) candidate {
 	}
 	isrc := ""
 	for _, listed := range rec.ISRCs {
-		if canonicalISRC(listed) == canonicalISRC(wanted) {
+		if songfacts.CanonicalISRC(listed) == songfacts.CanonicalISRC(wanted) {
 			isrc = listed
 		}
 	}
@@ -208,7 +209,7 @@ func (a appleLookup) ByISRC(ctx context.Context, isrc string) ([]candidate, erro
 	if err := a.limiter.Wait(ctx); err != nil {
 		return nil, err
 	}
-	songs, err := a.songs.SongsByISRC(ctx, canonicalISRC(isrc))
+	songs, err := a.songs.SongsByISRC(ctx, songfacts.CanonicalISRC(isrc))
 	if err != nil {
 		return nil, appleFailure(err)
 	}

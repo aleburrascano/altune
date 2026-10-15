@@ -2,6 +2,7 @@ package main
 
 import (
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared/songfacts"
 	"context"
 	"errors"
 	"fmt"
@@ -141,7 +142,7 @@ func refuseHeldISRC(ctx context.Context, tx pgx.Tx, plan trackPlan, decisions []
 			continue
 		}
 		var other string
-		err := tx.QueryRow(ctx, "SELECT id::text FROM tracks WHERE user_id = $1 AND upper(replace(replace(isrc, '-', ''), ' ', '')) = $2 AND id <> $3 LIMIT 1", plan.UserID, canonicalISRC(*d.Change.NewValue), plan.TrackID).Scan(&other)
+		err := tx.QueryRow(ctx, "SELECT id::text FROM tracks WHERE user_id = $1 AND upper(replace(replace(isrc, '-', ''), ' ', '')) = $2 AND id <> $3 LIMIT 1", plan.UserID, songfacts.CanonicalISRC(*d.Change.NewValue), plan.TrackID).Scan(&other)
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 		case err != nil:

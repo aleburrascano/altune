@@ -21,12 +21,14 @@ linters:
             - altune/go-api/internal/shared$
             - altune/go-api/internal/shared/domain
             - altune/go-api/internal/shared/sharedtest
+            - altune/go-api/internal/shared/songfacts
             - altune/go-api/internal/shared/textnorm
+            - altune/go-api/internal/shared/versiontag
             - github.com/google/uuid
             - golang.org/x/text
           deny:
             - pkg: altune/go-api/internal/shared/
-              desc: domain may import from internal/shared only the root value objects, shared/domain and textnorm
+              desc: domain may import from internal/shared only the root value objects, shared/domain and the pure text packages (songfacts, textnorm, versiontag)
 
         catalog-boundary:
           files:

@@ -2,12 +2,10 @@ package main
 
 import (
 	"altune/go-api/internal/catalog/domain"
-	"regexp"
+	"altune/go-api/internal/shared/songfacts"
 	"slices"
 	"strings"
 )
-
-var creditSeparatorRe = regexp.MustCompile(`(?i)\s*(?:&|\+|,|;|/|\bfeat\.?|\bft\.?|\bfeaturing\b|\bwith\b|\bx\b|\band\b)\s*`)
 
 func titleKeys(title string) domain.SearchKeys {
 	return domain.CleanSearchKeys(title, "", "")
@@ -15,19 +13,19 @@ func titleKeys(title string) domain.SearchKeys {
 
 func sameSongTitle(a, b string) bool {
 	keysA, keysB := titleKeys(a), titleKeys(b)
-	return normalizeName(baseTitle(keysA.Title)) == normalizeName(baseTitle(keysB.Title)) && slices.Equal(keysA.VariantQualifiers(), keysB.VariantQualifiers())
+	return songfacts.NameKey(baseTitle(keysA.Title)) == songfacts.NameKey(baseTitle(keysB.Title)) && slices.Equal(keysA.VariantQualifiers(), keysB.VariantQualifiers())
 }
 
 func isCredited(stored, credit string) bool {
-	wanted := normalizeName(stored)
+	wanted := songfacts.NameKey(stored)
 	if wanted == "" {
 		return false
 	}
-	if normalizeName(credit) == wanted {
+	if songfacts.NameKey(credit) == wanted {
 		return true
 	}
-	for _, name := range creditSeparatorRe.Split(credit, -1) {
-		if normalizeName(name) == wanted {
+	for _, name := range songfacts.SplitCredit(credit) {
+		if songfacts.NameKey(name) == wanted {
 			return true
 		}
 	}
@@ -43,11 +41,11 @@ func ownSingles(groups []releaseGroup, songTitle string) []releaseGroup {
 var variousArtistsNames = []string{"variousartists", "va", "variosartistas", "verschiedeneinterpreten"}
 
 func isVariousArtists(name string) bool {
-	return slices.Contains(variousArtistsNames, normalizeName(name))
+	return slices.Contains(variousArtistsNames, songfacts.NameKey(name))
 }
 
 func isSameName(a, b string) bool {
-	return normalizeName(a) != "" && normalizeName(a) == normalizeName(b)
+	return songfacts.NameKey(a) != "" && songfacts.NameKey(a) == songfacts.NameKey(b)
 }
 
 const (

@@ -2,6 +2,7 @@ package main
 
 import (
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared/songfacts"
 	"altune/go-api/internal/shared/textnorm"
 	"encoding/json"
 	"errors"
@@ -252,7 +253,6 @@ func (p *trackPlan) addUnique(change plannedChange) {
 
 const (
 	earliestYear = 1900
-	isrcLength   = 12
 
 	maxTrackNumber    = 999
 	maxCatalogSeconds = 24 * 60 * 60
@@ -393,14 +393,14 @@ func checkISRC(fix *reportFix) error {
 }
 
 func checkISRCClear(fix *reportFix) error {
-	if fix.OldValue == nil || len(strings.ReplaceAll(*fix.OldValue, "-", "")) != isrcLength {
+	if fix.OldValue == nil || !songfacts.IsCanonicalISRC(songfacts.CanonicalISRC(*fix.OldValue)) {
 		return errors.New("isrc clear needs the 12 character old_value the audit saw")
 	}
 	return nil
 }
 
 func checkISRCFill(fix *reportFix) error {
-	if !isCanonicalISRC(*fix.NewValue) {
+	if !songfacts.IsCanonicalISRC(*fix.NewValue) {
 		return fmt.Errorf("isrc fill value %q is not 12 upper-case letters and digits", *fix.NewValue)
 	}
 	if fix.OldValue != nil {
@@ -418,18 +418,6 @@ func isProvenISRC(sources []string) bool {
 	return slices.Contains(sources, sourceTrackIdentity) || (slices.Contains(sources, sourceDeezer) && slices.Contains(sources, sourceMusicBrainz))
 }
 
-func isCanonicalISRC(value string) bool {
-	if len(value) != isrcLength {
-		return false
-	}
-	for _, r := range value {
-		if (r < 'A' || r > 'Z') && (r < '0' || r > '9') {
-			return false
-		}
-	}
-	return true
-}
-
 func checkArtworkReplacement(fix *reportFix) error {
 	if fix.OldValue != nil && strings.TrimSpace(*fix.OldValue) == "" {
 		return errors.New("artwork_url fix has a blank old_value")
@@ -442,8 +430,4 @@ func checkArtworkReplacement(fix *reportFix) error {
 		return fmt.Errorf("artwork_url %q is not an https URL", *fix.NewValue)
 	}
 	return nil
-}
-
-func canonicalISRC(value string) string {
-	return strings.ToUpper(strings.NewReplacer("-", "", " ", "").Replace(strings.TrimSpace(value)))
 }

@@ -35,7 +35,3 @@ type candidate struct {
 	Album         string   `json:"album,omitempty"`
 	LengthSeconds float64  `json:"length_seconds"`
 }
-
-func canonicalISRC(isrc string) string {
-	return strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(isrc), "-", ""))
-}

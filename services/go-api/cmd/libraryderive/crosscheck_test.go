@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/songfacts"
 	"context"
 	"errors"
 	"testing"
@@ -20,7 +21,7 @@ func (f *fakeDeezer) TrackByISRC(_ context.Context, isrc string) (deezerTrack, e
 	if f.blocked {
 		return deezerTrack{}, blocked("HTTP 403")
 	}
-	track, ok := f.byISRC[canonicalISRC(isrc)]
+	track, ok := f.byISRC[songfacts.CanonicalISRC(isrc)]
 	if !ok {
 		return deezerTrack{}, errCatalogUnknown
 	}

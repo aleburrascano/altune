@@ -2,6 +2,7 @@ package main
 
 import (
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared/songfacts"
 	"context"
 	"errors"
 	"strings"
@@ -233,7 +234,7 @@ func orStored(want, stored string) string {
 	if want != "" {
 		return want
 	}
-	return canonicalISRC(stored)
+	return songfacts.CanonicalISRC(stored)
 }
 
 func TestArtistFirst_NoCatalogOverlapNeverSearchesSongs(t *testing.T) {

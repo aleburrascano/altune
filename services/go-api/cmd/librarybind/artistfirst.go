@@ -2,6 +2,7 @@ package main
 
 import (
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared/songfacts"
 	"context"
 	"errors"
 	"slices"
@@ -53,7 +54,7 @@ func isPlausible(t libraryTrack, c candidate) bool {
 }
 
 func outcomeIgnoringISRC(t libraryTrack, from source, found []candidate, lookupErr error) sourceOutcome {
-	identified := slices.DeleteFunc(slices.Clone(found), func(c candidate) bool { return canonicalISRC(c.ISRC) == "" })
+	identified := slices.DeleteFunc(slices.Clone(found), func(c candidate) bool { return songfacts.CanonicalISRC(c.ISRC) == "" })
 	outcome := sourceOutcome{Source: from, Candidates: make([]judged, 0, len(identified))}
 	if lookupErr != nil {
 		outcome.Error = lookupErr.Error()
@@ -73,7 +74,7 @@ func outcomeIgnoringISRC(t libraryTrack, from source, found []candidate, lookupE
 func namesSeveralISRCs(all []judged) bool {
 	var isrcs []string
 	for _, j := range all {
-		if isrc := canonicalISRC(j.ISRC); j.isGuarded() && !slices.Contains(isrcs, isrc) {
+		if isrc := songfacts.CanonicalISRC(j.ISRC); j.isGuarded() && !slices.Contains(isrcs, isrc) {
 			isrcs = append(isrcs, isrc)
 		}
 	}
@@ -199,7 +200,7 @@ func winningCandidate(o sourceOutcome) judged {
 func distinctWinnerISRCs(winners []sourceOutcome) []string {
 	var isrcs []string
 	for _, o := range winners {
-		if isrc := canonicalISRC(winningCandidate(o).ISRC); !slices.Contains(isrcs, isrc) {
+		if isrc := songfacts.CanonicalISRC(winningCandidate(o).ISRC); !slices.Contains(isrcs, isrc) {
 			isrcs = append(isrcs, isrc)
 		}
 	}
@@ -221,7 +222,7 @@ func (i identity) boundByArtistFirst(t libraryTrack, agreed agreement) identity 
 	i.ISRC = agreed.ISRC
 	i.recordConfirmations(agreed.Sources)
 	i.Reason = reasonArtistFirstPrefix + i.Reason
-	if storedISRC := canonicalISRC(t.ISRC); storedISRC != "" && storedISRC != agreed.ISRC {
+	if storedISRC := songfacts.CanonicalISRC(t.ISRC); storedISRC != "" && storedISRC != agreed.ISRC {
 		i.Evidence.Replaced = &replacedISRC{ISRC: storedISRC, Refusal: priorReason, CatalogSeconds: agreed.CatalogSeconds, Independent: agreed.isDeezerAndApple()}
 	}
 	return i
