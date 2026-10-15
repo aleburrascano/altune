@@ -958,7 +958,7 @@ func TestYtDlpAudioSearcher_Download_RejectsWhenNoM4AIsProduced(t *testing.T) {
 }
 
 func TestYtDlpEntry_ASearchResultIsAnUpload(t *testing.T) {
-	c := ytDlpEntry{Title: "Bruno Mars - Finesse", WebpageURL: "https://www.youtube.com/watch?v=x"}.candidate()
+	c := CandidateFromEntry(Entry{Title: "Bruno Mars - Finesse", WebpageURL: "https://www.youtube.com/watch?v=x"})
 
 	if c.Kind != ports.KindUpload {
 		t.Errorf("Kind = %q, want an upload", c.Kind)

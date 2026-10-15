@@ -69,7 +69,7 @@
       "id": "pl-catalog-length-wins-over-a-doubted-search-pick",
       "expect_saved": { "isrc": "QZHN92620453", "isrc_source": "catalog", "provenance": "best_effort", "duration_seconds": 140 },
       "class": "OK",
-      "note": "prod ezcodylee 'ALBUM OF THE YEAR !' (ISRC QZHN92620453, catalog 139s, saved length 167s from the SoundCloud upload): MusicBrainz search picked a 167s recording the ISRC does not register, so the resolver doubts it. The 140s YouTube Music art track must be scored and accepted against the catalog 139s; reading the doubted 167s instead scored it 0.30 and the library kept the 167s SoundCloud version",
+      "note": "prod ezcodylee 'ALBUM OF THE YEAR !' (ISRC QZHN92620453, catalog 139s, saved length 167s from the SoundCloud upload): MusicBrainz search picked a 167s recording the ISRC does not register, so the resolver doubts it; prod's ytmusic source emits nothing here (the resolution has no YouTube source), and the SoundCloud results are the five scsearch entries yt-dlp returned from the prod IP. The 140s YouTube Music art track (ytmsearch Song Pwg_GsP2QZU, recorded 2026-10-15) must be scored and accepted against the catalog 139s; reading the doubted 167s instead scored it 0.30 and the library kept the 167s SoundCloud version",
       "track": {
         "title": "ALBUM OF THE YEAR !", "artist": "ezcodylee", "duration": 167, "catalog_duration": 139, "isrc": "QZHN92620453",
         "resolution": {
@@ -78,11 +78,15 @@
         }
       },
       "sources": [
-        { "name": "ytmusic", "search_seconds": 3, "candidates": [
-          { "title": "ALBUM OF THE YEAR !", "url": "https://music.youtube.com/watch?v=Pwg_GsP2QZU", "channel": "ezcodylee", "duration": 140, "correct": true }
+        { "name": "ytmsearch", "search_seconds": 2, "candidates": [
+          { "correct": true, "observed": { "ytmsearch_song": { "VideoID": "Pwg_GsP2QZU", "Title": "ALBUM OF THE YEAR !", "Artists": ["ezcodylee"], "Album": "ALBUM OF THE YEAR !", "DurationSeconds": 140, "Type": "MUSIC_VIDEO_TYPE_ATV", "Explicit": true } } }
         ] },
         { "name": "ytdlp", "search_seconds": 4, "candidates": [
-          { "title": "ALBUM OF THE YEAR !", "url": "https://soundcloud.com/ezcodylee/album-of-the-year", "channel": "ezcodylee", "duration": 167 }
+          { "observed": { "ytdlp_entry": { "title": "ALBUM OF THE YEAR !", "duration": 167.272, "webpage_url": "https://soundcloud.com/ezcodylee/album-of-the-year", "view_count": 79449 } } },
+          { "observed": { "ytdlp_entry": { "title": "J. Cole - Album Of The Year (Freestyle)", "duration": 138.918, "webpage_url": "https://soundcloud.com/j-cole/j-cole-album-of-the-year-freestyle", "view_count": 9575797 } } },
+          { "observed": { "ytdlp_entry": { "title": "Album of the Year Freestyle Remix", "duration": 140.08, "webpage_url": "https://soundcloud.com/m-spoon/alumb-of-the-year-freestyle", "view_count": 128 } } },
+          { "observed": { "ytdlp_entry": { "title": "J. Cole - Album of the Year (Freestyle) [Chalkt Rework]", "duration": 161.057, "webpage_url": "https://soundcloud.com/chalkt/j-cole-album-of-the-year-2", "view_count": 126 } } },
+          { "observed": { "ytdlp_entry": { "title": "Album of the year (Remix)", "duration": 142.263, "webpage_url": "https://soundcloud.com/spaceman_yella/album-of-the-year-remix", "view_count": 36 } } }
         ] }
       ]
     },

@@ -257,12 +257,12 @@ func (s *YtDlpAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec stri
 
 func candidatesFromEntryLines(lines [][]byte) (candidates []ports.AudioCandidate, skipped int) {
 	for _, line := range lines {
-		var entry ytDlpEntry
+		var entry Entry
 		if err := json.Unmarshal(line, &entry); err != nil || entry.WebpageURL == "" {
 			skipped++
 			continue
 		}
-		candidates = append(candidates, entry.candidate())
+		candidates = append(candidates, CandidateFromEntry(entry))
 	}
 	return candidates, skipped
 }
@@ -377,7 +377,7 @@ func largestReadable(paths []string) (string, int64) {
 	return best, bestSize
 }
 
-type ytDlpEntry struct {
+type Entry struct {
 	Title      string   `json:"title"`
 	Duration   float64  `json:"duration"`
 	WebpageURL string   `json:"webpage_url"`
@@ -386,7 +386,7 @@ type ytDlpEntry struct {
 	ViewCount  int64    `json:"view_count"`
 }
 
-func (e ytDlpEntry) candidate() ports.AudioCandidate {
+func CandidateFromEntry(e Entry) ports.AudioCandidate {
 	return ports.AudioCandidate{
 		Title:      e.Title,
 		Duration:   e.Duration,

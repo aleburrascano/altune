@@ -58,10 +58,10 @@ func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.Audio
 	}
 	slog.InfoContext(ctx, "acquisition.ytmsearch_strong_hit",
 		"video_id", hit.VideoID, "title", req.Title, "explicit", hit.Explicit)
-	return []ports.AudioCandidate{candidateFor(hit)}, nil
+	return []ports.AudioCandidate{CandidateFor(hit)}, nil
 }
 
-func candidateFor(hit Song) ports.AudioCandidate {
+func CandidateFor(hit Song) ports.AudioCandidate {
 	return ports.AudioCandidate{
 		Title:      hit.Title,
 		Duration:   float64(hit.DurationSeconds),

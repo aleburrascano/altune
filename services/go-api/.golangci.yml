@@ -155,6 +155,7 @@ linters:
             - altune/go-api/internal/acquisition/adapters/catalogpin
             - altune/go-api/internal/acquisition/adapters/discoverybridge
             - altune/go-api/internal/acquisition/adapters/tempfs
+            - altune/go-api/internal/acquisition/adapters/ytdlp
             - altune/go-api/internal/acquisition/adapters/ytmsearch
             - altune/go-api/internal/acquisition/adapters/ytmusic
           deny:
@@ -165,7 +166,7 @@ linters:
             - pkg: altune/go-api/internal/playback/adapters
               desc: service is driven by ports, it never imports adapters
             - pkg: altune/go-api/internal/acquisition/adapters
-              desc: the eval harness may compose only the catalogbridge, catalogpin, discoverybridge, tempfs, ytmusic and ytmsearch adapters
+              desc: the eval harness may compose only the catalogbridge, catalogpin, discoverybridge, tempfs, ytdlp, ytmusic and ytmsearch adapters
 
         acquisition-service-filesystem:
           files:

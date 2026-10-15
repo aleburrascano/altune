@@ -66,14 +66,17 @@ func pinnedVideoID(req ports.FindRequest) (videoID string, fromCatalogPin bool) 
 }
 
 func (s *Source) pinnedCandidate(ctx context.Context, videoID string, fromCatalogPin bool) ports.AudioCandidate {
-	observed := s.observe(ctx, videoID)
+	return CandidateForWatch(videoID, s.observe(ctx, videoID), fromCatalogPin)
+}
+
+func CandidateForWatch(videoID string, observed ytmsearch.Watch, pinned bool) ports.AudioCandidate {
 	return ports.AudioCandidate{
 		Title:      observed.Title,
 		Artists:    observed.Artists,
 		Explicit:   observed.Explicit,
 		URL:        watchURLPrefix + videoID,
 		Categories: []string{"Music"},
-		Resolved:   fromCatalogPin || isCatalogVideo(observed.Type),
+		Resolved:   pinned || isCatalogVideo(observed.Type),
 		Kind:       kindOf(observed.Type),
 	}
 }

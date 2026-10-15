@@ -2,6 +2,7 @@ package eval
 
 import (
 	"altune/go-api/internal/acquisition/adapters/catalogpin"
+	"altune/go-api/internal/acquisition/adapters/ytdlp"
 	"altune/go-api/internal/acquisition/adapters/ytmsearch"
 	"altune/go-api/internal/acquisition/adapters/ytmusic"
 	acqdomain "altune/go-api/internal/acquisition/domain"
@@ -48,9 +49,7 @@ func newCasePorts(kase Case) *casePorts {
 	return &casePorts{kase: kase, byPath: make(map[string]Candidate), clock: &simClock{}}
 }
 
-const ytdlpTier acqdomain.SourceName = "ytdlp"
-
-var prodFallbackTier = map[string]bool{string(ytdlpTier): true}
+var prodFallbackTier = map[string]bool{string(ytdlp.SourceName): true}
 
 func (p *casePorts) registry() *service.SourceRegistry {
 	var first, fallback []ports.AudioSource
@@ -76,7 +75,7 @@ func (p *casePorts) sources() []*evalSource {
 	return sources
 }
 
-var flatTierOrder = []acqdomain.SourceName{ytmsearch.SourceName, ytmusic.SourceName, catalogpin.SourceName, ytdlpTier}
+var flatTierOrder = []acqdomain.SourceName{ytmsearch.SourceName, ytmusic.SourceName, catalogpin.SourceName, ytdlp.SourceName}
 
 func flatTierOf(c Candidate) acqdomain.SourceName {
 	switch ports.CandidateKind(c.Kind) {
@@ -87,7 +86,7 @@ func flatTierOf(c Candidate) acqdomain.SourceName {
 	case ports.KindCatalogPin:
 		return catalogpin.SourceName
 	}
-	return ytdlpTier
+	return ytdlp.SourceName
 }
 
 func flatTiers(candidates []Candidate) []Source {
@@ -144,19 +143,7 @@ func (s *evalSource) Find(ctx context.Context, req ports.FindRequest) ([]ports.A
 		if c.Query != "" && !variants[c.Query] {
 			continue
 		}
-		out = append(out, ports.AudioCandidate{
-			Title:      c.Title,
-			Duration:   c.Duration,
-			URL:        c.URL,
-			Channel:    c.Channel,
-			Categories: c.Categories,
-			ViewCount:  c.ViewCount,
-			Resolved:   c.Resolved,
-			Kind:       ports.CandidateKind(c.Kind),
-			Artists:    c.Artists,
-			Album:      c.Album,
-			Explicit:   c.Explicit,
-		})
+		out = append(out, c.audioCandidate())
 	}
 	return out, nil
 }
@@ -170,7 +157,7 @@ type goldenWatches struct{ candidates []Candidate }
 func (g goldenWatches) Watch(_ context.Context, videoID string) (ytmsearch.Watch, error) {
 	for _, c := range g.candidates {
 		if strings.HasSuffix(c.URL, "="+videoID) {
-			return ytmsearch.Watch{VideoID: videoID, Title: c.Title, Artists: c.Artists, Explicit: c.Explicit}, nil
+			return c.watch(videoID), nil
 		}
 	}
 	return ytmsearch.Watch{}, fmt.Errorf("eval: no golden watch for video %q", videoID)
@@ -290,4 +277,23 @@ func (c Candidate) chromaprintResults(trackArtist string) []ports.AcoustIDResult
 		recordings = append(recordings, ports.LinkedRecording{MBID: mbid, Title: c.Title, Artists: []string{trackArtist}, Duration: c.Duration})
 	}
 	return []ports.AcoustIDResult{{ID: c.AcoustID, Score: 1, Recordings: recordings}}
+}
+
+func (c Candidate) watch(videoID string) ytmsearch.Watch {
+	if c.Observed != nil && c.Observed.Watch != nil {
+		return c.Observed.Watch.Watch
+	}
+	return ytmsearch.Watch{VideoID: videoID, Title: c.Title, Artists: c.Artists, Explicit: c.Explicit, Type: watchTypeOf(ports.CandidateKind(c.Kind))}
+}
+
+func watchTypeOf(kind ports.CandidateKind) ytmsearch.VideoType {
+	switch kind {
+	case ports.KindArtTrack:
+		return ytmsearch.VideoTypeATV
+	case ports.KindUpload:
+		return ytmsearch.VideoTypeUGC
+	case ports.KindPinnedVideo:
+		return ytmsearch.VideoTypeOMV
+	}
+	return ""
 }

@@ -1,10 +1,14 @@
 package eval
 
 import (
+	"altune/go-api/internal/acquisition/adapters/ytdlp"
+	"altune/go-api/internal/acquisition/adapters/ytmsearch"
+	"altune/go-api/internal/acquisition/adapters/ytmusic"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -91,6 +95,69 @@ type Candidate struct {
 	Correct         bool             `json:"correct,omitempty"`
 	Query           string           `json:"query,omitempty"`
 	DownloadSeconds float64          `json:"download_seconds,omitempty"`
+	Observed        *Observed        `json:"observed,omitempty"`
+}
+
+type Observed struct {
+	Song  *ytmsearch.Song `json:"ytmsearch_song,omitempty"`
+	Watch *ObservedWatch  `json:"ytmusic_watch,omitempty"`
+	Entry *ytdlp.Entry    `json:"ytdlp_entry,omitempty"`
+}
+
+type ObservedWatch struct {
+	ytmsearch.Watch
+	Pinned bool
+}
+
+func (o Observed) emit() (ports.AudioCandidate, error) {
+	switch {
+	case o.Song != nil && o.Watch == nil && o.Entry == nil:
+		return ytmsearch.CandidateFor(*o.Song), nil
+	case o.Watch != nil && o.Song == nil && o.Entry == nil:
+		return ytmusic.CandidateForWatch(o.Watch.VideoID, o.Watch.Watch, o.Watch.Pinned), nil
+	case o.Entry != nil && o.Song == nil && o.Watch == nil:
+		return ytdlp.CandidateFromEntry(*o.Entry), nil
+	}
+	return ports.AudioCandidate{}, errors.New("observed must hold exactly one of ytmsearch_song, ytmusic_watch, ytdlp_entry")
+}
+
+func (c Candidate) setsEmittedFields() bool {
+	return c.Title != "" || c.URL != "" || c.Channel != "" || len(c.Categories) > 0 ||
+		c.Duration != 0 || c.ViewCount != 0 || c.Resolved || c.Kind != "" ||
+		len(c.Artists) > 0 || c.Album != "" || c.Explicit
+}
+
+func (c Candidate) builtByItsAdapter() (Candidate, error) {
+	if c.Observed == nil {
+		return c, nil
+	}
+	if c.setsEmittedFields() {
+		return Candidate{}, errors.New("an observed candidate takes its title, url, channel, duration and kind from the adapter; set none of them beside it")
+	}
+	emitted, err := c.Observed.emit()
+	if err != nil {
+		return Candidate{}, err
+	}
+	c.Title, c.URL, c.Channel, c.Categories = emitted.Title, emitted.URL, emitted.Channel, emitted.Categories
+	c.Duration, c.ViewCount, c.Resolved, c.Kind = emitted.Duration, emitted.ViewCount, emitted.Resolved, string(emitted.Kind)
+	c.Artists, c.Album, c.Explicit = emitted.Artists, emitted.Album, emitted.Explicit
+	return c, nil
+}
+
+func (c Candidate) audioCandidate() ports.AudioCandidate {
+	return ports.AudioCandidate{
+		Title:      c.Title,
+		Duration:   c.Duration,
+		URL:        c.URL,
+		Channel:    c.Channel,
+		Categories: c.Categories,
+		ViewCount:  c.ViewCount,
+		Resolved:   c.Resolved,
+		Kind:       ports.CandidateKind(c.Kind),
+		Artists:    c.Artists,
+		Album:      c.Album,
+		Explicit:   c.Explicit,
+	}
 }
 
 type AcoustIDResult struct {
@@ -307,7 +374,33 @@ func decodeSuite(name string, raw []byte) ([]Case, error) {
 	if err := json.Unmarshal(raw, &s); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", name, err)
 	}
+	for i := range s.Cases {
+		if err := s.Cases[i].buildCandidatesByTheirAdapters(); err != nil {
+			return nil, fmt.Errorf("%s: case %q: %w", name, s.Cases[i].ID, err)
+		}
+	}
 	return s.Cases, nil
+}
+
+func (c *Case) buildCandidatesByTheirAdapters() error {
+	for _, group := range c.candidateGroups() {
+		for i := range group {
+			built, err := group[i].builtByItsAdapter()
+			if err != nil {
+				return err
+			}
+			group[i] = built
+		}
+	}
+	return nil
+}
+
+func (c *Case) candidateGroups() [][]Candidate {
+	groups := [][]Candidate{c.Candidates}
+	for i := range c.Sources {
+		groups = append(groups, c.Sources[i].Candidates)
+	}
+	return groups
 }
 
 func sortedByID(cases []Case) []Case {

@@ -2,12 +2,17 @@ package eval
 
 import (
 	"altune/go-api/internal/acquisition/adapters/catalogbridge"
+	"altune/go-api/internal/acquisition/adapters/ytdlp"
+	"altune/go-api/internal/acquisition/adapters/ytmsearch"
+	"altune/go-api/internal/acquisition/adapters/ytmusic"
 	"altune/go-api/internal/acquisition/ports"
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -1257,5 +1262,154 @@ func TestRun_FlatCandidatesRunInProdTiersByKind(t *testing.T) {
 	}
 	if out.Attempts != 1 {
 		t.Errorf("attempts = %d, want 1: prod never searches uploads once a resolved candidate exists", out.Attempts)
+	}
+}
+
+type fixedSongs []ytmsearch.Song
+
+func (f fixedSongs) SearchSongs(context.Context, string) ([]ytmsearch.Song, error) { return f, nil }
+
+type fixedWatch ytmsearch.Watch
+
+func (f fixedWatch) Watch(context.Context, string) (ytmsearch.Watch, error) {
+	return ytmsearch.Watch(f), nil
+}
+
+func writeGolden(t *testing.T, candidate string) string {
+	t.Helper()
+	dir := t.TempDir()
+	body := `{"cases":[{"id":"shape","class":"OK","track":{"title":"Halo","artist":"Nova"},"candidates":[` + candidate + `]}]}`
+	if err := os.WriteFile(filepath.Join(dir, "shape.json"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func loadedCandidate(t *testing.T, candidate string) Candidate {
+	t.Helper()
+	cases, err := LoadDir(writeGolden(t, candidate))
+	if err != nil {
+		t.Fatalf("LoadDir: %v", err)
+	}
+	if len(cases) != 1 || len(cases[0].Candidates) != 1 {
+		t.Fatalf("loaded %d cases, want one case with one candidate", len(cases))
+	}
+	return cases[0].Candidates[0]
+}
+
+func TestRun_ObservedCandidatesGoThroughTheAdapters(t *testing.T) {
+	ctx := context.Background()
+	req := ports.FindRequest{Title: "Halo", Artist: "Nova"}
+	pinReq := req
+	pinReq.CatalogSources = []ports.CatalogSource{{Provider: string(ports.ProviderYouTube), ExternalID: "abcdefghijk"}}
+
+	t.Run("ytmsearch song", func(t *testing.T) {
+		song := ytmsearch.Song{VideoID: "abcdefghijk", Title: "Halo", Artists: []string{"Nova"}, Album: "Glow", DurationSeconds: 201, Type: ytmsearch.VideoTypeATV, Explicit: true}
+		want, err := ytmsearch.NewSource(fixedSongs{song}, nil).Find(ctx, req)
+		if err != nil || len(want) != 1 {
+			t.Fatalf("ytmsearch Find = %v, %v", want, err)
+		}
+
+		got := loadedCandidate(t, `{"observed":{"ytmsearch_song":{"VideoID":"abcdefghijk","Title":"Halo","Artists":["Nova"],"Album":"Glow","DurationSeconds":201,"Type":"MUSIC_VIDEO_TYPE_ATV","Explicit":true}}}`).audioCandidate()
+
+		if !reflect.DeepEqual(got, want[0]) {
+			t.Errorf("golden candidate = %+v, want what ytmsearch Find emits: %+v", got, want[0])
+		}
+	})
+
+	t.Run("ytmusic watch", func(t *testing.T) {
+		watch := ytmsearch.Watch{VideoID: "abcdefghijk", Title: "Halo", Artists: []string{"Nova"}, Type: ytmsearch.VideoTypeOMV}
+		want, err := ytmusic.NewSource(nil, fixedWatch(watch)).Find(ctx, pinReq)
+		if err != nil || len(want) != 1 {
+			t.Fatalf("ytmusic Find = %v, %v", want, err)
+		}
+
+		got := loadedCandidate(t, `{"observed":{"ytmusic_watch":{"VideoID":"abcdefghijk","Title":"Halo","Artists":["Nova"],"Type":"MUSIC_VIDEO_TYPE_OMV","Pinned":true}}}`).audioCandidate()
+
+		if !reflect.DeepEqual(got, want[0]) {
+			t.Errorf("golden candidate = %+v, want what ytmusic Find emits: %+v", got, want[0])
+		}
+	})
+
+	t.Run("ytdlp entry", func(t *testing.T) {
+		line := `{"title":"Halo","duration":201.5,"webpage_url":"https://soundcloud.com/nova/halo","view_count":7}`
+		var entry ytdlp.Entry
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			t.Fatal(err)
+		}
+
+		got := loadedCandidate(t, `{"observed":{"ytdlp_entry":`+line+`}}`).audioCandidate()
+
+		if want := ytdlp.CandidateFromEntry(entry); !reflect.DeepEqual(got, want) {
+			t.Errorf("golden candidate = %+v, want what ytdlp emits: %+v", got, want)
+		}
+		if got.Kind != ports.KindUpload || got.Resolved {
+			t.Errorf("golden candidate kind %q resolved %v, want an unresolved upload", got.Kind, got.Resolved)
+		}
+	})
+}
+
+func TestLoad_RefusesAnObservedCandidateThatAlsoSetsWhatTheAdapterEmits(t *testing.T) {
+	for name, candidate := range map[string]string{
+		"a hand-set channel":       `{"channel":"ezcodylee","observed":{"ytdlp_entry":{"webpage_url":"https://soundcloud.com/a/b"}}}`,
+		"two observed forms":       `{"observed":{"ytdlp_entry":{"webpage_url":"https://soundcloud.com/a/b"},"ytmsearch_song":{"VideoID":"abcdefghijk"}}}`,
+		"an observed with no form": `{"observed":{}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := LoadDir(writeGolden(t, candidate)); err == nil || !strings.Contains(err.Error(), `"shape"`) {
+				t.Fatalf("LoadDir = %v, want a refusal naming case %q", err, "shape")
+			}
+		})
+	}
+}
+
+func TestGoldenWatches_CarryTheWatchTypeProdObserved(t *testing.T) {
+	url := "https://music.youtube.com/watch?v=abcdefghijk"
+	observed := ytmsearch.Watch{VideoID: "abcdefghijk", Title: "Halo", Type: ytmsearch.VideoTypeOMV}
+	tests := []struct {
+		name      string
+		candidate Candidate
+		want      ytmsearch.VideoType
+	}{
+		{"an art track is an ATV", Candidate{URL: url, Kind: "art_track", Resolved: true}, ytmsearch.VideoTypeATV},
+		{"an upload is a UGC", Candidate{URL: url, Kind: "upload"}, ytmsearch.VideoTypeUGC},
+		{"an observed watch is returned as observed", Candidate{URL: url, Observed: &Observed{Watch: &ObservedWatch{Watch: observed}}}, ytmsearch.VideoTypeOMV},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := goldenWatches{candidates: []Candidate{tt.candidate}}.Watch(context.Background(), "abcdefghijk")
+
+			if err != nil || got.Type != tt.want {
+				t.Errorf("Watch = %+v, %v; want type %q", got, err, tt.want)
+			}
+		})
+	}
+}
+
+func TestEmbedded_TheCatalogLengthGoldenIsWhatProdsAdaptersEmit(t *testing.T) {
+	kase := embeddedCase(t, "pl-catalog-length-wins-over-a-doubted-search-pick")
+
+	var artTracks, uploads int
+	for _, cand := range kase.allCandidates() {
+		switch ports.CandidateKind(cand.Kind) {
+		case ports.KindArtTrack:
+			artTracks++
+			if !cand.Resolved || cand.Channel != "YouTube Music Art Track" || cand.Duration != 140 {
+				t.Errorf("art track %+v is not what ytmsearch emits for the 140 s hit", cand)
+			}
+		case ports.KindUpload:
+			uploads++
+			if cand.Resolved || cand.Channel != "" {
+				t.Errorf("upload %+v is not what ytdlp emits for a SoundCloud result", cand)
+			}
+		default:
+			t.Errorf("candidate %q has kind %q: prod's ytmusic emits nothing for this resolution", cand.URL, cand.Kind)
+		}
+	}
+	if artTracks != 1 || uploads < 2 {
+		t.Errorf("got %d art tracks and %d uploads, want the one ytmsearch hit and the scsearch results", artTracks, uploads)
+	}
+	if out := Run(context.Background(), kase); !out.Pass {
+		t.Errorf("expected pass, got %q (err %q)", out.Reason, out.Err)
 	}
 }
