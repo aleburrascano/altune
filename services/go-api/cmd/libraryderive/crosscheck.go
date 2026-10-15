@@ -102,6 +102,7 @@ type crossCheckInput struct {
 	SongTitle      string
 	Group          releaseGroup
 	RecordingISRCs []string
+	ExactAlbum     bool
 }
 
 func (c crossChecker) check(ctx context.Context, in crossCheckInput) (crossCheck, error) {
@@ -138,7 +139,7 @@ func (c crossChecker) searchArtistAlbums(ctx context.Context, in crossCheckInput
 	if err != nil {
 		return crossCheck{}, err
 	}
-	candidates := firstSameTitled(found, in.Group.Title, maxAlbumCandidates)
+	candidates := firstSameTitled(found, in.Group.Title, maxAlbumCandidates, in.ExactAlbum)
 	same, otherMaster, err := c.scanAlbums(ctx, candidates, in)
 	switch {
 	case err != nil:
@@ -172,10 +173,10 @@ func (c crossChecker) scanAlbums(ctx context.Context, candidates []deezerAlbum, 
 	return nil, otherMaster, nil
 }
 
-func firstSameTitled(albums []deezerAlbum, title string, limit int) []deezerAlbum {
+func firstSameTitled(albums []deezerAlbum, title string, limit int, exact bool) []deezerAlbum {
 	var same []deezerAlbum
 	for _, album := range albums {
-		if sameTitle(album.Title, title) && len(same) < limit {
+		if len(same) < limit && (sameTitle(album.Title, title) && (!exact || songfacts.NameKey(album.Title) == songfacts.NameKey(title))) {
 			same = append(same, album)
 		}
 	}
@@ -228,4 +229,9 @@ func (c crossChecker) storedAlbumListing(ctx context.Context, in crossCheckInput
 		return nil, err
 	}
 	return listing.Match, nil
+}
+
+func (c crossChecker) storedAlbumRelease(ctx context.Context, in crossCheckInput, storedAlbum string) (*deezerMatch, error) {
+	in.ExactAlbum = true
+	return c.storedAlbumListing(ctx, in, storedAlbum)
 }

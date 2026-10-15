@@ -54,7 +54,6 @@ const (
 	reasonStoredListsTrackEarlier = "deezer lists the track on the stored album, which is earlier than the chosen release"
 	reasonTitleUncorroborated     = "the deezer track does not carry this title"
 	reasonArtistUncorroborated    = "the catalogs disagree on the artist"
-	reasonNoDeezerAlbum           = "no deezer album matches the chosen release"
 	reasonAlbumArtistDisputed     = "the deezer album is credited to another artist than the chosen release"
 	reasonChosenIsCompilation     = "the chosen release is a compilation, soundtrack, dj-mix or various-artists release and an album is stored"
 	reasonChosenIsAnotherArtists  = "the chosen release is credited to another artist than the recording's primary artist"
@@ -67,10 +66,22 @@ func (g releaseGroup) isCompilationLike() bool {
 	return isVariousArtists(g.Artist) || slices.ContainsFunc(g.SecondaryTypes, func(kind string) bool { return slices.Contains(compilationTypes, kind) })
 }
 
-func albumArtistHold(chosenArtist string, match *deezerMatch) string {
+func (g releaseGroup) credits(rec recording) bool {
+	if rec.PrimaryID != "" && slices.Contains(g.ArtistIDs, rec.PrimaryID) {
+		return true
+	}
+	lead := songfacts.NameKey(rec.leadArtist())
+	return slices.ContainsFunc(g.ArtistNames, func(name string) bool { return songfacts.NameKey(name) == lead })
+}
+
+func noDeezerAlbum(release string) string {
+	return "no deezer album matches " + release
+}
+
+func albumArtistHold(chosenArtist string, match *deezerMatch, release string) string {
 	switch {
 	case match == nil:
-		return reasonNoDeezerAlbum
+		return noDeezerAlbum(release)
 	case sharesArtist(match.AlbumArtist, chosenArtist):
 		return ""
 	}

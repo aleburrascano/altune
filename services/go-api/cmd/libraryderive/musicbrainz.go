@@ -25,11 +25,12 @@ const (
 )
 
 type recording struct {
-	ID      string
-	Title   string
-	Artist  string
-	Primary string
-	ISRCs   []string
+	ID        string
+	Title     string
+	Artist    string
+	Primary   string
+	PrimaryID string
+	ISRCs     []string
 }
 
 func (r recording) leadArtist() string {
@@ -63,6 +64,7 @@ type artistCredit []struct {
 	Name       string `json:"name"`
 	JoinPhrase string `json:"joinphrase"`
 	Artist     struct {
+		ID   string `json:"id"`
 		Name string `json:"name"`
 	} `json:"artist"`
 }
@@ -72,6 +74,29 @@ func (c artistCredit) primary() string {
 		return ""
 	}
 	return cmp.Or(c[0].Artist.Name, c[0].Name)
+}
+
+func (c artistCredit) primaryID() string {
+	if len(c) == 0 {
+		return ""
+	}
+	return c[0].Artist.ID
+}
+
+func (c artistCredit) ids() []string {
+	var out []string
+	for _, credit := range c {
+		out = append(out, credit.Artist.ID)
+	}
+	return out
+}
+
+func (c artistCredit) names() []string {
+	var out []string
+	for _, credit := range c {
+		out = append(out, cmp.Or(credit.Artist.Name, credit.Name))
+	}
+	return out
 }
 
 func (c artistCredit) text() string {
@@ -203,14 +228,19 @@ func (m musicBrainz) ReleaseTrack(ctx context.Context, releaseID, recordingID st
 }
 
 func toReleaseGroup(body releaseGroupBody, releaseCredit artistCredit) releaseGroup {
+	credit := body.ArtistCredit
+	if len(credit) == 0 {
+		credit = releaseCredit
+	}
 	return releaseGroup{
 		ID: body.ID, Title: body.Title, Artist: cmp.Or(body.ArtistCredit.text(), releaseCredit.text()), PrimaryType: body.PrimaryType,
 		SecondaryTypes: body.SecondaryTypes, FirstReleaseDate: body.FirstReleaseDate,
+		ArtistIDs: credit.ids(), ArtistNames: credit.names(),
 	}
 }
 
 func toRecording(body recordingBody) recording {
-	return recording{ID: body.ID, Title: body.Title, Artist: body.ArtistCredit.text(), Primary: body.ArtistCredit.primary(), ISRCs: body.ISRCs}
+	return recording{ID: body.ID, Title: body.Title, Artist: body.ArtistCredit.text(), Primary: body.ArtistCredit.primary(), PrimaryID: body.ArtistCredit.primaryID(), ISRCs: body.ISRCs}
 }
 
 func (m musicBrainz) getJSON(ctx context.Context, path string, into any) error {

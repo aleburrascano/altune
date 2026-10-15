@@ -14,6 +14,8 @@ type releaseGroup struct {
 	FirstReleaseDate string
 	ReleaseID        string
 	FrontReleaseID   string
+	ArtistIDs        []string
+	ArtistNames      []string
 }
 
 type rule string
@@ -23,6 +25,7 @@ const (
 	ruleMixtape     rule = "mixtape"
 	ruleSingleOrEP  rule = "single_or_ep"
 	ruleOnlyHome    rule = "only_home"
+	ruleStoredAlbum rule = "stored_album"
 )
 
 const (

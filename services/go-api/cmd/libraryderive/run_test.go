@@ -2,6 +2,7 @@ package main
 
 import (
 	"altune/go-api/internal/shared/songfacts"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -571,10 +572,9 @@ func TestDeriveAll_AnAlbumWhoseDeezerTracklistLacksTheRecordingIsNeverTheCorrect
 func TestDeriveAll_AStoredOriginalAlbumIsNotReplacedByALaterReleaseOfTheRecording(t *testing.T) {
 	const isrc = "USDJ21500001"
 	rec := recording{ID: "rec", Title: "oui", Artist: "Jeremih", Primary: "Jeremih", ISRCs: []string{isrc}}
-	homes := []releaseGroup{
-		group("rg-late-nights", "Late Nights: The Album", "Album", "2015-12-04", "Mixtape/Street"),
-		group("rg-say-oui", "Jeremih: Say Oui", "Album", "2026-02-13"),
-	}
+	lateNights := group("rg-late-nights", "Late Nights: The Album", "Album", "2015-12-04", "Mixtape/Street")
+	lateNights.Artist, lateNights.ArtistNames = "Jeremih", []string{"Jeremih"}
+	homes := []releaseGroup{lateNights, group("rg-say-oui", "Jeremih: Say Oui", "Album", "2026-02-13")}
 	stored := libraryTrack{ID: "t", Title: "oui", Artist: "Jeremih", Album: "Late Nights: The Album", ISRC: isrc, Year: 2015}
 	got := deriveSong(t, rec, homes, &fakeDeezer{}, stored)
 	for _, kind := range []category{"album_correct", "year_correct"} {
@@ -582,10 +582,11 @@ func TestDeriveAll_AStoredOriginalAlbumIsNotReplacedByALaterReleaseOfTheRecordin
 			t.Errorf("%s: %+v", kind, got[kind])
 		}
 	}
-	for _, kind := range []category{"album_differs", "year_differs"} {
-		if d := got[kind]; d.Fix != nil || !strings.Contains(d.Detail, reasonStoredIsOriginal) {
-			t.Errorf("%s: %+v", kind, d)
-		}
+	if d := got["album_differs"]; d.Fix != nil || !strings.Contains(d.Detail, reasonStoredIsOriginal) {
+		t.Errorf("album_differs: %+v", d)
+	}
+	if _, differs := got["year_differs"]; differs {
+		t.Errorf("year still differs against the stored album: %+v", got["year_differs"])
 	}
 }
 
@@ -606,23 +607,68 @@ func TestDeriveAll_AnEstateSaleTrackWithoutANumberIsNotFilledFromTheBaseAlbum(t 
 	}
 }
 
-func TestDeriveAll_AHeldAlbumDoesNotFillTheFieldsItOwns(t *testing.T) {
+func TestDeriveAll_AHeldAlbumFillsTheFieldsFromTheStoredAlbumItself(t *testing.T) {
 	const isrc = "USDJ21500001"
 	rec := recording{ID: "rec", Title: "oui", Artist: "Jeremih", Primary: "Jeremih", ISRCs: []string{isrc}}
-	homes := []releaseGroup{
-		group("rg-late-nights", "Late Nights: The Album", "Album", "2015-12-04", "Mixtape/Street"),
-		group("rg-say-oui", "Jeremih: Say Oui", "Album", "2026-02-13"),
-	}
+	lateNights := group("rg-late-nights", "Late Nights: The Album", "Album", "2015-12-04", "Mixtape/Street")
+	lateNights.Artist, lateNights.ArtistNames = "Jeremih", []string{"Jeremih"}
+	homes := []releaseGroup{lateNights, group("rg-say-oui", "Jeremih: Say Oui", "Album", "2026-02-13")}
 	dz := deezerCrediting(isrc, "oui", "Jeremih", "Jeremih: Say Oui")
 	stored := libraryTrack{ID: "t", Title: "oui", Artist: "Jeremih", Album: "Late Nights: The Album", ISRC: isrc}
 	got := deriveSong(t, rec, homes, dz, stored)
-	for _, kind := range []category{"year_fill", "track_number_fill", "genre_fill", "artwork_url_fill", "album_artist_fill"} {
-		if _, filled := got[kind]; filled {
-			t.Errorf("%s from the held album: %+v", kind, got[kind])
+	y := got["year_fill"]
+	if y.Fix == nil || !strings.Contains(y.Detail, `"2015"`) {
+		t.Errorf("year not filled from Late Nights' own release group (2015-12-04): %+v", y)
+	}
+	if d := got["album_differs"]; d.Fix != nil || !strings.Contains(d.Detail, reasonStoredIsOriginal) {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestDeriveAll_AStoredAlbumTitleSharedByTwoGroupsAdoptsOnlyTheLeadArtistsOwnAlbum(t *testing.T) {
+	const isrc = "USDJ21500001"
+	rec := recording{ID: "rec", Title: "oui", Artist: "Jeremih", Primary: "Jeremih", ISRCs: []string{isrc}}
+	compilation := group("rg-va", "Late Nights: The Album", "Album", "1999-01-01", "Compilation")
+	compilation.Artist, compilation.ArtistNames = "Various Artists", []string{"Various Artists"}
+	own := group("rg-own", "Late Nights: The Album", "Album", "2015-12-04", "Mixtape/Street")
+	own.Artist, own.ArtistNames = "Jeremih", []string{"Jeremih"}
+	later := group("rg-say-oui", "Jeremih: Say Oui", "Album", "2026-02-13")
+	stored := libraryTrack{ID: "t", Title: "oui", Artist: "Jeremih", Album: "Late Nights: The Album", ISRC: isrc}
+	orders := map[string][]releaseGroup{
+		"compilation first":  {compilation, own, later},
+		"artist album first": {own, compilation, later},
+	}
+	for name, homes := range orders {
+		got := deriveSong(t, rec, homes, deezerCrediting(isrc, "oui", "Jeremih", "Jeremih: Say Oui"), stored)
+		if y := got["year_fill"]; y.Fix == nil || !strings.Contains(y.Detail, `"2015"`) {
+			t.Errorf("%s: year not from the artist's own album: %+v", name, y)
+		}
+		if aa := got["album_artist_differs"]; aa.Fix != nil && strings.Contains(aa.Detail, "Various") {
+			t.Errorf("%s: adopted Various Artists: %+v", name, aa)
 		}
 	}
-	if d := got["track_number_differs"]; d.Fix != nil || !strings.Contains(d.Detail, reasonStoredIsOriginal) {
-		t.Fatalf("got %+v", got)
+}
+
+func TestDeriveAll_TwoSameTitledGroupsOfTheLeadArtistFillNothingFromEither(t *testing.T) {
+	const isrc = "USDJ21500004"
+	rec := recording{ID: "rec", Title: "Buddy Holly", Artist: "Weezer", Primary: "Weezer", ISRCs: []string{isrc}}
+	blue := group("rg-blue", "Weezer", "Album", "1994-05-10", "Mixtape/Street")
+	green := group("rg-green", "Weezer", "Album", "2001-05-15", "Mixtape/Street")
+	for _, g := range []*releaseGroup{&blue, &green} {
+		g.Artist, g.ArtistNames = "Weezer", []string{"Weezer"}
+	}
+	chosen := group("rg-chosen", "Make Believe", "Album", "2030-01-01")
+	stored := libraryTrack{ID: "t", Title: "Buddy Holly", Artist: "Weezer", Album: "Weezer", ISRC: isrc}
+	orders := map[string][]releaseGroup{"blue first": {blue, green, chosen}, "green first": {green, blue, chosen}}
+	for name, homes := range orders {
+		got := deriveSong(t, rec, homes, deezerCrediting(isrc, "Buddy Holly", "Weezer", "Make Believe"), stored)
+		y := got["year_fill"]
+		if strings.Contains(y.Detail, `"1994"`) || strings.Contains(y.Detail, `"2001"`) {
+			t.Errorf("%s: adopted one of two same-titled albums: %+v", name, y)
+		}
+		if d := got["album_differs"]; d.Fix != nil {
+			t.Errorf("%s: album moved: %+v", name, d)
+		}
 	}
 }
 
@@ -630,10 +676,12 @@ type replayExpectation struct {
 	applies  map[string]string
 	keeps    []string
 	reported []string
+	settles  []string
 }
 
 type realProdCase struct {
 	name         string
+	fixture      string
 	recording    string
 	blankCover   bool
 	stored       libraryTrack
@@ -717,10 +765,7 @@ func TestDeriveAll_RealProdCasesKeepTheirOutcomePerField(t *testing.T) {
 				ID: "t", Title: "WHAT A DAY", Artist: "Tyler, The Creator", Album: "CALL ME IF YOU GET LOST: The Estate Sale", AlbumArtist: "Tyler, The Creator",
 				ISRC: "USQX92301935", Year: 2023, Genre: "Rap/Hip Hop", TrackNumber: 19, ArtworkURL: dzCover("40b4545c7f373fb519dfcc9092c2ccf6", "1000x1000"), FileSeconds: 216,
 			},
-			expectations: replayExpectation{
-				keeps:    []string{"album", "track_number", "genre", "artwork_url"},
-				reported: []string{"track_number", "genre", "artwork_url"},
-			},
+			expectations: replayExpectation{keeps: []string{"album"}, settles: []string{"track_number", "genre", "artwork_url"}},
 		},
 		{
 			name: "jeremih-oui",
@@ -826,7 +871,7 @@ func TestDeriveAll_RealProdCasesKeepTheirOutcomePerField(t *testing.T) {
 				ID: "t", Title: "We Found Love (Album Version)", Artist: "Rihanna", Album: "Talk That Talk (Deluxe)", ISRC: "USUM71115507", Genre: "Pop",
 				ArtworkURL: dzCover("5199f89d5113a83b5086463d5d0c9415", "1000x1000"), FileSeconds: 216,
 			},
-			expectations: replayExpectation{keeps: []string{"album", "album_artist", "year"}, reported: []string{"album"}},
+			expectations: replayExpectation{applies: map[string]string{"album_artist": "Rihanna", "year": "2011"}, keeps: []string{"album"}, reported: []string{"album"}},
 		},
 		{
 			name:      "u2-still-havent-found",
@@ -853,7 +898,7 @@ func TestDeriveAll_RealProdCasesKeepTheirOutcomePerField(t *testing.T) {
 				ID: "t", Title: "Yeah! (feat. Lil Jon & Ludacris)", Artist: "USHER", Album: "Confessions (Expanded Edition)", ISRC: "USAR10301423",
 				ArtworkURL: dzCover("b89c20012cccb051c8a4e04d98386f95", "500x500"), FileSeconds: 251,
 			},
-			expectations: replayExpectation{keeps: []string{"album", "album_artist", "year"}, reported: []string{"album"}},
+			expectations: replayExpectation{applies: map[string]string{"album_artist": "USHER", "year": "2004"}, keeps: []string{"album"}, reported: []string{"album"}},
 		},
 		{
 			name: "sade-smooth-operator",
@@ -877,7 +922,11 @@ func TestDeriveAll_RealProdCasesKeepTheirOutcomePerField(t *testing.T) {
 				ID: "t", Title: "One Kiss", Artist: "Calvin Harris", Album: "One Kiss", AlbumArtist: "Calvin Harris", ISRC: "GBARL1800368", Year: 2018, TrackNumber: 1,
 				ArtworkURL: dzCover("0397baea24f861db7ee63fb1c70391f9", "500x500"), FileSeconds: 214.86,
 			},
-			expectations: replayExpectation{keeps: []string{"album", "album_artist", "year", "track_number", "artwork_url"}, reported: []string{"album"}},
+			expectations: replayExpectation{
+				applies:  map[string]string{"album_artist": "Calvin Harris & Dua Lipa", "artwork_url": "https://coverartarchive.org/release/c80adc92-c63c-4f3e-8bb8-f9a3992631dc/front"},
+				keeps:    []string{"album", "year", "track_number"},
+				reported: []string{"album"},
+			},
 		},
 		{
 			name: "coldplay-something-just-like-this",
@@ -885,7 +934,11 @@ func TestDeriveAll_RealProdCasesKeepTheirOutcomePerField(t *testing.T) {
 				ID: "t", Title: "Something Just Like This", Artist: "Coldplay", Album: "Something Just Like This", AlbumArtist: "Coldplay", ISRC: "USQX91700278", Year: 2017,
 				TrackNumber: 1, ArtworkURL: dzCover("2ae6c01a51296a7ec6d89c96a4fac32c", "500x500"), FileSeconds: 247.6,
 			},
-			expectations: replayExpectation{keeps: []string{"album", "year", "artwork_url"}, reported: []string{"album"}},
+			expectations: replayExpectation{
+				applies:  map[string]string{"artwork_url": "https://cdn-images.dzcdn.net/images/cover/2ae6c01a51296a7ec6d89c96a4fac32c/1000x1000-000000-80-0-0.jpg"},
+				keeps:    []string{"album", "year"},
+				reported: []string{"album"},
+			},
 		},
 		{
 			name:      "gunna-alright",
@@ -936,10 +989,37 @@ func TestDeriveAll_RealProdCasesKeepTheirOutcomePerField(t *testing.T) {
 			},
 			expectations: replayExpectation{keeps: []string{"album", "track_number"}, reported: []string{"genre"}},
 		},
+		{
+			name:    "held-album-tyler-what-a-day-estate-sale",
+			fixture: "tyler-what-a-day",
+			stored: libraryTrack{
+				ID: "t", Title: "WHAT A DAY", Artist: "Tyler, The Creator", Album: "CALL ME IF YOU GET LOST: The Estate Sale", AlbumArtist: "Tyler, The Creator",
+				ISRC: "USQX92301935", Year: 2023, Genre: "Rap/Hip Hop", TrackNumber: 19, ArtworkURL: dzCover("40b4545c7f373fb519dfcc9092c2ccf6", "1000x1000"), FileSeconds: 216,
+			},
+			expectations: replayExpectation{settles: []string{"album", "year", "track_number", "genre", "artwork_url"}},
+		},
+		{
+			name:      "held-album-jeremih-oui-late-nights",
+			fixture:   "jeremih-oui-original-recording",
+			recording: "0d751dff-30e6-46fd-bc75-574f973d9eac",
+			stored: libraryTrack{
+				ID: "t", Title: "oui", Artist: "Jeremih", Album: "Late Nights: The Album", AlbumArtist: "Jeremih", ISRC: "USUM71513397", Year: 2015, Genre: "R&B",
+				TrackNumber: 4, ArtworkURL: dzCover("56907774d655c7924a309edca4351a76", "1000x1000"), FileSeconds: 238,
+			},
+			expectations: replayExpectation{settles: []string{"year", "track_number", "genre", "artwork_url"}},
+		},
+		{
+			name: "held-album-daniel-caesar-valentina-bonus-version",
+			stored: libraryTrack{
+				ID: "t", Title: "Valentina", Artist: "Daniel Caesar", Album: "NEVER ENOUGH (Bonus Version)", AlbumArtist: "Daniel Caesar", ISRC: "USUG12209353", Year: 2023,
+				Genre: "R&B", TrackNumber: 18, ArtworkURL: dzCover("0d571082af7c78114321031d7f84d331", "1000x1000"), FileSeconds: 154,
+			},
+			expectations: replayExpectation{applies: map[string]string{"track_number": "2"}, settles: []string{"year", "genre", "artwork_url"}},
+		},
 	}
 	for _, c := range realProdCases {
 		t.Run(c.name, func(t *testing.T) {
-			mb, dz := replayCatalogs(t, c.name)
+			mb, dz := replayCatalogs(t, cmp.Or(c.fixture, c.name))
 			d := newDeriver(mb, dz)
 			d.covers = fakeCoverProbe{placeholders: map[string]bool{}}
 			if c.blankCover {
@@ -959,6 +1039,14 @@ func TestDeriveAll_RealProdCasesKeepTheirOutcomePerField(t *testing.T) {
 			for _, field := range c.expectations.keeps {
 				if value, changed := applied[field]; changed {
 					t.Errorf("%s was changed to %q", field, value)
+				}
+			}
+			for _, field := range c.expectations.settles {
+				if value, changed := applied[field]; changed {
+					t.Errorf("%s was changed to %q", field, value)
+				}
+				if slices.Contains(reportedFields(got.Findings), field) {
+					t.Errorf("%s is still reported (reported: %v)", field, reportedFields(got.Findings))
 				}
 			}
 			for _, field := range c.expectations.reported {
@@ -991,10 +1079,16 @@ func TestDeriveAll_JeremihOuiStaysOnLateNightsWhenDeezerListsItOnTheEarlierStore
 			t.Errorf("%s: %+v", kind, got[kind])
 		}
 	}
-	for _, kind := range []category{"album_differs", "year_differs", "track_number_differs", "artwork_url_differs"} {
-		if d := got[kind]; d.Fix != nil || !strings.Contains(d.Detail, reasonStoredListsTrackEarlier) {
-			t.Errorf("%s: %+v", kind, d)
+	if d := got["album_differs"]; d.Fix != nil || !strings.Contains(d.Detail, reasonStoredListsTrackEarlier) {
+		t.Errorf("album_differs: %+v", d)
+	}
+	for _, kind := range []category{"year_differs", "track_number_differs"} {
+		if _, differs := got[kind]; differs {
+			t.Errorf("%s still differs against the stored album: %+v", kind, got[kind])
 		}
+	}
+	if d := got["artwork_url_differs"]; d.Fix != nil || !strings.Contains(d.Detail, "the stored album has no cover") {
+		t.Errorf("artwork_url_differs: %+v", d)
 	}
 }
 

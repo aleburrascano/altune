@@ -106,6 +106,7 @@ type withheld struct {
 	CatalogDuration string
 	ISRC            string
 	AlbumArtist     string
+	Release         string
 }
 
 func (w withheld) of(field string) string {
@@ -130,7 +131,14 @@ func (w withheld) of(field string) string {
 	return ""
 }
 
-const reasonNoValue = "no trustworthy value on the chosen release"
+const (
+	releaseChosen = "the chosen release"
+	releaseStored = "the stored album"
+)
+
+func noValueOn(release string) string {
+	return "no trustworthy value on " + cmp.Or(release, releaseChosen)
+}
 
 func diff(stored libraryTrack, want desired) []difference {
 	moved := albumDiffers(stored.Album, want.Album)
@@ -225,7 +233,7 @@ func appendField(found []difference, field, stored, want string, differs bool, g
 	case want == "" && stored == "":
 		return found
 	case want == "":
-		return append(found, unknown(field, stored, want, cmp.Or(whyNot.of(field), reasonNoValue)))
+		return append(found, unknown(field, stored, want, cmp.Or(whyNot.of(field), noValueOn(whyNot.Release))))
 	case !differs || stored == want:
 		return found
 	case stored == "":
