@@ -53,6 +53,12 @@ var (
 	editionSuffixRe = regexp.MustCompile(fmt.Sprintf(`(?i)^(.*\S)\s[-–—]\s+([^-–—|]*\b(?:%s|%s)\b[^-–—|]*)$`, editionKinds, editionNouns))
 )
 
+var releaseMarkerRe = regexp.MustCompile(`(?i)^\s*(?:(?:\d{4}\s+)?(?:digitally\s+)?remaster(?:ed)?(?:\s+\d{4})?|radio\s+edit|explicit|clean)\s*$`)
+
+func IsReleaseMarker(text string) bool {
+	return releaseMarkerRe.MatchString(text)
+}
+
 func IsEditionLabel(text string) bool {
 	return editionLabelRe.MatchString(text)
 }

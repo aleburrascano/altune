@@ -71,6 +71,47 @@ func TestStampOwnership_StampsOwnedTracksOnly(t *testing.T) {
 	}
 }
 
+func TestStampOwnership_VersionedLibraryTrackDoesNotOwnTheStudioSong(t *testing.T) {
+	svc := NewOwnershipEnrichmentService(stubOwnershipReader{owned: map[string]ports.OwnedTrack{
+		domain.OwnershipKey("Song (Live)", "X"):  {TrackID: "live"},
+		domain.OwnershipKey("Song (Remix)", "X"): {TrackID: "remix"},
+	}}, nil)
+	studio, studioExtras := ownable("track", "Song", "X", map[string]any{})
+	live, liveExtras := ownable("track", "Song (Live)", "X", map[string]any{})
+
+	svc.StampOwnership(context.Background(), shared.UserId{}, []OwnableItem{studio, live})
+
+	if len(*studioExtras) != 0 {
+		t.Errorf("studio extras = %v, want unstamped", *studioExtras)
+	}
+	if got := (*liveExtras)["owned_track_id"]; got != "live" {
+		t.Errorf("live owned_track_id = %v, want live", got)
+	}
+}
+
+func TestStampOwnership_MatchesByISRCAndRefusesAConflictingISRC(t *testing.T) {
+	svc := NewOwnershipEnrichmentService(stubOwnershipReader{owned: map[string]ports.OwnedTrack{
+		domain.OwnershipISRCKey("USRC17607839"):    {TrackID: "by-isrc", ISRC: "USRC17607839"},
+		domain.OwnershipKey("Song", "X"):           {TrackID: "other-recording", ISRC: "GBAAA0000001"},
+		domain.OwnershipKey("Respelled Song", "X"): {TrackID: "by-name"},
+	}}, nil)
+	sameRecording, sameExtras := ownable("track", "Song Retitled", "Y", map[string]any{"isrc": "us-rc1-76-07839"})
+	otherRecording, otherExtras := ownable("track", "Song", "X", map[string]any{"isrc": "USRC17607839x"})
+	unlabelled, unlabelledExtras := ownable("track", "Respelled Song", "X", map[string]any{"isrc": "FRZZZ0000009"})
+
+	svc.StampOwnership(context.Background(), shared.UserId{}, []OwnableItem{sameRecording, otherRecording, unlabelled})
+
+	if got := (*sameExtras)["owned_track_id"]; got != "by-isrc" {
+		t.Errorf("same recording owned_track_id = %v, want by-isrc", got)
+	}
+	if got, stamped := (*otherExtras)["owned_track_id"]; stamped {
+		t.Errorf("conflicting ISRC owned_track_id = %v, want unstamped", got)
+	}
+	if got := (*unlabelledExtras)["owned_track_id"]; got != "by-name" {
+		t.Errorf("owned track without ISRC owned_track_id = %v, want by-name", got)
+	}
+}
+
 func TestStampOwnership_LookupFailureAndNilServiceLeaveItemsUntouched(t *testing.T) {
 	failing := NewOwnershipEnrichmentService(stubOwnershipReader{err: errors.New("db down")}, nil)
 	for name, svc := range map[string]*OwnershipEnrichmentService{"lookup failure": failing, "nil service": nil} {

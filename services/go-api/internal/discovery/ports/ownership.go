@@ -11,6 +11,7 @@ type OwnedTrack struct {
 	Artist            string
 	AcquisitionStatus string
 	TrackNumber       *int
+	ISRC              string
 }
 
 type TrackNumberFiller interface {

@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/runloop"
+	"altune/go-api/internal/shared/songfacts"
 	"context"
 	"log/slog"
 	"time"
@@ -77,7 +78,7 @@ func stampOwned(item OwnableItem, owned map[string]ports.OwnedTrack) {
 	if item.Kind != domain.ResultKindTrack.String() || item.Extras == nil {
 		return
 	}
-	match, ok := owned[domain.OwnershipKey(item.Title, item.Artist)]
+	match, ok := ownedMatch(item, owned)
 	if !ok {
 		return
 	}
@@ -86,6 +87,20 @@ func stampOwned(item OwnableItem, owned map[string]ports.OwnedTrack) {
 	}
 	(*item.Extras)[domain.ExtraOwnedTrackID] = match.TrackID
 	(*item.Extras)["owned_acquisition_status"] = match.AcquisitionStatus
+}
+
+func ownedMatch(item OwnableItem, owned map[string]ports.OwnedTrack) (ports.OwnedTrack, bool) {
+	itemISRC := songfacts.CanonicalISRC(domain.StringExtra(item.extras(), domain.ExtraISRC))
+	if itemISRC != "" {
+		if match, ok := owned[domain.OwnershipISRCKey(itemISRC)]; ok {
+			return match, true
+		}
+	}
+	match, ok := owned[domain.OwnershipKey(item.Title, item.Artist)]
+	if !ok || (itemISRC != "" && match.ISRC != "" && match.ISRC != itemISRC) {
+		return ports.OwnedTrack{}, false
+	}
+	return match, true
 }
 
 func (s *OwnershipEnrichmentService) EnrichAlbumTracks(

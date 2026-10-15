@@ -57,6 +57,41 @@ func TestOwnedByTitleArtist_FirstRefWinsOnDuplicateKey(t *testing.T) {
 	}
 }
 
+func TestOwnedByTitleArtist_LiveLibraryTrackIsNotKeyedAsTheStudioSong(t *testing.T) {
+	reader := NewOwnershipReader(&fakeLister{tracks: []catalogdomain.OwnedTrackRef{
+		{ID: "live", Title: "Song (Live)", Artist: "X"},
+	}})
+
+	owned, err := reader.OwnedByTitleArtist(context.Background(), testUser())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := owned[domain.OwnershipKey("Song", "X")]; ok {
+		t.Errorf("studio Song keyed as owned by a live-only library: %v", owned)
+	}
+	if owned[domain.OwnershipKey("Song (Live)", "X")].TrackID != "live" {
+		t.Errorf("live track not keyed by its own title: %v", owned)
+	}
+}
+
+func TestOwnedByTitleArtist_ISRCReachesTheTrackThatLostTheNameKey(t *testing.T) {
+	reader := NewOwnershipReader(&fakeLister{tracks: []catalogdomain.OwnedTrackRef{
+		{ID: "first", Title: "Alive", Artist: "Pearl Jam", ISRC: "USSM19100001"},
+		{ID: "second", Title: "Alive", Artist: "Pearl Jam", ISRC: "us-sm1-91-00002"},
+	}})
+
+	owned, err := reader.OwnedByTitleArtist(context.Background(), testUser())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := owned[domain.OwnershipISRCKey("USSM19100002")].TrackID; got != "second" {
+		t.Errorf("ISRC lookup TrackID = %q, want second", got)
+	}
+	if got := owned[domain.OwnershipISRCKey("USSM19100001")].TrackID; got != "first" {
+		t.Errorf("ISRC lookup TrackID = %q, want first", got)
+	}
+}
+
 func TestOwnedByTitleArtist_PropagatesError(t *testing.T) {
 	reader := NewOwnershipReader(&fakeLister{err: errors.New("db down")})
 

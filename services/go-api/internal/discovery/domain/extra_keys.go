@@ -17,6 +17,7 @@ const (
 	ExtraCopyright        = "copyright"
 	ExtraUPC              = "upc"
 	ExtraMBID             = "mbid"
+	ExtraISRC             = "isrc"
 	ExtraDisambiguation   = "disambiguation"
 	ExtraOwnedTrackID     = "owned_track_id"
 	ExtraTrackPosition    = "track_position"

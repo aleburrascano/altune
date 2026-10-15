@@ -147,6 +147,32 @@ func TestIsEditionLabel(t *testing.T) {
 	}
 }
 
+func TestIsReleaseMarker(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"Remastered", true},
+		{"Remastered 2011", true},
+		{"2011 Remaster", true},
+		{"Digitally Remastered", true},
+		{"Radio Edit", true},
+		{"Explicit", true},
+		{"Clean", true},
+		{"Clean Bandit Remix", false},
+		{"Radio Edit Remix", false},
+		{"Piano Version", false},
+		{"Live", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			if got := IsReleaseMarker(tt.input); got != tt.want {
+				t.Fatalf("IsReleaseMarker(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 var copiedSongFactDefinitionRe = regexp.MustCompile(`func (?:canonicalISRC|normalizeName|isCanonicalISRC)\(`)
 
 var compiledPatternLiteralRe = regexp.MustCompile("regexp\\.MustCompile\\(`([^`]*)`\\)")

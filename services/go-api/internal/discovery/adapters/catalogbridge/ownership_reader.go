@@ -6,8 +6,10 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/songfacts"
 	"context"
 	"fmt"
+	"log/slog"
 )
 
 var _ ports.OwnershipReader = (*OwnershipReader)(nil)
@@ -41,14 +43,24 @@ func (r *OwnershipReader) OwnedByTitleArtist(
 			Artist:            ref.Artist,
 			AcquisitionStatus: ref.AcquisitionStatus,
 			TrackNumber:       ref.TrackNumber,
+			ISRC:              songfacts.CanonicalISRC(ref.ISRC),
 		}
-		key := domain.OwnershipKey(track.Title, track.Artist)
-		if _, taken := owned[key]; taken {
-			continue
-		}
-		owned[key] = track
+		claim(ctx, owned, domain.OwnershipISRCKey(track.ISRC), track)
+		claim(ctx, owned, domain.OwnershipKey(track.Title, track.Artist), track)
 	}
 	return owned, nil
+}
+
+func claim(ctx context.Context, owned map[string]ports.OwnedTrack, key string, track ports.OwnedTrack) {
+	if key == "" {
+		return
+	}
+	if kept, taken := owned[key]; taken {
+		slog.DebugContext(ctx, "ownership.duplicate_key",
+			"kept_track_id", kept.TrackID, "dropped_track_id", track.TrackID)
+		return
+	}
+	owned[key] = track
 }
 
 var (
