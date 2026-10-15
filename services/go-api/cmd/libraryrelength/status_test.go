@@ -58,3 +58,29 @@ func TestWriteStatus_ListenListHoldsOnlyWhatStillMismatches(t *testing.T) {
 		t.Fatalf("got:\n%s", out.String())
 	}
 }
+
+func TestWriteStatus_WrongAudioJobsAreMarkedAndNameTheLibraryverifyPostCheck(t *testing.T) {
+	wrong := statusFor(func(r *statusRow) {
+		r.Title = "outside"
+		r.OldFileSeconds = number(176)
+		r.PlannedCatalogSeconds = 178
+		r.InFlight = true
+	})
+	lengthMiss := statusFor(func(r *statusRow) { r.Title = "Miss"; r.PlannedCatalogSeconds = 218 })
+	var out bytes.Buffer
+	writeStatus(&out, []statusRow{wrong, lengthMiss})
+	got := out.String()
+	_, note, found := strings.Cut(got, "wrong-audio re-acquires (1)")
+	if !found || !strings.Contains(note, "libraryverify") || !strings.Contains(note, "outside") || strings.Contains(note, "Miss") ||
+		!strings.Contains(got, "Drake - outside [wrong audio]") || strings.Contains(got, "Miss [wrong audio]") {
+		t.Fatalf("got:\n%s", got)
+	}
+}
+
+func TestWriteStatus_NoWrongAudioJobsPrintsNoPostCheckNote(t *testing.T) {
+	var out bytes.Buffer
+	writeStatus(&out, []statusRow{statusFor(func(r *statusRow) { r.PlannedCatalogSeconds = 218 })})
+	if strings.Contains(out.String(), "libraryverify") {
+		t.Fatalf("got:\n%s", out.String())
+	}
+}
