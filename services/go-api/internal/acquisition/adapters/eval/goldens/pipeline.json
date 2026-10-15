@@ -10,7 +10,7 @@
         { "name": "ytmsearch", "search_seconds": 2, "candidates": [
           { "title": "ALBUM OF THE YEAR !", "url": "https://music.youtube.com/watch?v=Pwg_GsP2QZU", "channel": "YouTube Music Art Track", "categories": ["Music"], "duration": 140, "resolved": true, "kind": "art_track", "artists": ["ezcodylee"], "correct": true }
         ] },
-        { "name": "soundcloud", "search_seconds": 3, "candidates": [
+        { "name": "ytdlp", "search_seconds": 3, "candidates": [
           { "title": "ALBUM OF THE YEAR !", "url": "https://soundcloud.com/ezcodylee/album-of-the-year", "channel": "ezcodylee", "duration": 167 }
         ] }
       ]
@@ -80,7 +80,7 @@
         { "name": "ytmusic", "search_seconds": 3, "candidates": [
           { "title": "ALBUM OF THE YEAR !", "url": "https://music.youtube.com/watch?v=Pwg_GsP2QZU", "channel": "ezcodylee", "duration": 140, "correct": true }
         ] },
-        { "name": "soundcloud", "search_seconds": 4, "candidates": [
+        { "name": "ytdlp", "search_seconds": 4, "candidates": [
           { "title": "ALBUM OF THE YEAR !", "url": "https://soundcloud.com/ezcodylee/album-of-the-year", "channel": "ezcodylee", "duration": 167 }
         ] }
       ]
