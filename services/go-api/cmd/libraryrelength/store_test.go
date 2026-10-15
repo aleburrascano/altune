@@ -120,7 +120,7 @@ func TestStore_ReacquireKeepsTheFileLengthAndQueuesAReplaceJob(t *testing.T) {
 		t.Fatalf("got %s, %v", got, err)
 	}
 	after := stateOf(t, s, row)
-	if *after.catalog != 379 || *after.duration != 226 || !after.mismatch || after.jobKind != "replace" || !after.jobQueued ||
+	if *after.catalog != 379 || *after.duration != 226 || !after.mismatch || after.jobKind != "upgrade" || !after.jobQueued ||
 		after.status != "ready" || *after.audioVersion != "v1" || after.loggedFixes != 1 {
 		t.Fatalf("after enqueue %+v", after)
 	}
