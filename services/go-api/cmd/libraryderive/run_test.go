@@ -25,20 +25,16 @@ type fakeMusicBrainz struct {
 	blocked    bool
 }
 
-func (f *fakeMusicBrainz) ReleaseTrackSeconds(_ context.Context, releaseID, recordingID string) (float64, error) {
+func (f *fakeMusicBrainz) ReleaseTrack(_ context.Context, releaseID, recordingID string) (releaseTrack, error) {
 	if f.lengthErr != nil {
-		return 0, f.lengthErr
+		return releaseTrack{}, f.lengthErr
 	}
-	seconds, ok := f.lengths[releaseID+"/"+recordingID]
+	key := releaseID + "/" + recordingID
+	seconds, ok := f.lengths[key]
 	if !ok {
-		return 0, errCatalogUnknown
+		return releaseTrack{}, errCatalogUnknown
 	}
-	return seconds, nil
-}
-
-func (f *fakeMusicBrainz) ReleaseTrack(ctx context.Context, releaseID, recordingID string) (releaseTrack, error) {
-	seconds, err := f.ReleaseTrackSeconds(ctx, releaseID, recordingID)
-	return releaseTrack{Seconds: seconds, Position: f.positions[releaseID+"/"+recordingID]}, err
+	return releaseTrack{Seconds: seconds, Position: f.positions[key]}, nil
 }
 
 func (f *fakeMusicBrainz) RecordingsByISRC(_ context.Context, isrc string) ([]recording, error) {

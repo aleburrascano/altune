@@ -141,20 +141,20 @@ func TestMusicBrainz_RemembersTheReleaseOfAGroupAndTheFirstOneWithFrontArt(t *te
 	}
 }
 
-func TestMusicBrainz_ReadsTheRecordingsLengthOnAReleaseInWholeSeconds(t *testing.T) {
+func TestMusicBrainz_ReadsTheRecordingsPositionAndLengthOnAReleaseInWholeSeconds(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/ws/2/release/rel-1" || r.URL.Query().Get("inc") != "recordings" {
 			t.Errorf("request %s", r.URL)
 		}
 		_, _ = w.Write([]byte(`{"media":[{"tracks":[{"length":180000,"recording":{"id":"other"}}]},` +
-			`{"tracks":[{"length":297600,"recording":{"id":"rec-1"}}]}]}`))
+			`{"tracks":[{"position":7,"length":297600,"recording":{"id":"rec-1"}}]}]}`))
 	}))
 	defer srv.Close()
 	m := fastMusicBrainz(srv)
-	if got, err := m.ReleaseTrackSeconds(t.Context(), "rel-1", "rec-1"); err != nil || got != 298 {
-		t.Fatalf("got %v, %v", got, err)
+	if got, err := m.ReleaseTrack(t.Context(), "rel-1", "rec-1"); err != nil || got != (releaseTrack{Position: 7, Seconds: 298}) {
+		t.Fatalf("got %+v, %v", got, err)
 	}
-	if _, err := m.ReleaseTrackSeconds(t.Context(), "rel-1", "absent"); !errors.Is(err, errCatalogUnknown) {
+	if _, err := m.ReleaseTrack(t.Context(), "rel-1", "absent"); !errors.Is(err, errCatalogUnknown) {
 		t.Fatalf("a recording missing from the release: %v", err)
 	}
 }
