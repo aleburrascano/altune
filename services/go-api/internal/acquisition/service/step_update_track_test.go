@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/acquisition/adapters/catalogbridge"
 	"altune/go-api/internal/acquisition/adapters/discoverybridge"
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service/grade"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"context"
@@ -216,6 +217,49 @@ func TestUpdateTrackStep_Execute_StoresVerdictScoreAndSourceTitleAsEvidence(t *t
 	}
 	if updated.AcquisitionConfidence() != 0 {
 		t.Errorf("confidence = %v, want 0 until computed", updated.AcquisitionConfidence())
+	}
+}
+
+func TestUpdateTrackStep_Execute_StoresSourceKindGenerationAndGradePerKind(t *testing.T) {
+	cases := []struct {
+		name      string
+		kind      ports.CandidateKind
+		channel   string
+		verdict   VerdictKind
+		wantKind  grade.SourceKind
+		wantGrade grade.Grade
+	}{
+		{"art track proven by fingerprint", ports.KindArtTrack, channelTopic, VerdictHard, grade.ArtTrack, grade.A},
+		{"official video proven by fingerprint", ports.KindPinnedVideo, channelTopic, VerdictHard, grade.OfficialVideo, grade.A},
+		{"artist's own upload proven by fingerprint", ports.KindUpload, channelArtist, VerdictHard, grade.LabelUpload, grade.A},
+		{"fan upload proven by fingerprint", ports.KindUpload, channelOther, VerdictHard, grade.FanUpload, grade.B},
+		{"art track the fingerprint says is another version", ports.KindArtTrack, channelTopic, VerdictOtherVersion, grade.ArtTrack, grade.F},
+		{"fan upload with no fingerprint answer", ports.KindUpload, channelOther, VerdictUnknown, grade.FanUpload, grade.D},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			userId := shared.NewUserId(uuid.New())
+			repo := newFakeTrackRepository()
+			track := seedTrackInRepo(t, repo, userId, nil)
+			ac := &AcquisitionContext{
+				AudioRef: drinkingAudio,
+				Selected: &ports.AudioCandidate{Title: "Song", URL: drinkingSource, Kind: tc.kind},
+				Verdict:  AudioVerdict{Kind: tc.verdict},
+				Evidence: Evidence{Channel: tc.channel},
+			}
+
+			if _, err := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID).Execute(context.Background(), ac, afterStore{}); err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+
+			var got Evidence
+			if err := json.Unmarshal(storedTrack(t, repo, track).AcquisitionEvidence(), &got); err != nil {
+				t.Fatalf("evidence not stored as JSON: %v", err)
+			}
+			if got.SourceKind != tc.wantKind || got.Grade != tc.wantGrade || got.PipelineGeneration != grade.PipelineGeneration {
+				t.Errorf("source_kind=%q grade=%q generation=%d, want %q %q %d", got.SourceKind, got.Grade, got.PipelineGeneration, tc.wantKind, tc.wantGrade, grade.PipelineGeneration)
+			}
+		})
 	}
 }
 
