@@ -67,6 +67,12 @@ func TestValidateCases_RejectsMalformed(t *testing.T) {
 		{"isrc recordings for a track with no isrc", []Case{
 			{ID: "x", Class: "F1", Track: Track{Title: "t", Artist: "a", Resolution: &Resolution{ISRCRecordings: []ISRCRecording{{MBID: "m"}}}}, Candidates: []Candidate{{URL: "u"}}},
 		}},
+		{"recorded search hit with no title", []Case{
+			{ID: "x", Class: "F1", Track: Track{Title: "t", Artist: "a", Resolution: &Resolution{Search: []SearchedRecording{{Artist: "a", MBID: "m"}}}}, Candidates: []Candidate{{URL: "u"}}},
+		}},
+		{"recorded search hit with no artist", []Case{
+			{ID: "x", Class: "F1", Track: Track{Title: "t", Artist: "a", Resolution: &Resolution{Search: []SearchedRecording{{Title: "t", MBID: "m"}}}}, Candidates: []Candidate{{URL: "u"}}},
+		}},
 		{"isrc recording with no mbid", []Case{
 			{ID: "x", Class: "F1", Track: Track{Title: "t", Artist: "a", ISRC: "I", Resolution: &Resolution{ISRCRecordings: []ISRCRecording{{Duration: 200}}}}, Candidates: []Candidate{{URL: "u"}}},
 		}},
@@ -324,7 +330,7 @@ func otherRecordingResults(acoustID, mbid, title string, duration float64) []Aco
 }
 
 func TestRun_ResolvedSearchMBIDRejectsAnUploadTheFingerprintLinksToAnotherSong(t *testing.T) {
-	kase := remixMBIDCase(&Resolution{Search: &SearchedRecording{MBID: "remix", Duration: 236}}, "")
+	kase := remixMBIDCase(&Resolution{Search: []SearchedRecording{{Title: "Drinking in L.A.", Artist: "Bran Van 3000", MBID: "remix", Duration: 236}}}, "")
 	kase.Candidates[0].AcoustIDResults = otherRecordingResults("album-ac", "album", "Different Song", 237)
 
 	out := Run(context.Background(), kase)
@@ -498,7 +504,7 @@ func TestRun_RemixMBIDAnchorsToTheISRCRecordingNearestTheTrackLength(t *testing.
 		Track: Track{
 			Title: "Drinking in L.A.", Artist: "Bran Van 3000", Duration: 236, ISRC: "CAA509814003",
 			Resolution: &Resolution{
-				Search: &SearchedRecording{MBID: "remix", ISRC: "CAA509814003", Duration: 236},
+				Search: []SearchedRecording{{Title: "Drinking in L.A.", Artist: "Bran Van 3000", MBID: "remix", ISRC: "CAA509814003", Duration: 236}},
 				ISRCRecordings: []ISRCRecording{
 					{MBID: "edit", Duration: 220},
 					{MBID: "album", Duration: 236},
@@ -1112,7 +1118,7 @@ func TestRun_AdoptsTheISRCTheFingerprintProves(t *testing.T) {
 		ID: "adopt", Class: "RW",
 		Track: Track{
 			Title: "Song", Artist: "Artist", Duration: 200,
-			Resolution: &Resolution{Search: &SearchedRecording{MBID: mbid, ISRC: "CAA509814003", Duration: 200}},
+			Resolution: &Resolution{Search: []SearchedRecording{{Title: "Song", Artist: "Artist", MBID: mbid, ISRC: "CAA509814003", Duration: 200}}},
 		},
 		Candidates: []Candidate{{
 			Title: "Song", URL: "u", Channel: "Artist - Topic", Duration: 200, Correct: true,
@@ -1124,6 +1130,30 @@ func TestRun_AdoptsTheISRCTheFingerprintProves(t *testing.T) {
 
 	if out.Saved.ISRC != "CAA509814003" || out.Saved.ISRCSource != "fingerprint" {
 		t.Errorf("saved %+v, want the fingerprint-proven ISRC written back", out.Saved)
+	}
+}
+
+func TestRun_TheRecordedSearchKeepsEachHitsOwnTitle(t *testing.T) {
+	const live, studio = "aaaaaaaa-0000-4000-8000-00000000000a", "aaaaaaaa-0000-4000-8000-00000000000b"
+	kase := Case{
+		ID: "live-first", Class: "RW",
+		Track: Track{
+			Title: "Song", Artist: "Artist", Duration: 200,
+			Resolution: &Resolution{Search: []SearchedRecording{
+				{Title: "Song (Live)", Artist: "Artist", MBID: live, Duration: 250},
+				{Title: "Song", Artist: "Artist", MBID: studio, Duration: 200},
+			}},
+		},
+		Candidates: []Candidate{{
+			Title: "Song", URL: "u", Channel: "Artist - Topic", Duration: 200, Correct: true,
+			AcoustID: "ac", RecordingMBIDs: []string{studio},
+		}},
+	}
+
+	out := Run(context.Background(), kase)
+
+	if out.Failed || out.Stored != "u" {
+		t.Fatalf("stored %q failed=%v err=%q, want the upload linked to the studio recording", out.Stored, out.Failed, out.Err)
 	}
 }
 

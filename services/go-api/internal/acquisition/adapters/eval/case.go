@@ -47,9 +47,9 @@ type CatalogSource struct {
 }
 
 type Resolution struct {
-	Search         *SearchedRecording `json:"search,omitempty"`
-	ISRCRecordings []ISRCRecording    `json:"isrc_recordings,omitempty"`
-	Pinned         *PinnedRecording   `json:"pinned,omitempty"`
+	Search         []SearchedRecording `json:"search,omitempty"`
+	ISRCRecordings []ISRCRecording     `json:"isrc_recordings,omitempty"`
+	Pinned         *PinnedRecording    `json:"pinned,omitempty"`
 }
 
 type PinnedRecording struct {
@@ -64,6 +64,9 @@ type PinnedRecording struct {
 func (p PinnedRecording) facts() ports.RecordingFacts { return ports.RecordingFacts(p) }
 
 type SearchedRecording struct {
+	Title    string `json:"title"`
+	Artist   string `json:"artist"`
+	Album    string `json:"album,omitempty"`
 	MBID     string `json:"mbid,omitempty"`
 	ISRC     string `json:"isrc,omitempty"`
 	Duration int    `json:"duration,omitempty"`
@@ -568,6 +571,11 @@ func validateResolution(c Case) error {
 		return fmt.Errorf("case %q sets a resolution and a copied identity; keep one", c.ID)
 	case len(r.ISRCRecordings) > 0 && c.Track.ISRC == "":
 		return fmt.Errorf("case %q lists isrc recordings for a track with no isrc", c.ID)
+	}
+	for _, hit := range r.Search {
+		if hit.Title == "" || hit.Artist == "" {
+			return fmt.Errorf("case %q has a recorded search hit with no title or artist", c.ID)
+		}
 	}
 	for _, rec := range r.ISRCRecordings {
 		if rec.MBID == "" {

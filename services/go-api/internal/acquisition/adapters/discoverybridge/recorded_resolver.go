@@ -13,6 +13,7 @@ import (
 type RecordedSearchHit struct {
 	Title    string
 	Artist   string
+	Album    string
 	ISRC     string
 	MBID     string
 	Duration int
@@ -23,8 +24,8 @@ type RecordedISRCRecording struct {
 	Duration int
 }
 
-func NewRecordedResolver(hit *RecordedSearchHit, isrcRecordings []RecordedISRCRecording, pinned *acqports.RecordingFacts) *RecordingResolver {
-	return NewRecordingResolver(recordedSearch{hit: hit},
+func NewRecordedResolver(hits []RecordedSearchHit, isrcRecordings []RecordedISRCRecording, pinned *acqports.RecordingFacts) *RecordingResolver {
+	return NewRecordingResolver(recordedSearch{hits: hits},
 		WithISRCAuthority(recordedISRCAuthority(isrcRecordings)),
 		WithRecordingLookup(recordedLookup{pinned: pinned}))
 }
@@ -41,21 +42,23 @@ func (l recordedLookup) RecordingByMBID(_ context.Context, mbid string) (acqport
 }
 
 type recordedSearch struct {
-	hit *RecordedSearchHit
+	hits []RecordedSearchHit
 }
 
 func (s recordedSearch) Execute(context.Context, shared.UserId, *discoverydomain.SearchQuery, bool) (*search.SearchOutput, error) {
-	if s.hit == nil {
-		return &search.SearchOutput{}, nil
+	results := make([]discoverydomain.SearchResult, 0, len(s.hits))
+	for _, hit := range s.hits {
+		results = append(results, discoverydomain.SearchResult{
+			Kind:          discoverydomain.ResultKindTrack,
+			Title:         hit.Title,
+			Subtitle:      hit.Artist,
+			Album:         hit.Album,
+			ISRC:          hit.ISRC,
+			RecordingMBID: hit.MBID,
+			Duration:      hit.Duration,
+		})
 	}
-	return &search.SearchOutput{Results: []discoverydomain.SearchResult{{
-		Kind:          discoverydomain.ResultKindTrack,
-		Title:         s.hit.Title,
-		Subtitle:      s.hit.Artist,
-		ISRC:          s.hit.ISRC,
-		RecordingMBID: s.hit.MBID,
-		Duration:      s.hit.Duration,
-	}}}, nil
+	return &search.SearchOutput{Results: results}, nil
 }
 
 type recordedISRCAuthority []RecordedISRCRecording

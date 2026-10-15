@@ -101,7 +101,7 @@ func resolverFor(kase Case) ports.RecordingResolver {
 	for _, rec := range res.ISRCRecordings {
 		isrcRecordings = append(isrcRecordings, discoverybridge.RecordedISRCRecording{MBID: rec.MBID, Duration: rec.Duration})
 	}
-	return discoverybridge.NewRecordedResolver(searchHitFor(kase), isrcRecordings, pinnedFactsFor(res))
+	return discoverybridge.NewRecordedResolver(searchHitsFor(res), isrcRecordings, pinnedFactsFor(res))
 }
 
 func pinnedFactsFor(res *Resolution) *ports.RecordingFacts {
@@ -112,18 +112,19 @@ func pinnedFactsFor(res *Resolution) *ports.RecordingFacts {
 	return &facts
 }
 
-func searchHitFor(kase Case) *discoverybridge.RecordedSearchHit {
-	search := kase.Track.Resolution.Search
-	if search == nil {
-		return nil
+func searchHitsFor(res *Resolution) []discoverybridge.RecordedSearchHit {
+	hits := make([]discoverybridge.RecordedSearchHit, 0, len(res.Search))
+	for _, hit := range res.Search {
+		hits = append(hits, discoverybridge.RecordedSearchHit{
+			Title:    hit.Title,
+			Artist:   hit.Artist,
+			Album:    hit.Album,
+			ISRC:     hit.ISRC,
+			MBID:     hit.MBID,
+			Duration: hit.Duration,
+		})
 	}
-	return &discoverybridge.RecordedSearchHit{
-		Title:    kase.Track.Title,
-		Artist:   kase.Track.Artist,
-		ISRC:     search.ISRC,
-		MBID:     search.MBID,
-		Duration: search.Duration,
-	}
+	return hits
 }
 
 func outcomeOf(kase Case, ac *service.AcquisitionContext, runErr error, clock *simClock, saved SavedTrack) Outcome {

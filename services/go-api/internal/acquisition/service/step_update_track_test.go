@@ -393,7 +393,7 @@ func TestUpdateTrackStep_AnExistingISRCIsNeverReplacedByAProvenOne(t *testing.T)
 
 func TestUpdateTrackStep_DrinkingInLAWritesNoGuessedISRC(t *testing.T) {
 	recorded := discoverybridge.NewRecordedResolver(
-		&discoverybridge.RecordedSearchHit{Title: "Drinking in L.A.", Artist: "Bran Van 3000", ISRC: drinkingISRC, MBID: drinkingRemix, Duration: 236},
+		[]discoverybridge.RecordedSearchHit{{Title: "Drinking in L.A.", Artist: "Bran Van 3000", ISRC: drinkingISRC, MBID: drinkingRemix, Duration: 236}},
 		[]discoverybridge.RecordedISRCRecording{{MBID: drinkingAlbum, Duration: 236}}, nil)
 	ac := &AcquisitionContext{
 		BestEffort: true,

@@ -73,7 +73,7 @@
       "track": {
         "title": "ALBUM OF THE YEAR !", "artist": "ezcodylee", "duration": 167, "catalog_duration": 139, "isrc": "QZHN92620453",
         "resolution": {
-          "search": { "mbid": "aaaaaaaa-0000-4000-8000-000000000167", "isrc": "QZHN92620453", "duration": 167 },
+          "search": [ { "title": "ALBUM OF THE YEAR !", "artist": "ezcodylee", "mbid": "aaaaaaaa-0000-4000-8000-000000000167", "isrc": "QZHN92620453", "duration": 167 } ],
           "isrc_recordings": [ { "mbid": "bbbbbbbb-0000-4000-8000-000000000139", "duration": 139 }, { "mbid": "cccccccc-0000-4000-8000-000000000167", "duration": 167 } ]
         }
       },
@@ -97,7 +97,7 @@
       "track": {
         "title": "Phone (Interlude)", "artist": "SLAYR", "isrc": "USSM12600221",
         "resolution": {
-          "search": { "mbid": "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", "isrc": "USSM12600221", "duration": 128 },
+          "search": [ { "title": "Phone (Interlude)", "artist": "SLAYR", "mbid": "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", "isrc": "USSM12600221", "duration": 128 } ],
           "isrc_recordings": [ { "mbid": "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", "duration": 128 } ]
         }
       },

@@ -10,11 +10,7 @@
         "album": "Comedy!",
         "isrc": "QZNWT2078100",
         "resolution": {
-          "search": {
-            "mbid": "ff36acc9-9aa4-4054-b77a-417ffad766c9",
-            "isrc": "QZNWT2078100",
-            "duration": 138
-          },
+          "search": [ { "title": "Comedy!", "artist": "Autumn!", "mbid": "ff36acc9-9aa4-4054-b77a-417ffad766c9", "isrc": "QZNWT2078100", "duration": 138 } ],
           "isrc_recordings": [
             {
               "mbid": "ff36acc9-9aa4-4054-b77a-417ffad766c9",

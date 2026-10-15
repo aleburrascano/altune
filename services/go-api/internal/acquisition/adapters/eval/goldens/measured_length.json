@@ -7,7 +7,7 @@
       "track": {
         "title": "Phone (Interlude)", "artist": "SLAYR", "isrc": "USSM12600221",
         "resolution": {
-          "search": { "mbid": "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", "isrc": "USSM12600221", "duration": 128 },
+          "search": [ { "title": "Phone (Interlude)", "artist": "SLAYR", "mbid": "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", "isrc": "USSM12600221", "duration": 128 } ],
           "isrc_recordings": [ { "mbid": "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", "duration": 128 } ]
         }
       },

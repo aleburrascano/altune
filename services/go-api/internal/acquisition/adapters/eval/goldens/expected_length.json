@@ -7,7 +7,7 @@
       "track": {
         "title": "ALBUM OF THE YEAR !", "artist": "ezcodylee", "isrc": "QZHN92620453",
         "resolution": {
-          "search": { "mbid": "aaaaaaaa-0000-4000-8000-000000000167", "isrc": "QZHN92620453", "duration": 167 },
+          "search": [ { "title": "ALBUM OF THE YEAR !", "artist": "ezcodylee", "mbid": "aaaaaaaa-0000-4000-8000-000000000167", "isrc": "QZHN92620453", "duration": 167 } ],
           "isrc_recordings": [ { "mbid": "48529b3b-596b-4250-9226-74ee7531e06c" } ]
         }
       },

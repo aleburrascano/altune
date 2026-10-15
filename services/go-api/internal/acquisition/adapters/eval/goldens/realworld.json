@@ -8,7 +8,7 @@
       "track": {
         "title": "Drinking in L.A.", "artist": "Bran Van 3000", "duration": 236, "isrc": "CAA509814003",
         "resolution": {
-          "search": { "mbid": "d3dc2825-20c0-4a4f-a963-baa589049146", "isrc": "CAA509814003", "duration": 236 },
+          "search": [ { "title": "Drinking in L.A.", "artist": "Bran Van 3000", "mbid": "d3dc2825-20c0-4a4f-a963-baa589049146", "isrc": "CAA509814003", "duration": 236 } ],
           "isrc_recordings": [ { "mbid": "5d6efd30-23c6-4a9b-85af-706ea2df9022", "duration": 236 } ]
         }
       },
@@ -26,7 +26,7 @@
       "track": {
         "title": "Rollacoasta", "artist": "prettifun", "duration": 158.67, "isrc": "USC4R2668964",
         "resolution": {
-          "search": { "mbid": "b29ac684", "isrc": "USC4R2668964", "duration": 159 },
+          "search": [ { "title": "Rollacoasta", "artist": "prettifun", "mbid": "b29ac684", "isrc": "USC4R2668964", "duration": 159 } ],
           "isrc_recordings": [ { "mbid": "b29ac684", "duration": 159 } ]
         }
       },
