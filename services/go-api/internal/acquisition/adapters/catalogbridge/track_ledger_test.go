@@ -335,6 +335,25 @@ func TestCompleteKeepsTheCatalogLengthBesideTheFileLength(t *testing.T) {
 	}
 }
 
+func TestGetNeverAimsAtTheLastMeasuredFile(t *testing.T) {
+	track, userId := newTrack(t, 1)
+	if err := track.SetDuration(112); err != nil {
+		t.Fatal(err)
+	}
+
+	snap, err := NewTrackLedger(newFakeStore(track)).Get(context.Background(), track.ID, userId)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if snap.DurationSeconds != nil {
+		t.Errorf("target length = %v, want none: the measured file length is not a target", *snap.DurationSeconds)
+	}
+	if snap.StoredDurationSeconds == nil || *snap.StoredDurationSeconds != 112 {
+		t.Errorf("StoredDurationSeconds = %v, want the measured 112", snap.StoredDurationSeconds)
+	}
+}
+
 func TestGetAimsADownloadAtTheCatalogLengthNotTheStoredFile(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -342,7 +361,6 @@ func TestGetAimsADownloadAtTheCatalogLengthNotTheStoredFile(t *testing.T) {
 		want    float64
 	}{
 		{"catalog length known", 235, 235},
-		{"no catalog length", 0, 137},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

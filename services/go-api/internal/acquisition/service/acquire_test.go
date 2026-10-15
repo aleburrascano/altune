@@ -962,7 +962,7 @@ func TestExecute_RecordsDurationRejectionsAndNeverDownloadOnes(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	repo := newFakeTrackRepository()
 	track := pendingTrack(t, repo, userId)
-	if err := track.SetDuration(200); err != nil {
+	if err := track.SetCatalogDuration(200); err != nil {
 		t.Fatalf("set duration: %v", err)
 	}
 	short := namedCandidate("https://youtube.com/watch?v=shortshort1")
@@ -1367,5 +1367,36 @@ func TestBuildTrackRef_CarriesTheCatalogPins(t *testing.T) {
 
 	if bare := buildTrackRef(&ports.TrackSnapshot{}); bare.CatalogMBID != "" || bare.CatalogSources != nil {
 		t.Errorf("unpinned track carries pins: %+v", bare)
+	}
+}
+
+type lengthRecordingSource struct {
+	newAudioSource
+	requested []float64
+}
+
+func (s *lengthRecordingSource) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
+	s.requested = append(s.requested, req.Duration)
+	return s.newAudioSource.Find(ctx, req)
+}
+
+func TestExecuteReplace_TheStoredLengthIsNotTheTarget(t *testing.T) {
+	repo, store, userId, trackId, _ := seedReadyTrack(t)
+	key := trackId.String() + ":" + userId.String()
+	row := repo.rows[key]
+	wrongVersion := 112.0
+	row.DurationSeconds = &wrongVersion
+	repo.rows[key] = row
+	resolver := &stubResolver{identity: ports.RecordingIdentity{MBID: "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", Duration: 128}}
+	source := &lengthRecordingSource{}
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(source), store, WithRecordingResolver(resolver))
+
+	_ = svc.ExecuteReplace(context.Background(), userId, trackId)
+
+	if len(resolver.queries) != 1 || resolver.queries[0].Duration != 0 {
+		t.Errorf("resolver queries = %+v, want one with no length: the stored 112 s is not a target", resolver.queries)
+	}
+	if len(source.requested) == 0 || source.requested[0] != 128 {
+		t.Errorf("search lengths = %v, want the MusicBrainz 128 s, not the stored 112 s", source.requested)
 	}
 }
