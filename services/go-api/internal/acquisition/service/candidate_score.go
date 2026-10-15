@@ -97,6 +97,7 @@ type candidateEntry struct {
 	qualDistance  int
 	isFallback    bool
 	artistMatch   bool
+	uploader      string
 	featMatch     bool
 	candidate     ports.AudioCandidate
 }
@@ -106,4 +107,38 @@ func durationDelta(expected, actual float64) float64 {
 		return math.MaxFloat64
 	}
 	return math.Abs(expected - actual)
+}
+
+func uploaderClass(trackArtist string, c ports.AudioCandidate) string {
+	switch {
+	case c.Kind == ports.KindArtTrack:
+		return artTrackClass(trackArtist, c.Artists)
+	case isTopicChannel(c.Channel):
+		return channelTopic
+	case artistMatchesChannel(trackArtist, c.Channel):
+		return channelArtist
+	default:
+		return channelOther
+	}
+}
+
+func artTrackClass(trackArtist string, credited []string) string {
+	want := creditKey(trackArtist)
+	for _, name := range credited {
+		if want != "" && creditKey(name) == want {
+			return channelTopic
+		}
+	}
+	return channelOther
+}
+
+func creditKey(name string) string {
+	return textnorm.NormalizeForIdentity(strings.ReplaceAll(name, "$", "s"))
+}
+
+func artistMatchesCandidate(trackArtist string, c ports.AudioCandidate) bool {
+	if c.Kind == ports.KindArtTrack {
+		return artTrackClass(trackArtist, c.Artists) == channelTopic
+	}
+	return artistMatchesChannel(trackArtist, c.Channel)
 }

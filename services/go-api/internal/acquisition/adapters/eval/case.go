@@ -62,6 +62,8 @@ type Candidate struct {
 	AcoustID        string           `json:"acoustid,omitempty"`
 	AcoustIDResults []AcoustIDResult `json:"acoustid_results,omitempty"`
 	Resolved        bool             `json:"resolved,omitempty"`
+	Kind            string           `json:"kind,omitempty"`
+	Artists         []string         `json:"artists,omitempty"`
 	Correct         bool             `json:"correct,omitempty"`
 	Query           string           `json:"query,omitempty"`
 	DownloadSeconds float64          `json:"download_seconds,omitempty"`

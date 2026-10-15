@@ -1,6 +1,18 @@
 {
   "cases": [
     {
+      "id": "pl-art-track-by-the-searched-artist-is-trusted-without-a-fingerprint",
+      "expect_provenance": "best_effort",
+      "class": "OK",
+      "note": "prod case ezcodylee 'ALBUM OF THE YEAR !' (Pwg_GsP2QZU): ytmsearch proves the art track credits the artist and sets kind art_track, but its channel is the placeholder 'YouTube Music Art Track'; AcoustID does not know the audio, so only the proven kind lifts it over the confidence floor",
+      "track": { "title": "ALBUM OF THE YEAR !", "artist": "ezcodylee", "duration": 150, "authoritative_duration": 150, "mbid": "pl-art-expected" },
+      "sources": [
+        { "name": "ytmsearch", "search_seconds": 2, "candidates": [
+          { "title": "ALBUM OF THE YEAR !", "url": "https://music.youtube.com/watch?v=Pwg_GsP2QZU", "channel": "YouTube Music Art Track", "categories": ["Music"], "duration": 158, "resolved": true, "kind": "art_track", "artists": ["ezcodylee"], "correct": true }
+        ] }
+      ]
+    },
+    {
       "id": "pl-two-sources-registry-merges-the-master-over-a-cover",
       "class": "OK",
       "note": "ytmusic and ytdlp both answer through the real SourceRegistry.Find fan-out; the cover from ytmusic loses to the Topic master from ytdlp the same way selection.json's single-source cases do",
