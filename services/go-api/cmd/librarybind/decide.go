@@ -3,6 +3,7 @@ package main
 import (
 	"altune/go-api/internal/shared/songfacts"
 	"cmp"
+	"encoding/json"
 	"math"
 	"slices"
 	"strings"
@@ -45,6 +46,7 @@ type evidence struct {
 	Replaced     *replacedISRC   `json:"replaced_isrc,omitempty"`
 	DifferingCut *differingCut   `json:"differing_cut,omitempty"`
 	SourceKey    string          `json:"source_key,omitempty"`
+	Pin          json.RawMessage `json:"pin,omitempty"`
 }
 
 type identity struct {

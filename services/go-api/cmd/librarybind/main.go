@@ -45,6 +45,7 @@ var (
 	errNegativeLimit    = errors.New("-limit must not be negative")
 	errReportWithUndo   = errors.New("-report belongs to a bind run, not -undo")
 	errBadMaxCutGap     = errors.New(maxCutGapVarName + " must be a duration above zero, like 10s")
+	errPinsWithBindFlag = errors.New("-pins takes no -undo, -user, -limit or -report")
 )
 
 type options struct {
@@ -54,6 +55,7 @@ type options struct {
 	userID    string
 	limit     int
 	report    string
+	pins      string
 }
 
 func parseOptions(args []string, output io.Writer) (options, error) {
@@ -66,6 +68,7 @@ func parseOptions(args []string, output io.Writer) (options, error) {
 	flags.StringVar(&opts.userID, "user", "", "only this user id")
 	flags.IntVar(&opts.limit, "limit", 0, "stop after this many tracks (0 means all)")
 	flags.StringVar(&opts.report, "report", "", "write a libraryrelength fix_isrc plan for the wrong ISRCs this run replaced")
+	flags.StringVar(&opts.pins, "pins", "", "write the hand-pinned identities in this JSON file instead of binding by rule")
 	if err := flags.Parse(args); err != nil {
 		return options{}, err
 	}
@@ -83,6 +86,8 @@ func (o options) check() error {
 	switch {
 	case o.apply && o.undo:
 		return errApplyAndUndo
+	case o.pins != "" && (o.undo || o.userID != "" || o.limit != 0 || o.report != ""):
+		return errPinsWithBindFlag
 	case o.undo && (o.userID != "" || o.limit != 0):
 		return errUndoWithFilters
 	case o.undo && o.report != "":
@@ -143,7 +148,22 @@ func run(opts options, env func(string) string, out io.Writer) error {
 	if opts.undo {
 		return runUndo(ctx, s, opts.undoRunID, out)
 	}
+	if opts.pins != "" {
+		return runPinned(ctx, s, opts, out)
+	}
 	return runBind(ctx, s, opts, env, out)
+}
+
+func runPinned(ctx context.Context, s store, opts options, out io.Writer) error {
+	raw, err := os.ReadFile(opts.pins)
+	if err != nil {
+		return fmt.Errorf("read pins: %w", err)
+	}
+	var sink identitySink
+	if opts.apply {
+		sink = s
+	}
+	return runPins(ctx, raw, s.loadPinTargets, sink, uuid.New(), out)
 }
 
 func runUndo(ctx context.Context, s store, runID uuid.UUID, out io.Writer) error {

@@ -46,3 +46,15 @@ func TestParseOptions_RejectsAMalformedRunID(t *testing.T) {
 		t.Fatal("expected an error")
 	}
 }
+
+func TestParseOptions_PinsAreTheirOwnMode(t *testing.T) {
+	got, err := parseOptions([]string{"-pins", "pins.json", "-apply"}, io.Discard)
+	if err != nil || got.pins != "pins.json" || !got.apply {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+	for _, extra := range [][]string{{"-user", "u"}, {"-limit", "3"}, {"-report", "plan.json"}, {"-undo", "6f1c1f0e-6a52-4a3c-9d3e-0b1f2a3b4c5d"}} {
+		if _, err := parseOptions(append([]string{"-pins", "pins.json"}, extra...), io.Discard); !errors.Is(err, errPinsWithBindFlag) {
+			t.Errorf("-pins with %v: err = %v", extra, err)
+		}
+	}
+}

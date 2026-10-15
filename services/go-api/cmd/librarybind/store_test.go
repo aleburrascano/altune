@@ -272,3 +272,66 @@ func TestStore_DeletingATrackDeletesItsIdentity(t *testing.T) {
 		t.Fatal("identity outlived its track")
 	}
 }
+
+func TestStore_LoadPinTargetsReportsVersionAndIdentityStatusPerTrack(t *testing.T) {
+	s := testStore(t)
+	user := uuid.NewString()
+	fresh, unbound, bound := seedReady(t, s, user), seedReady(t, s, user), seedReady(t, s, user)
+	if _, err := s.save(t.Context(), uuid.New(), unbound, unboundIdentity(unbound)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.save(t.Context(), uuid.New(), bound, boundIdentity(bound)); err != nil {
+		t.Fatal(err)
+	}
+
+	targets, err := s.loadPinTargets(t.Context(), []string{fresh.ID, unbound.ID, bound.ID, uuid.NewString()})
+	if err != nil || len(targets) != 3 {
+		t.Fatalf("targets = %+v, %v", targets, err)
+	}
+	if got := targets[fresh.ID]; got.IdentityStatus != "" || got.Track.Version != fresh.Version || got.Track.Title != fresh.Title {
+		t.Errorf("fresh = %+v", got)
+	}
+	if targets[unbound.ID].IdentityStatus != statusUnbound || targets[bound.ID].IdentityStatus != statusBound {
+		t.Errorf("targets = %+v", targets)
+	}
+}
+
+func TestStore_PinsFillAnUnboundTrackKeepABoundOneAndUndoWithTheirRun(t *testing.T) {
+	s := testStore(t)
+	user := uuid.NewString()
+	toPin, alreadyBound := seedReady(t, s, user), seedReady(t, s, user)
+	if _, err := s.save(t.Context(), uuid.New(), toPin, unboundIdentity(toPin)); err != nil {
+		t.Fatal(err)
+	}
+	boundRun := uuid.New()
+	if _, err := s.save(t.Context(), boundRun, alreadyBound, boundIdentity(alreadyBound)); err != nil {
+		t.Fatal(err)
+	}
+	pinsRaw := []byte(`[
+		{"track_id":"` + toPin.ID + `","track_version":4,"status":"bound","isrc":"USPR18000001","deezer_track_id":"77","note":"hand check","evidence":{"url":"https://example.test/1"}},
+		{"track_id":"` + alreadyBound.ID + `","track_version":4,"status":"unofficial","note":"should not land"}
+	]`)
+	runID := uuid.New()
+	report := newReport()
+	if err := runPins(t.Context(), pinsRaw, s.loadPinTargets, s, runID, report); err != nil {
+		t.Fatalf("runPins: %v\n%s", err, report.String())
+	}
+
+	row, ok := identityOf(t, s, toPin.ID)
+	if !ok || row.status != statusBound || row.reason != "pinned: hand check" || row.runID != runID || row.deezerID == nil || *row.deezerID != "77" {
+		t.Fatalf("pinned row = %+v, found %v", row, ok)
+	}
+	if !containsAll(row.proof, `"pin": {"url": "https://example.test/1"}`, `"title": "Celebration"`) {
+		t.Errorf("evidence = %s", row.proof)
+	}
+	if kept, _ := identityOf(t, s, alreadyBound.ID); kept.status != statusBound || kept.runID != boundRun {
+		t.Errorf("a bound row was overwritten: %+v", kept)
+	}
+
+	if tally, err := s.undoRun(t.Context(), runID); err != nil || tally.Removed != 1 {
+		t.Fatalf("undo: %+v, %v", tally, err)
+	}
+	if _, ok := identityOf(t, s, toPin.ID); ok {
+		t.Error("the pinned row survived its undo")
+	}
+}

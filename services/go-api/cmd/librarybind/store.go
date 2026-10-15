@@ -46,6 +46,30 @@ func (s store) loadTracks(ctx context.Context, userID string, limit int) ([]libr
 	return tracks, rows.Err()
 }
 
+const pinTargetsSQL = `SELECT t.id::text, t.user_id::text, t.title, t.artist, COALESCE(t.album, ''), COALESCE(t.isrc, ''),
+	COALESCE(t.duration_seconds, 0), t.version, COALESCE(i.status, '')
+	FROM tracks t
+	LEFT JOIN track_identity i ON i.track_id = t.id
+	WHERE t.id::text = ANY($1::text[])`
+
+func (s store) loadPinTargets(ctx context.Context, trackIDs []string) (map[string]pinTarget, error) {
+	rows, err := s.pool.Query(ctx, pinTargetsSQL, trackIDs)
+	if err != nil {
+		return nil, fmt.Errorf("query pinned tracks: %w", err)
+	}
+	defer rows.Close()
+	targets := map[string]pinTarget{}
+	for rows.Next() {
+		var target pinTarget
+		t := &target.Track
+		if err := rows.Scan(&t.ID, &t.UserID, &t.Title, &t.Artist, &t.Album, &t.ISRC, &t.FileSeconds, &t.Version, &target.IdentityStatus); err != nil {
+			return nil, fmt.Errorf("scan pinned track: %w", err)
+		}
+		targets[t.ID] = target
+	}
+	return targets, rows.Err()
+}
+
 const saveIdentitySQL = `INSERT INTO track_identity (track_id, user_id, isrc, mb_recording_id, deezer_track_id, apple_song_id,
 	status, reason, evidence, run_id, track_version_at_bind)
 	SELECT t.id, t.user_id, $3::text, $4::text, $5::text, $6::text, $7::text, $8::text, $9::jsonb, $10::uuid, t.version
