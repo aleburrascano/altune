@@ -41,6 +41,7 @@ type evidence struct {
 	FileSeconds float64         `json:"file_seconds"`
 	Sources     []sourceOutcome `json:"sources"`
 	ArtistFirst []sourceOutcome `json:"artist_first,omitempty"`
+	Search      []sourceOutcome `json:"search,omitempty"`
 	Replaced    *replacedISRC   `json:"replaced_isrc,omitempty"`
 }
 
@@ -80,18 +81,16 @@ func pickWinner(fileSeconds float64, all []judged) (winnerID string, ambiguous b
 			strings.Compare(a.ID, b.ID),
 		)
 	})
-	if lengthSpread(guarded) > lengthToleranceSeconds {
+	if hasRivalRecording(guarded) {
 		return "", true
 	}
 	return guarded[0].ID, false
 }
 
-func lengthSpread(candidates []judged) float64 {
-	shortest, longest := candidates[0].LengthSeconds, candidates[0].LengthSeconds
-	for _, c := range candidates {
-		shortest, longest = min(shortest, c.LengthSeconds), max(longest, c.LengthSeconds)
-	}
-	return longest - shortest
+func hasRivalRecording(closestFirst []judged) bool {
+	return slices.ContainsFunc(closestFirst, func(j judged) bool {
+		return math.Abs(j.LengthSeconds-closestFirst[0].LengthSeconds) > lengthToleranceSeconds
+	})
 }
 
 func decide(t libraryTrack, outcomes []sourceOutcome) identity {

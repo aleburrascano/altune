@@ -39,6 +39,10 @@ func wantsArtistFirst(found identity) bool {
 
 var artistFirstReasons = []string{reasonNoISRC, reasonISRCNotFound, reasonRefusedPrefix + string(guardTitle), reasonRefusedPrefix + string(guardLength)}
 
+func wantsSearch(found identity) bool {
+	return wantsArtistFirst(found) || (found.Status == statusUnbound && found.Reason == reasonAmbiguous)
+}
+
 func isRepairableRefusal(reason string) bool {
 	return reason == reasonRefusedPrefix+string(guardTitle) || reason == reasonRefusedPrefix+string(guardLength)
 }

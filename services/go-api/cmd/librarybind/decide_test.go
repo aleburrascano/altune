@@ -497,3 +497,36 @@ func TestOutcomeOf_DuplicateListingsOfOneRecordingAreNotAmbiguous(t *testing.T) 
 		t.Fatalf("winner %q ambiguous %v", got.Winner, got.Ambiguous)
 	}
 }
+
+func TestOutcomeOf_CompilationListingsAFewSecondsApartAreOneRecording(t *testing.T) {
+	timeAfterTime := libraryTrack{ID: "t", Title: "Time After Time", Artist: "Cyndi Lauper", ISRC: "USSM18300650", FileSeconds: 241.335}
+	lauper := func(id, album string, length float64) candidate {
+		return candidate{ID: id, ISRC: "USSM18300650", Title: "Time After Time", Artists: []string{"Cyndi Lauper"}, Album: album, LengthSeconds: length}
+	}
+	found := []candidate{
+		lauper("187488704", "The Essential Cyndi Lauper", 241),
+		lauper("1736213616", "Flashback Hits", 241),
+		lauper("1297035626", "Stranger Things (Soundtrack from the Netflix Original Series)", 237),
+		lauper("400603695", "She's So Unusual", 245),
+		lauper("795192837", "She's So Unusual: A 30th Anniversary Celebration (Deluxe Edition)", 243),
+		lauper("965879700", "21 Love Songs", 242),
+		lauper("6803674159", "All My Love Vol.1 - Love Songs from the 80s", 239),
+		lauper("477025757", "Essential Love Ballads", 240),
+	}
+	got := outcomeOf(timeAfterTime, sourceApple, found, nil)
+	if got.Winner != "1736213616" || got.Ambiguous {
+		t.Fatalf("winner %q ambiguous %v", got.Winner, got.Ambiguous)
+	}
+}
+
+func TestOutcomeOf_ARivalLengthFartherFromTheFileThanTheToleranceStaysAmbiguous(t *testing.T) {
+	track := with2(celebration(), func(tr *libraryTrack) { tr.FileSeconds = 210 })
+	got := outcomeOf(track, sourceApple, []candidate{
+		with(catalogCelebration("near"), func(c *candidate) { c.LengthSeconds = 210.4 }),
+		with(catalogCelebration("far"), func(c *candidate) { c.LengthSeconds = 213 }),
+		with(catalogCelebration("low"), func(c *candidate) { c.LengthSeconds = 207.2 }),
+	}, nil)
+	if got.Winner != "" || !got.Ambiguous {
+		t.Fatalf("winner %q ambiguous %v", got.Winner, got.Ambiguous)
+	}
+}

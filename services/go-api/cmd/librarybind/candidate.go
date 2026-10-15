@@ -34,4 +34,5 @@ type candidate struct {
 	Artists       []string `json:"artists"`
 	Album         string   `json:"album,omitempty"`
 	LengthSeconds float64  `json:"length_seconds"`
+	Released      string   `json:"released,omitempty"`
 }

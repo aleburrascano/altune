@@ -134,15 +134,23 @@ type musicBrainzRecording struct {
 		Name   string            `json:"name"`
 		Artist musicBrainzArtist `json:"artist"`
 	} `json:"artist-credit"`
+	Releases []musicBrainzRelease `json:"releases"`
+}
+
+type musicBrainzRelease struct {
+	Date  string `json:"date"`
+	Group struct {
+		PrimaryType    string   `json:"primary-type"`
+		SecondaryTypes []string `json:"secondary-types"`
+	} `json:"release-group"`
 }
 
 type musicBrainzSearch struct {
 	Recordings []musicBrainzRecording `json:"recordings"`
 }
 
-func (m musicBrainzLookup) ByISRC(ctx context.Context, isrc string) ([]candidate, error) {
-	query := `isrc:"` + songfacts.CanonicalISRC(isrc) + `"`
-	path := "/ws/2/recording?query=" + url.QueryEscape(query) + "&inc=isrcs&fmt=json&limit=" + strconv.Itoa(musicBrainzResultLimit)
+func (m musicBrainzLookup) recordings(ctx context.Context, query string, limit int) ([]musicBrainzRecording, error) {
+	path := "/ws/2/recording?query=" + url.QueryEscape(query) + "&inc=isrcs&fmt=json&limit=" + strconv.Itoa(limit)
 	raw, err := m.client.get(ctx, path)
 	if errors.Is(err, errCatalogUnknown) {
 		return nil, nil
@@ -154,8 +162,16 @@ func (m musicBrainzLookup) ByISRC(ctx context.Context, isrc string) ([]candidate
 	if err := json.Unmarshal(raw, &body); err != nil {
 		return nil, fmt.Errorf("decode musicbrainz response: %w", err)
 	}
-	found := make([]candidate, 0, len(body.Recordings))
-	for _, rec := range body.Recordings {
+	return body.Recordings, nil
+}
+
+func (m musicBrainzLookup) ByISRC(ctx context.Context, isrc string) ([]candidate, error) {
+	recordings, err := m.recordings(ctx, `isrc:"`+songfacts.CanonicalISRC(isrc)+`"`, musicBrainzResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	found := make([]candidate, 0, len(recordings))
+	for _, rec := range recordings {
 		found = append(found, musicBrainzCandidate(rec, isrc))
 	}
 	return found, nil

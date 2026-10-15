@@ -158,7 +158,8 @@ func runBind(ctx context.Context, s store, opts options, out io.Writer) error {
 		sink = s
 	}
 	runID := uuid.New()
-	done, runErr := bindTracks(ctx, tracks, lookups, sink, runID, newArtistFirst(artistSources, musicBrainz, held).refine)
+	search := searchBinder{musicBrainz: musicBrainz, deezer: deezer}
+	done, runErr := bindTracks(ctx, tracks, lookups, sink, runID, newArtistFirst(artistSources, musicBrainz, held).refine, search.refine)
 	writeReport(out, done, opts.apply, runID)
 	if opts.report != "" {
 		runErr = errors.Join(runErr, writeRelengthPlan(opts.report, relengthPlan(done.Decisions, runErr != nil)))
