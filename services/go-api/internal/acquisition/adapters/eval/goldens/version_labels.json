@@ -1,15 +1,15 @@
 {
   "cases": [
     {
-      "id": "vl-plain-acoustic-upload-without-the-master",
+      "id": "vl-plain-demo-upload-beside-a-copy-of-the-master",
       "class": "F1",
-      "note": "prod track 9a94c21c Corey Hart 'Sunglasses at Night' (ISRC CAU111800471, catalog 233s). Candidates are the real yt-dlp results (ytsearch on prod, 2026-10-15) for 'Sunglasses at Night (Acoustic) Corey Hart Topic' that run near the catalog length once the master is absent: Corey Hart Official's acoustic upload uG7yhcAuO-M, whose real title ends '(Acoustic Version)' and real length is 302s. Modelled, not recorded: the title is plainly '(Acoustic)' and the length 233s, the Corey Hart case where no 'Version' word or length gap gives it away. Storing it is worse than storing nothing",
+      "note": "prod track bbc01d40 Tate McRae 'feel like shit' (ISRC USRC12103112, catalog 204s, stored from 6QzFzver330). Two of the real yt-dlp results (prod container, ytsearch10 'Tate McRae - feel like shit demo', 2026-10-15), unmodified: the plainly titled '(Demo)' upload (199s, no 'Version' in the title) and a copy of the master. Other results of that search are omitted, not edited; with a high-view lyric upload present the master wins on main anyway",
       "track": {
-        "title": "Sunglasses at Night",
-        "artist": "Corey Hart",
-        "album": "First Offense",
-        "duration": 233,
-        "authoritative_duration": 233
+        "title": "feel like shit",
+        "artist": "Tate McRae",
+        "album": "feel like shit",
+        "duration": 204,
+        "authoritative_duration": 204
       },
       "sources": [
         {
@@ -17,14 +17,25 @@
           "search_seconds": 3,
           "candidates": [
             {
-              "title": "Sunglasses At Night (Acoustic)",
-              "url": "https://www.youtube.com/watch?v=uG7yhcAuO-M",
-              "channel": "Corey Hart Official",
+              "title": "Tate McRae - Feel Like Shit (Demo)",
+              "url": "https://www.youtube.com/watch?v=lVQeiXKfczs",
+              "channel": "Tates unreleased ",
               "categories": [
                 "Music"
               ],
-              "duration": 233,
-              "view_count": 3140
+              "duration": 199,
+              "view_count": 129
+            },
+            {
+              "title": "Tate McRae - feel like shit (4K) | HQ Audio",
+              "url": "https://www.youtube.com/watch?v=KEJm7B8RYw0",
+              "channel": "Sadblint",
+              "categories": [
+                "Music"
+              ],
+              "duration": 206,
+              "view_count": 203,
+              "correct": true
             }
           ]
         }
