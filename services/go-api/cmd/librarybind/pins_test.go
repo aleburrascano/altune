@@ -233,3 +233,68 @@ func TestRunPins_ARejectedPinFailsTheRunButTheValidOnesStillWrite(t *testing.T) 
 		t.Errorf("report = %s", out.String())
 	}
 }
+
+func TestParsePins_AReplacementNeedsAnAnchorAndEvidence(t *testing.T) {
+	replacesISRC := func(f map[string]any) { f["replaces"] = map[string]any{"isrc": "USPR18000009"} }
+	cases := []struct {
+		name    string
+		change  func(map[string]any)
+		wantErr error
+	}{
+		{"replaces by isrc", replacesISRC, nil},
+		{"replaces by mb recording id", func(f map[string]any) { f["replaces"] = map[string]any{"mb_recording_id": pinMBID} }, nil},
+		{"replaces with no ids", func(f map[string]any) { f["replaces"] = map[string]any{} }, errReplacesNoAnchor},
+		{"replaces with a bad isrc", func(f map[string]any) { f["replaces"] = map[string]any{"isrc": "nope"} }, errBadISRC},
+		{"replaces with a bad mb id", func(f map[string]any) { f["replaces"] = map[string]any{"mb_recording_id": "nope"} }, errBadMBRecordingID},
+		{"replaces without evidence", func(f map[string]any) { replacesISRC(f); delete(f, "evidence") }, errMissingEvidence},
+		{"replaces with null evidence", func(f map[string]any) { replacesISRC(f); f["evidence"] = nil }, errMissingEvidence},
+		{"replaces without a note", func(f map[string]any) { replacesISRC(f); delete(f, "note") }, errMissingNote},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pins, rejected, err := parsePins(pinJSON(t, tc.change))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.wantErr == nil {
+				if len(pins) != 1 || len(rejected) != 0 {
+					t.Fatalf("pins %d, rejected %+v", len(pins), rejected)
+				}
+				return
+			}
+			if len(pins) != 0 || len(rejected) != 1 {
+				t.Fatalf("pins %d, rejected %+v", len(pins), rejected)
+			}
+			if !errors.Is(rejected[0].Err, tc.wantErr) {
+				t.Errorf("err = %v, want %v", rejected[0].Err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestDecidePin_AReplacementWritesOnlyOverABoundRowThatMatches(t *testing.T) {
+	replacing := func(r replaces) pin {
+		return pin{TrackID: pinTrackID, TrackVersion: 4, Status: statusBound, Replaces: &r}
+	}
+	boundRow := pinTarget{Track: pinnedTrack(), IdentityStatus: statusBound, IdentityISRC: "USPR18000009", IdentityMBRecordingID: pinMBID}
+	cases := []struct {
+		name   string
+		pin    pin
+		target pinTarget
+		want   pinSkip
+	}{
+		{"isrc matches", replacing(replaces{ISRC: "USPR18000009"}), boundRow, pinWrites},
+		{"both ids match", replacing(replaces{ISRC: "USPR18000009", MBRecordingID: pinMBID}), boundRow, pinWrites},
+		{"isrc differs", replacing(replaces{ISRC: "USPR18000001"}), boundRow, pinSkipReplaceMismatch},
+		{"one of two ids differs", replacing(replaces{ISRC: "USPR18000009", MBRecordingID: "other"}), boundRow, pinSkipReplaceMismatch},
+		{"an unbound row", replacing(replaces{ISRC: "USPR18000009"}), pinTarget{Track: pinnedTrack(), IdentityStatus: statusUnbound}, pinSkipNothingToReplace},
+		{"no row", replacing(replaces{ISRC: "USPR18000009"}), pinTarget{Track: pinnedTrack()}, pinSkipNothingToReplace},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := decidePin(tc.pin, map[string]pinTarget{pinTrackID: tc.target}).Skip; got != tc.want {
+				t.Errorf("skip = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

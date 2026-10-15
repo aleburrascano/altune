@@ -17,6 +17,8 @@ const reasonPinnedPrefix = "pinned: "
 
 var (
 	errMissingNote      = errors.New("note is required")
+	errMissingEvidence  = errors.New("a replacement requires evidence")
+	errReplacesNoAnchor = errors.New("replaces needs an isrc or an mb_recording_id")
 	errMissingVersion   = errors.New("track_version is required")
 	errBadStatus        = errors.New(`status must be "bound" or "unofficial"`)
 	errBadISRC          = errors.New("isrc is not a canonical ISRC")
@@ -37,6 +39,25 @@ type pin struct {
 	AppleSongID   string
 	Note          string
 	Evidence      json.RawMessage
+	Replaces      *replaces
+}
+
+type replaces struct {
+	ISRC          string
+	MBRecordingID string
+}
+
+func (r replaces) matches(isrc, mbRecordingID string) bool {
+	return (r.ISRC == "" || r.ISRC == isrc) && (r.MBRecordingID == "" || r.MBRecordingID == mbRecordingID)
+}
+
+type replacesFile struct {
+	ISRC          string `json:"isrc"`
+	MBRecordingID string `json:"mb_recording_id"`
+}
+
+func (f replacesFile) parsed() replaces {
+	return replaces{ISRC: songfacts.CanonicalISRC(f.ISRC), MBRecordingID: strings.ToLower(strings.TrimSpace(f.MBRecordingID))}
 }
 
 type pinFile struct {
@@ -49,6 +70,7 @@ type pinFile struct {
 	AppleSongID   string          `json:"apple_song_id"`
 	Note          string          `json:"note"`
 	Evidence      json.RawMessage `json:"evidence"`
+	Replaces      *replacesFile   `json:"replaces"`
 }
 
 type rejectedPin struct {
@@ -88,6 +110,10 @@ func parsePin(entry json.RawMessage) (pin, error) {
 		MBRecordingID: strings.ToLower(strings.TrimSpace(file.MBRecordingID)), DeezerTrackID: strings.TrimSpace(file.DeezerTrackID),
 		AppleSongID: strings.TrimSpace(file.AppleSongID), Note: strings.TrimSpace(file.Note), Evidence: file.Evidence,
 	}
+	if file.Replaces != nil {
+		replaced := file.Replaces.parsed()
+		p.Replaces = &replaced
+	}
 	if file.TrackVersion != nil {
 		p.TrackVersion = *file.TrackVersion
 	}
@@ -113,6 +139,22 @@ func (p pin) validate(hasVersion bool) error {
 		return errBadMBRecordingID
 	case p.Status == statusBound && p.ISRC == "" && p.MBRecordingID == "":
 		return errBoundNeedsAnchor
+	}
+	return p.Replaces.validate(p.Evidence)
+}
+
+func (r *replaces) validate(proof json.RawMessage) error {
+	switch {
+	case r == nil:
+		return nil
+	case r.ISRC != "" && !songfacts.IsCanonicalISRC(r.ISRC):
+		return fmt.Errorf("replaces: %w", errBadISRC)
+	case r.MBRecordingID != "" && !isUUID(r.MBRecordingID):
+		return fmt.Errorf("replaces: %w", errBadMBRecordingID)
+	case r.ISRC == "" && r.MBRecordingID == "":
+		return errReplacesNoAnchor
+	case len(proof) == 0 || bytes.Equal(bytes.TrimSpace(proof), []byte("null")):
+		return errMissingEvidence
 	}
 	return nil
 }
@@ -140,18 +182,22 @@ func withoutDuplicates(pins []pin) ([]pin, []rejectedPin) {
 }
 
 type pinTarget struct {
-	Track          libraryTrack
-	IdentityStatus status
+	Track                 libraryTrack
+	IdentityStatus        status
+	IdentityISRC          string
+	IdentityMBRecordingID string
 }
 
 type pinSkip string
 
 const (
-	pinWrites             pinSkip = ""
-	pinSkipUnknownTrack   pinSkip = "unknown-track"
-	pinSkipTrackChanged   pinSkip = "track-changed"
-	pinSkipAlreadyDecided pinSkip = "already-identified"
-	pinSkipLostRace       pinSkip = "lost-race"
+	pinWrites               pinSkip = ""
+	pinSkipUnknownTrack     pinSkip = "unknown-track"
+	pinSkipTrackChanged     pinSkip = "track-changed"
+	pinSkipAlreadyDecided   pinSkip = "already-identified"
+	pinSkipNothingToReplace pinSkip = "nothing-to-replace"
+	pinSkipReplaceMismatch  pinSkip = "replaces-mismatch"
+	pinSkipLostRace         pinSkip = "lost-race"
 )
 
 type pinDecision struct {
@@ -167,6 +213,12 @@ func decidePin(p pin, targets map[string]pinTarget) pinDecision {
 		return pinDecision{Pin: p, Skip: pinSkipUnknownTrack}
 	case target.Track.Version != p.TrackVersion:
 		return pinDecision{Pin: p, Track: target.Track, Skip: pinSkipTrackChanged}
+	case p.Replaces != nil && target.IdentityStatus != statusBound:
+		return pinDecision{Pin: p, Track: target.Track, Skip: pinSkipNothingToReplace}
+	case p.Replaces != nil && !p.Replaces.matches(target.IdentityISRC, target.IdentityMBRecordingID):
+		return pinDecision{Pin: p, Track: target.Track, Skip: pinSkipReplaceMismatch}
+	case p.Replaces != nil:
+		return pinDecision{Pin: p, Track: target.Track, Skip: pinWrites}
 	case target.IdentityStatus != "" && target.IdentityStatus != statusUnbound:
 		return pinDecision{Pin: p, Track: target.Track, Skip: pinSkipAlreadyDecided}
 	}
@@ -181,6 +233,7 @@ func (p pin) identity(t libraryTrack) identity {
 			Title: t.Title, Artist: t.Artist, Album: t.Album, FileSeconds: t.FileSeconds,
 			Sources: []sourceOutcome{}, Pin: p.Evidence,
 		},
+		Replaces: p.Replaces,
 	}
 }
 
@@ -264,7 +317,14 @@ func pinLine(d pinDecision) string {
 	if d.Skip != pinWrites {
 		return fmt.Sprintf("  skipped    %s (%s): %s", d.Pin.TrackID, d.Skip, pinSkipDetail(d))
 	}
-	return fmt.Sprintf("  %-10s %s - %s (%s): %s", d.Pin.Status, d.Track.Artist, d.Track.Title, d.Pin.TrackID, reasonPinnedPrefix+d.Pin.Note)
+	return fmt.Sprintf("  %-10s %s - %s (%s): %s%s", d.Pin.Status, d.Track.Artist, d.Track.Title, d.Pin.TrackID, reasonPinnedPrefix+d.Pin.Note, replacementSuffix(d.Pin.Replaces))
+}
+
+func replacementSuffix(r *replaces) string {
+	if r == nil {
+		return ""
+	}
+	return fmt.Sprintf(" [replaces isrc=%q mb_recording_id=%q]", r.ISRC, r.MBRecordingID)
 }
 
 func pinSkipDetail(d pinDecision) string {
@@ -273,6 +333,10 @@ func pinSkipDetail(d pinDecision) string {
 		return "no such track"
 	case pinSkipTrackChanged:
 		return fmt.Sprintf("pinned against version %d, track is now %d", d.Pin.TrackVersion, d.Track.Version)
+	case pinSkipNothingToReplace:
+		return "replaces names an identity, but the track has no bound row"
+	case pinSkipReplaceMismatch:
+		return "the stored isrc or mb_recording_id differs from replaces"
 	case pinSkipLostRace:
 		return "the track changed or was identified while the run was writing"
 	}

@@ -380,3 +380,210 @@ func TestStore_SaveNeverOverwritesAnotherCatalogMBIDNorPinsAnUnboundTrack(t *tes
 		t.Errorf("an unbound track was pinned to %s", *pin)
 	}
 }
+
+const (
+	replacementMBID = "5c1d9d0e-7a3b-4f60-9e11-2b3c4d5e6f70"
+	replacementISRC = "USUM71900002"
+)
+
+func replacePinJSON(trackID, replacesJSON string) []byte {
+	return []byte(`[{"track_id":"` + trackID + `","track_version":4,"status":"bound","isrc":"` + replacementISRC + `","mb_recording_id":"` + replacementMBID +
+		`","note":"studio release, not the live cut","evidence":{"url":"https://example.test/studio"},"replaces":` + replacesJSON + `}]`)
+}
+
+func boundWithOldIdentity(t *testing.T, s store) (libraryTrack, uuid.UUID) {
+	t.Helper()
+	track := seedReady(t, s, uuid.NewString())
+	oldRun := uuid.New()
+	if _, err := s.save(t.Context(), oldRun, track, boundIdentity(track)); err != nil {
+		t.Fatal(err)
+	}
+	return track, oldRun
+}
+
+func TestStore_APinReplacesABoundIdentityWhenItsReplacesMatchesTheStoredRow(t *testing.T) {
+	s := testStore(t)
+	track, _ := boundWithOldIdentity(t, s)
+	runID := uuid.New()
+	report := newReport()
+
+	raw := replacePinJSON(track.ID, `{"isrc":"`+celebrationISRC+`"}`)
+	if err := runPins(t.Context(), raw, s.loadPinTargets, s, runID, report); err != nil {
+		t.Fatalf("runPins: %v\n%s", err, report.String())
+	}
+	row, _ := identityOf(t, s, track.ID)
+	if row.runID != runID || row.isrc == nil || *row.isrc != replacementISRC || row.mbID == nil || *row.mbID != replacementMBID || row.deezerID != nil {
+		t.Fatalf("row = %+v", row)
+	}
+	if row.reason != "pinned: studio release, not the live cut" || !containsAll(row.proof, `"previous_identity"`, `"deezer_track_id": "77"`, `"url": "https://example.test/studio"`) {
+		t.Errorf("reason %q, evidence %s", row.reason, row.proof)
+	}
+	if !contains(report.String(), "pinned: 1, skipped: 0") {
+		t.Errorf("report = %s", report.String())
+	}
+}
+
+func TestStore_APinWhoseReplacesDiffersFromTheStoredRowIsSkippedAndReported(t *testing.T) {
+	s := testStore(t)
+	track, oldRun := boundWithOldIdentity(t, s)
+	report := newReport()
+
+	raw := replacePinJSON(track.ID, `{"isrc":"USXX00000009"}`)
+	if err := runPins(t.Context(), raw, s.loadPinTargets, s, uuid.New(), report); err != nil {
+		t.Fatalf("runPins: %v\n%s", err, report.String())
+	}
+	if row, _ := identityOf(t, s, track.ID); row.runID != oldRun || row.deezerID == nil || *row.deezerID != "77" {
+		t.Errorf("a mismatched replace overwrote the row: %+v", row)
+	}
+	if !contains(report.String(), "replaces-mismatch") || !contains(report.String(), "pinned: 0, skipped: 1") {
+		t.Errorf("report = %s", report.String())
+	}
+}
+
+func TestStore_TheReplaceGuardHoldsInSQLWhenTheRowChangedAfterThePinWasDecided(t *testing.T) {
+	s := testStore(t)
+	track, oldRun := boundWithOldIdentity(t, s)
+	if _, err := s.pool.Exec(t.Context(), "UPDATE track_identity SET isrc = 'USXX00000009' WHERE track_id = $1", track.ID); err != nil {
+		t.Fatal(err)
+	}
+	found := boundIdentity(track)
+	found.Replaces = &replaces{ISRC: celebrationISRC}
+
+	if verdict, err := s.save(t.Context(), uuid.New(), track, found); err != nil || verdict != saveSkipped {
+		t.Fatalf("save: %v, %v", verdict, err)
+	}
+	if row, _ := identityOf(t, s, track.ID); row.runID != oldRun {
+		t.Errorf("row = %+v", row)
+	}
+}
+
+func TestStore_APinWithoutReplacesStillSkipsABoundRow(t *testing.T) {
+	s := testStore(t)
+	track, oldRun := boundWithOldIdentity(t, s)
+	report := newReport()
+
+	raw := []byte(`[{"track_id":"` + track.ID + `","track_version":4,"status":"bound","isrc":"` + replacementISRC + `","note":"no replaces","evidence":{"url":"https://example.test/x"}}]`)
+	if err := runPins(t.Context(), raw, s.loadPinTargets, s, uuid.New(), report); err != nil {
+		t.Fatalf("runPins: %v\n%s", err, report.String())
+	}
+	if row, _ := identityOf(t, s, track.ID); row.runID != oldRun || row.deezerID == nil || *row.deezerID != "77" {
+		t.Errorf("row = %+v", row)
+	}
+	if !contains(report.String(), "already-identified") {
+		t.Errorf("report = %s", report.String())
+	}
+}
+
+func TestStore_UndoRestoresTheIdentityAReplacementOverwrote(t *testing.T) {
+	s := testStore(t)
+	track, oldRun := boundWithOldIdentity(t, s)
+	before, _ := identityOf(t, s, track.ID)
+	runID := uuid.New()
+	raw := replacePinJSON(track.ID, `{"isrc":"`+celebrationISRC+`"}`)
+	if err := runPins(t.Context(), raw, s.loadPinTargets, s, runID, newReport()); err != nil {
+		t.Fatal(err)
+	}
+
+	tally, err := s.undoRun(t.Context(), runID)
+	if err != nil || tally.Restored != 1 || tally.Removed != 0 || tally.Kept != 0 {
+		t.Fatalf("undo: %+v, %v", tally, err)
+	}
+	after, ok := identityOf(t, s, track.ID)
+	if !ok || after.runID != oldRun || after.status != before.status || after.reason != before.reason || after.proof != before.proof ||
+		after.deezerID == nil || *after.deezerID != "77" || after.isrc == nil || *after.isrc != celebrationISRC || after.mbID != nil || after.version != before.version {
+		t.Fatalf("after = %+v, want %+v", after, before)
+	}
+}
+
+func replaceBoundToRecording(t *testing.T, s store, oldRecording string, catalog *string) (libraryTrack, uuid.UUID) {
+	t.Helper()
+	track := seedReady(t, s, uuid.NewString())
+	if _, err := s.save(t.Context(), uuid.New(), track, boundToRecording(track, oldRecording)); err != nil {
+		t.Fatal(err)
+	}
+	setCatalogMBID(t, s, track.ID, catalog)
+	runID := uuid.New()
+	raw := replacePinJSON(track.ID, `{"mb_recording_id":"`+oldRecording+`"}`)
+	if err := runPins(t.Context(), raw, s.loadPinTargets, s, runID, newReport()); err != nil {
+		t.Fatal(err)
+	}
+	return track, runID
+}
+
+func loggedCatalogChange(t *testing.T, s store, runID uuid.UUID, trackID string) (oldValue, newValue *string) {
+	t.Helper()
+	err := s.pool.QueryRow(t.Context(),
+		"SELECT old_value, new_value FROM track_metadata_changes WHERE run_id = $1 AND track_id = $2 AND field = 'catalog_mbid'", runID, trackID).
+		Scan(&oldValue, &newValue)
+	if err != nil {
+		t.Fatalf("catalog_mbid change not logged: %v", err)
+	}
+	return oldValue, newValue
+}
+
+func TestStore_AReplaceRepointsCatalogMBIDFromTheOldRecordingAndUndoPutsItBack(t *testing.T) {
+	s := testStore(t)
+	oldRecording := uuid.NewString()
+	track, runID := replaceBoundToRecording(t, s, oldRecording, &oldRecording)
+
+	if pin := catalogMBIDOf(t, s, track.ID); pin == nil || *pin != replacementMBID {
+		t.Fatalf("catalog_mbid = %v, want %s", pin, replacementMBID)
+	}
+	if was, now := loggedCatalogChange(t, s, runID, track.ID); was == nil || *was != oldRecording || now == nil || *now != replacementMBID {
+		t.Errorf("logged change = %v -> %v", was, now)
+	}
+	if got := trackVersion(t, s, track.ID); got != track.Version {
+		t.Errorf("track version = %d, want unchanged %d", got, track.Version)
+	}
+
+	tally, err := s.undoRun(t.Context(), runID)
+	if err != nil || tally.Restored != 1 || tally.Unpinned != 1 {
+		t.Fatalf("undo: %+v, %v", tally, err)
+	}
+	if pin := catalogMBIDOf(t, s, track.ID); pin == nil || *pin != oldRecording {
+		t.Errorf("catalog_mbid after undo = %v, want %s", pin, oldRecording)
+	}
+}
+
+func TestStore_AReplaceFillsANullCatalogMBIDAndUndoRestoresNull(t *testing.T) {
+	s := testStore(t)
+	track, runID := replaceBoundToRecording(t, s, uuid.NewString(), nil)
+
+	if pin := catalogMBIDOf(t, s, track.ID); pin == nil || *pin != replacementMBID {
+		t.Fatalf("catalog_mbid = %v, want %s", pin, replacementMBID)
+	}
+	if _, err := s.undoRun(t.Context(), runID); err != nil {
+		t.Fatal(err)
+	}
+	if pin := catalogMBIDOf(t, s, track.ID); pin != nil {
+		t.Errorf("catalog_mbid after undo = %s, want NULL", *pin)
+	}
+}
+
+func TestStore_AReplaceLeavesACatalogMBIDThatPointsElsewhere(t *testing.T) {
+	s := testStore(t)
+	elsewhere := uuid.NewString()
+	track, runID := replaceBoundToRecording(t, s, uuid.NewString(), &elsewhere)
+
+	if pin := catalogMBIDOf(t, s, track.ID); pin == nil || *pin != elsewhere {
+		t.Errorf("catalog_mbid = %v, want untouched %s", pin, elsewhere)
+	}
+	if row, _ := identityOf(t, s, track.ID); row.runID != runID {
+		t.Errorf("the identity was not replaced: %+v", row)
+	}
+}
+
+func TestStore_UndoLeavesACatalogMBIDThatChangedAfterTheReplace(t *testing.T) {
+	s := testStore(t)
+	oldRecording, later := uuid.NewString(), uuid.NewString()
+	track, runID := replaceBoundToRecording(t, s, oldRecording, &oldRecording)
+	setCatalogMBID(t, s, track.ID, &later)
+
+	tally, err := s.undoRun(t.Context(), runID)
+	if err != nil || tally.Unpinned != 0 || tally.PinsKept != 1 {
+		t.Fatalf("undo: %+v, %v", tally, err)
+	}
+	if pin := catalogMBIDOf(t, s, track.ID); pin == nil || *pin != later {
+		t.Errorf("catalog_mbid after undo = %v, want %s", pin, later)
+	}
+}

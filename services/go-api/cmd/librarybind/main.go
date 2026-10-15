@@ -69,7 +69,7 @@ func parseOptions(args []string, output io.Writer) (options, error) {
 	var rawRunID string
 	flags.BoolVar(&opts.apply, "apply", false, "write the identity rows (default is a dry run)")
 	flags.BoolVar(&opts.pinCatalog, "pin-catalog", false, "set catalog_mbid of bound tracks to their bound recording (dry run unless -apply)")
-	flags.StringVar(&rawRunID, "undo", "", "delete the identity rows of this run id whose track version is unchanged and restore the catalog_mbid it pinned where unchanged")
+	flags.StringVar(&rawRunID, "undo", "", "delete the identity rows of this run id whose track version is unchanged, restoring the identity a replacement overwrote, and restore the catalog_mbid it pinned where unchanged")
 	flags.StringVar(&opts.userID, "user", "", "only this user id")
 	flags.IntVar(&opts.limit, "limit", 0, "stop after this many tracks (0 means all)")
 	flags.StringVar(&opts.report, "report", "", "write a libraryrelength fix_isrc plan for the wrong ISRCs this run replaced")
@@ -185,7 +185,7 @@ func runUndo(ctx context.Context, s store, runID uuid.UUID, out io.Writer) error
 	if err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(out, "undo %s: removed %d, kept %d (track changed since the bind); unpinned %d, kept %d pins (catalog_mbid changed since)\n", runID, tally.Removed, tally.Kept, tally.Unpinned, tally.PinsKept)
+	_, _ = fmt.Fprintf(out, "undo %s: removed %d, restored %d, kept %d (track changed since the bind); unpinned %d, kept %d pins (catalog_mbid changed since)\n", runID, tally.Removed, tally.Restored, tally.Kept, tally.Unpinned, tally.PinsKept)
 	return nil
 }
 

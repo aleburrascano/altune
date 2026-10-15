@@ -57,6 +57,7 @@ type identity struct {
 	DeezerTrackID string
 	AppleSongID   string
 	Evidence      evidence
+	Replaces      *replaces
 }
 
 func outcomeOf(t libraryTrack, from source, found []candidate, lookupErr error) sourceOutcome {
