@@ -1,0 +1,99 @@
+{
+  "cases": [
+    {
+      "id": "rw-che-guap-baby-namesake-topic-and-archive-channel",
+      "class": "RW",
+      "note": "prod track ebbe86d9 (Che, 'guap baby', album UNRELEASED, no ISRC, no catalog length): prod stored https://www.youtube.com/watch?v=Nq5eeLLla6Y from 'Che Archive' as best_effort (channel class artist, verdict empty, length delta 0.33s). The ytdlp search for 'Che guap baby' (run read-only in the prod go-api container, yt-dlp 2026.08.19) also returns 'Guap Baby' on 'Chechive - Topic', whose artists metadata is ['Chechive'], not Che: a different artist's Topic channel, and 'che' is a substring of both channel names. Candidates are the real ytdlp results (extracted fields: channel, category, length, views); the Chechive and Che Archive uploads were fetched with the same call. On main any Topic channel is trusted and a substring names the artist, so the Chechive upload is stored as if it were Che's",
+      "track": {
+        "title": "guap baby",
+        "artist": "Che",
+        "album": "UNRELEASED"
+      },
+      "sources": [
+        {
+          "name": "ytdlp",
+          "search_seconds": 3,
+          "candidates": [
+            {
+              "title": "Guap Baby",
+              "url": "https://www.youtube.com/watch?v=FOqWl9seUs0",
+              "kind": "upload",
+              "channel": "Chechive - Topic",
+              "categories": [
+                "Music"
+              ],
+              "duration": 131,
+              "view_count": 12914
+            },
+            {
+              "title": "Che- Guap baby",
+              "url": "https://www.youtube.com/watch?v=Nq5eeLLla6Y",
+              "kind": "upload",
+              "channel": "Che Archive",
+              "categories": [
+                "People & Blogs"
+              ],
+              "duration": 131,
+              "actual_duration": 131.332,
+              "view_count": 385,
+              "correct": true
+            },
+            {
+              "title": "guap baby - che ; prod 4our3va",
+              "url": "https://www.youtube.com/watch?v=2XtUd5HjDvY",
+              "kind": "upload",
+              "channel": "MO",
+              "categories": [
+                "Gaming"
+              ],
+              "duration": 132,
+              "view_count": 974
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rw-usher-featuring-pitbull-credit-and-namesake-topic",
+      "class": "RW",
+      "note": "prod track 40f970bc (Usher featuring Pitbull, 'DJ Got Us Fallin' in Love', 247s, not yet acquired). The ytdlp search in the prod go-api container (yt-dlp 2026.08.19) returns Usher's own Official Video on the 'Usher' channel (246s, 463M views) and a plain-titled upload on \"DJ's United - Topic\" (artists ['Hipster DJs United'], 222s, 460 views). The channel is the first credited artist of a multi-artist credit, so it must be recognised as the artist's; the other Topic channel names a different artist and must not be trusted. On main the Topic channel gets the trusted bonus and the credit 'Usher featuring Pitbull' matches no channel by substring",
+      "track": {
+        "title": "DJ Got Us Fallin' in Love",
+        "artist": "Usher featuring Pitbull",
+        "album": "DJ Got Us Fallin' in Love",
+        "duration": 247
+      },
+      "sources": [
+        {
+          "name": "ytdlp",
+          "search_seconds": 3,
+          "candidates": [
+            {
+              "title": "DJ Got Us Fallin' In Love",
+              "url": "https://www.youtube.com/watch?v=UNNf9HdKFAM",
+              "kind": "upload",
+              "channel": "DJ's United - Topic",
+              "categories": [
+                "Music"
+              ],
+              "duration": 222,
+              "view_count": 460
+            },
+            {
+              "title": "Usher - DJ Got Us Fallin' In Love (Official Video) ft. Pitbull",
+              "url": "https://www.youtube.com/watch?v=C-dvTjK_07c",
+              "kind": "upload",
+              "channel": "Usher",
+              "categories": [
+                "Music"
+              ],
+              "duration": 246,
+              "view_count": 463645117,
+              "correct": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

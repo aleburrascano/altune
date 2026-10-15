@@ -1367,3 +1367,59 @@ func TestRankCandidates_TheUsersPickGoesBeforeTheArtTrack(t *testing.T) {
 		})
 	}
 }
+
+func TestUploaderClass_ATopicChannelMustBeTheTracksArtist(t *testing.T) {
+	upload := func(channel string) ports.AudioCandidate {
+		return ports.AudioCandidate{Channel: channel, Kind: ports.KindUpload}
+	}
+	tests := []struct {
+		name      string
+		artist    string
+		candidate ports.AudioCandidate
+		want      string
+	}{
+		{"the artist's own topic channel is topic", "Cutting Crew", upload("Cutting Crew - Topic"), channelTopic},
+		{"topic channel matches through normalisation", "ASAP Rocky", upload("A$AP Rocky - Topic"), channelTopic},
+		{"a karaoke topic channel is untrusted", "Cutting Crew", upload("Karaoke Hits - Topic"), channelOther},
+		{"a namesake topic channel is untrusted", "Che", upload("Chechive - Topic"), channelOther},
+		{"a substring namesake channel is untrusted", "Eve", upload("Steve Lacy"), channelOther},
+		{"the artist's own channel is artist", "Cutting Crew", upload("Cutting Crew"), channelArtist},
+		{"the artist's VEVO channel is artist", "The Weeknd", upload("TheWeekndVEVO"), channelArtist},
+		{"the artist's official channel is artist", "Eve", upload("Eve Official"), channelArtist},
+	}
+	for _, tt := range tests {
+		if got := uploaderClass(tt.artist, tt.candidate); got != tt.want {
+			t.Errorf("%s: uploaderClass = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+	if artistMatchesChannel("Eve", "Steve Lacy") {
+		t.Error("artistMatchesChannel(Eve, Steve Lacy) = true, want a whole-name comparison")
+	}
+}
+
+func TestUploaderClass_AnyCreditedArtistOwnsTheTopicChannel(t *testing.T) {
+	upload := func(channel string) ports.AudioCandidate {
+		return ports.AudioCandidate{Channel: channel, Kind: ports.KindUpload}
+	}
+	tests := []struct {
+		name      string
+		artist    string
+		candidate ports.AudioCandidate
+		want      string
+	}{
+		{"first of a featuring credit", "Usher featuring Pitbull", upload("Usher - Topic"), channelTopic},
+		{"second of a featuring credit", "Usher featuring Pitbull", upload("Pitbull - Topic"), channelTopic},
+		{"first of an ampersand credit", "Fatt Smaxk & Playboi Carti", upload("Fatt Smaxk - Topic"), channelTopic},
+		{"the duo's whole name", "Nico & Vinz", upload("Nico & Vinz - Topic"), channelTopic},
+		{"a comma credit", "Earth, Wind & Fire", upload("Earth, Wind & Fire - Topic"), channelTopic},
+		{"first credited artist's own channel", "Usher featuring Pitbull", upload("Usher"), channelArtist},
+		{"a karaoke topic channel stays untrusted", "Usher featuring Pitbull", upload("Karaoke Hits - Topic"), channelOther},
+		{"a namesake topic channel stays untrusted", "Fatt Smaxk & Playboi Carti", upload("Chechive - Topic"), channelOther},
+		{"another artist's topic channel stays untrusted", "Usher featuring Pitbull", upload("DJ's United - Topic"), channelOther},
+	}
+	for _, tt := range tests {
+		if got := uploaderClass(tt.artist, tt.candidate); got != tt.want {
+			t.Errorf("%s: uploaderClass = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}

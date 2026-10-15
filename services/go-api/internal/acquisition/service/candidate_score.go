@@ -77,17 +77,34 @@ func metadataRank(c ports.AudioCandidate, expectedDuration float64, maxViews int
 	return 0.45*ch + 0.25*dur + 0.20*cat + 0.10*views
 }
 
+const topicChannelSuffix = "- Topic"
+
 func isTopicChannel(channel string) bool {
-	return strings.HasSuffix(channel, "- Topic")
+	return strings.HasSuffix(channel, topicChannelSuffix)
 }
 
 func artistMatchesChannel(trackArtist, channel string) bool {
-	artistNorm := strings.ReplaceAll(textnorm.NormalizeForMatch(trackArtist), " ", "")
-	if artistNorm == "" {
-		return false
+	name := compactCreditKey(strings.TrimSuffix(channel, topicChannelSuffix))
+	for _, credited := range creditedArtists(trackArtist) {
+		want := compactCreditKey(credited)
+		if want != "" && (name == want || name == want+"vevo" || name == want+"official") {
+			return true
+		}
 	}
-	channelNorm := strings.ReplaceAll(textnorm.NormalizeForMatch(channel), " ", "")
-	return strings.Contains(channelNorm, artistNorm)
+	return false
+}
+
+func creditedArtists(credit string) []string {
+	spelled := strings.ReplaceAll(credit, "$", "s")
+	names := []string{spelled}
+	for name := range artistNames(spelled) {
+		names = append(names, name)
+	}
+	return names
+}
+
+func compactCreditKey(name string) string {
+	return strings.ReplaceAll(creditKey(name), " ", "")
 }
 
 type candidateEntry struct {
@@ -116,7 +133,7 @@ func uploaderClass(trackArtist string, c ports.AudioCandidate) string {
 		return channelTopic
 	case isCreditedKind(c.Kind):
 		return artTrackClass(trackArtist, c.Artists)
-	case isTopicChannel(c.Channel):
+	case artistMatchesChannel(trackArtist, c.Channel) && isTopicChannel(c.Channel):
 		return channelTopic
 	case artistMatchesChannel(trackArtist, c.Channel):
 		return channelArtist
