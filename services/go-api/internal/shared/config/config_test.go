@@ -1988,6 +1988,25 @@ func TestLoad_TheUpgradeLaneIsOffByDefaultWithBoundedKnobs(t *testing.T) {
 	}
 }
 
+func TestLoad_TheInPlaceCheckHasItsOwnBoundedRate(t *testing.T) {
+	setEnv(t, validConfigEnv(nil))
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.AcquisitionUpgradeVerifyPerHour != 60 {
+		t.Errorf("verify per hour = %d, want 60 by default", cfg.AcquisitionUpgradeVerifyPerHour)
+	}
+
+	for _, value := range []string{"0", "3601"} {
+		setEnv(t, validConfigEnv(map[string]string{"ACQUISITION_UPGRADE_VERIFY_PER_HOUR": value}))
+
+		if _, err := Load(); err == nil || !searchString(err.Error(), "ACQUISITION_UPGRADE_VERIFY_PER_HOUR") {
+			t.Errorf("Load with %s: error = %v, want it to name ACQUISITION_UPGRADE_VERIFY_PER_HOUR", value, err)
+		}
+	}
+}
+
 func TestLoad_RejectsAnOutOfRangeUpgradeKnob(t *testing.T) {
 	cases := map[string]string{
 		"ACQUISITION_UPGRADE_PER_HOUR":    "0",

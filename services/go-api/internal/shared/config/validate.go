@@ -180,6 +180,9 @@ func (c *Config) validateAcquisitionUpgrade() error {
 	if c.AcquisitionUpgradePerHour < 1 || c.AcquisitionUpgradePerHour > maxAcquisitionUpgradePerHour {
 		return fmt.Errorf("ACQUISITION_UPGRADE_PER_HOUR must be between 1 and %d, got %d", maxAcquisitionUpgradePerHour, c.AcquisitionUpgradePerHour)
 	}
+	if c.AcquisitionUpgradeVerifyPerHour < 1 || c.AcquisitionUpgradeVerifyPerHour > maxAcquisitionUpgradePerHour {
+		return fmt.Errorf("ACQUISITION_UPGRADE_VERIFY_PER_HOUR must be between 1 and %d, got %d", maxAcquisitionUpgradePerHour, c.AcquisitionUpgradeVerifyPerHour)
+	}
 	if c.AcquisitionUpgradeConcurrency < 1 {
 		return fmt.Errorf("ACQUISITION_UPGRADE_CONCURRENCY must be >= 1, got %d", c.AcquisitionUpgradeConcurrency)
 	}

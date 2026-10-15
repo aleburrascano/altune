@@ -471,7 +471,21 @@ returns nothing while any user job (acquire or replace) is claimable, and the us
 `Claim` never returns an upgrade job. A planned track is only enqueued while fewer than that
 many upgrade jobs are queued or running. Upgrade jobs publish no events to the user.
 
-`ExecuteUpgrade` runs the replace flow (`replaceLoaded`) with a `ReplaceGate` holding the
+Before it downloads anything, `ExecuteUpgrade` checks the stored file in place, once per
+`PipelineGeneration` (`in_place_generation` in the evidence), at most
+`ACQUISITION_UPGRADE_VERIFY_PER_HOUR` checks an hour (AcoustID and Deezer calls, not downloads).
+`AcquireTrackAudioService.CheckInPlace` resolves the bound recording, fingerprints the stored
+file and classifies it with the same `classifyMatch`/`ClassifyAudio` acquisition uses; with no
+AcoustID answer it compares the file with the Deezer preview of the track's ISRC
+(`ports.PreviewMatcher`, `adapters/deezerpreview`). `ports.InPlaceStore.RecordInPlace` writes
+the verdict and the regraded grade (`grade.Of`, no file change), only while `audio_ref` is
+still the file checked. A grade A result ends the job with no download; any other result falls
+through to the re-acquire below with the new grade as the gate. A user upload (no
+`audio_source_url`) is checked once and never replaced: a hard match grades it `A_user` (above
+A, never a candidate), a wrong version or song sets `user_upload_mismatch`, no answer changes
+nothing. A dry run logs `acquisition.upgrade_in_place` and records nothing.
+
+`ExecuteUpgrade` then runs the replace flow (`replaceLoaded`) with a `ReplaceGate` holding the
 stored grade. `UpdateTrackStep` asks the gate before it commits: the new file's grade must beat
 the stored one (`Grade.Beats`, F < D < C < B < A, strictly), else the step fails with
 `ErrNotAnUpgrade`, the pipeline rolls back the per-attempt copy it stored, and the old file

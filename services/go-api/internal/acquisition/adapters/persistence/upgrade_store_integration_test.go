@@ -117,6 +117,140 @@ func TestPgxUpgradeStore_AUserUploadIsNeverACandidate(t *testing.T) {
 	}
 }
 
+func uploadsIncluded() ports.UpgradeSelection {
+	selection := selectionOf(10)
+	selection.IncludeUnverifiedUploads = true
+	return selection
+}
+
+func TestPgxUpgradeStore_UnverifiedUserUploadsAreCandidatesOnlyWhenAsked(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxUpgradeStore(pool)
+
+	unverified := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D")})
+	verified := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"D","in_place_generation":1}`})
+	graded := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("A_user")})
+
+	if got := candidatesAmong(t, store, selectionOf(10), unverified, verified, graded); len(got) != 0 {
+		t.Errorf("candidates = %v, want no user upload unless uploads are asked for", got)
+	}
+	got := candidatesAmong(t, store, uploadsIncluded(), unverified, verified, graded)
+	if !slices.Equal(got, []shared.TrackId{unverified}) {
+		t.Errorf("candidates = %v, want only the upload not yet checked this generation", got)
+	}
+}
+
+func TestPgxUpgradeStore_AGradeAUserTrackIsNeverACandidate(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxUpgradeStore(pool)
+
+	aUser := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("A_user"), sourceURL: sourceURL("mine")})
+
+	if got := candidatesAmong(t, store, uploadsIncluded(), aUser); len(got) != 0 {
+		t.Errorf("candidates = %v, want none: A_user is the top grade", got)
+	}
+}
+
+type recordedEvidence struct {
+	Grade      string
+	Verdict    string
+	Basis      string
+	Score      float64
+	Generation int
+	Mismatch   bool
+	Channel    string
+}
+
+func readEvidence(t *testing.T, pool *pgxpool.Pool, id shared.TrackId) recordedEvidence {
+	t.Helper()
+	var evidence recordedEvidence
+	err := pool.QueryRow(context.Background(), `
+		SELECT COALESCE(acquisition_evidence->>'grade', ''),
+			COALESCE(acquisition_evidence->>'verdict', ''),
+			COALESCE(acquisition_evidence->>'in_place_basis', ''),
+			COALESCE((acquisition_evidence->>'acoustid_score')::float8, 0),
+			COALESCE((acquisition_evidence->>'in_place_generation')::int, 0),
+			COALESCE((acquisition_evidence->>'user_upload_mismatch')::boolean, false),
+			COALESCE(acquisition_evidence->>'channel', '')
+		FROM tracks WHERE id = $1`, id.UUID()).
+		Scan(&evidence.Grade, &evidence.Verdict, &evidence.Basis, &evidence.Score, &evidence.Generation, &evidence.Mismatch, &evidence.Channel)
+	if err != nil {
+		t.Fatalf("read evidence: %v", err)
+	}
+	return evidence
+}
+
+func TestPgxUpgradeStore_RecordInPlaceWritesTheVerdictAndGradeAndKeepsTheRestOfTheEvidence(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxUpgradeStore(pool)
+	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"C","verdict":"unknown","channel":"topic"}`, sourceURL: sourceURL("art")})
+
+	recorded, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{
+		AudioRef: "u/" + id.String() + ".mp3", Generation: 1, Verdict: "hard", Basis: "acoustid", Score: 0.97, Grade: "A",
+	})
+
+	if err != nil || !recorded {
+		t.Fatalf("RecordInPlace = %v, %v, want it recorded", recorded, err)
+	}
+	want := recordedEvidence{Grade: "A", Verdict: "hard", Basis: "acoustid", Score: 0.97, Generation: 1, Channel: "topic"}
+	if got := readEvidence(t, pool, id); got != want {
+		t.Errorf("evidence = %+v, want %+v", got, want)
+	}
+}
+
+func TestPgxUpgradeStore_RecordInPlaceWithNoGradeOrVerdictOnlyStampsTheGeneration(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxUpgradeStore(pool)
+	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"C","verdict":"unknown"}`, sourceURL: sourceURL("art")})
+
+	if _, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{AudioRef: "u/" + id.String() + ".mp3", Generation: 1}); err != nil {
+		t.Fatalf("RecordInPlace: %v", err)
+	}
+
+	want := recordedEvidence{Grade: "C", Verdict: "unknown", Generation: 1}
+	if got := readEvidence(t, pool, id); got != want {
+		t.Errorf("evidence = %+v, want %+v", got, want)
+	}
+}
+
+func TestPgxUpgradeStore_RecordInPlaceFlagsAMismatchedUserUploadWithoutRegrading(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxUpgradeStore(pool)
+	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D")})
+
+	if _, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{
+		AudioRef: "u/" + id.String() + ".mp3", Generation: 1, Verdict: "other_version", Basis: "acoustid", Score: 0.9, UserUploadMismatch: true,
+	}); err != nil {
+		t.Fatalf("RecordInPlace: %v", err)
+	}
+
+	want := recordedEvidence{Grade: "D", Verdict: "other_version", Basis: "acoustid", Score: 0.9, Generation: 1, Mismatch: true}
+	if got := readEvidence(t, pool, id); got != want {
+		t.Errorf("evidence = %+v, want %+v", got, want)
+	}
+}
+
+func TestPgxUpgradeStore_RecordInPlaceIgnoresAFileThatChangedMeanwhile(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxUpgradeStore(pool)
+	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("C"), sourceURL: sourceURL("art")})
+
+	recorded, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{AudioRef: "u/replaced-since.mp3", Generation: 1, Verdict: "hard", Grade: "A"})
+
+	if err != nil || recorded {
+		t.Fatalf("RecordInPlace = %v, %v, want a verdict on an old file to be dropped", recorded, err)
+	}
+	if got := readEvidence(t, pool, id); got.Grade != "C" || got.Generation != 0 {
+		t.Errorf("evidence = %+v, want the track untouched", got)
+	}
+}
+
 func TestPgxUpgradeStore_AFileThatIsNotReadyIsNeverACandidate(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)

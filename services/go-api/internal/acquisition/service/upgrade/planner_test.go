@@ -55,6 +55,19 @@ func TestPlanner_SchedulesThePickedTrackForTheCurrentGeneration(t *testing.T) {
 	}
 }
 
+func TestPlanner_CheckingUploadsAsksTheStoreForUnverifiedUserUploadsToo(t *testing.T) {
+	store := &pickingStore{}
+
+	if err := upgrade.NewPlanner(store, &recordingScheduler{}, 2, 6*time.Hour).CheckingUploads().PlanNext(context.Background()); err != nil {
+		t.Fatalf("PlanNext: %v", err)
+	}
+
+	want := ports.UpgradeSelection{Limit: 1, Generation: grade.PipelineGeneration, RetryAfter: 6 * time.Hour, MaxQueued: 2, IncludeUnverifiedUploads: true}
+	if store.selection != want {
+		t.Errorf("selection = %+v, want %+v", store.selection, want)
+	}
+}
+
 func TestPlanner_SchedulesNothingWhenNothingIsPicked(t *testing.T) {
 	scheduler := &recordingScheduler{}
 

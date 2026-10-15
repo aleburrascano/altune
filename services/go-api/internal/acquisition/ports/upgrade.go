@@ -17,11 +17,27 @@ type UpgradeSelection struct {
 	Generation int
 	RetryAfter time.Duration
 	MaxQueued  int
+
+	IncludeUnverifiedUploads bool
 }
 
 type UpgradeAttempt struct {
 	RejectedSourceKey string
 	CountsAsTry       bool
+}
+
+type InPlaceRecord struct {
+	AudioRef           string
+	Generation         int
+	Verdict            string
+	Basis              string
+	Score              float64
+	Grade              string
+	UserUploadMismatch bool
+}
+
+type InPlaceStore interface {
+	RecordInPlace(ctx context.Context, trackID shared.TrackId, record InPlaceRecord) (recorded bool, err error)
 }
 
 type UpgradeStore interface {

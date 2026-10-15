@@ -2,6 +2,15 @@ package grade
 
 import "testing"
 
+func TestBeats_AUserIsTheTopOfTheScale(t *testing.T) {
+	if !AUser.Beats(A) || A.Beats(AUser) || AUser.Beats(AUser) {
+		t.Error("A_user must beat A, and nothing beats A_user")
+	}
+	if !AUser.IsKnown() || !AUser.IsTop() || !A.IsTop() || B.IsTop() {
+		t.Error("only A and A_user are top grades")
+	}
+}
+
 func TestBeats(t *testing.T) {
 	cases := []struct {
 		name      string
