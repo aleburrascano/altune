@@ -22,6 +22,7 @@ func TestOf(t *testing.T) {
 		{"length only", Silent, shared.ProvenanceCorroborated, ArtTrack, C},
 		{"best effort", Silent, shared.ProvenanceBestEffort, ArtTrack, D},
 		{"no evidence", Silent, shared.ProvenanceBestEffort, "", D},
+		{"fingerprint finds a different song but proves nothing", Unsupported, shared.ProvenanceCorroborated, ArtTrack, D},
 		{"fingerprint proves another version or song", Contradicts, shared.ProvenanceVerified, ArtTrack, F},
 	}
 	for _, tc := range cases {

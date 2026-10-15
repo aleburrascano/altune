@@ -146,17 +146,18 @@ func (c Candidate) builtByItsAdapter() (Candidate, error) {
 
 func (c Candidate) audioCandidate() ports.AudioCandidate {
 	return ports.AudioCandidate{
-		Title:      c.Title,
-		Duration:   c.Duration,
-		URL:        c.URL,
-		Channel:    c.Channel,
-		Categories: c.Categories,
-		ViewCount:  c.ViewCount,
-		Resolved:   c.Resolved,
-		Kind:       ports.CandidateKind(c.Kind),
-		Artists:    c.Artists,
-		Album:      c.Album,
-		Explicit:   c.Explicit,
+		Title:       c.Title,
+		Duration:    c.Duration,
+		URL:         c.URL,
+		Channel:     c.Channel,
+		Categories:  c.Categories,
+		ViewCount:   c.ViewCount,
+		Resolved:    c.Resolved,
+		Kind:        ports.CandidateKind(c.Kind),
+		ObservedOMV: ports.CandidateKind(c.Kind) == ports.KindPinnedVideo,
+		Artists:     c.Artists,
+		Album:       c.Album,
+		Explicit:    c.Explicit,
 	}
 }
 

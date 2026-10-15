@@ -71,13 +71,14 @@ func (s *Source) pinnedCandidate(ctx context.Context, videoID string, fromCatalo
 
 func CandidateForWatch(videoID string, observed ytmsearch.Watch, pinned bool) ports.AudioCandidate {
 	return ports.AudioCandidate{
-		Title:      observed.Title,
-		Artists:    observed.Artists,
-		Explicit:   observed.Explicit,
-		URL:        watchURLPrefix + videoID,
-		Categories: []string{"Music"},
-		Resolved:   pinned || isCatalogVideo(observed.Type),
-		Kind:       kindOf(observed.Type),
+		Title:       observed.Title,
+		Artists:     observed.Artists,
+		Explicit:    observed.Explicit,
+		URL:         watchURLPrefix + videoID,
+		Categories:  []string{"Music"},
+		Resolved:    pinned || isCatalogVideo(observed.Type),
+		Kind:        kindOf(observed.Type),
+		ObservedOMV: observed.Type == ytmsearch.VideoTypeOMV,
 	}
 }
 

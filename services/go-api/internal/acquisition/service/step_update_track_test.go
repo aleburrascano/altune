@@ -243,7 +243,7 @@ func TestUpdateTrackStep_Execute_StoresSourceKindGenerationAndGradePerKind(t *te
 			track := seedTrackInRepo(t, repo, userId, nil)
 			ac := &AcquisitionContext{
 				AudioRef: drinkingAudio,
-				Selected: &ports.AudioCandidate{Title: "Song", URL: drinkingSource, Kind: tc.kind},
+				Selected: &ports.AudioCandidate{Title: "Song", URL: drinkingSource, Kind: tc.kind, ObservedOMV: tc.kind == ports.KindPinnedVideo},
 				Verdict:  AudioVerdict{Kind: tc.verdict},
 				Evidence: Evidence{Channel: tc.channel},
 			}
@@ -260,6 +260,30 @@ func TestUpdateTrackStep_Execute_StoresSourceKindGenerationAndGradePerKind(t *te
 				t.Errorf("source_kind=%q grade=%q generation=%d, want %q %q %d", got.SourceKind, got.Grade, got.PipelineGeneration, tc.wantKind, tc.wantGrade, grade.PipelineGeneration)
 			}
 		})
+	}
+}
+
+func TestUpdateTrackStep_Execute_ADoubtedReferenceNeverGradesA(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track := seedTrackInRepo(t, repo, userId, nil)
+	ac := &AcquisitionContext{
+		AudioRef: drinkingAudio,
+		Selected: &ports.AudioCandidate{Title: "Song", URL: drinkingSource, Kind: ports.KindArtTrack},
+		Verdict:  AudioVerdict{Kind: VerdictHard},
+		Identity: ports.RecordingIdentity{ReferenceDoubted: true},
+	}
+
+	if _, err := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID).Execute(context.Background(), ac, afterStore{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var got Evidence
+	if err := json.Unmarshal(storedTrack(t, repo, track).AcquisitionEvidence(), &got); err != nil {
+		t.Fatalf("evidence not stored as JSON: %v", err)
+	}
+	if got.Grade != grade.B {
+		t.Errorf("grade = %q, want B", got.Grade)
 	}
 }
 

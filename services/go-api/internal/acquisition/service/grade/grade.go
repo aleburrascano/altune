@@ -21,6 +21,7 @@ const (
 	Approximates
 	Matches
 	Contradicts
+	Unsupported
 )
 
 func Of(fingerprint Fingerprint, provenance shared.AcquisitionProvenance, kind SourceKind) Grade {
@@ -34,6 +35,8 @@ func Of(fingerprint Fingerprint, provenance shared.AcquisitionProvenance, kind S
 		return B
 	case Approximates:
 		return B
+	case Unsupported:
+		return D
 	}
 	if provenance == shared.ProvenanceVerified || provenance == shared.ProvenanceCorroborated {
 		return C

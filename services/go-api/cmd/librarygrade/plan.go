@@ -80,7 +80,7 @@ func classifyYouTube(ctx context.Context, lookup authorLookup, artist, videoID s
 	switch {
 	case err == nil && watch.Type == ytmsearch.VideoTypeATV:
 		return grade.ArtTrack, nil
-	case err == nil && watch.Type != ytmsearch.VideoTypeUGC:
+	case err == nil && watch.Type == ytmsearch.VideoTypeOMV:
 		return grade.OfficialVideo, nil
 	case err != nil && !errors.Is(err, ytmsearch.ErrNoWatchTrack):
 		return "", fmt.Errorf("youtube watch: %w", err)

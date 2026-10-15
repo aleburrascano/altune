@@ -15,19 +15,21 @@ func TestSourceKindOf(t *testing.T) {
 	cases := []struct {
 		name    string
 		kind    ports.CandidateKind
+		omv     bool
 		channel string
 		want    grade.SourceKind
 	}{
-		{"art track", ports.KindArtTrack, channelOther, grade.ArtTrack},
-		{"official video", ports.KindPinnedVideo, channelOther, grade.OfficialVideo},
-		{"upload from the artist's channel", ports.KindUpload, channelArtist, grade.LabelUpload},
-		{"upload from a topic channel", ports.KindUpload, channelTopic, grade.LabelUpload},
-		{"upload from any other channel", ports.KindUpload, channelOther, grade.FanUpload},
-		{"catalog pin is not assumed official", ports.KindCatalogPin, channelTopic, grade.FanUpload},
+		{"art track", ports.KindArtTrack, false, channelOther, grade.ArtTrack},
+		{"observed official video", ports.KindPinnedVideo, true, channelOther, grade.OfficialVideo},
+		{"pinned video of an unknown type is not official", ports.KindPinnedVideo, false, channelTopic, grade.FanUpload},
+		{"upload from the artist's channel", ports.KindUpload, false, channelArtist, grade.LabelUpload},
+		{"upload from a topic channel", ports.KindUpload, false, channelTopic, grade.LabelUpload},
+		{"upload from any other channel", ports.KindUpload, false, channelOther, grade.FanUpload},
+		{"catalog pin is not assumed official", ports.KindCatalogPin, false, channelTopic, grade.FanUpload},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := SourceKindOf(ports.AudioCandidate{Kind: tc.kind}, tc.channel); got != tc.want {
+			if got := SourceKindOf(ports.AudioCandidate{Kind: tc.kind, ObservedOMV: tc.omv}, tc.channel); got != tc.want {
 				t.Errorf("SourceKindOf = %q, want %q", got, tc.want)
 			}
 		})
@@ -58,7 +60,7 @@ func TestFingerprintOf(t *testing.T) {
 		VerdictHard:          grade.Matches,
 		VerdictSoft:          grade.Approximates,
 		VerdictOtherVersion:  grade.Contradicts,
-		VerdictDifferentSong: grade.Contradicts,
+		VerdictDifferentSong: grade.Unsupported,
 		VerdictUnknown:       grade.Silent,
 		"":                   grade.Silent,
 	}

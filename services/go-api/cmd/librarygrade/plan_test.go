@@ -48,6 +48,8 @@ func TestClassifySource(t *testing.T) {
 		{"no source url is the user's own upload", "", fakeLookup{}, grade.UserUpload, nil, false},
 		{"youtube music album audio", youtubeURL, fakeLookup{watch: ytmsearch.Watch{Type: ytmsearch.VideoTypeATV}}, grade.ArtTrack, nil, false},
 		{"youtube official video", youtubeURL, fakeLookup{watch: ytmsearch.Watch{Type: ytmsearch.VideoTypeOMV}}, grade.OfficialVideo, nil, false},
+		{"youtube video of an unlisted type goes by its author", youtubeURL, fakeLookup{watch: ytmsearch.Watch{Type: "MUSIC_VIDEO_TYPE_OTHER"}, author: "lyrics hub"}, grade.FanUpload, nil, true},
+		{"youtube watch with no type goes by its author", youtubeURL, fakeLookup{author: "lyrics hub"}, grade.FanUpload, nil, true},
 		{"youtube upload by the artist", youtubeURL, fakeLookup{watch: ytmsearch.Watch{Type: ytmsearch.VideoTypeUGC}, author: "Daft Punk"}, grade.LabelUpload, nil, true},
 		{"youtube upload by a fan", youtubeURL, fakeLookup{watch: ytmsearch.Watch{Type: ytmsearch.VideoTypeUGC}, author: "lyrics hub"}, grade.FanUpload, nil, true},
 		{"youtube video outside the music catalog", youtubeURL, fakeLookup{watchErr: ytmsearch.ErrNoWatchTrack, author: "Daft Punk"}, grade.LabelUpload, nil, true},

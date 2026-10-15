@@ -141,12 +141,19 @@ func SourceKindOf(c ports.AudioCandidate, channelClass string) grade.SourceKind 
 	case ports.KindArtTrack:
 		return grade.ArtTrack
 	case ports.KindPinnedVideo:
-		return grade.OfficialVideo
+		return officialVideoKind(c)
 	case ports.KindUpload:
 		return uploadSourceKind(channelClass)
 	default:
 		return grade.FanUpload
 	}
+}
+
+func officialVideoKind(c ports.AudioCandidate) grade.SourceKind {
+	if c.ObservedOMV {
+		return grade.OfficialVideo
+	}
+	return grade.FanUpload
 }
 
 func UploaderSourceKind(trackArtist, channel string) grade.SourceKind {
@@ -160,14 +167,24 @@ func uploadSourceKind(channelClass string) grade.SourceKind {
 	return grade.FanUpload
 }
 
+func (ac *AcquisitionContext) gradedFingerprint() grade.Fingerprint {
+	fingerprint := FingerprintOf(ac.Verdict.Kind)
+	if fingerprint == grade.Matches && ac.Identity.ReferenceDoubted {
+		return grade.Approximates
+	}
+	return fingerprint
+}
+
 func FingerprintOf(verdict VerdictKind) grade.Fingerprint {
 	switch verdict {
 	case VerdictHard:
 		return grade.Matches
 	case VerdictSoft:
 		return grade.Approximates
-	case VerdictOtherVersion, VerdictDifferentSong:
+	case VerdictOtherVersion:
 		return grade.Contradicts
+	case VerdictDifferentSong:
+		return grade.Unsupported
 	default:
 		return grade.Silent
 	}
@@ -183,7 +200,7 @@ func (ac *AcquisitionContext) collectEvidence() Evidence {
 		evidence.SourceKind = SourceKindOf(*ac.Selected, evidence.Channel)
 	}
 	evidence.PipelineGeneration = grade.PipelineGeneration
-	evidence.Grade = grade.Of(FingerprintOf(ac.Verdict.Kind), ac.Provenance(), evidence.SourceKind)
+	evidence.Grade = grade.Of(ac.gradedFingerprint(), ac.Provenance(), evidence.SourceKind)
 	return evidence
 }
 
