@@ -105,7 +105,8 @@ func scoreCandidate(track TrackRef, c ports.AudioCandidate, maxViews int64) cand
 		meta:          metadataRank(c, track.Duration, maxViews),
 		durationDelta: durationDelta(track.Duration, c.Duration),
 		qualDistance:  qualifierDistance(track.Title, c.Title),
-		artistMatch:   artistMatchesChannel(track.Artist, c.Channel),
+		artistMatch:   artistMatchesCandidate(track.Artist, c),
+		uploader:      uploaderClass(track.Artist, c),
 		featMatch:     featureMatch(track.Title, c.Title),
 		candidate:     c,
 	}
@@ -123,7 +124,7 @@ func logCandidateEvaluated(ctx context.Context, track TrackRef, e candidateEntry
 		"identity_score", math.Round(e.ident*10)/10,
 		"metadata_rank", math.Round(e.meta*1000)/1000,
 		"qualifier_distance", e.qualDistance,
-		"is_topic", isTopicChannel(c.Channel),
+		"is_topic", e.uploader == channelTopic,
 		"artist_match", e.artistMatch,
 		"feature_match", e.featMatch,
 		"track_artist", track.Artist,
@@ -184,7 +185,7 @@ func classifyCandidates(
 			continue
 		}
 		entry.isFallback = len(fallback) > 0
-		if isTopicChannel(c.Channel) {
+		if entry.uploader == channelTopic {
 			topic = append(topic, entry)
 		} else {
 			other = append(other, entry)

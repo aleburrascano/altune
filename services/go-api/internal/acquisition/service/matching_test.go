@@ -1180,3 +1180,26 @@ func TestSelectBest_AnExplicitResolvedTrackBeatsACloserCleanOne(t *testing.T) {
 		t.Fatalf("selected %v, want the explicit track even though the clean one is closer in length", got)
 	}
 }
+
+func TestUploaderClass_ArtTrackIsTrustedOnlyWhenItsArtistsCreditTheTrackArtist(t *testing.T) {
+	artTrack := func(artists ...string) ports.AudioCandidate {
+		return ports.AudioCandidate{Channel: "YouTube Music Art Track", Kind: ports.KindArtTrack, Artists: artists}
+	}
+	tests := []struct {
+		name      string
+		artist    string
+		candidate ports.AudioCandidate
+		want      string
+	}{
+		{"credited art track counts as topic", "ezcodylee", artTrack("ezcodylee"), channelTopic},
+		{"credit matches through normalisation", "ASAP Rocky", artTrack("A$AP Rocky"), channelTopic},
+		{"other artist's art track is untrusted", "ezcodylee", artTrack("Someone Else"), channelOther},
+		{"art track without credits is untrusted", "ezcodylee", artTrack(), channelOther},
+		{"upload on a topic channel is topic", "ezcodylee", ports.AudioCandidate{Channel: "ezcodylee - Topic"}, channelTopic},
+	}
+	for _, tt := range tests {
+		if got := uploaderClass(tt.artist, tt.candidate); got != tt.want {
+			t.Errorf("%s: uploaderClass = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}

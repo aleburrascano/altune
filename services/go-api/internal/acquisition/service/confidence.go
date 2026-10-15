@@ -82,24 +82,13 @@ func durationBonus(delta, trackSeconds float64) float64 {
 	}
 }
 
-func channelClass(trackArtist, channel string) string {
-	switch {
-	case isTopicChannel(channel):
-		return channelTopic
-	case artistMatchesChannel(trackArtist, channel):
-		return channelArtist
-	default:
-		return channelOther
-	}
-}
-
 func (ac *AcquisitionContext) buildEvidence(candidate ports.AudioCandidate, verified verificationResult) Evidence {
 	_, fallback := UnrequestedQualifiers(ac.Track.Title, ac.Track.Artist, candidate.Title)
 	return Evidence{
 		Verdict:              string(verified.verdict.Kind),
 		AcoustIDScore:        verified.verdict.Score,
 		DurationDeltaSeconds: ac.durationDelta(candidate, verified.probed),
-		Channel:              channelClass(ac.Track.Artist, candidate.Channel),
+		Channel:              uploaderClass(ac.Track.Artist, candidate),
 		Qualifiers:           fallback,
 		Resolved:             candidate.Resolved,
 		SourceTitle:          candidate.Title,

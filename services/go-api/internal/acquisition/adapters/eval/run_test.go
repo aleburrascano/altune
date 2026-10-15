@@ -858,3 +858,22 @@ func TestRunAll_OverlappedDownloadsScoreAsTheSlowestOfTheWindow(t *testing.T) {
 		t.Fatalf("simulated seconds = %.1f, want 30.5 (0.5s search + the 30s slowest of one window)", out.SimulatedSeconds)
 	}
 }
+
+func TestRun_ArtTrackByTheSearchedArtistIsTrustedWithoutAFingerprint(t *testing.T) {
+	cases, err := LoadEmbedded()
+	if err != nil {
+		t.Fatalf("LoadEmbedded: %v", err)
+	}
+	var kase Case
+	for _, c := range cases {
+		if c.ID == "pl-art-track-by-the-searched-artist-is-trusted-without-a-fingerprint" {
+			kase = c
+		}
+	}
+
+	out := Run(context.Background(), kase)
+
+	if !out.Pass {
+		t.Fatalf("expected pass, got %q (stored %q)", out.Reason, out.Stored)
+	}
+}
