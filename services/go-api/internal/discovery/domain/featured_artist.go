@@ -1,7 +1,9 @@
 package domain
 
 import (
+	"altune/go-api/internal/shared/songfacts"
 	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/versiontag"
 	"regexp"
 	"strconv"
 	"strings"
@@ -92,24 +94,50 @@ func asString(v any) string {
 	return ""
 }
 
-var featuredFromTextRe = regexp.MustCompile(`(?i)(?:\(|\[)?\s*(?:feat\.?|ft\.?|featuring|with)\s+([^)\]]+?)(?:\)|\]|$)`)
+var (
+	bracketedRe    = regexp.MustCompile(`[(\[]([^()\[\]]*)[)\]]`)
+	dashTailRe     = regexp.MustCompile(`\s[-–—]\s+(.*)$`)
+	dashCutRe      = regexp.MustCompile(`\s[-–—]\s.*$`)
+	withCreditRe   = regexp.MustCompile(`(?i)^\s*with\s+(.+)$`)
+	featuredCredit = versiontag.FeaturedCredit
+)
 
 func FeaturedFromText(title, subtitle string) []FeaturedArtist {
 	for _, text := range []string{title, subtitle} {
-		match := featuredFromTextRe.FindStringSubmatch(text)
-		if match == nil {
-			continue
-		}
-		var out []FeaturedArtist
-		for _, name := range strings.Split(match[1], ",") {
-			name = strings.TrimSpace(name)
-			if name != "" {
-				out = append(out, FeaturedArtist{Name: name, Role: RoleFeatured})
-			}
-		}
-		if len(out) > 0 {
+		if out := creditsIn(text); len(out) > 0 {
 			return out
 		}
 	}
 	return nil
+}
+
+func creditsIn(text string) []FeaturedArtist {
+	var segments []string
+	for _, m := range bracketedRe.FindAllStringSubmatch(text, -1) {
+		segments = append(segments, m[1])
+	}
+	if m := dashTailRe.FindStringSubmatch(text); m != nil {
+		segments = append(segments, m[1])
+	}
+	for _, seg := range segments {
+		if w := withCreditRe.FindStringSubmatch(seg); w != nil {
+			return featuredNames(w[1])
+		}
+	}
+	for _, seg := range append(segments, dashCutRe.ReplaceAllString(text, "")) {
+		if m := featuredCredit.FindStringSubmatch(seg); m != nil {
+			return featuredNames(dashCutRe.ReplaceAllString(m[1], ""))
+		}
+	}
+	return nil
+}
+
+func featuredNames(credit string) []FeaturedArtist {
+	var out []FeaturedArtist
+	for _, name := range songfacts.SplitCredit(credit) {
+		if name = strings.TrimSpace(name); name != "" {
+			out = append(out, FeaturedArtist{Name: name, Role: RoleFeatured})
+		}
+	}
+	return out
 }

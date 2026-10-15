@@ -151,6 +151,11 @@ func TestFeaturedFromText(t *testing.T) {
 		{"multiple guests", "Track (with Ken Carson, Playboi Carti)", "Destroy Lonely", []string{"Ken Carson", "Playboi Carti"}},
 		{"falls through to subtitle", "Plain Title", "Artist feat. Guest", []string{"Guest"}},
 		{"no credit", "Plain Title", "Artist", nil},
+		{"with inside a word", "Left Hand Free", "Alt-J", nil},
+		{"with opens a plain title", "Stay With Me", "Sam Smith", nil},
+		{"with or without", "With or Without You", "U2", nil},
+		{"ampersand splits", "Song (feat. Jay-Z & Kanye West)", "A", []string{"Jay-Z", "Kanye West"}},
+		{"dash tail credit", "Song - with Drake", "A", []string{"Drake"}},
 	}
 
 	for _, tt := range tests {
