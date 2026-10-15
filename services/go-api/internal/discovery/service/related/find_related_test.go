@@ -22,7 +22,7 @@ type fakeRelationshipQuerier struct {
 	err           error
 }
 
-func (f *fakeRelationshipQuerier) FindRelatedByAlbum(_ context.Context, _ shared.UserId, _ string, _ int) ([]ports.RelatedTrackMatch, error) {
+func (f *fakeRelationshipQuerier) FindRelatedByAlbumArtist(_ context.Context, _ shared.UserId, _ string, _ string, _ int) ([]ports.RelatedTrackMatch, error) {
 	return f.albumResults, f.err
 }
 
@@ -284,7 +284,7 @@ type scriptedQuerier struct {
 	sawCtx  func(ctx context.Context)
 }
 
-func (q *scriptedQuerier) FindRelatedByAlbum(ctx context.Context, _ shared.UserId, album string, _ int) ([]ports.RelatedTrackMatch, error) {
+func (q *scriptedQuerier) FindRelatedByAlbumArtist(ctx context.Context, _ shared.UserId, album string, _ string, _ int) ([]ports.RelatedTrackMatch, error) {
 	q.calls.Add(1)
 	if q.sawCtx != nil {
 		q.sawCtx(ctx)
@@ -512,7 +512,7 @@ func TestFindRelatedDispatch_LookupsReceiveBoundedCallerContext(t *testing.T) {
 
 type panickingQuerier struct{}
 
-func (panickingQuerier) FindRelatedByAlbum(context.Context, shared.UserId, string, int) ([]ports.RelatedTrackMatch, error) {
+func (panickingQuerier) FindRelatedByAlbumArtist(context.Context, shared.UserId, string, string, int) ([]ports.RelatedTrackMatch, error) {
 	panic("querier exploded")
 }
 
@@ -643,5 +643,35 @@ func TestFindRelated_DeezerFailureRecordsOnSharedBreaker(t *testing.T) {
 
 	if provider.calls.Load() != providercall.FailureThreshold {
 		t.Errorf("provider calls = %d, want %d then circuit open", provider.calls.Load(), providercall.FailureThreshold)
+	}
+}
+
+type libraryByArtist map[string][]ports.RelatedTrackMatch
+
+func (l libraryByArtist) FindRelatedByAlbumArtist(_ context.Context, _ shared.UserId, _ string, artist string, _ int) ([]ports.RelatedTrackMatch, error) {
+	return l[artist], nil
+}
+
+func TestFindRelated_SameAlbumNameOfAnotherArtistIsNotRelated(t *testing.T) {
+	querier := libraryByArtist{
+		"Queen": {{Title: "Bohemian Rhapsody", Artist: "Queen", Album: "Greatest Hits"}},
+		"ABBA":  {{Title: "Dancing Queen", Artist: "ABBA", Album: "Greatest Hits"}},
+	}
+	svc := NewFindRelatedService(querier, nil, nil)
+	user := discoverytest.NewUser()
+	hit := func(artist string) []domain.SearchResult {
+		r := discoverytest.TrackResult(domain.ProviderDeezer, "1", "Main", artist, nil)
+		r.Album = "Greatest Hits"
+		return []domain.SearchResult{r}
+	}
+
+	queen := svc.Execute(context.Background(), user, hit("Queen"))
+	abba := svc.Execute(context.Background(), user, hit("ABBA"))
+
+	if len(queen) != 1 || len(queen[0].Items) != 1 || queen[0].Items[0].Title != "Bohemian Rhapsody" {
+		t.Errorf("Queen related = %+v, want only Bohemian Rhapsody", queen)
+	}
+	if len(abba) != 1 || len(abba[0].Items) != 1 || abba[0].Items[0].Title != "Dancing Queen" {
+		t.Errorf("ABBA related = %+v, want only Dancing Queen (memo must not cross artists)", abba)
 	}
 }

@@ -53,9 +53,9 @@ func TestPgxRelationshipQuerier_FindRelated(t *testing.T) {
 	seedTrackRow(t, pool, userA, "Song Three", artist, "Other "+album)
 
 	t.Run("by album dedups and scopes to the album", func(t *testing.T) {
-		got, err := q.FindRelatedByAlbum(ctx, callerA, album, 10)
+		got, err := q.FindRelatedByAlbumArtist(ctx, callerA, album, artist, 10)
 		if err != nil {
-			t.Fatalf("FindRelatedByAlbum: %v", err)
+			t.Fatalf("FindRelatedByAlbumArtist: %v", err)
 		}
 		if len(got) != 2 {
 			t.Fatalf("got %d matches, want 2 (Song One collapsed + Song Two)", len(got))
@@ -66,9 +66,9 @@ func TestPgxRelationshipQuerier_FindRelated(t *testing.T) {
 		seedTrackRow(t, pool, userB, "B Own Song", artist, album)
 		callerB := shared.NewUserId(userB)
 
-		byAlbum, err := q.FindRelatedByAlbum(ctx, callerB, album, 10)
+		byAlbum, err := q.FindRelatedByAlbumArtist(ctx, callerB, album, artist, 10)
 		if err != nil {
-			t.Fatalf("FindRelatedByAlbum: %v", err)
+			t.Fatalf("FindRelatedByAlbumArtist: %v", err)
 		}
 		titles := matchTitles(byAlbum)
 		for _, leaked := range []string{"Song One", "Song Two", "Song Three"} {
@@ -80,4 +80,46 @@ func TestPgxRelationshipQuerier_FindRelated(t *testing.T) {
 			t.Errorf("got %v, want only user B's own track", titles)
 		}
 	})
+}
+
+func TestPgxRelationshipQuerier_FindRelatedByAlbumArtist(t *testing.T) {
+	pool := testPool(t)
+	q := NewPgxRelationshipQuerier(pool)
+	ctx := context.Background()
+	user := uuid.New()
+	caller := shared.NewUserId(user)
+	album := "Greatest Hits " + uuid.New().String()[:8]
+
+	seedTrackRow(t, pool, user, "Bohemian Rhapsody", "Queen", album)
+	seedTrackRow(t, pool, user, "Dancing Queen", "ABBA", album)
+
+	got, err := q.FindRelatedByAlbumArtist(ctx, caller, album, "Queen", 10)
+	if err != nil {
+		t.Fatalf("FindRelatedByAlbumArtist: %v", err)
+	}
+	titles := matchTitles(got)
+	if !titles["Bohemian Rhapsody"] || titles["Dancing Queen"] {
+		t.Errorf("got %v, want only Queen's track", titles)
+	}
+}
+
+func TestKeepArtistMatches(t *testing.T) {
+	candidates := []albumCandidate{
+		{match: ports.RelatedTrackMatch{Title: "Queen Song", Artist: "Queen"}},
+		{match: ports.RelatedTrackMatch{Title: "ABBA Song", Artist: "ABBA"}},
+		{match: ports.RelatedTrackMatch{Title: "Compilation Song", Artist: "Someone"}, albumArtist: "queen"},
+	}
+	titlesFor := func(artist string) map[string]bool {
+		return matchTitles(keepArtistMatches(candidates, artist, 10))
+	}
+
+	if got := titlesFor("Queen"); len(got) != 2 || !got["Queen Song"] || !got["Compilation Song"] {
+		t.Errorf("Queen: got %v, want Queen Song and the album-artist Compilation Song", got)
+	}
+	if got := titlesFor("ABBA"); len(got) != 1 || !got["ABBA Song"] {
+		t.Errorf("ABBA: got %v, want only ABBA Song", got)
+	}
+	if got := titlesFor(""); len(got) != 3 {
+		t.Errorf("empty artist: got %v, want album-only matching", got)
+	}
 }

@@ -13,7 +13,7 @@ type CountingRelationshipQuerier struct {
 	Calls         atomic.Int64
 }
 
-func (q *CountingRelationshipQuerier) FindRelatedByAlbum(_ context.Context, userId shared.UserId, _ string, _ int) ([]ports.RelatedTrackMatch, error) {
+func (q *CountingRelationshipQuerier) FindRelatedByAlbumArtist(_ context.Context, userId shared.UserId, _, _ string, _ int) ([]ports.RelatedTrackMatch, error) {
 	q.Calls.Add(1)
 	return q.MatchesByUser[userId], nil
 }

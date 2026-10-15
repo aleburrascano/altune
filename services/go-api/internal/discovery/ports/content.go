@@ -39,5 +39,5 @@ type DiscogsRelease struct {
 }
 
 type RelationshipQuerier interface {
-	FindRelatedByAlbum(ctx context.Context, userId shared.UserId, album string, limit int) ([]RelatedTrackMatch, error)
+	FindRelatedByAlbumArtist(ctx context.Context, userId shared.UserId, album, artist string, limit int) ([]RelatedTrackMatch, error)
 }

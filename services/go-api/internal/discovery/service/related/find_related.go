@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/discovery/service/providercall"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/runloop"
+	"altune/go-api/internal/shared/songfacts"
 	"context"
 	"log/slog"
 	"sync"
@@ -94,7 +95,7 @@ func (s *FindRelatedService) dispatchLibraryMatches(fan *relatedFanOut, userId s
 		return
 	}
 	fan.fetchRelatedGroup(lookup, func(ctx context.Context) ([]domain.SearchResult, error) {
-		matches, err := s.querier.FindRelatedByAlbum(ctx, userId, album, relatedPerGroup)
+		matches, err := s.querier.FindRelatedByAlbumArtist(ctx, userId, album, result.Subtitle, relatedPerGroup)
 		if err != nil {
 			slog.DebugContext(ctx, "related.library_lookup_failed", "error", err)
 			return nil, err
@@ -200,7 +201,7 @@ func libraryMatchesLookup(userId shared.UserId, result domain.SearchResult) rela
 		relationship: domain.RelationshipLibraryMatches,
 		relatedTo:    result.Title,
 		owner:        userId,
-		subject:      result.Album,
+		subject:      result.Album + "\x00" + songfacts.NameKey(result.Subtitle),
 		panicLog:     relatedPanicLog{event: "related.library_lookup_panic", key: "album", value: result.Album},
 	}
 }

@@ -1749,7 +1749,7 @@ type ownershipQuerier struct {
 	rows []ownedTrackRow
 }
 
-func (q *ownershipQuerier) FindRelatedByAlbum(_ context.Context, userId shared.UserId, album string, _ int) ([]ports.RelatedTrackMatch, error) {
+func (q *ownershipQuerier) FindRelatedByAlbumArtist(_ context.Context, userId shared.UserId, album string, _ string, _ int) ([]ports.RelatedTrackMatch, error) {
 	var out []ports.RelatedTrackMatch
 	for _, r := range q.rows {
 		if r.owner == userId && r.match.Album == album {
