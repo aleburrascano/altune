@@ -476,8 +476,14 @@ Before it downloads anything, `ExecuteUpgrade` checks the stored file in place, 
 `ACQUISITION_UPGRADE_VERIFY_PER_HOUR` checks an hour (AcoustID and Deezer calls, not downloads).
 `AcquireTrackAudioService.CheckInPlace` resolves the bound recording, fingerprints the stored
 file and classifies it with the same `classifyMatch`/`ClassifyAudio` acquisition uses; with no
-AcoustID answer it compares the file with the Deezer preview of the track's ISRC
-(`ports.PreviewMatcher`, `adapters/deezerpreview`). `ports.InPlaceStore.RecordInPlace` writes
+AcoustID proof (no answer, or a contradicting or different-song one) it compares the file with
+the Deezer preview of the track's ISRC (`ports.PreviewMatcher`, `adapters/deezerpreview`). A
+matching preview outweighs a contradicting AcoustID answer; the contradiction counts only when
+the preview does not match and AcoustID names another recording than the bound ones. A preview
+match is stored as verdict `preview` with its bit error rate: at or below
+`ACQUISITION_UPGRADE_PREVIEW_A_MAX_BER` (0.10) and with a trusted reference it grades like a
+fingerprint match (A from an official source), otherwise B. Three failed checks in a row stop
+the check and let the lane re-acquire; the stored grade is only ever raised by a check. `ports.InPlaceStore.RecordInPlace` writes
 the verdict and the regraded grade (`grade.Of`, no file change), only while `audio_ref` is
 still the file checked. A grade A result ends the job with no download; any other result falls
 through to the re-acquire below with the new grade as the gate. A user upload (no
