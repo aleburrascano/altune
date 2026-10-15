@@ -30,6 +30,7 @@ type AcquireTrackAudioService struct {
 	confidenceFloor float64
 	workspace       ports.TempWorkspace
 	storedAudio     ports.StoredAudioReader
+	contextObserver func(*AcquisitionContext)
 }
 
 func NewAcquireTrackAudioService(
@@ -66,6 +67,10 @@ func WithAcquireTempWorkspace(w ports.TempWorkspace) func(*AcquireTrackAudioServ
 
 func WithStoredAudioReader(r ports.StoredAudioReader) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.storedAudio = r }
+}
+
+func WithContextObserver(f func(*AcquisitionContext)) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) { s.contextObserver = f }
 }
 
 func WithAcquireConfidenceFloor(floor float64) func(*AcquireTrackAudioService) {
@@ -156,12 +161,19 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 		return err
 	}
 	ac := s.startAcquisition(ctx, userId, trackId, track)
+	defer s.observe(ac)
 	defer CleanupTemp(ctx, s.workspace, ac)
 	s.loadPriorRejections(ctx, ac)
 	if err := s.runAcquisition(ctx, userId, trackId, ac); err != nil {
 		return s.settleExecuteFailure(ctx, jobCtx, userId, trackId, err, ac)
 	}
 	return nil
+}
+
+func (s *AcquireTrackAudioService) observe(ac *AcquisitionContext) {
+	if s.contextObserver != nil {
+		s.contextObserver(ac)
+	}
 }
 
 func (s *AcquireTrackAudioService) settleExecuteFailure(ctx, jobCtx context.Context, userId shared.UserId, trackId shared.TrackId, err error, ac *AcquisitionContext) error {
@@ -183,6 +195,7 @@ func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId sh
 		return err
 	}
 	ac := s.startAcquisition(ctx, userId, trackId, track)
+	defer s.observe(ac)
 	defer CleanupTemp(ctx, s.workspace, ac)
 	if err := configureReplaceExclusion(ctx, ac, track, trackId); err != nil {
 		return s.settleReplaceFailure(ctx, jobCtx, userId, trackId, err, ac)

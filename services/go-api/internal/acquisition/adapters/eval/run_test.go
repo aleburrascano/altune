@@ -1,12 +1,14 @@
 package eval
 
 import (
+	"altune/go-api/internal/acquisition/adapters/catalogbridge"
 	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -897,9 +899,16 @@ func TestRun_CarriesTheCatalogPinsIntoTheTrack(t *testing.T) {
 		}},
 	}
 
-	track := trackRefFor(kase)
-	if track.CatalogMBID != kase.Track.CatalogMBID {
-		t.Errorf("CatalogMBID = %q", track.CatalogMBID)
+	ledger, err := catalogbridge.NewSeededLedger(seedFor(kase))
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	track, err := ledger.Get(context.Background(), ledger.TrackID(), ledger.UserID())
+	if err != nil || track == nil {
+		t.Fatalf("Get = %v, %v", track, err)
+	}
+	if track.CatalogMBID == nil || *track.CatalogMBID != kase.Track.CatalogMBID {
+		t.Errorf("CatalogMBID = %v", track.CatalogMBID)
 	}
 	if len(track.CatalogSources) != 1 || track.CatalogSources[0] != (ports.CatalogSource{Provider: "musicbrainz", ExternalID: "abc"}) {
 		t.Errorf("CatalogSources = %+v", track.CatalogSources)
@@ -907,8 +916,8 @@ func TestRun_CarriesTheCatalogPinsIntoTheTrack(t *testing.T) {
 	if track.CatalogExplicit == nil || *track.CatalogExplicit {
 		t.Errorf("CatalogExplicit = %v, want false", track.CatalogExplicit)
 	}
-	if track.Duration != 139 {
-		t.Errorf("Duration = %v, want the catalog length 139", track.Duration)
+	if track.DurationSeconds == nil || *track.DurationSeconds != 139 {
+		t.Errorf("DurationSeconds = %v, want the catalog length 139", track.DurationSeconds)
 	}
 
 	found, err := newCasePorts(kase).sources()[0].Find(context.Background(), ports.FindRequest{})
@@ -1060,5 +1069,150 @@ func TestIdentifyFake_AlwaysCarriesResultsLikeChromaprint(t *testing.T) {
 				t.Errorf("%s %s: known match %+v carries no Results, chromaprint always fills them", kase.ID, cand.URL, match)
 			}
 		}
+	}
+}
+
+func TestRun_GoldensAssertTheSavedTrack(t *testing.T) {
+	for _, id := range []string{
+		"rw-drinking-in-la-remix-mbid-anchored-to-isrc",
+		"pl-catalog-length-wins-over-a-doubted-search-pick",
+		"reacquire-never-returns-the-upload-the-user-rejected",
+	} {
+		kase := embeddedCase(t, id)
+		if kase.ExpectSaved == nil {
+			t.Fatalf("%s: the golden asserts nothing about the saved track", id)
+		}
+
+		out := Run(context.Background(), kase)
+
+		if !out.Pass {
+			t.Errorf("%s: expected pass, got %q (err %q)", id, out.Reason, out.Err)
+		}
+	}
+}
+
+func TestRun_SavesTheISRCAndTheMeasuredLengthThroughTheLedger(t *testing.T) {
+	out := Run(context.Background(), embeddedCase(t, "rw-drinking-in-la-remix-mbid-anchored-to-isrc"))
+
+	want := SavedTrack{ISRC: "CAA509814003", ISRCSource: "catalog", Provenance: "verified", DurationSeconds: 237}
+	if out.Saved.ISRC != want.ISRC || out.Saved.ISRCSource != want.ISRCSource ||
+		out.Saved.Provenance != want.Provenance || out.Saved.DurationSeconds != want.DurationSeconds {
+		t.Errorf("saved %+v, want %+v", out.Saved, want)
+	}
+}
+
+func TestRun_AdoptsTheISRCTheFingerprintProves(t *testing.T) {
+	const mbid = "aaaaaaaa-0000-4000-8000-000000000001"
+	kase := Case{
+		ID: "adopt", Class: "RW",
+		Track: Track{
+			Title: "Song", Artist: "Artist", Duration: 200,
+			Resolution: &Resolution{Search: &SearchedRecording{MBID: mbid, ISRC: "CAA509814003", Duration: 200}},
+		},
+		Candidates: []Candidate{{
+			Title: "Song", URL: "u", Channel: "Artist - Topic", Duration: 200, Correct: true,
+			AcoustID: "ac", RecordingMBIDs: []string{mbid},
+		}},
+	}
+
+	out := Run(context.Background(), kase)
+
+	if out.Saved.ISRC != "CAA509814003" || out.Saved.ISRCSource != "fingerprint" {
+		t.Errorf("saved %+v, want the fingerprint-proven ISRC written back", out.Saved)
+	}
+}
+
+func TestRun_JudgesTheExpectedSavedTrack(t *testing.T) {
+	base := embeddedCase(t, "rw-drinking-in-la-remix-mbid-anchored-to-isrc")
+	tests := []struct {
+		name string
+		want SavedExpectation
+		fail string
+	}{
+		{"isrc", SavedExpectation{ISRC: "XX0000000000"}, "want saved isrc XX0000000000"},
+		{"isrc source", SavedExpectation{ISRCSource: "fingerprint"}, "want saved isrc source fingerprint"},
+		{"provenance", SavedExpectation{Provenance: "best_effort"}, "want saved provenance best_effort"},
+		{"duration", SavedExpectation{DurationSeconds: 236}, "want saved duration 236"},
+		{"rejected keys", SavedExpectation{RejectedKeys: []string{"youtube:abc"}}, "want saved rejected keys [youtube:abc]"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			kase := base
+			kase.ExpectSaved = &tt.want
+
+			out := Run(context.Background(), kase)
+
+			if out.Pass || !strings.HasPrefix(out.Reason, tt.fail) {
+				t.Errorf("pass=%v reason=%q, want a failure starting %q", out.Pass, out.Reason, tt.fail)
+			}
+		})
+	}
+}
+
+func TestRun_ReplacingAFileOfUnknownSourceAimsAtTheCatalogNotTheStoredLength(t *testing.T) {
+	out := Run(context.Background(), embeddedCase(t, "pl-replace-measured-length-is-not-the-target"))
+
+	if !out.Pass {
+		t.Fatalf("expected pass, got %q (err %q)", out.Reason, out.Err)
+	}
+	if want := "https://www.youtube.com/watch?v=fV3KcFFVZJ8"; out.Stored != want {
+		t.Errorf("stored %q, want the artist's upload %q", out.Stored, want)
+	}
+}
+
+func TestRun_ReplaceNeverStoresTheFileTheTrackAlreadyHolds(t *testing.T) {
+	kase := embeddedCase(t, "replace-unknown-source-never-stores-the-current-file-again")
+
+	out := Run(context.Background(), kase)
+
+	if !out.Pass || out.Stored != "" {
+		t.Errorf("pass=%v stored=%q reason=%q, want nothing stored", out.Pass, out.Stored, out.Reason)
+	}
+	unfingerprinted := kase
+	unfingerprinted.Stored = &StoredFile{Duration: kase.Stored.Duration}
+	if out := Run(context.Background(), unfingerprinted); out.Pass {
+		t.Errorf("without a fingerprint of the stored file the upload wins and the case must fail; stored %q", out.Stored)
+	}
+}
+
+func TestRun_ASeededRejectedSourceNeverComesBack(t *testing.T) {
+	kase := embeddedCase(t, "reacquire-fails-rather-than-return-the-only-upload-the-user-rejected")
+
+	out := Run(context.Background(), kase)
+
+	if !out.Pass || out.Stored != "" {
+		t.Errorf("pass=%v stored=%q reason=%q, want the rejected upload refused", out.Pass, out.Stored, out.Reason)
+	}
+}
+
+func TestRun_TheRejectedKeyStaysOnTheSavedTrack(t *testing.T) {
+	out := Run(context.Background(), embeddedCase(t, "reacquire-never-returns-the-upload-the-user-rejected"))
+
+	if want := []string{"youtube:FjkkqbEbFOY"}; !slices.Equal(out.Saved.RejectedKeys, want) {
+		t.Errorf("saved rejected keys %v, want %v", out.Saved.RejectedKeys, want)
+	}
+}
+
+func TestValidateCases_RejectsAStoredFileWithNoDuration(t *testing.T) {
+	cases := []Case{{
+		ID: "x", Class: "OK", Stored: &StoredFile{},
+		Track:      Track{Title: "t", Artist: "a"},
+		Candidates: []Candidate{{URL: "u"}},
+	}}
+
+	if err := validateCases(cases); err == nil || !strings.Contains(err.Error(), "stores a file with no duration") {
+		t.Fatalf("validateCases = %v, want a stored-file duration error", err)
+	}
+}
+
+func TestValidateCases_RejectsAnUnknownExpectedSavedProvenance(t *testing.T) {
+	cases := []Case{{
+		ID: "x", Class: "OK", ExpectSaved: &SavedExpectation{Provenance: "made_up"},
+		Track:      Track{Title: "t", Artist: "a"},
+		Candidates: []Candidate{{URL: "u"}},
+	}}
+
+	if err := validateCases(cases); err == nil || !strings.Contains(err.Error(), "unknown saved provenance") {
+		t.Fatalf("validateCases = %v, want an unknown saved provenance error", err)
 	}
 }

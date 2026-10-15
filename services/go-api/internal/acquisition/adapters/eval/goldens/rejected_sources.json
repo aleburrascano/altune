@@ -2,6 +2,7 @@
   "cases": [
     {
       "id": "reacquire-never-returns-the-upload-the-user-rejected",
+      "expect_saved": { "rejected_keys": ["youtube:FjkkqbEbFOY"] },
       "class": "OK",
       "note": "prod LUCKI Over ISRC CA5KR1827984 (track 37148cf4): the user replaced the DatPiff upload FjkkqbEbFOY (rejected_source_keys youtube:FjkkqbEbFOY) and the track now stores NxTPVbk-FZQ. Candidates are the prod yt-dlp ytsearch5 and scsearch5 results for 'LUCKI Over' (2026-10-15, titles, channels and durations as the probe printed them); the rejected upload is excluded as the service now seeds it for every job kind. Service-level proof for first acquire, retry, missing-file reacquire and replace lives in service/acquire_test.go",
       "track": {

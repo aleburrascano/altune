@@ -187,19 +187,35 @@ func (c Candidate) probedDuration() float64 {
 }
 
 type Case struct {
-	ID             string            `json:"id"`
-	Class          string            `json:"class"`
-	Note           string            `json:"note,omitempty"`
-	Track          Track             `json:"track"`
-	ExcludeURLs    []string          `json:"exclude_urls,omitempty"`
-	StoredAcoustID string            `json:"stored_acoustid,omitempty"`
-	Recordings     []PinnedRecording `json:"recordings,omitempty"`
-	Candidates     []Candidate       `json:"candidates,omitempty"`
-	Sources        []Source          `json:"sources,omitempty"`
-	Pending        string            `json:"pending,omitempty"`
+	ID          string            `json:"id"`
+	Class       string            `json:"class"`
+	Note        string            `json:"note,omitempty"`
+	Track       Track             `json:"track"`
+	ExcludeURLs []string          `json:"exclude_urls,omitempty"`
+	Stored      *StoredFile       `json:"stored,omitempty"`
+	Recordings  []PinnedRecording `json:"recordings,omitempty"`
+	Candidates  []Candidate       `json:"candidates,omitempty"`
+	Sources     []Source          `json:"sources,omitempty"`
+	Pending     string            `json:"pending,omitempty"`
 
 	ExpectProvenance  string `json:"expect_provenance,omitempty"`
 	ExpectFailureCode string `json:"expect_failure_code,omitempty"`
+
+	ExpectSaved *SavedExpectation `json:"expect_saved,omitempty"`
+}
+
+type StoredFile struct {
+	Duration  float64 `json:"duration"`
+	AcoustID  string  `json:"acoustid,omitempty"`
+	SourceURL string  `json:"source_url,omitempty"`
+}
+
+type SavedExpectation struct {
+	ISRC            string   `json:"isrc,omitempty"`
+	ISRCSource      string   `json:"isrc_source,omitempty"`
+	Provenance      string   `json:"provenance,omitempty"`
+	DurationSeconds float64  `json:"duration_seconds,omitempty"`
+	RejectedKeys    []string `json:"rejected_keys,omitempty"`
 }
 
 func (c Case) isPending() bool { return c.Pending != "" }
@@ -405,6 +421,9 @@ func validateCaseExtensions(c Case) error {
 	if err := validateExpectProvenance(c); err != nil {
 		return err
 	}
+	if err := validateStoredAndSaved(c); err != nil {
+		return err
+	}
 	if err := validateRecordings(c); err != nil {
 		return err
 	}
@@ -459,6 +478,17 @@ func validatePinned(c Case) error {
 		return fmt.Errorf("case %q records a pinned recording for a track with no catalog mbid", c.ID)
 	case pinned.MBID != c.Track.CatalogMBID:
 		return fmt.Errorf("case %q records pinned recording %q but the catalog pins %q", c.ID, pinned.MBID, c.Track.CatalogMBID)
+	}
+	return nil
+}
+
+func validateStoredAndSaved(c Case) error {
+	if c.Stored != nil && c.Stored.Duration <= 0 {
+		return fmt.Errorf("case %q stores a file with no duration", c.ID)
+	}
+	saved := c.ExpectSaved
+	if saved != nil && saved.Provenance != "" && !shared.AcquisitionProvenance(saved.Provenance).Valid() {
+		return fmt.Errorf("case %q expects unknown saved provenance %q", c.ID, saved.Provenance)
 	}
 	return nil
 }

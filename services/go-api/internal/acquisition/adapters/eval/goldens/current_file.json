@@ -11,7 +11,7 @@
           "isrc_recordings": [ { "mbid": "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", "duration": 128 } ]
         }
       },
-      "stored_acoustid": "2b99657a-d010-4e3d-9dda-7b972f14bd9c",
+      "stored": { "duration": 129, "acoustid": "2b99657a-d010-4e3d-9dda-7b972f14bd9c" },
       "candidates": [
           { "title": "Phone (Interlude)", "url": "https://music.youtube.com/watch?v=TB0z2HVFxEE", "channel": "YouTube Music Art Track", "categories": ["Music"], "duration": 112, "resolved": true, "kind": "art_track", "artists": ["SLAYR"],
             "acoustid": "67d29ae9-708c-42a1-b5ca-9ba2367e65eb", "recording_mbids": ["e7ca1ccd-65cf-43e3-9964-ffb5a0479077"], "acoustid_results": [ { "id": "67d29ae9-708c-42a1-b5ca-9ba2367e65eb", "score": 0.95413136, "recordings": [ { "mbid": "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", "title": "Phone (interlude)", "artists": ["slayr", "TJAYY"], "duration": 128 } ] } ] },

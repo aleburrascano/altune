@@ -67,6 +67,7 @@
     },
     {
       "id": "pl-catalog-length-wins-over-a-doubted-search-pick",
+      "expect_saved": { "isrc": "QZHN92620453", "isrc_source": "catalog", "provenance": "best_effort", "duration_seconds": 140 },
       "class": "OK",
       "note": "prod ezcodylee 'ALBUM OF THE YEAR !' (ISRC QZHN92620453, catalog 139s, saved length 167s from the SoundCloud upload): MusicBrainz search picked a 167s recording the ISRC does not register, so the resolver doubts it. The 140s YouTube Music art track must be scored and accepted against the catalog 139s; reading the doubted 167s instead scored it 0.30 and the library kept the 167s SoundCloud version",
       "track": {

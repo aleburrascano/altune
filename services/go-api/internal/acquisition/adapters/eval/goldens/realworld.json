@@ -2,6 +2,7 @@
   "cases": [
     {
       "id": "rw-drinking-in-la-remix-mbid-anchored-to-isrc",
+      "expect_saved": { "isrc": "CAA509814003", "isrc_source": "catalog", "provenance": "verified", "duration_seconds": 237 },
       "class": "RW",
       "note": "staging track 3b0fe67b (#3129): discovery's merged result paired the album ISRC with the 307s '(Who Mix?)' remix MBID d3dc2825, whose AcoustID cluster holds only the remix. MusicBrainz lists only the album recording 5d6efd30 for the ISRC, and every correct upload fingerprints to AcoustID 5d5d307d, which links it. Without the ISRC anchor every correct candidate is rejected as fingerprint",
       "track": {

@@ -215,6 +215,23 @@ func (p *casePorts) AcoustIDsFor(_ context.Context, mbid string) ([]string, erro
 	return linked, nil
 }
 
+func (p *casePorts) CopyStored(_ context.Context, _, dir string) (string, error) {
+	path := filepath.Join(dir, "stored.mp3")
+	if err := os.WriteFile(path, []byte("eval-stored-audio-bytes"), 0o644); err != nil {
+		return "", err
+	}
+	p.pathsMu.Lock()
+	defer p.pathsMu.Unlock()
+	p.byPath[path] = Candidate{AcoustID: p.kase.Stored.AcoustID}
+	return path, nil
+}
+
+type copiedIdentity ports.RecordingIdentity
+
+func (c copiedIdentity) Resolve(context.Context, ports.RecordingQuery) (ports.RecordingIdentity, error) {
+	return ports.RecordingIdentity(c), nil
+}
+
 func (p *casePorts) Exists(_ context.Context, _ string) (bool, error) { return false, nil }
 
 func (p *casePorts) Store(_ context.Context, _ string, audioRef string) error {
