@@ -1275,3 +1275,36 @@ func TestExecuteReplace_NoFallbackRetryWhenTheFallbackAlreadyRan(t *testing.T) {
 		t.Errorf("fallback searched %d times, want exactly 1", unresolvedBroken.finds)
 	}
 }
+
+func TestConfigureReplaceExclusion_UnknownSourceRecordsTheStoredLengthNotARank(t *testing.T) {
+	stored, oldRef := 112.0, "audio/old.m4a"
+	track := &ports.TrackSnapshot{AudioRef: &oldRef, StoredDurationSeconds: &stored}
+	ac := &AcquisitionContext{}
+
+	configureReplaceExclusion(context.Background(), ac, track, shared.NewTrackId())
+
+	artTrack := ports.AudioCandidate{URL: "https://music.youtube.com/watch?v=TB0z2HVFxEE", Duration: 112}
+	upload := ports.AudioCandidate{URL: "https://www.youtube.com/watch?v=fV3KcFFVZJ8", Duration: 129}
+	if !ac.Replace.excludesCandidate(artTrack) {
+		t.Error("the candidate matching the stored file's length must be excluded")
+	}
+	if ac.Replace.excludesCandidate(upload) {
+		t.Error("a 129 s upload is not the 112 s stored file and must stay eligible")
+	}
+}
+
+func TestConfigureReplaceExclusion_KnownSourceIgnoresLength(t *testing.T) {
+	stored, oldRef := 112.0, "audio/old.m4a"
+	source := "https://www.youtube.com/watch?v=known"
+	track := &ports.TrackSnapshot{AudioRef: &oldRef, AudioSourceURL: &source, StoredDurationSeconds: &stored}
+	ac := &AcquisitionContext{}
+
+	configureReplaceExclusion(context.Background(), ac, track, shared.NewTrackId())
+
+	if ac.Replace.excludesCandidate(ports.AudioCandidate{URL: "https://example.com/other", Duration: 112}) {
+		t.Error("with a known source only the source key excludes")
+	}
+	if !ac.Replace.excludesCandidate(ports.AudioCandidate{URL: source, Duration: 300}) {
+		t.Error("the known source must be excluded")
+	}
+}

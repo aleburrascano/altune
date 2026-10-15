@@ -99,6 +99,7 @@ func snapshotOf(track *domain.Track) *ports.TrackSnapshot {
 		Genre:                  track.Genre,
 		AudioRef:               track.AudioRef,
 		AudioSourceURL:         track.AudioSourceURL,
+		StoredDurationSeconds:  track.DurationSeconds,
 		RejectedSourceKeys:     track.RejectedSourceKeys,
 		Status:                 mapStatus(track.AcquisitionStatus),
 		Streamable:             track.IsStreamable(),

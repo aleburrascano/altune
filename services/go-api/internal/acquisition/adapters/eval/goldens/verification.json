@@ -22,22 +22,22 @@
       ]
     },
     {
-      "id": "replace-legacy-track-skips-the-top-ranked",
+      "id": "replace-legacy-track-excludes-the-file-matching-stored-length",
       "class": "OK",
-      "note": "a track acquired before audio_source_url existed has nothing to exclude; skipping the top-ranked candidate is what makes the first replace return something different instead of silently re-storing the same file",
-      "track": { "title": "Blinding Lights", "artist": "The Weeknd", "duration": 200, "authoritative_duration": 200 },
-      "skip_top_ranked": true,
+      "note": "a track acquired before audio_source_url existed has nothing to exclude; the candidate whose length matches the stored file (within max(5s, 3%)) is treated as the current file and excluded, so the first replace returns a different one",
+      "track": { "title": "Blinding Lights", "artist": "The Weeknd", "duration": 200 },
+      "stored_length": 200,
       "candidates": [
         { "title": "Blinding Lights", "url": "yt:presumed-current", "channel": "The Weeknd - Topic", "categories": ["Music"], "duration": 200, "view_count": 50000000 },
-        { "title": "The Weeknd - Blinding Lights (Audio)", "url": "yt:alternate", "channel": "AnotherUploader", "categories": ["Music"], "duration": 201, "view_count": 1000, "correct": true }
+        { "title": "The Weeknd - Blinding Lights (Audio)", "url": "yt:alternate", "channel": "AnotherUploader", "categories": ["Music"], "duration": 215, "view_count": 1000, "correct": true }
       ]
     },
     {
-      "id": "replace-legacy-track-with-one-candidate-fails-cleanly",
+      "id": "replace-legacy-track-with-only-stored-length-match-fails-cleanly",
       "class": "OK",
-      "note": "skipping the only candidate leaves nothing to store; the pipeline must fail so the caller keeps the original audio rather than re-storing the same file",
+      "note": "the only candidate matches the stored length and is excluded, leaving nothing to store; the pipeline must fail so the caller keeps the original audio rather than re-storing the same file",
       "track": { "title": "Rare Leak", "artist": "Some Artist", "duration": 200, "authoritative_duration": 200 },
-      "skip_top_ranked": true,
+      "stored_length": 200,
       "candidates": [
         { "title": "Some Artist - Rare Leak", "url": "sc:only", "channel": "Some Artist", "duration": 200 }
       ]

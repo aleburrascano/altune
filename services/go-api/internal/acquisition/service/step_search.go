@@ -61,7 +61,7 @@ func (s *SearchStep) find(ctx context.Context, req ports.FindRequest) ([]ports.A
 func filterCandidates(ctx context.Context, ac *AcquisitionContext, candidates []ports.AudioCandidate) (kept, skipped []ports.AudioCandidate) {
 	for _, c := range candidates {
 		switch {
-		case ac.Replace.excludes(c.URL):
+		case ac.Replace.excludesCandidate(c):
 			slog.InfoContext(ctx, "acquisition.candidate_excluded",
 				"track_id", ac.Track.ID, "url", c.URL, "source", c.Source)
 		case ac.priorRejected(c.URL):

@@ -268,13 +268,14 @@ func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, trac
 		track.RejectedSourceKeys,
 		sourceKey(deref(track.AudioSourceURL)),
 	)
+	if track.AudioSourceURL == nil {
+		ac.Replace.StoredLength = deref(track.StoredDurationSeconds)
+		slog.InfoContext(ctx, "acquisition.replacing_unknown_source",
+			"track_id", trackId.String(), "stored_length", ac.Replace.StoredLength)
+	}
 	if len(ac.Replace.ExcludeKeys) > 0 {
 		slog.InfoContext(ctx, "acquisition.replacing_source",
 			"track_id", trackId.String(), "excluded_keys", ac.Replace.ExcludeKeys)
-	} else {
-		ac.Replace.SkipTopRanked = true
-		slog.InfoContext(ctx, "acquisition.replacing_unknown_source",
-			"track_id", trackId.String())
 	}
 }
 
