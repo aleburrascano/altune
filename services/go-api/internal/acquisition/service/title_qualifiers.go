@@ -1,8 +1,8 @@
 package service
 
 import (
-	"altune/go-api/internal/acquisition/service/versiontag"
 	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/versiontag"
 	"regexp"
 	"strings"
 )

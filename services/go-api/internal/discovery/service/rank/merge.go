@@ -4,7 +4,10 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/service/release"
 	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/versiontag"
 	"math"
+	"slices"
+	"strings"
 )
 
 type Entity struct {
@@ -184,11 +187,14 @@ func sameEntity(ke, kc keyedResult) (domain.EntityResolutionTier, bool) {
 	if tier, ok, decided := sameIdentity(e, c); decided {
 		return tier, ok
 	}
+	if differentVersions(e, c) {
+		return domain.EntityResolutionNone, false
+	}
 	return domain.EntityResolutionNone, sameName(e.Kind, ke.key, kc.key)
 }
 
 func sameIdentity(e, c domain.SearchResult) (domain.EntityResolutionTier, bool, bool) {
-	if e.ISRC != "" && c.ISRC != "" && e.ISRC == c.ISRC {
+	if eISRC := canonicalISRC(e.ISRC); eISRC != "" && eISRC == canonicalISRC(c.ISRC) {
 		return domain.EntityResolutionISRC, true, true
 	}
 	if e.Kind == domain.ResultKindAlbum && e.UPC != "" && c.UPC != "" && e.UPC == c.UPC &&
@@ -205,6 +211,19 @@ func sameIdentity(e, c domain.SearchResult) (domain.EntityResolutionTier, bool, 
 		return domain.EntityResolutionBridge, true, true
 	}
 	return domain.EntityResolutionNone, false, false
+}
+
+func canonicalISRC(isrc string) string {
+	return strings.ToUpper(strings.NewReplacer("-", "", " ", "").Replace(strings.TrimSpace(isrc)))
+}
+
+func hasConflictingISRCs(a, b domain.SearchResult) bool {
+	aISRC, bISRC := canonicalISRC(a.ISRC), canonicalISRC(b.ISRC)
+	return aISRC != "" && bISRC != "" && aISRC != bISRC
+}
+
+func differentVersions(a, b domain.SearchResult) bool {
+	return hasConflictingISRCs(a, b) && !slices.Equal(versiontag.Labels(a.Title), versiontag.Labels(b.Title))
 }
 
 func sameName(kind domain.ResultKind, e, c matchKey) bool {
@@ -233,6 +252,7 @@ func mergeInto(canonical, other domain.SearchResult, matchTier domain.EntityReso
 		ResolutionTier: domain.StampResolutionTier(tier),
 	}
 	carryIdentity(&merged, canonical, other, matchTier)
+	alignExplicitWithISRC(&merged, canonical, other)
 	carryFields(&merged, canonical, other)
 	return merged
 }
@@ -266,6 +286,21 @@ func carryIdentity(merged *domain.SearchResult, canonical, other domain.SearchRe
 		merged.ISRC = provenISRC
 		merged.MBID = provenMBID
 	}
+}
+
+func alignExplicitWithISRC(merged *domain.SearchResult, canonical, other domain.SearchResult) {
+	if !hasConflictingISRCs(canonical, other) {
+		return
+	}
+	source := canonical
+	if canonicalISRC(merged.ISRC) == canonicalISRC(other.ISRC) {
+		source = other
+	}
+	if explicit, ok := source.Extras[domain.ExtraExplicit]; ok {
+		merged.Extras[domain.ExtraExplicit] = explicit
+		return
+	}
+	delete(merged.Extras, domain.ExtraExplicit)
 }
 
 func carryFields(merged *domain.SearchResult, canonical, other domain.SearchResult) {

@@ -787,6 +787,56 @@ func TestMerge_TitleTierKeepsProvenIdentityOverALaterMoreCompleteCandidate(t *te
 	}
 }
 
+func TestMerge_DifferentISRCsKeepARemixApartFromTheOriginal(t *testing.T) {
+	original := discoverytest.WithISRC(discoverytest.Track("Song", "X", domain.ProviderDeezer, nil), "USUM71700001")
+	remix := discoverytest.WithISRC(discoverytest.Track("Song (Remix)", "X", domain.ProviderSpotify, nil), "USUM71700002")
+
+	entities := Merge([][]domain.SearchResult{{original}, {remix}})
+
+	if len(entities) != 2 {
+		t.Fatalf("got %d entities, want the remix and the original kept apart", len(entities))
+	}
+}
+
+func TestMerge_DifferentISRCsStillMergeWhenTheVersionWordsAgree(t *testing.T) {
+	a := discoverytest.WithISRC(discoverytest.Track("Song", "X", domain.ProviderDeezer, nil), "USUM71700001")
+	b := discoverytest.WithISRC(discoverytest.Track("Song", "X", domain.ProviderSpotify, nil), "USUM71700002")
+
+	entities := Merge([][]domain.SearchResult{{a}, {b}})
+
+	if len(entities) != 1 {
+		t.Fatalf("got %d entities, want 1", len(entities))
+	}
+}
+
+func TestMerge_ExplicitAndCleanTwinsCarryTheISRCOfTheSameSource(t *testing.T) {
+	explicit := discoverytest.WithISRC(discoverytest.Track("Song", "X", domain.ProviderDeezer, map[string]any{domain.ExtraExplicit: true}), "USUM71700001")
+	clean := discoverytest.WithISRC(discoverytest.Track("Song", "X", domain.ProviderSpotify, nil), "USUM71700002")
+	clean.Album = "Clean Album"
+
+	for _, order := range [][][]domain.SearchResult{{{explicit}, {clean}}, {{clean}, {explicit}}} {
+		entities := Merge(order)
+		if len(entities) != 1 {
+			t.Fatalf("got %d entities, want the twins merged", len(entities))
+		}
+		r := entities[0].Result
+		if got, want := domain.BoolExtra(r.Extras, domain.ExtraExplicit), r.ISRC == "USUM71700001"; got != want {
+			t.Errorf("ISRC %q with explicit=%v: the flag must come from the ISRC's own source", r.ISRC, got)
+		}
+	}
+}
+
+func TestMerge_ISRCsDifferingOnlyInFormattingMatch(t *testing.T) {
+	soundcloud := discoverytest.WithISRC(discoverytest.Track("Song", "X", domain.ProviderSoundCloud, nil), "us-um7-17-03861")
+	deezer := discoverytest.WithISRC(discoverytest.Track("Song (Remix)", "Y", domain.ProviderDeezer, nil), "USUM71703861")
+
+	entities := Merge([][]domain.SearchResult{{soundcloud}, {deezer}})
+
+	if len(entities) != 1 {
+		t.Fatalf("got %d entities, want the dashed and canonical ISRC to match", len(entities))
+	}
+}
+
 func artistWithID(name string, provider domain.ProviderName, id string, fans int64, image string) domain.SearchResult {
 	return domain.SearchResult{
 		Kind:     domain.ResultKindArtist,

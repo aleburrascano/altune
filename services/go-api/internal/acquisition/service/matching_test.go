@@ -2,7 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/acquisition/service/versiontag"
+	"altune/go-api/internal/shared/versiontag"
 	"context"
 	"strings"
 	"testing"
