@@ -121,6 +121,12 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 			extras[domain.ExtraAlbum] = item.Album.Title
 		}
 		extras[domain.ExtraDuration] = item.Duration
+		if item.TrackPosition > 0 {
+			extras[domain.ExtraTrackNumber] = item.TrackPosition
+		}
+		if item.DiskNumber > 0 {
+			extras[domain.ExtraDiscNumber] = item.DiskNumber
+		}
 		if item.Preview != "" {
 			extras[domain.ExtraPreviewURL] = item.Preview
 		}
@@ -185,6 +191,8 @@ type deezerItem struct {
 	Preview        string       `json:"preview"`
 	Duration       int          `json:"duration"`
 	ISRC           string       `json:"isrc"`
+	TrackPosition  int          `json:"track_position"`
+	DiskNumber     int          `json:"disk_number"`
 	CoverBig       string       `json:"cover_big"`
 	CoverXL        string       `json:"cover_xl"`
 	PictureBig     string       `json:"picture_big"`

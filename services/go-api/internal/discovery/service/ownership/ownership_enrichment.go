@@ -17,6 +17,7 @@ type OwnableItem struct {
 	Kind   string
 	Title  string
 	Artist string
+	Album  string
 	Extras *map[string]any
 }
 
@@ -56,22 +57,27 @@ func (s *OwnershipEnrichmentService) StampOwnership(
 	userId shared.UserId,
 	items []OwnableItem,
 ) {
+	s.stampOwnedItems(ctx, userId, items)
+}
+
+func (s *OwnershipEnrichmentService) stampOwnedItems(
+	ctx context.Context,
+	userId shared.UserId,
+	items []OwnableItem,
+) map[string]ports.OwnedTrack {
 	if s == nil || s.ownership == nil {
-		return
+		return nil
 	}
 
 	owned, err := s.ownership.OwnedByTitleArtist(ctx, userId)
 	if err != nil {
 		slog.WarnContext(ctx, "ownership.lookup_failed", "error", err)
-		return
+		return nil
 	}
-	if len(owned) == 0 {
-		return
-	}
-
 	for _, item := range items {
 		stampOwned(item, owned)
 	}
+	return owned
 }
 
 func stampOwned(item OwnableItem, owned map[string]ports.OwnedTrack) {
@@ -108,23 +114,17 @@ func (s *OwnershipEnrichmentService) EnrichAlbumTracks(
 	userId shared.UserId,
 	items []OwnableItem,
 ) <-chan struct{} {
-	s.StampOwnership(ctx, userId, items)
-	return s.fillTrackNumbers(ctx, userId, items)
+	owned := s.stampOwnedItems(ctx, userId, items)
+	return s.fillTrackNumbers(ctx, userId, pendingTrackNumbers(items, owned))
 }
 
 func (s *OwnershipEnrichmentService) fillTrackNumbers(
 	ctx context.Context,
 	userId shared.UserId,
-	items []OwnableItem,
+	pending map[string]int,
 ) <-chan struct{} {
 	done := make(chan struct{})
-	if s == nil || s.trackNumbers == nil || s.ownership == nil {
-		close(done)
-		return done
-	}
-
-	pending := pendingTrackNumbers(items)
-	if len(pending) == 0 {
+	if s == nil || s.trackNumbers == nil || len(pending) == 0 {
 		close(done)
 		return done
 	}
@@ -155,18 +155,33 @@ func (s *OwnershipEnrichmentService) fillPending(
 	}
 }
 
-func pendingTrackNumbers(items []OwnableItem) map[string]int {
+func pendingTrackNumbers(items []OwnableItem, owned map[string]ports.OwnedTrack) map[string]int {
+	byTrackID := make(map[string]ports.OwnedTrack, len(owned))
+	for _, track := range owned {
+		byTrackID[track.TrackID] = track
+	}
 	pending := map[string]int{}
-	for i, item := range items {
+	for _, item := range items {
 		extras := item.extras()
-		trackId := domain.StringExtra(extras, domain.ExtraOwnedTrackID)
-		if trackId == "" {
+		track, isOwned := byTrackID[domain.StringExtra(extras, domain.ExtraOwnedTrackID)]
+		if !isOwned || track.TrackNumber != nil {
 			continue
 		}
-		if _, positioned := extras[domain.ExtraTrackPosition]; positioned {
+		position := domain.IntExtra(extras, domain.ExtraTrackNumber)
+		if position <= 0 || !matchesByISRC(track, extras) || !isSameNamedAlbum(track.Album, item.Album) {
 			continue
 		}
-		pending[trackId] = i + 1
+		pending[track.TrackID] = position
 	}
 	return pending
+}
+
+func matchesByISRC(track ports.OwnedTrack, extras map[string]any) bool {
+	stored := songfacts.CanonicalISRC(track.ISRC)
+	return songfacts.IsCanonicalISRC(stored) && stored == songfacts.CanonicalISRC(domain.StringExtra(extras, domain.ExtraISRC))
+}
+
+func isSameNamedAlbum(storedAlbum, pageAlbum string) bool {
+	storedKey := domain.OwnershipKey(storedAlbum, "")
+	return storedKey != domain.OwnershipKey("", "") && storedKey == domain.OwnershipKey(pageAlbum, "")
 }

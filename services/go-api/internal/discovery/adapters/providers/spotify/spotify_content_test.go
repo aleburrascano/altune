@@ -394,3 +394,13 @@ func TestSpotifyAdapter_GetArtistAlbums_reResolvesSessionOnAuthFailure(t *testin
 		t.Errorf("albums = %+v", albums)
 	}
 }
+
+func TestMapSpotifyAlbumTrack_CarriesTheProvidersTrackAndDiscNumber(t *testing.T) {
+	r, ok := mapSpotifyAlbumTrack(spotifyAlbumTrack{Name: "Bonus One", URI: "spotify:track:abc", TrackNumber: 1, DiscNumber: 2})
+	if !ok {
+		t.Fatal("track dropped")
+	}
+	if r.Extras[domain.ExtraTrackNumber] != 1 || r.Extras[domain.ExtraDiscNumber] != 2 {
+		t.Errorf("extras = %v, want track 1 disc 2", r.Extras)
+	}
+}

@@ -37,6 +37,14 @@ func ownableItems(slates ...[]SearchResultDTO) []ownership.OwnableItem {
 	return out
 }
 
+func albumTrackItems(albumTitle string, items []SearchResultDTO) []ownership.OwnableItem {
+	out := ownableItems(items)
+	for i := range out {
+		out[i].Album = albumTitle
+	}
+	return out
+}
+
 func ownableItem(dto *SearchResultDTO) ownership.OwnableItem {
 	return ownership.OwnableItem{Kind: dto.Kind, Title: dto.Title, Artist: dto.Subtitle, Extras: &dto.Extras}
 }

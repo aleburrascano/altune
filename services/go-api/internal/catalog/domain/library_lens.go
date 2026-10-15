@@ -99,4 +99,5 @@ type OwnedTrackRef struct {
 	AcquisitionStatus string
 	TrackNumber       *int
 	ISRC              string
+	Album             string
 }

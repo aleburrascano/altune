@@ -719,3 +719,10 @@ func TestDeezerAdapter_GetAlbumTracks_readsEveryPage(t *testing.T) {
 		t.Fatalf("got %d tracks, want all 120 in order", len(results))
 	}
 }
+
+func TestMapDeezerResult_CarriesTheProvidersTrackPositionAndDiskNumber(t *testing.T) {
+	r := mapDeezerResult(deezerItem{ID: 7, Title: "Bonus One", TrackPosition: 1, DiskNumber: 2}, domain.ResultKindTrack)
+	if r.Extras[domain.ExtraTrackNumber] != 1 || r.Extras[domain.ExtraDiscNumber] != 2 {
+		t.Errorf("extras = %v, want track 1 disc 2", r.Extras)
+	}
+}

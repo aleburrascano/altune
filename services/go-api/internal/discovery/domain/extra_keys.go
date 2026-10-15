@@ -20,7 +20,6 @@ const (
 	ExtraISRC             = "isrc"
 	ExtraDisambiguation   = "disambiguation"
 	ExtraOwnedTrackID     = "owned_track_id"
-	ExtraTrackPosition    = "track_position"
 	ExtraRecordType       = "record_type"
 	ExtraResolutionTier   = "resolution_tier"
 	ExtraTopPick          = "top_pick"
@@ -41,5 +40,16 @@ func StringExtra(extras map[string]any, key string) string {
 		return v
 	default:
 		return ""
+	}
+}
+
+func IntExtra(extras map[string]any, key string) int {
+	switch v := extras[key].(type) {
+	case int:
+		return v
+	case float64:
+		return int(v)
+	default:
+		return 0
 	}
 }

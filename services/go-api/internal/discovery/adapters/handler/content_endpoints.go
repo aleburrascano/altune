@@ -149,7 +149,7 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 
 			dto := contentFetchToDTO(resp)
 			if userId, hasUser := authbridge.UserIDFromContext(r.Context()); hasUser {
-				h.ownership.EnrichAlbumTracks(r.Context(), userId, ownableItems(dto.Items))
+				h.ownership.EnrichAlbumTracks(r.Context(), userId, albumTrackItems(albumTitle, dto.Items))
 			}
 			status, _ := contentFetchOutcome(resp)
 			httputil.WriteJSON(w, status, dto)

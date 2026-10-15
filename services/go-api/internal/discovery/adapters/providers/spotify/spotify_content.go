@@ -247,6 +247,7 @@ type spotifyAlbumTrack struct {
 	Name        string `json:"name"`
 	URI         string `json:"uri"`
 	TrackNumber int    `json:"trackNumber"`
+	DiscNumber  int    `json:"discNumber"`
 	Duration    struct {
 		TotalMilliseconds int64 `json:"totalMilliseconds"`
 	} `json:"duration"`
@@ -310,6 +311,12 @@ func mapSpotifyAlbumTrack(t spotifyAlbumTrack) (domain.SearchResult, bool) {
 	extras := map[string]any{}
 	if t.ContentRating.Label == "EXPLICIT" {
 		extras[domain.ExtraExplicit] = true
+	}
+	if t.TrackNumber > 0 {
+		extras[domain.ExtraTrackNumber] = t.TrackNumber
+	}
+	if t.DiscNumber > 0 {
+		extras[domain.ExtraDiscNumber] = t.DiscNumber
 	}
 	if feats := spotifyFeaturedArtists(t); len(feats) > 0 {
 		extras[domain.ExtraFeaturedArtists] = domain.FeaturedArtistsToExtras(feats)

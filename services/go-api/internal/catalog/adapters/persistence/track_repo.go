@@ -373,7 +373,7 @@ func (r *PgxTrackRepository) listOwnedTrackRefsPage(
 	defer cancel()
 
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, title, artist, acquisition_status, track_number, COALESCE(isrc, '')
+		`SELECT id, title, artist, acquisition_status, track_number, COALESCE(isrc, ''), COALESCE(album, '')
 		FROM tracks WHERE user_id = $1 AND id > $2
 		ORDER BY id
 		LIMIT $3`,
@@ -484,7 +484,7 @@ func scanOwnedTrackRefs(rows pgx.Rows) ([]domain.OwnedTrackRef, error) {
 	refs := []domain.OwnedTrackRef{}
 	for rows.Next() {
 		var ref domain.OwnedTrackRef
-		if err := rows.Scan(&ref.ID, &ref.Title, &ref.Artist, &ref.AcquisitionStatus, &ref.TrackNumber, &ref.ISRC); err != nil {
+		if err := rows.Scan(&ref.ID, &ref.Title, &ref.Artist, &ref.AcquisitionStatus, &ref.TrackNumber, &ref.ISRC, &ref.Album); err != nil {
 			return nil, fmt.Errorf("scan owned track ref: %w", err)
 		}
 		refs = append(refs, ref)

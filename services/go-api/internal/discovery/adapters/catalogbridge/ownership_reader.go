@@ -44,6 +44,7 @@ func (r *OwnershipReader) OwnedByTitleArtist(
 			AcquisitionStatus: ref.AcquisitionStatus,
 			TrackNumber:       ref.TrackNumber,
 			ISRC:              songfacts.CanonicalISRC(ref.ISRC),
+			Album:             ref.Album,
 		}
 		claim(ctx, owned, domain.OwnershipISRCKey(track.ISRC), track)
 		claim(ctx, owned, domain.OwnershipKey(track.Title, track.Artist), track)
