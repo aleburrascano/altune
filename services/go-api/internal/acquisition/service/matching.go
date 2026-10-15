@@ -62,31 +62,32 @@ func lessOther(a, b candidateEntry) bool {
 	return breakTie(a, b)
 }
 
-func rankAndCollect(ctx context.Context, track TrackRef, candidates []ports.AudioCandidate) ([]ports.AudioCandidate, []CandidateRejection) {
+func rankAndCollect(ctx context.Context, track TrackRef, expectedLength float64, candidates []ports.AudioCandidate) ([]ports.AudioCandidate, []CandidateRejection) {
 	if len(candidates) == 0 {
 		return nil, nil
 	}
 
 	maxViews := maxViewCount(candidates)
-	resolved, topic, other, rejected := classifyCandidates(ctx, track, candidates, maxViews)
+	resolved, topic, other, rejected := classifyCandidates(ctx, track, expectedLength, candidates, maxViews)
 
-	sort.SliceStable(resolved, func(i, j int) bool {
-		return lessResolved(resolved[i], resolved[j])
-	})
-	sort.SliceStable(topic, func(i, j int) bool {
-		return lessTopic(topic[i], topic[j])
-	})
-	sort.SliceStable(other, func(i, j int) bool {
-		return lessOther(other[i], other[j])
-	})
+	sortBucket(resolved, lessResolved)
+	sortBucket(topic, lessTopic)
+	sortBucket(other, lessOther)
+	return flattenBuckets(resolved, topic, other), rejected
+}
 
-	ranked := make([]ports.AudioCandidate, 0, len(resolved)+len(topic)+len(other))
-	for _, bucket := range [][]candidateEntry{resolved, topic, other} {
+func sortBucket(bucket []candidateEntry, less func(a, b candidateEntry) bool) {
+	sort.SliceStable(bucket, func(i, j int) bool { return less(bucket[i], bucket[j]) })
+}
+
+func flattenBuckets(buckets ...[]candidateEntry) []ports.AudioCandidate {
+	var ranked []ports.AudioCandidate
+	for _, bucket := range buckets {
 		for _, e := range bucket {
 			ranked = append(ranked, e.candidate)
 		}
 	}
-	return ranked, rejected
+	return ranked
 }
 
 func maxViewCount(candidates []ports.AudioCandidate) int64 {
@@ -99,11 +100,11 @@ func maxViewCount(candidates []ports.AudioCandidate) int64 {
 	return maxViews
 }
 
-func scoreCandidate(track TrackRef, c ports.AudioCandidate, maxViews int64) candidateEntry {
+func scoreCandidate(track TrackRef, expectedLength float64, c ports.AudioCandidate, maxViews int64) candidateEntry {
 	return candidateEntry{
 		ident:         identityScore(track.Title, track.Artist, c.Title),
-		meta:          metadataRank(c, track.Duration, maxViews),
-		durationDelta: durationDelta(track.Duration, c.Duration),
+		meta:          metadataRank(c, expectedLength, maxViews),
+		durationDelta: durationDelta(expectedLength, c.Duration),
 		qualDistance:  qualifierDistance(track.Title, c.Title),
 		artistMatch:   artistMatchesCandidate(track.Artist, c),
 		uploader:      uploaderClass(track.Artist, c),
@@ -154,6 +155,7 @@ func unplayableRejection(c ports.AudioCandidate) CandidateRejection {
 func classifyCandidates(
 	ctx context.Context,
 	track TrackRef,
+	expectedLength float64,
 	candidates []ports.AudioCandidate,
 	maxViews int64,
 ) (resolved, topic, other []candidateEntry, rejected []CandidateRejection) {
@@ -162,7 +164,7 @@ func classifyCandidates(
 			rejected = append(rejected, unplayableRejection(c))
 			continue
 		}
-		entry := scoreCandidate(track, c, maxViews)
+		entry := scoreCandidate(track, expectedLength, c, maxViews)
 		logCandidateEvaluated(ctx, track, entry)
 
 		if c.Resolved {

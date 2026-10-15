@@ -1,0 +1,22 @@
+{
+  "cases": [
+    {
+      "id": "pl-doubted-mb-length-never-becomes-the-expected-length",
+      "class": "OK",
+      "note": "prod ezcodylee 'ALBUM OF THE YEAR !' (ISRC QZHN92620453) as first added, before any catalog or saved length existed. MusicBrainz search picked a 167 s recording the ISRC does not register; the only registered recording (48529b3b, live MusicBrainz) carries no length, so the resolver doubts the 167 s and keeps it as Identity.Duration. Writing it into the track made 167 s the gate and ranking target and skipped the artist's own 140 s upload as 27 s off; the doubted length must never be the expected length. The search recording id is modelled, MusicBrainz was not asked for it",
+      "track": {
+        "title": "ALBUM OF THE YEAR !", "artist": "ezcodylee", "isrc": "QZHN92620453",
+        "resolution": {
+          "search": { "mbid": "aaaaaaaa-0000-4000-8000-000000000167", "isrc": "QZHN92620453", "duration": 167 },
+          "isrc_recordings": [ { "mbid": "48529b3b-596b-4250-9226-74ee7531e06c" } ]
+        }
+      },
+      "sources": [
+        { "name": "ytdlp", "candidates": [
+          { "title": "ALBUM OF THE YEAR !", "url": "https://www.youtube.com/watch?v=Pwg_GsP2QZU", "channel": "ezcodylee", "categories": ["Music"], "duration": 140, "correct": true },
+          { "title": "ALBUM OF THE YEAR !", "url": "https://soundcloud.com/ezcodylee/album-of-the-year", "channel": "ezcodylee", "duration": 167 }
+        ] }
+      ]
+    }
+  ]
+}

@@ -9,7 +9,7 @@ import (
 )
 
 func selectBest(track TrackRef, candidates []ports.AudioCandidate) *ports.AudioCandidate {
-	ranked, _ := rankAndCollect(context.Background(), track, candidates)
+	ranked, _ := rankAndCollect(context.Background(), track, track.Duration, candidates)
 	if len(ranked) == 0 {
 		return nil
 	}
@@ -229,7 +229,7 @@ func TestRankCandidates_TieIsDeterministicAndPrefersExpectedLength(t *testing.T)
 	}
 
 	for i := 0; i < 50; i++ {
-		ranked, _ := rankAndCollect(context.Background(), track, candidates)
+		ranked, _ := rankAndCollect(context.Background(), track, track.Duration, candidates)
 		if len(ranked) != 2 {
 			t.Fatalf("expected both candidates ranked, got %d", len(ranked))
 		}
@@ -247,12 +247,12 @@ func TestRankCandidates_TotalTieIsStillDeterministic(t *testing.T) {
 		{Title: "Artist - Song", Channel: "Artist - Topic", URL: "https://a.example/x"},
 	}
 
-	first, _ := rankAndCollect(context.Background(), track, candidates)
+	first, _ := rankAndCollect(context.Background(), track, track.Duration, candidates)
 	if len(first) == 0 {
 		t.Fatal("expected candidates to survive the identity gate")
 	}
 	for i := 0; i < 50; i++ {
-		again, _ := rankAndCollect(context.Background(), track, candidates)
+		again, _ := rankAndCollect(context.Background(), track, track.Duration, candidates)
 		if again[0].URL != first[0].URL {
 			t.Fatalf("run %d picked %q, first run picked %q — ranking is not deterministic",
 				i, again[0].URL, first[0].URL)
@@ -849,7 +849,7 @@ func TestRankCandidates_AcousticLosesToTheMasterOnTheSameTopicChannel(t *testing
 		},
 	}
 
-	ranked, _ := rankAndCollect(context.Background(), track, candidates)
+	ranked, _ := rankAndCollect(context.Background(), track, track.Duration, candidates)
 	if len(ranked) != 2 {
 		t.Fatalf("ranked = %d, want both", len(ranked))
 	}
@@ -880,7 +880,7 @@ func TestRankCandidates_MusicVideoLosesToPlainAudio(t *testing.T) {
 		},
 	}
 
-	ranked, _ := rankAndCollect(context.Background(), track, candidates)
+	ranked, _ := rankAndCollect(context.Background(), track, track.Duration, candidates)
 	if ranked[0].Title != "Never Surrender" {
 		t.Fatalf("selected %q — the plain audio must outrank the video container", ranked[0].Title)
 	}
@@ -907,7 +907,7 @@ func TestRankCandidates_ProvenanceStillBeatsQualifierDistanceOffTopic(t *testing
 		},
 	}
 
-	ranked, _ := rankAndCollect(context.Background(), track, candidates)
+	ranked, _ := rankAndCollect(context.Background(), track, track.Duration, candidates)
 	if ranked[0].Channel != "TheWeekndVEVO" {
 		t.Fatalf("selected %q — off Topic, label provenance outranks a shorter qualifier list", ranked[0].Channel)
 	}
@@ -1087,7 +1087,7 @@ func TestRankAndCollect_RejectsUnrequestedVersionBeforeDownload(t *testing.T) {
 		{Title: "Rollacoasta", Channel: "prettifun", Duration: 159, URL: "https://youtube.com/watch?v=clean", Categories: []string{"Music"}},
 	}
 
-	ranked, rejected := rankAndCollect(context.Background(), track, candidates)
+	ranked, rejected := rankAndCollect(context.Background(), track, track.Duration, candidates)
 
 	if len(ranked) != 1 || ranked[0].URL != "https://youtube.com/watch?v=clean" {
 		t.Fatalf("ranked = %v, want only the clean upload", ranked)
@@ -1104,7 +1104,7 @@ func TestRankAndCollect_RadioEditRanksAfterEveryCleanCandidate(t *testing.T) {
 		{Title: "Harbour Lights", Channel: "The Marram - Topic", Duration: 200, URL: "https://x.example/clean", Categories: []string{"Music"}},
 	}
 
-	ranked, rejected := rankAndCollect(context.Background(), track, candidates)
+	ranked, rejected := rankAndCollect(context.Background(), track, track.Duration, candidates)
 
 	if len(rejected) != 0 || len(ranked) != 2 || ranked[0].URL != "https://x.example/clean" {
 		t.Fatalf("ranked = %v rejected = %v, want the clean upload first and the edit kept", ranked, rejected)
@@ -1119,7 +1119,7 @@ func TestRankAndCollect_MustHold8_UnplayableCandidatesAreRejectedBeforeRanking(t
 		{Title: "Drinking in L.A.", URL: "sc:ok"},
 	}
 
-	ranked, rejected := rankAndCollect(context.Background(), track, candidates)
+	ranked, rejected := rankAndCollect(context.Background(), track, track.Duration, candidates)
 
 	if len(ranked) != 1 || ranked[0].URL != "sc:ok" {
 		t.Fatalf("ranked = %v, want only the playable candidate so the downloader never sees the others", ranked)
@@ -1134,7 +1134,7 @@ func TestLogCandidateEvaluated_CarriesScoresAndCandidateAttributes(t *testing.T)
 	track := TrackRef{ID: "t1", Title: "Song", Artist: "Artist", Duration: 200}
 	c := ports.AudioCandidate{Source: "youtube", Title: "Song", Channel: "Artist - Topic", Duration: 200, ViewCount: 50}
 
-	entry := scoreCandidate(track, c, 100)
+	entry := scoreCandidate(track, track.Duration, c, 100)
 	logCandidateEvaluated(context.Background(), track, entry)
 
 	rec := findLogRecord(t, buf, "candidate_evaluated")
@@ -1201,5 +1201,27 @@ func TestUploaderClass_ArtTrackIsTrustedOnlyWhenItsArtistsCreditTheTrackArtist(t
 		if got := uploaderClass(tt.artist, tt.candidate); got != tt.want {
 			t.Errorf("%s: uploaderClass = %q, want %q", tt.name, got, tt.want)
 		}
+	}
+}
+
+func TestSelectBest_RanksByTheExpectedLength(t *testing.T) {
+	artTrack := func(url string, duration float64) ports.AudioCandidate {
+		return ports.AudioCandidate{
+			Title: "Phone (Interlude)", URL: url, Channel: "YouTube Music Art Track", Duration: duration, Resolved: true,
+			Artists: []string{"SLAYR"}, Album: "Phone", Kind: ports.KindArtTrack,
+		}
+	}
+	ac := &AcquisitionContext{
+		Track:      TrackRef{ID: "t1", Title: "Phone (Interlude)", Artist: "SLAYR", Album: "Phone"},
+		Identity:   ports.RecordingIdentity{Duration: 128},
+		Candidates: []ports.AudioCandidate{artTrack("https://music.youtube.com/watch?v=aaaaaaaaaaa", 112), artTrack("https://music.youtube.com/watch?v=bbbbbbbbbbb", 128)},
+	}
+
+	if _, err := NewSelectStep().Execute(context.Background(), ac, afterSearch{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if ac.Selected.Duration != 128 {
+		t.Errorf("selected %v s, want the candidate closest to the expected 128 s", ac.Selected.Duration)
 	}
 }

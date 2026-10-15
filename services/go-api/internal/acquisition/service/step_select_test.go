@@ -224,6 +224,7 @@ func shadowLine(t *testing.T, logs string) map[string]any {
 func TestSelectStep_ShadowLogsDisagreementWithoutChangingThePick(t *testing.T) {
 	logs := captureJSONLogSync(t)
 	ac := &AcquisitionContext{Track: finesseTrack(), Candidates: []ports.AudioCandidate{finesseRemix(), finesseAlbumTrack()}}
+	ac.Track.CatalogDuration = 0
 	ac.Track.Duration = 223
 
 	if _, err := NewSelectStep().Execute(context.Background(), ac, afterSearch{}); err != nil {

@@ -137,7 +137,7 @@ func TestRankAndCollect_RescuesLowIdentityOnTheArtistChannel(t *testing.T) {
 		Channel: "Cutting Crew - Topic",
 	}}
 
-	ranked, rejected := rankAndCollect(context.Background(), track, candidates)
+	ranked, rejected := rankAndCollect(context.Background(), track, track.Duration, candidates)
 
 	if len(ranked) != 1 || ranked[0].URL != "yt:master" {
 		t.Fatalf("artist-channel candidate was dropped by the identity gate: ranked=%v", ranked)
@@ -155,7 +155,7 @@ func TestRankAndCollect_DropsAndRecordsForeignLowIdentity(t *testing.T) {
 		Channel: "CookingChannel",
 	}}
 
-	ranked, rejected := rankAndCollect(context.Background(), track, candidates)
+	ranked, rejected := rankAndCollect(context.Background(), track, track.Duration, candidates)
 
 	if len(ranked) != 0 {
 		t.Fatalf("an unrelated candidate must stay gated: ranked=%v", ranked)
