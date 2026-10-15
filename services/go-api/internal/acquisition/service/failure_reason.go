@@ -14,6 +14,7 @@ const maxAcquisitionAttempts = 3
 var (
 	ErrAcquisitionRetryable = errors.New("acquisition failed transiently, job released for retry")
 	ErrNoConfidentMatch     = errors.New("no candidate met the confidence floor")
+	ErrReplaceFactMissing   = errors.New("replace: no fact identifies the current file")
 )
 
 func retryBackoff(attempts int) time.Duration {

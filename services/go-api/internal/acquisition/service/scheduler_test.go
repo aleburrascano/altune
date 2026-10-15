@@ -279,6 +279,7 @@ func TestBackgroundScheduler_ShutdownMidSearch_ReleasesTheReplaceJobForAnotherWo
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
+	track.SetAudioSource("https://www.youtube.com/watch?v=currentAAAA")
 	repo := newFakeTrackRepository()
 	key := track.ID.String() + ":" + userId.String()
 	repo.tracks[key] = track
