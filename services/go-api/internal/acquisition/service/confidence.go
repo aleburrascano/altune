@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"log/slog"
@@ -12,27 +13,21 @@ const (
 	defaultConfidenceFloor = 0.5
 	confidenceScale        = 100
 
-	hardConfidence        = 0.95
-	softConfidence        = 0.85
-	lowScoreCutoff        = 0.92
-	lowScorePenalty       = 0.10
-	unknownBase           = 0.2
-	unknownCap            = 0.8
-	trustedChannelBonus   = 0.3
-	tightDurationBonus    = 0.2
-	looseDurationBonus    = 0.1
-	resolvedBonus         = 0.1
-	qualifierPenalty      = 0.2
-	tightDurationSeconds  = 2.0
-	looseDurationSeconds  = 15.0
-	looseDurationFraction = 0.07
+	hardConfidence      = 0.95
+	softConfidence      = 0.85
+	lowScoreCutoff      = 0.92
+	lowScorePenalty     = 0.10
+	unknownBase         = 0.2
+	unknownCap          = 0.8
+	trustedChannelBonus = 0.3
+	tightDurationBonus  = 0.2
+	looseDurationBonus  = 0.1
+	resolvedBonus       = 0.1
+	qualifierPenalty    = 0.2
 
 	channelTopic  = "topic"
 	channelArtist = "artist"
 	channelOther  = "other"
-
-	fallbackDurationSeconds  = 5.0
-	fallbackDurationFraction = 0.03
 )
 
 func ScoreConfidence(e Evidence, trackSeconds float64) float64 {
@@ -74,9 +69,9 @@ func channelBonus(class string) float64 {
 func durationBonus(delta, trackSeconds float64) float64 {
 	delta = math.Abs(delta)
 	switch {
-	case delta <= tightDurationSeconds:
+	case delta <= domain.LengthTight.Allowance(trackSeconds):
 		return tightDurationBonus
-	case delta <= math.Max(looseDurationSeconds, looseDurationFraction*trackSeconds):
+	case delta <= domain.LengthLoose.Allowance(trackSeconds):
 		return looseDurationBonus
 	default:
 		return 0
@@ -109,7 +104,7 @@ func (ac *AcquisitionContext) durationDelta(candidate ports.AudioCandidate, prob
 }
 
 func fallbackLengthMatches(delta, trackSeconds float64) bool {
-	return math.Abs(delta) <= math.Max(fallbackDurationSeconds, fallbackDurationFraction*trackSeconds)
+	return math.Abs(delta) <= domain.LengthAuthoritative.Allowance(trackSeconds)
 }
 
 func (ac *AcquisitionContext) adopt(ctx context.Context, evidence Evidence) {

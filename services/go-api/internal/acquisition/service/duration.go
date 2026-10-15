@@ -1,26 +1,16 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
-	"math"
-)
-
-const (
-	durationMatchSlackSecs = 15.0
-	durationMatchFraction  = 0.07
-
-	authoritativeSlackSecs = 5.0
-	authoritativeFraction  = 0.03
 )
 
 func durationWithinTolerance(expected, actual float64) bool {
-	tolerance := math.Max(durationMatchSlackSecs, expected*durationMatchFraction)
-	return math.Abs(expected-actual) <= tolerance
+	return domain.LengthLoose.Agrees(expected, actual)
 }
 
 func durationWithinAuthoritativeTolerance(expected, actual float64) bool {
-	tolerance := math.Max(authoritativeSlackSecs, expected*authoritativeFraction)
-	return math.Abs(expected-actual) <= tolerance
+	return domain.LengthAuthoritative.Agrees(expected, actual)
 }
 
 func (ac *AcquisitionContext) resolvedLength() float64 {

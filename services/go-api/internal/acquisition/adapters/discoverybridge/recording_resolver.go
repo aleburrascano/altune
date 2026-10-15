@@ -1,6 +1,7 @@
 package discoverybridge
 
 import (
+	"altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/discovery/service/search"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/textnorm"
@@ -18,10 +19,8 @@ import (
 )
 
 const (
-	resolveLimit          = 10
-	maxReferenceMBIDs     = 5
-	durationToleranceSecs = 5.0
-	durationTolerancePct  = 0.03
+	resolveLimit      = 10
+	maxReferenceMBIDs = 5
 )
 
 var (
@@ -199,8 +198,7 @@ func durationDisagrees(want, got float64) bool {
 	if want <= 0 || got <= 0 {
 		return false
 	}
-	tolerance := math.Max(durationToleranceSecs, want*durationTolerancePct)
-	return math.Abs(got-want) > tolerance
+	return !domain.LengthAuthoritative.Agrees(want, got)
 }
 
 func referenceSet(mbid string, recordings []discoveryports.ISRCRecording) []string {

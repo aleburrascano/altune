@@ -192,7 +192,7 @@ service/                 the orchestration: pipeline shape, the pure decisions, 
   step_store.go          STORE — re-validate decode, Store, compensating delete
   step_update_track.go   UPDATE_TRACK — MarkReady + measured duration, or a replace's audio swap
   matching.go            identityScore, metadataRank, featureMatch, qualifierDistance, the sorts, rankAndCollect
-  duration.go            the tolerance windows — durationWithinTolerance, lengthCorroborated, durationAcceptable
+  duration.go            which window applies — durationWithinTolerance, lengthCorroborated, durationAcceptable (the windows are `domain.LengthTolerance`)
   registry.go            SourceRegistry — fans Find across sources into per-source slots, routes Fetch by candidate.Source
   rejection.go           RejectionStage, CandidateRejection, recordRejection, summarizeRejections
   source_key.go          sourceKey / SourceKeys / mergeSourceKeys — the normalized rejected_source_keys identity
@@ -671,7 +671,7 @@ flowchart TD
 | `identityScore` / `identityMin` | which candidates survive the gate at all | raising the floor drops legitimate sparse-metadata tracks; lowering it admits covers |
 | the `rankAndCollect` sorts | which recording enters the library | a tiebreak that looks harmless reorders every equal-identity pair (§7.3) |
 | `metadataRank` weights | non-Topic ordering only — Topic bucketing is upstream of it | tuning views/duration while the real problem is bucket membership |
-| `durationWithinTolerance` | the only F1/F2 defense | tighter rejects legitimate intro/outro trims; looser admits remixes |
+| `durationWithinTolerance` (window: `domain.LengthLoose`) | the only F1/F2 defense | tighter rejects legitimate intro/outro trims; looser admits remixes |
 | `lengthCorroborated` | which window every download is measured against | making it laxer silently re-tightens the gate around an unverified saved duration |
 | `qualifierDistance` or its sort position | master-vs-variant on the same channel; label-vs-fan upload off it | promoting it above `metadataRank` outside the Topic bucket puts a lyrics re-upload ahead of the label's own master |
 | `DownloadStep.identify`'s tiers | whether a wrong recording can enter the library at all | widening rejection past "cluster known" makes the underground long tail unacquirable — the failure that forced the first rollback |
