@@ -436,5 +436,7 @@ func buildTrackRef(track *ports.TrackSnapshot) TrackRef {
 
 		CatalogDuration: deref(track.CatalogDurationSeconds),
 		CatalogExplicit: track.CatalogExplicit,
+		CatalogMBID:     deref(track.CatalogMBID),
+		CatalogSources:  track.CatalogSources,
 	}
 }

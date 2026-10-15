@@ -45,6 +45,20 @@ type RecordingQuery struct {
 	Album    string
 	ISRC     string
 	Duration float64
+	MBID     string
+}
+
+type RecordingFacts struct {
+	MBID           string
+	Title          string
+	Disambiguation string
+	Artists        []string
+	ISRCs          []string
+	Duration       float64
+}
+
+type RecordingLookup interface {
+	RecordingByMBID(ctx context.Context, mbid string) (RecordingFacts, bool, error)
 }
 
 type RecordingResolver interface {

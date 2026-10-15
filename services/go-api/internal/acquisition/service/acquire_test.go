@@ -1337,3 +1337,25 @@ func TestExecuteReplace_FailsCleanlyWhenNoFactIdentifiesTheCurrentFile(t *testin
 		t.Errorf("track audio ref = %v, want %q kept", got, originalRef)
 	}
 }
+
+func TestBuildTrackRef_CarriesTheCatalogPins(t *testing.T) {
+	mbid := "b1a9c0e9-d987-4042-ae91-78d6a3267d69"
+	explicit := true
+	sources := []ports.CatalogSource{{Provider: "ytmusic", ExternalID: "dQw4w9WgXcQ"}, {Provider: "soundcloud", ExternalID: "123"}}
+
+	ref := buildTrackRef(&ports.TrackSnapshot{CatalogMBID: &mbid, CatalogSources: sources, CatalogExplicit: &explicit})
+
+	if ref.CatalogMBID != mbid {
+		t.Errorf("CatalogMBID = %q, want %q", ref.CatalogMBID, mbid)
+	}
+	if len(ref.CatalogSources) != 2 || ref.CatalogSources[0] != sources[0] || ref.CatalogSources[1] != sources[1] {
+		t.Errorf("CatalogSources = %v, want %v", ref.CatalogSources, sources)
+	}
+	if ref.CatalogExplicit == nil || !*ref.CatalogExplicit {
+		t.Errorf("CatalogExplicit = %v, want true", ref.CatalogExplicit)
+	}
+
+	if bare := buildTrackRef(&ports.TrackSnapshot{}); bare.CatalogMBID != "" || bare.CatalogSources != nil {
+		t.Errorf("unpinned track carries pins: %+v", bare)
+	}
+}

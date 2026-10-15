@@ -14,6 +14,9 @@ type FindRequest struct {
 	Duration float64
 	Identity RecordingIdentity
 
+	CatalogSources  []CatalogSource
+	CatalogExplicit *bool
+
 	FallbackOnly bool
 }
 

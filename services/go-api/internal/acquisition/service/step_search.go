@@ -105,6 +105,9 @@ func findRequestFor(ac *AcquisitionContext) ports.FindRequest {
 		Duration: ac.ExpectedLength(),
 		Identity: ac.Identity,
 
+		CatalogSources:  ac.Track.CatalogSources,
+		CatalogExplicit: ac.Track.CatalogExplicit,
+
 		FallbackOnly: ac.FallbackOnly,
 	}
 }

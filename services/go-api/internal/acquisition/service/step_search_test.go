@@ -216,3 +216,21 @@ func TestSearchStep_HealthyAllExcluded_StaysNoMatchFound(t *testing.T) {
 		t.Errorf("failureReason = %q, want permanent no_match_found", got)
 	}
 }
+
+func TestFindRequestFor_CarriesTheCatalogPins(t *testing.T) {
+	explicit := false
+	sources := []ports.CatalogSource{{Provider: "ytmusic", ExternalID: "dQw4w9WgXcQ"}}
+	ac := &AcquisitionContext{Track: TrackRef{CatalogSources: sources, CatalogExplicit: &explicit}}
+
+	req := findRequestFor(ac)
+
+	if len(req.CatalogSources) != 1 || req.CatalogSources[0] != sources[0] {
+		t.Errorf("CatalogSources = %v, want %v", req.CatalogSources, sources)
+	}
+	if req.CatalogExplicit == nil || *req.CatalogExplicit {
+		t.Errorf("CatalogExplicit = %v, want false", req.CatalogExplicit)
+	}
+	if bare := findRequestFor(&AcquisitionContext{}); bare.CatalogSources != nil || bare.CatalogExplicit != nil {
+		t.Errorf("unpinned track yields pins: %+v", bare)
+	}
+}
