@@ -277,9 +277,7 @@ func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, trac
 		sourceKey(deref(track.AudioSourceURL)),
 	)
 	if track.AudioSourceURL == nil {
-		ac.Replace.StoredLength = deref(track.StoredDurationSeconds)
-		slog.InfoContext(ctx, "acquisition.replacing_unknown_source",
-			"track_id", trackId.String(), "stored_length", ac.Replace.StoredLength)
+		slog.InfoContext(ctx, "acquisition.replacing_unknown_source", "track_id", trackId.String())
 	}
 	if len(ac.Replace.ExcludeKeys) > 0 {
 		slog.InfoContext(ctx, "acquisition.replacing_source",
@@ -448,19 +446,34 @@ func buildTrackRef(track *ports.TrackSnapshot) TrackRef {
 }
 
 func (s *AcquireTrackAudioService) fingerprintStoredFile(ctx context.Context, ac *AcquisitionContext, track *ports.TrackSnapshot, trackId shared.TrackId) {
-	if track.AudioSourceURL != nil || track.AudioRef == nil || s.storedAudio == nil || s.identifier == nil {
+	if track.AudioSourceURL != nil || track.AudioRef == nil {
+		return
+	}
+	if s.storedAudio == nil || s.identifier == nil {
+		warnCurrentFileUnidentified(ctx, trackId, "no stored-audio reader or identifier is wired")
 		return
 	}
 	match, err := s.identifyStored(ctx, *track.AudioRef, deref(track.StoredDurationSeconds))
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.replace_current_file_fingerprint_failed",
 			"track_id", trackId.String(), "audio_ref", *track.AudioRef, "error", redact.LogError(err))
+		warnCurrentFileUnidentified(ctx, trackId, "the stored file could not be fingerprinted")
+		return
+	}
+	if match.AcoustID == "" {
+		warnCurrentFileUnidentified(ctx, trackId, "AcoustID returned no id for the stored file")
 		return
 	}
 	ac.Replace.StoredAcoustID = match.AcoustID
 	slog.InfoContext(ctx, "acquisition.replace_current_file_fingerprinted",
 		"track_id", trackId.String(), "audio_ref", *track.AudioRef,
 		"stored_acoustid", match.AcoustID, "known", match.Known())
+}
+
+func warnCurrentFileUnidentified(ctx context.Context, trackId shared.TrackId, reason string) {
+	slog.WarnContext(ctx, "acquisition.replace_current_file_unidentified",
+		"track_id", trackId.String(), "reason", reason,
+		"effect", "no candidate is excluded as the current file")
 }
 
 func (s *AcquireTrackAudioService) identifyStored(ctx context.Context, audioRef string, durationHint float64) (ports.RecordingMatch, error) {

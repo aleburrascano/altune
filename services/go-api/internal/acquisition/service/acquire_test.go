@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -1287,7 +1288,7 @@ func TestExecuteReplace_NoFallbackRetryWhenTheFallbackAlreadyRan(t *testing.T) {
 	}
 }
 
-func TestConfigureReplaceExclusion_UnknownSourceRecordsTheStoredLengthNotARank(t *testing.T) {
+func TestConfigureReplaceExclusion_UnknownSourceExcludesNoCandidateBeforeDownload(t *testing.T) {
 	stored, oldRef := 112.0, "audio/old.m4a"
 	track := &ports.TrackSnapshot{AudioRef: &oldRef, StoredDurationSeconds: &stored}
 	ac := &AcquisitionContext{}
@@ -1296,11 +1297,17 @@ func TestConfigureReplaceExclusion_UnknownSourceRecordsTheStoredLengthNotARank(t
 
 	artTrack := ports.AudioCandidate{URL: "https://music.youtube.com/watch?v=TB0z2HVFxEE", Duration: 112}
 	upload := ports.AudioCandidate{URL: "https://www.youtube.com/watch?v=fV3KcFFVZJ8", Duration: 129}
-	if !ac.Replace.excludesCandidate(artTrack) {
-		t.Error("the candidate matching the stored file's length must be excluded")
+	if len(ac.Replace.ExcludeKeys) != 0 {
+		t.Errorf("ExcludeKeys = %v, want none for an unknown source", ac.Replace.ExcludeKeys)
+	}
+	if ac.Replace.StoredAcoustID != "" {
+		t.Errorf("StoredAcoustID = %q, want empty: only fingerprinting the stored file sets it", ac.Replace.StoredAcoustID)
+	}
+	if ac.Replace.excludesCandidate(artTrack) {
+		t.Error("a candidate of the stored file's 112 s length must stay eligible: the current file is found by fingerprint after download")
 	}
 	if ac.Replace.excludesCandidate(upload) {
-		t.Error("a 129 s upload is not the 112 s stored file and must stay eligible")
+		t.Error("a 129 s upload must stay eligible")
 	}
 }
 
@@ -1561,5 +1568,200 @@ func TestExecuteReplace_TheStoredCopyWorkspaceIsRemovedWhateverTheOutcome(t *tes
 				t.Errorf("stored copy dirs created = %d, want 1", storedDirs)
 			}
 		})
+	}
+}
+
+type uploadsByBytesSource struct {
+	mu      sync.Mutex
+	uploads map[string]string
+	found   []ports.AudioCandidate
+	fetched []string
+}
+
+func (s *uploadsByBytesSource) Name() acqdomain.SourceName { return "uploads" }
+
+func (s *uploadsByBytesSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
+	return s.found, nil
+}
+
+func (s *uploadsByBytesSource) Fetch(_ context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+	s.mu.Lock()
+	s.fetched = append(s.fetched, c.URL)
+	s.mu.Unlock()
+	path := filepath.Join(outDir, "audio.mp3")
+	return fetchedAt(path, os.WriteFile(path, []byte(s.uploads[c.URL]), 0o600))
+}
+
+type acoustIDByBytesIdentifier struct {
+	byBytes map[string]ports.RecordingMatch
+}
+
+func (i acoustIDByBytesIdentifier) Identify(_ context.Context, path string, _ float64) (ports.RecordingMatch, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ports.RecordingMatch{}, err
+	}
+	return i.byBytes[string(data)], nil
+}
+
+func (acoustIDByBytesIdentifier) AcoustIDsFor(context.Context, string) ([]string, error) {
+	return nil, nil
+}
+
+const (
+	sameLengthCurrentURL = "https://www.youtube.com/watch?v=currentFile"
+	sameLengthOtherURL   = "https://www.youtube.com/watch?v=otherUpload"
+	recordingMBID        = "e7ca1ccd-65cf-43e3-9964-ffb5a0479077"
+)
+
+func sameLengthUploads() *uploadsByBytesSource {
+	return &uploadsByBytesSource{
+		uploads: map[string]string{sameLengthCurrentURL: "the current file again", sameLengthOtherURL: "another upload"},
+		found: []ports.AudioCandidate{
+			{Title: "Blinding Lights", URL: sameLengthCurrentURL, Channel: "The Weeknd - Topic", Categories: []string{"Music"}, Duration: 112, ViewCount: 9000000},
+			{Title: "Blinding Lights", URL: sameLengthOtherURL, Channel: "The Weeknd - Topic", Categories: []string{"Music"}, Duration: 112, ViewCount: 1000},
+		},
+	}
+}
+
+func replaceOfAnUnknownSource(t *testing.T, source *uploadsByBytesSource, identifier acoustIDByBytesIdentifier, readerFor func(*bytesAudioStore) ports.StoredAudioReader) (*bytesAudioStore, error) {
+	t.Helper()
+	repo, store, userId, trackId, _ := seedReadyTrack(t)
+	seedUnknownSourceTrack(repo, userId, trackId)
+	resolver := &stubResolver{identity: ports.RecordingIdentity{MBID: recordingMBID, Duration: 112}}
+	options := []func(*AcquireTrackAudioService){WithRecordingResolver(resolver), WithAudioIdentifier(identifier)}
+	if readerFor != nil {
+		options = append(options, WithStoredAudioReader(readerFor(store)))
+	}
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(source), store, options...)
+	return store, svc.ExecuteReplace(context.Background(), userId, trackId)
+}
+
+func storesBytes(store *bytesAudioStore, want string) bool {
+	for _, stored := range store.objects {
+		if stored == want {
+			return true
+		}
+	}
+	return false
+}
+
+func TestExecuteReplace_TheCurrentFileIsFoundByFingerprint(t *testing.T) {
+	source := sameLengthUploads()
+	identifier := acoustIDByBytesIdentifier{byBytes: map[string]ports.RecordingMatch{
+		"original bytes":         {AcoustID: "acoustid-of-the-stored-file", MBIDs: []string{recordingMBID}},
+		"the current file again": {AcoustID: "acoustid-of-the-stored-file", MBIDs: []string{recordingMBID}},
+		"another upload":         {AcoustID: "acoustid-of-another-upload", MBIDs: []string{recordingMBID}},
+	}}
+
+	store, err := replaceOfAnUnknownSource(t, source, identifier,
+		func(s *bytesAudioStore) ports.StoredAudioReader { return storedBytesReader{store: s} })
+	if err != nil {
+		t.Fatalf("ExecuteReplace: %v, want the same-length upload with another fingerprint stored", err)
+	}
+	if !slices.Contains(source.fetched, sameLengthCurrentURL) || !slices.Contains(source.fetched, sameLengthOtherURL) {
+		t.Errorf("fetched %v, want both same-length candidates tried", source.fetched)
+	}
+	if storesBytes(store, "the current file again") || !storesBytes(store, "another upload") {
+		t.Errorf("store = %v, want only the upload with a different fingerprint", store.objects)
+	}
+}
+
+func TestExecuteReplace_NoFingerprintExcludesNothing(t *testing.T) {
+	storedBytes := func(s *bytesAudioStore) ports.StoredAudioReader { return storedBytesReader{store: s} }
+	tests := map[string]struct {
+		readerFor  func(*bytesAudioStore) ports.StoredAudioReader
+		wantLogged string
+	}{
+		"the stored copy fails": {
+			readerFor: func(s *bytesAudioStore) ports.StoredAudioReader {
+				return storedBytesReader{store: s, err: errors.New("object storage unavailable")}
+			},
+			wantLogged: "the stored file could not be fingerprinted",
+		},
+		"AcoustID has no id for the stored file": {
+			readerFor:  storedBytes,
+			wantLogged: "AcoustID returned no id for the stored file",
+		},
+		"no stored-audio reader is wired": {
+			wantLogged: "no stored-audio reader or identifier is wired",
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			source := sameLengthUploads()
+			identifier := acoustIDByBytesIdentifier{byBytes: map[string]ports.RecordingMatch{
+				"the current file again": {AcoustID: "acoustid-of-the-stored-file", MBIDs: []string{recordingMBID}},
+				"another upload":         {AcoustID: "acoustid-of-another-upload", MBIDs: []string{recordingMBID}},
+			}}
+			logs := captureLogs(t)
+
+			store, err := replaceOfAnUnknownSource(t, source, identifier, tt.readerFor)
+			if err != nil {
+				t.Fatalf("ExecuteReplace: %v, want the replace to carry on", err)
+			}
+			if !slices.Contains(source.fetched, sameLengthCurrentURL) {
+				t.Errorf("fetched %v, want the same-length top candidate tried, not excluded", source.fetched)
+			}
+			if !storesBytes(store, "the current file again") {
+				t.Errorf("store = %v, want the top candidate stored: nothing is excluded without a fingerprint", store.objects)
+			}
+			if !strings.Contains(logs.String(), "level=WARN msg=acquisition.replace_current_file_unidentified") ||
+				!strings.Contains(logs.String(), tt.wantLogged) {
+				t.Errorf("logs = %q, want the missing exclusion warned: %s", logs.String(), tt.wantLogged)
+			}
+		})
+	}
+}
+
+func TestExecuteReplace_AnOutageWithOnlyTheCurrentFileLeftIsSourceUnavailableAndRecordsNothing(t *testing.T) {
+	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
+	seedUnknownSourceTrack(repo, userId, trackId)
+	healthy := &uploadsByBytesSource{
+		uploads: map[string]string{sameLengthCurrentURL: "the current file again"},
+		found: []ports.AudioCandidate{
+			{Title: "Blinding Lights", URL: sameLengthCurrentURL, Channel: "The Weeknd - Topic", Categories: []string{"Music"}, Duration: 112},
+		},
+	}
+	rejections := &fakeRejectionStore{}
+	identifier := acoustIDByBytesIdentifier{byBytes: map[string]ports.RecordingMatch{
+		"original bytes":         {AcoustID: "acoustid-of-the-stored-file", MBIDs: []string{recordingMBID}},
+		"the current file again": {AcoustID: "acoustid-of-the-stored-file", MBIDs: []string{recordingMBID}},
+	}}
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(outageSource(), healthy), store,
+		WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: recordingMBID, Duration: 112}}),
+		WithAudioIdentifier(identifier), WithStoredAudioReader(storedBytesReader{store: store}), WithRejectionStore(rejections))
+
+	err := svc.ExecuteReplace(context.Background(), userId, trackId)
+
+	if FailureCodeOf(err) != string(shared.FailureSourceUnavailable) {
+		t.Errorf("failure code = %q (%v), want source_unavailable: a source was down and the only candidate left was the current file", FailureCodeOf(err), err)
+	}
+	if len(rejections.recorded) != 0 {
+		t.Errorf("recorded = %+v, want nothing: the current file is not a lasting rejection", rejections.recorded)
+	}
+	if got := store.objects[originalRef]; got != "original bytes" {
+		t.Errorf("stored audio = %q, want the original kept", got)
+	}
+}
+
+func TestExecuteReplace_TheCurrentFileIsFoundWithoutAResolvedRecording(t *testing.T) {
+	repo, store, userId, trackId, _ := seedReadyTrack(t)
+	seedUnknownSourceTrack(repo, userId, trackId)
+	source := sameLengthUploads()
+	identifier := acoustIDByBytesIdentifier{byBytes: map[string]ports.RecordingMatch{
+		"original bytes":         {AcoustID: "acoustid-of-the-stored-file"},
+		"the current file again": {AcoustID: "acoustid-of-the-stored-file"},
+		"another upload":         {AcoustID: "acoustid-of-another-upload"},
+	}}
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(source), store,
+		WithRecordingResolver(&stubResolver{}), WithAudioIdentifier(identifier), WithStoredAudioReader(storedBytesReader{store: store}))
+
+	err := svc.ExecuteReplace(context.Background(), userId, trackId)
+	if err != nil {
+		t.Fatalf("ExecuteReplace: %v, want the other upload stored", err)
+	}
+	if storesBytes(store, "the current file again") || !storesBytes(store, "another upload") {
+		t.Errorf("store = %v, want only the upload with a different fingerprint", store.objects)
 	}
 }

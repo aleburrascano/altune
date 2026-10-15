@@ -3,7 +3,7 @@
     {
       "id": "pl-replace-measured-length-is-not-the-target",
       "class": "OK",
-      "note": "prod SLAYR 'Phone (Interlude)' (ISRC USSM12600221) replaced while it carried no catalog length: the stored file measured 112 s (the YouTube Music art track) and MusicBrainz registers e7ca1ccd at 128 s (live). The measured 112 s is only the stored length that excludes the art track; it is neither the target nor the resolver query length, so the artist's own 129 s upload is judged against 128 s and stored. The eval harness builds the track ref directly, so the ledger half of this fix is proven by TestGetNeverAimsAtTheLastMeasuredFile and TestExecuteReplace_TheStoredLengthIsNotTheTarget",
+      "note": "prod SLAYR 'Phone (Interlude)' (ISRC USSM12600221) replaced while it carried no catalog length: the stored file measured 112 s (the YouTube Music art track) and MusicBrainz registers e7ca1ccd at 128 s (live). The AcoustIDs and result shapes here are (real AcoustID lookups, with the app's client, of the prod yt-dlp downloads of TB0z2HVFxEE and fV3KcFFVZJ8 (2026-10-15)), not by its length; it is neither the target nor the resolver query length, so the artist's own 129 s upload is judged against 128 s and stored. The eval harness builds the track ref directly, so the ledger half of this fix is proven by TestGetNeverAimsAtTheLastMeasuredFile and TestExecuteReplace_TheStoredLengthIsNotTheTarget",
       "track": {
         "title": "Phone (Interlude)", "artist": "SLAYR", "isrc": "USSM12600221",
         "resolution": {
@@ -11,13 +11,14 @@
           "isrc_recordings": [ { "mbid": "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", "duration": 128 } ]
         }
       },
-      "stored_length": 112,
       "sources": [
         { "name": "ytmsearch", "candidates": [
-          { "title": "Phone (Interlude)", "url": "https://music.youtube.com/watch?v=TB0z2HVFxEE", "channel": "YouTube Music Art Track", "categories": ["Music"], "duration": 112, "resolved": true, "kind": "art_track", "artists": ["SLAYR"] }
+          { "title": "Phone (Interlude)", "url": "https://music.youtube.com/watch?v=TB0z2HVFxEE", "channel": "YouTube Music Art Track", "categories": ["Music"], "duration": 112, "resolved": true, "kind": "art_track", "artists": ["SLAYR"],
+            "acoustid": "67d29ae9-708c-42a1-b5ca-9ba2367e65eb", "recording_mbids": ["e7ca1ccd-65cf-43e3-9964-ffb5a0479077"], "acoustid_results": [ { "id": "67d29ae9-708c-42a1-b5ca-9ba2367e65eb", "score": 0.95413136, "recordings": [ { "mbid": "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", "title": "Phone (interlude)", "artists": ["slayr", "TJAYY"], "duration": 128 } ] } ] }
         ] },
         { "name": "ytdlp", "candidates": [
-          { "title": "SLAYR - Phone (Interlude)", "url": "https://www.youtube.com/watch?v=fV3KcFFVZJ8", "channel": "SLAYR", "categories": ["Music"], "duration": 129, "view_count": 40000, "correct": true }
+          { "title": "SLAYR - Phone (Interlude)", "url": "https://www.youtube.com/watch?v=fV3KcFFVZJ8", "channel": "SLAYR", "categories": ["Music"], "duration": 129, "view_count": 40000, "correct": true,
+            "acoustid": "2b99657a-d010-4e3d-9dda-7b972f14bd9c", "recording_mbids": ["e7ca1ccd-65cf-43e3-9964-ffb5a0479077"], "acoustid_results": [ { "id": "2b99657a-d010-4e3d-9dda-7b972f14bd9c", "score": 0.98552877, "recordings": [ { "mbid": "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", "title": "Phone (interlude)", "artists": ["slayr", "TJAYY"], "duration": 128 } ] } ] }
         ] }
       ]
     }

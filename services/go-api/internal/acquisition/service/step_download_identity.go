@@ -51,6 +51,9 @@ func judgePreview(
 	match ports.RecordingMatch,
 	elapsed time.Duration,
 ) (*identification, *downloadRejection) {
+	if ac.Replace.isCurrentFile(match) {
+		return nil, currentFileRejection(ctx, ac, candidate)
+	}
 	verdict := classifyMatch(ac, match, candidate.Duration)
 	logPreviewFingerprint(ctx, ac, candidate, verdict, elapsed)
 	judged := verificationResult{verdict: verdict}
@@ -142,7 +145,7 @@ func (s *DownloadStep) identify(
 	filePath string,
 	result *verificationResult,
 ) *downloadRejection {
-	if s.identifier == nil || ac.Identity.MBID == "" {
+	if s.identifier == nil || (ac.Identity.MBID == "" && ac.Replace.StoredAcoustID == "") {
 		return nil
 	}
 
@@ -154,6 +157,12 @@ func (s *DownloadStep) identify(
 		return nil
 	}
 
+	if ac.Replace.isCurrentFile(match) {
+		return currentFileRejection(ctx, ac, candidate)
+	}
+	if ac.Identity.MBID == "" {
+		return nil
+	}
 	result.verdict = classifyMatch(ac, match, result.probed)
 	logAudioVerdict(ctx, ac, candidate, result.verdict)
 	return judgeVerdict(ctx, ac, candidate, match, result)
@@ -264,5 +273,16 @@ func fingerprintRejection(candidate ports.AudioCandidate, reason string) *downlo
 		stage:  RejectionFingerprint,
 		reason: reason,
 		err:    fmt.Errorf("candidate %q rejected by fingerprint: %s", candidate.URL, reason),
+	}
+}
+
+func currentFileRejection(ctx context.Context, ac *AcquisitionContext, candidate ports.AudioCandidate) *downloadRejection {
+	slog.InfoContext(ctx, "acquisition.candidate_is_current_file",
+		"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
+		"stored_acoustid", ac.Replace.StoredAcoustID)
+	return &downloadRejection{
+		stage:  RejectionCurrentFile,
+		reason: "current file",
+		err:    fmt.Errorf("candidate %q is the file the track already has", candidate.URL),
 	}
 }

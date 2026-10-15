@@ -30,8 +30,8 @@ func Run(ctx context.Context, kase Case) Outcome {
 	ac := &service.AcquisitionContext{
 		Track: trackRefFor(kase),
 		Replace: service.ReplaceState{
-			ExcludeKeys:  service.SourceKeys(kase.ExcludeURLs),
-			StoredLength: kase.StoredLength,
+			ExcludeKeys:    service.SourceKeys(kase.ExcludeURLs),
+			StoredAcoustID: kase.StoredAcoustID,
 		},
 	}
 	resolveIdentity(ctx, kase, p, ac)

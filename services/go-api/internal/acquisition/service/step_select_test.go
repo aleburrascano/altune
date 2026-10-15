@@ -130,7 +130,7 @@ func TestSearchStep_OutageWithOnlyStoredFileMatch_IsSourceUnavailable(t *testing
 	ctx := withJobAttempt(context.Background(), 1)
 	ac := &AcquisitionContext{
 		Track:   TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200},
-		Replace: ReplaceState{StoredLength: 200},
+		Replace: ReplaceState{ExcludeKeys: []string{sourceKey(matchingCandidate.URL)}},
 	}
 
 	_, err := NewSearchStep(NewSourceRegistry(outageSource(), healthy)).Execute(ctx, ac, pipelineStart{})
@@ -260,7 +260,7 @@ func TestSearchStep_FirstTierHoldingOnlyTheStoredFileStillOpensTheFallbackTier(t
 	registry := NewSourceRegistry(first).WithFallback(findOnlySource{name: "ytdlp"})
 	ac := &AcquisitionContext{
 		Track:   TrackRef{Title: "Phone (Interlude)", Artist: "SLAYR", Duration: 128},
-		Replace: ReplaceState{StoredLength: 112},
+		Replace: ReplaceState{ExcludeKeys: []string{sourceKey(storedArtTrack.URL)}},
 	}
 
 	_, err := NewSearchStep(registry).Execute(context.Background(), ac, pipelineStart{})

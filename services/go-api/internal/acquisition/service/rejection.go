@@ -26,6 +26,7 @@ const (
 	RejectionUndecodable  RejectionStage = "undecodable"
 	RejectionFingerprint  RejectionStage = "fingerprint"
 	RejectionNotAttempted RejectionStage = "not_attempted"
+	RejectionCurrentFile  RejectionStage = "current_file"
 )
 
 type CandidateRejection struct {
@@ -75,7 +76,7 @@ func summarizeRejections(rejections []CandidateRejection) string {
 }
 
 func (s RejectionStage) lasting() bool {
-	return s != RejectionDownload && s != RejectionNotAttempted
+	return s != RejectionDownload && s != RejectionNotAttempted && s != RejectionCurrentFile
 }
 
 func lastingRejectionRecords(ac *AcquisitionContext) []ports.CandidateRejectionRecord {

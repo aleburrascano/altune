@@ -22,24 +22,37 @@
       ]
     },
     {
-      "id": "replace-legacy-track-excludes-the-file-matching-stored-length",
+      "id": "replace-legacy-track-stores-the-artists-upload-over-the-art-track",
       "class": "OK",
-      "note": "a track acquired before audio_source_url existed has nothing to exclude; the candidate whose length matches the stored file (within max(5s, 3%)) is treated as the current file and excluded, so the first replace returns a different one",
-      "track": { "title": "Blinding Lights", "artist": "The Weeknd", "duration": 200 },
-      "stored_length": 200,
+      "note": "prod SLAYR Phone (Interlude) ISRC USSM12600221: a legacy replace stores the artist's upload, not the 112 s art track, which fails the 128 s identity length. AcoustIDs and result shapes are real AcoustID lookups, with the app's client, of the prod yt-dlp downloads of TB0z2HVFxEE and fV3KcFFVZJ8 (2026-10-15).",
+      "track": {
+        "title": "Phone (Interlude)", "artist": "SLAYR", "isrc": "USSM12600221",
+        "resolution": {
+          "search": { "mbid": "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", "isrc": "USSM12600221", "duration": 128 },
+          "isrc_recordings": [ { "mbid": "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", "duration": 128 } ]
+        }
+      },
       "candidates": [
-        { "title": "Blinding Lights", "url": "yt:presumed-current", "channel": "The Weeknd - Topic", "categories": ["Music"], "duration": 200, "view_count": 50000000 },
-        { "title": "The Weeknd - Blinding Lights (Audio)", "url": "yt:alternate", "channel": "AnotherUploader", "categories": ["Music"], "duration": 215, "view_count": 1000, "correct": true }
+          { "title": "Phone (Interlude)", "url": "https://music.youtube.com/watch?v=TB0z2HVFxEE", "channel": "YouTube Music Art Track", "categories": ["Music"], "duration": 112, "resolved": true, "kind": "art_track", "artists": ["SLAYR"],
+            "acoustid": "67d29ae9-708c-42a1-b5ca-9ba2367e65eb", "recording_mbids": ["e7ca1ccd-65cf-43e3-9964-ffb5a0479077"], "acoustid_results": [ { "id": "67d29ae9-708c-42a1-b5ca-9ba2367e65eb", "score": 0.95413136, "recordings": [ { "mbid": "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", "title": "Phone (interlude)", "artists": ["slayr", "TJAYY"], "duration": 128 } ] } ] },
+          { "title": "SLAYR - Phone (Interlude)", "url": "https://www.youtube.com/watch?v=fV3KcFFVZJ8", "channel": "SLAYR", "categories": ["Music"], "duration": 129, "view_count": 40000, "correct": true,
+            "acoustid": "2b99657a-d010-4e3d-9dda-7b972f14bd9c", "recording_mbids": ["e7ca1ccd-65cf-43e3-9964-ffb5a0479077"], "acoustid_results": [ { "id": "2b99657a-d010-4e3d-9dda-7b972f14bd9c", "score": 0.98552877, "recordings": [ { "mbid": "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", "title": "Phone (interlude)", "artists": ["slayr", "TJAYY"], "duration": 128 } ] } ] }
       ]
     },
     {
-      "id": "replace-legacy-track-with-only-stored-length-match-fails-cleanly",
+      "id": "replace-legacy-track-with-only-the-art-track-fails-cleanly",
       "class": "OK",
-      "note": "the only candidate matches the stored length and is excluded, leaving nothing to store; the pipeline must fail so the caller keeps the original audio rather than re-storing the same file",
-      "track": { "title": "Rare Leak", "artist": "Some Artist", "duration": 200, "authoritative_duration": 200 },
-      "stored_length": 200,
+      "note": "prod SLAYR Phone (Interlude): the only candidate is the 112 s art track, which fails the 128 s identity length, leaving nothing to store; the pipeline must fail so the caller keeps the original audio rather than re-storing the same file",
+      "track": {
+        "title": "Phone (Interlude)", "artist": "SLAYR", "isrc": "USSM12600221",
+        "resolution": {
+          "search": { "mbid": "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", "isrc": "USSM12600221", "duration": 128 },
+          "isrc_recordings": [ { "mbid": "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", "duration": 128 } ]
+        }
+      },
       "candidates": [
-        { "title": "Some Artist - Rare Leak", "url": "sc:only", "channel": "Some Artist", "duration": 200 }
+          { "title": "Phone (Interlude)", "url": "https://music.youtube.com/watch?v=TB0z2HVFxEE", "channel": "YouTube Music Art Track", "categories": ["Music"], "duration": 112, "resolved": true, "kind": "art_track", "artists": ["SLAYR"],
+            "acoustid": "67d29ae9-708c-42a1-b5ca-9ba2367e65eb", "recording_mbids": ["e7ca1ccd-65cf-43e3-9964-ffb5a0479077"], "acoustid_results": [ { "id": "67d29ae9-708c-42a1-b5ca-9ba2367e65eb", "score": 0.95413136, "recordings": [ { "mbid": "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", "title": "Phone (interlude)", "artists": ["slayr", "TJAYY"], "duration": 128 } ] } ] }
       ]
     },
     {
