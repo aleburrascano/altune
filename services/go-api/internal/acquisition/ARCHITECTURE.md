@@ -354,15 +354,20 @@ outcome equals the serial walk. Per candidate:
    (`ports.SkipPreviewFallback`), and every preview logs
    `acquisition.preview_fingerprint`.
 3. The full download, then the duration and decode gates.
-4. `ClassifyAudio(ref, duration, results)` classifies the fingerprint (skipped when
+4. `ClassifyAudio(ref, duration, results, facts)` classifies the fingerprint (skipped when
    the preview already produced the verdict).
 
 `ClassifyAudio` drops each linked recording whose length disagrees with the audio
 (authoritative tolerance, max(5s, 3%)), then returns one `AudioVerdict`: `hard`
 when a surviving link is in the reference `MBIDs`; `soft` when one names the same
-song by the same artist with no unrequested qualifier and the length agrees;
-`other_version` when the same song survives only with an unrequested qualifier;
-`different_song` otherwise; `unknown` when AcoustID returned nothing. `hard` and
+song by the same artist with no unrequested qualifier, the length agrees, and its
+MusicBrainz title plus disambiguation carries the track's version labels
+(`versiontag.RecordingLabels`); `other_version` when the same song survives only with
+an unrequested qualifier or with other version labels; `different_song` otherwise;
+`unknown` when AcoustID returned nothing, or when the version labels could not be
+read. The download step asks `ports.RecordingLookup` (`RecordingByMBID`) for the
+facts of the linked recordings that would otherwise be `soft`: at most three per
+candidate, cached for the job, stopping at the first with matching labels. `hard` and
 `soft` set `IdentityVerified`. `other_version` and `different_song` reject at stage
 `fingerprint`. Each verdict logs `acquisition.audio_verdict`, with the surviving
 links and `reference_doubted`.

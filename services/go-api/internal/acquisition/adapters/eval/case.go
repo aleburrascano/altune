@@ -188,15 +188,16 @@ func (c Candidate) probedDuration() float64 {
 }
 
 type Case struct {
-	ID             string      `json:"id"`
-	Class          string      `json:"class"`
-	Note           string      `json:"note,omitempty"`
-	Track          Track       `json:"track"`
-	ExcludeURLs    []string    `json:"exclude_urls,omitempty"`
-	StoredAcoustID string      `json:"stored_acoustid,omitempty"`
-	Candidates     []Candidate `json:"candidates,omitempty"`
-	Sources        []Source    `json:"sources,omitempty"`
-	Pending        string      `json:"pending,omitempty"`
+	ID             string            `json:"id"`
+	Class          string            `json:"class"`
+	Note           string            `json:"note,omitempty"`
+	Track          Track             `json:"track"`
+	ExcludeURLs    []string          `json:"exclude_urls,omitempty"`
+	StoredAcoustID string            `json:"stored_acoustid,omitempty"`
+	Recordings     []PinnedRecording `json:"recordings,omitempty"`
+	Candidates     []Candidate       `json:"candidates,omitempty"`
+	Sources        []Source          `json:"sources,omitempty"`
+	Pending        string            `json:"pending,omitempty"`
 
 	ExpectProvenance  string `json:"expect_provenance,omitempty"`
 	ExpectFailureCode string `json:"expect_failure_code,omitempty"`
@@ -405,7 +406,24 @@ func validateCaseExtensions(c Case) error {
 	if err := validateExpectProvenance(c); err != nil {
 		return err
 	}
+	if err := validateRecordings(c); err != nil {
+		return err
+	}
 	return validateResolution(c)
+}
+
+func validateRecordings(c Case) error {
+	seen := make(map[string]bool, len(c.Recordings))
+	for _, rec := range c.Recordings {
+		switch {
+		case rec.MBID == "":
+			return fmt.Errorf("case %q records a recording lookup with no mbid", c.ID)
+		case seen[rec.MBID]:
+			return fmt.Errorf("case %q records recording %q twice", c.ID, rec.MBID)
+		}
+		seen[rec.MBID] = true
+	}
+	return nil
 }
 
 func validateExpectProvenance(c Case) error {

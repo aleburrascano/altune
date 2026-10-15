@@ -162,8 +162,11 @@ func (a *App) buildAcquisitionScheduler(
 				acqDiscoveryBridge.WithISRCAuthority(disc.musicBrainz),
 				acqDiscoveryBridge.WithRecordingLookup(acqDiscoveryBridge.NewRecordingLookup(disc.musicBrainz)))
 		}
-		acquireOpts = append(acquireOpts, acqService.WithRecordingResolver(
-			acqDiscoveryBridge.NewRecordingResolver(disc.searchSvc, resolverOpts...)))
+		recordingResolver := acqDiscoveryBridge.NewRecordingResolver(disc.searchSvc, resolverOpts...)
+		acquireOpts = append(acquireOpts, acqService.WithRecordingResolver(recordingResolver))
+		if disc.musicBrainz != nil {
+			acquireOpts = append(acquireOpts, acqService.WithAcquireRecordingLookup(recordingResolver))
+		}
 	}
 	lookups := &lookupTracker{}
 	if a.cfg.AcoustIDAPIKey != "" {

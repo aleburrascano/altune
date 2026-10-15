@@ -1983,3 +1983,105 @@ func TestDownloadStep_CandidateDownloadFailedLogRedactsCookiePath(t *testing.T) 
 		t.Fatalf("candidate URL should stay in the log for triage:\n%s", out)
 	}
 }
+
+type stubVersionLookup struct {
+	facts map[string]ports.RecordingFacts
+	err   error
+	calls []string
+}
+
+func (s *stubVersionLookup) RecordingByMBID(_ context.Context, mbid string) (ports.RecordingFacts, bool, error) {
+	s.calls = append(s.calls, mbid)
+	if s.err != nil {
+		return ports.RecordingFacts{}, false, s.err
+	}
+	facts, found := s.facts[mbid]
+	return facts, found, nil
+}
+
+func plainTitledLinks(mbids ...string) ports.RecordingMatch {
+	recordings := make([]ports.LinkedRecording, 0, len(mbids))
+	for _, mbid := range mbids {
+		recordings = append(recordings, ports.LinkedRecording{MBID: mbid, Title: "Sunglasses at Night", Artists: []string{"Corey Hart"}})
+	}
+	return ports.RecordingMatch{AcoustID: "ac-linked", MBIDs: mbids, Score: 0.97, Results: linkedResults(recordings...)}
+}
+
+func TestDownloadStep_SoftNeedsTheSameVersionLabels(t *testing.T) {
+	plain := ports.RecordingFacts{MBID: "mb-linked", Title: "Sunglasses at Night"}
+	acoustic := ports.RecordingFacts{MBID: "mb-linked", Title: "Sunglasses at Night", Disambiguation: "acoustic"}
+	remastered := ports.RecordingFacts{MBID: "mb-linked", Title: "Sunglasses at Night", Disambiguation: "remastered"}
+	factsLookup := func(facts ports.RecordingFacts) *stubVersionLookup {
+		return &stubVersionLookup{facts: map[string]ports.RecordingFacts{facts.MBID: facts}}
+	}
+	tests := []struct {
+		name         string
+		lookup       *stubVersionLookup
+		wantReject   string
+		wantVerdict  VerdictKind
+		wantVerified bool
+	}{
+		{"an acoustic disambiguation is another version", factsLookup(acoustic), "other version", "", false},
+		{"matching labels are soft", factsLookup(plain), "", VerdictSoft, true},
+		{"a remaster disambiguation is the same version", factsLookup(remastered), "", VerdictSoft, true},
+		{"a failed lookup is not soft", &stubVersionLookup{err: errors.New("musicbrainz down")}, "", VerdictUnknown, false},
+		{"an unknown recording is not soft", &stubVersionLookup{}, "", VerdictUnknown, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			step := NewDownloadStep(&fileWritingSearcher{writeFile: true},
+				WithDownloadIdentifier(&stubIdentifier{match: plainTitledLinks("mb-linked")}), WithRecordingLookup(tt.lookup))
+			ac := downloadContext("mb-master", nil)
+
+			_, err := step.Execute(context.Background(), ac, afterSelect{})
+			if tt.wantReject != "" {
+				if err == nil || len(ac.Rejections) == 0 || ac.Rejections[0].Reason != tt.wantReject {
+					t.Fatalf("err = %v, rejections = %+v, want every candidate rejected as %q", err, ac.Rejections, tt.wantReject)
+				}
+				return
+			}
+			if tt.wantVerdict == VerdictUnknown {
+				if !errors.Is(err, ErrNoConfidentMatch) {
+					t.Fatalf("err = %v, want an unverified match held below the confidence floor", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+			defer os.RemoveAll(filepath.Dir(ac.TempPath))
+			if ac.Verdict.Kind != tt.wantVerdict {
+				t.Errorf("verdict = %q, want %q", ac.Verdict.Kind, tt.wantVerdict)
+			}
+			if got := ac.Provenance() == domain.ProvenanceVerified; got != tt.wantVerified {
+				t.Errorf("verified = %v, want %v", got, tt.wantVerified)
+			}
+		})
+	}
+}
+
+func TestDownloadStep_VersionLookupsAreCappedAndCachedPerJob(t *testing.T) {
+	acoustic := func(mbid string) ports.RecordingFacts {
+		return ports.RecordingFacts{MBID: mbid, Title: "Sunglasses at Night", Disambiguation: "acoustic"}
+	}
+	lookup := &stubVersionLookup{facts: map[string]ports.RecordingFacts{
+		"mb-1": acoustic("mb-1"), "mb-2": acoustic("mb-2"), "mb-3": acoustic("mb-3"), "mb-4": acoustic("mb-4"),
+	}}
+	step := NewDownloadStep(&fileWritingSearcher{writeFile: true},
+		WithDownloadIdentifier(&stubIdentifier{match: plainTitledLinks("mb-1", "mb-2", "mb-3", "mb-4")}), WithRecordingLookup(lookup))
+	ac := downloadContext("mb-master", nil)
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err == nil {
+		t.Fatal("expected every candidate rejected as another version")
+	}
+	if len(ac.Rejections) != 2 {
+		t.Fatalf("rejections = %+v, want one per candidate", ac.Rejections)
+	}
+	if want := []string{"mb-1", "mb-2", "mb-3"}; !equalStrings(lookup.calls, want) {
+		t.Errorf("lookups = %v, want %v: three per candidate, the second candidate served from the job's cache", lookup.calls, want)
+	}
+}
+
+func equalStrings(a, b []string) bool {
+	return len(a) == len(b) && strings.Join(a, "\x00") == strings.Join(b, "\x00")
+}

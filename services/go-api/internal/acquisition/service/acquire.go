@@ -25,6 +25,7 @@ type AcquireTrackAudioService struct {
 	storeKeyPrefix  string
 	rejections      ports.RejectionStore
 	downloadLimiter *DownloadLimiter
+	recordingLookup ports.RecordingLookup
 	verifySkips     ports.VerifySkipRecorder
 	confidenceFloor float64
 	workspace       ports.TempWorkspace
@@ -53,6 +54,10 @@ func NewAcquireTrackAudioService(
 
 func WithDownloadLimiter(l *DownloadLimiter) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.downloadLimiter = l }
+}
+
+func WithAcquireRecordingLookup(l ports.RecordingLookup) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) { s.recordingLookup = l }
 }
 
 func WithAcquireTempWorkspace(w ports.TempWorkspace) func(*AcquireTrackAudioService) {

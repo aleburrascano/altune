@@ -1,0 +1,67 @@
+{
+  "cases": [
+    {
+      "id": "soft-same-version-recording-stays-soft",
+      "class": "OK",
+      "note": "prod track fb445faa Autumn! 'Comedy!' (ISRC QZNWT2078100), stored verified on a soft verdict from the YouTube Music art track azE7RLVe15o (prod container yt-dlp, 138s). Real AcoustID lookup with the app's client (meta=recordings releasegroups, 2026-10-15): result a3bfe81d, score 0.9314874, links recording 72d538dd, not the ISRC's recording ff36acc9. MusicBrainz lookups of 72d538dd and ff36acc9 (musicbrainz.org/ws/2/recording, 2026-10-15): title 'Comedy!', empty disambiguation, 138000 ms and 138082 ms. The linked recording is the same version, so it stays soft and verified",
+      "track": {
+        "title": "Comedy!",
+        "artist": "Autumn!",
+        "album": "Comedy!",
+        "isrc": "QZNWT2078100",
+        "resolution": {
+          "search": {
+            "mbid": "ff36acc9-9aa4-4054-b77a-417ffad766c9",
+            "isrc": "QZNWT2078100",
+            "duration": 138
+          },
+          "isrc_recordings": [
+            {
+              "mbid": "ff36acc9-9aa4-4054-b77a-417ffad766c9",
+              "duration": 138
+            }
+          ]
+        }
+      },
+      "recordings": [
+        {
+          "mbid": "72d538dd-ffe7-4d04-a0a2-9339283f3166",
+          "title": "Comedy!",
+          "artists": ["Autumn!"],
+          "duration": 138
+        }
+      ],
+      "expect_provenance": "verified",
+      "candidates": [
+        {
+          "title": "Comedy!",
+          "url": "https://music.youtube.com/watch?v=azE7RLVe15o",
+          "channel": "YouTube Music Art Track",
+          "categories": ["Music"],
+          "duration": 138,
+          "resolved": true,
+          "kind": "art_track",
+          "artists": ["Autumn!"],
+          "album": "Comedy!",
+          "correct": true,
+          "acoustid": "a3bfe81d-965b-4406-8cc6-cff7e5f8897a",
+          "recording_mbids": ["72d538dd-ffe7-4d04-a0a2-9339283f3166"],
+          "acoustid_results": [
+            {
+              "id": "a3bfe81d-965b-4406-8cc6-cff7e5f8897a",
+              "score": 0.9314874,
+              "recordings": [
+                {
+                  "mbid": "72d538dd-ffe7-4d04-a0a2-9339283f3166",
+                  "title": "Comedy!",
+                  "artists": ["Autumn!"],
+                  "duration": 138
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

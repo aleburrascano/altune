@@ -307,6 +307,7 @@ func (s *AcquireTrackAudioService) buildSteps(userId shared.UserId, trackId shar
 	return CoreSteps(s.sources, s.audioTagger, s.audioStore, s.audioProber, s.identifier, s.workspace,
 		[]func(*DownloadStep){
 			WithStepDownloadLimiter(s.downloadLimiter),
+			WithRecordingLookup(s.recordingLookup),
 			WithConfidenceFloor(s.confidenceFloor),
 			WithStepVerifySkips(s.verifySkips),
 		},

@@ -3,6 +3,7 @@ package service
 import (
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/versiontag"
 	"math"
 	"regexp"
 	"slices"
@@ -31,13 +32,15 @@ type AudioVerdict struct {
 	Surviving []ports.LinkedRecording
 }
 
-func ClassifyAudio(ref AudioReference, audioDuration float64, results []ports.AcoustIDResult) AudioVerdict {
+type LookedUpRecordings map[string]ports.RecordingFacts
+
+func ClassifyAudio(ref AudioReference, audioDuration float64, results []ports.AcoustIDResult, facts LookedUpRecordings) AudioVerdict {
 	surviving := recordingsMatchingLength(audioDuration, results)
 	if len(surviving) == 0 {
 		return AudioVerdict{Kind: VerdictUnknown}
 	}
 	return AudioVerdict{
-		Kind:      newAudioMatcher(ref, audioDuration).verdictFor(surviving),
+		Kind:      newAudioMatcher(ref, audioDuration, facts).verdictFor(surviving),
 		Score:     topScore(results),
 		Surviving: surviving,
 	}
@@ -75,7 +78,30 @@ func topScore(results []ports.AcoustIDResult) float64 {
 	return best
 }
 
+func SoftCandidateMBIDs(ref AudioReference, audioDuration float64, results []ports.AcoustIDResult) []string {
+	matcher := newAudioMatcher(ref, audioDuration, nil)
+	var mbids []string
+	for _, recording := range recordingsMatchingLength(audioDuration, results) {
+		if recording.MBID != "" && !matcher.isReferenceRecording(recording) && matcher.agreesOnSongArtistAndLength(recording) && !slices.Contains(mbids, recording.MBID) {
+			mbids = append(mbids, recording.MBID)
+		}
+	}
+	return mbids
+}
+
+func sharesVersionLabels(trackTitle string, facts ports.RecordingFacts) bool {
+	return slices.Equal(versiontag.RecordingLabels(trackTitle), versiontag.RecordingLabels(recordingTitleWithDisambiguation(facts)))
+}
+
+func recordingTitleWithDisambiguation(facts ports.RecordingFacts) string {
+	if facts.Disambiguation == "" {
+		return facts.Title
+	}
+	return facts.Title + " (" + facts.Disambiguation + ")"
+}
+
 type audioMatcher struct {
+	facts        LookedUpRecordings
 	mbids        []string
 	core         string
 	ref          AudioReference
@@ -83,8 +109,9 @@ type audioMatcher struct {
 	lengthAgrees bool
 }
 
-func newAudioMatcher(ref AudioReference, audioDuration float64) audioMatcher {
+func newAudioMatcher(ref AudioReference, audioDuration float64, facts LookedUpRecordings) audioMatcher {
 	return audioMatcher{
+		facts:        facts,
 		mbids:        ref.MBIDs,
 		core:         coreTitle(ref.Title),
 		ref:          ref,
@@ -111,6 +138,8 @@ func (m audioMatcher) verdictFor(surviving []ports.LinkedRecording) VerdictKind 
 		return VerdictSoft
 	case slices.ContainsFunc(surviving, m.isOtherVersion):
 		return VerdictOtherVersion
+	case slices.ContainsFunc(surviving, m.isUnverifiedVersion):
+		return VerdictUnknown
 	default:
 		return VerdictDifferentSong
 	}
@@ -120,12 +149,26 @@ func (m audioMatcher) isReferenceRecording(recording ports.LinkedRecording) bool
 	return recording.MBID != "" && slices.Contains(m.mbids, recording.MBID)
 }
 
-func (m audioMatcher) agreesSoftly(recording ports.LinkedRecording) bool {
+func (m audioMatcher) agreesOnSongArtistAndLength(recording ports.LinkedRecording) bool {
 	return m.lengthAgrees && m.isSameSong(recording) && !m.hasUnrequestedQualifier(recording) && m.sharesArtist(recording)
 }
 
+func (m audioMatcher) agreesSoftly(recording ports.LinkedRecording) bool {
+	facts, found := m.facts[recording.MBID]
+	return m.agreesOnSongArtistAndLength(recording) && found && sharesVersionLabels(m.ref.Title, facts)
+}
+
 func (m audioMatcher) isOtherVersion(recording ports.LinkedRecording) bool {
-	return m.isSameSong(recording) && m.hasUnrequestedQualifier(recording)
+	if m.isSameSong(recording) && m.hasUnrequestedQualifier(recording) {
+		return true
+	}
+	facts, found := m.facts[recording.MBID]
+	return found && m.agreesOnSongArtistAndLength(recording) && !sharesVersionLabels(m.ref.Title, facts)
+}
+
+func (m audioMatcher) isUnverifiedVersion(recording ports.LinkedRecording) bool {
+	_, found := m.facts[recording.MBID]
+	return !found && m.agreesOnSongArtistAndLength(recording)
 }
 
 func (m audioMatcher) isSameSong(recording ports.LinkedRecording) bool {

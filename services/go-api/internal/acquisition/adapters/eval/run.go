@@ -37,7 +37,8 @@ func Run(ctx context.Context, kase Case) Outcome {
 	resolveIdentity(ctx, kase, p, ac)
 
 	ws := tempfs.New()
-	steps := service.CoreSteps(p.registry(), nil, p, p, p, ws, nil)
+	steps := service.CoreSteps(p.registry(), nil, p, p, p, ws,
+		[]func(*service.DownloadStep){service.WithRecordingLookup(recordedLookups(kase.Recordings))})
 	runErr := service.RunPipeline(ctx, steps, ac)
 	service.CleanupTemp(ctx, ws, ac)
 	return outcomeOf(kase, ac, runErr, p.clock)
@@ -198,4 +199,15 @@ func targetLength(t Track) float64 {
 		return t.CatalogDuration
 	}
 	return t.Duration
+}
+
+type recordedLookups []PinnedRecording
+
+func (l recordedLookups) RecordingByMBID(_ context.Context, mbid string) (ports.RecordingFacts, bool, error) {
+	for _, rec := range l {
+		if rec.MBID == mbid {
+			return rec.facts(), true, nil
+		}
+	}
+	return ports.RecordingFacts{}, false, nil
 }

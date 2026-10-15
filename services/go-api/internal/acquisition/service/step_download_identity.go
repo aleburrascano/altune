@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 )
 
@@ -41,10 +42,10 @@ func (s *DownloadStep) previewIdentification(
 		return nil, nil
 	}
 
-	return judgePreview(ctx, ac, candidate, match, time.Since(started))
+	return s.judgePreview(ctx, ac, candidate, match, time.Since(started))
 }
 
-func judgePreview(
+func (s *DownloadStep) judgePreview(
 	ctx context.Context,
 	ac *AcquisitionContext,
 	candidate ports.AudioCandidate,
@@ -54,7 +55,7 @@ func judgePreview(
 	if ac.Replace.isCurrentFile(match) {
 		return nil, currentFileRejection(ctx, ac, candidate)
 	}
-	verdict := classifyMatch(ac, match, candidate.Duration)
+	verdict := s.classifyMatch(ctx, ac, match, candidate.Duration)
 	logPreviewFingerprint(ctx, ac, candidate, verdict, elapsed)
 	judged := verificationResult{verdict: verdict}
 	if rejection := judgeVerdict(ctx, ac, candidate, match, &judged); rejection != nil {
@@ -163,13 +164,15 @@ func (s *DownloadStep) identify(
 	if ac.Identity.MBID == "" {
 		return nil
 	}
-	result.verdict = classifyMatch(ac, match, result.probed)
+	result.verdict = s.classifyMatch(ctx, ac, match, result.probed)
 	logAudioVerdict(ctx, ac, candidate, result.verdict)
 	return judgeVerdict(ctx, ac, candidate, match, result)
 }
 
-func classifyMatch(ac *AcquisitionContext, match ports.RecordingMatch, probed float64) AudioVerdict {
-	verdict := ClassifyAudio(referenceFor(ac), probed, match.Results)
+func (s *DownloadStep) classifyMatch(ctx context.Context, ac *AcquisitionContext, match ports.RecordingMatch, probed float64) AudioVerdict {
+	ref := referenceFor(ac)
+	facts := s.sameVersionFacts(ctx, ref, SoftCandidateMBIDs(ref, probed, match.Results))
+	verdict := ClassifyAudio(ref, probed, match.Results, facts)
 	if verdict.Kind == VerdictUnknown && match.Known() && identityAgrees(ac, match) {
 		return AudioVerdict{Kind: VerdictHard, Score: match.Score}
 	}
@@ -285,4 +288,73 @@ func currentFileRejection(ctx context.Context, ac *AcquisitionContext, candidate
 		reason: "current file",
 		err:    fmt.Errorf("candidate %q is the file the track already has", candidate.URL),
 	}
+}
+
+const maxVersionLookupsPerCandidate = 3
+
+type recordingFactsCache struct {
+	mu      sync.Mutex
+	entries map[string]ports.RecordingFacts
+	missing map[string]bool
+}
+
+func (c *recordingFactsCache) get(mbid string) (facts ports.RecordingFacts, found, known bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.missing[mbid] {
+		return ports.RecordingFacts{}, false, true
+	}
+	facts, found = c.entries[mbid]
+	return facts, found, found
+}
+
+func (c *recordingFactsCache) put(mbid string, facts ports.RecordingFacts, found bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !found {
+		if c.missing == nil {
+			c.missing = make(map[string]bool)
+		}
+		c.missing[mbid] = true
+		return
+	}
+	if c.entries == nil {
+		c.entries = make(map[string]ports.RecordingFacts)
+	}
+	c.entries[mbid] = facts
+}
+
+func WithRecordingLookup(l ports.RecordingLookup) func(*DownloadStep) {
+	return func(s *DownloadStep) { s.recordingLookup = l }
+}
+
+func (s *DownloadStep) sameVersionFacts(ctx context.Context, ref AudioReference, mbids []string) LookedUpRecordings {
+	if s.recordingLookup == nil {
+		return nil
+	}
+	facts := make(LookedUpRecordings)
+	for _, mbid := range mbids[:min(len(mbids), maxVersionLookupsPerCandidate)] {
+		recording, found := s.recordingFacts(ctx, mbid)
+		if !found {
+			continue
+		}
+		facts[mbid] = recording
+		if sharesVersionLabels(ref.Title, recording) {
+			break
+		}
+	}
+	return facts
+}
+
+func (s *DownloadStep) recordingFacts(ctx context.Context, mbid string) (ports.RecordingFacts, bool) {
+	if facts, found, known := s.factsCache.get(mbid); known {
+		return facts, found
+	}
+	facts, found, err := s.recordingLookup.RecordingByMBID(ctx, mbid)
+	if err != nil {
+		slog.WarnContext(ctx, "acquisition.version_lookup_failed", "mbid", mbid, "error", redact.LogError(err))
+		return ports.RecordingFacts{}, false
+	}
+	s.factsCache.put(mbid, facts, found)
+	return facts, found
 }

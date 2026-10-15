@@ -36,6 +36,7 @@ type verdictCase struct {
 	ref           AudioReference
 	audioDuration float64
 	results       []ports.AcoustIDResult
+	facts         LookedUpRecordings
 	want          VerdictKind
 }
 
@@ -43,10 +44,10 @@ func assertVerdicts(t *testing.T, cases []verdictCase) {
 	t.Helper()
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := ClassifyAudio(tc.ref, tc.audioDuration, tc.results)
+			got := ClassifyAudio(tc.ref, tc.audioDuration, tc.results, tc.facts)
 
 			if got.Kind != tc.want {
-				t.Errorf("ClassifyAudio(%+v, %v, %+v).Kind = %q, want %q", tc.ref, tc.audioDuration, tc.results, got.Kind, tc.want)
+				t.Errorf("ClassifyAudio(%+v, %v, %+v, %+v).Kind = %q, want %q", tc.ref, tc.audioDuration, tc.results, tc.facts, got.Kind, tc.want)
 			}
 		})
 	}
@@ -66,7 +67,8 @@ func TestClassifyAudio_StudyCases(t *testing.T) {
 			audioDuration: 281,
 			results: []ports.AcoustIDResult{acoustIDResult("cc", 0.88,
 				linked("sibling", "(I Just) Died in Your Arms", 279, "Cutting Crew"))},
-			want: VerdictSoft,
+			facts: lookedUp("sibling", "(I Just) Died in Your Arms", ""),
+			want:  VerdictSoft,
 		},
 		{
 			name:          "Pavarotti Nessun dorma only links live recordings, so the audio is another version",
@@ -95,7 +97,7 @@ func TestClassifyAudio_StudyCases(t *testing.T) {
 }
 
 func TestClassifyAudio_LengthFilterKeepsOnlyLinksNearTheAudioLength(t *testing.T) {
-	verdict := ClassifyAudio(drinkingInLA, 236, []ports.AcoustIDResult{drinkingInLAResult})
+	verdict := ClassifyAudio(drinkingInLA, 236, []ports.AcoustIDResult{drinkingInLAResult}, nil)
 
 	if got, want := survivingMBIDs(verdict), []string{"5d6efd30"}; !slices.Equal(got, want) {
 		t.Errorf("surviving links for 236s audio = %v, want %v", got, want)
@@ -121,7 +123,7 @@ func TestClassifyAudio_LengthFilterBoundaries(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			results := []ports.AcoustIDResult{acoustIDResult("a", 0.9, linked("link", "Drinking in L.A.", tt.link, "Bran Van 3000"))}
 
-			verdict := ClassifyAudio(drinkingInLA, tt.audioDuration, results)
+			verdict := ClassifyAudio(drinkingInLA, tt.audioDuration, results, nil)
 
 			if survives := len(verdict.Surviving) == 1; survives != tt.wantSurvives {
 				t.Errorf("link of %vs for %vs audio survives = %v, want %v", tt.link, tt.audioDuration, survives, tt.wantSurvives)
@@ -131,6 +133,10 @@ func TestClassifyAudio_LengthFilterBoundaries(t *testing.T) {
 }
 
 var dontStopMeNow = AudioReference{Title: "Don't Stop Me Now", Artist: "Queen", Duration: 209, MBIDs: []string{"canonical"}}
+
+func lookedUp(mbid, title, disambiguation string) LookedUpRecordings {
+	return LookedUpRecordings{mbid: {MBID: mbid, Title: title, Disambiguation: disambiguation}}
+}
 
 func singleLink(recording ports.LinkedRecording) []ports.AcoustIDResult {
 	return []ports.AcoustIDResult{acoustIDResult("q", 0.85, recording)}
@@ -143,6 +149,7 @@ func TestClassifyAudio_SoftNeedsTitleQualifierArtistAndLengthToAgree(t *testing.
 		{
 			name: "title qualifier artist and length all agree", ref: dontStopMeNow, audioDuration: 210,
 			results: singleLink(linked("sibling", "Don’t Stop Me Now", 210, "Queen")),
+			facts:   lookedUp("sibling", "Don't Stop Me Now", ""),
 			want:    VerdictSoft,
 		},
 		{
@@ -179,24 +186,28 @@ func TestClassifyAudio_SoftAgreementDetails(t *testing.T) {
 			name: "a left curly apostrophe matches a straight one",
 			ref:  AudioReference{Title: "Rock ‘n’ Roll", Artist: "Queen"}, audioDuration: 200,
 			results: singleLink(linked("s", "Rock 'n' Roll", 200, "Queen")),
+			facts:   lookedUp("s", "Rock 'n' Roll", ""),
 			want:    VerdictSoft,
 		},
 		{
 			name: "a featured artist on the reference overlaps a recording credit",
 			ref:  AudioReference{Title: "Under Pressure", Artist: "Queen feat. David Bowie"}, audioDuration: 248,
 			results: singleLink(linked("s", "Under Pressure", 248, "David Bowie")),
+			facts:   lookedUp("s", "Under Pressure", ""),
 			want:    VerdictSoft,
 		},
 		{
 			name: "a joint credit split on ampersand overlaps the reference",
 			ref:  AudioReference{Title: "Under Pressure", Artist: "Queen"}, audioDuration: 248,
 			results: singleLink(linked("s", "Under Pressure", 248, "Queen & David Bowie")),
+			facts:   lookedUp("s", "Under Pressure", ""),
 			want:    VerdictSoft,
 		},
 		{
 			name: "a qualifier the reference asks for is not unrequested",
 			ref:  AudioReference{Title: "Nessun dorma (live)", Artist: "Luciano Pavarotti", Duration: 180}, audioDuration: 181,
 			results: singleLink(linked("s", "Nessun Dorma (Live)", 182, "Luciano Pavarotti")),
+			facts:   lookedUp("s", "Nessun Dorma (Live)", ""),
 			want:    VerdictSoft,
 		},
 		{
@@ -235,16 +246,19 @@ func TestClassifyAudio_MajorityOfOtherTitlesOverridesSoftButNotHard(t *testing.T
 		{
 			name: "two other titles out of three downgrade soft to a different song", ref: dontStopMeNow, audioDuration: 210,
 			results: []ports.AcoustIDResult{acoustIDResult("q", 0.9, sibling, other, another)},
+			facts:   lookedUp("sibling", "Don't Stop Me Now", ""),
 			want:    VerdictDifferentSong,
 		},
 		{
 			name: "one other title out of two is not a majority", ref: dontStopMeNow, audioDuration: 210,
 			results: []ports.AcoustIDResult{acoustIDResult("q", 0.9, sibling, other, other)},
+			facts:   lookedUp("sibling", "Don't Stop Me Now", ""),
 			want:    VerdictSoft,
 		},
 		{
 			name: "an untitled link is not counted as another title", ref: dontStopMeNow, audioDuration: 210,
 			results: []ports.AcoustIDResult{acoustIDResult("q", 0.9, sibling, other, untitled)},
+			facts:   lookedUp("sibling", "Don't Stop Me Now", ""),
 			want:    VerdictSoft,
 		},
 		{
@@ -285,7 +299,7 @@ func TestClassifyAudio_ResultsWithoutUsableLinks(t *testing.T) {
 func TestClassifyAudio_ScoreIsTheTopResultScore(t *testing.T) {
 	results := []ports.AcoustIDResult{acoustIDResult("low", 0.6), drinkingInLAResult, acoustIDResult("mid", 0.7)}
 
-	verdict := ClassifyAudio(drinkingInLA, 236, results)
+	verdict := ClassifyAudio(drinkingInLA, 236, results, nil)
 
 	if verdict.Score != 0.93 {
 		t.Errorf("Score = %v, want 0.93", verdict.Score)
@@ -293,7 +307,7 @@ func TestClassifyAudio_ScoreIsTheTopResultScore(t *testing.T) {
 }
 
 func TestClassifyAudio_UnknownCarriesNoScoreOrLinks(t *testing.T) {
-	verdict := ClassifyAudio(drinkingInLA, 236, nil)
+	verdict := ClassifyAudio(drinkingInLA, 236, nil, nil)
 
 	if verdict.Score != 0 || verdict.Surviving != nil {
 		t.Errorf("unknown verdict = %+v, want zero score and no links", verdict)
@@ -307,7 +321,7 @@ func TestClassifyAudio_ScoreIgnoresANaNResultScore(t *testing.T) {
 		acoustIDResult("mid", 0.7),
 	}
 
-	verdict := ClassifyAudio(drinkingInLA, 236, results)
+	verdict := ClassifyAudio(drinkingInLA, 236, results, nil)
 
 	if verdict.Score != 0.93 {
 		t.Errorf("Score = %v, want 0.93 (a NaN score must not poison the top score)", verdict.Score)
@@ -318,7 +332,7 @@ func TestClassifyAudio_NegativeReferenceLengthDisagrees(t *testing.T) {
 	ref := dontStopMeNow
 	ref.Duration = -5
 
-	verdict := ClassifyAudio(ref, 210, singleLink(linked("sibling", "Don't Stop Me Now", 210, "Queen")))
+	verdict := ClassifyAudio(ref, 210, singleLink(linked("sibling", "Don't Stop Me Now", 210, "Queen")), lookedUp("sibling", "Don't Stop Me Now", ""))
 
 	if verdict.Kind != VerdictDifferentSong {
 		t.Errorf("Kind = %q, want %q (a negative reference duration is not unknown, it disagrees)", verdict.Kind, VerdictDifferentSong)
@@ -336,6 +350,7 @@ func TestClassifyAudio_ProbeMajorityRule(t *testing.T) {
 		{
 			name: "other titles dropped by the length filter do not outvote a soft match", ref: dontStopMeNow, audioDuration: 210,
 			results: []ports.AcoustIDResult{acoustIDResult("q", 0.9, sibling, longOther, longAnother)},
+			facts:   lookedUp("sibling", "Don't Stop Me Now", ""),
 			want:    VerdictSoft,
 		},
 		{
@@ -343,7 +358,8 @@ func TestClassifyAudio_ProbeMajorityRule(t *testing.T) {
 			results: []ports.AcoustIDResult{acoustIDResult("q", 0.9, sibling,
 				linked("remix", "Don't Stop Me Now (remix)", 210, "Queen"),
 				linked("live", "Don't Stop Me Now (live)", 210, "Queen"))},
-			want: VerdictSoft,
+			facts: lookedUp("sibling", "Don't Stop Me Now", ""),
+			want:  VerdictSoft,
 		},
 		{
 			name: "a majority of other titles leaves another version as another version", ref: dontStopMeNow, audioDuration: 210,
@@ -357,7 +373,8 @@ func TestClassifyAudio_ProbeMajorityRule(t *testing.T) {
 				acoustIDResult("b", 0.8, other),
 				acoustIDResult("c", 0.7, another),
 			},
-			want: VerdictDifferentSong,
+			facts: lookedUp("sibling", "Don't Stop Me Now", ""),
+			want:  VerdictDifferentSong,
 		},
 	})
 }
@@ -382,7 +399,8 @@ func TestClassifyAudio_ProbeHardAndSoftAcrossResults(t *testing.T) {
 			results: []ports.AcoustIDResult{acoustIDResult("q", 0.9,
 				linked("canonical", "Don't Stop Me Now", 300, "Queen"),
 				linked("sibling", "Don't Stop Me Now", 211, "Queen"))},
-			want: VerdictSoft,
+			facts: lookedUp("sibling", "Don't Stop Me Now", ""),
+			want:  VerdictSoft,
 		},
 		{
 			name: "an empty but non-nil result list is unknown", ref: dontStopMeNow, audioDuration: 210,
@@ -398,7 +416,7 @@ func TestClassifyAudio_ProbeSurvivingCollectsLinksFromEveryResult(t *testing.T) 
 		acoustIDResult("b", 0.8, linked("b-keep", "Don't Stop Me Now", 0, "Queen")),
 	}
 
-	verdict := ClassifyAudio(dontStopMeNow, 210, results)
+	verdict := ClassifyAudio(dontStopMeNow, 210, results, lookedUp("a-keep", "Don't Stop Me Now", ""))
 
 	got := survivingMBIDs(verdict)
 	slices.Sort(got)
@@ -412,11 +430,13 @@ func TestClassifyAudio_ProbeSoftAgreementInputs(t *testing.T) {
 		{
 			name: "a title with its apostrophe dropped agrees with the reference", ref: dontStopMeNow, audioDuration: 210,
 			results: singleLink(linked("s", "Dont Stop Me Now", 210, "Queen")),
+			facts:   lookedUp("s", "Don't Stop Me Now", ""),
 			want:    VerdictSoft,
 		},
 		{
 			name: "title and artist case do not matter", ref: dontStopMeNow, audioDuration: 210,
 			results: singleLink(linked("s", "DON'T STOP ME NOW", 210, "QUEEN")),
+			facts:   lookedUp("s", "Don't Stop Me Now", ""),
 			want:    VerdictSoft,
 		},
 		{
@@ -428,17 +448,20 @@ func TestClassifyAudio_ProbeSoftAgreementInputs(t *testing.T) {
 			name: "a recording without the reference's qualifier carries nothing unrequested",
 			ref:  AudioReference{Title: "Nessun dorma (live)", Artist: "Luciano Pavarotti", Duration: 180}, audioDuration: 181,
 			results: singleLink(linked("s", "Nessun dorma", 182, "Luciano Pavarotti")),
+			facts:   lookedUp("s", "Nessun dorma", "live"),
 			want:    VerdictSoft,
 		},
 		{
 			name: "a joint reference credit split on a comma overlaps one credited artist",
 			ref:  AudioReference{Title: "Under Pressure", Artist: "Queen, David Bowie"}, audioDuration: 248,
 			results: singleLink(linked("s", "Under Pressure", 248, "David Bowie")),
+			facts:   lookedUp("s", "Under Pressure", ""),
 			want:    VerdictSoft,
 		},
 		{
 			name: "any one of several recording artists may overlap", ref: dontStopMeNow, audioDuration: 210,
 			results: singleLink(linked("s", "Don't Stop Me Now", 210, "Freddie Mercury", "Queen")),
+			facts:   lookedUp("s", "Don't Stop Me Now", ""),
 			want:    VerdictSoft,
 		},
 		{
@@ -461,6 +484,7 @@ func TestClassifyAudio_ProbeSoftAgreementInputs(t *testing.T) {
 			name: "a reference length just inside five seconds of short audio agrees",
 			ref:  AudioReference{Title: "Intro", Artist: "Queen", Duration: 105}, audioDuration: 100,
 			results: singleLink(linked("s", "Intro", 100, "Queen")),
+			facts:   lookedUp("s", "Intro", ""),
 			want:    VerdictSoft,
 		},
 		{
@@ -505,6 +529,7 @@ func TestClassifyAudio_PlainlyTitledReleaseVariantsAreAnotherVersion(t *testing.
 		{
 			name: "a remastered recording still agrees softly", ref: sunglasses, audioDuration: 232,
 			results: singleLink(linked("remaster", "Sunglasses at Night (2011 Remaster)", 232, "Corey Hart")),
+			facts:   lookedUp("remaster", "Sunglasses at Night", "2011 Remaster"),
 			want:    VerdictSoft,
 		},
 	})

@@ -26,14 +26,16 @@ type previewSource interface {
 }
 
 type DownloadStep struct {
-	fetcher    candidateFetcher
-	workspace  ports.TempWorkspace
-	prober     ports.AudioProber
-	identifier ports.AudioIdentifier
-	limiter    *DownloadLimiter
-	skips      ports.VerifySkipRecorder
-	width      int
-	floor      float64
+	fetcher         candidateFetcher
+	workspace       ports.TempWorkspace
+	prober          ports.AudioProber
+	identifier      ports.AudioIdentifier
+	limiter         *DownloadLimiter
+	recordingLookup ports.RecordingLookup
+	factsCache      recordingFactsCache
+	skips           ports.VerifySkipRecorder
+	width           int
+	floor           float64
 
 	candidateTimeout time.Duration
 }
