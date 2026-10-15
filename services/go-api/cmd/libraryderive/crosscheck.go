@@ -71,9 +71,11 @@ type deezerMatch struct {
 }
 
 type crossCheck struct {
-	Outcome     outcome
-	Match       *deezerMatch
-	OtherMaster *deezerTrack
+	Outcome         outcome
+	Match           *deezerMatch
+	OtherMaster     *deezerTrack
+	Track           deezerTrack
+	AlbumLacksTrack bool
 }
 
 func canonicalISRC(isrc string) string {
@@ -130,7 +132,7 @@ func (c crossChecker) matchOf(ctx context.Context, track deezerTrack) (crossChec
 	if err != nil {
 		return crossCheck{}, err
 	}
-	return crossCheck{Outcome: outcomeSameISRC, Match: newMatch(album, track)}, nil
+	return crossCheck{Outcome: outcomeSameISRC, Match: newMatch(album, track), Track: track}, nil
 }
 
 func newMatch(album deezerAlbum, track deezerTrack) *deezerMatch {
@@ -148,7 +150,8 @@ func (c crossChecker) searchArtistAlbums(ctx context.Context, in crossCheckInput
 	if err != nil {
 		return crossCheck{}, err
 	}
-	same, otherMaster, err := c.scanAlbums(ctx, firstSameTitled(found, in.Group.Title, maxAlbumCandidates), in)
+	candidates := firstSameTitled(found, in.Group.Title, maxAlbumCandidates)
+	same, otherMaster, err := c.scanAlbums(ctx, candidates, in)
 	switch {
 	case err != nil:
 		return crossCheck{}, err
@@ -157,7 +160,7 @@ func (c crossChecker) searchArtistAlbums(ctx context.Context, in crossCheckInput
 	case otherMaster != nil:
 		return crossCheck{Outcome: outcomeOtherMaster, OtherMaster: otherMaster}, nil
 	}
-	return crossCheck{Outcome: outcomeNoAlbum}, nil
+	return crossCheck{Outcome: outcomeNoAlbum, AlbumLacksTrack: len(candidates) > 0}, nil
 }
 
 func (c crossChecker) scanAlbums(ctx context.Context, candidates []deezerAlbum, in crossCheckInput) (*deezerTrack, *deezerTrack, error) {

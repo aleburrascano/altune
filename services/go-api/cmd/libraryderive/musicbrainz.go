@@ -8,6 +8,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -51,22 +52,31 @@ func isMusicBrainzThrottle(status int, _ []byte) bool {
 	return status == http.StatusServiceUnavailable || status == http.StatusTooManyRequests
 }
 
+var featureJoinRe = regexp.MustCompile(`(?i)\b(?:feat|ft|featuring|with)\b`)
+
 type artistCredit []struct {
 	Name       string `json:"name"`
 	JoinPhrase string `json:"joinphrase"`
+	Artist     struct {
+		Name string `json:"name"`
+	} `json:"artist"`
 }
 
 func (c artistCredit) primary() string {
 	if len(c) == 0 {
 		return ""
 	}
-	return c[0].Name
+	return cmp.Or(c[0].Artist.Name, c[0].Name)
 }
 
 func (c artistCredit) text() string {
 	var out strings.Builder
-	for _, credit := range c {
-		out.WriteString(credit.Name + credit.JoinPhrase)
+	for i, credit := range c {
+		out.WriteString(cmp.Or(credit.Artist.Name, credit.Name))
+		if i == len(c)-1 || featureJoinRe.MatchString(credit.JoinPhrase) {
+			break
+		}
+		out.WriteString(credit.JoinPhrase)
 	}
 	return strings.TrimSpace(out.String())
 }

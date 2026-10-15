@@ -95,6 +95,9 @@ func (d difference) category() category {
 }
 
 type withheld struct {
+	Title           string
+	Artist          string
+	Album           string
 	TrackNumber     string
 	Genre           string
 	ArtworkURL      string
@@ -104,6 +107,12 @@ type withheld struct {
 
 func (w withheld) of(field string) string {
 	switch field {
+	case "title":
+		return w.Title
+	case "artist":
+		return w.Artist
+	case "album":
+		return w.Album
 	case "track_number":
 		return w.TrackNumber
 	case "genre":
@@ -126,13 +135,17 @@ func diff(stored libraryTrack, want desired) []difference {
 	if moved && stored.Album != "" {
 		group = "album-move:" + stored.ID
 	}
-	stance := stanceToward(stored.Album, want.Album, moved)
+	held := moved && stored.Album != "" && want.WhyNot.Album != ""
+	stance := stanceToward(stored.Album, want.Album, moved, held)
+	if held {
+		group = ""
+	}
 	var found []difference
-	found = appendField(found, "album", stored.Album, want.Album, moved, group, want.WhyNot)
-	found = appendField(found, "title", stored.Title, want.Title, !sameSongTitle(stored.Title, want.Title), group, want.WhyNot)
-	found = appendField(found, "artist", stored.Artist, want.Artist, !isCredited(stored.Artist, want.Artist), group, want.WhyNot)
-	found = appendField(found, "year", intText(stored.Year), intText(want.Year), stored.Year != want.Year, group, want.WhyNot)
-	found = appendField(found, "album_artist", stored.AlbumArtist, want.AlbumArtist, !isSameName(stored.AlbumArtist, want.AlbumArtist), group, want.WhyNot)
+	found = appendHeldOr(found, "album", stored.Album, want.Album, moved, stance, group, want.WhyNot)
+	found = appendCorroborated(found, "title", stored.Title, want.Title, !sameSongTitle(stored.Title, want.Title), group, want.WhyNot)
+	found = appendCorroborated(found, "artist", stored.Artist, want.Artist, !isCredited(stored.Artist, want.Artist), group, want.WhyNot)
+	found = appendHeldOr(found, "year", intText(stored.Year), intText(want.Year), stored.Year != want.Year, stance, group, want.WhyNot)
+	found = appendHeldOr(found, "album_artist", stored.AlbumArtist, want.AlbumArtist, !isSameName(stored.AlbumArtist, want.AlbumArtist), stance, group, want.WhyNot)
 	found = appendAlbumBound(found, "track_number", intText(stored.TrackNumber), intText(want.TrackNumber), stance, group, want.WhyNot)
 	found = appendAlbumBound(found, "genre", stored.Genre, want.Genre, stance, group, want.WhyNot)
 	found = appendField(found, "catalog_duration_seconds", secondsText(stored.CatalogDurationSeconds), secondsText(want.CatalogDurationSeconds),
@@ -147,10 +160,13 @@ const (
 	albumMoves albumStance = iota
 	albumSameEdition
 	albumOtherEdition
+	albumHeld
 )
 
-func stanceToward(stored, want string, moved bool) albumStance {
+func stanceToward(stored, want string, moved, held bool) albumStance {
 	switch {
+	case held:
+		return albumHeld
 	case moved:
 		return albumMoves
 	case normalizeName(stored) == normalizeName(want):
@@ -170,13 +186,27 @@ func appendArtwork(found []difference, track libraryTrack, want desired, stance 
 }
 
 func appendAlbumBound(found []difference, field, stored, want string, stance albumStance, group string, whyNot withheld) []difference {
-	if stance == albumOtherEdition && stored != "" && want != "" && stored != want {
+	if stance == albumOtherEdition && want != "" && stored != want {
 		return append(found, unknown(field, stored, want, "the stored album is another edition of the chosen release"))
 	}
 	if stance == albumSameEdition {
 		group = ""
 	}
-	return appendField(found, field, stored, want, stored != want, group, whyNot)
+	return appendHeldOr(found, field, stored, want, stored != want, stance, group, whyNot)
+}
+
+func appendHeldOr(found []difference, field, stored, want string, differs bool, stance albumStance, group string, whyNot withheld) []difference {
+	if stance == albumHeld && differs && want != "" {
+		return append(found, unknown(field, stored, want, whyNot.Album))
+	}
+	return appendField(found, field, stored, want, differs, group, whyNot)
+}
+
+func appendCorroborated(found []difference, field, stored, want string, differs bool, group string, whyNot withheld) []difference {
+	if differs && stored != "" && want != "" && whyNot.of(field) != "" {
+		return append(found, unknown(field, stored, want, whyNot.of(field)))
+	}
+	return appendField(found, field, stored, want, differs, group, whyNot)
 }
 
 func appendField(found []difference, field, stored, want string, differs bool, group string, whyNot withheld) []difference {
@@ -198,7 +228,15 @@ func unknown(field, stored, want, reason string) difference {
 }
 
 func albumDiffers(stored, want string) bool {
-	return want != "" && normalizeName(baseTitle(stored)) != normalizeName(baseTitle(want))
+	return want != "" && !sameAlbumGroup(stored, want)
+}
+
+func sameAlbumGroup(a, b string) bool {
+	return normalizeName(baseTitle(a)) == normalizeName(baseTitle(b)) || isColonEdition(a, b) || isColonEdition(b, a)
+}
+
+func isColonEdition(edition, group string) bool {
+	return group != "" && strings.HasPrefix(strings.ToLower(edition), strings.ToLower(group)+": ")
 }
 
 func optional(value string) *string {

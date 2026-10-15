@@ -451,3 +451,169 @@ func TestDeriveAll_AnIsrcNeitherOnTheRecordingNorConfirmedByABindIsReportedNotCo
 		t.Fatalf("a bind-confirmed isrc was not corrected: %+v", proven)
 	}
 }
+
+func deriveSong(t *testing.T, rec recording, homes []releaseGroup, dz *fakeDeezer, stored libraryTrack) map[category]finding {
+	t.Helper()
+	mb := &fakeMusicBrainz{recordings: map[string]recording{rec.ID: rec}, homes: map[string][]releaseGroup{rec.ID: homes}}
+	bound := boundTrack{libraryTrack: stored, MBRecordingID: rec.ID, IdentityISRC: stored.ISRC}
+	return byCategory(newDeriver(mb, dz).deriveAll(t.Context(), []boundTrack{bound}).Findings)
+}
+
+func deezerCrediting(isrc, title, artist, albumTitle string) *fakeDeezer {
+	return &fakeDeezer{
+		byISRC: map[string]deezerTrack{
+			isrc: {ID: "1", ISRC: isrc, Title: title, Artist: artist, Position: 1, DurationSeconds: 200, AlbumID: "10", AlbumTitle: albumTitle},
+		},
+		albums: map[string]deezerAlbum{"10": {ID: "10", Title: albumTitle, CoverURL: "https://cdn/a.jpg", Genre: "Pop"}},
+	}
+}
+
+func TestDeriveAll_ATitleMusicBrainzSpellsDifferentlyIsReportedUnlessDeezerCarriesIt(t *testing.T) {
+	cases := []struct {
+		artist, album, stored, musicBrainz, isrc string
+	}{
+		{"BLACKPINK", "BORN PINK", "JUMP", "뛰어 (JUMP)", "KRA302200001"},
+		{"Jon Secada", "Jon Secada", "Angel", "Ángel", "USEM39200001"},
+		{"Cordae", "The Lost Boy", "C Carter", "Coach Carter", "USRC11900001"},
+	}
+	for _, c := range cases {
+		t.Run(c.stored, func(t *testing.T) {
+			rec := recording{ID: "rec", Title: c.musicBrainz, Artist: c.artist, Primary: c.artist, ISRCs: []string{c.isrc}}
+			homes := []releaseGroup{group("rg", c.album, "Album", "2020-01-01")}
+			stored := libraryTrack{ID: "t", Title: c.stored, Artist: c.artist, Album: c.album, ISRC: c.isrc, Year: 2020}
+			got := deriveSong(t, rec, homes, deezerCrediting(c.isrc, c.stored, c.artist, c.album), stored)
+			if _, corrected := got["title_correct"]; corrected {
+				t.Fatalf("title corrected to musicbrainz's spelling: %+v", got["title_correct"])
+			}
+			if d := got["title_differs"]; d.Fix != nil || !strings.Contains(d.Detail, reasonTitleUncorroborated) {
+				t.Fatalf("got %+v", got)
+			}
+		})
+	}
+}
+
+func TestDeriveAll_ATitleDeezerCarriesToIsCorrected(t *testing.T) {
+	rec := recording{ID: "rec", Title: "Ángel", Artist: "Jon Secada", Primary: "Jon Secada", ISRCs: []string{"USEM39200001"}}
+	stored := libraryTrack{ID: "t", Title: "Angel", Artist: "Jon Secada", Album: "Jon Secada", ISRC: "USEM39200001", Year: 1992}
+	got := deriveSong(t, rec, []releaseGroup{group("rg", "Jon Secada", "Album", "1992-01-01")}, deezerCrediting("USEM39200001", "Ángel", "Jon Secada", "Jon Secada"), stored)
+	if fix := got["title_correct"].Fix; fix == nil || *fix.NewValue != "Ángel" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestDeriveAll_AnArtistChangeNeedsDeezerToCreditTheNewArtist(t *testing.T) {
+	const isrc = "USUM72100002"
+	rec := recording{ID: "rec", Title: "556 (Green Tip)", Artist: "iayze", Primary: "iayze", ISRCs: []string{isrc}}
+	homes := []releaseGroup{group("rg", "Pop Out", "Album", "2024-01-01")}
+	stored := libraryTrack{ID: "t", Title: "556 (Green Tip)", Artist: "Jace!", Album: "Pop Out", ISRC: isrc, Year: 2024}
+	got := deriveSong(t, rec, homes, deezerCrediting(isrc, "556 (Green Tip)", "Jace!", "Pop Out"), stored)
+	if _, corrected := got["artist_correct"]; corrected {
+		t.Fatalf("artist leaked: %+v", got["artist_correct"])
+	}
+	if d := got["artist_differs"]; d.Fix != nil || !strings.Contains(d.Detail, "the catalogs disagree on the artist") {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestDeriveAll_BrunoMarsBecomesSilkSonicWhenDeezerCreditsSilkSonic(t *testing.T) {
+	const isrc = "USAT22000001"
+	rec := recording{ID: "rec", Title: "Leave the Door Open", Artist: "Silk Sonic", Primary: "Silk Sonic", ISRCs: []string{isrc}}
+	homes := []releaseGroup{group("rg", "An Evening With Silk Sonic", "Album", "2021-11-12")}
+	stored := libraryTrack{ID: "t", Title: "Leave the Door Open", Artist: "Bruno Mars", Album: "An Evening With Silk Sonic", ISRC: isrc, Year: 2021}
+	applied := deriveSong(t, rec, homes, deezerCrediting(isrc, "Leave the Door Open", "Silk Sonic", "An Evening With Silk Sonic"), stored)
+	if fix := applied["artist_correct"].Fix; fix == nil || *fix.NewValue != "Silk Sonic" {
+		t.Fatalf("got %+v", applied)
+	}
+	held := deriveSong(t, rec, homes, deezerCrediting(isrc, "Leave the Door Open", "Bruno Mars", "An Evening With Silk Sonic"), stored)
+	if held["artist_differs"].Fix != nil || held["artist_correct"].Fix != nil {
+		t.Fatalf("got %+v", held)
+	}
+}
+
+func TestDeriveAll_AnEstateSaleTrackStaysOnItsAlbumGroupInsteadOfMovingToTheBaseAlbum(t *testing.T) {
+	const isrc = "USSM12100001"
+	rec := recording{ID: "rec", Title: "WHAT A DAY", Artist: "Tyler, The Creator", Primary: "Tyler, The Creator", ISRCs: []string{isrc}}
+	homes := []releaseGroup{group("rg", "CALL ME IF YOU GET LOST", "Album", "2021-06-25")}
+	stored := libraryTrack{
+		ID: "t", Title: "WHAT A DAY", Artist: "Tyler, The Creator", Album: "CALL ME IF YOU GET LOST: The Estate Sale", ISRC: isrc, Year: 2021, TrackNumber: 22,
+	}
+	got := deriveSong(t, rec, homes, &fakeDeezer{}, stored)
+	if _, moved := got["album_correct"]; moved {
+		t.Fatalf("album moved: %+v", got["album_correct"])
+	}
+	if _, lost := got["track_number_correct"]; lost {
+		t.Fatalf("track number rewritten: %+v", got["track_number_correct"])
+	}
+}
+
+func TestDeriveAll_AnAlbumWhoseDeezerTracklistLacksTheRecordingIsNeverTheCorrection(t *testing.T) {
+	dz := celebrationDeezer()
+	album := dz.albums["80"]
+	album.Tracks = []deezerAlbumTrack{{ID: "9000", Title: "Celebration (Part 2)"}}
+	dz.albums["80"] = album
+	got := byCategory(newDeriver(celebrationMusicBrainz(), dz).deriveAll(t.Context(), []boundTrack{celebrationTrack()}).Findings)
+	if _, moved := got["album_correct"]; moved {
+		t.Fatalf("album moved: %+v", got["album_correct"])
+	}
+	if d := got["album_differs"]; d.Fix != nil || !strings.Contains(d.Detail, reasonAlbumLacksTrack) {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestDeriveAll_AStoredOriginalAlbumIsNotReplacedByALaterReleaseOfTheRecording(t *testing.T) {
+	const isrc = "USDJ21500001"
+	rec := recording{ID: "rec", Title: "oui", Artist: "Jeremih", Primary: "Jeremih", ISRCs: []string{isrc}}
+	homes := []releaseGroup{
+		group("rg-late-nights", "Late Nights: The Album", "Album", "2015-12-04", "Mixtape/Street"),
+		group("rg-say-oui", "Jeremih: Say Oui", "Album", "2026-02-13"),
+	}
+	stored := libraryTrack{ID: "t", Title: "oui", Artist: "Jeremih", Album: "Late Nights: The Album", ISRC: isrc, Year: 2015}
+	got := deriveSong(t, rec, homes, &fakeDeezer{}, stored)
+	for _, kind := range []category{"album_correct", "year_correct"} {
+		if _, corrected := got[kind]; corrected {
+			t.Errorf("%s: %+v", kind, got[kind])
+		}
+	}
+	for _, kind := range []category{"album_differs", "year_differs"} {
+		if d := got[kind]; d.Fix != nil || !strings.Contains(d.Detail, reasonStoredIsOriginal) {
+			t.Errorf("%s: %+v", kind, d)
+		}
+	}
+}
+
+func TestDeriveAll_AnEstateSaleTrackWithoutANumberIsNotFilledFromTheBaseAlbum(t *testing.T) {
+	const isrc = "USSM12100001"
+	rec := recording{ID: "rec", Title: "WHAT A DAY", Artist: "Tyler, The Creator", Primary: "Tyler, The Creator", ISRCs: []string{isrc}}
+	homes := []releaseGroup{group("rg", "CALL ME IF YOU GET LOST", "Album", "2021-06-25")}
+	dz := deezerCrediting(isrc, "WHAT A DAY", "Tyler, The Creator", "CALL ME IF YOU GET LOST")
+	stored := libraryTrack{ID: "t", Title: "WHAT A DAY", Artist: "Tyler, The Creator", Album: "CALL ME IF YOU GET LOST: The Estate Sale", ISRC: isrc, Year: 2021}
+	got := deriveSong(t, rec, homes, dz, stored)
+	for _, kind := range []category{"track_number_fill", "genre_fill", "artwork_url_fill"} {
+		if _, filled := got[kind]; filled {
+			t.Errorf("%s from the base album: %+v", kind, got[kind])
+		}
+	}
+	if d := got["track_number_differs"]; d.Fix != nil || !strings.Contains(d.Detail, "another edition") {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestDeriveAll_AHeldAlbumDoesNotFillTheFieldsItOwns(t *testing.T) {
+	const isrc = "USDJ21500001"
+	rec := recording{ID: "rec", Title: "oui", Artist: "Jeremih", Primary: "Jeremih", ISRCs: []string{isrc}}
+	homes := []releaseGroup{
+		group("rg-late-nights", "Late Nights: The Album", "Album", "2015-12-04", "Mixtape/Street"),
+		group("rg-say-oui", "Jeremih: Say Oui", "Album", "2026-02-13"),
+	}
+	dz := deezerCrediting(isrc, "oui", "Jeremih", "Jeremih: Say Oui")
+	stored := libraryTrack{ID: "t", Title: "oui", Artist: "Jeremih", Album: "Late Nights: The Album", ISRC: isrc}
+	got := deriveSong(t, rec, homes, dz, stored)
+	for _, kind := range []category{"year_fill", "track_number_fill", "genre_fill", "artwork_url_fill", "album_artist_fill"} {
+		if _, filled := got[kind]; filled {
+			t.Errorf("%s from the held album: %+v", kind, got[kind])
+		}
+	}
+	if d := got["track_number_differs"]; d.Fix != nil || !strings.Contains(d.Detail, reasonStoredIsOriginal) {
+		t.Fatalf("got %+v", got)
+	}
+}

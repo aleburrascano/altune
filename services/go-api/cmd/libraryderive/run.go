@@ -72,7 +72,7 @@ func (d *deriver) findingsFor(ctx context.Context, t boundTrack) ([]finding, err
 	if err != nil {
 		return nil, err
 	}
-	chosen, err := d.chooseFor(ctx, rec)
+	chosen, homes, err := d.chooseFor(ctx, rec)
 	if err != nil {
 		return nil, err
 	}
@@ -89,6 +89,9 @@ func (d *deriver) findingsFor(ctx context.Context, t boundTrack) ([]finding, err
 		own.Withheld.ISRC = "the isrc is not listed on the musicbrainz recording and bind did not confirm it on deezer or apple"
 		a.ISRC = ""
 	}
+	own.Withheld.Album = albumHold(t.Album, chosen.Group, homes, check)
+	own.Withheld.Title = titleHold(a.Title, check.Track)
+	own.Withheld.Artist = artistHold(a.Artist, check.Track)
 	check.Match = own
 	head := about(t, categoryReleaseChosen, chosen.Group.describe()+" by "+string(chosen.Rule)+"; deezer "+string(check.Outcome))
 	return append([]finding{head}, changesFor(t, a, chosen, check)...), nil
@@ -132,16 +135,16 @@ func (d *deriver) recordingIDByISRC(ctx context.Context, isrc string) (string, e
 	return "", skipped{categoryRecordingAmbiguous, strconv.Itoa(len(ids)) + " musicbrainz recordings carry isrc " + isrc}
 }
 
-func (d *deriver) chooseFor(ctx context.Context, rec recording) (pick, error) {
+func (d *deriver) chooseFor(ctx context.Context, rec recording) (pick, []releaseGroup, error) {
 	groups, err := d.recordings.ReleaseGroups(ctx, rec.ID)
 	if err != nil && !errors.Is(err, errCatalogUnknown) {
-		return pick{}, err
+		return pick{}, nil, err
 	}
 	chosen, ok := chooseRelease(ownSingles(groups, rec.Title))
 	if !ok {
-		return pick{}, skipped{categoryReleaseUnchosen, strconv.Itoa(len(groups)) + " release groups, none an original album or single"}
+		return pick{}, nil, skipped{categoryReleaseUnchosen, strconv.Itoa(len(groups)) + " release groups, none an original album or single"}
 	}
-	return chosen, nil
+	return chosen, groups, nil
 }
 
 func (d *deriver) crossCheckOf(ctx context.Context, rec recording, a anchor, chosen pick) (crossCheck, error) {

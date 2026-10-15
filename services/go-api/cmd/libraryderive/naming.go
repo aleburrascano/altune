@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	"regexp"
 	"slices"
+	"strings"
 )
 
 var creditSeparatorRe = regexp.MustCompile(`(?i)\s*(?:&|\+|,|;|/|\bfeat\.?|\bft\.?|\bfeaturing\b|\bwith\b|\bx\b|\band\b)\s*`)
@@ -47,4 +48,37 @@ func isVariousArtists(name string) bool {
 
 func isSameName(a, b string) bool {
 	return normalizeName(a) != "" && normalizeName(a) == normalizeName(b)
+}
+
+const (
+	reasonAlbumLacksTrack      = "the deezer tracklist of the chosen album does not list the recording"
+	reasonStoredIsOriginal     = "the stored album is an official release group of the recording and the chosen one is not earlier"
+	reasonTitleUncorroborated  = "the deezer track does not carry this title"
+	reasonArtistUncorroborated = "the catalogs disagree on the artist"
+)
+
+func albumHold(storedAlbum string, chosen releaseGroup, homes []releaseGroup, check crossCheck) string {
+	if check.AlbumLacksTrack {
+		return reasonAlbumLacksTrack
+	}
+	for _, home := range homes {
+		if !albumDiffers(storedAlbum, home.Title) && !isEarlier(chosen.FirstReleaseDate, home.FirstReleaseDate) {
+			return reasonStoredIsOriginal
+		}
+	}
+	return ""
+}
+
+func titleHold(title string, deezer deezerTrack) string {
+	if strings.EqualFold(canonicalText(title), canonicalText(deezer.Title)) {
+		return ""
+	}
+	return reasonTitleUncorroborated
+}
+
+func artistHold(artist string, deezer deezerTrack) string {
+	if sharesArtist(deezer.Artist, artist) {
+		return ""
+	}
+	return reasonArtistUncorroborated
 }

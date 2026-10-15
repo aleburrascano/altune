@@ -36,7 +36,7 @@ func TestMusicBrainz_ReadsARecordingWithItsCreditsAndIsrcs(t *testing.T) {
 	}))
 	defer srv.Close()
 	got, err := fastMusicBrainz(srv).Recording(t.Context(), "rec-1")
-	if err != nil || got.Title != "Careless Whisper" || got.Artist != "Wham! feat. George Michael" || got.Primary != "Wham!" || !got.hasISRC("gb-aye-8400001") {
+	if err != nil || got.Title != "Careless Whisper" || got.Artist != "Wham!" || got.Primary != "Wham!" || !got.hasISRC("gb-aye-8400001") {
 		t.Fatalf("got %+v, %v", got, err)
 	}
 }
@@ -156,5 +156,40 @@ func TestMusicBrainz_ReadsTheRecordingsLengthOnAReleaseInWholeSeconds(t *testing
 	}
 	if _, err := m.ReleaseTrackSeconds(t.Context(), "rel-1", "absent"); !errors.Is(err, errCatalogUnknown) {
 		t.Fatalf("a recording missing from the release: %v", err)
+	}
+}
+
+func TestMusicBrainz_ACreditReadsAsTheCanonicalArtistAndStopsAtTheFirstFeatureJoin(t *testing.T) {
+	cases := []struct{ name, credits, artist, primary string }{
+		{"Ken Carson", `[{"name":"Ken Car$on","joinphrase":"","artist":{"name":"Ken Carson"}}]`, "Ken Carson", "Ken Carson"},
+		{
+			"Travis Scott",
+			`[{"name":"Travi$ Scott","joinphrase":" feat. ","artist":{"name":"Travis Scott"}},{"name":"The 1975","joinphrase":" & ","artist":{"name":"The 1975"}},` +
+				`{"name":"Big Sean","joinphrase":"","artist":{"name":"Big Sean"}}]`,
+			"Travis Scott", "Travis Scott",
+		},
+		{
+			"Tyler, The Creator",
+			`[{"name":"Tyler, The Creator","joinphrase":" feat. ","artist":{"name":"Tyler, The Creator"}},{"name":"Lola Young","joinphrase":"","artist":{"name":"Lola Young"}}]`,
+			"Tyler, The Creator", "Tyler, The Creator",
+		},
+		{"Bruno Mars", `[{"name":"Silk Sonic","joinphrase":"","artist":{"name":"Silk Sonic"}}]`, "Silk Sonic", "Silk Sonic"},
+		{
+			"a duo",
+			`[{"name":"Wham!","joinphrase":" & ","artist":{"name":"Wham!"}},{"name":"George Michael","joinphrase":"","artist":{"name":"George Michael"}}]`,
+			"Wham! & George Michael", "Wham!",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(`{"id":"rec-1","title":"Song","artist-credit":` + c.credits + `,"isrcs":[]}`))
+			}))
+			defer srv.Close()
+			got, err := fastMusicBrainz(srv).Recording(t.Context(), "rec-1")
+			if err != nil || got.Artist != c.artist || got.Primary != c.primary {
+				t.Fatalf("got %+v, %v", got, err)
+			}
+		})
 	}
 }
