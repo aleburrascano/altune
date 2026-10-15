@@ -921,3 +921,57 @@ func TestRun_CarriesTheCatalogPinsIntoTheTrack(t *testing.T) {
 		t.Errorf("Run did not pass: %+v", out)
 	}
 }
+
+func TestRun_TheCatalogPinBeatsTheFirstTextSearchHit(t *testing.T) {
+	kase := embeddedCase(t, "rw-boys-dont-cry-pin-studio-over-first-search-live")
+
+	out := Run(context.Background(), kase)
+
+	if !out.Pass {
+		t.Fatalf("expected pass, got %q (err %q)", out.Reason, out.Err)
+	}
+	if want := "https://www.youtube.com/watch?v=Q460cEwJgCI"; out.Stored != want {
+		t.Errorf("stored %q, want the studio upload %q", out.Stored, want)
+	}
+}
+
+func TestRun_PinnedTrackWithNoRecordedAnswersStillRejectsAnotherRecording(t *testing.T) {
+	kase := Case{
+		ID: "t", Class: "RW",
+		Track: Track{Title: "Song", Artist: "Artist", Duration: 200, CatalogMBID: "pin", Resolution: &Resolution{}},
+		Candidates: []Candidate{
+			{Title: "Song", URL: "other-version", Channel: "Artist - Topic", Duration: 200, ViewCount: 9000000, AcoustID: "other-ac", RecordingMBIDs: []string{"other"}},
+			{Title: "Song", URL: "pinned", Channel: "Artist - Topic", Duration: 200, ViewCount: 10, AcoustID: "pin-ac", RecordingMBIDs: []string{"pin"}, Correct: true},
+		},
+	}
+
+	out := Run(context.Background(), kase)
+
+	if !out.Pass || out.Stored != "pinned" {
+		t.Errorf("pass %v stored %q (%s), want the pinned recording's upload", out.Pass, out.Stored, out.Reason)
+	}
+}
+
+func TestValidateCases_RejectsAPinnedRecordingTheCatalogDoesNotPin(t *testing.T) {
+	pinned := &PinnedRecording{MBID: "pin"}
+	tests := []struct {
+		name        string
+		catalogMBID string
+	}{
+		{"no catalog pin", ""},
+		{"a different catalog pin", "other"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cases := []Case{{
+				ID: "x", Class: "RW",
+				Track:      Track{Title: "t", Artist: "a", CatalogMBID: tt.catalogMBID, Resolution: &Resolution{Pinned: pinned}},
+				Candidates: []Candidate{{URL: "u"}},
+			}}
+
+			if err := validateCases(cases); err == nil {
+				t.Error("validateCases accepted a recorded pinned recording the catalog does not pin")
+			}
+		})
+	}
+}

@@ -57,7 +57,15 @@ func resolverFor(kase Case) *discoverybridge.RecordingResolver {
 	for _, rec := range res.ISRCRecordings {
 		isrcRecordings = append(isrcRecordings, discoverybridge.RecordedISRCRecording{MBID: rec.MBID, Duration: rec.Duration})
 	}
-	return discoverybridge.NewRecordedResolver(searchHitFor(kase), isrcRecordings)
+	return discoverybridge.NewRecordedResolver(searchHitFor(kase), isrcRecordings, pinnedFactsFor(res))
+}
+
+func pinnedFactsFor(res *Resolution) *ports.RecordingFacts {
+	if res.Pinned == nil {
+		return nil
+	}
+	facts := res.Pinned.facts()
+	return &facts
 }
 
 func searchHitFor(kase Case) *discoverybridge.RecordedSearchHit {

@@ -1,0 +1,25 @@
+{
+  "cases": [
+    {
+      "id": "rw-boys-dont-cry-pin-studio-over-first-search-live",
+      "class": "RW",
+      "note": "prod track ae40a977 (The Cure, 'Boys Don't Cry', Greatest Hits, 157.07s). Prod has no track with a catalog_mbid yet, so the pin is the studio recording 2b2af12b (MusicBrainz length 157306 ms, no ISRC listed) and the text search is MusicBrainz's real recording:\"Boys Don't Cry\" AND artist:\"The Cure\" query, whose first title match is the live recording 95ccd64c (1991-03-03, The Limehouse, 187000 ms, no AcoustID). Both MusicBrainz lookups are recorded in the resolution. Candidates are the real yt-dlp search results for 'The Cure Boys Don't Cry' from the prod host (ytdlp: kind upload, not resolved); the studio upload fingerprints to AcoustID 4881574c, which AcoustID lists for the studio recording only. The AcoustID score and the live uploads' unknown fingerprints are modelled, not fingerprinted. Without the pin the resolver adopts the live recording, the studio upload fingerprints as another version and every candidate is rejected",
+      "track": {
+        "title": "Boys Don't Cry", "artist": "The Cure", "album": "Greatest Hits", "duration": 157.07,
+        "catalog_mbid": "2b2af12b-48f1-444e-8591-cacb9f88f02a",
+        "resolution": {
+          "search": { "mbid": "95ccd64c-5b38-43e0-827d-bb14b271372a", "duration": 187 },
+          "pinned": { "mbid": "2b2af12b-48f1-444e-8591-cacb9f88f02a", "title": "Boys Don’t Cry", "artists": ["The Cure"], "duration": 157.306 }
+        }
+      },
+      "sources": [
+        { "name": "ytdlp", "search_seconds": 3, "candidates": [
+          { "title": "The Cure - Boys Don't Cry HQ", "url": "https://www.youtube.com/watch?v=Q460cEwJgCI", "channel": "Bruce Perdew", "categories": ["Music"], "duration": 158, "view_count": 1685207, "acoustid": "4881574c-d77f-458f-89e6-c9010b56266e", "recording_mbids": ["2b2af12b-48f1-444e-8591-cacb9f88f02a"], "acoustid_results": [ { "id": "4881574c-d77f-458f-89e6-c9010b56266e", "score": 0.98, "recordings": [ { "mbid": "2b2af12b-48f1-444e-8591-cacb9f88f02a", "title": "Boys Don’t Cry", "artists": ["The Cure"], "duration": 157 } ] } ], "correct": true },
+          { "title": "The cure - Boys Don't Cry Release 1980 Live at the MTV Studios for MTV Unplugged, London UK 1991", "url": "https://www.youtube.com/watch?v=xIKHQfJy5Q4", "channel": "ChrisyumulMotovlog", "categories": ["Music"], "duration": 189, "view_count": 3973 },
+          { "title": "Boys Don't Cry (Live)", "url": "https://www.youtube.com/watch?v=ru6MxseSRdU", "channel": "The Cure", "categories": ["Music"], "duration": 223, "view_count": 19726 },
+          { "title": "The Cure \"Boys Don't Cry\" Live | Rock Hall 2019 Induction", "url": "https://www.youtube.com/watch?v=0iSUjp-QIpY", "channel": "Rock & Roll Hall of Fame", "categories": ["Music"], "duration": 208, "view_count": 8621872 }
+        ] }
+      ]
+    }
+  ]
+}
