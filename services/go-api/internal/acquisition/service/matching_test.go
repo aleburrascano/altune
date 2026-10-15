@@ -80,7 +80,7 @@ func TestSelectBestCandidate(t *testing.T) {
 				},
 			},
 			wantTitle:  "The Weeknd - Starboy (Audio)",
-			wantReason: "candidate with duration within durationTight (3s) should score higher than one 70s off",
+			wantReason: "candidate with duration within the tight length window (2s) should score higher than one 70s off",
 		},
 		{
 			name: "no candidates returns nil",
@@ -269,7 +269,8 @@ func TestDurationScore(t *testing.T) {
 	}{
 		{name: "exact match", expected: 200, actual: 200, want: 1.0},
 		{name: "within tight threshold", expected: 200, actual: 202, want: 1.0},
-		{name: "at tight boundary", expected: 200, actual: 203, want: 1.0},
+		{name: "at tight boundary", expected: 200, actual: 202, want: 1.0},
+		{name: "just past tight", expected: 200, actual: 203, want: 0.5},
 		{name: "between tight and loose", expected: 200, actual: 210, want: 0.5},
 		{name: "at loose boundary", expected: 200, actual: 215, want: 0.5},
 		{name: "beyond loose threshold", expected: 200, actual: 216, want: 0.0},
@@ -283,6 +284,31 @@ func TestDurationScore(t *testing.T) {
 			got := durationScore(tt.expected, tt.actual)
 			if got != tt.want {
 				t.Errorf("durationScore(%v, %v) = %v, want %v", tt.expected, tt.actual, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDurationScore_UsesTheConfidenceWindows(t *testing.T) {
+	tests := []struct {
+		name     string
+		expected float64
+		delta    float64
+	}{
+		{name: "3s off is loose", expected: 200, delta: 3},
+		{name: "tight edge", expected: 200, delta: 2},
+		{name: "flat loose edge", expected: 200, delta: 15},
+		{name: "past flat loose edge", expected: 200, delta: 16},
+		{name: "400s track 25s off is loose", expected: 400, delta: 25},
+		{name: "400s track at fractional edge", expected: 400, delta: 28},
+		{name: "400s track past fractional edge", expected: 400, delta: 29},
+	}
+	scoreOf := map[float64]float64{tightDurationBonus: 1.0, looseDurationBonus: 0.5, 0: 0.0}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			want := scoreOf[durationBonus(tt.delta, tt.expected)]
+			if got := durationScore(tt.expected, tt.expected+tt.delta); got != want {
+				t.Errorf("durationScore(%v, %v) = %v, confidence window implies %v", tt.expected, tt.expected+tt.delta, got, want)
 			}
 		})
 	}

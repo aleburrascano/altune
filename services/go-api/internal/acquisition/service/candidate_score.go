@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/textnorm"
 	"math"
@@ -11,9 +12,7 @@ const (
 	unrequestedQualifierCost = 1
 	unfulfilledQualifierCost = 2
 
-	identityMin   = 60.0
-	durationTight = 3
-	durationLoose = 15
+	identityMin = 60.0
 )
 
 func identityScore(trackTitle, trackArtist, candidateTitle string) float64 {
@@ -52,14 +51,14 @@ func durationScore(expected, actual float64) float64 {
 	if expected == 0 || actual == 0 {
 		return 0.5
 	}
-	diff := math.Abs(expected - actual)
-	if diff <= durationTight {
+	switch {
+	case domain.LengthTight.Agrees(expected, actual):
 		return 1.0
-	}
-	if diff <= durationLoose {
+	case domain.LengthLoose.Agrees(expected, actual):
 		return 0.5
+	default:
+		return 0.0
 	}
-	return 0.0
 }
 
 func viewScore(viewCount, maxViews int64) float64 {
