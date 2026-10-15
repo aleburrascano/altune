@@ -1320,3 +1320,50 @@ func TestUploaderClass_APinnedVideoIsTrustedByItsCredits(t *testing.T) {
 		}
 	}
 }
+
+func TestRankCandidates_TheUsersPickGoesBeforeTheArtTrack(t *testing.T) {
+	track := TrackRef{Title: "Murder On The Dancefloor", Artist: "Sophie Ellis-Bextor", Duration: 230}
+	artTrack := ports.AudioCandidate{
+		Title:    "Murder On The Dancefloor",
+		Duration: 232,
+		URL:      "https://music.youtube.com/watch?v=RCtTDJgxPDA",
+		Artists:  []string{"Sophie Ellis-Bextor"},
+		Resolved: true,
+		Kind:     ports.KindArtTrack,
+	}
+	pickedUpload := ports.AudioCandidate{
+		Title:    "Murder On The Dancefloor",
+		URL:      "https://soundcloud.com/sophie-ellis-bextor-official/murder-on-the-dancefloor-album",
+		Artists:  []string{"Sophie Ellis-Bextor"},
+		Resolved: true,
+		Kind:     ports.KindCatalogPin,
+	}
+	catalogVideo := ports.AudioCandidate{
+		Title:    "Murder On The Dancefloor",
+		URL:      "https://music.youtube.com/watch?v=Zv6M1xG4T0w",
+		Artists:  []string{"Sophie Ellis-Bextor"},
+		Resolved: true,
+		Kind:     ports.KindPinnedVideo,
+	}
+	tests := []struct {
+		name       string
+		candidates []ports.AudioCandidate
+		wantFirst  string
+	}{
+		{"pick listed after the art track", []ports.AudioCandidate{artTrack, pickedUpload}, pickedUpload.URL},
+		{"pick listed before the art track", []ports.AudioCandidate{pickedUpload, artTrack}, pickedUpload.URL},
+		{"a pinned video stays behind the art track", []ports.AudioCandidate{catalogVideo, artTrack}, artTrack.URL},
+		{"pick still first beside a pinned video and an art track", []ports.AudioCandidate{artTrack, catalogVideo, pickedUpload}, pickedUpload.URL},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ranked, _ := rankAndCollect(context.Background(), track, track.Duration, tt.candidates)
+			if len(ranked) != len(tt.candidates) {
+				t.Fatalf("ranked %d candidates, want all %d", len(ranked), len(tt.candidates))
+			}
+			if ranked[0].URL != tt.wantFirst {
+				t.Errorf("first = %q, want %q", ranked[0].URL, tt.wantFirst)
+			}
+		})
+	}
+}

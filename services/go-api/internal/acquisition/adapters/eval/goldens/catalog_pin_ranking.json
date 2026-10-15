@@ -1,0 +1,55 @@
+{
+  "cases": [
+    {
+      "id": "rw-murder-on-the-dancefloor-the-picked-upload-before-the-art-track",
+      "class": "RW",
+      "note": "live-captured real case, not a recorded prod pick: no prod track carries catalog_sources yet (0 of 2269) because the client pin is not released, so the pin is a user pick modelled on a real upload. Art track: the real ytmsearch songs result for 'Murder On The Dancefloor Sophie Ellis-Bextor' captured 2026-10-15 through the adapter's own innertube client against music.youtube.com (first hit RCtTDJgxPDA, Sophie Ellis-Bextor, album Murder On The Dancefloor, 232 s, MUSIC_VIDEO_TYPE_ATV). Pin: the official upload soundcloud.com/sophie-ellis-bextor-official/murder-on-the-dancefloor-album, a real scsearch5 result by yt-dlp on 2026-10-15 (230.059 s, 4446161 plays); that it is the upload a user would pick for this track is inferred, not recorded. The ISRC GBAKW0100229 is the one the same capture searched by. The track length is unknown, as on a fresh catalog track. On main the resolved art track has a known length and the pin has none, so the art track is tried first and stored; the user's pick is never tried. With the pin ranked first the picked upload is stored",
+      "track": {
+        "title": "Murder On The Dancefloor",
+        "artist": "Sophie Ellis-Bextor",
+        "album": "Murder On The Dancefloor",
+        "isrc": "GBAKW0100229",
+        "catalog_sources": [
+          {
+            "provider": "soundcloud",
+            "external_id": "murder-on-the-dancefloor-album",
+            "url": "https://soundcloud.com/sophie-ellis-bextor-official/murder-on-the-dancefloor-album"
+          }
+        ]
+      },
+      "sources": [
+        {
+          "name": "catalogpin",
+          "adapter": "catalogpin",
+          "search_seconds": 0,
+          "candidates": [
+            {
+              "title": "Murder On The Dancefloor",
+              "url": "https://soundcloud.com/sophie-ellis-bextor-official/murder-on-the-dancefloor-album",
+              "duration": 230.059,
+              "view_count": 4446161,
+              "correct": true
+            }
+          ]
+        },
+        {
+          "name": "ytmsearch",
+          "search_seconds": 1,
+          "candidates": [
+            {
+              "title": "Murder On The Dancefloor",
+              "url": "https://music.youtube.com/watch?v=RCtTDJgxPDA",
+              "channel": "YouTube Music Art Track",
+              "categories": ["Music"],
+              "duration": 232,
+              "resolved": true,
+              "kind": "art_track",
+              "artists": ["Sophie Ellis-Bextor"],
+              "album": "Murder On The Dancefloor"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

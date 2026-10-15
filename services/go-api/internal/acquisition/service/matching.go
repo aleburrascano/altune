@@ -17,7 +17,14 @@ func breakTie(a, b candidateEntry) bool {
 	return a.candidate.URL < b.candidate.URL
 }
 
+func isUsersPick(e candidateEntry) bool {
+	return e.candidate.Kind == ports.KindCatalogPin
+}
+
 func lessResolved(a, b candidateEntry) bool {
+	if isUsersPick(a) != isUsersPick(b) {
+		return isUsersPick(a)
+	}
 	if a.explicitFits != b.explicitFits {
 		return a.explicitFits
 	}
