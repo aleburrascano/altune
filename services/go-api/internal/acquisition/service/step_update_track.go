@@ -26,11 +26,12 @@ func NewUpdateTrackStep(ledger ports.TrackLedger, userId shared.UserId, trackId 
 func (s *UpdateTrackStep) Name() StepName { return stepNameUpdateTrack }
 
 func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterStore) (afterUpdate, error) {
+	isrc, _ := ac.provenISRC()
 	completion := ports.Completion{
 		AudioRef:           ac.AudioRef,
 		ReplaceAudio:       ac.Replace.PreservedRef != "",
 		Duration:           ac.MeasuredDuration(),
-		ISRC:               ac.Track.ISRC,
+		ISRC:               isrc,
 		Provenance:         ac.Provenance(),
 		RejectedSourceKeys: ac.Replace.ExcludeKeys,
 	}

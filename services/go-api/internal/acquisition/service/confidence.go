@@ -5,6 +5,7 @@ import (
 	"context"
 	"log/slog"
 	"math"
+	"slices"
 )
 
 const (
@@ -122,22 +123,60 @@ func (ac *AcquisitionContext) adopt(ctx context.Context, evidence Evidence) {
 }
 
 type Evidence struct {
-	Verdict              string   `json:"verdict"`
-	AcoustIDScore        float64  `json:"acoustid_score"`
-	ISRCSetHit           bool     `json:"isrc_set_hit"`
-	DurationDeltaSeconds float64  `json:"duration_delta_seconds"`
-	Channel              string   `json:"channel"`
-	Qualifiers           []string `json:"qualifiers"`
-	Resolved             bool     `json:"resolved"`
-	SourceTitle          string   `json:"source_title"`
+	Verdict              string     `json:"verdict"`
+	AcoustIDScore        float64    `json:"acoustid_score"`
+	ISRCSetHit           bool       `json:"isrc_set_hit"`
+	DurationDeltaSeconds float64    `json:"duration_delta_seconds"`
+	Channel              string     `json:"channel"`
+	Qualifiers           []string   `json:"qualifiers"`
+	Resolved             bool       `json:"resolved"`
+	SourceTitle          string     `json:"source_title"`
+	ISRCSource           ISRCSource `json:"isrc_source"`
 }
 
 func (ac *AcquisitionContext) collectEvidence() Evidence {
 	evidence := ac.Evidence
 	evidence.Verdict = string(ac.Verdict.Kind)
 	evidence.AcoustIDScore = ac.Verdict.Score
+	_, evidence.ISRCSource = ac.provenISRC()
 	if ac.Selected != nil {
 		evidence.SourceTitle = ac.Selected.Title
 	}
 	return evidence
+}
+
+type ISRCSource string
+
+const (
+	ISRCFromCatalog         ISRCSource = "catalog"
+	ISRCFromPinnedRecording ISRCSource = "pinned_recording"
+	ISRCFromFingerprint     ISRCSource = "fingerprint"
+	ISRCUnproven            ISRCSource = "unproven"
+)
+
+func (ac *AcquisitionContext) provenISRC() (string, ISRCSource) {
+	switch {
+	case ac.Track.ISRC != "":
+		return ac.Track.ISRC, ISRCFromCatalog
+	case ac.Identity.ISRC == "":
+		return "", ISRCUnproven
+	case ac.identityIsCatalogPin():
+		return ac.Identity.ISRC, ISRCFromPinnedRecording
+	case ac.fingerprintProvesReference():
+		return ac.Identity.ISRC, ISRCFromFingerprint
+	}
+	return "", ISRCUnproven
+}
+
+func (ac *AcquisitionContext) identityIsCatalogPin() bool {
+	return ac.Track.CatalogMBID != "" && ac.Identity.MBID == ac.Track.CatalogMBID
+}
+
+func (ac *AcquisitionContext) fingerprintProvesReference() bool {
+	if ac.Verdict.Kind != VerdictHard || ac.Identity.ReferenceDoubted {
+		return false
+	}
+	return slices.ContainsFunc(ac.Verdict.Surviving, func(recording ports.LinkedRecording) bool {
+		return recording.MBID != "" && slices.Contains(ac.Identity.MBIDs, recording.MBID)
+	})
 }
