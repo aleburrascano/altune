@@ -28,7 +28,7 @@ func ResolveIdentity(ctx context.Context, recordings ports.RecordingResolver, id
 	if identity.IsZero() {
 		return
 	}
-	adoptIdentity(ctx, ac, identity)
+	ac.Identity = identity
 	resolveExpectedCluster(ctx, identifier, ac)
 }
 
@@ -39,15 +39,6 @@ func withCatalogPin(identity ports.RecordingIdentity, pin string) ports.Recordin
 	identity.MBID = pin
 	identity.MBIDs = []string{pin}
 	return identity
-}
-
-func adoptIdentity(ctx context.Context, ac *AcquisitionContext, identity ports.RecordingIdentity) {
-	ac.Identity = identity
-	if ac.Track.Duration <= 0 && identity.Duration > 0 {
-		ac.Track.Duration = identity.Duration
-		slog.InfoContext(ctx, "acquisition.identity_supplied_duration",
-			"track_id", ac.Track.ID, "duration", identity.Duration)
-	}
 }
 
 func resolveExpectedCluster(ctx context.Context, identifier ports.AudioIdentifier, ac *AcquisitionContext) {

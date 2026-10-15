@@ -642,7 +642,7 @@ func TestRankCandidates_TopicFirstThenOrdered(t *testing.T) {
 		{Title: "How Sweet", Channel: "NewJeans - Topic", Duration: 840, URL: "topic", Categories: []string{"Music"}, ViewCount: 9_000_000},
 	}
 
-	ranked, _ := rankAndCollect(context.Background(), track, candidates)
+	ranked, _ := rankAndCollect(context.Background(), track, track.Duration, candidates)
 	if len(ranked) != 2 {
 		t.Fatalf("expected both candidates ranked, got %d", len(ranked))
 	}
@@ -745,7 +745,7 @@ func TestCandidateLogs_StampTrackIDAndSource(t *testing.T) {
 			msg:  "candidate_evaluated",
 			run: func(ctx context.Context, t *testing.T) {
 				track := TrackRef{ID: logTestTrackID, Title: "Song", Artist: "Artist"}
-				_, _ = rankAndCollect(ctx, track, []ports.AudioCandidate{logTestCandidate()})
+				_, _ = rankAndCollect(ctx, track, track.Duration, []ports.AudioCandidate{logTestCandidate()})
 			},
 		},
 		{

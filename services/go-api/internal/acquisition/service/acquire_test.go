@@ -348,25 +348,32 @@ func serviceWithResolver(r ports.RecordingResolver) *AcquireTrackAudioService {
 	)
 }
 
-func TestResolveIdentity_SuppliesMissingDuration(t *testing.T) {
-	svc := serviceWithResolver(&stubResolver{
-		identity: ports.RecordingIdentity{Duration: 181, ISRC: "USUM71922973"},
-	})
-	ac := &AcquisitionContext{Track: TrackRef{Title: "Smaxk Or Die", Artist: "Fatt Smaxk"}}
+func TestResolveIdentity_NeverWritesTheMBLengthIntoTheTrack(t *testing.T) {
+	tests := []struct {
+		name     string
+		identity ports.RecordingIdentity
+		want     float64
+	}{
+		{"a trusted MB length is the expected length", ports.RecordingIdentity{Duration: 181, ISRC: "USUM71922973"}, 181},
+		{"a doubted MB length is never the expected length", ports.RecordingIdentity{Duration: 181, ISRC: "USUM71922973", ReferenceDoubted: true}, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := serviceWithResolver(&stubResolver{identity: tt.identity})
+			ac := &AcquisitionContext{Track: TrackRef{Title: "Smaxk Or Die", Artist: "Fatt Smaxk"}}
 
-	svc.resolveIdentity(context.Background(), ac)
+			svc.resolveIdentity(context.Background(), ac)
 
-	if ac.Track.Duration != 181 {
-		t.Errorf("duration = %v, want the resolved 181", ac.Track.Duration)
-	}
-	if ac.Track.ISRC != "" {
-		t.Errorf("track isrc = %q, want a resolver guess kept off the track", ac.Track.ISRC)
-	}
-	if ac.Identity.ISRC != "USUM71922973" {
-		t.Errorf("identity isrc = %q, want the resolved one", ac.Identity.ISRC)
-	}
-	if ac.Identity.Duration != 181 {
-		t.Errorf("identity not recorded on the context: %+v", ac.Identity)
+			if ac.Track.Duration != 0 {
+				t.Errorf("track duration = %v, want the MB length kept off the track", ac.Track.Duration)
+			}
+			if ac.ExpectedLength() != tt.want {
+				t.Errorf("ExpectedLength() = %v, want %v", ac.ExpectedLength(), tt.want)
+			}
+			if ac.Track.ISRC != "" || ac.Identity.ISRC != "USUM71922973" {
+				t.Errorf("track isrc %q, identity isrc %q, want the guess on the identity only", ac.Track.ISRC, ac.Identity.ISRC)
+			}
+		})
 	}
 }
 

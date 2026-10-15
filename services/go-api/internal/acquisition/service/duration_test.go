@@ -56,8 +56,8 @@ func TestLengthCorroborated_RequiresAgreement(t *testing.T) {
 	if !contextWithLengths(262, 263).lengthCorroborated() {
 		t.Error("two independent sources agreeing is exactly what corroboration means")
 	}
-	if !contextWithLengths(0, 262).lengthCorroborated() {
-		t.Error("a resolved length with nothing to contradict it is corroborated")
+	if contextWithLengths(0, 262).lengthCorroborated() {
+		t.Error("a single resolved length is one source, not corroboration")
 	}
 }
 

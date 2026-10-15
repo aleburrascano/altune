@@ -464,7 +464,7 @@ func TestAcqStage_SymbolOnlyArtistDoesNotRescueUnrelatedCandidate(t *testing.T) 
 		Channel: "CookingChannel",
 	}}
 
-	ranked, rejected := rankAndCollect(context.Background(), track, candidates)
+	ranked, rejected := rankAndCollect(context.Background(), track, track.Duration, candidates)
 
 	if len(ranked) != 0 {
 		t.Fatalf("unrelated candidate must stay gated for a symbol-only artist: ranked=%v", ranked)
@@ -636,6 +636,7 @@ func TestProvenance(t *testing.T) {
 			name: "length corroborated by discovery but no fingerprint",
 			ac: AcquisitionContext{
 				DurationVerified: true,
+				Track:            TrackRef{Duration: 181},
 				Identity:         ports.RecordingIdentity{Duration: 181},
 			},
 			want: domain.ProvenanceCorroborated,
@@ -663,6 +664,15 @@ func TestProvenance(t *testing.T) {
 				t.Errorf("Provenance() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestProvenance_OneLengthSourceIsNotCorroborated(t *testing.T) {
+	ac := contextWithLengths(0, 181)
+	ac.DurationVerified = true
+
+	if got := ac.Provenance(); got != domain.ProvenanceBestEffort {
+		t.Errorf("Provenance() = %q, want best_effort - the MB length alone checked against itself proves nothing", got)
 	}
 }
 

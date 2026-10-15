@@ -132,7 +132,7 @@ func TestResolveIdentity_ResolvedPinnedIdentityIsAdoptedAsIs(t *testing.T) {
 
 	ResolveIdentity(context.Background(), &stubResolver{identity: resolved}, identifier, ac)
 
-	if !slices.Equal(ac.Identity.MBIDs, resolved.MBIDs) || ac.Identity.Duration != 157.306 || ac.Track.Duration != 157.306 {
+	if !slices.Equal(ac.Identity.MBIDs, resolved.MBIDs) || ac.Identity.Duration != 157.306 || ac.Track.Duration != 0 {
 		t.Errorf("identity = %+v, track duration %v, want the resolver's pinned identity untouched", ac.Identity, ac.Track.Duration)
 	}
 	if !slices.Equal(identifier.asked, []string{pinnedBoysDontCry}) {

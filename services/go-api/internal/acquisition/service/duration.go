@@ -50,11 +50,8 @@ func (ac *AcquisitionContext) ExpectedLength() float64 {
 
 func (ac *AcquisitionContext) lengthCorroborated() bool {
 	saved, resolved := ac.savedLength(), ac.resolvedLength()
-	if resolved <= 0 {
+	if saved <= 0 || resolved <= 0 {
 		return false
-	}
-	if saved <= 0 {
-		return true
 	}
 	return durationWithinAuthoritativeTolerance(saved, resolved)
 }
@@ -82,14 +79,14 @@ func (ac *AcquisitionContext) fileLengthAcceptable(candidate ports.AudioCandidat
 
 func (ac *AcquisitionContext) durationAcceptable(actual float64) bool {
 	saved, resolved := ac.savedLength(), ac.resolvedLength()
-	if ac.lengthCorroborated() {
-		if saved <= 0 {
-			return durationWithinAuthoritativeTolerance(resolved, actual)
-		}
+	switch {
+	case ac.lengthCorroborated():
 		return durationWithinAuthoritativeTolerance(saved, actual)
-	}
-	if resolved > 0 {
+	case saved <= 0 && resolved > 0:
+		return durationWithinTolerance(resolved, actual)
+	case resolved > 0:
 		return durationWithinTolerance(saved, actual) || durationWithinTolerance(resolved, actual)
+	default:
+		return durationWithinTolerance(saved, actual)
 	}
-	return durationWithinTolerance(saved, actual)
 }
