@@ -18,10 +18,7 @@ import (
 	discoveryports "altune/go-api/internal/discovery/ports"
 )
 
-const (
-	resolveLimit      = 10
-	maxReferenceMBIDs = 5
-)
+const resolveLimit = 10
 
 var (
 	_ acqports.RecordingResolver = (*RecordingResolver)(nil)
@@ -205,7 +202,7 @@ func referenceSet(mbid string, recordings []discoveryports.ISRCRecording) []stri
 	seen := make(map[string]bool, len(recordings)+1)
 	var set []string
 	add := func(id string) {
-		if id == "" || seen[id] || len(set) >= maxReferenceMBIDs {
+		if id == "" || seen[id] {
 			return
 		}
 		seen[id] = true

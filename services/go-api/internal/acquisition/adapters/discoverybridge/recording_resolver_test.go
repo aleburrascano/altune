@@ -324,14 +324,15 @@ func TestResolve_NoISRCRecordingsYieldsEmptyMBIDsWhenSearchFindsNothing(t *testi
 	}
 }
 
-func TestResolve_ISRCReferenceSetCapsAtFive(t *testing.T) {
+func TestResolve_ISRCReferenceSetKeepsEveryRegisteredRecording(t *testing.T) {
 	authority := &stubISRCAuthority{recordings: []discoveryports.ISRCRecording{
-		{MBID: "remix-mbid", Duration: 236},
 		{MBID: "b", Duration: 236},
 		{MBID: "c", Duration: 236},
 		{MBID: "d", Duration: 236},
 		{MBID: "e", Duration: 236},
 		{MBID: "f", Duration: 236},
+		{MBID: "remix-mbid", Duration: 236},
+		{MBID: "g", Duration: 236},
 	}}
 	resolver := NewRecordingResolver(drinkingInLA(), WithISRCAuthority(authority))
 
@@ -339,9 +340,7 @@ func TestResolve_ISRCReferenceSetCapsAtFive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	if len(identity.MBIDs) != 5 {
-		t.Errorf("MBIDs = %v, want exactly 5 (the cap)", identity.MBIDs)
-	}
+	assertMBIDs(t, identity.MBIDs, []string{"remix-mbid", "b", "c", "d", "e", "f", "g"})
 }
 
 func TestResolve_SearchDurationDisagreementDoubtsTheReferenceWithNoISRC(t *testing.T) {
@@ -488,24 +487,6 @@ func TestResolve_ReferenceSetListsARepeatedISRCRecordingOnce(t *testing.T) {
 		t.Fatalf("Resolve: %v", err)
 	}
 	assertMBIDs(t, identity.MBIDs, []string{"remix-mbid", "other"})
-}
-
-func TestResolve_CappedReferenceSetKeepsTheResolvedMBIDFirst(t *testing.T) {
-	authority := &stubISRCAuthority{recordings: []discoveryports.ISRCRecording{
-		{MBID: "b", Duration: 236},
-		{MBID: "c", Duration: 236},
-		{MBID: "d", Duration: 236},
-		{MBID: "e", Duration: 236},
-		{MBID: "f", Duration: 236},
-		{MBID: "remix-mbid", Duration: 236},
-	}}
-	resolver := NewRecordingResolver(drinkingInLA(), WithISRCAuthority(authority))
-
-	identity, err := resolver.Resolve(context.Background(), drinkingQuery)
-	if err != nil {
-		t.Fatalf("Resolve: %v", err)
-	}
-	assertMBIDs(t, identity.MBIDs, []string{"remix-mbid", "b", "c", "d", "e"})
 }
 
 func TestResolve_ISRCRecordingWithoutAnMBIDIsNotAReference(t *testing.T) {

@@ -280,7 +280,7 @@ flowchart TD
 ```
 
 **Reference set.** Before searching, `RecordingResolver` builds the reference the
-audio is later judged against: `RecordingIdentity.MBIDs`, up to five recordings
+audio is later judged against: `RecordingIdentity.MBIDs`, every recording
 registered to the track's ISRC (through `WithISRCAuthority`), with the resolved MBID
 first. When the saved and resolved lengths disagree, or the searched MBID is not
 among the ISRC's recordings, the identity carries `ReferenceDoubted` and logs
