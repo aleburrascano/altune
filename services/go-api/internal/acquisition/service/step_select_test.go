@@ -249,3 +249,22 @@ func TestSelectStep_ShadowLogsAgreement(t *testing.T) {
 		t.Fatalf("shadow line = %v, selected = %s, want agreement on the album track", line, ac.Selected.URL)
 	}
 }
+
+func TestSearchStep_FirstTierHoldingOnlyTheStoredFileStillOpensTheFallbackTier(t *testing.T) {
+	storedArtTrack := ports.AudioCandidate{
+		Title: "Phone (Interlude)", URL: "https://music.youtube.com/watch?v=TB0z2HVFxEE",
+		Duration: 112, Resolved: true, Kind: ports.KindArtTrack, Artists: []string{"SLAYR"},
+	}
+	first := findOnlySource{name: "ytmsearch", candidates: []ports.AudioCandidate{storedArtTrack}}
+	registry := NewSourceRegistry(first).WithFallback(findOnlySource{name: "ytdlp"})
+	ac := &AcquisitionContext{
+		Track:   TrackRef{Title: "Phone (Interlude)", Artist: "SLAYR", Duration: 128},
+		Replace: ReplaceState{StoredLength: 112},
+	}
+
+	_, err := NewSearchStep(registry).Execute(context.Background(), ac, pipelineStart{})
+
+	if err == nil || !ac.FallbackSkipped {
+		t.Fatalf("err = %v, FallbackSkipped = %v, want a failed first tier that opens the fallback", err, ac.FallbackSkipped)
+	}
+}
