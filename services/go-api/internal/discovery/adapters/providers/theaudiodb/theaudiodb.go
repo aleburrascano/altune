@@ -11,10 +11,27 @@ import (
 
 type Adapter struct {
 	client *http.Client
+	apiKey string
 }
 
-func New(client *http.Client) *Adapter {
-	return &Adapter{client: client}
+type Option func(*Adapter)
+
+func WithAPIKey(key string) Option {
+	return func(a *Adapter) { a.apiKey = key }
+}
+
+func New(client *http.Client, opts ...Option) *Adapter {
+	a := &Adapter{client: client}
+	for _, opt := range opts {
+		opt(a)
+	}
+	return a
+}
+
+func (a *Adapter) enabled() bool { return a.apiKey != "" }
+
+func (a *Adapter) endpoint(path string) string {
+	return "https://theaudiodb.com/api/v1/json/" + url.PathEscape(a.apiKey) + "/" + path
 }
 
 func (a *Adapter) Name() domain.ProviderName { return domain.ProviderTheAudioDB }
@@ -26,11 +43,11 @@ func (a *Adapter) SupportedKinds() map[domain.ResultKind]bool {
 }
 
 func (a *Adapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
-	if !kinds[domain.ResultKindArtist] {
+	if !a.enabled() || !kinds[domain.ResultKindArtist] {
 		return nil, nil
 	}
 
-	u := fmt.Sprintf("https://theaudiodb.com/api/v1/json/523532/search.php?s=%s", url.QueryEscape(query))
+	u := a.endpoint("search.php?s=" + url.QueryEscape(query))
 
 	var body struct {
 		Artists []artistHit `json:"artists"`
@@ -59,6 +76,9 @@ func artistResults(artists []artistHit) []domain.SearchResult {
 }
 
 func (a *Adapter) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, error) {
+	if !a.enabled() {
+		return "", nil
+	}
 	if kind == domain.ResultKindArtist {
 		return a.resolveArtist(ctx, title, mbid)
 	}
@@ -86,8 +106,8 @@ func (a *Adapter) resolveAlbum(ctx context.Context, title, subtitle string) (str
 		return "", nil
 	}
 
-	u := fmt.Sprintf("https://theaudiodb.com/api/v1/json/523532/searchalbum.php?s=%s&a=%s",
-		url.QueryEscape(subtitle), url.QueryEscape(title))
+	u := a.endpoint(fmt.Sprintf("searchalbum.php?s=%s&a=%s",
+		url.QueryEscape(subtitle), url.QueryEscape(title)))
 	var body struct {
 		Album []struct {
 			StrAlbumThumb string `json:"strAlbumThumb"`
@@ -103,7 +123,7 @@ func (a *Adapter) resolveAlbum(ctx context.Context, title, subtitle string) (str
 }
 
 func (a *Adapter) artistThumbByMBID(ctx context.Context, mbid string) string {
-	u := fmt.Sprintf("https://theaudiodb.com/api/v1/json/523532/artist-mb.php?i=%s", url.QueryEscape(mbid))
+	u := a.endpoint("artist-mb.php?i=" + url.QueryEscape(mbid))
 	var body struct {
 		Artists []struct {
 			StrArtistThumb string `json:"strArtistThumb"`

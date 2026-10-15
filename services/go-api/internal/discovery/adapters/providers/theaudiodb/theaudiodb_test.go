@@ -29,7 +29,7 @@ func TestTheAudioDBAdapter_Search(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := New(providertest.NewClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL), WithAPIKey("k"))
 	results, err := adapter.Search(context.Background(), "coldplay", map[domain.ResultKind]bool{
 		domain.ResultKindArtist: true,
 	})
@@ -71,7 +71,7 @@ func TestTheAudioDBAdapter_Search_Empty(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := New(providertest.NewClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL), WithAPIKey("k"))
 	results, err := adapter.Search(context.Background(), "nonexistent artist xyz", map[domain.ResultKind]bool{
 		domain.ResultKindArtist: true,
 	})
@@ -89,7 +89,7 @@ func TestTheAudioDBAdapter_Search_UnsupportedKind(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := New(providertest.NewClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL), WithAPIKey("k"))
 	results, err := adapter.Search(context.Background(), "anything", map[domain.ResultKind]bool{
 		domain.ResultKindTrack: true,
 	})
@@ -114,7 +114,7 @@ func TestTheAudioDBAdapter_Resolve_Artist(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := New(providertest.NewClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL), WithAPIKey("k"))
 	url, err := adapter.Resolve(context.Background(), domain.ResultKindArtist, "Coldplay", "", "")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
@@ -139,7 +139,7 @@ func TestTheAudioDBAdapter_Resolve_Album(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := New(providertest.NewClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL), WithAPIKey("k"))
 	url, err := adapter.Resolve(context.Background(), domain.ResultKindAlbum, "OK Computer", "Radiohead", "")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
@@ -156,7 +156,7 @@ func TestTheAudioDBAdapter_Resolve_ArtistSearchNoResultsIsEmptyMiss(t *testing.T
 	}))
 	defer server.Close()
 
-	adapter := New(providertest.NewClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL), WithAPIKey("k"))
 	url, err := adapter.Resolve(context.Background(), domain.ResultKindArtist, "Nobody", "", "")
 	if err != nil || url != "" {
 		t.Errorf("Resolve with zero results = (%q, %v), want (\"\", nil) — a verified miss", url, err)
@@ -169,7 +169,7 @@ func TestTheAudioDBAdapter_Resolve_AlbumSearchHTTPErrorIsUnavailable(t *testing.
 	}))
 	defer server.Close()
 
-	adapter := New(providertest.NewClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL), WithAPIKey("k"))
 	url, err := adapter.Resolve(context.Background(), domain.ResultKindAlbum, "OK Computer", "Radiohead", "")
 	if !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Fatalf("Resolve on 500 error = %v, want ports.ErrArtworkUnavailable", err)
@@ -185,7 +185,7 @@ func TestTheAudioDBAdapter_Search_transportErrorSurfaces(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := New(providertest.NewClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL), WithAPIKey("k"))
 	results, err := adapter.Search(context.Background(), "anything", map[domain.ResultKind]bool{
 		domain.ResultKindArtist: true,
 	})
@@ -210,7 +210,7 @@ func TestTheAudioDBAdapter_Resolve_ArtistByMBID(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := New(providertest.NewClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL), WithAPIKey("k"))
 	url, err := adapter.Resolve(context.Background(), domain.ResultKindArtist, "Che", "", "mbid-che-1")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
@@ -234,7 +234,7 @@ func TestTheAudioDBAdapter_Resolve_MBIDMissFallsBackToNameSearch(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := New(providertest.NewClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL), WithAPIKey("k"))
 	url, err := adapter.Resolve(context.Background(), domain.ResultKindArtist, "Che", "", "mbid-unknown")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
@@ -250,7 +250,7 @@ func TestTheAudioDBAdapter_Resolve_ArtistSearchErrorIsUnavailableNotEmpty(t *tes
 	}))
 	defer server.Close()
 
-	adapter := New(providertest.NewClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL), WithAPIKey("k"))
 	url, err := adapter.Resolve(context.Background(), domain.ResultKindArtist, "Che", "", "")
 	if !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Fatalf("Resolve on 500 = (%q, %v), want ports.ErrArtworkUnavailable", url, err)
@@ -267,7 +267,7 @@ func TestTheAudioDBAdapter_Resolve_AlbumWithoutSubtitleIsEmpty(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := New(providertest.NewClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL), WithAPIKey("k"))
 	url, err := adapter.Resolve(context.Background(), domain.ResultKindAlbum, "OK Computer", "", "")
 	if err != nil || url != "" {
 		t.Errorf("Resolve = (%q, %v), want (\"\", nil)", url, err)
@@ -280,7 +280,7 @@ func TestTheAudioDBAdapter_Search_http500Propagates(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := New(providertest.NewClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL), WithAPIKey("k"))
 	_, err := adapter.Search(context.Background(), "che", map[domain.ResultKind]bool{
 		domain.ResultKindArtist: true,
 	})
@@ -290,7 +290,7 @@ func TestTheAudioDBAdapter_Search_http500Propagates(t *testing.T) {
 }
 
 func TestTheAudioDBAdapter_meta(t *testing.T) {
-	adapter := New(http.DefaultClient)
+	adapter := New(http.DefaultClient, WithAPIKey("k"))
 	if adapter.Name() != domain.ProviderTheAudioDB {
 		t.Errorf("Name = %v", adapter.Name())
 	}
@@ -310,7 +310,7 @@ func TestTheAudioDBAdapter_Resolve_ProviderFailureIsUnavailable(t *testing.T) {
 				srv := httptest.NewServer(handler)
 				defer srv.Close()
 
-				adapter := New(providertest.NewClient(srv.URL))
+				adapter := New(providertest.NewClient(srv.URL), WithAPIKey("k"))
 				url, err := adapter.Resolve(context.Background(), kind, "OK Computer", "Radiohead", "")
 				if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
 					t.Fatalf("Resolve(%s) on %s = (%q, %v), want (\"\", ErrArtworkUnavailable)", kind, name, url, err)
@@ -339,7 +339,7 @@ func TestTheAudioDBAdapter_Resolve_VerifiedMissIsEmptyWithoutError(t *testing.T)
 				srv := httptest.NewServer(handler)
 				defer srv.Close()
 
-				adapter := New(providertest.NewClient(srv.URL))
+				adapter := New(providertest.NewClient(srv.URL), WithAPIKey("k"))
 				url, err := adapter.Resolve(context.Background(), kind, "OK Computer", "Radiohead", "")
 				if url != "" || err != nil {
 					t.Errorf("Resolve(%s) on %s = (%q, %v), want (\"\", nil)", kind, name, url, err)
@@ -354,7 +354,7 @@ func TestTheAudioDBAdapter_Resolve_CancelledMidRequestIsUnavailable(t *testing.T
 		t.Run(kind.String(), func(t *testing.T) {
 			srv, ctx := providertest.CancelMidRequestServer(t)
 
-			adapter := New(providertest.NewClient(srv.URL))
+			adapter := New(providertest.NewClient(srv.URL), WithAPIKey("k"))
 			url, err := adapter.Resolve(ctx, kind, "OK Computer", "Radiohead", "")
 			if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
 				t.Errorf("Resolve(%s) cancelled mid-request = (%q, %v), want ErrArtworkUnavailable wrapping context.Canceled", kind, url, err)
@@ -374,5 +374,42 @@ func TestArtworkSourceTags(t *testing.T) {
 		if tt.got.String() != tt.want {
 			t.Errorf("ArtworkSource = %q, want %q", tt.got, tt.want)
 		}
+	}
+}
+
+func TestTheAudioDBAdapter_DisabledWithoutAPIKey(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+
+	adapter := New(providertest.NewClient(server.URL))
+	results, err := adapter.Search(context.Background(), "coldplay", map[domain.ResultKind]bool{domain.ResultKindArtist: true})
+	if err != nil || len(results) != 0 {
+		t.Errorf("Search = %v, %v; want no results, no error", results, err)
+	}
+	art, err := adapter.Resolve(context.Background(), domain.ResultKindAlbum, "Parachutes", "Coldplay", "")
+	if err != nil || art != "" {
+		t.Errorf("Resolve = %q, %v; want empty, no error", art, err)
+	}
+	if calls != 0 {
+		t.Errorf("made %d requests without an API key, want 0", calls)
+	}
+}
+
+func TestTheAudioDBAdapter_KeyGoesInRequestPath(t *testing.T) {
+	var path string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+
+	adapter := New(providertest.NewClient(server.URL), WithAPIKey("k123"))
+	_, _ = adapter.Search(context.Background(), "coldplay", map[domain.ResultKind]bool{domain.ResultKindArtist: true})
+	if !strings.Contains(path, "/json/k123/search.php") {
+		t.Errorf("path = %q, want the key in it", path)
 	}
 }

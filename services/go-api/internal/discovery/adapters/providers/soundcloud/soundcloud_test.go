@@ -1238,7 +1238,7 @@ func TestChainedArtworkResolver_NextProviderStillReturnsArtworkAfterAProviderFai
 
 	for name, broken := range map[string]ports.ArtworkResolver{"soundcloud": newTestSoundCloudAPI(failing, nil)} {
 		t.Run(name, func(t *testing.T) {
-			chain := artworkchain.NewChainedArtworkResolver(broken, theaudiodb.New(providertest.NewClient(healthy.URL)))
+			chain := artworkchain.NewChainedArtworkResolver(broken, theaudiodb.New(providertest.NewClient(healthy.URL), theaudiodb.WithAPIKey("k")))
 			url, source, err := chain.ResolveTagged(context.Background(), domain.ResultKindArtist, "sombr", "", "")
 			if err != nil {
 				t.Fatalf("ResolveTagged after %s fails = (%q, %q, %v), want no error", name, url, source, err)

@@ -147,12 +147,15 @@ func keyedArtworkResolvers(cf clientFactory, cfg *config.Config) []discoveryPort
 		resolvers = append(resolvers,
 			genius.NewGeniusArtworkResolver(cf.discovery(), cfg.GeniusAccessToken))
 	}
+	if cfg.HasTheAudioDB() {
+		resolvers = append(resolvers,
+			theaudiodb.New(cf.discovery(), theaudiodb.WithAPIKey(cfg.TheAudioDBAPIKey)))
+	}
 	return resolvers
 }
 
 func openArtworkResolvers(cf clientFactory, cfg *config.Config) []discoveryPorts.ArtworkResolver {
 	resolvers := []discoveryPorts.ArtworkResolver{
-		theaudiodb.New(cf.discovery()),
 		deezer.NewDeezerAdapter(cf.discovery()),
 		itunes.NewITunesAdapter(cf.discovery()),
 	}

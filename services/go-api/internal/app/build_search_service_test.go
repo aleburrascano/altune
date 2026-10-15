@@ -156,7 +156,7 @@ func TestScrapedProviderWiringCollections(t *testing.T) {
 			consens: []string{"itunes", "ytmusic", "soundcloud"},
 			artwork: []string{
 				"*coverartarchive.CoverArtArchiveResolver", "coverartarchive.CoverArtArchiveIdentityResolver", "*spotify.SpotifyArtworkResolver",
-				"*theaudiodb.Adapter", "*deezer.DeezerAdapter", "*itunes.ITunesAdapter",
+				"*deezer.DeezerAdapter", "*itunes.ITunesAdapter",
 				"*ytmusic.YouTubeMusicArtworkResolver", "*soundcloud.SoundCloudAPIAdapter",
 			},
 		},
@@ -167,7 +167,7 @@ func TestScrapedProviderWiringCollections(t *testing.T) {
 			search:  []string{"*deezer.DeezerAdapter", "*ytmusic.YouTubeMusicAdapter"},
 			consens: []string{"itunes", "ytmusic"},
 			artwork: []string{
-				"*coverartarchive.CoverArtArchiveResolver", "coverartarchive.CoverArtArchiveIdentityResolver", "*theaudiodb.Adapter",
+				"*coverartarchive.CoverArtArchiveResolver", "coverartarchive.CoverArtArchiveIdentityResolver",
 				"*deezer.DeezerAdapter", "*itunes.ITunesAdapter", "*ytmusic.YouTubeMusicArtworkResolver",
 			},
 		},
@@ -336,6 +336,7 @@ func TestAllKeysProviderOrder(t *testing.T) {
 	cfg.DiscogsToken = "k"
 	cfg.FanartTVAPIKey = "k"
 	cfg.GeniusAccessToken = "k"
+	cfg.TheAudioDBAPIKey = "k"
 
 	var consensus []string
 	for _, p := range BuildConsensusProviders(cfg, nil) {

@@ -367,7 +367,7 @@ func failingArtworkProviders(srv *httptest.Server) map[string]ports.ArtworkResol
 	return map[string]ports.ArtworkResolver{
 		"genius":     genius.NewGeniusArtworkResolver(providertest.NewClient(srv.URL), "token"),
 		"ytmusic":    ytmusic.NewYouTubeMusicArtworkResolver(&providertest.RedirectTransport{TargetURL: srv.URL}),
-		"theaudiodb": theaudiodb.New(providertest.NewClient(srv.URL)),
+		"theaudiodb": theaudiodb.New(providertest.NewClient(srv.URL), theaudiodb.WithAPIKey("k")),
 	}
 }
 
@@ -385,7 +385,7 @@ func TestChainedArtworkResolver_NextProviderStillReturnsArtworkAfterAProviderFai
 
 	for name, broken := range failingArtworkProviders(failing) {
 		t.Run(name, func(t *testing.T) {
-			chain := NewChainedArtworkResolver(broken, theaudiodb.New(providertest.NewClient(healthy.URL)))
+			chain := NewChainedArtworkResolver(broken, theaudiodb.New(providertest.NewClient(healthy.URL), theaudiodb.WithAPIKey("k")))
 			url, source, err := chain.ResolveTagged(context.Background(), domain.ResultKindArtist, "sombr", "", "")
 			if err != nil {
 				t.Fatalf("ResolveTagged after %s fails = (%q, %q, %v), want no error", name, url, source, err)

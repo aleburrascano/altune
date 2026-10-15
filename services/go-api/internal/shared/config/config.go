@@ -45,6 +45,7 @@ type Config struct {
 	MusicBrainzUserAgent string `env:"MUSICBRAINZ_USER_AGENT"`
 	LastFMAPIKey         string `env:"LASTFM_API_KEY"`
 	FanartTVAPIKey       string `env:"FANARTTV_API_KEY"`
+	TheAudioDBAPIKey     string `env:"THEAUDIODB_API_KEY"`
 	GeniusAccessToken    string `env:"GENIUS_ACCESS_TOKEN"`
 	DiscogsToken         string `env:"DISCOGS_TOKEN"`
 

@@ -1950,3 +1950,20 @@ func TestLoad_DiscoverySearchDeadlineRejectsNegative(t *testing.T) {
 		t.Fatalf("err = %v, want an error naming DISCOVERY_SEARCH_DEADLINE", err)
 	}
 }
+
+func TestConfig_TheAudioDBAPIKeyFromEnv(t *testing.T) {
+	setEnv(t, validConfigEnv(map[string]string{"THEAUDIODB_API_KEY": "audiodb-key"}))
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.TheAudioDBAPIKey != "audiodb-key" || !cfg.HasTheAudioDB() {
+		t.Errorf("key = %q, HasTheAudioDB = %v; want the env value and true", cfg.TheAudioDBAPIKey, cfg.HasTheAudioDB())
+	}
+}
+
+func TestConfig_HasTheAudioDB(t *testing.T) {
+	if (&Config{}).HasTheAudioDB() {
+		t.Error("HasTheAudioDB() = true with no key, want false")
+	}
+}

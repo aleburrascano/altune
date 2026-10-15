@@ -62,6 +62,10 @@ func (c *Config) HasFanartTV() bool {
 	return c.FanartTVAPIKey != ""
 }
 
+func (c *Config) HasTheAudioDB() bool {
+	return c.TheAudioDBAPIKey != ""
+}
+
 func (c *Config) HasGenius() bool {
 	return c.GeniusAccessToken != ""
 }
