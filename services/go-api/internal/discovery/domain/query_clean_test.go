@@ -100,6 +100,13 @@ func TestSearchText(t *testing.T) {
 		{"keeps audio", "audio lsd", "audio lsd"},
 		{"cleans pasted video title", "Song - Artist (Official Video)", "Song - Artist"},
 		{"cleans bracket tag", "Song - Artist [HD]", "Song - Artist"},
+		{"keeps noise-word artist head", "Audio Bullys - Real Love (Remix)", "Audio Bullys - Real Love (Remix)"},
+		{"keeps topic head", "Topic - Song (Live)", "Topic - Song (Live)"},
+		{"keeps non-noise tag", "Artist - Song (Remix)", "Artist - Song (Remix)"},
+		{"leaves a mixed tag whole", "Artist - Song [Live HD]", "Artist - Song [Live HD]"},
+		{"leaves noise word inside a name tag", "A - B (Audio Bullys Remix)", "A - B (Audio Bullys Remix)"},
+		{"leaves noise word inside a live tag", "Song - X (Live at Audio Arena)", "Song - X (Live at Audio Arena)"},
+		{"drops dangling separator", "Artist - (Official Video)", "Artist"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

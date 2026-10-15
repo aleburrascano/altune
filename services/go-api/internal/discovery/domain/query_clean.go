@@ -40,20 +40,20 @@ func CleanQuery(raw string) string {
 	return cleaned
 }
 
-var pastedVideoTitleRe = regexp.MustCompile(`\s[-–—]\s.*[(\[][^)\]]*[)\]]$`)
+var pastedVideoTitleRe = regexp.MustCompile(`^(.*\s[-–—]\s.*?)\s*[(\[]([^)\]]*)[)\]]$`)
 
-var emptyBracketsRe = regexp.MustCompile(`\(\s*\)|\[\s*\]`)
+func stripNoise(text string) string {
+	for _, re := range noiseRes {
+		text = re.ReplaceAllString(text, " ")
+	}
+	return strings.TrimSpace(whitespaceRe.ReplaceAllString(text, " "))
+}
 
 func SearchText(raw string) string {
 	trimmed := strings.TrimSpace(raw)
-	if !pastedVideoTitleRe.MatchString(trimmed) {
+	match := pastedVideoTitleRe.FindStringSubmatch(trimmed)
+	if len(match) == 0 || stripNoise(match[2]) != "" {
 		return trimmed
 	}
-	cleaned := CleanQuery(trimmed)
-	cleaned = emptyBracketsRe.ReplaceAllString(cleaned, " ")
-	cleaned = strings.TrimSpace(whitespaceRe.ReplaceAllString(cleaned, " "))
-	if cleaned == "" {
-		return trimmed
-	}
-	return cleaned
+	return strings.TrimSpace(strings.TrimRight(match[1], " -–—"))
 }
