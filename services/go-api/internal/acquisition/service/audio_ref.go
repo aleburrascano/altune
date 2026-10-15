@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/textnorm"
 	"crypto/sha256"
 	"encoding/hex"
@@ -14,6 +15,11 @@ import (
 func stagedReplaceRef(canonical, attemptID string) string {
 	ext := path.Ext(canonical)
 	return strings.TrimSuffix(canonical, ext) + ".replace-" + attemptID + ext
+}
+
+func trackScopedRef(canonical string, trackID shared.TrackId) string {
+	ext := path.Ext(canonical)
+	return strings.TrimSuffix(canonical, ext) + "." + trackID.String() + ext
 }
 
 func BuildAudioRef(track TrackRef, tempPath string) string {

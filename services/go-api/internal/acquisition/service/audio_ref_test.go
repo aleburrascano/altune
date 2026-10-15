@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/shared"
 	"os"
 	"path/filepath"
 	"strings"
@@ -191,5 +192,21 @@ func TestSanitizePathComponent(t *testing.T) {
 				t.Errorf("sanitizePathComponent(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestTrackScopedRef_PutsTheTrackIDBeforeTheExtension(t *testing.T) {
+	id := shared.NewTrackId()
+	got := trackScopedRef("u/a/b/song.opus", id)
+	if want := "u/a/b/song." + id.String() + ".opus"; got != want {
+		t.Errorf("trackScopedRef = %q, want %q", got, want)
+	}
+}
+
+func TestTrackScopedRef_IgnoresDotsInTheDirectories(t *testing.T) {
+	id := shared.NewTrackId()
+	got := trackScopedRef("staging.v2/u/mr. big/x/to be with you.opus", id)
+	if want := "staging.v2/u/mr. big/x/to be with you." + id.String() + ".opus"; got != want {
+		t.Errorf("trackScopedRef = %q, want %q", got, want)
 	}
 }

@@ -79,6 +79,8 @@ func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext, _ after
 	audioRef := s.keyPrefix + BuildAudioRef(ac.Track, ac.TempPath)
 	if ac.Replace.PreservedRef != "" {
 		audioRef = stagedReplaceRef(audioRef, s.attemptID())
+	} else if s.sharedWithAnotherTrack(ctx, audioRef) {
+		audioRef = trackScopedRef(audioRef, s.ownTrackID)
 	}
 	ac.AudioRef = audioRef
 
@@ -143,7 +145,7 @@ func (s *StoreStep) sharedWithAnotherTrack(ctx context.Context, audioRef string)
 	}
 	inUse, err := s.trackRefs.AudioRefInUse(ctx, audioRef, s.ownTrackID)
 	if err != nil {
-		slog.ErrorContext(ctx, "acquisition.rollback_audio_usage_unknown",
+		slog.ErrorContext(ctx, "acquisition.audio_usage_unknown",
 			"audio_ref", audioRef, "error", redact.LogError(err))
 		return true
 	}

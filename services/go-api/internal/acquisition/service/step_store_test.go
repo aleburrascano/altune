@@ -498,3 +498,228 @@ func TestStoreRollback_HandedOver(t *testing.T) {
 		}
 	})
 }
+
+type writeLogStore struct {
+	fakeAudioStore
+	writes []string
+}
+
+func (s *writeLogStore) Store(ctx context.Context, src, audioRef string) error {
+	s.writes = append(s.writes, audioRef)
+	return s.fakeAudioStore.Store(ctx, src, audioRef)
+}
+
+func beyonceTrack() TrackRef {
+	return TrackRef{UserID: "u", Title: "Halo", Artist: "Beyonce", Album: "X"}
+}
+
+func executeStore(t *testing.T, store ports.AudioWriter, refs ports.AudioRefLookup, own domain.TrackId) *AcquisitionContext {
+	t.Helper()
+	step := NewStoreStep(store, WithStoreAudioRefGuard(refs, own))
+	ac := &AcquisitionContext{Track: beyonceTrack(), TempPath: "/tmp/altune-test/halo.opus"}
+	if _, err := step.Execute(context.Background(), ac, afterTag{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	return ac
+}
+
+func TestStoreStep_NeverOverwritesAudioAnotherTrackServes(t *testing.T) {
+	const canonical = "u/beyonce/x/halo.opus"
+	serving, acquiring := domain.NewTrackId(), domain.NewTrackId()
+	store := &writeLogStore{fakeAudioStore: *newFakeAudioStore()}
+	store.stored[canonical] = true
+	refs := trackRefIndex{holders: map[string][]domain.TrackId{canonical: {serving}}}
+
+	ac := executeStore(t, store, refs, acquiring)
+
+	want := "u/beyonce/x/halo." + acquiring.String() + ".opus"
+	if ac.AudioRef != want {
+		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, want)
+	}
+	if !store.stored[want] {
+		t.Errorf("scoped ref %q was not stored", want)
+	}
+	if len(store.writes) != 1 || store.writes[0] != want {
+		t.Errorf("writes = %v, want only %q: canonical ref %q is served by track %s", store.writes, want, canonical, serving)
+	}
+}
+
+func TestStoreStep_KeepsTheCanonicalRefItAlreadyHolds(t *testing.T) {
+	const canonical = "u/beyonce/x/halo.opus"
+	acquiring := domain.NewTrackId()
+	store := newFakeAudioStore()
+	refs := trackRefIndex{holders: map[string][]domain.TrackId{canonical: {acquiring}}}
+
+	ac := executeStore(t, store, refs, acquiring)
+
+	if ac.AudioRef != canonical {
+		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, canonical)
+	}
+}
+
+func TestStoreStep_ScopesTheRefWhenUsageIsUnknown(t *testing.T) {
+	acquiring := domain.NewTrackId()
+	store := newFakeAudioStore()
+	refs := trackRefIndex{err: errors.New("database unavailable")}
+
+	ac := executeStore(t, store, refs, acquiring)
+
+	want := "u/beyonce/x/halo." + acquiring.String() + ".opus"
+	if ac.AudioRef != want {
+		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, want)
+	}
+}
+
+func TestStoreStep_ScopesTheRefWhenAnotherTrackSharesItWithTheAcquiringTrack(t *testing.T) {
+	const canonical = "u/beyonce/x/halo.opus"
+	serving, acquiring := domain.NewTrackId(), domain.NewTrackId()
+	store := &writeLogStore{fakeAudioStore: *newFakeAudioStore()}
+	store.stored[canonical] = true
+	refs := trackRefIndex{holders: map[string][]domain.TrackId{canonical: {acquiring, serving}}}
+
+	ac := executeStore(t, store, refs, acquiring)
+
+	want := "u/beyonce/x/halo." + acquiring.String() + ".opus"
+	if ac.AudioRef != want {
+		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, want)
+	}
+	for _, w := range store.writes {
+		if w == canonical {
+			t.Errorf("wrote %q, which track %s still serves", canonical, serving)
+		}
+	}
+}
+
+func TestStoreStep_RollbackOfAScopedStoreDeletesItAndKeepsTheServedAudio(t *testing.T) {
+	const canonical = "u/beyonce/x/halo.opus"
+	serving, acquiring := domain.NewTrackId(), domain.NewTrackId()
+	store := newFakeAudioStore()
+	store.stored[canonical] = true
+	refs := trackRefIndex{holders: map[string][]domain.TrackId{canonical: {serving}}}
+	step := NewStoreStep(store, WithStoreAudioRefGuard(refs, acquiring))
+	step.sleep = func(_ time.Duration) {}
+	ac := &AcquisitionContext{Track: beyonceTrack(), TempPath: "/tmp/altune-test/halo.opus"}
+
+	if _, err := step.Execute(context.Background(), ac, afterTag{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if err := step.Rollback(context.Background(), ac); err != nil {
+		t.Fatalf("Rollback: %v", err)
+	}
+
+	scoped := "u/beyonce/x/halo." + acquiring.String() + ".opus"
+	if store.stored[scoped] {
+		t.Errorf("rollback left %q orphaned: only the rolled-back track wrote it", scoped)
+	}
+	if !store.stored[canonical] {
+		t.Errorf("rollback deleted %q, which track %s serves", canonical, serving)
+	}
+}
+
+func TestStoreStep_ScopesTheRefWhenAnAmpersandVariantServesTheCanonicalRef(t *testing.T) {
+	const canonical = "u/simon and garfunkel/x/cecilia.opus"
+	serving, acquiring := domain.NewTrackId(), domain.NewTrackId()
+	store := &writeLogStore{fakeAudioStore: *newFakeAudioStore()}
+	store.stored[canonical] = true
+	refs := trackRefIndex{holders: map[string][]domain.TrackId{canonical: {serving}}}
+	step := NewStoreStep(store, WithStoreAudioRefGuard(refs, acquiring))
+	ac := &AcquisitionContext{
+		Track:    TrackRef{UserID: "u", Title: "Cecilia", Artist: "Simon & Garfunkel", Album: "X"},
+		TempPath: "/tmp/altune-test/cecilia.opus",
+	}
+
+	if _, err := step.Execute(context.Background(), ac, afterTag{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	want := "u/simon and garfunkel/x/cecilia." + acquiring.String() + ".opus"
+	if ac.AudioRef != want {
+		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, want)
+	}
+	if len(store.writes) != 1 || store.writes[0] != want {
+		t.Errorf("writes = %v, want only %q", store.writes, want)
+	}
+}
+
+func TestStoreStep_ScopesThePrefixedRefAnotherTrackServes(t *testing.T) {
+	const canonical = "staging/u/beyonce/x/halo.opus"
+	serving, acquiring := domain.NewTrackId(), domain.NewTrackId()
+	store := &writeLogStore{fakeAudioStore: *newFakeAudioStore()}
+	store.stored[canonical] = true
+	refs := trackRefIndex{holders: map[string][]domain.TrackId{canonical: {serving}}}
+	step := NewStoreStep(store, WithStoreKeyPrefix("staging/"), WithStoreAudioRefGuard(refs, acquiring))
+	ac := &AcquisitionContext{Track: beyonceTrack(), TempPath: "/tmp/altune-test/halo.opus"}
+
+	if _, err := step.Execute(context.Background(), ac, afterTag{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	want := "staging/u/beyonce/x/halo." + acquiring.String() + ".opus"
+	if ac.AudioRef != want {
+		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, want)
+	}
+	if len(store.writes) != 1 || store.writes[0] != want {
+		t.Errorf("writes = %v, want only %q", store.writes, want)
+	}
+}
+
+func TestStoreStep_KeepsTheCanonicalRefWhenNoTrackHoldsIt(t *testing.T) {
+	const canonical = "u/beyonce/x/halo.opus"
+	store := newFakeAudioStore()
+	store.stored[canonical] = true
+	refs := trackRefIndex{holders: map[string][]domain.TrackId{}}
+
+	ac := executeStore(t, store, refs, domain.NewTrackId())
+
+	if ac.AudioRef != canonical {
+		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, canonical)
+	}
+}
+
+func TestStoreStep_RepeatedAcquisitionUnderACollisionReusesOneScopedRef(t *testing.T) {
+	const canonical = "u/beyonce/x/halo.opus"
+	serving, acquiring := domain.NewTrackId(), domain.NewTrackId()
+	store := &writeLogStore{fakeAudioStore: *newFakeAudioStore()}
+	store.stored[canonical] = true
+	refs := trackRefIndex{holders: map[string][]domain.TrackId{canonical: {serving}}}
+
+	first := executeStore(t, store, refs, acquiring)
+	second := executeStore(t, store, refs, acquiring)
+
+	want := "u/beyonce/x/halo." + acquiring.String() + ".opus"
+	if first.AudioRef != want || second.AudioRef != want {
+		t.Errorf("AudioRefs = %q, %q, want both %q", first.AudioRef, second.AudioRef, want)
+	}
+	for _, w := range store.writes {
+		if w == canonical {
+			t.Errorf("wrote %q, which track %s serves", canonical, serving)
+		}
+	}
+}
+
+func TestStoreStep_ReplaceStagesItsOwnRefEvenWhenAnotherTrackServesTheCanonicalRef(t *testing.T) {
+	const canonical = "u/beyonce/x/halo.opus"
+	serving, acquiring := domain.NewTrackId(), domain.NewTrackId()
+	store := &writeLogStore{fakeAudioStore: *newFakeAudioStore()}
+	store.stored[canonical] = true
+	refs := trackRefIndex{holders: map[string][]domain.TrackId{canonical: {serving, acquiring}}}
+	step := NewStoreStep(store, WithStoreAudioRefGuard(refs, acquiring))
+	step.attemptID = func() string { return testAttemptID }
+	ac := &AcquisitionContext{
+		Track:    beyonceTrack(),
+		TempPath: "/tmp/altune-test/halo.opus",
+		Replace:  ReplaceState{PreservedRef: canonical},
+	}
+
+	if _, err := step.Execute(context.Background(), ac, afterTag{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	want := "u/beyonce/x/halo.replace-" + testAttemptID + ".opus"
+	if ac.AudioRef != want {
+		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, want)
+	}
+	if len(store.writes) != 1 || store.writes[0] != want {
+		t.Errorf("writes = %v, want only %q", store.writes, want)
+	}
+}
