@@ -922,16 +922,19 @@ func TestRun_CarriesTheCatalogPinsIntoTheTrack(t *testing.T) {
 	}
 }
 
-func TestRun_TheCatalogPinBeatsTheFirstTextSearchHit(t *testing.T) {
-	kase := embeddedCase(t, "rw-boys-dont-cry-pin-studio-over-first-search-live")
+func TestRun_TheCatalogPinAloneVerifiesTheStoredUpload(t *testing.T) {
+	kase := embeddedCase(t, "rw-everybody-wants-pin-verifies-the-stored-upload")
 
 	out := Run(context.Background(), kase)
 
 	if !out.Pass {
 		t.Fatalf("expected pass, got %q (err %q)", out.Reason, out.Err)
 	}
-	if want := "https://www.youtube.com/watch?v=Q460cEwJgCI"; out.Stored != want {
-		t.Errorf("stored %q, want the studio upload %q", out.Stored, want)
+	if want := "https://www.youtube.com/watch?v=SFU1GeGFpzY"; out.Stored != want {
+		t.Errorf("stored %q, want the pinned recording upload %q", out.Stored, want)
+	}
+	if out.Provenance != "verified" {
+		t.Errorf("provenance %q, want verified: the pin must put the stored upload through the fingerprint gate", out.Provenance)
 	}
 }
 
