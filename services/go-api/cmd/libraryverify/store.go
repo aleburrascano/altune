@@ -42,16 +42,17 @@ const readyTracksSQL = `SELECT t.id::text, t.user_id::text, t.artist, t.title, C
 	LEFT JOIN track_identity i ON i.track_id = t.id
 	WHERE t.acquisition_status = 'ready'
 	  AND ($1 = '' OR t.user_id::text = $1)
+	  AND (COALESCE(cardinality($3::text[]), 0) = 0 OR t.id::text = ANY($3))
 	ORDER BY t.user_id, t.artist, t.title, t.id
 	LIMIT NULLIF($2, 0)`
 
-func loadReadyTracks(ctx context.Context, pool *pgxpool.Pool, userID string, limit int) ([]libraryTrack, error) {
+func loadReadyTracks(ctx context.Context, pool *pgxpool.Pool, userID string, limit int, trackIDs []string) ([]libraryTrack, error) {
 	tx, err := pool.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return nil, fmt.Errorf("begin read-only transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	rows, err := tx.Query(ctx, readyTracksSQL, userID, limit)
+	rows, err := tx.Query(ctx, readyTracksSQL, userID, limit, trackIDs)
 	if err != nil {
 		return nil, fmt.Errorf("query ready tracks: %w", err)
 	}

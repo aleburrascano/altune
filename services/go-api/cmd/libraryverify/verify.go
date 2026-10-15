@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -18,6 +19,7 @@ import (
 const (
 	maxReportedCandidates = 5
 	progressEvery         = 25
+	checkpointEvery       = 10
 	scratchDirPrefix      = "libraryverify-"
 )
 
@@ -33,17 +35,18 @@ type libraryTrack struct {
 }
 
 type trackResult struct {
-	TrackID    string        `json:"track_id"`
-	UserID     string        `json:"user_id"`
-	Artist     string        `json:"artist"`
-	Title      string        `json:"title"`
-	AudioRef   string        `json:"audio_ref"`
-	Identity   boundIdentity `json:"identity"`
-	Verdict    verdict       `json:"verdict"`
-	Basis      string        `json:"basis,omitempty"`
-	TopScore   float64       `json:"top_score"`
-	Candidates []candidate   `json:"acoustid_candidates,omitempty"`
-	Error      string        `json:"error,omitempty"`
+	TrackID    string           `json:"track_id"`
+	UserID     string           `json:"user_id"`
+	Artist     string           `json:"artist"`
+	Title      string           `json:"title"`
+	AudioRef   string           `json:"audio_ref"`
+	Identity   boundIdentity    `json:"identity"`
+	Verdict    verdict          `json:"verdict"`
+	Basis      string           `json:"basis,omitempty"`
+	TopScore   float64          `json:"top_score"`
+	Candidates []candidate      `json:"acoustid_candidates,omitempty"`
+	Preview    *previewEvidence `json:"preview,omitempty"`
+	Error      string           `json:"error,omitempty"`
 }
 
 type audioIdentifier interface {
@@ -57,6 +60,11 @@ type verifier struct {
 	minScore  float64
 	progress  io.Writer
 	completed atomic.Int64
+
+	previews   previewSource
+	printer    rawPrinter
+	cut        previewCut
+	checkpoint func(finished []trackResult)
 }
 
 func (v *verifier) verify(ctx context.Context, track libraryTrack) trackResult {
@@ -69,29 +77,92 @@ func (v *verifier) verify(ctx context.Context, track libraryTrack) trackResult {
 		result.Verdict, result.Error = verdictFailed, err.Error()
 		return result
 	}
-	result.Verdict, result.Basis, result.TopScore = assessed.Verdict, assessed.Basis, assessed.topScore()
+	result.Verdict, result.Basis, result.TopScore, result.Preview = assessed.Verdict, assessed.Basis, assessed.topScore(), assessed.Preview
 	result.Candidates = assessed.Candidates[:min(len(assessed.Candidates), maxReportedCandidates)]
 	return result
 }
 
-func (v *verifier) assess(ctx context.Context, track libraryTrack) (assessment, error) {
+func (v *verifier) withAudio(ctx context.Context, track libraryTrack, use func(file string) error) error {
 	if track.AudioRef == "" {
-		return assessment{}, errNoStoredAudio
+		return errNoStoredAudio
 	}
 	dir, err := os.MkdirTemp("", scratchDirPrefix)
 	if err != nil {
-		return assessment{}, fmt.Errorf("create scratch dir: %w", err)
+		return fmt.Errorf("create scratch dir: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 	file := filepath.Join(dir, "audio"+path.Ext(track.AudioRef))
 	if err := v.download(ctx, track.AudioRef, file); err != nil {
-		return assessment{}, err
+		return err
 	}
+	return use(file)
+}
+
+func (v *verifier) assess(ctx context.Context, track libraryTrack) (assessment, error) {
+	var assessed assessment
+	err := v.withAudio(ctx, track, func(file string) error {
+		var err error
+		assessed, err = v.assessFile(ctx, track, file)
+		return err
+	})
+	return assessed, err
+}
+
+func (v *verifier) assessFile(ctx context.Context, track libraryTrack, file string) (assessment, error) {
 	match, err := v.identify.Identify(ctx, file, 0)
 	if err != nil {
 		return assessment{}, fmt.Errorf("fingerprint: %w", err)
 	}
-	return judge(ctx, track.Identity, confidentCandidates(match.Results, v.minScore), v.lookups)
+	judged, err := judge(ctx, track.Identity, confidentCandidates(match.Results, v.minScore), v.lookups)
+	if err != nil || v.previews == nil || !needsPreviewCheck(track.Identity, judged.Verdict) {
+		return judged, err
+	}
+	evidence, err := v.measurePreview(ctx, track.Identity, file)
+	if err != nil {
+		return assessment{}, fmt.Errorf("preview: %w", err)
+	}
+	return withPreview(judged, []string{track.Title, evidence.DeezerTitle}, evidence, v.cut), nil
+}
+
+func (v *verifier) measurePreview(ctx context.Context, identity boundIdentity, file string) (previewEvidence, error) {
+	clip, err := v.previews.Clip(ctx, identity)
+	if err != nil {
+		return previewEvidence{}, err
+	}
+	evidence := previewEvidence{DeezerTrackID: clip.DeezerTrackID, DeezerTitle: clip.DeezerTitle, Unavailable: clip.Unavailable}
+	if clip.Unavailable != "" {
+		return evidence, nil
+	}
+	filePrint, err := v.printer.Print(ctx, file)
+	if err != nil {
+		return previewEvidence{}, fmt.Errorf("fingerprint the file: %w", err)
+	}
+	return withAlignment(evidence, filePrint, clip.Print)
+}
+
+func incomparable(filePrint, previewPrint []uint32) string {
+	switch {
+	case len(previewPrint) < minPreviewItems:
+		return errPreviewTooShort.Error()
+	case len(filePrint) >= fingerprintedItemCap:
+		return errFileReachesCap.Error()
+	case len(previewPrint) > len(filePrint):
+		return errPrintLongerThanRef.Error()
+	}
+	return ""
+}
+
+func withAlignment(evidence previewEvidence, filePrint, previewPrint []uint32) (previewEvidence, error) {
+	if reason := incomparable(filePrint, previewPrint); reason != "" {
+		evidence.Unavailable = reason
+		return evidence, nil
+	}
+	aligned, err := bestAlignment(filePrint, previewPrint)
+	if err != nil {
+		return previewEvidence{}, err
+	}
+	evidence.Alignment = &alignmentEvidence{BitErrorRate: aligned.BitErrorRate, OffsetSeconds: aligned.offsetSeconds()}
+	return evidence, nil
 }
 
 func (v *verifier) download(ctx context.Context, ref, destination string) error {
@@ -113,6 +184,7 @@ func (v *verifier) download(ctx context.Context, ref, destination string) error 
 
 func (v *verifier) verifyAll(ctx context.Context, tracks []libraryTrack, concurrency int) []trackResult {
 	results := make([]trackResult, len(tracks))
+	finished := &finishedResults{flushEvery: checkpointEvery, flush: v.checkpoint}
 	slots := make(chan struct{}, max(concurrency, 1))
 	var group sync.WaitGroup
 	for i, track := range tracks {
@@ -122,6 +194,7 @@ func (v *verifier) verifyAll(ctx context.Context, tracks []libraryTrack, concurr
 			defer group.Done()
 			defer func() { <-slots }()
 			results[i] = v.verify(ctx, track)
+			finished.add(results[i])
 			v.reportProgress(len(tracks))
 		}()
 	}
@@ -133,5 +206,21 @@ func (v *verifier) reportProgress(total int) {
 	done := v.completed.Add(1)
 	if done%progressEvery == 0 || int(done) == total {
 		_, _ = fmt.Fprintf(v.progress, "libraryverify: %d/%d tracks verified\n", done, total)
+	}
+}
+
+type finishedResults struct {
+	mu         sync.Mutex
+	results    []trackResult
+	flushEvery int
+	flush      func([]trackResult)
+}
+
+func (f *finishedResults) add(result trackResult) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.results = append(f.results, result)
+	if f.flush != nil && len(f.results)%f.flushEvery == 0 {
+		f.flush(slices.Clone(f.results))
 	}
 }

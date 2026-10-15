@@ -4,6 +4,9 @@ import (
 	"altune/go-api/internal/acquisition/adapters/chromaprint"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -75,5 +78,70 @@ func TestParseOptions_DefaultsAndFlags(t *testing.T) {
 func TestParseOptions_RejectsANegativeLimit(t *testing.T) {
 	if _, err := parseOptions([]string{"-limit", "-1"}, io.Discard); !errors.Is(err, errNegativeLimit) {
 		t.Errorf("err = %v, want errNegativeLimit", err)
+	}
+}
+
+func TestPreviewSettingsFromEnv_DefaultsAreConservativeForDeezer(t *testing.T) {
+	got, err := previewSettingsFromEnv(envOf(nil))
+
+	if err != nil || got.deezerRate > 2 || got.deezerRate <= 0 || got.cut.matchMax >= got.cut.absentMin {
+		t.Errorf("settings = %+v, %v; want a deezer rate in (0, 2] and a match cut below the absent cut", got, err)
+	}
+}
+
+func TestPreviewSettingsFromEnv_ReadsOverridesAndRefusesBadOnes(t *testing.T) {
+	got, err := previewSettingsFromEnv(envOf(map[string]string{deezerRateVarName: "5", matchMaxVarName: "0.2", absentMinVarName: "0.45"}))
+	if err != nil || got != (previewSettings{deezerRate: 5, cut: previewCut{matchMax: 0.2, absentMin: 0.45}}) {
+		t.Errorf("settings = %+v, %v; want the overrides", got, err)
+	}
+	tests := []struct {
+		name string
+		env  map[string]string
+		want error
+	}{
+		{"deezer above 5 per second", map[string]string{deezerRateVarName: "6"}, errBadDeezerRate},
+		{"deezer zero rate", map[string]string{deezerRateVarName: "0"}, errBadDeezerRate},
+		{"cut not a number", map[string]string{matchMaxVarName: "low"}, errBadPreviewCut},
+		{"cut of 1", map[string]string{absentMinVarName: "1"}, errBadPreviewCut},
+		{"match cut at the absent cut", map[string]string{matchMaxVarName: "0.4", absentMinVarName: "0.4"}, errBadPreviewCut},
+		{"match cut above the default absent cut", map[string]string{matchMaxVarName: "0.45"}, errBadPreviewCut},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := previewSettingsFromEnv(envOf(tt.env)); !errors.Is(err, tt.want) {
+				t.Errorf("err = %v, want %v", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseOptions_ReadsTheTracksFileAndCalibrateFlags(t *testing.T) {
+	got, err := parseOptions([]string{"-tracks", "/x/ids.txt", "-calibrate"}, io.Discard)
+
+	if err != nil || got.tracksFile != "/x/ids.txt" || !got.calibrate {
+		t.Errorf("got %+v, %v", got, err)
+	}
+}
+
+func TestReadTrackIDs_SplitsOnWhitespaceAndRefusesAnEmptyList(t *testing.T) {
+	dir := t.TempDir()
+	listed := filepath.Join(dir, "ids.txt")
+	blank := filepath.Join(dir, "blank.txt")
+	if err := os.WriteFile(listed, []byte("a\nb\n\n c \n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(blank, []byte(" \n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	ids, err := readTrackIDs(listed)
+	if err != nil || !slices.Equal(ids, []string{"a", "b", "c"}) {
+		t.Errorf("ids = %v, %v; want a b c", ids, err)
+	}
+	if _, err := readTrackIDs(blank); !errors.Is(err, errEmptyTracksFile) {
+		t.Errorf("blank err = %v, want errEmptyTracksFile", err)
+	}
+	if ids, err := readTrackIDs(""); err != nil || ids != nil {
+		t.Errorf("no file: ids = %v, err = %v; want every track", ids, err)
 	}
 }

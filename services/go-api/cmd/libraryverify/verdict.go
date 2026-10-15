@@ -2,6 +2,7 @@ package main
 
 import (
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"fmt"
 	"slices"
@@ -11,13 +12,15 @@ import (
 type verdict string
 
 const (
-	verdictConfirmed    verdict = "confirmed"
-	verdictMismatch     verdict = "mismatch"
-	verdictUnknown      verdict = "unknown"
-	verdictUnofficial   verdict = "unofficial"
-	verdictUnbound      verdict = "unbound"
-	verdictUnverifiable verdict = "unverifiable"
-	verdictFailed       verdict = "failed"
+	verdictConfirmed        verdict = "confirmed"
+	verdictConfirmedPreview verdict = "confirmed_preview"
+	verdictWrongAudio       verdict = "wrong_audio"
+	verdictMismatch         verdict = "mismatch"
+	verdictUnknown          verdict = "unknown"
+	verdictUnofficial       verdict = "unofficial"
+	verdictUnbound          verdict = "unbound"
+	verdictUnverifiable     verdict = "unverifiable"
+	verdictFailed           verdict = "failed"
 )
 
 type identityStatus string
@@ -33,6 +36,7 @@ const (
 	basisRecordingID = "mb_recording_id in an AcoustID result"
 	basisMergedID    = "merged mb_recording_id in an AcoustID result"
 	basisISRC        = "ISRC shared with an AcoustID recording"
+	basisPreview     = "the file contains the bound recording's Deezer preview"
 )
 
 type boundIdentity struct {
@@ -57,6 +61,7 @@ type assessment struct {
 	Verdict    verdict
 	Basis      string
 	Candidates []candidate
+	Preview    *previewEvidence
 }
 
 func confidentCandidates(results []ports.AcoustIDResult, minScore float64) []candidate {
@@ -145,4 +150,60 @@ func confirmThroughMusicBrainz(ctx context.Context, identity boundIdentity, cand
 		return basisISRC, nil
 	}
 	return "", nil
+}
+
+type alignmentEvidence struct {
+	BitErrorRate  float64 `json:"bit_error_rate"`
+	OffsetSeconds float64 `json:"offset_seconds"`
+}
+
+type previewEvidence struct {
+	DeezerTrackID string             `json:"deezer_track_id,omitempty"`
+	DeezerTitle   string             `json:"deezer_title,omitempty"`
+	Alignment     *alignmentEvidence `json:"alignment,omitempty"`
+	Unavailable   string             `json:"unavailable,omitempty"`
+}
+
+type previewCut struct {
+	matchMax  float64
+	absentMin float64
+}
+
+func (c previewCut) isMatch(rate float64) bool  { return rate <= c.matchMax }
+func (c previewCut) isAbsent(rate float64) bool { return rate >= c.absentMin }
+
+func needsPreviewCheck(identity boundIdentity, judged verdict) bool {
+	if identity.Status != statusBound {
+		return false
+	}
+	return judged == verdictMismatch || judged == verdictUnknown || judged == verdictUnverifiable
+}
+
+func withPreview(judged assessment, titles []string, evidence previewEvidence, cut previewCut) assessment {
+	judged.Preview = &evidence
+	if evidence.Alignment == nil {
+		return judged
+	}
+	switch rate := evidence.Alignment.BitErrorRate; {
+	case cut.isMatch(rate):
+		judged.Verdict, judged.Basis = verdictConfirmedPreview, basisPreview
+	case cut.isAbsent(rate) && namesOnlyOtherTitles(judged.Candidates, titles):
+		judged.Verdict = verdictWrongAudio
+	}
+	return judged
+}
+
+func namesOnlyOtherTitles(candidates []candidate, titles []string) bool {
+	named := slices.DeleteFunc(slices.Clone(candidates), func(c candidate) bool {
+		return textnorm.NormalizeForMatch(c.Title) == ""
+	})
+	return len(named) > 0 && !namesAnyTitle(named, titles)
+}
+
+func namesAnyTitle(candidates []candidate, titles []string) bool {
+	return slices.ContainsFunc(candidates, func(c candidate) bool {
+		return slices.ContainsFunc(titles, func(title string) bool {
+			return textnorm.NormalizeForMatch(c.Title) == textnorm.NormalizeForMatch(title)
+		})
+	})
 }

@@ -3,6 +3,10 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -63,5 +67,84 @@ func TestWriteSummary_ListsMismatchesAndFailuresButNotConfirmed(t *testing.T) {
 	}
 	if strings.Contains(text, "t-1") {
 		t.Errorf("summary lists a confirmed track:\n%s", text)
+	}
+}
+
+func TestCheckpointTo_LeavesAWholePartialReportAndNoTempFile(t *testing.T) {
+	reportPath := filepath.Join(t.TempDir(), "report.json")
+
+	checkpointTo(reportPath, 0.85, io.Discard)(sampleResults()[:2])
+
+	raw, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("read report: %v", err)
+	}
+	var decoded struct {
+		Partial bool `json:"partial"`
+		Total   int  `json:"total"`
+	}
+	if err := json.Unmarshal(raw, &decoded); err != nil || !decoded.Partial || decoded.Total != 2 {
+		t.Errorf("report = %s (%v), want a partial report of 2 tracks", raw, err)
+	}
+	if _, err := os.Stat(reportPath + ".pending"); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("pending file still exists: %v", err)
+	}
+}
+
+func TestSaveJSON_RemovesThePendingFileWhenEncodingFails(t *testing.T) {
+	reportPath := filepath.Join(t.TempDir(), "report.json")
+
+	err := saveJSON(reportPath, map[string]any{"unencodable": make(chan int)})
+
+	if err == nil {
+		t.Fatal("saveJSON returned no error for an unencodable value")
+	}
+	for _, leftover := range []string{reportPath, reportPath + ".pending"} {
+		if _, statErr := os.Stat(leftover); !errors.Is(statErr, os.ErrNotExist) {
+			t.Errorf("%s exists after a failed save: %v", leftover, statErr)
+		}
+	}
+}
+
+func TestPublishCalibration_LeavesTheWholeReportAndNoTempFile(t *testing.T) {
+	reportPath := filepath.Join(t.TempDir(), "calibration.json")
+
+	err := publishCalibration(calibrationReport{Same: distribution{Count: 1}}, reportPath, io.Discard)
+	if err != nil {
+		t.Fatalf("publishCalibration: %v", err)
+	}
+	if _, err := os.Stat(reportPath); err != nil {
+		t.Errorf("report missing: %v", err)
+	}
+	if _, err := os.Stat(reportPath + ".pending"); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("pending file still exists: %v", err)
+	}
+}
+
+func TestCheckpointTo_SaysSoWhenTheReportCannotBeWritten(t *testing.T) {
+	var progress bytes.Buffer
+
+	checkpointTo(filepath.Join(t.TempDir(), "missing", "report.json"), 0.85, &progress)(sampleResults())
+
+	if !strings.Contains(progress.String(), "checkpoint of 3 tracks failed") {
+		t.Errorf("progress = %q, want the failed checkpoint named", progress.String())
+	}
+}
+
+func TestWriteSummary_ListsWrongAudioWithTheCatalogAndAcoustIDEvidence(t *testing.T) {
+	var out bytes.Buffer
+	wrong := trackResult{
+		TrackID: "t-9", Artist: "Travis Scott", Title: "outside", Verdict: verdictWrongAudio,
+		Identity:   boundIdentity{Status: statusBound, ISRC: "USSM11607554"},
+		Candidates: []candidate{{MBRecordingID: "rec-trap", Title: "beibs in the trap", Artists: []string{"Travis Scott"}, Score: 0.96}},
+		Preview:    &previewEvidence{Alignment: &alignmentEvidence{BitErrorRate: 0.47, OffsetSeconds: 12}},
+	}
+
+	writeSummary(&out, buildReport([]trackResult{wrong}, 0.85, time.Now()), "/x/r.json")
+
+	for _, want := range []string{"wrong_audio", "t-9", "beibs in the trap", "0.47", "USSM11607554"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("summary missing %q:\n%s", want, out.String())
+		}
 	}
 }
