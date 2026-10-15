@@ -48,7 +48,9 @@ func newCasePorts(kase Case) *casePorts {
 	return &casePorts{kase: kase, byPath: make(map[string]Candidate), clock: &simClock{}}
 }
 
-var prodFallbackTier = map[string]bool{"ytdlp": true}
+const ytdlpTier acqdomain.SourceName = "ytdlp"
+
+var prodFallbackTier = map[string]bool{string(ytdlpTier): true}
 
 func (p *casePorts) registry() *service.SourceRegistry {
 	var first, fallback []ports.AudioSource
@@ -65,13 +67,43 @@ func (p *casePorts) registry() *service.SourceRegistry {
 func (p *casePorts) sources() []*evalSource {
 	specs := p.kase.Sources
 	if !p.kase.usesNamedSources() {
-		specs = []Source{{Name: "eval", SearchSeconds: defaultSearchSeconds, Candidates: p.kase.Candidates}}
+		specs = flatTiers(p.kase.Candidates)
 	}
 	sources := make([]*evalSource, 0, len(specs))
 	for _, spec := range specs {
 		sources = append(sources, &evalSource{spec: spec, shared: p})
 	}
 	return sources
+}
+
+var flatTierOrder = []acqdomain.SourceName{ytmsearch.SourceName, ytmusic.SourceName, catalogpin.SourceName, ytdlpTier}
+
+func flatTierOf(c Candidate) acqdomain.SourceName {
+	switch ports.CandidateKind(c.Kind) {
+	case ports.KindArtTrack:
+		return ytmsearch.SourceName
+	case ports.KindPinnedVideo:
+		return ytmusic.SourceName
+	case ports.KindCatalogPin:
+		return catalogpin.SourceName
+	}
+	return ytdlpTier
+}
+
+func flatTiers(candidates []Candidate) []Source {
+	var tiers []Source
+	for _, name := range flatTierOrder {
+		var members []Candidate
+		for _, c := range candidates {
+			if flatTierOf(c) == name {
+				members = append(members, c)
+			}
+		}
+		if len(members) > 0 {
+			tiers = append(tiers, Source{Name: string(name), SearchSeconds: defaultSearchSeconds, Candidates: members})
+		}
+	}
+	return tiers
 }
 
 func queryVariantsFor(req ports.FindRequest) map[string]bool {

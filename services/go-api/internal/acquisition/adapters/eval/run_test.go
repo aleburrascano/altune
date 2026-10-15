@@ -1216,3 +1216,46 @@ func TestValidateCases_RejectsAnUnknownExpectedSavedProvenance(t *testing.T) {
 		t.Fatalf("validateCases = %v, want an unknown saved provenance error", err)
 	}
 }
+
+func TestLoad_RefusesShapesProdNeverEmits(t *testing.T) {
+	goldens := map[string]struct{ candidate, want string }{
+		"resolved with a real channel and no kind": {`{"title":"t","url":"u","channel":"YouTube Music catalog","resolved":true}`, "resolved with no kind"},
+		"art_track that is not resolved":           {`{"title":"t","url":"u","kind":"art_track"}`, "art_track that is not resolved"},
+		"upload that is resolved":                  {`{"title":"t","url":"u","kind":"upload","resolved":true}`, "resolved upload"},
+	}
+	for name, g := range goldens {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			body := `{"cases":[{"id":"shape","class":"F1","track":{"title":"t","artist":"a"},"candidates":[` + g.candidate + `]}]}`
+			if err := os.WriteFile(filepath.Join(dir, "shape.json"), []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			_, err := LoadDir(dir)
+
+			if err == nil || !strings.Contains(err.Error(), g.want) || !strings.Contains(err.Error(), `"shape"`) {
+				t.Fatalf("LoadDir = %v, want a refusal naming case %q and %q", err, "shape", g.want)
+			}
+		})
+	}
+}
+
+func TestRun_FlatCandidatesRunInProdTiersByKind(t *testing.T) {
+	kase := Case{
+		ID: "t", Class: "OK",
+		Track: Track{Title: "Solitude", Artist: "Nova", Duration: 200, AuthoritativeDuration: 200},
+		Candidates: []Candidate{
+			{Title: "Solitude", URL: "upload", Channel: "Nova - Topic", Duration: 200, ViewCount: 9000000},
+			{Title: "Solitude", URL: "art", Channel: "YouTube Music Art Track", Duration: 200, Resolved: true, Kind: "art_track", Artists: []string{"Nova"}, Correct: true},
+		},
+	}
+
+	out := Run(context.Background(), kase)
+
+	if !out.Pass || out.Stored != "art" {
+		t.Fatalf("stored %q (%s), want the art track", out.Stored, out.Reason)
+	}
+	if out.Attempts != 1 {
+		t.Errorf("attempts = %d, want 1: prod never searches uploads once a resolved candidate exists", out.Attempts)
+	}
+}

@@ -378,6 +378,9 @@ func validateCandidates(c Case) error {
 			return fmt.Errorf("case %q repeats candidate url %q", c.ID, cand.URL)
 		}
 		urls[cand.URL] = true
+		if err := validateCandidateShape(c.ID, cand); err != nil {
+			return err
+		}
 		if cand.Query != "" && !knownQueries[cand.Query] {
 			return fmt.Errorf("case %q candidate %q has unknown query %q", c.ID, cand.URL, cand.Query)
 		}
@@ -387,6 +390,18 @@ func validateCandidates(c Case) error {
 		); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func validateCandidateShape(caseID string, cand Candidate) error {
+	switch kind := ports.CandidateKind(cand.Kind); {
+	case cand.Resolved && kind == "":
+		return fmt.Errorf("case %q candidate %q is resolved with no kind; prod emits a resolved candidate only as art_track, pinned_video or catalog_pin", caseID, cand.URL)
+	case kind == ports.KindArtTrack && !cand.Resolved:
+		return fmt.Errorf("case %q candidate %q is an art_track that is not resolved; prod's ytmsearch always resolves it", caseID, cand.URL)
+	case kind == ports.KindUpload && cand.Resolved:
+		return fmt.Errorf("case %q candidate %q is a resolved upload; prod's ytdlp never resolves one", caseID, cand.URL)
 	}
 	return nil
 }

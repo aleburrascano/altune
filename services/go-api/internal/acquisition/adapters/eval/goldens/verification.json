@@ -166,28 +166,28 @@
       "note": "a catalog hit that will not download must not end the walk",
       "track": { "title": "Circles", "artist": "Post Malone", "duration": 215, "authoritative_duration": 215 },
       "candidates": [
-        { "title": "Circles", "url": "ytm:dead", "channel": "YouTube Music catalog", "duration": 215, "resolved": true, "download_fails": true },
+        { "title": "Circles", "url": "https://music.youtube.com/watch?v=4EQkYVtE-28", "channel": "YouTube Music Art Track", "categories": ["Music"], "duration": 216, "resolved": true, "kind": "art_track", "artists": ["Post Malone"], "album": "Hollywood's Bleeding", "download_fails": true },
         { "title": "Circles", "url": "yt:master", "channel": "Post Malone - Topic", "categories": ["Music"], "duration": 215, "correct": true }
       ]
     },
     {
       "id": "two-resolved-candidates-closest-length-wins",
       "class": "OK",
-      "note": "sources are equal; the tie between two catalog hits resolves on distance from the corroborated length",
+      "note": "sources are equal; the pinned music video carries no length before download (the ytmusic adapter emits none), so it is downloaded first, probed at 222s against the corroborated 215s and rejected, and the art track is stored",
       "track": { "title": "Circles", "artist": "Post Malone", "duration": 215, "authoritative_duration": 215 },
       "candidates": [
-        { "title": "Circles", "url": "ytm:long", "channel": "YouTube Music catalog", "duration": 222, "actual_duration": 222 },
-        { "title": "Circles", "url": "ytm:exact", "channel": "YouTube Music catalog", "duration": 215, "actual_duration": 215, "resolved": true, "correct": true }
+        { "title": "Circles", "url": "https://music.youtube.com/watch?v=wXhTHyIgQ_U", "categories": ["Music"], "actual_duration": 222, "resolved": true, "kind": "pinned_video", "artists": ["Post Malone"] },
+        { "title": "Circles", "url": "https://music.youtube.com/watch?v=4EQkYVtE-28", "channel": "YouTube Music Art Track", "categories": ["Music"], "duration": 216, "actual_duration": 216, "resolved": true, "kind": "art_track", "artists": ["Post Malone"], "album": "Hollywood's Bleeding", "correct": true }
       ]
     },
     {
       "id": "resolved-undecodable-falls-back-to-search",
       "class": "F9",
       "note": "a catalog hit with corrupt samples must not be trusted for being resolved",
-      "track": { "title": "How Sweet", "artist": "NewJeans", "duration": 226, "authoritative_duration": 226 },
+      "track": { "title": "How Sweet", "artist": "NewJeans", "duration": 220, "authoritative_duration": 220 },
       "candidates": [
-        { "title": "How Sweet", "url": "ytm:corrupt", "channel": "YouTube Music catalog", "duration": 226, "resolved": true, "undecodable": true },
-        { "title": "NewJeans - How Sweet", "url": "yt:good", "channel": "NewJeans - Topic", "categories": ["Music"], "duration": 226, "correct": true }
+        { "title": "How Sweet", "url": "https://music.youtube.com/watch?v=vrM2mrI83uk", "channel": "YouTube Music Art Track", "categories": ["Music"], "duration": 220, "resolved": true, "kind": "art_track", "artists": ["NewJeans"], "album": "How Sweet", "undecodable": true },
+        { "title": "NewJeans - How Sweet", "url": "yt:good", "channel": "NewJeans - Topic", "categories": ["Music"], "duration": 220, "correct": true }
       ]
     },
     {
