@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"time"
 
@@ -16,6 +17,8 @@ const (
 	retryBackoff     = 2 * time.Second
 	maxServerErrors  = 5
 	maxResponseBytes = 4 << 20
+	backoffGrowth    = 2
+	maxWaitCeiling   = time.Duration(math.MaxInt64)
 )
 
 type throttlePolicy struct {
@@ -76,7 +79,13 @@ func (c *catalogClient) get(ctx context.Context, path string) ([]byte, error) {
 }
 
 func (c *catalogClient) waitBefore(attempt int) time.Duration {
-	wait := c.backoff << (attempt - 1)
+	wait := c.backoff
+	for range attempt - 1 {
+		if wait > maxWaitCeiling/backoffGrowth {
+			break
+		}
+		wait *= backoffGrowth
+	}
 	if c.maxWait > 0 {
 		return min(wait, c.maxWait)
 	}

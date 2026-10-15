@@ -54,11 +54,37 @@ const (
 	reasonStoredListsTrackEarlier = "deezer lists the track on the stored album, which is earlier than the chosen release"
 	reasonTitleUncorroborated     = "the deezer track does not carry this title"
 	reasonArtistUncorroborated    = "the catalogs disagree on the artist"
+	reasonNoDeezerAlbum           = "no deezer album matches the chosen release"
+	reasonAlbumArtistDisputed     = "the deezer album is credited to another artist than the chosen release"
+	reasonChosenIsCompilation     = "the chosen release is a compilation, soundtrack, dj-mix or various-artists release and an album is stored"
+	reasonChosenIsAnotherArtists  = "the chosen release is credited to another artist than the recording's primary artist"
+	reasonStoredTiesChosenYear    = "deezer lists the track on the stored album, which shares the only year the chosen release dates"
 )
 
-func albumHold(storedAlbum string, chosen releaseGroup, homes []releaseGroup, check crossCheck) string {
-	if check.AlbumLacksTrack {
+var compilationTypes = []string{"Compilation", "Soundtrack", "DJ-mix"}
+
+func (g releaseGroup) isCompilationLike() bool {
+	return isVariousArtists(g.Artist) || slices.ContainsFunc(g.SecondaryTypes, func(kind string) bool { return slices.Contains(compilationTypes, kind) })
+}
+
+func albumArtistHold(chosenArtist string, match *deezerMatch) string {
+	switch {
+	case match == nil:
+		return reasonNoDeezerAlbum
+	case sharesArtist(match.AlbumArtist, chosenArtist):
+		return ""
+	}
+	return reasonAlbumArtistDisputed
+}
+
+func albumHold(storedAlbum string, chosen releaseGroup, homes []releaseGroup, check crossCheck, leadArtist string) string {
+	switch {
+	case check.AlbumLacksTrack:
 		return reasonAlbumLacksTrack
+	case storedAlbum != "" && chosen.isCompilationLike():
+		return reasonChosenIsCompilation
+	case storedAlbum != "" && leadArtist != "" && chosen.Artist != "" && !isCredited(leadArtist, chosen.Artist):
+		return reasonChosenIsAnotherArtists
 	}
 	for _, home := range homes {
 		if !albumDiffers(storedAlbum, home.Title) && !isEarlier(chosen.FirstReleaseDate, home.FirstReleaseDate) {

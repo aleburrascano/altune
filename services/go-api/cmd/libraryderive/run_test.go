@@ -775,9 +775,8 @@ func TestDeriveAll_RealProdCasesKeepTheirOutcomePerField(t *testing.T) {
 				TrackNumber: 8, ArtworkURL: dzCover("faada8a8c545b2e3d454267b55c82e14", "1000x1000"), FileSeconds: 203,
 			},
 			expectations: replayExpectation{
-				applies:  map[string]string{"album_artist": "Silk Sonic"},
-				keeps:    []string{"artist"},
-				reported: []string{"artist"},
+				keeps:    []string{"artist", "album_artist"},
+				reported: []string{"artist", "album_artist"},
 			},
 		},
 		{
@@ -808,6 +807,108 @@ func TestDeriveAll_RealProdCasesKeepTheirOutcomePerField(t *testing.T) {
 			expectations: replayExpectation{applies: map[string]string{
 				"artwork_url": "https://coverartarchive.org/release/06a81817-093d-40f0-aef2-90673fa550ae/front", "year": "2007",
 			}},
+		},
+		{
+			name:       "kanye-stronger-album-artist",
+			blankCover: true,
+			stored: libraryTrack{
+				ID: "t", Title: "Stronger", Artist: "Kanye West", Album: "Graduation", AlbumArtist: "Kanye West", ISRC: "USUM70741299", Year: 2013, Genre: "rap", TrackNumber: 1,
+				ArtworkURL: dzCover("d167d9a9b2f3f49ed72878a00530415b", "1000x1000"), FileSeconds: 311,
+			},
+			expectations: replayExpectation{keeps: []string{"album_artist"}, reported: []string{"album_artist"}},
+		},
+		{
+			name:      "rihanna-we-found-love",
+			recording: "70b75f40-442e-48b2-a41e-6b7490b73fbe",
+			stored: libraryTrack{
+				ID: "t", Title: "We Found Love (Album Version)", Artist: "Rihanna", Album: "Talk That Talk (Deluxe)", ISRC: "USUM71115507", Genre: "Pop",
+				ArtworkURL: dzCover("5199f89d5113a83b5086463d5d0c9415", "1000x1000"), FileSeconds: 216,
+			},
+			expectations: replayExpectation{keeps: []string{"album", "album_artist", "year"}, reported: []string{"album"}},
+		},
+		{
+			name:      "u2-still-havent-found",
+			recording: "d50715ed-96a3-4de8-9b19-cb58667c879f",
+			stored: libraryTrack{
+				ID: "t", Title: "I Still Haven’t Found What I’m Looking For", Artist: "U2", Album: "Greatest Hits", ISRC: "GBUM70709783",
+				ArtworkURL: "https://coverartarchive.org/release-group/e7044c49-02de-3130-b6df-a1a8c403644a/front-500", FileSeconds: 275.69,
+			},
+			expectations: replayExpectation{keeps: []string{"album", "album_artist", "year"}, reported: []string{"album"}},
+		},
+		{
+			name:      "tozzi-ti-amo",
+			recording: "eb761497-ec38-4023-b280-faeb7f0eef74",
+			stored: libraryTrack{
+				ID: "t", Title: "Ti Amo", Artist: "Umberto Tozzi", Album: "Ti amo", AlbumArtist: "Umberto Tozzi", ISRC: "ITR007700021", Year: 2021, Genre: "Pop", TrackNumber: 1,
+				ArtworkURL: dzCover("1dde50527d5cf2167dc5a3f01c8df6f3", "500x500"), FileSeconds: 246,
+			},
+			expectations: replayExpectation{keeps: []string{"album", "album_artist", "year"}, reported: []string{"album"}},
+		},
+		{
+			name:      "usher-yeah",
+			recording: "4f595ab5-18bb-4007-b17d-066a0e704234",
+			stored: libraryTrack{
+				ID: "t", Title: "Yeah! (feat. Lil Jon & Ludacris)", Artist: "USHER", Album: "Confessions (Expanded Edition)", ISRC: "USAR10301423",
+				ArtworkURL: dzCover("b89c20012cccb051c8a4e04d98386f95", "500x500"), FileSeconds: 251,
+			},
+			expectations: replayExpectation{keeps: []string{"album", "album_artist", "year"}, reported: []string{"album"}},
+		},
+		{
+			name: "sade-smooth-operator",
+			stored: libraryTrack{
+				ID: "t", Title: "Smooth Operator (2011 Remastered)", Artist: "Sade", Album: "The Ultimate Collection", AlbumArtist: "Sade", ISRC: "GBARL1100319", Year: 2011,
+				Genre: "R&B", TrackNumber: 2, ArtworkURL: dzCover("e2fd836cedf9336dc5c725dc3c4df5e0", "500x500"), FileSeconds: 258.7,
+			},
+			expectations: replayExpectation{keeps: []string{"album", "album_artist", "year"}, reported: []string{"album"}},
+		},
+		{
+			name: "spandau-ballet-gold",
+			stored: libraryTrack{
+				ID: "t", Title: "Gold", Artist: "Spandau Ballet", Album: "40 Years · The Greatest Hits", ISRC: "GBAYK8300018",
+				ArtworkURL: "https://coverartarchive.org/release-group/85157d23-8324-491d-8afd-f2ce84f794cd/front-500", FileSeconds: 231.49,
+			},
+			expectations: replayExpectation{keeps: []string{"album", "album_artist", "year"}, reported: []string{"album"}},
+		},
+		{
+			name: "calvin-harris-one-kiss",
+			stored: libraryTrack{
+				ID: "t", Title: "One Kiss", Artist: "Calvin Harris", Album: "One Kiss", AlbumArtist: "Calvin Harris", ISRC: "GBARL1800368", Year: 2018, TrackNumber: 1,
+				ArtworkURL: dzCover("0397baea24f861db7ee63fb1c70391f9", "500x500"), FileSeconds: 214.86,
+			},
+			expectations: replayExpectation{keeps: []string{"album", "album_artist", "year", "track_number", "artwork_url"}, reported: []string{"album"}},
+		},
+		{
+			name: "coldplay-something-just-like-this",
+			stored: libraryTrack{
+				ID: "t", Title: "Something Just Like This", Artist: "Coldplay", Album: "Something Just Like This", AlbumArtist: "Coldplay", ISRC: "USQX91700278", Year: 2017,
+				TrackNumber: 1, ArtworkURL: dzCover("2ae6c01a51296a7ec6d89c96a4fac32c", "500x500"), FileSeconds: 247.6,
+			},
+			expectations: replayExpectation{keeps: []string{"album", "year", "artwork_url"}, reported: []string{"album"}},
+		},
+		{
+			name:      "gunna-alright",
+			recording: "4a8c7f79-1c4f-477d-a6d9-5ecf1d15be39",
+			stored: libraryTrack{
+				ID: "t", Title: "alright", Artist: "Gunna", Album: "a Gift & a Curse", AlbumArtist: "Gunna", ISRC: "USAT22306583", Year: 2023, Genre: "Rap/Hip Hop", TrackNumber: 15,
+				ArtworkURL: dzCover("35446b14e181f0a3fe415c06fec08d0b", "1000x1000"), FileSeconds: 184.03,
+			},
+			expectations: replayExpectation{keeps: []string{"album", "track_number", "artwork_url"}, reported: []string{"album"}},
+		},
+		{
+			name: "homixide-gang-ssn",
+			stored: libraryTrack{
+				ID: "t", Title: "SSN", Artist: "Homixide Gang", Album: "SSN", AlbumArtist: "Homixide Gang", ISRC: "QZNWT2118702", Year: 2021, Genre: "Rap/Hip Hop", TrackNumber: 1,
+				ArtworkURL: dzCover("ee11ae9a62b81ab5fda53b88cd805094", "1000x1000"), FileSeconds: 101.4,
+			},
+			expectations: replayExpectation{keeps: []string{"artist", "album_artist"}, reported: []string{"album_artist"}},
+		},
+		{
+			name: "luba-everytime",
+			stored: libraryTrack{
+				ID: "t", Title: "Everytime I See Your Picture", Artist: "Luba", Album: "Secrets & Sins", ISRC: "CAE158400020", Genre: "Pop", TrackNumber: 4,
+				ArtworkURL: dzCover("887a27e6b666f6024da92564a52a23a6", "1000x1000"), FileSeconds: 240.59,
+			},
+			expectations: replayExpectation{applies: map[string]string{"album_artist": "Luba"}},
 		},
 	}
 	for _, c := range realProdCases {

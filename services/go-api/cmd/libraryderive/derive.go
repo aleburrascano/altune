@@ -105,6 +105,7 @@ type withheld struct {
 	ArtworkURL      string
 	CatalogDuration string
 	ISRC            string
+	AlbumArtist     string
 }
 
 func (w withheld) of(field string) string {
@@ -147,7 +148,7 @@ func diff(stored libraryTrack, want desired) []difference {
 	found = appendCorroborated(found, "title", stored.Title, want.Title, !sameSongTitle(stored.Title, want.Title), group, want.WhyNot)
 	found = appendCorroborated(found, "artist", stored.Artist, want.Artist, !isCredited(stored.Artist, want.Artist), group, want.WhyNot)
 	found = appendAlbumBound(found, "year", intText(stored.Year), intText(want.Year), stance, group, want.WhyNot)
-	found = appendHeldOr(found, "album_artist", stored.AlbumArtist, want.AlbumArtist, !isSameName(stored.AlbumArtist, want.AlbumArtist), stance, group, want.WhyNot)
+	found = appendAlbumArtist(found, stored.Artist, stored.AlbumArtist, want.AlbumArtist, stance, group, want.WhyNot)
 	found = appendAlbumBound(found, "track_number", intText(stored.TrackNumber), intText(want.TrackNumber), stance, group, want.WhyNot)
 	found = appendAlbumBound(found, "genre", stored.Genre, want.Genre, stance, group, want.WhyNot)
 	found = appendField(found, "catalog_duration_seconds", secondsText(stored.CatalogDurationSeconds), secondsText(want.CatalogDurationSeconds),
@@ -202,6 +203,14 @@ func appendHeldOr(found []difference, field, stored, want string, differs bool, 
 		return append(found, unknown(field, stored, want, cmp.Or(whyNot.Bind, whyNot.Album)))
 	}
 	return appendField(found, field, stored, want, differs, group, whyNot)
+}
+
+func appendAlbumArtist(found []difference, trackArtist, stored, want string, stance albumStance, group string, whyNot withheld) []difference {
+	differs := !isSameName(stored, want)
+	if stance != albumHeld && differs && stored != "" && want != "" && whyNot.AlbumArtist != "" && !isCredited(trackArtist, want) {
+		return append(found, unknown("album_artist", stored, want, whyNot.AlbumArtist))
+	}
+	return appendHeldOr(found, "album_artist", stored, want, differs, stance, group, whyNot)
 }
 
 func appendCorroborated(found []difference, field, stored, want string, differs bool, group string, whyNot withheld) []difference {

@@ -32,6 +32,10 @@ type recording struct {
 	ISRCs   []string
 }
 
+func (r recording) leadArtist() string {
+	return cmp.Or(r.Primary, r.Artist)
+}
+
 func (r recording) hasISRC(isrc string) bool {
 	return slices.ContainsFunc(r.ISRCs, func(listed string) bool { return songfacts.CanonicalISRC(listed) == songfacts.CanonicalISRC(isrc) })
 }

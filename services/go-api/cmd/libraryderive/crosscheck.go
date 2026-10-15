@@ -62,6 +62,7 @@ const (
 type deezerMatch struct {
 	AlbumID         string
 	AlbumTitle      string
+	AlbumArtist     string
 	ReleaseDate     string
 	CoverURL        string
 	Genre           string
@@ -124,7 +125,7 @@ func (c crossChecker) matchOf(ctx context.Context, track deezerTrack) (crossChec
 
 func newMatch(album deezerAlbum, track deezerTrack) *deezerMatch {
 	return &deezerMatch{
-		AlbumID: album.ID, AlbumTitle: album.Title, ReleaseDate: album.ReleaseDate, CoverURL: album.CoverURL, Genre: album.Genre,
+		AlbumID: album.ID, AlbumTitle: album.Title, AlbumArtist: album.Artist, ReleaseDate: album.ReleaseDate, CoverURL: album.CoverURL, Genre: album.Genre,
 		TrackPosition: track.Position, DurationSeconds: track.DurationSeconds, ISRC: track.ISRC,
 	}
 }

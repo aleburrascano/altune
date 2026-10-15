@@ -102,15 +102,24 @@ func (d *deriver) findingsFor(ctx context.Context, t boundTrack) ([]finding, err
 }
 
 func (d *deriver) heldAlbumReason(ctx context.Context, t boundTrack, rec recording, a anchor, chosen releaseGroup, homes []releaseGroup, check crossCheck, bindDoubt string) (string, error) {
-	if reason := albumHold(t.Album, chosen, homes, check); reason != "" || bindDoubt != "" || t.Album == "" || a.ISRC == "" || !albumDiffers(t.Album, chosen.Title) {
+	if reason := albumHold(t.Album, chosen, homes, check, rec.leadArtist()); reason != "" || bindDoubt != "" || t.Album == "" || a.ISRC == "" || !albumDiffers(t.Album, chosen.Title) {
 		return reason, nil
 	}
-	in := crossCheckInput{ISRC: a.ISRC, Artist: cmp.Or(rec.Primary, rec.Artist), SongTitle: rec.Title, RecordingISRCs: rec.ISRCs}
+	in := crossCheckInput{ISRC: a.ISRC, Artist: rec.leadArtist(), SongTitle: rec.Title, RecordingISRCs: rec.ISRCs}
 	listing, err := d.checker.storedAlbumListing(ctx, in, t.Album)
-	if err != nil || listing == nil || !isEarlier(listing.ReleaseDate, chosen.FirstReleaseDate) {
+	switch {
+	case err != nil || listing == nil:
 		return "", err
+	case isEarlier(listing.ReleaseDate, chosen.FirstReleaseDate):
+		return reasonStoredListsTrackEarlier, nil
+	case datesOnlyItsYear(chosen.FirstReleaseDate, listing.ReleaseDate):
+		return reasonStoredTiesChosenYear, nil
 	}
-	return reasonStoredListsTrackEarlier, nil
+	return "", nil
+}
+
+func datesOnlyItsYear(chosenDate, listedDate string) bool {
+	return len(chosenDate) == yearDigits && strings.HasPrefix(listedDate, chosenDate)
 }
 
 func (d *deriver) recordingOf(ctx context.Context, t boundTrack) (recording, error) {
@@ -168,7 +177,7 @@ func (d *deriver) crossCheckOf(ctx context.Context, rec recording, a anchor, cho
 		return crossCheck{Outcome: outcomeNoAlbum}, nil
 	}
 	return d.checker.check(ctx, crossCheckInput{
-		ISRC: a.ISRC, Artist: cmp.Or(rec.Primary, rec.Artist), SongTitle: rec.Title, Group: chosen.Group, RecordingISRCs: rec.ISRCs,
+		ISRC: a.ISRC, Artist: rec.leadArtist(), SongTitle: rec.Title, Group: chosen.Group, RecordingISRCs: rec.ISRCs,
 	})
 }
 
@@ -177,9 +186,9 @@ func (d *deriver) withOwnRelease(ctx context.Context, rec recording, group relea
 	if match != nil {
 		own = *match
 	}
-	own.Withheld = withheld{}
+	own.Withheld = withheld{AlbumArtist: albumArtistHold(group.Artist, match)}
 	if match == nil {
-		own.Withheld.TrackNumber = "no deezer album matches the chosen release"
+		own.Withheld.TrackNumber = reasonNoDeezerAlbum
 		own.Withheld.Genre = own.Withheld.TrackNumber
 	}
 	own.CoverURL, own.Withheld.ArtworkURL = d.ownCover(ctx, own.CoverURL, group)
