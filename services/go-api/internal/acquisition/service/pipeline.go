@@ -342,7 +342,7 @@ func CoreSteps(
 	return Pipeline{
 		search:     NewSearchStep(sources),
 		selectBest: NewSelectStep(),
-		download:   NewDownloadStep(sources, append([]func(*DownloadStep){WithDownloadProber(prober), WithDownloadIdentifier(identifier), WithVerifyWidth(2), WithStepTempWorkspace(workspace)}, downloadOpts...)...),
+		download:   NewDownloadStep(sources, append([]func(*DownloadStep){WithDownloadProber(prober), WithDownloadIdentifier(identifier), WithVerifyWidth(prodVerifyWidth), WithStepTempWorkspace(workspace)}, downloadOpts...)...),
 		tag:        NewTagStep(tagger),
 		store:      NewStoreStep(store, append([]func(*StoreStep){WithStoreProber(prober), WithStoreWorkspace(workspace)}, storeOpts...)...),
 	}

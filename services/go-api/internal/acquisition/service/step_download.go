@@ -40,8 +40,10 @@ type DownloadStep struct {
 	candidateTimeout time.Duration
 }
 
+const prodVerifyWidth = 2
+
 func NewDownloadStep(fetcher candidateFetcher, opts ...func(*DownloadStep)) *DownloadStep {
-	s := &DownloadStep{fetcher: fetcher, workspace: defaultTempWorkspace, width: 1, candidateTimeout: defaultCandidateTimeout}
+	s := &DownloadStep{fetcher: fetcher, workspace: defaultTempWorkspace, width: prodVerifyWidth, candidateTimeout: defaultCandidateTimeout}
 	for _, opt := range opts {
 		opt(s)
 	}
