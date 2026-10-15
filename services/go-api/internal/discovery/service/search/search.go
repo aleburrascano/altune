@@ -248,7 +248,7 @@ func (s *Service) ExecutePage(
 	continues shared.EntityId,
 ) (*SearchOutput, error) {
 	startedAt := time.Now().UTC()
-	searchQuery := domain.CleanQuery(query.Raw)
+	searchQuery := domain.SearchText(query.Raw)
 	queryNorm := textnorm.NormalizeForMatch(searchQuery)
 
 	slog.InfoContext(ctx, "search.v2.start", logging.SearchTextAttr(query.Raw))
@@ -477,7 +477,7 @@ func (s *Service) RankVariantsForEval(
 	ctx context.Context,
 	query *domain.SearchQuery,
 ) (withReshape, withoutReshape []domain.SearchResult) {
-	searchQuery := domain.CleanQuery(query.Raw)
+	searchQuery := domain.SearchText(query.Raw)
 	queryNorm := textnorm.NormalizeForMatch(searchQuery)
 	perProvider, _ := s.fanOutLive(ctx, searchQuery, query.Kinds)
 	s.identity.Stamp(ctx, perProvider)
@@ -488,7 +488,7 @@ func (s *Service) InspectSearchWithStatuses(
 	ctx context.Context,
 	query *domain.SearchQuery,
 ) ([]domain.SearchResult, []domain.ProviderSearchResponse) {
-	searchQuery := domain.CleanQuery(query.Raw)
+	searchQuery := domain.SearchText(query.Raw)
 	queryNorm := textnorm.NormalizeForMatch(searchQuery)
 	perProvider, statuses := s.fanOutLive(ctx, searchQuery, query.Kinds)
 	ranked := s.mergeRankEnrich(ctx, perProvider, queryNorm, &stageTimings{})

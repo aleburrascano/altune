@@ -62,7 +62,7 @@ func (s *RecordSearchHistoryService) RecordSubmitted(ctx context.Context, userId
 	if err != nil {
 		return err
 	}
-	queryNorm := textnorm.NormalizeForMatch(domain.CleanQuery(query.Raw))
+	queryNorm := textnorm.NormalizeForMatch(domain.SearchText(query.Raw))
 	s.Record(ctx, userId, query, queryNorm, true, time.Now())
 	return nil
 }

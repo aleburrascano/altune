@@ -39,3 +39,21 @@ func CleanQuery(raw string) string {
 	}
 	return cleaned
 }
+
+var pastedVideoTitleRe = regexp.MustCompile(`\s[-–—]\s.*[(\[][^)\]]*[)\]]$`)
+
+var emptyBracketsRe = regexp.MustCompile(`\(\s*\)|\[\s*\]`)
+
+func SearchText(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if !pastedVideoTitleRe.MatchString(trimmed) {
+		return trimmed
+	}
+	cleaned := CleanQuery(trimmed)
+	cleaned = emptyBracketsRe.ReplaceAllString(cleaned, " ")
+	cleaned = strings.TrimSpace(whitespaceRe.ReplaceAllString(cleaned, " "))
+	if cleaned == "" {
+		return trimmed
+	}
+	return cleaned
+}

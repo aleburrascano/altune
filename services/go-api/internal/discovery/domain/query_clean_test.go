@@ -94,6 +94,22 @@ func TestCleanQuery(t *testing.T) {
 	}
 }
 
+func TestSearchText(t *testing.T) {
+	tests := []struct{ name, raw, want string }{
+		{"keeps topic", "topic breaking me", "topic breaking me"},
+		{"keeps audio", "audio lsd", "audio lsd"},
+		{"cleans pasted video title", "Song - Artist (Official Video)", "Song - Artist"},
+		{"cleans bracket tag", "Song - Artist [HD]", "Song - Artist"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SearchText(tt.raw); got != tt.want {
+				t.Errorf("SearchText(%q) = %q, want %q", tt.raw, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestCleanQueryTrailingFeat(t *testing.T) {
 	tests := []struct {
 		name string
