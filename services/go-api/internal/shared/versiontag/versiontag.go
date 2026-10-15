@@ -13,8 +13,10 @@ type Entry struct {
 	tokens []string
 }
 
+const remasterLabel = "remaster"
+
 func (e Entry) Benign() bool {
-	return e.Label == ""
+	return e.Label == "" || e.Label == remasterLabel
 }
 
 var lexicon = []Entry{
@@ -53,15 +55,17 @@ var lexicon = []Entry{
 }
 
 var releaseVariants = []Entry{
-	{"remaster", false, []string{"remaster"}},
-	{"remaster", false, []string{"remastered"}},
-	{"re-recorded", false, []string{"re", "recorded"}},
-	{"re-recorded", false, []string{"rerecorded"}},
-	{"acoustic", false, []string{"acoustic"}},
-	{"demo", false, []string{"demo"}},
+	{remasterLabel, false, []string{"remaster"}},
+	{remasterLabel, false, []string{"remastered"}},
+	{"re-recorded", true, []string{"re", "recorded"}},
+	{"re-recorded", true, []string{"rerecorded"}},
+	{"acoustic", true, []string{"acoustic"}},
+	{"demo", true, []string{"demo"}},
 }
 
-var longestPhrase = longestPhraseIn(lexicon)
+var versionPhrases = slices.Concat(lexicon, releaseVariants)
+
+var longestPhrase = longestPhraseIn(versionPhrases)
 
 func longestPhraseIn(entries []Entry) int {
 	longest := 0
@@ -105,7 +109,7 @@ func (e Entry) In(tokens []string) bool {
 func entryAt(tokens []string, pos int) (Entry, bool) {
 	for length := min(longestPhrase, len(tokens)-pos); length >= 1; length-- {
 		phrase := tokens[pos : pos+length]
-		for _, entry := range lexicon {
+		for _, entry := range versionPhrases {
 			if slices.Equal(entry.tokens, phrase) {
 				return entry, true
 			}
@@ -159,10 +163,8 @@ func Labels(title string) []string {
 }
 
 func RecordingLabels(title string) []string {
-	return slices.DeleteFunc(Labels(title), func(label string) bool { return label == "remaster" })
+	return slices.DeleteFunc(Labels(title), func(label string) bool { return label == remasterLabel })
 }
-
-var versionPhrases = slices.Concat(lexicon, releaseVariants)
 
 func versionPhraseAt(tokens []string, pos int) int {
 	longest := 0

@@ -1,0 +1,86 @@
+{
+  "cases": [
+    {
+      "id": "vl-plain-demo-upload-beside-a-copy-of-the-master",
+      "class": "F1",
+      "note": "prod track bbc01d40 Tate McRae 'feel like shit' (ISRC USRC12103112, catalog 204s, stored from 6QzFzver330). Two of the real yt-dlp results (prod container, ytsearch10 'Tate McRae - feel like shit demo', 2026-10-15), unmodified: the plainly titled '(Demo)' upload (199s, no 'Version' in the title) and a copy of the master. Other results of that search are omitted, not edited; with a high-view lyric upload present the master wins on main anyway",
+      "track": {
+        "title": "feel like shit",
+        "artist": "Tate McRae",
+        "album": "feel like shit",
+        "duration": 204,
+        "authoritative_duration": 204
+      },
+      "sources": [
+        {
+          "name": "ytdlp",
+          "search_seconds": 3,
+          "candidates": [
+            {
+              "title": "Tate McRae - Feel Like Shit (Demo)",
+              "url": "https://www.youtube.com/watch?v=lVQeiXKfczs",
+              "channel": "Tates unreleased ",
+              "categories": [
+                "Music"
+              ],
+              "duration": 199,
+              "view_count": 129
+            },
+            {
+              "title": "Tate McRae - feel like shit (4K) | HQ Audio",
+              "url": "https://www.youtube.com/watch?v=KEJm7B8RYw0",
+              "channel": "Sadblint",
+              "categories": [
+                "Music"
+              ],
+              "duration": 206,
+              "view_count": 203,
+              "correct": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vl-remastered-upload-is-not-a-qualifier",
+      "class": "OK",
+      "note": "same prod track, real yt-dlp results: the '(Remastered Audio)' upload kc2vN1xfcrc (230s) is the studio master and stays eligible beside the live acoustic rehearsal bLaMXoXPA-s (310s)",
+      "track": {
+        "title": "Sunglasses at Night",
+        "artist": "Corey Hart",
+        "album": "First Offense",
+        "duration": 233,
+        "authoritative_duration": 233
+      },
+      "sources": [
+        {
+          "name": "ytdlp",
+          "search_seconds": 3,
+          "candidates": [
+            {
+              "title": "Corey Hart - \"Sunglasses at Night\" (2014 live acoustic rehearsal version)",
+              "url": "https://www.youtube.com/watch?v=bLaMXoXPA-s",
+              "channel": "Corey Hart Official",
+              "categories": [
+                "Music"
+              ],
+              "duration": 310,
+              "view_count": 109702
+            },
+            {
+              "title": "Corey Hart - Sunglasses At Night (Remastered Audio) HD",
+              "url": "https://www.youtube.com/watch?v=kc2vN1xfcrc",
+              "channel": "Happy Charlie",
+              "categories": [
+                "Music"
+              ],
+              "duration": 230,
+              "view_count": 72089,
+              "correct": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
