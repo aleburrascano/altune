@@ -614,3 +614,20 @@ func TestPickRecording_AnotherVersionIsNotTheSavedSong(t *testing.T) {
 		t.Fatal("picked the acoustic recording for a plain title")
 	}
 }
+
+func TestResolve_ISRCAnchorPicksTheRecordingNearestTheCatalogLength(t *testing.T) {
+	search := drinkingInLA()
+	search.out.Results[0].Duration = 167
+	recordings := []discoveryports.ISRCRecording{{MBID: "long", Duration: 167}, {MBID: "catalog", Duration: 139}}
+	resolver := NewRecordingResolver(search, WithISRCAuthority(&stubISRCAuthority{recordings: recordings}))
+	query := drinkingQuery
+	query.Duration = 139
+
+	identity, err := resolver.Resolve(context.Background(), query)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if identity.MBID != "catalog" {
+		t.Errorf("MBID = %q, want the recording nearest the catalog length", identity.MBID)
+	}
+}

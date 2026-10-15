@@ -177,5 +177,7 @@ func trackRefFor(kase Case) service.TrackRef {
 		Album:    kase.Track.Album,
 		Duration: kase.Track.Duration,
 		ISRC:     kase.Track.ISRC,
+
+		CatalogDuration: kase.Track.CatalogDuration,
 	}
 }

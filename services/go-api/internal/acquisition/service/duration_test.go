@@ -102,3 +102,77 @@ func TestDurationAcceptable_TightensWhenCorroborated(t *testing.T) {
 		t.Error("a 3s difference is ordinary encoding trim and must still pass")
 	}
 }
+
+func TestExpectedLength_OneLengthForEveryReader(t *testing.T) {
+	cases := []struct {
+		name string
+		ac   *AcquisitionContext
+		want float64
+	}{
+		{"catalog length wins over a trusted resolved one", &AcquisitionContext{
+			Track: TrackRef{Duration: 139, CatalogDuration: 139}, Identity: ports.RecordingIdentity{Duration: 167},
+		}, 139},
+		{"resolved length when not doubted", contextWithLengths(139, 140), 140},
+		{"saved length when the resolved one is doubted", &AcquisitionContext{
+			Track: TrackRef{Duration: 139}, Identity: ports.RecordingIdentity{Duration: 167, ReferenceDoubted: true},
+		}, 139},
+		{"saved length when nothing was resolved", contextWithLengths(139, 0), 139},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.ac.ExpectedLength(); got != tc.want {
+				t.Errorf("ExpectedLength = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestDurationDelta_ReadsTheExpectedLengthNotTheDoubtedSearchPick(t *testing.T) {
+	ac := &AcquisitionContext{
+		Track:    TrackRef{Duration: 139, CatalogDuration: 139},
+		Identity: ports.RecordingIdentity{Duration: 167, ReferenceDoubted: true},
+	}
+
+	if got := ac.durationDelta(ports.AudioCandidate{Duration: 140}, 140); got != 1 {
+		t.Errorf("durationDelta = %v, want 1 against the catalog 139s", got)
+	}
+}
+
+func TestDurationAcceptable_ADoubtedResolvedLengthWidensNothing(t *testing.T) {
+	ac := &AcquisitionContext{
+		Track:    TrackRef{Duration: 139},
+		Identity: ports.RecordingIdentity{Duration: 167, ReferenceDoubted: true},
+	}
+
+	if ac.durationAcceptable(167) {
+		t.Error("a 167s file matches only the doubted search pick and must be rejected")
+	}
+}
+
+func TestReferenceFor_CarriesTheExpectedLength(t *testing.T) {
+	ac := &AcquisitionContext{
+		Track:    TrackRef{Duration: 139, CatalogDuration: 139},
+		Identity: ports.RecordingIdentity{Duration: 167, ReferenceDoubted: true},
+	}
+
+	if got := referenceFor(ac).Duration; got != 139 {
+		t.Errorf("reference duration = %v, want 139", got)
+	}
+}
+
+func TestDurationGates_CatalogLengthBeatsADifferingSavedLength(t *testing.T) {
+	ac := &AcquisitionContext{
+		Track:    TrackRef{Duration: 167, CatalogDuration: 139},
+		Identity: ports.RecordingIdentity{Duration: 167, ReferenceDoubted: true},
+	}
+
+	if !ac.candidateDurationPlausible(ports.AudioCandidate{Duration: 140}) {
+		t.Error("the 140s art track must pass the pre-download gate against the catalog 139s")
+	}
+	if ac.candidateDurationPlausible(ports.AudioCandidate{Duration: 167}) {
+		t.Error("the 167s upload must fail the pre-download gate against the catalog 139s")
+	}
+	if !ac.durationAcceptable(140) || ac.durationAcceptable(167) {
+		t.Error("the file-length gate must accept 140s and reject 167s against the catalog 139s")
+	}
+}

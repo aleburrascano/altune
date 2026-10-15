@@ -257,13 +257,13 @@ func recordNotAttempted(ac *AcquisitionContext, untried []ports.AudioCandidate) 
 
 func recordImplausibleDuration(ctx context.Context, ac *AcquisitionContext, candidate ports.AudioCandidate) {
 	ac.recordRejection(candidate.URL, candidate.Title, candidate.Source, RejectionDuration,
-		fmt.Sprintf("search duration %.0fs vs expected %.0fs", candidate.Duration, ac.Track.Duration))
+		fmt.Sprintf("search duration %.0fs vs expected %.0fs", candidate.Duration, ac.ExpectedLength()))
 	slog.InfoContext(ctx, "acquisition.candidate_skipped_duration",
 		"track_id", ac.Track.ID,
 		"url", candidate.URL,
 		"source", candidate.Source,
 		"search_duration", candidate.Duration,
-		"expected_duration", ac.Track.Duration,
+		"expected_duration", ac.ExpectedLength(),
 	)
 }
 
@@ -362,10 +362,10 @@ func judgeAttempt(ac *AcquisitionContext, candidate ports.AudioCandidate, filePa
 		filePath:   filePath,
 		verified:   verified,
 		evidence:   evidence,
-		confidence: ScoreConfidence(evidence, ac.Track.Duration),
+		confidence: ScoreConfidence(evidence, ac.ExpectedLength()),
 		fallback:   len(evidence.Qualifiers) > 0,
 	}
-	if result.fallback && !fallbackLengthMatches(evidence.DurationDeltaSeconds, ac.Track.Duration) {
+	if result.fallback && !fallbackLengthMatches(evidence.DurationDeltaSeconds, ac.ExpectedLength()) {
 		result.rejection = &downloadRejection{
 			stage:  RejectionDuration,
 			reason: fmt.Sprintf("fallback version %.0fs off the expected length", evidence.DurationDeltaSeconds),
@@ -511,7 +511,7 @@ func durationRejection(
 		"source", candidate.Source,
 		"actual_duration", actual,
 		"expected_duration", expectedLength(ac, candidate),
-		"authoritative", ac.Identity.Duration > 0,
+		"authoritative", ac.resolvedLength() > 0,
 	)
 	return &downloadRejection{
 		stage:  RejectionDuration,

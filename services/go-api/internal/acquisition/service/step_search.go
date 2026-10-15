@@ -102,7 +102,7 @@ func findRequestFor(ac *AcquisitionContext) ports.FindRequest {
 		Artist:   ac.Track.Artist,
 		Album:    ac.Track.Album,
 		ISRC:     ac.Track.ISRC,
-		Duration: ac.Track.Duration,
+		Duration: ac.ExpectedLength(),
 		Identity: ac.Identity,
 
 		FallbackOnly: ac.FallbackOnly,

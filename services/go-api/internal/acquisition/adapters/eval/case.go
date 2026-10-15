@@ -25,6 +25,8 @@ type Track struct {
 	Duration float64 `json:"duration,omitempty"`
 	ISRC     string  `json:"isrc,omitempty"`
 
+	CatalogDuration float64 `json:"catalog_duration,omitempty"`
+
 	AuthoritativeDuration float64  `json:"authoritative_duration,omitempty"`
 	MBID                  string   `json:"mbid,omitempty"`
 	AcoustIDs             []string `json:"acoustids,omitempty"`
