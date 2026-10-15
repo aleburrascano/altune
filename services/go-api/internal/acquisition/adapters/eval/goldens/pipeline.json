@@ -15,11 +15,6 @@
         ] }
       ]
     },
-    { "name": "ytmsearch", "search_seconds": 2, "candidates": [
-          { "title": "ALBUM OF THE YEAR !", "url": "https://music.youtube.com/watch?v=Pwg_GsP2QZU", "channel": "YouTube Music Art Track", "categories": ["Music"], "duration": 158, "resolved": true, "kind": "art_track", "artists": ["ezcodylee"], "correct": true }
-        ] }
-      ]
-    },
     {
       "id": "pl-two-sources-registry-merges-the-master-over-a-cover",
       "class": "OK",

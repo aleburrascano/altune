@@ -1187,21 +1187,18 @@ func TestUploaderClass_ArtTrackIsTrustedOnlyWhenItsArtistsCreditTheTrackArtist(t
 	}
 	tests := []struct {
 		name      string
+		artist    string
 		candidate ports.AudioCandidate
 		want      string
 	}{
-		{"credited art track counts as topic", artTrack("ezcodylee"), channelTopic},
-		{"credit matches through normalisation", artTrack("A$AP Rocky"), channelTopic},
-		{"other artist's art track is untrusted", artTrack("Someone Else"), channelOther},
-		{"art track without credits is untrusted", artTrack(), channelOther},
-		{"upload on a topic channel is topic", ports.AudioCandidate{Channel: "ezcodylee - Topic"}, channelTopic},
+		{"credited art track counts as topic", "ezcodylee", artTrack("ezcodylee"), channelTopic},
+		{"credit matches through normalisation", "ASAP Rocky", artTrack("A$AP Rocky"), channelTopic},
+		{"other artist's art track is untrusted", "ezcodylee", artTrack("Someone Else"), channelOther},
+		{"art track without credits is untrusted", "ezcodylee", artTrack(), channelOther},
+		{"upload on a topic channel is topic", "ezcodylee", ports.AudioCandidate{Channel: "ezcodylee - Topic"}, channelTopic},
 	}
 	for _, tt := range tests {
-		artist := "ezcodylee"
-		if tt.name == "credit matches through normalisation" {
-			artist = "ASAP Rocky"
-		}
-		if got := uploaderClass(artist, tt.candidate); got != tt.want {
+		if got := uploaderClass(tt.artist, tt.candidate); got != tt.want {
 			t.Errorf("%s: uploaderClass = %q, want %q", tt.name, got, tt.want)
 		}
 	}
