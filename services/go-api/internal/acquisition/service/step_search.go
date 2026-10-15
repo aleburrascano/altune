@@ -31,6 +31,7 @@ func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext, _ pipe
 		return afterSearch{}, withCancellation(ctx, err)
 	}
 
+	ac.FallbackSkipped = s.skippedFallback(ac, candidates)
 	kept, skipped := filterCandidates(ctx, ac, candidates)
 	if len(kept) == 0 && len(skipped) > 0 {
 		slog.InfoContext(ctx, "acquisition.prior_rejections_exhausted",
@@ -46,7 +47,6 @@ func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext, _ pipe
 
 	ac.Candidates = kept
 	ac.SearchUnavailable = outage
-	ac.FallbackSkipped = s.skippedFallback(ac, candidates)
 	return afterSearch{}, nil
 }
 

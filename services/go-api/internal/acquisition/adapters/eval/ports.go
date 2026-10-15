@@ -3,6 +3,7 @@ package eval
 import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service"
 	"context"
 	"errors"
 	"fmt"
@@ -43,12 +44,26 @@ func newCasePorts(kase Case) *casePorts {
 	return &casePorts{kase: kase, byPath: make(map[string]Candidate), clock: &simClock{}}
 }
 
-func (p *casePorts) sources() []ports.AudioSource {
+var prodFallbackTier = map[string]bool{"ytdlp": true, "soundcloud": true}
+
+func (p *casePorts) registry() *service.SourceRegistry {
+	var first, fallback []ports.AudioSource
+	for _, source := range p.sources() {
+		if prodFallbackTier[source.spec.Name] {
+			fallback = append(fallback, source)
+			continue
+		}
+		first = append(first, source)
+	}
+	return service.NewSourceRegistry(first...).WithFallback(fallback...)
+}
+
+func (p *casePorts) sources() []*evalSource {
 	specs := p.kase.Sources
 	if !p.kase.usesNamedSources() {
 		specs = []Source{{Name: "eval", SearchSeconds: defaultSearchSeconds, Candidates: p.kase.Candidates}}
 	}
-	sources := make([]ports.AudioSource, 0, len(specs))
+	sources := make([]*evalSource, 0, len(specs))
 	for _, spec := range specs {
 		sources = append(sources, &evalSource{spec: spec, shared: p})
 	}
