@@ -335,3 +335,48 @@ func TestStore_PinsFillAnUnboundTrackKeepABoundOneAndUndoWithTheirRun(t *testing
 		t.Error("the pinned row survived its undo")
 	}
 }
+
+func TestStore_SavePinsTheBoundRecordingAsCatalogMBIDAndUndoRestoresNull(t *testing.T) {
+	s := testStore(t)
+	track := seedReady(t, s, uuid.NewString())
+	recording, runID := uuid.NewString(), uuid.New()
+
+	if verdict, err := s.save(t.Context(), runID, track, boundToRecording(track, recording)); err != nil || verdict != saveWritten {
+		t.Fatalf("save: %v, %v", verdict, err)
+	}
+	if pin := catalogMBIDOf(t, s, track.ID); pin == nil || *pin != recording {
+		t.Fatalf("catalog_mbid = %v, want %s", pin, recording)
+	}
+	if got := trackVersion(t, s, track.ID); got != track.Version {
+		t.Errorf("track version = %d, want unchanged %d", got, track.Version)
+	}
+
+	tally, err := s.undoRun(t.Context(), runID)
+	if err != nil || tally.Removed != 1 || tally.Unpinned != 1 {
+		t.Fatalf("undo: %+v, %v", tally, err)
+	}
+	if pin := catalogMBIDOf(t, s, track.ID); pin != nil {
+		t.Errorf("catalog_mbid after undo = %s, want NULL", *pin)
+	}
+}
+
+func TestStore_SaveNeverOverwritesAnotherCatalogMBIDNorPinsAnUnboundTrack(t *testing.T) {
+	s := testStore(t)
+	user, other := uuid.NewString(), uuid.NewString()
+	pinned, unbound := seedReady(t, s, user), seedReady(t, s, user)
+	setCatalogMBID(t, s, pinned.ID, &other)
+
+	if _, err := s.save(t.Context(), uuid.New(), pinned, boundToRecording(pinned, uuid.NewString())); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.save(t.Context(), uuid.New(), unbound, unboundIdentity(unbound)); err != nil {
+		t.Fatal(err)
+	}
+
+	if pin := catalogMBIDOf(t, s, pinned.ID); pin == nil || *pin != other {
+		t.Errorf("catalog_mbid = %v, want untouched %s", pin, other)
+	}
+	if pin := catalogMBIDOf(t, s, unbound.ID); pin != nil {
+		t.Errorf("an unbound track was pinned to %s", *pin)
+	}
+}

@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -85,7 +87,12 @@ func (s store) save(ctx context.Context, runID uuid.UUID, t libraryTrack, found 
 	if err != nil {
 		return saveSkipped, fmt.Errorf("encode evidence: %w", err)
 	}
-	result, err := s.pool.Exec(ctx, saveIdentitySQL, t.ID, t.Version, nullable(found.ISRC), nullable(found.MBRecordingID),
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return saveSkipped, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	result, err := tx.Exec(ctx, saveIdentitySQL, t.ID, t.Version, nullable(found.ISRC), nullable(found.MBRecordingID),
 		nullable(found.DeezerTrackID), nullable(found.AppleSongID), string(found.Status), found.Reason, proof, runID)
 	if err != nil {
 		return saveSkipped, fmt.Errorf("save identity: %w", err)
@@ -93,7 +100,21 @@ func (s store) save(ctx context.Context, runID uuid.UUID, t libraryTrack, found 
 	if result.RowsAffected() == 0 {
 		return saveSkipped, nil
 	}
+	if err := pinBoundRecording(ctx, tx, runID, t, found); err != nil {
+		return saveSkipped, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return saveSkipped, fmt.Errorf("commit: %w", err)
+	}
 	return saveWritten, nil
+}
+
+func pinBoundRecording(ctx context.Context, tx pgx.Tx, runID uuid.UUID, t libraryTrack, found identity) error {
+	if found.Status != statusBound || !isPinnableRecording(found.MBRecordingID) {
+		return nil
+	}
+	_, err := catalogPinInTx(ctx, tx, runID, catalogPinCandidate{TrackID: t.ID, UserID: t.UserID, RecordingID: strings.ToLower(found.MBRecordingID), Version: t.Version})
+	return err
 }
 
 func nullable(value string) *string {
@@ -104,8 +125,14 @@ func nullable(value string) *string {
 }
 
 type undoTally struct {
-	Removed int
-	Kept    int
+	Removed  int
+	Kept     int
+	Unpinned int
+	PinsKept int
+}
+
+func (u undoTally) isEmpty() bool {
+	return u.Removed+u.Kept+u.Unpinned+u.PinsKept == 0
 }
 
 var errNothingToUndo = errors.New("nothing to undo")
@@ -116,13 +143,36 @@ const undoRunSQL = `WITH removed AS (
 	RETURNING i.track_id
 ) SELECT (SELECT count(*) FROM removed), (SELECT count(*) FROM track_identity WHERE run_id = $1) - (SELECT count(*) FROM removed)`
 
+const undoPinsSQL = `WITH unpinned AS (
+	UPDATE tracks t SET catalog_mbid = NULL FROM track_metadata_changes c
+	WHERE c.run_id = $1 AND c.field = 'catalog_mbid' AND c.undone_at IS NULL
+	  AND t.id = c.track_id AND t.catalog_mbid = c.new_value
+	RETURNING c.track_id
+), stamped AS (
+	UPDATE track_metadata_changes SET undone_at = now()
+	WHERE run_id = $1 AND field = 'catalog_mbid' AND undone_at IS NULL AND track_id IN (SELECT track_id FROM unpinned)
+	RETURNING track_id
+) SELECT (SELECT count(*) FROM unpinned),
+	(SELECT count(*) FROM track_metadata_changes WHERE run_id = $1 AND field = 'catalog_mbid' AND undone_at IS NULL) - (SELECT count(*) FROM unpinned)`
+
 func (s store) undoRun(ctx context.Context, runID uuid.UUID) (undoTally, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return undoTally{}, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
 	var tally undoTally
-	if err := s.pool.QueryRow(ctx, undoRunSQL, runID).Scan(&tally.Removed, &tally.Kept); err != nil {
+	if err := tx.QueryRow(ctx, undoRunSQL, runID).Scan(&tally.Removed, &tally.Kept); err != nil {
 		return undoTally{}, fmt.Errorf("undo run: %w", err)
 	}
-	if tally.Removed+tally.Kept == 0 {
+	if err := tx.QueryRow(ctx, undoPinsSQL, runID).Scan(&tally.Unpinned, &tally.PinsKept); err != nil {
+		return undoTally{}, fmt.Errorf("undo pins: %w", err)
+	}
+	if tally.isEmpty() {
 		return tally, fmt.Errorf("%w for run_id %s", errNothingToUndo, runID)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return undoTally{}, fmt.Errorf("commit: %w", err)
 	}
 	return tally, nil
 }

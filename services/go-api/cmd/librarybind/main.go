@@ -39,23 +39,27 @@ func cutPolicyFromEnv(env func(string) string) (cutPolicy, error) {
 const usageNotice = "librarybind: do not run this from the prod VM, Deezer rate-blocks the prod IP and the app shares it; run it from another host, dry runs with a read-only LIBRARYBIND_DATABASE_URL"
 
 var (
-	errEmptyDatabaseURL = errors.New("LIBRARYBIND_DATABASE_URL is not set")
-	errApplyAndUndo     = errors.New("-apply and -undo are separate modes")
-	errUndoWithFilters  = errors.New("-undo takes no -user or -limit")
-	errNegativeLimit    = errors.New("-limit must not be negative")
-	errReportWithUndo   = errors.New("-report belongs to a bind run, not -undo")
-	errBadMaxCutGap     = errors.New(maxCutGapVarName + " must be a duration above zero, like 10s")
-	errPinsWithBindFlag = errors.New("-pins takes no -undo, -user, -limit or -report")
+	errEmptyDatabaseURL     = errors.New("LIBRARYBIND_DATABASE_URL is not set")
+	errApplyAndUndo         = errors.New("-apply and -undo are separate modes")
+	errUndoWithFilters      = errors.New("-undo takes no -user or -limit")
+	errNegativeLimit        = errors.New("-limit must not be negative")
+	errReportWithUndo       = errors.New("-report belongs to a bind run, not -undo")
+	errBadMaxCutGap         = errors.New(maxCutGapVarName + " must be a duration above zero, like 10s")
+	errPinsWithBindFlag     = errors.New("-pins takes no -undo, -user, -limit or -report")
+	errCatalogPinWithUndo   = errors.New("-pin-catalog and -undo are separate modes")
+	errCatalogPinWithReport = errors.New("-report belongs to a bind run, not -pin-catalog")
+	errCatalogPinWithPins   = errors.New("-pin-catalog and -pins are separate modes")
 )
 
 type options struct {
-	apply     bool
-	undo      bool
-	undoRunID uuid.UUID
-	userID    string
-	limit     int
-	report    string
-	pins      string
+	apply      bool
+	pinCatalog bool
+	undo       bool
+	undoRunID  uuid.UUID
+	userID     string
+	limit      int
+	report     string
+	pins       string
 }
 
 func parseOptions(args []string, output io.Writer) (options, error) {
@@ -64,7 +68,8 @@ func parseOptions(args []string, output io.Writer) (options, error) {
 	var opts options
 	var rawRunID string
 	flags.BoolVar(&opts.apply, "apply", false, "write the identity rows (default is a dry run)")
-	flags.StringVar(&rawRunID, "undo", "", "delete the identity rows of this run id whose track version is unchanged")
+	flags.BoolVar(&opts.pinCatalog, "pin-catalog", false, "set catalog_mbid of bound tracks to their bound recording (dry run unless -apply)")
+	flags.StringVar(&rawRunID, "undo", "", "delete the identity rows of this run id whose track version is unchanged and restore the catalog_mbid it pinned where unchanged")
 	flags.StringVar(&opts.userID, "user", "", "only this user id")
 	flags.IntVar(&opts.limit, "limit", 0, "stop after this many tracks (0 means all)")
 	flags.StringVar(&opts.report, "report", "", "write a libraryrelength fix_isrc plan for the wrong ISRCs this run replaced")
@@ -88,6 +93,12 @@ func (o options) check() error {
 		return errApplyAndUndo
 	case o.pins != "" && (o.undo || o.userID != "" || o.limit != 0 || o.report != ""):
 		return errPinsWithBindFlag
+	case o.pinCatalog && o.pins != "":
+		return errCatalogPinWithPins
+	case o.pinCatalog && o.undo:
+		return errCatalogPinWithUndo
+	case o.pinCatalog && o.report != "":
+		return errCatalogPinWithReport
 	case o.undo && (o.userID != "" || o.limit != 0):
 		return errUndoWithFilters
 	case o.undo && o.report != "":
@@ -151,6 +162,9 @@ func run(opts options, env func(string) string, out io.Writer) error {
 	if opts.pins != "" {
 		return runPinned(ctx, s, opts, out)
 	}
+	if opts.pinCatalog {
+		return runCatalogPin(ctx, s, opts, out)
+	}
 	return runBind(ctx, s, opts, env, out)
 }
 
@@ -171,7 +185,7 @@ func runUndo(ctx context.Context, s store, runID uuid.UUID, out io.Writer) error
 	if err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(out, "undo %s: removed %d, kept %d (track changed since the bind)\n", runID, tally.Removed, tally.Kept)
+	_, _ = fmt.Fprintf(out, "undo %s: removed %d, kept %d (track changed since the bind); unpinned %d, kept %d pins (catalog_mbid changed since)\n", runID, tally.Removed, tally.Kept, tally.Unpinned, tally.PinsKept)
 	return nil
 }
 

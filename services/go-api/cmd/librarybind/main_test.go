@@ -58,3 +58,16 @@ func TestParseOptions_PinsAreTheirOwnMode(t *testing.T) {
 		}
 	}
 }
+
+func TestParseOptions_PinCatalogIsItsOwnMode(t *testing.T) {
+	got, err := parseOptions([]string{"-pin-catalog", "-apply", "-user", "u"}, io.Discard)
+	if err != nil || !got.pinCatalog || !got.apply || got.userID != "u" {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+	if _, err := parseOptions([]string{"-pin-catalog", "-undo", "6f1c1f0e-6a52-4a3c-9d3e-0b1f2a3b4c5d"}, io.Discard); !errors.Is(err, errCatalogPinWithUndo) {
+		t.Fatalf("with undo: %v", err)
+	}
+	if _, err := parseOptions([]string{"-pin-catalog", "-report", "plan.json"}, io.Discard); !errors.Is(err, errCatalogPinWithReport) {
+		t.Fatalf("with report: %v", err)
+	}
+}
