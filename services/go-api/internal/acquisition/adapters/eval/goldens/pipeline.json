@@ -8,10 +8,10 @@
       "track": { "title": "ALBUM OF THE YEAR !", "artist": "ezcodylee", "isrc": "QZHN92620453", "duration": 139, "authoritative_duration": 139, "mbid": "pl-art-expected" },
       "sources": [
         { "name": "ytmsearch", "search_seconds": 2, "candidates": [
-          { "title": "ALBUM OF THE YEAR !", "url": "https://music.youtube.com/watch?v=Pwg_GsP2QZU", "channel": "YouTube Music Art Track", "categories": ["Music"], "duration": 140, "resolved": true, "kind": "art_track", "artists": ["ezcodylee"], "correct": true }
+          { "observed": { "ytmsearch_song": { "VideoID": "Pwg_GsP2QZU", "Title": "ALBUM OF THE YEAR !", "Artists": ["ezcodylee"], "Album": "ALBUM OF THE YEAR !", "DurationSeconds": 140, "Type": "MUSIC_VIDEO_TYPE_ATV", "Explicit": true } }, "correct": true }
         ] },
         { "name": "ytdlp", "search_seconds": 3, "candidates": [
-          { "title": "ALBUM OF THE YEAR !", "url": "https://soundcloud.com/ezcodylee/album-of-the-year", "channel": "ezcodylee", "duration": 167 }
+          { "observed": { "ytdlp_entry": { "title": "ALBUM OF THE YEAR !", "duration": 167.272, "webpage_url": "https://soundcloud.com/ezcodylee/album-of-the-year", "view_count": 79455 } } }
         ] }
       ]
     },
@@ -93,7 +93,7 @@
     {
       "id": "pl-replace-unknown-source-keeps-the-artists-upload-eligible",
       "class": "OK",
-      "note": "prod case SLAYR Phone (Interlude) ISRC USSM12600221: no audio_source_url, the stored file is the YouTube Music art track ytmsearch returns as the only first-tier candidate; the art track fails the 128 s identity length, which must still send the search to the yt-dlp fallback tier, where the artist's own 129 s upload (AcoustID 2b99657a) must be selected, never skipped by rank. AcoustIDs and result shapes are real AcoustID lookups, with the app's client, of the prod yt-dlp downloads of TB0z2HVFxEE and fV3KcFFVZJ8 (2026-10-15). The art track also fails the 128 s identity length",
+      "note": "prod case SLAYR Phone (Interlude) ISRC USSM12600221: no audio_source_url, the stored file is the YouTube Music art track ytmsearch returns as the only first-tier candidate; the art track fails the 128 s identity length, which must still send the search to the yt-dlp fallback tier, where the artist's own 129 s upload (AcoustID 2b99657a) must be selected, never skipped by rank. AcoustIDs and result shapes are real AcoustID lookups, with the app's client, of the prod yt-dlp downloads of TB0z2HVFxEE and fV3KcFFVZJ8 (2026-10-15). The art track also fails the 128 s identity length: ytmsearch lists it at 113 s, within the 15 s loose window, and the 112 s the prod stored file measured (actual_duration) is what fails it",
       "track": {
         "title": "Phone (Interlude)", "artist": "SLAYR", "isrc": "USSM12600221",
         "resolution": {
@@ -103,11 +103,11 @@
       },
       "sources": [
         { "name": "ytmsearch", "candidates": [
-          { "title": "Phone (Interlude)", "url": "https://music.youtube.com/watch?v=TB0z2HVFxEE", "channel": "YouTube Music Art Track", "categories": ["Music"], "duration": 112, "resolved": true, "kind": "art_track", "artists": ["SLAYR"],
+          { "observed": { "ytmsearch_song": { "VideoID": "TB0z2HVFxEE", "Title": "Phone (Interlude)", "Artists": ["slayr"], "Album": "Half Blood", "DurationSeconds": 113, "Type": "MUSIC_VIDEO_TYPE_ATV", "Explicit": true } }, "actual_duration": 112,
             "acoustid": "67d29ae9-708c-42a1-b5ca-9ba2367e65eb", "recording_mbids": ["e7ca1ccd-65cf-43e3-9964-ffb5a0479077"], "acoustid_results": [ { "id": "67d29ae9-708c-42a1-b5ca-9ba2367e65eb", "score": 0.95413136, "recordings": [ { "mbid": "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", "title": "Phone (interlude)", "artists": ["slayr", "TJAYY"], "duration": 128 } ] } ] }
         ] },
         { "name": "ytdlp", "candidates": [
-          { "title": "SLAYR - Phone (Interlude)", "url": "https://www.youtube.com/watch?v=fV3KcFFVZJ8", "channel": "SLAYR", "categories": ["Music"], "duration": 129, "view_count": 40000, "correct": true,
+          { "observed": { "ytdlp_entry": { "title": "slayr - Phone (Interlude) (feat. TJAYY)", "duration": 129, "webpage_url": "https://www.youtube.com/watch?v=fV3KcFFVZJ8", "channel": "slayr", "view_count": 222232 } }, "correct": true,
             "acoustid": "2b99657a-d010-4e3d-9dda-7b972f14bd9c", "recording_mbids": ["e7ca1ccd-65cf-43e3-9964-ffb5a0479077"], "acoustid_results": [ { "id": "2b99657a-d010-4e3d-9dda-7b972f14bd9c", "score": 0.98552877, "recordings": [ { "mbid": "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", "title": "Phone (interlude)", "artists": ["slayr", "TJAYY"], "duration": 128 } ] } ] }
         ] }
       ]

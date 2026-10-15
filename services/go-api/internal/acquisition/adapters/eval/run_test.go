@@ -1413,3 +1413,30 @@ func TestEmbedded_TheCatalogLengthGoldenIsWhatProdsAdaptersEmit(t *testing.T) {
 		t.Errorf("expected pass, got %q (err %q)", out.Reason, out.Err)
 	}
 }
+
+var liveSearchGoldens = []string{"pipeline.json", "current_file.json", "verification.json", "art_track_length.json"}
+
+const handBuiltNoteMarker = "hand-built because"
+
+func TestEmbedded_LiveSearchCandidatesAreObserved(t *testing.T) {
+	for _, name := range liveSearchGoldens {
+		raw, err := goldenFS.ReadFile("goldens/" + name)
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		cases, err := decodeSuite(name, raw)
+		if err != nil {
+			t.Fatalf("decode %s: %v", name, err)
+		}
+		for _, kase := range cases {
+			if strings.Contains(kase.Note, handBuiltNoteMarker) {
+				continue
+			}
+			for _, cand := range kase.allCandidates() {
+				if cand.Observed == nil && strings.HasPrefix(cand.URL, "http") {
+					t.Errorf("%s: case %q: live-search candidate %q is hand-built; record the adapter's raw input under observed, or say %q in the case note", name, kase.ID, cand.URL, handBuiltNoteMarker)
+				}
+			}
+		}
+	}
+}
