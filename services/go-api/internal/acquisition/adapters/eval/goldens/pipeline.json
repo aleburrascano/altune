@@ -49,6 +49,26 @@
           { "title": "Harbor Light", "url": "ytdlp:master", "channel": "Coastline - Topic", "duration": 210, "download_seconds": 25, "correct": true }
         ] }
       ]
+    },
+    {
+      "id": "pl-catalog-length-wins-over-a-doubted-search-pick",
+      "class": "OK",
+      "note": "prod ezcodylee 'ALBUM OF THE YEAR !' (ISRC QZHN92620453, catalog 139s): MusicBrainz search picked a 167s recording the ISRC does not register, so the resolver doubts it. The 140s YouTube Music art track must be scored and accepted against the catalog 139s; reading the doubted 167s instead scored it 0.30 and the library kept the 167s SoundCloud version",
+      "track": {
+        "title": "ALBUM OF THE YEAR !", "artist": "ezcodylee", "duration": 139, "isrc": "QZHN92620453",
+        "resolution": {
+          "search": { "mbid": "aaaaaaaa-0000-4000-8000-000000000167", "isrc": "QZHN92620453", "duration": 167 },
+          "isrc_recordings": [ { "mbid": "bbbbbbbb-0000-4000-8000-000000000139", "duration": 139 }, { "mbid": "cccccccc-0000-4000-8000-000000000167", "duration": 167 } ]
+        }
+      },
+      "sources": [
+        { "name": "ytmusic", "search_seconds": 3, "candidates": [
+          { "title": "ALBUM OF THE YEAR !", "url": "https://music.youtube.com/watch?v=Pwg_GsP2QZU", "channel": "ezcodylee", "duration": 140, "correct": true }
+        ] },
+        { "name": "soundcloud", "search_seconds": 4, "candidates": [
+          { "title": "ALBUM OF THE YEAR !", "url": "https://soundcloud.com/ezcodylee/album-of-the-year", "channel": "ezcodylee", "duration": 167 }
+        ] }
+      ]
     }
   ]
 }

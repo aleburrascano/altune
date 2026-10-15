@@ -111,10 +111,7 @@ func (ac *AcquisitionContext) durationDelta(candidate ports.AudioCandidate, prob
 	if measured <= 0 {
 		measured = candidate.Duration
 	}
-	expected := ac.Identity.Duration
-	if expected <= 0 {
-		expected = ac.Track.Duration
-	}
+	expected := ac.ExpectedLength()
 	if measured <= 0 || expected <= 0 {
 		return 0
 	}
@@ -127,7 +124,7 @@ func fallbackLengthMatches(delta, trackSeconds float64) bool {
 
 func (ac *AcquisitionContext) adopt(ctx context.Context, evidence Evidence) {
 	ac.Evidence = evidence
-	ac.Confidence = ScoreConfidence(evidence, ac.Track.Duration)
+	ac.Confidence = ScoreConfidence(evidence, ac.ExpectedLength())
 	slog.InfoContext(ctx, "acquisition.confidence",
 		"track_id", ac.Track.ID,
 		"confidence", ac.Confidence,

@@ -478,6 +478,7 @@ A change should preserve all of these; if it can't, that's the discussion.
 - Only lasting rejection stages (everything but `download` and `not_attempted`) are remembered in `acquisition_rejections`.
 - Prior-rejected sources are skipped, never dropped for good: when nothing else is left they come back.
 - Every fetch, full or preview, goes through the `DownloadLimiter`.
+- A change to where a fact comes from (expected length, ISRC, version, uploader or kind) updates every reader of that fact, including code from older epics, and a pipeline golden from the real case proves the new value reaches the final pick and score.
 - A preview failure falls back to the full-file path; it never rejects a candidate.
 - The pre-download duration check skips only when both the search-time and expected lengths are known.
 

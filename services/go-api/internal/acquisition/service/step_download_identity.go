@@ -176,11 +176,7 @@ func referenceFor(ac *AcquisitionContext) AudioReference {
 	if len(mbids) == 0 {
 		mbids = []string{ac.Identity.MBID}
 	}
-	duration := ac.Identity.Duration
-	if duration == 0 {
-		duration = ac.Track.Duration
-	}
-	return AudioReference{Title: ac.Track.Title, Artist: ac.Track.Artist, Duration: duration, MBIDs: mbids}
+	return AudioReference{Title: ac.Track.Title, Artist: ac.Track.Artist, Duration: ac.ExpectedLength(), MBIDs: mbids}
 }
 
 const maxLoggedSurviving = 5
