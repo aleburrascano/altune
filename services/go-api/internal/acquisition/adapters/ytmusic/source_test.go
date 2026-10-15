@@ -59,6 +59,21 @@ func TestFind_AFailedLookupLeavesTheFactsUnknown(t *testing.T) {
 	}
 }
 
+func TestCandidateForWatch_OnlyAnObservedOfficialVideoIsMarkedOfficial(t *testing.T) {
+	cases := map[ytmsearch.VideoType]bool{
+		ytmsearch.VideoTypeOMV: true,
+		ytmsearch.VideoTypeATV: false,
+		ytmsearch.VideoTypeUGC: false,
+		"":                     false,
+	}
+	for videoType, want := range cases {
+		got := CandidateForWatch("88oFlVnMEsc", ytmsearch.Watch{Type: videoType}, false)
+		if got.ObservedOMV != want {
+			t.Errorf("type %q: ObservedOMV = %v, want %v", videoType, got.ObservedOMV, want)
+		}
+	}
+}
+
 type recordingFetcher struct {
 	gotURL string
 	gotDir string

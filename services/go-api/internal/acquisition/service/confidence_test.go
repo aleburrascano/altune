@@ -5,10 +5,71 @@ import (
 	"altune/go-api/internal/acquisition/adapters/ytmusic"
 	"altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service/grade"
 	"context"
 	"math"
 	"testing"
 )
+
+func TestSourceKindOf(t *testing.T) {
+	cases := []struct {
+		name    string
+		kind    ports.CandidateKind
+		omv     bool
+		channel string
+		want    grade.SourceKind
+	}{
+		{"art track", ports.KindArtTrack, false, channelOther, grade.ArtTrack},
+		{"observed official video", ports.KindPinnedVideo, true, channelOther, grade.OfficialVideo},
+		{"pinned video of an unknown type is not official", ports.KindPinnedVideo, false, channelTopic, grade.FanUpload},
+		{"upload from the artist's channel", ports.KindUpload, false, channelArtist, grade.LabelUpload},
+		{"upload from a topic channel", ports.KindUpload, false, channelTopic, grade.LabelUpload},
+		{"upload from any other channel", ports.KindUpload, false, channelOther, grade.FanUpload},
+		{"catalog pin is not assumed official", ports.KindCatalogPin, false, channelTopic, grade.FanUpload},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := SourceKindOf(ports.AudioCandidate{Kind: tc.kind, ObservedOMV: tc.omv}, tc.channel); got != tc.want {
+				t.Errorf("SourceKindOf = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestUploaderSourceKind(t *testing.T) {
+	cases := []struct {
+		name, artist, channel string
+		want                  grade.SourceKind
+	}{
+		{"the artist's own channel", "Daft Punk", "Daft Punk", grade.LabelUpload},
+		{"a topic channel", "Daft Punk", "Daft Punk - Topic", grade.LabelUpload},
+		{"someone else's channel", "Daft Punk", "lyrics hub", grade.FanUpload},
+		{"no channel", "Daft Punk", "", grade.FanUpload},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := UploaderSourceKind(tc.artist, tc.channel); got != tc.want {
+				t.Errorf("UploaderSourceKind = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFingerprintOf(t *testing.T) {
+	cases := map[VerdictKind]grade.Fingerprint{
+		VerdictHard:          grade.Matches,
+		VerdictSoft:          grade.Approximates,
+		VerdictOtherVersion:  grade.Contradicts,
+		VerdictDifferentSong: grade.Unsupported,
+		VerdictUnknown:       grade.Silent,
+		"":                   grade.Silent,
+	}
+	for verdict, want := range cases {
+		if got := FingerprintOf(verdict); got != want {
+			t.Errorf("FingerprintOf(%q) = %v, want %v", verdict, got, want)
+		}
+	}
+}
 
 func TestScoreConfidence(t *testing.T) {
 	tests := []struct {

@@ -21,19 +21,20 @@ const (
 )
 
 type AudioCandidate struct {
-	Title      string
-	Duration   float64
-	URL        string
-	Channel    string
-	Categories []string
-	ViewCount  int64
-	Source     acqdomain.SourceName
-	Resolved   bool
-	Explicit   bool
-	Unplayable string
-	Artists    []string
-	Album      string
-	Kind       CandidateKind
+	Title       string
+	Duration    float64
+	URL         string
+	Channel     string
+	Categories  []string
+	ViewCount   int64
+	Source      acqdomain.SourceName
+	Resolved    bool
+	Explicit    bool
+	Unplayable  string
+	Artists     []string
+	Album       string
+	Kind        CandidateKind
+	ObservedOMV bool
 }
 
 func DedupeCandidatesBySourceKey(merged, results []AudioCandidate, positionByKey map[string]int) []AudioCandidate {

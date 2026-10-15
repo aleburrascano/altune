@@ -389,6 +389,16 @@ step fails with `ErrNoConfidentMatch`, which `failureReason` maps to
 max(5s, 3%). The winning `Evidence` and confidence are logged as
 `acquisition.confidence` and written to the track by UpdateTrack.
 
+UpdateTrack also stamps three facts into the stored evidence (`acquisition_evidence`
+jsonb, no column): `source_kind` (`art_track` and `official_video` from the candidate
+kind, `label_upload` or `fan_upload` for an upload by its channel class, never the
+title; a catalog pin counts as `fan_upload` until its owner is known), `pipeline_generation`
+(`PipelineGeneration`, bumped by hand when acquisition gains a source or a check) and
+`grade` (`GradeOf`: A fingerprint-proven official source, B proven but unofficial or
+soft, C length only, D best effort, F the fingerprint proves another song or version).
+Grades sort best to worst, so `ORDER BY acquisition_evidence->>'grade' DESC` is worst
+first. `cmd/librarygrade` backfills the same facts for tracks stored before this.
+
 Rejections carry a stage: `identity`, `qualifier`, `download`, `drm`, `preview`,
 `duration`, `undecodable`, `fingerprint`, `not_attempted`. Every stage except
 `download` and `not_attempted` is *lasting*: at the end of the run it is written to

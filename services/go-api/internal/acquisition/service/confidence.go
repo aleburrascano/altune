@@ -3,6 +3,7 @@ package service
 import (
 	"altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service/grade"
 	"context"
 	"log/slog"
 	"math"
@@ -121,15 +122,72 @@ func (ac *AcquisitionContext) adopt(ctx context.Context, evidence Evidence) {
 }
 
 type Evidence struct {
-	Verdict              string     `json:"verdict"`
-	AcoustIDScore        float64    `json:"acoustid_score"`
-	ISRCSetHit           bool       `json:"isrc_set_hit"`
-	DurationDeltaSeconds *float64   `json:"duration_delta_seconds"`
-	Channel              string     `json:"channel"`
-	Qualifiers           []string   `json:"qualifiers"`
-	Resolved             bool       `json:"resolved"`
-	SourceTitle          string     `json:"source_title"`
-	ISRCSource           ISRCSource `json:"isrc_source"`
+	Verdict              string           `json:"verdict"`
+	AcoustIDScore        float64          `json:"acoustid_score"`
+	ISRCSetHit           bool             `json:"isrc_set_hit"`
+	DurationDeltaSeconds *float64         `json:"duration_delta_seconds"`
+	Channel              string           `json:"channel"`
+	Qualifiers           []string         `json:"qualifiers"`
+	Resolved             bool             `json:"resolved"`
+	SourceTitle          string           `json:"source_title"`
+	ISRCSource           ISRCSource       `json:"isrc_source"`
+	SourceKind           grade.SourceKind `json:"source_kind"`
+	PipelineGeneration   int              `json:"pipeline_generation"`
+	Grade                grade.Grade      `json:"grade"`
+}
+
+func SourceKindOf(c ports.AudioCandidate, channelClass string) grade.SourceKind {
+	switch c.Kind {
+	case ports.KindArtTrack:
+		return grade.ArtTrack
+	case ports.KindPinnedVideo:
+		return officialVideoKind(c)
+	case ports.KindUpload:
+		return uploadSourceKind(channelClass)
+	default:
+		return grade.FanUpload
+	}
+}
+
+func officialVideoKind(c ports.AudioCandidate) grade.SourceKind {
+	if c.ObservedOMV {
+		return grade.OfficialVideo
+	}
+	return grade.FanUpload
+}
+
+func UploaderSourceKind(trackArtist, channel string) grade.SourceKind {
+	return uploadSourceKind(uploaderClass(trackArtist, ports.AudioCandidate{Channel: channel, Kind: ports.KindUpload}))
+}
+
+func uploadSourceKind(channelClass string) grade.SourceKind {
+	if channelClass == channelTopic || channelClass == channelArtist {
+		return grade.LabelUpload
+	}
+	return grade.FanUpload
+}
+
+func (ac *AcquisitionContext) gradedFingerprint() grade.Fingerprint {
+	fingerprint := FingerprintOf(ac.Verdict.Kind)
+	if fingerprint == grade.Matches && ac.Identity.ReferenceDoubted {
+		return grade.Approximates
+	}
+	return fingerprint
+}
+
+func FingerprintOf(verdict VerdictKind) grade.Fingerprint {
+	switch verdict {
+	case VerdictHard:
+		return grade.Matches
+	case VerdictSoft:
+		return grade.Approximates
+	case VerdictOtherVersion:
+		return grade.Contradicts
+	case VerdictDifferentSong:
+		return grade.Unsupported
+	default:
+		return grade.Silent
+	}
 }
 
 func (ac *AcquisitionContext) collectEvidence() Evidence {
@@ -139,7 +197,10 @@ func (ac *AcquisitionContext) collectEvidence() Evidence {
 	_, evidence.ISRCSource = ac.provenISRC()
 	if ac.Selected != nil {
 		evidence.SourceTitle = ac.Selected.Title
+		evidence.SourceKind = SourceKindOf(*ac.Selected, evidence.Channel)
 	}
+	evidence.PipelineGeneration = grade.PipelineGeneration
+	evidence.Grade = grade.Of(ac.gradedFingerprint(), ac.Provenance(), evidence.SourceKind)
 	return evidence
 }
 
