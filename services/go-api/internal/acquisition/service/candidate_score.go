@@ -103,7 +103,7 @@ func creditedArtists(credit string) []string {
 }
 
 func compactCreditKey(name string) string {
-	return strings.ReplaceAll(creditKey(name), " ", "")
+	return strings.ReplaceAll(domain.CreditKey(name), " ", "")
 }
 
 type candidateEntry struct {
@@ -146,17 +146,10 @@ func isCreditedKind(kind ports.CandidateKind) bool {
 }
 
 func artTrackClass(trackArtist string, credited []string) string {
-	want := creditKey(trackArtist)
-	for _, name := range credited {
-		if want != "" && creditKey(name) == want {
-			return channelTopic
-		}
+	if domain.Credits(credited, trackArtist) {
+		return channelTopic
 	}
 	return channelOther
-}
-
-func creditKey(name string) string {
-	return textnorm.NormalizeForIdentity(strings.ReplaceAll(name, "$", "s"))
 }
 
 func artistMatchesCandidate(trackArtist string, c ports.AudioCandidate) bool {

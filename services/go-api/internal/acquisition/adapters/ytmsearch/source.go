@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"math"
 	"regexp"
-	"strings"
 )
 
 const SourceName acqdomain.SourceName = "ytmsearch"
@@ -115,23 +114,9 @@ func lengthGap(song Song, savedLength float64) float64 {
 func matches(song Song, req ports.FindRequest) bool {
 	return song.Type == VideoTypeATV &&
 		comparableTitle(song.Title) == comparableTitle(req.Title) &&
-		credits(song.Artists, req.Artist)
+		acqdomain.Credits(song.Artists, req.Artist)
 }
 
 func comparableTitle(title string) string {
 	return textnorm.NormalizeForIdentity(ignorableTitleBrackets.ReplaceAllString(title, ""))
-}
-
-func credits(artists []string, artist string) bool {
-	want := comparableArtist(artist)
-	for _, credited := range artists {
-		if comparableArtist(credited) == want {
-			return true
-		}
-	}
-	return false
-}
-
-func comparableArtist(name string) string {
-	return textnorm.NormalizeForIdentity(strings.ReplaceAll(name, "$", "s"))
 }

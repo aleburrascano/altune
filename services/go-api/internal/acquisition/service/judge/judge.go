@@ -1,6 +1,7 @@
 package judge
 
 import (
+	"altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/shared/textnorm"
 	"altune/go-api/internal/shared/versiontag"
 	"math"
@@ -66,7 +67,7 @@ func Evaluate(t Target, c Candidate) Decision {
 	if titleIdentity(c.Title) != titleIdentity(t.Title) {
 		return Decision{Reject, "different title"}
 	}
-	if !credited(c.Artists, t.Artist) {
+	if !domain.Credits(c.Artists, t.Artist) {
 		return Decision{Reject, "artist not credited"}
 	}
 	if want, got := versiontag.Labels(t.Title), versiontag.Labels(c.Title); !slices.Equal(want, got) {
@@ -157,20 +158,6 @@ func albumKnown(t Target) bool {
 func sameAlbum(want, got string) bool {
 	w := textnorm.NormalizeForMatch(want)
 	return w != "" && w == textnorm.NormalizeForMatch(got)
-}
-
-func credited(artists []string, artist string) bool {
-	want := comparableArtistName(artist)
-	for _, a := range artists {
-		if comparableArtistName(a) == want {
-			return true
-		}
-	}
-	return false
-}
-
-func comparableArtistName(name string) string {
-	return textnorm.NormalizeForIdentity(strings.ReplaceAll(name, "$", "s"))
 }
 
 func labelList(labels []string) string {
