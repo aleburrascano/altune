@@ -117,6 +117,10 @@ func matches(song Song, req ports.FindRequest) bool {
 		acqdomain.Credits(song.Artists, req.Artist)
 }
 
+func CreditsArtist(artists []string, artist string) bool { return credits(artists, artist) }
+
+func SameTitle(a, b string) bool { return comparableTitle(a) == comparableTitle(b) }
+
 func comparableTitle(title string) string {
 	return textnorm.NormalizeForIdentity(ignorableTitleBrackets.ReplaceAllString(title, ""))
 }
