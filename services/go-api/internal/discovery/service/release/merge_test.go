@@ -416,3 +416,23 @@ func TestFilterKept_dropsOnlyTheNamesake(t *testing.T) {
 		}
 	}
 }
+
+func TestMergeReleases_albumAndSameTitledSingleStayApart(t *testing.T) {
+	got := MergeReleases([]ReleaseGroup{
+		idGroup(albumVariant(domain.ProviderDeezer, "d-album", "Lover", withType("album"), withTracks(18))),
+		idGroup(albumVariant(domain.ProviderDeezer, "d-single", "Lover", withType("single"), withTracks(1))),
+	})
+	if len(got) != 2 {
+		t.Fatalf("want album and single as two cards, got %d: %+v", len(got), got)
+	}
+}
+
+func TestMergeReleases_sameAlbumAcrossProvidersStillMerges(t *testing.T) {
+	got := MergeReleases([]ReleaseGroup{
+		idGroup(albumVariant(domain.ProviderDeezer, "d1", "Lover", withType("album"))),
+		idGroup(albumVariant(domain.ProviderAppleMusic, "a1", "Lover", withType("album"))),
+	})
+	if len(got) != 1 {
+		t.Fatalf("want one merged card, got %d", len(got))
+	}
+}

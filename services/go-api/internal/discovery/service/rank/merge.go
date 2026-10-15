@@ -119,7 +119,7 @@ func artistNameRulesOf(perProvider [][]domain.SearchResult) artistNameRules {
 
 func (n artistNameRules) blockNameJoin(e, c keyedResult) bool {
 	return n.ambiguous[c.key.title] || n.lesser[artistSourceKey(c.result)] ||
-		n.lesser[artistSourceKey(e.result)] || claimsAnotherID(e.result, c.result)
+		n.lesser[artistSourceKey(e.result)] || release.ClaimsAnotherID(e.result, c.result)
 }
 
 func lesserSameNameArtists(perProvider [][]domain.SearchResult) map[string]bool {
@@ -150,25 +150,6 @@ func artistSourceKey(r domain.SearchResult) string {
 		return ""
 	}
 	return release.SourceKey(r.Sources[0].Provider, r.Sources[0].ExternalID)
-}
-
-func claimsAnotherID(e, c domain.SearchResult) bool {
-	for _, cs := range c.Sources {
-		sameProvider, sameID := false, false
-		for _, es := range e.Sources {
-			if es.Provider != cs.Provider {
-				continue
-			}
-			sameProvider = true
-			if es.ExternalID == cs.ExternalID {
-				sameID = true
-			}
-		}
-		if sameProvider && !sameID {
-			return true
-		}
-	}
-	return false
 }
 
 func recordBestRank(e *Entity, providers map[domain.ProviderName]bool, rank int) {
