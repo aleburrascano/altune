@@ -59,8 +59,8 @@ const (
 
 func TestArtistCardWithMBID_PicksTheCardOfThatArtistNotTheFirstSameNameCard(t *testing.T) {
 	results := []domain.SearchResult{
-		{Kind: domain.ResultKindArtist, Title: "Nirvana", MBID: ukNirvana, Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "uk"}}},
-		{Kind: domain.ResultKindArtist, Title: "Nirvana", MBID: usNirvana, Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "us"}}},
+		{Kind: domain.ResultKindArtist, Title: "Nirvana", ArtistMBID: ukNirvana, Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "uk"}}},
+		{Kind: domain.ResultKindArtist, Title: "Nirvana", ArtistMBID: usNirvana, Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "us"}}},
 	}
 
 	card, ok := artistCardWithMBID(results, usNirvana)

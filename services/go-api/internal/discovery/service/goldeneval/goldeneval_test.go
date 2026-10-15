@@ -22,11 +22,11 @@ func goldenTrackResult(title, isrc string) domain.SearchResult {
 }
 
 func goldenAlbumResult(title, mbid string) domain.SearchResult {
-	return domain.SearchResult{Kind: domain.ResultKindAlbum, Title: title, Subtitle: "Weezer", MBID: mbid}
+	return domain.SearchResult{Kind: domain.ResultKindAlbum, Title: title, Subtitle: "Weezer", ReleaseGroupMBID: mbid}
 }
 
 func goldenArtistResult(mbid string) domain.SearchResult {
-	return domain.SearchResult{Kind: domain.ResultKindArtist, Title: "Nirvana", MBID: mbid}
+	return domain.SearchResult{Kind: domain.ResultKindArtist, Title: "Nirvana", ArtistMBID: mbid}
 }
 
 func parseOne(t *testing.T, caseJSON string) Case {

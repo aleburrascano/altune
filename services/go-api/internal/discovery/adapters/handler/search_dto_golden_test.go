@@ -30,7 +30,7 @@ func TestSearchResultToDTO_typedRecordTypeAndTierKeepWireBytes(t *testing.T) {
 		Extras:  map[string]any{},
 	}
 	dup := domain.SearchResult{
-		Kind: domain.ResultKindArtist, Title: "Band", Popularity: 1, MBID: "m1",
+		Kind: domain.ResultKindArtist, Title: "Band", Popularity: 1, ArtistMBID: "m1",
 		ResolutionTier: domain.StampResolutionTier(domain.EntityResolutionISRC),
 		Sources:        []domain.SourceRef{{Provider: domain.ProviderSpotify, ExternalID: "5"}},
 	}
@@ -64,6 +64,31 @@ func TestSearchResultToDTO_FillsExtrasDurationFromTheResult(t *testing.T) {
 			got := searchResultToDTO(tt.result).Extras["duration"]
 			if got != tt.want {
 				t.Errorf("extras.duration = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSearchResultToDTO_mbidKeyIsProjectedFromTheKindsTypedField(t *testing.T) {
+	typed := domain.SearchResult{RecordingMBID: "rec", ReleaseMBID: "rel", ReleaseGroupMBID: "rg", ArtistMBID: "art"}
+	cases := []struct {
+		kind domain.ResultKind
+		want string
+	}{
+		{domain.ResultKindTrack, "rec"},
+		{domain.ResultKindAlbum, "rg"},
+		{domain.ResultKindArtist, "art"},
+	}
+	for _, c := range cases {
+		t.Run(c.kind.String(), func(t *testing.T) {
+			r := typed
+			r.Kind = c.kind
+			r.Title = "T"
+
+			dtos := searchResultsToDTOs([]domain.SearchResult{r})
+
+			if got := dtos[0].Extras["mbid"]; got != c.want {
+				t.Errorf("extras.mbid = %v, want %q", got, c.want)
 			}
 		})
 	}

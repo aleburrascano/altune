@@ -235,7 +235,7 @@ func defaultArtworkSource(result *domain.SearchResult) {
 
 func (a *ArtworkFiller) lookupMBID(ctx context.Context, result *domain.SearchResult) (mbid string, fromDurable bool) {
 	durableMBID, fromDurable := a.lookupDurableIdentity(ctx, result)
-	mbid = cmp.Or(result.MBID, durableMBID)
+	mbid = cmp.Or(result.EntityMBID(), durableMBID)
 	if mbid == "" {
 		mbid = a.lookupMBIDIndex(ctx, *result)
 	}

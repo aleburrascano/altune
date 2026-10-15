@@ -313,7 +313,7 @@ func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
 		},
 		{
 			name: "result mbid beats durable mbid but durable still flags the path",
-			in:   domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", MBID: "own", Sources: deezerSrc},
+			in:   domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", RecordingMBID: "own", Sources: deezerSrc},
 			st: stages{
 				durable: &scriptedIdentityStore{ok: true, mbid: "dur"},
 				index:   &scriptedMBIDIndex{ok: true, mbid: "idx"},
@@ -410,7 +410,7 @@ func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
 		},
 		{
 			name:      "live resolver miss stamps none and caches the miss",
-			in:        domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", MBID: "own"},
+			in:        domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", RecordingMBID: "own"},
 			st:        stages{cache: &scriptedArtworkCache{}},
 			noDurable: true, noIndex: true,
 			wantPath:  "none",
@@ -418,7 +418,7 @@ func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
 		},
 		{
 			name:      "a miss from failing resolvers is stamped degraded and never cached",
-			in:        domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", MBID: "own"},
+			in:        domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", RecordingMBID: "own"},
 			st:        stages{cache: &scriptedArtworkCache{}, live: scriptedResolver{outage: errors.New("coverartarchive 503")}},
 			noDurable: true, noIndex: true,
 			wantPath:  "degraded",
@@ -426,7 +426,7 @@ func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
 		},
 		{
 			name:      "identity miss falls back to name lookup",
-			in:        domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", MBID: "own"},
+			in:        domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", RecordingMBID: "own"},
 			st:        stages{live: scriptedResolver{nameURL: "https://n.jpg"}},
 			noDurable: true, noIndex: true, noCache: true,
 			wantPath:   "name",

@@ -17,8 +17,8 @@ func TestProviderContracts(t *testing.T) {
 				return NewLastFmAdapter(providertest.NewClient(srv.URL), "test-api-key").Search(t.Context(), "small talk", providertest.TrackKinds())
 			},
 			Required: func(t *testing.T, r domain.SearchResult) {
-				if r.MBID == "" {
-					t.Error("MBID empty — merge's identifier tier consumes it")
+				if r.RecordingMBID == "" {
+					t.Error("RecordingMBID empty — merge's identifier tier consumes it")
 				}
 			},
 		},
@@ -29,8 +29,8 @@ func TestProviderContracts(t *testing.T) {
 				return NewLastFmAdapter(providertest.NewClient(srv.URL), "test-api-key").Search(t.Context(), "ok computer", providertest.AlbumKinds())
 			},
 			Required: func(t *testing.T, r domain.SearchResult) {
-				if r.MBID != "" {
-					t.Errorf("album MBID stamped (%q) — Last.fm album-search mbids are RELEASE MBIDs, a different UUID namespace than the RELEASE-GROUP MBIDs MusicBrainz album results carry; stamping one makes the MBID hard-stop block every MB↔Last.fm album merge", r.MBID)
+				if r.EntityMBID() != "" {
+					t.Errorf("album MBID stamped (%q) — Last.fm album-search mbids are RELEASE MBIDs, a different UUID namespace than the RELEASE-GROUP MBIDs MusicBrainz album results carry; stamping one makes the MBID hard-stop block every MB↔Last.fm album merge", r.EntityMBID())
 				}
 			},
 		},
@@ -41,8 +41,8 @@ func TestProviderContracts(t *testing.T) {
 				return NewLastFmAdapter(providertest.NewClient(srv.URL), "test-api-key").Search(t.Context(), "the weeknd", providertest.ArtistKinds())
 			},
 			Required: func(t *testing.T, r domain.SearchResult) {
-				if r.MBID == "" {
-					t.Error("MBID empty — merge's identifier tier consumes it")
+				if r.ArtistMBID == "" {
+					t.Error("ArtistMBID empty — merge's identifier tier consumes it")
 				}
 			},
 		},

@@ -95,8 +95,8 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 		norm := textnorm.NormalizeForMatch(r.Title)
 		key := norm
 		if ambiguous[norm] {
-			key = norm + "\x00" + r.MBID
-			if r.MBID == "" && len(r.Sources) > 0 {
+			key = norm + "\x00" + r.ArtistMBID
+			if r.ArtistMBID == "" && len(r.Sources) > 0 {
 				key = norm + "\x00" + release.SourceKey(r.Sources[0].Provider, r.Sources[0].ExternalID)
 			}
 		}

@@ -124,7 +124,7 @@ func TestCollapseArtistDuplicates(t *testing.T) {
 		}
 		for _, r := range got {
 			if _, ok := r.Extras["collapsed_artists"]; ok {
-				t.Errorf("unexpected collapsed_artists under ambiguous name (MBID=%q)", r.MBID)
+				t.Errorf("unexpected collapsed_artists under ambiguous name (MBID=%q)", r.EntityMBID())
 			}
 		}
 	})

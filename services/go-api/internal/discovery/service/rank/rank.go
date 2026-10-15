@@ -248,7 +248,7 @@ func isLowConfidenceTail(r domain.SearchResult) bool {
 		return false
 	}
 	hasIdentity := r.ISRC != "" ||
-		r.MBID != "" ||
+		r.HasEntityMBID() ||
 		r.Album != ""
 	return !hasIdentity
 }

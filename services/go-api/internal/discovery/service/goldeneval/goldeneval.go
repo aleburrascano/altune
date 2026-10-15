@@ -137,9 +137,9 @@ func (c Case) Hits(r domain.SearchResult) bool {
 	case domain.ResultKindTrack:
 		return slices.Contains(c.ISRCs, songfacts.CanonicalISRC(r.ISRC)) && discoveryEval.LabelsAgree(discoveryEval.ResultLabels(r.Kind, r.Title), c.Labels)
 	case domain.ResultKindAlbum:
-		return strings.EqualFold(r.MBID, c.MBID) && discoveryEval.LabelsAgree(discoveryEval.ResultLabels(r.Kind, r.Title), c.Labels)
+		return strings.EqualFold(r.ReleaseGroupMBID, c.MBID) && discoveryEval.LabelsAgree(discoveryEval.ResultLabels(r.Kind, r.Title), c.Labels)
 	case domain.ResultKindArtist:
-		return strings.EqualFold(r.MBID, c.MBID)
+		return strings.EqualFold(r.ArtistMBID, c.MBID)
 	default:
 		return false
 	}

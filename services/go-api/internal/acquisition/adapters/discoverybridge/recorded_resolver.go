@@ -49,12 +49,12 @@ func (s recordedSearch) Execute(context.Context, shared.UserId, *discoverydomain
 		return &search.SearchOutput{}, nil
 	}
 	return &search.SearchOutput{Results: []discoverydomain.SearchResult{{
-		Kind:     discoverydomain.ResultKindTrack,
-		Title:    s.hit.Title,
-		Subtitle: s.hit.Artist,
-		ISRC:     s.hit.ISRC,
-		MBID:     s.hit.MBID,
-		Duration: s.hit.Duration,
+		Kind:          discoverydomain.ResultKindTrack,
+		Title:         s.hit.Title,
+		Subtitle:      s.hit.Artist,
+		ISRC:          s.hit.ISRC,
+		RecordingMBID: s.hit.MBID,
+		Duration:      s.hit.Duration,
 	}}}, nil
 }
 

@@ -20,12 +20,12 @@ func TestRedisResultCache_RoundTripAndFreshCopies(t *testing.T) {
 
 	original := []domain.SearchResult{
 		{
-			Kind:     domain.ResultKindTrack,
-			Title:    "Cached Track",
-			Subtitle: "Cached Artist",
-			ImageURL: "https://img/1.jpg",
-			MBID:     "mbid-1",
-			Xref:     map[domain.ProviderKey]string{"deezer": "42"},
+			Kind:          domain.ResultKindTrack,
+			Title:         "Cached Track",
+			Subtitle:      "Cached Artist",
+			ImageURL:      "https://img/1.jpg",
+			RecordingMBID: "mbid-1",
+			Xref:          map[domain.ProviderKey]string{"deezer": "42"},
 			Sources: []domain.SourceRef{
 				{Provider: domain.ProviderDeezer, ExternalID: "42", URL: "https://deezer/42"},
 			},
@@ -48,7 +48,7 @@ func TestRedisResultCache_RoundTripAndFreshCopies(t *testing.T) {
 	}
 	first := got[0]
 	if first.Title != "Cached Track" || first.Subtitle != "Cached Artist" ||
-		first.Kind != domain.ResultKindTrack || first.MBID != "mbid-1" ||
+		first.Kind != domain.ResultKindTrack || first.RecordingMBID != "mbid-1" ||
 		first.Album != "Cached Album" || first.Duration != 200 {
 		t.Errorf("first result did not round-trip: %+v", first)
 	}

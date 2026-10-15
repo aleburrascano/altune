@@ -73,17 +73,17 @@ func TestMerge_UnambiguousArtistNameStillNameMerges(t *testing.T) {
 
 func TestMerge_ITunesBridgesIntoMBIdentityDespiteAmbiguousName(t *testing.T) {
 	mb := domain.SearchResult{
-		Kind:    domain.ResultKindArtist,
-		Title:   "Che",
-		Sources: []domain.SourceRef{{Provider: domain.ProviderMusicBrainz, ExternalID: "mbid-che-1", URL: "https://mb/1"}},
-		MBID:    "mbid-che-1",
-		Xref:    map[domain.ProviderKey]string{"itunes": "5468295"},
+		Kind:       domain.ResultKindArtist,
+		Title:      "Che",
+		Sources:    []domain.SourceRef{{Provider: domain.ProviderMusicBrainz, ExternalID: "mbid-che-1", URL: "https://mb/1"}},
+		ArtistMBID: "mbid-che-1",
+		Xref:       map[domain.ProviderKey]string{"itunes": "5468295"},
 	}
 	mb2 := domain.SearchResult{
-		Kind:    domain.ResultKindArtist,
-		Title:   "Che",
-		Sources: []domain.SourceRef{{Provider: domain.ProviderMusicBrainz, ExternalID: "mbid-che-2", URL: "https://mb/2"}},
-		MBID:    "mbid-che-2",
+		Kind:       domain.ResultKindArtist,
+		Title:      "Che",
+		Sources:    []domain.SourceRef{{Provider: domain.ProviderMusicBrainz, ExternalID: "mbid-che-2", URL: "https://mb/2"}},
+		ArtistMBID: "mbid-che-2",
 	}
 	itunes := domain.SearchResult{
 		Kind:    domain.ResultKindArtist,
@@ -200,11 +200,11 @@ func TestMergeInto_CoalescesTypedContentFields(t *testing.T) {
 
 func TestMerge_IdentityBridge(t *testing.T) {
 	mb := domain.SearchResult{
-		Kind:    domain.ResultKindArtist,
-		Title:   "Ye",
-		Sources: []domain.SourceRef{{Provider: domain.ProviderMusicBrainz, ExternalID: "mbid-ye"}},
-		MBID:    "mbid-ye",
-		Xref:    map[domain.ProviderKey]string{"deezer": "230"},
+		Kind:       domain.ResultKindArtist,
+		Title:      "Ye",
+		Sources:    []domain.SourceRef{{Provider: domain.ProviderMusicBrainz, ExternalID: "mbid-ye"}},
+		ArtistMBID: "mbid-ye",
+		Xref:       map[domain.ProviderKey]string{"deezer": "230"},
 	}
 	dz := domain.SearchResult{
 		Kind:    domain.ResultKindArtist,
@@ -421,8 +421,8 @@ func TestMergeInto_TitleTierNeverImportsARemixMBIDOntoTheOriginal(t *testing.T) 
 		t.Fatalf("got %d entities, want 1 (title tier still merges)", len(entities))
 	}
 	r := entities[0].Result
-	if r.MBID == "d3dc2825" {
-		t.Errorf("MBID = %v, want anything but the remix's MBID", r.MBID)
+	if r.IdentityMBID() == "d3dc2825" {
+		t.Errorf("MBID = %v, want anything but the remix's MBID", r.IdentityMBID())
 	}
 	if r.ISRC != "CAA509814003" {
 		t.Errorf("ISRC = %v, want the original's CAA509814003 preserved", r.ISRC)
@@ -443,8 +443,8 @@ func TestMergeInto_TitleTierCarriesMBIDAndISRCWhenTitlesAgreeUnderIdentity(t *te
 	if r.ISRC != "USUM71703089" {
 		t.Errorf("ISRC = %v, want USUM71703089 carried across", r.ISRC)
 	}
-	if r.MBID != "mbid-humble" {
-		t.Errorf("MBID = %v, want mbid-humble carried across", r.MBID)
+	if r.IdentityMBID() != "mbid-humble" {
+		t.Errorf("MBID = %v, want mbid-humble carried across", r.IdentityMBID())
 	}
 }
 
@@ -461,8 +461,8 @@ func TestMergeInto_TitleTierCarriesWhenOneSideHasNoKnownDuration(t *testing.T) {
 	if r.ISRC != "ISRC-UNKNOWN-DUR" {
 		t.Errorf("ISRC = %v, want ISRC-UNKNOWN-DUR carried (a side has no known duration to disagree)", r.ISRC)
 	}
-	if r.MBID != "MBID-UNKNOWN-DUR" {
-		t.Errorf("MBID = %v, want MBID-UNKNOWN-DUR carried (a side has no known duration to disagree)", r.MBID)
+	if r.IdentityMBID() != "MBID-UNKNOWN-DUR" {
+		t.Errorf("MBID = %v, want MBID-UNKNOWN-DUR carried (a side has no known duration to disagree)", r.IdentityMBID())
 	}
 }
 
@@ -480,8 +480,8 @@ func TestMergeInto_TitleTierCarriesAtThreePercentDurationBoundary(t *testing.T) 
 	if r.ISRC != "ISRC-AT-BOUNDARY" {
 		t.Errorf("ISRC = %v, want ISRC-AT-BOUNDARY carried (6s on 200s is exactly 3%%, still within tolerance)", r.ISRC)
 	}
-	if r.MBID != "MBID-AT-BOUNDARY" {
-		t.Errorf("MBID = %v, want MBID-AT-BOUNDARY carried (6s on 200s is exactly 3%%, still within tolerance)", r.MBID)
+	if r.IdentityMBID() != "MBID-AT-BOUNDARY" {
+		t.Errorf("MBID = %v, want MBID-AT-BOUNDARY carried (6s on 200s is exactly 3%%, still within tolerance)", r.IdentityMBID())
 	}
 }
 
@@ -499,8 +499,8 @@ func TestMergeInto_TitleTierCarriesAtFiveSecondFloorBoundary(t *testing.T) {
 	if r.ISRC != "ISRC-AT-FLOOR" {
 		t.Errorf("ISRC = %v, want ISRC-AT-FLOOR carried (5s diff sits exactly on the 5s floor, still within tolerance)", r.ISRC)
 	}
-	if r.MBID != "MBID-AT-FLOOR" {
-		t.Errorf("MBID = %v, want MBID-AT-FLOOR carried (5s diff sits exactly on the 5s floor, still within tolerance)", r.MBID)
+	if r.IdentityMBID() != "MBID-AT-FLOOR" {
+		t.Errorf("MBID = %v, want MBID-AT-FLOOR carried (5s diff sits exactly on the 5s floor, still within tolerance)", r.IdentityMBID())
 	}
 }
 
@@ -515,8 +515,8 @@ func TestMergeInto_TitleTierDoesNotCarryBeyondThreePercentDurationTolerance(t *t
 		t.Fatalf("got %d entities, want 1 (title tier still merges)", len(entities))
 	}
 	r := entities[0].Result
-	if r.MBID == "MBID-OVER-TOLERANCE" {
-		t.Errorf("MBID = %v, want it not carried (8s on 200s exceeds the 3%% tolerance)", r.MBID)
+	if r.IdentityMBID() == "MBID-OVER-TOLERANCE" {
+		t.Errorf("MBID = %v, want it not carried (8s on 200s exceeds the 3%% tolerance)", r.IdentityMBID())
 	}
 	if r.ISRC != "ISRC-OVER-TOLERANCE" {
 		t.Errorf("ISRC = %v, want ISRC-OVER-TOLERANCE preserved from the canonical side", r.ISRC)
@@ -542,8 +542,8 @@ func TestMergeInto_NameMatchNeverPastesLookalikeArtworkOverIdentity(t *testing.T
 		if got.ImageURL != "" {
 			t.Errorf("%s: ImageURL = %q, want empty placeholder (never the look-alike cover)", name, got.ImageURL)
 		}
-		if got.MBID != "mbid-dontoliver" {
-			t.Errorf("%s: MBID = %q, want the identity preserved", name, got.MBID)
+		if got.IdentityMBID() != "mbid-dontoliver" {
+			t.Errorf("%s: MBID = %q, want the identity preserved", name, got.IdentityMBID())
 		}
 	}
 }
@@ -640,7 +640,7 @@ func TestMerge_TitleTierNeverPairsTheOriginalISRCWithTheRemixMBIDInEitherOrder(t
 			t.Fatalf("%s: got %d entities, want 1 (title tier still merges)", name, len(entities))
 		}
 		r := entities[0].Result
-		if r.MBID == "d3dc2825" && r.ISRC == "CAA509814003" {
+		if r.IdentityMBID() == "d3dc2825" && r.ISRC == "CAA509814003" {
 			t.Errorf("%s: merged entity pairs the original's ISRC CAA509814003 with the remix's MBID d3dc2825", name)
 		}
 		if got := len(r.Sources); got != 2 {
@@ -665,7 +665,7 @@ func TestMerge_TitleTierNeverPairsTheOriginalMBIDWithARemixISRCInEitherOrder(t *
 			t.Fatalf("%s: got %d entities, want 1 (title tier still merges)", name, len(entities))
 		}
 		r := entities[0].Result
-		if r.MBID == "mbid-original" && r.ISRC == "ISRC-REMIX" {
+		if r.IdentityMBID() == "mbid-original" && r.ISRC == "ISRC-REMIX" {
 			t.Errorf("%s: merged entity pairs the original's MBID with the remix's ISRC", name)
 		}
 	}
@@ -682,8 +682,8 @@ func TestMerge_TitleTierDoesNotCarryMBIDAcrossAQualifierEvenWhenDurationsMatch(t
 		t.Fatalf("got %d entities, want 1 (title tier still merges)", len(entities))
 	}
 	r := entities[0].Result
-	if r.MBID == "mbid-live" {
-		t.Errorf("MBID = %q, want the live recording's MBID not carried (titles differ under identity normalisation)", r.MBID)
+	if r.IdentityMBID() == "mbid-live" {
+		t.Errorf("MBID = %q, want the live recording's MBID not carried (titles differ under identity normalisation)", r.IdentityMBID())
 	}
 	if r.ISRC != "GBAYE0500000" {
 		t.Errorf("ISRC = %q, want GBAYE0500000 kept", r.ISRC)
@@ -701,8 +701,8 @@ func TestMerge_TitleTierDoesNotCarryJustAboveTheFiveSecondFloor(t *testing.T) {
 		t.Fatalf("got %d entities, want 1 (title tier still merges)", len(entities))
 	}
 	r := entities[0].Result
-	if r.MBID == "MBID-ABOVE-FLOOR" {
-		t.Errorf("MBID = %q, want it not carried (6s on 100s exceeds max(5s, 3s))", r.MBID)
+	if r.IdentityMBID() == "MBID-ABOVE-FLOOR" {
+		t.Errorf("MBID = %q, want it not carried (6s on 100s exceeds max(5s, 3s))", r.IdentityMBID())
 	}
 	if r.ISRC != "ISRC-ABOVE-FLOOR" {
 		t.Errorf("ISRC = %q, want ISRC-ABOVE-FLOOR kept from the canonical side", r.ISRC)
@@ -727,8 +727,8 @@ func TestMerge_TitleTierCarriesTheAlbumMBIDPastARejectedRemix(t *testing.T) {
 	if got.Result.ISRC == "" {
 		t.Fatalf("no entity carries ISRC CAA509814003 among %d entities", len(entities))
 	}
-	if got.Result.MBID != "5d6efd30" {
-		t.Errorf("MBID = %q, want 5d6efd30 (the album recording's MBID, never the remix's d3dc2825)", got.Result.MBID)
+	if got.Result.IdentityMBID() != "5d6efd30" {
+		t.Errorf("MBID = %q, want 5d6efd30 (the album recording's MBID, never the remix's d3dc2825)", got.Result.IdentityMBID())
 	}
 }
 
@@ -746,8 +746,8 @@ func TestMerge_ISRCTierStillCarriesMBIDAcrossDifferentTitlesAndDurations(t *test
 	if tier := r.ResolutionTier.Tier.String(); tier != "isrc" {
 		t.Errorf("resolution_tier = %v, want isrc", tier)
 	}
-	if r.MBID != "mbid-shared" {
-		t.Errorf("MBID = %q, want mbid-shared carried (stronger tiers are unchanged)", r.MBID)
+	if r.IdentityMBID() != "mbid-shared" {
+		t.Errorf("MBID = %q, want mbid-shared carried (stronger tiers are unchanged)", r.IdentityMBID())
 	}
 }
 
@@ -760,8 +760,8 @@ func TestMerge_ArtistNameTierCarriesMBIDAcrossAParenthetical(t *testing.T) {
 		t.Fatalf("got %d entities, want 1 (artist name tier still merges)", len(entities))
 	}
 	r := entities[0].Result
-	if r.MBID != "mbid-poison" {
-		t.Errorf("MBID = %q, want mbid-poison (the identity-agreement gate must not apply to the artist branch)", r.MBID)
+	if r.IdentityMBID() != "mbid-poison" {
+		t.Errorf("MBID = %q, want mbid-poison (the identity-agreement gate must not apply to the artist branch)", r.IdentityMBID())
 	}
 }
 
@@ -782,8 +782,8 @@ func TestMerge_TitleTierKeepsProvenIdentityOverALaterMoreCompleteCandidate(t *te
 	if r.ISRC != "ISRC-PROVEN" {
 		t.Errorf("ISRC = %q, want ISRC-PROVEN kept (the proven side, not the merely more complete candidate)", r.ISRC)
 	}
-	if r.MBID != "mbid-proven" {
-		t.Errorf("MBID = %q, want mbid-proven kept (the proven side, not the merely more complete candidate)", r.MBID)
+	if r.IdentityMBID() != "mbid-proven" {
+		t.Errorf("MBID = %q, want mbid-proven kept (the proven side, not the merely more complete candidate)", r.IdentityMBID())
 	}
 }
 

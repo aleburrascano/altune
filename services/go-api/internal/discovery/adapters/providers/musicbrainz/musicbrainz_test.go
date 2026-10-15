@@ -81,8 +81,8 @@ func TestMusicBrainzAdapter_Search_Recordings(t *testing.T) {
 	if r.Sources[0].URL != "https://musicbrainz.org/recording/abc-123-def" {
 		t.Errorf("source URL: got %q, want musicbrainz recording URL", r.Sources[0].URL)
 	}
-	if r.MBID != "abc-123-def" {
-		t.Errorf("MBID: got %q, want %q", r.MBID, "abc-123-def")
+	if r.RecordingMBID != "abc-123-def" {
+		t.Errorf("MBID: got %q, want %q", r.RecordingMBID, "abc-123-def")
 	}
 	if r.ISRC != "GBAYE9700011" {
 		t.Errorf("ISRC: got %q, want %q", r.ISRC, "GBAYE9700011")
@@ -135,8 +135,8 @@ func TestMusicBrainzAdapter_Search_Artists(t *testing.T) {
 	if r.Sources[0].URL != "https://musicbrainz.org/artist/a74b1b7f-71a5-4011-9441-d0b5e4122711" {
 		t.Errorf("source URL: got %q, want musicbrainz artist URL", r.Sources[0].URL)
 	}
-	if r.MBID != "a74b1b7f-71a5-4011-9441-d0b5e4122711" {
-		t.Errorf("MBID: got %q, want the artist MBID", r.MBID)
+	if r.ArtistMBID != "a74b1b7f-71a5-4011-9441-d0b5e4122711" {
+		t.Errorf("MBID: got %q, want the artist MBID", r.ArtistMBID)
 	}
 	if r.Extras["artist_type"] != "Group" {
 		t.Errorf("extras.artist_type: got %v, want %q", r.Extras["artist_type"], "Group")
@@ -190,8 +190,8 @@ func TestMusicBrainzAdapter_Search_ReleaseGroups(t *testing.T) {
 	if r.Sources[0].URL != "https://musicbrainz.org/release-group/rg-001-abc" {
 		t.Errorf("source URL: got %q, want musicbrainz release-group URL", r.Sources[0].URL)
 	}
-	if r.MBID != "rg-001-abc" {
-		t.Errorf("MBID: got %q, want %q", r.MBID, "rg-001-abc")
+	if r.ReleaseGroupMBID != "rg-001-abc" {
+		t.Errorf("MBID: got %q, want %q", r.ReleaseGroupMBID, "rg-001-abc")
 	}
 }
 
@@ -629,8 +629,8 @@ func TestMapMBReleaseGroup_carriesFirstReleaseDate(t *testing.T) {
 	if r.Subtitle != "Che" {
 		t.Errorf("Subtitle = %q, want Che", r.Subtitle)
 	}
-	if r.MBID != "rg-1" {
-		t.Errorf("MBID = %q, want rg-1", r.MBID)
+	if r.ReleaseGroupMBID != "rg-1" {
+		t.Errorf("MBID = %q, want rg-1", r.ReleaseGroupMBID)
 	}
 	if r.RecordType != "ep" {
 		t.Errorf("record_type = %v, want ep (lowercased primary-type, so EPs leave the Albums row)", r.RecordType)

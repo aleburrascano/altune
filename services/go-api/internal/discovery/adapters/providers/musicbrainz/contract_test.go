@@ -20,8 +20,8 @@ func TestProviderContracts(t *testing.T) {
 				if r.ISRC == "" {
 					t.Error("ISRC empty — merge's identifier tier consumes it")
 				}
-				if r.MBID == "" {
-					t.Error("MBID empty — merge's identifier tier consumes it")
+				if r.RecordingMBID == "" {
+					t.Error("RecordingMBID empty — merge's identifier tier consumes it")
 				}
 			},
 		},
@@ -32,8 +32,8 @@ func TestProviderContracts(t *testing.T) {
 				return NewMusicBrainzAdapter(providertest.NewClient(srv.URL), "altune-test/1.0").Search(t.Context(), "radiohead", providertest.ArtistKinds())
 			},
 			Required: func(t *testing.T, r domain.SearchResult) {
-				if r.MBID == "" {
-					t.Error("MBID empty — artist identity resolution consumes it")
+				if r.ArtistMBID == "" {
+					t.Error("ArtistMBID empty — artist identity resolution consumes it")
 				}
 			},
 		},

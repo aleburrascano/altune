@@ -44,7 +44,7 @@ func (a *LastFmAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderNa
 		r := domain.NewProviderResult(domain.ResultKindAlbum, al.Name, al.Artist.Name, lastfmExtraLargeImage(al.Image),
 			domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(al.URL), URL: al.URL},
 			extras)
-		r.MBID = al.MBID
+		r.ReleaseMBID = al.MBID
 		results = append(results, r)
 	}
 	return results, nil

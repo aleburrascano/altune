@@ -1,13 +1,15 @@
 package domain
 
-import "testing"
-
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"testing"
 )
 
 func TestStringExtra(t *testing.T) {
@@ -62,5 +64,61 @@ func TestDiscoveryNeverReadsOrWritesARemovedExtrasKey(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSearchResult_SharedMBIDFieldStaysRemoved(t *testing.T) {
+	parsed, err := parser.ParseFile(token.NewFileSet(), "search_result.go", nil, 0)
+	if err != nil {
+		t.Fatalf("parse search_result.go: %v", err)
+	}
+	var fields []string
+	ast.Inspect(parsed, func(n ast.Node) bool {
+		spec, ok := n.(*ast.TypeSpec)
+		if !ok || spec.Name.Name != "SearchResult" {
+			return true
+		}
+		for _, f := range spec.Type.(*ast.StructType).Fields.List {
+			for _, name := range f.Names {
+				fields = append(fields, name.Name)
+			}
+		}
+		return false
+	})
+	for _, f := range fields {
+		if f == "MBID" {
+			t.Fatalf("SearchResult has the shared MBID field again, want typed RecordingMBID/ReleaseMBID/ReleaseGroupMBID/ArtistMBID only")
+		}
+	}
+	if len(fields) == 0 {
+		t.Fatal("SearchResult struct not found in search_result.go")
+	}
+}
+
+func TestSearchResult_IdentityMBIDIsTheKindsOwnTypedField(t *testing.T) {
+	typed := SearchResult{RecordingMBID: "rec", ReleaseMBID: "rel", ReleaseGroupMBID: "rg", ArtistMBID: "art"}
+	cases := []struct {
+		name         string
+		kind         ResultKind
+		result       SearchResult
+		wantIdentity string
+		wantEntity   string
+	}{
+		{"track is its recording", ResultKindTrack, typed, "rec", "rec"},
+		{"album is its release group, never its release", ResultKindAlbum, typed, "rg", "rg"},
+		{"artist is its artist", ResultKindArtist, typed, "art", "art"},
+		{"album with only a release has no identity but keeps the release for lookups", ResultKindAlbum, SearchResult{ReleaseMBID: "rel"}, "", "rel"},
+		{"track never borrows a release", ResultKindTrack, SearchResult{ReleaseMBID: "rel"}, "", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			c.result.Kind = c.kind
+			if got := c.result.IdentityMBID(); got != c.wantIdentity {
+				t.Errorf("IdentityMBID = %q, want %q", got, c.wantIdentity)
+			}
+			if got := c.result.EntityMBID(); got != c.wantEntity {
+				t.Errorf("EntityMBID = %q, want %q", got, c.wantEntity)
+			}
+		})
 	}
 }

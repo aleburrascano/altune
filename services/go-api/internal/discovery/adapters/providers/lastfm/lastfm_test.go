@@ -74,8 +74,8 @@ func TestLastFmAdapter_Search_Tracks(t *testing.T) {
 	if r.Extras["listeners"] != "1234567" {
 		t.Errorf("extras.listeners: got %v, want %q", r.Extras["listeners"], "1234567")
 	}
-	if r.MBID != "6c9d9e5f-25cc-4e3a-9d3a-3a4b7d2f1a01" {
-		t.Errorf("MBID: got %q, want the fixture mbid", r.MBID)
+	if r.RecordingMBID != "6c9d9e5f-25cc-4e3a-9d3a-3a4b7d2f1a01" {
+		t.Errorf("MBID: got %q, want the fixture mbid", r.RecordingMBID)
 	}
 }
 
@@ -128,8 +128,8 @@ func TestLastFmAdapter_Search_Artists(t *testing.T) {
 	if r.Extras["listeners"] != "9876543" {
 		t.Errorf("extras.listeners: got %v, want %q", r.Extras["listeners"], "9876543")
 	}
-	if r.MBID != "c8b03190-306c-4120-bb0b-6f2ebfc06ea9" {
-		t.Errorf("MBID: got %q, want the fixture mbid", r.MBID)
+	if r.ArtistMBID != "c8b03190-306c-4120-bb0b-6f2ebfc06ea9" {
+		t.Errorf("MBID: got %q, want the fixture mbid", r.ArtistMBID)
 	}
 }
 
@@ -176,8 +176,8 @@ func TestLastFmAdapter_Search_Albums_DoesNotStampReleaseMBID(t *testing.T) {
 	if r.Subtitle != "Radiohead" {
 		t.Errorf("subtitle: got %q, want %q", r.Subtitle, "Radiohead")
 	}
-	if r.MBID != "" {
-		t.Errorf("MBID: got %q, want empty (release-namespace mbid must not be stamped)", r.MBID)
+	if r.EntityMBID() != "" {
+		t.Errorf("MBID: got %q, want empty (release-namespace mbid must not be stamped)", r.EntityMBID())
 	}
 }
 
@@ -265,8 +265,8 @@ func TestLastFmAdapter_GetArtistAlbums(t *testing.T) {
 	if r.Kind != domain.ResultKindAlbum || r.Title != "After Hours" || r.Subtitle != "The Weeknd" {
 		t.Errorf("result = %+v", r)
 	}
-	if r.MBID != lastfmTestMBID {
-		t.Errorf("MBID = %q, want carried for the identifier merge tier", r.MBID)
+	if r.ReleaseMBID != lastfmTestMBID {
+		t.Errorf("MBID = %q, want carried for the identifier merge tier", r.ReleaseMBID)
 	}
 	if r.Extras["playcount"] != int64(41000000) {
 		t.Errorf("playcount = %v, want int64", r.Extras["playcount"])

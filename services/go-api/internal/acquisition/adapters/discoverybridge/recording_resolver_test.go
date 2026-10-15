@@ -93,12 +93,12 @@ func (failingSearcher) Execute(context.Context, shared.UserId, *discoverydomain.
 func drinkingInLA() stubSearcher {
 	return stubSearcher{out: &search.SearchOutput{
 		Results: []discoverydomain.SearchResult{{
-			Kind:     discoverydomain.ResultKindTrack,
-			Title:    "Drinking in L.A.",
-			Subtitle: "Bran Van 3000",
-			ISRC:     "CAA509814003",
-			MBID:     "remix-mbid",
-			Duration: 236,
+			Kind:          discoverydomain.ResultKindTrack,
+			Title:         "Drinking in L.A.",
+			Subtitle:      "Bran Van 3000",
+			ISRC:          "CAA509814003",
+			RecordingMBID: "remix-mbid",
+			Duration:      236,
 		}},
 	}}
 }
@@ -665,7 +665,7 @@ var (
 func searchRanking(mbid string, duration int, sources ...discoverydomain.SourceRef) stubSearcher {
 	return stubSearcher{out: &search.SearchOutput{Results: []discoverydomain.SearchResult{{
 		Kind: discoverydomain.ResultKindTrack, Title: "Boys Don't Cry", Subtitle: "The Cure",
-		MBID: mbid, Duration: duration, Sources: sources,
+		RecordingMBID: mbid, Duration: duration, Sources: sources,
 	}}}}
 }
 

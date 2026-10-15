@@ -132,7 +132,7 @@ func parseLastFmTracks(raw json.RawMessage) []domain.SearchResult {
 		r := domain.NewProviderResult(domain.ResultKindTrack, t.Name, t.Artist, lastfmExtraLargeImage(t.Image),
 			domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(t.URL), URL: t.URL},
 			extras)
-		r.MBID = t.MBID
+		r.RecordingMBID = t.MBID
 		results = append(results, r)
 	}
 	return results
@@ -191,7 +191,7 @@ func parseLastFmArtists(raw json.RawMessage) []domain.SearchResult {
 		r := domain.NewProviderResult(domain.ResultKindArtist, a.Name, "", lastfmExtraLargeImage(a.Image),
 			domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(a.URL), URL: a.URL},
 			extras)
-		r.MBID = a.MBID
+		r.ArtistMBID = a.MBID
 		results = append(results, r)
 	}
 	return results

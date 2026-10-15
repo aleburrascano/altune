@@ -71,7 +71,8 @@ func compatibleRelease(candidates []*MergedRelease, variant domain.SearchResult)
 }
 
 func conflictingIdentity(a, b domain.SearchResult) bool {
-	return differ(a.MBID, b.MBID) || differ(a.UPC, b.UPC) ||
+	return differ(a.RecordingMBID, b.RecordingMBID) || differ(a.ReleaseMBID, b.ReleaseMBID) ||
+		differ(a.ReleaseGroupMBID, b.ReleaseGroupMBID) || differ(a.ArtistMBID, b.ArtistMBID) || differ(a.UPC, b.UPC) ||
 		ClaimsAnotherID(a, b) || albumVersusSingle(a.RecordType, b.RecordType)
 }
 
@@ -131,7 +132,6 @@ func bestOfRelease(a, b domain.SearchResult) domain.SearchResult {
 	a.Album = FirstNonEmpty(a.Album, b.Album)
 	a.ISRC = FirstNonEmpty(a.ISRC, b.ISRC)
 	a.UPC = FirstNonEmpty(a.UPC, b.UPC)
-	a.MBID = FirstNonEmpty(a.MBID, b.MBID)
 	a.RecordingMBID = FirstNonEmpty(a.RecordingMBID, b.RecordingMBID)
 	a.ReleaseMBID = FirstNonEmpty(a.ReleaseMBID, b.ReleaseMBID)
 	a.ReleaseGroupMBID = FirstNonEmpty(a.ReleaseGroupMBID, b.ReleaseGroupMBID)
@@ -209,7 +209,7 @@ func mergeRecordType(a, b domain.RecordType) domain.RecordType {
 }
 
 func hasStrongID(r domain.SearchResult) bool {
-	return r.MBID != "" || r.ISRC != "" || r.UPC != ""
+	return r.HasEntityMBID() || r.ISRC != "" || r.UPC != ""
 }
 
 func UnionSources(a, b []domain.SourceRef) []domain.SourceRef {

@@ -61,15 +61,26 @@ func hitFor(c goldeneval.Case) domain.SearchResult {
 	if len(c.ISRCs) > 0 {
 		r.ISRC = c.ISRCs[0]
 	}
-	r.MBID = c.MBID
+	setMBID(&r, c.MBID)
 	return r
+}
+
+func setMBID(r *domain.SearchResult, id string) {
+	switch r.Kind {
+	case domain.ResultKindArtist:
+		r.ArtistMBID = id
+	case domain.ResultKindAlbum:
+		r.ReleaseGroupMBID = id
+	default:
+		r.RecordingMBID = id
+	}
 }
 
 func decoyFor(c goldeneval.Case) domain.SearchResult {
 	r := hitFor(c)
 	r.Title += " (Live)"
 	r.ISRC = "ZZZZZ0000000"
-	r.MBID = "00000000-0000-0000-0000-000000000000"
+	setMBID(&r, "00000000-0000-0000-0000-000000000000")
 	return r
 }
 

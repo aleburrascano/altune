@@ -454,7 +454,7 @@ func runQuery(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redis
 		for _, s := range r.Sources {
 			srcs = append(srcs, s.Provider.String())
 		}
-		fmt.Printf("  %d. [%-6s] %-45q sub=%-28q src=%v isrc=%q mbid=%q upc=%q\n", i+1, r.Kind.String(), r.Title, r.Subtitle, srcs, r.ISRC, r.MBID, r.UPC)
+		fmt.Printf("  %d. [%-6s] %-45q sub=%-28q src=%v isrc=%q mbid=%q upc=%q\n", i+1, r.Kind.String(), r.Title, r.Subtitle, srcs, r.ISRC, r.EntityMBID(), r.UPC)
 	}
 	return nil
 }

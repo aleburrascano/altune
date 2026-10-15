@@ -245,7 +245,7 @@ func runDetailLive(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, 
 
 func artistCardWithMBID(results []domain.SearchResult, mbid string) (domain.SearchResult, bool) {
 	for _, r := range results {
-		if r.Kind == domain.ResultKindArtist && len(r.Sources) > 0 && strings.EqualFold(r.MBID, mbid) {
+		if r.Kind == domain.ResultKindArtist && len(r.Sources) > 0 && strings.EqualFold(r.ArtistMBID, mbid) {
 			return r, true
 		}
 	}

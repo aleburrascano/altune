@@ -327,7 +327,7 @@ func pickRecording(results []discoverydomain.SearchResult, q acqports.RecordingQ
 func toIdentity(res discoverydomain.SearchResult) acqports.RecordingIdentity {
 	identity := acqports.RecordingIdentity{
 		ISRC:     res.ISRC,
-		MBID:     res.MBID,
+		MBID:     res.RecordingMBID,
 		Duration: float64(res.Duration),
 	}
 	for _, src := range res.Sources {

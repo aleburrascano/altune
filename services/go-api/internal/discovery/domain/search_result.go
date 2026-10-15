@@ -21,7 +21,6 @@ type SearchResult struct {
 	Sources          []SourceRef
 	Popularity       float64
 	ISRC             string
-	MBID             string
 	RecordingMBID    string
 	ReleaseMBID      string
 	ReleaseGroupMBID string
@@ -44,6 +43,33 @@ type SearchResult struct {
 	ArtworkPath      ArtworkPath
 	ResolutionTier   ResolutionTierStamp
 	Extras           map[string]any
+}
+
+func (r SearchResult) IdentityMBID() string {
+	switch r.Kind {
+	case ResultKindTrack:
+		return r.RecordingMBID
+	case ResultKindAlbum:
+		return r.ReleaseGroupMBID
+	case ResultKindArtist:
+		return r.ArtistMBID
+	default:
+		return ""
+	}
+}
+
+func (r SearchResult) EntityMBID() string {
+	if id := r.IdentityMBID(); id != "" {
+		return id
+	}
+	if r.Kind == ResultKindAlbum {
+		return r.ReleaseMBID
+	}
+	return ""
+}
+
+func (r SearchResult) HasEntityMBID() bool {
+	return r.RecordingMBID != "" || r.ReleaseMBID != "" || r.ReleaseGroupMBID != "" || r.ArtistMBID != ""
 }
 
 func (r *SearchResult) PutExtra(key string, value any) {
@@ -75,7 +101,7 @@ func PutTypedExtras(extras map[string]any, r SearchResult) {
 	putIfSet(extras, wireRecordType, string(r.RecordType))
 	putIfSet(extras, wireISRC, r.ISRC)
 	putIfSet(extras, wireUPC, r.UPC)
-	putIfSet(extras, wireMBID, r.MBID)
+	putIfSet(extras, wireMBID, r.EntityMBID())
 	putIfSet(extras, wireArtworkPath, string(r.ArtworkPath))
 	putIfSet(extras, wireDuration, r.Duration)
 	putIfSet(extras, wireTrackNumber, r.TrackPosition.Track)

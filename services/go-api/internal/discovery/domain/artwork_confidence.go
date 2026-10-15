@@ -23,7 +23,7 @@ func (r SearchResult) ArtworkConfidenceRank() int {
 }
 
 func (r SearchResult) HasArtworkIdentity() bool {
-	return r.MBID != "" || r.ISRC != "" || r.UPC != "" || len(r.Xref) > 0
+	return r.EntityMBID() != "" || r.ISRC != "" || r.UPC != "" || len(r.Xref) > 0
 }
 
 func FirstNonEmptyArtwork(a, b SearchResult) (url string, source ProviderKey) {

@@ -180,11 +180,11 @@ func sameIdentity(e, c domain.SearchResult) (domain.EntityResolutionTier, bool, 
 		return domain.EntityResolutionISRC, true, true
 	}
 	if e.Kind == domain.ResultKindAlbum && e.UPC != "" && c.UPC != "" && e.UPC == c.UPC &&
-		(e.MBID == "" || c.MBID == "" || e.MBID == c.MBID) {
+		(e.IdentityMBID() == "" || c.IdentityMBID() == "" || e.IdentityMBID() == c.IdentityMBID()) {
 		return domain.EntityResolutionUPC, true, true
 	}
-	if e.MBID != "" && c.MBID != "" {
-		if e.MBID == c.MBID {
+	if e.IdentityMBID() != "" && c.IdentityMBID() != "" {
+		if e.IdentityMBID() == c.IdentityMBID() {
 			return domain.EntityResolutionMBID, true, true
 		}
 		return domain.EntityResolutionNone, false, true
@@ -256,18 +256,20 @@ func orderByCompleteness(canonical, other domain.SearchResult) (domain.SearchRes
 }
 
 func carryIdentity(merged *domain.SearchResult, canonical, other domain.SearchResult, matchTier domain.EntityResolutionTier) {
-	provenISRC, provenMBID, hasProven := provenIdentity(canonical, other)
+	proven, hasProven := provenIdentity(canonical, other)
 	titleTierMerge := matchTier == domain.EntityResolutionNone && canonical.Kind != domain.ResultKindArtist
 	identityAgrees := !titleTierMerge || sameVersionIdentity(canonical, other)
 	merged.ISRC = identityCarriedField(canonical.ISRC, other.ISRC, identityAgrees)
-	merged.MBID = identityCarriedField(canonical.MBID, other.MBID, identityAgrees)
 	merged.RecordingMBID = identityCarriedField(canonical.RecordingMBID, other.RecordingMBID, identityAgrees)
 	merged.ReleaseMBID = identityCarriedField(canonical.ReleaseMBID, other.ReleaseMBID, identityAgrees)
 	merged.ReleaseGroupMBID = identityCarriedField(canonical.ReleaseGroupMBID, other.ReleaseGroupMBID, identityAgrees)
 	merged.ArtistMBID = identityCarriedField(canonical.ArtistMBID, other.ArtistMBID, identityAgrees)
 	if !identityAgrees && hasProven {
-		merged.ISRC = provenISRC
-		merged.MBID = provenMBID
+		merged.ISRC = proven.ISRC
+		merged.RecordingMBID = proven.RecordingMBID
+		merged.ReleaseMBID = proven.ReleaseMBID
+		merged.ReleaseGroupMBID = proven.ReleaseGroupMBID
+		merged.ArtistMBID = proven.ArtistMBID
 	}
 }
 
@@ -344,16 +346,16 @@ func confidenceFor(tier domain.EntityResolutionTier, sourceCount int) domain.Con
 	return domain.ConfidenceLow
 }
 
-func provenIdentity(a, b domain.SearchResult) (isrc, mbid string, ok bool) {
+func provenIdentity(a, b domain.SearchResult) (proven domain.SearchResult, ok bool) {
 	aProven := a.ResolutionTier.Stamped && a.ResolutionTier.Tier != domain.EntityResolutionNone
 	bProven := b.ResolutionTier.Stamped && b.ResolutionTier.Tier != domain.EntityResolutionNone
 	switch {
 	case aProven && !bProven:
-		return a.ISRC, a.MBID, true
+		return a, true
 	case bProven && !aProven:
-		return b.ISRC, b.MBID, true
+		return b, true
 	default:
-		return "", "", false
+		return domain.SearchResult{}, false
 	}
 }
 
@@ -421,7 +423,7 @@ func ambiguousArtistNames(perProvider [][]domain.SearchResult) map[string]bool {
 func ambiguousArtistNamesFlat(results []domain.SearchResult) map[string]bool {
 	mbidsByName := make(map[string]map[string]bool)
 	for _, r := range results {
-		if r.Kind != domain.ResultKindArtist || r.MBID == "" {
+		if r.Kind != domain.ResultKindArtist || r.ArtistMBID == "" {
 			continue
 		}
 		if !providersOf(r)[domain.ProviderMusicBrainz] {
@@ -431,7 +433,7 @@ func ambiguousArtistNamesFlat(results []domain.SearchResult) map[string]bool {
 		if mbidsByName[name] == nil {
 			mbidsByName[name] = make(map[string]bool)
 		}
-		mbidsByName[name][r.MBID] = true
+		mbidsByName[name][r.ArtistMBID] = true
 	}
 	ambiguous := make(map[string]bool)
 	for name, mbids := range mbidsByName {

@@ -48,3 +48,19 @@ func TestStampIdentities_NoBridgeIsNoOp(t *testing.T) {
 		t.Fatalf("nil bridge must be a no-op, but xref was stamped")
 	}
 }
+
+func TestStampIdentities_AlbumWithOnlyAReleaseMBIDIsNotLookedUpAsAReleaseGroup(t *testing.T) {
+	fb := &fakeIdentityBridge{byMBID: map[string]map[domain.ProviderKey]string{
+		"release-uuid": {"deezer": "555"},
+	}}
+	s := NewIdentityStamper(fb, nil, nil, &runloop.Tracker{})
+	album := discoverytest.Res(domain.ResultKindAlbum, "Pinkerton", "Weezer", domain.ProviderLastFM, nil)
+	album.ReleaseMBID = "release-uuid"
+	groups := [][]domain.SearchResult{{album}}
+
+	s.Stamp(context.Background(), groups)
+
+	if groups[0][0].Xref != nil {
+		t.Fatalf("a release MBID was bridged as a release group, xref=%v", groups[0][0].Xref)
+	}
+}

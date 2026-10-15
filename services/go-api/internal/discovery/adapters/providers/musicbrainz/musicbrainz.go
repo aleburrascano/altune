@@ -160,7 +160,7 @@ func mapMBRecording(rec mbRecording) domain.SearchResult {
 	r := domain.NewProviderResult(domain.ResultKindTrack, recordingTitle(rec), subtitle, "",
 		domain.SourceRef{Provider: domain.ProviderMusicBrainz, ExternalID: rec.ID, URL: "https://musicbrainz.org/recording/" + rec.ID},
 		extras)
-	r.MBID = rec.ID
+	r.RecordingMBID = rec.ID
 	if len(rec.ISRCs) > 0 {
 		r.ISRC = rec.ISRCs[0]
 	}
@@ -203,7 +203,7 @@ func mapMBArtist(art mbArtistItem) domain.SearchResult {
 	r := domain.NewProviderResult(domain.ResultKindArtist, art.Name, "", "",
 		domain.SourceRef{Provider: domain.ProviderMusicBrainz, ExternalID: art.ID, URL: "https://musicbrainz.org/artist/" + art.ID},
 		extras)
-	r.MBID = art.ID
+	r.ArtistMBID = art.ID
 	return r
 }
 
@@ -222,7 +222,7 @@ func mapMBReleaseGroup(rg mbReleaseGroup) domain.SearchResult {
 	r := domain.NewProviderResult(domain.ResultKindAlbum, rg.Title, subtitle, "",
 		domain.SourceRef{Provider: domain.ProviderMusicBrainz, ExternalID: rg.ID, URL: "https://musicbrainz.org/release-group/" + rg.ID},
 		extras)
-	r.MBID = rg.ID
+	r.ReleaseGroupMBID = rg.ID
 	r.RecordType = domain.RecordType(strings.ToLower(strings.TrimSpace(rg.PrimaryType)))
 	r.ReleaseDate = rg.FirstReleaseDate
 	return r

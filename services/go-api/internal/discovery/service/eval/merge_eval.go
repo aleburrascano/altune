@@ -147,8 +147,8 @@ func provableIdentityKey(r domain.SearchResult) string {
 	if isrc := songfacts.CanonicalISRC(r.ISRC); isrc != "" {
 		return "isrc:" + isrc + "|" + labels
 	}
-	if r.MBID != "" {
-		return "mbid:" + strings.ToLower(r.MBID) + "|" + labels
+	if r.IdentityMBID() != "" {
+		return "mbid:" + strings.ToLower(r.IdentityMBID()) + "|" + labels
 	}
 	return "t:" + r.Kind.String() + "|" + textnorm.NormalizeForMatch(r.Title) + "|" + textnorm.NormalizeForMatch(r.Subtitle) + "|" + labels
 }

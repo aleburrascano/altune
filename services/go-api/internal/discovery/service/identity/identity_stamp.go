@@ -52,18 +52,19 @@ func (s *IdentityStamper) stampXrefs(ctx context.Context, perProvider [][]domain
 	for gi := range perProvider {
 		for ri := range perProvider[gi] {
 			r := &perProvider[gi][ri]
-			if r.MBID == "" {
+			mbid := r.IdentityMBID()
+			if mbid == "" {
 				continue
 			}
-			ids, ok := s.bridge.ExternalIDs(ctx, r.Kind, r.MBID)
+			ids, ok := s.bridge.ExternalIDs(ctx, r.Kind, mbid)
 			if !ok {
 				continue
 			}
 			r.Xref = ids
 			slog.DebugContext(ctx, "merge.identity_bridge_stamped",
-				"kind", r.Kind.String(), "mbid", r.MBID, "ids", len(ids))
+				"kind", r.Kind.String(), "mbid", mbid, "ids", len(ids))
 			if s.store != nil {
-				learned = append(learned, learnedBridge{kind: r.Kind, mbid: r.MBID, ids: ids})
+				learned = append(learned, learnedBridge{kind: r.Kind, mbid: mbid, ids: ids})
 			}
 		}
 	}

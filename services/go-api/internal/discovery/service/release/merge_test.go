@@ -230,7 +230,7 @@ func TestMergeReleases_typedUPCFolds(t *testing.T) {
 }
 
 func withMBID(id string) func(*domain.SearchResult) {
-	return func(r *domain.SearchResult) { r.MBID = id }
+	return func(r *domain.SearchResult) { r.ReleaseGroupMBID = id }
 }
 
 func withYear(y int) func(*domain.SearchResult) {
@@ -253,8 +253,8 @@ func TestMergeReleases_differentMBIDsStayApart(t *testing.T) {
 	}
 	wantCover := map[string]string{"blue": "blue.jpg", "green": "green.jpg"}
 	for _, m := range merged {
-		if m.Result.ImageURL != wantCover[m.Result.MBID] {
-			t.Errorf("MBID %q cover = %q, want %q (artwork leaked across albums)", m.Result.MBID, m.Result.ImageURL, wantCover[m.Result.MBID])
+		if m.Result.ImageURL != wantCover[m.Result.ReleaseGroupMBID] {
+			t.Errorf("MBID %q cover = %q, want %q (artwork leaked across albums)", m.Result.ReleaseGroupMBID, m.Result.ImageURL, wantCover[m.Result.ReleaseGroupMBID])
 		}
 	}
 }
@@ -287,7 +287,7 @@ func TestBestArtwork_prefersIdentityCoverOverPlainProviderCover(t *testing.T) {
 	a := albumVariant(domain.ProviderDeezer, "d1", "No Idea", withCover("https://deezer/plain.jpg"))
 	a.ArtworkSource = "deezer"
 	b := albumVariant(domain.ProviderMusicBrainz, "m1", "No Idea", withCover("https://caa/identity.jpg"))
-	b.MBID = "mbid-noidea"
+	b.ReleaseGroupMBID = "mbid-noidea"
 	b.ArtworkSource = "coverartarchive"
 
 	url, source := bestArtwork(a, b)
@@ -302,7 +302,7 @@ func TestBestArtwork_prefersIdentityCoverOverPlainProviderCover(t *testing.T) {
 
 func TestBestArtwork_fallsBackToTheOnlyCoverForCoverage(t *testing.T) {
 	a := albumVariant(domain.ProviderMusicBrainz, "m1", "No Idea")
-	a.MBID = "mbid-noidea"
+	a.ReleaseGroupMBID = "mbid-noidea"
 	b := albumVariant(domain.ProviderDeezer, "d1", "No Idea", withCover("https://deezer/cover.jpg"))
 	b.ArtworkSource = "deezer"
 
@@ -434,5 +434,41 @@ func TestMergeReleases_sameAlbumAcrossProvidersStillMerges(t *testing.T) {
 	})
 	if len(got) != 1 {
 		t.Fatalf("want one merged card, got %d", len(got))
+	}
+}
+
+func TestMergeReleases_releaseAndReleaseGroupMBIDsAreNotCompared(t *testing.T) {
+	withReleaseGroup := func(id string) func(*domain.SearchResult) {
+		return func(r *domain.SearchResult) { r.ReleaseGroupMBID = id }
+	}
+	withRelease := func(id string) func(*domain.SearchResult) {
+		return func(r *domain.SearchResult) { r.ReleaseMBID = id }
+	}
+	groups := []ReleaseGroup{
+		idGroup(albumVariant(domain.ProviderMusicBrainz, "mb", "Pinkerton", withReleaseGroup("rg-uuid"))),
+		idGroup(albumVariant(domain.ProviderLastFM, "lf", "Pinkerton", withRelease("release-uuid"))),
+	}
+
+	merged := MergeReleases(groups)
+
+	if len(merged) != 1 {
+		t.Fatalf("merged %d releases, want 1 (a release MBID must not be compared with a release-group MBID)", len(merged))
+	}
+	if got := merged[0].Result; got.ReleaseGroupMBID != "rg-uuid" || got.ReleaseMBID != "release-uuid" {
+		t.Errorf("merged MBIDs = rg %q release %q, want both carried", got.ReleaseGroupMBID, got.ReleaseMBID)
+	}
+}
+
+func TestMergeReleases_differentReleaseGroupMBIDsStillStayApart(t *testing.T) {
+	withReleaseGroup := func(id string) func(*domain.SearchResult) {
+		return func(r *domain.SearchResult) { r.ReleaseGroupMBID = id }
+	}
+	groups := []ReleaseGroup{
+		idGroup(albumVariant(domain.ProviderMusicBrainz, "mb-blue", "Weezer", withReleaseGroup("blue"))),
+		idGroup(albumVariant(domain.ProviderMusicBrainz, "mb-green", "Weezer", withReleaseGroup("green"))),
+	}
+
+	if n := len(MergeReleases(groups)); n != 2 {
+		t.Errorf("merged %d releases, want 2 (different release groups)", n)
 	}
 }
