@@ -114,7 +114,7 @@ func uploaderClass(trackArtist string, c ports.AudioCandidate) string {
 	switch {
 	case c.Kind == ports.KindCatalogPin:
 		return channelTopic
-	case c.Kind == ports.KindArtTrack:
+	case isCreditedKind(c.Kind):
 		return artTrackClass(trackArtist, c.Artists)
 	case isTopicChannel(c.Channel):
 		return channelTopic
@@ -123,6 +123,10 @@ func uploaderClass(trackArtist string, c ports.AudioCandidate) string {
 	default:
 		return channelOther
 	}
+}
+
+func isCreditedKind(kind ports.CandidateKind) bool {
+	return kind == ports.KindArtTrack || kind == ports.KindPinnedVideo
 }
 
 func artTrackClass(trackArtist string, credited []string) string {
@@ -143,7 +147,7 @@ func artistMatchesCandidate(trackArtist string, c ports.AudioCandidate) bool {
 	if c.Kind == ports.KindCatalogPin {
 		return true
 	}
-	if c.Kind == ports.KindArtTrack {
+	if isCreditedKind(c.Kind) {
 		return artTrackClass(trackArtist, c.Artists) == channelTopic
 	}
 	return artistMatchesChannel(trackArtist, c.Channel)

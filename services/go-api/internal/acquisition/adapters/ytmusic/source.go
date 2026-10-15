@@ -13,7 +13,6 @@ const (
 	SourceName     acqdomain.SourceName = "ytmusic"
 	identityKey                         = ports.ProviderYouTube
 	watchURLPrefix                      = "https://music.youtube.com/watch?v="
-	catalogChannel                      = "YouTube Music catalog"
 )
 
 var videoIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
@@ -40,7 +39,7 @@ func NewSource(fetcher audioFetcher, lookup videoLookup) *Source {
 func (s *Source) Name() acqdomain.SourceName { return SourceName }
 
 func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
-	videoID := pinnedVideoID(req)
+	videoID, fromCatalogPin := pinnedVideoID(req)
 	if videoID == "" {
 		return nil, nil
 	}
@@ -53,30 +52,44 @@ func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.Audio
 	slog.InfoContext(ctx, "acquisition.ytmusic_resolved",
 		"video_id", videoID, "title", req.Title)
 
-	return []ports.AudioCandidate{s.pinnedCandidate(ctx, videoID)}, nil
+	return []ports.AudioCandidate{s.pinnedCandidate(ctx, videoID, fromCatalogPin)}, nil
 }
 
-func pinnedVideoID(req ports.FindRequest) string {
+func pinnedVideoID(req ports.FindRequest) (videoID string, fromCatalogPin bool) {
 	for _, pin := range req.CatalogSources {
 		if pin.Provider == string(identityKey) && pin.ExternalID != "" {
-			return pin.ExternalID
+			return pin.ExternalID, true
 		}
 	}
 	resolved, _ := req.Identity.SourceFor(identityKey)
-	return resolved.ExternalID
+	return resolved.ExternalID, false
 }
 
-func (s *Source) pinnedCandidate(ctx context.Context, videoID string) ports.AudioCandidate {
+func (s *Source) pinnedCandidate(ctx context.Context, videoID string, fromCatalogPin bool) ports.AudioCandidate {
 	observed := s.observe(ctx, videoID)
 	return ports.AudioCandidate{
 		Title:      observed.Title,
 		Artists:    observed.Artists,
 		Explicit:   observed.Explicit,
 		URL:        watchURLPrefix + videoID,
-		Channel:    catalogChannel,
 		Categories: []string{"Music"},
-		Resolved:   true,
-		Kind:       ports.KindPinnedVideo,
+		Resolved:   fromCatalogPin || isCatalogVideo(observed.Type),
+		Kind:       kindOf(observed.Type),
+	}
+}
+
+func isCatalogVideo(videoType ytmsearch.VideoType) bool {
+	return videoType == ytmsearch.VideoTypeATV || videoType == ytmsearch.VideoTypeOMV
+}
+
+func kindOf(videoType ytmsearch.VideoType) ports.CandidateKind {
+	switch videoType {
+	case ytmsearch.VideoTypeATV:
+		return ports.KindArtTrack
+	case ytmsearch.VideoTypeUGC:
+		return ports.KindUpload
+	default:
+		return ports.KindPinnedVideo
 	}
 }
 

@@ -1,0 +1,40 @@
+{
+  "cases": [
+    {
+      "id": "rw-tornero-pinned-catalog-video-with-credits",
+      "class": "RW",
+      "note": "prod track 3d962d9c (I Santo California, 'Tornerò', 245s catalog length, ISRC AUXN22310952): prod stored music.youtube.com/watch?v=UeGkPDoLKjI as corroborated at confidence 0.4 (resolved, channel other, no fingerprint verdict, source title Tornerò, length delta -6.08s, audio 238.92s). Prod has no track with catalog_sources yet (0 of 2269), so the pin is modelled as the catalog link to the video prod stored. The ytmusic source runs the real adapter over the real YouTube Music next response for that video (fetched read-only from the prod go-api container: title Tornerò, byline I Santo California, album Canzoni d'amore - Vol. 1 - Io per lei, 2011, type MUSIC_VIDEO_TYPE_ATV). The eval watch stub does not carry the type, so the candidate is the unknown-type pinned video, trusted by its credit. On main the placeholder channel makes it channelOther with an unknown verdict, 0.2+0+0.1+0.1 = 0.4, below the 0.5 floor, so the song fails",
+      "track": {
+        "title": "Tornerò",
+        "artist": "I Santo California",
+        "album": "Tornerò",
+        "catalog_duration": 245,
+        "isrc": "AUXN22310952",
+        "catalog_sources": [
+          {
+            "provider": "youtube",
+            "external_id": "UeGkPDoLKjI"
+          }
+        ]
+      },
+      "sources": [
+        {
+          "name": "ytmusic",
+          "adapter": "ytmusic",
+          "search_seconds": 3,
+          "candidates": [
+            {
+              "title": "Tornerò",
+              "url": "https://music.youtube.com/watch?v=UeGkPDoLKjI",
+              "artists": [
+                "I Santo California"
+              ],
+              "actual_duration": 238.92,
+              "correct": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

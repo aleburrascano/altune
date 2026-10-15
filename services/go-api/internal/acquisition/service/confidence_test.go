@@ -1,6 +1,10 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/adapters/ytmsearch"
+	"altune/go-api/internal/acquisition/adapters/ytmusic"
+	"altune/go-api/internal/acquisition/ports"
+	"context"
 	"math"
 	"testing"
 )
@@ -42,5 +46,38 @@ func TestScoreConfidence_RanksHardOverSoftOverEveryUnknown(t *testing.T) {
 	soft := ScoreConfidence(Evidence{Verdict: "soft", AcoustIDScore: 0.5}, 204)
 	if !(hard > soft && soft >= best) {
 		t.Errorf("hard %v, soft %v, best unknown %v: want hard > soft >= unknown", hard, soft, best)
+	}
+}
+
+type tornerWatch struct{}
+
+func (tornerWatch) Watch(context.Context, string) (ytmsearch.Watch, error) {
+	return ytmsearch.Watch{
+		VideoID: "UeGkPDoLKjI",
+		Title:   "Tornerò",
+		Artists: []string{"I Santo California"},
+		Type:    ytmsearch.VideoTypeATV,
+	}, nil
+}
+
+func TestConfidence_ACreditedPinnedVideoClearsTheFloor(t *testing.T) {
+	req := ports.FindRequest{
+		Title:          "Tornerò",
+		Artist:         "I Santo California",
+		CatalogSources: []ports.CatalogSource{{Provider: "youtube", ExternalID: "UeGkPDoLKjI"}},
+	}
+	found, err := ytmusic.NewSource(nil, tornerWatch{}).Find(context.Background(), req)
+	if err != nil || len(found) != 1 {
+		t.Fatalf("Find = %+v, %v", found, err)
+	}
+	evidence := Evidence{
+		Channel:              uploaderClass(req.Artist, found[0]),
+		Resolved:             found[0].Resolved,
+		DurationDeltaSeconds: -6.08,
+		SourceTitle:          found[0].Title,
+	}
+
+	if got := ScoreConfidence(evidence, 245); got < defaultConfidenceFloor {
+		t.Errorf("confidence = %v, want at least the %v floor", got, defaultConfidenceFloor)
 	}
 }

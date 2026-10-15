@@ -1297,3 +1297,26 @@ func TestUploaderClass_TheCatalogPinIsTrusted(t *testing.T) {
 		t.Error("the user's own pick must not be rejected for a channel that does not name the artist")
 	}
 }
+
+func TestUploaderClass_APinnedVideoIsTrustedByItsCredits(t *testing.T) {
+	pinned := func(artists ...string) ports.AudioCandidate {
+		return ports.AudioCandidate{Kind: ports.KindPinnedVideo, Artists: artists, Resolved: true}
+	}
+	tests := []struct {
+		name      string
+		artist    string
+		candidate ports.AudioCandidate
+		want      string
+	}{
+		{"credited pinned video counts as topic", "slayr", pinned("slayr"), channelTopic},
+		{"credit matches through normalisation", "ASAP Rocky", pinned("A$AP Rocky"), channelTopic},
+		{"other artist's pinned video is untrusted", "slayr", pinned("Someone Else"), channelOther},
+		{"pinned video without credits is untrusted", "slayr", pinned(), channelOther},
+		{"upload crediting the artist stays untrusted", "slayr", ports.AudioCandidate{Kind: ports.KindUpload, Artists: []string{"slayr"}}, channelOther},
+	}
+	for _, tt := range tests {
+		if got := uploaderClass(tt.artist, tt.candidate); got != tt.want {
+			t.Errorf("%s: uploaderClass = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
