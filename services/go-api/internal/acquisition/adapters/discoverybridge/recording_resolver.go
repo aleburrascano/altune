@@ -24,7 +24,10 @@ const (
 	durationTolerancePct  = 0.03
 )
 
-var _ acqports.RecordingResolver = (*RecordingResolver)(nil)
+var (
+	_ acqports.RecordingResolver = (*RecordingResolver)(nil)
+	_ acqports.RecordingLookup   = (*RecordingResolver)(nil)
+)
 
 type recordingSearcher interface {
 	Execute(ctx context.Context, userId shared.UserId, query *discoverydomain.SearchQuery, saveHistory bool) (*search.SearchOutput, error)
@@ -34,9 +37,27 @@ type isrcAuthority interface {
 	RecordingsByISRC(ctx context.Context, isrc string) ([]discoveryports.ISRCRecording, error)
 }
 
+type recordingAuthority interface {
+	RecordingByMBID(ctx context.Context, mbid string) (discoveryports.MBRecording, bool, error)
+}
+
+type authorityLookup struct {
+	authority recordingAuthority
+}
+
+func NewRecordingLookup(a recordingAuthority) acqports.RecordingLookup {
+	return authorityLookup{authority: a}
+}
+
+func (l authorityLookup) RecordingByMBID(ctx context.Context, mbid string) (acqports.RecordingFacts, bool, error) {
+	recording, found, err := l.authority.RecordingByMBID(ctx, mbid)
+	return acqports.RecordingFacts(recording), found, err
+}
+
 type RecordingResolver struct {
 	search recordingSearcher
 	isrc   isrcAuthority
+	lookup acqports.RecordingLookup
 }
 
 func NewRecordingResolver(search recordingSearcher, opts ...func(*RecordingResolver)) *RecordingResolver {
@@ -51,13 +72,70 @@ func WithISRCAuthority(a isrcAuthority) func(*RecordingResolver) {
 	return func(r *RecordingResolver) { r.isrc = a }
 }
 
+func WithRecordingLookup(l acqports.RecordingLookup) func(*RecordingResolver) {
+	return func(r *RecordingResolver) { r.lookup = l }
+}
+
+func (r *RecordingResolver) RecordingByMBID(ctx context.Context, mbid string) (acqports.RecordingFacts, bool, error) {
+	if r.lookup == nil {
+		return acqports.RecordingFacts{}, false, nil
+	}
+	return r.lookup.RecordingByMBID(ctx, mbid)
+}
+
 func (r *RecordingResolver) Resolve(ctx context.Context, q acqports.RecordingQuery) (acqports.RecordingIdentity, error) {
+	if q.MBID != "" {
+		return r.resolvePinned(ctx, q), nil
+	}
 	identity, err := r.resolveFromSearch(ctx, q)
 	anchored := r.anchorToISRC(ctx, q, identity)
 	if err != nil && anchored.MBID == "" {
 		return acqports.RecordingIdentity{}, err
 	}
 	return anchored, nil
+}
+
+func (r *RecordingResolver) resolvePinned(ctx context.Context, q acqports.RecordingQuery) acqports.RecordingIdentity {
+	identity := r.pinnedIdentity(ctx, q.MBID)
+	searched, err := r.resolveFromSearch(ctx, q)
+	if err != nil {
+		slog.WarnContext(ctx, "acquisition.pin_search_failed", "pinned_mbid", q.MBID, "error", err)
+	}
+	if searched.MBID != "" && searched.MBID != q.MBID {
+		slog.InfoContext(ctx, "acquisition.identity_pin_disagrees",
+			"pinned_mbid", q.MBID, "search_mbid", searched.MBID)
+		return identity
+	}
+	if searched.MBID == q.MBID {
+		identity.Sources = searched.Sources
+	}
+	return identity
+}
+
+func (r *RecordingResolver) pinnedIdentity(ctx context.Context, pin string) acqports.RecordingIdentity {
+	identity := acqports.RecordingIdentity{MBID: pin, MBIDs: []string{pin}}
+	facts, found := r.pinnedFacts(ctx, pin)
+	if !found {
+		return identity
+	}
+	identity.Duration = facts.Duration
+	if len(facts.ISRCs) == 1 {
+		identity.ISRC = facts.ISRCs[0]
+		identity.MBIDs = referenceSet(pin, r.isrcRecordings(ctx, identity.ISRC))
+	}
+	return identity
+}
+
+func (r *RecordingResolver) pinnedFacts(ctx context.Context, pin string) (acqports.RecordingFacts, bool) {
+	facts, found, err := r.RecordingByMBID(ctx, pin)
+	if err != nil {
+		slog.WarnContext(ctx, "acquisition.pinned_recording_lookup_failed", "pinned_mbid", pin, "error", err)
+		return acqports.RecordingFacts{}, false
+	}
+	if !found {
+		slog.InfoContext(ctx, "acquisition.pinned_recording_unknown", "pinned_mbid", pin)
+	}
+	return facts, found
 }
 
 func (r *RecordingResolver) anchorToISRC(ctx context.Context, q acqports.RecordingQuery, identity acqports.RecordingIdentity) acqports.RecordingIdentity {

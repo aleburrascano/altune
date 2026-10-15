@@ -53,3 +53,12 @@ type ISRCRecording struct {
 	MBID     string
 	Duration int
 }
+
+type MBRecording struct {
+	MBID           string
+	Title          string
+	Disambiguation string
+	Artists        []string
+	ISRCs          []string
+	Duration       float64
+}

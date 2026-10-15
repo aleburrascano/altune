@@ -7,6 +7,8 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -629,5 +631,236 @@ func TestResolve_ISRCAnchorPicksTheRecordingNearestTheCatalogLength(t *testing.T
 	}
 	if identity.MBID != "catalog" {
 		t.Errorf("MBID = %q, want the recording nearest the catalog length", identity.MBID)
+	}
+}
+
+type stubRecordingLookup struct {
+	facts map[string]acqports.RecordingFacts
+	err   error
+	asked []string
+}
+
+func (s *stubRecordingLookup) RecordingByMBID(_ context.Context, mbid string) (acqports.RecordingFacts, bool, error) {
+	s.asked = append(s.asked, mbid)
+	facts, found := s.facts[mbid]
+	return facts, found, s.err
+}
+
+const (
+	cureStudioMBID = "2b2af12b-48f1-444e-8591-cacb9f88f02a"
+	cureLiveMBID   = "95ccd64c-5b38-43e0-827d-bb14b271372a"
+)
+
+var (
+	cureStudioFacts = acqports.RecordingFacts{
+		MBID: cureStudioMBID, Title: "Boys Don\u2019t Cry", Artists: []string{"The Cure"}, Duration: 157.306,
+	}
+	cureLiveFacts = acqports.RecordingFacts{
+		MBID: cureLiveMBID, Title: "Boys Don\u2019t Cry", Artists: []string{"The Cure"}, Duration: 187,
+		Disambiguation: "live, 1991-03-03: The Limehouse, London, UK",
+	}
+	pinnedCureQuery = acqports.RecordingQuery{Title: "Boys Don't Cry", Artist: "The Cure", Duration: 157.07, MBID: cureStudioMBID}
+)
+
+func searchRanking(mbid string, duration int, sources ...discoverydomain.SourceRef) stubSearcher {
+	return stubSearcher{out: &search.SearchOutput{Results: []discoverydomain.SearchResult{{
+		Kind: discoverydomain.ResultKindTrack, Title: "Boys Don't Cry", Subtitle: "The Cure",
+		MBID: mbid, Duration: duration, Sources: sources,
+	}}}}
+}
+
+func cureLookup() *stubRecordingLookup {
+	return &stubRecordingLookup{facts: map[string]acqports.RecordingFacts{
+		cureStudioMBID: cureStudioFacts, cureLiveMBID: cureLiveFacts,
+	}}
+}
+
+func TestResolve_TheCatalogPinIsTheIdentity(t *testing.T) {
+	logs := captureDefaultLog(t)
+	liveSource := discoverydomain.SourceRef{Provider: discoverydomain.ProviderYouTube, ExternalID: "live-video"}
+	resolver := NewRecordingResolver(searchRanking(cureLiveMBID, 187, liveSource), WithRecordingLookup(cureLookup()))
+
+	identity, err := resolver.Resolve(context.Background(), pinnedCureQuery)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	if identity.MBID != cureStudioMBID || !slices.Equal(identity.MBIDs, []string{cureStudioMBID}) {
+		t.Errorf("identity MBID %q MBIDs %v, want the pinned studio recording alone", identity.MBID, identity.MBIDs)
+	}
+	if identity.Duration != 157.306 || identity.ReferenceDoubted {
+		t.Errorf("duration %v doubted %v, want the pinned length and a trusted reference", identity.Duration, identity.ReferenceDoubted)
+	}
+	if _, adopted := identity.SourceFor(acqports.ProviderYouTube); adopted {
+		t.Error("the live recording's youtube source must not follow a rejected search pick")
+	}
+	for _, want := range []string{"acquisition.identity_pin_disagrees", "pinned_mbid=" + cureStudioMBID, "search_mbid=" + cureLiveMBID} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("log lacks %q:\n%s", want, logs.String())
+		}
+	}
+}
+
+func TestResolve_PinnedIdentityHoldsWhateverTheTextSearchDoes(t *testing.T) {
+	tests := []struct {
+		name     string
+		searcher recordingSearcher
+	}{
+		{"search finds nothing", stubSearcher{out: &search.SearchOutput{}}},
+		{"search fails", failingSearcher{}},
+		{"search has no resolver wired", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolver := NewRecordingResolver(tt.searcher, WithRecordingLookup(cureLookup()))
+
+			identity, err := resolver.Resolve(context.Background(), pinnedCureQuery)
+
+			if err != nil || identity.MBID != cureStudioMBID || identity.Duration != 157.306 {
+				t.Errorf("identity %+v, err %v; want the pinned recording and its length", identity, err)
+			}
+		})
+	}
+}
+
+func TestResolve_SearchAgreeingWithThePinKeepsItsSourcesAndLogsNoDisagreement(t *testing.T) {
+	logs := captureDefaultLog(t)
+	studioSource := discoverydomain.SourceRef{Provider: discoverydomain.ProviderYouTube, ExternalID: "studio-video"}
+	resolver := NewRecordingResolver(searchRanking(cureStudioMBID, 157, studioSource), WithRecordingLookup(cureLookup()))
+
+	identity, _ := resolver.Resolve(context.Background(), pinnedCureQuery)
+
+	if got, ok := identity.SourceFor(acqports.ProviderYouTube); !ok || got.ExternalID != "studio-video" {
+		t.Errorf("youtube source = %+v, %v; want the agreeing search's video", got, ok)
+	}
+	if strings.Contains(logs.String(), "identity_pin_disagrees") {
+		t.Errorf("agreeing search logged a disagreement:\n%s", logs.String())
+	}
+}
+
+func TestResolve_PinnedRecordingWithOneISRCAnchorsTheReferenceSet(t *testing.T) {
+	facts := cureStudioFacts
+	facts.ISRCs = []string{"GBAAA8000001"}
+	authority := &stubISRCAuthority{recordings: []discoveryports.ISRCRecording{
+		{MBID: "greatest-hits-sibling", Duration: 157}, {MBID: cureStudioMBID, Duration: 157},
+	}}
+	lookup := &stubRecordingLookup{facts: map[string]acqports.RecordingFacts{cureStudioMBID: facts}}
+	resolver := NewRecordingResolver(searchRanking(cureLiveMBID, 187), WithRecordingLookup(lookup), WithISRCAuthority(authority))
+
+	identity, _ := resolver.Resolve(context.Background(), pinnedCureQuery)
+
+	if identity.ISRC != "GBAAA8000001" {
+		t.Errorf("ISRC = %q, want the pinned recording's only ISRC", identity.ISRC)
+	}
+	if want := []string{cureStudioMBID, "greatest-hits-sibling"}; !slices.Equal(identity.MBIDs, want) {
+		t.Errorf("MBIDs = %v, want the pin first then its ISRC siblings %v", identity.MBIDs, want)
+	}
+}
+
+func TestResolve_PinnedRecordingWithSeveralISRCsLeavesTheISRCEmpty(t *testing.T) {
+	facts := cureStudioFacts
+	facts.ISRCs = []string{"GBAAA8000001", "GBAAA8000002"}
+	authority := &stubISRCAuthority{recordings: []discoveryports.ISRCRecording{{MBID: "other"}}}
+	lookup := &stubRecordingLookup{facts: map[string]acqports.RecordingFacts{cureStudioMBID: facts}}
+	resolver := NewRecordingResolver(stubSearcher{out: &search.SearchOutput{}}, WithRecordingLookup(lookup), WithISRCAuthority(authority))
+
+	identity, _ := resolver.Resolve(context.Background(), pinnedCureQuery)
+
+	if identity.ISRC != "" || !slices.Equal(identity.MBIDs, []string{cureStudioMBID}) || authority.calls != 0 {
+		t.Errorf("identity %+v isrc lookups %d; want no ISRC claimed and the pin alone", identity, authority.calls)
+	}
+}
+
+func TestResolve_PinSurvivesAnUnknownOrUnreachablePinnedRecording(t *testing.T) {
+	tests := []struct {
+		name   string
+		lookup acqports.RecordingLookup
+		logged string
+	}{
+		{"musicbrainz does not know the mbid", &stubRecordingLookup{}, "acquisition.pinned_recording_unknown"},
+		{"musicbrainz fails", &stubRecordingLookup{err: errors.New("503")}, "acquisition.pinned_recording_lookup_failed"},
+		{"no lookup wired", nil, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logs := captureDefaultLog(t)
+			resolver := NewRecordingResolver(searchRanking(cureLiveMBID, 187), WithRecordingLookup(tt.lookup))
+
+			identity, err := resolver.Resolve(context.Background(), pinnedCureQuery)
+
+			if err != nil || identity.MBID != cureStudioMBID || !slices.Equal(identity.MBIDs, []string{cureStudioMBID}) {
+				t.Errorf("identity %+v, err %v; want the bare pin", identity, err)
+			}
+			if identity.Duration != 0 || identity.ReferenceDoubted {
+				t.Errorf("duration %v doubted %v; the search's live length must not leak in", identity.Duration, identity.ReferenceDoubted)
+			}
+			if !strings.Contains(logs.String(), tt.logged) {
+				t.Errorf("log lacks %q:\n%s", tt.logged, logs.String())
+			}
+		})
+	}
+}
+
+func TestResolver_RecordingByMBIDServesTheWiredLookup(t *testing.T) {
+	resolver := NewRecordingResolver(nil, WithRecordingLookup(cureLookup()))
+
+	facts, found, err := resolver.RecordingByMBID(context.Background(), cureLiveMBID)
+	if err != nil || !found || facts.Disambiguation != cureLiveFacts.Disambiguation {
+		t.Errorf("facts %+v found %v err %v; want the live recording's facts", facts, found, err)
+	}
+	if _, found, _ := NewRecordingResolver(nil).RecordingByMBID(context.Background(), cureLiveMBID); found {
+		t.Error("a resolver without a lookup must report not found")
+	}
+}
+
+func TestResolve_UnpinnedQueryNeverAsksTheRecordingLookup(t *testing.T) {
+	lookup := cureLookup()
+	resolver := NewRecordingResolver(searchRanking(cureLiveMBID, 187), WithRecordingLookup(lookup))
+	query := pinnedCureQuery
+	query.MBID = ""
+
+	identity, _ := resolver.Resolve(context.Background(), query)
+
+	if identity.MBID != cureLiveMBID || len(lookup.asked) != 0 {
+		t.Errorf("identity %+v lookups %v; want the search pick and no lookup without a pin", identity, lookup.asked)
+	}
+}
+
+type stubRecordingAuthority struct {
+	recording discoveryports.MBRecording
+	found     bool
+	err       error
+}
+
+func (s stubRecordingAuthority) RecordingByMBID(context.Context, string) (discoveryports.MBRecording, bool, error) {
+	return s.recording, s.found, s.err
+}
+
+func TestNewRecordingLookup_CarriesEveryFactAcrossTheDiscoveryBoundary(t *testing.T) {
+	authority := stubRecordingAuthority{found: true, recording: discoveryports.MBRecording{
+		MBID: cureLiveMBID, Title: "Boys Don’t Cry", Disambiguation: "live, 1991-03-03: The Limehouse, London, UK",
+		Artists: []string{"The Cure"}, ISRCs: []string{"GBAAA8000001"}, Duration: 187,
+	}}
+
+	facts, found, err := NewRecordingLookup(authority).RecordingByMBID(context.Background(), cureLiveMBID)
+
+	want := acqports.RecordingFacts{
+		MBID: cureLiveMBID, Title: "Boys Don’t Cry", Disambiguation: "live, 1991-03-03: The Limehouse, London, UK",
+		Artists: []string{"The Cure"}, ISRCs: []string{"GBAAA8000001"}, Duration: 187,
+	}
+	if err != nil || !found || !reflect.DeepEqual(facts, want) {
+		t.Errorf("facts %+v found %v err %v; want %+v", facts, found, err, want)
+	}
+}
+
+func TestNewRecordingLookup_PassesNotFoundAndFailureThrough(t *testing.T) {
+	boom := errors.New("503")
+
+	_, found, err := NewRecordingLookup(stubRecordingAuthority{}).RecordingByMBID(context.Background(), cureLiveMBID)
+	if found || err != nil {
+		t.Errorf("unknown mbid = found %v err %v; want not found without error", found, err)
+	}
+	if _, _, err := NewRecordingLookup(stubRecordingAuthority{err: boom}).RecordingByMBID(context.Background(), cureLiveMBID); !errors.Is(err, boom) {
+		t.Errorf("err = %v, want the authority's failure", err)
 	}
 }

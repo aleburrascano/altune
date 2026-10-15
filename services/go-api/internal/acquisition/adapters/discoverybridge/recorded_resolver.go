@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/shared"
 	"context"
 
+	acqports "altune/go-api/internal/acquisition/ports"
 	discoverydomain "altune/go-api/internal/discovery/domain"
 	discoveryports "altune/go-api/internal/discovery/ports"
 )
@@ -22,8 +23,21 @@ type RecordedISRCRecording struct {
 	Duration int
 }
 
-func NewRecordedResolver(hit *RecordedSearchHit, isrcRecordings []RecordedISRCRecording) *RecordingResolver {
-	return NewRecordingResolver(recordedSearch{hit: hit}, WithISRCAuthority(recordedISRCAuthority(isrcRecordings)))
+func NewRecordedResolver(hit *RecordedSearchHit, isrcRecordings []RecordedISRCRecording, pinned *acqports.RecordingFacts) *RecordingResolver {
+	return NewRecordingResolver(recordedSearch{hit: hit},
+		WithISRCAuthority(recordedISRCAuthority(isrcRecordings)),
+		WithRecordingLookup(recordedLookup{pinned: pinned}))
+}
+
+type recordedLookup struct {
+	pinned *acqports.RecordingFacts
+}
+
+func (l recordedLookup) RecordingByMBID(_ context.Context, mbid string) (acqports.RecordingFacts, bool, error) {
+	if l.pinned == nil || l.pinned.MBID != mbid {
+		return acqports.RecordingFacts{}, false, nil
+	}
+	return *l.pinned, true, nil
 }
 
 type recordedSearch struct {

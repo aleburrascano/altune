@@ -154,7 +154,9 @@ func (a *App) buildAcquisitionScheduler(
 	if disc.searchSvc != nil {
 		var resolverOpts []func(*acqDiscoveryBridge.RecordingResolver)
 		if disc.musicBrainz != nil {
-			resolverOpts = append(resolverOpts, acqDiscoveryBridge.WithISRCAuthority(disc.musicBrainz))
+			resolverOpts = append(resolverOpts,
+				acqDiscoveryBridge.WithISRCAuthority(disc.musicBrainz),
+				acqDiscoveryBridge.WithRecordingLookup(acqDiscoveryBridge.NewRecordingLookup(disc.musicBrainz)))
 		}
 		acquireOpts = append(acquireOpts, acqService.WithRecordingResolver(
 			acqDiscoveryBridge.NewRecordingResolver(disc.searchSvc, resolverOpts...)))

@@ -18,17 +18,27 @@ func ResolveIdentity(ctx context.Context, recordings ports.RecordingResolver, id
 		Album:    ac.Track.Album,
 		ISRC:     ac.Track.ISRC,
 		Duration: ac.Track.Duration,
+		MBID:     ac.Track.CatalogMBID,
 	})
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.identity_resolve_failed",
 			"track_id", ac.Track.ID, "error", redact.LogError(err))
-		return
 	}
+	identity = withCatalogPin(identity, ac.Track.CatalogMBID)
 	if identity.IsZero() {
 		return
 	}
 	adoptIdentity(ctx, ac, identity)
 	resolveExpectedCluster(ctx, identifier, ac)
+}
+
+func withCatalogPin(identity ports.RecordingIdentity, pin string) ports.RecordingIdentity {
+	if pin == "" || identity.MBID != "" {
+		return identity
+	}
+	identity.MBID = pin
+	identity.MBIDs = []string{pin}
+	return identity
 }
 
 func adoptIdentity(ctx context.Context, ac *AcquisitionContext, identity ports.RecordingIdentity) {

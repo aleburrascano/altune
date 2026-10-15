@@ -1,0 +1,81 @@
+{
+  "cases": [
+    {
+      "id": "rw-everybody-wants-pin-verifies-the-stored-upload",
+      "class": "RW",
+      "note": "prod track 2d72cb52 (Tears For Fears, 'Everybody Wants To Rule The World', Songs From The Big Chair (Deluxe), 250.66s, no ISRC): prod stored SFU1GeGFpzY as best_effort, never fingerprint-checked. Prod has no track with a catalog_mbid yet, so the pin is modelled as MusicBrainz recording e4b347be (251000 ms, three ISRCs; the real lookup is recorded in the resolution) and the text search finds nothing. On main no identity is resolved, so the fingerprint gate never runs although the catalog knows the recording; with the pin the gate runs and the upload verifies. Candidates are the real yt-dlp results for the query from the prod host (ytdlp: upload, not resolved). Modelled, not fingerprinted: the AcoustID the upload matches (7f4c97b1 is one of e4b347be's 56 real AcoustIDs) and its 0.98 score",
+      "track": {
+        "title": "Everybody Wants To Rule The World",
+        "artist": "Tears For Fears",
+        "album": "Songs From The Big Chair (Deluxe)",
+        "duration": 250.65941,
+        "catalog_mbid": "e4b347be-ecb2-44ff-aaa8-3d4c517d7ea5",
+        "resolution": {
+          "pinned": {
+            "mbid": "e4b347be-ecb2-44ff-aaa8-3d4c517d7ea5",
+            "title": "Everybody Wants to Rule the World",
+            "artists": [
+              "Tears for Fears"
+            ],
+            "isrcs": [
+              "GBF088590110",
+              "GBFO88590110",
+              "GBUM70501053"
+            ],
+            "duration": 251
+          }
+        }
+      },
+      "sources": [
+        {
+          "name": "ytdlp",
+          "search_seconds": 3,
+          "candidates": [
+            {
+              "title": "Tears For Fears - Everybody Wants To Rule The World",
+              "url": "https://www.youtube.com/watch?v=SFU1GeGFpzY",
+              "channel": "Rewind Music Group",
+              "categories": [
+                "Music"
+              ],
+              "duration": 251,
+              "view_count": 56276508,
+              "acoustid": "7f4c97b1-e258-498c-b655-2bafc4950ade",
+              "recording_mbids": [
+                "e4b347be-ecb2-44ff-aaa8-3d4c517d7ea5"
+              ],
+              "acoustid_results": [
+                {
+                  "id": "7f4c97b1-e258-498c-b655-2bafc4950ade",
+                  "score": 0.98,
+                  "recordings": [
+                    {
+                      "mbid": "e4b347be-ecb2-44ff-aaa8-3d4c517d7ea5",
+                      "title": "Everybody Wants to Rule the World",
+                      "artists": [
+                        "Tears for Fears"
+                      ],
+                      "duration": 251
+                    }
+                  ]
+                }
+              ],
+              "correct": true
+            },
+            {
+              "title": "Tears for Fears — Everybody Wants to Rule the World | LIVE Performance | SiriusXM",
+              "url": "https://www.youtube.com/watch?v=Pkgd3tER1yI",
+              "channel": "SiriusXM",
+              "categories": [
+                "Music"
+              ],
+              "duration": 273,
+              "view_count": 46367846
+            }
+          ]
+        }
+      ],
+      "expect_provenance": "verified"
+    }
+  ]
+}

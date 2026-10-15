@@ -45,7 +45,19 @@ type CatalogSource struct {
 type Resolution struct {
 	Search         *SearchedRecording `json:"search,omitempty"`
 	ISRCRecordings []ISRCRecording    `json:"isrc_recordings,omitempty"`
+	Pinned         *PinnedRecording   `json:"pinned,omitempty"`
 }
+
+type PinnedRecording struct {
+	MBID           string   `json:"mbid"`
+	Title          string   `json:"title,omitempty"`
+	Disambiguation string   `json:"disambiguation,omitempty"`
+	Artists        []string `json:"artists,omitempty"`
+	ISRCs          []string `json:"isrcs,omitempty"`
+	Duration       float64  `json:"duration,omitempty"`
+}
+
+func (p PinnedRecording) facts() ports.RecordingFacts { return ports.RecordingFacts(p) }
 
 type SearchedRecording struct {
 	MBID     string `json:"mbid,omitempty"`
@@ -407,6 +419,19 @@ func validateResolution(c Case) error {
 		if rec.MBID == "" {
 			return fmt.Errorf("case %q has an isrc recording with no mbid", c.ID)
 		}
+	}
+	return validatePinned(c)
+}
+
+func validatePinned(c Case) error {
+	pinned := c.Track.Resolution.Pinned
+	switch {
+	case pinned == nil:
+		return nil
+	case c.Track.CatalogMBID == "":
+		return fmt.Errorf("case %q records a pinned recording for a track with no catalog mbid", c.ID)
+	case pinned.MBID != c.Track.CatalogMBID:
+		return fmt.Errorf("case %q records pinned recording %q but the catalog pins %q", c.ID, pinned.MBID, c.Track.CatalogMBID)
 	}
 	return nil
 }
