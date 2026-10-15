@@ -490,3 +490,22 @@ func TestGetExposesTheCatalogIdentity(t *testing.T) {
 		t.Errorf("CatalogDurationSeconds = %v, want 226", snap.CatalogDurationSeconds)
 	}
 }
+
+func TestGetKeepsTheMeasuredFileLengthBesideTheCatalogLength(t *testing.T) {
+	track, userId := newTrack(t, 1)
+	measured, catalog := 112.0, 128.0
+	track.DurationSeconds = &measured
+	track.CatalogDurationSeconds = &catalog
+	ledger := NewTrackLedger(newFakeStore(track))
+
+	snap, err := ledger.Get(context.Background(), track.ID, userId)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.StoredDurationSeconds == nil || *snap.StoredDurationSeconds != 112 {
+		t.Fatalf("StoredDurationSeconds = %v, want the measured 112 not the catalog 128", snap.StoredDurationSeconds)
+	}
+	if snap.DurationSeconds == nil || *snap.DurationSeconds != 128 {
+		t.Fatalf("DurationSeconds = %v, want the catalog target 128", snap.DurationSeconds)
+	}
+}
