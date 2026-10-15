@@ -75,6 +75,17 @@ func BuildBaselines(metrics []NamedMetric, margins map[string]float64) Baselines
 	return out
 }
 
+func (g GateResult) Failed() bool { return g.Regressed || g.Missing }
+
+func AnyFailed(gates []GateResult) bool {
+	for _, g := range gates {
+		if g.Failed() {
+			return true
+		}
+	}
+	return false
+}
+
 func AnyRegressed(gates []GateResult) bool {
 	for _, g := range gates {
 		if g.Regressed {
@@ -86,7 +97,7 @@ func AnyRegressed(gates []GateResult) bool {
 
 func (g GateResult) String() string {
 	if g.Missing {
-		return fmt.Sprintf("%-28s %8.4f  (no baseline — recorded)", g.Metric, g.Current)
+		return fmt.Sprintf("%-28s %8.4f  (no baseline — FAILS the run until one is recorded)", g.Metric, g.Current)
 	}
 	status := "ok"
 	if g.Regressed {

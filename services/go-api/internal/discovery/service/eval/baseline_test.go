@@ -171,3 +171,38 @@ func TestSortedGates(t *testing.T) {
 		t.Error("SortedGates must not mutate its input")
 	}
 }
+
+func TestAnyFailed_AMetricWithNoBaselineFailsTheRun(t *testing.T) {
+	baselines := Baselines{"eval.top1_rate": {Metric: "eval.top1_rate", Value: 0.9, HigherIsBetter: true}}
+
+	gates := baselines.GateAll([]NamedMetric{
+		{Name: "eval.top1_rate", Value: 0.95, HigherIsBetter: true},
+		{Name: "merge.under_merge_rate", Value: 0.01},
+	})
+
+	if !AnyFailed(gates) {
+		t.Fatal("a metric that is emitted but has no baseline must fail the run")
+	}
+	if AnyFailed(gates[:1]) {
+		t.Error("a metric inside its baseline must not fail the run")
+	}
+}
+
+func TestGateResult_FailedCoversBothWaysToFail(t *testing.T) {
+	tests := []struct {
+		name string
+		gate GateResult
+		want bool
+	}{
+		{"within baseline", GateResult{}, false},
+		{"regressed", GateResult{Regressed: true}, true},
+		{"no baseline", GateResult{Missing: true}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.gate.Failed(); got != tt.want {
+				t.Errorf("Failed = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

@@ -17,6 +17,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
@@ -45,6 +46,7 @@ type options struct {
 	typos           int
 	corpus          string
 	corpusFile      string
+	goldenCorpus    bool
 	metricsPath     string
 	reportsDir      string
 	fixtures        string
@@ -53,7 +55,7 @@ type options struct {
 
 func main() {
 	var opts options
-	flag.StringVar(&opts.mode, "mode", "eval", "eval | merge | correction | correction-seed | diversity | health | signal-a | signal-b | artwork | artist-intent | corpus-build | corpus-snapshot | replay | report | detail | detail-live | prod")
+	flag.StringVar(&opts.mode, "mode", "eval", "eval | merge | correction | correction-seed | diversity | health | signal-a | signal-b | artwork | artist-intent | golden | corpus-build | corpus-snapshot | replay | report | detail | detail-live | prod")
 	flag.IntVar(&opts.limit, "limit", 0, "eval: max entities to evaluate (0 = all)")
 	flag.IntVar(&opts.concurrency, "concurrency", 4, "eval: parallel searches against live providers")
 	flag.IntVar(&opts.sinceDays, "since-days", 30, "signals: telemetry window in days")
@@ -68,6 +70,7 @@ func main() {
 	flag.IntVar(&opts.typos, "typos", 3, "correction: synthetic typos generated per known-good term")
 	flag.StringVar(&opts.corpus, "corpus", "exact", "eval/diversity corpus: exact (\"artist title\") | hard (single-token titles, title-only query)")
 	flag.StringVar(&opts.corpusFile, "corpus-file", "", "read the gated corpus from this frozen snapshot instead of the live tracks table; with -mode corpus-snapshot, the path to write; with -mode replay, the behavioral corpus to load (see -mode corpus-build)")
+	flag.BoolVar(&opts.goldenCorpus, "corpus-golden", false, "use the track cases of the committed golden set as the library corpus (public, no user data); excludes -corpus-file")
 	flag.StringVar(&opts.metricsPath, "metrics", "", "write this run's flat metric list to this path (for -mode report)")
 	flag.StringVar(&opts.reportsDir, "reports", "", "report: directory of metrics-*.json files to aggregate and gate")
 	flag.StringVar(&opts.fixtures, "fixtures", "", "eval: directory of recorded provider fixtures. With -record, write them (live); without, replay them (deterministic, offline w.r.t. providers)")
@@ -96,7 +99,7 @@ func clampSinceDays(notice io.Writer, sinceDays int) int {
 	return aggregateRetentionDays
 }
 
-var knownModes = []string{"eval", "merge", "correction", "correction-seed", "diversity", "health", "signal-a", "signal-b", "artwork", "artist-intent", "corpus-build", "corpus-snapshot", "replay", "report", "detail", "detail-live", "prod"}
+var knownModes = []string{"eval", "merge", "correction", "correction-seed", "diversity", "health", "signal-a", "signal-b", "artwork", "artist-intent", "golden", "corpus-build", "corpus-snapshot", "replay", "report", "detail", "detail-live", "prod"}
 
 func unknownModeError(mode string) error {
 	return fmt.Errorf("unknown mode %q (want %s)", mode, strings.Join(knownModes, " | "))
@@ -159,6 +162,8 @@ func run(opts options) error {
 		return runArtworkEval(ctx, cfg, pool, redisClient, opts)
 	case "artist-intent":
 		return runArtistIntent(ctx, cfg, pool, redisClient, opts)
+	case "golden":
+		return runGolden(ctx, cfg, pool, redisClient, opts)
 	case "corpus-build":
 		return runCorpusBuild(ctx, pool, opts)
 	case "corpus-snapshot":
@@ -233,13 +238,39 @@ func runDiversity(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	once := func() (discoveryEval.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "diversity differential over %d entities (corpus=%s, concurrency=%d, top-%d)...\n", len(corpusEnts), opts.corpus, opts.concurrency, opts.topK)
 		svc := app.BuildSearchService(ctx, cfg, pool, redisClient, nil)
-		vs := variantSearchAdapter{svc: svc}
-		report := discoveryEval.RunDiversityEvalMode(ctx, corpusEnts, vs, opts.concurrency, opts.topK, mode, progress)
+		report, err := measureDiversity(ctx, corpusEnts, variantSearchAdapter{svc: svc}, opts.concurrency, opts.topK, mode, progress)
 		svc.WaitForBackground()
+		if err != nil {
+			return nil, err
+		}
 		return report, nil
 	}
 	human := func(r discoveryEval.HarnessReport) string { return renderDiversity(r.(discoveryEval.DiversityReport)) }
 	return runHarness("diversity", once, human, opts)
+}
+
+func measureMerge(ctx context.Context, entities []discoveryEval.LibraryEntity, searcher discoveryEval.Searcher, concurrency int, progress func(done, total int)) (discoveryEval.MergeReport, error) {
+	report := discoveryEval.RunMergeEval(ctx, entities, searcher, concurrency, progress)
+	return report, requireMeasured("merge", report.Evaluated, report.Errored)
+}
+
+type unansweredCounter struct {
+	inner      discoveryEval.VariantSearcher
+	unanswered atomic.Int64
+}
+
+func (c *unansweredCounter) SearchVariants(ctx context.Context, query string) ([]domain.SearchResult, []domain.SearchResult) {
+	with, without := c.inner.SearchVariants(ctx, query)
+	if len(with) == 0 && len(without) == 0 {
+		c.unanswered.Add(1)
+	}
+	return with, without
+}
+
+func measureDiversity(ctx context.Context, entities []discoveryEval.LibraryEntity, inner discoveryEval.VariantSearcher, concurrency, k int, mode discoveryEval.QueryMode, progress func(done, total int)) (discoveryEval.DiversityReport, error) {
+	counter := &unansweredCounter{inner: inner}
+	report := discoveryEval.RunDiversityEvalMode(ctx, entities, counter, concurrency, k, mode, progress)
+	return report, requireMeasured("diversity", report.Evaluated, int(counter.unanswered.Load()))
 }
 
 func corpusEntities(entities []discoveryEval.LibraryEntity, corpus string) ([]discoveryEval.LibraryEntity, discoveryEval.QueryMode) {
@@ -319,8 +350,11 @@ func runMerge(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redis
 	once := func() (discoveryEval.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "merge-eval over %d unique entities (concurrency=%d)...\n", len(entities), opts.concurrency)
 		searcher, drain := buildEvalSearcher(ctx, cfg, pool, redisClient)
-		report := discoveryEval.RunMergeEval(ctx, entities, searcher, opts.concurrency, progress)
+		report, err := measureMerge(ctx, entities, searcher, opts.concurrency, progress)
 		drain()
+		if err != nil {
+			return nil, err
+		}
 		return report, nil
 	}
 	human := func(r discoveryEval.HarnessReport) string { return renderMerge(r.(discoveryEval.MergeReport)) }
@@ -409,7 +443,7 @@ func runQuery(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redis
 		return fmt.Errorf("search %q: %w", opts.query, err)
 	}
 
-	n := 6
+	n := 20
 	if len(results) < n {
 		n = len(results)
 	}
@@ -420,7 +454,7 @@ func runQuery(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redis
 		for _, s := range r.Sources {
 			srcs = append(srcs, s.Provider.String())
 		}
-		fmt.Printf("  %d. [%-6s] %-45q sub=%-28q src=%v\n", i+1, r.Kind.String(), r.Title, r.Subtitle, srcs)
+		fmt.Printf("  %d. [%-6s] %-45q sub=%-28q src=%v isrc=%q mbid=%q upc=%q\n", i+1, r.Kind.String(), r.Title, r.Subtitle, srcs, r.ISRC, r.MBID, r.UPC)
 	}
 	return nil
 }
@@ -572,7 +606,11 @@ func runSignalA(ctx context.Context, pool *pgxpool.Pool, redisClient *goredis.Cl
 
 	once := func() (discoveryEval.HarnessReport, error) {
 		since := time.Now().UTC().AddDate(0, 0, -opts.sinceDays)
-		return svc.Execute(ctx, since, opts.top)
+		report, err := svc.Execute(ctx, since, opts.top)
+		if err != nil {
+			return nil, err
+		}
+		return report, requireSignalASamples(report)
 	}
 	human := func(r discoveryEval.HarnessReport) string {
 		return renderSignalA(r.(*discoveryEval.CoverageReportA), opts.sinceDays)
@@ -589,7 +627,11 @@ func runSignalB(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, opt
 
 	once := func() (discoveryEval.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "scanning %d distinct artists across providers (concurrency=%d)...\n", len(artists), opts.concurrency)
-		return svc.Execute(ctx, artists, opts.concurrency)
+		report, err := svc.Execute(ctx, artists, opts.concurrency)
+		if err != nil {
+			return nil, err
+		}
+		return report, requireMeasured("signal-b", report.ArtistsScanned, 0)
 	}
 	human := func(r discoveryEval.HarnessReport) string {
 		return renderSignalB(r.(*discoveryEval.CoverageReportB))

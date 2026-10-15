@@ -2,6 +2,8 @@ package main
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -123,5 +125,28 @@ func TestSeedEntries_KindsTermsAndDedupes(t *testing.T) {
 	}
 	if artists != 1 || tracks != 3 {
 		t.Errorf("kinds = %d artist / %d track, want 1 / 3", artists, tracks)
+	}
+}
+
+func TestRunReport_AMetricWithNoBaselineFailsTheAggregate(t *testing.T) {
+	dir := t.TempDir()
+	if err := maybeWriteMetrics(filepath.Join(dir, "metrics-merge.json"), "merge", []discoveryEval.NamedMetric{
+		{Name: "merge.under_merge_rate", Value: 0.01},
+	}); err != nil {
+		t.Fatalf("maybeWriteMetrics: %v", err)
+	}
+	baselines := filepath.Join(dir, "baselines.json")
+	if err := writeBaselines(baselines, discoveryEval.Baselines{}); err != nil {
+		t.Fatalf("writeBaselines: %v", err)
+	}
+
+	err := runReport(options{reportsDir: dir, baselinesPath: baselines})
+
+	if !errors.Is(err, errRegressed) {
+		t.Fatalf("runReport = %v, want errRegressed for an emitted metric with no baseline", err)
+	}
+	digest, readErr := os.ReadFile(filepath.Join(dir, "regressions.txt"))
+	if readErr != nil || !strings.Contains(string(digest), "merge.under_merge_rate has no baseline") {
+		t.Errorf("regression digest = %q (%v), want it to name the unbaselined metric", digest, readErr)
 	}
 }

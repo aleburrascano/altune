@@ -5,7 +5,7 @@ set -uo pipefail
 for attempt in 1 2; do
   if ./tmp/discoveryeval \
     -mode "$MODE" \
-    -corpus-file "$CORPUS" \
+    -corpus-golden -concurrency 1 \
     -json "./tmp/report-$MODE.json" \
     -metrics "./tmp/metrics-$MODE.json"; then
     exit 0

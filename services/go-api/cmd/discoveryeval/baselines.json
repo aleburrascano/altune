@@ -1,4 +1,18 @@
 {
+  "artist_intent.absent_rate": {
+    "metric": "artist_intent.absent_rate",
+    "value": 0,
+    "margin": 0,
+    "higher_is_better": false,
+    "note": "measured over 3 runs"
+  },
+  "artist_intent.buried_rate": {
+    "metric": "artist_intent.buried_rate",
+    "value": 0.03225806451612903,
+    "margin": 0,
+    "higher_is_better": false,
+    "note": "measured over 3 runs"
+  },
   "artist_intent.hard_absent_rate": {
     "metric": "artist_intent.hard_absent_rate",
     "value": 0,
@@ -27,6 +41,20 @@
     "higher_is_better": true,
     "note": "measured over 3 runs"
   },
+  "artist_intent.top1_rate": {
+    "metric": "artist_intent.top1_rate",
+    "value": 0.9354838709677419,
+    "margin": 0,
+    "higher_is_better": true,
+    "note": "measured over 3 runs"
+  },
+  "artist_intent.topk_rate": {
+    "metric": "artist_intent.topk_rate",
+    "value": 0.967741935483871,
+    "margin": 0,
+    "higher_is_better": true,
+    "note": "measured over 3 runs"
+  },
   "correction.precision_rate": {
     "metric": "correction.precision_rate",
     "value": 1,
@@ -36,8 +64,8 @@
   },
   "correction.recall_rate": {
     "metric": "correction.recall_rate",
-    "value": 0.9348148148148149,
-    "margin": 0.00666666666666671,
+    "value": 0.9692307692307692,
+    "margin": 0,
     "higher_is_better": true,
     "note": "measured over 3 runs"
   },
@@ -78,43 +106,71 @@
   },
   "eval.top1_rate": {
     "metric": "eval.top1_rate",
-    "value": 0.985082578582845,
+    "value": 0.8000000000000002,
     "margin": 0,
-    "higher_is_better": true,
-    "note": "single-run baseline — margin 0; re-run with -noise-runs 3 to set a real margin"
-  },
-  "eval.topk_rate": {
-    "metric": "eval.topk_rate",
-    "value": 0.9952051145444859,
-    "margin": 0,
-    "higher_is_better": true,
-    "note": "single-run baseline — margin 0; re-run with -noise-runs 3 to set a real margin"
-  },
-  "merge.collapse_rate": {
-    "metric": "merge.collapse_rate",
-    "value": 0.052870978900034594,
-    "margin": 0.04047042545831893,
     "higher_is_better": true,
     "note": "measured over 3 runs"
   },
+  "eval.topk_rate": {
+    "metric": "eval.topk_rate",
+    "value": 1,
+    "margin": 0,
+    "higher_is_better": true,
+    "note": "measured over 3 runs"
+  },
+  "golden.hit_rate": {
+    "metric": "golden.hit_rate",
+    "value": 0.4929577464788732,
+    "margin": 0.028169,
+    "higher_is_better": true,
+    "note": "measured over 6 runs, margin set to 2 of 71 cases: a gated run moved one case by live-provider jitter"
+  },
+  "golden.top1_rate": {
+    "metric": "golden.top1_rate",
+    "value": 0.4366197183098591,
+    "margin": 0.028169,
+    "higher_is_better": true,
+    "note": "measured over 6 runs, margin set to 2 of 71 cases: a gated run moved one case by live-provider jitter"
+  },
+  "golden.unexpected_cases": {
+    "metric": "golden.unexpected_cases",
+    "value": 0,
+    "margin": 0,
+    "higher_is_better": false,
+    "note": "measured over 6 runs"
+  },
   "merge.over_merge_rate": {
     "metric": "merge.over_merge_rate",
-    "value": 0.0009442870632672333,
-    "margin": 0.00424929178470255,
+    "value": 0,
+    "margin": 0,
+    "higher_is_better": false,
+    "note": "measured over 3 runs"
+  },
+  "merge.under_merge_rate": {
+    "metric": "merge.under_merge_rate",
+    "value": 0,
+    "margin": 0,
+    "higher_is_better": false,
+    "note": "measured over 3 runs"
+  },
+  "signal_a.abandoned_gaps": {
+    "metric": "signal_a.abandoned_gaps",
+    "value": 44,
+    "margin": 0,
     "higher_is_better": false,
     "note": "measured over 3 runs"
   },
   "signal_a.strong_gaps": {
     "metric": "signal_a.strong_gaps",
-    "value": 0,
+    "value": 50,
     "margin": 0,
     "higher_is_better": false,
     "note": "measured over 3 runs"
   },
   "signal_b.mean_gap_pct": {
     "metric": "signal_b.mean_gap_pct",
-    "value": 0.6660091561668842,
-    "margin": 0.03537556963013366,
+    "value": 0.6960744773730236,
+    "margin": 0.00026682794933813314,
     "higher_is_better": false,
     "note": "measured over 3 runs"
   }

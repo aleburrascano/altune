@@ -2,15 +2,22 @@ package eval
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/songfacts"
 	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/versiontag"
 	"context"
 	"slices"
 	"strings"
 )
 
 type LibraryEntity struct {
-	Title  string `json:"title"`
-	Artist string `json:"artist"`
+	Title  string          `json:"title"`
+	Artist string          `json:"artist"`
+	Known  *KnownRecording `json:"known,omitempty"`
+}
+
+type KnownRecording struct {
+	ISRCs []string `json:"isrcs"`
 }
 
 type Searcher interface {
@@ -154,8 +161,11 @@ func evalOneQuery(ctx context.Context, query string, entity LibraryEntity, searc
 }
 
 func matchesEntity(r domain.SearchResult, entity LibraryEntity) bool {
-	if r.Kind != domain.ResultKindTrack {
+	if r.Kind != domain.ResultKindTrack || !LabelsAgree(versiontag.RecordingLabels(r.Title), versiontag.RecordingLabels(entity.Title)) {
 		return false
+	}
+	if entity.Known != nil {
+		return slices.Contains(entity.Known.ISRCs, songfacts.CanonicalISRC(r.ISRC))
 	}
 	rt := textnorm.NormalizeForMatch(r.Title)
 	et := textnorm.NormalizeForMatch(entity.Title)
@@ -219,4 +229,18 @@ func aggregate(results []EvalResult, k int) EvalReport {
 
 func quoteJSON(s string) ([]byte, error) {
 	return []byte(`"` + s + `"`), nil
+}
+
+func LabelsAgree(a, b []string) bool {
+	x, y := slices.Clone(a), slices.Clone(b)
+	slices.Sort(x)
+	slices.Sort(y)
+	return slices.Equal(x, y)
+}
+
+func ResultLabels(kind domain.ResultKind, title string) []string {
+	if kind == domain.ResultKindTrack {
+		return versiontag.RecordingLabels(title)
+	}
+	return versiontag.Labels(title)
 }

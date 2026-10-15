@@ -10,6 +10,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -18,6 +19,7 @@ import (
 
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryEval "altune/go-api/internal/discovery/service/eval"
+	goldeneval "altune/go-api/internal/discovery/service/goldeneval"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
@@ -33,11 +35,15 @@ func runDetail(ctx context.Context, cfg *config.Config, opts options) error {
 	}
 
 	svc := app.BuildArtistContentService(cfg, nil, seedStore(goldens))
-	adapter := detailServiceAdapter{svc: svc}
+	adapter := &detailServiceAdapter{svc: svc}
 
 	once := func() (discoveryEval.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "detail-eval over %d golden artists (live providers)...\n", len(goldens))
-		return discoveryEval.RunDetailEval(ctx, goldens, adapter), nil
+		report := discoveryEval.RunDetailEval(ctx, goldens, adapter)
+		if err := adapter.fetchFailure(); err != nil {
+			return nil, err
+		}
+		return report, nil
 	}
 	human := func(r discoveryEval.HarnessReport) string { return renderDetail(r.(discoveryEval.DetailReport)) }
 	return runHarness("detail", once, human, opts)
@@ -82,21 +88,29 @@ func (s *seededIdentityStore) LookupByProviderID(_ context.Context, kind domain.
 }
 
 type detailServiceAdapter struct {
-	svc *content.GetArtistContentService
+	svc      *content.GetArtistContentService
+	failures []error
 }
 
-func (a detailServiceAdapter) Albums(ctx context.Context, seedProvider, seedID, name string) []discoveryEval.DetailItem {
+func (a *detailServiceAdapter) fetchFailure() error {
+	if len(a.failures) == 0 {
+		return nil
+	}
+	return fmt.Errorf("detail-eval: %d fetch(es) failed, so the recall numbers would be wrong: %w", len(a.failures), errors.Join(a.failures...))
+}
+
+func (a *detailServiceAdapter) Albums(ctx context.Context, seedProvider, seedID, name string) []discoveryEval.DetailItem {
 	return a.fetch(ctx, seedProvider, seedID, name, true)
 }
 
-func (a detailServiceAdapter) TopTracks(ctx context.Context, seedProvider, seedID, name string) []discoveryEval.DetailItem {
+func (a *detailServiceAdapter) TopTracks(ctx context.Context, seedProvider, seedID, name string) []discoveryEval.DetailItem {
 	return a.fetch(ctx, seedProvider, seedID, name, false)
 }
 
-func (a detailServiceAdapter) fetch(ctx context.Context, seedProvider, seedID, name string, albums bool) []discoveryEval.DetailItem {
+func (a *detailServiceAdapter) fetch(ctx context.Context, seedProvider, seedID, name string, albums bool) []discoveryEval.DetailItem {
 	pn, err := domain.ParseProviderName(seedProvider)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "detail-eval: skip %q: %v\n", name, err)
+		a.failures = append(a.failures, fmt.Errorf("%q: seed provider: %w", name, err))
 		return nil
 	}
 	var resp *providercall.ContentFetchResponse
@@ -107,7 +121,7 @@ func (a detailServiceAdapter) fetch(ctx context.Context, seedProvider, seedID, n
 		resp, fetchErr = a.svc.GetTopTracks(ctx, pn, seedID, nil, 25)
 	}
 	if fetchErr != nil {
-		fmt.Fprintf(os.Stderr, "detail-eval: fetch for %q failed: %v\n", name, fetchErr)
+		a.failures = append(a.failures, fmt.Errorf("%q: %w", name, fetchErr))
 	}
 	if resp == nil {
 		return nil
@@ -145,6 +159,23 @@ func renderDetail(r discoveryEval.DetailReport) string {
 //go:embed detail_live_artists.txt
 var detailLiveArtists string
 
+type liveArtist struct {
+	mbid string
+	name string
+}
+
+func parseLiveArtists(text string) ([]liveArtist, error) {
+	out := []liveArtist{}
+	for _, line := range strings.Split(strings.TrimSpace(text), "\n") {
+		mbid, name, ok := strings.Cut(strings.TrimSpace(line), " ")
+		if !ok || strings.TrimSpace(name) == "" || !goldeneval.IsMBID(mbid) {
+			return nil, fmt.Errorf("detail-live artist line %q must be \"<artist mbid> <name>\"", line)
+		}
+		out = append(out, liveArtist{mbid: mbid, name: strings.TrimSpace(name)})
+	}
+	return out, nil
+}
+
 type detailLiveRow struct {
 	Artist         string   `json:"artist"`
 	CardIDs        []string `json:"card_ids"`
@@ -168,15 +199,21 @@ func runDetailLive(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, 
 	defer drain()
 	content := app.BuildArtistContentService(cfg, nil, &seededIdentityStore{})
 
+	artists, err := parseLiveArtists(detailLiveArtists)
+	if err != nil {
+		return err
+	}
 	var rows []detailLiveRow
-	for _, name := range strings.Split(strings.TrimSpace(detailLiveArtists), "\n") {
+	var missingCards []string
+	for _, artist := range artists {
+		name := artist.name
 		results, err := searcher.Search(ctx, name)
 		if err != nil {
 			return fmt.Errorf("search %q: %w", name, err)
 		}
-		card, ok := artistCardNamed(results, name)
+		card, ok := artistCardWithMBID(results, artist.mbid)
 		if !ok {
-			fmt.Fprintf(os.Stderr, "detail-live: no artist card named %q\n", name)
+			missingCards = append(missingCards, fmt.Sprintf("%s (%s)", name, artist.mbid))
 			continue
 		}
 		seed, known := card.Sources[0], cardKnownIDs(card)
@@ -196,9 +233,23 @@ func runDetailLive(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, 
 	fmt.Print(renderDetailLive(report))
 	if opts.jsonPath != "" {
 		b, _ := json.MarshalIndent(report, "", "  ")
-		return os.WriteFile(opts.jsonPath, b, 0o600)
+		if err := os.WriteFile(opts.jsonPath, b, 0o600); err != nil {
+			return fmt.Errorf("write %s: %w", opts.jsonPath, err)
+		}
+	}
+	if len(missingCards) > 0 {
+		return fmt.Errorf("detail-live: no artist card carries the expected MBID for %s", strings.Join(missingCards, ", "))
 	}
 	return nil
+}
+
+func artistCardWithMBID(results []domain.SearchResult, mbid string) (domain.SearchResult, bool) {
+	for _, r := range results {
+		if r.Kind == domain.ResultKindArtist && len(r.Sources) > 0 && strings.EqualFold(r.MBID, mbid) {
+			return r, true
+		}
+	}
+	return domain.SearchResult{}, false
 }
 
 func artistCardNamed(results []domain.SearchResult, name string) (domain.SearchResult, bool) {

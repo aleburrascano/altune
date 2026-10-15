@@ -1,18 +1,22 @@
 package eval
 
 import (
-	"context"
-	"sync"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/service/release"
+	"altune/go-api/internal/shared/songfacts"
 	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/shared/versiontag"
+	"context"
+	"slices"
+	"strings"
+	"sync"
 )
 
 type MergeResult struct {
 	Entity              LibraryEntity `json:"entity"`
 	Query               string        `json:"query"`
 	Found               bool          `json:"found"`
+	Errored             bool          `json:"errored,omitempty"`
 	ResultsSeen         int           `json:"results_seen"`
 	UnderMergeIncidents int           `json:"under_merge_incidents"`
 	UnderMergeExample   string        `json:"under_merge_example,omitempty"`
@@ -22,6 +26,7 @@ type MergeReport struct {
 	Total               int           `json:"total"`
 	Evaluated           int           `json:"evaluated"`
 	NoMatch             int           `json:"no_match"`
+	Errored             int           `json:"errored,omitempty"`
 	Skipped             int           `json:"skipped"`
 	ResultsSeen         int           `json:"results_seen"`
 	UnderMergeIncidents int           `json:"under_merge_incidents"`
@@ -45,13 +50,13 @@ func RunMergeEval(ctx context.Context, entities []LibraryEntity, searcher Search
 	sigOwners := map[string]map[string]bool{}
 
 	runParallel(entities, concurrency, progress, func(i int, entity LibraryEntity) {
-		results[i] = mergeEvalOne(ctx, entity, searcher, &mu, sigOwners)
+		results[i] = mergeEvalOne(ctx, entity, entities, searcher, &mu, sigOwners)
 	})
 
 	return aggregateMerge(results, sigOwners)
 }
 
-func mergeEvalOne(ctx context.Context, entity LibraryEntity, searcher Searcher, mu *sync.Mutex, sigOwners map[string]map[string]bool) MergeResult {
+func mergeEvalOne(ctx context.Context, entity LibraryEntity, corpus []LibraryEntity, searcher Searcher, mu *sync.Mutex, sigOwners map[string]map[string]bool) MergeResult {
 	res := MergeResult{Entity: entity}
 	if entity.Artist == "" {
 		return res
@@ -60,7 +65,11 @@ func mergeEvalOne(ctx context.Context, entity LibraryEntity, searcher Searcher, 
 	res.Query = query
 
 	shown, err := searcher.Search(ctx, query)
-	if err != nil || len(shown) == 0 {
+	if err != nil {
+		res.Errored = true
+		return res
+	}
+	if len(shown) == 0 {
 		return res
 	}
 	res.Found = true
@@ -70,7 +79,6 @@ func mergeEvalOne(ctx context.Context, entity LibraryEntity, searcher Searcher, 
 	res.UnderMergeIncidents = incidents
 	res.UnderMergeExample = example
 
-	ownerTitle := textnorm.NormalizeForMatch(entity.Title)
 	for _, r := range shown {
 		if !matchesEntity(r, entity) {
 			continue
@@ -80,10 +88,42 @@ func mergeEvalOne(ctx context.Context, entity LibraryEntity, searcher Searcher, 
 		if sigOwners[sig] == nil {
 			sigOwners[sig] = map[string]bool{}
 		}
-		sigOwners[sig][ownerTitle] = true
+		sigOwners[sig][ownerKey(entity)] = true
+		for _, other := range claimedOthers(r, entity, corpus) {
+			sigOwners[sig][ownerKey(other)] = true
+		}
 		mu.Unlock()
 	}
 	return res
+}
+
+func ownerKey(e LibraryEntity) string {
+	return textnorm.NormalizeForMatch(e.Title) + "|" + strings.Join(versiontag.RecordingLabels(e.Title), "+") + "|" + textnorm.NormalizeForMatch(e.Artist)
+}
+
+func claimedOthers(r domain.SearchResult, entity LibraryEntity, corpus []LibraryEntity) []LibraryEntity {
+	if entity.Known == nil {
+		return nil
+	}
+	var out []LibraryEntity
+	for _, other := range corpus {
+		if other.Known == nil || sharesISRC(other.Known, entity.Known) {
+			continue
+		}
+		if matchesEntity(r, LibraryEntity{Title: other.Title, Artist: other.Artist}) {
+			out = append(out, other)
+		}
+	}
+	return out
+}
+
+func sharesISRC(a, b *KnownRecording) bool {
+	for _, isrc := range a.ISRCs {
+		if slices.Contains(b.ISRCs, isrc) {
+			return true
+		}
+	}
+	return false
 }
 
 func detectUnderMerge(results []domain.SearchResult) (incidents int, example string) {
@@ -103,13 +143,18 @@ func detectUnderMerge(results []domain.SearchResult) (incidents int, example str
 }
 
 func provableIdentityKey(r domain.SearchResult) string {
-	if r.ISRC != "" {
-		return "isrc:" + r.ISRC
+	labels := versionLabelKey(r)
+	if isrc := songfacts.CanonicalISRC(r.ISRC); isrc != "" {
+		return "isrc:" + isrc + "|" + labels
 	}
 	if r.MBID != "" {
-		return "mbid:" + r.MBID
+		return "mbid:" + strings.ToLower(r.MBID) + "|" + labels
 	}
-	return "t:" + r.Kind.String() + "|" + textnorm.NormalizeForMatch(r.Title) + "|" + textnorm.NormalizeForMatch(r.Subtitle)
+	return "t:" + r.Kind.String() + "|" + textnorm.NormalizeForMatch(r.Title) + "|" + textnorm.NormalizeForMatch(r.Subtitle) + "|" + labels
+}
+
+func versionLabelKey(r domain.SearchResult) string {
+	return strings.Join(ResultLabels(r.Kind, r.Title), "+")
 }
 
 func resultSignature(r domain.SearchResult) string {
@@ -125,6 +170,8 @@ func aggregateMerge(results []MergeResult, sigOwners map[string]map[string]bool)
 		switch {
 		case r.Query == "":
 			report.Skipped++
+		case r.Errored:
+			report.Errored++
 		case !r.Found:
 			report.NoMatch++
 		default:

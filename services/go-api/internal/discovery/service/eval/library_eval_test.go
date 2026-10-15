@@ -293,3 +293,32 @@ func TestOutcomeEnumsMarshalJSON(t *testing.T) {
 		})
 	}
 }
+
+func TestMatchesEntity_VersionLabelsAndKnownRecording(t *testing.T) {
+	studio := LibraryEntity{Title: "Bohemian Rhapsody", Artist: "Queen"}
+	known := LibraryEntity{Title: "Bohemian Rhapsody", Artist: "Queen", Known: &KnownRecording{ISRCs: []string{"GBUM71029604"}}}
+	withISRC := func(title, isrc string) domain.SearchResult {
+		r := evalTrack(title, "Queen")
+		r.ISRC = isrc
+		return r
+	}
+	tests := []struct {
+		name   string
+		result domain.SearchResult
+		entity LibraryEntity
+		want   bool
+	}{
+		{"the Live Aid recording is not the studio song", evalTrack("Bohemian Rhapsody (Live Aid)", "Queen"), studio, false},
+		{"a live entity matches its live recording", evalTrack("Bohemian Rhapsody (Live Aid)", "Queen"), LibraryEntity{Title: "Bohemian Rhapsody (Live Aid)", Artist: "Queen"}, true},
+		{"known ISRC in provider formatting matches", withISRC("Bohemian Rhapsody", "gb-um7-10-29604"), known, true},
+		{"right title and artist but another ISRC does not match", withISRC("Bohemian Rhapsody", "GBUM71805979"), known, false},
+		{"right title and artist with no ISRC does not match a known recording", withISRC("Bohemian Rhapsody", ""), known, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := matchesEntity(tt.result, tt.entity); got != tt.want {
+				t.Errorf("matchesEntity = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

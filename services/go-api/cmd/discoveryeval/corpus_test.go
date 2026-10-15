@@ -81,3 +81,24 @@ func TestLoadFrozenCorpus_RejectsRandom(t *testing.T) {
 		t.Fatal("expected -random with -corpus-file to be rejected")
 	}
 }
+
+func TestResolveEntities_GoldenCorpusIsTheTrackCasesWithTheirISRCs(t *testing.T) {
+	entities, err := resolveEntities(context.Background(), nil, options{goldenCorpus: true})
+
+	if err != nil || len(entities) < 20 {
+		t.Fatalf("entities = %d, err = %v, want the committed golden tracks without a database", len(entities), err)
+	}
+	for _, e := range entities {
+		if e.Known == nil || len(e.Known.ISRCs) == 0 {
+			t.Errorf("entity %+v has no known ISRC, so it would be scored by text", e)
+		}
+	}
+}
+
+func TestResolveEntities_GoldenCorpusAndCorpusFileExcludeEachOther(t *testing.T) {
+	opts := options{goldenCorpus: true, corpusFile: writeTestCorpus(t)}
+
+	if _, err := resolveEntities(context.Background(), nil, opts); err == nil {
+		t.Fatal("expected -corpus-golden with -corpus-file to be rejected")
+	}
+}

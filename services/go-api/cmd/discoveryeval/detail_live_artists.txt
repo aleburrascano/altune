@@ -1,24 +1,21 @@
-LUCKI
-Lil Tecca
-Ken Carson
-Yeat
-Autumn!
-Don Toliver
-Drake
-che
-Future
-SLAYR
-Destroy Lonely
-Cochise
-Rich Amiri
-JID
-Nirvana
-Bush
-Genesis
-Low
-Air
-Yes
-Burial
-Sublime
-Boston
-Muse
+9ccaca30-60aa-4890-ae6c-ab55225ee274 LUCKI
+e6fdf3f9-8077-4126-b0cf-94da9a8b627e Lil Tecca
+860d7dc2-618d-437e-a3bb-7b91c2d40095 Ken Carson
+9e6a6a2f-f696-4cc0-87f1-e4f712e46802 Yeat
+a0723a3c-4135-438e-85c5-012712144ede Don Toliver
+9fff2f8a-21e6-47de-a2b8-7f449929d43f Drake
+0a68f3b5-79c2-4f81-a7bc-ebc977602e86 che
+48262e82-db9f-4a92-b650-dfef979b73ec Future
+987d3d86-0d7a-4292-ae96-a8d59e456436 Destroy Lonely
+8ae4189a-67e8-4466-91cb-8902f2b72ab2 Rich Amiri
+d616b606-cf6a-4b6e-ab0f-e253b8db6610 JID
+5b11f4ce-a62d-471e-81fc-a69a8278c7da Nirvana
+93ccd76c-3790-4435-a8bf-02bc26294b93 Bush
+8e3fcd7d-bda1-4ca0-b987-b8528d2ee74e Genesis
+42faad37-8aaa-42e4-a300-5a7dae79ed24 Low
+cb67438a-7f50-4f2b-a6f1-2bb2729fd538 Air
+c1d4f2ba-cf39-460c-9528-6b827d3417a1 Yes
+9ddce51c-2b75-4b3e-ac8c-1db09e7c89c6 Burial
+95f5b748-d370-47fe-85bd-0af2dc450bc0 Sublime
+0d8b0d50-e4cf-4da4-965d-f24c58ec3268 Boston
+9c9f1380-2516-4fc9-a3e6-f9f61941d090 Muse

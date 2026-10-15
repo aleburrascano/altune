@@ -84,7 +84,7 @@ func runReport(opts options) error {
 		gates := baselines.GateAll(f.Metrics)
 		gatesByMode[f.Mode] = gates
 		for _, g := range gates {
-			if g.Regressed {
+			if g.Failed() {
 				regressed = append(regressed, g)
 			}
 		}
@@ -111,6 +111,10 @@ func renderReport(modes []string, gatesByMode map[string][]discoveryEval.GateRes
 	} else {
 		fmt.Fprintf(&b, "**%d metric(s) regressed** across %d mode(s):\n\n", len(regressed), len(modes))
 		for _, g := range regressed {
+			if g.Missing {
+				fmt.Fprintf(&b, "- `%s` %.4f has no baseline: record one with -update-baselines\n", g.Metric, g.Current)
+				continue
+			}
 			fmt.Fprintf(&b, "- `%s` %.4f vs baseline %.4f ±%.4f (%+.4f)\n", g.Metric, g.Current, g.Baseline, g.Margin, g.Current-g.Baseline)
 		}
 		b.WriteString("\n")
@@ -139,6 +143,10 @@ func renderReport(modes []string, gatesByMode map[string][]discoveryEval.GateRes
 func regressionDigest(gates []discoveryEval.GateResult) string {
 	names := make([]string, 0, len(gates))
 	for _, g := range gates {
+		if g.Missing {
+			names = append(names, g.Metric+" has no baseline")
+			continue
+		}
 		names = append(names, fmt.Sprintf("%s %+.4f", g.Metric, g.Current-g.Baseline))
 	}
 	return strings.Join(names, ", ")

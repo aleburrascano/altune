@@ -5,12 +5,7 @@ case " ${MODES:-all} " in
   *) echo "$MODE not selected ($MODES)"; exit 0 ;;
 esac
 cd "$WT/services/go-api"
-. "$WT/scripts/ci/eval-env.sh" production || exit 0
-export CORPUS=cmd/discoveryeval/corpus-library.json
-if [ "$MODE" != detail ] && [ ! -f "$CORPUS" ]; then
-  echo "::notice::$MODE skipped: $CORPUS is not committed yet; dispatch discovery-eval-corpus-refresh with open-pr true and merge its PR first"
-  exit 0
-fi
+. "$WT/scripts/ci/eval-env.sh" production || exit 1
 mkdir -p tmp
 go build -o ./tmp/discoveryeval ./cmd/discoveryeval
 if [ "$MODE" = correction ]; then
@@ -19,13 +14,13 @@ if [ "$MODE" = correction ]; then
   port=$(docker port "$cid" 6379/tcp | head -1 | awk -F: '{print $NF}')
   export REDIS_URL="redis://127.0.0.1:$port"
   for _ in $(seq 30); do docker exec "$cid" redis-cli ping >/dev/null 2>&1 && break; sleep 1; done
-  ./tmp/discoveryeval -mode correction-seed -corpus-file "$CORPUS"
+  ./tmp/discoveryeval -mode correction-seed -corpus-golden -concurrency 1
 else
   export REDIS_URL=
 fi
 rc=0
 if [ -n "${REBASELINE:-}" ]; then
-  ./tmp/discoveryeval -mode "$MODE" -corpus-file "$CORPUS" -update-baselines -noise-runs "${NOISE_RUNS:-3}" || rc=$?
+  ./tmp/discoveryeval -mode "$MODE" -corpus-golden -concurrency 1 -update-baselines -noise-runs "${NOISE_RUNS:-3}" || rc=$?
 else
   bash "$WT/scripts/ci/discovery-eval-mode.sh" || rc=$?
   mkdir -p "$RUN_DIR"

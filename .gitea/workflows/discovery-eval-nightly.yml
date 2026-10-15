@@ -51,7 +51,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [detail, correction, signal-a]
+        mode: [golden, detail, correction, signal-a]
     runs-on: host
     timeout-minutes: 175
     steps:
@@ -84,11 +84,11 @@ jobs:
         run: |
           set -euo pipefail
           if ! ls "$RUN_DIR"/metrics-*.json >/dev/null 2>&1; then
-            echo "::notice::no mode produced metrics; nothing to report"
-            exit 0
+            echo "::error::no mode produced metrics, so nothing was measured"
+            exit 1
           fi
           cd "$WT/services/go-api"
-          . "$WT/scripts/ci/eval-env.sh" production || exit 0
+          . "$WT/scripts/ci/eval-env.sh" production || exit 1
           go run ./cmd/discoveryeval -mode report -reports "$RUN_DIR"
       - name: clean up
         if: always()

@@ -19,6 +19,6 @@ for eval_env_key in DISCOGS_TOKEN FANARTTV_API_KEY THEAUDIODB_API_KEY GENIUS_ACC
   [ -n "${!eval_env_key:-}" ] || echo "::warning::$eval_env_key is not set in $eval_env_file on the VM; that provider is left out of this run"
 done
 if [ -n "$eval_env_missing" ]; then
-  echo "::notice::discovery eval skipped: not set in $eval_env_file on the VM:$eval_env_missing"
+  echo "::error::discovery eval cannot run: not set in $eval_env_file on the VM:$eval_env_missing"
   return 1 2>/dev/null || exit 1
 fi

@@ -7,12 +7,15 @@ import (
 	"time"
 
 	discoveryEval "altune/go-api/internal/discovery/service/eval"
+	goldeneval "altune/go-api/internal/discovery/service/goldeneval"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+func (o options) usesFrozenCorpus() bool { return o.corpusFile != "" || o.goldenCorpus }
+
 func resolveEntities(ctx context.Context, pool *pgxpool.Pool, opts options) ([]discoveryEval.LibraryEntity, error) {
-	if opts.corpusFile == "" {
+	if !opts.usesFrozenCorpus() {
 		return loadLibraryEntities(ctx, pool, opts.limit, opts.random)
 	}
 	corpus, err := loadFrozenCorpus(opts)
@@ -23,7 +26,7 @@ func resolveEntities(ctx context.Context, pool *pgxpool.Pool, opts options) ([]d
 }
 
 func resolveArtists(ctx context.Context, pool *pgxpool.Pool, opts options, limit int) ([]string, error) {
-	if opts.corpusFile == "" {
+	if !opts.usesFrozenCorpus() {
 		return loadDistinctArtists(ctx, pool, limit)
 	}
 	corpus, err := loadFrozenCorpus(opts)
@@ -34,7 +37,7 @@ func resolveArtists(ctx context.Context, pool *pgxpool.Pool, opts options, limit
 }
 
 func resolveTerms(ctx context.Context, pool *pgxpool.Pool, opts options) ([]string, error) {
-	if opts.corpusFile == "" {
+	if !opts.usesFrozenCorpus() {
 		return loadLibraryTerms(ctx, pool, opts.limit)
 	}
 	corpus, err := loadFrozenCorpus(opts)
@@ -48,12 +51,36 @@ func loadFrozenCorpus(opts options) (discoveryEval.LibraryCorpus, error) {
 	if opts.random {
 		return discoveryEval.LibraryCorpus{}, fmt.Errorf("-random cannot be combined with -corpus-file: a frozen corpus is deterministic by definition")
 	}
-	corpus, err := discoveryEval.LoadLibraryCorpus(opts.corpusFile)
+	corpus, err := frozenCorpus(opts)
 	if err != nil {
 		return discoveryEval.LibraryCorpus{}, err
 	}
 	fmt.Fprintf(os.Stderr, "frozen corpus: %d entities, generated %s\n", len(corpus.Entities), corpus.GeneratedAt)
 	return corpus, nil
+}
+
+func frozenCorpus(opts options) (discoveryEval.LibraryCorpus, error) {
+	if opts.goldenCorpus && opts.corpusFile != "" {
+		return discoveryEval.LibraryCorpus{}, fmt.Errorf("-corpus-golden and -corpus-file are two different corpora: pick one")
+	}
+	if !opts.goldenCorpus {
+		return discoveryEval.LoadLibraryCorpus(opts.corpusFile)
+	}
+	cases, err := loadGoldens()
+	if err != nil {
+		return discoveryEval.LibraryCorpus{}, err
+	}
+	return discoveryEval.NewLibraryCorpus("golden", goldenLibraryEntities(cases)), nil
+}
+
+func goldenLibraryEntities(cases []goldeneval.Case) []discoveryEval.LibraryEntity {
+	out := []discoveryEval.LibraryEntity{}
+	for _, c := range cases {
+		if c.Kind == "track" {
+			out = append(out, discoveryEval.LibraryEntity{Title: c.Title, Artist: c.Artist, Known: &discoveryEval.KnownRecording{ISRCs: c.ISRCs}})
+		}
+	}
+	return out
 }
 
 func truncate[T any](in []T, limit int) []T {

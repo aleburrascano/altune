@@ -11,6 +11,20 @@ import (
 
 var errRegressed = errors.New("eval regression")
 
+func requireSignalASamples(report *discoveryEval.CoverageReportA) error {
+	return requireMeasured("signal-a", len(report.Strong)+len(report.Weak)+len(report.Abandoned)+report.FilteredAsTypos, 0)
+}
+
+func requireMeasured(mode string, measured, errored int) error {
+	if errored > 0 {
+		return fmt.Errorf("%s: %d search(es) errored, so the numbers do not measure the ranker", mode, errored)
+	}
+	if measured == 0 {
+		return fmt.Errorf("%s: nothing was measured (0 samples)", mode)
+	}
+	return nil
+}
+
 func runHarness(
 	name string,
 	once func() (discoveryEval.HarnessReport, error),
@@ -41,7 +55,7 @@ func runHarness(
 	fmt.Print(renderGateBlock(gates))
 	fmt.Print(renderSlices(report.Failures()))
 
-	if discoveryEval.AnyRegressed(gates) {
+	if discoveryEval.AnyFailed(gates) {
 		return errRegressed
 	}
 	return nil
@@ -141,8 +155,8 @@ func renderGateBlock(gates []discoveryEval.GateResult) string {
 	for _, g := range discoveryEval.SortedGates(gates) {
 		out += "  " + g.String() + "\n"
 	}
-	if discoveryEval.AnyRegressed(gates) {
-		out += "\n  ⚠ REGRESSION — one or more metrics fell past their noise margin.\n"
+	if discoveryEval.AnyFailed(gates) {
+		out += "\n  ⚠ REGRESSION — a metric fell past its noise margin or has no baseline.\n"
 	}
 	return out
 }
