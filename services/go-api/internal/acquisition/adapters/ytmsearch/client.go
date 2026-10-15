@@ -1,9 +1,11 @@
 package ytmsearch
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -69,17 +71,35 @@ func New(cfg Config) *Client {
 func (c *Client) Watch(ctx context.Context, videoID string) (Watch, error) {
 	raw, err := c.postInnerTube(ctx, c.next, "next", map[string]any{"videoId": videoID})
 	if err != nil {
-		return Watch{}, err
+		return Watch{}, c.outage(ctx, err)
 	}
-	return ParseWatch(raw)
+	watch, err := ParseWatch(raw)
+	if err != nil {
+		return Watch{}, c.outage(ctx, err)
+	}
+	return watch, nil
 }
 
 func (c *Client) SearchSongs(ctx context.Context, query string) ([]Song, error) {
 	raw, err := c.postInnerTube(ctx, c.search, "search", map[string]any{"query": query, "params": songsFilterParams})
 	if err != nil {
-		return nil, err
+		return nil, c.outage(ctx, err)
 	}
-	return ParseSongs(raw)
+	songs, err := ParseSongs(raw)
+	if err != nil {
+		return nil, c.outage(ctx, err)
+	}
+	return songs, nil
+}
+
+func (c *Client) outage(ctx context.Context, err error) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		err = fmt.Errorf("ytmsearch: timed out after %v", c.timeout)
+	}
+	return &acqdomain.SourceUnavailableError{Source: SourceName, Err: err}
 }
 
 func (c *Client) OEmbed(ctx context.Context, videoID string) (OEmbed, error) {

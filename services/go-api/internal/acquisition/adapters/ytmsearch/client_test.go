@@ -1,8 +1,10 @@
 package ytmsearch
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -172,5 +174,184 @@ func TestClient_CancelledContextStopsTheWait(t *testing.T) {
 
 	if _, err := client.Watch(ctx, "u4GAeAYGAqE"); err == nil {
 		t.Fatal("want the context error while waiting for the slot")
+	}
+}
+
+func TestClient_AnOutageIsSourceUnavailable(t *testing.T) {
+	statusServer := func(status int) *httptest.Server {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(status) }))
+		t.Cleanup(srv.Close)
+		return srv
+	}
+	refused := httptest.NewServer(http.NotFoundHandler())
+	refused.Close()
+	hung := make(chan struct{})
+	hangingServer := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) { <-hung }))
+	t.Cleanup(hangingServer.Close)
+	t.Cleanup(func() { close(hung) })
+	unparsable := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("not json")) }))
+	t.Cleanup(unparsable.Close)
+
+	cases := []struct {
+		name    string
+		srv     *httptest.Server
+		timeout time.Duration
+	}{
+		{"429", statusServer(http.StatusTooManyRequests), time.Second},
+		{"503", statusServer(http.StatusServiceUnavailable), time.Second},
+		{"400", statusServer(http.StatusBadRequest), time.Second},
+		{"refused connection", refused, time.Second},
+		{"the client's own timeout", hangingServer, 30 * time.Millisecond},
+		{"an unparsable body", unparsable, time.Second},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			client := clientFor(tc.srv, 0, tc.timeout)
+
+			_, searchErr := client.SearchSongs(context.Background(), "anything")
+			_, watchErr := client.Watch(context.Background(), "XDC3uH1FSgw")
+
+			for name, err := range map[string]error{"SearchSongs": searchErr, "Watch": watchErr} {
+				if !acqdomain.IsSourceUnavailable(err) {
+					t.Errorf("%s err = %v, want source unavailable", name, err)
+				}
+				if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+					t.Errorf("%s err = %v, must not read as a cancellation", name, err)
+				}
+			}
+		})
+	}
+}
+
+func TestClient_ACancelledCallerIsNotAnOutage(t *testing.T) {
+	hung := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) { <-hung }))
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(hung) })
+	client := clientFor(srv, 0, time.Minute)
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(30*time.Millisecond, cancel)
+
+	_, searchErr := client.SearchSongs(ctx, "anything")
+	_, watchErr := client.Watch(ctx, "XDC3uH1FSgw")
+
+	for name, err := range map[string]error{"SearchSongs": searchErr, "Watch": watchErr} {
+		if !errors.Is(err, context.Canceled) || acqdomain.IsSourceUnavailable(err) {
+			t.Errorf("%s err = %v, want the caller's cancellation, not an outage", name, err)
+		}
+	}
+}
+
+func TestClient_AnOutageNamesYtmsearchAsTheUnavailableSource(t *testing.T) {
+	for _, status := range []int{http.StatusInternalServerError, http.StatusBadGateway, http.StatusNotFound} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(status) }))
+		t.Cleanup(srv.Close)
+		client := clientFor(srv, 0, time.Second)
+
+		_, searchErr := client.SearchSongs(context.Background(), "anything")
+		_, watchErr := client.Watch(context.Background(), "XDC3uH1FSgw")
+
+		for name, err := range map[string]error{"SearchSongs": searchErr, "Watch": watchErr} {
+			var unavailable *acqdomain.SourceUnavailableError
+			if !errors.As(err, &unavailable) || unavailable.Source != acqdomain.SourceName("ytmsearch") {
+				t.Errorf("status %d: %s err = %v, want SourceUnavailableError{Source: ytmsearch}", status, name, err)
+			}
+		}
+	}
+}
+
+func TestClient_ACallerDeadlineIsNotAnOutage(t *testing.T) {
+	hung := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) { <-hung }))
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(hung) })
+	client := clientFor(srv, 0, time.Minute)
+
+	for name, call := range map[string]func(context.Context) error{
+		"SearchSongs": func(ctx context.Context) error { _, err := client.SearchSongs(ctx, "anything"); return err },
+		"Watch":       func(ctx context.Context) error { _, err := client.Watch(ctx, "XDC3uH1FSgw"); return err },
+	} {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+		err := call(ctx)
+		cancel()
+		if !errors.Is(err, context.DeadlineExceeded) || acqdomain.IsSourceUnavailable(err) {
+			t.Errorf("%s err = %v, want the caller's deadline, not an outage", name, err)
+		}
+	}
+}
+
+func TestClient_ACallerCancelledWhileWaitingForItsTurnIsNotAnOutage(t *testing.T) {
+	var requests []recordedRequest
+	client := clientFor(fixtureServer(t, &requests), time.Hour, time.Second)
+	_, _ = client.Watch(context.Background(), "XDC3uH1FSgw")
+	_, _ = client.SearchSongs(context.Background(), "q")
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(30*time.Millisecond, cancel)
+
+	_, watchErr := client.Watch(ctx, "u4GAeAYGAqE")
+	_, searchErr := client.SearchSongs(ctx, "q")
+
+	for name, err := range map[string]error{"SearchSongs": searchErr, "Watch": watchErr} {
+		if !errors.Is(err, context.Canceled) || acqdomain.IsSourceUnavailable(err) {
+			t.Errorf("%s err = %v, want the caller's cancellation, not an outage", name, err)
+		}
+	}
+}
+
+func TestClient_AnAlreadyCancelledCallerIsNotAnOutageEvenWhenTheServerIsDown(t *testing.T) {
+	refused := httptest.NewServer(http.NotFoundHandler())
+	refused.Close()
+	client := clientFor(refused, 0, time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, searchErr := client.SearchSongs(ctx, "anything")
+	_, watchErr := client.Watch(ctx, "XDC3uH1FSgw")
+
+	for name, err := range map[string]error{"SearchSongs": searchErr, "Watch": watchErr} {
+		if !errors.Is(err, context.Canceled) || acqdomain.IsSourceUnavailable(err) {
+			t.Errorf("%s err = %v, want the caller's cancellation, not an outage", name, err)
+		}
+	}
+}
+
+func TestClient_AConnectionDroppedMidResponseIsSourceUnavailable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Length", "100000")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"contents":`))
+		w.(http.Flusher).Flush()
+		conn, _, err := w.(http.Hijacker).Hijack()
+		if err == nil {
+			_ = conn.Close()
+		}
+	}))
+	t.Cleanup(srv.Close)
+	client := clientFor(srv, 0, time.Second)
+
+	_, searchErr := client.SearchSongs(context.Background(), "anything")
+	_, watchErr := client.Watch(context.Background(), "XDC3uH1FSgw")
+
+	for name, err := range map[string]error{"SearchSongs": searchErr, "Watch": watchErr} {
+		if !acqdomain.IsSourceUnavailable(err) || errors.Is(err, context.Canceled) {
+			t.Errorf("%s err = %v, want source unavailable", name, err)
+		}
+	}
+}
+
+func TestClient_ItsOwnTimeoutSaysItTimedOut(t *testing.T) {
+	hung := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) { <-hung }))
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(hung) })
+	client := clientFor(srv, 0, 30*time.Millisecond)
+
+	_, searchErr := client.SearchSongs(context.Background(), "anything")
+	_, watchErr := client.Watch(context.Background(), "XDC3uH1FSgw")
+
+	for name, err := range map[string]error{"SearchSongs": searchErr, "Watch": watchErr} {
+		if err == nil || !strings.Contains(err.Error(), "timed out after 30ms") {
+			t.Errorf("%s err = %v, want it to say it timed out after 30ms", name, err)
+		}
 	}
 }

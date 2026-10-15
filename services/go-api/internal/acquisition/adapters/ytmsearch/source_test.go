@@ -1,10 +1,14 @@
 package ytmsearch
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 type fakeSongSearch struct {
@@ -203,5 +207,57 @@ func TestSource_TheArtTrackCarriesWhatTheSearchObserved(t *testing.T) {
 	}
 	if got[0].Kind != ports.KindArtTrack || got[0].Album != "24K Magic" || len(got[0].Artists) != 1 || got[0].Artists[0] != "Bruno Mars" {
 		t.Errorf("candidate = %+v, want the art track with its observed artists and album", got[0])
+	}
+}
+
+func TestSource_AnOutageIsSourceUnavailable(t *testing.T) {
+	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusServiceUnavailable) }))
+	t.Cleanup(down.Close)
+	hung := make(chan struct{})
+	slow := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) { <-hung }))
+	t.Cleanup(slow.Close)
+	t.Cleanup(func() { close(hung) })
+
+	for name, client := range map[string]*Client{
+		"a 503":                clientFor(down, 0, time.Second),
+		"the client timed out": clientFor(slow, 0, 30*time.Millisecond),
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := NewSource(client, &recordingDownloader{}).Find(context.Background(), vibesRequest)
+
+			if !acqdomain.IsSourceUnavailable(err) {
+				t.Errorf("Find err = %v, want source unavailable", err)
+			}
+			if errors.Is(err, context.DeadlineExceeded) {
+				t.Errorf("Find err = %v, must not satisfy DeadlineExceeded", err)
+			}
+		})
+	}
+}
+
+func TestSource_ACancelledCallerIsNotAnOutage(t *testing.T) {
+	hung := make(chan struct{})
+	slow := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) { <-hung }))
+	t.Cleanup(slow.Close)
+	t.Cleanup(func() { close(hung) })
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(30*time.Millisecond, cancel)
+
+	_, err := NewSource(clientFor(slow, 0, time.Minute), &recordingDownloader{}).Find(ctx, vibesRequest)
+
+	if !errors.Is(err, context.Canceled) || acqdomain.IsSourceUnavailable(err) {
+		t.Errorf("Find err = %v, want the caller's cancellation, not an outage", err)
+	}
+}
+
+func TestSource_AnOutageNamesYtmsearch(t *testing.T) {
+	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTooManyRequests) }))
+	t.Cleanup(down.Close)
+
+	_, err := NewSource(clientFor(down, 0, time.Second), &recordingDownloader{}).Find(context.Background(), vibesRequest)
+
+	var unavailable *acqdomain.SourceUnavailableError
+	if !errors.As(err, &unavailable) || unavailable.Source != acqdomain.SourceName("ytmsearch") {
+		t.Errorf("Find err = %v, want SourceUnavailableError{Source: ytmsearch}", err)
 	}
 }
