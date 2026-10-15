@@ -978,3 +978,39 @@ func TestValidateCases_RejectsAPinnedRecordingTheCatalogDoesNotPin(t *testing.T)
 		})
 	}
 }
+
+func TestRun_AYTMusicAdapterSourceEmitsTheCatalogPinnedVideoFirst(t *testing.T) {
+	pinned := "https://music.youtube.com/watch?v=OkjmSTJOAL4"
+	kase := Case{
+		ID: "pin", Class: "RW",
+		Track: Track{
+			Title: "Mubu", Artist: "LUCKI", Duration: 156,
+			CatalogSources: []CatalogSource{{Provider: "youtube", ExternalID: "OkjmSTJOAL4"}},
+		},
+		Sources: []Source{{Name: "ytmusic", Adapter: "ytmusic", Candidates: []Candidate{
+			{Title: "Mubu", URL: pinned, Artists: []string{"LUCKI"}, ActualDuration: 156, Correct: true},
+		}}},
+	}
+
+	out := Run(context.Background(), kase)
+
+	if !out.Pass || out.Stored != pinned {
+		t.Fatalf("stored %q (%s), want the catalog-pinned video", out.Stored, out.Reason)
+	}
+
+	kase.Track.CatalogSources = nil
+	if out := Run(context.Background(), kase); out.Pass {
+		t.Errorf("without a catalog pin the adapter has no video to emit; stored %q", out.Stored)
+	}
+}
+
+func TestValidateCases_RejectsAnUnknownSourceAdapter(t *testing.T) {
+	kase := Case{
+		ID: "a", Class: "RW", Track: Track{Title: "t", Artist: "a"},
+		Sources: []Source{{Name: "x", Adapter: "nope", Candidates: []Candidate{{URL: "u"}}}},
+	}
+
+	if err := validateCases([]Case{kase}); err == nil {
+		t.Error("expected an unknown adapter to be rejected")
+	}
+}

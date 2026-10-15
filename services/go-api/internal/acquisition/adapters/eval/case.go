@@ -130,6 +130,8 @@ func (c Candidate) portResults() []ports.AcoustIDResult {
 	return results
 }
 
+const adapterYTMusic = "ytmusic"
+
 const (
 	QueryISRC             = "isrc"
 	QueryTitleArtist      = "title_artist"
@@ -151,6 +153,7 @@ const (
 
 type Source struct {
 	Name          string      `json:"name"`
+	Adapter       string      `json:"adapter,omitempty"`
 	SearchSeconds float64     `json:"search_seconds,omitempty"`
 	Fails         bool        `json:"fails,omitempty"`
 	Candidates    []Candidate `json:"candidates"`
@@ -335,6 +338,9 @@ func validateSources(c Case) error {
 	for _, src := range c.Sources {
 		if src.Name == "" {
 			return fmt.Errorf("case %q has a source with no name", c.ID)
+		}
+		if src.Adapter != "" && src.Adapter != adapterYTMusic {
+			return fmt.Errorf("case %q source %q names unknown adapter %q", c.ID, src.Name, src.Adapter)
 		}
 		if len(src.Candidates) == 0 && !src.Fails {
 			return fmt.Errorf("case %q source %q has no candidates", c.ID, src.Name)

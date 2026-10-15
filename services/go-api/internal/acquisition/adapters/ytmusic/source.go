@@ -40,31 +40,44 @@ func NewSource(fetcher audioFetcher, lookup videoLookup) *Source {
 func (s *Source) Name() acqdomain.SourceName { return SourceName }
 
 func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
-	source, ok := req.Identity.SourceFor(identityKey)
-	if !ok || source.ExternalID == "" {
+	videoID := pinnedVideoID(req)
+	if videoID == "" {
 		return nil, nil
 	}
-	if !videoIDPattern.MatchString(source.ExternalID) {
+	if !videoIDPattern.MatchString(videoID) {
 		slog.WarnContext(ctx, "acquisition.ytmusic_video_id_rejected",
-			"video_id", source.ExternalID, "title", req.Title)
+			"video_id", videoID, "title", req.Title)
 		return nil, nil
 	}
 
 	slog.InfoContext(ctx, "acquisition.ytmusic_resolved",
-		"video_id", source.ExternalID, "title", req.Title)
+		"video_id", videoID, "title", req.Title)
 
-	observed := s.observe(ctx, source.ExternalID)
+	return []ports.AudioCandidate{s.pinnedCandidate(ctx, videoID)}, nil
+}
 
-	return []ports.AudioCandidate{{
+func pinnedVideoID(req ports.FindRequest) string {
+	for _, pin := range req.CatalogSources {
+		if pin.Provider == string(identityKey) && pin.ExternalID != "" {
+			return pin.ExternalID
+		}
+	}
+	resolved, _ := req.Identity.SourceFor(identityKey)
+	return resolved.ExternalID
+}
+
+func (s *Source) pinnedCandidate(ctx context.Context, videoID string) ports.AudioCandidate {
+	observed := s.observe(ctx, videoID)
+	return ports.AudioCandidate{
 		Title:      observed.Title,
 		Artists:    observed.Artists,
 		Explicit:   observed.Explicit,
-		URL:        watchURLPrefix + source.ExternalID,
+		URL:        watchURLPrefix + videoID,
 		Channel:    catalogChannel,
 		Categories: []string{"Music"},
 		Resolved:   true,
 		Kind:       ports.KindPinnedVideo,
-	}}, nil
+	}
 }
 
 func (s *Source) observe(ctx context.Context, videoID string) ytmsearch.Watch {
