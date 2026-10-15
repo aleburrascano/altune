@@ -98,7 +98,14 @@ func better(song, best Song, req ports.FindRequest) bool {
 	if song.Explicit != best.Explicit {
 		return song.Explicit == ports.PrefersExplicit(req.CatalogExplicit)
 	}
+	if onAlbum, bestOnAlbum := onCatalogAlbum(song, req), onCatalogAlbum(best, req); onAlbum != bestOnAlbum {
+		return onAlbum
+	}
 	return req.Duration > 0 && lengthGap(song, req.Duration) < lengthGap(best, req.Duration)
+}
+
+func onCatalogAlbum(song Song, req ports.FindRequest) bool {
+	return req.Album != "" && textnorm.NormalizeForMatch(song.Album) == textnorm.NormalizeForMatch(req.Album)
 }
 
 func lengthGap(song Song, savedLength float64) float64 {

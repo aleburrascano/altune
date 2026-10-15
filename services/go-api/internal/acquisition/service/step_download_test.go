@@ -281,11 +281,6 @@ func TestDownloadStep_CandidateSearchDurationCannotDisqualify_IsStillFetched(t *
 			candidate: ports.AudioCandidate{URL: "https://example.com/x"},
 		},
 		{
-			name:      "a catalog resolved the candidate",
-			track:     TrackRef{Duration: 200},
-			candidate: ports.AudioCandidate{URL: "https://example.com/x", Duration: 10800, Resolved: true},
-		},
-		{
 			name:      "the track has no saved duration to compare against",
 			track:     TrackRef{},
 			candidate: ports.AudioCandidate{URL: "https://example.com/x", Duration: 10800},
@@ -308,6 +303,34 @@ func TestDownloadStep_CandidateSearchDurationCannotDisqualify_IsStillFetched(t *
 				t.Errorf("rejections = %+v, want none", ac.Rejections)
 			}
 		})
+	}
+}
+
+func TestDownloadStep_AResolvedCandidateFarFromTheTargetLength_IsSkippedBeforeFetch(t *testing.T) {
+	const mix = "https://example.com/resolved-mix"
+	searcher := &fileWritingSearcher{writeFile: true}
+	step := NewDownloadStep(searcher)
+	ac := &AcquisitionContext{
+		Track: TrackRef{Title: "X", Artist: "Y", Duration: 200},
+		Ranked: []ports.AudioCandidate{
+			{URL: mix, Duration: 10800, Resolved: true},
+			{URL: "https://example.com/track", Duration: 201},
+		},
+	}
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+	if searcher.calls != 1 || searcher.gotURL != "https://example.com/track" {
+		t.Errorf("fetched %d candidates, last %q, want only the track: the resolved 10800 s candidate must never be downloaded", searcher.calls, searcher.gotURL)
+	}
+	if len(ac.Rejections) != 1 {
+		t.Fatalf("rejections = %+v, want exactly one, for the resolved candidate", ac.Rejections)
+	}
+	if got := ac.Rejections[0]; got.URL != mix || got.Stage != RejectionDuration {
+		t.Errorf("rejection = %+v, want %q at stage %q", got, mix, RejectionDuration)
 	}
 }
 
@@ -487,18 +510,20 @@ func TestDownloadStep_AllCandidatesWrongDuration_Errors(t *testing.T) {
 
 func TestDownloadStep_AnOfficialTrackIsCheckedAgainstItsOwnLength(t *testing.T) {
 	cases := map[string]struct {
+		target      float64
 		fileSeconds float64
 		accepted    bool
 	}{
-		"file matches the official length, saved length is stale": {fileSeconds: 168, accepted: true},
-		"file is shorter than the official length":                {fileSeconds: 122, accepted: false},
+		"file matches the official length and the target":               {target: 168, fileSeconds: 168, accepted: true},
+		"file is shorter than the official length":                      {target: 168, fileSeconds: 122, accepted: false},
+		"file matches the official length but is off the target length": {target: 122, fileSeconds: 168, accepted: false},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			step := NewDownloadStep(&fileWritingSearcher{writeFile: true},
 				WithDownloadProber(&queueProber{durations: []float64{tc.fileSeconds}}))
 			ac := &AcquisitionContext{
-				Track: TrackRef{Title: "Demigod", Artist: "SLAYR", Duration: 122},
+				Track: TrackRef{Title: "Demigod", Artist: "SLAYR", Duration: tc.target},
 				Ranked: []ports.AudioCandidate{
 					{URL: "https://music.youtube.com/watch?v=official", Duration: 168, Resolved: true},
 				},
@@ -512,6 +537,62 @@ func TestDownloadStep_AnOfficialTrackIsCheckedAgainstItsOwnLength(t *testing.T) 
 				t.Fatalf("accepted = %v (err %v), want %v", accepted, err, tc.accepted)
 			}
 		})
+	}
+}
+
+func TestDownloadStep_AResolvedTrackMustMatchTheTargetLength(t *testing.T) {
+	cases := map[string]struct {
+		byline      float64
+		fileSeconds float64
+		accepted    bool
+	}{
+		"file matches its byline but is 30 s off the catalog length": {byline: 294, fileSeconds: 294, accepted: false},
+		"file matches its byline and the catalog length":             {byline: 264, fileSeconds: 264, accepted: true},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			step := NewDownloadStep(&fileWritingSearcher{writeFile: true},
+				WithDownloadProber(&queueProber{durations: []float64{tc.fileSeconds}}))
+			ac := &AcquisitionContext{
+				Track: TrackRef{Title: "Human", Artist: "The Human League", CatalogDuration: 264},
+				Ranked: []ports.AudioCandidate{
+					{URL: "https://music.youtube.com/watch?v=art", Duration: tc.byline, Resolved: true, Kind: ports.KindArtTrack},
+				},
+			}
+
+			_, err := step.Execute(context.Background(), ac, afterSelect{})
+			if ac.TempPath != "" {
+				defer os.RemoveAll(filepath.Dir(ac.TempPath))
+			}
+			if accepted := err == nil && ac.TempPath != ""; accepted != tc.accepted {
+				t.Fatalf("accepted = %v (err %v), want %v", accepted, err, tc.accepted)
+			}
+		})
+	}
+}
+
+func TestDownloadStep_AProbedFileOffTheTargetLengthIsRejectedAfterDownload(t *testing.T) {
+	art := ports.AudioCandidate{URL: "https://music.youtube.com/watch?v=art", Duration: 275, Resolved: true, Kind: ports.KindArtTrack}
+	searcher := &fileWritingSearcher{writeFile: true}
+	step := NewDownloadStep(searcher, WithDownloadProber(&queueProber{durations: []float64{283}}))
+	ac := &AcquisitionContext{
+		Track:  TrackRef{Title: "Human", Artist: "The Human League", CatalogDuration: 264},
+		Ranked: []ports.AudioCandidate{art},
+	}
+
+	_, err := step.Execute(context.Background(), ac, afterSelect{})
+	if ac.TempPath != "" {
+		defer os.RemoveAll(filepath.Dir(ac.TempPath))
+	}
+
+	if err == nil || ac.TempPath != "" {
+		t.Fatalf("err = %v, TempPath = %q, want the file rejected", err, ac.TempPath)
+	}
+	if searcher.calls != 1 {
+		t.Errorf("fetched %d candidates, want 1: the byline is within tolerance of the target, so only the probed file can fail", searcher.calls)
+	}
+	if len(ac.Rejections) != 1 || ac.Rejections[0].Stage != RejectionDuration || ac.Rejections[0].Reason != "duration 283s vs expected 264s" {
+		t.Errorf("rejections = %+v, want one duration rejection naming the 264 s target", ac.Rejections)
 	}
 }
 

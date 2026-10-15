@@ -57,10 +57,13 @@ func (ac *AcquisitionContext) lengthCorroborated() bool {
 }
 
 func (ac *AcquisitionContext) candidateDurationPlausible(candidate ports.AudioCandidate) bool {
-	if candidate.Resolved || candidate.Duration <= 0 || ac.savedLength() <= 0 {
+	if candidate.Duration <= 0 {
 		return true
 	}
-	return ac.durationAcceptable(candidate.Duration)
+	if candidate.Resolved {
+		return ac.ExpectedLength() <= 0 || ac.durationAcceptable(candidate.Duration)
+	}
+	return ac.savedLength() <= 0 || ac.durationAcceptable(candidate.Duration)
 }
 
 func expectedLength(ac *AcquisitionContext, candidate ports.AudioCandidate) float64 {
@@ -70,9 +73,17 @@ func expectedLength(ac *AcquisitionContext, candidate ports.AudioCandidate) floa
 	return ac.ExpectedLength()
 }
 
+func lengthHeldAgainst(ac *AcquisitionContext, candidate ports.AudioCandidate, actual float64) float64 {
+	if candidate.Resolved && candidate.Duration > 0 && !durationWithinAuthoritativeTolerance(candidate.Duration, actual) {
+		return candidate.Duration
+	}
+	return ac.ExpectedLength()
+}
+
 func (ac *AcquisitionContext) fileLengthAcceptable(candidate ports.AudioCandidate, actual float64) bool {
 	if candidate.Resolved && candidate.Duration > 0 {
-		return durationWithinAuthoritativeTolerance(candidate.Duration, actual)
+		return durationWithinAuthoritativeTolerance(candidate.Duration, actual) &&
+			(ac.ExpectedLength() <= 0 || ac.durationAcceptable(actual))
 	}
 	return ac.durationAcceptable(actual)
 }

@@ -161,6 +161,19 @@ func TestSource_TheClosestLengthBreaksATie(t *testing.T) {
 	}
 }
 
+func TestSource_TheCatalogAlbumBreaksATie(t *testing.T) {
+	compilation := atv("mmmmmmmmmmm", "Human", []string{"The Human League"}, 264, false)
+	compilation.Album = "Greatest Hits"
+	original := atv("nnnnnnnnnnn", "Human", []string{"The Human League"}, 300, false)
+	original.Album = "Crash"
+	req := ports.FindRequest{Title: "Human", Artist: "The Human League", Album: "crash", Duration: 264}
+
+	got := find(t, []Song{compilation, original}, req)
+	if len(got) != 1 || got[0].URL != "https://music.youtube.com/watch?v=nnnnnnnnnnn" {
+		t.Errorf("candidates = %+v, want the hit on the catalog album over the closer length", got)
+	}
+}
+
 func TestSource_SearchErrorsAreReturned(t *testing.T) {
 	src := NewSource(&fakeSongSearch{err: errors.New("innertube 503")}, &recordingDownloader{})
 	if _, err := src.Find(context.Background(), vibesRequest); err == nil {

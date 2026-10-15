@@ -505,19 +505,20 @@ func durationRejection(
 	candidate ports.AudioCandidate,
 	actual float64,
 ) *downloadRejection {
+	held := lengthHeldAgainst(ac, candidate, actual)
 	slog.InfoContext(ctx, "acquisition.candidate_rejected_duration",
 		"track_id", ac.Track.ID,
 		"url", candidate.URL,
 		"source", candidate.Source,
 		"actual_duration", actual,
-		"expected_duration", expectedLength(ac, candidate),
+		"expected_duration", held,
 		"authoritative", ac.resolvedLength() > 0,
 	)
 	return &downloadRejection{
 		stage:  RejectionDuration,
-		reason: fmt.Sprintf("duration %.0fs vs expected %.0fs", actual, expectedLength(ac, candidate)),
+		reason: fmt.Sprintf("duration %.0fs vs expected %.0fs", actual, held),
 		err: fmt.Errorf("candidate %q duration %.0fs != expected %.0fs",
-			candidate.URL, actual, expectedLength(ac, candidate)),
+			candidate.URL, actual, held),
 	}
 }
 

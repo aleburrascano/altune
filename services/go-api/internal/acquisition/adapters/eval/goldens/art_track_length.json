@@ -1,0 +1,18 @@
+{
+  "cases": [
+    {
+      "id": "rw-platinum-blonde-live-art-track-103s-off-the-catalog",
+      "class": "RW",
+      "note": "prod track 9b98afe7 (Standing In The Dark (Live at City Hall, Toronto), Platinum Blonde, ISRC CAC228300043, catalog length 300 s): the only prod track whose stored YouTube Music file is more than 20 s off its catalog length (197.2 s measured, 102.8 s short). Prod stored the art track 1XUdM44TuVw as corroborated at confidence 0.3, resolved, no AcoustID match; the file was checked only against its own 198 s byline. The art track is modelled as ytmsearch emits it (a live ytmsearch query for the title returned this ATV hit, album Seven Year Itch: 1982-1989, 198 s). No other candidate is recorded, so the right outcome is to acquire nothing",
+      "track": {
+        "title": "Standing In The Dark (Live at City Hall, Toronto)", "artist": "Platinum Blonde", "album": "Seven Year Itch: 1982-1989",
+        "isrc": "CAC228300043", "catalog_duration": 300
+      },
+      "sources": [
+        { "name": "ytmsearch", "search_seconds": 2, "candidates": [
+          { "title": "Standing In The Dark (Live at City Hall, Toronto)", "url": "https://music.youtube.com/watch?v=1XUdM44TuVw", "channel": "YouTube Music Art Track", "categories": ["Music"], "duration": 198, "actual_duration": 197.22, "resolved": true, "kind": "art_track", "artists": ["Platinum Blonde"], "album": "Seven Year Itch: 1982-1989" }
+        ] }
+      ]
+    }
+  ]
+}
