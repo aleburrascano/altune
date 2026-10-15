@@ -37,6 +37,10 @@ type AudioCandidate struct {
 	ObservedOMV bool
 }
 
+func (c AudioCandidate) IsResolved() bool {
+	return c.Kind != "" && c.Kind != KindUpload
+}
+
 func DedupeCandidatesBySourceKey(merged, results []AudioCandidate, positionByKey map[string]int) []AudioCandidate {
 	for _, c := range results {
 		if c.URL == "" {
@@ -54,7 +58,7 @@ func mergeCandidate(merged []AudioCandidate, c AudioCandidate, positionByKey map
 		positionByKey[key] = len(merged)
 		return append(merged, c)
 	}
-	if c.Resolved && !merged[position].Resolved {
+	if c.IsResolved() && !merged[position].IsResolved() {
 		merged[position] = c
 	}
 	return merged

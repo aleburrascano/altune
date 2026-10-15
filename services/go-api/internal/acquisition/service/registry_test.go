@@ -43,6 +43,7 @@ func candidate(url string) ports.AudioCandidate {
 func resolvedCandidate(url string) ports.AudioCandidate {
 	c := candidate(url)
 	c.Resolved = true
+	c.Kind = ports.KindArtTrack
 	return c
 }
 
@@ -364,5 +365,34 @@ func TestSourceRegistry_FetchReachesFallbackSources(t *testing.T) {
 	}
 	if len(fallback.fetched) != 1 {
 		t.Errorf("fallback fetched %d times, want 1", len(fallback.fetched))
+	}
+}
+
+func TestSourceRegistry_TheKindDecidesTheFallback(t *testing.T) {
+	artTrack := candidate("https://music.youtube.com/watch?v=abc")
+	artTrack.Kind = ports.KindArtTrack
+	upload := candidate("https://www.youtube.com/watch?v=def")
+	upload.Kind = ports.KindUpload
+	upload.Resolved = true
+
+	for name, tc := range map[string]struct {
+		hit          ports.AudioCandidate
+		wantFallback int
+	}{
+		"art track with the flag unset": {artTrack, 0},
+		"upload with the flag set":      {upload, 1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			first := &stubSource{name: "ytmsearch", found: []ports.AudioCandidate{tc.hit}}
+			fallback := &stubSource{name: "ytdlp", found: []ports.AudioCandidate{candidate("u1")}}
+			reg := NewSourceRegistry(first).WithFallback(fallback)
+
+			if _, err := reg.Find(context.Background(), ports.FindRequest{}); err != nil {
+				t.Fatalf("Find returned error: %v", err)
+			}
+			if fallback.finds != tc.wantFallback {
+				t.Errorf("fallback searched %d times, want %d", fallback.finds, tc.wantFallback)
+			}
+		})
 	}
 }

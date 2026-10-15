@@ -51,6 +51,17 @@ func TestFind_TheCandidateCarriesWhatThePinnedVideoIs(t *testing.T) {
 	}
 }
 
+func TestFind_AFailedLookupIsAnUnresolvedUpload(t *testing.T) {
+	src := NewSource(&recordingFetcher{}, stubLookup{err: errors.New("ytm down")})
+	got, err := src.Find(context.Background(), pinnedTo("remember them days", "88oFlVnMEsc"))
+	if err != nil || len(got) != 1 {
+		t.Fatalf("Find = %+v, %v", got, err)
+	}
+	if got[0].Kind != ports.KindUpload || got[0].Resolved || got[0].IsResolved() {
+		t.Errorf("candidate = %+v, want an unresolved upload", got[0])
+	}
+}
+
 func TestFind_AFailedLookupLeavesTheFactsUnknown(t *testing.T) {
 	src := NewSource(&recordingFetcher{}, stubLookup{err: errors.New("ytm down")})
 	got, err := src.Find(context.Background(), pinnedTo("remember them days", "88oFlVnMEsc"))
@@ -196,8 +207,8 @@ func TestName(t *testing.T) {
 
 func TestFind_TheCatalogLinkIsThePinnedVideo(t *testing.T) {
 	req := ports.FindRequest{
-		Title:    "Finesse",
-		Identity: ports.RecordingIdentity{Sources: []ports.ProviderRef{{Provider: "youtube", ExternalID: "dQw4w9WgXcQ"}}},
+		Title:          "Finesse",
+		CatalogSources: []ports.CatalogSource{{Provider: "youtube", ExternalID: "dQw4w9WgXcQ"}},
 	}
 
 	got, err := NewSource(&recordingFetcher{}, stubLookup{}).Find(context.Background(), req)
@@ -314,8 +325,8 @@ func TestFind_TheObservedTypeIsTheKind(t *testing.T) {
 		{"art track is the art track", observedFixture(t, "88oFlVnMEsc"), resolverOnly("88oFlVnMEsc"), ports.KindArtTrack, true, "LUCKI"},
 		{"official video is the pinned video", observedFixture(t, "u4GAeAYGAqE"), resolverOnly("u4GAeAYGAqE"), ports.KindPinnedVideo, true, "slayr"},
 		{"user upload is an unresolved upload", stubLookup{watch: ytmsearch.Watch{Type: ytmsearch.VideoTypeUGC}}, resolverOnly("dQw4w9WgXcQ"), ports.KindUpload, false, ""},
-		{"user upload the catalog pinned stays resolved", stubLookup{watch: ytmsearch.Watch{Type: ytmsearch.VideoTypeUGC}}, catalogPinned("dQw4w9WgXcQ"), ports.KindUpload, true, ""},
-		{"failed lookup of a resolver video is unresolved", stubLookup{err: errors.New("ytm down")}, resolverOnly("dQw4w9WgXcQ"), ports.KindPinnedVideo, false, ""},
+		{"user upload the catalog pinned stays resolved", stubLookup{watch: ytmsearch.Watch{Type: ytmsearch.VideoTypeUGC}}, catalogPinned("dQw4w9WgXcQ"), ports.KindPinnedVideo, true, ""},
+		{"failed lookup of a resolver video is unresolved", stubLookup{err: errors.New("ytm down")}, resolverOnly("dQw4w9WgXcQ"), ports.KindUpload, false, ""},
 		{"failed lookup of a catalog pin stays resolved", stubLookup{err: errors.New("ytm down")}, catalogPinned("dQw4w9WgXcQ"), ports.KindPinnedVideo, true, ""},
 	}
 	for _, tt := range tests {

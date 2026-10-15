@@ -492,13 +492,9 @@ func validateCandidates(c Case) error {
 }
 
 func validateCandidateShape(caseID string, cand Candidate) error {
-	switch kind := ports.CandidateKind(cand.Kind); {
-	case cand.Resolved && kind == "":
-		return fmt.Errorf("case %q candidate %q is resolved with no kind; prod emits a resolved candidate only as art_track, pinned_video or catalog_pin", caseID, cand.URL)
-	case kind == ports.KindArtTrack && !cand.Resolved:
-		return fmt.Errorf("case %q candidate %q is an art_track that is not resolved; prod's ytmsearch always resolves it", caseID, cand.URL)
-	case kind == ports.KindUpload && cand.Resolved:
-		return fmt.Errorf("case %q candidate %q is a resolved upload; prod's ytdlp never resolves one", caseID, cand.URL)
+	kindResolved := ports.AudioCandidate{Kind: ports.CandidateKind(cand.Kind)}.IsResolved()
+	if cand.Resolved != kindResolved {
+		return fmt.Errorf("case %q candidate %q has resolved=%t but kind %q reads as resolved=%t", caseID, cand.URL, cand.Resolved, cand.Kind, kindResolved)
 	}
 	return nil
 }

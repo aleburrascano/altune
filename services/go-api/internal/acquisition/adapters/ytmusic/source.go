@@ -70,14 +70,19 @@ func (s *Source) pinnedCandidate(ctx context.Context, videoID string, fromCatalo
 }
 
 func CandidateForWatch(videoID string, observed ytmsearch.Watch, pinned bool) ports.AudioCandidate {
+	resolved := pinned || isCatalogVideo(observed.Type)
+	kind := ports.KindUpload
+	if resolved {
+		kind = resolvedKind(observed.Type)
+	}
 	return ports.AudioCandidate{
 		Title:       observed.Title,
 		Artists:     observed.Artists,
 		Explicit:    observed.Explicit,
 		URL:         watchURLPrefix + videoID,
 		Categories:  []string{"Music"},
-		Resolved:    pinned || isCatalogVideo(observed.Type),
-		Kind:        kindOf(observed.Type),
+		Resolved:    resolved,
+		Kind:        kind,
 		ObservedOMV: observed.Type == ytmsearch.VideoTypeOMV,
 	}
 }
@@ -86,15 +91,11 @@ func isCatalogVideo(videoType ytmsearch.VideoType) bool {
 	return videoType == ytmsearch.VideoTypeATV || videoType == ytmsearch.VideoTypeOMV
 }
 
-func kindOf(videoType ytmsearch.VideoType) ports.CandidateKind {
-	switch videoType {
-	case ytmsearch.VideoTypeATV:
+func resolvedKind(videoType ytmsearch.VideoType) ports.CandidateKind {
+	if videoType == ytmsearch.VideoTypeATV {
 		return ports.KindArtTrack
-	case ytmsearch.VideoTypeUGC:
-		return ports.KindUpload
-	default:
-		return ports.KindPinnedVideo
 	}
+	return ports.KindPinnedVideo
 }
 
 func (s *Source) observe(ctx context.Context, videoID string) ytmsearch.Watch {

@@ -98,7 +98,7 @@ func findOne(ctx context.Context, req ports.FindRequest, source ports.AudioSourc
 func anyResolved(slots [][]ports.AudioCandidate) bool {
 	for _, slot := range slots {
 		for _, c := range slot {
-			if c.Resolved {
+			if c.IsResolved() {
 				return true
 			}
 		}

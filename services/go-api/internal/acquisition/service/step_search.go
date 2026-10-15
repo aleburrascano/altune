@@ -85,7 +85,7 @@ func (s *SearchStep) skippedFallback(ac *AcquisitionContext, candidates []ports.
 		return false
 	}
 	for _, c := range candidates {
-		if c.Resolved {
+		if c.IsResolved() {
 			return true
 		}
 	}

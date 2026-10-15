@@ -1254,9 +1254,9 @@ func TestValidateCases_RejectsAnUnknownExpectedSavedProvenance(t *testing.T) {
 
 func TestLoad_RefusesShapesProdNeverEmits(t *testing.T) {
 	goldens := map[string]struct{ candidate, want string }{
-		"resolved with a real channel and no kind": {`{"title":"t","url":"u","channel":"YouTube Music catalog","resolved":true}`, "resolved with no kind"},
-		"art_track that is not resolved":           {`{"title":"t","url":"u","kind":"art_track"}`, "art_track that is not resolved"},
-		"upload that is resolved":                  {`{"title":"t","url":"u","kind":"upload","resolved":true}`, "resolved upload"},
+		"resolved with a real channel and no kind": {`{"title":"t","url":"u","channel":"YouTube Music catalog","resolved":true}`, `has resolved=true but kind "" reads as resolved=false`},
+		"art_track that is not resolved":           {`{"title":"t","url":"u","kind":"art_track"}`, `has resolved=false but kind "art_track" reads as resolved=true`},
+		"upload that is resolved":                  {`{"title":"t","url":"u","kind":"upload","resolved":true}`, `has resolved=true but kind "upload" reads as resolved=false`},
 	}
 	for name, g := range goldens {
 		t.Run(name, func(t *testing.T) {
@@ -1468,5 +1468,20 @@ func TestEmbedded_LiveSearchCandidatesAreObserved(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestValidateCases_RefusesAResolvedFlagTheKindDenies(t *testing.T) {
+	for name, cand := range map[string]Candidate{
+		"resolved upload":       {URL: "u", Resolved: true, Kind: "upload"},
+		"resolved with no kind": {URL: "u", Resolved: true},
+		"unresolved pin":        {URL: "u", Kind: "pinned_video"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := validateCases([]Case{{ID: "x", Class: "F1", Track: Track{Title: "t", Artist: "a"}, Candidates: []Candidate{cand}}})
+			if err == nil {
+				t.Fatal("validateCases accepted a resolved flag the kind denies")
+			}
+		})
 	}
 }
