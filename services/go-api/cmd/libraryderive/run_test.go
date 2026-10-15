@@ -4,6 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -615,5 +620,224 @@ func TestDeriveAll_AHeldAlbumDoesNotFillTheFieldsItOwns(t *testing.T) {
 	}
 	if d := got["track_number_differs"]; d.Fix != nil || !strings.Contains(d.Detail, reasonStoredIsOriginal) {
 		t.Fatalf("got %+v", got)
+	}
+}
+
+type replayExpectation struct {
+	applies  map[string]string
+	keeps    []string
+	reported []string
+}
+
+type realProdCase struct {
+	name         string
+	recording    string
+	blankCover   bool
+	stored       libraryTrack
+	expectations replayExpectation
+}
+
+type recordedResponse struct {
+	Status int             `json:"status"`
+	Body   json.RawMessage `json:"body"`
+}
+
+func replayCatalogs(t *testing.T, name string) (musicBrainz, deezer) {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("testdata", "replay", name+".json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var recorded map[string]recordedResponse
+	if err := json.Unmarshal(raw, &recorded); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		answer, ok := recorded[r.URL.RequestURI()]
+		if !ok {
+			t.Errorf("request with no recorded answer: %s", r.URL.RequestURI())
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(answer.Status)
+		_, _ = w.Write(answer.Body)
+	}))
+	t.Cleanup(srv.Close)
+	return fastMusicBrainz(srv), fastDeezer(srv)
+}
+
+func appliedFixes(found []finding) map[string]string {
+	applied := map[string]string{}
+	for _, f := range found {
+		if f.Fix != nil && f.Fix.NewValue != nil {
+			applied[f.Fix.Field] = *f.Fix.NewValue
+		}
+	}
+	return applied
+}
+
+func reportedFields(found []finding) []string {
+	var fields []string
+	for _, f := range found {
+		if field, isReport := strings.CutSuffix(string(f.Category), "_differs"); isReport {
+			fields = append(fields, field)
+		}
+	}
+	return fields
+}
+
+func dzCover(md5, size string) string {
+	return "https://cdn-images.dzcdn.net/images/cover/" + md5 + "/" + size + "-000000-80-0-0.jpg"
+}
+
+func TestDeriveAll_RealProdCasesKeepTheirOutcomePerField(t *testing.T) {
+	realProdCases := []realProdCase{
+		{
+			name: "ken-carson-yale",
+			stored: libraryTrack{
+				ID: "t", Title: "Yale", Artist: "Ken Carson", Album: "Teen X", AlbumArtist: "Ken Carson", ISRC: "TCAFB2005896", Year: 2020, Genre: "Rap/Hip Hop",
+				TrackNumber: 2, ArtworkURL: dzCover("1c0d7ab95997d32f951bd0c2d6e1f8c1", "1000x1000"), FileSeconds: 106,
+			},
+			expectations: replayExpectation{keeps: []string{"artist", "album_artist", "album"}},
+		},
+		{
+			name: "travis-scott-dont-play",
+			stored: libraryTrack{
+				ID: "t", Title: "Don't Play (feat. The 1975 & Big Sean)", Artist: "Travis Scott", Album: "DAYS BEFORE RODEO", AlbumArtist: "Travis Scott", ISRC: "USSM11405561",
+				Year: 2014, Genre: "Rap/Hip Hop", TrackNumber: 1, ArtworkURL: dzCover("2ee938c5dbac408d30dbe998eb6b1280", "1000x1000"), FileSeconds: 285,
+			},
+			expectations: replayExpectation{keeps: []string{"artist", "album_artist", "title"}},
+		},
+		{
+			name: "tyler-what-a-day",
+			stored: libraryTrack{
+				ID: "t", Title: "WHAT A DAY", Artist: "Tyler, The Creator", Album: "CALL ME IF YOU GET LOST: The Estate Sale", AlbumArtist: "Tyler, The Creator",
+				ISRC: "USQX92301935", Year: 2023, Genre: "Rap/Hip Hop", TrackNumber: 19, ArtworkURL: dzCover("40b4545c7f373fb519dfcc9092c2ccf6", "1000x1000"), FileSeconds: 216,
+			},
+			expectations: replayExpectation{
+				keeps:    []string{"album", "track_number", "genre", "artwork_url"},
+				reported: []string{"track_number", "genre", "artwork_url"},
+			},
+		},
+		{
+			name: "jeremih-oui",
+			stored: libraryTrack{
+				ID: "t", Title: "oui", Artist: "Jeremih", Album: "Late Nights: The Album", AlbumArtist: "Jeremih", ISRC: "USUM71513397", Year: 2015, Genre: "R&B",
+				TrackNumber: 4, ArtworkURL: dzCover("56907774d655c7924a309edca4351a76", "1000x1000"), FileSeconds: 238,
+			},
+			expectations: replayExpectation{keeps: []string{"album", "year", "track_number", "artwork_url"}},
+		},
+		{
+			name:      "jeremih-oui-original-recording",
+			recording: "0d751dff-30e6-46fd-bc75-574f973d9eac",
+			stored: libraryTrack{
+				ID: "t", Title: "oui", Artist: "Jeremih", Album: "Late Nights: The Album", AlbumArtist: "Jeremih", ISRC: "USUM71513397", Year: 2015, Genre: "R&B",
+				TrackNumber: 4, ArtworkURL: dzCover("56907774d655c7924a309edca4351a76", "1000x1000"), FileSeconds: 238,
+			},
+			expectations: replayExpectation{keeps: []string{"album", "year", "track_number", "artwork_url"}},
+		},
+		{
+			name: "blackpink-jump",
+			stored: libraryTrack{
+				ID: "t", Title: "JUMP", Artist: "BLACKPINK", Album: "JUMP", ISRC: "KRA402400094", Genre: "K-pop", ArtworkURL: dzCover("6ef57c5bebc2c8ff9710cf3eca0addb0", "500x500"), FileSeconds: 165,
+			},
+			expectations: replayExpectation{keeps: []string{"title"}, reported: []string{"title"}},
+		},
+		{
+			name: "jon-secada-angel",
+			stored: libraryTrack{
+				ID: "t", Title: "Angel", Artist: "Jon Secada", Album: "Jon Secada", AlbumArtist: "Jon Secada", ISRC: "USSB29200104",
+				ArtworkURL: dzCover("a6f22e152a4a4f2c659b57b4b3789ce5", "500x500"), FileSeconds: 249,
+			},
+			expectations: replayExpectation{keeps: []string{"title"}, reported: []string{"title"}},
+		},
+		{
+			name: "cordae-c-carter",
+			stored: libraryTrack{
+				ID: "t", Title: "C Carter", Artist: "Cordae", Album: "From a Birds Eye View", AlbumArtist: "Cordae", ISRC: "USAT22107997", Year: 2022, Genre: "Rap/Hip Hop",
+				TrackNumber: 8, ArtworkURL: dzCover("a4e5621aeba74613f9c66368359f3be2", "1000x1000"), FileSeconds: 193,
+			},
+			expectations: replayExpectation{keeps: []string{"title"}, reported: []string{"title"}},
+		},
+		{
+			name: "jace-556-green-tip",
+			stored: libraryTrack{
+				ID: "t", Title: "556 (Green Tip)", Artist: "Jace!", Album: "556 (Green Tip)", AlbumArtist: "Jace!", ISRC: "USLD91736763", Year: 2022, Genre: "Rap/Hip Hop",
+				TrackNumber: 5, ArtworkURL: dzCover("2a633a006eda5e61224455eff786f199", "1000x1000"), FileSeconds: 117,
+			},
+			expectations: replayExpectation{keeps: []string{"artist", "album_artist"}},
+		},
+		{
+			name: "bruno-mars-skate",
+			stored: libraryTrack{
+				ID: "t", Title: "Skate", Artist: "Bruno Mars", Album: "An Evening With Silk Sonic", AlbumArtist: "Bruno Mars", ISRC: "USAT22104222", Year: 2021, Genre: "Pop",
+				TrackNumber: 8, ArtworkURL: dzCover("faada8a8c545b2e3d454267b55c82e14", "1000x1000"), FileSeconds: 203,
+			},
+			expectations: replayExpectation{
+				applies:  map[string]string{"album_artist": "Silk Sonic"},
+				keeps:    []string{"artist"},
+				reported: []string{"artist"},
+			},
+		},
+		{
+			name: "pitbull-give-me-everything",
+			stored: libraryTrack{
+				ID: "t", Title: "Give Me Everything (feat. Nayer)", Artist: "Pitbull", Album: "Greatest Hits", AlbumArtist: "Pitbull", ISRC: "USJAY1100032",
+				ArtworkURL: dzCover("bafa7580e18f2d795792b09b2d2bed43", "500x500"), FileSeconds: 252.336,
+			},
+			expectations: replayExpectation{applies: map[string]string{"album": "Planet Pit", "year": "2011", "track_number": "2"}, keeps: []string{"artist"}},
+		},
+		{
+			name: "che-tuesday",
+			stored: libraryTrack{
+				ID: "t", Title: "Tuesday", Artist: "che", Album: "Empty Clip", AlbumArtist: "Che", ISRC: "CH7812677039",
+				ArtworkURL: dzCover("68a7ee84662ebcde06b430ca59bb99ef", "500x500"), FileSeconds: 170,
+			},
+			expectations: replayExpectation{applies: map[string]string{
+				"title": "2sday", "artwork_url": dzCover("fa61c7182566f93516a4a83f73187549", "1000x1000"),
+			}},
+		},
+		{
+			name:       "kanye-stronger",
+			blankCover: true,
+			stored: libraryTrack{
+				ID: "t", Title: "Stronger", Artist: "Kanye West", Album: "Graduation", AlbumArtist: "Kanye West", ISRC: "USUM70741299", Year: 2013, Genre: "rap", TrackNumber: 1,
+				ArtworkURL: dzCover("d167d9a9b2f3f49ed72878a00530415b", "1000x1000"), FileSeconds: 311,
+			},
+			expectations: replayExpectation{applies: map[string]string{
+				"artwork_url": "https://coverartarchive.org/release/06a81817-093d-40f0-aef2-90673fa550ae/front", "year": "2007",
+			}},
+		},
+	}
+	for _, c := range realProdCases {
+		t.Run(c.name, func(t *testing.T) {
+			mb, dz := replayCatalogs(t, c.name)
+			d := newDeriver(mb, dz)
+			d.covers = fakeCoverProbe{placeholders: map[string]bool{}}
+			if c.blankCover {
+				d.covers = fakeCoverProbe{placeholders: map[string]bool{c.stored.ArtworkURL: true}}
+			}
+			bound := boundTrack{libraryTrack: c.stored, IdentityISRC: c.stored.ISRC, MBRecordingID: c.recording}
+			got := d.deriveAll(t.Context(), []boundTrack{bound})
+			if got.Aborted != nil {
+				t.Fatalf("aborted: %v", got.Aborted)
+			}
+			applied := appliedFixes(got.Findings)
+			for field, want := range c.expectations.applies {
+				if applied[field] != want {
+					t.Errorf("%s: applied %q, want %q (all applied: %v)", field, applied[field], want, applied)
+				}
+			}
+			for _, field := range c.expectations.keeps {
+				if value, changed := applied[field]; changed {
+					t.Errorf("%s was changed to %q", field, value)
+				}
+			}
+			for _, field := range c.expectations.reported {
+				if !slices.Contains(reportedFields(got.Findings), field) {
+					t.Errorf("%s is not reported (reported: %v)", field, reportedFields(got.Findings))
+				}
+			}
+		})
 	}
 }

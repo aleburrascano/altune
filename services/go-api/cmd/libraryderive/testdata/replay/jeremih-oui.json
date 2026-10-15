@@ -1,0 +1,3 @@
+{
+"/ws/2/recording?query=isrc%3A%22USUM71513397%22&inc=isrcs&fmt=json&limit=25": {"body": {"recordings": [{"artist-credit": [{"artist": {"name": "Jeremih"}, "joinphrase": "", "name": "Jeremih"}], "id": "ed8e3c1e-b20d-4d54-bf08-1b9852d0cfed", "isrcs": ["USUM71513397"], "title": "oui"}, {"artist-credit": [{"artist": {"name": "Jeremih"}, "joinphrase": "", "name": "Jeremih"}], "id": "0d751dff-30e6-46fd-bc75-574f973d9eac", "isrcs": ["USUM71513397"], "title": "Oui"}]}, "status": 200}
+}

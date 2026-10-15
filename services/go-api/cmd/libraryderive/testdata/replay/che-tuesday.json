@@ -1,0 +1,5 @@
+{
+"/2.0/album/1064715531": {"body": {"artist": {"name": "che"}, "cover_big": "https://cdn-images.dzcdn.net/images/cover/fa61c7182566f93516a4a83f73187549/500x500-000000-80-0-0.jpg", "cover_xl": "https://cdn-images.dzcdn.net/images/cover/fa61c7182566f93516a4a83f73187549/1000x1000-000000-80-0-0.jpg", "genres": {"data": [{"name": "Rap/Hip Hop"}]}, "id": 1064715531, "record_type": "ep", "release_date": "2026-06-23", "title": "Empty Clip", "tracks": {"data": [{"id": 4250398571, "title": "Like Lil Mexico"}, {"id": 4250398581, "title": "2sday"}, {"id": 4250398591, "title": "Dmx"}, {"id": 4250398601, "title": "Og Ginobili"}, {"id": 4250398611, "title": "Los Santos"}]}}, "status": 200},
+"/2.0/track/isrc:CH7812677039": {"body": {"album": {"id": 1064715531, "title": "Empty Clip"}, "artist": {"name": "che"}, "duration": 168, "id": 4250398581, "isrc": "CH7812677039", "title": "2sday", "track_position": 2}, "status": 200},
+"/ws/2/recording?query=isrc%3A%22CH7812677039%22&inc=isrcs&fmt=json&limit=25": {"body": {"recordings": []}, "status": 200}
+}
