@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 )
 
 func (s *AcquireTrackAudioService) resolveIdentity(ctx context.Context, ac *AcquisitionContext) {
@@ -49,10 +50,15 @@ var ErrInPlaceUnavailable = errors.New("the stored file cannot be checked in pla
 const (
 	basisAcoustID = "acoustid"
 	basisPreview  = "preview"
+
+	verdictPreview = "preview"
 )
 
-func WithPreviewMatcher(m ports.PreviewMatcher) func(*AcquireTrackAudioService) {
-	return func(s *AcquireTrackAudioService) { s.previews = m }
+func WithPreviewMatcher(m ports.PreviewMatcher, officialMaxBitErrorRate float64) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) {
+		s.previews = m
+		s.previewOfficialMaxBER = officialMaxBitErrorRate
+	}
 }
 
 func (s *AcquireTrackAudioService) CheckInPlace(ctx context.Context, track *ports.TrackSnapshot) (upgrade.Finding, error) {
@@ -70,11 +76,35 @@ func (s *AcquireTrackAudioService) CheckInPlace(ctx context.Context, track *port
 	if err != nil {
 		return upgrade.Finding{}, fmt.Errorf("copy stored audio: %w", err)
 	}
+	return s.judgeInPlace(ctx, ac, track, path)
+}
+
+func (s *AcquireTrackAudioService) judgeInPlace(ctx context.Context, ac *AcquisitionContext, track *ports.TrackSnapshot, path string) (upgrade.Finding, error) {
 	finding, err := s.fingerprintInPlace(ctx, ac, path, deref(track.StoredDurationSeconds))
-	if err != nil || finding.Answered() {
+	if err != nil || isProven(finding) {
 		return finding, err
 	}
-	return s.previewInPlace(ctx, track, path), nil
+	if preview, matched := s.previewInPlace(ctx, ac, track, path); matched {
+		return preview, nil
+	}
+	if namesAnotherBoundRecording(ac) {
+		return finding, nil
+	}
+	return upgrade.Finding{}, nil
+}
+
+func isProven(finding upgrade.Finding) bool {
+	return finding.Fingerprint == grade.Matches || finding.Fingerprint == grade.Approximates
+}
+
+func namesAnotherBoundRecording(ac *AcquisitionContext) bool {
+	reference := ac.Identity.MBIDs
+	if len(reference) == 0 {
+		reference = []string{ac.Identity.MBID}
+	}
+	return slices.ContainsFunc(ac.Verdict.Surviving, func(recording ports.LinkedRecording) bool {
+		return recording.MBID != "" && !slices.Contains(reference, recording.MBID)
+	})
 }
 
 func (s *AcquireTrackAudioService) fingerprintInPlace(ctx context.Context, ac *AcquisitionContext, path string, storedSeconds float64) (upgrade.Finding, error) {
@@ -95,21 +125,33 @@ func (s *AcquireTrackAudioService) fingerprintInPlace(ctx context.Context, ac *A
 	}, nil
 }
 
-func (s *AcquireTrackAudioService) previewInPlace(ctx context.Context, track *ports.TrackSnapshot, path string) upgrade.Finding {
+func (s *AcquireTrackAudioService) previewInPlace(ctx context.Context, ac *AcquisitionContext, track *ports.TrackSnapshot, path string) (upgrade.Finding, bool) {
 	target := previewTargetOf(track)
 	if s.previews == nil || (target == ports.PreviewTarget{}) {
-		return upgrade.Finding{}
+		return upgrade.Finding{}, false
 	}
 	comparison, err := s.previews.MatchesPreview(ctx, path, target)
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.in_place_preview_failed",
 			"track_id", track.ID.String(), "error", redact.LogError(err))
-		return upgrade.Finding{}
+		return upgrade.Finding{}, false
 	}
 	if !comparison.Matched {
-		return upgrade.Finding{}
+		return upgrade.Finding{}, false
 	}
-	return upgrade.Finding{Verdict: string(VerdictHard), Fingerprint: grade.Matches, Basis: basisPreview}
+	return upgrade.Finding{
+		Verdict:      verdictPreview,
+		Fingerprint:  s.previewFingerprint(ac, comparison.BitErrorRate),
+		Basis:        basisPreview,
+		BitErrorRate: comparison.BitErrorRate,
+	}, true
+}
+
+func (s *AcquireTrackAudioService) previewFingerprint(ac *AcquisitionContext, bitErrorRate float64) grade.Fingerprint {
+	if ac.Identity.ReferenceDoubted || bitErrorRate > s.previewOfficialMaxBER {
+		return grade.Approximates
+	}
+	return grade.Matches
 }
 
 func previewTargetOf(track *ports.TrackSnapshot) ports.PreviewTarget {

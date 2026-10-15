@@ -235,6 +235,57 @@ func TestPgxUpgradeStore_RecordInPlaceFlagsAMismatchedUserUploadWithoutRegrading
 	}
 }
 
+func TestPgxUpgradeStore_RecordInPlaceNeverLowersTheStoredGrade(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxUpgradeStore(pool)
+	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("C"), sourceURL: sourceURL("art")})
+	ctx := context.Background()
+	ref := "u/" + id.String() + ".mp3"
+
+	for _, grade := range []string{"F", "D", "C"} {
+		if _, err := store.RecordInPlace(ctx, id, ports.InPlaceRecord{AudioRef: ref, Generation: 1, Verdict: "other_version", Grade: grade}); err != nil {
+			t.Fatalf("RecordInPlace %s: %v", grade, err)
+		}
+		if got := readEvidence(t, pool, id); got.Grade != "C" || got.Verdict != "other_version" {
+			t.Errorf("after %s: evidence = %+v, want grade C kept and the verdict recorded", grade, got)
+		}
+	}
+	if _, err := store.RecordInPlace(ctx, id, ports.InPlaceRecord{AudioRef: ref, Generation: 1, Verdict: "preview", Basis: "preview", BitErrorRate: 0.06, Grade: "A"}); err != nil {
+		t.Fatalf("RecordInPlace A: %v", err)
+	}
+	var rate float64
+	if err := pool.QueryRow(ctx, `SELECT (acquisition_evidence->>'in_place_bit_error_rate')::float8 FROM tracks WHERE id = $1`, id.UUID()).Scan(&rate); err != nil {
+		t.Fatalf("read bit error rate: %v", err)
+	}
+	if got := readEvidence(t, pool, id); got.Grade != "A" || got.Verdict != "preview" || rate != 0.06 {
+		t.Errorf("evidence = %+v, rate = %v, want the raise to A with the preview verdict and its bit error rate", got, rate)
+	}
+}
+
+func TestPgxUpgradeStore_NoteInPlaceFailureCountsAndMakesTheTrackWaitItsTurn(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxUpgradeStore(pool)
+	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("C"), sourceURL: sourceURL("art")})
+
+	first, err := store.NoteInPlaceFailure(context.Background(), id)
+	if err != nil {
+		t.Fatalf("NoteInPlaceFailure: %v", err)
+	}
+	second, err := store.NoteInPlaceFailure(context.Background(), id)
+	if err != nil {
+		t.Fatalf("NoteInPlaceFailure: %v", err)
+	}
+
+	if first != 1 || second != 2 {
+		t.Errorf("failures = %d, %d, want 1, 2", first, second)
+	}
+	if got := candidatesAmong(t, store, selectionOf(10), id); len(got) != 0 {
+		t.Errorf("candidates = %v, want the track to wait out the retry delay", got)
+	}
+}
+
 func TestPgxUpgradeStore_RecordInPlaceIgnoresAFileThatChangedMeanwhile(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)

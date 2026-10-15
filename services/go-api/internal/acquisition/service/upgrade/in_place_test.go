@@ -27,8 +27,16 @@ func (c *fixedChecker) CheckInPlace(context.Context, *ports.TrackSnapshot) (upgr
 }
 
 type recordingInPlaceStore struct {
-	mu      sync.Mutex
-	records []ports.InPlaceRecord
+	mu       sync.Mutex
+	records  []ports.InPlaceRecord
+	failures int
+}
+
+func (s *recordingInPlaceStore) NoteInPlaceFailure(context.Context, shared.TrackId) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.failures++
+	return s.failures, nil
 }
 
 func (s *recordingInPlaceStore) RecordInPlace(_ context.Context, _ shared.TrackId, record ports.InPlaceRecord) (bool, error) {
@@ -44,7 +52,8 @@ var (
 	wrongSong  = upgrade.Finding{Verdict: "different_song", Fingerprint: grade.Unsupported, Basis: "acoustid", Score: 0.9}
 	noAnswer   = upgrade.Finding{}
 	softMatch  = upgrade.Finding{Verdict: "soft", Fingerprint: grade.Approximates, Basis: "acoustid", Score: 0.9}
-	previewHit = upgrade.Finding{Verdict: "hard", Fingerprint: grade.Matches, Basis: "preview"}
+	previewHit = upgrade.Finding{Verdict: "preview", Fingerprint: grade.Matches, Basis: "preview", BitErrorRate: 0.06}
+	looseHit   = upgrade.Finding{Verdict: "preview", Fingerprint: grade.Approximates, Basis: "preview", BitErrorRate: 0.15}
 )
 
 func (w *world) storedEvidence(evidence string) {
@@ -92,8 +101,8 @@ func TestRunner_APreviewMatchProvesTheFileAsWellAsAFingerprint(t *testing.T) {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
-	if len(recorder.records) != 1 || recorder.records[0].Grade != "A" || recorder.records[0].Basis != "preview" {
-		t.Errorf("records = %+v, want grade A on the preview basis", recorder.records)
+	if len(recorder.records) != 1 || recorder.records[0].Grade != "A" || recorder.records[0].Basis != "preview" || recorder.records[0].Verdict != "preview" || recorder.records[0].BitErrorRate != 0.06 {
+		t.Errorf("records = %+v, want grade A on the preview basis, verdict preview, with the bit error rate", recorder.records)
 	}
 	if w.source.finds != 0 {
 		t.Errorf("sources searched %d times, want 0", w.source.finds)
@@ -259,7 +268,50 @@ func TestRunner_ACheckThatFailsRecordsNothingAndReportsTheError(t *testing.T) {
 	if len(recorder.records) != 0 || w.source.finds != 0 {
 		t.Errorf("records = %+v, searches = %d, want nothing recorded and no download on a failed check", recorder.records, w.source.finds)
 	}
-	if fmt.Sprint(w.upgrades.attempts) != fmt.Sprint([]ports.UpgradeAttempt{{}}) {
-		t.Errorf("attempts = %v, want one uncounted attempt so the track waits its turn", w.upgrades.attempts)
+	if recorder.failures != 1 {
+		t.Errorf("failures noted = %d, want 1 so the track waits its turn and the count grows", recorder.failures)
+	}
+}
+
+func TestRunner_AfterThreeFailedChecksTheTrackFallsThroughToReacquire(t *testing.T) {
+	w := seed(t, grade.C)
+	w.storedEvidence(evidenceFor(grade.C, grade.ArtTrack))
+	recorder := &recordingInPlaceStore{}
+	runner := w.checkedRunner(upgrade.Config{MaxTries: 3}, &fixedChecker{err: errors.New("fpcalc cannot decode")}, recorder)
+
+	for try := 1; try <= 2; try++ {
+		if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); err == nil {
+			t.Fatalf("try %d: ExecuteUpgrade = nil, want the failed check reported", try)
+		}
+	}
+	if w.source.finds != 0 {
+		t.Fatalf("sources searched %d times before the third failure, want 0", w.source.finds)
+	}
+	if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil && !errors.Is(err, upgrade.ErrKept) {
+		t.Fatalf("third try: %v", err)
+	}
+
+	if w.source.finds != 1 {
+		t.Errorf("sources searched %d times, want 1 once the check has failed three times", w.source.finds)
+	}
+	if len(recorder.records) != 1 || recorder.records[0].Generation != grade.PipelineGeneration || recorder.records[0].Grade != "" {
+		t.Errorf("records = %+v, want the generation stamped so the check is not repeated", recorder.records)
+	}
+}
+
+func TestRunner_APreviewMatchAboveTheOfficialCutGradesBAndStillLooksForABetterSource(t *testing.T) {
+	w := seed(t, grade.D)
+	w.storedEvidence(evidenceFor(grade.D, grade.ArtTrack))
+	recorder := &recordingInPlaceStore{}
+
+	if err := w.checkedRunner(upgrade.Config{MaxTries: 3}, &fixedChecker{finding: looseHit}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil && !errors.Is(err, upgrade.ErrKept) {
+		t.Fatalf("ExecuteUpgrade: %v", err)
+	}
+
+	if len(recorder.records) != 1 || recorder.records[0].Grade != "B" || recorder.records[0].Verdict != "preview" || recorder.records[0].BitErrorRate != 0.15 {
+		t.Errorf("records = %+v, want B with the preview verdict and the bit error rate kept", recorder.records)
+	}
+	if w.source.finds != 1 {
+		t.Errorf("sources searched %d times, want 1: B is below A", w.source.finds)
 	}
 }

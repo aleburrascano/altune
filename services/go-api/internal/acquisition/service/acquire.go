@@ -33,6 +33,8 @@ type AcquireTrackAudioService struct {
 	storedAudio     ports.StoredAudioReader
 	contextObserver func(*AcquisitionContext)
 	previews        ports.PreviewMatcher
+
+	previewOfficialMaxBER float64
 }
 
 func NewAcquireTrackAudioService(

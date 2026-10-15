@@ -184,7 +184,7 @@ func (a *App) buildAcquisitionScheduler(
 		acqService.WithAcquireTempWorkspace(tempfs.New()),
 		acqService.WithStoredAudioReader(storedAudioReader{store: audioStore}))
 	if a.upgradeEnabled() {
-		acquireOpts = append(acquireOpts, acqService.WithPreviewMatcher(a.upgradePreviewMatcher()))
+		acquireOpts = append(acquireOpts, acqService.WithPreviewMatcher(a.upgradePreviewMatcher(), a.cfg.AcquisitionUpgradePreviewAMaxBER))
 	}
 	ledger := acqCatalogBridge.NewTrackLedger(trackRepo, acqCatalogBridge.WithLengthTolerance(a.cfg.AcquisitionLengthToleranceSeconds))
 	acquireSvc := acqService.NewAcquireTrackAudioService(

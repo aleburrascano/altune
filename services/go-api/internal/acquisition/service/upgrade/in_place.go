@@ -18,6 +18,8 @@ type Finding struct {
 	Fingerprint grade.Fingerprint
 	Basis       string
 	Score       float64
+
+	BitErrorRate float64
 }
 
 func (f Finding) Answered() bool { return f.Fingerprint != grade.Silent }
@@ -95,9 +97,32 @@ func (r *Runner) checkInPlace(ctx context.Context, track *ports.TrackSnapshot, s
 	}
 	finding, err := r.inPlace.checker.CheckInPlace(ctx, track)
 	if err != nil {
-		r.noteUnchecked(ctx, track.ID)
-		return inPlaceOutcome{}, fmt.Errorf("check track %s in place: %w", track.ID, err)
+		return r.failedCheck(ctx, track, stored, err)
 	}
+	return r.settleFinding(ctx, track, stored, finding)
+}
+
+const maxInPlaceFailures = 3
+
+func (r *Runner) failedCheck(ctx context.Context, track *ports.TrackSnapshot, stored inPlaceEvidence, checkErr error) (inPlaceOutcome, error) {
+	if r.cfg.DryRun {
+		r.noteUnchecked(ctx, track.ID)
+		return inPlaceOutcome{}, fmt.Errorf("check track %s in place: %w", track.ID, checkErr)
+	}
+	failures, err := r.inPlace.recorder.NoteInPlaceFailure(ctx, track.ID)
+	if err != nil {
+		slog.ErrorContext(ctx, "acquisition.upgrade_in_place_failure_unrecorded",
+			"track_id", track.ID.String(), "error", redact.LogError(err))
+	}
+	if err == nil && failures >= maxInPlaceFailures {
+		slog.WarnContext(ctx, "acquisition.upgrade_in_place_given_up",
+			"track_id", track.ID.String(), "failures", failures, "error", redact.LogError(checkErr))
+		return r.settleFinding(ctx, track, stored, Finding{})
+	}
+	return inPlaceOutcome{}, fmt.Errorf("check track %s in place: %w", track.ID, checkErr)
+}
+
+func (r *Runner) settleFinding(ctx context.Context, track *ports.TrackSnapshot, stored inPlaceEvidence, finding Finding) (inPlaceOutcome, error) {
 	record := verdictOf(track, stored, finding)
 	slog.InfoContext(ctx, "acquisition.upgrade_in_place",
 		"track_id", track.ID.String(), "from", string(stored.Grade), "to", record.Grade,
@@ -122,7 +147,7 @@ func gradeAfter(stored grade.Grade, record ports.InPlaceRecord) grade.Grade {
 func verdictOf(track *ports.TrackSnapshot, stored inPlaceEvidence, finding Finding) ports.InPlaceRecord {
 	record := ports.InPlaceRecord{
 		AudioRef: *track.AudioRef, Generation: grade.PipelineGeneration,
-		Verdict: finding.Verdict, Basis: finding.Basis, Score: finding.Score,
+		Verdict: finding.Verdict, Basis: finding.Basis, Score: finding.Score, BitErrorRate: finding.BitErrorRate,
 	}
 	switch {
 	case !finding.Answered():
