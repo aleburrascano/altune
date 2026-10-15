@@ -315,8 +315,13 @@ func remixMBIDCase(resolution *Resolution, isrc string) Case {
 	}
 }
 
+func otherRecordingResults(acoustID, mbid, title string, duration float64) []AcoustIDResult {
+	return []AcoustIDResult{{ID: acoustID, Score: 1, Recordings: []LinkedRecording{{MBID: mbid, Title: title, Artists: []string{"Bran Van 3000"}, Duration: duration}}}}
+}
+
 func TestRun_ResolvedSearchMBIDSetsTheExpectedAcoustIDCluster(t *testing.T) {
 	kase := remixMBIDCase(&Resolution{Search: &SearchedRecording{MBID: "remix", Duration: 236}}, "")
+	kase.Candidates[0].AcoustIDResults = otherRecordingResults("album-ac", "album", "Different Song", 237)
 
 	out := Run(context.Background(), kase)
 
@@ -340,6 +345,7 @@ func TestRun_CaseWithoutResolutionCopiesItsIdentity(t *testing.T) {
 	kase := remixMBIDCase(nil, "")
 	kase.Track.MBID = "remix"
 	kase.Track.AcoustIDs = []string{"remix-ac"}
+	kase.Candidates[0].AcoustIDResults = otherRecordingResults("album-ac", "album", "Different Song", 237)
 
 	out := Run(context.Background(), kase)
 
@@ -943,7 +949,7 @@ func TestRun_PinnedTrackWithNoRecordedAnswersStillRejectsAnotherRecording(t *tes
 		ID: "t", Class: "RW",
 		Track: Track{Title: "Song", Artist: "Artist", Duration: 200, CatalogMBID: "pin", Resolution: &Resolution{}},
 		Candidates: []Candidate{
-			{Title: "Song", URL: "other-version", Channel: "Artist - Topic", Duration: 200, ViewCount: 9000000, AcoustID: "other-ac", RecordingMBIDs: []string{"other"}},
+			{Title: "Song", URL: "other-version", Channel: "Artist - Topic", Duration: 200, ViewCount: 9000000, AcoustID: "other-ac", RecordingMBIDs: []string{"other"}, AcoustIDResults: []AcoustIDResult{{ID: "other-ac", Score: 1, Recordings: []LinkedRecording{{MBID: "other", Title: "Another Song", Artists: []string{"Artist"}, Duration: 200}}}}},
 			{Title: "Song", URL: "pinned", Channel: "Artist - Topic", Duration: 200, ViewCount: 10, AcoustID: "pin-ac", RecordingMBIDs: []string{"pin"}, Correct: true},
 		},
 	}
@@ -1037,5 +1043,26 @@ func TestRun_ACatalogPinAdapterSourceEmitsThePickedSoundCloudUpload(t *testing.T
 	kase.Track.CatalogSources = nil
 	if out := Run(context.Background(), kase); out.Pass {
 		t.Errorf("without a catalog pin the adapter emits nothing; stored %q", out.Stored)
+	}
+}
+
+func TestIdentifyFake_AlwaysCarriesResultsLikeChromaprint(t *testing.T) {
+	cases, err := LoadEmbedded()
+	if err != nil {
+		t.Fatalf("LoadEmbedded: %v", err)
+	}
+	for _, kase := range cases {
+		p := newCasePorts(kase)
+		for i, cand := range kase.allCandidates() {
+			path := filepath.Join("fake", kase.ID, string(rune('a'+i)))
+			p.byPath[path] = cand
+			match, err := p.Identify(context.Background(), path, 0)
+			if err != nil {
+				t.Fatalf("%s %s: Identify: %v", kase.ID, cand.URL, err)
+			}
+			if match.Known() && len(match.Results) == 0 {
+				t.Errorf("%s %s: known match %+v carries no Results, chromaprint always fills them", kase.ID, cand.URL, match)
+			}
+		}
 	}
 }

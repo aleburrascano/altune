@@ -260,14 +260,14 @@ func TestClassifyAudio_ResultsWithoutUsableLinks(t *testing.T) {
 	blankMBIDs.MBIDs = []string{""}
 	assertVerdicts(t, []verdictCase{
 		{
-			name: "results whose links all fail the length filter are a different song", ref: drinkingInLA, audioDuration: 300,
+			name: "results whose links all fail the length filter are unknown", ref: drinkingInLA, audioDuration: 300,
 			results: []ports.AcoustIDResult{drinkingInLAResult},
-			want:    VerdictDifferentSong,
+			want:    VerdictUnknown,
 		},
 		{
-			name: "a result with no linked recordings is a different song", ref: drinkingInLA, audioDuration: 236,
+			name: "a result with no linked recordings is unknown", ref: drinkingInLA, audioDuration: 236,
 			results: []ports.AcoustIDResult{acoustIDResult("bare", 0.7)},
-			want:    VerdictDifferentSong,
+			want:    VerdictUnknown,
 		},
 		{
 			name: "a blank MBID never makes a hard match", ref: blankMBIDs, audioDuration: 210,
@@ -373,9 +373,9 @@ func TestClassifyAudio_ProbeHardAndSoftAcrossResults(t *testing.T) {
 			want: VerdictHard,
 		},
 		{
-			name: "the reference recording dropped by the length filter is not hard", ref: dontStopMeNow, audioDuration: 210,
+			name: "the reference recording dropped by the length filter is not hard, it is unknown", ref: dontStopMeNow, audioDuration: 210,
 			results: singleLink(linked("canonical", "Bohemian Rhapsody", 355, "Queen")),
-			want:    VerdictDifferentSong,
+			want:    VerdictUnknown,
 		},
 		{
 			name: "a soft sibling survives beside the reference recording dropped by length", ref: dontStopMeNow, audioDuration: 210,
@@ -506,6 +506,31 @@ func TestClassifyAudio_PlainlyTitledReleaseVariantsAreAnotherVersion(t *testing.
 			name: "a remastered recording still agrees softly", ref: sunglasses, audioDuration: 232,
 			results: singleLink(linked("remaster", "Sunglasses at Night (2011 Remaster)", 232, "Corey Hart")),
 			want:    VerdictSoft,
+		},
+	})
+}
+
+func TestClassifyAudio_AnUnlinkedAcoustIDIsUnknown(t *testing.T) {
+	assertVerdicts(t, []verdictCase{
+		{
+			name: "a result with no linked recording", ref: drinkingInLA, audioDuration: 236,
+			results: []ports.AcoustIDResult{acoustIDResult("bare", 0.9)},
+			want:    VerdictUnknown,
+		},
+		{
+			name: "results whose links all miss the length filter", ref: drinkingInLA, audioDuration: 300,
+			results: []ports.AcoustIDResult{drinkingInLAResult},
+			want:    VerdictUnknown,
+		},
+	})
+}
+
+func TestClassifyAudio_ALinkedOtherSongStaysDifferent(t *testing.T) {
+	assertVerdicts(t, []verdictCase{
+		{
+			name: "a surviving link to another title", ref: drinkingInLA, audioDuration: 236,
+			results: singleLink(linked("other", "Thinking in L.A.", 236, "Bran Van 3000")),
+			want:    VerdictDifferentSong,
 		},
 	})
 }

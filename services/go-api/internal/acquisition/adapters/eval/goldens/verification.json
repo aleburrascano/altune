@@ -70,7 +70,7 @@
       "note": "AcoustID knows nothing about the expected recording, so there is no ground truth to reject against; a mismatching fingerprint must still be accepted or the long tail becomes unacquirable",
       "track": { "title": "Rare Leak", "artist": "Some Artist", "duration": 200, "authoritative_duration": 200, "mbid": "mb-expected" },
       "candidates": [
-        { "title": "Some Artist - Rare Leak", "url": "sc:leak", "channel": "Some Artist", "duration": 200, "acoustid": "ac-something-else", "recording_mbids": ["mb-unrelated"], "correct": true }
+        { "title": "Some Artist - Rare Leak", "url": "sc:leak", "channel": "Some Artist", "duration": 200, "acoustid": "ac-something-else", "acoustid_results": [{ "id": "ac-something-else", "score": 1, "recordings": [] }], "correct": true }
       ]
     },
     {

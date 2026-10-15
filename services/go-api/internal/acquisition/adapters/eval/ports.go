@@ -202,7 +202,7 @@ func (p *casePorts) Identify(_ context.Context, filePath string, _ float64) (por
 	if acoustID == "" && len(cand.AcoustIDResults) > 0 {
 		acoustID = cand.AcoustIDResults[0].ID
 	}
-	return ports.RecordingMatch{AcoustID: acoustID, MBIDs: cand.RecordingMBIDs, Score: 1, Results: cand.portResults()}, nil
+	return ports.RecordingMatch{AcoustID: acoustID, MBIDs: cand.RecordingMBIDs, Score: 1, Results: cand.chromaprintResults(p.kase.Track.Artist)}, nil
 }
 
 func (p *casePorts) AcoustIDsFor(_ context.Context, mbid string) ([]string, error) {
@@ -230,4 +230,15 @@ func (p *casePorts) Delete(_ context.Context, audioRef string) error {
 		}
 	}
 	return nil
+}
+
+func (c Candidate) chromaprintResults(trackArtist string) []ports.AcoustIDResult {
+	if len(c.AcoustIDResults) > 0 {
+		return c.portResults()
+	}
+	recordings := make([]ports.LinkedRecording, 0, len(c.RecordingMBIDs))
+	for _, mbid := range c.RecordingMBIDs {
+		recordings = append(recordings, ports.LinkedRecording{MBID: mbid, Title: c.Title, Artists: []string{trackArtist}, Duration: c.Duration})
+	}
+	return []ports.AcoustIDResult{{ID: c.AcoustID, Score: 1, Recordings: recordings}}
 }

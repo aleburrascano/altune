@@ -32,10 +32,10 @@ type AudioVerdict struct {
 }
 
 func ClassifyAudio(ref AudioReference, audioDuration float64, results []ports.AcoustIDResult) AudioVerdict {
-	if len(results) == 0 {
+	surviving := recordingsMatchingLength(audioDuration, results)
+	if len(surviving) == 0 {
 		return AudioVerdict{Kind: VerdictUnknown}
 	}
-	surviving := recordingsMatchingLength(audioDuration, results)
 	return AudioVerdict{
 		Kind:      newAudioMatcher(ref, audioDuration).verdictFor(surviving),
 		Score:     topScore(results),
