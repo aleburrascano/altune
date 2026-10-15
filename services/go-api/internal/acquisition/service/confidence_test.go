@@ -135,7 +135,7 @@ func TestConfidence_ACreditedPinnedVideoClearsTheFloor(t *testing.T) {
 	}
 	evidence := Evidence{
 		Channel:              uploaderClass(req.Artist, found[0]),
-		Resolved:             found[0].Resolved,
+		Resolved:             found[0].IsResolved(),
 		DurationDeltaSeconds: secs(-6.08),
 		SourceTitle:          found[0].Title,
 	}

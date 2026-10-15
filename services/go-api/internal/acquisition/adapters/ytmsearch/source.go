@@ -67,7 +67,6 @@ func CandidateFor(hit Song) ports.AudioCandidate {
 		URL:        musicWatchURLPrefix + hit.VideoID,
 		Channel:    artTrackChannel,
 		Categories: []string{"Music"},
-		Resolved:   true,
 		Explicit:   hit.Explicit,
 		Artists:    hit.Artists,
 		Album:      hit.Album,

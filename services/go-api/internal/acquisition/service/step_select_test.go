@@ -193,14 +193,14 @@ const (
 
 func finesseRemix() ports.AudioCandidate {
 	return ports.AudioCandidate{
-		Title: "Finesse (Remix)", URL: finesseRemixURL, Channel: "YouTube Music Art Track", Duration: 218, Resolved: true,
+		Title: "Finesse (Remix)", URL: finesseRemixURL, Channel: "YouTube Music Art Track", Duration: 218,
 		Artists: []string{"Bruno Mars", "Cardi B"}, Album: "Finesse (Remix)", Kind: ports.KindArtTrack,
 	}
 }
 
 func finesseAlbumTrack() ports.AudioCandidate {
 	return ports.AudioCandidate{
-		Title: "Finesse", URL: finesseAlbumURL, Channel: "YouTube Music Art Track", Duration: 191, Resolved: true,
+		Title: "Finesse", URL: finesseAlbumURL, Channel: "YouTube Music Art Track", Duration: 191,
 		Artists: []string{"Bruno Mars"}, Album: "24K Magic", Kind: ports.KindArtTrack,
 	}
 }
@@ -253,7 +253,7 @@ func TestSelectStep_ShadowLogsAgreement(t *testing.T) {
 func TestSearchStep_FirstTierHoldingOnlyTheStoredFileStillOpensTheFallbackTier(t *testing.T) {
 	storedArtTrack := ports.AudioCandidate{
 		Title: "Phone (Interlude)", URL: "https://music.youtube.com/watch?v=TB0z2HVFxEE",
-		Duration: 112, Resolved: true, Kind: ports.KindArtTrack, Artists: []string{"SLAYR"},
+		Duration: 112, Kind: ports.KindArtTrack, Artists: []string{"SLAYR"},
 	}
 	first := findOnlySource{name: "ytmsearch", candidates: []ports.AudioCandidate{storedArtTrack}}
 	registry := NewSourceRegistry(first).WithFallback(findOnlySource{name: "ytdlp"})

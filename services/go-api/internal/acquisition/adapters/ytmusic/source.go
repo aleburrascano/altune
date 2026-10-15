@@ -81,7 +81,6 @@ func CandidateForWatch(videoID string, observed ytmsearch.Watch, pinned bool) po
 		Explicit:    observed.Explicit,
 		URL:         watchURLPrefix + videoID,
 		Categories:  []string{"Music"},
-		Resolved:    resolved,
 		Kind:        kind,
 		ObservedOMV: observed.Type == ytmsearch.VideoTypeOMV,
 	}

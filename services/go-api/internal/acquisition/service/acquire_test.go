@@ -1235,10 +1235,10 @@ func (*brokenArtTrackSource) Name() acqdomain.SourceName { return "ytmsearch" }
 func (s *brokenArtTrackSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
 	s.finds++
 	return []ports.AudioCandidate{{
-		Title:    "Blinding Lights",
-		URL:      "https://music.youtube.com/watch?v=artTrackAAA",
-		Channel:  "YouTube Music Art Track",
-		Resolved: true,
+		Title:   "Blinding Lights",
+		URL:     "https://music.youtube.com/watch?v=artTrackAAA",
+		Channel: "YouTube Music Art Track",
+		Kind:    ports.KindArtTrack,
 	}}, nil
 }
 
@@ -1870,7 +1870,7 @@ func TestExecute_AMissingFileTriesItsStoredSourceFirst(t *testing.T) {
 			track.RejectedSourceKeys = tt.rejected
 			var found []ports.AudioCandidate
 			for _, u := range rivals {
-				found = append(found, ports.AudioCandidate{Title: "Blinding Lights", URL: u, Channel: "The Weeknd", Artists: []string{"The Weeknd"}, Resolved: true, Kind: ports.KindArtTrack, Source: "fake"})
+				found = append(found, ports.AudioCandidate{Title: "Blinding Lights", URL: u, Channel: "The Weeknd", Artists: []string{"The Weeknd"}, Kind: ports.KindArtTrack, Source: "fake"})
 			}
 			searcher := &fakeAudioSearcher{searchResults: found, downloadErr: errors.New("boom")}
 			registry := NewSourceRegistry(catalogpin.NewSource(searcherDownloads{searcher}), searcher)
@@ -1896,7 +1896,7 @@ func TestExecuteReplace_NeverOffersTheCurrentSourceAsTheKnownOne(t *testing.T) {
 	track := readyTrackWithSource(t, repo, userId, "u/a/b/c.mp3", storedSource)
 	store := newFakeAudioStore()
 	store.stored["u/a/b/c.mp3"] = true
-	rival := ports.AudioCandidate{Title: "Blinding Lights", URL: "https://music.youtube.com/watch?v=aaaaaaaaaaa", Resolved: true, Kind: ports.KindArtTrack, Artists: []string{"The Weeknd"}, Source: "fake"}
+	rival := ports.AudioCandidate{Title: "Blinding Lights", URL: "https://music.youtube.com/watch?v=aaaaaaaaaaa", Kind: ports.KindArtTrack, Artists: []string{"The Weeknd"}, Source: "fake"}
 	searcher := &fakeAudioSearcher{searchResults: []ports.AudioCandidate{rival}, downloadErr: errors.New("boom")}
 	registry := NewSourceRegistry(catalogpin.NewSource(searcherDownloads{searcher}), searcher)
 	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), registry, store)

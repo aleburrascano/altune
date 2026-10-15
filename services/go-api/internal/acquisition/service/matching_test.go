@@ -1197,10 +1197,27 @@ func TestUnrequestedQualifiers_TitleWithoutBracketHasNoVeto(t *testing.T) {
 	assertQualifiers(t, "fallback", fallback, nil)
 }
 
+func TestSelectBest_AnArtTrackIsResolvedByItsKind(t *testing.T) {
+	track := TrackRef{Title: "Matches", Artist: "Tezzus", CatalogDuration: 180}
+	weak := ports.AudioCandidate{Title: "Unrelated Words", URL: "https://music.youtube.com/watch?v=weakAAAAAAA", Duration: 180}
+
+	art := weak
+	art.Kind = ports.KindArtTrack
+	if got := selectBest(track, []ports.AudioCandidate{art}); got == nil || got.URL != art.URL {
+		t.Errorf("selected %v, want the art track: its kind skips the identity gate", got)
+	}
+
+	upload := weak
+	upload.Kind = ports.KindUpload
+	if got := selectBest(track, []ports.AudioCandidate{upload}); got != nil {
+		t.Errorf("selected %v, want nothing: an upload goes through the identity gate", got)
+	}
+}
+
 func TestSelectBest_AnExplicitResolvedTrackBeatsACloserCleanOne(t *testing.T) {
 	track := TrackRef{Title: "Matches", Artist: "Tezzus", CatalogDuration: 180}
-	clean := ports.AudioCandidate{Title: "Matches", URL: "https://music.youtube.com/watch?v=cleanAAAAAA", Duration: 180, Resolved: true}
-	explicit := ports.AudioCandidate{Title: "Matches", URL: "https://music.youtube.com/watch?v=explicitAAA", Duration: 182, Resolved: true, Explicit: true}
+	clean := ports.AudioCandidate{Title: "Matches", URL: "https://music.youtube.com/watch?v=cleanAAAAAA", Duration: 180, Kind: ports.KindArtTrack}
+	explicit := ports.AudioCandidate{Title: "Matches", URL: "https://music.youtube.com/watch?v=explicitAAA", Duration: 182, Kind: ports.KindArtTrack, Explicit: true}
 
 	if got := selectBest(track, []ports.AudioCandidate{clean, explicit}); got == nil || got.URL != explicit.URL {
 		t.Fatalf("selected %v, want the explicit track even though the clean one is closer in length", got)
@@ -1208,8 +1225,8 @@ func TestSelectBest_AnExplicitResolvedTrackBeatsACloserCleanOne(t *testing.T) {
 }
 
 func TestSelectBest_TheCatalogExplicitFlagPicksTheTwin(t *testing.T) {
-	clean := ports.AudioCandidate{Title: "Matches", URL: "https://music.youtube.com/watch?v=cleanAAAAAA", Duration: 182, Resolved: true}
-	explicit := ports.AudioCandidate{Title: "Matches", URL: "https://music.youtube.com/watch?v=explicitAAA", Duration: 180, Resolved: true, Explicit: true}
+	clean := ports.AudioCandidate{Title: "Matches", URL: "https://music.youtube.com/watch?v=cleanAAAAAA", Duration: 182, Kind: ports.KindArtTrack}
+	explicit := ports.AudioCandidate{Title: "Matches", URL: "https://music.youtube.com/watch?v=explicitAAA", Duration: 180, Kind: ports.KindArtTrack, Explicit: true}
 	yes, no := true, false
 	tests := []struct {
 		name    string
@@ -1256,7 +1273,7 @@ func TestUploaderClass_ArtTrackIsTrustedOnlyWhenItsArtistsCreditTheTrackArtist(t
 func TestSelectBest_RanksByTheExpectedLength(t *testing.T) {
 	artTrack := func(url string, duration float64) ports.AudioCandidate {
 		return ports.AudioCandidate{
-			Title: "Phone (Interlude)", URL: url, Channel: "YouTube Music Art Track", Duration: duration, Resolved: true,
+			Title: "Phone (Interlude)", URL: url, Channel: "YouTube Music Art Track", Duration: duration,
 			Artists: []string{"SLAYR"}, Album: "Phone", Kind: ports.KindArtTrack,
 		}
 	}
@@ -1315,7 +1332,7 @@ func TestRankAndCollect_RejectsPlainlyTitledAcousticAndDemoUploads(t *testing.T)
 }
 
 func TestUploaderClass_TheCatalogPinIsTrusted(t *testing.T) {
-	pin := ports.AudioCandidate{Kind: ports.KindCatalogPin, Resolved: true, Artists: []string{"Sophie Ellis-Bextor"}}
+	pin := ports.AudioCandidate{Kind: ports.KindCatalogPin, Artists: []string{"Sophie Ellis-Bextor"}}
 	if got := uploaderClass("Sophie Ellis-Bextor", pin); got != channelTopic {
 		t.Errorf("uploaderClass = %q, want the user's own pick trusted as %q", got, channelTopic)
 	}
@@ -1326,7 +1343,7 @@ func TestUploaderClass_TheCatalogPinIsTrusted(t *testing.T) {
 
 func TestUploaderClass_APinnedVideoIsTrustedByItsCredits(t *testing.T) {
 	pinned := func(artists ...string) ports.AudioCandidate {
-		return ports.AudioCandidate{Kind: ports.KindPinnedVideo, Artists: artists, Resolved: true}
+		return ports.AudioCandidate{Kind: ports.KindPinnedVideo, Artists: artists}
 	}
 	tests := []struct {
 		name      string
@@ -1354,22 +1371,19 @@ func TestRankCandidates_TheUsersPickGoesBeforeTheArtTrack(t *testing.T) {
 		Duration: 232,
 		URL:      "https://music.youtube.com/watch?v=RCtTDJgxPDA",
 		Artists:  []string{"Sophie Ellis-Bextor"},
-		Resolved: true,
 		Kind:     ports.KindArtTrack,
 	}
 	pickedUpload := ports.AudioCandidate{
-		Title:    "Murder On The Dancefloor",
-		URL:      "https://soundcloud.com/sophie-ellis-bextor-official/murder-on-the-dancefloor-album",
-		Artists:  []string{"Sophie Ellis-Bextor"},
-		Resolved: true,
-		Kind:     ports.KindCatalogPin,
+		Title:   "Murder On The Dancefloor",
+		URL:     "https://soundcloud.com/sophie-ellis-bextor-official/murder-on-the-dancefloor-album",
+		Artists: []string{"Sophie Ellis-Bextor"},
+		Kind:    ports.KindCatalogPin,
 	}
 	catalogVideo := ports.AudioCandidate{
-		Title:    "Murder On The Dancefloor",
-		URL:      "https://music.youtube.com/watch?v=Zv6M1xG4T0w",
-		Artists:  []string{"Sophie Ellis-Bextor"},
-		Resolved: true,
-		Kind:     ports.KindPinnedVideo,
+		Title:   "Murder On The Dancefloor",
+		URL:     "https://music.youtube.com/watch?v=Zv6M1xG4T0w",
+		Artists: []string{"Sophie Ellis-Bextor"},
+		Kind:    ports.KindPinnedVideo,
 	}
 	tests := []struct {
 		name       string

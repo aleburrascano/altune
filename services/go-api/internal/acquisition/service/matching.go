@@ -176,7 +176,7 @@ func classifyCandidates(
 		entry := scoreCandidate(track, expectedLength, c, maxViews)
 		logCandidateEvaluated(ctx, track, entry)
 
-		if c.Resolved {
+		if c.IsResolved() {
 			resolved = append(resolved, entry)
 			continue
 		}

@@ -49,7 +49,7 @@ func TestSource_AStrongArtTrackHitIsOneResolvedCandidate(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("candidates = %v, want 1", got)
 	}
-	if got[0].URL != "https://music.youtube.com/watch?v=LMDLNLM6Ji8" || !got[0].Resolved || got[0].Duration != 125 || !got[0].Explicit {
+	if got[0].URL != "https://music.youtube.com/watch?v=LMDLNLM6Ji8" || !got[0].IsResolved() || got[0].Duration != 125 || !got[0].Explicit {
 		t.Errorf("candidate = %+v, want a resolved, explicit music.youtube.com candidate of 125 s", got[0])
 	}
 	if len(search.queries) != 1 || search.queries[0] != "2021 Vibes LUCKI" {

@@ -55,11 +55,10 @@ func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.Audio
 
 func pinnedCandidate(req ports.FindRequest, pinURL string) ports.AudioCandidate {
 	return ports.AudioCandidate{
-		URL:      pinURL,
-		Title:    req.Title,
-		Artists:  []string{req.Artist},
-		Resolved: true,
-		Kind:     ports.KindCatalogPin,
+		URL:     pinURL,
+		Title:   req.Title,
+		Artists: []string{req.Artist},
+		Kind:    ports.KindCatalogPin,
 	}
 }
 

@@ -906,7 +906,7 @@ func TestRun_CarriesTheCatalogPinsIntoTheTrack(t *testing.T) {
 		},
 		Candidates: []Candidate{{
 			Title: "t", URL: "https://music.youtube.com/watch?v=x", Duration: 139,
-			Resolved: true, Explicit: true, Album: "Album", Correct: true,
+			Resolved: true, Kind: "art_track", Explicit: true, Album: "Album", Correct: true,
 		}},
 	}
 
@@ -1373,8 +1373,8 @@ func TestRun_ObservedCandidatesGoThroughTheAdapters(t *testing.T) {
 		if want := ytdlp.CandidateFromEntry(entry); !reflect.DeepEqual(got, want) {
 			t.Errorf("golden candidate = %+v, want what ytdlp emits: %+v", got, want)
 		}
-		if got.Kind != ports.KindUpload || got.Resolved {
-			t.Errorf("golden candidate kind %q resolved %v, want an unresolved upload", got.Kind, got.Resolved)
+		if got.Kind != ports.KindUpload || got.IsResolved() {
+			t.Errorf("golden candidate kind %q resolved %v, want an unresolved upload", got.Kind, got.IsResolved())
 		}
 	})
 }

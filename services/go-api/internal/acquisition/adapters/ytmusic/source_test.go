@@ -57,7 +57,7 @@ func TestFind_AFailedLookupIsAnUnresolvedUpload(t *testing.T) {
 	if err != nil || len(got) != 1 {
 		t.Fatalf("Find = %+v, %v", got, err)
 	}
-	if got[0].Kind != ports.KindUpload || got[0].Resolved || got[0].IsResolved() {
+	if got[0].Kind != ports.KindUpload || got[0].IsResolved() {
 		t.Errorf("candidate = %+v, want an unresolved upload", got[0])
 	}
 }
@@ -116,7 +116,7 @@ func TestFind_ResolvesFromTheIdentityVideoID(t *testing.T) {
 	if got[0].URL != "https://music.youtube.com/watch?v=dQw4w9WgXcQ" {
 		t.Errorf("URL = %q", got[0].URL)
 	}
-	if got[0].Resolved {
+	if got[0].IsResolved() {
 		t.Error("a resolver video whose lookup observed no type must stay unresolved so it faces the resemblance gate")
 	}
 	if got[0].Duration != 0 || got[0].Title != "" {
@@ -302,7 +302,7 @@ func TestFind_TheCatalogPinCarriesWhatThatVideoIs(t *testing.T) {
 	if err != nil || len(got) != 1 {
 		t.Fatalf("Find = %+v, %v", got, err)
 	}
-	if got[0].Kind != ports.KindArtTrack || !got[0].Resolved || got[0].Title != "2021 Vibes" {
+	if got[0].Kind != ports.KindArtTrack || !got[0].IsResolved() || got[0].Title != "2021 Vibes" {
 		t.Errorf("candidate = %+v, want the art track, resolved video with its own title", got[0])
 	}
 }
@@ -336,7 +336,7 @@ func TestFind_TheObservedTypeIsTheKind(t *testing.T) {
 				t.Fatalf("Find = %+v, %v", got, err)
 			}
 			c := got[0]
-			if c.Kind != tt.wantKind || c.Resolved != tt.wantResolved || c.Channel != "" {
+			if c.Kind != tt.wantKind || c.IsResolved() != tt.wantResolved || c.Channel != "" {
 				t.Errorf("candidate = %+v, want kind %q resolved %v and no channel", c, tt.wantKind, tt.wantResolved)
 			}
 			if tt.wantArtist != "" && !slices.Contains(c.Artists, tt.wantArtist) {

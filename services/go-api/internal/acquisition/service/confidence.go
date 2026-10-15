@@ -94,7 +94,7 @@ func (ac *AcquisitionContext) buildEvidence(candidate ports.AudioCandidate, veri
 		DurationDeltaSeconds: delta,
 		Channel:              uploaderClass(ac.Track.Artist, candidate),
 		Qualifiers:           fallback,
-		Resolved:             candidate.Resolved,
+		Resolved:             candidate.IsResolved(),
 		SourceTitle:          candidate.Title,
 	}
 }

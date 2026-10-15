@@ -46,9 +46,9 @@ func TestFind_EmitsThePickedSoundCloudUpload(t *testing.T) {
 	}
 	want := ports.AudioCandidate{
 		URL: pickedUpload, Title: "Murder On The Dancefloor", Artists: []string{"Sophie Ellis-Bextor"},
-		Resolved: true, Kind: ports.KindCatalogPin,
+		Kind: ports.KindCatalogPin,
 	}
-	if got[0].URL != want.URL || got[0].Title != want.Title || !got[0].Resolved || got[0].Kind != want.Kind ||
+	if got[0].URL != want.URL || got[0].Title != want.Title || !got[0].IsResolved() || got[0].Kind != want.Kind ||
 		len(got[0].Artists) != 1 || got[0].Artists[0] != want.Artists[0] {
 		t.Errorf("candidate = %+v, want %+v", got[0], want)
 	}
@@ -117,7 +117,7 @@ func TestFind_EmitsTheKnownSource(t *testing.T) {
 	if err != nil || len(got) != 1 {
 		t.Fatalf("Find = %+v, %v; want the known source", got, err)
 	}
-	if got[0].URL != known || !got[0].Resolved || got[0].Kind != ports.KindCatalogPin {
+	if got[0].URL != known || !got[0].IsResolved() || got[0].Kind != ports.KindCatalogPin {
 		t.Errorf("candidate = %+v, want the known source as a resolved catalog pin", got[0])
 	}
 

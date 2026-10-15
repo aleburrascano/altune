@@ -316,7 +316,7 @@ func TestDownloadStep_AResolvedCandidateFarFromTheTargetLength_IsSkippedBeforeFe
 	ac := &AcquisitionContext{
 		Track: TrackRef{Title: "X", Artist: "Y", CatalogDuration: 200},
 		Ranked: []ports.AudioCandidate{
-			{URL: mix, Duration: 10800, Resolved: true},
+			{URL: mix, Duration: 10800, Kind: ports.KindArtTrack},
 			{URL: "https://example.com/track", Duration: 201},
 		},
 	}
@@ -528,7 +528,7 @@ func TestDownloadStep_AnOfficialTrackIsCheckedAgainstItsOwnLength(t *testing.T) 
 			ac := &AcquisitionContext{
 				Track: TrackRef{Title: "Demigod", Artist: "SLAYR", CatalogDuration: tc.target},
 				Ranked: []ports.AudioCandidate{
-					{URL: "https://music.youtube.com/watch?v=official", Duration: 168, Resolved: true},
+					{URL: "https://music.youtube.com/watch?v=official", Duration: 168, Kind: ports.KindArtTrack},
 				},
 			}
 
@@ -559,7 +559,7 @@ func TestDownloadStep_AResolvedTrackMustMatchTheTargetLength(t *testing.T) {
 			ac := &AcquisitionContext{
 				Track: TrackRef{Title: "Human", Artist: "The Human League", CatalogDuration: 264},
 				Ranked: []ports.AudioCandidate{
-					{URL: "https://music.youtube.com/watch?v=art", Duration: tc.byline, Resolved: true, Kind: ports.KindArtTrack},
+					{URL: "https://music.youtube.com/watch?v=art", Duration: tc.byline, Kind: ports.KindArtTrack},
 				},
 			}
 
@@ -575,7 +575,7 @@ func TestDownloadStep_AResolvedTrackMustMatchTheTargetLength(t *testing.T) {
 }
 
 func TestDownloadStep_AProbedFileOffTheTargetLengthIsRejectedAfterDownload(t *testing.T) {
-	art := ports.AudioCandidate{URL: "https://music.youtube.com/watch?v=art", Duration: 275, Resolved: true, Kind: ports.KindArtTrack}
+	art := ports.AudioCandidate{URL: "https://music.youtube.com/watch?v=art", Duration: 275, Kind: ports.KindArtTrack}
 	searcher := &fileWritingSearcher{writeFile: true}
 	step := NewDownloadStep(searcher, WithDownloadProber(&queueProber{durations: []float64{283}}))
 	ac := &AcquisitionContext{

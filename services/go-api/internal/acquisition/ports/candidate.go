@@ -28,7 +28,6 @@ type AudioCandidate struct {
 	Categories  []string
 	ViewCount   int64
 	Source      acqdomain.SourceName
-	Resolved    bool
 	Explicit    bool
 	Unplayable  string
 	Artists     []string

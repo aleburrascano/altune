@@ -142,7 +142,7 @@ func (c Candidate) builtByItsAdapter() (Candidate, error) {
 		return Candidate{}, err
 	}
 	c.Title, c.URL, c.Channel, c.Categories = emitted.Title, emitted.URL, emitted.Channel, emitted.Categories
-	c.Duration, c.ViewCount, c.Resolved, c.Kind = emitted.Duration, emitted.ViewCount, emitted.Resolved, string(emitted.Kind)
+	c.Duration, c.ViewCount, c.Resolved, c.Kind = emitted.Duration, emitted.ViewCount, emitted.IsResolved(), string(emitted.Kind)
 	c.Artists, c.Album, c.Explicit = emitted.Artists, emitted.Album, emitted.Explicit
 	return c, nil
 }
@@ -155,7 +155,6 @@ func (c Candidate) audioCandidate() ports.AudioCandidate {
 		Channel:     c.Channel,
 		Categories:  c.Categories,
 		ViewCount:   c.ViewCount,
-		Resolved:    c.Resolved,
 		Kind:        ports.CandidateKind(c.Kind),
 		ObservedOMV: ports.CandidateKind(c.Kind) == ports.KindPinnedVideo,
 		Artists:     c.Artists,

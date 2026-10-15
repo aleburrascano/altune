@@ -42,7 +42,6 @@ func candidate(url string) ports.AudioCandidate {
 
 func resolvedCandidate(url string) ports.AudioCandidate {
 	c := candidate(url)
-	c.Resolved = true
 	c.Kind = ports.KindArtTrack
 	return c
 }
@@ -196,7 +195,7 @@ func TestMergeSlots_PrefersTheResolvedSpellingOfOneVideo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mergeSlots returned error: %v", err)
 	}
-	if len(got) != 1 || !got[0].Resolved {
+	if len(got) != 1 || !got[0].IsResolved() {
 		t.Fatalf("got %v, want the one resolved candidate — dedupe must not drop a resolution", got)
 	}
 }
@@ -212,7 +211,7 @@ func TestMergeSlots_KeepsTheResolvedCandidateAheadOfALaterDuplicate(t *testing.T
 	if err != nil {
 		t.Fatalf("mergeSlots returned error: %v", err)
 	}
-	if len(got) != 1 || !got[0].Resolved {
+	if len(got) != 1 || !got[0].IsResolved() {
 		t.Fatalf("got %v, want the one resolved candidate — an unresolved duplicate must not displace it", got)
 	}
 }
@@ -373,14 +372,13 @@ func TestSourceRegistry_TheKindDecidesTheFallback(t *testing.T) {
 	artTrack.Kind = ports.KindArtTrack
 	upload := candidate("https://www.youtube.com/watch?v=def")
 	upload.Kind = ports.KindUpload
-	upload.Resolved = true
 
 	for name, tc := range map[string]struct {
 		hit          ports.AudioCandidate
 		wantFallback int
 	}{
-		"art track with the flag unset": {artTrack, 0},
-		"upload with the flag set":      {upload, 1},
+		"art track": {artTrack, 0},
+		"upload":    {upload, 1},
 	} {
 		t.Run(name, func(t *testing.T) {
 			first := &stubSource{name: "ytmsearch", found: []ports.AudioCandidate{tc.hit}}
