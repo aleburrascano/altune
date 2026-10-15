@@ -502,6 +502,9 @@ func TestGetKeepsTheMeasuredFileLengthBesideTheCatalogLength(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if snap == nil {
+		t.Fatal("want snapshot, got nil")
+	}
 	if snap.StoredDurationSeconds == nil || *snap.StoredDurationSeconds != 112 {
 		t.Fatalf("StoredDurationSeconds = %v, want the measured 112 not the catalog 128", snap.StoredDurationSeconds)
 	}
