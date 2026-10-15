@@ -45,6 +45,7 @@ type TrackSnapshot struct {
 	AudioSourceURL         *string
 	StoredDurationSeconds  *float64
 	RejectedSourceKeys     []string
+	Evidence               json.RawMessage
 	Status                 TrackStatus
 	Streamable             bool
 	Version                int

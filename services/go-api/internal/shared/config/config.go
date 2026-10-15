@@ -70,6 +70,14 @@ type Config struct {
 
 	AcquisitionDrainBudgetSeconds int `env:"ACQUISITION_DRAIN_BUDGET_SECONDS" envDefault:"60"`
 
+	AcquisitionUpgradeEnabled     bool `env:"ACQUISITION_UPGRADE_ENABLED" envDefault:"false"`
+	AcquisitionUpgradeDryRun      bool `env:"ACQUISITION_UPGRADE_DRY_RUN" envDefault:"false"`
+	AcquisitionUpgradePerHour     int  `env:"ACQUISITION_UPGRADE_PER_HOUR" envDefault:"30"`
+	AcquisitionUpgradeConcurrency int  `env:"ACQUISITION_UPGRADE_CONCURRENCY" envDefault:"1"`
+	AcquisitionUpgradeMaxTries    int  `env:"ACQUISITION_UPGRADE_MAX_TRIES" envDefault:"3"`
+
+	AcquisitionUpgradeRetryAfter time.Duration `env:"ACQUISITION_UPGRADE_RETRY_AFTER" envDefault:"24h"`
+
 	AcoustIDAPIKey string `env:"ACOUSTID_API_KEY"`
 	YtMusicEnabled bool   `env:"YTMUSIC_ENABLED" envDefault:"true"`
 	YtDLPEnabled   bool   `env:"YTDLP_ENABLED" envDefault:"true"`

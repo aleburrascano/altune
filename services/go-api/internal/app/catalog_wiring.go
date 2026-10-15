@@ -183,8 +183,9 @@ func (a *App) buildAcquisitionScheduler(
 		acqService.WithAcquireConfidenceFloor(a.cfg.AcquisitionConfidenceFloor),
 		acqService.WithAcquireTempWorkspace(tempfs.New()),
 		acqService.WithStoredAudioReader(storedAudioReader{store: audioStore}))
+	ledger := acqCatalogBridge.NewTrackLedger(trackRepo, acqCatalogBridge.WithLengthTolerance(a.cfg.AcquisitionLengthToleranceSeconds))
 	acquireSvc := acqService.NewAcquireTrackAudioService(
-		acqCatalogBridge.NewTrackLedger(trackRepo, acqCatalogBridge.WithLengthTolerance(a.cfg.AcquisitionLengthToleranceSeconds)),
+		ledger,
 		acqService.NewSourceRegistry(audioSources.first...).WithFallback(audioSources.fallback...),
 		audioStore,
 		acquireOpts...,
@@ -196,6 +197,9 @@ func (a *App) buildAcquisitionScheduler(
 		acqService.WithVerifySkipCount(skips.Count),
 		acqService.WithFingerprintVerified(lookups.Verified),
 		acqService.WithDrainBudget(time.Duration(a.cfg.AcquisitionDrainBudgetSeconds) * time.Second),
+	}
+	if a.upgradeEnabled() {
+		schedulerOpts = append(schedulerOpts, a.upgradeLane(ledger, acquireSvc))
 	}
 	if a.pool != nil {
 		schedulerOpts = append(schedulerOpts,

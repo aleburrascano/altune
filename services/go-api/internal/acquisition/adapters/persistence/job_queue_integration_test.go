@@ -778,3 +778,134 @@ func TestPgxJobQueue_FencedUpdatesWrapErrorsWithTheirOperation(t *testing.T) {
 		})
 	}
 }
+
+func TestPgxJobQueue_AnUpgradeKeepsTheTrackReadyWhileItIsQueued(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	queue := NewPgxJobQueue(pool)
+	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("keep")})
+
+	if err := queue.Enqueue(context.Background(), id, ports.JobKindUpgrade, 0); err != nil {
+		t.Fatalf("Enqueue upgrade = %v, want nil", err)
+	}
+
+	var status string
+	if err := pool.QueryRow(context.Background(), `SELECT acquisition_status FROM tracks WHERE id = $1`, id.UUID()).Scan(&status); err != nil {
+		t.Fatalf("read status: %v", err)
+	}
+	if status != "ready" {
+		t.Errorf("status while an upgrade is queued = %q, want ready (the old file keeps playing)", status)
+	}
+}
+
+func TestPgxJobQueue_AnUpgradeIsNeverQueuedForATrackWithoutAPlayableFile(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	queue := NewPgxJobQueue(pool)
+	track := insertPendingTrack(t, pool, time.Now().Add(time.Hour))
+
+	err := queue.Enqueue(context.Background(), track.ID, ports.JobKindUpgrade, 0)
+
+	if err == nil {
+		t.Fatal("Enqueue upgrade on a pending track = nil, want it refused")
+	}
+	var kind string
+	if err := pool.QueryRow(context.Background(), `SELECT acquisition_job_kind FROM tracks WHERE id = $1`, track.ID.UUID()).Scan(&kind); err != nil {
+		t.Fatalf("read kind: %v", err)
+	}
+	if kind == string(ports.JobKindUpgrade) {
+		t.Error("the refused enqueue still marked the track as an upgrade job")
+	}
+}
+
+func TestPgxJobQueue_UserAddsKeepPriorityOverUpgrades(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	queue := NewPgxJobQueue(pool)
+	ctx := context.Background()
+	upgrading := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("F"), sourceURL: sourceURL("up")})
+	if err := queue.Enqueue(ctx, upgrading, ports.JobKindUpgrade, 0); err != nil {
+		t.Fatalf("Enqueue upgrade = %v", err)
+	}
+	added := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
+
+	if _, err := queue.ClaimUpgrade(ctx, time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
+		t.Fatalf("ClaimUpgrade while a user add waits = %v, want ErrNoJobAvailable", err)
+	}
+	userJob, err := queue.Claim(ctx, time.Minute)
+	if err != nil {
+		t.Fatalf("Claim = %v, want the user's add (never the upgrade)", err)
+	}
+	if userJob.TrackID != added.ID || userJob.Kind != ports.JobKindAcquire {
+		t.Errorf("Claim returned %+v, want the user add %s", userJob, added.ID)
+	}
+	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
+		t.Fatalf("second Claim = %v, want ErrNoJobAvailable: the upgrade is not a user job", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE tracks SET acquisition_status = 'ready' WHERE id = $1`, added.ID.UUID()); err != nil {
+		t.Fatalf("mark the add ready: %v", err)
+	}
+	if err := queue.Settle(ctx, userJob.TrackID, userJob.Fence); err != nil {
+		t.Fatalf("Settle = %v", err)
+	}
+
+	upgrade, err := queue.ClaimUpgrade(ctx, time.Minute)
+	if err != nil {
+		t.Fatalf("ClaimUpgrade once no user add waits = %v, want the upgrade", err)
+	}
+	if upgrade.TrackID != upgrading || upgrade.Kind != ports.JobKindUpgrade {
+		t.Errorf("ClaimUpgrade returned %+v, want the upgrade of %s", upgrade, upgrading)
+	}
+}
+
+func TestPgxJobQueue_AnUpgradeNeverOverwritesAQueuedUserReplace(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	queue := NewPgxJobQueue(pool)
+	ctx := context.Background()
+	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("replaced")})
+	if err := queue.Enqueue(ctx, id, ports.JobKindReplace, time.Hour); err != nil {
+		t.Fatalf("Enqueue replace = %v", err)
+	}
+
+	err := queue.Enqueue(ctx, id, ports.JobKindUpgrade, 0)
+
+	if !errors.Is(err, acqdomain.ErrJobKindConflict) {
+		t.Fatalf("Enqueue upgrade over a queued replace = %v, want ErrJobKindConflict", err)
+	}
+	var kind string
+	var queued bool
+	if err := pool.QueryRow(ctx, `SELECT acquisition_job_kind, acquisition_available_at > now() + interval '30 minutes' FROM tracks WHERE id = $1`, id.UUID()).Scan(&kind, &queued); err != nil {
+		t.Fatalf("read job: %v", err)
+	}
+	if kind != string(ports.JobKindReplace) || !queued {
+		t.Errorf("kind = %q, queued for later = %v, want the user's replace untouched", kind, queued)
+	}
+}
+
+func TestPgxJobQueue_AUserReplaceTakesOverARunningUpgrade(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	queue := NewPgxJobQueue(pool)
+	ctx := context.Background()
+	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("running")})
+	if err := queue.Enqueue(ctx, id, ports.JobKindUpgrade, 0); err != nil {
+		t.Fatalf("Enqueue upgrade = %v", err)
+	}
+	upgrade, err := queue.ClaimUpgrade(ctx, time.Minute)
+	if err != nil || upgrade.TrackID != id {
+		t.Fatalf("ClaimUpgrade = %+v, %v, want the upgrade of the track", upgrade, err)
+	}
+
+	if err := queue.Enqueue(ctx, id, ports.JobKindReplace, 0); err != nil {
+		t.Fatalf("Enqueue replace over a running upgrade = %v, want the user's job to win", err)
+	}
+
+	if err := queue.Heartbeat(ctx, id, upgrade.Fence, time.Minute); !errors.Is(err, acqdomain.ErrLeaseLost) {
+		t.Errorf("upgrade Heartbeat = %v, want ErrLeaseLost so the upgrade stops", err)
+	}
+	replace, err := queue.Claim(ctx, time.Minute)
+	if err != nil || replace.TrackID != id || replace.Kind != ports.JobKindReplace {
+		t.Errorf("Claim = %+v, %v, want the user's replace right after", replace, err)
+	}
+}

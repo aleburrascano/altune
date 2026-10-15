@@ -23,6 +23,7 @@ type PgxJobQueue struct {
 
 var _ ports.JobQueue = (*PgxJobQueue)(nil)
 var _ ports.QueueDepthReader = (*PgxJobQueue)(nil)
+var _ ports.UpgradeJobQueue = (*PgxJobQueue)(nil)
 
 func NewPgxJobQueue(pool *pgxpool.Pool) *PgxJobQueue {
 	return &PgxJobQueue{pool: pool}
@@ -31,20 +32,28 @@ func NewPgxJobQueue(pool *pgxpool.Pool) *PgxJobQueue {
 const enqueueJobSQL = `
 UPDATE tracks
 SET acquisition_status = CASE
-		WHEN $2 = 'replace' AND acquisition_status = 'ready' THEN acquisition_status
+		WHEN $2 IN ('replace', 'upgrade') AND acquisition_status = 'ready' THEN acquisition_status
 		ELSE 'pending'
 	END,
 	acquisition_job_kind = $2,
 	acquisition_available_at = now() + make_interval(secs => $3),
 	acquisition_lease_until = CASE
+		WHEN acquisition_job_kind = 'upgrade' AND $2 <> 'upgrade' THEN NULL
 		WHEN (acquisition_status = 'pending' OR acquisition_available_at IS NOT NULL)
 			AND acquisition_lease_until >= now() THEN acquisition_lease_until
 	END,
+	acquisition_attempts = acquisition_attempts
+		+ CASE WHEN acquisition_job_kind = 'upgrade' AND $2 <> 'upgrade' THEN 1 ELSE 0 END,
 	acquisition_run_attempts = 0,
 	failure_reason = ''
 WHERE id = $1
 	AND (
-		(acquisition_status <> 'pending' AND acquisition_available_at IS NULL)
+		$2 <> 'upgrade'
+		OR (acquisition_status = 'ready' AND (acquisition_available_at IS NULL OR acquisition_job_kind = 'upgrade'))
+	)
+	AND (
+		(acquisition_job_kind = 'upgrade' AND $2 <> 'upgrade')
+		OR (acquisition_status <> 'pending' AND acquisition_available_at IS NULL)
 		OR acquisition_lease_until IS NULL
 		OR acquisition_lease_until < now()
 		OR acquisition_job_kind = $2
@@ -112,6 +121,7 @@ WITH candidate AS (
 	SELECT t.id
 	FROM tracks t
 	WHERE t.acquisition_available_at <= now()
+		AND t.acquisition_job_kind <> 'upgrade'
 		AND (t.acquisition_status = 'pending' OR t.acquisition_job_kind = 'replace')
 		AND (t.acquisition_lease_until IS NULL OR t.acquisition_lease_until < now())
 	ORDER BY (
@@ -123,7 +133,29 @@ WITH candidate AS (
 	FOR UPDATE OF t SKIP LOCKED
 	LIMIT 1
 )
-UPDATE tracks
+` + leaseClaimedJobSQL
+
+const claimUpgradeJobSQL = `
+WITH candidate AS (
+	SELECT t.id
+	FROM tracks t
+	WHERE t.acquisition_available_at <= now()
+		AND t.acquisition_job_kind = 'upgrade'
+		AND (t.acquisition_lease_until IS NULL OR t.acquisition_lease_until < now())
+		AND NOT EXISTS (
+			SELECT 1 FROM tracks u
+			WHERE u.acquisition_available_at <= now()
+				AND u.acquisition_job_kind <> 'upgrade'
+				AND (u.acquisition_status = 'pending' OR u.acquisition_job_kind = 'replace')
+				AND (u.acquisition_lease_until IS NULL OR u.acquisition_lease_until < now())
+		)
+	ORDER BY t.acquisition_available_at
+	FOR UPDATE OF t SKIP LOCKED
+	LIMIT 1
+)
+` + leaseClaimedJobSQL
+
+const leaseClaimedJobSQL = `UPDATE tracks
 SET acquisition_lease_until = now() + make_interval(secs => $1),
 	acquisition_attempts = acquisition_attempts + 1,
 	acquisition_run_attempts = acquisition_run_attempts + 1,
@@ -134,9 +166,28 @@ RETURNING tracks.id, tracks.user_id, tracks.acquisition_job_kind, tracks.acquisi
 	GREATEST(EXTRACT(EPOCH FROM now() - tracks.acquisition_available_at), 0)::float8`
 
 func (q *PgxJobQueue) Claim(ctx context.Context, lease time.Duration) (ports.Job, error) {
+	return q.claim(ctx, claimJobSQL, lease)
+}
+
+func (q *PgxJobQueue) ClaimUpgrade(ctx context.Context, lease time.Duration) (ports.Job, error) {
+	return q.claim(ctx, claimUpgradeJobSQL, lease)
+}
+
+func (q *PgxJobQueue) claim(ctx context.Context, sql string, lease time.Duration) (ports.Job, error) {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
 
+	job, err := scanClaimedJob(q.pool.QueryRow(ctx, sql, lease.Seconds()))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.Job{}, acqdomain.ErrNoJobAvailable
+	}
+	if err != nil {
+		return ports.Job{}, fmt.Errorf("claim acquisition job: %w", err)
+	}
+	return job, nil
+}
+
+func scanClaimedJob(row pgx.Row) (ports.Job, error) {
 	var (
 		trackID  shared.TrackId
 		userID   shared.UserId
@@ -145,13 +196,8 @@ func (q *PgxJobQueue) Claim(ctx context.Context, lease time.Duration) (ports.Job
 		run      int
 		waited   float64
 	)
-	row := q.pool.QueryRow(ctx, claimJobSQL, lease.Seconds())
-	err := scanTrackClaim(row, &trackID, &userID, &kind, &attempts, &run, &waited)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ports.Job{}, acqdomain.ErrNoJobAvailable
-	}
-	if err != nil {
-		return ports.Job{}, fmt.Errorf("claim acquisition job: %w", err)
+	if err := scanTrackClaim(row, &trackID, &userID, &kind, &attempts, &run, &waited); err != nil {
+		return ports.Job{}, err
 	}
 	return ports.Job{
 		TrackID: trackID, UserID: userID, Kind: ports.JobKind(kind), Attempts: attempts, Run: run, Fence: ports.Fence(attempts),

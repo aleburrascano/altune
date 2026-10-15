@@ -170,6 +170,29 @@ func (c *Config) validateAudioKeyPrefix() error {
 	return nil
 }
 
+const (
+	maxAcquisitionUpgradePerHour    = 3600
+	minAcquisitionUpgradeRetryAfter = time.Minute
+	maxAcquisitionUpgradeRetryAfter = 30 * 24 * time.Hour
+)
+
+func (c *Config) validateAcquisitionUpgrade() error {
+	if c.AcquisitionUpgradePerHour < 1 || c.AcquisitionUpgradePerHour > maxAcquisitionUpgradePerHour {
+		return fmt.Errorf("ACQUISITION_UPGRADE_PER_HOUR must be between 1 and %d, got %d", maxAcquisitionUpgradePerHour, c.AcquisitionUpgradePerHour)
+	}
+	if c.AcquisitionUpgradeConcurrency < 1 {
+		return fmt.Errorf("ACQUISITION_UPGRADE_CONCURRENCY must be >= 1, got %d", c.AcquisitionUpgradeConcurrency)
+	}
+	if c.AcquisitionUpgradeMaxTries < 1 {
+		return fmt.Errorf("ACQUISITION_UPGRADE_MAX_TRIES must be >= 1, got %d", c.AcquisitionUpgradeMaxTries)
+	}
+	if c.AcquisitionUpgradeRetryAfter < minAcquisitionUpgradeRetryAfter || c.AcquisitionUpgradeRetryAfter > maxAcquisitionUpgradeRetryAfter {
+		return fmt.Errorf("ACQUISITION_UPGRADE_RETRY_AFTER must be between %s and %s, got %s",
+			minAcquisitionUpgradeRetryAfter, maxAcquisitionUpgradeRetryAfter, c.AcquisitionUpgradeRetryAfter)
+	}
+	return nil
+}
+
 func (c *Config) validateRedis() error {
 	if c.RedisURL == "" {
 		return nil
@@ -197,6 +220,9 @@ func (c *Config) validateTuning() error {
 	}
 	if c.AcquisitionDrainBudgetSeconds < 1 {
 		return fmt.Errorf("ACQUISITION_DRAIN_BUDGET_SECONDS must be >= 1, got %d", c.AcquisitionDrainBudgetSeconds)
+	}
+	if err := c.validateAcquisitionUpgrade(); err != nil {
+		return err
 	}
 	if c.PlaybackQueueRateEvery <= 0 {
 		return fmt.Errorf("PLAYBACK_QUEUE_RATE_EVERY must be > 0, got %s", c.PlaybackQueueRateEvery)

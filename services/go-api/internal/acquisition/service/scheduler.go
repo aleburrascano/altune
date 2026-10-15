@@ -3,6 +3,7 @@ package service
 import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service/upgrade"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
@@ -72,6 +73,9 @@ type BackgroundAcquisitionScheduler struct {
 	now                 func() time.Time
 	outcomes            ports.OutcomeRecorder
 	outcomeWG           sync.WaitGroup
+
+	upgrader       upgradeRunner
+	upgradeWorkers int
 }
 
 func NewBackgroundAcquisitionScheduler(
@@ -117,9 +121,33 @@ func NewBackgroundAcquisitionScheduler(
 	}
 	for range workers {
 		s.runnersWG.Add(1)
-		go s.runWorker()
+		go s.runWorker(s.claimJob)
 	}
+	s.startUpgradeWorkers()
 	return s
+}
+
+func (s *BackgroundAcquisitionScheduler) startUpgradeWorkers() {
+	if s.upgrader == nil {
+		return
+	}
+	queue, ok := s.queue.(ports.UpgradeJobQueue)
+	if !ok {
+		slog.ErrorContext(s.baseCtx, "acquisition.upgrade_lane_unavailable", "reason", "the job queue cannot claim upgrade jobs")
+		return
+	}
+	claim := func() (ports.Job, bool) { return s.claimFrom(queue.ClaimUpgrade) }
+	for range s.upgradeWorkers {
+		s.runnersWG.Add(1)
+		go s.runWorker(claim)
+	}
+}
+
+func (s *BackgroundAcquisitionScheduler) eventsFor(kind ports.JobKind) events.Publisher {
+	if kind == ports.JobKindUpgrade {
+		return events.NoopPublisher()
+	}
+	return s.events
 }
 
 func (s *BackgroundAcquisitionScheduler) verificationStatus() ports.AcquisitionVerification {
@@ -142,7 +170,7 @@ func (s *BackgroundAcquisitionScheduler) Resume() {
 	notifyWake(s.wake)
 }
 
-func (s *BackgroundAcquisitionScheduler) runWorker() {
+func (s *BackgroundAcquisitionScheduler) runWorker(claim func() (ports.Job, bool)) {
 	defer s.runnersWG.Done()
 	for {
 		if s.closed.Load() {
@@ -154,7 +182,7 @@ func (s *BackgroundAcquisitionScheduler) runWorker() {
 			}
 			continue
 		}
-		job, ok := s.claimJob()
+		job, ok := claim()
 		if !ok {
 			if !s.idleWait() {
 				return
@@ -166,20 +194,26 @@ func (s *BackgroundAcquisitionScheduler) runWorker() {
 }
 
 func (s *BackgroundAcquisitionScheduler) claimJob() (ports.Job, bool) {
+	return s.claimFrom(s.queue.Claim)
+}
+
+type claimFunc func(ctx context.Context, lease time.Duration) (ports.Job, error)
+
+func (s *BackgroundAcquisitionScheduler) claimFrom(claim claimFunc) (ports.Job, bool) {
 	s.admitMu.RLock()
 	defer s.admitMu.RUnlock()
 	if s.closed.Load() {
 		return ports.Job{}, false
 	}
-	job, ok := s.claimNext()
+	job, ok := s.claimNext(claim)
 	if ok {
 		s.jobsWG.Add(1)
 	}
 	return job, ok
 }
 
-func (s *BackgroundAcquisitionScheduler) claimNext() (ports.Job, bool) {
-	job, err := s.queue.Claim(s.baseCtx, s.leaseDuration)
+func (s *BackgroundAcquisitionScheduler) claimNext(claim claimFunc) (ports.Job, bool) {
+	job, err := claim(s.baseCtx, s.leaseDuration)
 	if errors.Is(err, acqdomain.ErrNoJobAvailable) {
 		return ports.Job{}, false
 	}
@@ -226,7 +260,7 @@ func (s *BackgroundAcquisitionScheduler) startClaimedJob(jobCtx context.Context,
 	s.inflightCount.Add(1)
 	s.log.register(key, "")
 	s.log.markRunning(key)
-	reporter := schedulerJobReporter{ctx: jobCtx, log: s.log, events: s.events, trackID: key, userId: job.UserID}
+	reporter := schedulerJobReporter{ctx: jobCtx, log: s.log, events: s.eventsFor(job.Kind), trackID: key, userId: job.UserID}
 	reporter.timing("queue", job.Waited)
 	return withJobReporter(jobCtx, reporter)
 }
@@ -238,10 +272,14 @@ func (s *BackgroundAcquisitionScheduler) stopClaimedJob(cancelJob context.Cancel
 }
 
 func (s *BackgroundAcquisitionScheduler) acquisitionRunFor(kind ports.JobKind) acquisitionRun {
-	if kind == ports.JobKindReplace {
+	switch kind {
+	case ports.JobKindReplace:
 		return s.svc.ExecuteReplace
+	case ports.JobKindUpgrade:
+		return s.upgrader.ExecuteUpgrade
+	default:
+		return s.svc.Execute
 	}
-	return s.svc.Execute
 }
 
 func (s *BackgroundAcquisitionScheduler) jobContextFor(key string, attempt int) (context.Context, context.CancelFunc) {
@@ -270,6 +308,11 @@ func (s *BackgroundAcquisitionScheduler) completeClaimedJob(ctx context.Context,
 		record := s.log.complete(key, ports.JobCancelled, "shutdown")
 		s.recordOutcome(ctx, record)
 		slog.WarnContext(ctx, "background acquisition cancelled for shutdown", "track_id", key)
+		return
+	}
+	if errors.Is(err, upgrade.ErrKept) {
+		record := s.log.complete(key, ports.JobKept, "")
+		s.recordOutcome(ctx, record)
 		return
 	}
 	if err != nil {

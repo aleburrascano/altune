@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/acquisition/adapters/catalogbridge"
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	acqports "altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service/upgrade"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
@@ -2711,5 +2712,95 @@ func TestBackgroundScheduler_OutcomeCarriesStageTimesSourceHostAndFileFacts(t *t
 	}
 	if got.StageMs["search"] != 500 || got.Source.ID != "251" || got.Stored.Bytes != 4096 {
 		t.Errorf("outcome = %+v, want the job's stage times and file facts", got)
+	}
+}
+
+type orderedAcquirer struct {
+	stubAcquirer
+	releaseFirst chan struct{}
+	firstStarted chan struct{}
+	firstOnce    sync.Once
+}
+
+func (a *orderedAcquirer) Execute(context.Context, shared.UserId, domain.TrackId) error {
+	a.firstOnce.Do(func() {
+		close(a.firstStarted)
+		<-a.releaseFirst
+	})
+	a.record("Execute")
+	return nil
+}
+
+func (a *orderedAcquirer) ExecuteUpgrade(context.Context, shared.UserId, domain.TrackId) error {
+	a.record("ExecuteUpgrade")
+	return nil
+}
+
+func TestBackgroundScheduler_UpgradeJobsRunOnTheUpgradeLaneAfterEveryWaitingUserAdd(t *testing.T) {
+	acq := &orderedAcquirer{releaseFirst: make(chan struct{}), firstStarted: make(chan struct{})}
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
+		WithPollInterval(5*time.Millisecond),
+		WithUpgradeLane(acq, 1))
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(acq.releaseFirst) }) }
+	t.Cleanup(func() {
+		release()
+		scheduler.Shutdown(context.Background())
+	})
+	ctx := context.Background()
+	user := shared.NewUserId(uuid.New())
+
+	if err := scheduler.Schedule(ctx, user, domain.NewTrackId(), ""); err != nil {
+		t.Fatalf("Schedule: %v", err)
+	}
+	<-acq.firstStarted
+	if err := scheduler.Schedule(ctx, user, domain.NewTrackId(), ""); err != nil {
+		t.Fatalf("Schedule: %v", err)
+	}
+	if err := scheduler.ScheduleUpgrade(ctx, user, domain.NewTrackId()); err != nil {
+		t.Fatalf("ScheduleUpgrade: %v", err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if ran := acq.entryPointsRun(); len(ran) != 0 {
+		t.Fatalf("ran %v while the user's add was still waiting, want the upgrade held back", ran)
+	}
+	release()
+	wg.Wait()
+
+	got := acq.entryPointsRun()
+	want := []string{"Execute", "Execute", "ExecuteUpgrade"}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
+		t.Errorf("entry points run = %v, want %v: user adds first, the upgrade last", got, want)
+	}
+}
+
+type keptUpgrader struct{ stubAcquirer }
+
+func (*keptUpgrader) ExecuteUpgrade(context.Context, shared.UserId, domain.TrackId) error {
+	return upgrade.ErrKept
+}
+
+func TestBackgroundScheduler_AKeptUpgradeIsRecordedAsKeptNotAsSuccessOrFailure(t *testing.T) {
+	recorder := newFakeOutcomeRecorder()
+	acq := &keptUpgrader{}
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
+		WithPollInterval(5*time.Millisecond),
+		WithOutcomeRecorder(recorder),
+		WithUpgradeLane(acq, 1))
+	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
+
+	if err := scheduler.ScheduleUpgrade(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId()); err != nil {
+		t.Fatalf("ScheduleUpgrade: %v", err)
+	}
+	wg.Wait()
+
+	got := assertExactlyOneOutcome(t, recorder.calls)
+	if got.Outcome != acqports.JobKept {
+		t.Errorf("outcome = %q, want %q", got.Outcome, acqports.JobKept)
+	}
+	if status := scheduler.Status(); status.Succeeded != 0 || status.Failed != 0 {
+		t.Errorf("succeeded = %d, failed = %d, want a kept file to move neither", status.Succeeded, status.Failed)
 	}
 }

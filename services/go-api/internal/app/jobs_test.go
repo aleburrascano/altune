@@ -165,6 +165,7 @@ var allJobNameConsts = []jobName{
 	jobAcquisitionSourceCanary,
 	jobStreamRecovery,
 	jobAcquisitionPrune,
+	jobAcquisitionUpgrade,
 }
 
 func TestKnownJobNames_PinnedToEveryConst(t *testing.T) {

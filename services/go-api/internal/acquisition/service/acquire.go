@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service/upgrade"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/redact"
@@ -194,19 +195,49 @@ func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId sh
 	if err != nil || track == nil {
 		return err
 	}
+	_, err = s.replaceLoaded(ctx, jobCtx, userId, track, upgrade.Gate{})
+	return err
+}
+
+func (s *AcquireTrackAudioService) ReplaceGated(ctx context.Context, userId shared.UserId, track *ports.TrackSnapshot, gate upgrade.Gate) (upgrade.Attempt, error) {
+	jobCtx := ctx
+	ctx, cancel := context.WithTimeout(ctx, acquireTimeout)
+	defer cancel()
+	ac, err := s.withoutUserEvents().replaceLoaded(ctx, jobCtx, userId, track, gate)
+	return attemptOf(ac, err), err
+}
+
+func (s *AcquireTrackAudioService) withoutUserEvents() *AcquireTrackAudioService {
+	quiet := *s
+	quiet.events = events.NoopPublisher()
+	return &quiet
+}
+
+func attemptOf(ac *AcquisitionContext, err error) upgrade.Attempt {
+	attempt := upgrade.Attempt{NoSource: err != nil && foundNoSource(err)}
+	if ac != nil && ac.Selected != nil {
+		attempt.SourceKey = sourceKey(ac.Selected.URL)
+		attempt.Grade = ac.collectEvidence().Grade
+	}
+	return attempt
+}
+
+func (s *AcquireTrackAudioService) replaceLoaded(ctx, jobCtx context.Context, userId shared.UserId, track *ports.TrackSnapshot, gate upgrade.Gate) (*AcquisitionContext, error) {
+	trackId := track.ID
 	ac := s.startAcquisition(ctx, userId, trackId, track)
+	ac.Replace.Gate = gate
 	defer s.observe(ac)
 	defer CleanupTemp(ctx, s.workspace, ac)
 	if err := configureReplaceExclusion(ctx, ac, track, trackId); err != nil {
-		return s.settleReplaceFailure(ctx, jobCtx, userId, trackId, err, ac)
+		return ac, s.settleReplaceFailure(ctx, jobCtx, userId, trackId, err, ac)
 	}
 	s.fingerprintStoredFile(ctx, ac, track, trackId)
 	s.loadPriorRejections(ctx, ac)
 	if err := s.runAcquisition(ctx, userId, trackId, ac); err != nil {
-		return s.settleReplaceFailure(ctx, jobCtx, userId, trackId, err, ac)
+		return ac, s.settleReplaceFailure(ctx, jobCtx, userId, trackId, err, ac)
 	}
 	s.deleteSupersededAudio(ctx, userId, trackId, ac)
-	return nil
+	return ac, nil
 }
 
 func (s *AcquireTrackAudioService) settleReplaceFailure(ctx, jobCtx context.Context, userId shared.UserId, trackId shared.TrackId, err error, ac *AcquisitionContext) error {

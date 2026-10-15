@@ -267,3 +267,89 @@ func TestMemJobQueue_SettleWithAnExpiredClaimsFenceKeepsAJobEnqueuedAfterTheLeas
 		t.Fatalf("Claim after the stale Settle = %v, want the enqueued job", err)
 	}
 }
+
+func TestMemJobQueue_UserAddsKeepPriorityOverUpgrades(t *testing.T) {
+	q := newMemJobQueue(nil)
+	ctx := context.Background()
+	upgrading, added := domain.NewTrackId(), domain.NewTrackId()
+	if err := q.Enqueue(ctx, upgrading, ports.JobKindUpgrade, 0); err != nil {
+		t.Fatalf("Enqueue upgrade = %v", err)
+	}
+	if err := q.Enqueue(ctx, added, ports.JobKindAcquire, 0); err != nil {
+		t.Fatalf("Enqueue add = %v", err)
+	}
+
+	if _, err := q.ClaimUpgrade(ctx, time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
+		t.Fatalf("ClaimUpgrade while a user add waits = %v, want ErrNoJobAvailable", err)
+	}
+	userJob, err := q.Claim(ctx, time.Minute)
+	if err != nil || userJob.TrackID != added {
+		t.Fatalf("Claim = %+v, %v, want the user's add", userJob, err)
+	}
+	if _, err := q.Claim(ctx, time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
+		t.Fatalf("second Claim = %v, want ErrNoJobAvailable: an upgrade is not a user job", err)
+	}
+	if err := q.Settle(ctx, userJob.TrackID, userJob.Fence); err != nil {
+		t.Fatalf("Settle = %v", err)
+	}
+
+	upgrade, err := q.ClaimUpgrade(ctx, time.Minute)
+	if err != nil || upgrade.TrackID != upgrading || upgrade.Kind != ports.JobKindUpgrade {
+		t.Fatalf("ClaimUpgrade = %+v, %v, want the upgrade once no user add waits", upgrade, err)
+	}
+}
+
+func TestMemJobQueue_UpgradesAreNotCountedInTheUserQueueDepth(t *testing.T) {
+	q := newMemJobQueue(nil)
+	if err := q.Enqueue(context.Background(), domain.NewTrackId(), ports.JobKindUpgrade, 0); err != nil {
+		t.Fatalf("Enqueue upgrade = %v", err)
+	}
+
+	pending, _, err := q.PendingDepth(context.Background())
+
+	if err != nil || pending != 0 {
+		t.Errorf("PendingDepth = %d, %v, want 0: the depth alert is about user adds", pending, err)
+	}
+}
+
+func TestMemJobQueue_AnUpgradeNeverOverwritesAQueuedUserJob(t *testing.T) {
+	q := newMemJobQueue(nil)
+	ctx := context.Background()
+	trackID := domain.NewTrackId()
+	if err := q.Enqueue(ctx, trackID, ports.JobKindReplace, 0); err != nil {
+		t.Fatalf("Enqueue replace = %v", err)
+	}
+
+	if err := q.Enqueue(ctx, trackID, ports.JobKindUpgrade, 0); !errors.Is(err, acqdomain.ErrJobKindConflict) {
+		t.Fatalf("Enqueue upgrade over a queued replace = %v, want ErrJobKindConflict", err)
+	}
+
+	job, err := q.Claim(ctx, time.Minute)
+	if err != nil || job.Kind != ports.JobKindReplace {
+		t.Errorf("Claim = %+v, %v, want the user's replace still queued", job, err)
+	}
+}
+
+func TestMemJobQueue_AUserJobTakesOverARunningUpgrade(t *testing.T) {
+	q := newMemJobQueue(nil)
+	ctx := context.Background()
+	trackID := domain.NewTrackId()
+	if err := q.Enqueue(ctx, trackID, ports.JobKindUpgrade, 0); err != nil {
+		t.Fatalf("Enqueue upgrade = %v", err)
+	}
+	upgrade, err := q.ClaimUpgrade(ctx, time.Minute)
+	if err != nil {
+		t.Fatalf("ClaimUpgrade = %v", err)
+	}
+
+	if err := q.Enqueue(ctx, trackID, ports.JobKindReplace, 0); err != nil {
+		t.Fatalf("Enqueue replace over a running upgrade = %v, want the user's job to win", err)
+	}
+
+	if err := q.Heartbeat(ctx, trackID, upgrade.Fence, time.Minute); !errors.Is(err, acqdomain.ErrLeaseLost) {
+		t.Errorf("upgrade Heartbeat = %v, want ErrLeaseLost so the upgrade stops", err)
+	}
+	if job, err := q.Claim(ctx, time.Minute); err != nil || job.Kind != ports.JobKindReplace {
+		t.Errorf("Claim = %+v, %v, want the user's replace", job, err)
+	}
+}

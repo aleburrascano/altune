@@ -14,6 +14,10 @@ func (s *BackgroundAcquisitionScheduler) ScheduleReplace(ctx context.Context, us
 	return s.enqueue(ctx, userId, trackId, ports.JobKindReplace)
 }
 
+func (s *BackgroundAcquisitionScheduler) ScheduleUpgrade(ctx context.Context, userId shared.UserId, trackId shared.TrackId) error {
+	return s.enqueue(ctx, userId, trackId, ports.JobKindUpgrade)
+}
+
 func (s *BackgroundAcquisitionScheduler) Schedule(ctx context.Context, userId shared.UserId, trackId shared.TrackId, _ string) error {
 	return s.enqueue(ctx, userId, trackId, ports.JobKindAcquire)
 }

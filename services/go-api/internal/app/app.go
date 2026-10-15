@@ -208,6 +208,7 @@ func (a *App) startCatalogJobs(ctx context.Context, cat catalogWiring, playback 
 			acqPersistence.NewPgxOutcomeStore(a.pool),
 			acqPersistence.NewPgxRejectionStore(a.pool))
 	}
+	a.startAcquisitionUpgradeIfEnabled(ctx, cat.scheduler)
 }
 
 func (a *App) applyDisabledJobs(ctx context.Context) error {

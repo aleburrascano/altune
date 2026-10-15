@@ -21,6 +21,7 @@ const (
 	JobSucceeded JobState = "succeeded"
 	JobFailed    JobState = "failed"
 	JobCancelled JobState = "cancelled"
+	JobKept      JobState = "kept"
 )
 
 type VerifySkipRecorder interface {

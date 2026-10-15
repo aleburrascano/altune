@@ -11,6 +11,7 @@ type JobKind string
 const (
 	JobKindAcquire JobKind = "acquire"
 	JobKindReplace JobKind = "replace"
+	JobKindUpgrade JobKind = "upgrade"
 )
 
 type Job struct {
@@ -31,6 +32,10 @@ type JobQueue interface {
 	Heartbeat(ctx context.Context, trackID shared.TrackId, fence Fence, lease time.Duration) error
 	Release(ctx context.Context, trackID shared.TrackId, fence Fence, delay time.Duration) error
 	Settle(ctx context.Context, trackID shared.TrackId, fence Fence) error
+}
+
+type UpgradeJobQueue interface {
+	ClaimUpgrade(ctx context.Context, lease time.Duration) (Job, error)
 }
 
 type QueueDepthReader interface {

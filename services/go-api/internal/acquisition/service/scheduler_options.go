@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
 	"context"
 	"log/slog"
@@ -87,6 +88,17 @@ func WithVerifySkipCount(count func() uint64) func(*BackgroundAcquisitionSchedul
 
 func WithFingerprintVerified(verified func() bool) func(*BackgroundAcquisitionScheduler) {
 	return func(s *BackgroundAcquisitionScheduler) { s.fingerprintVerified = verified }
+}
+
+type upgradeRunner interface {
+	ExecuteUpgrade(ctx context.Context, userId shared.UserId, trackId shared.TrackId) error
+}
+
+func WithUpgradeLane(runner upgradeRunner, workers int) func(*BackgroundAcquisitionScheduler) {
+	return func(s *BackgroundAcquisitionScheduler) {
+		s.upgrader = runner
+		s.upgradeWorkers = workers
+	}
 }
 
 type VerifySkipCounter struct{ n atomic.Uint64 }

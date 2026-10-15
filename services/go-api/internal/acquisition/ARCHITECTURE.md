@@ -198,6 +198,9 @@ service/                 the orchestration: pipeline shape, the pure decisions, 
   failure_reason.go      failureReason, failureCode, isCancellation, withCancellation, reasonForStep
   temp_workspace.go      SweepStaleTempDirs — startup call into ports.TempWorkspace.SweepAbandoned (the reap itself lives in adapters/tempfs); CleanupTemp(ctx, ws, ac) removes TempDir through ports.TempWorkspace; also holds `defaultTempWorkspace`, nil in production and set by the service tests
   scheduler.go           BackgroundAcquisitionScheduler, Pause/Resume, Status, Shutdown
+  scheduler_upgrade.go   the upgrade lane's workers, ScheduleUpgrade, the silent event publisher for upgrade jobs
+  upgrade.go             ExecuteUpgrade, ReplaceGate (the ratchet), give-up bookkeeping
+  upgrade_planner.go     UpgradePlanner: one picked track per tick, enqueued as an upgrade job
   job_log.go             jobLog: the recent ring, counters (records are ports.JobRecord)
   job_telemetry.go       the jobReporter context seam and its schedulerJobReporter
   domain/admission_error.go admissionError and the admission sentinels (package domain)
@@ -453,6 +456,34 @@ migration 019, instead of failing retry/reacquire with 500. It tries Postgres on
 every call, so the durable window resumes without a restart once 019 is applied;
 any other store error still fails the request.
 
+### The upgrade lane
+
+Off by default (`ACQUISITION_UPGRADE_ENABLED`). A leader-only ticker (`acquisition upgrade`,
+one tick every `1h / ACQUISITION_UPGRADE_PER_HOUR`) asks `ports.UpgradeStore.Candidates` for
+one track: ready, from a source (`audio_source_url` set, so a user upload is never picked),
+graded below A (a missing grade counts as D), not queued, not tried in the last 24h, and not
+marked `best_available` for the current `grade.PipelineGeneration`. Worst grade first, then
+the longest untried. It is enqueued as a `JobKindUpgrade` job, which leaves the track `ready`
+and playing.
+
+`ACQUISITION_UPGRADE_CONCURRENCY` extra workers claim upgrade jobs with `ClaimUpgrade`, which
+returns nothing while any user job (acquire or replace) is claimable, and the user workers'
+`Claim` never returns an upgrade job. A planned track is only enqueued while fewer than that
+many upgrade jobs are queued or running. Upgrade jobs publish no events to the user.
+
+`ExecuteUpgrade` runs the replace flow (`replaceLoaded`) with a `ReplaceGate` holding the
+stored grade. `UpdateTrackStep` asks the gate before it commits: the new file's grade must beat
+the stored one (`Grade.Beats`, F < D < C < B < A, strictly), else the step fails with
+`ErrNotAnUpgrade`, the pipeline rolls back the per-attempt copy it stored, and the old file
+is never touched. A kept file counts as a try and adds the tried source to
+`rejected_source_keys`. At `ACQUISITION_UPGRADE_MAX_TRIES` counted tries, `GiveUp` writes
+`best_available_generation` and `best_available_reason` into the evidence; the track is picked
+again only when `PipelineGeneration` is bumped. A failure that says nothing about the sources
+(storage, an outage, cancellation) counts nothing. A successful swap writes fresh evidence, so
+all of this state resets. `ACQUISITION_UPGRADE_DRY_RUN` runs the whole pipeline, swaps nothing,
+rejects nothing, counts nothing, and logs `acquisition.upgrade_outcome` with `from`, `to` and
+`outcome` (`would_upgrade`, `kept_current`, `no_better_source`).
+
 ---
 
 ## 6. Invariant checklist
@@ -467,6 +498,8 @@ A change should preserve all of these; if it can't, that's the discussion.
 - Exclusion matches a normalized `sourceKey`, and a key is normalized exactly once.
 - A replace never drops a previously rejected source from the set.
 - A failed replace never publishes `track_acquisition_failed`.
+- An upgrade swaps the file only when the new grade is strictly higher; otherwise the old file stays and the new one is deleted. A user upload (no `audio_source_url`) and a grade A track are never upgraded.
+- An upgrade job never starts while a user add is claimable, and never publishes to the user.
 - A replace never writes over the audio the track is serving: it stores under a per-attempt ref, and the superseded object is deleted only after `update_track` commits.
 - Event names stay literal at their `Publish` call sites.
 - Every stage implements `Rollback` honestly.

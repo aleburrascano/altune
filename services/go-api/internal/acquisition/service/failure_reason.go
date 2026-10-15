@@ -56,6 +56,15 @@ func failureCode(err error) shared.FailureCode {
 	return shared.FailureAcquisitionFailed
 }
 
+func foundNoSource(err error) bool {
+	switch failureCode(err) {
+	case shared.FailureNoMatchFound, shared.FailureNoConfidentMatch, shared.FailureDownloadFailed:
+		return true
+	default:
+		return false
+	}
+}
+
 func isCancellation(err error) bool {
 	return errors.Is(err, context.Canceled) ||
 		errors.Is(err, context.DeadlineExceeded)

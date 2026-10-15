@@ -33,6 +33,7 @@ type memJob struct {
 var (
 	_ ports.JobQueue         = (*memJobQueue)(nil)
 	_ ports.QueueDepthReader = (*memJobQueue)(nil)
+	_ ports.UpgradeJobQueue  = (*memJobQueue)(nil)
 )
 
 func newMemJobQueue(wake chan<- struct{}) *memJobQueue {
@@ -60,6 +61,10 @@ func (q *memJobQueue) rememberUser(trackID shared.TrackId, userID shared.UserId)
 
 func (q *memJobQueue) Enqueue(_ context.Context, trackID shared.TrackId, kind ports.JobKind, delay time.Duration) error {
 	q.mu.Lock()
+	if existing, queued := q.jobs[trackID]; queued && kind == ports.JobKindUpgrade && existing.kind != ports.JobKindUpgrade {
+		q.mu.Unlock()
+		return acqdomain.ErrJobKindConflict
+	}
 	j := q.jobOrNew(trackID)
 	availableAt := q.now().Add(delay)
 	if held, err := q.enqueueLive(j, kind, availableAt); held {
@@ -97,6 +102,9 @@ func (q *memJobQueue) enqueueLive(j *memJob, kind ports.JobKind, availableAt tim
 		return false, nil
 	}
 	running := j.kind
+	if running == ports.JobKindUpgrade && kind != ports.JobKindUpgrade {
+		return false, nil
+	}
 	if running != kind {
 		q.mu.Unlock()
 		return true, acqdomain.ErrJobKindConflict
@@ -112,9 +120,25 @@ func (q *memJobQueue) enqueueLive(j *memJob, kind ports.JobKind, availableAt tim
 func (q *memJobQueue) Claim(_ context.Context, lease time.Duration) (ports.Job, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	return q.claimMatching(lease, isUserJob)
+}
 
+func (q *memJobQueue) ClaimUpgrade(_ context.Context, lease time.Duration) (ports.Job, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if _, userJob := q.findClaimable(q.now(), isUserJob); userJob != nil {
+		return ports.Job{}, acqdomain.ErrNoJobAvailable
+	}
+	return q.claimMatching(lease, isUpgradeJob)
+}
+
+func isUserJob(j *memJob) bool { return j.kind != ports.JobKindUpgrade }
+
+func isUpgradeJob(j *memJob) bool { return j.kind == ports.JobKindUpgrade }
+
+func (q *memJobQueue) claimMatching(lease time.Duration, match func(*memJob) bool) (ports.Job, error) {
 	now := q.now()
-	bestID, best := q.findClaimable(now)
+	bestID, best := q.findClaimable(now, match)
 	if best == nil {
 		return ports.Job{}, acqdomain.ErrNoJobAvailable
 	}
@@ -137,7 +161,7 @@ func (q *memJobQueue) PendingDepth(_ context.Context) (int, time.Duration, error
 	pending := 0
 	var oldest time.Time
 	for _, j := range q.jobs {
-		if j.leased && now.Before(j.leaseUntil) {
+		if isUpgradeJob(j) || (j.leased && now.Before(j.leaseUntil)) {
 			continue
 		}
 		pending++
@@ -151,10 +175,13 @@ func (q *memJobQueue) PendingDepth(_ context.Context) (int, time.Duration, error
 	return pending, now.Sub(oldest), nil
 }
 
-func (q *memJobQueue) findClaimable(now time.Time) (shared.TrackId, *memJob) {
+func (q *memJobQueue) findClaimable(now time.Time, match func(*memJob) bool) (shared.TrackId, *memJob) {
 	var bestID shared.TrackId
 	var best *memJob
 	for id, j := range q.jobs {
+		if !match(j) {
+			continue
+		}
 		if j.leased && now.Before(j.leaseUntil) {
 			continue
 		}

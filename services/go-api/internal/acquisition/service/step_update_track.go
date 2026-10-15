@@ -26,6 +26,10 @@ func NewUpdateTrackStep(ledger ports.TrackLedger, userId shared.UserId, trackId 
 func (s *UpdateTrackStep) Name() StepName { return stepNameUpdateTrack }
 
 func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterStore) (afterUpdate, error) {
+	evidence := ac.collectEvidence()
+	if err := ac.Replace.Gate.Admit(evidence.Grade); err != nil {
+		return afterUpdate{}, err
+	}
 	isrc, _ := ac.provenISRC()
 	completion := ports.Completion{
 		AudioRef:           ac.AudioRef,
@@ -36,7 +40,7 @@ func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext, _
 		RejectedSourceKeys: ac.Replace.ExcludeKeys,
 	}
 	if ac.Selected != nil {
-		raw, err := json.Marshal(ac.collectEvidence())
+		raw, err := json.Marshal(evidence)
 		if err != nil {
 			return afterUpdate{}, fmt.Errorf("marshal acquisition evidence: %w", err)
 		}

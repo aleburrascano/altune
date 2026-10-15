@@ -1967,3 +1967,49 @@ func TestConfig_HasTheAudioDB(t *testing.T) {
 		t.Error("HasTheAudioDB() = true with no key, want false")
 	}
 }
+
+func TestLoad_TheUpgradeLaneIsOffByDefaultWithBoundedKnobs(t *testing.T) {
+	setEnv(t, validConfigEnv(nil))
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if cfg.AcquisitionUpgradeEnabled || cfg.AcquisitionUpgradeDryRun {
+		t.Errorf("enabled = %v, dry run = %v, want both off by default", cfg.AcquisitionUpgradeEnabled, cfg.AcquisitionUpgradeDryRun)
+	}
+	if cfg.AcquisitionUpgradePerHour != 30 || cfg.AcquisitionUpgradeConcurrency != 1 || cfg.AcquisitionUpgradeMaxTries != 3 {
+		t.Errorf("per hour = %d, concurrency = %d, max tries = %d, want 30, 1, 3",
+			cfg.AcquisitionUpgradePerHour, cfg.AcquisitionUpgradeConcurrency, cfg.AcquisitionUpgradeMaxTries)
+	}
+	if cfg.AcquisitionUpgradeRetryAfter != 24*time.Hour {
+		t.Errorf("retry after = %s, want 24h", cfg.AcquisitionUpgradeRetryAfter)
+	}
+}
+
+func TestLoad_RejectsAnOutOfRangeUpgradeKnob(t *testing.T) {
+	cases := map[string]string{
+		"ACQUISITION_UPGRADE_PER_HOUR":    "0",
+		"ACQUISITION_UPGRADE_CONCURRENCY": "0",
+		"ACQUISITION_UPGRADE_MAX_TRIES":   "0",
+		"ACQUISITION_UPGRADE_RETRY_AFTER": "10s",
+	}
+	for name, value := range cases {
+		t.Run(name, func(t *testing.T) {
+			setEnv(t, validConfigEnv(map[string]string{name: value}))
+
+			_, err := Load()
+			if err == nil || !searchString(err.Error(), name) {
+				t.Fatalf("Load error = %v, want it to name %s", err, name)
+			}
+		})
+	}
+	t.Run("per hour above one a second", func(t *testing.T) {
+		setEnv(t, validConfigEnv(map[string]string{"ACQUISITION_UPGRADE_PER_HOUR": "3601"}))
+
+		if _, err := Load(); err == nil || !searchString(err.Error(), "ACQUISITION_UPGRADE_PER_HOUR") {
+			t.Fatalf("Load error = %v, want it to name ACQUISITION_UPGRADE_PER_HOUR", err)
+		}
+	})
+}

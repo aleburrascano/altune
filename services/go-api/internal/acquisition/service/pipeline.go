@@ -3,6 +3,7 @@ package service
 import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service/upgrade"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/redact"
 	"context"
@@ -241,6 +242,7 @@ type ReplaceState struct {
 	ExcludeKeys    []string
 	PreservedRef   string
 	StoredAcoustID string
+	Gate           upgrade.Gate
 }
 
 func (r ReplaceState) excludes(url string) bool {
