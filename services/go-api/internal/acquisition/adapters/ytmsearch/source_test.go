@@ -84,6 +84,19 @@ func TestSource_ExplicitBeatsCleanWhenBothMatch(t *testing.T) {
 	}
 }
 
+func TestSource_TheCatalogsCleanFlagPicksTheCleanTwin(t *testing.T) {
+	clean := false
+	req := vibesRequest
+	req.CatalogExplicit = &clean
+	got := find(t, []Song{
+		atv("88oFlVnMEsc", "2021 Vibes", []string{"LUCKI"}, 125, false),
+		atv("LMDLNLM6Ji8", "2021 Vibes", []string{"LUCKI"}, 125, true),
+	}, req)
+	if len(got) != 1 || got[0].URL != "https://music.youtube.com/watch?v=88oFlVnMEsc" {
+		t.Errorf("candidates = %+v, want only the clean 88oFlVnMEsc", got)
+	}
+}
+
 func TestSource_CreditAndTitleQuirksStillMatch(t *testing.T) {
 	cases := map[string]struct {
 		req  ports.FindRequest

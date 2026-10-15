@@ -18,8 +18,8 @@ func breakTie(a, b candidateEntry) bool {
 }
 
 func lessResolved(a, b candidateEntry) bool {
-	if a.candidate.Explicit != b.candidate.Explicit {
-		return a.candidate.Explicit
+	if a.explicitFits != b.explicitFits {
+		return a.explicitFits
 	}
 	return breakTie(a, b)
 }
@@ -109,6 +109,7 @@ func scoreCandidate(track TrackRef, expectedLength float64, c ports.AudioCandida
 		artistMatch:   artistMatchesCandidate(track.Artist, c),
 		uploader:      uploaderClass(track.Artist, c),
 		featMatch:     featureMatch(track.Title, c.Title),
+		explicitFits:  c.Explicit == ports.PrefersExplicit(track.CatalogExplicit),
 		candidate:     c,
 	}
 }
@@ -128,6 +129,7 @@ func logCandidateEvaluated(ctx context.Context, track TrackRef, e candidateEntry
 		"is_topic", e.uploader == channelTopic,
 		"artist_match", e.artistMatch,
 		"feature_match", e.featMatch,
+		"explicit", c.Explicit,
 		"track_artist", track.Artist,
 	)
 }

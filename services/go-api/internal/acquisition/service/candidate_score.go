@@ -99,6 +99,7 @@ type candidateEntry struct {
 	artistMatch   bool
 	uploader      string
 	featMatch     bool
+	explicitFits  bool
 	candidate     ports.AudioCandidate
 }
 

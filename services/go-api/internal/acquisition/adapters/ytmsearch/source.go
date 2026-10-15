@@ -87,18 +87,18 @@ func strongHit(songs []Song, req ports.FindRequest) (Song, bool) {
 		if !matches(song, req) {
 			continue
 		}
-		if !found || better(song, best, req.Duration) {
+		if !found || better(song, best, req) {
 			best, found = song, true
 		}
 	}
 	return best, found
 }
 
-func better(song, best Song, savedLength float64) bool {
+func better(song, best Song, req ports.FindRequest) bool {
 	if song.Explicit != best.Explicit {
-		return song.Explicit
+		return song.Explicit == ports.PrefersExplicit(req.CatalogExplicit)
 	}
-	return savedLength > 0 && lengthGap(song, savedLength) < lengthGap(best, savedLength)
+	return req.Duration > 0 && lengthGap(song, req.Duration) < lengthGap(best, req.Duration)
 }
 
 func lengthGap(song Song, savedLength float64) float64 {

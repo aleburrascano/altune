@@ -1,0 +1,95 @@
+{
+  "cases": [
+    {
+      "id": "rw-gods-plan-the-catalogs-clean-flag-picks-the-clean-twin",
+      "class": "RW",
+      "note": "Drake \"God's Plan\" (Scorpion, 198.973s). The catalog_explicit=false input is grounded in a real catalog entry, not a prod row: Apple Music/iTunes track 1406109863 (https://music.apple.com/us/album/gods-plan/1406109769?i=1406109863) reports trackExplicitness \"cleaned\" (iTunes lookup?id=1406109863, 2026-10-15), duration 198973 ms. Prod has no catalog_explicit to capture: 0 of 2269 tracks carry one because the client that writes catalog fields has not shipped its OTA yet. The candidates are the two real ytmsearch song hits for the query \"God's Plan Drake\" (YouTube Music, 2026-10-15): FrsOnNxIrg8 explicit and m1a_GqJf02M clean, both Scorpion, ATV, 199s, credited to Drake; modelled as the adapter emits a hit (resolved, kind art_track, channel \"YouTube Music Art Track\"). Real adapter returns one hit per Find; both are listed because the service ranking is what is pinned. On main explicit always wins, so the user who added the clean version gets the explicit audio",
+      "track": {
+        "title": "God's Plan",
+        "artist": "Drake",
+        "album": "Scorpion",
+        "duration": 198.973,
+        "catalog_explicit": false
+      },
+      "sources": [
+        {
+          "name": "ytmsearch",
+          "search_seconds": 2,
+          "candidates": [
+            {
+              "title": "God's Plan",
+              "url": "https://music.youtube.com/watch?v=FrsOnNxIrg8",
+              "channel": "YouTube Music Art Track",
+              "categories": ["Music"],
+              "duration": 199,
+              "resolved": true,
+              "kind": "art_track",
+              "artists": ["Drake"],
+              "album": "Scorpion",
+              "explicit": true
+            },
+            {
+              "title": "God's Plan",
+              "url": "https://music.youtube.com/watch?v=m1a_GqJf02M",
+              "channel": "YouTube Music Art Track",
+              "categories": ["Music"],
+              "duration": 199,
+              "resolved": true,
+              "kind": "art_track",
+              "artists": ["Drake"],
+              "album": "Scorpion",
+              "correct": true
+            }
+          ]
+        }
+      ],
+      "expect_provenance": "best_effort"
+    },
+    {
+      "id": "rw-gods-plan-the-catalogs-explicit-flag-keeps-the-explicit-twin",
+      "class": "RW",
+      "note": "Same song and the same two real ytmsearch hits as the clean case, for the user who added the explicit version: Deezer track 533609232 (https://www.deezer.com/track/533609232, ISRC USCM51800004, 198 s) reports explicit_lyrics true (api.deezer.com/track/533609232, 2026-10-15). No prod row carries catalog_explicit (0 of 2269; the client that writes it has not shipped its OTA)",
+      "track": {
+        "title": "God's Plan",
+        "artist": "Drake",
+        "album": "Scorpion",
+        "isrc": "USCM51800004",
+        "duration": 198,
+        "catalog_explicit": true
+      },
+      "sources": [
+        {
+          "name": "ytmsearch",
+          "search_seconds": 2,
+          "candidates": [
+            {
+              "title": "God's Plan",
+              "url": "https://music.youtube.com/watch?v=FrsOnNxIrg8",
+              "channel": "YouTube Music Art Track",
+              "categories": ["Music"],
+              "duration": 199,
+              "resolved": true,
+              "kind": "art_track",
+              "artists": ["Drake"],
+              "album": "Scorpion",
+              "explicit": true,
+              "correct": true
+            },
+            {
+              "title": "God's Plan",
+              "url": "https://music.youtube.com/watch?v=m1a_GqJf02M",
+              "channel": "YouTube Music Art Track",
+              "categories": ["Music"],
+              "duration": 199,
+              "resolved": true,
+              "kind": "art_track",
+              "artists": ["Drake"],
+              "album": "Scorpion"
+            }
+          ]
+        }
+      ],
+      "expect_provenance": "best_effort"
+    }
+  ]
+}

@@ -1181,6 +1181,29 @@ func TestSelectBest_AnExplicitResolvedTrackBeatsACloserCleanOne(t *testing.T) {
 	}
 }
 
+func TestSelectBest_TheCatalogExplicitFlagPicksTheTwin(t *testing.T) {
+	clean := ports.AudioCandidate{Title: "Matches", URL: "https://music.youtube.com/watch?v=cleanAAAAAA", Duration: 182, Resolved: true}
+	explicit := ports.AudioCandidate{Title: "Matches", URL: "https://music.youtube.com/watch?v=explicitAAA", Duration: 180, Resolved: true, Explicit: true}
+	yes, no := true, false
+	tests := []struct {
+		name    string
+		catalog *bool
+		want    string
+	}{
+		{"clean catalog flag picks the clean twin", &no, clean.URL},
+		{"explicit catalog flag picks the explicit twin", &yes, explicit.URL},
+		{"no catalog flag prefers explicit", nil, explicit.URL},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			track := TrackRef{Title: "Matches", Artist: "Tezzus", Duration: 180, CatalogExplicit: tt.catalog}
+			if got := selectBest(track, []ports.AudioCandidate{explicit, clean}); got == nil || got.URL != tt.want {
+				t.Fatalf("selected %v, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestUploaderClass_ArtTrackIsTrustedOnlyWhenItsArtistsCreditTheTrackArtist(t *testing.T) {
 	artTrack := func(artists ...string) ports.AudioCandidate {
 		return ports.AudioCandidate{Channel: "YouTube Music Art Track", Kind: ports.KindArtTrack, Artists: artists}

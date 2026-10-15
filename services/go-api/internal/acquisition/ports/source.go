@@ -20,6 +20,10 @@ type FindRequest struct {
 	FallbackOnly bool
 }
 
+func PrefersExplicit(catalogExplicit *bool) bool {
+	return catalogExplicit == nil || *catalogExplicit
+}
+
 type AudioSource interface {
 	Name() acqdomain.SourceName
 
