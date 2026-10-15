@@ -48,6 +48,9 @@ func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext, _
 		completion.Confidence = ac.Confidence
 		completion.Evidence = raw
 	}
+	if err := verifyCommitAllowed(ctx); err != nil {
+		return afterUpdate{}, err
+	}
 	err := s.ledger.Complete(ctx, s.trackId, s.userId, completion)
 	if errors.Is(err, ports.ErrTrackNotFound) {
 		return afterUpdate{}, errors.New("track not found for update")
@@ -61,4 +64,20 @@ func (s *UpdateTrackStep) Rollback(ctx context.Context, _ *AcquisitionContext) e
 		return nil
 	}
 	return err
+}
+
+type commitCheckContextKey struct{}
+
+type commitCheck func(ctx context.Context) error
+
+func withCommitCheck(ctx context.Context, check commitCheck) context.Context {
+	return context.WithValue(ctx, commitCheckContextKey{}, check)
+}
+
+func verifyCommitAllowed(ctx context.Context) error {
+	check, ok := ctx.Value(commitCheckContextKey{}).(commitCheck)
+	if !ok {
+		return nil
+	}
+	return check(ctx)
 }

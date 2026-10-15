@@ -2804,3 +2804,58 @@ func TestBackgroundScheduler_AKeptUpgradeIsRecordedAsKeptNotAsSuccessOrFailure(t
 		t.Errorf("succeeded = %d, failed = %d, want a kept file to move neither", status.Succeeded, status.Failed)
 	}
 }
+
+type committingUpgrader struct {
+	stubAcquirer
+	step       *UpdateTrackStep
+	started    chan struct{}
+	proceed    chan struct{}
+	commitErr  chan error
+	startedOne sync.Once
+}
+
+func (u *committingUpgrader) ExecuteUpgrade(ctx context.Context, _ shared.UserId, _ domain.TrackId) error {
+	u.startedOne.Do(func() { close(u.started) })
+	<-u.proceed
+	_, err := u.step.Execute(ctx, &AcquisitionContext{AudioRef: "upgraded.mp3"}, afterStore{})
+	u.commitErr <- err
+	return err
+}
+
+func TestBackgroundScheduler_AnUpgradeTakenOverByAReplaceDuringItsDownloadNeverCommits(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	repo := newFakeTrackRepository()
+	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	acq := &committingUpgrader{
+		step:      NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID),
+		started:   make(chan struct{}),
+		proceed:   make(chan struct{}),
+		commitErr: make(chan error, 1),
+	}
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 2),
+		WithPollInterval(5*time.Millisecond),
+		WithUpgradeLane(acq, 1))
+	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
+	ctx := context.Background()
+	if err := scheduler.ScheduleUpgrade(ctx, userId, track.ID); err != nil {
+		t.Fatalf("ScheduleUpgrade: %v", err)
+	}
+	<-acq.started
+
+	if err := scheduler.ScheduleReplace(ctx, userId, track.ID); err != nil {
+		t.Fatalf("ScheduleReplace over a running upgrade: %v", err)
+	}
+	close(acq.proceed)
+
+	if commitErr := <-acq.commitErr; !errors.Is(commitErr, acqdomain.ErrLeaseLost) {
+		t.Errorf("upgrade commit = %v, want ErrLeaseLost", commitErr)
+	}
+	if status := storedTrack(t, repo, track).AcquisitionStatus; status != domain.AcquisitionPending {
+		t.Errorf("track status = %v, want the upgrade to have written nothing", status)
+	}
+}

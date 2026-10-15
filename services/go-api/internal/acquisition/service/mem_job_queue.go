@@ -209,6 +209,16 @@ func (q *memJobQueue) Heartbeat(_ context.Context, trackID shared.TrackId, fence
 	return nil
 }
 
+func (q *memJobQueue) VerifyLease(_ context.Context, trackID shared.TrackId, fence ports.Fence) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	j, ok := q.jobs[trackID]
+	if !ok || !j.leased || ports.Fence(j.fence) != fence || !q.now().Before(j.leaseUntil) {
+		return acqdomain.ErrLeaseLost
+	}
+	return nil
+}
+
 func (q *memJobQueue) Release(_ context.Context, trackID shared.TrackId, fence ports.Fence, delay time.Duration) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()

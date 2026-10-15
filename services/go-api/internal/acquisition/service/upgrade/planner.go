@@ -51,6 +51,10 @@ func (p *Planner) schedule(ctx context.Context, candidate ports.UpgradeCandidate
 		slog.InfoContext(ctx, "acquisition.upgrade_planning_paused")
 		return nil
 	}
+	if errors.Is(err, acqdomain.ErrTrackJobInFlight) {
+		slog.InfoContext(ctx, "acquisition.upgrade_skipped_job_in_flight", "track_id", candidate.TrackID.String())
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("schedule upgrade of track %s: %w", candidate.TrackID, err)
 	}

@@ -234,6 +234,26 @@ UPDATE tracks
 SET acquisition_lease_until = now() + make_interval(secs => $3)
 WHERE id = $1 AND acquisition_attempts = $2 AND acquisition_available_at IS NOT NULL AND acquisition_lease_until >= now()`
 
+const verifyLeaseSQL = `
+SELECT EXISTS (
+	SELECT 1 FROM tracks
+	WHERE id = $1 AND acquisition_attempts = $2 AND acquisition_available_at IS NOT NULL AND acquisition_lease_until >= now()
+)`
+
+func (q *PgxJobQueue) VerifyLease(ctx context.Context, trackID shared.TrackId, fence ports.Fence) error {
+	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
+	defer cancel()
+
+	var held bool
+	if err := q.pool.QueryRow(ctx, verifyLeaseSQL, trackID.UUID(), int(fence)).Scan(&held); err != nil {
+		return fmt.Errorf("verify acquisition lease: %w", err)
+	}
+	if !held {
+		return fmt.Errorf("verify acquisition lease for track %s: %w", trackID, acqdomain.ErrLeaseLost)
+	}
+	return nil
+}
+
 func (q *PgxJobQueue) Heartbeat(ctx context.Context, trackID shared.TrackId, fence ports.Fence, lease time.Duration) error {
 	return q.execFenced(ctx, trackID, "heartbeat", heartbeatJobSQL, trackID.UUID(), int(fence), lease.Seconds())
 }
