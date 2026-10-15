@@ -1,0 +1,118 @@
+{
+  "cases": [
+    {
+      "id": "reacquire-never-returns-the-upload-the-user-rejected",
+      "class": "OK",
+      "note": "prod LUCKI Over ISRC CA5KR1827984 (track 37148cf4): the user replaced the DatPiff upload FjkkqbEbFOY (rejected_source_keys youtube:FjkkqbEbFOY) and the track now stores NxTPVbk-FZQ. Candidates are the prod yt-dlp ytsearch5 and scsearch5 results for 'LUCKI Over' (2026-10-15, titles, channels and durations as the probe printed them); the rejected upload is excluded as the service now seeds it for every job kind. Service-level proof for first acquire, retry, missing-file reacquire and replace lives in service/acquire_test.go",
+      "track": {
+        "title": "Over",
+        "artist": "LUCKI",
+        "album": "Watch My Back",
+        "duration": 135.962993,
+        "isrc": "CA5KR1827984",
+        "authoritative_duration": 135.962993
+      },
+      "exclude_urls": [
+        "https://www.youtube.com/watch?v=FjkkqbEbFOY"
+      ],
+      "candidates": [
+        {
+          "title": "Lucki Ecks -  Over",
+          "url": "https://www.youtube.com/watch?v=FjkkqbEbFOY",
+          "channel": "DatPiff",
+          "categories": [
+            "Music"
+          ],
+          "duration": 138,
+          "kind": "upload"
+        },
+        {
+          "title": "Over",
+          "url": "https://www.youtube.com/watch?v=NxTPVbk-FZQ",
+          "channel": "LUCKI",
+          "categories": [
+            "Music"
+          ],
+          "duration": 136,
+          "kind": "upload",
+          "correct": true
+        },
+        {
+          "title": "Over You",
+          "url": "https://www.youtube.com/watch?v=yUveu7rNY1M",
+          "channel": "Brentrambo - Topic",
+          "categories": [
+            "Music"
+          ],
+          "duration": 122,
+          "kind": "upload"
+        },
+        {
+          "title": "Over",
+          "url": "https://www.youtube.com/watch?v=Quqw6lu2sOY",
+          "channel": "Lucky Daye",
+          "categories": [
+            "Music"
+          ],
+          "duration": 205,
+          "kind": "upload"
+        },
+        {
+          "title": "Over [prod. Ugly Friend]",
+          "url": "https://api.soundcloud.com/tracks/soundcloud%3Atracks%3A321193537",
+          "channel": "LUCKI",
+          "duration": 136.006,
+          "kind": "upload"
+        }
+      ]
+    },
+    {
+      "id": "reacquire-fails-rather-than-return-the-only-upload-the-user-rejected",
+      "class": "OK",
+      "note": "same prod LUCKI Over search with the stored NxTPVbk-FZQ and the SoundCloud upload absent from the results: the DatPiff upload the user rejected is within 2 s of the track length and would win if not excluded, so the acquisition must fail cleanly and store nothing",
+      "track": {
+        "title": "Over",
+        "artist": "LUCKI",
+        "album": "Watch My Back",
+        "duration": 135.962993,
+        "isrc": "CA5KR1827984",
+        "authoritative_duration": 135.962993
+      },
+      "exclude_urls": [
+        "https://www.youtube.com/watch?v=FjkkqbEbFOY"
+      ],
+      "candidates": [
+        {
+          "title": "Lucki Ecks -  Over",
+          "url": "https://www.youtube.com/watch?v=FjkkqbEbFOY",
+          "channel": "DatPiff",
+          "categories": [
+            "Music"
+          ],
+          "duration": 138,
+          "kind": "upload"
+        },
+        {
+          "title": "Over You",
+          "url": "https://www.youtube.com/watch?v=yUveu7rNY1M",
+          "channel": "Brentrambo - Topic",
+          "categories": [
+            "Music"
+          ],
+          "duration": 122,
+          "kind": "upload"
+        },
+        {
+          "title": "Over",
+          "url": "https://www.youtube.com/watch?v=Quqw6lu2sOY",
+          "channel": "Lucky Daye",
+          "categories": [
+            "Music"
+          ],
+          "duration": 205,
+          "kind": "upload"
+        }
+      ]
+    }
+  ]
+}

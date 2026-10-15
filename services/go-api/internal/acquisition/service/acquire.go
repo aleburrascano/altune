@@ -257,7 +257,10 @@ func (s *AcquireTrackAudioService) startAcquisition(ctx context.Context, userId 
 	s.events.Publish(ctx, userId, events.TypeTrackAcquisitionStarted, map[string]any{
 		"track_id": trackId.String(),
 	})
-	return &AcquisitionContext{Track: buildTrackRef(track)}
+	return &AcquisitionContext{
+		Track:   buildTrackRef(track),
+		Replace: ReplaceState{ExcludeKeys: mergeSourceKeys(track.RejectedSourceKeys)},
+	}
 }
 
 func (s *AcquireTrackAudioService) runAcquisition(ctx context.Context, userId shared.UserId, trackId shared.TrackId, ac *AcquisitionContext) error {
@@ -278,7 +281,7 @@ func (s *AcquireTrackAudioService) runAcquisition(ctx context.Context, userId sh
 func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, track *ports.TrackSnapshot, trackId shared.TrackId) error {
 	ac.Replace.PreservedRef = deref(track.AudioRef)
 	ac.Replace.ExcludeKeys = mergeSourceKeys(
-		track.RejectedSourceKeys,
+		ac.Replace.ExcludeKeys,
 		sourceKey(deref(track.AudioSourceURL)),
 	)
 	if track.AudioSourceURL == nil {

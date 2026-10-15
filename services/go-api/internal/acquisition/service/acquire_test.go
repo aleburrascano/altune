@@ -1754,3 +1754,88 @@ func TestExecuteReplace_TheCurrentFileIsFoundWithoutAResolvedRecording(t *testin
 		t.Errorf("store = %v, want only the upload with a different fingerprint", store.objects)
 	}
 }
+
+const (
+	prodOverRejectedUpload = "https://www.youtube.com/watch?v=FjkkqbEbFOY"
+	prodOverCurrentSource  = "https://music.youtube.com/watch?v=NxTPVbk-FZQ"
+)
+
+func prodOverTrack(t *testing.T, repo *fakeTrackRepository, userId shared.UserId, settle func(*domain.Track) error) *domain.Track {
+	t.Helper()
+	track, err := domain.NewTrack(userId, "Over", "LUCKI", "Watch My Back")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	if err := settle(track); err != nil {
+		t.Fatalf("settle: %v", err)
+	}
+	track.RejectedSourceKeys = []string{"youtube:FjkkqbEbFOY"}
+	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	return track
+}
+
+func prodOverCandidates() []ports.AudioCandidate {
+	return []ports.AudioCandidate{
+		{Title: "Lucki Ecks -  Over", URL: prodOverRejectedUpload, Channel: "DatPiff", Duration: 138, Kind: ports.KindUpload, Source: "fake"},
+		{Title: "Over", URL: prodOverCurrentSource, Channel: "LUCKI", Duration: 136, Source: "fake"},
+	}
+}
+
+func TestExecute_ExcludesTheUsersRejectedSources(t *testing.T) {
+	missingFile := func(track *domain.Track) error { return track.MarkReady("lucki/watch-my-back/over.mp3") }
+	tests := []struct {
+		name   string
+		settle func(*domain.Track) error
+	}{
+		{"first acquisition", func(*domain.Track) error { return nil }},
+		{"retry after a failure", func(track *domain.Track) error { return track.MarkFailed("no match") }},
+		{"reacquire of a missing file", missingFile},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			userId := shared.NewUserId(uuid.New())
+			repo := newFakeTrackRepository()
+			track := prodOverTrack(t, repo, userId, tt.settle)
+			searcher := &fakeAudioSearcher{searchResults: prodOverCandidates(), downloadErr: errors.New("boom")}
+			svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore())
+
+			_ = svc.Execute(context.Background(), userId, track.ID)
+
+			if len(searcher.downloadURLs) != 1 || searcher.downloadURLs[0] != prodOverCurrentSource {
+				t.Errorf("download attempts = %v, want only %q", searcher.downloadURLs, prodOverCurrentSource)
+			}
+		})
+	}
+}
+
+func TestExecute_FailsRatherThanDownloadTheOnlyCandidateTheUserRejected(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track := prodOverTrack(t, repo, userId, func(*domain.Track) error { return nil })
+	searcher := &fakeAudioSearcher{searchResults: prodOverCandidates()[:1], downloadErr: errors.New("boom")}
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore())
+
+	_ = svc.Execute(context.Background(), userId, track.ID)
+
+	if len(searcher.downloadURLs) != 0 {
+		t.Errorf("download attempts = %v, want none: the only candidate is the one the user rejected", searcher.downloadURLs)
+	}
+}
+
+func TestExecuteReplace_StillExcludesTheUsersRejectedSourcesAndTheCurrentOne(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track := prodOverTrack(t, repo, userId, func(track *domain.Track) error { return track.MarkReady("lucki/watch-my-back/over.mp3") })
+	track.SetAudioSource(prodOverCurrentSource)
+	store := newFakeAudioStore()
+	store.stored["lucki/watch-my-back/over.mp3"] = true
+	other := ports.AudioCandidate{Title: "Over [prod. Ugly Friend]", URL: "https://api.soundcloud.com/tracks/soundcloud%3Atracks%3A321193537", Channel: "LUCKI", Duration: 136, Kind: ports.KindUpload, Source: "fake"}
+	searcher := &fakeAudioSearcher{searchResults: append(prodOverCandidates(), other), downloadErr: errors.New("boom")}
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), store)
+
+	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
+
+	if len(searcher.downloadURLs) != 1 || searcher.downloadURLs[0] != other.URL {
+		t.Errorf("download attempts = %v, want only %q", searcher.downloadURLs, other.URL)
+	}
+}
