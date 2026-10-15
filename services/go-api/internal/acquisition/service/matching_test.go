@@ -850,11 +850,11 @@ func TestRankCandidates_AcousticLosesToTheMasterOnTheSameTopicChannel(t *testing
 	}
 
 	ranked, _ := rankAndCollect(context.Background(), track, track.Duration, candidates)
-	if len(ranked) != 2 {
-		t.Fatalf("ranked = %d, want both", len(ranked))
+	if len(ranked) != 1 {
+		t.Fatalf("ranked = %d, want exactly the master (the acoustic upload is vetoed outright)", len(ranked))
 	}
 	if ranked[0].Title != "Sunglasses at Night" {
-		t.Fatalf("selected %q — an identical-length acoustic take must lose to the master on qualifier distance",
+		t.Fatalf("selected %q — an identical-length acoustic take must never beat the master",
 			ranked[0].Title)
 	}
 }
