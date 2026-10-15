@@ -88,3 +88,31 @@ func TestYTMDurationToSeconds(t *testing.T) {
 		})
 	}
 }
+
+func TestParseYTMSearch_ExplicitBadgeAfterAnotherBadge(t *testing.T) {
+	badge := func(icon string) map[string]any {
+		return map[string]any{"musicInlineBadgeRenderer": map[string]any{"icon": map[string]any{"iconType": icon}}}
+	}
+	song := map[string]any{"musicResponsiveListItemRenderer": map[string]any{
+		"overlay": map[string]any{"musicItemThumbnailOverlayRenderer": map[string]any{"content": map[string]any{"musicPlayButtonRenderer": map[string]any{
+			"playNavigationEndpoint": map[string]any{"watchEndpoint": map[string]any{
+				"watchEndpointMusicSupportedConfigs": map[string]any{"watchEndpointMusicConfig": map[string]any{"musicVideoType": "MUSIC_VIDEO_TYPE_ATV"}},
+			}},
+		}}}},
+		"badges": []any{badge("MUSIC_LIVE_BADGE"), badge("MUSIC_EXPLICIT_BADGE")},
+	}}
+	page := map[string]any{"contents": map[string]any{"tabbedSearchResultsRenderer": map[string]any{"tabs": []any{
+		map[string]any{"tabRenderer": map[string]any{"content": map[string]any{"sectionListRenderer": map[string]any{"contents": []any{
+			map[string]any{"musicShelfRenderer": map[string]any{"contents": []any{song}}},
+		}}}}},
+	}}}}
+
+	res := parseYTMSearch(page)
+
+	if len(res.Tracks) != 1 {
+		t.Fatalf("tracks = %d, want 1", len(res.Tracks))
+	}
+	if !res.Tracks[0].IsExplicit {
+		t.Error("track with the explicit badge second must be explicit")
+	}
+}

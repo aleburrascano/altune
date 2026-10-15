@@ -2,6 +2,7 @@ package ytmusic
 
 import (
 	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
+	"altune/go-api/internal/shared/ytminnertube"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -249,7 +250,7 @@ func parseYTMTrack(mr any) *ytmTrack {
 	if len(t.Artists) == 0 {
 		t.Artists = fallbackByline(info2)
 	}
-	t.IsExplicit = ytmHasExplicitBadge(mr)
+	t.IsExplicit = ytminnertube.HasExplicitBadge(ytmGet(mr, ytmPath{"badges"}))
 	t.Thumbnails = parseYTMThumbnails(ytmGet(mr, ytmPath{"thumbnail", "musicThumbnailRenderer", "thumbnail", "thumbnails"}))
 	return t
 }
@@ -283,7 +284,7 @@ func parseYTMAlbum(mr any) *ytmAlbum {
 		}
 		a.Year = ytmStr(runs[len(runs)-1], ytmPath{"text"})
 	}
-	a.IsExplicit = ytmHasExplicitBadge(mr)
+	a.IsExplicit = ytminnertube.HasExplicitBadge(ytmGet(mr, ytmPath{"badges"}))
 	a.Thumbnails = parseYTMThumbnails(ytmGet(mr, ytmPath{"thumbnail", "musicThumbnailRenderer", "thumbnail", "thumbnails"}))
 	return a
 }
@@ -333,10 +334,6 @@ func parseYTMTrailingDuration(runs []any) int {
 		return 0
 	}
 	return ytmDurationToSeconds(ytmStr(runs[len(runs)-1], ytmPath{"text"}))
-}
-
-func ytmHasExplicitBadge(mr any) bool {
-	return ytmStr(mr, ytmPath{"badges", 0, "musicInlineBadgeRenderer", "icon", "iconType"}) == "MUSIC_EXPLICIT_BADGE"
 }
 
 func parseYTMThumbnails(v any) []ytmThumbnail {

@@ -1,6 +1,7 @@
 package ytmsearch
 
 import (
+	"altune/go-api/internal/shared/ytminnertube"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,7 +19,6 @@ const (
 )
 
 const (
-	explicitBadgeIcon      = "MUSIC_EXPLICIT_BADGE"
 	artistPageType         = "MUSIC_PAGE_TYPE_ARTIST"
 	albumPageType          = "MUSIC_PAGE_TYPE_ALBUM"
 	userChannelPageType    = "MUSIC_PAGE_TYPE_USER_CHANNEL"
@@ -125,7 +125,7 @@ func watchFromPanelVideo(video node) Watch {
 		Title:    joinedRuns(video.at("title", "runs")),
 		Artists:  bylineArtists(video.at("longBylineText", "runs").items()),
 		Type:     VideoType(video.at("navigationEndpoint", "watchEndpoint", "watchEndpointMusicSupportedConfigs", "watchEndpointMusicConfig", "musicVideoType").text()),
-		Explicit: hasExplicitBadge(video.at("badges")),
+		Explicit: ytminnertube.HasExplicitBadge(video.at("badges").value),
 	}
 }
 
@@ -162,7 +162,7 @@ func songFromListItem(item node) (Song, bool) {
 		Album:           bylineAlbum(byline),
 		DurationSeconds: bylineDuration(byline),
 		Type:            VideoType(play.at("watchEndpointMusicSupportedConfigs", "watchEndpointMusicConfig", "musicVideoType").text()),
-		Explicit:        hasExplicitBadge(item.at("badges")),
+		Explicit:        ytminnertube.HasExplicitBadge(item.at("badges").value),
 	}, true
 }
 
@@ -229,13 +229,4 @@ func bylineDuration(runs []node) int {
 		seconds = seconds*60 + n
 	}
 	return seconds
-}
-
-func hasExplicitBadge(badges node) bool {
-	for _, badge := range badges.items() {
-		if badge.at("musicInlineBadgeRenderer", "icon", "iconType").text() == explicitBadgeIcon {
-			return true
-		}
-	}
-	return false
 }
