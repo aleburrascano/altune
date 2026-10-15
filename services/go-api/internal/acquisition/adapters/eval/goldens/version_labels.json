@@ -1,0 +1,75 @@
+{
+  "cases": [
+    {
+      "id": "vl-plain-acoustic-upload-without-the-master",
+      "class": "F1",
+      "note": "prod track 9a94c21c Corey Hart 'Sunglasses at Night' (ISRC CAU111800471, catalog 233s). Candidates are the real yt-dlp results (ytsearch on prod, 2026-10-15) for 'Sunglasses at Night (Acoustic) Corey Hart Topic' that run near the catalog length once the master is absent: Corey Hart Official's acoustic upload uG7yhcAuO-M, whose real title ends '(Acoustic Version)' and real length is 302s. Modelled, not recorded: the title is plainly '(Acoustic)' and the length 233s, the Corey Hart case where no 'Version' word or length gap gives it away. Storing it is worse than storing nothing",
+      "track": {
+        "title": "Sunglasses at Night",
+        "artist": "Corey Hart",
+        "album": "First Offense",
+        "duration": 233,
+        "authoritative_duration": 233
+      },
+      "sources": [
+        {
+          "name": "ytdlp",
+          "search_seconds": 3,
+          "candidates": [
+            {
+              "title": "Sunglasses At Night (Acoustic)",
+              "url": "https://www.youtube.com/watch?v=uG7yhcAuO-M",
+              "channel": "Corey Hart Official",
+              "categories": [
+                "Music"
+              ],
+              "duration": 233,
+              "view_count": 3140
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vl-remastered-upload-is-not-a-qualifier",
+      "class": "OK",
+      "note": "same prod track, real yt-dlp results: the '(Remastered Audio)' upload kc2vN1xfcrc (230s) is the studio master and stays eligible beside the live acoustic rehearsal bLaMXoXPA-s (310s)",
+      "track": {
+        "title": "Sunglasses at Night",
+        "artist": "Corey Hart",
+        "album": "First Offense",
+        "duration": 233,
+        "authoritative_duration": 233
+      },
+      "sources": [
+        {
+          "name": "ytdlp",
+          "search_seconds": 3,
+          "candidates": [
+            {
+              "title": "Corey Hart - \"Sunglasses at Night\" (2014 live acoustic rehearsal version)",
+              "url": "https://www.youtube.com/watch?v=bLaMXoXPA-s",
+              "channel": "Corey Hart Official",
+              "categories": [
+                "Music"
+              ],
+              "duration": 310,
+              "view_count": 109702
+            },
+            {
+              "title": "Corey Hart - Sunglasses At Night (Remastered Audio) HD",
+              "url": "https://www.youtube.com/watch?v=kc2vN1xfcrc",
+              "channel": "Happy Charlie",
+              "categories": [
+                "Music"
+              ],
+              "duration": 230,
+              "view_count": 72089,
+              "correct": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

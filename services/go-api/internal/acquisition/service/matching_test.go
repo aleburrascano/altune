@@ -1225,3 +1225,42 @@ func TestSelectBest_RanksByTheExpectedLength(t *testing.T) {
 		t.Errorf("selected %v s, want the candidate closest to the expected 128 s", ac.Selected.Duration)
 	}
 }
+
+func TestUnrequestedQualifiers_ReleaseVariantsAreQualifiers(t *testing.T) {
+	vetoed := map[string]string{
+		"Song (Acoustic)":    "acoustic",
+		"Song (Demo)":        "demo",
+		"Song (Re-Recorded)": "re-recorded",
+		"Song [Acoustic]":    "acoustic",
+	}
+	for title, label := range vetoed {
+		veto, fallback := UnrequestedQualifiers("Song", "Artist", title)
+		assertQualifiers(t, title+" veto", veto, []string{label})
+		assertQualifiers(t, title+" fallback", fallback, nil)
+	}
+	for _, title := range []string{"Song (Remastered)", "Song (2011 Remaster)"} {
+		veto, fallback := UnrequestedQualifiers("Song", "Artist", title)
+		assertQualifiers(t, title+" veto", veto, nil)
+		assertQualifiers(t, title+" fallback", fallback, nil)
+	}
+	veto, _ := UnrequestedQualifiers("Song (Acoustic)", "Artist", "Song (Acoustic)")
+	assertQualifiers(t, "requested acoustic veto", veto, nil)
+}
+
+func TestRankAndCollect_RejectsPlainlyTitledAcousticAndDemoUploads(t *testing.T) {
+	track := TrackRef{Title: "Sunglasses at Night", Artist: "Corey Hart", Duration: 233}
+	candidates := []ports.AudioCandidate{
+		{Title: "Sunglasses at Night (Acoustic)", Channel: "Corey Hart - Topic", Duration: 233, URL: "https://www.youtube.com/watch?v=acousticUp1", Categories: []string{"Music"}},
+		{Title: "Sunglasses at Night (Demo)", Channel: "Corey Hart - Topic", Duration: 233, URL: "https://www.youtube.com/watch?v=demoUpload1", Categories: []string{"Music"}},
+		{Title: "Sunglasses at Night", Channel: "Corey Hart", Duration: 232, URL: "https://www.youtube.com/watch?v=masterUp001", Categories: []string{"Music"}},
+	}
+
+	ranked, rejected := rankAndCollect(context.Background(), track, track.Duration, candidates)
+
+	if len(ranked) != 1 || ranked[0].URL != "https://www.youtube.com/watch?v=masterUp001" {
+		t.Fatalf("ranked = %v, want only the master", ranked)
+	}
+	if len(rejected) != 2 || rejected[0].Reason != "unrequested acoustic" || rejected[1].Reason != "unrequested demo" {
+		t.Fatalf("rejected = %+v, want acoustic and demo qualifier rejections", rejected)
+	}
+}

@@ -57,3 +57,40 @@ func TestRecordingLabels_NameADifferentRecording(t *testing.T) {
 		}
 	}
 }
+
+func TestMatches_ReleaseVariantsCarryTheirVeto(t *testing.T) {
+	cases := map[string]struct {
+		label string
+		veto  bool
+	}{
+		"Song (Acoustic)":      {"acoustic", true},
+		"Song (Demo)":          {"demo", true},
+		"Song (Re-Recorded)":   {"re-recorded", true},
+		"Song (Rerecorded)":    {"re-recorded", true},
+		"Song (Remastered)":    {"remaster", false},
+		"Song (2011 Remaster)": {"remaster", false},
+	}
+	for title, want := range cases {
+		var found bool
+		for _, entry := range Matches(Tokens(title)) {
+			if entry.Label == want.label {
+				found = true
+				if entry.Veto != want.veto {
+					t.Errorf("Matches(%q) %s veto = %v, want %v", title, want.label, entry.Veto, want.veto)
+				}
+			}
+		}
+		if !found {
+			t.Errorf("Matches(%q) has no %s entry", title, want.label)
+		}
+	}
+}
+
+func TestLabels_RecordingLabelsKeepReleaseVariants(t *testing.T) {
+	if got := Labels("Song (Acoustic) (Demo) (Remastered)"); !slices.Equal(got, []string{"acoustic", "demo", "remaster"}) {
+		t.Errorf("Labels = %v", got)
+	}
+	if got := RecordingLabels("Song (Acoustic) (Demo) (Remastered)"); !slices.Equal(got, []string{"acoustic", "demo"}) {
+		t.Errorf("RecordingLabels = %v", got)
+	}
+}

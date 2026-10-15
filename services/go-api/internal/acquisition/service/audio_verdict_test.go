@@ -488,3 +488,24 @@ func TestClassifyAudio_ProbeArtistSplitResistsHostileCredits(t *testing.T) {
 		},
 	})
 }
+
+func TestClassifyAudio_PlainlyTitledReleaseVariantsAreAnotherVersion(t *testing.T) {
+	sunglasses := AudioReference{Title: "Sunglasses at Night", Artist: "Corey Hart", Duration: 233, MBIDs: []string{"studio"}}
+	assertVerdicts(t, []verdictCase{
+		{
+			name: "an acoustic recording titled plainly (Acoustic) is another version", ref: sunglasses, audioDuration: 230,
+			results: singleLink(linked("acoustic", "Sunglasses at Night (Acoustic)", 230, "Corey Hart")),
+			want:    VerdictOtherVersion,
+		},
+		{
+			name: "a demo recording is another version", ref: sunglasses, audioDuration: 230,
+			results: singleLink(linked("demo", "Sunglasses at Night (Demo)", 230, "Corey Hart")),
+			want:    VerdictOtherVersion,
+		},
+		{
+			name: "a remastered recording still agrees softly", ref: sunglasses, audioDuration: 232,
+			results: singleLink(linked("remaster", "Sunglasses at Night (2011 Remaster)", 232, "Corey Hart")),
+			want:    VerdictSoft,
+		},
+	})
+}
