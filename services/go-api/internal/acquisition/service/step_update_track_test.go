@@ -412,3 +412,26 @@ func TestUpdateTrackStep_DrinkingInLAWritesNoGuessedISRC(t *testing.T) {
 		t.Errorf("isrc_source = %q, want %q", evidence.ISRCSource, ISRCUnproven)
 	}
 }
+
+func TestUpdateTrackStep_AnUncomparedLengthIsNullInTheEvidence(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track := seedTrackInRepo(t, repo, userId, nil)
+	ac := &AcquisitionContext{
+		AudioRef: "user/artist/album/song.mp3",
+		Selected: &ports.AudioCandidate{Title: "Song", URL: "https://example.com/v"},
+		Evidence: Evidence{Channel: "topic"},
+	}
+
+	if _, err := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID).Execute(context.Background(), ac, afterStore{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var stored map[string]any
+	if err := json.Unmarshal(storedTrack(t, repo, track).AcquisitionEvidence(), &stored); err != nil {
+		t.Fatalf("evidence not stored as JSON: %v", err)
+	}
+	if v, present := stored["duration_delta_seconds"]; !present || v != nil {
+		t.Errorf("duration_delta_seconds = %v (present %v), want null", v, present)
+	}
+}

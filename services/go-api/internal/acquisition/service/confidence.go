@@ -66,12 +66,15 @@ func channelBonus(class string) float64 {
 	return 0
 }
 
-func durationBonus(delta, trackSeconds float64) float64 {
-	delta = math.Abs(delta)
+func durationBonus(delta *float64, trackSeconds float64) float64 {
+	if delta == nil {
+		return 0
+	}
+	off := math.Abs(*delta)
 	switch {
-	case delta <= domain.LengthTight.Allowance(trackSeconds):
+	case off <= domain.LengthTight.Allowance(trackSeconds):
 		return tightDurationBonus
-	case delta <= domain.LengthLoose.Allowance(trackSeconds):
+	case off <= domain.LengthLoose.Allowance(trackSeconds):
 		return looseDurationBonus
 	default:
 		return 0
@@ -80,10 +83,14 @@ func durationBonus(delta, trackSeconds float64) float64 {
 
 func (ac *AcquisitionContext) buildEvidence(candidate ports.AudioCandidate, verified verificationResult) Evidence {
 	_, fallback := UnrequestedQualifiers(ac.Track.Title, ac.Track.Artist, candidate.Title)
+	var delta *float64
+	if d, known := ac.durationDelta(candidate, verified.probed); known {
+		delta = &d
+	}
 	return Evidence{
 		Verdict:              string(verified.verdict.Kind),
 		AcoustIDScore:        verified.verdict.Score,
-		DurationDeltaSeconds: ac.durationDelta(candidate, verified.probed),
+		DurationDeltaSeconds: delta,
 		Channel:              uploaderClass(ac.Track.Artist, candidate),
 		Qualifiers:           fallback,
 		Resolved:             candidate.Resolved,
@@ -91,20 +98,16 @@ func (ac *AcquisitionContext) buildEvidence(candidate ports.AudioCandidate, veri
 	}
 }
 
-func (ac *AcquisitionContext) durationDelta(candidate ports.AudioCandidate, probed float64) float64 {
-	measured := probed
-	if measured <= 0 {
-		measured = candidate.Duration
-	}
+func (ac *AcquisitionContext) durationDelta(candidate ports.AudioCandidate, probed float64) (float64, bool) {
 	expected := ac.ExpectedLength()
-	if measured <= 0 || expected <= 0 {
-		return 0
+	if probed <= 0 || expected <= 0 {
+		return 0, false
 	}
-	return measured - expected
+	return probed - expected, true
 }
 
-func fallbackLengthMatches(delta, trackSeconds float64) bool {
-	return math.Abs(delta) <= domain.LengthAuthoritative.Allowance(trackSeconds)
+func fallbackLengthMatches(delta *float64, trackSeconds float64) bool {
+	return delta != nil && math.Abs(*delta) <= domain.LengthAuthoritative.Allowance(trackSeconds)
 }
 
 func (ac *AcquisitionContext) adopt(ctx context.Context, evidence Evidence) {
@@ -121,7 +124,7 @@ type Evidence struct {
 	Verdict              string     `json:"verdict"`
 	AcoustIDScore        float64    `json:"acoustid_score"`
 	ISRCSetHit           bool       `json:"isrc_set_hit"`
-	DurationDeltaSeconds float64    `json:"duration_delta_seconds"`
+	DurationDeltaSeconds *float64   `json:"duration_delta_seconds"`
 	Channel              string     `json:"channel"`
 	Qualifiers           []string   `json:"qualifiers"`
 	Resolved             bool       `json:"resolved"`

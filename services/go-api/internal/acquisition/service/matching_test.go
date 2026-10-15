@@ -306,7 +306,7 @@ func TestDurationScore_UsesTheConfidenceWindows(t *testing.T) {
 	scoreOf := map[float64]float64{tightDurationBonus: 1.0, looseDurationBonus: 0.5, 0: 0.0}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			want := scoreOf[durationBonus(tt.delta, tt.expected)]
+			want := scoreOf[durationBonus(&tt.delta, tt.expected)]
 			if got := durationScore(tt.expected, tt.expected+tt.delta); got != want {
 				t.Errorf("durationScore(%v, %v) = %v, confidence window implies %v", tt.expected, tt.expected+tt.delta, got, want)
 			}

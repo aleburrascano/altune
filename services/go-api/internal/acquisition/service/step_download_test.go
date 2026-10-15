@@ -2136,3 +2136,34 @@ func TestNewDownloadStep_DefaultsToTheProdWidth(t *testing.T) {
 		t.Errorf("default width = %d, want the prod width %d", got, prodVerifyWidth)
 	}
 }
+
+func TestDownloadStep_AFallbackWithNoKnownLengthIsNeverStored(t *testing.T) {
+	fetcher := newGatedFetcher(nil)
+	ac := heldTrackContext(ports.AudioCandidate{
+		URL: "edit", Title: "Sunglasses at Night (Radio Edit)", Channel: "Corey Hart - Topic", Duration: 236,
+	})
+	ac.Track.CatalogDuration = 0
+	step := NewDownloadStep(fetcher, WithDownloadProber(scriptedProber{duration: 236}))
+
+	_, err := step.Execute(context.Background(), ac, afterSelect{})
+
+	if !errors.Is(err, ErrNoConfidentMatch) {
+		t.Fatalf("err = %v, want ErrNoConfidentMatch", err)
+	}
+}
+
+func TestDownloadStep_AFingerprintedFallbackWithNoKnownLengthIsNeverStored(t *testing.T) {
+	fetcher := newGatedFetcher(nil)
+	identifier := &urlIdentifier{fetcher: fetcher, matches: map[string]ports.RecordingMatch{"edit": hardMatch()}}
+	ac := heldTrackContext(ports.AudioCandidate{
+		URL: "edit", Title: "Sunglasses at Night (Radio Edit)", Channel: "Corey Hart - Topic", Duration: 236,
+	})
+	ac.Track.CatalogDuration = 0
+	step := NewDownloadStep(fetcher, WithDownloadIdentifier(identifier), WithDownloadProber(scriptedProber{duration: 236}))
+
+	_, err := step.Execute(context.Background(), ac, afterSelect{})
+
+	if !errors.Is(err, ErrNoConfidentMatch) {
+		t.Fatalf("err = %v, want ErrNoConfidentMatch", err)
+	}
+}

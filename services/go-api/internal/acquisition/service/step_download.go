@@ -370,10 +370,11 @@ func judgeAttempt(ac *AcquisitionContext, candidate ports.AudioCandidate, filePa
 		fallback:   len(evidence.Qualifiers) > 0,
 	}
 	if result.fallback && !fallbackLengthMatches(evidence.DurationDeltaSeconds, ac.ExpectedLength()) {
-		result.rejection = &downloadRejection{
-			stage:  RejectionDuration,
-			reason: fmt.Sprintf("fallback version %.0fs off the expected length", evidence.DurationDeltaSeconds),
+		reason := "fallback version, length unknown"
+		if evidence.DurationDeltaSeconds != nil {
+			reason = fmt.Sprintf("fallback version %.0fs off the expected length", *evidence.DurationDeltaSeconds)
 		}
+		result.rejection = &downloadRejection{stage: RejectionDuration, reason: reason}
 		return result
 	}
 	result.status = attemptAccepted

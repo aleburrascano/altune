@@ -133,8 +133,26 @@ func TestDurationDelta_ReadsTheExpectedLengthNotTheDoubtedSearchPick(t *testing.
 		Identity: ports.RecordingIdentity{Duration: 167, ReferenceDoubted: true},
 	}
 
-	if got := ac.durationDelta(ports.AudioCandidate{Duration: 140}, 140); got != 1 {
-		t.Errorf("durationDelta = %v, want 1 against the catalog 139s", got)
+	if got, known := ac.durationDelta(ports.AudioCandidate{Duration: 140}, 140); !known || got != 1 {
+		t.Errorf("durationDelta = %v, %v, want 1 against the catalog 139s", got, known)
+	}
+}
+
+func TestDurationDelta_IsUnknownWithoutAProbeOrATarget(t *testing.T) {
+	claimed := ports.AudioCandidate{Duration: 140}
+	cases := map[string]struct {
+		ac     *AcquisitionContext
+		probed float64
+	}{
+		"not probed, the search claim is no measurement": {&AcquisitionContext{Track: TrackRef{CatalogDuration: 139}}, 0},
+		"no expected length":                             {&AcquisitionContext{}, 140},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got, known := tc.ac.durationDelta(claimed, tc.probed); known {
+				t.Errorf("durationDelta = %v, known; want unknown", got)
+			}
+		})
 	}
 }
 

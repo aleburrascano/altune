@@ -3,6 +3,7 @@ package service
 import (
 	"altune/go-api/internal/acquisition/adapters/ytmsearch"
 	"altune/go-api/internal/acquisition/adapters/ytmusic"
+	"altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"math"
@@ -21,15 +22,16 @@ func TestScoreConfidence(t *testing.T) {
 		{"hard with a low score", Evidence{Verdict: "hard", AcoustIDScore: 0.8}, 204, 0.85},
 		{"soft with a low score stays at the unknown cap", Evidence{Verdict: "soft", AcoustIDScore: 0.8}, 204, 0.8},
 		{"hard with no score recorded", Evidence{Verdict: "hard"}, 204, 0.95},
-		{"topic one second off", Evidence{Verdict: "unknown", Channel: "topic", DurationDeltaSeconds: 1}, 204, 0.7},
-		{"other channel twenty seconds off", Evidence{Verdict: "unknown", Channel: "other", DurationDeltaSeconds: 20}, 204, 0.2},
-		{"artist channel on the spot", Evidence{Verdict: "unknown", Channel: "artist"}, 204, 0.7},
-		{"no fingerprint run", Evidence{Channel: "topic", DurationDeltaSeconds: -1}, 204, 0.7},
-		{"loose duration window", Evidence{Channel: "other", DurationDeltaSeconds: 10}, 204, 0.3},
-		{"loose window grows with the track", Evidence{Channel: "other", DurationDeltaSeconds: 20}, 400, 0.3},
-		{"qualifier costs 0.2", Evidence{Channel: "topic", DurationDeltaSeconds: 0, Qualifiers: []string{"radio edit"}}, 204, 0.5},
-		{"resolved adds 0.1 and the cap holds", Evidence{Channel: "topic", Resolved: true}, 204, 0.8},
-		{"never below zero", Evidence{Channel: "other", DurationDeltaSeconds: 90, Qualifiers: []string{"edit"}}, 204, 0},
+		{"topic one second off", Evidence{Verdict: "unknown", Channel: "topic", DurationDeltaSeconds: secs(1)}, 204, 0.7},
+		{"other channel twenty seconds off", Evidence{Verdict: "unknown", Channel: "other", DurationDeltaSeconds: secs(20)}, 204, 0.2},
+		{"artist channel on the spot", Evidence{Verdict: "unknown", Channel: "artist", DurationDeltaSeconds: secs(0)}, 204, 0.7},
+		{"no fingerprint run", Evidence{Channel: "topic", DurationDeltaSeconds: secs(-1)}, 204, 0.7},
+		{"loose duration window", Evidence{Channel: "other", DurationDeltaSeconds: secs(10)}, 204, 0.3},
+		{"loose window grows with the track", Evidence{Channel: "other", DurationDeltaSeconds: secs(20)}, 400, 0.3},
+		{"qualifier costs 0.2", Evidence{Channel: "topic", DurationDeltaSeconds: secs(0), Qualifiers: []string{"radio edit"}}, 204, 0.5},
+		{"resolved adds 0.1 and the cap holds", Evidence{Channel: "topic", Resolved: true, DurationDeltaSeconds: secs(0)}, 204, 0.8},
+		{"unknown length earns no length bonus", Evidence{Verdict: "unknown", Channel: "topic"}, 204, 0.5},
+		{"never below zero", Evidence{Channel: "other", DurationDeltaSeconds: secs(90), Qualifiers: []string{"edit"}}, 204, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -41,7 +43,7 @@ func TestScoreConfidence(t *testing.T) {
 }
 
 func TestScoreConfidence_RanksHardOverSoftOverEveryUnknown(t *testing.T) {
-	best := ScoreConfidence(Evidence{Channel: "topic", Resolved: true}, 204)
+	best := ScoreConfidence(Evidence{Channel: "topic", Resolved: true, DurationDeltaSeconds: secs(0)}, 204)
 	hard := ScoreConfidence(Evidence{Verdict: "hard", AcoustIDScore: 0.5}, 204)
 	soft := ScoreConfidence(Evidence{Verdict: "soft", AcoustIDScore: 0.5}, 204)
 	if !(hard > soft && soft >= best) {
@@ -73,11 +75,35 @@ func TestConfidence_ACreditedPinnedVideoClearsTheFloor(t *testing.T) {
 	evidence := Evidence{
 		Channel:              uploaderClass(req.Artist, found[0]),
 		Resolved:             found[0].Resolved,
-		DurationDeltaSeconds: -6.08,
+		DurationDeltaSeconds: secs(-6.08),
 		SourceTitle:          found[0].Title,
 	}
 
 	if got := ScoreConfidence(evidence, 245); got < defaultConfidenceFloor {
 		t.Errorf("confidence = %v, want at least the %v floor", got, defaultConfidenceFloor)
+	}
+}
+
+func secs(v float64) *float64 { return &v }
+
+func TestFallbackLengthMatches(t *testing.T) {
+	allowance := domain.LengthAuthoritative.Allowance(204)
+	tests := []struct {
+		name  string
+		delta *float64
+		want  bool
+	}{
+		{"unknown length", nil, false},
+		{"on the spot", secs(0), true},
+		{"at the allowance", secs(allowance), true},
+		{"past the allowance", secs(allowance + 0.5), false},
+		{"short past the allowance", secs(-allowance - 0.5), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := fallbackLengthMatches(tt.delta, 204); got != tt.want {
+				t.Errorf("fallbackLengthMatches = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
