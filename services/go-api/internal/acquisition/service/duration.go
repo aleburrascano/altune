@@ -30,6 +30,13 @@ func (ac *AcquisitionContext) resolvedLength() float64 {
 	return ac.Identity.Duration
 }
 
+func (ac *AcquisitionContext) savedLength() float64 {
+	if ac.Track.CatalogDuration > 0 {
+		return ac.Track.CatalogDuration
+	}
+	return ac.Track.Duration
+}
+
 func (ac *AcquisitionContext) ExpectedLength() float64 {
 	switch {
 	case ac.Track.CatalogDuration > 0:
@@ -37,12 +44,12 @@ func (ac *AcquisitionContext) ExpectedLength() float64 {
 	case ac.resolvedLength() > 0:
 		return ac.resolvedLength()
 	default:
-		return ac.Track.Duration
+		return ac.savedLength()
 	}
 }
 
 func (ac *AcquisitionContext) lengthCorroborated() bool {
-	saved, resolved := ac.Track.Duration, ac.resolvedLength()
+	saved, resolved := ac.savedLength(), ac.resolvedLength()
 	if resolved <= 0 {
 		return false
 	}
@@ -53,7 +60,7 @@ func (ac *AcquisitionContext) lengthCorroborated() bool {
 }
 
 func (ac *AcquisitionContext) candidateDurationPlausible(candidate ports.AudioCandidate) bool {
-	if candidate.Resolved || candidate.Duration <= 0 || ac.Track.Duration <= 0 {
+	if candidate.Resolved || candidate.Duration <= 0 || ac.savedLength() <= 0 {
 		return true
 	}
 	return ac.durationAcceptable(candidate.Duration)
@@ -74,7 +81,7 @@ func (ac *AcquisitionContext) fileLengthAcceptable(candidate ports.AudioCandidat
 }
 
 func (ac *AcquisitionContext) durationAcceptable(actual float64) bool {
-	saved, resolved := ac.Track.Duration, ac.resolvedLength()
+	saved, resolved := ac.savedLength(), ac.resolvedLength()
 	if ac.lengthCorroborated() {
 		if saved <= 0 {
 			return durationWithinAuthoritativeTolerance(resolved, actual)

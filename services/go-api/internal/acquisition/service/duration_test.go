@@ -159,3 +159,20 @@ func TestReferenceFor_CarriesTheExpectedLength(t *testing.T) {
 		t.Errorf("reference duration = %v, want 139", got)
 	}
 }
+
+func TestDurationGates_CatalogLengthBeatsADifferingSavedLength(t *testing.T) {
+	ac := &AcquisitionContext{
+		Track:    TrackRef{Duration: 167, CatalogDuration: 139},
+		Identity: ports.RecordingIdentity{Duration: 167, ReferenceDoubted: true},
+	}
+
+	if !ac.candidateDurationPlausible(ports.AudioCandidate{Duration: 140}) {
+		t.Error("the 140s art track must pass the pre-download gate against the catalog 139s")
+	}
+	if ac.candidateDurationPlausible(ports.AudioCandidate{Duration: 167}) {
+		t.Error("the 167s upload must fail the pre-download gate against the catalog 139s")
+	}
+	if !ac.durationAcceptable(140) || ac.durationAcceptable(167) {
+		t.Error("the file-length gate must accept 140s and reject 167s against the catalog 139s")
+	}
+}
