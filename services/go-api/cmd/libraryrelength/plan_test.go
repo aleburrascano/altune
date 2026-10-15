@@ -107,6 +107,43 @@ func TestReadPlan_WrongAudioReacquireNeedsEvidenceAndSkipsTheLengthGate(t *testi
 	}
 }
 
+func TestReadPlan_WrongAudioVerdictMustBeOnTheAllowList(t *testing.T) {
+	plan := func(evidence string) string {
+		return `{"findings":[{"track_id":"t1","length_plan":{"action":"reacquire","reason":"wrong_audio","user_id":"u","version":1,"old_isrc":"A","file_seconds":176,"catalog_seconds":178,"evidence":` + evidence + `}}]}`
+	}
+	for _, verdict := range []string{"wrong_song", "wrong_cut", "fan_upload", "live", "video_rip", "length_off"} {
+		t.Run("accepts "+verdict, func(t *testing.T) {
+			got, err := readPlan(strings.NewReader(plan(`{"verdict":"` + verdict + `","preview_score":0.2}`)))
+			if err != nil || len(got) != 1 || got[0].Evidence.Verdict != verdict {
+				t.Fatalf("got %+v, %v", got, err)
+			}
+		})
+	}
+	rejected := map[string]string{
+		"right_song":                    plan(`{"verdict":"right_song","preview_score":0.9}`),
+		"verdict with a stray space":    plan(`{"verdict":" live","preview_score":0.2}`),
+		"whitespace top recording":      plan(`{"verdict":"wrong_song","acoustid_top_recording":"   "}`),
+		"whitespace top and no preview": plan(`{"verdict":"live","acoustid_top_recording":"\t"}`),
+	}
+	for name, report := range rejected {
+		t.Run("rejects "+name, func(t *testing.T) {
+			if got, err := readPlan(strings.NewReader(report)); err == nil {
+				t.Fatalf("expected an error, got %+v", got)
+			}
+		})
+	}
+}
+
+func TestDescribe_WrongAudioPrintsTheTrimmedTopRecording(t *testing.T) {
+	c := change{
+		TrackID: "t1", Action: actionReacquire, Reason: reasonWrongAudio,
+		Evidence: evidence{Verdict: "wrong_song", TopRecording: "  beibs in the trap \n"},
+	}
+	if got := describe(c, verdictApplied, true); !strings.Contains(got, "(wrong_song, acoustid top beibs in the trap)") {
+		t.Fatalf("got %q", got)
+	}
+}
+
 func TestDescribe_WrongAudioShowsTheEvidence(t *testing.T) {
 	score := 0.12
 	c := change{

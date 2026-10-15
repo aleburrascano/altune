@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"slices"
 	"strings"
 )
 
@@ -28,14 +29,16 @@ type evidence struct {
 	PreviewScore *float64 `json:"preview_score"`
 }
 
+var wrongAudioVerdicts = []string{"wrong_song", "wrong_cut", "fan_upload", "live", "video_rip", "length_off"}
+
 func (e evidence) isComplete() bool {
-	return strings.TrimSpace(e.Verdict) != "" && (strings.TrimSpace(e.TopRecording) != "" || e.PreviewScore != nil)
+	return slices.Contains(wrongAudioVerdicts, e.Verdict) && (strings.TrimSpace(e.TopRecording) != "" || e.PreviewScore != nil)
 }
 
 func (e evidence) summary() string {
 	parts := []string{e.Verdict}
-	if e.TopRecording != "" {
-		parts = append(parts, "acoustid top "+e.TopRecording)
+	if top := strings.TrimSpace(e.TopRecording); top != "" {
+		parts = append(parts, "acoustid top "+top)
 	}
 	if e.PreviewScore != nil {
 		parts = append(parts, fmt.Sprintf("preview score %.2f", *e.PreviewScore))
@@ -194,7 +197,7 @@ func validateLengthMiss(c change) error {
 
 func validateWrongAudio(c change) error {
 	if !c.Evidence.isComplete() {
-		return errors.New("wrong_audio reacquire without evidence: needs a verdict and an acoustid_top_recording or preview_score")
+		return fmt.Errorf("wrong_audio reacquire without evidence: needs a verdict (%s) and an acoustid_top_recording or preview_score", strings.Join(wrongAudioVerdicts, ", "))
 	}
 	return nil
 }

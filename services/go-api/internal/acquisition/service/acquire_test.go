@@ -1907,3 +1907,24 @@ func TestExecuteReplace_NeverOffersTheCurrentSourceAsTheKnownOne(t *testing.T) {
 		t.Errorf("download attempts = %v, want only %q", searcher.downloadURLs, rival.URL)
 	}
 }
+
+func TestExecuteReplace_NeverFetchesTheCurrentSourceAgainEvenWhenItRanksFirst(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	wrongURL := "https://youtube.com/watch?v=wrongwrong1"
+	track := readyTrackWithSource(t, repo, userId, "u/a/b/c.mp3", wrongURL)
+	store := newFakeAudioStore()
+	store.stored["u/a/b/c.mp3"] = true
+	var results []ports.AudioCandidate
+	for _, u := range []string{wrongURL, otherURL} {
+		results = append(results, ports.AudioCandidate{Title: "The Weeknd - Blinding Lights", URL: u, Source: "fake"})
+	}
+	searcher := &fakeAudioSearcher{searchResults: results, downloadErr: errors.New("boom")}
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), store)
+
+	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
+
+	if len(searcher.downloadURLs) != 1 || searcher.downloadURLs[0] != otherURL {
+		t.Errorf("download attempts = %v, want only %q, never the current source %q", searcher.downloadURLs, otherURL, wrongURL)
+	}
+}
