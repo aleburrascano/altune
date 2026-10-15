@@ -1,0 +1,130 @@
+{
+  "cases": [
+    {
+      "id": "rw-street-player-radio-edit-the-picked-soundcloud-upload",
+      "class": "RW",
+      "note": "live-captured real case, not a recorded prod pick: no prod track carries catalog_sources yet (0 of 2269) because the client pin is not released. Prod track 6ec90a50 (Street Player 2021 - Radio Edit, D.J.F., album Street Player 2021 (Radio Edit), no ISRC, no length) failed on 2026-10-07 with no_match_found: all 11 candidates rejected (11 identity). The pin is the SoundCloud upload soundcloud.com/curre-2/chicago-finale-mp3 (real yt-dlp: id 1506924427, 192.124 s, 162216 plays), the same upload prod already stores for the library track 'CURRE, D.J.F - Street Player 2021 (Edit)'; that it is the upload a user would pick for this track is inferred, not recorded. Competing candidates are real yt-dlp ytsearch5/scsearch5 results for the three query variants captured read-only on the prod host on 2026-10-15 (ytdlp: upload, unresolved, flat-playlist so the SoundCloud channel is empty); ytmsearch finds no strong hit for it (verified live), so it emits nothing. On main the pin does not exist and every text-search candidate fails identity (nothing stored); with the catalogpin source the picked upload is stored",
+      "track": {
+        "title": "Street Player 2021 - Radio Edit",
+        "artist": "D.J.F.",
+        "album": "Street Player 2021 (Radio Edit)",
+        "duration": 0.0,
+        "isrc": "",
+        "catalog_sources": [
+          {
+            "provider": "soundcloud",
+            "external_id": "1506924427",
+            "url": "https://soundcloud.com/curre-2/chicago-finale-mp3"
+          }
+        ]
+      },
+      "sources": [
+        {
+          "name": "catalogpin",
+          "adapter": "catalogpin",
+          "search_seconds": 0,
+          "candidates": [
+            {
+              "title": "CURRE, D.J.F - Street Player 2021 (Edit)",
+              "url": "https://soundcloud.com/curre-2/chicago-finale-mp3",
+              "duration": 192.124,
+              "view_count": 162216,
+              "correct": true
+            }
+          ]
+        },
+        {
+          "name": "ytdlp",
+          "search_seconds": 3,
+          "candidates": [
+            {
+              "title": "CURRE, D.J.F - Street Player 2021 (Edit)",
+              "url": "https://www.youtube.com/watch?v=VYe0m_NYaX8",
+              "channel": "CURRE x",
+              "duration": 193,
+              "view_count": 62911,
+              "query": "title_artist"
+            },
+            {
+              "title": "Street Player 2021 (Edit) | CURRE, D.J.F",
+              "url": "https://www.youtube.com/watch?v=fODa-H3QZcI",
+              "channel": "Arian E",
+              "duration": 193,
+              "view_count": 697,
+              "query": "title_artist"
+            },
+            {
+              "title": "CURRE, D.J.F - Street Player 2021 (Edit)",
+              "url": "https://www.youtube.com/watch?v=wL8ZSCy2AU0",
+              "channel": "Justice",
+              "duration": 193,
+              "view_count": 593,
+              "query": "title_artist"
+            },
+            {
+              "title": "Street Player (2003 Remaster)",
+              "url": "https://www.youtube.com/watch?v=TeQy-YxGPP4",
+              "channel": "Chicago Band",
+              "duration": 551,
+              "view_count": 1842504,
+              "query": "title_artist"
+            },
+            {
+              "title": "Chicago - Street Player - DJ OzYBoY 2019 Rework",
+              "url": "https://www.youtube.com/watch?v=j_FxoanDjys",
+              "channel": "DJ OzYBoY",
+              "duration": 423,
+              "view_count": 37017,
+              "query": "title_artist"
+            },
+            {
+              "title": "chill guy grooves 😏",
+              "url": "https://soundcloud.com/zacharydiscojones/chillguygrooves",
+              "duration": 15055.327,
+              "view_count": 6372,
+              "query": "title_artist"
+            },
+            {
+              "title": "JIB x Long Drink 3 Hour Set @TrueNorthtavern North Park, San Diego, CA - Live",
+              "url": "https://soundcloud.com/julian-ib/truenorthjibxlongdrink",
+              "duration": 7296.046,
+              "view_count": 230,
+              "query": "title_artist"
+            },
+            {
+              "title": "Teddy House",
+              "url": "https://soundcloud.com/nora-rich/teddy-house",
+              "duration": 1733.369,
+              "view_count": 25,
+              "query": "title_artist"
+            },
+            {
+              "title": "Street Player (Original Radio Edit)",
+              "url": "https://www.youtube.com/watch?v=gHf68lZsMt0",
+              "channel": "The Real Booty Babes - Topic",
+              "duration": 200,
+              "view_count": 2678,
+              "query": "title_artist_album"
+            },
+            {
+              "title": "Chicago - Street Player - HQ/HD",
+              "url": "https://www.youtube.com/watch?v=BcUAZ3uP52E",
+              "channel": "Juan Classic",
+              "duration": 307,
+              "view_count": 186077,
+              "query": "title_artist_audio"
+            },
+            {
+              "title": "Chicago - Street Player (Dj ''S'' Rework)",
+              "url": "https://www.youtube.com/watch?v=EXk599d8K0Q",
+              "channel": "Dj \"S\"",
+              "duration": 280,
+              "view_count": 365526,
+              "query": "title_artist_audio"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

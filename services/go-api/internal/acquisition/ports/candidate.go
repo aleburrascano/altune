@@ -17,6 +17,7 @@ const (
 	KindArtTrack    CandidateKind = "art_track"
 	KindPinnedVideo CandidateKind = "pinned_video"
 	KindUpload      CandidateKind = "upload"
+	KindCatalogPin  CandidateKind = "catalog_pin"
 )
 
 type AudioCandidate struct {

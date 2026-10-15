@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/acquisition/adapters/catalogbridge"
+	"altune/go-api/internal/acquisition/adapters/catalogpin"
 	"altune/go-api/internal/acquisition/adapters/fixture"
 	"altune/go-api/internal/acquisition/adapters/id3"
 	"altune/go-api/internal/acquisition/adapters/tempfs"
@@ -304,9 +305,9 @@ func TestAudioSources_TheSongsSearchOutranksTheCatalogLinkForTheSameVideo(t *tes
 	a := &App{cfg: &config.Config{YtMusicEnabled: true, YtDLPEnabled: true}}
 	first := sourceNames(a.audioSourcesFor(t.Context(), ytdlp.NewYtDlpAudioSearcher("", "", "")).first)
 
-	if len(first) != 2 || first[0] != ytmsearch.SourceName || first[1] != ytmusic.SourceName {
-		t.Errorf("first tier = %v, want [%s %s]: duplicates keep the earlier source, and only the songs search carries the video's own length",
-			first, ytmsearch.SourceName, ytmusic.SourceName)
+	if len(first) != 3 || first[0] != catalogpin.SourceName || first[1] != ytmsearch.SourceName || first[2] != ytmusic.SourceName {
+		t.Errorf("first tier = %v, want [%s %s %s]: duplicates keep the earlier source, and only the songs search carries the video's own length",
+			first, catalogpin.SourceName, ytmsearch.SourceName, ytmusic.SourceName)
 	}
 }
 

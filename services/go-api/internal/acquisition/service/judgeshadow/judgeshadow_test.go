@@ -28,3 +28,9 @@ func TestLog_APanickingJudgeIsLoggedAndSwallowed(t *testing.T) {
 		t.Fatalf("log = %q, want the panic recorded", buf.String())
 	}
 }
+
+func TestKindOf_TheCatalogPinIsThePinnedKind(t *testing.T) {
+	if got := kindOf(ports.KindCatalogPin); got != judge.PinnedVideo {
+		t.Errorf("kindOf(catalog pin) = %q, want %q", got, judge.PinnedVideo)
+	}
+}

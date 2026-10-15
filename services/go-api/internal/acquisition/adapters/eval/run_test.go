@@ -1014,3 +1014,28 @@ func TestValidateCases_RejectsAnUnknownSourceAdapter(t *testing.T) {
 		t.Error("expected an unknown adapter to be rejected")
 	}
 }
+
+func TestRun_ACatalogPinAdapterSourceEmitsThePickedSoundCloudUpload(t *testing.T) {
+	picked := "https://soundcloud.com/curre-2/chicago-finale-mp3"
+	kase := Case{
+		ID: "pin", Class: "RW",
+		Track: Track{
+			Title: "Street Player 2021 - Radio Edit", Artist: "D.J.F.",
+			CatalogSources: []CatalogSource{{Provider: "soundcloud", ExternalID: "1506924427", URL: picked}},
+		},
+		Sources: []Source{{Name: "catalogpin", Adapter: "catalogpin", Candidates: []Candidate{
+			{Title: "CURRE, D.J.F - Street Player 2021 (Edit)", URL: picked, Duration: 192.124, Correct: true},
+		}}},
+	}
+
+	out := Run(context.Background(), kase)
+
+	if !out.Pass || out.Stored != picked {
+		t.Fatalf("stored %q (%s), want the picked upload", out.Stored, out.Reason)
+	}
+
+	kase.Track.CatalogSources = nil
+	if out := Run(context.Background(), kase); out.Pass {
+		t.Errorf("without a catalog pin the adapter emits nothing; stored %q", out.Stored)
+	}
+}

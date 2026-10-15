@@ -48,7 +48,7 @@ func kindOf(k ports.CandidateKind) judge.Kind {
 	switch k {
 	case ports.KindArtTrack:
 		return judge.ArtTrack
-	case ports.KindPinnedVideo:
+	case ports.KindPinnedVideo, ports.KindCatalogPin:
 		return judge.PinnedVideo
 	default:
 		return judge.Upload

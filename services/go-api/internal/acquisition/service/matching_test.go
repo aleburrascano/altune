@@ -1264,3 +1264,13 @@ func TestRankAndCollect_RejectsPlainlyTitledAcousticAndDemoUploads(t *testing.T)
 		t.Fatalf("rejected = %+v, want acoustic and demo qualifier rejections", rejected)
 	}
 }
+
+func TestUploaderClass_TheCatalogPinIsTrusted(t *testing.T) {
+	pin := ports.AudioCandidate{Kind: ports.KindCatalogPin, Resolved: true, Artists: []string{"Sophie Ellis-Bextor"}}
+	if got := uploaderClass("Sophie Ellis-Bextor", pin); got != channelTopic {
+		t.Errorf("uploaderClass = %q, want the user's own pick trusted as %q", got, channelTopic)
+	}
+	if !artistMatchesCandidate("Sophie Ellis-Bextor", pin) {
+		t.Error("the user's own pick must not be rejected for a channel that does not name the artist")
+	}
+}

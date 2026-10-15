@@ -1,6 +1,7 @@
 package eval
 
 import (
+	"altune/go-api/internal/acquisition/adapters/catalogpin"
 	"altune/go-api/internal/acquisition/adapters/ytmsearch"
 	"altune/go-api/internal/acquisition/adapters/ytmusic"
 	acqdomain "altune/go-api/internal/acquisition/domain"
@@ -99,8 +100,11 @@ func (s *evalSource) Find(ctx context.Context, req ports.FindRequest) ([]ports.A
 	if s.spec.Fails {
 		return nil, &acqdomain.SourceUnavailableError{Source: s.Name(), Err: errors.New("eval: simulated source failure")}
 	}
-	if s.spec.Adapter == adapterYTMusic {
+	switch s.spec.Adapter {
+	case adapterYTMusic:
 		return s.pinnedVideos(ctx, req)
+	case adapterCatalogPin:
+		return catalogpin.NewSource(nil).Find(ctx, req)
 	}
 	variants := queryVariantsFor(req)
 	out := make([]ports.AudioCandidate, 0, len(s.spec.Candidates))

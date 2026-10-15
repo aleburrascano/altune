@@ -1,6 +1,7 @@
 package app
 
 import (
+	"altune/go-api/internal/acquisition/adapters/catalogpin"
 	"altune/go-api/internal/acquisition/adapters/chromaprint"
 	"altune/go-api/internal/acquisition/adapters/ffmpegtag"
 	"altune/go-api/internal/acquisition/adapters/fixture"
@@ -318,6 +319,9 @@ func (a *App) audioSourcesFor(ctx context.Context, searcher *ytdlp.YtDlpAudioSea
 		tiers.fallback = append(tiers.fallback, ytdlp.NewSource(searcher))
 	} else {
 		slog.InfoContext(ctx, "acquisition: yt-dlp source disabled via YTDLP_ENABLED")
+	}
+	if len(tiers.all()) > 0 {
+		tiers.first = append([]acqPorts.AudioSource{catalogpin.NewSource(searcher)}, tiers.first...)
 	}
 	return tiers
 }

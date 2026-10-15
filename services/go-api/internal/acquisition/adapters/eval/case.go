@@ -130,7 +130,10 @@ func (c Candidate) portResults() []ports.AcoustIDResult {
 	return results
 }
 
-const adapterYTMusic = "ytmusic"
+const (
+	adapterYTMusic    = "ytmusic"
+	adapterCatalogPin = "catalogpin"
+)
 
 const (
 	QueryISRC             = "isrc"
@@ -339,7 +342,7 @@ func validateSources(c Case) error {
 		if src.Name == "" {
 			return fmt.Errorf("case %q has a source with no name", c.ID)
 		}
-		if src.Adapter != "" && src.Adapter != adapterYTMusic {
+		if src.Adapter != "" && src.Adapter != adapterYTMusic && src.Adapter != adapterCatalogPin {
 			return fmt.Errorf("case %q source %q names unknown adapter %q", c.ID, src.Name, src.Adapter)
 		}
 		if len(src.Candidates) == 0 && !src.Fails {

@@ -111,6 +111,8 @@ func durationDelta(expected, actual float64) float64 {
 
 func uploaderClass(trackArtist string, c ports.AudioCandidate) string {
 	switch {
+	case c.Kind == ports.KindCatalogPin:
+		return channelTopic
 	case c.Kind == ports.KindArtTrack:
 		return artTrackClass(trackArtist, c.Artists)
 	case isTopicChannel(c.Channel):
@@ -137,6 +139,9 @@ func creditKey(name string) string {
 }
 
 func artistMatchesCandidate(trackArtist string, c ports.AudioCandidate) bool {
+	if c.Kind == ports.KindCatalogPin {
+		return true
+	}
 	if c.Kind == ports.KindArtTrack {
 		return artTrackClass(trackArtist, c.Artists) == channelTopic
 	}
