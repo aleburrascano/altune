@@ -112,6 +112,8 @@ func (s *evalSource) Find(_ context.Context, req ports.FindRequest) ([]ports.Aud
 			Resolved:   c.Resolved,
 			Kind:       ports.CandidateKind(c.Kind),
 			Artists:    c.Artists,
+			Album:      c.Album,
+			Explicit:   c.Explicit,
 		})
 	}
 	return out, nil

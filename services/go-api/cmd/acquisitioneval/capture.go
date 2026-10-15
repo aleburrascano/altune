@@ -24,6 +24,11 @@ type captureTrackDump struct {
 	Album           string  `json:"album"`
 	DurationSeconds float64 `json:"duration_seconds"`
 	ISRC            string  `json:"isrc"`
+
+	CatalogDurationSeconds *float64             `json:"catalog_duration_seconds"`
+	CatalogMBID            string               `json:"catalog_mbid"`
+	CatalogExplicit        *bool                `json:"catalog_explicit"`
+	CatalogSources         []eval.CatalogSource `json:"catalog_sources"`
 }
 
 type captureDump struct {
@@ -101,6 +106,11 @@ func captureCase(raw []byte, tier string, now time.Time) (eval.Case, error) {
 			Album:    d.Track.Album,
 			Duration: d.Track.DurationSeconds,
 			ISRC:     d.Track.ISRC,
+
+			CatalogDuration: deref(d.Track.CatalogDurationSeconds),
+			CatalogMBID:     d.Track.CatalogMBID,
+			CatalogSources:  d.Track.CatalogSources,
+			CatalogExplicit: d.Track.CatalogExplicit,
 		},
 		Sources: sources,
 	}, nil
@@ -186,4 +196,11 @@ func slug(s string) string {
 		}
 	}
 	return strings.Trim(b.String(), "-")
+}
+
+func deref(f *float64) float64 {
+	if f == nil {
+		return 0
+	}
+	return *f
 }

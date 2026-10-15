@@ -175,9 +175,19 @@ func trackRefFor(kase Case) service.TrackRef {
 		Title:    kase.Track.Title,
 		Artist:   kase.Track.Artist,
 		Album:    kase.Track.Album,
-		Duration: kase.Track.Duration,
+		Duration: targetLength(kase.Track),
 		ISRC:     kase.Track.ISRC,
 
 		CatalogDuration: kase.Track.CatalogDuration,
+		CatalogMBID:     kase.Track.CatalogMBID,
+		CatalogSources:  kase.Track.portCatalogSources(),
+		CatalogExplicit: kase.Track.CatalogExplicit,
 	}
+}
+
+func targetLength(t Track) float64 {
+	if t.CatalogDuration > 0 {
+		return t.CatalogDuration
+	}
+	return t.Duration
 }

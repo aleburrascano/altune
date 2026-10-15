@@ -877,3 +877,47 @@ func TestRun_ArtTrackByTheSearchedArtistIsTrustedWithoutAFingerprint(t *testing.
 		t.Fatalf("expected pass, got %q (stored %q)", out.Reason, out.Stored)
 	}
 }
+
+func TestRun_CarriesTheCatalogPinsIntoTheTrack(t *testing.T) {
+	explicit := false
+	kase := Case{
+		ID:    "pins",
+		Class: "RW",
+		Track: Track{
+			Title: "t", Artist: "a", Duration: 167, CatalogDuration: 139,
+			CatalogMBID:     "11111111-2222-3333-4444-555555555555",
+			CatalogSources:  []CatalogSource{{Provider: "musicbrainz", ExternalID: "abc"}},
+			CatalogExplicit: &explicit,
+		},
+		Candidates: []Candidate{{
+			Title: "t", URL: "https://music.youtube.com/watch?v=x", Duration: 139,
+			Resolved: true, Explicit: true, Album: "Album", Correct: true,
+		}},
+	}
+
+	track := trackRefFor(kase)
+	if track.CatalogMBID != kase.Track.CatalogMBID {
+		t.Errorf("CatalogMBID = %q", track.CatalogMBID)
+	}
+	if len(track.CatalogSources) != 1 || track.CatalogSources[0] != (ports.CatalogSource{Provider: "musicbrainz", ExternalID: "abc"}) {
+		t.Errorf("CatalogSources = %+v", track.CatalogSources)
+	}
+	if track.CatalogExplicit == nil || *track.CatalogExplicit {
+		t.Errorf("CatalogExplicit = %v, want false", track.CatalogExplicit)
+	}
+	if track.Duration != 139 {
+		t.Errorf("Duration = %v, want the catalog length 139", track.Duration)
+	}
+
+	found, err := newCasePorts(kase).sources()[0].Find(context.Background(), ports.FindRequest{})
+	if err != nil || len(found) != 1 {
+		t.Fatalf("Find = %v, %v", found, err)
+	}
+	if !found[0].Explicit || found[0].Album != "Album" {
+		t.Errorf("candidate = %+v, want explicit with album", found[0])
+	}
+
+	if out := Run(context.Background(), kase); !out.Pass {
+		t.Errorf("Run did not pass: %+v", out)
+	}
+}

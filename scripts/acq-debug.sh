@@ -146,6 +146,8 @@ SQL
 SELECT json_build_object(
          'id', id, 'title', title, 'artist', artist, 'album', album,
          'duration_seconds', duration_seconds, 'isrc', isrc,
+         'catalog_duration_seconds', catalog_duration_seconds, 'catalog_mbid', catalog_mbid,
+         'catalog_explicit', catalog_explicit, 'catalog_sources', catalog_sources,
          'acquisition_status', acquisition_status, 'failure_reason', failure_reason,
          'audio_source_url', audio_source_url)
   FROM tracks WHERE id = :'id';

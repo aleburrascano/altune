@@ -317,3 +317,26 @@ func TestRunCapture_NeverPrintsACaseThatValidateCasesRejects(t *testing.T) {
 		})
 	}
 }
+
+func TestCaptureCase_CarriesTheCatalogPins(t *testing.T) {
+	dump := strings.Replace(testDump, `"isrc": "CAA509814003",`, `"isrc": "CAA509814003",
+    "catalog_duration_seconds": 231.5,
+    "catalog_mbid": "6f1c2a3e-0000-4000-8000-000000000001",
+    "catalog_explicit": false,
+    "catalog_sources": [{"provider":"musicbrainz","external_id":"abc"}],`, 1)
+
+	kase, err := captureCase([]byte(dump), "prod", time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("captureCase: %v", err)
+	}
+	track := kase.Track
+	if track.CatalogDuration != 231.5 || track.CatalogMBID != "6f1c2a3e-0000-4000-8000-000000000001" {
+		t.Errorf("catalog duration/mbid = %v / %q", track.CatalogDuration, track.CatalogMBID)
+	}
+	if track.CatalogExplicit == nil || *track.CatalogExplicit {
+		t.Errorf("catalog explicit = %v, want false", track.CatalogExplicit)
+	}
+	if len(track.CatalogSources) != 1 || track.CatalogSources[0].ExternalID != "abc" {
+		t.Errorf("catalog sources = %+v", track.CatalogSources)
+	}
+}

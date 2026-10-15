@@ -25,13 +25,21 @@ type Track struct {
 	Duration float64 `json:"duration,omitempty"`
 	ISRC     string  `json:"isrc,omitempty"`
 
-	CatalogDuration float64 `json:"catalog_duration,omitempty"`
+	CatalogDuration float64         `json:"catalog_duration,omitempty"`
+	CatalogMBID     string          `json:"catalog_mbid,omitempty"`
+	CatalogSources  []CatalogSource `json:"catalog_sources,omitempty"`
+	CatalogExplicit *bool           `json:"catalog_explicit,omitempty"`
 
 	AuthoritativeDuration float64  `json:"authoritative_duration,omitempty"`
 	MBID                  string   `json:"mbid,omitempty"`
 	AcoustIDs             []string `json:"acoustids,omitempty"`
 
 	Resolution *Resolution `json:"resolution,omitempty"`
+}
+
+type CatalogSource struct {
+	Provider   string `json:"provider"`
+	ExternalID string `json:"external_id"`
 }
 
 type Resolution struct {
@@ -66,6 +74,8 @@ type Candidate struct {
 	Resolved        bool             `json:"resolved,omitempty"`
 	Kind            string           `json:"kind,omitempty"`
 	Artists         []string         `json:"artists,omitempty"`
+	Album           string           `json:"album,omitempty"`
+	Explicit        bool             `json:"explicit,omitempty"`
 	Correct         bool             `json:"correct,omitempty"`
 	Query           string           `json:"query,omitempty"`
 	DownloadSeconds float64          `json:"download_seconds,omitempty"`
@@ -82,6 +92,17 @@ type LinkedRecording struct {
 	Title    string   `json:"title"`
 	Artists  []string `json:"artists,omitempty"`
 	Duration float64  `json:"duration,omitempty"`
+}
+
+func (t Track) portCatalogSources() []ports.CatalogSource {
+	if len(t.CatalogSources) == 0 {
+		return nil
+	}
+	out := make([]ports.CatalogSource, len(t.CatalogSources))
+	for i, s := range t.CatalogSources {
+		out[i] = ports.CatalogSource(s)
+	}
+	return out
 }
 
 func (c Candidate) portResults() []ports.AcoustIDResult {
