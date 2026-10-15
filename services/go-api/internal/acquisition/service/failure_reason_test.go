@@ -225,3 +225,25 @@ func TestExecute_AFirstTierOutageSurvivesAnEmptyFallback(t *testing.T) {
 		t.Errorf("failure code = %q, want source_unavailable", got)
 	}
 }
+
+func TestExecute_ABrokenSearchBesideEmptyResultsIsNotNoMatch(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	repo := newFakeTrackRepository()
+	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	broken := &stubSource{name: "ytdlp", findErr: errors.New("yt-dlp search: output parsed to nothing")}
+	registry := NewSourceRegistry(broken, &stubSource{name: "ytmsearch"})
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), registry, newFakeAudioStore())
+
+	execErr := svc.Execute(withJobAttempt(context.Background(), 1), userId, track.ID)
+
+	if got := FailureCodeOf(execErr); got != string(shared.FailureAcquisitionFailed) {
+		t.Errorf("failure code = %q, want acquisition_failed", got)
+	}
+	if errors.Is(execErr, ErrAcquisitionRetryable) {
+		t.Errorf("err = %v, a degraded search must not be retryable", execErr)
+	}
+}

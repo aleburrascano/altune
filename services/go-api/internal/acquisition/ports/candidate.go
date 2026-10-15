@@ -122,5 +122,12 @@ func CollectCandidatesReportingOutage(
 	if len(merged) == 0 && firstUnavailable != nil {
 		return nil, firstUnavailable, fmt.Errorf("no candidates and a source was unavailable: %w", firstUnavailable)
 	}
+	if len(merged) == 0 && firstErr != nil {
+		return nil, nil, degraded(firstErr)
+	}
 	return merged, firstUnavailable, nil
+}
+
+func degraded(err error) error {
+	return fmt.Errorf("%w: %w", acqdomain.ErrSearchDegraded, err)
 }

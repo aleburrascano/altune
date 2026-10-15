@@ -40,6 +40,9 @@ func failureCode(err error) shared.FailureCode {
 	if acqdomain.IsSourceUnavailable(err) {
 		return shared.FailureSourceUnavailable
 	}
+	if errors.Is(err, acqdomain.ErrSearchDegraded) {
+		return shared.FailureAcquisitionFailed
+	}
 	if errors.Is(err, ErrNoConfidentMatch) {
 		return shared.FailureNoConfidentMatch
 	}

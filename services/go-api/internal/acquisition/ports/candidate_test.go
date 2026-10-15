@@ -27,9 +27,13 @@ func TestCollectCandidates_EmptyMergeBesideUnavailableFailureIsUnavailable(t *te
 	}
 }
 
-func TestCollectCandidates_EmptyMergeBesidePlainFailureIsNotAnError(t *testing.T) {
-	if _, err := collectBesideFailure(errors.New("parse")); err != nil {
-		t.Fatalf("err = %v, want nil", err)
+func TestCollectCandidates_EmptyMergeBesidePlainFailureIsDegraded(t *testing.T) {
+	parseErr := errors.New("parse")
+
+	_, err := collectBesideFailure(parseErr)
+
+	if !errors.Is(err, acqdomain.ErrSearchDegraded) || !errors.Is(err, parseErr) {
+		t.Fatalf("err = %v, want ErrSearchDegraded wrapping the parse failure", err)
 	}
 }
 
