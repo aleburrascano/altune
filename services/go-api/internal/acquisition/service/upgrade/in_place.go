@@ -160,6 +160,7 @@ func verdictOf(track *ports.TrackSnapshot, stored inPlaceEvidence, finding Findi
 		kind = grade.FanUpload
 	}
 	record.Grade = string(grade.Of(finding.Fingerprint, shared.ProvenanceBestEffort, kind))
+	record.Contradicted = finding.Fingerprint == grade.Contradicts || finding.Fingerprint == grade.Unsupported
 	return record
 }
 

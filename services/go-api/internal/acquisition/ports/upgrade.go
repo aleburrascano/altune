@@ -35,6 +35,7 @@ type InPlaceRecord struct {
 	BitErrorRate       float64
 	Grade              string
 	UserUploadMismatch bool
+	Contradicted       bool
 }
 
 type InPlaceStore interface {

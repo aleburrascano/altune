@@ -263,6 +263,24 @@ func TestPgxUpgradeStore_RecordInPlaceNeverLowersTheStoredGrade(t *testing.T) {
 	}
 }
 
+func TestPgxUpgradeStore_RecordInPlaceLowersTheGradeOnlyForAContradictionThatStands(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxUpgradeStore(pool)
+	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("C"), sourceURL: sourceURL("art")})
+
+	recorded, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{
+		AudioRef: "u/" + id.String() + ".mp3", Generation: 1, Verdict: "other_version", Basis: "acoustid", Grade: "F", Contradicted: true,
+	})
+
+	if err != nil || !recorded {
+		t.Fatalf("RecordInPlace = %v, %v, want it recorded", recorded, err)
+	}
+	if got := readEvidence(t, pool, id); got.Grade != "F" || got.Verdict != "other_version" {
+		t.Errorf("evidence = %+v, want the stored grade to tell the truth about the file: F", got)
+	}
+}
+
 func TestPgxUpgradeStore_NoteInPlaceFailureCountsAndMakesTheTrackWaitItsTurn(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)

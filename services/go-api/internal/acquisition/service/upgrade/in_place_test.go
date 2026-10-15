@@ -118,7 +118,7 @@ func TestRunner_AMismatchRecordsTheVerdictThenFallsThroughToReacquire(t *testing
 	if err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
-	if len(recorder.records) != 1 || recorder.records[0].Grade != "F" || recorder.records[0].Verdict != "other_version" {
+	if len(recorder.records) != 1 || recorder.records[0].Grade != "F" || recorder.records[0].Verdict != "other_version" || !recorder.records[0].Contradicted {
 		t.Errorf("records = %+v, want the F verdict recorded", recorder.records)
 	}
 	if w.source.finds != 1 {

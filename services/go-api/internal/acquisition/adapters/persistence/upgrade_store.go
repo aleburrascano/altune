@@ -135,7 +135,7 @@ SET acquisition_evidence = COALESCE(acquisition_evidence, '{}'::jsonb) || jsonb_
 		'in_place_bit_error_rate', NULLIF($9::float8, 0),
 		'verdict', NULLIF($4::text, ''),
 		'acoustid_score', NULLIF($6::float8, 0),
-		'grade', CASE WHEN %s > %s THEN $7::text END,
+		'grade', CASE WHEN NULLIF($7::text, '') IS NOT NULL AND ($10::boolean OR %s > %s) THEN $7::text END,
 		'user_upload_mismatch', CASE WHEN $8::boolean THEN true END)),
 	version = version + 1
 WHERE id = $1 AND audio_ref = $2 AND acquisition_status = 'ready'`,
@@ -147,7 +147,7 @@ func (s *PgxUpgradeStore) RecordInPlace(ctx context.Context, trackID shared.Trac
 	defer cancel()
 
 	tag, err := s.pool.Exec(ctx, recordInPlaceSQL, trackID.UUID(), record.AudioRef, record.Generation,
-		record.Verdict, record.Basis, record.Score, record.Grade, record.UserUploadMismatch, record.BitErrorRate)
+		record.Verdict, record.Basis, record.Score, record.Grade, record.UserUploadMismatch, record.BitErrorRate, record.Contradicted)
 	if err != nil {
 		return false, fmt.Errorf("record in-place verdict: %w", err)
 	}
