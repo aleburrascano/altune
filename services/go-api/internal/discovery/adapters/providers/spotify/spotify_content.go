@@ -222,11 +222,7 @@ type spotifyPFTrack struct {
 		} `json:"coverArt"`
 	} `json:"albumOfTrack"`
 	Artists struct {
-		Items []struct {
-			Profile struct {
-				Name string `json:"name"`
-			} `json:"profile"`
-		} `json:"items"`
+		Items []spotifyArtistRef `json:"items"`
 	} `json:"artists"`
 }
 
@@ -255,11 +251,7 @@ type spotifyAlbumTrack struct {
 		Label string `json:"label"`
 	} `json:"contentRating"`
 	Artists struct {
-		Items []struct {
-			Profile struct {
-				Name string `json:"name"`
-			} `json:"profile"`
-		} `json:"items"`
+		Items []spotifyArtistRef `json:"items"`
 	} `json:"artists"`
 }
 
@@ -271,7 +263,7 @@ func mapSpotifyRelease(rel spotifyPFRelease) (domain.SearchResult, bool) {
 		spotifyBestImage(rel.CoverArt.Sources),
 		domain.SourceRef{Provider: domain.ProviderSpotify, ExternalID: rel.ID, URL: spotifyReleaseURL(rel.SharingInfo.ShareURL, rel.ID)},
 		nil)
-	r.RecordType = domain.RecordType(strings.ToLower(rel.Type))
+	r.RecordType = spotifyRecordTypes.Parse(rel.Type)
 	r.ReleaseDate = spotifyReleaseDate(rel.Date.ISOString, rel.Date.Year)
 	r.TrackCount = rel.Tracks.TotalCount
 	return r, true
@@ -285,14 +277,12 @@ func mapSpotifyOverviewTrack(t spotifyPFTrack) (domain.SearchResult, bool) {
 	if len(t.Artists.Items) > 0 {
 		artist = t.Artists.Items[0].Profile.Name
 	}
-	var extras map[string]any
-	if t.ContentRating.Label == "EXPLICIT" {
-		extras = map[string]any{domain.ExtraExplicit: true}
-	}
 	r := domain.NewProviderResult(domain.ResultKindTrack, t.Name, artist,
 		spotifyBestImage(t.AlbumOfTrack.CoverArt.Sources),
 		domain.SourceRef{Provider: domain.ProviderSpotify, ExternalID: t.ID, URL: "https://open.spotify.com/track/" + t.ID},
-		extras)
+		nil)
+	r.Explicit = spotifyExplicit(t.ContentRating.Label)
+	r.Contributors = spotifyContributors(t.Artists.Items)
 	if t.Duration.TotalMilliseconds > 0 {
 		r.Duration = int(t.Duration.TotalMilliseconds / 1000)
 	}
@@ -309,21 +299,15 @@ func mapSpotifyAlbumTrack(t spotifyAlbumTrack) (domain.SearchResult, bool) {
 		artist = t.Artists.Items[0].Profile.Name
 	}
 	extras := map[string]any{}
-	if t.ContentRating.Label == "EXPLICIT" {
-		extras[domain.ExtraExplicit] = true
-	}
-	if t.TrackNumber > 0 {
-		extras[domain.ExtraTrackNumber] = t.TrackNumber
-	}
-	if t.DiscNumber > 0 {
-		extras[domain.ExtraDiscNumber] = t.DiscNumber
-	}
 	if feats := spotifyFeaturedArtists(t); len(feats) > 0 {
 		extras[domain.ExtraFeaturedArtists] = domain.FeaturedArtistsToExtras(feats)
 	}
 	r := domain.NewProviderResult(domain.ResultKindTrack, t.Name, artist, "",
 		domain.SourceRef{Provider: domain.ProviderSpotify, ExternalID: id, URL: "https://open.spotify.com/track/" + id},
 		extras)
+	r.TrackPosition = domain.TrackPosition{Disc: t.DiscNumber, Track: t.TrackNumber}
+	r.Explicit = spotifyExplicit(t.ContentRating.Label)
+	r.Contributors = spotifyContributors(t.Artists.Items)
 	if t.Duration.TotalMilliseconds > 0 {
 		r.Duration = int(t.Duration.TotalMilliseconds / 1000)
 	}
@@ -332,9 +316,9 @@ func mapSpotifyAlbumTrack(t spotifyAlbumTrack) (domain.SearchResult, bool) {
 
 func spotifyFeaturedArtists(t spotifyAlbumTrack) []domain.FeaturedArtist {
 	var feats []domain.FeaturedArtist
-	for i, a := range t.Artists.Items {
-		if name := strings.TrimSpace(a.Profile.Name); i > 0 && name != "" {
-			feats = append(feats, domain.FeaturedArtist{Name: name, Role: domain.RoleFeatured})
+	for _, c := range spotifyContributors(t.Artists.Items) {
+		if c.Role == domain.ContributorFeatured {
+			feats = append(feats, domain.FeaturedArtist{Name: c.Name, Role: domain.RoleFeatured})
 		}
 	}
 	return feats

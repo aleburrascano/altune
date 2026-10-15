@@ -810,7 +810,8 @@ func TestMerge_DifferentISRCsStillMergeWhenTheVersionWordsAgree(t *testing.T) {
 }
 
 func TestMerge_ExplicitAndCleanTwinsCarryTheISRCOfTheSameSource(t *testing.T) {
-	explicit := discoverytest.WithISRC(discoverytest.Track("Song", "X", domain.ProviderDeezer, map[string]any{domain.ExtraExplicit: true}), "USUM71700001")
+	explicit := discoverytest.WithISRC(discoverytest.Track("Song", "X", domain.ProviderDeezer, nil), "USUM71700001")
+	explicit.Explicit = domain.BoolPtr(true)
 	clean := discoverytest.WithISRC(discoverytest.Track("Song", "X", domain.ProviderSpotify, nil), "USUM71700002")
 	clean.Album = "Clean Album"
 
@@ -820,7 +821,7 @@ func TestMerge_ExplicitAndCleanTwinsCarryTheISRCOfTheSameSource(t *testing.T) {
 			t.Fatalf("got %d entities, want the twins merged", len(entities))
 		}
 		r := entities[0].Result
-		if got, want := domain.BoolExtra(r.Extras, domain.ExtraExplicit), r.ISRC == "USUM71700001"; got != want {
+		if got, want := r.Explicit != nil && *r.Explicit, r.ISRC == "USUM71700001"; got != want {
 			t.Errorf("ISRC %q with explicit=%v: the flag must come from the ISRC's own source", r.ISRC, got)
 		}
 	}

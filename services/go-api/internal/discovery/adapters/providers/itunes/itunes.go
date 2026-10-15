@@ -80,9 +80,6 @@ func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResul
 	artworkURL := upscaleArtwork(item.ArtworkURL100, iTunesListArtworkSize)
 
 	extras := make(map[string]any)
-	if item.TrackTimeMillis > 0 {
-		extras[domain.ExtraDuration] = item.TrackTimeMillis / 1000
-	}
 	if item.PrimaryGenreName != "" {
 		extras[domain.ExtraGenre] = item.PrimaryGenreName
 	}
@@ -95,15 +92,6 @@ func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResul
 		extras[domain.ExtraAlbum] = item.CollectionName
 		if item.PreviewURL != "" {
 			extras[domain.ExtraPreviewURL] = item.PreviewURL
-		}
-		if item.TrackNumber > 0 {
-			extras[domain.ExtraTrackNumber] = item.TrackNumber
-		}
-		if item.DiscNumber > 0 {
-			extras[domain.ExtraDiscNumber] = item.DiscNumber
-		}
-		if item.TrackExplicitness == "explicit" {
-			extras[domain.ExtraExplicit] = true
 		}
 	case domain.ResultKindAlbum:
 		title = StripAlbumTypeSuffix(item.CollectionName)
@@ -127,6 +115,10 @@ func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResul
 	if kind == domain.ResultKindTrack {
 		r.Album = item.CollectionName
 		r.ReleaseDate = item.ReleaseDate
+		r.TrackPosition = domain.TrackPosition{Disc: item.DiscNumber, Track: item.TrackNumber}
+		if item.TrackExplicitness == "explicit" {
+			r.Explicit = domain.BoolPtr(true)
+		}
 		if item.TrackTimeMillis > 0 {
 			r.Duration = int(item.TrackTimeMillis / 1000)
 		}

@@ -43,9 +43,6 @@ func mapSoundCloudAPITrack(t scAPITrack) (domain.SearchResult, bool) {
 	}
 
 	extras := map[string]any{}
-	if t.DurationMs > 0 {
-		extras[domain.ExtraDuration] = float64(t.DurationMs) / 1000.0
-	}
 	if t.PlaybackCount > 0 {
 		extras[domain.ExtraPlaybackCount] = t.PlaybackCount
 	}

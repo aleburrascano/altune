@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared/songfacts"
 	"altune/go-api/internal/shared/textnorm"
 	"altune/go-api/internal/shared/versiontag"
+	"cmp"
 	"math"
 	"slices"
 )
@@ -229,6 +230,7 @@ func mergeInto(canonical, other domain.SearchResult, matchTier domain.EntityReso
 		ResolutionTier: domain.StampResolutionTier(tier),
 	}
 	carryIdentity(&merged, canonical, other, matchTier)
+	merged.Explicit = cmp.Or(canonical.Explicit, other.Explicit)
 	alignExplicitWithISRC(&merged, canonical, other)
 	carryFields(&merged, canonical, other)
 	return merged
@@ -259,6 +261,10 @@ func carryIdentity(merged *domain.SearchResult, canonical, other domain.SearchRe
 	identityAgrees := !titleTierMerge || sameVersionIdentity(canonical, other)
 	merged.ISRC = identityCarriedField(canonical.ISRC, other.ISRC, identityAgrees)
 	merged.MBID = identityCarriedField(canonical.MBID, other.MBID, identityAgrees)
+	merged.RecordingMBID = identityCarriedField(canonical.RecordingMBID, other.RecordingMBID, identityAgrees)
+	merged.ReleaseMBID = identityCarriedField(canonical.ReleaseMBID, other.ReleaseMBID, identityAgrees)
+	merged.ReleaseGroupMBID = identityCarriedField(canonical.ReleaseGroupMBID, other.ReleaseGroupMBID, identityAgrees)
+	merged.ArtistMBID = identityCarriedField(canonical.ArtistMBID, other.ArtistMBID, identityAgrees)
 	if !identityAgrees && hasProven {
 		merged.ISRC = provenISRC
 		merged.MBID = provenMBID
@@ -273,16 +279,25 @@ func alignExplicitWithISRC(merged *domain.SearchResult, canonical, other domain.
 	if songfacts.CanonicalISRC(merged.ISRC) == songfacts.CanonicalISRC(other.ISRC) {
 		source = other
 	}
-	if explicit, ok := source.Extras[domain.ExtraExplicit]; ok {
-		merged.Extras[domain.ExtraExplicit] = explicit
-		return
+	merged.Explicit = source.Explicit
+}
+
+func firstKnownPosition(a, b domain.TrackPosition) domain.TrackPosition {
+	if a == (domain.TrackPosition{}) {
+		return b
 	}
-	delete(merged.Extras, domain.ExtraExplicit)
+	return a
 }
 
 func carryFields(merged *domain.SearchResult, canonical, other domain.SearchResult) {
 	merged.RecordType = release.FirstNonEmpty(canonical.RecordType, other.RecordType)
 	merged.UPC = release.FirstNonEmpty(canonical.UPC, other.UPC)
+	merged.ArtworkPath = release.FirstNonEmpty(canonical.ArtworkPath, other.ArtworkPath)
+	merged.TrackPosition = firstKnownPosition(canonical.TrackPosition, other.TrackPosition)
+	merged.Contributors = canonical.Contributors
+	if len(merged.Contributors) == 0 {
+		merged.Contributors = other.Contributors
+	}
 	merged.Xref = canonical.Xref
 	if len(merged.Xref) == 0 {
 		merged.Xref = other.Xref

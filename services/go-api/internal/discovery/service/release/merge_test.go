@@ -36,7 +36,7 @@ func withType(t domain.RecordType) func(*domain.SearchResult) {
 }
 
 func withUPC(u string) func(*domain.SearchResult) {
-	return func(r *domain.SearchResult) { r.Extras["upc"] = u }
+	return func(r *domain.SearchResult) { r.UPC = u }
 }
 
 func idGroup(rs ...domain.SearchResult) ReleaseGroup {

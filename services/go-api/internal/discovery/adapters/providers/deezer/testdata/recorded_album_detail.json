@@ -1,0 +1,39 @@
+{
+  "id": 302127,
+  "title": "Discovery",
+  "upc": "724384960650",
+  "link": "https://www.deezer.com/album/302127",
+  "cover_big": "https://cdn-images.dzcdn.net/images/cover/5718f7c81c27e0b2417e2a4c45224f8a/500x500-000000-80-0-0.jpg",
+  "cover_xl": "https://cdn-images.dzcdn.net/images/cover/5718f7c81c27e0b2417e2a4c45224f8a/1000x1000-000000-80-0-0.jpg",
+  "md5_image": "5718f7c81c27e0b2417e2a4c45224f8a",
+  "genre_id": 106,
+  "label": "Daft Life Ltd./ADA France",
+  "nb_tracks": 14,
+  "duration": 3662,
+  "fans": 343361,
+  "release_date": "2001-03-07",
+  "record_type": "album",
+  "available": true,
+  "explicit_lyrics": false,
+  "explicit_content_lyrics": 7,
+  "explicit_content_cover": 0,
+  "contributors": [
+    {
+      "id": 27,
+      "name": "Daft Punk",
+      "picture_big": "https://cdn-images.dzcdn.net/images/artist/638e69b9caaf9f9f3f8826febea7b543/500x500-000000-80-0-0.jpg",
+      "picture_xl": "https://cdn-images.dzcdn.net/images/artist/638e69b9caaf9f9f3f8826febea7b543/1000x1000-000000-80-0-0.jpg",
+      "radio": true,
+      "type": "artist",
+      "role": "Main"
+    }
+  ],
+  "artist": {
+    "id": 27,
+    "name": "Daft Punk",
+    "picture_big": "https://cdn-images.dzcdn.net/images/artist/638e69b9caaf9f9f3f8826febea7b543/500x500-000000-80-0-0.jpg",
+    "picture_xl": "https://cdn-images.dzcdn.net/images/artist/638e69b9caaf9f9f3f8826febea7b543/1000x1000-000000-80-0-0.jpg",
+    "type": "artist"
+  },
+  "type": "album"
+}

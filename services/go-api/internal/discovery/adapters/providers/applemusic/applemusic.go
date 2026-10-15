@@ -225,17 +225,8 @@ func mapAppleMusicSong(s appleMusicSong) domain.SearchResult {
 	if a.IsAppleDigitalMaster {
 		extras["apple_digital_master"] = true
 	}
-	if a.TrackNumber > 0 {
-		extras[domain.ExtraTrackNumber] = a.TrackNumber
-	}
-	if a.DiscNumber > 0 {
-		extras[domain.ExtraDiscNumber] = a.DiscNumber
-	}
 	if len(a.Previews) > 0 && a.Previews[0].URL != "" {
 		extras[domain.ExtraPreviewURL] = a.Previews[0].URL
-	}
-	if a.ContentRating == "explicit" {
-		extras[domain.ExtraExplicit] = true
 	}
 
 	r := domain.NewProviderResult(domain.ResultKindTrack, a.Name, a.ArtistName,
@@ -245,6 +236,10 @@ func mapAppleMusicSong(s appleMusicSong) domain.SearchResult {
 	r.ISRC = a.ISRC
 	r.Album = a.AlbumName
 	r.ReleaseDate = a.ReleaseDate
+	r.TrackPosition = domain.TrackPosition{Disc: a.DiscNumber, Track: a.TrackNumber}
+	if a.ContentRating == "explicit" {
+		r.Explicit = domain.BoolPtr(true)
+	}
 	if a.DurationInMillis > 0 {
 		r.Duration = int(a.DurationInMillis / 1000)
 	}
@@ -263,12 +258,6 @@ func mapAppleMusicAlbum(al appleMusicAlbum) domain.SearchResult {
 	if a.RecordLabel != "" {
 		extras["record_label"] = a.RecordLabel
 	}
-	if a.UPC != "" {
-		extras[domain.ExtraUPC] = a.UPC
-	}
-	if a.ContentRating == "explicit" {
-		extras[domain.ExtraExplicit] = true
-	}
 
 	r := domain.NewProviderResult(domain.ResultKindAlbum, itunes.StripAlbumTypeSuffix(a.Name), a.ArtistName,
 		appleMusicArtworkURL(a.Artwork.URL, appleMusicArtworkSize),
@@ -278,6 +267,9 @@ func mapAppleMusicAlbum(al appleMusicAlbum) domain.SearchResult {
 	r.ReleaseDate = a.ReleaseDate
 	r.TrackCount = a.TrackCount
 	r.UPC = a.UPC
+	if a.ContentRating == "explicit" {
+		r.Explicit = domain.BoolPtr(true)
+	}
 	return r
 }
 

@@ -15,6 +15,9 @@ type SearchResultDTO struct {
 	FavoriteKey     string         `json:"favorite_key"`
 	Sources         []SourceRefDTO `json:"sources"`
 	Extras          map[string]any `json:"extras"`
+
+	isrc     string
+	position domain.TrackPosition
 }
 
 type SourceRefDTO struct {
@@ -108,18 +111,6 @@ func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 	if _, set := extras[domain.ExtraAlbum]; !set && sr.Album != "" {
 		extras[domain.ExtraAlbum] = sr.Album
 	}
-	if sr.ISRC != "" {
-		extras["isrc"] = sr.ISRC
-	}
-	if sr.UPC != "" {
-		extras[domain.ExtraUPC] = sr.UPC
-	}
-	if sr.MBID != "" {
-		extras[domain.ExtraMBID] = sr.MBID
-	}
-	if _, set := extras[domain.ExtraDuration]; !set && sr.Duration > 0 {
-		extras[domain.ExtraDuration] = sr.Duration
-	}
 	if sr.Year != 0 {
 		extras["year"] = sr.Year
 	}
@@ -151,6 +142,8 @@ func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 		FavoriteKey:     domain.FavoriteKeyOf(sr),
 		Sources:         sources,
 		Extras:          extras,
+		isrc:            sr.ISRC,
+		position:        sr.TrackPosition,
 	}
 }
 

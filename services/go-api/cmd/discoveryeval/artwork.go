@@ -66,8 +66,8 @@ func resolveArtistArtworkPath(ctx context.Context, searcher discoveryEval.Search
 		if results[i].ImageURL == "" {
 			return "blank"
 		}
-		if p := domain.StringExtra(results[i].Extras, domain.ExtraArtworkPath); p != "" {
-			return p
+		if p := results[i].ArtworkPath; p != "" {
+			return string(p)
 		}
 		return "unknown"
 	}

@@ -78,8 +78,8 @@ func TestITunesAdapter_Search_Tracks(t *testing.T) {
 	if r.Extras["album"] != "Led Zeppelin IV" {
 		t.Errorf("extras.album: got %v, want %q", r.Extras["album"], "Led Zeppelin IV")
 	}
-	if dur, ok := r.Extras["duration"].(int64); !ok || dur != 482 {
-		t.Errorf("extras.duration: got %v (%T), want 482", r.Extras["duration"], r.Extras["duration"])
+	if r.Duration != 482 {
+		t.Errorf("Duration: got %d, want 482", r.Duration)
 	}
 	if r.Extras["genre"] != "Rock" {
 		t.Errorf("extras.genre: got %v, want %q", r.Extras["genre"], "Rock")

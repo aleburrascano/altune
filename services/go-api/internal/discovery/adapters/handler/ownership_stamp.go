@@ -46,7 +46,7 @@ func albumTrackItems(albumTitle string, items []SearchResultDTO) []ownership.Own
 }
 
 func ownableItem(dto *SearchResultDTO) ownership.OwnableItem {
-	return ownership.OwnableItem{Kind: dto.Kind, Title: dto.Title, Artist: dto.Subtitle, Extras: &dto.Extras}
+	return ownership.OwnableItem{Kind: dto.Kind, Title: dto.Title, Artist: dto.Subtitle, ISRC: dto.isrc, TrackPosition: dto.position, Extras: &dto.Extras}
 }
 
 func ownershipTargets(

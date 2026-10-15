@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -77,8 +80,8 @@ func TestDeezerAdapter_Search_Tracks(t *testing.T) {
 	if r.Extras["album"] != "A Night at the Opera" {
 		t.Errorf("extras.album: got %v, want %q", r.Extras["album"], "A Night at the Opera")
 	}
-	if dur, ok := r.Extras["duration"].(int); !ok || dur != 355 {
-		t.Errorf("extras.duration: got %v (%T), want 355", r.Extras["duration"], r.Extras["duration"])
+	if r.Duration != 355 {
+		t.Errorf("Duration: got %d, want 355", r.Duration)
 	}
 	if r.ProviderRank != 150000 {
 		t.Errorf("ProviderRank: got %d, want 150000", r.ProviderRank)
@@ -722,7 +725,119 @@ func TestDeezerAdapter_GetAlbumTracks_readsEveryPage(t *testing.T) {
 
 func TestMapDeezerResult_CarriesTheProvidersTrackPositionAndDiskNumber(t *testing.T) {
 	r := mapDeezerResult(deezerItem{ID: 7, Title: "Bonus One", TrackPosition: 1, DiskNumber: 2}, domain.ResultKindTrack)
-	if r.Extras[domain.ExtraTrackNumber] != 1 || r.Extras[domain.ExtraDiscNumber] != 2 {
-		t.Errorf("extras = %v, want track 1 disc 2", r.Extras)
+	if r.TrackPosition != (domain.TrackPosition{Disc: 2, Track: 1}) {
+		t.Errorf("track position = %+v, want track 1 disc 2", r.TrackPosition)
+	}
+}
+
+func searchRecordedPayload(t *testing.T, kind domain.ResultKind, fixture string) domain.SearchResult {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("testdata", fixture))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintf(w, `{"data": [%s], "total": 1}`, raw)
+	}))
+	defer server.Close()
+	results, err := NewDeezerAdapter(providertest.NewClient(server.URL)).Search(t.Context(), "recorded", map[domain.ResultKind]bool{kind: true})
+	if err != nil || len(results) != 1 {
+		t.Fatalf("Search = %d results, err %v, want exactly the recorded one", len(results), err)
+	}
+	return results[0]
+}
+
+func TestSearch_RecordedTrackPayloadFillsTheTypedContract(t *testing.T) {
+	r := searchRecordedPayload(t, domain.ResultKindTrack, "recorded_track_with_featured_contributor.json")
+
+	wantContributors := []domain.Contributor{
+		{ProviderID: "12178", Name: "Calvin Harris", Role: domain.ContributorMain},
+		{ProviderID: "564", Name: "Rihanna", Role: domain.ContributorFeatured},
+	}
+	checks := []struct {
+		field     string
+		got, want any
+	}{
+		{"ISRC", r.ISRC, "GBARL1600460"},
+		{"TrackPosition", r.TrackPosition, domain.TrackPosition{Disc: 1, Track: 1}},
+		{"Duration", r.Duration, 222},
+		{"Contributors", r.Contributors, wantContributors},
+		{"Explicit", r.Explicit != nil && !*r.Explicit, true},
+		{"Album", r.Album, "This Is What You Came For"},
+		{"Extras track_number", r.Extras["track_number"], nil},
+		{"Extras duration", r.Extras["duration"], nil},
+		{"Extras explicit", r.Extras["explicit"], nil},
+	}
+	for _, c := range checks {
+		if !reflect.DeepEqual(c.got, c.want) {
+			t.Errorf("%s = %#v, want %#v", c.field, c.got, c.want)
+		}
+	}
+}
+
+func TestSearch_RecordedTrackWithSeveralMainContributorsKeepsEachOnce(t *testing.T) {
+	r := searchRecordedPayload(t, domain.ResultKindTrack, "recorded_track_with_several_main_contributors.json")
+
+	want := []domain.Contributor{
+		{ProviderID: "27", Name: "Daft Punk", Role: domain.ContributorMain},
+		{ProviderID: "103", Name: "Pharrell Williams", Role: domain.ContributorMain},
+		{ProviderID: "7207", Name: "Nile Rodgers", Role: domain.ContributorMain},
+	}
+	if !reflect.DeepEqual(r.Contributors, want) {
+		t.Errorf("Contributors = %#v, want %#v", r.Contributors, want)
+	}
+	if r.TrackPosition != (domain.TrackPosition{Disc: 1, Track: 8}) {
+		t.Errorf("TrackPosition = %+v, want disc 1 track 8", r.TrackPosition)
+	}
+}
+
+func TestSearch_RecordedAlbumPayloadFillsTheTypedContract(t *testing.T) {
+	r := searchRecordedPayload(t, domain.ResultKindAlbum, "recorded_album_detail.json")
+
+	checks := []struct {
+		field     string
+		got, want any
+	}{
+		{"UPC", r.UPC, "724384960650"},
+		{"RecordType", r.RecordType, domain.RecordTypeAlbum},
+		{"TrackCount", r.TrackCount, 14},
+		{"Contributors", r.Contributors, []domain.Contributor{{ProviderID: "27", Name: "Daft Punk", Role: domain.ContributorMain}}},
+		{"Explicit", r.Explicit != nil && !*r.Explicit, true},
+		{"ISRC", r.ISRC, ""},
+	}
+	for _, c := range checks {
+		if !reflect.DeepEqual(c.got, c.want) {
+			t.Errorf("%s = %#v, want %#v", c.field, c.got, c.want)
+		}
+	}
+}
+
+func TestMapDeezerResult_RecordTypeIsParsedCaseInsensitivelyAgainstDeezersVocabulary(t *testing.T) {
+	tests := []struct {
+		raw  string
+		want domain.RecordType
+	}{
+		{"album", domain.RecordTypeAlbum},
+		{"EP", domain.RecordTypeEP},
+		{" Single ", domain.RecordTypeSingle},
+		{"compilation", domain.RecordTypeCompilation},
+		{"mixtape", domain.RecordTypeUnknown},
+	}
+	for _, tt := range tests {
+		if got := mapDeezerResult(deezerItem{ID: 1, Title: "A", RecordType: tt.raw}, domain.ResultKindAlbum).RecordType; got != tt.want {
+			t.Errorf("record_type %q = %q, want %q", tt.raw, got, tt.want)
+		}
+	}
+}
+
+func TestMapDeezerResult_ISRCIsCanonicalOrEmpty(t *testing.T) {
+	tests := []struct{ raw, want string }{
+		{"gb-arl-16-00460", "GBARL1600460"},
+		{"not-an-isrc", ""},
+	}
+	for _, tt := range tests {
+		if got := mapDeezerResult(deezerItem{ID: 1, Title: "T", ISRC: tt.raw}, domain.ResultKindTrack).ISRC; got != tt.want {
+			t.Errorf("isrc %q = %q, want %q", tt.raw, got, tt.want)
+		}
 	}
 }

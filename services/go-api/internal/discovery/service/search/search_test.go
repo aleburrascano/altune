@@ -1284,8 +1284,8 @@ func TestService_MissingArtworkIsFetchedAfterTheAnswer(t *testing.T) {
 	if first.Results[0].ImageURL != "" {
 		t.Fatalf("first answer ImageURL = %q, want none while the live lookup runs", first.Results[0].ImageURL)
 	}
-	if path, _ := first.Results[0].Extras["artwork_path"].(string); path != "pending" {
-		t.Errorf("artwork_path = %q, want pending", path)
+	if path := first.Results[0].ArtworkPath; path != domain.ArtworkPathPending {
+		t.Errorf("ArtworkPath = %q, want pending", path)
 	}
 
 	close(resolver.release)

@@ -12,30 +12,38 @@ type SourceRef struct {
 }
 
 type SearchResult struct {
-	Kind           ResultKind
-	Title          string
-	Subtitle       string
-	ImageURL       string
-	ArtworkSource  ProviderKey
-	Confidence     Confidence
-	Sources        []SourceRef
-	Popularity     float64
-	ISRC           string
-	MBID           string
-	UPC            string
-	Xref           map[ProviderKey]string
-	Year           int
-	ReleaseDate    string
-	TrackCount     int
-	ProviderRank   int64
-	FanCount       int64
-	Album          string
-	Duration       int
-	DeezerAlbumID  string
-	Signature      string
-	RecordType     RecordType
-	ResolutionTier ResolutionTierStamp
-	Extras         map[string]any
+	Kind             ResultKind
+	Title            string
+	Subtitle         string
+	ImageURL         string
+	ArtworkSource    ProviderKey
+	Confidence       Confidence
+	Sources          []SourceRef
+	Popularity       float64
+	ISRC             string
+	MBID             string
+	RecordingMBID    string
+	ReleaseMBID      string
+	ReleaseGroupMBID string
+	ArtistMBID       string
+	UPC              string
+	Xref             map[ProviderKey]string
+	Year             int
+	ReleaseDate      string
+	TrackCount       int
+	ProviderRank     int64
+	FanCount         int64
+	Album            string
+	Duration         int
+	DeezerAlbumID    string
+	Signature        string
+	RecordType       RecordType
+	TrackPosition    TrackPosition
+	Contributors     []Contributor
+	Explicit         *bool
+	ArtworkPath      ArtworkPath
+	ResolutionTier   ResolutionTierStamp
+	Extras           map[string]any
 }
 
 func (r *SearchResult) PutExtra(key string, value any) {
@@ -51,12 +59,39 @@ func (r SearchResult) WithExtra(key string, value any) SearchResult {
 	return r
 }
 
+const (
+	wireArtworkPath = "artwork_path"
+	wireDuration    = "duration"
+	wireExplicit    = "explicit"
+	wireTrackNumber = "track_number"
+	wireDiscNumber  = "disc_number"
+	wireUPC         = "upc"
+	wireMBID        = "mbid"
+	wireISRC        = "isrc"
+	wireRecordType  = "record_type"
+)
+
 func PutTypedExtras(extras map[string]any, r SearchResult) {
-	if r.RecordType != "" {
-		extras[ExtraRecordType] = string(r.RecordType)
+	putIfSet(extras, wireRecordType, string(r.RecordType))
+	putIfSet(extras, wireISRC, r.ISRC)
+	putIfSet(extras, wireUPC, r.UPC)
+	putIfSet(extras, wireMBID, r.MBID)
+	putIfSet(extras, wireArtworkPath, string(r.ArtworkPath))
+	putIfSet(extras, wireDuration, r.Duration)
+	putIfSet(extras, wireTrackNumber, r.TrackPosition.Track)
+	putIfSet(extras, wireDiscNumber, r.TrackPosition.Disc)
+	if r.Explicit != nil && *r.Explicit {
+		extras[wireExplicit] = true
 	}
 	if r.ResolutionTier.Stamped {
 		extras[ExtraResolutionTier] = r.ResolutionTier.Tier.String()
+	}
+}
+
+func putIfSet[T comparable](extras map[string]any, key string, value T) {
+	var zero T
+	if value != zero {
+		extras[key] = value
 	}
 }
 

@@ -124,3 +124,22 @@ func TestSoundCloudAdapter_Search_CapsConcurrentYtdlp(t *testing.T) {
 		t.Errorf("search after slots freed: %v", err)
 	}
 }
+
+func TestSoundCloudAdapter_Search_YtdlpEntryFillsTheTypedDuration(t *testing.T) {
+	adapter := NewSoundCloudAdapter()
+	adapter.dumpJSON = func(context.Context, []string) ([][]byte, string, error) {
+		return [][]byte{[]byte(`{"title":"Song","uploader":"Artist","duration":226.5,"webpage_url":"https://soundcloud.com/a/s","id":"1","playback_count":9}`)}, "", nil
+	}
+
+	results, err := adapter.Search(context.Background(), "q", map[domain.ResultKind]bool{domain.ResultKindTrack: true})
+	if err != nil || len(results) != 1 {
+		t.Fatalf("Search = %d results, err %v, want one", len(results), err)
+	}
+
+	if results[0].Duration != 226 {
+		t.Errorf("Duration = %d, want 226", results[0].Duration)
+	}
+	if _, present := results[0].Extras["duration"]; present {
+		t.Errorf("extras = %v, want no duration key", results[0].Extras)
+	}
+}

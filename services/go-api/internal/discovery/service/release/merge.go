@@ -71,7 +71,7 @@ func compatibleRelease(candidates []*MergedRelease, variant domain.SearchResult)
 }
 
 func conflictingIdentity(a, b domain.SearchResult) bool {
-	return differ(a.MBID, b.MBID) || differ(releaseUPC(a), releaseUPC(b)) ||
+	return differ(a.MBID, b.MBID) || differ(a.UPC, b.UPC) ||
 		ClaimsAnotherID(a, b) || albumVersusSingle(a.RecordType, b.RecordType)
 }
 
@@ -104,10 +104,6 @@ func differ(a, b string) bool {
 	return a != "" && b != "" && a != b
 }
 
-func releaseUPC(r domain.SearchResult) string {
-	return FirstNonEmpty(r.UPC, domain.StringExtra(r.Extras, domain.ExtraUPC))
-}
-
 func releaseKey(title string) string {
 	base := textnorm.NormalizeForMatch(title)
 	if base == "" {
@@ -136,6 +132,19 @@ func bestOfRelease(a, b domain.SearchResult) domain.SearchResult {
 	a.ISRC = FirstNonEmpty(a.ISRC, b.ISRC)
 	a.UPC = FirstNonEmpty(a.UPC, b.UPC)
 	a.MBID = FirstNonEmpty(a.MBID, b.MBID)
+	a.RecordingMBID = FirstNonEmpty(a.RecordingMBID, b.RecordingMBID)
+	a.ReleaseMBID = FirstNonEmpty(a.ReleaseMBID, b.ReleaseMBID)
+	a.ReleaseGroupMBID = FirstNonEmpty(a.ReleaseGroupMBID, b.ReleaseGroupMBID)
+	a.ArtistMBID = FirstNonEmpty(a.ArtistMBID, b.ArtistMBID)
+	if a.TrackPosition == (domain.TrackPosition{}) {
+		a.TrackPosition = b.TrackPosition
+	}
+	if len(a.Contributors) == 0 {
+		a.Contributors = b.Contributors
+	}
+	if a.Explicit == nil {
+		a.Explicit = b.Explicit
+	}
 	a.ImageURL, a.ArtworkSource = bestArtwork(a, b)
 	a.Sources = UnionSources(a.Sources, b.Sources)
 	a.RecordType = mergeReleaseRecordType(a.RecordType, b.RecordType)
@@ -200,7 +209,7 @@ func mergeRecordType(a, b domain.RecordType) domain.RecordType {
 }
 
 func hasStrongID(r domain.SearchResult) bool {
-	return r.MBID != "" || r.ISRC != "" || r.UPC != "" || domain.StringExtra(r.Extras, domain.ExtraUPC) != ""
+	return r.MBID != "" || r.ISRC != "" || r.UPC != ""
 }
 
 func UnionSources(a, b []domain.SourceRef) []domain.SourceRef {

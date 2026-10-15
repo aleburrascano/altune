@@ -226,8 +226,8 @@ func TestMapYTMusicVideo(t *testing.T) {
 	if src.URL != "https://music.youtube.com/watch?v=abc123" {
 		t.Errorf("source URL = %q", src.URL)
 	}
-	if got.Extras["duration"] != 200 {
-		t.Errorf("duration extra = %v, want 200", got.Extras["duration"])
+	if got.Duration != 200 {
+		t.Errorf("Duration = %d, want 200", got.Duration)
 	}
 }
 

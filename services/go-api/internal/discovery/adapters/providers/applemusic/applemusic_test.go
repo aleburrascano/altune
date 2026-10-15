@@ -120,8 +120,8 @@ func TestAppleMusicAdapter_Search_mapsAllKinds(t *testing.T) {
 	if track.Extras["preview_url"] != "https://audio-ssl.itunes.apple.com/preview.m4a" {
 		t.Errorf("track preview_url extra = %v", track.Extras["preview_url"])
 	}
-	if track.Extras["explicit"] != true {
-		t.Errorf("track explicit extra = %v, want true", track.Extras["explicit"])
+	if track.Explicit == nil || !*track.Explicit {
+		t.Errorf("track Explicit = %v, want true", track.Explicit)
 	}
 	if len(track.Sources) != 1 || track.Sources[0].ExternalID != "1488408568" {
 		t.Errorf("track source = %+v", track.Sources)
@@ -131,14 +131,14 @@ func TestAppleMusicAdapter_Search_mapsAllKinds(t *testing.T) {
 	if album.TrackCount != 14 {
 		t.Errorf("album.TrackCount = %d, want 14", album.TrackCount)
 	}
-	if album.Extras["upc"] != "00602435610238" {
-		t.Errorf("album upc extra = %v", album.Extras["upc"])
+	if _, ok := album.Extras["upc"]; ok {
+		t.Errorf("album upc extra = %v, want the UPC only in the typed field", album.Extras["upc"])
 	}
 	if album.UPC != "00602435610238" {
 		t.Errorf("album.UPC = %q, want typed upc (merge's album tier reads it)", album.UPC)
 	}
-	if album.Extras["explicit"] != true {
-		t.Errorf("album explicit extra = %v, want true", album.Extras["explicit"])
+	if album.Explicit == nil || !*album.Explicit {
+		t.Errorf("album Explicit = %v, want true", album.Explicit)
 	}
 
 	artist := byKind[domain.ResultKindArtist]

@@ -10,10 +10,10 @@ func (r SearchResult) ArtworkConfidenceRank() int {
 	if r.ImageURL == "" {
 		return ArtworkRankNone
 	}
-	switch StringExtra(r.Extras, ExtraArtworkPath) {
-	case "durable-identity", "identity":
+	switch r.ArtworkPath {
+	case ArtworkPathDurableIdentity, ArtworkPathIdentity:
 		return ArtworkRankIdentity
-	case "name":
+	case ArtworkPathName:
 		return ArtworkRankProvider
 	}
 	if r.HasArtworkIdentity() {

@@ -247,12 +247,7 @@ type spotifyTrackData struct {
 		} `json:"coverArt"`
 	} `json:"albumOfTrack"`
 	Artists struct {
-		Items []struct {
-			Profile struct {
-				Name string `json:"name"`
-			} `json:"profile"`
-			URI string `json:"uri"`
-		} `json:"items"`
+		Items []spotifyArtistRef `json:"items"`
 	} `json:"artists"`
 }
 
@@ -265,11 +260,7 @@ type spotifyAlbumData struct {
 		Sources []spotifyImage `json:"sources"`
 	} `json:"coverArt"`
 	Artists struct {
-		Items []struct {
-			Profile struct {
-				Name string `json:"name"`
-			} `json:"profile"`
-		} `json:"items"`
+		Items []spotifyArtistRef `json:"items"`
 	} `json:"artists"`
 	Date struct {
 		Year int `json:"year"`
@@ -287,6 +278,49 @@ type spotifyArtistData struct {
 			Sources []spotifyImage `json:"sources"`
 		} `json:"avatarImage"`
 	} `json:"visuals"`
+}
+
+type spotifyArtistRef struct {
+	Profile struct {
+		Name string `json:"name"`
+	} `json:"profile"`
+	URI string `json:"uri"`
+}
+
+var spotifyRecordTypes = domain.RecordTypeVocabulary{
+	"album":       domain.RecordTypeAlbum,
+	"single":      domain.RecordTypeSingle,
+	"ep":          domain.RecordTypeEP,
+	"compilation": domain.RecordTypeCompilation,
+}
+
+const spotifyExplicitLabel = "EXPLICIT"
+
+func spotifyExplicit(label string) *bool {
+	if label == spotifyExplicitLabel {
+		return domain.BoolPtr(true)
+	}
+	return nil
+}
+
+func spotifyContributors(artists []spotifyArtistRef) []domain.Contributor {
+	var out []domain.Contributor
+	for _, a := range artists {
+		name := strings.TrimSpace(a.Profile.Name)
+		if name == "" {
+			continue
+		}
+		id := spotifyIDFromURI(a.URI)
+		if a.URI == "" {
+			id = ""
+		}
+		role := domain.ContributorFeatured
+		if len(out) == 0 {
+			role = domain.ContributorMain
+		}
+		out = append(out, domain.Contributor{ProviderID: id, Name: name, Role: role})
+	}
+	return out
 }
 
 func spotifyBestImage(sources []spotifyImage) string {
@@ -320,16 +354,13 @@ func mapSpotifyTrack(t spotifyTrackData) (domain.SearchResult, bool) {
 		artist = t.Artists.Items[0].Profile.Name
 	}
 
-	var extras map[string]any
-	if t.ContentRating.Label == "EXPLICIT" {
-		extras = map[string]any{domain.ExtraExplicit: true}
-	}
-
 	r := domain.NewProviderResult(domain.ResultKindTrack, t.Name, artist,
 		spotifyBestImage(t.AlbumOfTrack.CoverArt.Sources),
 		domain.SourceRef{Provider: domain.ProviderSpotify, ExternalID: id, URL: "https://open.spotify.com/track/" + id},
-		extras)
+		nil)
 	r.Album = t.AlbumOfTrack.Name
+	r.Explicit = spotifyExplicit(t.ContentRating.Label)
+	r.Contributors = spotifyContributors(t.Artists.Items)
 	if t.Duration.TotalMilliseconds > 0 {
 		r.Duration = int(t.Duration.TotalMilliseconds / 1000)
 	}
@@ -352,7 +383,7 @@ func mapSpotifyAlbum(al spotifyAlbumData) (domain.SearchResult, bool) {
 		spotifyBestImage(al.CoverArt.Sources),
 		domain.SourceRef{Provider: domain.ProviderSpotify, ExternalID: id, URL: "https://open.spotify.com/album/" + id},
 		nil)
-	r.RecordType = domain.RecordType(strings.ToLower(al.Type))
+	r.RecordType = spotifyRecordTypes.Parse(al.Type)
 	if al.Date.Year > 0 {
 		r.Year = al.Date.Year
 	}

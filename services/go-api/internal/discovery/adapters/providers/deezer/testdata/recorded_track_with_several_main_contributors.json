@@ -1,0 +1,68 @@
+{
+  "id": 67238735,
+  "readable": true,
+  "title": "Get Lucky (feat. Pharrell Williams and Nile Rodgers)",
+  "title_short": "Get Lucky",
+  "title_version": "(feat. Pharrell Williams and Nile Rodgers)",
+  "isrc": "USQX91300108",
+  "link": "https://www.deezer.com/track/67238735",
+  "duration": 367,
+  "track_position": 8,
+  "disk_number": 1,
+  "rank": 877635,
+  "release_date": "2013-05-20",
+  "explicit_lyrics": false,
+  "explicit_content_lyrics": 0,
+  "explicit_content_cover": 0,
+  "preview": "https://cdnt-preview.dzcdn.net/api/1/1/c/8/a/0/c8a61130657a2cf58e3ac751e7950617.mp3",
+  "bpm": 116.1,
+  "gain": -11.3,
+  "contributors": [
+    {
+      "id": 27,
+      "name": "Daft Punk",
+      "picture_big": "https://cdn-images.dzcdn.net/images/artist/638e69b9caaf9f9f3f8826febea7b543/500x500-000000-80-0-0.jpg",
+      "picture_xl": "https://cdn-images.dzcdn.net/images/artist/638e69b9caaf9f9f3f8826febea7b543/1000x1000-000000-80-0-0.jpg",
+      "radio": true,
+      "type": "artist",
+      "role": "Main"
+    },
+    {
+      "id": 103,
+      "name": "Pharrell Williams",
+      "picture_big": "https://cdn-images.dzcdn.net/images/artist/1267b8781c5bff065a20dca4a3c9fda7/500x500-000000-80-0-0.jpg",
+      "picture_xl": "https://cdn-images.dzcdn.net/images/artist/1267b8781c5bff065a20dca4a3c9fda7/1000x1000-000000-80-0-0.jpg",
+      "radio": true,
+      "type": "artist",
+      "role": "Main"
+    },
+    {
+      "id": 7207,
+      "name": "Nile Rodgers",
+      "picture_big": "https://cdn-images.dzcdn.net/images/artist/64f826f318c84ce50ff538c01f62f1ff/500x500-000000-80-0-0.jpg",
+      "picture_xl": "https://cdn-images.dzcdn.net/images/artist/64f826f318c84ce50ff538c01f62f1ff/1000x1000-000000-80-0-0.jpg",
+      "radio": true,
+      "type": "artist",
+      "role": "Main"
+    }
+  ],
+  "md5_image": "311bba0fc112d15f72c8b5a65f0456c1",
+  "artist": {
+    "id": 27,
+    "name": "Daft Punk",
+    "picture_big": "https://cdn-images.dzcdn.net/images/artist/638e69b9caaf9f9f3f8826febea7b543/500x500-000000-80-0-0.jpg",
+    "picture_xl": "https://cdn-images.dzcdn.net/images/artist/638e69b9caaf9f9f3f8826febea7b543/1000x1000-000000-80-0-0.jpg",
+    "radio": true,
+    "type": "artist"
+  },
+  "album": {
+    "id": 6575789,
+    "title": "Random Access Memories",
+    "link": "https://www.deezer.com/album/6575789",
+    "cover_big": "https://cdn-images.dzcdn.net/images/cover/311bba0fc112d15f72c8b5a65f0456c1/500x500-000000-80-0-0.jpg",
+    "cover_xl": "https://cdn-images.dzcdn.net/images/cover/311bba0fc112d15f72c8b5a65f0456c1/1000x1000-000000-80-0-0.jpg",
+    "release_date": "2013-05-17",
+    "type": "album"
+  },
+  "type": "track"
+}

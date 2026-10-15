@@ -1,0 +1,38 @@
+{
+  "data": {
+    "albumUnion": {
+      "tracksV2": {
+        "totalCount": 2,
+        "items": [
+          {
+            "track": {
+              "uri": "spotify:track:2xLMifQCjDGFmkHkpNLD9h",
+              "name": "SICKO MODE",
+              "trackNumber": 3,
+              "discNumber": 1,
+              "duration": {"totalMilliseconds": 312820},
+              "contentRating": {"label": "EXPLICIT"},
+              "artists": {"items": [
+                {"uri": "spotify:artist:0Y5tJX1MQlPlqiwlOH1tJY", "profile": {"name": "Travis Scott"}},
+                {"uri": "spotify:artist:3TVXtAsR1Inumwj472S9r4", "profile": {"name": "Drake"}}
+              ]}
+            }
+          },
+          {
+            "track": {
+              "uri": "spotify:track:6gBFPUFcJLzWGx4lenP6h2",
+              "name": "STARGAZING",
+              "trackNumber": 1,
+              "discNumber": 2,
+              "duration": {"totalMilliseconds": 270715},
+              "contentRating": {"label": "NONE"},
+              "artists": {"items": [
+                {"uri": "spotify:artist:0Y5tJX1MQlPlqiwlOH1tJY", "profile": {"name": "Travis Scott"}}
+              ]}
+            }
+          }
+        ]
+      }
+    }
+  }
+}

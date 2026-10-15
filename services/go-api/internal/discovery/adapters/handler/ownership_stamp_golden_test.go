@@ -67,6 +67,12 @@ func goldenTrack(title, id string, extras map[string]any) discdomain.SearchResul
 	}
 }
 
+func goldenPlaced(title, id string, track int) discdomain.SearchResult {
+	r := goldenTrack(title, id, map[string]any{})
+	r.TrackPosition = discdomain.TrackPosition{Track: track}
+	return r
+}
+
 func goldenAlbum(title, id string) discdomain.SearchResult {
 	return discdomain.SearchResult{
 		Kind: discdomain.ResultKindAlbum, Title: title, Subtitle: "Artist",
@@ -79,14 +85,16 @@ func goldenTracks() []discdomain.SearchResult {
 	return []discdomain.SearchResult{
 		goldenTrack("Owned Song", "1", nil),
 		goldenTrack("Stranger Song", "2", map[string]any{}),
-		goldenTrack("Placed Song", "3", map[string]any{"track_number": 7}),
+		goldenPlaced("Placed Song", "3", 7),
 		goldenAlbum("Owned Song", "4"),
 	}
 }
 
 func goldenAlbumPageTracks() []discdomain.SearchResult {
 	tracks := goldenTracks()
-	tracks[0] = goldenTrack("Owned Song", "1", map[string]any{"isrc": "USRC17607839", "track_number": 1})
+	tracks[0] = goldenTrack("Owned Song", "1", map[string]any{})
+	tracks[0].ISRC = "USRC17607839"
+	tracks[0].TrackPosition = discdomain.TrackPosition{Track: 1}
 	return tracks
 }
 

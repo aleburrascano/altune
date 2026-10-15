@@ -335,8 +335,8 @@ func TestSoundCloudAPIAdapter_Search_MapsRichMetadata(t *testing.T) {
 	if r.Sources[0].ExternalID != "12345" {
 		t.Errorf("external id = %q, want 12345", r.Sources[0].ExternalID)
 	}
-	if got := r.Extras["duration"]; got != 180.0 {
-		t.Errorf("duration = %v, want 180.0 seconds", got)
+	if r.Duration != 180 {
+		t.Errorf("Duration = %d, want 180 seconds", r.Duration)
 	}
 	if got := r.Extras["playback_count"]; got != int64(999000) {
 		t.Errorf("playback_count = %v (%T), want int64 999000", got, got)

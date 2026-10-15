@@ -8,6 +8,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -103,8 +106,8 @@ func TestSpotifyAdapter_GetArtistTopTracks(t *testing.T) {
 	if tr.Title != "Blinding Lights" || tr.Subtitle != "The Weeknd" || tr.Duration != 200 {
 		t.Errorf("track = %+v", tr)
 	}
-	if tr.Extras["explicit"] != true {
-		t.Errorf("track explicit = %v, want true", tr.Extras["explicit"])
+	if tr.Explicit == nil || !*tr.Explicit {
+		t.Errorf("track explicit = %v, want true", tr.Explicit)
 	}
 }
 
@@ -135,8 +138,8 @@ func TestSpotifyAdapter_GetAlbumTracks(t *testing.T) {
 	if tracks[0].Sources[0].ExternalID != "tr1" {
 		t.Errorf("track[0] id = %q, want tr1 (extracted from uri)", tracks[0].Sources[0].ExternalID)
 	}
-	if tracks[0].Extras["explicit"] != true {
-		t.Errorf("track[0] explicit = %v, want true", tracks[0].Extras["explicit"])
+	if tracks[0].Explicit == nil || !*tracks[0].Explicit {
+		t.Errorf("track[0] explicit = %v, want true", tracks[0].Explicit)
 	}
 }
 
@@ -400,7 +403,92 @@ func TestMapSpotifyAlbumTrack_CarriesTheProvidersTrackAndDiscNumber(t *testing.T
 	if !ok {
 		t.Fatal("track dropped")
 	}
-	if r.Extras[domain.ExtraTrackNumber] != 1 || r.Extras[domain.ExtraDiscNumber] != 2 {
-		t.Errorf("extras = %v, want track 1 disc 2", r.Extras)
+	if r.TrackPosition != (domain.TrackPosition{Disc: 2, Track: 1}) {
+		t.Errorf("track position = %+v, want track 1 disc 2", r.TrackPosition)
+	}
+}
+
+func servePayload(t *testing.T, fixture string) *httptest.Server {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("testdata", fixture))
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(raw)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestGetAlbumTracks_PayloadFillsPositionExplicitAndContributors(t *testing.T) {
+	adapter := newContentSpotifyAdapter(servePayload(t, "payload_album_tracks_with_featured_artist.json"))
+
+	results, err := adapter.GetAlbumTracks(t.Context(), domain.ProviderSpotify, "41GuZcammIkupMPKH2OJ6I")
+	if err != nil || len(results) != 2 {
+		t.Fatalf("GetAlbumTracks = %d results, err %v, want 2", len(results), err)
+	}
+
+	sicko, stargazing := results[0], results[1]
+	checks := []struct {
+		field     string
+		got, want any
+	}{
+		{"sicko position", sicko.TrackPosition, domain.TrackPosition{Disc: 1, Track: 3}},
+		{"sicko explicit", sicko.Explicit != nil && *sicko.Explicit, true},
+		{"sicko duration", sicko.Duration, 312},
+		{"sicko contributors", sicko.Contributors, []domain.Contributor{
+			{ProviderID: "0Y5tJX1MQlPlqiwlOH1tJY", Name: "Travis Scott", Role: domain.ContributorMain},
+			{ProviderID: "3TVXtAsR1Inumwj472S9r4", Name: "Drake", Role: domain.ContributorFeatured},
+		}},
+		{"stargazing position", stargazing.TrackPosition, domain.TrackPosition{Disc: 2, Track: 1}},
+		{"stargazing explicit", stargazing.Explicit, (*bool)(nil)},
+		{"stargazing contributors", stargazing.Contributors, []domain.Contributor{
+			{ProviderID: "0Y5tJX1MQlPlqiwlOH1tJY", Name: "Travis Scott", Role: domain.ContributorMain},
+		}},
+		{"sicko extras track_number", sicko.Extras["track_number"], nil},
+		{"sicko extras explicit", sicko.Extras["explicit"], nil},
+	}
+	for _, c := range checks {
+		if !reflect.DeepEqual(c.got, c.want) {
+			t.Errorf("%s = %#v, want %#v", c.field, c.got, c.want)
+		}
+	}
+}
+
+func TestSearch_PayloadFillsTrackAndAlbumContract(t *testing.T) {
+	adapter := newTestSpotifyAdapter(servePayload(t, "payload_search_track_and_album.json"))
+
+	results, err := adapter.Search(t.Context(), "sicko mode", map[domain.ResultKind]bool{domain.ResultKindTrack: true, domain.ResultKindAlbum: true})
+	if err != nil || len(results) != 2 {
+		t.Fatalf("Search = %d results, err %v, want a track and an album", len(results), err)
+	}
+
+	var track, album domain.SearchResult
+	for _, r := range results {
+		if r.Kind == domain.ResultKindTrack {
+			track = r
+		} else {
+			album = r
+		}
+	}
+	checks := []struct {
+		field     string
+		got, want any
+	}{
+		{"track explicit", track.Explicit != nil && *track.Explicit, true},
+		{"track album", track.Album, "ASTROWORLD"},
+		{"track contributors", track.Contributors, []domain.Contributor{
+			{ProviderID: "0Y5tJX1MQlPlqiwlOH1tJY", Name: "Travis Scott", Role: domain.ContributorMain},
+			{ProviderID: "3TVXtAsR1Inumwj472S9r4", Name: "Drake", Role: domain.ContributorFeatured},
+		}},
+		{"track isrc", track.ISRC, ""},
+		{"album record type", album.RecordType, domain.RecordTypeAlbum},
+		{"album year", album.Year, 2018},
+	}
+	for _, c := range checks {
+		if !reflect.DeepEqual(c.got, c.want) {
+			t.Errorf("%s = %#v, want %#v", c.field, c.got, c.want)
+		}
 	}
 }

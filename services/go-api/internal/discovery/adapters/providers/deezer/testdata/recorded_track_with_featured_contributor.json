@@ -1,0 +1,68 @@
+{
+  "id": 123883254,
+  "readable": true,
+  "title": "This Is What You Came For",
+  "title_short": "This Is What You Came For",
+  "title_version": "",
+  "isrc": "GBARL1600460",
+  "link": "https://www.deezer.com/track/123883254",
+  "duration": 222,
+  "track_position": 1,
+  "disk_number": 1,
+  "rank": 938929,
+  "release_date": "2016-04-29",
+  "explicit_lyrics": false,
+  "explicit_content_lyrics": 0,
+  "explicit_content_cover": 0,
+  "preview": "https://cdnt-preview.dzcdn.net/api/1/1/e/e/9/0/ee9343b8c6302f49270fd6e96321276c.mp3",
+  "bpm": 124.16,
+  "gain": -6.8,
+  "contributors": [
+    {
+      "id": 12178,
+      "name": "Calvin Harris",
+      "picture_big": "https://cdn-images.dzcdn.net/images/artist/a53031d02dc2f8a8eb15d117c015d5eb/500x500-000000-80-0-0.jpg",
+      "picture_xl": "https://cdn-images.dzcdn.net/images/artist/a53031d02dc2f8a8eb15d117c015d5eb/1000x1000-000000-80-0-0.jpg",
+      "radio": true,
+      "type": "artist",
+      "role": "Main"
+    },
+    {
+      "id": 564,
+      "name": "Rihanna",
+      "picture_big": "https://cdn-images.dzcdn.net/images/artist/b78cdc205fae2641b89208e78b30e1b3/500x500-000000-80-0-0.jpg",
+      "picture_xl": "https://cdn-images.dzcdn.net/images/artist/b78cdc205fae2641b89208e78b30e1b3/1000x1000-000000-80-0-0.jpg",
+      "radio": true,
+      "type": "artist",
+      "role": "Main"
+    },
+    {
+      "id": 564,
+      "name": "Rihanna",
+      "picture_big": "https://cdn-images.dzcdn.net/images/artist/b78cdc205fae2641b89208e78b30e1b3/500x500-000000-80-0-0.jpg",
+      "picture_xl": "https://cdn-images.dzcdn.net/images/artist/b78cdc205fae2641b89208e78b30e1b3/1000x1000-000000-80-0-0.jpg",
+      "radio": true,
+      "type": "artist",
+      "role": "Featured"
+    }
+  ],
+  "md5_image": "b8af7ff13a47e2775307299843da9b36",
+  "artist": {
+    "id": 12178,
+    "name": "Calvin Harris",
+    "picture_big": "https://cdn-images.dzcdn.net/images/artist/a53031d02dc2f8a8eb15d117c015d5eb/500x500-000000-80-0-0.jpg",
+    "picture_xl": "https://cdn-images.dzcdn.net/images/artist/a53031d02dc2f8a8eb15d117c015d5eb/1000x1000-000000-80-0-0.jpg",
+    "radio": true,
+    "type": "artist"
+  },
+  "album": {
+    "id": 12988558,
+    "title": "This Is What You Came For",
+    "link": "https://www.deezer.com/album/12988558",
+    "cover_big": "https://cdn-images.dzcdn.net/images/cover/b8af7ff13a47e2775307299843da9b36/500x500-000000-80-0-0.jpg",
+    "cover_xl": "https://cdn-images.dzcdn.net/images/cover/b8af7ff13a47e2775307299843da9b36/1000x1000-000000-80-0-0.jpg",
+    "release_date": "2016-04-29",
+    "type": "album"
+  },
+  "type": "track"
+}

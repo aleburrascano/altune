@@ -203,7 +203,7 @@ func TestSpotifyAdapter_Search_explicitFlag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Search() error = %v", err)
 	}
-	if len(results) != 1 || results[0].Extras["explicit"] != true {
+	if len(results) != 1 || results[0].Explicit == nil || !*results[0].Explicit {
 		t.Errorf("results = %+v, want one track with explicit=true", results)
 	}
 }

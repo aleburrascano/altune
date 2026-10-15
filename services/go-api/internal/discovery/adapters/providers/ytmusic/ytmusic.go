@@ -174,14 +174,8 @@ func mapYTMusicTrack(t *ytmTrack) domain.SearchResult {
 		imageURL = t.Thumbnails[len(t.Thumbnails)-1].URL
 	}
 	extras := make(map[string]any)
-	if t.Duration > 0 {
-		extras[domain.ExtraDuration] = t.Duration
-	}
 	if t.Album.Name != "" {
 		extras[domain.ExtraAlbum] = t.Album.Name
-	}
-	if t.IsExplicit {
-		extras[domain.ExtraExplicit] = true
 	}
 
 	r := domain.NewProviderResult(domain.ResultKindTrack, t.Title, subtitle, imageURL,
@@ -189,6 +183,9 @@ func mapYTMusicTrack(t *ytmTrack) domain.SearchResult {
 		extras)
 	r.Album = t.Album.Name
 	r.Duration = t.Duration
+	if t.IsExplicit {
+		r.Explicit = domain.BoolPtr(true)
+	}
 	return r
 }
 
@@ -202,9 +199,6 @@ func mapYTMusicVideo(v *ytmVideo) domain.SearchResult {
 		imageURL = v.Thumbnails[len(v.Thumbnails)-1].URL
 	}
 	extras := make(map[string]any)
-	if v.Duration > 0 {
-		extras[domain.ExtraDuration] = v.Duration
-	}
 
 	r := domain.NewProviderResult(domain.ResultKindTrack, v.Title, subtitle, imageURL,
 		domain.SourceRef{Provider: domain.ProviderYouTube, ExternalID: v.VideoID, URL: "https://music.youtube.com/watch?v=" + v.VideoID},
@@ -223,14 +217,14 @@ func mapYTMusicAlbum(a *ytmAlbum) domain.SearchResult {
 		imageURL = a.Thumbnails[len(a.Thumbnails)-1].URL
 	}
 	extras := make(map[string]any)
-	if a.IsExplicit {
-		extras[domain.ExtraExplicit] = true
-	}
 
 	r := domain.NewProviderResult(domain.ResultKindAlbum, a.Title, subtitle, imageURL,
 		domain.SourceRef{Provider: domain.ProviderYouTube, ExternalID: a.BrowseID, URL: "https://music.youtube.com/browse/" + a.BrowseID},
 		extras)
 	r.RecordType = domain.RecordType(a.Type)
+	if a.IsExplicit {
+		r.Explicit = domain.BoolPtr(true)
+	}
 	if y, err := strconv.Atoi(strings.TrimSpace(a.Year)); err == nil && y > 0 {
 		r.Year = y
 	}

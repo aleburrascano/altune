@@ -179,20 +179,20 @@ type artworkOutcome struct {
 	mbid        string
 }
 
-func (o artworkOutcome) path() string {
+func (o artworkOutcome) path() domain.ArtworkPath {
 	switch o.stage {
 	case artworkStageProvider:
-		return "provider"
+		return domain.ArtworkPathProvider
 	case artworkStageCacheHit:
-		return "cache"
+		return domain.ArtworkPathCache
 	case artworkStageCachedMiss:
-		return "none"
+		return domain.ArtworkPathNone
 	case artworkStageDegraded:
-		return "degraded"
+		return domain.ArtworkPathDegraded
 	case artworkStagePending:
-		return "pending"
+		return domain.ArtworkPathPending
 	default:
-		return artworkPathFor(o.resolved, o.confidence, o.fromDurable)
+		return domain.ArtworkPath(artworkPathFor(o.resolved, o.confidence, o.fromDurable))
 	}
 }
 
@@ -315,8 +315,8 @@ func applyResolvedArtwork(result *domain.SearchResult, url string, source domain
 	result.ArtworkSource = source
 }
 
-func setArtworkPath(r *domain.SearchResult, path string) {
-	r.PutExtra(domain.ExtraArtworkPath, path)
+func setArtworkPath(r *domain.SearchResult, path domain.ArtworkPath) {
+	r.ArtworkPath = path
 }
 
 func artworkPathFor(resolved string, confidence ports.ArtworkConfidence, fromDurable bool) string {

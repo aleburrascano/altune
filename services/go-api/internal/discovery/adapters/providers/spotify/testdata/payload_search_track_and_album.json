@@ -1,0 +1,46 @@
+{
+  "data": {
+    "searchV2": {
+      "tracksV2": {
+        "items": [{
+          "item": {
+            "data": {
+              "id": "2xLMifQCjDGFmkHkpNLD9h",
+              "name": "SICKO MODE",
+              "uri": "spotify:track:2xLMifQCjDGFmkHkpNLD9h",
+              "duration": {"totalMilliseconds": 312820},
+              "contentRating": {"label": "EXPLICIT"},
+              "albumOfTrack": {
+                "id": "41GuZcammIkupMPKH2OJ6I",
+                "name": "ASTROWORLD",
+                "uri": "spotify:album:41GuZcammIkupMPKH2OJ6I",
+                "coverArt": {"sources": [
+                  {"url": "https://i.scdn.co/image/ab67616d00001e02", "width": 300, "height": 300},
+                  {"url": "https://i.scdn.co/image/ab67616d0000b273", "width": 640, "height": 640}
+                ]}
+              },
+              "artists": {"items": [
+                {"uri": "spotify:artist:0Y5tJX1MQlPlqiwlOH1tJY", "profile": {"name": "Travis Scott"}},
+                {"uri": "spotify:artist:3TVXtAsR1Inumwj472S9r4", "profile": {"name": "Drake"}}
+              ]}
+            }
+          }
+        }]
+      },
+      "albumsV2": {
+        "items": [{
+          "data": {
+            "id": "41GuZcammIkupMPKH2OJ6I",
+            "name": "ASTROWORLD",
+            "uri": "spotify:album:41GuZcammIkupMPKH2OJ6I",
+            "type": "ALBUM",
+            "coverArt": {"sources": [{"url": "https://i.scdn.co/image/ab67616d0000b273", "width": 640, "height": 640}]},
+            "artists": {"items": [{"profile": {"name": "Travis Scott"}}]},
+            "date": {"year": 2018}
+          }
+        }]
+      },
+      "artists": {"items": []}
+    }
+  }
+}

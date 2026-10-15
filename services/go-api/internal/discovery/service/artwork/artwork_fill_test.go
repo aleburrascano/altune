@@ -24,8 +24,8 @@ func TestArtworkFiller_OutageLeavesTheCacheOpenForTheNextFill(t *testing.T) {
 	if cached, written := cache.Store[track.Title]; written {
 		t.Fatalf("the outage wrote a cache entry (%q); a negative entry blanks the art for hours", cached)
 	}
-	if path, _ := duringOutage.Extras["artwork_path"].(string); path != "degraded" {
-		t.Errorf("artwork_path = %q, want degraded (an outage must not report as a clean miss)", path)
+	if path := duringOutage.ArtworkPath; path != domain.ArtworkPathDegraded {
+		t.Errorf("ArtworkPath = %q, want degraded (an outage must not report as a clean miss)", path)
 	}
 
 	recovered := &scriptedResolver{log: &stageLog{}, nameURL: "https://caa/cover.jpg"}
@@ -467,8 +467,8 @@ func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
 
 			got := f.fillOne(context.Background(), tc.in)
 
-			if path, _ := got.Extras["artwork_path"].(string); path != tc.wantPath {
-				t.Errorf("artwork_path = %q, want %q", path, tc.wantPath)
+			if path := got.ArtworkPath; path != domain.ArtworkPath(tc.wantPath) {
+				t.Errorf("ArtworkPath = %q, want %q", path, tc.wantPath)
 			}
 			wantURL := tc.wantURL
 			if wantURL == "" {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -120,18 +121,8 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 			imageURL = preferURL(item.Album.CoverXL, item.Album.CoverBig)
 			extras[domain.ExtraAlbum] = item.Album.Title
 		}
-		extras[domain.ExtraDuration] = item.Duration
-		if item.TrackPosition > 0 {
-			extras[domain.ExtraTrackNumber] = item.TrackPosition
-		}
-		if item.DiskNumber > 0 {
-			extras[domain.ExtraDiscNumber] = item.DiskNumber
-		}
 		if item.Preview != "" {
 			extras[domain.ExtraPreviewURL] = item.Preview
-		}
-		if item.ExplicitLyrics {
-			extras[domain.ExtraExplicit] = true
 		}
 	case domain.ResultKindAlbum:
 		title = item.Title
@@ -151,7 +142,8 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 		domain.SourceRef{Provider: domain.ProviderDeezer, ExternalID: fmt.Sprintf("%d", item.ID), URL: item.Link},
 		extras)
 	if kind == domain.ResultKindTrack {
-		r.ISRC = item.ISRC
+		r.ISRC = domain.ValidISRC(item.ISRC)
+		r.TrackPosition = domain.TrackPosition{Disc: item.DiskNumber, Track: item.TrackPosition}
 		r.ProviderRank = item.Rank
 		if item.Album != nil {
 			r.Album = item.Album.Title
@@ -160,12 +152,60 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 		r.Duration = item.Duration
 	}
 	if kind == domain.ResultKindAlbum {
-		r.RecordType = domain.RecordType(item.RecordType)
+		r.RecordType = deezerRecordTypes.Parse(item.RecordType)
+		r.UPC = strings.TrimSpace(item.UPC)
 		r.ReleaseDate = item.ReleaseDate
 		r.TrackCount = item.NbTracks
 	}
+	if kind != domain.ResultKindArtist {
+		r.Explicit = item.ExplicitLyrics
+		r.Contributors = deezerContributors(item)
+	}
 	r.FanCount = item.NbFan
 	return r
+}
+
+var deezerRecordTypes = domain.RecordTypeVocabulary{
+	"album":       domain.RecordTypeAlbum,
+	"single":      domain.RecordTypeSingle,
+	"ep":          domain.RecordTypeEP,
+	"compilation": domain.RecordTypeCompilation,
+}
+
+var deezerContributorRoles = map[string]domain.ContributorRole{
+	"main":     domain.ContributorMain,
+	"featured": domain.ContributorFeatured,
+}
+
+type contributorList struct {
+	entries []domain.Contributor
+	byID    map[string]int
+}
+
+func (l *contributorList) add(c domain.Contributor) {
+	if i, seen := l.byID[c.ProviderID]; seen {
+		if c.Role == domain.ContributorFeatured {
+			l.entries[i].Role = domain.ContributorFeatured
+		}
+		return
+	}
+	l.byID[c.ProviderID] = len(l.entries)
+	l.entries = append(l.entries, c)
+}
+
+func deezerContributors(item deezerItem) []domain.Contributor {
+	list := contributorList{byID: map[string]int{}}
+	for _, c := range item.Contributors {
+		role, known := deezerContributorRoles[strings.ToLower(strings.TrimSpace(c.Role))]
+		name := strings.TrimSpace(c.Name)
+		if known && c.ID != 0 && name != "" {
+			list.add(domain.Contributor{ProviderID: strconv.FormatInt(c.ID, 10), Name: name, Role: role})
+		}
+	}
+	if len(list.entries) == 0 && item.Artist != nil && item.Artist.ID != 0 && strings.TrimSpace(item.Artist.Name) != "" {
+		list.add(domain.Contributor{ProviderID: strconv.FormatInt(item.Artist.ID, 10), Name: strings.TrimSpace(item.Artist.Name), Role: domain.ContributorMain})
+	}
+	return list.entries
 }
 
 type deezerAPIError struct {
@@ -184,28 +224,30 @@ type deezerSearchResponse struct {
 }
 
 type deezerItem struct {
-	ID             int64        `json:"id"`
-	Title          string       `json:"title"`
-	Name           string       `json:"name"`
-	Link           string       `json:"link"`
-	Preview        string       `json:"preview"`
-	Duration       int          `json:"duration"`
-	ISRC           string       `json:"isrc"`
-	TrackPosition  int          `json:"track_position"`
-	DiskNumber     int          `json:"disk_number"`
-	CoverBig       string       `json:"cover_big"`
-	CoverXL        string       `json:"cover_xl"`
-	PictureBig     string       `json:"picture_big"`
-	PictureXL      string       `json:"picture_xl"`
-	Artist         *deezerRef   `json:"artist"`
-	Album          *deezerAlbum `json:"album"`
-	ExplicitLyrics bool         `json:"explicit_lyrics"`
-	RecordType     string       `json:"record_type"`
-	ReleaseDate    string       `json:"release_date"`
-	NbTracks       int          `json:"nb_tracks"`
-	Rank           int64        `json:"rank"`
-	NbFan          int64        `json:"nb_fan"`
-	GenreID        int          `json:"genre_id"`
+	ID             int64               `json:"id"`
+	Title          string              `json:"title"`
+	Name           string              `json:"name"`
+	Link           string              `json:"link"`
+	Preview        string              `json:"preview"`
+	Duration       int                 `json:"duration"`
+	ISRC           string              `json:"isrc"`
+	TrackPosition  int                 `json:"track_position"`
+	DiskNumber     int                 `json:"disk_number"`
+	CoverBig       string              `json:"cover_big"`
+	CoverXL        string              `json:"cover_xl"`
+	PictureBig     string              `json:"picture_big"`
+	PictureXL      string              `json:"picture_xl"`
+	Artist         *deezerRef          `json:"artist"`
+	Album          *deezerAlbum        `json:"album"`
+	ExplicitLyrics *bool               `json:"explicit_lyrics"`
+	UPC            string              `json:"upc"`
+	Contributors   []deezerContributor `json:"contributors"`
+	RecordType     string              `json:"record_type"`
+	ReleaseDate    string              `json:"release_date"`
+	NbTracks       int                 `json:"nb_tracks"`
+	Rank           int64               `json:"rank"`
+	NbFan          int64               `json:"nb_fan"`
+	GenreID        int                 `json:"genre_id"`
 }
 
 type deezerRef struct {

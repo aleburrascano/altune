@@ -14,11 +14,13 @@ import (
 var trackNumberFillTimeout = 10 * time.Second
 
 type OwnableItem struct {
-	Kind   string
-	Title  string
-	Artist string
-	Album  string
-	Extras *map[string]any
+	Kind          string
+	Title         string
+	Artist        string
+	Album         string
+	ISRC          string
+	TrackPosition domain.TrackPosition
+	Extras        *map[string]any
 }
 
 func (it OwnableItem) extras() map[string]any {
@@ -96,7 +98,7 @@ func stampOwned(item OwnableItem, owned map[string]ports.OwnedTrack) {
 }
 
 func ownedMatch(item OwnableItem, owned map[string]ports.OwnedTrack) (ports.OwnedTrack, bool) {
-	itemISRC := songfacts.CanonicalISRC(domain.StringExtra(item.extras(), domain.ExtraISRC))
+	itemISRC := songfacts.CanonicalISRC(item.ISRC)
 	if itemISRC != "" {
 		if match, ok := owned[domain.OwnershipISRCKey(itemISRC)]; ok {
 			return match, true
@@ -167,8 +169,8 @@ func pendingTrackNumbers(items []OwnableItem, owned map[string]ports.OwnedTrack)
 		if !isOwned || track.TrackNumber != nil {
 			continue
 		}
-		position := domain.IntExtra(extras, domain.ExtraTrackNumber)
-		if position <= 0 || !matchesByISRC(track, extras) || !isSameNamedAlbum(track.Album, item.Album) {
+		position := item.TrackPosition.Track
+		if position <= 0 || !matchesByISRC(track, item.ISRC) || !isSameNamedAlbum(track.Album, item.Album) {
 			continue
 		}
 		pending[track.TrackID] = position
@@ -176,9 +178,9 @@ func pendingTrackNumbers(items []OwnableItem, owned map[string]ports.OwnedTrack)
 	return pending
 }
 
-func matchesByISRC(track ports.OwnedTrack, extras map[string]any) bool {
+func matchesByISRC(track ports.OwnedTrack, itemISRC string) bool {
 	stored := songfacts.CanonicalISRC(track.ISRC)
-	return songfacts.IsCanonicalISRC(stored) && stored == songfacts.CanonicalISRC(domain.StringExtra(extras, domain.ExtraISRC))
+	return songfacts.IsCanonicalISRC(stored) && stored == songfacts.CanonicalISRC(itemISRC)
 }
 
 func isSameNamedAlbum(storedAlbum, pageAlbum string) bool {

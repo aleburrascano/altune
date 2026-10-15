@@ -166,7 +166,6 @@ func mapMBRecording(rec mbRecording) domain.SearchResult {
 	}
 	if rec.LengthMs > 0 {
 		r.Duration = rec.LengthMs / 1000
-		extras[domain.ExtraDuration] = r.Duration
 	}
 	return r
 }

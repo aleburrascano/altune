@@ -17,8 +17,8 @@ func TestProviderContracts(t *testing.T) {
 				return newTestSpotifyAdapter(srv).Search(t.Context(), "sicko mode", providertest.TrackKinds())
 			},
 			Required: func(t *testing.T, r domain.SearchResult) {
-				if r.Extras["explicit"] != true {
-					t.Error("Extras[explicit] missing — explicit badge consumes it")
+				if r.Explicit == nil || !*r.Explicit {
+					t.Error("Explicit missing — explicit badge consumes it")
 				}
 				if r.Duration == 0 {
 					t.Error("Duration zero — track detail consumes it")
