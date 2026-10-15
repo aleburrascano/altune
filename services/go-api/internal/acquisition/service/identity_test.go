@@ -85,8 +85,8 @@ func TestResolveIdentity_ResolvedPinnedIdentityIsAdoptedAsIs(t *testing.T) {
 
 	ResolveIdentity(context.Background(), &stubResolver{identity: resolved}, identifier, ac)
 
-	if !slices.Equal(ac.Identity.MBIDs, resolved.MBIDs) || ac.Identity.Duration != 157.306 || ac.Track.Duration != 0 {
-		t.Errorf("identity = %+v, track duration %v, want the resolver's pinned identity untouched", ac.Identity, ac.Track.Duration)
+	if !slices.Equal(ac.Identity.MBIDs, resolved.MBIDs) || ac.Identity.Duration != 157.306 || ac.Track.CatalogDuration != 0 {
+		t.Errorf("identity = %+v, track duration %v, want the resolver's pinned identity untouched", ac.Identity, ac.Track.CatalogDuration)
 	}
 	if len(identifier.asked) != 0 {
 		t.Errorf("cluster asked for %v, want no cluster lookup", identifier.asked)

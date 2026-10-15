@@ -367,8 +367,8 @@ func TestResolveIdentity_NeverWritesTheMBLengthIntoTheTrack(t *testing.T) {
 
 			svc.resolveIdentity(context.Background(), ac)
 
-			if ac.Track.Duration != 0 {
-				t.Errorf("track duration = %v, want the MB length kept off the track", ac.Track.Duration)
+			if ac.Track.CatalogDuration != 0 {
+				t.Errorf("track duration = %v, want the MB length kept off the track", ac.Track.CatalogDuration)
 			}
 			if ac.ExpectedLength() != tt.want {
 				t.Errorf("ExpectedLength() = %v, want %v", ac.ExpectedLength(), tt.want)
@@ -382,22 +382,22 @@ func TestResolveIdentity_NeverWritesTheMBLengthIntoTheTrack(t *testing.T) {
 
 func TestResolveIdentity_NeverOverwritesSavedDuration(t *testing.T) {
 	svc := serviceWithResolver(&stubResolver{identity: ports.RecordingIdentity{Duration: 999}})
-	ac := &AcquisitionContext{Track: TrackRef{Title: "T", Artist: "A", Duration: 200}}
+	ac := &AcquisitionContext{Track: TrackRef{Title: "T", Artist: "A", CatalogDuration: 200}}
 
 	svc.resolveIdentity(context.Background(), ac)
 
-	if ac.Track.Duration != 200 {
-		t.Errorf("duration = %v, want the saved 200 kept", ac.Track.Duration)
+	if ac.Track.CatalogDuration != 200 {
+		t.Errorf("duration = %v, want the saved 200 kept", ac.Track.CatalogDuration)
 	}
 }
 
 func TestResolveIdentity_ResolverErrorIsNonFatal(t *testing.T) {
 	svc := serviceWithResolver(&stubResolver{err: errors.New("discovery down")})
-	ac := &AcquisitionContext{Track: TrackRef{Title: "T", Artist: "A", Duration: 200}}
+	ac := &AcquisitionContext{Track: TrackRef{Title: "T", Artist: "A", CatalogDuration: 200}}
 
 	svc.resolveIdentity(context.Background(), ac)
 
-	if ac.Track.Duration != 200 || !ac.Identity.IsZero() {
+	if ac.Track.CatalogDuration != 200 || !ac.Identity.IsZero() {
 		t.Errorf("a resolver failure must leave the track untouched, got %+v", ac.Track)
 	}
 }
@@ -877,7 +877,7 @@ func TestAcquire_FailureOnPendingTrackStillMarksFailed(t *testing.T) {
 func TestResolveIdentity_QueryCarriesTheTracksDuration(t *testing.T) {
 	stub := &stubResolver{}
 	svc := serviceWithResolver(stub)
-	ac := &AcquisitionContext{Track: TrackRef{Title: "Circles", Artist: "Post Malone", Duration: 215}}
+	ac := &AcquisitionContext{Track: TrackRef{Title: "Circles", Artist: "Post Malone", CatalogDuration: 215}}
 
 	svc.resolveIdentity(context.Background(), ac)
 

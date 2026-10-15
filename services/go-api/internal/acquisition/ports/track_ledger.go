@@ -32,7 +32,6 @@ type TrackSnapshot struct {
 	Title                  string
 	Artist                 string
 	Album                  string
-	DurationSeconds        *float64
 	CatalogDurationSeconds *float64
 	CatalogMBID            *string
 	CatalogExplicit        *bool

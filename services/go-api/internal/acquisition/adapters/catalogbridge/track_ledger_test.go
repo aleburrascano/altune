@@ -349,8 +349,8 @@ func TestGetNeverAimsAtTheLastMeasuredFile(t *testing.T) {
 		t.Fatal("want snapshot, got nil")
 	}
 
-	if snap.DurationSeconds != nil {
-		t.Errorf("target length = %v, want none: the measured file length is not a target", *snap.DurationSeconds)
+	if snap.CatalogDurationSeconds != nil {
+		t.Errorf("target length = %v, want none: the measured file length is not a target", *snap.CatalogDurationSeconds)
 	}
 	if snap.StoredDurationSeconds == nil || *snap.StoredDurationSeconds != 112 {
 		t.Errorf("StoredDurationSeconds = %v, want the measured 112", snap.StoredDurationSeconds)
@@ -378,8 +378,8 @@ func TestGetAimsADownloadAtTheCatalogLengthNotTheStoredFile(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if snap.DurationSeconds == nil || *snap.DurationSeconds != tt.want {
-				t.Fatalf("target length = %v, want %v", snap.DurationSeconds, tt.want)
+			if snap.CatalogDurationSeconds == nil || *snap.CatalogDurationSeconds != tt.want {
+				t.Fatalf("target length = %v, want %v", snap.CatalogDurationSeconds, tt.want)
 			}
 		})
 	}
@@ -530,8 +530,8 @@ func TestGetKeepsTheMeasuredFileLengthBesideTheCatalogLength(t *testing.T) {
 	if snap.StoredDurationSeconds == nil || *snap.StoredDurationSeconds != 112 {
 		t.Fatalf("StoredDurationSeconds = %v, want the measured 112 not the catalog 128", snap.StoredDurationSeconds)
 	}
-	if snap.DurationSeconds == nil || *snap.DurationSeconds != 128 {
-		t.Fatalf("DurationSeconds = %v, want the catalog target 128", snap.DurationSeconds)
+	if snap.CatalogDurationSeconds == nil || *snap.CatalogDurationSeconds != 128 {
+		t.Fatalf("CatalogDurationSeconds = %v, want the catalog target 128", snap.CatalogDurationSeconds)
 	}
 }
 

@@ -9,7 +9,7 @@ import (
 )
 
 func selectBest(track TrackRef, candidates []ports.AudioCandidate) *ports.AudioCandidate {
-	ranked, _ := rankAndCollect(context.Background(), track, track.Duration, candidates)
+	ranked, _ := rankAndCollect(context.Background(), track, track.CatalogDuration, candidates)
 	if len(ranked) == 0 {
 		return nil
 	}
@@ -29,9 +29,9 @@ func TestSelectBestCandidate(t *testing.T) {
 		{
 			name: "topic channel preferred when identity >= 60",
 			track: TrackRef{
-				Title:    "Blinding Lights",
-				Artist:   "The Weeknd",
-				Duration: 200,
+				Title:           "Blinding Lights",
+				Artist:          "The Weeknd",
+				CatalogDuration: 200,
 			},
 			candidates: []ports.AudioCandidate{
 				{
@@ -57,9 +57,9 @@ func TestSelectBestCandidate(t *testing.T) {
 		{
 			name: "exact duration match scores highest among non-topic candidates",
 			track: TrackRef{
-				Title:    "Starboy",
-				Artist:   "The Weeknd",
-				Duration: 230,
+				Title:           "Starboy",
+				Artist:          "The Weeknd",
+				CatalogDuration: 230,
 			},
 			candidates: []ports.AudioCandidate{
 				{
@@ -95,9 +95,9 @@ func TestSelectBestCandidate(t *testing.T) {
 		{
 			name: "all candidates below identity threshold filtered out",
 			track: TrackRef{
-				Title:    "Save Your Tears",
-				Artist:   "The Weeknd",
-				Duration: 215,
+				Title:           "Save Your Tears",
+				Artist:          "The Weeknd",
+				CatalogDuration: 215,
 			},
 			candidates: []ports.AudioCandidate{
 				{
@@ -123,9 +123,9 @@ func TestSelectBestCandidate(t *testing.T) {
 		{
 			name: "highest composite score wins among non-topic candidates",
 			track: TrackRef{
-				Title:    "Die For You",
-				Artist:   "The Weeknd",
-				Duration: 260,
+				Title:           "Die For You",
+				Artist:          "The Weeknd",
+				CatalogDuration: 260,
 			},
 			candidates: []ports.AudioCandidate{
 				{
@@ -161,9 +161,9 @@ func TestSelectBestCandidate(t *testing.T) {
 		{
 			name: "topic channel wins over VEVO even with fewer views",
 			track: TrackRef{
-				Title:    "After Hours",
-				Artist:   "The Weeknd",
-				Duration: 361,
+				Title:           "After Hours",
+				Artist:          "The Weeknd",
+				CatalogDuration: 361,
 			},
 			candidates: []ports.AudioCandidate{
 				{
@@ -210,7 +210,7 @@ func TestSelectBestCandidate(t *testing.T) {
 }
 
 func TestRankCandidates_TieIsDeterministicAndPrefersExpectedLength(t *testing.T) {
-	track := TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200}
+	track := TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", CatalogDuration: 200}
 	candidates := []ports.AudioCandidate{
 		{
 			Title:      "Blinding Lights",
@@ -229,7 +229,7 @@ func TestRankCandidates_TieIsDeterministicAndPrefersExpectedLength(t *testing.T)
 	}
 
 	for i := 0; i < 50; i++ {
-		ranked, _ := rankAndCollect(context.Background(), track, track.Duration, candidates)
+		ranked, _ := rankAndCollect(context.Background(), track, track.CatalogDuration, candidates)
 		if len(ranked) != 2 {
 			t.Fatalf("expected both candidates ranked, got %d", len(ranked))
 		}
@@ -247,12 +247,12 @@ func TestRankCandidates_TotalTieIsStillDeterministic(t *testing.T) {
 		{Title: "Artist - Song", Channel: "Artist - Topic", URL: "https://a.example/x"},
 	}
 
-	first, _ := rankAndCollect(context.Background(), track, track.Duration, candidates)
+	first, _ := rankAndCollect(context.Background(), track, track.CatalogDuration, candidates)
 	if len(first) == 0 {
 		t.Fatal("expected candidates to survive the identity gate")
 	}
 	for i := 0; i < 50; i++ {
-		again, _ := rankAndCollect(context.Background(), track, track.Duration, candidates)
+		again, _ := rankAndCollect(context.Background(), track, track.CatalogDuration, candidates)
 		if again[0].URL != first[0].URL {
 			t.Fatalf("run %d picked %q, first run picked %q — ranking is not deterministic",
 				i, again[0].URL, first[0].URL)
@@ -419,9 +419,9 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 		{
 			name: "die hard by intended artist prefers correct Topic channel",
 			track: TrackRef{
-				Title:    "Die Hard",
-				Artist:   "Dr. Dre",
-				Duration: 280,
+				Title:           "Die Hard",
+				Artist:          "Dr. Dre",
+				CatalogDuration: 280,
 			},
 			candidates: []ports.AudioCandidate{
 				{
@@ -448,9 +448,9 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 		{
 			name: "die hard kendrick is correct when artist is kendrick",
 			track: TrackRef{
-				Title:    "DIE HARD",
-				Artist:   "Kendrick Lamar",
-				Duration: 238,
+				Title:           "DIE HARD",
+				Artist:          "Kendrick Lamar",
+				CatalogDuration: 238,
 			},
 			candidates: []ports.AudioCandidate{
 				{
@@ -477,9 +477,9 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 		{
 			name: "topic channel beats vevo for exact match",
 			track: TrackRef{
-				Title:    "Blinding Lights",
-				Artist:   "The Weeknd",
-				Duration: 200,
+				Title:           "Blinding Lights",
+				Artist:          "The Weeknd",
+				CatalogDuration: 200,
 			},
 			candidates: []ports.AudioCandidate{
 				{
@@ -505,9 +505,9 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 		{
 			name: "title-only match penalized below combined match",
 			track: TrackRef{
-				Title:    "Lose Yourself",
-				Artist:   "Eminem",
-				Duration: 326,
+				Title:           "Lose Yourself",
+				Artist:          "Eminem",
+				CatalogDuration: 326,
 			},
 			candidates: []ports.AudioCandidate{
 				{
@@ -533,9 +533,9 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 		{
 			name: "unrelated candidates filtered out",
 			track: TrackRef{
-				Title:    "Save Your Tears",
-				Artist:   "The Weeknd",
-				Duration: 215,
+				Title:           "Save Your Tears",
+				Artist:          "The Weeknd",
+				CatalogDuration: 215,
 			},
 			candidates: []ports.AudioCandidate{
 				{
@@ -553,9 +553,9 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 		{
 			name: "feat track prefers candidate naming the featured artist",
 			track: TrackRef{
-				Title:    "Smaxk Or Die (feat. Playboi Carti)",
-				Artist:   "Fatt Smaxk",
-				Duration: 0,
+				Title:           "Smaxk Or Die (feat. Playboi Carti)",
+				Artist:          "Fatt Smaxk",
+				CatalogDuration: 0,
 			},
 			candidates: []ports.AudioCandidate{
 				{
@@ -581,9 +581,9 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 		{
 			name: "same title different artists picks correct one by channel",
 			track: TrackRef{
-				Title:    "Circles",
-				Artist:   "Post Malone",
-				Duration: 215,
+				Title:           "Circles",
+				Artist:          "Post Malone",
+				CatalogDuration: 215,
 			},
 			candidates: []ports.AudioCandidate{
 				{
@@ -643,7 +643,7 @@ func TestAcquisitionMatchingReport(t *testing.T) {
 	cases := []testCase{
 		{
 			query: "Die Hard (Dr. Dre)",
-			track: TrackRef{Title: "Die Hard", Artist: "Dr. Dre", Duration: 280},
+			track: TrackRef{Title: "Die Hard", Artist: "Dr. Dre", CatalogDuration: 280},
 			candidates: []ports.AudioCandidate{
 				{Title: "DIE HARD", Channel: "Kendrick Lamar - Topic", Duration: 240, Categories: []string{"Music"}, ViewCount: 65_000_000},
 				{Title: "Die Hard", Channel: "Dr. Dre - Topic", Duration: 282, Categories: []string{"Music"}, ViewCount: 5_000_000},
@@ -652,7 +652,7 @@ func TestAcquisitionMatchingReport(t *testing.T) {
 		},
 		{
 			query: "Blinding Lights (The Weeknd)",
-			track: TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200},
+			track: TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", CatalogDuration: 200},
 			candidates: []ports.AudioCandidate{
 				{Title: "The Weeknd - Blinding Lights", Channel: "TheWeekndVEVO", Duration: 203, Categories: []string{"Music"}, ViewCount: 500_000_000},
 				{Title: "Blinding Lights", Channel: "The Weeknd - Topic", Duration: 200, Categories: []string{"Music"}, ViewCount: 10_000_000},
@@ -661,7 +661,7 @@ func TestAcquisitionMatchingReport(t *testing.T) {
 		},
 		{
 			query: "Circles (Post Malone)",
-			track: TrackRef{Title: "Circles", Artist: "Post Malone", Duration: 215},
+			track: TrackRef{Title: "Circles", Artist: "Post Malone", CatalogDuration: 215},
 			candidates: []ports.AudioCandidate{
 				{Title: "Circles", Channel: "Post Malone - Topic", Duration: 215, Categories: []string{"Music"}, ViewCount: 20_000_000},
 				{Title: "Circles", Channel: "Mac Miller - Topic", Duration: 283, Categories: []string{"Music"}, ViewCount: 15_000_000},
@@ -702,7 +702,7 @@ func TestAcquisitionMatchingReport(t *testing.T) {
 }
 
 func TestSelectBestCandidate_SoundCloudFillsGap(t *testing.T) {
-	track := TrackRef{Title: "Fell In Love", Artist: "Lil Tecca", Duration: 150}
+	track := TrackRef{Title: "Fell In Love", Artist: "Lil Tecca", CatalogDuration: 150}
 
 	candidates := []ports.AudioCandidate{
 		{
@@ -723,7 +723,7 @@ func TestSelectBestCandidate_SoundCloudFillsGap(t *testing.T) {
 }
 
 func TestSelectBestCandidate_TopicChannelBeatsSoundCloud(t *testing.T) {
-	track := TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200}
+	track := TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", CatalogDuration: 200}
 
 	candidates := []ports.AudioCandidate{
 		{
@@ -855,7 +855,7 @@ func TestQualifierDistance_CountsEachUnrequestedBracketSegment(t *testing.T) {
 }
 
 func TestRankCandidates_AcousticLosesToTheMasterOnTheSameTopicChannel(t *testing.T) {
-	track := TrackRef{Title: "Sunglasses at Night", Artist: "Corey Hart", Duration: 232}
+	track := TrackRef{Title: "Sunglasses at Night", Artist: "Corey Hart", CatalogDuration: 232}
 	candidates := []ports.AudioCandidate{
 		{
 			Title:      "Sunglasses at Night (Acoustic Version)",
@@ -875,7 +875,7 @@ func TestRankCandidates_AcousticLosesToTheMasterOnTheSameTopicChannel(t *testing
 		},
 	}
 
-	ranked, _ := rankAndCollect(context.Background(), track, track.Duration, candidates)
+	ranked, _ := rankAndCollect(context.Background(), track, track.CatalogDuration, candidates)
 	if len(ranked) != 1 {
 		t.Fatalf("ranked = %d, want exactly the master (the acoustic upload is vetoed outright)", len(ranked))
 	}
@@ -886,7 +886,7 @@ func TestRankCandidates_AcousticLosesToTheMasterOnTheSameTopicChannel(t *testing
 }
 
 func TestRankCandidates_MusicVideoLosesToPlainAudio(t *testing.T) {
-	track := TrackRef{Title: "Never Surrender", Artist: "Corey Hart", Duration: 262}
+	track := TrackRef{Title: "Never Surrender", Artist: "Corey Hart", CatalogDuration: 262}
 	candidates := []ports.AudioCandidate{
 		{
 			Title:      "Never Surrender (Official Music Video)",
@@ -906,14 +906,14 @@ func TestRankCandidates_MusicVideoLosesToPlainAudio(t *testing.T) {
 		},
 	}
 
-	ranked, _ := rankAndCollect(context.Background(), track, track.Duration, candidates)
+	ranked, _ := rankAndCollect(context.Background(), track, track.CatalogDuration, candidates)
 	if ranked[0].Title != "Never Surrender" {
 		t.Fatalf("selected %q — the plain audio must outrank the video container", ranked[0].Title)
 	}
 }
 
 func TestRankCandidates_ProvenanceStillBeatsQualifierDistanceOffTopic(t *testing.T) {
-	track := TrackRef{Title: "Die For You", Artist: "The Weeknd", Duration: 260}
+	track := TrackRef{Title: "Die For You", Artist: "The Weeknd", CatalogDuration: 260}
 	candidates := []ports.AudioCandidate{
 		{
 			Title:      "The Weeknd - Die For You (Lyrics)",
@@ -933,7 +933,7 @@ func TestRankCandidates_ProvenanceStillBeatsQualifierDistanceOffTopic(t *testing
 		},
 	}
 
-	ranked, _ := rankAndCollect(context.Background(), track, track.Duration, candidates)
+	ranked, _ := rankAndCollect(context.Background(), track, track.CatalogDuration, candidates)
 	if ranked[0].Channel != "TheWeekndVEVO" {
 		t.Fatalf("selected %q — off Topic, label provenance outranks a shorter qualifier list", ranked[0].Channel)
 	}
@@ -1101,7 +1101,7 @@ func TestUnrequestedQualifiers_OtherMixesStayVetoed(t *testing.T) {
 }
 
 func TestRankAndCollect_RejectsUnrequestedVersionBeforeDownload(t *testing.T) {
-	track := TrackRef{Title: "Rollacoasta", Artist: "prettifun", Duration: 159}
+	track := TrackRef{Title: "Rollacoasta", Artist: "prettifun", CatalogDuration: 159}
 	candidates := []ports.AudioCandidate{
 		{
 			Title:      "prettifun - Rollacoasta (Instrumental) [100% Accurate]",
@@ -1113,7 +1113,7 @@ func TestRankAndCollect_RejectsUnrequestedVersionBeforeDownload(t *testing.T) {
 		{Title: "Rollacoasta", Channel: "prettifun", Duration: 159, URL: "https://youtube.com/watch?v=clean", Categories: []string{"Music"}},
 	}
 
-	ranked, rejected := rankAndCollect(context.Background(), track, track.Duration, candidates)
+	ranked, rejected := rankAndCollect(context.Background(), track, track.CatalogDuration, candidates)
 
 	if len(ranked) != 1 || ranked[0].URL != "https://youtube.com/watch?v=clean" {
 		t.Fatalf("ranked = %v, want only the clean upload", ranked)
@@ -1124,13 +1124,13 @@ func TestRankAndCollect_RejectsUnrequestedVersionBeforeDownload(t *testing.T) {
 }
 
 func TestRankAndCollect_RadioEditRanksAfterEveryCleanCandidate(t *testing.T) {
-	track := TrackRef{Title: "Harbour Lights", Artist: "The Marram", Duration: 236}
+	track := TrackRef{Title: "Harbour Lights", Artist: "The Marram", CatalogDuration: 236}
 	candidates := []ports.AudioCandidate{
 		{Title: "Harbour Lights (Radio Edit)", Channel: "The Marram - Topic", Duration: 236, URL: "https://x.example/edit", Categories: []string{"Music"}},
 		{Title: "Harbour Lights", Channel: "The Marram - Topic", Duration: 200, URL: "https://x.example/clean", Categories: []string{"Music"}},
 	}
 
-	ranked, rejected := rankAndCollect(context.Background(), track, track.Duration, candidates)
+	ranked, rejected := rankAndCollect(context.Background(), track, track.CatalogDuration, candidates)
 
 	if len(rejected) != 0 || len(ranked) != 2 || ranked[0].URL != "https://x.example/clean" {
 		t.Fatalf("ranked = %v rejected = %v, want the clean upload first and the edit kept", ranked, rejected)
@@ -1138,14 +1138,14 @@ func TestRankAndCollect_RadioEditRanksAfterEveryCleanCandidate(t *testing.T) {
 }
 
 func TestRankAndCollect_MustHold8_UnplayableCandidatesAreRejectedBeforeRanking(t *testing.T) {
-	track := TrackRef{Title: "Drinking in L.A.", Artist: "Bran Van 3000", Duration: 240}
+	track := TrackRef{Title: "Drinking in L.A.", Artist: "Bran Van 3000", CatalogDuration: 240}
 	candidates := []ports.AudioCandidate{
 		{Title: "Drinking in L.A.", URL: "sc:drm", Unplayable: "drm"},
 		{Title: "Drinking in L.A.", URL: "sc:preview", Unplayable: "preview"},
 		{Title: "Drinking in L.A.", URL: "sc:ok"},
 	}
 
-	ranked, rejected := rankAndCollect(context.Background(), track, track.Duration, candidates)
+	ranked, rejected := rankAndCollect(context.Background(), track, track.CatalogDuration, candidates)
 
 	if len(ranked) != 1 || ranked[0].URL != "sc:ok" {
 		t.Fatalf("ranked = %v, want only the playable candidate so the downloader never sees the others", ranked)
@@ -1157,10 +1157,10 @@ func TestRankAndCollect_MustHold8_UnplayableCandidatesAreRejectedBeforeRanking(t
 
 func TestLogCandidateEvaluated_CarriesScoresAndCandidateAttributes(t *testing.T) {
 	buf := captureJSONLog(t)
-	track := TrackRef{ID: "t1", Title: "Song", Artist: "Artist", Duration: 200}
+	track := TrackRef{ID: "t1", Title: "Song", Artist: "Artist", CatalogDuration: 200}
 	c := ports.AudioCandidate{Source: "youtube", Title: "Song", Channel: "Artist - Topic", Duration: 200, ViewCount: 50}
 
-	entry := scoreCandidate(track, track.Duration, c, 100)
+	entry := scoreCandidate(track, track.CatalogDuration, c, 100)
 	logCandidateEvaluated(context.Background(), track, entry)
 
 	rec := findLogRecord(t, buf, "candidate_evaluated")
@@ -1198,7 +1198,7 @@ func TestUnrequestedQualifiers_TitleWithoutBracketHasNoVeto(t *testing.T) {
 }
 
 func TestSelectBest_AnExplicitResolvedTrackBeatsACloserCleanOne(t *testing.T) {
-	track := TrackRef{Title: "Matches", Artist: "Tezzus", Duration: 180}
+	track := TrackRef{Title: "Matches", Artist: "Tezzus", CatalogDuration: 180}
 	clean := ports.AudioCandidate{Title: "Matches", URL: "https://music.youtube.com/watch?v=cleanAAAAAA", Duration: 180, Resolved: true}
 	explicit := ports.AudioCandidate{Title: "Matches", URL: "https://music.youtube.com/watch?v=explicitAAA", Duration: 182, Resolved: true, Explicit: true}
 
@@ -1222,7 +1222,7 @@ func TestSelectBest_TheCatalogExplicitFlagPicksTheTwin(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			track := TrackRef{Title: "Matches", Artist: "Tezzus", Duration: 180, CatalogExplicit: tt.catalog}
+			track := TrackRef{Title: "Matches", Artist: "Tezzus", CatalogDuration: 180, CatalogExplicit: tt.catalog}
 			if got := selectBest(track, []ports.AudioCandidate{explicit, clean}); got == nil || got.URL != tt.want {
 				t.Fatalf("selected %v, want %s", got, tt.want)
 			}
@@ -1297,14 +1297,14 @@ func TestUnrequestedQualifiers_ReleaseVariantsAreQualifiers(t *testing.T) {
 }
 
 func TestRankAndCollect_RejectsPlainlyTitledAcousticAndDemoUploads(t *testing.T) {
-	track := TrackRef{Title: "Sunglasses at Night", Artist: "Corey Hart", Duration: 233}
+	track := TrackRef{Title: "Sunglasses at Night", Artist: "Corey Hart", CatalogDuration: 233}
 	candidates := []ports.AudioCandidate{
 		{Title: "Sunglasses at Night (Acoustic)", Channel: "Corey Hart - Topic", Duration: 233, URL: "https://www.youtube.com/watch?v=acousticUp1", Categories: []string{"Music"}},
 		{Title: "Sunglasses at Night (Demo)", Channel: "Corey Hart - Topic", Duration: 233, URL: "https://www.youtube.com/watch?v=demoUpload1", Categories: []string{"Music"}},
 		{Title: "Sunglasses at Night", Channel: "Corey Hart", Duration: 232, URL: "https://www.youtube.com/watch?v=masterUp001", Categories: []string{"Music"}},
 	}
 
-	ranked, rejected := rankAndCollect(context.Background(), track, track.Duration, candidates)
+	ranked, rejected := rankAndCollect(context.Background(), track, track.CatalogDuration, candidates)
 
 	if len(ranked) != 1 || ranked[0].URL != "https://www.youtube.com/watch?v=masterUp001" {
 		t.Fatalf("ranked = %v, want only the master", ranked)
@@ -1348,7 +1348,7 @@ func TestUploaderClass_APinnedVideoIsTrustedByItsCredits(t *testing.T) {
 }
 
 func TestRankCandidates_TheUsersPickGoesBeforeTheArtTrack(t *testing.T) {
-	track := TrackRef{Title: "Murder On The Dancefloor", Artist: "Sophie Ellis-Bextor", Duration: 230}
+	track := TrackRef{Title: "Murder On The Dancefloor", Artist: "Sophie Ellis-Bextor", CatalogDuration: 230}
 	artTrack := ports.AudioCandidate{
 		Title:    "Murder On The Dancefloor",
 		Duration: 232,
@@ -1383,7 +1383,7 @@ func TestRankCandidates_TheUsersPickGoesBeforeTheArtTrack(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ranked, _ := rankAndCollect(context.Background(), track, track.Duration, tt.candidates)
+			ranked, _ := rankAndCollect(context.Background(), track, track.CatalogDuration, tt.candidates)
 			if len(ranked) != len(tt.candidates) {
 				t.Fatalf("ranked %d candidates, want all %d", len(ranked), len(tt.candidates))
 			}

@@ -300,7 +300,6 @@ type TrackRef struct {
 	Title       string
 	Artist      string
 	Album       string
-	Duration    float64
 	ISRC        string
 	Year        int
 	TrackNumber int

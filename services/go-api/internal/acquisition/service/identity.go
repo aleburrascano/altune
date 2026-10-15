@@ -17,7 +17,7 @@ func ResolveIdentity(ctx context.Context, recordings ports.RecordingResolver, _ 
 		Artist:   ac.Track.Artist,
 		Album:    ac.Track.Album,
 		ISRC:     ac.Track.ISRC,
-		Duration: ac.Track.Duration,
+		Duration: ac.Track.CatalogDuration,
 		MBID:     ac.Track.CatalogMBID,
 	})
 	if err != nil {

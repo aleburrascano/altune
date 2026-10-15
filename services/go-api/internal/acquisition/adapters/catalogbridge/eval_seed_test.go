@@ -38,8 +38,8 @@ func TestNewSeededLedger_SnapshotCarriesTheSeededFields(t *testing.T) {
 	if snapshot.ISRC == nil || *snapshot.ISRC != "CA5KR1827984" {
 		t.Errorf("ISRC = %v", snapshot.ISRC)
 	}
-	if snapshot.DurationSeconds == nil || *snapshot.DurationSeconds != 135.96 {
-		t.Errorf("DurationSeconds = %v, want the catalog length", snapshot.DurationSeconds)
+	if snapshot.CatalogDurationSeconds == nil || *snapshot.CatalogDurationSeconds != 135.96 {
+		t.Errorf("CatalogDurationSeconds = %v, want the catalog length", snapshot.CatalogDurationSeconds)
 	}
 	if snapshot.CatalogMBID == nil || *snapshot.CatalogMBID != "pinned" {
 		t.Errorf("CatalogMBID = %v", snapshot.CatalogMBID)

@@ -8,7 +8,7 @@ import (
 
 func contextWithLengths(saved, resolved float64) *AcquisitionContext {
 	return &AcquisitionContext{
-		Track:    TrackRef{Duration: saved},
+		Track:    TrackRef{CatalogDuration: saved},
 		Identity: ports.RecordingIdentity{Duration: resolved},
 	}
 }
@@ -86,13 +86,13 @@ func TestMeasuredDuration_PrefersTheProbedValue(t *testing.T) {
 }
 
 func TestDurationAcceptable_TightensWhenCorroborated(t *testing.T) {
-	loose := AcquisitionContext{Track: TrackRef{Duration: 181}}
+	loose := AcquisitionContext{Track: TrackRef{CatalogDuration: 181}}
 	if !loose.durationAcceptable(193) {
 		t.Error("without a corroborated length, a 12s excess is inside the loose tolerance")
 	}
 
 	tight := AcquisitionContext{
-		Track:    TrackRef{Duration: 181},
+		Track:    TrackRef{CatalogDuration: 181},
 		Identity: ports.RecordingIdentity{Duration: 181},
 	}
 	if tight.durationAcceptable(193) {
@@ -110,13 +110,13 @@ func TestExpectedLength_OneLengthForEveryReader(t *testing.T) {
 		want float64
 	}{
 		{"catalog length wins over a trusted resolved one", &AcquisitionContext{
-			Track: TrackRef{Duration: 139, CatalogDuration: 139}, Identity: ports.RecordingIdentity{Duration: 167},
+			Track: TrackRef{CatalogDuration: 139}, Identity: ports.RecordingIdentity{Duration: 167},
 		}, 139},
-		{"resolved length when not doubted", contextWithLengths(139, 140), 140},
-		{"saved length when the resolved one is doubted", &AcquisitionContext{
-			Track: TrackRef{Duration: 139}, Identity: ports.RecordingIdentity{Duration: 167, ReferenceDoubted: true},
+		{"resolved length when no target length is saved", contextWithLengths(0, 140), 140},
+		{"target length when the resolved one is doubted", &AcquisitionContext{
+			Track: TrackRef{CatalogDuration: 139}, Identity: ports.RecordingIdentity{Duration: 167, ReferenceDoubted: true},
 		}, 139},
-		{"saved length when nothing was resolved", contextWithLengths(139, 0), 139},
+		{"target length when nothing was resolved", contextWithLengths(139, 0), 139},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -129,7 +129,7 @@ func TestExpectedLength_OneLengthForEveryReader(t *testing.T) {
 
 func TestDurationDelta_ReadsTheExpectedLengthNotTheDoubtedSearchPick(t *testing.T) {
 	ac := &AcquisitionContext{
-		Track:    TrackRef{Duration: 139, CatalogDuration: 139},
+		Track:    TrackRef{CatalogDuration: 139},
 		Identity: ports.RecordingIdentity{Duration: 167, ReferenceDoubted: true},
 	}
 
@@ -140,7 +140,7 @@ func TestDurationDelta_ReadsTheExpectedLengthNotTheDoubtedSearchPick(t *testing.
 
 func TestDurationAcceptable_ADoubtedResolvedLengthWidensNothing(t *testing.T) {
 	ac := &AcquisitionContext{
-		Track:    TrackRef{Duration: 139},
+		Track:    TrackRef{CatalogDuration: 139},
 		Identity: ports.RecordingIdentity{Duration: 167, ReferenceDoubted: true},
 	}
 
@@ -151,7 +151,7 @@ func TestDurationAcceptable_ADoubtedResolvedLengthWidensNothing(t *testing.T) {
 
 func TestReferenceFor_CarriesTheExpectedLength(t *testing.T) {
 	ac := &AcquisitionContext{
-		Track:    TrackRef{Duration: 139, CatalogDuration: 139},
+		Track:    TrackRef{CatalogDuration: 139},
 		Identity: ports.RecordingIdentity{Duration: 167, ReferenceDoubted: true},
 	}
 
@@ -160,9 +160,9 @@ func TestReferenceFor_CarriesTheExpectedLength(t *testing.T) {
 	}
 }
 
-func TestDurationGates_CatalogLengthBeatsADifferingSavedLength(t *testing.T) {
+func TestDurationGates_ADoubtedResolvedLengthDoesNotMoveThePreDownloadGate(t *testing.T) {
 	ac := &AcquisitionContext{
-		Track:    TrackRef{Duration: 167, CatalogDuration: 139},
+		Track:    TrackRef{CatalogDuration: 139},
 		Identity: ports.RecordingIdentity{Duration: 167, ReferenceDoubted: true},
 	}
 

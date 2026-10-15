@@ -130,14 +130,14 @@ func (c *capturingSource) tried(url string) bool {
 }
 
 func TestRankAndCollect_RescuesLowIdentityOnTheArtistChannel(t *testing.T) {
-	track := TrackRef{Title: "I've Been in Love Before", Artist: "Cutting Crew", Duration: 253}
+	track := TrackRef{Title: "I've Been in Love Before", Artist: "Cutting Crew", CatalogDuration: 253}
 	candidates := []ports.AudioCandidate{{
 		Title:   "I've Been In Love Before HQ Stereo Remaster Full Length Version 1986 Special",
 		URL:     "yt:master",
 		Channel: "Cutting Crew - Topic",
 	}}
 
-	ranked, rejected := rankAndCollect(context.Background(), track, track.Duration, candidates)
+	ranked, rejected := rankAndCollect(context.Background(), track, track.CatalogDuration, candidates)
 
 	if len(ranked) != 1 || ranked[0].URL != "yt:master" {
 		t.Fatalf("artist-channel candidate was dropped by the identity gate: ranked=%v", ranked)
@@ -148,14 +148,14 @@ func TestRankAndCollect_RescuesLowIdentityOnTheArtistChannel(t *testing.T) {
 }
 
 func TestRankAndCollect_DropsAndRecordsForeignLowIdentity(t *testing.T) {
-	track := TrackRef{Title: "I've Been in Love Before", Artist: "Cutting Crew", Duration: 253}
+	track := TrackRef{Title: "I've Been in Love Before", Artist: "Cutting Crew", CatalogDuration: 253}
 	candidates := []ports.AudioCandidate{{
 		Title:   "Completely Unrelated Cooking Show Full Episode Forty Seven Nonsense",
 		URL:     "yt:cooking",
 		Channel: "CookingChannel",
 	}}
 
-	ranked, rejected := rankAndCollect(context.Background(), track, track.Duration, candidates)
+	ranked, rejected := rankAndCollect(context.Background(), track, track.CatalogDuration, candidates)
 
 	if len(ranked) != 0 {
 		t.Fatalf("an unrelated candidate must stay gated: ranked=%v", ranked)

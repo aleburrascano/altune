@@ -14,9 +14,9 @@ func TestSelectStep_Execute(t *testing.T) {
 	step := NewSelectStep()
 	ac := &AcquisitionContext{
 		Track: TrackRef{
-			Title:    "Blinding Lights",
-			Artist:   "The Weeknd",
-			Duration: 200,
+			Title:           "Blinding Lights",
+			Artist:          "The Weeknd",
+			CatalogDuration: 200,
 		},
 		Candidates: []ports.AudioCandidate{
 			{
@@ -45,7 +45,7 @@ func TestSelectStep_Execute(t *testing.T) {
 func TestSelectStep_Execute_NoCandidates(t *testing.T) {
 	step := NewSelectStep()
 	ac := &AcquisitionContext{
-		Track:      TrackRef{Title: "Song", Artist: "Artist", Duration: 200},
+		Track:      TrackRef{Title: "Song", Artist: "Artist", CatalogDuration: 200},
 		Candidates: []ports.AudioCandidate{},
 	}
 
@@ -62,7 +62,7 @@ func TestSelectStep_Execute_NoCandidates(t *testing.T) {
 func TestSelectStep_Execute_AllCandidatesBelowThreshold(t *testing.T) {
 	step := NewSelectStep()
 	ac := &AcquisitionContext{
-		Track: TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200},
+		Track: TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", CatalogDuration: 200},
 		Candidates: []ports.AudioCandidate{
 			{
 				Title:      "Cooking Tutorial Episode 47",
@@ -93,7 +93,7 @@ func searchOutageThenSelect(t *testing.T, down findOnlySource, healthy findOnlyS
 	t.Helper()
 	ctx := withJobAttempt(context.Background(), 1)
 	ac := &AcquisitionContext{
-		Track:   TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200},
+		Track:   TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", CatalogDuration: 200},
 		Replace: replace,
 	}
 	if _, err := NewSearchStep(NewSourceRegistry(down, healthy)).Execute(ctx, ac, pipelineStart{}); err != nil {
@@ -129,7 +129,7 @@ func TestSearchStep_OutageWithOnlyStoredFileMatch_IsSourceUnavailable(t *testing
 	healthy := findOnlySource{name: "healthy", candidates: []ports.AudioCandidate{matchingCandidate}}
 	ctx := withJobAttempt(context.Background(), 1)
 	ac := &AcquisitionContext{
-		Track:   TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200},
+		Track:   TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", CatalogDuration: 200},
 		Replace: ReplaceState{ExcludeKeys: []string{sourceKey(matchingCandidate.URL)}},
 	}
 
@@ -224,16 +224,15 @@ func shadowLine(t *testing.T, logs string) map[string]any {
 func TestSelectStep_ShadowLogsDisagreementWithoutChangingThePick(t *testing.T) {
 	logs := captureJSONLogSync(t)
 	ac := &AcquisitionContext{Track: finesseTrack(), Candidates: []ports.AudioCandidate{finesseRemix(), finesseAlbumTrack()}}
-	ac.Track.CatalogDuration = 0
-	ac.Track.Duration = 223
+	ac.Track.CatalogDuration = 223
 
 	if _, err := NewSelectStep().Execute(context.Background(), ac, afterSearch{}); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 
 	line := shadowLine(t, logs.String())
-	if line["agree"] != false || line["judge_url"] != finesseAlbumURL || line["pipeline_url"] != ac.Selected.URL || ac.Selected.URL != finesseRemixURL {
-		t.Fatalf("shadow line = %v, selected = %s, want the pipeline on the remix and the judge on the album track", line, ac.Selected.URL)
+	if line["agree"] != false || line["judge_url"] != "" || line["pipeline_url"] != ac.Selected.URL || ac.Selected.URL != finesseRemixURL {
+		t.Fatalf("shadow line = %v, selected = %s, want the pipeline on the remix and the judge accepting neither", line, ac.Selected.URL)
 	}
 }
 
@@ -259,7 +258,7 @@ func TestSearchStep_FirstTierHoldingOnlyTheStoredFileStillOpensTheFallbackTier(t
 	first := findOnlySource{name: "ytmsearch", candidates: []ports.AudioCandidate{storedArtTrack}}
 	registry := NewSourceRegistry(first).WithFallback(findOnlySource{name: "ytdlp"})
 	ac := &AcquisitionContext{
-		Track:   TrackRef{Title: "Phone (Interlude)", Artist: "SLAYR", Duration: 128},
+		Track:   TrackRef{Title: "Phone (Interlude)", Artist: "SLAYR", CatalogDuration: 128},
 		Replace: ReplaceState{ExcludeKeys: []string{sourceKey(storedArtTrack.URL)}},
 	}
 

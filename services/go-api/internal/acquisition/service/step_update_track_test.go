@@ -397,7 +397,7 @@ func TestUpdateTrackStep_DrinkingInLAWritesNoGuessedISRC(t *testing.T) {
 		[]discoverybridge.RecordedISRCRecording{{MBID: drinkingAlbum, Duration: 236}}, nil)
 	ac := &AcquisitionContext{
 		BestEffort: true,
-		Track:      TrackRef{Title: "Drinking in L.A.", Artist: "Bran Van 3000", Duration: 236},
+		Track:      TrackRef{Title: "Drinking in L.A.", Artist: "Bran Van 3000", CatalogDuration: 236},
 		Verdict:    AudioVerdict{Kind: VerdictUnknown},
 	}
 	ResolveIdentity(context.Background(), recorded, nil, ac)

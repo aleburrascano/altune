@@ -453,7 +453,6 @@ func buildTrackRef(track *ports.TrackSnapshot) TrackRef {
 		Title:       track.Title,
 		Artist:      track.Artist,
 		Album:       track.Album,
-		Duration:    deref(track.DurationSeconds),
 		ISRC:        deref(track.ISRC),
 		Year:        deref(track.Year),
 		TrackNumber: deref(track.TrackNumber),

@@ -916,8 +916,8 @@ func TestRun_CarriesTheCatalogPinsIntoTheTrack(t *testing.T) {
 	if track.CatalogExplicit == nil || *track.CatalogExplicit {
 		t.Errorf("CatalogExplicit = %v, want false", track.CatalogExplicit)
 	}
-	if track.DurationSeconds == nil || *track.DurationSeconds != 139 {
-		t.Errorf("DurationSeconds = %v, want the catalog length 139", track.DurationSeconds)
+	if track.CatalogDurationSeconds == nil || *track.CatalogDurationSeconds != 139 {
+		t.Errorf("CatalogDurationSeconds = %v, want the catalog length 139", track.CatalogDurationSeconds)
 	}
 
 	found, err := newCasePorts(kase).sources()[0].Find(context.Background(), ports.FindRequest{})

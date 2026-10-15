@@ -457,14 +457,14 @@ func TestAcqStage_ArtistMatchesChannel(t *testing.T) {
 }
 
 func TestAcqStage_SymbolOnlyArtistDoesNotRescueUnrelatedCandidate(t *testing.T) {
-	track := TrackRef{Title: "Must Be the Moon", Artist: "!!!", Duration: 253}
+	track := TrackRef{Title: "Must Be the Moon", Artist: "!!!", CatalogDuration: 253}
 	candidates := []ports.AudioCandidate{{
 		Title:   "Completely Unrelated Cooking Show Full Episode Forty Seven Nonsense",
 		URL:     "yt:cooking",
 		Channel: "CookingChannel",
 	}}
 
-	ranked, rejected := rankAndCollect(context.Background(), track, track.Duration, candidates)
+	ranked, rejected := rankAndCollect(context.Background(), track, track.CatalogDuration, candidates)
 
 	if len(ranked) != 0 {
 		t.Fatalf("unrelated candidate must stay gated for a symbol-only artist: ranked=%v", ranked)
@@ -562,10 +562,10 @@ func TestAcqStage_BuildAudioRef(t *testing.T) {
 
 func TestAcqStage_FullSelectionTrace(t *testing.T) {
 	track := TrackRef{
-		Title:    "Blinding Lights",
-		Artist:   "The Weeknd",
-		Duration: 200,
-		ISRC:     "USUM71922973",
+		Title:           "Blinding Lights",
+		Artist:          "The Weeknd",
+		CatalogDuration: 200,
+		ISRC:            "USUM71922973",
 	}
 
 	candidates := []ports.AudioCandidate{
@@ -636,7 +636,7 @@ func TestProvenance(t *testing.T) {
 			name: "length corroborated by discovery but no fingerprint",
 			ac: AcquisitionContext{
 				DurationVerified: true,
-				Track:            TrackRef{Duration: 181},
+				Track:            TrackRef{CatalogDuration: 181},
 				Identity:         ports.RecordingIdentity{Duration: 181},
 			},
 			want: domain.ProvenanceCorroborated,
@@ -805,7 +805,7 @@ func acquirableFixture(t *testing.T) (*AcquireTrackAudioService, *domain.Track, 
 	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore())
 	ac := &AcquisitionContext{Track: TrackRef{
 		ID: track.ID.String(), UserID: userId.String(),
-		Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours", Duration: 200,
+		Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours", CatalogDuration: 200,
 	}}
 	return svc, track, ac
 }

@@ -80,7 +80,6 @@ func snapshotOf(track *domain.Track) *ports.TrackSnapshot {
 		Title:                  track.Title,
 		Artist:                 track.Artist,
 		Album:                  track.Album,
-		DurationSeconds:        track.CatalogDurationSeconds,
 		CatalogDurationSeconds: track.CatalogDurationSeconds,
 		CatalogMBID:            track.CatalogMBID,
 		CatalogExplicit:        track.CatalogExplicit,
