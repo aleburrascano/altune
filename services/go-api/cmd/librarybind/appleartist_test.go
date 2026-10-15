@@ -68,6 +68,19 @@ func TestAppleArtistSource_KeepsOnlySongsFromTheArtistsAlbums(t *testing.T) {
 	}
 }
 
+func TestAppleArtistSource_AnArtistAppleHasNoCatalogForIsAnEmptyAnswer(t *testing.T) {
+	api := fakeAppleArtists{err: providerhttp.StatusError{Status: http.StatusNotFound}}
+	source := appleArtistSource{api: api, limiter: rate.NewLimiter(rate.Inf, 1)}
+	artists, err := source.FindArtists(t.Context(), "Luciano Pavarotti")
+	if err != nil || len(artists) != 0 {
+		t.Fatalf("artists = %+v, %v", artists, err)
+	}
+	view, err := source.Catalog(t.Context(), providerArtist{ID: "p1", Name: "Luciano Pavarotti"})
+	if err != nil || len(view.Albums) != 0 || len(view.Titles) != 0 {
+		t.Fatalf("view = %+v, %v", view, err)
+	}
+}
+
 func TestAppleArtistSource_AbortsOnForbidden(t *testing.T) {
 	api := fakeAppleArtists{err: providerhttp.StatusError{Status: http.StatusForbidden}}
 	source := appleArtistSource{api: api, limiter: rate.NewLimiter(rate.Inf, 1)}

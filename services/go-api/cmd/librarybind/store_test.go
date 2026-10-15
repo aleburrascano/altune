@@ -125,6 +125,31 @@ func contains(text, part string) bool {
 	return false
 }
 
+func TestStore_LoadsTheAudioSourceURLAndSavesAnUncataloguedUploadAsUnofficialWithItsSourceKey(t *testing.T) {
+	s := testStore(t)
+	user := uuid.NewString()
+	track := seedReady(t, s, user)
+	const upload = "https://soundcloud.com/curre-2/chicago-finale-mp3"
+	if _, err := s.pool.Exec(t.Context(), "UPDATE tracks SET audio_source_url = $2 WHERE id = $1", track.ID, upload); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := s.loadTracks(t.Context(), user, 0)
+	if err != nil || len(loaded) != 1 || loaded[0].SourceURL != upload {
+		t.Fatalf("loaded %+v, %v", loaded, err)
+	}
+	found, err := markUncatalogued(t.Context(), loaded[0], answeredWithNothing(reasonISRCNotFound))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if verdict, err := s.save(t.Context(), uuid.New(), loaded[0], found); err != nil || verdict != saveWritten {
+		t.Fatalf("save: %v, %v", verdict, err)
+	}
+	row, ok := identityOf(t, s, track.ID)
+	if !ok || row.status != statusUnofficial || row.reason != reasonNotInCatalog || !contains(row.proof, `"source_key": "soundcloud.com/curre-2/chicago-finale-mp3"`) {
+		t.Fatalf("row = %+v, found %v", row, ok)
+	}
+}
+
 func TestStore_SaveSkipsATrackThatChangedSinceItWasRead(t *testing.T) {
 	s := testStore(t)
 	track := seedReady(t, s, uuid.NewString())

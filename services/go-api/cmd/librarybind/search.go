@@ -55,6 +55,7 @@ func releaseHomes(releases []musicBrainzRelease) []releasepick.Group {
 type searchBinder struct {
 	musicBrainz recordingSearch
 	deezer      isrcLookup
+	cuts        cutPolicy
 }
 
 func leadArtist(artist string) string {
@@ -62,6 +63,7 @@ func leadArtist(artist string) string {
 }
 
 func matchingTrack(t libraryTrack, keys domain.SearchKeys) libraryTrack {
+	t.Artist = keys.Artist
 	if len(keys.VariantQualifiers()) == 0 {
 		t.Title = keys.Title
 	}
@@ -112,6 +114,33 @@ func (b searchBinder) confirmFirstProposal(ctx context.Context, t, match library
 	return found, nil
 }
 
+func (b searchBinder) refineDifferingCut(ctx context.Context, t libraryTrack, found identity) (identity, error) {
+	if !wantsSearch(found) || len(found.Evidence.Search) == 0 || found.hasUnlistedRecordingAtFileLength(found.Evidence.Search[0].Candidates) {
+		return found, nil
+	}
+	match := matchingTrack(t, domain.CleanSearchKeys(t.Title, t.Artist, ""))
+	for _, proposal := range rankedDifferingCuts(match.FileSeconds, found.Evidence.Search[0]) {
+		if !b.cuts.allows(lengthGap(match.FileSeconds, proposal)) {
+			found.refuseCut(match.FileSeconds, proposal.LengthSeconds)
+			continue
+		}
+		confirmation, err := b.confirmAtCatalogLength(ctx, match, proposal)
+		if err != nil {
+			return found, err
+		}
+		found.Evidence.Search = append(found.Evidence.Search, confirmation)
+		if confirmation.Winner != "" && !confirmation.Ambiguous {
+			return found.boundBySearch(match, proposal, confirmation), nil
+		}
+	}
+	return found, nil
+}
+
+func (b searchBinder) confirmAtCatalogLength(ctx context.Context, match libraryTrack, proposal judged) (sourceOutcome, error) {
+	match.FileSeconds = proposal.LengthSeconds
+	return b.confirmWithDeezer(ctx, match, proposal)
+}
+
 func (b searchBinder) confirmWithDeezer(ctx context.Context, match libraryTrack, proposal judged) (sourceOutcome, error) {
 	match.ISRC = proposal.ISRC
 	listed, err := b.deezer.ByISRC(ctx, proposal.ISRC)
@@ -122,11 +151,19 @@ func (b searchBinder) confirmWithDeezer(ctx context.Context, match libraryTrack,
 }
 
 func rankedProposals(fileSeconds float64, proposals sourceOutcome) []judged {
+	return rankedOriginals(fileSeconds, proposals, judged.isGuarded)
+}
+
+func rankedDifferingCuts(fileSeconds float64, proposals sourceOutcome) []judged {
+	return rankedOriginals(fileSeconds, proposals, isRefusedOnlyForLength)
+}
+
+func rankedOriginals(fileSeconds float64, proposals sourceOutcome, isProposable func(judged) bool) []judged {
 	closest := map[string]judged{}
 	for _, j := range proposals.Candidates {
 		isrc := songfacts.CanonicalISRC(j.ISRC)
 		held, seen := closest[isrc]
-		if j.isGuarded() && j.isOriginalRecording() && (!seen || lengthGap(fileSeconds, j) < lengthGap(fileSeconds, held)) {
+		if isProposable(j) && j.isOriginalRecording() && (!seen || lengthGap(fileSeconds, j) < lengthGap(fileSeconds, held)) {
 			closest[isrc] = j
 		}
 	}
@@ -172,6 +209,7 @@ func (i identity) boundBySearch(t libraryTrack, proposal judged, confirmation so
 	i.Status = statusBound
 	i.ISRC = songfacts.CanonicalISRC(proposal.ISRC)
 	i.recordConfirmations([]sourceOutcome{proposed, confirmation})
+	i.noteLengthGap(t.FileSeconds, proposal.LengthSeconds)
 	i.Reason = reasonSearchPrefix + i.Reason
 	if storedISRC := songfacts.CanonicalISRC(t.ISRC); storedISRC != "" && storedISRC != i.ISRC {
 		i.Evidence.Replaced = &replacedISRC{ISRC: storedISRC, Refusal: priorReason, CatalogSeconds: winningCandidate(confirmation).LengthSeconds}

@@ -20,7 +20,7 @@ const (
 )
 
 const unidentifiedTracksSQL = `SELECT t.id::text, t.user_id::text, t.title, t.artist, COALESCE(t.album, ''), COALESCE(t.isrc, ''),
-	COALESCE(t.duration_seconds, 0), t.version
+	COALESCE(t.duration_seconds, 0), t.version, COALESCE(t.audio_source_url, '')
 	FROM tracks t
 	LEFT JOIN track_identity i ON i.track_id = t.id
 	WHERE t.acquisition_status = 'ready'
@@ -38,7 +38,7 @@ func (s store) loadTracks(ctx context.Context, userID string, limit int) ([]libr
 	var tracks []libraryTrack
 	for rows.Next() {
 		var t libraryTrack
-		if err := rows.Scan(&t.ID, &t.UserID, &t.Title, &t.Artist, &t.Album, &t.ISRC, &t.FileSeconds, &t.Version); err != nil {
+		if err := rows.Scan(&t.ID, &t.UserID, &t.Title, &t.Artist, &t.Album, &t.ISRC, &t.FileSeconds, &t.Version, &t.SourceURL); err != nil {
 			return nil, fmt.Errorf("scan ready track: %w", err)
 		}
 		tracks = append(tracks, t)

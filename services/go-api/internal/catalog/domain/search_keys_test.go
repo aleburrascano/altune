@@ -240,6 +240,26 @@ func TestCleanSearchKeys(t *testing.T) {
 			name: "radio edit is not also edit", title: "Song (Radio Edit)", artist: "A",
 			want: SearchKeys{Artist: "A", Title: "Song", Qualifiers: []string{"radio edit"}, Variant: true},
 		},
+		{
+			name: "artist prefix repeated twice", title: "Tate McRae - Tate McRae - One track mind", artist: "Tate McRae",
+			want: SearchKeys{Artist: "Tate McRae", Title: "One track mind"},
+		},
+		{
+			name: "credit group naming the lead artist and a guest", title: "100 Racks (Offset feat. Playboi Carti)", artist: "Quality Control",
+			want: SearchKeys{Artist: "Quality Control", Title: "100 Racks"},
+		},
+		{
+			name: "dangling artist group repeated in the title", title: "CHERISH (Kool & The Gang)", artist: "CHERISH (Kool & The Gang",
+			want: SearchKeys{Artist: "Kool & The Gang", Title: "CHERISH"},
+		},
+		{
+			name: "dangling group that the title does not repeat is kept", title: "Song", artist: "Band (Live",
+			want: SearchKeys{Artist: "Band (Live", Title: "Song"},
+		},
+		{
+			name: "remix credit group is still a remix", title: "Song (Remix feat. B)", artist: "A",
+			want: SearchKeys{Artist: "A", Title: "Song", Qualifiers: []string{"remix"}, Variant: true},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

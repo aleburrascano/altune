@@ -19,6 +19,23 @@ const (
 	runTimeout  = 4 * time.Hour
 )
 
+const (
+	maxCutGapVarName = "LIBRARYBIND_MAX_CUT_GAP"
+	defaultMaxCutGap = 10 * time.Second
+)
+
+func cutPolicyFromEnv(env func(string) string) (cutPolicy, error) {
+	gap := defaultMaxCutGap
+	if raw := env(maxCutGapVarName); raw != "" {
+		parsed, err := time.ParseDuration(raw)
+		if err != nil || parsed <= 0 {
+			return cutPolicy{}, errBadMaxCutGap
+		}
+		gap = parsed
+	}
+	return cutPolicy{maxGapSeconds: gap.Seconds()}, nil
+}
+
 const usageNotice = "librarybind: do not run this from the prod VM, Deezer rate-blocks the prod IP and the app shares it; run it from another host, dry runs with a read-only LIBRARYBIND_DATABASE_URL"
 
 var (
@@ -27,6 +44,7 @@ var (
 	errUndoWithFilters  = errors.New("-undo takes no -user or -limit")
 	errNegativeLimit    = errors.New("-limit must not be negative")
 	errReportWithUndo   = errors.New("-report belongs to a bind run, not -undo")
+	errBadMaxCutGap     = errors.New(maxCutGapVarName + " must be a duration above zero, like 10s")
 )
 
 type options struct {
@@ -125,7 +143,7 @@ func run(opts options, env func(string) string, out io.Writer) error {
 	if opts.undo {
 		return runUndo(ctx, s, opts.undoRunID, out)
 	}
-	return runBind(ctx, s, opts, out)
+	return runBind(ctx, s, opts, env, out)
 }
 
 func runUndo(ctx context.Context, s store, runID uuid.UUID, out io.Writer) error {
@@ -137,7 +155,7 @@ func runUndo(ctx context.Context, s store, runID uuid.UUID, out io.Writer) error
 	return nil
 }
 
-func runBind(ctx context.Context, s store, opts options, out io.Writer) error {
+func runBind(ctx context.Context, s store, opts options, env func(string) string, out io.Writer) error {
 	tracks, err := s.loadTracks(ctx, opts.userID, opts.limit)
 	if err != nil {
 		return err
@@ -146,23 +164,42 @@ func runBind(ctx context.Context, s store, opts options, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	lookups, refiners, err := bindWiring(env, held)
+	if err != nil {
+		return err
+	}
+	runID := uuid.New()
+	done, runErr := bindTracks(ctx, tracks, lookups, sinkFor(s, opts), runID, refiners...)
+	writeReport(out, done, opts.apply, runID)
+	return errors.Join(runErr, writeReportedPlan(opts, done, runErr))
+}
+
+func sinkFor(s store, opts options) identitySink {
+	if opts.apply {
+		return s
+	}
+	return nil
+}
+
+func writeReportedPlan(opts options, done tally, runErr error) error {
+	if opts.report == "" {
+		return nil
+	}
+	return writeRelengthPlan(opts.report, relengthPlan(done.Decisions, runErr != nil))
+}
+
+func bindWiring(env func(string) string, held heldIndex) ([]isrcLookup, []refineFunc, error) {
+	cuts, err := cutPolicyFromEnv(env)
+	if err != nil {
+		return nil, nil, err
+	}
 	httpClient := &http.Client{Timeout: httpTimeout}
 	deezer := newDeezerLookup(httpClient, deezerBaseURL, deezerRequestsPerSec)
 	musicBrainz := newMusicBrainzLookup(httpClient, musicBrainzBaseURL, musicBrainzRequestsSec)
 	adapter := newAppleAdapter(httpClient)
 	apple := newAppleLookup(adapter, appleRequestsPerSec)
-	lookups := []isrcLookup{deezer, musicBrainz, apple}
 	artistSources := []artistSource{deezerArtistSource(deezer), appleArtistSource{api: adapter, limiter: apple.limiter}}
-	var sink identitySink
-	if opts.apply {
-		sink = s
-	}
-	runID := uuid.New()
-	search := searchBinder{musicBrainz: musicBrainz, deezer: deezer}
-	done, runErr := bindTracks(ctx, tracks, lookups, sink, runID, newArtistFirst(artistSources, musicBrainz, held).refine, search.refine)
-	writeReport(out, done, opts.apply, runID)
-	if opts.report != "" {
-		runErr = errors.Join(runErr, writeRelengthPlan(opts.report, relengthPlan(done.Decisions, runErr != nil)))
-	}
-	return runErr
+	search := searchBinder{musicBrainz: musicBrainz, deezer: deezer, cuts: cuts}
+	refiners := []refineFunc{newArtistFirst(artistSources, musicBrainz, held).refine, search.refine, cuts.bindDifferingCut, search.refineDifferingCut, markUncatalogued}
+	return []isrcLookup{deezer, musicBrainz, apple}, refiners, nil
 }

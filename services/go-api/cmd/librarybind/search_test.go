@@ -317,6 +317,36 @@ func TestMusicBrainzSearch_QueriesByTitleAndArtistAndYieldsOneCandidatePerISRC(t
 	}
 }
 
+const princeSearchJSON = `{"recordings":[
+	{"id":"392bd99f-4f36-4e5c-adbd-7287ab92c381","title":"1999","length":217413,"disambiguation":"single edit",
+	 "isrcs":["USRH11902862","USWB19901185","USWB18200029"],
+	 "artist-credit":[{"name":"Prince","artist":{"name":"Prince","aliases":[{"name":"(us 1) PRINCE"}]}}],
+	 "releases":[{"date":"2019-11-29","release-group":{"primary-type":"Album"}},{"date":"1998","release-group":{"primary-type":"Album","secondary-types":["Compilation"]}}]},
+	{"id":"d2c83920-6066-48f4-88d6-2ad6f469ecf4","title":"1999","length":378000,"disambiguation":"album version",
+	 "isrcs":["USRH11902851","USWB18200028"],
+	 "artist-credit":[{"name":"Prince","artist":{"name":"Prince"}}],
+	 "releases":[{"date":"2019-11-29","release-group":{"primary-type":"Album"}},{"date":"1982","release-group":{"primary-type":"Album"}}]},
+	{"id":"4b2d1f0e-8c0a-4f55-9d3e-0a6a3b6f6f11","title":"1999","length":353943,"disambiguation":"live, 1987-06-20: Stadion Galgenwaard, Utrecht, Netherlands",
+	 "isrcs":["USWB12000944"],
+	 "artist-credit":[{"name":"Prince","artist":{"name":"Prince"}}],
+	 "releases":[{"date":"2020","release-group":{"primary-type":"Album","secondary-types":["Live"]}}]}]}`
+
+func TestSearchBinder_BindsTheSingleEditMusicBrainzRecordedForAFileOfThatLength(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(princeSearchJSON)) }))
+	defer srv.Close()
+	nineteenNinetyNine := libraryTrack{ID: "t-prince", UserID: "u1", Title: "1999", Artist: "Prince", Album: "1999", FileSeconds: 218.88, Version: 1}
+	singleEdit := candidate{ID: "dz-1", ISRC: "USWB19901185", Title: "1999", Artists: []string{"Prince"}, LengthSeconds: 217}
+	dz := &fakeDeezerByISRC{known: map[string]candidate{singleEdit.ISRC: singleEdit}, fail: map[string]error{}}
+	binder := searchBinder{musicBrainz: newMusicBrainzLookup(srv.Client(), srv.URL, 1000), deezer: dz}
+	got, err := binder.refine(t.Context(), nineteenNinetyNine, noISRC())
+	if err != nil || got.Status != statusBound || got.ISRC != "USWB19901185" || got.MBRecordingID != "392bd99f-4f36-4e5c-adbd-7287ab92c381" {
+		t.Fatalf("got %s %q isrc %q mb %q, %v", got.Status, got.Reason, got.ISRC, got.MBRecordingID, err)
+	}
+	if !slices.Equal(dz.asked, []string{"USRH11902862", "USWB18200029", "USWB19901185"}) {
+		t.Errorf("deezer asked %v, want only the single edit's isrcs", dz.asked)
+	}
+}
+
 func TestMusicBrainzSearch_AbortsOnForbidden(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusForbidden) }))
 	defer srv.Close()
@@ -358,6 +388,132 @@ func TestSearchBinder_BindsOnlyRecordingsWithAnOriginalStudioRelease(t *testing.
 				t.Errorf("deezer asked %v about a recording that cannot bind", dz.asked)
 			}
 		})
+	}
+}
+
+func TestSearchBinder_BindsRecordingsMusicBrainzOnlyLabelsAsAStudioCut(t *testing.T) {
+	studio := queenRecording("mb-studio", "GBCEE0500364", "1975", 354.9)
+	cases := []struct {
+		disambiguation string
+		wantBound      bool
+	}{
+		{"single edit", true},
+		{"radio edit", true},
+		{"album version", true},
+		{"single version", true},
+		{"album original mix", true},
+		{"live, 1992-04-20: Wembley Stadium, London, UK", false},
+		{"acoustic", false},
+		{"part of “Club MTV” DJ‐mix", false},
+		{"360 Reality Audio mix", false},
+		{"alternate take", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.disambiguation, func(t *testing.T) {
+			recording := with(studio, func(c *candidate) { c.Disambiguation = tc.disambiguation })
+			_, _, binder := searchWith([]candidate{recording}, recording)
+			got, err := binder.refine(t.Context(), bohemianRhapsody(), noISRC())
+			if err != nil || (got.Status == statusBound) != tc.wantBound {
+				t.Fatalf("got %s %q, %v", got.Status, got.Reason, err)
+			}
+		})
+	}
+}
+
+func TestSearchBinder_BindsTheOriginalWhenOnlyTheFileLengthDiffersFromTheCatalog(t *testing.T) {
+	closer := libraryTrack{ID: "t-rush", UserID: "u1", Title: "Closer to the Heart", Artist: "Rush", FileSeconds: 188.67, Version: 1}
+	studio := candidate{ID: "mb-1", ISRC: "USMR17780107", Title: "Closer to the Heart", Artists: []string{"Rush"}, LengthSeconds: 174, Homes: studioAlbum}
+	_, dz, binder := searchWith([]candidate{studio}, studio)
+	done, err := bindTracks(t.Context(), []libraryTrack{closer}, nil, nil, uuid.New(), binder.refine, binder.refineDifferingCut)
+	if err != nil || len(done.Decisions) != 1 {
+		t.Fatalf("done %+v, %v", done, err)
+	}
+	got := done.Decisions[0].Found
+	if got.Status != statusBound || got.ISRC != "USMR17780107" || got.Reason != "search: bound: file length differs from catalog by 15s" {
+		t.Fatalf("got %s %q isrc %q", got.Status, got.Reason, got.ISRC)
+	}
+	if got.MBRecordingID != "mb-1" || got.DeezerTrackID != "dz-USMR17780107" || got.Evidence.DifferingCut == nil || got.Evidence.DifferingCut.CatalogSeconds != 174 {
+		t.Errorf("ids = mb %q deezer %q, evidence %+v", got.MBRecordingID, got.DeezerTrackID, got.Evidence.DifferingCut)
+	}
+	if len(dz.asked) != 1 {
+		t.Errorf("deezer asked %v", dz.asked)
+	}
+}
+
+func TestSearchBinder_ADifferingCutNeedsDeezerToAgreeWithMusicBrainzAndStaysAnOriginal(t *testing.T) {
+	closer := libraryTrack{ID: "t-rush", UserID: "u1", Title: "Closer to the Heart", Artist: "Rush", FileSeconds: 188.67, Version: 1}
+	studio := candidate{ID: "mb-1", ISRC: "USMR17780107", Title: "Closer to the Heart", Artists: []string{"Rush"}, LengthSeconds: 174, Homes: studioAlbum}
+	cases := []struct {
+		name        string
+		musicBrainz candidate
+		deezer      []candidate
+	}{
+		{"deezer lists the isrc at another length", studio, []candidate{with(studio, func(c *candidate) { c.LengthSeconds = 190 })}},
+		{"deezer does not know the isrc", studio, nil},
+		{"the recording only appears on a compilation", with(studio, func(c *candidate) {
+			c.Homes = []releasepick.Group{{PrimaryType: "Album", SecondaryTypes: []string{"Compilation"}, Date: "1987"}}
+		}), []candidate{studio}},
+		{"the title names a live version", with(studio, func(c *candidate) { c.Title = "Closer to the Heart (Live)" }), []candidate{studio}},
+		{"the artist is another act", with(studio, func(c *candidate) { c.Artists = []string{"Big Wreck"} }), []candidate{studio}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, binder := searchWith([]candidate{tc.musicBrainz}, tc.deezer...)
+			got, err := bindTracks(t.Context(), []libraryTrack{closer}, nil, nil, uuid.New(), binder.refine, binder.refineDifferingCut)
+			if err != nil || got.Decisions[0].Found.Status != statusUnbound {
+				t.Fatalf("got %+v, %v", got.Decisions[0].Found, err)
+			}
+		})
+	}
+}
+
+func TestSearchBinder_ADifferingCutPastTheCapStaysRefusedWithTheGapInTheEvidence(t *testing.T) {
+	closer := libraryTrack{ID: "t-rush", UserID: "u1", Title: "Closer to the Heart", Artist: "Rush", FileSeconds: 188.67, Version: 1}
+	studio := candidate{ID: "mb-1", ISRC: "USMR17780107", Title: "Closer to the Heart", Artists: []string{"Rush"}, LengthSeconds: 174, Homes: studioAlbum}
+	_, dz, binder := searchWith([]candidate{studio}, studio)
+	binder.cuts = cutPolicy{maxGapSeconds: 10}
+	done, err := bindTracks(t.Context(), []libraryTrack{closer}, nil, nil, uuid.New(), binder.refine, binder.refineDifferingCut)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := done.Decisions[0].Found
+	if got.Status != statusUnbound || got.Reason != "refused-length" || got.Evidence.DifferingCut == nil || got.Evidence.DifferingCut.CatalogSeconds != 174 || len(dz.asked) != 0 {
+		t.Fatalf("got %s %q cut %+v, deezer asked %v", got.Status, got.Reason, got.Evidence.DifferingCut, dz.asked)
+	}
+}
+
+func TestSearchBinder_ADifferingCutYieldsToARecordingAtTheFilesOwnLength(t *testing.T) {
+	iris := libraryTrack{ID: "t-iris", UserID: "u1", Title: "Iris", Artist: "The Goo Goo Dolls", FileSeconds: 289, Version: 1}
+	rerecording := candidate{ID: "mb-1", ISRC: "USWB12600244", Title: "Iris", Artists: []string{"Goo Goo Dolls"}, LengthSeconds: 199.7, Homes: studioAlbum}
+	original := candidate{ID: "dz-1", ISRC: "USWB19800160", Title: "Iris", Artists: []string{"The Goo Goo Dolls"}, LengthSeconds: 289}
+	_, dz, binder := searchWith([]candidate{rerecording}, rerecording)
+	found := noISRC()
+	found.Evidence.ArtistFirst = []sourceOutcome{{Source: sourceDeezer, Candidates: []judged{judge(iris, original)}}}
+	strict, err := binder.refine(t.Context(), iris, found)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := binder.refineDifferingCut(t.Context(), iris, strict)
+	if err != nil || got.Status != statusUnbound || got.Evidence.DifferingCut != nil || len(dz.asked) != 0 {
+		t.Fatalf("got %s %q cut %+v, deezer asked %v, %v", got.Status, got.Reason, got.Evidence.DifferingCut, dz.asked, err)
+	}
+}
+
+func TestSearchBinder_ADifferingCutPassOnlyRunsForTracksTheSearchLeftUnbound(t *testing.T) {
+	studio := queenRecording("mb-album", "GBCEE0500364", "2005", 354.0)
+	_, dz, binder := searchWith([]candidate{studio}, studio)
+	for _, decided := range []identity{
+		{Status: statusBound, ISRC: "GBCEE0500364"},
+		{Status: statusUnbound, Reason: reasonLookupFailed},
+		{Status: statusUnbound, Reason: reasonNoISRC},
+	} {
+		got, err := binder.refineDifferingCut(t.Context(), bohemianRhapsody(), decided)
+		if err != nil || got.Status != decided.Status || got.Reason != decided.Reason {
+			t.Fatalf("%+v became %+v, %v", decided, got, err)
+		}
+	}
+	if len(dz.asked) != 0 {
+		t.Errorf("deezer asked %v", dz.asked)
 	}
 }
 

@@ -35,14 +35,16 @@ type sourceOutcome struct {
 }
 
 type evidence struct {
-	Title       string          `json:"title"`
-	Artist      string          `json:"artist"`
-	Album       string          `json:"album"`
-	FileSeconds float64         `json:"file_seconds"`
-	Sources     []sourceOutcome `json:"sources"`
-	ArtistFirst []sourceOutcome `json:"artist_first,omitempty"`
-	Search      []sourceOutcome `json:"search,omitempty"`
-	Replaced    *replacedISRC   `json:"replaced_isrc,omitempty"`
+	Title        string          `json:"title"`
+	Artist       string          `json:"artist"`
+	Album        string          `json:"album"`
+	FileSeconds  float64         `json:"file_seconds"`
+	Sources      []sourceOutcome `json:"sources"`
+	ArtistFirst  []sourceOutcome `json:"artist_first,omitempty"`
+	Search       []sourceOutcome `json:"search,omitempty"`
+	Replaced     *replacedISRC   `json:"replaced_isrc,omitempty"`
+	DifferingCut *differingCut   `json:"differing_cut,omitempty"`
+	SourceKey    string          `json:"source_key,omitempty"`
 }
 
 type identity struct {
@@ -88,8 +90,10 @@ func pickWinner(fileSeconds float64, all []judged) (winnerID string, ambiguous b
 }
 
 func hasRivalRecording(closestFirst []judged) bool {
+	closest := closestFirst[0]
 	return slices.ContainsFunc(closestFirst, func(j judged) bool {
-		return math.Abs(j.LengthSeconds-closestFirst[0].LengthSeconds) > lengthToleranceSeconds
+		return songfacts.CanonicalISRC(j.ISRC) != songfacts.CanonicalISRC(closest.ISRC) &&
+			math.Abs(j.LengthSeconds-closest.LengthSeconds) > lengthToleranceSeconds
 	})
 }
 

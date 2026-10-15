@@ -216,6 +216,11 @@ func appleFailure(err error) error {
 	return err
 }
 
+func isAppleNotFound(err error) bool {
+	var statusErr providerhttp.StatusError
+	return errors.As(err, &statusErr) && statusErr.Status == http.StatusNotFound
+}
+
 func newAppleAdapter(httpClient *http.Client) *applemusic.AppleMusicAdapter {
 	return applemusic.NewAppleMusicAdapter(httpClient)
 }

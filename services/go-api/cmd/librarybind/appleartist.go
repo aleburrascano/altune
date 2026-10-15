@@ -27,6 +27,9 @@ func appleCall[T any](ctx context.Context, limiter *rate.Limiter, call func() (T
 		return none, err
 	}
 	results, err := call()
+	if isAppleNotFound(err) {
+		return none, nil
+	}
 	if err != nil {
 		return none, appleFailure(err)
 	}

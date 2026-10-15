@@ -2,6 +2,8 @@ package main
 
 import (
 	"altune/go-api/internal/shared/releasepick"
+	"altune/go-api/internal/shared/versiontag"
+	"slices"
 	"strings"
 )
 
@@ -22,6 +24,7 @@ type libraryTrack struct {
 	ISRC        string
 	FileSeconds float64
 	Version     int
+	SourceURL   string
 }
 
 func (t libraryTrack) hasUnreleasedAlbum() bool {
@@ -39,8 +42,19 @@ type candidate struct {
 	Homes          []releasepick.Group `json:"homes,omitempty"`
 }
 
+var releaseTypeNames = []string{strings.ToLower(releasepick.PrimaryAlbum), strings.ToLower(releasepick.PrimarySingle), strings.ToLower(releasepick.PrimaryEP)}
+
+func namesAnotherPerformance(disambiguation string) bool {
+	tokens := versiontag.Tokens(disambiguation)
+	if slices.ContainsFunc(versiontag.Matches(tokens), func(entry versiontag.Entry) bool { return entry.Veto }) {
+		return true
+	}
+	unexplained := slices.DeleteFunc(versiontag.WithoutVersionPhrases(tokens), func(word string) bool { return slices.Contains(releaseTypeNames, word) })
+	return len(unexplained) > 0
+}
+
 func (c candidate) original() (releasepick.Group, releasepick.Kind, bool) {
-	if c.Disambiguation != "" {
+	if namesAnotherPerformance(c.Disambiguation) {
 		return releasepick.Group{}, releasepick.KindNone, false
 	}
 	return releasepick.Best(c.Homes, func(g releasepick.Group) releasepick.Group { return g })

@@ -61,7 +61,8 @@ var (
 	groupRe       = regexp.MustCompile(`[(\[{（【][^)\]}）】]*[)\]}）】]`)
 	separatorRe   = regexp.MustCompile(`\s+[-–—|]\s+`)
 	dashSuffixRe  = regexp.MustCompile(`\s[-–—]\s+([^-–—|]+)$`)
-	creditGroupRe = regexp.MustCompile(`(?i)^\s*(?:feat|ft|featuring|with)\b`)
+	creditGroupRe = regexp.MustCompile(`(?i)^\s*(?:feat|ft|featuring|with)\b|\b(?:feat|ft|featuring)\b`)
+	danglingRe    = regexp.MustCompile(`^.*?\S\s*[(\[{（【]([^)\]}）】]+)$`)
 	trailingFeat  = regexp.MustCompile(`(?i)\s+(?:feat|ft|featuring)\.?\s+.+$`)
 	trailingHDRe  = regexp.MustCompile(`\s+(?:HD|HQ)\s*$`)
 	videoExtRe    = regexp.MustCompile(`(?i)\.(?:avi|wmv|mpg|mpeg|flv)$`)
@@ -84,13 +85,13 @@ var noiseGroupRes = []*regexp.Regexp{
 
 func CleanSearchKeys(title, artist, uploader string) SearchKeys {
 	original := strings.TrimSpace(textnorm.NFKC(title))
-	storedArtist := channelStripped(dropDuplicateGroups(artist))
+	storedArtist := nameRepeatedInTitle(channelStripped(dropDuplicateGroups(artist)), original)
 	channelName := channelStripped(dropDuplicateGroups(uploader))
 	keys := initialKeys(artist, storedArtist, channelName)
 
 	found := map[string]bool{}
-	work := splitCredit(dropSymbols(original), found, storedArtist, channelName)
-	keys.Title = stripDecorations(work, found)
+	work := splitCredits(dropSymbols(original), found, storedArtist, channelName)
+	keys.Title = stripDecorations(work, found, storedArtist)
 	if keys.Title == "" {
 		keys.Title = tidy(original)
 	}
@@ -118,8 +119,8 @@ func initialKeys(rawArtist, storedArtist, channelName string) SearchKeys {
 	return keys
 }
 
-func stripDecorations(work string, found map[string]bool) string {
-	work = stripDecorationGroups(work, found)
+func stripDecorations(work string, found map[string]bool, artist string) string {
+	work = stripDecorationGroups(work, found, artist)
 	work = stripQualifierSuffixes(work, found)
 	work = dashVideoRe.ReplaceAllString(work, "")
 	work = videoExtRe.ReplaceAllString(work, "")
@@ -139,15 +140,28 @@ func orderedQualifiers(found map[string]bool) (names []string, variant bool) {
 	return names, variant
 }
 
-func stripDecorationGroups(work string, found map[string]bool) string {
+func stripDecorationGroups(work string, found map[string]bool, artist string) string {
 	return rewriteGroups(work, func(prefix, group string) bool {
 		inner := groupInner(group)
 		matched := matchQualifiers(inner)
 		for _, name := range matched {
 			found[name] = true
 		}
-		return len(matched) == 0 && !isDroppableGroup(prefix, inner)
+		return len(matched) == 0 && !isDroppableGroup(prefix, inner) && !sameName(inner, artist)
 	})
+}
+
+func nameRepeatedInTitle(artist, title string) string {
+	m := danglingRe.FindStringSubmatch(artist)
+	if m == nil {
+		return artist
+	}
+	for _, group := range groupRe.FindAllString(title, -1) {
+		if sameName(groupInner(group), m[1]) {
+			return tidy(m[1])
+		}
+	}
+	return artist
 }
 
 func stripQualifierSuffixes(work string, found map[string]bool) string {
@@ -164,6 +178,16 @@ func stripQualifierSuffixes(work string, found map[string]bool) string {
 			found[name] = true
 		}
 		work = strings.TrimSuffix(work, m[0])
+	}
+}
+
+func splitCredits(title string, found map[string]bool, names ...string) string {
+	for {
+		rest := splitCredit(title, found, names...)
+		if rest == title {
+			return title
+		}
+		title = rest
 	}
 }
 

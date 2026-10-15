@@ -281,9 +281,9 @@ func TestDecide_BindRule(t *testing.T) {
 			track: celebration(),
 			outcomes: []sourceOutcome{
 				outcomeOf(celebration(), sourceDeezer, []candidate{catalogCelebration("77")}, nil),
-				outcomeOf(celebration(), sourceMusicBrainz, []candidate{
+				outcomeIgnoringISRC(celebration(), sourceMusicBrainz, []candidate{
 					with(catalogCelebration("r0"), func(c *candidate) { c.LengthSeconds = 295.5 }),
-					with(catalogCelebration("r1"), func(c *candidate) { c.LengthSeconds = 300.5 }),
+					with(catalogCelebration("r1"), func(c *candidate) { c.LengthSeconds = 300.5; c.ISRC = "USRIVAL00001" }),
 				}, nil),
 			},
 			wantStatus: statusUnbound,
@@ -335,7 +335,7 @@ func TestOutcomeOf_RefusesWhenCandidatesDifferByMoreThanTheTolerance(t *testing.
 		wantWinner  string
 		wantAmbigus bool
 	}{
-		{"two recordings five seconds apart, both within the guard, are ambiguous", []float64{295.5, 300.5}, "", true},
+		{"two listings of one isrc five seconds apart, both within the guard, are one recording and the closer wins", []float64{295.5, 300.5}, "r0", false},
 		{"a clearly closer recording wins", []float64{298, 295.5}, "r0", false},
 		{"a lone recording wins", []float64{296}, "r0", false},
 	}
@@ -390,13 +390,13 @@ func TestOutcomeOf_ListingsBehindOneISRCAreOneRecording(t *testing.T) {
 			wantWinner: "b",
 		},
 		{
-			name:  "lengths further apart than the tolerance are different versions",
+			name:  "lengths further apart than the tolerance behind one isrc are one recording",
 			track: with2(superpowers, func(tr *libraryTrack) { tr.FileSeconds = 210 }),
 			found: []candidate{
 				listing("a", "Superpowers", []string{"Daniel Caesar"}, "", 207.5),
 				listing("b", "Superpowers", []string{"Daniel Caesar"}, "", 212.5),
 			},
-			wantAmbig: true,
+			wantWinner: "a",
 		},
 		{
 			name:  "lengths exactly at the tolerance apart are one recording",
@@ -408,13 +408,13 @@ func TestOutcomeOf_ListingsBehindOneISRCAreOneRecording(t *testing.T) {
 			wantWinner: "a",
 		},
 		{
-			name:  "lengths just past the tolerance apart are different versions",
+			name:  "lengths just past the tolerance apart behind one isrc are one recording",
 			track: with2(superpowers, func(tr *libraryTrack) { tr.FileSeconds = 210 }),
 			found: []candidate{
 				listing("a", "Superpowers", []string{"Daniel Caesar"}, "", 208.4),
 				listing("b", "Superpowers", []string{"Daniel Caesar"}, "", 211.5),
 			},
-			wantAmbig: true,
+			wantWinner: "b",
 		},
 		{
 			name:  "a plain track never picks the remix behind the same isrc",
@@ -519,12 +519,50 @@ func TestOutcomeOf_CompilationListingsAFewSecondsApartAreOneRecording(t *testing
 	}
 }
 
+func TestOutcomeOf_RecordingsBehindOneISRCAreOneRecordingEvenWhenTheirLengthsDiffer(t *testing.T) {
+	getDownOnIt := libraryTrack{ID: "t", Title: "Get Down On It", Artist: "Kool & The Gang", ISRC: "USDJ20110815", FileSeconds: 293.67}
+	listed := func(id, isrc string, length float64) candidate {
+		return candidate{ID: id, ISRC: isrc, Title: "Get Down on It", Artists: []string{"Kool & the Gang"}, LengthSeconds: length}
+	}
+	cases := []struct {
+		name       string
+		found      []candidate
+		wantWinner string
+		wantAmbig  bool
+	}{
+		{"two cuts of one isrc both inside the guard pick the closer", []candidate{listed("album", "USDJ20110815", 291.28), listed("remaster", "USDJ20110815", 296.28)}, "album", false},
+		{"two isrcs five seconds apart inside the guard stay ambiguous", []candidate{listed("a", "USDJ20110815", 291.28), listed("b", "USPR38100044", 296.28)}, "", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := outcomeIgnoringISRC(getDownOnIt, sourceMusicBrainz, tc.found, nil)
+			if got.Winner != tc.wantWinner || got.Ambiguous != tc.wantAmbig {
+				t.Fatalf("winner %q ambiguous %v", got.Winner, got.Ambiguous)
+			}
+		})
+	}
+}
+
+func TestDecide_AnAmbiguousSourceWhoseCandidatesShareTheStoredISRCStillBinds(t *testing.T) {
+	track := celebration()
+	got := decide(track, []sourceOutcome{
+		outcomeOf(track, sourceDeezer, []candidate{catalogCelebration("77")}, nil),
+		outcomeOf(track, sourceMusicBrainz, []candidate{
+			with(catalogCelebration("r0"), func(c *candidate) { c.LengthSeconds = 295.5 }),
+			with(catalogCelebration("r1"), func(c *candidate) { c.LengthSeconds = 300.5 }),
+		}, nil),
+	})
+	if got.Status != statusBound || got.MBRecordingID != "r0" || got.DeezerTrackID != "77" {
+		t.Fatalf("got %s %q mb %q deezer %q", got.Status, got.Reason, got.MBRecordingID, got.DeezerTrackID)
+	}
+}
+
 func TestOutcomeOf_ARivalLengthFartherFromTheFileThanTheToleranceStaysAmbiguous(t *testing.T) {
 	track := with2(celebration(), func(tr *libraryTrack) { tr.FileSeconds = 210 })
-	got := outcomeOf(track, sourceApple, []candidate{
+	got := outcomeIgnoringISRC(track, sourceApple, []candidate{
 		with(catalogCelebration("near"), func(c *candidate) { c.LengthSeconds = 210.4 }),
-		with(catalogCelebration("far"), func(c *candidate) { c.LengthSeconds = 213 }),
-		with(catalogCelebration("low"), func(c *candidate) { c.LengthSeconds = 207.2 }),
+		with(catalogCelebration("far"), func(c *candidate) { c.LengthSeconds = 213; c.ISRC = "USRIVAL00001" }),
+		with(catalogCelebration("low"), func(c *candidate) { c.LengthSeconds = 207.2; c.ISRC = "USRIVAL00002" }),
 	}, nil)
 	if got.Winner != "" || !got.Ambiguous {
 		t.Fatalf("winner %q ambiguous %v", got.Winner, got.Ambiguous)
