@@ -72,7 +72,9 @@ func bridgeBatch(kind domain.ResultKind, mbid string, xref map[domain.ProviderKe
 			 VALUES ($1, $2, $3, $4, $5)
 			 ON CONFLICT (provider, external_id, kind)
 			 DO UPDATE SET mbid = EXCLUDED.mbid,
-				xref = entity_identity.xref || EXCLUDED.xref,
+				xref = CASE WHEN entity_identity.mbid = EXCLUDED.mbid
+					THEN entity_identity.xref || EXCLUDED.xref
+					ELSE EXCLUDED.xref END,
 				resolved_at = now()`,
 			provider, externalID, kind.String(), mbid, blob,
 		)

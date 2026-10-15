@@ -271,6 +271,29 @@ func TestRedisIdentityStore_PersistBridges_RedisDelFailureStillReturnsNil(t *tes
 	}
 }
 
+func TestRedisIdentityStore_PersistBridges_MBIDChangeDropsOldCachedCopy(t *testing.T) {
+	client := testRedisClient(t)
+	ext := fmt.Sprintf("dz-mbidchg-%s", t.Name())
+	inner := &recordingIdentityStore{
+		mbid: "mbid-m1", xref: map[domain.ProviderKey]string{"deezer": ext, "applemusic": "A1"}, found: true,
+	}
+	store := NewRedisIdentityStore(inner, client)
+	ctx := context.Background()
+	cleanKeys(t, client, identityKey(domain.ResultKindArtist, "deezer", ext))
+
+	if _, _, ok := store.LookupByProviderID(ctx, domain.ResultKindArtist, "deezer", ext); !ok {
+		t.Fatal("precondition: lookup must hit")
+	}
+	inner.mbid, inner.xref = "mbid-m2", map[domain.ProviderKey]string{"deezer": ext}
+	if err := store.PersistBridges(ctx, domain.ResultKindArtist, "mbid-m2", inner.xref); err != nil {
+		t.Fatalf("PersistBridges: %v", err)
+	}
+	mbid, xref, ok := store.LookupByProviderID(ctx, domain.ResultKindArtist, "deezer", ext)
+	if !ok || mbid != "mbid-m2" || len(xref) != 1 {
+		t.Errorf("lookup = (%q, %v, %v), want the M2 identity without the old artist's edges", mbid, xref, ok)
+	}
+}
+
 type midLookupIdentityStore struct {
 	recordingIdentityStore
 	beforeReturn func()

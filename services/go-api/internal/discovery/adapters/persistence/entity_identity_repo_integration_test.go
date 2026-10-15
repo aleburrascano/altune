@@ -68,8 +68,8 @@ func TestPgxIdentityStore_RoundTrip(t *testing.T) {
 	if gotMBID != newMBID {
 		t.Errorf("after upsert mbid = %q, want %q", gotMBID, newMBID)
 	}
-	if gotXref["discogs"] != "987654" {
-		t.Errorf("partial re-learn erased the discogs edge, xref = %v", gotXref)
+	if _, has := gotXref["discogs"]; has {
+		t.Errorf("MBID change kept the old artist's discogs edge, xref = %v", gotXref)
 	}
 	if gotXref["deezer"] != "234701081" {
 		t.Errorf("xref lost the re-learned deezer edge, xref = %v", gotXref)
@@ -226,5 +226,41 @@ func TestPgxIdentityStore_LookupByProviderID_CorruptXrefWarnsAndKeepsHit(t *test
 	}
 	if !strings.Contains(logs.String(), "identity.xref_corrupt") {
 		t.Errorf("corrupt xref not logged at Warn: %q", logs.String())
+	}
+}
+
+func TestPgxIdentityStore_PersistBridges_MBIDChangeReplacesXref(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, os.Getenv("DATABASE_URL"))
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer pool.Close()
+	cleanup := `DELETE FROM entity_identity WHERE external_id IN ('mbidchg-d1','mbidchg-a1','mbidchg-d2')`
+	_, _ = pool.Exec(ctx, cleanup)
+	defer pool.Exec(ctx, cleanup)
+	store := NewPgxIdentityStore(pool)
+	kind := domain.ResultKindArtist
+
+	if err := store.PersistBridges(ctx, kind, "mbid-m1", map[domain.ProviderKey]string{"deezer": "mbidchg-d1", "applemusic": "mbidchg-a1"}); err != nil {
+		t.Fatalf("persist M1: %v", err)
+	}
+	if err := store.PersistBridges(ctx, kind, "mbid-m1", map[domain.ProviderKey]string{"deezer": "mbidchg-d1", "discogs": "mbidchg-d2"}); err != nil {
+		t.Fatalf("persist M1 again: %v", err)
+	}
+	if _, xref, _ := store.LookupByProviderID(ctx, kind, "deezer", "mbidchg-d1"); xref["applemusic"] != "mbidchg-a1" {
+		t.Fatalf("same-MBID relearn must merge, xref = %v", xref)
+	}
+
+	if err := store.PersistBridges(ctx, kind, "mbid-m2", map[domain.ProviderKey]string{"deezer": "mbidchg-d1"}); err != nil {
+		t.Fatalf("persist M2: %v", err)
+	}
+	mbid, xref, ok := store.LookupByProviderID(ctx, kind, "deezer", "mbidchg-d1")
+	if !ok || mbid != "mbid-m2" {
+		t.Fatalf("lookup = (%q, %v), want mbid-m2", mbid, ok)
+	}
+	if len(xref) != 1 || xref["deezer"] != "mbidchg-d1" {
+		t.Errorf("xref = %v, want only the new artist's deezer edge", xref)
 	}
 }
