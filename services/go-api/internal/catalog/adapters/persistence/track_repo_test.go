@@ -1154,7 +1154,7 @@ func TestPgxTrackRepo_RoundTripsTheCatalogIdentity(t *testing.T) {
 	cleanupTrack(t, pool, pinned.ID, userId)
 	mbid := "5b11f4ce-a62d-471e-81fc-a69a8278c7da"
 	explicit := true
-	sources := []domain.CatalogSource{{Provider: "deezer", ExternalID: "42"}, {Provider: "spotify", ExternalID: "abc"}}
+	sources := []domain.CatalogSource{{Provider: "deezer", ExternalID: "42"}, {Provider: "soundcloud", ExternalID: "abc", URL: "https://soundcloud.com/artist/track"}}
 	if err := pinned.SetCatalogIdentity(&mbid, &explicit, sources); err != nil {
 		t.Fatal(err)
 	}

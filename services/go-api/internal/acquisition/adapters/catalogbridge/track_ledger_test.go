@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/google/uuid"
@@ -510,5 +511,20 @@ func TestGetKeepsTheMeasuredFileLengthBesideTheCatalogLength(t *testing.T) {
 	}
 	if snap.DurationSeconds == nil || *snap.DurationSeconds != 128 {
 		t.Fatalf("DurationSeconds = %v, want the catalog target 128", snap.DurationSeconds)
+	}
+}
+
+func TestGetExposesThePickedSourceURL(t *testing.T) {
+	track, userId := newTrack(t, 1)
+	const pick = "https://soundcloud.com/artist/track"
+	track.CatalogSources = []domain.CatalogSource{{Provider: "soundcloud", ExternalID: pick, URL: pick}}
+
+	snap, err := NewTrackLedger(newFakeStore(track)).Get(context.Background(), track.ID, userId)
+	if err != nil || snap == nil {
+		t.Fatalf("Get: %v, %v", snap, err)
+	}
+	want := []ports.CatalogSource{{Provider: "soundcloud", ExternalID: pick, URL: pick}}
+	if !reflect.DeepEqual(snap.CatalogSources, want) {
+		t.Errorf("CatalogSources = %+v, want %+v", snap.CatalogSources, want)
 	}
 }

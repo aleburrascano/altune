@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 )
 
@@ -36,6 +37,34 @@ func KnownCatalogProviders() []string {
 type CatalogSource struct {
 	Provider   string `json:"provider"`
 	ExternalID string `json:"external_id"`
+	URL        string `json:"url,omitempty"`
+}
+
+func WithSoundCloudURL(sources []CatalogSource, rawURL string) []CatalogSource {
+	rawURL = strings.TrimSpace(rawURL)
+	if !isSoundCloudURL(rawURL) {
+		return sources
+	}
+	out := append([]CatalogSource(nil), sources...)
+	for i := range out {
+		if out[i].Provider == "soundcloud" {
+			out[i].URL = rawURL
+			return out
+		}
+	}
+	if len(rawURL) > maxCatalogExternalIDSize || len(out) >= MaxCatalogSources {
+		return sources
+	}
+	return append(out, CatalogSource{Provider: "soundcloud", ExternalID: rawURL, URL: rawURL})
+}
+
+func isSoundCloudURL(raw string) bool {
+	parsed, err := url.Parse(raw)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	return host == "soundcloud.com" || strings.HasSuffix(host, ".soundcloud.com")
 }
 
 var uuidDashPositions = map[int]bool{8: true, 13: true, 18: true, 23: true}
@@ -79,7 +108,7 @@ func validateCatalogSource(s CatalogSource) error {
 	if len(s.ExternalID) > maxCatalogExternalIDSize {
 		return NewValidationError(fmt.Sprintf("sources external_id exceeds %d characters", maxCatalogExternalIDSize))
 	}
-	return nil
+	return ValidateSourceURL(s.URL)
 }
 
 func NormalizeCatalogSources(sources []CatalogSource) ([]CatalogSource, error) {

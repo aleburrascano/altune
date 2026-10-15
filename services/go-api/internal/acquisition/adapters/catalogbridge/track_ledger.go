@@ -113,7 +113,7 @@ func snapshotSources(sources []domain.CatalogSource) []ports.CatalogSource {
 	}
 	out := make([]ports.CatalogSource, len(sources))
 	for i, s := range sources {
-		out[i] = ports.CatalogSource{Provider: s.Provider, ExternalID: s.ExternalID}
+		out[i] = ports.CatalogSource{Provider: s.Provider, ExternalID: s.ExternalID, URL: s.URL}
 	}
 	return out
 }

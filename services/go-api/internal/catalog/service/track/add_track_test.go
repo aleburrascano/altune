@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -839,5 +841,55 @@ func TestAddTrackService_RejectsInvalidCatalogIdentity(t *testing.T) {
 				t.Fatalf("a refused save must not insert: out=%v stored=%d", out, len(repo.Tracks))
 			}
 		})
+	}
+}
+
+func TestAddTrackService_KeepsThePickedSoundCloudURLOnItsCatalogSource(t *testing.T) {
+	repo := catalogtest.NewTrackRepo()
+	userId := catalogtest.UserId()
+	pick := "https://soundcloud.com/artist/track"
+	input := AddTrackInput{
+		Title: "Track", Artist: "Artist", Album: "Album",
+		CatalogSources: []domain.CatalogSource{{Provider: "deezer", ExternalID: "1"}},
+		SourceURL:      &pick,
+	}
+
+	out, err := NewAddTrackService(repo).Execute(context.Background(), userId, input)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	stored, err := repo.GetByID(context.Background(), out.Track.ID, userId)
+	if err != nil || stored == nil {
+		t.Fatalf("GetByID: %v, %v", stored, err)
+	}
+	want := []domain.CatalogSource{
+		{Provider: "deezer", ExternalID: "1"},
+		{Provider: "soundcloud", ExternalID: pick, URL: pick},
+	}
+	if !reflect.DeepEqual(stored.CatalogSources, want) {
+		t.Errorf("CatalogSources = %+v, want %+v", stored.CatalogSources, want)
+	}
+}
+
+func TestAddTrackService_FullCatalogSourcesWithPickedSoundCloudURLStillAdds(t *testing.T) {
+	repo := catalogtest.NewTrackRepo()
+	userId := catalogtest.UserId()
+	pick := "https://soundcloud.com/artist/track"
+	sources := make([]domain.CatalogSource, domain.MaxCatalogSources)
+	for i := range sources {
+		sources[i] = domain.CatalogSource{Provider: "deezer", ExternalID: strconv.Itoa(i + 1)}
+	}
+	input := AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album", CatalogSources: sources, SourceURL: &pick}
+
+	out, err := NewAddTrackService(repo).Execute(context.Background(), userId, input)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	stored, err := repo.GetByID(context.Background(), out.Track.ID, userId)
+	if err != nil || stored == nil {
+		t.Fatalf("GetByID: %v, %v", stored, err)
+	}
+	if !reflect.DeepEqual(stored.CatalogSources, sources) {
+		t.Errorf("CatalogSources = %+v, want unchanged", stored.CatalogSources)
 	}
 }

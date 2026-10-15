@@ -111,7 +111,11 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 			return nil, err
 		}
 	}
-	if err := track.SetCatalogIdentity(input.CatalogMBID, input.CatalogExplicit, input.CatalogSources); err != nil {
+	sources := input.CatalogSources
+	if input.SourceURL != nil {
+		sources = domain.WithSoundCloudURL(sources, *input.SourceURL)
+	}
+	if err := track.SetCatalogIdentity(input.CatalogMBID, input.CatalogExplicit, sources); err != nil {
 		return nil, err
 	}
 	track.ArtworkURL = input.ArtworkURL

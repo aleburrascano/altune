@@ -40,6 +40,7 @@ type Track struct {
 type CatalogSource struct {
 	Provider   string `json:"provider"`
 	ExternalID string `json:"external_id"`
+	URL        string `json:"url,omitempty"`
 }
 
 type Resolution struct {

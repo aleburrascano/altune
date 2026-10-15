@@ -23,6 +23,7 @@ var (
 type CatalogSource struct {
 	Provider   string
 	ExternalID string
+	URL        string
 }
 
 type TrackSnapshot struct {

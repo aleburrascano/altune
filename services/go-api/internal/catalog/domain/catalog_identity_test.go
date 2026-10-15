@@ -2,6 +2,7 @@ package domain
 
 import (
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -105,4 +106,70 @@ func TestTrack_SetCatalogIdentity_RejectsBadMBID(t *testing.T) {
 	if err := (&Track{}).SetCatalogIdentity(&bad, nil, nil); err == nil {
 		t.Fatal("want a validation error for a non-UUID mbid")
 	}
+}
+
+func TestWithSoundCloudURL(t *testing.T) {
+	const pick = "https://soundcloud.com/artist/track"
+	tests := []struct {
+		name    string
+		sources []CatalogSource
+		url     string
+		want    []CatalogSource
+	}{
+		{
+			name:    "creates the entry when absent",
+			sources: []CatalogSource{{Provider: "deezer", ExternalID: "1"}},
+			url:     pick,
+			want: []CatalogSource{
+				{Provider: "deezer", ExternalID: "1"},
+				{Provider: "soundcloud", ExternalID: pick, URL: pick},
+			},
+		},
+		{
+			name:    "sets it on the existing entry",
+			sources: []CatalogSource{{Provider: "soundcloud", ExternalID: "123"}},
+			url:     pick,
+			want:    []CatalogSource{{Provider: "soundcloud", ExternalID: "123", URL: pick}},
+		},
+		{
+			name:    "a full list is left unchanged",
+			sources: fullCatalogSources(),
+			url:     pick,
+			want:    fullCatalogSources(),
+		},
+		{
+			name: "a subdomain is soundcloud",
+			url:  "https://m.soundcloud.com/a/b",
+			want: []CatalogSource{{Provider: "soundcloud", ExternalID: "https://m.soundcloud.com/a/b", URL: "https://m.soundcloud.com/a/b"}},
+		},
+		{"another host is ignored", nil, "https://notsoundcloud.com/a/b", nil},
+		{"empty is ignored", nil, "", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := WithSoundCloudURL(tt.sources, tt.url); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeCatalogSources_KeepsTheURL(t *testing.T) {
+	in := []CatalogSource{{Provider: "soundcloud", ExternalID: "1", URL: "https://soundcloud.com/a/b"}}
+	got, err := NormalizeCatalogSources(in)
+	if err != nil || !reflect.DeepEqual(got, in) {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+	bad := []CatalogSource{{Provider: "soundcloud", ExternalID: "1", URL: "javascript:alert(1)"}}
+	if _, err := NormalizeCatalogSources(bad); err == nil {
+		t.Fatal("want a non-http url rejected")
+	}
+}
+
+func fullCatalogSources() []CatalogSource {
+	out := make([]CatalogSource, MaxCatalogSources)
+	for i := range out {
+		out[i] = CatalogSource{Provider: "deezer", ExternalID: strconv.Itoa(i + 1)}
+	}
+	return out
 }
