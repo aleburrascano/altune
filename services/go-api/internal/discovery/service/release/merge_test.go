@@ -229,6 +229,60 @@ func TestMergeReleases_typedUPCFolds(t *testing.T) {
 	}
 }
 
+func withMBID(id string) func(*domain.SearchResult) {
+	return func(r *domain.SearchResult) { r.MBID = id }
+}
+
+func withYear(y int) func(*domain.SearchResult) {
+	return func(r *domain.SearchResult) { r.Year = y }
+}
+
+func TestMergeReleases_differentMBIDsStayApart(t *testing.T) {
+	groups := []ReleaseGroup{
+		idGroup(
+			albumVariant(domain.ProviderMusicBrainz, "mb-blue", "Weezer", withMBID("blue"), withDate("1994-05-10"), withCover("blue.jpg")),
+			albumVariant(domain.ProviderMusicBrainz, "mb-green", "Weezer", withMBID("green"), withDate("2001-05-15"), withCover("green.jpg")),
+		),
+		idGroup(albumVariant(domain.ProviderSpotify, "sp-blue", "Weezer", withDate("1994"))),
+	}
+
+	merged := MergeReleases(groups)
+
+	if len(merged) != 2 {
+		t.Fatalf("merged %d releases, want 2 (Blue and Green apart)", len(merged))
+	}
+	wantCover := map[string]string{"blue": "blue.jpg", "green": "green.jpg"}
+	for _, m := range merged {
+		if m.Result.ImageURL != wantCover[m.Result.MBID] {
+			t.Errorf("MBID %q cover = %q, want %q (artwork leaked across albums)", m.Result.MBID, m.Result.ImageURL, wantCover[m.Result.MBID])
+		}
+	}
+}
+
+func TestMergeReleases_differentUPCsStayApart(t *testing.T) {
+	groups := []ReleaseGroup{
+		idGroup(albumVariant(domain.ProviderITunes, "i1", "Weezer", withUPC("111"))),
+		idGroup(albumVariant(domain.ProviderDeezer, "d1", "Weezer", withUPC("222"))),
+	}
+
+	if n := len(MergeReleases(groups)); n != 2 {
+		t.Errorf("merged %d releases, want 2 (different UPCs)", n)
+	}
+}
+
+func TestMergeReleases_yearFollowsTheMergedDate(t *testing.T) {
+	groups := []ReleaseGroup{
+		idGroup(albumVariant(domain.ProviderSpotify, "sp", "Pinkerton", withYear(2011))),
+		idGroup(albumVariant(domain.ProviderMusicBrainz, "mb", "Pinkerton", withDate("1996-09-24"))),
+	}
+
+	got := findRelease(t, MergeReleases(groups), "Pinkerton")
+
+	if got.Result.ReleaseDate != "1996-09-24" || got.Result.Year != 1996 {
+		t.Errorf("date %q year %d, want 1996-09-24 and 1996", got.Result.ReleaseDate, got.Result.Year)
+	}
+}
+
 func TestBestArtwork_prefersIdentityCoverOverPlainProviderCover(t *testing.T) {
 	a := albumVariant(domain.ProviderDeezer, "d1", "No Idea", withCover("https://deezer/plain.jpg"))
 	a.ArtworkSource = "deezer"

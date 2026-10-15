@@ -26,19 +26,19 @@ type MergedRelease struct {
 }
 
 func MergeReleases(groups []ReleaseGroup) []MergedRelease {
-	byKey := make(map[string]*MergedRelease)
-	var order []string
+	byKey := make(map[string][]*MergedRelease)
+	var order []*MergedRelease
 	for _, group := range groups {
 		for _, variant := range group.Releases {
 			key := releaseKey(variant.Title)
 			if key == "" {
 				continue
 			}
-			m, ok := byKey[key]
-			if !ok {
+			m := compatibleRelease(byKey[key], variant)
+			if m == nil {
 				m = &MergedRelease{Result: variant, Providers: map[domain.ProviderName]bool{}}
-				byKey[key] = m
-				order = append(order, key)
+				byKey[key] = append(byKey[key], m)
+				order = append(order, m)
 			} else {
 				m.Result = bestOfRelease(m.Result, variant)
 			}
@@ -55,10 +55,31 @@ func MergeReleases(groups []ReleaseGroup) []MergedRelease {
 	}
 
 	out := make([]MergedRelease, 0, len(order))
-	for _, key := range order {
-		out = append(out, *byKey[key])
+	for _, m := range order {
+		out = append(out, *m)
 	}
 	return out
+}
+
+func compatibleRelease(candidates []*MergedRelease, variant domain.SearchResult) *MergedRelease {
+	for _, c := range candidates {
+		if !conflictingIdentity(c.Result, variant) {
+			return c
+		}
+	}
+	return nil
+}
+
+func conflictingIdentity(a, b domain.SearchResult) bool {
+	return differ(a.MBID, b.MBID) || differ(releaseUPC(a), releaseUPC(b))
+}
+
+func differ(a, b string) bool {
+	return a != "" && b != "" && a != b
+}
+
+func releaseUPC(r domain.SearchResult) string {
+	return FirstNonEmpty(r.UPC, domain.StringExtra(r.Extras, domain.ExtraUPC))
 }
 
 func releaseKey(title string) string {
@@ -82,7 +103,7 @@ func releaseKey(title string) string {
 func bestOfRelease(a, b domain.SearchResult) domain.SearchResult {
 	a.Subtitle = FirstNonEmpty(a.Subtitle, b.Subtitle)
 	a.ReleaseDate = bestReleaseDate(a.ReleaseDate, b.ReleaseDate)
-	a.Year = FirstNonZero(a.Year, b.Year)
+	a.Year = yearOfDate(a.ReleaseDate, FirstNonZero(a.Year, b.Year))
 	a.TrackCount = maxInt(a.TrackCount, b.TrackCount)
 	a.Duration = FirstNonZero(a.Duration, b.Duration)
 	a.Album = FirstNonEmpty(a.Album, b.Album)
@@ -97,6 +118,12 @@ func bestOfRelease(a, b domain.SearchResult) domain.SearchResult {
 	}
 	a.Extras = mergeReleaseExtras(a.Extras, b.Extras)
 	return a
+}
+
+func yearOfDate(releaseDate string, fallback int) int {
+	dated := domain.SearchResult{ReleaseDate: releaseDate}
+	domain.NormalizeReleaseYear(&dated)
+	return FirstNonZero(dated.Year, fallback)
 }
 
 func bestArtwork(a, b domain.SearchResult) (url string, source domain.ProviderKey) {
