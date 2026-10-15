@@ -1,0 +1,18 @@
+{
+  "cases": [
+    {
+      "id": "rw-mubu-catalog-pinned-youtube-video",
+      "class": "RW",
+      "note": "prod track c9d3f092 (Mubu, LUCKI): stored from music.youtube.com/watch?v=OkjmSTJOAL4 as verified (resolved, acoustid 0.987, source title Mubu). No prod track carries catalog_sources yet (0 of 2269), so the pin is modelled as the catalog link to the video prod stored, with no resolver youtube source. The ytmusic source runs the real adapter: before the fix it ignored the catalog link and emitted nothing, leaving no candidate to store",
+      "track": {
+        "title": "Mubu", "artist": "LUCKI", "album": "s*x m*ney dr*gs", "duration": 155.72, "isrc": "USUYG1496059",
+        "catalog_sources": [ { "provider": "youtube", "external_id": "OkjmSTJOAL4" } ]
+      },
+      "sources": [
+        { "name": "ytmusic", "adapter": "ytmusic", "search_seconds": 3, "candidates": [
+          { "title": "Mubu", "url": "https://music.youtube.com/watch?v=OkjmSTJOAL4", "artists": ["LUCKI"], "actual_duration": 152.43, "correct": true }
+        ] }
+      ]
+    }
+  ]
+}

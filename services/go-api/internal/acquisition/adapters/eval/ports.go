@@ -1,6 +1,8 @@
 package eval
 
 import (
+	"altune/go-api/internal/acquisition/adapters/ytmsearch"
+	"altune/go-api/internal/acquisition/adapters/ytmusic"
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service"
@@ -10,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 )
 
@@ -91,10 +94,13 @@ type evalSource struct {
 
 func (s *evalSource) Name() acqdomain.SourceName { return acqdomain.SourceName(s.spec.Name) }
 
-func (s *evalSource) Find(_ context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
+func (s *evalSource) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
 	s.shared.clock.recordSearch(s.spec.searchSeconds())
 	if s.spec.Fails {
 		return nil, &acqdomain.SourceUnavailableError{Source: s.Name(), Err: errors.New("eval: simulated source failure")}
+	}
+	if s.spec.Adapter == adapterYTMusic {
+		return s.pinnedVideos(ctx, req)
 	}
 	variants := queryVariantsFor(req)
 	out := make([]ports.AudioCandidate, 0, len(s.spec.Candidates))
@@ -117,6 +123,21 @@ func (s *evalSource) Find(_ context.Context, req ports.FindRequest) ([]ports.Aud
 		})
 	}
 	return out, nil
+}
+
+func (s *evalSource) pinnedVideos(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
+	return ytmusic.NewSource(nil, goldenWatches{candidates: s.spec.Candidates}).Find(ctx, req)
+}
+
+type goldenWatches struct{ candidates []Candidate }
+
+func (g goldenWatches) Watch(_ context.Context, videoID string) (ytmsearch.Watch, error) {
+	for _, c := range g.candidates {
+		if strings.HasSuffix(c.URL, "="+videoID) {
+			return ytmsearch.Watch{VideoID: videoID, Title: c.Title, Artists: c.Artists, Explicit: c.Explicit}, nil
+		}
+	}
+	return ytmsearch.Watch{}, fmt.Errorf("eval: no golden watch for video %q", videoID)
 }
 
 func (s *evalSource) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {

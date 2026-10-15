@@ -193,3 +193,90 @@ func TestFind_TheCatalogLinkIsThePinnedVideo(t *testing.T) {
 		t.Errorf("Kind = %q, want the pinned video", got[0].Kind)
 	}
 }
+
+func resolverVideoOnly(videoID string) ports.RecordingIdentity {
+	return ports.RecordingIdentity{Sources: []ports.ProviderRef{{Provider: "youtube", ExternalID: videoID}}}
+}
+
+func findURLs(t *testing.T, req ports.FindRequest) []string {
+	t.Helper()
+	got, err := NewSource(&recordingFetcher{}, stubLookup{}).Find(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Find: %v", err)
+	}
+	urls := make([]string, len(got))
+	for i, c := range got {
+		urls[i] = c.URL
+	}
+	return urls
+}
+
+func TestFind_TheCatalogPinBeatsTheResolverVideo(t *testing.T) {
+	req := ports.FindRequest{
+		Title:          "Mubu",
+		Identity:       resolverVideoOnly("dQw4w9WgXcQ"),
+		CatalogSources: []ports.CatalogSource{{Provider: "deezer", ExternalID: "12345"}, {Provider: "youtube", ExternalID: "OkjmSTJOAL4"}},
+	}
+
+	got := findURLs(t, req)
+
+	if want := []string{"https://music.youtube.com/watch?v=OkjmSTJOAL4"}; !slices.Equal(got, want) {
+		t.Errorf("candidates = %v, want only the catalog-pinned video %v", got, want)
+	}
+}
+
+func TestFind_TheCatalogPinStandsWhenTheResolverFoundNothing(t *testing.T) {
+	req := ports.FindRequest{
+		Title:          "Mubu",
+		CatalogSources: []ports.CatalogSource{{Provider: "youtube", ExternalID: "OkjmSTJOAL4"}},
+	}
+
+	got := findURLs(t, req)
+
+	if want := []string{"https://music.youtube.com/watch?v=OkjmSTJOAL4"}; !slices.Equal(got, want) {
+		t.Errorf("candidates = %v, want the pinned video %v", got, want)
+	}
+}
+
+func TestFind_WithoutAYouTubePinTheResolverVideoIsUsed(t *testing.T) {
+	req := ports.FindRequest{
+		Title:          "Mubu",
+		Identity:       resolverVideoOnly("dQw4w9WgXcQ"),
+		CatalogSources: []ports.CatalogSource{{Provider: "deezer", ExternalID: "12345"}},
+	}
+
+	got := findURLs(t, req)
+
+	if want := []string{"https://music.youtube.com/watch?v=dQw4w9WgXcQ"}; !slices.Equal(got, want) {
+		t.Errorf("candidates = %v, want the resolver's video %v", got, want)
+	}
+}
+
+func TestFind_AMalformedCatalogPinIsNotReplacedByTheResolverVideo(t *testing.T) {
+	req := ports.FindRequest{
+		Title:          "Mubu",
+		Identity:       resolverVideoOnly("dQw4w9WgXcQ"),
+		CatalogSources: []ports.CatalogSource{{Provider: "youtube", ExternalID: "abc&list=1"}},
+	}
+
+	if got := findURLs(t, req); len(got) != 0 {
+		t.Errorf("candidates = %v, want none for a malformed pin", got)
+	}
+}
+
+func TestFind_TheCatalogPinCarriesWhatThatVideoIs(t *testing.T) {
+	src := NewSource(&recordingFetcher{}, observedFixture(t, "88oFlVnMEsc"))
+	req := ports.FindRequest{
+		Title:          "remember them days",
+		Identity:       resolverVideoOnly("dQw4w9WgXcQ"),
+		CatalogSources: []ports.CatalogSource{{Provider: "youtube", ExternalID: "88oFlVnMEsc"}},
+	}
+
+	got, err := src.Find(context.Background(), req)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("Find = %+v, %v", got, err)
+	}
+	if got[0].Kind != ports.KindPinnedVideo || !got[0].Resolved || got[0].Title != "2021 Vibes" {
+		t.Errorf("candidate = %+v, want the pinned, resolved video with its own title", got[0])
+	}
+}
