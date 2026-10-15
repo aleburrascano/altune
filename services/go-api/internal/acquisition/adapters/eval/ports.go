@@ -44,7 +44,7 @@ func newCasePorts(kase Case) *casePorts {
 	return &casePorts{kase: kase, byPath: make(map[string]Candidate), clock: &simClock{}}
 }
 
-var prodFallbackTier = map[string]bool{"ytdlp": true, "soundcloud": true}
+var prodFallbackTier = map[string]bool{"ytdlp": true}
 
 func (p *casePorts) registry() *service.SourceRegistry {
 	var first, fallback []ports.AudioSource
