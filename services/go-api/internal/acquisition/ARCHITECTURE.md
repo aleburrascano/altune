@@ -620,12 +620,11 @@ Veto qualifiers, `drm`/`preview` inspection and the pre-download duration check
 (`candidateDurationPlausible`) remove candidates without a download, and the preview
 fingerprint (first 130s) rejects a wrong recording for a fraction of a full fetch.
 Rejection memory (`acquisition_rejections`, 30 days) means a retry no longer spends
-its budget re-downloading last time's losers. Windows (`WithVerifyWidth`) would
-pay the remaining downloads in parallel.
-**Still open:** (a) production runs width 1 because nothing passes `WithVerifyWidth`;
-(b) `ACQUISITION_CONFIDENCE_FLOOR` is not yet passed to `WithConfidenceFloor`, so the
-floor is the 0.5 default; (c) a source with no `PreviewFetcher` still pays the full
-download per candidate; (d) a lasting rejection can be wrong (a source that was
+its budget re-downloading last time's losers. Windows (`WithVerifyWidth`) pay the
+remaining downloads in parallel: `CoreSteps` passes `prodVerifyWidth` (2), the step's default.
+**Still open:** (a) `ACQUISITION_CONFIDENCE_FLOOR` is not yet passed to `WithConfidenceFloor`, so the
+floor is the 0.5 default; (b) a source with no `PreviewFetcher` still pays the full
+download per candidate; (c) a lasting rejection can be wrong (a source that was
 briefly a preview), and the 30-day window is the only correction.
 
 ### 7.12 ~~Retry admission is untested~~ — closed
