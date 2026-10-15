@@ -30,9 +30,8 @@ type Track struct {
 	CatalogSources  []CatalogSource `json:"catalog_sources,omitempty"`
 	CatalogExplicit *bool           `json:"catalog_explicit,omitempty"`
 
-	AuthoritativeDuration float64  `json:"authoritative_duration,omitempty"`
-	MBID                  string   `json:"mbid,omitempty"`
-	AcoustIDs             []string `json:"acoustids,omitempty"`
+	AuthoritativeDuration float64 `json:"authoritative_duration,omitempty"`
+	MBID                  string  `json:"mbid,omitempty"`
 
 	Resolution *Resolution `json:"resolution,omitempty"`
 }
@@ -438,7 +437,7 @@ func validateResolution(c Case) error {
 	switch {
 	case r == nil:
 		return nil
-	case c.Track.MBID != "" || len(c.Track.AcoustIDs) > 0 || c.Track.AuthoritativeDuration > 0:
+	case c.Track.MBID != "" || c.Track.AuthoritativeDuration > 0:
 		return fmt.Errorf("case %q sets a resolution and a copied identity; keep one", c.ID)
 	case len(r.ISRCRecordings) > 0 && c.Track.ISRC == "":
 		return fmt.Errorf("case %q lists isrc recordings for a track with no isrc", c.ID)

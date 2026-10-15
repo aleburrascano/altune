@@ -54,9 +54,6 @@ func TestValidateCases_RejectsMalformed(t *testing.T) {
 		{"resolution beside a copied mbid", []Case{
 			{ID: "x", Class: "F1", Track: Track{Title: "t", Artist: "a", MBID: "m", Resolution: &Resolution{}}, Candidates: []Candidate{{URL: "u"}}},
 		}},
-		{"resolution beside copied acoustids", []Case{
-			{ID: "x", Class: "F1", Track: Track{Title: "t", Artist: "a", AcoustIDs: []string{"ac"}, Resolution: &Resolution{}}, Candidates: []Candidate{{URL: "u"}}},
-		}},
 		{"resolution beside a copied authoritative duration", []Case{
 			{ID: "x", Class: "F1", Track: Track{Title: "t", Artist: "a", AuthoritativeDuration: 200, Resolution: &Resolution{}}, Candidates: []Candidate{{URL: "u"}}},
 		}},
@@ -319,14 +316,14 @@ func otherRecordingResults(acoustID, mbid, title string, duration float64) []Aco
 	return []AcoustIDResult{{ID: acoustID, Score: 1, Recordings: []LinkedRecording{{MBID: mbid, Title: title, Artists: []string{"Bran Van 3000"}, Duration: duration}}}}
 }
 
-func TestRun_ResolvedSearchMBIDSetsTheExpectedAcoustIDCluster(t *testing.T) {
+func TestRun_ResolvedSearchMBIDRejectsAnUploadTheFingerprintLinksToAnotherSong(t *testing.T) {
 	kase := remixMBIDCase(&Resolution{Search: &SearchedRecording{MBID: "remix", Duration: 236}}, "")
 	kase.Candidates[0].AcoustIDResults = otherRecordingResults("album-ac", "album", "Different Song", 237)
 
 	out := Run(context.Background(), kase)
 
 	if !out.Failed {
-		t.Fatalf("expected the remix's AcoustID cluster to reject the album upload, stored %q", out.Stored)
+		t.Fatalf("expected the fingerprint's other-song result to reject the album upload, stored %q", out.Stored)
 	}
 }
 
@@ -344,13 +341,12 @@ func TestRun_ISRCAnswerAloneSuppliesTheIdentity(t *testing.T) {
 func TestRun_CaseWithoutResolutionCopiesItsIdentity(t *testing.T) {
 	kase := remixMBIDCase(nil, "")
 	kase.Track.MBID = "remix"
-	kase.Track.AcoustIDs = []string{"remix-ac"}
 	kase.Candidates[0].AcoustIDResults = otherRecordingResults("album-ac", "album", "Different Song", 237)
 
 	out := Run(context.Background(), kase)
 
 	if !out.Failed {
-		t.Fatalf("expected the copied remix cluster to reject the album upload, stored %q", out.Stored)
+		t.Fatalf("expected the fingerprint's other-song result to reject the album upload, stored %q", out.Stored)
 	}
 }
 

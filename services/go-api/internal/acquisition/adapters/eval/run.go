@@ -170,10 +170,9 @@ func judgeStored(kase Case, out Outcome) (bool, string) {
 
 func identityFor(kase Case) ports.RecordingIdentity {
 	return ports.RecordingIdentity{
-		ISRC:      kase.Track.ISRC,
-		MBID:      kase.Track.MBID,
-		Duration:  kase.Track.AuthoritativeDuration,
-		AcoustIDs: kase.Track.AcoustIDs,
+		ISRC:     kase.Track.ISRC,
+		MBID:     kase.Track.MBID,
+		Duration: kase.Track.AuthoritativeDuration,
 	}
 }
 

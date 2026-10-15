@@ -11,7 +11,7 @@ func (s *AcquireTrackAudioService) resolveIdentity(ctx context.Context, ac *Acqu
 	ResolveIdentity(ctx, s.recordings, s.identifier, ac)
 }
 
-func ResolveIdentity(ctx context.Context, recordings ports.RecordingResolver, identifier ports.AudioIdentifier, ac *AcquisitionContext) {
+func ResolveIdentity(ctx context.Context, recordings ports.RecordingResolver, _ ports.AudioIdentifier, ac *AcquisitionContext) {
 	identity, err := recordings.Resolve(ctx, ports.RecordingQuery{
 		Title:    ac.Track.Title,
 		Artist:   ac.Track.Artist,
@@ -29,7 +29,6 @@ func ResolveIdentity(ctx context.Context, recordings ports.RecordingResolver, id
 		return
 	}
 	ac.Identity = identity
-	resolveExpectedCluster(ctx, identifier, ac)
 }
 
 func withCatalogPin(identity ports.RecordingIdentity, pin string) ports.RecordingIdentity {
@@ -39,26 +38,4 @@ func withCatalogPin(identity ports.RecordingIdentity, pin string) ports.Recordin
 	identity.MBID = pin
 	identity.MBIDs = []string{pin}
 	return identity
-}
-
-func resolveExpectedCluster(ctx context.Context, identifier ports.AudioIdentifier, ac *AcquisitionContext) {
-	if identifier == nil || ac.Identity.MBID == "" {
-		return
-	}
-
-	cluster, err := identifier.AcoustIDsFor(ctx, ac.Identity.MBID)
-	if err != nil {
-		slog.WarnContext(ctx, identifyFailureEvent(err, "acquisition.expected_cluster_failed"),
-			"track_id", ac.Track.ID, "mbid", ac.Identity.MBID, "error", redact.LogError(err))
-		return
-	}
-	if len(cluster) == 0 {
-		slog.InfoContext(ctx, "acquisition.expected_cluster_unknown",
-			"track_id", ac.Track.ID, "mbid", ac.Identity.MBID)
-		return
-	}
-
-	ac.Identity.AcoustIDs = cluster
-	slog.InfoContext(ctx, "acquisition.expected_cluster_resolved",
-		"track_id", ac.Track.ID, "mbid", ac.Identity.MBID, "acoustids", len(cluster))
 }

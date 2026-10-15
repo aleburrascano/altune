@@ -76,9 +76,9 @@ failure taxonomy, because it is also the spec any future verification must satis
 
 | # | Failure | Example | Defended by |
 |---|---|---|---|
-| F1 | **Different performance** — cover, tribute, karaoke, acoustic take, AI clone | "Sunglasses at Night (Acoustic Version)" | ✅ qualifier distance when a master competes; fingerprint cluster rejection when it doesn't — **undefended only where AcoustID has no cluster for the expected recording** |
+| F1 | **Different performance** — cover, tribute, karaoke, acoustic take, AI clone | "Sunglasses at Night (Acoustic Version)" | ✅ qualifier distance when a master competes; fingerprint verdict when it doesn't — **undefended only where AcoustID returns no linked recording for the audio** |
 | F2 | **Different edit — longer** — remix, extended mix, live, mashup | "Starboy (Extended Remix)" | ✅ duration gate |
-| F3 | **Different edit — same length** — slowed, sped-up, reverb, nightcore, 8D | "Blinding Lights (Slowed + Reverb)" | ✅ qualifier distance, then fingerprint cluster rejection — no longer dependent on a known duration |
+| F3 | **Different edit — same length** — slowed, sped-up, reverb, nightcore, 8D | "Blinding Lights (Slowed + Reverb)" | ✅ qualifier distance, then the fingerprint verdict — no longer dependent on a known duration |
 | F4 | **Different mix of the same performance** — radio edit, clean/explicit swap | "…(Radio Edit)" | ✅ duration gate |
 | F5 | **Right recording, contaminated container** — music video with a spoken intro, an unrelated snippet | the Smaxk Or Die music video | ✅ corroborated-duration gate |
 | F6 | **Truncated** — a preview stub sold as the full track | SoundCloud's ~30s public preview | ✅ duration gate + the 45s CLI threshold |
@@ -92,17 +92,16 @@ suite currently scores **72/72** (`goldens/` holds 72 cases across four files). 
 rule per row:
 
 1. **Resolve identity before fetching** — discovery supplies ISRC/MBID/duration
-   (`RecordingResolver`), so the pipeline knows *what* it wants, and
-   `resolveExpectedCluster` resolves the expected recording's AcoustID set.
-2. **Compare the bytes cluster-to-cluster.** `AudioIdentifier` (fpcalc → AcoustID)
-   marks a track `verified` when the audio's AcoustID falls inside the expected
-   recording's cluster, and **rejects** when the cluster is known and the audio
-   sits outside it. The earlier version compared MBID *equality* and was unsound —
-   a recording carries many MBIDs (album, single, compilation, remaster), so the
-   sets legitimately need not intersect; that version rejected every candidate for
-   Rihanna's "Don't Stop the Music". Cluster comparison is immune to that, and
-   rejection is confined to the case where AcoustID actually knows the expected
-   recording, so unreleased material stays acquirable.
+   (`RecordingResolver`), so the pipeline knows *what* it wants.
+2. **Compare the bytes by what AcoustID says they are.** `AudioIdentifier` (fpcalc →
+   AcoustID) returns the recordings the audio's AcoustID links to. `ClassifyAudio`
+   marks a track `verified` when a linked recording is the expected one, and
+   **rejects** when the links name another version or another song. The earlier
+   version compared MBID *equality* and was unsound — a recording carries many MBIDs
+   (album, single, compilation, remaster), so the sets legitimately need not
+   intersect; that version rejected every candidate for Rihanna's "Don't Stop the
+   Music". An audio whose fingerprint links to nothing is Unknown and is accepted,
+   so unreleased material stays acquirable.
 3. **Score the words normalization deleted.** `qualifierDistance` reads the raw
    titles and ranks on the symmetric difference of their bracketed-qualifier token
    sets, which is what separates a master from an acoustic take or a music video
@@ -174,7 +173,7 @@ independent catalogue), `best_effort` (neither — the unidentified tail).
 ports/                   the contracts, plus the small value helpers that belong to them
   candidate.go           AudioCandidate; DedupeCandidatesByURL / CollectCandidates{,UntilEnough} — the one merge every multi-source search runs through
   cooldown.go            CooldownKind (retry · reacquire), CooldownStore — the cross-process manual-action window
-  identify.go            RecordingMatch (Known / Matches / InCluster), AudioIdentifier
+  identify.go            RecordingMatch (Known / Matches), AudioIdentifier
   probe.go               AudioProber — ProbeDuration + ValidateDecodable
   recording.go           Provider* identity keys, RecordingIdentity / RecordingSource / RecordingQuery, RecordingResolver (+ noop)
   source.go              FindRequest, AudioSource (Name / Find / Fetch), SearchQueries — the four query variants
@@ -451,8 +450,8 @@ any other store error still fails the request.
 A change should preserve all of these; if it can't, that's the discussion.
 
 - The pipeline shape is defined once, in `CoreSteps`. Never in a caller.
-- The fingerprint rejects only against a known expected cluster; unknown audio always passes.
-- Fingerprints are compared cluster-to-cluster, never by MBID equality.
+- The fingerprint rejects only on linked recordings that name another version or song; unknown audio always passes.
+- Fingerprints are judged by their linked recordings, never by MBID equality.
 - A tightened duration window requires the saved and resolved lengths to *agree*.
 - Variant markers are read from the raw title; `NormalizeForMatch` is never "fixed" to keep them.
 - Exclusion matches a normalized `sourceKey`, and a key is normalized exactly once.
@@ -530,9 +529,9 @@ yields the same pick run-to-run, which is what makes the eval in §7.8 meaningfu
 ffmpeg can decode the stream; neither asks whether the audio *is the recording*.
 `AudioIdentifier` does, and now rejects on it (§1.2). A contaminated container is
 caught by the corroborated-duration gate, and a different performance by the
-AcoustID cluster comparison.
+AcoustID's linked recordings.
 
-What remains: rejection needs AcoustID to know the expected recording. Where it
+What remains: rejection needs AcoustID to link the audio to a recording. Where it
 doesn't — unreleased and underground material, the same long tail where Topic
 channels don't exist — the file is still accepted on resemblance alone. There is no
 head/tail excess detection either: a container whose *total* length matches but whose
@@ -679,7 +678,7 @@ flowchart TD
 | `durationWithinTolerance` (window: `domain.LengthLoose`) | the only F1/F2 defense | tighter rejects legitimate intro/outro trims; looser admits remixes |
 | `lengthCorroborated` | which window every download is measured against | making it laxer silently re-tightens the gate around an unverified saved duration |
 | `qualifierDistance` or its sort position | master-vs-variant on the same channel; label-vs-fan upload off it | promoting it above `metadataRank` outside the Topic bucket puts a lyrics re-upload ahead of the label's own master |
-| `DownloadStep.identify`'s tiers | whether a wrong recording can enter the library at all | widening rejection past "cluster known" makes the underground long tail unacquirable — the failure that forced the first rollback |
+| `DownloadStep.identify`'s tiers | whether a wrong recording can enter the library at all | widening rejection past "AcoustID links the audio to another version or song" makes the underground long tail unacquirable — the failure that forced the first rollback |
 | `sourceKey` | every stored `rejected_source_keys` value | changing the key shape orphans the memory and re-acquire silently toggles again |
 | a stage `Name()` string | `failureReason`'s vocabulary, the `progress` event payload the mobile client renders | rename compiles clean and breaks the client silently |
 | a source's `Name()` (`ytdlp`, `ytmusic`) | `stampSource` stamps it onto `AudioCandidate.Source`; `SourceRegistry.Fetch` routes the download by matching it back, and it labels every candidate log line and `CandidateRejection` | renaming one leaves `Fetch` with "no source named" for every candidate that source found — the search is paid for and then discarded wholesale |

@@ -21,7 +21,6 @@ type RecordingIdentity struct {
 	MBID             string
 	Duration         float64
 	Sources          []ProviderRef
-	AcoustIDs        []string
 	MBIDs            []string
 	ReferenceDoubted bool
 }

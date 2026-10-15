@@ -172,15 +172,7 @@ func (s *DownloadStep) identify(
 func (s *DownloadStep) classifyMatch(ctx context.Context, ac *AcquisitionContext, match ports.RecordingMatch, probed float64) AudioVerdict {
 	ref := referenceFor(ac)
 	facts := s.sameVersionFacts(ctx, ref, SoftCandidateMBIDs(ref, probed, match.Results))
-	verdict := ClassifyAudio(ref, probed, match.Results, facts)
-	if verdict.Kind == VerdictUnknown && match.Known() && identityAgrees(ac, match) {
-		return AudioVerdict{Kind: VerdictHard, Score: match.Score}
-	}
-	return verdict
-}
-
-func identityAgrees(ac *AcquisitionContext, match ports.RecordingMatch) bool {
-	return match.Matches(ac.Identity.MBID) || match.InCluster(ac.Identity.AcoustIDs)
+	return ClassifyAudio(ref, probed, match.Results, facts)
 }
 
 func referenceFor(ac *AcquisitionContext) AudioReference {
@@ -238,37 +230,15 @@ func judgeUnknown(
 	candidate ports.AudioCandidate,
 	match ports.RecordingMatch,
 ) *downloadRejection {
-	switch {
-	case !match.Known():
+	if !match.Known() {
 		slog.InfoContext(ctx, "acquisition.identify_unknown",
 			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source)
 		return nil
-	case len(ac.Identity.AcoustIDs) == 0:
-		slog.InfoContext(ctx, "acquisition.identify_uncorroborated",
-			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
-			"want_mbid", ac.Identity.MBID, "got_mbids", match.MBIDs)
-		return nil
-	default:
-		logFingerprintRejected(ctx, ac, candidate, match)
-		return fingerprintRejection(candidate, "different recording")
 	}
-}
-
-func logFingerprintRejected(
-	ctx context.Context,
-	ac *AcquisitionContext,
-	candidate ports.AudioCandidate,
-	match ports.RecordingMatch,
-) {
-	slog.InfoContext(ctx, "acquisition.candidate_rejected_fingerprint",
-		"track_id", ac.Track.ID,
-		"url", candidate.URL,
-		"source", candidate.Source,
-		"want_mbid", ac.Identity.MBID,
-		"want_acoustids", ac.Identity.AcoustIDs,
-		"got_acoustid", match.AcoustID,
-		"got_mbids", match.MBIDs,
-	)
+	slog.InfoContext(ctx, "acquisition.identify_uncorroborated",
+		"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
+		"want_mbid", ac.Identity.MBID, "got_mbids", match.MBIDs)
+	return nil
 }
 
 func fingerprintRejection(candidate ports.AudioCandidate, reason string) *downloadRejection {

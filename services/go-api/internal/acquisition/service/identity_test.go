@@ -1,13 +1,10 @@
 package service
 
 import (
-	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"errors"
-	"fmt"
 	"slices"
-	"strings"
 	"testing"
 )
 
@@ -22,58 +19,6 @@ func TestRecordingIdentity_SourceFor(t *testing.T) {
 	}
 	if _, ok := id.SourceFor("tidal"); ok {
 		t.Error("SourceFor(tidal) should report missing")
-	}
-}
-
-type clusterErrIdentifier struct{ err error }
-
-func (clusterErrIdentifier) Identify(context.Context, string, float64) (ports.RecordingMatch, error) {
-	return ports.RecordingMatch{}, nil
-}
-
-func (i clusterErrIdentifier) AcoustIDsFor(context.Context, string) ([]string, error) {
-	return nil, i.err
-}
-
-func TestResolveIdentity_ClusterLookupErrorLogEvent(t *testing.T) {
-	cases := []struct {
-		name      string
-		err       error
-		want      string
-		notWanted string
-	}{
-		{
-			name:      "throttled",
-			err:       fmt.Errorf("acoustid lookup: %w", acqdomain.ErrIdentifyThrottled),
-			want:      "acquisition.identify_throttled",
-			notWanted: "acquisition.expected_cluster_failed",
-		},
-		{
-			name:      "other failure",
-			err:       errors.New("boom"),
-			want:      "acquisition.expected_cluster_failed",
-			notWanted: "acquisition.identify_throttled",
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			logs := captureJSONLog(t)
-			ac := &AcquisitionContext{Track: TrackRef{ID: "t1"}}
-			resolver := &stubResolver{identity: ports.RecordingIdentity{MBID: "mb-1"}}
-
-			ResolveIdentity(context.Background(), resolver, clusterErrIdentifier{err: tc.err}, ac)
-
-			rec := findLogRecord(t, logs, tc.want)
-			if rec["track_id"] != "t1" || rec["mbid"] != "mb-1" {
-				t.Errorf("log attrs = %v", rec)
-			}
-			if strings.Contains(logs.String(), tc.notWanted) {
-				t.Errorf("unexpected %s: %s", tc.notWanted, logs.String())
-			}
-			if len(ac.Identity.AcoustIDs) != 0 {
-				t.Errorf("AcoustIDs = %v, want empty", ac.Identity.AcoustIDs)
-			}
-		})
 	}
 }
 
@@ -100,6 +45,17 @@ func pinnedTrack() TrackRef {
 	return TrackRef{ID: "t1", Title: "Boys Don't Cry", Artist: "The Cure", CatalogMBID: pinnedBoysDontCry}
 }
 
+func TestResolveIdentity_SpendsNoClusterLookup(t *testing.T) {
+	identifier := &clusterIdentifier{clusters: map[string][]string{pinnedBoysDontCry: {pinnedCluster}}}
+	ac := &AcquisitionContext{Track: pinnedTrack()}
+
+	ResolveIdentity(context.Background(), &stubResolver{identity: ports.RecordingIdentity{MBID: pinnedBoysDontCry}}, identifier, ac)
+
+	if len(identifier.asked) != 0 {
+		t.Errorf("cluster asked for %v, want no AcoustID quota spent on identity resolution", identifier.asked)
+	}
+}
+
 func TestResolveIdentity_PinnedTrackTheResolverKnowsNothingAboutStillGetsTheFingerprintGate(t *testing.T) {
 	identifier := &clusterIdentifier{clusters: map[string][]string{pinnedBoysDontCry: {pinnedCluster}}}
 	ac := &AcquisitionContext{Track: pinnedTrack()}
@@ -109,9 +65,6 @@ func TestResolveIdentity_PinnedTrackTheResolverKnowsNothingAboutStillGetsTheFing
 	if ac.Identity.MBID != pinnedBoysDontCry || !slices.Equal(ac.Identity.MBIDs, []string{pinnedBoysDontCry}) {
 		t.Errorf("identity = %+v, want the catalog pin as the recording and its only reference", ac.Identity)
 	}
-	if !slices.Equal(ac.Identity.AcoustIDs, []string{pinnedCluster}) {
-		t.Errorf("AcoustIDs = %v, want the pinned recording's cluster", ac.Identity.AcoustIDs)
-	}
 }
 
 func TestResolveIdentity_PinnedTrackSurvivesAResolverFailure(t *testing.T) {
@@ -120,8 +73,8 @@ func TestResolveIdentity_PinnedTrackSurvivesAResolverFailure(t *testing.T) {
 
 	ResolveIdentity(context.Background(), &stubResolver{err: errors.New("musicbrainz down")}, identifier, ac)
 
-	if ac.Identity.MBID != pinnedBoysDontCry || !slices.Equal(ac.Identity.AcoustIDs, []string{pinnedCluster}) {
-		t.Errorf("identity = %+v, want the pin and its cluster despite the failed resolve", ac.Identity)
+	if ac.Identity.MBID != pinnedBoysDontCry {
+		t.Errorf("identity = %+v, want the pin despite the failed resolve", ac.Identity)
 	}
 }
 
@@ -135,8 +88,8 @@ func TestResolveIdentity_ResolvedPinnedIdentityIsAdoptedAsIs(t *testing.T) {
 	if !slices.Equal(ac.Identity.MBIDs, resolved.MBIDs) || ac.Identity.Duration != 157.306 || ac.Track.Duration != 0 {
 		t.Errorf("identity = %+v, track duration %v, want the resolver's pinned identity untouched", ac.Identity, ac.Track.Duration)
 	}
-	if !slices.Equal(identifier.asked, []string{pinnedBoysDontCry}) {
-		t.Errorf("cluster asked for %v, want only the pin", identifier.asked)
+	if len(identifier.asked) != 0 {
+		t.Errorf("cluster asked for %v, want no cluster lookup", identifier.asked)
 	}
 }
 

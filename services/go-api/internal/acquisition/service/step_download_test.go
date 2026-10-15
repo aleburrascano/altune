@@ -795,17 +795,18 @@ func logTestDownloadContext() *AcquisitionContext {
 }
 
 func TestCandidateLogs_StampTrackIDAndSource(t *testing.T) {
-	identityCtx := func(cluster []string) *AcquisitionContext {
+	identityCtx := func() *AcquisitionContext {
 		ac := logTestDownloadContext()
 		ac.Track.Duration = 0
-		ac.Identity = ports.RecordingIdentity{MBID: "mb-want", AcoustIDs: cluster}
+		ac.Identity = ports.RecordingIdentity{MBID: "mb-want"}
 		return ac
 	}
 
 	tests := []struct {
-		name string
-		msg  string
-		run  func(ctx context.Context, t *testing.T)
+		name  string
+		msg   string
+		attrs map[string]any
+		run   func(ctx context.Context, t *testing.T)
 	}{
 		{
 			name: "search exclusion",
@@ -865,7 +866,7 @@ func TestCandidateLogs_StampTrackIDAndSource(t *testing.T) {
 			name: "identify failure",
 			msg:  "acquisition.identify_failed",
 			run: func(ctx context.Context, t *testing.T) {
-				runDownloadForLog(ctx, t, identityCtx(nil),
+				runDownloadForLog(ctx, t, identityCtx(),
 					WithDownloadIdentifier(&stubIdentifier{err: errors.New("acoustid boom")}))
 			},
 		},
@@ -873,7 +874,7 @@ func TestCandidateLogs_StampTrackIDAndSource(t *testing.T) {
 			name: "identify unknown",
 			msg:  "acquisition.identify_unknown",
 			run: func(ctx context.Context, t *testing.T) {
-				runDownloadForLog(ctx, t, identityCtx(nil),
+				runDownloadForLog(ctx, t, identityCtx(),
 					WithDownloadIdentifier(&stubIdentifier{}))
 			},
 		},
@@ -881,16 +882,19 @@ func TestCandidateLogs_StampTrackIDAndSource(t *testing.T) {
 			name: "identify uncorroborated",
 			msg:  "acquisition.identify_uncorroborated",
 			run: func(ctx context.Context, t *testing.T) {
-				runDownloadForLog(ctx, t, identityCtx(nil),
+				runDownloadForLog(ctx, t, identityCtx(),
 					WithDownloadIdentifier(&stubIdentifier{match: ports.RecordingMatch{MBIDs: []string{"mb-other"}}}))
 			},
 		},
 		{
-			name: "fingerprint rejection",
-			msg:  "acquisition.candidate_rejected_fingerprint",
+			name: "different song rejection",
+			msg:  "acquisition.audio_verdict",
+			attrs: map[string]any{
+				"track_id": logTestTrackID, "candidate_url": logTestCandidate().URL, "verdict": string(VerdictDifferentSong),
+			},
 			run: func(ctx context.Context, t *testing.T) {
-				runDownloadForLog(ctx, t, identityCtx([]string{"ac-want"}),
-					WithDownloadIdentifier(&stubIdentifier{match: ports.RecordingMatch{AcoustID: "ac-other", MBIDs: []string{"mb-other"}}}))
+				runDownloadForLog(ctx, t, identityCtx(),
+					WithDownloadIdentifier(&stubIdentifier{match: differentSongMatch()}))
 			},
 		},
 	}
@@ -901,11 +905,14 @@ func TestCandidateLogs_StampTrackIDAndSource(t *testing.T) {
 			tt.run(context.Background(), t)
 
 			rec := findLogRecord(t, logs, tt.msg)
-			if got := rec["track_id"]; got != logTestTrackID {
-				t.Errorf("%s track_id = %v, want %q; record: %v", tt.msg, got, logTestTrackID, rec)
+			want := tt.attrs
+			if want == nil {
+				want = map[string]any{"track_id": logTestTrackID, "source": logTestSource}
 			}
-			if got := rec["source"]; got != logTestSource {
-				t.Errorf("%s source = %v, want %q; record: %v", tt.msg, got, logTestSource, rec)
+			for key, value := range want {
+				if got := rec[key]; got != value {
+					t.Errorf("%s %s = %v, want %v; record: %v", tt.msg, key, got, value, rec)
+				}
 			}
 		})
 	}
@@ -921,10 +928,10 @@ func runDownloadForLog(ctx context.Context, t *testing.T, ac *AcquisitionContext
 }
 
 type stubIdentifier struct {
-	match   ports.RecordingMatch
-	err     error
-	cluster []string
-	calls   int
+	match        ports.RecordingMatch
+	err          error
+	calls        int
+	clusterCalls int
 }
 
 func (s *stubIdentifier) Identify(context.Context, string, float64) (ports.RecordingMatch, error) {
@@ -933,13 +940,14 @@ func (s *stubIdentifier) Identify(context.Context, string, float64) (ports.Recor
 }
 
 func (s *stubIdentifier) AcoustIDsFor(context.Context, string) ([]string, error) {
-	return s.cluster, nil
+	s.clusterCalls++
+	return nil, nil
 }
 
-func downloadContext(mbid string, cluster []string) *AcquisitionContext {
+func downloadContext(mbid string) *AcquisitionContext {
 	return &AcquisitionContext{
 		Track:    TrackRef{Title: "Sunglasses at Night", Artist: "Corey Hart"},
-		Identity: ports.RecordingIdentity{MBID: mbid, AcoustIDs: cluster},
+		Identity: ports.RecordingIdentity{MBID: mbid},
 		Ranked: []ports.AudioCandidate{
 			{URL: "https://youtube.com/watch?v=first000000"},
 			{URL: "https://youtube.com/watch?v=second00000"},
@@ -947,50 +955,66 @@ func downloadContext(mbid string, cluster []string) *AcquisitionContext {
 	}
 }
 
-func TestDownloadStep_RejectsAudioOutsideTheExpectedCluster(t *testing.T) {
-	identifier := &stubIdentifier{
-		match:   ports.RecordingMatch{AcoustID: "ac-acoustic", MBIDs: []string{"mb-acoustic"}},
-		cluster: []string{"ac-master-a", "ac-master-b"},
+func referenceMatch() ports.RecordingMatch {
+	return ports.RecordingMatch{
+		AcoustID: "ac-master", MBIDs: []string{"mb-master"}, Score: 0.98,
+		Results: linkedResults(ports.LinkedRecording{MBID: "mb-master", Title: "Sunglasses at Night", Artists: []string{"Corey Hart"}}),
 	}
-	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(identifier))
-	ac := downloadContext("mb-master", []string{"ac-master-a", "ac-master-b"})
+}
 
-	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err == nil {
-		t.Fatal("expected every candidate rejected: the audio is a different recording")
+func differentSongMatch() ports.RecordingMatch {
+	return ports.RecordingMatch{
+		AcoustID: "ac-other", MBIDs: []string{"mb-other"}, Score: 0.98,
+		Results: linkedResults(ports.LinkedRecording{MBID: "mb-other", Title: "Take On Me", Artists: []string{"a-ha"}}),
+	}
+}
+
+func TestDownloadStep_RejectsAudioFingerprintedAsADifferentSong(t *testing.T) {
+	identifier := &stubIdentifier{match: differentSongMatch()}
+	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(identifier))
+	ac := downloadContext("mb-master")
+
+	_, err := step.Execute(context.Background(), ac, afterSelect{})
+	if err == nil {
+		t.Fatal("expected every candidate rejected: the fingerprint links a different song")
+	}
+	if !strings.Contains(err.Error(), "different song") {
+		t.Errorf("error = %q, want the different-song reason", err)
+	}
+	if identifier.calls != 2 {
+		t.Errorf("identify calls = %d, want both candidates fingerprinted and rejected", identifier.calls)
 	}
 	if ac.TempPath != "" {
 		t.Errorf("TempPath must stay empty when the fingerprint rejects, got %q", ac.TempPath)
 	}
 }
 
-func TestDownloadStep_AcceptsAudioInsideTheExpectedCluster(t *testing.T) {
-	identifier := &stubIdentifier{
-		match: ports.RecordingMatch{AcoustID: "ac-master-b", MBIDs: []string{"mb-some-other-release"}},
-	}
+func TestDownloadStep_AcceptsAudioFingerprintedAsTheReferenceRecording(t *testing.T) {
+	identifier := &stubIdentifier{match: referenceMatch()}
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(identifier))
-	ac := downloadContext("mb-master", []string{"ac-master-a", "ac-master-b"})
+	ac := downloadContext("mb-master")
 
 	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
-		t.Fatalf("the Don't Stop the Music case: MBIDs need not intersect, the cluster settles it — got %v", err)
+		t.Fatalf("audio linked to the reference recording must be accepted: %v", err)
 	}
 	defer os.RemoveAll(filepath.Dir(ac.TempPath))
 
 	if !ac.IdentityVerified {
-		t.Error("a cluster hit is the strongest claim available and must mark the track verified")
+		t.Error("a Hard verdict is the strongest claim available and must mark the track verified")
 	}
 }
 
-func TestDownloadStep_NeverRejectsWithoutAnExpectedCluster(t *testing.T) {
+func TestDownloadStep_NeverRejectsAudioTheFingerprintCannotLink(t *testing.T) {
 	identifier := &stubIdentifier{
 		match: ports.RecordingMatch{AcoustID: "ac-unrelated", MBIDs: []string{"mb-unrelated"}},
 	}
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(identifier))
-	ac := downloadContext("mb-master", nil)
+	ac := downloadContext("mb-master")
 	ac.Track.Duration = 236
 	ac.Ranked = []ports.AudioCandidate{{URL: "https://youtube.com/watch?v=first000000", Channel: "Corey Hart", Duration: 236}}
 
 	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
-		t.Fatalf("with no ground truth there is nothing to reject against; the long tail must stay acquirable: %v", err)
+		t.Fatalf("an unlinked fingerprint is Unknown, never a rejection; the long tail must stay acquirable: %v", err)
 	}
 	defer os.RemoveAll(filepath.Dir(ac.TempPath))
 
@@ -1003,9 +1027,9 @@ func TestDownloadStep_NeverRejectsWithoutAnExpectedCluster(t *testing.T) {
 }
 
 func TestDownloadStep_UnknownAudioIsAccepted(t *testing.T) {
-	identifier := &stubIdentifier{cluster: []string{"ac-master"}}
+	identifier := &stubIdentifier{}
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(identifier))
-	ac := downloadContext("mb-master", []string{"ac-master"})
+	ac := downloadContext("mb-master")
 	ac.Track.Duration = 236
 	ac.Ranked = []ports.AudioCandidate{{URL: "https://youtube.com/watch?v=first000000", Channel: "Corey Hart", Duration: 236}}
 
@@ -1020,9 +1044,9 @@ func TestDownloadStep_UnknownAudioIsAccepted(t *testing.T) {
 }
 
 func TestDownloadStep_IdentifierErrorIsFailOpen(t *testing.T) {
-	identifier := &stubIdentifier{err: errors.New("acoustid down"), cluster: []string{"ac-master"}}
+	identifier := &stubIdentifier{err: errors.New("acoustid down")}
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(identifier))
-	ac := downloadContext("mb-master", []string{"ac-master"})
+	ac := downloadContext("mb-master")
 
 	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
 		t.Fatalf("acquisition must never block on a broken validator: %v", err)
@@ -1033,7 +1057,7 @@ func TestDownloadStep_IdentifierErrorIsFailOpen(t *testing.T) {
 func TestDownloadStep_NoExpectedMBIDSkipsIdentificationEntirely(t *testing.T) {
 	identifier := &stubIdentifier{match: ports.RecordingMatch{AcoustID: "ac-whatever"}}
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(identifier))
-	ac := downloadContext("", []string{"ac-master"})
+	ac := downloadContext("")
 
 	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -1046,9 +1070,9 @@ func TestDownloadStep_NoExpectedMBIDSkipsIdentificationEntirely(t *testing.T) {
 }
 
 func TestDownloadStep_RejectionWalksToTheNextCandidate(t *testing.T) {
-	identifier := &rejectFirstIdentifier{cluster: []string{"ac-master"}}
+	identifier := &rejectFirstIdentifier{}
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(identifier))
-	ac := downloadContext("mb-master", []string{"ac-master"})
+	ac := downloadContext("mb-master")
 
 	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
 		t.Fatalf("a rejected candidate must not end the walk: %v", err)
@@ -1061,20 +1085,19 @@ func TestDownloadStep_RejectionWalksToTheNextCandidate(t *testing.T) {
 }
 
 type rejectFirstIdentifier struct {
-	cluster []string
-	calls   int
+	calls int
 }
 
 func (r *rejectFirstIdentifier) Identify(context.Context, string, float64) (ports.RecordingMatch, error) {
 	r.calls++
 	if r.calls == 1 {
-		return ports.RecordingMatch{AcoustID: "ac-wrong", MBIDs: []string{"mb-wrong"}}, nil
+		return differentSongMatch(), nil
 	}
-	return ports.RecordingMatch{AcoustID: "ac-master", MBIDs: []string{"mb-master"}}, nil
+	return referenceMatch(), nil
 }
 
 func (r *rejectFirstIdentifier) AcoustIDsFor(context.Context, string) ([]string, error) {
-	return r.cluster, nil
+	return nil, nil
 }
 
 func linkedResults(recordings ...ports.LinkedRecording) []ports.AcoustIDResult {
@@ -1092,7 +1115,7 @@ func TestDownloadStep_LiveOnlyLinksRejectedThenCleanCandidateVerified(t *testing
 	}
 	identifier := &sequenceIdentifier{matches: []ports.RecordingMatch{live, clean}}
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(identifier))
-	ac := downloadContext("mb-studio", nil)
+	ac := downloadContext("mb-studio")
 	ac.Track.Title = "Nessun dorma"
 
 	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
@@ -1114,7 +1137,7 @@ func TestDownloadStep_LinksToAnotherSongAreRejected(t *testing.T) {
 		Results: linkedResults(ports.LinkedRecording{MBID: "mb-x", Title: "Something Else Entirely"}),
 	}
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(&stubIdentifier{match: match}))
-	ac := downloadContext("mb-master", nil)
+	ac := downloadContext("mb-master")
 
 	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err == nil {
 		t.Fatal("expected every candidate rejected as a different song")
@@ -1131,7 +1154,7 @@ func TestDownloadStep_LogsAudioVerdictForEveryDecision(t *testing.T) {
 		Results: linkedResults(ports.LinkedRecording{MBID: "mb-master", Title: "Sunglasses at Night"}),
 	}
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(&stubIdentifier{match: match}))
-	ac := downloadContext("mb-master", nil)
+	ac := downloadContext("mb-master")
 
 	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -1200,7 +1223,7 @@ func previewMatch(mbid, title string) ports.RecordingMatch {
 }
 
 func previewContext() *AcquisitionContext {
-	ac := downloadContext("mb-studio", nil)
+	ac := downloadContext("mb-studio")
 	ac.Track.Title = "Nessun dorma"
 	ac.Ranked = ac.Ranked[:1]
 	ac.Ranked[0].Duration = 250
@@ -1394,10 +1417,10 @@ func (r *gateRecorder) RecordVerifySkip(gate string) { r.gates = append(r.gates,
 
 func TestDownloadStep_IdentifierErrorRecordsAnIdentifyFailedSkip(t *testing.T) {
 	rec := &gateRecorder{}
-	identifier := &stubIdentifier{err: errors.New("acoustid down"), cluster: []string{"ac-master"}}
+	identifier := &stubIdentifier{err: errors.New("acoustid down")}
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true},
 		WithDownloadIdentifier(identifier), WithStepVerifySkips(rec))
-	ac := downloadContext("mb-master", []string{"ac-master"})
+	ac := downloadContext("mb-master")
 
 	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -1730,7 +1753,7 @@ func TestDownloadStep_ProbeErrorIsAcceptedAndRecordsAProbeFailedSkip(t *testing.
 	rec := &gateRecorder{}
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true},
 		WithDownloadProber(scriptedProber{probeErr: errors.New("probe boom")}), WithStepVerifySkips(rec))
-	ac := downloadContext("", nil)
+	ac := downloadContext("")
 	ac.Track.Duration = 200
 
 	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
@@ -1750,7 +1773,7 @@ func TestDownloadStep_UnknownDurationIsAcceptedAndRecordsANoDurationSkip(t *test
 	rec := &gateRecorder{}
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true},
 		WithDownloadProber(scriptedProber{duration: 200}), WithStepVerifySkips(rec))
-	ac := downloadContext("", nil)
+	ac := downloadContext("")
 	ac.Track.Duration = 0
 
 	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
@@ -1770,7 +1793,7 @@ func TestDownloadStep_SuccessfulProbeRecordsNoSkip(t *testing.T) {
 	rec := &gateRecorder{}
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true},
 		WithDownloadProber(scriptedProber{duration: 200}), WithStepVerifySkips(rec))
-	ac := downloadContext("", nil)
+	ac := downloadContext("")
 	ac.Track.Duration = 200
 
 	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
@@ -2031,7 +2054,7 @@ func TestDownloadStep_SoftNeedsTheSameVersionLabels(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			step := NewDownloadStep(&fileWritingSearcher{writeFile: true},
 				WithDownloadIdentifier(&stubIdentifier{match: plainTitledLinks("mb-linked")}), WithRecordingLookup(tt.lookup))
-			ac := downloadContext("mb-master", nil)
+			ac := downloadContext("mb-master")
 
 			_, err := step.Execute(context.Background(), ac, afterSelect{})
 			if tt.wantReject != "" {
@@ -2069,7 +2092,7 @@ func TestDownloadStep_VersionLookupsAreCappedAndCachedPerJob(t *testing.T) {
 	}}
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true},
 		WithDownloadIdentifier(&stubIdentifier{match: plainTitledLinks("mb-1", "mb-2", "mb-3", "mb-4")}), WithRecordingLookup(lookup))
-	ac := downloadContext("mb-master", nil)
+	ac := downloadContext("mb-master")
 
 	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err == nil {
 		t.Fatal("expected every candidate rejected as another version")

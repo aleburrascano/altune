@@ -32,8 +32,8 @@
     {
       "id": "f1-cover-only",
       "class": "F1",
-      "note": "only a cover exists; acquiring it is worse than acquiring nothing. Normalization strips (Piano Cover), so nothing in the title can tell them apart — the fingerprint can, because the cover's AcoustID is not in the master recording's cluster",
-      "track": { "title": "Blinding Lights", "artist": "The Weeknd", "duration": 200, "mbid": "mb-master", "acoustids": ["ac-master-a", "ac-master-b"] },
+      "note": "only a cover exists; acquiring it is worse than acquiring nothing. Normalization strips (Piano Cover), so nothing in the title can tell them apart — the fingerprint can, because the AcoustID result names the cover recording, not the master",
+      "track": { "title": "Blinding Lights", "artist": "The Weeknd", "duration": 200, "mbid": "mb-master" },
       "candidates": [
         { "title": "Blinding Lights (Piano Cover)", "url": "yt:cover", "channel": "Piano Tutorials", "categories": ["Music"], "duration": 195, "view_count": 5000000, "recording_mbids": ["mb-cover"], "acoustid": "ac-cover" }
       ]
@@ -52,7 +52,7 @@
       "id": "f1-acoustic-only-rejected-by-fingerprint",
       "class": "F1",
       "note": "the acoustic take is the only candidate and its length is inside the window; ranking cannot save this one, the fingerprint must reject it outright",
-      "track": { "title": "Sunglasses at Night", "artist": "Corey Hart", "duration": 232, "authoritative_duration": 232, "mbid": "mb-sunglasses", "acoustids": ["ac-sunglasses"] },
+      "track": { "title": "Sunglasses at Night", "artist": "Corey Hart", "duration": 232, "authoritative_duration": 232, "mbid": "mb-sunglasses" },
       "candidates": [
         { "title": "Sunglasses at Night (Acoustic Version)", "url": "yt:acoustic", "channel": "Corey Hart - Topic", "categories": ["Music"], "duration": 230, "actual_duration": 230, "view_count": 900000, "acoustid": "ac-acoustic", "recording_mbids": ["mb-acoustic"] }
       ]
@@ -128,7 +128,7 @@
       "id": "f3-sped-up-no-expected-duration",
       "class": "F3",
       "note": "no saved duration means no duration gate, and normalization has already deleted (Sped Up) — only the fingerprint is left to catch it",
-      "track": { "title": "Blinding Lights", "artist": "The Weeknd", "mbid": "mb-master", "acoustids": ["ac-master"] },
+      "track": { "title": "Blinding Lights", "artist": "The Weeknd", "mbid": "mb-master" },
       "candidates": [
         { "title": "Blinding Lights (Sped Up)", "url": "yt:sped", "channel": "Nightcore Zone", "categories": ["Music"], "duration": 172, "view_count": 3000000, "recording_mbids": ["mb-sped"], "acoustid": "ac-sped" }
       ]
