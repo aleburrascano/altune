@@ -73,13 +73,6 @@ func (l *TrackLedger) Get(ctx context.Context, id shared.TrackId, userId shared.
 	return snapshotOf(track), nil
 }
 
-func targetLength(track *domain.Track) *float64 {
-	if track.CatalogDurationSeconds != nil {
-		return track.CatalogDurationSeconds
-	}
-	return track.DurationSeconds
-}
-
 func snapshotOf(track *domain.Track) *ports.TrackSnapshot {
 	return &ports.TrackSnapshot{
 		ID:                     track.ID,
@@ -87,7 +80,7 @@ func snapshotOf(track *domain.Track) *ports.TrackSnapshot {
 		Title:                  track.Title,
 		Artist:                 track.Artist,
 		Album:                  track.Album,
-		DurationSeconds:        targetLength(track),
+		DurationSeconds:        track.CatalogDurationSeconds,
 		CatalogDurationSeconds: track.CatalogDurationSeconds,
 		CatalogMBID:            track.CatalogMBID,
 		CatalogExplicit:        track.CatalogExplicit,

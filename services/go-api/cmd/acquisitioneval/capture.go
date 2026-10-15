@@ -101,11 +101,10 @@ func captureCase(raw []byte, tier string, now time.Time) (eval.Case, error) {
 		Class: "RW",
 		Note:  captureNote(rejectionSummary, tier, now),
 		Track: eval.Track{
-			Title:    d.Track.Title,
-			Artist:   d.Track.Artist,
-			Album:    d.Track.Album,
-			Duration: d.Track.DurationSeconds,
-			ISRC:     d.Track.ISRC,
+			Title:  d.Track.Title,
+			Artist: d.Track.Artist,
+			Album:  d.Track.Album,
+			ISRC:   d.Track.ISRC,
 
 			CatalogDuration: deref(d.Track.CatalogDurationSeconds),
 			CatalogMBID:     d.Track.CatalogMBID,

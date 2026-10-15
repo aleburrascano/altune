@@ -17,7 +17,8 @@ const testDump = `{
     "title": "Drinking in L.A.",
     "artist": "Bran Van 3000",
     "album": "Glee",
-    "duration_seconds": 236,
+    "duration_seconds": 99,
+    "catalog_duration_seconds": 236,
     "isrc": "CAA509814003",
     "acquisition_status": "failed",
     "failure_reason": "no correct candidate: all 2 candidates rejected (2 fingerprint)",
@@ -216,7 +217,7 @@ func TestRunCapture_CarriesTheTrackRowIntoTheCase(t *testing.T) {
 	}
 	kase := probeDecodeAndValidate(t, out)
 	tr := kase.Track
-	if tr.Title != "Drinking in L.A." || tr.Artist != "Bran Van 3000" || tr.Album != "Glee" || tr.Duration != 236 || tr.ISRC != "CAA509814003" {
+	if tr.Title != "Drinking in L.A." || tr.Artist != "Bran Van 3000" || tr.Album != "Glee" || tr.CatalogDuration != 236 || tr.Duration != 0 || tr.ISRC != "CAA509814003" {
 		t.Fatalf("track = %+v, want title/artist/album/duration/isrc from the dump row", tr)
 	}
 }
