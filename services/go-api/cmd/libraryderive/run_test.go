@@ -963,7 +963,7 @@ func TestDeriveAll_RealProdCasesKeepTheirOutcomePerField(t *testing.T) {
 				ID: "t", Title: "Everytime I See Your Picture", Artist: "Luba", Album: "Secrets & Sins", ISRC: "CAE158400020", Genre: "Pop", TrackNumber: 4,
 				ArtworkURL: dzCover("887a27e6b666f6024da92564a52a23a6", "1000x1000"), FileSeconds: 240.59,
 			},
-			expectations: replayExpectation{applies: map[string]string{"album_artist": "Luba"}},
+			expectations: replayExpectation{keeps: []string{"album_artist"}, reported: []string{"album_artist"}},
 		},
 		{
 			name: "dave-sprinter",
@@ -1015,6 +1015,53 @@ func TestDeriveAll_RealProdCasesKeepTheirOutcomePerField(t *testing.T) {
 				Genre: "R&B", TrackNumber: 18, ArtworkURL: dzCover("0d571082af7c78114321031d7f84d331", "1000x1000"), FileSeconds: 154,
 			},
 			expectations: replayExpectation{applies: map[string]string{"track_number": "2"}, settles: []string{"year", "genre", "artwork_url"}},
+		},
+		{
+			name: "juice-wrld-feeling",
+			stored: libraryTrack{
+				ID: "t", Title: "Feeling", Artist: "Juice WRLD", Album: "Death Race For Love (Bonus Track Version)", ISRC: "USUG11900388", Year: 2021, FileSeconds: 202,
+			},
+			expectations: replayExpectation{applies: map[string]string{"year": "2019"}, keeps: []string{"album"}},
+		},
+		{
+			name: "sade-kiss-of-life",
+			stored: libraryTrack{
+				ID: "t", Title: "Kiss of Life", Artist: "Sade", Album: "The Best of Sade", ISRC: "GBBBM9200026", Year: 1994, FileSeconds: 250,
+			},
+			expectations: replayExpectation{keeps: []string{"album", "year"}},
+		},
+		{
+			name: "rush-tom-sawyer",
+			stored: libraryTrack{
+				ID: "t", Title: "Tom Sawyer", Artist: "Rush", Album: "Moving Pictures (2011 Remaster)", ISRC: "USMR18180103", FileSeconds: 273,
+			},
+			expectations: replayExpectation{applies: map[string]string{"year": "1981"}, keeps: []string{"album"}},
+		},
+		{
+			name:    "luba-everytime-keeps-stored-album",
+			fixture: "luba-everytime",
+			stored: libraryTrack{
+				ID: "t", Title: "Everytime I See Your Picture", Artist: "Luba", Album: "Secrets & Sins", ISRC: "CAE158400020", Genre: "Pop", TrackNumber: 4,
+				ArtworkURL: dzCover("887a27e6b666f6024da92564a52a23a6", "1000x1000"), FileSeconds: 240.59,
+			},
+			expectations: replayExpectation{keeps: []string{"album", "track_number", "album_artist", "year"}, reported: []string{"album", "album_artist"}},
+		},
+		{
+			name:    "luba-everytime-keeps-stored-cover",
+			fixture: "luba-everytime",
+			stored: libraryTrack{
+				ID: "t", Title: "Everytime I See Your Picture", Artist: "Luba", Album: "Secrets & Sins", ISRC: "CAE158400020", Genre: "Pop", TrackNumber: 4,
+				ArtworkURL: dzCover("887a27e6b666f6024da92564a52a23a6", "1000x1000"), FileSeconds: 240.59,
+			},
+			expectations: replayExpectation{keeps: []string{"artwork_url"}, reported: []string{"artwork_url"}},
+		},
+		{
+			name:      "black-box-everybody-everybody",
+			recording: "b8b98454-68c9-4d2e-ac43-0d7fef3a93c4",
+			stored: libraryTrack{
+				ID: "t", Title: "Everybody Everybody", Artist: "Black Box", Album: "Everybody Everybody", ISRC: "GBCMX0609003", FileSeconds: 247,
+			},
+			expectations: replayExpectation{keeps: []string{"album", "year", "track_number", "album_artist"}, reported: []string{"album", "year", "track_number", "album_artist"}},
 		},
 	}
 	for _, c := range realProdCases {

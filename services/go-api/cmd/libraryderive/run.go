@@ -101,6 +101,7 @@ func (d *deriver) findingsFor(ctx context.Context, t boundTrack) ([]finding, err
 		return nil, err
 	}
 	chosen, own = adoption.chosen, adoption.own
+	own.Withheld.FallbackAlbum = chosen.Rule.fallbackHold()
 	own.Withheld.Title = titleHold(a.Title, check.Track)
 	own.Withheld.Artist = artistHold(a.Artist, check.Track)
 	check.Match = own
@@ -169,7 +170,7 @@ func (d *deriver) adoptStoredRelease(ctx context.Context, t boundTrack, rec reco
 
 func albumFindings(t boundTrack, a anchor, group releaseGroup, match *deezerMatch) []finding {
 	var found []finding
-	for _, d := range diff(t.libraryTrack, derive(a, group, match)) {
+	for _, d := range diff(t.libraryTrack, deriveFor(t, a, group, match)) {
 		if d.Field == "album" {
 			found = append(found, findingOf(t, d))
 		}
@@ -191,7 +192,20 @@ func storedReleaseGroup(rec recording, homes []releaseGroup, storedAlbum string,
 	if listing == nil {
 		return releaseGroup{}, false
 	}
-	return releaseGroup{Title: listing.AlbumTitle, Artist: listing.AlbumArtist, FirstReleaseDate: listing.ReleaseDate}, true
+	return releaseGroup{
+		Title: listing.AlbumTitle, Artist: listing.AlbumArtist,
+		FirstReleaseDate: cmp.Or(firstDateOfOnlyAlbumNamed(rec, homes, storedAlbum), listing.ReleaseDate), EditionDate: listing.ReleaseDate,
+	}, true
+}
+
+func firstDateOfOnlyAlbumNamed(rec recording, homes []releaseGroup, storedAlbum string) string {
+	named := slices.DeleteFunc(slices.Clone(homes), func(home releaseGroup) bool {
+		return !sameAlbumGroup(home.Title, storedAlbum) || !home.credits(rec)
+	})
+	if len(named) != 1 {
+		return ""
+	}
+	return named[0].FirstReleaseDate
 }
 
 func (d *deriver) recordingOf(ctx context.Context, t boundTrack) (recording, error) {
@@ -362,7 +376,7 @@ func changesFor(t boundTrack, a anchor, chosen pick, check crossCheck) []finding
 
 func differenceFindings(t boundTrack, a anchor, group releaseGroup, match *deezerMatch) []finding {
 	var found []finding
-	for _, d := range diff(t.libraryTrack, derive(a, group, match)) {
+	for _, d := range diff(t.libraryTrack, deriveFor(t, a, group, match)) {
 		found = append(found, findingOf(t, d))
 	}
 	return found
@@ -384,4 +398,12 @@ func otherMasterWith(t boundTrack, a anchor, chosen pick, own *deezerMatch, mast
 		FileSeconds: t.FileSeconds, CatalogSeconds: master.DurationSeconds,
 	}
 	return append(found, plan)
+}
+
+func deriveFor(t boundTrack, a anchor, group releaseGroup, match *deezerMatch) desired {
+	want := derive(a, group, match)
+	if t.Year > 0 && t.Year == yearOf(group.EditionDate) {
+		want.Year = t.Year
+	}
+	return want
 }

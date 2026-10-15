@@ -107,6 +107,7 @@ type withheld struct {
 	ISRC            string
 	AlbumArtist     string
 	Release         string
+	FallbackAlbum   string
 }
 
 func (w withheld) of(field string) string {
@@ -148,21 +149,25 @@ func diff(stored libraryTrack, want desired) []difference {
 	}
 	held := moved && stored.Album != "" && (want.WhyNot.Album != "" || want.WhyNot.Bind != "")
 	stance := stanceToward(stored.Album, want.Album, moved, held)
+	dependentStance := stance
+	if moved && stored.Album != "" && !held && want.WhyNot.FallbackAlbum != "" {
+		dependentStance, group = albumHeld, ""
+	}
 	if held {
 		group = ""
 	}
 	var found []difference
-	found = appendHeldOr(found, "album", stored.Album, want.Album, moved, stance, group, want.WhyNot)
+	found = appendHeldOr(found, "album", stored.Album, want.Album, moved, dependentStance, group, want.WhyNot)
 	found = appendCorroborated(found, "title", stored.Title, want.Title, !sameSongTitle(stored.Title, want.Title), group, want.WhyNot)
 	found = appendCorroborated(found, "artist", stored.Artist, want.Artist, !isCredited(stored.Artist, want.Artist), group, want.WhyNot)
-	found = appendAlbumBound(found, "year", intText(stored.Year), intText(want.Year), stance, group, want.WhyNot)
-	found = appendAlbumArtist(found, stored.Artist, stored.AlbumArtist, want.AlbumArtist, stance, group, want.WhyNot)
-	found = appendAlbumBound(found, "track_number", intText(stored.TrackNumber), intText(want.TrackNumber), stance, group, want.WhyNot)
+	found = appendAlbumBound(found, "year", intText(stored.Year), intText(want.Year), dependentStance, group, want.WhyNot)
+	found = appendAlbumArtist(found, stored.Artist, stored.AlbumArtist, want.AlbumArtist, dependentStance, group, want.WhyNot)
+	found = appendAlbumBound(found, "track_number", intText(stored.TrackNumber), intText(want.TrackNumber), dependentStance, group, want.WhyNot)
 	found = appendAlbumBound(found, "genre", stored.Genre, want.Genre, stance, group, want.WhyNot)
 	found = appendField(found, "catalog_duration_seconds", secondsText(stored.CatalogDurationSeconds), secondsText(want.CatalogDurationSeconds),
 		math.Abs(stored.CatalogDurationSeconds-want.CatalogDurationSeconds) > catalogLengthSlack, "", want.WhyNot)
 	found = appendField(found, "isrc", stored.ISRC, songfacts.CanonicalISRC(want.ISRC), songfacts.CanonicalISRC(stored.ISRC) != songfacts.CanonicalISRC(want.ISRC), "", want.WhyNot)
-	return appendArtwork(found, stored, want, stance, group)
+	return appendArtwork(found, stored, want, dependentStance, group)
 }
 
 type albumStance int
@@ -208,7 +213,7 @@ func appendAlbumBound(found []difference, field, stored, want string, stance alb
 
 func appendHeldOr(found []difference, field, stored, want string, differs bool, stance albumStance, group string, whyNot withheld) []difference {
 	if stance == albumHeld && differs && want != "" {
-		return append(found, unknown(field, stored, want, cmp.Or(whyNot.Bind, whyNot.Album)))
+		return append(found, unknown(field, stored, want, cmp.Or(whyNot.Bind, whyNot.Album, whyNot.FallbackAlbum)))
 	}
 	return appendField(found, field, stored, want, differs, group, whyNot)
 }

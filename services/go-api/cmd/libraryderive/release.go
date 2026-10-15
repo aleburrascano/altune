@@ -2,6 +2,7 @@ package main
 
 import (
 	"altune/go-api/internal/shared/releasepick"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -13,6 +14,7 @@ type releaseGroup struct {
 	PrimaryType      string
 	SecondaryTypes   []string
 	FirstReleaseDate string
+	EditionDate      string
 	ReleaseID        string
 	FrontReleaseID   string
 	ArtistIDs        []string
@@ -27,7 +29,21 @@ const (
 	ruleSingleOrEP  rule = "single_or_ep"
 	ruleOnlyHome    rule = "only_home"
 	ruleStoredAlbum rule = "stored_album"
+	ruleDeezerAlbum rule = "deezer_album"
 )
+
+const reasonFallbackNeverReplacesAlbum = "the chosen album is a fallback pick, which only fills an empty album and never replaces a stored one"
+
+func (r rule) isFallback() bool {
+	return !slices.Contains([]rule{ruleStudioAlbum, ruleMixtape, ruleSingleOrEP, ruleStoredAlbum}, r)
+}
+
+func (r rule) fallbackHold() string {
+	if r.isFallback() {
+		return reasonFallbackNeverReplacesAlbum
+	}
+	return ""
+}
 
 const (
 	primaryAlbum  = releasepick.PrimaryAlbum
@@ -46,10 +62,14 @@ func (g releaseGroup) pickable() releasepick.Group {
 }
 
 func (g releaseGroup) year() int {
-	if len(g.FirstReleaseDate) < yearDigits {
+	return yearOf(g.FirstReleaseDate)
+}
+
+func yearOf(date string) int {
+	if len(date) < yearDigits {
 		return 0
 	}
-	year, err := strconv.Atoi(g.FirstReleaseDate[:yearDigits])
+	year, err := strconv.Atoi(date[:yearDigits])
 	if err != nil {
 		return 0
 	}

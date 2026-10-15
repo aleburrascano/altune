@@ -39,7 +39,7 @@ func deezerReleaseFindings(t boundTrack, isrc string, track deezerTrack, album d
 	}
 	group := releaseGroup{ID: "deezer:" + album.ID, Title: album.Title, Artist: album.Artist, PrimaryType: primary, FirstReleaseDate: album.ReleaseDate}
 	a := anchor{ISRC: isrc, Title: track.Title, Artist: track.Artist}
-	head := about(t, categoryReleaseChosen, group.describe()+" by deezer_album; deezer "+string(outcomeSameISRC))
+	head := about(t, categoryReleaseChosen, group.describe()+" by "+string(ruleDeezerAlbum)+"; deezer "+string(outcomeSameISRC))
 	found := append([]finding{head}, differenceFindings(t, a, group, deezerOnlyMatch(album, track))...)
 	for i := range found {
 		found[i].Source = sourceDeezer
@@ -49,6 +49,7 @@ func deezerReleaseFindings(t boundTrack, isrc string, track deezerTrack, album d
 
 func deezerOnlyMatch(album deezerAlbum, track deezerTrack) *deezerMatch {
 	match := newMatch(album, track)
+	match.Withheld.FallbackAlbum = ruleDeezerAlbum.fallbackHold()
 	if match.CoverURL == "" {
 		match.Withheld.ArtworkURL = "deezer has no usable cover for the album (missing, the blank placeholder or not verifiable) and there is no musicbrainz release to fall back on"
 	}
