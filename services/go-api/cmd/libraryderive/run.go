@@ -187,28 +187,31 @@ func (d *deriver) withOwnRelease(ctx context.Context, rec recording, group relea
 		own = *match
 	}
 	own.Withheld = withheld{AlbumArtist: albumArtistHold(group.Artist, match)}
-	if match == nil {
-		own.Withheld.TrackNumber = reasonNoDeezerAlbum
-		own.Withheld.Genre = own.Withheld.TrackNumber
-	}
 	own.CoverURL, own.Withheld.ArtworkURL = d.ownCover(ctx, own.CoverURL, group)
-	seconds, err := d.ownLength(ctx, rec, group, own.DurationSeconds)
-	if own.DurationSeconds = seconds; seconds == 0 {
+	listed, err := d.listedTrack(ctx, rec, group, match)
+	if match == nil {
+		own.TrackPosition = listed.Position
+		own.Withheld.Genre = reasonNoDeezerAlbum
+		if listed.Position == 0 {
+			own.Withheld.TrackNumber = reasonNoDeezerAlbum
+		}
+	}
+	if own.DurationSeconds = cmp.Or(own.DurationSeconds, listed.Seconds); own.DurationSeconds == 0 {
 		own.Withheld.CatalogDuration = "no track length on the chosen release"
 	}
 	return &own, err
 }
 
-func (d *deriver) ownLength(ctx context.Context, rec recording, group releaseGroup, deezerSeconds float64) (float64, error) {
+func (d *deriver) listedTrack(ctx context.Context, rec recording, group releaseGroup, match *deezerMatch) (releaseTrack, error) {
 	releaseID := cmp.Or(group.FrontReleaseID, group.ReleaseID)
-	if deezerSeconds != 0 || releaseID == "" {
-		return deezerSeconds, nil
+	if match != nil && match.DurationSeconds != 0 || releaseID == "" {
+		return releaseTrack{}, nil
 	}
-	seconds, err := d.recordings.ReleaseTrackSeconds(ctx, releaseID, rec.ID)
+	listed, err := d.recordings.ReleaseTrack(ctx, releaseID, rec.ID)
 	if errors.Is(err, errCatalogBlocked) {
-		return 0, err
+		return releaseTrack{}, err
 	}
-	return seconds, nil
+	return listed, nil
 }
 
 type coverVerdict int

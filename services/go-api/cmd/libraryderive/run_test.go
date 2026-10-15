@@ -20,6 +20,7 @@ type fakeMusicBrainz struct {
 	recordings map[string]recording
 	homes      map[string][]releaseGroup
 	lengths    map[string]float64
+	positions  map[string]int
 	lengthErr  error
 	blocked    bool
 }
@@ -33,6 +34,11 @@ func (f *fakeMusicBrainz) ReleaseTrackSeconds(_ context.Context, releaseID, reco
 		return 0, errCatalogUnknown
 	}
 	return seconds, nil
+}
+
+func (f *fakeMusicBrainz) ReleaseTrack(ctx context.Context, releaseID, recordingID string) (releaseTrack, error) {
+	seconds, err := f.ReleaseTrackSeconds(ctx, releaseID, recordingID)
+	return releaseTrack{Seconds: seconds, Position: f.positions[releaseID+"/"+recordingID]}, err
 }
 
 func (f *fakeMusicBrainz) RecordingsByISRC(_ context.Context, isrc string) ([]recording, error) {
@@ -909,6 +915,30 @@ func TestDeriveAll_RealProdCasesKeepTheirOutcomePerField(t *testing.T) {
 				ArtworkURL: dzCover("887a27e6b666f6024da92564a52a23a6", "1000x1000"), FileSeconds: 240.59,
 			},
 			expectations: replayExpectation{applies: map[string]string{"album_artist": "Luba"}},
+		},
+		{
+			name: "dave-sprinter",
+			stored: libraryTrack{
+				ID: "t", Title: "Sprinter", Artist: "Dave", Album: "Sprinter", AlbumArtist: "Dave & Central Cee", ISRC: "GBUM72305159", Year: 2023, Genre: "Pop", TrackNumber: 2,
+				ArtworkURL: dzCover("f97888ccd13c3be72765e110a0797d37", "1000x1000"), FileSeconds: 229,
+			},
+			expectations: replayExpectation{applies: map[string]string{"track_number": "1"}, reported: []string{"genre"}},
+		},
+		{
+			name: "jack-harlow-churchill-downs",
+			stored: libraryTrack{
+				ID: "t", Title: "Churchill Downs (feat. Drake)", Artist: "Jack Harlow", Album: "Come Home The Kids Miss You", AlbumArtist: "Jack Harlow", ISRC: "USAT22203487", Year: 2022,
+				Genre: "Rap/Hip Hop", TrackNumber: 24, ArtworkURL: dzCover("b66494c3e751cdaa1ce4a14ed6125f15", "1000x1000"), FileSeconds: 309,
+			},
+			expectations: replayExpectation{applies: map[string]string{"track_number": "10"}, keeps: []string{"album", "year"}, reported: []string{"genre"}},
+		},
+		{
+			name: "don-toliver-excavator",
+			stored: libraryTrack{
+				ID: "t", Title: "Excavator", Artist: "Don Toliver", Album: "OCTANE", AlbumArtist: "Don Toliver", ISRC: "USAT22600128", Year: 2026, Genre: "Rap/Hip Hop", TrackNumber: 13,
+				ArtworkURL: dzCover("123eb0268dfea84370a28c4a2114dc28", "1000x1000"), FileSeconds: 211,
+			},
+			expectations: replayExpectation{keeps: []string{"album", "track_number"}, reported: []string{"genre"}},
 		},
 	}
 	for _, c := range realProdCases {
