@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/redact"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -37,6 +36,7 @@ type Runner struct {
 	replacer Replacer
 	store    ports.UpgradeStore
 	cfg      Config
+	inPlace  *inPlaceCheck
 }
 
 func NewRunner(ledger ports.TrackLedger, replacer Replacer, store ports.UpgradeStore, cfg Config) *Runner {
@@ -79,8 +79,20 @@ func (r *Runner) ExecuteUpgrade(ctx context.Context, userId shared.UserId, track
 		slog.WarnContext(ctx, "acquisition.upgrade_track_not_found", "track_id", trackId.String())
 		return nil
 	}
-	current, ok := upgradableGrade(track)
-	if !ok {
+	stored := inPlaceEvidenceOf(track.Evidence)
+	current := stored.Grade
+	if !isPlayableFile(track) || current.IsTop() {
+		slog.InfoContext(ctx, "acquisition.upgrade_skipped", "track_id", trackId.String())
+		return nil
+	}
+	if r.isUnchecked(track) {
+		checked, err := r.checkInPlace(ctx, track, stored)
+		if err != nil || checked.settled {
+			return err
+		}
+		current = checked.grade
+	}
+	if isUserUpload(track) {
 		slog.InfoContext(ctx, "acquisition.upgrade_skipped", "track_id", trackId.String())
 		return nil
 	}
@@ -136,22 +148,6 @@ func (r *Runner) giveUp(ctx context.Context, trackId shared.TrackId, current gra
 		"track_id", trackId.String(), "grade", string(current), "tries", tries, "reason", reason)
 }
 
-type evidenceGrade struct {
-	Grade grade.Grade `json:"grade"`
-}
-
-func storedGrade(evidence json.RawMessage) grade.Grade {
-	var stored evidenceGrade
-	if err := json.Unmarshal(evidence, &stored); err != nil || !stored.Grade.IsKnown() {
-		return grade.Ungraded
-	}
-	return stored.Grade
-}
-
-func upgradableGrade(track *ports.TrackSnapshot) (grade.Grade, bool) {
-	if track.Status != ports.TrackReady || track.AudioRef == nil || track.AudioSourceURL == nil || *track.AudioSourceURL == "" {
-		return "", false
-	}
-	current := storedGrade(track.Evidence)
-	return current, current != grade.A
+func isPlayableFile(track *ports.TrackSnapshot) bool {
+	return track.Status == ports.TrackReady && track.AudioRef != nil
 }

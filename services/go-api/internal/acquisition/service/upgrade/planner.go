@@ -17,22 +17,29 @@ type Scheduler interface {
 }
 
 type Planner struct {
-	store      ports.UpgradeStore
-	scheduler  Scheduler
-	maxQueued  int
-	retryAfter time.Duration
+	store        ports.UpgradeStore
+	scheduler    Scheduler
+	maxQueued    int
+	retryAfter   time.Duration
+	checkUploads bool
 }
 
 func NewPlanner(store ports.UpgradeStore, scheduler Scheduler, maxQueued int, retryAfter time.Duration) *Planner {
 	return &Planner{store: store, scheduler: scheduler, maxQueued: maxQueued, retryAfter: retryAfter}
 }
 
+func (p *Planner) CheckingUploads() *Planner {
+	p.checkUploads = true
+	return p
+}
+
 func (p *Planner) PlanNext(ctx context.Context) error {
 	candidates, err := p.store.Candidates(ctx, ports.UpgradeSelection{
-		Limit:      1,
-		Generation: grade.PipelineGeneration,
-		RetryAfter: p.retryAfter,
-		MaxQueued:  p.maxQueued,
+		Limit:                    1,
+		Generation:               grade.PipelineGeneration,
+		RetryAfter:               p.retryAfter,
+		MaxQueued:                p.maxQueued,
+		IncludeUnverifiedUploads: p.checkUploads,
 	})
 	if err != nil {
 		return fmt.Errorf("pick tracks to upgrade: %w", err)

@@ -76,6 +76,9 @@ type Config struct {
 	AcquisitionUpgradeConcurrency int  `env:"ACQUISITION_UPGRADE_CONCURRENCY" envDefault:"1"`
 	AcquisitionUpgradeMaxTries    int  `env:"ACQUISITION_UPGRADE_MAX_TRIES" envDefault:"3"`
 
+	AcquisitionUpgradeVerifyPerHour  int     `env:"ACQUISITION_UPGRADE_VERIFY_PER_HOUR" envDefault:"60"`
+	AcquisitionUpgradePreviewAMaxBER float64 `env:"ACQUISITION_UPGRADE_PREVIEW_A_MAX_BER" envDefault:"0.10"`
+
 	AcquisitionUpgradeRetryAfter time.Duration `env:"ACQUISITION_UPGRADE_RETRY_AFTER" envDefault:"24h"`
 
 	AcoustIDAPIKey string `env:"ACOUSTID_API_KEY"`

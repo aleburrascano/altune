@@ -7,11 +7,12 @@ const PipelineGeneration = 1
 type Grade string
 
 const (
-	A Grade = "A"
-	B Grade = "B"
-	C Grade = "C"
-	D Grade = "D"
-	F Grade = "F"
+	A     Grade = "A"
+	AUser Grade = "A_user"
+	B     Grade = "B"
+	C     Grade = "C"
+	D     Grade = "D"
+	F     Grade = "F"
 )
 
 type Fingerprint int

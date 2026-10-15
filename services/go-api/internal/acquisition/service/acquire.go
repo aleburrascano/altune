@@ -32,6 +32,9 @@ type AcquireTrackAudioService struct {
 	workspace       ports.TempWorkspace
 	storedAudio     ports.StoredAudioReader
 	contextObserver func(*AcquisitionContext)
+	previews        ports.PreviewMatcher
+
+	previewOfficialMaxBER float64
 }
 
 func NewAcquireTrackAudioService(
