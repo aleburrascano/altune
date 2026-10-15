@@ -1308,3 +1308,32 @@ func TestConfigureReplaceExclusion_KnownSourceIgnoresLength(t *testing.T) {
 		t.Error("the known source must be excluded")
 	}
 }
+
+func TestExecuteReplace_FailsCleanlyWhenNoFactIdentifiesTheCurrentFile(t *testing.T) {
+	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
+	key := trackId.String() + ":" + userId.String()
+	row := repo.rows[key]
+	row.AudioSourceURL = nil
+	row.DurationSeconds = nil
+	repo.rows[key] = row
+	source := &stubSource{name: "ytmsearch", found: []ports.AudioCandidate{candidate("https://www.youtube.com/watch?v=otherAAAAAA")}}
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(source), store)
+
+	err := svc.ExecuteReplace(context.Background(), userId, trackId)
+
+	if !errors.Is(err, ErrReplaceFactMissing) {
+		t.Fatalf("ExecuteReplace = %v, want ErrReplaceFactMissing", err)
+	}
+	if errors.Is(err, ErrAcquisitionRetryable) {
+		t.Error("a missing fact is not retryable")
+	}
+	if source.finds != 0 {
+		t.Errorf("sources searched %d times, want 0 (the replace must not run blind)", source.finds)
+	}
+	if got := store.objects[originalRef]; got != "original bytes" || len(store.objects) != 1 {
+		t.Errorf("store = %v, want only the original audio untouched", store.objects)
+	}
+	if got := repo.rows[key].AudioRef; got == nil || *got != originalRef {
+		t.Errorf("track audio ref = %v, want %q kept", got, originalRef)
+	}
+}

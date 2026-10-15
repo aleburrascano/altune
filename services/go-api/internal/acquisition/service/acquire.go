@@ -174,7 +174,9 @@ func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId sh
 	}
 	ac := s.startAcquisition(ctx, userId, trackId, track)
 	defer CleanupTemp(ctx, s.workspace, ac)
-	configureReplaceExclusion(ctx, ac, track, trackId)
+	if err := configureReplaceExclusion(ctx, ac, track, trackId); err != nil {
+		return s.settleReplaceFailure(ctx, jobCtx, userId, trackId, err, ac)
+	}
 	s.loadPriorRejections(ctx, ac)
 	if err := s.runAcquisition(ctx, userId, trackId, ac); err != nil {
 		return s.settleReplaceFailure(ctx, jobCtx, userId, trackId, err, ac)
@@ -262,7 +264,7 @@ func (s *AcquireTrackAudioService) runAcquisition(ctx context.Context, userId sh
 	return nil
 }
 
-func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, track *ports.TrackSnapshot, trackId shared.TrackId) {
+func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, track *ports.TrackSnapshot, trackId shared.TrackId) error {
 	ac.Replace.PreservedRef = deref(track.AudioRef)
 	ac.Replace.ExcludeKeys = mergeSourceKeys(
 		track.RejectedSourceKeys,
@@ -277,6 +279,14 @@ func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, trac
 		slog.InfoContext(ctx, "acquisition.replacing_source",
 			"track_id", trackId.String(), "excluded_keys", ac.Replace.ExcludeKeys)
 	}
+	return requireCurrentFileFact(track)
+}
+
+func requireCurrentFileFact(track *ports.TrackSnapshot) error {
+	if sourceKey(deref(track.AudioSourceURL)) != "" || deref(track.StoredDurationSeconds) > 0 {
+		return nil
+	}
+	return ErrReplaceFactMissing
 }
 
 const settleBudget = 10 * time.Second
