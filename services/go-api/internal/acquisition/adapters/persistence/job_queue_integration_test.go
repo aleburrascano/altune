@@ -909,3 +909,29 @@ func TestPgxJobQueue_AUserReplaceTakesOverARunningUpgrade(t *testing.T) {
 		t.Errorf("Claim = %+v, %v, want the user's replace right after", replace, err)
 	}
 }
+
+func TestPgxJobQueue_AnUpgradeLosesItsLeaseTheMomentAReplaceTakesOver(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	queue := NewPgxJobQueue(pool)
+	ctx := context.Background()
+	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("running")})
+	if err := queue.Enqueue(ctx, id, ports.JobKindUpgrade, 0); err != nil {
+		t.Fatalf("Enqueue upgrade = %v", err)
+	}
+	upgrade, err := queue.ClaimUpgrade(ctx, time.Minute)
+	if err != nil {
+		t.Fatalf("ClaimUpgrade = %v", err)
+	}
+	if err := queue.VerifyLease(ctx, id, upgrade.Fence); err != nil {
+		t.Fatalf("VerifyLease while the upgrade holds the lease = %v, want nil", err)
+	}
+
+	if err := queue.Enqueue(ctx, id, ports.JobKindReplace, 0); err != nil {
+		t.Fatalf("Enqueue replace = %v", err)
+	}
+
+	if err := queue.VerifyLease(ctx, id, upgrade.Fence); !errors.Is(err, acqdomain.ErrLeaseLost) {
+		t.Errorf("VerifyLease after the takeover = %v, want ErrLeaseLost", err)
+	}
+}

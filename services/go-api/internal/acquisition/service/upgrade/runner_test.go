@@ -232,7 +232,7 @@ func TestRunner_ALowerGradeTrackGetsTheBetterFile(t *testing.T) {
 func TestRunner_AnEqualGradeKeepsTheOldFileAndRejectsTheTriedSource(t *testing.T) {
 	w := seed(t, grade.D)
 
-	if err := w.runner(upgrade.Config{MaxTries: 3}).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil && !errors.Is(err, upgrade.ErrKept) {
+	if err := w.runner(upgrade.Config{MaxTries: 3}).ExecuteUpgrade(context.Background(), w.userId, w.trackId); !errors.Is(err, upgrade.ErrKept) {
 		t.Fatalf("ExecuteUpgrade: %v, want a kept file to be a settled job", err)
 	}
 
@@ -251,7 +251,7 @@ func TestRunner_AnEqualGradeKeepsTheOldFileAndRejectsTheTriedSource(t *testing.T
 func TestRunner_ALowerGradeKeepsTheOldFile(t *testing.T) {
 	w := seed(t, grade.B)
 
-	if err := w.runner(upgrade.Config{MaxTries: 3}).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil && !errors.Is(err, upgrade.ErrKept) {
+	if err := w.runner(upgrade.Config{MaxTries: 3}).ExecuteUpgrade(context.Background(), w.userId, w.trackId); !errors.Is(err, upgrade.ErrKept) {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -296,7 +296,7 @@ func TestRunner_GivesUpAfterTheMaximumTriesWithNothingBetter(t *testing.T) {
 	runner := w.runner(upgrade.Config{MaxTries: 3})
 
 	for try := 1; try <= 3; try++ {
-		if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil && !errors.Is(err, upgrade.ErrKept) {
+		if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); !errors.Is(err, upgrade.ErrKept) {
 			t.Fatalf("ExecuteUpgrade try %d: %v", try, err)
 		}
 		if try < 3 && len(w.upgrades.gaveUp) != 0 {
@@ -315,7 +315,7 @@ func TestRunner_GivesUpAfterTheMaximumTriesWithNothingBetter(t *testing.T) {
 func TestRunner_ADryRunReportsTheOutcomeWithoutSwappingOrCounting(t *testing.T) {
 	w := seed(t, grade.F)
 
-	if err := w.runner(upgrade.Config{MaxTries: 1, DryRun: true}).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil && !errors.Is(err, upgrade.ErrKept) {
+	if err := w.runner(upgrade.Config{MaxTries: 1, DryRun: true}).ExecuteUpgrade(context.Background(), w.userId, w.trackId); !errors.Is(err, upgrade.ErrKept) {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 

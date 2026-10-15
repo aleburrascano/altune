@@ -353,3 +353,25 @@ func TestMemJobQueue_AUserJobTakesOverARunningUpgrade(t *testing.T) {
 		t.Errorf("Claim = %+v, %v, want the user's replace", job, err)
 	}
 }
+
+func TestMemJobQueue_VerifyLeaseHoldsOnlyForTheCurrentFenceOfALiveLease(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	q := newMemJobQueueWithClock(nil, func() time.Time { return now })
+	ctx := context.Background()
+	trackID := shared.NewTrackId()
+	if err := q.Enqueue(ctx, trackID, ports.JobKindUpgrade, 0); err != nil {
+		t.Fatalf("Enqueue upgrade: %v", err)
+	}
+	job, err := q.ClaimUpgrade(ctx, time.Minute)
+	if err != nil {
+		t.Fatalf("ClaimUpgrade: %v", err)
+	}
+	if err := q.VerifyLease(ctx, trackID, job.Fence); err != nil {
+		t.Fatalf("VerifyLease on the claimed fence = %v, want nil", err)
+	}
+
+	now = now.Add(2 * time.Minute)
+	if err := q.VerifyLease(ctx, trackID, job.Fence); !errors.Is(err, acqdomain.ErrLeaseLost) {
+		t.Errorf("VerifyLease after the lease expired = %v, want ErrLeaseLost", err)
+	}
+}

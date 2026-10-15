@@ -36,6 +36,7 @@ type JobQueue interface {
 
 type UpgradeJobQueue interface {
 	ClaimUpgrade(ctx context.Context, lease time.Duration) (Job, error)
+	VerifyLease(ctx context.Context, trackID shared.TrackId, fence Fence) error
 }
 
 type QueueDepthReader interface {

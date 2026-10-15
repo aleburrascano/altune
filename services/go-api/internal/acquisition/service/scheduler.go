@@ -143,6 +143,16 @@ func (s *BackgroundAcquisitionScheduler) startUpgradeWorkers() {
 	}
 }
 
+func (s *BackgroundAcquisitionScheduler) withLeaseFence(ctx context.Context, job ports.Job) context.Context {
+	verifier, ok := s.queue.(ports.UpgradeJobQueue)
+	if !ok || job.Kind != ports.JobKindUpgrade {
+		return ctx
+	}
+	return withCommitCheck(ctx, func(ctx context.Context) error {
+		return verifier.VerifyLease(ctx, job.TrackID, job.Fence)
+	})
+}
+
 func (s *BackgroundAcquisitionScheduler) eventsFor(kind ports.JobKind) events.Publisher {
 	if kind == ports.JobKindUpgrade {
 		return events.NoopPublisher()
@@ -245,6 +255,7 @@ func (s *BackgroundAcquisitionScheduler) runClaimedJob(job ports.Job) {
 
 	jobCtx, cancelJob := s.jobContextFor(key, job.Run)
 	defer cancelJob()
+	jobCtx = s.withLeaseFence(jobCtx, job)
 
 	heartbeatDone := make(chan struct{})
 	go s.heartbeatLoop(jobCtx, job, cancelJob, heartbeatDone)

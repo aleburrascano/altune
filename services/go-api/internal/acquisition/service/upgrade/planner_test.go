@@ -97,3 +97,12 @@ func TestInterval_SpreadsTheHourlyBudgetEvenly(t *testing.T) {
 		}
 	}
 }
+
+func TestPlanner_ATrackWithAJobInFlightIsSkippedNotAFailure(t *testing.T) {
+	picks := &pickingStore{picks: []ports.UpgradeCandidate{{TrackID: domain.NewTrackId()}}}
+	scheduler := &recordingScheduler{err: acqdomain.ErrTrackJobInFlight}
+
+	if err := upgrade.NewPlanner(picks, scheduler, 1, time.Hour).PlanNext(context.Background()); err != nil {
+		t.Errorf("PlanNext with a job in flight = %v, want nil: the batch goes on", err)
+	}
+}
