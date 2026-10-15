@@ -359,8 +359,11 @@ func TestResolveIdentity_SuppliesMissingDuration(t *testing.T) {
 	if ac.Track.Duration != 181 {
 		t.Errorf("duration = %v, want the resolved 181", ac.Track.Duration)
 	}
-	if ac.Track.ISRC != "USUM71922973" {
-		t.Errorf("isrc = %q, want the resolved one", ac.Track.ISRC)
+	if ac.Track.ISRC != "" {
+		t.Errorf("track isrc = %q, want a resolver guess kept off the track", ac.Track.ISRC)
+	}
+	if ac.Identity.ISRC != "USUM71922973" {
+		t.Errorf("identity isrc = %q, want the resolved one", ac.Identity.ISRC)
 	}
 	if ac.Identity.Duration != 181 {
 		t.Errorf("identity not recorded on the context: %+v", ac.Identity)

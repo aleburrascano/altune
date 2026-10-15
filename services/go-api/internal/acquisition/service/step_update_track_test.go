@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/adapters/catalogbridge"
+	"altune/go-api/internal/acquisition/adapters/discoverybridge"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
@@ -259,5 +260,155 @@ func TestUpdateTrackStep_Execute_PersistsTheISRCAcquisitionResolved(t *testing.T
 
 	if got := storedTrack(t, repo, track).ISRC; got == nil || *got != "GBAYE0601498" {
 		t.Errorf("ISRC = %v, want GBAYE0601498", got)
+	}
+}
+
+const (
+	drinkingISRC   = "CAA509814003"
+	drinkingAlbum  = "5d6efd30-23c6-4a9b-85af-706ea2df9022"
+	drinkingRemix  = "d3dc2825-20c0-4a4f-a963-baa589049146"
+	drinkingAudio  = "user/bran-van-3000/drinking-in-la.opus"
+	drinkingSource = "https://www.youtube.com/watch?v=-_5yNLsZ5Pk"
+)
+
+func completeWith(t *testing.T, ac *AcquisitionContext, storedISRC string) (*domain.Track, Evidence) {
+	t.Helper()
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track := seedTrackInRepo(t, repo, userId, nil)
+	if storedISRC != "" {
+		track.AdoptISRC(storedISRC)
+	}
+	ac.AudioRef = drinkingAudio
+	ac.Selected = &ports.AudioCandidate{Title: "Drinking in L.A.", URL: drinkingSource}
+	if _, err := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID).Execute(context.Background(), ac, afterStore{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	updated := storedTrack(t, repo, track)
+	var evidence Evidence
+	if err := json.Unmarshal(updated.AcquisitionEvidence(), &evidence); err != nil {
+		t.Fatalf("evidence not stored as JSON: %v", err)
+	}
+	return updated, evidence
+}
+
+func assertStoredISRC(t *testing.T, track *domain.Track, want string) {
+	t.Helper()
+	switch got := track.ISRC; {
+	case want == "" && got != nil && *got != "":
+		t.Errorf("stored ISRC = %q, want none", *got)
+	case want != "" && (got == nil || *got != want):
+		t.Errorf("stored ISRC = %v, want %q", got, want)
+	}
+}
+
+func TestUpdateTrackStep_AnUnprovenISRCIsNotWrittenBack(t *testing.T) {
+	ac := &AcquisitionContext{
+		BestEffort: true,
+		Verdict:    AudioVerdict{Kind: VerdictUnknown},
+		Identity:   ports.RecordingIdentity{ISRC: drinkingISRC, MBID: drinkingRemix, MBIDs: []string{drinkingRemix}},
+	}
+
+	track, evidence := completeWith(t, ac, "")
+
+	assertStoredISRC(t, track, "")
+	if evidence.ISRCSource != ISRCUnproven {
+		t.Errorf("isrc_source = %q, want %q", evidence.ISRCSource, ISRCUnproven)
+	}
+}
+
+func TestUpdateTrackStep_AFingerprintProvenISRCIsWrittenBack(t *testing.T) {
+	ac := &AcquisitionContext{
+		Verdict: AudioVerdict{Kind: VerdictHard, Score: 0.99, Surviving: []ports.LinkedRecording{{MBID: drinkingAlbum, Duration: 236}}},
+		Identity: ports.RecordingIdentity{
+			ISRC: drinkingISRC, MBID: drinkingAlbum, MBIDs: []string{drinkingAlbum},
+		},
+	}
+
+	track, evidence := completeWith(t, ac, "")
+
+	assertStoredISRC(t, track, drinkingISRC)
+	if evidence.ISRCSource != ISRCFromFingerprint {
+		t.Errorf("isrc_source = %q, want %q", evidence.ISRCSource, ISRCFromFingerprint)
+	}
+}
+
+func TestUpdateTrackStep_ADoubtedReferenceDoesNotProveItsISRC(t *testing.T) {
+	ac := &AcquisitionContext{
+		Verdict: AudioVerdict{Kind: VerdictHard, Surviving: []ports.LinkedRecording{{MBID: drinkingAlbum}}},
+		Identity: ports.RecordingIdentity{
+			ISRC: drinkingISRC, MBID: drinkingAlbum, MBIDs: []string{drinkingAlbum}, ReferenceDoubted: true,
+		},
+	}
+
+	track, evidence := completeWith(t, ac, "")
+
+	assertStoredISRC(t, track, "")
+	if evidence.ISRCSource != ISRCUnproven {
+		t.Errorf("isrc_source = %q, want %q", evidence.ISRCSource, ISRCUnproven)
+	}
+}
+
+func TestUpdateTrackStep_AHardVerdictOutsideTheReferenceSetDoesNotProveTheISRC(t *testing.T) {
+	ac := &AcquisitionContext{
+		Verdict:  AudioVerdict{Kind: VerdictHard, Surviving: []ports.LinkedRecording{{MBID: "some-other-recording"}}},
+		Identity: ports.RecordingIdentity{ISRC: drinkingISRC, MBID: drinkingAlbum, MBIDs: []string{drinkingAlbum}},
+	}
+
+	track, _ := completeWith(t, ac, "")
+
+	assertStoredISRC(t, track, "")
+}
+
+func TestUpdateTrackStep_ThePinnedRecordingsISRCIsWrittenBack(t *testing.T) {
+	ac := &AcquisitionContext{
+		BestEffort: true,
+		Track:      TrackRef{CatalogMBID: drinkingAlbum},
+		Verdict:    AudioVerdict{Kind: VerdictUnknown},
+		Identity:   ports.RecordingIdentity{ISRC: drinkingISRC, MBID: drinkingAlbum, MBIDs: []string{drinkingAlbum}},
+	}
+
+	track, evidence := completeWith(t, ac, "")
+
+	assertStoredISRC(t, track, drinkingISRC)
+	if evidence.ISRCSource != ISRCFromPinnedRecording {
+		t.Errorf("isrc_source = %q, want %q", evidence.ISRCSource, ISRCFromPinnedRecording)
+	}
+}
+
+func TestUpdateTrackStep_AnExistingISRCIsNeverReplacedByAProvenOne(t *testing.T) {
+	ac := &AcquisitionContext{
+		Track:    TrackRef{ISRC: "USWB19901214"},
+		Verdict:  AudioVerdict{Kind: VerdictHard, Surviving: []ports.LinkedRecording{{MBID: drinkingAlbum}}},
+		Identity: ports.RecordingIdentity{ISRC: "DEUM71724939", MBID: drinkingAlbum, MBIDs: []string{drinkingAlbum}},
+	}
+
+	track, evidence := completeWith(t, ac, "USWB19901214")
+
+	assertStoredISRC(t, track, "USWB19901214")
+	if evidence.ISRCSource != ISRCFromCatalog {
+		t.Errorf("isrc_source = %q, want %q", evidence.ISRCSource, ISRCFromCatalog)
+	}
+}
+
+func TestUpdateTrackStep_DrinkingInLAWritesNoGuessedISRC(t *testing.T) {
+	recorded := discoverybridge.NewRecordedResolver(
+		&discoverybridge.RecordedSearchHit{Title: "Drinking in L.A.", Artist: "Bran Van 3000", ISRC: drinkingISRC, MBID: drinkingRemix, Duration: 236},
+		[]discoverybridge.RecordedISRCRecording{{MBID: drinkingAlbum, Duration: 236}}, nil)
+	ac := &AcquisitionContext{
+		BestEffort: true,
+		Track:      TrackRef{Title: "Drinking in L.A.", Artist: "Bran Van 3000", Duration: 236},
+		Verdict:    AudioVerdict{Kind: VerdictUnknown},
+	}
+	ResolveIdentity(context.Background(), recorded, nil, ac)
+	if ac.Identity.ISRC != drinkingISRC {
+		t.Fatalf("resolver identity ISRC = %q, want the search hit's guess", ac.Identity.ISRC)
+	}
+
+	track, evidence := completeWith(t, ac, "")
+
+	assertStoredISRC(t, track, "")
+	if evidence.ISRCSource != ISRCUnproven {
+		t.Errorf("isrc_source = %q, want %q", evidence.ISRCSource, ISRCUnproven)
 	}
 }

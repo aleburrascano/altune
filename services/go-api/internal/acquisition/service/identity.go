@@ -48,9 +48,6 @@ func adoptIdentity(ctx context.Context, ac *AcquisitionContext, identity ports.R
 		slog.InfoContext(ctx, "acquisition.identity_supplied_duration",
 			"track_id", ac.Track.ID, "duration", identity.Duration)
 	}
-	if ac.Track.ISRC == "" && identity.ISRC != "" {
-		ac.Track.ISRC = identity.ISRC
-	}
 }
 
 func resolveExpectedCluster(ctx context.Context, identifier ports.AudioIdentifier, ac *AcquisitionContext) {

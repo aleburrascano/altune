@@ -234,3 +234,18 @@ func TestFindRequestFor_CarriesTheCatalogPins(t *testing.T) {
 		t.Errorf("unpinned track yields pins: %+v", bare)
 	}
 }
+
+func TestFindRequestFor_HintsTheSearchWithTheResolvedISRCWhenTheTrackHasNone(t *testing.T) {
+	guessed := &AcquisitionContext{Identity: ports.RecordingIdentity{ISRC: "CAA509814003"}}
+	owned := &AcquisitionContext{
+		Track:    TrackRef{ISRC: "USWB19901214"},
+		Identity: ports.RecordingIdentity{ISRC: "DEUM71724939"},
+	}
+
+	if got := findRequestFor(guessed).ISRC; got != "CAA509814003" {
+		t.Errorf("hint = %q, want the resolved ISRC", got)
+	}
+	if got := findRequestFor(owned).ISRC; got != "USWB19901214" {
+		t.Errorf("hint = %q, want the track's own ISRC over the resolver's", got)
+	}
+}

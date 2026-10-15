@@ -101,7 +101,7 @@ func findRequestFor(ac *AcquisitionContext) ports.FindRequest {
 		Title:    ac.Track.Title,
 		Artist:   ac.Track.Artist,
 		Album:    ac.Track.Album,
-		ISRC:     ac.Track.ISRC,
+		ISRC:     searchHintISRC(ac),
 		Duration: ac.ExpectedLength(),
 		Identity: ac.Identity,
 
@@ -110,4 +110,11 @@ func findRequestFor(ac *AcquisitionContext) ports.FindRequest {
 
 		FallbackOnly: ac.FallbackOnly,
 	}
+}
+
+func searchHintISRC(ac *AcquisitionContext) string {
+	if ac.Track.ISRC != "" {
+		return ac.Track.ISRC
+	}
+	return ac.Identity.ISRC
 }
