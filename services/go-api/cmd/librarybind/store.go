@@ -128,10 +128,11 @@ func pinCatalogAfterSave(ctx context.Context, tx pgx.Tx, runID uuid.UUID, t libr
 	if found.Replaces == nil {
 		return pinBoundRecording(ctx, tx, runID, t, found)
 	}
-	if found.Status != statusBound || !isPinnableRecording(found.MBRecordingID) {
-		return nil
+	var recording *string
+	if found.Status == statusBound && isPinnableRecording(found.MBRecordingID) {
+		recording = nullable(strings.ToLower(found.MBRecordingID))
 	}
-	if _, err := tx.Exec(ctx, repointCatalogSQL, t.ID, strings.ToLower(found.MBRecordingID), runID); err != nil {
+	if _, err := tx.Exec(ctx, repointCatalogSQL, t.ID, recording, runID); err != nil {
 		return fmt.Errorf("repoint catalog_mbid: %w", err)
 	}
 	return nil
@@ -200,7 +201,7 @@ const undoRunSQL = `WITH unchanged AS (
 const undoPinsSQL = `WITH unpinned AS (
 	UPDATE tracks t SET catalog_mbid = c.old_value FROM track_metadata_changes c
 	WHERE c.run_id = $1 AND c.field = 'catalog_mbid' AND c.undone_at IS NULL
-	  AND t.id = c.track_id AND t.catalog_mbid = c.new_value
+	  AND t.id = c.track_id AND t.catalog_mbid IS NOT DISTINCT FROM c.new_value
 	RETURNING c.track_id
 ), stamped AS (
 	UPDATE track_metadata_changes SET undone_at = now()
