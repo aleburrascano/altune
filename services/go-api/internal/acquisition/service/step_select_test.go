@@ -10,78 +10,6 @@ import (
 	"testing"
 )
 
-func TestSelectStep_SkipTopRankedDropsTheLeader(t *testing.T) {
-	ac := &AcquisitionContext{
-		Track:   TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200},
-		Replace: ReplaceState{SkipTopRanked: true},
-		Candidates: []ports.AudioCandidate{
-			{Title: "Blinding Lights", URL: "leader", Channel: "The Weeknd - Topic", Duration: 200},
-			{Title: "The Weeknd - Blinding Lights", URL: "runner-up", Channel: "Someone", Duration: 201},
-		},
-	}
-
-	if _, err := NewSelectStep().Execute(context.Background(), ac, afterSearch{}); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if ac.Selected == nil || ac.Selected.URL != "runner-up" {
-		t.Fatalf("selected = %+v, want the runner-up", ac.Selected)
-	}
-}
-
-func TestSelectStep_SkipTopRankedWithOneCandidateFails(t *testing.T) {
-	ac := &AcquisitionContext{
-		Track:   TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200},
-		Replace: ReplaceState{SkipTopRanked: true},
-		Candidates: []ports.AudioCandidate{
-			{Title: "Blinding Lights", URL: "only", Channel: "The Weeknd - Topic", Duration: 200},
-		},
-	}
-
-	if _, err := NewSelectStep().Execute(context.Background(), ac, afterSearch{}); err == nil {
-		t.Fatal("expected failure rather than re-storing the only candidate")
-	}
-}
-
-func TestSelectStep_SkipTopRankedKeepsTheOfficialTrack(t *testing.T) {
-	ac := &AcquisitionContext{
-		Track:   TrackRef{Title: "Demigod", Artist: "SLAYR", Duration: 168},
-		Replace: ReplaceState{SkipTopRanked: true},
-		Candidates: []ports.AudioCandidate{
-			{Title: "Demigod", URL: "official", Channel: "YouTube Music Art Track", Duration: 168, Resolved: true},
-			{Title: "SLAYR - Demigod", URL: "old-upload", Channel: "SLAYR - Topic", Duration: 122},
-			{Title: "SLAYR - Demigod (audio)", URL: "other-upload", Channel: "Someone", Duration: 167},
-		},
-	}
-
-	if _, err := NewSelectStep().Execute(context.Background(), ac, afterSearch{}); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if ac.Selected == nil || ac.Selected.URL != "official" {
-		t.Fatalf("selected = %+v, want the official track", ac.Selected)
-	}
-	for _, c := range ac.Ranked {
-		if c.URL == "old-upload" {
-			t.Fatalf("the leading upload must still be skipped, ranked = %+v", ac.Ranked)
-		}
-	}
-}
-
-func TestSelectStep_SkipTopRankedOffByDefault(t *testing.T) {
-	ac := &AcquisitionContext{
-		Track: TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200},
-		Candidates: []ports.AudioCandidate{
-			{Title: "Blinding Lights", URL: "leader", Channel: "The Weeknd - Topic", Duration: 200},
-		},
-	}
-
-	if _, err := NewSelectStep().Execute(context.Background(), ac, afterSearch{}); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if ac.Selected == nil || ac.Selected.URL != "leader" {
-		t.Fatalf("an ordinary acquire must keep the leader, got %+v", ac.Selected)
-	}
-}
-
 func TestSelectStep_Execute(t *testing.T) {
 	step := NewSelectStep()
 	ac := &AcquisitionContext{
@@ -197,10 +125,15 @@ func TestSelectStep_SearchOutageWithAllRejected_IsRetryable(t *testing.T) {
 	}
 }
 
-func TestSelectStep_SearchOutageWithSkipTopRanked_IsSourceUnavailable(t *testing.T) {
+func TestSearchStep_OutageWithOnlyStoredFileMatch_IsSourceUnavailable(t *testing.T) {
 	healthy := findOnlySource{name: "healthy", candidates: []ports.AudioCandidate{matchingCandidate}}
+	ctx := withJobAttempt(context.Background(), 1)
+	ac := &AcquisitionContext{
+		Track:   TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200},
+		Replace: ReplaceState{StoredLength: 200},
+	}
 
-	_, err := searchOutageThenSelect(t, outageSource(), healthy, ReplaceState{SkipTopRanked: true})
+	_, err := NewSearchStep(NewSourceRegistry(outageSource(), healthy)).Execute(ctx, ac, pipelineStart{})
 
 	if !acqdomain.IsSourceUnavailable(err) {
 		t.Fatalf("err = %v, want source-unavailable", err)

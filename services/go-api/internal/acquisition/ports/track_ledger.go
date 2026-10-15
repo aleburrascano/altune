@@ -43,6 +43,7 @@ type TrackSnapshot struct {
 	Genre                  *string
 	AudioRef               *string
 	AudioSourceURL         *string
+	StoredDurationSeconds  *float64
 	RejectedSourceKeys     []string
 	Status                 TrackStatus
 	Streamable             bool

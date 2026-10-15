@@ -84,6 +84,21 @@
           { "title": "ALBUM OF THE YEAR !", "url": "https://soundcloud.com/ezcodylee/album-of-the-year", "channel": "ezcodylee", "duration": 167 }
         ] }
       ]
+    },
+    {
+      "id": "pl-replace-unknown-source-keeps-the-artists-upload-eligible",
+      "class": "OK",
+      "note": "prod case SLAYR Phone (Interlude) ISRC USSM12600221: no audio_source_url, the stored file measured 112 s and is the YouTube Music art track; the artist's own 129 s upload is not the stored file and must be selected, never skipped by rank",
+      "track": { "title": "Phone (Interlude)", "artist": "SLAYR", "duration": 128, "authoritative_duration": 128 },
+      "stored_length": 112,
+      "sources": [
+        { "name": "ytmusic", "candidates": [
+          { "title": "Phone (Interlude)", "url": "ytmusic:TB0z2HVFxEE", "channel": "SLAYR - Topic", "categories": ["Music"], "duration": 112, "view_count": 900000 }
+        ] },
+        { "name": "ytdlp", "candidates": [
+          { "title": "SLAYR - Phone (Interlude)", "url": "ytdlp:fV3KcFFVZJ8", "channel": "SLAYR", "categories": ["Music"], "duration": 129, "view_count": 40000, "correct": true }
+        ] }
+      ]
     }
   ]
 }

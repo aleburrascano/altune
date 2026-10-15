@@ -228,9 +228,9 @@ type AttemptedCandidate struct {
 }
 
 type ReplaceState struct {
-	ExcludeKeys   []string
-	PreservedRef  string
-	SkipTopRanked bool
+	ExcludeKeys  []string
+	PreservedRef string
+	StoredLength float64
 }
 
 func (r ReplaceState) excludes(url string) bool {
@@ -241,6 +241,17 @@ func (r ReplaceState) excludes(url string) bool {
 		}
 	}
 	return false
+}
+
+func (r ReplaceState) isStoredFile(c ports.AudioCandidate) bool {
+	if r.StoredLength <= 0 || c.Duration <= 0 {
+		return false
+	}
+	return durationWithinAuthoritativeTolerance(r.StoredLength, c.Duration)
+}
+
+func (r ReplaceState) excludesCandidate(c ports.AudioCandidate) bool {
+	return r.excludes(c.URL) || r.isStoredFile(c)
 }
 
 func (ac *AcquisitionContext) priorRejected(url string) bool {

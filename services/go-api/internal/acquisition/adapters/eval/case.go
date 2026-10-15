@@ -148,15 +148,15 @@ func (c Candidate) probedDuration() float64 {
 }
 
 type Case struct {
-	ID            string      `json:"id"`
-	Class         string      `json:"class"`
-	Note          string      `json:"note,omitempty"`
-	Track         Track       `json:"track"`
-	ExcludeURLs   []string    `json:"exclude_urls,omitempty"`
-	SkipTopRanked bool        `json:"skip_top_ranked,omitempty"`
-	Candidates    []Candidate `json:"candidates,omitempty"`
-	Sources       []Source    `json:"sources,omitempty"`
-	Pending       string      `json:"pending,omitempty"`
+	ID           string      `json:"id"`
+	Class        string      `json:"class"`
+	Note         string      `json:"note,omitempty"`
+	Track        Track       `json:"track"`
+	ExcludeURLs  []string    `json:"exclude_urls,omitempty"`
+	StoredLength float64     `json:"stored_length,omitempty"`
+	Candidates   []Candidate `json:"candidates,omitempty"`
+	Sources      []Source    `json:"sources,omitempty"`
+	Pending      string      `json:"pending,omitempty"`
 
 	ExpectProvenance  string `json:"expect_provenance,omitempty"`
 	ExpectFailureCode string `json:"expect_failure_code,omitempty"`
