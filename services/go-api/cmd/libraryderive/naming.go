@@ -2,6 +2,7 @@ package main
 
 import (
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared/releasepick"
 	"altune/go-api/internal/shared/songfacts"
 	"slices"
 	"strings"
@@ -98,7 +99,7 @@ func albumHold(storedAlbum string, chosen releaseGroup, homes []releaseGroup, ch
 		return reasonChosenIsAnotherArtists
 	}
 	for _, home := range homes {
-		if !albumDiffers(storedAlbum, home.Title) && !isEarlier(chosen.FirstReleaseDate, home.FirstReleaseDate) {
+		if !albumDiffers(storedAlbum, home.Title) && !releasepick.IsEarlier(chosen.FirstReleaseDate, home.FirstReleaseDate) {
 			return reasonStoredIsOriginal
 		}
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/releasepick"
 	"context"
 	"errors"
 	"net/http"
@@ -44,16 +45,18 @@ func (f *fakeDeezerByISRC) ByISRC(_ context.Context, isrc string) ([]candidate, 
 	return nil, nil
 }
 
+var studioAlbum = []releasepick.Group{{PrimaryType: "Album", Date: "1990"}}
+
 func bohemianRhapsody() libraryTrack {
 	return libraryTrack{ID: "t-queen", UserID: "u1", Title: "Bohemian Rhapsody", Artist: "Queen", Album: "A Night at the Opera", FileSeconds: 354.4, Version: 2}
 }
 
 func queenRecording(id, isrc, released string, seconds float64) candidate {
-	return candidate{ID: id, ISRC: isrc, Title: "Bohemian Rhapsody", Artists: []string{"Queen"}, LengthSeconds: seconds, Released: released}
+	return candidate{ID: id, ISRC: isrc, Title: "Bohemian Rhapsody", Artists: []string{"Queen"}, LengthSeconds: seconds, Homes: []releasepick.Group{{PrimaryType: "Album", Date: released}}}
 }
 
 func onDeezer(c candidate) candidate {
-	c.ID, c.Released = "dz-"+c.ISRC, ""
+	c.ID, c.Homes = "dz-"+c.ISRC, nil
 	return c
 }
 
@@ -127,7 +130,7 @@ func TestSearchBinder_LeavesAlreadyDecidedTracksAlone(t *testing.T) {
 
 func TestSearchBinder_CleansTheArtistOutOfTheTitleForMatching(t *testing.T) {
 	myWay := libraryTrack{ID: "t-elvis", UserID: "u1", Title: "My Way - Elvis Presley", Artist: "Elvis Presley", FileSeconds: 227}
-	elvis := candidate{ID: "mb-1", ISRC: "USRC17705642", Title: "My Way", Artists: []string{"Elvis Presley"}, LengthSeconds: 228.7}
+	elvis := candidate{ID: "mb-1", ISRC: "USRC17705642", Title: "My Way", Artists: []string{"Elvis Presley"}, LengthSeconds: 228.7, Homes: studioAlbum}
 	mb, _, binder := searchWith([]candidate{elvis}, elvis)
 	got, err := binder.refine(t.Context(), myWay, noISRC())
 	if err != nil || got.Status != statusBound || got.ISRC != "USRC17705642" {
@@ -140,7 +143,7 @@ func TestSearchBinder_CleansTheArtistOutOfTheTitleForMatching(t *testing.T) {
 
 func TestSearchBinder_SearchesTheLeadArtistOfAFeaturedCredit(t *testing.T) {
 	fallin := libraryTrack{ID: "t-usher", UserID: "u1", Title: "DJ Got Us Fallin' in Love", Artist: "Usher featuring Pitbull", FileSeconds: 221.5}
-	song := candidate{ID: "x", ISRC: "USLF21000041", Title: "DJ Got Us Fallin’ In Love", Artists: []string{"Usher"}, LengthSeconds: 221.7}
+	song := candidate{ID: "x", ISRC: "USLF21000041", Title: "DJ Got Us Fallin’ In Love", Artists: []string{"Usher"}, LengthSeconds: 221.7, Homes: studioAlbum}
 	mb, _, binder := searchWith([]candidate{song}, song)
 	got, err := binder.refine(t.Context(), fallin, noISRC())
 	if err != nil || got.Status != statusBound {
@@ -154,7 +157,7 @@ func TestSearchBinder_SearchesTheLeadArtistOfAFeaturedCredit(t *testing.T) {
 func TestSearchBinder_LeavesTracksUnboundWhenTheSourcesDoNotProveOneRecording(t *testing.T) {
 	getYou := libraryTrack{ID: "t-caesar", UserID: "u1", Title: "Get You (feat. Kali Uchis)", Artist: "Daniel Caesar", FileSeconds: 271}
 	getYouListing := func(seconds float64) candidate {
-		return candidate{ID: "g", ISRC: "TCACR1690004", Title: "Get You (feat. Kali Uchis)", Artists: []string{"Daniel Caesar"}, LengthSeconds: seconds}
+		return candidate{ID: "g", ISRC: "TCACR1690004", Title: "Get You (feat. Kali Uchis)", Artists: []string{"Daniel Caesar"}, LengthSeconds: seconds, Homes: studioAlbum}
 	}
 	studio := queenRecording("mb-album", "GBCEE0500364", "2005", 354.0)
 	liveTitle := func(c candidate) candidate {
@@ -229,7 +232,7 @@ func TestSearchBinder_AsksDeezerAboutAtMostFiveISRCs(t *testing.T) {
 
 func TestSearchBinder_RecordsTheStoredISRCItReplaces(t *testing.T) {
 	nunToMe := libraryTrack{ID: "t-kankan", UserID: "u1", Title: "Nun To Me 2", Artist: "KANKAN", ISRC: "USUYG1412120", FileSeconds: 126.7}
-	sequel := candidate{ID: "s", ISRC: "USUYG1414898", Title: "Nun To Me 2", Artists: []string{"KANKAN"}, LengthSeconds: 126}
+	sequel := candidate{ID: "s", ISRC: "USUYG1414898", Title: "Nun To Me 2", Artists: []string{"KANKAN"}, LengthSeconds: 126, Homes: studioAlbum}
 	_, _, binder := searchWith([]candidate{sequel}, sequel)
 	got, err := binder.refine(t.Context(), nunToMe, identity{Status: statusUnbound, Reason: "refused-title"})
 	if err != nil || got.Status != statusBound || got.ISRC != "USUYG1414898" {
@@ -300,11 +303,17 @@ func TestMusicBrainzSearch_QueriesByTitleAndArtistAndYieldsOneCandidatePerISRC(t
 		t.Fatalf("got %+v, %v", got, err)
 	}
 	studio := got[0]
-	if studio.ID != "mb-studio" || studio.ISRC != "GBCEE0500364" || studio.LengthSeconds != 354 || studio.Released != "1975-10-31" || !artistMatches("Queen", studio.Artists) {
+	if studio.ID != "mb-studio" || studio.ISRC != "GBCEE0500364" || studio.LengthSeconds != 354 || len(studio.Homes) != 3 || !artistMatches("Queen", studio.Artists) {
 		t.Errorf("studio candidate = %+v", studio)
 	}
-	if got[1].ISRC != "GBUM71029604" || got[2].ID != "mb-live" || got[2].Released != "" {
+	if home, kind, ok := studio.original(); !ok || home.Date != "1975-10-31" || kind != releasepick.KindStudioAlbum {
+		t.Errorf("studio original = %+v %v %v", home, kind, ok)
+	}
+	if got[1].ISRC != "GBUM71029604" || got[2].ID != "mb-live" || got[2].Disambiguation != "" {
 		t.Errorf("candidates = %+v", got)
+	}
+	if _, _, ok := got[2].original(); ok {
+		t.Errorf("a recording that only appears on a live album has an original release")
 	}
 }
 
@@ -316,28 +325,50 @@ func TestMusicBrainzSearch_AbortsOnForbidden(t *testing.T) {
 	}
 }
 
-func TestOriginalRelease(t *testing.T) {
-	release := func(date, primary string, secondary ...string) musicBrainzRelease {
-		r := musicBrainzRelease{Date: date}
-		r.Group.PrimaryType, r.Group.SecondaryTypes = primary, secondary
-		return r
+func TestSearchBinder_BindsOnlyRecordingsWithAnOriginalStudioRelease(t *testing.T) {
+	onAlbum := func(secondary ...string) []releasepick.Group {
+		return []releasepick.Group{{PrimaryType: "Album", Date: "1992", SecondaryTypes: secondary}}
 	}
+	studio := queenRecording("mb-studio", "GBCEE0500364", "1975", 354.9)
 	cases := []struct {
-		name     string
-		releases []musicBrainzRelease
-		want     string
+		name      string
+		recording candidate
+		wantBound bool
 	}{
-		{"the earliest plain album", []musicBrainzRelease{release("2005", "Album"), release("1975-11-21", "Album")}, "1975-11-21"},
-		{"compilations and live albums do not count", []musicBrainzRelease{release("1990", "Album", "Compilation"), release("1986", "Album", "Live"), release("2001", "Album")}, "2001"},
-		{"singles and eps count", []musicBrainzRelease{release("1977", "Single"), release("1978", "EP")}, "1977"},
-		{"an undated release is ignored", []musicBrainzRelease{release("", "Album"), release("2011", "Album")}, "2011"},
-		{"none qualifies", []musicBrainzRelease{release("1986", "Album", "Live"), release("2020", "Broadcast")}, ""},
+		{"a plain title on a plain album", studio, true},
+		{"a plain title that only appears on a live album", with(studio, func(c *candidate) { c.Homes = onAlbum("Live") }), false},
+		{"a plain title that only appears on a compilation", with(studio, func(c *candidate) { c.Homes = onAlbum("Compilation") }), false},
+		{"a plain title that only appears on a remix single", with(studio, func(c *candidate) {
+			c.Homes = []releasepick.Group{{PrimaryType: "Single", SecondaryTypes: []string{"Remix"}}}
+		}), false},
+		{"a recording MusicBrainz disambiguates", with(studio, func(c *candidate) { c.Disambiguation = "demo" }), false},
+		{"a recording with no release data", with(studio, func(c *candidate) { c.Homes = nil }), false},
+		{"a live album next to a plain album is still an original", with(studio, func(c *candidate) {
+			c.Homes = append(onAlbum("Live"), releasepick.Group{PrimaryType: "Album", Date: "1975"})
+		}), true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := originalRelease(tc.releases); got != tc.want {
-				t.Fatalf("got %q, want %q", got, tc.want)
+			_, dz, binder := searchWith([]candidate{tc.recording}, tc.recording)
+			got, err := binder.refine(t.Context(), bohemianRhapsody(), noISRC())
+			if err != nil || (got.Status == statusBound) != tc.wantBound {
+				t.Fatalf("got %s %q, %v", got.Status, got.Reason, err)
+			}
+			if !tc.wantBound && len(dz.asked) != 0 {
+				t.Errorf("deezer asked %v about a recording that cannot bind", dz.asked)
 			}
 		})
+	}
+}
+
+func TestSearchBinder_RanksByTheSharedReleasePickBeforeDateAndLength(t *testing.T) {
+	single := with(queenRecording("a", "GBCEE7500015", "", 354.4), func(c *candidate) {
+		c.Homes = []releasepick.Group{{PrimaryType: "Single", Date: "1975-10"}}
+	})
+	album := queenRecording("b", "GBUM71029604", "1976", 355.0)
+	_, dz, binder := searchWith([]candidate{single, album}, single, album)
+	got, err := binder.refine(t.Context(), bohemianRhapsody(), noISRC())
+	if err != nil || got.ISRC != "GBUM71029604" || dz.asked[0] != "GBUM71029604" {
+		t.Fatalf("isrc %q asked %v, %v", got.ISRC, dz.asked, err)
 	}
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/releasepick"
 	"altune/go-api/internal/shared/songfacts"
 	"cmp"
 	"context"
@@ -116,7 +117,7 @@ func (d *deriver) heldAlbumReason(ctx context.Context, t boundTrack, rec recordi
 	switch {
 	case err != nil || listing == nil:
 		return "", err
-	case isEarlier(listing.ReleaseDate, chosen.FirstReleaseDate):
+	case releasepick.IsEarlier(listing.ReleaseDate, chosen.FirstReleaseDate):
 		return reasonStoredListsTrackEarlier, nil
 	case datesOnlyItsYear(chosen.FirstReleaseDate, listing.ReleaseDate):
 		return reasonStoredTiesChosenYear, nil

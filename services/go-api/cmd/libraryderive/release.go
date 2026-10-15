@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/releasepick"
 	"strconv"
 	"strings"
 )
@@ -29,12 +30,10 @@ const (
 )
 
 const (
-	primaryAlbum  = "Album"
-	primarySingle = "Single"
-	primaryEP     = "EP"
+	primaryAlbum  = releasepick.PrimaryAlbum
+	primarySingle = releasepick.PrimarySingle
+	primaryEP     = releasepick.PrimaryEP
 	yearDigits    = 4
-
-	secondaryMixtape = "Mixtape/Street"
 )
 
 type pick struct {
@@ -42,16 +41,8 @@ type pick struct {
 	Rule  rule
 }
 
-func (g releaseGroup) isPlainAlbum() bool {
-	return g.PrimaryType == primaryAlbum && len(g.SecondaryTypes) == 0
-}
-
-func (g releaseGroup) isMixtape() bool {
-	return g.PrimaryType == primaryAlbum && len(g.SecondaryTypes) == 1 && g.SecondaryTypes[0] == secondaryMixtape
-}
-
-func (g releaseGroup) isPlainSingleOrEP() bool {
-	return (g.PrimaryType == primarySingle || g.PrimaryType == primaryEP) && len(g.SecondaryTypes) == 0
+func (g releaseGroup) pickable() releasepick.Group {
+	return releasepick.Group{PrimaryType: g.PrimaryType, SecondaryTypes: g.SecondaryTypes, Date: g.FirstReleaseDate}
 }
 
 func (g releaseGroup) year() int {
@@ -73,37 +64,15 @@ func (g releaseGroup) describe() string {
 	return g.Title + " (" + kind + ", " + g.FirstReleaseDate + ")"
 }
 
-func isEarlier(a, b string) bool {
-	shared := min(len(a), len(b))
-	switch {
-	case a == "":
-		return false
-	case b == "":
-		return true
-	}
-	return a[:shared] < b[:shared]
-}
-
-func earliest(groups []releaseGroup, qualifies func(releaseGroup) bool) (releaseGroup, bool) {
-	var best releaseGroup
-	found := false
-	for _, g := range groups {
-		if qualifies(g) && (!found || isEarlier(g.FirstReleaseDate, best.FirstReleaseDate)) {
-			best, found = g, true
-		}
-	}
-	return best, found
+var ruleOfKind = map[releasepick.Kind]rule{
+	releasepick.KindStudioAlbum: ruleStudioAlbum,
+	releasepick.KindMixtape:     ruleMixtape,
+	releasepick.KindSingleOrEP:  ruleSingleOrEP,
 }
 
 func chooseRelease(groups []releaseGroup) (pick, bool) {
-	if album, ok := earliest(groups, releaseGroup.isPlainAlbum); ok {
-		return pick{Group: album, Rule: ruleStudioAlbum}, true
-	}
-	if mixtape, ok := earliest(groups, releaseGroup.isMixtape); ok {
-		return pick{Group: mixtape, Rule: ruleMixtape}, true
-	}
-	if single, ok := earliest(groups, releaseGroup.isPlainSingleOrEP); ok {
-		return pick{Group: single, Rule: ruleSingleOrEP}, true
+	if best, kind, ok := releasepick.Best(groups, releaseGroup.pickable); ok {
+		return pick{Group: best, Rule: ruleOfKind[kind]}, true
 	}
 	if len(groups) == 1 {
 		return pick{Group: groups[0], Rule: ruleOnlyHome}, true

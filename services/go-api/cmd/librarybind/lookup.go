@@ -126,11 +126,12 @@ type musicBrainzArtist struct {
 }
 
 type musicBrainzRecording struct {
-	ID           string   `json:"id"`
-	Title        string   `json:"title"`
-	Length       int      `json:"length"`
-	ISRCs        []string `json:"isrcs"`
-	ArtistCredit []struct {
+	ID             string   `json:"id"`
+	Title          string   `json:"title"`
+	Disambiguation string   `json:"disambiguation"`
+	Length         int      `json:"length"`
+	ISRCs          []string `json:"isrcs"`
+	ArtistCredit   []struct {
 		Name   string            `json:"name"`
 		Artist musicBrainzArtist `json:"artist"`
 	} `json:"artist-credit"`

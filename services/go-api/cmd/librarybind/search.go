@@ -2,6 +2,7 @@ package main
 
 import (
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared/releasepick"
 	"altune/go-api/internal/shared/songfacts"
 	"altune/go-api/internal/shared/versiontag"
 	"cmp"
@@ -16,9 +17,6 @@ const (
 	reasonSearchPrefix     = "search: "
 	musicBrainzSearchLimit = 100
 	maxISRCsConfirmed      = 5
-	musicBrainzPlainAlbum  = "Album"
-	musicBrainzPlainSingle = "Single"
-	musicBrainzPlainEP     = "EP"
 )
 
 var luceneQuoteEscaper = strings.NewReplacer(`\`, `\\`, `"`, `\"`)
@@ -36,39 +34,22 @@ func (m musicBrainzLookup) Search(ctx context.Context, artist, title string) ([]
 	}
 	var found []candidate
 	for _, rec := range recordings {
-		released := originalRelease(rec.Releases)
+		homes := releaseHomes(rec.Releases)
 		for _, isrc := range rec.ISRCs {
 			c := musicBrainzCandidate(rec, isrc)
-			c.Released = released
+			c.Disambiguation, c.Homes = rec.Disambiguation, homes
 			found = append(found, c)
 		}
 	}
 	return found, nil
 }
 
-func originalRelease(releases []musicBrainzRelease) string {
-	earliest := ""
+func releaseHomes(releases []musicBrainzRelease) []releasepick.Group {
+	homes := make([]releasepick.Group, 0, len(releases))
 	for _, release := range releases {
-		group := release.Group
-		isPlain := len(group.SecondaryTypes) == 0 && slices.Contains([]string{musicBrainzPlainAlbum, musicBrainzPlainSingle, musicBrainzPlainEP}, group.PrimaryType)
-		if isPlain && compareReleased(release.Date, earliest) < 0 {
-			earliest = release.Date
-		}
+		homes = append(homes, releasepick.Group{PrimaryType: release.Group.PrimaryType, SecondaryTypes: release.Group.SecondaryTypes, Date: release.Date})
 	}
-	return earliest
-}
-
-func compareReleased(a, b string) int {
-	switch {
-	case a == "" && b == "":
-		return 0
-	case a == "":
-		return 1
-	case b == "":
-		return -1
-	}
-	shared := min(len(a), len(b))
-	return strings.Compare(a[:shared], b[:shared])
+	return homes
 }
 
 type searchBinder struct {
@@ -145,7 +126,7 @@ func rankedProposals(fileSeconds float64, proposals sourceOutcome) []judged {
 	for _, j := range proposals.Candidates {
 		isrc := songfacts.CanonicalISRC(j.ISRC)
 		held, seen := closest[isrc]
-		if j.isGuarded() && (!seen || lengthGap(fileSeconds, j) < lengthGap(fileSeconds, held)) {
+		if j.isGuarded() && j.isOriginalRecording() && (!seen || lengthGap(fileSeconds, j) < lengthGap(fileSeconds, held)) {
 			closest[isrc] = j
 		}
 	}
@@ -153,14 +134,32 @@ func rankedProposals(fileSeconds float64, proposals sourceOutcome) []judged {
 	for _, j := range closest {
 		ranked = append(ranked, j)
 	}
-	slices.SortFunc(ranked, func(a, b judged) int {
-		return cmp.Or(
-			compareReleased(a.Released, b.Released),
-			cmp.Compare(lengthGap(fileSeconds, a), lengthGap(fileSeconds, b)),
-			strings.Compare(a.ISRC, b.ISRC),
-		)
-	})
+	slices.SortFunc(ranked, func(a, b judged) int { return compareProposals(fileSeconds, a, b) })
 	return ranked[:min(len(ranked), maxISRCsConfirmed)]
+}
+
+func compareProposals(fileSeconds float64, a, b judged) int {
+	return cmp.Or(
+		cmp.Compare(originalKind(a), originalKind(b)),
+		releasepick.CompareDates(originalDate(a), originalDate(b)),
+		cmp.Compare(lengthGap(fileSeconds, a), lengthGap(fileSeconds, b)),
+		strings.Compare(a.ISRC, b.ISRC),
+	)
+}
+
+func (j judged) isOriginalRecording() bool {
+	_, _, ok := j.original()
+	return ok
+}
+
+func originalKind(j judged) releasepick.Kind {
+	_, kind, _ := j.original()
+	return kind
+}
+
+func originalDate(j judged) string {
+	home, _, _ := j.original()
+	return home.Date
 }
 
 func lengthGap(fileSeconds float64, j judged) float64 {
