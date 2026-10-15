@@ -3,6 +3,7 @@ package service
 import (
 	"altune/go-api/internal/acquisition/adapters/catalogbridge"
 	acqdomain "altune/go-api/internal/acquisition/domain"
+	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"context"
@@ -193,5 +194,34 @@ func TestFailureReason_DownloadStepWrappingNoConfidentMatch(t *testing.T) {
 	}
 	if !domain.FailureNoConfidentMatch.Known() {
 		t.Error("FailureNoConfidentMatch is not Known()")
+	}
+}
+
+func TestExecute_AFirstTierOutageSurvivesAnEmptyFallback(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	repo := newFakeTrackRepository()
+	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	blocked := &stubSource{
+		name:  "ytmsearch",
+		found: []ports.AudioCandidate{resolvedCandidate("https://music.youtube.com/watch?v=artTrackAAA")},
+		fetchErr: &acqdomain.SourceUnavailableError{
+			Source: "ytmsearch",
+			Err:    errors.New("yt-dlp download: HTTP Error 429: Too Many Requests"),
+		},
+	}
+	registry := NewSourceRegistry(blocked).WithFallback(&stubSource{name: "ytdlp"})
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), registry, newFakeAudioStore())
+
+	execErr := svc.Execute(withJobAttempt(context.Background(), 1), userId, track.ID)
+
+	if !errors.Is(execErr, ErrAcquisitionRetryable) {
+		t.Errorf("err = %v, want ErrAcquisitionRetryable: the first tier was down, not empty", execErr)
+	}
+	if got := FailureCodeOf(execErr); got != string(shared.FailureSourceUnavailable) {
+		t.Errorf("failure code = %q, want source_unavailable", got)
 	}
 }

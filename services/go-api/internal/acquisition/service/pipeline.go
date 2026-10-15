@@ -1,6 +1,7 @@
 package service
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/redact"
@@ -96,7 +97,9 @@ func RunPipeline(ctx context.Context, p Pipeline, ac *AcquisitionContext) (err e
 		ac.FallbackSkipped, ac.FallbackOnly = false, true
 		ac.Candidates, ac.Ranked, ac.Selected = nil, nil, nil
 		run.completed = nil
+		firstTierErr := err
 		downloaded, err = searchAndDownload(ctx, run, p)
+		err = keepFirstTierOutage(err, firstTierErr)
 	}
 	if err != nil {
 		return err
@@ -114,6 +117,13 @@ func RunPipeline(ctx context.Context, p Pipeline, ac *AcquisitionContext) (err e
 	}
 	_, err = runStage(ctx, run, p.updateTrack, stored)
 	return err
+}
+
+func keepFirstTierOutage(fallbackErr, firstTierErr error) error {
+	if fallbackErr == nil || acqdomain.IsSourceUnavailable(fallbackErr) || !acqdomain.IsSourceUnavailable(firstTierErr) {
+		return fallbackErr
+	}
+	return fmt.Errorf("%w (first tier: %w)", fallbackErr, firstTierErr)
 }
 
 func searchAndDownload(ctx context.Context, run *pipelineRun, p Pipeline) (afterDownload, error) {
