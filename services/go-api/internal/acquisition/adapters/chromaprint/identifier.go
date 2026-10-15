@@ -28,7 +28,7 @@ var ErrMissingAPIKey = errors.New("chromaprint: AcoustID API key is empty")
 const (
 	fingerprintTimeout = 60 * time.Second
 	lookupTimeout      = 15 * time.Second
-	minScore           = 0.85
+	MinScore           = 0.85
 	defaultEndpoint    = "https://api.acoustid.org/v2/lookup"
 	clusterEndpoint    = "https://api.acoustid.org/v2/track/list_by_mbid"
 	requestsPerSecond  = 3
@@ -66,6 +66,11 @@ func NewIdentifier(binDir, apiKey string) *Identifier {
 
 func (i *Identifier) WithClusterEndpoint(endpoint string) *Identifier {
 	i.clusterEndpoint = endpoint
+	return i
+}
+
+func (i *Identifier) WithRequestsPerSecond(perSecond float64) *Identifier {
+	i.limiter = rate.NewLimiter(rate.Limit(perSecond), 1)
 	return i
 }
 
@@ -286,7 +291,7 @@ func (i *Identifier) AcoustIDsFor(ctx context.Context, mbid string) ([]string, e
 func bestMatch(parsed lookupResponse) ports.RecordingMatch {
 	var best ports.RecordingMatch
 	for _, result := range parsed.Results {
-		if result.Score < minScore || result.Score <= best.Score {
+		if result.Score < MinScore || result.Score <= best.Score {
 			continue
 		}
 		mbids := make([]string, 0, len(result.Recordings))
@@ -323,7 +328,7 @@ type fullLookupResponse struct {
 func acoustIDResults(full fullLookupResponse) []ports.AcoustIDResult {
 	results := make([]ports.AcoustIDResult, 0, len(full.Results))
 	for _, result := range full.Results {
-		if result.Score < minScore {
+		if result.Score < MinScore {
 			continue
 		}
 		results = append(results, ports.AcoustIDResult{

@@ -962,3 +962,11 @@ func TestRetryAfter_ParsesSecondsCapsAtFiveAndDefaultsToOne(t *testing.T) {
 		}
 	}
 }
+
+func TestWithRequestsPerSecond_LowersTheLookupRate(t *testing.T) {
+	id := NewIdentifier("", "key").WithRequestsPerSecond(1.5)
+
+	if id.limiter.Limit() != rate.Limit(1.5) {
+		t.Errorf("limiter limit = %v, want 1.5", id.limiter.Limit())
+	}
+}
