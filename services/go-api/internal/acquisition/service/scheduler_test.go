@@ -1228,6 +1228,47 @@ func TestSchedulerJobReporter_StageWithoutConfiguredEventsDoesNotPanic(t *testin
 	}
 }
 
+func replaceThroughTheScheduler(t *testing.T, kind acqports.JobKind, pub *recordingPublisher) {
+	t.Helper()
+	repo, store, userId, trackId, _ := seedReadyTrack(t)
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store, WithAcquireEvents(pub))
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1),
+		WithPollInterval(5*time.Millisecond), WithSchedulerEvents(pub))
+	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
+	scheduler.queue.(userRememberer).rememberUser(trackId, userId)
+
+	if err := scheduler.queue.Enqueue(context.Background(), trackId, kind, 0); err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, recent := scheduler.log.snapshot(); len(recent) > 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the replace job never finished")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func TestBackgroundScheduler_AUserReplaceStartsWithTheTrackTitle(t *testing.T) {
+	pub := newRecordingPublisher()
+
+	replaceThroughTheScheduler(t, acqports.JobKindReplace, pub)
+
+	started := pub.last[events.TypeTrackAcquisitionStarted]
+	if started["title"] != "Blinding Lights" || started["artist"] != "The Weeknd" {
+		t.Errorf("started payload = %v, want the track's title and artist", started)
+	}
+	progress := pub.last[events.TypeTrackAcquisitionProgress]
+	if progress["title"] != "Blinding Lights" {
+		t.Errorf("progress payload = %v, want the track's title", progress)
+	}
+}
+
 type blockingAcquirer struct {
 	release chan struct{}
 	calls   atomic.Int32

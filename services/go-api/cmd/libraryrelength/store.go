@@ -117,7 +117,7 @@ func updateTrack(ctx context.Context, tx pgx.Tx, c change) error {
 func (s store) enqueueReplace(ctx context.Context, runID uuid.UUID, c change) (verdict, error) {
 	trackID, err := uuid.Parse(c.TrackID)
 	if err == nil {
-		err = s.queue.Enqueue(ctx, shared.TrackIdFromUUID(trackID), acqports.JobKindReplace, 0)
+		err = s.queue.Enqueue(ctx, shared.TrackIdFromUUID(trackID), acqports.JobKindUpgrade, 0)
 	}
 	if err == nil {
 		return verdictApplied, nil

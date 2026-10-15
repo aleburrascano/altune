@@ -120,7 +120,7 @@ func TestStore_ReacquireKeepsTheFileLengthAndQueuesAReplaceJob(t *testing.T) {
 		t.Fatalf("got %s, %v", got, err)
 	}
 	after := stateOf(t, s, row)
-	if *after.catalog != 379 || *after.duration != 226 || !after.mismatch || after.jobKind != "replace" || !after.jobQueued ||
+	if *after.catalog != 379 || *after.duration != 226 || !after.mismatch || after.jobKind != "upgrade" || !after.jobQueued ||
 		after.status != "ready" || *after.audioVersion != "v1" || after.loggedFixes != 1 {
 		t.Fatalf("after enqueue %+v", after)
 	}
@@ -238,6 +238,27 @@ func TestStore_ReacquireThatCannotEnqueueRestoresTheTrack(t *testing.T) {
 	}
 	if after := stateOf(t, s, row); *after.duration != 226 || after.catalog != nil || after.mismatch || after.jobQueued {
 		t.Fatalf("after failed enqueue %+v", after)
+	}
+}
+
+type kindRecordingQueue struct{ kinds *[]ports.JobKind }
+
+func (q kindRecordingQueue) Enqueue(_ context.Context, _ shared.TrackId, kind ports.JobKind, _ time.Duration) error {
+	*q.kinds = append(*q.kinds, kind)
+	return nil
+}
+
+func TestStore_ReacquireGoesThroughTheSilentRatchetedUpgradeLane(t *testing.T) {
+	var kinds []ports.JobKind
+	s := store{queue: kindRecordingQueue{kinds: &kinds}}
+
+	got, err := s.enqueueReplace(context.Background(), uuid.New(), change{TrackID: uuid.NewString()})
+
+	if got != verdictApplied || err != nil {
+		t.Fatalf("got %s, %v", got, err)
+	}
+	if !reflect.DeepEqual(kinds, []ports.JobKind{ports.JobKindUpgrade}) {
+		t.Fatalf("enqueued kinds = %v, want only the upgrade kind", kinds)
 	}
 }
 

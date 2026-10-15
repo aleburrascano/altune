@@ -30,6 +30,7 @@ import {
   toTrackStatus,
 } from '@shared/apiClient/trackAcquisition';
 import type { TrackResponse } from '@shared/apiClient/trackResponse';
+import type { JsonObject } from '@shared/files/json';
 import { libraryKeys, playlistKeys } from '@shared/query/queryKeys';
 
 import {
@@ -63,6 +64,25 @@ function parseAddedTrack(data: Record<string, unknown>): TrackResponse | null {
 function trackMeta(track: TrackResponse | undefined): DownloadMeta | undefined {
   if (!track) return undefined;
   return { title: track.title, artist: track.artist, artworkUrl: track.artwork_url };
+}
+
+function nonEmpty(text: string | null): string | null {
+  return text === '' ? null : text;
+}
+
+function eventMeta(payload: JsonObject): DownloadMeta | undefined {
+  const title = nonEmpty(asString(payload.title));
+  const artist = nonEmpty(asString(payload.artist));
+  if (title === null && artist === null) return undefined;
+  return { title, artist };
+}
+
+function downloadMeta(
+  queryClient: QueryClient,
+  trackId: TrackId,
+  payload: JsonObject,
+): DownloadMeta | undefined {
+  return trackMeta(getTrackFromCaches(queryClient, trackId)) ?? eventMeta(payload);
 }
 
 function progressPhase(stage: string | null): DownloadPhase | null {
@@ -112,7 +132,7 @@ function handleTrackAcquisitionStarted(queryClient: QueryClient, event: ServerEv
   if (!trackId) return;
   if (isStaleStart(trackId)) return;
   const pending = toPending();
-  startDownload(trackId, trackMeta(getTrackFromCaches(queryClient, trackId)));
+  startDownload(trackId, downloadMeta(queryClient, trackId, event.data));
   scheduleTrackPatch(queryClient, trackId, pending);
   patchTrackStatus(trackId, toTrackStatus(pending), 'sse');
 }
@@ -121,7 +141,7 @@ function handleTrackAcquisitionProgress(queryClient: QueryClient, event: ServerE
   const trackId = asTrackIdOrNull(event.data.track_id);
   const phase = progressPhase(asString(event.data.stage));
   if (trackId && phase) {
-    progressDownload(trackId, phase, trackMeta(getTrackFromCaches(queryClient, trackId)));
+    progressDownload(trackId, phase, downloadMeta(queryClient, trackId, event.data));
   }
 }
 

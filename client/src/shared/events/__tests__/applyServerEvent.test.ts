@@ -569,6 +569,22 @@ describe('track_acquisition_progress', () => {
     }
   });
 
+  it('names the download from the event when the track is in no cache', () => {
+    const queryClient = makeClient();
+
+    applyServerEvent(
+      queryClient,
+      serverEvent('track_acquisition_progress', {
+        track_id: 't1',
+        stage: 'download',
+        title: 'Song',
+        artist: 'Band',
+      }),
+    );
+
+    expect(useDownloadStore.getState().entries.t1).toMatchObject({ title: 'Song', artist: 'Band' });
+  });
+
   it('is a no-op when track_id is missing from the payload', () => {
     const queryClient = makeClient();
 
