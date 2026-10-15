@@ -9,6 +9,7 @@ import (
 	"altune/go-api/internal/shared/events"
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1398,5 +1399,167 @@ func TestExecuteReplace_TheStoredLengthIsNotTheTarget(t *testing.T) {
 	}
 	if len(source.requested) == 0 || source.requested[0] != 128 {
 		t.Errorf("search lengths = %v, want the MusicBrainz 128 s, not the stored 112 s", source.requested)
+	}
+}
+
+type storedBytesReader struct {
+	store *bytesAudioStore
+	err   error
+}
+
+func (r storedBytesReader) CopyStored(_ context.Context, audioRef, dir string) (string, error) {
+	if r.err != nil {
+		return "", r.err
+	}
+	path := filepath.Join(dir, "stored"+filepath.Ext(audioRef))
+	return path, os.WriteFile(path, []byte(r.store.objects[audioRef]), 0o600)
+}
+
+type contentRecordingIdentifier struct {
+	mu       sync.Mutex
+	contents []string
+	storedID string
+}
+
+func (i *contentRecordingIdentifier) Identify(_ context.Context, path string, _ float64) (ports.RecordingMatch, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ports.RecordingMatch{}, err
+	}
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.contents = append(i.contents, string(data))
+	if string(data) == "original bytes" {
+		return ports.RecordingMatch{AcoustID: i.storedID}, nil
+	}
+	return ports.RecordingMatch{}, nil
+}
+
+func (i *contentRecordingIdentifier) AcoustIDsFor(context.Context, string) ([]string, error) {
+	return nil, nil
+}
+
+func (i *contentRecordingIdentifier) identifiedStoredFile() int {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	n := 0
+	for _, c := range i.contents {
+		if c == "original bytes" {
+			n++
+		}
+	}
+	return n
+}
+
+func captureLogs(t *testing.T) *strings.Builder {
+	t.Helper()
+	var out strings.Builder
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&out, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	return &out
+}
+
+func seedUnknownSourceTrack(repo *committingTrackRepo, userId shared.UserId, trackId domain.TrackId) {
+	key := trackId.String() + ":" + userId.String()
+	row := repo.rows[key]
+	stored := 112.0
+	row.AudioSourceURL = nil
+	row.DurationSeconds = &stored
+	repo.rows[key] = row
+}
+
+func TestExecuteReplace_FingerprintsTheStoredFileOnce(t *testing.T) {
+	tests := map[string]struct {
+		clearSource bool
+		wantCalls   int
+		wantLogged  bool
+	}{
+		"no source url identifies the stored file once": {clearSource: true, wantCalls: 1, wantLogged: true},
+		"a known source url does not":                   {clearSource: false, wantCalls: 0, wantLogged: false},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			repo, store, userId, trackId, _ := seedReadyTrack(t)
+			if tt.clearSource {
+				seedUnknownSourceTrack(repo, userId, trackId)
+			}
+			identifier := &contentRecordingIdentifier{storedID: "acoustid-of-the-stored-file"}
+			logs := captureLogs(t)
+			svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store,
+				WithAudioIdentifier(identifier), WithStoredAudioReader(storedBytesReader{store: store}))
+
+			if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
+				t.Fatalf("ExecuteReplace: %v", err)
+			}
+
+			if got := identifier.identifiedStoredFile(); got != tt.wantCalls {
+				t.Errorf("stored file identified %d times, want %d", got, tt.wantCalls)
+			}
+			logged := strings.Contains(logs.String(), "acquisition.replace_current_file_fingerprinted") &&
+				strings.Contains(logs.String(), "stored_acoustid=acoustid-of-the-stored-file")
+			if logged != tt.wantLogged {
+				t.Errorf("fingerprint of the stored file logged = %v, want %v", logged, tt.wantLogged)
+			}
+		})
+	}
+}
+
+func TestExecuteReplace_AFailedStoredCopyIsLoggedAndTheReplaceStillRuns(t *testing.T) {
+	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
+	seedUnknownSourceTrack(repo, userId, trackId)
+	identifier := &contentRecordingIdentifier{storedID: "never-recorded"}
+	logs := captureLogs(t)
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store,
+		WithAudioIdentifier(identifier), WithStoredAudioReader(storedBytesReader{store: store, err: errors.New("object storage unavailable")}))
+
+	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
+		t.Fatalf("ExecuteReplace: %v, want the replace to carry on without the stored fingerprint", err)
+	}
+
+	if !strings.Contains(logs.String(), "acquisition.replace_current_file_fingerprint_failed") {
+		t.Errorf("logs = %q, want the failed stored copy reported", logs.String())
+	}
+	if strings.Contains(logs.String(), "acquisition.replace_current_file_fingerprinted") {
+		t.Error("a failed copy must not log a fingerprint")
+	}
+	row := repo.committed(trackId, userId)
+	if row.AudioRef == nil || *row.AudioRef == originalRef {
+		t.Errorf("audio_ref = %v, want the replace to have swapped in the new audio", row.AudioRef)
+	}
+}
+
+func TestExecuteReplace_TheStoredCopyWorkspaceIsRemovedWhateverTheOutcome(t *testing.T) {
+	tests := map[string]error{
+		"after a successful identify": nil,
+		"after a failed copy":         errors.New("object storage unavailable"),
+	}
+	for name, copyErr := range tests {
+		t.Run(name, func(t *testing.T) {
+			repo, store, userId, trackId, _ := seedReadyTrack(t)
+			seedUnknownSourceTrack(repo, userId, trackId)
+			ws := newCallRecordingWorkspace()
+			svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store,
+				WithAcquireTempWorkspace(ws), WithAudioIdentifier(&contentRecordingIdentifier{}),
+				WithStoredAudioReader(storedBytesReader{store: store, err: copyErr}))
+
+			if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
+				t.Fatalf("ExecuteReplace: %v", err)
+			}
+
+			storedDirs := 0
+			for _, dir := range ws.createdDirs() {
+				if !strings.Contains(dir, "stored-") {
+					continue
+				}
+				storedDirs++
+				if _, err := os.Stat(dir); !os.IsNotExist(err) {
+					t.Errorf("stored copy dir %s still exists (stat err = %v)", dir, err)
+				}
+			}
+			if storedDirs != 1 {
+				t.Errorf("stored copy dirs created = %d, want 1", storedDirs)
+			}
+		})
 	}
 }

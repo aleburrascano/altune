@@ -228,9 +228,10 @@ type AttemptedCandidate struct {
 }
 
 type ReplaceState struct {
-	ExcludeKeys  []string
-	PreservedRef string
-	StoredLength float64
+	ExcludeKeys    []string
+	PreservedRef   string
+	StoredLength   float64
+	StoredAcoustID string
 }
 
 func (r ReplaceState) excludes(url string) bool {

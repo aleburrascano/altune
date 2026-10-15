@@ -28,6 +28,7 @@ type AcquireTrackAudioService struct {
 	verifySkips     ports.VerifySkipRecorder
 	confidenceFloor float64
 	workspace       ports.TempWorkspace
+	storedAudio     ports.StoredAudioReader
 }
 
 func NewAcquireTrackAudioService(
@@ -56,6 +57,10 @@ func WithDownloadLimiter(l *DownloadLimiter) func(*AcquireTrackAudioService) {
 
 func WithAcquireTempWorkspace(w ports.TempWorkspace) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.workspace = w }
+}
+
+func WithStoredAudioReader(r ports.StoredAudioReader) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) { s.storedAudio = r }
 }
 
 func WithAcquireConfidenceFloor(floor float64) func(*AcquireTrackAudioService) {
@@ -177,6 +182,7 @@ func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId sh
 	if err := configureReplaceExclusion(ctx, ac, track, trackId); err != nil {
 		return s.settleReplaceFailure(ctx, jobCtx, userId, trackId, err, ac)
 	}
+	s.fingerprintStoredFile(ctx, ac, track, trackId)
 	s.loadPriorRejections(ctx, ac)
 	if err := s.runAcquisition(ctx, userId, trackId, ac); err != nil {
 		return s.settleReplaceFailure(ctx, jobCtx, userId, trackId, err, ac)
@@ -439,4 +445,34 @@ func buildTrackRef(track *ports.TrackSnapshot) TrackRef {
 		CatalogMBID:     deref(track.CatalogMBID),
 		CatalogSources:  track.CatalogSources,
 	}
+}
+
+func (s *AcquireTrackAudioService) fingerprintStoredFile(ctx context.Context, ac *AcquisitionContext, track *ports.TrackSnapshot, trackId shared.TrackId) {
+	if track.AudioSourceURL != nil || track.AudioRef == nil || s.storedAudio == nil || s.identifier == nil {
+		return
+	}
+	match, err := s.identifyStored(ctx, *track.AudioRef, deref(track.StoredDurationSeconds))
+	if err != nil {
+		slog.WarnContext(ctx, "acquisition.replace_current_file_fingerprint_failed",
+			"track_id", trackId.String(), "audio_ref", *track.AudioRef, "error", redact.LogError(err))
+		return
+	}
+	ac.Replace.StoredAcoustID = match.AcoustID
+	slog.InfoContext(ctx, "acquisition.replace_current_file_fingerprinted",
+		"track_id", trackId.String(), "audio_ref", *track.AudioRef,
+		"stored_acoustid", match.AcoustID, "known", match.Known())
+}
+
+func (s *AcquireTrackAudioService) identifyStored(ctx context.Context, audioRef string, durationHint float64) (ports.RecordingMatch, error) {
+	dir, err := s.workspace.Create("stored-*")
+	if err != nil {
+		return ports.RecordingMatch{}, fmt.Errorf("create stored-audio dir: %w", err)
+	}
+	defer func() { _ = s.workspace.Remove(dir) }()
+
+	path, err := s.storedAudio.CopyStored(ctx, audioRef, dir)
+	if err != nil {
+		return ports.RecordingMatch{}, fmt.Errorf("copy stored audio: %w", err)
+	}
+	return s.identifier.Identify(ctx, path, durationHint)
 }

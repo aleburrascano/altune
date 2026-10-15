@@ -17,7 +17,10 @@ import (
 	"altune/go-api/internal/observe/service/eventtap"
 	"altune/go-api/internal/shared/binpath"
 	"context"
+	"io"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"time"
 
@@ -175,7 +178,8 @@ func (a *App) buildAcquisitionScheduler(
 	acquireOpts = append(acquireOpts,
 		acqService.WithDownloadLimiter(acqService.NewDownloadLimiter(a.cfg.AcquisitionDownloadConcurrency)),
 		acqService.WithAcquireConfidenceFloor(a.cfg.AcquisitionConfidenceFloor),
-		acqService.WithAcquireTempWorkspace(tempfs.New()))
+		acqService.WithAcquireTempWorkspace(tempfs.New()),
+		acqService.WithStoredAudioReader(storedAudioReader{store: audioStore}))
 	acquireSvc := acqService.NewAcquireTrackAudioService(
 		acqCatalogBridge.NewTrackLedger(trackRepo, acqCatalogBridge.WithLengthTolerance(a.cfg.AcquisitionLengthToleranceSeconds)),
 		acqService.NewSourceRegistry(audioSources.first...).WithFallback(audioSources.fallback...),
@@ -197,6 +201,29 @@ func (a *App) buildAcquisitionScheduler(
 			acqService.WithOutcomeRecorder(acqPersistence.NewPgxOutcomeStore(a.pool)))
 	}
 	return acqService.NewBackgroundAcquisitionScheduler(acquireSvc, &a.wg, a.sem, schedulerOpts...)
+}
+
+type storedAudioReader struct {
+	store catalogPorts.AudioStore
+}
+
+func (r storedAudioReader) CopyStored(ctx context.Context, audioRef, dir string) (string, error) {
+	stream, _, err := r.store.Stream(ctx, audioRef)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = stream.Close() }()
+
+	path := filepath.Join(dir, "stored"+filepath.Ext(audioRef))
+	dst, err := os.Create(path)
+	if err != nil {
+		return "", err
+	}
+	if _, err := io.Copy(dst, stream); err != nil {
+		_ = dst.Close()
+		return "", err
+	}
+	return path, dst.Close()
 }
 
 type lookupTracker struct {
