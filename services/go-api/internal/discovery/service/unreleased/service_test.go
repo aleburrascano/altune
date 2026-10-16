@@ -162,6 +162,40 @@ func TestService_List_CacheIsKeyedOnTheNormalizedArtistName(t *testing.T) {
 	}
 }
 
+func TestService_List_DropsTranslationPagesButKeepsRealUnreleasedMaterial(t *testing.T) {
+	tests := []struct {
+		name   string
+		genius []string
+		want   []string
+	}{
+		{"turkish translation is dropped", []string{"Secondhand ft. Rema (Türkçe Çeviri)"}, nil},
+		{"english translation is dropped", []string{"Song [English Translation]"}, nil},
+		{"spanish translation is dropped", []string{"Song (Traducción al Español)"}, nil},
+		{"russian translation is dropped", []string{"Song (Русский перевод)"}, nil},
+		{"demo is kept", []string{"Song (Demo)"}, []string{"Song (Demo)"}},
+		{"original version is kept", []string{"Song (Original)"}, []string{"Song (Original)"}},
+		{"cover is kept", []string{"Song (Cover)"}, []string{"Song (Cover)"}},
+		{"marker outside brackets is kept", []string{"Translation"}, []string{"Translation"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := NewService(
+				&discoverytest.GeniusSongCatalog{ArtistID: 7, ArtistFound: true, Songs: songs(tt.genius...)},
+				&discoverytest.ArtistCatalogTitles{},
+				nil,
+				Config{MaxPages: 1, MaxDetails: 50},
+			)
+			got, err := svc.List(context.Background(), domain.ProviderDeezer, "1", "Artist", nil)
+			if err != nil {
+				t.Fatalf("List: %v", err)
+			}
+			if !slices.Equal(titlesOf(got), tt.want) {
+				t.Errorf("titles = %v, want %v", titlesOf(got), tt.want)
+			}
+		})
+	}
+}
+
 func TestService_List_CacheTTLDependsOnHowTrustworthyTheAnswerIs(t *testing.T) {
 	tests := []struct {
 		name   string

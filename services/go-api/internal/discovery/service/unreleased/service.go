@@ -104,7 +104,7 @@ func (s *Service) unreleasedSongs(ctx context.Context, artistID int, catalogTitl
 	if err != nil {
 		return nil, false, err
 	}
-	candidates := withoutCatalogMatches(songs, catalogTitles)
+	candidates := withoutCatalogMatches(withoutTranslations(songs), catalogTitles)
 	details, complete, err := s.lookUpDetails(ctx, candidates)
 	if err != nil {
 		return nil, false, err
