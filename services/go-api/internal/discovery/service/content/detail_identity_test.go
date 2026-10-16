@@ -60,8 +60,8 @@ func TestProviderContentID_aliases(t *testing.T) {
 	if got := providerContentID(id, domain.ProviderAppleMusic); got != "it1" {
 		t.Errorf("apple music id = %q, want the shared iTunes id it1", got)
 	}
-	if got := providerContentID(id, domain.ProviderLastFM); got != "" {
-		t.Errorf("lastfm id = %q, want empty (the MBID is not a Last.fm artist id)", got)
+	if got := providerContentID(id, domain.ProviderLastFM); got != "mbid-x" {
+		t.Errorf("lastfm id = %q, want mbid-x (Last.fm top tracks are looked up by MBID)", got)
 	}
 	if got := providerContentID(id, domain.ProviderSpotify); got != "" {
 		t.Errorf("spotify id = %q, want empty (not bridged)", got)

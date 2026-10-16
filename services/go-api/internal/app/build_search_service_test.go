@@ -250,12 +250,12 @@ func allScrapedProvidersEnabled() config.Config {
 	}
 }
 
-func TestLastFMServesTheByNameConsensusNotArtistPagesByID(t *testing.T) {
+func TestLastFMIsAnArtistContentProviderAndInTheByNameConsensus(t *testing.T) {
 	cfg := allScrapedProvidersEnabled()
 	cfg.LastFMAPIKey = "key"
 
-	if _, ok := buildArtistContentProviders(newClientFactory(nil), &cfg)[discoveryDomain.ProviderLastFM]; ok {
-		t.Error("Last.fm is an artist content provider; its albums lookup takes an artist name, not the MBID it would be given")
+	if _, ok := buildArtistContentProviders(newClientFactory(nil), &cfg)[discoveryDomain.ProviderLastFM]; !ok {
+		t.Error("Last.fm is not an artist content provider; artist top tracks lose the by-MBID Last.fm leg")
 	}
 	if !hasConsensusProvider(&cfg, "lastfm") {
 		t.Error("Last.fm left the by-name consensus")

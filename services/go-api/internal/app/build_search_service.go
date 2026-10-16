@@ -180,6 +180,7 @@ func contentSearchOptions(
 	if cfg.IdentityVerifyOnPersist && sharedMB != nil {
 		verifyProviders := buildArtistContentProviders(cf, cfg)
 		delete(verifyProviders, domain.ProviderSoundCloud)
+		delete(verifyProviders, domain.ProviderLastFM)
 		opts = append(opts, search.WithIdentityVerifier(
 			identity.NewIdentityVerifier(sharedMB, verifyProviders),
 		))
