@@ -3,12 +3,14 @@ package ports
 import (
 	"altune/go-api/internal/shared"
 	"context"
+	"time"
 )
 
 type OrphanedAudio struct {
-	AudioRef string
-	UserId   shared.UserId
-	TrackId  shared.TrackId
+	AudioRef  string
+	UserId    shared.UserId
+	TrackId   shared.TrackId
+	NotBefore time.Time
 }
 
 type OrphanedAudioRecorder interface {

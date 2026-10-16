@@ -1980,6 +1980,22 @@ func TestLoad_TheInPlaceCheckHasItsOwnBoundedRate(t *testing.T) {
 	}
 }
 
+func TestLoad_SupersededAudioGraceDefaultsToSevenDaysAndRejectsNegative(t *testing.T) {
+	setEnv(t, validConfigEnv(nil))
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.AcquisitionSupersededAudioGrace != 168*time.Hour {
+		t.Errorf("grace = %s, want 168h", cfg.AcquisitionSupersededAudioGrace)
+	}
+
+	setEnv(t, validConfigEnv(map[string]string{"ACQUISITION_SUPERSEDED_AUDIO_GRACE": "-1h"}))
+	if _, err := Load(); err == nil || !searchString(err.Error(), "ACQUISITION_SUPERSEDED_AUDIO_GRACE") {
+		t.Fatalf("Load error = %v, want it to name ACQUISITION_SUPERSEDED_AUDIO_GRACE", err)
+	}
+}
+
 func TestLoad_RejectsAnOutOfRangeUpgradeKnob(t *testing.T) {
 	cases := map[string]string{
 		"ACQUISITION_UPGRADE_PER_HOUR":    "0",

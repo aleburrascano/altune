@@ -90,6 +90,8 @@ type Config struct {
 
 	AcquisitionUpgradeRetryAfter time.Duration `env:"ACQUISITION_UPGRADE_RETRY_AFTER" envDefault:"24h"`
 
+	AcquisitionSupersededAudioGrace time.Duration `env:"ACQUISITION_SUPERSEDED_AUDIO_GRACE" envDefault:"168h"`
+
 	AcoustIDAPIKey string `env:"ACOUSTID_API_KEY"`
 	YtMusicEnabled bool   `env:"YTMUSIC_ENABLED" envDefault:"true"`
 	YtDLPEnabled   bool   `env:"YTDLP_ENABLED" envDefault:"true"`

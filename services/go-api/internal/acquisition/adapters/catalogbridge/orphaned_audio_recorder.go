@@ -16,8 +16,9 @@ func NewOrphanedAudioRecorder(q catalogports.OrphanedAudioRecorder) *OrphanedAud
 
 func (r *OrphanedAudioRecorder) RecordOrphanedAudio(ctx context.Context, orphan ports.OrphanedAudio) error {
 	return r.queue.RecordOrphanedAudio(ctx, catalogports.OrphanedAudio{
-		AudioRef: orphan.AudioRef,
-		UserId:   orphan.UserId,
-		TrackId:  orphan.TrackId,
+		AudioRef:  orphan.AudioRef,
+		UserId:    orphan.UserId,
+		TrackId:   orphan.TrackId,
+		NotBefore: orphan.NotBefore,
 	})
 }

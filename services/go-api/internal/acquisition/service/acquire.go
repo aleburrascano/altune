@@ -36,8 +36,9 @@ type AcquireTrackAudioService struct {
 	contextObserver func(*AcquisitionContext)
 	previews        ports.PreviewMatcher
 
-	cuts           audiojudge.Cuts
-	acquireTimeout time.Duration
+	cuts            audiojudge.Cuts
+	acquireTimeout  time.Duration
+	supersededGrace time.Duration
 }
 
 func NewAcquireTrackAudioService(
@@ -102,6 +103,10 @@ func WithAcquireEvents(pub events.Publisher) func(*AcquireTrackAudioService) {
 
 func WithAcquireOrphanQueue(q ports.OrphanedAudioRecorder) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.orphans = q }
+}
+
+func WithSupersededAudioGrace(d time.Duration) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) { s.supersededGrace = d }
 }
 
 func WithRecordingResolver(r ports.RecordingResolver) func(*AcquireTrackAudioService) {
@@ -294,11 +299,29 @@ func (s *AcquireTrackAudioService) deleteSupersededAudio(ctx context.Context, us
 	if s.servedByAnotherTrack(delCtx, trackId, old) {
 		return
 	}
+	if s.orphans != nil {
+		s.queueSupersededAudio(ctx, userId, trackId, old)
+		return
+	}
 	if err := s.audioStore.Delete(delCtx, old); err != nil {
 		slog.ErrorContext(ctx, "acquisition.replace_orphaned_old_audio",
 			"track_id", trackId.String(), "audio_ref", old, "error", redact.LogError(err))
 		recordOrphanedAudio(ctx, s.orphans, userId, trackId, old)
 	}
+}
+
+func (s *AcquireTrackAudioService) queueSupersededAudio(ctx context.Context, userId shared.UserId, trackId shared.TrackId, old string) {
+	err := queueOrphanedAudio(ctx, s.orphans, ports.OrphanedAudio{
+		AudioRef:  old,
+		UserId:    userId,
+		TrackId:   trackId,
+		NotBefore: time.Now().Add(s.supersededGrace),
+	})
+	if err != nil {
+		return
+	}
+	slog.InfoContext(ctx, "acquisition.replace_superseded_audio_queued",
+		"track_id", trackId.String(), "audio_ref", old, "grace", s.supersededGrace.String())
 }
 
 func (s *AcquireTrackAudioService) servedByAnotherTrack(ctx context.Context, trackId shared.TrackId, audioRef string) bool {

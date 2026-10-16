@@ -152,6 +152,7 @@ func (a *App) buildAcquisitionScheduler(
 	acquireOpts := []func(*acqService.AcquireTrackAudioService){
 		acqService.WithAcquireEvents(tap),
 		acqService.WithAcquireOrphanQueue(acqCatalogBridge.NewOrphanedAudioRecorder(persistence.NewPgxOrphanedAudioRepository(a.pool))),
+		acqService.WithSupersededAudioGrace(a.cfg.AcquisitionSupersededAudioGrace),
 		acqService.WithAudioProber(audioProber),
 		acqService.WithVerifySkips(skips),
 		acqService.WithAudioTagger(ffmpegtag.NewTagger(binpath.Resolve("ffmpeg", a.cfg.FFmpegLocation), id3.NewTagger())),
