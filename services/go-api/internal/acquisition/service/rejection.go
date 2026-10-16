@@ -30,21 +30,24 @@ const (
 )
 
 type CandidateRejection struct {
-	URL    string
-	Title  string
-	Source acqdomain.SourceName
-	Stage  RejectionStage
-	Reason string
+	URL        string
+	Title      string
+	Source     acqdomain.SourceName
+	Stage      RejectionStage
+	Reason     string
+	Unmeasured bool
 }
 
 func (ac *AcquisitionContext) recordRejection(url, title string, source acqdomain.SourceName, stage RejectionStage, reason string) {
-	ac.Rejections = append(ac.Rejections, CandidateRejection{
-		URL:    url,
-		Title:  title,
-		Source: source,
-		Stage:  stage,
-		Reason: reason,
-	})
+	ac.appendRejection(CandidateRejection{URL: url, Title: title, Source: source, Stage: stage, Reason: reason})
+}
+
+func (ac *AcquisitionContext) recordUnmeasuredRejection(url, title string, source acqdomain.SourceName, stage RejectionStage, reason string) {
+	ac.appendRejection(CandidateRejection{URL: url, Title: title, Source: source, Stage: stage, Reason: reason, Unmeasured: true})
+}
+
+func (ac *AcquisitionContext) appendRejection(r CandidateRejection) {
+	ac.Rejections = append(ac.Rejections, r)
 }
 
 func summarizeRejections(rejections []CandidateRejection) string {
@@ -83,7 +86,7 @@ func lastingRejectionRecords(ac *AcquisitionContext) []ports.CandidateRejectionR
 	recs := make([]ports.CandidateRejectionRecord, 0, len(ac.Rejections))
 	for _, r := range ac.Rejections {
 		key := sourceKey(r.URL)
-		if !r.Stage.lasting() || key == "" {
+		if !r.Stage.lasting() || r.Unmeasured || key == "" {
 			continue
 		}
 		recs = append(recs, ports.CandidateRejectionRecord{

@@ -259,7 +259,7 @@ func recordNotAttempted(ac *AcquisitionContext, untried []ports.AudioCandidate) 
 }
 
 func recordImplausibleDuration(ctx context.Context, ac *AcquisitionContext, candidate ports.AudioCandidate) {
-	ac.recordRejection(candidate.URL, candidate.Title, candidate.Source, RejectionDuration,
+	ac.recordUnmeasuredRejection(candidate.URL, candidate.Title, candidate.Source, RejectionDuration,
 		fmt.Sprintf("search duration %.0fs vs expected %.0fs", candidate.Duration, ac.ExpectedLength()))
 	slog.InfoContext(ctx, "acquisition.candidate_skipped_duration",
 		"track_id", ac.Track.ID,

@@ -959,24 +959,32 @@ func TestExecute_RetryAttemptsAPriorRejectionWhenItIsTheOnlyCandidate(t *testing
 	}
 }
 
-func TestExecute_RecordsDurationRejectionsAndNeverDownloadOnes(t *testing.T) {
+func TestExecute_ASearchLengthRejectionIsNotRemembered(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	repo := newFakeTrackRepository()
 	track := pendingTrack(t, repo, userId)
 	if err := track.SetCatalogDuration(200); err != nil {
 		t.Fatalf("set duration: %v", err)
 	}
+	audio := filepath.Join(t.TempDir(), "song.mp3")
+	if err := os.WriteFile(audio, []byte("audio"), 0o600); err != nil {
+		t.Fatalf("write audio: %v", err)
+	}
 	short := namedCandidate("https://youtube.com/watch?v=shortshort1")
 	short.Duration = 30
-	failing := namedCandidate(otherURL)
-	searcher := &fakeAudioSearcher{searchResults: []ports.AudioCandidate{short, failing}, downloadErr: errors.New("boom")}
+	downloaded := namedCandidate(otherURL)
+	searcher := &fakeAudioSearcher{searchResults: []ports.AudioCandidate{short, downloaded}, downloadPath: audio}
 	store := &fakeRejectionStore{}
-	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore(), WithRejectionStore(store))
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore(),
+		WithRejectionStore(store), WithAudioProber(&queueProber{durations: []float64{30}}))
 
 	_ = svc.Execute(context.Background(), userId, track.ID)
 
-	if len(store.recorded) != 1 || store.recorded[0].Reason != "duration" || store.recorded[0].SourceKey != sourceKey(short.URL) {
-		t.Errorf("recorded = %+v, want one duration rejection for %q", store.recorded, short.URL)
+	if slices.Contains(searcher.downloadURLs, short.URL) {
+		t.Fatalf("download attempts = %v, the search-length candidate must never be downloaded", searcher.downloadURLs)
+	}
+	if len(store.recorded) != 1 || store.recorded[0].Reason != "duration" || store.recorded[0].SourceKey != sourceKey(downloaded.URL) {
+		t.Errorf("recorded = %+v, want only the probed duration rejection for %q", store.recorded, downloaded.URL)
 	}
 }
 
@@ -1047,18 +1055,20 @@ func TestExecute_APriorRejectionJudgedOnAnotherRecordingIsRetried(t *testing.T) 
 }
 
 func TestExecute_RecordsTheBasisWithEachLastingRejection(t *testing.T) {
-	short := namedCandidate("https://youtube.com/watch?v=shortshort1")
-	short.Duration = 30
+	audio := filepath.Join(t.TempDir(), "song.mp3")
+	if err := os.WriteFile(audio, []byte("audio"), 0o600); err != nil {
+		t.Fatalf("write audio: %v", err)
+	}
 	userId := shared.NewUserId(uuid.New())
 	repo := newFakeTrackRepository()
 	track := pendingTrack(t, repo, userId)
 	if err := track.SetCatalogDuration(recordedLength); err != nil {
 		t.Fatalf("set duration: %v", err)
 	}
-	searcher := &fakeAudioSearcher{searchResults: []ports.AudioCandidate{short, namedCandidate(otherURL)}, downloadErr: errors.New("boom")}
+	searcher := &fakeAudioSearcher{searchResults: []ports.AudioCandidate{namedCandidate(otherURL)}, downloadPath: audio}
 	store := &fakeRejectionStore{}
 	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore(),
-		WithRejectionStore(store), WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: runMBID}}))
+		WithRejectionStore(store), WithAudioProber(&queueProber{durations: []float64{30}}), WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: runMBID}}))
 
 	_ = svc.Execute(context.Background(), userId, track.ID)
 

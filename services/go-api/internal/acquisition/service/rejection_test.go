@@ -321,3 +321,18 @@ func TestLastingRejectionRecords_CarryTheRunsExpectedLengthAndReferenceMBID(t *t
 		t.Errorf("records = %+v, want one carrying basis %+v", recs, want)
 	}
 }
+
+func TestLastingRejectionRecords_DropsAnUnmeasuredDuration(t *testing.T) {
+	ac := &AcquisitionContext{Track: TrackRef{ID: "t1"}}
+	ac.recordUnmeasuredRejection("https://youtube.com/watch?v=a", "", "yt", RejectionDuration, "search duration 30s vs expected 200s")
+	ac.recordRejection("https://youtube.com/watch?v=b", "", "yt", RejectionDuration, "duration 30s vs expected 200s")
+
+	recs := lastingRejectionRecords(ac)
+
+	if len(recs) != 1 || recs[0].SourceKey != sourceKey("https://youtube.com/watch?v=b") {
+		t.Errorf("records = %+v, want only the measured duration rejection", recs)
+	}
+	if len(ac.Rejections) != 2 {
+		t.Errorf("run rejections = %d, want both kept for the summary", len(ac.Rejections))
+	}
+}
