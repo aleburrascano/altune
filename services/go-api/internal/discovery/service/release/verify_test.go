@@ -2,6 +2,7 @@ package release
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/textnorm"
 	"fmt"
 	"testing"
 )
@@ -162,5 +163,37 @@ func TestMatchesAnchor_caseAndPunctuationStillMatch(t *testing.T) {
 	g := verifyGroup(domain.ProviderDeezer, "Night Drive!", "BLUE HOUR", "High-Tide", "Paper Moon?")
 	if !MatchesAnchor(g, mb) {
 		t.Error("titles differing only in case and punctuation did not match")
+	}
+}
+
+func TestFilterGroupsByMBAnchor_mixedPageKeepsOnlyOverlappingReleases(t *testing.T) {
+	rapper := numberedTitles("rap", 35)
+	mb := NormalizeTitleSet(rapper)
+	mixed := append(numberedTitles("other che", 63), rapper[:4]...)
+
+	got := FilterGroupsByMBAnchor(mb, []ReleaseGroup{verifyGroup(domain.ProviderDeezer, mixed...)})
+
+	if len(got) != 1 {
+		t.Fatalf("kept %d groups, want 1", len(got))
+	}
+	if len(got[0].Releases) != 4 {
+		t.Fatalf("kept %d releases, want the 4 overlapping", len(got[0].Releases))
+	}
+	for _, r := range got[0].Releases {
+		if !mb[textnorm.NormalizeForMatch(r.Title)] {
+			t.Errorf("kept non-MB release %q", r.Title)
+		}
+	}
+}
+
+func TestFilterGroupsByMBAnchor_highRatioGroupKeepsItsExtras(t *testing.T) {
+	rapper := numberedTitles("rap", 35)
+	mb := NormalizeTitleSet(rapper)
+	group := append(numberedTitles("deezer only", 2), rapper[:6]...)
+
+	got := FilterGroupsByMBAnchor(mb, []ReleaseGroup{verifyGroup(domain.ProviderDeezer, group...)})
+
+	if len(got) != 1 || len(got[0].Releases) != 8 {
+		t.Fatalf("a group at or above the ratio must stay whole, got %d groups", len(got))
 	}
 }
