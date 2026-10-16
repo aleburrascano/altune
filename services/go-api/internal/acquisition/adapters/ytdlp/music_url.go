@@ -1,12 +1,10 @@
 package ytdlp
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"net/url"
-	"regexp"
 	"strings"
 )
-
-var youTubeVideoID = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 
 var youTubeWatchHosts = map[string]bool{
 	"www.youtube.com": true,
@@ -20,10 +18,10 @@ func ytDlpURL(raw string) string {
 		return raw
 	}
 	id := youTubeWatchID(parsed)
-	if !youTubeVideoID.MatchString(id) {
+	if !acqdomain.IsYouTubeVideoID(id) {
 		return raw
 	}
-	return "https://music.youtube.com/watch?v=" + id
+	return acqdomain.YouTubeMusicWatchURL(id)
 }
 
 func youTubeWatchID(u *url.URL) string {

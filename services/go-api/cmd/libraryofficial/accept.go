@@ -4,11 +4,8 @@ import (
 	"altune/go-api/internal/acquisition/adapters/ytmsearch"
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/shared/textnorm"
-	"regexp"
 	"strings"
 )
-
-var videoIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 
 type target struct {
 	TrackID        string
@@ -40,7 +37,7 @@ func (t target) judge(song ytmsearch.Song) rejection {
 	switch {
 	case song.Type != ytmsearch.VideoTypeATV:
 		return rejectNotArtTrack
-	case !videoIDPattern.MatchString(song.VideoID):
+	case !acqdomain.IsYouTubeVideoID(song.VideoID):
 		return rejectVideoID
 	case !ytmsearch.CreditsArtist(song.Artists, t.Artist):
 		return rejectArtist

@@ -23,6 +23,16 @@ var videoIDPathPrefixes = map[string]bool{"embed": true, "v": true, "shorts": tr
 
 var videoIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 
+const youTubeMusicWatchURLPrefix = "https://music.youtube.com/watch?v="
+
+func IsYouTubeVideoID(id string) bool {
+	return videoIDPattern.MatchString(id)
+}
+
+func YouTubeMusicWatchURL(videoID string) string {
+	return youTubeMusicWatchURLPrefix + videoID
+}
+
 func SourceKey(rawURL string) string {
 	if id := youtubeVideoID(rawURL); id != "" {
 		return "youtube:" + id
@@ -56,7 +66,7 @@ func videoIDOnYouTubeHost(host string, u *url.URL) string {
 }
 
 func videoID(candidateID string) string {
-	if !videoIDPattern.MatchString(candidateID) {
+	if !IsYouTubeVideoID(candidateID) {
 		return ""
 	}
 	return candidateID

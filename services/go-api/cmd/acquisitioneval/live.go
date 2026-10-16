@@ -2,6 +2,7 @@ package main
 
 import (
 	"altune/go-api/internal/acquisition/adapters/ytmsearch"
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"bufio"
 	"context"
 	"encoding/json"
@@ -11,7 +12,6 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -29,8 +29,6 @@ const (
 )
 
 var errLiveFlagsRequired = errors.New("-tracks and -out are required")
-
-var videoIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 
 var youtubeHosts = map[string]bool{
 	"youtube.com":       true,
@@ -268,7 +266,7 @@ func youtubeVideoID(rawURL string) (string, bool) {
 	if strings.EqualFold(parsed.Hostname(), "youtu.be") {
 		candidate = strings.TrimPrefix(parsed.Path, "/")
 	}
-	if !videoIDPattern.MatchString(candidate) {
+	if !acqdomain.IsYouTubeVideoID(candidate) {
 		return "", false
 	}
 	return candidate, true

@@ -12,10 +12,7 @@ import (
 
 const SourceName acqdomain.SourceName = "ytmsearch"
 
-const (
-	musicWatchURLPrefix = "https://music.youtube.com/watch?v="
-	topResults          = 5
-)
+const topResults = 5
 
 type songSearch interface {
 	SearchSongs(ctx context.Context, query string) ([]Song, error)
@@ -60,7 +57,7 @@ func CandidateFor(hit Song) ports.AudioCandidate {
 	return ports.AudioCandidate{
 		Title:    hit.Title,
 		Duration: float64(hit.DurationSeconds),
-		URL:      musicWatchURLPrefix + hit.VideoID,
+		URL:      acqdomain.YouTubeMusicWatchURL(hit.VideoID),
 		Explicit: hit.Explicit,
 		Artists:  hit.Artists,
 		Album:    hit.Album,

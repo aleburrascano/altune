@@ -6,16 +6,12 @@ import (
 	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"log/slog"
-	"regexp"
 )
 
 const (
-	SourceName     acqdomain.SourceName = "ytmusic"
-	identityKey                         = ports.ProviderYouTube
-	watchURLPrefix                      = "https://music.youtube.com/watch?v="
+	SourceName  acqdomain.SourceName = "ytmusic"
+	identityKey                      = ports.ProviderYouTube
 )
-
-var videoIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 
 type audioFetcher interface {
 	Download(ctx context.Context, url string, outDir string) (ports.FetchedAudio, error)
@@ -43,7 +39,7 @@ func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.Audio
 	if videoID == "" {
 		return nil, nil
 	}
-	if !videoIDPattern.MatchString(videoID) {
+	if !acqdomain.IsYouTubeVideoID(videoID) {
 		slog.WarnContext(ctx, "acquisition.ytmusic_video_id_rejected",
 			"video_id", videoID, "title", req.Title)
 		return nil, nil
@@ -79,7 +75,7 @@ func CandidateForWatch(videoID string, observed ytmsearch.Watch, pinned bool) po
 		Title:       observed.Title,
 		Artists:     observed.Artists,
 		Explicit:    observed.Explicit,
-		URL:         watchURLPrefix + videoID,
+		URL:         acqdomain.YouTubeMusicWatchURL(videoID),
 		Categories:  []string{"Music"},
 		Kind:        kind,
 		ObservedOMV: observed.Type == ytmsearch.VideoTypeOMV,
