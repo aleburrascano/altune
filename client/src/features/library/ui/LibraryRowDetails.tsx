@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { StyleSheet } from 'react-native';
-import { useDownloadPhase } from '@shared/acquisition/downloadStore';
+import { useDownloadPhase } from '@shared/acquisition/state/downloadStore';
 import { withFeaturing } from '@shared/apiClient/featuredArtists';
 import { Text } from '@shared/ui';
 import { LibraryRowFailure } from '@features/library/ui/LibraryRowFailure';

@@ -4,7 +4,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { asTrackId } from '@shared/apiClient/ids';
 import type { CreateTrackRequest, TrackResponse } from '@shared/apiClient/trackResponse';
-import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
+import { useTrackStatusStore } from '@shared/acquisition/state/trackStatusStore';
 import { PlaybackContext } from '@shared/playback/usePlayback';
 import { libraryKeys } from '@shared/query/queryKeys';
 import { readDetailHandoff } from '@shared/navigation/detailHandoff';

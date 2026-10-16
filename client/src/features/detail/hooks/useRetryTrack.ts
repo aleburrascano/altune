@@ -5,8 +5,8 @@ import {
   recordRetryTapped,
   type RetryEntryPoint,
 } from '@shared/acquisition/state/acquisitionTelemetry';
-import { failedTrackStatus, patchTrackStatus } from '@shared/acquisition/trackStatusStore';
-import { useSharedRetryAcquisition } from '@shared/acquisition/useRetryAcquisition';
+import { failedTrackStatus, patchTrackStatus } from '@shared/acquisition/state/trackStatusStore';
+import { useSharedRetryAcquisition } from '@shared/acquisition/hooks/track/useRetryAcquisition';
 
 export type RetryTrack = Pick<UseMutationResult<void, Error, TrackId>, 'mutate' | 'isPending'>;
 

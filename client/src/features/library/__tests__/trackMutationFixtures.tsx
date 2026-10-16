@@ -4,8 +4,8 @@ import { QueryClient, QueryClientProvider, type InfiniteData } from '@tanstack/r
 import { asPlaylistId, asTrackId } from '@shared/apiClient/ids';
 import type { ListTracksResponse, TrackResponse } from '@shared/apiClient/trackResponse';
 import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
-import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
-import type { TrackStatus } from '@shared/acquisition/trackStatusStore';
+import { useTrackStatusStore } from '@shared/acquisition/state/trackStatusStore';
+import type { TrackStatus } from '@shared/acquisition/state/trackStatusStore';
 import { libraryKeys, playlistKeys } from '@shared/query/queryKeys';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { AcquisitionPortProvider } from '@shared/acquisition/ports/AcquisitionPortProvider';

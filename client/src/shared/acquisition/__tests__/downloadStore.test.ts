@@ -8,7 +8,7 @@ import {
   useDownloadStore,
   type DownloadEntry,
   type DownloadPhase,
-} from '@shared/acquisition/downloadStore';
+} from '@shared/acquisition/state/downloadStore';
 import { asTrackId } from '@shared/apiClient/ids';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 

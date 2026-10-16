@@ -9,7 +9,7 @@ import {
   patchTrackStatus,
   trackIdentityKey,
   useTrackStatusStore,
-} from '@shared/acquisition/trackStatusStore';
+} from '@shared/acquisition/state/trackStatusStore';
 import { getSessionId } from '@shared/telemetry/eventSession';
 import { enqueueCritical, flushOutbox, _resetOutboxForTest } from '@shared/telemetry/outbox';
 import { useOwnedTrack } from '@features/detail/hooks/useOwnedTrack';
@@ -21,7 +21,7 @@ import {
   type ServerEventsClient,
   type ServerEventsClientFactory,
 } from '@shared/events/useServerEvents';
-import { startDownload, useDownloadStore } from '@shared/acquisition/downloadStore';
+import { startDownload, useDownloadStore } from '@shared/acquisition/state/downloadStore';
 import { getSearchState, setSearchState } from '@features/discovery/domain/searchState';
 import { registerSearchStateSignOutReset } from '@features/discovery/adapters/registerSearchStateSignOutReset';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';

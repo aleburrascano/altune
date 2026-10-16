@@ -30,7 +30,7 @@ import {
   patchTrackStatus,
   useTrackStatusStore,
   type TrackStatus,
-} from '@shared/acquisition/trackStatusStore';
+} from '@shared/acquisition/state/trackStatusStore';
 
 function deleteEndpoint(trackId: TrackId) {
   return `DELETE /v1/tracks/${trackId}`;

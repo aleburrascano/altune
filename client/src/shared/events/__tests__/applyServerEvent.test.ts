@@ -4,8 +4,8 @@ import {
   registerAudioCacheInvalidator,
   _resetAudioCacheInvalidatorsForTest,
 } from '@shared/acquisition/state/audioCacheInvalidation';
-import { useDownloadStore } from '@shared/acquisition/downloadStore';
-import { trackIdentityKey, useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
+import { useDownloadStore } from '@shared/acquisition/state/downloadStore';
+import { trackIdentityKey, useTrackStatusStore } from '@shared/acquisition/state/trackStatusStore';
 import { asPlaylistId, asTrackId } from '@shared/apiClient/ids';
 import type {
   ListPlaylistsResponse,

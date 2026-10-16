@@ -5,7 +5,7 @@ import {
   linkTrackIdentity,
   patchTrackStatus,
   trackIdentityKey,
-} from '@shared/acquisition/trackStatusStore';
+} from '@shared/acquisition/state/trackStatusStore';
 import {
   isStaleDownloadPhase,
   startDownload,
@@ -15,9 +15,9 @@ import {
   rememberDownloadMeta,
   type DownloadMeta,
   type DownloadPhase,
-} from '@shared/acquisition/downloadStore';
+} from '@shared/acquisition/state/downloadStore';
 import { invalidateAudioCaches } from '@shared/acquisition/state/audioCacheInvalidation';
-import { stageToPhase } from '@shared/acquisition/stagePhase';
+import { stageToPhase } from '@shared/acquisition/state/stagePhase';
 import { offlineDownloadsSupported } from '@shared/offline/domain/offlineSupport';
 import { repinIfPinned } from '@shared/offline/pinnedStore';
 import { tryParseTrackResponse } from '@shared/apiClient/tracks';

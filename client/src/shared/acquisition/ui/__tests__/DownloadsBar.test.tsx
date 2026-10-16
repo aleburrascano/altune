@@ -8,8 +8,8 @@ import {
   useActiveDownloadItems,
   useDownloadStore,
   type DownloadEntry,
-} from '@shared/acquisition/downloadStore';
-import { ACQUISITION_PHASES } from '@shared/acquisition/stagePhase';
+} from '@shared/acquisition/state/downloadStore';
+import { ACQUISITION_PHASES } from '@shared/acquisition/state/stagePhase';
 import * as announceModule from '@shared/ui/announce';
 import { asTrackId } from '@shared/apiClient/ids';
 

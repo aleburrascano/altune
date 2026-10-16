@@ -11,7 +11,7 @@ import {
   type WireTrackStatus,
 } from '@shared/apiClient/trackAcquisition';
 import type { CreateTrackRequest, TrackResponse } from '@shared/apiClient/trackResponse';
-import { rememberDownloadMeta } from '@shared/acquisition/downloadStore';
+import { rememberDownloadMeta } from '@shared/acquisition/state/downloadStore';
 import {
   adoptResponseStatus,
   linkTrackIdentity,
@@ -19,7 +19,7 @@ import {
   patchTrackStatus,
   removeTrackStatus,
   trackIdentityKey,
-} from '@shared/acquisition/trackStatusStore';
+} from '@shared/acquisition/state/trackStatusStore';
 import {
   invalidateLibraryDerived,
   removeTrackFromCaches,

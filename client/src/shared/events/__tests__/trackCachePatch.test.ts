@@ -25,7 +25,7 @@ import {
   seedTracksPrefix,
 } from '@shared/events/__tests__/trackCacheFixtures';
 import { toReady, toTrackStatus } from '@shared/apiClient/trackAcquisition';
-import { patchTrackStatus, useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
+import { patchTrackStatus, useTrackStatusStore } from '@shared/acquisition/state/trackStatusStore';
 
 describe('getTrackFromCaches', () => {
   it('returns undefined when nothing is cached', () => {

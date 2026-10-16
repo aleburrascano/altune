@@ -2,7 +2,7 @@ import type { QueryClient, QueryKey } from '@tanstack/react-query';
 
 import type { TrackId } from '@shared/apiClient/ids';
 import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { removeTrackStatus } from '@shared/acquisition/trackStatusStore';
+import { removeTrackStatus } from '@shared/acquisition/state/trackStatusStore';
 import { libraryKeys } from '@shared/query/queryKeys';
 import {
   pagedAccessor,

@@ -9,7 +9,7 @@ import {
   patchTrackStatus,
   trackIdentityKey,
   useTrackStatusStore,
-} from '@shared/acquisition/trackStatusStore';
+} from '@shared/acquisition/state/trackStatusStore';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { SaveAllPill, TrackSaveControl, TrackSavePill } from '@features/detail/ui/SaveControls';

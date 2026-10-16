@@ -1,4 +1,4 @@
-import { trackIdentityKey } from '@shared/acquisition/trackStatusStore';
+import { trackIdentityKey } from '@shared/acquisition/state/trackStatusStore';
 import { asTrackId, type TrackId } from '@shared/apiClient/ids';
 import type {
   CatalogSourceRef,

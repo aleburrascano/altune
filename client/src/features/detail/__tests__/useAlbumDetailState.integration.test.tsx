@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
+import { useTrackStatusStore } from '@shared/acquisition/state/trackStatusStore';
 
 import { useAlbumDetailState } from '@features/detail/hooks/useAlbumDetailState';
 import {

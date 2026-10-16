@@ -1,8 +1,8 @@
 import type { ReactElement } from 'react';
 import { FlatList, StyleSheet, View, type ListRenderItemInfo } from 'react-native';
 
-import { useDownloadPhase, type DownloadEntry } from '@shared/acquisition/downloadStore';
-import { phaseLabel } from '@shared/acquisition/stagePhase';
+import { useDownloadPhase, type DownloadEntry } from '@shared/acquisition/state/downloadStore';
+import { phaseLabel } from '@shared/acquisition/state/stagePhase';
 import { Text, radius, spacing, useTheme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { ModalFrame } from '@shared/ui/primitives/ModalFrame';

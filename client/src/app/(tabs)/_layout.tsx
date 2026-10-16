@@ -4,7 +4,7 @@ import { usePathname } from 'expo-router';
 import { useState } from 'react';
 import { View } from 'react-native';
 
-import { useActiveDownloadItems } from '@shared/acquisition/downloadStore';
+import { useActiveDownloadItems } from '@shared/acquisition/state/downloadStore';
 import { DownloadsBar } from '@shared/acquisition/ui/DownloadsBar';
 import { DownloadsSheet } from '@shared/acquisition/ui/DownloadsSheet';
 import { MiniPlayer } from '@features/playback';

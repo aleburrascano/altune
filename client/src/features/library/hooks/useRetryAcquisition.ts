@@ -33,7 +33,7 @@ import {
   type RetryEntryPoint,
   type RetrySkipReason,
 } from '@shared/acquisition/state/acquisitionTelemetry';
-import { useSharedRetryAcquisition } from '@shared/acquisition/useRetryAcquisition';
+import { useSharedRetryAcquisition } from '@shared/acquisition/hooks/track/useRetryAcquisition';
 
 const trackMutationKeys = {
   retryAcquisition: ['track', 'retry-acquisition'] as const,

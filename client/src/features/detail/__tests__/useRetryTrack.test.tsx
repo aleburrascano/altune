@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { asTrackId } from '@shared/apiClient/ids';
-import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
+import { useTrackStatusStore } from '@shared/acquisition/state/trackStatusStore';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 import { useRetryTrack } from '@features/detail/hooks/useRetryTrack';

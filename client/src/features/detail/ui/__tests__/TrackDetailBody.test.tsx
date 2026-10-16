@@ -8,7 +8,7 @@ import {
   patchTrackStatus,
   trackIdentityKey,
   useTrackStatusStore,
-} from '@shared/acquisition/trackStatusStore';
+} from '@shared/acquisition/state/trackStatusStore';
 
 import { optimisticTrackId, toCreateTrackRequest } from '@features/detail/domain/saveTrack';
 import type { LateralNavHandle } from '@features/detail/hooks/useTrackDetailActions';

@@ -3,7 +3,7 @@ import type { RefObject } from 'react';
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
-import { trackIdentityKey } from '@shared/acquisition/trackStatusStore';
+import { trackIdentityKey } from '@shared/acquisition/state/trackStatusStore';
 
 import { runBounded, type BatchOutcome } from '@shared/runBounded';
 

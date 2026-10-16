@@ -1,5 +1,5 @@
-import type { DownloadPhase } from '@shared/acquisition/downloadStore';
-import { phaseLabel } from '@shared/acquisition/stagePhase';
+import type { DownloadPhase } from '@shared/acquisition/state/downloadStore';
+import { phaseLabel } from '@shared/acquisition/state/stagePhase';
 import type { PinnedStatus } from '@shared/offline/pinnedStore';
 
 import { pinnedStatusDisplay } from '@features/library/domain/pinnedStatusDisplay';

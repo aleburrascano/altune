@@ -6,7 +6,7 @@ import {
   useTrackIdForIdentity,
   useTrackStatus,
   type TrackStatus,
-} from '@shared/acquisition/trackStatusStore';
+} from '@shared/acquisition/state/trackStatusStore';
 
 import {
   ownedFromTrackInfo,

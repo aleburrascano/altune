@@ -7,7 +7,7 @@ import type { ApiError } from '@shared/failure/errors';
 
 import { createMemoryAcquisitionPort } from '@shared/acquisition/__tests__/memoryAcquisitionPort';
 import { AcquisitionPortProvider } from '@shared/acquisition/ports/AcquisitionPortProvider';
-import { useSharedRetryAcquisition } from '@shared/acquisition/useRetryAcquisition';
+import { useSharedRetryAcquisition } from '@shared/acquisition/hooks/track/useRetryAcquisition';
 import { signInTestUser } from '@testing/signInTestUser';
 
 const { __http } = require('@testing/doubles/fetch.js');

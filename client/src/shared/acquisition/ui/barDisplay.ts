@@ -3,8 +3,8 @@ import {
   isInFlight,
   type DownloadEntry,
   type DownloadPhase,
-} from '@shared/acquisition/downloadStore';
-import { ACQUISITION_PHASES } from '@shared/acquisition/stagePhase';
+} from '@shared/acquisition/state/downloadStore';
+import { ACQUISITION_PHASES } from '@shared/acquisition/state/stagePhase';
 
 export interface BarDisplay {
   phase: DownloadPhase;

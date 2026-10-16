@@ -11,7 +11,7 @@ import {
   useTrackStatus,
   useTrackStatusStore,
   type TrackStatus,
-} from '@shared/acquisition/trackStatusStore';
+} from '@shared/acquisition/state/trackStatusStore';
 import { asTrackId, type TrackId } from '@shared/apiClient/ids';
 import { toFailed, toPending, toReady, toTrackStatus } from '@shared/apiClient/trackAcquisition';
 import type { AcquisitionStatus } from '@shared/apiClient/trackResponse';

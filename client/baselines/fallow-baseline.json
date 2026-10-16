@@ -39,7 +39,7 @@
     "src/features/settings/hooks/useAccountEmail.ts:accountEmail",
     "src/shared/acquisition/state/acquisitionTelemetry.ts:_resetAcquisitionTelemetryForTest",
     "src/shared/acquisition/state/audioCacheInvalidation.ts:_resetAudioCacheInvalidatorsForTest",
-    "src/shared/acquisition/downloadStore.ts:useDownloadStore",
+    "src/shared/acquisition/state/downloadStore.ts:useDownloadStore",
     "src/shared/acquisition/ports/AcquisitionPortProvider.tsx:AcquisitionPortProvider",
     "src/shared/auth/sessionExpired.ts:getSessionExpired",
     "src/shared/device/webOrigin.ts:webOrigin",

@@ -4,9 +4,9 @@ import { Animated, StyleSheet, View } from 'react-native';
 
 import { ChevronUp } from 'lucide-react-native';
 
-import type { DownloadEntry } from '@shared/acquisition/downloadStore';
+import type { DownloadEntry } from '@shared/acquisition/state/downloadStore';
 import { deriveBarDisplay } from '@shared/acquisition/ui/barDisplay';
-import { ACQUISITION_PHASES, phaseLabel } from '@shared/acquisition/stagePhase';
+import { ACQUISITION_PHASES, phaseLabel } from '@shared/acquisition/state/stagePhase';
 import { Text, pressedStyle, spacing, useTheme } from '@shared/ui';
 import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
 import { Artwork } from '@shared/ui/primitives/Artwork';
