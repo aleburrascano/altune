@@ -35,7 +35,8 @@ type AcquireTrackAudioService struct {
 	contextObserver func(*AcquisitionContext)
 	previews        ports.PreviewMatcher
 
-	cuts audiojudge.Cuts
+	cuts           audiojudge.Cuts
+	acquireTimeout time.Duration
 }
 
 func NewAcquireTrackAudioService(
@@ -54,6 +55,7 @@ func NewAcquireTrackAudioService(
 		cuts:       audiojudge.DefaultCuts(),
 
 		confidenceFloor: defaultConfidenceFloor,
+		acquireTimeout:  acquireTimeout,
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -158,7 +160,7 @@ func schedulerCancelledJobContext(ctx context.Context) bool {
 
 func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.UserId, trackId shared.TrackId) error {
 	jobCtx := ctx
-	ctx, cancel := context.WithTimeout(ctx, acquireTimeout)
+	ctx, cancel := context.WithTimeout(ctx, s.acquireTimeout)
 	defer cancel()
 	track, err := s.loadTrack(ctx, userId, trackId)
 	if err != nil || track == nil {
@@ -188,6 +190,7 @@ func (s *AcquireTrackAudioService) settleExecuteFailure(ctx, jobCtx context.Cont
 	if schedulerCancelledJobContext(jobCtx) {
 		return s.reportSchedulerCancelledWithoutMarkingFailed(ctx, userId, trackId, err)
 	}
+	err = ownTimeout(jobCtx, ctx, err)
 	if willRetry(jobCtx, err) {
 		return s.reportRetryableFailure(ctx, userId, trackId, err)
 	}
@@ -196,7 +199,7 @@ func (s *AcquireTrackAudioService) settleExecuteFailure(ctx, jobCtx context.Cont
 
 func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId shared.UserId, trackId shared.TrackId) error {
 	jobCtx := ctx
-	ctx, cancel := context.WithTimeout(ctx, acquireTimeout)
+	ctx, cancel := context.WithTimeout(ctx, s.acquireTimeout)
 	defer cancel()
 	track, err := s.loadTrack(ctx, userId, trackId)
 	if err != nil || track == nil {
@@ -208,7 +211,7 @@ func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId sh
 
 func (s *AcquireTrackAudioService) ReplaceGated(ctx context.Context, userId shared.UserId, track *ports.TrackSnapshot, gate upgrade.Gate) (upgrade.Attempt, error) {
 	jobCtx := ctx
-	ctx, cancel := context.WithTimeout(ctx, acquireTimeout)
+	ctx, cancel := context.WithTimeout(ctx, s.acquireTimeout)
 	defer cancel()
 	ac, err := s.withoutUserEvents().replaceLoaded(ctx, jobCtx, userId, track, gate)
 	return attemptOf(ac, err), err
@@ -251,6 +254,7 @@ func (s *AcquireTrackAudioService) settleReplaceFailure(ctx, jobCtx context.Cont
 	if schedulerCancelledJobContext(jobCtx) {
 		return s.reportSchedulerCancelledWithoutMarkingFailed(ctx, userId, trackId, err)
 	}
+	err = ownTimeout(jobCtx, ctx, err)
 	return s.reportReplaceFailure(ctx, userId, trackId, err, ac)
 }
 

@@ -2,6 +2,7 @@ package service
 
 import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
+	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
@@ -15,6 +16,7 @@ var (
 	ErrAcquisitionRetryable = errors.New("acquisition failed transiently, job released for retry")
 	ErrNoConfidentMatch     = errors.New("no candidate met the confidence floor")
 	ErrReplaceFactMissing   = errors.New("replace: no fact identifies the current file")
+	ErrAcquisitionTimedOut  = errors.New("acquisition exhausted its own time budget")
 )
 
 func retryBackoff(attempts int) time.Duration {
@@ -22,7 +24,14 @@ func retryBackoff(attempts int) time.Duration {
 }
 
 func isTransientFailure(err error) bool {
-	return acqdomain.IsSourceUnavailable(err)
+	return acqdomain.IsSourceUnavailable(err) || errors.Is(err, ErrAcquisitionTimedOut)
+}
+
+func ownTimeout(jobCtx, ctx context.Context, err error) error {
+	if !ports.RunTimedOut(jobCtx, ctx) {
+		return err
+	}
+	return fmt.Errorf("%w: %w", ErrAcquisitionTimedOut, err)
 }
 
 func failureReason(err error) string {
@@ -34,6 +43,9 @@ func FailureCodeOf(err error) string {
 }
 
 func failureCode(err error) shared.FailureCode {
+	if errors.Is(err, ErrAcquisitionTimedOut) {
+		return shared.FailureSourceUnavailable
+	}
 	if isCancellation(err) {
 		return shared.FailureAcquisitionCancelled
 	}

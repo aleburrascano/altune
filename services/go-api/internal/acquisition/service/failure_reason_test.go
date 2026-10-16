@@ -280,3 +280,14 @@ func TestRetryBackoff_ANonPositiveRunWaitsThePositiveFirstDelay(t *testing.T) {
 		}
 	}
 }
+
+func TestFailureCode_OwnTimeoutIsTransient(t *testing.T) {
+	err := fmt.Errorf("%w: %w", ErrAcquisitionTimedOut, &StepError{Step: "download", Err: context.DeadlineExceeded})
+
+	if got := failureReason(err); got != "source_unavailable" {
+		t.Errorf("failureReason = %q, want source_unavailable", got)
+	}
+	if !isTransientFailure(err) {
+		t.Error("isTransientFailure = false, want true")
+	}
+}

@@ -1976,3 +1976,76 @@ func TestExecute_AConfiguredZeroFloorIsHonoured(t *testing.T) {
 		t.Errorf("with no option err = %v, want ErrNoConfidentMatch at the 0.5 default", err)
 	}
 }
+
+type stalledSource struct{}
+
+func (stalledSource) Name() acqdomain.SourceName { return "stalled" }
+
+func (stalledSource) Find(ctx context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
+	<-ctx.Done()
+	return nil, withCancellation(ctx, ctx.Err())
+}
+
+func (stalledSource) Fetch(ctx context.Context, _ ports.AudioCandidate, _ string) (ports.FetchedAudio, error) {
+	<-ctx.Done()
+	return ports.FetchedAudio{}, withCancellation(ctx, ctx.Err())
+}
+
+func executeAfterOwnTimeBudget(t *testing.T, attempt int) (*domain.Track, *recordingPublisher, error) {
+	t.Helper()
+	userId := shared.NewUserId(uuid.New())
+	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	repo := newFakeTrackRepository()
+	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	pub := newRecordingPublisher()
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(stalledSource{}), newFakeAudioStore(), WithAcquireEvents(pub))
+	svc.acquireTimeout = time.Millisecond
+	ctx := withJobAttempt(withSchedulerOwnedJobContext(context.Background()), attempt)
+
+	execErr := svc.Execute(ctx, userId, track.ID)
+
+	return storedTrack(t, repo, track), pub, execErr
+}
+
+func TestExecute_AnExpiredOwnTimeBudgetIsRetried(t *testing.T) {
+	stored, pub, execErr := executeAfterOwnTimeBudget(t, 1)
+	if stored == nil || pub == nil {
+		t.Fatal("no stored track or publisher")
+	}
+
+	if !errors.Is(execErr, ErrAcquisitionRetryable) {
+		t.Errorf("err = %v, want ErrAcquisitionRetryable", execErr)
+	}
+	if !errors.Is(execErr, ErrAcquisitionTimedOut) {
+		t.Errorf("err = %v, want ErrAcquisitionTimedOut", execErr)
+	}
+	if stored.AcquisitionStatus != domain.AcquisitionPending {
+		t.Errorf("status = %v, want pending", stored.AcquisitionStatus)
+	}
+	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 0 {
+		t.Errorf("failed publishes = %d, want 0", got)
+	}
+}
+
+func TestExecute_AnExpiredOwnTimeBudgetOnTheLastAttemptIsSourceUnavailable(t *testing.T) {
+	stored, pub, execErr := executeAfterOwnTimeBudget(t, maxAcquisitionAttempts)
+	if stored == nil || pub == nil {
+		t.Fatal("no stored track or publisher")
+	}
+
+	if errors.Is(execErr, ErrAcquisitionRetryable) {
+		t.Errorf("err = %v, want a terminal failure", execErr)
+	}
+	if stored.AcquisitionStatus != domain.AcquisitionFailed {
+		t.Fatalf("status = %v, want failed", stored.AcquisitionStatus)
+	}
+	if got := deref(stored.FailureReason); got != string(domain.FailureSourceUnavailable) {
+		t.Errorf("failure reason = %q, want %q", got, domain.FailureSourceUnavailable)
+	}
+	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 1 {
+		t.Errorf("failed publishes = %d, want 1", got)
+	}
+}
