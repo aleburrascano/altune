@@ -189,6 +189,7 @@ describe('ArtistUnreleased', () => {
   it('drops the loading hint when the request fails', async () => {
     __http.reply(UNRELEASED, { status: 500, json: { code: 'internal' } });
     renderSection();
+    expect(screen.getByTestId('detail-unreleased-loading')).toBeTruthy();
 
     await waitFor(() => expect(screen.queryByTestId('detail-unreleased-loading')).toBeNull());
     expect(screen.queryByText('Looking for unreleased tracks…')).toBeNull();
@@ -197,6 +198,7 @@ describe('ArtistUnreleased', () => {
   it('drops the loading hint when the artist has none', async () => {
     __http.reply(UNRELEASED, { status: 200, json: { items: [] } });
     renderSection();
+    expect(screen.getByTestId('detail-unreleased-loading')).toBeTruthy();
 
     await waitFor(() => expect(screen.queryByTestId('detail-unreleased-loading')).toBeNull());
     expect(screen.queryByTestId('detail-unreleased')).toBeNull();
