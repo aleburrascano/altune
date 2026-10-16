@@ -29,7 +29,7 @@ import { installGlobalErrorReporting } from '@shared/telemetry/clientErrorReport
 import { PlaybackProvider, SleepTimerBridge, startPlaybackService } from '@features/playback';
 import { OfflineReconcileBridge } from '@shared/offline/ui/OfflineReconcileBridge';
 import { useWideWebLayout } from '@shared/ui/layout/useLayoutMode';
-import { ScreenBoundary } from '@shared/ui/ScreenBoundary';
+import { ScreenBoundary } from '@shared/ui/failure/ScreenBoundary';
 import { ThemeProvider, themes } from '@shared/ui/theme';
 import { useThemePreference } from '@shared/ui/theme/themePreference';
 import { AppChrome } from '@/shell/AppChrome';

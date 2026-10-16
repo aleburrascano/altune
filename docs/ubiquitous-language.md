@@ -138,4 +138,4 @@ Terms that **must not** appear in altune code (caught by the `terminology-drift`
 
 Words a folder name may use without a glossary term; each names a part of a screen or an outside technology, never a domain concept.
 
-- `screen`, `http`, `platform`, `wire`, `api`, `client`, `ui`, `files`, `device`, `lifecycle`, `navigation`, `telemetry`, `hero`, `timing`, `math`
+- `screen`, `http`, `platform`, `wire`, `api`, `client`, `ui`, `files`, `device`, `lifecycle`, `navigation`, `telemetry`, `hero`, `timing`, `math`, `concurrency`

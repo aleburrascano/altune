@@ -6,7 +6,7 @@ import { Text, type TextTone } from '@shared/ui/primitives/Text';
 import { spacing, type TypographyVariant } from '@shared/ui/theme';
 import { Button } from '@shared/ui/primitives/Button';
 import { asyncView } from '@shared/ui/asyncView';
-import { AsyncSection } from '@shared/ui/AsyncSection';
+import { AsyncSection } from '@shared/ui/async/AsyncSection';
 
 import { sharedStyles } from '@features/detail/ui/detailStyles';
 import type { ContentFailure } from '@features/detail/domain/contentStatus';

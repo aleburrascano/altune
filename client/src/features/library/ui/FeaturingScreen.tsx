@@ -11,7 +11,7 @@ import { buildPlayableQueue } from '@shared/playback/playFromList';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { Button, Screen, Skeleton, Text, spacing } from '@shared/ui';
-import { AsyncSection } from '@shared/ui/AsyncSection';
+import { AsyncSection } from '@shared/ui/async/AsyncSection';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { featuringDetailRoute, goBackOrToLibrary } from '@features/library/domain/libraryRoutes';

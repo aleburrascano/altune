@@ -2,7 +2,7 @@ import { Stack } from 'expo-router';
 import { View } from 'react-native';
 
 import { ArtworkBackground } from '@shared/ui/hero/ArtworkBackground';
-import { ScreenBoundary } from '@shared/ui/ScreenBoundary';
+import { ScreenBoundary } from '@shared/ui/failure/ScreenBoundary';
 import { themes } from '@shared/ui/theme';
 import { useThemePreference } from '@shared/ui/theme/themePreference';
 

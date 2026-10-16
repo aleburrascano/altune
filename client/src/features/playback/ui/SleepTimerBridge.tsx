@@ -4,7 +4,7 @@ import { usePlayback } from '@shared/playback/usePlayback';
 
 import { useAppStateChange } from '@shared/lifecycle';
 import { useSleepTimerStore } from '@features/playback/hooks/useSleepTimer';
-import { monotonicNow as defaultMonotonicNow } from '@shared/time';
+import { monotonicNow as defaultMonotonicNow } from '@shared/timing/monotonicNow';
 
 const MAX_SLEEP_CHECK_MS = 60_000;
 

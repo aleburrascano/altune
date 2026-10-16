@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router';
 
 import { useWideWebLayout } from '@shared/ui/layout/useLayoutMode';
-import { ScreenBoundary } from '@shared/ui/ScreenBoundary';
+import { ScreenBoundary } from '@shared/ui/failure/ScreenBoundary';
 
 function modalOptions(isWideWeb: boolean) {
   return isWideWeb

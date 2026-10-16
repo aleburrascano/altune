@@ -1,4 +1,4 @@
-import { runBounded } from '@shared/runBounded';
+import { runBounded } from '@shared/concurrency/runBounded';
 
 const limit = 4;
 

@@ -5,7 +5,7 @@ import { countLabel } from '@shared/ui/displayFormat';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { Screen, useTheme } from '@shared/ui';
-import { AsyncSection } from '@shared/ui/AsyncSection';
+import { AsyncSection } from '@shared/ui/async/AsyncSection';
 import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
 import { SearchBar } from '@shared/ui/primitives/SearchBar';
 import { AddToPlaylistSheet, CreatePlaylistModal } from '@shared/playlists';

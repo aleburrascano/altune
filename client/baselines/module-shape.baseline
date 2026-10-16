@@ -1,7 +1,3 @@
-M10 src/shared/runBounded.ts file at the shared root
-M10 src/shared/time.ts file at the shared root
-M10 src/shared/ui/AsyncSection.tsx loose file in shared/ui
-M10 src/shared/ui/ScreenBoundary.tsx loose file in shared/ui
 M10 src/shared/ui/announce.android.ts loose file in shared/ui
 M10 src/shared/ui/announce.ts loose file in shared/ui
 M10 src/shared/ui/asyncView.ts loose file in shared/ui

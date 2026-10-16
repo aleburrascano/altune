@@ -1,4 +1,4 @@
-import { monotonicNow } from '@shared/time';
+import { monotonicNow } from '@shared/timing/monotonicNow';
 
 const LOCKOUT_AFTER_FAILURES = 5;
 

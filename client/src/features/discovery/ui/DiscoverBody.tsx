@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { AsyncSection, type AsyncSectionProps } from '@shared/ui/AsyncSection';
+import { AsyncSection, type AsyncSectionProps } from '@shared/ui/async/AsyncSection';
 import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
 import { BlendedSection } from '@features/discovery/ui/BlendedSection';
 import {

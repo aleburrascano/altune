@@ -5,7 +5,7 @@ import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
 import { trackIdentityKey } from '@shared/acquisition/state/trackStatusStore';
 
-import { runBounded, type BatchOutcome } from '@shared/runBounded';
+import { runBounded, type BatchOutcome } from '@shared/concurrency/runBounded';
 
 import { toCreateTrackRequest, SAVE_ALL_CONCURRENCY } from '@features/detail/domain/saveTrack';
 import { trackExtras } from '@features/detail/domain/trackExtras';

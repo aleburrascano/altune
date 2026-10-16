@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useAppMutation } from '@shared/query/useAppMutation';
 import { showFailureAlert } from '@shared/ui';
-import { runBounded } from '@shared/runBounded';
+import { runBounded } from '@shared/concurrency/runBounded';
 import type { TrackId } from '@shared/apiClient/ids';
 import {
   forgetTrack,
