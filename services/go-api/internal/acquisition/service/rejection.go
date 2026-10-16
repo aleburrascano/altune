@@ -55,9 +55,31 @@ func summarizeRejections(rejections []CandidateRejection) string {
 		return ""
 	}
 
-	byStage := make(map[string]int, len(rejections))
-	for _, r := range rejections {
-		byStage[string(r.Stage)]++
+	judged := make(map[string]RejectionStage, len(rejections))
+	for i, r := range rejections {
+		key := sourceKey(r.URL)
+		if key == "" {
+			key = r.URL
+		}
+		if key == "" {
+			key = fmt.Sprintf("#%d", i)
+		}
+		if r.Stage != RejectionNotAttempted {
+			judged[key] = r.Stage
+		} else if _, ok := judged[key]; !ok {
+			judged[key] = ""
+		}
+	}
+
+	byStage := make(map[string]int, len(judged))
+	rejected, notTried := 0, 0
+	for _, stage := range judged {
+		if stage == "" {
+			notTried++
+			continue
+		}
+		byStage[string(stage)]++
+		rejected++
 	}
 
 	stages := make([]string, 0, len(byStage))
@@ -71,11 +93,21 @@ func summarizeRejections(rejections []CandidateRejection) string {
 		parts = append(parts, fmt.Sprintf("%d %s", byStage[stage], stage))
 	}
 
-	noun := "candidates"
-	if len(rejections) == 1 {
-		noun = "candidate"
+	if rejected == 0 {
+		return fmt.Sprintf("%d %s not tried", notTried, candidateNoun(notTried))
 	}
-	return fmt.Sprintf("all %d %s rejected (%s)", len(rejections), noun, strings.Join(parts, ", "))
+	summary := fmt.Sprintf("all %d %s rejected (%s)", rejected, candidateNoun(rejected), strings.Join(parts, ", "))
+	if notTried > 0 {
+		summary += fmt.Sprintf(", %d not tried", notTried)
+	}
+	return summary
+}
+
+func candidateNoun(n int) string {
+	if n == 1 {
+		return "candidate"
+	}
+	return "candidates"
 }
 
 func (s RejectionStage) lasting() bool {

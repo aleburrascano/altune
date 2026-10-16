@@ -257,7 +257,7 @@ func TestExecute_PersistsRejectionSummaryInFailureReason(t *testing.T) {
 	}
 }
 
-func TestExecute_AttemptCapLeavesUntriedCandidatesInTheSummary(t *testing.T) {
+func TestExecute_AttemptCapReportsUntriedCandidatesApart(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	track, err := domain.NewTrack(userId, "I've Been in Love Before", "Cutting Crew", "Broadcast")
 	if err != nil {
@@ -288,7 +288,7 @@ func TestExecute_AttemptCapLeavesUntriedCandidatesInTheSummary(t *testing.T) {
 		t.Fatal("track missing after acquire")
 		return
 	}
-	want := fmt.Sprintf("all %d candidates rejected (%d download, 3 not_attempted)", ranked, maxDownloadAttempts)
+	want := fmt.Sprintf("all %d candidates rejected (%d download), 3 not tried", maxDownloadAttempts, maxDownloadAttempts)
 	if reason := deref(updated.FailureReason); !strings.Contains(reason, want) {
 		t.Errorf("failure reason = %q, want it to contain %q", reason, want)
 	}
@@ -334,5 +334,42 @@ func TestLastingRejectionRecords_DropsAnUnmeasuredDuration(t *testing.T) {
 	}
 	if len(ac.Rejections) != 2 {
 		t.Errorf("run rejections = %d, want both kept for the summary", len(ac.Rejections))
+	}
+}
+
+func TestSummarizeRejections_UntriedAndDuplicatesAreNotCountedAsRejected(t *testing.T) {
+	tests := []struct {
+		name string
+		in   []CandidateRejection
+		want string
+	}{
+		{"same source in both tiers counts once, last real stage wins", []CandidateRejection{
+			{URL: "yt:a", Stage: RejectionIdentity},
+			{URL: "yt:a", Stage: RejectionDownload},
+		}, "all 1 candidate rejected (1 download)"},
+		{"untried reported apart", []CandidateRejection{
+			{URL: "yt:a", Stage: RejectionDownload},
+			{URL: "yt:b", Stage: RejectionDownload},
+			{URL: "yt:c", Stage: RejectionNotAttempted},
+			{URL: "yt:d", Stage: RejectionNotAttempted},
+			{URL: "yt:d", Stage: RejectionNotAttempted},
+		}, "all 2 candidates rejected (2 download), 2 not tried"},
+		{"skipped after being judged stays judged", []CandidateRejection{
+			{URL: "yt:a", Stage: RejectionIdentity},
+			{URL: "yt:a", Stage: RejectionNotAttempted},
+		}, "all 1 candidate rejected (1 identity)"},
+		{"only untried", []CandidateRejection{
+			{URL: "yt:a", Stage: RejectionNotAttempted},
+		}, "1 candidate not tried"},
+		{"url-less entries count on their own", []CandidateRejection{
+			{Stage: RejectionIdentity}, {Stage: RejectionIdentity},
+		}, "all 2 candidates rejected (2 identity)"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := summarizeRejections(tt.in); got != tt.want {
+				t.Errorf("summary = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
