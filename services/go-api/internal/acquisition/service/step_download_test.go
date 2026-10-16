@@ -2462,3 +2462,37 @@ func TestDownloadStep_AProbeFailureOnALiveAttemptIsStillASkip(t *testing.T) {
 
 	assertWindowSkips(t, rec.gates, ports.SkipProbeFailed)
 }
+
+type slowVersionLookup struct {
+	stubVersionLookup
+	delay time.Duration
+}
+
+func (s *slowVersionLookup) RecordingByMBID(ctx context.Context, mbid string) (ports.RecordingFacts, bool, error) {
+	time.Sleep(s.delay)
+	return s.stubVersionLookup.RecordingByMBID(ctx, mbid)
+}
+
+func TestDownloadStep_ConcurrentCandidatesShareOneVersionLookup(t *testing.T) {
+	lookup := &slowVersionLookup{
+		stubVersionLookup: stubVersionLookup{facts: map[string]ports.RecordingFacts{
+			"mb-linked": {MBID: "mb-linked", Title: "Sunglasses at Night"},
+		}},
+		delay: 30 * time.Millisecond,
+	}
+	step := NewDownloadStep(&fileWritingSearcher{writeFile: true},
+		WithDownloadIdentifier(&stubIdentifier{match: plainTitledLinks("mb-linked")}), WithRecordingLookup(lookup), WithVerifyWidth(2))
+	ac := downloadContext("mb-master")
+	for i := range ac.Ranked {
+		ac.Ranked[i].Title = ""
+	}
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+	if want := []string{"mb-linked"}; !equalStrings(lookup.calls, want) {
+		t.Errorf("lookups = %v, want %v: both candidates share one MusicBrainz call", lookup.calls, want)
+	}
+}
