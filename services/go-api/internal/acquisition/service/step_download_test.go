@@ -2345,3 +2345,22 @@ func TestDownloadStep_AZeroFloorIsUsedAsGiven(t *testing.T) {
 		t.Fatalf("a floor of 0 should store the held candidate, got %v", err)
 	}
 }
+
+func TestDownloadStep_TheStoredConfidenceIsTheJudgedOne(t *testing.T) {
+	ac := &AcquisitionContext{Track: TrackRef{Title: "X", Artist: "Y", CatalogDuration: 200}}
+	judged := attempt{
+		candidate:  ports.AudioCandidate{Title: "Song", URL: "https://example.com/v"},
+		status:     attemptAccepted,
+		evidence:   Evidence{Verdict: string(VerdictHard), AcoustIDScore: 0.97},
+		confidence: 0.123,
+	}
+	if ScoreConfidence(judged.evidence, ac.ExpectedLength()) == judged.confidence {
+		t.Fatal("fixture must make the judged confidence differ from a recomputation")
+	}
+
+	judged.applyTo(context.Background(), ac)
+
+	if ac.Confidence != judged.confidence {
+		t.Errorf("stored confidence = %v, want the judged %v", ac.Confidence, judged.confidence)
+	}
+}

@@ -382,8 +382,8 @@ links, the grade, the reasons and `reference_doubted`. The grade stored in the e
 the judge's.
 
 `unknown` is not a rejection. `judgeAttempt` builds `Evidence` (verdict, AcoustID
-score, ISRC-set hit, duration delta, channel class, fallback qualifiers, whether the
-identity was resolved, source title; `ISRCSetHit` is declared but nothing sets it yet) and scores it with
+score, duration delta, channel class, fallback qualifiers, whether the
+identity was resolved, source title) and scores it with
 `ScoreConfidence(e Evidence, trackSeconds float64)`: `hard` 0.95, `soft` 0.85 (each
 knocked to at least 0.8 when the AcoustID score is under 0.92), and for `unknown`
 0.2 plus 0.3 for a Topic or artist channel, plus 0.2 for a duration within 2s (0.1
@@ -648,7 +648,7 @@ every recording registered to the ISRC into `RecordingIdentity.MBIDs`, and a
 candidate whose fingerprint links any of them earns a `hard` verdict (§4), even when
 the resolved MBID is a remix. `ReferenceDoubted` flags the identities where the
 reference itself is suspect. **Still open:** a track with no ISRC has a one-element
-reference set, and `Evidence.ISRCSetHit` is declared but never populated.
+reference set.
 
 ### 7.8 Selection is tested against curated goldens, not live results — partially closed
 

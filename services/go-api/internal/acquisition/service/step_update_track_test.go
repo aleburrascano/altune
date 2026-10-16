@@ -202,6 +202,7 @@ func TestUpdateTrackStep_Execute_StoresVerdictScoreAndSourceTitleAsEvidence(t *t
 		Selected: &ports.AudioCandidate{Title: "Song (Official Audio)", URL: "https://example.com/v"},
 		Verdict:  AudioVerdict{Kind: VerdictHard, Score: 0.93},
 	}
+	ac.adopt(context.Background(), Evidence{Verdict: "hard", AcoustIDScore: 0.93, SourceTitle: "Song (Official Audio)"}, 0)
 
 	if _, err := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID).Execute(context.Background(), ac, afterStore{}); err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -501,5 +502,27 @@ func TestUpdateTrackStep_AnUncomparedLengthIsNullInTheEvidence(t *testing.T) {
 	}
 	if v, present := stored["duration_delta_seconds"]; !present || v != nil {
 		t.Errorf("duration_delta_seconds = %v (present %v), want null", v, present)
+	}
+}
+
+func TestUpdateTrackStep_EvidenceHasNoUnsetISRCHit(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track := seedTrackInRepo(t, repo, userId, nil)
+	ac := &AcquisitionContext{
+		AudioRef: drinkingAudio,
+		Selected: &ports.AudioCandidate{Title: "Song", URL: drinkingSource},
+	}
+
+	if _, err := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID).Execute(context.Background(), ac, afterStore{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(storedTrack(t, repo, track).AcquisitionEvidence(), &keys); err != nil {
+		t.Fatalf("evidence not stored as JSON: %v", err)
+	}
+	if _, present := keys["isrc_set_hit"]; present {
+		t.Errorf("stored evidence carries isrc_set_hit: %v", keys)
 	}
 }

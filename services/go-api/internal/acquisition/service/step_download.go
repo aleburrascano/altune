@@ -314,7 +314,7 @@ func (a attempt) applyTo(ctx context.Context, ac *AcquisitionContext) {
 	ac.IdentityVerified = a.verified.identity
 	ac.ProbedDuration = a.verified.probed
 	ac.Verdict = a.verified.verdict
-	ac.adopt(ctx, a.evidence)
+	ac.adopt(ctx, a.evidence, a.confidence)
 }
 
 func (s *DownloadStep) runAttempt(

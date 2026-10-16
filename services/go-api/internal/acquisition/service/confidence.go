@@ -111,9 +111,9 @@ func fallbackLengthMatches(delta *float64, trackSeconds float64) bool {
 	return delta != nil && math.Abs(*delta) <= domain.LengthAuthoritative.Allowance(trackSeconds)
 }
 
-func (ac *AcquisitionContext) adopt(ctx context.Context, evidence Evidence) {
+func (ac *AcquisitionContext) adopt(ctx context.Context, evidence Evidence, confidence float64) {
 	ac.Evidence = evidence
-	ac.Confidence = ScoreConfidence(evidence, ac.ExpectedLength())
+	ac.Confidence = confidence
 	slog.InfoContext(ctx, "acquisition.confidence",
 		"track_id", ac.Track.ID,
 		"confidence", ac.Confidence,
@@ -124,7 +124,6 @@ func (ac *AcquisitionContext) adopt(ctx context.Context, evidence Evidence) {
 type Evidence struct {
 	Verdict              string           `json:"verdict"`
 	AcoustIDScore        float64          `json:"acoustid_score"`
-	ISRCSetHit           bool             `json:"isrc_set_hit"`
 	DurationDeltaSeconds *float64         `json:"duration_delta_seconds"`
 	Channel              string           `json:"channel"`
 	Qualifiers           []string         `json:"qualifiers"`
@@ -192,11 +191,8 @@ func FingerprintOf(verdict VerdictKind) grade.Fingerprint {
 
 func (ac *AcquisitionContext) collectEvidence() Evidence {
 	evidence := ac.Evidence
-	evidence.Verdict = string(ac.Verdict.Kind)
-	evidence.AcoustIDScore = ac.Verdict.Score
 	_, evidence.ISRCSource = ac.provenISRC()
 	if ac.Selected != nil {
-		evidence.SourceTitle = ac.Selected.Title
 		evidence.SourceKind = SourceKindOf(*ac.Selected, evidence.Channel)
 	}
 	evidence.PipelineGeneration = grade.PipelineGeneration
