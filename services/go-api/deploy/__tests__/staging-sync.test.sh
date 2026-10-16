@@ -553,6 +553,124 @@ test_a_long_table_list_does_not_abort_a_ruled_table() {
     restore_manifest
 }
 
+test_sync_keeps_rejection_timestamps_and_detail_from_prod() {
+    reset_databases
+    write_env
+    sql prod -c "INSERT INTO acquisition_rejections (track_id, source_key, reason, detail, rejected_at, expected_seconds, reference_mbid) VALUES ('$T1', 'old-src', 'duration', 'too long', '2026-09-20 12:00:00+00', 201.5, 'mb-ref')"
+    run_sync
+    check "a sync with a dated rejection exits 0" 0 "$?"
+    check "a copied rejection keeps prod's rejected_at so the 30-day window matches" "2026-09-20 12:00:00" "$(staging_value "SELECT to_char(rejected_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') FROM acquisition_rejections WHERE track_id = '$T1'")"
+    check "a copied rejection keeps reason, detail and basis" "duration|too long|201.5|mb-ref" "$(staging_value "SELECT reason || '|' || detail || '|' || expected_seconds || '|' || reference_mbid FROM acquisition_rejections WHERE track_id = '$T1'")"
+}
+
+test_rejections_with_non_uuid_track_ids_do_not_abort_sync() {
+    reset_databases
+    write_env
+    sql prod -c "INSERT INTO acquisition_rejections (track_id, source_key, reason) VALUES ('not-a-uuid', 'junk-src', 'junk'), ('$T1', 'prod-src', 'from-prod')"
+    sql staging -c "INSERT INTO acquisition_rejections (track_id, source_key, reason) VALUES ('also-not-a-uuid', 'junk-src', 'staging-junk')"
+    run_sync
+    check "a non-uuid rejection track_id does not abort the sync" 0 "$?"
+    check "a non-uuid prod rejection never crosses" 0 "$(staging_value "SELECT count(*) FROM acquisition_rejections WHERE track_id = 'not-a-uuid'")"
+    check "a non-uuid staging rejection is left alone" "staging-junk" "$(staging_value "SELECT string_agg(reason, ',') FROM acquisition_rejections WHERE track_id = 'also-not-a-uuid'")"
+    check "a synced track's rejection still crosses beside non-uuid rows" "prod-src" "$(staging_value "SELECT string_agg(source_key, ',') FROM acquisition_rejections WHERE track_id = '$T1'")"
+}
+
+test_rejections_with_uppercase_track_ids_do_not_abort_sync() {
+    reset_databases
+    write_env
+    sql prod -c "INSERT INTO acquisition_rejections (track_id, source_key, reason) VALUES (upper('$T1'), 'upper-src', 'upper')"
+    sql staging -c "INSERT INTO acquisition_rejections (track_id, source_key, reason) VALUES (upper('$T_SMOKE'), 'upper-src', 'smoke-upper')"
+    run_sync
+    check "an uppercase rejection track_id does not abort the sync" 0 "$?"
+    check "an uppercase rejection of a staging-only account's track is left alone" "smoke-upper" "$(staging_value "SELECT string_agg(reason, ',') FROM acquisition_rejections WHERE track_id = upper('$T_SMOKE')")"
+}
+
+test_rejections_of_unsynced_tracks_stay_on_staging() {
+    reset_databases
+    write_env
+    local orphan=70000000-0000-0000-0000-000000000007
+    sql staging -c "INSERT INTO acquisition_rejections (track_id, source_key, reason) VALUES ('$orphan', 'orphan-src', 'orphan'), ('$T_SMOKE', 'smoke-src', 'smoke')"
+    run_sync
+    check "a sync with unsynced rejections exits 0" 0 "$?"
+    check "a rejection for a track on no tier stays on staging" "orphan" "$(staging_value "SELECT string_agg(reason, ',') FROM acquisition_rejections WHERE track_id = '$orphan'")"
+    run_sync
+    check "a staging-only account's rejection survives two syncs" "smoke" "$(staging_value "SELECT string_agg(reason, ',') FROM acquisition_rejections WHERE track_id = '$T_SMOKE'")"
+}
+
+test_track_deleted_on_prod_drops_its_rejections_from_staging() {
+    reset_databases
+    write_env
+    sql prod -c "INSERT INTO acquisition_rejections (track_id, source_key, reason) VALUES ('$T1', 'prod-src', 'from-prod')"
+    run_sync
+    check "the first sync before a prod delete exits 0" 0 "$?"
+    check "the rejection crosses before the prod delete" 1 "$(staging_value "SELECT count(*) FROM acquisition_rejections WHERE track_id = '$T1'")"
+    sql prod -c "DELETE FROM tracks WHERE id = '$T1'"
+    run_sync
+    check "a sync after a prod track delete exits 0" 0 "$?"
+    check "a track deleted on prod leaves staging" 0 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T1'")"
+    check "a track deleted on prod takes its staging rejections with it" 0 "$(staging_value "SELECT count(*) FROM acquisition_rejections WHERE track_id = '$T1'")"
+    check "a track deleted on prod takes its staging cooldowns with it" 0 "$(staging_value "SELECT count(*) FROM acquisition_cooldowns WHERE track_id = '$T1'")"
+}
+
+test_cooldowns_are_replaced_on_resync_and_kept_for_unsynced_accounts() {
+    reset_databases
+    write_env
+    sql staging -c "INSERT INTO acquisition_cooldowns VALUES ('$T_STALE', 'retry', now()), ('$T_SMOKE', 'reacquire', now())"
+    run_sync
+    check "a sync with staging cooldowns exits 0" 0 "$?"
+    check "a stale staging track's cooldown goes with it" 0 "$(staging_value "SELECT count(*) FROM acquisition_cooldowns WHERE track_id = '$T_STALE'")"
+    check "a staging-only account keeps its cooldown" "reacquire" "$(staging_value "SELECT string_agg(kind, ',') FROM acquisition_cooldowns WHERE track_id = '$T_SMOKE'")"
+    sql prod -c "UPDATE acquisition_cooldowns SET kind = 'reacquire' WHERE track_id = '$T1'"
+    run_sync
+    check "a second sync with cooldowns exits 0" 0 "$?"
+    check "a second sync replaces the synced track's cooldown" "reacquire" "$(staging_value "SELECT string_agg(kind, ',') FROM acquisition_cooldowns WHERE track_id = '$T1'")"
+}
+
+test_foreign_keyed_children_of_replaced_parents_are_cleared() {
+    reset_databases
+    write_env
+    local stale_pl=80000000-0000-0000-0000-000000000008 smoke_pl=90000000-0000-0000-0000-000000000009
+    local stale_fa=a0000000-0000-0000-0000-00000000000a
+    sql staging -c "INSERT INTO playlists (id, user_id, name) VALUES ('$stale_pl', '$S1', 'Stale'), ('$smoke_pl', '$S2', 'Smoke')" \
+        -c "INSERT INTO playlist_tracks VALUES ('$stale_pl', '$T_STALE', 0), ('$smoke_pl', '$T_SMOKE', 0)" \
+        -c "INSERT INTO featured_artists (id, user_id, name, norm_name) VALUES ('$stale_fa', '$S1', 'G', 'g')" \
+        -c "INSERT INTO track_featured_artists VALUES ('$T_STALE', '$stale_fa', 0)"
+    run_sync
+    check "a sync with foreign-keyed staging children exits 0" 0 "$?"
+    check "a replaced playlist's tracks are cleared" 0 "$(staging_value "SELECT count(*) FROM playlist_tracks WHERE playlist_id = '$stale_pl'")"
+    check "a staging-only account's playlist tracks stay" 1 "$(staging_value "SELECT count(*) FROM playlist_tracks WHERE playlist_id = '$smoke_pl'")"
+    check "a replaced track's featured artists are cleared" 0 "$(staging_value "SELECT count(*) FROM track_featured_artists WHERE track_id = '$T_STALE'")"
+    check "prod's playlist tracks land" 1 "$(staging_value "SELECT count(*) FROM playlist_tracks WHERE playlist_id = '$PL1'")"
+}
+
+test_track_deleted_on_staging_between_syncs_resyncs_its_rejections() {
+    reset_databases
+    write_env
+    sql prod -c "INSERT INTO acquisition_rejections (track_id, source_key, reason) VALUES ('$T1', 'prod-src', 'from-prod')"
+    run_sync
+    check "the first sync before a staging delete exits 0" 0 "$?"
+    sql staging -c "DELETE FROM tracks WHERE id = '$T1'"
+    run_sync
+    check "a sync after a staging track delete exits 0" 0 "$?"
+    check "a re-synced track carries prod's rejection exactly once" "prod-src" "$(staging_value "SELECT string_agg(source_key, ',') FROM acquisition_rejections WHERE track_id = '$T1'")"
+}
+
+test_two_syncs_leave_identical_rejections() {
+    reset_databases
+    write_env
+    local t3=b0000000-0000-0000-0000-00000000000b
+    sql prod -c "INSERT INTO tracks (id, user_id, title, artist, dedup_key, audio_ref) VALUES ('$t3', '$P1', 'Second', 'A', 'k3', 'a/second.mp3')" \
+        -c "INSERT INTO acquisition_rejections (track_id, source_key, reason, rejected_at) VALUES ('$T1', 'src-a', 'r', '2026-10-01 00:00:00+00'), ('$T1', 'src-b', 'r', '2026-10-02 00:00:00+00'), ('$t3', 'src-a', 'r', '2026-10-03 00:00:00+00')"
+    run_sync
+    check "the first of two syncs exits 0" 0 "$?"
+    check "every rejection of every synced track crosses" "$T1/src-a,$T1/src-b,$t3/src-a" "$(staging_value "SELECT string_agg(track_id || '/' || source_key, ',' ORDER BY track_id, source_key) FROM acquisition_rejections")"
+    local first
+    first=$(staging_value "SELECT string_agg(track_id || '/' || source_key || '/' || rejected_at, ',' ORDER BY track_id, source_key) FROM acquisition_rejections")
+    run_sync
+    check "the second of two syncs exits 0" 0 "$?"
+    check "a second unchanged sync leaves the same rejections" "$first" "$(staging_value "SELECT string_agg(track_id || '/' || source_key || '/' || rejected_at, ',' ORDER BY track_id, source_key) FROM acquisition_rejections")"
+}
+
 start_postgres
 install_docker_stub
 build_schema_template
@@ -591,6 +709,15 @@ test_column_drift_on_a_skip_table_still_syncs
 test_a_dropped_column_on_one_tier_is_not_drift
 test_same_columns_in_a_different_order_copy_by_name
 test_a_long_table_list_does_not_abort_a_ruled_table
+test_sync_keeps_rejection_timestamps_and_detail_from_prod
+test_rejections_with_non_uuid_track_ids_do_not_abort_sync
+test_rejections_with_uppercase_track_ids_do_not_abort_sync
+test_rejections_of_unsynced_tracks_stay_on_staging
+test_track_deleted_on_prod_drops_its_rejections_from_staging
+test_cooldowns_are_replaced_on_resync_and_kept_for_unsynced_accounts
+test_foreign_keyed_children_of_replaced_parents_are_cleared
+test_two_syncs_leave_identical_rejections
+test_track_deleted_on_staging_between_syncs_resyncs_its_rejections
 
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed; last script output:\n' "$FAILURES"

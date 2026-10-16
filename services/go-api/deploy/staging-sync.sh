@@ -220,8 +220,9 @@ import_table() {
 swap_sql() {
     local table cols select_cols
     for table in $(tables_with_rule child); do
-        printf 'DELETE FROM public.%s WHERE %s::text IN (SELECT id::text FROM public.%s WHERE user_id IN (SELECT staging_id FROM %s.user_map));\n' \
-            "$table" "${TABLE_FK_COLUMN[$table]}" "${TABLE_PARENT[$table]}" "$IMPORT_SCHEMA"
+        printf 'DELETE FROM public.%s WHERE %s::text IN (SELECT id::text FROM public.%s WHERE user_id IN (SELECT staging_id FROM %s.user_map) UNION SELECT id::text FROM %s.%s);\n' \
+            "$table" "${TABLE_FK_COLUMN[$table]}" "${TABLE_PARENT[$table]}" "$IMPORT_SCHEMA" \
+            "$IMPORT_SCHEMA" "${TABLE_PARENT[$table]}"
     done
     for table in $(tables_with_rule user) $(tables_with_rule reset); do
         printf 'DELETE FROM public.%s WHERE user_id IN (SELECT staging_id FROM %s.user_map);\n' \
