@@ -337,6 +337,7 @@ func (s *AcquireTrackAudioService) runAcquisition(ctx context.Context, userId sh
 		return err
 	}
 
+	jobReporterFrom(ctx).source(ac.Selected.URL)
 	jobReporterFrom(ctx).fetched(ac.SourceFormat)
 	jobReporterFrom(ctx).provenance(string(ac.Provenance()))
 	s.onAcquireCompleted(ctx, userId, trackId, ac.AudioRef)

@@ -76,11 +76,7 @@ func (r schedulerJobReporter) provenance(value string) {
 }
 
 func (r schedulerJobReporter) source(url string) {
-	r.log.update(r.trackID, func(j *ports.JobRecord) {
-		if j.ResolvedSource == "" {
-			j.ResolvedSource = url
-		}
-	})
+	r.log.update(r.trackID, func(j *ports.JobRecord) { j.ResolvedSource = url })
 }
 
 func (r schedulerJobReporter) timing(stage string, d time.Duration) {

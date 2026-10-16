@@ -2772,6 +2772,25 @@ func TestBackgroundScheduler_OutcomeCarriesStageTimesSourceHostAndFileFacts(t *t
 	}
 }
 
+func TestBackgroundScheduler_AFailedOutcomeNamesNoSourceHost(t *testing.T) {
+	recorder := newFakeOutcomeRecorder()
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(newFakeTrackRepository()), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
+
+	scheduler.recordOutcome(context.Background(), acqports.JobRecord{
+		TrackID:        "t1",
+		State:          acqports.JobFailed,
+		ResolvedSource: "https://music.youtube.com/watch?v=XDC3uH1FSgw",
+	})
+
+	got := assertExactlyOneOutcome(t, recorder.calls)
+	if got.SourceHost != "" {
+		t.Errorf("source host = %q, want empty: a failed job stored nothing", got.SourceHost)
+	}
+}
+
 type orderedAcquirer struct {
 	stubAcquirer
 	releaseFirst chan struct{}

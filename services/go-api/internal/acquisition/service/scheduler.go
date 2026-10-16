@@ -359,6 +359,10 @@ func (s *BackgroundAcquisitionScheduler) recordOutcome(ctx context.Context, reco
 	if s.outcomes == nil || record.TrackID == "" {
 		return
 	}
+	var sourceHost string
+	if record.State == ports.JobSucceeded {
+		sourceHost = hostOf(record.ResolvedSource)
+	}
 	s.outcomeWG.Add(1)
 	go func() {
 		defer s.outcomeWG.Done()
@@ -370,7 +374,7 @@ func (s *BackgroundAcquisitionScheduler) recordOutcome(ctx context.Context, reco
 			Reason:     record.Reason,
 			ElapsedMs:  record.ElapsedMs,
 			StageMs:    record.StageMs,
-			SourceHost: hostOf(record.ResolvedSource),
+			SourceHost: sourceHost,
 			Source:     record.Source,
 			Stored:     record.Stored,
 			Kind:       record.Kind,

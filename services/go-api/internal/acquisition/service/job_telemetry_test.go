@@ -1,12 +1,18 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/adapters/catalogbridge"
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/events"
 	"context"
 	"errors"
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type recordingReporter struct {
@@ -87,5 +93,68 @@ func TestSchedulerJobReporter_SumsRepeatedTimingsForAStage(t *testing.T) {
 	}
 	if record.Source.ID != "18" || record.Stored.Bytes != 4096 || record.Stored.Codec != "mp3" {
 		t.Errorf("record source = %+v stored = %+v, want the reported format and file", record.Source, record.Stored)
+	}
+}
+
+func TestSchedulerJobReporter_TheLastReportedSourceWins(t *testing.T) {
+	log := newJobLog()
+	log.register("t1", "")
+	rep := schedulerJobReporter{ctx: context.Background(), log: log, trackID: "t1"}
+
+	rep.source("https://music.youtube.com/watch?v=rank1")
+	rep.source("https://www.youtube.com/watch?v=rank2")
+	record := log.complete("t1", ports.JobSucceeded, "")
+
+	if want := "https://www.youtube.com/watch?v=rank2"; record.ResolvedSource != want {
+		t.Errorf("resolved source = %q, want %q (the candidate reported last)", record.ResolvedSource, want)
+	}
+}
+
+type secondRankSource struct{ unknownTopicSource }
+
+const (
+	failingRank1URL = "https://www.youtube.com/watch?v=rank1AAAAAA"
+	storedRank2URL  = "https://music.youtube.com/watch?v=rank2AAAAAA"
+)
+
+func (secondRankSource) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
+	found, err := unknownTopicSource{}.Find(ctx, req)
+	first, second := found[0], found[0]
+	first.URL, second.URL = failingRank1URL, storedRank2URL
+	return []ports.AudioCandidate{first, second}, err
+}
+
+func (s secondRankSource) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+	if c.URL == failingRank1URL {
+		return ports.FetchedAudio{}, errors.New("exit status 1")
+	}
+	return s.unknownTopicSource.Fetch(ctx, c, outDir)
+}
+
+func TestExecute_ReportsTheStoredCandidateAsTheSource(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track, err := domain.NewTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	seconds := 200.0
+	track.DurationSeconds = &seconds
+	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(secondRankSource{}),
+		&bytesAudioStore{objects: map[string]string{}},
+		WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding"}}),
+		WithAudioIdentifier(&stubIdentifier{}))
+	log := newJobLog()
+	log.register(track.ID.String(), "")
+	rep := schedulerJobReporter{ctx: context.Background(), log: log, events: events.NoopPublisher(), trackID: track.ID.String()}
+
+	if err := svc.Execute(withJobReporter(context.Background(), rep), userId, track.ID); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	record := log.complete(track.ID.String(), ports.JobSucceeded, "")
+	if record.ResolvedSource != storedRank2URL {
+		t.Errorf("job source = %q, want the stored rank-2 candidate %q", record.ResolvedSource, storedRank2URL)
 	}
 }
