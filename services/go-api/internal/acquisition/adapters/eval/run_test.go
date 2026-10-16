@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/acquisition/adapters/ytmsearch"
 	"altune/go-api/internal/acquisition/adapters/ytmusic"
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service"
 	"context"
 	"encoding/json"
 	"io"
@@ -641,6 +642,53 @@ func TestRun_SimulatedSecondsAndAttemptsAccumulateAlongThePath(t *testing.T) {
 	}
 	if out.SimulatedSeconds != 37 {
 		t.Fatalf("simulated seconds = %.1f, want 37 (7s search + 30s download)", out.SimulatedSeconds)
+	}
+}
+
+func TestRun_FallbackTimeAddsToTheFirstTier(t *testing.T) {
+	kase := Case{
+		ID: "t", Class: "OK",
+		Track: Track{Title: "Solitude", Artist: "Nova", Duration: 200},
+		Sources: []Source{
+			{Name: "ytmsearch", SearchSeconds: 3, Candidates: []Candidate{
+				{Title: "Solitude", URL: "art", Duration: 200, Resolved: true, Kind: "art_track", Artists: []string{"Nova"}, DownloadFails: true, DownloadSeconds: 5},
+			}},
+			{Name: "ytdlp", SearchSeconds: 4, Candidates: []Candidate{
+				{Title: "Solitude", URL: "master", Channel: "Nova - Topic", Duration: 200, DownloadSeconds: 7, Correct: true},
+			}},
+		},
+	}
+
+	out := Run(context.Background(), kase)
+
+	if out.Stored != "master" {
+		t.Fatalf("stored %q, want master from the fallback tier", out.Stored)
+	}
+	if out.SimulatedSeconds != 19 {
+		t.Fatalf("simulated seconds = %.1f, want 19 (3s + 4s of search, 5s + 7s of download)", out.SimulatedSeconds)
+	}
+}
+
+func TestValidateCases_RefusesTimesBeyondProdTimeouts(t *testing.T) {
+	track := Track{Title: "t", Artist: "a"}
+	tests := []struct {
+		name string
+		kase Case
+	}{
+		{"a candidate slower than the candidate timeout", Case{ID: "x", Class: "F1", Track: track, Candidates: []Candidate{
+			{URL: "u", DownloadSeconds: service.DefaultCandidateTimeout.Seconds() + 1},
+		}}},
+		{"a case slower than the job timeout", Case{ID: "x", Class: "F1", Track: track, Sources: []Source{
+			{Name: "ytmsearch", SearchSeconds: 300, Candidates: []Candidate{{URL: "u", DownloadSeconds: 170}}},
+			{Name: "ytdlp", SearchSeconds: 300, Candidates: []Candidate{{URL: "v", DownloadSeconds: 170}}},
+		}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := validateCases([]Case{tt.kase}); err == nil {
+				t.Fatal("validateCases = nil, want a refusal")
+			}
+		})
 	}
 }
 

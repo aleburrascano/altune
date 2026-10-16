@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -693,6 +694,58 @@ func handoverPipeline(t *testing.T, acquiring domain.TrackId, userId shared.User
 	pipeline.store = storeStep
 	pipeline.updateTrack = mockStage[afterStore, afterUpdate]{updateTrack}
 	return pipeline, store, ac
+}
+
+type tieredDownload struct {
+	*DownloadStep
+	tiers [][]ports.AudioCandidate
+	runs  int
+}
+
+func (d *tieredDownload) Execute(ctx context.Context, ac *AcquisitionContext, prev afterSelect) (afterDownload, error) {
+	ac.Ranked = d.tiers[d.runs]
+	d.runs++
+	out, err := d.DownloadStep.Execute(ctx, ac, prev)
+	if err != nil && !ac.FallbackOnly {
+		ac.FallbackSkipped = true
+	}
+	return out, err
+}
+
+type brokenURLFetcher struct{ broken string }
+
+func (f brokenURLFetcher) Fetch(_ context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+	if c.URL == f.broken {
+		return ports.FetchedAudio{}, errors.New("yt-dlp: download failed")
+	}
+	path := filepath.Join(outDir, "track.mp3")
+	return fetchedAt(path, os.WriteFile(path, []byte("audio-bytes"), 0o644))
+}
+
+func TestRunPipeline_FallbackWindowsContinueTheFirstTiersCount(t *testing.T) {
+	download := &tieredDownload{
+		DownloadStep: NewDownloadStep(brokenURLFetcher{broken: "https://example.com/first-tier"}),
+		tiers: [][]ports.AudioCandidate{
+			{{URL: "https://example.com/first-tier"}},
+			{{URL: "https://example.com/fallback"}},
+		},
+	}
+	pipeline := pipelineOf()
+	pipeline.download = download
+	ac := &AcquisitionContext{Track: TrackRef{ID: "t1"}}
+
+	if err := RunPipeline(context.Background(), pipeline, ac); err != nil {
+		t.Fatalf("RunPipeline: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+	want := []AttemptedCandidate{
+		{URL: "https://example.com/first-tier", Window: 0},
+		{URL: "https://example.com/fallback", Window: 1},
+	}
+	if !slices.Equal(ac.Attempted, want) {
+		t.Errorf("Attempted = %+v, want %+v: the fallback tier's windows continue the first tier's numbering", ac.Attempted, want)
+	}
 }
 
 func TestRunPipeline_PlainFailureDeletesTheStoredAudioAndQueuesNothing(t *testing.T) {

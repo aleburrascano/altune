@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/acquisition/adapters/ytmsearch"
 	"altune/go-api/internal/acquisition/adapters/ytmusic"
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/shared"
 	"embed"
 	"encoding/json"
@@ -493,7 +494,28 @@ func validateCases(cases []Case) error {
 		if err := validateCaseExtensions(c); err != nil {
 			return err
 		}
+		if err := validateProdTimeouts(c); err != nil {
+			return err
+		}
 		seen[c.ID] = true
+	}
+	return nil
+}
+
+func validateProdTimeouts(c Case) error {
+	candidateLimit := service.DefaultCandidateTimeout.Seconds()
+	total, slowest := 0.0, 0.0
+	for _, src := range c.Sources {
+		total += src.searchSeconds()
+	}
+	for _, cand := range c.allCandidates() {
+		if cand.downloadSeconds() > candidateLimit {
+			return fmt.Errorf("case %q candidate %q takes %.0fs to download; prod cancels a candidate after %.0fs", c.ID, cand.URL, cand.downloadSeconds(), candidateLimit)
+		}
+		slowest = max(slowest, cand.downloadSeconds())
+	}
+	if jobLimit := service.AcquireTimeout.Seconds(); total+slowest > jobLimit {
+		return fmt.Errorf("case %q simulates %.0fs of search and %.0fs of download; prod cancels a job after %.0fs", c.ID, total, slowest, jobLimit)
 	}
 	return nil
 }

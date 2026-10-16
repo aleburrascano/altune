@@ -57,7 +57,7 @@ func NewAcquireTrackAudioService(
 		cuts:       audiojudge.DefaultCuts(),
 
 		confidenceFloor: defaultConfidenceFloor,
-		acquireTimeout:  acquireTimeout,
+		acquireTimeout:  AcquireTimeout,
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -137,7 +137,7 @@ func WithRejectionStore(r ports.RejectionStore) func(*AcquireTrackAudioService) 
 	return func(s *AcquireTrackAudioService) { s.rejections = r }
 }
 
-const acquireTimeout = 10 * time.Minute
+const AcquireTimeout = 10 * time.Minute
 
 type schedulerOwnedJobContextKey struct{}
 

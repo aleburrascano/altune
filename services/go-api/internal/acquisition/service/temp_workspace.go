@@ -10,7 +10,7 @@ import (
 
 var defaultTempWorkspace ports.TempWorkspace
 
-const maxLiveTempAge = acquireTimeout + 15*time.Minute
+const maxLiveTempAge = AcquireTimeout + 15*time.Minute
 
 func SweepStaleTempDirs(ws ports.TempWorkspace) {
 	ws.SweepAbandoned(time.Now().Add(-maxLiveTempAge))

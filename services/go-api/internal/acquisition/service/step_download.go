@@ -15,7 +15,7 @@ const (
 	maxDownloadAttempts = 8
 	previewSeconds      = 130
 
-	defaultCandidateTimeout = 3 * time.Minute
+	DefaultCandidateTimeout = 3 * time.Minute
 )
 
 type candidateFetcher interface {
@@ -45,7 +45,7 @@ type DownloadStep struct {
 const prodVerifyWidth = 2
 
 func NewDownloadStep(fetcher candidateFetcher, opts ...func(*DownloadStep)) *DownloadStep {
-	s := &DownloadStep{fetcher: fetcher, workspace: defaultTempWorkspace, width: prodVerifyWidth, candidateTimeout: defaultCandidateTimeout, floor: defaultConfidenceFloor, cuts: audiojudge.DefaultCuts()}
+	s := &DownloadStep{fetcher: fetcher, workspace: defaultTempWorkspace, width: prodVerifyWidth, candidateTimeout: DefaultCandidateTimeout, floor: defaultConfidenceFloor, cuts: audiojudge.DefaultCuts()}
 	for _, opt := range opts {
 		opt(s)
 	}

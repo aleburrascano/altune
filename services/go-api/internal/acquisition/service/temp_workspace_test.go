@@ -46,8 +46,8 @@ func TestSweepStaleTempDirsCutoffSparesJobsStillInsideAcquireTimeout(t *testing.
 	if len(fake.cutoffs) != 1 {
 		t.Fatalf("SweepAbandoned calls = %d, want 1", len(fake.cutoffs))
 	}
-	if age := time.Since(fake.cutoffs[0]); age < acquireTimeout {
-		t.Errorf("cutoff is %v in the past, want at least acquireTimeout %v", age, acquireTimeout)
+	if age := time.Since(fake.cutoffs[0]); age < AcquireTimeout {
+		t.Errorf("cutoff is %v in the past, want at least AcquireTimeout %v", age, AcquireTimeout)
 	}
 }
 

@@ -19,21 +19,22 @@ import (
 
 type simClock struct {
 	mu     sync.Mutex
-	search float64
+	search map[bool]float64
 }
 
-func (c *simClock) recordSearch(seconds float64) {
+func (c *simClock) recordSearch(fallbackTier bool, seconds float64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if seconds > c.search {
-		c.search = seconds
+	if c.search == nil {
+		c.search = make(map[bool]float64)
 	}
+	c.search[fallbackTier] = max(c.search[fallbackTier], seconds)
 }
 
 func (c *simClock) searchSeconds() float64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.search
+	return c.search[false] + c.search[true]
 }
 
 type casePorts struct {
@@ -126,7 +127,7 @@ type evalSource struct {
 func (s *evalSource) Name() acqdomain.SourceName { return acqdomain.SourceName(s.spec.Name) }
 
 func (s *evalSource) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
-	s.shared.clock.recordSearch(s.spec.searchSeconds())
+	s.shared.clock.recordSearch(req.FallbackOnly, s.spec.searchSeconds())
 	if s.spec.Fails {
 		return nil, &acqdomain.SourceUnavailableError{Source: s.Name(), Err: errors.New("eval: simulated source failure")}
 	}
