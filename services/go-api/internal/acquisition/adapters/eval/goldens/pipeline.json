@@ -4,7 +4,7 @@
       "id": "pl-art-track-by-the-searched-artist-is-trusted-without-a-fingerprint",
       "expect_provenance": "best_effort",
       "class": "OK",
-      "note": "prod case ezcodylee 'ALBUM OF THE YEAR !' (ISRC QZHN92620453, catalog length 139s): ytmsearch proves the art track Pwg_GsP2QZU (140s) credits the artist and sets kind art_track, but its channel is the placeholder 'YouTube Music Art Track'; AcoustID does not know the audio, so only the proven kind lifts it over the confidence floor; the 167s SoundCloud upload is the wrong length",
+      "note": "prod case ezcodylee 'ALBUM OF THE YEAR !' (ISRC QZHN92620453, catalog length 139s): ytmsearch proves the art track Pwg_GsP2QZU (140s) credits the artist and sets kind art_track, and ytmsearch stamps no channel or categories on it; AcoustID does not know the audio, so only the proven kind lifts it over the confidence floor; the 167s SoundCloud upload is the wrong length",
       "track": { "title": "ALBUM OF THE YEAR !", "artist": "ezcodylee", "isrc": "QZHN92620453", "duration": 139, "authoritative_duration": 139, "mbid": "pl-art-expected" },
       "sources": [
         { "name": "ytmsearch", "search_seconds": 2, "candidates": [

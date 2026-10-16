@@ -261,3 +261,13 @@ func TestSource_AnOutageNamesYtmsearch(t *testing.T) {
 		t.Errorf("Find err = %v, want SourceUnavailableError{Source: ytmsearch}", err)
 	}
 }
+
+func TestSource_TheArtTrackCarriesNoPlaceholderText(t *testing.T) {
+	got := find(t, []Song{atv("LMDLNLM6Ji8", "2021 Vibes", []string{"LUCKI"}, 125, true)}, vibesRequest)
+	if len(got) != 1 {
+		t.Fatalf("candidates = %v, want 1", got)
+	}
+	if got[0].Channel != "" || len(got[0].Categories) != 0 {
+		t.Errorf("art track has channel %q and categories %q, want neither: ytmsearch observes no channel", got[0].Channel, got[0].Categories)
+	}
+}

@@ -3,7 +3,7 @@
     {
       "id": "rw-gods-plan-the-catalogs-clean-flag-picks-the-clean-twin",
       "class": "RW",
-      "note": "Drake \"God's Plan\" (Scorpion, 198.973s). The catalog_explicit=false input is grounded in a real catalog entry, not a prod row: Apple Music/iTunes track 1406109863 (https://music.apple.com/us/album/gods-plan/1406109769?i=1406109863) reports trackExplicitness \"cleaned\" (iTunes lookup?id=1406109863, 2026-10-15), duration 198973 ms. Prod has no catalog_explicit to capture: 0 of 2269 tracks carry one because the client that writes catalog fields has not shipped its OTA yet. The candidates are the two real ytmsearch song hits for the query \"God's Plan Drake\" (YouTube Music, 2026-10-15): FrsOnNxIrg8 explicit and m1a_GqJf02M clean, both Scorpion, ATV, 199s, credited to Drake; modelled as the adapter emits a hit (resolved, kind art_track, channel \"YouTube Music Art Track\"). Real adapter returns one hit per Find; both are listed because the service ranking is what is pinned. On main explicit always wins, so the user who added the clean version gets the explicit audio",
+      "note": "Drake \"God's Plan\" (Scorpion, 198.973s). The catalog_explicit=false input is grounded in a real catalog entry, not a prod row: Apple Music/iTunes track 1406109863 (https://music.apple.com/us/album/gods-plan/1406109769?i=1406109863) reports trackExplicitness \"cleaned\" (iTunes lookup?id=1406109863, 2026-10-15), duration 198973 ms. Prod has no catalog_explicit to capture: 0 of 2269 tracks carry one because the client that writes catalog fields has not shipped its OTA yet. The candidates are the two real ytmsearch song hits for the query \"God's Plan Drake\" (YouTube Music, 2026-10-15): FrsOnNxIrg8 explicit and m1a_GqJf02M clean, both Scorpion, ATV, 199s, credited to Drake; modelled as the adapter emits a hit (resolved, kind art_track, no channel or categories). Real adapter returns one hit per Find; both are listed because the service ranking is what is pinned. On main explicit always wins, so the user who added the clean version gets the explicit audio",
       "track": {
         "title": "God's Plan",
         "artist": "Drake",
@@ -19,8 +19,6 @@
             {
               "title": "God's Plan",
               "url": "https://music.youtube.com/watch?v=FrsOnNxIrg8",
-              "channel": "YouTube Music Art Track",
-              "categories": ["Music"],
               "duration": 199,
               "resolved": true,
               "kind": "art_track",
@@ -31,8 +29,6 @@
             {
               "title": "God's Plan",
               "url": "https://music.youtube.com/watch?v=m1a_GqJf02M",
-              "channel": "YouTube Music Art Track",
-              "categories": ["Music"],
               "duration": 199,
               "resolved": true,
               "kind": "art_track",
@@ -65,8 +61,6 @@
             {
               "title": "God's Plan",
               "url": "https://music.youtube.com/watch?v=FrsOnNxIrg8",
-              "channel": "YouTube Music Art Track",
-              "categories": ["Music"],
               "duration": 199,
               "resolved": true,
               "kind": "art_track",
@@ -78,8 +72,6 @@
             {
               "title": "God's Plan",
               "url": "https://music.youtube.com/watch?v=m1a_GqJf02M",
-              "channel": "YouTube Music Art Track",
-              "categories": ["Music"],
               "duration": 199,
               "resolved": true,
               "kind": "art_track",

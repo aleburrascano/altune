@@ -108,13 +108,14 @@ func maxViewCount(candidates []ports.AudioCandidate) int64 {
 }
 
 func scoreCandidate(track TrackRef, expectedLength float64, c ports.AudioCandidate, maxViews int64) candidateEntry {
+	uploader := uploaderClass(track.Artist, c)
 	return candidateEntry{
 		ident:         identityScore(track.Title, track.Artist, c.Title),
-		meta:          metadataRank(c, expectedLength, maxViews),
+		meta:          metadataRank(c, uploader, expectedLength, maxViews),
 		durationDelta: durationDelta(expectedLength, c.Duration),
 		qualDistance:  qualifierDistance(track.Title, c.Title),
 		artistMatch:   artistMatchesCandidate(track.Artist, c),
-		uploader:      uploaderClass(track.Artist, c),
+		uploader:      uploader,
 		featMatch:     featureMatch(track.Title, c.Title),
 		explicitFits:  c.Explicit == ports.PrefersExplicit(track.CatalogExplicit),
 		candidate:     c,

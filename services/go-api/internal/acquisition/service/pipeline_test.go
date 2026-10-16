@@ -494,9 +494,9 @@ func TestAcqStage_MetadataRank(t *testing.T) {
 		ViewCount:  1_000,
 	}
 
-	topicRank := metadataRank(topic, 200, 500_000_000)
-	vevoRank := metadataRank(vevo, 200, 500_000_000)
-	randomRank := metadataRank(random, 200, 500_000_000)
+	topicRank := metadataRank(topic, channelTopic, 200, 500_000_000)
+	vevoRank := metadataRank(vevo, channelOther, 200, 500_000_000)
+	randomRank := metadataRank(random, channelOther, 200, 500_000_000)
 
 	if topicRank < 0.5 {
 		t.Errorf("topic rank (%.3f) unexpectedly low", topicRank)

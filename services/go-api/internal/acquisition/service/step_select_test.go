@@ -193,14 +193,14 @@ const (
 
 func finesseRemix() ports.AudioCandidate {
 	return ports.AudioCandidate{
-		Title: "Finesse (Remix)", URL: finesseRemixURL, Channel: "YouTube Music Art Track", Duration: 218,
+		Title: "Finesse (Remix)", URL: finesseRemixURL, Duration: 218,
 		Artists: []string{"Bruno Mars", "Cardi B"}, Album: "Finesse (Remix)", Kind: ports.KindArtTrack,
 	}
 }
 
 func finesseAlbumTrack() ports.AudioCandidate {
 	return ports.AudioCandidate{
-		Title: "Finesse", URL: finesseAlbumURL, Channel: "YouTube Music Art Track", Duration: 191,
+		Title: "Finesse", URL: finesseAlbumURL, Duration: 191,
 		Artists: []string{"Bruno Mars"}, Album: "24K Magic", Kind: ports.KindArtTrack,
 	}
 }

@@ -28,8 +28,8 @@ func identityScore(trackTitle, trackArtist, candidateTitle string) float64 {
 	return math.Max(combinedScore, titleOnlyScore)
 }
 
-func channelScore(channel string) float64 {
-	if isTopicChannel(channel) {
+func channelScore(uploader, channel string) float64 {
+	if uploader == channelTopic || uploader == channelArtist {
 		return 1.0
 	}
 	if strings.Contains(strings.ToLower(channel), "vevo") {
@@ -68,8 +68,8 @@ func viewScore(viewCount, maxViews int64) float64 {
 	return math.Min(float64(viewCount)/float64(maxViews), 1.0)
 }
 
-func metadataRank(c ports.AudioCandidate, expectedDuration float64, maxViews int64) float64 {
-	ch := channelScore(c.Channel)
+func metadataRank(c ports.AudioCandidate, uploader string, expectedDuration float64, maxViews int64) float64 {
+	ch := channelScore(uploader, c.Channel)
 	cat := categoryScore(c.Categories)
 	dur := durationScore(expectedDuration, c.Duration)
 	views := viewScore(c.ViewCount, maxViews)

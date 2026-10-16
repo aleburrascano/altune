@@ -32,8 +32,6 @@
         {
           "title": "Comedy!",
           "url": "https://music.youtube.com/watch?v=azE7RLVe15o",
-          "channel": "YouTube Music Art Track",
-          "categories": ["Music"],
           "duration": 138,
           "resolved": true,
           "kind": "art_track",

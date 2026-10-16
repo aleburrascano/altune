@@ -15,7 +15,6 @@ const SourceName acqdomain.SourceName = "ytmsearch"
 
 const (
 	musicWatchURLPrefix = "https://music.youtube.com/watch?v="
-	artTrackChannel     = "YouTube Music Art Track"
 	topResults          = 5
 )
 
@@ -62,15 +61,13 @@ func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.Audio
 
 func CandidateFor(hit Song) ports.AudioCandidate {
 	return ports.AudioCandidate{
-		Title:      hit.Title,
-		Duration:   float64(hit.DurationSeconds),
-		URL:        musicWatchURLPrefix + hit.VideoID,
-		Channel:    artTrackChannel,
-		Categories: []string{"Music"},
-		Explicit:   hit.Explicit,
-		Artists:    hit.Artists,
-		Album:      hit.Album,
-		Kind:       ports.KindArtTrack,
+		Title:    hit.Title,
+		Duration: float64(hit.DurationSeconds),
+		URL:      musicWatchURLPrefix + hit.VideoID,
+		Explicit: hit.Explicit,
+		Artists:  hit.Artists,
+		Album:    hit.Album,
+		Kind:     ports.KindArtTrack,
 	}
 }
 

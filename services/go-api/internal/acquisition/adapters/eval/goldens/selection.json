@@ -74,7 +74,7 @@
       "track": { "title": "Smaxk Or Die", "artist": "Fatt Smaxk", "duration": 98, "authoritative_duration": 98 },
       "candidates": [
         { "title": "Fatt Smaxk - Smaxk Or Die (Official Music Video)", "url": "yt:video", "channel": "FattSmaxkVEVO", "categories": ["Music"], "duration": 181, "view_count": 2000000 },
-        { "title": "Smaxk Or Die", "url": "https://music.youtube.com/watch?v=oCFbQlv19vI", "channel": "YouTube Music Art Track", "categories": ["Music"], "duration": 98, "resolved": true, "kind": "art_track", "artists": ["Fatt Smaxk"], "album": "Smaxk Season 2", "explicit": true, "correct": true }
+        { "title": "Smaxk Or Die", "url": "https://music.youtube.com/watch?v=oCFbQlv19vI", "duration": 98, "resolved": true, "kind": "art_track", "artists": ["Fatt Smaxk"], "album": "Smaxk Season 2", "explicit": true, "correct": true }
       ]
     },
     {
@@ -83,7 +83,7 @@
       "note": "resolved skips the resemblance gate, never the audio gates — a contaminated catalog hit is still rejected",
       "track": { "title": "Smaxk Or Die", "artist": "Fatt Smaxk", "duration": 98, "authoritative_duration": 98 },
       "candidates": [
-        { "title": "Smaxk Or Die", "url": "https://music.youtube.com/watch?v=oCFbQlv19vI", "channel": "YouTube Music Art Track", "categories": ["Music"], "duration": 98, "actual_duration": 122, "resolved": true, "kind": "art_track", "artists": ["Fatt Smaxk"], "album": "Smaxk Season 2", "explicit": true }
+        { "title": "Smaxk Or Die", "url": "https://music.youtube.com/watch?v=oCFbQlv19vI", "duration": 98, "actual_duration": 122, "resolved": true, "kind": "art_track", "artists": ["Fatt Smaxk"], "album": "Smaxk Season 2", "explicit": true }
       ]
     },
     {

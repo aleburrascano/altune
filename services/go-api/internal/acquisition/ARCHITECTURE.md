@@ -311,7 +311,7 @@ identityScore = max( TokenSortRatio(norm(artist+title), norm(candidate)),
 gate: identityScore >= 60
 
 metadataRank  = 0.45·channel + 0.25·duration + 0.20·category + 0.10·views
-                channel: Topic 1.0 · VEVO 0.8 · other 0.3
+                channel: uploader class topic/artist 1.0 · "vevo" in the observed channel 0.8 · other 0.3
                 duration: ≤3s 1.0 · ≤15s 0.5 · else 0.0
 
 Topic bucket → sort by artistMatch, then featMatch, then identity

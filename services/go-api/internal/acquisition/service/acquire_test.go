@@ -1235,10 +1235,9 @@ func (*brokenArtTrackSource) Name() acqdomain.SourceName { return "ytmsearch" }
 func (s *brokenArtTrackSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
 	s.finds++
 	return []ports.AudioCandidate{{
-		Title:   "Blinding Lights",
-		URL:     "https://music.youtube.com/watch?v=artTrackAAA",
-		Channel: "YouTube Music Art Track",
-		Kind:    ports.KindArtTrack,
+		Title: "Blinding Lights",
+		URL:   "https://music.youtube.com/watch?v=artTrackAAA",
+		Kind:  ports.KindArtTrack,
 	}}, nil
 }
 

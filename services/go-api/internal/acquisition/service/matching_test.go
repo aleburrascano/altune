@@ -316,22 +316,25 @@ func TestDurationScore_UsesTheConfidenceWindows(t *testing.T) {
 
 func TestChannelScore(t *testing.T) {
 	tests := []struct {
-		name    string
-		channel string
-		want    float64
+		name     string
+		uploader string
+		channel  string
+		want     float64
 	}{
-		{name: "topic channel", channel: "The Weeknd - Topic", want: 1.0},
-		{name: "vevo channel", channel: "TheWeekndVEVO", want: 0.8},
-		{name: "vevo mixed case", channel: "SomeArtistVevo", want: 0.8},
-		{name: "regular channel", channel: "RandomUploader", want: 0.3},
-		{name: "empty channel", channel: "", want: 0.3},
+		{name: "topic class", uploader: channelTopic, channel: "The Weeknd - Topic", want: 1.0},
+		{name: "topic class without a channel", uploader: channelTopic, want: 1.0},
+		{name: "artist class", uploader: channelArtist, channel: "TheWeeknd", want: 1.0},
+		{name: "vevo channel", uploader: channelOther, channel: "TheWeekndVEVO", want: 0.8},
+		{name: "vevo mixed case", uploader: channelOther, channel: "SomeArtistVevo", want: 0.8},
+		{name: "regular channel", uploader: channelOther, channel: "RandomUploader", want: 0.3},
+		{name: "empty channel", uploader: channelOther, want: 0.3},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := channelScore(tt.channel)
+			got := channelScore(tt.uploader, tt.channel)
 			if got != tt.want {
-				t.Errorf("channelScore(%q) = %v, want %v", tt.channel, got, tt.want)
+				t.Errorf("channelScore(%q, %q) = %v, want %v", tt.uploader, tt.channel, got, tt.want)
 			}
 		})
 	}
@@ -1249,7 +1252,7 @@ func TestSelectBest_TheCatalogExplicitFlagPicksTheTwin(t *testing.T) {
 
 func TestUploaderClass_ArtTrackIsTrustedOnlyWhenItsArtistsCreditTheTrackArtist(t *testing.T) {
 	artTrack := func(artists ...string) ports.AudioCandidate {
-		return ports.AudioCandidate{Channel: "YouTube Music Art Track", Kind: ports.KindArtTrack, Artists: artists}
+		return ports.AudioCandidate{Kind: ports.KindArtTrack, Artists: artists}
 	}
 	tests := []struct {
 		name      string
@@ -1273,7 +1276,7 @@ func TestUploaderClass_ArtTrackIsTrustedOnlyWhenItsArtistsCreditTheTrackArtist(t
 func TestSelectBest_RanksByTheExpectedLength(t *testing.T) {
 	artTrack := func(url string, duration float64) ports.AudioCandidate {
 		return ports.AudioCandidate{
-			Title: "Phone (Interlude)", URL: url, Channel: "YouTube Music Art Track", Duration: duration,
+			Title: "Phone (Interlude)", URL: url, Duration: duration,
 			Artists: []string{"SLAYR"}, Album: "Phone", Kind: ports.KindArtTrack,
 		}
 	}
@@ -1461,5 +1464,22 @@ func TestUploaderClass_AnyCreditedArtistOwnsTheTopicChannel(t *testing.T) {
 		if got := uploaderClass(tt.artist, tt.candidate); got != tt.want {
 			t.Errorf("%s: uploaderClass = %q, want %q", tt.name, got, tt.want)
 		}
+	}
+}
+
+func TestSelectBest_AnArtistChannelUploadOutranksAnEqualReupload(t *testing.T) {
+	track := TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", CatalogDuration: 200}
+	reupload := ports.AudioCandidate{
+		Title: "Blinding Lights", Channel: "RandomUploader", Duration: 200,
+		URL: "https://www.youtube.com/watch?v=aaaaaaaaaaa", Kind: ports.KindUpload,
+	}
+	artist := ports.AudioCandidate{
+		Title: "Blinding Lights", Channel: "The Weeknd", Duration: 200,
+		URL: "https://www.youtube.com/watch?v=zzzzzzzzzzz", Kind: ports.KindUpload,
+	}
+
+	got := selectBest(track, []ports.AudioCandidate{reupload, artist})
+	if got == nil || got.URL != artist.URL {
+		t.Fatalf("selected %v, want the upload from the artist's own channel over an equal re-upload", got)
 	}
 }

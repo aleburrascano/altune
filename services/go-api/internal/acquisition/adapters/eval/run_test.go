@@ -1283,7 +1283,7 @@ func TestRun_FlatCandidatesRunInProdTiersByKind(t *testing.T) {
 		Track: Track{Title: "Solitude", Artist: "Nova", Duration: 200, AuthoritativeDuration: 200},
 		Candidates: []Candidate{
 			{Title: "Solitude", URL: "upload", Channel: "Nova - Topic", Duration: 200, ViewCount: 9000000},
-			{Title: "Solitude", URL: "art", Channel: "YouTube Music Art Track", Duration: 200, Resolved: true, Kind: "art_track", Artists: []string{"Nova"}, Correct: true},
+			{Title: "Solitude", URL: "art", Duration: 200, Resolved: true, Kind: "art_track", Artists: []string{"Nova"}, Correct: true},
 		},
 	}
 
@@ -1426,7 +1426,7 @@ func TestEmbedded_TheCatalogLengthGoldenIsWhatProdsAdaptersEmit(t *testing.T) {
 		switch ports.CandidateKind(cand.Kind) {
 		case ports.KindArtTrack:
 			artTracks++
-			if !cand.Resolved || cand.Channel != "YouTube Music Art Track" || cand.Duration != 140 {
+			if !cand.Resolved || cand.Channel != "" || len(cand.Categories) != 0 || cand.Duration != 140 {
 				t.Errorf("art track %+v is not what ytmsearch emits for the 140 s hit", cand)
 			}
 		case ports.KindUpload:
