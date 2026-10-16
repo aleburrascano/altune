@@ -2656,9 +2656,9 @@ func TestBackgroundScheduler_Schedule_RunsTheJobWhenTheSchedulerClockIsAnHourAhe
 	var wg sync.WaitGroup
 	skewed := func(s *BackgroundAcquisitionScheduler) {
 		s.now = func() time.Time { return time.Now().Add(time.Hour) }
+		s.queue = newMemJobQueue(s.wake)
 	}
-	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
-		WithJobQueue(newMemJobQueue(nil)), skewed)
+	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1), skewed)
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
