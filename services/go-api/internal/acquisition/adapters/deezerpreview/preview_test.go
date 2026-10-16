@@ -1,4 +1,4 @@
-package main
+package deezerpreview
 
 import (
 	"context"
@@ -7,10 +7,22 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 )
+
+const fpcalcFails = "#!/bin/sh\necho cannot decode >&2\nexit 1\n"
+
+func writeFakeFpcalc(t *testing.T, script string) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "fpcalc"), []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake fpcalc: %v", err)
+	}
+	return dir
+}
 
 type fixedPrinter struct {
 	print []uint32
@@ -26,7 +38,7 @@ type deezerStub struct {
 	previews  int
 }
 
-func (s *deezerStub) serve(t *testing.T) *deezerPreviews {
+func (s *deezerStub) serve(t *testing.T) *Previews {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
@@ -40,7 +52,7 @@ func (s *deezerStub) serve(t *testing.T) *deezerPreviews {
 		_, _ = fmt.Fprint(w, s.trackBody(len(s.paths)))
 	}))
 	t.Cleanup(server.Close)
-	previews := newDeezerPreviews(server.Client(), server.URL, 1000, fixedPrinter{print: []uint32{7, 8, 9}})
+	previews := New(server.Client(), server.URL, 1000, fixedPrinter{print: []uint32{7, 8, 9}})
 	previews.backoff = time.Millisecond
 	return previews
 }
@@ -56,7 +68,7 @@ func TestDeezerPreviews_FetchesAndFingerprintsThePreviewOfTheBoundISRC(t *testin
 	previews := stub.serve(t)
 	base = previews.baseURL
 
-	clip, err := previews.Clip(context.Background(), boundIdentity{ISRC: "ussm1-16-07554", DeezerTrackID: "999"})
+	clip, err := previews.Clip(context.Background(), Target{ISRC: "ussm1-16-07554", DeezerTrackID: "999"})
 	if err != nil {
 		t.Fatalf("Clip: %v", err)
 	}
@@ -75,7 +87,7 @@ func TestDeezerPreviews_FallsBackToTheDeezerTrackIDWithoutAnISRC(t *testing.T) {
 	previews := stub.serve(t)
 	base = previews.baseURL
 
-	if _, err := previews.Clip(context.Background(), boundIdentity{DeezerTrackID: "132201194"}); err != nil {
+	if _, err := previews.Clip(context.Background(), Target{DeezerTrackID: "132201194"}); err != nil {
 		t.Fatalf("Clip: %v", err)
 	}
 
@@ -87,13 +99,13 @@ func TestDeezerPreviews_FallsBackToTheDeezerTrackIDWithoutAnISRC(t *testing.T) {
 func TestDeezerPreviews_SaysWhyThereIsNoPreview(t *testing.T) {
 	tests := []struct {
 		name     string
-		identity boundIdentity
+		identity Target
 		body     string
 		want     string
 	}{
-		{"no ISRC and no deezer id", boundIdentity{}, "", noLookupKey},
-		{"deezer does not know the ISRC", boundIdentity{ISRC: "USSM11607554"}, `{"error":{"type":"DataException","message":"no data","code":800}}`, unknownToDeezer},
-		{"deezer knows the track but has no preview", boundIdentity{ISRC: "USSM11607554"}, `{"id":1,"title":"outside","preview":""}`, noPreviewAtDeezer},
+		{"no ISRC and no deezer id", Target{}, "", noLookupKey},
+		{"deezer does not know the ISRC", Target{ISRC: "USSM11607554"}, `{"error":{"type":"DataException","message":"no data","code":800}}`, unknownToDeezer},
+		{"deezer knows the track but has no preview", Target{ISRC: "USSM11607554"}, `{"id":1,"title":"outside","preview":""}`, noPreviewAtDeezer},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -122,7 +134,7 @@ func TestDeezerPreviews_BacksOffOnAQuotaErrorAndThenSucceeds(t *testing.T) {
 	previews := stub.serve(t)
 	base = previews.baseURL
 
-	clip, err := previews.Clip(context.Background(), boundIdentity{ISRC: "USSM11607554"})
+	clip, err := previews.Clip(context.Background(), Target{ISRC: "USSM11607554"})
 
 	if err != nil || clip.DeezerTrackID != "132201194" {
 		t.Fatalf("clip = %+v, err = %v, want the track after two quota errors", clip, err)
@@ -136,10 +148,10 @@ func TestDeezerPreviews_GivesUpWhenQuotaNeverLifts(t *testing.T) {
 	stub := &deezerStub{trackBody: func(int) string { return `{"error":{"code":4}}` }}
 	previews := stub.serve(t)
 
-	_, err := previews.Clip(context.Background(), boundIdentity{ISRC: "USSM11607554"})
+	_, err := previews.Clip(context.Background(), Target{ISRC: "USSM11607554"})
 
-	if !errors.Is(err, errDeezerThrottled) {
-		t.Errorf("err = %v, want errDeezerThrottled", err)
+	if !errors.Is(err, ErrDeezerThrottled) {
+		t.Errorf("err = %v, want ErrDeezerThrottled", err)
 	}
 	if len(stub.paths) != deezerAttempts {
 		t.Errorf("track requests = %d, want %d", len(stub.paths), deezerAttempts)
@@ -153,7 +165,7 @@ func TestDeezerPreviews_HoldsEveryRequestWhileAnotherCallerIsBackingOff(t *testi
 	previews.pause.extendTo(time.Now().Add(pause))
 	started := time.Now()
 
-	_, _ = previews.Clip(context.Background(), boundIdentity{ISRC: "USSM11607554"})
+	_, _ = previews.Clip(context.Background(), Target{ISRC: "USSM11607554"})
 
 	if elapsed := time.Since(started); elapsed < pause-10*time.Millisecond {
 		t.Errorf("request went out after %v, want it held for the %v cooldown", elapsed, pause)
@@ -163,7 +175,7 @@ func TestDeezerPreviews_HoldsEveryRequestWhileAnotherCallerIsBackingOff(t *testi
 func TestFpcalcPrinter_ReadsTheRawFingerprint(t *testing.T) {
 	dir := writeFakeFpcalc(t, "#!/bin/sh\nprintf '{\"duration\": 30, \"fingerprint\": [1936120799,4058316077,3]}'\n")
 
-	got, err := fpcalcPrinter{binary: dir + "/fpcalc"}.Print(context.Background(), os.DevNull)
+	got, err := FpcalcPrinter{binary: dir + "/fpcalc"}.Print(context.Background(), os.DevNull)
 
 	if err != nil || len(got) != 3 || got[0] != 1936120799 || got[1] != 4058316077 {
 		t.Errorf("print = %v, err = %v, want the three raw items", got, err)
@@ -174,10 +186,10 @@ func TestFpcalcPrinter_RefusesAnEmptyOrFailedFingerprint(t *testing.T) {
 	empty := writeFakeFpcalc(t, "#!/bin/sh\nprintf '{\"duration\": 30, \"fingerprint\": []}'\n")
 	failing := writeFakeFpcalc(t, fpcalcFails)
 
-	if _, err := (fpcalcPrinter{binary: empty + "/fpcalc"}).Print(context.Background(), os.DevNull); !errors.Is(err, errEmptyPrint) {
-		t.Errorf("empty err = %v, want errEmptyPrint", err)
+	if _, err := (FpcalcPrinter{binary: empty + "/fpcalc"}).Print(context.Background(), os.DevNull); !errors.Is(err, ErrEmptyPrint) {
+		t.Errorf("empty err = %v, want ErrEmptyPrint", err)
 	}
-	if _, err := (fpcalcPrinter{binary: failing + "/fpcalc"}).Print(context.Background(), os.DevNull); err == nil {
+	if _, err := (FpcalcPrinter{binary: failing + "/fpcalc"}).Print(context.Background(), os.DevNull); err == nil {
 		t.Error("failing fpcalc returned no error")
 	}
 }

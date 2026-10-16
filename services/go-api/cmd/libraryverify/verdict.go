@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/acquisition/adapters/deezerpreview"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service/audiojudge"
 	"altune/go-api/internal/acquisition/service/grade"
@@ -47,6 +48,10 @@ type boundIdentity struct {
 	DeezerTrackID string         `json:"deezer_track_id,omitempty"`
 	AppleSongID   string         `json:"apple_song_id,omitempty"`
 	Reason        string         `json:"reason,omitempty"`
+}
+
+func (i boundIdentity) previewTarget() deezerpreview.Target {
+	return deezerpreview.Target{ISRC: i.ISRC, DeezerTrackID: i.DeezerTrackID}
 }
 
 type candidate struct {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/acquisition/adapters/deezerpreview"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service/audiojudge"
 	"context"
@@ -54,6 +55,10 @@ type audioIdentifier interface {
 	Identify(ctx context.Context, filePath string, durationHint float64) (ports.RecordingMatch, error)
 }
 
+type previewSource interface {
+	Clip(ctx context.Context, target deezerpreview.Target) (deezerpreview.Clip, error)
+}
+
 type verifier struct {
 	store     catalogPorts.AudioStore
 	identify  audioIdentifier
@@ -63,7 +68,7 @@ type verifier struct {
 	completed atomic.Int64
 
 	previews   previewSource
-	printer    rawPrinter
+	printer    deezerpreview.RawPrinter
 	cut        previewCut
 	provenMax  float64
 	checkpoint func(finished []trackResult)
@@ -139,7 +144,7 @@ func confidentResults(results []ports.AcoustIDResult, minScore float64) []ports.
 }
 
 func (v *verifier) measurePreview(ctx context.Context, identity boundIdentity, file string) (previewEvidence, error) {
-	clip, err := v.previews.Clip(ctx, identity)
+	clip, err := v.previews.Clip(ctx, identity.previewTarget())
 	if err != nil {
 		return previewEvidence{}, err
 	}
@@ -154,30 +159,18 @@ func (v *verifier) measurePreview(ctx context.Context, identity boundIdentity, f
 	return withAlignment(evidence, filePrint, clip.Print)
 }
 
-func incomparable(filePrint, previewPrint []uint32) string {
-	switch {
-	case len(previewPrint) < minPreviewItems:
-		return errPreviewTooShort.Error()
-	case len(filePrint) >= fingerprintedItemCap:
-		return errFileReachesCap.Error()
-	case len(previewPrint) > len(filePrint):
-		return errPrintLongerThanRef.Error()
-	}
-	return ""
-}
-
 func withAlignment(evidence previewEvidence, filePrint, previewPrint []uint32) (previewEvidence, error) {
-	if reason := incomparable(filePrint, previewPrint); reason != "" {
+	if reason := deezerpreview.Incomparable(filePrint, previewPrint); reason != "" {
 		evidence.Unavailable = reason
 		return evidence, nil
 	}
-	aligned, err := bestAlignment(filePrint, previewPrint)
+	aligned, err := deezerpreview.BestAlignment(filePrint, previewPrint)
 	if err != nil {
 		return previewEvidence{}, err
 	}
 	evidence.Alignment = &alignmentEvidence{
-		BitErrorRate: aligned.BitErrorRate, OffsetSeconds: aligned.offsetSeconds(),
-		OverlapSeconds: float64(len(previewPrint)) * itemDurationSeconds,
+		BitErrorRate: aligned.BitErrorRate, OffsetSeconds: aligned.OffsetSeconds(),
+		OverlapSeconds: deezerpreview.OverlapSeconds(len(previewPrint)),
 	}
 	return evidence, nil
 }

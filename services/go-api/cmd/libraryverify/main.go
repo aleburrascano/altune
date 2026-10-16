@@ -2,6 +2,7 @@ package main
 
 import (
 	"altune/go-api/internal/acquisition/adapters/chromaprint"
+	"altune/go-api/internal/acquisition/adapters/deezerpreview"
 	"altune/go-api/internal/catalog/adapters/storage"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/config"
@@ -240,11 +241,11 @@ func verifierFromConfig(cfg *config.Config, tuning settings, previewTuning previ
 		return nil, errFpcalcMissing
 	}
 	client := &http.Client{Timeout: httpTimeout}
-	printer := fpcalcPrinter{binary: binpath.Resolve("fpcalc", cfg.FFmpegLocation)}
+	printer := deezerpreview.NewFpcalcPrinter(binpath.Resolve("fpcalc", cfg.FFmpegLocation))
 	return &verifier{
 		store: audioStore, identify: identifier, minScore: tuning.minScore, progress: os.Stderr,
 		lookups:  newMusicBrainz(client, musicBrainzBaseURL, tuning.musicBrainzRate),
-		previews: newDeezerPreviews(client, deezerBaseURL, previewTuning.deezerRate, printer),
+		previews: deezerpreview.New(client, deezerpreview.BaseURL, previewTuning.deezerRate, printer),
 		printer:  printer, cut: previewTuning.cut, provenMax: cfg.AcquisitionUpgradePreviewAMaxBER,
 	}, nil
 }

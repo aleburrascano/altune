@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/acquisition/adapters/deezerpreview"
 	"bytes"
 	"strings"
 	"testing"
@@ -11,7 +12,7 @@ func printedSong(id, artist, title, isrc string, seed uint64) printedTrack {
 	return printedTrack{
 		track: libraryTrack{ID: id, Artist: artist, Title: title, Identity: boundIdentity{ISRC: isrc}},
 		file:  audio,
-		clip:  previewClip{Print: audio[300:540]},
+		clip:  deezerpreview.Clip{Print: audio[300:540]},
 	}
 }
 
