@@ -2,6 +2,7 @@ package id3
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -20,8 +21,8 @@ func TestTagger_SkipsNonMp3(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := NewTagger().Tag(context.Background(), file, ports.TrackTags{Title: "T", Artist: "A"}); err != nil {
-		t.Fatalf("expected nil, got %v", err)
+	if err := NewTagger().Tag(context.Background(), file, ports.TrackTags{Title: "T", Artist: "A"}); !errors.Is(err, ErrUnsupportedContainer) {
+		t.Fatalf("Tag() = %v, want ErrUnsupportedContainer", err)
 	}
 
 	after, err := os.ReadFile(file)
@@ -30,6 +31,27 @@ func TestTagger_SkipsNonMp3(t *testing.T) {
 	}
 	if string(after) != string(original) {
 		t.Error("m4a file was modified by the tagger; non-MP3 bytes must be left untouched")
+	}
+}
+
+func TestTagger_AnUnsupportedContainerIsAnError(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "track.opus")
+	original := []byte("OggS opus original bytes")
+	if err := os.WriteFile(file, original, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := NewTagger().Tag(context.Background(), file, ports.TrackTags{Title: "T", Artist: "A"})
+	if !errors.Is(err, ErrUnsupportedContainer) {
+		t.Fatalf("Tag() = %v, want ErrUnsupportedContainer", err)
+	}
+
+	after, readErr := os.ReadFile(file)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(after) != string(original) {
+		t.Error("opus file was modified by the tagger; untaggable bytes must be left untouched")
 	}
 }
 

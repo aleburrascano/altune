@@ -2,8 +2,10 @@ package id3
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -12,14 +14,15 @@ import (
 	"github.com/bogem/id3v2/v2"
 )
 
+var ErrUnsupportedContainer = errors.New("id3: only .mp3 files can be tagged")
+
 type Tagger struct{}
 
 func NewTagger() *Tagger { return &Tagger{} }
 
 func (t *Tagger) Tag(ctx context.Context, filePath string, tags ports.TrackTags) error {
 	if !strings.HasSuffix(strings.ToLower(filePath), ".mp3") {
-		slog.InfoContext(ctx, "tag_skipped_non_mp3", "path", filePath)
-		return nil
+		return fmt.Errorf("%w: %s", ErrUnsupportedContainer, filepath.Ext(filePath))
 	}
 
 	tag, err := id3v2.Open(filePath, id3v2.Options{Parse: false})

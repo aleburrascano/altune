@@ -1,10 +1,12 @@
 package ffmpegtag
 
 import (
+	"altune/go-api/internal/acquisition/adapters/id3"
 	"altune/go-api/internal/acquisition/ports"
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -121,6 +123,22 @@ func TestTagger_HandsNonM4AFilesToTheFallback(t *testing.T) {
 	}
 	if _, err := os.Stat(argvFile); err == nil {
 		t.Error("ffmpeg ran for an mp3, want only the fallback")
+	}
+}
+
+func TestTagger_AnUntaggableContainerSurfacesThroughTheFallback(t *testing.T) {
+	binary, argvFile := fakeFfmpeg(t, "exit 1")
+	path := audioFile(t, "audio.opus", "opus bytes")
+
+	err := NewTagger(binary, id3.NewTagger()).Tag(context.Background(), path, fullTags)
+	if !errors.Is(err, id3.ErrUnsupportedContainer) {
+		t.Fatalf("Tag() = %v, want ErrUnsupportedContainer", err)
+	}
+	if got, _ := os.ReadFile(path); string(got) != "opus bytes" {
+		t.Errorf("file = %q, want the original untouched", got)
+	}
+	if _, statErr := os.Stat(argvFile); statErr == nil {
+		t.Error("ffmpeg ran for an opus file, want only the fallback")
 	}
 }
 
