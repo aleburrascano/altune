@@ -50,6 +50,10 @@ func (t *Tagger) Tag(ctx context.Context, filePath string, tags ports.TrackTags)
 		tag.SetGenre(tags.Genre)
 	}
 
+	if tags.ISRC != "" {
+		tag.AddTextFrame("TSRC", id3v2.EncodingUTF8, tags.ISRC)
+	}
+
 	if err := tag.Save(); err != nil {
 		return fmt.Errorf("save tags: %w", err)
 	}

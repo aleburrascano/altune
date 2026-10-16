@@ -20,6 +20,7 @@ func (s *TagStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterDo
 		return afterTag{}, nil
 	}
 
+	isrc, _ := ac.provenISRC()
 	tags := ports.TrackTags{
 		Title:       ac.Track.Title,
 		Artist:      ac.Track.Artist,
@@ -28,6 +29,7 @@ func (s *TagStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterDo
 		Genre:       ac.Track.Genre,
 		Year:        ac.Track.Year,
 		TrackNumber: ac.Track.TrackNumber,
+		ISRC:        isrc,
 	}
 	if err := s.tagger.Tag(ctx, ac.TempPath, tags); err != nil {
 		slog.WarnContext(ctx, "tagging_failed", "track_id", ac.Track.ID, "error", redact.LogError(err))

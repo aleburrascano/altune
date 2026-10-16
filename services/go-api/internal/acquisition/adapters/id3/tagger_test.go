@@ -73,3 +73,21 @@ func TestTagger_WritesTags(t *testing.T) {
 		t.Errorf("album = %q, want %q", got, "After Hours")
 	}
 }
+
+func TestTagger_WritesTheISRCFrame(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "track.mp3")
+	if err := os.WriteFile(file, []byte{}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := NewTagger().Tag(context.Background(), file, ports.TrackTags{Title: "T", Artist: "A", ISRC: "USRC17607839"}); err != nil {
+		t.Fatalf("Tag error: %v", err)
+	}
+	tag, err := id3v2.Open(file, id3v2.Options{Parse: true})
+	if err != nil {
+		t.Fatalf("reopen tagged file: %v", err)
+	}
+	defer tag.Close()
+	if got := tag.GetTextFrame("TSRC").Text; got != "USRC17607839" {
+		t.Errorf("TSRC = %q, want USRC17607839", got)
+	}
+}

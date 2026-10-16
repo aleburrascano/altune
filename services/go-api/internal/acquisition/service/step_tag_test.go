@@ -94,3 +94,33 @@ func (r *recordingTagger) Tag(_ context.Context, _ string, tags ports.TrackTags)
 	*r.tags = tags
 	return nil
 }
+
+func TestTagStep_EmbedsOnlyTheProvenISRC(t *testing.T) {
+	proven := &AcquisitionContext{
+		Track:    TrackRef{Title: "T", Artist: "A"},
+		Identity: ports.RecordingIdentity{ISRC: "USRC17607839", MBID: "rec-1", MBIDs: []string{"rec-1"}},
+		Verdict:  AudioVerdict{Kind: VerdictHard, Surviving: []ports.LinkedRecording{{MBID: "rec-1"}}},
+		TempPath: "/tmp/x.mp3",
+	}
+	unproven := &AcquisitionContext{
+		Track:    TrackRef{Title: "T", Artist: "A"},
+		Identity: ports.RecordingIdentity{ISRC: "USRC17607839", MBID: "rec-1", MBIDs: []string{"rec-1"}},
+		Verdict:  AudioVerdict{Kind: VerdictHard, Surviving: []ports.LinkedRecording{{MBID: "other"}}},
+		TempPath: "/tmp/x.mp3",
+	}
+	for name, tc := range map[string]struct {
+		ac   *AcquisitionContext
+		want string
+	}{
+		"fingerprint proves the ISRC's recording": {proven, "USRC17607839"},
+		"an unproven resolver ISRC":               {unproven, ""},
+	} {
+		var got ports.TrackTags
+		if _, err := NewTagStep(&recordingTagger{tags: &got}).Execute(context.Background(), tc.ac, afterDownload{}); err != nil {
+			t.Fatalf("%s: Execute error: %v", name, err)
+		}
+		if got.ISRC != tc.want {
+			t.Errorf("%s: ISRC = %q, want %q", name, got.ISRC, tc.want)
+		}
+	}
+}

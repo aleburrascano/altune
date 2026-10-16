@@ -10,6 +10,7 @@ type TrackTags struct {
 	Genre       string
 	Year        int
 	TrackNumber int
+	ISRC        string
 }
 
 type AudioTagger interface {
