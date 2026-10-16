@@ -2395,3 +2395,94 @@ func TestJudgeAttempt_AnOtherVersionIsHeldOrRejectedByLength(t *testing.T) {
 		})
 	}
 }
+
+type windowSiblingFetcher struct{ *gatedFetcher }
+
+func (f windowSiblingFetcher) PreviewFetcherFor(ports.AudioCandidate) (ports.PreviewFetcher, bool) {
+	return f, true
+}
+
+func (f windowSiblingFetcher) FetchPreview(_ context.Context, c ports.AudioCandidate, outDir string, _ int) (string, error) {
+	path := filepath.Join(outDir, "preview-"+c.URL+".mp3")
+	return path, os.WriteFile(path, []byte("preview-bytes"), 0o644)
+}
+
+type cancelledSiblingIdentifier struct {
+	fetcher       *gatedFetcher
+	rank2Started  chan struct{}
+	rank2Starting sync.Once
+}
+
+func (i *cancelledSiblingIdentifier) Identify(ctx context.Context, path string, _ float64) (ports.RecordingMatch, error) {
+	if strings.Contains(path, "rank2") || filepath.Dir(path) == i.fetcher.dirOf("rank2") {
+		i.rank2Starting.Do(func() { close(i.rank2Started) })
+		<-ctx.Done()
+		return ports.RecordingMatch{}, ctx.Err()
+	}
+	<-i.rank2Started
+	return hardMatch(), nil
+}
+
+func (i *cancelledSiblingIdentifier) AcoustIDsFor(context.Context, string) ([]string, error) {
+	return nil, nil
+}
+
+type cancelledSiblingProber struct{ fetcher *gatedFetcher }
+
+func (p cancelledSiblingProber) ProbeDuration(ctx context.Context, path string) (float64, error) {
+	if filepath.Dir(path) == p.fetcher.dirOf("rank2") {
+		<-ctx.Done()
+		return 0, ctx.Err()
+	}
+	return 236, nil
+}
+
+func (p cancelledSiblingProber) ValidateDecodable(context.Context, string) error { return nil }
+
+func TestDownloadStep_ACancelledWindowSiblingRecordsNoVerifySkip(t *testing.T) {
+	fetcher := newGatedFetcher(nil)
+	identifier := &cancelledSiblingIdentifier{fetcher: fetcher, rank2Started: make(chan struct{})}
+	rec := &gateRecorder{}
+	ac := heldTrackContext(
+		ports.AudioCandidate{URL: "rank1", Channel: "Corey Hart - Topic", Duration: 236},
+		ports.AudioCandidate{URL: "rank2", Channel: "Corey Hart - Topic", Duration: 236},
+	)
+	step := NewDownloadStep(windowSiblingFetcher{fetcher},
+		WithDownloadIdentifier(identifier), WithDownloadProber(cancelledSiblingProber{fetcher: fetcher}),
+		WithStepVerifySkips(rec), WithVerifyWidth(2))
+	logs := captureJSONLog(t)
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+	if ac.Selected == nil || ac.Selected.URL != "rank1" {
+		t.Fatalf("selected = %+v, want rank1", ac.Selected)
+	}
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if len(rec.gates) != 0 {
+		t.Errorf("recorded gates = %v, want none for a sibling cancelled by the win", rec.gates)
+	}
+	for _, event := range []string{"acquisition.probe_failed_accepting", "acquisition.preview_fallback", "acquisition.identify_failed"} {
+		if strings.Contains(logs.String(), event) {
+			t.Errorf("logged %s for a cancelled sibling", event)
+		}
+	}
+}
+
+func TestDownloadStep_AProbeFailureOnALiveAttemptIsStillASkip(t *testing.T) {
+	rec := &gateRecorder{}
+	prober := scriptedProber{probeErr: errors.New("ffprobe exploded")}
+	step := NewDownloadStep(&fileWritingSearcher{writeFile: true},
+		WithDownloadProber(prober), WithStepVerifySkips(rec), WithVerifyWidth(1))
+	ac := heldTrackContext(ports.AudioCandidate{URL: "only", Duration: 236})
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+	assertWindowSkips(t, rec.gates, ports.SkipProbeFailed)
+}

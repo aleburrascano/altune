@@ -76,6 +76,9 @@ func (s *DownloadStep) noteIdentifyFailure(
 	fallbackEvent string,
 	gate string,
 ) {
+	if ctx.Err() != nil {
+		return
+	}
 	slog.WarnContext(ctx, identifyFailureEvent(err, fallbackEvent),
 		"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
 		"error", redact.LogError(err))

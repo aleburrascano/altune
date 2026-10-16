@@ -498,6 +498,8 @@ func (s *DownloadStep) probeDuration(
 ) (bool, float64, *downloadRejection) {
 	actual, err := s.prober.ProbeDuration(ctx, filePath)
 	switch {
+	case err != nil && ctx.Err() != nil:
+		return false, 0, nil
 	case err != nil:
 		slog.WarnContext(ctx, "acquisition.probe_failed_accepting",
 			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
