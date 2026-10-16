@@ -816,39 +816,39 @@ func assertQualifiers(t *testing.T, name string, got, want []string) {
 }
 
 func TestUnrequestedQualifiers_InstrumentalAndAccuracyClaimAreVetoed(t *testing.T) {
-	veto, fallback := UnrequestedQualifiers("Rollacoasta", "prettifun", "prettifun - Rollacoasta (Instrumental) [100% Accurate]")
+	veto, qualifiers := UnrequestedQualifiers("Rollacoasta", "prettifun", "prettifun - Rollacoasta (Instrumental) [100% Accurate]")
 	assertQualifiers(t, "veto", veto, []string{"instrumental", "100% accurate"})
-	assertQualifiers(t, "fallback", fallback, nil)
+	assertQualifiers(t, "qualifiers", qualifiers, nil)
 }
 
 func TestUnrequestedQualifiers_ZeroWidthSpaceInsideQualifierIsStillVetoed(t *testing.T) {
-	veto, fallback := UnrequestedQualifiers("Rollacoasta", "prettifun", "prettifun - Rollacoasta (Instru\u200bmental)")
+	veto, qualifiers := UnrequestedQualifiers("Rollacoasta", "prettifun", "prettifun - Rollacoasta (Instru\u200bmental)")
 	assertQualifiers(t, "veto", veto, []string{"instrumental"})
-	assertQualifiers(t, "fallback", fallback, nil)
+	assertQualifiers(t, "qualifiers", qualifiers, nil)
 }
 
 func TestUnrequestedQualifiers_ReactionVideoIsVetoed(t *testing.T) {
-	veto, fallback := UnrequestedQualifiers("8AM In Charlotte", "Drake", "ImDontai Reacts To Drake 8AM In Charlotte")
+	veto, qualifiers := UnrequestedQualifiers("8AM In Charlotte", "Drake", "ImDontai Reacts To Drake 8AM In Charlotte")
 	assertQualifiers(t, "veto", veto, []string{"reacts"})
-	assertQualifiers(t, "fallback", fallback, nil)
+	assertQualifiers(t, "qualifiers", qualifiers, nil)
 }
 
-func TestUnrequestedQualifiers_RadioEditIsFallbackNotEdit(t *testing.T) {
-	veto, fallback := UnrequestedQualifiers("Song", "Someone", "Song (Radio Edit)")
+func TestUnrequestedQualifiers_RadioEditIsQualifierNotEdit(t *testing.T) {
+	veto, qualifiers := UnrequestedQualifiers("Song", "Someone", "Song (Radio Edit)")
 	assertQualifiers(t, "veto", veto, nil)
-	assertQualifiers(t, "fallback", fallback, []string{"radio edit"})
+	assertQualifiers(t, "qualifiers", qualifiers, []string{"radio edit"})
 }
 
 func TestUnrequestedQualifiers_RequestedWordInTrackTitleIsNotAQualifier(t *testing.T) {
-	veto, fallback := UnrequestedQualifiers("Live Forever", "Oasis", "Live Forever (Remastered)")
+	veto, qualifiers := UnrequestedQualifiers("Live Forever", "Oasis", "Live Forever (Remastered)")
 	assertQualifiers(t, "veto", veto, nil)
-	assertQualifiers(t, "fallback", fallback, nil)
+	assertQualifiers(t, "qualifiers", qualifiers, nil)
 }
 
 func TestUnrequestedQualifiers_RequestedWordAtEndOfTrackTitleIsNotAQualifier(t *testing.T) {
-	veto, fallback := UnrequestedQualifiers("Forever Live", "Oasis", "Forever Live (Remastered)")
+	veto, qualifiers := UnrequestedQualifiers("Forever Live", "Oasis", "Forever Live (Remastered)")
 	assertQualifiers(t, "veto", veto, nil)
-	assertQualifiers(t, "fallback", fallback, nil)
+	assertQualifiers(t, "qualifiers", qualifiers, nil)
 }
 
 func TestQualifierDistance_CountsEachUnrequestedBracketSegment(t *testing.T) {
@@ -944,11 +944,11 @@ func TestRankCandidates_ProvenanceStillBeatsQualifierDistanceOffTopic(t *testing
 
 func TestUnrequestedQualifiers(t *testing.T) {
 	tests := []struct {
-		name          string
-		title, artist string
-		candidate     string
-		wantVeto      []string
-		wantFallback  []string
+		name           string
+		title, artist  string
+		candidate      string
+		wantVeto       []string
+		wantQualifiers []string
 	}{
 		{"unbracketed slowed and reverb", "Song", "Someone", "Someone - Song slowed + reverb", []string{"slowed", "reverb"}, nil},
 		{"punctuation folded", "Song", "Someone", "Song 100 accurate", []string{"100% accurate"}, nil},
@@ -960,8 +960,8 @@ func TestUnrequestedQualifiers(t *testing.T) {
 		{"title order and deduplicated", "Song", "Someone", "Song (Live) [Snippet] live leaked leak", []string{"live", "snippet", "leak"}, nil},
 		{"phrases", "Song", "Someone", "Someone Type Beat - Song In The Booth Sped Up 8D", []string{"type beat", "in the booth", "sped up", "8d"}, nil},
 		{"lone phrase word is not the phrase", "Song", "Someone", "Song in the studio type", nil, nil},
-		{"veto and fallback split", "Song", "Someone", "Song (Extended Version) [Karaoke]", []string{"karaoke"}, []string{"extended", "version"}},
-		{"bare edit is fallback", "Song", "Someone", "Song (Edit)", nil, []string{"edit"}},
+		{"veto and qualifiers split", "Song", "Someone", "Song (Extended Version) [Karaoke]", []string{"karaoke"}, []string{"extended", "version"}},
+		{"bare edit is a qualifier", "Song", "Someone", "Song (Edit)", nil, []string{"edit"}},
 		{"artist word is requested", "Song", "Live", "Live - Song", nil, nil},
 		{"title phrase is requested", "Slowed Down", "Someone", "Slowed Down (Reverb)", []string{"reverb"}, nil},
 		{"requested qualifier in title brackets", "Song (Remix)", "Someone", "Song (Remix)", nil, nil},
@@ -975,9 +975,9 @@ func TestUnrequestedQualifiers(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			veto, fallback := UnrequestedQualifiers(tt.title, tt.artist, tt.candidate)
+			veto, qualifiers := UnrequestedQualifiers(tt.title, tt.artist, tt.candidate)
 			assertQualifiers(t, "veto of "+tt.candidate, veto, tt.wantVeto)
-			assertQualifiers(t, "fallback of "+tt.candidate, fallback, tt.wantFallback)
+			assertQualifiers(t, "qualifiers of "+tt.candidate, qualifiers, tt.wantQualifiers)
 		})
 	}
 }
@@ -988,11 +988,11 @@ func FuzzUnrequestedQualifiers(f *testing.F) {
 	f.Add("Song", "Someone", "Song （feat. Other） （Radio Edit） a")
 	labels := versiontag.KnownLabels()
 	f.Fuzz(func(t *testing.T, title, artist, candidate string) {
-		veto, fallback := UnrequestedQualifiers(title, artist, candidate)
+		veto, qualifiers := UnrequestedQualifiers(title, artist, candidate)
 		seen := make(map[string]bool)
-		for _, label := range append(veto, fallback...) {
+		for _, label := range append(veto, qualifiers...) {
 			if !labels[label] || seen[label] {
-				t.Fatalf("UnrequestedQualifiers(%q, %q, %q) = %v, %v: %q is unknown or repeated", title, artist, candidate, veto, fallback, label)
+				t.Fatalf("UnrequestedQualifiers(%q, %q, %q) = %v, %v: %q is unknown or repeated", title, artist, candidate, veto, qualifiers, label)
 			}
 			seen[label] = true
 		}
@@ -1002,11 +1002,11 @@ func FuzzUnrequestedQualifiers(f *testing.F) {
 func TestUnrequestedQualifiers_TitlesFromTheOutsideWorld(t *testing.T) {
 	longCandidate := "Song" + strings.Repeat(" (Live)", 5000) + " [Instrumental]"
 	tests := []struct {
-		name          string
-		title, artist string
-		candidate     string
-		wantVeto      []string
-		wantFallback  []string
+		name           string
+		title, artist  string
+		candidate      string
+		wantVeto       []string
+		wantQualifiers []string
 	}{
 		{"all caps instrumental upload is vetoed", "SPEED DEMON", "Lucy Bedroque", "Lucy Bedroque - SPEED DEMON (INSTRUMENTAL)", []string{"instrumental"}, nil},
 		{"lower case track title still requests the word", "live forever", "oasis", "LIVE FOREVER (LIVE)", nil, nil},
@@ -1032,9 +1032,9 @@ func TestUnrequestedQualifiers_TitlesFromTheOutsideWorld(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			veto, fallback := UnrequestedQualifiers(tt.title, tt.artist, tt.candidate)
+			veto, qualifiers := UnrequestedQualifiers(tt.title, tt.artist, tt.candidate)
 			assertQualifiers(t, "veto", veto, tt.wantVeto)
-			assertQualifiers(t, "fallback", fallback, tt.wantFallback)
+			assertQualifiers(t, "qualifiers", qualifiers, tt.wantQualifiers)
 		})
 	}
 }
@@ -1090,9 +1090,9 @@ func TestUnrequestedQualifiers_RemasterStyleMixIsNotAQualifier(t *testing.T) {
 		"Come Together (Mono Mix)",
 		"Come Together (Album Mix)",
 	} {
-		veto, fallback := UnrequestedQualifiers("Come Together", "The Beatles", title)
+		veto, qualifiers := UnrequestedQualifiers("Come Together", "The Beatles", title)
 		assertQualifiers(t, title+" veto", veto, nil)
-		assertQualifiers(t, title+" fallback", fallback, nil)
+		assertQualifiers(t, title+" qualifiers", qualifiers, nil)
 	}
 }
 
@@ -1186,18 +1186,18 @@ func TestLogCandidateEvaluated_CarriesScoresAndCandidateAttributes(t *testing.T)
 
 func TestUnrequestedQualifiers_FullwidthBracketsGetTheSameVetoAsAscii(t *testing.T) {
 	wantVeto, _ := UnrequestedQualifiers("Song", "Artist", "Artist - Song [Slowed]")
-	veto, fallback := UnrequestedQualifiers("Song", "Artist", "Artist - Song ［Ｓｌｏｗｅｄ］")
+	veto, qualifiers := UnrequestedQualifiers("Song", "Artist", "Artist - Song ［Ｓｌｏｗｅｄ］")
 	assertQualifiers(t, "veto", veto, wantVeto)
-	assertQualifiers(t, "fallback", fallback, nil)
+	assertQualifiers(t, "qualifiers", qualifiers, nil)
 	if len(veto) == 0 {
 		t.Fatal("veto is empty, want the slowed qualifier")
 	}
 }
 
 func TestUnrequestedQualifiers_TitleWithoutBracketHasNoVeto(t *testing.T) {
-	veto, fallback := UnrequestedQualifiers("Song", "Artist", "Artist - Song")
+	veto, qualifiers := UnrequestedQualifiers("Song", "Artist", "Artist - Song")
 	assertQualifiers(t, "veto", veto, nil)
-	assertQualifiers(t, "fallback", fallback, nil)
+	assertQualifiers(t, "qualifiers", qualifiers, nil)
 }
 
 func TestSelectBest_AnArtTrackIsResolvedByItsKind(t *testing.T) {
@@ -1303,14 +1303,14 @@ func TestUnrequestedQualifiers_ReleaseVariantsAreQualifiers(t *testing.T) {
 		"Song [Acoustic]":    "acoustic",
 	}
 	for title, label := range vetoed {
-		veto, fallback := UnrequestedQualifiers("Song", "Artist", title)
+		veto, qualifiers := UnrequestedQualifiers("Song", "Artist", title)
 		assertQualifiers(t, title+" veto", veto, []string{label})
-		assertQualifiers(t, title+" fallback", fallback, nil)
+		assertQualifiers(t, title+" qualifiers", qualifiers, nil)
 	}
 	for _, title := range []string{"Song (Remastered)", "Song (2011 Remaster)"} {
-		veto, fallback := UnrequestedQualifiers("Song", "Artist", title)
+		veto, qualifiers := UnrequestedQualifiers("Song", "Artist", title)
 		assertQualifiers(t, title+" veto", veto, nil)
-		assertQualifiers(t, title+" fallback", fallback, nil)
+		assertQualifiers(t, title+" qualifiers", qualifiers, nil)
 	}
 	veto, _ := UnrequestedQualifiers("Song (Acoustic)", "Artist", "Song (Acoustic)")
 	assertQualifiers(t, "requested acoustic veto", veto, nil)

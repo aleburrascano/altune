@@ -1672,7 +1672,7 @@ func TestDownloadStep_WalksPastUnknownFingerprintToALaterHardMatch(t *testing.T)
 	}
 }
 
-func TestDownloadStep_CleanHoldBeatsAHigherRankedFallbackHold(t *testing.T) {
+func TestDownloadStep_CleanHoldBeatsAHigherRankedOtherVersionHold(t *testing.T) {
 	fetcher := newGatedFetcher(nil)
 	identifier := &urlIdentifier{fetcher: fetcher, matches: map[string]ports.RecordingMatch{"edit": hardMatch()}}
 	ac := heldTrackContext(
@@ -1693,7 +1693,7 @@ func TestDownloadStep_CleanHoldBeatsAHigherRankedFallbackHold(t *testing.T) {
 		t.Errorf("a held selection must be best_effort, got BestEffort=%v provenance=%q", ac.BestEffort, ac.Provenance())
 	}
 	if _, err := os.Stat(fetcher.dirOf("edit")); !os.IsNotExist(err) {
-		t.Errorf("the displaced fallback hold's temp dir should be removed, stat err = %v", err)
+		t.Errorf("the displaced other-version hold's temp dir should be removed, stat err = %v", err)
 	}
 }
 
@@ -1712,7 +1712,7 @@ func TestDownloadStep_HeldCandidateBelowTheFloorFailsAsNoConfidentMatch(t *testi
 	}
 }
 
-func TestDownloadStep_FallbackOfTheWrongLengthIsNeverStored(t *testing.T) {
+func TestDownloadStep_OtherVersionOfTheWrongLengthIsNeverStored(t *testing.T) {
 	fetcher := newGatedFetcher(nil)
 	ac := heldTrackContext(ports.AudioCandidate{
 		URL: "edit", Title: "Sunglasses at Night (Radio Edit)", Channel: "Corey Hart - Topic", Duration: 236,
@@ -2205,7 +2205,7 @@ func TestNewDownloadStep_DefaultsToTheProdWidth(t *testing.T) {
 	}
 }
 
-func TestDownloadStep_AFallbackWithNoKnownLengthIsNeverStored(t *testing.T) {
+func TestDownloadStep_AnOtherVersionWithNoKnownLengthIsNeverStored(t *testing.T) {
 	fetcher := newGatedFetcher(nil)
 	ac := heldTrackContext(ports.AudioCandidate{
 		URL: "edit", Title: "Sunglasses at Night (Radio Edit)", Channel: "Corey Hart - Topic", Duration: 236,
@@ -2220,7 +2220,7 @@ func TestDownloadStep_AFallbackWithNoKnownLengthIsNeverStored(t *testing.T) {
 	}
 }
 
-func TestDownloadStep_AFingerprintedFallbackWithNoKnownLengthIsNeverStored(t *testing.T) {
+func TestDownloadStep_AFingerprintedOtherVersionWithNoKnownLengthIsNeverStored(t *testing.T) {
 	fetcher := newGatedFetcher(nil)
 	identifier := &urlIdentifier{fetcher: fetcher, matches: map[string]ports.RecordingMatch{"edit": hardMatch()}}
 	ac := heldTrackContext(ports.AudioCandidate{

@@ -73,23 +73,23 @@ func (s *DownloadStep) noteIdentifyFailure(
 	ac *AcquisitionContext,
 	candidate ports.AudioCandidate,
 	err error,
-	fallbackEvent string,
+	defaultEvent string,
 	gate string,
 ) {
 	if ctx.Err() != nil {
 		return
 	}
-	slog.WarnContext(ctx, identifyFailureEvent(err, fallbackEvent),
+	slog.WarnContext(ctx, identifyFailureEvent(err, defaultEvent),
 		"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
 		"error", redact.LogError(err))
 	s.recordSkip(gate)
 }
 
-func identifyFailureEvent(err error, fallback string) string {
+func identifyFailureEvent(err error, defaultEvent string) string {
 	if errors.Is(err, acqdomain.ErrIdentifyThrottled) {
 		return "acquisition.identify_throttled"
 	}
-	return fallback
+	return defaultEvent
 }
 
 func logPreviewFingerprint(

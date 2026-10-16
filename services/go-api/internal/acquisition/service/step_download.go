@@ -363,8 +363,8 @@ func (s *DownloadStep) attemptAudio(
 }
 
 const (
-	rejectOtherVersionLengthUnknown = "fallback version, length unknown"
-	rejectOtherVersionOffLengthFmt  = "fallback version %.0fs off the expected length"
+	rejectOtherVersionLengthUnknown = "other version, length unknown"
+	rejectOtherVersionOffLengthFmt  = "other version %.0fs off the expected length"
 )
 
 func judgeAttempt(ac *AcquisitionContext, candidate ports.AudioCandidate, filePath string, verified verificationResult) attempt {

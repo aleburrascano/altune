@@ -374,8 +374,8 @@ func TestSourceRegistry_TheKindDecidesTheFallback(t *testing.T) {
 	upload.Kind = ports.KindUpload
 
 	for name, tc := range map[string]struct {
-		hit          ports.AudioCandidate
-		wantFallback int
+		hit            ports.AudioCandidate
+		wantSecondTier int
 	}{
 		"art track": {artTrack, 0},
 		"upload":    {upload, 1},
@@ -388,8 +388,8 @@ func TestSourceRegistry_TheKindDecidesTheFallback(t *testing.T) {
 			if _, err := reg.Find(context.Background(), ports.FindRequest{}); err != nil {
 				t.Fatalf("Find returned error: %v", err)
 			}
-			if fallback.finds != tc.wantFallback {
-				t.Errorf("fallback searched %d times, want %d", fallback.finds, tc.wantFallback)
+			if fallback.finds != tc.wantSecondTier {
+				t.Errorf("fallback searched %d times, want %d", fallback.finds, tc.wantSecondTier)
 			}
 		})
 	}
