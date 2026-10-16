@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -39,7 +40,7 @@ func TestMatchOf_PicksHighestScoreAboveThreshold(t *testing.T) {
 	if got.AcoustID != "strong" {
 		t.Errorf("AcoustID = %q, want strong", got.AcoustID)
 	}
-	if !got.Matches("mbid-b") {
+	if !slices.Contains(got.MBIDs, "mbid-b") {
 		t.Errorf("MBIDs = %v, want mbid-b", got.MBIDs)
 	}
 }
@@ -54,65 +55,10 @@ func TestMatchOf_IgnoresLowScores(t *testing.T) {
 func TestMatchOf_KeepsResultsWithOnlyAnAcoustID(t *testing.T) {
 	got := matchFromBody(t, `{"status":"ok","results":[{"id":"acoustid-only","score":0.99}]}`)
 	if !got.Known() {
-		t.Fatalf("an AcoustID with no MusicBrainz links still identifies the audio for cluster comparison, got %+v", got)
+		t.Fatalf("an AcoustID with no MusicBrainz links still identifies the audio, got %+v", got)
 	}
-	if !got.InCluster([]string{"other", "acoustid-only"}) {
-		t.Errorf("InCluster must match on the AcoustID, got %+v", got)
-	}
-	if got.InCluster([]string{"other"}) {
-		t.Error("an AcoustID outside the expected cluster is a different recording")
-	}
-}
-
-func TestRecordingMatch_EmptyAcoustIDNeverMatchesACluster(t *testing.T) {
-	if (ports.RecordingMatch{MBIDs: []string{"mb"}}).InCluster([]string{"", "a"}) {
-		t.Error("a match with no AcoustID must never be read as being in the cluster")
-	}
-}
-
-func TestAcoustIDsFor_SendsAPIKeyInPostFormNotURL(t *testing.T) {
-	const apiKey = "secret-api-key"
-	const mbid = "mbid-123"
-
-	var gotURL string
-	var gotMethod string
-	var gotForm url.Values
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotURL = r.URL.String()
-		gotMethod = r.Method
-		if err := r.ParseForm(); err != nil {
-			t.Errorf("parse form: %v", err)
-		}
-		gotForm = r.PostForm
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok","tracks":[{"id":"track-1"}]}`))
-	}))
-	defer srv.Close()
-
-	id := NewIdentifier("", apiKey).WithClusterEndpoint(srv.URL)
-
-	ids, err := id.AcoustIDsFor(context.Background(), mbid)
-	if err != nil {
-		t.Fatalf("AcoustIDsFor: %v", err)
-	}
-	if len(ids) != 1 || ids[0] != "track-1" {
-		t.Errorf("ids = %v, want [track-1]", ids)
-	}
-
-	if gotMethod != http.MethodPost {
-		t.Errorf("method = %q, want POST", gotMethod)
-	}
-	if strings.Contains(gotURL, apiKey) {
-		t.Errorf("API key leaked into request URL %q", gotURL)
-	}
-	if strings.Contains(gotURL, mbid) {
-		t.Errorf("mbid leaked into request URL %q", gotURL)
-	}
-	if got := gotForm.Get("client"); got != apiKey {
-		t.Errorf("form client = %q, want %q", got, apiKey)
-	}
-	if got := gotForm.Get("mbid"); got != mbid {
-		t.Errorf("form mbid = %q, want %q", got, mbid)
+	if got.AcoustID != "acoustid-only" {
+		t.Errorf("AcoustID = %q, want acoustid-only", got.AcoustID)
 	}
 }
 
@@ -241,34 +187,6 @@ func TestLookup_EmptyKeyReturnsError(t *testing.T) {
 	}
 }
 
-func TestAcoustIDsFor_EmptyKeyReturnsError(t *testing.T) {
-	id := NewIdentifier("", "")
-
-	_, err := id.AcoustIDsFor(context.Background(), "mbid-1")
-
-	if !errors.Is(err, ErrMissingAPIKey) {
-		t.Fatalf("AcoustIDsFor with empty key err = %v, want ErrMissingAPIKey", err)
-	}
-}
-
-func TestAcoustIDsFor_ValidKeyNoResultsIsNilError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok","tracks":[]}`))
-	}))
-	defer srv.Close()
-
-	id := NewIdentifier("", "real-key").WithClusterEndpoint(srv.URL)
-
-	ids, err := id.AcoustIDsFor(context.Background(), "mbid-1")
-	if err != nil {
-		t.Fatalf("a genuine no-match must not error, got %v", err)
-	}
-	if len(ids) != 0 {
-		t.Errorf("ids = %v, want empty", ids)
-	}
-}
-
 func TestLookup_OversizedResponseBodyIsRejected(t *testing.T) {
 	oversized := `{"status":"ok","results":[{"id":"` + strings.Repeat("x", lookupBodyCap+1024) + `"}]}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -283,26 +201,6 @@ func TestLookup_OversizedResponseBodyIsRejected(t *testing.T) {
 
 	if err == nil {
 		t.Fatal("lookup against an oversized response body must error, got nil")
-	}
-}
-
-func TestAcoustIDsFor_OversizedResponseBodyIsRejected(t *testing.T) {
-	oversized := `{"status":"ok","tracks":[{"id":"` + strings.Repeat("x", lookupBodyCap+1024) + `"}]}`
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(oversized))
-	}))
-	defer srv.Close()
-
-	id := NewIdentifier("", "real-key").WithClusterEndpoint(srv.URL)
-
-	ids, err := id.AcoustIDsFor(context.Background(), "mbid-1")
-
-	if err == nil {
-		t.Fatal("AcoustIDsFor against an oversized response body must error, got nil")
-	}
-	if len(ids) != 0 {
-		t.Errorf("ids = %v, want none on error", ids)
 	}
 }
 
@@ -361,7 +259,7 @@ func TestIdentify_ReturnsEveryResultAboveTheScoreFloorWithLinkedRecordings(t *te
 		t.Fatalf("Identify: %v", err)
 	}
 
-	if match.AcoustID != "ac-top" || match.Score != 0.98 || !match.Matches("mb-top") {
+	if match.AcoustID != "ac-top" || match.Score != 0.98 || !slices.Contains(match.MBIDs, "mb-top") {
 		t.Fatalf("top match = %+v, want the ac-top result as before", match)
 	}
 	if len(match.Results) != 2 {
@@ -461,71 +359,6 @@ func TestLookup_ContextDeadlineAbortsTheRateLimitWaitBeforeAnyRequest(t *testing
 	}
 }
 
-func TestAcoustIDsFor_ContextDeadlineAbortsTheRateLimitWaitBeforeAnyRequest(t *testing.T) {
-	var hits int
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		hits++
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok","tracks":[]}`))
-	}))
-	defer srv.Close()
-
-	limiter := rate.NewLimiter(rate.Every(time.Hour), 1)
-	limiter.Allow()
-	id := NewIdentifier("", "real-key").WithClusterEndpoint(srv.URL)
-	id.limiter = limiter
-
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
-	defer cancel()
-
-	_, err := id.AcoustIDsFor(ctx, "mbid-1")
-
-	if err == nil {
-		t.Fatal("AcoustIDsFor blocked on an exhausted limiter must fail, got nil error")
-	}
-	if hits != 0 {
-		t.Errorf("hits = %d, want 0: the rate limit wait must abort before any request reaches the network", hits)
-	}
-}
-
-func TestIdentifier_SharesOneLimiterAcrossLookupAndAcoustIDsFor(t *testing.T) {
-	var lookupHits, clusterHits int
-	lookupSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		lookupHits++
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok","results":[]}`))
-	}))
-	defer lookupSrv.Close()
-	clusterSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		clusterHits++
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok","tracks":[]}`))
-	}))
-	defer clusterSrv.Close()
-
-	limiter := rate.NewLimiter(rate.Every(50*time.Millisecond), 1)
-	id := NewIdentifier(fakeFpcalcDir(t, 100), "real-key").
-		WithEndpoint(lookupSrv.URL).
-		WithClusterEndpoint(clusterSrv.URL)
-	id.limiter = limiter
-
-	start := time.Now()
-	if _, err := id.Identify(context.Background(), "/tmp/full.mp3", 0); err != nil {
-		t.Fatalf("Identify: %v", err)
-	}
-	if _, err := id.AcoustIDsFor(context.Background(), "mbid-1"); err != nil {
-		t.Fatalf("AcoustIDsFor: %v", err)
-	}
-	elapsed := time.Since(start)
-
-	if lookupHits != 1 || clusterHits != 1 {
-		t.Fatalf("lookupHits = %d, clusterHits = %d, want 1 and 1", lookupHits, clusterHits)
-	}
-	if elapsed < 40*time.Millisecond {
-		t.Errorf("elapsed = %v, want at least ~50ms: a shared limiter with a single burst token must make the second call wait", elapsed)
-	}
-}
-
 func TestIdentify_ZeroDurationHintKeepsFpcalcsMeasuredDuration(t *testing.T) {
 	var gotForm url.Values
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -592,79 +425,11 @@ func TestIdentify_TiedScoresKeepStableInputOrder(t *testing.T) {
 	}
 }
 
-func clusterBodyOfSize(t *testing.T, size int) string {
-	t.Helper()
-	valid := `{"status":"ok","tracks":[{"id":"track-1"}]}`
-	if size < len(valid) {
-		t.Fatalf("size %d too small for a valid body", size)
-	}
-	return valid + strings.Repeat(" ", size-len(valid))
-}
-
-func clusterServerServing(body string) *httptest.Server {
+func lookupServerServing(body string) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(body))
 	}))
-}
-
-func TestAcoustIDsFor_BodyJustUnderTheCapStillReturnsItsIDs(t *testing.T) {
-	srv := clusterServerServing(clusterBodyOfSize(t, lookupBodyCap-1))
-	defer srv.Close()
-
-	id := NewIdentifier("", "real-key").WithClusterEndpoint(srv.URL)
-
-	ids, err := id.AcoustIDsFor(context.Background(), "mbid-1")
-	if err != nil {
-		t.Fatalf("a body under the cap must parse, got %v", err)
-	}
-	if !reflect.DeepEqual(ids, []string{"track-1"}) {
-		t.Errorf("ids = %v, want [track-1]", ids)
-	}
-}
-
-func TestAcoustIDsFor_OversizedBodyWhoseCappedPrefixIsValidJSONIsRejected(t *testing.T) {
-	srv := clusterServerServing(clusterBodyOfSize(t, lookupBodyCap+1024))
-	defer srv.Close()
-	id := NewIdentifier("", "real-key").WithClusterEndpoint(srv.URL)
-	ids, err := id.AcoustIDsFor(context.Background(), "mbid-1")
-	if err == nil {
-		t.Fatalf("oversized body must error, not parse the truncated prefix; got ids %v", ids)
-	}
-	if len(ids) != 0 {
-		t.Errorf("ids = %v, want none on error", ids)
-	}
-}
-
-func TestAcoustIDsFor_BodyExactlyAtTheCapIsRejected(t *testing.T) {
-	srv := clusterServerServing(clusterBodyOfSize(t, lookupBodyCap))
-	defer srv.Close()
-	id := NewIdentifier("", "real-key").WithClusterEndpoint(srv.URL)
-	ids, err := id.AcoustIDsFor(context.Background(), "mbid-1")
-	if err == nil {
-		t.Fatalf("a body at the cap must error; got ids %v", ids)
-	}
-	if len(ids) != 0 {
-		t.Errorf("ids = %v, want none on error", ids)
-	}
-}
-
-func TestAcoustIDsFor_OversizedBodyErrorNamesTheClusterResponse(t *testing.T) {
-	oversized := `{"status":"ok","tracks":[{"id":"` + strings.Repeat("x", lookupBodyCap+1024) + `"}]}`
-	srv := clusterServerServing(oversized)
-	defer srv.Close()
-
-	id := NewIdentifier("", "real-key").WithClusterEndpoint(srv.URL)
-
-	_, err := id.AcoustIDsFor(context.Background(), "mbid-1")
-
-	if err == nil {
-		t.Fatal("oversized body must error, got nil")
-	}
-	msg := err.Error()
-	if !strings.Contains(msg, "parse acoustid cluster response: ") && !strings.Contains(msg, "read acoustid cluster response: ") {
-		t.Errorf("err = %q, want it wrapped as parse/read acoustid cluster response", msg)
-	}
 }
 
 func lookupBodyOfSize(t *testing.T, size int) string {
@@ -677,7 +442,7 @@ func lookupBodyOfSize(t *testing.T, size int) string {
 }
 
 func TestLookup_BodyJustUnderTheCapStillReturnsItsMatch(t *testing.T) {
-	srv := clusterServerServing(lookupBodyOfSize(t, lookupBodyCap-1))
+	srv := lookupServerServing(lookupBodyOfSize(t, lookupBodyCap-1))
 	defer srv.Close()
 
 	id := NewIdentifier("", "real-key").WithEndpoint(srv.URL)
@@ -692,7 +457,7 @@ func TestLookup_BodyJustUnderTheCapStillReturnsItsMatch(t *testing.T) {
 }
 
 func TestLookup_OversizedBodyWhoseCappedPrefixIsValidJSONIsRejected(t *testing.T) {
-	srv := clusterServerServing(lookupBodyOfSize(t, lookupBodyCap+1024))
+	srv := lookupServerServing(lookupBodyOfSize(t, lookupBodyCap+1024))
 	defer srv.Close()
 	id := NewIdentifier("", "real-key").WithEndpoint(srv.URL)
 	match, err := id.lookup(context.Background(), fingerprint{Duration: 100, Fingerprint: "abc"})
@@ -702,51 +467,12 @@ func TestLookup_OversizedBodyWhoseCappedPrefixIsValidJSONIsRejected(t *testing.T
 }
 
 func TestLookup_BodyExactlyAtTheCapIsRejected(t *testing.T) {
-	srv := clusterServerServing(lookupBodyOfSize(t, lookupBodyCap))
+	srv := lookupServerServing(lookupBodyOfSize(t, lookupBodyCap))
 	defer srv.Close()
 	id := NewIdentifier("", "real-key").WithEndpoint(srv.URL)
 	match, err := id.lookup(context.Background(), fingerprint{Duration: 100, Fingerprint: "abc"})
 	if err == nil {
 		t.Fatalf("a body at the cap must error; got match %+v", match)
-	}
-}
-
-func TestAcoustIDsFor_EndlessStreamingBodyReturnsAnErrorPromptly(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok","tracks":[{"id":"`))
-		chunk := []byte(strings.Repeat("x", 64<<10))
-		for {
-			if r.Context().Err() != nil {
-				return
-			}
-			if _, err := w.Write(chunk); err != nil {
-				return
-			}
-		}
-	}))
-	defer srv.Close()
-
-	id := NewIdentifier("", "real-key").WithClusterEndpoint(srv.URL)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	done := make(chan error, 1)
-	go func() {
-		_, err := id.AcoustIDsFor(ctx, "mbid-1")
-		done <- err
-	}()
-
-	select {
-	case err := <-done:
-		if err == nil {
-			t.Fatal("an endless body must error, got nil")
-		}
-		if ctx.Err() != nil {
-			t.Fatalf("returned only because the context expired (%v); the cap must stop the read", err)
-		}
-	case <-time.After(15 * time.Second):
-		t.Fatal("AcoustIDsFor kept reading an endless body")
 	}
 }
 
@@ -760,7 +486,7 @@ func matchingLookupBodyPaddedTo(t *testing.T, size int) string {
 }
 
 func TestIdentify_OversizedBodyWhoseCappedPrefixHoldsAMatchIsRejected(t *testing.T) {
-	srv := clusterServerServing(matchingLookupBodyPaddedTo(t, lookupBodyCap+1024))
+	srv := lookupServerServing(matchingLookupBodyPaddedTo(t, lookupBodyCap+1024))
 	defer srv.Close()
 	id := NewIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
 
@@ -769,13 +495,13 @@ func TestIdentify_OversizedBodyWhoseCappedPrefixHoldsAMatchIsRejected(t *testing
 	if err == nil {
 		t.Fatalf("an oversized body must error, not yield the prefix's match; got %+v", match)
 	}
-	if match.AcoustID != "" || match.Matches("mb-top") {
+	if match.AcoustID != "" || slices.Contains(match.MBIDs, "mb-top") {
 		t.Errorf("match = %+v, want the zero match on error", match)
 	}
 }
 
 func TestIdentify_BodyExactlyAtTheCapHoldingAMatchIsRejected(t *testing.T) {
-	srv := clusterServerServing(matchingLookupBodyPaddedTo(t, lookupBodyCap))
+	srv := lookupServerServing(matchingLookupBodyPaddedTo(t, lookupBodyCap))
 	defer srv.Close()
 	id := NewIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
 
@@ -787,7 +513,7 @@ func TestIdentify_BodyExactlyAtTheCapHoldingAMatchIsRejected(t *testing.T) {
 }
 
 func TestIdentify_BodyJustUnderTheCapStillReturnsItsMatch(t *testing.T) {
-	srv := clusterServerServing(matchingLookupBodyPaddedTo(t, lookupBodyCap-1))
+	srv := lookupServerServing(matchingLookupBodyPaddedTo(t, lookupBodyCap-1))
 	defer srv.Close()
 	id := NewIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
 
@@ -795,13 +521,13 @@ func TestIdentify_BodyJustUnderTheCapStillReturnsItsMatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a body under the cap must parse, got %v", err)
 	}
-	if match.AcoustID != "ac-top" || !match.Matches("mb-top") {
+	if match.AcoustID != "ac-top" || !slices.Contains(match.MBIDs, "mb-top") {
 		t.Errorf("match = %+v, want ac-top linked to mb-top", match)
 	}
 }
 
 func TestLookup_OversizedBodyErrorNamesTheLookupResponse(t *testing.T) {
-	srv := clusterServerServing(lookupBodyOfSize(t, lookupBodyCap+1024))
+	srv := lookupServerServing(lookupBodyOfSize(t, lookupBodyCap+1024))
 	defer srv.Close()
 	id := NewIdentifier("", "real-key").WithEndpoint(srv.URL)
 
@@ -904,33 +630,6 @@ func TestIdentify_ThrottledOnceThenOKReturnsTheMatch(t *testing.T) {
 	}
 }
 
-func TestAcoustIDsFor_TwoThrottledAnswersSurfaceErrIdentifyThrottled(t *testing.T) {
-	srv, hits := throttlingServer(t, 2, `{"status":"ok","tracks":[{"id":"t1"}]}`)
-	id := NewIdentifier("", "real-key").WithClusterEndpoint(srv.URL)
-
-	_, err := id.AcoustIDsFor(context.Background(), "mbid")
-
-	if !errors.Is(err, acqdomain.ErrIdentifyThrottled) {
-		t.Fatalf("err = %v, want ErrIdentifyThrottled", err)
-	}
-	if *hits != 2 {
-		t.Errorf("hits = %d, want 2 (one retry)", *hits)
-	}
-}
-
-func TestAcoustIDsFor_ThrottledOnceThenOKReturnsTheIDs(t *testing.T) {
-	srv, _ := throttlingServer(t, 1, `{"status":"ok","tracks":[{"id":"t1"}]}`)
-	id := NewIdentifier("", "real-key").WithClusterEndpoint(srv.URL)
-
-	ids, err := id.AcoustIDsFor(context.Background(), "mbid")
-	if err != nil {
-		t.Fatalf("AcoustIDsFor: %v", err)
-	}
-	if !reflect.DeepEqual(ids, []string{"t1"}) {
-		t.Errorf("ids = %v, want [t1]", ids)
-	}
-}
-
 func TestIdentify_NoMatchIsZeroMatchAndServerErrorIsNotThrottled(t *testing.T) {
 	srv, _ := throttlingServer(t, 0, `{"status":"ok","results":[]}`)
 	id := NewIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
@@ -988,4 +687,47 @@ func TestWithRequestsPerSecond_LowersTheLookupRate(t *testing.T) {
 	if id.limiter.Limit() != rate.Limit(1.5) {
 		t.Errorf("limiter limit = %v, want 1.5", id.limiter.Limit())
 	}
+}
+
+func TestLookup_SendsAPIKeyInPostFormNotURL(t *testing.T) {
+	const apiKey = "secret-api-key"
+
+	var gotURL, gotMethod string
+	var gotForm url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotURL = r.URL.String()
+		gotMethod = r.Method
+		if err := r.ParseForm(); err != nil {
+			t.Errorf("parse form: %v", err)
+		}
+		gotForm = r.PostForm
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok","results":[]}`))
+	}))
+	defer srv.Close()
+
+	id := NewIdentifier(fakeFpcalcDir(t, 100), apiKey).WithEndpoint(srv.URL)
+	if _, err := id.Identify(context.Background(), "/tmp/full.mp3", 0); err != nil {
+		t.Fatalf("Identify: %v", err)
+	}
+
+	if gotMethod != http.MethodPost {
+		t.Errorf("method = %q, want POST", gotMethod)
+	}
+	if strings.Contains(gotURL, apiKey) {
+		t.Errorf("API key leaked into request URL %q", gotURL)
+	}
+	if got := gotForm.Get("client"); got != apiKey {
+		t.Errorf("form client = %q, want %q", got, apiKey)
+	}
+}
+
+type identifyOnly struct{}
+
+func (identifyOnly) Identify(context.Context, string, float64) (ports.RecordingMatch, error) {
+	return ports.RecordingMatch{}, nil
+}
+
+func TestAudioIdentifier_IsIdentifyOnly(t *testing.T) {
+	var _ ports.AudioIdentifier = identifyOnly{}
 }

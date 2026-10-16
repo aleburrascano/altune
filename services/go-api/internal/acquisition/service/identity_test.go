@@ -26,42 +26,20 @@ func TestRecordingIdentity_SourceFor(t *testing.T) {
 	}
 }
 
-type clusterIdentifier struct {
-	clusters map[string][]string
-	asked    []string
-}
+type identifyNothing struct{}
 
-func (*clusterIdentifier) Identify(context.Context, string, float64) (ports.RecordingMatch, error) {
+func (identifyNothing) Identify(context.Context, string, float64) (ports.RecordingMatch, error) {
 	return ports.RecordingMatch{}, nil
 }
 
-func (i *clusterIdentifier) AcoustIDsFor(_ context.Context, mbid string) ([]string, error) {
-	i.asked = append(i.asked, mbid)
-	return i.clusters[mbid], nil
-}
-
-const (
-	pinnedBoysDontCry = "2b2af12b-48f1-444e-8591-cacb9f88f02a"
-	pinnedCluster     = "4881574c-d77f-458f-89e6-c9010b56266e"
-)
+const pinnedBoysDontCry = "2b2af12b-48f1-444e-8591-cacb9f88f02a"
 
 func pinnedTrack() TrackRef {
 	return TrackRef{ID: "t1", Title: "Boys Don't Cry", Artist: "The Cure", CatalogMBID: pinnedBoysDontCry}
 }
 
-func TestResolveIdentity_SpendsNoClusterLookup(t *testing.T) {
-	identifier := &clusterIdentifier{clusters: map[string][]string{pinnedBoysDontCry: {pinnedCluster}}}
-	ac := &AcquisitionContext{Track: pinnedTrack()}
-
-	ResolveIdentity(context.Background(), &stubResolver{identity: ports.RecordingIdentity{MBID: pinnedBoysDontCry}}, identifier, ac)
-
-	if len(identifier.asked) != 0 {
-		t.Errorf("cluster asked for %v, want no AcoustID quota spent on identity resolution", identifier.asked)
-	}
-}
-
 func TestResolveIdentity_PinnedTrackTheResolverKnowsNothingAboutStillGetsTheFingerprintGate(t *testing.T) {
-	identifier := &clusterIdentifier{clusters: map[string][]string{pinnedBoysDontCry: {pinnedCluster}}}
+	identifier := identifyNothing{}
 	ac := &AcquisitionContext{Track: pinnedTrack()}
 
 	ResolveIdentity(context.Background(), &stubResolver{}, identifier, ac)
@@ -72,7 +50,7 @@ func TestResolveIdentity_PinnedTrackTheResolverKnowsNothingAboutStillGetsTheFing
 }
 
 func TestResolveIdentity_PinnedTrackSurvivesAResolverFailure(t *testing.T) {
-	identifier := &clusterIdentifier{clusters: map[string][]string{pinnedBoysDontCry: {pinnedCluster}}}
+	identifier := identifyNothing{}
 	ac := &AcquisitionContext{Track: pinnedTrack()}
 
 	ResolveIdentity(context.Background(), &stubResolver{err: errors.New("musicbrainz down")}, identifier, ac)
@@ -83,7 +61,7 @@ func TestResolveIdentity_PinnedTrackSurvivesAResolverFailure(t *testing.T) {
 }
 
 func TestResolveIdentity_ResolvedPinnedIdentityIsAdoptedAsIs(t *testing.T) {
-	identifier := &clusterIdentifier{clusters: map[string][]string{pinnedBoysDontCry: {pinnedCluster}}}
+	identifier := identifyNothing{}
 	resolved := ports.RecordingIdentity{MBID: pinnedBoysDontCry, MBIDs: []string{pinnedBoysDontCry, "isrc-sibling"}, Duration: 157.306}
 	ac := &AcquisitionContext{Track: pinnedTrack()}
 
@@ -92,19 +70,16 @@ func TestResolveIdentity_ResolvedPinnedIdentityIsAdoptedAsIs(t *testing.T) {
 	if !slices.Equal(ac.Identity.MBIDs, resolved.MBIDs) || ac.Identity.Duration != 157.306 || ac.Track.CatalogDuration != 0 {
 		t.Errorf("identity = %+v, track duration %v, want the resolver's pinned identity untouched", ac.Identity, ac.Track.CatalogDuration)
 	}
-	if len(identifier.asked) != 0 {
-		t.Errorf("cluster asked for %v, want no cluster lookup", identifier.asked)
-	}
 }
 
 func TestResolveIdentity_UnpinnedTrackWithNothingResolvedStaysWithoutIdentity(t *testing.T) {
-	identifier := &clusterIdentifier{}
+	identifier := identifyNothing{}
 	ac := &AcquisitionContext{Track: TrackRef{ID: "t1", Title: "Boys Don't Cry", Artist: "The Cure"}}
 
 	ResolveIdentity(context.Background(), &stubResolver{}, identifier, ac)
 
-	if !ac.Identity.IsZero() || len(identifier.asked) != 0 {
-		t.Errorf("identity = %+v, asked %v; want no identity and no cluster lookup without a pin", ac.Identity, identifier.asked)
+	if !ac.Identity.IsZero() {
+		t.Errorf("identity = %+v, want no identity without a pin", ac.Identity)
 	}
 }
 

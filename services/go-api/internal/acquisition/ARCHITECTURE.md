@@ -173,7 +173,7 @@ independent catalogue), `best_effort` (neither — the unidentified tail).
 ports/                   the contracts, plus the small value helpers that belong to them
   candidate.go           AudioCandidate; DedupeCandidatesByURL / CollectCandidates{,UntilEnough} — the one merge every multi-source search runs through
   cooldown.go            CooldownKind (retry · reacquire), CooldownStore — the cross-process manual-action window
-  identify.go            RecordingMatch (Known / Matches), AudioIdentifier
+  identify.go            RecordingMatch (Known), AudioIdentifier
   probe.go               AudioProber — ProbeDuration + ValidateDecodable
   recording.go           Provider* identity keys, RecordingIdentity / RecordingSource / RecordingQuery, RecordingResolver (+ noop)
   source.go              FindRequest, AudioSource (Name / Find / Fetch), SearchQueries — the four query variants

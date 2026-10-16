@@ -30,7 +30,6 @@ const (
 	lookupTimeout      = 15 * time.Second
 	MinScore           = 0.85
 	defaultEndpoint    = "https://api.acoustid.org/v2/lookup"
-	clusterEndpoint    = "https://api.acoustid.org/v2/track/list_by_mbid"
 	requestsPerSecond  = 3
 	lookupBodyCap      = 2 << 20
 	defaultRetryAfter  = time.Second
@@ -40,12 +39,11 @@ const (
 var _ ports.AudioIdentifier = (*Identifier)(nil)
 
 type Identifier struct {
-	fpcalc          string
-	apiKey          string
-	endpoint        string
-	clusterEndpoint string
-	client          *http.Client
-	limiter         *rate.Limiter
+	fpcalc   string
+	apiKey   string
+	endpoint string
+	client   *http.Client
+	limiter  *rate.Limiter
 }
 
 func NewIdentifier(binDir, apiKey string) *Identifier {
@@ -55,18 +53,12 @@ func NewIdentifier(binDir, apiKey string) *Identifier {
 			"audio fingerprint identification is disabled and every lookup will fail")
 	}
 	return &Identifier{
-		fpcalc:          binpath.Resolve("fpcalc", binDir),
-		apiKey:          key,
-		endpoint:        defaultEndpoint,
-		clusterEndpoint: clusterEndpoint,
-		client:          &http.Client{Timeout: lookupTimeout},
-		limiter:         rate.NewLimiter(rate.Limit(requestsPerSecond), requestsPerSecond),
+		fpcalc:   binpath.Resolve("fpcalc", binDir),
+		apiKey:   key,
+		endpoint: defaultEndpoint,
+		client:   &http.Client{Timeout: lookupTimeout},
+		limiter:  rate.NewLimiter(rate.Limit(requestsPerSecond), requestsPerSecond),
 	}
-}
-
-func (i *Identifier) WithClusterEndpoint(endpoint string) *Identifier {
-	i.clusterEndpoint = endpoint
-	return i
 }
 
 func (i *Identifier) WithRequestsPerSecond(perSecond float64) *Identifier {
@@ -234,64 +226,6 @@ func retryAfter(header string) time.Duration {
 		return defaultRetryAfter
 	}
 	return time.Duration(min(seconds, int(maxRetryAfter/time.Second))) * time.Second
-}
-
-type clusterResponse struct {
-	Status string `json:"status"`
-	Error  struct {
-		Message string `json:"message"`
-	} `json:"error"`
-	Tracks []struct {
-		ID string `json:"id"`
-	} `json:"tracks"`
-}
-
-func (i *Identifier) AcoustIDsFor(ctx context.Context, mbid string) ([]string, error) {
-	if i.apiKey == "" {
-		return nil, ErrMissingAPIKey
-	}
-	if mbid == "" {
-		return nil, nil
-	}
-
-	form := url.Values{}
-	form.Set("client", i.apiKey)
-	form.Set("mbid", mbid)
-	form.Set("format", "json")
-
-	resp, err := i.send(ctx, i.clusterEndpoint, form, "acoustid cluster lookup")
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("acoustid cluster lookup: status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, lookupBodyCap+1))
-	if err != nil {
-		return nil, fmt.Errorf("read acoustid cluster response: %w", err)
-	}
-	if len(body) >= lookupBodyCap {
-		return nil, fmt.Errorf("read acoustid cluster response: exceeds %d byte cap", lookupBodyCap)
-	}
-
-	var parsed clusterResponse
-	if err := json.Unmarshal(body, &parsed); err != nil {
-		return nil, fmt.Errorf("parse acoustid cluster response: %w", err)
-	}
-	if parsed.Status != "ok" {
-		return nil, fmt.Errorf("acoustid cluster lookup: %s", parsed.Error.Message)
-	}
-
-	ids := make([]string, 0, len(parsed.Tracks))
-	for _, track := range parsed.Tracks {
-		if track.ID != "" {
-			ids = append(ids, track.ID)
-		}
-	}
-	return ids, nil
 }
 
 func matchOf(results []ports.AcoustIDResult) ports.RecordingMatch {

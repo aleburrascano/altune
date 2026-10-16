@@ -299,10 +299,6 @@ func (c Candidate) downloadSeconds() float64 {
 	return defaultDownloadSeconds
 }
 
-func (c Candidate) linksRecording(mbid string) bool {
-	return mbid != "" && slices.Contains(c.RecordingMBIDs, mbid)
-}
-
 func (c Candidate) probedDuration() float64 {
 	if c.ActualDuration > 0 {
 		return c.ActualDuration

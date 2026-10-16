@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 )
@@ -259,16 +258,6 @@ func (p *casePorts) Identify(_ context.Context, filePath string, _ float64) (por
 		acoustID = cand.AcoustIDResults[0].ID
 	}
 	return ports.RecordingMatch{AcoustID: acoustID, MBIDs: cand.RecordingMBIDs, Score: 1, Results: cand.chromaprintResults(p.kase.Track.Artist)}, nil
-}
-
-func (p *casePorts) AcoustIDsFor(_ context.Context, mbid string) ([]string, error) {
-	var linked []string
-	for _, c := range p.kase.allCandidates() {
-		if c.AcoustID != "" && c.linksRecording(mbid) && !slices.Contains(linked, c.AcoustID) {
-			linked = append(linked, c.AcoustID)
-		}
-	}
-	return linked, nil
 }
 
 func (p *casePorts) CopyStored(_ context.Context, _, dir string) (string, error) {

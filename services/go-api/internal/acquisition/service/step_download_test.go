@@ -938,11 +938,10 @@ func runDownloadForLog(ctx context.Context, t *testing.T, ac *AcquisitionContext
 }
 
 type stubIdentifier struct {
-	mu           sync.Mutex
-	match        ports.RecordingMatch
-	err          error
-	calls        int
-	clusterCalls int
+	mu    sync.Mutex
+	match ports.RecordingMatch
+	err   error
+	calls int
 }
 
 func (s *stubIdentifier) Identify(context.Context, string, float64) (ports.RecordingMatch, error) {
@@ -950,11 +949,6 @@ func (s *stubIdentifier) Identify(context.Context, string, float64) (ports.Recor
 	s.calls++
 	s.mu.Unlock()
 	return s.match, s.err
-}
-
-func (s *stubIdentifier) AcoustIDsFor(context.Context, string) ([]string, error) {
-	s.clusterCalls++
-	return nil, nil
 }
 
 func downloadContext(mbid string) *AcquisitionContext {
@@ -1112,10 +1106,6 @@ func (r *rejectFirstIdentifier) Identify(context.Context, string, float64) (port
 	return referenceMatch(), nil
 }
 
-func (r *rejectFirstIdentifier) AcoustIDsFor(context.Context, string) ([]string, error) {
-	return nil, nil
-}
-
 func linkedResults(recordings ...ports.LinkedRecording) []ports.AcoustIDResult {
 	return []ports.AcoustIDResult{{ID: "ac-audio", Score: 0.97, Recordings: recordings}}
 }
@@ -1200,10 +1190,6 @@ func (s *sequenceIdentifier) Identify(context.Context, string, float64) (ports.R
 	return match, nil
 }
 
-func (s *sequenceIdentifier) AcoustIDsFor(context.Context, string) ([]string, error) {
-	return nil, nil
-}
-
 type previewingFetcher struct {
 	fileWritingSearcher
 	previewErr  error
@@ -1231,10 +1217,6 @@ type durationRecordingIdentifier struct {
 func (d *durationRecordingIdentifier) Identify(_ context.Context, _ string, hint float64) (ports.RecordingMatch, error) {
 	d.durations = append(d.durations, hint)
 	return d.match, nil
-}
-
-func (d *durationRecordingIdentifier) AcoustIDsFor(context.Context, string) ([]string, error) {
-	return nil, nil
 }
 
 func previewMatch(mbid, title string) ports.RecordingMatch {
@@ -1629,8 +1611,6 @@ func (i *urlIdentifier) Identify(_ context.Context, path string, _ float64) (por
 	}
 	return ports.RecordingMatch{}, nil
 }
-
-func (i *urlIdentifier) AcoustIDsFor(context.Context, string) ([]string, error) { return nil, nil }
 
 func hardMatch() ports.RecordingMatch {
 	return ports.RecordingMatch{
@@ -2421,10 +2401,6 @@ func (i *cancelledSiblingIdentifier) Identify(ctx context.Context, path string, 
 	}
 	<-i.rank2Started
 	return hardMatch(), nil
-}
-
-func (i *cancelledSiblingIdentifier) AcoustIDsFor(context.Context, string) ([]string, error) {
-	return nil, nil
 }
 
 type cancelledSiblingProber struct{ fetcher *gatedFetcher }

@@ -436,9 +436,6 @@ func TestResolveIdentity_WithAnIdentifierNeverAsksForACluster(t *testing.T) {
 	if ac.Identity.MBID != "mbid-1" {
 		t.Fatalf("identity = %+v, want the resolved recording", ac.Identity)
 	}
-	if identifier.clusterCalls != 0 {
-		t.Errorf("AcoustIDsFor calls = %d, want none: resolving an identity spends no AcoustID quota", identifier.clusterCalls)
-	}
 }
 
 func TestExecute_WithoutResolverStillRuns(t *testing.T) {
@@ -1538,10 +1535,6 @@ func (i *contentRecordingIdentifier) Identify(_ context.Context, path string, _ 
 	return ports.RecordingMatch{}, nil
 }
 
-func (i *contentRecordingIdentifier) AcoustIDsFor(context.Context, string) ([]string, error) {
-	return nil, nil
-}
-
 func (i *contentRecordingIdentifier) identifiedStoredFile() int {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -1698,10 +1691,6 @@ func (i acoustIDByBytesIdentifier) Identify(_ context.Context, path string, _ fl
 		return ports.RecordingMatch{}, err
 	}
 	return i.byBytes[string(data)], nil
-}
-
-func (acoustIDByBytesIdentifier) AcoustIDsFor(context.Context, string) ([]string, error) {
-	return nil, nil
 }
 
 const (
