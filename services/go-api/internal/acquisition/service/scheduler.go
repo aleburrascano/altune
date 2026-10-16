@@ -314,6 +314,8 @@ func (s *BackgroundAcquisitionScheduler) execClaimedJob(ctx context.Context, key
 	return err
 }
 
+const leaseLostReason = "lease_lost"
+
 func (s *BackgroundAcquisitionScheduler) completeClaimedJob(ctx context.Context, key string, err error) {
 	if err != nil && s.baseCtx.Err() != nil {
 		record := s.log.complete(key, ports.JobCancelled, "shutdown")
@@ -324,6 +326,18 @@ func (s *BackgroundAcquisitionScheduler) completeClaimedJob(ctx context.Context,
 	if errors.Is(err, upgrade.ErrKept) {
 		record := s.log.complete(key, ports.JobKept, "")
 		s.recordOutcome(ctx, record)
+		return
+	}
+	if errors.Is(err, ErrAcquisitionRetryable) {
+		reason := redact.LogError(err)
+		s.log.complete(key, ports.JobRetrying, reason)
+		slog.InfoContext(ctx, "background acquisition will retry", "track_id", key, "reason", reason)
+		return
+	}
+	if err != nil && schedulerCancelledJobContext(ctx) {
+		record := s.log.complete(key, ports.JobCancelled, leaseLostReason)
+		s.recordOutcome(ctx, record)
+		slog.WarnContext(ctx, "background acquisition cancelled after lease loss", "track_id", key)
 		return
 	}
 	if err != nil {

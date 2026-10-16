@@ -3035,3 +3035,73 @@ func TestBackgroundScheduler_APanickedJobBelowTheRunCapIsRetriedAfterItsBackoff(
 		})
 	}
 }
+
+type retryableAcquirer struct{}
+
+func (retryableAcquirer) Execute(context.Context, shared.UserId, domain.TrackId) error {
+	return ErrAcquisitionRetryable
+}
+
+func (retryableAcquirer) ExecuteReplace(context.Context, shared.UserId, domain.TrackId) error {
+	return ErrAcquisitionRetryable
+}
+
+func (retryableAcquirer) RefuseQueued(context.Context, shared.UserId, domain.TrackId) {}
+
+func TestBackgroundScheduler_ARetryableJobIsRetryingNotFailed(t *testing.T) {
+	recorder := newFakeOutcomeRecorder()
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(retryableAcquirer{}, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+	t.Cleanup(func() {
+		scheduler.Shutdown(context.Background())
+	})
+
+	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
+		t.Fatalf("schedule: %v", err)
+	}
+
+	deadline := time.Now().Add(jobSettleTimeout)
+	for len(scheduler.Status().Recent) == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	status := scheduler.Status()
+	if len(status.Recent) == 0 || status.Recent[0].State != acqports.JobRetrying {
+		t.Fatalf("recent = %+v, want one %s job", status.Recent, acqports.JobRetrying)
+	}
+	if status.Failed != 0 {
+		t.Errorf("failed = %d, want 0", status.Failed)
+	}
+	select {
+	case o := <-recorder.calls:
+		t.Errorf("recorder received %+v, want no outcome row for a retrying job", o)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestBackgroundScheduler_ALeaseLostJobRecordsCancelled(t *testing.T) {
+	recorder := newFakeOutcomeRecorder()
+	acq := &ctxCapturingAcquirer{started: make(chan struct{}), release: make(chan struct{})}
+	queue := &flakyHeartbeatQueue{memJobQueue: newMemJobQueue(make(chan struct{}, 1)), heartbeatErr: acqdomain.ErrLeaseLost}
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
+		WithJobQueue(queue),
+		WithHeartbeatInterval(5*time.Millisecond),
+		WithOutcomeRecorder(recorder),
+	)
+	t.Cleanup(func() {
+		close(acq.release)
+		scheduler.Shutdown(context.Background())
+	})
+
+	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
+		t.Fatalf("schedule: %v", err)
+	}
+
+	outcome := awaitOutcome(t, recorder.calls)
+	if outcome.Outcome != acqports.JobCancelled || outcome.Reason != "lease_lost" {
+		t.Errorf("outcome = %q reason %q, want %q reason lease_lost", outcome.Outcome, outcome.Reason, acqports.JobCancelled)
+	}
+	if failed := scheduler.Status().Failed; failed != 0 {
+		t.Errorf("failed = %d, want 0", failed)
+	}
+}
