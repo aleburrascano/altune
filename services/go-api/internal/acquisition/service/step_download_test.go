@@ -421,6 +421,7 @@ func TestDownloadStep_SerialPath_EarlierUnavailableSurvivesADifferentLastFailure
 }
 
 type queueProber struct {
+	mu         sync.Mutex
 	durations  []float64
 	calls      int
 	decodeErrs []error
@@ -428,12 +429,16 @@ type queueProber struct {
 }
 
 func (p *queueProber) ProbeDuration(_ context.Context, _ string) (float64, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	d := p.durations[p.calls]
 	p.calls++
 	return d, nil
 }
 
 func (p *queueProber) ValidateDecodable(_ context.Context, _ string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	var err error
 	if p.decCalls < len(p.decodeErrs) {
 		err = p.decodeErrs[p.decCalls]
