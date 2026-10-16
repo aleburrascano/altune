@@ -24,6 +24,7 @@ import { ArtistTopTracks } from '@features/detail/ui/ArtistTopTracks';
 import { DetailActions } from '@features/detail/ui/DetailActions';
 import { DetailScaffold, type DetailChrome } from '@features/detail/ui/DetailScaffold';
 import { DiscographySections } from '@features/detail/ui/DiscographySections';
+import { ArtistUnreleased } from '@features/detail/ui/ArtistUnreleased';
 import { LastFmEnrichmentSection } from '@features/detail/ui/LastFmEnrichmentSection';
 
 type ArtistDetailBodyProps = {
@@ -160,6 +161,7 @@ function ArtistDetailContentBody(props: ArtistDetailBodyProps & { artist: Artist
       <IncompleteLibraryNotice artist={props.artist} />
       <LibraryAlbums artist={props.artist} />
       <ArtistDiscography artist={props.artist} />
+      <ArtistUnreleased artist={props.result} />
       <AboutArtist lastfm={props.lastfm} lastfmError={props.lastfmError ?? false} />
     </>
   );

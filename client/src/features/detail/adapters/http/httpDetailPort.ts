@@ -6,6 +6,7 @@ import {
   getEnrichment,
   getLastFmEnrichment,
   getRelatedTracks,
+  getUnreleasedTracks,
 } from '@shared/apiClient/enrichment';
 import { getLibraryAlbums } from '@shared/apiClient/library';
 import { createTrack, getTracks } from '@shared/apiClient/tracks';
@@ -20,6 +21,7 @@ export const httpDetailPort: DetailPort = {
   getAlbumTracks: (...args) => getAlbumTracks(...args),
   getRelatedTracks: (...args) => getRelatedTracks(...args),
   getArtistContent: (...args) => getArtistContent(...args),
+  getUnreleasedTracks: (...args) => getUnreleasedTracks(...args),
   createTrack: (...args) => createTrack(...args),
   getTracks: (...args) => getTracks(...args),
   getLibraryAlbums: (...args) => getLibraryAlbums(...args),

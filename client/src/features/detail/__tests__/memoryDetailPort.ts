@@ -184,6 +184,8 @@ export function createMemoryDetailPort(seed: MemoryDetailSeed = {}): DetailPort 
         signal,
         () => artistContent[externalId] ?? { top_tracks: emptyContent(), albums: emptyContent() },
       ),
+    getUnreleasedTracks: (_provider, _externalId, _request, signal) =>
+      resolveOnLaterTick(signal, () => ({ items: [] })),
     createTrack: async (body, idempotencyKey) => {
       const replayed = idempotencyKey === undefined ? undefined : createdByKey.get(idempotencyKey);
       if (replayed !== undefined) return replayed;

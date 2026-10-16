@@ -11,6 +11,7 @@ export interface DetailPort {
   getAlbumTracks: typeof enrichment.getAlbumTracks;
   getRelatedTracks: typeof enrichment.getRelatedTracks;
   getArtistContent: typeof enrichment.getArtistContent;
+  getUnreleasedTracks: typeof enrichment.getUnreleasedTracks;
   createTrack: typeof tracks.createTrack;
   getTracks: typeof tracks.getTracks;
   getLibraryAlbums: typeof library.getLibraryAlbums;

@@ -5,6 +5,7 @@ import {
   getEnrichment,
   getLastFmEnrichment,
   getDeezerEnrichment,
+  getUnreleasedTracks,
   type ContentFetchResponse,
 } from '@shared/apiClient/enrichment';
 import { supabase } from '@shared/auth/supabaseClient';
@@ -542,6 +543,68 @@ describe('content fetch responses are parsed, not cast', () => {
     await expect(getArtistContent('deezer', 'art-1')).rejects.toMatchObject({
       name: 'ContractError',
       at: 'ArtistContentResponse.albums.items',
+    });
+  });
+});
+
+describe('getUnreleasedTracks', () => {
+  const PATH = 'GET /v1/discovery/artists/spotify/art-1/unreleased';
+  const row = {
+    genius_id: 7,
+    title: 'Cancun',
+    cover_url: 'https://img.example/c.jpg',
+    genius_url: 'https://genius.com/cancun',
+    release_date: '2022-07-24',
+    has_media: true,
+  };
+
+  it('sends the artist name and the known ids as query params', async () => {
+    __http.reply(PATH, { status: 200, json: { items: [] } });
+
+    await getUnreleasedTracks('spotify', 'art-1', {
+      name: 'Juice WRLD',
+      knownIds: [{ provider: 'deezer', external_id: 'd1', url: 'https://d.example/1' }],
+    });
+
+    const params = new URLSearchParams(__http.last().query);
+    expect(params.get('name')).toBe('Juice WRLD');
+    expect(params.get('ids')).toBe('deezer:d1');
+  });
+
+  it('omits ids when none are known, and accepts an abort signal', async () => {
+    __http.reply(PATH, { status: 200, json: { items: [] } });
+
+    await getUnreleasedTracks('spotify', 'art-1', { name: 'X' }, new AbortController().signal);
+    expect(new URLSearchParams(__http.last().query).has('ids')).toBe(false);
+
+    await getUnreleasedTracks('spotify', 'art-1', { name: 'X', knownIds: [] });
+    expect(new URLSearchParams(__http.last().query).has('ids')).toBe(false);
+  });
+
+  it('keeps set and null optional fields as they arrive', async () => {
+    const bare = { ...row, genius_id: 8, cover_url: null, release_date: null };
+    __http.reply(PATH, { status: 200, json: { items: [row, bare] } });
+
+    const { items } = await getUnreleasedTracks('spotify', 'art-1', { name: 'X' });
+
+    expect(items).toEqual([row, bare]);
+  });
+
+  it('skips a malformed row and keeps the rest', async () => {
+    const badUrl = { ...row, genius_id: 9, genius_url: 'http://genius.com/x' };
+    __http.reply(PATH, { status: 200, json: { items: [badUrl, 'junk', row] } });
+
+    const { items } = await getUnreleasedTracks('spotify', 'art-1', { name: 'X' });
+
+    expect(items).toEqual([row]);
+  });
+
+  it('rejects with a ContractError when items is not an array', async () => {
+    __http.reply(PATH, { status: 200, json: { items: null } });
+
+    await expect(getUnreleasedTracks('spotify', 'art-1', { name: 'X' })).rejects.toMatchObject({
+      name: 'ContractError',
+      at: 'UnreleasedTracksResponse.items',
     });
   });
 });

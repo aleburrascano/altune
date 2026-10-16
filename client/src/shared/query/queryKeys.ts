@@ -54,6 +54,7 @@ export const detailKeys = {
     ['album-discovery-tracks', provider, externalId] as const,
   artistContent: (provider: string, externalId: string, knownIds: string) =>
     ['artist-content', provider, externalId, knownIds] as const,
+  unreleasedTracks: (knownIds: string) => ['unreleased-tracks', knownIds] as const,
   relatedTracks: (externalId: string) => ['related-tracks', externalId] as const,
 };
 

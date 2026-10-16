@@ -1,14 +1,16 @@
 import { PROVIDER_STATUSES, parseDiscoveryResult } from '@shared/apiClient/discovery';
 import { discoveryEntityPath, sourceIdList } from '@shared/apiClient/ids';
-import { apiFetch, signalInit, withQuery } from '@shared/apiClient/index';
+import { apiFetch, LONG_REQUEST_TIMEOUT_MS, signalInit, withQuery } from '@shared/apiClient/index';
 import {
   asArray,
   parseArray,
   asBoolean,
+  asHttpsUrl,
   asNumber,
   asRecord,
   asString,
   member,
+  nullableString,
 } from '@shared/apiClient/wireDecoders';
 
 import type {
@@ -275,4 +277,83 @@ export async function getArtistContent(
   if (opts.knownIds?.length) params.set('ids', sourceIdList(opts.knownIds));
   const path = discoveryEntityPath('artists', provider, externalId, 'content');
   return parseArtistContentResponse(await apiFetch(withQuery(path, params), signalInit(signal)));
+}
+
+export type UnreleasedTrack = {
+  genius_id: number;
+  title: string;
+  cover_url: string | null;
+  genius_url: string;
+  release_date: string | null;
+  has_media: boolean;
+};
+
+export type UnreleasedTracksResponse = { items: UnreleasedTrack[] };
+
+function parseUnreleasedIdentity(r: Record<string, unknown>, at: string) {
+  return {
+    genius_id: asNumber(r.genius_id, `${at}.genius_id`),
+    title: asString(r.title, `${at}.title`),
+    genius_url: asHttpsUrl(r.genius_url, `${at}.genius_url`),
+  };
+}
+
+function parseUnreleasedDetails(r: Record<string, unknown>, at: string) {
+  return {
+    cover_url: nullableString(r.cover_url, `${at}.cover_url`),
+    release_date: nullableString(r.release_date, `${at}.release_date`),
+    has_media: asBoolean(r.has_media, `${at}.has_media`),
+  };
+}
+
+function parseUnreleasedTrack(value: unknown, at: string): UnreleasedTrack {
+  const r = asRecord(value, at);
+  return { ...parseUnreleasedIdentity(r, at), ...parseUnreleasedDetails(r, at) };
+}
+
+export type UnreleasedTracksRequest = {
+  name: string;
+  knownIds?: readonly DiscoverySource[];
+};
+
+function unreleasedParams({ name, knownIds }: UnreleasedTracksRequest): URLSearchParams {
+  const params = new URLSearchParams({ name });
+  if (knownIds?.length) params.set('ids', sourceIdList(knownIds));
+  return params;
+}
+
+function parseUnreleasedRow(value: unknown, at: string): UnreleasedTrack | null {
+  try {
+    return parseUnreleasedTrack(value, at);
+  } catch {
+    return null;
+  }
+}
+
+function isParsed(track: UnreleasedTrack | null): track is UnreleasedTrack {
+  return track !== null;
+}
+
+function parseUnreleasedTracksResponse(value: unknown): UnreleasedTracksResponse {
+  const at = 'UnreleasedTracksResponse';
+  const rows = parseArray(asRecord(value, at).items, `${at}.items`, parseUnreleasedRow);
+  return { items: rows.filter(isParsed) };
+}
+
+async function fetchUnreleasedTracks(
+  url: string,
+  signal: AbortSignal | undefined,
+): Promise<UnreleasedTracksResponse> {
+  const init = { ...signalInit(signal), timeoutMs: LONG_REQUEST_TIMEOUT_MS };
+  return parseUnreleasedTracksResponse(await apiFetch(url, init));
+}
+
+export async function getUnreleasedTracks(
+  provider: string,
+  externalId: string,
+  request: UnreleasedTracksRequest,
+  signal?: AbortSignal,
+): Promise<UnreleasedTracksResponse> {
+  const path = discoveryEntityPath('artists', provider, externalId, 'unreleased');
+  return fetchUnreleasedTracks(withQuery(path, unreleasedParams(request)), signal);
 }
