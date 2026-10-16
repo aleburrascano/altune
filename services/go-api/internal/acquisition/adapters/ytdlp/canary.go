@@ -32,7 +32,7 @@ type CanarySource struct {
 	Format string
 }
 
-const audioOnlyFormat = "bestaudio"
+var audioOnlyFormat, _, _ = strings.Cut(audioFormatSelector, "/best[")
 
 var (
 	YouTubeCanary    = CanarySource{Name: youtubeCanaryName, URL: "https://www.youtube.com/watch?v=jNQXAC9IVRw"}

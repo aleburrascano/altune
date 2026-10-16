@@ -237,8 +237,11 @@ func videoOnlyYtDlp(t *testing.T) string {
 	return withYtDlpScript(t, "#!/bin/sh\n"+
 		"prev=\"\"\n"+
 		"for arg in \"$@\"; do\n"+
-		"  if [ \"$prev\" = \"-f\" ] && [ \"$arg\" = \"bestaudio\" ]; then\n"+
-		"    echo 'ERROR: [youtube] jNQXAC9IVRw: Requested format is not available' >&2; exit 1\n"+
+		"  if [ \"$prev\" = \"-f\" ]; then\n"+
+		"    case \"$arg\" in\n"+
+		"      */best\\[*) ;;\n"+
+		"      *) echo 'ERROR: [youtube] jNQXAC9IVRw: Requested format is not available' >&2; exit 1 ;;\n"+
+		"    esac\n"+
 		"  fi\n"+
 		"  prev=\"$arg\"\n"+
 		"done\n"+
@@ -323,5 +326,21 @@ func TestCanary_ParentCancelIsNotATimeout(t *testing.T) {
 	}
 	if err != nil && strings.Contains(err.Error(), "timed out") {
 		t.Fatalf("Canary() = %q, must not call a parent cancel a timeout", err)
+	}
+}
+
+func TestCanary_YTMusicAsksForTheAudioOnlyPrefixOfTheDownloadSelector(t *testing.T) {
+	s := NewYtDlpAudioSearcher("", "", "")
+	var canaryArgs string
+	s.binary, canaryArgs = formatArgRecorder(t, "", "212")
+
+	if err := s.Canary(context.Background(), YTMusicCanary); err != nil {
+		t.Fatalf("Canary(ytmusic) = %v, want nil", err)
+	}
+
+	got := formatFlag(t, canaryArgs)
+	audioOnly, _, _ := strings.Cut(audioFormatSelector, "/best[")
+	if got != audioOnly {
+		t.Errorf("canary -f %q, want the download selector audio-only prefix %q", got, audioOnly)
 	}
 }
