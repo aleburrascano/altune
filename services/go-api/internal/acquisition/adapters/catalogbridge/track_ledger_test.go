@@ -1,6 +1,7 @@
 package catalogbridge
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	catalogports "altune/go-api/internal/catalog/ports"
@@ -119,7 +120,7 @@ func TestCompleteMarksPendingTrackReady(t *testing.T) {
 	store := newFakeStore(track)
 	ledger := NewTrackLedger(store)
 
-	err := ledger.Complete(context.Background(), track.ID, userId, ports.Completion{
+	err := ledger.Complete(context.Background(), track.ID, userId, 0, ports.Completion{
 		AudioRef:           "ref-1",
 		Duration:           215.5,
 		Provenance:         shared.ProvenanceVerified,
@@ -163,7 +164,7 @@ func TestCompleteWithReplaceAudioReplacesReadyTrack(t *testing.T) {
 	store := newFakeStore(track)
 	ledger := NewTrackLedger(store)
 
-	if err := ledger.Complete(context.Background(), track.ID, userId, ports.Completion{AudioRef: "new-ref", ReplaceAudio: true}); err != nil {
+	if err := ledger.Complete(context.Background(), track.ID, userId, 0, ports.Completion{AudioRef: "new-ref", ReplaceAudio: true}); err != nil {
 		t.Fatal(err)
 	}
 	got := storedTrack(t, store, track.ID)
@@ -180,7 +181,7 @@ func TestCompleteOnFailedTrackIsIllegalTransition(t *testing.T) {
 	store := newFakeStore(track)
 	ledger := NewTrackLedger(store)
 
-	err := ledger.Complete(context.Background(), track.ID, userId, ports.Completion{AudioRef: "ref", ReplaceAudio: true})
+	err := ledger.Complete(context.Background(), track.ID, userId, 0, ports.Completion{AudioRef: "ref", ReplaceAudio: true})
 	if !errors.Is(err, ports.ErrIllegalTransition) {
 		t.Fatalf("want ErrIllegalTransition, got %v", err)
 	}
@@ -217,7 +218,7 @@ func TestMissingTrackReturnsNotFound(t *testing.T) {
 	_, userId := newTrack(t, 1)
 	ledger := NewTrackLedger(newFakeStore())
 
-	err := ledger.Fail(context.Background(), domain.NewTrackId(), userId, "boom")
+	err := ledger.Fail(context.Background(), domain.NewTrackId(), userId, 0, "boom")
 	if !errors.Is(err, ports.ErrTrackNotFound) {
 		t.Fatalf("want ErrTrackNotFound, got %v", err)
 	}
@@ -228,13 +229,13 @@ func TestFailAndRevertTransition(t *testing.T) {
 	store := newFakeStore(track)
 	ledger := NewTrackLedger(store)
 
-	if err := ledger.Fail(context.Background(), track.ID, userId, "boom"); err != nil {
+	if err := ledger.Fail(context.Background(), track.ID, userId, 0, "boom"); err != nil {
 		t.Fatal(err)
 	}
 	if got := storedTrack(t, store, track.ID); got.AcquisitionStatus != domain.AcquisitionFailed {
 		t.Fatalf("want failed, got %v", got.AcquisitionStatus)
 	}
-	if err := ledger.Revert(context.Background(), track.ID, userId); err != nil {
+	if err := ledger.Revert(context.Background(), track.ID, userId, 0); err != nil {
 		t.Fatal(err)
 	}
 	if got := storedTrack(t, store, track.ID); got.AcquisitionStatus != domain.AcquisitionPending {
@@ -248,7 +249,7 @@ func TestVersionConflictIsRetried(t *testing.T) {
 	store.conflicts = 1
 	ledger := NewTrackLedger(store)
 
-	if err := ledger.Fail(context.Background(), track.ID, userId, "boom"); err != nil {
+	if err := ledger.Fail(context.Background(), track.ID, userId, 0, "boom"); err != nil {
 		t.Fatal(err)
 	}
 	if len(store.updates) != 2 {
@@ -265,7 +266,7 @@ func TestVersionConflictExhaustsAttempts(t *testing.T) {
 	store.conflicts = 100
 	ledger := NewTrackLedger(store)
 
-	err := ledger.Fail(context.Background(), track.ID, userId, "boom")
+	err := ledger.Fail(context.Background(), track.ID, userId, 0, "boom")
 	if !errors.Is(err, catalogports.ErrTrackVersionConflict) {
 		t.Fatalf("want conflict, got %v", err)
 	}
@@ -317,7 +318,7 @@ func completeWithAudioLength(t *testing.T, catalogSeconds, audioSeconds float64)
 		t.Fatal(err)
 	}
 	store := newFakeStore(track)
-	err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, ports.Completion{AudioRef: "ref", Duration: audioSeconds})
+	err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0, ports.Completion{AudioRef: "ref", Duration: audioSeconds})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -434,7 +435,7 @@ func TestCompleteDoesNotFlagATrackWithoutACatalogLength(t *testing.T) {
 	track, userId := newTrack(t, 1)
 	store := newFakeStore(track)
 
-	err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, ports.Completion{AudioRef: "ref", Duration: 137})
+	err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0, ports.Completion{AudioRef: "ref", Duration: 137})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -455,7 +456,7 @@ func TestCompleteClearsTheFlagWhenReplacementAudioMatches(t *testing.T) {
 	track.AudioLengthMismatch = true
 	store := newFakeStore(track)
 
-	err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, ports.Completion{AudioRef: "new", ReplaceAudio: true, Duration: 236})
+	err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0, ports.Completion{AudioRef: "new", ReplaceAudio: true, Duration: 236})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -483,7 +484,7 @@ func TestCompletePersistsTheResolvedISRCOnlyWhenTheTrackHasNone(t *testing.T) {
 			track.ISRC = tt.have
 			store := newFakeStore(track)
 
-			err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, ports.Completion{AudioRef: "ref", ISRC: tt.got})
+			err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0, ports.Completion{AudioRef: "ref", ISRC: tt.got})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -566,5 +567,235 @@ func TestGetExposesThePickedSourceURL(t *testing.T) {
 	want := []ports.CatalogSource{{Provider: "soundcloud", ExternalID: pick, URL: pick}}
 	if !reflect.DeepEqual(snap.CatalogSources, want) {
 		t.Errorf("CatalogSources = %+v, want %+v", snap.CatalogSources, want)
+	}
+}
+
+func TestTrackLedger_CompleteWithAStaleFenceIsLeaseLost(t *testing.T) {
+	track, userId := newTrack(t, 4)
+	track.AcquisitionFence = 3
+	store := newFakeStore(track)
+	ledger := NewTrackLedger(store)
+
+	err := ledger.Complete(context.Background(), track.ID, userId, 2, ports.Completion{AudioRef: "ref-1"})
+
+	if !errors.Is(err, acqdomain.ErrLeaseLost) {
+		t.Fatalf("err = %v, want ErrLeaseLost", err)
+	}
+	if got := storedTrack(t, store, track.ID); got.AcquisitionStatus != domain.AcquisitionPending || len(store.updates) != 0 {
+		t.Errorf("status = %v, updates = %v, want the track untouched", got.AcquisitionStatus, store.updates)
+	}
+}
+
+func TestTrackLedger_FailAndRevertWithAStaleFenceAreLeaseLost(t *testing.T) {
+	track, userId := newTrack(t, 1)
+	track.AcquisitionFence = 3
+	store := newFakeStore(track)
+	ledger := NewTrackLedger(store)
+
+	failErr := ledger.Fail(context.Background(), track.ID, userId, 2, "boom")
+	revertErr := ledger.Revert(context.Background(), track.ID, userId, 2)
+
+	if !errors.Is(failErr, acqdomain.ErrLeaseLost) || !errors.Is(revertErr, acqdomain.ErrLeaseLost) {
+		t.Fatalf("Fail = %v, Revert = %v, want ErrLeaseLost from both", failErr, revertErr)
+	}
+	if got := storedTrack(t, store, track.ID); got.AcquisitionStatus != domain.AcquisitionPending || len(store.updates) != 0 {
+		t.Errorf("status = %v, updates = %v, want the track untouched", got.AcquisitionStatus, store.updates)
+	}
+}
+
+func TestTrackLedger_WritesThatOwnTheLeaseOrCarryNoFenceGoThrough(t *testing.T) {
+	cases := []struct {
+		name         string
+		heldFence    ports.Fence
+		trackedFence int
+	}{
+		{"the held fence is the track's", 3, 3},
+		{"no fence is held", 0, 3},
+		{"the track tracks no lease", 3, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			track, userId := newTrack(t, 1)
+			track.AcquisitionFence = tc.trackedFence
+			store := newFakeStore(track)
+
+			err := NewTrackLedger(store).Fail(context.Background(), track.ID, userId, tc.heldFence, "boom")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := storedTrack(t, store, track.ID); got.AcquisitionStatus != domain.AcquisitionFailed {
+				t.Errorf("status = %v, want failed", got.AcquisitionStatus)
+			}
+		})
+	}
+}
+
+func TestTrackLedger_AClaimBetweenReadAndUpdateFencesOutTheWriter(t *testing.T) {
+	track, userId := newTrack(t, 1)
+	track.AcquisitionFence = 2
+	store := &reclaimingStore{fakeStore: newFakeStore(track)}
+
+	err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 2, ports.Completion{AudioRef: "ref-1"})
+
+	if !errors.Is(err, acqdomain.ErrLeaseLost) {
+		t.Fatalf("err = %v, want ErrLeaseLost once the retry re-reads the new owner's fence", err)
+	}
+	if got := storedTrack(t, store.fakeStore, track.ID); got.AcquisitionStatus != domain.AcquisitionPending {
+		t.Errorf("status = %v, want pending", got.AcquisitionStatus)
+	}
+}
+
+type reclaimingStore struct {
+	*fakeStore
+	reclaimed bool
+}
+
+func (s *reclaimingStore) Update(ctx context.Context, track *domain.Track, expectedVersion int) error {
+	if !s.reclaimed {
+		s.reclaimed = true
+		stored, ok := s.tracks[track.ID]
+		if !ok || stored == nil {
+			return catalogports.ErrTrackMissing
+		}
+		current := *stored
+		current.AcquisitionFence++
+		current.Version++
+		s.tracks[track.ID] = &current
+	}
+	return s.fakeStore.Update(ctx, track, expectedVersion)
+}
+
+func TestTrackLedger_AFenceAheadOfTheTracksIsAlsoLeaseLost(t *testing.T) {
+	track, userId := newTrack(t, 1)
+	track.AcquisitionFence = 3
+	store := newFakeStore(track)
+
+	err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 4, ports.Completion{AudioRef: "ref-1"})
+
+	if !errors.Is(err, acqdomain.ErrLeaseLost) {
+		t.Fatalf("err = %v, want ErrLeaseLost: a fence that differs either way is not the owner", err)
+	}
+	if got := storedTrack(t, store, track.ID); got.AcquisitionStatus != domain.AcquisitionPending || got.AudioRef != nil {
+		t.Errorf("status = %v, audio_ref = %v, want the track pending with no audio", got.AcquisitionStatus, got.AudioRef)
+	}
+}
+
+func TestTrackLedger_AStaleReplaceKeepsTheTrackOnItsServingAudio(t *testing.T) {
+	track, userId := newTrack(t, 1)
+	if err := track.MarkReady("old-ref"); err != nil {
+		t.Fatal(err)
+	}
+	track.AcquisitionFence = 3
+	store := newFakeStore(track)
+
+	err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 2, ports.Completion{AudioRef: "new-ref", ReplaceAudio: true})
+
+	if !errors.Is(err, acqdomain.ErrLeaseLost) {
+		t.Fatalf("err = %v, want ErrLeaseLost", err)
+	}
+	got := storedTrack(t, store, track.ID)
+	if got.AcquisitionStatus != domain.AcquisitionReady || got.AudioRef == nil || *got.AudioRef != "old-ref" {
+		t.Errorf("status = %v, audio_ref = %v, want ready on old-ref", got.AcquisitionStatus, got.AudioRef)
+	}
+	if len(store.updates) != 0 {
+		t.Errorf("updates = %v, want none", store.updates)
+	}
+}
+
+func TestTrackLedger_AStaleRevertLeavesAFailedTrackFailedWithItsReason(t *testing.T) {
+	track, userId := newTrack(t, 1)
+	if err := track.FailAcquisition("boom"); err != nil {
+		t.Fatal(err)
+	}
+	track.AcquisitionFence = 3
+	store := newFakeStore(track)
+
+	err := NewTrackLedger(store).Revert(context.Background(), track.ID, userId, 2)
+
+	if !errors.Is(err, acqdomain.ErrLeaseLost) {
+		t.Fatalf("err = %v, want ErrLeaseLost", err)
+	}
+	got := storedTrack(t, store, track.ID)
+	if got.AcquisitionStatus != domain.AcquisitionFailed || got.FailureReason == nil || *got.FailureReason != "boom" {
+		t.Errorf("status = %v, reason = %v, want failed with boom", got.AcquisitionStatus, got.FailureReason)
+	}
+	if len(store.updates) != 0 {
+		t.Errorf("updates = %v, want none", store.updates)
+	}
+}
+
+func TestTrackLedger_CompleteAndRevertWithoutAFenceOnEitherSideGoThrough(t *testing.T) {
+	cases := []struct {
+		name         string
+		heldFence    ports.Fence
+		trackedFence int
+	}{
+		{"no fence is held", 0, 3},
+		{"the track tracks no lease", 3, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name+": complete", func(t *testing.T) {
+			track, userId := newTrack(t, 1)
+			track.AcquisitionFence = tc.trackedFence
+			store := newFakeStore(track)
+
+			if err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, tc.heldFence, ports.Completion{AudioRef: "ref-1"}); err != nil {
+				t.Fatal(err)
+			}
+			got := storedTrack(t, store, track.ID)
+			if got.AcquisitionStatus != domain.AcquisitionReady || got.AudioRef == nil || *got.AudioRef != "ref-1" {
+				t.Errorf("status = %v, audio_ref = %v, want ready on ref-1", got.AcquisitionStatus, got.AudioRef)
+			}
+		})
+		t.Run(tc.name+": revert", func(t *testing.T) {
+			track, userId := newTrack(t, 1)
+			if err := track.FailAcquisition("boom"); err != nil {
+				t.Fatal(err)
+			}
+			track.AcquisitionFence = tc.trackedFence
+			store := newFakeStore(track)
+
+			if err := NewTrackLedger(store).Revert(context.Background(), track.ID, userId, tc.heldFence); err != nil {
+				t.Fatal(err)
+			}
+			if got := storedTrack(t, store, track.ID); got.AcquisitionStatus != domain.AcquisitionPending {
+				t.Errorf("status = %v, want pending", got.AcquisitionStatus)
+			}
+		})
+	}
+}
+
+func TestTrackLedger_AClaimBetweenReadAndUpdateStopsTheOldOwnerFailingTheTrack(t *testing.T) {
+	track, userId := newTrack(t, 1)
+	track.AcquisitionFence = 2
+	store := &reclaimingStore{fakeStore: newFakeStore(track)}
+
+	err := NewTrackLedger(store).Fail(context.Background(), track.ID, userId, 2, "boom")
+
+	if !errors.Is(err, acqdomain.ErrLeaseLost) {
+		t.Fatalf("err = %v, want ErrLeaseLost", err)
+	}
+	got := storedTrack(t, store.fakeStore, track.ID)
+	if got.AcquisitionStatus != domain.AcquisitionPending || got.FailureReason != nil {
+		t.Errorf("status = %v, reason = %v, want pending with no failure", got.AcquisitionStatus, got.FailureReason)
+	}
+	if got.AcquisitionFence != 3 {
+		t.Errorf("fence = %d, want the new owner's 3", got.AcquisitionFence)
+	}
+}
+
+func TestTrackLedger_RevertAtIgnoresTheLease(t *testing.T) {
+	track, userId := newTrack(t, 5)
+	if err := track.FailAcquisition("boom"); err != nil {
+		t.Fatal(err)
+	}
+	track.AcquisitionFence = 3
+	store := newFakeStore(track)
+
+	if err := NewTrackLedger(store).RevertAt(context.Background(), ports.TrackSnapshot{ID: track.ID, UserId: userId, Version: 5}); err != nil {
+		t.Fatal(err)
+	}
+	if got := storedTrack(t, store, track.ID); got.AcquisitionStatus != domain.AcquisitionPending {
+		t.Errorf("status = %v, want pending", got.AcquisitionStatus)
 	}
 }

@@ -253,7 +253,7 @@ func (s *BackgroundAcquisitionScheduler) runClaimedJob(job ports.Job) {
 	key := job.TrackID.String()
 	run := s.acquisitionRunFor(job.Kind)
 
-	jobCtx, cancelJob := s.jobContextFor(key, job.Run)
+	jobCtx, cancelJob := s.jobContextFor(key, job)
 	defer cancelJob()
 	jobCtx = s.withLeaseFence(jobCtx, job)
 
@@ -297,9 +297,9 @@ func (s *BackgroundAcquisitionScheduler) acquisitionRunFor(kind ports.JobKind) a
 	}
 }
 
-func (s *BackgroundAcquisitionScheduler) jobContextFor(key string, attempt int) (context.Context, context.CancelFunc) {
+func (s *BackgroundAcquisitionScheduler) jobContextFor(key string, job ports.Job) (context.Context, context.CancelFunc) {
 	jobCtx, cancelJob := context.WithCancel(s.baseCtx)
-	jobCtx = withJobAttempt(withSchedulerOwnedJobContext(jobCtx), attempt)
+	jobCtx = withJobFence(withJobAttempt(withSchedulerOwnedJobContext(jobCtx), job.Run), job.Fence)
 	if corrID, ok := s.corrIDs.LoadAndDelete(key); ok {
 		jobCtx = logging.WithCorrelationID(jobCtx, corrID.(string))
 	}
@@ -332,6 +332,10 @@ func (s *BackgroundAcquisitionScheduler) completeClaimedJob(ctx context.Context,
 		s.recordOutcome(ctx, record)
 		return
 	}
+	if errors.Is(err, acqdomain.ErrLeaseLost) {
+		s.recordLeaseLoss(ctx, key)
+		return
+	}
 	if errors.Is(err, ErrAcquisitionRetryable) {
 		reason := redact.LogError(err)
 		s.log.complete(key, ports.JobRetrying, reason)
@@ -339,9 +343,7 @@ func (s *BackgroundAcquisitionScheduler) completeClaimedJob(ctx context.Context,
 		return
 	}
 	if err != nil && schedulerCancelledJobContext(ctx) {
-		record := s.log.complete(key, ports.JobCancelled, leaseLostReason)
-		s.recordOutcome(ctx, record)
-		slog.WarnContext(ctx, "background acquisition cancelled after lease loss", "track_id", key)
+		s.recordLeaseLoss(ctx, key)
 		return
 	}
 	if err != nil {
@@ -353,6 +355,12 @@ func (s *BackgroundAcquisitionScheduler) completeClaimedJob(ctx context.Context,
 	}
 	record := s.log.complete(key, ports.JobSucceeded, "")
 	s.recordOutcome(ctx, record)
+}
+
+func (s *BackgroundAcquisitionScheduler) recordLeaseLoss(ctx context.Context, key string) {
+	record := s.log.complete(key, ports.JobCancelled, leaseLostReason)
+	s.recordOutcome(ctx, record)
+	slog.WarnContext(ctx, "background acquisition cancelled after lease loss", "track_id", key)
 }
 
 func (s *BackgroundAcquisitionScheduler) recordOutcome(ctx context.Context, record ports.JobRecord) {

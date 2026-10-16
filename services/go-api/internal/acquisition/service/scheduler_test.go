@@ -3159,3 +3159,82 @@ func TestScheduler_OutcomeCarriesJobKindRunAndProvenance(t *testing.T) {
 		t.Errorf("outcome kind/run/provenance = %q/%d/%q, want replace/2/corroborated", got.Kind, got.Run, got.Provenance)
 	}
 }
+
+func TestBackgroundScheduler_AJobWhoseLeaseWasReclaimedLeavesTheTrackPending(t *testing.T) {
+	recorder := newFakeOutcomeRecorder()
+	userId := shared.NewUserId(uuid.New())
+	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	track.AcquisitionFence = 1000
+	repo := newFakeTrackRepository()
+	key := track.ID.String() + ":" + userId.String()
+	repo.tracks[key] = track
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{searchErr: errors.New("boom")}), newFakeAudioStore())
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+	t.Cleanup(func() {
+		scheduler.Shutdown(context.Background())
+	})
+
+	if err := scheduler.Schedule(context.Background(), userId, track.ID, ""); err != nil {
+		t.Fatalf("schedule: %v", err)
+	}
+
+	assertExactlyOneOutcome(t, recorder.calls)
+	wg.Wait()
+	if got := repo.tracks[key].AcquisitionStatus; got != domain.AcquisitionPending {
+		t.Errorf("status = %v, want pending: the job ran on a fence the track no longer carries", got)
+	}
+	if got := repo.tracks[key].FailureReason; got != nil {
+		t.Errorf("failure_reason = %q, want none", *got)
+	}
+}
+
+func TestBackgroundScheduler_ALedgerRefusalForAStaleFenceRecordsCancelledNotFailed(t *testing.T) {
+	recorder := newFakeOutcomeRecorder()
+	userId := shared.NewUserId(uuid.New())
+	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	track.AcquisitionFence = 1000
+	repo := newFakeTrackRepository()
+	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{searchErr: errors.New("boom")}), newFakeAudioStore())
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+	t.Cleanup(func() {
+		scheduler.Shutdown(context.Background())
+	})
+
+	if err := scheduler.Schedule(context.Background(), userId, track.ID, ""); err != nil {
+		t.Fatalf("schedule: %v", err)
+	}
+
+	outcome := assertExactlyOneOutcome(t, recorder.calls)
+	wg.Wait()
+	if outcome.Outcome != acqports.JobCancelled || outcome.Reason != leaseLostReason {
+		t.Errorf("outcome = %q/%q, want %q/%q", outcome.Outcome, outcome.Reason, acqports.JobCancelled, leaseLostReason)
+	}
+}
+
+func TestExecute_ALedgerRefusalForAStaleFenceSurfacesErrLeaseLostWithTheCause(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	track.AcquisitionFence = 2
+	repo := newFakeTrackRepository()
+	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	cause := errors.New("boom")
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{searchErr: cause}), newFakeAudioStore())
+
+	err = svc.Execute(withJobFence(context.Background(), 1), userId, track.ID)
+
+	if !errors.Is(err, acqdomain.ErrLeaseLost) || !errors.Is(err, cause) {
+		t.Errorf("err = %v, want both ErrLeaseLost and the pipeline's cause", err)
+	}
+}

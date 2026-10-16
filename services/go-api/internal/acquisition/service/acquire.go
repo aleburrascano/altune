@@ -1,6 +1,7 @@
 package service
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service/audiojudge"
 	"altune/go-api/internal/acquisition/service/upgrade"
@@ -153,6 +154,20 @@ func jobAttemptFrom(ctx context.Context) int {
 	return attempt
 }
 
+type jobFenceContextKey struct{}
+
+func withJobFence(ctx context.Context, fence ports.Fence) context.Context {
+	return context.WithValue(ctx, jobFenceContextKey{}, fence)
+}
+
+func jobFenceFrom(ctx context.Context) ports.Fence {
+	if ctx == nil {
+		return 0
+	}
+	fence, _ := ctx.Value(jobFenceContextKey{}).(ports.Fence)
+	return fence
+}
+
 func schedulerCancelledJobContext(ctx context.Context) bool {
 	ownedByScheduler, _ := ctx.Value(schedulerOwnedJobContextKey{}).(bool)
 	return ownedByScheduler && ctx.Err() != nil
@@ -197,6 +212,9 @@ type retryPolicy func(jobCtx context.Context, err error) bool
 func neverRetry(context.Context, error) bool { return false }
 
 func (s *AcquireTrackAudioService) settleFailure(ctx, jobCtx context.Context, userId shared.UserId, trackId shared.TrackId, err error, retry retryPolicy, reportTerminal func(error) error) error {
+	if errors.Is(err, acqdomain.ErrLeaseLost) {
+		return s.reportSchedulerCancelledWithoutMarkingFailed(ctx, userId, trackId, err)
+	}
 	if schedulerCancelledJobContext(jobCtx) {
 		return s.reportSchedulerCancelledWithoutMarkingFailed(ctx, userId, trackId, err)
 	}
@@ -430,7 +448,9 @@ func (s *AcquireTrackAudioService) reportAcquireFailure(ctx context.Context, use
 	reason := rejectionAwareReason(ctx, trackId, err, ac)
 	settleCtx, cancel := settleContext(ctx)
 	defer cancel()
-	s.markFailed(settleCtx, trackId, userId, reason)
+	if persistErr := s.failTrack(settleCtx, trackId, userId, reason); errors.Is(persistErr, acqdomain.ErrLeaseLost) {
+		return errors.Join(err, persistErr)
+	}
 	s.events.Publish(settleCtx, userId, events.TypeTrackAcquisitionFailed, map[string]any{
 		"track_id": trackId.String(),
 		"reason":   reason,
@@ -465,18 +485,27 @@ func (s *AcquireTrackAudioService) onAcquireCompleted(ctx context.Context, userI
 }
 
 func (s *AcquireTrackAudioService) markFailed(ctx context.Context, trackId shared.TrackId, userId shared.UserId, reason string) bool {
-	err := s.ledger.Fail(ctx, trackId, userId, reason)
+	return s.failTrack(ctx, trackId, userId, reason) == nil
+}
+
+func (s *AcquireTrackAudioService) failTrack(ctx context.Context, trackId shared.TrackId, userId shared.UserId, reason string) error {
+	err := s.ledger.Fail(ctx, trackId, userId, jobFenceFrom(ctx), reason)
 	if errors.Is(err, ports.ErrIllegalTransition) {
 		slog.InfoContext(ctx, "mark_failed: track already settled, failure ignored",
 			"track_id", trackId.String(), "error", redact.LogError(err))
-		return false
+		return err
+	}
+	if errors.Is(err, acqdomain.ErrLeaseLost) {
+		slog.InfoContext(ctx, "mark_failed: lease lost, failure not persisted",
+			"track_id", trackId.String(), "error", redact.LogError(err))
+		return err
 	}
 	if err != nil {
 		slog.ErrorContext(ctx, "mark_failed: could not persist failure",
 			"track_id", trackId.String(), "error", redact.LogError(err))
-		return false
+		return err
 	}
-	return true
+	return nil
 }
 
 func (s *AcquireTrackAudioService) RefuseQueued(ctx context.Context, userId shared.UserId, trackId shared.TrackId) {

@@ -66,8 +66,8 @@ type Completion struct {
 type TrackLedger interface {
 	AudioRefLookup
 	Get(ctx context.Context, id shared.TrackId, userId shared.UserId) (*TrackSnapshot, error)
-	Complete(ctx context.Context, id shared.TrackId, userId shared.UserId, c Completion) error
-	Fail(ctx context.Context, id shared.TrackId, userId shared.UserId, reason string) error
-	Revert(ctx context.Context, id shared.TrackId, userId shared.UserId) error
+	Complete(ctx context.Context, id shared.TrackId, userId shared.UserId, fence Fence, c Completion) error
+	Fail(ctx context.Context, id shared.TrackId, userId shared.UserId, fence Fence, reason string) error
+	Revert(ctx context.Context, id shared.TrackId, userId shared.UserId, fence Fence) error
 	RevertAt(ctx context.Context, track TrackSnapshot) error
 }

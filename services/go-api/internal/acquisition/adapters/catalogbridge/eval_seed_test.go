@@ -83,7 +83,7 @@ func TestNewSeededLedger_SavedReadsBackWhatCompleteWrote(t *testing.T) {
 	ledger, _ := seededSnapshot(t, SeededTrack{Title: "Song", Artist: "Artist"})
 	evidence := json.RawMessage(`{"isrc_source":"fingerprint"}`)
 
-	err := ledger.Complete(context.Background(), ledger.TrackID(), ledger.UserID(), ports.Completion{
+	err := ledger.Complete(context.Background(), ledger.TrackID(), ledger.UserID(), 0, ports.Completion{
 		AudioRef: "ref", Duration: 237, ISRC: "CAA509814003",
 		Provenance: shared.AcquisitionProvenance("verified"), RejectedSourceKeys: []string{"youtube:abc"},
 		Confidence: 0.9, Evidence: evidence,

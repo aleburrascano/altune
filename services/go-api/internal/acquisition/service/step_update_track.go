@@ -51,7 +51,7 @@ func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext, _
 	if err := verifyCommitAllowed(ctx); err != nil {
 		return afterUpdate{}, err
 	}
-	err := s.ledger.Complete(ctx, s.trackId, s.userId, completion)
+	err := s.ledger.Complete(ctx, s.trackId, s.userId, jobFenceFrom(ctx), completion)
 	if errors.Is(err, ports.ErrTrackNotFound) {
 		return afterUpdate{}, errors.New("track not found for update")
 	}
@@ -59,7 +59,7 @@ func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext, _
 }
 
 func (s *UpdateTrackStep) Rollback(ctx context.Context, _ *AcquisitionContext) error {
-	err := s.ledger.Revert(ctx, s.trackId, s.userId)
+	err := s.ledger.Revert(ctx, s.trackId, s.userId, jobFenceFrom(ctx))
 	if errors.Is(err, ports.ErrIllegalTransition) {
 		return nil
 	}

@@ -2361,3 +2361,98 @@ func TestReplaceGated_ATransientOutageBelowTheCapIsNotRetried(t *testing.T) {
 		t.Errorf("err = %v, want a terminal failure: the upgrade lane keeps its own retry policy", err)
 	}
 }
+
+func TestExecute_AWorkerThatLostItsLeaseDoesNotFailTheTrack(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	track.AcquisitionFence = 2
+	repo := newFakeTrackRepository()
+	key := track.ID.String() + ":" + userId.String()
+	repo.tracks[key] = track
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+
+	_ = svc.Execute(withJobFence(context.Background(), 1), userId, track.ID)
+
+	if got := repo.tracks[key].AcquisitionStatus; got != domain.AcquisitionPending {
+		t.Errorf("status = %v, want pending: the new lease owner is still downloading", got)
+	}
+}
+
+func TestExecute_AWorkerHoldingTheCurrentLeaseStillFailsTheTrack(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	track.AcquisitionFence = 2
+	repo := newFakeTrackRepository()
+	key := track.ID.String() + ":" + userId.String()
+	repo.tracks[key] = track
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+
+	_ = svc.Execute(withJobFence(context.Background(), 2), userId, track.ID)
+
+	if got := repo.tracks[key].AcquisitionStatus; got != domain.AcquisitionFailed {
+		t.Errorf("status = %v, want failed", got)
+	}
+}
+
+func TestExecute_AWorkerThatLostItsLeaseCannotLandItsDownload(t *testing.T) {
+	cases := []struct {
+		name       string
+		held       ports.Fence
+		wantStatus domain.AcquisitionStatus
+		wantAudio  bool
+	}{
+		{"the lease was reclaimed", 1, domain.AcquisitionPending, false},
+		{"the lease is still held", 2, domain.AcquisitionReady, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			userId := shared.NewUserId(uuid.New())
+			track, err := domain.NewTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
+			if err != nil {
+				t.Fatalf("new track: %v", err)
+			}
+			track.AcquisitionFence = 2
+			repo := &committingTrackRepo{rows: map[string]domain.Track{track.ID.String() + ":" + userId.String(): *track}}
+			store := &bytesAudioStore{objects: map[string]string{}}
+			svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store)
+
+			_ = svc.Execute(withJobFence(context.Background(), tc.held), userId, track.ID)
+
+			row := repo.committed(track.ID, userId)
+			if row.AcquisitionStatus != tc.wantStatus {
+				t.Errorf("status = %v, want %v", row.AcquisitionStatus, tc.wantStatus)
+			}
+			if (row.AudioRef != nil) != tc.wantAudio {
+				t.Errorf("audio_ref = %v, want set = %v", row.AudioRef, tc.wantAudio)
+			}
+			if row.FailureReason != nil {
+				t.Errorf("failure_reason = %q, want none", *row.FailureReason)
+			}
+		})
+	}
+}
+
+func TestExecuteReplace_AWorkerThatLostItsLeaseLeavesTheServingAudioInPlace(t *testing.T) {
+	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
+	key := trackId.String() + ":" + userId.String()
+	row := repo.rows[key]
+	row.AcquisitionFence = 2
+	repo.rows[key] = row
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store)
+
+	_ = svc.ExecuteReplace(withJobFence(context.Background(), 1), userId, trackId)
+
+	got := repo.committed(trackId, userId)
+	if got.AcquisitionStatus != domain.AcquisitionReady || got.AudioRef == nil || *got.AudioRef != originalRef {
+		t.Errorf("track = %v %v, want ready on the original ref %q", got.AcquisitionStatus, got.AudioRef, originalRef)
+	}
+	if store.objects[originalRef] != "original bytes" {
+		t.Errorf("object at the serving ref = %q, want the original audio kept", store.objects[originalRef])
+	}
+}

@@ -112,8 +112,8 @@ func mapStatus(s domain.AcquisitionStatus) ports.TrackStatus {
 	}
 }
 
-func (l *TrackLedger) Complete(ctx context.Context, id shared.TrackId, userId shared.UserId, c ports.Completion) error {
-	return l.loadAndUpdate(ctx, id, userId, func(track *domain.Track) error {
+func (l *TrackLedger) Complete(ctx context.Context, id shared.TrackId, userId shared.UserId, fence ports.Fence, c ports.Completion) error {
+	return l.loadAndUpdate(ctx, id, userId, fence, func(track *domain.Track) error {
 		return complete(ctx, track, c)
 	})
 }
@@ -176,14 +176,14 @@ func recordMetadata(ctx context.Context, track *domain.Track, c ports.Completion
 	}
 }
 
-func (l *TrackLedger) Fail(ctx context.Context, id shared.TrackId, userId shared.UserId, reason string) error {
-	return l.loadAndUpdate(ctx, id, userId, func(track *domain.Track) error {
+func (l *TrackLedger) Fail(ctx context.Context, id shared.TrackId, userId shared.UserId, fence ports.Fence, reason string) error {
+	return l.loadAndUpdate(ctx, id, userId, fence, func(track *domain.Track) error {
 		return track.FailAcquisition(reason)
 	})
 }
 
-func (l *TrackLedger) Revert(ctx context.Context, id shared.TrackId, userId shared.UserId) error {
-	return l.loadAndUpdate(ctx, id, userId, func(track *domain.Track) error {
+func (l *TrackLedger) Revert(ctx context.Context, id shared.TrackId, userId shared.UserId, fence ports.Fence) error {
+	return l.loadAndUpdate(ctx, id, userId, fence, func(track *domain.Track) error {
 		return track.RevertToPending()
 	})
 }
@@ -208,10 +208,10 @@ func (l *TrackLedger) RevertAt(ctx context.Context, snapshot ports.TrackSnapshot
 	return nil
 }
 
-func (l *TrackLedger) loadAndUpdate(ctx context.Context, id shared.TrackId, userId shared.UserId, mutate func(*domain.Track) error) error {
+func (l *TrackLedger) loadAndUpdate(ctx context.Context, id shared.TrackId, userId shared.UserId, fence ports.Fence, mutate func(*domain.Track) error) error {
 	var lastErr error
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		lastErr = l.attempt(ctx, id, userId, mutate)
+		lastErr = l.attempt(ctx, id, userId, fence, mutate)
 		if !errors.Is(lastErr, catalogports.ErrTrackVersionConflict) {
 			return lastErr
 		}
@@ -219,7 +219,7 @@ func (l *TrackLedger) loadAndUpdate(ctx context.Context, id shared.TrackId, user
 	return fmt.Errorf("update track: exhausted %d CAS attempts: %w", maxAttempts, lastErr)
 }
 
-func (l *TrackLedger) attempt(ctx context.Context, id shared.TrackId, userId shared.UserId, mutate func(*domain.Track) error) error {
+func (l *TrackLedger) attempt(ctx context.Context, id shared.TrackId, userId shared.UserId, fence ports.Fence, mutate func(*domain.Track) error) error {
 	track, err := l.store.GetByID(ctx, id, userId)
 	if err != nil {
 		return fmt.Errorf("get track: %w", err)
@@ -227,10 +227,17 @@ func (l *TrackLedger) attempt(ctx context.Context, id shared.TrackId, userId sha
 	if track == nil {
 		return ports.ErrTrackNotFound
 	}
+	if leaseSuperseded(fence, track.AcquisitionFence) {
+		return fmt.Errorf("track %s claimed by fence %d, caller holds %d: %w", id, track.AcquisitionFence, fence, acqdomain.ErrLeaseLost)
+	}
 	expectedVersion := track.Version
 	if err := mutate(track); err != nil {
 		return translate(err)
 	}
+	return l.write(ctx, track, expectedVersion)
+}
+
+func (l *TrackLedger) write(ctx context.Context, track *domain.Track, expectedVersion int) error {
 	if err := l.store.Update(ctx, track, expectedVersion); err != nil {
 		if errors.Is(err, catalogports.ErrTrackVersionConflict) {
 			return err
@@ -238,4 +245,8 @@ func (l *TrackLedger) attempt(ctx context.Context, id shared.TrackId, userId sha
 		return fmt.Errorf("update track: %w", err)
 	}
 	return nil
+}
+
+func leaseSuperseded(held ports.Fence, current int) bool {
+	return held > 0 && current > 0 && current != int(held)
 }
