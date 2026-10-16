@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service/audiojudge"
 	"altune/go-api/internal/shared/textnorm"
 	"altune/go-api/internal/shared/versiontag"
 	"math"
@@ -17,6 +18,7 @@ const (
 	VerdictOtherVersion  VerdictKind = "other_version"
 	VerdictDifferentSong VerdictKind = "different_song"
 	VerdictUnknown       VerdictKind = "unknown"
+	VerdictContradicted  VerdictKind = "contradicted"
 )
 
 type AudioReference struct {
@@ -30,6 +32,23 @@ type AudioVerdict struct {
 	Kind      VerdictKind
 	Score     float64
 	Surviving []ports.LinkedRecording
+	Judged    audiojudge.Verdict
+}
+
+func audioVerdictOf(judged audiojudge.Verdict, results []ports.AcoustIDResult) AudioVerdict {
+	return AudioVerdict{Kind: verdictKindOf(judged.Kind), Score: topScore(results), Surviving: judged.Linked, Judged: judged}
+}
+
+func verdictKindOf(kind audiojudge.Kind) VerdictKind {
+	switch kind {
+	case audiojudge.Proven:
+		return VerdictHard
+	case audiojudge.Likely:
+		return VerdictSoft
+	case audiojudge.Contradicted:
+		return VerdictContradicted
+	}
+	return VerdictUnknown
 }
 
 type LookedUpRecordings map[string]ports.RecordingFacts

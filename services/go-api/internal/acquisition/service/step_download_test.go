@@ -890,13 +890,15 @@ func TestCandidateLogs_StampTrackIDAndSource(t *testing.T) {
 			},
 		},
 		{
-			name: "different song rejection",
+			name: "contradicted rejection",
 			msg:  "acquisition.audio_verdict",
 			attrs: map[string]any{
-				"track_id": logTestTrackID, "candidate_url": logTestCandidate().URL, "verdict": string(VerdictDifferentSong),
+				"track_id": logTestTrackID, "candidate_url": logTestCandidate().URL, "verdict": string(VerdictContradicted),
 			},
 			run: func(ctx context.Context, t *testing.T) {
-				runDownloadForLog(ctx, t, identityCtx(),
+				ac := identityCtx()
+				ac.Ranked[0].Title = "Artist - Song (Live)"
+				runDownloadForLog(ctx, t, ac,
 					WithDownloadIdentifier(&stubIdentifier{match: differentSongMatch()}))
 			},
 		},
@@ -979,13 +981,16 @@ func TestDownloadStep_RejectsAudioFingerprintedAsADifferentSong(t *testing.T) {
 	identifier := &stubIdentifier{match: differentSongMatch()}
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(identifier))
 	ac := downloadContext("mb-master")
+	for i := range ac.Ranked {
+		ac.Ranked[i].Title = "Corey Hart - Sunglasses at Night (Live)"
+	}
 
 	_, err := step.Execute(context.Background(), ac, afterSelect{})
 	if err == nil {
-		t.Fatal("expected every candidate rejected: the fingerprint links a different song")
+		t.Fatal("expected every candidate rejected: the fingerprint links a different song and the title names another version")
 	}
-	if !strings.Contains(err.Error(), "different song") {
-		t.Errorf("error = %q, want the different-song reason", err)
+	if !strings.Contains(err.Error(), "contradicted") || !strings.Contains(err.Error(), "another recording") {
+		t.Errorf("error = %q, want the contradiction naming the other recording", err)
 	}
 	if identifier.calls != 2 {
 		t.Errorf("identify calls = %d, want both candidates fingerprinted and rejected", identifier.calls)
@@ -1120,17 +1125,20 @@ func TestDownloadStep_SerialPath_LiveOnlyLinksRejectedThenCleanCandidateVerified
 		Results: linkedResults(ports.LinkedRecording{MBID: "mb-studio", Title: "Nessun dorma"}),
 	}
 	identifier := &sequenceIdentifier{matches: []ports.RecordingMatch{live, clean}}
-	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(identifier), WithVerifyWidth(1))
+	liveFacts := &stubVersionLookup{facts: map[string]ports.RecordingFacts{"mb-live": {MBID: "mb-live", Title: "Nessun dorma", Disambiguation: "live"}}}
+	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(identifier), WithRecordingLookup(liveFacts), WithVerifyWidth(1))
 	ac := downloadContext("mb-studio")
 	ac.Track.Title = "Nessun dorma"
+	ac.Ranked[0].Title = "Nessun dorma (Live)"
+	ac.Ranked[1].Title = "Nessun dorma"
 
 	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	defer os.RemoveAll(filepath.Dir(ac.TempPath))
 
-	if len(ac.Rejections) != 1 || ac.Rejections[0].Stage != RejectionFingerprint || ac.Rejections[0].Reason != "other version" {
-		t.Errorf("rejections = %+v, want one fingerprint rejection with reason other version", ac.Rejections)
+	if len(ac.Rejections) != 1 || ac.Rejections[0].Stage != RejectionFingerprint || !strings.HasPrefix(ac.Rejections[0].Reason, "contradicted") {
+		t.Errorf("rejections = %+v, want one fingerprint rejection as contradicted: the live link and the live title agree", ac.Rejections)
 	}
 	if ac.Provenance() != domain.ProvenanceVerified || ac.Verdict.Kind != VerdictHard {
 		t.Errorf("provenance = %v, verdict = %v, want verified and hard", ac.Provenance(), ac.Verdict.Kind)
@@ -1144,12 +1152,15 @@ func TestDownloadStep_LinksToAnotherSongAreRejected(t *testing.T) {
 	}
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(&stubIdentifier{match: match}))
 	ac := downloadContext("mb-master")
+	for i := range ac.Ranked {
+		ac.Ranked[i].Title = "Corey Hart - Sunglasses at Night (Live)"
+	}
 
 	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err == nil {
-		t.Fatal("expected every candidate rejected as a different song")
+		t.Fatal("expected every candidate rejected: another song linked and another version titled")
 	}
-	if len(ac.Rejections) == 0 || ac.Rejections[0].Reason != "different song" {
-		t.Errorf("rejections = %+v, want reason different song", ac.Rejections)
+	if len(ac.Rejections) == 0 || !strings.HasPrefix(ac.Rejections[0].Reason, "contradicted") {
+		t.Errorf("rejections = %+v, want a contradicted reason", ac.Rejections)
 	}
 }
 
@@ -1239,8 +1250,10 @@ func previewContext() *AcquisitionContext {
 func TestDownloadStep_PreviewOtherVersionRejectsWithoutFullFetch(t *testing.T) {
 	fetcher := &previewingFetcher{fileWritingSearcher: fileWritingSearcher{writeFile: true}}
 	identifier := &durationRecordingIdentifier{match: previewMatch("mb-live", "Nessun dorma (live)")}
-	step := NewDownloadStep(fetcher, WithDownloadIdentifier(identifier))
+	liveFacts := &stubVersionLookup{facts: map[string]ports.RecordingFacts{"mb-live": {MBID: "mb-live", Title: "Nessun dorma", Disambiguation: "live"}}}
+	step := NewDownloadStep(fetcher, WithDownloadIdentifier(identifier), WithRecordingLookup(liveFacts))
 	ac := previewContext()
+	ac.Ranked[0].Title = "Nessun dorma (Live)"
 
 	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err == nil {
 		t.Fatal("expected the live preview to reject the only candidate")
@@ -1249,8 +1262,8 @@ func TestDownloadStep_PreviewOtherVersionRejectsWithoutFullFetch(t *testing.T) {
 	if fetcher.calls != 0 {
 		t.Errorf("full fetches = %d, want 0 after a rejecting preview", fetcher.calls)
 	}
-	if len(ac.Rejections) != 1 || ac.Rejections[0].Reason != "other version" {
-		t.Errorf("rejections = %+v, want one other version rejection", ac.Rejections)
+	if len(ac.Rejections) != 1 || !strings.HasPrefix(ac.Rejections[0].Reason, "contradicted") {
+		t.Errorf("rejections = %+v, want one contradicted rejection", ac.Rejections)
 	}
 }
 
@@ -2062,25 +2075,29 @@ func TestDownloadStep_SoftNeedsTheSameVersionLabels(t *testing.T) {
 	tests := []struct {
 		name         string
 		lookup       *stubVersionLookup
+		title        string
 		wantReject   string
 		wantVerdict  VerdictKind
 		wantVerified bool
 	}{
-		{"an acoustic disambiguation is another version", factsLookup(acoustic), "other version", "", false},
-		{"matching labels are soft", factsLookup(plain), "", VerdictSoft, true},
-		{"a remaster disambiguation is the same version", factsLookup(remastered), "", VerdictSoft, true},
-		{"a failed lookup is not soft", &stubVersionLookup{err: errors.New("musicbrainz down")}, "", VerdictUnknown, false},
-		{"an unknown recording is not soft", &stubVersionLookup{}, "", VerdictUnknown, false},
+		{"an acoustic disambiguation with an acoustic title is another version", factsLookup(acoustic), "Sunglasses at Night (Acoustic)", "contradicted", "", false},
+		{"matching labels are soft", factsLookup(plain), "", "", VerdictSoft, true},
+		{"a remaster disambiguation is the same version", factsLookup(remastered), "", "", VerdictSoft, true},
+		{"a failed lookup is not soft", &stubVersionLookup{err: errors.New("musicbrainz down")}, "", "", VerdictUnknown, false},
+		{"an unknown recording is not soft", &stubVersionLookup{}, "", "", VerdictUnknown, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			step := NewDownloadStep(&fileWritingSearcher{writeFile: true},
 				WithDownloadIdentifier(&stubIdentifier{match: plainTitledLinks("mb-linked")}), WithRecordingLookup(tt.lookup))
 			ac := downloadContext("mb-master")
+			for i := range ac.Ranked {
+				ac.Ranked[i].Title = tt.title
+			}
 
 			_, err := step.Execute(context.Background(), ac, afterSelect{})
 			if tt.wantReject != "" {
-				if err == nil || len(ac.Rejections) == 0 || ac.Rejections[0].Reason != tt.wantReject {
+				if err == nil || len(ac.Rejections) == 0 || !strings.HasPrefix(ac.Rejections[0].Reason, tt.wantReject) {
 					t.Fatalf("err = %v, rejections = %+v, want every candidate rejected as %q", err, ac.Rejections, tt.wantReject)
 				}
 				return
@@ -2105,6 +2122,12 @@ func TestDownloadStep_SoftNeedsTheSameVersionLabels(t *testing.T) {
 	}
 }
 
+func fourLinksOneOfThemAnotherTitle() ports.RecordingMatch {
+	match := plainTitledLinks("mb-1", "mb-2", "mb-3", "mb-4")
+	match.Results[0].Recordings[3].Title = "Take On Me"
+	return match
+}
+
 func TestDownloadStep_SerialPath_VersionLookupsAreCappedAndCachedPerJob(t *testing.T) {
 	acoustic := func(mbid string) ports.RecordingFacts {
 		return ports.RecordingFacts{MBID: mbid, Title: "Sunglasses at Night", Disambiguation: "acoustic"}
@@ -2113,8 +2136,11 @@ func TestDownloadStep_SerialPath_VersionLookupsAreCappedAndCachedPerJob(t *testi
 		"mb-1": acoustic("mb-1"), "mb-2": acoustic("mb-2"), "mb-3": acoustic("mb-3"), "mb-4": acoustic("mb-4"),
 	}}
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true},
-		WithDownloadIdentifier(&stubIdentifier{match: plainTitledLinks("mb-1", "mb-2", "mb-3", "mb-4")}), WithRecordingLookup(lookup), WithVerifyWidth(1))
+		WithDownloadIdentifier(&stubIdentifier{match: fourLinksOneOfThemAnotherTitle()}), WithRecordingLookup(lookup), WithVerifyWidth(1))
 	ac := downloadContext("mb-master")
+	for i := range ac.Ranked {
+		ac.Ranked[i].Title = "Sunglasses at Night (Acoustic)"
+	}
 
 	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err == nil {
 		t.Fatal("expected every candidate rejected as another version")
@@ -2165,5 +2191,101 @@ func TestDownloadStep_AFingerprintedFallbackWithNoKnownLengthIsNeverStored(t *te
 
 	if !errors.Is(err, ErrNoConfidentMatch) {
 		t.Fatalf("err = %v, want ErrNoConfidentMatch", err)
+	}
+}
+
+func TestDownloadStep_AFingerprintNamingAnotherSongIsOneSourceSoItIsHeldAndNeverRejected(t *testing.T) {
+	identifier := &stubIdentifier{match: differentSongMatch()}
+	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(identifier))
+	ac := downloadContext("mb-master")
+
+	_, err := step.Execute(context.Background(), ac, afterSelect{})
+
+	if !errors.Is(err, ErrNoConfidentMatch) || len(ac.Rejections) != 0 || identifier.calls != 2 {
+		t.Errorf("err = %v, rejections = %+v, identify calls = %d, want both candidates fingerprinted and held, none rejected", err, ac.Rejections, identifier.calls)
+	}
+}
+
+func TestDownloadStep_AFingerprintNamingAnotherSongAndATitleWithOtherVersionTagsContradict(t *testing.T) {
+	identifier := &stubIdentifier{match: differentSongMatch()}
+	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(identifier))
+	ac := downloadContext("mb-master")
+	ac.Ranked = []ports.AudioCandidate{{URL: "https://youtube.com/watch?v=live0000000", Title: "Corey Hart - Sunglasses at Night (Live)"}}
+
+	_, err := step.Execute(context.Background(), ac, afterSelect{})
+
+	if err == nil || len(ac.Rejections) != 1 || ac.Rejections[0].Stage != RejectionFingerprint || !strings.HasPrefix(ac.Rejections[0].Reason, "contradicted") {
+		t.Errorf("err = %v, rejections = %+v, want one fingerprint rejection: two sources agree the file is something else", err, ac.Rejections)
+	}
+}
+
+func TestDownloadStep_TheGradeOfAVerifiedFileIsTheJudgesAndFollowsTheSource(t *testing.T) {
+	cases := map[string]struct {
+		candidate ports.AudioCandidate
+		want      string
+	}{
+		"an art track": {ports.AudioCandidate{URL: "https://music.youtube.com/watch?v=art00000000", Title: "Sunglasses at Night", Kind: ports.KindArtTrack}, "A"},
+		"a fan upload": {ports.AudioCandidate{URL: "https://youtube.com/watch?v=fan00000000", Title: "Sunglasses at Night", Kind: ports.KindUpload, Channel: "Some Fan"}, "B"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(&stubIdentifier{match: referenceMatch()}))
+			ac := downloadContext("mb-master")
+			ac.Ranked = []ports.AudioCandidate{tc.candidate}
+
+			if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+			defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+			if got := string(ac.collectEvidence().Grade); got != tc.want {
+				t.Errorf("grade = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestDownloadStep_ATrackWithNoCatalogIdentityIsGradedBestAvailable(t *testing.T) {
+	step := NewDownloadStep(&fileWritingSearcher{writeFile: true})
+	ac := &AcquisitionContext{
+		Track:  TrackRef{Title: "Leaked Song", Artist: "Corey Hart"},
+		Ranked: []ports.AudioCandidate{{URL: "https://youtube.com/watch?v=leak0000000", Title: "Leaked Song", Kind: ports.KindArtTrack}},
+	}
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+	if got := string(ac.collectEvidence().Grade); got != "best_available" {
+		t.Errorf("grade = %q, want best_available: nothing in the catalog to judge the audio against", got)
+	}
+}
+
+func TestDownloadStep_ASameTitleLinkWhoseVersionWasNeverLookedUpIsNeverLikely(t *testing.T) {
+	match := plainTitledLinks("mb-linked")
+	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(&stubIdentifier{match: match}))
+	ac := downloadContext("mb-master")
+
+	_, err := step.Execute(context.Background(), ac, afterSelect{})
+
+	if !errors.Is(err, ErrNoConfidentMatch) || ac.IdentityVerified {
+		t.Errorf("err = %v, identity verified = %v, want the unverifiable duplicate held as unknown", err, ac.IdentityVerified)
+	}
+}
+
+func TestDownloadStep_ALinkWithNoMBIDNamesNothingSoItNeverContradicts(t *testing.T) {
+	match := ports.RecordingMatch{
+		AcoustID: "ac-nameless", Score: 0.97,
+		Results: linkedResults(ports.LinkedRecording{Title: "Take On Me", Artists: []string{"a-ha"}}),
+	}
+	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(&stubIdentifier{match: match}))
+	ac := downloadContext("mb-master")
+	ac.Ranked = []ports.AudioCandidate{{URL: "https://youtube.com/watch?v=live0000000", Title: "Corey Hart - Sunglasses at Night (Live)"}}
+
+	_, err := step.Execute(context.Background(), ac, afterSelect{})
+
+	if len(ac.Rejections) != 0 || !errors.Is(err, ErrNoConfidentMatch) {
+		t.Errorf("err = %v, rejections = %+v, want the nameless link ignored and the lone title tag held as unknown", err, ac.Rejections)
 	}
 }

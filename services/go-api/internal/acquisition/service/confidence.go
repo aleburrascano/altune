@@ -181,7 +181,7 @@ func FingerprintOf(verdict VerdictKind) grade.Fingerprint {
 		return grade.Matches
 	case VerdictSoft:
 		return grade.Approximates
-	case VerdictOtherVersion:
+	case VerdictOtherVersion, VerdictContradicted:
 		return grade.Contradicts
 	case VerdictDifferentSong:
 		return grade.Unsupported
@@ -200,8 +200,15 @@ func (ac *AcquisitionContext) collectEvidence() Evidence {
 		evidence.SourceKind = SourceKindOf(*ac.Selected, evidence.Channel)
 	}
 	evidence.PipelineGeneration = grade.PipelineGeneration
-	evidence.Grade = grade.Of(ac.gradedFingerprint(), ac.Provenance(), evidence.SourceKind)
+	evidence.Grade = ac.gradeFor(evidence.SourceKind)
 	return evidence
+}
+
+func (ac *AcquisitionContext) gradeFor(kind grade.SourceKind) grade.Grade {
+	if ac.Verdict.Judged.Grade != "" {
+		return ac.Verdict.Judged.Grade
+	}
+	return grade.Of(ac.gradedFingerprint(), ac.Provenance(), kind)
 }
 
 type ISRCSource string

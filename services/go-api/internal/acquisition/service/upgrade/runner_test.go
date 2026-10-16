@@ -166,6 +166,7 @@ func seed(t *testing.T, stored grade.Grade) *world {
 		t.Fatalf("mark ready: %v", err)
 	}
 	track.SetAudioSource(currentURL)
+	track.AdoptISRC("USUG11904206")
 	evidence := json.RawMessage(fmt.Sprintf(`{"grade":%q,"pipeline_generation":1}`, stored))
 	if err := track.SetAcquisitionConfidence(0.5, evidence); err != nil {
 		t.Fatalf("set evidence: %v", err)

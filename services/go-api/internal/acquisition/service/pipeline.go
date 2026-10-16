@@ -323,6 +323,7 @@ func (s *AcquireTrackAudioService) buildSteps(userId shared.UserId, trackId shar
 			WithRecordingLookup(s.recordingLookup),
 			WithConfidenceFloor(s.confidenceFloor),
 			WithStepVerifySkips(s.verifySkips),
+			WithJudgeCuts(s.cuts),
 		},
 		WithStoreAudioRefGuard(s.ledger, trackId),
 		WithStoreOrphanQueue(s.orphans, userId),

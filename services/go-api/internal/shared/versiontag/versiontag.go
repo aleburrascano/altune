@@ -14,8 +14,58 @@ type Tags struct {
 }
 
 func ParseTags(title string) Tags {
-	tokens := WithoutVersionPhrases(Tokens(WithoutFeatureCredits(title)))
-	return Tags{Part: partNumber(tokens), Labels: RecordingLabels(title)}
+	numbered, tokens := withoutVersionNumbers(Tokens(WithoutFeatureCredits(title)))
+	return Tags{Part: partNumber(WithoutVersionPhrases(tokens)), Labels: withVersionNumbers(RecordingLabels(title), numbered)}
+}
+
+const (
+	versionNumberLabelPrefix = "v"
+	versionLabel             = "version"
+)
+
+var versionWords = []string{"v", "ver", "version"}
+
+var versionNumberRe = regexp.MustCompile(`^v(\d{1,2})$`)
+
+func withoutVersionNumbers(tokens []string) (numbers, rest []string) {
+	for pos := 0; pos < len(tokens); pos++ {
+		if number := versionNumberAt(tokens, pos); number != "" {
+			numbers = append(numbers, number)
+			if !versionNumberRe.MatchString(tokens[pos]) {
+				pos++
+			}
+			continue
+		}
+		rest = append(rest, tokens[pos])
+	}
+	return numbers, rest
+}
+
+func versionNumberAt(tokens []string, pos int) string {
+	if match := versionNumberRe.FindStringSubmatch(tokens[pos]); match != nil {
+		return versionNumberLabelPrefix + match[1]
+	}
+	if pos+1 < len(tokens) && slices.Contains(versionWords, tokens[pos]) && isArabicNumber(tokens[pos+1]) {
+		return versionNumberLabelPrefix + tokens[pos+1]
+	}
+	return ""
+}
+
+func isArabicNumber(token string) bool {
+	n, err := strconv.Atoi(token)
+	return err == nil && n >= 1 && len(token) <= 2
+}
+
+func withVersionNumbers(labels, numbered []string) []string {
+	if len(numbered) == 0 {
+		return labels
+	}
+	labels = slices.DeleteFunc(slices.Clone(labels), func(label string) bool { return label == versionLabel })
+	for _, number := range numbered {
+		labels = AppendLabel(labels, number)
+	}
+	slices.Sort(labels)
+	return labels
 }
 
 func (t Tags) Equal(other Tags) bool {

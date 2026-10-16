@@ -146,13 +146,19 @@ func inPlaceMatch(recordings ...ports.LinkedRecording) ports.RecordingMatch {
 	return ports.RecordingMatch{AcoustID: "ac-1", Results: []ports.AcoustIDResult{{ID: "ac-1", Score: 0.97, Recordings: recordings}}}
 }
 
-func inPlaceService(identifier ports.AudioIdentifier, previews ports.PreviewMatcher, mbid string) *AcquireTrackAudioService {
+func inPlaceService(identifier ports.AudioIdentifier, previews ports.PreviewMatcher, mbid string, extra ...func(*AcquireTrackAudioService)) *AcquireTrackAudioService {
 	store := &bytesAudioStore{objects: map[string]string{inPlaceRef: "stored bytes"}}
-	return NewAcquireTrackAudioService(nil, nil, store,
+	opts := []func(*AcquireTrackAudioService){
 		WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: mbid, MBIDs: []string{mbid}}}),
 		WithAudioIdentifier(identifier),
 		WithStoredAudioReader(storedBytesReader{store: store}),
-		WithPreviewMatcher(previews, 0.10))
+		WithPreviewMatcher(previews, 0.10),
+	}
+	return NewAcquireTrackAudioService(nil, nil, store, append(opts, extra...)...)
+}
+
+func liveRecordingLookup() *stubVersionLookup {
+	return &stubVersionLookup{facts: map[string]ports.RecordingFacts{"live-mbid": {MBID: "live-mbid", Title: "Boys Don't Cry", Disambiguation: "live"}}}
 }
 
 func TestCheckInPlace_AFileTheFingerprintLinksToTheBoundRecordingMatches(t *testing.T) {
@@ -169,18 +175,19 @@ func TestCheckInPlace_AFileTheFingerprintLinksToTheBoundRecordingMatches(t *test
 
 func TestCheckInPlace_AFileTheFingerprintLinksToAnotherVersionContradicts(t *testing.T) {
 	identifier := &stubIdentifier{match: inPlaceMatch(ports.LinkedRecording{MBID: "live-mbid", Title: "Boys Don't Cry (Live)", Artists: []string{"The Cure"}})}
+	liveSource := fromSource(inPlaceTrack(), `{"source_kind":"art_track","source_title":"Boys Don't Cry (Live)"}`)
 
-	finding, err := inPlaceService(identifier, nil, pinnedBoysDontCry).CheckInPlace(context.Background(), inPlaceTrack())
+	finding, err := inPlaceService(identifier, nil, pinnedBoysDontCry, WithAcquireRecordingLookup(liveRecordingLookup())).CheckInPlace(context.Background(), liveSource)
 	if err != nil {
 		t.Fatalf("CheckInPlace: %v", err)
 	}
-	if finding.Fingerprint != grade.Contradicts || finding.Verdict != string(VerdictOtherVersion) {
+	if finding.Fingerprint != grade.Contradicts || finding.Verdict != string(VerdictContradicted) || !finding.Lowers {
 		t.Errorf("finding = %+v, want the other version to contradict", finding)
 	}
 }
 
 func TestCheckInPlace_WithNoAcoustIDAnswerThePreviewComparisonDecides(t *testing.T) {
-	previews := &stubPreviewMatcher{comparison: ports.PreviewComparison{Matched: true, BitErrorRate: 0.05}}
+	previews := &stubPreviewMatcher{comparison: ports.PreviewComparison{Matched: true, BitErrorRate: 0.05, OverlapSeconds: 29}}
 
 	finding, err := inPlaceService(&stubIdentifier{}, previews, pinnedBoysDontCry).CheckInPlace(context.Background(), inPlaceTrack())
 	if err != nil {
@@ -196,7 +203,7 @@ func TestCheckInPlace_WithNoAcoustIDAnswerThePreviewComparisonDecides(t *testing
 }
 
 func TestCheckInPlace_APreviewMatchAboveTheOfficialCutOnlyApproximates(t *testing.T) {
-	previews := &stubPreviewMatcher{comparison: ports.PreviewComparison{Matched: true, BitErrorRate: 0.15}}
+	previews := &stubPreviewMatcher{comparison: ports.PreviewComparison{Matched: true, BitErrorRate: 0.15, OverlapSeconds: 29}}
 
 	finding, err := inPlaceService(&stubIdentifier{}, previews, pinnedBoysDontCry).CheckInPlace(context.Background(), inPlaceTrack())
 	if err != nil {
@@ -214,7 +221,7 @@ func TestCheckInPlace_APreviewMatchOnADoubtedReferenceOnlyApproximates(t *testin
 		WithRecordingResolver(&stubResolver{identity: doubted}),
 		WithAudioIdentifier(&stubIdentifier{}),
 		WithStoredAudioReader(storedBytesReader{store: store}),
-		WithPreviewMatcher(&stubPreviewMatcher{comparison: ports.PreviewComparison{Matched: true, BitErrorRate: 0.05}}, 0.10))
+		WithPreviewMatcher(&stubPreviewMatcher{comparison: ports.PreviewComparison{Matched: true, BitErrorRate: 0.05, OverlapSeconds: 29}}, 0.10))
 
 	finding, err := svc.CheckInPlace(context.Background(), inPlaceTrack())
 	if err != nil {
@@ -227,7 +234,7 @@ func TestCheckInPlace_APreviewMatchOnADoubtedReferenceOnlyApproximates(t *testin
 
 func TestCheckInPlace_AContradictingAcoustIDAnswerWithAMatchingPreviewProvesNothingWrong(t *testing.T) {
 	identifier := &stubIdentifier{match: inPlaceMatch(ports.LinkedRecording{MBID: "part-one-mbid", Title: "Boys Don't Cry (Part 2)", Artists: []string{"The Cure"}})}
-	previews := &stubPreviewMatcher{comparison: ports.PreviewComparison{Matched: true, BitErrorRate: 0.06}}
+	previews := &stubPreviewMatcher{comparison: ports.PreviewComparison{Matched: true, BitErrorRate: 0.06, OverlapSeconds: 29}}
 
 	finding, err := inPlaceService(identifier, previews, pinnedBoysDontCry).CheckInPlace(context.Background(), inPlaceTrack())
 	if err != nil {
@@ -240,14 +247,15 @@ func TestCheckInPlace_AContradictingAcoustIDAnswerWithAMatchingPreviewProvesNoth
 
 func TestCheckInPlace_AContradictionStandsOnlyWhenThePreviewDoesNotMatchEither(t *testing.T) {
 	cases := map[string]*stubPreviewMatcher{
-		"the preview is another song": {comparison: ports.PreviewComparison{BitErrorRate: 0.5}},
+		"the preview is another song": {comparison: ports.PreviewComparison{BitErrorRate: 0.5, OverlapSeconds: 29}},
 		"deezer has no preview":       {comparison: ports.PreviewComparison{Unavailable: "deezer has no preview for this track"}},
 	}
 	for name, previews := range cases {
 		t.Run(name, func(t *testing.T) {
 			identifier := &stubIdentifier{match: inPlaceMatch(ports.LinkedRecording{MBID: "live-mbid", Title: "Boys Don't Cry (Live)", Artists: []string{"The Cure"}})}
+			liveSource := fromSource(inPlaceTrack(), `{"source_kind":"art_track","source_title":"Boys Don't Cry (Live)"}`)
 
-			finding, err := inPlaceService(identifier, previews, pinnedBoysDontCry).CheckInPlace(context.Background(), inPlaceTrack())
+			finding, err := inPlaceService(identifier, previews, pinnedBoysDontCry, WithAcquireRecordingLookup(liveRecordingLookup())).CheckInPlace(context.Background(), liveSource)
 			if err != nil {
 				t.Fatalf("CheckInPlace: %v", err)
 			}
@@ -260,7 +268,7 @@ func TestCheckInPlace_AContradictionStandsOnlyWhenThePreviewDoesNotMatchEither(t
 
 func TestCheckInPlace_ADifferentSongAnswerWithAMatchingPreviewIsNotAMismatch(t *testing.T) {
 	identifier := &stubIdentifier{match: inPlaceMatch(ports.LinkedRecording{MBID: "other-song", Title: "Killing an Arab", Artists: []string{"The Cure"}})}
-	previews := &stubPreviewMatcher{comparison: ports.PreviewComparison{Matched: true, BitErrorRate: 0.07}}
+	previews := &stubPreviewMatcher{comparison: ports.PreviewComparison{Matched: true, BitErrorRate: 0.07, OverlapSeconds: 29}}
 
 	finding, err := inPlaceService(identifier, previews, pinnedBoysDontCry).CheckInPlace(context.Background(), inPlaceTrack())
 	if err != nil {
@@ -290,7 +298,7 @@ func TestCheckInPlace_APreviewThatDoesNotMatchOrCannotBeFetchedLeavesTheFileUnan
 
 func TestCheckInPlace_ATrackWithNoBoundRecordingIsOnlyComparedByPreview(t *testing.T) {
 	identifier := &stubIdentifier{match: inPlaceMatch(ports.LinkedRecording{MBID: pinnedBoysDontCry})}
-	previews := &stubPreviewMatcher{comparison: ports.PreviewComparison{Matched: true}}
+	previews := &stubPreviewMatcher{comparison: ports.PreviewComparison{Matched: true, OverlapSeconds: 29}}
 
 	finding, err := inPlaceService(identifier, previews, "").CheckInPlace(context.Background(), inPlaceTrack())
 	if err != nil {
@@ -316,5 +324,119 @@ func TestCheckInPlace_WithoutAnIdentifierOrStoredAudioReaderItSaysSo(t *testing.
 
 	if _, err := svc.CheckInPlace(context.Background(), inPlaceTrack()); !errors.Is(err, ErrInPlaceUnavailable) {
 		t.Errorf("CheckInPlace = %v, want ErrInPlaceUnavailable", err)
+	}
+}
+
+func fromSource(track *ports.TrackSnapshot, evidence string) *ports.TrackSnapshot {
+	url := "https://music.youtube.com/watch?v=art"
+	track.AudioSourceURL = &url
+	track.Evidence = []byte(evidence)
+	return track
+}
+
+func judgedPreview(rate float64) *stubPreviewMatcher {
+	return &stubPreviewMatcher{comparison: ports.PreviewComparison{Matched: rate <= 0.18, BitErrorRate: rate, OverlapSeconds: 29}}
+}
+
+func TestCheckInPlace_APreviewAtTheProvenCutGradesAOnAnOfficialSourceAndBOnAFanUpload(t *testing.T) {
+	cases := map[string]struct {
+		evidence string
+		want     grade.Fingerprint
+	}{
+		"art track":  {`{"source_kind":"art_track"}`, grade.Matches},
+		"fan upload": {`{"source_kind":"fan_upload"}`, grade.Approximates},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			track := fromSource(inPlaceTrack(), tc.evidence)
+
+			finding, err := inPlaceService(&stubIdentifier{}, judgedPreview(0.05), pinnedBoysDontCry).CheckInPlace(context.Background(), track)
+
+			if err != nil || finding.Fingerprint != tc.want || finding.Basis != "preview" || finding.Lowers {
+				t.Errorf("finding = %+v, err = %v, want fingerprint %v on the preview basis and no lowering", finding, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestCheckInPlace_TheProvenCutIsTheOneTheServiceWasGiven(t *testing.T) {
+	cases := map[float64]grade.Fingerprint{0.15: grade.Matches, 0.10: grade.Approximates}
+	for provenMax, want := range cases {
+		t.Run("", func(t *testing.T) {
+			store := &bytesAudioStore{objects: map[string]string{inPlaceRef: "stored bytes"}}
+			svc := NewAcquireTrackAudioService(nil, nil, store,
+				WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: pinnedBoysDontCry, MBIDs: []string{pinnedBoysDontCry}}}),
+				WithAudioIdentifier(&stubIdentifier{}),
+				WithStoredAudioReader(storedBytesReader{store: store}),
+				WithPreviewMatcher(judgedPreview(0.12), provenMax))
+
+			finding, err := svc.CheckInPlace(context.Background(), fromSource(inPlaceTrack(), `{"source_kind":"art_track"}`))
+
+			if err != nil || finding.Fingerprint != want {
+				t.Errorf("proven cut %v: finding = %+v, err = %v, want fingerprint %v", provenMax, finding, err, want)
+			}
+		})
+	}
+}
+
+func TestCheckInPlace_AnAcoustIDAnswerNamingAnotherRecordingIsOneSourceAndNeverLowersAGrade(t *testing.T) {
+	identifier := &stubIdentifier{match: inPlaceMatch(ports.LinkedRecording{MBID: "live-mbid", Title: "Killing an Arab", Artists: []string{"The Cure"}})}
+
+	finding, err := inPlaceService(identifier, nil, pinnedBoysDontCry).CheckInPlace(context.Background(), fromSource(inPlaceTrack(), `{"source_kind":"art_track"}`))
+
+	if err != nil || finding.Answered() || finding.Lowers {
+		t.Errorf("finding = %+v, err = %v, want no answer: unknown never lowers a grade", finding, err)
+	}
+}
+
+func TestCheckInPlace_AContradictionNeedsASecondIndependentSource(t *testing.T) {
+	other := inPlaceMatch(ports.LinkedRecording{MBID: "other-mbid", Title: "Killing an Arab", Artists: []string{"The Cure"}})
+	cases := map[string]struct {
+		previews *stubPreviewMatcher
+		evidence string
+		want     bool
+	}{
+		"an absent preview":                      {judgedPreview(0.45), `{"source_kind":"art_track"}`, true},
+		"a source title with other version tags": {nil, `{"source_kind":"art_track","source_title":"Boys Don't Cry (Live)"}`, true},
+		"a preview that is between the cuts":     {judgedPreview(0.25), `{"source_kind":"art_track"}`, false},
+		"a source title with the same tags":      {nil, `{"source_kind":"art_track","source_title":"Boys Don't Cry (Remastered)"}`, false},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			var previews ports.PreviewMatcher
+			if tc.previews != nil {
+				previews = tc.previews
+			}
+
+			finding, err := inPlaceService(&stubIdentifier{match: other}, previews, pinnedBoysDontCry).CheckInPlace(context.Background(), fromSource(inPlaceTrack(), tc.evidence))
+
+			contradicted := finding.Fingerprint == grade.Contradicts && finding.Lowers
+			if err != nil || contradicted != tc.want {
+				t.Errorf("finding = %+v, err = %v, want contradicted = %v", finding, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestCheckInPlace_AWrongLengthFileTheFingerprintProvesLowersTheGradeBelowA(t *testing.T) {
+	identifier := &stubIdentifier{match: inPlaceMatch(ports.LinkedRecording{MBID: pinnedBoysDontCry, Title: "Boys Don't Cry", Artists: []string{"The Cure"}})}
+	track := fromSource(inPlaceTrack(), `{"source_kind":"art_track"}`)
+	catalog, stored := 155.0, 262.0
+	track.CatalogDurationSeconds, track.StoredDurationSeconds = &catalog, &stored
+
+	finding, err := inPlaceService(identifier, nil, pinnedBoysDontCry).CheckInPlace(context.Background(), track)
+
+	if err != nil || finding.Fingerprint != grade.Approximates || !finding.Lowers {
+		t.Errorf("finding = %+v, err = %v, want a proven file of the wrong length to approximate and lower the stored grade", finding, err)
+	}
+}
+
+func TestCheckInPlace_APreviewOverlapUnderTheMinimumIsNoPreview(t *testing.T) {
+	previews := &stubPreviewMatcher{comparison: ports.PreviewComparison{Matched: true, BitErrorRate: 0.02, OverlapSeconds: 8}}
+
+	finding, err := inPlaceService(&stubIdentifier{}, previews, pinnedBoysDontCry).CheckInPlace(context.Background(), inPlaceTrack())
+
+	if err != nil || finding.Answered() {
+		t.Errorf("finding = %+v, err = %v, want no answer from a preview that overlaps too little", finding, err)
 	}
 }

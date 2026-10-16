@@ -2,7 +2,7 @@ package grade
 
 import "altune/go-api/internal/shared"
 
-const PipelineGeneration = 1
+const PipelineGeneration = 2
 
 type Grade string
 

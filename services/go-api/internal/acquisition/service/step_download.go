@@ -3,6 +3,7 @@ package service
 import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service/audiojudge"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"fmt"
@@ -36,6 +37,7 @@ type DownloadStep struct {
 	skips           ports.VerifySkipRecorder
 	width           int
 	floor           float64
+	cuts            audiojudge.Cuts
 
 	candidateTimeout time.Duration
 }
@@ -43,7 +45,7 @@ type DownloadStep struct {
 const prodVerifyWidth = 2
 
 func NewDownloadStep(fetcher candidateFetcher, opts ...func(*DownloadStep)) *DownloadStep {
-	s := &DownloadStep{fetcher: fetcher, workspace: defaultTempWorkspace, width: prodVerifyWidth, candidateTimeout: defaultCandidateTimeout}
+	s := &DownloadStep{fetcher: fetcher, workspace: defaultTempWorkspace, width: prodVerifyWidth, candidateTimeout: defaultCandidateTimeout, cuts: audiojudge.DefaultCuts()}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -74,6 +76,10 @@ func (s *DownloadStep) recordSkip(gate string) {
 	if s.skips != nil {
 		s.skips.RecordVerifySkip(gate)
 	}
+}
+
+func WithJudgeCuts(cuts audiojudge.Cuts) func(*DownloadStep) {
+	return func(s *DownloadStep) { s.cuts = cuts }
 }
 
 func WithVerifyWidth(n int) func(*DownloadStep) {
@@ -462,6 +468,9 @@ func (s *DownloadStep) verify(
 	}
 	if rejection := s.identify(ctx, ac, candidate, filePath, &result); rejection != nil {
 		return result, rejection
+	}
+	if result.verdict.Judged.Kind == "" {
+		result.verdict.Judged = s.judgeUnfingerprinted(ac, result.probed, sourceOf(ac, candidate))
 	}
 
 	return result, nil

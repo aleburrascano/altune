@@ -81,7 +81,7 @@ func (r *Runner) ExecuteUpgrade(ctx context.Context, userId shared.UserId, track
 	}
 	stored := inPlaceEvidenceOf(track.Evidence)
 	current := stored.Grade
-	if !isPlayableFile(track) || current.IsTop() {
+	if !isPlayableFile(track) || r.isSettled(track, current) {
 		slog.InfoContext(ctx, "acquisition.upgrade_skipped", "track_id", trackId.String())
 		return nil
 	}
@@ -146,6 +146,16 @@ func (r *Runner) giveUp(ctx context.Context, trackId shared.TrackId, current gra
 	}
 	slog.InfoContext(ctx, "acquisition.upgrade_gave_up",
 		"track_id", trackId.String(), "grade", string(current), "tries", tries, "reason", reason)
+}
+
+func (r *Runner) isSettled(track *ports.TrackSnapshot, current grade.Grade) bool {
+	switch {
+	case current.IsBestAvailable(), current == grade.AUser:
+		return true
+	case current == grade.A:
+		return !r.isUnchecked(track)
+	}
+	return false
 }
 
 func isPlayableFile(track *ports.TrackSnapshot) bool {

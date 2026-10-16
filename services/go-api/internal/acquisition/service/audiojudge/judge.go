@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service/grade"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/songfacts"
 	"altune/go-api/internal/shared/textnorm"
 	"altune/go-api/internal/shared/versiontag"
 	"fmt"
@@ -25,10 +26,12 @@ const (
 type IdentityVersion string
 
 type Verdict struct {
-	Kind          Kind
-	Grade         grade.Grade
-	Reasons       []string
-	JudgedAgainst IdentityVersion
+	Kind              Kind
+	Grade             grade.Grade
+	LowersStoredGrade bool
+	Reasons           []string
+	Linked            []ports.LinkedRecording
+	JudgedAgainst     IdentityVersion
 }
 
 func (v Verdict) HoldsFor(current IdentityVersion) bool {
@@ -39,6 +42,8 @@ type Identity struct {
 	Version        IdentityVersion
 	ISRC           string
 	MBID           string
+	MergedMBIDs    []string
+	Doubted        bool
 	CatalogLengths map[string]float64
 	Title          string
 	Artist         string
@@ -54,9 +59,11 @@ type Preview struct {
 }
 
 type Audio struct {
-	AcoustID []ports.AcoustIDResult
-	Preview  *Preview
-	Length   float64
+	AcoustID            []ports.AcoustIDResult
+	Preview             *Preview
+	Length              float64
+	RecordingFacts      map[string]ports.RecordingFacts
+	RequireVersionFacts bool
 }
 
 type Source struct {
@@ -89,6 +96,8 @@ const (
 )
 
 type evidence struct {
+	linked      []ports.LinkedRecording
+	doubted     bool
 	acoustID    acoustIDStance
 	preview     previewStance
 	tagsDiffer  bool
@@ -110,16 +119,19 @@ func Judge(in Input, cuts Cuts) Verdict {
 	ev := gather(in, cuts)
 	kind := ev.kind()
 	return Verdict{
-		Kind:          kind,
-		Grade:         grade.Of(ev.fingerprint(kind), ev.provenance(), in.Source.Kind),
-		Reasons:       ev.reasons,
-		JudgedAgainst: in.Identity.Version,
+		Kind:              kind,
+		Grade:             grade.Of(ev.fingerprint(kind), ev.provenance(), in.Source.Kind),
+		LowersStoredGrade: kind == Contradicted || ev.demotedByLength(),
+		Reasons:           ev.reasons,
+		Linked:            ev.linked,
+		JudgedAgainst:     in.Identity.Version,
 	}
 }
 
 func gather(in Input, cuts Cuts) evidence {
 	var ev evidence
-	ev.official = in.Source.Kind.IsOfficial()
+	ev.official = in.Source.Kind.IsOfficial() || in.Source.Kind == grade.UserUpload
+	ev.doubted = in.Identity.Doubted
 	ev.judgeAcoustID(in)
 	ev.judgePreview(in.Audio.Preview, cuts)
 	ev.judgeTags(in)
@@ -146,11 +158,19 @@ func (ev evidence) againstCount() int {
 }
 
 func (ev evidence) isProven() bool {
+	if ev.lengthOuter || ev.doubted {
+		return false
+	}
 	return ev.acoustID == acoustIDBound || (ev.preview == previewProven && ev.official && !ev.tagsDiffer)
 }
 
+func (ev evidence) demotedByLength() bool {
+	return ev.lengthOuter && !ev.doubted && (ev.acoustID == acoustIDBound || (ev.preview == previewProven && ev.official && !ev.tagsDiffer))
+}
+
 func (ev evidence) isLikely() bool {
-	return ev.preview == previewProven || ev.preview == previewLikely || (ev.acoustID == acoustIDDuplicate && ev.preview != previewAbsent)
+	isUncontradictedDuplicate := ev.acoustID == acoustIDDuplicate && ev.preview != previewAbsent && !ev.lengthOuter
+	return ev.acoustID == acoustIDBound || ev.preview == previewProven || ev.preview == previewLikely || isUncontradictedDuplicate
 }
 
 func (ev evidence) kind() Kind {
@@ -188,26 +208,58 @@ func (ev evidence) provenance() shared.AcquisitionProvenance {
 
 func (ev *evidence) judgeAcoustID(in Input) {
 	survivors := recordingsMatchingLength(in.Audio.Length, in.Audio.AcoustID)
+	ev.linked = survivors
 	if len(survivors) == 0 {
 		ev.note("acoustid: no linked recording of the file's length")
 		return
 	}
-	if i := slices.IndexFunc(survivors, func(r ports.LinkedRecording) bool { return isBoundRecording(in.Identity, r) }); i >= 0 {
+	if i := slices.IndexFunc(survivors, func(r ports.LinkedRecording) bool { return in.Audio.isBound(in.Identity, r) }); i >= 0 {
 		ev.acoustID = acoustIDBound
 		ev.note("acoustid: links the bound recording %s", survivors[i].MBID)
 		return
 	}
-	if i := slices.IndexFunc(survivors, func(r ports.LinkedRecording) bool { return isSameTitleDuplicate(in.Identity, r) }); i >= 0 {
+	sameTitle := sameTitleLinks(in.Identity, survivors)
+	if i := slices.IndexFunc(sameTitle, func(r ports.LinkedRecording) bool { return in.Audio.isDuplicate(in.Identity, r) }); i >= 0 && !mostTitlesDiffer(in.Identity, survivors) {
 		ev.acoustID = acoustIDDuplicate
-		ev.note("acoustid: links %s, a same-title duplicate of the bound recording", survivors[i].MBID)
+		ev.note("acoustid: links %s, a same-title duplicate of the bound recording", sameTitle[i].MBID)
+		return
+	}
+	if unverified := slices.IndexFunc(sameTitle, func(r ports.LinkedRecording) bool { return in.Audio.cannotVerifyVersionOf(r) }); unverified >= 0 {
+		ev.note("acoustid: links %s, a same-title recording whose version could not be verified", sameTitle[unverified].MBID)
+		return
+	}
+	named := slices.IndexFunc(survivors, func(r ports.LinkedRecording) bool { return textnorm.NormalizeForMatch(r.Title) != "" })
+	if named < 0 {
+		ev.note("acoustid: links only untitled recordings, which name nothing")
 		return
 	}
 	ev.acoustID = acoustIDOther
-	ev.note("acoustid: names another recording %q (%s)", survivors[0].Title, survivors[0].MBID)
+	ev.note("acoustid: names another recording %q (%s)", survivors[named].Title, survivors[named].MBID)
 }
 
-func isBoundRecording(identity Identity, recording ports.LinkedRecording) bool {
-	return identity.MBID != "" && recording.MBID == identity.MBID
+func (a Audio) isBound(identity Identity, recording ports.LinkedRecording) bool {
+	if isBoundByID(identity, recording) {
+		return true
+	}
+	facts, found := a.RecordingFacts[recording.MBID]
+	return found && identity.ISRC != "" && slices.ContainsFunc(facts.ISRCs, func(isrc string) bool {
+		return songfacts.CanonicalISRC(isrc) == songfacts.CanonicalISRC(identity.ISRC)
+	})
+}
+
+func VersionLookupCandidates(in Input) []string {
+	var candidates []string
+	survivors := recordingsMatchingLength(in.Audio.Length, in.Audio.AcoustID)
+	for _, recording := range slices.Concat(sameTitleLinks(in.Identity, survivors), survivors) {
+		if !isBoundByID(in.Identity, recording) && !slices.Contains(candidates, recording.MBID) {
+			candidates = append(candidates, recording.MBID)
+		}
+	}
+	return candidates
+}
+
+func isBoundByID(identity Identity, recording ports.LinkedRecording) bool {
+	return recording.MBID == identity.MBID || slices.Contains(identity.MergedMBIDs, recording.MBID)
 }
 
 func recordingsMatchingLength(audioLength float64, results []ports.AcoustIDResult) []ports.LinkedRecording {
@@ -227,11 +279,50 @@ func linkLengthAgrees(audioLength, linkLength float64) bool {
 	return isLengthUnknown || domain.LengthAuthoritative.Agrees(audioLength, linkLength)
 }
 
-func isSameTitleDuplicate(identity Identity, recording ports.LinkedRecording) bool {
-	return identity.ISRC == "" &&
-		textnorm.NormalizeForMatch(recording.Title) == textnorm.NormalizeForMatch(identity.Title) &&
-		versiontag.ParseTags(recording.Title).Equal(versiontag.ParseTags(identity.Title)) &&
-		sharesArtist(identity.Artist, recording.Artists)
+func sameTitleLinks(identity Identity, survivors []ports.LinkedRecording) []ports.LinkedRecording {
+	return slices.DeleteFunc(slices.Clone(survivors), func(recording ports.LinkedRecording) bool {
+		return textnorm.NormalizeForMatch(recording.Title) != textnorm.NormalizeForMatch(identity.Title) ||
+			!sharesArtist(identity.Artist, recording.Artists)
+	})
+}
+
+func (a Audio) cannotVerifyVersionOf(recording ports.LinkedRecording) bool {
+	_, found := a.RecordingFacts[recording.MBID]
+	return a.RequireVersionFacts && !found
+}
+
+func (a Audio) isDuplicate(identity Identity, recording ports.LinkedRecording) bool {
+	facts, found := a.RecordingFacts[recording.MBID]
+	isOtherRecordingByISRC := identity.ISRC != "" && (!found || len(facts.ISRCs) != 0)
+	if a.cannotVerifyVersionOf(recording) || isOtherRecordingByISRC {
+		return false
+	}
+	title := recording.Title
+	if found {
+		title = titleWithDisambiguation(facts)
+	}
+	return versiontag.ParseTags(title).Equal(versiontag.ParseTags(identity.Title))
+}
+
+func titleWithDisambiguation(facts ports.RecordingFacts) string {
+	if facts.Disambiguation == "" {
+		return facts.Title
+	}
+	return facts.Title + " (" + facts.Disambiguation + ")"
+}
+
+func mostTitlesDiffer(identity Identity, survivors []ports.LinkedRecording) bool {
+	titles := make(map[string]bool)
+	for _, recording := range survivors {
+		if core := textnorm.NormalizeForMatch(recording.Title); core != "" {
+			titles[core] = true
+		}
+	}
+	differing := len(titles)
+	if titles[textnorm.NormalizeForMatch(identity.Title)] {
+		differing--
+	}
+	return differing*2 > len(titles)
 }
 
 func sharesArtist(artist string, credits []string) bool {

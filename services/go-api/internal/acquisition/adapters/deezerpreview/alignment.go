@@ -24,6 +24,10 @@ type Alignment struct {
 	BitErrorRate float64
 }
 
+func OverlapSeconds(items int) float64 {
+	return float64(items) * itemDurationSeconds
+}
+
 func (a Alignment) OffsetSeconds() float64 {
 	return float64(a.OffsetItems) * itemDurationSeconds
 }

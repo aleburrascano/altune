@@ -31,7 +31,11 @@ WHERE t.acquisition_status = 'ready'
 	AND t.audio_ref IS NOT NULL
 	AND (COALESCE(t.audio_source_url, '') <> '' OR ($5::boolean AND COALESCE((t.acquisition_evidence->>'in_place_generation')::int, 0) < $2))
 	AND t.acquisition_available_at IS NULL
-	AND COALESCE(t.acquisition_evidence->>'grade', 'D') NOT IN ('A', 'A_user')
+	AND COALESCE(t.acquisition_evidence->>'grade', 'D') NOT IN ('A_user', 'best_available')
+	AND (
+		COALESCE(t.acquisition_evidence->>'grade', 'D') <> 'A'
+		OR ($5::boolean AND COALESCE((t.acquisition_evidence->>'in_place_generation')::int, 0) < $2)
+	)
 	AND COALESCE((t.acquisition_evidence->>'best_available_generation')::int, 0) < $2
 	AND COALESCE((t.acquisition_evidence->>'upgrade_tried_at')::timestamptz, '-infinity') < now() - make_interval(secs => $3)
 	AND (
@@ -135,7 +139,7 @@ SET acquisition_evidence = COALESCE(acquisition_evidence, '{}'::jsonb) || jsonb_
 		'in_place_bit_error_rate', NULLIF($9::float8, 0),
 		'verdict', NULLIF($4::text, ''),
 		'acoustid_score', NULLIF($6::float8, 0),
-		'grade', CASE WHEN NULLIF($7::text, '') IS NOT NULL AND ($10::boolean OR %s > %s) THEN $7::text END,
+		'grade', CASE WHEN NULLIF($7::text, '') IS NOT NULL AND COALESCE(acquisition_evidence->>'grade', 'D') <> 'best_available' AND ($10::boolean OR %s > %s) THEN $7::text END,
 		'user_upload_mismatch', CASE WHEN $8::boolean THEN true END)),
 	version = version + 1
 WHERE id = $1 AND audio_ref = $2 AND acquisition_status = 'ready'`,

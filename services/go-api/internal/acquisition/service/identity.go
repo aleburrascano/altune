@@ -2,14 +2,16 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service/audiojudge"
 	"altune/go-api/internal/acquisition/service/grade"
 	"altune/go-api/internal/acquisition/service/upgrade"
 	"altune/go-api/internal/shared/redact"
+	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
 )
 
 func (s *AcquireTrackAudioService) resolveIdentity(ctx context.Context, ac *AcquisitionContext) {
@@ -54,10 +56,10 @@ const (
 	verdictPreview = "preview"
 )
 
-func WithPreviewMatcher(m ports.PreviewMatcher, officialMaxBitErrorRate float64) func(*AcquireTrackAudioService) {
+func WithPreviewMatcher(m ports.PreviewMatcher, provenMaxBitErrorRate float64) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) {
 		s.previews = m
-		s.previewOfficialMaxBER = officialMaxBitErrorRate
+		s.cuts = audiojudge.CutsWithProvenMax(provenMaxBitErrorRate)
 	}
 }
 
@@ -80,78 +82,80 @@ func (s *AcquireTrackAudioService) CheckInPlace(ctx context.Context, track *port
 }
 
 func (s *AcquireTrackAudioService) judgeInPlace(ctx context.Context, ac *AcquisitionContext, track *ports.TrackSnapshot, path string) (upgrade.Finding, error) {
-	finding, err := s.fingerprintInPlace(ctx, ac, path, deref(track.StoredDurationSeconds))
-	if err != nil || isProven(finding) {
-		return finding, err
+	input := judgeInput(ac, nil, deref(track.StoredDurationSeconds), storedSourceOf(track))
+	score, err := s.fingerprintInto(ctx, ac, &input, path)
+	if err != nil {
+		return upgrade.Finding{}, err
 	}
-	if preview, matched := s.previewInPlace(ctx, ac, track, path); matched {
-		return preview, nil
+	verdict := audiojudge.Judge(input, s.cuts)
+	if verdict.Kind == audiojudge.Proven {
+		return findingOf(verdict, basisAcoustID, score, 0), nil
 	}
-	if namesAnotherBoundRecording(ac) {
-		return finding, nil
+	preview := s.previewInPlace(ctx, track, path)
+	if preview == nil {
+		return findingOf(verdict, basisAcoustID, score, 0), nil
 	}
-	return upgrade.Finding{}, nil
+	input.Audio.Preview = preview
+	return findingOf(audiojudge.Judge(input, s.cuts), basisPreview, score, preview.BitErrorRate), nil
 }
 
-func isProven(finding upgrade.Finding) bool {
-	return finding.Fingerprint == grade.Matches || finding.Fingerprint == grade.Approximates
-}
-
-func namesAnotherBoundRecording(ac *AcquisitionContext) bool {
-	reference := ac.Identity.MBIDs
-	if len(reference) == 0 {
-		reference = []string{ac.Identity.MBID}
-	}
-	return slices.ContainsFunc(ac.Verdict.Surviving, func(recording ports.LinkedRecording) bool {
-		return recording.MBID != "" && !slices.Contains(reference, recording.MBID)
-	})
-}
-
-func (s *AcquireTrackAudioService) fingerprintInPlace(ctx context.Context, ac *AcquisitionContext, path string, storedSeconds float64) (upgrade.Finding, error) {
+func (s *AcquireTrackAudioService) fingerprintInto(ctx context.Context, ac *AcquisitionContext, input *audiojudge.Input, path string) (float64, error) {
 	if ac.Identity.MBID == "" {
-		return upgrade.Finding{}, nil
+		return 0, nil
 	}
 	match, err := s.identifier.Identify(ctx, path, 0)
 	if err != nil {
-		return upgrade.Finding{}, fmt.Errorf("fingerprint the stored file: %w", err)
+		return 0, fmt.Errorf("fingerprint the stored file: %w", err)
 	}
-	classifier := NewDownloadStep(nil, WithRecordingLookup(s.recordingLookup))
-	ac.Verdict = classifier.classifyMatch(ctx, ac, match, storedSeconds)
-	return upgrade.Finding{
-		Verdict:     string(ac.Verdict.Kind),
-		Fingerprint: ac.gradedFingerprint(),
-		Basis:       basisAcoustID,
-		Score:       ac.Verdict.Score,
-	}, nil
+	input.Audio.AcoustID = match.Results
+	input.Audio.RecordingFacts = NewDownloadStep(nil, WithRecordingLookup(s.recordingLookup)).versionFacts(ctx, *input)
+	return topScore(match.Results), nil
 }
 
-func (s *AcquireTrackAudioService) previewInPlace(ctx context.Context, ac *AcquisitionContext, track *ports.TrackSnapshot, path string) (upgrade.Finding, bool) {
+func findingOf(verdict audiojudge.Verdict, basis string, score, bitErrorRate float64) upgrade.Finding {
+	if verdict.Kind == audiojudge.Unknown {
+		return upgrade.Finding{}
+	}
+	kind := verdictKindOf(verdict.Kind)
+	finding := upgrade.Finding{
+		Verdict:      string(kind),
+		Fingerprint:  FingerprintOf(kind),
+		Basis:        basis,
+		Score:        score,
+		Lowers:       verdict.LowersStoredGrade,
+		BitErrorRate: bitErrorRate,
+	}
+	if basis == basisPreview {
+		finding.Verdict = verdictPreview
+	}
+	return finding
+}
+
+func storedSourceOf(track *ports.TrackSnapshot) judgedSource {
+	var stored Evidence
+	_ = json.Unmarshal(track.Evidence, &stored)
+	kind := cmp.Or(stored.SourceKind, grade.FanUpload)
+	if track.AudioSourceURL == nil || *track.AudioSourceURL == "" {
+		kind = grade.UserUpload
+	}
+	return judgedSource{kind: kind, title: stored.SourceTitle}
+}
+
+func (s *AcquireTrackAudioService) previewInPlace(ctx context.Context, track *ports.TrackSnapshot, path string) *audiojudge.Preview {
 	target := previewTargetOf(track)
 	if s.previews == nil || (target == ports.PreviewTarget{}) {
-		return upgrade.Finding{}, false
+		return nil
 	}
 	comparison, err := s.previews.MatchesPreview(ctx, path, target)
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.in_place_preview_failed",
 			"track_id", track.ID.String(), "error", redact.LogError(err))
-		return upgrade.Finding{}, false
+		return nil
 	}
-	if !comparison.Matched {
-		return upgrade.Finding{}, false
+	if comparison.Unavailable != "" {
+		return nil
 	}
-	return upgrade.Finding{
-		Verdict:      verdictPreview,
-		Fingerprint:  s.previewFingerprint(ac, comparison.BitErrorRate),
-		Basis:        basisPreview,
-		BitErrorRate: comparison.BitErrorRate,
-	}, true
-}
-
-func (s *AcquireTrackAudioService) previewFingerprint(ac *AcquisitionContext, bitErrorRate float64) grade.Fingerprint {
-	if ac.Identity.ReferenceDoubted || bitErrorRate > s.previewOfficialMaxBER {
-		return grade.Approximates
-	}
-	return grade.Matches
+	return &audiojudge.Preview{BitErrorRate: comparison.BitErrorRate, OverlapSeconds: comparison.OverlapSeconds}
 }
 
 func previewTargetOf(track *ports.TrackSnapshot) ports.PreviewTarget {

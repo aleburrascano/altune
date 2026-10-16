@@ -94,9 +94,9 @@ rule per row:
 1. **Resolve identity before fetching** — discovery supplies ISRC/MBID/duration
    (`RecordingResolver`), so the pipeline knows *what* it wants.
 2. **Compare the bytes by what AcoustID says they are.** `AudioIdentifier` (fpcalc →
-   AcoustID) returns the recordings the audio's AcoustID links to. `ClassifyAudio`
-   marks a track `verified` when a linked recording is the expected one, and
-   **rejects** when the links name another version or another song. The earlier
+   AcoustID) returns the recordings the audio's AcoustID links to. The audio judge
+   (`service/audiojudge`) marks a track `verified` when a linked recording is the expected one, and
+   **rejects** only when two independent sources say the file is another version or song. The earlier
    version compared MBID *equality* and was unsound — a recording carries many MBIDs
    (album, single, compilation, remaster), so the sets legitimately need not
    intersect; that version rejected every candidate for Rihanna's "Don't Stop the
@@ -261,12 +261,12 @@ flowchart TD
     S3 --> G0{"pre-download duration<br/>candidateDurationPlausible"}
     G0 -->|fail| S3
     G0 --> G1["preview fingerprint<br/>first 130s, sources that can"]
-    G1 -->|"other_version / different_song"| S3
+    G1 -->|"contradicted"| S3
     G1 --> G2["full download"]
     G2 --> G3{"duration + decode gates"}
     G3 -->|fail| S3
-    G3 --> G4["ClassifyAudio verdict<br/>when no preview verdict"]
-    G4 -->|"other_version / different_song"| S3
+    G3 --> G4["audio judge verdict<br/>when no preview verdict"]
+    G4 -->|"contradicted"| S3
     G4 --> J{"judgeAttempt"}
     J -->|"hard / soft"| S4
     J -->|"unknown or fallback qualifier"| HOLD["hold best by confidence"]
@@ -356,23 +356,28 @@ outcome equals the serial walk. Per candidate:
    (`ports.SkipPreviewFallback`), and every preview logs
    `acquisition.preview_fingerprint`.
 3. The full download, then the duration and decode gates.
-4. `ClassifyAudio(ref, duration, results, facts)` classifies the fingerprint (skipped when
-   the preview already produced the verdict).
+4. `audiojudge.Judge` judges the fingerprint (skipped when the preview already produced the verdict).
 
-`ClassifyAudio` drops each linked recording whose length disagrees with the audio
-(authoritative tolerance, max(5s, 3%)), then returns one `AudioVerdict`: `hard`
-when a surviving link is in the reference `MBIDs`; `soft` when one names the same
-song by the same artist with no unrequested qualifier, the length agrees, and its
-MusicBrainz title plus disambiguation carries the track's version labels
-(`versiontag.RecordingLabels`); `other_version` when the same song survives only with
-an unrequested qualifier or with other version labels; `different_song` otherwise;
-`unknown` when AcoustID returned nothing, or when the version labels could not be
-read. The download step asks `ports.RecordingLookup` (`RecordingByMBID`) for the
-facts of the linked recordings that would otherwise be `soft`: at most three per
-candidate, cached for the job, stopping at the first with matching labels. `hard` and
-`soft` set `IdentityVerified`. `other_version` and `different_song` reject at stage
-`fingerprint`. Each verdict logs `acquisition.audio_verdict`, with the surviving
-links and `reference_doubted`.
+The judge (`service/audiojudge`) drops each linked recording whose length disagrees with
+the audio (authoritative tolerance, max(5s, 3%)) and each link that names no MBID, then
+returns `proven | likely | unknown | contradicted`, a grade and the reasons. `proven`
+(legacy name `hard`) when a surviving link is the bound recording (any of the reference
+`MBIDs`, or a recording whose MusicBrainz ISRCs include the track's) and the length fits
+the catalog; `likely` (`soft`) when one names the same song by the same artist with the
+same parsed version tags (`versiontag.ParseTags`, read from its MusicBrainz title plus
+disambiguation) and most surviving links name the same title; `contradicted` when at
+least two independent sources say the file is something else (AcoustID names another
+recording, the preview is absent, the candidate title's version tags differ, the length
+is outside every catalog length) and none says it is the recording; `unknown` otherwise,
+including when AcoustID returned nothing or the version tags could not be read. A length
+outside every catalog length demotes a would-be `proven` to `likely`. A track with no
+MBID, ISRC or catalog length is `unknown` with grade `best_available`. The download step
+asks `ports.RecordingLookup` (`RecordingByMBID`) for the facts of the linked recordings
+the judge names (`audiojudge.VersionLookupCandidates`): at most three per candidate,
+cached for the job. `proven` and `likely` set `IdentityVerified`. `contradicted` rejects
+at stage `fingerprint`. Each verdict logs `acquisition.audio_verdict`, with the surviving
+links, the grade, the reasons and `reference_doubted`. The grade stored in the evidence is
+the judge's.
 
 `unknown` is not a rejection. `judgeAttempt` builds `Evidence` (verdict, AcoustID
 score, ISRC-set hit, duration delta, channel class, fallback qualifiers, whether the
@@ -475,15 +480,18 @@ Before it downloads anything, `ExecuteUpgrade` checks the stored file in place, 
 `PipelineGeneration` (`in_place_generation` in the evidence), at most
 `ACQUISITION_UPGRADE_VERIFY_PER_HOUR` checks an hour (AcoustID and Deezer calls, not downloads).
 `AcquireTrackAudioService.CheckInPlace` resolves the bound recording, fingerprints the stored
-file and classifies it with the same `classifyMatch`/`ClassifyAudio` acquisition uses; with no
-AcoustID proof (no answer, or a contradicting or different-song one) it compares the file with
-the Deezer preview of the track's ISRC (`ports.PreviewMatcher`, `adapters/deezerpreview`). A
-matching preview outweighs a contradicting AcoustID answer; the contradiction counts only when
-the preview does not match and AcoustID names another recording than the bound ones. A preview
-match is stored as verdict `preview` with its bit error rate: at or below
-`ACQUISITION_UPGRADE_PREVIEW_A_MAX_BER` (0.10) and with a trusted reference it grades like a
-fingerprint match (A from an official source), otherwise B. Three failed checks in a row stop
-the check and let the lane re-acquire; the stored grade is only ever raised by a check. `ports.InPlaceStore.RecordInPlace` writes
+file and judges it with the same `audiojudge.Judge` acquisition uses; with no AcoustID proof it
+adds the Deezer preview of the track's ISRC (`ports.PreviewMatcher`, `adapters/deezerpreview`),
+bit error rate and overlap included. A matching preview outweighs a contradicting AcoustID
+answer; a contradiction needs a second source (an absent preview, a source title with other
+version tags, a length outside every catalog length). A preview match is stored as verdict
+`preview` with its bit error rate: at or below `ACQUISITION_UPGRADE_PREVIEW_A_MAX_BER` (0.10),
+with a trusted reference and an official source it grades A, otherwise B. Three failed checks
+in a row stop the check and let the lane re-acquire. A check lowers the stored grade only when
+the judge says the evidence stands against it (`contradicted`, or a length outside every
+catalog length demoting a proven file); `unknown` changes nothing. A stored `best_available`
+grade (a track with no catalog identity) is never picked, checked or replaced, and a stored A is
+checked once per `PipelineGeneration` too, so a wrong-length A can be lowered and repaired. `ports.InPlaceStore.RecordInPlace` writes
 the verdict and the regraded grade (`grade.Of`, no file change), only while `audio_ref` is
 still the file checked. A grade A result ends the job with no download; any other result falls
 through to the re-acquire below with the new grade as the gate. A user upload (no
@@ -511,7 +519,7 @@ rejects nothing, counts nothing, and logs `acquisition.upgrade_outcome` with `fr
 A change should preserve all of these; if it can't, that's the discussion.
 
 - The pipeline shape is defined once, in `CoreSteps`. Never in a caller.
-- The fingerprint rejects only on linked recordings that name another version or song; unknown audio always passes.
+- The fingerprint rejects only when the judge finds two independent sources against the file; unknown audio always passes.
 - Fingerprints are judged by their linked recordings, never by MBID equality.
 - A tightened duration window requires the saved and resolved lengths to *agree*.
 - Variant markers are read from the raw title; `NormalizeForMatch` is never "fixed" to keep them.
@@ -540,7 +548,7 @@ A change should preserve all of these; if it can't, that's the discussion.
 - Acquisition never imports catalog's adapters, observe, or the composition root.
 - Stage `Name()` strings are a public contract (§8) — renaming one is a breaking change.
 - A veto-family qualifier the track didn't ask for rejects at `qualifier`, whatever the fingerprint says.
-- `other_version` and `different_song` verdicts always reject; only `unknown` may be held.
+- A `contradicted` verdict always rejects; only `unknown` may be held, and `unknown` never rejects, replaces or lowers a stored grade.
 - An `unknown` or fallback candidate is stored only at or above the confidence floor, and as `best_effort`, never `verified`.
 - Only lasting rejection stages (everything but `download` and `not_attempted`) are remembered in `acquisition_rejections`.
 - Prior-rejected sources are skipped, never dropped for good: when nothing else is left they come back.

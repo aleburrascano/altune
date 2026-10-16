@@ -2,6 +2,7 @@ package main
 
 import (
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service/audiojudge"
 	"context"
 	"errors"
 	"fmt"
@@ -64,6 +65,7 @@ type verifier struct {
 	previews   previewSource
 	printer    rawPrinter
 	cut        previewCut
+	provenMax  float64
 	checkpoint func(finished []trackResult)
 }
 
@@ -113,7 +115,8 @@ func (v *verifier) assessFile(ctx context.Context, track libraryTrack, file stri
 	if err != nil {
 		return assessment{}, fmt.Errorf("fingerprint: %w", err)
 	}
-	judged, err := judge(ctx, track.Identity, confidentCandidates(match.Results, v.minScore), v.lookups)
+	j := judgement{track: track, results: confidentResults(match.Results, v.minScore), cuts: v.cuts()}
+	judged, err := judge(ctx, j, confidentCandidates(match.Results, v.minScore), v.lookups)
 	if err != nil || v.previews == nil || !needsPreviewCheck(track.Identity, judged.Verdict) {
 		return judged, err
 	}
@@ -121,7 +124,18 @@ func (v *verifier) assessFile(ctx context.Context, track libraryTrack, file stri
 	if err != nil {
 		return assessment{}, fmt.Errorf("preview: %w", err)
 	}
-	return withPreview(judged, []string{track.Title, evidence.DeezerTitle}, evidence, v.cut), nil
+	return withPreview(j, judged, evidence), nil
+}
+
+func (v *verifier) cuts() audiojudge.Cuts {
+	cuts := audiojudge.CutsWithProvenMax(v.provenMax)
+	cuts.LikelyMax = max(v.cut.matchMax, v.provenMax)
+	cuts.AbsentMin = v.cut.absentMin
+	return cuts
+}
+
+func confidentResults(results []ports.AcoustIDResult, minScore float64) []ports.AcoustIDResult {
+	return slices.DeleteFunc(slices.Clone(results), func(result ports.AcoustIDResult) bool { return result.Score < minScore })
 }
 
 func (v *verifier) measurePreview(ctx context.Context, identity boundIdentity, file string) (previewEvidence, error) {
@@ -161,7 +175,10 @@ func withAlignment(evidence previewEvidence, filePrint, previewPrint []uint32) (
 	if err != nil {
 		return previewEvidence{}, err
 	}
-	evidence.Alignment = &alignmentEvidence{BitErrorRate: aligned.BitErrorRate, OffsetSeconds: aligned.offsetSeconds()}
+	evidence.Alignment = &alignmentEvidence{
+		BitErrorRate: aligned.BitErrorRate, OffsetSeconds: aligned.offsetSeconds(),
+		OverlapSeconds: float64(len(previewPrint)) * itemDurationSeconds,
+	}
 	return evidence, nil
 }
 

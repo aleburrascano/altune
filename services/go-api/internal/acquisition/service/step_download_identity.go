@@ -3,11 +3,15 @@ package service
 import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service/audiojudge"
+	"altune/go-api/internal/acquisition/service/grade"
 	"altune/go-api/internal/shared/redact"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 )
@@ -55,7 +59,7 @@ func (s *DownloadStep) judgePreview(
 	if ac.Replace.isCurrentFile(match) {
 		return nil, currentFileRejection(ctx, ac, candidate)
 	}
-	verdict := s.classifyMatch(ctx, ac, match, candidate.Duration)
+	verdict := s.classifyMatch(ctx, ac, match, candidate.Duration, sourceOf(ac, candidate))
 	logPreviewFingerprint(ctx, ac, candidate, verdict, elapsed)
 	judged := verificationResult{verdict: verdict}
 	if rejection := judgeVerdict(ctx, ac, candidate, match, &judged); rejection != nil {
@@ -164,15 +168,50 @@ func (s *DownloadStep) identify(
 	if ac.Identity.MBID == "" {
 		return nil
 	}
-	result.verdict = s.classifyMatch(ctx, ac, match, result.probed)
+	result.verdict = s.classifyMatch(ctx, ac, match, result.probed, sourceOf(ac, candidate))
 	logAudioVerdict(ctx, ac, candidate, result.verdict)
 	return judgeVerdict(ctx, ac, candidate, match, result)
 }
 
-func (s *DownloadStep) classifyMatch(ctx context.Context, ac *AcquisitionContext, match ports.RecordingMatch, probed float64) AudioVerdict {
-	ref := referenceFor(ac)
-	facts := s.sameVersionFacts(ctx, ref, SoftCandidateMBIDs(ref, probed, match.Results))
-	return ClassifyAudio(ref, probed, match.Results, facts)
+type judgedSource struct {
+	kind  grade.SourceKind
+	title string
+}
+
+func sourceOf(ac *AcquisitionContext, candidate ports.AudioCandidate) judgedSource {
+	return judgedSource{kind: SourceKindOf(candidate, uploaderClass(ac.Track.Artist, candidate)), title: candidate.Title}
+}
+
+func (s *DownloadStep) classifyMatch(ctx context.Context, ac *AcquisitionContext, match ports.RecordingMatch, probed float64, source judgedSource) AudioVerdict {
+	input := judgeInput(ac, match.Results, probed, source)
+	input.Audio.RecordingFacts = s.versionFacts(ctx, input)
+	return audioVerdictOf(audiojudge.Judge(input, s.cuts), match.Results)
+}
+
+func (s *DownloadStep) judgeUnfingerprinted(ac *AcquisitionContext, probed float64, source judgedSource) audiojudge.Verdict {
+	return audiojudge.Judge(judgeInput(ac, nil, probed, source), s.cuts)
+}
+
+func judgeInput(ac *AcquisitionContext, results []ports.AcoustIDResult, length float64, source judgedSource) audiojudge.Input {
+	return audiojudge.Input{
+		Identity:       judgeIdentity(ac),
+		Audio:          audiojudge.Audio{AcoustID: results, Length: length, RequireVersionFacts: true},
+		Source:         audiojudge.Source{Kind: source.kind},
+		CandidateTitle: source.title,
+	}
+}
+
+func judgeIdentity(ac *AcquisitionContext) audiojudge.Identity {
+	return audiojudge.Identity{
+		Version:        identityVersionOf(ac),
+		ISRC:           cmp.Or(ac.Track.ISRC, ac.Identity.ISRC),
+		MBID:           ac.Identity.MBID,
+		MergedMBIDs:    ac.Identity.MBIDs,
+		Doubted:        ac.Identity.ReferenceDoubted,
+		CatalogLengths: map[string]float64{"catalog": ac.Track.CatalogDuration, "recording": ac.resolvedLength()},
+		Title:          ac.Track.Title,
+		Artist:         ac.Track.Artist,
+	}
 }
 
 func referenceFor(ac *AcquisitionContext) AudioReference {
@@ -181,6 +220,10 @@ func referenceFor(ac *AcquisitionContext) AudioReference {
 		mbids = []string{ac.Identity.MBID}
 	}
 	return AudioReference{Title: ac.Track.Title, Artist: ac.Track.Artist, Duration: ac.ExpectedLength(), MBIDs: mbids}
+}
+
+func identityVersionOf(ac *AcquisitionContext) audiojudge.IdentityVersion {
+	return audiojudge.IdentityVersion(fmt.Sprintf("mbid=%s;isrc=%s;doubted=%t", ac.Identity.MBID, cmp.Or(ac.Track.ISRC, ac.Identity.ISRC), ac.Identity.ReferenceDoubted))
 }
 
 const (
@@ -193,6 +236,9 @@ func logAudioVerdict(ctx context.Context, ac *AcquisitionContext, candidate port
 		"track_id", ac.Track.ID,
 		"candidate_url", candidate.URL,
 		"verdict", string(verdict.Kind),
+		"judged", string(verdict.Judged.Kind),
+		"grade", string(verdict.Judged.Grade),
+		"reasons", verdict.Judged.Reasons,
 		"score", verdict.Score,
 		"surviving", loggedSurviving(verdict.Surviving),
 		"reference_doubted", ac.Identity.ReferenceDoubted,
@@ -231,10 +277,8 @@ func judgeVerdict(
 	case VerdictHard, VerdictSoft:
 		result.identity = true
 		return nil
-	case VerdictOtherVersion:
-		return fingerprintRejection(candidate, "other version")
-	case VerdictDifferentSong:
-		return fingerprintRejection(candidate, "different song")
+	case VerdictContradicted:
+		return fingerprintRejection(candidate, "contradicted: "+strings.Join(result.verdict.Judged.Reasons, "; "))
 	default:
 		return judgeUnknown(ctx, ac, candidate, match)
 	}
@@ -314,19 +358,15 @@ func WithRecordingLookup(l ports.RecordingLookup) func(*DownloadStep) {
 	return func(s *DownloadStep) { s.recordingLookup = l }
 }
 
-func (s *DownloadStep) sameVersionFacts(ctx context.Context, ref AudioReference, mbids []string) LookedUpRecordings {
+func (s *DownloadStep) versionFacts(ctx context.Context, input audiojudge.Input) map[string]ports.RecordingFacts {
+	facts := make(map[string]ports.RecordingFacts)
 	if s.recordingLookup == nil {
-		return nil
+		return facts
 	}
-	facts := make(LookedUpRecordings)
-	for _, mbid := range mbids[:min(len(mbids), maxVersionLookupsPerCandidate)] {
-		recording, found := s.recordingFacts(ctx, mbid)
-		if !found {
-			continue
-		}
-		facts[mbid] = recording
-		if sharesVersionLabels(ref.Title, recording) {
-			break
+	candidates := audiojudge.VersionLookupCandidates(input)
+	for _, mbid := range candidates[:min(len(candidates), maxVersionLookupsPerCandidate)] {
+		if recording, found := s.recordingFacts(ctx, mbid); found {
+			facts[mbid] = recording
 		}
 	}
 	return facts

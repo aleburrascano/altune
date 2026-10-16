@@ -18,6 +18,7 @@ type Finding struct {
 	Fingerprint grade.Fingerprint
 	Basis       string
 	Score       float64
+	Lowers      bool
 
 	BitErrorRate float64
 }
@@ -36,7 +37,7 @@ type inPlaceEvidence struct {
 
 func inPlaceEvidenceOf(raw json.RawMessage) inPlaceEvidence {
 	var stored inPlaceEvidence
-	if err := json.Unmarshal(raw, &stored); err != nil || !stored.Grade.IsKnown() {
+	if err := json.Unmarshal(raw, &stored); err != nil || (!stored.Grade.IsKnown() && !stored.Grade.IsBestAvailable()) {
 		stored.Grade = grade.Ungraded
 	}
 	return stored
@@ -134,14 +135,16 @@ func (r *Runner) settleFinding(ctx context.Context, track *ports.TrackSnapshot, 
 	} else if err := r.recordInPlace(ctx, track, record); err != nil {
 		return inPlaceOutcome{}, err
 	}
-	return inPlaceOutcome{grade: gradeAfter(stored.Grade, record), settled: isUserUpload(track) || grade.Grade(record.Grade).IsTop()}, nil
+	after := gradeAfter(stored.Grade, record)
+	return inPlaceOutcome{grade: after, settled: isUserUpload(track) || after.IsTop()}, nil
 }
 
 func gradeAfter(stored grade.Grade, record ports.InPlaceRecord) grade.Grade {
-	if record.Grade == "" {
+	recorded := grade.Grade(record.Grade)
+	if recorded == "" || (!record.Contradicted && !recorded.Beats(stored)) {
 		return stored
 	}
-	return grade.Grade(record.Grade)
+	return recorded
 }
 
 func verdictOf(track *ports.TrackSnapshot, stored inPlaceEvidence, finding Finding) ports.InPlaceRecord {
@@ -160,7 +163,7 @@ func verdictOf(track *ports.TrackSnapshot, stored inPlaceEvidence, finding Findi
 		kind = grade.FanUpload
 	}
 	record.Grade = string(grade.Of(finding.Fingerprint, shared.ProvenanceBestEffort, kind))
-	record.Contradicted = finding.Fingerprint == grade.Contradicts || finding.Fingerprint == grade.Unsupported
+	record.Contradicted = finding.Lowers || finding.Fingerprint == grade.Contradicts || finding.Fingerprint == grade.Unsupported
 	return record
 }
 

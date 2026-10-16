@@ -332,11 +332,12 @@ func otherRecordingResults(acoustID, mbid, title string, duration float64) []Aco
 func TestRun_ResolvedSearchMBIDRejectsAnUploadTheFingerprintLinksToAnotherSong(t *testing.T) {
 	kase := remixMBIDCase(&Resolution{Search: []SearchedRecording{{Title: "Drinking in L.A.", Artist: "Bran Van 3000", MBID: "remix", Duration: 236}}}, "")
 	kase.Candidates[0].AcoustIDResults = otherRecordingResults("album-ac", "album", "Different Song", 237)
+	kase.Candidates[0].Title = "Drinking in L.A. (Radio Edit)"
 
 	out := Run(context.Background(), kase)
 
 	if !out.Failed {
-		t.Fatalf("expected the fingerprint's other-song result to reject the album upload, stored %q", out.Stored)
+		t.Fatalf("expected the fingerprint's other-song result and the radio-edit title together to reject the album upload, stored %q", out.Stored)
 	}
 }
 
@@ -355,11 +356,12 @@ func TestRun_CaseWithoutResolutionCopiesItsIdentity(t *testing.T) {
 	kase := remixMBIDCase(nil, "")
 	kase.Track.MBID = "remix"
 	kase.Candidates[0].AcoustIDResults = otherRecordingResults("album-ac", "album", "Different Song", 237)
+	kase.Candidates[0].Title = "Drinking in L.A. (Radio Edit)"
 
 	out := Run(context.Background(), kase)
 
 	if !out.Failed {
-		t.Fatalf("expected the fingerprint's other-song result to reject the album upload, stored %q", out.Stored)
+		t.Fatalf("expected the fingerprint's other-song result and the radio-edit title together to reject the album upload, stored %q", out.Stored)
 	}
 }
 

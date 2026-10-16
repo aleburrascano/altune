@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service/audiojudge"
 	"altune/go-api/internal/acquisition/service/upgrade"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
@@ -34,7 +35,7 @@ type AcquireTrackAudioService struct {
 	contextObserver func(*AcquisitionContext)
 	previews        ports.PreviewMatcher
 
-	previewOfficialMaxBER float64
+	cuts audiojudge.Cuts
 }
 
 func NewAcquireTrackAudioService(
@@ -50,6 +51,7 @@ func NewAcquireTrackAudioService(
 		recordings: ports.NoopRecordingResolver(),
 		events:     events.NoopPublisher(),
 		workspace:  defaultTempWorkspace,
+		cuts:       audiojudge.DefaultCuts(),
 	}
 	for _, opt := range opts {
 		opt(s)

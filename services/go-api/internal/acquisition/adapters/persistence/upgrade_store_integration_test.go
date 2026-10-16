@@ -129,7 +129,7 @@ func TestPgxUpgradeStore_UnverifiedUserUploadsAreCandidatesOnlyWhenAsked(t *test
 	store := NewPgxUpgradeStore(pool)
 
 	unverified := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D")})
-	verified := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"D","in_place_generation":1}`})
+	verified := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: fmt.Sprintf(`{"grade":"D","in_place_generation":%d}`, grade.PipelineGeneration)})
 	graded := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("A_user")})
 
 	if got := candidatesAmong(t, store, selectionOf(10), unverified, verified, graded); len(got) != 0 {
@@ -451,5 +451,83 @@ func TestPgxUpgradeStore_RejectedSourceKeysKeepTheNewestTwentyFive(t *testing.T)
 	}
 	if len(keys) != 25 || keys[0] != "youtube:02" || keys[24] != "youtube:26" {
 		t.Errorf("rejected_source_keys = %v, want the newest 25 (02 to 26)", keys)
+	}
+}
+
+func judgedEvidenceOf(g string, inPlaceGeneration int) string {
+	return fmt.Sprintf(`{"grade":%q,"in_place_generation":%d}`, g, inPlaceGeneration)
+}
+
+func TestPgxUpgradeStore_ATrackGradedBestAvailableIsNeverACandidate(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxUpgradeStore(pool)
+
+	bestAvailable := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("best_available"), sourceURL: sourceURL("leak")})
+	unchecked := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: judgedEvidenceOf("best_available", 0), sourceURL: sourceURL("leak2")})
+	worst := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("F"), sourceURL: sourceURL("ffff")})
+
+	for name, selection := range map[string]ports.UpgradeSelection{"plain": selectionOf(10), "with unverified": uploadsIncluded()} {
+		got := candidatesAmong(t, store, selection, bestAvailable, unchecked, worst)
+		if !slices.Equal(got, []shared.TrackId{worst}) {
+			t.Errorf("%s: candidates = %v, want only the F track: best_available is not on the ladder and sorts above F as text", name, got)
+		}
+	}
+}
+
+func TestPgxUpgradeStore_AGradeATrackIsACandidateOnlyWhenNotYetJudgedThisGenerationAndAsked(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxUpgradeStore(pool)
+
+	unjudged := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: judgedEvidenceOf("A", 0), sourceURL: sourceURL("old")})
+	staleJudgement := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: judgedEvidenceOf("A", grade.PipelineGeneration-1), sourceURL: sourceURL("stale")})
+	judged := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: judgedEvidenceOf("A", grade.PipelineGeneration), sourceURL: sourceURL("fresh")})
+
+	if got := candidatesAmong(t, store, selectionOf(10), unjudged, staleJudgement, judged); len(got) != 0 {
+		t.Errorf("candidates = %v, want no grade A unless the in-place check is asked for", got)
+	}
+	got := candidatesAmong(t, store, uploadsIncluded(), unjudged, staleJudgement, judged)
+	if len(got) != 2 || !slices.Contains(got, unjudged) || !slices.Contains(got, staleJudgement) {
+		t.Errorf("candidates = %v, want the two grade A tracks the current judge has not seen, so a wrong-length A can be repaired", got)
+	}
+}
+
+func TestPgxUpgradeStore_RecordInPlaceNeverReplacesAStoredBestAvailableGrade(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxUpgradeStore(pool)
+	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("best_available"), sourceURL: sourceURL("leak")})
+
+	if _, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{
+		AudioRef: "u/" + id.String() + ".mp3", Generation: 1, Verdict: "contradicted", Basis: "acoustid", Grade: "F", Contradicted: true,
+	}); err != nil {
+		t.Fatalf("RecordInPlace: %v", err)
+	}
+
+	if got := readEvidence(t, pool, id); got.Grade != "best_available" {
+		t.Errorf("grade = %q, want best_available kept: it is never replaced", got.Grade)
+	}
+}
+
+func TestPgxUpgradeStore_RecordInPlaceLowersAWrongLengthGradeAToB(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxUpgradeStore(pool)
+	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("A"), sourceURL: sourceURL("art")})
+	ref := "u/" + id.String() + ".mp3"
+
+	if _, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{AudioRef: ref, Generation: 2, Verdict: "hard", Grade: "B"}); err != nil {
+		t.Fatalf("RecordInPlace: %v", err)
+	}
+	if got := readEvidence(t, pool, id); got.Grade != "A" {
+		t.Fatalf("grade = %q, want A kept: weaker evidence alone never lowers", got.Grade)
+	}
+	if _, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{AudioRef: ref, Generation: 2, Verdict: "hard", Grade: "B", Contradicted: true}); err != nil {
+		t.Fatalf("RecordInPlace: %v", err)
+	}
+
+	if got := readEvidence(t, pool, id); got.Grade != "B" {
+		t.Errorf("grade = %q, want B once the length contradicts the file", got.Grade)
 	}
 }

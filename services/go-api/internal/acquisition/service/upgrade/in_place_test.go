@@ -165,7 +165,7 @@ func TestRunner_AMatchOnAnUnofficialSourceIsBAndStillLooksForAnOfficialOne(t *te
 
 func TestRunner_ATrackCheckedThisGenerationIsNotCheckedAgain(t *testing.T) {
 	w := seed(t, grade.C)
-	w.storedEvidence(`{"grade":"C","source_kind":"art_track","in_place_generation":1}`)
+	w.storedEvidence(fmt.Sprintf(`{"grade":"C","source_kind":"art_track","in_place_generation":%d}`, grade.PipelineGeneration))
 	checker := &fixedChecker{finding: hardMatch}
 
 	if err := w.checkedRunner(upgrade.Config{MaxTries: 3}, checker, &recordingInPlaceStore{}).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil && !errors.Is(err, upgrade.ErrKept) {
@@ -313,5 +313,87 @@ func TestRunner_APreviewMatchAboveTheOfficialCutGradesBAndStillLooksForABetterSo
 	}
 	if w.source.finds != 1 {
 		t.Errorf("sources searched %d times, want 1: B is below A", w.source.finds)
+	}
+}
+
+func judgedEvidence(g grade.Grade, inPlaceGeneration int) string {
+	return fmt.Sprintf(`{"grade":%q,"source_kind":"art_track","in_place_generation":%d}`, g, inPlaceGeneration)
+}
+
+func TestRunner_ATrackGradedBestAvailableIsNeitherCheckedNorReplaced(t *testing.T) {
+	w := seed(t, grade.BestAvailable)
+	w.storedEvidence(judgedEvidence(grade.BestAvailable, 0))
+	checker := &fixedChecker{finding: otherTake}
+	recorder := &recordingInPlaceStore{}
+
+	err := w.checkedRunner(upgrade.Config{MaxTries: 3}, checker, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId)
+
+	if err != nil || checker.calls != 0 || len(recorder.records) != 0 || w.source.finds != 0 {
+		t.Errorf("err = %v, checks = %d, records = %+v, searches = %d, want the track left alone", err, checker.calls, recorder.records, w.source.finds)
+	}
+	if row := w.committed(); *row.AudioRef != originalRef {
+		t.Errorf("audio_ref = %v, want the original file", row.AudioRef)
+	}
+}
+
+func TestRunner_AGradeATrackNotYetCheckedThisGenerationIsCheckedAndKeptWhenNothingStandsAgainstIt(t *testing.T) {
+	w := seed(t, grade.A)
+	w.storedEvidence(judgedEvidence(grade.A, 0))
+	checker := &fixedChecker{finding: noAnswer}
+	recorder := &recordingInPlaceStore{}
+
+	err := w.checkedRunner(upgrade.Config{MaxTries: 3}, checker, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId)
+
+	if err != nil || checker.calls != 1 || w.source.finds != 0 {
+		t.Errorf("err = %v, checks = %d, searches = %d, want one check and no re-acquire: unknown changes nothing", err, checker.calls, w.source.finds)
+	}
+	if len(recorder.records) != 1 || recorder.records[0].Grade != "" || recorder.records[0].Generation != grade.PipelineGeneration {
+		t.Errorf("records = %+v, want the generation stamped and the grade left alone", recorder.records)
+	}
+}
+
+func TestRunner_AGradeATrackCheckedThisGenerationIsSkipped(t *testing.T) {
+	w := seed(t, grade.A)
+	w.storedEvidence(judgedEvidence(grade.A, grade.PipelineGeneration))
+	checker := &fixedChecker{finding: otherTake}
+
+	err := w.checkedRunner(upgrade.Config{MaxTries: 3}, checker, &recordingInPlaceStore{}).ExecuteUpgrade(context.Background(), w.userId, w.trackId)
+
+	if err != nil || checker.calls != 0 || w.source.finds != 0 {
+		t.Errorf("err = %v, checks = %d, searches = %d, want the top grade skipped", err, checker.calls, w.source.finds)
+	}
+}
+
+func TestRunner_AWrongLengthGradeAIsLoweredAndReacquired(t *testing.T) {
+	w := seed(t, grade.A)
+	w.storedEvidence(judgedEvidence(grade.A, 0))
+	wrongLength := upgrade.Finding{Verdict: "hard", Fingerprint: grade.Approximates, Basis: "acoustid", Score: 0.97, Lowers: true}
+	recorder := &recordingInPlaceStore{}
+
+	err := w.checkedRunner(upgrade.Config{MaxTries: 3}, &fixedChecker{finding: wrongLength}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId)
+
+	if err != nil && !errors.Is(err, upgrade.ErrKept) {
+		t.Fatalf("ExecuteUpgrade: %v", err)
+	}
+	if len(recorder.records) != 1 || recorder.records[0].Grade != "B" || !recorder.records[0].Contradicted {
+		t.Errorf("records = %+v, want B recorded with permission to lower the stored A", recorder.records)
+	}
+	if w.source.finds != 1 {
+		t.Errorf("sources searched %d times, want 1: a lowered grade is repaired by the lane", w.source.finds)
+	}
+}
+
+func TestRunner_AProvenButNotLoweringFindingNeverLowersAStoredGrade(t *testing.T) {
+	w := seed(t, grade.A)
+	w.storedEvidence(judgedEvidence(grade.A, 0))
+	recorder := &recordingInPlaceStore{}
+
+	err := w.checkedRunner(upgrade.Config{MaxTries: 3}, &fixedChecker{finding: softMatch}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId)
+
+	if err != nil || w.source.finds != 0 {
+		t.Errorf("err = %v, searches = %d, want the stored A kept: weaker evidence now does not lower it", err, w.source.finds)
+	}
+	if len(recorder.records) != 1 || recorder.records[0].Contradicted {
+		t.Errorf("records = %+v, want no permission to lower", recorder.records)
 	}
 }

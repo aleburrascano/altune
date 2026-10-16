@@ -2,6 +2,11 @@ package main
 
 import (
 	"altune/go-api/internal/acquisition/adapters/chromaprint"
+	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service"
+	"altune/go-api/internal/acquisition/service/grade"
+	"altune/go-api/internal/acquisition/service/upgrade"
+	"altune/go-api/internal/shared"
 	"bytes"
 	"context"
 	"errors"
@@ -12,8 +17,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	catalogPorts "altune/go-api/internal/catalog/ports"
+
+	"github.com/google/uuid"
 )
 
 type fakeLookups struct {
@@ -388,5 +396,108 @@ func TestVerifyAll_FlushesTheFinishedResultsEveryFewTracks(t *testing.T) {
 
 	if len(flushed) != 2 || len(flushed[0]) != checkpointEvery || len(flushed[1]) != checkpointEvery*2 {
 		t.Errorf("flushes carried %d results, want two flushes of %d and %d", len(flushed), checkpointEvery, checkpointEvery*2)
+	}
+}
+
+type storedFileReader struct{}
+
+func (storedFileReader) CopyStored(_ context.Context, _, dir string) (string, error) {
+	path := filepath.Join(dir, "stored.mp3")
+	return path, os.WriteFile(path, []byte("audio"), 0o600)
+}
+
+type osWorkspace struct{}
+
+func (osWorkspace) Create(pattern string) (string, error) { return os.MkdirTemp("", pattern) }
+func (osWorkspace) Remove(path string) error              { return os.RemoveAll(path) }
+func (osWorkspace) Size(string) (int64, error)            { return 0, nil }
+func (osWorkspace) SweepAbandoned(time.Time) int          { return 0 }
+
+type fixedResolver struct{ identity ports.RecordingIdentity }
+
+func (r fixedResolver) Resolve(context.Context, ports.RecordingQuery) (ports.RecordingIdentity, error) {
+	return r.identity, nil
+}
+
+type fixedPreviewMatcher struct{ comparison ports.PreviewComparison }
+
+func (m fixedPreviewMatcher) MatchesPreview(context.Context, string, ports.PreviewTarget) (ports.PreviewComparison, error) {
+	return m.comparison, nil
+}
+
+type judgedClass string
+
+const (
+	classConfirmed judgedClass = "confirmed"
+	classWrong     judgedClass = "wrong_audio"
+	classUnknown   judgedClass = "unknown"
+)
+
+func classOfVerdict(got verdict) judgedClass {
+	switch got {
+	case verdictConfirmed, verdictConfirmedPreview:
+		return classConfirmed
+	case verdictWrongAudio:
+		return classWrong
+	}
+	return classUnknown
+}
+
+func classOfFinding(finding upgrade.Finding) judgedClass {
+	switch finding.Fingerprint {
+	case grade.Matches, grade.Approximates:
+		return classConfirmed
+	case grade.Contradicts:
+		return classWrong
+	}
+	return classUnknown
+}
+
+func TestVerify_LibraryverifyAndTheUpgradeLaneJudgeTheSameFileTheSameWay(t *testing.T) {
+	const absentRate, matchRate = 0.5, 0.0
+	file := randomPrint(31, 1400)
+	payloads := []string{"acoustid_bound_recording.json", "acoustid_other_recording.json", "acoustid_same_title_duplicate.json", "acoustid_no_results.json"}
+	previews := map[string]struct {
+		clip       []uint32
+		comparison *ports.PreviewComparison
+	}{
+		"no preview":   {nil, nil},
+		"matching":     {file[400:640], &ports.PreviewComparison{BitErrorRate: matchRate, OverlapSeconds: 29.7, Matched: true}},
+		"another song": {randomPrint(32, 240), &ports.PreviewComparison{BitErrorRate: absentRate, OverlapSeconds: 29.7}},
+	}
+	identity := boundIdentity{Status: statusBound, MBRecordingID: "rec-bound", ISRC: "USAAA0000001"}
+	for _, payload := range payloads {
+		for name, preview := range previews {
+			t.Run(payload+" with "+name, func(t *testing.T) {
+				v := newVerifier(t, payload, &fakeLookups{})
+				v.cut, v.provenMax = previewCut{matchMax: 0.18, absentMin: 0.35}, 0.10
+				acquisitionOpts := []func(*service.AcquireTrackAudioService){
+					service.WithRecordingResolver(fixedResolver{identity: ports.RecordingIdentity{MBID: "rec-bound", MBIDs: []string{"rec-bound"}}}),
+					service.WithAudioIdentifier(v.identify.(ports.AudioIdentifier)),
+					service.WithStoredAudioReader(storedFileReader{}),
+					service.WithAcquireTempWorkspace(osWorkspace{}),
+				}
+				if preview.comparison != nil {
+					v = withPreviewCheck(v, &fakePreviews{clip: previewClip{DeezerTrackID: "1", DeezerTitle: "Song", Print: preview.clip}}, file)
+					v.cut, v.provenMax = previewCut{matchMax: 0.18, absentMin: 0.35}, 0.10
+					acquisitionOpts = append(acquisitionOpts, service.WithPreviewMatcher(fixedPreviewMatcher{comparison: *preview.comparison}, 0.10))
+				}
+				ref, isrc := "u/song.mp3", "USAAA0000001"
+				track := &ports.TrackSnapshot{
+					ID: shared.TrackIdFromUUID(uuid.New()), Title: "Song", Artist: "Artist", AudioRef: &ref, ISRC: &isrc,
+					CatalogSources: []ports.CatalogSource{{Provider: "deezer", ExternalID: "1"}},
+				}
+
+				finding, err := service.NewAcquireTrackAudioService(nil, nil, nil, acquisitionOpts...).CheckInPlace(context.Background(), track)
+				if err != nil {
+					t.Fatalf("CheckInPlace: %v", err)
+				}
+				audited := v.verify(context.Background(), trackWith(identity))
+
+				if classOfVerdict(audited.Verdict) != classOfFinding(finding) {
+					t.Errorf("libraryverify says %q, the upgrade lane says %+v", audited.Verdict, finding)
+				}
+			})
+		}
 	}
 }

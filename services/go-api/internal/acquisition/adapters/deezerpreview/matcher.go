@@ -39,5 +39,9 @@ func (m *Matcher) MatchesPreview(ctx context.Context, filePath string, target po
 	if err != nil {
 		return ports.PreviewComparison{}, err
 	}
-	return ports.PreviewComparison{Matched: aligned.BitErrorRate <= m.matchMax, BitErrorRate: aligned.BitErrorRate}, nil
+	return ports.PreviewComparison{
+		Matched:        aligned.BitErrorRate <= m.matchMax,
+		BitErrorRate:   aligned.BitErrorRate,
+		OverlapSeconds: OverlapSeconds(len(clip.Print)),
+	}, nil
 }

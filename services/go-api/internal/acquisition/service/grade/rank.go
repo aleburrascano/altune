@@ -20,3 +20,5 @@ func (g Grade) Beats(other Grade) bool {
 }
 
 func (g Grade) IsTop() bool { return g == A || g == AUser }
+
+func (g Grade) IsBestAvailable() bool { return g == BestAvailable }

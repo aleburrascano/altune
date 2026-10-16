@@ -118,6 +118,43 @@ func TestParseTags_PartAndSequelNumbersAreData(t *testing.T) {
 	}
 }
 
+func TestParseTags_VersionNumberIsALabelNotAPart(t *testing.T) {
+	cases := []struct {
+		title     string
+		wantPart  int
+		wantLabel string
+	}{
+		{"Song (Version 2)", 1, "v2"},
+		{"Song [V2]", 1, "v2"},
+		{"Song v.2", 1, "v2"},
+		{"Song (Ver. 3)", 1, "v3"},
+		{"Song Part 2 (Version 2)", 2, "v2"},
+	}
+	for _, tc := range cases {
+		got := ParseTags(tc.title)
+		if got.Part != tc.wantPart || !slices.Equal(got.Labels, []string{tc.wantLabel}) {
+			t.Errorf("ParseTags(%q) = %+v, want part %d and label %q", tc.title, got, tc.wantPart, tc.wantLabel)
+		}
+	}
+}
+
+func TestTags_EqualReadsTwoVersion2TitlesAsTheSameVersion(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want bool
+	}{
+		{"Song [V2]", "Song (Version 2)", true},
+		{"Song (Version 2)", "Song (Version 3)", false},
+		{"Song (Version 2)", "Song", false},
+		{"Song 2", "Song (Version 2)", false},
+	}
+	for _, tc := range cases {
+		if got := ParseTags(tc.a).Equal(ParseTags(tc.b)); got != tc.want {
+			t.Errorf("ParseTags(%q).Equal(ParseTags(%q)) = %v, want %v", tc.a, tc.b, got, tc.want)
+		}
+	}
+}
+
 func TestTags_EqualComparesPartAndLabels(t *testing.T) {
 	cases := []struct {
 		a, b string

@@ -245,7 +245,7 @@ func verifierFromConfig(cfg *config.Config, tuning settings, previewTuning previ
 		store: audioStore, identify: identifier, minScore: tuning.minScore, progress: os.Stderr,
 		lookups:  newMusicBrainz(client, musicBrainzBaseURL, tuning.musicBrainzRate),
 		previews: newDeezerPreviews(client, deezerBaseURL, previewTuning.deezerRate, printer),
-		printer:  printer, cut: previewTuning.cut,
+		printer:  printer, cut: previewTuning.cut, provenMax: cfg.AcquisitionUpgradePreviewAMaxBER,
 	}, nil
 }
 

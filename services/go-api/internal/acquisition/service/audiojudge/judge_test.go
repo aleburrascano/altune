@@ -162,3 +162,107 @@ func TestJudge_Goldens(t *testing.T) {
 		}
 	})
 }
+
+func TestJudge_CallerFacts(t *testing.T) {
+	art := Source{Kind: grade.ArtTrack}
+	identity := Identity{
+		Version: "v1", ISRC: "USRC10000001", MBID: "mb-bound", MergedMBIDs: []string{"mb-merged"}, Title: "Song", Artist: "Artist",
+		CatalogLengths: map[string]float64{"deezer": 200},
+	}
+	noISRC := identity
+	noISRC.ISRC = ""
+	dup := []ports.AcoustIDResult{linked("mb-dup", "Song", 200, "Artist")}
+
+	cases := []struct {
+		name      string
+		identity  Identity
+		audio     Audio
+		wantKind  Kind
+		wantLower bool
+	}{
+		{"a merged MBID is the bound recording", identity, Audio{AcoustID: []ports.AcoustIDResult{linked("mb-merged", "Song", 200, "Artist")}, Length: 200}, Proven, false},
+		{"a link with no MBID names nothing, so it neither proves nor contradicts", identity, Audio{AcoustID: []ports.AcoustIDResult{linked("", "Other Song", 200, "Someone")}, Preview: preview(0.40), Length: 200}, Unknown, false},
+		{"links that carry no title name nothing", identity, Audio{AcoustID: []ports.AcoustIDResult{linked("mb-untitled", "", 200, "Someone")}, Preview: preview(0.40), Length: 200}, Unknown, false},
+		{"a recording whose looked-up ISRCs include the bound one is the bound recording", identity, Audio{AcoustID: dup, Length: 200, RecordingFacts: map[string]ports.RecordingFacts{"mb-dup": {MBID: "mb-dup", Title: "Song", ISRCs: []string{"usrc10000001"}}}}, Proven, false},
+		{"a looked-up recording with another ISRC is another recording", identity, Audio{AcoustID: dup, Length: 200, RecordingFacts: map[string]ports.RecordingFacts{"mb-dup": {MBID: "mb-dup", Title: "Song", ISRCs: []string{"USRC19999999"}}}}, Unknown, false},
+		{"a looked-up duplicate with no ISRC and the same version is likely", identity, Audio{AcoustID: dup, Length: 200, RecordingFacts: map[string]ports.RecordingFacts{"mb-dup": {MBID: "mb-dup", Title: "Song"}}}, Likely, false},
+		{"a looked-up duplicate whose disambiguation says live is another version", noISRC, Audio{AcoustID: dup, Length: 200, RecordingFacts: map[string]ports.RecordingFacts{"mb-dup": {MBID: "mb-dup", Title: "Song", Disambiguation: "live"}}}, Unknown, false},
+		{"a same-title link whose version cannot be looked up is not a duplicate when lookups are required", noISRC, Audio{AcoustID: dup, Length: 200, RequireVersionFacts: true}, Unknown, false},
+		{"a same-title link is a duplicate by its own title when lookups are not required", noISRC, Audio{AcoustID: dup, Length: 200}, Likely, false},
+		{"most surviving links naming other songs outvote one same-title duplicate", noISRC, Audio{AcoustID: []ports.AcoustIDResult{
+			linked("mb-dup", "Song", 200, "Artist"), linked("mb-a", "Other A", 200, "Someone"), linked("mb-b", "Other B", 200, "Someone"),
+		}, Preview: preview(0.40), Length: 200}, Contradicted, true},
+		{"a bound link with a length outside every catalog length is only likely and lowers a stored grade", identity, Audio{AcoustID: []ports.AcoustIDResult{linked("mb-bound", "Song", 0, "Artist")}, Length: 262}, Likely, true},
+		{"a bound link inside the catalog length is proven and lowers nothing", identity, Audio{AcoustID: []ports.AcoustIDResult{linked("mb-bound", "Song", 0, "Artist")}, Length: 201}, Proven, false},
+		{"a length outside every catalog length with no fingerprint answer lowers nothing", identity, Audio{Length: 262}, Unknown, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := Judge(Input{Identity: tc.identity, Audio: tc.audio, Source: art, CandidateTitle: "Song"}, DefaultCuts())
+			if got.Kind != tc.wantKind || got.LowersStoredGrade != tc.wantLower {
+				t.Errorf("verdict = %s lowers=%v, want %s lowers=%v; reasons: %v", got.Kind, got.LowersStoredGrade, tc.wantKind, tc.wantLower, got.Reasons)
+			}
+		})
+	}
+}
+
+func TestJudge_ALengthContradictionLowersTheGradeBelowA(t *testing.T) {
+	identity := Identity{Version: "v1", MBID: "mb-bound", Title: "Song", Artist: "Artist", CatalogLengths: map[string]float64{"deezer": 200}}
+	audio := func(length float64) Audio {
+		return Audio{AcoustID: []ports.AcoustIDResult{linked("mb-bound", "Song", 0, "Artist")}, Length: length}
+	}
+
+	fits := Judge(Input{Identity: identity, Audio: audio(200), Source: Source{Kind: grade.ArtTrack}, CandidateTitle: "Song"}, DefaultCuts())
+	wrongLength := Judge(Input{Identity: identity, Audio: audio(262), Source: Source{Kind: grade.ArtTrack}, CandidateTitle: "Song"}, DefaultCuts())
+
+	if fits.Grade != grade.A || wrongLength.Grade != grade.B || !wrongLength.Grade.IsKnown() {
+		t.Errorf("grades = %s and %s, want A for the fitting file and B for the wrong-length one", fits.Grade, wrongLength.Grade)
+	}
+}
+
+func TestJudge_ADoubtedReferenceCapsAFingerprintProofAtLikely(t *testing.T) {
+	identity := Identity{Version: "v1", MBID: "mb-bound", Doubted: true, Title: "Song", Artist: "Artist", CatalogLengths: map[string]float64{"deezer": 200}}
+
+	byAcoustID := Judge(Input{Identity: identity, Audio: Audio{AcoustID: []ports.AcoustIDResult{linked("mb-bound", "Song", 200, "Artist")}, Length: 200}, Source: Source{Kind: grade.ArtTrack}, CandidateTitle: "Song"}, DefaultCuts())
+	byPreview := Judge(Input{Identity: identity, Audio: Audio{Preview: preview(0.05), Length: 200}, Source: Source{Kind: grade.ArtTrack}, CandidateTitle: "Song"}, DefaultCuts())
+
+	if byAcoustID.Kind != Likely || byPreview.Kind != Likely || byAcoustID.LowersStoredGrade {
+		t.Errorf("verdicts = %s and %s (lowers %v), want likely for both and no lowering", byAcoustID.Kind, byPreview.Kind, byAcoustID.LowersStoredGrade)
+	}
+}
+
+func TestJudge_AUserUploadIsProvenByAPreviewAtTheCutWhateverItsSource(t *testing.T) {
+	identity := Identity{Version: "v1", ISRC: "USRC10000001", Title: "Song", Artist: "Artist", CatalogLengths: map[string]float64{"deezer": 200}}
+
+	got := Judge(Input{Identity: identity, Audio: Audio{Preview: preview(0.08), Length: 200}, Source: Source{Kind: grade.UserUpload}}, DefaultCuts())
+
+	if got.Kind != Proven {
+		t.Errorf("verdict = %s, want proven: a user's own file needs no official source", got.Kind)
+	}
+}
+
+func TestCutsWithProvenMax_TheProvenCutComesFromTheCallerAndNeverExceedsTheLikelyCut(t *testing.T) {
+	loose := CutsWithProvenMax(0.25)
+	strict := CutsWithProvenMax(0.05)
+
+	if loose.ProvenMax != 0.25 || loose.LikelyMax < loose.ProvenMax {
+		t.Errorf("loose cuts = %+v, want a proven cut of 0.25 under the likely cut", loose)
+	}
+	if strict.ProvenMax != 0.05 || strict.LikelyMax != DefaultCuts().LikelyMax || strict.AbsentMin != DefaultCuts().AbsentMin {
+		t.Errorf("strict cuts = %+v, want only the proven cut changed", strict)
+	}
+}
+
+func TestVersionLookupCandidates_NameTheLinksTheCallerMustLookUp(t *testing.T) {
+	identity := Identity{MBID: "mb-bound", MergedMBIDs: []string{"mb-merged"}, Title: "Song", Artist: "Artist"}
+	results := []ports.AcoustIDResult{
+		linked("mb-bound", "Song", 200, "Artist"), linked("mb-merged", "Song", 200, "Artist"),
+		linked("mb-other", "Other Song", 200, "Someone"), linked("mb-dup", "Song", 200, "Artist"),
+	}
+
+	got := VersionLookupCandidates(Input{Identity: identity, Audio: Audio{AcoustID: results, Length: 200}})
+
+	if len(got) != 2 || got[0] != "mb-dup" || got[1] != "mb-other" {
+		t.Errorf("candidates = %v, want the same-title link first, then the other, and never a bound recording", got)
+	}
+}

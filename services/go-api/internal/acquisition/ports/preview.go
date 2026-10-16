@@ -8,9 +8,10 @@ type PreviewTarget struct {
 }
 
 type PreviewComparison struct {
-	Matched      bool
-	BitErrorRate float64
-	Unavailable  string
+	Matched        bool
+	BitErrorRate   float64
+	OverlapSeconds float64
+	Unavailable    string
 }
 
 type PreviewMatcher interface {

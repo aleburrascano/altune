@@ -14,6 +14,13 @@ type Cuts struct {
 	MinOverlapSecs float64
 }
 
+func CutsWithProvenMax(provenMax float64) Cuts {
+	cuts := DefaultCuts()
+	cuts.ProvenMax = provenMax
+	cuts.LikelyMax = max(cuts.LikelyMax, provenMax)
+	return cuts
+}
+
 func DefaultCuts() Cuts {
 	return Cuts{ProvenMax: defaultProvenMax, LikelyMax: defaultLikelyMax, AbsentMin: defaultAbsentMin, MinOverlapSecs: defaultMinOverlapSecs}
 }
