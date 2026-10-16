@@ -590,6 +590,28 @@ describe('getUnreleasedTracks', () => {
     expect(items).toEqual([row, bare]);
   });
 
+  it('keeps has_media true, false and null as they arrive', async () => {
+    const silent = { ...row, genius_id: 10, has_media: false };
+    const unknown = { ...row, genius_id: 11, has_media: null };
+    __http.reply(PATH, { status: 200, json: { items: [row, silent, unknown] } });
+
+    const { items } = await getUnreleasedTracks('spotify', 'art-1', { name: 'X' });
+
+    expect(items.map((item) => item.has_media)).toEqual([true, false, null]);
+  });
+
+  it('reads pending as given and treats a missing flag as false', async () => {
+    async function pendingOf(body: object) {
+      __http.reset();
+      __http.reply(PATH, { status: 200, json: body });
+      return (await getUnreleasedTracks('spotify', 'art-1', { name: 'X' })).pending;
+    }
+
+    expect(await pendingOf({ items: [], pending: true })).toBe(true);
+    expect(await pendingOf({ items: [], pending: false })).toBe(false);
+    expect(await pendingOf({ items: [] })).toBe(false);
+  });
+
   it('skips a malformed row and keeps the rest', async () => {
     const badUrl = { ...row, genius_id: 9, genius_url: 'http://genius.com/x' };
     __http.reply(PATH, { status: 200, json: { items: [badUrl, 'junk', row] } });
