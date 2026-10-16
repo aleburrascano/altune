@@ -1483,3 +1483,20 @@ func TestSelectBest_AnArtistChannelUploadOutranksAnEqualReupload(t *testing.T) {
 		t.Fatalf("selected %v, want the upload from the artist's own channel over an equal re-upload", got)
 	}
 }
+
+func TestFeatureMatch_ComparesCreditKeysAsWholeWords(t *testing.T) {
+	cases := []struct {
+		name, track, candidate string
+		want                   bool
+	}{
+		{"diacritics, and, hyphen", "Song (feat. Beyoncé & JAY-Z)", "Song (feat. Beyonce and JAY Z)", true},
+		{"substring of another name", "Song (feat. Eve)", "Song (feat. Steve Lacy)", false},
+		{"missing featured artist", "Song (feat. Eve)", "Song", false},
+		{"no featured artist", "Song", "Song (feat. Eve)", true},
+	}
+	for _, c := range cases {
+		if got := featureMatch(c.track, c.candidate); got != c.want {
+			t.Errorf("%s: featureMatch(%q, %q) = %v, want %v", c.name, c.track, c.candidate, got, c.want)
+		}
+	}
+}

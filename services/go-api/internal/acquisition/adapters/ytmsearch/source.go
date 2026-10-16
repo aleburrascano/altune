@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"regexp"
 )
 
 const SourceName acqdomain.SourceName = "ytmsearch"
@@ -17,8 +16,6 @@ const (
 	musicWatchURLPrefix = "https://music.youtube.com/watch?v="
 	topResults          = 5
 )
-
-var ignorableTitleBrackets = regexp.MustCompile(`(?i)\s*[\(\[](feat\.?|ft\.?|with|bonus)\b[^\)\]]*[\)\]]`)
 
 type songSearch interface {
 	SearchSongs(ctx context.Context, query string) ([]Song, error)
@@ -118,5 +115,5 @@ func CreditsArtist(artists []string, artist string) bool { return acqdomain.Cred
 func SameTitle(a, b string) bool { return comparableTitle(a) == comparableTitle(b) }
 
 func comparableTitle(title string) string {
-	return textnorm.NormalizeForIdentity(ignorableTitleBrackets.ReplaceAllString(title, ""))
+	return textnorm.NormalizeForIdentity(acqdomain.CreditBrackets.ReplaceAllString(title, ""))
 }

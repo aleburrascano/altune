@@ -271,3 +271,12 @@ func TestSource_TheArtTrackCarriesNoPlaceholderText(t *testing.T) {
 		t.Errorf("art track has channel %q and categories %q, want neither: ytmsearch observes no channel", got[0].Channel, got[0].Categories)
 	}
 }
+
+func TestSource_AFeaturingBracketIsACreditNotATitle(t *testing.T) {
+	song := atv("abc12345678", "Finesse (featuring Cardi B)", []string{"Bruno Mars"}, 191, false)
+	req := ports.FindRequest{Title: "Finesse", Artist: "Bruno Mars", Duration: 191}
+
+	if got := find(t, []Song{song}, req); len(got) != 1 {
+		t.Fatalf("candidates = %v, want the featuring art track taken as a strong hit", got)
+	}
+}

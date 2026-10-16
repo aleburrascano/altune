@@ -1,12 +1,12 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service/audiojudge"
 	"altune/go-api/internal/shared/textnorm"
 	"altune/go-api/internal/shared/versiontag"
 	"math"
-	"regexp"
 	"slices"
 )
 
@@ -228,12 +228,10 @@ func coreTitle(title string) string {
 	return textnorm.NormalizeForMatch(title)
 }
 
-var artistSeparatorRe = regexp.MustCompile(`(?i)\s*(?:&|,|\b(?:featuring|feat|ft)\b\.?)\s*`)
-
 func artistNames(credit string) map[string]bool {
 	names := make(map[string]bool)
-	for _, part := range artistSeparatorRe.Split(credit, -1) {
-		if name := textnorm.NormalizeForMatch(part); name != "" {
+	for _, part := range domain.SplitCredit(credit) {
+		if name := domain.CreditKey(part); name != "" {
 			names[name] = true
 		}
 	}

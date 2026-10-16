@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 	"altune/go-api/internal/shared/versiontag"
 	"math"
-	"regexp"
 	"slices"
 	"strings"
 )
@@ -55,8 +54,6 @@ const (
 	ReplaceSwap   ReplaceOutcome = "swap"
 	ReplaceUnsure ReplaceOutcome = "unsure"
 )
-
-var creditOnlyBrackets = regexp.MustCompile(`(?i)\s*[\(\[](?:feat\.?|ft\.?|featuring|with|bonus)\b[^\)\]]*[\)\]]`)
 
 func Evaluate(t Target, c Candidate) Decision {
 	if titleIdentity(c.Title) != titleIdentity(t.Title) {
@@ -137,7 +134,7 @@ func lengthsAgree(want, got float64) bool {
 }
 
 func titleIdentity(title string) string {
-	tokens := versiontag.Tokens(creditOnlyBrackets.ReplaceAllString(versiontag.WithoutFeatureCredits(title), ""))
+	tokens := versiontag.Tokens(domain.CreditBrackets.ReplaceAllString(versiontag.WithoutFeatureCredits(title), ""))
 	return strings.Join(versiontag.WithoutVersionPhrases(tokens), " ")
 }
 

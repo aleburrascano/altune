@@ -1,6 +1,7 @@
 package service
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/shared/textnorm"
 	"altune/go-api/internal/shared/versiontag"
 	"regexp"
@@ -9,31 +10,11 @@ import (
 
 var featuredRe = versiontag.FeaturedCredit
 
-var featSepRe = regexp.MustCompile(`(?i)\s*(?:,|&|\band\b)\s*`)
-
-func extractFeaturedArtists(title string) []string {
-	m := featuredRe.FindStringSubmatch(title)
-	if m == nil {
-		return nil
-	}
-	parts := featSepRe.Split(strings.TrimSpace(m[1]), -1)
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		if p = strings.TrimSpace(p); p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
 func featureMatch(trackTitle, candidateTitle string) bool {
-	feats := extractFeaturedArtists(trackTitle)
-	if len(feats) == 0 {
-		return true
-	}
-	cand := strings.ToLower(candidateTitle)
-	for _, f := range feats {
-		if !strings.Contains(cand, strings.ToLower(f)) {
+	cand := " " + acqdomain.CreditKey(candidateTitle) + " "
+	for _, f := range acqdomain.FeaturedCredits(trackTitle) {
+		key := acqdomain.CreditKey(f)
+		if key != "" && !strings.Contains(cand, " "+key+" ") {
 			return false
 		}
 	}
