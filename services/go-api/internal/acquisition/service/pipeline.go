@@ -3,6 +3,8 @@ package service
 import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service/judge"
+	"altune/go-api/internal/acquisition/service/judgeshadow"
 	"altune/go-api/internal/acquisition/service/upgrade"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/redact"
@@ -102,6 +104,7 @@ func RunPipeline(ctx context.Context, p Pipeline, ac *AcquisitionContext) (err e
 		downloaded, err = searchAndDownload(ctx, run, p)
 		err = keepFirstTierOutage(err, firstTierErr)
 	}
+	logShadowJudge(ctx, ac, err)
 	if err != nil {
 		return err
 	}
@@ -118,6 +121,18 @@ func RunPipeline(ctx context.Context, p Pipeline, ac *AcquisitionContext) (err e
 	}
 	_, err = runStage(ctx, run, p.updateTrack, stored)
 	return err
+}
+
+func logShadowJudge(ctx context.Context, ac *AcquisitionContext, downloadErr error) {
+	var kept *ports.AudioCandidate
+	if downloadErr == nil {
+		kept = ac.Selected
+	}
+	judgeshadow.Log(ctx, shadowTarget(ac.Track), ac.Track.ID, kept, ac.ProbedDuration, ac.Candidates)
+}
+
+func shadowTarget(t TrackRef) judge.Target {
+	return judge.Target{Title: t.Title, Artist: t.Artist, Album: t.Album, Length: t.CatalogDuration, Explicit: t.CatalogExplicit}
 }
 
 func keepFirstTierOutage(fallbackErr, firstTierErr error) error {

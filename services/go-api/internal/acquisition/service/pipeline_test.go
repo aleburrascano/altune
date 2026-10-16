@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -888,4 +889,95 @@ func TestRunPipeline_RollbackFailedLogRedactsCookiePath(t *testing.T) {
 	_ = RunPipeline(context.Background(), pipelineOf(first, second), &AcquisitionContext{})
 
 	assertNoCookiePath(t, logs.String(), "rollback failed")
+}
+
+type funcStage[In, Out any] struct {
+	*mockStep
+	run func(ac *AcquisitionContext) error
+}
+
+func (f funcStage[In, Out]) Execute(_ context.Context, ac *AcquisitionContext, _ In) (Out, error) {
+	var out Out
+	return out, f.run(ac)
+}
+
+func shadowLine(t *testing.T, logs string) map[string]any {
+	t.Helper()
+	for _, raw := range strings.Split(logs, "\n") {
+		var line map[string]any
+		if json.Unmarshal([]byte(raw), &line) == nil && line["msg"] == "acquisition.judge_shadow" {
+			return line
+		}
+	}
+	t.Fatalf("no acquisition.judge_shadow line in %s", logs)
+	return nil
+}
+
+func shadowPipeline(candidates []ports.AudioCandidate, keep int) Pipeline {
+	p := pipelineOf()
+	p.search = funcStage[pipelineStart, afterSearch]{&mockStep{name: "search"}, func(ac *AcquisitionContext) error {
+		ac.Candidates = candidates
+		return nil
+	}}
+	p.selectBest = funcStage[afterSearch, afterSelect]{&mockStep{name: "select"}, func(ac *AcquisitionContext) error {
+		ac.Selected = &candidates[0]
+		return nil
+	}}
+	p.download = funcStage[afterSelect, afterDownload]{&mockStep{name: "download"}, func(ac *AcquisitionContext) error {
+		if keep < 0 {
+			return errors.New("every candidate failed")
+		}
+		ac.Selected, ac.ProbedDuration = &candidates[keep], 191
+		return nil
+	}}
+	return p
+}
+
+func TestRunPipeline_ShadowJudgesTheKeptCandidate(t *testing.T) {
+	logs := captureJSONLogSync(t)
+	pin := ports.AudioCandidate{Title: "Finesse", URL: finesseRemixURL, Artists: []string{"Bruno Mars"}, Kind: ports.KindPinnedVideo}
+	pin.URL = "https://music.youtube.com/watch?v=pinned"
+	candidates := []ports.AudioCandidate{finesseRemix(), pin}
+	ac := &AcquisitionContext{Track: finesseTrack()}
+
+	if err := RunPipeline(context.Background(), shadowPipeline(candidates, 1), ac); err != nil {
+		t.Fatalf("RunPipeline: %v", err)
+	}
+
+	line := shadowLine(t, logs.String())
+	if line["pipeline_url"] != pin.URL || line["judge_url"] != pin.URL || line["verdict"] != "agree" {
+		t.Fatalf("shadow line = %v, want the kept second candidate judged and agreed", line)
+	}
+	if n := strings.Count(logs.String(), "acquisition.judge_shadow"); n != 1 {
+		t.Fatalf("shadow lines = %d, want 1", n)
+	}
+}
+
+func TestRunPipeline_ShadowLogsDisagreementWithoutChangingThePick(t *testing.T) {
+	logs := captureJSONLogSync(t)
+	candidates := []ports.AudioCandidate{finesseRemix(), finesseAlbumTrack()}
+	ac := &AcquisitionContext{Track: finesseTrack()}
+
+	if err := RunPipeline(context.Background(), shadowPipeline(candidates, 0), ac); err != nil {
+		t.Fatalf("RunPipeline: %v", err)
+	}
+
+	line := shadowLine(t, logs.String())
+	if line["verdict"] != "disagree" || line["judge_url"] != finesseAlbumURL || line["pipeline_url"] != finesseRemixURL {
+		t.Fatalf("shadow line = %v, want the judge on the album track and the pipeline on the remix", line)
+	}
+}
+
+func TestRunPipeline_ShadowLogsAFailedPipeline(t *testing.T) {
+	logs := captureJSONLogSync(t)
+	ac := &AcquisitionContext{Track: finesseTrack()}
+
+	if err := RunPipeline(context.Background(), shadowPipeline([]ports.AudioCandidate{finesseAlbumTrack()}, -1), ac); err == nil {
+		t.Fatal("RunPipeline: want the download error")
+	}
+
+	line := shadowLine(t, logs.String())
+	if line["verdict"] != "pipeline_failed" || line["pipeline_url"] != "" {
+		t.Fatalf("shadow line = %v, want pipeline_failed with no kept url", line)
+	}
 }

@@ -48,13 +48,6 @@ type Decision struct {
 	Reason  string
 }
 
-type ReplaceOutcome string
-
-const (
-	ReplaceSwap   ReplaceOutcome = "swap"
-	ReplaceUnsure ReplaceOutcome = "unsure"
-)
-
 func Evaluate(t Target, c Candidate) Decision {
 	if titleIdentity(c.Title) != titleIdentity(t.Title) {
 		return Decision{Reject, "different title"}
@@ -71,6 +64,8 @@ func Evaluate(t Target, c Candidate) Decision {
 	switch {
 	case t.Length > 0 && c.Length > 0 && !lengthsAgree(t.Length, c.Length):
 		return Decision{Reject, "length disagrees with the catalog length"}
+	case t.Length <= 0 && albumKnown(t) && textnorm.NormalizeForMatch(c.Album) == "":
+		return Decision{Verify, "no catalog length and unknown album: cannot confirm the cut"}
 	case t.Length <= 0 && albumKnown(t) && !sameAlbum(t.Album, c.Album):
 		return Decision{Reject, "no catalog length and another album: cannot confirm the cut"}
 	default:
@@ -90,13 +85,6 @@ func Choose(t Target, candidates []Candidate) (Candidate, Decision, bool) {
 		}
 	}
 	return best, bestDecision, found
-}
-
-func Replace(t Target, currentLength float64, chosen Candidate) ReplaceOutcome {
-	if t.Length > 0 || currentLength <= 0 || lengthsAgree(currentLength, chosen.Length) {
-		return ReplaceSwap
-	}
-	return ReplaceUnsure
 }
 
 func preferred(t Target, a, b Candidate) bool {

@@ -9,35 +9,65 @@ import (
 
 var choose = judge.Choose
 
-func Log(ctx context.Context, target judge.Target, trackID string, pipelinePick ports.AudioCandidate, candidates []ports.AudioCandidate) {
+type verdict string
+
+const (
+	verdictAgree          verdict = "agree"
+	verdictDisagree       verdict = "disagree"
+	verdictJudgeAbstained verdict = "judge_abstained"
+	verdictPipelineFailed verdict = "pipeline_failed"
+)
+
+func Log(ctx context.Context, target judge.Target, trackID string, kept *ports.AudioCandidate, keptProbedSeconds float64, candidates []ports.AudioCandidate) {
 	defer func() {
 		if r := recover(); r != nil {
 			slog.ErrorContext(ctx, "acquisition.judge_shadow_panic", "track_id", trackID, "panic", r)
 		}
 	}()
+	keptURL := ""
+	if kept != nil {
+		keptURL = kept.URL
+	}
 	judgeURL, reason := "", "no candidate accepted"
-	if best, decision, found := choose(target, observed(candidates)); found {
+	if best, decision, found := choose(target, observed(candidates, keptURL, keptProbedSeconds)); found {
 		judgeURL, reason = best.URL, decision.Reason
 	}
 	slog.InfoContext(ctx, "acquisition.judge_shadow",
 		"track_id", trackID,
-		"pipeline_url", pipelinePick.URL,
+		"pipeline_url", keptURL,
 		"judge_url", judgeURL,
 		"judge_reason", reason,
-		"agree", judgeURL == pipelinePick.URL,
+		"verdict", verdictOf(kept != nil, keptURL, judgeURL),
 	)
 }
 
-func observed(candidates []ports.AudioCandidate) []judge.Candidate {
+func verdictOf(keptAny bool, keptURL, judgeURL string) verdict {
+	switch {
+	case !keptAny:
+		return verdictPipelineFailed
+	case judgeURL == "":
+		return verdictJudgeAbstained
+	case judgeURL == keptURL:
+		return verdictAgree
+	default:
+		return verdictDisagree
+	}
+}
+
+func observed(candidates []ports.AudioCandidate, keptURL string, keptProbedSeconds float64) []judge.Candidate {
 	out := make([]judge.Candidate, 0, len(candidates))
 	for _, c := range candidates {
+		length := c.Duration
+		if length == 0 && keptURL != "" && c.URL == keptURL {
+			length = keptProbedSeconds
+		}
 		out = append(out, judge.Candidate{
 			URL:      c.URL,
 			Kind:     kindOf(c.Kind),
 			Title:    c.Title,
 			Artists:  c.Artists,
 			Album:    c.Album,
-			Length:   c.Duration,
+			Length:   length,
 			Explicit: c.Explicit,
 		})
 	}

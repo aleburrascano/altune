@@ -705,6 +705,18 @@ briefly a preview), and the 30-day window is the only correction.
 schedule, and a simulated restart; `adapters/persistence` integration tests prove
 the Postgres cooldown store across two pools and under concurrent reservations.
 
+### 7.13 The shadow judge has no end date
+
+`service/judge` and `service/judgeshadow` run beside the pipeline and select nothing.
+`RunPipeline` logs one `acquisition.judge_shadow` line per job, after the final
+search/select/download (fallback tier included), comparing the judge's pick with the
+candidate acquisition kept; `verdict` is `agree`, `disagree`, `judge_abstained` or
+`pipeline_failed`.
+**Sunset:** once 200 jobs with verdict `agree` or `disagree` have been logged after
+this change ships, or by 2027-03-31, whichever is first, review every `disagree` and
+either file a ticket to make the judge the selector or delete `judge` and
+`judgeshadow`. The numbers are a judgment call; the count and the date are the point.
+
 ---
 
 ## 8. Change-impact map

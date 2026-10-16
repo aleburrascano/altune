@@ -4,9 +4,7 @@ import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"context"
-	"encoding/json"
 	"errors"
-	"strings"
 	"testing"
 )
 
@@ -207,47 +205,6 @@ func finesseAlbumTrack() ports.AudioCandidate {
 
 func finesseTrack() TrackRef {
 	return TrackRef{ID: "track-1", Title: "Finesse", Artist: "Bruno Mars", Album: "24K Magic", CatalogDuration: 191}
-}
-
-func shadowLine(t *testing.T, logs string) map[string]any {
-	t.Helper()
-	for _, raw := range strings.Split(logs, "\n") {
-		var line map[string]any
-		if json.Unmarshal([]byte(raw), &line) == nil && line["msg"] == "acquisition.judge_shadow" {
-			return line
-		}
-	}
-	t.Fatalf("no acquisition.judge_shadow line in %s", logs)
-	return nil
-}
-
-func TestSelectStep_ShadowLogsDisagreementWithoutChangingThePick(t *testing.T) {
-	logs := captureJSONLogSync(t)
-	ac := &AcquisitionContext{Track: finesseTrack(), Candidates: []ports.AudioCandidate{finesseRemix(), finesseAlbumTrack()}}
-	ac.Track.CatalogDuration = 223
-
-	if _, err := NewSelectStep().Execute(context.Background(), ac, afterSearch{}); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-
-	line := shadowLine(t, logs.String())
-	if line["agree"] != false || line["judge_url"] != "" || line["pipeline_url"] != ac.Selected.URL || ac.Selected.URL != finesseRemixURL {
-		t.Fatalf("shadow line = %v, selected = %s, want the pipeline on the remix and the judge accepting neither", line, ac.Selected.URL)
-	}
-}
-
-func TestSelectStep_ShadowLogsAgreement(t *testing.T) {
-	logs := captureJSONLogSync(t)
-	ac := &AcquisitionContext{Track: finesseTrack(), Candidates: []ports.AudioCandidate{finesseAlbumTrack()}}
-
-	if _, err := NewSelectStep().Execute(context.Background(), ac, afterSearch{}); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-
-	line := shadowLine(t, logs.String())
-	if line["agree"] != true || ac.Selected.URL != finesseAlbumURL {
-		t.Fatalf("shadow line = %v, selected = %s, want agreement on the album track", line, ac.Selected.URL)
-	}
 }
 
 func TestSearchStep_FirstTierHoldingOnlyTheStoredFileStillOpensTheFallbackTier(t *testing.T) {
