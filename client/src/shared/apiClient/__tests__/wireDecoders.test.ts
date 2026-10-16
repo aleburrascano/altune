@@ -62,7 +62,7 @@ describe('primitive narrowers return the value or throw a ContractError', () => 
     expect(() => nullableBoolean('x', 'nb')).toThrow(ContractError);
   });
 
-  it('member accepts a declared value,rejects an undeclared one, and rejects a non-string', () => {
+  it('member accepts a declared value, rejects an undeclared one, and rejects a non-string', () => {
     expect(member('ready', ['pending', 'ready', 'failed'] as const, 'm')).toBe('ready');
     expect(() => member('nope', ['pending', 'ready', 'failed'] as const, 'm')).toThrow(
       ContractError,
