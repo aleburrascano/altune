@@ -95,6 +95,7 @@ type Candidate struct {
 	Artists         []string         `json:"artists,omitempty"`
 	Album           string           `json:"album,omitempty"`
 	Explicit        bool             `json:"explicit,omitempty"`
+	Unplayable      string           `json:"unplayable,omitempty"`
 	Correct         bool             `json:"correct,omitempty"`
 	Query           string           `json:"query,omitempty"`
 	DownloadSeconds float64          `json:"download_seconds,omitempty"`
@@ -160,6 +161,7 @@ func (c Candidate) audioCandidate() ports.AudioCandidate {
 		Artists:     c.Artists,
 		Album:       c.Album,
 		Explicit:    c.Explicit,
+		Unplayable:  c.Unplayable,
 	}
 }
 
@@ -516,6 +518,9 @@ func validateCandidateShape(caseID string, cand Candidate) error {
 	kindResolved := ports.AudioCandidate{Kind: ports.CandidateKind(cand.Kind)}.IsResolved()
 	if cand.Resolved != kindResolved {
 		return fmt.Errorf("case %q candidate %q has resolved=%t but kind %q reads as resolved=%t", caseID, cand.URL, cand.Resolved, cand.Kind, kindResolved)
+	}
+	if !slices.Contains([]string{"", ports.UnplayablePreview, ports.UnplayableDRM}, cand.Unplayable) {
+		return fmt.Errorf("case %q candidate %q has unplayable %q, want %q or %q", caseID, cand.URL, cand.Unplayable, ports.UnplayablePreview, ports.UnplayableDRM)
 	}
 	return nil
 }

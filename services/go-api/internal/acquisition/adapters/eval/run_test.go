@@ -1487,3 +1487,46 @@ func TestValidateCases_RefusesAResolvedFlagTheKindDenies(t *testing.T) {
 		})
 	}
 }
+
+func TestRun_AnUnplayableCandidateIsNeverStored(t *testing.T) {
+	kase := embeddedCase(t, "unplayable-soundcloud-previews-are-never-stored-the-full-upload-is")
+	const fullUpload = "https://soundcloud.com/koolandthegang/get-down-on-it"
+
+	t.Run("the full upload is stored beside the previews", func(t *testing.T) {
+		out := Run(context.Background(), kase)
+
+		if !out.Pass || out.Stored != fullUpload {
+			t.Fatalf("Run stored %q (pass=%v: %s), want the full upload %q", out.Stored, out.Pass, out.Reason, fullUpload)
+		}
+		if out.TopRanked != fullUpload || out.Attempts != 1 {
+			t.Errorf("ranked %q and attempted %d candidates, want only the full upload ranked and attempted", out.TopRanked, out.Attempts)
+		}
+	})
+
+	t.Run("a preview listed at the full length is rejected before any download", func(t *testing.T) {
+		var previews []Candidate
+		for _, c := range kase.allCandidates() {
+			if c.Unplayable == ports.UnplayablePreview {
+				c.Duration, c.ActualDuration, c.Correct = kase.Track.CatalogDuration, 30, false
+				previews = append(previews, c)
+			}
+		}
+		if len(previews) == 0 {
+			t.Fatal("the golden holds no candidate marked a preview")
+		}
+		kase.Sources = []Source{{Name: "ytdlp", SearchSeconds: 3, Candidates: previews}}
+
+		out := Run(context.Background(), kase)
+
+		if out.Stored != "" || out.Attempts != 0 {
+			t.Errorf("stored %q after %d download attempts, want no download of a preview", out.Stored, out.Attempts)
+		}
+	})
+}
+
+func TestLoad_RefusesAnUnplayableReasonProdNeverSets(t *testing.T) {
+	_, err := LoadDir(writeGolden(t, `{"url":"https://soundcloud.com/a/b","unplayable":"paywall"}`))
+	if err == nil || !strings.Contains(err.Error(), `"paywall"`) {
+		t.Fatalf("LoadDir = %v, want a refusal naming the unplayable value", err)
+	}
+}
