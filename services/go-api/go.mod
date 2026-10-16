@@ -3,6 +3,7 @@ module altune/go-api
 go 1.26.9
 
 require (
+	github.com/alicebob/miniredis/v2 v2.39.0
 	github.com/bogem/id3v2/v2 v2.1.4
 	github.com/caarlos0/env/v11 v11.4.1
 	github.com/go-chi/chi/v5 v5.3.2
@@ -33,6 +34,8 @@ require (
 	golang.org/x/time v0.16.0
 	mvdan.cc/sh/v3 v3.14.1
 )
+
+require github.com/yuin/gopher-lua v1.1.1 // indirect
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect

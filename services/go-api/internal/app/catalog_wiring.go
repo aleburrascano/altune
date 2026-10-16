@@ -17,10 +17,12 @@ import (
 	"altune/go-api/internal/discovery/service/ownership"
 	"altune/go-api/internal/observe/service/eventtap"
 	"altune/go-api/internal/shared/binpath"
+	"altune/go-api/internal/shared/ytminnertube"
 	"context"
 	"errors"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -342,6 +344,16 @@ func (a *App) acquisitionSources(ctx context.Context) (sourceTiers, acqPorts.Acq
 	return a.audioSourcesFor(ctx, searcher), tools
 }
 
+func (a *App) innerTubeClient(ctx context.Context) *http.Client {
+	settings := ytminnertube.Settings{MinInterval: a.cfg.YtmInnerTubeMinInterval, Cooldown: a.cfg.YtmInnerTubeCooldown}
+	budget, err := ytminnertube.NewBudget(a.redisClient, settings)
+	if err != nil {
+		slog.WarnContext(ctx, "acquisition: no shared InnerTube budget without redis, pacing in-process only")
+		return nil
+	}
+	return &http.Client{Transport: budget.Transport(nil)}
+}
+
 func (a *App) sourceCanarySearcher() *ytdlp.YtDlpAudioSearcher {
 	if a.cfg.AcquisitionFixtureEnabled() {
 		return nil
@@ -353,11 +365,15 @@ func (a *App) sourceCanaryYTMClient() *ytmsearch.Client {
 	if a.cfg.AcquisitionFixtureEnabled() {
 		return nil
 	}
-	return newYTMSearchClient()
+	return a.budgetedYTMSearchClient(context.Background())
 }
 
 func newYTMSearchClient() *ytmsearch.Client {
 	return ytmsearch.New(ytmsearch.Config{MinInterval: ytmSearchMinInterval, Timeout: ytmSearchTimeout})
+}
+
+func (a *App) budgetedYTMSearchClient(ctx context.Context) *ytmsearch.Client {
+	return ytmsearch.New(ytmsearch.Config{HTTP: a.innerTubeClient(ctx), MinInterval: ytmSearchMinInterval, Timeout: ytmSearchTimeout})
 }
 
 func (a *App) newYtDlpSearcher() *ytdlp.YtDlpAudioSearcher {
@@ -369,7 +385,7 @@ func (a *App) newYtDlpSearcher() *ytdlp.YtDlpAudioSearcher {
 func (a *App) audioSourcesFor(ctx context.Context, searcher *ytdlp.YtDlpAudioSearcher) sourceTiers {
 	var tiers sourceTiers
 	if a.cfg.YtMusicEnabled {
-		songs := newYTMSearchClient()
+		songs := a.budgetedYTMSearchClient(ctx)
 		tiers.first = append(tiers.first, ytmsearch.NewSource(songs, searcher), ytmusic.NewSource(searcher, songs))
 	} else {
 		slog.InfoContext(ctx, "acquisition: ytmusic source disabled via YTMUSIC_ENABLED")

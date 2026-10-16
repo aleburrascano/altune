@@ -94,9 +94,11 @@ type Config struct {
 
 	AcquisitionSupersededAudioGrace time.Duration `env:"ACQUISITION_SUPERSEDED_AUDIO_GRACE" envDefault:"168h"`
 
-	AcoustIDAPIKey string `env:"ACOUSTID_API_KEY"`
-	YtMusicEnabled bool   `env:"YTMUSIC_ENABLED" envDefault:"true"`
-	YtDLPEnabled   bool   `env:"YTDLP_ENABLED" envDefault:"true"`
+	AcoustIDAPIKey          string        `env:"ACOUSTID_API_KEY"`
+	YtMusicEnabled          bool          `env:"YTMUSIC_ENABLED" envDefault:"true"`
+	YtmInnerTubeMinInterval time.Duration `env:"YTM_INNERTUBE_MIN_INTERVAL" envDefault:"2s"`
+	YtmInnerTubeCooldown    time.Duration `env:"YTM_INNERTUBE_COOLDOWN" envDefault:"10m"`
+	YtDLPEnabled            bool          `env:"YTDLP_ENABLED" envDefault:"true"`
 
 	SpotifyEnabled     bool `env:"SPOTIFY_ENABLED" envDefault:"true"`
 	SoundCloudEnabled  bool `env:"SOUNDCLOUD_ENABLED" envDefault:"true"`

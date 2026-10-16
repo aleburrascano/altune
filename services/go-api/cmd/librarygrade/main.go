@@ -2,6 +2,7 @@ package main
 
 import (
 	"altune/go-api/internal/acquisition/adapters/ytmsearch"
+	"altune/go-api/internal/shared/ytminnertube"
 	"context"
 	"errors"
 	"flag"
@@ -138,6 +139,11 @@ func run(opts options, env func(string) string, out io.Writer) error {
 	if opts.undo {
 		return runUndo(ctx, store{pool: pool}, opts.undoRunID, out)
 	}
-	youtube := ytmsearch.New(ytmsearch.Config{MinInterval: interval, Timeout: lookupTimeout})
+	budgeted, budget, err := ytminnertube.ToolClient(ctx, env)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintln(out, budget.Describe())
+	youtube := ytmsearch.New(ytmsearch.Config{HTTP: budgeted, MinInterval: interval, Timeout: lookupTimeout})
 	return runBackfill(ctx, store{pool: pool}, newSourceLookup(youtube, interval), opts, uuid.New(), out)
 }

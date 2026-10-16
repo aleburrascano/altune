@@ -14,7 +14,7 @@ import (
 
 const (
 	samplesPerKind    = 5
-	maxSearchFailures = 20
+	maxSearchFailures = 3
 )
 
 const noSongResults rejection = "no-song-results"

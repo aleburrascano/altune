@@ -1,10 +1,15 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/alicebob/miniredis/v2"
 )
 
 func TestParseOptions(t *testing.T) {
@@ -45,7 +50,7 @@ func TestPacingFromEnv(t *testing.T) {
 		want    pacing
 		wantErr error
 	}{
-		{"defaults", nil, pacing{concurrency: 2, minInterval: time.Second}, nil},
+		{"defaults", nil, pacing{concurrency: 2, minInterval: 5 * time.Second}, nil},
 		{"both set", map[string]string{concurrencyVarName: "4", minIntervalVarName: "250ms"}, pacing{concurrency: 4, minInterval: 250 * time.Millisecond}, nil},
 		{"no spacing at all", map[string]string{minIntervalVarName: "0s"}, pacing{concurrency: 2}, nil},
 		{"zero workers", map[string]string{concurrencyVarName: "0"}, pacing{}, errBadConcurrencyEnv},
@@ -61,5 +66,23 @@ func TestPacingFromEnv(t *testing.T) {
 				t.Fatalf("got %+v, %v", got, err)
 			}
 		})
+	}
+}
+
+func TestBudgetedClient_LogsTheSharedPace(t *testing.T) {
+	server := miniredis.RunT(t)
+	env := func(key string) string {
+		return map[string]string{"REDIS_URL": "redis://" + server.Addr()}[key]
+	}
+	var out bytes.Buffer
+	client, err := budgetedClient(context.Background(), env, &out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client == nil {
+		t.Fatal("nil client without an error")
+	}
+	if got := out.String(); !strings.HasPrefix(got, "shared InnerTube budget: one call per ") {
+		t.Fatalf("log = %q, want the shared pace line", got)
 	}
 }

@@ -2,11 +2,13 @@ package main
 
 import (
 	"altune/go-api/internal/acquisition/adapters/ytmsearch"
+	"altune/go-api/internal/shared/ytminnertube"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strconv"
 	"time"
@@ -20,7 +22,7 @@ const (
 	searchTimeout         = 10 * time.Second
 	defaultConcurrency    = 2
 	maxConcurrency        = 16
-	defaultMinInterval    = time.Second
+	defaultMinInterval    = 5 * time.Second
 	concurrencyVarName    = "LIBRARYOFFICIAL_CONCURRENCY"
 	minIntervalVarName    = "LIBRARYOFFICIAL_MIN_INTERVAL"
 	databaseURLVarName    = "DATABASE_URL"
@@ -155,8 +157,21 @@ func run(opts options, env func(string) string, out io.Writer) error {
 	if opts.undo {
 		return runUndo(ctx, s, opts.undoRunID, out)
 	}
-	search := ytmsearch.New(ytmsearch.Config{MinInterval: paced.minInterval, Timeout: searchTimeout})
+	budgeted, err := budgetedClient(ctx, env, out)
+	if err != nil {
+		return err
+	}
+	search := ytmsearch.New(ytmsearch.Config{HTTP: budgeted, MinInterval: paced.minInterval, Timeout: searchTimeout})
 	return runFind(ctx, s, search, paced.concurrency, opts, out)
+}
+
+func budgetedClient(ctx context.Context, env func(string) string, out io.Writer) (*http.Client, error) {
+	budgeted, budget, err := ytminnertube.ToolClient(ctx, env)
+	if err != nil {
+		return nil, err
+	}
+	_, _ = fmt.Fprintln(out, budget.Describe())
+	return budgeted, nil
 }
 
 func runUndo(ctx context.Context, s store, runID uuid.UUID, out io.Writer) error {
