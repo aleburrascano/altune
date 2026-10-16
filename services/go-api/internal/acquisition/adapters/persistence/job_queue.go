@@ -48,6 +48,7 @@ SET acquisition_status = CASE
 	failure_reason = '',
 	version = version + 1
 WHERE id = $1
+	AND NOT ($2 = 'acquire' AND acquisition_status = 'ready')
 	AND (
 		$2 <> 'upgrade'
 		OR (acquisition_status = 'ready' AND (acquisition_available_at IS NULL OR acquisition_job_kind = 'upgrade'))
@@ -60,7 +61,7 @@ WHERE id = $1
 		OR acquisition_job_kind = $2
 	)`
 
-const jobKindForLeasedTrackSQL = `SELECT acquisition_job_kind FROM tracks WHERE id = $1`
+const jobStateForNoopEnqueueSQL = `SELECT acquisition_job_kind, acquisition_status FROM tracks WHERE id = $1`
 
 func (q *PgxJobQueue) Enqueue(ctx context.Context, trackID shared.TrackId, kind ports.JobKind, delay time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
@@ -81,13 +82,16 @@ func (q *PgxJobQueue) Enqueue(ctx context.Context, trackID shared.TrackId, kind 
 }
 
 func (q *PgxJobQueue) resolveEnqueueNoop(ctx context.Context, trackID shared.TrackId, kind ports.JobKind) error {
-	var runningKind string
-	err := q.pool.QueryRow(ctx, jobKindForLeasedTrackSQL, trackID.UUID()).Scan(&runningKind)
+	var runningKind, status string
+	err := q.pool.QueryRow(ctx, jobStateForNoopEnqueueSQL, trackID.UUID()).Scan(&runningKind, &status)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("enqueue acquisition job: track %s not found", trackID)
 	}
 	if err != nil {
 		return fmt.Errorf("enqueue acquisition job: %w", err)
+	}
+	if kind == ports.JobKindAcquire && status == "ready" {
+		return nil
 	}
 	if ports.JobKind(runningKind) != kind {
 		return acqdomain.ErrJobKindConflict

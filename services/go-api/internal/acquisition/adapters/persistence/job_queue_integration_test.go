@@ -453,6 +453,15 @@ func insertReadyTrack(t *testing.T, pool *pgxpool.Pool) *domain.Track {
 	return track
 }
 
+func markRowFailed(t *testing.T, pool *pgxpool.Pool, trackID domain.TrackId) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE tracks SET acquisition_status = 'failed', failure_reason = 'audio missing', version = version + 1 WHERE id = $1`,
+		trackID.UUID()); err != nil {
+		t.Fatalf("mark row failed: %v", err)
+	}
+}
+
 func acquisitionStatus(t *testing.T, pool *pgxpool.Pool, trackID domain.TrackId) string {
 	t.Helper()
 	var status string
@@ -503,7 +512,7 @@ func TestPgxJobQueue_ReplaceOfAReadyTrackKeepsItReadyThroughClaimAndSettle(t *te
 	}
 }
 
-func TestPgxJobQueue_EnqueueOfAcquireOnAReadyTrackStillMarksPending(t *testing.T) {
+func TestPgxJobQueue_EnqueueOfAcquireOnAReadyTrackLeavesItReady(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := NewPgxJobQueue(pool)
@@ -513,8 +522,11 @@ func TestPgxJobQueue_EnqueueOfAcquireOnAReadyTrackStillMarksPending(t *testing.T
 	if err := queue.Enqueue(context.Background(), track.ID, ports.JobKindAcquire, 0); err != nil {
 		t.Fatalf("Enqueue = %v, want nil", err)
 	}
-	if got := acquisitionStatus(t, pool, track.ID); got != "pending" {
-		t.Errorf("status = %q, want pending", got)
+	if got := acquisitionStatus(t, pool, track.ID); got != "ready" {
+		t.Errorf("status = %q, want ready", got)
+	}
+	if _, err := queue.Claim(context.Background(), time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
+		t.Errorf("Claim = %v, want ErrNoJobAvailable", err)
 	}
 }
 
@@ -525,6 +537,7 @@ func TestPgxJobQueue_SecondReplaceEnqueueWhileLeasedIsANoop(t *testing.T) {
 	ctx := context.Background()
 
 	track := insertReadyTrack(t, pool)
+	markRowFailed(t, pool, track.ID)
 	if err := queue.Enqueue(ctx, track.ID, ports.JobKindReplace, 0); err != nil {
 		t.Fatalf("Enqueue = %v", err)
 	}
@@ -1003,6 +1016,7 @@ func TestPgxJobQueue_RetryBetweenAudioMissingLoadAndWriteLeavesTheTrackPendingAn
 		t.Fatalf("MarkFailed = %v", err)
 	}
 
+	markRowFailed(t, pool, track.ID)
 	if err := queue.Enqueue(ctx, track.ID, ports.JobKindAcquire, 0); err != nil {
 		t.Fatalf("Enqueue = %v, want nil", err)
 	}
@@ -1178,6 +1192,7 @@ func TestPgxJobQueue_EnqueueRacingAStaleCatalogWriteAlwaysEndsPending(t *testing
 		if err := loaded.MarkFailed("audio missing"); err != nil {
 			t.Fatalf("MarkFailed = %v", err)
 		}
+		markRowFailed(t, pool, track.ID)
 
 		var wg sync.WaitGroup
 		var enqueueErr, updateErr error
