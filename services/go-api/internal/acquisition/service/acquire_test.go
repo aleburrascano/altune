@@ -887,7 +887,7 @@ func TestResolveIdentity_QueryCarriesTheTracksDuration(t *testing.T) {
 }
 
 type fakeRejectionStore struct {
-	active    []string
+	active    []ports.PriorRejection
 	activeErr error
 	recordErr error
 	recorded  []ports.CandidateRejectionRecord
@@ -899,9 +899,17 @@ func (f *fakeRejectionStore) Record(_ context.Context, recs []ports.CandidateRej
 	return f.recordErr
 }
 
-func (f *fakeRejectionStore) ActiveKeys(_ context.Context, _ string, since time.Time) ([]string, error) {
+func (f *fakeRejectionStore) Active(_ context.Context, _ string, since time.Time) ([]ports.PriorRejection, error) {
 	f.since = since
 	return f.active, f.activeErr
+}
+
+func priorRejectionsOnTheRunsBasis(urls ...string) []ports.PriorRejection {
+	prior := make([]ports.PriorRejection, len(urls))
+	for i, u := range urls {
+		prior[i] = ports.PriorRejection{SourceKey: sourceKey(u), Basis: &ports.RejectionBasis{}}
+	}
+	return prior
 }
 
 const (
@@ -928,7 +936,7 @@ func retryWith(t *testing.T, store ports.RejectionStore, urls ...string) (*fakeA
 }
 
 func TestExecute_RetrySkipsAURLRejectedAsDRMTenDaysAgo(t *testing.T) {
-	store := &fakeRejectionStore{active: []string{sourceKey(drmURL)}}
+	store := &fakeRejectionStore{active: priorRejectionsOnTheRunsBasis(drmURL)}
 
 	searcher, _ := retryWith(t, store, drmURL, otherURL)
 
@@ -941,7 +949,7 @@ func TestExecute_RetrySkipsAURLRejectedAsDRMTenDaysAgo(t *testing.T) {
 }
 
 func TestExecute_RetryAttemptsAPriorRejectionWhenItIsTheOnlyCandidate(t *testing.T) {
-	store := &fakeRejectionStore{active: []string{sourceKey(drmURL)}}
+	store := &fakeRejectionStore{active: priorRejectionsOnTheRunsBasis(drmURL)}
 
 	searcher, _ := retryWith(t, store, drmURL)
 
@@ -968,6 +976,94 @@ func TestExecute_RecordsDurationRejectionsAndNeverDownloadOnes(t *testing.T) {
 
 	if len(store.recorded) != 1 || store.recorded[0].Reason != "duration" || store.recorded[0].SourceKey != sourceKey(short.URL) {
 		t.Errorf("recorded = %+v, want one duration rejection for %q", store.recorded, short.URL)
+	}
+}
+
+const (
+	recordedLength = 200.0
+	runMBID        = "11111111-2222-3333-4444-555555555555"
+)
+
+func retryOnALength(t *testing.T, prior []ports.PriorRejection, urls ...string) (*fakeAudioSearcher, *fakeRejectionStore) {
+	t.Helper()
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track := pendingTrack(t, repo, userId)
+	if err := track.SetCatalogDuration(recordedLength); err != nil {
+		t.Fatalf("set duration: %v", err)
+	}
+	searcher := &fakeAudioSearcher{downloadErr: errors.New("boom")}
+	for _, u := range urls {
+		searcher.searchResults = append(searcher.searchResults, namedCandidate(u))
+	}
+	store := &fakeRejectionStore{active: prior}
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore(),
+		WithRejectionStore(store), WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: runMBID}}))
+	_ = svc.Execute(context.Background(), userId, track.ID)
+	return searcher, store
+}
+
+func priorRejectionOn(url string, basis *ports.RejectionBasis) []ports.PriorRejection {
+	return []ports.PriorRejection{{SourceKey: sourceKey(url), Basis: basis}}
+}
+
+func TestExecute_APriorRejectionJudgedOnAnotherLengthIsRetried(t *testing.T) {
+	prior := priorRejectionOn(drmURL, &ports.RejectionBasis{ExpectedSeconds: 150, ReferenceMBID: runMBID})
+
+	searcher, _ := retryOnALength(t, prior, drmURL, otherURL)
+
+	if !slices.Contains(searcher.downloadURLs, drmURL) {
+		t.Errorf("download attempts = %v, want %q retried: its rejection was judged on 150s, the run expects %vs", searcher.downloadURLs, drmURL, recordedLength)
+	}
+}
+
+func TestExecute_APriorRejectionOnTheSameBasisIsSkipped(t *testing.T) {
+	prior := priorRejectionOn(drmURL, &ports.RejectionBasis{ExpectedSeconds: recordedLength, ReferenceMBID: runMBID})
+
+	searcher, _ := retryOnALength(t, prior, drmURL, otherURL)
+
+	if len(searcher.downloadURLs) != 1 || searcher.downloadURLs[0] != otherURL {
+		t.Errorf("download attempts = %v, want only %q", searcher.downloadURLs, otherURL)
+	}
+}
+
+func TestExecute_APriorRejectionWithNoBasisIsIgnored(t *testing.T) {
+	searcher, _ := retryOnALength(t, priorRejectionOn(drmURL, nil), drmURL, otherURL)
+
+	if !slices.Contains(searcher.downloadURLs, drmURL) {
+		t.Errorf("download attempts = %v, want %q retried: its rejection has no recorded basis", searcher.downloadURLs, drmURL)
+	}
+}
+
+func TestExecute_APriorRejectionJudgedOnAnotherRecordingIsRetried(t *testing.T) {
+	prior := priorRejectionOn(drmURL, &ports.RejectionBasis{ExpectedSeconds: recordedLength, ReferenceMBID: "another-recording"})
+
+	searcher, _ := retryOnALength(t, prior, drmURL, otherURL)
+
+	if !slices.Contains(searcher.downloadURLs, drmURL) {
+		t.Errorf("download attempts = %v, want %q retried: its rejection was judged against another MBID", searcher.downloadURLs, drmURL)
+	}
+}
+
+func TestExecute_RecordsTheBasisWithEachLastingRejection(t *testing.T) {
+	short := namedCandidate("https://youtube.com/watch?v=shortshort1")
+	short.Duration = 30
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track := pendingTrack(t, repo, userId)
+	if err := track.SetCatalogDuration(recordedLength); err != nil {
+		t.Fatalf("set duration: %v", err)
+	}
+	searcher := &fakeAudioSearcher{searchResults: []ports.AudioCandidate{short, namedCandidate(otherURL)}, downloadErr: errors.New("boom")}
+	store := &fakeRejectionStore{}
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore(),
+		WithRejectionStore(store), WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: runMBID}}))
+
+	_ = svc.Execute(context.Background(), userId, track.ID)
+
+	want := ports.RejectionBasis{ExpectedSeconds: recordedLength, ReferenceMBID: runMBID}
+	if len(store.recorded) != 1 || store.recorded[0].Basis != want {
+		t.Errorf("recorded = %+v, want one rejection carrying basis %+v", store.recorded, want)
 	}
 }
 
@@ -1001,7 +1097,7 @@ func TestExecuteReplace_ExcludesStoredKeysAndRejectedSourceKeys(t *testing.T) {
 		results = append(results, ports.AudioCandidate{Title: "The Weeknd - Blinding Lights", URL: u, Source: "fake"})
 	}
 	searcher := &fakeAudioSearcher{searchResults: results, downloadErr: errors.New("boom")}
-	rejections := &fakeRejectionStore{active: []string{sourceKey(drmURL)}}
+	rejections := &fakeRejectionStore{active: priorRejectionsOnTheRunsBasis(drmURL)}
 	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), store, WithRejectionStore(rejections))
 
 	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
@@ -1974,6 +2070,138 @@ func TestExecute_AConfiguredZeroFloorIsHonoured(t *testing.T) {
 	_, err = acquireLowConfidence(t)
 	if !errors.Is(err, ErrNoConfidentMatch) {
 		t.Errorf("with no option err = %v, want ErrNoConfidentMatch at the 0.5 default", err)
+	}
+}
+
+func retryWithBasis(t *testing.T, catalogLength float64, identity ports.RecordingIdentity, prior []ports.PriorRejection, urls ...string) *fakeAudioSearcher {
+	t.Helper()
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track := pendingTrack(t, repo, userId)
+	if catalogLength > 0 {
+		if err := track.SetCatalogDuration(catalogLength); err != nil {
+			t.Fatalf("set duration: %v", err)
+		}
+	}
+	searcher := &fakeAudioSearcher{downloadErr: errors.New("boom")}
+	for _, u := range urls {
+		searcher.searchResults = append(searcher.searchResults, namedCandidate(u))
+	}
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore(),
+		WithRejectionStore(&fakeRejectionStore{active: prior}), WithRecordingResolver(&stubResolver{identity: identity}))
+	_ = svc.Execute(context.Background(), userId, track.ID)
+	return searcher
+}
+
+func TestExecute_APriorRejectionJudgedOnTheResolvedLengthIsSkippedWhenTheTrackHasNoCatalogLength(t *testing.T) {
+	prior := priorRejectionOn(drmURL, &ports.RejectionBasis{ExpectedSeconds: 200, ReferenceMBID: runMBID})
+
+	searcher := retryWithBasis(t, 0, ports.RecordingIdentity{MBID: runMBID, Duration: 200}, prior, drmURL, otherURL)
+
+	if len(searcher.downloadURLs) != 1 || searcher.downloadURLs[0] != otherURL {
+		t.Errorf("download attempts = %v, want only %q: the run resolved 200s and %s, the same basis the rejection was judged on", searcher.downloadURLs, otherURL, runMBID)
+	}
+}
+
+func TestExecute_APriorRejectionJudgedWithNoLengthIsRetriedOnceTheCatalogLengthIsKnown(t *testing.T) {
+	prior := priorRejectionOn(drmURL, &ports.RejectionBasis{ExpectedSeconds: 0, ReferenceMBID: runMBID})
+
+	searcher := retryWithBasis(t, 200, ports.RecordingIdentity{MBID: runMBID}, prior, drmURL, otherURL)
+
+	if !slices.Contains(searcher.downloadURLs, drmURL) {
+		t.Errorf("download attempts = %v, want %q retried: it was judged with no expected length, the run now expects 200s", searcher.downloadURLs, drmURL)
+	}
+}
+
+func TestExecute_APriorRejectionJudgedOnALengthIsRetriedWhenTheRunHasNoLength(t *testing.T) {
+	prior := priorRejectionOn(drmURL, &ports.RejectionBasis{ExpectedSeconds: 200, ReferenceMBID: runMBID})
+
+	searcher := retryWithBasis(t, 0, ports.RecordingIdentity{MBID: runMBID}, prior, drmURL, otherURL)
+
+	if !slices.Contains(searcher.downloadURLs, drmURL) {
+		t.Errorf("download attempts = %v, want %q retried: it was judged on 200s, the run knows no length", searcher.downloadURLs, drmURL)
+	}
+}
+
+func TestExecute_APriorRejectionJudgedWithNoMBIDIsRetriedOnceTheMBIDIsKnown(t *testing.T) {
+	prior := priorRejectionOn(drmURL, &ports.RejectionBasis{ExpectedSeconds: 200, ReferenceMBID: ""})
+
+	searcher := retryWithBasis(t, 200, ports.RecordingIdentity{MBID: runMBID}, prior, drmURL, otherURL)
+
+	if !slices.Contains(searcher.downloadURLs, drmURL) {
+		t.Errorf("download attempts = %v, want %q retried: it was judged with no reference MBID, the run now has %s", searcher.downloadURLs, drmURL, runMBID)
+	}
+}
+
+func TestExecute_APriorRejectionJudgedOnAnMBIDIsRetriedWhenTheRunResolvesNone(t *testing.T) {
+	prior := priorRejectionOn(drmURL, &ports.RejectionBasis{ExpectedSeconds: 200, ReferenceMBID: runMBID})
+
+	searcher := retryWithBasis(t, 200, ports.RecordingIdentity{}, prior, drmURL, otherURL)
+
+	if !slices.Contains(searcher.downloadURLs, drmURL) {
+		t.Errorf("download attempts = %v, want %q retried: it was judged against %s, the run resolved no MBID", searcher.downloadURLs, drmURL, runMBID)
+	}
+}
+
+func TestExecute_APriorRejectionAppliesOnlyWhileTheLengthIsWithinTheAuthoritativeWindow(t *testing.T) {
+	cases := []struct {
+		name     string
+		recorded float64
+		skipped  bool
+	}{
+		{"just inside above", 205.5, true},
+		{"just inside below", 194.5, true},
+		{"just outside above", 206.5, false},
+		{"just outside below", 193.5, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			prior := priorRejectionOn(drmURL, &ports.RejectionBasis{ExpectedSeconds: tc.recorded, ReferenceMBID: runMBID})
+
+			searcher := retryWithBasis(t, 200, ports.RecordingIdentity{MBID: runMBID}, prior, drmURL, otherURL)
+
+			if got := slices.Contains(searcher.downloadURLs, drmURL); got == tc.skipped {
+				t.Errorf("recorded %vs vs run 200s: %q downloaded = %v, want %v (attempts %v)", tc.recorded, drmURL, got, !tc.skipped, searcher.downloadURLs)
+			}
+		})
+	}
+}
+
+func TestExecute_AStaleRejectionDoesNotReviveASourceRejectedOnTheSameBasis(t *testing.T) {
+	prior := []ports.PriorRejection{
+		{SourceKey: sourceKey(drmURL), Basis: &ports.RejectionBasis{ExpectedSeconds: 200, ReferenceMBID: runMBID}},
+		{SourceKey: sourceKey(otherURL), Basis: &ports.RejectionBasis{ExpectedSeconds: 150, ReferenceMBID: runMBID}},
+	}
+
+	searcher := retryWithBasis(t, 200, ports.RecordingIdentity{MBID: runMBID}, prior, drmURL, otherURL)
+
+	if len(searcher.downloadURLs) != 1 || searcher.downloadURLs[0] != otherURL {
+		t.Errorf("download attempts = %v, want only %q: its rejection is stale so not every candidate was skipped", searcher.downloadURLs, otherURL)
+	}
+}
+
+func TestExecuteReplace_RetriesAPriorRejectionJudgedOnAnotherLength(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track := readyTrackWithSource(t, repo, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=wrongwrong1")
+	if err := track.SetCatalogDuration(200); err != nil {
+		t.Fatalf("set duration: %v", err)
+	}
+	store := newFakeAudioStore()
+	store.stored["u/a/b/c.mp3"] = true
+	var results []ports.AudioCandidate
+	for _, u := range []string{drmURL, otherURL} {
+		results = append(results, ports.AudioCandidate{Title: "The Weeknd - Blinding Lights", URL: u, Source: "fake"})
+	}
+	searcher := &fakeAudioSearcher{searchResults: results, downloadErr: errors.New("boom")}
+	rejections := &fakeRejectionStore{active: priorRejectionOn(drmURL, &ports.RejectionBasis{ExpectedSeconds: 150, ReferenceMBID: runMBID})}
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), store,
+		WithRejectionStore(rejections), WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: runMBID}}))
+
+	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
+
+	if !slices.Contains(searcher.downloadURLs, drmURL) {
+		t.Errorf("download attempts = %v, want %q retried: its rejection was judged on 150s, the replace run expects 200s", searcher.downloadURLs, drmURL)
 	}
 }
 

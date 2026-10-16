@@ -245,7 +245,7 @@ type AcquisitionContext struct {
 	FallbackSkipped bool
 	FallbackOnly    bool
 
-	PriorRejectedKeys []string
+	PriorRejections []ports.PriorRejection
 }
 
 type AttemptedCandidate struct {
@@ -280,12 +280,23 @@ func (r ReplaceState) excludesCandidate(c ports.AudioCandidate) bool {
 
 func (ac *AcquisitionContext) priorRejected(url string) bool {
 	key := sourceKey(url)
-	for _, rejected := range ac.PriorRejectedKeys {
-		if rejected == key {
+	for _, rejected := range ac.PriorRejections {
+		if rejected.SourceKey == key && ac.stillJudgedOnTheSameBasis(rejected.Basis) {
 			return true
 		}
 	}
 	return false
+}
+
+func (ac *AcquisitionContext) stillJudgedOnTheSameBasis(recorded *ports.RejectionBasis) bool {
+	if recorded == nil || recorded.ReferenceMBID != ac.Identity.MBID {
+		return false
+	}
+	current := ac.ExpectedLength()
+	if recorded.ExpectedSeconds <= 0 || current <= 0 {
+		return recorded.ExpectedSeconds <= 0 && current <= 0
+	}
+	return durationWithinAuthoritativeTolerance(recorded.ExpectedSeconds, current)
 }
 
 func (ac *AcquisitionContext) Provenance() shared.AcquisitionProvenance {

@@ -11,6 +11,49 @@ import (
 	"github.com/google/uuid"
 )
 
+func activeKeys(store *PgxRejectionStore, ctx context.Context, trackID string, since time.Time) ([]string, error) {
+	prior, err := store.Active(ctx, trackID, since)
+	keys := make([]string, len(prior))
+	for i, p := range prior {
+		keys[i] = p.SourceKey
+	}
+	return keys, err
+}
+
+func TestPgxRejectionStore_ActiveReturnsTheRecordedBasis(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxRejectionStore(pool)
+	ctx := context.Background()
+	trackID := uuid.NewString()
+	basis := ports.RejectionBasis{ExpectedSeconds: 322.5, ReferenceMBID: "mbid-1"}
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO acquisition_rejections (track_id, source_key, reason, rejected_at) VALUES ($1, 'legacy', 'duration', now())`,
+		trackID); err != nil {
+		t.Fatalf("seed legacy rejection: %v", err)
+	}
+	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
+		{TrackID: trackID, SourceKey: "with-basis", Reason: "duration", Basis: basis},
+	}); err != nil {
+		t.Fatalf("Record(...) = %v, want nil", err)
+	}
+
+	prior, err := store.Active(ctx, trackID, time.Now().Add(-30*24*time.Hour))
+	if err != nil {
+		t.Fatalf("Active(...) = %v, want nil", err)
+	}
+	if len(prior) != 2 || prior[0].SourceKey != "legacy" || prior[1].SourceKey != "with-basis" {
+		t.Fatalf("Active(...) = %+v, want [legacy with-basis]", prior)
+	}
+	if prior[0].Basis != nil {
+		t.Errorf("legacy basis = %+v, want nil for a NULL basis", *prior[0].Basis)
+	}
+	if prior[1].Basis == nil || *prior[1].Basis != basis {
+		t.Errorf("recorded basis = %v, want %+v", prior[1].Basis, basis)
+	}
+}
+
 func TestPgxRejectionStore_RecordThenActiveKeysReturnsRecordedKeys(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
@@ -26,7 +69,7 @@ func TestPgxRejectionStore_RecordThenActiveKeysReturnsRecordedKeys(t *testing.T)
 		t.Fatalf("Record(...) = %v, want nil", err)
 	}
 
-	keys, err := store.ActiveKeys(ctx, trackID, time.Now().Add(-30*24*time.Hour))
+	keys, err := activeKeys(store, ctx, trackID, time.Now().Add(-30*24*time.Hour))
 	if err != nil {
 		t.Fatalf("ActiveKeys(...) = %v, want nil", err)
 	}
@@ -96,7 +139,7 @@ func TestPgxRejectionStore_ActiveKeysExcludesKeysRejectedBeforeSince(t *testing.
 		t.Fatalf("Record(...) = %v, want nil", err)
 	}
 
-	keys, err := store.ActiveKeys(ctx, trackID, time.Now().Add(-30*24*time.Hour))
+	keys, err := activeKeys(store, ctx, trackID, time.Now().Add(-30*24*time.Hour))
 	if err != nil {
 		t.Fatalf("ActiveKeys(...) = %v, want nil", err)
 	}
@@ -180,7 +223,7 @@ func TestPgxRejectionStore_ReRecordingAStaleKeyMakesItActiveAgain(t *testing.T) 
 		t.Fatalf("Record(...) = %v, want nil", err)
 	}
 
-	keys, err := store.ActiveKeys(ctx, trackID, time.Now().Add(-30*24*time.Hour))
+	keys, err := activeKeys(store, ctx, trackID, time.Now().Add(-30*24*time.Hour))
 	if err != nil {
 		t.Fatalf("ActiveKeys(...) = %v, want nil", err)
 	}
@@ -205,7 +248,7 @@ func TestPgxRejectionStore_ActiveKeysOnlyReturnsTheRequestedTracksKeys(t *testin
 		t.Fatalf("Record(...) = %v, want nil", err)
 	}
 
-	keys, err := store.ActiveKeys(ctx, trackA, time.Now().Add(-30*24*time.Hour))
+	keys, err := activeKeys(store, ctx, trackA, time.Now().Add(-30*24*time.Hour))
 	if err != nil {
 		t.Fatalf("ActiveKeys(...) = %v, want nil", err)
 	}
@@ -219,7 +262,7 @@ func TestPgxRejectionStore_ActiveKeysForATrackWithNoRejectionsIsEmpty(t *testing
 	pool := newPool(t)
 	store := NewPgxRejectionStore(pool)
 
-	keys, err := store.ActiveKeys(context.Background(), uuid.NewString(), time.Now().Add(-30*24*time.Hour))
+	keys, err := activeKeys(store, context.Background(), uuid.NewString(), time.Now().Add(-30*24*time.Hour))
 	if err != nil {
 		t.Fatalf("ActiveKeys(...) = %v, want nil", err)
 	}
@@ -242,7 +285,7 @@ func TestPgxRejectionStore_SourceKeyWithQuotesAndUnicodeRoundTripsVerbatim(t *te
 		t.Fatalf("Record(...) = %v, want nil", err)
 	}
 
-	keys, err := store.ActiveKeys(ctx, trackID, time.Now().Add(-30*24*time.Hour))
+	keys, err := activeKeys(store, ctx, trackID, time.Now().Add(-30*24*time.Hour))
 	if err != nil {
 		t.Fatalf("ActiveKeys(...) = %v, want nil", err)
 	}
@@ -258,7 +301,7 @@ func TestPgxRejectionStore_ActiveKeysWithCancelledContextReturnsError(t *testing
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := store.ActiveKeys(ctx, uuid.NewString(), time.Now().Add(-30*24*time.Hour))
+	_, err := activeKeys(store, ctx, uuid.NewString(), time.Now().Add(-30*24*time.Hour))
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("ActiveKeys with a cancelled context = %v, want an error wrapping context.Canceled", err)
 	}
@@ -288,7 +331,7 @@ func TestPgxRejectionStore_RecordBatchWithOneInvalidRecordStoresNothing(t *testi
 	if err == nil {
 		t.Fatal("Record with an empty SourceKey in the batch = nil, want an error")
 	}
-	keys, err := store.ActiveKeys(ctx, trackID, time.Now().Add(-30*24*time.Hour))
+	keys, err := activeKeys(store, ctx, trackID, time.Now().Add(-30*24*time.Hour))
 	if err != nil {
 		t.Fatalf("ActiveKeys(...) = %v, want nil", err)
 	}
@@ -367,7 +410,7 @@ func TestPgxRejectionStore_ConcurrentRecordsOfTheSameKeysAllSucceed(t *testing.T
 			t.Errorf("concurrent Record(...) = %v, want nil", err)
 		}
 	}
-	keys, err := store.ActiveKeys(ctx, trackID, time.Now().Add(-30*24*time.Hour))
+	keys, err := activeKeys(store, ctx, trackID, time.Now().Add(-30*24*time.Hour))
 	if err != nil {
 		t.Fatalf("ActiveKeys(...) = %v, want nil", err)
 	}
@@ -398,7 +441,7 @@ func TestPgxRejectionStore_PruneDeletesRowsOlderThanRetentionAndKeepsNewer(t *te
 		t.Fatalf("Prune(...) = %v, want nil", err)
 	}
 
-	keys, err := store.ActiveKeys(ctx, trackID, time.Now().Add(-90*24*time.Hour))
+	keys, err := activeKeys(store, ctx, trackID, time.Now().Add(-90*24*time.Hour))
 	if err != nil {
 		t.Fatalf("ActiveKeys(...) = %v, want nil", err)
 	}
@@ -432,5 +475,86 @@ func TestPgxRejectionStore_PruneRemovesMoreRowsThanOneBatch(t *testing.T) {
 	}
 	if left != 0 {
 		t.Errorf("rejections left after Prune = %d, want 0", left)
+	}
+}
+
+func TestPgxRejectionStore_ARejectionJudgedWithNoLengthOrMBIDKeepsAnEmptyBasisNotNone(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxRejectionStore(pool)
+	ctx := context.Background()
+	trackID := uuid.NewString()
+
+	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
+		{TrackID: trackID, SourceKey: "unknown-length", Reason: "identity", Basis: ports.RejectionBasis{}},
+	}); err != nil {
+		t.Fatalf("Record(...) = %v, want nil", err)
+	}
+
+	prior, err := store.Active(ctx, trackID, time.Now().Add(-30*24*time.Hour))
+	if err != nil {
+		t.Fatalf("Active(...) = %v, want nil", err)
+	}
+	if len(prior) != 1 {
+		t.Fatalf("Active(...) = %+v, want one rejection", prior)
+	}
+	if prior[0].Basis == nil || *prior[0].Basis != (ports.RejectionBasis{}) {
+		t.Errorf("basis = %v, want a recorded basis of 0s and no MBID, not the nil of a legacy row", prior[0].Basis)
+	}
+}
+
+func TestPgxRejectionStore_ReRecordingALegacyRowWritesItsBasis(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxRejectionStore(pool)
+	ctx := context.Background()
+	trackID := uuid.NewString()
+	basis := ports.RejectionBasis{ExpectedSeconds: 201, ReferenceMBID: "mbid-now"}
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO acquisition_rejections (track_id, source_key, reason, rejected_at) VALUES ($1, 'legacy', 'duration', now() - interval '2 days')`,
+		trackID); err != nil {
+		t.Fatalf("seed legacy rejection: %v", err)
+	}
+	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
+		{TrackID: trackID, SourceKey: "legacy", Reason: "duration", Basis: basis},
+	}); err != nil {
+		t.Fatalf("Record(...) = %v, want nil", err)
+	}
+
+	prior, err := store.Active(ctx, trackID, time.Now().Add(-30*24*time.Hour))
+	if err != nil {
+		t.Fatalf("Active(...) = %v, want nil", err)
+	}
+	if len(prior) != 1 || prior[0].Basis == nil || *prior[0].Basis != basis {
+		t.Errorf("Active(...) = %+v, want the legacy row rewritten with basis %+v", prior, basis)
+	}
+}
+
+func TestPgxRejectionStore_ReRecordingOnANewBasisReplacesTheOldOne(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxRejectionStore(pool)
+	ctx := context.Background()
+	trackID := uuid.NewString()
+	newer := ports.RejectionBasis{ExpectedSeconds: 0, ReferenceMBID: ""}
+
+	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
+		{TrackID: trackID, SourceKey: "source-a", Reason: "duration", Basis: ports.RejectionBasis{ExpectedSeconds: 150, ReferenceMBID: "mbid-old"}},
+	}); err != nil {
+		t.Fatalf("first Record(...) = %v, want nil", err)
+	}
+	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
+		{TrackID: trackID, SourceKey: "source-a", Reason: "fingerprint", Basis: newer},
+	}); err != nil {
+		t.Fatalf("second Record(...) = %v, want nil", err)
+	}
+
+	prior, err := store.Active(ctx, trackID, time.Now().Add(-30*24*time.Hour))
+	if err != nil {
+		t.Fatalf("Active(...) = %v, want nil", err)
+	}
+	if len(prior) != 1 || prior[0].Basis == nil || *prior[0].Basis != newer {
+		t.Errorf("Active(...) = %+v, want one row carrying the later basis %+v", prior, newer)
 	}
 }

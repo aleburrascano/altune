@@ -294,8 +294,9 @@ original audio look wrong.
 +"audio"), each fanned by the adapter to `ytsearch5:` and `scsearch5:`. Results
 merge and dedupe by URL through the one shared helper. A single engine failing is
 tolerated; the search fails only when *every* engine fails, for *every* query.
-Candidates whose `sourceKey` is in the track's active `acquisition_rejections` rows
-are dropped and logged as `acquisition.candidate_skipped_prior_rejection`; when
+Candidates whose `sourceKey` is in the track's active `acquisition_rejections` rows,
+and whose recorded basis (expected length, reference MBID) still equals the run's
+after `resolveIdentity` (a row with no basis is ignored), are dropped and logged as `acquisition.candidate_skipped_prior_rejection`; when
 that would leave nothing, they come back (`acquisition.prior_rejections_exhausted`).
 SoundCloud candidates are inspected by the yt-dlp adapter (`inspect.go`, two at a
 time, cached 24h): a track whose audio formats are all encrypted arrives with
@@ -412,8 +413,9 @@ first. `cmd/librarygrade` backfills the same facts for tracks stored before this
 Rejections carry a stage: `identity`, `qualifier`, `download`, `drm`, `preview`,
 `duration`, `undecodable`, `fingerprint`, `not_attempted`. Every stage except
 `download` and `not_attempted` is *lasting*: at the end of the run it is written to
-`acquisition_rejections` (migration 029, keyed by track and `sourceKey`), and for
-30 days a plain retry skips that source (§7.11). Log events to watch:
+`acquisition_rejections` (migration 029, keyed by track and `sourceKey`, with the expected length and
+reference MBID of the run in migration 045), and for 30 days a plain retry skips that
+source only while its own expected length and MBID still match (§7.11). Log events to watch:
 `acquisition.audio_verdict`, `acquisition.reference_doubted`,
 `acquisition.preview_fingerprint`, `acquisition.candidate_skipped_prior_rejection`,
 `acquisition.confidence`.

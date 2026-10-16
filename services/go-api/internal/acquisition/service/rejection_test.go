@@ -306,3 +306,18 @@ func TestLastingRejectionRecords_KeepsFingerprintAndDropsTransientStages(t *test
 		t.Errorf("records = %+v, want only the fingerprint rejection", recs)
 	}
 }
+
+func TestLastingRejectionRecords_CarryTheRunsExpectedLengthAndReferenceMBID(t *testing.T) {
+	ac := &AcquisitionContext{
+		Track:    TrackRef{ID: "t1", CatalogDuration: 322},
+		Identity: ports.RecordingIdentity{MBID: "mbid-1"},
+	}
+	ac.recordRejection("https://youtube.com/watch?v=a", "", "yt", RejectionDuration, "too short")
+
+	recs := lastingRejectionRecords(ac)
+
+	want := ports.RejectionBasis{ExpectedSeconds: 322, ReferenceMBID: "mbid-1"}
+	if len(recs) != 1 || recs[0].Basis != want {
+		t.Errorf("records = %+v, want one carrying basis %+v", recs, want)
+	}
+}

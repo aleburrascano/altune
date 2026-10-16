@@ -21,13 +21,15 @@ func NewPgxRejectionStore(pool *pgxpool.Pool) *PgxRejectionStore {
 }
 
 const recordRejectionsSQL = `
-INSERT INTO acquisition_rejections (track_id, source_key, reason, detail, rejected_at)
-SELECT track_id, source_key, reason, detail, now()
-FROM unnest($1::text[], $2::text[], $3::text[], $4::text[])
-	AS u(track_id, source_key, reason, detail)
+INSERT INTO acquisition_rejections (track_id, source_key, reason, detail, expected_seconds, reference_mbid, rejected_at)
+SELECT track_id, source_key, reason, detail, expected_seconds, reference_mbid, now()
+FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::double precision[], $6::text[])
+	AS u(track_id, source_key, reason, detail, expected_seconds, reference_mbid)
 ON CONFLICT (track_id, source_key) DO UPDATE
 	SET reason = EXCLUDED.reason,
 		detail = EXCLUDED.detail,
+		expected_seconds = EXCLUDED.expected_seconds,
+		reference_mbid = EXCLUDED.reference_mbid,
 		rejected_at = EXCLUDED.rejected_at`
 
 type rejectionBatchKey struct {
@@ -52,18 +54,33 @@ func dedupeLastWins(recs []ports.CandidateRejectionRecord) []ports.CandidateReje
 	return deduped
 }
 
-func columnsOf(recs []ports.CandidateRejectionRecord) (trackIDs, sourceKeys, reasons, details []string) {
-	trackIDs = make([]string, len(recs))
-	sourceKeys = make([]string, len(recs))
-	reasons = make([]string, len(recs))
-	details = make([]string, len(recs))
-	for i, r := range recs {
-		trackIDs[i] = r.TrackID
-		sourceKeys[i] = r.SourceKey
-		reasons[i] = r.Reason
-		details[i] = r.Detail
+type rejectionColumns struct {
+	trackIDs        []string
+	sourceKeys      []string
+	reasons         []string
+	details         []string
+	expectedSeconds []float64
+	referenceMBIDs  []string
+}
+
+func columnsOf(recs []ports.CandidateRejectionRecord) rejectionColumns {
+	cols := rejectionColumns{
+		trackIDs:        make([]string, len(recs)),
+		sourceKeys:      make([]string, len(recs)),
+		reasons:         make([]string, len(recs)),
+		details:         make([]string, len(recs)),
+		expectedSeconds: make([]float64, len(recs)),
+		referenceMBIDs:  make([]string, len(recs)),
 	}
-	return trackIDs, sourceKeys, reasons, details
+	for i, r := range recs {
+		cols.trackIDs[i] = r.TrackID
+		cols.sourceKeys[i] = r.SourceKey
+		cols.reasons[i] = r.Reason
+		cols.details[i] = r.Detail
+		cols.expectedSeconds[i] = r.Basis.ExpectedSeconds
+		cols.referenceMBIDs[i] = r.Basis.ReferenceMBID
+	}
+	return cols
 }
 
 func (s *PgxRejectionStore) Record(ctx context.Context, recs []ports.CandidateRejectionRecord) error {
@@ -74,45 +91,55 @@ func (s *PgxRejectionStore) Record(ctx context.Context, recs []ports.CandidateRe
 		return nil
 	}
 
-	trackIDs, sourceKeys, reasons, details := columnsOf(dedupeLastWins(recs))
-	_, err := s.pool.Exec(ctx, recordRejectionsSQL, trackIDs, sourceKeys, reasons, details)
+	cols := columnsOf(dedupeLastWins(recs))
+	_, err := s.pool.Exec(ctx, recordRejectionsSQL,
+		cols.trackIDs, cols.sourceKeys, cols.reasons, cols.details, cols.expectedSeconds, cols.referenceMBIDs)
 	if err != nil {
 		return fmt.Errorf("record acquisition rejections: %w", err)
 	}
 	return nil
 }
 
-const activeRejectionKeysSQL = `
-SELECT source_key FROM acquisition_rejections
+const activeRejectionsSQL = `
+SELECT source_key, expected_seconds, reference_mbid FROM acquisition_rejections
 WHERE track_id = $1 AND rejected_at >= $2
 ORDER BY source_key`
 
-func scanActiveKeys(rows pgx.Rows) ([]string, error) {
-	var keys []string
+func scanActiveRejections(rows pgx.Rows) ([]ports.PriorRejection, error) {
+	var prior []ports.PriorRejection
 	for rows.Next() {
 		var key string
-		if err := rows.Scan(&key); err != nil {
+		var expectedSeconds *float64
+		var referenceMBID *string
+		if err := rows.Scan(&key, &expectedSeconds, &referenceMBID); err != nil {
 			return nil, fmt.Errorf("scan active acquisition rejection: %w", err)
 		}
-		keys = append(keys, key)
+		prior = append(prior, ports.PriorRejection{SourceKey: key, Basis: recordedBasis(expectedSeconds, referenceMBID)})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate active acquisition rejections: %w", err)
 	}
-	return keys, nil
+	return prior, nil
 }
 
-func (s *PgxRejectionStore) ActiveKeys(ctx context.Context, trackID string, since time.Time) ([]string, error) {
+func recordedBasis(expectedSeconds *float64, referenceMBID *string) *ports.RejectionBasis {
+	if expectedSeconds == nil || referenceMBID == nil {
+		return nil
+	}
+	return &ports.RejectionBasis{ExpectedSeconds: *expectedSeconds, ReferenceMBID: *referenceMBID}
+}
+
+func (s *PgxRejectionStore) Active(ctx context.Context, trackID string, since time.Time) ([]ports.PriorRejection, error) {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
 
-	rows, err := s.pool.Query(ctx, activeRejectionKeysSQL, trackID, since)
+	rows, err := s.pool.Query(ctx, activeRejectionsSQL, trackID, since)
 	if err != nil {
 		return nil, fmt.Errorf("list active acquisition rejections: %w", err)
 	}
 	defer rows.Close()
 
-	return scanActiveKeys(rows)
+	return scanActiveRejections(rows)
 }
 
 const RejectionRetention = 60 * 24 * time.Hour

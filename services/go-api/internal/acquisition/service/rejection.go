@@ -91,9 +91,14 @@ func lastingRejectionRecords(ac *AcquisitionContext) []ports.CandidateRejectionR
 			SourceKey: key,
 			Reason:    string(r.Stage),
 			Detail:    r.Reason,
+			Basis:     ac.rejectionBasis(),
 		})
 	}
 	return recs
+}
+
+func (ac *AcquisitionContext) rejectionBasis() ports.RejectionBasis {
+	return ports.RejectionBasis{ExpectedSeconds: ac.ExpectedLength(), ReferenceMBID: ac.Identity.MBID}
 }
 
 func (s *AcquireTrackAudioService) recordRejections(ctx context.Context, ac *AcquisitionContext) {
@@ -116,13 +121,13 @@ func (s *AcquireTrackAudioService) loadPriorRejections(ctx context.Context, ac *
 	if s.rejections == nil {
 		return
 	}
-	keys, err := s.rejections.ActiveKeys(ctx, ac.Track.ID, time.Now().Add(-priorRejectionWindow))
+	prior, err := s.rejections.Active(ctx, ac.Track.ID, time.Now().Add(-priorRejectionWindow))
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.rejection_load_failed",
 			"track_id", ac.Track.ID, "error", redact.LogError(err))
 		return
 	}
-	ac.PriorRejectedKeys = keys
+	ac.PriorRejections = prior
 }
 
 func unplayableStage(reason string) RejectionStage {
