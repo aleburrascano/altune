@@ -45,7 +45,8 @@ SET acquisition_status = CASE
 	acquisition_attempts = acquisition_attempts
 		+ CASE WHEN acquisition_job_kind = 'upgrade' AND $2 <> 'upgrade' THEN 1 ELSE 0 END,
 	acquisition_run_attempts = 0,
-	failure_reason = ''
+	failure_reason = '',
+	version = version + 1
 WHERE id = $1
 	AND (
 		$2 <> 'upgrade'
@@ -159,7 +160,8 @@ const leaseClaimedJobSQL = `UPDATE tracks
 SET acquisition_lease_until = now() + make_interval(secs => $1),
 	acquisition_attempts = acquisition_attempts + 1,
 	acquisition_run_attempts = acquisition_run_attempts + 1,
-	acquisition_started_at = now()
+	acquisition_started_at = now(),
+	version = version + 1
 FROM candidate
 WHERE tracks.id = candidate.id
 RETURNING tracks.id, tracks.user_id, tracks.acquisition_job_kind, tracks.acquisition_attempts, tracks.acquisition_run_attempts,

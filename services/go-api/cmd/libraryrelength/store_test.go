@@ -148,7 +148,7 @@ func TestStore_ReacquireSkipsATrackAlreadyEnqueuedOrInFlight(t *testing.T) {
 	if got, err := s.apply(context.Background(), uuid.New(), c, true); err != nil || got != verdictApplied {
 		t.Fatalf("first: %s, %v", got, err)
 	}
-	c.Version = 5
+	c.Version = stateOf(t, s, row).version
 	if got, err := s.apply(context.Background(), uuid.New(), c, true); err != nil || got != verdictInFlight {
 		t.Fatalf("while queued: %s, %v", got, err)
 	}
