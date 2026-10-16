@@ -2364,3 +2364,34 @@ func TestDownloadStep_TheStoredConfidenceIsTheJudgedOne(t *testing.T) {
 		t.Errorf("stored confidence = %v, want the judged %v", ac.Confidence, judged.confidence)
 	}
 }
+
+func TestJudgeAttempt_AnOtherVersionIsHeldOrRejectedByLength(t *testing.T) {
+	ac := &AcquisitionContext{Track: TrackRef{Title: "Song", Artist: "Artist", CatalogDuration: 200}}
+	tests := []struct {
+		name       string
+		title      string
+		probed     float64
+		want       attemptStatus
+		wantReason string
+	}{
+		{"plain title on length is accepted", "Artist - Song", 200, attemptAccepted, ""},
+		{"other version on length is held", "Song (Radio Edit)", 203, attemptHeld, ""},
+		{"other version 30s off is rejected", "Song (Radio Edit)", 230, 0, fmt.Sprintf(rejectOtherVersionOffLengthFmt, 30.0)},
+		{"other version with no probed length is rejected", "Song (Radio Edit)", 0, 0, rejectOtherVersionLengthUnknown},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			verified := verificationResult{probed: tt.probed, verdict: AudioVerdict{Kind: VerdictSoft}}
+			got := judgeAttempt(ac, ports.AudioCandidate{Title: tt.title}, "/tmp/a.m4a", verified)
+			if tt.wantReason != "" {
+				if got.rejection == nil || got.rejection.reason != tt.wantReason {
+					t.Fatalf("rejection = %+v, want reason %q", got.rejection, tt.wantReason)
+				}
+				return
+			}
+			if got.rejection != nil || got.status != tt.want {
+				t.Errorf("status = %v, rejection = %+v, want status %v and no rejection", got.status, got.rejection, tt.want)
+			}
+		})
+	}
+}

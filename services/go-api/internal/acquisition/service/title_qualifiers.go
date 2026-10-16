@@ -66,7 +66,7 @@ func qualifierDistance(trackTitle, candidateTitle string) int {
 	return distance
 }
 
-func UnrequestedQualifiers(trackTitle, trackArtist, candidateTitle string) (veto, fallback []string) {
+func UnrequestedQualifiers(trackTitle, trackArtist, candidateTitle string) (veto, qualifiers []string) {
 	titleTokens := versiontag.Tokens(trackTitle)
 	artistTokens := versiontag.Tokens(trackArtist)
 	for _, entry := range versiontag.Matches(versiontag.Tokens(versiontag.WithoutFeatureCredits(candidateTitle))) {
@@ -77,7 +77,7 @@ func UnrequestedQualifiers(trackTitle, trackArtist, candidateTitle string) (veto
 			veto = versiontag.AppendLabel(veto, entry.Label)
 			continue
 		}
-		fallback = versiontag.AppendLabel(fallback, entry.Label)
+		qualifiers = versiontag.AppendLabel(qualifiers, entry.Label)
 	}
-	return veto, fallback
+	return veto, qualifiers
 }

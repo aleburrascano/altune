@@ -188,8 +188,8 @@ func (h *holdBook) discard() {
 }
 
 func (a attempt) beats(other attempt) bool {
-	if a.fallback != other.fallback {
-		return !a.fallback
+	if a.otherVersion != other.otherVersion {
+		return !a.otherVersion
 	}
 	return a.confidence > other.confidence
 }
@@ -279,16 +279,16 @@ const (
 )
 
 type attempt struct {
-	candidate  ports.AudioCandidate
-	filePath   string
-	tmpDir     string
-	verified   verificationResult
-	rejection  *downloadRejection
-	status     attemptStatus
-	fallback   bool
-	evidence   Evidence
-	confidence float64
-	format     ports.SourceFormat
+	candidate    ports.AudioCandidate
+	filePath     string
+	tmpDir       string
+	verified     verificationResult
+	rejection    *downloadRejection
+	status       attemptStatus
+	otherVersion bool
+	evidence     Evidence
+	confidence   float64
+	format       ports.SourceFormat
 }
 
 func (a attempt) err() error {
@@ -359,25 +359,30 @@ func (s *DownloadStep) attemptAudio(
 	return result
 }
 
+const (
+	rejectOtherVersionLengthUnknown = "fallback version, length unknown"
+	rejectOtherVersionOffLengthFmt  = "fallback version %.0fs off the expected length"
+)
+
 func judgeAttempt(ac *AcquisitionContext, candidate ports.AudioCandidate, filePath string, verified verificationResult) attempt {
 	evidence := ac.buildEvidence(candidate, verified)
 	result := attempt{
-		filePath:   filePath,
-		verified:   verified,
-		evidence:   evidence,
-		confidence: ScoreConfidence(evidence, ac.ExpectedLength()),
-		fallback:   len(evidence.Qualifiers) > 0,
+		filePath:     filePath,
+		verified:     verified,
+		evidence:     evidence,
+		confidence:   ScoreConfidence(evidence, ac.ExpectedLength()),
+		otherVersion: len(evidence.Qualifiers) > 0,
 	}
-	if result.fallback && !fallbackLengthMatches(evidence.DurationDeltaSeconds, ac.ExpectedLength()) {
-		reason := "fallback version, length unknown"
+	if result.otherVersion && !otherVersionLengthMatches(evidence.DurationDeltaSeconds, ac.ExpectedLength()) {
+		reason := rejectOtherVersionLengthUnknown
 		if evidence.DurationDeltaSeconds != nil {
-			reason = fmt.Sprintf("fallback version %.0fs off the expected length", *evidence.DurationDeltaSeconds)
+			reason = fmt.Sprintf(rejectOtherVersionOffLengthFmt, *evidence.DurationDeltaSeconds)
 		}
 		result.rejection = &downloadRejection{stage: RejectionDuration, reason: reason}
 		return result
 	}
 	result.status = attemptAccepted
-	if result.fallback || verified.verdict.Kind == VerdictUnknown {
+	if result.otherVersion || verified.verdict.Kind == VerdictUnknown {
 		result.status = attemptHeld
 	}
 	return result

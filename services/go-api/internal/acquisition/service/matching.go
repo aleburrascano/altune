@@ -32,8 +32,8 @@ func lessResolved(a, b candidateEntry) bool {
 }
 
 func lessTopic(a, b candidateEntry) bool {
-	if a.isFallback != b.isFallback {
-		return b.isFallback
+	if a.isOtherVersion != b.isOtherVersion {
+		return b.isOtherVersion
 	}
 	if a.artistMatch != b.artistMatch {
 		return a.artistMatch
@@ -51,8 +51,8 @@ func lessTopic(a, b candidateEntry) bool {
 }
 
 func lessOther(a, b candidateEntry) bool {
-	if a.isFallback != b.isFallback {
-		return b.isFallback
+	if a.isOtherVersion != b.isOtherVersion {
+		return b.isOtherVersion
 	}
 	if a.ident != b.ident {
 		return a.ident > b.ident
@@ -191,12 +191,12 @@ func classifyCandidates(
 			})
 			continue
 		}
-		veto, fallback := UnrequestedQualifiers(track.Title, track.Artist, c.Title)
+		veto, qualifiers := UnrequestedQualifiers(track.Title, track.Artist, c.Title)
 		if len(veto) > 0 {
 			rejected = append(rejected, qualifierRejection(c, veto))
 			continue
 		}
-		entry.isFallback = len(fallback) > 0
+		entry.isOtherVersion = len(qualifiers) > 0
 		if entry.uploader == channelTopic {
 			topic = append(topic, entry)
 		} else {

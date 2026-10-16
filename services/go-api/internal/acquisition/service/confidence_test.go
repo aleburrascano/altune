@@ -147,7 +147,7 @@ func TestConfidence_ACreditedPinnedVideoClearsTheFloor(t *testing.T) {
 
 func secs(v float64) *float64 { return &v }
 
-func TestFallbackLengthMatches(t *testing.T) {
+func TestOtherVersionLengthMatches(t *testing.T) {
 	allowance := domain.LengthAuthoritative.Allowance(204)
 	tests := []struct {
 		name  string
@@ -162,8 +162,8 @@ func TestFallbackLengthMatches(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := fallbackLengthMatches(tt.delta, 204); got != tt.want {
-				t.Errorf("fallbackLengthMatches = %v, want %v", got, tt.want)
+			if got := otherVersionLengthMatches(tt.delta, 204); got != tt.want {
+				t.Errorf("otherVersionLengthMatches = %v, want %v", got, tt.want)
 			}
 		})
 	}

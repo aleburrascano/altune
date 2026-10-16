@@ -107,16 +107,16 @@ func compactCreditKey(name string) string {
 }
 
 type candidateEntry struct {
-	ident         float64
-	meta          float64
-	durationDelta float64
-	qualDistance  int
-	isFallback    bool
-	artistMatch   bool
-	uploader      string
-	featMatch     bool
-	explicitFits  bool
-	candidate     ports.AudioCandidate
+	ident          float64
+	meta           float64
+	durationDelta  float64
+	qualDistance   int
+	isOtherVersion bool
+	artistMatch    bool
+	uploader       string
+	featMatch      bool
+	explicitFits   bool
+	candidate      ports.AudioCandidate
 }
 
 func durationDelta(expected, actual float64) float64 {

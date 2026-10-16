@@ -83,7 +83,7 @@ func durationBonus(delta *float64, trackSeconds float64) float64 {
 }
 
 func (ac *AcquisitionContext) buildEvidence(candidate ports.AudioCandidate, verified verificationResult) Evidence {
-	_, fallback := UnrequestedQualifiers(ac.Track.Title, ac.Track.Artist, candidate.Title)
+	_, qualifiers := UnrequestedQualifiers(ac.Track.Title, ac.Track.Artist, candidate.Title)
 	var delta *float64
 	if d, known := ac.durationDelta(candidate, verified.probed); known {
 		delta = &d
@@ -93,7 +93,7 @@ func (ac *AcquisitionContext) buildEvidence(candidate ports.AudioCandidate, veri
 		AcoustIDScore:        verified.verdict.Score,
 		DurationDeltaSeconds: delta,
 		Channel:              uploaderClass(ac.Track.Artist, candidate),
-		Qualifiers:           fallback,
+		Qualifiers:           qualifiers,
 		Resolved:             candidate.IsResolved(),
 		SourceTitle:          candidate.Title,
 	}
@@ -107,7 +107,7 @@ func (ac *AcquisitionContext) durationDelta(candidate ports.AudioCandidate, prob
 	return probed - expected, true
 }
 
-func fallbackLengthMatches(delta *float64, trackSeconds float64) bool {
+func otherVersionLengthMatches(delta *float64, trackSeconds float64) bool {
 	return delta != nil && math.Abs(*delta) <= domain.LengthAuthoritative.Allowance(trackSeconds)
 }
 
