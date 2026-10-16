@@ -43,7 +43,11 @@ SET acquisition_status = CASE
 			AND acquisition_lease_until >= now() THEN acquisition_lease_until
 	END,
 	acquisition_attempts = acquisition_attempts
-		+ CASE WHEN acquisition_job_kind = 'upgrade' AND $2 <> 'upgrade' THEN 1 ELSE 0 END,
+		+ CASE
+			WHEN acquisition_job_kind = 'upgrade' AND $2 <> 'upgrade' THEN 1
+			WHEN acquisition_lease_until < now() THEN 1
+			ELSE 0
+		END,
 	acquisition_run_attempts = 0,
 	failure_reason = '',
 	version = version + 1

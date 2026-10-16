@@ -188,11 +188,29 @@ func (q *memJobQueue) findClaimable(now time.Time, match func(*memJob) bool) (sh
 		if now.Before(j.availableAt) {
 			continue
 		}
-		if best == nil || j.availableAt.Before(best.availableAt) {
+		if best == nil || q.claimsBefore(now, j, best) {
 			best, bestID = j, id
 		}
 	}
 	return bestID, best
+}
+
+func (q *memJobQueue) claimsBefore(now time.Time, candidate, best *memJob) bool {
+	candidateLive, bestLive := q.liveLeases(now, candidate.userID), q.liveLeases(now, best.userID)
+	if candidateLive != bestLive {
+		return candidateLive < bestLive
+	}
+	return candidate.availableAt.Before(best.availableAt)
+}
+
+func (q *memJobQueue) liveLeases(now time.Time, userID shared.UserId) int {
+	live := 0
+	for _, j := range q.jobs {
+		if j.userID == userID && j.leased && now.Before(j.leaseUntil) {
+			live++
+		}
+	}
+	return live
 }
 
 func (q *memJobQueue) Heartbeat(_ context.Context, trackID shared.TrackId, fence ports.Fence, lease time.Duration) error {
@@ -200,12 +218,13 @@ func (q *memJobQueue) Heartbeat(_ context.Context, trackID shared.TrackId, fence
 	defer q.mu.Unlock()
 	j, ok := q.jobs[trackID]
 	if !ok {
-		return fmt.Errorf("heartbeat acquisition job: track %s not found", trackID)
-	}
-	if !j.leased || ports.Fence(j.fence) != fence {
 		return acqdomain.ErrLeaseLost
 	}
-	j.leaseUntil = q.now().Add(lease)
+	now := q.now()
+	if !j.leased || ports.Fence(j.fence) != fence || !now.Before(j.leaseUntil) {
+		return acqdomain.ErrLeaseLost
+	}
+	j.leaseUntil = now.Add(lease)
 	return nil
 }
 

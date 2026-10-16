@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/acquisitiontest"
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
@@ -374,4 +375,31 @@ func TestMemJobQueue_VerifyLeaseHoldsOnlyForTheCurrentFenceOfALiveLease(t *testi
 	if err := q.VerifyLease(ctx, trackID, job.Fence); !errors.Is(err, acqdomain.ErrLeaseLost) {
 		t.Errorf("VerifyLease after the lease expired = %v, want ErrLeaseLost", err)
 	}
+}
+
+type contractMemJobQueue struct {
+	*memJobQueue
+}
+
+func (q contractMemJobQueue) AddTrack(_ *testing.T, userID shared.UserId) shared.TrackId {
+	trackID := shared.NewTrackId()
+	q.rememberUser(trackID, userID)
+	return trackID
+}
+
+func (q contractMemJobQueue) ExpireLease(t *testing.T, trackID shared.TrackId) {
+	t.Helper()
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	j, ok := q.jobs[trackID]
+	if !ok {
+		t.Fatalf("expire lease: track %s has no job", trackID)
+	}
+	j.leaseUntil = q.now().Add(-time.Second)
+}
+
+func TestMemJobQueue_Contract(t *testing.T) {
+	acquisitiontest.JobQueueContract(t, func(*testing.T) acquisitiontest.JobQueueUnderTest {
+		return contractMemJobQueue{newMemJobQueue(nil)}
+	})
 }

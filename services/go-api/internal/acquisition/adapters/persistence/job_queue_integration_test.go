@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"altune/go-api/internal/acquisition/acquisitiontest"
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service"
@@ -653,7 +654,7 @@ func TestPgxJobQueue_PendingDepthCountsUnleasedJobsAndReportsOldestAge(t *testin
 	}
 }
 
-func TestPgxJobQueue_ReEnqueueAfterPriorClaimsStartsANewRunButKeepsTheFence(t *testing.T) {
+func TestPgxJobQueue_ReEnqueueAfterPriorClaimsStartsANewRunAndAdvancesTheFence(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := NewPgxJobQueue(pool)
@@ -678,8 +679,8 @@ func TestPgxJobQueue_ReEnqueueAfterPriorClaimsStartsANewRunButKeepsTheFence(t *t
 		t.Fatalf("Claim after re-Enqueue = %v", err)
 	}
 
-	if job.Run != 1 || job.Attempts != 4 {
-		t.Errorf("Run/Attempts = %d/%d, want 1/4", job.Run, job.Attempts)
+	if job.Run != 1 || job.Attempts != 5 {
+		t.Errorf("Run/Attempts = %d/%d, want 1/5", job.Run, job.Attempts)
 	}
 	if err := queue.Settle(ctx, track.ID, stale.Fence); !errors.Is(err, acqdomain.ErrLeaseLost) {
 		t.Errorf("stale Settle = %v, want ErrLeaseLost", err)
@@ -1377,5 +1378,70 @@ func TestPgxJobQueue_APanickingReplaceBelowTheRunCapIsRetriedAfterItsBackoff(t *
 	}
 	if got := acq.runs.Load(); got != 1 {
 		t.Errorf("runs = %d, want 1", got)
+	}
+}
+
+type contractPgxJobQueue struct {
+	*PgxJobQueue
+	pool *pgxpool.Pool
+}
+
+func (q contractPgxJobQueue) AddTrack(t *testing.T, userID shared.UserId) shared.TrackId {
+	t.Helper()
+	track, err := domain.NewTrack(userID, "Blinding Lights", "The Weeknd", "After Hours")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	_, err = q.pool.Exec(context.Background(),
+		`INSERT INTO tracks (id, user_id, title, artist, album, dedup_key, acquisition_status) VALUES ($1, $2, $3, $4, $5, $6, 'failed')`,
+		track.ID.UUID(), track.UserId.UUID(), track.Title, track.Artist, track.Album, uuid.NewString())
+	if err != nil {
+		t.Fatalf("insert track: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = q.pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID.UUID())
+	})
+	return track.ID
+}
+
+func (q contractPgxJobQueue) ExpireLease(t *testing.T, trackID shared.TrackId) {
+	expireLease(t, q.pool, trackID)
+}
+
+func TestPgxJobQueue_Contract(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	acquisitiontest.JobQueueContract(t, func(*testing.T) acquisitiontest.JobQueueUnderTest {
+		return contractPgxJobQueue{PgxJobQueue: NewPgxJobQueue(pool), pool: pool}
+	})
+}
+
+func TestPgxJobQueue_AReplaceReEnqueuedOverALapsedLeaseSurvivesTheStaleSettle(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	queue := NewPgxJobQueue(pool)
+	ctx := context.Background()
+	track := insertReadyTrack(t, pool)
+	if err := queue.Enqueue(ctx, track.ID, ports.JobKindReplace, 0); err != nil {
+		t.Fatalf("Enqueue = %v", err)
+	}
+	stale, err := queue.Claim(ctx, time.Minute)
+	if err != nil {
+		t.Fatalf("Claim = %v", err)
+	}
+	expireLease(t, pool, track.ID)
+	if err := queue.Enqueue(ctx, track.ID, ports.JobKindReplace, 0); err != nil {
+		t.Fatalf("re-Enqueue over the lapsed lease = %v", err)
+	}
+
+	if err := queue.Settle(ctx, track.ID, stale.Fence); !errors.Is(err, acqdomain.ErrLeaseLost) {
+		t.Errorf("stale Settle = %v, want ErrLeaseLost", err)
+	}
+
+	if scheduledAvailableAt(t, pool, track.ID) == nil {
+		t.Error("available_at = NULL after the stale Settle, want the re-enqueued replace kept")
+	}
+	if job, err := queue.Claim(ctx, time.Minute); err != nil || job.TrackID != track.ID {
+		t.Errorf("Claim = %+v, %v, want the re-enqueued replace", job, err)
 	}
 }
