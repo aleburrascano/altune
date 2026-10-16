@@ -34,6 +34,8 @@ setup_case() {
 echo "docker \$*" >> "$WORK/actions.log"
 case "\$*" in
   "ps --format {{.Names}}") [ "$legacy" = yes ] && echo altune-go-api; exit 0 ;;
+  "ps -a --format {{.Names}}") [ -n "${IDLE_CONTAINER:-}" ] && echo "${IDLE_CONTAINER:-}"; exit 0 ;;
+  "logs altune-go-api-"*) [ "${LOGS_FAIL:-no}" = yes ] && exit 1; echo '{"msg":"candidate_evaluated","track_id":"t1"}'; exit 0 ;;
   *"exec -T caddy sha256sum"*) echo "\$(cat "$WORK/container.hash")  /etc/caddy/Caddyfile"; exit 0 ;;
   *"--force-recreate caddy"*) [ "${CADDY_STUCK:-no}" = yes ] || cp "$WORK/host.hash" "$WORK/container.hash"; exit 0 ;;
   *"wget"*"/health"*) exit $([ "$health_ok" = yes ] && echo 0 || echo 1) ;;
@@ -49,11 +51,12 @@ EOF
     chmod +x "$WORK/bin"/*
     : >"$WORK/actions.log"
 
-    (cd "$WORK/api" && PATH="$WORK/bin:$PATH" HEALTH_TIMEOUT=4 \
+    mkdir -p "$WORK/home"
+    (cd "$WORK/api" && PATH="$WORK/bin:$PATH" HEALTH_TIMEOUT=4 HOME="${ARCHIVE_HOME:-$WORK/home}" \
         bash deploy/blue-green.sh >"$WORK/out.log" 2>&1)
     RC=$?
     UPSTREAM=$(cat "$WORK/api/deploy/caddy/upstream.conf" 2>/dev/null)
-    unset PROD_ENV CADDY_DRIFT CADDY_STUCK
+    unset PROD_ENV CADDY_DRIFT CADDY_STUCK IDLE_CONTAINER LOGS_FAIL ARCHIVE_HOME
 }
 
 fail() {
@@ -155,6 +158,46 @@ CADDY_DRIFT=yes CADDY_STUCK=yes setup_case blue yes yes no
 expect_rc 1
 grep -qF "host=$(cat "$WORK/host.hash") container=stale" "$WORK/out.log" || fail "expected both hashes in the log"
 expect_no_action "caddy reload"
+
+CASE="the idle colour's logs are archived to ~/altune-logs before it is recreated"
+IDLE_CONTAINER=altune-go-api-green setup_case blue yes yes no
+expect_rc 0
+archives=("$WORK"/home/altune-logs/go-api-green-*.log.gz)
+[ -f "${archives[0]}" ] || fail "no go-api-green archive under ~/altune-logs"
+archived=$(zcat "${archives[0]}" 2>/dev/null)
+grep -qF '"msg":"candidate_evaluated"' <<<"$archived" || fail "the archive does not hold the container's log"
+logs_line=$(grep -nF "docker logs altune-go-api-green" "$WORK/actions.log" | head -1 | cut -d: -f1)
+up_line=$(grep -nF "up -d --no-deps go-api-green" "$WORK/actions.log" | head -1 | cut -d: -f1)
+[ -n "$logs_line" ] && [ "$logs_line" -lt "$up_line" ] || fail "the logs were not read before the colour was recreated"
+
+CASE="no archive is attempted when the idle colour has no container"
+setup_case blue yes yes no
+expect_rc 0
+expect_no_action "docker logs"
+[ -e "$WORK/home/altune-logs" ] && fail "~/altune-logs was created with nothing to archive"
+
+CASE="a failing docker logs only warns, leaves no partial file, and the deploy still succeeds"
+IDLE_CONTAINER=altune-go-api-green LOGS_FAIL=yes setup_case blue yes yes no
+expect_rc 0
+expect_upstream "reverse_proxy altune-go-api-green:8000"
+grep -qF "WARNING: could not archive the logs of go-api-green" "$WORK/out.log" || fail "expected an archive warning"
+[ -z "$(ls -A "$WORK/home/altune-logs" 2>/dev/null)" ] || fail "a failed archive left a file behind"
+
+CASE="an unwritable log directory only warns and the deploy still succeeds"
+: >"$parent/not-a-dir"
+ARCHIVE_HOME="$parent/not-a-dir" IDLE_CONTAINER=altune-go-api-green setup_case blue yes yes no
+expect_rc 0
+expect_upstream "reverse_proxy altune-go-api-green:8000"
+grep -qF "WARNING: could not archive" "$WORK/out.log" || fail "expected an archive warning"
+
+CASE="archives older than 30 days are pruned and newer ones kept"
+mkdir -p "$parent/prune-home/altune-logs"
+touch -d '40 days ago' "$parent/prune-home/altune-logs/go-api-blue-old.log.gz"
+touch -d '5 days ago' "$parent/prune-home/altune-logs/go-api-blue-recent.log.gz"
+ARCHIVE_HOME="$parent/prune-home" IDLE_CONTAINER=altune-go-api-green setup_case blue yes yes no
+expect_rc 0
+[ -e "$parent/prune-home/altune-logs/go-api-blue-old.log.gz" ] && fail "the 40-day-old archive was kept"
+[ -e "$parent/prune-home/altune-logs/go-api-blue-recent.log.gz" ] || fail "the 5-day-old archive was pruned"
 
 site_imports() {
     awk -v site="$1" '

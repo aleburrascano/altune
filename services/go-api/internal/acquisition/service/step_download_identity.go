@@ -169,7 +169,7 @@ func (s *DownloadStep) identify(
 		return nil
 	}
 	result.verdict = s.classifyMatch(ctx, ac, match, result.probed, sourceOf(ac, candidate))
-	logAudioVerdict(ctx, ac, candidate, result.verdict)
+	logAudioVerdict(ctx, ac, candidate, result.verdict, match.Results)
 	return judgeVerdict(ctx, ac, candidate, match, result)
 }
 
@@ -220,10 +220,12 @@ func identityVersionOf(ac *AcquisitionContext) audiojudge.IdentityVersion {
 
 const (
 	maxLoggedSurviving     = 5
+	maxLoggedResults       = 5
+	maxLoggedRecordings    = 5
 	maxLoggedReleaseGroups = 5
 )
 
-func logAudioVerdict(ctx context.Context, ac *AcquisitionContext, candidate ports.AudioCandidate, verdict AudioVerdict) {
+func logAudioVerdict(ctx context.Context, ac *AcquisitionContext, candidate ports.AudioCandidate, verdict AudioVerdict, results []ports.AcoustIDResult) {
 	slog.InfoContext(ctx, "acquisition.audio_verdict",
 		"track_id", ac.Track.ID,
 		"candidate_url", candidate.URL,
@@ -233,6 +235,7 @@ func logAudioVerdict(ctx context.Context, ac *AcquisitionContext, candidate port
 		"reasons", verdict.Judged.Reasons,
 		"score", verdict.Score,
 		"surviving", loggedSurviving(verdict.Surviving),
+		"results", loggedResults(results),
 		"reference_doubted", ac.Identity.ReferenceDoubted,
 	)
 }
@@ -246,6 +249,18 @@ func loggedSurviving(surviving []ports.LinkedRecording) []map[string]any {
 			"release_groups":       loggedReleaseGroups(recording.ReleaseGroups),
 			"release_groups_total": len(recording.ReleaseGroups),
 		})
+	}
+	return logged
+}
+
+func loggedResults(results []ports.AcoustIDResult) []map[string]any {
+	logged := make([]map[string]any, 0, min(len(results), maxLoggedResults))
+	for _, result := range results[:min(len(results), maxLoggedResults)] {
+		recordings := make([]string, 0, min(len(result.Recordings), maxLoggedRecordings))
+		for _, recording := range result.Recordings[:min(len(result.Recordings), maxLoggedRecordings)] {
+			recordings = append(recordings, recording.MBID)
+		}
+		logged = append(logged, map[string]any{"score": result.Score, "recordings": recordings})
 	}
 	return logged
 }

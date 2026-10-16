@@ -26,7 +26,7 @@ STUBDOCKER
 
 run_script() {
     (
-        PATH="$WORK/bin:$PATH" ALTUNE_HOST=stub ALTUNE_REMOTE_DIR="$WORK/checkout" \
+        PATH="$WORK/bin:$PATH" HOME="${STUB_HOME:-$HOME}" ALTUNE_HOST=stub ALTUNE_REMOTE_DIR="$WORK/checkout" \
             bash "$HERE/acq-debug.sh" "$@" >"$WORK/out.log" 2>"$WORK/err.log"
     )
     RC=$?
@@ -108,6 +108,46 @@ run_script capture 03ae722b-52e2-4c42-a89b-5b7751020358
 expect_rc 0
 expect_out '"candidate_title":"Smaxk Or Die"'
 
+CASE="capture reads ~/altune-logs archives, so a candidate line from before a container was recreated reaches the dump"
+new_stub_bin
+stub_audit_tools
+mkdir -p "$WORK/home/altune-logs"
+echo '{"time":"2026-09-20T04:29:14Z","msg":"candidate_evaluated","track_id":"03ae722b-52e2-4c42-a89b-5b7751020358","source":"ytdlp","candidate_title":"Only In The Archive"}' |
+    gzip >"$WORK/home/altune-logs/go-api-green-20260920T050000Z.log.gz"
+cat >"$WORK/bin/docker" <<'STUBDOCKER'
+#!/usr/bin/env bash
+case "$1 $2" in
+    "ps -a") echo altune-go-api-green ;;
+    ps*) echo altune-go-api-green ;;
+esac
+STUBDOCKER
+cat >"$WORK/bin/psql" <<'STUBPSQL'
+#!/usr/bin/env bash
+if grep -q json_build_object; then echo '{"id":"03ae722b-52e2-4c42-a89b-5b7751020358"}'; else echo 03ae722b-52e2-4c42-a89b-5b7751020358; fi
+STUBPSQL
+chmod +x "$WORK/bin/docker" "$WORK/bin/psql"
+STUB_HOME="$WORK/home" run_script capture 03ae722b-52e2-4c42-a89b-5b7751020358
+expect_rc 0
+expect_out '"candidate_title":"Only In The Archive"'
+
+CASE="logs <since> keeps archived lines inside the window and drops older ones, and an unparseable window drops all archived lines"
+new_stub_bin
+mkdir -p "$WORK/home/altune-logs"
+recent=$(date -u -d '10 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
+{
+    echo '{"time":"2020-01-01T00:00:00Z","msg":"acquisition.audio_verdict","note":"too old"}'
+    echo "{\"time\":\"$recent\",\"msg\":\"acquisition.audio_verdict\",\"note\":\"in window\"}"
+} | gzip >"$WORK/home/altune-logs/go-api-green-20260920T050000Z.log.gz"
+STUB_HOME="$WORK/home" run_script logs 1h
+expect_rc 0
+expect_out '"note":"in window"'
+expect_not_out '"note":"too old"'
+STUB_HOME="$WORK/home" run_script logs 99999h
+expect_out '"note":"too old"'
+STUB_HOME="$WORK/home" run_script logs nonsense
+expect_not_out '"note":"in window"'
+expect_not_out '"note":"too old"'
+
 CASE="track with no argument exits 3 with the usage on stderr and nothing on stdout"
 new_stub_bin
 run_script track
@@ -156,7 +196,7 @@ CASE="checkout missing on the VM exits 3 with the checkout message on stderr and
 new_stub_bin
 missing_dir="$WORK/checkout-missing"
 (
-    PATH="$WORK/bin:$PATH" ALTUNE_HOST=stub ALTUNE_REMOTE_DIR="$missing_dir" \
+    PATH="$WORK/bin:$PATH" HOME="${STUB_HOME:-$HOME}" ALTUNE_HOST=stub ALTUNE_REMOTE_DIR="$missing_dir" \
         bash "$HERE/acq-debug.sh" summary >"$WORK/out.log" 2>"$WORK/err.log"
 )
 RC=$?

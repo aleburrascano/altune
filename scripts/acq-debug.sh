@@ -59,8 +59,35 @@ api=$(docker ps --filter "name=^${prefix}-" --format '{{.Names}}' | head -1)
 
 need_api() { [ -n "$api" ] || { echo "acq-debug: no running ${prefix}-* container" >&2; exit 3; }; }
 
+archive_cutoff() {
+  local window=$1 spec
+  case $window in
+    '') return 0 ;;
+    *[!0-9hms]*) date -u -d "$window" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null; return ;;
+  esac
+  [[ $window =~ ^([0-9]+[hms])+$ ]] || return 1
+  spec=$(sed -E 's/([0-9]+)h/\1 hours /g; s/([0-9]+)m/\1 minutes /g; s/([0-9]+)s/\1 seconds /g' <<<"$window")
+  date -u -d "$spec ago" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null
+}
+
+archived_lines() {
+  local window="" cutoff f
+  [ "${1:-}" = --since ] && window=${2:-}
+  cutoff=$(archive_cutoff "$window") || return 0
+  [ -z "$window" ] || [ -n "$cutoff" ] || return 0
+  for f in "$HOME"/altune-logs/go-api-*.log.gz; do
+    [ -f "$f" ] || continue
+    zcat "$f" 2>/dev/null | awk -v cutoff="$cutoff" '
+      cutoff == "" { print; next }
+      match($0, /^\{"time":"[^"]+"/) && substr($0, 10, RLENGTH - 10) >= cutoff { print }'
+  done
+}
+
 api_logs() {
-  for c in $(docker ps -a --filter "name=^${prefix}-" --format '{{.Names}}'); do docker logs "$@" "$c" 2>&1; done | sort
+  {
+    for c in $(docker ps -a --filter "name=^${prefix}-" --format '{{.Names}}'); do docker logs "$@" "$c" 2>&1; done
+    archived_lines "$@"
+  } | sort -u
 }
 
 db() {

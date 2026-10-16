@@ -4,6 +4,23 @@ cd "$(dirname "$0")/.." || exit
 . deploy/prod_host.sh
 resolve_public_health_url "${PROD_ENV_FILE:-.env.production}"
 
+archive_colour_logs() {
+    local container="altune-go-api-$1" names dir archive
+    [ -n "${HOME:-}" ] || return 1
+    names=$(docker ps -a --format '{{.Names}}' 2>/dev/null) || return 0
+    grep -qx "$container" <<<"$names" || return 0
+    dir="$HOME/altune-logs"
+    archive="$dir/go-api-$1-$(date -u +%Y%m%dT%H%M%SZ).log.gz"
+    mkdir -p "$dir" || return 1
+    if timeout 60 docker logs "$container" 2>&1 | gzip >"$archive.partial"; then
+        mv "$archive.partial" "$archive" || return 1
+    else
+        rm -f "$archive.partial"
+        return 1
+    fi
+    find "$dir" -maxdepth 1 -name 'go-api-*.log.gz' -mtime +30 -delete || return 1
+}
+
 ACTIVE=$(active_color)
 TARGET=$(idle_color "$ACTIVE")
 capture_upstream
@@ -14,6 +31,8 @@ compose up -d redis caddy pot
 
 log "building $TARGET"
 compose build "go-api-$TARGET"
+
+archive_colour_logs "$TARGET" || log "WARNING: could not archive the logs of go-api-$TARGET; deploying anyway"
 
 log "starting $TARGET"
 compose up -d --no-deps "go-api-$TARGET"
