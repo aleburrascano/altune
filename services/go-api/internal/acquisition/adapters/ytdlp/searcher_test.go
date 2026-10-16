@@ -1014,3 +1014,79 @@ func TestYtDlpEntry_ASearchResultIsAnUpload(t *testing.T) {
 		t.Errorf("Kind = %q, want an upload", c.Kind)
 	}
 }
+
+func previewWithScript(t *testing.T, body string) (string, error) {
+	t.Helper()
+	outDir := t.TempDir()
+	binary := filepath.Join(t.TempDir(), "fake-yt-dlp")
+	script := "#!/bin/sh\n" + strings.ReplaceAll(body, "OUT", outDir) + "\n"
+	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s := NewYtDlpAudioSearcher("", "", "")
+	s.binary = binary
+	return s.DownloadPreview(context.Background(), "https://youtube.com/watch?v=1", outDir, 30)
+}
+
+func TestDownload_RejectsAPrintedPathThatClimbsOutOfTheOutputDir(t *testing.T) {
+	_, err := downloadWithScript(t, "truncate -s 20K OUT/../escaped.m4a; echo 'altune-output-path:OUT/../escaped.m4a'")
+	if err == nil {
+		t.Fatal("Download accepted a printed path that climbs out of the output dir with ../")
+	}
+}
+
+func TestDownload_RejectsAPrintedPathInASiblingDirSharingTheOutputDirPrefix(t *testing.T) {
+	_, err := downloadWithScript(t, "mkdir -p OUT-evil; truncate -s 20K OUT-evil/a.m4a; echo 'altune-output-path:OUT-evil/a.m4a'")
+	if err == nil {
+		t.Fatal("Download accepted a printed path in a sibling dir whose name starts with the output dir")
+	}
+}
+
+func TestDownload_RejectsAPrintedPathThatDoesNotExist(t *testing.T) {
+	_, err := downloadWithScript(t, "echo 'altune-output-path:OUT/missing.m4a'")
+	if err == nil {
+		t.Fatal("Download accepted a printed path with no file behind it")
+	}
+}
+
+func TestDownload_AnEmptyPrintedPathIsNoPath(t *testing.T) {
+	_, err := downloadWithScript(t, "truncate -s 20K OUT/a.m4a; echo 'altune-output-path:'")
+	if err == nil || err.Error() != "no output path printed by yt-dlp" {
+		t.Fatalf("Download error = %v, want no output path printed by yt-dlp", err)
+	}
+}
+
+func TestDownload_APathPrintedOnlyToStderrIsNoPath(t *testing.T) {
+	_, err := downloadWithScript(t, "truncate -s 20K OUT/a.m4a; echo 'altune-output-path:OUT/a.m4a' >&2")
+	if err == nil || err.Error() != "no output path printed by yt-dlp" {
+		t.Fatalf("Download error = %v, want no output path printed by yt-dlp", err)
+	}
+}
+
+func TestDownload_ReturnsAPrintedPathWithUnicodeSpacesAndAmpersand(t *testing.T) {
+	got, err := downloadWithScript(t, "truncate -s 20K 'OUT/Sigur Rós - Hoppípolla (Simon & Garfunkel).m4a'; truncate -s 90K OUT/stray.m4a; echo 'altune-source-format:hls_aac_160k|mp4a.40.2|160'; echo 'altune-output-path:OUT/Sigur Rós - Hoppípolla (Simon & Garfunkel).m4a'")
+	if err != nil || filepath.Base(got.Path) != "Sigur Rós - Hoppípolla (Simon & Garfunkel).m4a" {
+		t.Fatalf("Download = %q, %v, want the printed unicode file", got.Path, err)
+	}
+}
+
+func TestDownload_FindsThePrintedPathAfterAHugeStdout(t *testing.T) {
+	got, err := downloadWithScript(t, "truncate -s 20K OUT/a.m4a; truncate -s 90K OUT/stray.m4a; head -c 2000000 /dev/zero | tr '\\000' x; echo; seq 1 100000; echo 'altune-output-path:OUT/a.m4a'")
+	if err != nil || filepath.Base(got.Path) != "a.m4a" {
+		t.Fatalf("Download = %q, %v, want a.m4a after a huge stdout", got.Path, err)
+	}
+}
+
+func TestDownloadPreview_ReturnsThePrintedFileNotALargerStray(t *testing.T) {
+	got, err := previewWithScript(t, "truncate -s 20K OUT/preview.m4a; truncate -s 90K OUT/stray.m4a; echo 'altune-output-path:OUT/preview.m4a'")
+	if err != nil || filepath.Base(got) != "preview.m4a" {
+		t.Fatalf("DownloadPreview = %q, %v, want preview.m4a", got, err)
+	}
+}
+
+func TestDownloadPreview_ErrorsWhenNoPathIsPrinted(t *testing.T) {
+	_, err := previewWithScript(t, "truncate -s 20K OUT/preview.m4a")
+	if err == nil || !strings.Contains(err.Error(), "no output path printed by yt-dlp") {
+		t.Fatalf("DownloadPreview error = %v, want no output path printed by yt-dlp", err)
+	}
+}
