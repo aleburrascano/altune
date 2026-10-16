@@ -6,11 +6,13 @@ import (
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func snapshotWith(status ports.TrackStatus, streamable bool) *ports.TrackSnapshot {
@@ -303,5 +305,25 @@ func TestReacquireAdmission_NilSnapshotRefused(t *testing.T) {
 	}
 	if scheduled {
 		t.Error("scheduled a reacquire for a nil snapshot")
+	}
+}
+
+func TestRetryAdmission_ACooldownStoreErrorRefusesTheRetry(t *testing.T) {
+	store := newFakeCooldownStore()
+	store.reserveErr = fmt.Errorf("reserve cooldown: %w", &pgconn.PgError{
+		Code:    "42P01",
+		Message: `relation "acquisition_cooldowns" does not exist`,
+	})
+	called := false
+	err := NewRetryAdmission(store).Admit(context.Background(), failedTrack(t), func() error { called = true; return nil })
+	if !errors.Is(err, store.reserveErr) {
+		t.Fatalf("Admit = %v, want the store error", err)
+	}
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "42P01" {
+		t.Errorf("Admit error = %v, want it to carry SQLSTATE 42P01", err)
+	}
+	if called {
+		t.Error("retry was scheduled although the cooldown store failed")
 	}
 }

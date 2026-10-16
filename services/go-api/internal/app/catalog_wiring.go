@@ -68,6 +68,7 @@ type catalogWiring struct {
 type audioSourcesStaging struct {
 	audioStore     catalogPorts.AudioStore
 	trackRepo      *persistence.PgxTrackRepository
+	ledger         *acqCatalogBridge.TrackLedger
 	scheduler      catalogPorts.AcquisitionScheduler
 	background     *acqService.BackgroundAcquisitionScheduler
 	ytDlpSearcher  *ytdlp.YtDlpAudioSearcher
@@ -126,12 +127,13 @@ func (a *App) wireAudioSources(
 	staging := audioSourcesStaging{
 		audioStore:     audioStore,
 		trackRepo:      trackRepo,
+		ledger:         acqCatalogBridge.NewTrackLedger(trackRepo),
 		ytDlpSearcher:  a.sourceCanarySearcher(),
 		ytDlpAvailable: tools.YtDlp,
 		ytmCanary:      a.sourceCanaryYTMClient(),
 	}
 	if len(audioSources.all()) > 0 && audioStore != nil {
-		bgScheduler := a.buildAcquisitionScheduler(ctx, tap, disc, trackRepo, audioStore, audioSources, tools)
+		bgScheduler := a.buildAcquisitionScheduler(ctx, tap, disc, staging.ledger, audioStore, audioSources, tools)
 		staging.background = bgScheduler
 		staging.scheduler = bgScheduler
 	}
@@ -142,7 +144,7 @@ func (a *App) buildAcquisitionScheduler(
 	ctx context.Context,
 	tap *eventtap.Tap,
 	disc discoveryWiring,
-	trackRepo *persistence.PgxTrackRepository,
+	ledger *acqCatalogBridge.TrackLedger,
 	audioStore catalogPorts.AudioStore,
 	audioSources sourceTiers,
 	verification acqPorts.AcquisitionVerification,
@@ -192,7 +194,6 @@ func (a *App) buildAcquisitionScheduler(
 	if a.upgradeEnabled() {
 		acquireOpts = append(acquireOpts, acqService.WithPreviewMatcher(a.upgradePreviewMatcher(), a.cfg.AcquisitionUpgradePreviewAMaxBER))
 	}
-	ledger := acqCatalogBridge.NewTrackLedger(trackRepo)
 	acquireSvc := acqService.NewAcquireTrackAudioService(
 		ledger,
 		acqService.NewSourceRegistry(audioSources.first...).WithFallback(audioSources.fallback...),
@@ -298,9 +299,9 @@ func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServices
 	var retryH *acqHandler.RetryHandler
 	var reacquireH *acqHandler.ReacquireHandler
 	if audio.scheduler != nil {
-		cooldowns := acqPersistence.NewFallbackCooldownStore(acqPersistence.NewPgxCooldownStore(a.pool))
-		retryH = acqHandler.NewRetryHandler(acqCatalogBridge.NewTrackLedger(audio.trackRepo), audio.scheduler, acqService.NewRetryAdmission(cooldowns))
-		reacquireH = acqHandler.NewReacquireHandler(acqCatalogBridge.NewTrackLedger(audio.trackRepo), audio.background, acqService.NewReacquireAdmission(cooldowns))
+		cooldowns := acqPersistence.NewPgxCooldownStore(a.pool)
+		retryH = acqHandler.NewRetryHandler(audio.ledger, audio.scheduler, acqService.NewRetryAdmission(cooldowns))
+		reacquireH = acqHandler.NewReacquireHandler(audio.ledger, audio.background, acqService.NewReacquireAdmission(cooldowns))
 	}
 
 	return catalogWiring{

@@ -228,7 +228,7 @@ adapters/
   discoverybridge/
     recording_resolver.go RecordingResolver — discovery's search service to a RecordingIdentity
   persistence/
-    cooldown_store.go    PgxCooldownStore — the atomic reserve/release upsert on acquisition_cooldowns; FallbackCooldownStore — per-process windows while migration 019 is unapplied
+    cooldown_store.go    PgxCooldownStore — the atomic reserve/release upsert on acquisition_cooldowns
 ```
 
 Ports are deliberately **narrow slices of larger capabilities**: `AudioWriter` is
@@ -458,12 +458,9 @@ upsert through `ports.CooldownStore`), so it holds across restarts, blue-green
 swaps and replicas rather than per process. `ReacquireAdmission` shares the store
 with its own `reacquire` window.
 
-Migrations are applied by hand after deploy, so the wiring wraps the Postgres
-store in `persistence.FallbackCooldownStore`: while the table is missing
-(SQLSTATE 42P01) it keeps the same windows per process and logs one WARN naming
-migration 019, instead of failing retry/reacquire with 500. It tries Postgres on
-every call, so the durable window resumes without a restart once 019 is applied;
-any other store error still fails the request.
+The wiring uses `persistence.PgxCooldownStore` directly: a store error (including
+an undefined table, SQLSTATE 42P01) refuses the retry or reacquire with that error
+rather than admitting it from per-process state.
 
 ### The upgrade lane
 
@@ -769,7 +766,7 @@ flowchart TD
 | a source's `Name()` (`ytdlp`, `ytmusic`) | `stampSource` stamps it onto `AudioCandidate.Source`; `SourceRegistry.Fetch` routes the download by matching it back, and it labels every candidate log line and `CandidateRejection` | renaming one leaves `Fetch` with "no source named" for every candidate that source found — the search is paid for and then discarded wholesale |
 | a `ports.Provider*` identity key (`youtube`, `deezer`, `soundcloud`) | `discoverybridge.providerKey`'s mapping off discovery's `ProviderName`, `RecordingIdentity.SourceFor`, `ytmusic`'s `identityKey` | a key written by one side and not looked up by the other fails *silently*: `SourceFor` returns false and the resolved source simply never produces a candidate |
 | a `RejectionStage` constant | the per-stage counts in `summarizeRejections`, persisted into `failure_reason` after `domain.FailureDetailSeparator`, and every rejection log line | renaming one splits that stage's history — rows and dashboards group the old and new spelling as two different, half-populated stages |
-| a `ports.CooldownKind` value (`retry`, `reacquire`) | the `acquisition_cooldowns.kind` CHECK constraint (migration 019), both admissions, and `FallbackCooldownStore`'s in-memory key | a kind the constraint doesn't list fails every reserve with a 500; renaming one abandons the windows already written and reopens the cooldown for every track |
+| a `ports.CooldownKind` value (`retry`, `reacquire`) | the `acquisition_cooldowns.kind` CHECK constraint (migration 019), and both admissions | a kind the constraint doesn't list fails every reserve with a 500; renaming one abandons the windows already written and reopens the cooldown for every track |
 | `CoreSteps` | production *and* every reacquire CLI command | a step added for the service also runs in bulk repair, on the whole library |
 | `BuildAudioRef` / the sanitizer | the storage layout *and* `cmd/backfillaudio`'s key derivation | a layout change orphans every existing object and makes backfill unable to find them |
 | `AudioCandidate` fields | the ytdlp adapter's extraction and every matcher | a field added but not populated reads as a zero score, not as an error |
