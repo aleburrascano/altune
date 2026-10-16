@@ -80,8 +80,8 @@ func TestPgxJobQueue_ClaimSkipsUnavailableAndLeasedRows(t *testing.T) {
 	if job.TrackID != track.ID {
 		t.Errorf("Claim returned track %s, want the available one %s (not the future-scheduled %s)", job.TrackID, track.ID, future.ID)
 	}
-	if job.Attempts != 1 {
-		t.Errorf("Attempts = %d, want 1", job.Attempts)
+	if job.Fence != 1 {
+		t.Errorf("Fence = %d, want 1", job.Fence)
 	}
 
 	if _, err := queue.Claim(ctx, 2*time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
@@ -181,8 +181,8 @@ func TestPgxJobQueue_LapsedLeaseIsReclaimed(t *testing.T) {
 	if second.TrackID != track.ID {
 		t.Fatalf("second Claim returned %s, want reclaimed %s", second.TrackID, track.ID)
 	}
-	if second.Attempts != 2 {
-		t.Errorf("Attempts after reclaim = %d, want 2", second.Attempts)
+	if second.Fence != 2 {
+		t.Errorf("Fence after reclaim = %d, want 2", second.Fence)
 	}
 }
 
@@ -320,8 +320,8 @@ func TestPgxJobQueue_ZombieHeartbeatFailsAfterReclaimAndLeavesNewOwnerAlone(t *t
 	if newOwner.TrackID != track.ID {
 		t.Fatalf("second Claim returned %s, want reclaimed %s", newOwner.TrackID, track.ID)
 	}
-	if newOwner.Attempts == zombie.Attempts {
-		t.Fatalf("reclaim did not advance the fence: zombie.Attempts=%d newOwner.Attempts=%d", zombie.Attempts, newOwner.Attempts)
+	if newOwner.Fence == zombie.Fence {
+		t.Fatalf("reclaim did not advance the fence: zombie.Fence=%d newOwner.Fence=%d", zombie.Fence, newOwner.Fence)
 	}
 
 	if err := queue.Heartbeat(ctx, track.ID, zombie.Fence, time.Minute); !errors.Is(err, acqdomain.ErrLeaseLost) {
@@ -679,8 +679,8 @@ func TestPgxJobQueue_ReEnqueueAfterPriorClaimsStartsANewRunAndAdvancesTheFence(t
 		t.Fatalf("Claim after re-Enqueue = %v", err)
 	}
 
-	if job.Run != 1 || job.Attempts != 5 {
-		t.Errorf("Run/Attempts = %d/%d, want 1/5", job.Run, job.Attempts)
+	if job.Run != 1 || job.Fence != 5 {
+		t.Errorf("Run/Fence = %d/%d, want 1/5", job.Run, job.Fence)
 	}
 	if err := queue.Settle(ctx, track.ID, stale.Fence); !errors.Is(err, acqdomain.ErrLeaseLost) {
 		t.Errorf("stale Settle = %v, want ErrLeaseLost", err)
@@ -1443,5 +1443,32 @@ func TestPgxJobQueue_AReplaceReEnqueuedOverALapsedLeaseSurvivesTheStaleSettle(t 
 	}
 	if job, err := queue.Claim(ctx, time.Minute); err != nil || job.TrackID != track.ID {
 		t.Errorf("Claim = %+v, %v, want the re-enqueued replace", job, err)
+	}
+}
+
+func TestPgxJobQueue_SettledReplaceLeavesNoJobKindBehind(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	queue := NewPgxJobQueue(pool)
+	ctx := context.Background()
+	track := insertReadyTrack(t, pool)
+	if err := queue.Enqueue(ctx, track.ID, ports.JobKindReplace, 0); err != nil {
+		t.Fatalf("Enqueue = %v", err)
+	}
+	job, err := queue.Claim(ctx, time.Minute)
+	if err != nil {
+		t.Fatalf("Claim = %v", err)
+	}
+
+	if err := queue.Settle(ctx, track.ID, job.Fence); err != nil {
+		t.Fatalf("Settle = %v", err)
+	}
+
+	var kind string
+	if err := pool.QueryRow(ctx, `SELECT acquisition_job_kind FROM tracks WHERE id = $1`, track.ID.UUID()).Scan(&kind); err != nil {
+		t.Fatalf("read kind: %v", err)
+	}
+	if kind != string(ports.JobKindAcquire) {
+		t.Errorf("job kind after a settled replace = %q, want %q", kind, ports.JobKindAcquire)
 	}
 }

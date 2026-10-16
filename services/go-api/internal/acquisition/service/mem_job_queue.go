@@ -149,7 +149,7 @@ func (q *memJobQueue) claimMatching(lease time.Duration, match func(*memJob) boo
 	best.run++
 	best.reenqueued = false
 	return ports.Job{
-		TrackID: bestID, UserID: best.userID, Kind: best.kind, Attempts: best.attempts, Run: best.run, Fence: ports.Fence(best.fence),
+		TrackID: bestID, UserID: best.userID, Kind: best.kind, Run: best.run, Fence: ports.Fence(best.fence),
 		Waited: max(now.Sub(best.availableAt), 0),
 	}, nil
 }

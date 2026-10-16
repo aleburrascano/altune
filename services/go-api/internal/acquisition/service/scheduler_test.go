@@ -972,7 +972,7 @@ func TestBackgroundScheduler_Schedule_PanickingJobAtTheAttemptCapFailsTheTrack(t
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
-	job := acqports.Job{TrackID: domain.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Attempts: maxAcquisitionAttempts, Run: maxAcquisitionAttempts}
+	job := acqports.Job{TrackID: domain.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Run: maxAcquisitionAttempts}
 
 	scheduler.releasePanickedJob(job)
 
@@ -989,7 +989,7 @@ func TestBackgroundScheduler_Schedule_PanickingJobWithOldClaimsButFreshRunIsRetr
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
-	job := acqports.Job{TrackID: domain.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Attempts: maxAcquisitionAttempts + 4, Run: 1}
+	job := acqports.Job{TrackID: domain.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Fence: acqports.Fence(maxAcquisitionAttempts + 4), Run: 1}
 
 	scheduler.releasePanickedJob(job)
 
@@ -1006,7 +1006,7 @@ func TestBackgroundScheduler_Schedule_PanickingJobAtTheRunCapFailsTheTrack(t *te
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
-	job := acqports.Job{TrackID: domain.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Attempts: maxAcquisitionAttempts + 4, Run: maxAcquisitionAttempts}
+	job := acqports.Job{TrackID: domain.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Fence: acqports.Fence(maxAcquisitionAttempts + 4), Run: maxAcquisitionAttempts}
 
 	scheduler.releasePanickedJob(job)
 
@@ -2925,7 +2925,7 @@ func TestBackgroundScheduler_APanickingReplaceAtTheRunCapIsSettled(t *testing.T)
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
-	job := acqports.Job{TrackID: domain.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Kind: acqports.JobKindReplace, Attempts: maxAcquisitionAttempts, Run: maxAcquisitionAttempts}
+	job := acqports.Job{TrackID: domain.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Kind: acqports.JobKindReplace, Run: maxAcquisitionAttempts}
 
 	scheduler.releasePanickedJob(job)
 
@@ -2989,7 +2989,7 @@ func TestBackgroundScheduler_APanickedJobAtOrPastTheRunCapLeavesTheQueueWhatever
 		for _, r := range runs {
 			run := r.run
 			t.Run(string(kind)+"/"+r.name, func(t *testing.T) {
-				acq, queue := panickedJobOutcome(t, acqports.Job{Kind: kind, Attempts: run, Run: run})
+				acq, queue := panickedJobOutcome(t, acqports.Job{Kind: kind, Run: run})
 
 				if got := queue.releaseDelays(); len(got) != 0 {
 					t.Errorf("released with %v, want no Release: a released job at the cap stays claimable", got)
@@ -3021,7 +3021,7 @@ func TestBackgroundScheduler_APanickedJobBelowTheRunCapIsRetriedAfterItsBackoff(
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			acq, queue := panickedJobOutcome(t, acqports.Job{Kind: tc.kind, Attempts: tc.run, Run: tc.run})
+			acq, queue := panickedJobOutcome(t, acqports.Job{Kind: tc.kind, Run: tc.run})
 
 			if got := queue.releaseDelays(); len(got) != 1 || got[0] != tc.want {
 				t.Errorf("release delays = %v, want exactly [%v]", got, tc.want)

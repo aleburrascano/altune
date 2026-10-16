@@ -15,13 +15,12 @@ const (
 )
 
 type Job struct {
-	TrackID  shared.TrackId
-	UserID   shared.UserId
-	Kind     JobKind
-	Attempts int
-	Run      int
-	Fence    Fence
-	Waited   time.Duration
+	TrackID shared.TrackId
+	UserID  shared.UserId
+	Kind    JobKind
+	Run     int
+	Fence   Fence
+	Waited  time.Duration
 }
 
 type Fence int

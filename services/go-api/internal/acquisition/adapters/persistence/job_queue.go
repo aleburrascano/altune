@@ -65,18 +65,22 @@ WHERE id = $1
 		OR acquisition_job_kind = $2
 	)`
 
-const jobStateForNoopEnqueueSQL = `SELECT acquisition_job_kind, acquisition_status FROM tracks WHERE id = $1`
+const jobStateForRefusedEnqueueSQL = `
+SELECT acquisition_job_kind, acquisition_status, COALESCE(acquisition_lease_until >= now(), false)
+FROM tracks WHERE id = $1`
 
 func (q *PgxJobQueue) Enqueue(ctx context.Context, trackID shared.TrackId, kind ports.JobKind, delay time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
 
-	tag, err := q.pool.Exec(ctx, enqueueJobSQL, trackID.UUID(), string(kind), delay.Seconds())
+	applied, err := q.applyEnqueue(ctx, trackID, kind, delay)
 	if err != nil {
-		return fmt.Errorf("enqueue acquisition job: %w", err)
+		return err
 	}
-	if tag.RowsAffected() == 0 {
-		return q.resolveEnqueueNoop(ctx, trackID, kind)
+	if !applied {
+		if applied, err = q.resolveRefusedEnqueue(ctx, trackID, kind, delay); err != nil || !applied {
+			return err
+		}
 	}
 	if _, err := q.pool.Exec(ctx, "NOTIFY "+acquisitionJobChannel); err != nil {
 		slog.WarnContext(ctx, "acquisition.enqueue_notify_failed",
@@ -85,19 +89,39 @@ func (q *PgxJobQueue) Enqueue(ctx context.Context, trackID shared.TrackId, kind 
 	return nil
 }
 
-func (q *PgxJobQueue) resolveEnqueueNoop(ctx context.Context, trackID shared.TrackId, kind ports.JobKind) error {
-	var runningKind, status string
-	err := q.pool.QueryRow(ctx, jobStateForNoopEnqueueSQL, trackID.UUID()).Scan(&runningKind, &status)
+func (q *PgxJobQueue) applyEnqueue(ctx context.Context, trackID shared.TrackId, kind ports.JobKind, delay time.Duration) (bool, error) {
+	tag, err := q.pool.Exec(ctx, enqueueJobSQL, trackID.UUID(), string(kind), delay.Seconds())
+	if err != nil {
+		return false, fmt.Errorf("enqueue acquisition job: %w", err)
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
+func (q *PgxJobQueue) resolveRefusedEnqueue(ctx context.Context, trackID shared.TrackId, kind ports.JobKind, delay time.Duration) (bool, error) {
+	var heldKind, status string
+	var leaseIsLive bool
+	err := q.pool.QueryRow(ctx, jobStateForRefusedEnqueueSQL, trackID.UUID()).Scan(&heldKind, &status, &leaseIsLive)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("enqueue acquisition job: track %s not found", trackID)
+		return false, fmt.Errorf("enqueue acquisition job: track %s not found", trackID)
 	}
 	if err != nil {
-		return fmt.Errorf("enqueue acquisition job: %w", err)
+		return false, fmt.Errorf("enqueue acquisition job: %w", err)
 	}
 	if kind == ports.JobKindAcquire && status == "ready" {
-		return nil
+		return false, nil
 	}
-	if ports.JobKind(runningKind) != kind {
+	if leaseIsLive {
+		return false, conflictUnlessSameKind(ports.JobKind(heldKind), kind)
+	}
+	applied, err := q.applyEnqueue(ctx, trackID, kind, delay)
+	if err != nil || applied {
+		return applied, err
+	}
+	return false, conflictUnlessSameKind(ports.JobKind(heldKind), kind)
+}
+
+func conflictUnlessSameKind(held, requested ports.JobKind) error {
+	if held != requested {
 		return acqdomain.ErrJobKindConflict
 	}
 	return nil
@@ -210,7 +234,7 @@ func scanClaimedJob(row pgx.Row) (ports.Job, error) {
 		return ports.Job{}, err
 	}
 	return ports.Job{
-		TrackID: trackID, UserID: userID, Kind: ports.JobKind(kind), Attempts: attempts, Run: run, Fence: ports.Fence(attempts),
+		TrackID: trackID, UserID: userID, Kind: ports.JobKind(kind), Run: run, Fence: ports.Fence(attempts),
 		Waited: time.Duration(waited * float64(time.Second)),
 	}, nil
 }
@@ -282,6 +306,10 @@ UPDATE tracks
 SET acquisition_lease_until = NULL,
 	acquisition_available_at = CASE
 		WHEN acquisition_status = 'pending' THEN COALESCE(acquisition_available_at, now())
+	END,
+	acquisition_job_kind = CASE
+		WHEN acquisition_status = 'pending' THEN acquisition_job_kind
+		ELSE 'acquire'
 	END
 WHERE id = $1 AND acquisition_attempts = $2`
 
@@ -312,14 +340,22 @@ func (n *PgxJobNotifier) Listen(ctx context.Context, wake chan<- struct{}) {
 	}
 }
 
+func warnNotifierCannotListen(ctx context.Context, err error) {
+	if ctx.Err() == nil {
+		slog.WarnContext(ctx, "acquisition.notifier_listen_failed", "error", err)
+	}
+}
+
 func (n *PgxJobNotifier) listenOnce(ctx context.Context, wake chan<- struct{}) {
 	conn, err := n.pool.Acquire(ctx)
 	if err != nil {
+		warnNotifierCannotListen(ctx, err)
 		return
 	}
 	defer conn.Release()
 
 	if _, err := conn.Exec(ctx, "LISTEN "+acquisitionJobChannel); err != nil {
+		warnNotifierCannotListen(ctx, err)
 		return
 	}
 	for {

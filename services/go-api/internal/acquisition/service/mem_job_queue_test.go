@@ -166,7 +166,7 @@ func TestMemJobQueue_ClaimReclaimsAJobWhoseLeaseExpired(t *testing.T) {
 	}
 }
 
-func TestMemJobQueue_ReEnqueueAfterPriorClaimsStartsANewRunButKeepsTheFence(t *testing.T) {
+func TestMemJobQueue_ReEnqueueAfterPriorClaimsStartsANewRunAndAdvancesTheFence(t *testing.T) {
 	clock := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	q := newMemJobQueueWithClock(nil, func() time.Time { return clock })
 	ctx := context.Background()
@@ -192,8 +192,8 @@ func TestMemJobQueue_ReEnqueueAfterPriorClaimsStartsANewRunButKeepsTheFence(t *t
 		t.Fatalf("Claim after re-Enqueue = %v", err)
 	}
 
-	if job.Run != 1 || job.Attempts != 4 {
-		t.Errorf("Run/Attempts = %d/%d, want 1/4", job.Run, job.Attempts)
+	if job.Run != 1 || job.Fence != 5 {
+		t.Errorf("Run/Fence = %d/%d, want 1/5", job.Run, job.Fence)
 	}
 	if err := q.Settle(ctx, trackID, stale.Fence); !errors.Is(err, acqdomain.ErrLeaseLost) {
 		t.Errorf("stale Settle = %v, want ErrLeaseLost", err)
