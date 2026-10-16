@@ -118,17 +118,30 @@ func (i *Identifier) fingerprintFile(ctx context.Context, filePath string) (fing
 	return fp, nil
 }
 
+type lookupRecording struct {
+	ID       string  `json:"id"`
+	Title    string  `json:"title"`
+	Duration float64 `json:"duration"`
+	Artists  []struct {
+		Name string `json:"name"`
+	} `json:"artists"`
+	ReleaseGroups []struct {
+		ID             string   `json:"id"`
+		Title          string   `json:"title"`
+		Type           string   `json:"type"`
+		SecondaryTypes []string `json:"secondarytypes"`
+	} `json:"releasegroups"`
+}
+
 type lookupResponse struct {
 	Status string `json:"status"`
 	Error  struct {
 		Message string `json:"message"`
 	} `json:"error"`
 	Results []struct {
-		ID         string  `json:"id"`
-		Score      float64 `json:"score"`
-		Recordings []struct {
-			ID string `json:"id"`
-		} `json:"recordings"`
+		ID         string            `json:"id"`
+		Score      float64           `json:"score"`
+		Recordings []lookupRecording `json:"recordings"`
 	} `json:"results"`
 }
 
@@ -169,14 +182,7 @@ func (i *Identifier) lookup(ctx context.Context, fp fingerprint) (ports.Recordin
 		return ports.RecordingMatch{}, fmt.Errorf("acoustid lookup: %s", parsed.Error.Message)
 	}
 
-	var full fullLookupResponse
-	if err := json.Unmarshal(body, &full); err != nil {
-		return ports.RecordingMatch{}, fmt.Errorf("parse acoustid response: %w", err)
-	}
-
-	match := bestMatch(parsed)
-	match.Results = acoustIDResults(full)
-	return match, nil
+	return matchOf(acoustIDResults(parsed)), nil
 }
 
 func (i *Identifier) send(ctx context.Context, endpoint string, form url.Values, label string) (*http.Response, error) {
@@ -288,44 +294,23 @@ func (i *Identifier) AcoustIDsFor(ctx context.Context, mbid string) ([]string, e
 	return ids, nil
 }
 
-func bestMatch(parsed lookupResponse) ports.RecordingMatch {
-	var best ports.RecordingMatch
-	for _, result := range parsed.Results {
-		if result.Score < MinScore || result.Score <= best.Score {
-			continue
-		}
+func matchOf(results []ports.AcoustIDResult) ports.RecordingMatch {
+	for _, result := range results {
 		mbids := make([]string, 0, len(result.Recordings))
 		for _, rec := range result.Recordings {
-			if rec.ID != "" {
-				mbids = append(mbids, rec.ID)
+			if rec.MBID != "" {
+				mbids = append(mbids, rec.MBID)
 			}
 		}
 		if result.ID == "" && len(mbids) == 0 {
 			continue
 		}
-		best = ports.RecordingMatch{AcoustID: result.ID, MBIDs: mbids, Score: result.Score}
+		return ports.RecordingMatch{AcoustID: result.ID, MBIDs: mbids, Score: result.Score, Results: results}
 	}
-	return best
+	return ports.RecordingMatch{Results: results}
 }
 
-type fullLookupRecording struct {
-	ID       string  `json:"id"`
-	Title    string  `json:"title"`
-	Duration float64 `json:"duration"`
-	Artists  []struct {
-		Name string `json:"name"`
-	} `json:"artists"`
-}
-
-type fullLookupResponse struct {
-	Results []struct {
-		ID         string                `json:"id"`
-		Score      float64               `json:"score"`
-		Recordings []fullLookupRecording `json:"recordings"`
-	} `json:"results"`
-}
-
-func acoustIDResults(full fullLookupResponse) []ports.AcoustIDResult {
+func acoustIDResults(full lookupResponse) []ports.AcoustIDResult {
 	results := make([]ports.AcoustIDResult, 0, len(full.Results))
 	for _, result := range full.Results {
 		if result.Score < MinScore {
@@ -341,14 +326,15 @@ func acoustIDResults(full fullLookupResponse) []ports.AcoustIDResult {
 	return results
 }
 
-func linkedRecordings(recordings []fullLookupRecording) []ports.LinkedRecording {
+func linkedRecordings(recordings []lookupRecording) []ports.LinkedRecording {
 	linked := make([]ports.LinkedRecording, 0, len(recordings))
 	for _, recording := range recordings {
 		linked = append(linked, ports.LinkedRecording{
-			MBID:     recording.ID,
-			Title:    recording.Title,
-			Artists:  artistNames(recording.Artists),
-			Duration: recording.Duration,
+			MBID:          recording.ID,
+			Title:         recording.Title,
+			Artists:       artistNames(recording.Artists),
+			Duration:      recording.Duration,
+			ReleaseGroups: releaseGroups(recording),
 		})
 	}
 	return linked
@@ -365,4 +351,20 @@ func artistNames(artists []struct {
 		}
 	}
 	return names
+}
+
+func releaseGroups(recording lookupRecording) []ports.ReleaseGroup {
+	if len(recording.ReleaseGroups) == 0 {
+		return nil
+	}
+	groups := make([]ports.ReleaseGroup, 0, len(recording.ReleaseGroups))
+	for _, group := range recording.ReleaseGroups {
+		groups = append(groups, ports.ReleaseGroup{
+			MBID:           group.ID,
+			Title:          group.Title,
+			Type:           group.Type,
+			SecondaryTypes: group.SecondaryTypes,
+		})
+	}
+	return groups
 }

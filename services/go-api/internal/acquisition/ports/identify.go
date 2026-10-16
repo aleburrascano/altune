@@ -4,11 +4,19 @@ import (
 	"context"
 )
 
+type ReleaseGroup struct {
+	MBID           string
+	Title          string
+	Type           string
+	SecondaryTypes []string
+}
+
 type LinkedRecording struct {
-	MBID     string
-	Title    string
-	Artists  []string
-	Duration float64
+	MBID          string
+	Title         string
+	Artists       []string
+	Duration      float64
+	ReleaseGroups []ReleaseGroup
 }
 
 type AcoustIDResult struct {

@@ -183,7 +183,10 @@ func referenceFor(ac *AcquisitionContext) AudioReference {
 	return AudioReference{Title: ac.Track.Title, Artist: ac.Track.Artist, Duration: ac.ExpectedLength(), MBIDs: mbids}
 }
 
-const maxLoggedSurviving = 5
+const (
+	maxLoggedSurviving     = 5
+	maxLoggedReleaseGroups = 5
+)
 
 func logAudioVerdict(ctx context.Context, ac *AcquisitionContext, candidate ports.AudioCandidate, verdict AudioVerdict) {
 	slog.InfoContext(ctx, "acquisition.audio_verdict",
@@ -196,10 +199,23 @@ func logAudioVerdict(ctx context.Context, ac *AcquisitionContext, candidate port
 	)
 }
 
-func loggedSurviving(surviving []ports.LinkedRecording) []map[string]string {
-	logged := make([]map[string]string, 0, min(len(surviving), maxLoggedSurviving))
+func loggedSurviving(surviving []ports.LinkedRecording) []map[string]any {
+	logged := make([]map[string]any, 0, min(len(surviving), maxLoggedSurviving))
 	for _, recording := range surviving[:min(len(surviving), maxLoggedSurviving)] {
-		logged = append(logged, map[string]string{"mbid": recording.MBID, "title": recording.Title})
+		logged = append(logged, map[string]any{
+			"mbid":                 recording.MBID,
+			"title":                recording.Title,
+			"release_groups":       loggedReleaseGroups(recording.ReleaseGroups),
+			"release_groups_total": len(recording.ReleaseGroups),
+		})
+	}
+	return logged
+}
+
+func loggedReleaseGroups(groups []ports.ReleaseGroup) []map[string]any {
+	logged := make([]map[string]any, 0, min(len(groups), maxLoggedReleaseGroups))
+	for _, group := range groups[:min(len(groups), maxLoggedReleaseGroups)] {
+		logged = append(logged, map[string]any{"type": group.Type, "secondary_types": group.SecondaryTypes})
 	}
 	return logged
 }

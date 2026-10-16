@@ -170,10 +170,18 @@ type AcoustIDResult struct {
 }
 
 type LinkedRecording struct {
-	MBID     string   `json:"mbid"`
-	Title    string   `json:"title"`
-	Artists  []string `json:"artists,omitempty"`
-	Duration float64  `json:"duration,omitempty"`
+	MBID          string         `json:"mbid"`
+	Title         string         `json:"title"`
+	Artists       []string       `json:"artists,omitempty"`
+	Duration      float64        `json:"duration,omitempty"`
+	ReleaseGroups []ReleaseGroup `json:"release_groups,omitempty"`
+}
+
+type ReleaseGroup struct {
+	MBID           string   `json:"mbid"`
+	Title          string   `json:"title,omitempty"`
+	Type           string   `json:"type,omitempty"`
+	SecondaryTypes []string `json:"secondary_types,omitempty"`
 }
 
 func (t Track) portCatalogSources() []ports.CatalogSource {
@@ -192,11 +200,25 @@ func (c Candidate) portResults() []ports.AcoustIDResult {
 	for _, r := range c.AcoustIDResults {
 		recordings := make([]ports.LinkedRecording, 0, len(r.Recordings))
 		for _, rec := range r.Recordings {
-			recordings = append(recordings, ports.LinkedRecording(rec))
+			recordings = append(recordings, ports.LinkedRecording{
+				MBID: rec.MBID, Title: rec.Title, Artists: rec.Artists, Duration: rec.Duration,
+				ReleaseGroups: portReleaseGroups(rec.ReleaseGroups),
+			})
 		}
 		results = append(results, ports.AcoustIDResult{ID: r.ID, Score: r.Score, Recordings: recordings})
 	}
 	return results
+}
+
+func portReleaseGroups(groups []ReleaseGroup) []ports.ReleaseGroup {
+	if len(groups) == 0 {
+		return nil
+	}
+	out := make([]ports.ReleaseGroup, len(groups))
+	for i, g := range groups {
+		out[i] = ports.ReleaseGroup(g)
+	}
+	return out
 }
 
 const (

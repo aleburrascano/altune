@@ -22,25 +22,19 @@ import (
 	"golang.org/x/time/rate"
 )
 
-func TestBestMatch_PicksHighestScoreAboveThreshold(t *testing.T) {
+func matchFromBody(t *testing.T, body string) ports.RecordingMatch {
+	t.Helper()
 	var parsed lookupResponse
-	parsed.Status = "ok"
-	parsed.Results = []struct {
-		ID         string  `json:"id"`
-		Score      float64 `json:"score"`
-		Recordings []struct {
-			ID string `json:"id"`
-		} `json:"recordings"`
-	}{
-		{ID: "weak", Score: 0.9, Recordings: []struct {
-			ID string `json:"id"`
-		}{{ID: "mbid-a"}}},
-		{ID: "strong", Score: 0.98, Recordings: []struct {
-			ID string `json:"id"`
-		}{{ID: "mbid-b"}}},
+	if err := json.Unmarshal([]byte(body), &parsed); err != nil {
+		t.Fatalf("unmarshal: %v", err)
 	}
+	return matchOf(acoustIDResults(parsed))
+}
 
-	got := bestMatch(parsed)
+func TestMatchOf_PicksHighestScoreAboveThreshold(t *testing.T) {
+	got := matchFromBody(t, `{"status":"ok","results":[
+		{"id":"weak","score":0.9,"recordings":[{"id":"mbid-a"}]},
+		{"id":"strong","score":0.98,"recordings":[{"id":"mbid-b"}]}]}`)
 
 	if got.AcoustID != "strong" {
 		t.Errorf("AcoustID = %q, want strong", got.AcoustID)
@@ -50,40 +44,15 @@ func TestBestMatch_PicksHighestScoreAboveThreshold(t *testing.T) {
 	}
 }
 
-func TestBestMatch_IgnoresLowScores(t *testing.T) {
-	var parsed lookupResponse
-	parsed.Status = "ok"
-	parsed.Results = []struct {
-		ID         string  `json:"id"`
-		Score      float64 `json:"score"`
-		Recordings []struct {
-			ID string `json:"id"`
-		} `json:"recordings"`
-	}{
-		{ID: "weak", Score: 0.3, Recordings: []struct {
-			ID string `json:"id"`
-		}{{ID: "mbid-a"}}},
-	}
-
-	if got := bestMatch(parsed); got.Known() {
+func TestMatchOf_IgnoresLowScores(t *testing.T) {
+	got := matchFromBody(t, `{"status":"ok","results":[{"id":"weak","score":0.3,"recordings":[{"id":"mbid-a"}]}]}`)
+	if got.Known() {
 		t.Errorf("a below-threshold result must not count as known, got %+v", got)
 	}
 }
 
-func TestBestMatch_KeepsResultsWithOnlyAnAcoustID(t *testing.T) {
-	var parsed lookupResponse
-	parsed.Status = "ok"
-	parsed.Results = []struct {
-		ID         string  `json:"id"`
-		Score      float64 `json:"score"`
-		Recordings []struct {
-			ID string `json:"id"`
-		} `json:"recordings"`
-	}{
-		{ID: "acoustid-only", Score: 0.99},
-	}
-
-	got := bestMatch(parsed)
+func TestMatchOf_KeepsResultsWithOnlyAnAcoustID(t *testing.T) {
+	got := matchFromBody(t, `{"status":"ok","results":[{"id":"acoustid-only","score":0.99}]}`)
 	if !got.Known() {
 		t.Fatalf("an AcoustID with no MusicBrainz links still identifies the audio for cluster comparison, got %+v", got)
 	}
@@ -405,6 +374,56 @@ func TestIdentify_ReturnsEveryResultAboveTheScoreFloorWithLinkedRecordings(t *te
 	want := ports.LinkedRecording{MBID: "mb-top", Title: "Song One", Artists: []string{"Artist A"}, Duration: 236}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("linked recording = %+v, want %+v", got, want)
+	}
+}
+
+func TestIdentify_CarriesReleaseGroupsOnLinkedRecordings(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"ok","results":[{"id":"ac-top","score":0.98,"recordings":[
+			{"id":"mb-live","title":"Song","releasegroups":[
+				{"id":"rg-1","title":"Song Live","type":"Album","secondarytypes":["Live","Compilation"]},
+				{"id":"rg-2","title":"Song","type":"Single"}]},
+			{"id":"mb-bare","title":"Song"}]}]}`))
+	}))
+	defer srv.Close()
+
+	id := NewIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
+	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
+	if err != nil {
+		t.Fatalf("Identify: %v", err)
+	}
+
+	recs := match.Results[0].Recordings
+	want := []ports.ReleaseGroup{
+		{MBID: "rg-1", Title: "Song Live", Type: "Album", SecondaryTypes: []string{"Live", "Compilation"}},
+		{MBID: "rg-2", Title: "Song", Type: "Single"},
+	}
+	if !reflect.DeepEqual(recs[0].ReleaseGroups, want) {
+		t.Errorf("release groups = %+v, want %+v", recs[0].ReleaseGroups, want)
+	}
+	if recs[1].ReleaseGroups != nil {
+		t.Errorf("a recording without release groups must carry nil, got %+v", recs[1].ReleaseGroups)
+	}
+}
+
+func TestIdentify_TheMatchIsTheTopResult(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"ok","results":[
+			{"id":"ac-first","score":0.95,"recordings":[{"id":"mb-first"}]},
+			{"id":"ac-tied","score":0.95,"recordings":[{"id":"mb-tied"}]}]}`))
+	}))
+	defer srv.Close()
+
+	id := NewIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
+	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
+	if err != nil {
+		t.Fatalf("Identify: %v", err)
+	}
+
+	top := match.Results[0]
+	if top.ID != "ac-first" || match.AcoustID != top.ID || match.Score != top.Score ||
+		!reflect.DeepEqual(match.MBIDs, []string{"mb-first"}) {
+		t.Errorf("match = %+v, want it derived from Results[0] = %+v", match, top)
 	}
 }
 
