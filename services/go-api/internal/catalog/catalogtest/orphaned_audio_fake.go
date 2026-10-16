@@ -45,6 +45,9 @@ func (q *OrphanedAudioQueue) ListOrphanedAudio(_ context.Context, limit int) ([]
 	}
 	out := make([]ports.OrphanedAudio, 0, len(q.Orphans))
 	for _, o := range q.Orphans {
+		if o.NotBefore.After(time.Now()) {
+			continue
+		}
 		out = append(out, *o)
 	}
 	sort.Slice(out, func(i, j int) bool {

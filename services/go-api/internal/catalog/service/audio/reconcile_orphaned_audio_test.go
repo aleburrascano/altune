@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 )
 
 const orphanRef = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/artist/album/title.mp3"
@@ -56,6 +57,35 @@ func (f *orphanFixture) run(t *testing.T) OrphanedAudioSweep {
 		t.Fatalf("sweep: %v", err)
 	}
 	return sweep
+}
+
+func TestReconcile_SupersededAudioInsideTheGraceIsKeptAndReusedAudioIsReleasedAfter(t *testing.T) {
+	f := newOrphanFixture()
+	ctx := context.Background()
+	userId := catalogtest.UserId()
+	f.store.Seed(orphanRef, []byte("audio"))
+	held := ports.OrphanedAudio{AudioRef: orphanRef, UserId: userId, TrackId: domain.NewTrackId(), NotBefore: time.Now().Add(time.Hour)}
+	if err := f.queue.RecordOrphanedAudio(ctx, held); err != nil {
+		t.Fatal(err)
+	}
+
+	if sweep := f.run(t); sweep != (OrphanedAudioSweep{}) {
+		t.Errorf("sweep inside the grace = %+v, want nothing touched", sweep)
+	}
+	if _, ok := f.store.Files[orphanRef]; !ok {
+		t.Fatal("object deleted inside the grace window")
+	}
+
+	catalogtest.SeedReadyTrack(t, f.repo, userId, "Title", "Artist", "Album", orphanRef)
+	held.NotBefore = time.Now().Add(-time.Minute)
+	if err := f.queue.RecordOrphanedAudio(ctx, held); err != nil {
+		t.Fatal(err)
+	}
+
+	if sweep := f.run(t); sweep.Released != 1 || sweep.Deleted != 0 {
+		t.Errorf("sweep after the grace = %+v, want the reused ref released, not deleted", sweep)
+	}
+	f.assertReferencedAudioIntact(t)
 }
 
 func (f *orphanFixture) assertReferencedAudioIntact(t *testing.T) {

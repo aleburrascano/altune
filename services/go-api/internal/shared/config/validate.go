@@ -196,6 +196,9 @@ func (c *Config) validateAcquisitionUpgrade() error {
 		return fmt.Errorf("ACQUISITION_UPGRADE_RETRY_AFTER must be between %s and %s, got %s",
 			minAcquisitionUpgradeRetryAfter, maxAcquisitionUpgradeRetryAfter, c.AcquisitionUpgradeRetryAfter)
 	}
+	if c.AcquisitionSupersededAudioGrace < 0 {
+		return fmt.Errorf("ACQUISITION_SUPERSEDED_AUDIO_GRACE must not be negative, got %s", c.AcquisitionSupersededAudioGrace)
+	}
 	return nil
 }
 

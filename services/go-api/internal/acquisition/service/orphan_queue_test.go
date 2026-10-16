@@ -42,6 +42,33 @@ func TestExecuteReplace_FailedOldAudioDeleteIsQueuedForTheSweep(t *testing.T) {
 	}
 }
 
+func TestExecuteReplace_SupersededAudioIsQueuedAfterTheGraceAndKept(t *testing.T) {
+	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
+	queue := &recordingOrphanQueue{}
+	grace := 168 * time.Hour
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store,
+		WithAcquireOrphanQueue(queue), WithSupersededAudioGrace(grace))
+
+	before := time.Now()
+	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
+		t.Fatalf("ExecuteReplace: %v", err)
+	}
+
+	if len(queue.recorded) != 1 {
+		t.Fatalf("recorded = %+v, want exactly one orphan", queue.recorded)
+	}
+	got := queue.recorded[0]
+	if got.AudioRef != originalRef || got.UserId != userId || got.TrackId != trackId {
+		t.Errorf("recorded = %+v, want the superseded ref %s for user %s track %s", got, originalRef, userId, trackId)
+	}
+	if got.NotBefore.Before(before.Add(grace)) || got.NotBefore.After(time.Now().Add(grace)) {
+		t.Errorf("not before = %s, want now plus %s", got.NotBefore, grace)
+	}
+	if _, kept := store.objects[originalRef]; !kept {
+		t.Error("the superseded object was deleted inside the grace window")
+	}
+}
+
 func TestExecuteReplace_QueueFailureDoesNotFailTheJob(t *testing.T) {
 	repo, store, userId, trackId, _ := seedReadyTrack(t)
 	store.deleteErr = errors.New("object storage unavailable")

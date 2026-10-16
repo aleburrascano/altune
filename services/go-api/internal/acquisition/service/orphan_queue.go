@@ -15,11 +15,16 @@ func recordOrphanedAudio(ctx context.Context, q ports.OrphanedAudioRecorder, use
 	if q == nil {
 		return
 	}
+	_ = queueOrphanedAudio(ctx, q, ports.OrphanedAudio{AudioRef: audioRef, UserId: userId, TrackId: trackId})
+}
+
+func queueOrphanedAudio(ctx context.Context, q ports.OrphanedAudioRecorder, orphan ports.OrphanedAudio) error {
 	recordCtx, cancel := detachedTimeout(ctx, orphanRecordTimeout)
 	defer cancel()
-	err := q.RecordOrphanedAudio(recordCtx, ports.OrphanedAudio{AudioRef: audioRef, UserId: userId, TrackId: trackId})
+	err := q.RecordOrphanedAudio(recordCtx, orphan)
 	if err != nil {
 		slog.ErrorContext(ctx, "acquisition.orphaned_audio_not_queued",
-			"track_id", trackId.String(), "audio_ref", audioRef, "error", redact.LogError(err))
+			"track_id", orphan.TrackId.String(), "audio_ref", orphan.AudioRef, "error", redact.LogError(err))
 	}
+	return err
 }

@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared"
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -50,6 +51,24 @@ func OrphanedAudioQueueContract(t *testing.T, newQueue func(t *testing.T) (ports
 		got, count := listed(t, q, orphan.AudioRef)
 		if count != 1 || got.UserId != userId || got.TrackId != orphan.TrackId || got.Attempts != 0 || got.RecordedAt.IsZero() {
 			t.Fatalf("listed = %+v (x%d), want owner, track, zero attempts, a timestamp", got, count)
+		}
+	})
+
+	t.Run("a ref recorded with a future not-before is listed only once it passes", func(t *testing.T) {
+		q, _ := newQueue(t)
+		userId := shared.NewUserId(uuid.New())
+		held, due := refFor(userId), refFor(userId)
+		for ref, notBefore := range map[string]time.Time{held: time.Now().Add(time.Hour), due: time.Now().Add(-time.Minute)} {
+			orphan := ports.OrphanedAudio{AudioRef: ref, UserId: userId, TrackId: domain.NewTrackId(), NotBefore: notBefore}
+			if err := q.RecordOrphanedAudio(ctx, orphan); err != nil {
+				t.Fatalf("RecordOrphanedAudio: %v", err)
+			}
+		}
+		if _, count := listed(t, q, held); count != 0 {
+			t.Errorf("held ref listed %d times before its not-before, want 0", count)
+		}
+		if _, count := listed(t, q, due); count != 1 {
+			t.Errorf("due ref listed %d times, want 1", count)
 		}
 	})
 

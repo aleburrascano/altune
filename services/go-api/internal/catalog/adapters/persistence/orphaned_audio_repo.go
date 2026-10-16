@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -30,13 +31,13 @@ func (r *PgxOrphanedAudioRepository) RecordOrphanedAudio(ctx context.Context, or
 	defer cancel()
 
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO orphaned_audio (audio_ref, user_id, track_id, recorded_at)
-		 VALUES ($1, $2, $3, now())
+		`INSERT INTO orphaned_audio (audio_ref, user_id, track_id, recorded_at, not_before)
+		 VALUES ($1, $2, $3, now(), COALESCE($4, now()))
 		 ON CONFLICT (audio_ref) DO UPDATE
 		 SET user_id = EXCLUDED.user_id, track_id = EXCLUDED.track_id,
-		     recorded_at = EXCLUDED.recorded_at, attempts = 0,
+		     recorded_at = EXCLUDED.recorded_at, not_before = EXCLUDED.not_before, attempts = 0,
 		     last_attempt_at = NULL, last_error = NULL`,
-		orphan.AudioRef, orphan.UserId.UUID(), orphan.TrackId.UUID(),
+		orphan.AudioRef, orphan.UserId.UUID(), orphan.TrackId.UUID(), notBeforeArg(orphan.NotBefore),
 	)
 	return orphanQueueErr("record orphaned audio", err)
 }
@@ -48,6 +49,7 @@ func (r *PgxOrphanedAudioRepository) ListOrphanedAudio(ctx context.Context, limi
 	rows, err := r.pool.Query(ctx,
 		`SELECT audio_ref, user_id, track_id, recorded_at, attempts
 		 FROM orphaned_audio
+		 WHERE not_before <= now()
 		 ORDER BY last_attempt_at ASC NULLS FIRST, recorded_at ASC
 		 LIMIT $1`,
 		limit,
@@ -118,6 +120,13 @@ func (r *PgxOrphanedAudioRepository) MarkOrphanedAudioAttempt(ctx context.Contex
 		audioRef, cause,
 	)
 	return orphanQueueErr("mark orphaned audio attempt", err)
+}
+
+func notBeforeArg(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
 }
 
 func orphanQueueErr(op string, err error) error {

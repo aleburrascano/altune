@@ -15,6 +15,7 @@ type OrphanedAudio struct {
 	UserId     shared.UserId
 	TrackId    domain.TrackId
 	RecordedAt time.Time
+	NotBefore  time.Time
 	Attempts   int
 }
 
