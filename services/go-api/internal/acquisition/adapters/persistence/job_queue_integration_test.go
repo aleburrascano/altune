@@ -1279,3 +1279,88 @@ func TestPgxJobQueue_HeartbeatReleaseAndSettleLeaveACatalogWriteLoadedDuringTheR
 		})
 	}
 }
+
+func scheduledAvailableAt(t *testing.T, pool *pgxpool.Pool, trackID domain.TrackId) *time.Time {
+	t.Helper()
+	var at *time.Time
+	if err := pool.QueryRow(context.Background(),
+		`SELECT acquisition_available_at FROM tracks WHERE id = $1`, trackID.UUID()).Scan(&at); err != nil {
+		t.Fatalf("select available_at: %v", err)
+	}
+	return at
+}
+
+func TestPgxJobQueue_APanickingReplaceAtTheRunCapIsNotClaimedAgain(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	queue := NewPgxJobQueue(pool)
+	ctx := context.Background()
+	track := insertReadyTrack(t, pool)
+	if err := queue.Enqueue(ctx, track.ID, ports.JobKindReplace, 0); err != nil {
+		t.Fatalf("Enqueue = %v", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE tracks SET acquisition_run_attempts = 2 WHERE id = $1`, track.ID.UUID()); err != nil {
+		t.Fatalf("set run attempts: %v", err)
+	}
+	acq := &panickingAcquirer{}
+	var wg sync.WaitGroup
+	scheduler := service.NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
+		service.WithJobQueue(queue), service.WithPollInterval(5*time.Millisecond))
+	t.Cleanup(func() {
+		scheduler.Shutdown(context.Background())
+	})
+
+	deadline := time.Now().Add(5 * time.Second)
+	for scheduledAvailableAt(t, pool, track.ID) != nil && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if at := scheduledAvailableAt(t, pool, track.ID); at != nil {
+		t.Errorf("available_at = %v after the panic at the run cap, want NULL: the job must leave the queue", at)
+	}
+	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
+		t.Errorf("Claim after the capped panic = %v, want ErrNoJobAvailable", err)
+	}
+	if got := acq.runs.Load(); got != 1 {
+		t.Errorf("runs = %d, want 1", got)
+	}
+}
+
+func TestPgxJobQueue_APanickingReplaceBelowTheRunCapIsRetriedAfterItsBackoff(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	queue := NewPgxJobQueue(pool)
+	ctx := context.Background()
+	track := insertReadyTrack(t, pool)
+	if err := queue.Enqueue(ctx, track.ID, ports.JobKindReplace, 0); err != nil {
+		t.Fatalf("Enqueue = %v", err)
+	}
+	acq := &panickingAcquirer{}
+	var wg sync.WaitGroup
+	scheduler := service.NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
+		service.WithJobQueue(queue), service.WithPollInterval(5*time.Millisecond))
+	t.Cleanup(func() {
+		scheduler.Shutdown(context.Background())
+	})
+
+	deadline := time.Now().Add(5 * time.Second)
+	for acq.runs.Load() == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	time.Sleep(300 * time.Millisecond)
+	scheduler.Shutdown(context.Background())
+
+	at := scheduledAvailableAt(t, pool, track.ID)
+	if at == nil {
+		t.Fatalf("available_at = NULL after the first panic, want the job kept for a retry")
+	}
+	if wait := time.Until(*at); wait < 20*time.Second || wait > 31*time.Second {
+		t.Errorf("retry scheduled %v from now, want about 30s for the first run", wait)
+	}
+	if got := acquisitionStatus(t, pool, track.ID); got != "ready" {
+		t.Errorf("status = %q, want ready", got)
+	}
+	if got := acq.runs.Load(); got != 1 {
+		t.Errorf("runs = %d, want 1", got)
+	}
+}

@@ -391,6 +391,9 @@ func (s *BackgroundAcquisitionScheduler) finishJob(job ports.Job, jobErr error) 
 func (s *BackgroundAcquisitionScheduler) releasePanickedJob(job ports.Job) {
 	if job.Run >= maxAcquisitionAttempts {
 		s.refuseQueuedRecovering(job)
+		err := s.queue.Settle(context.Background(), job.TrackID, job.Fence)
+		s.logQueueOutcome("settle", job.TrackID, err)
+		return
 	}
 	err := s.queue.Release(context.Background(), job.TrackID, job.Fence, retryBackoff(job.Run))
 	s.logQueueOutcome("release", job.TrackID, err)

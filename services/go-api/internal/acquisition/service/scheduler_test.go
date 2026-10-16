@@ -2900,3 +2900,138 @@ func TestBackgroundScheduler_AnUpgradeTakenOverByAReplaceDuringItsDownloadNeverC
 		t.Errorf("track status = %v, want the upgrade to have written nothing", status)
 	}
 }
+
+type queueCallRecorder struct {
+	*memJobQueue
+	released atomic.Int32
+	settled  atomic.Int32
+}
+
+func (q *queueCallRecorder) Release(ctx context.Context, trackID domain.TrackId, fence acqports.Fence, delay time.Duration) error {
+	q.released.Add(1)
+	return q.memJobQueue.Release(ctx, trackID, fence, delay)
+}
+
+func (q *queueCallRecorder) Settle(ctx context.Context, trackID domain.TrackId, fence acqports.Fence) error {
+	q.settled.Add(1)
+	return q.memJobQueue.Settle(ctx, trackID, fence)
+}
+
+func TestBackgroundScheduler_APanickingReplaceAtTheRunCapIsSettled(t *testing.T) {
+	acq := &panickingAcquirer{}
+	var wg sync.WaitGroup
+	queue := &queueCallRecorder{memJobQueue: newMemJobQueue(make(chan struct{}, 1))}
+	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1), WithJobQueue(queue))
+	t.Cleanup(func() {
+		scheduler.Shutdown(context.Background())
+	})
+	job := acqports.Job{TrackID: domain.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Kind: acqports.JobKindReplace, Attempts: maxAcquisitionAttempts, Run: maxAcquisitionAttempts}
+
+	scheduler.releasePanickedJob(job)
+
+	if got := queue.released.Load(); got != 0 {
+		t.Errorf("released %d times, want 0: a released replace stays claimable on a ready track", got)
+	}
+	if got := queue.settled.Load(); got != 1 {
+		t.Errorf("settled %d times, want 1", got)
+	}
+}
+
+type panicQueueRecorder struct {
+	*memJobQueue
+	mu      sync.Mutex
+	delays  []time.Duration
+	settled atomic.Int32
+}
+
+func (q *panicQueueRecorder) Release(ctx context.Context, trackID domain.TrackId, fence acqports.Fence, delay time.Duration) error {
+	q.mu.Lock()
+	q.delays = append(q.delays, delay)
+	q.mu.Unlock()
+	return q.memJobQueue.Release(ctx, trackID, fence, delay)
+}
+
+func (q *panicQueueRecorder) Settle(ctx context.Context, trackID domain.TrackId, fence acqports.Fence) error {
+	q.settled.Add(1)
+	return q.memJobQueue.Settle(ctx, trackID, fence)
+}
+
+func (q *panicQueueRecorder) releaseDelays() []time.Duration {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return append([]time.Duration(nil), q.delays...)
+}
+
+func panickedJobOutcome(t *testing.T, job acqports.Job) (*panickingAcquirer, *panicQueueRecorder) {
+	t.Helper()
+	acq := &panickingAcquirer{}
+	var wg sync.WaitGroup
+	queue := &panicQueueRecorder{memJobQueue: newMemJobQueue(make(chan struct{}, 1))}
+	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1), WithJobQueue(queue))
+	t.Cleanup(func() {
+		scheduler.Shutdown(context.Background())
+	})
+	job.TrackID = domain.NewTrackId()
+	job.UserID = shared.NewUserId(uuid.New())
+
+	scheduler.releasePanickedJob(job)
+
+	return acq, queue
+}
+
+func TestBackgroundScheduler_APanickedJobAtOrPastTheRunCapLeavesTheQueueWhateverItsKind(t *testing.T) {
+	kinds := []acqports.JobKind{acqports.JobKindAcquire, acqports.JobKindReplace, acqports.JobKindUpgrade}
+	runs := []struct {
+		name string
+		run  int
+	}{{"at the cap", 3}, {"one past the cap", 4}, {"past the shift overflow", 17}, {"far past the cap", 1000}}
+	for _, kind := range kinds {
+		for _, r := range runs {
+			run := r.run
+			t.Run(string(kind)+"/"+r.name, func(t *testing.T) {
+				acq, queue := panickedJobOutcome(t, acqports.Job{Kind: kind, Attempts: run, Run: run})
+
+				if got := queue.releaseDelays(); len(got) != 0 {
+					t.Errorf("released with %v, want no Release: a released job at the cap stays claimable", got)
+				}
+				if got := queue.settled.Load(); got != 1 {
+					t.Errorf("settled %d times, want 1", got)
+				}
+				if got := acq.refused.Load(); got != 1 {
+					t.Errorf("refused %d times, want 1", got)
+				}
+			})
+		}
+	}
+}
+
+func TestBackgroundScheduler_APanickedJobBelowTheRunCapIsRetriedAfterItsBackoff(t *testing.T) {
+	cases := []struct {
+		name string
+		kind acqports.JobKind
+		run  int
+		want time.Duration
+	}{
+		{"acquire/first run", acqports.JobKindAcquire, 1, 30 * time.Second},
+		{"acquire/second run", acqports.JobKindAcquire, 2, 2 * time.Minute},
+		{"replace/first run", acqports.JobKindReplace, 1, 30 * time.Second},
+		{"replace/second run", acqports.JobKindReplace, 2, 2 * time.Minute},
+		{"upgrade/first run", acqports.JobKindUpgrade, 1, 30 * time.Second},
+		{"upgrade/second run", acqports.JobKindUpgrade, 2, 2 * time.Minute},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			acq, queue := panickedJobOutcome(t, acqports.Job{Kind: tc.kind, Attempts: tc.run, Run: tc.run})
+
+			if got := queue.releaseDelays(); len(got) != 1 || got[0] != tc.want {
+				t.Errorf("release delays = %v, want exactly [%v]", got, tc.want)
+			}
+			if got := queue.settled.Load(); got != 0 {
+				t.Errorf("settled %d times, want 0: below the cap the job keeps its retry", got)
+			}
+			if got := acq.refused.Load(); got != 0 {
+				t.Errorf("refused %d times, want 0", got)
+			}
+		})
+	}
+}

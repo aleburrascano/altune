@@ -18,7 +18,7 @@ var (
 )
 
 func retryBackoff(attempts int) time.Duration {
-	return 30 * time.Second << (2 * (max(attempts, 1) - 1))
+	return 30 * time.Second << (2 * (min(max(attempts, 1), maxAcquisitionAttempts) - 1))
 }
 
 func isTransientFailure(err error) bool {

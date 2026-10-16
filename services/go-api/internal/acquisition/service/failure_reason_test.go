@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -245,5 +246,37 @@ func TestExecute_ABrokenSearchBesideEmptyResultsIsNotNoMatch(t *testing.T) {
 	}
 	if errors.Is(execErr, ErrAcquisitionRetryable) {
 		t.Errorf("err = %v, a degraded search must not be retryable", execErr)
+	}
+}
+
+func TestRetryBackoff_IsClampedAtTheAttemptCap(t *testing.T) {
+	ceiling := retryBackoff(maxAcquisitionAttempts)
+	for run := 1; run <= 100; run++ {
+		got := retryBackoff(run)
+		if got <= 0 || got > ceiling {
+			t.Fatalf("retryBackoff(%d) = %v, want within (0, %v]", run, got, ceiling)
+		}
+	}
+	want := []time.Duration{30 * time.Second, 2 * time.Minute, 8 * time.Minute}
+	for i, w := range want {
+		if got := retryBackoff(i + 1); got != w {
+			t.Errorf("retryBackoff(%d) = %v, want %v", i+1, got, w)
+		}
+	}
+}
+
+func TestRetryBackoff_PastTheCapWaitsExactlyAsLongAsAtTheCap(t *testing.T) {
+	for _, run := range []int{4, 15, 16, 17, 33, 64, 65, 100, 1 << 20, int(^uint(0) >> 1)} {
+		if got := retryBackoff(run); got != 8*time.Minute {
+			t.Errorf("retryBackoff(%d) = %v, want 8m0s", run, got)
+		}
+	}
+}
+
+func TestRetryBackoff_ANonPositiveRunWaitsThePositiveFirstDelay(t *testing.T) {
+	for _, run := range []int{0, -1, -64, -int(^uint(0)>>1) - 1} {
+		if got := retryBackoff(run); got != 30*time.Second {
+			t.Errorf("retryBackoff(%d) = %v, want 30s", run, got)
+		}
 	}
 }
