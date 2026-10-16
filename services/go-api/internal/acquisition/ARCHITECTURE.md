@@ -102,9 +102,9 @@ rule per row:
    intersect; that version rejected every candidate for Rihanna's "Don't Stop the
    Music". An audio whose fingerprint links to nothing is Unknown and is accepted,
    so unreleased material stays acquirable.
-3. **Score the words normalization deleted.** `qualifierDistance` reads the raw
-   titles and ranks on the symmetric difference of their bracketed-qualifier token
-   sets, which is what separates a master from an acoustic take or a music video
+3. **Score the words normalization deleted.** `qualifierDistance` ranks on the
+   symmetric difference of the titles' `versiontag.Labels` plus a short list of
+   presentation markers (music video, lyric video, visualizer, lyrics), which is what separates a master from an acoustic take or a music video
    on the same Topic channel.
 4. **Reconcile length by agreement.** When the saved and resolved durations agree
    the gate tightens from ±max(15s, 7%) to ±max(5s, 3%), catching a contaminated
@@ -568,9 +568,9 @@ user, not by how hard they are.
 
 ### 7.1 ~~Normalization deletes the words that distinguish variants~~ — closed
 
-`qualifierDistance` now generalizes the `extractFeaturedArtists` workaround: it reads
-the raw titles, tokenizes their bracketed segments, and ranks on the symmetric
-difference (unrequested marker 1, requested-but-missing 2). `NormalizeForMatch` was
+`qualifierDistance` now generalizes the `extractFeaturedArtists` workaround: it ranks on
+the symmetric difference of `versiontag.Labels` plus the presentation-marker list
+(years, "Official Audio" and "HD" cost nothing; an unbracketed "- Live" counts) (unrequested marker 1, requested-but-missing 2). `NormalizeForMatch` was
 left alone, as §8 requires. The asymmetry is preserved — a user who saves
 "Song (Slowed)" gets the slowed take.
 

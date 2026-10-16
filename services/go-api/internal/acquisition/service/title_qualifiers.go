@@ -2,13 +2,10 @@ package service
 
 import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
-	"altune/go-api/internal/shared/textnorm"
 	"altune/go-api/internal/shared/versiontag"
-	"regexp"
+	"slices"
 	"strings"
 )
-
-var featuredRe = versiontag.FeaturedCredit
 
 func featureMatch(trackTitle, candidateTitle string) bool {
 	cand := " " + acqdomain.CreditKey(candidateTitle) + " "
@@ -21,33 +18,48 @@ func featureMatch(trackTitle, candidateTitle string) bool {
 	return true
 }
 
-var qualifierRe = regexp.MustCompile(`[\(\[\{]([^\)\]\}]*)[\)\]\}]`)
+var presentationMarkers = [][]string{
+	{"official", "music", "video"},
+	{"music", "video"},
+	{"official", "video"},
+	{"lyric", "video"},
+	{"visualizer"},
+	{"lyrics"},
+	{"video"},
+}
 
-func qualifierTokens(title string) map[string]bool {
-	tokens := make(map[string]bool)
-	for _, segment := range qualifierRe.FindAllStringSubmatch(textnorm.NFKC(title), -1) {
-		if featuredRe.MatchString(segment[1]) {
-			continue
+func distanceLabels(title string) []string {
+	labels := versiontag.RecordingLabels(title)
+	tokens := versiontag.Tokens(versiontag.WithoutFeatureCredits(title))
+	for pos := 0; pos < len(tokens); {
+		advanced := false
+		for _, marker := range presentationMarkers {
+			if pos+len(marker) <= len(tokens) && slices.Equal(tokens[pos:pos+len(marker)], marker) {
+				labels = versiontag.AppendLabel(labels, strings.Join(marker, " "))
+				pos += len(marker)
+				advanced = true
+				break
+			}
 		}
-		for _, word := range strings.Fields(textnorm.NormalizeForMatch(segment[1])) {
-			tokens[word] = true
+		if !advanced {
+			pos++
 		}
 	}
-	return tokens
+	return labels
 }
 
 func qualifierDistance(trackTitle, candidateTitle string) int {
-	want := qualifierTokens(trackTitle)
-	got := qualifierTokens(candidateTitle)
+	want := distanceLabels(trackTitle)
+	got := distanceLabels(candidateTitle)
 
 	distance := 0
-	for token := range got {
-		if !want[token] {
+	for _, label := range got {
+		if !slices.Contains(want, label) {
 			distance += unrequestedQualifierCost
 		}
 	}
-	for token := range want {
-		if !got[token] {
+	for _, label := range want {
+		if !slices.Contains(got, label) {
 			distance += unfulfilledQualifierCost
 		}
 	}

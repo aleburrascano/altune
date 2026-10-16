@@ -1500,3 +1500,22 @@ func TestFeatureMatch_ComparesCreditKeysAsWholeWords(t *testing.T) {
 		}
 	}
 }
+
+func TestQualifierDistance_CountsVersionsAndPresentationNotNoise(t *testing.T) {
+	const base = "Song"
+	free := []string{"Song (2011)", "Song (Official Audio)", "Song (HD)", "Song (2011 Remaster)"}
+	for _, c := range free {
+		if d := qualifierDistance(base, c); d != 0 {
+			t.Errorf("qualifierDistance(%q, %q) = %d, want 0", base, c, d)
+		}
+	}
+	if d := qualifierDistance(base, "Song - Live"); d <= 0 {
+		t.Errorf("unbracketed live costs %d, want > 0", d)
+	}
+	if d := qualifierDistance(base, "Song (Official Music Video)"); d != unrequestedQualifierCost {
+		t.Errorf("official music video costs %d, want %d", d, unrequestedQualifierCost)
+	}
+	if d := qualifierDistance("Video Games", "Video Games"); d != 0 {
+		t.Errorf("marker word in the track title costs %d, want 0", d)
+	}
+}
