@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -277,7 +278,10 @@ func (s *YtDlpAudioSearcher) DownloadPreview(ctx context.Context, url string, ou
 	return fetched.Path, err
 }
 
-const sourceFormatPrefix = "altune-source-format:"
+const (
+	sourceFormatPrefix = "altune-source-format:"
+	outputPathPrefix   = "altune-output-path:"
+)
 
 func parseSourceFormat(stdout string) ports.SourceFormat {
 	for line := range strings.Lines(stdout) {
@@ -313,6 +317,7 @@ func (s *YtDlpAudioSearcher) fetchAudio(
 		"--max-filesize", maxSourceFileSize,
 		"--no-progress",
 		"--print", "after_move:" + sourceFormatPrefix + "%(format_id)s|%(acodec)s|%(abr)s",
+		"--print", "after_move:" + outputPathPrefix + "%(filepath)s",
 		"-o", outTemplate,
 	}
 	args = append(args, sectionArgs...)
@@ -335,46 +340,42 @@ func (s *YtDlpAudioSearcher) fetchAudio(
 		return ports.FetchedAudio{}, s.classifiedFailure(fmt.Errorf("yt-dlp download: %w (stderr: %s)", err, embeddedStderr(stderr)), stderr, ports.RunTimedOut(ctx, runCtx))
 	}
 
-	path, err := largestM4A(outDir)
+	path, err := validatedOutputPath(outDir, parseOutputPath(stdout))
 	if err != nil {
 		return ports.FetchedAudio{}, err
 	}
 	return ports.FetchedAudio{Path: path, Format: parseSourceFormat(stdout)}, nil
 }
 
-func largestM4A(outDir string) (string, error) {
-	matches, err := filepath.Glob(filepath.Join(outDir, "*.m4a"))
-	if err != nil || len(matches) == 0 {
-		return "", fmt.Errorf("no m4a file produced in %s", outDir)
+func parseOutputPath(stdout string) string {
+	for line := range strings.Lines(stdout) {
+		if path, ok := strings.CutPrefix(strings.TrimSpace(line), outputPathPrefix); ok {
+			return path
+		}
 	}
-
-	best, bestSize := largestReadable(matches)
-	if best == "" {
-		return "", fmt.Errorf("stat downloaded files in %s", outDir)
-	}
-	const minFileSize = 10 * 1024
-	if bestSize < minFileSize {
-		return "", fmt.Errorf("downloaded file too small (%d bytes), likely corrupt", bestSize)
-	}
-	if bestSize > maxDownloadedFileBytes {
-		return "", fmt.Errorf("downloaded file too large (%d bytes, cap %d), not a single track", bestSize, maxDownloadedFileBytes)
-	}
-
-	return best, nil
+	return ""
 }
 
-func largestReadable(paths []string) (string, int64) {
-	best, bestSize := "", int64(-1)
-	for _, m := range paths {
-		info, err := os.Stat(m)
-		if err != nil {
-			continue
-		}
-		if info.Size() > bestSize {
-			best, bestSize = m, info.Size()
-		}
+func validatedOutputPath(outDir, printed string) (string, error) {
+	if printed == "" {
+		return "", errors.New("no output path printed by yt-dlp")
 	}
-	return best, bestSize
+	rel, err := filepath.Rel(outDir, printed)
+	if err != nil || !filepath.IsLocal(rel) || filepath.Ext(printed) != ".m4a" {
+		return "", fmt.Errorf("yt-dlp printed an output path outside %s or not an m4a: %s", outDir, printed)
+	}
+	info, err := os.Stat(printed)
+	if err != nil {
+		return "", fmt.Errorf("stat downloaded file in %s: %w", outDir, err)
+	}
+	const minFileSize = 10 * 1024
+	if info.Size() < minFileSize {
+		return "", fmt.Errorf("downloaded file too small (%d bytes), likely corrupt", info.Size())
+	}
+	if info.Size() > maxDownloadedFileBytes {
+		return "", fmt.Errorf("downloaded file too large (%d bytes, cap %d), not a single track", info.Size(), maxDownloadedFileBytes)
+	}
+	return printed, nil
 }
 
 type Entry struct {
