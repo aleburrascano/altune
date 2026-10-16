@@ -724,7 +724,7 @@ func (f brokenURLFetcher) Fetch(_ context.Context, c ports.AudioCandidate, outDi
 
 func TestRunPipeline_FallbackWindowsContinueTheFirstTiersCount(t *testing.T) {
 	download := &tieredDownload{
-		DownloadStep: NewDownloadStep(brokenURLFetcher{broken: "https://example.com/first-tier"}),
+		DownloadStep: newTestDownloadStep(brokenURLFetcher{broken: "https://example.com/first-tier"}),
 		tiers: [][]ports.AudioCandidate{
 			{{URL: "https://example.com/first-tier"}},
 			{{URL: "https://example.com/fallback"}},
@@ -856,7 +856,7 @@ func acquirableFixture(t *testing.T) (*AcquireTrackAudioService, *domain.Track, 
 		}},
 		downloadPath: audio,
 	}
-	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore())
+	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore())
 	ac := &AcquisitionContext{Track: TrackRef{
 		ID: track.ID.String(), UserID: userId.String(),
 		Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours", CatalogDuration: 200,

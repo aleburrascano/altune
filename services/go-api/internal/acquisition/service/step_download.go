@@ -45,7 +45,7 @@ type DownloadStep struct {
 const prodVerifyWidth = 2
 
 func NewDownloadStep(fetcher candidateFetcher, opts ...func(*DownloadStep)) *DownloadStep {
-	s := &DownloadStep{fetcher: fetcher, workspace: defaultTempWorkspace, width: prodVerifyWidth, candidateTimeout: DefaultCandidateTimeout, floor: defaultConfidenceFloor, cuts: audiojudge.DefaultCuts()}
+	s := &DownloadStep{fetcher: fetcher, width: prodVerifyWidth, candidateTimeout: DefaultCandidateTimeout, floor: defaultConfidenceFloor, cuts: audiojudge.DefaultCuts()}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -97,6 +97,9 @@ func WithConfidenceFloor(floor float64) func(*DownloadStep) {
 func (s *DownloadStep) Name() StepName { return stepNameDownload }
 
 func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterSelect) (afterDownload, error) {
+	if s.workspace == nil {
+		return afterDownload{}, ErrNoTempWorkspace
+	}
 	if s.width > 1 {
 		return s.executeWindowed(ctx, ac)
 	}

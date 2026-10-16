@@ -131,7 +131,7 @@ func inPlaceService(identifier ports.AudioIdentifier, previews ports.PreviewMatc
 		WithStoredAudioReader(storedBytesReader{store: store}),
 		WithPreviewMatcher(previews, 0.10),
 	}
-	return NewAcquireTrackAudioService(nil, nil, store, append(opts, extra...)...)
+	return newTestAcquireService(nil, nil, store, append(opts, extra...)...)
 }
 
 func liveRecordingLookup() *stubVersionLookup {
@@ -194,7 +194,7 @@ func TestCheckInPlace_APreviewMatchAboveTheOfficialCutOnlyApproximates(t *testin
 func TestCheckInPlace_APreviewMatchOnADoubtedReferenceOnlyApproximates(t *testing.T) {
 	store := &bytesAudioStore{objects: map[string]string{inPlaceRef: "stored bytes"}}
 	doubted := ports.RecordingIdentity{MBID: pinnedBoysDontCry, MBIDs: []string{pinnedBoysDontCry}, ReferenceDoubted: true}
-	svc := NewAcquireTrackAudioService(nil, nil, store,
+	svc := newTestAcquireService(nil, nil, store,
 		WithRecordingResolver(&stubResolver{identity: doubted}),
 		WithAudioIdentifier(&stubIdentifier{}),
 		WithStoredAudioReader(storedBytesReader{store: store}),
@@ -297,7 +297,7 @@ func TestCheckInPlace_AFailedFingerprintIsAnErrorNotAnAnswer(t *testing.T) {
 }
 
 func TestCheckInPlace_WithoutAnIdentifierOrStoredAudioReaderItSaysSo(t *testing.T) {
-	svc := NewAcquireTrackAudioService(nil, nil, &bytesAudioStore{})
+	svc := newTestAcquireService(nil, nil, &bytesAudioStore{})
 
 	if _, err := svc.CheckInPlace(context.Background(), inPlaceTrack()); !errors.Is(err, ErrInPlaceUnavailable) {
 		t.Errorf("CheckInPlace = %v, want ErrInPlaceUnavailable", err)
@@ -341,7 +341,7 @@ func TestCheckInPlace_TheProvenCutIsTheOneTheServiceWasGiven(t *testing.T) {
 	for provenMax, want := range cases {
 		t.Run("", func(t *testing.T) {
 			store := &bytesAudioStore{objects: map[string]string{inPlaceRef: "stored bytes"}}
-			svc := NewAcquireTrackAudioService(nil, nil, store,
+			svc := newTestAcquireService(nil, nil, store,
 				WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: pinnedBoysDontCry, MBIDs: []string{pinnedBoysDontCry}}}),
 				WithAudioIdentifier(&stubIdentifier{}),
 				WithStoredAudioReader(storedBytesReader{store: store}),

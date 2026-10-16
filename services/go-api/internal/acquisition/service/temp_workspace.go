@@ -3,12 +3,12 @@ package service
 import (
 	"altune/go-api/internal/acquisition/ports"
 	"context"
+	"errors"
 	"log/slog"
-	"path/filepath"
 	"time"
 )
 
-var defaultTempWorkspace ports.TempWorkspace
+var ErrNoTempWorkspace = errors.New("no temp workspace configured")
 
 const maxLiveTempAge = AcquireTimeout + 15*time.Minute
 
@@ -17,18 +17,14 @@ func SweepStaleTempDirs(ws ports.TempWorkspace) {
 }
 
 func CleanupTemp(ctx context.Context, ws ports.TempWorkspace, ac *AcquisitionContext) {
-	if ac.TempPath == "" {
+	if ws == nil || ac.TempPath == "" {
 		return
 	}
-	root := ac.tempRoot()
-	if err := ws.Remove(root); err != nil {
-		slog.WarnContext(ctx, "temp_cleanup_failed", "path", root, "error", err)
+	path := ac.TempDir
+	if path == "" {
+		path = ac.TempPath
 	}
-}
-
-func (ac *AcquisitionContext) tempRoot() string {
-	if ac.TempDir != "" {
-		return ac.TempDir
+	if err := ws.Remove(path); err != nil {
+		slog.WarnContext(ctx, "temp_cleanup_failed", "path", path, "error", err)
 	}
-	return filepath.Dir(ac.TempPath)
 }

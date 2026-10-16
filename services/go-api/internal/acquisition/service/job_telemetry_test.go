@@ -142,7 +142,7 @@ func TestExecute_ReportsTheStoredCandidateAsTheSource(t *testing.T) {
 	seconds := 200.0
 	track.DurationSeconds = &seconds
 	repo.tracks[track.ID.String()+":"+userId.String()] = track
-	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(secondRankSource{}),
+	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(secondRankSource{}),
 		&bytesAudioStore{objects: map[string]string{}},
 		WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding"}}),
 		WithAudioIdentifier(&stubIdentifier{}))

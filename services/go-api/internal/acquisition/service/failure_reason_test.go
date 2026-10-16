@@ -53,7 +53,7 @@ func TestStepName_IsTheOneItsFailureCodeIsKeyedOn(t *testing.T) {
 	}{
 		{NewSearchStep(nil), "search", domain.FailureNoMatchFound},
 		{NewSelectStep(), "select", domain.FailureNoMatchFound},
-		{NewDownloadStep(nil), "download", domain.FailureDownloadFailed},
+		{newTestDownloadStep(nil), "download", domain.FailureDownloadFailed},
 		{NewTagStep(nil), "tag", domain.FailureAcquisitionFailed},
 		{NewStoreStep(nil), "store", domain.FailureStorageFailed},
 		{NewUpdateTrackStep(nil, shared.UserId{}, domain.TrackId{}), "update_track", domain.FailureAcquisitionFailed},
@@ -112,7 +112,7 @@ func TestExecute_SourceThatCouldNotAnswer_IsNotReportedAsNoMatch(t *testing.T) {
 			repo := newFakeTrackRepository()
 			repo.tracks[track.ID.String()+":"+userId.String()] = track
 			finder := &fakeAudioSearcher{searchErr: tt.searchErr}
-			svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(finder), newFakeAudioStore())
+			svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(finder), newFakeAudioStore())
 
 			_ = svc.Execute(context.Background(), userId, track.ID)
 
@@ -215,7 +215,7 @@ func TestExecute_AFirstTierOutageSurvivesAnEmptyFallback(t *testing.T) {
 		},
 	}
 	registry := NewSourceRegistry(blocked).WithFallback(&stubSource{name: "ytdlp"})
-	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), registry, newFakeAudioStore())
+	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), registry, newFakeAudioStore())
 
 	execErr := svc.Execute(withJobAttempt(context.Background(), 1), userId, track.ID)
 
@@ -237,7 +237,7 @@ func TestExecute_ABrokenSearchBesideEmptyResultsIsNotNoMatch(t *testing.T) {
 	repo.tracks[track.ID.String()+":"+userId.String()] = track
 	broken := &stubSource{name: "ytdlp", findErr: errors.New("yt-dlp search: output parsed to nothing")}
 	registry := NewSourceRegistry(broken, &stubSource{name: "ytmsearch"})
-	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), registry, newFakeAudioStore())
+	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), registry, newFakeAudioStore())
 
 	execErr := svc.Execute(withJobAttempt(context.Background(), 1), userId, track.ID)
 

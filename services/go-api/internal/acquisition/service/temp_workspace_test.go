@@ -83,7 +83,20 @@ func (osWorkspace) Size(path string) (int64, error) {
 
 func (osWorkspace) SweepAbandoned(time.Time) int { return 0 }
 
-func init() { defaultTempWorkspace = osWorkspace{} }
+func newTestAcquireService(
+	ledger ports.TrackLedger,
+	sources *SourceRegistry,
+	audioStore ports.AudioWriter,
+	opts ...func(*AcquireTrackAudioService),
+) *AcquireTrackAudioService {
+	opts = append([]func(*AcquireTrackAudioService){WithAcquireTempWorkspace(osWorkspace{})}, opts...)
+	return NewAcquireTrackAudioService(ledger, sources, audioStore, opts...)
+}
+
+func newTestDownloadStep(fetcher candidateFetcher, opts ...func(*DownloadStep)) *DownloadStep {
+	opts = append([]func(*DownloadStep){WithStepTempWorkspace(osWorkspace{})}, opts...)
+	return NewDownloadStep(fetcher, opts...)
+}
 
 type callRecordingWorkspace struct {
 	inner ports.TempWorkspace
@@ -183,12 +196,36 @@ func TestCleanupTemp_WithoutTempDirRemovesOnlyFileParent(t *testing.T) {
 
 	CleanupTemp(context.Background(), osWorkspace{}, &AcquisitionContext{TempPath: file})
 
-	if _, err := os.Stat(parent); !os.IsNotExist(err) {
-		t.Errorf("file parent %q should be removed, stat err = %v", parent, err)
+	if _, err := os.Stat(file); !os.IsNotExist(err) {
+		t.Errorf("temp file %q should be removed, stat err = %v", file, err)
+	}
+	if _, err := os.Stat(parent); err != nil {
+		t.Errorf("the file's directory must survive: %v", err)
 	}
 	if _, err := os.Stat(outer); err != nil {
 		t.Errorf("directory above the parent must survive: %v", err)
 	}
+}
+
+func TestCleanupTemp_WithoutTempDirRemovesOnlyTheFile(t *testing.T) {
+	parent := t.TempDir()
+	file := filepath.Join(parent, "track.mp3")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	CleanupTemp(context.Background(), osWorkspace{}, &AcquisitionContext{TempPath: file})
+
+	if _, err := os.Stat(file); !os.IsNotExist(err) {
+		t.Errorf("temp file should be removed, stat err = %v", err)
+	}
+	if _, err := os.Stat(parent); err != nil {
+		t.Errorf("the file's directory must survive: %v", err)
+	}
+}
+
+func TestCleanupTemp_WithoutAWorkspaceRemovesNothingAndDoesNotPanic(t *testing.T) {
+	CleanupTemp(context.Background(), nil, &AcquisitionContext{TempPath: "/x/track.mp3", TempDir: "/x"})
 }
 
 func TestCleanupTemp_EmptyTempPathRemovesNothing(t *testing.T) {
@@ -220,7 +257,7 @@ func TestCleanupTemp_WithoutTempDirRemovesFileParent(t *testing.T) {
 
 	CleanupTemp(context.Background(), ws, &AcquisitionContext{TempPath: file})
 
-	if got := ws.removedPaths(); len(got) != 1 || got[0] != filepath.Dir(file) {
-		t.Errorf("removed = %v, want exactly [%s]", got, filepath.Dir(file))
+	if got := ws.removedPaths(); len(got) != 1 || got[0] != file {
+		t.Errorf("removed = %v, want exactly [%s]", got, file)
 	}
 }

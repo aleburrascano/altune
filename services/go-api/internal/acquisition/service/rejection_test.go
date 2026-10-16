@@ -26,7 +26,7 @@ func TestExecuteReplace_SeedsExclusionsFromMemoryAndTheCurrentSource(t *testing.
 	store.stored["u/a/b/c.mp3"] = true
 
 	captured := &capturingSource{}
-	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(captured), store)
+	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(captured), store)
 
 	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
 
@@ -239,7 +239,7 @@ func TestExecute_PersistsRejectionSummaryInFailureReason(t *testing.T) {
 		URL:     "yt:cooking",
 		Channel: "CookingChannel",
 	}}}
-	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore())
+	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore())
 
 	_ = svc.Execute(context.Background(), userId, track.ID)
 
@@ -276,7 +276,7 @@ func TestExecute_AttemptCapReportsUntriedCandidatesApart(t *testing.T) {
 		})
 	}
 	searcher := &fakeAudioSearcher{searchResults: candidates, downloadErr: errors.New("boom")}
-	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore())
+	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore())
 
 	_ = svc.Execute(context.Background(), userId, track.ID)
 

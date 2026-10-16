@@ -31,7 +31,7 @@ func TestExecuteReplace_FailedOldAudioDeleteIsQueuedForTheSweep(t *testing.T) {
 	store.deleteErr = errors.New("object storage unavailable")
 	queue := &recordingOrphanQueue{}
 	grace := 24 * time.Hour
-	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store,
+	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store,
 		WithAcquireOrphanQueue(queue), WithSupersededAudioGrace(grace))
 
 	before := time.Now()
@@ -58,7 +58,7 @@ func TestExecuteReplace_SupersededAudioIsQueuedAfterTheGraceAndKept(t *testing.T
 	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
 	queue := &recordingOrphanQueue{}
 	grace := 168 * time.Hour
-	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store,
+	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store,
 		WithAcquireOrphanQueue(queue), WithSupersededAudioGrace(grace))
 
 	before := time.Now()
@@ -85,7 +85,7 @@ func TestExecuteReplace_QueueFailureDoesNotFailTheJob(t *testing.T) {
 	repo, store, userId, trackId, _ := seedReadyTrack(t)
 	store.deleteErr = errors.New("object storage unavailable")
 	queue := &recordingOrphanQueue{err: errors.New("queue down")}
-	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store, WithAcquireOrphanQueue(queue))
+	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store, WithAcquireOrphanQueue(queue))
 
 	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
 		t.Fatalf("ExecuteReplace: %v, want success despite the queue failing", err)
@@ -95,7 +95,7 @@ func TestExecuteReplace_QueueFailureDoesNotFailTheJob(t *testing.T) {
 func TestExecuteReplace_NothingIsDeletedAtCommitAndExactlyOneEntryIsQueued(t *testing.T) {
 	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
 	queue := &recordingOrphanQueue{}
-	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store,
+	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store,
 		WithAcquireOrphanQueue(queue), WithSupersededAudioGrace(time.Hour))
 
 	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
@@ -114,7 +114,7 @@ func TestExecuteReplace_FailedRollbackDeleteIsQueuedForTheSweep(t *testing.T) {
 	repo.updateErr = errors.New("transient db error")
 	store.deleteErr = errors.New("object storage unavailable")
 	queue := &recordingOrphanQueue{}
-	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store, WithAcquireOrphanQueue(queue))
+	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store, WithAcquireOrphanQueue(queue))
 
 	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err == nil {
 		t.Fatal("expected the replace to fail")

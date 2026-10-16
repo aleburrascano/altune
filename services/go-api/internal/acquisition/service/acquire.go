@@ -53,7 +53,6 @@ func NewAcquireTrackAudioService(
 		audioStore: audioStore,
 		recordings: ports.NoopRecordingResolver(),
 		events:     events.NoopPublisher(),
-		workspace:  defaultTempWorkspace,
 		cuts:       audiojudge.DefaultCuts(),
 
 		confidenceFloor: defaultConfidenceFloor,
@@ -614,6 +613,9 @@ func warnCurrentFileUnidentified(ctx context.Context, trackId shared.TrackId, re
 }
 
 func (s *AcquireTrackAudioService) identifyStored(ctx context.Context, audioRef string, durationHint float64) (ports.RecordingMatch, error) {
+	if s.workspace == nil {
+		return ports.RecordingMatch{}, ErrNoTempWorkspace
+	}
 	dir, err := s.workspace.Create("stored-*")
 	if err != nil {
 		return ports.RecordingMatch{}, fmt.Errorf("create stored-audio dir: %w", err)
