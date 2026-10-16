@@ -2532,3 +2532,71 @@ func TestDownloadStep_AnEmptyFingerprintIsAVerifySkip(t *testing.T) {
 		t.Errorf("empty fingerprint logged as identify_unknown: %s", logs.String())
 	}
 }
+
+type formatByURLFetcher struct {
+	formats map[string]ports.SourceFormat
+}
+
+func (f *formatByURLFetcher) Fetch(_ context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+	path := filepath.Join(outDir, "track.mp3")
+	if err := os.WriteFile(path, []byte("audio-bytes"), 0o644); err != nil {
+		return ports.FetchedAudio{}, err
+	}
+	return ports.FetchedAudio{Path: path, Format: f.formats[c.URL]}, nil
+}
+
+func selectedAmongMuxedAndAudioOnly(t *testing.T, width int, muxedKind ports.CandidateKind) string {
+	t.Helper()
+	const muxedURL, audioOnlyURL = "https://youtube.com/watch?v=muxed0000000", "https://soundcloud.com/a/audio"
+	fetcher := &formatByURLFetcher{formats: map[string]ports.SourceFormat{
+		muxedURL:     {ID: "18", Kbps: 96},
+		audioOnlyURL: {ID: "hls_aac_160k", Kbps: 160},
+	}}
+	step := NewDownloadStep(fetcher, WithVerifyWidth(width), WithDownloadIdentifier(&stubIdentifier{match: referenceMatch()}), WithStepTempWorkspace(osWorkspace{}))
+	ac := downloadContext("mb-master")
+	ac.Ranked = []ports.AudioCandidate{{URL: muxedURL, Kind: muxedKind}, {URL: audioOnlyURL, Kind: ports.KindUpload}}
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+	return ac.Selected.URL
+}
+
+func TestDownloadStep_AMuxedFallbackYieldsToAnAudioOnlyStreamOfTheSameGrade(t *testing.T) {
+	for _, width := range []int{1, 2} {
+		if got := selectedAmongMuxedAndAudioOnly(t, width, ports.KindUpload); got != "https://soundcloud.com/a/audio" {
+			t.Errorf("width %d: selected %s, want the audio-only candidate", width, got)
+		}
+	}
+}
+
+func TestDownloadStep_AMuxedFallbackOfAHigherGradeIsKept(t *testing.T) {
+	for _, width := range []int{1, 2} {
+		if got := selectedAmongMuxedAndAudioOnly(t, width, ports.KindArtTrack); got != "https://youtube.com/watch?v=muxed0000000" {
+			t.Errorf("width %d: selected %s, want the higher-graded muxed candidate", width, got)
+		}
+	}
+}
+
+func TestDownloadStep_WhenEveryCandidateIsMuxedTheFirstAcceptedFileIsStored(t *testing.T) {
+	const firstURL, secondURL = "https://youtube.com/watch?v=first0000000", "https://youtube.com/watch?v=second000000"
+	for _, width := range []int{1, 2} {
+		fetcher := &formatByURLFetcher{formats: map[string]ports.SourceFormat{
+			firstURL:  {ID: "18", Kbps: 96},
+			secondURL: {ID: "18", Kbps: 96},
+		}}
+		step := NewDownloadStep(fetcher, WithVerifyWidth(width), WithDownloadIdentifier(&stubIdentifier{match: referenceMatch()}), WithStepTempWorkspace(osWorkspace{}))
+		ac := downloadContext("mb-master")
+		ac.Ranked = []ports.AudioCandidate{{URL: firstURL, Kind: ports.KindUpload}, {URL: secondURL, Kind: ports.KindUpload}}
+		if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+			t.Fatalf("width %d: Execute error: %v", width, err)
+		}
+		if ac.Selected.URL != firstURL {
+			t.Errorf("width %d: selected %s, want the first accepted muxed file", width, ac.Selected.URL)
+		}
+		if _, err := os.Stat(ac.TempPath); err != nil {
+			t.Errorf("width %d: stored file missing: %v", width, err)
+		}
+		os.RemoveAll(filepath.Dir(ac.TempPath))
+	}
+}

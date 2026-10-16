@@ -4,6 +4,7 @@ import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service/audiojudge"
+	"altune/go-api/internal/acquisition/service/grade"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"fmt"
@@ -124,6 +125,10 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 			recordImplausibleDuration(ctx, ac, ac.Ranked[i])
 			continue
 		}
+		if holds.muxedRetrySpent() {
+			recordNotAttempted(ac, ac.Ranked[i:])
+			break
+		}
 
 		tmpDir, err := s.workspace.Create("*")
 		if err != nil {
@@ -133,10 +138,13 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 		ac.Attempted = append(ac.Attempted, AttemptedCandidate{URL: ac.Ranked[i].URL, Window: attempts})
 		attempts++
 		result := s.runAttempt(ctx, ac, ac.Ranked[i], tmpDir)
-		result.applyTo(ctx, ac)
 		if result.status == attemptAccepted {
-			return afterDownload{}, nil
+			if holds.resolveAccepted(ctx, ac, result) {
+				return afterDownload{}, nil
+			}
+			continue
 		}
+		result.applyTo(ctx, ac)
 		holds.offer(result)
 		failures.noteAttempt(result)
 	}
@@ -145,6 +153,10 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 }
 
 func (s *DownloadStep) settle(ctx context.Context, ac *AcquisitionContext, holds *holdBook, failures *downloadFailures) error {
+	if muxed := holds.takeMuxed(); muxed != nil {
+		muxed.applyTo(ctx, ac)
+		return nil
+	}
 	held := holds.take()
 	if held == nil {
 		return failures.noneAccepted(ctx)
@@ -160,9 +172,60 @@ func (s *DownloadStep) settle(ctx context.Context, ac *AcquisitionContext, holds
 	return nil
 }
 
+func (a attempt) muxed() bool { return a.format.ID == ports.MuxedFallbackFormatID }
+
 type holdBook struct {
-	ws   ports.TempWorkspace
-	best *attempt
+	ws         ports.TempWorkspace
+	best       *attempt
+	muxed      *attempt
+	retryGiven bool
+}
+
+func (h *holdBook) muxedRetrySpent() bool {
+	if h.muxed == nil {
+		return false
+	}
+	spent := h.retryGiven
+	h.retryGiven = true
+	return spent
+}
+
+func (h *holdBook) takeMuxed() *attempt {
+	muxed := h.muxed
+	h.muxed = nil
+	return muxed
+}
+
+func (h *holdBook) resolveAccepted(ctx context.Context, ac *AcquisitionContext, result attempt) bool {
+	switch {
+	case !result.muxed() && h.muxed == nil:
+		result.applyTo(ctx, ac)
+		return true
+	case !result.muxed():
+		return h.chooseAgainstMuxed(ctx, ac, result)
+	case h.muxed == nil:
+		h.muxed = &result
+	default:
+		_ = h.ws.Remove(result.tmpDir)
+	}
+	return false
+}
+
+func (h *holdBook) chooseAgainstMuxed(ctx context.Context, ac *AcquisitionContext, audioOnly attempt) bool {
+	muxed := h.takeMuxed()
+	winner, loser := *muxed, audioOnly
+	if !gradeOf(ctx, ac, *muxed).Beats(gradeOf(ctx, ac, audioOnly)) {
+		winner, loser = audioOnly, *muxed
+	}
+	_ = h.ws.Remove(loser.tmpDir)
+	winner.applyTo(ctx, ac)
+	return true
+}
+
+func gradeOf(ctx context.Context, ac *AcquisitionContext, a attempt) grade.Grade {
+	scratch := *ac
+	a.applyTo(ctx, &scratch)
+	return scratch.collectEvidence().Grade
 }
 
 func (h *holdBook) offer(candidate attempt) {
@@ -184,6 +247,10 @@ func (h *holdBook) take() *attempt {
 }
 
 func (h *holdBook) discard() {
+	if h.muxed != nil {
+		_ = h.ws.Remove(h.muxed.tmpDir)
+		h.muxed = nil
+	}
 	if h.best != nil {
 		_ = h.ws.Remove(h.best.tmpDir)
 		h.best = nil

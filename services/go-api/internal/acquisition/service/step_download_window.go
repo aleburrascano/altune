@@ -21,6 +21,10 @@ func (s *DownloadStep) executeWindowed(ctx context.Context, ac *AcquisitionConte
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return afterDownload{}, fmt.Errorf("download cancelled: %w", ctxErr)
 		}
+		if holds.muxedRetrySpent() {
+			recordNotAttempted(ac, pending)
+			break
+		}
 		var window []ports.AudioCandidate
 		window, pending = s.nextWindow(ctx, ac, pending, used, &failures)
 		if len(window) == 0 {
@@ -96,7 +100,7 @@ func (s *DownloadStep) runWindow(ctx context.Context, ac *AcquisitionContext, wi
 		go func(rank int) {
 			defer wg.Done()
 			results[rank] = s.guardedWindowAttempt(ctxs[rank], ac, window[rank])
-			if results[rank].status == attemptAccepted {
+			if results[rank].status == attemptAccepted && !results[rank].muxed() {
 				mu.Lock()
 				cancelAll(cancels[rank+1:])
 				mu.Unlock()
@@ -152,10 +156,13 @@ func mergeWindow(ctx context.Context, ws ports.TempWorkspace, ac *AcquisitionCon
 			_ = ws.Remove(result.tmpDir)
 			continue
 		}
+		if result.status == attemptAccepted {
+			won = holds.resolveAccepted(ctx, ac, result)
+			continue
+		}
 		result.applyTo(ctx, ac)
 		failures.noteAttempt(result)
 		holds.offer(result)
-		won = won || result.status == attemptAccepted
 	}
 	return won
 }
