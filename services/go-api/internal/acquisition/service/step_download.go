@@ -45,7 +45,7 @@ type DownloadStep struct {
 const prodVerifyWidth = 2
 
 func NewDownloadStep(fetcher candidateFetcher, opts ...func(*DownloadStep)) *DownloadStep {
-	s := &DownloadStep{fetcher: fetcher, workspace: defaultTempWorkspace, width: prodVerifyWidth, candidateTimeout: defaultCandidateTimeout, cuts: audiojudge.DefaultCuts()}
+	s := &DownloadStep{fetcher: fetcher, workspace: defaultTempWorkspace, width: prodVerifyWidth, candidateTimeout: defaultCandidateTimeout, floor: defaultConfidenceFloor, cuts: audiojudge.DefaultCuts()}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -92,13 +92,6 @@ func WithCandidateTimeout(d time.Duration) func(*DownloadStep) {
 
 func WithConfidenceFloor(floor float64) func(*DownloadStep) {
 	return func(s *DownloadStep) { s.floor = floor }
-}
-
-func (s *DownloadStep) confidenceFloor() float64 {
-	if s.floor <= 0 {
-		return defaultConfidenceFloor
-	}
-	return s.floor
 }
 
 func (s *DownloadStep) Name() StepName { return stepNameDownload }
@@ -153,10 +146,10 @@ func (s *DownloadStep) settle(ctx context.Context, ac *AcquisitionContext, holds
 	if held == nil {
 		return failures.noneAccepted(ctx)
 	}
-	if held.confidence < s.confidenceFloor() {
+	if held.confidence < s.floor {
 		_ = holds.ws.Remove(held.tmpDir)
 		return fmt.Errorf("best candidate confidence %.2f is below the floor %.2f: %w",
-			held.confidence, s.confidenceFloor(), ErrNoConfidentMatch)
+			held.confidence, s.floor, ErrNoConfidentMatch)
 	}
 	held.status = attemptAccepted
 	held.applyTo(ctx, ac)

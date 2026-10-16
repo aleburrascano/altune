@@ -2289,3 +2289,13 @@ func TestDownloadStep_ALinkWithNoMBIDNamesNothingSoItNeverContradicts(t *testing
 		t.Errorf("err = %v, rejections = %+v, want the nameless link ignored and the lone title tag held as unknown", err, ac.Rejections)
 	}
 }
+
+func TestDownloadStep_AZeroFloorIsUsedAsGiven(t *testing.T) {
+	fetcher := newGatedFetcher(nil)
+	ac := heldTrackContext(ports.AudioCandidate{URL: "reupload", Channel: "chill uploads", Duration: 236})
+	step := NewDownloadStep(fetcher, WithDownloadIdentifier(&urlIdentifier{fetcher: fetcher}), WithConfidenceFloor(0))
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+		t.Fatalf("a floor of 0 should store the held candidate, got %v", err)
+	}
+}

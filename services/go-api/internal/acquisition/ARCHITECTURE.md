@@ -389,9 +389,10 @@ within max(15s, 7%)), plus 0.1 when resolved, minus 0.2 for a qualifier, capped 
 0.8. An `unknown` or fallback candidate is *held*, not accepted; the walk keeps
 trying and `settle` picks the best held candidate (non-fallback first, then highest
 confidence). It is stored, as `best_effort`, only when its confidence reaches
-the confidence floor (`WithConfidenceFloor`, default 0.5; the
-`ACQUISITION_CONFIDENCE_FLOOR` config value is parsed and validated but not yet
-passed to the step, §7.11); otherwise the
+the confidence floor (`WithConfidenceFloor`; the step and the service start at
+0.5, and `ACQUISITION_CONFIDENCE_FLOOR` is wired through `catalog_wiring.go` ->
+`WithAcquireConfidenceFloor` -> `WithConfidenceFloor` and used as given, 0
+included); otherwise the
 step fails with `ErrNoConfidentMatch`, which `failureReason` maps to
 `no_confident_match`. A fallback candidate must also match the expected length within
 max(5s, 3%). The winning `Evidence` and confidence are logged as
@@ -693,9 +694,8 @@ fingerprint (first 130s) rejects a wrong recording for a fraction of a full fetc
 Rejection memory (`acquisition_rejections`, 30 days) means a retry no longer spends
 its budget re-downloading last time's losers. Windows (`WithVerifyWidth`) pay the
 remaining downloads in parallel: `CoreSteps` passes `prodVerifyWidth` (2), the step's default.
-**Still open:** (a) `ACQUISITION_CONFIDENCE_FLOOR` is not yet passed to `WithConfidenceFloor`, so the
-floor is the 0.5 default; (b) a source with no `PreviewFetcher` still pays the full
-download per candidate; (c) a lasting rejection can be wrong (a source that was
+**Still open:** (a) a source with no `PreviewFetcher` still pays the full
+download per candidate; (b) a lasting rejection can be wrong (a source that was
 briefly a preview), and the 30-day window is the only correction.
 
 ### 7.12 ~~Retry admission is untested~~ — closed

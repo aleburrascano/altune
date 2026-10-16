@@ -52,6 +52,8 @@ func NewAcquireTrackAudioService(
 		events:     events.NoopPublisher(),
 		workspace:  defaultTempWorkspace,
 		cuts:       audiojudge.DefaultCuts(),
+
+		confidenceFloor: defaultConfidenceFloor,
 	}
 	for _, opt := range opts {
 		opt(s)

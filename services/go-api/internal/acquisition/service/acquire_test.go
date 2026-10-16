@@ -1928,3 +1928,52 @@ func TestExecuteReplace_NeverFetchesTheCurrentSourceAgainEvenWhenItRanksFirst(t 
 		t.Errorf("download attempts = %v, want only %q, never the current source %q", searcher.downloadURLs, otherURL, wrongURL)
 	}
 }
+
+type lowConfidenceSource struct{ unknownTopicSource }
+
+func (lowConfidenceSource) Name() acqdomain.SourceName { return "low-confidence" }
+
+func (lowConfidenceSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
+	return []ports.AudioCandidate{{
+		Title:    "Blinding Lights",
+		URL:      "https://www.youtube.com/watch?v=reuploadAAA",
+		Channel:  "chill uploads",
+		Duration: 220,
+	}}, nil
+}
+
+func acquireLowConfidence(t *testing.T, opts ...func(*AcquireTrackAudioService)) (*domain.Track, error) {
+	t.Helper()
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track, err := domain.NewTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	seconds := 200.0
+	track.DurationSeconds = &seconds
+	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(lowConfidenceSource{}),
+		&bytesAudioStore{objects: map[string]string{}},
+		append([]func(*AcquireTrackAudioService){
+			WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding"}}),
+			WithAudioIdentifier(&stubIdentifier{}),
+		}, opts...)...)
+	err = svc.Execute(context.Background(), userId, track.ID)
+	return storedTrack(t, repo, track), err
+}
+
+func TestExecute_AConfiguredZeroFloorIsHonoured(t *testing.T) {
+	track, err := acquireLowConfidence(t, WithAcquireConfidenceFloor(0))
+	if err != nil {
+		t.Fatalf("a floor of 0 should store the held candidate, got %v", err)
+	}
+	if track.AcquisitionStatus != domain.AcquisitionReady {
+		t.Errorf("status = %v, want ready", track.AcquisitionStatus)
+	}
+
+	_, err = acquireLowConfidence(t)
+	if !errors.Is(err, ErrNoConfidentMatch) {
+		t.Errorf("with no option err = %v, want ErrNoConfidentMatch at the 0.5 default", err)
+	}
+}
