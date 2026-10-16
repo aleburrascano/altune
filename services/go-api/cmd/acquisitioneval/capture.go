@@ -24,6 +24,7 @@ type captureTrackDump struct {
 	Album           string  `json:"album"`
 	DurationSeconds float64 `json:"duration_seconds"`
 	ISRC            string  `json:"isrc"`
+	AudioSourceURL  string  `json:"audio_source_url"`
 
 	CatalogDurationSeconds *float64             `json:"catalog_duration_seconds"`
 	CatalogMBID            string               `json:"catalog_mbid"`
@@ -115,6 +116,8 @@ func captureCase(raw []byte, tier string, now time.Time) (eval.Case, error) {
 			Artist: d.Track.Artist,
 			Album:  d.Track.Album,
 			ISRC:   d.Track.ISRC,
+
+			AudioSourceURL: d.Track.AudioSourceURL,
 
 			CatalogDuration: deref(d.Track.CatalogDurationSeconds),
 			CatalogMBID:     d.Track.CatalogMBID,

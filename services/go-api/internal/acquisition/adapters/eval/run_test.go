@@ -1530,3 +1530,33 @@ func TestLoad_RefusesAnUnplayableReasonProdNeverSets(t *testing.T) {
 		t.Fatalf("LoadDir = %v, want a refusal naming the unplayable value", err)
 	}
 }
+
+func TestRun_AReplaceExcludesTheStoredSource(t *testing.T) {
+	for name, storedURL := range map[string]string{
+		"a stored music.youtube.com url excludes its youtube.com twin": "https://music.youtube.com/watch?v=7wBgcalM4c4",
+		"a stored youtube.com url excludes its music.youtube.com twin": "https://www.youtube.com/watch?v=7wBgcalM4c4",
+	} {
+		t.Run(name, func(t *testing.T) {
+			kase := embeddedCase(t, "replace-known-source-excludes-the-stored-source-by-its-url")
+			kase.Track.AudioSourceURL = storedURL
+
+			out := Run(context.Background(), kase)
+
+			if !out.Pass || out.Stored != "" {
+				t.Errorf("pass=%v stored=%q reason=%q, want nothing stored: the stored source is excluded by its url", out.Pass, out.Stored, out.Reason)
+			}
+		})
+	}
+}
+
+func TestValidateCases_AcceptsASourceURLForATrackWithNoStoredFile(t *testing.T) {
+	cases := []Case{{
+		ID: "x", Class: "OK",
+		Track:      Track{Title: "t", Artist: "a", AudioSourceURL: "https://www.youtube.com/watch?v=7wBgcalM4c4"},
+		Candidates: []Candidate{{URL: "u"}},
+	}}
+
+	if err := validateCases(cases); err != nil {
+		t.Fatalf("validateCases = %v, want nil", err)
+	}
+}

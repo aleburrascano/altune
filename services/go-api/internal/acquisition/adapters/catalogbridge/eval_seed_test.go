@@ -105,3 +105,14 @@ func TestNewSeededLedger_RefusesATrackTheCatalogWouldNotHold(t *testing.T) {
 		t.Fatal("NewSeededLedger accepted a track with no title")
 	}
 }
+
+func TestNewSeededLedger_ATrackSourceURLReachesTheSnapshotWithNoStoredFile(t *testing.T) {
+	_, snapshot := seededSnapshot(t, SeededTrack{
+		Title: "Time After Time", Artist: "Cyndi Lauper",
+		AudioSourceURL: "https://music.youtube.com/watch?v=7wBgcalM4c4",
+	})
+
+	if snapshot.AudioSourceURL == nil || *snapshot.AudioSourceURL != "https://music.youtube.com/watch?v=7wBgcalM4c4" {
+		t.Errorf("AudioSourceURL = %v", snapshot.AudioSourceURL)
+	}
+}

@@ -28,6 +28,7 @@ type SeededTrack struct {
 	CatalogMBID        string
 	CatalogExplicit    *bool
 	CatalogSources     []ports.CatalogSource
+	AudioSourceURL     string
 	RejectedSourceKeys []string
 	Stored             *SeededFile
 }
@@ -71,6 +72,7 @@ func seededDomainTrack(userID shared.UserId, seed SeededTrack) (*domain.Track, e
 		return nil, fmt.Errorf("catalog duration: %w", err)
 	}
 	seedCatalogPins(track, seed)
+	track.SetAudioSource(seed.AudioSourceURL)
 	for _, key := range seed.RejectedSourceKeys {
 		track.RejectAudioSource(key)
 	}

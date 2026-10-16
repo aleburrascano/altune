@@ -358,3 +358,35 @@ func TestRunCapture_ReadsProdLinesWhereTheLoggerAddsItsOwnSourceObject(t *testin
 		t.Fatalf("candidate = %+v, want the prod line's title, channel, duration and views", c)
 	}
 }
+
+func TestCaptureCase_KeepsTheStoredSourceURL(t *testing.T) {
+	track := strings.Replace(probeTrack, `"audio_source_url":""`, `"audio_source_url":"https://music.youtube.com/watch?v=7wBgcalM4c4"`, 1)
+	dump := `{"track":` + track + `,"logs":[` + probeCandLine("ytdlp", "Drinking in L.A.") + `]}`
+
+	kase, err := captureCase([]byte(dump), "prod", time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC))
+	capturedURL := kase.Track.AudioSourceURL
+
+	if err != nil {
+		t.Fatalf("captureCase: %v", err)
+	}
+	if want := "https://music.youtube.com/watch?v=7wBgcalM4c4"; kase.Track.AudioSourceURL != want {
+		t.Errorf("track audio_source_url = %q, want %q", kase.Track.AudioSourceURL, want)
+	}
+	if capturedURL == "" {
+		t.Error("the dump's audio_source_url was dropped")
+	}
+}
+
+func TestRunCapture_ACaptureOfAReadyTrackLoadsAsIs(t *testing.T) {
+	track := strings.Replace(probeTrack, `"audio_source_url":""`, `"audio_source_url":"https://music.youtube.com/watch?v=7wBgcalM4c4"`, 1)
+	dump := `{"track":` + track + `,"logs":[` + probeCandLine("ytdlp", "Drinking in L.A.") + `]}`
+
+	code, out := probeCapture(t, []string{"-tier", "prod"}, dump)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if kase := probeDecodeAndValidate(t, out); kase.Stored != nil || kase.Track.AudioSourceURL == "" {
+		t.Errorf("stored = %+v, audio_source_url = %q, want the url kept and no stored block", kase.Stored, kase.Track.AudioSourceURL)
+	}
+}

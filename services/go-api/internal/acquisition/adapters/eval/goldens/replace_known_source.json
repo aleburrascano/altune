@@ -1,0 +1,23 @@
+{
+  "cases": [
+    {
+      "id": "replace-known-source-excludes-the-stored-source-by-its-url",
+      "class": "OK",
+      "note": "prod track 1eec416b (Time After Time, Cyndi Lauper, ISRC USSM18300650), upgrade replace of 2026-10-16 05:45: the stored file is the YouTube Music art track 7wBgcalM4c4 (audio_source_url music.youtube.com, 241.335 s) and prod logged acquisition.replacing_source excluded_keys [youtube:7wBgcalM4c4] and acquisition.candidate_excluded for ytmsearch's music.youtube.com URL and, after first_tier_failed_trying_fallback, for yt-dlp's www.youtube.com URL of the same video. The two candidates are those two prod emissions: the ytmsearch Song from the innertube search of 2026-10-16 (byline 4:02) and the yt-dlp flat entry of the ytsearch5:USSM18300650 query (view_count as of 2026-10-16). Neither may be stored, because the stored source's URL is what the replace excludes; the 14 other candidates prod evaluated are left out, as their AcoustID results cannot be recorded without downloading them",
+      "track": {
+        "title": "Time After Time", "artist": "Cyndi Lauper", "album": "She's So Unusual", "isrc": "USSM18300650",
+        "audio_source_url": "https://music.youtube.com/watch?v=7wBgcalM4c4",
+        "catalog_duration": 241
+      },
+      "stored": { "duration": 241.335011 },
+      "sources": [
+        { "name": "ytmsearch", "candidates": [
+          { "observed": { "ytmsearch_song": { "VideoID": "7wBgcalM4c4", "Title": "Time After Time", "Artists": ["Cyndi Lauper"], "Album": "She's So Unusual", "DurationSeconds": 242, "Type": "MUSIC_VIDEO_TYPE_ATV" } } }
+        ] },
+        { "name": "ytdlp", "candidates": [
+          { "observed": { "ytdlp_entry": { "title": "Time After Time", "duration": 242, "webpage_url": "https://www.youtube.com/watch?v=7wBgcalM4c4", "channel": "Cyndi Lauper", "view_count": 182928781 } }, "query": "isrc" }
+        ] }
+      ]
+    }
+  ]
+}

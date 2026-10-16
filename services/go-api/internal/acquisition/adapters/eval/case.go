@@ -29,6 +29,8 @@ type Track struct {
 	Duration float64 `json:"duration,omitempty"`
 	ISRC     string  `json:"isrc,omitempty"`
 
+	AudioSourceURL string `json:"audio_source_url,omitempty"`
+
 	CatalogDuration float64         `json:"catalog_duration,omitempty"`
 	CatalogMBID     string          `json:"catalog_mbid,omitempty"`
 	CatalogSources  []CatalogSource `json:"catalog_sources,omitempty"`
@@ -299,9 +301,8 @@ type Case struct {
 }
 
 type StoredFile struct {
-	Duration  float64 `json:"duration"`
-	AcoustID  string  `json:"acoustid,omitempty"`
-	SourceURL string  `json:"source_url,omitempty"`
+	Duration float64 `json:"duration"`
+	AcoustID string  `json:"acoustid,omitempty"`
 }
 
 type SavedExpectation struct {

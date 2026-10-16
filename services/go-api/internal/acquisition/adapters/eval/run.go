@@ -82,12 +82,13 @@ func seedFor(kase Case) catalogbridge.SeededTrack {
 		CatalogMBID:     t.CatalogMBID,
 		CatalogExplicit: t.CatalogExplicit,
 		CatalogSources:  t.portCatalogSources(),
+		AudioSourceURL:  t.AudioSourceURL,
 	}
 	for _, rawURL := range kase.ExcludeURLs {
 		seed.RejectedSourceKeys = append(seed.RejectedSourceKeys, acqdomain.SourceKey(rawURL))
 	}
 	if kase.Stored != nil {
-		seed.Stored = &catalogbridge.SeededFile{Duration: kase.Stored.Duration, SourceURL: kase.Stored.SourceURL}
+		seed.Stored = &catalogbridge.SeededFile{Duration: kase.Stored.Duration}
 	}
 	return seed
 }
