@@ -7,8 +7,8 @@ import {
 } from '@shared/files/__tests__/memoryFileStore';
 
 import { createMemoryOfflinePort } from '@shared/offline/__tests__/memoryOfflinePort';
-import { runDownloadQueue } from '@shared/offline/pinnedDownloadWorker';
-import { setPinnedFileStore } from '@shared/offline/pinnedFiles';
+import { runDownloadQueue } from '@shared/offline/state/pinnedDownloadWorker';
+import { setPinnedFileStore } from '@shared/offline/state/pinnedFiles';
 import type { OfflinePort } from '@shared/offline/ports/offlinePort';
 import type { PinnedEntry } from '@shared/offline/pinnedIndex';
 import { signInTestUser } from '@testing/signInTestUser';

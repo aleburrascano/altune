@@ -183,10 +183,10 @@ src/shared/events/trackPatchBatch.ts unsubscribe
 src/shared/failure/describeError.ts describeError
 src/shared/files/durableDocument.ts schemaVersionOf
 src/shared/killSwitch/killSwitch.ts adoptSwitches
-src/shared/offline/pinnedFiles.ts deletePinnedMany
-src/shared/offline/pinnedFiles.ts downloadPinned
-src/shared/offline/pinnedFiles.ts formatBytes
-src/shared/offline/pinnedFiles.ts pinnedFilesByTrackId
+src/shared/offline/state/pinnedFiles.ts deletePinnedMany
+src/shared/offline/state/pinnedFiles.ts downloadPinned
+src/shared/offline/state/pinnedFiles.ts formatBytes
+src/shared/offline/state/pinnedFiles.ts pinnedFilesByTrackId
 src/shared/offline/pinnedIndex.ts entryOfStatus
 src/shared/offline/pinnedIndex.ts narrowEntry
 src/shared/offline/pinnedIndex.ts narrowIndex

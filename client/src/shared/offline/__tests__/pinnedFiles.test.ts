@@ -1,7 +1,7 @@
 import * as FileSystem from 'expo-file-system';
 
 import { asTrackId, type TrackId } from '@shared/apiClient/ids';
-import * as pinnedFilesModule from '@shared/offline/pinnedFiles';
+import * as pinnedFilesModule from '@shared/offline/state/pinnedFiles';
 
 import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 
@@ -14,7 +14,7 @@ import {
   pinnedFilesByTrackId,
   setPinnedFileStore,
   withPinnedBytesCached,
-} from '@shared/offline/pinnedFiles';
+} from '@shared/offline/state/pinnedFiles';
 import type { StoredDirectory, StoredFile } from '@shared/files/fileStore';
 import {
   createMemoryFileStore,

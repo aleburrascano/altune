@@ -2,7 +2,7 @@ function offlineDownloadsSupportedOn(os: string): boolean {
   let loaded: boolean | undefined;
   jest.isolateModules(() => {
     require('react-native').Platform.OS = os;
-    loaded = require('@shared/offline/offlineSupport').offlineDownloadsSupported;
+    loaded = require('@shared/offline/domain/offlineSupport').offlineDownloadsSupported;
   });
   return loaded as boolean;
 }

@@ -11,7 +11,7 @@ import {
   pinStorageFull,
   unsignedUrl,
   withPinnedBytesCached,
-} from '@shared/offline/pinnedFiles';
+} from '@shared/offline/state/pinnedFiles';
 import type { OfflinePort } from '@shared/offline/ports/offlinePort';
 import {
   type PinnedEntry,

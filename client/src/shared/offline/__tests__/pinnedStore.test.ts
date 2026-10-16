@@ -11,7 +11,7 @@ import {
 import type { StoredDirectory, StoredFile } from '@shared/files/fileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
 import { notifyIdentityChange, runSignOutCleanups } from '@shared/session/signOutCleanup';
-import { setPinnedFileStore } from '@shared/offline/pinnedFiles';
+import { setPinnedFileStore } from '@shared/offline/state/pinnedFiles';
 import {
   flushIndex,
   loadIndex,

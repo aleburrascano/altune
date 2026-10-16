@@ -2,10 +2,6 @@ M10 src/shared/acquisition/downloadStore.ts not a layer folder or index.ts
 M10 src/shared/acquisition/stagePhase.ts not a layer folder or index.ts
 M10 src/shared/acquisition/trackStatusStore.ts not a layer folder or index.ts
 M10 src/shared/acquisition/useRetryAcquisition.ts not a layer folder or index.ts
-M10 src/shared/math.ts file at the shared root
-M10 src/shared/offline/offlineSupport.ts not a layer folder or index.ts
-M10 src/shared/offline/pinnedDownloadWorker.ts not a layer folder or index.ts
-M10 src/shared/offline/pinnedFiles.ts not a layer folder or index.ts
 M10 src/shared/offline/pinnedIndex.ts not a layer folder or index.ts
 M10 src/shared/offline/pinnedStore.ts not a layer folder or index.ts
 M10 src/shared/playlists/mutations.ts not a layer folder or index.ts

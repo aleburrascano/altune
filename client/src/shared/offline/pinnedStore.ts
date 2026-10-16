@@ -4,9 +4,9 @@ import { parseTrackId, type TrackId } from '@shared/apiClient/ids';
 import { onIdentityChange, onSignOut } from '@shared/session/signOutCleanup';
 import { onKillSwitchChange } from '@shared/killSwitch/killSwitch';
 
-import { offlineDownloadsSupported } from '@shared/offline/offlineSupport';
+import { offlineDownloadsSupported } from '@shared/offline/domain/offlineSupport';
 import { httpOfflinePort } from '@shared/offline/adapters/http/httpOfflinePort';
-import { runDownloadQueue } from '@shared/offline/pinnedDownloadWorker';
+import { runDownloadQueue } from '@shared/offline/state/pinnedDownloadWorker';
 import {
   deleteAllPinned,
   deletePinned,
@@ -14,7 +14,7 @@ import {
   deleteAbandonedDownloads,
   pinStorageFull,
   pinnedFilesByTrackId,
-} from '@shared/offline/pinnedFiles';
+} from '@shared/offline/state/pinnedFiles';
 import {
   type PinnedEntry,
   changedEntryIds,
@@ -29,7 +29,7 @@ import {
   writeOwner,
 } from '@shared/offline/pinnedIndex';
 
-export { pinnedBytes as pinnedByteTotal } from '@shared/offline/pinnedFiles';
+export { pinnedBytes as pinnedByteTotal } from '@shared/offline/state/pinnedFiles';
 
 export type { PinnedEntry, PinnedStatus } from '@shared/offline/pinnedIndex';
 

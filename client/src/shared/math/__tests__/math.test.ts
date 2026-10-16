@@ -1,4 +1,4 @@
-import { clamp } from '@shared/math';
+import { clamp } from '@shared/math/math';
 
 describe('clamp — holding a value inside its bounds', () => {
   it('returns the value when it is already inside the bounds', () => {

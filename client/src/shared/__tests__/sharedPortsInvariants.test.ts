@@ -142,7 +142,7 @@ describe('real tree', () => {
 
   it('scans the live ids importers and the exempt adapter', () => {
     const relFiles = allFiles.map(rel);
-    for (const f of ['pinnedFiles', 'pinnedStore', 'pinnedIndex']) {
+    for (const f of ['state/pinnedFiles', 'pinnedStore', 'pinnedIndex']) {
       const file = allFiles.find((p) => rel(p) === `offline/${f}.ts`);
       expect(file && rel(file)).toBe(`offline/${f}.ts`);
       expect(fs.readFileSync(file!, 'utf8')).toContain(IDS_SPECIFIER);

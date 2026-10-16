@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import { clamp } from '@shared/math';
+import { clamp } from '@shared/math/math';
 
 import {
   ascending,

@@ -1,6 +1,6 @@
 import { StyleSheet } from 'react-native';
 
-import { clamp } from '@shared/math';
+import { clamp } from '@shared/math/math';
 import { spacing, minInteractiveHeight, opacity } from '@shared/ui/theme/tokens';
 
 export const sharedStyles = StyleSheet.create({

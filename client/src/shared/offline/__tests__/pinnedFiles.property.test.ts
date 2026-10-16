@@ -7,7 +7,7 @@ import {
   downloadPinned,
   formatBytes,
   setPinnedFileStore,
-} from '@shared/offline/pinnedFiles';
+} from '@shared/offline/state/pinnedFiles';
 
 const PINNED_T1 = 'memory://document/offline-audio/t1';
 

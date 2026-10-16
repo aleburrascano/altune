@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type AccessibilityActionEvent, Animated, type View } from 'react-native';
 import { Gesture } from 'react-native-gesture-handler';
 
-import { clamp } from '@shared/math';
+import { clamp } from '@shared/math/math';
 
 const A11Y_SEEK_STEP_MS = 15000;
 

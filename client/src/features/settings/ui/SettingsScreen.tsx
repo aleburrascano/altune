@@ -5,7 +5,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { appVersionLabel } from '@shared/device/device';
 import { Screen, Text, spacing, useTheme } from '@shared/ui';
 import { useSignOut } from '@shared/auth/useSignOut';
-import { offlineDownloadsSupported } from '@shared/offline/offlineSupport';
+import { offlineDownloadsSupported } from '@shared/offline/domain/offlineSupport';
 import { useAccountEmail } from '@features/settings/hooks/useAccountEmail';
 import { useSettingsClearSearchHistory } from '@features/settings/hooks/useSettingsClearSearchHistory';
 import { useDownloadStats, useRemoveDownloads } from '@features/settings/hooks/useDownloads';

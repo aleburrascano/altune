@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 
 import type { TrackId } from '@shared/apiClient/ids';
 import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { offlineDownloadsSupported } from '@shared/offline/offlineSupport';
+import { offlineDownloadsSupported } from '@shared/offline/domain/offlineSupport';
 import {
   usePinnedStore,
   type PinAdmission,
