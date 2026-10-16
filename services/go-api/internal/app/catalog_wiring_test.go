@@ -28,6 +28,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -620,6 +621,42 @@ func TestWireCatalogFingerprintVerifiedStaysFalseUntilALookupSucceeds(t *testing
 	}
 	if !working.Verified() {
 		t.Error("Verified() = false after a successful lookup, want true")
+	}
+}
+
+type sequencedIdentifier struct {
+	acqPorts.AudioIdentifier
+	errs []error
+	next int
+}
+
+func (s *sequencedIdentifier) Identify(context.Context, string, float64) (acqPorts.RecordingMatch, error) {
+	err := s.errs[s.next]
+	s.next++
+	return acqPorts.RecordingMatch{}, err
+}
+
+func TestWireCatalogFingerprintVerifiedFollowsTheLatestLookup(t *testing.T) {
+	throttled := fmt.Errorf("acoustid lookup: %w", acqdomain.ErrIdentifyThrottled)
+	tracker := &lookupTracker{AudioIdentifier: &sequencedIdentifier{errs: []error{
+		nil, throttled, errors.New("invalid api key"), throttled, nil,
+	}}}
+
+	steps := []struct {
+		name string
+		want bool
+	}{
+		{"success", true},
+		{"throttled after success", true},
+		{"failure after success", false},
+		{"throttled after failure", false},
+		{"success after failure", true},
+	}
+	for _, step := range steps {
+		_, _ = tracker.Identify(context.Background(), "a.opus", 0)
+		if got := tracker.Verified(); got != step.want {
+			t.Errorf("Verified() after %s = %v, want %v", step.name, got, step.want)
+		}
 	}
 }
 

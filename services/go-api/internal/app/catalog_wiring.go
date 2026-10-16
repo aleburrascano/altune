@@ -10,6 +10,7 @@ import (
 	"altune/go-api/internal/acquisition/adapters/ytdlp"
 	"altune/go-api/internal/acquisition/adapters/ytmsearch"
 	"altune/go-api/internal/acquisition/adapters/ytmusic"
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/catalog/adapters/discoverybridge"
 	"altune/go-api/internal/catalog/adapters/persistence"
 	"altune/go-api/internal/catalog/adapters/storage"
@@ -17,6 +18,7 @@ import (
 	"altune/go-api/internal/observe/service/eventtap"
 	"altune/go-api/internal/shared/binpath"
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"os"
@@ -247,8 +249,11 @@ type lookupTracker struct {
 
 func (t *lookupTracker) Identify(ctx context.Context, filePath string, durationHint float64) (acqPorts.RecordingMatch, error) {
 	match, err := t.AudioIdentifier.Identify(ctx, filePath, durationHint)
-	if err == nil {
+	switch {
+	case err == nil:
 		t.succeeded.Store(true)
+	case !errors.Is(err, acqdomain.ErrIdentifyThrottled):
+		t.succeeded.Store(false)
 	}
 	return match, err
 }
