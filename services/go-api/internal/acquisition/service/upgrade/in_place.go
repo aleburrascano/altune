@@ -33,6 +33,12 @@ type inPlaceEvidence struct {
 	Grade             grade.Grade      `json:"grade"`
 	SourceKind        grade.SourceKind `json:"source_kind"`
 	InPlaceGeneration int              `json:"in_place_generation"`
+	SourceFormatID    string           `json:"source_format_id"`
+	SourceKbps        int              `json:"source_kbps"`
+}
+
+func (e inPlaceEvidence) format() ports.SourceFormat {
+	return ports.SourceFormat{ID: e.SourceFormatID, Kbps: e.SourceKbps}
 }
 
 func inPlaceEvidenceOf(raw json.RawMessage) inPlaceEvidence {

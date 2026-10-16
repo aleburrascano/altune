@@ -119,3 +119,16 @@ func TestPlanner_ATrackWithAJobInFlightIsSkippedNotAFailure(t *testing.T) {
 		t.Errorf("PlanNext with a job in flight = %v, want nil: the batch goes on", err)
 	}
 }
+
+func TestPlanner_RescuingLowBitrateAsksTheStoreForTheFloor(t *testing.T) {
+	store := &pickingStore{}
+
+	if err := upgrade.NewPlanner(store, &recordingScheduler{}, 2, 6*time.Hour).RescuingLowBitrate(112).PlanNext(context.Background()); err != nil {
+		t.Fatalf("PlanNext: %v", err)
+	}
+
+	want := ports.UpgradeSelection{Limit: 1, Generation: grade.PipelineGeneration, RetryAfter: 6 * time.Hour, MaxQueued: 2, LowBitrateFloorKbps: 112}
+	if store.selection != want {
+		t.Errorf("selection = %+v, want %+v", store.selection, want)
+	}
+}

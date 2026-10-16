@@ -564,3 +564,25 @@ func TestPgxUpgradeStore_RecordInPlaceClearsAStaleAcoustIDScoreOnAPreviewVerdict
 		t.Errorf("evidence = %+v, want the old score cleared and the preview verdict recorded", got)
 	}
 }
+
+func TestUpgradeStore_Candidates_LowBitrateRescue(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxUpgradeStore(pool)
+
+	muxed := insertUpgradableTrack(t, pool, readyTrackSpec{
+		evidence: `{"grade":"A","source_format_id":"18","source_kbps":96}`, sourceURL: sourceURL("muxd"),
+	})
+	audioOnly := insertUpgradableTrack(t, pool, readyTrackSpec{
+		evidence: `{"grade":"A","source_format_id":"140","source_kbps":130}`, sourceURL: sourceURL("audio"),
+	})
+
+	withFloor := selectionOf(10)
+	withFloor.LowBitrateFloorKbps = 112
+	if got := candidatesAmong(t, store, withFloor, muxed, audioOnly); !slices.Equal(got, []shared.TrackId{muxed}) {
+		t.Errorf("candidates at floor 112 = %v, want only the muxed grade-A file %v", got, muxed)
+	}
+	if got := candidatesAmong(t, store, selectionOf(10), muxed, audioOnly); len(got) != 0 {
+		t.Errorf("candidates at floor 0 = %v, want none: a zero floor switches the rescue off", got)
+	}
+}

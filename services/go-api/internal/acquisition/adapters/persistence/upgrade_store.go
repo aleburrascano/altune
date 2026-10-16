@@ -35,6 +35,9 @@ WHERE t.acquisition_status = 'ready'
 	AND (
 		COALESCE(t.acquisition_evidence->>'grade', 'D') <> 'A'
 		OR ($5::boolean AND COALESCE((t.acquisition_evidence->>'in_place_generation')::int, 0) < $2)
+		OR ($6::int > 0 AND (
+			t.acquisition_evidence->>'source_format_id' = '18'
+			OR COALESCE(NULLIF(t.acquisition_evidence->>'source_kbps', '')::int, 0) BETWEEN 1 AND $6::int - 1))
 	)
 	AND COALESCE((t.acquisition_evidence->>'best_available_generation')::int, 0) < $2
 	AND COALESCE((t.acquisition_evidence->>'upgrade_tried_at')::timestamptz, '-infinity') < now() - make_interval(secs => $3)
@@ -52,7 +55,8 @@ func (s *PgxUpgradeStore) Candidates(ctx context.Context, selection ports.Upgrad
 	defer cancel()
 
 	rows, err := s.pool.Query(ctx, upgradeCandidatesSQL,
-		selection.Limit, selection.Generation, selection.RetryAfter.Seconds(), selection.MaxQueued, selection.CheckInPlace)
+		selection.Limit, selection.Generation, selection.RetryAfter.Seconds(), selection.MaxQueued, selection.CheckInPlace,
+		selection.LowBitrateFloorKbps)
 	if err != nil {
 		return nil, fmt.Errorf("select upgrade candidates: %w", err)
 	}

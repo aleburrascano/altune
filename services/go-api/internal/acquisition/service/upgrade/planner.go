@@ -22,6 +22,7 @@ type Planner struct {
 	maxQueued    int
 	retryAfter   time.Duration
 	checkUploads bool
+	lowBitrate   int
 }
 
 func NewPlanner(store ports.UpgradeStore, scheduler Scheduler, maxQueued int, retryAfter time.Duration) *Planner {
@@ -33,6 +34,11 @@ func (p *Planner) CheckingUploads() *Planner {
 	return p
 }
 
+func (p *Planner) RescuingLowBitrate(floorKbps int) *Planner {
+	p.lowBitrate = floorKbps
+	return p
+}
+
 func (p *Planner) PlanNext(ctx context.Context) error {
 	candidates, err := p.store.Candidates(ctx, ports.UpgradeSelection{
 		Limit:        1,
@@ -40,6 +46,8 @@ func (p *Planner) PlanNext(ctx context.Context) error {
 		RetryAfter:   p.retryAfter,
 		MaxQueued:    p.maxQueued,
 		CheckInPlace: p.checkUploads,
+
+		LowBitrateFloorKbps: p.lowBitrate,
 	})
 	if err != nil {
 		return fmt.Errorf("pick tracks to upgrade: %w", err)

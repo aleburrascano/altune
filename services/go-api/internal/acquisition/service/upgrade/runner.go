@@ -17,8 +17,9 @@ var ErrKept = errors.New("upgrade kept the current file")
 const settleBudget = 10 * time.Second
 
 type Config struct {
-	DryRun   bool
-	MaxTries int
+	DryRun              bool
+	MaxTries            int
+	LowBitrateFloorKbps int
 }
 
 type Attempt struct {
@@ -81,7 +82,7 @@ func (r *Runner) ExecuteUpgrade(ctx context.Context, userId shared.UserId, track
 	}
 	stored := inPlaceEvidenceOf(track.Evidence)
 	current := stored.Grade
-	if !isPlayableFile(track) || r.isSettled(track, current) {
+	if !isPlayableFile(track) || r.isSettled(track, current, stored.format()) {
 		slog.InfoContext(ctx, "acquisition.upgrade_skipped", "track_id", trackId.String())
 		return nil
 	}
@@ -97,6 +98,10 @@ func (r *Runner) ExecuteUpgrade(ctx context.Context, userId shared.UserId, track
 		return nil
 	}
 	gate := Gate{Current: current, DryRun: r.cfg.DryRun}
+	if stored.format().IsLowBitrate(r.cfg.LowBitrateFloorKbps) {
+		gate.Stored = stored.format()
+		gate.FloorKbps = r.cfg.LowBitrateFloorKbps
+	}
 	attempt, err := r.replacer.ReplaceGated(ctx, userId, track, gate)
 	return r.settle(ctx, trackId, gate, attempt, err)
 }
@@ -148,12 +153,12 @@ func (r *Runner) giveUp(ctx context.Context, trackId shared.TrackId, current gra
 		"track_id", trackId.String(), "grade", string(current), "tries", tries, "reason", reason)
 }
 
-func (r *Runner) isSettled(track *ports.TrackSnapshot, current grade.Grade) bool {
+func (r *Runner) isSettled(track *ports.TrackSnapshot, current grade.Grade, stored ports.SourceFormat) bool {
 	switch {
 	case current.IsBestAvailable(), current == grade.AUser:
 		return true
 	case current == grade.A:
-		return !r.isUnchecked(track)
+		return !r.isUnchecked(track) && !stored.IsLowBitrate(r.cfg.LowBitrateFloorKbps)
 	}
 	return false
 }

@@ -21,7 +21,10 @@ const (
 func (a *App) upgradeLane(ledger acqPorts.TrackLedger, svc *acqService.AcquireTrackAudioService) func(*acqService.BackgroundAcquisitionScheduler) {
 	store := acqPersistence.NewPgxUpgradeStore(a.pool)
 	runner := upgrade.NewRunner(ledger, svc, store,
-		upgrade.Config{DryRun: a.cfg.AcquisitionUpgradeDryRun, MaxTries: a.cfg.AcquisitionUpgradeMaxTries}).
+		upgrade.Config{
+			DryRun: a.cfg.AcquisitionUpgradeDryRun, MaxTries: a.cfg.AcquisitionUpgradeMaxTries,
+			LowBitrateFloorKbps: a.cfg.AcquisitionLowBitrateFloorKbps,
+		}).
 		WithInPlaceCheck(svc, store, a.cfg.AcquisitionUpgradeVerifyPerHour)
 	return acqService.WithUpgradeLane(runner, a.cfg.AcquisitionUpgradeConcurrency)
 }
@@ -42,7 +45,8 @@ func (a *App) startAcquisitionUpgradeIfEnabled(ctx context.Context, scheduler *a
 }
 
 func (a *App) startAcquisitionUpgrade(ctx context.Context, scheduler upgrade.Scheduler) {
-	planner := upgrade.NewPlanner(acqPersistence.NewPgxUpgradeStore(a.pool), scheduler, a.cfg.AcquisitionUpgradeConcurrency, a.cfg.AcquisitionUpgradeRetryAfter).CheckingUploads()
+	planner := upgrade.NewPlanner(acqPersistence.NewPgxUpgradeStore(a.pool), scheduler, a.cfg.AcquisitionUpgradeConcurrency, a.cfg.AcquisitionUpgradeRetryAfter).CheckingUploads().
+		RescuingLowBitrate(a.cfg.AcquisitionLowBitrateFloorKbps)
 	interval := upgrade.Interval(a.cfg.AcquisitionUpgradePerHour)
 	a.startLoggedJob(ctx, jobAcquisitionUpgrade, interval, planner.PlanNext,
 		"interval", interval.String(), "dry_run", a.cfg.AcquisitionUpgradeDryRun)

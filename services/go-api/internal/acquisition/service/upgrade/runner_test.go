@@ -405,3 +405,45 @@ func TestRunner_AFailedGiveUpStillSettlesTheKeptFile(t *testing.T) {
 		t.Errorf("audio_ref = %v, want the old file kept", row.AudioRef)
 	}
 }
+
+type gateRecorder struct {
+	gates []upgrade.Gate
+}
+
+func (g *gateRecorder) ReplaceGated(_ context.Context, _ shared.UserId, _ *ports.TrackSnapshot, gate upgrade.Gate) (upgrade.Attempt, error) {
+	g.gates = append(g.gates, gate)
+	return upgrade.Attempt{}, nil
+}
+
+func TestRunner_ALowBitrateFileAtAIsNotSettled(t *testing.T) {
+	cases := []struct {
+		name     string
+		evidence string
+		reached  bool
+	}{
+		{"a muxed format 18 file", `{"grade":"A","source_format_id":"18","source_kbps":96,"in_place_generation":%d}`, true},
+		{"an audio-only file above the floor", `{"grade":"A","source_format_id":"140","source_kbps":130,"in_place_generation":%d}`, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := seed(t, grade.A)
+			w.storedEvidence(fmt.Sprintf(tc.evidence, grade.PipelineGeneration))
+			replacer := &gateRecorder{}
+			runner := upgrade.NewRunner(catalogbridge.NewTrackLedger(w.tracks), replacer, w.upgrades, upgrade.Config{MaxTries: 3, LowBitrateFloorKbps: 112})
+
+			if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
+				t.Fatalf("ExecuteUpgrade: %v", err)
+			}
+
+			if !tc.reached {
+				if len(replacer.gates) != 0 {
+					t.Errorf("gates = %+v, want the file skipped", replacer.gates)
+				}
+				return
+			}
+			if len(replacer.gates) != 1 || replacer.gates[0].Stored.ID != "18" {
+				t.Errorf("gates = %+v, want one ReplaceGated carrying the stored format 18", replacer.gates)
+			}
+		})
+	}
+}

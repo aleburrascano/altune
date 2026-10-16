@@ -85,6 +85,8 @@ type Config struct {
 	AcquisitionUpgradeConcurrency int  `env:"ACQUISITION_UPGRADE_CONCURRENCY" envDefault:"1"`
 	AcquisitionUpgradeMaxTries    int  `env:"ACQUISITION_UPGRADE_MAX_TRIES" envDefault:"3"`
 
+	AcquisitionLowBitrateFloorKbps int `env:"ACQUISITION_LOW_BITRATE_FLOOR_KBPS" envDefault:"112"`
+
 	AcquisitionUpgradeVerifyPerHour  int     `env:"ACQUISITION_UPGRADE_VERIFY_PER_HOUR" envDefault:"60"`
 	AcquisitionUpgradePreviewAMaxBER float64 `env:"ACQUISITION_UPGRADE_PREVIEW_A_MAX_BER" envDefault:"0.10"`
 

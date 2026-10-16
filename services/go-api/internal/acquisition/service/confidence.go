@@ -133,6 +133,8 @@ type Evidence struct {
 	SourceKind           grade.SourceKind `json:"source_kind"`
 	PipelineGeneration   int              `json:"pipeline_generation"`
 	Grade                grade.Grade      `json:"grade"`
+	SourceFormatID       string           `json:"source_format_id,omitempty"`
+	SourceKbps           int              `json:"source_kbps,omitempty"`
 }
 
 func SourceKindOf(c ports.AudioCandidate, channelClass string) grade.SourceKind {
@@ -196,6 +198,8 @@ func (ac *AcquisitionContext) collectEvidence() Evidence {
 		evidence.SourceKind = SourceKindOf(*ac.Selected, evidence.Channel)
 	}
 	evidence.PipelineGeneration = grade.PipelineGeneration
+	evidence.SourceFormatID = ac.SourceFormat.ID
+	evidence.SourceKbps = ac.SourceFormat.Kbps
 	evidence.Grade = ac.gradeFor(evidence.SourceKind)
 	return evidence
 }

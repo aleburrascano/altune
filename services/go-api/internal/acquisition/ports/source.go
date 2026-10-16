@@ -45,6 +45,15 @@ type SourceFormat struct {
 	Kbps  int
 }
 
+const MuxedFallbackFormatID = "18"
+
+func (f SourceFormat) IsLowBitrate(floorKbps int) bool {
+	if floorKbps <= 0 {
+		return false
+	}
+	return f.ID == MuxedFallbackFormatID || (f.Kbps > 0 && f.Kbps < floorKbps)
+}
+
 type PreviewFetcher interface {
 	FetchPreview(ctx context.Context, candidate AudioCandidate, outDir string, seconds int) (filePath string, err error)
 }

@@ -192,6 +192,9 @@ func (c *Config) validateAcquisitionUpgrade() error {
 	if c.AcquisitionUpgradeMaxTries < 1 {
 		return fmt.Errorf("ACQUISITION_UPGRADE_MAX_TRIES must be >= 1, got %d", c.AcquisitionUpgradeMaxTries)
 	}
+	if c.AcquisitionLowBitrateFloorKbps < 0 {
+		return fmt.Errorf("ACQUISITION_LOW_BITRATE_FLOOR_KBPS must be >= 0, got %d", c.AcquisitionLowBitrateFloorKbps)
+	}
 	if c.AcquisitionUpgradeRetryAfter < minAcquisitionUpgradeRetryAfter || c.AcquisitionUpgradeRetryAfter > maxAcquisitionUpgradeRetryAfter {
 		return fmt.Errorf("ACQUISITION_UPGRADE_RETRY_AFTER must be between %s and %s, got %s",
 			minAcquisitionUpgradeRetryAfter, maxAcquisitionUpgradeRetryAfter, c.AcquisitionUpgradeRetryAfter)

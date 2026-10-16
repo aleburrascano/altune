@@ -396,10 +396,12 @@ func reportDecision(ctx context.Context, ac *AcquisitionContext) {
 func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, track *ports.TrackSnapshot, trackId shared.TrackId) error {
 	ac.Replace.PreservedRef = deref(track.AudioRef)
 	ac.Track.AudioSourceURL = ""
-	ac.Replace.ExcludeKeys = mergeSourceKeys(
-		ac.Replace.ExcludeKeys,
-		sourceKey(deref(track.AudioSourceURL)),
-	)
+	if !ac.Replace.Gate.RefetchesCurrentSource() {
+		ac.Replace.ExcludeKeys = mergeSourceKeys(
+			ac.Replace.ExcludeKeys,
+			sourceKey(deref(track.AudioSourceURL)),
+		)
+	}
 	if track.AudioSourceURL == nil {
 		slog.InfoContext(ctx, "acquisition.replacing_unknown_source", "track_id", trackId.String())
 	}

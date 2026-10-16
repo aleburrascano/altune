@@ -19,6 +19,8 @@ type UpgradeSelection struct {
 	MaxQueued  int
 
 	CheckInPlace bool
+
+	LowBitrateFloorKbps int
 }
 
 type UpgradeAttempt struct {

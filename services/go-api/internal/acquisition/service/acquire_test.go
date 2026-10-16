@@ -5,11 +5,13 @@ import (
 	"altune/go-api/internal/acquisition/adapters/catalogpin"
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service/grade"
 	"altune/go-api/internal/acquisition/service/upgrade"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"os"
@@ -2492,5 +2494,79 @@ func TestExecute_TheSourceIsAskedWithTheCatalogFacts(t *testing.T) {
 	}
 	if req.CatalogExplicit == nil || !*req.CatalogExplicit {
 		t.Errorf("request CatalogExplicit = %v, want true", req.CatalogExplicit)
+	}
+}
+
+type completionRecordingLedger struct {
+	ports.TrackLedger
+	completed []ports.Completion
+}
+
+func (l *completionRecordingLedger) Complete(ctx context.Context, id shared.TrackId, userId shared.UserId, fence ports.Fence, c ports.Completion) error {
+	l.completed = append(l.completed, c)
+	return l.TrackLedger.Complete(ctx, id, userId, fence, c)
+}
+
+const lowBitrateStoredSource = "https://www.youtube.com/watch?v=currentAAAA"
+
+type audioOnlyOfTheStoredSource struct{ newAudioSource }
+
+func (audioOnlyOfTheStoredSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
+	return []ports.AudioCandidate{{
+		Title:      "Blinding Lights",
+		URL:        lowBitrateStoredSource,
+		Channel:    "The Weeknd - Topic",
+		Categories: []string{"Music"},
+		Kind:       ports.KindArtTrack,
+		Duration:   200,
+	}}, nil
+}
+
+func (s audioOnlyOfTheStoredSource) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+	fetched, err := s.newAudioSource.Fetch(ctx, c, outDir)
+	fetched.Format = ports.SourceFormat{ID: "140", Codec: "mp4a.40.2", Kbps: 130}
+	return fetched, err
+}
+
+func TestReplaceGated_AMuxedFallbackIsSwappedForTheAudioOnlyStreamOfTheSameSource(t *testing.T) {
+	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
+	ledger := &completionRecordingLedger{TrackLedger: catalogbridge.NewTrackLedger(repo)}
+	svc := newTestAcquireService(ledger, NewSourceRegistry(audioOnlyOfTheStoredSource{}), store,
+		WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding", MBIDs: []string{"mb-blinding"}}}),
+		WithAudioIdentifier(&stubIdentifier{match: inPlaceMatch(ports.LinkedRecording{MBID: "mb-blinding", Title: "Blinding Lights", Artists: []string{"The Weeknd"}})}),
+	)
+	track, err := ledger.Get(context.Background(), trackId, userId)
+	if err != nil || track == nil {
+		t.Fatalf("load track: %v %v", track, err)
+	}
+	gate := upgrade.Gate{
+		Current:   grade.A,
+		Stored:    ports.SourceFormat{ID: "18", Codec: "mp4a.40.2", Kbps: 96},
+		FloorKbps: 112,
+	}
+
+	if _, err := svc.ReplaceGated(context.Background(), userId, track, gate); err != nil {
+		t.Fatalf("ReplaceGated: %v, want the 140 stream at 130 kbps admitted over the stored format 18 at 96", err)
+	}
+
+	if row := repo.committed(trackId, userId); row.AudioRef == nil || *row.AudioRef == originalRef {
+		t.Fatalf("audio_ref = %v, want the swap committed to a new ref", row.AudioRef)
+	}
+	if len(ledger.completed) != 1 {
+		t.Fatalf("completions = %d, want 1", len(ledger.completed))
+	}
+	done := ledger.completed[0]
+	var evidence struct {
+		SourceFormatID string `json:"source_format_id"`
+		SourceKbps     int    `json:"source_kbps"`
+	}
+	if err := json.Unmarshal(done.Evidence, &evidence); err != nil {
+		t.Fatalf("evidence %s: %v", done.Evidence, err)
+	}
+	if evidence.SourceFormatID != "140" || evidence.SourceKbps != 130 {
+		t.Errorf("evidence = %+v, want the fetched format 140 at 130 kbps", evidence)
+	}
+	if slices.Contains(done.RejectedSourceKeys, sourceKey(lowBitrateStoredSource)) {
+		t.Errorf("rejected keys = %v, want the stored source left out: the upgrade refetches it", done.RejectedSourceKeys)
 	}
 }
