@@ -90,6 +90,7 @@ func (s memoryStore) Stream(_ context.Context, ref string) (catalogPorts.AudioSt
 const (
 	noPreviewText           = "deezer has no preview for this track"
 	fpcalcPrintsFingerprint = "#!/bin/sh\nprintf '{\"duration\": 200, \"fingerprint\": \"AQAAdkmVJUqSpNce\"}'\n"
+	fpcalcPrintsNothing     = "#!/bin/sh\nprintf '{\"duration\": 0, \"fingerprint\": \"\"}'\n"
 	fpcalcFails             = "#!/bin/sh\necho cannot decode >&2\nexit 1\n"
 )
 
@@ -234,6 +235,17 @@ func TestVerify_FingerprintFailureFailsTheTrack(t *testing.T) {
 
 	if got.Verdict != verdictFailed || !strings.Contains(got.Error, "fingerprint") {
 		t.Errorf("verdict = %q error = %q, want failed with a fingerprint error", got.Verdict, got.Error)
+	}
+}
+
+func TestVerify_EmptyFingerprintIsAnUnidentifiedTrackNotAFailure(t *testing.T) {
+	v := newVerifier(t, "acoustid_bound_recording.json", &fakeLookups{})
+	v.identify = chromaprint.NewIdentifier(writeFakeFpcalc(t, fpcalcPrintsNothing), "key")
+
+	got := v.verify(context.Background(), trackWith(boundIdentity{Status: statusBound, MBRecordingID: "rec-bound"}))
+
+	if got.Verdict == verdictFailed || got.Error != "" {
+		t.Errorf("verdict = %q error = %q, want an empty-match verdict, not a failure", got.Verdict, got.Error)
 	}
 }
 

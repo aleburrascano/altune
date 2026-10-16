@@ -1,11 +1,13 @@
 package service
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service/grade"
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 
@@ -413,5 +415,18 @@ func TestCheckInPlace_APreviewOverlapUnderTheMinimumIsNoPreview(t *testing.T) {
 
 	if err != nil || finding.Answered() {
 		t.Errorf("finding = %+v, err = %v, want no answer from a preview that overlaps too little", finding, err)
+	}
+}
+
+func TestCheckInPlace_AnEmptyFingerprintStillFallsBackToThePreviewComparison(t *testing.T) {
+	previews := &stubPreviewMatcher{comparison: ports.PreviewComparison{Matched: true, BitErrorRate: 0.05, OverlapSeconds: 29}}
+	identifier := &stubIdentifier{err: fmt.Errorf("stored.mp3: %w", acqdomain.ErrEmptyFingerprint)}
+
+	finding, err := inPlaceService(identifier, previews, pinnedBoysDontCry).CheckInPlace(context.Background(), inPlaceTrack())
+	if err != nil {
+		t.Fatalf("CheckInPlace: %v", err)
+	}
+	if finding.Fingerprint != grade.Matches || finding.Basis != "preview" {
+		t.Errorf("finding = %+v, want the preview comparison to decide", finding)
 	}
 }

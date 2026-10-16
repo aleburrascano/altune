@@ -247,8 +247,8 @@ type lookupTracker struct {
 	succeeded atomic.Bool
 }
 
-func (t *lookupTracker) Identify(ctx context.Context, filePath string, durationHint float64) (acqPorts.RecordingMatch, error) {
-	match, err := t.AudioIdentifier.Identify(ctx, filePath, durationHint)
+func (t *lookupTracker) Identify(ctx context.Context, filePath string, fullLengthForPreview float64) (acqPorts.RecordingMatch, error) {
+	match, err := t.AudioIdentifier.Identify(ctx, filePath, fullLengthForPreview)
 	switch {
 	case err == nil:
 		t.succeeded.Store(true)

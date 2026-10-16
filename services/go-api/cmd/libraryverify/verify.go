@@ -2,6 +2,7 @@ package main
 
 import (
 	"altune/go-api/internal/acquisition/adapters/deezerpreview"
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service/audiojudge"
 	"context"
@@ -52,7 +53,7 @@ type trackResult struct {
 }
 
 type audioIdentifier interface {
-	Identify(ctx context.Context, filePath string, durationHint float64) (ports.RecordingMatch, error)
+	Identify(ctx context.Context, filePath string, fullLengthForPreview float64) (ports.RecordingMatch, error)
 }
 
 type previewSource interface {
@@ -117,6 +118,9 @@ func (v *verifier) assess(ctx context.Context, track libraryTrack) (assessment, 
 
 func (v *verifier) assessFile(ctx context.Context, track libraryTrack, file string) (assessment, error) {
 	match, err := v.identify.Identify(ctx, file, 0)
+	if errors.Is(err, acqdomain.ErrEmptyFingerprint) {
+		match, err = ports.RecordingMatch{}, nil
+	}
 	if err != nil {
 		return assessment{}, fmt.Errorf("fingerprint: %w", err)
 	}

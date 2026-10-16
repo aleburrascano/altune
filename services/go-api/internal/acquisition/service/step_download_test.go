@@ -2496,3 +2496,23 @@ func TestDownloadStep_ConcurrentCandidatesShareOneVersionLookup(t *testing.T) {
 		t.Errorf("lookups = %v, want %v: both candidates share one MusicBrainz call", lookup.calls, want)
 	}
 }
+
+func TestDownloadStep_AnEmptyFingerprintIsAVerifySkip(t *testing.T) {
+	logs := captureJSONLog(t)
+	rec := &gateRecorder{}
+	empty := fmt.Errorf("/tmp/x.mp3: %w", acqdomain.ErrEmptyFingerprint)
+	step := NewDownloadStep(&fileWritingSearcher{writeFile: true},
+		WithDownloadIdentifier(&stubIdentifier{err: empty}), WithStepVerifySkips(rec))
+	ac := downloadContext("mb-master")
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+	assertWindowSkips(t, rec.gates, "identify_failed")
+	findLogRecord(t, logs, "acquisition.identify_failed")
+	if strings.Contains(logs.String(), "acquisition.identify_unknown") {
+		t.Errorf("empty fingerprint logged as identify_unknown: %s", logs.String())
+	}
+}

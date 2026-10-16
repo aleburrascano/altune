@@ -1,6 +1,7 @@
 package service
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service/audiojudge"
 	"altune/go-api/internal/acquisition/service/grade"
@@ -104,6 +105,11 @@ func (s *AcquireTrackAudioService) fingerprintInto(ctx context.Context, ac *Acqu
 		return 0, nil
 	}
 	match, err := s.identifier.Identify(ctx, path, 0)
+	if errors.Is(err, acqdomain.ErrEmptyFingerprint) {
+		slog.WarnContext(ctx, "acquisition.in_place_fingerprint_empty",
+			"track_id", ac.Track.ID, "error", redact.LogError(err))
+		return 0, nil
+	}
 	if err != nil {
 		return 0, fmt.Errorf("fingerprint the stored file: %w", err)
 	}

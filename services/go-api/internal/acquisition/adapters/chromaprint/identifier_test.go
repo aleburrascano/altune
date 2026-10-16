@@ -359,7 +359,7 @@ func TestLookup_ContextDeadlineAbortsTheRateLimitWaitBeforeAnyRequest(t *testing
 	}
 }
 
-func TestIdentify_ZeroDurationHintKeepsFpcalcsMeasuredDuration(t *testing.T) {
+func TestIdentify_ZeroFullLengthForPreviewKeepsFpcalcsMeasuredDuration(t *testing.T) {
 	var gotForm url.Values
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
@@ -730,4 +730,25 @@ func (identifyOnly) Identify(context.Context, string, float64) (ports.RecordingM
 
 func TestAudioIdentifier_IsIdentifyOnly(t *testing.T) {
 	var _ ports.AudioIdentifier = identifyOnly{}
+}
+
+func TestIdentify_EmptyFingerprintIsAnError(t *testing.T) {
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits++ }))
+	defer srv.Close()
+	dir := t.TempDir()
+	script := "#!/bin/sh\nprintf '{\"duration\": 0, \"fingerprint\": \"\"}'\n"
+	if err := os.WriteFile(filepath.Join(dir, "fpcalc"), []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake fpcalc: %v", err)
+	}
+	id := NewIdentifier(dir, "real-key").WithEndpoint(srv.URL)
+
+	_, err := id.Identify(context.Background(), "/tmp/broken.mp3", 0)
+
+	if !errors.Is(err, acqdomain.ErrEmptyFingerprint) {
+		t.Fatalf("err = %v, want ErrEmptyFingerprint", err)
+	}
+	if hits != 0 {
+		t.Errorf("lookup hits = %d, want 0 when there is no fingerprint", hits)
+	}
 }

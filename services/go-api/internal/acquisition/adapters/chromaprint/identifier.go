@@ -83,16 +83,16 @@ type fingerprint struct {
 	Fingerprint string  `json:"fingerprint"`
 }
 
-func (i *Identifier) Identify(ctx context.Context, filePath string, durationHint float64) (ports.RecordingMatch, error) {
+func (i *Identifier) Identify(ctx context.Context, filePath string, fullLengthForPreview float64) (ports.RecordingMatch, error) {
 	fp, err := i.fingerprintFile(ctx, filePath)
 	if err != nil {
 		return ports.RecordingMatch{}, err
 	}
 	if fp.Fingerprint == "" || fp.Duration <= 0 {
-		return ports.RecordingMatch{}, nil
+		return ports.RecordingMatch{}, fmt.Errorf("%s: %w", filePath, acqdomain.ErrEmptyFingerprint)
 	}
-	if durationHint > 0 {
-		fp.Duration = math.Round(durationHint)
+	if fullLengthForPreview > 0 {
+		fp.Duration = math.Round(fullLengthForPreview)
 	}
 	return i.lookup(ctx, fp)
 }

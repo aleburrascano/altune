@@ -35,5 +35,5 @@ type RecordingMatch struct {
 func (m RecordingMatch) Known() bool { return len(m.MBIDs) > 0 || m.AcoustID != "" }
 
 type AudioIdentifier interface {
-	Identify(ctx context.Context, filePath string, durationHint float64) (RecordingMatch, error)
+	Identify(ctx context.Context, filePath string, fullLengthForPreview float64) (RecordingMatch, error)
 }
