@@ -118,7 +118,7 @@ func TestRunner_AMismatchRecordsTheVerdictThenFallsThroughToReacquire(t *testing
 	if err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
-	if len(recorder.records) != 1 || recorder.records[0].Grade != "F" || recorder.records[0].Verdict != "other_version" || !recorder.records[0].Contradicted {
+	if len(recorder.records) != 1 || recorder.records[0].Grade != "F" || recorder.records[0].Verdict != "other_version" || !recorder.records[0].MayLower {
 		t.Errorf("records = %+v, want the F verdict recorded", recorder.records)
 	}
 	if w.source.finds != 1 {
@@ -375,7 +375,7 @@ func TestRunner_AWrongLengthGradeAIsLoweredAndReacquired(t *testing.T) {
 	if err != nil && !errors.Is(err, upgrade.ErrKept) {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
-	if len(recorder.records) != 1 || recorder.records[0].Grade != "B" || !recorder.records[0].Contradicted {
+	if len(recorder.records) != 1 || recorder.records[0].Grade != "B" || !recorder.records[0].MayLower {
 		t.Errorf("records = %+v, want B recorded with permission to lower the stored A", recorder.records)
 	}
 	if w.source.finds != 1 {
@@ -393,7 +393,7 @@ func TestRunner_AProvenButNotLoweringFindingNeverLowersAStoredGrade(t *testing.T
 	if err != nil || w.source.finds != 0 {
 		t.Errorf("err = %v, searches = %d, want the stored A kept: weaker evidence now does not lower it", err, w.source.finds)
 	}
-	if len(recorder.records) != 1 || recorder.records[0].Contradicted {
+	if len(recorder.records) != 1 || recorder.records[0].MayLower {
 		t.Errorf("records = %+v, want no permission to lower", recorder.records)
 	}
 }

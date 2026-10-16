@@ -62,7 +62,7 @@ func TestPlanner_CheckingUploadsAsksTheStoreForUnverifiedUserUploadsToo(t *testi
 		t.Fatalf("PlanNext: %v", err)
 	}
 
-	want := ports.UpgradeSelection{Limit: 1, Generation: grade.PipelineGeneration, RetryAfter: 6 * time.Hour, MaxQueued: 2, IncludeUnverifiedUploads: true}
+	want := ports.UpgradeSelection{Limit: 1, Generation: grade.PipelineGeneration, RetryAfter: 6 * time.Hour, MaxQueued: 2, CheckInPlace: true}
 	if store.selection != want {
 		t.Errorf("selection = %+v, want %+v", store.selection, want)
 	}

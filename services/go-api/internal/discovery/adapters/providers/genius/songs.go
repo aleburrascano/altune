@@ -117,11 +117,6 @@ func (c *SongCatalog) songsPage(ctx context.Context, artistID, page int) (songs 
 	return body.Response.Songs, nextPage, nil
 }
 
-func (c *SongCatalog) HasMedia(ctx context.Context, songID int) (bool, error) {
-	detail, err := c.SongDetail(ctx, songID)
-	return detail.HasMedia, err
-}
-
 type geniusSongDetailBody struct {
 	Response struct {
 		Song struct {

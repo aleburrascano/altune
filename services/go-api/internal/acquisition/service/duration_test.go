@@ -167,17 +167,6 @@ func TestDurationAcceptable_ADoubtedResolvedLengthWidensNothing(t *testing.T) {
 	}
 }
 
-func TestReferenceFor_CarriesTheExpectedLength(t *testing.T) {
-	ac := &AcquisitionContext{
-		Track:    TrackRef{CatalogDuration: 139},
-		Identity: ports.RecordingIdentity{Duration: 167, ReferenceDoubted: true},
-	}
-
-	if got := referenceFor(ac).Duration; got != 139 {
-		t.Errorf("reference duration = %v, want 139", got)
-	}
-}
-
 func TestDurationGates_ADoubtedResolvedLengthDoesNotMoveThePreDownloadGate(t *testing.T) {
 	ac := &AcquisitionContext{
 		Track:    TrackRef{CatalogDuration: 139},

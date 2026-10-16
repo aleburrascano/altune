@@ -319,22 +319,6 @@ func TestSongCatalog_FindArtistID_NoMatchIsNotFound(t *testing.T) {
 	}
 }
 
-func TestSongCatalog_HasMedia_OnlyYouTubeAndSoundCloudCount(t *testing.T) {
-	server := songCatalogServer(t, map[string]string{
-		"/songs/1": `{"response":{"song":{"media":[{"provider":"spotify"},{"provider":"youtube"}]}}}`,
-		"/songs/2": `{"response":{"song":{"media":[{"provider":"spotify"}]}}}`,
-		"/songs/3": `{"response":{"song":{"media":[]}}}`,
-	})
-	catalog := NewSongCatalog(providertest.NewClient(server.URL), "tok")
-
-	for id, want := range map[int]bool{1: true, 2: false, 3: false} {
-		got, err := catalog.HasMedia(context.Background(), id)
-		if err != nil || got != want {
-			t.Errorf("HasMedia(%d) = (%v, %v), want %v", id, got, err, want)
-		}
-	}
-}
-
 func TestArtworkSourceTags(t *testing.T) {
 	tests := []struct {
 		got  domain.ProviderKey

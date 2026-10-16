@@ -18,7 +18,7 @@ type UpgradeSelection struct {
 	RetryAfter time.Duration
 	MaxQueued  int
 
-	IncludeUnverifiedUploads bool
+	CheckInPlace bool
 }
 
 type UpgradeAttempt struct {
@@ -35,7 +35,7 @@ type InPlaceRecord struct {
 	BitErrorRate       float64
 	Grade              string
 	UserUploadMismatch bool
-	Contradicted       bool
+	MayLower           bool
 }
 
 type InPlaceStore interface {

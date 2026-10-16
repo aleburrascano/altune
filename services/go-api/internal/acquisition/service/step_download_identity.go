@@ -214,14 +214,6 @@ func judgeIdentity(ac *AcquisitionContext) audiojudge.Identity {
 	}
 }
 
-func referenceFor(ac *AcquisitionContext) AudioReference {
-	mbids := ac.Identity.MBIDs
-	if len(mbids) == 0 {
-		mbids = []string{ac.Identity.MBID}
-	}
-	return AudioReference{Title: ac.Track.Title, Artist: ac.Track.Artist, Duration: ac.ExpectedLength(), MBIDs: mbids}
-}
-
 func identityVersionOf(ac *AcquisitionContext) audiojudge.IdentityVersion {
 	return audiojudge.IdentityVersion(fmt.Sprintf("mbid=%s;isrc=%s;doubted=%t", ac.Identity.MBID, cmp.Or(ac.Track.ISRC, ac.Identity.ISRC), ac.Identity.ReferenceDoubted))
 }

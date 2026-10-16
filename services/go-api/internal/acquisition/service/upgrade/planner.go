@@ -35,11 +35,11 @@ func (p *Planner) CheckingUploads() *Planner {
 
 func (p *Planner) PlanNext(ctx context.Context) error {
 	candidates, err := p.store.Candidates(ctx, ports.UpgradeSelection{
-		Limit:                    1,
-		Generation:               grade.PipelineGeneration,
-		RetryAfter:               p.retryAfter,
-		MaxQueued:                p.maxQueued,
-		IncludeUnverifiedUploads: p.checkUploads,
+		Limit:        1,
+		Generation:   grade.PipelineGeneration,
+		RetryAfter:   p.retryAfter,
+		MaxQueued:    p.maxQueued,
+		CheckInPlace: p.checkUploads,
 	})
 	if err != nil {
 		return fmt.Errorf("pick tracks to upgrade: %w", err)

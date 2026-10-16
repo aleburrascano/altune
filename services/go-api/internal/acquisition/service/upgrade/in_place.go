@@ -141,7 +141,7 @@ func (r *Runner) settleFinding(ctx context.Context, track *ports.TrackSnapshot, 
 
 func gradeAfter(stored grade.Grade, record ports.InPlaceRecord) grade.Grade {
 	recorded := grade.Grade(record.Grade)
-	if recorded == "" || (!record.Contradicted && !recorded.Beats(stored)) {
+	if recorded == "" || (!record.MayLower && !recorded.Beats(stored)) {
 		return stored
 	}
 	return recorded
@@ -163,7 +163,7 @@ func verdictOf(track *ports.TrackSnapshot, stored inPlaceEvidence, finding Findi
 		kind = grade.FanUpload
 	}
 	record.Grade = string(grade.Of(finding.Fingerprint, shared.ProvenanceBestEffort, kind))
-	record.Contradicted = finding.Lowers || finding.Fingerprint == grade.Contradicts || finding.Fingerprint == grade.Unsupported
+	record.MayLower = finding.Lowers || finding.Fingerprint == grade.Contradicts || finding.Fingerprint == grade.Unsupported
 	return record
 }
 

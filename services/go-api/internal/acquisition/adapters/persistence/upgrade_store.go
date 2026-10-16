@@ -52,7 +52,7 @@ func (s *PgxUpgradeStore) Candidates(ctx context.Context, selection ports.Upgrad
 	defer cancel()
 
 	rows, err := s.pool.Query(ctx, upgradeCandidatesSQL,
-		selection.Limit, selection.Generation, selection.RetryAfter.Seconds(), selection.MaxQueued, selection.IncludeUnverifiedUploads)
+		selection.Limit, selection.Generation, selection.RetryAfter.Seconds(), selection.MaxQueued, selection.CheckInPlace)
 	if err != nil {
 		return nil, fmt.Errorf("select upgrade candidates: %w", err)
 	}
@@ -151,7 +151,7 @@ func (s *PgxUpgradeStore) RecordInPlace(ctx context.Context, trackID shared.Trac
 	defer cancel()
 
 	tag, err := s.pool.Exec(ctx, recordInPlaceSQL, trackID.UUID(), record.AudioRef, record.Generation,
-		record.Verdict, record.Basis, record.Score, record.Grade, record.UserUploadMismatch, record.BitErrorRate, record.Contradicted)
+		record.Verdict, record.Basis, record.Score, record.Grade, record.UserUploadMismatch, record.BitErrorRate, record.MayLower)
 	if err != nil {
 		return false, fmt.Errorf("record in-place verdict: %w", err)
 	}

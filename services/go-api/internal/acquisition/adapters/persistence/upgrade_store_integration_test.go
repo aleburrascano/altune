@@ -119,7 +119,7 @@ func TestPgxUpgradeStore_AUserUploadIsNeverACandidate(t *testing.T) {
 
 func uploadsIncluded() ports.UpgradeSelection {
 	selection := selectionOf(10)
-	selection.IncludeUnverifiedUploads = true
+	selection.CheckInPlace = true
 	return selection
 }
 
@@ -270,7 +270,7 @@ func TestPgxUpgradeStore_RecordInPlaceLowersTheGradeOnlyForAContradictionThatSta
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("C"), sourceURL: sourceURL("art")})
 
 	recorded, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{
-		AudioRef: "u/" + id.String() + ".mp3", Generation: 1, Verdict: "other_version", Basis: "acoustid", Grade: "F", Contradicted: true,
+		AudioRef: "u/" + id.String() + ".mp3", Generation: 1, Verdict: "other_version", Basis: "acoustid", Grade: "F", MayLower: true,
 	})
 
 	if err != nil || !recorded {
@@ -500,7 +500,7 @@ func TestPgxUpgradeStore_RecordInPlaceNeverReplacesAStoredBestAvailableGrade(t *
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("best_available"), sourceURL: sourceURL("leak")})
 
 	if _, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{
-		AudioRef: "u/" + id.String() + ".mp3", Generation: 1, Verdict: "contradicted", Basis: "acoustid", Grade: "F", Contradicted: true,
+		AudioRef: "u/" + id.String() + ".mp3", Generation: 1, Verdict: "contradicted", Basis: "acoustid", Grade: "F", MayLower: true,
 	}); err != nil {
 		t.Fatalf("RecordInPlace: %v", err)
 	}
@@ -523,7 +523,7 @@ func TestPgxUpgradeStore_RecordInPlaceLowersAWrongLengthGradeAToB(t *testing.T) 
 	if got := readEvidence(t, pool, id); got.Grade != "A" {
 		t.Fatalf("grade = %q, want A kept: weaker evidence alone never lowers", got.Grade)
 	}
-	if _, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{AudioRef: ref, Generation: 2, Verdict: "hard", Grade: "B", Contradicted: true}); err != nil {
+	if _, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{AudioRef: ref, Generation: 2, Verdict: "hard", Grade: "B", MayLower: true}); err != nil {
 		t.Fatalf("RecordInPlace: %v", err)
 	}
 
