@@ -84,6 +84,30 @@ expect_err "acq-debug: no DATABASE_URL in .env.production"
 expect_no_out
 expect_not_out "no track matches"
 
+CASE="capture reads the stopped blue/green colour too, so a candidate line logged before the last deploy reaches the dump"
+new_stub_bin
+stub_audit_tools
+cat >"$WORK/bin/docker" <<'STUBDOCKER'
+#!/usr/bin/env bash
+case "$1 $2" in
+    "ps -a") printf 'altune-go-api-green\naltune-go-api-blue\n' ;;
+    ps*) echo altune-go-api-green ;;
+    logs*)
+        case "${!#}" in
+            altune-go-api-blue) echo '{"time":"2026-10-16T04:29:14Z","msg":"candidate_evaluated","track_id":"03ae722b-52e2-4c42-a89b-5b7751020358","source":"ytdlp","candidate_title":"Smaxk Or Die"}' ;;
+            altune-go-api-green) echo '{"time":"2026-10-16T05:00:00Z","msg":"redis connected"}' ;;
+        esac ;;
+esac
+STUBDOCKER
+cat >"$WORK/bin/psql" <<'STUBPSQL'
+#!/usr/bin/env bash
+if grep -q json_build_object; then echo '{"id":"03ae722b-52e2-4c42-a89b-5b7751020358"}'; else echo 03ae722b-52e2-4c42-a89b-5b7751020358; fi
+STUBPSQL
+chmod +x "$WORK/bin/docker" "$WORK/bin/psql"
+run_script capture 03ae722b-52e2-4c42-a89b-5b7751020358
+expect_rc 0
+expect_out '"candidate_title":"Smaxk Or Die"'
+
 CASE="track with no argument exits 3 with the usage on stderr and nothing on stdout"
 new_stub_bin
 run_script track

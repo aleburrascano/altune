@@ -341,3 +341,20 @@ func TestCaptureCase_CarriesTheCatalogPins(t *testing.T) {
 		t.Errorf("catalog sources = %+v", track.CatalogSources)
 	}
 }
+
+func TestRunCapture_ReadsProdLinesWhereTheLoggerAddsItsOwnSourceObject(t *testing.T) {
+	prodLine := `{"time":"2026-10-16T04:29:14.3239588Z","level":"INFO","source":{"function":"altune/go-api/internal/acquisition/service.logCandidateEvaluated","file":"/src/internal/acquisition/service/matching.go","line":126},"msg":"candidate_evaluated","track_id":"03ae722b-52e2-4c42-a89b-5b7751020358","source":"ytdlp","candidate_title":"Smaxk Or Die","candidate_channel":"Fatt Smaxk","candidate_duration":98,"candidate_views":3147765,"identity_score":60,"metadata_rank":0.275,"qualifier_distance":0,"is_topic":false,"artist_match":true,"feature_match":false,"explicit":false,"track_artist":"Fatt Smaxk & Playboi Carti"}`
+	startupLine := `{"time":"2026-10-16T04:17:47.40618187Z","level":"INFO","source":{"function":"altune/go-api/internal/shared/redis.NewClient","file":"/src/internal/shared/redis/redis.go","line":37},"msg":"redis connected"}`
+	dump := `{"track":` + probeTrack + `,"logs":[` + startupLine + `,` + prodLine + `]}`
+	code, out := probeCapture(t, []string{"-tier", "prod"}, dump)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	kase := probeDecodeAndValidate(t, out)
+	if len(kase.Sources) != 1 || kase.Sources[0].Name != "ytdlp" || len(kase.Sources[0].Candidates) != 1 {
+		t.Fatalf("sources = %+v, want one ytdlp source with one candidate", kase.Sources)
+	}
+	if c := kase.Sources[0].Candidates[0]; c.Title != "Smaxk Or Die" || c.Channel != "Fatt Smaxk" || c.Duration != 98 || c.ViewCount != 3147765 {
+		t.Fatalf("candidate = %+v, want the prod line's title, channel, duration and views", c)
+	}
+}

@@ -59,6 +59,10 @@ api=$(docker ps --filter "name=^${prefix}-" --format '{{.Names}}' | head -1)
 
 need_api() { [ -n "$api" ] || { echo "acq-debug: no running ${prefix}-* container" >&2; exit 3; }; }
 
+api_logs() {
+  for c in $(docker ps -a --filter "name=^${prefix}-" --format '{{.Names}}'); do docker logs "$@" "$c" 2>&1; done | sort
+}
+
 db() {
   local url
   url=$(grep -E '^DATABASE_URL=' "$envfile" | head -1 | cut -d= -f2- | tr -d "\"'")
@@ -125,8 +129,8 @@ SELECT id, title, artist, album, duration_seconds, acquisition_status, failure_r
   FROM tracks WHERE id = :'id';
 SQL
     if [ -n "$api" ]; then
-      echo "-- log lines for $id in $api (this container's lifetime only)"
-      docker logs "$api" 2>&1 | grep -F "$id" | cut -c1-400 | tail -60
+      echo "-- log lines for $id in every ${prefix}-* colour"
+      api_logs | grep -F "$id" | cut -c1-400 | tail -60
     fi
   done
   ;;
@@ -154,7 +158,7 @@ SELECT json_build_object(
 SQL
 )
   [ -n "$track_json" ] || { echo "acq-debug: no track row for $id" >&2; exit 1; }
-  lines=$(docker logs "$api" 2>&1 | grep -F "$id" | grep -E '"msg":"(candidate_evaluated|acquisition\.rejection_summary)"')
+  lines=$(api_logs | grep -F "$id" | grep -E '"msg":"(candidate_evaluated|acquisition\.rejection_summary)"')
   logs_json=""
   [ -n "$lines" ] && logs_json=$(printf '%s\n' "$lines" | paste -sd, -)
   printf '{"track": %s, "logs": [%s]}\n' "$track_json" "$logs_json"
@@ -257,7 +261,7 @@ exit $status'
 logs)
   need_api
   since=${1:-1h}; pattern=${2:-.}
-  docker logs --since "$since" "$api" 2>&1 |
+  api_logs --since "$since" |
     grep -iE 'acqui|candidate|download|ytdlp|yt-dlp|schedul|reject|verif|stale' |
     grep -v '"path":"/observe/acquisition"' |
     grep -E -- "$pattern" | cut -c1-400 | tail -200

@@ -36,14 +36,24 @@ type captureDump struct {
 	Logs  []json.RawMessage `json:"logs"`
 }
 
+type candidateSource string
+
+func (s *candidateSource) UnmarshalJSON(raw []byte) error {
+	var name string
+	if json.Unmarshal(raw, &name) == nil {
+		*s = candidateSource(name)
+	}
+	return nil
+}
+
 type captureLogLine struct {
-	Msg               string  `json:"msg"`
-	Source            string  `json:"source"`
-	CandidateTitle    string  `json:"candidate_title"`
-	CandidateChannel  string  `json:"candidate_channel"`
-	CandidateDuration float64 `json:"candidate_duration"`
-	CandidateViews    int64   `json:"candidate_views"`
-	Summary           string  `json:"summary"`
+	Msg               string          `json:"msg"`
+	Source            candidateSource `json:"source"`
+	CandidateTitle    string          `json:"candidate_title"`
+	CandidateChannel  string          `json:"candidate_channel"`
+	CandidateDuration float64         `json:"candidate_duration"`
+	CandidateViews    int64           `json:"candidate_views"`
+	Summary           string          `json:"summary"`
 }
 
 func runCapture(args []string, stdin io.Reader, stdout io.Writer, now time.Time) int {
@@ -139,7 +149,7 @@ func captureSources(logs []json.RawMessage) ([]eval.Source, string, error) {
 }
 
 func addCapturedCandidate(sources *[]eval.Source, index, counter map[string]int, line captureLogLine) {
-	name := line.Source
+	name := string(line.Source)
 	if name == "" {
 		name = "unknown"
 	}
