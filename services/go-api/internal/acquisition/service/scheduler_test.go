@@ -1380,7 +1380,7 @@ func TestBackgroundScheduler_ShutdownCancellation_LeavesTheQueuedJobUnclaimed(t 
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithDrainBudget(10*time.Millisecond))
 	t.Cleanup(func() {
 		close(repo.release)
-		wg.Wait()
+		scheduler.Shutdown(context.Background())
 	})
 
 	if err := scheduler.Schedule(context.Background(), userId, running.ID, ""); err != nil {
@@ -1434,7 +1434,7 @@ func TestBackgroundScheduler_ScheduleDuringShutdown_Refuses(t *testing.T) {
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithDrainBudget(10*time.Millisecond))
 	t.Cleanup(func() {
 		close(repo.release)
-		wg.Wait()
+		scheduler.Shutdown(context.Background())
 	})
 
 	if err := scheduler.Schedule(context.Background(), userId, running.ID, ""); err != nil {
@@ -2131,17 +2131,17 @@ func TestBackgroundScheduler_Shutdown_WaitsForTheInFlightOutcomeWrite(t *testing
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
 
+	start := time.Now()
 	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
 		t.Fatalf("schedule: %v", err)
 	}
 	wg.Wait()
 
-	start := time.Now()
 	scheduler.Shutdown(context.Background())
 	elapsed := time.Since(start)
 
 	if elapsed < recorder.delay {
-		t.Errorf("Shutdown returned after %s, want at least the %s the in-flight outcome write takes", elapsed, recorder.delay)
+		t.Errorf("Shutdown returned %s after Schedule, want at least the %s the in-flight outcome write takes", elapsed, recorder.delay)
 	}
 	assertExactlyOneOutcome(t, recorder.calls)
 }
@@ -3127,6 +3127,7 @@ func TestBackgroundScheduler_ALeaseLostJobRecordsCancelled(t *testing.T) {
 	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
 		WithJobQueue(queue),
 		WithHeartbeatInterval(5*time.Millisecond),
+		WithPollInterval(5*time.Millisecond),
 		WithOutcomeRecorder(recorder),
 	)
 	t.Cleanup(func() {
