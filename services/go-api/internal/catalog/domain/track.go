@@ -96,6 +96,8 @@ type Track struct {
 	AcquisitionStartedAt *time.Time
 
 	Version int
+
+	AcquisitionFence int
 }
 
 const maxRejectedSourceKeys = 25

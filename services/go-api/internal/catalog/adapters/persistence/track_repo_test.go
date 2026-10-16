@@ -1190,3 +1190,42 @@ func TestPgxTrackRepo_RoundTripsTheCatalogIdentity(t *testing.T) {
 			unpinned.CatalogMBID, unpinned.CatalogExplicit, unpinned.CatalogSources)
 	}
 }
+
+func TestPgxTrackRepo_GetByIDCarriesTheAcquisitionLeaseGeneration(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	track := newTestTrackForDB(t, userId)
+	cleanupTrack(t, pool, track.ID, userId)
+	if _, _, err := repo.Add(ctx, track); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`UPDATE tracks SET acquisition_attempts = 3 WHERE id = $1`, track.ID.UUID()); err != nil {
+		t.Fatalf("simulate queue claims: %v", err)
+	}
+
+	loaded, err := repo.GetByID(ctx, track.ID, userId)
+	if err != nil || loaded == nil {
+		t.Fatalf("GetByID = %v, %v", loaded, err)
+	}
+	if loaded.AcquisitionFence != 3 {
+		t.Fatalf("AcquisitionFence = %d, want 3", loaded.AcquisitionFence)
+	}
+
+	loaded.Title = "renamed " + uuid.New().String()
+	loaded.AcquisitionFence = 99
+	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	var stored int
+	if err := pool.QueryRow(ctx,
+		`SELECT acquisition_attempts FROM tracks WHERE id = $1`, track.ID.UUID()).Scan(&stored); err != nil {
+		t.Fatalf("read acquisition_attempts: %v", err)
+	}
+	if stored != 3 {
+		t.Errorf("acquisition_attempts after Update = %d, want 3 (only the queue writes it)", stored)
+	}
+}

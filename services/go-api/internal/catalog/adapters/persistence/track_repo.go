@@ -19,7 +19,7 @@ import (
 
 const trackColumns = `id, user_id, title, artist, album, duration_seconds,
 	added_at, artwork_url, acquisition_status, dedup_key,
-	year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url, rejected_source_keys, audio_version, acquisition_started_at, acquisition_confidence, acquisition_evidence, catalog_duration_seconds, catalog_mbid, catalog_explicit, catalog_sources, audio_length_mismatch, version`
+	year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url, rejected_source_keys, audio_version, acquisition_started_at, acquisition_confidence, acquisition_evidence, catalog_duration_seconds, catalog_mbid, catalog_explicit, catalog_sources, audio_length_mismatch, version, acquisition_attempts`
 
 var trackColumnsPrefixed = prefixColumns(trackColumns, "t.")
 
@@ -527,13 +527,14 @@ func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 		catalogSources  []byte
 		lengthMismatch  bool
 		version         int
+		fence           int
 	)
 
 	dest = []any{
 		&id, &userId, &title, &artist, &album, &durSecs,
 		&addedAt, &artworkURL, &acqStatus, &dedupKey,
 		&year, &genre, &trackNumber, &albumArtist, &isrc, &audioRef, &failureReason, &provenance, &sourceURL,
-		&rejectedKeys, &audioVersion, &startedAt, &confidence, &evidence, &catalogDurSecs, &catalogMBID, &catalogExplicit, &catalogSources, &lengthMismatch, &version,
+		&rejectedKeys, &audioVersion, &startedAt, &confidence, &evidence, &catalogDurSecs, &catalogMBID, &catalogExplicit, &catalogSources, &lengthMismatch, &version, &fence,
 	}
 
 	build = func() (*domain.Track, error) {
@@ -588,6 +589,7 @@ func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 			CatalogSources:         sources,
 			AudioLengthMismatch:    lengthMismatch,
 			Version:                version,
+			AcquisitionFence:       fence,
 		}, nil
 	}
 	return dest, build
