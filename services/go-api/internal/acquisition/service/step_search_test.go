@@ -249,3 +249,20 @@ func TestFindRequestFor_HintsTheSearchWithTheResolvedISRCWhenTheTrackHasNone(t *
 		t.Errorf("hint = %q, want the track's own ISRC over the resolver's", got)
 	}
 }
+
+func TestSearchStep_AResolvedFallbackHitDoesNotMarkTheFallbackSkipped(t *testing.T) {
+	first := &stubSource{name: "first", found: []ports.AudioCandidate{candidate("u1")}}
+	fallback := &stubSource{name: "fallback", found: []ports.AudioCandidate{resolvedCandidate("u2")}}
+	step := NewSearchStep(NewSourceRegistry(first).WithFallback(fallback))
+	ac := &AcquisitionContext{Track: TrackRef{Title: "Song Title", Artist: "Artist"}}
+
+	if _, err := step.Execute(context.Background(), ac, pipelineStart{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if fallback.finds != 1 {
+		t.Fatalf("fallback finds = %d, want 1: the fallback tier ran", fallback.finds)
+	}
+	if ac.FallbackSkipped {
+		t.Error("FallbackSkipped = true, want false: the fallback ran, only its candidate is resolved")
+	}
+}

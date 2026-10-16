@@ -43,13 +43,19 @@ func (r *SourceRegistry) all() []ports.AudioSource {
 }
 
 func (r *SourceRegistry) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
-	candidates, _, err := r.FindReportingOutage(ctx, req)
-	return candidates, err
+	res, err := r.FindReportingOutage(ctx, req)
+	return res.Candidates, err
 }
 
-func (r *SourceRegistry) FindReportingOutage(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error, error) {
+type FindResult struct {
+	Candidates      []ports.AudioCandidate
+	Outage          error
+	FallbackSkipped bool
+}
+
+func (r *SourceRegistry) FindReportingOutage(ctx context.Context, req ports.FindRequest) (FindResult, error) {
 	if len(r.sources) == 0 && len(r.fallback) == 0 {
-		return nil, nil, ErrNoAudioSources
+		return FindResult{}, ErrNoAudioSources
 	}
 
 	if req.FallbackOnly {
@@ -57,14 +63,17 @@ func (r *SourceRegistry) FindReportingOutage(ctx context.Context, req ports.Find
 		return mergeSlotsReportingOutage(ctx, r.fallback, slots, errs)
 	}
 	slots, errs := findAll(ctx, req, r.sources)
-	if len(r.fallback) == 0 || anyResolved(slots) {
+	if len(r.fallback) == 0 {
 		return mergeSlotsReportingOutage(ctx, r.sources, slots, errs)
+	}
+	if anyResolved(slots) {
+		res, err := mergeSlotsReportingOutage(ctx, r.sources, slots, errs)
+		res.FallbackSkipped = true
+		return res, err
 	}
 	fallbackSlots, fallbackErrs := findAll(ctx, req, r.fallback)
 	return mergeSlotsReportingOutage(ctx, r.all(), append(slots, fallbackSlots...), append(errs, fallbackErrs...))
 }
-
-func (r *SourceRegistry) HasFallback() bool { return len(r.fallback) > 0 }
 
 func findAll(ctx context.Context, req ports.FindRequest, sources []ports.AudioSource) ([][]ports.AudioCandidate, []error) {
 	slots := make([][]ports.AudioCandidate, len(sources))
@@ -111,8 +120,8 @@ func mergeSlotsReportingOutage(
 	sources []ports.AudioSource,
 	slots [][]ports.AudioCandidate,
 	errs []error,
-) ([]ports.AudioCandidate, error, error) {
-	return ports.CollectCandidatesReportingOutage(
+) (FindResult, error) {
+	candidates, outage, err := ports.CollectCandidatesReportingOutage(
 		len(sources), math.MaxInt,
 		func(i int) ([]ports.AudioCandidate, error) { return slots[i], errs[i] },
 		func(i int, candidates []ports.AudioCandidate) {
@@ -127,6 +136,7 @@ func mergeSlotsReportingOutage(
 			return fmt.Errorf("every audio source failed: %w", firstErr)
 		},
 	)
+	return FindResult{Candidates: candidates, Outage: outage}, err
 }
 
 func stampSource(name acqdomain.SourceName, candidates []ports.AudioCandidate) []ports.AudioCandidate {

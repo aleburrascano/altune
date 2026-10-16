@@ -12,7 +12,7 @@ type candidateFinder interface {
 }
 
 type outageReportingFinder interface {
-	FindReportingOutage(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error, error)
+	FindReportingOutage(ctx context.Context, req ports.FindRequest) (FindResult, error)
 }
 
 type SearchStep struct {
@@ -26,13 +26,14 @@ func NewSearchStep(finder candidateFinder) *SearchStep {
 func (s *SearchStep) Name() StepName { return stepNameSearch }
 
 func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext, _ pipelineStart) (afterSearch, error) {
-	candidates, outage, err := s.find(ctx, findRequestFor(ac))
+	res, err := s.find(ctx, findRequestFor(ac))
 	if err != nil {
 		return afterSearch{}, withCancellation(ctx, err)
 	}
+	outage := res.Outage
 
-	ac.FallbackSkipped = s.skippedFallback(ac, candidates)
-	kept, skipped := filterCandidates(ctx, ac, candidates)
+	ac.FallbackSkipped = res.FallbackSkipped
+	kept, skipped := filterCandidates(ctx, ac, res.Candidates)
 	if len(kept) == 0 && len(skipped) > 0 {
 		slog.InfoContext(ctx, "acquisition.prior_rejections_exhausted",
 			"track_id", ac.Track.ID, "skipped", len(skipped))
@@ -50,12 +51,12 @@ func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext, _ pipe
 	return afterSearch{}, nil
 }
 
-func (s *SearchStep) find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error, error) {
+func (s *SearchStep) find(ctx context.Context, req ports.FindRequest) (FindResult, error) {
 	if reporter, ok := s.finder.(outageReportingFinder); ok {
 		return reporter.FindReportingOutage(ctx, req)
 	}
 	candidates, err := s.finder.Find(ctx, req)
-	return candidates, nil, err
+	return FindResult{Candidates: candidates}, err
 }
 
 func filterCandidates(ctx context.Context, ac *AcquisitionContext, candidates []ports.AudioCandidate) (kept, skipped []ports.AudioCandidate) {
@@ -77,23 +78,6 @@ func filterCandidates(ctx context.Context, ac *AcquisitionContext, candidates []
 
 func (s *SearchStep) Rollback(_ context.Context, _ *AcquisitionContext) error {
 	return nil
-}
-
-func (s *SearchStep) skippedFallback(ac *AcquisitionContext, candidates []ports.AudioCandidate) bool {
-	tiered, ok := s.finder.(fallbackAware)
-	if !ok || !tiered.HasFallback() || ac.FallbackOnly {
-		return false
-	}
-	for _, c := range candidates {
-		if c.IsResolved() {
-			return true
-		}
-	}
-	return false
-}
-
-type fallbackAware interface {
-	HasFallback() bool
 }
 
 func findRequestFor(ac *AcquisitionContext) ports.FindRequest {

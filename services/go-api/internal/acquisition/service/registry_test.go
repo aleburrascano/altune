@@ -306,8 +306,8 @@ func mergeSlots(
 	slots [][]ports.AudioCandidate,
 	errs []error,
 ) ([]ports.AudioCandidate, error) {
-	merged, _, err := mergeSlotsReportingOutage(ctx, sources, slots, errs)
-	return merged, err
+	res, err := mergeSlotsReportingOutage(ctx, sources, slots, errs)
+	return res.Candidates, err
 }
 
 func fetchedAt(path string, err error) (ports.FetchedAudio, error) {
@@ -390,6 +390,36 @@ func TestSourceRegistry_TheKindDecidesTheFallback(t *testing.T) {
 			}
 			if fallback.finds != tc.wantFallback {
 				t.Errorf("fallback searched %d times, want %d", fallback.finds, tc.wantFallback)
+			}
+		})
+	}
+}
+
+func TestSourceRegistry_ReportsWhetherItSkippedTheFallback(t *testing.T) {
+	tests := []struct {
+		name         string
+		first        []ports.AudioCandidate
+		withFallback bool
+		req          ports.FindRequest
+		want         bool
+	}{
+		{"resolved first-tier hit skips the configured fallback", []ports.AudioCandidate{resolvedCandidate("u1")}, true, ports.FindRequest{}, true},
+		{"unresolved first tier runs the fallback", []ports.AudioCandidate{candidate("u1")}, true, ports.FindRequest{}, false},
+		{"no fallback configured", []ports.AudioCandidate{resolvedCandidate("u1")}, false, ports.FindRequest{}, false},
+		{"fallback only", []ports.AudioCandidate{resolvedCandidate("u1")}, true, ports.FindRequest{FallbackOnly: true}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reg := NewSourceRegistry(&stubSource{name: "first", found: tt.first})
+			if tt.withFallback {
+				reg.WithFallback(&stubSource{name: "fb", found: []ports.AudioCandidate{candidate("u2")}})
+			}
+			res, err := reg.FindReportingOutage(context.Background(), tt.req)
+			if err != nil {
+				t.Fatalf("FindReportingOutage: %v", err)
+			}
+			if res.FallbackSkipped != tt.want {
+				t.Errorf("FallbackSkipped = %v, want %v", res.FallbackSkipped, tt.want)
 			}
 		})
 	}
