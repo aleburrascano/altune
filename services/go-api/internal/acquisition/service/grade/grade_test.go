@@ -39,3 +39,14 @@ func TestOf_GradesSortBestToWorstSoAQueryCanOrderWorstFirst(t *testing.T) {
 		t.Fatal("grades must sort best to worst as text")
 	}
 }
+
+func TestBestAvailable_IsNotOnTheLadderTheGradesAreOrderedBy(t *testing.T) {
+	for _, g := range []Grade{A, B, C, D, F} {
+		if g == BestAvailable {
+			t.Errorf("%q must differ from every ladder grade", g)
+		}
+	}
+	if BestAvailable <= F {
+		t.Error("best_available must not sort among the grades A..F")
+	}
+}

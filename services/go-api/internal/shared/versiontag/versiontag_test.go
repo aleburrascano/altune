@@ -94,3 +94,46 @@ func TestLabels_RecordingLabelsKeepReleaseVariants(t *testing.T) {
 		t.Errorf("RecordingLabels = %v", got)
 	}
 }
+
+func TestParseTags_PartAndSequelNumbersAreData(t *testing.T) {
+	cases := map[string]int{
+		"Nun To Me":              1,
+		"Nun To Me 2":            2,
+		"Nun To Me, Pt. 2":       2,
+		"Nun To Me Part II":      2,
+		"Nun To Me II":           2,
+		"Nun To Me Vol. 3":       3,
+		"Nun To Me Part 1":       1,
+		"Rocky Part V":           5,
+		"Blink 182":              1,
+		"Song 2 (Live)":          2,
+		"Song 2 (feat. Someone)": 2,
+		"2":                      1,
+		"Malcolm X":              1,
+	}
+	for title, want := range cases {
+		if got := ParseTags(title).Part; got != want {
+			t.Errorf("ParseTags(%q).Part = %d, want %d", title, got, want)
+		}
+	}
+}
+
+func TestTags_EqualComparesPartAndLabels(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want bool
+	}{
+		{"Song", "Song", true},
+		{"Song", "Song (Remastered 2011)", true},
+		{"Song", "Song 2", false},
+		{"Song Part 1", "Song", true},
+		{"Song Pt. 2", "Song Part II", true},
+		{"Song", "Song (Live)", false},
+		{"Song 2 (Live)", "Song 2", false},
+	}
+	for _, tc := range cases {
+		if got := ParseTags(tc.a).Equal(ParseTags(tc.b)); got != tc.want {
+			t.Errorf("ParseTags(%q).Equal(ParseTags(%q)) = %v, want %v", tc.a, tc.b, got, tc.want)
+		}
+	}
+}

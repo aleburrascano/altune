@@ -13,6 +13,8 @@ const (
 	C     Grade = "C"
 	D     Grade = "D"
 	F     Grade = "F"
+
+	BestAvailable Grade = "best_available"
 )
 
 type Fingerprint int

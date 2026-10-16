@@ -4,8 +4,67 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 )
+
+type Tags struct {
+	Part   int
+	Labels []string
+}
+
+func ParseTags(title string) Tags {
+	tokens := WithoutVersionPhrases(Tokens(WithoutFeatureCredits(title)))
+	return Tags{Part: partNumber(tokens), Labels: RecordingLabels(title)}
+}
+
+func (t Tags) Equal(other Tags) bool {
+	return t.Part == other.Part && slices.Equal(t.Labels, other.Labels)
+}
+
+const firstPart = 1
+
+var partWords = []string{"pt", "part", "vol", "volume", "chapter", "episode"}
+
+var bareRomanNumerals = map[string]int{"ii": 2, "iii": 3, "iv": 4, "vi": 6, "vii": 7, "viii": 8, "ix": 9}
+
+var keywordedRomanNumerals = map[string]int{"i": 1, "v": 5, "x": 10}
+
+func partNumber(tokens []string) int {
+	if len(tokens) < 2 {
+		return firstPart
+	}
+	last := tokens[len(tokens)-1]
+	number := bareNumber(last)
+	if slices.Contains(partWords, tokens[len(tokens)-2]) {
+		number = keywordedNumber(last)
+	}
+	if number == 0 {
+		return firstPart
+	}
+	return number
+}
+
+func keywordedNumber(token string) int {
+	if n, ok := keywordedRomanNumerals[token]; ok {
+		return n
+	}
+	return bareNumber(token)
+}
+
+func bareNumber(token string) int {
+	if n, ok := bareRomanNumerals[token]; ok {
+		return n
+	}
+	if len(token) > 2 {
+		return 0
+	}
+	n, err := strconv.Atoi(token)
+	if err != nil || n < 1 {
+		return 0
+	}
+	return n
+}
 
 type Entry struct {
 	Label  string

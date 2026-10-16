@@ -1,0 +1,164 @@
+package audiojudge
+
+import (
+	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service/grade"
+	"testing"
+)
+
+func linked(mbid, title string, length float64, artists ...string) ports.AcoustIDResult {
+	return ports.AcoustIDResult{ID: "aid-" + mbid, Score: 0.97, Recordings: []ports.LinkedRecording{{MBID: mbid, Title: title, Artists: artists, Duration: length}}}
+}
+
+func preview(rate float64) *Preview {
+	return &Preview{BitErrorRate: rate, OverlapSeconds: 29}
+}
+
+func TestJudge_Table(t *testing.T) {
+	identity := Identity{
+		Version: "v1", ISRC: "USRC10000001", MBID: "mb-bound", Title: "Song", Artist: "Artist",
+		CatalogLengths: map[string]float64{"deezer": 200, "musicbrainz": 201},
+	}
+	noISRC := identity
+	noISRC.ISRC = ""
+	art := Source{Kind: grade.ArtTrack}
+	fan := Source{Kind: grade.FanUpload}
+
+	cases := []struct {
+		name      string
+		identity  Identity
+		audio     Audio
+		source    Source
+		candidate string
+		kind      Kind
+		grade     grade.Grade
+	}{
+		{"acoustid links the bound recording with matching length", identity, Audio{AcoustID: []ports.AcoustIDResult{linked("mb-bound", "Song", 200, "Artist")}, Length: 200}, art, "Song", Proven, grade.A},
+		{"acoustid proof on a fan upload grades B", identity, Audio{AcoustID: []ports.AcoustIDResult{linked("mb-bound", "Song", 200, "Artist")}, Length: 200}, fan, "Song", Proven, grade.B},
+		{"acoustid links the bound recording at a length 100s off is no answer", identity, Audio{AcoustID: []ports.AcoustIDResult{linked("mb-bound", "Song", 300, "Artist")}, Length: 200}, art, "Song", Unknown, grade.C},
+		{"preview at the A cut on an official source with matching tags", identity, Audio{Preview: preview(0.10), Length: 200}, art, "Song", Proven, grade.A},
+		{"preview at the A cut on a fan upload is only likely", identity, Audio{Preview: preview(0.10), Length: 200}, fan, "Song", Likely, grade.B},
+		{"preview at the A cut but the version tags differ is only likely", identity, Audio{Preview: preview(0.05), Length: 200}, art, "Song (Live)", Likely, grade.B},
+		{"preview at 0.18 is likely", identity, Audio{Preview: preview(0.18), Length: 200}, art, "Song", Likely, grade.B},
+		{"preview at 0.19 proves nothing", identity, Audio{Preview: preview(0.19), Length: 200}, art, "Song", Unknown, grade.C},
+		{"preview overlap too short is no preview", identity, Audio{Preview: &Preview{BitErrorRate: 0.02, OverlapSeconds: 5}, Length: 200}, art, "Song", Unknown, grade.C},
+		{"same-title acoustid duplicate with no ISRC is likely", noISRC, Audio{AcoustID: []ports.AcoustIDResult{linked("mb-dup", "Song", 200, "Artist")}, Length: 200}, art, "Song", Likely, grade.B},
+		{"same-title acoustid duplicate with an ISRC is another recording, one source, unknown", identity, Audio{AcoustID: []ports.AcoustIDResult{linked("mb-dup", "Song", 200, "Artist")}, Length: 200}, art, "Song", Unknown, grade.D},
+		{"same-title duplicate but the preview is absent is not likely", noISRC, Audio{AcoustID: []ports.AcoustIDResult{linked("mb-dup", "Song", 200, "Artist")}, Preview: preview(0.40), Length: 200}, art, "Song", Unknown, grade.C},
+		{"no catalog identity is unknown and best available, whatever the audio says", Identity{Version: "v1", Title: "Song", Artist: "Artist"}, Audio{AcoustID: []ports.AcoustIDResult{linked("mb-other", "Other Song", 200, "Someone")}, Preview: preview(0.45), Length: 200}, fan, "Song (Live)", Unknown, grade.BestAvailable},
+		{"nothing to go on is unknown", identity, Audio{}, art, "Song", Unknown, grade.D},
+		{"a part number alone never contradicts", identity, Audio{Length: 200}, art, "Song pt 2", Unknown, grade.C},
+		{"a preview that is absent alone never contradicts", identity, Audio{Preview: preview(0.45), Length: 200}, art, "Song", Unknown, grade.C},
+		{"another acoustid recording alone never contradicts", identity, Audio{AcoustID: []ports.AcoustIDResult{linked("mb-other", "Other Song", 200, "Someone")}, Length: 200}, art, "Song", Unknown, grade.D},
+		{"another acoustid recording and an absent preview contradict", identity, Audio{AcoustID: []ports.AcoustIDResult{linked("mb-other", "Other Song", 200, "Someone")}, Preview: preview(0.40), Length: 200}, art, "Song", Contradicted, grade.F},
+		{"a different version tag and a length outside the window contradict", identity, Audio{Length: 260}, art, "Song (Live)", Contradicted, grade.F},
+		{"a length outside the window alone never contradicts", identity, Audio{Length: 260}, art, "Song", Unknown, grade.D},
+		{"a matching preview vetoes two sources against", identity, Audio{AcoustID: []ports.AcoustIDResult{linked("mb-other", "Other Song", 200, "Someone")}, Preview: preview(0.12), Length: 200}, fan, "Song", Likely, grade.B},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := Judge(Input{Identity: tc.identity, Audio: tc.audio, Source: tc.source, CandidateTitle: tc.candidate}, DefaultCuts())
+			if got.Kind != tc.kind || got.Grade != tc.grade {
+				t.Errorf("verdict = %s/%s, want %s/%s; reasons: %v", got.Kind, got.Grade, tc.kind, tc.grade, got.Reasons)
+			}
+			if len(got.Reasons) == 0 {
+				t.Error("a verdict must say why")
+			}
+			if got.JudgedAgainst != tc.identity.Version {
+				t.Errorf("JudgedAgainst = %q, want %q", got.JudgedAgainst, tc.identity.Version)
+			}
+		})
+	}
+}
+
+func TestJudge_Goldens(t *testing.T) {
+	art := Source{Kind: grade.ArtTrack}
+	fan := Source{Kind: grade.FanUpload}
+
+	t.Run("KANKAN Nun To Me 2: no MB part 2, acoustid names part 1, the preview matches part 2", func(t *testing.T) {
+		identity := Identity{Version: "v1", ISRC: "JPPO02000002", Title: "Nun To Me 2", Artist: "KANKAN", CatalogLengths: map[string]float64{"deezer": 188}}
+		audio := Audio{AcoustID: []ports.AcoustIDResult{linked("mb-part1", "Nun To Me", 188, "KANKAN")}, Preview: preview(0.08), Length: 188}
+
+		official := Judge(Input{Identity: identity, Audio: audio, Source: art, CandidateTitle: "Nun To Me 2"}, DefaultCuts())
+		if official.Kind != Proven || official.Grade != grade.A {
+			t.Errorf("official upload = %s/%s, want proven/A; reasons: %v", official.Kind, official.Grade, official.Reasons)
+		}
+		reupload := Judge(Input{Identity: identity, Audio: audio, Source: fan, CandidateTitle: "Nun To Me 2"}, DefaultCuts())
+		if reupload.Kind != Likely {
+			t.Errorf("fan re-upload = %s, want likely; reasons: %v", reupload.Kind, reupload.Reasons)
+		}
+	})
+
+	t.Run("Autumn: a stale rejection expires when the identity is re-pinned", func(t *testing.T) {
+		wrongPin := Identity{Version: "pin-1", ISRC: "USAT20000001", Title: "Still The Same!", Artist: "Autumn!", CatalogLengths: map[string]float64{"deezer": 201}}
+		audio := Audio{AcoustID: []ports.AcoustIDResult{linked("mb-part1", "Still The Same!", 201, "Autumn!")}, Preview: preview(0.40), Length: 201}
+		rejected := Judge(Input{Identity: wrongPin, Audio: audio, Source: art, CandidateTitle: "Still The Same! 2"}, DefaultCuts())
+		if rejected.Kind != Contradicted {
+			t.Fatalf("against the wrong pin = %s, want contradicted; reasons: %v", rejected.Kind, rejected.Reasons)
+		}
+		if !rejected.HoldsFor("pin-1") || rejected.HoldsFor("pin-2") {
+			t.Error("a verdict holds only for the identity version it was judged against")
+		}
+
+		repinned := wrongPin
+		repinned.Version, repinned.Title = "pin-2", "Still The Same! 2"
+		audio.Preview = preview(0.06)
+		rejudged := Judge(Input{Identity: repinned, Audio: audio, Source: art, CandidateTitle: "Still The Same! 2"}, DefaultCuts())
+		if rejudged.Kind != Proven || rejudged.JudgedAgainst != "pin-2" {
+			t.Errorf("after the re-pin = %s against %q, want proven against pin-2; reasons: %v", rejudged.Kind, rejudged.JudgedAgainst, rejudged.Reasons)
+		}
+	})
+
+	t.Run("Platinum Blonde Live: catalog lengths disagree and the preview matches", func(t *testing.T) {
+		identity := Identity{
+			Version: "v1", ISRC: "ITA000000001", Title: "Live at City Hall", Artist: "Platinum Blonde",
+			CatalogLengths: map[string]float64{"deezer": 251, "musicbrainz": 297},
+		}
+		audio := Audio{AcoustID: []ports.AcoustIDResult{linked("mb-studio", "City Hall", 297, "Platinum Blonde")}, Preview: preview(0.06), Length: 297}
+		for source, want := range map[Source]Kind{art: Proven, fan: Likely} {
+			got := Judge(Input{Identity: identity, Audio: audio, Source: source, CandidateTitle: "Live at City Hall"}, DefaultCuts())
+			if got.Kind != want {
+				t.Errorf("%s source = %s, want %s; reasons: %v", source.Kind, got.Kind, want, got.Reasons)
+			}
+		}
+		withoutPreview := Judge(Input{Identity: identity, Audio: Audio{Length: 297}, Source: art, CandidateTitle: "Live at City Hall"}, DefaultCuts())
+		if withoutPreview.Kind != Unknown || withoutPreview.Grade != grade.C {
+			t.Errorf("no preview = %s/%s, want unknown/C", withoutPreview.Kind, withoutPreview.Grade)
+		}
+	})
+
+	t.Run("Pavarotti: acoustid names another performance and the preview is absent", func(t *testing.T) {
+		identity := Identity{Version: "v1", ISRC: "ITB000000001", MBID: "mb-studio", Title: "Nessun Dorma", Artist: "Luciano Pavarotti", CatalogLengths: map[string]float64{"deezer": 195}}
+		audio := Audio{AcoustID: []ports.AcoustIDResult{linked("mb-live", "Nessun Dorma (Live)", 195, "Luciano Pavarotti")}, Preview: preview(0.45), Length: 195}
+		got := Judge(Input{Identity: identity, Audio: audio, Source: fan, CandidateTitle: "Nessun Dorma"}, DefaultCuts())
+		if got.Kind != Contradicted || got.Grade != grade.F {
+			t.Errorf("verdict = %s/%s, want contradicted/F; reasons: %v", got.Kind, got.Grade, got.Reasons)
+		}
+	})
+
+	t.Run("Travis Scott outside: another song with the same title, AcoustID and length alone", func(t *testing.T) {
+		identity := Identity{Version: "v1", ISRC: "USSM10000001", MBID: "mb-ts", Title: "outside", Artist: "Travis Scott", CatalogLengths: map[string]float64{"deezer": 241}}
+		audio := Audio{AcoustID: []ports.AcoustIDResult{linked("mb-other", "Outside", 215, "Another Artist")}, Length: 215}
+		got := Judge(Input{Identity: identity, Audio: audio, Source: fan, CandidateTitle: "outside"}, DefaultCuts())
+		if got.Kind != Contradicted {
+			t.Errorf("verdict = %s, want contradicted; reasons: %v", got.Kind, got.Reasons)
+		}
+	})
+
+	t.Run("unreleased track: no catalog identity is never contradicted, whatever the audio says", func(t *testing.T) {
+		unreleased := Identity{Version: "v1", Title: "Leaked Song", Artist: "Artist"}
+		other := []ports.AcoustIDResult{linked("mb-other", "Another Song", 200, "Someone")}
+		answers := map[string]Audio{
+			"an acoustid answer and a differing tag": {AcoustID: other, Length: 200},
+			"a preview that is absent":               {Preview: preview(0.45), Length: 200},
+			"both together":                          {AcoustID: other, Preview: preview(0.45), Length: 200},
+			"nothing":                                {},
+		}
+		for name, audio := range answers {
+			got := Judge(Input{Identity: unreleased, Audio: audio, Source: fan, CandidateTitle: "Leaked Song (Live)"}, DefaultCuts())
+			if got.Kind != Unknown || got.Grade != grade.BestAvailable || len(got.Reasons) == 0 || got.JudgedAgainst != "v1" {
+				t.Errorf("%s = %s/%s %v, want unknown/best_available with a reason", name, got.Kind, got.Grade, got.Reasons)
+			}
+		}
+	})
+}
