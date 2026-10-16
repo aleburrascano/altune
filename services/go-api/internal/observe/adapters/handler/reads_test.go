@@ -112,13 +112,13 @@ func TestReadsEval_NilMeterAnswersDisabled(t *testing.T) {
 func TestReadsAcquisition_ServesTheReaderStatus(t *testing.T) {
 	scheduledAt := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
 	reader := fakeAcquisitionReader{status: acqPorts.AcquisitionStatus{
-		InFlight:      2,
-		Succeeded:     10,
-		Failed:        3,
-		Rejected:      7,
-		QueueDepth:    5,
-		Workers: 16,
-		Verification:  acqPorts.AcquisitionVerification{Ffprobe: true, YtDlp: true},
+		InFlight:     2,
+		Succeeded:    10,
+		Failed:       3,
+		Rejected:     7,
+		QueueDepth:   5,
+		Workers:      16,
+		Verification: acqPorts.AcquisitionVerification{Ffprobe: true, YtDlp: true},
 		ActiveJobs: []acqPorts.JobRecord{{
 			TrackID:     "trk-1",
 			Title:       "Title One",
