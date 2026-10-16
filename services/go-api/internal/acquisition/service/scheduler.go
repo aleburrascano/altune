@@ -388,6 +388,11 @@ func (s *BackgroundAcquisitionScheduler) recordOutcome(ctx context.Context, reco
 			Kind:       record.Kind,
 			Run:        record.Run,
 			Provenance: record.Provenance,
+
+			Confidence:      record.Confidence,
+			SourceKey:       record.SourceKey,
+			TargetSeconds:   record.TargetSeconds,
+			MeasuredSeconds: record.MeasuredSeconds,
 		})
 		if err != nil {
 			slog.WarnContext(ctx, "acquisition.outcome_record_failed",

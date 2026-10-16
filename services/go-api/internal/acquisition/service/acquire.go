@@ -348,6 +348,7 @@ func (s *AcquireTrackAudioService) startAcquisition(ctx context.Context, userId 
 
 func (s *AcquireTrackAudioService) runAcquisition(ctx context.Context, userId shared.UserId, trackId shared.TrackId, ac *AcquisitionContext) error {
 	defer s.recordRejections(ctx, ac)
+	defer reportDecision(ctx, ac)
 	identityStart := time.Now()
 	s.resolveIdentity(ctx, ac)
 	timeStage(ctx, "identity", identityStart)
@@ -360,6 +361,14 @@ func (s *AcquireTrackAudioService) runAcquisition(ctx context.Context, userId sh
 	jobReporterFrom(ctx).provenance(string(ac.Provenance()))
 	s.onAcquireCompleted(ctx, userId, trackId, ac.AudioRef)
 	return nil
+}
+
+func reportDecision(ctx context.Context, ac *AcquisitionContext) {
+	var key string
+	if ac.Selected != nil {
+		key = sourceKey(ac.Selected.URL)
+	}
+	jobReporterFrom(ctx).decided(ac.Confidence, key, ac.ExpectedLength(), ac.MeasuredDuration())
 }
 
 func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, track *ports.TrackSnapshot, trackId shared.TrackId) error {

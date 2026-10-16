@@ -15,6 +15,8 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -3236,5 +3238,51 @@ func TestExecute_ALedgerRefusalForAStaleFenceSurfacesErrLeaseLostWithTheCause(t 
 
 	if !errors.Is(err, acqdomain.ErrLeaseLost) || !errors.Is(err, cause) {
 		t.Errorf("err = %v, want both ErrLeaseLost and the pipeline's cause", err)
+	}
+}
+
+func TestScheduler_OutcomeCarriesTheRunsConfidenceSourceAndLengths(t *testing.T) {
+	const target = 215.0
+	stored := namedCandidate("https://youtube.com/watch?v=abcdefghijk")
+	stored.Duration = 214
+	audio := filepath.Join(t.TempDir(), "song.mp3")
+	if err := os.WriteFile(audio, []byte("audio"), 0o600); err != nil {
+		t.Fatalf("write audio: %v", err)
+	}
+	cases := []struct {
+		name         string
+		searcher     *fakeAudioSearcher
+		prober       *queueProber
+		wantSource   string
+		wantMeasured float64
+		wantScored   bool
+	}{
+		{"stored file", &fakeAudioSearcher{searchResults: []acqports.AudioCandidate{stored}, downloadPath: audio}, &queueProber{durations: []float64{213.4, 213.4}}, sourceKey(stored.URL), 213.4, true},
+		{"no match: target, no measurement", &fakeAudioSearcher{}, &queueProber{}, "", 0, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := newFakeOutcomeRecorder()
+			userId := shared.NewUserId(uuid.New())
+			repo := newFakeTrackRepository()
+			track := pendingTrack(t, repo, userId)
+			if err := track.SetCatalogDuration(target); err != nil {
+				t.Fatalf("set duration: %v", err)
+			}
+			svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(tc.searcher), newFakeAudioStore(), WithAudioProber(tc.prober))
+			var wg sync.WaitGroup
+			scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+			t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
+
+			if err := scheduler.Schedule(context.Background(), userId, track.ID, ""); err != nil {
+				t.Fatalf("schedule: %v", err)
+			}
+
+			got := assertExactlyOneOutcome(t, recorder.calls)
+			wg.Wait()
+			if (got.Confidence > 0) != tc.wantScored || got.SourceKey != tc.wantSource || got.TargetSeconds != target || got.MeasuredSeconds != tc.wantMeasured {
+				t.Errorf("outcome = %v/%q/%v/%v, want scored=%v/%q/%v/%v", got.Confidence, got.SourceKey, got.TargetSeconds, got.MeasuredSeconds, tc.wantScored, tc.wantSource, float64(target), tc.wantMeasured)
+			}
+		})
 	}
 }

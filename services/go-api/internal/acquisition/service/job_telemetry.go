@@ -18,17 +18,19 @@ type jobReporter interface {
 	timing(stage string, d time.Duration)
 	fetched(format ports.SourceFormat)
 	stored(file ports.StoredFile)
+	decided(confidence float64, sourceKey string, target, measured float64)
 }
 
 type noopJobReporter struct{}
 
-func (noopJobReporter) meta(_, _, _ string)              {}
-func (noopJobReporter) stage(_ string)                   {}
-func (noopJobReporter) source(_ string)                  {}
-func (noopJobReporter) provenance(_ string)              {}
-func (noopJobReporter) timing(_ string, _ time.Duration) {}
-func (noopJobReporter) fetched(_ ports.SourceFormat)     {}
-func (noopJobReporter) stored(_ ports.StoredFile)        {}
+func (noopJobReporter) meta(_, _, _ string)                       {}
+func (noopJobReporter) stage(_ string)                            {}
+func (noopJobReporter) source(_ string)                           {}
+func (noopJobReporter) provenance(_ string)                       {}
+func (noopJobReporter) timing(_ string, _ time.Duration)          {}
+func (noopJobReporter) fetched(_ ports.SourceFormat)              {}
+func (noopJobReporter) stored(_ ports.StoredFile)                 {}
+func (noopJobReporter) decided(_ float64, _ string, _, _ float64) {}
 
 func timeStage(ctx context.Context, stage string, start time.Time) {
 	jobReporterFrom(ctx).timing(stage, time.Since(start))
@@ -94,4 +96,10 @@ func (r schedulerJobReporter) fetched(format ports.SourceFormat) {
 
 func (r schedulerJobReporter) stored(file ports.StoredFile) {
 	r.log.update(r.trackID, func(j *ports.JobRecord) { j.Stored = file })
+}
+
+func (r schedulerJobReporter) decided(confidence float64, sourceKey string, target, measured float64) {
+	r.log.update(r.trackID, func(j *ports.JobRecord) {
+		j.Confidence, j.SourceKey, j.TargetSeconds, j.MeasuredSeconds = confidence, sourceKey, target, measured
+	})
 }

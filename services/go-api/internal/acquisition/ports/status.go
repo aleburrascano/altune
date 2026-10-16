@@ -60,6 +60,11 @@ type JobRecord struct {
 	StageMs        map[string]int64
 	Source         SourceFormat
 	Stored         StoredFile
+
+	Confidence      float64
+	SourceKey       string
+	TargetSeconds   float64
+	MeasuredSeconds float64
 }
 
 type AcquisitionStatus struct {
