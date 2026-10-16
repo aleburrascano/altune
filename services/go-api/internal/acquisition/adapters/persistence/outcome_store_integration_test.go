@@ -336,3 +336,44 @@ func TestPgxOutcomeStore_RecordsStageTimesAndFileFacts(t *testing.T) {
 		t.Errorf("source_kbps = %d, want NULL when yt-dlp reported no audio bitrate", *kbps)
 	}
 }
+
+func TestPgxOutcomeStore_RecordsJobKindRunProvenanceAndLengths(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxOutcomeStore(pool)
+	ctx := context.Background()
+	full := uuid.NewString()
+	bare := uuid.NewString()
+
+	err := store.Record(ctx, ports.AcquisitionOutcome{
+		TrackID: full, Outcome: "succeeded", Kind: ports.JobKindReplace, Run: 2, Provenance: "corroborated",
+		Confidence: 0.87, SourceKey: "yt:abc", TargetSeconds: 215.5, MeasuredSeconds: 214.9,
+	})
+	if err != nil {
+		t.Fatalf("Record full = %v, want nil", err)
+	}
+	if err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: bare, Outcome: "failed"}); err != nil {
+		t.Fatalf("Record bare = %v, want nil", err)
+	}
+
+	const q = `SELECT job_kind, run, provenance, confidence, source_key, target_seconds, measured_seconds
+		FROM acquisition_outcomes WHERE track_id = $1`
+	var kind, provenance, sourceKey string
+	var run *int
+	var confidence, target, measured *float64
+	if err := pool.QueryRow(ctx, q, full).Scan(&kind, &run, &provenance, &confidence, &sourceKey, &target, &measured); err != nil {
+		t.Fatalf("query full row: %v", err)
+	}
+	if kind != "replace" || run == nil || *run != 2 || provenance != "corroborated" || sourceKey != "yt:abc" ||
+		confidence == nil || *confidence != 0.87 || target == nil || *target != 215.5 || measured == nil || *measured != 214.9 {
+		t.Errorf("full row = %q %v %q %v %q %v %v, want replace 2 corroborated 0.87 yt:abc 215.5 214.9",
+			kind, run, provenance, confidence, sourceKey, target, measured)
+	}
+
+	if err := pool.QueryRow(ctx, q, bare).Scan(&kind, &run, &provenance, &confidence, &sourceKey, &target, &measured); err != nil {
+		t.Fatalf("query bare row: %v", err)
+	}
+	if kind != "" || run != nil || provenance != "" || confidence != nil || sourceKey != "" || target != nil || measured != nil {
+		t.Errorf("bare row = %q %v %q %v %q %v %v, want empty text and NULL numbers", kind, run, provenance, confidence, sourceKey, target, measured)
+	}
+}

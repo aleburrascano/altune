@@ -271,6 +271,10 @@ func (s *BackgroundAcquisitionScheduler) startClaimedJob(jobCtx context.Context,
 	s.inflightCount.Add(1)
 	s.log.register(key, "")
 	s.log.markRunning(key)
+	s.log.update(key, func(r *ports.JobRecord) {
+		r.Kind = job.Kind
+		r.Run = job.Run
+	})
 	reporter := schedulerJobReporter{ctx: jobCtx, log: s.log, events: s.eventsFor(job.Kind), trackID: key, userId: job.UserID}
 	reporter.timing("queue", job.Waited)
 	return withJobReporter(jobCtx, reporter)
@@ -369,6 +373,9 @@ func (s *BackgroundAcquisitionScheduler) recordOutcome(ctx context.Context, reco
 			SourceHost: hostOf(record.ResolvedSource),
 			Source:     record.Source,
 			Stored:     record.Stored,
+			Kind:       record.Kind,
+			Run:        record.Run,
+			Provenance: record.Provenance,
 		})
 		if err != nil {
 			slog.WarnContext(ctx, "acquisition.outcome_record_failed",

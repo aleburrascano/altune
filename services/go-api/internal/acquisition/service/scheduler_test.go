@@ -3105,3 +3105,22 @@ func TestBackgroundScheduler_ALeaseLostJobRecordsCancelled(t *testing.T) {
 		t.Errorf("failed = %d, want 0", failed)
 	}
 }
+
+func TestScheduler_OutcomeCarriesJobKindRunAndProvenance(t *testing.T) {
+	recorder := newFakeOutcomeRecorder()
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(newFakeTrackRepository()), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
+
+	job := acqports.Job{TrackID: domain.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Kind: acqports.JobKindReplace, Run: 2}
+	key := job.TrackID.String()
+	reportedCtx := scheduler.startClaimedJob(context.Background(), key, job)
+	jobReporterFrom(reportedCtx).provenance("corroborated")
+	scheduler.recordOutcome(reportedCtx, scheduler.log.complete(key, acqports.JobSucceeded, ""))
+
+	got := assertExactlyOneOutcome(t, recorder.calls)
+	if got.Kind != acqports.JobKindReplace || got.Run != 2 || got.Provenance != "corroborated" {
+		t.Errorf("outcome kind/run/provenance = %q/%d/%q, want replace/2/corroborated", got.Kind, got.Run, got.Provenance)
+	}
+}
