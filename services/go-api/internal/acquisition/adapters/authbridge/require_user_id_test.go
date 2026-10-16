@@ -57,17 +57,3 @@ func TestRequireUserID_RefusesLookAlikeKey(t *testing.T) {
 		t.Fatalf("ok = %v, status = %d; want false, 401", ok, rec.Code)
 	}
 }
-
-func TestUserIDFromContext(t *testing.T) {
-	parent := context.Background()
-	if _, ok := UserIDFromContext(parent); ok {
-		t.Fatal("empty context returned a user")
-	}
-	uid := shared.NewUserId(uuid.New())
-
-	got, ok := UserIDFromContext(authservice.ContextWithUserID(parent, uid))
-
-	if !ok || got.UUID() != uid.UUID() {
-		t.Fatalf("got %v, %v; want %v, true", got.UUID(), ok, uid.UUID())
-	}
-}

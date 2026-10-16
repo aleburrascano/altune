@@ -12,7 +12,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -29,7 +31,7 @@ func TestYtDlpAudioSearcher_Search(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	candidates, err := searcher.Search(ctx, "The Weeknd Blinding Lights")
+	candidates, err := searcher.SearchQueries(ctx, []string{"The Weeknd Blinding Lights"})
 	if err != nil {
 		t.Fatalf("Search returned error: %v", err)
 	}
@@ -108,7 +110,7 @@ func argvRecordingDownloaderAt(t *testing.T, outDir string) (binary, argvFile st
 	return binary, argvFile
 }
 
-func TestYtDlpAudioSearcher_Download_CapsTheSourceFileSize(t *testing.T) {
+func TestDownload_MaxFilesizeFlagIsTheDownloadedFileCap(t *testing.T) {
 	withDecoyYtDlp(t)
 	outDir := t.TempDir()
 	binary, argvFile := argvRecordingDownloaderAt(t, outDir)
@@ -128,8 +130,8 @@ func TestYtDlpAudioSearcher_Download_CapsTheSourceFileSize(t *testing.T) {
 		if arg != "--max-filesize" {
 			continue
 		}
-		if i+1 >= len(argv) || argv[i+1] != maxSourceFileSize {
-			t.Fatalf("argv = %q, want --max-filesize followed by %q", argv, maxSourceFileSize)
+		if i+1 >= len(argv) || argv[i+1] != strconv.Itoa(maxDownloadedFileBytes) {
+			t.Fatalf("argv = %q, want --max-filesize followed by %q", argv, strconv.Itoa(maxDownloadedFileBytes))
 		}
 		return
 	}
@@ -251,7 +253,7 @@ func TestYtDlpAudioSearcher_Search_EngineFailureLogRedactsTheCookiePath(t *testi
 		return nil, cookieJarError()
 	})
 
-	if _, err := s.Search(context.Background(), "q"); err == nil {
+	if _, err := s.SearchQueries(context.Background(), []string{"q"}); err == nil {
 		t.Fatal("every engine failed, Search reported no error")
 	}
 
@@ -315,9 +317,12 @@ func withRunner(r searchRunner) *YtDlpAudioSearcher {
 }
 
 func TestYtDlpAudioSearcher_Search_QueriesBothEngines(t *testing.T) {
+	var mu sync.Mutex
 	var specs []string
 	s := withRunner(func(_ context.Context, spec string) ([]ports.AudioCandidate, error) {
+		mu.Lock()
 		specs = append(specs, spec)
+		mu.Unlock()
 		switch spec {
 		case "ytsearch5:song artist":
 			return []ports.AudioCandidate{{Title: "YT", URL: "https://youtube.com/watch?v=1"}}, nil
@@ -327,13 +332,14 @@ func TestYtDlpAudioSearcher_Search_QueriesBothEngines(t *testing.T) {
 		return nil, nil
 	})
 
-	got, err := s.Search(context.Background(), "song artist")
+	got, err := s.SearchQueries(context.Background(), []string{"song artist"})
 	if err != nil {
 		t.Fatalf("Search error: %v", err)
 	}
 
-	if len(specs) != 2 || specs[0] != "ytsearch5:song artist" || specs[1] != "scsearch5:song artist" {
-		t.Fatalf("engine specs = %v, want yt then sc", specs)
+	slices.Sort(specs)
+	if !slices.Equal(specs, []string{"scsearch5:song artist", "ytsearch5:song artist"}) {
+		t.Fatalf("engine specs = %v, want yt and sc", specs)
 	}
 	if len(got) != 2 {
 		t.Fatalf("expected 2 merged candidates, got %d: %+v", len(got), got)
@@ -346,7 +352,7 @@ func TestYtDlpAudioSearcher_Search_DedupsByURL(t *testing.T) {
 		return []ports.AudioCandidate{dup}, nil
 	})
 
-	got, err := s.Search(context.Background(), "q")
+	got, err := s.SearchQueries(context.Background(), []string{"q"})
 	if err != nil {
 		t.Fatalf("Search error: %v", err)
 	}
@@ -363,7 +369,7 @@ func TestYtDlpAudioSearcher_Search_OneEngineFails(t *testing.T) {
 		return []ports.AudioCandidate{{Title: "SC", URL: "https://soundcloud.com/x/leak"}}, nil
 	})
 
-	got, err := s.Search(context.Background(), "q")
+	got, err := s.SearchQueries(context.Background(), []string{"q"})
 	if err != nil {
 		t.Fatalf("a single engine failure must not fail the search, got: %v", err)
 	}
@@ -377,7 +383,7 @@ func TestYtDlpAudioSearcher_Search_BothEnginesFail(t *testing.T) {
 		return nil, errors.New("down")
 	})
 
-	if _, err := s.Search(context.Background(), "q"); err == nil {
+	if _, err := s.SearchQueries(context.Background(), []string{"q"}); err == nil {
 		t.Fatal("expected an error when every engine fails")
 	}
 }
@@ -743,7 +749,7 @@ func assertStderrEmbeddedSafely(t *testing.T, err error) {
 func TestYtDlpAudioSearcher_SearchRedactsAndCapsStderr(t *testing.T) {
 	withLeakyYtDlp(t)
 	s := NewYtDlpAudioSearcher("", "", "")
-	_, err := s.Search(context.Background(), "q")
+	_, err := s.SearchQueries(context.Background(), []string{"q"})
 	assertStderrEmbeddedSafely(t, err)
 }
 

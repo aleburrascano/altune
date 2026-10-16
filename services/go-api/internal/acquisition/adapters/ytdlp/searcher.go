@@ -30,8 +30,6 @@ const (
 	previewTimeout  = 60 * time.Second
 )
 
-const maxSourceFileSize = "200M"
-
 const audioFormatSelector = "140/bestaudio[ext=m4a]/bestaudio/best[height<=480][protocol=https]/best[height<=480]/best"
 
 const aacEncodeKbps = 128
@@ -115,26 +113,6 @@ func (s *YtDlpAudioSearcher) classifiedFailure(err error, stderr string, timedOu
 		return err
 	}
 	return &acqdomain.SourceUnavailableError{Source: SourceName, Err: err}
-}
-
-func (s *YtDlpAudioSearcher) Search(ctx context.Context, query string) ([]ports.AudioCandidate, error) {
-	return ports.CollectCandidates(
-		len(searchEngines),
-		func(i int) ([]ports.AudioCandidate, error) {
-			return s.runSearch(ctx, searchEngines[i]+query)
-		},
-		func(i int, candidates []ports.AudioCandidate) {
-			slog.InfoContext(ctx, "acquisition.engine_search_results",
-				"spec", searchEngines[i]+query, "candidates", len(candidates))
-		},
-		func(i int, err error) {
-			slog.WarnContext(ctx, "acquisition.engine_search_failed",
-				"spec", searchEngines[i]+query, "error", redact.LogError(err))
-		},
-		func(firstErr error) error {
-			return fmt.Errorf("all search engines failed: %w", firstErr)
-		},
-	)
 }
 
 type pairOutcome struct {
@@ -314,7 +292,7 @@ func (s *YtDlpAudioSearcher) fetchAudio(
 		"-x",
 		"--audio-format", "m4a",
 		"--audio-quality", fmt.Sprintf("%dK", aacEncodeKbps),
-		"--max-filesize", maxSourceFileSize,
+		"--max-filesize", strconv.Itoa(maxDownloadedFileBytes),
 		"--no-progress",
 		"--print", "after_move:" + sourceFormatPrefix + "%(format_id)s|%(acodec)s|%(abr)s",
 		"--print", "after_move:" + outputPathPrefix + "%(filepath)s",
