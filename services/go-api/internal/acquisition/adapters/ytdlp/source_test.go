@@ -51,7 +51,7 @@ func TestSource_Find_RunsEveryQueryEvenAfterEnoughCandidatesAreFound(t *testing.
 	wantSearches := len(searchQueries(findRequest())) * len(searchEngines)
 	if len(specs) != wantSearches {
 		t.Fatalf("searches = %d %v, want all %d even though the first query's engines already return %d candidates",
-			len(specs), specs, wantSearches, ports.EnoughCandidates)
+			len(specs), specs, wantSearches, 5)
 	}
 	if len(got) != wantSearches*5 {
 		t.Fatalf("merged candidates = %d, want %d", len(got), wantSearches*5)

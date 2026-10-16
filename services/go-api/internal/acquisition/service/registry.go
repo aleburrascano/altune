@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math"
 	"sync"
 )
 
@@ -122,7 +121,7 @@ func mergeSlotsReportingOutage(
 	errs []error,
 ) (FindResult, error) {
 	candidates, outage, err := ports.CollectCandidatesReportingOutage(
-		len(sources), math.MaxInt,
+		len(sources),
 		func(i int) ([]ports.AudioCandidate, error) { return slots[i], errs[i] },
 		func(i int, candidates []ports.AudioCandidate) {
 			slog.InfoContext(ctx, "acquisition.source_find_results",

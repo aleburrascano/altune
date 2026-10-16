@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	maxDownloadAttempts = ports.EnoughCandidates
+	maxDownloadAttempts = 8
 	previewSeconds      = 130
 
 	defaultCandidateTimeout = 3 * time.Minute

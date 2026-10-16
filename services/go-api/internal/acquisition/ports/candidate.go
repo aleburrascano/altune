@@ -3,7 +3,6 @@ package ports
 import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"fmt"
-	"math"
 )
 
 const (
@@ -63,10 +62,6 @@ func mergeCandidate(merged []AudioCandidate, c AudioCandidate, positionByKey map
 	return merged
 }
 
-const EnoughCandidates = 8
-
-const unlimitedCandidates = math.MaxInt
-
 func CollectCandidates(
 	n int,
 	run func(i int) ([]AudioCandidate, error),
@@ -74,22 +69,12 @@ func CollectCandidates(
 	onFailure func(i int, err error),
 	allFailed func(firstErr error) error,
 ) ([]AudioCandidate, error) {
-	return CollectCandidatesUntilEnough(n, unlimitedCandidates, run, onSuccess, onFailure, allFailed)
-}
-
-func CollectCandidatesUntilEnough(
-	n, enough int,
-	run func(i int) ([]AudioCandidate, error),
-	onSuccess func(i int, candidates []AudioCandidate),
-	onFailure func(i int, err error),
-	allFailed func(firstErr error) error,
-) ([]AudioCandidate, error) {
-	merged, _, err := CollectCandidatesReportingOutage(n, enough, run, onSuccess, onFailure, allFailed)
+	merged, _, err := CollectCandidatesReportingOutage(n, run, onSuccess, onFailure, allFailed)
 	return merged, err
 }
 
 func CollectCandidatesReportingOutage(
-	n, enough int,
+	n int,
 	run func(i int) ([]AudioCandidate, error),
 	onSuccess func(i int, candidates []AudioCandidate),
 	onFailure func(i int, err error),
@@ -99,7 +84,7 @@ func CollectCandidatesReportingOutage(
 	var firstErr, firstUnavailable error
 	failures := 0
 
-	for i := 0; i < n && len(merged) < enough; i++ {
+	for i := 0; i < n; i++ {
 		candidates, err := run(i)
 		if err != nil {
 			failures++
