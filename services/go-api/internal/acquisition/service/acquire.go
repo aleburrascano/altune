@@ -187,14 +187,24 @@ func (s *AcquireTrackAudioService) observe(ac *AcquisitionContext) {
 }
 
 func (s *AcquireTrackAudioService) settleExecuteFailure(ctx, jobCtx context.Context, userId shared.UserId, trackId shared.TrackId, err error, ac *AcquisitionContext) error {
+	return s.settleFailure(ctx, jobCtx, userId, trackId, err, willRetry, func(err error) error {
+		return s.reportAcquireFailure(ctx, userId, trackId, err, ac)
+	})
+}
+
+type retryPolicy func(jobCtx context.Context, err error) bool
+
+func neverRetry(context.Context, error) bool { return false }
+
+func (s *AcquireTrackAudioService) settleFailure(ctx, jobCtx context.Context, userId shared.UserId, trackId shared.TrackId, err error, retry retryPolicy, reportTerminal func(error) error) error {
 	if schedulerCancelledJobContext(jobCtx) {
 		return s.reportSchedulerCancelledWithoutMarkingFailed(ctx, userId, trackId, err)
 	}
 	err = ownTimeout(jobCtx, ctx, err)
-	if willRetry(jobCtx, err) {
+	if retry(jobCtx, err) {
 		return s.reportRetryableFailure(ctx, userId, trackId, err)
 	}
-	return s.reportAcquireFailure(ctx, userId, trackId, err, ac)
+	return reportTerminal(err)
 }
 
 func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId shared.UserId, trackId shared.TrackId) error {
@@ -205,7 +215,7 @@ func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId sh
 	if err != nil || track == nil {
 		return err
 	}
-	_, err = s.replaceLoaded(ctx, jobCtx, userId, track, upgrade.Gate{})
+	_, err = s.replaceLoaded(ctx, jobCtx, userId, track, upgrade.Gate{}, willRetry)
 	return err
 }
 
@@ -213,7 +223,7 @@ func (s *AcquireTrackAudioService) ReplaceGated(ctx context.Context, userId shar
 	jobCtx := ctx
 	ctx, cancel := context.WithTimeout(ctx, s.acquireTimeout)
 	defer cancel()
-	ac, err := s.withoutUserEvents().replaceLoaded(ctx, jobCtx, userId, track, gate)
+	ac, err := s.withoutUserEvents().replaceLoaded(ctx, jobCtx, userId, track, gate, neverRetry)
 	return attemptOf(ac, err), err
 }
 
@@ -232,30 +242,28 @@ func attemptOf(ac *AcquisitionContext, err error) upgrade.Attempt {
 	return attempt
 }
 
-func (s *AcquireTrackAudioService) replaceLoaded(ctx, jobCtx context.Context, userId shared.UserId, track *ports.TrackSnapshot, gate upgrade.Gate) (*AcquisitionContext, error) {
+func (s *AcquireTrackAudioService) replaceLoaded(ctx, jobCtx context.Context, userId shared.UserId, track *ports.TrackSnapshot, gate upgrade.Gate, retry retryPolicy) (*AcquisitionContext, error) {
 	trackId := track.ID
 	ac := s.startAcquisition(ctx, userId, trackId, track)
 	ac.Replace.Gate = gate
 	defer s.observe(ac)
 	defer CleanupTemp(ctx, s.workspace, ac)
 	if err := configureReplaceExclusion(ctx, ac, track, trackId); err != nil {
-		return ac, s.settleReplaceFailure(ctx, jobCtx, userId, trackId, err, ac)
+		return ac, s.settleReplaceFailure(ctx, jobCtx, userId, trackId, err, retry, ac)
 	}
 	s.fingerprintStoredFile(ctx, ac, track, trackId)
 	s.loadPriorRejections(ctx, ac)
 	if err := s.runAcquisition(ctx, userId, trackId, ac); err != nil {
-		return ac, s.settleReplaceFailure(ctx, jobCtx, userId, trackId, err, ac)
+		return ac, s.settleReplaceFailure(ctx, jobCtx, userId, trackId, err, retry, ac)
 	}
 	s.deleteSupersededAudio(ctx, userId, trackId, ac)
 	return ac, nil
 }
 
-func (s *AcquireTrackAudioService) settleReplaceFailure(ctx, jobCtx context.Context, userId shared.UserId, trackId shared.TrackId, err error, ac *AcquisitionContext) error {
-	if schedulerCancelledJobContext(jobCtx) {
-		return s.reportSchedulerCancelledWithoutMarkingFailed(ctx, userId, trackId, err)
-	}
-	err = ownTimeout(jobCtx, ctx, err)
-	return s.reportReplaceFailure(ctx, userId, trackId, err, ac)
+func (s *AcquireTrackAudioService) settleReplaceFailure(ctx, jobCtx context.Context, userId shared.UserId, trackId shared.TrackId, err error, retry retryPolicy, ac *AcquisitionContext) error {
+	return s.settleFailure(ctx, jobCtx, userId, trackId, err, retry, func(err error) error {
+		return s.reportReplaceFailure(ctx, userId, trackId, err, ac)
+	})
 }
 
 func (s *AcquireTrackAudioService) deleteSupersededAudio(ctx context.Context, userId shared.UserId, trackId shared.TrackId, ac *AcquisitionContext) {

@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/acquisition/adapters/catalogpin"
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service/upgrade"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
@@ -2275,5 +2276,78 @@ func TestExecute_AnExpiredOwnTimeBudgetOnTheLastAttemptIsSourceUnavailable(t *te
 	}
 	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 1 {
 		t.Errorf("failed publishes = %d, want 1", got)
+	}
+}
+
+type replaceFixture struct {
+	svc    *AcquireTrackAudioService
+	repo   *fakeTrackRepository
+	track  *domain.Track
+	store  *fakeAudioStore
+	pub    *recordingPublisher
+	userId shared.UserId
+	ctx    context.Context
+}
+
+func newReplaceFixture(t *testing.T, searcher *fakeAudioSearcher, attempt int) replaceFixture {
+	t.Helper()
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track := readyTrackWithSource(t, repo, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=wrong")
+	store := newFakeAudioStore()
+	store.stored["u/a/b/c.mp3"] = true
+	pub := newRecordingPublisher()
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), store, WithAcquireEvents(pub))
+	ctx := withJobAttempt(withSchedulerOwnedJobContext(context.Background()), attempt)
+	return replaceFixture{svc: svc, repo: repo, track: track, store: store, pub: pub, userId: userId, ctx: ctx}
+}
+
+func TestExecuteReplace_ATransientOutageBelowTheCapIsRetried(t *testing.T) {
+	for attempt := 1; attempt < maxAcquisitionAttempts; attempt++ {
+		f := newReplaceFixture(t, transientSearchFailure(), attempt)
+		err := f.svc.ExecuteReplace(f.ctx, f.userId, f.track.ID)
+		stored, store, pub := storedTrack(t, f.repo, f.track), f.store, f.pub
+
+		if !errors.Is(err, ErrAcquisitionRetryable) {
+			t.Errorf("attempt %d: err = %v, want ErrAcquisitionRetryable", attempt, err)
+		}
+		if stored.AcquisitionStatus != domain.AcquisitionReady || stored.AudioRef == nil || *stored.AudioRef != "u/a/b/c.mp3" {
+			t.Errorf("attempt %d: status = %v, audio_ref = %v, want the track ready with its audio", attempt, stored.AcquisitionStatus, stored.AudioRef)
+		}
+		if !store.stored["u/a/b/c.mp3"] {
+			t.Errorf("attempt %d: the user's audio must survive", attempt)
+		}
+		if got := pub.count(events.TypeTrackReplaceFailed); got != 0 {
+			t.Errorf("attempt %d: replace-failed publishes = %d, want 0", attempt, got)
+		}
+	}
+}
+
+func TestExecuteReplace_ATransientOutageOnTheLastAttemptFails(t *testing.T) {
+	f := newReplaceFixture(t, transientSearchFailure(), maxAcquisitionAttempts)
+	err := f.svc.ExecuteReplace(f.ctx, f.userId, f.track.ID)
+	stored, pub := storedTrack(t, f.repo, f.track), f.pub
+
+	if err == nil || errors.Is(err, ErrAcquisitionRetryable) {
+		t.Errorf("err = %v, want a terminal failure", err)
+	}
+	if stored.AcquisitionStatus != domain.AcquisitionReady {
+		t.Errorf("status = %v, want the track left ready", stored.AcquisitionStatus)
+	}
+	if got := pub.count(events.TypeTrackReplaceFailed); got != 1 {
+		t.Errorf("replace-failed publishes = %d, want 1", got)
+	}
+}
+
+func TestReplaceGated_ATransientOutageBelowTheCapIsNotRetried(t *testing.T) {
+	f := newReplaceFixture(t, transientSearchFailure(), 1)
+	snapshot, err := f.svc.loadTrack(f.ctx, f.userId, f.track.ID)
+	if err != nil || snapshot == nil {
+		t.Fatalf("load track: %v", err)
+	}
+	_, err = f.svc.ReplaceGated(f.ctx, f.userId, snapshot, upgrade.Gate{})
+
+	if err == nil || errors.Is(err, ErrAcquisitionRetryable) {
+		t.Errorf("err = %v, want a terminal failure: the upgrade lane keeps its own retry policy", err)
 	}
 }
