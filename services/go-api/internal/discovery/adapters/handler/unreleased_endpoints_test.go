@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -37,7 +38,7 @@ func TestHandleArtistUnreleased_NoGeniusMatchIsAnEmptyList(t *testing.T) {
 	rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/999/unreleased?name=Nobody", nil)
 
 	discAssertStatus(t, rec, http.StatusOK)
-	if got := rec.Body.String(); got != "{\"items\":[]}\n" {
+	if got := rec.Body.String(); got != "{\"items\":[],\"pending\":false}\n" {
 		t.Errorf("body = %q, want an empty items list", got)
 	}
 }
@@ -87,10 +88,10 @@ func TestHandleArtistUnreleased_ReturnsUnreleasedSongsWithTheAppShape(t *testing
 		t.Fatalf("items = %+v, want Cancun then Naruto", items)
 	}
 	cancun, naruto := items[0], items[1]
-	if cancun.CoverURL == nil || *cancun.CoverURL != "https://img/c.jpg" || cancun.ReleaseDate == nil || !cancun.HasMedia {
+	if cancun.CoverURL == nil || *cancun.CoverURL != "https://img/c.jpg" || cancun.ReleaseDate == nil || cancun.HasMedia == nil || !*cancun.HasMedia {
 		t.Errorf("cancun = %+v, want cover, release date and has_media", cancun)
 	}
-	if naruto.CoverURL != nil || naruto.ReleaseDate != nil || naruto.HasMedia {
+	if naruto.CoverURL != nil || naruto.ReleaseDate != nil || (naruto.HasMedia != nil && *naruto.HasMedia) {
 		t.Errorf("naruto = %+v, want null cover, null release date and no media", naruto)
 	}
 }
@@ -102,5 +103,21 @@ func TestHandleArtistUnreleased_UpstreamFailureIsAnError(t *testing.T) {
 
 	if rec.Code < 500 {
 		t.Errorf("status = %d, want a 5xx", rec.Code)
+	}
+}
+
+func TestHandleArtistUnreleased_SlowJobAnswersPendingWithNoItems(t *testing.T) {
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: []domain.UnreleasedSong{{GeniusID: 1, Title: "Leak"}}, Gate: make(chan struct{})}
+	svc := unreleased.NewService(genius, &discoverytest.ArtistCatalogTitles{}, nil, unreleased.Config{MaxPages: 1, MaxDetails: 10, Wait: 10 * time.Millisecond})
+	h := NewDiscoveryHandler(DiscoveryServices{}).WithUnreleased(svc)
+	r := chi.NewRouter()
+	r.Use(middleware.Middleware(discVerifyAsTestUser))
+	r.Mount("/discovery", h.Routes())
+
+	rec := discServe(t, r, http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Artist", nil)
+
+	discAssertStatus(t, rec, http.StatusOK)
+	if got := rec.Body.String(); got != "{\"items\":[],\"pending\":true}\n" {
+		t.Errorf("body = %q, want pending with no items", got)
 	}
 }

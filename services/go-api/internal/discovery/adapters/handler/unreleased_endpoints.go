@@ -13,11 +13,12 @@ type UnreleasedSongDTO struct {
 	CoverURL    *string `json:"cover_url"`
 	GeniusURL   string  `json:"genius_url"`
 	ReleaseDate *string `json:"release_date"`
-	HasMedia    bool    `json:"has_media"`
+	HasMedia    *bool   `json:"has_media"`
 }
 
 type UnreleasedResponseDTO struct {
-	Items []UnreleasedSongDTO `json:"items"`
+	Items   []UnreleasedSongDTO `json:"items"`
+	Pending bool                `json:"pending"`
 }
 
 func (h *DiscoveryHandler) WithUnreleased(svc *unreleased.Service) *DiscoveryHandler {
@@ -25,9 +26,9 @@ func (h *DiscoveryHandler) WithUnreleased(svc *unreleased.Service) *DiscoveryHan
 	return h
 }
 
-func unreleasedToDTO(songs []domain.UnreleasedSong) UnreleasedResponseDTO {
-	items := make([]UnreleasedSongDTO, len(songs))
-	for i, s := range songs {
+func unreleasedToDTO(found unreleased.Lookup) UnreleasedResponseDTO {
+	items := make([]UnreleasedSongDTO, len(found.Songs))
+	for i, s := range found.Songs {
 		items[i] = UnreleasedSongDTO{
 			GeniusID:    s.GeniusID,
 			Title:       s.Title,
@@ -37,7 +38,7 @@ func unreleasedToDTO(songs []domain.UnreleasedSong) UnreleasedResponseDTO {
 			HasMedia:    s.HasMedia,
 		}
 	}
-	return UnreleasedResponseDTO{Items: items}
+	return UnreleasedResponseDTO{Items: items, Pending: found.Pending}
 }
 
 func nonEmpty(s string) *string {
@@ -56,14 +57,14 @@ func (h *DiscoveryHandler) handleArtistUnreleased(w http.ResponseWriter, r *http
 				return
 			}
 			if h.unreleasedSvc == nil {
-				httputil.WriteJSON(w, http.StatusOK, unreleasedToDTO(nil))
+				httputil.WriteJSON(w, http.StatusOK, unreleasedToDTO(unreleased.Lookup{}))
 				return
 			}
-			songs, err := h.unreleasedSvc.List(r.Context(), pn, externalID, name, knownIDsParam(r))
+			found, err := h.unreleasedSvc.Lookup(r.Context(), pn, externalID, name, knownIDsParam(r))
 			if err != nil {
 				failContentFetch(w, r, err, "get artist unreleased failed", provider, externalID)
 				return
 			}
-			httputil.WriteJSON(w, http.StatusOK, unreleasedToDTO(songs))
+			httputil.WriteJSON(w, http.StatusOK, unreleasedToDTO(found))
 		})
 }

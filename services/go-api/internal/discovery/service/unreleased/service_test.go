@@ -3,9 +3,11 @@ package unreleased
 import (
 	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"errors"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 )
@@ -88,8 +90,14 @@ func TestService_List_MarksMediaOnlyWithinTheDetailCap(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("got %d songs, want 3", len(got))
 	}
-	if !got[0].HasMedia || got[1].HasMedia || got[2].HasMedia {
-		t.Errorf("has_media = %v %v %v, want true false false (third song is past the cap)", got[0].HasMedia, got[1].HasMedia, got[2].HasMedia)
+	if got[0].HasMedia == nil || !*got[0].HasMedia {
+		t.Errorf("first song has_media = %v, want true", got[0].HasMedia)
+	}
+	if got[1].HasMedia == nil || *got[1].HasMedia {
+		t.Errorf("second song has_media = %v, want false", got[1].HasMedia)
+	}
+	if got[2].HasMedia != nil {
+		t.Errorf("third song unknown (past the cap): has_media = %v, want nil", *got[2].HasMedia)
 	}
 }
 
@@ -175,5 +183,223 @@ func TestService_List_CacheTTLDependsOnHowTrustworthyTheAnswerIs(t *testing.T) {
 				t.Errorf("ttl = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestService_List_HidesSongsWithReleasedEvidenceFromGenius(t *testing.T) {
+	tests := []struct {
+		name    string
+		title   string
+		catalog []string
+		detail  domain.GeniusSongDetail
+		want    []string
+	}{
+		{"song on a catalog tracklist is hidden", "Deep Cut", []string{"Deep Cut"}, domain.GeniusSongDetail{}, nil},
+		{"spotify link hides the song", "Leak", nil, domain.GeniusSongDetail{OnStreamingSite: true}, nil},
+		{"genius album equal to a catalog album hides the song", "Leak", []string{"Heaven or Hell"}, domain.GeniusSongDetail{AlbumTitle: "HEAVEN OR HELL"}, nil},
+		{"genius album unknown to the catalog keeps the song", "Leak", []string{"Heaven or Hell"}, domain.GeniusSongDetail{AlbumTitle: "Fan Compilation"}, []string{"Leak"}},
+		{"unreleased album keeps the song even when the catalog has that name", "Leak", []string{"Unreleased"}, domain.GeniusSongDetail{AlbumTitle: "Unreleased"}, []string{"Leak"}},
+		{"unreleased album variant keeps the song", "Leak", []string{"Unreleased Songs"}, domain.GeniusSongDetail{AlbumTitle: "Unreleased Songs"}, []string{"Leak"}},
+		{"no evidence keeps the song", "Leak", nil, domain.GeniusSongDetail{HasMedia: true}, []string{"Leak"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs(tt.title), DetailByID: map[int]domain.GeniusSongDetail{1: tt.detail}}
+			svc := NewService(genius, &discoverytest.ArtistCatalogTitles{Titles: tt.catalog}, nil, Config{MaxPages: 1, MaxDetails: 10, DetailConcurrency: 2})
+			got, err := svc.List(context.Background(), domain.ProviderDeezer, "1", "Artist", nil)
+			if err != nil {
+				t.Fatalf("List: %v", err)
+			}
+			if !slices.Equal(titlesOf(got), tt.want) {
+				t.Errorf("titles = %v, want %v", titlesOf(got), tt.want)
+			}
+		})
+	}
+}
+
+func TestService_List_LooksUpDetailsOnlyForSongsTheCatalogDidNotHide(t *testing.T) {
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Released", "Leak")}
+	svc := NewService(genius, &discoverytest.ArtistCatalogTitles{Titles: []string{"Released"}}, nil, Config{MaxPages: 1, MaxDetails: 10, DetailConcurrency: 2})
+	if _, err := svc.List(context.Background(), domain.ProviderDeezer, "1", "Artist", nil); err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if got := genius.DetailLookups(); !slices.Equal(got, []int{2}) {
+		t.Errorf("detail lookups = %v, want only the surviving song [2]", got)
+	}
+}
+
+func TestService_List_PartialCatalogGetsTheShortTTLAndStillFilters(t *testing.T) {
+	cache := newMemoryCache()
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Released", "Leak")}
+	catalog := &discoverytest.ArtistCatalogTitles{Titles: []string{"Released"}, Err: ports.ErrPartialCatalog}
+	svc := NewService(genius, catalog, cache, cachedConfig)
+	got, err := svc.List(context.Background(), domain.ProviderDeezer, "1", "Artist", nil)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if !slices.Equal(titlesOf(got), []string{"Leak"}) {
+		t.Errorf("titles = %v, want [Leak]", titlesOf(got))
+	}
+	if ttl := cache.ttls["1|artist"]; ttl != shortTTL {
+		t.Errorf("ttl = %v, want %v", ttl, shortTTL)
+	}
+}
+
+func TestService_List_HasMediaIsUnknownUntilLookedUp(t *testing.T) {
+	genius := &discoverytest.GeniusSongCatalog{
+		ArtistFound: true,
+		Songs:       songs("A", "B", "C"),
+		MediaByID:   map[int]bool{1: true},
+		DetailByID:  map[int]domain.GeniusSongDetail{},
+	}
+	svc := NewService(genius, &discoverytest.ArtistCatalogTitles{}, nil, Config{MaxPages: 1, MaxDetails: 2, DetailConcurrency: 2})
+	got, err := svc.List(context.Background(), domain.ProviderDeezer, "1", "Artist", nil)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("got %d songs, want 3", len(got))
+	}
+	if got[0].HasMedia == nil || !*got[0].HasMedia || got[1].HasMedia == nil || *got[1].HasMedia || got[2].HasMedia != nil {
+		t.Errorf("has_media = %v %v %v, want true false nil (third song was past the cap)", got[0].HasMedia, got[1].HasMedia, got[2].HasMedia)
+	}
+}
+
+func TestService_List_FailedDetailLookupLeavesHasMediaUnknown(t *testing.T) {
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("A"), MediaErr: errors.New("429")}
+	svc := NewService(genius, &discoverytest.ArtistCatalogTitles{}, nil, Config{MaxPages: 1, MaxDetails: 5, DetailConcurrency: 1})
+	got, err := svc.List(context.Background(), domain.ProviderDeezer, "1", "Artist", nil)
+	if err != nil || len(got) != 1 || got[0].HasMedia != nil {
+		t.Errorf("List = (%v, %v), want one song with unknown has_media", got, err)
+	}
+}
+
+func TestService_List_ReleasedRemixesNeedTheExactRemixOnACatalogRelease(t *testing.T) {
+	catalog := []string{"After Party", "After Party (CHOPNOTSLOP REMIX)", "No Idea - CHOPNOTSLOP REMIX", "Up & Down"}
+	genius := []string{"After Party (CHOPNOTSLOP REMIX)", "After Party (Crooked Colours Remix)", "No Idea (CHOPNOTSLOP REMIX)", "Up & Down (Physical Version)", "After Party (Demo)"}
+	svc := NewService(
+		&discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs(genius...)},
+		&discoverytest.ArtistCatalogTitles{Titles: catalog},
+		nil,
+		Config{MaxPages: 1, MaxDetails: 10, DetailConcurrency: 2},
+	)
+	got, err := svc.List(context.Background(), domain.ProviderDeezer, "1", "Artist", nil)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	want := []string{"After Party (Crooked Colours Remix)", "Up & Down (Physical Version)", "After Party (Demo)"}
+	if !slices.Equal(titlesOf(got), want) {
+		t.Errorf("titles = %v, want %v", titlesOf(got), want)
+	}
+}
+
+type lockedCache struct {
+	mu    sync.Mutex
+	inner *memoryCache
+}
+
+func newLockedCache() *lockedCache { return &lockedCache{inner: newMemoryCache()} }
+
+func (c *lockedCache) Get(ctx context.Context, p domain.ProviderName, id, nameKey string) ([]domain.UnreleasedSong, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.inner.Get(ctx, p, id, nameKey)
+}
+
+func (c *lockedCache) Set(ctx context.Context, p domain.ProviderName, id, nameKey string, s []domain.UnreleasedSong, ttl time.Duration) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.inner.Set(ctx, p, id, nameKey, s, ttl)
+}
+
+func (c *lockedCache) entries() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.inner.stored)
+}
+
+func backgroundService(ctx context.Context, genius *discoverytest.GeniusSongCatalog, cache *lockedCache, wait time.Duration) (*Service, *sync.WaitGroup) {
+	var jobs sync.WaitGroup
+	cfg := Config{MaxPages: 1, MaxDetails: 10, DetailConcurrency: 2, TTL: longTTL, EmptyTTL: shortTTL, Wait: wait}
+	return NewService(genius, &discoverytest.ArtistCatalogTitles{}, cache, cfg, WithLifecycle(ctx, &jobs)), &jobs
+}
+
+func TestService_Lookup_SlowJobIsPendingThenTheNextCallIsCached(t *testing.T) {
+	gate := make(chan struct{})
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak"), Gate: gate}
+	svc, jobs := backgroundService(context.Background(), genius, newLockedCache(), 20*time.Millisecond)
+
+	first, err := svc.Lookup(context.Background(), domain.ProviderDeezer, "1", "Artist", nil)
+	if err != nil || !first.Pending || first.Songs == nil || len(first.Songs) != 0 {
+		t.Fatalf("first Lookup = (%+v, %v), want pending with an empty non-nil list", first, err)
+	}
+	close(gate)
+	jobs.Wait()
+
+	second, err := svc.Lookup(context.Background(), domain.ProviderDeezer, "1", "Artist", nil)
+	if err != nil || second.Pending || !slices.Equal(titlesOf(second.Songs), []string{"Leak"}) {
+		t.Errorf("second Lookup = (%+v, %v), want the cached item and not pending", second, err)
+	}
+	if len(genius.SearchedFor) != 1 {
+		t.Errorf("genius searched %d times, want 1", len(genius.SearchedFor))
+	}
+}
+
+func TestService_Lookup_ConcurrentCallsShareOneJob(t *testing.T) {
+	gate := make(chan struct{})
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak"), Gate: gate}
+	svc, jobs := backgroundService(context.Background(), genius, newLockedCache(), 0)
+
+	const callers = 8
+	results := make(chan Lookup, callers)
+	for range callers {
+		go func() {
+			found, _ := svc.Lookup(context.Background(), domain.ProviderDeezer, "1", "Artist", nil)
+			results <- found
+		}()
+	}
+	time.Sleep(50 * time.Millisecond)
+	close(gate)
+	for range callers {
+		if got := <-results; !slices.Equal(titlesOf(got.Songs), []string{"Leak"}) {
+			t.Errorf("a caller got %v, want [Leak]", titlesOf(got.Songs))
+		}
+	}
+	jobs.Wait()
+	if len(genius.SearchedFor) != 1 {
+		t.Errorf("genius searched %d times, want one job for the key", len(genius.SearchedFor))
+	}
+}
+
+func TestService_Lookup_FailedJobLeavesNoCacheEntry(t *testing.T) {
+	boom := errors.New("genius down")
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Err: boom}
+	cache := newLockedCache()
+	svc, jobs := backgroundService(context.Background(), genius, cache, 0)
+
+	if _, err := svc.Lookup(context.Background(), domain.ProviderDeezer, "1", "Artist", nil); !errors.Is(err, boom) {
+		t.Errorf("err = %v, want %v", err, boom)
+	}
+	jobs.Wait()
+	if cache.entries() != 0 {
+		t.Errorf("cache has %d entries after a failed job, want none", cache.entries())
+	}
+}
+
+func TestService_Lookup_ServerShutdownStopsTheJob(t *testing.T) {
+	lifecycle, shutdown := context.WithCancel(context.Background())
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Gate: make(chan struct{})}
+	svc, jobs := backgroundService(lifecycle, genius, newLockedCache(), 10*time.Millisecond)
+
+	if _, err := svc.Lookup(context.Background(), domain.ProviderDeezer, "1", "Artist", nil); err != nil {
+		t.Fatalf("Lookup: %v", err)
+	}
+	shutdown()
+	stopped := make(chan struct{})
+	go func() { jobs.Wait(); close(stopped) }()
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the job outlived the lifecycle context")
 	}
 }

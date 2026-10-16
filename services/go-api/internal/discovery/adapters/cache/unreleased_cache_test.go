@@ -33,7 +33,7 @@ func TestRedisUnreleasedCache_RoundTripsWithTheGivenTTL(t *testing.T) {
 	ctx := context.Background()
 	id := fmt.Sprintf("round-trip-%s", t.Name())
 	cleanKeys(t, client, unreleasedKey(domain.ProviderDeezer, id, "artist"))
-	want := []domain.UnreleasedSong{{GeniusID: 5, Title: "Cancun", GeniusURL: "https://genius.com/c", HasMedia: true}}
+	want := []domain.UnreleasedSong{{GeniusID: 5, Title: "Cancun", GeniusURL: "https://genius.com/c", HasMedia: new(true)}}
 
 	if err := c.Set(ctx, domain.ProviderDeezer, id, "artist", want, time.Hour); err != nil {
 		t.Fatalf("Set: %v", err)
@@ -48,5 +48,28 @@ func TestRedisUnreleasedCache_RoundTripsWithTheGivenTTL(t *testing.T) {
 	}
 	if ttl := client.TTL(ctx, unreleasedKey(domain.ProviderDeezer, id, "artist")).Val(); ttl <= 0 || ttl > time.Hour {
 		t.Errorf("ttl = %v, want within (0, 1h]", ttl)
+	}
+}
+
+func TestRedisUnreleasedCache_IgnoresEntriesWrittenUnderTheUnversionedKey(t *testing.T) {
+	client := testRedisClient(t)
+	c := NewRedisUnreleasedCache(client)
+	ctx := context.Background()
+	id := fmt.Sprintf("legacy-%s", t.Name())
+	legacyKey := fmt.Sprintf("unreleased:songs:%s:%s:%s", domain.ProviderDeezer.Key(), id, "artist")
+	cleanKeys(t, client, legacyKey, unreleasedKey(domain.ProviderDeezer, id, "artist"))
+	if err := client.Set(ctx, legacyKey, `[{"genius_id":9,"title":"Released Single"}]`, time.Hour).Err(); err != nil {
+		t.Fatalf("seed legacy entry: %v", err)
+	}
+
+	if songs, ok := c.Get(ctx, domain.ProviderDeezer, id, "artist"); ok {
+		t.Errorf("Get served the legacy entry %v", songs)
+	}
+}
+
+func TestUnreleasedKey_IsNotTheUnversionedLegacyKey(t *testing.T) {
+	legacyKey := fmt.Sprintf("unreleased:songs:%s:%s:%s", domain.ProviderDeezer.Key(), "13631667", "don toliver")
+	if unreleasedKey(domain.ProviderDeezer, "13631667", "don toliver") == legacyKey {
+		t.Error("the key still matches the pre-fix cache entries")
 	}
 }

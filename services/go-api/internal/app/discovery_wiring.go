@@ -206,17 +206,17 @@ func (a *App) recordEventActivityOptions() []func(*interaction.RecordEventServic
 	return []func(*interaction.RecordEventService){interaction.WithRecordEventActivityFeed(a.eventTap)}
 }
 
-func (a *App) buildDiscoveryHandler(cf clientFactory, services discoveryHandler.DiscoveryServices) *discoveryHandler.DiscoveryHandler {
+func (a *App) buildDiscoveryHandler(ctx context.Context, cf clientFactory, services discoveryHandler.DiscoveryServices) *discoveryHandler.DiscoveryHandler {
 	discoveryH := discoveryHandler.NewDiscoveryHandler(services)
 	discoveryH.WithDetailEnrichers(a.buildDetailEnrichers(cf))
-	discoveryH.WithUnreleased(a.buildUnreleasedService(cf, services.Artist))
+	discoveryH.WithUnreleased(a.buildUnreleasedService(ctx, cf, services.Artist))
 	if telemetry.Enabled() {
 		discoveryH.WithClientEvents(telemetry.NewClientEvents(a.cfg.TelemetryUserKey, otel.GetLoggerProvider().Logger(telemetry.ScopeName)))
 	}
 	return discoveryH
 }
 
-func (a *App) buildUnreleasedService(cf clientFactory, artistSvc *content.GetArtistContentService) *unreleased.Service {
+func (a *App) buildUnreleasedService(ctx context.Context, cf clientFactory, artistSvc *content.GetArtistContentService) *unreleased.Service {
 	if !a.cfg.HasGenius() || artistSvc == nil {
 		return nil
 	}
@@ -225,11 +225,15 @@ func (a *App) buildUnreleasedService(cf clientFactory, artistSvc *content.GetArt
 		artistSvc,
 		discoveryCacheAdapters.NewRedisUnreleasedCache(a.redisClient, cacheSignalOption()),
 		unreleased.Config{
-			MaxPages:   a.cfg.GeniusUnreleasedMaxPages,
-			MaxDetails: a.cfg.GeniusUnreleasedMaxDetails,
-			TTL:        a.cfg.GeniusUnreleasedTTL,
-			EmptyTTL:   a.cfg.GeniusUnreleasedEmptyTTL,
+			MaxPages:          a.cfg.GeniusUnreleasedMaxPages,
+			MaxDetails:        a.cfg.GeniusUnreleasedMaxDetails,
+			DetailConcurrency: a.cfg.GeniusUnreleasedDetailConcurrency,
+			TTL:               a.cfg.GeniusUnreleasedTTL,
+			EmptyTTL:          a.cfg.GeniusUnreleasedEmptyTTL,
+			Wait:              a.cfg.GeniusUnreleasedWait,
+			JobTimeout:        a.cfg.GeniusUnreleasedJobTimeout,
 		},
+		unreleased.WithLifecycle(ctx, &a.wg),
 	)
 }
 
@@ -262,7 +266,7 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 
 	enrichSvc := a.wireDiscoveryEnrichment(cf, sharedMB)
 
-	discoveryH := a.buildDiscoveryHandler(cf, discoveryHandler.DiscoveryServices{
+	discoveryH := a.buildDiscoveryHandler(ctx, cf, discoveryHandler.DiscoveryServices{
 		Search:        searchSvc,
 		History:       historySvc,
 		RecordHistory: history.NewRecordSearchHistoryService(historyRepo),

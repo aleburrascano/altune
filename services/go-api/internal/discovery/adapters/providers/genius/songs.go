@@ -118,24 +118,43 @@ func (c *SongCatalog) songsPage(ctx context.Context, artistID, page int) (songs 
 }
 
 func (c *SongCatalog) HasMedia(ctx context.Context, songID int) (bool, error) {
-	var body struct {
-		Response struct {
-			Song struct {
-				Media []struct {
-					Provider string `json:"provider"`
-				} `json:"media"`
-			} `json:"song"`
-		} `json:"response"`
-	}
+	detail, err := c.SongDetail(ctx, songID)
+	return detail.HasMedia, err
+}
+
+type geniusSongDetailBody struct {
+	Response struct {
+		Song struct {
+			AppleMusicID string `json:"apple_music_id"`
+			Album        *struct {
+				Name string `json:"name"`
+			} `json:"album"`
+			Media []struct {
+				Provider string `json:"provider"`
+			} `json:"media"`
+		} `json:"song"`
+	} `json:"response"`
+}
+
+func (c *SongCatalog) SongDetail(ctx context.Context, songID int) (domain.GeniusSongDetail, error) {
+	var body geniusSongDetailBody
 	if err := c.get(ctx, fmt.Sprintf("/songs/%d", songID), &body); err != nil {
-		return false, err
+		return domain.GeniusSongDetail{}, err
 	}
-	for _, m := range body.Response.Song.Media {
-		if m.Provider == "youtube" || m.Provider == "soundcloud" {
-			return true, nil
-		}
+	return body.detail(), nil
+}
+
+func (b geniusSongDetailBody) detail() domain.GeniusSongDetail {
+	song := b.Response.Song
+	detail := domain.GeniusSongDetail{OnStreamingSite: song.AppleMusicID != ""}
+	if song.Album != nil {
+		detail.AlbumTitle = song.Album.Name
 	}
-	return false, nil
+	for _, m := range song.Media {
+		detail.HasMedia = detail.HasMedia || m.Provider == "youtube" || m.Provider == "soundcloud"
+		detail.OnStreamingSite = detail.OnStreamingSite || m.Provider == "spotify"
+	}
+	return detail
 }
 
 func (c *SongCatalog) get(ctx context.Context, path string, dst any) error {

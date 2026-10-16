@@ -267,6 +267,15 @@ func (c *Config) validateGeniusUnreleased() error {
 	if c.GeniusUnreleasedMaxDetails < 0 {
 		return fmt.Errorf("GENIUS_UNRELEASED_MAX_DETAILS must not be negative, got %d", c.GeniusUnreleasedMaxDetails)
 	}
+	if c.GeniusUnreleasedDetailConcurrency < 1 {
+		return fmt.Errorf("GENIUS_UNRELEASED_DETAIL_CONCURRENCY must be >= 1, got %d", c.GeniusUnreleasedDetailConcurrency)
+	}
+	if c.GeniusUnreleasedWait <= 0 {
+		return fmt.Errorf("GENIUS_UNRELEASED_WAIT must be > 0, got %s", c.GeniusUnreleasedWait)
+	}
+	if c.GeniusUnreleasedJobTimeout <= 0 {
+		return fmt.Errorf("GENIUS_UNRELEASED_JOB_TIMEOUT must be > 0, got %s", c.GeniusUnreleasedJobTimeout)
+	}
 	if c.GeniusUnreleasedTTL <= 0 {
 		return fmt.Errorf("GENIUS_UNRELEASED_TTL must be > 0, got %s", c.GeniusUnreleasedTTL)
 	}

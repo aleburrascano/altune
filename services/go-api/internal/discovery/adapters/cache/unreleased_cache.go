@@ -34,6 +34,8 @@ func (c *RedisUnreleasedCache) Set(ctx context.Context, provider domain.Provider
 	return c.setJSON(ctx, unreleasedKey(provider, externalID, nameKey), songs, ttl)
 }
 
+const unreleasedKeyVersion = "v2"
+
 func unreleasedKey(provider domain.ProviderName, externalID, nameKey string) string {
-	return fmt.Sprintf("unreleased:songs:%s:%s:%s", provider.Key(), externalID, nameKey)
+	return fmt.Sprintf("unreleased:songs:%s:%s:%s:%s", unreleasedKeyVersion, provider.Key(), externalID, nameKey)
 }

@@ -3,14 +3,17 @@ package ports
 import (
 	"altune/go-api/internal/discovery/domain"
 	"context"
+	"errors"
 	"time"
 )
 
 type GeniusSongCatalog interface {
 	FindArtistID(ctx context.Context, artistName string, knownTitles []string) (int, bool, error)
 	ArtistSongs(ctx context.Context, artistID, maxPages int) ([]domain.UnreleasedSong, error)
-	HasMedia(ctx context.Context, songID int) (bool, error)
+	SongDetail(ctx context.Context, songID int) (domain.GeniusSongDetail, error)
 }
+
+var ErrPartialCatalog = errors.New("catalog titles are partial")
 
 type ArtistCatalogTitles interface {
 	CatalogTitles(ctx context.Context, provider domain.ProviderName, externalID string, known map[domain.ProviderName]string) ([]string, error)

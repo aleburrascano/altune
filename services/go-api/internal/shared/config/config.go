@@ -48,10 +48,13 @@ type Config struct {
 	TheAudioDBAPIKey     string `env:"THEAUDIODB_API_KEY"`
 	GeniusAccessToken    string `env:"GENIUS_ACCESS_TOKEN"`
 
-	GeniusUnreleasedMaxPages   int           `env:"GENIUS_UNRELEASED_MAX_PAGES" envDefault:"10"`
-	GeniusUnreleasedMaxDetails int           `env:"GENIUS_UNRELEASED_MAX_DETAILS" envDefault:"50"`
-	GeniusUnreleasedEmptyTTL   time.Duration `env:"GENIUS_UNRELEASED_EMPTY_TTL" envDefault:"1h"`
-	GeniusUnreleasedTTL        time.Duration `env:"GENIUS_UNRELEASED_TTL" envDefault:"168h"`
+	GeniusUnreleasedMaxPages          int           `env:"GENIUS_UNRELEASED_MAX_PAGES" envDefault:"10"`
+	GeniusUnreleasedMaxDetails        int           `env:"GENIUS_UNRELEASED_MAX_DETAILS" envDefault:"500"`
+	GeniusUnreleasedDetailConcurrency int           `env:"GENIUS_UNRELEASED_DETAIL_CONCURRENCY" envDefault:"4"`
+	GeniusUnreleasedWait              time.Duration `env:"GENIUS_UNRELEASED_WAIT" envDefault:"15s"`
+	GeniusUnreleasedJobTimeout        time.Duration `env:"GENIUS_UNRELEASED_JOB_TIMEOUT" envDefault:"10m"`
+	GeniusUnreleasedEmptyTTL          time.Duration `env:"GENIUS_UNRELEASED_EMPTY_TTL" envDefault:"1h"`
+	GeniusUnreleasedTTL               time.Duration `env:"GENIUS_UNRELEASED_TTL" envDefault:"168h"`
 
 	DiscogsToken string `env:"DISCOGS_TOKEN"`
 

@@ -371,3 +371,24 @@ func TestGeniusArtworkResolver_Resolve_MalformedHitFailsTheResponse(t *testing.T
 		})
 	}
 }
+
+func TestSongCatalog_SongDetail_ReadsStreamingLinksAndAlbum(t *testing.T) {
+	server := songCatalogServer(t, map[string]string{
+		"/songs/1": `{"response":{"song":{"album":{"name":"Heaven or Hell"},"media":[{"provider":"spotify"},{"provider":"youtube"}]}}}`,
+		"/songs/2": `{"response":{"song":{"album":null,"apple_music_id":"1440","media":[]}}}`,
+		"/songs/3": `{"response":{"song":{"apple_music_id":"","media":[{"provider":"soundcloud"},{"provider":"apple_music"}]}}}`,
+	})
+	catalog := NewSongCatalog(providertest.NewClient(server.URL), "tok")
+
+	want := map[int]domain.GeniusSongDetail{
+		1: {HasMedia: true, OnStreamingSite: true, AlbumTitle: "Heaven or Hell"},
+		2: {OnStreamingSite: true},
+		3: {HasMedia: true},
+	}
+	for id, w := range want {
+		got, err := catalog.SongDetail(context.Background(), id)
+		if err != nil || got != w {
+			t.Errorf("SongDetail(%d) = (%+v, %v), want %+v", id, got, err, w)
+		}
+	}
+}
