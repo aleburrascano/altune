@@ -186,3 +186,23 @@ func TestEvaluate_RejectsWithTheReason(t *testing.T) {
 		})
 	}
 }
+
+func TestEvaluate_LengthAgreesOnTheAuthoritativeWindow(t *testing.T) {
+	target := Target{Title: "Finesse", Artist: "Bruno Mars", Album: "24K Magic", Length: 200}
+	tests := []struct {
+		name   string
+		length float64
+		want   Outcome
+	}{
+		{"6 s off agrees (3% of 200)", 206, Accept},
+		{"7 s off disagrees", 207, Reject},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := artTrack("x", "Finesse", "24K Magic", tt.length, false, "Bruno Mars")
+			if got := Evaluate(target, c).Outcome; got != tt.want {
+				t.Errorf("Evaluate = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

@@ -56,11 +56,6 @@ const (
 	ReplaceUnsure ReplaceOutcome = "unsure"
 )
 
-const (
-	lengthAgreeSlackSecs = 3.0
-	lengthAgreeFraction  = 0.02
-)
-
 var creditOnlyBrackets = regexp.MustCompile(`(?i)\s*[\(\[](?:feat\.?|ft\.?|featuring|with|bonus)\b[^\)\]]*[\)\]]`)
 
 func Evaluate(t Target, c Candidate) Decision {
@@ -138,7 +133,7 @@ func kindRank(k Kind) int {
 }
 
 func lengthsAgree(want, got float64) bool {
-	return math.Abs(want-got) <= math.Max(lengthAgreeSlackSecs, want*lengthAgreeFraction)
+	return domain.LengthAuthoritative.Agrees(want, got)
 }
 
 func titleIdentity(title string) string {

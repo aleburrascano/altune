@@ -186,7 +186,7 @@ func (a *App) buildAcquisitionScheduler(
 	if a.upgradeEnabled() {
 		acquireOpts = append(acquireOpts, acqService.WithPreviewMatcher(a.upgradePreviewMatcher(), a.cfg.AcquisitionUpgradePreviewAMaxBER))
 	}
-	ledger := acqCatalogBridge.NewTrackLedger(trackRepo, acqCatalogBridge.WithLengthTolerance(a.cfg.AcquisitionLengthToleranceSeconds))
+	ledger := acqCatalogBridge.NewTrackLedger(trackRepo)
 	acquireSvc := acqService.NewAcquireTrackAudioService(
 		ledger,
 		acqService.NewSourceRegistry(audioSources.first...).WithFallback(audioSources.fallback...),

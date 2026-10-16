@@ -1375,44 +1375,6 @@ func TestLoad_AcquisitionConfidenceFloor(t *testing.T) {
 	}
 }
 
-func TestLoad_AcquisitionLengthToleranceSeconds(t *testing.T) {
-	tests := []struct {
-		name      string
-		tolerance string
-		want      float64
-		wantErr   bool
-	}{
-		{name: "default", tolerance: "", want: 10},
-		{name: "zero", tolerance: "0", want: 0},
-		{name: "fractional", tolerance: "2.5", want: 2.5},
-		{name: "negative", tolerance: "-1", wantErr: true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			overrides := map[string]string{}
-			if tt.tolerance != "" {
-				overrides["ACQUISITION_LENGTH_TOLERANCE_SECONDS"] = tt.tolerance
-			}
-			setEnv(t, validConfigEnv(overrides))
-			t.Cleanup(func() { os.Unsetenv("ACQUISITION_LENGTH_TOLERANCE_SECONDS") })
-
-			cfg, err := Load()
-			if tt.wantErr {
-				if err == nil || !searchString(err.Error(), "ACQUISITION_LENGTH_TOLERANCE_SECONDS") {
-					t.Fatalf("expected error naming ACQUISITION_LENGTH_TOLERANCE_SECONDS, got: %v", err)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if cfg.AcquisitionLengthToleranceSeconds != tt.want {
-				t.Errorf("AcquisitionLengthToleranceSeconds = %v, want %v", cfg.AcquisitionLengthToleranceSeconds, tt.want)
-			}
-		})
-	}
-}
-
 func TestLoad_ProductionDatabaseURLRequiresTLS(t *testing.T) {
 	tests := []struct {
 		name    string

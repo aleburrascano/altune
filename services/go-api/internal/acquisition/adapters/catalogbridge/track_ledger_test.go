@@ -310,14 +310,14 @@ func TestRevertAtRevertsAtSnapshotVersion(t *testing.T) {
 	}
 }
 
-func completeWithAudioLength(t *testing.T, catalogSeconds, audioSeconds float64, opts ...func(*TrackLedger)) *domain.Track {
+func completeWithAudioLength(t *testing.T, catalogSeconds, audioSeconds float64) *domain.Track {
 	t.Helper()
 	track, userId := newTrack(t, 1)
 	if err := track.SetCatalogDuration(catalogSeconds); err != nil {
 		t.Fatal(err)
 	}
 	store := newFakeStore(track)
-	err := NewTrackLedger(store, opts...).Complete(context.Background(), track.ID, userId, ports.Completion{AudioRef: "ref", Duration: audioSeconds})
+	err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, ports.Completion{AudioRef: "ref", Duration: audioSeconds})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -390,19 +390,38 @@ func TestCompleteFlagsAudioOffTheCatalogLengthBeyondTheTolerance(t *testing.T) {
 		name     string
 		catalog  float64
 		audio    float64
-		opts     []func(*TrackLedger)
 		wantFlag bool
 	}{
 		{name: "short by more than the default", catalog: 235, audio: 137, wantFlag: true},
 		{name: "long by more than the default", catalog: 125, audio: 172, wantFlag: true},
-		{name: "inside the default", catalog: 200, audio: 207, wantFlag: false},
-		{name: "exactly at the tolerance", catalog: 200, audio: 210, wantFlag: false},
-		{name: "configured tolerance widens", catalog: 200, audio: 230, opts: []func(*TrackLedger){WithLengthTolerance(45)}, wantFlag: false},
-		{name: "configured tolerance narrows", catalog: 200, audio: 204, opts: []func(*TrackLedger){WithLengthTolerance(2)}, wantFlag: true},
+		{name: "exactly at the allowance", catalog: 200, audio: 205, wantFlag: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := completeWithAudioLength(t, tt.catalog, tt.audio, tt.opts...)
+			got := completeWithAudioLength(t, tt.catalog, tt.audio)
+
+			if got.AudioLengthMismatch != tt.wantFlag {
+				t.Errorf("AudioLengthMismatch = %v, want %v", got.AudioLengthMismatch, tt.wantFlag)
+			}
+		})
+	}
+}
+
+func TestComplete_FlagsAMismatchOutsideTheAuthoritativeWindow(t *testing.T) {
+	tests := []struct {
+		name     string
+		catalog  float64
+		audio    float64
+		wantFlag bool
+	}{
+		{name: "400 s track 11 s off is inside 3%", catalog: 400, audio: 411, wantFlag: false},
+		{name: "400 s track 13 s off is outside 3%", catalog: 400, audio: 413, wantFlag: true},
+		{name: "200 s track 8 s off is outside the 5 s slack", catalog: 200, audio: 208, wantFlag: true},
+		{name: "200 s track 5 s short is inside", catalog: 200, audio: 195, wantFlag: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := completeWithAudioLength(t, tt.catalog, tt.audio)
 
 			if got.AudioLengthMismatch != tt.wantFlag {
 				t.Errorf("AudioLengthMismatch = %v, want %v", got.AudioLengthMismatch, tt.wantFlag)
