@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/acquisition/adapters/ytdlp"
+	"altune/go-api/internal/acquisition/adapters/ytmsearch"
 	"context"
 	"fmt"
 	"log/slog"
@@ -11,21 +12,18 @@ import (
 
 const sourceCanaryInterval = time.Hour
 
-type sourceCanaryProbe interface {
-	Canary(ctx context.Context, source ytdlp.CanarySource) error
+type namedCanary struct {
+	name string
+	run  func(context.Context) error
 }
 
-func (a *App) startSourceCanary(ctx context.Context, searcher *ytdlp.YtDlpAudioSearcher, ytDlpAvailable bool, enabled sourceToggles) {
-	if searcher == nil || !ytDlpAvailable {
-		return
-	}
-	canaries := sourceCanaries(enabled)
+func (a *App) startSourceCanary(ctx context.Context, searcher *ytdlp.YtDlpAudioSearcher, ytDlpAvailable bool, ytm *ytmsearch.Client, enabled sourceToggles) {
+	canaries := sourceCanaries(searcher, ytDlpAvailable, ytm, enabled)
 	if len(canaries) == 0 {
 		return
 	}
-	probe := sourceCanaryProbe(searcher)
 	a.startSimpleJob(jobAcquisitionSourceCanary, sourceCanaryInterval, func(ctx context.Context) error {
-		return runSourceCanaries(ctx, probe, canaries)
+		return runSourceCanaries(ctx, canaries)
 	}, "interval", sourceCanaryInterval.String())
 }
 
@@ -34,28 +32,36 @@ type sourceToggles struct {
 	ytDlp   bool
 }
 
-func sourceCanaries(enabled sourceToggles) []ytdlp.CanarySource {
-	var canaries []ytdlp.CanarySource
-	if enabled.ytDlp {
-		canaries = append(canaries, ytdlp.YouTubeCanary)
+func sourceCanaries(searcher *ytdlp.YtDlpAudioSearcher, ytDlpAvailable bool, ytm *ytmsearch.Client, enabled sourceToggles) []namedCanary {
+	var canaries []namedCanary
+	if searcher != nil && ytDlpAvailable {
+		probe := func(source ytdlp.CanarySource) namedCanary {
+			return namedCanary{name: source.Name, run: func(ctx context.Context) error { return searcher.Canary(ctx, source) }}
+		}
+		if enabled.ytDlp {
+			canaries = append(canaries, probe(ytdlp.YouTubeCanary))
+		}
+		if enabled.ytMusic {
+			canaries = append(canaries, probe(ytdlp.YTMusicCanary))
+		}
+		if enabled.ytDlp {
+			canaries = append(canaries, probe(ytdlp.SoundCloudCanary))
+		}
 	}
-	if enabled.ytMusic {
-		canaries = append(canaries, ytdlp.YTMusicCanary)
-	}
-	if enabled.ytDlp {
-		canaries = append(canaries, ytdlp.SoundCloudCanary)
+	if enabled.ytMusic && ytm != nil {
+		canaries = append(canaries, namedCanary{name: string(ytmsearch.SourceName), run: ytm.Canary})
 	}
 	return canaries
 }
 
-func runSourceCanaries(ctx context.Context, probe sourceCanaryProbe, canaries []ytdlp.CanarySource) error {
+func runSourceCanaries(ctx context.Context, canaries []namedCanary) error {
 	var dark []string
 	for _, canary := range canaries {
 		started := time.Now()
-		err := probe.Canary(ctx, canary)
-		logSourceCanaryResult(ctx, canary.Name, time.Since(started), err)
+		err := canary.run(ctx)
+		logSourceCanaryResult(ctx, canary.name, time.Since(started), err)
 		if err != nil {
-			dark = append(dark, darkSourceMessage(canary.Name, err))
+			dark = append(dark, darkSourceMessage(canary.name, err))
 		}
 	}
 	if len(dark) == 0 {

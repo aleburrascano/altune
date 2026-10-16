@@ -59,6 +59,7 @@ type catalogWiring struct {
 	reacquireH        *acqHandler.ReacquireHandler
 	ytDlpSearcher     *ytdlp.YtDlpAudioSearcher
 	ytDlpAvailable    bool
+	ytmCanary         *ytmsearch.Client
 	scheduler         *acqService.BackgroundAcquisitionScheduler
 }
 
@@ -69,6 +70,7 @@ type audioSourcesStaging struct {
 	background     *acqService.BackgroundAcquisitionScheduler
 	ytDlpSearcher  *ytdlp.YtDlpAudioSearcher
 	ytDlpAvailable bool
+	ytmCanary      *ytmsearch.Client
 }
 
 type catalogServicesStaging struct {
@@ -124,6 +126,7 @@ func (a *App) wireAudioSources(
 		trackRepo:      trackRepo,
 		ytDlpSearcher:  a.sourceCanarySearcher(),
 		ytDlpAvailable: tools.YtDlp,
+		ytmCanary:      a.sourceCanaryYTMClient(),
 	}
 	if len(audioSources.all()) > 0 && audioStore != nil {
 		bgScheduler := a.buildAcquisitionScheduler(ctx, tap, disc, trackRepo, audioStore, audioSources, tools)
@@ -308,6 +311,7 @@ func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServices
 		reacquireH:        reacquireH,
 		ytDlpSearcher:     audio.ytDlpSearcher,
 		ytDlpAvailable:    audio.ytDlpAvailable,
+		ytmCanary:         audio.ytmCanary,
 		scheduler:         audio.background,
 	}
 }
@@ -338,6 +342,17 @@ func (a *App) sourceCanarySearcher() *ytdlp.YtDlpAudioSearcher {
 	return a.newYtDlpSearcher()
 }
 
+func (a *App) sourceCanaryYTMClient() *ytmsearch.Client {
+	if a.cfg.AcquisitionFixtureEnabled() {
+		return nil
+	}
+	return newYTMSearchClient()
+}
+
+func newYTMSearchClient() *ytmsearch.Client {
+	return ytmsearch.New(ytmsearch.Config{MinInterval: ytmSearchMinInterval, Timeout: ytmSearchTimeout})
+}
+
 func (a *App) newYtDlpSearcher() *ytdlp.YtDlpAudioSearcher {
 	return ytdlp.NewYtDlpAudioSearcher(a.cfg.FFmpegLocation, a.cfg.YtDLPCookieFile, a.cfg.YtDLPJSRuntime).
 		WithRemoteComponents(a.cfg.YtDLPRemoteComponents).
@@ -347,7 +362,7 @@ func (a *App) newYtDlpSearcher() *ytdlp.YtDlpAudioSearcher {
 func (a *App) audioSourcesFor(ctx context.Context, searcher *ytdlp.YtDlpAudioSearcher) sourceTiers {
 	var tiers sourceTiers
 	if a.cfg.YtMusicEnabled {
-		songs := ytmsearch.New(ytmsearch.Config{MinInterval: ytmSearchMinInterval, Timeout: ytmSearchTimeout})
+		songs := newYTMSearchClient()
 		tiers.first = append(tiers.first, ytmsearch.NewSource(songs, searcher), ytmusic.NewSource(searcher, songs))
 	} else {
 		slog.InfoContext(ctx, "acquisition: ytmusic source disabled via YTMUSIC_ENABLED")

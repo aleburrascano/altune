@@ -201,7 +201,7 @@ func (a *App) connectInfra(ctx context.Context) (authports.TokenVerifier, *testa
 func (a *App) startCatalogJobs(ctx context.Context, cat catalogWiring, playback playbackWiring) {
 	a.startOrphanedAudioReconcile(ctx, cat.orphanedAudio, cat.audioStore)
 	a.startDeletedIdentityErasure(ctx, playback.forgetDeletedIdentities)
-	a.startSourceCanary(ctx, cat.ytDlpSearcher, cat.ytDlpAvailable,
+	a.startSourceCanary(ctx, cat.ytDlpSearcher, cat.ytDlpAvailable, cat.ytmCanary,
 		sourceToggles{ytMusic: a.cfg.YtMusicEnabled, ytDlp: a.cfg.YtDLPEnabled})
 	if a.pool != nil {
 		a.startAcquisitionPrune(ctx,
