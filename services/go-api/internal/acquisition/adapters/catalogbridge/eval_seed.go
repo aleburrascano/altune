@@ -15,8 +15,7 @@ import (
 const seededAudioRef = "eval/stored.mp3"
 
 type SeededFile struct {
-	Duration  float64
-	SourceURL string
+	Duration float64
 }
 
 type SeededTrack struct {
@@ -99,7 +98,6 @@ func seedStoredFile(track *domain.Track, stored *SeededFile) error {
 	if err := track.SetDuration(stored.Duration); err != nil {
 		return fmt.Errorf("stored duration: %w", err)
 	}
-	track.SetAudioSource(stored.SourceURL)
 	return nil
 }
 

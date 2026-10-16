@@ -61,7 +61,8 @@ func TestNewSeededLedger_SnapshotCarriesTheSeededFields(t *testing.T) {
 func TestNewSeededLedger_AStoredFileMakesTheTrackReadyWithItsMeasuredLength(t *testing.T) {
 	_, snapshot := seededSnapshot(t, SeededTrack{
 		Title: "Phone (Interlude)", Artist: "SLAYR",
-		Stored: &SeededFile{Duration: 112, SourceURL: "https://www.youtube.com/watch?v=TB0z2HVFxEE"},
+		AudioSourceURL: "https://www.youtube.com/watch?v=TB0z2HVFxEE",
+		Stored:         &SeededFile{Duration: 112},
 	})
 
 	if snapshot.Status != ports.TrackReady || snapshot.AudioRef == nil {
