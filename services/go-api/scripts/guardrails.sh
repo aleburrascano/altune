@@ -66,6 +66,10 @@ do_vuln() {
 
 do_nilaway() {
   echo "== nilaway ceiling ratchet =="
+  if [ "${NILAWAY_LOCAL:-}" != 1 ]; then
+    echo "SKIP nilaway: runs in CI only (set NILAWAY_LOCAL=1 to run it here)"
+    return
+  fi
   have nilaway || go install "go.uber.org/nilaway/cmd/nilaway@${NILAWAY_VERSION}"
   local base count
   base="$(tr -dc '0-9' < nilaway-baseline.txt)"

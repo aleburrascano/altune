@@ -40,6 +40,7 @@ cd client && npm start
 ## Conventions
 
 - PR titles: `type(scope): subject`, checked by `scripts/ci/pr-shape.sh`
+- nilaway runs in CI only; read the CI log for new findings (set `NILAWAY_LOCAL=1` to run it locally in `guardrails.sh` or `precheck.sh`).
 - Go formatting: `bash services/go-api/scripts/guardrails.sh fmt` is the formatter of record — golangci-lint's bundled gofumpt, the exact formatter the CI gate enforces, across both Go modules. **Never run standalone `gofumpt -w`:** it splits stdlib from local imports while the gate wants a single alphabetical group (local `altune/...` first), so its output is rejected by CI.
 - Domain vocabulary is fixed by [`docs/ubiquitous-language.md`](docs/ubiquitous-language.md) — "Song" is banned; the noun is `Track`
 - Features are planned and tracked as Gitea issues — one ticket per unit of work, closed by its PR

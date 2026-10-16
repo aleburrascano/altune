@@ -214,7 +214,7 @@ if touches '^services/overseer/'; then
     check "overseer no comments (whole tree)" services/go-api go run ./scripts/lintcomments --all ../overseer
     test_check "overseer tests (race)" $m "${heavy[@]}" env CGO_ENABLED=1 go test -race -shuffle=on -count=1 ./...
     touches '^services/overseer/go\.(mod|sum)$' && need govulncheck "overseer govulncheck" && check "overseer govulncheck" $m "${heavy[@]}" govulncheck ./...
-    need nilaway "overseer nilaway ceiling" && check "overseer nilaway ceiling" $m "${heavy[@]}" bash "$root/scripts/ci/nilaway-ceiling.sh"
+    [ "${NILAWAY_LOCAL:-}" = 1 ] && need nilaway "overseer nilaway ceiling" && check "overseer nilaway ceiling" $m "${heavy[@]}" bash "$root/scripts/ci/nilaway-ceiling.sh"
   fi
   if touches '^services/overseer/web/' && need npm "overseer web"; then
     if link_deps $m/web; then
