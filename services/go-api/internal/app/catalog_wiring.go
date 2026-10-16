@@ -328,7 +328,7 @@ func (t sourceTiers) all() []acqPorts.AudioSource {
 func (a *App) acquisitionSources(ctx context.Context) (sourceTiers, acqPorts.AcquisitionVerification) {
 	if a.cfg.AcquisitionFixtureEnabled() {
 		slog.WarnContext(ctx, "acquisition: fixture audio source replaces every live source", "env", a.cfg.Env)
-		return sourceTiers{first: []acqPorts.AudioSource{fixture.NewSource()}}, acqPorts.AcquisitionVerification{}
+		return sourceTiers{first: []acqPorts.AudioSource{fixture.NewArtTrackSource()}, fallback: []acqPorts.AudioSource{fixture.NewUploadSource()}}, acqPorts.AcquisitionVerification{}
 	}
 	searcher := a.newYtDlpSearcher()
 	tools := acqPorts.AcquisitionVerification{YtDlp: searcher.Available()}

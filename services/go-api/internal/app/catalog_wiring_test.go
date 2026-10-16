@@ -198,17 +198,36 @@ func TestAcquisitionSources_FixtureNeverWiredOutsideOptedInNonProd(t *testing.T)
 	for _, c := range cases {
 		sources, _ := (&App{cfg: &c}).acquisitionSources(t.Context())
 		names := sourceNames(sources.all())
-		if containsSource(names, fixture.SourceName) || !containsSource(names, ytdlp.SourceName) {
+		if containsSource(names, fixture.SourceName) || containsSource(names, fixture.UploadSourceName) || !containsSource(names, ytdlp.SourceName) {
 			t.Fatalf("cfg env=%q optIn=%v: sources %v, want live sources and no fixture", c.Env, c.AcquisitionFixtureOptIn, names)
 		}
 	}
 }
 
-func TestAcquisitionSources_OptedInTestEnvUsesOnlyFixture(t *testing.T) {
+func TestAcquisitionSources_OptedInTestEnvUsesOnlyFixtures(t *testing.T) {
 	cfg := &config.Config{Env: "test", AcquisitionFixtureOptIn: true, YtMusicEnabled: true, YtDLPEnabled: true}
 	sources, _ := (&App{cfg: cfg}).acquisitionSources(t.Context())
-	if names := sourceNames(sources.all()); len(names) != 1 || names[0] != fixture.SourceName {
-		t.Fatalf("sources = %v, want only %q", names, fixture.SourceName)
+	assertFixtureTiers(t, sources)
+}
+
+func assertFixtureTiers(t *testing.T, sources sourceTiers) {
+	t.Helper()
+	first, fallback := sourceNames(sources.first), sourceNames(sources.fallback)
+	if len(first) != 1 || first[0] != fixture.SourceName || len(fallback) != 1 || fallback[0] != fixture.UploadSourceName {
+		t.Fatalf("tiers first=%v fallback=%v, want [%q] and [%q]", first, fallback, fixture.SourceName, fixture.UploadSourceName)
+	}
+}
+
+func TestAcquisitionFixture_TiersMirrorProd(t *testing.T) {
+	cfg := &config.Config{Env: "test", AcquisitionFixtureOptIn: true, YtMusicEnabled: true, YtDLPEnabled: true}
+	sources, _ := (&App{cfg: cfg}).acquisitionSources(t.Context())
+	assertFixtureTiers(t, sources)
+
+	musicDir := t.TempDir()
+	track := acquireWithFixture(t, musicDir)
+	assertReadyWithAudio(t, track, musicDir)
+	if track.AudioSourceURL == nil || *track.AudioSourceURL != fixture.ArtTrackURL {
+		t.Fatalf("stored source = %v, want the resolved art track %q", track.AudioSourceURL, fixture.ArtTrackURL)
 	}
 }
 
@@ -626,12 +645,10 @@ func TestWireCatalogRejectsPartialOCIS3EvenWithMusicDir(t *testing.T) {
 	}
 }
 
-func TestAcquisitionSources_ProviderReplayUsesOnlyFixture(t *testing.T) {
+func TestAcquisitionSources_ProviderReplayUsesOnlyFixtures(t *testing.T) {
 	cfg := &config.Config{Env: "test", ProviderReplayOptIn: true, ProviderReplayDir: t.TempDir(), YtDLPEnabled: true}
 	sources, _ := (&App{cfg: cfg}).acquisitionSources(t.Context())
-	if names := sourceNames(sources.all()); len(names) != 1 || names[0] != fixture.SourceName {
-		t.Fatalf("sources = %v, want only %q", names, fixture.SourceName)
-	}
+	assertFixtureTiers(t, sources)
 }
 
 func TestBuildAcquisitionScheduler_AcquisitionPausedStartsPausedBeforeStartupSwitches(t *testing.T) {
