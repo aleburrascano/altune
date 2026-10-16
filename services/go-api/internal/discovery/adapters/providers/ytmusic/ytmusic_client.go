@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 )
@@ -18,12 +17,7 @@ import (
 var errYTMUnexpectedShape = errors.New("ytmusic: response is not a JSON object")
 
 const (
-	ytmEndpoint        = "https://music.youtube.com/youtubei/v1/search"
-	ytmClientName      = "WEB_REMIX"
-	ytmClientVersion   = "1.20220715.04.00"
-	ytmSearchKey       = "AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30"
 	ytmResponseBodyCap = 16 << 20
-	ytmUserAgent       = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36"
 )
 
 type ytmFilter string
@@ -92,33 +86,21 @@ type ytmResult struct {
 }
 
 func ytmSearch(ctx context.Context, client *http.Client, query string, filter ytmFilter) (*ytmResult, error) {
-	body := map[string]any{
-		"context": map[string]any{
-			"client": map[string]any{
-				"clientName":    ytmClientName,
-				"clientVersion": ytmClientVersion,
-				"hl":            "en",
-				"gl":            "US",
-			},
-			"user": map[string]any{"lockedSafetyMode": false},
-		},
-		"query": query,
-	}
+	fields := map[string]any{"query": query}
 	if filter != ytmNoFilter {
-		body["params"] = string(filter)
+		fields["params"] = string(filter)
 	}
+	body := ytminnertube.Body(fields)
 
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("ytmusic marshal: %w", err)
 	}
 
-	params := url.Values{}
-	params.Add("key", ytmSearchKey)
-	_, raw, err := providerhttp.PostBytesCappedOK(ctx, client, ytmEndpoint+"?"+params.Encode(), bytes.NewReader(payload), ytmResponseBodyCap,
+	_, raw, err := providerhttp.PostBytesCappedOK(ctx, client, ytminnertube.URL(ytminnertube.MusicURL, "search"), bytes.NewReader(payload), ytmResponseBodyCap,
 		providerhttp.WithHeader("Content-Type", "application/json; charset=utf-8"),
 		providerhttp.WithHeader("Referer", "https://music.youtube.com/search"),
-		providerhttp.WithHeader("User-Agent", ytmUserAgent))
+		providerhttp.WithHeader("User-Agent", ytminnertube.UserAgent))
 	if err != nil {
 		return nil, fmt.Errorf("ytmusic do: %w", err)
 	}

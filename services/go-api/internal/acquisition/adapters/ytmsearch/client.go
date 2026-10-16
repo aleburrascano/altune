@@ -2,13 +2,13 @@ package ytmsearch
 
 import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
+	"altune/go-api/internal/shared/ytminnertube"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"net/http"
 	"net/url"
 	"sync"
@@ -16,13 +16,9 @@ import (
 )
 
 const (
-	DefaultMusicURL  = "https://music.youtube.com"
+	DefaultMusicURL  = ytminnertube.MusicURL
 	DefaultOEmbedURL = "https://www.youtube.com/oembed"
 
-	clientName        = "WEB_REMIX"
-	clientVersion     = "1.20220715.04.00"
-	innerTubeKey      = "AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30"
-	userAgent         = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36"
 	songsFilterParams = "EgWKAQIIAWoMEA4QChADEAQQCRAF"
 	responseBodyCap   = 16 << 20
 	watchURLPrefix    = "https://www.youtube.com/watch?v="
@@ -116,11 +112,11 @@ func (c *Client) OEmbed(ctx context.Context, videoID string) (OEmbed, error) {
 }
 
 func (c *Client) postInnerTube(ctx context.Context, g *gate, endpoint string, fields map[string]any) ([]byte, error) {
-	payload, err := json.Marshal(innerTubeBody(fields))
+	payload, err := json.Marshal(ytminnertube.Body(fields))
 	if err != nil {
 		return nil, fmt.Errorf("ytmsearch: marshal %s: %w", endpoint, err)
 	}
-	target := fmt.Sprintf("%s/youtubei/v1/%s?key=%s", c.musicURL, endpoint, innerTubeKey)
+	target := ytminnertube.URL(c.musicURL, endpoint)
 	req, err := http.NewRequest(http.MethodPost, target, bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("ytmsearch: build %s request: %w", endpoint, err)
@@ -130,17 +126,6 @@ func (c *Client) postInnerTube(ctx context.Context, g *gate, endpoint string, fi
 	return c.do(ctx, g, req)
 }
 
-func innerTubeBody(fields map[string]any) map[string]any {
-	body := map[string]any{
-		"context": map[string]any{
-			"client": map[string]any{"clientName": clientName, "clientVersion": clientVersion, "hl": "en", "gl": "US"},
-			"user":   map[string]any{"lockedSafetyMode": false},
-		},
-	}
-	maps.Copy(body, fields)
-	return body
-}
-
 func (c *Client) do(ctx context.Context, g *gate, req *http.Request) ([]byte, error) {
 	ctx, cancel := c.boundedContext(ctx)
 	defer cancel()
@@ -148,7 +133,7 @@ func (c *Client) do(ctx context.Context, g *gate, req *http.Request) ([]byte, er
 		return nil, err
 	}
 	req = req.WithContext(ctx)
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", ytminnertube.UserAgent)
 	return c.send(req)
 }
 
