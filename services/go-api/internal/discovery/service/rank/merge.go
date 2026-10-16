@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/shared/songfacts"
 	"altune/go-api/internal/shared/textnorm"
 	"altune/go-api/internal/shared/versiontag"
-	"cmp"
 	"math"
 	"slices"
 )
@@ -230,7 +229,7 @@ func mergeInto(canonical, other domain.SearchResult, matchTier domain.EntityReso
 		ResolutionTier: domain.StampResolutionTier(tier),
 	}
 	carryIdentity(&merged, canonical, other, matchTier)
-	merged.Explicit = cmp.Or(canonical.Explicit, other.Explicit)
+	merged.Explicit = mergedExplicit(canonical.Explicit, other.Explicit)
 	alignExplicitWithISRC(&merged, canonical, other)
 	carryFields(&merged, canonical, other)
 	return merged
@@ -271,6 +270,16 @@ func carryIdentity(merged *domain.SearchResult, canonical, other domain.SearchRe
 		merged.ReleaseGroupMBID = proven.ReleaseGroupMBID
 		merged.ArtistMBID = proven.ArtistMBID
 	}
+}
+
+func mergedExplicit(a, b *bool) *bool {
+	if a == nil {
+		return b
+	}
+	if b == nil {
+		return a
+	}
+	return domain.BoolPtr(*a || *b)
 }
 
 func alignExplicitWithISRC(merged *domain.SearchResult, canonical, other domain.SearchResult) {

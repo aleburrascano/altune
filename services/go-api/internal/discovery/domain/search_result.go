@@ -106,8 +106,8 @@ func PutTypedExtras(extras map[string]any, r SearchResult) {
 	putIfSet(extras, wireDuration, r.Duration)
 	putIfSet(extras, wireTrackNumber, r.TrackPosition.Track)
 	putIfSet(extras, wireDiscNumber, r.TrackPosition.Disc)
-	if r.Explicit != nil && *r.Explicit {
-		extras[wireExplicit] = true
+	if r.Explicit != nil {
+		extras[wireExplicit] = *r.Explicit
 	}
 	if r.ResolutionTier.Stamped {
 		extras[ExtraResolutionTier] = r.ResolutionTier.Tier.String()

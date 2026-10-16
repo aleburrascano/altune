@@ -181,3 +181,27 @@ func TestNewProviderResult_KeepsHTTPSImageURLAndDoesNotLeakAcrossCalls(t *testin
 		t.Errorf("ImageURL = %q, want empty after an earlier valid call", unsafe.ImageURL)
 	}
 }
+
+func TestPutTypedExtras_CarriesAKnownNotExplicit(t *testing.T) {
+	tests := []struct {
+		name     string
+		explicit *bool
+		want     any
+		present  bool
+	}{
+		{"known not explicit", BoolPtr(false), false, true},
+		{"known explicit", BoolPtr(true), true, true},
+		{"unknown", nil, nil, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			extras := map[string]any{}
+			PutTypedExtras(extras, SearchResult{Explicit: tt.explicit})
+
+			got, present := extras["explicit"]
+			if present != tt.present || got != tt.want {
+				t.Errorf("extras[explicit] = %v (present %v), want %v (present %v)", got, present, tt.want, tt.present)
+			}
+		})
+	}
+}

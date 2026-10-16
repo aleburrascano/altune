@@ -85,15 +85,6 @@ func TestPutTypedExtras_ProjectsTheTypedFieldsOntoTheirWireKeys(t *testing.T) {
 	}
 }
 
-func TestPutTypedExtras_ANotExplicitResultCarriesNoExplicitKey(t *testing.T) {
-	extras := map[string]any{}
-	PutTypedExtras(extras, SearchResult{Explicit: BoolPtr(false)})
-
-	if _, present := extras["explicit"]; present {
-		t.Errorf("extras = %v, want no explicit key for a clean track", extras)
-	}
-}
-
 func TestArtworkConfidenceRank_ReadsTheTypedPath(t *testing.T) {
 	tests := []struct {
 		name string

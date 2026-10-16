@@ -93,3 +93,50 @@ func TestSearchResultToDTO_mbidKeyIsProjectedFromTheKindsTypedField(t *testing.T
 		})
 	}
 }
+
+func TestSearchResultToDTO_AMergedCleanEditSendsExplicitFalseOnTheWire(t *testing.T) {
+	clean := domain.SearchResult{
+		Kind: domain.ResultKindTrack, Title: "Been Waiting!", Subtitle: "Autumn!", ISRC: "QM42K1903228", Duration: 123,
+		Sources:  []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "642332252"}},
+		Explicit: domain.BoolPtr(false),
+	}
+	unknown := domain.SearchResult{
+		Kind: domain.ResultKindTrack, Title: "Been Waiting!", Subtitle: "Autumn!", ISRC: "QM42K1903228", Duration: 123,
+		Sources: []domain.SourceRef{{Provider: domain.ProviderSpotify, ExternalID: "s1"}},
+	}
+	for i, groups := range [][][]domain.SearchResult{{{clean}, {unknown}}, {{unknown}, {clean}}} {
+		entities := rank.Merge(groups)
+		if len(entities) != 1 {
+			t.Fatalf("order %d: got %d entities, want one merged track", i, len(entities))
+		}
+		raw, err := json.Marshal(searchResultToDTO(entities[0].Result))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var wire struct {
+			Extras map[string]json.RawMessage `json:"extras"`
+		}
+		if err := json.Unmarshal(raw, &wire); err != nil {
+			t.Fatal(err)
+		}
+		if got := string(wire.Extras["explicit"]); got != "false" {
+			t.Errorf("order %d: wire extras.explicit = %q, want false in %s", i, got, raw)
+		}
+	}
+}
+
+func TestSearchResultToDTO_AnUnknownExplicitLeavesTheWireKeyAbsent(t *testing.T) {
+	raw, err := json.Marshal(searchResultToDTO(domain.SearchResult{Kind: domain.ResultKindTrack, Title: "T"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire struct {
+		Extras map[string]json.RawMessage `json:"extras"`
+	}
+	if err := json.Unmarshal(raw, &wire); err != nil {
+		t.Fatal(err)
+	}
+	if got, present := wire.Extras["explicit"]; present {
+		t.Errorf("wire extras.explicit = %s, want the key absent when no provider knows", got)
+	}
+}

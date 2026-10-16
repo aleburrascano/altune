@@ -838,6 +838,61 @@ func TestMerge_ISRCsDifferingOnlyInFormattingMatch(t *testing.T) {
 	}
 }
 
+type recordedDeezerTrack struct {
+	id       string
+	isrc     string
+	explicit bool
+}
+
+var (
+	recordedCleanEdit    = recordedDeezerTrack{id: "642332252", isrc: "QM42K1903228", explicit: false}
+	recordedExplicitTwin = recordedDeezerTrack{id: "1216445232", isrc: "QM42K1903228", explicit: true}
+)
+
+func recordedDeezerResult(recorded recordedDeezerTrack, known bool) domain.SearchResult {
+	r := discoverytest.WithISRC(discoverytest.Track("Been Waiting!", "Autumn!", domain.ProviderDeezer, nil), recorded.isrc)
+	r.Album = "##R3 ##R3"
+	r.Duration = 123
+	r.Sources[0].ExternalID = recorded.id
+	if known {
+		r.Explicit = domain.BoolPtr(recorded.explicit)
+	}
+	return r
+}
+
+func TestMerge_ExplicitTrueWinsThenFalse(t *testing.T) {
+	tests := []struct {
+		name         string
+		first        domain.SearchResult
+		second       domain.SearchResult
+		wantKnown    bool
+		wantExplicit bool
+	}{
+		{"clean edit and its explicit twin", recordedDeezerResult(recordedCleanEdit, true), recordedDeezerResult(recordedExplicitTwin, true), true, true},
+		{"clean edit and a provider that does not know", recordedDeezerResult(recordedCleanEdit, true), recordedDeezerResult(recordedExplicitTwin, false), true, false},
+		{"explicit twin and a provider that does not know", recordedDeezerResult(recordedExplicitTwin, true), recordedDeezerResult(recordedCleanEdit, false), true, true},
+		{"neither provider knows", recordedDeezerResult(recordedCleanEdit, false), recordedDeezerResult(recordedExplicitTwin, false), false, false},
+	}
+	for _, tt := range tests {
+		for _, swapped := range []bool{false, true} {
+			groups := [][]domain.SearchResult{{tt.first}, {tt.second}}
+			if swapped {
+				groups = [][]domain.SearchResult{{tt.second}, {tt.first}}
+			}
+			t.Run(tt.name, func(t *testing.T) {
+				entities := Merge(groups)
+				if len(entities) != 1 {
+					t.Fatalf("got %d entities, want the recorded pair merged", len(entities))
+				}
+				got := entities[0].Result.Explicit
+				if (got != nil) != tt.wantKnown || (got != nil && *got != tt.wantExplicit) {
+					t.Errorf("merged Explicit = %v, want known=%v explicit=%v (swapped=%v)", got, tt.wantKnown, tt.wantExplicit, swapped)
+				}
+			})
+		}
+	}
+}
+
 func artistWithID(name string, provider domain.ProviderName, id string, fans int64, image string) domain.SearchResult {
 	return domain.SearchResult{
 		Kind:     domain.ResultKindArtist,
@@ -1016,5 +1071,91 @@ func TestMerge_AnotherProviderJoinsTheMostPopularSameNameArtistWhicheverComesFir
 	}
 	if fan := entityWithSource(t, entities, domain.ProviderDeezer, "373427811"); len(fan.Result.Sources) != 1 {
 		t.Errorf("the 211-fan account took sources %v, want only its own", fan.Result.Sources)
+	}
+}
+
+func explicitProbeTrack(provider domain.ProviderName, id string, explicit *bool) domain.SearchResult {
+	r := discoverytest.WithISRC(discoverytest.Track("Been Waiting!", "Autumn!", provider, nil), "QM42K1903228")
+	r.Album = "##R3 ##R3"
+	r.Duration = 123
+	r.Sources[0].ExternalID = id
+	r.Explicit = explicit
+	return r
+}
+
+func everyOrderOf3(a, b, c domain.SearchResult) [][][]domain.SearchResult {
+	return [][][]domain.SearchResult{
+		{{a}, {b}, {c}},
+		{{a}, {c}, {b}},
+		{{b}, {a}, {c}},
+		{{b}, {c}, {a}},
+		{{c}, {a}, {b}},
+		{{c}, {b}, {a}},
+	}
+}
+
+func TestMerge_ThreeProvidersExplicitIsTrueWhenAnySaysTrueInEveryOrder(t *testing.T) {
+	clean := explicitProbeTrack(domain.ProviderDeezer, "642332252", domain.BoolPtr(false))
+	unknown := explicitProbeTrack(domain.ProviderAppleMusic, "a1", nil)
+	explicit := explicitProbeTrack(domain.ProviderSpotify, "s1", domain.BoolPtr(true))
+
+	for i, groups := range everyOrderOf3(clean, unknown, explicit) {
+		entities := Merge(groups)
+		if len(entities) != 1 {
+			t.Fatalf("order %d: got %d entities, want the three providers merged", i, len(entities))
+		}
+		if got := entities[0].Result.Explicit; got == nil || !*got {
+			t.Errorf("order %d: merged Explicit = %v, want true (one provider says explicit)", i, got)
+		}
+	}
+}
+
+func TestMerge_ThreeProvidersExplicitIsFalseWhenEveryKnownValueIsFalseInEveryOrder(t *testing.T) {
+	clean := explicitProbeTrack(domain.ProviderDeezer, "642332252", domain.BoolPtr(false))
+	alsoClean := explicitProbeTrack(domain.ProviderSpotify, "s1", domain.BoolPtr(false))
+	unknown := explicitProbeTrack(domain.ProviderAppleMusic, "a1", nil)
+
+	for i, groups := range everyOrderOf3(clean, alsoClean, unknown) {
+		entities := Merge(groups)
+		if len(entities) != 1 {
+			t.Fatalf("order %d: got %d entities, want the three providers merged", i, len(entities))
+		}
+		if got := entities[0].Result.Explicit; got == nil || *got {
+			t.Errorf("order %d: merged Explicit = %v, want a known false", i, got)
+		}
+	}
+}
+
+func TestMerge_ThreeProvidersNoneKnowingLeavesExplicitUnknownInEveryOrder(t *testing.T) {
+	a := explicitProbeTrack(domain.ProviderDeezer, "642332252", nil)
+	b := explicitProbeTrack(domain.ProviderSpotify, "s1", nil)
+	c := explicitProbeTrack(domain.ProviderAppleMusic, "a1", nil)
+
+	for i, groups := range everyOrderOf3(a, b, c) {
+		if got := Merge(groups)[0].Result.Explicit; got != nil {
+			t.Errorf("order %d: merged Explicit = %v, want nil when no provider knows", i, *got)
+		}
+	}
+}
+
+func TestMerge_CleanTwinWithAKnownFalseKeepsTheFlagOfItsOwnISRC(t *testing.T) {
+	explicit := discoverytest.WithISRC(discoverytest.Track("Song", "X", domain.ProviderDeezer, nil), "USUM71700001")
+	explicit.Explicit = domain.BoolPtr(true)
+	clean := discoverytest.WithISRC(discoverytest.Track("Song", "X", domain.ProviderSpotify, nil), "USUM71700002")
+	clean.Album = "Clean Album"
+	clean.Explicit = domain.BoolPtr(false)
+
+	for i, order := range [][][]domain.SearchResult{{{explicit}, {clean}}, {{clean}, {explicit}}} {
+		entities := Merge(order)
+		if len(entities) != 1 {
+			t.Fatalf("order %d: got %d entities, want the twins merged", i, len(entities))
+		}
+		r := entities[0].Result
+		if r.Explicit == nil {
+			t.Fatalf("order %d: merged Explicit is unknown, want the known flag of ISRC %q", i, r.ISRC)
+		}
+		if want := r.ISRC == "USUM71700001"; *r.Explicit != want {
+			t.Errorf("order %d: ISRC %q carries explicit=%v, want %v (the ISRC's own source)", i, r.ISRC, *r.Explicit, want)
+		}
 	}
 }
