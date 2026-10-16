@@ -1,7 +1,3 @@
-M10 src/shared/offline/pinnedIndex.ts not a layer folder or index.ts
-M10 src/shared/offline/pinnedStore.ts not a layer folder or index.ts
-M10 src/shared/playlists/mutations.ts not a layer folder or index.ts
-M10 src/shared/playlists/useSingleFlightAction.ts not a layer folder or index.ts
 M10 src/shared/runBounded.ts file at the shared root
 M10 src/shared/time.ts file at the shared root
 M10 src/shared/ui/AsyncSection.tsx loose file in shared/ui
@@ -229,8 +225,6 @@ M9 src/features/library/hooks holds more than 16 source files
 M9 src/features/library/ui holds more than 16 source files
 M9 src/features/playback/adapters holds both files and folders
 M9 src/shared/apiClient holds more than 16 source files
-M9 src/shared/offline holds both files and folders
-M9 src/shared/playlists holds both files and folders
 M9 src/shared/ui holds both files and folders
 M9 src/shared/ui/primitives holds more than 16 source files
 N4 src/features/detail/domain/trackExtras.ts exports AlbumExtrasResult with the word Extras

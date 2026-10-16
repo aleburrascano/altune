@@ -21,7 +21,7 @@ import {
   readyEntry,
   scheduleSaveIndex,
   tagChangedEntries,
-} from '@shared/offline/pinnedIndex';
+} from '@shared/offline/state/pinnedIndex';
 
 type QueueState = {
   entries: Record<string, PinnedEntry>;

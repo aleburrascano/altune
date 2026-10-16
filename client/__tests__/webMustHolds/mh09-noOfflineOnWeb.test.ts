@@ -34,7 +34,7 @@ describe('mh09: the pinned-store machinery never starts on web', () => {
         INDEX_URI,
         JSON.stringify({ old: { trackId: 'old', status: 'failed' } }),
       );
-      const { usePinnedStore } = require('@shared/offline/pinnedStore');
+      const { usePinnedStore } = require('@shared/offline/state/pinnedStore');
       const loaded = { ...usePinnedStore.getState().entries };
       usePinnedStore.getState().pin(asTrackId('t1'));
       return { loaded, afterPin: usePinnedStore.getState().entries.t1?.status };
@@ -52,9 +52,9 @@ describe('mh09: the pinned-store machinery never starts on web', () => {
 describe('mh09: an identity change never claims pinned downloads on web', () => {
   function ownerAfterSignIn(os: 'ios'): string | null {
     return onPlatform(os, () => {
-      require('@shared/offline/pinnedStore');
+      require('@shared/offline/state/pinnedStore');
       require('@shared/session/signOutCleanup').notifyIdentityChange('user-a');
-      return require('@shared/offline/pinnedIndex').readOwner();
+      return require('@shared/offline/state/pinnedIndex').readOwner();
     });
   }
 
@@ -66,7 +66,7 @@ describe('mh09: an identity change never claims pinned downloads on web', () => 
 describe('mh09: an acquisition completing never restarts a stale pin on web', () => {
   function statusAfterCompletion(os: 'ios'): string | undefined {
     return onPlatform(os, () => {
-      const { usePinnedStore } = require('@shared/offline/pinnedStore');
+      const { usePinnedStore } = require('@shared/offline/state/pinnedStore');
       const { applyServerEvent } = require('@shared/events/applyServerEvent');
       const { QueryClient } = require('@tanstack/react-query');
       usePinnedStore.setState({
@@ -94,7 +94,7 @@ describe('mh09: an acquisition completing never restarts a stale pin on web', ()
 describe('mh09: the reconcile bridge does nothing on web', () => {
   function statusAfterMountOn(os: 'ios'): string | undefined {
     const { usePinnedStore, OfflineReconcileBridge } = onPlatform(os, () => ({
-      usePinnedStore: require('@shared/offline/pinnedStore').usePinnedStore,
+      usePinnedStore: require('@shared/offline/state/pinnedStore').usePinnedStore,
       OfflineReconcileBridge: require('@shared/offline/ui/OfflineReconcileBridge')
         .OfflineReconcileBridge,
     }));

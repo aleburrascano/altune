@@ -19,7 +19,7 @@ import {
 import { invalidateAudioCaches } from '@shared/acquisition/state/audioCacheInvalidation';
 import { stageToPhase } from '@shared/acquisition/state/stagePhase';
 import { offlineDownloadsSupported } from '@shared/offline/domain/offlineSupport';
-import { repinIfPinned } from '@shared/offline/pinnedStore';
+import { repinIfPinned } from '@shared/offline/state/pinnedStore';
 import { tryParseTrackResponse } from '@shared/apiClient/tracks';
 import type { TrackId } from '@shared/apiClient/ids';
 import {

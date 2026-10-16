@@ -27,11 +27,11 @@ import {
   scheduleSaveIndex,
   tagChangedEntries,
   writeOwner,
-} from '@shared/offline/pinnedIndex';
+} from '@shared/offline/state/pinnedIndex';
 
 export { pinnedBytes as pinnedByteTotal } from '@shared/offline/state/pinnedFiles';
 
-export type { PinnedEntry, PinnedStatus } from '@shared/offline/pinnedIndex';
+export type { PinnedEntry, PinnedStatus } from '@shared/offline/state/pinnedIndex';
 
 function readyWithFileOnDisk(entries: Record<string, PinnedEntry>): Record<string, PinnedEntry> {
   const kept: Record<string, PinnedEntry> = {};

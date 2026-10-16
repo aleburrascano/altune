@@ -11,7 +11,7 @@ import {
   useRenamePlaylist,
   useCreatePlaylist,
   useCreatePlaylistWithTracks,
-} from '@shared/playlists/mutations';
+} from '@shared/playlists/hooks/playlist/mutations';
 import { ApiError, ContractError, NetworkError } from '@shared/failure/errors';
 import { PlaylistsPortProvider } from '@shared/playlists/ports/PlaylistsPortProvider';
 import type { PlaylistsPort } from '@shared/playlists/ports/playlistsPort';

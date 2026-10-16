@@ -2,7 +2,7 @@ import TrackPlayer, { Event } from 'react-native-track-player';
 
 import { asTrackId } from '@shared/apiClient/ids';
 import { ApiError } from '@shared/failure/errors';
-import { usePinnedStore } from '@shared/offline/pinnedStore';
+import { usePinnedStore } from '@shared/offline/state/pinnedStore';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
 

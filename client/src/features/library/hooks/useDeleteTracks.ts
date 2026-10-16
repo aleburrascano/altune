@@ -12,7 +12,7 @@ import {
   type TrackCachePlacement,
 } from '@shared/events/trackCachePatch';
 import { TRACK_CACHE_FAMILIES } from '@shared/events/trackCacheShapes';
-import { usePinnedStore } from '@shared/offline/pinnedStore';
+import { usePinnedStore } from '@shared/offline/state/pinnedStore';
 import { libraryKeys } from '@shared/query/queryKeys';
 import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
 import { guardedMutationOptions } from '@shared/session/guardedMutation';

@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 
-import { usePinnedStore } from '@shared/offline/pinnedStore';
+import { usePinnedStore } from '@shared/offline/state/pinnedStore';
 import { asTrackId } from '@shared/apiClient/ids';
 import { signInTestUser } from '@testing/signInTestUser';
 

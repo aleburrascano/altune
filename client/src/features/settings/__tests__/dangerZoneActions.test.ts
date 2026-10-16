@@ -3,7 +3,7 @@ import * as FileSystem from 'expo-file-system';
 import { NetworkError } from '@shared/apiClient';
 import { asTrackId } from '@shared/apiClient/ids';
 import type { SignOutResult } from '@shared/auth/useSignOut';
-import { usePinnedStore } from '@shared/offline/pinnedStore';
+import { usePinnedStore } from '@shared/offline/state/pinnedStore';
 
 import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 

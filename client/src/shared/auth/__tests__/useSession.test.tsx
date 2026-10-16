@@ -4,7 +4,7 @@ import { renderHook, act } from '@testing-library/react-native';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import * as FileSystem from 'expo-file-system';
 
-import { usePinnedStore } from '@shared/offline/pinnedStore';
+import { usePinnedStore } from '@shared/offline/state/pinnedStore';
 
 import { useSession } from '@shared/auth/useSession';
 import { supabase } from '@shared/auth/supabaseClient';

@@ -17,7 +17,7 @@ function bootFreshApp() {
     session: require('@shared/auth/useSession'),
     supabase: require('@shared/auth/supabaseClient').supabase,
     outbox: require('@shared/telemetry/outbox'),
-    pinned: require('@shared/offline/pinnedStore'),
+    pinned: require('@shared/offline/state/pinnedStore'),
     registry: require('@shared/session/signOutCleanup'),
     expired: require('@shared/auth/sessionExpired'),
   };
@@ -46,7 +46,7 @@ describe('identity change wiring on the real modules', () => {
     const events: string[] = [];
     app.registry.onSignOut(() => events.push('forget'));
     const outboxOwner = jest.spyOn(app.outbox, 'setOutboxOwner');
-    const claimedOwner = jest.spyOn(require('@shared/offline/pinnedIndex'), 'writeOwner');
+    const claimedOwner = jest.spyOn(require('@shared/offline/state/pinnedIndex'), 'writeOwner');
     claimedOwner.mockImplementation((id: unknown) =>
       events.push(`claim:${String(id)}:${String(app.registry.hasSignedInUser())}`),
     );

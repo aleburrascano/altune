@@ -10,7 +10,7 @@ import {
 } from '@features/library/hooks/usePlaylistMenu';
 import { Alert, type AlertButton } from 'react-native';
 import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { usePinnedStore } from '@shared/offline/pinnedStore';
+import { usePinnedStore } from '@shared/offline/state/pinnedStore';
 import { playlistKeys } from '@shared/query/queryKeys';
 import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';

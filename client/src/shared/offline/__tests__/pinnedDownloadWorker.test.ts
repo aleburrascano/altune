@@ -10,7 +10,7 @@ import { createMemoryOfflinePort } from '@shared/offline/__tests__/memoryOffline
 import { runDownloadQueue } from '@shared/offline/state/pinnedDownloadWorker';
 import { setPinnedFileStore } from '@shared/offline/state/pinnedFiles';
 import type { OfflinePort } from '@shared/offline/ports/offlinePort';
-import type { PinnedEntry } from '@shared/offline/pinnedIndex';
+import type { PinnedEntry } from '@shared/offline/state/pinnedIndex';
 import { signInTestUser } from '@testing/signInTestUser';
 import { asTrackId, type TrackId } from '@shared/apiClient/ids';
 

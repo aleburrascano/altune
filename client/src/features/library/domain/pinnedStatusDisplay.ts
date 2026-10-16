@@ -1,4 +1,4 @@
-import type { PinnedStatus } from '@shared/offline/pinnedStore';
+import type { PinnedStatus } from '@shared/offline/state/pinnedStore';
 
 type PinnedStatusDisplay = {
   a11ySuffix: string;

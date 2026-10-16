@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { asTrackId } from '@shared/apiClient/ids';
 import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
+import { usePinnedStore, type PinnedEntry } from '@shared/offline/state/pinnedStore';
 import { trackResponseFactory } from '@testing/factories';
 
 import { LibraryRow } from '@features/library/ui/LibraryRow';

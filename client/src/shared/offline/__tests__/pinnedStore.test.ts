@@ -20,14 +20,14 @@ import {
   scheduleSaveIndex,
   setPinnedIndexFileStore,
   writeOwner,
-} from '@shared/offline/pinnedIndex';
+} from '@shared/offline/state/pinnedIndex';
 import {
   usePinnedStore,
   type PinnedEntry,
   type PinnedStatus,
   resolvePinnedUri,
   repinIfPinned,
-} from '@shared/offline/pinnedStore';
+} from '@shared/offline/state/pinnedStore';
 
 const PIN_DOWNLOAD_TIMEOUT_MS = 120_000;
 const MAX_PINNED_BYTES = 8_589_934_592;
@@ -673,7 +673,7 @@ describe('the pinned index is written through to disk and loaded back on relaunc
 
       let reloadedEntries: Record<string, PinnedEntry> | undefined;
       jest.isolateModules(() => {
-        const mod = require('@shared/offline/pinnedStore') as {
+        const mod = require('@shared/offline/state/pinnedStore') as {
           usePinnedStore: typeof usePinnedStore;
         };
         reloadedEntries = mod.usePinnedStore.getState().entries;
@@ -688,7 +688,7 @@ describe('the pinned index is written through to disk and loaded back on relaunc
 
       let reloadedEntries: Record<string, PinnedEntry> | undefined;
       jest.isolateModules(() => {
-        const mod = require('@shared/offline/pinnedStore') as {
+        const mod = require('@shared/offline/state/pinnedStore') as {
           usePinnedStore: typeof usePinnedStore;
         };
         reloadedEntries = mod.usePinnedStore.getState().entries;
@@ -705,7 +705,7 @@ describe('the pinned index is written through to disk and loaded back on relaunc
 
       let reloadedEntries: Record<string, PinnedEntry> | undefined;
       jest.isolateModules(() => {
-        const mod = require('@shared/offline/pinnedStore') as {
+        const mod = require('@shared/offline/state/pinnedStore') as {
           usePinnedStore: typeof usePinnedStore;
         };
         reloadedEntries = mod.usePinnedStore.getState().entries;
@@ -745,7 +745,7 @@ describe('loading, validating and coalescing writes of the pinned index', () => 
   function importFreshEntries(): unknown {
     let entries: unknown;
     jest.isolateModules(() => {
-      const mod = require('@shared/offline/pinnedStore') as {
+      const mod = require('@shared/offline/state/pinnedStore') as {
         usePinnedStore: typeof usePinnedStore;
       };
       entries = mod.usePinnedStore.getState().entries;
@@ -1356,7 +1356,7 @@ describe('reconcile squares the index with the files on disk', () => {
             },
           }),
         );
-        freshStoreModule = require('@shared/offline/pinnedStore') as {
+        freshStoreModule = require('@shared/offline/state/pinnedStore') as {
           usePinnedStore: typeof usePinnedStore;
         };
       });

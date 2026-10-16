@@ -18,8 +18,11 @@ import { Tappable } from '@shared/ui/primitives/Tappable';
 
 import { CreatePlaylistModal } from '@shared/playlists/ui/CreatePlaylistModal';
 import { usePlaylistsPort } from '@shared/playlists/ports/PlaylistsPortProvider';
-import { useAddTracksToPlaylist, useCreatePlaylistWithTracks } from '@shared/playlists/mutations';
-import { useSingleFlightAction } from '@shared/playlists/useSingleFlightAction';
+import {
+  useAddTracksToPlaylist,
+  useCreatePlaylistWithTracks,
+} from '@shared/playlists/hooks/playlist/mutations';
+import { useSingleFlightAction } from '@shared/playlists/hooks/playlist/useSingleFlightAction';
 import { radius, sheetGrabber, sheetTopRadius } from '@shared/ui/theme';
 
 const SHEET_PLAYLIST_CAP = 2000;

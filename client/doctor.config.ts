@@ -10,7 +10,7 @@ const pagingLoopsAwaitInOrder = {
 const sequentialByDesignAwaitInLoop = {
   files: [
     'src/shared/offline/state/pinnedDownloadWorker.ts',
-    'src/shared/offline/pinnedStore.ts',
+    'src/shared/offline/state/pinnedStore.ts',
     'src/shared/telemetry/outbox.ts',
   ],
   rules: ['react-doctor/async-await-in-loop'],
@@ -77,7 +77,7 @@ const progressValueFollowsPlaybackPosition = {
 };
 
 const closeGuardsClearOnlyOnceTheParentHasClosedTheSurface = {
-  files: ['src/shared/playlists/useSingleFlightAction.ts'],
+  files: ['src/shared/playlists/hooks/playlist/useSingleFlightAction.ts'],
   rules: ['react-doctor/no-event-handler'],
 };
 

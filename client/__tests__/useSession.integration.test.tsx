@@ -27,7 +27,7 @@ import { registerSearchStateSignOutReset } from '@features/discovery/adapters/re
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { detailHref, readDetailHandoff } from '@shared/navigation/detailHandoff';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
-import type * as PinnedStoreModule from '@shared/offline/pinnedStore';
+import type * as PinnedStoreModule from '@shared/offline/state/pinnedStore';
 
 import { useSession } from '@shared/auth/useSession';
 import { useSignOut } from '@shared/auth/useSignOut';
@@ -794,7 +794,7 @@ describe('pinned downloads across a killed sign-out', () => {
     return {
       session: require('@shared/auth/useSession'),
       supabase: (require('@shared/auth/supabaseClient') as typeof SupabaseClientModule).supabase,
-      pinned: require('@shared/offline/pinnedStore'),
+      pinned: require('@shared/offline/state/pinnedStore'),
     };
   }
 

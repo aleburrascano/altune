@@ -5,7 +5,7 @@ import {
   usePinnedStore,
   type PinnedEntry,
   type UnpinAllOutcome,
-} from '@shared/offline/pinnedStore';
+} from '@shared/offline/state/pinnedStore';
 import { downloadStats, type DownloadStats } from '@features/settings/domain/downloadStatsModel';
 
 function measureAfter(_entries: Record<string, PinnedEntry>): number {

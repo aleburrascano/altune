@@ -7,7 +7,7 @@ import {
   saveIndex,
   setPinnedIndexFileStore,
   type PinnedEntry,
-} from '@shared/offline/pinnedIndex';
+} from '@shared/offline/state/pinnedIndex';
 import {
   createMemoryFileStore,
   type MemoryFileStore,

@@ -47,7 +47,7 @@
     "src/shared/killSwitch/killSwitch.ts:setKillSwitchFileStore",
     "src/shared/killSwitch/killSwitchPoll.ts:refreshKillSwitches",
     "src/shared/offline/state/pinnedFiles.ts:setPinnedFileStore",
-    "src/shared/offline/pinnedIndex.ts:setPinnedIndexFileStore",
+    "src/shared/offline/state/pinnedIndex.ts:setPinnedIndexFileStore",
     "src/shared/playlists/index.ts:useCreatePlaylistWithTracks",
     "src/shared/playlists/index.ts:useSingleFlightAction",
     "src/shared/playlists/index.ts:httpPlaylistsPort",

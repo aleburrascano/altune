@@ -9,7 +9,7 @@ import {
   type PinBatchResult,
   type PinnedStatus,
   type UnpinBatchResult,
-} from '@shared/offline/pinnedStore';
+} from '@shared/offline/state/pinnedStore';
 import { showFailureAlert } from '@shared/ui';
 
 export type LibraryOffline = {

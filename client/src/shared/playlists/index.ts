@@ -7,8 +7,8 @@ export {
   useDeletePlaylist,
   useRemoveTracksFromPlaylist,
   useRenamePlaylist,
-} from '@shared/playlists/mutations';
-export { useSingleFlightAction } from '@shared/playlists/useSingleFlightAction';
+} from '@shared/playlists/hooks/playlist/mutations';
+export { useSingleFlightAction } from '@shared/playlists/hooks/playlist/useSingleFlightAction';
 export { httpPlaylistsPort } from '@shared/playlists/adapters/http/httpPlaylistsPort';
 export {
   PlaylistsPortProvider,

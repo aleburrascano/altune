@@ -24,7 +24,7 @@ import { Alert } from 'react-native';
 import { ApiError, NetworkError } from '@shared/failure/errors';
 import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
 import { useTrackStatusStore } from '@shared/acquisition/state/trackStatusStore';
-import { usePinnedStore } from '@shared/offline/pinnedStore';
+import { usePinnedStore } from '@shared/offline/state/pinnedStore';
 import { RETRY_TAIL } from '@shared/failure/describeError';
 import type { ReactNode } from 'react';
 import { QueryClientProvider, type InfiniteData } from '@tanstack/react-query';

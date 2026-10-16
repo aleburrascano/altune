@@ -2,7 +2,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Tappable } from '@shared/ui/primitives/Tappable';
 import { formatDuration } from '@shared/ui/displayFormat';
-import type { PinnedStatus } from '@shared/offline/pinnedStore';
+import type { PinnedStatus } from '@shared/offline/state/pinnedStore';
 import { Row, Text, spacing, useTheme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';

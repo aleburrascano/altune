@@ -9,7 +9,7 @@ import { ApiError } from '@shared/apiClient';
 import { useSignOut, type SignOutResult } from '@shared/auth/useSignOut';
 
 import { asTrackId } from '@shared/apiClient/ids';
-import { usePinnedStore } from '@shared/offline/pinnedStore';
+import { usePinnedStore } from '@shared/offline/state/pinnedStore';
 
 import { useRemoveDownloads } from '@features/settings/hooks/useDownloads';
 import { downloadStats } from '@features/settings/domain/downloadStatsModel';

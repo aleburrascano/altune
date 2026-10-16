@@ -14,7 +14,7 @@ import type {
 } from '@shared/apiClient/playlistResponse';
 import type { ListTracksResponse, TrackResponse } from '@shared/apiClient/trackResponse';
 import { libraryKeys, playlistKeys } from '@shared/query/queryKeys';
-import { usePinnedStore } from '@shared/offline/pinnedStore';
+import { usePinnedStore } from '@shared/offline/state/pinnedStore';
 
 import { applyServerEvent } from '@shared/events/applyServerEvent';
 import type { JsonObject } from '@shared/files/json';

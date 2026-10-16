@@ -5,7 +5,7 @@ import type { TrackId } from '@shared/apiClient/ids';
 import { useTheme } from '@shared/ui';
 import { Tappable } from '@shared/ui/primitives/Tappable';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
-import type { PinnedStatus } from '@shared/offline/pinnedStore';
+import type { PinnedStatus } from '@shared/offline/state/pinnedStore';
 import { PINNED_GLYPH, PINNED_GLYPH_LABEL } from '@features/library/ui/pinnedGlyphs';
 import { pinnedStatusDisplay } from '@features/library/domain/pinnedStatusDisplay';
 import { touchTarget } from '@shared/ui/theme';

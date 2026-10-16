@@ -2,7 +2,7 @@ import { renderHook } from '@testing-library/react-native';
 
 import { asTrackId } from '@shared/apiClient/ids';
 import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { usePinnedStore } from '@shared/offline/pinnedStore';
+import { usePinnedStore } from '@shared/offline/state/pinnedStore';
 import { trackResponseFactory } from '@testing/factories';
 
 import {
@@ -161,7 +161,7 @@ function loadOnWeb(): OfflineHooks {
       renderHook: require('@testing-library/react-native').renderHook,
       useLibraryOffline: require('@features/library/hooks/useLibraryOffline').useLibraryOffline,
       usePinnedStatus: require('@features/library/hooks/useLibraryOffline').usePinnedStatus,
-      usePinnedStore: require('@shared/offline/pinnedStore').usePinnedStore,
+      usePinnedStore: require('@shared/offline/state/pinnedStore').usePinnedStore,
     };
   });
   if (loaded === undefined) throw new Error('web modules failed to load');

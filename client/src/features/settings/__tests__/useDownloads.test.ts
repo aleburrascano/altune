@@ -1,7 +1,11 @@
 import { act, renderHook } from '@testing-library/react-native';
 import * as FileSystem from 'expo-file-system';
 
-import { pinnedByteTotal, usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
+import {
+  pinnedByteTotal,
+  usePinnedStore,
+  type PinnedEntry,
+} from '@shared/offline/state/pinnedStore';
 import { useDownloadStats, useRemoveDownloads } from '@features/settings/hooks/useDownloads';
 import { downloadStats } from '@features/settings/domain/downloadStatsModel';
 import {

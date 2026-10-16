@@ -4,7 +4,7 @@ import { QueryClientProvider, type InfiniteData } from '@tanstack/react-query';
 import { ApiError } from '@shared/failure/errors';
 import { asTrackId, type TrackId } from '@shared/apiClient/ids';
 import { useTrackStatusStore } from '@shared/acquisition/state/trackStatusStore';
-import { usePinnedStore } from '@shared/offline/pinnedStore';
+import { usePinnedStore } from '@shared/offline/state/pinnedStore';
 import { RETRY_TAIL } from '@shared/failure/describeError';
 import { TRACK_CACHE_FAMILIES } from '@shared/events/trackCacheShapes';
 import type { ReactNode } from 'react';

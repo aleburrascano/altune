@@ -2,7 +2,7 @@ import { Alert } from 'react-native';
 
 import { asTrackId } from '@shared/apiClient/ids';
 import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
+import { usePinnedStore, type PinnedEntry } from '@shared/offline/state/pinnedStore';
 import { trackResponseFactory } from '@testing/factories';
 
 import { buildTrackMenuItems } from '@features/library/hooks/useTrackMenu';

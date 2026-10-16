@@ -76,7 +76,10 @@ describe('sanity: this suite is actually scanning the real slice', () => {
 });
 
 describe('rule 1 — every membership write is a batch, never a singular-track hook', () => {
-  const mutationsSource = fs.readFileSync(path.join(SLICE_DIR, 'mutations.ts'), 'utf8');
+  const mutationsSource = fs.readFileSync(
+    path.join(SLICE_DIR, 'hooks', 'playlist', 'mutations.ts'),
+    'utf8',
+  );
   const hookNames = exportedFunctionNames(mutationsSource);
 
   function singularMembershipHooks(names: string[]): string[] {
@@ -293,15 +296,17 @@ describe('rule 5 — the barrel is the public surface', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('the deep-import detector fires on @shared/playlists/mutations and a relative equivalent, not on the bare barrel specifier', () => {
-    expect(
-      deepImportViolations("import { useCreatePlaylist } from '@shared/playlists/mutations';"),
-    ).toEqual(['@shared/playlists/mutations']);
+  it('the deep-import detector fires on @shared/playlists/hooks/playlist/mutations and a relative equivalent, not on the bare barrel specifier', () => {
     expect(
       deepImportViolations(
-        "import { useCreatePlaylist } from '../../../shared/playlists/mutations';",
+        "import { useCreatePlaylist } from '@shared/playlists/hooks/playlist/mutations';",
       ),
-    ).toEqual(['../../../shared/playlists/mutations']);
+    ).toEqual(['@shared/playlists/hooks/playlist/mutations']);
+    expect(
+      deepImportViolations(
+        "import { useCreatePlaylist } from '../../../shared/playlists/hooks/playlist/mutations';",
+      ),
+    ).toEqual(['../../../shared/playlists/hooks/playlist/mutations']);
     expect(deepImportViolations("import { AddToPlaylistSheet } from '@shared/playlists';")).toEqual(
       [],
     );

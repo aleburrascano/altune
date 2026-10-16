@@ -5,8 +5,8 @@ import { render, screen } from '@testing-library/react-native';
 import { asTrackId } from '@shared/apiClient/ids';
 import { applyServerEvent } from '@shared/events/applyServerEvent';
 import { notifyIdentityChange } from '@shared/session/signOutCleanup';
-import { readOwner } from '@shared/offline/pinnedIndex';
-import { usePinnedStore } from '@shared/offline/pinnedStore';
+import { readOwner } from '@shared/offline/state/pinnedIndex';
+import { usePinnedStore } from '@shared/offline/state/pinnedStore';
 import { OfflineReconcileBridge } from '@shared/offline/ui/OfflineReconcileBridge';
 import { FeaturePorts } from '@/wiring/FeaturePorts';
 import { httpFeaturePorts } from '@/wiring/httpFeaturePorts';
@@ -29,7 +29,7 @@ describe('mh09: the pinned-store machinery never starts on web', () => {
         INDEX_URI,
         JSON.stringify({ old: { trackId: 'old', status: 'failed' } }),
       );
-      const store = require('@shared/offline/pinnedStore').usePinnedStore;
+      const store = require('@shared/offline/state/pinnedStore').usePinnedStore;
       loaded = { ...store.getState().entries };
       store.getState().pin(asTrackId('t1'));
       working = store.getState().isWorking;

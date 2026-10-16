@@ -2,7 +2,7 @@ import { act, render } from '@testing-library/react-native';
 import * as FileSystem from 'expo-file-system';
 
 import { OfflineReconcileBridge } from '@shared/offline/ui/OfflineReconcileBridge';
-import { usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
+import { usePinnedStore, type PinnedEntry } from '@shared/offline/state/pinnedStore';
 import { asTrackId, type TrackId } from '@shared/apiClient/ids';
 import { signInTestUser } from '@testing/signInTestUser';
 
