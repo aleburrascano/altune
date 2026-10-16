@@ -94,6 +94,11 @@ grep -q 'return of b.Find flows into a deref' <<<"$new" || { echo "FAIL new flow
 grep -q '^::error file=services/go-api/internal/b.go,line=7::internal/b.go:7:2: Potential nil panic detected' <<<"$new" || { echo "FAIL annotation wrong"; fail=1; }
 grep -c '^::error file=' <<<"$new" | grep -qx 1 || { echo "FAIL old finding annotated as new"; fail=1; }
 
+matcher='^[[:space:]]*(.+\.go):([0-9]+:[0-9]+:)? '
+grep -v '^::' <<<"$out" | grep -Eq "$matcher" && { echo "FAIL a line the go problem matcher would annotate"; fail=1; }
+grep -q 'internal/a.go :14:2: Potential nil panic detected' <<<"$out" || { echo "FAIL findings not shown as plain text"; fail=1; }
+grep -c '^::error file=' <<<"$out" | grep -qx 1 || { echo "FAIL annotations are not just the new finding"; fail=1; }
+
 repo=$work/repo-no-base-run
 mkdir -p "$repo/services/go-api/internal"
 git -C "$repo" init -q -b main

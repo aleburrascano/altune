@@ -34,6 +34,10 @@ strip_ansi() {
   sed 's/\x1b\[[0-9;]*m//g' "$1"
 }
 
+plain_text() {
+  sed 's/\.go:/.go :/g' <<< "$1"
+}
+
 count_findings() {
   strip_ansi "$1" | grep -c 'Potential nil panic detected' || true
 }
@@ -66,7 +70,7 @@ block_location() {
 
 print_block() {
   local block=$1 loc first
-  echo "${block//"$NL"/$'\n'}"
+  plain_text "${block//"$NL"/$'\n'}"
   first=${block%%"$NL"*}
   loc=$(block_location "$block")
   if [ -n "$loc" ]; then
@@ -141,7 +145,7 @@ if [ "$STATUS" -ne 0 ] && [ "$COUNT" -eq 0 ]; then
   exit 1
 fi
 echo "::group::nilaway findings"
-strip_ansi "$REPORT"
+plain_text "$(strip_ansi "$REPORT")"
 echo "::endgroup::"
 echo "nilaway findings: ${COUNT} (ceiling ${BASE})"
 if [ "$COUNT" -gt "$BASE" ]; then
