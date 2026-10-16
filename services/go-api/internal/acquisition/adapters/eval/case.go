@@ -127,6 +127,11 @@ func (o Observed) emit() (ports.AudioCandidate, error) {
 	return ports.AudioCandidate{}, errors.New("observed must hold exactly one of ytmsearch_song, ytmusic_watch, ytdlp_entry")
 }
 
+func (c Candidate) setsEmittedFieldsBesidesURL() bool {
+	c.URL = ""
+	return c.setsEmittedFields()
+}
+
 func (c Candidate) setsEmittedFields() bool {
 	return c.Title != "" || c.URL != "" || c.Channel != "" || len(c.Categories) > 0 ||
 		c.Duration != 0 || c.ViewCount != 0 || c.Resolved || c.Kind != "" ||
@@ -250,11 +255,34 @@ const (
 )
 
 type Source struct {
-	Name          string      `json:"name"`
-	Adapter       string      `json:"adapter,omitempty"`
-	SearchSeconds float64     `json:"search_seconds,omitempty"`
-	Fails         bool        `json:"fails,omitempty"`
-	Candidates    []Candidate `json:"candidates"`
+	Name            string                         `json:"name"`
+	Adapter         string                         `json:"adapter,omitempty"`
+	SearchSeconds   float64                        `json:"search_seconds,omitempty"`
+	Fails           bool                           `json:"fails,omitempty"`
+	Candidates      []Candidate                    `json:"candidates"`
+	ObservedSongs   []ObservedSong                 `json:"observed_songs,omitempty"`
+	ObservedWatches map[string]ObservedWatchRecord `json:"observed_watches,omitempty"`
+}
+
+type ObservedSong struct {
+	VideoID         string              `json:"video_id"`
+	Title           string              `json:"title"`
+	Artists         []string            `json:"artists,omitempty"`
+	Album           string              `json:"album,omitempty"`
+	DurationSeconds int                 `json:"duration_seconds,omitempty"`
+	Type            ytmsearch.VideoType `json:"type"`
+	Explicit        bool                `json:"explicit,omitempty"`
+}
+
+type ObservedWatchRecord struct {
+	Title    string              `json:"title"`
+	Artists  []string            `json:"artists,omitempty"`
+	Type     ytmsearch.VideoType `json:"type"`
+	Explicit bool                `json:"explicit,omitempty"`
+}
+
+func (s Source) recordsObservations() bool {
+	return len(s.ObservedSongs) > 0 || len(s.ObservedWatches) > 0
 }
 
 func (s Source) searchSeconds() float64 {
@@ -482,8 +510,31 @@ func validateSources(c Case) error {
 		if src.Adapter != "" && src.Adapter != adapterYTMusic && src.Adapter != adapterCatalogPin {
 			return fmt.Errorf("case %q source %q names unknown adapter %q", c.ID, src.Name, src.Adapter)
 		}
-		if len(src.Candidates) == 0 && !src.Fails {
+		if err := validateRecordedSource(c.ID, src); err != nil {
+			return err
+		}
+		if len(src.Candidates) == 0 && !src.Fails && !src.recordsObservations() {
 			return fmt.Errorf("case %q source %q has no candidates", c.ID, src.Name)
+		}
+	}
+	return nil
+}
+
+func validateRecordedSource(caseID string, src Source) error {
+	switch {
+	case len(src.ObservedSongs) > 0 && src.Name != string(ytmsearch.SourceName):
+		return fmt.Errorf("case %q source %q records ytmsearch songs; only the %q source can", caseID, src.Name, ytmsearch.SourceName)
+	case len(src.ObservedWatches) > 0 && src.Name != string(ytmusic.SourceName):
+		return fmt.Errorf("case %q source %q records ytmusic watches; only the %q source can", caseID, src.Name, ytmusic.SourceName)
+	case src.recordsObservations() && src.Adapter != "":
+		return fmt.Errorf("case %q source %q records observations and names adapter %q; keep one", caseID, src.Name, src.Adapter)
+	}
+	if !src.recordsObservations() {
+		return nil
+	}
+	for _, cand := range src.Candidates {
+		if cand.Observed != nil || cand.setsEmittedFieldsBesidesURL() {
+			return fmt.Errorf("case %q source %q records observations, so its adapter emits the candidates; candidate %q may carry only a url and download facts", caseID, src.Name, cand.URL)
 		}
 	}
 	return nil

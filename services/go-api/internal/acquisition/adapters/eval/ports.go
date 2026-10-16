@@ -131,6 +131,9 @@ func (s *evalSource) Find(ctx context.Context, req ports.FindRequest) ([]ports.A
 	if s.spec.Fails {
 		return nil, &acqdomain.SourceUnavailableError{Source: s.Name(), Err: errors.New("eval: simulated source failure")}
 	}
+	if s.spec.recordsObservations() {
+		return s.recordedFind(ctx, req)
+	}
 	switch s.spec.Adapter {
 	case adapterYTMusic:
 		return s.pinnedVideos(ctx, req)
@@ -146,6 +149,41 @@ func (s *evalSource) Find(ctx context.Context, req ports.FindRequest) ([]ports.A
 		out = append(out, c.audioCandidate())
 	}
 	return out, nil
+}
+
+func (s *evalSource) recordedFind(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
+	fetcher := evalFetcher{shared: s.shared}
+	if s.Name() == ytmsearch.SourceName {
+		return ytmsearch.NewSource(recordedSongs(s.spec.ObservedSongs), fetcher).Find(ctx, req)
+	}
+	return ytmusic.NewSource(fetcher, recordedWatches(s.spec.ObservedWatches)).Find(ctx, req)
+}
+
+type recordedSongs []ObservedSong
+
+func (r recordedSongs) SearchSongs(context.Context, string) ([]ytmsearch.Song, error) {
+	songs := make([]ytmsearch.Song, len(r))
+	for i, song := range r {
+		songs[i] = ytmsearch.Song(song)
+	}
+	return songs, nil
+}
+
+type recordedWatches map[string]ObservedWatchRecord
+
+func (r recordedWatches) Watch(_ context.Context, videoID string) (ytmsearch.Watch, error) {
+	record, ok := r[videoID]
+	if !ok {
+		return ytmsearch.Watch{}, fmt.Errorf("eval: no recorded watch for video %q", videoID)
+	}
+	return ytmsearch.Watch{VideoID: videoID, Title: record.Title, Artists: record.Artists, Type: record.Type, Explicit: record.Explicit}, nil
+}
+
+type evalFetcher struct{ shared *casePorts }
+
+func (f evalFetcher) Download(ctx context.Context, url, outDir string) (ports.FetchedAudio, error) {
+	path, err := f.shared.Download(ctx, url, outDir)
+	return ports.FetchedAudio{Path: path}, err
 }
 
 func (s *evalSource) pinnedVideos(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
@@ -164,8 +202,7 @@ func (g goldenWatches) Watch(_ context.Context, videoID string) (ytmsearch.Watch
 }
 
 func (s *evalSource) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
-	path, err := s.shared.Download(ctx, c.URL, outDir)
-	return ports.FetchedAudio{Path: path}, err
+	return evalFetcher{shared: s.shared}.Download(ctx, c.URL, outDir)
 }
 
 func (p *casePorts) Download(_ context.Context, url string, outDir string) (string, error) {

@@ -1,0 +1,126 @@
+{
+  "cases": [
+    {
+      "id": "ob-lucki-2021-vibes-explicit-art-track-beats-the-clean-twin",
+      "class": "OK",
+      "note": "prod LUCKI '2021 Vibes' (track fead1e2b, ISRC USUYG1496058, catalog 124 s, stored music.youtube.com/watch?v=LMDLNLM6Ji8 as verified, measured 124.817007 s). observed_songs is the raw ytmsearch song search for '2021 Vibes LUCKI' from services/go-api/internal/acquisition/adapters/ytmsearch/testdata/search_lucki_2021_vibes.json, parsed by ytmsearch.ParseSongs: the explicit art track LMDLNLM6Ji8 and the clean art track 88oFlVnMEsc, both 125 s on the same album. A search made on 2026-10-16 no longer lists LMDLNLM6Ji8, so the committed recording is the only one holding the choice prod made. ytmsearch.Source.Find picks the strong hit; the ytmusic watch for the pinned-less request yields nothing. No AcoustID lookup was recorded for this track, so no provenance is expected",
+      "track": {
+        "title": "2021 Vibes", "artist": "LUCKI", "album": "s*x m*ney dr*gs", "catalog_duration": 124, "isrc": "USUYG1496058", "catalog_mbid": "b74e039d-4f91-4117-957b-15928c6b2058"
+      },
+      "sources": [
+        { "name": "ytmsearch", "search_seconds": 2,
+          "observed_songs": [
+            {"video_id": "88oFlVnMEsc", "title": "2021 Vibes", "artists": ["LUCKI"], "album": "s*x m*ney dr*gs", "duration_seconds": 125, "type": "MUSIC_VIDEO_TYPE_ATV"},
+            {"video_id": "LMDLNLM6Ji8", "title": "2021 Vibes", "artists": ["LUCKI"], "album": "s*x m*ney dr*gs", "duration_seconds": 125, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "2P2xPdvdWPY", "title": "Karma A Bitch", "artists": ["LUCKI"], "album": "s*x m*ney dr*gs", "duration_seconds": 106, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "qB0d_x73FLw", "title": "Chrome Denim", "artists": ["LUCKI"], "album": "s*x m*ney dr*gs", "duration_seconds": 104, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "WDe76Y2ssVY", "title": "Me Myself & I", "artists": ["Lucki"], "album": "Days B4 III", "duration_seconds": 133, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "CN0ksjW3i6U", "title": "Tunevert", "artists": ["LUCKI"], "album": "s*x m*ney dr*gs", "duration_seconds": 124, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "4RuRl4pUVXA", "title": "Almighty Tune", "artists": ["LUCKI"], "album": "s*x m*ney dr*gs", "duration_seconds": 114, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "ulbSqJDd0Ro", "title": "Gemini Love", "artists": ["LUCKI"], "album": "s*x m*ney dr*gs", "duration_seconds": 158, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "dvhSHjFTvUM", "title": "Bby Pluto", "artists": ["LUCKI"], "album": "s*x m*ney dr*gs", "duration_seconds": 161, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "txCNEdlpXTc", "title": "Wholeworldslatt (feat. Veeze)", "artists": ["LUCKI"], "album": "s*x m*ney dr*gs", "duration_seconds": 206, "type": "MUSIC_VIDEO_TYPE_ATV"},
+            {"video_id": "sG5PGitZ0vI", "title": "Faith", "artists": ["Lucki"], "album": "Almost There", "duration_seconds": 109, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "WbTmjcWD47w", "title": "MADE MY DAY", "artists": ["LUCKI"], "album": "FLAWLESS LIKE ME", "duration_seconds": 125, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "FTcGUX11TjQ", "title": "Pop Star", "artists": ["LUCKI"], "album": "s*x m*ney dr*gs", "duration_seconds": 144, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "KbGJdxOW5HU", "title": "Super Ski", "artists": ["LUCKI"], "album": "s*x m*ney dr*gs", "duration_seconds": 136, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "v9NE8x-9xHg", "title": "Options", "artists": ["Lucki"], "album": "Watch My Back", "duration_seconds": 142, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "uvHNOP4U6YY", "title": "Live It", "artists": ["Lucki"], "album": "Live It", "duration_seconds": 131, "type": "MUSIC_VIDEO_TYPE_ATV"},
+            {"video_id": "dRU9ABiikF4", "title": "RTF", "artists": ["Lucki"], "album": "RTF", "duration_seconds": 81, "type": "MUSIC_VIDEO_TYPE_ATV"},
+            {"video_id": "b12k8I-_C6w", "title": "Friendly", "artists": ["Lucki"], "album": "Friendly", "duration_seconds": 144, "type": "MUSIC_VIDEO_TYPE_ATV"},
+            {"video_id": "D0meVJwBUl0", "title": "Alternative Outro", "artists": ["Lucki"], "album": "Alternative Trap", "duration_seconds": 291, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "PrDR0vaG8HI", "title": "Rumors", "artists": ["Lucki"], "album": "Freewave", "duration_seconds": 131, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true}
+          ],
+          "candidates": [
+            { "url": "https://music.youtube.com/watch?v=LMDLNLM6Ji8", "actual_duration": 124.817007, "correct": true }
+          ] },
+        { "name": "ytmusic", "search_seconds": 2,
+          "observed_watches": {
+            "LMDLNLM6Ji8": { "title": "2021 Vibes", "artists": ["LUCKI"], "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true }
+          } }
+      ]
+    },
+    {
+      "id": "ob-lucki-2021-vibes-catalog-pin-meets-the-search-hit",
+      "class": "OK",
+      "note": "prod LUCKI '2021 Vibes' (track 5d14e927, same recording as fead1e2b, catalog_sources youtube LMDLNLM6Ji8, stored music.youtube.com/watch?v=LMDLNLM6Ji8 as verified). Same recorded ytmsearch results as ob-lucki-2021-vibes-explicit-art-track-beats-the-clean-twin. The request carries the catalog pin, so the real ytmusic.Source.Find looks up the pinned video (watch metadata for LMDLNLM6Ji8 pulled from innertube next on 2026-10-16) and both sources emit the same source key, which the registry dedupes",
+      "track": {
+        "title": "2021 Vibes", "artist": "LUCKI", "album": "s*x m*ney dr*gs", "catalog_duration": 124, "isrc": "USUYG1496058", "catalog_mbid": "b74e039d-4f91-4117-957b-15928c6b2058",
+        "catalog_sources": [ { "provider": "youtube", "external_id": "LMDLNLM6Ji8" } ]
+      },
+      "sources": [
+        { "name": "ytmsearch", "search_seconds": 2,
+          "observed_songs": [
+            {"video_id": "88oFlVnMEsc", "title": "2021 Vibes", "artists": ["LUCKI"], "album": "s*x m*ney dr*gs", "duration_seconds": 125, "type": "MUSIC_VIDEO_TYPE_ATV"},
+            {"video_id": "LMDLNLM6Ji8", "title": "2021 Vibes", "artists": ["LUCKI"], "album": "s*x m*ney dr*gs", "duration_seconds": 125, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "2P2xPdvdWPY", "title": "Karma A Bitch", "artists": ["LUCKI"], "album": "s*x m*ney dr*gs", "duration_seconds": 106, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "qB0d_x73FLw", "title": "Chrome Denim", "artists": ["LUCKI"], "album": "s*x m*ney dr*gs", "duration_seconds": 104, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "WDe76Y2ssVY", "title": "Me Myself & I", "artists": ["Lucki"], "album": "Days B4 III", "duration_seconds": 133, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "CN0ksjW3i6U", "title": "Tunevert", "artists": ["LUCKI"], "album": "s*x m*ney dr*gs", "duration_seconds": 124, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "4RuRl4pUVXA", "title": "Almighty Tune", "artists": ["LUCKI"], "album": "s*x m*ney dr*gs", "duration_seconds": 114, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "ulbSqJDd0Ro", "title": "Gemini Love", "artists": ["LUCKI"], "album": "s*x m*ney dr*gs", "duration_seconds": 158, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "dvhSHjFTvUM", "title": "Bby Pluto", "artists": ["LUCKI"], "album": "s*x m*ney dr*gs", "duration_seconds": 161, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "txCNEdlpXTc", "title": "Wholeworldslatt (feat. Veeze)", "artists": ["LUCKI"], "album": "s*x m*ney dr*gs", "duration_seconds": 206, "type": "MUSIC_VIDEO_TYPE_ATV"},
+            {"video_id": "sG5PGitZ0vI", "title": "Faith", "artists": ["Lucki"], "album": "Almost There", "duration_seconds": 109, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "WbTmjcWD47w", "title": "MADE MY DAY", "artists": ["LUCKI"], "album": "FLAWLESS LIKE ME", "duration_seconds": 125, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "FTcGUX11TjQ", "title": "Pop Star", "artists": ["LUCKI"], "album": "s*x m*ney dr*gs", "duration_seconds": 144, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "KbGJdxOW5HU", "title": "Super Ski", "artists": ["LUCKI"], "album": "s*x m*ney dr*gs", "duration_seconds": 136, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "v9NE8x-9xHg", "title": "Options", "artists": ["Lucki"], "album": "Watch My Back", "duration_seconds": 142, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "uvHNOP4U6YY", "title": "Live It", "artists": ["Lucki"], "album": "Live It", "duration_seconds": 131, "type": "MUSIC_VIDEO_TYPE_ATV"},
+            {"video_id": "dRU9ABiikF4", "title": "RTF", "artists": ["Lucki"], "album": "RTF", "duration_seconds": 81, "type": "MUSIC_VIDEO_TYPE_ATV"},
+            {"video_id": "b12k8I-_C6w", "title": "Friendly", "artists": ["Lucki"], "album": "Friendly", "duration_seconds": 144, "type": "MUSIC_VIDEO_TYPE_ATV"},
+            {"video_id": "D0meVJwBUl0", "title": "Alternative Outro", "artists": ["Lucki"], "album": "Alternative Trap", "duration_seconds": 291, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "PrDR0vaG8HI", "title": "Rumors", "artists": ["Lucki"], "album": "Freewave", "duration_seconds": 131, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true}
+          ],
+          "candidates": [
+            { "url": "https://music.youtube.com/watch?v=LMDLNLM6Ji8", "actual_duration": 124.817007, "correct": true }
+          ] },
+        { "name": "ytmusic", "search_seconds": 2,
+          "observed_watches": {
+            "LMDLNLM6Ji8": { "title": "2021 Vibes", "artists": ["LUCKI"], "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true }
+          } }
+      ]
+    },
+    {
+      "id": "ob-ezcodylee-album-of-the-year-art-track-among-nineteen-search-results",
+      "class": "OK",
+      "expect_saved": { "isrc": "QZHN92620453", "provenance": "best_effort" },
+      "note": "prod ezcodylee 'ALBUM OF THE YEAR !' (track e2ee8a85, ISRC QZHN92620453, catalog 139 s, stored music.youtube.com/watch?v=Pwg_GsP2QZU as best_effort, measured 139.376009 s, no AcoustID match). observed_songs is the raw ytmsearch song search for 'ALBUM OF THE YEAR ! ezcodylee' pulled from innertube search on 2026-10-16 and parsed by ytmsearch.ParseSongs: one title and artist match among 19 other art tracks. The track has no catalog pin, so the ytmusic watch (innertube next for Pwg_GsP2QZU) must yield no candidate",
+      "track": {
+        "title": "ALBUM OF THE YEAR !", "artist": "ezcodylee", "album": "ALBUM OF THE YEAR !", "catalog_duration": 139, "isrc": "QZHN92620453", "catalog_mbid": "48529b3b-596b-4250-9226-74ee7531e06c"
+      },
+      "sources": [
+        { "name": "ytmsearch", "search_seconds": 2,
+          "observed_songs": [
+            {"video_id": "Pwg_GsP2QZU", "title": "ALBUM OF THE YEAR !", "artists": ["ezcodylee"], "album": "ALBUM OF THE YEAR !", "duration_seconds": 140, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "GeMQFILWKWk", "title": "ROCK N ROLL !", "artists": ["ezcodylee"], "album": "Stunt And Die 3 (Deluxe Edition)", "duration_seconds": 213, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "LHMkMbM_6bo", "title": "HEY HO !", "artists": ["ezcodylee"], "album": "Stunt And Die 3 (Deluxe Edition)", "duration_seconds": 156, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "SlFIm6fENbw", "title": "DIEHARD ! (feat. Happy Death Men)", "artists": ["ezcodylee"], "album": "STUNT 4 LIFE", "duration_seconds": 212, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "x3vU80mMYjA", "title": "DEADMAN ! (feat. Lucy Bedroque)", "artists": ["ezcodylee"], "album": "DEADMAN !", "duration_seconds": 154, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "F46qeLS1ZOE", "title": "Album of the Year (feat. Easy$ & Krizzy)", "artists": ["Eddie Ray"], "album": "The Legendary Shift", "duration_seconds": 205, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "gF_QmFjiKjw", "title": "SHUT UP !", "artists": ["ezcodylee"], "album": "STUNT 4 LIFE", "duration_seconds": 150, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "_d-VKkfmqbI", "title": "high off life (feat. Eddie Franco)", "artists": ["ezcodylee"], "album": "pretty good, wbu", "duration_seconds": 189, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "ulfVrhnohrg", "title": "To Brazil!", "artists": ["Vengaboys"], "album": "The Party Album!", "duration_seconds": 188, "type": "MUSIC_VIDEO_TYPE_ATV"},
+            {"video_id": "72RyMcC705s", "title": "Waiting Outside The Lines", "artists": ["Greyson Chance"], "album": "Hold On ‘Til The Night", "duration_seconds": 232, "type": "MUSIC_VIDEO_TYPE_ATV"},
+            {"video_id": "umW27NVlvCI", "title": "On the Floor", "artists": ["IceJJFish"], "album": "On the Floor", "duration_seconds": 275, "type": "MUSIC_VIDEO_TYPE_ATV"},
+            {"video_id": "yvCqZ3kPOJ4", "title": "Hey Hey Hey", "artists": ["Chemical Surf"], "album": "Hey Hey Hey", "duration_seconds": 322, "type": "MUSIC_VIDEO_TYPE_ATV"},
+            {"video_id": "UYj--lMbQko", "title": "Happy Birthday (Radio Edit)", "artists": ["Birthday Allstars"], "album": "Happy Birthday", "duration_seconds": 225, "type": "MUSIC_VIDEO_TYPE_ATV"},
+            {"video_id": "E1s5_9gxGfU", "title": "Dancing", "artists": ["James Hype"], "album": "Dancing", "duration_seconds": 241, "type": "MUSIC_VIDEO_TYPE_ATV"},
+            {"video_id": "pq6eykGCLVg", "title": "Year of the Young", "artists": ["Smith & Thell"], "album": "Pixie's Parasol", "duration_seconds": 165, "type": "MUSIC_VIDEO_TYPE_ATV"},
+            {"video_id": "nj6SMl5X0tI", "title": "Play Dead Til They Kill You (feat. EYEDEA (rhymesayers/E&A/Carbon Carousel))", "artists": ["Saturday Morning Soundtrack"], "album": "Saturday Morning Soundtrack", "duration_seconds": 560, "type": "MUSIC_VIDEO_TYPE_ATV"},
+            {"video_id": "WIrAYlgRLfc", "title": "this is what you get for the entire album", "artists": ["C8OWgvj3ryzIVx2sFEMk8RbOLYOUIFvl"], "album": "fuck you & the Destruction of Presbyterian twinfolk sliding on Oppnar Block", "duration_seconds": 34, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true},
+            {"video_id": "9qnqYL0eNNI", "title": "Yellow", "artists": ["Coldplay"], "album": "Parachutes", "duration_seconds": 267, "type": "MUSIC_VIDEO_TYPE_ATV"},
+            {"video_id": "FRu_FkCtSHo", "title": "Auld Lang Syne - The New Year's Anthem", "artists": ["Mariah Carey"], "album": "Merry Christmas II You", "duration_seconds": 228, "type": "MUSIC_VIDEO_TYPE_ATV"},
+            {"video_id": "GDdoEZL3vJg", "title": "I Drink Wine", "artists": ["Adele"], "album": "30", "duration_seconds": 377, "type": "MUSIC_VIDEO_TYPE_ATV"}
+          ],
+          "candidates": [
+            { "url": "https://music.youtube.com/watch?v=Pwg_GsP2QZU", "actual_duration": 139.376009, "correct": true }
+          ] },
+        { "name": "ytmusic", "search_seconds": 2,
+          "observed_watches": {
+            "Pwg_GsP2QZU": { "title": "ALBUM OF THE YEAR !", "artists": ["ezcodylee"], "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true }
+          } }
+      ]
+    }
+  ]
+}

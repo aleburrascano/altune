@@ -1560,3 +1560,83 @@ func TestValidateCases_AcceptsASourceURLForATrackWithNoStoredFile(t *testing.T) 
 		t.Fatalf("validateCases = %v, want nil", err)
 	}
 }
+
+func TestRun_RecordedObservationsGoThroughTheRealAdapters(t *testing.T) {
+	const explicitURL = "https://music.youtube.com/watch?v=bcdefghijkl"
+	const cleanURL = "https://music.youtube.com/watch?v=abcdefghijk"
+	recorded := func(pin []CatalogSource) Case {
+		return Case{
+			ID: "x", Class: "OK",
+			Track: Track{Title: "Halo", Artist: "Nova", CatalogDuration: 200, CatalogSources: pin},
+			Sources: []Source{
+				{Name: "ytmsearch", ObservedSongs: []ObservedSong{
+					{VideoID: "zyxwvutsrqp", Title: "Halo (Live)", Artists: []string{"Nova"}, DurationSeconds: 200, Type: ytmsearch.VideoTypeOMV},
+					{VideoID: "abcdefghijk", Title: "Halo", Artists: []string{"Nova"}, DurationSeconds: 200, Type: ytmsearch.VideoTypeATV},
+					{VideoID: "bcdefghijkl", Title: "Halo", Artists: []string{"Nova"}, DurationSeconds: 200, Type: ytmsearch.VideoTypeATV, Explicit: true},
+				}, Candidates: []Candidate{
+					{URL: cleanURL, ActualDuration: 200},
+					{URL: explicitURL, ActualDuration: 200, Correct: true},
+				}},
+				{Name: "ytmusic", ObservedWatches: map[string]ObservedWatchRecord{
+					"abcdefghijk": {Title: "Halo", Artists: []string{"Nova"}, Type: ytmsearch.VideoTypeATV},
+				}},
+			},
+		}
+	}
+
+	t.Run("ytmsearch stores the strong hit its own tie-break picks among the recorded songs", func(t *testing.T) {
+		out := Run(context.Background(), recorded(nil))
+
+		if !out.Pass || out.Stored != explicitURL {
+			t.Fatalf("Run stored %q (pass=%v: %s), want the explicit art track %q", out.Stored, out.Pass, out.Reason, explicitURL)
+		}
+	})
+
+	t.Run("ytmusic yields no candidate when the request pins no video", func(t *testing.T) {
+		kase := recorded(nil)
+		watches := newCasePorts(kase).sources()[1]
+
+		got, err := watches.Find(context.Background(), ports.FindRequest{Title: "Halo", Artist: "Nova"})
+
+		if err != nil || len(got) != 0 {
+			t.Errorf("Find = %v, %v, want no candidate", got, err)
+		}
+	})
+
+	t.Run("ytmusic emits the recorded watch of the pinned video", func(t *testing.T) {
+		kase := recorded([]CatalogSource{{Provider: string(ports.ProviderYouTube), ExternalID: "abcdefghijk"}})
+		watches := newCasePorts(kase).sources()[1]
+
+		got, err := watches.Find(context.Background(), ports.FindRequest{Title: "Halo", Artist: "Nova", CatalogSources: kase.Track.portCatalogSources()})
+
+		if err != nil || len(got) != 1 || got[0].URL != cleanURL || got[0].Kind != ports.KindArtTrack {
+			t.Errorf("Find = %+v, %v, want the pinned art track at %q", got, err, cleanURL)
+		}
+	})
+}
+
+func TestValidateCases_RefusesARecordedSourceThatBreaksItsAdapter(t *testing.T) {
+	song := []ObservedSong{{VideoID: "abcdefghijk", Title: "Halo", Type: ytmsearch.VideoTypeATV}}
+	watch := map[string]ObservedWatchRecord{"abcdefghijk": {Title: "Halo", Type: ytmsearch.VideoTypeATV}}
+	facts := []Candidate{{URL: "u"}}
+	tests := []struct {
+		name string
+		src  Source
+		want string
+	}{
+		{"songs on a source that is not ytmsearch", Source{Name: "ytdlp", ObservedSongs: song, Candidates: facts}, "records ytmsearch songs"},
+		{"watches on a source that is not ytmusic", Source{Name: "ytmsearch", ObservedWatches: watch, Candidates: facts}, "records ytmusic watches"},
+		{"songs beside a named adapter", Source{Name: "ytmsearch", Adapter: "ytmusic", ObservedSongs: song, Candidates: facts}, "keep one"},
+		{"a hand-set title beside the recording", Source{Name: "ytmsearch", ObservedSongs: song, Candidates: []Candidate{{URL: "u", Title: "Halo"}}}, "may carry only a url and download facts"},
+		{"an observed candidate beside the songs", Source{Name: "ytmsearch", ObservedSongs: song, Candidates: []Candidate{{URL: "u", Observed: &Observed{}}}}, "may carry only a url and download facts"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateCases([]Case{{ID: "x", Class: "F1", Track: Track{Title: "t", Artist: "a"}, Sources: []Source{tt.src}}})
+
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("validateCases = %v, want an error containing %q", err, tt.want)
+			}
+		})
+	}
+}
