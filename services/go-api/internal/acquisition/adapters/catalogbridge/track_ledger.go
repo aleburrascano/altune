@@ -182,12 +182,6 @@ func (l *TrackLedger) Fail(ctx context.Context, id shared.TrackId, userId shared
 	})
 }
 
-func (l *TrackLedger) Revert(ctx context.Context, id shared.TrackId, userId shared.UserId, fence ports.Fence) error {
-	return l.loadAndUpdate(ctx, id, userId, fence, func(track *domain.Track) error {
-		return track.RevertToPending()
-	})
-}
-
 func (l *TrackLedger) RevertAt(ctx context.Context, snapshot ports.TrackSnapshot) error {
 	track, err := l.store.GetByID(ctx, snapshot.ID, snapshot.UserId)
 	if err != nil {

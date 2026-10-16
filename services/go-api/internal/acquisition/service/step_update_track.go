@@ -58,14 +58,6 @@ func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext, _
 	return afterUpdate{}, err
 }
 
-func (s *UpdateTrackStep) Rollback(ctx context.Context, _ *AcquisitionContext) error {
-	err := s.ledger.Revert(ctx, s.trackId, s.userId, jobFenceFrom(ctx))
-	if errors.Is(err, ports.ErrIllegalTransition) {
-		return nil
-	}
-	return err
-}
-
 type commitCheckContextKey struct{}
 
 type commitCheck func(ctx context.Context) error

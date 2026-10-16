@@ -38,13 +38,22 @@ const (
 	stepNamePipeline    StepName = "pipeline"
 )
 
-type undoable interface {
+type named interface {
 	Name() StepName
+}
+
+type undoable interface {
+	named
 	Rollback(ctx context.Context, ac *AcquisitionContext) error
 }
 
 type stage[In, Out any] interface {
 	undoable
+	Execute(ctx context.Context, ac *AcquisitionContext, prev In) (Out, error)
+}
+
+type finalStage[In, Out any] interface {
+	named
 	Execute(ctx context.Context, ac *AcquisitionContext, prev In) (Out, error)
 }
 
@@ -54,10 +63,10 @@ type Pipeline struct {
 	download    stage[afterSelect, afterDownload]
 	tag         stage[afterDownload, afterTag]
 	store       stage[afterTag, afterStore]
-	updateTrack stage[afterStore, afterUpdate]
+	updateTrack finalStage[afterStore, afterUpdate]
 }
 
-func (p Pipeline) withUpdateTrack(s stage[afterStore, afterUpdate]) Pipeline {
+func (p Pipeline) withUpdateTrack(s finalStage[afterStore, afterUpdate]) Pipeline {
 	p.updateTrack = s
 	return p
 }
@@ -74,7 +83,7 @@ type pipelineRun struct {
 	ac        *AcquisitionContext
 	reporter  jobReporter
 	completed []undoable
-	current   undoable
+	current   named
 }
 
 func RunPipeline(ctx context.Context, p Pipeline, ac *AcquisitionContext) (err error) {
@@ -119,7 +128,7 @@ func RunPipeline(ctx context.Context, p Pipeline, ac *AcquisitionContext) (err e
 	if p.updateTrack == nil {
 		return nil
 	}
-	_, err = runStage(ctx, run, p.updateTrack, stored)
+	_, err = execStage(ctx, run, p.updateTrack, stored)
 	return err
 }
 
@@ -155,32 +164,44 @@ func searchAndDownload(ctx context.Context, run *pipelineRun, p Pipeline) (after
 }
 
 func runStage[In, Out any](ctx context.Context, run *pipelineRun, s stage[In, Out], prev In) (Out, error) {
-	var none Out
-	ac := run.ac
-
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		rollback(ctx, run.completed, ac)
-		return none, fmt.Errorf("pipeline cancelled: %w", ctxErr)
+	out, err := execStage(ctx, run, s, prev)
+	if err != nil {
+		return out, err
 	}
+	run.completed = append(run.completed, s)
+	return out, nil
+}
 
+func announceStage(ctx context.Context, run *pipelineRun, s named) {
+	ac := run.ac
 	run.current = s
 	run.reporter.stage(string(s.Name()))
 	if ac.Selected != nil {
 		run.reporter.source(ac.Selected.URL)
 	}
 	slog.InfoContext(ctx, "pipeline step starting", "step", s.Name(), "track_id", ac.Track.ID)
+}
+
+func execStage[In, Out any](ctx context.Context, run *pipelineRun, s finalStage[In, Out], prev In) (Out, error) {
+	var none Out
+
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		rollback(ctx, run.completed, run.ac)
+		return none, fmt.Errorf("pipeline cancelled: %w", ctxErr)
+	}
+
+	announceStage(ctx, run, s)
 
 	start := time.Now()
-	out, execErr := s.Execute(ctx, ac, prev)
+	out, execErr := s.Execute(ctx, run.ac, prev)
 	timeStage(ctx, string(s.Name()), start)
 	if execErr != nil {
 		slog.ErrorContext(ctx, "pipeline step failed",
-			"step", s.Name(), "track_id", ac.Track.ID, "error", redact.LogError(execErr))
-		rollback(ctx, run.completed, ac)
+			"step", s.Name(), "track_id", run.ac.Track.ID, "error", redact.LogError(execErr))
+		rollback(ctx, run.completed, run.ac)
 		return none, &StepError{Step: s.Name(), Err: execErr}
 	}
 
-	run.completed = append(run.completed, s)
 	return out, nil
 }
 

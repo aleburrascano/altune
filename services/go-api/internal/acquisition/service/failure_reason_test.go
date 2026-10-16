@@ -47,7 +47,7 @@ func TestFailureReason(t *testing.T) {
 
 func TestStepName_IsTheOneItsFailureCodeIsKeyedOn(t *testing.T) {
 	tests := []struct {
-		step     undoable
+		step     named
 		wantName string
 		wantCode domain.FailureCode
 	}{

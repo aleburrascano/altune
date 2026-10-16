@@ -989,3 +989,33 @@ func TestRunPipeline_ShadowLogsAFailedPipeline(t *testing.T) {
 		t.Fatalf("shadow line = %v, want pipeline_failed with no kept url", line)
 	}
 }
+
+func TestRunPipeline_AFailingUpdateTrackRollsBackOnlyTheEarlierStages(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track := seedTrackInRepo(t, repo, userId, markReadyWith("old-ref"))
+	var log []string
+	steps := make([]*mockStep, 5)
+	for i, name := range pipelineStageNames[:5] {
+		steps[i] = newMockStep(name, &log)
+	}
+	p := pipelineOf(steps...).withUpdateTrack(NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID))
+
+	err := RunPipeline(context.Background(), p, &AcquisitionContext{})
+
+	var stepErr *StepError
+	if !errors.As(err, &stepErr) || stepErr.Step != stepNameUpdateTrack {
+		t.Fatalf("err = %v, want a StepError from update_track", err)
+	}
+	want := []string{
+		"execute:search", "execute:select", "execute:download", "execute:tag", "execute:store",
+		"rollback:store", "rollback:tag", "rollback:download", "rollback:select", "rollback:search",
+	}
+	if strings.Join(log, ",") != strings.Join(want, ",") {
+		t.Errorf("log = %v, want %v", log, want)
+	}
+	got := storedTrack(t, repo, track)
+	if got.AcquisitionStatus != domain.AcquisitionReady || got.AudioRef == nil || *got.AudioRef != "old-ref" {
+		t.Errorf("status = %v, audio_ref = %v, want ready on old-ref", got.AcquisitionStatus, got.AudioRef)
+	}
+}

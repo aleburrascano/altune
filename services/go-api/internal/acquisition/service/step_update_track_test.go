@@ -114,30 +114,6 @@ func TestUpdateTrackStep_Execute_EmptyAudioRef(t *testing.T) {
 	}
 }
 
-func TestUpdateTrackStep_Rollback_RevertsToPending(t *testing.T) {
-	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("NewTrack: %v", err)
-	}
-	audioRef := "user/artist/album/song.mp3"
-	_ = track.MarkReady(audioRef)
-
-	repo := newFakeTrackRepository()
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
-
-	step := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID)
-	ac := &AcquisitionContext{}
-
-	if err := step.Rollback(context.Background(), ac); err != nil {
-		t.Fatalf("expected no error on rollback, got %v", err)
-	}
-	reverted := storedTrack(t, repo, track)
-	if reverted.AcquisitionStatus != domain.AcquisitionPending {
-		t.Errorf("track status after rollback = %v, want %v", reverted.AcquisitionStatus, domain.AcquisitionPending)
-	}
-}
-
 func TestUpdateTrackStep_Name(t *testing.T) {
 	step := NewUpdateTrackStep(nil, shared.UserId{}, domain.TrackId{})
 	if got := step.Name(); got != "update_track" {
@@ -298,22 +274,6 @@ func TestUpdateTrackStep_Execute_NoStoredCandidateLeavesEvidenceEmpty(t *testing
 	}
 	if updated := storedTrack(t, repo, track); updated.AcquisitionEvidence() != nil {
 		t.Errorf("evidence = %s, want none", updated.AcquisitionEvidence())
-	}
-}
-
-func TestUpdateTrackStep_RollbackOnPendingTrackIsANoOp(t *testing.T) {
-	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := seedTrackInRepo(t, repo, userId, nil)
-	marker := track.AcquisitionStartedAt
-	step := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID)
-
-	if err := step.Rollback(context.Background(), &AcquisitionContext{}); err != nil {
-		t.Fatalf("rollback of a pending track: %v", err)
-	}
-	got := storedTrack(t, repo, track)
-	if got.AcquisitionStartedAt != marker {
-		t.Error("rollback refreshed the in-flight marker of a track that was never marked ready")
 	}
 }
 

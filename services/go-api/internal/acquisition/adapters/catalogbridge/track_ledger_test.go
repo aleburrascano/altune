@@ -224,7 +224,7 @@ func TestMissingTrackReturnsNotFound(t *testing.T) {
 	}
 }
 
-func TestFailAndRevertTransition(t *testing.T) {
+func TestFailTransition(t *testing.T) {
 	track, userId := newTrack(t, 1)
 	store := newFakeStore(track)
 	ledger := NewTrackLedger(store)
@@ -234,12 +234,6 @@ func TestFailAndRevertTransition(t *testing.T) {
 	}
 	if got := storedTrack(t, store, track.ID); got.AcquisitionStatus != domain.AcquisitionFailed {
 		t.Fatalf("want failed, got %v", got.AcquisitionStatus)
-	}
-	if err := ledger.Revert(context.Background(), track.ID, userId, 0); err != nil {
-		t.Fatal(err)
-	}
-	if got := storedTrack(t, store, track.ID); got.AcquisitionStatus != domain.AcquisitionPending {
-		t.Fatalf("want pending, got %v", got.AcquisitionStatus)
 	}
 }
 
@@ -586,17 +580,16 @@ func TestTrackLedger_CompleteWithAStaleFenceIsLeaseLost(t *testing.T) {
 	}
 }
 
-func TestTrackLedger_FailAndRevertWithAStaleFenceAreLeaseLost(t *testing.T) {
+func TestTrackLedger_FailWithAStaleFenceIsLeaseLost(t *testing.T) {
 	track, userId := newTrack(t, 1)
 	track.AcquisitionFence = 3
 	store := newFakeStore(track)
 	ledger := NewTrackLedger(store)
 
 	failErr := ledger.Fail(context.Background(), track.ID, userId, 2, "boom")
-	revertErr := ledger.Revert(context.Background(), track.ID, userId, 2)
 
-	if !errors.Is(failErr, acqdomain.ErrLeaseLost) || !errors.Is(revertErr, acqdomain.ErrLeaseLost) {
-		t.Fatalf("Fail = %v, Revert = %v, want ErrLeaseLost from both", failErr, revertErr)
+	if !errors.Is(failErr, acqdomain.ErrLeaseLost) {
+		t.Fatalf("Fail = %v, want ErrLeaseLost", failErr)
 	}
 	if got := storedTrack(t, store, track.ID); got.AcquisitionStatus != domain.AcquisitionPending || len(store.updates) != 0 {
 		t.Errorf("status = %v, updates = %v, want the track untouched", got.AcquisitionStatus, store.updates)
@@ -702,29 +695,7 @@ func TestTrackLedger_AStaleReplaceKeepsTheTrackOnItsServingAudio(t *testing.T) {
 	}
 }
 
-func TestTrackLedger_AStaleRevertLeavesAFailedTrackFailedWithItsReason(t *testing.T) {
-	track, userId := newTrack(t, 1)
-	if err := track.FailAcquisition("boom"); err != nil {
-		t.Fatal(err)
-	}
-	track.AcquisitionFence = 3
-	store := newFakeStore(track)
-
-	err := NewTrackLedger(store).Revert(context.Background(), track.ID, userId, 2)
-
-	if !errors.Is(err, acqdomain.ErrLeaseLost) {
-		t.Fatalf("err = %v, want ErrLeaseLost", err)
-	}
-	got := storedTrack(t, store, track.ID)
-	if got.AcquisitionStatus != domain.AcquisitionFailed || got.FailureReason == nil || *got.FailureReason != "boom" {
-		t.Errorf("status = %v, reason = %v, want failed with boom", got.AcquisitionStatus, got.FailureReason)
-	}
-	if len(store.updates) != 0 {
-		t.Errorf("updates = %v, want none", store.updates)
-	}
-}
-
-func TestTrackLedger_CompleteAndRevertWithoutAFenceOnEitherSideGoThrough(t *testing.T) {
+func TestTrackLedger_CompleteWithoutAFenceOnEitherSideGoesThrough(t *testing.T) {
 	cases := []struct {
 		name         string
 		heldFence    ports.Fence
@@ -745,21 +716,6 @@ func TestTrackLedger_CompleteAndRevertWithoutAFenceOnEitherSideGoThrough(t *test
 			got := storedTrack(t, store, track.ID)
 			if got.AcquisitionStatus != domain.AcquisitionReady || got.AudioRef == nil || *got.AudioRef != "ref-1" {
 				t.Errorf("status = %v, audio_ref = %v, want ready on ref-1", got.AcquisitionStatus, got.AudioRef)
-			}
-		})
-		t.Run(tc.name+": revert", func(t *testing.T) {
-			track, userId := newTrack(t, 1)
-			if err := track.FailAcquisition("boom"); err != nil {
-				t.Fatal(err)
-			}
-			track.AcquisitionFence = tc.trackedFence
-			store := newFakeStore(track)
-
-			if err := NewTrackLedger(store).Revert(context.Background(), track.ID, userId, tc.heldFence); err != nil {
-				t.Fatal(err)
-			}
-			if got := storedTrack(t, store, track.ID); got.AcquisitionStatus != domain.AcquisitionPending {
-				t.Errorf("status = %v, want pending", got.AcquisitionStatus)
 			}
 		})
 	}
