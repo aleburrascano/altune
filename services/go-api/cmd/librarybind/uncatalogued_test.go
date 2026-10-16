@@ -31,7 +31,7 @@ func TestMarkUncatalogued_MakesATrackNoCatalogListsUnofficialOnlyWhenItCameFromA
 		wantKey    string
 	}{
 		{"a soundcloud upload", curreTrack(), reasonISRCNotFound, statusUnofficial, "soundcloud.com/curre-2/chicago-finale-mp3"},
-		{"a soundcloud subdomain", with2(curreTrack(), func(tr *libraryTrack) { tr.SourceURL = "https://m.soundcloud.com/curre-2/x" }), reasonNoISRC, statusUnofficial, "m.soundcloud.com/curre-2/x"},
+		{"a soundcloud subdomain", with2(curreTrack(), func(tr *libraryTrack) { tr.SourceURL = "https://m.soundcloud.com/curre-2/x" }), reasonNoISRC, statusUnofficial, "soundcloud.com/curre-2/x"},
 		{"a youtube source stays unbound", with2(curreTrack(), func(tr *libraryTrack) { tr.SourceURL = "https://www.youtube.com/watch?v=NifcYqCpA1c" }), reasonNoISRC, statusUnbound, "youtube:NifcYqCpA1c"},
 		{"a host that only mentions soundcloud stays unbound", with2(curreTrack(), func(tr *libraryTrack) { tr.SourceURL = "https://notsoundcloud.com/a" }), reasonNoISRC, statusUnbound, "notsoundcloud.com/a"},
 		{"a track with no source url stays unbound", with2(curreTrack(), func(tr *libraryTrack) { tr.SourceURL = "" }), reasonNoISRC, statusUnbound, ""},

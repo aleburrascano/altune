@@ -12,11 +12,14 @@ var youtubeHosts = map[string]bool{
 	"m.youtube.com":     true,
 	"music.youtube.com": true,
 	shortYouTubeHost:    true,
+
+	"youtube-nocookie.com":     true,
+	"www.youtube-nocookie.com": true,
 }
 
 const shortYouTubeHost = "youtu.be"
 
-var videoIDPathPrefixes = map[string]bool{"embed": true, "v": true}
+var videoIDPathPrefixes = map[string]bool{"embed": true, "v": true, "shorts": true, "live": true}
 
 var videoIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 
@@ -60,13 +63,14 @@ func videoID(candidateID string) string {
 }
 
 func normalizedURLKey(rawURL string) string {
-	key := strings.TrimSpace(rawURL)
+	key := strings.ToLower(strings.TrimSpace(rawURL))
 	if i := strings.IndexByte(key, '?'); i >= 0 {
 		key = key[:i]
 	}
 	key = strings.TrimPrefix(key, "https://")
 	key = strings.TrimPrefix(key, "http://")
 	key = strings.TrimPrefix(key, "www.")
+	key = strings.TrimPrefix(key, "m.")
 	key = strings.TrimSuffix(key, "/")
-	return strings.ToLower(key)
+	return key
 }
