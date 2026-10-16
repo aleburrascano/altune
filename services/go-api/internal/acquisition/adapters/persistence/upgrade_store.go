@@ -132,7 +132,8 @@ const gradeRankSQL = `array_position(ARRAY['F', 'D', 'C', 'B', 'A', 'A_user'], %
 
 var recordInPlaceSQL = fmt.Sprintf(`
 UPDATE tracks
-SET acquisition_evidence = COALESCE(acquisition_evidence, '{}'::jsonb) || jsonb_strip_nulls(jsonb_build_object(
+SET acquisition_evidence = (COALESCE(acquisition_evidence, '{}'::jsonb) - CASE WHEN $4::text = 'preview'
+			THEN ARRAY['in_place_failures', 'acoustid_score'] ELSE ARRAY['in_place_failures'] END) || jsonb_strip_nulls(jsonb_build_object(
 		'in_place_generation', $3::int,
 		'in_place_at', now(),
 		'in_place_basis', NULLIF($5::text, ''),

@@ -531,3 +531,36 @@ func TestPgxUpgradeStore_RecordInPlaceLowersAWrongLengthGradeAToB(t *testing.T) 
 		t.Errorf("grade = %q, want B once the length contradicts the file", got.Grade)
 	}
 }
+
+func TestPgxUpgradeStore_RecordInPlaceClearsTheFailureCountSoANewGenerationStartsFresh(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxUpgradeStore(pool)
+	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"C","in_place_failures":2}`, sourceURL: sourceURL("art")})
+
+	if _, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{AudioRef: "u/" + id.String() + ".mp3", Generation: 2, Verdict: "hard", Grade: "A"}); err != nil {
+		t.Fatalf("RecordInPlace: %v", err)
+	}
+	failures, err := store.NoteInPlaceFailure(context.Background(), id)
+
+	if err != nil || failures != 1 {
+		t.Errorf("failures after a recorded verdict = %d, %v, want 1: the count starts over", failures, err)
+	}
+}
+
+func TestPgxUpgradeStore_RecordInPlaceClearsAStaleAcoustIDScoreOnAPreviewVerdict(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxUpgradeStore(pool)
+	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"C","acoustid_score":0.9}`, sourceURL: sourceURL("art")})
+
+	if _, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{
+		AudioRef: "u/" + id.String() + ".mp3", Generation: 2, Verdict: "preview", Basis: "preview", BitErrorRate: 0.06,
+	}); err != nil {
+		t.Fatalf("RecordInPlace: %v", err)
+	}
+
+	if got := readEvidence(t, pool, id); got.Score != 0 || got.Verdict != "preview" {
+		t.Errorf("evidence = %+v, want the old score cleared and the preview verdict recorded", got)
+	}
+}
