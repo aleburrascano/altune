@@ -55,7 +55,7 @@ func newAcquisitionStatusDTO(s ports.AcquisitionStatus) AcquisitionStatusDTO {
 		Rejected:           s.Rejected,
 		Paused:             s.Paused,
 		QueueDepth:         s.QueueDepth,
-		QueueCapacity:      s.QueueCapacity,
+		QueueCapacity:      s.Workers,
 		OldestPendingAgeMs: s.OldestPendingAge.Milliseconds(),
 		QueueDepthKnown:    s.QueueDepthKnown,
 		Verification: AcquisitionVerificationDTO{

@@ -117,7 +117,7 @@ func TestReadsAcquisition_ServesTheReaderStatus(t *testing.T) {
 		Failed:        3,
 		Rejected:      7,
 		QueueDepth:    5,
-		QueueCapacity: 16,
+		Workers: 16,
 		Verification:  acqPorts.AcquisitionVerification{Ffprobe: true, YtDlp: true},
 		ActiveJobs: []acqPorts.JobRecord{{
 			TrackID:     "trk-1",

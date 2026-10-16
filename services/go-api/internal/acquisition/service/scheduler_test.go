@@ -709,8 +709,8 @@ func TestBackgroundScheduler_StatusQueueDrainsAndCountsShutdownRejections(t *tes
 	if status.QueueDepth != 0 {
 		t.Errorf("queue depth after drain = %d, want 0", status.QueueDepth)
 	}
-	if status.QueueCapacity != cap(sem) {
-		t.Errorf("queue capacity = %d, want %d (worker count)", status.QueueCapacity, cap(sem))
+	if status.Workers != cap(sem) {
+		t.Errorf("queue capacity = %d, want %d (worker count)", status.Workers, cap(sem))
 	}
 
 	scheduler.Shutdown(context.Background())
@@ -1595,15 +1595,15 @@ func TestAcquisitionStatus_SnapshotIsACopy(t *testing.T) {
 	}
 }
 
-func TestAcquisitionVerification_FullyArmed_RequiresYtDlp(t *testing.T) {
+func TestAcquisitionVerification_ToolsPresent_RequiresYtDlp(t *testing.T) {
 	armed := acqports.AcquisitionVerification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true}
-	if !armed.FullyArmed() {
-		t.Error("FullyArmed() = false with every tool present, want true")
+	if !armed.ToolsPresent() {
+		t.Error("ToolsPresent() = false with every tool present, want true")
 	}
 
 	missingYtDlp := acqports.AcquisitionVerification{Ffprobe: true, Ffmpeg: true, Fpcalc: true}
-	if missingYtDlp.FullyArmed() {
-		t.Error("FullyArmed() = true with yt-dlp unavailable; the startup warning never fires (defect)")
+	if missingYtDlp.ToolsPresent() {
+		t.Error("ToolsPresent() = true with yt-dlp unavailable; the startup warning never fires (defect)")
 	}
 }
 
@@ -1945,6 +1945,22 @@ func TestWithVerificationStatus_LogsDegradedOrArmed(t *testing.T) {
 				t.Errorf("log = %s %s, want %s %s", record.Level, record.Msg, tc.wantLevel, tc.wantMsg)
 			}
 		})
+	}
+}
+
+func TestWithVerificationStatus_NamesFingerprintLookupsUnverified(t *testing.T) {
+	logs := captureJSONLogSync(t)
+
+	WithVerificationStatus(acqports.AcquisitionVerification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true})(&BackgroundAcquisitionScheduler{})
+
+	var record struct {
+		FingerprintLookup string `json:"fingerprint_lookup"`
+	}
+	if err := json.Unmarshal([]byte(logs.String()), &record); err != nil {
+		t.Fatalf("expected exactly one JSON log line, got %q: %v", logs.String(), err)
+	}
+	if !strings.Contains(record.FingerprintLookup, "unverified") {
+		t.Errorf("fingerprint_lookup = %q, want it to say unverified", record.FingerprintLookup)
 	}
 }
 

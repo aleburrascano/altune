@@ -38,7 +38,7 @@ const (
 	SkipNoDuration         = "no_duration"
 )
 
-func (v AcquisitionVerification) FullyArmed() bool {
+func (v AcquisitionVerification) ToolsPresent() bool {
 	return v.Ffprobe && v.Ffmpeg && v.Fpcalc && v.YtDlp
 }
 
@@ -72,7 +72,7 @@ type AcquisitionStatus struct {
 	QueueDepth       int
 	OldestPendingAge time.Duration
 	QueueDepthKnown  bool
-	QueueCapacity    int
+	Workers          int
 	Verification     AcquisitionVerification
 	ActiveJobs       []JobRecord
 	Recent           []JobRecord

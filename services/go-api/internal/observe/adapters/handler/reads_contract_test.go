@@ -46,7 +46,7 @@ func TestContract_EvalMatchesFixture(t *testing.T) {
 
 func TestContract_AcquisitionMatchesFixture(t *testing.T) {
 	reader := fakeAcquisitionReader{status: acqPorts.AcquisitionStatus{
-		InFlight: 1, Succeeded: 2, Failed: 3, Rejected: 4, QueueDepth: 5, QueueCapacity: 6,
+		InFlight: 1, Succeeded: 2, Failed: 3, Rejected: 4, QueueDepth: 5, Workers: 6,
 	}}
 	rec := serveRead(t, Deps{Acquisition: reader}, "/acquisition")
 	assertMatchesFixture(t, "observe_acquisition.json", rec.Body.Bytes())

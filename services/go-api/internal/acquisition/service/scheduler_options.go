@@ -70,15 +70,19 @@ func WithOutcomeRecorder(r ports.OutcomeRecorder) func(*BackgroundAcquisitionSch
 	return func(s *BackgroundAcquisitionScheduler) { s.outcomes = r }
 }
 
+const fingerprintLookupUnverified = "unverified until the first successful lookup"
+
 func WithVerificationStatus(v ports.AcquisitionVerification) func(*BackgroundAcquisitionScheduler) {
 	return func(s *BackgroundAcquisitionScheduler) {
 		s.verification = v
-		if !v.FullyArmed() {
+		if !v.ToolsPresent() {
 			slog.WarnContext(context.Background(), "acquisition.verification_degraded",
-				"ffprobe", v.Ffprobe, "ffmpeg", v.Ffmpeg, "fpcalc", v.Fpcalc, "yt_dlp", v.YtDlp)
+				"ffprobe", v.Ffprobe, "ffmpeg", v.Ffmpeg, "fpcalc", v.Fpcalc, "yt_dlp", v.YtDlp,
+				"fingerprint_lookup", fingerprintLookupUnverified)
 			return
 		}
-		slog.InfoContext(context.Background(), "acquisition.verification_armed")
+		slog.InfoContext(context.Background(), "acquisition.verification_armed",
+			"fpcalc", v.Fpcalc, "fingerprint_lookup", fingerprintLookupUnverified)
 	}
 }
 

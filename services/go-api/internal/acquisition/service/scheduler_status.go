@@ -24,7 +24,7 @@ func (s *BackgroundAcquisitionScheduler) Status() ports.AcquisitionStatus {
 		QueueDepth:       pending,
 		OldestPendingAge: oldestAge,
 		QueueDepthKnown:  depthKnown,
-		QueueCapacity:    s.workerCount(),
+		Workers:          s.workerCount(),
 		Verification:     s.verificationStatus(),
 		ActiveJobs:       jobs,
 		Recent:           recent,
