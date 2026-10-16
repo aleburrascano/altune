@@ -200,7 +200,7 @@ synced_tables() {
 source_filter() {
     case ${TABLE_RULE[$1]} in
         child)
-            printf '%s IN (SELECT id FROM public.%s WHERE user_id = ANY(%s))' \
+            printf '%s::text IN (SELECT id::text FROM public.%s WHERE user_id = ANY(%s))' \
                 "${TABLE_FK_COLUMN[$1]}" "${TABLE_PARENT[$1]}" "$PROD_IDS" ;;
         global)
             printf 'true' ;;
@@ -219,6 +219,10 @@ import_table() {
 
 swap_sql() {
     local table cols select_cols
+    for table in $(tables_with_rule child); do
+        printf 'DELETE FROM public.%s WHERE %s::text IN (SELECT id::text FROM public.%s WHERE user_id IN (SELECT staging_id FROM %s.user_map));\n' \
+            "$table" "${TABLE_FK_COLUMN[$table]}" "${TABLE_PARENT[$table]}" "$IMPORT_SCHEMA"
+    done
     for table in $(tables_with_rule user) $(tables_with_rule reset); do
         printf 'DELETE FROM public.%s WHERE user_id IN (SELECT staging_id FROM %s.user_map);\n' \
             "$table" "$IMPORT_SCHEMA"

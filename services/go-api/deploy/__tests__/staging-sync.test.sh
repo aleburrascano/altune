@@ -272,14 +272,29 @@ test_manifest_with_comments_blank_lines_and_tabs_syncs() {
 test_skip_tables_are_never_touched() {
     reset_databases
     write_env
-    sql prod -c "INSERT INTO acquisition_outcomes (track_id, outcome, reason, elapsed_ms) VALUES ('$T1', 'succeeded', 'from-prod', 1)" \
-        -c "INSERT INTO acquisition_rejections (track_id, source_key, reason) VALUES ('$T1', 'prod-src', 'from-prod')"
-    sql staging -c "INSERT INTO acquisition_outcomes (track_id, outcome, reason, elapsed_ms) VALUES ('$T_STALE', 'failed', 'from-staging', 2)" \
-        -c "INSERT INTO acquisition_rejections (track_id, source_key, reason) VALUES ('$T_STALE', 'staging-src', 'from-staging')"
+    sql prod -c "INSERT INTO acquisition_outcomes (track_id, outcome, reason, elapsed_ms) VALUES ('$T1', 'succeeded', 'from-prod', 1)"
+    sql staging -c "INSERT INTO acquisition_outcomes (track_id, outcome, reason, elapsed_ms) VALUES ('$T_STALE', 'failed', 'from-staging', 2)"
     run_sync
     check "a sync with skip tables exits 0" 0 "$?"
     check "skipped outcomes keep only staging's rows" "from-staging" "$(staging_value "SELECT string_agg(reason, ',') FROM acquisition_outcomes")"
-    check "skipped rejections keep only staging's rows" "from-staging" "$(staging_value "SELECT string_agg(reason, ',') FROM acquisition_rejections")"
+}
+
+test_sync_copies_rejections_of_synced_tracks() {
+    reset_databases
+    write_env
+    sql prod -c "INSERT INTO acquisition_rejections (track_id, source_key, reason) VALUES ('$T1', 'prod-src', 'from-prod'), ('$T2', 'unmatched-src', 'unmatched')"
+    sql staging -c "INSERT INTO acquisition_rejections (track_id, source_key, reason) VALUES ('$T_STALE', 'stale-src', 'from-staging'), ('$T_SMOKE', 'smoke-src', 'smoke')"
+    run_sync
+    check "a sync with rejections exits 0" 0 "$?"
+    check "prod's rejections for the synced track come across" "prod-src" "$(staging_value "SELECT string_agg(source_key, ',') FROM acquisition_rejections WHERE track_id = '$T1'")"
+    check "staging's stale rejections for synced users are cleared" 0 "$(staging_value "SELECT count(*) FROM acquisition_rejections WHERE track_id = '$T_STALE'")"
+    check "an unmatched account's rejections never cross" 0 "$(staging_value "SELECT count(*) FROM acquisition_rejections WHERE track_id = '$T2'")"
+    check "a staging-only account keeps its rejections" 1 "$(staging_value "SELECT count(*) FROM acquisition_rejections WHERE track_id = '$T_SMOKE'")"
+
+    sql prod -c "UPDATE acquisition_rejections SET source_key = 'prod-src-2' WHERE track_id = '$T1'"
+    run_sync
+    check "a second sync exits 0" 0 "$?"
+    check "a second sync replaces the rows instead of colliding" "prod-src-2" "$(staging_value "SELECT string_agg(source_key, ',') FROM acquisition_rejections WHERE track_id = '$T1'")"
 }
 
 test_reset_clears_only_matched_users_orphaned_audio() {
@@ -550,6 +565,7 @@ test_manifest_line_for_a_table_on_neither_tier_aborts_sync
 test_commented_out_line_is_not_a_rule
 test_manifest_with_comments_blank_lines_and_tabs_syncs
 test_skip_tables_are_never_touched
+test_sync_copies_rejections_of_synced_tracks
 test_reset_clears_only_matched_users_orphaned_audio
 test_manifest_rule_for_a_table_on_one_tier_only_syncs
 test_missing_manifest_aborts_sync
