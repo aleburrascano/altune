@@ -901,13 +901,21 @@ func (f funcStage[In, Out]) Execute(_ context.Context, ac *AcquisitionContext, _
 	return out, f.run(ac)
 }
 
-func shadowLine(t *testing.T, logs string) map[string]any {
-	t.Helper()
+func shadowLines(logs, trackID string) []map[string]any {
+	var lines []map[string]any
 	for _, raw := range strings.Split(logs, "\n") {
 		var line map[string]any
-		if json.Unmarshal([]byte(raw), &line) == nil && line["msg"] == "acquisition.judge_shadow" {
-			return line
+		if json.Unmarshal([]byte(raw), &line) == nil && line["msg"] == "acquisition.judge_shadow" && line["track_id"] == trackID {
+			lines = append(lines, line)
 		}
+	}
+	return lines
+}
+
+func shadowLine(t *testing.T, logs, trackID string) map[string]any {
+	t.Helper()
+	if lines := shadowLines(logs, trackID); len(lines) > 0 {
+		return lines[0]
 	}
 	t.Fatalf("no acquisition.judge_shadow line in %s", logs)
 	return nil
@@ -944,11 +952,11 @@ func TestRunPipeline_ShadowJudgesTheKeptCandidate(t *testing.T) {
 		t.Fatalf("RunPipeline: %v", err)
 	}
 
-	line := shadowLine(t, logs.String())
+	line := shadowLine(t, logs.String(), ac.Track.ID)
 	if line["pipeline_url"] != pin.URL || line["judge_url"] != pin.URL || line["verdict"] != "agree" {
 		t.Fatalf("shadow line = %v, want the kept second candidate judged and agreed", line)
 	}
-	if n := strings.Count(logs.String(), "acquisition.judge_shadow"); n != 1 {
+	if n := len(shadowLines(logs.String(), ac.Track.ID)); n != 1 {
 		t.Fatalf("shadow lines = %d, want 1", n)
 	}
 }
@@ -962,7 +970,7 @@ func TestRunPipeline_ShadowLogsDisagreementWithoutChangingThePick(t *testing.T) 
 		t.Fatalf("RunPipeline: %v", err)
 	}
 
-	line := shadowLine(t, logs.String())
+	line := shadowLine(t, logs.String(), ac.Track.ID)
 	if line["verdict"] != "disagree" || line["judge_url"] != finesseAlbumURL || line["pipeline_url"] != finesseRemixURL {
 		t.Fatalf("shadow line = %v, want the judge on the album track and the pipeline on the remix", line)
 	}
@@ -976,7 +984,7 @@ func TestRunPipeline_ShadowLogsAFailedPipeline(t *testing.T) {
 		t.Fatal("RunPipeline: want the download error")
 	}
 
-	line := shadowLine(t, logs.String())
+	line := shadowLine(t, logs.String(), ac.Track.ID)
 	if line["verdict"] != "pipeline_failed" || line["pipeline_url"] != "" {
 		t.Fatalf("shadow line = %v, want pipeline_failed with no kept url", line)
 	}
