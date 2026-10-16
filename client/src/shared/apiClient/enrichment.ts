@@ -10,6 +10,7 @@ import {
   asRecord,
   asString,
   member,
+  nullableBoolean,
   nullableString,
 } from '@shared/apiClient/wireDecoders';
 
@@ -285,10 +286,10 @@ export type UnreleasedTrack = {
   cover_url: string | null;
   genius_url: string;
   release_date: string | null;
-  has_media: boolean;
+  has_media: boolean | null;
 };
 
-export type UnreleasedTracksResponse = { items: UnreleasedTrack[] };
+export type UnreleasedTracksResponse = { items: UnreleasedTrack[]; pending: boolean };
 
 function parseUnreleasedIdentity(r: Record<string, unknown>, at: string) {
   return {
@@ -302,7 +303,7 @@ function parseUnreleasedDetails(r: Record<string, unknown>, at: string) {
   return {
     cover_url: nullableString(r.cover_url, `${at}.cover_url`),
     release_date: nullableString(r.release_date, `${at}.release_date`),
-    has_media: asBoolean(r.has_media, `${at}.has_media`),
+    has_media: nullableBoolean(r.has_media, `${at}.has_media`),
   };
 }
 
@@ -336,8 +337,12 @@ function isParsed(track: UnreleasedTrack | null): track is UnreleasedTrack {
 
 function parseUnreleasedTracksResponse(value: unknown): UnreleasedTracksResponse {
   const at = 'UnreleasedTracksResponse';
-  const rows = parseArray(asRecord(value, at).items, `${at}.items`, parseUnreleasedRow);
-  return { items: rows.filter(isParsed) };
+  const body = asRecord(value, at);
+  const rows = parseArray(body.items, `${at}.items`, parseUnreleasedRow);
+  return {
+    items: rows.filter(isParsed),
+    pending: nullableBoolean(body.pending, `${at}.pending`) === true,
+  };
 }
 
 async function fetchUnreleasedTracks(

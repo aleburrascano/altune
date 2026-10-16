@@ -6,6 +6,7 @@ import {
   asRecord,
   asString,
   member,
+  nullableBoolean,
   nullableNumber,
   nullableString,
   parseErrorBody,
@@ -53,7 +54,15 @@ describe('primitive narrowers return the value or throw a ContractError', () => 
     expect(() => nullableNumber('x', 'nn')).toThrow(ContractError);
   });
 
-  it('member accepts a declared value, rejects an undeclared one, and rejects a non-string', () => {
+  it('nullableBoolean maps null and undefined to null, carries true and false, and rejects a string', () => {
+    expect(nullableBoolean(null, 'nb')).toBeNull();
+    expect(nullableBoolean(undefined, 'nb')).toBeNull();
+    expect(nullableBoolean(true, 'nb')).toBe(true);
+    expect(nullableBoolean(false, 'nb')).toBe(false);
+    expect(() => nullableBoolean('x', 'nb')).toThrow(ContractError);
+  });
+
+  it('member accepts a declared value,rejects an undeclared one, and rejects a non-string', () => {
     expect(member('ready', ['pending', 'ready', 'failed'] as const, 'm')).toBe('ready');
     expect(() => member('nope', ['pending', 'ready', 'failed'] as const, 'm')).toThrow(
       ContractError,

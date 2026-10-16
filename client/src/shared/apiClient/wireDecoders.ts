@@ -71,6 +71,10 @@ export function nullableString(value: unknown, at: string): string | null {
   return value == null ? null : asString(value, at);
 }
 
+export function nullableBoolean(value: unknown, at: string): boolean | null {
+  return value == null ? null : asBoolean(value, at);
+}
+
 export function nullableNumber(value: unknown, at: string): number | null {
   return value == null ? null : asNumber(value, at);
 }
