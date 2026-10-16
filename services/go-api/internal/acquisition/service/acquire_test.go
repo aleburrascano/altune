@@ -2456,3 +2456,52 @@ func TestExecuteReplace_AWorkerThatLostItsLeaseLeavesTheServingAudioInPlace(t *t
 		t.Errorf("object at the serving ref = %q, want the original audio kept", store.objects[originalRef])
 	}
 }
+
+func TestExecute_TheSourceIsAskedWithTheCatalogFacts(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	explicit := true
+	sources := []domain.CatalogSource{
+		{Provider: "spotify", ExternalID: "4uLU6hMCjMI75M1A2tKUQC", URL: "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC"},
+		{Provider: "deezer", ExternalID: "3135556"},
+	}
+	track := seedTrackInRepo(t, repo, userId, func(tr *domain.Track) error {
+		isrc := "USUM71703861"
+		tr.ISRC = &isrc
+		if err := tr.SetCatalogDuration(214); err != nil {
+			return err
+		}
+		if err := tr.SetDuration(200); err != nil {
+			return err
+		}
+		return tr.SetCatalogIdentity(nil, &explicit, sources)
+	})
+	searcher := &fakeAudioSearcher{}
+	svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore())
+
+	_ = svc.Execute(context.Background(), userId, track.ID)
+
+	if len(searcher.requests) != 1 {
+		t.Fatalf("source asked %d times, want 1", len(searcher.requests))
+	}
+	req := searcher.requests[0]
+	if req.Title != "Song" || req.Artist != "Artist" || req.Album != "Album" {
+		t.Errorf("request title/artist/album = %q/%q/%q, want Song/Artist/Album", req.Title, req.Artist, req.Album)
+	}
+	if req.ISRC != "USUM71703861" {
+		t.Errorf("request ISRC = %q, want USUM71703861", req.ISRC)
+	}
+	if req.Duration != 214 {
+		t.Errorf("request Duration = %v, want the catalog length 214 (stored length is 200)", req.Duration)
+	}
+	want := []ports.CatalogSource{
+		{Provider: "spotify", ExternalID: "4uLU6hMCjMI75M1A2tKUQC", URL: "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC"},
+		{Provider: "deezer", ExternalID: "3135556"},
+	}
+	if !slices.Equal(req.CatalogSources, want) {
+		t.Errorf("request CatalogSources = %+v, want %+v", req.CatalogSources, want)
+	}
+	if req.CatalogExplicit == nil || !*req.CatalogExplicit {
+		t.Errorf("request CatalogExplicit = %v, want true", req.CatalogExplicit)
+	}
+}

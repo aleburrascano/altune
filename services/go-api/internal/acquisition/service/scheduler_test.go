@@ -127,6 +127,7 @@ type fakeAudioSearcher struct {
 	downloadErr   error
 	searchCalled  bool
 	downloadURLs  []string
+	requests      []acqports.FindRequest
 	mu            sync.Mutex
 }
 
@@ -146,7 +147,10 @@ func (s *fakeAudioSearcher) Download(_ context.Context, url string, _ string) (s
 
 func (s *fakeAudioSearcher) Name() acqdomain.SourceName { return "fake" }
 
-func (s *fakeAudioSearcher) Find(ctx context.Context, _ acqports.FindRequest) ([]acqports.AudioCandidate, error) {
+func (s *fakeAudioSearcher) Find(ctx context.Context, req acqports.FindRequest) ([]acqports.AudioCandidate, error) {
+	s.mu.Lock()
+	s.requests = append(s.requests, req)
+	s.mu.Unlock()
 	return s.Search(ctx, "")
 }
 
