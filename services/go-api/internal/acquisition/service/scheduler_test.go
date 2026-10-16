@@ -3046,6 +3046,35 @@ func TestBackgroundScheduler_APanickedJobAtOrPastTheRunCapLeavesTheQueueWhatever
 	}
 }
 
+func TestBackgroundScheduler_APanickedJobThatLostItsLeaseDoesNotFailTheTrack(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	track.AcquisitionFence = 1000
+	repo := newFakeTrackRepository()
+	key := track.ID.String() + ":" + userId.String()
+	repo.tracks[key] = track
+	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	var wg sync.WaitGroup
+	queue := settleKeepsPendingQueue{newMemJobQueue(make(chan struct{}, 1))}
+	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithJobQueue(queue))
+	t.Cleanup(func() {
+		scheduler.Shutdown(context.Background())
+	})
+	job := acqports.Job{TrackID: track.ID, UserID: userId, Fence: 1, Run: maxAcquisitionAttempts}
+
+	scheduler.releasePanickedJob(job)
+
+	if got := repo.tracks[key].AcquisitionStatus; got != domain.AcquisitionPending {
+		t.Errorf("status = %v, want pending: the panicked job no longer holds the lease", got)
+	}
+	if got := repo.tracks[key].FailureReason; got != nil {
+		t.Errorf("failure_reason = %q, want none", *got)
+	}
+}
+
 func TestBackgroundScheduler_APanickedJobBelowTheRunCapIsRetriedAfterItsBackoff(t *testing.T) {
 	cases := []struct {
 		name string
@@ -3289,5 +3318,147 @@ func TestScheduler_OutcomeCarriesTheRunsConfidenceSourceAndLengths(t *testing.T)
 				t.Errorf("outcome = %v/%q/%v/%v, want scored=%v/%q/%v/%v", got.Confidence, got.SourceKey, got.TargetSeconds, got.MeasuredSeconds, tc.wantScored, tc.wantSource, float64(target), tc.wantMeasured)
 			}
 		})
+	}
+}
+
+func fencedPendingTrack(t *testing.T, fence int) (*fakeTrackRepository, *domain.Track) {
+	t.Helper()
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track := newPendingTrack(t, userId, repo)
+	storedTrack(t, repo, track).AcquisitionFence = fence
+	return repo, track
+}
+
+func panicThroughTheLedger(t *testing.T, store catalogbridge.TrackStore, job acqports.Job) (*queueCallRecorder, *recordingPublisher) {
+	t.Helper()
+	pub := newRecordingPublisher()
+	svc := newTestAcquireService(catalogbridge.NewTrackLedger(store), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), WithAcquireEvents(pub))
+	var wg sync.WaitGroup
+	queue := &queueCallRecorder{memJobQueue: newMemJobQueue(make(chan struct{}, 1))}
+	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithJobQueue(queue))
+	t.Cleanup(func() {
+		scheduler.Shutdown(context.Background())
+	})
+	scheduler.releasePanickedJob(job)
+	return queue, pub
+}
+
+func TestBackgroundScheduler_APanickedJobAtTheRunCapThatStillHoldsItsLeaseFailsTheTrack(t *testing.T) {
+	repo, track := fencedPendingTrack(t, 7)
+	job := acqports.Job{TrackID: track.ID, UserID: track.UserId, Fence: 7, Run: maxAcquisitionAttempts}
+
+	_, pub := panicThroughTheLedger(t, repo, job)
+
+	if got := storedTrack(t, repo, track).AcquisitionStatus; got != domain.AcquisitionFailed {
+		t.Errorf("status = %v, want failed: the job still holds the lease", got)
+	}
+	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 1 {
+		t.Errorf("track_acquisition_failed publishes = %d, want 1", got)
+	}
+}
+
+func TestBackgroundScheduler_APanickedJobOneFenceBehindDoesNotFailTheTrackOrAnnounceIt(t *testing.T) {
+	repo, track := fencedPendingTrack(t, 7)
+	job := acqports.Job{TrackID: track.ID, UserID: track.UserId, Fence: 6, Run: maxAcquisitionAttempts}
+
+	_, pub := panicThroughTheLedger(t, repo, job)
+
+	stored := storedTrack(t, repo, track)
+	if stored.AcquisitionStatus != domain.AcquisitionPending {
+		t.Errorf("status = %v, want pending: a fence one behind has lost the lease", stored.AcquisitionStatus)
+	}
+	if stored.FailureReason != nil {
+		t.Errorf("failure_reason = %q, want none", *stored.FailureReason)
+	}
+	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 0 {
+		t.Errorf("track_acquisition_failed publishes = %d, want 0: nothing failed", got)
+	}
+}
+
+func TestBackgroundScheduler_APanickedJobBelowTheRunCapLeavesTheTrackPendingForItsRetry(t *testing.T) {
+	repo, track := fencedPendingTrack(t, 7)
+	job := acqports.Job{TrackID: track.ID, UserID: track.UserId, Fence: 7, Run: maxAcquisitionAttempts - 1}
+
+	queue, _ := panicThroughTheLedger(t, repo, job)
+
+	if got := storedTrack(t, repo, track).AcquisitionStatus; got != domain.AcquisitionPending {
+		t.Errorf("status = %v, want pending: below the cap the job is retried", got)
+	}
+	if got := queue.released.Load(); got != 1 {
+		t.Errorf("released %d times, want 1", got)
+	}
+	if got := queue.settled.Load(); got != 0 {
+		t.Errorf("settled %d times, want 0", got)
+	}
+}
+
+func TestBackgroundScheduler_AnUnfencedPanickedJobAtTheRunCapStillFailsTheTrack(t *testing.T) {
+	repo, track := fencedPendingTrack(t, 1000)
+	job := acqports.Job{TrackID: track.ID, UserID: track.UserId, Fence: 0, Run: maxAcquisitionAttempts}
+
+	panicThroughTheLedger(t, repo, job)
+
+	if got := storedTrack(t, repo, track).AcquisitionStatus; got != domain.AcquisitionFailed {
+		t.Errorf("status = %v, want failed: an unfenced job is not checked against the lease", got)
+	}
+}
+
+func TestBackgroundScheduler_APanickedJobAtTheRunCapSurvivesARefusalThatPanicsAndLeavesTheQueue(t *testing.T) {
+	job := acqports.Job{TrackID: domain.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Fence: 7, Run: maxAcquisitionAttempts}
+
+	var queue *queueCallRecorder
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("panic escaped the scheduler: %v", r)
+			}
+		}()
+		queue, _ = panicThroughTheLedger(t, &panicRepo{}, job)
+	}()
+
+	if queue == nil {
+		t.Fatal("panicThroughTheLedger returned no queue recorder")
+	}
+	if got := queue.settled.Load(); got != 1 {
+		t.Errorf("settled %d times, want 1: the job at the cap still leaves the queue", got)
+	}
+}
+
+func TestBackgroundScheduler_APanickedReplaceOrUpgradeThatLostItsLeaseLeavesTheTrackPending(t *testing.T) {
+	for _, kind := range []acqports.JobKind{acqports.JobKindReplace, acqports.JobKindUpgrade} {
+		t.Run(string(kind), func(t *testing.T) {
+			repo, track := fencedPendingTrack(t, 1000)
+			job := acqports.Job{TrackID: track.ID, UserID: track.UserId, Kind: kind, Fence: 1, Run: maxAcquisitionAttempts}
+
+			panicThroughTheLedger(t, repo, job)
+
+			if got := storedTrack(t, repo, track).AcquisitionStatus; got != domain.AcquisitionPending {
+				t.Errorf("status = %v, want pending: the panicked %s job no longer holds the lease", got, kind)
+			}
+		})
+	}
+}
+
+func TestBackgroundScheduler_APanickedUpgradeAtTheRunCapThatHoldsItsLeaseLeavesAReadyTrackReady(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	if err := track.MarkReady("audio/ref.mp3"); err != nil {
+		t.Fatalf("mark ready: %v", err)
+	}
+	track.AcquisitionFence = 7
+	if _, err := repo.Add(context.Background(), track); err != nil {
+		t.Fatalf("add track: %v", err)
+	}
+	job := acqports.Job{TrackID: track.ID, UserID: userId, Kind: acqports.JobKindUpgrade, Fence: 7, Run: maxAcquisitionAttempts}
+
+	panicThroughTheLedger(t, repo, job)
+
+	if got := storedTrack(t, repo, track).AcquisitionStatus; got != domain.AcquisitionReady {
+		t.Errorf("status = %v, want ready: a failed upgrade never un-readies the playing file", got)
 	}
 }

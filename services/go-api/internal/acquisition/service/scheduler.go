@@ -443,7 +443,7 @@ func (s *BackgroundAcquisitionScheduler) refuseQueuedRecovering(job ports.Job) {
 			slog.ErrorContext(s.baseCtx, "acquisition_panic_fail_track", "track_id", job.TrackID.String(), "panic", r)
 		}
 	}()
-	s.svc.RefuseQueued(context.Background(), job.UserID, job.TrackID)
+	s.svc.RefuseQueued(withJobFence(context.Background(), job.Fence), job.UserID, job.TrackID)
 }
 
 func (s *BackgroundAcquisitionScheduler) logQueueOutcome(op string, trackID shared.TrackId, err error) {
