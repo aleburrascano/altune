@@ -50,10 +50,10 @@ func (s *YtDlpAudioSearcher) Canary(ctx context.Context, source CanarySource) er
 	canaryCtx, cancel := context.WithTimeout(ctx, s.canaryTimeout)
 	defer cancel()
 
-	return s.runCanaryProbe(canaryCtx, source, cookieFile)
+	return s.runCanaryProbe(ctx, canaryCtx, source, cookieFile)
 }
 
-func (s *YtDlpAudioSearcher) runCanaryProbe(ctx context.Context, source CanarySource, cookieFile string) error {
+func (s *YtDlpAudioSearcher) runCanaryProbe(parent, ctx context.Context, source CanarySource, cookieFile string) error {
 	format := source.Format
 	if format == "" {
 		format = audioFormatSelector
@@ -63,8 +63,8 @@ func (s *YtDlpAudioSearcher) runCanaryProbe(ctx context.Context, source CanarySo
 	}, cookieFile)
 
 	stdout, stderr, err := execcmd.Run(ctx, s.binary, args...)
-	if ctx.Err() != nil {
-		return fmt.Errorf("timed out after %s", s.canaryTimeout)
+	if stopped := s.canaryStopped(parent, ctx); stopped != nil {
+		return stopped
 	}
 	if err != nil {
 		return errors.New(redact.LogText(firstLine(stderr)))
@@ -75,9 +75,16 @@ func (s *YtDlpAudioSearcher) runCanaryProbe(ctx context.Context, source CanarySo
 	return nil
 }
 
+func (s *YtDlpAudioSearcher) canaryStopped(parent, run context.Context) error {
+	if ports.RunTimedOut(parent, run) {
+		return fmt.Errorf("timed out after %s", s.canaryTimeout)
+	}
+	return parent.Err()
+}
+
 func isSoundCloudPreviewDuration(stdout string) bool {
 	duration, err := strconv.ParseFloat(strings.TrimSpace(stdout), 64)
-	return err == nil && duration == soundCloudPreviewDuration
+	return err == nil && isSoundCloudPreviewLength(duration)
 }
 
 func (s *YtDlpAudioSearcher) cookieJarCopy(pattern string) (path string, cleanup func(), err error) {

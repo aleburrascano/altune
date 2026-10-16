@@ -99,8 +99,12 @@ func (i inspection) unplayableFor(flatDuration float64) string {
 	return ""
 }
 
+func isSoundCloudPreviewLength(seconds float64) bool {
+	return math.Abs(seconds-soundCloudPreviewDuration) <= previewDurationSlack
+}
+
 func (i inspection) isPreviewDuration(flatDuration float64) bool {
-	return math.Abs(i.Duration-soundCloudPreviewDuration) <= previewDurationSlack &&
+	return isSoundCloudPreviewLength(i.Duration) &&
 		flatDuration > soundCloudPreviewDuration+previewFlatMargin
 }
 

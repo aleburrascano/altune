@@ -3,6 +3,7 @@ package ytdlp
 import (
 	"altune/go-api/internal/acquisition/ports"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -280,5 +281,47 @@ func TestCopyToTempFile_LivesInAReapableDirectoryRemovedByCleanup(t *testing.T) 
 	cleanup()
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		t.Errorf("copy dir %q still exists after cleanup, Stat err = %v", dir, err)
+	}
+}
+
+func TestCanary_SoundCloudPreviewUsesTheInspectionSlack(t *testing.T) {
+	cases := []struct {
+		reported string
+		wantDark bool
+	}{
+		{"30.04", true},
+		{"29.98", true},
+		{"31", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.reported, func(t *testing.T) {
+			s := NewYtDlpAudioSearcher("", "", "")
+			s.binary = withYtDlpScript(t, "#!/bin/sh\necho '"+tc.reported+"'\n")
+
+			err := s.Canary(context.Background(), SoundCloudCanary)
+
+			if tc.wantDark && (err == nil || err.Error() != "preview only") {
+				t.Fatalf("Canary() = %v, want preview only for %s s", err, tc.reported)
+			}
+			if !tc.wantDark && err != nil {
+				t.Fatalf("Canary() = %v, want nil for %s s", err, tc.reported)
+			}
+		})
+	}
+}
+
+func TestCanary_ParentCancelIsNotATimeout(t *testing.T) {
+	s := NewYtDlpAudioSearcher("", "", "")
+	s.binary = withYtDlpScript(t, "#!/bin/sh\nexec sleep 30\n")
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(100*time.Millisecond, cancel)
+
+	err := s.Canary(ctx, SoundCloudCanary)
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Canary() = %v, want context.Canceled", err)
+	}
+	if err != nil && strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("Canary() = %q, must not call a parent cancel a timeout", err)
 	}
 }
