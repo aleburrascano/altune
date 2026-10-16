@@ -2081,8 +2081,8 @@ func TestDownloadStep_SoftNeedsTheSameVersionLabels(t *testing.T) {
 		wantVerified bool
 	}{
 		{"an acoustic disambiguation with an acoustic title is another version", factsLookup(acoustic), "Sunglasses at Night (Acoustic)", "contradicted", "", false},
-		{"matching labels are soft", factsLookup(plain), "", "", VerdictSoft, true},
-		{"a remaster disambiguation is the same version", factsLookup(remastered), "", "", VerdictSoft, true},
+		{"matching labels are soft", factsLookup(plain), "", "", VerdictSoft, false},
+		{"a remaster disambiguation is the same version", factsLookup(remastered), "", "", VerdictSoft, false},
 		{"a failed lookup is not soft", &stubVersionLookup{err: errors.New("musicbrainz down")}, "", "", VerdictUnknown, false},
 		{"an unknown recording is not soft", &stubVersionLookup{}, "", "", VerdictUnknown, false},
 	}
@@ -2117,6 +2117,47 @@ func TestDownloadStep_SoftNeedsTheSameVersionLabels(t *testing.T) {
 			}
 			if got := ac.Provenance() == domain.ProvenanceVerified; got != tt.wantVerified {
 				t.Errorf("verified = %v, want %v", got, tt.wantVerified)
+			}
+		})
+	}
+}
+
+func TestDownloadStep_ASoftVerdictIsAcceptedButNotIdentityVerified(t *testing.T) {
+	tests := []struct {
+		name        string
+		catalog     float64
+		wantProvens domain.AcquisitionProvenance
+	}{
+		{"a corroborated length is corroborated", 180, domain.ProvenanceCorroborated},
+		{"an uncorroborated length is best effort", 0, domain.ProvenanceBestEffort},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lookup := &stubVersionLookup{facts: map[string]ports.RecordingFacts{
+				"mb-linked": {MBID: "mb-linked", Title: "Sunglasses at Night"},
+			}}
+			step := NewDownloadStep(&fileWritingSearcher{writeFile: true},
+				WithDownloadIdentifier(&stubIdentifier{match: plainTitledLinks("mb-linked")}), WithRecordingLookup(lookup),
+				WithDownloadProber(&queueProber{durations: []float64{180, 180}}))
+			ac := downloadContext("mb-master")
+			ac.Track.CatalogDuration = tt.catalog
+			ac.Identity.Duration = tt.catalog
+			for i := range ac.Ranked {
+				ac.Ranked[i].Title = ""
+			}
+
+			if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+			defer os.RemoveAll(filepath.Dir(ac.TempPath))
+			if ac.Verdict.Kind != VerdictSoft {
+				t.Errorf("verdict = %q, want soft", ac.Verdict.Kind)
+			}
+			if ac.IdentityVerified {
+				t.Error("IdentityVerified = true, want false on a soft verdict")
+			}
+			if got := ac.Provenance(); got != tt.wantProvens {
+				t.Errorf("provenance = %q, want %q", got, tt.wantProvens)
 			}
 		})
 	}

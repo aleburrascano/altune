@@ -274,8 +274,10 @@ func judgeVerdict(
 	result *verificationResult,
 ) *downloadRejection {
 	switch result.verdict.Kind {
-	case VerdictHard, VerdictSoft:
+	case VerdictHard:
 		result.identity = true
+		return nil
+	case VerdictSoft:
 		return nil
 	case VerdictContradicted:
 		return fingerprintRejection(candidate, "contradicted: "+strings.Join(result.verdict.Judged.Reasons, "; "))

@@ -3,7 +3,7 @@
     {
       "id": "soft-same-version-recording-stays-soft",
       "class": "OK",
-      "note": "prod track fb445faa Autumn! 'Comedy!' (ISRC QZNWT2078100), stored verified on a soft verdict from the YouTube Music art track azE7RLVe15o (prod container yt-dlp, 138s). Real AcoustID lookup with the app's client (meta=recordings releasegroups, 2026-10-15): result a3bfe81d, score 0.9314874, links recording 72d538dd, not the ISRC's recording ff36acc9. MusicBrainz lookups of 72d538dd and ff36acc9 (musicbrainz.org/ws/2/recording, 2026-10-15): title 'Comedy!', empty disambiguation, 138000 ms and 138082 ms. The linked recording is the same version, so it stays soft and verified",
+      "note": "prod track fb445faa Autumn! 'Comedy!' (ISRC QZNWT2078100), stored verified on a soft verdict from the YouTube Music art track azE7RLVe15o (prod container yt-dlp, 138s). Real AcoustID lookup with the app's client (meta=recordings releasegroups, 2026-10-15): result a3bfe81d, score 0.9314874, links recording 72d538dd, not the ISRC's recording ff36acc9. MusicBrainz lookups of 72d538dd and ff36acc9 (musicbrainz.org/ws/2/recording, 2026-10-15): title 'Comedy!', empty disambiguation, 138000 ms and 138082 ms. The linked recording is the same version, so it stays soft, accepted, not fingerprint-verified",
       "track": {
         "title": "Comedy!",
         "artist": "Autumn!",
@@ -27,7 +27,7 @@
           "duration": 138
         }
       ],
-      "expect_provenance": "verified",
+      "expect_provenance": "best_effort",
       "candidates": [
         {
           "title": "Comedy!",

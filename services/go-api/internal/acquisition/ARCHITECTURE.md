@@ -374,7 +374,8 @@ outside every catalog length demotes a would-be `proven` to `likely`. A track wi
 MBID, ISRC or catalog length is `unknown` with grade `best_available`. The download step
 asks `ports.RecordingLookup` (`RecordingByMBID`) for the facts of the linked recordings
 the judge names (`audiojudge.VersionLookupCandidates`): at most three per candidate,
-cached for the job. `proven` and `likely` set `IdentityVerified`. `contradicted` rejects
+cached for the job. Only `proven` (a Hard verdict: the fingerprint links our reference recording) sets
+`IdentityVerified`; `likely` (Soft) is accepted, and its provenance follows the length rule. `contradicted` rejects
 at stage `fingerprint`. Each verdict logs `acquisition.audio_verdict`, with the surviving
 links, the grade, the reasons and `reference_doubted`. The grade stored in the evidence is
 the judge's.

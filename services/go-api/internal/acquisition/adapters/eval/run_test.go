@@ -1107,7 +1107,7 @@ func TestRun_GoldensAssertTheSavedTrack(t *testing.T) {
 func TestRun_SavesTheISRCAndTheMeasuredLengthThroughTheLedger(t *testing.T) {
 	out := Run(context.Background(), embeddedCase(t, "rw-drinking-in-la-remix-mbid-anchored-to-isrc"))
 
-	want := SavedTrack{ISRC: "CAA509814003", ISRCSource: "catalog", Provenance: "verified", DurationSeconds: 237}
+	want := SavedTrack{ISRC: "CAA509814003", ISRCSource: "catalog", Provenance: "best_effort", DurationSeconds: 237}
 	if out.Saved.ISRC != want.ISRC || out.Saved.ISRCSource != want.ISRCSource ||
 		out.Saved.Provenance != want.Provenance || out.Saved.DurationSeconds != want.DurationSeconds {
 		t.Errorf("saved %+v, want %+v", out.Saved, want)
@@ -1168,7 +1168,7 @@ func TestRun_JudgesTheExpectedSavedTrack(t *testing.T) {
 	}{
 		{"isrc", SavedExpectation{ISRC: "XX0000000000"}, "want saved isrc XX0000000000"},
 		{"isrc source", SavedExpectation{ISRCSource: "fingerprint"}, "want saved isrc source fingerprint"},
-		{"provenance", SavedExpectation{Provenance: "best_effort"}, "want saved provenance best_effort"},
+		{"provenance", SavedExpectation{Provenance: "verified"}, "want saved provenance verified"},
 		{"duration", SavedExpectation{DurationSeconds: 236}, "want saved duration 236"},
 		{"rejected keys", SavedExpectation{RejectedKeys: []string{"youtube:abc"}}, "want saved rejected keys [youtube:abc]"},
 	}
