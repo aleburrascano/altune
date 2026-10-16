@@ -148,6 +148,23 @@ STUB_HOME="$WORK/home" run_script logs nonsense
 expect_not_out '"note":"in window"'
 expect_not_out '"note":"too old"'
 
+CASE="logs full keeps a whole long line, the default width cuts it at 400, and a bad width exits 3"
+new_stub_bin
+mkdir -p "$WORK/home/altune-logs"
+recent=$(date -u -d '10 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
+pad=$(printf 'x%.0s' $(seq 1 500))
+echo "{\"time\":\"$recent\",\"msg\":\"acquisition.audio_verdict\",\"pad\":\"$pad\",\"results\":\"tail-marker\"}" |
+    gzip >"$WORK/home/altune-logs/go-api-green-20260920T050000Z.log.gz"
+STUB_HOME="$WORK/home" run_script logs 1h . full
+expect_rc 0
+expect_out '"results":"tail-marker"'
+STUB_HOME="$WORK/home" run_script logs 1h
+expect_rc 0
+expect_not_out 'tail-marker'
+STUB_HOME="$WORK/home" run_script logs 1h . wide
+expect_rc 3
+expect_err "acq-debug: logs width must be a number or 'full'"
+
 CASE="track with no argument exits 3 with the usage on stderr and nothing on stdout"
 new_stub_bin
 run_script track

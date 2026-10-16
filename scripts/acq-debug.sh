@@ -20,7 +20,8 @@ Usage: bash scripts/acq-debug.sh [--staging] <command> [args]
   probe <query>         run the app's own yt-dlp search for <query>, then try extracting each
                         candidate the way the download step would — shows bot-checks, previews, dead ids
   tools                 binary versions and a live canary per source (is YouTube / SoundCloud reachable?)
-  logs [since] [regex]  acquisition log lines from the running go-api (default since 1h)
+  logs [since] [regex] [width]  acquisition log lines from the running go-api (default since 1h;
+                        width cuts each line, default 400; 'full' keeps whole lines and the last 2000)
   sql <select>          an ad-hoc read-only query against the tier's database
 
 Env: ALTUNE_HOST (required: user@host or an ~/.ssh/config alias for the VM),
@@ -287,11 +288,16 @@ exit $status'
 
 logs)
   need_api
-  since=${1:-1h}; pattern=${2:-.}
+  since=${1:-1h}; pattern=${2:-.}; width=${3:-400}
+  case $width in
+    full) clip() { tail -2000; } ;;
+    ''|*[!0-9]*) echo "acq-debug: logs width must be a number or 'full'" >&2; exit 3 ;;
+    *) clip() { cut -c1-"$width" | tail -200; } ;;
+  esac
   api_logs --since "$since" |
     grep -iE 'acqui|candidate|download|ytdlp|yt-dlp|schedul|reject|verif|stale' |
     grep -v '"path":"/observe/acquisition"' |
-    grep -E -- "$pattern" | cut -c1-400 | tail -200
+    grep -E -- "$pattern" | clip
   ;;
 
 sql)
