@@ -5,17 +5,21 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"sync"
 	"testing"
 )
 
 type scriptedSearch struct {
 	answers map[string][]ytmsearch.Song
 	err     error
+	mu      sync.Mutex
 	asked   []string
 }
 
 func (s *scriptedSearch) SearchSongs(_ context.Context, query string) ([]ytmsearch.Song, error) {
+	s.mu.Lock()
 	s.asked = append(s.asked, query)
+	s.mu.Unlock()
 	return s.answers[query], s.err
 }
 
