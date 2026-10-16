@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/discovery/ports"
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -226,6 +227,111 @@ func TestGeniusArtworkResolver_Resolve_CancelledMidRequestIsUnavailable(t *testi
 	url, err := resolver.Resolve(ctx, domain.ResultKindTrack, "Creep", "Radiohead", "")
 	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
 		t.Errorf("Resolve cancelled mid-request = (%q, %v), want ErrArtworkUnavailable wrapping context.Canceled", url, err)
+	}
+}
+
+const artistPhoto = "https://images.genius.com/artist-photo.jpg"
+
+func songCatalogServer(t *testing.T, routes map[string]string) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, ok := routes[r.URL.Path]
+		if !ok {
+			t.Errorf("unexpected request %s", r.URL.String())
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(body))
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+func TestSongCatalog_ArtistSongs_KeepsPrimaryArtistSongsAndNeverUsesTheArtistPhotoAsCover(t *testing.T) {
+	server := songCatalogServer(t, map[string]string{"/artists/7/songs": `{"response":{"next_page":null,"songs":[
+		{"id":1,"title":"Cancun","url":"https://genius.com/c","release_date":"2022-07-24","song_art_image_url":"https://images.genius.com/cancun.jpg","header_image_url":"https://images.genius.com/cancun-h.jpg","primary_artist":{"id":7,"image_url":"` + artistPhoto + `"}},
+		{"id":2,"title":"Naruto","url":"https://genius.com/n","song_art_image_url":"` + artistPhoto + `","header_image_url":"` + artistPhoto + `","primary_artist":{"id":7,"image_url":"` + artistPhoto + `"}},
+		{"id":3,"title":"Header Only","url":"https://genius.com/h","song_art_image_url":"https://images.genius.com/x.jpg","header_image_url":"","primary_artist":{"id":7,"image_url":"https://images.genius.com/y.jpg","header_image_url":"https://images.genius.com/x.jpg"}},
+		{"id":4,"title":"Feature","url":"https://genius.com/f","song_art_image_url":"https://images.genius.com/f.jpg","primary_artist":{"id":99}}
+	]}}`})
+	catalog := NewSongCatalog(providertest.NewClient(server.URL), "tok")
+
+	songs, err := catalog.ArtistSongs(context.Background(), 7, 3)
+	if err != nil {
+		t.Fatalf("ArtistSongs: %v", err)
+	}
+
+	if len(songs) != 3 {
+		t.Fatalf("got %d songs, want 3 (the feature is dropped): %+v", len(songs), songs)
+	}
+	if songs[0].CoverURL != "https://images.genius.com/cancun.jpg" || songs[0].ReleaseDate != "2022-07-24" {
+		t.Errorf("cancun = %+v, want its own cover and release date", songs[0])
+	}
+	if songs[1].CoverURL != "" {
+		t.Errorf("naruto cover = %q, want none (it is the artist photo)", songs[1].CoverURL)
+	}
+	if songs[2].CoverURL != "" {
+		t.Errorf("header-only cover = %q, want none (it is the artist header)", songs[2].CoverURL)
+	}
+}
+
+func TestSongCatalog_ArtistSongs_StopsAtThePageCap(t *testing.T) {
+	pages := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pages++
+		fmt.Fprintf(w, `{"response":{"next_page":%d,"songs":[]}}`, pages+1)
+	}))
+	defer server.Close()
+	catalog := NewSongCatalog(providertest.NewClient(server.URL), "tok")
+
+	if _, err := catalog.ArtistSongs(context.Background(), 7, 2); err != nil {
+		t.Fatalf("ArtistSongs: %v", err)
+	}
+	if pages != 2 {
+		t.Errorf("fetched %d pages, want 2", pages)
+	}
+}
+
+func TestSongCatalog_FindArtistID_RequiresAnExactPrimaryArtistName(t *testing.T) {
+	server := songCatalogServer(t, map[string]string{"/search": `{"response":{"hits":[
+		{"result":{"primary_artist":{"id":11,"name":"Internet Money"}}},
+		{"result":{"primary_artist":{"id":22,"name":"Don Toliver Jr"}}},
+		{"result":{"primary_artist":{"id":33,"name":"don toliver"}}}
+	]}}`})
+	catalog := NewSongCatalog(providertest.NewClient(server.URL), "tok")
+
+	id, found, err := catalog.FindArtistID(context.Background(), "Don Toliver", nil)
+
+	if err != nil || !found || id != 33 {
+		t.Errorf("FindArtistID = (%d, %v, %v), want (33, true, nil)", id, found, err)
+	}
+}
+
+func TestSongCatalog_FindArtistID_NoMatchIsNotFound(t *testing.T) {
+	server := songCatalogServer(t, map[string]string{"/search": `{"response":{"hits":[{"result":{"primary_artist":{"id":11,"name":"Internet Money"}}}]}}`})
+	catalog := NewSongCatalog(providertest.NewClient(server.URL), "tok")
+
+	_, found, err := catalog.FindArtistID(context.Background(), "Don Toliver", []string{"Magnolia"})
+
+	if err != nil || found {
+		t.Errorf("FindArtistID = (found %v, err %v), want not found without error", found, err)
+	}
+}
+
+func TestSongCatalog_HasMedia_OnlyYouTubeAndSoundCloudCount(t *testing.T) {
+	server := songCatalogServer(t, map[string]string{
+		"/songs/1": `{"response":{"song":{"media":[{"provider":"spotify"},{"provider":"youtube"}]}}}`,
+		"/songs/2": `{"response":{"song":{"media":[{"provider":"spotify"}]}}}`,
+		"/songs/3": `{"response":{"song":{"media":[]}}}`,
+	})
+	catalog := NewSongCatalog(providertest.NewClient(server.URL), "tok")
+
+	for id, want := range map[int]bool{1: true, 2: false, 3: false} {
+		got, err := catalog.HasMedia(context.Background(), id)
+		if err != nil || got != want {
+			t.Errorf("HasMedia(%d) = (%v, %v), want %v", id, got, err, want)
+		}
 	}
 }
 

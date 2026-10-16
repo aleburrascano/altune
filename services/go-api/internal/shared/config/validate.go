@@ -257,6 +257,22 @@ func (c *Config) validateTuning() error {
 	if c.AcquisitionLengthToleranceSeconds < 0 {
 		return fmt.Errorf("ACQUISITION_LENGTH_TOLERANCE_SECONDS must not be negative, got %v", c.AcquisitionLengthToleranceSeconds)
 	}
+	return c.validateGeniusUnreleased()
+}
+
+func (c *Config) validateGeniusUnreleased() error {
+	if c.GeniusUnreleasedMaxPages < 1 {
+		return fmt.Errorf("GENIUS_UNRELEASED_MAX_PAGES must be >= 1, got %d", c.GeniusUnreleasedMaxPages)
+	}
+	if c.GeniusUnreleasedMaxDetails < 0 {
+		return fmt.Errorf("GENIUS_UNRELEASED_MAX_DETAILS must not be negative, got %d", c.GeniusUnreleasedMaxDetails)
+	}
+	if c.GeniusUnreleasedTTL <= 0 {
+		return fmt.Errorf("GENIUS_UNRELEASED_TTL must be > 0, got %s", c.GeniusUnreleasedTTL)
+	}
+	if c.GeniusUnreleasedEmptyTTL <= 0 {
+		return fmt.Errorf("GENIUS_UNRELEASED_EMPTY_TTL must be > 0, got %s", c.GeniusUnreleasedEmptyTTL)
+	}
 	return nil
 }
 

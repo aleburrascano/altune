@@ -47,7 +47,13 @@ type Config struct {
 	FanartTVAPIKey       string `env:"FANARTTV_API_KEY"`
 	TheAudioDBAPIKey     string `env:"THEAUDIODB_API_KEY"`
 	GeniusAccessToken    string `env:"GENIUS_ACCESS_TOKEN"`
-	DiscogsToken         string `env:"DISCOGS_TOKEN"`
+
+	GeniusUnreleasedMaxPages   int           `env:"GENIUS_UNRELEASED_MAX_PAGES" envDefault:"10"`
+	GeniusUnreleasedMaxDetails int           `env:"GENIUS_UNRELEASED_MAX_DETAILS" envDefault:"50"`
+	GeniusUnreleasedEmptyTTL   time.Duration `env:"GENIUS_UNRELEASED_EMPTY_TTL" envDefault:"1h"`
+	GeniusUnreleasedTTL        time.Duration `env:"GENIUS_UNRELEASED_TTL" envDefault:"168h"`
+
+	DiscogsToken string `env:"DISCOGS_TOKEN"`
 
 	OCIS3Endpoint  string `env:"OCI_S3_ENDPOINT"`
 	OCIS3AccessKey string `env:"OCI_S3_ACCESS_KEY"`

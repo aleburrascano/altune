@@ -657,6 +657,7 @@ GET  /v1/discovery/suggest?q=
 GET/DELETE /v1/discovery/search-history   (written as a side-effect of search — no POST)
 GET  /v1/discovery/artists/{provider}/{externalId}/albums?name=&limit=
 GET  /v1/discovery/artists/{provider}/{externalId}/top-tracks?name=&limit=
+GET  /v1/discovery/artists/{provider}/{externalId}/unreleased?name=&ids=
 GET  /v1/discovery/albums/{provider}/{externalId}/tracks?title=&artist=&limit=
 GET  /v1/discovery/tracks/{provider}/{externalId}/related?limit=
 GET  /v1/discovery/enrichment[/lastfm|/deezer|/discogs|/discogs/artist]?kind=&title=&subtitle=&mbid=

@@ -10,6 +10,7 @@ import (
 	"altune/go-api/internal/discovery/service/ownership"
 	"altune/go-api/internal/discovery/service/related"
 	"altune/go-api/internal/discovery/service/search"
+	"altune/go-api/internal/discovery/service/unreleased"
 	"altune/go-api/internal/discovery/service/vocabulary"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/telemetry"
@@ -27,6 +28,7 @@ type DiscoveryHandler struct {
 	albumSvc        *content.GetAlbumTracksService
 	artistSvc       *content.GetArtistContentService
 	relatedSvc      *related.GetRelatedTracksService
+	unreleasedSvc   *unreleased.Service
 	enrichSvc       *enrich.EnrichmentService
 	suggestSvc      *vocabulary.SuggestService
 	eventSvc        *interaction.RecordEventService
@@ -129,6 +131,7 @@ func (h *DiscoveryHandler) contentRoutes(r chi.Router) {
 	r.Get("/artists/{provider}/{externalId}/content", h.handleArtistContent)
 	r.Get("/artists/{provider}/{externalId}/top-tracks", h.handleArtistTopTracks)
 	r.Get("/artists/{provider}/{externalId}/albums", h.handleArtistAlbums)
+	r.Get("/artists/{provider}/{externalId}/unreleased", h.handleArtistUnreleased)
 	r.Get("/tracks/{provider}/{externalId}/related", h.handleRelatedTracks)
 	r.Get("/enrichment", h.handleEnrichment)
 	r.Get("/enrichment/lastfm", h.handleLastFmEnrichment)

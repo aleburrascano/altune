@@ -3,6 +3,7 @@ package app
 import (
 	"altune/go-api/internal/catalog/adapters/discoverybridge"
 	"altune/go-api/internal/discovery/adapters/providers/deezer"
+	"altune/go-api/internal/discovery/adapters/providers/genius"
 	"altune/go-api/internal/discovery/adapters/providers/itunes"
 	"altune/go-api/internal/discovery/adapters/providers/musicbrainz"
 	"altune/go-api/internal/discovery/service/content"
@@ -12,6 +13,7 @@ import (
 	"altune/go-api/internal/discovery/service/providercall"
 	"altune/go-api/internal/discovery/service/related"
 	"altune/go-api/internal/discovery/service/search"
+	"altune/go-api/internal/discovery/service/unreleased"
 	"altune/go-api/internal/discovery/service/vocabulary"
 	"altune/go-api/internal/shared/telemetry"
 	"context"
@@ -207,10 +209,28 @@ func (a *App) recordEventActivityOptions() []func(*interaction.RecordEventServic
 func (a *App) buildDiscoveryHandler(cf clientFactory, services discoveryHandler.DiscoveryServices) *discoveryHandler.DiscoveryHandler {
 	discoveryH := discoveryHandler.NewDiscoveryHandler(services)
 	discoveryH.WithDetailEnrichers(a.buildDetailEnrichers(cf))
+	discoveryH.WithUnreleased(a.buildUnreleasedService(cf, services.Artist))
 	if telemetry.Enabled() {
 		discoveryH.WithClientEvents(telemetry.NewClientEvents(a.cfg.TelemetryUserKey, otel.GetLoggerProvider().Logger(telemetry.ScopeName)))
 	}
 	return discoveryH
+}
+
+func (a *App) buildUnreleasedService(cf clientFactory, artistSvc *content.GetArtistContentService) *unreleased.Service {
+	if !a.cfg.HasGenius() || artistSvc == nil {
+		return nil
+	}
+	return unreleased.NewService(
+		genius.NewSongCatalog(cf.discovery(), a.cfg.GeniusAccessToken),
+		artistSvc,
+		discoveryCacheAdapters.NewRedisUnreleasedCache(a.redisClient, cacheSignalOption()),
+		unreleased.Config{
+			MaxPages:   a.cfg.GeniusUnreleasedMaxPages,
+			MaxDetails: a.cfg.GeniusUnreleasedMaxDetails,
+			TTL:        a.cfg.GeniusUnreleasedTTL,
+			EmptyTTL:   a.cfg.GeniusUnreleasedEmptyTTL,
+		},
+	)
 }
 
 func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiring {
