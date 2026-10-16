@@ -153,11 +153,19 @@ WHERE ctid IN (
 	WHERE rejected_at < $1
 	LIMIT $2)`
 
-func pruneInBatches(ctx context.Context, pool *pgxpool.Pool, sql string, cutoff time.Time) (int64, error) {
+const pruneOrphanRejectionsSQL = `
+DELETE FROM acquisition_rejections
+WHERE ctid IN (
+	SELECT r.ctid FROM acquisition_rejections r
+	WHERE r.track_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+	AND NOT EXISTS (SELECT 1 FROM tracks t WHERE t.id = r.track_id::uuid)
+	LIMIT $1)`
+
+func pruneInBatches(ctx context.Context, pool *pgxpool.Pool, sql string, args ...any) (int64, error) {
 	var total int64
 	for {
 		batchCtx, cancel := context.WithTimeout(ctx, dbCallTimeout)
-		tag, err := pool.Exec(batchCtx, sql, cutoff, pruneBatchSize)
+		tag, err := pool.Exec(batchCtx, sql, append(args, pruneBatchSize)...)
 		cancel()
 		if err != nil {
 			return total, err
@@ -171,6 +179,11 @@ func pruneInBatches(ctx context.Context, pool *pgxpool.Pool, sql string, cutoff 
 
 func (s *PgxRejectionStore) Prune(ctx context.Context, now time.Time) (int64, error) {
 	pruned, err := pruneInBatches(ctx, s.pool, pruneRejectionsSQL, now.UTC().Add(-RejectionRetention))
+	if err == nil {
+		var orphans int64
+		orphans, err = pruneInBatches(ctx, s.pool, pruneOrphanRejectionsSQL)
+		pruned += orphans
+	}
 	if err != nil {
 		return pruned, fmt.Errorf("prune acquisition rejections: %w", err)
 	}

@@ -273,7 +273,8 @@ func TestPgxOutcomeStore_PruneDeletesOutcomesOlderThanRetentionAndKeepsNewer(t *
 	pool := newPool(t)
 	store := NewPgxOutcomeStore(pool)
 	ctx := context.Background()
-	oldTrack, newTrack := uuid.NewString(), uuid.NewString()
+	oldTrack := insertFailedTrack(t, pool).ID.UUID().String()
+	newTrack := insertFailedTrack(t, pool).ID.UUID().String()
 
 	for _, seed := range []struct {
 		trackID string
@@ -375,5 +376,184 @@ func TestPgxOutcomeStore_RecordsJobKindRunProvenanceAndLengths(t *testing.T) {
 	}
 	if kind != "" || run != nil || provenance != "" || confidence != nil || sourceKey != "" || target != nil || measured != nil {
 		t.Errorf("bare row = %q %v %q %v %q %v %v, want empty text and NULL numbers", kind, run, provenance, confidence, sourceKey, target, measured)
+	}
+}
+
+func TestPgxOutcomeStore_PruneRemovesRowsOfADeletedTrack(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxOutcomeStore(pool)
+	ctx := context.Background()
+	kept := insertFailedTrack(t, pool).ID.UUID().String()
+	deleted := insertFailedTrack(t, pool).ID.UUID().String()
+	for _, trackID := range []string{kept, deleted} {
+		if err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "failed", ElapsedMs: 10}); err != nil {
+			t.Fatalf("Record(...) = %v, want nil", err)
+		}
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM tracks WHERE id = $1`, deleted); err != nil {
+		t.Fatalf("delete track: %v", err)
+	}
+
+	pruned, err := store.Prune(ctx, time.Now())
+	if err != nil {
+		t.Fatalf("Prune(...) = %v, want nil", err)
+	}
+
+	if got := queryOutcomeRows(t, pool, deleted); len(got) != 0 {
+		t.Errorf("outcomes of the deleted track after Prune = %v, want none", got)
+	}
+	if got := queryOutcomeRows(t, pool, kept); len(got) != 1 {
+		t.Errorf("outcomes of the live track after Prune = %d, want 1", len(got))
+	}
+	if pruned < 1 {
+		t.Errorf("Prune(...) = %d, want the orphan counted", pruned)
+	}
+}
+
+func TestPgxOutcomeStore_PruneKeepsAnOutcomeStoredUnderTheUppercaseIDOfALiveTrack(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxOutcomeStore(pool)
+	ctx := context.Background()
+	live := insertFailedTrack(t, pool).ID.UUID().String()
+	upper := strings.ToUpper(live)
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO acquisition_outcomes (track_id, outcome, reason, elapsed_ms, completed_at) VALUES ($1, 'failed', 'no_match', 10, now())`,
+		upper); err != nil {
+		t.Fatalf("seed outcome: %v", err)
+	}
+
+	if _, err := store.Prune(ctx, time.Now()); err != nil {
+		t.Fatalf("Prune(...) = %v, want nil", err)
+	}
+
+	if got := queryOutcomeRows(t, pool, upper); len(got) != 1 {
+		t.Errorf("outcomes under %q after Prune = %d, want 1 (its track %s is live)", upper, len(got), live)
+	}
+}
+
+func TestPgxOutcomeStore_PruneSucceedsWhenATrackIDIsNotAUUID(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxOutcomeStore(pool)
+	ctx := context.Background()
+	live := insertFailedTrack(t, pool).ID.UUID().String()
+	for _, trackID := range []string{"not-a-uuid-" + uuid.NewString(), live} {
+		if err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "failed", ElapsedMs: 10}); err != nil {
+			t.Fatalf("Record(...) = %v, want nil", err)
+		}
+	}
+
+	if _, err := store.Prune(ctx, time.Now()); err != nil {
+		t.Fatalf("Prune(...) with a non-uuid track id stored = %v, want nil", err)
+	}
+
+	if got := queryOutcomeRows(t, pool, live); len(got) != 1 {
+		t.Errorf("outcomes of the live track after Prune = %d, want 1", len(got))
+	}
+}
+
+func TestPgxOutcomeStore_PruneKeepsRowsOfATrackDeletedAndRecreatedWithTheSameID(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxOutcomeStore(pool)
+	ctx := context.Background()
+	track := insertFailedTrack(t, pool)
+	trackID := track.ID.UUID().String()
+	if err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "failed", ElapsedMs: 10}); err != nil {
+		t.Fatalf("Record(...) = %v, want nil", err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM tracks WHERE id = $1`, track.ID.UUID()); err != nil {
+		t.Fatalf("delete track: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO tracks (id, user_id, title, artist, album, dedup_key, acquisition_status) VALUES ($1, $2, $3, $4, $5, $6, 'failed')`,
+		track.ID.UUID(), track.UserId.UUID(), track.Title, track.Artist, track.Album, uuid.NewString()); err != nil {
+		t.Fatalf("re-create track: %v", err)
+	}
+
+	if _, err := store.Prune(ctx, time.Now()); err != nil {
+		t.Fatalf("Prune(...) = %v, want nil", err)
+	}
+
+	if got := queryOutcomeRows(t, pool, trackID); len(got) != 1 {
+		t.Errorf("outcomes of the re-created track after Prune = %d, want 1", len(got))
+	}
+}
+
+func TestPgxOutcomeStore_PruneRemovesOrphansFillingExactlyTwoBatchesAndKeepsLiveRows(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxOutcomeStore(pool)
+	ctx := context.Background()
+	live := insertFailedTrack(t, pool).ID.UUID().String()
+	deleted := insertFailedTrack(t, pool)
+	deletedID := deleted.ID.UUID().String()
+	for _, trackID := range []string{live, deletedID} {
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO acquisition_outcomes (track_id, outcome, reason, elapsed_ms, completed_at)
+			 SELECT $1, 'failed', 'no_match', 10, now() FROM generate_series(1, $2) g`,
+			trackID, 2*pruneBatchSize); err != nil {
+			t.Fatalf("seed outcomes: %v", err)
+		}
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM tracks WHERE id = $1`, deleted.ID.UUID()); err != nil {
+		t.Fatalf("delete track: %v", err)
+	}
+
+	if _, err := store.Prune(ctx, time.Now()); err != nil {
+		t.Fatalf("Prune(...) = %v, want nil", err)
+	}
+
+	if got := queryOutcomeRows(t, pool, deletedID); len(got) != 0 {
+		t.Errorf("outcomes of the deleted track after Prune = %d, want 0", len(got))
+	}
+	if got := queryOutcomeRows(t, pool, live); len(got) != 2*pruneBatchSize {
+		t.Errorf("outcomes of the live track after Prune = %d, want %d", len(got), 2*pruneBatchSize)
+	}
+}
+
+func TestPgxOutcomeStore_PruneCountsAnOrphanOlderThanRetentionOnce(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxOutcomeStore(pool)
+	ctx := context.Background()
+	if _, err := store.Prune(ctx, time.Now()); err != nil {
+		t.Fatalf("draining Prune(...) = %v, want nil", err)
+	}
+	live := insertFailedTrack(t, pool).ID.UUID().String()
+	orphan := uuid.NewString()
+	for _, seed := range []struct {
+		trackID string
+		age     string
+	}{
+		{live, "91 days"},
+		{live, "200 days"},
+		{live, "1 day"},
+		{orphan, "1 day"},
+		{orphan, "2 days"},
+		{orphan, "91 days"},
+	} {
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO acquisition_outcomes (track_id, outcome, reason, elapsed_ms, completed_at) VALUES ($1, 'failed', 'no_match', 10, now() - $2::interval)`,
+			seed.trackID, seed.age); err != nil {
+			t.Fatalf("seed outcome: %v", err)
+		}
+	}
+
+	pruned, err := store.Prune(ctx, time.Now())
+	if err != nil {
+		t.Fatalf("Prune(...) = %v, want nil", err)
+	}
+
+	if pruned != 5 {
+		t.Errorf("Prune(...) = %d, want 5 (2 expired live rows + 3 orphan rows, one of them also expired)", pruned)
+	}
+	if got := queryOutcomeRows(t, pool, orphan); len(got) != 0 {
+		t.Errorf("orphan outcomes after Prune = %d, want 0", len(got))
+	}
+	if got := queryOutcomeRows(t, pool, live); len(got) != 1 {
+		t.Errorf("live track outcomes after Prune = %d, want 1", len(got))
 	}
 }

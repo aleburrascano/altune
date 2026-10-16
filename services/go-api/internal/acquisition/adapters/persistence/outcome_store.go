@@ -53,8 +53,21 @@ WHERE id IN (
 	WHERE completed_at < $1
 	LIMIT $2)`
 
+const pruneOrphanOutcomesSQL = `
+DELETE FROM acquisition_outcomes
+WHERE id IN (
+	SELECT o.id FROM acquisition_outcomes o
+	WHERE o.track_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+	AND NOT EXISTS (SELECT 1 FROM tracks t WHERE t.id = o.track_id::uuid)
+	LIMIT $1)`
+
 func (s *PgxOutcomeStore) Prune(ctx context.Context, now time.Time) (int64, error) {
 	pruned, err := pruneInBatches(ctx, s.pool, pruneOutcomesSQL, now.UTC().Add(-OutcomeRetention))
+	if err == nil {
+		var orphans int64
+		orphans, err = pruneInBatches(ctx, s.pool, pruneOrphanOutcomesSQL)
+		pruned += orphans
+	}
 	if err != nil {
 		return pruned, fmt.Errorf("prune acquisition outcomes: %w", err)
 	}
