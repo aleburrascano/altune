@@ -169,3 +169,24 @@ func TestSettings_DescribeNamesTheSharedPaceAndCooldown(t *testing.T) {
 		t.Fatalf("Describe() = %q, want %q", got, want)
 	}
 }
+
+func TestBudget_RefusesASlotThatLeavesNoTimeForTheRequestWithoutReservingIt(t *testing.T) {
+	server := miniredis.RunT(t)
+	budget := budgetOn(t, server, Settings{MinInterval: 9900 * time.Millisecond})
+	if err := budget.Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	slotBefore, err := server.Get(budgetKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := budget.Wait(ctx); !errors.Is(err, ErrBudgetRefused) {
+		t.Fatalf("slot 9.9s out under a 10s deadline: got %v, want ErrBudgetRefused", err)
+	}
+	if slotAfter, _ := server.Get(budgetKey); slotAfter != slotBefore {
+		t.Fatalf("refused call moved the next slot from %s to %s, want it left alone", slotBefore, slotAfter)
+	}
+}

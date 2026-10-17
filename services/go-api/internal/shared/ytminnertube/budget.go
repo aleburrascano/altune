@@ -23,6 +23,7 @@ const (
 	unlimitedWaitMillis  = -1
 	refusedWaitMillis    = -1
 	redisCommandDeadline = 3 * time.Second
+	minRequestTime       = 3 * time.Second
 )
 
 var (
@@ -141,7 +142,7 @@ func maxWaitMillis(ctx context.Context) int64 {
 	if !ok {
 		return unlimitedWaitMillis
 	}
-	return max(time.Until(deadline).Milliseconds(), 0)
+	return max((time.Until(deadline) - minRequestTime).Milliseconds(), 0)
 }
 
 func (b *Budget) CoolDown(ctx context.Context) error {
