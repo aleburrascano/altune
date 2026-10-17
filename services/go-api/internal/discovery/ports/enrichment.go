@@ -62,3 +62,28 @@ type MBRecording struct {
 	ISRCs          []string
 	Duration       float64
 }
+
+type MBWorkRecording struct {
+	MBID           string
+	Title          string
+	Disambiguation string
+	ArtistIDs      []string
+	Duration       float64
+	Live           bool
+}
+
+type MBRelease struct {
+	Title  string
+	Date   string
+	Status string
+}
+
+type MBRecordingDetail struct {
+	MBID             string
+	Title            string
+	ArtistIDs        []string
+	ISRCs            []string
+	Duration         float64
+	FirstReleaseDate string
+	Releases         []MBRelease
+}
