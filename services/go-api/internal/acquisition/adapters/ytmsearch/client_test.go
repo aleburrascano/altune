@@ -1,16 +1,22 @@
 package ytmsearch
 
 import (
-	acqdomain "altune/go-api/internal/acquisition/domain"
+	"altune/go-api/internal/shared/ytminnertube"
 	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	acqdomain "altune/go-api/internal/acquisition/domain"
+
+	"github.com/alicebob/miniredis/v2"
+	goredis "github.com/redis/go-redis/v9"
 )
 
 type recordedRequest struct {
@@ -368,4 +374,53 @@ func TestClient_WaitingForItsTurnDoesNotUseUpTheRequestTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second search err = %v, want the turn wait outside the %v request timeout", err, timeout)
 	}
+}
+
+func TestClient_WaitsForASharedBudgetSlotBeyondTheTimeout(t *testing.T) {
+	const interval, timeout = 300 * time.Millisecond, 50 * time.Millisecond
+	const budgetKey = "ytminnertube:budget"
+	redisServer := miniredis.RunT(t)
+	redisClient := goredis.NewClient(&goredis.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() { _ = redisClient.Close() })
+	budget, err := ytminnertube.NewBudget(redisClient, ytminnertube.Settings{MinInterval: interval})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := budget.Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	slotBefore := budgetSlot(t, redisServer, budgetKey)
+
+	var requests []recordedRequest
+	srv := fixtureServer(t, &requests)
+	client := New(Config{
+		HTTP:        &http.Client{Transport: budget.Transport(nil)},
+		MusicURL:    srv.URL,
+		OEmbedURL:   srv.URL + "/oembed",
+		MinInterval: time.Millisecond,
+		Timeout:     timeout,
+	})
+
+	if _, err := client.SearchSongs(context.Background(), "waits for the shared budget"); err != nil {
+		if errors.Is(err, ytminnertube.ErrBudgetRefused) {
+			t.Fatalf("slot %v out under a %v timeout was refused: %v", interval, timeout, err)
+		}
+		t.Fatalf("search err = %v, want the slot wait outside the %v request timeout", err, timeout)
+	}
+	if taken := budgetSlot(t, redisServer, budgetKey) - slotBefore; taken != interval.Milliseconds() {
+		t.Fatalf("the search advanced the shared slot by %dms, want exactly one interval of %v", taken, interval)
+	}
+}
+
+func budgetSlot(t *testing.T, server *miniredis.Miniredis, key string) int64 {
+	t.Helper()
+	raw, err := server.Get(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slot, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return slot
 }
