@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/database"
 	"context"
 	"errors"
 	"fmt"
@@ -23,7 +24,6 @@ func openReadOnlyPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, e
 		return nil, fmt.Errorf("parse database url: %w", err)
 	}
 	cfg.MaxConns = 1
-	cfg.ConnConfig.RuntimeParams["default_transaction_read_only"] = "on"
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create pool: %w", err)
@@ -47,25 +47,26 @@ const readyTracksSQL = `SELECT t.id::text, t.user_id::text, t.artist, t.title, C
 	LIMIT NULLIF($2, 0)`
 
 func loadReadyTracks(ctx context.Context, pool *pgxpool.Pool, userID string, limit int, trackIDs []string) ([]libraryTrack, error) {
-	tx, err := pool.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
-	if err != nil {
-		return nil, fmt.Errorf("begin read-only transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	rows, err := tx.Query(ctx, readyTracksSQL, userID, limit, trackIDs)
-	if err != nil {
-		return nil, fmt.Errorf("query ready tracks: %w", err)
-	}
-	defer rows.Close()
 	var tracks []libraryTrack
-	for rows.Next() {
-		track, err := scanTrack(rows)
+	err := database.ReadOnly(ctx, pool, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, readyTracksSQL, userID, limit, trackIDs)
 		if err != nil {
-			return nil, err
+			return fmt.Errorf("query ready tracks: %w", err)
 		}
-		tracks = append(tracks, track)
+		defer rows.Close()
+		for rows.Next() {
+			track, err := scanTrack(rows)
+			if err != nil {
+				return err
+			}
+			tracks = append(tracks, track)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, err
 	}
-	return tracks, rows.Err()
+	return tracks, nil
 }
 
 func scanTrack(rows pgx.Rows) (libraryTrack, error) {

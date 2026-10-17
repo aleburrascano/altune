@@ -1,10 +1,12 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/database"
 	"context"
 	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -19,7 +21,6 @@ func openReadOnlyPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, e
 		return nil, fmt.Errorf("parse database url: %w", err)
 	}
 	cfg.MaxConns = 2
-	cfg.ConnConfig.RuntimeParams["default_transaction_read_only"] = "on"
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create pool: %w", err)
@@ -41,20 +42,26 @@ const readyTracksQuery = `SELECT id, user_id, title, artist, COALESCE(album, '')
 	LIMIT NULLIF($2, 0)`
 
 func loadReadyTracks(ctx context.Context, pool *pgxpool.Pool, userID string, limit int) ([]libraryTrack, error) {
-	rows, err := pool.Query(ctx, readyTracksQuery, userID, limit)
-	if err != nil {
-		return nil, fmt.Errorf("query ready tracks: %w", err)
-	}
-	defer rows.Close()
 	var tracks []libraryTrack
-	for rows.Next() {
-		var t libraryTrack
-		if err := rows.Scan(&t.ID, &t.UserID, &t.Title, &t.Artist, &t.Album, &t.AlbumArtist,
-			&t.ISRC, &t.ArtworkURL, &t.Year, &t.DurationSeconds, &t.Version,
-			&t.Genre, &t.TrackNumber, &t.CatalogDurationSeconds); err != nil {
-			return nil, fmt.Errorf("scan ready track: %w", err)
+	err := database.ReadOnly(ctx, pool, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, readyTracksQuery, userID, limit)
+		if err != nil {
+			return fmt.Errorf("query ready tracks: %w", err)
 		}
-		tracks = append(tracks, t)
+		defer rows.Close()
+		for rows.Next() {
+			var t libraryTrack
+			if err := rows.Scan(&t.ID, &t.UserID, &t.Title, &t.Artist, &t.Album, &t.AlbumArtist,
+				&t.ISRC, &t.ArtworkURL, &t.Year, &t.DurationSeconds, &t.Version,
+				&t.Genre, &t.TrackNumber, &t.CatalogDurationSeconds); err != nil {
+				return fmt.Errorf("scan ready track: %w", err)
+			}
+			tracks = append(tracks, t)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, err
 	}
-	return tracks, rows.Err()
+	return tracks, nil
 }

@@ -270,8 +270,60 @@ WORK=$WORK run_script export-tracks 30
 expect_rc 0
 [ "$(cat "$WORK/out.log")" = '{"id":"t1"}' ] || fail "rows not passed through: $(cat "$WORK/out.log")"
 grep -qF "days=30" "$WORK/psql.args" || fail "window not passed to psql: $(cat "$WORK/psql.args")"
-grep -qF "default_transaction_read_only = on" < <(head -1 "$WORK/psql.sql") || fail "session not forced read-only"
+[ "$(head -1 "$WORK/psql.sql")" = "BEGIN READ ONLY;" ] || fail "export-tracks query not in a read-only transaction"
 grep -qiE '\b(insert|update|delete|drop)\b' "$WORK/psql.sql" && fail "export query must be read-only"
+
+CASE="sql pipes its statement inside a read-only transaction with a local timeout and no session read-only SET"
+new_stub_bin
+printf 'DATABASE_URL=postgres://stub\n' >"$WORK/checkout/services/go-api/.env.production"
+cat >"$WORK/bin/psql" <<'STUBPSQL'
+#!/usr/bin/env bash
+cat >"$WORK/psql.sql"
+printf '1\n'
+STUBPSQL
+chmod +x "$WORK/bin/psql"
+WORK=$WORK run_script sql "select 1"
+expect_rc 0
+[ "$(head -1 "$WORK/psql.sql")" = "BEGIN READ ONLY;" ] || fail "first line is not BEGIN READ ONLY: $(head -1 "$WORK/psql.sql")"
+[ "$(tail -1 "$WORK/psql.sql")" = "COMMIT;" ] || fail "last line is not COMMIT: $(tail -1 "$WORK/psql.sql")"
+grep -qF "SET LOCAL statement_timeout = '30s';" "$WORK/psql.sql" || fail "timeout is not transaction-local"
+grep -qF "select 1;" "$WORK/psql.sql" || fail "statement missing from the piped sql"
+grep -qF "default_transaction_read_only" "$WORK/psql.sql" && fail "session read-only SET must be gone"
+
+if [ -n "${DATABASE_URL:-}" ]; then
+    real_pg_sql() {
+        new_stub_bin
+        printf 'DATABASE_URL=%s\n' "$DATABASE_URL" >"$WORK/checkout/services/go-api/.env.production"
+        PGOPTIONS='-c default_transaction_read_only=off' run_script sql "$1"
+    }
+    probe_rows() {
+        psql "$DATABASE_URL" -X -q -A -t -c "SELECT count(*) FROM acq_debug_probe_rows"
+    }
+    psql "$DATABASE_URL" -X -q -c "DROP TABLE IF EXISTS acq_debug_probe_rows; CREATE TABLE acq_debug_probe_rows (id int)" >/dev/null 2>&1
+
+    CASE="sql with a data-modifying CTE is refused by the database even when the session default is off"
+    real_pg_sql "WITH d AS (INSERT INTO acq_debug_probe_rows VALUES (1) RETURNING 1) SELECT count(*) FROM d"
+    [ "$RC" != 0 ] || fail "writing CTE exited 0"
+    expect_err "read-only transaction"
+    [ "$(probe_rows)" = 0 ] || fail "writing CTE inserted a row: $(probe_rows)"
+
+    CASE="sql with a CTE that first switches transaction_read_only off still cannot write"
+    real_pg_sql "WITH s AS (SELECT set_config('transaction_read_only', 'off', true)), d AS (INSERT INTO acq_debug_probe_rows SELECT 1 FROM s RETURNING 1) SELECT count(*) FROM d"
+    [ "$RC" != 0 ] || fail "set_config then write exited 0"
+    [ "$(probe_rows)" = 0 ] || fail "set_config then write inserted a row: $(probe_rows)"
+
+    CASE="sql with two statements split by a newline instead of ';' writes nothing"
+    real_pg_sql "$(printf 'SELECT 1\nINSERT INTO acq_debug_probe_rows VALUES (1)')"
+    [ "$RC" != 0 ] || fail "newline-split statements exited 0"
+    [ "$(probe_rows)" = 0 ] || fail "newline-split statements inserted a row: $(probe_rows)"
+
+    CASE="sql with a SELECT through the real database prints its rows"
+    real_pg_sql "SELECT 41 + 1"
+    expect_rc 0
+    expect_out 42
+
+    psql "$DATABASE_URL" -X -q -c "DROP TABLE IF EXISTS acq_debug_probe_rows" >/dev/null
+fi
 
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"

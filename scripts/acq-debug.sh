@@ -2,8 +2,8 @@
 usage() {
   cat <<'USAGE'
 Debug audio acquisition against the live backend from a terminal, without the
-app. Everything runs on the OCI VM over SSH and is read-only: the database
-session is forced read-only, yt-dlp runs with --simulate against a throwaway
+app. Everything runs on the OCI VM over SSH and is read-only: every database
+query runs in a read-only transaction, yt-dlp runs with --simulate against a throwaway
 copy of the cookie file, and no secret is ever printed.
 
 Usage: bash scripts/acq-debug.sh [--staging] <command> [args]
@@ -95,7 +95,7 @@ db() {
   local url
   url=$(grep -E '^DATABASE_URL=' "$envfile" | head -1 | cut -d= -f2- | tr -d "\"'")
   [ -n "$url" ] || { echo "acq-debug: no DATABASE_URL in $envfile" >&2; exit 3; }
-  { echo "SET default_transaction_read_only = on; SET statement_timeout = '30s';"; cat; } |
+  { printf 'BEGIN READ ONLY;\nSET LOCAL statement_timeout = '"'30s'"';\n'; cat; printf 'COMMIT;\n'; } |
     psql "$url" -X -q -v ON_ERROR_STOP=1 "$@"
 }
 
