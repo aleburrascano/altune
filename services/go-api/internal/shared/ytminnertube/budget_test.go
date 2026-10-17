@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -189,4 +190,63 @@ func TestBudget_RefusesASlotThatLeavesNoTimeForTheRequestWithoutReservingIt(t *t
 	if slotAfter, _ := server.Get(budgetKey); slotAfter != slotBefore {
 		t.Fatalf("refused call moved the next slot from %s to %s, want it left alone", slotBefore, slotAfter)
 	}
+}
+
+func TestBudgetTransport_TakesOneSlotWhenTheCallerReservedFirst(t *testing.T) {
+	const interval = 200 * time.Millisecond
+	cases := []struct {
+		name    string
+		reserve bool
+	}{
+		{name: "caller reserved first", reserve: true},
+		{name: "caller did not reserve", reserve: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := miniredis.RunT(t)
+			budget := budgetOn(t, server, Settings{MinInterval: interval})
+			upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+			t.Cleanup(upstream.Close)
+			client := &http.Client{Transport: budget.Transport(nil)}
+			if err := budget.Wait(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			slotBefore := slotMillis(t, server)
+
+			ctx := context.Background()
+			if tc.reserve {
+				reserved, err := ReserveSlot(ctx, client)
+				if err != nil {
+					t.Fatal(err)
+				}
+				ctx = reserved
+			}
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, upstream.URL, http.NoBody)
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp, err := client.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = resp.Body.Close()
+
+			if taken := slotMillis(t, server) - slotBefore; taken != interval.Milliseconds() {
+				t.Fatalf("the call advanced the next slot by %dms, want exactly one interval of %v", taken, interval)
+			}
+		})
+	}
+}
+
+func slotMillis(t *testing.T, server *miniredis.Miniredis) int64 {
+	t.Helper()
+	raw, err := server.Get(budgetKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slot, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return slot
 }

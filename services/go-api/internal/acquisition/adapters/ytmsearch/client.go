@@ -130,6 +130,10 @@ func (c *Client) do(ctx context.Context, g *gate, req *http.Request) ([]byte, er
 	if err := g.wait(ctx); err != nil {
 		return nil, err
 	}
+	ctx, err := ytminnertube.ReserveSlot(ctx, c.http)
+	if err != nil {
+		return nil, err
+	}
 	ctx, cancel := c.boundedContext(ctx)
 	defer cancel()
 	req = req.WithContext(ctx)
