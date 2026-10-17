@@ -1,7 +1,7 @@
 {
   "name": "eslint-config-house-ts",
   "version": "0.4.0",
-  "description": "House TypeScript style, shared by every TS repo. The why behind each rule: ~/.claude/workflow/typescript/style.md.",
+  "description": "House TypeScript style, shared by every TS repo. The why behind each rule: style.md in this package.",
   "main": "index.js",
   "peerDependencies": {
     "eslint": "^9.0.0 || ^10.0.0",
