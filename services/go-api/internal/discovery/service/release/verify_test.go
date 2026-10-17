@@ -197,3 +197,50 @@ func TestFilterGroupsByMBAnchor_highRatioGroupKeepsItsExtras(t *testing.T) {
 		t.Fatalf("a group at or above the ratio must stay whole, got %d groups", len(got))
 	}
 }
+
+func trackGroup(provider domain.ProviderName, album string, titles ...string) ReleaseGroup {
+	g := verifyGroup(provider, titles...)
+	for i := range g.Releases {
+		g.Releases[i].Kind = domain.ResultKindTrack
+		g.Releases[i].Album = album
+	}
+	return g
+}
+
+func TestFilterMixedPageTracks(t *testing.T) {
+	mbTitles := numberedTitles("che", 30)
+	mb := NormalizeTitleSet(mbTitles)
+	mixedAlbums := append(numberedTitles("other", 20), mbTitles[:4]...)
+	cleanAlbums := mbTitles[:10]
+
+	titlesOf := func(gs []ReleaseGroup) []string {
+		out := []string{}
+		for _, g := range gs {
+			for _, r := range g.Releases {
+				out = append(out, r.Title)
+			}
+		}
+		return out
+	}
+	tests := []struct {
+		name        string
+		deezerPage  []string
+		deezerTrack ReleaseGroup
+		apple       ReleaseGroup
+		want        []string
+	}{
+		{"mixed page drops deezer-only tracks", mixedAlbums, trackGroup(domain.ProviderDeezer, "other 1", "wtf", "hugo"), trackGroup(domain.ProviderAppleMusic, "che 1"), []string{}},
+		{"mixed page keeps tracks another provider lists", mixedAlbums, trackGroup(domain.ProviderDeezer, "other 1", "wtf", "hugo"), trackGroup(domain.ProviderAppleMusic, "che 1", "hugo"), []string{"hugo", "hugo"}},
+		{"mixed page keeps tracks on an MB-confirmed release", mixedAlbums, trackGroup(domain.ProviderDeezer, "che 2", "real song"), trackGroup(domain.ProviderAppleMusic, "che 1"), []string{"real song"}},
+		{"ratio-passing page keeps all tracks", cleanAlbums, trackGroup(domain.ProviderDeezer, "other 1", "wtf", "hugo"), trackGroup(domain.ProviderAppleMusic, "che 1"), []string{"wtf", "hugo"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			albums := []ReleaseGroup{verifyGroup(domain.ProviderDeezer, tc.deezerPage...)}
+			got := titlesOf(FilterMixedPageTracks(mb, albums, []ReleaseGroup{tc.deezerTrack, tc.apple}))
+			if fmt.Sprint(got) != fmt.Sprint(tc.want) {
+				t.Errorf("kept %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

@@ -34,6 +34,7 @@ func (s *GetArtistContentService) v2TopTracks(ctx context.Context, identity Reso
 	groups, partial := s.v2ReleaseGroups(ctx, identity, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
 		return p.GetArtistTopTracks(ctx, provider, id)
 	})
+	groups = s.dropMixedPageTracks(ctx, identity, groups)
 	kept := dropSoundCloudOnly(identity, release.FilterCohesive(release.FilterKept(release.MergeReleases(groups))))
 	sort.SliceStable(kept, func(i, j int) bool {
 		return len(kept[i].Providers) > len(kept[j].Providers)
@@ -43,6 +44,22 @@ func (s *GetArtistContentService) v2TopTracks(ctx context.Context, identity Reso
 		out = append(out, m.Result)
 	}
 	return out, partial
+}
+
+func (s *GetArtistContentService) dropMixedPageTracks(ctx context.Context, identity ResolvedArtistIdentity, trackGroups []release.ReleaseGroup) []release.ReleaseGroup {
+	if s.mbAnchor == nil || identity.MBID == "" {
+		return trackGroups
+	}
+	albumGroups, _ := s.v2ReleaseGroups(ctx, identity, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
+		return p.GetArtistAlbums(ctx, provider, id)
+	})
+	titles, err := providercall.GuardedFetch(ctx, s.breaker, domain.ProviderMusicBrainz, func() ([]string, error) {
+		return s.mbAnchor.ReleaseGroupTitles(ctx, identity.MBID)
+	})
+	if err != nil || len(titles) == 0 {
+		return trackGroups
+	}
+	return release.FilterMixedPageTracks(release.NormalizeTitleSet(titles), albumGroups, trackGroups)
 }
 
 func (s *GetArtistContentService) v2ReleaseGroups(ctx context.Context, identity ResolvedArtistIdentity, fetch identityContentFetch) (releaseGroups []release.ReleaseGroup, partial bool) {

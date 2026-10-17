@@ -758,3 +758,74 @@ func TestGetArtistContent_v2_anEmptyAnswerIsNotFoundWithoutAskingAgain(t *testin
 		t.Errorf("Deezer asked %d times for albums and %d for top tracks, want once each", albumCalls, trackCalls)
 	}
 }
+
+func TestGetTopTracks_v2_mixedDeezerPageTracksAreFilteredAgainstMB(t *testing.T) {
+	mbTitles := make([]string, 0, 30)
+	for i := 1; i <= 30; i++ {
+		mbTitles = append(mbTitles, "che "+strings.Repeat("i", i))
+	}
+	mixedPage := func() []domain.SearchResult {
+		page := make([]domain.SearchResult, 0, 24)
+		for i := 1; i <= 20; i++ {
+			page = append(page, discoverytest.V2Album(domain.ProviderDeezer, "d-o"+strings.Repeat("i", i), "other "+strings.Repeat("i", i)))
+		}
+		for _, title := range mbTitles[:4] {
+			page = append(page, discoverytest.V2Album(domain.ProviderDeezer, "d-"+title, title))
+		}
+		return page
+	}
+	cleanPage := func() []domain.SearchResult {
+		page := make([]domain.SearchResult, 0, 10)
+		for _, title := range mbTitles[:10] {
+			page = append(page, discoverytest.V2Album(domain.ProviderDeezer, "d-"+title, title))
+		}
+		return page
+	}
+	deezerOnly := func() []domain.SearchResult {
+		wtf := discoverytest.TrackFrom(domain.ProviderDeezer, "d-wtf", "wtf", "Che")
+		wtf.Album = "other i"
+		hugo := discoverytest.TrackFrom(domain.ProviderDeezer, "d-hugo", "hugo", "Che")
+		hugo.Album = "other ii"
+		return []domain.SearchResult{wtf, hugo}
+	}
+	tests := []struct {
+		name   string
+		albums []domain.SearchResult
+		anchor stubMBAnchor
+		want   []string
+	}{
+		{"mixed page drops its deezer-only tracks", mixedPage(), stubMBAnchor{titles: mbTitles}, []string{}},
+		{"clean page keeps every track", cleanPage(), stubMBAnchor{titles: mbTitles}, []string{"wtf", "hugo"}},
+		{"MB error returns the tracks unfiltered", mixedPage(), stubMBAnchor{err: errors.New("musicbrainz down")}, []string{"wtf", "hugo"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			deezer := &discoverytest.ArtistContentProvider{
+				GetAlbumsFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+					return tc.albums, nil
+				},
+				GetTopTracksFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+					return deezerOnly(), nil
+				},
+			}
+			svc := NewGetArtistContentService(
+				map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: deezer},
+				WithContentIdentityStore(&discoverytest.FakeIdentityStore{Mbid: "mbid-che", Xref: map[domain.ProviderKey]string{"deezer": "d1"}}),
+				WithMBAnchor(tc.anchor),
+			)
+
+			resp, err := svc.GetTopTracks(t.Context(), domain.ProviderDeezer, "d1", nil, 10)
+			if err != nil {
+				t.Fatalf("GetTopTracks error = %v", err)
+			}
+
+			got := make([]string, 0, len(resp.Items))
+			for _, r := range resp.Items {
+				got = append(got, r.Title)
+			}
+			if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+				t.Errorf("tracks = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
