@@ -13,7 +13,14 @@ import (
 
 const provider = string(ports.ProviderYouTube)
 
-type store struct{ pool *pgxpool.Pool }
+type store struct {
+	pool   *pgxpool.Pool
+	access pgx.TxAccessMode
+}
+
+func (s store) begin(ctx context.Context) (pgx.Tx, error) {
+	return s.pool.BeginTx(ctx, pgx.TxOptions{AccessMode: s.access})
+}
 
 type writeVerdict string
 
@@ -33,7 +40,12 @@ const targetsSQL = `SELECT t.id::text, t.user_id::text, t.artist, t.title, COALE
 	ORDER BY t.user_id, t.artist, t.title, t.id`
 
 func (s store) loadTargets(ctx context.Context, userID string) ([]target, error) {
-	rows, err := s.pool.Query(ctx, targetsSQL, userID, provider)
+	tx, err := s.begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, targetsSQL, userID, provider)
 	if err != nil {
 		return nil, fmt.Errorf("query bound tracks without an official pointer: %w", err)
 	}
@@ -63,7 +75,7 @@ const logPointerSQL = `INSERT INTO track_metadata_changes (run_id, track_id, use
 	VALUES ($1, $2, $3, 'catalog_sources', $4, $5)`
 
 func (s store) point(ctx context.Context, runID uuid.UUID, t target, videoID string) (writeVerdict, error) {
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.begin(ctx)
 	if err != nil {
 		return writeSkipped, fmt.Errorf("begin: %w", err)
 	}
@@ -105,7 +117,7 @@ const undoSQL = `WITH restored AS (
 	(SELECT count(*) FROM track_metadata_changes WHERE run_id = $1 AND field = 'catalog_sources' AND undone_at IS NULL) - (SELECT count(*) FROM restored)`
 
 func (s store) undo(ctx context.Context, runID uuid.UUID) (undoTally, error) {
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.begin(ctx)
 	if err != nil {
 		return undoTally{}, fmt.Errorf("begin: %w", err)
 	}

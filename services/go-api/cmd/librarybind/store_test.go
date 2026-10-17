@@ -1,12 +1,18 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"net/url"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -613,5 +619,212 @@ func TestStore_AReplaceWithoutARecordingIdClearsACatalogMBIDOnTheReplacedRecordi
 	}
 	if pin := catalogMBIDOf(t, s, track.ID); pin == nil || *pin != oldRecording {
 		t.Errorf("catalog_mbid after undo = %v, want %s", pin, oldRecording)
+	}
+}
+
+func TestStore_SaveOnAReadOnlyStoreIsRefusedByTheDatabaseWhateverTheSessionDefault(t *testing.T) {
+	seeded := testStore(t)
+	track := seedReady(t, seeded, uuid.NewString())
+	dry := store{pool: seeded.pool, access: pgx.ReadOnly}
+
+	verdict, err := dry.save(t.Context(), uuid.New(), track, boundIdentity(track))
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "25006" || verdict != saveSkipped {
+		t.Fatalf("verdict %q, err %v, want SQLSTATE 25006", verdict, err)
+	}
+	if _, ok := identityOf(t, seeded, track.ID); ok {
+		t.Error("a track_identity row was written by a read-only store")
+	}
+}
+
+func readOnlyTrapURL(t *testing.T, s store) string {
+	t.Helper()
+	schema := "probe_trap_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	stmts := []string{
+		`CREATE SCHEMA ` + schema,
+		`CREATE FUNCTION ` + schema + `.guard() RETURNS boolean LANGUAGE plpgsql VOLATILE AS $$
+		BEGIN
+			IF current_setting('transaction_read_only') <> 'on' THEN
+				RAISE EXCEPTION 'probe-trap: table touched outside a read-only transaction';
+			END IF;
+			RETURN true;
+		END $$`,
+	}
+	for _, table := range []string{"tracks", "track_identity", "track_metadata_changes"} {
+		stmts = append(stmts, `CREATE VIEW `+schema+`.`+table+` AS SELECT * FROM public.`+table+` WHERE (SELECT `+schema+`.guard())`)
+	}
+	for _, stmt := range stmts {
+		if _, err := s.pool.Exec(context.Background(), stmt); err != nil {
+			t.Fatalf("trap: %v", err)
+		}
+	}
+	t.Cleanup(func() { _, _ = s.pool.Exec(context.Background(), `DROP SCHEMA `+schema+` CASCADE`) })
+	u, err := url.Parse(os.Getenv("DATABASE_URL"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := u.Query()
+	q.Set("search_path", schema+",public")
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+func TestOpenPool_SetsNoReadOnlySessionDefault(t *testing.T) {
+	testStore(t)
+	pool, err := openPool(t.Context(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+
+	var setting string
+	if err := pool.QueryRow(t.Context(), `SHOW transaction_read_only`).Scan(&setting); err != nil {
+		t.Fatal(err)
+	}
+	if setting == "on" {
+		t.Fatalf("openPool left the session read-only by default: %q", setting)
+	}
+}
+
+func envWithDatabase(databaseURL string) func(string) string {
+	return func(name string) string {
+		if name == "LIBRARYBIND_DATABASE_URL" {
+			return databaseURL
+		}
+		return ""
+	}
+}
+
+func TestRun_PinCatalogDryRunTouchesTablesOnlyInsideReadOnlyTransactionsAndWritesNothing(t *testing.T) {
+	s := testStore(t)
+	user, recording := uuid.NewString(), uuid.NewString()
+	track := seedBoundUnpinned(t, s, user, recording)
+	trap := readOnlyTrapURL(t, s)
+
+	var out bytes.Buffer
+	if err := run(options{pinCatalog: true, userID: user}, envWithDatabase(trap), &out); err != nil {
+		t.Fatalf("dry run: %v\n%s", err, out.String())
+	}
+	expectReport(t, out.String(), "dry run, nothing written", "to pin     1")
+	if pin := catalogMBIDOf(t, s, track.ID); pin != nil {
+		t.Errorf("a dry run pinned %s", *pin)
+	}
+
+	err := run(options{pinCatalog: true, apply: true, userID: user}, envWithDatabase(trap), &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "probe-trap") {
+		t.Fatalf("an apply run read outside a read-write transaction should trip the trap, got %v", err)
+	}
+}
+
+func TestRun_PinsDryRunTouchesTablesOnlyInsideReadOnlyTransactionsAndWritesNothing(t *testing.T) {
+	s := testStore(t)
+	track := seedReady(t, s, uuid.NewString())
+	if _, err := s.save(t.Context(), uuid.New(), track, unboundIdentity(track)); err != nil {
+		t.Fatal(err)
+	}
+	pinsPath := filepath.Join(t.TempDir(), "pins.json")
+	pins := `[{"track_id":"` + track.ID + `","track_version":4,"status":"bound","isrc":"USPR18000001","note":"hand check","evidence":{"url":"https://example.test/1"}}]`
+	if err := os.WriteFile(pinsPath, []byte(pins), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	trap := readOnlyTrapURL(t, s)
+
+	var out bytes.Buffer
+	if err := run(options{pins: pinsPath}, envWithDatabase(trap), &out); err != nil {
+		t.Fatalf("dry run: %v\n%s", err, out.String())
+	}
+	if row, ok := identityOf(t, s, track.ID); !ok || row.status != statusUnbound {
+		t.Fatalf("a dry pins run wrote the identity: %+v, found %v", row, ok)
+	}
+
+	err := run(options{pins: pinsPath, apply: true}, envWithDatabase(trap), &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "probe-trap") {
+		t.Fatalf("an apply run read outside a read-write transaction should trip the trap, got %v", err)
+	}
+}
+
+func TestRun_BindDryRunTouchesTablesOnlyInsideReadOnlyTransactions(t *testing.T) {
+	s := testStore(t)
+	trap := readOnlyTrapURL(t, s)
+
+	var out bytes.Buffer
+	user := uuid.NewString()
+	if err := run(options{userID: user}, envWithDatabase(trap), &out); err != nil {
+		t.Fatalf("dry run: %v\n%s", err, out.String())
+	}
+
+	err := run(options{userID: user, apply: true}, envWithDatabase(trap), &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "probe-trap") {
+		t.Fatalf("an apply run read outside a read-write transaction should trip the trap, got %v", err)
+	}
+}
+
+func TestRun_PinCatalogApplyStillPinsTheBoundRecording(t *testing.T) {
+	s := testStore(t)
+	user, recording := uuid.NewString(), uuid.NewString()
+	track := seedBoundUnpinned(t, s, user, recording)
+
+	var out bytes.Buffer
+	if err := run(options{pinCatalog: true, apply: true, userID: user}, envWithDatabase(os.Getenv("DATABASE_URL")), &out); err != nil {
+		t.Fatalf("apply: %v\n%s", err, out.String())
+	}
+	if pin := catalogMBIDOf(t, s, track.ID); pin == nil || *pin != recording {
+		t.Fatalf("catalog_mbid = %v, want %s", pin, recording)
+	}
+}
+
+func TestRun_UndoStillRemovesTheRunsIdentityRows(t *testing.T) {
+	s := testStore(t)
+	track := seedReady(t, s, uuid.NewString())
+	runID := uuid.New()
+	if _, err := s.save(t.Context(), runID, track, boundIdentity(track)); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := run(options{undo: true, undoRunID: runID}, envWithDatabase(os.Getenv("DATABASE_URL")), &out); err != nil {
+		t.Fatalf("undo: %v\n%s", err, out.String())
+	}
+	if _, ok := identityOf(t, s, track.ID); ok {
+		t.Fatal("the undo left the run's identity row")
+	}
+}
+
+func TestStore_WriteCatalogPinOnAReadOnlyStoreIsRefusedByTheDatabase(t *testing.T) {
+	seeded := testStore(t)
+	user, recording := uuid.NewString(), uuid.NewString()
+	track := seedBoundUnpinned(t, seeded, user, recording)
+	dry := store{pool: seeded.pool, access: pgx.ReadOnly}
+	candidates, err := dry.loadCatalogPinCandidates(t.Context(), user)
+	if err != nil || len(candidates) != 1 {
+		t.Fatalf("candidates %+v, err %v", candidates, err)
+	}
+
+	_, err = dry.writeCatalogPin(t.Context(), uuid.New(), candidates[0])
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "25006" {
+		t.Fatalf("err %v, want SQLSTATE 25006", err)
+	}
+	if pin := catalogMBIDOf(t, seeded, track.ID); pin != nil {
+		t.Errorf("a read-only store pinned %s", *pin)
+	}
+}
+
+func TestStore_UndoRunOnAReadOnlyStoreIsRefusedByTheDatabase(t *testing.T) {
+	seeded := testStore(t)
+	track := seedReady(t, seeded, uuid.NewString())
+	runID := uuid.New()
+	if _, err := seeded.save(t.Context(), runID, track, boundIdentity(track)); err != nil {
+		t.Fatal(err)
+	}
+	dry := store{pool: seeded.pool, access: pgx.ReadOnly}
+
+	_, err := dry.undoRun(t.Context(), runID)
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "25006" {
+		t.Fatalf("err %v, want SQLSTATE 25006", err)
+	}
+	if _, ok := identityOf(t, seeded, track.ID); !ok {
+		t.Fatal("a read-only undo removed the identity row")
 	}
 }

@@ -54,7 +54,12 @@ const catalogPinCandidatesSQL = `SELECT t.id::text, t.user_id::text, t.artist, t
 	ORDER BY t.user_id, t.artist, t.title, t.id`
 
 func (s store) loadCatalogPinCandidates(ctx context.Context, userID string) ([]catalogPinCandidate, error) {
-	rows, err := s.pool.Query(ctx, catalogPinCandidatesSQL, userID)
+	tx, err := s.begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, catalogPinCandidatesSQL, userID)
 	if err != nil {
 		return nil, fmt.Errorf("query bound tracks to pin: %w", err)
 	}
@@ -90,7 +95,7 @@ func catalogPinInTx(ctx context.Context, tx pgx.Tx, runID uuid.UUID, c catalogPi
 }
 
 func (s store) writeCatalogPin(ctx context.Context, runID uuid.UUID, c catalogPinCandidate) (saveVerdict, error) {
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.begin(ctx)
 	if err != nil {
 		return saveSkipped, fmt.Errorf("begin: %w", err)
 	}

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -109,7 +110,7 @@ func (o options) check() error {
 	return nil
 }
 
-func openPool(ctx context.Context, databaseURL string, readOnly bool) (*pgxpool.Pool, error) {
+func openPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	if databaseURL == "" {
 		return nil, errEmptyDatabaseURL
 	}
@@ -118,9 +119,6 @@ func openPool(ctx context.Context, databaseURL string, readOnly bool) (*pgxpool.
 		return nil, fmt.Errorf("parse database url: %w", err)
 	}
 	cfg.MaxConns = 2
-	if readOnly {
-		cfg.ConnConfig.RuntimeParams["default_transaction_read_only"] = "on"
-	}
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create pool: %w", err)
@@ -150,12 +148,15 @@ func run(opts options, env func(string) string, out io.Writer) error {
 	fmt.Fprintln(os.Stderr, usageNotice)
 	ctx, cancel := context.WithTimeout(context.Background(), runTimeout)
 	defer cancel()
-	pool, err := openPool(ctx, env("LIBRARYBIND_DATABASE_URL"), !opts.apply && !opts.undo)
+	pool, err := openPool(ctx, env("LIBRARYBIND_DATABASE_URL"))
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
 	s := store{pool: pool}
+	if !opts.apply && !opts.undo {
+		s.access = pgx.ReadOnly
+	}
 	if opts.undo {
 		return runUndo(ctx, s, opts.undoRunID, out)
 	}

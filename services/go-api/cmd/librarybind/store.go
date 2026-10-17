@@ -12,7 +12,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type store struct{ pool *pgxpool.Pool }
+type store struct {
+	pool   *pgxpool.Pool
+	access pgx.TxAccessMode
+}
+
+func (s store) begin(ctx context.Context) (pgx.Tx, error) {
+	return s.pool.BeginTx(ctx, pgx.TxOptions{AccessMode: s.access})
+}
 
 type saveVerdict string
 
@@ -32,7 +39,12 @@ const unidentifiedTracksSQL = `SELECT t.id::text, t.user_id::text, t.title, t.ar
 	LIMIT NULLIF($2, 0)`
 
 func (s store) loadTracks(ctx context.Context, userID string, limit int) ([]libraryTrack, error) {
-	rows, err := s.pool.Query(ctx, unidentifiedTracksSQL, userID, limit)
+	tx, err := s.begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, unidentifiedTracksSQL, userID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("query ready tracks: %w", err)
 	}
@@ -55,7 +67,12 @@ const pinTargetsSQL = `SELECT t.id::text, t.user_id::text, t.title, t.artist, CO
 	WHERE t.id::text = ANY($1::text[])`
 
 func (s store) loadPinTargets(ctx context.Context, trackIDs []string) (map[string]pinTarget, error) {
-	rows, err := s.pool.Query(ctx, pinTargetsSQL, trackIDs)
+	tx, err := s.begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, pinTargetsSQL, trackIDs)
 	if err != nil {
 		return nil, fmt.Errorf("query pinned tracks: %w", err)
 	}
@@ -95,7 +112,7 @@ func (s store) save(ctx context.Context, runID uuid.UUID, t libraryTrack, found 
 	if err != nil {
 		return saveSkipped, fmt.Errorf("encode evidence: %w", err)
 	}
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.begin(ctx)
 	if err != nil {
 		return saveSkipped, fmt.Errorf("begin: %w", err)
 	}
@@ -211,7 +228,7 @@ const undoPinsSQL = `WITH unpinned AS (
 	(SELECT count(*) FROM track_metadata_changes WHERE run_id = $1 AND field = 'catalog_mbid' AND undone_at IS NULL) - (SELECT count(*) FROM unpinned)`
 
 func (s store) undoRun(ctx context.Context, runID uuid.UUID) (undoTally, error) {
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.begin(ctx)
 	if err != nil {
 		return undoTally{}, fmt.Errorf("begin: %w", err)
 	}

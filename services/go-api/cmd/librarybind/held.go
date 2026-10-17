@@ -60,7 +60,12 @@ const heldTracksSQL = `SELECT t.id::text, t.user_id::text, t.artist, COALESCE(t.
 	  AND ($1 = '' OR t.user_id::text = $1)`
 
 func (s store) loadHeld(ctx context.Context, userID string) (heldIndex, error) {
-	rows, err := s.pool.Query(ctx, heldTracksSQL, userID)
+	tx, err := s.begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, heldTracksSQL, userID)
 	if err != nil {
 		return nil, fmt.Errorf("query held tracks: %w", err)
 	}

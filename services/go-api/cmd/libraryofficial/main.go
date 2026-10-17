@@ -14,19 +14,19 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const (
-	runTimeout            = 4 * time.Hour
-	searchTimeout         = 10 * time.Second
-	defaultConcurrency    = 2
-	maxConcurrency        = 16
-	defaultMinInterval    = 5 * time.Second
-	concurrencyVarName    = "LIBRARYOFFICIAL_CONCURRENCY"
-	minIntervalVarName    = "LIBRARYOFFICIAL_MIN_INTERVAL"
-	databaseURLVarName    = "DATABASE_URL"
-	readOnlySessionOption = "default_transaction_read_only"
+	runTimeout         = 4 * time.Hour
+	searchTimeout      = 10 * time.Second
+	defaultConcurrency = 2
+	maxConcurrency     = 16
+	defaultMinInterval = 5 * time.Second
+	concurrencyVarName = "LIBRARYOFFICIAL_CONCURRENCY"
+	minIntervalVarName = "LIBRARYOFFICIAL_MIN_INTERVAL"
+	databaseURLVarName = "DATABASE_URL"
 )
 
 var (
@@ -104,7 +104,7 @@ func pacingFromEnv(env func(string) string) (pacing, error) {
 	return paced, nil
 }
 
-func openPool(ctx context.Context, databaseURL string, readOnly bool) (*pgxpool.Pool, error) {
+func openPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	if databaseURL == "" {
 		return nil, errEmptyDatabaseURL
 	}
@@ -113,9 +113,6 @@ func openPool(ctx context.Context, databaseURL string, readOnly bool) (*pgxpool.
 		return nil, fmt.Errorf("parse database url: %w", err)
 	}
 	cfg.MaxConns = 2
-	if readOnly {
-		cfg.ConnConfig.RuntimeParams[readOnlySessionOption] = "on"
-	}
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create pool: %w", err)
@@ -148,12 +145,15 @@ func run(opts options, env func(string) string, out io.Writer) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), runTimeout)
 	defer cancel()
-	pool, err := openPool(ctx, env(databaseURLVarName), !opts.apply && !opts.undo)
+	pool, err := openPool(ctx, env(databaseURLVarName))
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
 	s := store{pool: pool}
+	if !opts.apply && !opts.undo {
+		s.access = pgx.ReadOnly
+	}
 	if opts.undo {
 		return runUndo(ctx, s, opts.undoRunID, out)
 	}
