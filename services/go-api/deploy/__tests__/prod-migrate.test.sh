@@ -12,6 +12,7 @@ setup_case() {
     local env_body=$1 has_file=${2:-yes}
     local stub_tracks=${STUB_TRACKS:-t} stub_fail=${STUB_MIGRATE_FAIL:-__none__}
     local stub_preapplied=${STUB_PREAPPLIED:-} stub_dump_rc=${STUB_DUMP_RC:-0}
+    local stub_read_fail=${STUB_TRACKER_READ_FAIL:-no}
     WORK=$(mktemp -d -p "$parent")
     mkdir -p "$WORK/bin" "$WORK/api/deploy" "$WORK/api/migrations"
     cp "$HERE/prod_host.sh" "$HERE/prod-migrate.sh" "$WORK/api/deploy/"
@@ -48,10 +49,13 @@ if [ -n "\$file" ]; then
 fi
 case "\$query" in
     *"count(*) FROM schema_migrations"*) wc -l < "\$applied" | tr -d ' ' ;;
+    *"FROM schema_migrations"*)
+        if [ "$stub_read_fail" = yes ]; then
+            echo 'psql: error: FATAL: Failed to connect to database: {:error, :timeout}' >&2
+            exit 2
+        fi
+        cat "\$applied" ;;
     *"to_regclass"*) printf '%s' '$stub_tracks' ;;
-    *"SELECT 1 FROM schema_migrations WHERE version"*)
-        v=\$(printf '%s' "\$query" | sed -E "s/.*version='([^']*)'.*/\1/")
-        grep -qxF "\$v" "\$applied" && printf '1' ;;
     *"INSERT INTO schema_migrations"*)
         v=\$(printf '%s' "\$query" | sed -E "s/.*VALUES \('([^']*)'\).*/\1/")
         grep -qxF "\$v" "\$applied" || printf '%s\n' "\$v" >> "\$applied" ;;
@@ -78,7 +82,7 @@ EOF
     (cd "$WORK/api" && PATH="$WORK/bin:$PATH" SNAPSHOT_DIR="$WORK/snapshots" \
         bash deploy/prod-migrate.sh >"$WORK/out.log" 2>&1)
     RC=$?
-    unset STUB_TRACKS STUB_MIGRATE_FAIL STUB_PREAPPLIED STUB_DUMP_RC STUB_OLD_SNAPSHOTS
+    unset STUB_TRACKER_READ_FAIL STUB_TRACKS STUB_MIGRATE_FAIL STUB_PREAPPLIED STUB_DUMP_RC STUB_OLD_SNAPSHOTS
 }
 
 fail() {
@@ -199,10 +203,55 @@ prod_dumps=("$WORK"/snapshots/prod-*.dump)
 [ -e "$WORK/snapshots/prod-20200106T000000Z-before-a.dump" ] || fail "newer old snapshot deleted"
 [ -e "$WORK/snapshots/staging-20190101T000000Z-before-a.dump" ] || fail "other tier's snapshot deleted"
 
+CASE="a failed schema_migrations read aborts the deploy: no snapshot, no apply"
+STUB_TRACKER_READ_FAIL=yes STUB_PREAPPLIED=$'001_baseline\n002_indexes' setup_case "$FULL_ENV"
+expect_rc 1
+expect_out "FAILED: cannot read schema_migrations"
+[ ! -s "$WORK/applies.log" ] || fail "applied a migration after the tracker read failed"
+[ ! -e "$WORK/dumps.log" ] || fail "took a snapshot after the tracker read failed"
+grep -qF "prod migrations up to date" "$WORK/out.log" && fail "reported success despite an unreadable tracker"
+
 CASE="restore-snapshot.sh with no arguments prints usage and exits 2"
 OUT=$(bash "$HERE/restore-snapshot.sh" 2>&1); RC=$?
 [ "$RC" = 2 ] || fail "expected exit 2, got $RC"
 [ "$OUT" = "usage: restore-snapshot.sh <staging|prod> <dump file>" ] || fail "unexpected usage line: $OUT"
+
+probe_rerun() {
+    : >"$WORK/applies.log"
+    rm -f "$WORK/dumps.log"
+    (cd "$WORK/api" && PATH="$WORK/bin:$PATH" SNAPSHOT_DIR="$WORK/snapshots" \
+        bash deploy/prod-migrate.sh >"$WORK/out.log" 2>&1)
+    RC=$?
+}
+
+ALL_SIX=$'001_baseline\n002_indexes\n016_constraint\n020_marked_index\n021_unmarked_index\n022_prose_only'
+
+CASE="a fresh DB whose tracker read fails still aborts with no snapshot and no apply"
+STUB_TRACKER_READ_FAIL=yes STUB_TRACKS=f setup_case "$FULL_ENV"
+expect_rc 1
+expect_out "FAILED: cannot read schema_migrations"
+[ ! -s "$WORK/applies.log" ] || fail "applied a migration on a fresh DB after the tracker read failed"
+[ ! -e "$WORK/dumps.log" ] || fail "took a snapshot after the tracker read failed"
+
+CASE="a version that is a prefix of an applied one is still pending, and the reverse"
+STUB_PREAPPLIED="$ALL_SIX"$'\n030_a\n031_bc' setup_case "$FULL_ENV"
+: >"$WORK/api/migrations/030_a.sql"
+: >"$WORK/api/migrations/030_ab.sql"
+: >"$WORK/api/migrations/031_b.sql"
+: >"$WORK/api/migrations/031_bc.sql"
+probe_rerun
+expect_rc 0
+expect_apply 030_ab yes
+expect_apply 031_b yes
+grep -qE "^(030_a|031_bc) " "$WORK/applies.log" && fail "re-applied an exactly-tracked migration"
+[ "$(wc -l <"$WORK/applies.log")" = 2 ] || fail "expected exactly 2 applies, got: $(tr '\n' ' ' <"$WORK/applies.log")"
+
+CASE="an applied version listed in the tracker is never re-applied when other versions are pending"
+STUB_PREAPPLIED=$'001_baseline\n016_constraint\n022_prose_only' setup_case "$FULL_ENV"
+expect_rc 0
+grep -qE "^(001_baseline|016_constraint|022_prose_only) " "$WORK/applies.log" && fail "re-applied a tracked migration"
+expect_apply 002_indexes yes
+expect_apply 020_marked_index no
 
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"

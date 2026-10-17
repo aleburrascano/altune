@@ -46,9 +46,7 @@ done
 case "\$query" in
     *"count(*) FROM schema_migrations"*) wc -l < "\$applied" | tr -d ' ' ;;
     *"to_regclass"*) printf '%s' '$stub_tracks' ;;
-    *"SELECT 1 FROM schema_migrations WHERE version"*)
-        v=\$(printf '%s' "\$query" | sed -E "s/.*version='([^']*)'.*/\1/")
-        grep -qxF "\$v" "\$applied" && printf '1' ;;
+    *"SELECT version FROM schema_migrations"*) cat "\$applied" ;;
     *"INSERT INTO schema_migrations"*)
         v=\$(printf '%s' "\$query" | sed -E "s/.*VALUES \('([^']*)'\).*/\1/")
         grep -qxF "\$v" "\$applied" || printf '%s\n' "\$v" >> "\$applied" ;;
@@ -355,6 +353,42 @@ expect_out "FAILED: rollback drill: previous build unhealthy on the new schema"
 expect_out "FAILED: rollback drill: go-api-green did not stop"
 expect_no_action "$KEEP_PREVIOUS"
 grep -qF "previous build healthy" "$WORK/out.log" && fail "reported an unhealthy previous build as healthy"
+
+probe_rerun_with_failing_tracker_read() {
+    cp "$WORK/bin/psql" "$WORK/bin/psql-stub"
+    cat >"$WORK/bin/psql" <<EOF
+#!/usr/bin/env bash
+prev=""; query=""
+for a in "\$@"; do [ "\$prev" = "-c" ] && query="\$a"; prev="\$a"; done
+case "\$query" in
+    *"count(*) FROM schema_migrations"*) ;;
+    *"FROM schema_migrations"*)
+        echo 'psql: error: FATAL: Failed to connect to database: {:error, :timeout}' >&2
+        exit 2 ;;
+esac
+exec "$WORK/bin/psql-stub" "\$@"
+EOF
+    chmod +x "$WORK/bin/psql"
+    : >"$WORK/actions.log"
+    : >"$WORK/applies.log"
+    : >"$WORK/applied"
+    rm -rf "$WORK/snapshots"
+    (cd "$WORK/api" && PATH="$WORK/bin:$PATH" SNAPSHOT_DIR="$WORK/snapshots" STAGING_HEALTH_TIMEOUT=1 \
+        bash deploy/staging.sh >"$WORK/out.log" 2>&1)
+    RC=$?
+}
+
+for tracks in f t; do
+    CASE="a failed schema_migrations read aborts the staging deploy before any apply or build (to_regclass=$tracks)"
+    STUB_TRACKS=$tracks setup_case "$FULL_ENV"
+    probe_rerun_with_failing_tracker_read
+    expect_rc 1
+    expect_out "FAILED: cannot read schema_migrations"
+    [ ! -s "$WORK/applies.log" ] || fail "applied a migration after the tracker read failed"
+    ls "$WORK"/snapshots/*.dump >/dev/null 2>&1 && fail "took a snapshot after the tracker read failed"
+    expect_no_action "up -d --build"
+    grep -qF "deployed staging" "$WORK/out.log" && fail "reported a deploy despite an unreadable tracker"
+done
 
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"

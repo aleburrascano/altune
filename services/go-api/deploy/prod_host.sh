@@ -184,11 +184,10 @@ apply_migration_file() {
 }
 
 pending_migration_versions() {
-    local version
+    local applied version
+    applied=$(psql_value 'SELECT version FROM schema_migrations;') || return 1
     for version in $(migration_versions); do
-        if [ "$(psql_value "SELECT 1 FROM schema_migrations WHERE version='$version';")" != 1 ]; then
-            echo "$version"
-        fi
+        grep -qxF -- "$version" <<<"$applied" || echo "$version"
     done
 }
 
@@ -219,7 +218,10 @@ snapshot_database() {
 
 apply_new_migrations() {
     local pending version
-    pending=$(pending_migration_versions)
+    if ! pending=$(pending_migration_versions); then
+        log "FAILED: cannot read schema_migrations; no snapshot taken, no migration applied"
+        exit 1
+    fi
     [ -n "$pending" ] || return 0
     snapshot_database "$(head -1 <<<"$pending")"
     for version in $pending; do
