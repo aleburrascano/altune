@@ -1,0 +1,29 @@
+{
+  "cases": [
+    {
+      "id": "rw-its-only-love-original-nowhere-takes-classic-version",
+      "class": "RW",
+      "note": "prod track 297803f1 (#3232): the 1984 Reckless recording 7933a65c is unavailable on YouTube Music in our region and its other copies are DRM, so no source holds it. The artist's official Classic Version re-recording 25d68187 (YTM art track Ml2N72dMv_8, 194s, 2025; the owner stored it by hand, run 74158348, with evidence channel topic, art_track, acoustid_score 0.994462) is the only fit; the track is stored on it and relabelled as it",
+      "track": {
+        "title": "It's Only Love", "artist": "Bryan Adams", "album": "Reckless", "duration": 195, "isrc": "USAM18490008",
+        "catalog_mbid": "7933a65c-2c66-4ec1-9880-e46b5d2f05de"
+      },
+      "rerecording": {
+        "original_mbid": "7933a65c-2c66-4ec1-9880-e46b5d2f05de",
+        "mbid": "25d68187-ee71-4f06-9e58-0b49d66bf8a8",
+        "title": "It’s Only Love (classic version)",
+        "album": "It’s Only Love",
+        "year": 2025,
+        "isrc": "IETLH2500023",
+        "duration": 194
+      },
+      "candidates": [
+        { "title": "It's Only Love (Classic Version)", "url": "https://music.youtube.com/watch?v=Ml2N72dMv_8", "duration": 194, "resolved": true, "kind": "art_track",
+          "acoustid": "rw-its-only-love-classic-version", "recording_mbids": ["25d68187-ee71-4f06-9e58-0b49d66bf8a8"],
+          "acoustid_results": [ { "id": "rw-its-only-love-classic-version", "score": 0.994462, "recordings": [ { "mbid": "25d68187-ee71-4f06-9e58-0b49d66bf8a8", "title": "It’s Only Love (classic version)", "artists": ["Bryan Adams"], "duration": 194 } ] } ],
+          "correct": true }
+      ],
+      "expect_saved": { "title": "It’s Only Love (classic version)", "album": "It’s Only Love", "year": 2025, "isrc": "IETLH2500023", "mbid": "25d68187-ee71-4f06-9e58-0b49d66bf8a8", "duration_seconds": 194 }
+    }
+  ]
+}

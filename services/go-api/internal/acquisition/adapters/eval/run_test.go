@@ -1688,3 +1688,56 @@ func TestValidateCases_RefusesARecordedSourceThatBreaksItsAdapter(t *testing.T) 
 		})
 	}
 }
+
+func TestRun_ItsOnlyLoveStoresTheClassicVersionWhenTheOriginalIsNowhere(t *testing.T) {
+	kase := embeddedCase(t, "rw-its-only-love-original-nowhere-takes-classic-version")
+
+	out := Run(context.Background(), kase)
+
+	if !out.Pass {
+		t.Fatalf("expected pass, got %q (err %q, saved %+v)", out.Reason, out.Err, out.Saved)
+	}
+	if want := "https://music.youtube.com/watch?v=Ml2N72dMv_8"; out.Stored != want {
+		t.Errorf("stored %q, want the Classic Version %q", out.Stored, want)
+	}
+}
+
+func TestRun_ItsOnlyLoveWithoutTheRerecordingStoresNothing(t *testing.T) {
+	kase := embeddedCase(t, "rw-its-only-love-original-nowhere-takes-classic-version")
+	kase.Rerecording = nil
+
+	out := Run(context.Background(), kase)
+
+	if !out.Failed {
+		t.Fatalf("expected a failure, stored %q", out.Stored)
+	}
+	if out.FailureCode != "no_confident_match" && out.FailureCode != "no_match_found" {
+		t.Errorf("failure code %q, want no_confident_match or no_match_found", out.FailureCode)
+	}
+	if out.Stored != "" || out.Saved.CatalogMBID != "" && out.Saved.CatalogMBID != kase.Track.CatalogMBID {
+		t.Errorf("stored %q, saved %+v; want nothing stored and the original label kept", out.Stored, out.Saved)
+	}
+}
+
+func TestJudgeSaved_FailsOnADifferingTitleAlbumYearOrMBID(t *testing.T) {
+	saved := SavedTrack{Title: "T", Album: "A", Year: 2025, CatalogMBID: "m"}
+	tests := []struct {
+		name string
+		want SavedExpectation
+	}{
+		{"title", SavedExpectation{Title: "other"}},
+		{"album", SavedExpectation{Album: "other"}},
+		{"year", SavedExpectation{Year: 1984}},
+		{"mbid", SavedExpectation{MBID: "other"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if reason, ok := judgeSaved(&tt.want, Outcome{Saved: saved}); ok {
+				t.Fatalf("expected a failure for a differing %s, got pass %q", tt.name, reason)
+			}
+		})
+	}
+	if reason, ok := judgeSaved(&SavedExpectation{Title: "T", Album: "A", Year: 2025, MBID: "m"}, Outcome{Saved: saved}); !ok {
+		t.Fatalf("expected a match, got %q", reason)
+	}
+}

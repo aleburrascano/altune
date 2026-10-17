@@ -323,6 +323,18 @@ type Case struct {
 	ExpectFailureCode string `json:"expect_failure_code,omitempty"`
 
 	ExpectSaved *SavedExpectation `json:"expect_saved,omitempty"`
+
+	Rerecording *RecordedRerecording `json:"rerecording,omitempty"`
+}
+
+type RecordedRerecording struct {
+	OriginalMBID string  `json:"original_mbid"`
+	MBID         string  `json:"mbid"`
+	Title        string  `json:"title"`
+	Album        string  `json:"album,omitempty"`
+	Year         int     `json:"year,omitempty"`
+	ISRC         string  `json:"isrc,omitempty"`
+	Duration     float64 `json:"duration,omitempty"`
 }
 
 type StoredFile struct {
@@ -336,6 +348,10 @@ type SavedExpectation struct {
 	Provenance      string   `json:"provenance,omitempty"`
 	DurationSeconds float64  `json:"duration_seconds,omitempty"`
 	RejectedKeys    []string `json:"rejected_keys,omitempty"`
+	Title           string   `json:"title,omitempty"`
+	Album           string   `json:"album,omitempty"`
+	Year            int      `json:"year,omitempty"`
+	MBID            string   `json:"mbid,omitempty"`
 }
 
 func (c Case) isPending() bool { return c.Pending != "" }
@@ -694,6 +710,9 @@ func validatePinned(c Case) error {
 func validateStoredAndSaved(c Case) error {
 	if c.Stored != nil && c.Stored.Duration <= 0 {
 		return fmt.Errorf("case %q stores a file with no duration", c.ID)
+	}
+	if r := c.Rerecording; r != nil && (r.OriginalMBID == "" || r.MBID == "" || r.Title == "") {
+		return fmt.Errorf("case %q records a re-recording without its original mbid, mbid and title", c.ID)
 	}
 	saved := c.ExpectSaved
 	if saved != nil && saved.Provenance != "" && !shared.AcquisitionProvenance(saved.Provenance).Valid() {

@@ -33,6 +33,10 @@ type SeededTrack struct {
 }
 
 type SavedTrack struct {
+	Title              string
+	Album              string
+	Year               int
+	CatalogMBID        string
 	ISRC               string
 	Provenance         string
 	DurationSeconds    float64
@@ -111,6 +115,10 @@ func (l *SeededLedger) Saved() SavedTrack {
 		return SavedTrack{}
 	}
 	return SavedTrack{
+		Title:              track.Title,
+		Album:              track.Album,
+		Year:               derefOrZero(track.Year),
+		CatalogMBID:        derefOrZero(track.CatalogMBID),
 		ISRC:               derefOrZero(track.ISRC),
 		Provenance:         derefOrZero(track.AcquisitionProvenance),
 		DurationSeconds:    derefOrZero(track.DurationSeconds),

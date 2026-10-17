@@ -38,7 +38,7 @@ func Run(ctx context.Context, kase Case) Outcome {
 	}
 
 	var observed *service.AcquisitionContext
-	svc := service.NewAcquireTrackAudioService(ledger, p.registry(), p,
+	opts := []func(*service.AcquireTrackAudioService){
 		service.WithAudioProber(p),
 		service.WithAudioIdentifier(p),
 		service.WithRecordingResolver(resolverFor(kase)),
@@ -46,12 +46,32 @@ func Run(ctx context.Context, kase Case) Outcome {
 		service.WithAcquireTempWorkspace(tempfs.New()),
 		service.WithStoredAudioReader(p),
 		service.WithContextObserver(func(ac *service.AcquisitionContext) { observed = ac }),
-	)
+	}
+	if kase.Rerecording != nil {
+		opts = append(opts, service.WithRerecordingFinder(recordedRerecording{*kase.Rerecording}))
+	}
+	svc := service.NewAcquireTrackAudioService(ledger, p.registry(), p, opts...)
 	runErr := executeFor(ctx, svc, kase, ledger)
 	if observed == nil && runErr == nil {
 		runErr = errors.New("eval: the service never started an acquisition")
 	}
 	return outcomeOf(kase, observed, runErr, p.clock, savedTrackOf(ledger.Saved()))
+}
+
+type recordedRerecording struct{ answer RecordedRerecording }
+
+func (r recordedRerecording) FindRerecording(_ context.Context, q ports.RerecordingQuery) (ports.RecordingLabel, bool, error) {
+	if q.OriginalMBID != r.answer.OriginalMBID {
+		return ports.RecordingLabel{}, false, nil
+	}
+	return ports.RecordingLabel{
+		MBID:            r.answer.MBID,
+		Title:           r.answer.Title,
+		Album:           r.answer.Album,
+		Year:            r.answer.Year,
+		ISRC:            r.answer.ISRC,
+		DurationSeconds: r.answer.Duration,
+	}, true, nil
 }
 
 func executeFor(ctx context.Context, svc *service.AcquireTrackAudioService, kase Case, ledger *catalogbridge.SeededLedger) error {
@@ -216,6 +236,14 @@ func judgeSaved(want *SavedExpectation, out Outcome) (string, bool) {
 		return fmt.Sprintf("want saved rejected keys %v, got %v", want.RejectedKeys, got.RejectedKeys), false
 	case want.DurationSeconds > 0 && got.DurationSeconds != want.DurationSeconds:
 		return fmt.Sprintf("want saved duration %v, got %v", want.DurationSeconds, got.DurationSeconds), false
+	case want.Title != "" && got.Title != want.Title:
+		return "want saved title " + want.Title + ", got " + got.Title, false
+	case want.Album != "" && got.Album != want.Album:
+		return "want saved album " + want.Album + ", got " + got.Album, false
+	case want.Year != 0 && got.Year != want.Year:
+		return fmt.Sprintf("want saved year %d, got %d", want.Year, got.Year), false
+	case want.MBID != "" && got.CatalogMBID != want.MBID:
+		return "want saved mbid " + want.MBID + ", got " + got.CatalogMBID, false
 	}
 	return "", true
 }
@@ -272,6 +300,10 @@ type SavedTrack struct {
 	Provenance      string
 	DurationSeconds float64
 	RejectedKeys    []string
+	Title           string
+	Album           string
+	Year            int
+	CatalogMBID     string
 }
 
 func savedTrackOf(saved catalogbridge.SavedTrack) SavedTrack {
@@ -285,5 +317,9 @@ func savedTrackOf(saved catalogbridge.SavedTrack) SavedTrack {
 		Provenance:      saved.Provenance,
 		DurationSeconds: saved.DurationSeconds,
 		RejectedKeys:    saved.RejectedSourceKeys,
+		Title:           saved.Title,
+		Album:           saved.Album,
+		Year:            saved.Year,
+		CatalogMBID:     saved.CatalogMBID,
 	}
 }
