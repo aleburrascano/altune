@@ -504,13 +504,14 @@ func TestResolve_ISRCRecordingWithoutAnMBIDIsNotAReference(t *testing.T) {
 	assertMBIDs(t, identity.MBIDs, []string{"remix-mbid", "other"})
 }
 
-func TestResolve_SearchLengthOffByMoreThanFiveSecondsDoubtsEvenWhenISRCAgrees(t *testing.T) {
+func TestResolve_SearchLengthOffByMoreThanFiveSecondsIsLoggedNotDoubtedWhenISRCAgrees(t *testing.T) {
 	search := drinkingInLA()
 	search.out.Results[0].Duration = 100
 	q := drinkingQuery
 	q.Duration = 106
 	authority := &stubISRCAuthority{recordings: []discoveryports.ISRCRecording{{MBID: "remix-mbid", Duration: 100}}}
 	resolver := NewRecordingResolver(search, WithISRCAuthority(authority))
+	logs := captureDefaultLog(t)
 
 	identity, err := resolver.Resolve(context.Background(), q)
 	if err != nil {
@@ -520,8 +521,14 @@ func TestResolve_SearchLengthOffByMoreThanFiveSecondsDoubtsEvenWhenISRCAgrees(t 
 		t.Errorf("MBID = %q, want the search MBID kept", identity.MBID)
 	}
 	assertMBIDs(t, identity.MBIDs, []string{"remix-mbid"})
-	if !identity.ReferenceDoubted {
-		t.Error("ReferenceDoubted = false, want true: 100s vs 106s is 6s, past max(5s, 3%)")
+	if identity.ReferenceDoubted {
+		t.Error("ReferenceDoubted = true, want false: the ISRC registers the reference MBID, so 100s vs 106s is only logged")
+	}
+	out := logs.String()
+	for _, want := range []string{"acquisition.catalog_length_conflict", "catalog_seconds=106", "reference_seconds=100"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("log missing %q, got:\n%s", want, out)
+		}
 	}
 }
 
@@ -843,5 +850,203 @@ func TestNewRecordingLookup_PassesNotFoundAndFailureThrough(t *testing.T) {
 	}
 	if _, _, err := NewRecordingLookup(stubRecordingAuthority{err: boom}).RecordingByMBID(context.Background(), cureLiveMBID); !errors.Is(err, boom) {
 		t.Errorf("err = %v, want the authority's failure", err)
+	}
+}
+
+func TestResolve_CatalogLengthConflictWithISRCRegisteredReferenceIsNotDoubted(t *testing.T) {
+	search := drinkingInLA()
+	search.out.Results[0].Duration = 197
+	q := drinkingQuery
+	q.Duration = 300
+	authority := &stubISRCAuthority{recordings: []discoveryports.ISRCRecording{{MBID: "remix-mbid", Duration: 197}}}
+	resolver := NewRecordingResolver(search, WithISRCAuthority(authority))
+	logs := captureDefaultLog(t)
+
+	identity, err := resolver.Resolve(context.Background(), q)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if identity.ReferenceDoubted {
+		t.Error("ReferenceDoubted = true, want false: the ISRC registers the reference MBID")
+	}
+	if identity.MBID != "remix-mbid" || identity.Duration != 197 {
+		t.Errorf("identity = %q/%vs, want remix-mbid/197s kept", identity.MBID, identity.Duration)
+	}
+	out := logs.String()
+	for _, want := range []string{"acquisition.catalog_length_conflict", "catalog_seconds=300", "reference_seconds=197"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("log missing %q, got:\n%s", want, out)
+		}
+	}
+}
+
+func TestResolve_CatalogLengthAgreeingWithISRCRegisteredReferenceLogsNoConflict(t *testing.T) {
+	search := drinkingInLA()
+	q := drinkingQuery
+	q.Duration = 237
+	authority := &stubISRCAuthority{recordings: []discoveryports.ISRCRecording{{MBID: "remix-mbid", Duration: 236}}}
+	resolver := NewRecordingResolver(search, WithISRCAuthority(authority))
+	logs := captureDefaultLog(t)
+
+	if _, err := resolver.Resolve(context.Background(), q); err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if strings.Contains(logs.String(), "acquisition.catalog_length_conflict") {
+		t.Errorf("unexpected conflict log:\n%s", logs.String())
+	}
+}
+
+func TestResolve_CatalogLengthConflictWithOtherISRCRecordingsStillDoubts(t *testing.T) {
+	search := drinkingInLA()
+	search.out.Results[0].Duration = 197
+	q := drinkingQuery
+	q.Duration = 300
+	authority := &stubISRCAuthority{recordings: []discoveryports.ISRCRecording{{MBID: "other-mbid", Duration: 300}}}
+	resolver := NewRecordingResolver(search, WithISRCAuthority(authority))
+	logs := captureDefaultLog(t)
+
+	identity, err := resolver.Resolve(context.Background(), q)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if !identity.ReferenceDoubted {
+		t.Error("ReferenceDoubted = false, want true: the ISRC registers other recordings only")
+	}
+	if strings.Contains(logs.String(), "acquisition.catalog_length_conflict") {
+		t.Errorf("unexpected conflict log:\n%s", logs.String())
+	}
+}
+
+func TestResolve_CatalogLengthConflictStillDoubtsWhenTheISRCLookupFails(t *testing.T) {
+	search := drinkingInLA()
+	search.out.Results[0].Duration = 197
+	q := drinkingQuery
+	q.Duration = 300
+	authority := &stubISRCAuthority{err: errors.New("503")}
+	resolver := NewRecordingResolver(search, WithISRCAuthority(authority))
+	logs := captureDefaultLog(t)
+
+	identity, err := resolver.Resolve(context.Background(), q)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if !identity.ReferenceDoubted {
+		t.Error("ReferenceDoubted = false, want true: a failed ISRC lookup leaves only the 300s vs 197s disagreement")
+	}
+	if strings.Contains(logs.String(), "acquisition.catalog_length_conflict") {
+		t.Errorf("conflict log emitted without the ISRC registering the reference:\n%s", logs.String())
+	}
+}
+
+func TestResolve_CatalogLengthConflictIsNotDoubtedWhenTheISRCRegistersTheReferenceAmongSeveral(t *testing.T) {
+	search := drinkingInLA()
+	search.out.Results[0].Duration = 197
+	q := drinkingQuery
+	q.Duration = 300
+	authority := &stubISRCAuthority{recordings: []discoveryports.ISRCRecording{
+		{MBID: "other-mbid", Duration: 300},
+		{MBID: "remix-mbid", Duration: 197},
+		{MBID: "third-mbid", Duration: 250},
+	}}
+	resolver := NewRecordingResolver(search, WithISRCAuthority(authority))
+	logs := captureDefaultLog(t)
+
+	identity, err := resolver.Resolve(context.Background(), q)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if identity.ReferenceDoubted {
+		t.Error("ReferenceDoubted = true, want false: the ISRC registers the reference MBID, even among other recordings")
+	}
+	if identity.MBID != "remix-mbid" || identity.Duration != 197 {
+		t.Errorf("identity = %q/%vs, want remix-mbid/197s kept, not the 300s recording nearest the catalog length", identity.MBID, identity.Duration)
+	}
+	var line string
+	for _, l := range strings.Split(logs.String(), "\n") {
+		if strings.Contains(l, "acquisition.catalog_length_conflict") {
+			line = l
+		}
+	}
+	for _, want := range []string{"isrc=CAA509814003", "mbid=remix-mbid", "catalog_seconds=300", "reference_seconds=197"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("catalog_length_conflict log %q lacks %q", line, want)
+		}
+	}
+}
+
+func TestResolve_UnknownCatalogLengthWithISRCRegisteredReferenceLogsNoConflict(t *testing.T) {
+	search := drinkingInLA()
+	search.out.Results[0].Duration = 197
+	q := drinkingQuery
+	q.Duration = 0
+	authority := &stubISRCAuthority{recordings: []discoveryports.ISRCRecording{{MBID: "remix-mbid", Duration: 197}}}
+	resolver := NewRecordingResolver(search, WithISRCAuthority(authority))
+	logs := captureDefaultLog(t)
+
+	identity, err := resolver.Resolve(context.Background(), q)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if identity.ReferenceDoubted {
+		t.Error("ReferenceDoubted = true, want false: an unknown catalog length cannot disagree")
+	}
+	if strings.Contains(logs.String(), "acquisition.catalog_length_conflict") {
+		t.Errorf("conflict logged for an unknown catalog length:\n%s", logs.String())
+	}
+}
+
+func TestResolve_UnknownReferenceLengthWithISRCRegisteredReferenceLogsNoConflict(t *testing.T) {
+	search := drinkingInLA()
+	search.out.Results[0].Duration = 0
+	q := drinkingQuery
+	q.Duration = 300
+	authority := &stubISRCAuthority{recordings: []discoveryports.ISRCRecording{{MBID: "remix-mbid", Duration: 0}}}
+	resolver := NewRecordingResolver(search, WithISRCAuthority(authority))
+	logs := captureDefaultLog(t)
+
+	identity, err := resolver.Resolve(context.Background(), q)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if identity.ReferenceDoubted {
+		t.Error("ReferenceDoubted = true, want false: an unknown reference length cannot disagree")
+	}
+	if strings.Contains(logs.String(), "acquisition.catalog_length_conflict") {
+		t.Errorf("conflict logged for an unknown reference length:\n%s", logs.String())
+	}
+}
+
+func TestResolve_CatalogLengthExactlyFiveSecondsOffISRCRegisteredReferenceLogsNoConflict(t *testing.T) {
+	search := drinkingInLA()
+	search.out.Results[0].Duration = 197
+	q := drinkingQuery
+	q.Duration = 202
+	authority := &stubISRCAuthority{recordings: []discoveryports.ISRCRecording{{MBID: "remix-mbid", Duration: 197}}}
+	resolver := NewRecordingResolver(search, WithISRCAuthority(authority))
+	logs := captureDefaultLog(t)
+
+	identity, err := resolver.Resolve(context.Background(), q)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if identity.ReferenceDoubted {
+		t.Error("ReferenceDoubted = true, want false: 5s off is within max(5s, 3%)")
+	}
+	if strings.Contains(logs.String(), "acquisition.catalog_length_conflict") {
+		t.Errorf("conflict logged for lengths within tolerance:\n%s", logs.String())
+	}
+}
+
+func TestResolve_PinnedReferenceIsNotDoubtedByAWrongCatalogLength(t *testing.T) {
+	q := pinnedCureQuery
+	q.Duration = 300
+	resolver := NewRecordingResolver(searchRanking(cureStudioMBID, 157), WithRecordingLookup(cureLookup()))
+
+	identity, err := resolver.Resolve(context.Background(), q)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if identity.MBID != cureStudioMBID || identity.ReferenceDoubted {
+		t.Errorf("identity %q doubted %v, want the pinned recording, never doubted", identity.MBID, identity.ReferenceDoubted)
 	}
 }

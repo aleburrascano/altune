@@ -1,8 +1,11 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/adapters/discoverybridge"
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service/grade"
 	"altune/go-api/internal/catalog/domain"
+	"context"
 	"testing"
 )
 
@@ -181,5 +184,34 @@ func TestDurationGates_ADoubtedResolvedLengthDoesNotMoveThePreDownloadGate(t *te
 	}
 	if !ac.durationAcceptable(140) || ac.durationAcceptable(167) {
 		t.Error("the file-length gate must accept 140s and reject 167s against the catalog 139s")
+	}
+}
+
+func TestResolvedIdentity_StandingInTheDarkCatalogLengthConflictReachesTheReaders(t *testing.T) {
+	const isrc, mbid = "USAAA2400001", "standing-in-the-dark-live"
+	resolver := discoverybridge.NewRecordedResolver(
+		[]discoverybridge.RecordedSearchHit{{Title: "Standing In The Dark (Live)", Artist: "Artist", ISRC: isrc, MBID: mbid, Duration: 197}},
+		[]discoverybridge.RecordedISRCRecording{{MBID: mbid, Duration: 197}}, nil)
+	ac := &AcquisitionContext{
+		Track:   TrackRef{Title: "Standing In The Dark (Live)", Artist: "Artist", ISRC: isrc, CatalogDuration: 300},
+		Verdict: AudioVerdict{Kind: VerdictHard, Surviving: []ports.LinkedRecording{{MBID: mbid}}},
+	}
+
+	ResolveIdentity(context.Background(), resolver, nil, ac)
+
+	if ac.Identity.ReferenceDoubted || ac.Identity.Duration != 197 {
+		t.Fatalf("identity = %+v, want the 197s reference undoubted", ac.Identity)
+	}
+	if got := ac.resolvedLength(); got != 197 {
+		t.Errorf("resolvedLength = %v, want 197", got)
+	}
+	if ac.lengthCorroborated() {
+		t.Error("lengthCorroborated = true, want false: catalog 300s and reference 197s still disagree")
+	}
+	if got := ac.gradedFingerprint(); got != grade.Matches {
+		t.Errorf("gradedFingerprint = %v, want Matches, not cut to Approximates", got)
+	}
+	if !ac.fingerprintProvesReference() {
+		t.Error("fingerprintProvesReference = false, want true for a surviving recording on the undoubted reference")
 	}
 }

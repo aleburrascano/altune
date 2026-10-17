@@ -135,12 +135,19 @@ func (r *RecordingResolver) pinnedFacts(ctx context.Context, pin string) (acqpor
 }
 
 func (r *RecordingResolver) anchorToISRC(ctx context.Context, q acqports.RecordingQuery, identity acqports.RecordingIdentity) acqports.RecordingIdentity {
-	identity.ReferenceDoubted = durationDisagrees(q.Duration, identity.Duration)
+	lengthDisagrees := durationDisagrees(q.Duration, identity.Duration)
+	identity.ReferenceDoubted = lengthDisagrees
 	recordings := r.isrcRecordings(ctx, q.ISRC)
 	if len(recordings) == 0 {
 		return withReferenceSet(identity, identity.MBID, nil)
 	}
 	if isrcRegistersMBID(recordings, identity.MBID) {
+		identity.ReferenceDoubted = false
+		if lengthDisagrees {
+			slog.InfoContext(ctx, "acquisition.catalog_length_conflict",
+				"isrc", q.ISRC, "mbid", identity.MBID,
+				"catalog_seconds", q.Duration, "reference_seconds", identity.Duration)
+		}
 		return withReferenceSet(identity, identity.MBID, recordings)
 	}
 	return r.anchorToMismatchedISRC(ctx, q, identity, recordings)
