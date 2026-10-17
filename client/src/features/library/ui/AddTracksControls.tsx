@@ -12,7 +12,7 @@ import {
 } from '@shared/ui';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { Tappable, type TappableProps } from '@shared/ui/primitives/Tappable';
-import { countLabel } from '@shared/ui/displayFormat';
+import { countLabel } from '@shared/ui/format/displayFormat';
 
 type AddTracksHeaderProps = {
   playlistName: string;

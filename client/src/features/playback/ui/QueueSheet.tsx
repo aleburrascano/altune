@@ -5,7 +5,7 @@ import { EllipsisVertical, Play } from 'lucide-react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Reanimated, { type SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
-import { countLabel } from '@shared/ui/displayFormat';
+import { countLabel } from '@shared/ui/format/displayFormat';
 import { withFeaturing } from '@shared/apiClient/featuredArtists';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';

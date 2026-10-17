@@ -138,7 +138,7 @@ export default {
           'src/shared/device/isWebPlatform.ts',
           'src/shared/device/webOrigin.ts',
           'src/shared/files/defaultFileStore.ts',
-          'src/shared/ui/announce.ts',
+          'src/shared/ui/a11y/announce.ts',
           'src/shared/ui/dialog/dialog.ts',
           'src/shared/ui/haptics.ts',
           'src/shared/ui/keyboard/keyboard.ios.tsx',

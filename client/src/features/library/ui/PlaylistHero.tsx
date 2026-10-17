@@ -3,7 +3,7 @@ import { StyleSheet, TextInput, View } from 'react-native';
 import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Play, Plus, Shuffle } from 'lucide-react-native';
 
-import { countLabel } from '@shared/ui/displayFormat';
+import { countLabel } from '@shared/ui/format/displayFormat';
 import { Text, spacing, useTheme } from '@shared/ui';
 import {
   fontFamily,

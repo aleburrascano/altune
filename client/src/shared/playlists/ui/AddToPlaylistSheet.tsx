@@ -10,7 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import type { PlaylistId, TrackId } from '@shared/apiClient/ids';
 import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
-import { countLabel } from '@shared/ui/displayFormat';
+import { countLabel } from '@shared/ui/format/displayFormat';
 import { playlistKeys } from '@shared/query/queryKeys';
 import { Text, pressedStyle, spacing, useTheme } from '@shared/ui';
 import { ModalFrame } from '@shared/ui/primitives/ModalFrame';

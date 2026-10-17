@@ -1,5 +1,5 @@
-import { asyncView, type AsyncView } from '@shared/ui/asyncView';
-import { countLabel } from '@shared/ui/displayFormat';
+import { asyncView, type AsyncView } from '@shared/ui/async/asyncView';
+import { countLabel } from '@shared/ui/format/displayFormat';
 
 import type { DiscoverySearchResponse } from '@shared/apiClient/discovery';
 

@@ -10,7 +10,7 @@ import {
   type DownloadEntry,
 } from '@shared/acquisition/state/downloadStore';
 import { ACQUISITION_PHASES } from '@shared/acquisition/state/stagePhase';
-import * as announceModule from '@shared/ui/announce';
+import * as announceModule from '@shared/ui/a11y/announce';
 import { asTrackId } from '@shared/apiClient/ids';
 
 const FINISHING_DWELL_MS = 500;

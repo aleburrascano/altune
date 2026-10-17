@@ -2,7 +2,7 @@ import { type ReactElement, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import { asyncView } from '@shared/ui/asyncView';
+import { asyncView } from '@shared/ui/async/asyncView';
 import { AsyncSection } from '@shared/ui/async/AsyncSection';
 import { Text } from '@shared/ui/primitives/Text';
 import { spacing } from '@shared/ui/theme';

@@ -1,7 +1,3 @@
-M10 src/shared/ui/announce.android.ts loose file in shared/ui
-M10 src/shared/ui/announce.ts loose file in shared/ui
-M10 src/shared/ui/asyncView.ts loose file in shared/ui
-M10 src/shared/ui/displayFormat.ts loose file in shared/ui
 M10 src/shared/ui/haptics.ts loose file in shared/ui
 M10 src/shared/ui/haptics.web.ts loose file in shared/ui
 M10 src/shared/ui/useAnnounceChange.ts loose file in shared/ui

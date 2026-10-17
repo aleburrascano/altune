@@ -4,7 +4,7 @@ import { ApiError, isServerFaultStatus } from '@shared/failure/errors';
 import type { PlaylistId, TrackId } from '@shared/apiClient/ids';
 import type { PlaylistDetailResponse, PlaylistResponse } from '@shared/apiClient/playlistResponse';
 import { RETRY_TAIL } from '@shared/failure/describeError';
-import { countLabel } from '@shared/ui/displayFormat';
+import { countLabel } from '@shared/ui/format/displayFormat';
 import { playlistKeys } from '@shared/query/queryKeys';
 import { useAppMutation, useOptimisticMutation } from '@shared/query/useAppMutation';
 import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';

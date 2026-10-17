@@ -1,6 +1,6 @@
 import type { TrackId } from '@shared/apiClient/ids';
 import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { countLabel } from '@shared/ui/displayFormat';
+import { countLabel } from '@shared/ui/format/displayFormat';
 import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { confirmDestructive } from '@shared/ui/dialog/dialog';
 import { useDeleteTrack, useDeleteTracks } from '@features/library/hooks/useDeleteTracks';

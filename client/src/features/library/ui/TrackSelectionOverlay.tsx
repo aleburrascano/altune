@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { countLabel } from '@shared/ui/displayFormat';
+import { countLabel } from '@shared/ui/format/displayFormat';
 import { AddToPlaylistSheet } from '@shared/playlists';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import { useReconcileSelection } from '@features/library/hooks/useSelection';

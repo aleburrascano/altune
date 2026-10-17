@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import { View } from 'react-native';
 
 import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
-import { asyncView } from '@shared/ui/asyncView';
+import { asyncView } from '@shared/ui/async/asyncView';
 import { Text, type Theme, useTheme } from '@shared/ui';
 import { sidebarItemStyle } from '@shared/ui/navigation/sidebarItemStyle';
 import { Tappable } from '@shared/ui/primitives/Tappable';

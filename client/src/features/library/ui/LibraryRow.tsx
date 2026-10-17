@@ -1,7 +1,7 @@
 import { memo, type ReactElement } from 'react';
 import { StyleSheet, View, type StyleProp, type TextStyle } from 'react-native';
 import { Tappable } from '@shared/ui/primitives/Tappable';
-import { formatDuration } from '@shared/ui/displayFormat';
+import { formatDuration } from '@shared/ui/format/displayFormat';
 import { Text, useWideWebLayout, useTheme, type Theme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';

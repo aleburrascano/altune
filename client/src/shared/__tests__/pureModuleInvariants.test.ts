@@ -11,8 +11,8 @@ const PURE_MODULES = [
   'failure/errors',
   'navigation/detailHandoff',
   'query/queryKeys',
-  'ui/asyncView',
-  'ui/displayFormat',
+  'ui/async/asyncView',
+  'ui/format/displayFormat',
 ];
 
 type FeatureFile = { relativePath: string; content: string };
@@ -159,21 +159,21 @@ describe('pure shared modules rule 2 — extraction requires 2+ distinct feature
 
   it('counts distinct feature directories, not distinct files — three files in one feature is one consumer', () => {
     const threeFilesOneFeature: FeatureFile[] = [
-      { relativePath: 'detail/a.ts', content: "from '@shared/ui/displayFormat'" },
-      { relativePath: 'detail/ui/b.tsx', content: "from '@shared/ui/displayFormat'" },
-      { relativePath: 'detail/hooks/c.ts', content: "from '@shared/ui/displayFormat'" },
+      { relativePath: 'detail/a.ts', content: "from '@shared/ui/format/displayFormat'" },
+      { relativePath: 'detail/ui/b.tsx', content: "from '@shared/ui/format/displayFormat'" },
+      { relativePath: 'detail/hooks/c.ts', content: "from '@shared/ui/format/displayFormat'" },
     ];
-    expect(distinctFeatureConsumers('ui/displayFormat', threeFilesOneFeature)).toEqual(
+    expect(distinctFeatureConsumers('ui/format/displayFormat', threeFilesOneFeature)).toEqual(
       new Set(['detail']),
     );
   });
 
   it('a module referenced by two different features counts as two consumers', () => {
     const twoFeatures: FeatureFile[] = [
-      { relativePath: 'detail/a.ts', content: "from '@shared/ui/displayFormat'" },
-      { relativePath: 'library/b.ts', content: "from '@shared/ui/displayFormat'" },
+      { relativePath: 'detail/a.ts', content: "from '@shared/ui/format/displayFormat'" },
+      { relativePath: 'library/b.ts', content: "from '@shared/ui/format/displayFormat'" },
     ];
-    expect(distinctFeatureConsumers('ui/displayFormat', twoFeatures)).toEqual(
+    expect(distinctFeatureConsumers('ui/format/displayFormat', twoFeatures)).toEqual(
       new Set(['detail', 'library']),
     );
   });

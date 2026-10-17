@@ -5,7 +5,7 @@ import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Text, type TextTone } from '@shared/ui/primitives/Text';
 import { spacing, type TypographyVariant } from '@shared/ui/theme';
 import { Button } from '@shared/ui/primitives/Button';
-import { asyncView } from '@shared/ui/asyncView';
+import { asyncView } from '@shared/ui/async/asyncView';
 import { AsyncSection } from '@shared/ui/async/AsyncSection';
 
 import { sharedStyles } from '@features/detail/ui/detailStyles';

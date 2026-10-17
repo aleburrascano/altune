@@ -5,7 +5,7 @@ import { ChevronLeft } from 'lucide-react-native';
 import type { FeaturedArtist, TrackResponse } from '@shared/apiClient/trackResponse';
 import { detailHref } from '@shared/navigation/detailHandoff';
 import { trackToDiscoveryResult } from '@shared/apiClient/trackToDiscoveryResult';
-import { asyncView } from '@shared/ui/asyncView';
+import { asyncView } from '@shared/ui/async/asyncView';
 import { isCurrentlyPlaying } from '@shared/playback/playbackContextValue';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
 import { usePlayback } from '@shared/playback/usePlayback';
