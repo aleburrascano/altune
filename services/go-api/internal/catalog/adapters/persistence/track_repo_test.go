@@ -1229,3 +1229,228 @@ func TestPgxTrackRepo_GetByIDCarriesTheAcquisitionLeaseGeneration(t *testing.T) 
 		t.Errorf("acquisition_attempts after Update = %d, want 3 (only the queue writes it)", stored)
 	}
 }
+
+func TestPgxTrackRepo_UpdateOfARelabelledTrackPersistsTheSixLabelColumns(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	track := newTestTrackForDB(t, userId)
+	cleanupTrack(t, pool, track.ID, userId)
+	if _, _, err := repo.Add(ctx, track); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+	loaded, err := repo.GetByID(ctx, track.ID, userId)
+	if err != nil || loaded == nil {
+		t.Fatalf("GetByID: got=%v err=%v", loaded, err)
+	}
+
+	const mbid = "25d68187-ee71-4f06-9e58-0b49d66bf8a8"
+	if err := loaded.RelabelAsRecording(mbid, "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194); err != nil {
+		t.Fatal(err)
+	}
+	if err := loaded.MarkReady("s3://bucket/test-" + uuid.New().String() + ".opus"); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+
+	got, err := repo.GetByID(ctx, track.ID, userId)
+	if err != nil || got == nil {
+		t.Fatalf("GetByID after update: got=%v err=%v", got, err)
+	}
+	if got.Title != "It’s Only Love (classic version)" || got.Album != "It’s Only Love" {
+		t.Errorf("title/album = %q / %q", got.Title, got.Album)
+	}
+	if got.Year == nil || *got.Year != 2025 {
+		t.Errorf("Year = %v, want 2025", got.Year)
+	}
+	if got.DedupKey != loaded.DedupKey {
+		t.Errorf("DedupKey = %q, want %q", got.DedupKey, loaded.DedupKey)
+	}
+	if got.CatalogMBID == nil || *got.CatalogMBID != mbid {
+		t.Errorf("CatalogMBID = %v, want %s", got.CatalogMBID, mbid)
+	}
+	if got.CatalogDurationSeconds == nil || *got.CatalogDurationSeconds != 194 {
+		t.Errorf("CatalogDurationSeconds = %v, want 194", got.CatalogDurationSeconds)
+	}
+	if got.ISRC == nil || *got.ISRC != "IETLH2500023" {
+		t.Errorf("ISRC = %v, want IETLH2500023", got.ISRC)
+	}
+}
+
+func addAndLoadForRelabel(ctx context.Context, t *testing.T, repo *PgxTrackRepository, pool *pgxpool.Pool, track *domain.Track) *domain.Track {
+	t.Helper()
+	cleanupTrack(t, pool, track.ID, track.UserId)
+	if _, _, err := repo.Add(ctx, track); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+	loaded, err := repo.GetByID(ctx, track.ID, track.UserId)
+	if err != nil || loaded == nil {
+		t.Fatalf("GetByID: got=%v err=%v", loaded, err)
+	}
+	return loaded
+}
+
+func TestPgxTrackRepo_ARelabelOntoAnotherOfTheUsersTracksFailsAndLandsNothing(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	existing, err := domain.NewTrack(userId, "It’s Only Love (classic version)", "Bryan Adams", "It’s Only Love")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addAndLoadForRelabel(ctx, t, repo, pool, existing)
+	studio, err := domain.NewTrack(userId, "It's Only Love", "Bryan Adams", "Reckless")
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded := addAndLoadForRelabel(ctx, t, repo, pool, studio)
+
+	if err := loaded.RelabelAsRecording("25d68187-ee71-4f06-9e58-0b49d66bf8a8", "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194); err != nil {
+		t.Fatal(err)
+	}
+	if err := loaded.MarkReady("s3://bucket/test-" + uuid.New().String() + ".opus"); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Update(ctx, loaded, loaded.Version); err == nil {
+		t.Fatal("Update() = nil, want the dedup collision to fail the write")
+	}
+
+	got, err := repo.GetByID(ctx, studio.ID, userId)
+	if err != nil || got == nil {
+		t.Fatalf("GetByID after failed update: got=%v err=%v", got, err)
+	}
+	if got.Title != "It's Only Love" || got.Album != "Reckless" {
+		t.Errorf("title/album = %q / %q, want the studio labels kept", got.Title, got.Album)
+	}
+	if got.AcquisitionStatus == domain.AcquisitionReady || got.AudioRef != nil {
+		t.Errorf("audio landed without its relabel: status=%v ref=%v", got.AcquisitionStatus, got.AudioRef)
+	}
+}
+
+func TestPgxTrackRepo_AStaleRelabelWritesNoLabelColumns(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	studio, err := domain.NewTrack(userId, "It's Only Love "+uuid.New().String()[:8], "Bryan Adams", "Reckless")
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded := addAndLoadForRelabel(ctx, t, repo, pool, studio)
+
+	if err := loaded.RelabelAsRecording("25d68187-ee71-4f06-9e58-0b49d66bf8a8", "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194); err != nil {
+		t.Fatal(err)
+	}
+	if err := loaded.MarkReady("s3://bucket/test-" + uuid.New().String() + ".opus"); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Update(ctx, loaded, loaded.Version+1); !errors.Is(err, ports.ErrTrackVersionConflict) {
+		t.Fatalf("Update() at a stale version = %v, want ErrTrackVersionConflict", err)
+	}
+
+	got, err := repo.GetByID(ctx, studio.ID, userId)
+	if err != nil || got == nil {
+		t.Fatalf("GetByID: got=%v err=%v", got, err)
+	}
+	if got.Title != studio.Title || got.Album != "Reckless" || got.CatalogMBID != nil || got.Year != nil {
+		t.Errorf("labels written by a refused CAS: title=%q album=%q mbid=%v year=%v", got.Title, got.Album, got.CatalogMBID, got.Year)
+	}
+}
+
+func TestPgxTrackRepo_ARelabelThatClearsYearISRCAndLengthStoresNulls(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	studio, err := domain.NewTrack(userId, "It's Only Love "+uuid.New().String()[:8], "Bryan Adams", "Reckless")
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded := addAndLoadForRelabel(ctx, t, repo, pool, studio)
+	if err := loaded.RelabelAsRecording("7933a65c-2c66-4ec1-9880-e46b5d2f05de", "Studio", "Reckless", 1984, "USAM18490008", 195); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
+		t.Fatalf("first Update() error = %v", err)
+	}
+	labelled, err := repo.GetByID(ctx, studio.ID, userId)
+	if err != nil || labelled == nil {
+		t.Fatalf("GetByID: got=%v err=%v", labelled, err)
+	}
+
+	const title = "It’s Only Love (classic version)"
+	if err := labelled.RelabelAsRecording("25d68187-ee71-4f06-9e58-0b49d66bf8a8", title, "", 0, "", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Update(ctx, labelled, labelled.Version); err != nil {
+		t.Fatalf("second Update() error = %v", err)
+	}
+
+	got, err := repo.GetByID(ctx, studio.ID, userId)
+	if err != nil || got == nil {
+		t.Fatalf("GetByID: got=%v err=%v", got, err)
+	}
+	if got.Title != title || got.Album != title {
+		t.Errorf("title/album = %q / %q, want %q for both", got.Title, got.Album, title)
+	}
+	if got.Year != nil || got.ISRC != nil || got.CatalogDurationSeconds != nil {
+		t.Errorf("year/isrc/length = %v/%v/%v, want all NULL after a relabel that knows none", got.Year, got.ISRC, got.CatalogDurationSeconds)
+	}
+}
+
+func TestPgxTrackRepo_AReloadedRelabelledTrackDoesNotRewriteLabelsOnItsNextWrite(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	studio, err := domain.NewTrack(userId, "It's Only Love "+uuid.New().String()[:8], "Bryan Adams", "Reckless")
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded := addAndLoadForRelabel(ctx, t, repo, pool, studio)
+	if err := loaded.RelabelAsRecording("25d68187-ee71-4f06-9e58-0b49d66bf8a8", "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194); err != nil {
+		t.Fatal(err)
+	}
+	if err := loaded.MarkReady("s3://bucket/test-" + uuid.New().String() + ".opus"); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
+		t.Fatalf("relabel Update() error = %v", err)
+	}
+
+	reloaded, err := repo.GetByID(ctx, studio.ID, userId)
+	if err != nil || reloaded == nil {
+		t.Fatalf("GetByID: got=%v err=%v", reloaded, err)
+	}
+	if reloaded.Relabelled() {
+		t.Fatal("Relabelled() = true on a freshly loaded track")
+	}
+	const editedTitle = "Owner Retitled"
+	if _, err := pool.Exec(ctx, `UPDATE tracks SET title=$3 WHERE id=$1 AND user_id=$2`,
+		studio.ID.UUID(), userId.UUID(), editedTitle); err != nil {
+		t.Fatalf("concurrent metadata edit failed: %v", err)
+	}
+	if err := reloaded.ReplaceAudio("s3://bucket/test-" + uuid.New().String() + ".opus"); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Update(ctx, reloaded, reloaded.Version); err != nil {
+		t.Fatalf("replace Update() error = %v", err)
+	}
+
+	got, err := repo.GetByID(ctx, studio.ID, userId)
+	if err != nil || got == nil {
+		t.Fatalf("GetByID: got=%v err=%v", got, err)
+	}
+	if got.Title != editedTitle {
+		t.Errorf("Title = %q, want %q: a later non-relabel write clobbered a metadata edit", got.Title, editedTitle)
+	}
+}

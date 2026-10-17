@@ -51,6 +51,15 @@ type TrackSnapshot struct {
 	Version                int
 }
 
+type RecordingLabel struct {
+	MBID            string
+	Title           string
+	Album           string
+	Year            int
+	ISRC            string
+	DurationSeconds float64
+}
+
 type Completion struct {
 	AudioRef           string
 	ReplaceAudio       bool
@@ -61,6 +70,7 @@ type Completion struct {
 	SourceURL          string
 	Confidence         float64
 	Evidence           json.RawMessage
+	Relabel            *RecordingLabel
 }
 
 type TrackLedger interface {

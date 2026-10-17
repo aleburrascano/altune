@@ -98,6 +98,8 @@ type Track struct {
 	Version int
 
 	AcquisitionFence int
+
+	relabelled bool
 }
 
 const maxRejectedSourceKeys = 25
@@ -351,6 +353,63 @@ func (t *Track) AdoptISRC(isrc string) {
 		return
 	}
 	t.ISRC = &isrc
+}
+
+type recordingLabel struct {
+	mbid     string
+	title    string
+	album    string
+	duration float64
+}
+
+func validateRecordingLabel(mbid, title, album string, durationSeconds float64) (recordingLabel, error) {
+	normalizedMBID, err := NormalizeCatalogMBID(mbid)
+	if err != nil {
+		return recordingLabel{}, err
+	}
+	title = strings.TrimSpace(title)
+	if err := validateTrackText(title, "title"); err != nil {
+		return recordingLabel{}, err
+	}
+	resolved := resolveAlbum(album, title)
+	if err := validateTrackText(resolved, "album"); err != nil {
+		return recordingLabel{}, err
+	}
+	if err := ValidateDurationSeconds(durationSeconds); err != nil {
+		return recordingLabel{}, err
+	}
+	return recordingLabel{mbid: normalizedMBID, title: title, album: resolved, duration: durationSeconds}, nil
+}
+
+func (t *Track) RelabelAsRecording(mbid, title, album string, year int, isrc string, durationSeconds float64) error {
+	label, err := validateRecordingLabel(mbid, title, album, durationSeconds)
+	if err != nil {
+		return err
+	}
+	t.Title = label.title
+	t.Album = label.album
+	t.DedupKey = computeDedupKey(label.title, t.Artist, label.album)
+	t.CatalogMBID = &label.mbid
+	t.Year, t.ISRC, t.CatalogDurationSeconds = nil, nil, nil
+	t.setRelabelOptionals(year, isrc, durationSeconds)
+	t.relabelled = true
+	return nil
+}
+
+func (t *Track) setRelabelOptionals(year int, isrc string, durationSeconds float64) {
+	if year != 0 {
+		t.Year = &year
+	}
+	if isrc != "" {
+		t.ISRC = &isrc
+	}
+	if durationSeconds > 0 {
+		t.CatalogDurationSeconds = &durationSeconds
+	}
+}
+
+func (t *Track) Relabelled() bool {
+	return t.relabelled
 }
 
 func (t *Track) MarkFailed(reason string) error {

@@ -970,3 +970,161 @@ func TestSetAcquisitionProvenance_RejectsUnknownValues(t *testing.T) {
 		t.Errorf("provenance = %v, want verified", track.AcquisitionProvenance)
 	}
 }
+
+const reRecordingMBID = "25d68187-ee71-4f06-9e58-0b49d66bf8a8"
+
+func studioLabelledTrack(t *testing.T) *Track {
+	t.Helper()
+	track, err := NewTrack(shared.NewUserId(uuid.New()), "It's Only Love", "Bryan Adams", "Reckless")
+	if err != nil {
+		t.Fatal(err)
+	}
+	studioMBID, studioISRC, studioYear, studioLength := "7933a65c-2c66-4ec1-9880-e46b5d2f05de", "USAM18490008", 1984, 195.0
+	track.CatalogMBID, track.ISRC, track.Year, track.CatalogDurationSeconds = &studioMBID, &studioISRC, &studioYear, &studioLength
+	return track
+}
+
+func TestTrack_RelabelAsRecordingNamesTheStoredRecording(t *testing.T) {
+	t.Parallel()
+	track := studioLabelledTrack(t)
+	if track.Relabelled() {
+		t.Fatal("Relabelled() = true before any relabel")
+	}
+
+	err := track.RelabelAsRecording(reRecordingMBID, "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if track.Title != "It’s Only Love (classic version)" || track.Album != "It’s Only Love" {
+		t.Errorf("title/album = %q / %q", track.Title, track.Album)
+	}
+	if track.Year == nil || *track.Year != 2025 {
+		t.Errorf("Year = %v, want 2025", track.Year)
+	}
+	if track.ISRC == nil || *track.ISRC != "IETLH2500023" {
+		t.Errorf("ISRC = %v, want IETLH2500023", track.ISRC)
+	}
+	if track.CatalogMBID == nil || *track.CatalogMBID != reRecordingMBID {
+		t.Errorf("CatalogMBID = %v, want %s", track.CatalogMBID, reRecordingMBID)
+	}
+	if track.CatalogDurationSeconds == nil || *track.CatalogDurationSeconds != 194 {
+		t.Errorf("CatalogDurationSeconds = %v, want 194", track.CatalogDurationSeconds)
+	}
+	if want := computeDedupKey(track.Title, "Bryan Adams", track.Album); track.DedupKey != want {
+		t.Errorf("DedupKey = %q, want %q", track.DedupKey, want)
+	}
+	if !track.Relabelled() {
+		t.Error("Relabelled() = false after a relabel")
+	}
+}
+
+func TestTrack_RelabelAsRecordingClearsWhatTheRecordingDoesNotKnow(t *testing.T) {
+	t.Parallel()
+	track := studioLabelledTrack(t)
+
+	if err := track.RelabelAsRecording(reRecordingMBID, "Live Cut", "", 0, "", 0); err != nil {
+		t.Fatal(err)
+	}
+
+	if track.Album != "Live Cut" {
+		t.Errorf("Album = %q, want the title", track.Album)
+	}
+	if track.Year != nil || track.ISRC != nil || track.CatalogDurationSeconds != nil {
+		t.Errorf("year/isrc/length = %v/%v/%v, want all cleared", track.Year, track.ISRC, track.CatalogDurationSeconds)
+	}
+}
+
+func TestTrack_RelabelAsRecordingRefusesAndChangesNothing(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name, mbid, title string
+		duration          float64
+	}{
+		{name: "empty mbid", mbid: "", title: "Title"},
+		{name: "malformed mbid", mbid: "nope", title: "Title"},
+		{name: "empty title", mbid: reRecordingMBID, title: ""},
+		{name: "title with NUL", mbid: reRecordingMBID, title: "a\x00b"},
+		{name: "negative length", mbid: reRecordingMBID, title: "Title", duration: -1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			track := studioLabelledTrack(t)
+			before := *track
+
+			if err := track.RelabelAsRecording(tt.mbid, tt.title, "Album", 2025, "IETLH2500023", tt.duration); err == nil {
+				t.Fatal("expected an error")
+			}
+
+			if !reflect.DeepEqual(*track, before) {
+				t.Errorf("track changed on a refused relabel: %+v", *track)
+			}
+			if track.Relabelled() {
+				t.Error("Relabelled() = true after a refused relabel")
+			}
+		})
+	}
+}
+
+func TestTrack_ARelabelledTrackKeepsItsArtistAndDedupsLikeOneAddedUnderTheNewLabels(t *testing.T) {
+	t.Parallel()
+	track := studioLabelledTrack(t)
+	studioKey := track.DedupKey
+
+	if err := track.RelabelAsRecording(reRecordingMBID, "It’s Only Love (classic version)", "It’s Only Love", 2025, "IETLH2500023", 194); err != nil {
+		t.Fatal(err)
+	}
+
+	if track.Artist != "Bryan Adams" {
+		t.Errorf("Artist = %q, want the artist kept", track.Artist)
+	}
+	if track.DedupKey == studioKey {
+		t.Error("DedupKey still names the studio recording after a relabel")
+	}
+	addedFresh, err := NewTrack(track.UserId, "It’s Only Love (classic version)", "Bryan Adams", "It’s Only Love")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if track.DedupKey != addedFresh.DedupKey {
+		t.Errorf("DedupKey = %q, want %q (the key a track added under the new labels gets)", track.DedupKey, addedFresh.DedupKey)
+	}
+}
+
+func TestTrack_RelabelAsRecordingRefusesBadAlbumTextAndChangesNothing(t *testing.T) {
+	t.Parallel()
+	tests := []struct{ name, album, isrc string }{
+		{name: "album with NUL", album: "a\x00b", isrc: "IETLH2500023"},
+		{name: "album past the text limit", album: strings.Repeat("a", MaxLibrarySearchLength+1), isrc: "IETLH2500023"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			track := studioLabelledTrack(t)
+			before := *track
+
+			if err := track.RelabelAsRecording(reRecordingMBID, "Title", tt.album, 2025, tt.isrc, 194); err == nil {
+				t.Fatal("expected an error")
+			}
+			if !reflect.DeepEqual(*track, before) {
+				t.Errorf("track changed on a refused relabel: %+v", *track)
+			}
+			if track.Relabelled() {
+				t.Error("Relabelled() = true after a refused relabel")
+			}
+		})
+	}
+}
+
+func TestTrack_RelabelAsRecordingAcceptsAnAlbumAtTheTextLimit(t *testing.T) {
+	t.Parallel()
+	track := studioLabelledTrack(t)
+	album := strings.Repeat("a", MaxLibrarySearchLength)
+
+	if err := track.RelabelAsRecording(reRecordingMBID, "Title", album, 2025, "IETLH2500023", 194); err != nil {
+		t.Fatalf("album at the limit refused: %v", err)
+	}
+	if track.Album != album {
+		t.Error("album at the limit not stored")
+	}
+}

@@ -123,8 +123,28 @@ func complete(ctx context.Context, track *domain.Track, c ports.Completion) erro
 		return err
 	}
 	recordMetadata(ctx, track, c)
+	if c.Relabel != nil {
+		if err := relabel(ctx, track, *c.Relabel); err != nil {
+			return err
+		}
+	}
 	track.AdoptISRC(c.ISRC)
 	recordLengthCheck(ctx, track, c.Duration)
+	return nil
+}
+
+func relabel(ctx context.Context, track *domain.Track, label ports.RecordingLabel) error {
+	oldMBID, oldTitle := "", track.Title
+	if track.CatalogMBID != nil {
+		oldMBID = *track.CatalogMBID
+	}
+	if err := track.RelabelAsRecording(label.MBID, label.Title, label.Album, label.Year, label.ISRC, label.DurationSeconds); err != nil {
+		return fmt.Errorf("relabel as recording: %w", err)
+	}
+	slog.InfoContext(ctx, "acquisition.track_relabelled",
+		"track_id", track.ID.String(),
+		"old_mbid", oldMBID, "new_mbid", *track.CatalogMBID,
+		"old_title", oldTitle, "new_title", track.Title)
 	return nil
 }
 

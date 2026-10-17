@@ -192,21 +192,20 @@ func (r *PgxTrackRepository) ListByIDs(ctx context.Context, userId shared.UserId
 	return collectTracks(rows)
 }
 
-func (r *PgxTrackRepository) Update(ctx context.Context, track *domain.Track, expectedVersion int) error {
-	ctx, cancel := withDBTimeout(ctx)
-	defer cancel()
-
-	var newVersion int
-	err := r.pool.QueryRow(ctx,
-		`UPDATE tracks SET
-			duration_seconds=$3, acquisition_status=$4, audio_ref=$5,
+const updateAcquisitionColumns = `duration_seconds=$3, acquisition_status=$4, audio_ref=$5,
 			failure_reason=$6, acquisition_provenance=$7, audio_source_url=$8,
 			rejected_source_keys=$9, audio_version=$10, acquisition_started_at=$11,
 			acquisition_confidence=$12, acquisition_evidence=$13,
 			isrc=$14, audio_length_mismatch=$15,
-			version = version + 1
-		WHERE id = $1 AND user_id = $2 AND version = $16
-		RETURNING version`,
+			version = version + 1`
+
+const updateRelabelColumns = `,
+			title=$17, album=$18, year=$19, dedup_key=$20,
+			catalog_mbid=$21, catalog_duration_seconds=$22`
+
+func updateStatement(track *domain.Track, expectedVersion int) (string, []any) {
+	set := updateAcquisitionColumns
+	args := []any{
 		track.ID.UUID(), track.UserId.UUID(),
 		track.DurationSeconds, track.AcquisitionStatus.String(), track.AudioRef,
 		track.FailureReason, track.AcquisitionProvenance, track.AudioSourceURL,
@@ -214,6 +213,27 @@ func (r *PgxTrackRepository) Update(ctx context.Context, track *domain.Track, ex
 		track.ConfidenceScore, track.EvidenceJSON,
 		track.ISRC, track.AudioLengthMismatch,
 		expectedVersion,
+	}
+	if track.Relabelled() {
+		set += updateRelabelColumns
+		args = append(args,
+			track.Title, track.Album, track.Year, track.DedupKey,
+			track.CatalogMBID, track.CatalogDurationSeconds)
+	}
+	return set, args
+}
+
+func (r *PgxTrackRepository) Update(ctx context.Context, track *domain.Track, expectedVersion int) error {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
+	set, args := updateStatement(track, expectedVersion)
+	var newVersion int
+	err := r.pool.QueryRow(ctx,
+		`UPDATE tracks SET `+set+`
+		WHERE id = $1 AND user_id = $2 AND version = $16
+		RETURNING version`,
+		args...,
 	).Scan(&newVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return r.classifyFailedCAS(ctx, track, expectedVersion)

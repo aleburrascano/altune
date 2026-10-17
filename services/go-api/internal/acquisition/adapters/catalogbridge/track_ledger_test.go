@@ -755,3 +755,234 @@ func TestTrackLedger_RevertAtIgnoresTheLease(t *testing.T) {
 		t.Errorf("status = %v, want pending", got.AcquisitionStatus)
 	}
 }
+
+func goldenRelabel() *ports.RecordingLabel {
+	return &ports.RecordingLabel{
+		MBID:            "25d68187-ee71-4f06-9e58-0b49d66bf8a8",
+		Title:           "It’s Only Love (classic version)",
+		Album:           "It’s Only Love",
+		Year:            2025,
+		ISRC:            "IETLH2500023",
+		DurationSeconds: 194,
+	}
+}
+
+func studioLabelledTrack(t *testing.T) (*domain.Track, shared.UserId) {
+	t.Helper()
+	userId := shared.NewUserId(uuid.New())
+	track, err := domain.NewTrack(userId, "It's Only Love", "Bryan Adams", "Reckless")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mbid, isrc, year, length := "7933a65c-2c66-4ec1-9880-e46b5d2f05de", "USAM18490008", 1984, 195.0
+	track.CatalogMBID, track.ISRC, track.Year, track.CatalogDurationSeconds = &mbid, &isrc, &year, &length
+	track.Version = 1
+	return track, userId
+}
+
+func TestTrackLedger_CompleteWithARelabelStoresTheRecordingActuallyStored(t *testing.T) {
+	track, userId := studioLabelledTrack(t)
+	store := newFakeStore(track)
+
+	err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
+		ports.Completion{AudioRef: "ref", Duration: 194, ISRC: "IETLH2500023", Relabel: goldenRelabel()})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := storedTrack(t, store, track.ID)
+	if got.Title != "It’s Only Love (classic version)" || got.Album != "It’s Only Love" {
+		t.Errorf("title/album = %q / %q", got.Title, got.Album)
+	}
+	if got.Year == nil || *got.Year != 2025 {
+		t.Errorf("Year = %v, want 2025", got.Year)
+	}
+	if got.ISRC == nil || *got.ISRC != "IETLH2500023" {
+		t.Errorf("ISRC = %v, want IETLH2500023", got.ISRC)
+	}
+	if got.CatalogMBID == nil || *got.CatalogMBID != "25d68187-ee71-4f06-9e58-0b49d66bf8a8" {
+		t.Errorf("CatalogMBID = %v", got.CatalogMBID)
+	}
+	if got.CatalogDurationSeconds == nil || *got.CatalogDurationSeconds != 194 {
+		t.Errorf("CatalogDurationSeconds = %v, want 194", got.CatalogDurationSeconds)
+	}
+	if got.AudioLengthMismatch {
+		t.Error("AudioLengthMismatch = true, want the length checked against the new catalog length")
+	}
+	if !got.Relabelled() {
+		t.Error("the written track did not carry the relabel to the store")
+	}
+}
+
+func TestTrackLedger_CompleteWithoutARelabelKeepsTheTracksLabels(t *testing.T) {
+	track, userId := studioLabelledTrack(t)
+	store := newFakeStore(track)
+
+	err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
+		ports.Completion{AudioRef: "ref", Duration: 195, ISRC: "IETLH2500023"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := storedTrack(t, store, track.ID)
+	if got.Title != "It's Only Love" || got.Album != "Reckless" || *got.Year != 1984 || *got.ISRC != "USAM18490008" ||
+		*got.CatalogMBID != "7933a65c-2c66-4ec1-9880-e46b5d2f05de" || *got.CatalogDurationSeconds != 195 {
+		t.Errorf("labels changed without a relabel: %+v", got)
+	}
+	if got.Relabelled() {
+		t.Error("Relabelled() = true without a relabel")
+	}
+}
+
+func TestTrackLedger_ARefusedRelabelFailsTheCompletionAndWritesNothing(t *testing.T) {
+	track, userId := studioLabelledTrack(t)
+	store := newFakeStore(track)
+	label := goldenRelabel()
+	label.MBID = ""
+
+	err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
+		ports.Completion{AudioRef: "ref", Duration: 194, Relabel: label})
+
+	if err == nil {
+		t.Fatal("expected the completion to fail")
+	}
+	if len(store.updates) != 0 {
+		t.Errorf("updates = %v, want none", store.updates)
+	}
+}
+
+func TestTrackLedger_ARelabelSurvivesAVersionConflictRetry(t *testing.T) {
+	track, userId := studioLabelledTrack(t)
+	store := newFakeStore(track)
+	store.conflicts = 1
+
+	err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
+		ports.Completion{AudioRef: "ref", Duration: 194, Relabel: goldenRelabel()})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(store.updates) != 2 {
+		t.Fatalf("want 2 update attempts, got %v", store.updates)
+	}
+	got := storedTrack(t, store, track.ID)
+	if got.Title != "It’s Only Love (classic version)" || got.Album != "It’s Only Love" {
+		t.Errorf("title/album = %q / %q, want the re-recording's labels after the retry", got.Title, got.Album)
+	}
+	if got.CatalogMBID == nil || *got.CatalogMBID != "25d68187-ee71-4f06-9e58-0b49d66bf8a8" {
+		t.Errorf("CatalogMBID = %v, want the re-recording after the retry", got.CatalogMBID)
+	}
+	if got.AcquisitionStatus != domain.AcquisitionReady || got.AudioRef == nil || *got.AudioRef != "ref" {
+		t.Errorf("audio did not land with the relabel: status=%v ref=%v", got.AcquisitionStatus, got.AudioRef)
+	}
+}
+
+func TestTrackLedger_ARelabelChecksTheMeasuredLengthAgainstTheNewCatalogLength(t *testing.T) {
+	track, userId := studioLabelledTrack(t)
+	store := newFakeStore(track)
+	label := goldenRelabel()
+	label.DurationSeconds = 400
+
+	err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
+		ports.Completion{AudioRef: "ref", Duration: 195, Relabel: label})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got := storedTrack(t, store, track.ID); !got.AudioLengthMismatch {
+		t.Error("AudioLengthMismatch = false: 195 s of audio against a 400 s relabelled length must be flagged")
+	}
+}
+
+func TestTrackLedger_ARelabelWithNoKnownLengthLeavesNothingToMismatch(t *testing.T) {
+	track, userId := studioLabelledTrack(t)
+	store := newFakeStore(track)
+	label := goldenRelabel()
+	label.DurationSeconds = 0
+
+	err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
+		ports.Completion{AudioRef: "ref", Duration: 60, Relabel: label})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := storedTrack(t, store, track.ID)
+	if got.CatalogDurationSeconds != nil {
+		t.Errorf("CatalogDurationSeconds = %v, want cleared", *got.CatalogDurationSeconds)
+	}
+	if got.AudioLengthMismatch {
+		t.Error("AudioLengthMismatch = true against the studio length the relabel cleared")
+	}
+}
+
+func TestTrackLedger_TheRelabelsISRCWinsOverTheCompletionsISRC(t *testing.T) {
+	track, userId := studioLabelledTrack(t)
+	store := newFakeStore(track)
+
+	err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
+		ports.Completion{AudioRef: "ref", Duration: 194, ISRC: "USAM18490008", Relabel: goldenRelabel()})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got := storedTrack(t, store, track.ID); got.ISRC == nil || *got.ISRC != "IETLH2500023" {
+		t.Errorf("ISRC = %v, want the relabel's IETLH2500023", got.ISRC)
+	}
+}
+
+func TestTrackLedger_ARelabelWithNoISRCTakesTheCompletionsResolvedISRC(t *testing.T) {
+	track, userId := studioLabelledTrack(t)
+	store := newFakeStore(track)
+	label := goldenRelabel()
+	label.ISRC = ""
+
+	err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
+		ports.Completion{AudioRef: "ref", Duration: 194, ISRC: "IETLH2500023", Relabel: label})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got := storedTrack(t, store, track.ID); got.ISRC == nil || *got.ISRC != "IETLH2500023" {
+		t.Errorf("ISRC = %v, want the completion's IETLH2500023 adopted after the relabel cleared the studio one", got.ISRC)
+	}
+}
+
+func TestTrackLedger_AReplaceOfAReadyTrackCanRelabelIt(t *testing.T) {
+	track, userId := studioLabelledTrack(t)
+	if err := track.MarkReady("studio-ref"); err != nil {
+		t.Fatal(err)
+	}
+	store := newFakeStore(track)
+
+	err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
+		ports.Completion{AudioRef: "rerecording-ref", ReplaceAudio: true, Duration: 194, Relabel: goldenRelabel()})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := storedTrack(t, store, track.ID)
+	if got.AudioRef == nil || *got.AudioRef != "rerecording-ref" {
+		t.Errorf("AudioRef = %v, want rerecording-ref", got.AudioRef)
+	}
+	if got.Title != "It’s Only Love (classic version)" || got.Year == nil || *got.Year != 2025 {
+		t.Errorf("title/year = %q / %v, want the re-recording's", got.Title, got.Year)
+	}
+}
+
+func TestTrackLedger_AnIllegalReplaceWithARelabelWritesNoLabels(t *testing.T) {
+	track, userId := studioLabelledTrack(t)
+	if err := track.FailAcquisition("boom"); err != nil {
+		t.Fatal(err)
+	}
+	store := newFakeStore(track)
+
+	err := NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
+		ports.Completion{AudioRef: "ref", ReplaceAudio: true, Duration: 194, Relabel: goldenRelabel()})
+	if !errors.Is(err, ports.ErrIllegalTransition) {
+		t.Fatalf("want ErrIllegalTransition, got %v", err)
+	}
+
+	if got := storedTrack(t, store, track.ID); got.Title != "It's Only Love" || *got.CatalogMBID != "7933a65c-2c66-4ec1-9880-e46b5d2f05de" {
+		t.Errorf("labels changed on a refused completion: %q / %v", got.Title, *got.CatalogMBID)
+	}
+}
