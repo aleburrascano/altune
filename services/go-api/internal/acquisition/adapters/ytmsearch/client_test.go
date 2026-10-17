@@ -355,3 +355,17 @@ func TestClient_ItsOwnTimeoutSaysItTimedOut(t *testing.T) {
 		}
 	}
 }
+
+func TestClient_WaitingForItsTurnDoesNotUseUpTheRequestTimeout(t *testing.T) {
+	var requests []recordedRequest
+	const interval, timeout = 150 * time.Millisecond, 50 * time.Millisecond
+	client := clientFor(fixtureServer(t, &requests), interval, timeout)
+	if _, err := client.SearchSongs(context.Background(), "first"); err != nil {
+		t.Fatalf("first search: %v", err)
+	}
+
+	_, err := client.SearchSongs(context.Background(), "waits longer than the timeout for its turn")
+	if err != nil {
+		t.Fatalf("second search err = %v, want the turn wait outside the %v request timeout", err, timeout)
+	}
+}

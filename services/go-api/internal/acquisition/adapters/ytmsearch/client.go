@@ -127,11 +127,11 @@ func (c *Client) postInnerTube(ctx context.Context, g *gate, endpoint string, fi
 }
 
 func (c *Client) do(ctx context.Context, g *gate, req *http.Request) ([]byte, error) {
-	ctx, cancel := c.boundedContext(ctx)
-	defer cancel()
 	if err := g.wait(ctx); err != nil {
 		return nil, err
 	}
+	ctx, cancel := c.boundedContext(ctx)
+	defer cancel()
 	req = req.WithContext(ctx)
 	req.Header.Set("User-Agent", ytminnertube.UserAgent)
 	return c.send(req)
