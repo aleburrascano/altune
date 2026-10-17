@@ -163,9 +163,27 @@ type budgetTransport struct {
 	base   http.RoundTripper
 }
 
+type slotReservedKey struct{}
+
+func ReserveSlot(ctx context.Context, client *http.Client) (context.Context, error) {
+	if client == nil {
+		return ctx, nil
+	}
+	transport, ok := client.Transport.(budgetTransport)
+	if !ok {
+		return ctx, nil
+	}
+	if err := transport.budget.Wait(ctx); err != nil {
+		return ctx, err
+	}
+	return context.WithValue(ctx, slotReservedKey{}, true), nil
+}
+
 func (t budgetTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if err := t.budget.Wait(req.Context()); err != nil {
-		return nil, err
+	if reserved, _ := req.Context().Value(slotReservedKey{}).(bool); !reserved {
+		if err := t.budget.Wait(req.Context()); err != nil {
+			return nil, err
+		}
 	}
 	resp, err := t.base.RoundTrip(req)
 	if err == nil && resp != nil && resp.StatusCode == http.StatusForbidden {
