@@ -3,6 +3,7 @@ package main
 import (
 	"altune/go-api/internal/acquisition/adapters/ytmsearch"
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/alicebob/miniredis/v2"
 )
 
 type liveServer struct {
@@ -226,5 +229,30 @@ func TestLiveConfigFromEnv(t *testing.T) {
 
 	if _, err := liveConfigFromEnv(func(string) string { return "soon" }); err == nil {
 		t.Error("want an error for an unparseable duration")
+	}
+}
+
+func TestBudgetedClient_LogsTheSharedPace(t *testing.T) {
+	server := miniredis.RunT(t)
+	env := func(key string) string {
+		return map[string]string{"REDIS_URL": "redis://" + server.Addr()}[key]
+	}
+	var out bytes.Buffer
+	client, err := budgetedClient(context.Background(), env, &out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client == nil {
+		t.Fatal("nil client without an error")
+	}
+	if got := out.String(); !strings.HasPrefix(got, "shared InnerTube budget: one call per ") {
+		t.Fatalf("log = %q, want the shared pace line", got)
+	}
+}
+
+func TestRunLiveCommand_RefusesWithoutTheSharedBudget(t *testing.T) {
+	var out bytes.Buffer
+	if code := runLiveCommand(nil, &out, func(string) string { return "" }); code != liveUsageExitCode {
+		t.Fatalf("exit = %d, want %d: live mode must not run outside the shared budget", code, liveUsageExitCode)
 	}
 }

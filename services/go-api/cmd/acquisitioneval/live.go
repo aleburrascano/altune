@@ -3,6 +3,7 @@ package main
 import (
 	"altune/go-api/internal/acquisition/adapters/ytmsearch"
 	acqdomain "altune/go-api/internal/acquisition/domain"
+	"altune/go-api/internal/shared/ytminnertube"
 	"bufio"
 	"context"
 	"encoding/json"
@@ -10,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"sort"
@@ -110,7 +112,22 @@ func runLiveCommand(args []string, stdout io.Writer, getenv func(string) string)
 		fmt.Fprintf(os.Stderr, "acquisitioneval: live: %v\n", err)
 		return liveUsageExitCode
 	}
+	budgeted, err := budgetedClient(context.Background(), getenv, stdout)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "acquisitioneval: live: %v\n", err)
+		return liveUsageExitCode
+	}
+	cfg.HTTP = budgeted
 	return runLive(args, stdout, ytmsearch.New(cfg))
+}
+
+func budgetedClient(ctx context.Context, getenv func(string) string, out io.Writer) (*http.Client, error) {
+	budgeted, budget, err := ytminnertube.ToolClient(ctx, getenv)
+	if err != nil {
+		return nil, err
+	}
+	_, _ = fmt.Fprintln(out, budget.Describe())
+	return budgeted, nil
 }
 
 func runLive(args []string, stdout io.Writer, client *ytmsearch.Client) int {
