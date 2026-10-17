@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -138,6 +140,21 @@ func TestStore_DryRunWritesNothing(t *testing.T) {
 	}
 	if after := stateOf(t, s, row); !reflect.DeepEqual(after, before) {
 		t.Fatalf("dry run changed the track: %+v -> %+v", before, after)
+	}
+}
+
+func TestStore_ReadOnlyAccessRefusesTheWriteOnAPlainPool(t *testing.T) {
+	rw := testStore(t)
+	row := seedReady(t, rw, "USALBUM", 226)
+	before := stateOf(t, rw, row)
+	s := store{pool: rw.pool, queue: rw.queue, access: pgx.ReadOnly}
+	got, err := s.apply(context.Background(), uuid.New(), changeFor(row, actionFixISRC, "USRADIO", 226, 225), true)
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "25006" || got != verdictFailed {
+		t.Fatalf("got %s, %v; want a failed write with SQLSTATE 25006", got, err)
+	}
+	if after := stateOf(t, rw, row); !reflect.DeepEqual(after, before) {
+		t.Fatalf("read-only apply changed the track: %+v -> %+v", before, after)
 	}
 }
 
@@ -281,5 +298,93 @@ func TestStore_RestoreAfterAFailedEnqueueSurvivesTheRunContextEnding(t *testing.
 	}
 	if after := stateOf(t, s, row); *after.duration != 226 || after.catalog != nil || after.mismatch || after.jobQueued {
 		t.Fatalf("after failed enqueue %+v", after)
+	}
+}
+
+func TestStore_ReadOnlyAccessRefusesAReacquireAndQueuesNoJob(t *testing.T) {
+	rw := testStore(t)
+	row := seedReady(t, rw, "USALBUM", 226)
+	before := stateOf(t, rw, row)
+	s := store{pool: rw.pool, queue: rw.queue, access: pgx.ReadOnly}
+	got, err := s.apply(context.Background(), uuid.New(), changeFor(row, actionReacquire, "", 226, 379), true)
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "25006" || got == verdictApplied {
+		t.Fatalf("got %s, %v; want a refused write with SQLSTATE 25006", got, err)
+	}
+	if after := stateOf(t, rw, row); !reflect.DeepEqual(after, before) {
+		t.Fatalf("read-only reacquire changed the track or queued a job: %+v -> %+v", before, after)
+	}
+}
+
+func TestStore_DryRunStillReportsWhatItWouldApplyWhenReadOnly(t *testing.T) {
+	rw := testStore(t)
+	row := seedReady(t, rw, "USALBUM", 226)
+	before := stateOf(t, rw, row)
+	s := store{pool: rw.pool, queue: rw.queue, access: pgx.ReadOnly}
+	for _, c := range []change{changeFor(row, actionReacquire, "", 226, 379), changeFor(row, actionFixISRC, "USRADIO", 226, 225)} {
+		got, err := s.apply(context.Background(), uuid.New(), c, false)
+		if err != nil || got != verdictApplied {
+			t.Fatalf("%s dry run on a read-only store: got %s, %v", c.Action, got, err)
+		}
+	}
+	stale := changeFor(row, actionFixISRC, "USRADIO", 226, 225)
+	stale.Version = 3
+	if got, err := s.apply(context.Background(), uuid.New(), stale, false); err != nil || got != verdictStale {
+		t.Fatalf("stale dry run on a read-only store: got %s, %v", got, err)
+	}
+	if after := stateOf(t, rw, row); !reflect.DeepEqual(after, before) {
+		t.Fatalf("dry run changed the track: %+v -> %+v", before, after)
+	}
+}
+
+func TestStore_ReadOnlyAccessRefusesAnUndoAndKeepsTheFix(t *testing.T) {
+	rw := testStore(t)
+	row := seedReady(t, rw, "USALBUM", 226)
+	runID := uuid.New()
+	if got, err := rw.apply(context.Background(), runID, changeFor(row, actionFixISRC, "USRADIO", 226, 225), true); err != nil || got != verdictApplied {
+		t.Fatalf("apply: %s, %v", got, err)
+	}
+	applied := stateOf(t, rw, row)
+	s := store{pool: rw.pool, queue: rw.queue, access: pgx.ReadOnly}
+	results, err := s.undoRun(context.Background(), runID)
+	var pgErr *pgconn.PgError
+	refused := errors.As(err, &pgErr) && pgErr.Code == "25006"
+	for _, r := range results {
+		if r.Verdict == undoRestored {
+			t.Fatalf("read-only undo claimed a restore: %+v", results)
+		}
+		if errors.As(r.Err, &pgErr) && pgErr.Code == "25006" {
+			refused = true
+		}
+	}
+	if !refused {
+		t.Fatalf("got %+v, %v; want the undo refused with SQLSTATE 25006", results, err)
+	}
+	if after := stateOf(t, rw, row); !reflect.DeepEqual(after, applied) {
+		t.Fatalf("read-only undo changed the track: %+v -> %+v", applied, after)
+	}
+	if again, err := rw.undoRun(context.Background(), runID); err != nil || len(again) != 1 || again[0].Verdict != undoRestored {
+		t.Fatalf("the fix must still be undoable after a refused undo: %+v, %v", again, err)
+	}
+}
+
+func TestLoadStatus_ReadsOnAPlainReadWritePool(t *testing.T) {
+	s := testStore(t)
+	changes := seedReacquires(t, s, 1)
+	if err := runPlan(context.Background(), s, changes, 1, true, uuid.New(), &strings.Builder{}); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := loadStatus(context.Background(), s.pool)
+	if err != nil {
+		t.Fatalf("status on a plain pool: %v", err)
+	}
+	found := false
+	for _, r := range rows {
+		if r.TrackID == changes[0].TrackID {
+			found = r.InFlight
+		}
+	}
+	if !found {
+		t.Fatalf("status lost the queued track %s: %+v", changes[0].TrackID, rows)
 	}
 }

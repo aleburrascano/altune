@@ -6,6 +6,7 @@ import (
 	"io"
 	"math"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -71,7 +72,12 @@ const statusSQL = `SELECT DISTINCT ON (f.track_id) f.track_id::text, t.artist, t
 	ORDER BY f.track_id, f.applied_at DESC`
 
 func loadStatus(ctx context.Context, pool *pgxpool.Pool) ([]statusRow, error) {
-	rows, err := pool.Query(ctx, statusSQL)
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return nil, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, statusSQL)
 	if err != nil {
 		return nil, fmt.Errorf("query status: %w", err)
 	}

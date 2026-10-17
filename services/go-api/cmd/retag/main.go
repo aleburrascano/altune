@@ -20,6 +20,7 @@ import (
 	catalogPorts "altune/go-api/internal/catalog/ports"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -92,7 +93,7 @@ func concurrencyFrom(raw string) (int, error) {
 	return n, nil
 }
 
-func openPool(ctx context.Context, databaseURL string, readOnly bool) (*pgxpool.Pool, error) {
+func openPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	if databaseURL == "" {
 		return nil, errEmptyDatabaseURL
 	}
@@ -101,9 +102,6 @@ func openPool(ctx context.Context, databaseURL string, readOnly bool) (*pgxpool.
 		return nil, fmt.Errorf("parse database url: %w", err)
 	}
 	cfg.MaxConns = 2
-	if readOnly {
-		cfg.ConnConfig.RuntimeParams["default_transaction_read_only"] = "on"
-	}
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create pool: %w", err)
@@ -170,13 +168,16 @@ func run(opts options, env func(string) string, out io.Writer) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), runTimeout)
 	defer cancel()
-	pool, err := openPool(ctx, rt.cfg.DatabaseURL, !opts.apply)
+	pool, err := openPool(ctx, rt.cfg.DatabaseURL)
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
 
 	tracks := trackStore{pool: pool}
+	if !opts.apply {
+		tracks.access = pgx.ReadOnly
+	}
 	r := productionRetagger(rt.cfg, rt.audioStore, tracks, opts.limit)
 	return runRetag(ctx, tracks, r, opts.sel, opts.apply, rt.concurrency, out)
 }

@@ -20,8 +20,13 @@ type jobEnqueuer interface {
 }
 
 type store struct {
-	pool  *pgxpool.Pool
-	queue jobEnqueuer
+	pool   *pgxpool.Pool
+	queue  jobEnqueuer
+	access pgx.TxAccessMode
+}
+
+func (s store) begin(ctx context.Context) (pgx.Tx, error) {
+	return s.pool.BeginTx(ctx, pgx.TxOptions{AccessMode: s.access})
 }
 
 const selectTrackSQL = `SELECT t.isrc, t.version, t.acquisition_status, t.duration_seconds, t.catalog_duration_seconds,
@@ -51,7 +56,7 @@ const insertFixSQL = `INSERT INTO track_length_fixes (run_id, track_id, user_id,
 	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
 
 func (s store) apply(ctx context.Context, runID uuid.UUID, c change, write bool) (verdict, error) {
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.begin(ctx)
 	if err != nil {
 		return verdictFailed, fmt.Errorf("begin: %w", err)
 	}
@@ -159,7 +164,12 @@ const loggedFixesSQL = `SELECT track_id::text, user_id::text, action, old_isrc, 
 	FROM track_length_fixes WHERE run_id = $1 AND ($2 = '' OR track_id::text = $2) AND undone_at IS NULL ORDER BY track_id`
 
 func (s store) loggedFixes(ctx context.Context, runID uuid.UUID, trackID string) ([]loggedFix, error) {
-	rows, err := s.pool.Query(ctx, loggedFixesSQL, runID, trackID)
+	tx, err := s.begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, loggedFixesSQL, runID, trackID)
 	if err != nil {
 		return nil, fmt.Errorf("query change log: %w", err)
 	}
@@ -208,7 +218,7 @@ const restoreReplaceSQL = `UPDATE tracks SET duration_seconds = $3, catalog_dura
 const stampUndoneSQL = `UPDATE track_length_fixes SET undone_at = now() WHERE run_id = $1 AND track_id = $2`
 
 func (s store) undoRow(ctx context.Context, runID uuid.UUID, f loggedFix) (undoVerdict, error) {
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.begin(ctx)
 	if err != nil {
 		return undoFailed, fmt.Errorf("begin: %w", err)
 	}

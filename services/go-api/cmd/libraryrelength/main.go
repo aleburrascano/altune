@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -87,7 +88,7 @@ func maxPerRun(env func(string) string) (int, error) {
 	return value, nil
 }
 
-func openPool(ctx context.Context, databaseURL string, readOnly bool) (*pgxpool.Pool, error) {
+func openPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	if databaseURL == "" {
 		return nil, errEmptyDatabaseURL
 	}
@@ -96,9 +97,6 @@ func openPool(ctx context.Context, databaseURL string, readOnly bool) (*pgxpool.
 		return nil, fmt.Errorf("parse database url: %w", err)
 	}
 	cfg.MaxConns = 2
-	if readOnly {
-		cfg.ConnConfig.RuntimeParams["default_transaction_read_only"] = "on"
-	}
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create pool: %w", err)
@@ -131,12 +129,16 @@ func run(opts options, env func(string) string, out io.Writer) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), runTimeout)
 	defer cancel()
-	pool, err := openPool(ctx, env("RELENGTH_DATABASE_URL"), !opts.apply && !opts.undo)
+	pool, err := openPool(ctx, env("RELENGTH_DATABASE_URL"))
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
-	return dispatch(ctx, opts, store{pool: pool, queue: persistence.NewPgxJobQueue(pool)}, limit, out)
+	var access pgx.TxAccessMode
+	if !opts.apply && !opts.undo {
+		access = pgx.ReadOnly
+	}
+	return dispatch(ctx, opts, store{pool: pool, queue: persistence.NewPgxJobQueue(pool), access: access}, limit, out)
 }
 
 func dispatch(ctx context.Context, opts options, s store, limit int, out io.Writer) error {

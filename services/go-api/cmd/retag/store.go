@@ -20,7 +20,12 @@ func (s selection) changedOnly() bool {
 }
 
 type trackStore struct {
-	pool *pgxpool.Pool
+	pool   *pgxpool.Pool
+	access pgx.TxAccessMode
+}
+
+func (s trackStore) inTx(ctx context.Context, fn func(pgx.Tx) error) error {
+	return pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{AccessMode: s.access}, fn)
 }
 
 const readyTracksSQL = `SELECT id::text, user_id::text, title, artist, COALESCE(album, ''), COALESCE(album_artist, ''),
@@ -38,20 +43,23 @@ func (s trackStore) readyTracks(ctx context.Context, sel selection) ([]trackRow,
 	if sel.changedOnly() {
 		query, args = readyTracksSQL+changedFilterSQL+" ORDER BY id", selectionArgs(sel)
 	}
-	rows, err := s.pool.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("query ready tracks: %w", err)
-	}
-	defer rows.Close()
 	var tracks []trackRow
-	for rows.Next() {
-		track, err := scanTrack(rows)
+	err := s.inTx(ctx, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
-			return nil, err
+			return fmt.Errorf("query ready tracks: %w", err)
 		}
-		tracks = append(tracks, track)
-	}
-	return tracks, rows.Err()
+		defer rows.Close()
+		for rows.Next() {
+			track, err := scanTrack(rows)
+			if err != nil {
+				return err
+			}
+			tracks = append(tracks, track)
+		}
+		return rows.Err()
+	})
+	return tracks, err
 }
 
 func scanTrack(rows pgx.Rows) (trackRow, error) {
@@ -80,6 +88,8 @@ const stillServesSQL = `SELECT EXISTS (SELECT 1 FROM tracks
 
 func (s trackStore) stillServes(ctx context.Context, track trackRow) (bool, error) {
 	var serves bool
-	err := s.pool.QueryRow(ctx, stillServesSQL, track.ID, track.UserID, track.Ref).Scan(&serves)
+	err := s.inTx(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, stillServesSQL, track.ID, track.UserID, track.Ref).Scan(&serves)
+	})
 	return serves, err
 }

@@ -68,3 +68,33 @@ func TestLoadPlan_ApplyRefusesAnAbortedReportFile(t *testing.T) {
 		t.Fatalf("dry run: %+v, %v", got, err)
 	}
 }
+
+func TestRun_DryRunWritesNothingAndApplyStillCommitsThroughTheTool(t *testing.T) {
+	s := testStore(t)
+	row := seedReady(t, s, "USALBUM", 226)
+	path := filepath.Join(t.TempDir(), "report.json")
+	report := `{"findings":[{"track_id":"` + row.trackID + `","artist":"Artist","title":"Song","category":"length_version_fix",
+"length_plan":{"action":"fix_isrc","user_id":"` + row.userID + `","version":4,"old_isrc":"USALBUM","new_isrc":"USRADIO","file_seconds":226,"catalog_seconds":225}}]}`
+	if err := os.WriteFile(path, []byte(report), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env := func(key string) string {
+		if key == "RELENGTH_DATABASE_URL" {
+			return os.Getenv("DATABASE_URL")
+		}
+		return ""
+	}
+	before := stateOf(t, s, row)
+	if err := run(options{reportPath: path}, env, io.Discard); err != nil {
+		t.Fatalf("dry run: %v", err)
+	}
+	if after := stateOf(t, s, row); *after.isrc != "USALBUM" || after.version != before.version || after.loggedFixes != 0 {
+		t.Fatalf("dry run wrote: %+v", after)
+	}
+	if err := run(options{reportPath: path, apply: true}, env, io.Discard); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if after := stateOf(t, s, row); *after.isrc != "USRADIO" || after.version != 5 || after.loggedFixes != 1 {
+		t.Fatalf("apply did not commit: %+v", after)
+	}
+}
