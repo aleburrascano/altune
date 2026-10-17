@@ -71,3 +71,11 @@ type noopRecordingResolver struct{}
 func (noopRecordingResolver) Resolve(context.Context, RecordingQuery) (RecordingIdentity, error) {
 	return RecordingIdentity{}, nil
 }
+
+type RerecordingQuery struct {
+	OriginalMBID string
+}
+
+type RerecordingFinder interface {
+	FindRerecording(ctx context.Context, q RerecordingQuery) (RecordingLabel, bool, error)
+}

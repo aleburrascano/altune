@@ -51,9 +51,10 @@ func (l authorityLookup) RecordingByMBID(ctx context.Context, mbid string) (acqp
 }
 
 type RecordingResolver struct {
-	search recordingSearcher
-	isrc   isrcAuthority
-	lookup acqports.RecordingLookup
+	search      recordingSearcher
+	isrc        isrcAuthority
+	lookup      acqports.RecordingLookup
+	rerecording rerecordingAuthority
 }
 
 func NewRecordingResolver(search recordingSearcher, opts ...func(*RecordingResolver)) *RecordingResolver {
