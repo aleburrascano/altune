@@ -485,7 +485,7 @@ commit_as_base() {
 add_go_fixture() {
     mkdir -p "$WORK/bin" "$WORK/home"
     printf '#!/usr/bin/env bash\nprintf "go %%s\\n" "$*" >>"%s/tools.log"\nexec "%s" "$@"\n' "$WORK" "$REAL_GO" >"$WORK/bin/go"
-    printf '#!/usr/bin/env bash\nprintf "golangci-lint %%s\\n" "$*" >>"%s/tools.log"\n' "$WORK" >"$WORK/bin/golangci-lint"
+    printf '#!/usr/bin/env bash\nprintf "golangci-lint %%s\\n" "$*" >>"%s/tools.log"\nprintf "golangci-lint-cache %%s %%s\\n" "$1" "$GOLANGCI_LINT_CACHE" >>"%s/tools.log"\n' "$WORK" "$WORK" >"$WORK/bin/golangci-lint"
     printf '#!/usr/bin/env bash\nprintf "govulncheck %%s\\n" "$*" >>"%s/tools.log"\n' "$WORK" >"$WORK/bin/govulncheck"
     chmod +x "$WORK/bin/go" "$WORK/bin/golangci-lint" "$WORK/bin/govulncheck"
     (
@@ -846,6 +846,15 @@ commit_as_base
 run_with_tools
 expect_log "vet altune/go-api/internal/discovery/adapters/x"
 expect_log "test -shuffle=on -count=1 ./internal/discovery/adapters/x"
+
+CASE="every golangci-lint call runs with a cache inside the checkout"
+new_repo
+add_go_fixture
+edit_go_file internal/discovery/adapters/x/x.go
+run_with_tools --lint
+expect_log "golangci-lint-cache run $WORK/repo/.cache/golangci-lint"
+stray=$(grep "^golangci-lint-cache run " "$WORK/tools.log" | grep -vF " $WORK/repo/.cache/golangci-lint")
+[ -z "$stray" ] || fail "a golangci-lint call ran outside the checkout cache"
 
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"

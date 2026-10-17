@@ -6,6 +6,7 @@ lint_only=0
 
 root=$(git rev-parse --show-toplevel) || exit 3
 cd "$root" || exit 3
+lint_cache="$root/.cache/golangci-lint"
 default_base_ref() { git rev-parse --verify --quiet gitea/main >/dev/null && echo gitea/main || echo origin/main; }
 base_ref=${1:-$(default_base_ref)}
 base=$(git merge-base "$base_ref" HEAD) || { echo "precheck: no merge base with $base_ref"; exit 3; }
@@ -154,8 +155,8 @@ if touches '^services/go-api/'; then
     if touches '(^|/)\.golangci[^/]*\.yml$' || [ -n "$(git diff -M --name-only --diff-filter=RC "$base")" ] || [ -n "$(untracked | grep -E '\.go$')" ]; then
       import_scope=()
     fi
-    check "go-api import direction" $m "${heavy[@]}" golangci-lint run "${import_scope[@]}" --allow-serial-runners
-    check "go-api strict linters (new code)" $m "${heavy[@]}" golangci-lint run --config .golangci.strict.yml --new-from-rev="$base" --allow-serial-runners
+    check "go-api import direction" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run "${import_scope[@]}" --allow-serial-runners
+    check "go-api strict linters (new code)" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --new-from-rev="$base" --allow-serial-runners
     check "go-api no comments (whole tree)" $m go run ./scripts/lintcomments --all .
     check "go-api no new vague names" $m go run ./scripts/lintnames "$base"
     check "go-api module shape" $m go run ./scripts/moduleshape
@@ -210,7 +211,7 @@ if touches '^services/overseer/'; then
   if need go "overseer" && need golangci-lint "overseer lint"; then
     check "overseer build" $m "${heavy[@]}" go build ./...
     check "overseer vet" $m "${heavy[@]}" go vet ./...
-    check "overseer strict linters" $m "${heavy[@]}" golangci-lint run --config "$root/services/go-api/.golangci.strict.yml" --disable=funlen,revive --allow-serial-runners
+    check "overseer strict linters" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config "$root/services/go-api/.golangci.strict.yml" --disable=funlen,revive --allow-serial-runners
     check "overseer no comments (whole tree)" services/go-api go run ./scripts/lintcomments --all ../overseer
     test_check "overseer tests (race)" $m "${heavy[@]}" env CGO_ENABLED=1 go test -race -shuffle=on -count=1 ./...
     touches '^services/overseer/go\.(mod|sum)$' && need govulncheck "overseer govulncheck" && check "overseer govulncheck" $m "${heavy[@]}" govulncheck ./...

@@ -77,3 +77,4 @@ services/go-api/deploy/caddy/upstream.conf
 /graft/
 
 supabase/.temp/
+/.cache/
