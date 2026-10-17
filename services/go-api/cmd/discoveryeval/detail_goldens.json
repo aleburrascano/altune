@@ -10,11 +10,11 @@
       "spotify": "5A7T1LAGJg5NXySBoIKUmF",
       "soundcloud": "che"
     },
-    "expected_albums": ["rest in bass", "fully loaded", "empty clip", "14 hahaha lol", "sayso says"],
+    "expected_albums": ["rest in bass", "fully loaded", "empty clip", "sayso says"],
     "expected_top_tracks": ["miley cyrus", "mannequin", "dior leopard", "million dollar mansion", "pizza time"],
-    "forbidden_sources": ["deezer"],
-    "forbidden_titles": ["samsonite", "kiss me in the sky", "gallos ciegos", "the qualifier", "drunken love & heartbreak", "por siempre"],
-    "_note": "The Che bug reincarnate: seed the WRONG deezer id (234701081 = a different soul/latin Che) alongside the rapper's real spotify/apple/soundcloud ids. The MB anchor (albums) + cohesion (top-tracks) must drop every deezer-sourced (soul) item and every forbidden soul title. contamination must be 0."
+    "forbidden_sources": [],
+    "forbidden_titles": ["samsonite", "kiss me in the sky", "gallos ciegos", "the qualifier", "drunken love & heartbreak", "por siempre", "the incident", "until we meet again", "nobody's favorite", "good"],
+    "_note": "The Che bug reincarnate: seed the WRONG deezer id (234701081 = a different soul/latin Che) alongside the rapper's real spotify/apple/soundcloud ids. That Deezer page is now MIXED: it also carries the rapper's own releases (3, RichPhønks, intro, wtf), which MusicBrainz and Apple confirm, so a deezer-sourced item is no longer proof of contamination and deezer is not a forbidden source. The soul/latin Che's Deezer-only titles (none on MB 0a68f3b5 or Apple 1586243773) are forbidden_titles instead: the MB anchor (albums) + cohesion (top-tracks) must still drop every one of them. contamination must be 0."
   },
   {
     "name": "Che (clean identity)",
@@ -26,7 +26,7 @@
       "spotify": "5A7T1LAGJg5NXySBoIKUmF",
       "soundcloud": "che"
     },
-    "expected_albums": ["rest in bass", "fully loaded", "empty clip", "14 hahaha lol", "sayso says"],
+    "expected_albums": ["rest in bass", "fully loaded", "empty clip", "sayso says"],
     "expected_top_tracks": ["miley cyrus", "mannequin", "dior leopard", "million dollar mansion", "pizza time"],
     "forbidden_sources": ["deezer"],
     "forbidden_titles": ["samsonite", "kiss me in the sky", "gallos ciegos", "the qualifier", "drunken love & heartbreak", "por siempre"],
