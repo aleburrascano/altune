@@ -24,7 +24,12 @@ type decision struct {
 }
 
 type store struct {
-	pool *pgxpool.Pool
+	pool   *pgxpool.Pool
+	access pgx.TxAccessMode
+}
+
+func (s store) begin(ctx context.Context) (pgx.Tx, error) {
+	return s.pool.BeginTx(ctx, pgx.TxOptions{AccessMode: s.access})
 }
 
 type trackRow struct {
@@ -99,7 +104,7 @@ func allFailed(plan trackPlan) []decision {
 }
 
 func (s store) reconcileTrack(ctx context.Context, runID uuid.UUID, plan trackPlan, write bool) ([]decision, error) {
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.begin(ctx)
 	if err != nil {
 		return allFailed(plan), fmt.Errorf("begin: %w", err)
 	}
@@ -320,7 +325,12 @@ const loggedChangesSQL = `SELECT track_id::text, user_id::text, field, old_value
 	FROM track_metadata_changes WHERE run_id = $1 AND undone_at IS NULL ORDER BY track_id, field`
 
 func (s store) loggedChanges(ctx context.Context, runID uuid.UUID) ([]loggedChange, error) {
-	rows, err := s.pool.Query(ctx, loggedChangesSQL, runID)
+	tx, err := s.begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, loggedChangesSQL, runID)
 	if err != nil {
 		return nil, fmt.Errorf("query change log: %w", err)
 	}
@@ -348,7 +358,7 @@ func sameValue(a, b *string) bool {
 }
 
 func (s store) undoUnit(ctx context.Context, runID uuid.UUID, unit []loggedChange) (undoVerdict, error) {
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.begin(ctx)
 	if err != nil {
 		return undoFailed, fmt.Errorf("begin: %w", err)
 	}

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -63,7 +64,7 @@ func undoOptions(opts options, rawRunID string) (options, error) {
 	return options{undo: true, undoRunID: runID}, nil
 }
 
-func openPool(ctx context.Context, databaseURL string, readOnly bool) (*pgxpool.Pool, error) {
+func openPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	if databaseURL == "" {
 		return nil, errEmptyDatabaseURL
 	}
@@ -72,9 +73,6 @@ func openPool(ctx context.Context, databaseURL string, readOnly bool) (*pgxpool.
 		return nil, fmt.Errorf("parse database url: %w", err)
 	}
 	cfg.MaxConns = 2
-	if readOnly {
-		cfg.ConnConfig.RuntimeParams["default_transaction_read_only"] = "on"
-	}
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create pool: %w", err)
@@ -103,19 +101,23 @@ func main() {
 func run(opts options, env func(string) string, out io.Writer) error {
 	ctx, cancel := context.WithTimeout(context.Background(), runTimeout)
 	defer cancel()
-	pool, err := openPool(ctx, env("RECONCILE_DATABASE_URL"), !opts.apply && !opts.undo)
+	pool, err := openPool(ctx, env("RECONCILE_DATABASE_URL"))
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
+	access := pgx.ReadWrite
+	if !opts.apply && !opts.undo {
+		access = pgx.ReadOnly
+	}
 	if opts.undo {
-		return runUndo(ctx, store{pool: pool}, opts.undoRunID, out)
+		return runUndo(ctx, store{pool: pool, access: access}, opts.undoRunID, out)
 	}
 	plans, err := loadPlan(opts.reportPath)
 	if err != nil {
 		return err
 	}
-	return runReconcile(ctx, store{pool: pool}, plans, opts.apply, uuid.New(), out)
+	return runReconcile(ctx, store{pool: pool, access: access}, plans, opts.apply, uuid.New(), out)
 }
 
 func loadPlan(path string) ([]trackPlan, error) {

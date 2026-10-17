@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -87,7 +88,7 @@ func minIntervalFromEnv(env func(string) string) (time.Duration, error) {
 	return interval, nil
 }
 
-func openPool(ctx context.Context, databaseURL string, readOnly bool) (*pgxpool.Pool, error) {
+func openPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	if databaseURL == "" {
 		return nil, errEmptyDatabaseURL
 	}
@@ -96,9 +97,6 @@ func openPool(ctx context.Context, databaseURL string, readOnly bool) (*pgxpool.
 		return nil, fmt.Errorf("parse database url: %w", err)
 	}
 	cfg.MaxConns = 2
-	if readOnly {
-		cfg.ConnConfig.RuntimeParams["default_transaction_read_only"] = "on"
-	}
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create pool: %w", err)
@@ -131,13 +129,17 @@ func run(opts options, env func(string) string, out io.Writer) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), runTimeout)
 	defer cancel()
-	pool, err := openPool(ctx, env(databaseURLVarName), !opts.apply && !opts.undo)
+	pool, err := openPool(ctx, env(databaseURLVarName))
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
+	access := pgx.ReadWrite
+	if !opts.apply && !opts.undo {
+		access = pgx.ReadOnly
+	}
 	if opts.undo {
-		return runUndo(ctx, store{pool: pool}, opts.undoRunID, out)
+		return runUndo(ctx, store{pool: pool, access: access}, opts.undoRunID, out)
 	}
 	budgeted, budget, err := ytminnertube.ToolClient(ctx, env)
 	if err != nil {
@@ -145,5 +147,5 @@ func run(opts options, env func(string) string, out io.Writer) error {
 	}
 	_, _ = fmt.Fprintln(out, budget.Describe())
 	youtube := ytmsearch.New(ytmsearch.Config{HTTP: budgeted, MinInterval: interval, Timeout: lookupTimeout})
-	return runBackfill(ctx, store{pool: pool}, newSourceLookup(youtube, interval), opts, uuid.New(), out)
+	return runBackfill(ctx, store{pool: pool, access: access}, newSourceLookup(youtube, interval), opts, uuid.New(), out)
 }

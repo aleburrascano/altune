@@ -5,11 +5,17 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type store struct {
-	pool *pgxpool.Pool
+	pool   *pgxpool.Pool
+	access pgx.TxAccessMode
+}
+
+func (s store) begin(ctx context.Context) (pgx.Tx, error) {
+	return s.pool.BeginTx(ctx, pgx.TxOptions{AccessMode: s.access})
 }
 
 const ungradedTracksSQL = `SELECT id::text, user_id::text, artist, COALESCE(audio_source_url, ''), COALESCE(acquisition_provenance, ''),
@@ -35,7 +41,12 @@ func (s store) ungradedTracks(ctx context.Context, userID string, limit int) ([]
 		query += " LIMIT $2"
 		args = append(args, limit)
 	}
-	rows, err := s.pool.Query(ctx, query, args...)
+	tx, err := s.begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query tracks: %w", err)
 	}
@@ -56,17 +67,33 @@ func (s store) applyPatch(ctx context.Context, row trackRow, p patch) (bool, err
 	if err != nil {
 		return false, fmt.Errorf("encode patch: %w", err)
 	}
-	tag, err := s.pool.Exec(ctx, applyPatchSQL, row.ID, row.UserID, row.Version, string(raw))
+	tx, err := s.begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	tag, err := tx.Exec(ctx, applyPatchSQL, row.ID, row.UserID, row.Version, string(raw))
 	if err != nil {
 		return false, fmt.Errorf("update track: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("commit: %w", err)
 	}
 	return tag.RowsAffected() == 1, nil
 }
 
 func (s store) undoRun(ctx context.Context, runID uuid.UUID) (int64, error) {
-	tag, err := s.pool.Exec(ctx, undoRunSQL, runID.String())
+	tx, err := s.begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	tag, err := tx.Exec(ctx, undoRunSQL, runID.String())
 	if err != nil {
 		return 0, fmt.Errorf("undo run: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("commit: %w", err)
 	}
 	return tag.RowsAffected(), nil
 }

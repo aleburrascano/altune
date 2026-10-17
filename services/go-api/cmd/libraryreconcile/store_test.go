@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -613,5 +615,159 @@ func TestRunReconcile_FillsAnEmptyCoverAndAnEmptyAlbumAndRecomputesTheKey(t *tes
 	_, out, err := reconcile(t, s, true, planFor(row, 4, cover, album))
 	if got := readSong(t, s, row); err != nil || got.ArtworkURL != "https://cdn/mib.jpg" || got.Album != "Make It Big" || got.DedupKey != "careless whisper|wham|make it big" {
 		t.Fatalf("err=%v got=%+v out=%s", err, got, out)
+	}
+}
+
+func TestReconcileTrack_ReadOnlyAccessRefusesTheWriteEvenWhenTheSessionDefaultIsReadWrite(t *testing.T) {
+	s := testStore(t)
+	row := seedTrack(t, s, nil, nil, nil)
+	dry := store{pool: s.pool, access: pgx.ReadOnly}
+
+	_, err := dry.reconcileTrack(context.Background(), uuid.New(), planFor(row, 4, fillChanges()...), true)
+
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "25006" {
+		t.Fatalf("err = %v, want SQLSTATE 25006", err)
+	}
+	if got := snapshot(t, s, row); got.year != nil || got.albumArtist != nil || got.version != 4 {
+		t.Fatalf("track changed: %+v", got)
+	}
+}
+
+func readOnlyGuardURL(t *testing.T, s store) string {
+	t.Helper()
+	schema := "probe_ro_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	ddl := strings.ReplaceAll(`CREATE SCHEMA S;
+		CREATE FUNCTION S.assert_read_only() RETURNS boolean STABLE LANGUAGE plpgsql AS $$
+		BEGIN
+			IF current_setting('transaction_read_only') <> 'on' THEN
+				RAISE EXCEPTION 'read outside a read-only transaction';
+			END IF;
+			RETURN true;
+		END $$;
+		CREATE VIEW S.tracks AS SELECT * FROM public.tracks WHERE S.assert_read_only();
+		CREATE VIEW S.track_metadata_changes AS SELECT * FROM public.track_metadata_changes WHERE S.assert_read_only();`,
+		"S.", schema+".")
+	ddl = strings.Replace(ddl, "CREATE SCHEMA S;", "CREATE SCHEMA "+schema+";", 1)
+	if _, err := s.pool.Exec(context.Background(), ddl); err != nil {
+		t.Fatalf("guard schema: %v", err)
+	}
+	t.Cleanup(func() { _, _ = s.pool.Exec(context.Background(), "DROP SCHEMA "+schema+" CASCADE") })
+	url := os.Getenv("DATABASE_URL")
+	sep := "?"
+	if strings.Contains(url, "?") {
+		sep = "&"
+	}
+	return url + sep + "search_path=" + schema + ",public"
+}
+
+func yearFillReport(t *testing.T, row seeded) string {
+	t.Helper()
+	path := t.TempDir() + "/report.json"
+	body := `{"findings":[{"track_id":"` + row.trackID + `","fix":{"user_id":"` + row.userID +
+		`","version":4,"field":"year","mode":"fill","old_value":null,"new_value":"2019"}}]}`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func reconcileEnv(url string) func(string) string {
+	return func(key string) string {
+		if key == "RECONCILE_DATABASE_URL" {
+			return url
+		}
+		return ""
+	}
+}
+
+func TestRun_ADryRunReadsTheLibraryOnlyInsideReadOnlyTransactions(t *testing.T) {
+	s := testStore(t)
+	row := seedTrack(t, s, nil, nil, nil)
+	guarded := readOnlyGuardURL(t, s)
+	probe, err := pgxpool.New(context.Background(), guarded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer probe.Close()
+	var n int
+	if err := probe.QueryRow(context.Background(), "SELECT count(*) FROM tracks").Scan(&n); err == nil {
+		t.Fatal("guard is not live: a read-write read of tracks passed")
+	}
+
+	var out bytes.Buffer
+	runErr := run(options{reportPath: yearFillReport(t, row)}, reconcileEnv(guarded), &out)
+
+	if got := snapshot(t, s, row); runErr != nil || got.year != nil || got.version != 4 {
+		t.Fatalf("err=%v got=%+v out=%s", runErr, got, out.String())
+	}
+	_ = run(options{reportPath: yearFillReport(t, row), apply: true}, reconcileEnv(guarded), &out)
+	if got := snapshot(t, s, row); got.year != nil {
+		t.Fatalf("guard is bypassed: a read-write apply through it wrote %+v\n%s", got, out.String())
+	}
+}
+
+func TestRun_ApplyAndUndoStillWriteWhenTheSessionDefaultIsReadWrite(t *testing.T) {
+	s := testStore(t)
+	row := seedTrack(t, s, nil, nil, nil)
+	env := reconcileEnv(os.Getenv("DATABASE_URL"))
+
+	var out bytes.Buffer
+	applyErr := run(options{reportPath: yearFillReport(t, row), apply: true}, env, &out)
+	applied := snapshot(t, s, row)
+	if applyErr != nil || applied.year == nil || *applied.year != 2019 || applied.version != 5 {
+		t.Fatalf("apply: err=%v got=%+v out=%s", applyErr, applied, out.String())
+	}
+	var runID uuid.UUID
+	if err := s.pool.QueryRow(context.Background(),
+		"SELECT DISTINCT run_id FROM track_metadata_changes WHERE track_id = $1", row.trackID).Scan(&runID); err != nil {
+		t.Fatal(err)
+	}
+
+	undoErr := run(options{undo: true, undoRunID: runID}, env, &out)
+
+	if got := snapshot(t, s, row); undoErr != nil || got.year != nil {
+		t.Fatalf("undo: err=%v got=%+v out=%s", undoErr, got, out.String())
+	}
+}
+
+func TestUndoRun_ReadOnlyAccessRefusesTheRestoreAndLeavesTheAppliedValue(t *testing.T) {
+	s := testStore(t)
+	row := seedTrack(t, s, nil, nil, nil)
+	runID, _, err := reconcile(t, s, true, planFor(row, 4, fillChanges()...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dry := store{pool: s.pool, access: pgx.ReadOnly}
+
+	results, undoErr := dry.undoRun(context.Background(), runID)
+
+	refused := undoErr != nil
+	for _, r := range results {
+		var pgErr *pgconn.PgError
+		if errors.As(r.Err, &pgErr) && pgErr.Code == "25006" {
+			refused = true
+		}
+	}
+	if got := snapshot(t, s, row); !refused || got.year == nil || *got.year != 2019 || got.version != 5 {
+		t.Fatalf("err=%v results=%+v got=%+v", undoErr, results, got)
+	}
+}
+
+func TestReconcileTrack_ADryRunOnReadOnlyAccessStillReportsTheChangeItWouldApply(t *testing.T) {
+	s := testStore(t)
+	row := seedTrack(t, s, nil, nil, nil)
+	dry := store{pool: s.pool, access: pgx.ReadOnly}
+
+	decisions, err := dry.reconcileTrack(context.Background(), uuid.New(), planFor(row, 4, fillChanges()...), false)
+
+	applied := 0
+	for _, d := range decisions {
+		if d.Verdict == verdictApplied {
+			applied++
+		}
+	}
+	if got := snapshot(t, s, row); err != nil || applied != 2 || got.year != nil || got.version != 4 {
+		t.Fatalf("err=%v decisions=%+v got=%+v", err, decisions, got)
 	}
 }
