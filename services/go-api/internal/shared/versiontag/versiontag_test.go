@@ -43,6 +43,28 @@ func TestWithoutVersionPhrases_KeepsTitleWords(t *testing.T) {
 	}
 }
 
+func TestWithoutRerecordingPhrases(t *testing.T) {
+	cases := []struct {
+		title string
+		want  string
+		found bool
+	}{
+		{"It’s Only Love (Classic Version)", "its only love", true},
+		{"Love Story (Taylor's Version)", "love story", true},
+		{"Song (Re-Recorded)", "song", true},
+		{"Song (Rerecorded)", "song", true},
+		{"Song (Re-Recording)", "song", true},
+		{"Classic Rock Version Of Me", "classic rock version of me", false},
+		{"Cold Heart (PNAU Remix)", "cold heart pnau remix", false},
+	}
+	for _, c := range cases {
+		kept, found := WithoutRerecordingPhrases(Tokens(c.title))
+		if got := strings.Join(kept, " "); got != c.want || found != c.found {
+			t.Errorf("WithoutRerecordingPhrases(%q) = %q, %v; want %q, %v", c.title, got, found, c.want, c.found)
+		}
+	}
+}
+
 func TestRecordingLabels_NameADifferentRecording(t *testing.T) {
 	for title, want := range map[string]string{
 		"Wanna Be Startin' Somethin' (Album Version)":                "",
@@ -171,6 +193,43 @@ func TestTags_EqualComparesPartAndLabels(t *testing.T) {
 	for _, tc := range cases {
 		if got := ParseTags(tc.a).Equal(ParseTags(tc.b)); got != tc.want {
 			t.Errorf("ParseTags(%q).Equal(ParseTags(%q)) = %v, want %v", tc.a, tc.b, got, tc.want)
+		}
+	}
+}
+
+func TestWithoutRerecordingPhrases_LoneWordsAndEmptyInputAreNotAPhrase(t *testing.T) {
+	cases := []struct {
+		title string
+		want  string
+	}{
+		{"", ""},
+		{"Classic", "classic"},
+		{"Version", "version"},
+		{"Classic Man", "classic man"},
+		{"Classical Gas", "classical gas"},
+		{"Version Classic", "version classic"},
+		{"Taylors", "taylors"},
+		{"Song (Album Version)", "song album version"},
+	}
+	for _, c := range cases {
+		kept, found := WithoutRerecordingPhrases(Tokens(c.title))
+		if got := strings.Join(kept, " "); got != c.want || found {
+			t.Errorf("WithoutRerecordingPhrases(%q) = %q, %v; want %q, false", c.title, got, found, c.want)
+		}
+	}
+}
+
+func TestWithoutRerecordingPhrases_FoldsCaseAndCurlyApostrophe(t *testing.T) {
+	for title, want := range map[string]string{
+		"Love Story (Taylor’s Version)": "love story",
+		"LOVE STORY (TAYLOR'S VERSION)": "love story",
+		"Classic Version":               "",
+		"Song (Classic Version) [Live]": "song live",
+		"Song - Re-Recorded Version":    "song version",
+	} {
+		kept, found := WithoutRerecordingPhrases(Tokens(title))
+		if got := strings.Join(kept, " "); got != want || !found {
+			t.Errorf("WithoutRerecordingPhrases(%q) = %q, %v; want %q, true", title, got, found, want)
 		}
 	}
 }

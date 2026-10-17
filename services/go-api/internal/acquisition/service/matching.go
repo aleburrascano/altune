@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/versiontag"
 	"context"
 	"fmt"
 	"log/slog"
@@ -152,6 +153,14 @@ func qualifierRejection(c ports.AudioCandidate, veto []string) CandidateRejectio
 	}
 }
 
+func carriesUnrequestedRerecording(wantedTitle, candidateTitle string) bool {
+	if _, wanted := versiontag.WithoutRerecordingPhrases(versiontag.Tokens(wantedTitle)); wanted {
+		return false
+	}
+	_, carried := versiontag.WithoutRerecordingPhrases(versiontag.Tokens(candidateTitle))
+	return carried
+}
+
 func unplayableRejection(c ports.AudioCandidate) CandidateRejection {
 	return CandidateRejection{
 		URL:    c.URL,
@@ -177,6 +186,10 @@ func classifyCandidates(
 		entry := scoreCandidate(track, expectedLength, c, maxViews)
 		logCandidateEvaluated(ctx, track, entry)
 
+		if carriesUnrequestedRerecording(track.Title, c.Title) {
+			rejected = append(rejected, qualifierRejection(c, []string{"re-recorded"}))
+			continue
+		}
 		if c.IsResolved() {
 			resolved = append(resolved, entry)
 			continue

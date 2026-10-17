@@ -299,6 +299,36 @@ func WithoutVersionPhrases(tokens []string) []string {
 	return kept
 }
 
+var rerecordingPhrases = [][]string{
+	{"classic", "version"},
+	{"re", "recorded"},
+	{"rerecorded"},
+	{"re", "recording"},
+	{"taylors", "version"},
+}
+
+func rerecordingPhraseAt(tokens []string, pos int) int {
+	for _, phrase := range rerecordingPhrases {
+		if pos+len(phrase) <= len(tokens) && slices.Equal(tokens[pos:pos+len(phrase)], phrase) {
+			return len(phrase)
+		}
+	}
+	return 0
+}
+
+func WithoutRerecordingPhrases(tokens []string) (kept []string, found bool) {
+	for pos := 0; pos < len(tokens); {
+		if n := rerecordingPhraseAt(tokens, pos); n > 0 {
+			found = true
+			pos += n
+			continue
+		}
+		kept = append(kept, tokens[pos])
+		pos++
+	}
+	return kept, found
+}
+
 func KnownLabels() map[string]bool {
 	labels := make(map[string]bool)
 	for _, entry := range lexicon {

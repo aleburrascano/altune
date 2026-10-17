@@ -20,14 +20,6 @@ const (
 
 var _ acqports.RerecordingFinder = (*RecordingResolver)(nil)
 
-var rerecordingPhrases = [][]string{
-	{"classic", "version"},
-	{"re", "recorded"},
-	{"rerecorded"},
-	{"re", "recording"},
-	{"taylors", "version"},
-}
-
 type rerecordingAuthority interface {
 	WorkRecordings(ctx context.Context, recordingMBID string) ([]discoveryports.MBWorkRecording, error)
 	RecordingDetail(ctx context.Context, mbid string) (discoveryports.MBRecordingDetail, bool, error)
@@ -91,8 +83,8 @@ func sameLeadArtist(a, b []string) bool {
 }
 
 func rerecordingSongTitle(rec discoveryports.MBWorkRecording) ([]string, bool) {
-	title, inTitle := withoutRerecordingPhrases(versiontag.Tokens(rec.Title))
-	disambiguation, inDisambiguation := withoutRerecordingPhrases(versiontag.Tokens(rec.Disambiguation))
+	title, inTitle := versiontag.WithoutRerecordingPhrases(versiontag.Tokens(rec.Title))
+	disambiguation, inDisambiguation := versiontag.WithoutRerecordingPhrases(versiontag.Tokens(rec.Disambiguation))
 	if !inTitle && !inDisambiguation {
 		return nil, false
 	}
@@ -100,30 +92,6 @@ func rerecordingSongTitle(rec discoveryports.MBWorkRecording) ([]string, bool) {
 		return nil, false
 	}
 	return versiontag.WithoutVersionPhrases(title), true
-}
-
-func withoutRerecordingPhrases(tokens []string) ([]string, bool) {
-	var kept []string
-	found := false
-	for pos := 0; pos < len(tokens); {
-		if n := rerecordingPhraseAt(tokens, pos); n > 0 {
-			found = true
-			pos += n
-			continue
-		}
-		kept = append(kept, tokens[pos])
-		pos++
-	}
-	return kept, found
-}
-
-func rerecordingPhraseAt(tokens []string, pos int) int {
-	for _, phrase := range rerecordingPhrases {
-		if pos+len(phrase) <= len(tokens) && slices.Equal(tokens[pos:pos+len(phrase)], phrase) {
-			return len(phrase)
-		}
-	}
-	return 0
 }
 
 func vetoed(tokens []string) bool {

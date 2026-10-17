@@ -18,7 +18,7 @@
         "duration": 194
       },
       "candidates": [
-        { "title": "It's Only Love (Classic Version)", "url": "https://music.youtube.com/watch?v=Ml2N72dMv_8", "duration": 194, "resolved": true, "kind": "art_track",
+        { "title": "It's Only Love (Classic Version)", "url": "https://music.youtube.com/watch?v=Ml2N72dMv_8", "duration": 194, "resolved": true, "kind": "art_track", "artists": ["Bryan Adams"], "channel": "Bryan Adams - Topic",
           "acoustid": "rw-its-only-love-classic-version", "recording_mbids": ["25d68187-ee71-4f06-9e58-0b49d66bf8a8"],
           "acoustid_results": [ { "id": "rw-its-only-love-classic-version", "score": 0.994462, "recordings": [ { "mbid": "25d68187-ee71-4f06-9e58-0b49d66bf8a8", "title": "It’s Only Love (classic version)", "artists": ["Bryan Adams"], "duration": 194 } ] } ],
           "correct": true }

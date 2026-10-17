@@ -1519,3 +1519,119 @@ func TestQualifierDistance_CountsVersionsAndPresentationNotNoise(t *testing.T) {
 		t.Errorf("marker word in the track title costs %d, want 0", d)
 	}
 }
+
+func TestRankAndCollect_RejectsRerecordingTitleTheTrackDoesNotCarry(t *testing.T) {
+	track := TrackRef{Title: "It's Only Love", Artist: "Bryan Adams", CatalogDuration: 195}
+	for _, title := range []string{
+		"It's Only Love (Classic Version)",
+		"It's Only Love (Taylor's Version)",
+		"It's Only Love (Re-Recorded)",
+		"It's Only Love (Re-Recording)",
+	} {
+		for _, kind := range []ports.CandidateKind{ports.KindArtTrack, ports.KindUpload} {
+			c := ports.AudioCandidate{Title: title, URL: "https://music.youtube.com/watch?v=Ml2N72dMv_8", Duration: 194, Kind: kind, Artists: []string{"Bryan Adams"}, Channel: "Bryan Adams - Topic"}
+			ranked, rejected := rankAndCollect(context.Background(), track, track.CatalogDuration, []ports.AudioCandidate{c})
+			if len(ranked) != 0 || len(rejected) != 1 || rejected[0].Stage != RejectionQualifier || rejected[0].Reason != "unrequested re-recorded" {
+				t.Errorf("%q kind %q: ranked=%d rejected=%+v", title, kind, len(ranked), rejected)
+			}
+		}
+	}
+}
+
+func TestRankAndCollect_RanksRerecordingWhenTrackCarriesIt(t *testing.T) {
+	track := TrackRef{Title: "It’s Only Love (classic version)", Artist: "Bryan Adams", CatalogDuration: 194}
+	c := ports.AudioCandidate{Title: "It's Only Love (Classic Version)", URL: "https://music.youtube.com/watch?v=Ml2N72dMv_8", Duration: 194, Kind: ports.KindArtTrack, Artists: []string{"Bryan Adams"}, Channel: "Bryan Adams - Topic"}
+	ranked, rejected := rankAndCollect(context.Background(), track, track.CatalogDuration, []ports.AudioCandidate{c})
+	if len(ranked) != 1 || len(rejected) != 0 {
+		t.Errorf("ranked=%d rejected=%+v", len(ranked), rejected)
+	}
+}
+
+func TestRankAndCollect_TheUsersOwnPickIsStillRefusedWhenItIsARerecording(t *testing.T) {
+	track := TrackRef{Title: "It's Only Love", Artist: "Bryan Adams", CatalogDuration: 195}
+	for _, kind := range []ports.CandidateKind{ports.KindCatalogPin, ports.KindPinnedVideo} {
+		c := ports.AudioCandidate{Title: "It's Only Love (Classic Version)", URL: "https://music.youtube.com/watch?v=pin", Duration: 194, Kind: kind, Artists: []string{"Bryan Adams"}, Channel: "Bryan Adams - Topic"}
+		ranked, rejected := rankAndCollect(context.Background(), track, track.CatalogDuration, []ports.AudioCandidate{c})
+		if len(ranked) != 0 || len(rejected) != 1 || rejected[0].Stage != RejectionQualifier || rejected[0].Reason != "unrequested re-recorded" {
+			t.Errorf("kind %q: ranked=%d rejected=%+v, want one re-recorded qualifier rejection", kind, len(ranked), rejected)
+		}
+	}
+}
+
+func TestRankAndCollect_RerecordingPhraseIsRefusedWhateverItsCaseApostropheOrBracket(t *testing.T) {
+	track := TrackRef{Title: "Love Story", Artist: "Taylor Swift", CatalogDuration: 235}
+	for _, title := range []string{
+		"Love Story (Taylor’s Version)",
+		"Love Story (TAYLOR'S VERSION)",
+		"Love Story [Taylors Version]",
+		"Love Story - Taylor's Version",
+		"Love Story (classic version)",
+		"Love Story (RE-RECORDING)",
+		"Love Story （Taylor's Version）",
+	} {
+		c := ports.AudioCandidate{Title: title, URL: "https://music.youtube.com/watch?v=x", Duration: 235, Kind: ports.KindArtTrack, Artists: []string{"Taylor Swift"}, Channel: "Taylor Swift - Topic"}
+		ranked, rejected := rankAndCollect(context.Background(), track, track.CatalogDuration, []ports.AudioCandidate{c})
+		if len(ranked) != 0 || len(rejected) != 1 || rejected[0].Reason != "unrequested re-recorded" {
+			t.Errorf("%q: ranked=%d rejected=%+v, want it refused as re-recorded", title, len(ranked), rejected)
+		}
+	}
+}
+
+func TestRankAndCollect_ClassicOrVersionAloneIsNotARerecording(t *testing.T) {
+	cases := []struct{ track, candidate string }{
+		{"Classic Man", "Classic Man"},
+		{"Classical Gas", "Classical Gas"},
+		{"Classic", "Classic"},
+		{"Version", "Version"},
+		{"It's Only Love", "It's Only Love (Remastered 2014)"},
+		{"It's Only Love", "It's Only Love (Album Version)"},
+		{"It's Only Love", "It's Only Love (Classic)"},
+		{"Classic Rock Version Of Me", "Classic Rock Version Of Me"},
+	}
+	for _, c := range cases {
+		track := TrackRef{Title: c.track, Artist: "Bryan Adams", CatalogDuration: 195}
+		cand := ports.AudioCandidate{Title: c.candidate, URL: "https://music.youtube.com/watch?v=y", Duration: 195, Kind: ports.KindArtTrack, Artists: []string{"Bryan Adams"}, Channel: "Bryan Adams - Topic"}
+		ranked, rejected := rankAndCollect(context.Background(), track, track.CatalogDuration, []ports.AudioCandidate{cand})
+		for _, r := range rejected {
+			if r.Reason == "unrequested re-recorded" {
+				t.Errorf("track %q candidate %q: refused as re-recorded", c.track, c.candidate)
+			}
+		}
+		if len(ranked) != 1 {
+			t.Errorf("track %q candidate %q: ranked=%d rejected=%+v, want it ranked", c.track, c.candidate, len(ranked), rejected)
+		}
+	}
+}
+
+func TestRankAndCollect_RerecordingPhraseOnlyInChannelOrAlbumDoesNotRefuseTheCandidate(t *testing.T) {
+	track := TrackRef{Title: "It's Only Love", Artist: "Bryan Adams", CatalogDuration: 195}
+	c := ports.AudioCandidate{Title: "It's Only Love", URL: "https://music.youtube.com/watch?v=z", Duration: 195, Kind: ports.KindArtTrack, Artists: []string{"Bryan Adams"}, Channel: "Taylor's Version Archive", Album: "Classic Version Hits"}
+	ranked, rejected := rankAndCollect(context.Background(), track, track.CatalogDuration, []ports.AudioCandidate{c})
+	if len(ranked) != 1 || len(rejected) != 0 {
+		t.Errorf("ranked=%d rejected=%+v, want the plainly titled candidate ranked", len(ranked), rejected)
+	}
+}
+
+func TestRankAndCollect_TrackTitledAsATaylorsVersionAcceptsEitherApostrophe(t *testing.T) {
+	track := TrackRef{Title: "Love Story (Taylor's Version)", Artist: "Taylor Swift", CatalogDuration: 235}
+	c := ports.AudioCandidate{Title: "Love Story (Taylor’s Version)", URL: "https://music.youtube.com/watch?v=tv", Duration: 235, Kind: ports.KindArtTrack, Artists: []string{"Taylor Swift"}, Channel: "Taylor Swift - Topic"}
+	ranked, rejected := rankAndCollect(context.Background(), track, track.CatalogDuration, []ports.AudioCandidate{c})
+	if len(ranked) != 1 || len(rejected) != 0 {
+		t.Errorf("ranked=%d rejected=%+v, want the Taylor's Version ranked", len(ranked), rejected)
+	}
+}
+
+func TestRankAndCollect_RefusingTheRerecordingStillRanksTheOriginalBesideIt(t *testing.T) {
+	track := TrackRef{Title: "It's Only Love", Artist: "Bryan Adams", CatalogDuration: 195}
+	candidates := []ports.AudioCandidate{
+		{Title: "It's Only Love (Classic Version)", URL: "https://music.youtube.com/watch?v=classic", Duration: 194, Kind: ports.KindArtTrack, Artists: []string{"Bryan Adams"}, Channel: "Bryan Adams - Topic"},
+		{Title: "It's Only Love", URL: "https://www.youtube.com/watch?v=original", Duration: 195, Channel: "Bryan Adams", Categories: []string{"Music"}},
+	}
+	ranked, rejected := rankAndCollect(context.Background(), track, track.CatalogDuration, candidates)
+	if len(ranked) != 1 || ranked[0].URL != "https://www.youtube.com/watch?v=original" {
+		t.Fatalf("ranked=%v, want only the original", ranked)
+	}
+	if len(rejected) != 1 || rejected[0].Reason != "unrequested re-recorded" {
+		t.Fatalf("rejected=%+v, want the Classic Version refused as re-recorded", rejected)
+	}
+}
