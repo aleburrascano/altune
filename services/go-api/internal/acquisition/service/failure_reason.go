@@ -77,6 +77,15 @@ func foundNoSource(err error) bool {
 	}
 }
 
+func noSourceHasIt(err error) bool {
+	switch failureCode(err) {
+	case shared.FailureNoMatchFound, shared.FailureNoConfidentMatch:
+		return true
+	default:
+		return false
+	}
+}
+
 func isCancellation(err error) bool {
 	return errors.Is(err, context.Canceled) ||
 		errors.Is(err, context.DeadlineExceeded)

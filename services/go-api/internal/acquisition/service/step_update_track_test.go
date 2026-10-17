@@ -509,3 +509,34 @@ func TestUpdateTrackStep_Execute_AnUnprobedFetchedFileGetsNoLengthRescue(t *test
 		t.Fatalf("Execute = %v, want ErrNotAnUpgrade: the source's claimed 285 s was never measured", err)
 	}
 }
+
+func TestUpdateTrackStep_PassesTheRelabelThroughToTheCompletion(t *testing.T) {
+	cases := []struct {
+		name    string
+		relabel *ports.RecordingLabel
+	}{
+		{"the re-recording pass set a label", func() *ports.RecordingLabel { label := goldenRerecording(); return &label }()},
+		{"no re-recording pass ran", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			userId := shared.NewUserId(uuid.New())
+			track, err := domain.NewTrack(userId, "It's Only Love", "Bryan Adams", "Reckless")
+			if err != nil {
+				t.Fatalf("new track: %v", err)
+			}
+			repo := newFakeTrackRepository()
+			repo.tracks[track.ID.String()+":"+userId.String()] = track
+			ledger := &completionRecordingLedger{TrackLedger: catalogbridge.NewTrackLedger(repo)}
+			step := NewUpdateTrackStep(ledger, userId, track.ID)
+
+			if _, err := step.Execute(context.Background(), &AcquisitionContext{AudioRef: "u/a/b/c.m4a", Relabel: tc.relabel}, afterStore{}); err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+
+			if len(ledger.completed) != 1 || ledger.completed[0].Relabel != tc.relabel {
+				t.Errorf("completions = %+v, want one carrying relabel %v", ledger.completed, tc.relabel)
+			}
+		})
+	}
+}

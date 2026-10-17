@@ -170,12 +170,15 @@ func (a *App) buildAcquisitionScheduler(
 		if disc.musicBrainz != nil {
 			resolverOpts = append(resolverOpts,
 				acqDiscoveryBridge.WithISRCAuthority(disc.musicBrainz),
+				acqDiscoveryBridge.WithRerecordingAuthority(disc.musicBrainz),
 				acqDiscoveryBridge.WithRecordingLookup(acqDiscoveryBridge.NewRecordingLookup(disc.musicBrainz)))
 		}
 		recordingResolver := acqDiscoveryBridge.NewRecordingResolver(disc.searchSvc, resolverOpts...)
 		acquireOpts = append(acquireOpts, acqService.WithRecordingResolver(recordingResolver))
 		if disc.musicBrainz != nil {
-			acquireOpts = append(acquireOpts, acqService.WithAcquireRecordingLookup(recordingResolver))
+			acquireOpts = append(acquireOpts,
+				acqService.WithAcquireRecordingLookup(recordingResolver),
+				acqService.WithRerecordingFinder(recordingResolver))
 		}
 	}
 	lookups := &lookupTracker{}

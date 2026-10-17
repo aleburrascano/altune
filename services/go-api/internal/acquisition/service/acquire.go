@@ -4,11 +4,14 @@ import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service/audiojudge"
+	"altune/go-api/internal/acquisition/service/grade"
 	"altune/go-api/internal/acquisition/service/upgrade"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/redact"
+	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -23,6 +26,7 @@ type AcquireTrackAudioService struct {
 	audioTagger     ports.AudioTagger
 	identifier      ports.AudioIdentifier
 	recordings      ports.RecordingResolver
+	rerecordings    ports.RerecordingFinder
 	events          events.Publisher
 	orphans         ports.OrphanedAudioRecorder
 	storeKeyPrefix  string
@@ -114,6 +118,10 @@ func WithRecordingResolver(r ports.RecordingResolver) func(*AcquireTrackAudioSer
 			s.recordings = r
 		}
 	}
+}
+
+func WithRerecordingFinder(f ports.RerecordingFinder) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) { s.rerecordings = f }
 }
 
 func WithAudioProber(p ports.AudioProber) func(*AcquireTrackAudioService) {
@@ -245,14 +253,15 @@ func (s *AcquireTrackAudioService) ReplaceGated(ctx context.Context, userId shar
 	jobCtx := ctx
 	ctx, cancel := context.WithTimeout(ctx, s.acquireTimeout)
 	defer cancel()
-	ac, err := s.withoutUserEvents().replaceLoaded(ctx, jobCtx, userId, track, gate, neverRetry)
+	ac, err := s.forUpgradeSweep().replaceLoaded(ctx, jobCtx, userId, track, gate, neverRetry)
 	return attemptOf(ac, err), err
 }
 
-func (s *AcquireTrackAudioService) withoutUserEvents() *AcquireTrackAudioService {
-	quiet := *s
-	quiet.events = events.NoopPublisher()
-	return &quiet
+func (s *AcquireTrackAudioService) forUpgradeSweep() *AcquireTrackAudioService {
+	sweep := *s
+	sweep.events = events.NoopPublisher()
+	sweep.rerecordings = nil
+	return &sweep
 }
 
 func attemptOf(ac *AcquisitionContext, err error) upgrade.Attempt {
@@ -268,6 +277,7 @@ func (s *AcquireTrackAudioService) replaceLoaded(ctx, jobCtx context.Context, us
 	trackId := track.ID
 	ac := s.startAcquisition(ctx, userId, trackId, track)
 	ac.Replace.Gate = gate
+	ac.Replace.StoredKnownWrong = storedFileKnownWrong(track)
 	defer s.observe(ac)
 	defer CleanupTemp(ctx, s.workspace, ac)
 	if err := configureReplaceExclusion(ctx, ac, track, trackId); err != nil {
@@ -374,8 +384,11 @@ func (s *AcquireTrackAudioService) runAcquisition(ctx context.Context, userId sh
 	identityStart := time.Now()
 	s.resolveIdentity(ctx, ac)
 	timeStage(ctx, "identity", identityStart)
-	if err := RunPipeline(ctx, s.buildSteps(userId, trackId), ac); err != nil {
-		return err
+	steps := s.buildSteps(userId, trackId)
+	if err := RunPipeline(ctx, steps, ac); err != nil {
+		if failure := s.takeRerecording(ctx, steps, ac, err); failure != nil {
+			return failure
+		}
 	}
 
 	jobReporterFrom(ctx).source(ac.Selected.URL)
@@ -383,6 +396,76 @@ func (s *AcquireTrackAudioService) runAcquisition(ctx context.Context, userId sh
 	jobReporterFrom(ctx).provenance(string(ac.Provenance()))
 	s.onAcquireCompleted(ctx, userId, trackId, ac.AudioRef)
 	return nil
+}
+
+func (s *AcquireTrackAudioService) takeRerecording(ctx context.Context, steps Pipeline, ac *AcquisitionContext, originalErr error) error {
+	originalMBID := cmp.Or(ac.Identity.MBID, ac.Track.CatalogMBID)
+	if !s.mayTakeRerecording(ctx, ac, originalErr) || originalMBID == "" {
+		return originalErr
+	}
+	label, found := s.findRerecording(ctx, ac, originalMBID)
+	if !found {
+		return originalErr
+	}
+	if err := s.runRerecordingPass(ctx, steps, ac, label); err != nil {
+		logRerecordingTier(ctx, ac, originalMBID, label.MBID, "pass_failed", err)
+		if ctx.Err() != nil {
+			return err
+		}
+		return originalErr
+	}
+	logRerecordingTier(ctx, ac, originalMBID, label.MBID, "taken", nil)
+	return nil
+}
+
+func (s *AcquireTrackAudioService) runRerecordingPass(ctx context.Context, steps Pipeline, ac *AcquisitionContext, label ports.RecordingLabel) error {
+	original := *ac
+	ac.retargetTo(label)
+	s.resolveIdentity(ctx, ac)
+	if err := RunPipeline(ctx, steps, ac); err != nil {
+		*ac = original
+		return err
+	}
+	s.recordRejections(ctx, &original)
+	ac.Rejections = ac.Rejections[len(original.Rejections):]
+	return nil
+}
+
+func (s *AcquireTrackAudioService) mayTakeRerecording(ctx context.Context, ac *AcquisitionContext, err error) bool {
+	return s.rerecordings != nil && noSourceHasIt(err) && ctx.Err() == nil && ac.Replace.allowsRerecording()
+}
+
+func (s *AcquireTrackAudioService) findRerecording(ctx context.Context, ac *AcquisitionContext, originalMBID string) (ports.RecordingLabel, bool) {
+	label, found, err := s.rerecordings.FindRerecording(ctx, ports.RerecordingQuery{OriginalMBID: originalMBID})
+	switch {
+	case err != nil:
+		logRerecordingTier(ctx, ac, originalMBID, "", "finder_failed", err)
+	case !found:
+		logRerecordingTier(ctx, ac, originalMBID, "", "none", nil)
+	case label.MBID == ac.Track.CatalogMBID:
+		logRerecordingTier(ctx, ac, originalMBID, label.MBID, "already_the_rerecording", nil)
+	default:
+		return label, true
+	}
+	return ports.RecordingLabel{}, false
+}
+
+func logRerecordingTier(ctx context.Context, ac *AcquisitionContext, originalMBID, rerecordingMBID, outcome string, err error) {
+	attrs := []any{"track_id", ac.Track.ID, "original_mbid", originalMBID, "rerecording_mbid", rerecordingMBID, "outcome", outcome}
+	if err != nil {
+		slog.WarnContext(ctx, "acquisition.rerecording_tier", append(attrs, "error", redact.LogError(err))...)
+		return
+	}
+	slog.InfoContext(ctx, "acquisition.rerecording_tier", attrs...)
+}
+
+func storedFileKnownWrong(track *ports.TrackSnapshot) bool {
+	catalog, stored := deref(track.CatalogDurationSeconds), deref(track.StoredDurationSeconds)
+	if catalog > 0 && stored > 0 && !acqdomain.LengthAuthoritative.Agrees(catalog, stored) {
+		return true
+	}
+	var evidence Evidence
+	return json.Unmarshal(track.Evidence, &evidence) == nil && evidence.Grade == grade.F
 }
 
 func reportDecision(ctx context.Context, ac *AcquisitionContext) {

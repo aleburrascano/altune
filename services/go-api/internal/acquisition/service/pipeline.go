@@ -107,7 +107,7 @@ func RunPipeline(ctx context.Context, p Pipeline, ac *AcquisitionContext) (err e
 		slog.InfoContext(ctx, "acquisition.first_tier_failed_trying_fallback",
 			"track_id", ac.Track.ID, "error", redact.LogError(err))
 		ac.FallbackSkipped, ac.FallbackOnly = false, true
-		ac.Candidates, ac.Ranked, ac.Selected = nil, nil, nil
+		ac.clearCandidates()
 		run.completed = nil
 		firstTierErr := err
 		downloaded, err = searchAndDownload(ctx, run, p)
@@ -267,6 +267,22 @@ type AcquisitionContext struct {
 	FallbackOnly    bool
 
 	PriorRejections []ports.PriorRejection
+
+	Relabel *ports.RecordingLabel
+}
+
+func (ac *AcquisitionContext) clearCandidates() {
+	ac.Candidates, ac.Ranked, ac.Selected = nil, nil, nil
+}
+
+func (ac *AcquisitionContext) retargetTo(label ports.RecordingLabel) {
+	ac.clearCandidates()
+	ac.FallbackSkipped, ac.FallbackOnly = false, false
+	ac.Identity = ports.RecordingIdentity{}
+	ac.Track.Title, ac.Track.Album, ac.Track.Year = label.Title, label.Album, label.Year
+	ac.Track.ISRC, ac.Track.CatalogMBID, ac.Track.CatalogDuration = label.ISRC, label.MBID, label.DurationSeconds
+	ac.Track.CatalogSources, ac.Track.AudioSourceURL = nil, ""
+	ac.Relabel = &label
 }
 
 type AttemptedCandidate struct {
@@ -279,6 +295,12 @@ type ReplaceState struct {
 	PreservedRef   string
 	StoredAcoustID string
 	Gate           upgrade.Gate
+
+	StoredKnownWrong bool
+}
+
+func (r ReplaceState) allowsRerecording() bool {
+	return r.PreservedRef == "" || r.StoredKnownWrong
 }
 
 func (r ReplaceState) excludes(url string) bool {

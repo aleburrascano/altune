@@ -2644,3 +2644,554 @@ func TestReplaceGated_ASameGradeFileIsRefusedWhenTheLengthRescueDoesNotHold(t *t
 		})
 	}
 }
+
+const (
+	recklessMBID        = "7933a65c-2c66-4ec1-9880-e46b5d2f05de"
+	classicVersionURL   = "https://music.youtube.com/watch?v=Ml2N72dMv_8"
+	recklessReuploadURL = "https://www.youtube.com/watch?v=reuploadIOL"
+	recklessTopicURL    = "https://www.youtube.com/watch?v=recklessIOL"
+)
+
+func goldenRerecording() ports.RecordingLabel {
+	return ports.RecordingLabel{
+		MBID:            "25d68187-ee71-4f06-9e58-0b49d66bf8a8",
+		Title:           "It’s Only Love (classic version)",
+		Album:           "It’s Only Love",
+		Year:            2025,
+		ISRC:            "IETLH2500023",
+		DurationSeconds: 194,
+	}
+}
+
+type stubRerecordingFinder struct {
+	label   ports.RecordingLabel
+	found   bool
+	err     error
+	queries []ports.RerecordingQuery
+}
+
+func (f *stubRerecordingFinder) FindRerecording(_ context.Context, q ports.RerecordingQuery) (ports.RecordingLabel, bool, error) {
+	f.queries = append(f.queries, q)
+	return f.label, f.found, f.err
+}
+
+func findsGoldenRerecording() *stubRerecordingFinder {
+	return &stubRerecordingFinder{label: goldenRerecording(), found: true}
+}
+
+type pinnedRecordingResolver struct{}
+
+func (pinnedRecordingResolver) Resolve(_ context.Context, q ports.RecordingQuery) (ports.RecordingIdentity, error) {
+	return ports.RecordingIdentity{MBID: q.MBID, MBIDs: []string{q.MBID}}, nil
+}
+
+type itsOnlyLoveSources struct {
+	originalOnTopic    bool
+	originalOutage     bool
+	rerecordingBroken  bool
+	originalFetchFails bool
+	requests           []ports.FindRequest
+}
+
+func (*itsOnlyLoveSources) Name() acqdomain.SourceName { return "its-only-love" }
+
+func (s *itsOnlyLoveSources) Find(_ context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
+	s.requests = append(s.requests, req)
+	switch {
+	case req.Title == goldenRerecording().Title:
+		return []ports.AudioCandidate{{Title: req.Title, URL: classicVersionURL, Channel: "Bryan Adams - Topic", Categories: []string{"Music"}, Duration: 194}}, nil
+	case s.originalOutage:
+		return nil, &acqdomain.SourceUnavailableError{Source: "its-only-love", Err: errors.New("http error 503")}
+	case s.originalOnTopic:
+		return []ports.AudioCandidate{{Title: "It's Only Love", URL: recklessTopicURL, Channel: "Bryan Adams - Topic", Categories: []string{"Music"}, Duration: 195}}, nil
+	default:
+		return []ports.AudioCandidate{
+			{Title: "It's Only Love", URL: recklessReuploadURL, Channel: "chill uploads", Duration: 215},
+			{Title: "It's Only Love", URL: recklessDRMURL, Channel: "Bryan Adams - Topic", Categories: []string{"Music"}, Duration: 195, Unplayable: ports.UnplayableDRM},
+		}, nil
+	}
+}
+
+func (s *itsOnlyLoveSources) Fetch(_ context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+	if c.URL == recklessTopicURL && s.originalFetchFails {
+		return ports.FetchedAudio{}, errors.New("fetch: http error 403")
+	}
+	if c.URL == classicVersionURL && s.rerecordingBroken {
+		return ports.FetchedAudio{}, errors.New("fetch: http error 403")
+	}
+	path := filepath.Join(outDir, "audio.m4a")
+	fetched, err := fetchedAt(path, os.WriteFile(path, []byte("audio of "+c.URL), 0o600))
+	fetched.Format = ports.SourceFormat{ID: "140", Codec: "mp4a.40.2", Kbps: 128}
+	return fetched, err
+}
+
+type itsOnlyLoveTrack struct {
+	repo    *committingTrackRepo
+	store   *bytesAudioStore
+	ledger  *completionRecordingLedger
+	userId  shared.UserId
+	trackId domain.TrackId
+	ref     string
+}
+
+func seedItsOnlyLove(t *testing.T, storedSeconds float64, sources []domain.CatalogSource) itsOnlyLoveTrack {
+	t.Helper()
+	userId := shared.NewUserId(uuid.New())
+	track, err := domain.NewTrack(userId, "It's Only Love", "Bryan Adams", "Reckless")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	isrc, mbid := "USAM18490008", recklessMBID
+	track.ISRC = &isrc
+	if err := track.SetCatalogDuration(195); err != nil {
+		t.Fatalf("catalog duration: %v", err)
+	}
+	if err := track.SetCatalogIdentity(&mbid, nil, sources); err != nil {
+		t.Fatalf("catalog identity: %v", err)
+	}
+	store := &bytesAudioStore{objects: map[string]string{}}
+	var ref string
+	if storedSeconds > 0 {
+		ref = BuildAudioRef(trackRefOf(track), "audio.m4a")
+		if err := track.MarkReady(ref); err != nil {
+			t.Fatalf("mark ready: %v", err)
+		}
+		track.SetAudioSource("https://www.youtube.com/watch?v=storedIOLAA")
+		if err := track.SetDuration(storedSeconds); err != nil {
+			t.Fatalf("stored duration: %v", err)
+		}
+		store.objects[ref] = "stored bytes"
+	}
+	repo := &committingTrackRepo{rows: map[string]domain.Track{track.ID.String() + ":" + userId.String(): *track}}
+	return itsOnlyLoveTrack{repo: repo, store: store, ledger: &completionRecordingLedger{TrackLedger: catalogbridge.NewTrackLedger(repo)}, userId: userId, trackId: track.ID, ref: ref}
+}
+
+func (f itsOnlyLoveTrack) service(sources *itsOnlyLoveSources, finder ports.RerecordingFinder) *AcquireTrackAudioService {
+	return newTestAcquireService(f.ledger, NewSourceRegistry(sources), f.store,
+		WithRecordingResolver(pinnedRecordingResolver{}),
+		WithAudioIdentifier(&stubIdentifier{}),
+		WithRerecordingFinder(finder))
+}
+
+func (f itsOnlyLoveTrack) row() domain.Track { return f.repo.committed(f.trackId, f.userId) }
+
+func TestRerecording_NoConfidentOriginalTakesTheOfficialRerecordingLabelledAsIt(t *testing.T) {
+	cases := []struct {
+		name          string
+		storedSeconds float64
+		run           func(*AcquireTrackAudioService, context.Context, shared.UserId, shared.TrackId) error
+	}{
+		{"replace of the 292 s live file", 292, (*AcquireTrackAudioService).ExecuteReplace},
+		{"acquire", 0, (*AcquireTrackAudioService).Execute},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			golden := seedItsOnlyLove(t, tc.storedSeconds, nil)
+			finder := findsGoldenRerecording()
+
+			if err := tc.run(golden.service(&itsOnlyLoveSources{}, finder), context.Background(), golden.userId, golden.trackId); err != nil {
+				t.Fatalf("run: %v, want the re-recording committed", err)
+			}
+
+			if len(finder.queries) != 1 || finder.queries[0].OriginalMBID != recklessMBID {
+				t.Errorf("finder queries = %+v, want one for the Reckless recording", finder.queries)
+			}
+			row := golden.row()
+			if row.AudioRef == nil || golden.store.objects[*row.AudioRef] != "audio of "+classicVersionURL {
+				t.Fatalf("serving audio = %v, want the classic version's audio", row.AudioRef)
+			}
+			if len(golden.ledger.completed) != 1 || golden.ledger.completed[0].Relabel == nil || *golden.ledger.completed[0].Relabel != goldenRerecording() {
+				t.Fatalf("completions = %+v, want one relabelled as the golden re-recording", golden.ledger.completed)
+			}
+			if row.Title != goldenRerecording().Title || row.CatalogMBID == nil || *row.CatalogMBID != goldenRerecording().MBID {
+				t.Errorf("track = %q %v, want it labelled as the classic version", row.Title, row.CatalogMBID)
+			}
+		})
+	}
+}
+
+func TestRerecording_AFoundOriginalNeverAsksForARerecording(t *testing.T) {
+	golden := seedItsOnlyLove(t, 0, nil)
+	finder := findsGoldenRerecording()
+
+	if err := golden.service(&itsOnlyLoveSources{originalOnTopic: true}, finder).Execute(context.Background(), golden.userId, golden.trackId); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if len(finder.queries) != 0 {
+		t.Errorf("finder queries = %+v, want none once the original is found", finder.queries)
+	}
+	if len(golden.ledger.completed) != 1 || golden.ledger.completed[0].Relabel != nil {
+		t.Fatalf("completions = %+v, want one with no relabel", golden.ledger.completed)
+	}
+	if row := golden.row(); row.AudioRef == nil || golden.store.objects[*row.AudioRef] != "audio of "+recklessTopicURL {
+		t.Errorf("serving audio = %v, want the Reckless recording", row.AudioRef)
+	}
+}
+
+func TestRerecording_AFailedRerecordingTierKeepsTheOriginalFailure(t *testing.T) {
+	cases := []struct {
+		name      string
+		sources   *itsOnlyLoveSources
+		finder    *stubRerecordingFinder
+		wantCode  shared.FailureCode
+		wantAsked int
+	}{
+		{"the finder errors", &itsOnlyLoveSources{}, &stubRerecordingFinder{err: errors.New("musicbrainz 503")}, shared.FailureNoConfidentMatch, 1},
+		{"the finder finds nothing", &itsOnlyLoveSources{}, &stubRerecordingFinder{}, shared.FailureNoConfidentMatch, 1},
+		{"the re-recording pass fails too", &itsOnlyLoveSources{rerecordingBroken: true}, findsGoldenRerecording(), shared.FailureNoConfidentMatch, 1},
+		{"the original is found but its download fails", &itsOnlyLoveSources{originalOnTopic: true, originalFetchFails: true}, findsGoldenRerecording(), shared.FailureDownloadFailed, 0},
+		{"a source outage", &itsOnlyLoveSources{originalOutage: true}, findsGoldenRerecording(), shared.FailureSourceUnavailable, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			golden := seedItsOnlyLove(t, 0, nil)
+
+			err := golden.service(tc.sources, tc.finder).Execute(withJobAttempt(context.Background(), maxAcquisitionAttempts), golden.userId, golden.trackId)
+
+			if got := failureCode(err); got != tc.wantCode {
+				t.Errorf("failure code = %q (%v), want %q", got, err, tc.wantCode)
+			}
+			if len(tc.finder.queries) != tc.wantAsked {
+				t.Errorf("finder asked %d times, want %d", len(tc.finder.queries), tc.wantAsked)
+			}
+			if len(golden.ledger.completed) != 0 {
+				t.Errorf("completions = %+v, want none", golden.ledger.completed)
+			}
+			for _, req := range tc.sources.requests {
+				if tc.wantAsked == 0 && req.Title == goldenRerecording().Title {
+					t.Errorf("searched %q after an outage, want no re-recording pass", req.Title)
+				}
+			}
+		})
+	}
+}
+
+func TestRerecording_AReplaceOfAFittingOriginalTakesNoRerecording(t *testing.T) {
+	golden := seedItsOnlyLove(t, 195, nil)
+	finder := findsGoldenRerecording()
+
+	err := golden.service(&itsOnlyLoveSources{}, finder).ExecuteReplace(withJobAttempt(context.Background(), maxAcquisitionAttempts), golden.userId, golden.trackId)
+
+	if got := failureCode(err); got != shared.FailureNoConfidentMatch {
+		t.Errorf("failure code = %q (%v), want no_confident_match", got, err)
+	}
+	if len(finder.queries) != 0 {
+		t.Errorf("finder queries = %+v, want none for a stored file that fits the catalog length", finder.queries)
+	}
+	if row := golden.row(); row.AudioRef == nil || *row.AudioRef != golden.ref || row.Title != "It's Only Love" {
+		t.Errorf("track = %q on %v, want the original kept on %q", row.Title, row.AudioRef, golden.ref)
+	}
+}
+
+func TestRerecording_AGatedUpgradeNeverTakesARerecording(t *testing.T) {
+	for _, storedSeconds := range []float64{195, 292} {
+		golden := seedItsOnlyLove(t, storedSeconds, nil)
+		finder := findsGoldenRerecording()
+		sources := &itsOnlyLoveSources{}
+		track, err := golden.ledger.Get(context.Background(), golden.trackId, golden.userId)
+		if err != nil || track == nil {
+			t.Fatalf("load track: %v %v", track, err)
+		}
+
+		_, err = golden.service(sources, finder).ReplaceGated(context.Background(), golden.userId, track, upgrade.Gate{Current: grade.D, CatalogSeconds: 195, StoredSeconds: storedSeconds})
+
+		if err == nil {
+			t.Errorf("stored %v s: ReplaceGated succeeded, want the stored file kept", storedSeconds)
+		}
+		if len(finder.queries) != 0 || len(sources.requests) != 1 {
+			t.Errorf("stored %v s: finder asked %d times, searched %d times, want no re-recording pass", storedSeconds, len(finder.queries), len(sources.requests))
+		}
+		if row := golden.row(); row.AudioRef == nil || *row.AudioRef != golden.ref {
+			t.Errorf("stored %v s: audio_ref = %v, want the stored %q kept", storedSeconds, row.AudioRef, golden.ref)
+		}
+	}
+}
+
+func TestRerecording_TheSecondSearchCarriesNoPinOrKnownURLOfTheOriginal(t *testing.T) {
+	pins := []domain.CatalogSource{
+		{Provider: "soundcloud", ExternalID: "reckless", URL: "https://soundcloud.com/bryanadams/its-only-love"},
+		{Provider: string(ports.ProviderYouTube), ExternalID: "recklessIOL"},
+	}
+	golden := seedItsOnlyLove(t, 0, pins)
+	sources := &itsOnlyLoveSources{}
+	if err := acquireFromAKnownSourceURL(context.Background(), golden, sources); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var rerecordingSearches int
+	for _, req := range sources.requests {
+		if req.Title != goldenRerecording().Title {
+			if len(req.CatalogSources) != 2 || req.KnownSourceURL == "" {
+				t.Errorf("original request = %+v, want it to carry the original's pins and known URL", req)
+			}
+			continue
+		}
+		rerecordingSearches++
+		if len(req.CatalogSources) != 0 || req.KnownSourceURL != "" {
+			t.Errorf("re-recording request carries pins %+v / known URL %q, want none of the original's", req.CatalogSources, req.KnownSourceURL)
+		}
+	}
+	if rerecordingSearches == 0 {
+		t.Fatalf("requests = %+v, want a search for the re-recording", sources.requests)
+	}
+}
+
+func acquireFromAKnownSourceURL(ctx context.Context, golden itsOnlyLoveTrack, sources *itsOnlyLoveSources) error {
+	row := golden.row()
+	row.SetAudioSource("https://soundcloud.com/bryanadams/its-only-love")
+	golden.repo.rows[row.ID.String()+":"+golden.userId.String()] = row
+	return golden.service(sources, findsGoldenRerecording()).Execute(ctx, golden.userId, golden.trackId)
+}
+
+func TestRerecording_AReplaceOfAGradeFFileTakesTheRerecording(t *testing.T) {
+	golden := seedItsOnlyLove(t, 195, nil)
+	row := golden.row()
+	row.EvidenceJSON = json.RawMessage(`{"grade":"F"}`)
+	golden.repo.rows[row.ID.String()+":"+golden.userId.String()] = row
+
+	if err := golden.service(&itsOnlyLoveSources{}, findsGoldenRerecording()).ExecuteReplace(context.Background(), golden.userId, golden.trackId); err != nil {
+		t.Fatalf("ExecuteReplace: %v, want the grade F file replaced by the re-recording", err)
+	}
+
+	if len(golden.ledger.completed) != 1 || golden.ledger.completed[0].Relabel == nil {
+		t.Fatalf("completions = %+v, want one relabelled as the re-recording", golden.ledger.completed)
+	}
+}
+
+const recklessDRMURL = "https://music.youtube.com/watch?v=drmCopyIOLx"
+
+func TestRerecording_EachPassRemembersItsRejectionsOnItsOwnBasis(t *testing.T) {
+	for _, sources := range []*itsOnlyLoveSources{{}, {rerecordingBroken: true}} {
+		golden := seedItsOnlyLove(t, 0, nil)
+		rejections := &fakeRejectionStore{}
+		svc := golden.service(sources, findsGoldenRerecording())
+		WithRejectionStore(rejections)(svc)
+
+		_ = svc.Execute(withJobAttempt(context.Background(), maxAcquisitionAttempts), golden.userId, golden.trackId)
+
+		var drm []ports.CandidateRejectionRecord
+		for _, rec := range rejections.recorded {
+			if rec.SourceKey == sourceKey(recklessDRMURL) {
+				drm = append(drm, rec)
+			}
+		}
+		want := ports.RejectionBasis{ExpectedSeconds: 195, ReferenceMBID: recklessMBID}
+		if len(drm) != 1 || drm[0].Basis != want {
+			t.Errorf("re-recording broken %v: DRM copy records = %+v, want one judged on the original's basis %+v", sources.rerecordingBroken, drm, want)
+		}
+	}
+}
+
+type probeOriginalOutageSource struct{ requests []ports.FindRequest }
+
+func (*probeOriginalOutageSource) Name() acqdomain.SourceName { return "probe-outage" }
+
+func (s *probeOriginalOutageSource) Find(_ context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
+	s.requests = append(s.requests, req)
+	if req.Title == goldenRerecording().Title {
+		return nil, nil
+	}
+	return nil, &acqdomain.SourceUnavailableError{Source: "probe-outage", Err: errors.New("http error 503")}
+}
+
+func (*probeOriginalOutageSource) Fetch(context.Context, ports.AudioCandidate, string) (ports.FetchedAudio, error) {
+	return ports.FetchedAudio{}, errors.New("never fetched")
+}
+
+func TestRerecording_AnOutageOnOneSourceWithNoMatchOnTheOthersTakesNoRerecording(t *testing.T) {
+	golden := seedItsOnlyLove(t, 0, nil)
+	finder := findsGoldenRerecording()
+	outage := &probeOriginalOutageSource{}
+	others := &itsOnlyLoveSources{}
+	svc := newTestAcquireService(golden.ledger, NewSourceRegistry(outage, others), golden.store,
+		WithRecordingResolver(pinnedRecordingResolver{}),
+		WithAudioIdentifier(&stubIdentifier{}),
+		WithRerecordingFinder(finder))
+
+	_ = svc.Execute(withJobAttempt(context.Background(), maxAcquisitionAttempts), golden.userId, golden.trackId)
+
+	if len(finder.queries) != 0 {
+		t.Errorf("finder queries = %+v, want none after a source outage", finder.queries)
+	}
+	for _, req := range others.requests {
+		if req.Title == goldenRerecording().Title {
+			t.Errorf("searched %q after an outage, want no re-recording pass", req.Title)
+		}
+	}
+	if len(golden.ledger.completed) != 0 {
+		t.Errorf("completions = %+v, want none", golden.ledger.completed)
+	}
+}
+
+func TestRerecording_AReplaceWhoseRerecordingDownloadFailsLeavesTheTrackAsItWas(t *testing.T) {
+	golden := seedItsOnlyLove(t, 292, nil)
+	sources := &itsOnlyLoveSources{rerecordingBroken: true}
+	finder := findsGoldenRerecording()
+	svc := golden.service(sources, finder)
+
+	for run := 1; run <= 2; run++ {
+		err := svc.ExecuteReplace(withJobAttempt(context.Background(), maxAcquisitionAttempts), golden.userId, golden.trackId)
+
+		if got := failureCode(err); got != shared.FailureNoConfidentMatch {
+			t.Errorf("run %d: failure code = %q (%v), want no_confident_match", run, got, err)
+		}
+		row := golden.row()
+		if row.Title != "It's Only Love" || row.Album != "Reckless" {
+			t.Errorf("run %d: track = %q / %q, want the original's labels kept", run, row.Title, row.Album)
+		}
+		if row.ISRC == nil || *row.ISRC != "USAM18490008" || row.CatalogMBID == nil || *row.CatalogMBID != recklessMBID {
+			t.Errorf("run %d: ISRC %v MBID %v, want the Reckless recording's", run, row.ISRC, row.CatalogMBID)
+		}
+		if row.AudioRef == nil || *row.AudioRef != golden.ref || golden.store.objects[golden.ref] != "stored bytes" {
+			t.Errorf("run %d: audio_ref = %v, want the stored %q kept", run, row.AudioRef, golden.ref)
+		}
+		if len(finder.queries) != run || finder.queries[run-1].OriginalMBID != recklessMBID {
+			t.Errorf("run %d: finder queries = %+v, want each run to ask for the Reckless recording", run, finder.queries)
+		}
+	}
+	if len(golden.ledger.completed) != 0 {
+		t.Errorf("completions = %+v, want none", golden.ledger.completed)
+	}
+}
+
+type failingPinDownloads struct{}
+
+func (failingPinDownloads) Download(context.Context, string, string) (ports.FetchedAudio, error) {
+	return ports.FetchedAudio{}, errors.New("fetch: http error 403")
+}
+
+func TestRerecording_AnOriginalWhoseSoundCloudPinFailsToDownloadNeverAsksForARerecording(t *testing.T) {
+	pins := []domain.CatalogSource{{Provider: "soundcloud", ExternalID: "1", URL: "https://soundcloud.com/bryanadams/its-only-love-reckless"}}
+	golden := seedItsOnlyLove(t, 0, pins)
+	sources := &itsOnlyLoveSources{}
+	finder := findsGoldenRerecording()
+	svc := newTestAcquireService(golden.ledger, NewSourceRegistry(catalogpin.NewSource(failingPinDownloads{}), sources), golden.store,
+		WithRecordingResolver(pinnedRecordingResolver{}),
+		WithAudioIdentifier(&stubIdentifier{}),
+		WithRerecordingFinder(finder))
+
+	err := svc.Execute(withJobAttempt(context.Background(), maxAcquisitionAttempts), golden.userId, golden.trackId)
+
+	if got := failureCode(err); got != shared.FailureDownloadFailed {
+		t.Errorf("failure code = %q (%v), want the original's download_failed kept", got, err)
+	}
+	if len(finder.queries) != 0 {
+		t.Errorf("finder queries = %+v, want none: a source has the original", finder.queries)
+	}
+	if row := golden.row(); row.AudioRef != nil {
+		t.Errorf("audio ref = %v, want none stored", row.AudioRef)
+	}
+}
+
+func TestRerecording_ALabelNamingTheTrackItselfRunsNoSecondPass(t *testing.T) {
+	golden := seedItsOnlyLove(t, 0, nil)
+	row := golden.row()
+	same := goldenRerecording().MBID
+	row.CatalogMBID = &same
+	golden.repo.rows[row.ID.String()+":"+golden.userId.String()] = row
+	sources := &itsOnlyLoveSources{}
+
+	err := golden.service(sources, findsGoldenRerecording()).Execute(withJobAttempt(context.Background(), maxAcquisitionAttempts), golden.userId, golden.trackId)
+
+	if got := failureCode(err); got != shared.FailureNoConfidentMatch {
+		t.Errorf("failure code = %q (%v), want no_confident_match", got, err)
+	}
+	for _, req := range sources.requests {
+		if req.Title == goldenRerecording().Title {
+			t.Errorf("searched %q for a track already on that recording, want no second pass", req.Title)
+		}
+	}
+	if len(golden.ledger.completed) != 0 {
+		t.Errorf("completions = %+v, want none", golden.ledger.completed)
+	}
+}
+
+type probeCancellingSource struct {
+	*itsOnlyLoveSources
+	cancel context.CancelFunc
+}
+
+func (s probeCancellingSource) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
+	s.requests = append(s.requests, req)
+	s.cancel()
+	return nil, nil
+}
+
+func TestRerecording_AJobCancelledDuringTheFirstPassNeverAsksForARerecording(t *testing.T) {
+	golden := seedItsOnlyLove(t, 0, nil)
+	finder := findsGoldenRerecording()
+	ctx, cancel := context.WithCancel(withJobAttempt(context.Background(), maxAcquisitionAttempts))
+	defer cancel()
+	sources := probeCancellingSource{&itsOnlyLoveSources{}, cancel}
+	svc := newTestAcquireService(golden.ledger, NewSourceRegistry(sources), golden.store,
+		WithRecordingResolver(pinnedRecordingResolver{}),
+		WithAudioIdentifier(&stubIdentifier{}),
+		WithRerecordingFinder(finder))
+
+	_ = svc.Execute(ctx, golden.userId, golden.trackId)
+
+	if len(finder.queries) != 0 {
+		t.Errorf("finder queries = %+v, want none once the job is cancelled", finder.queries)
+	}
+	if len(golden.ledger.completed) != 0 {
+		t.Errorf("completions = %+v, want none", golden.ledger.completed)
+	}
+}
+
+func TestRerecording_TheRerecordingIsTaggedAndStoredUnderItsOwnLabels(t *testing.T) {
+	golden := seedItsOnlyLove(t, 0, nil)
+	var tags ports.TrackTags
+	svc := golden.service(&itsOnlyLoveSources{}, findsGoldenRerecording())
+	WithAudioTagger(&recordingTagger{tags: &tags})(svc)
+
+	if err := svc.Execute(context.Background(), golden.userId, golden.trackId); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if tags.Title != "It’s Only Love (classic version)" || tags.Album != "It’s Only Love" || tags.Year != 2025 || tags.ISRC != "IETLH2500023" {
+		t.Errorf("tags = %+v, want the classic version's title, album, year and ISRC", tags)
+	}
+	row := golden.row()
+	if row.Album != "It’s Only Love" || row.Year == nil || *row.Year != 2025 || row.ISRC == nil || *row.ISRC != "IETLH2500023" {
+		t.Errorf("track album %q year %v ISRC %v, want the classic version's", row.Album, row.Year, row.ISRC)
+	}
+}
+
+type probeBlockingRerecordingSource struct{ *itsOnlyLoveSources }
+
+func (s probeBlockingRerecordingSource) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
+	if req.Title == goldenRerecording().Title {
+		s.requests = append(s.requests, req)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	return s.itsOnlyLoveSources.Find(ctx, req)
+}
+
+func TestRerecording_ASecondPassThatRunsOutOfTimeFailsAsATimeout(t *testing.T) {
+	golden := seedItsOnlyLove(t, 292, nil)
+	sources := probeBlockingRerecordingSource{&itsOnlyLoveSources{}}
+	svc := newTestAcquireService(golden.ledger, NewSourceRegistry(sources), golden.store,
+		WithRecordingResolver(pinnedRecordingResolver{}),
+		WithAudioIdentifier(&stubIdentifier{}),
+		WithRerecordingFinder(findsGoldenRerecording()))
+	ctx, cancel := context.WithTimeout(withJobAttempt(context.Background(), maxAcquisitionAttempts), 3*time.Second)
+	defer cancel()
+
+	err := svc.ExecuteReplace(ctx, golden.userId, golden.trackId)
+
+	reached := false
+	for _, req := range sources.requests {
+		reached = reached || req.Title == goldenRerecording().Title
+	}
+	if !reached {
+		t.Fatalf("requests = %+v, want the deadline to land in the re-recording pass", sources.requests)
+	}
+	if got := failureCode(err); got != shared.FailureAcquisitionCancelled && got != shared.FailureSourceUnavailable {
+		t.Errorf("failure code = %q (%v), want a timeout, not the original's no_confident_match", got, err)
+	}
+	if row := golden.row(); row.AudioRef == nil || *row.AudioRef != golden.ref || row.Title != "It's Only Love" {
+		t.Errorf("track = %q on %v, want the stored file and labels kept", row.Title, row.AudioRef)
+	}
+}

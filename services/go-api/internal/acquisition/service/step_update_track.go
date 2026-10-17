@@ -38,6 +38,7 @@ func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext, _
 		ISRC:               isrc,
 		Provenance:         ac.Provenance(),
 		RejectedSourceKeys: ac.Replace.ExcludeKeys,
+		Relabel:            ac.Relabel,
 	}
 	if ac.Selected != nil {
 		raw, err := json.Marshal(evidence)
