@@ -2570,3 +2570,77 @@ func TestReplaceGated_AMuxedFallbackIsSwappedForTheAudioOnlyStreamOfTheSameSourc
 		t.Errorf("rejected keys = %v, want the stored source left out: the upgrade refetches it", done.RejectedSourceKeys)
 	}
 }
+
+type fullLengthAlbumCut struct{ newAudioSource }
+
+func (fullLengthAlbumCut) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
+	found, err := newAudioSource{}.Find(ctx, req)
+	for i := range found {
+		found[i].Duration = 285
+	}
+	return found, err
+}
+
+func TestReplaceGated_AFileThatFitsTheCatalogLengthReplacesAStoredEditAtTheSameGrade(t *testing.T) {
+	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
+	ledger := &completionRecordingLedger{TrackLedger: catalogbridge.NewTrackLedger(repo)}
+	svc := newTestAcquireService(ledger, NewSourceRegistry(fullLengthAlbumCut{}), store,
+		WithAudioProber(&queueProber{durations: []float64{285, 285, 285}}),
+		WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding", MBIDs: []string{"mb-blinding"}}}),
+		WithAudioIdentifier(&stubIdentifier{match: inPlaceMatch(ports.LinkedRecording{MBID: "mb-blinding", Title: "Blinding Lights", Artists: []string{"The Weeknd"}})}),
+	)
+	track, err := ledger.Get(context.Background(), trackId, userId)
+	if err != nil || track == nil {
+		t.Fatalf("load track: %v %v", track, err)
+	}
+	catalog := 285.0
+	track.CatalogDurationSeconds = &catalog
+	gate := upgrade.Gate{Current: grade.B, CatalogSeconds: 285, StoredSeconds: 231}
+
+	if _, err := svc.ReplaceGated(context.Background(), userId, track, gate); err != nil {
+		t.Fatalf("ReplaceGated: %v, want the 285 s file admitted over the 231 s edit", err)
+	}
+
+	if row := repo.committed(trackId, userId); row.AudioRef == nil || *row.AudioRef == originalRef {
+		t.Fatalf("audio_ref = %v, want the swap committed to a new ref", row.AudioRef)
+	}
+	if len(ledger.completed) != 1 || ledger.completed[0].Duration != 285 {
+		t.Errorf("completions = %+v, want one carrying the 285 s length", ledger.completed)
+	}
+}
+
+func TestReplaceGated_ASameGradeFileIsRefusedWhenTheLengthRescueDoesNotHold(t *testing.T) {
+	cases := []struct {
+		name string
+		gate upgrade.Gate
+	}{
+		{"the stored file already fits the catalog length", upgrade.Gate{Current: grade.B, CatalogSeconds: 285, StoredSeconds: 284}},
+		{"the fetched 285 s file misses a 195 s catalog length", upgrade.Gate{Current: grade.B, CatalogSeconds: 195, StoredSeconds: 292}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo, store, userId, trackId, originalRef := seedReadyTrack(t)
+			ledger := &completionRecordingLedger{TrackLedger: catalogbridge.NewTrackLedger(repo)}
+			svc := newTestAcquireService(ledger, NewSourceRegistry(fullLengthAlbumCut{}), store,
+				WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding", MBIDs: []string{"mb-blinding"}}}),
+				WithAudioIdentifier(&stubIdentifier{match: inPlaceMatch(ports.LinkedRecording{MBID: "mb-blinding", Title: "Blinding Lights", Artists: []string{"The Weeknd"}})}),
+				WithAudioProber(&queueProber{durations: []float64{285, 285, 285}}),
+			)
+			track, err := ledger.Get(context.Background(), trackId, userId)
+			if err != nil || track == nil {
+				t.Fatalf("load track: %v %v", track, err)
+			}
+
+			if _, err := svc.ReplaceGated(context.Background(), userId, track, tc.gate); !errors.Is(err, upgrade.ErrNotAnUpgrade) {
+				t.Fatalf("ReplaceGated = %v, want ErrNotAnUpgrade for the same-grade 285 s file", err)
+			}
+
+			if row := repo.committed(trackId, userId); row.AudioRef == nil || *row.AudioRef != originalRef {
+				t.Errorf("audio_ref = %v, want the original %q kept", row.AudioRef, originalRef)
+			}
+			if len(ledger.completed) != 0 {
+				t.Errorf("completions = %+v, want none", ledger.completed)
+			}
+		})
+	}
+}

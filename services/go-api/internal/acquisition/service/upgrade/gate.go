@@ -1,6 +1,7 @@
 package upgrade
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service/grade"
 	"errors"
@@ -18,6 +19,9 @@ type Gate struct {
 
 	Stored    ports.SourceFormat
 	FloorKbps int
+
+	CatalogSeconds float64
+	StoredSeconds  float64
 }
 
 func (g Gate) Admit(candidate grade.Grade) error {
@@ -30,8 +34,8 @@ func (g Gate) Admit(candidate grade.Grade) error {
 	return g.admitted(candidate)
 }
 
-func (g Gate) AdmitFetched(candidate grade.Grade, fetched ports.SourceFormat) error {
-	if g.betterStreamOfSameGrade(candidate, fetched) {
+func (g Gate) AdmitFetched(candidate grade.Grade, fetched ports.SourceFormat, fetchedSeconds float64) error {
+	if g.betterStreamOfSameGrade(candidate, fetched) || g.fitsCatalogLengthOfSameGrade(candidate, fetchedSeconds) {
 		return g.admitted(candidate)
 	}
 	return g.Admit(candidate)
@@ -46,6 +50,16 @@ func (g Gate) betterStreamOfSameGrade(candidate grade.Grade, fetched ports.Sourc
 		candidate == g.Current &&
 		!fetched.IsLowBitrate(g.FloorKbps) &&
 		fetched.Kbps > g.Stored.Kbps
+}
+
+func (g Gate) fitsCatalogLengthOfSameGrade(candidate grade.Grade, fetchedSeconds float64) bool {
+	return g.Current.IsKnown() &&
+		candidate == g.Current &&
+		g.CatalogSeconds > 0 &&
+		g.StoredSeconds > 0 &&
+		fetchedSeconds > 0 &&
+		!acqdomain.LengthAuthoritative.Agrees(g.CatalogSeconds, g.StoredSeconds) &&
+		acqdomain.LengthAuthoritative.Agrees(g.CatalogSeconds, fetchedSeconds)
 }
 
 func (g Gate) admitted(candidate grade.Grade) error {

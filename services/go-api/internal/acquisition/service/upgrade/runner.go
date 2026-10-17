@@ -97,7 +97,12 @@ func (r *Runner) ExecuteUpgrade(ctx context.Context, userId shared.UserId, track
 		slog.InfoContext(ctx, "acquisition.upgrade_skipped", "track_id", trackId.String())
 		return nil
 	}
-	gate := Gate{Current: current, DryRun: r.cfg.DryRun}
+	gate := Gate{
+		Current:        current,
+		DryRun:         r.cfg.DryRun,
+		CatalogSeconds: secondsOf(track.CatalogDurationSeconds),
+		StoredSeconds:  secondsOf(track.StoredDurationSeconds),
+	}
 	if stored.format().IsLowBitrate(r.cfg.LowBitrateFloorKbps) {
 		gate.Stored = stored.format()
 		gate.FloorKbps = r.cfg.LowBitrateFloorKbps
@@ -165,4 +170,11 @@ func (r *Runner) isSettled(track *ports.TrackSnapshot, current grade.Grade, stor
 
 func isPlayableFile(track *ports.TrackSnapshot) bool {
 	return track.Status == ports.TrackReady && track.AudioRef != nil
+}
+
+func secondsOf(seconds *float64) float64 {
+	if seconds == nil {
+		return 0
+	}
+	return *seconds
 }

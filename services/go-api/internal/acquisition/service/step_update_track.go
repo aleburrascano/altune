@@ -27,7 +27,7 @@ func (s *UpdateTrackStep) Name() StepName { return stepNameUpdateTrack }
 
 func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterStore) (afterUpdate, error) {
 	evidence := ac.collectEvidence()
-	if err := ac.Replace.Gate.AdmitFetched(evidence.Grade, ac.SourceFormat); err != nil {
+	if err := ac.Replace.Gate.AdmitFetched(evidence.Grade, ac.SourceFormat, ac.ProbedDuration); err != nil {
 		return afterUpdate{}, err
 	}
 	isrc, _ := ac.provenISRC()

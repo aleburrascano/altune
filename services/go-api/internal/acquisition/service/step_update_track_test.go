@@ -5,10 +5,12 @@ import (
 	"altune/go-api/internal/acquisition/adapters/discoverybridge"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service/grade"
+	"altune/go-api/internal/acquisition/service/upgrade"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"context"
 	"encoding/json"
+	"errors"
 	"math"
 	"testing"
 
@@ -484,5 +486,26 @@ func TestUpdateTrackStep_EvidenceHasNoUnsetISRCHit(t *testing.T) {
 	}
 	if _, present := keys["isrc_set_hit"]; present {
 		t.Errorf("stored evidence carries isrc_set_hit: %v", keys)
+	}
+}
+
+func TestUpdateTrackStep_Execute_AnUnprobedFetchedFileGetsNoLengthRescue(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track := seedTrackInRepo(t, repo, userId, markReadyWith("u/a/b/old.opus"))
+	ac := &AcquisitionContext{
+		AudioRef: "u/a/b/new.opus",
+		Selected: &ports.AudioCandidate{Title: "Song", URL: drinkingSource, Kind: ports.KindUpload, Duration: 285},
+		Verdict:  AudioVerdict{Kind: VerdictHard},
+		Evidence: Evidence{Channel: channelOther},
+		Replace: ReplaceState{
+			PreservedRef: "u/a/b/old.opus",
+			Gate:         upgrade.Gate{Current: grade.B, CatalogSeconds: 285, StoredSeconds: 231},
+		},
+	}
+
+	_, err := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID).Execute(context.Background(), ac, afterStore{})
+	if !errors.Is(err, upgrade.ErrNotAnUpgrade) {
+		t.Fatalf("Execute = %v, want ErrNotAnUpgrade: the source's claimed 285 s was never measured", err)
 	}
 }

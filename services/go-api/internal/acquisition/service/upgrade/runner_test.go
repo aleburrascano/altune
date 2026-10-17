@@ -447,3 +447,68 @@ func TestRunner_ALowBitrateFileAtAIsNotSettled(t *testing.T) {
 		})
 	}
 }
+
+func TestRunner_TheGateCarriesTheCatalogAndStoredLengths(t *testing.T) {
+	w := seed(t, grade.B)
+	key := rowKey(w.trackId, w.userId)
+	row := w.tracks.rows[key]
+	if err := row.SetCatalogDuration(285); err != nil {
+		t.Fatalf("set catalog duration: %v", err)
+	}
+	if err := row.SetDuration(231); err != nil {
+		t.Fatalf("set stored duration: %v", err)
+	}
+	w.tracks.rows[key] = row
+	replacer := &gateRecorder{}
+	runner := upgrade.NewRunner(catalogbridge.NewTrackLedger(w.tracks), replacer, w.upgrades, upgrade.Config{MaxTries: 3})
+
+	if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
+		t.Fatalf("ExecuteUpgrade: %v", err)
+	}
+
+	if len(replacer.gates) != 1 || replacer.gates[0].CatalogSeconds != 285 || replacer.gates[0].StoredSeconds != 231 {
+		t.Errorf("gates = %+v, want one carrying catalog 285 s and stored 231 s", replacer.gates)
+	}
+}
+
+func TestRunner_ALowBitrateGateAlsoCarriesTheCatalogAndStoredLengths(t *testing.T) {
+	w := seed(t, grade.A)
+	w.storedEvidence(fmt.Sprintf(`{"grade":"A","source_format_id":"18","source_kbps":96,"in_place_generation":%d}`, grade.PipelineGeneration))
+	key := rowKey(w.trackId, w.userId)
+	row := w.tracks.rows[key]
+	if err := row.SetCatalogDuration(195); err != nil {
+		t.Fatalf("set catalog duration: %v", err)
+	}
+	if err := row.SetDuration(292); err != nil {
+		t.Fatalf("set stored duration: %v", err)
+	}
+	w.tracks.rows[key] = row
+	replacer := &gateRecorder{}
+	runner := upgrade.NewRunner(catalogbridge.NewTrackLedger(w.tracks), replacer, w.upgrades, upgrade.Config{MaxTries: 3, LowBitrateFloorKbps: 112})
+
+	if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
+		t.Fatalf("ExecuteUpgrade: %v", err)
+	}
+
+	if len(replacer.gates) != 1 {
+		t.Fatalf("gates = %+v, want one", replacer.gates)
+	}
+	g := replacer.gates[0]
+	if g.Stored.ID != "18" || g.FloorKbps != 112 || g.CatalogSeconds != 195 || g.StoredSeconds != 292 {
+		t.Errorf("gate = %+v, want stored format 18, floor 112, catalog 195 s and stored 292 s", g)
+	}
+}
+
+func TestRunner_ATrackWithNoKnownLengthsGetsAGateWithTheLengthRescueOff(t *testing.T) {
+	w := seed(t, grade.B)
+	replacer := &gateRecorder{}
+	runner := upgrade.NewRunner(catalogbridge.NewTrackLedger(w.tracks), replacer, w.upgrades, upgrade.Config{MaxTries: 3})
+
+	if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
+		t.Fatalf("ExecuteUpgrade: %v", err)
+	}
+
+	if len(replacer.gates) != 1 || replacer.gates[0].CatalogSeconds != 0 || replacer.gates[0].StoredSeconds != 0 {
+		t.Errorf("gates = %+v, want one with catalog and stored lengths 0", replacer.gates)
+	}
+}
