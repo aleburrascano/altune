@@ -15,16 +15,17 @@ const rrfK = 60
 type demoteFunc func(domain.SearchResult) bool
 
 type scored struct {
-	result     domain.SearchResult
-	relevance  float64
-	behavioral float64
-	prominence float64
-	pop        float64
-	rrf        float64
-	multi      bool
-	demoted    bool
-	topPick    bool
-	ofPick     bool
+	result      domain.SearchResult
+	relevance   float64
+	behavioral  float64
+	prominence  float64
+	pop         float64
+	rrf         float64
+	multi       bool
+	demoted     bool
+	topPick     bool
+	ofPick      bool
+	namedArtist bool
 }
 
 type rankConfig struct {
@@ -69,16 +70,17 @@ func rankScored(entities []Entity, queryNorm string, cfg rankConfig) []scored {
 			prominence = prominenceOf(r)
 		}
 		results = append(results, scored{
-			result:     r,
-			relevance:  idfWeightedCoverage(r, queryNorm, rarity),
-			behavioral: cfg.behavioral[domain.ResultSignature(r)],
-			prominence: prominence,
-			pop:        r.Popularity,
-			rrf:        rrfScore(e.BestRank),
-			multi:      len(providersOf(r)) > 1,
-			demoted:    demoted,
-			topPick:    domain.BoolExtra(r.Extras, domain.ExtraTopPick),
-			ofPick:     pickedArtist != "" && r.Kind != domain.ResultKindArtist && creditsArtist(r, pickedArtist),
+			result:      r,
+			relevance:   idfWeightedCoverage(r, queryNorm, rarity),
+			behavioral:  cfg.behavioral[domain.ResultSignature(r)],
+			prominence:  prominence,
+			pop:         r.Popularity,
+			rrf:         rrfScore(e.BestRank),
+			multi:       len(providersOf(r)) > 1,
+			demoted:     demoted,
+			topPick:     domain.BoolExtra(r.Extras, domain.ExtraTopPick),
+			namedArtist: isStrongNamedArtist(r, queryNorm),
+			ofPick:      pickedArtist != "" && r.Kind != domain.ResultKindArtist && creditsArtist(r, pickedArtist),
 		})
 	}
 
@@ -98,6 +100,9 @@ func rankLess(a, b scored) bool {
 	}
 	if a.relevance != b.relevance {
 		return a.relevance > b.relevance
+	}
+	if a.namedArtist != b.namedArtist {
+		return a.namedArtist
 	}
 	if a.prominence != b.prominence {
 		return a.prominence > b.prominence
