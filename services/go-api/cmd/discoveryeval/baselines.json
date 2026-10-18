@@ -155,14 +155,14 @@
   },
   "signal_a.abandoned_gaps": {
     "metric": "signal_a.abandoned_gaps",
-    "value": 44,
+    "value": 70,
     "margin": 0,
     "higher_is_better": false,
     "note": "measured over 3 runs"
   },
   "signal_a.strong_gaps": {
     "metric": "signal_a.strong_gaps",
-    "value": 50,
+    "value": 73,
     "margin": 0,
     "higher_is_better": false,
     "note": "measured over 3 runs"
