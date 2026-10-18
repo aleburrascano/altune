@@ -169,8 +169,8 @@
   },
   "signal_b.mean_gap_pct": {
     "metric": "signal_b.mean_gap_pct",
-    "value": 0.6960744773730236,
-    "margin": 0.00026682794933813314,
+    "value": 0.7316805324893897,
+    "margin": 0.0009951624049758245,
     "higher_is_better": false,
     "note": "measured over 3 runs"
   }
