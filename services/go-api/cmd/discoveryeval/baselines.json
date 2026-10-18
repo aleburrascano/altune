@@ -170,8 +170,8 @@
   "signal_b.mean_gap_pct": {
     "metric": "signal_b.mean_gap_pct",
     "value": 0.7316805324893897,
-    "margin": 0.0009951624049758245,
+    "margin": 0.036,
     "higher_is_better": false,
-    "note": "measured over 3 runs"
+    "note": "value measured over 3 runs; margin set to the observed nightly swing (0.696-0.731 within 12h with no code change, #3167)"
   }
 }
