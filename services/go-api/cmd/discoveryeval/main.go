@@ -14,6 +14,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"slices"
 	"strings"
@@ -59,7 +60,7 @@ func main() {
 	flag.IntVar(&opts.limit, "limit", 0, "eval: max entities to evaluate (0 = all)")
 	flag.IntVar(&opts.concurrency, "concurrency", 4, "eval: parallel searches against live providers")
 	flag.IntVar(&opts.sinceDays, "since-days", 30, "signals: telemetry window in days")
-	flag.IntVar(&opts.top, "top", 50, "signals: max ranked entries")
+	flag.IntVar(&opts.top, "top", 50, "signal-a: max entries listed per section in the printed report (counts and gates always cover the full set)")
 	flag.IntVar(&opts.topK, "top-k", 3, "eval: top-K window — entity passes if it ranks within the top K (1 = strict #1)")
 	flag.StringVar(&opts.jsonPath, "json", "", "write the full JSON report to this path (default: stdout summary only)")
 	flag.BoolVar(&opts.random, "random", false, "eval: sample entities randomly instead of alphabetically (use with -limit for a representative sample)")
@@ -606,14 +607,14 @@ func runSignalA(ctx context.Context, pool *pgxpool.Pool, redisClient *goredis.Cl
 
 	once := func() (discoveryEval.HarnessReport, error) {
 		since := time.Now().UTC().AddDate(0, 0, -opts.sinceDays)
-		report, err := svc.Execute(ctx, since, opts.top)
+		report, err := svc.Execute(ctx, since, math.MaxInt32)
 		if err != nil {
 			return nil, err
 		}
 		return report, requireSignalASamples(report)
 	}
 	human := func(r discoveryEval.HarnessReport) string {
-		return renderSignalA(r.(*discoveryEval.CoverageReportA), opts.sinceDays)
+		return renderSignalA(r.(*discoveryEval.CoverageReportA), opts.sinceDays, opts.top)
 	}
 	return runHarness("signal-a", once, human, opts)
 }

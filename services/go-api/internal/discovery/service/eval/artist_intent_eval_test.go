@@ -1,11 +1,11 @@
 package eval
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"errors"
+	"reflect"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func artistCard(name string) domain.SearchResult {
@@ -210,5 +210,44 @@ func TestArtistIntentOutcome_StringAndJSON(t *testing.T) {
 		if err != nil || string(b) != `"`+tt.want+`"` {
 			t.Errorf("MarshalJSON = %s (%v), want %q", b, err, tt.want)
 		}
+	}
+}
+
+func TestRunArtistIntentEval_KeepsAResultPerQueryAndNamesTheFailures(t *testing.T) {
+	searcher := &fakeSearcher{byQuery: map[string][]domain.SearchResult{
+		"Air":   {evalTrack("Air", "Someone"), album("Air", "Someone"), evalTrack("Air Supply", "Other"), artistCard("Air")},
+		"Drake": {artistCard("Drake")},
+	}}
+
+	report := RunArtistIntentEval(context.Background(), []string{"Air", "Drake"}, searcher, 1, 3, "", nil)
+
+	if len(report.Results) != 2 {
+		t.Fatalf("Results = %d, want 2", len(report.Results))
+	}
+	air, drake := report.Results[0], report.Results[1]
+	if air.Pass {
+		t.Errorf("Air Pass = true, want false (artist is #4, k=3)")
+	}
+	if !drake.Pass {
+		t.Errorf("Drake Pass = false, want true")
+	}
+	if want := `artist card "Air" in top 3`; air.Expected != want {
+		t.Errorf("Air Expected = %q, want %q", air.Expected, want)
+	}
+	wantRanked := []string{"track:Air", "album:Air", "track:Air Supply"}
+	if got := air.RankedLabels(); !reflect.DeepEqual(got, wantRanked) {
+		t.Errorf("Air RankedLabels = %v, want %v", got, wantRanked)
+	}
+
+	failed := report.FailedQueries()
+	if len(failed) != 1 || failed[0].Artist != "Air" {
+		t.Fatalf("FailedQueries = %+v, want only Air", failed)
+	}
+	fails := report.Failures()
+	if len(fails) != 1 {
+		t.Fatalf("Failures = %d, want 1", len(fails))
+	}
+	if got := fails[0].Attrs["expected"]; got != `artist card "Air" in top 3` {
+		t.Errorf("Failures()[0].Attrs[expected] = %v, want the Air expectation", got)
 	}
 }

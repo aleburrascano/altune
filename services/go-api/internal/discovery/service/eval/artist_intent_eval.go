@@ -1,10 +1,10 @@
 package eval
 
 import (
-	"context"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/textnorm"
+	"context"
+	"fmt"
 )
 
 type ArtistIntentOutcome int
@@ -44,6 +44,9 @@ func (o ArtistIntentOutcome) MarshalJSON() ([]byte, error) {
 
 type ArtistIntentResult struct {
 	Artist        string              `json:"artist"`
+	Expected      string              `json:"expected,omitempty"`
+	Ranked        []ResultSummary     `json:"ranked,omitempty"`
+	Pass          bool                `json:"pass"`
 	Outcome       ArtistIntentOutcome `json:"outcome"`
 	ArtistPos     int                 `json:"artist_pos"`
 	FirstTrackPos int                 `json:"first_track_pos"`
@@ -102,7 +105,7 @@ func evalOneArtist(ctx context.Context, artist string, searcher Searcher, k int)
 		return ArtistIntentResult{Artist: artist, Outcome: ArtistIntentSkipped, ArtistPos: -1, FirstTrackPos: -1}
 	}
 
-	res := ArtistIntentResult{Artist: artist, ArtistPos: -1, FirstTrackPos: -1}
+	res := ArtistIntentResult{Artist: artist, Expected: fmt.Sprintf("artist card %q in top %d", artist, k), ArtistPos: -1, FirstTrackPos: -1}
 
 	shown, err := searcher.Search(ctx, artist)
 	if err != nil {
@@ -124,6 +127,9 @@ func evalOneArtist(ctx context.Context, artist string, searcher Searcher, k int)
 		}
 	}
 
+	for _, r := range shown[:min(k, len(shown))] {
+		res.Ranked = append(res.Ranked, ResultSummary{Kind: r.Kind.String(), Title: r.Title, Subtitle: r.Subtitle})
+	}
 	res.Top = &ResultSummary{Kind: shown[0].Kind.String(), Title: shown[0].Title, Subtitle: shown[0].Subtitle}
 
 	switch {
@@ -131,6 +137,7 @@ func evalOneArtist(ctx context.Context, artist string, searcher Searcher, k int)
 		res.Outcome = ArtistIntentAbsent
 	case res.ArtistPos < k:
 		res.Outcome = ArtistIntentPass
+		res.Pass = true
 	case res.FirstTrackPos != -1 && res.FirstTrackPos < k:
 		res.Outcome = ArtistIntentBuried
 	default:
@@ -179,6 +186,25 @@ func (r ArtistIntentReport) Metrics() []NamedMetric {
 	}
 }
 
+func (r ArtistIntentResult) RankedLabels() []string {
+	out := make([]string, 0, len(r.Ranked))
+	for _, s := range r.Ranked {
+		out = append(out, s.Kind+":"+s.Title)
+	}
+	return out
+}
+
+func (r ArtistIntentReport) FailedQueries() []ArtistIntentResult {
+	out := []ArtistIntentResult{}
+	for _, res := range r.Results {
+		if res.Outcome == ArtistIntentPass || res.Outcome == ArtistIntentSkipped {
+			continue
+		}
+		out = append(out, res)
+	}
+	return out
+}
+
 func (r ArtistIntentReport) Failures() []FailureRecord {
 	out := []FailureRecord{}
 	for _, res := range r.Results {
@@ -187,6 +213,8 @@ func (r ArtistIntentReport) Failures() []FailureRecord {
 		}
 		attrs := QueryAttrs(res.Artist)
 		attrs["outcome"] = res.Outcome.String()
+		attrs["expected"] = res.Expected
+		attrs["ranked"] = res.RankedLabels()
 		if res.Top != nil {
 			attrs["top_kind"] = res.Top.Kind
 		}

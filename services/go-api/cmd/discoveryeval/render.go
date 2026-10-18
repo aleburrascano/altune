@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	discoveryEval "altune/go-api/internal/discovery/service/eval"
@@ -70,6 +71,15 @@ func renderArtistIntent(report discoveryEval.ArtistIntentReport) string {
 	out += fmt.Sprintf("- BURIED (ranker bug): %d (%.1f%%) — artist present but a same-name track out-ranked it\n", report.Buried, report.BuriedRate()*100)
 	out += fmt.Sprintf("- ABSENT (recall gap): %d (%.1f%%) — artist card never surfaced; no reorder can fix\n", report.Absent, report.AbsentRate()*100)
 	out += fmt.Sprintf("- Below-K (other): %d · No-results: %d\n", report.BelowK, report.NoResults)
+
+	failed := report.FailedQueries()
+	out += fmt.Sprintf("\n## Failing queries — %d\n\n", len(failed))
+	for _, r := range failed {
+		out += renderFailedArtistIntent(r) + "\n"
+	}
+	if len(failed) == 0 {
+		out += "_none_\n"
+	}
 
 	out += "\n## Buried — artist out-ranked by a same-name track (ranker-fixable)\n\n"
 	buried, absent := 0, 0
@@ -166,18 +176,18 @@ func renderCorrection(report discoveryEval.CorrectionReport) string {
 	return out
 }
 
-func renderSignalA(report *discoveryEval.CoverageReportA, sinceDays int) string {
+func renderSignalA(report *discoveryEval.CoverageReportA, sinceDays, top int) string {
 	out := fmt.Sprintf("# Discovery coverage signal A — %s\n\n", time.Now().UTC().Format(time.RFC3339))
 	out += fmt.Sprintf("Window: last %d days. Strong = zero-result (not a typo); weak = results shown but no click.\n\n", sinceDays)
 
 	out += fmt.Sprintf("## Strong gaps — %d (filtered %d typos)\n\n", len(report.Strong), report.FilteredAsTypos)
-	out += renderGaps(report.Strong)
+	out += renderGaps(report.Strong, top)
 
 	out += fmt.Sprintf("\n## Weak hints — %d\n\n", len(report.Weak))
-	out += renderGaps(report.Weak)
+	out += renderGaps(report.Weak, top)
 
 	out += fmt.Sprintf("\n## Abandoned — %d (no click, reformulated within 60s)\n\n", len(report.Abandoned))
-	out += renderGaps(report.Abandoned)
+	out += renderGaps(report.Abandoned, top)
 	return out
 }
 
@@ -228,12 +238,31 @@ func negativeLeakRate(score discoveryEval.ReplayScore) float64 {
 	return float64(score.NegativeLeakK) / float64(score.Negatives)
 }
 
-func renderGaps(gaps []discoveryEval.CoverageGap) string {
+func renderFailedArtistIntent(r discoveryEval.ArtistIntentResult) string {
+	ranked := strings.Join(r.RankedLabels(), " | ")
+	if ranked == "" {
+		ranked = "(nothing ranked)"
+	}
+	line := fmt.Sprintf("- %q [%s] expected %s; ranked: %s", r.Artist, r.Outcome, r.Expected, ranked)
+	if r.ArtistPos >= 0 {
+		line += fmt.Sprintf("; artist at #%d", r.ArtistPos+1)
+	}
+	if r.Error != "" {
+		line += "; error: " + r.Error
+	}
+	return line
+}
+
+func renderGaps(gaps []discoveryEval.CoverageGap, top int) string {
 	if len(gaps) == 0 {
 		return "_none_\n"
 	}
 	out := ""
-	for _, g := range gaps {
+	for i, g := range gaps {
+		if top > 0 && i >= top {
+			out += fmt.Sprintf("_… %d more (raise -top to list them)_\n", len(gaps)-top)
+			break
+		}
 		out += fmt.Sprintf("- %q — %d×\n", g.QueryNorm, g.Count)
 	}
 	return out
