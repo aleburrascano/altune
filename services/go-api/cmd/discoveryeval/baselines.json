@@ -8,7 +8,7 @@
   },
   "artist_intent.buried_rate": {
     "metric": "artist_intent.buried_rate",
-    "value": 0.03225806451612903,
+    "value": 0,
     "margin": 0,
     "higher_is_better": false,
     "note": "measured over 3 runs"
@@ -50,7 +50,7 @@
   },
   "artist_intent.topk_rate": {
     "metric": "artist_intent.topk_rate",
-    "value": 0.967741935483871,
+    "value": 1,
     "margin": 0,
     "higher_is_better": true,
     "note": "measured over 3 runs"
