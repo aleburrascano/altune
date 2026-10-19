@@ -13,7 +13,6 @@ private enum Palette {
   static let textPrimary = Color(red: 0xF4 / 255, green: 0xF4 / 255, blue: 0xF6 / 255)
   static let textSecondary = Color(red: 0xA6 / 255, green: 0xA6 / 255, blue: 0xAE / 255)
   static let emptyGlyph = Color(red: 0x74 / 255, green: 0x74 / 255, blue: 0x7E / 255)
-  static let pillInk = Color(red: 0x18 / 255, green: 0x18 / 255, blue: 0x1C / 255)
   static let activeToggle = Color(red: 0x6B / 255, green: 0x8F / 255, blue: 0xFF / 255)
   static let scrimInk = Color(red: 6 / 255, green: 5 / 255, blue: 17 / 255)
 }
@@ -412,21 +411,15 @@ struct NeutralBackground: View {
 struct EmptyStateMessage {
   let headline: String
   let detail: String
-  let pillTitle: String
-  let pillSymbol: String?
 
   static let nothingPlayed = EmptyStateMessage(
     headline: "Open Altune to start a playlist",
-    detail: "Nothing playing",
-    pillTitle: "Open",
-    pillSymbol: "arrow.up.right"
+    detail: "Nothing playing"
   )
 
   static let signedOut = EmptyStateMessage(
     headline: "Sign in to Altune",
-    detail: "Your playlists will show up here.",
-    pillTitle: "Sign in",
-    pillSymbol: nil
+    detail: "Your playlists will show up here."
   )
 }
 
@@ -450,7 +443,6 @@ struct SmallEmptyView: View {
           .lineLimit(2)
           .padding(.top, 3)
         Spacer(minLength: 0)
-        EmptyStatePill(message: message)
       }
       .padding(16)
     }
@@ -477,8 +469,6 @@ struct MediumEmptyView: View {
           .foregroundStyle(Palette.textSecondary)
           .lineLimit(1)
           .padding(.top, 4)
-        EmptyStatePill(message: message)
-          .padding(.top, 14)
       }
       .frame(maxHeight: .infinity)
       .padding(.leading, 178)
@@ -493,27 +483,6 @@ struct EmptyStateGlyph: View {
       .font(.system(size: 24, weight: .regular))
       .foregroundStyle(Palette.emptyGlyph)
       .frame(width: 30, height: 30)
-  }
-}
-
-struct EmptyStatePill: View {
-  let message: EmptyStateMessage
-
-  var body: some View {
-    HStack(spacing: 6) {
-      Text(message.pillTitle)
-        .font(.system(size: TypeScale.medium, weight: .bold))
-        .tracking(-0.15)
-      if let pillSymbol = message.pillSymbol {
-        Image(systemName: pillSymbol)
-          .font(.system(size: 12, weight: .bold))
-      }
-    }
-    .foregroundStyle(Palette.pillInk)
-    .padding(.leading, 20)
-    .padding(.trailing, 18)
-    .frame(height: 44)
-    .background(Capsule().fill(Palette.textPrimary))
   }
 }
 

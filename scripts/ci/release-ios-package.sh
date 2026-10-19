@@ -8,6 +8,7 @@ APP=${apps[0]}
 echo "App=$APP"
 mkdir -p "$RUNNER_TEMP/Payload"
 cp -R "$APP" "$RUNNER_TEMP/Payload/"
+bash "$GITHUB_WORKSPACE/scripts/ci/release-ios-sign.sh" "$RUNNER_TEMP/Payload/$(basename "$APP")"
 ( cd "$RUNNER_TEMP" && zip -qry Altune.ipa Payload )
 SIZE=$(stat -f%z "$RUNNER_TEMP/Altune.ipa")
 echo "size=$SIZE" >> "$GITHUB_OUTPUT"
