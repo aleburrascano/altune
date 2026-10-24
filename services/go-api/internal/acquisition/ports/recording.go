@@ -8,6 +8,7 @@ const (
 	ProviderYouTube    RecordingProvider = "youtube"
 	ProviderDeezer     RecordingProvider = "deezer"
 	ProviderSoundCloud RecordingProvider = "soundcloud"
+	ProviderPixeldrain RecordingProvider = "pixeldrain"
 )
 
 type ProviderRef struct {

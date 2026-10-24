@@ -3,6 +3,7 @@ package domain
 import (
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 )
 
@@ -24,6 +25,12 @@ var knownCatalogProviders = map[string]struct{}{
 	"amazonmusic": {},
 	"applemusic":  {},
 	"spotify":     {},
+}
+
+const PixeldrainProvider = "pixeldrain"
+
+var pinOnlyCatalogProviders = map[string]*regexp.Regexp{
+	PixeldrainProvider: regexp.MustCompile(`^[A-Za-z0-9]{6,16}$`),
 }
 
 func KnownCatalogProviders() []string {
@@ -95,9 +102,23 @@ func NormalizeCatalogMBID(raw string) (string, error) {
 	return strings.ToLower(raw), nil
 }
 
-func validateCatalogSource(s CatalogSource) error {
-	if _, known := knownCatalogProviders[s.Provider]; !known {
+func validateCatalogProvider(s CatalogSource) error {
+	if _, known := knownCatalogProviders[s.Provider]; known {
+		return nil
+	}
+	pinID, pinOnly := pinOnlyCatalogProviders[s.Provider]
+	if !pinOnly {
 		return NewValidationError("sources provider is unknown: " + s.Provider)
+	}
+	if !pinID.MatchString(s.ExternalID) {
+		return NewValidationError("sources external_id is not a valid " + s.Provider + " id")
+	}
+	return nil
+}
+
+func validateCatalogSource(s CatalogSource) error {
+	if err := validateCatalogProvider(s); err != nil {
+		return err
 	}
 	if s.ExternalID == "" {
 		return NewValidationError("sources external_id must not be empty")
