@@ -46,7 +46,7 @@ function CardHint({ track, card }: UnreleasedCardProps): ReactElement | null {
   const hint = cardHint(track, card.state);
   if (hint === null) return null;
   return (
-    <Text variant="label" tone="tertiary" testID={`detail-unreleased-hint-${track.genius_id}`}>
+    <Text variant="label" tone="tertiary" testID={`detail-unreleased-hint-${track.key}`}>
       {hint}
     </Text>
   );
@@ -63,12 +63,22 @@ function UnreleasedCover({ track }: UnreleasedRowProps): ReactElement {
   );
 }
 
+function QualityLine({ track }: UnreleasedRowProps): ReactElement | null {
+  if (track.quality === null) return null;
+  return (
+    <Text variant="label" tone="secondary" testID={`detail-unreleased-quality-${track.key}`}>
+      {track.quality}
+    </Text>
+  );
+}
+
 function UnreleasedTitle({ track, card }: UnreleasedCardProps): ReactElement {
   return (
     <View style={styles.title}>
       <Text variant="body" numberOfLines={1}>
         {track.title}
       </Text>
+      <QualityLine track={track} />
       <CardHint track={track} card={card} />
     </View>
   );
@@ -79,6 +89,7 @@ function pressedCardStyle({ pressed }: PressState) {
 }
 
 function openGenius(track: UnreleasedTrack): void {
+  if (track.genius_url === null) return;
   Linking.openURL(track.genius_url).catch((error: unknown) => {
     console.warn('[detail] could not open the Genius page', {
       geniusId: track.genius_id,
@@ -96,7 +107,7 @@ function cardLabel(track: UnreleasedTrack, state: UnreleasedCardState): string {
 function unreleasedRowProps({ track, card }: UnreleasedCardProps) {
   return {
     action: `detail.artist.unreleased.${card.state}`,
-    testID: `detail-unreleased-${track.genius_id}`,
+    testID: `detail-unreleased-${track.key}`,
     onPress: card.onPress,
     accessibilityRole: card.state === 'genius' ? ('link' as const) : ('button' as const),
     accessibilityLabel: cardLabel(track, card.state),
@@ -115,7 +126,7 @@ function UnreleasedRow({ artist, track }: UnreleasedArtistRowProps): ReactElemen
 }
 
 function unreleasedKey(track: UnreleasedTrack): string {
-  return String(track.genius_id);
+  return track.key;
 }
 
 type UnreleasedItemInfo = { item: UnreleasedTrack };

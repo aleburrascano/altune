@@ -286,4 +286,35 @@ describe('ArtistUnreleased', () => {
     await waitFor(() => expect(startQueue).toHaveBeenCalledTimes(1));
     expect(__http.countFor('POST /v1/tracks')).toBe(0);
   });
+
+  it('renders a tracker-only song with its quality and saves it pinned to the pixeldrain file', async () => {
+    const trackerOnly = {
+      genius_id: null,
+      tracker_key: 'ken-carson:dream-v2',
+      title: 'Dream [V2]',
+      quality: 'High Quality',
+      cover_url: null,
+      genius_url: null,
+      release_date: null,
+      has_media: true,
+      audio_links: [{ provider: 'pixeldrain', url: 'https://pixeldrain.com/u/ozSpSjn7' }],
+      extras: {},
+    };
+    __http.reply(UNRELEASED, { status: 200, json: { items: [trackerOnly] } });
+    __http.reply('POST /v1/tracks', savedTrack());
+    renderSection();
+
+    expect(await screen.findByText('High Quality')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('detail-unreleased-ken-carson:dream-v2'));
+
+    await waitFor(() => expect(__http.countFor('POST /v1/tracks')).toBe(1));
+    const save = __http.requests.find(
+      (request: RecordedRequest) => request.method === 'POST' && request.path === '/v1/tracks',
+    );
+    expect(JSON.parse(String(save.body))).toMatchObject({
+      title: 'Dream [V2]',
+      album: 'UNRELEASED',
+      sources: [{ provider: 'pixeldrain', external_id: 'ozSpSjn7' }],
+    });
+  });
 });

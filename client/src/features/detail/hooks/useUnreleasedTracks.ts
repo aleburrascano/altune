@@ -97,13 +97,26 @@ function usePlayOwned(asTrack: DiscoveryResult, owned: OwnedTrack | null): () =>
   };
 }
 
+function fallbackState(track: UnreleasedTrack): UnreleasedCardState {
+  return track.genius_url === null ? 'disabled' : 'genius';
+}
+
 function cardState(
-  acquirable: boolean,
+  track: UnreleasedTrack,
   owned: OwnedTrack | null,
   save: SaveState,
 ): UnreleasedCardState {
   if (owned?.acquisitionStatus === 'ready') return 'play';
-  return acquirable ? save : 'genius';
+  return isAcquirable(track) ? save : fallbackState(track);
+}
+
+type CardActions = { genius: () => void; play: () => void; save: () => void };
+
+function noAction(): void {}
+
+function cardAction(state: UnreleasedCardState, actions: CardActions): () => void {
+  if (state === 'genius' || state === 'play') return actions[state];
+  return state === 'disabled' ? noAction : actions.save;
 }
 
 export function useUnreleasedCard({ track, artist, openGenius }: CardTarget): UnreleasedCard {
@@ -111,7 +124,6 @@ export function useUnreleasedCard({ track, artist, openGenius }: CardTarget): Un
   const owned = useOwnedUnreleased(asTrack);
   const save = useTrackSave(asTrack, owned);
   const play = usePlayOwned(asTrack, owned);
-  const state = cardState(isAcquirable(track), owned, save.state);
-  const actions = { genius: openGenius, play };
-  return { state, onPress: state === 'genius' || state === 'play' ? actions[state] : save.onSave };
+  const state = cardState(track, owned, save.state);
+  return { state, onPress: cardAction(state, { genius: openGenius, play, save: save.onSave }) };
 }

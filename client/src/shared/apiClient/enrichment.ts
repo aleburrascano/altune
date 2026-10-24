@@ -1,3 +1,4 @@
+import { ContractError } from '@shared/failure/errors';
 import { PROVIDER_STATUSES, parseDiscoveryResult } from '@shared/apiClient/discovery';
 import { discoveryEntityPath, sourceIdList } from '@shared/apiClient/ids';
 import { apiFetch, LONG_REQUEST_TIMEOUT_MS, signalInit, withQuery } from '@shared/apiClient/index';
@@ -11,6 +12,7 @@ import {
   asString,
   member,
   nullableBoolean,
+  nullableNumber,
   nullableString,
 } from '@shared/apiClient/wireDecoders';
 
@@ -280,13 +282,18 @@ export async function getArtistContent(
   return parseArtistContentResponse(await apiFetch(withQuery(path, params), signalInit(signal)));
 }
 
-export type UnreleasedAudioLink = { provider: 'soundcloud' | 'youtube'; url: string };
+const AUDIO_PROVIDERS = ['soundcloud', 'youtube', 'pixeldrain'] as const;
+
+export type UnreleasedAudioLink = { provider: (typeof AUDIO_PROVIDERS)[number]; url: string };
 
 export type UnreleasedTrack = {
-  genius_id: number;
+  key: string;
+  genius_id: number | null;
+  tracker_key: string | null;
   title: string;
+  quality: string | null;
   cover_url: string | null;
-  genius_url: string;
+  genius_url: string | null;
   release_date: string | null;
   has_media: boolean | null;
   audio_links: UnreleasedAudioLink[];
@@ -295,16 +302,26 @@ export type UnreleasedTrack = {
 
 export type UnreleasedTracksResponse = { items: UnreleasedTrack[]; pending: boolean };
 
+function nullableHttpsUrl(value: unknown, at: string): string | null {
+  return value == null ? null : asHttpsUrl(value, at);
+}
+
+function unreleasedKey(geniusId: number | null, trackerKey: string | null, at: string): string {
+  const key = trackerKey ?? (geniusId === null ? null : String(geniusId));
+  if (key === null) throw new ContractError(at, 'expected a genius_id or a tracker_key');
+  return key;
+}
+
 function parseUnreleasedIdentity(r: Record<string, unknown>, at: string) {
-  return {
-    genius_id: asNumber(r.genius_id, `${at}.genius_id`),
-    title: asString(r.title, `${at}.title`),
-    genius_url: asHttpsUrl(r.genius_url, `${at}.genius_url`),
-  };
+  const genius_id = nullableNumber(r.genius_id, `${at}.genius_id`);
+  const tracker_key = nullableString(r.tracker_key, `${at}.tracker_key`);
+  const key = unreleasedKey(genius_id, tracker_key, at);
+  const genius_url = nullableHttpsUrl(r.genius_url, `${at}.genius_url`);
+  return { key, genius_id, tracker_key, title: asString(r.title, `${at}.title`), genius_url };
 }
 
 function isAudioProvider(value: unknown): value is UnreleasedAudioLink['provider'] {
-  return value === 'soundcloud' || value === 'youtube';
+  return AUDIO_PROVIDERS.some((provider) => provider === value);
 }
 
 function isNonEmptyString(value: unknown): value is string {
@@ -340,6 +357,7 @@ function parseOwnershipExtras(value: unknown, at: string): Record<string, unknow
 
 function parseUnreleasedDetails(r: Record<string, unknown>, at: string) {
   return {
+    quality: nullableString(r.quality, `${at}.quality`),
     cover_url: nullableString(r.cover_url, `${at}.cover_url`),
     release_date: nullableString(r.release_date, `${at}.release_date`),
     has_media: nullableBoolean(r.has_media, `${at}.has_media`),

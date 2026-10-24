@@ -560,6 +560,11 @@ describe('getUnreleasedTracks', () => {
     extras: {},
   };
 
+  type WireRow = Record<string, unknown> & { genius_id: number };
+  function asParsed(wire: WireRow) {
+    return { key: String(wire.genius_id), tracker_key: null, quality: null, ...wire };
+  }
+
   it('sends the artist name and the known ids as query params', async () => {
     __http.reply(PATH, { status: 200, json: { items: [] } });
 
@@ -589,7 +594,7 @@ describe('getUnreleasedTracks', () => {
 
     const { items } = await getUnreleasedTracks('spotify', 'art-1', { name: 'X' });
 
-    expect(items).toEqual([row, bare]);
+    expect(items).toEqual([asParsed(row), asParsed(bare)]);
   });
 
   it('keeps has_media true, false and null as they arrive', async () => {
@@ -600,6 +605,29 @@ describe('getUnreleasedTracks', () => {
     const { items } = await getUnreleasedTracks('spotify', 'art-1', { name: 'X' });
 
     expect(items.map((item) => item.has_media)).toEqual([true, false, null]);
+  });
+
+  it('keys a tracker-only row on its tracker_key and keeps its quality and pixeldrain link', async () => {
+    const trackerOnly = {
+      ...row,
+      genius_id: null,
+      genius_url: null,
+      tracker_key: 'ken-carson:dream-v2',
+      quality: 'High Quality',
+      audio_links: [{ provider: 'pixeldrain', url: 'https://pixeldrain.com/u/ozSpSjn7' }],
+    };
+    const nameless = { ...row, genius_id: null, genius_url: null };
+    __http.reply(PATH, { status: 200, json: { items: [trackerOnly, nameless] } });
+
+    const { items } = await getUnreleasedTracks('spotify', 'art-1', { name: 'Ken Carson' });
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      key: 'ken-carson:dream-v2',
+      genius_url: null,
+      quality: 'High Quality',
+      audio_links: [{ provider: 'pixeldrain', url: 'https://pixeldrain.com/u/ozSpSjn7' }],
+    });
   });
 
   it('carries the ownership extras, and reads missing extras as not owned', async () => {
@@ -660,7 +688,7 @@ describe('getUnreleasedTracks', () => {
 
     const { items } = await getUnreleasedTracks('spotify', 'art-1', { name: 'X' });
 
-    expect(items).toEqual([row]);
+    expect(items).toEqual([asParsed(row)]);
   });
 
   it('rejects with a ContractError when items is not an array', async () => {

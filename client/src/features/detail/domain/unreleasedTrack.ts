@@ -4,17 +4,25 @@ import type { UnreleasedAudioLink, UnreleasedTrack } from '@shared/apiClient/enr
 const UNRELEASED_ALBUM = 'UNRELEASED';
 
 const YOUTUBE_VIDEO_ID = /[?&]v=([A-Za-z0-9_-]{11})/;
+const PIXELDRAIN_FILE_ID = /^https:\/\/pixeldrain\.com\/u\/([A-Za-z0-9]{6,16})$/;
 
-function youtubeVideoId(url: string): string | null {
-  return YOUTUBE_VIDEO_ID.exec(url)?.[1] ?? null;
+type LinkMapper = (url: string) => DiscoverySource | null;
+
+function sourceFromId(provider: string, pattern: RegExp): LinkMapper {
+  return (url) => {
+    const id = pattern.exec(url)?.[1];
+    return id === undefined ? null : { provider, external_id: id, url };
+  };
 }
 
+const LINK_SOURCES: Record<UnreleasedAudioLink['provider'], LinkMapper> = {
+  soundcloud: (url) => ({ provider: 'soundcloud', external_id: url, url }),
+  youtube: sourceFromId('youtube', YOUTUBE_VIDEO_ID),
+  pixeldrain: sourceFromId('pixeldrain', PIXELDRAIN_FILE_ID),
+};
+
 function linkSource(link: UnreleasedAudioLink): DiscoverySource | null {
-  if (link.provider === 'soundcloud') {
-    return { provider: 'soundcloud', external_id: link.url, url: link.url };
-  }
-  const videoId = youtubeVideoId(link.url);
-  return videoId === null ? null : { provider: 'youtube', external_id: videoId, url: link.url };
+  return LINK_SOURCES[link.provider](link.url);
 }
 
 function linkSources(track: UnreleasedTrack): DiscoverySource[] {
