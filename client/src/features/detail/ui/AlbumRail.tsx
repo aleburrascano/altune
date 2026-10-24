@@ -5,6 +5,7 @@ import type { LayoutChangeEvent } from 'react-native';
 import { ChevronRight } from 'lucide-react-native';
 
 import { useWideWebLayout } from '@shared/ui/layout';
+import { HorizontalRail } from '@shared/ui/primitives/HorizontalRail';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Text } from '@shared/ui/primitives/Text';
@@ -133,8 +134,6 @@ function railStyleProps() {
 function railStaticProps() {
   return {
     testID: 'detail-discography-rail',
-    horizontal: true as const,
-    showsHorizontalScrollIndicator: false,
     initialNumToRender: SECTION_CAP,
     keyExtractor: railKey,
     ...railStyleProps(),
@@ -157,7 +156,7 @@ function railDynamicProps(props: AlbumRailProps) {
 }
 
 function AlbumRailList(props: AlbumRailProps): ReactElement {
-  return <FlatList {...railStaticProps()} {...railDynamicProps(props)} data={props.items} />;
+  return <HorizontalRail {...railStaticProps()} {...railDynamicProps(props)} data={props.items} />;
 }
 
 type GridCardProps = RailCardProps & { cardWidth: number };

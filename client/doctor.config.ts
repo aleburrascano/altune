@@ -143,6 +143,7 @@ export default {
           'src/shared/ui/haptics.ts',
           'src/shared/ui/keyboard/keyboard.ios.tsx',
           'src/shared/ui/keyboard/keyboard.tsx',
+          'src/shared/ui/primitives/HorizontalRail.tsx',
         ],
         rules: ['deslop/unused-export'],
       },
