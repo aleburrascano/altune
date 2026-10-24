@@ -394,3 +394,17 @@ func TestSongCatalog_SongDetail_KeepsNormalisedAudioLinks(t *testing.T) {
 		t.Errorf("AudioLinks = (%+v, %v), want %+v", got.AudioLinks, err, want)
 	}
 }
+
+func TestSongCatalog_SongDetail_KeepsARepeatedAudioLinkOnce(t *testing.T) {
+	server := songCatalogServer(t, map[string]string{
+		"/songs/1": `{"response":{"song":{"media":[{"provider":"youtube","url":"https://youtu.be/dQw4w9WgXcQ"},{"provider":"youtube","url":"http://www.youtube.com/watch?v=dQw4w9WgXcQ"}]}}}`,
+	})
+	catalog := NewSongCatalog(providertest.NewClient(server.URL), "tok")
+
+	got, err := catalog.SongDetail(context.Background(), 1)
+
+	want := []domain.AudioLink{{Provider: "youtube", URL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}}
+	if err != nil || !reflect.DeepEqual(got.AudioLinks, want) {
+		t.Errorf("AudioLinks = (%+v, %v), want %+v", got.AudioLinks, err, want)
+	}
+}

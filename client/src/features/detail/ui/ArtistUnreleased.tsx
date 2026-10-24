@@ -10,20 +10,44 @@ import { radius, spacing } from '@shared/ui/theme';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import type { UnreleasedTrack } from '@shared/apiClient/enrichment';
 
-import { useUnreleasedTracks } from '@features/detail/hooks/useUnreleasedTracks';
+import {
+  useUnreleasedCard,
+  type UnreleasedCard,
+  type UnreleasedCardState,
+  useUnreleasedTracks,
+} from '@features/detail/hooks/useUnreleasedTracks';
 import { DETAIL_GUTTER, RELATED_CARD_WIDTH, sharedStyles } from '@features/detail/ui/detailStyles';
 import { Section } from '@features/detail/ui/Section';
 
 type UnreleasedRowProps = { track: UnreleasedTrack };
-type UnreleasedSectionProps = { tracks: UnreleasedTrack[] };
+type UnreleasedArtistRowProps = { artist: DiscoveryResult; track: UnreleasedTrack };
+type UnreleasedCardProps = { track: UnreleasedTrack; card: UnreleasedCard };
+type UnreleasedListProps = { artist: DiscoveryResult; tracks: UnreleasedTrack[] };
 type ArtistUnreleasedProps = { artist: DiscoveryResult };
 type PressState = { pressed: boolean };
 
-function NoAudioHint({ track }: UnreleasedRowProps): ReactElement | null {
-  if (track.has_media !== false) return null;
+const CARD_HINTS: Record<UnreleasedCardState, string | null> = {
+  genius: null,
+  add: 'Tap to save',
+  saving: 'Downloading…',
+  ready: null,
+  play: 'Tap to play',
+  failed: "Couldn't get it · tap to retry",
+  rejected: "Couldn't get it",
+  disabled: null,
+};
+
+function cardHint(track: UnreleasedTrack, state: UnreleasedCardState): string | null {
+  if (state === 'genius' && track.has_media === false) return 'no audio found';
+  return CARD_HINTS[state];
+}
+
+function CardHint({ track, card }: UnreleasedCardProps): ReactElement | null {
+  const hint = cardHint(track, card.state);
+  if (hint === null) return null;
   return (
-    <Text variant="label" tone="tertiary" testID={`detail-unreleased-no-audio-${track.genius_id}`}>
-      no audio found
+    <Text variant="label" tone="tertiary" testID={`detail-unreleased-hint-${track.genius_id}`}>
+      {hint}
     </Text>
   );
 }
@@ -39,13 +63,13 @@ function UnreleasedCover({ track }: UnreleasedRowProps): ReactElement {
   );
 }
 
-function UnreleasedTitle({ track }: UnreleasedRowProps): ReactElement {
+function UnreleasedTitle({ track, card }: UnreleasedCardProps): ReactElement {
   return (
     <View style={styles.title}>
       <Text variant="body" numberOfLines={1}>
         {track.title}
       </Text>
-      <NoAudioHint track={track} />
+      <CardHint track={track} card={card} />
     </View>
   );
 }
@@ -63,22 +87,29 @@ function openGenius(track: UnreleasedTrack): void {
   });
 }
 
-function unreleasedRowProps(track: UnreleasedTrack) {
+function cardLabel(track: UnreleasedTrack, state: UnreleasedCardState): string {
+  if (state === 'genius') return `Open ${track.title} on Genius`;
+  if (state === 'play') return `Play ${track.title}`;
+  return `Save ${track.title}`;
+}
+
+function unreleasedRowProps({ track, card }: UnreleasedCardProps) {
   return {
-    action: 'detail.artist.unreleased',
+    action: `detail.artist.unreleased.${card.state}`,
     testID: `detail-unreleased-${track.genius_id}`,
-    onPress: () => openGenius(track),
-    accessibilityRole: 'link' as const,
-    accessibilityLabel: `Open ${track.title} on Genius`,
+    onPress: card.onPress,
+    accessibilityRole: card.state === 'genius' ? ('link' as const) : ('button' as const),
+    accessibilityLabel: cardLabel(track, card.state),
     style: pressedCardStyle,
   };
 }
 
-function UnreleasedRow({ track }: UnreleasedRowProps): ReactElement {
+function UnreleasedRow({ artist, track }: UnreleasedArtistRowProps): ReactElement {
+  const card = useUnreleasedCard({ track, artist, openGenius: () => openGenius(track) });
   return (
-    <Tappable {...unreleasedRowProps(track)}>
+    <Tappable {...unreleasedRowProps({ track, card })}>
       <UnreleasedCover track={track} />
-      <UnreleasedTitle track={track} />
+      <UnreleasedTitle track={track} card={card} />
     </Tappable>
   );
 }
@@ -89,22 +120,28 @@ function unreleasedKey(track: UnreleasedTrack): string {
 
 type UnreleasedItemInfo = { item: UnreleasedTrack };
 
-function renderUnreleasedRow({ item }: UnreleasedItemInfo): ReactElement {
-  return <UnreleasedRow track={item} />;
+function rowRenderer(artist: DiscoveryResult) {
+  return function renderUnreleasedRow({ item }: UnreleasedItemInfo): ReactElement {
+    return <UnreleasedRow artist={artist} track={item} />;
+  };
 }
 
-function UnreleasedSection({ tracks }: UnreleasedSectionProps): ReactElement {
+const RAIL_LAYOUT = { testID: 'detail-unreleased-rail', keyExtractor: unreleasedKey };
+
+function UnreleasedRail({ artist, tracks }: UnreleasedListProps): ReactElement {
+  const renderItem = rowRenderer(artist);
+  return <HorizontalRail {...RAIL_LAYOUT} {...railStyle()} data={tracks} renderItem={renderItem} />;
+}
+
+function railStyle() {
+  return { style: styles.rail, contentContainerStyle: styles.railContent };
+}
+
+function UnreleasedSection(props: UnreleasedListProps): ReactElement {
   return (
     <View testID="detail-unreleased">
       <Section label="Unreleased">
-        <HorizontalRail
-          testID="detail-unreleased-rail"
-          data={tracks}
-          keyExtractor={unreleasedKey}
-          renderItem={renderUnreleasedRow}
-          style={styles.rail}
-          contentContainerStyle={styles.railContent}
-        />
+        <UnreleasedRail {...props} />
       </Section>
     </View>
   );
@@ -130,7 +167,7 @@ function UnreleasedLoading(): ReactElement {
 
 export function ArtistUnreleased({ artist }: ArtistUnreleasedProps): ReactElement | null {
   const { tracks, isLoading } = useUnreleasedTracks(artist);
-  if (tracks.length > 0) return <UnreleasedSection tracks={tracks} />;
+  if (tracks.length > 0) return <UnreleasedSection artist={artist} tracks={tracks} />;
   return isLoading ? <UnreleasedLoading /> : null;
 }
 

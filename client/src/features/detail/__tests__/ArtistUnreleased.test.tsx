@@ -6,7 +6,12 @@ import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { httpDetailPort } from '@features/detail/adapters/http/httpDetailPort';
 import { DetailPortProvider } from '@features/detail/ports/DetailPortProvider';
 import { ArtistUnreleased } from '@features/detail/ui/ArtistUnreleased';
-import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
+import {
+  createPlaybackWrapper,
+  createTestQueryClient,
+  idlePlayback,
+  signInTestUser,
+} from '@testing/queryHarness';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -40,8 +45,13 @@ const SECOND_REQUEST = 2;
 
 const SILENT = { ...CANCUN, genius_id: 456, title: 'Silent Demo', has_media: false };
 
+type RecordedRequest = { method: string; path: string; body: unknown };
+
+const startQueue = jest.fn<Promise<void>, unknown[]>(() => Promise.resolve());
+const PLAYBACK = { ...idlePlayback, startQueue };
+
 function renderSection() {
-  const Base = createWrapper(createTestQueryClient());
+  const Base = createPlaybackWrapper(createTestQueryClient({ mutations: true }), PLAYBACK);
   return render(
     <Base>
       <DetailPortProvider port={httpDetailPort}>
@@ -51,7 +61,45 @@ function renderSection() {
   );
 }
 
-beforeEach(signInTestUser);
+beforeEach(() => {
+  startQueue.mockClear();
+  signInTestUser();
+});
+
+const SOUNDCLOUD_URL = 'https://soundcloud.com/ken/dream';
+const DREAM = {
+  ...CANCUN,
+  genius_id: 789,
+  title: 'Dream',
+  audio_links: [{ provider: 'soundcloud', url: SOUNDCLOUD_URL }],
+};
+const OWNED_LOOT = {
+  ...DREAM,
+  genius_id: 790,
+  title: 'Loot',
+  extras: { owned_track_id: 'track-owned-loot', owned_acquisition_status: 'ready' },
+};
+
+function savedTrack() {
+  return {
+    status: 201,
+    json: {
+      id: 'track-9',
+      title: 'Dream',
+      artist: 'Juice WRLD',
+      album: 'UNRELEASED',
+      duration_seconds: null,
+      added_at: '2026-10-24T00:00:00Z',
+      acquisition_status: 'pending',
+      artwork_url: null,
+      failure_reason: null,
+      year: null,
+      genre: null,
+      track_number: null,
+      album_artist: null,
+    },
+  };
+}
 
 describe('ArtistUnreleased', () => {
   it('stays hidden when the artist has no unreleased tracks', async () => {
@@ -69,8 +117,8 @@ describe('ArtistUnreleased', () => {
 
     expect(await screen.findByText('Cancun')).toBeTruthy();
     expect(screen.getByText('Silent Demo')).toBeTruthy();
-    expect(screen.queryByTestId('detail-unreleased-no-audio-123')).toBeNull();
-    expect(screen.getByTestId('detail-unreleased-no-audio-456')).toBeTruthy();
+    expect(screen.queryByTestId('detail-unreleased-hint-123')).toBeNull();
+    expect(screen.getByTestId('detail-unreleased-hint-456')).toBeTruthy();
 
     fireEvent.press(screen.getByTestId('detail-unreleased-123'));
     expect(openURL).toHaveBeenCalledWith(CANCUN.genius_url);
@@ -136,8 +184,8 @@ describe('ArtistUnreleased', () => {
     renderSection();
 
     expect(await screen.findByText('Unknown Demo')).toBeTruthy();
-    expect(screen.getByTestId('detail-unreleased-no-audio-456')).toBeTruthy();
-    expect(screen.queryByTestId('detail-unreleased-no-audio-789')).toBeNull();
+    expect(screen.getByTestId('detail-unreleased-hint-456')).toBeTruthy();
+    expect(screen.queryByTestId('detail-unreleased-hint-789')).toBeNull();
   });
 
   it('keeps the loading line and refetches every 10s while pending, then shows the row', async () => {
@@ -204,5 +252,38 @@ describe('ArtistUnreleased', () => {
 
     await waitFor(() => expect(screen.queryByTestId('detail-unreleased-loading')).toBeNull());
     expect(screen.queryByTestId('detail-unreleased')).toBeNull();
+  });
+
+  it('saves a song with a SoundCloud link as an UNRELEASED track pinned to that link', async () => {
+    __http.reply(UNRELEASED, { status: 200, json: { items: [DREAM] } });
+    __http.reply('POST /v1/tracks', savedTrack());
+    renderSection();
+
+    expect(await screen.findByText('Tap to save')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('detail-unreleased-789'));
+
+    await waitFor(() => expect(__http.countFor('POST /v1/tracks')).toBe(1));
+    const save = __http.requests.find(
+      (request: RecordedRequest) => request.method === 'POST' && request.path === '/v1/tracks',
+    );
+    const sent = JSON.parse(String(save.body));
+    expect(sent).toMatchObject({
+      title: 'Dream',
+      artist: 'Juice WRLD',
+      album: 'UNRELEASED',
+      source_url: SOUNDCLOUD_URL,
+    });
+    expect(await screen.findByText('Downloading…')).toBeTruthy();
+  });
+
+  it('plays a song the user already owns instead of saving it again', async () => {
+    __http.reply(UNRELEASED, { status: 200, json: { items: [OWNED_LOOT] } });
+    renderSection();
+
+    expect(await screen.findByText('Tap to play')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('detail-unreleased-790'));
+
+    await waitFor(() => expect(startQueue).toHaveBeenCalledTimes(1));
+    expect(__http.countFor('POST /v1/tracks')).toBe(0);
   });
 });
