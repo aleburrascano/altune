@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/discovery/adapters/providers/genius"
 	"altune/go-api/internal/discovery/adapters/providers/itunes"
 	"altune/go-api/internal/discovery/adapters/providers/musicbrainz"
+	"altune/go-api/internal/discovery/adapters/providers/trackers"
 	"altune/go-api/internal/discovery/service/content"
 	"altune/go-api/internal/discovery/service/favorites"
 	"altune/go-api/internal/discovery/service/history"
@@ -217,24 +218,44 @@ func (a *App) buildDiscoveryHandler(ctx context.Context, cf clientFactory, servi
 }
 
 func (a *App) buildUnreleasedService(ctx context.Context, cf clientFactory, artistSvc *content.GetArtistContentService) *unreleased.Service {
-	if !a.cfg.HasGenius() || artistSvc == nil {
+	if (!a.cfg.HasGenius() && !a.cfg.HasTrackers()) || artistSvc == nil {
 		return nil
 	}
 	return unreleased.NewService(
-		genius.NewSongCatalog(cf.discovery(), a.cfg.GeniusAccessToken),
+		a.geniusSongCatalog(cf),
 		artistSvc,
 		discoveryCacheAdapters.NewRedisUnreleasedCache(a.redisClient, cacheSignalOption()),
-		unreleased.Config{
-			MaxPages:          a.cfg.GeniusUnreleasedMaxPages,
-			MaxDetails:        a.cfg.GeniusUnreleasedMaxDetails,
-			DetailConcurrency: a.cfg.GeniusUnreleasedDetailConcurrency,
-			TTL:               a.cfg.GeniusUnreleasedTTL,
-			EmptyTTL:          a.cfg.GeniusUnreleasedEmptyTTL,
-			Wait:              a.cfg.GeniusUnreleasedWait,
-			JobTimeout:        a.cfg.GeniusUnreleasedJobTimeout,
-		},
-		unreleased.WithLifecycle(ctx, &a.wg),
+		a.unreleasedConfig(),
+		a.unreleasedOptions(ctx, cf)...,
 	)
+}
+
+func (a *App) geniusSongCatalog(cf clientFactory) discoveryPorts.GeniusSongCatalog {
+	if !a.cfg.HasGenius() {
+		return nil
+	}
+	return genius.NewSongCatalog(cf.discovery(), a.cfg.GeniusAccessToken)
+}
+
+func (a *App) unreleasedOptions(ctx context.Context, cf clientFactory) []unreleased.Option {
+	opts := []unreleased.Option{unreleased.WithLifecycle(ctx, &a.wg)}
+	if a.cfg.HasTrackers() {
+		index := discoveryCacheAdapters.NewRedisTrackerIndexCache(a.redisClient, cacheSignalOption())
+		opts = append(opts, unreleased.WithTrackers(trackers.NewClient(cf.discovery(), a.cfg.GoogleSheetsAPIKey, a.cfg.TrackerHubSheetID, index)))
+	}
+	return opts
+}
+
+func (a *App) unreleasedConfig() unreleased.Config {
+	return unreleased.Config{
+		MaxPages:          a.cfg.GeniusUnreleasedMaxPages,
+		MaxDetails:        a.cfg.GeniusUnreleasedMaxDetails,
+		DetailConcurrency: a.cfg.GeniusUnreleasedDetailConcurrency,
+		TTL:               a.cfg.GeniusUnreleasedTTL,
+		EmptyTTL:          a.cfg.GeniusUnreleasedEmptyTTL,
+		Wait:              a.cfg.GeniusUnreleasedWait,
+		JobTimeout:        a.cfg.GeniusUnreleasedJobTimeout,
+	}
 }
 
 func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiring {

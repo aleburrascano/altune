@@ -1,0 +1,162 @@
+package unreleased
+
+import (
+	"altune/go-api/internal/discovery/discoverytest"
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
+	"bytes"
+	"context"
+	"errors"
+	"log/slog"
+	"slices"
+	"strings"
+	"testing"
+)
+
+func pixeldrainLink(id string) domain.AudioLink {
+	return domain.AudioLink{Provider: domain.AudioProviderPixeldrain, URL: "https://pixeldrain.com/u/" + id}
+}
+
+func trackerSong(title, id string) domain.UnreleasedSong {
+	return domain.UnreleasedSong{Title: title, Quality: "High Quality", TrackerKey: "ken:" + id, AudioLinks: []domain.AudioLink{pixeldrainLink(id)}}
+}
+
+func listWith(t *testing.T, genius *discoverytest.GeniusSongCatalog, trackers *discoverytest.TrackerSongs, cache ports.UnreleasedCache) ([]domain.UnreleasedSong, error) {
+	t.Helper()
+	svc := NewService(geniusPort(genius), &discoverytest.ArtistCatalogTitles{}, cache, cachedConfig, WithTrackers(trackers))
+	return svc.List(context.Background(), domain.ProviderDeezer, "1", "Ken Carson", nil)
+}
+
+func geniusPort(g *discoverytest.GeniusSongCatalog) ports.GeniusSongCatalog {
+	if g == nil {
+		return nil
+	}
+	return g
+}
+
+func TestService_List_TrackerSongMergesIntoTheGeniusSongWithTheSameTitle(t *testing.T) {
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Loot")}
+	trackers := &discoverytest.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("⭐ Loot", "lootaaaa")}}
+	got, err := listWith(t, genius, trackers, nil)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("got %v, err %v, want one merged item", titlesOf(got), err)
+	}
+	if got[0].GeniusID != 1 || got[0].Quality != "High Quality" || !slices.Contains(got[0].AudioLinks, pixeldrainLink("lootaaaa")) {
+		t.Errorf("merged = %+v, want genius id kept plus quality and the pixeldrain link", got[0])
+	}
+}
+
+func TestService_List_TrackerSongNeverMergesIntoAnotherVersion(t *testing.T) {
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Dream", "Dream [V1]")}
+	trackers := &discoverytest.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("Dream [V2]", "dreamv2a")}}
+	got, err := listWith(t, genius, trackers, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"Dream", "Dream [V1]", "Dream [V2]"}
+	if len(got) != len(want) || !slices.Equal(titlesOf(got), want) {
+		t.Fatalf("titles = %v, want %v", titlesOf(got), want)
+	}
+	if got[0].Quality != "" || got[1].Quality != "" || got[2].GeniusID != 0 {
+		t.Errorf("only the V2 item is tracker-only: %+v", got)
+	}
+}
+
+func TestService_List_TrackerSongsDoNotUseUpDetailLookups(t *testing.T) {
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("A")}
+	trackers := &discoverytest.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("B", "bbbbbbbb"), trackerSong("C", "cccccccc")}}
+	if _, err := listWith(t, genius, trackers, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := genius.DetailLookups(); !slices.Equal(got, []int{1}) {
+		t.Errorf("detail lookups = %v, want only the genius song", got)
+	}
+}
+
+func TestService_List_ReleasedTrackerSongIsHidden(t *testing.T) {
+	trackers := &discoverytest.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("Magnolia", "magnolia"), trackerSong("Dream [V2]", "dreamv2a")}}
+	svc := NewService(nil, &discoverytest.ArtistCatalogTitles{Titles: []string{"Magnolia"}}, nil, cachedConfig, WithTrackers(trackers))
+	got, err := svc.List(context.Background(), domain.ProviderDeezer, "1", "Ken Carson", nil)
+	if err != nil || !slices.Equal(titlesOf(got), []string{"Dream [V2]"}) {
+		t.Errorf("got %v, err %v, want only the unreleased tracker song", titlesOf(got), err)
+	}
+}
+
+func captureLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
+func TestService_List_TrackerFailureKeepsTheGeniusListAndGetsTheShortTTL(t *testing.T) {
+	logs := captureLogs(t)
+	cache := newMemoryCache()
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
+	got, err := listWith(t, genius, &discoverytest.TrackerSongs{Err: errors.New("sheets 503")}, cache)
+	if err != nil || !slices.Equal(titlesOf(got), []string{"Leak"}) {
+		t.Fatalf("got %v, err %v, want the genius-only list", titlesOf(got), err)
+	}
+	if ttl := cache.ttls["1|ken carson"]; ttl != shortTTL {
+		t.Errorf("ttl = %v, want %v", ttl, shortTTL)
+	}
+	if !strings.Contains(logs.String(), "trackers.fetch_failed") {
+		t.Errorf("log %q lacks trackers.fetch_failed", logs.String())
+	}
+}
+
+func TestService_List_GeniusFailureKeepsTheTrackerList(t *testing.T) {
+	cache := newMemoryCache()
+	genius := &discoverytest.GeniusSongCatalog{Err: errors.New("genius 401")}
+	trackers := &discoverytest.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("Dream [V2]", "dreamv2a")}}
+	got, err := listWith(t, genius, trackers, cache)
+	if err != nil || !slices.Equal(titlesOf(got), []string{"Dream [V2]"}) {
+		t.Fatalf("got %v, err %v, want the tracker-only list", titlesOf(got), err)
+	}
+	if ttl := cache.ttls["1|ken carson"]; ttl != shortTTL {
+		t.Errorf("ttl = %v, want %v after a genius outage", ttl, shortTTL)
+	}
+}
+
+func TestService_List_GeniusNotFoundKeepsTheTrackerListAtTheLongTTL(t *testing.T) {
+	cache := newMemoryCache()
+	trackers := &discoverytest.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("Dream [V2]", "dreamv2a")}}
+	got, err := listWith(t, &discoverytest.GeniusSongCatalog{ArtistFound: false}, trackers, cache)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("got %v, err %v", titlesOf(got), err)
+	}
+	if ttl := cache.ttls["1|ken carson"]; ttl != longTTL {
+		t.Errorf("ttl = %v, want %v for a real not-found", ttl, longTTL)
+	}
+}
+
+func TestService_List_NoGeniusPortYieldsTrackerSongsWithAShortTTL(t *testing.T) {
+	cache := newMemoryCache()
+	trackers := &discoverytest.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("Dream [V2]", "dreamv2a")}}
+	got, err := listWith(t, nil, trackers, cache)
+	if err != nil || !slices.Equal(titlesOf(got), []string{"Dream [V2]"}) {
+		t.Fatalf("got %v, err %v, want the tracker-only list", titlesOf(got), err)
+	}
+	if ttl := cache.ttls["1|ken carson"]; ttl != shortTTL {
+		t.Errorf("ttl = %v, want %v with no genius port", ttl, shortTTL)
+	}
+}
+
+func TestService_List_BothSourcesFailingIsAnError(t *testing.T) {
+	genius := &discoverytest.GeniusSongCatalog{Err: errors.New("genius down")}
+	if _, err := listWith(t, genius, &discoverytest.TrackerSongs{Err: errors.New("sheets down")}, nil); err == nil {
+		t.Error("List succeeded with both sources failing")
+	}
+}
+
+func TestService_List_CancelledJobIsAnErrorEvenWithTrackerSongs(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	trackers := &discoverytest.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("Dream [V2]", "dreamv2a")}}
+	svc := NewService(nil, &discoverytest.ArtistCatalogTitles{}, nil, cachedConfig, WithTrackers(trackers))
+	if _, err := svc.List(ctx, domain.ProviderDeezer, "1", "Ken Carson", nil); !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v, want context.Canceled", err)
+	}
+}

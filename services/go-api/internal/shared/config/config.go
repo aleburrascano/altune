@@ -47,6 +47,8 @@ type Config struct {
 	FanartTVAPIKey       string `env:"FANARTTV_API_KEY"`
 	TheAudioDBAPIKey     string `env:"THEAUDIODB_API_KEY"`
 	GeniusAccessToken    string `env:"GENIUS_ACCESS_TOKEN"`
+	GoogleSheetsAPIKey   string `env:"GOOGLE_SHEETS_API_KEY"`
+	TrackerHubSheetID    string `env:"TRACKER_HUB_SHEET_ID" envDefault:"1Z8aANbxXbnUGoZPRvJfWL3gz6jrzPPrwVt3d0c1iJ_4"`
 
 	GeniusUnreleasedMaxPages          int           `env:"GENIUS_UNRELEASED_MAX_PAGES" envDefault:"10"`
 	GeniusUnreleasedMaxDetails        int           `env:"GENIUS_UNRELEASED_MAX_DETAILS" envDefault:"500"`
@@ -200,6 +202,7 @@ func (c Config) LogValue() slog.Value {
 		slog.Bool("has_musicbrainz", c.HasMusicBrainz()),
 		slog.Bool("has_fanarttv", c.HasFanartTV()),
 		slog.Bool("has_genius", c.HasGenius()),
+		slog.Bool("has_trackers", c.HasTrackers()),
 		slog.Bool("has_discogs", c.HasDiscogs()),
 		slog.Bool("has_spotify", c.HasSpotify()),
 		slog.Bool("has_soundcloud", c.HasSoundCloud()),

@@ -2021,3 +2021,33 @@ func TestLoad_RejectsAnOutOfRangeUpgradeKnob(t *testing.T) {
 		}
 	})
 }
+
+func TestConfig_HasTrackers(t *testing.T) {
+	if (&Config{}).HasTrackers() {
+		t.Error("HasTrackers() = true with no key")
+	}
+	if !(&Config{GoogleSheetsAPIKey: "k"}).HasTrackers() {
+		t.Error("HasTrackers() = false with a key")
+	}
+}
+
+func TestValidate_TrackerHubNeededOnlyWithAKey(t *testing.T) {
+	cases := []struct {
+		name    string
+		env     map[string]string
+		wantErr bool
+	}{
+		{name: "no key", env: map[string]string{"TRACKER_HUB_SHEET_ID": " "}},
+		{name: "key and default hub", env: map[string]string{"GOOGLE_SHEETS_API_KEY": "k"}},
+		{name: "key and blank hub", env: map[string]string{"GOOGLE_SHEETS_API_KEY": "k", "TRACKER_HUB_SHEET_ID": " "}, wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			setEnv(t, validConfigEnv(tc.env))
+			_, err := Load()
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("Load err = %v, wantErr %v", err, tc.wantErr)
+			}
+		})
+	}
+}

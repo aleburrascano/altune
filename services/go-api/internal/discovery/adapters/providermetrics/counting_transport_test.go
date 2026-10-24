@@ -211,6 +211,7 @@ func TestMetadataProvidersGetTheirOwnBucket(t *testing.T) {
 		{"https://www.theaudiodb.com/api/v1/json/2/search.php", "theaudiodb"},
 		{"https://theaudiodb.com/api/v1/json/2/search.php", "theaudiodb"},
 		{"https://webservice.fanart.tv/v3/music/x", "fanart"},
+		{"https://sheets.googleapis.com/v4/spreadsheets/x", "sheets"},
 	}
 	for _, c := range cases {
 		t.Run(c.url, func(t *testing.T) {

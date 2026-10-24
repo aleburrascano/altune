@@ -10,12 +10,14 @@ import (
 )
 
 type UnreleasedSongDTO struct {
-	GeniusID    int                `json:"genius_id"`
+	GeniusID    *int               `json:"genius_id"`
 	Title       string             `json:"title"`
 	CoverURL    *string            `json:"cover_url"`
-	GeniusURL   string             `json:"genius_url"`
+	GeniusURL   *string            `json:"genius_url"`
 	ReleaseDate *string            `json:"release_date"`
 	HasMedia    *bool              `json:"has_media"`
+	Quality     *string            `json:"quality"`
+	TrackerKey  *string            `json:"tracker_key"`
 	AudioLinks  []domain.AudioLink `json:"audio_links"`
 	Extras      map[string]any     `json:"extras"`
 }
@@ -34,12 +36,14 @@ func unreleasedToDTO(found unreleased.Lookup) UnreleasedResponseDTO {
 	items := make([]UnreleasedSongDTO, len(found.Songs))
 	for i, s := range found.Songs {
 		items[i] = UnreleasedSongDTO{
-			GeniusID:    s.GeniusID,
+			GeniusID:    nonZero(s.GeniusID),
 			Title:       s.Title,
 			CoverURL:    nonEmpty(s.CoverURL),
-			GeniusURL:   s.GeniusURL,
+			GeniusURL:   nonEmpty(s.GeniusURL),
 			ReleaseDate: nonEmpty(s.ReleaseDate),
 			HasMedia:    s.HasMedia,
+			Quality:     nonEmpty(s.Quality),
+			TrackerKey:  nonEmpty(s.TrackerKey),
 			AudioLinks:  nonNilLinks(s.AudioLinks),
 			Extras:      map[string]any{},
 		}
@@ -73,6 +77,13 @@ func (h *DiscoveryHandler) writeUnreleased(w http.ResponseWriter, r *http.Reques
 		h.ownership.StampOwnership(r.Context(), userId, unreleasedOwnableItems(artistName, dto.Items))
 	}
 	httputil.WriteJSON(w, http.StatusOK, dto)
+}
+
+func nonZero(n int) *int {
+	if n == 0 {
+		return nil
+	}
+	return &n
 }
 
 func nonEmpty(s string) *string {

@@ -1,0 +1,78 @@
+{
+ "sheets": [
+  {
+   "data": [
+    {
+     "rowData": [
+      {
+       "values": [
+        {
+         "formattedValue": "Era"
+        },
+        {
+         "formattedValue": "Name"
+        },
+        {
+         "formattedValue": "Description / Notes"
+        },
+        {
+         "formattedValue": "Track Length"
+        },
+        {
+         "formattedValue": "File\nDate",
+         "textFormatRuns": [
+          {
+           "format": {}
+          },
+          {
+           "format": {}
+          }
+         ]
+        },
+        {
+         "formattedValue": "Leak\nDate",
+         "textFormatRuns": [
+          {
+           "format": {}
+          },
+          {
+           "format": {}
+          }
+         ]
+        },
+        {
+         "formattedValue": "Type"
+        },
+        {
+         "formattedValue": "Available Length"
+        },
+        {
+         "formattedValue": "Quality"
+        },
+        {
+         "formattedValue": "Link(s)"
+        }
+       ]
+      },
+      {
+       "values": [
+        {
+         "formattedValue": "0 OG File(s)\n3 Full\n0 Tagged\n2 Partial(s)\n0 Snippet(s)\n4 Unavailable"
+        },
+        {},
+        {
+         "formattedValue": "(June 26, 1993) Ariana Grande is born. \n(February 27, 2011) Demo CD is released."
+        },
+        {},
+        {},
+        {
+         "formattedValue": "Ariana Grande (Demo CD) is an early collection of pre-debut recordings that captured Ariana's transition from Broadway and television into pop music. Featuring youthful vocals and R&B-inspired production, these demos showcased her vocal potential while helping shape the sound that would later define her official debut era."
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

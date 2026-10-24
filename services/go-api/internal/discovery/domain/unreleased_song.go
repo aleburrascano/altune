@@ -5,6 +5,7 @@ type AudioProvider string
 const (
 	AudioProviderSoundCloud AudioProvider = "soundcloud"
 	AudioProviderYouTube    AudioProvider = "youtube"
+	AudioProviderPixeldrain AudioProvider = "pixeldrain"
 )
 
 type AudioLink struct {
@@ -26,5 +27,7 @@ type UnreleasedSong struct {
 	GeniusURL   string      `json:"genius_url"`
 	ReleaseDate string      `json:"release_date,omitempty"`
 	HasMedia    *bool       `json:"has_media"`
+	Quality     string      `json:"quality,omitempty"`
+	TrackerKey  string      `json:"tracker_key,omitempty"`
 	AudioLinks  []AudioLink `json:"audio_links,omitempty"`
 }

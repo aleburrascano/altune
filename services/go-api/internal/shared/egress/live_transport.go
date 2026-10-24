@@ -28,6 +28,7 @@ var providerRateLimits = map[string]rate.Limit{
 	"na.web.skill.music.a2z.com": 2,
 	"api-partner.spotify.com":    3,
 	"api.genius.com":             2,
+	"sheets.googleapis.com":      2,
 	"webservice.fanart.tv":       2,
 	"coverartarchive.org":        2,
 	"api.music.apple.com":        3,

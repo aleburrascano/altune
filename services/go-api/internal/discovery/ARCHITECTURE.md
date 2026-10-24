@@ -657,7 +657,7 @@ GET  /v1/discovery/suggest?q=
 GET/DELETE /v1/discovery/search-history   (written as a side-effect of search — no POST)
 GET  /v1/discovery/artists/{provider}/{externalId}/albums?name=&limit=
 GET  /v1/discovery/artists/{provider}/{externalId}/top-tracks?name=&limit=
-GET  /v1/discovery/artists/{provider}/{externalId}/unreleased?name=&ids=   (each item carries Genius's SoundCloud/YouTube `audio_links`, normalised to https)
+GET  /v1/discovery/artists/{provider}/{externalId}/unreleased?name=&ids=   (each item carries Genius's SoundCloud/YouTube `audio_links`, normalised to https; items also merge the fan trackers' full leaks from `providers/trackers` (TrackerHub index cached 24h, artist sheet read on demand), carrying `quality`, `tracker_key` and `pixeldrain` links, with `genius_id`/`genius_url` null on tracker-only items; Genius is optional and the service is built when either Genius or the Sheets key is set)
 GET  /v1/discovery/albums/{provider}/{externalId}/tracks?title=&artist=&limit=
 GET  /v1/discovery/tracks/{provider}/{externalId}/related?limit=
 GET  /v1/discovery/enrichment[/lastfm|/deezer|/discogs|/discogs/artist]?kind=&title=&subtitle=&mbid=

@@ -69,3 +69,14 @@ var _ ports.ArtistCatalogTitles = (*ArtistCatalogTitles)(nil)
 func (c *ArtistCatalogTitles) CatalogTitles(context.Context, domain.ProviderName, string, map[domain.ProviderName]string) ([]string, error) {
 	return c.Titles, c.Err
 }
+
+type TrackerSongs struct {
+	Songs []domain.UnreleasedSong
+	Err   error
+}
+
+var _ ports.TrackerSongs = (*TrackerSongs)(nil)
+
+func (t *TrackerSongs) ArtistSongs(context.Context, string) ([]domain.UnreleasedSong, error) {
+	return append([]domain.UnreleasedSong(nil), t.Songs...), t.Err
+}

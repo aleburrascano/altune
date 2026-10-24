@@ -20,6 +20,7 @@ const (
 	providerGenius      = "genius"
 	providerTheAudioDB  = "theaudiodb"
 	providerFanart      = "fanart"
+	providerSheets      = "sheets"
 	providerOther       = "other"
 )
 
@@ -43,6 +44,7 @@ var providerNames = []string{
 	providerGenius,
 	providerTheAudioDB,
 	providerFanart,
+	providerSheets,
 	providerOther,
 }
 
@@ -75,6 +77,7 @@ var hostSuffixes = []struct {
 	{"genius.com", providerGenius},
 	{"theaudiodb.com", providerTheAudioDB},
 	{"fanart.tv", providerFanart},
+	{"sheets.googleapis.com", providerSheets},
 }
 
 var counters = newCounters()

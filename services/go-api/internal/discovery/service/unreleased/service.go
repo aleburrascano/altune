@@ -25,10 +25,11 @@ type Config struct {
 }
 
 type Service struct {
-	genius  ports.GeniusSongCatalog
-	catalog ports.ArtistCatalogTitles
-	cache   ports.UnreleasedCache
-	cfg     Config
+	genius   ports.GeniusSongCatalog
+	trackers ports.TrackerSongs
+	catalog  ports.ArtistCatalogTitles
+	cache    ports.UnreleasedCache
+	cfg      Config
 
 	lifecycle context.Context
 	jobs      *sync.WaitGroup
@@ -88,15 +89,11 @@ func (s *Service) build(ctx context.Context, provider domain.ProviderName, exter
 	if err != nil && catalogComplete {
 		return nil, false, err
 	}
-	artistID, found, err := s.genius.FindArtistID(ctx, artistName, titles)
-	if err != nil {
-		return nil, false, err
+	songs, complete, err := combineSources(s.geniusResult(ctx, artistName, titles), s.trackerResult(ctx, artistName, titles))
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, false, ctxErr
 	}
-	if !found {
-		return []domain.UnreleasedSong{}, catalogComplete, nil
-	}
-	unreleased, detailsComplete, err := s.unreleasedSongs(ctx, artistID, titles)
-	return unreleased, catalogComplete && detailsComplete, err
+	return songs, catalogComplete && complete, err
 }
 
 func (s *Service) unreleasedSongs(ctx context.Context, artistID int, catalogTitles []string) ([]domain.UnreleasedSong, bool, error) {

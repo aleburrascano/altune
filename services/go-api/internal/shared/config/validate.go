@@ -260,7 +260,17 @@ func (c *Config) validateTuning() error {
 	if !isUnitFraction(c.AcquisitionConfidenceFloor) {
 		return fmt.Errorf("ACQUISITION_CONFIDENCE_FLOOR must be between 0 and 1, got %v", c.AcquisitionConfidenceFloor)
 	}
+	if err := c.validateTrackers(); err != nil {
+		return err
+	}
 	return c.validateGeniusUnreleased()
+}
+
+func (c *Config) validateTrackers() error {
+	if c.HasTrackers() && strings.TrimSpace(c.TrackerHubSheetID) == "" {
+		return errors.New("TRACKER_HUB_SHEET_ID must be set when GOOGLE_SHEETS_API_KEY is set")
+	}
+	return nil
 }
 
 func (c *Config) validateGeniusUnreleased() error {

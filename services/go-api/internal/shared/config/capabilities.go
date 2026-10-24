@@ -70,6 +70,10 @@ func (c *Config) HasGenius() bool {
 	return c.GeniusAccessToken != ""
 }
 
+func (c *Config) HasTrackers() bool {
+	return c.GoogleSheetsAPIKey != ""
+}
+
 func (c *Config) HasMusicBrainz() bool {
 	return c.MusicBrainzUserAgent != ""
 }

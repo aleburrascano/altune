@@ -193,3 +193,34 @@ func TestHandleArtistUnreleased_LeavesSongsUnstampedForAUserWhoOwnsNone(t *testi
 		}
 	}
 }
+
+func TestHandleArtistUnreleased_TrackerOnlyItemHasNullGeniusFieldsOnTheWire(t *testing.T) {
+	trackers := &discoverytest.TrackerSongs{Songs: []domain.UnreleasedSong{{
+		Title: "Dream [V2]", Quality: "High Quality", TrackerKey: "ken-carson:dream-v2", HasMedia: new(true),
+		AudioLinks: []domain.AudioLink{{Provider: domain.AudioProviderPixeldrain, URL: "https://pixeldrain.com/u/ozSpSjn7"}},
+	}}}
+	svc := unreleased.NewService(nil, &discoverytest.ArtistCatalogTitles{}, nil, unreleased.Config{MaxPages: 1, MaxDetails: 10}, unreleased.WithTrackers(trackers))
+	h := NewDiscoveryHandler(DiscoveryServices{}).WithUnreleased(svc)
+	r := chi.NewRouter()
+	r.Use(middleware.Middleware(discVerifyAsTestUser))
+	r.Mount("/discovery", h.Routes())
+
+	rec := discServe(t, r, http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Ken+Carson", nil)
+
+	discAssertStatus(t, rec, http.StatusOK)
+	want := `{"items":[{"genius_id":null,"title":"Dream [V2]","cover_url":null,"genius_url":null,"release_date":null,"has_media":true,"quality":"High Quality","tracker_key":"ken-carson:dream-v2","audio_links":[{"provider":"pixeldrain","url":"https://pixeldrain.com/u/ozSpSjn7"}],"extras":{}}],"pending":false}` + "\n"
+	if got := rec.Body.String(); got != want {
+		t.Errorf("body = %s, want %s", got, want)
+	}
+}
+
+func TestHandleArtistUnreleased_GeniusItemKeepsItsIDAndURLAndNullTrackerFields(t *testing.T) {
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: []domain.UnreleasedSong{{GeniusID: 9, Title: "Leak", GeniusURL: "https://genius.com/l"}}}
+	rec := discServe(t, unreleasedRouter(genius, nil), http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Artist", nil)
+
+	discAssertStatus(t, rec, http.StatusOK)
+	item := decodeUnreleased(t, rec.Body.Bytes()).Items[0]
+	if item.GeniusID == nil || *item.GeniusID != 9 || item.GeniusURL == nil || item.Quality != nil || item.TrackerKey != nil {
+		t.Errorf("item = %+v", item)
+	}
+}

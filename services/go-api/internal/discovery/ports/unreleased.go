@@ -23,3 +23,12 @@ type UnreleasedCache interface {
 	Get(ctx context.Context, provider domain.ProviderName, externalID, nameKey string) ([]domain.UnreleasedSong, bool)
 	Set(ctx context.Context, provider domain.ProviderName, externalID, nameKey string, songs []domain.UnreleasedSong, ttl time.Duration) error
 }
+
+type TrackerSongs interface {
+	ArtistSongs(ctx context.Context, artistName string) ([]domain.UnreleasedSong, error)
+}
+
+type TrackerIndexCache interface {
+	Get(ctx context.Context) (map[string]string, bool)
+	Set(ctx context.Context, index map[string]string, ttl time.Duration) error
+}

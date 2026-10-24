@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/discovery/adapters/providers/discogs"
 	discoveryDomain "altune/go-api/internal/discovery/domain"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/service/content"
 	discoveryEnrich "altune/go-api/internal/discovery/service/enrich"
 	"altune/go-api/internal/discovery/service/rank"
 	"altune/go-api/internal/discovery/service/search"
@@ -245,5 +246,43 @@ func TestBehavioralRankingRefresh_LogsOnFailure(t *testing.T) {
 	wantFailed := `level=WARN msg="behavioral ranking refresh failed" error=boom` + "\n"
 	if !strings.Contains(logged, wantFailed) {
 		t.Errorf("failure line drifted: want %q in\n%s", wantFailed, logged)
+	}
+}
+
+type noCallTransport struct{}
+
+func (noCallTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, http.ErrNotSupported
+}
+
+func unreleasedWiringApp(cfg *config.Config) (*App, clientFactory) {
+	return &App{cfg: cfg}, newClientFactory(noCallTransport{})
+}
+
+func TestBuildUnreleasedService_BuiltFromTheSheetsKeyAloneWithoutAGeniusToken(t *testing.T) {
+	a, cf := unreleasedWiringApp(&config.Config{GoogleSheetsAPIKey: "k", TrackerHubSheetID: "hub"})
+	if svc := a.buildUnreleasedService(context.Background(), cf, &content.GetArtistContentService{}); svc == nil {
+		t.Fatal("service not built with only the Sheets key set")
+	}
+}
+
+func TestBuildUnreleasedService_NotBuiltWithNeitherSource(t *testing.T) {
+	a, cf := unreleasedWiringApp(&config.Config{})
+	if svc := a.buildUnreleasedService(context.Background(), cf, &content.GetArtistContentService{}); svc != nil {
+		t.Error("service built with no Genius token and no Sheets key")
+	}
+}
+
+func TestGeniusSongCatalog_IsAnUntypedNilWithoutAToken(t *testing.T) {
+	a, cf := unreleasedWiringApp(&config.Config{GoogleSheetsAPIKey: "k"})
+	if port := a.geniusSongCatalog(cf); port != nil {
+		t.Errorf("genius port = %#v, want a nil interface so the service's nil check works", port)
+	}
+}
+
+func TestGeniusSongCatalog_PresentWithAToken(t *testing.T) {
+	a, cf := unreleasedWiringApp(&config.Config{GeniusAccessToken: "t"})
+	if a.geniusSongCatalog(cf) == nil {
+		t.Error("genius port missing though a token is set")
 	}
 }
