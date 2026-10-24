@@ -6,12 +6,17 @@ import (
 	"context"
 	"log/slog"
 	"net/url"
+	"regexp"
 	"strings"
 )
 
 const SourceName acqdomain.SourceName = "catalogpin"
 
 const pinnedProvider = ports.ProviderSoundCloud
+
+const pixeldrainDownloadBase = "https://pixeldrain.com/api/file/"
+
+var pixeldrainFileID = regexp.MustCompile(`^[A-Za-z0-9]{6,16}$`)
 
 type audioFetcher interface {
 	Download(ctx context.Context, url string, outDir string) (ports.FetchedAudio, error)
@@ -37,6 +42,28 @@ func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.Audio
 }
 
 func (s *Source) pinnedCandidates(ctx context.Context, req ports.FindRequest) []ports.AudioCandidate {
+	if files := pixeldrainCandidates(ctx, req); len(files) > 0 {
+		return files
+	}
+	return soundCloudCandidates(ctx, req)
+}
+
+func pixeldrainCandidates(ctx context.Context, req ports.FindRequest) []ports.AudioCandidate {
+	var files []ports.AudioCandidate
+	for _, pin := range req.CatalogSources {
+		if pin.Provider != string(ports.ProviderPixeldrain) {
+			continue
+		}
+		if !pixeldrainFileID.MatchString(pin.ExternalID) {
+			slog.WarnContext(ctx, "acquisition.catalogpin_pixeldrain_id_rejected", "title", req.Title)
+			continue
+		}
+		files = append(files, pinnedCandidate(req, pixeldrainDownloadBase+pin.ExternalID+"?download"))
+	}
+	return files
+}
+
+func soundCloudCandidates(ctx context.Context, req ports.FindRequest) []ports.AudioCandidate {
 	var pinned []ports.AudioCandidate
 	for _, pin := range req.CatalogSources {
 		if pin.Provider != string(pinnedProvider) || !usablePinURL(ctx, req, pin) {

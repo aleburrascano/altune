@@ -196,3 +196,41 @@ func TestFind_KeepsAPinPlayableWhenInspectionFails(t *testing.T) {
 		t.Fatalf("Unplayable = %q, want empty", got[0].Unplayable)
 	}
 }
+
+func TestFind_RebuildsAPixeldrainPinFromItsFileID(t *testing.T) {
+	src := NewSource(&recordingFetcher{})
+
+	got, err := src.Find(context.Background(), requestPinning(
+		ports.CatalogSource{Provider: "pixeldrain", ExternalID: "ozSpSjn7", URL: "https://evil.example/x"},
+	))
+
+	want := "https://pixeldrain.com/api/file/ozSpSjn7?download"
+	if err != nil || len(got) != 1 || got[0].URL != want || got[0].Kind != ports.KindCatalogPin {
+		t.Fatalf("Find = %+v, %v; want one pin at %s", got, err, want)
+	}
+}
+
+func TestFind_PrefersThePixeldrainFileOverASoundCloudPin(t *testing.T) {
+	src := NewSource(&recordingFetcher{})
+
+	got, _ := src.Find(context.Background(), requestPinning(
+		ports.CatalogSource{Provider: "soundcloud", ExternalID: "1", URL: pickedUpload},
+		ports.CatalogSource{Provider: "pixeldrain", ExternalID: "ozSpSjn7"},
+	))
+
+	if len(got) != 1 || got[0].URL != "https://pixeldrain.com/api/file/ozSpSjn7?download" {
+		t.Fatalf("Find = %+v, want only the pixeldrain file", got)
+	}
+}
+
+func TestFind_DropsAMalformedPixeldrainID(t *testing.T) {
+	src := NewSource(&recordingFetcher{})
+
+	got, _ := src.Find(context.Background(), requestPinning(
+		ports.CatalogSource{Provider: "pixeldrain", ExternalID: "../etc"},
+	))
+
+	if len(got) != 0 {
+		t.Fatalf("Find = %+v, want no candidate for a malformed id", got)
+	}
+}

@@ -53,6 +53,8 @@ func TestNormalizeCatalogSources_RejectsInvalid(t *testing.T) {
 		{"NUL in external id", []CatalogSource{{Provider: "deezer", ExternalID: "a\x00b"}}, "NUL"},
 		{"external id over 200", []CatalogSource{{Provider: "deezer", ExternalID: strings.Repeat("x", 201)}}, "external_id"},
 		{"too many sources", tooMany, "sources exceeds"},
+		{"pixeldrain id with a path", []CatalogSource{{Provider: "pixeldrain", ExternalID: "../x"}}, "pixeldrain id"},
+		{"pixeldrain id too short", []CatalogSource{{Provider: "pixeldrain", ExternalID: "ab"}}, "pixeldrain id"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -172,4 +174,11 @@ func fullCatalogSources() []CatalogSource {
 		out[i] = CatalogSource{Provider: "deezer", ExternalID: strconv.Itoa(i + 1)}
 	}
 	return out
+}
+
+func TestNormalizeCatalogSources_AcceptsAPixeldrainFileID(t *testing.T) {
+	got, err := NormalizeCatalogSources([]CatalogSource{{Provider: "pixeldrain", ExternalID: "ozSpSjn7"}})
+	if err != nil || len(got) != 1 || got[0].ExternalID != "ozSpSjn7" {
+		t.Fatalf("NormalizeCatalogSources = %+v, %v; want the pixeldrain pin kept", got, err)
+	}
 }
