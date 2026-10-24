@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -35,14 +36,27 @@ type sheetsServer struct {
 	lastQuery   atomic.Value
 	lastKey     atomic.Value
 	artistCode  int
+	tabs        string
+}
+
+func tabsBody(titles ...string) string {
+	sheets := make([]string, 0, len(titles))
+	for _, title := range titles {
+		sheets = append(sheets, `{"properties":{"title":"`+title+`"}}`)
+	}
+	return `{"sheets":[` + strings.Join(sheets, ",") + `]}`
 }
 
 func newSheetsServer(t *testing.T, hub, artist []byte) *sheetsServer {
 	t.Helper()
-	s := &sheetsServer{artistCode: http.StatusOK}
+	s := &sheetsServer{artistCode: http.StatusOK, tabs: tabsBody("Released", "Unreleased")}
 	s.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		s.lastQuery.Store(r.URL.RawQuery)
 		s.lastKey.Store(r.Header.Get("X-Goog-Api-Key"))
+		if strings.HasSuffix(r.URL.Path, kenSheetID) && r.URL.Query().Get("fields") == tabsMask {
+			_, _ = w.Write([]byte(s.tabs))
+			return
+		}
+		s.lastQuery.Store(r.URL.RawQuery)
 		if strings.HasSuffix(r.URL.Path, kenSheetID) {
 			s.artistCalls.Add(1)
 			w.WriteHeader(s.artistCode)
@@ -89,7 +103,7 @@ func TestClient_SendsTheKeyInAHeaderNeverInTheURL(t *testing.T) {
 	if got, _ := srv.lastKey.Load().(string); got != testKey {
 		t.Errorf("X-Goog-Api-Key = %q, want the key", got)
 	}
-	for _, want := range []string{"ranges=Unreleased", "prettyPrint=false", "fields="} {
+	for _, want := range []string{"ranges=%27Unreleased%27", "prettyPrint=false", "fields="} {
 		if !strings.Contains(query, want) {
 			t.Errorf("query %q lacks %q", query, want)
 		}
@@ -129,12 +143,41 @@ func TestClient_ASheetsOutageIsAnError(t *testing.T) {
 	}
 }
 
-func TestClient_ASheetWithoutAnUnreleasedTabIsEmptyNotAnError(t *testing.T) {
+func TestClient_ReadsTheUnreleasedTabWhateverItIsCalled(t *testing.T) {
+	for _, title := range []string{"Unreleased Discography", "💿Unreleased", "Tom's unreleased"} {
+		srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), readFixture(t, "ken_carson_unreleased.json"))
+		srv.tabs = tabsBody("Released Discography", title, "Unsurfaced")
+		songs, err := srv.client(nil).ArtistSongs(context.Background(), "Ken Carson")
+		if err != nil || len(songs) != 4 {
+			t.Errorf("tab %q: songs = %d, err = %v, want the 4 full leaks", title, len(songs), err)
+		}
+		if query, _ := srv.lastQuery.Load().(string); !strings.Contains(query, "ranges="+url.QueryEscape(tabRange(title))) {
+			t.Errorf("tab %q: grid query %q does not read that tab", title, query)
+		}
+	}
+}
+
+func TestPickUnreleased_PrefersTheTabNamedJustUnreleased(t *testing.T) {
+	got, found := pickUnreleased([]string{"Unreleased (Alt)", "💿 Unreleased", "Released"})
+	if !found || got != "💿 Unreleased" {
+		t.Errorf("picked %q, want the tab named just Unreleased", got)
+	}
+}
+
+func TestClient_ASheetWithoutAnUnreleasedTabIsEmptyWithoutAGridFetch(t *testing.T) {
+	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), nil)
+	srv.tabs = tabsBody("Fit Pics", "Remakes")
+	songs, err := srv.client(&fakeIndexCache{}).ArtistSongs(context.Background(), "Ken Carson")
+	if err != nil || len(songs) != 0 || srv.artistCalls.Load() != 0 {
+		t.Errorf("songs = %v, err = %v, grid calls = %d, want none, no error, no grid fetch", songs, err, srv.artistCalls.Load())
+	}
+}
+
+func TestClient_ABadRequestForTheTabIsAnError(t *testing.T) {
 	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), nil)
 	srv.artistCode = http.StatusBadRequest
-	songs, err := srv.client(&fakeIndexCache{}).ArtistSongs(context.Background(), "Ken Carson")
-	if err != nil || len(songs) != 0 {
-		t.Errorf("songs = %v, err = %v, want none and no error", songs, err)
+	if _, err := srv.client(&fakeIndexCache{}).ArtistSongs(context.Background(), "Ken Carson"); err == nil {
+		t.Error("a 400 on a tab that exists must surface, not read as an empty sheet")
 	}
 }
 

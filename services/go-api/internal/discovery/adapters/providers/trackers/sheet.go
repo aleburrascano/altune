@@ -32,7 +32,7 @@ func mapColumns(header gridRow) columns {
 		switch {
 		case strings.HasPrefix(label, "name"):
 			cols.name = i
-		case strings.HasPrefix(label, "portion"), strings.HasPrefix(label, "available"):
+		case strings.HasPrefix(label, "portion"), strings.HasPrefix(label, "availab"):
 			cols.portion = i
 		case strings.HasPrefix(label, "quality"):
 			cols.quality = i

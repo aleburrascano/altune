@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -19,7 +18,6 @@ const (
 	sheetsBaseURL  = "https://sheets.googleapis.com/v4/spreadsheets/"
 	fieldsMask     = "sheets.data.rowData.values(formattedValue,hyperlink,textFormatRuns.format.link.uri)"
 	hubRange       = "Artists!A:A"
-	artistRange    = "Unreleased"
 	maxSheetBytes  = 16 << 20
 	hubIndexTTL    = 24 * time.Hour
 	requestTimeout = 30 * time.Second
@@ -64,7 +62,7 @@ func (c *Client) hubIndex(ctx context.Context) (map[string]string, error) {
 			return cached, nil
 		}
 	}
-	body, err := c.fetch(ctx, c.hubID, hubRange)
+	body, err := c.fetch(ctx, c.hubID, gridQuery(hubRange))
 	if err != nil {
 		return nil, err
 	}
@@ -86,9 +84,13 @@ func (c *Client) storeIndex(ctx context.Context, index map[string]string) {
 }
 
 func (c *Client) artistRows(ctx context.Context, sheetID string) ([]trackerRow, error) {
-	body, err := c.fetch(ctx, sheetID, artistRange)
+	tab, found, err := c.findUnreleasedTab(ctx, sheetID)
+	if err != nil || !found {
+		return nil, err
+	}
+	body, err := c.fetch(ctx, sheetID, gridQuery(tabRange(tab)))
 	if err != nil {
-		return nil, tolerateMissingTab(ctx, sheetID, err)
+		return nil, err
 	}
 	rows, mapped, err := parseSheet(body)
 	if err != nil {
@@ -100,17 +102,27 @@ func (c *Client) artistRows(ctx context.Context, sheetID string) ([]trackerRow, 
 	return rows, nil
 }
 
-func tolerateMissingTab(ctx context.Context, sheetID string, err error) error {
-	var status providerhttp.StatusError
-	if errors.As(err, &status) && status.Status == http.StatusBadRequest {
-		slog.WarnContext(ctx, "trackers.unmapped_sheet", "sheet_id", sheetID, "reason", "no Unreleased tab")
-		return nil
+func (c *Client) findUnreleasedTab(ctx context.Context, sheetID string) (string, bool, error) {
+	body, err := c.fetch(ctx, sheetID, url.Values{"fields": {tabsMask}})
+	if err != nil {
+		return "", false, err
 	}
-	return err
+	tab, found, err := unreleasedTab(body)
+	if err != nil {
+		return "", false, providerhttp.BadPayloadError{Cause: err}
+	}
+	if !found {
+		slog.WarnContext(ctx, "trackers.unmapped_sheet", "sheet_id", sheetID, "reason", "no unreleased tab")
+	}
+	return tab, found, nil
 }
 
-func (c *Client) fetch(ctx context.Context, sheetID, sheetRange string) ([]byte, error) {
-	query := url.Values{"ranges": {sheetRange}, "prettyPrint": {"false"}, "fields": {fieldsMask}}
+func gridQuery(sheetRange string) url.Values {
+	return url.Values{"ranges": {sheetRange}, "fields": {fieldsMask}}
+}
+
+func (c *Client) fetch(ctx context.Context, sheetID string, query url.Values) ([]byte, error) {
+	query.Set("prettyPrint", "false")
 	target := c.baseURL + url.PathEscape(strings.TrimSpace(sheetID)) + "?" + query.Encode()
 	_, body, err := providerhttp.GetBytesCapped(ctx, c.http, target, maxSheetBytes, providerhttp.WithHeader(apiKeyHeader, c.apiKey))
 	return body, err

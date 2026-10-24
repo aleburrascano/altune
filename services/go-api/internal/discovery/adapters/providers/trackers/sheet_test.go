@@ -64,6 +64,15 @@ func TestMapColumns_FindsColumnsWhateverTheirPosition(t *testing.T) {
 	}
 }
 
+func TestMapColumns_ReadsAnAvailabilityColumnAsThePortion(t *testing.T) {
+	header := gridRow{Values: []gridCell{
+		{FormattedValue: "Name "}, {FormattedValue: "Availability"}, {FormattedValue: "Links\n(pillows.su)"},
+	}}
+	if cols := mapColumns(header); cols.portion != 1 || !cols.usable() {
+		t.Errorf("cols = %+v, want Availability as the portion column", cols)
+	}
+}
+
 func TestParseSheet_UnknownLayoutIsUnmappedNotAnError(t *testing.T) {
 	body := []byte(`{"sheets":[{"data":[{"rowData":[{"values":[{"formattedValue":"Foo"},{"formattedValue":"Bar"}]}]}]}]}`)
 	rows, mapped, err := parseSheet(body)
