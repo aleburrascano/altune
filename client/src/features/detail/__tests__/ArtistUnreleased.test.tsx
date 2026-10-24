@@ -30,6 +30,7 @@ const CANCUN = {
   release_date: '2022-07-24',
   has_media: true,
   audio_links: [],
+  extras: {},
 };
 
 const POLL_MS = 10_000;

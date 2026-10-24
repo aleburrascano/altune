@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service/unreleased"
 	"encoding/json"
 	"errors"
@@ -146,5 +147,49 @@ func TestHandleArtistUnreleased_ReturnsAudioLinksAsAlwaysAnArray(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"audio_links":[]`) {
 		t.Errorf("body = %s, want an empty audio_links array for Naruto", rec.Body.String())
+	}
+}
+
+func ownedUnreleasedRouter(reader goldenOwnershipReader) chi.Router {
+	genius := &discoverytest.GeniusSongCatalog{
+		ArtistID: 7, ArtistFound: true,
+		Songs: []domain.UnreleasedSong{
+			{GeniusID: 1, Title: "Dream", GeniusURL: "https://genius.com/d"},
+			{GeniusID: 2, Title: "Loot", GeniusURL: "https://genius.com/l"},
+		},
+	}
+	svc := unreleased.NewService(genius, &discoverytest.ArtistCatalogTitles{}, nil, unreleased.Config{MaxPages: 1, MaxDetails: 10})
+	h := wireGoldenOwnership(NewDiscoveryHandler(DiscoveryServices{}).WithUnreleased(svc), reader, nil)
+	r := chi.NewRouter()
+	r.Use(middleware.Middleware(discVerifyAsTestUser))
+	r.Mount("/discovery", h.Routes())
+	return r
+}
+
+func TestHandleArtistUnreleased_StampsTheSongsTheUserOwns(t *testing.T) {
+	reader := goldenOwnershipReader{owned: map[string]ports.OwnedTrack{
+		domain.OwnershipKey("Dream", "Ken Carson"): {TrackID: "track-9", AcquisitionStatus: "ready"},
+	}}
+
+	rec := discServe(t, ownedUnreleasedRouter(reader), http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Ken+Carson", nil)
+
+	discAssertStatus(t, rec, http.StatusOK)
+	items := decodeUnreleased(t, rec.Body.Bytes()).Items
+	if len(items) != 2 || items[0].Extras[domain.ExtraOwnedTrackID] != "track-9" || items[0].Extras["owned_acquisition_status"] != "ready" {
+		t.Fatalf("items = %+v, want Dream stamped as owned track-9, ready", items)
+	}
+	if _, owned := items[1].Extras[domain.ExtraOwnedTrackID]; owned {
+		t.Errorf("Loot extras = %v, want no ownership", items[1].Extras)
+	}
+}
+
+func TestHandleArtistUnreleased_LeavesSongsUnstampedForAUserWhoOwnsNone(t *testing.T) {
+	rec := discServe(t, ownedUnreleasedRouter(goldenOwnershipReader{}), http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Ken+Carson", nil)
+
+	discAssertStatus(t, rec, http.StatusOK)
+	for _, item := range decodeUnreleased(t, rec.Body.Bytes()).Items {
+		if len(item.Extras) != 0 {
+			t.Errorf("%s extras = %v, want none", item.Title, item.Extras)
+		}
 	}
 }

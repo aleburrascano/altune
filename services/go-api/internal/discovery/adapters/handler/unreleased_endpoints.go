@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"altune/go-api/internal/discovery/adapters/authbridge"
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/service/ownership"
 	"altune/go-api/internal/discovery/service/unreleased"
 	"altune/go-api/internal/shared/httputil"
 	"net/http"
@@ -15,6 +17,7 @@ type UnreleasedSongDTO struct {
 	ReleaseDate *string            `json:"release_date"`
 	HasMedia    *bool              `json:"has_media"`
 	AudioLinks  []domain.AudioLink `json:"audio_links"`
+	Extras      map[string]any     `json:"extras"`
 }
 
 type UnreleasedResponseDTO struct {
@@ -38,6 +41,7 @@ func unreleasedToDTO(found unreleased.Lookup) UnreleasedResponseDTO {
 			ReleaseDate: nonEmpty(s.ReleaseDate),
 			HasMedia:    s.HasMedia,
 			AudioLinks:  nonNilLinks(s.AudioLinks),
+			Extras:      map[string]any{},
 		}
 	}
 	return UnreleasedResponseDTO{Items: items, Pending: found.Pending}
@@ -48,6 +52,27 @@ func nonNilLinks(links []domain.AudioLink) []domain.AudioLink {
 		return []domain.AudioLink{}
 	}
 	return links
+}
+
+func unreleasedOwnableItems(artistName string, items []UnreleasedSongDTO) []ownership.OwnableItem {
+	out := make([]ownership.OwnableItem, len(items))
+	for i := range items {
+		out[i] = ownership.OwnableItem{
+			Kind:   domain.ResultKindTrack.String(),
+			Title:  items[i].Title,
+			Artist: artistName,
+			Extras: &items[i].Extras,
+		}
+	}
+	return out
+}
+
+func (h *DiscoveryHandler) writeUnreleased(w http.ResponseWriter, r *http.Request, artistName string, found unreleased.Lookup) {
+	dto := unreleasedToDTO(found)
+	if userId, ok := authbridge.UserIDFromContext(r.Context()); ok {
+		h.ownership.StampOwnership(r.Context(), userId, unreleasedOwnableItems(artistName, dto.Items))
+	}
+	httputil.WriteJSON(w, http.StatusOK, dto)
 }
 
 func nonEmpty(s string) *string {
@@ -74,6 +99,6 @@ func (h *DiscoveryHandler) handleArtistUnreleased(w http.ResponseWriter, r *http
 				failContentFetch(w, r, err, "get artist unreleased failed", provider, externalID)
 				return
 			}
-			httputil.WriteJSON(w, http.StatusOK, unreleasedToDTO(found))
+			h.writeUnreleased(w, r, name, found)
 		})
 }

@@ -290,6 +290,7 @@ export type UnreleasedTrack = {
   release_date: string | null;
   has_media: boolean | null;
   audio_links: UnreleasedAudioLink[];
+  extras: Record<string, unknown>;
 };
 
 export type UnreleasedTracksResponse = { items: UnreleasedTrack[]; pending: boolean };
@@ -331,12 +332,19 @@ function parseAudioLinks(value: unknown): UnreleasedAudioLink[] {
   return links;
 }
 
+const EXTRAS_FROM_A_SERVER_WITHOUT_OWNERSHIP: Readonly<Record<string, unknown>> = Object.freeze({});
+
+function parseOwnershipExtras(value: unknown, at: string): Record<string, unknown> {
+  return value === undefined ? EXTRAS_FROM_A_SERVER_WITHOUT_OWNERSHIP : asRecord(value, at);
+}
+
 function parseUnreleasedDetails(r: Record<string, unknown>, at: string) {
   return {
     cover_url: nullableString(r.cover_url, `${at}.cover_url`),
     release_date: nullableString(r.release_date, `${at}.release_date`),
     has_media: nullableBoolean(r.has_media, `${at}.has_media`),
     audio_links: parseAudioLinks(r.audio_links),
+    extras: parseOwnershipExtras(r.extras, `${at}.extras`),
   };
 }
 

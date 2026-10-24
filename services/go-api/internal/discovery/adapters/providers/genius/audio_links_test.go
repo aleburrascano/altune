@@ -33,7 +33,7 @@ func TestNormalizeAudioLink(t *testing.T) {
 			if ok != (tc.want != "") || got.URL != tc.want {
 				t.Errorf("normalizeAudioLink(%q, %q) = %q, %v; want %q", tc.provider, tc.in, got.URL, ok, tc.want)
 			}
-			if ok && got.Provider != tc.provider {
+			if ok && string(got.Provider) != tc.provider {
 				t.Errorf("provider = %q, want %q", got.Provider, tc.provider)
 			}
 		})

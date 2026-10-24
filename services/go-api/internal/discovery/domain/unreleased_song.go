@@ -1,8 +1,15 @@
 package domain
 
+type AudioProvider string
+
+const (
+	AudioProviderSoundCloud AudioProvider = "soundcloud"
+	AudioProviderYouTube    AudioProvider = "youtube"
+)
+
 type AudioLink struct {
-	Provider string `json:"provider"`
-	URL      string `json:"url"`
+	Provider AudioProvider `json:"provider"`
+	URL      string        `json:"url"`
 }
 
 type GeniusSongDetail struct {

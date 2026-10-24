@@ -557,6 +557,7 @@ describe('getUnreleasedTracks', () => {
     release_date: '2022-07-24',
     has_media: true,
     audio_links: [{ provider: 'soundcloud', url: 'https://soundcloud.com/a/b' }],
+    extras: {},
   };
 
   it('sends the artist name and the known ids as query params', async () => {
@@ -599,6 +600,22 @@ describe('getUnreleasedTracks', () => {
     const { items } = await getUnreleasedTracks('spotify', 'art-1', { name: 'X' });
 
     expect(items.map((item) => item.has_media)).toEqual([true, false, null]);
+  });
+
+  it('carries the ownership extras, and reads missing extras as not owned', async () => {
+    const owned = {
+      ...row,
+      extras: { owned_track_id: 'track-9', owned_acquisition_status: 'ready' },
+    };
+    const older = { ...row, genius_id: 8, extras: undefined };
+    __http.reply(PATH, { status: 200, json: { items: [owned, older] } });
+
+    const { items } = await getUnreleasedTracks('spotify', 'art-1', { name: 'Ken Carson' });
+
+    expect(items.map((item) => item.extras)).toEqual([
+      { owned_track_id: 'track-9', owned_acquisition_status: 'ready' },
+      {},
+    ]);
   });
 
   it('defaults audio_links to empty and drops unknown providers or malformed links', async () => {

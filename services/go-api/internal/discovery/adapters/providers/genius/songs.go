@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 )
 
@@ -149,7 +150,7 @@ func (b geniusSongDetailBody) detail() domain.GeniusSongDetail {
 	for _, m := range song.Media {
 		detail.HasMedia = detail.HasMedia || m.Provider == "youtube" || m.Provider == "soundcloud"
 		detail.OnStreamingSite = detail.OnStreamingSite || m.Provider == "spotify"
-		if link, ok := normalizeAudioLink(m.Provider, m.URL); ok {
+		if link, ok := normalizeAudioLink(m.Provider, m.URL); ok && !slices.Contains(detail.AudioLinks, link) {
 			detail.AudioLinks = append(detail.AudioLinks, link)
 		}
 	}

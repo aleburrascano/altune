@@ -17,16 +17,16 @@ func normalizeAudioLink(provider, rawURL string) (domain.AudioLink, bool) {
 		return domain.AudioLink{}, false
 	}
 	var normalized string
-	switch provider {
-	case "youtube":
+	switch domain.AudioProvider(provider) {
+	case domain.AudioProviderYouTube:
 		normalized = canonicalYouTube(u)
-	case "soundcloud":
+	case domain.AudioProviderSoundCloud:
 		normalized = canonicalSoundCloud(u)
 	}
 	if normalized == "" || len(normalized) > maxAudioLinkLength {
 		return domain.AudioLink{}, false
 	}
-	return domain.AudioLink{Provider: provider, URL: normalized}, true
+	return domain.AudioLink{Provider: domain.AudioProvider(provider), URL: normalized}, true
 }
 
 func isWebURL(u *url.URL) bool {
