@@ -15,6 +15,7 @@ const pinnedProvider = ports.ProviderSoundCloud
 
 type audioFetcher interface {
 	Download(ctx context.Context, url string, outDir string) (ports.FetchedAudio, error)
+	MarkUnplayable(ctx context.Context, candidates []ports.AudioCandidate)
 }
 
 var _ ports.AudioSource = (*Source)(nil)
@@ -30,27 +31,37 @@ func NewSource(fetcher audioFetcher) *Source {
 func (s *Source) Name() acqdomain.SourceName { return SourceName }
 
 func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
+	candidates := s.pinnedCandidates(ctx, req)
+	s.fetcher.MarkUnplayable(ctx, candidates)
+	return candidates, nil
+}
+
+func (s *Source) pinnedCandidates(ctx context.Context, req ports.FindRequest) []ports.AudioCandidate {
 	var pinned []ports.AudioCandidate
 	for _, pin := range req.CatalogSources {
-		if pin.Provider != string(pinnedProvider) {
-			continue
-		}
-		if pin.URL == "" {
-			slog.DebugContext(ctx, "acquisition.catalogpin_url_missing",
-				"external_id", pin.ExternalID, "title", req.Title)
-			continue
-		}
-		if !isSoundCloudURL(pin.URL) {
-			slog.WarnContext(ctx, "acquisition.catalogpin_url_rejected",
-				"url", pin.URL, "title", req.Title)
+		if pin.Provider != string(pinnedProvider) || !usablePinURL(ctx, req, pin) {
 			continue
 		}
 		pinned = append(pinned, pinnedCandidate(req, pin.URL))
 	}
 	if len(pinned) == 0 && isHTTPSURL(req.KnownSourceURL) {
-		return []ports.AudioCandidate{pinnedCandidate(req, req.KnownSourceURL)}, nil
+		return []ports.AudioCandidate{pinnedCandidate(req, req.KnownSourceURL)}
 	}
-	return pinned, nil
+	return pinned
+}
+
+func usablePinURL(ctx context.Context, req ports.FindRequest, pin ports.CatalogSource) bool {
+	if pin.URL == "" {
+		slog.DebugContext(ctx, "acquisition.catalogpin_url_missing",
+			"external_id", pin.ExternalID, "title", req.Title)
+		return false
+	}
+	if !isSoundCloudURL(pin.URL) {
+		slog.WarnContext(ctx, "acquisition.catalogpin_url_rejected",
+			"url", pin.URL, "title", req.Title)
+		return false
+	}
+	return true
 }
 
 func pinnedCandidate(req ports.FindRequest, pinURL string) ports.AudioCandidate {

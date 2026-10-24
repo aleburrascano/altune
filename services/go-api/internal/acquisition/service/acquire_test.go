@@ -1940,6 +1940,8 @@ func TestExecuteReplace_StillExcludesTheUsersRejectedSourcesAndTheCurrentOne(t *
 
 type searcherDownloads struct{ searcher *fakeAudioSearcher }
 
+func (searcherDownloads) MarkUnplayable(context.Context, []ports.AudioCandidate) {}
+
 func (d searcherDownloads) Download(ctx context.Context, url, outDir string) (ports.FetchedAudio, error) {
 	return fetchedAt(d.searcher.Download(ctx, url, outDir))
 }
@@ -3056,6 +3058,8 @@ func TestRerecording_AReplaceWhoseRerecordingDownloadFailsLeavesTheTrackAsItWas(
 }
 
 type failingPinDownloads struct{}
+
+func (failingPinDownloads) MarkUnplayable(context.Context, []ports.AudioCandidate) {}
 
 func (failingPinDownloads) Download(context.Context, string, string) (ports.FetchedAudio, error) {
 	return ports.FetchedAudio{}, errors.New("fetch: http error 403")

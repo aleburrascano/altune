@@ -138,7 +138,7 @@ func (s *evalSource) Find(ctx context.Context, req ports.FindRequest) ([]ports.A
 	case adapterYTMusic:
 		return s.pinnedVideos(ctx, req)
 	case adapterCatalogPin:
-		return catalogpin.NewSource(nil).Find(ctx, req)
+		return catalogpin.NewSource(uninspectedPins{}).Find(ctx, req)
 	}
 	variants := queryVariantsFor(req)
 	out := make([]ports.AudioCandidate, 0, len(s.spec.Candidates))
@@ -324,3 +324,11 @@ func watchTypeOf(kind ports.CandidateKind) ytmsearch.VideoType {
 	}
 	return ""
 }
+
+type uninspectedPins struct{}
+
+func (uninspectedPins) Download(context.Context, string, string) (ports.FetchedAudio, error) {
+	return ports.FetchedAudio{}, errors.New("eval: pins are never downloaded")
+}
+
+func (uninspectedPins) MarkUnplayable(context.Context, []ports.AudioCandidate) {}

@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/acquisition/ports"
 	"bytes"
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"testing"
@@ -12,6 +13,13 @@ import (
 type recordingFetcher struct {
 	gotURL string
 	gotDir string
+	reason string
+}
+
+func (f *recordingFetcher) MarkUnplayable(_ context.Context, candidates []ports.AudioCandidate) {
+	for i := range candidates {
+		candidates[i].Unplayable = f.reason
+	}
 }
 
 func (f *recordingFetcher) Download(_ context.Context, url, outDir string) (ports.FetchedAudio, error) {
@@ -134,5 +142,57 @@ func TestFind_EmitsTheKnownSource(t *testing.T) {
 		if err != nil || len(none) != 0 {
 			t.Errorf("known source %q: Find = %+v, %v; want nothing", unusable, none, err)
 		}
+	}
+}
+
+type inspectingFetcher struct {
+	recordingFetcher
+	formatURL string
+	err       error
+}
+
+func (f *inspectingFetcher) MarkUnplayable(_ context.Context, candidates []ports.AudioCandidate) {
+	if f.err != nil {
+		return
+	}
+	if !strings.Contains(f.formatURL, "preview") {
+		return
+	}
+	for i := range candidates {
+		candidates[i].Unplayable = ports.UnplayablePreview
+	}
+}
+
+func findPinned(t *testing.T, f audioFetcher) []ports.AudioCandidate {
+	t.Helper()
+	got, err := NewSource(f).Find(context.Background(), requestPinning(
+		ports.CatalogSource{Provider: "soundcloud", URL: pickedUpload}))
+	if err != nil || len(got) != 1 {
+		t.Fatalf("Find = %v, %v; want one candidate", got, err)
+	}
+	return got
+}
+
+func TestFind_MarksAPreviewPinUnplayable(t *testing.T) {
+	got := findPinned(t, &inspectingFetcher{formatURL: "https://cf-media.sndcdn.com/x_preview.mp3"})
+
+	if got[0].Unplayable != ports.UnplayablePreview {
+		t.Fatalf("Unplayable = %q, want %q", got[0].Unplayable, ports.UnplayablePreview)
+	}
+}
+
+func TestFind_LeavesAFullLengthPinPlayable(t *testing.T) {
+	got := findPinned(t, &inspectingFetcher{formatURL: "https://cf-media.sndcdn.com/x_full.mp3"})
+
+	if got[0].Unplayable != "" {
+		t.Fatalf("Unplayable = %q, want empty", got[0].Unplayable)
+	}
+}
+
+func TestFind_KeepsAPinPlayableWhenInspectionFails(t *testing.T) {
+	got := findPinned(t, &inspectingFetcher{formatURL: "preview", err: errors.New("yt-dlp timed out")})
+
+	if got[0].Unplayable != "" {
+		t.Fatalf("Unplayable = %q, want empty", got[0].Unplayable)
 	}
 }
