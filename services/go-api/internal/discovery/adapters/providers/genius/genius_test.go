@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -371,8 +372,25 @@ func TestSongCatalog_SongDetail_ReadsStreamingLinksAndAlbum(t *testing.T) {
 	}
 	for id, w := range want {
 		got, err := catalog.SongDetail(context.Background(), id)
-		if err != nil || got != w {
+		if err != nil || !reflect.DeepEqual(got, w) {
 			t.Errorf("SongDetail(%d) = (%+v, %v), want %+v", id, got, err, w)
 		}
+	}
+}
+
+func TestSongCatalog_SongDetail_KeepsNormalisedAudioLinks(t *testing.T) {
+	server := songCatalogServer(t, map[string]string{
+		"/songs/1": `{"response":{"song":{"media":[{"provider":"soundcloud","url":"http://soundcloud.com/a/b?in=x"},{"provider":"youtube","url":"https://youtu.be/dQw4w9WgXcQ"},{"provider":"youtube","url":"https://youtube.com/nope"},{"provider":"spotify","url":"https://open.spotify.com/t/1"}]}}}`,
+	})
+	catalog := NewSongCatalog(providertest.NewClient(server.URL), "tok")
+
+	got, err := catalog.SongDetail(context.Background(), 1)
+
+	want := []domain.AudioLink{
+		{Provider: "soundcloud", URL: "https://soundcloud.com/a/b"},
+		{Provider: "youtube", URL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
+	}
+	if err != nil || !reflect.DeepEqual(got.AudioLinks, want) {
+		t.Errorf("AudioLinks = (%+v, %v), want %+v", got.AudioLinks, err, want)
 	}
 }

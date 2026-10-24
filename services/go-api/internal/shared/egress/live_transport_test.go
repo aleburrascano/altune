@@ -329,7 +329,7 @@ func TestLiveTransport_MusicBrainzAllowsNoBurst(t *testing.T) {
 	}
 }
 
-var notFetchedHosts = map[string]bool{"e-cdns-images.dzcdn.net": true}
+var notFetchedHosts = map[string]bool{"e-cdns-images.dzcdn.net": true, "www.youtube.com": true}
 
 var adapterURLHost = regexp.MustCompile(`"https?://([a-zA-Z0-9.-]+)`)
 

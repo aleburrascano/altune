@@ -29,6 +29,7 @@ const CANCUN = {
   genius_url: 'https://genius.com/Juice-wrld-cancun-lyrics',
   release_date: '2022-07-24',
   has_media: true,
+  audio_links: [],
 };
 
 const POLL_MS = 10_000;

@@ -8,12 +8,13 @@ import (
 )
 
 type UnreleasedSongDTO struct {
-	GeniusID    int     `json:"genius_id"`
-	Title       string  `json:"title"`
-	CoverURL    *string `json:"cover_url"`
-	GeniusURL   string  `json:"genius_url"`
-	ReleaseDate *string `json:"release_date"`
-	HasMedia    *bool   `json:"has_media"`
+	GeniusID    int                `json:"genius_id"`
+	Title       string             `json:"title"`
+	CoverURL    *string            `json:"cover_url"`
+	GeniusURL   string             `json:"genius_url"`
+	ReleaseDate *string            `json:"release_date"`
+	HasMedia    *bool              `json:"has_media"`
+	AudioLinks  []domain.AudioLink `json:"audio_links"`
 }
 
 type UnreleasedResponseDTO struct {
@@ -36,9 +37,17 @@ func unreleasedToDTO(found unreleased.Lookup) UnreleasedResponseDTO {
 			GeniusURL:   s.GeniusURL,
 			ReleaseDate: nonEmpty(s.ReleaseDate),
 			HasMedia:    s.HasMedia,
+			AudioLinks:  nonNilLinks(s.AudioLinks),
 		}
 	}
 	return UnreleasedResponseDTO{Items: items, Pending: found.Pending}
+}
+
+func nonNilLinks(links []domain.AudioLink) []domain.AudioLink {
+	if links == nil {
+		return []domain.AudioLink{}
+	}
+	return links
 }
 
 func nonEmpty(s string) *string {

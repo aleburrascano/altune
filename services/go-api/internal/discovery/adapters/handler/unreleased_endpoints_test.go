@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -119,5 +120,31 @@ func TestHandleArtistUnreleased_SlowJobAnswersPendingWithNoItems(t *testing.T) {
 	discAssertStatus(t, rec, http.StatusOK)
 	if got := rec.Body.String(); got != "{\"items\":[],\"pending\":true}\n" {
 		t.Errorf("body = %q, want pending with no items", got)
+	}
+}
+
+func TestHandleArtistUnreleased_ReturnsAudioLinksAsAlwaysAnArray(t *testing.T) {
+	genius := &discoverytest.GeniusSongCatalog{
+		ArtistID: 7, ArtistFound: true,
+		Songs: []domain.UnreleasedSong{
+			{GeniusID: 1, Title: "Cancun", GeniusURL: "https://genius.com/c"},
+			{GeniusID: 2, Title: "Naruto", GeniusURL: "https://genius.com/n"},
+		},
+		DetailByID: map[int]domain.GeniusSongDetail{
+			1: {HasMedia: true, AudioLinks: []domain.AudioLink{{Provider: "soundcloud", URL: "https://soundcloud.com/a/b"}}},
+		},
+	}
+	router := unreleasedRouter(genius, nil)
+
+	rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Artist", nil)
+
+	discAssertStatus(t, rec, http.StatusOK)
+	items := decodeUnreleased(t, rec.Body.Bytes()).Items
+	want := domain.AudioLink{Provider: "soundcloud", URL: "https://soundcloud.com/a/b"}
+	if len(items) != 2 || len(items[0].AudioLinks) != 1 || items[0].AudioLinks[0] != want {
+		t.Fatalf("items = %+v, want the soundcloud link on Cancun", items)
+	}
+	if !strings.Contains(rec.Body.String(), `"audio_links":[]`) {
+		t.Errorf("body = %s, want an empty audio_links array for Naruto", rec.Body.String())
 	}
 }

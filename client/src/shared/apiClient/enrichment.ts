@@ -280,6 +280,8 @@ export async function getArtistContent(
   return parseArtistContentResponse(await apiFetch(withQuery(path, params), signalInit(signal)));
 }
 
+export type UnreleasedAudioLink = { provider: 'soundcloud' | 'youtube'; url: string };
+
 export type UnreleasedTrack = {
   genius_id: number;
   title: string;
@@ -287,6 +289,7 @@ export type UnreleasedTrack = {
   genius_url: string;
   release_date: string | null;
   has_media: boolean | null;
+  audio_links: UnreleasedAudioLink[];
 };
 
 export type UnreleasedTracksResponse = { items: UnreleasedTrack[]; pending: boolean };
@@ -299,11 +302,41 @@ function parseUnreleasedIdentity(r: Record<string, unknown>, at: string) {
   };
 }
 
+function isAudioProvider(value: unknown): value is UnreleasedAudioLink['provider'] {
+  return value === 'soundcloud' || value === 'youtube';
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value !== '';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isAudioLink(value: unknown): value is UnreleasedAudioLink {
+  return isRecord(value) && isAudioProvider(value.provider) && isNonEmptyString(value.url);
+}
+
+function toAudioLink({ provider, url }: UnreleasedAudioLink): UnreleasedAudioLink {
+  return { provider, url };
+}
+
+function parseAudioLinks(value: unknown): UnreleasedAudioLink[] {
+  const links: UnreleasedAudioLink[] = [];
+  if (!Array.isArray(value)) return links;
+  for (const item of value) {
+    if (isAudioLink(item)) links.push(toAudioLink(item));
+  }
+  return links;
+}
+
 function parseUnreleasedDetails(r: Record<string, unknown>, at: string) {
   return {
     cover_url: nullableString(r.cover_url, `${at}.cover_url`),
     release_date: nullableString(r.release_date, `${at}.release_date`),
     has_media: nullableBoolean(r.has_media, `${at}.has_media`),
+    audio_links: parseAudioLinks(r.audio_links),
   };
 }
 

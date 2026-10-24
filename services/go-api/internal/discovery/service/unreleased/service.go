@@ -171,6 +171,7 @@ func withoutReleasedEvidence(songs []domain.UnreleasedSong, details []lookedUpDe
 		if details[i].found {
 			hasMedia := details[i].detail.HasMedia
 			song.HasMedia = &hasMedia
+			song.AudioLinks = details[i].detail.AudioLinks
 		}
 		kept = append(kept, song)
 	}

@@ -556,6 +556,7 @@ describe('getUnreleasedTracks', () => {
     genius_url: 'https://genius.com/cancun',
     release_date: '2022-07-24',
     has_media: true,
+    audio_links: [{ provider: 'soundcloud', url: 'https://soundcloud.com/a/b' }],
   };
 
   it('sends the artist name and the known ids as query params', async () => {
@@ -598,6 +599,30 @@ describe('getUnreleasedTracks', () => {
     const { items } = await getUnreleasedTracks('spotify', 'art-1', { name: 'X' });
 
     expect(items.map((item) => item.has_media)).toEqual([true, false, null]);
+  });
+
+  it('defaults audio_links to empty and drops unknown providers or malformed links', async () => {
+    const missing = { ...row, genius_id: 20, audio_links: undefined };
+    const notArray = { ...row, genius_id: 21, audio_links: 'x' };
+    const mixed = {
+      ...row,
+      genius_id: 22,
+      audio_links: [
+        { provider: 'youtube', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+        { provider: 'spotify', url: 'https://open.spotify.com/track/1' },
+        { provider: 'soundcloud' },
+        'junk',
+      ],
+    };
+    __http.reply(PATH, { status: 200, json: { items: [missing, notArray, mixed] } });
+
+    const { items } = await getUnreleasedTracks('spotify', 'art-1', { name: 'X' });
+
+    expect(items.map((item) => item.audio_links)).toEqual([
+      [],
+      [],
+      [{ provider: 'youtube', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }],
+    ]);
   });
 
   it('reads pending as given and treats a missing flag as false', async () => {

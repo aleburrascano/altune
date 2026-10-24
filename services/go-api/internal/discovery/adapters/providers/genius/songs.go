@@ -126,6 +126,7 @@ type geniusSongDetailBody struct {
 			} `json:"album"`
 			Media []struct {
 				Provider string `json:"provider"`
+				URL      string `json:"url"`
 			} `json:"media"`
 		} `json:"song"`
 	} `json:"response"`
@@ -148,6 +149,9 @@ func (b geniusSongDetailBody) detail() domain.GeniusSongDetail {
 	for _, m := range song.Media {
 		detail.HasMedia = detail.HasMedia || m.Provider == "youtube" || m.Provider == "soundcloud"
 		detail.OnStreamingSite = detail.OnStreamingSite || m.Provider == "spotify"
+		if link, ok := normalizeAudioLink(m.Provider, m.URL); ok {
+			detail.AudioLinks = append(detail.AudioLinks, link)
+		}
 	}
 	return detail
 }
