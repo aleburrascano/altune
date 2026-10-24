@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 )
@@ -54,6 +55,19 @@ func (c *Client) ArtistSongs(ctx context.Context, artistName string) ([]domain.U
 		return nil, fmt.Errorf("tracker sheet: %w", err)
 	}
 	return songsFromRows(artistName, rows), nil
+}
+
+func (c *Client) Artists(ctx context.Context) ([]string, error) {
+	index, err := c.hubIndex(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("tracker hub: %w", err)
+	}
+	names := make([]string, 0, len(index))
+	for name := range index {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names, nil
 }
 
 func (c *Client) hubIndex(ctx context.Context) (map[string]string, error) {

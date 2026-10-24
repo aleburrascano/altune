@@ -2,6 +2,8 @@ package trackers
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"encoding/json"
+	"fmt"
 	"slices"
 	"testing"
 )
@@ -56,25 +58,6 @@ func TestParseSheet_MapsASecondRealHeaderShapeByKeyword(t *testing.T) {
 	}
 }
 
-func TestMapColumns_FindsColumnsWhateverTheirPosition(t *testing.T) {
-	header := gridRow{Values: []gridCell{
-		{FormattedValue: "Link(s)"}, {FormattedValue: "Portion"}, {FormattedValue: "Quality"}, {FormattedValue: "Name"},
-	}}
-	cols := mapColumns(header)
-	if cols.name != 3 || cols.portion != 1 || cols.quality != 2 || !slices.Equal(cols.links, []int{0}) {
-		t.Errorf("cols = %+v", cols)
-	}
-}
-
-func TestMapColumns_ReadsAnAvailabilityColumnAsThePortion(t *testing.T) {
-	header := gridRow{Values: []gridCell{
-		{FormattedValue: "Name "}, {FormattedValue: "Availability"}, {FormattedValue: "Links\n(pillows.su)"},
-	}}
-	if cols := mapColumns(header); cols.portion != 1 || !cols.usable() {
-		t.Errorf("cols = %+v, want Availability as the portion column", cols)
-	}
-}
-
 func TestParseSheet_UnknownLayoutIsUnmappedNotAnError(t *testing.T) {
 	body := []byte(`{"sheets":[{"data":[{"rowData":[{"values":[{"formattedValue":"Foo"},{"formattedValue":"Bar"}]}]}]}]}`)
 	rows, mapped, err := parseSheet(body)
@@ -109,5 +92,86 @@ func TestAudioLink_ReadsEveryKnownFileHostAndSoundCloud(t *testing.T) {
 		if got, ok := audioLink(raw); ok {
 			t.Errorf("audioLink(%q) = %+v, want rejected", raw, got)
 		}
+	}
+}
+
+func gridOf(header []string, rows ...[]gridCell) []gridRow {
+	head := gridRow{}
+	for _, label := range header {
+		head.Values = append(head.Values, gridCell{FormattedValue: label})
+	}
+	grid := []gridRow{head}
+	for _, r := range rows {
+		grid = append(grid, gridRow{Values: r})
+	}
+	return grid
+}
+
+func songRow(era, title, portion, link string) []gridCell {
+	return []gridCell{{FormattedValue: era}, {FormattedValue: title}, {FormattedValue: portion}, {FormattedValue: "Pillowcase", Hyperlink: link}}
+}
+
+func pillowsLink(n int) string {
+	return fmt.Sprintf("https://pillowcase.su/f/%032d", n)
+}
+
+func TestInferColumns_ReadsAnUnlabelledLayoutFromItsCells(t *testing.T) {
+	var rows [][]gridCell
+	for i := range 8 {
+		rows = append(rows, songRow("Rodeo", fmt.Sprintf("Song %d\n(prod. X)", i), "Full - HQ", pillowsLink(i)))
+	}
+	cols, headerAt, ok := inferColumns(gridOf([]string{"Era", "Track", "What's There", "Sources"}, rows...))
+	if !ok || headerAt != -1 || cols.name != 1 || cols.portion != 2 || len(cols.links) != 1 || cols.links[0] != 3 {
+		t.Errorf("cols = %+v, header %d, ok %v; want title 1, portion 2, links [3]", cols, headerAt, ok)
+	}
+}
+
+func TestInferColumns_PrefersAHintedTitleColumnAndSkipsNumbering(t *testing.T) {
+	var rows [][]gridCell
+	for i := range 8 {
+		row := append([]gridCell{{FormattedValue: fmt.Sprint(i + 1)}}, songRow("Era", fmt.Sprintf("Song %d", i), "OG File", pillowsLink(i))...)
+		rows = append(rows, row)
+	}
+	cols, _, ok := inferColumns(gridOf([]string{"#", "Era", "Title", "Portion", "Links"}, rows...))
+	if !ok || cols.name != 2 || cols.portion != 3 {
+		t.Errorf("cols = %+v, want the Title column (2) and Portion (3)", cols)
+	}
+}
+
+func TestParseSheet_ReadsFullHQAsAWholeSongWithItsQuality(t *testing.T) {
+	var rows [][]gridCell
+	for i := range 6 {
+		rows = append(rows, songRow("Era", fmt.Sprintf("Song %d", i), "Snippet - LQ", pillowsLink(i)))
+	}
+	rows = append(rows, songRow("Era", "Keeper", "Full - HQ", pillowsLink(99)), songRow("Era", "Fan cut", "Full - HQ (Unofficial)", pillowsLink(98)))
+	body, _ := json.Marshal(gridResponse{Sheets: []struct {
+		Data []struct {
+			RowData []gridRow `json:"rowData"`
+		} `json:"data"`
+	}{{Data: []struct {
+		RowData []gridRow `json:"rowData"`
+	}{{RowData: gridOf([]string{"Era", "Title", "What's Available?", "Links"}, rows...)}}}}})
+	got, mapped, err := parseSheet(body)
+	if err != nil || !mapped || len(got) != 1 || got[0].title != "Keeper" || got[0].quality != "HQ" {
+		t.Errorf("parseSheet = %+v, mapped %v, err %v; want only Keeper at HQ", got, mapped, err)
+	}
+}
+
+func TestInferColumns_SkipsADateColumnLeftOfTheTitles(t *testing.T) {
+	var rows [][]gridCell
+	for i := range 8 {
+		rows = append(rows, append([]gridCell{{FormattedValue: fmt.Sprintf("Feb %d, 2017", i+1)}}, songRow("Era", fmt.Sprintf("Song %d", i), "Full", pillowsLink(i))...))
+	}
+	cols, _, ok := inferColumns(gridOf([]string{"Date", "Era", "Track", "Portion", "Links"}, rows...))
+	if !ok || cols.name != 2 {
+		t.Errorf("cols = %+v, want the Track column (2), not the dates", cols)
+	}
+}
+
+func TestInferColumns_UsesHeaderWordsWhenASheetIsTooSmallToJudge(t *testing.T) {
+	grid := gridOf([]string{"Name", "Portion", "Links"}, []gridCell{{FormattedValue: "Loot"}, {FormattedValue: "OG File"}, {FormattedValue: "x", Hyperlink: "https://pixeldrain.com/u/abcd1234"}})
+	cols, headerAt, ok := inferColumns(grid)
+	if !ok || headerAt != 0 || cols.name != 0 || cols.portion != 1 || len(cols.links) != 1 || cols.links[0] != 2 {
+		t.Errorf("cols = %+v, header %d, ok %v; want the header's Name, Portion and Links", cols, headerAt, ok)
 	}
 }

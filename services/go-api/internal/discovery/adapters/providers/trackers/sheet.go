@@ -7,48 +7,10 @@ import (
 	"strings"
 )
 
-const headerScanRows = 5
-
-type columns struct {
-	name, portion, quality int
-	links                  []int
-}
-
 type trackerRow struct {
 	title   string
 	quality string
 	links   []domain.AudioLink
-}
-
-func mapColumns(header gridRow) columns {
-	cols := columns{name: -1, portion: -1, quality: -1}
-	for i, cell := range header.Values {
-		label := strings.ToLower(firstLine(cell.FormattedValue))
-		switch {
-		case strings.HasPrefix(label, "name"):
-			cols.name = i
-		case strings.HasPrefix(label, "portion"), strings.HasPrefix(label, "availab"):
-			cols.portion = i
-		case strings.HasPrefix(label, "quality"):
-			cols.quality = i
-		case strings.Contains(label, "link"):
-			cols.links = append(cols.links, i)
-		}
-	}
-	return cols
-}
-
-func (c columns) usable() bool {
-	return c.name >= 0 && c.portion >= 0 && len(c.links) > 0
-}
-
-func findHeader(rows []gridRow) (columns, int, bool) {
-	for i := 0; i < min(len(rows), headerScanRows); i++ {
-		if cols := mapColumns(rows[i]); cols.usable() {
-			return cols, i, true
-		}
-	}
-	return columns{}, 0, false
 }
 
 func parseSheet(body []byte) (rows []trackerRow, mapped bool, err error) {
@@ -56,7 +18,7 @@ func parseSheet(body []byte) (rows []trackerRow, mapped bool, err error) {
 	if err != nil {
 		return nil, false, err
 	}
-	cols, headerAt, mapped := findHeader(grid)
+	cols, headerAt, mapped := inferColumns(grid)
 	if !mapped {
 		return nil, false, nil
 	}
@@ -69,7 +31,8 @@ func parseSheet(body []byte) (rows []trackerRow, mapped bool, err error) {
 }
 
 func (c columns) parseRow(row gridRow) (trackerRow, bool) {
-	if !isWholeSong(row.cell(c.portion).FormattedValue) {
+	portion, portionQuality := splitPortion(row.cell(c.portion).FormattedValue)
+	if !isWholeSong(portion) {
 		return trackerRow{}, false
 	}
 	title := trimLeadingDecoration(firstLine(row.cell(c.name).FormattedValue))
@@ -77,7 +40,20 @@ func (c columns) parseRow(row gridRow) (trackerRow, bool) {
 	if title == "" || len(links) == 0 {
 		return trackerRow{}, false
 	}
-	return trackerRow{title: title, quality: strings.TrimSpace(row.cell(c.quality).FormattedValue), links: links}, true
+	quality := strings.TrimSpace(row.cell(c.quality).FormattedValue)
+	if c.quality < 0 {
+		quality = portionQuality
+	}
+	return trackerRow{title: title, quality: quality, links: links}, true
+}
+
+func splitPortion(raw string) (portion, quality string) {
+	line := strings.TrimSpace(firstLine(raw))
+	if strings.Contains(strings.ToLower(line), "unofficial") {
+		return "", ""
+	}
+	portion, quality, _ = strings.Cut(line, " - ")
+	return portion, strings.TrimSpace(quality)
 }
 
 func isWholeSong(portion string) bool {

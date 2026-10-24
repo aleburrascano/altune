@@ -37,7 +37,7 @@ func decodeRows(body []byte) ([]gridRow, error) {
 		return nil, err
 	}
 	if len(resp.Sheets) == 0 || len(resp.Sheets[0].Data) == 0 {
-		return nil, nil
+		return []gridRow{}, nil
 	}
 	return resp.Sheets[0].Data[0].RowData, nil
 }
