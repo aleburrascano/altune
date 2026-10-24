@@ -1,7 +1,8 @@
-import type { ReactElement } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import type { ComponentProps, ReactElement } from 'react';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { Artwork } from '@shared/ui/primitives/Artwork';
+import { HorizontalRail } from '@shared/ui/primitives/HorizontalRail';
 import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing } from '@shared/ui/theme/tokens';
@@ -13,13 +14,95 @@ import { type DetailRoute } from '@features/detail/domain/detailNavigation';
 import { useOpenDetail } from '@features/detail/hooks/useDetailNavigation';
 import { RELATED_CARD_WIDTH, sharedStyles } from '@features/detail/ui/detailStyles';
 
+function relatedKey(track: DiscoveryResult, index: number): string {
+  return track.sources[0]?.external_id ?? String(index);
+}
+
+type RelatedCardProps = {
+  track: DiscoveryResult;
+  index: number;
+  onPress: (track: DiscoveryResult) => void;
+};
+
+type TrackProps = { track: DiscoveryResult };
+type A11yProps = Pick<
+  TappableProps,
+  'accessibilityLabel' | 'accessibilityHint' | 'accessibilityRole'
+>;
+type PressState = { pressed: boolean };
+type TappableProps = ComponentProps<typeof Tappable>;
+
+type RelatedTracksSectionProps = {
+  result: DiscoveryResult;
+  detailRoute: DetailRoute;
+};
+
+function RelatedCardSubtitle({ track }: TrackProps): ReactElement | null {
+  return track.subtitle ? (
+    <Text variant="label" tone="secondary" numberOfLines={1}>
+      {track.subtitle}
+    </Text>
+  ) : null;
+}
+
+function RelatedCardText({ track }: TrackProps): ReactElement {
+  return (
+    <>
+      <Text variant="body" numberOfLines={1} style={styles.cardTitle}>
+        {track.title}
+      </Text>
+      <RelatedCardSubtitle track={track} />
+    </>
+  );
+}
+
+function RelatedCardArt({ track }: TrackProps): ReactElement {
+  return (
+    <Artwork
+      uri={track.image_url}
+      size={RELATED_CARD_WIDTH}
+      radius={radius.md}
+      accessibilityLabel={track.title}
+    />
+  );
+}
+
+function relatedCardStyle({ pressed }: PressState): StyleProp<ViewStyle> {
+  return [styles.card, pressed ? sharedStyles.pressed : null];
+}
+
+function relatedCardA11y(track: DiscoveryResult): A11yProps {
+  return {
+    accessibilityRole: 'button',
+    accessibilityLabel: `Open ${track.title}`,
+    accessibilityHint: "Opens the related track's detail",
+  };
+}
+
+function relatedCardProps(card: RelatedCardProps): TappableProps {
+  const { track, index, onPress } = card;
+  return {
+    ...relatedCardA11y(track),
+    action: 'detail.related_track.open',
+    testID: `detail-related-${index}`,
+    onPress: () => onPress(track),
+    style: relatedCardStyle,
+  };
+}
+
+function RelatedCard(card: RelatedCardProps): ReactElement {
+  return (
+    <Tappable {...relatedCardProps(card)}>
+      <RelatedCardArt track={card.track} />
+      <RelatedCardText track={card.track} />
+    </Tappable>
+  );
+}
+
 export function RelatedTracksSection({
   result: parent,
   detailRoute,
-}: {
-  result: DiscoveryResult;
-  detailRoute: DetailRoute;
-}): ReactElement | null {
+}: RelatedTracksSectionProps): ReactElement | null {
   const openDetail = useOpenDetail(detailRoute);
   const { relatedTracks } = useRelatedTracks({ sources: parent.sources });
 
@@ -36,39 +119,14 @@ export function RelatedTracksSection({
       <Text variant="label" tone="secondary" style={sharedStyles.sectionTitle}>
         Tracks you might like
       </Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
+      <HorizontalRail
+        data={relatedTracks}
+        keyExtractor={relatedKey}
+        renderItem={({ item, index }) => (
+          <RelatedCard track={item} index={index} onPress={onRelatedPress} />
+        )}
         contentContainerStyle={styles.rail}
-      >
-        {relatedTracks.map((track, index) => (
-          <Tappable
-            action="detail.related_track.open"
-            key={track.sources[0]?.external_id ?? index}
-            testID={`detail-related-${index}`}
-            onPress={() => onRelatedPress(track)}
-            accessibilityRole="button"
-            accessibilityLabel={`Open ${track.title}`}
-            accessibilityHint="Opens the related track's detail"
-            style={({ pressed }) => [styles.card, pressed ? sharedStyles.pressed : null]}
-          >
-            <Artwork
-              uri={track.image_url}
-              size={RELATED_CARD_WIDTH}
-              radius={radius.md}
-              accessibilityLabel={track.title}
-            />
-            <Text variant="body" numberOfLines={1} style={styles.cardTitle}>
-              {track.title}
-            </Text>
-            {track.subtitle ? (
-              <Text variant="label" tone="secondary" numberOfLines={1}>
-                {track.subtitle}
-              </Text>
-            ) : null}
-          </Tappable>
-        ))}
-      </ScrollView>
+      />
     </View>
   );
 }

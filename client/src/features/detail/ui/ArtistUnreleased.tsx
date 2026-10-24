@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
-import { FlatList, Linking, StyleSheet, View } from 'react-native';
+import { Linking, StyleSheet, View } from 'react-native';
 
+import { HorizontalRail } from '@shared/ui/primitives/HorizontalRail';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Text } from '@shared/ui/primitives/Text';
@@ -96,10 +97,8 @@ function UnreleasedSection({ tracks }: UnreleasedSectionProps): ReactElement {
   return (
     <View testID="detail-unreleased">
       <Section label="Unreleased">
-        <FlatList
+        <HorizontalRail
           testID="detail-unreleased-rail"
-          horizontal
-          showsHorizontalScrollIndicator={false}
           data={tracks}
           keyExtractor={unreleasedKey}
           renderItem={renderUnreleasedRow}

@@ -8,7 +8,8 @@ import type {
   TrackSelectionController,
   SelectionAction,
 } from '@features/library/hooks/useTrackSelection';
-import { FlatList, StyleSheet, View, type ListRenderItemInfo } from 'react-native';
+import { StyleSheet, View, type ListRenderItemInfo } from 'react-native';
+import { HorizontalRail } from '@shared/ui/primitives/HorizontalRail';
 import { Tappable, type TappableProps } from '@shared/ui/primitives/Tappable';
 import { Text, minInteractiveHeight, radius, spacing, useTheme } from '@shared/ui';
 import { opacity } from '@shared/ui/theme';
@@ -217,14 +218,14 @@ function renderActionItem({ item }: ListRenderItemInfo<SelectionAction>): ReactE
 }
 
 const ACTION_LIST_PROPS = {
-  horizontal: true,
-  showsHorizontalScrollIndicator: false,
   keyExtractor: actionKey,
   renderItem: renderActionItem,
 } as const;
 
 function ActionsRow({ actions }: Pick<SelectionBarProps, 'actions'>): ReactElement {
-  return <FlatList {...ACTION_LIST_PROPS} data={actions} contentContainerStyle={styles.actions} />;
+  return (
+    <HorizontalRail {...ACTION_LIST_PROPS} data={actions} contentContainerStyle={styles.actions} />
+  );
 }
 
 function barColors(theme: Theme): BarColors {
