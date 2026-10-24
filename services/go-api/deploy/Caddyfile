@@ -1,4 +1,8 @@
 altune.duckdns.org {
+	log
+	@notOta not path /updates/*
+	log_skip @notOta
+
 	redir /overseer /overseer/
 	handle_path /overseer/* {
 		reverse_proxy altune-overseer:8090
