@@ -8,6 +8,7 @@ func TestParse_ReadsEachHostsFileLink(t *testing.T) {
 		{"https://www.pixeldrain.com/u/ozSpSjn7", "pixeldrain", "ozSpSjn7", "https://pixeldrain.com/u/ozSpSjn7"},
 		{"https://pillows.su/f/4d201f3332e7128f9f148d765244ce98", "pillows", "4d201f3332e7128f9f148d765244ce98", "https://pillows.su/f/4d201f3332e7128f9f148d765244ce98"},
 		{"https://pillowcase.su/f/84310b5d2c21df85e4570aec299d1ead", "pillows", "84310b5d2c21df85e4570aec299d1ead", "https://pillows.su/f/84310b5d2c21df85e4570aec299d1ead"},
+		{"https://imgur.gg/f/0Q3ydhk", "imgurgg", "0Q3ydhk", "https://imgur.gg/f/0Q3ydhk"},
 	}
 	for _, c := range cases {
 		got, ok := Parse(c.link)
@@ -23,7 +24,7 @@ func TestParse_RejectsLinksThatAreNotAFile(t *testing.T) {
 		"https://pixeldrain.com/u/ab",
 		"https://pillows.su/f/short",
 		"https://evilpillows.su/f/4d201f3332e7128f9f148d765244ce98",
-		"https://imgur.gg/f/0Q3ydhk",
+		"https://imgur.com/f/0Q3ydhk",
 		"ftp://imgur.gg/f/0Q3ydhk",
 		"https://soundcloud.com/a/b",
 	} {
@@ -47,5 +48,22 @@ func TestDownloadURL_IsBuiltFromAValidIDOnly(t *testing.T) {
 		if got, ok := DownloadURL(in[0], in[1]); ok {
 			t.Errorf("DownloadURL(%q, %q) = %q, want rejected", in[0], in[1], got)
 		}
+	}
+}
+
+func TestFileOnPage_AcceptsOnlyThisIDsFileOnTheImgurggCDN(t *testing.T) {
+	page, ok := FileOnPage("imgurgg", "0Q3ydhk")
+	if !ok || page.PageURL != "https://imgur.gg/f/0Q3ydhk" {
+		t.Fatalf("FileOnPage = %+v, %v", page, ok)
+	}
+	body := `<audio src="https://evil.example/0Q3ydhk-x.mp3"></audio><audio src="https://b.imgur.gg/OTHER12-x.mp3"></audio><audio src="https://b.imgur.gg/0Q3ydhk-Got_A_New_One.mp3"></audio>`
+	if got := page.File.FindString(body); got != "https://b.imgur.gg/0Q3ydhk-Got_A_New_One.mp3" {
+		t.Errorf("file = %q, want only this id's b.imgur.gg file", got)
+	}
+	if _, ok := DownloadURL("imgurgg", "0Q3ydhk"); ok {
+		t.Error("an imgur.gg page must never be handed to the downloader")
+	}
+	if _, ok := FileOnPage("pixeldrain", "ozSpSjn7"); ok {
+		t.Error("pixeldrain has a direct download and no page step")
 	}
 }

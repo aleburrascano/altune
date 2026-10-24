@@ -21,12 +21,27 @@ type audioFetcher interface {
 
 var _ ports.AudioSource = (*Source)(nil)
 
-type Source struct {
-	fetcher audioFetcher
+type pageReader interface {
+	ReadPage(ctx context.Context, pageURL string) ([]byte, error)
 }
 
-func NewSource(fetcher audioFetcher) *Source {
-	return &Source{fetcher: fetcher}
+type Source struct {
+	fetcher audioFetcher
+	pages   pageReader
+}
+
+type Option func(*Source)
+
+func WithPageReader(pages pageReader) Option {
+	return func(s *Source) { s.pages = pages }
+}
+
+func NewSource(fetcher audioFetcher, opts ...Option) *Source {
+	s := &Source{fetcher: fetcher}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 func (s *Source) Name() acqdomain.SourceName { return SourceName }
@@ -38,19 +53,19 @@ func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.Audio
 }
 
 func (s *Source) pinnedCandidates(ctx context.Context, req ports.FindRequest) []ports.AudioCandidate {
-	if files := fileHostCandidates(ctx, req); len(files) > 0 {
+	if files := s.fileHostCandidates(ctx, req); len(files) > 0 {
 		return files
 	}
 	return soundCloudCandidates(ctx, req)
 }
 
-func fileHostCandidates(ctx context.Context, req ports.FindRequest) []ports.AudioCandidate {
+func (s *Source) fileHostCandidates(ctx context.Context, req ports.FindRequest) []ports.AudioCandidate {
 	var files []ports.AudioCandidate
 	for _, pin := range req.CatalogSources {
 		if !filehost.IsProvider(pin.Provider) {
 			continue
 		}
-		download, ok := filehost.DownloadURL(pin.Provider, pin.ExternalID)
+		download, ok := s.fileURL(ctx, pin)
 		if !ok {
 			slog.WarnContext(ctx, "acquisition.catalogpin_file_id_rejected", "provider", pin.Provider, "title", req.Title)
 			continue
@@ -58,6 +73,23 @@ func fileHostCandidates(ctx context.Context, req ports.FindRequest) []ports.Audi
 		files = append(files, pinnedCandidate(req, download))
 	}
 	return files
+}
+
+func (s *Source) fileURL(ctx context.Context, pin ports.CatalogSource) (string, bool) {
+	if download, ok := filehost.DownloadURL(pin.Provider, pin.ExternalID); ok {
+		return download, true
+	}
+	page, ok := filehost.FileOnPage(pin.Provider, pin.ExternalID)
+	if !ok || s.pages == nil {
+		return "", false
+	}
+	body, err := s.pages.ReadPage(ctx, page.PageURL)
+	if err != nil {
+		slog.WarnContext(ctx, "acquisition.catalogpin_page_unreadable", "provider", pin.Provider, "error", err)
+		return "", false
+	}
+	file := page.File.Find(body)
+	return string(file), file != nil
 }
 
 func soundCloudCandidates(ctx context.Context, req ports.FindRequest) []ports.AudioCandidate {

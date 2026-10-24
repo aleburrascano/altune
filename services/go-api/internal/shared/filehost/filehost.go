@@ -7,17 +7,20 @@ import (
 )
 
 type host struct {
-	provider  string
-	hostnames []string
-	pathID    *regexp.Regexp
-	validID   *regexp.Regexp
-	page      func(id string) string
-	download  func(id string) string
+	provider   string
+	hostnames  []string
+	pathID     *regexp.Regexp
+	validID    *regexp.Regexp
+	page       func(id string) string
+	download   func(id string) string
+	fileOnPage func(id string) *regexp.Regexp
 }
 
 var pixeldrainID = regexp.MustCompile(`^[A-Za-z0-9]{6,16}$`)
 
 var pillowsID = regexp.MustCompile(`^[A-Za-z0-9]{20,40}$`)
+
+var imgurggID = regexp.MustCompile(`^[A-Za-z0-9]{5,16}$`)
 
 var hosts = []host{
 	{
@@ -35,6 +38,16 @@ var hosts = []host{
 		validID:   pillowsID,
 		page:      func(id string) string { return "https://pillows.su/f/" + id },
 		download:  func(id string) string { return "https://api.pillows.su/api/download/" + id },
+	},
+	{
+		provider:  "imgurgg",
+		hostnames: []string{"imgur.gg"},
+		pathID:    regexp.MustCompile(`^/f/([^/]+)$`),
+		validID:   imgurggID,
+		page:      func(id string) string { return "https://imgur.gg/f/" + id },
+		fileOnPage: func(id string) *regexp.Regexp {
+			return regexp.MustCompile(`https://b\.imgur\.gg/` + id + `-[A-Za-z0-9._%()+-]{1,150}`)
+		},
 	},
 }
 
@@ -90,10 +103,23 @@ func ValidID(provider, id string) bool {
 
 func DownloadURL(provider, id string) (string, bool) {
 	h, ok := lookup(provider)
-	if !ok || !h.validID.MatchString(id) {
+	if !ok || h.download == nil || !h.validID.MatchString(id) {
 		return "", false
 	}
 	return h.download(id), true
+}
+
+type PageFile struct {
+	PageURL string
+	File    *regexp.Regexp
+}
+
+func FileOnPage(provider, id string) (PageFile, bool) {
+	h, ok := lookup(provider)
+	if !ok || h.fileOnPage == nil || !h.validID.MatchString(id) {
+		return PageFile{}, false
+	}
+	return PageFile{PageURL: h.page(id), File: h.fileOnPage(id)}, true
 }
 
 func lookup(provider string) (host, bool) {

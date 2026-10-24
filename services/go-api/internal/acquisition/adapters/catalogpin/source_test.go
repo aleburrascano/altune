@@ -246,3 +246,38 @@ func TestFind_RebuildsEveryFileHostPinFromItsID(t *testing.T) {
 		}
 	}
 }
+
+type fakePages struct {
+	body string
+	err  error
+	got  string
+}
+
+func (f *fakePages) ReadPage(_ context.Context, pageURL string) ([]byte, error) {
+	f.got = pageURL
+	return []byte(f.body), f.err
+}
+
+func TestFind_ResolvesAnImgurggPinToItsCDNFile(t *testing.T) {
+	pages := &fakePages{body: `<a href="https://evil.example/0Q3ydhk-a.mp3"></a><audio src="https://b.imgur.gg/0Q3ydhk-Got_A_New_One.mp3">`}
+	got, err := NewSource(&recordingFetcher{}, WithPageReader(pages)).Find(context.Background(), requestPinning(
+		ports.CatalogSource{Provider: "imgurgg", ExternalID: "0Q3ydhk", URL: "https://evil.example/x"},
+	))
+	want := "https://b.imgur.gg/0Q3ydhk-Got_A_New_One.mp3"
+	if err != nil || len(got) != 1 || got[0].URL != want || pages.got != "https://imgur.gg/f/0Q3ydhk" {
+		t.Fatalf("Find = %+v, %v, page read %q; want one pin at %s", got, err, pages.got, want)
+	}
+}
+
+func TestFind_DropsAnImgurggPinWhosePageHasNoCDNFile(t *testing.T) {
+	for name, src := range map[string]*Source{
+		"foreign file": NewSource(&recordingFetcher{}, WithPageReader(&fakePages{body: `<audio src="https://evil.example/0Q3ydhk-a.mp3">`})),
+		"page error":   NewSource(&recordingFetcher{}, WithPageReader(&fakePages{err: errors.New("down")})),
+		"no reader":    NewSource(&recordingFetcher{}),
+	} {
+		got, _ := src.Find(context.Background(), requestPinning(ports.CatalogSource{Provider: "imgurgg", ExternalID: "0Q3ydhk"}))
+		if len(got) != 0 {
+			t.Errorf("%s: Find = %+v, want no candidate", name, got)
+		}
+	}
+}

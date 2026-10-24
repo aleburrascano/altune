@@ -105,7 +105,7 @@ func TestAudioLink_ReadsEveryKnownFileHostAndSoundCloud(t *testing.T) {
 			t.Errorf("audioLink(%q) = %+v, %v, want %+v", raw, got, ok, want)
 		}
 	}
-	for _, raw := range []string{"https://pixeldrain.com/u/../x", "https://pixeldrain.com.evil.io/u/abcdef", "https://youtube.com/watch?v=dQw4w9WgXcQ", "https://mega.nz/file/x", "https://imgur.gg/f/0Q3ydhk"} {
+	for _, raw := range []string{"https://pixeldrain.com/u/../x", "https://pixeldrain.com.evil.io/u/abcdef", "https://youtube.com/watch?v=dQw4w9WgXcQ", "https://mega.nz/file/x"} {
 		if got, ok := audioLink(raw); ok {
 			t.Errorf("audioLink(%q) = %+v, want rejected", raw, got)
 		}

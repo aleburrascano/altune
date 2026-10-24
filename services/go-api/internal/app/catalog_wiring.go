@@ -399,10 +399,12 @@ func (a *App) audioSourcesFor(ctx context.Context, searcher *ytdlp.YtDlpAudioSea
 		slog.InfoContext(ctx, "acquisition: yt-dlp source disabled via YTDLP_ENABLED")
 	}
 	if len(tiers.all()) > 0 {
-		tiers.first = append([]acqPorts.AudioSource{catalogpin.NewSource(searcher)}, tiers.first...)
+		tiers.first = append([]acqPorts.AudioSource{catalogpin.NewSource(searcher, catalogpin.WithPageReader(catalogpin.NewHTTPPageReader(sharedLiveTransport(), fileHostPageTimeout)))}, tiers.first...)
 	}
 	return tiers
 }
+
+const fileHostPageTimeout = 10 * time.Second
 
 const (
 	ytmSearchMinInterval = 200 * time.Millisecond
