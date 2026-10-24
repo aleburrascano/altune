@@ -14,7 +14,7 @@ import (
 )
 
 func pixeldrainLink(id string) domain.AudioLink {
-	return domain.AudioLink{Provider: domain.AudioProviderPixeldrain, URL: "https://pixeldrain.com/u/" + id}
+	return domain.AudioLink{Provider: "pixeldrain", ExternalID: id, URL: "https://pixeldrain.com/u/" + id}
 }
 
 func trackerSong(title, id string) domain.UnreleasedSong {

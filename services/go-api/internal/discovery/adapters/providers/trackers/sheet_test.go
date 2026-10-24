@@ -1,6 +1,7 @@
 package trackers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"slices"
 	"testing"
 )
@@ -30,7 +31,8 @@ func TestParseSheet_ReadsQualityAndPixeldrainID(t *testing.T) {
 		t.Fatalf("rows = %v, err %v, want the sheet's songs", rows, err)
 	}
 	dream := rows[0]
-	if dream.quality != "High Quality" || !slices.Equal(dream.pixeldrains, []string{"ozSpSjn7"}) {
+	want := []domain.AudioLink{{Provider: "pixeldrain", ExternalID: "ozSpSjn7", URL: "https://pixeldrain.com/u/ozSpSjn7"}}
+	if dream.quality != "High Quality" || !slices.Equal(dream.links, want) {
 		t.Errorf("dream = %+v, want High Quality / ozSpSjn7", dream)
 	}
 }
@@ -87,22 +89,25 @@ func TestParseSheet_ReadsALinkHeldOnlyInATextRun(t *testing.T) {
 {"values":[{"formattedValue":"Loot"},{"formattedValue":"OG File"},{"formattedValue":"Exo Pixel","textFormatRuns":[{"format":{"link":{"uri":"https://exoshare.org/share/x"}}},{"format":{"link":{"uri":"https://pixeldrain.com/u/abcd1234"}}}]}]}
 ]}]}]}`)
 	rows, _, err := parseSheet(body)
-	if err != nil || len(rows) != 1 || !slices.Equal(rows[0].pixeldrains, []string{"abcd1234"}) {
+	if err != nil || len(rows) != 1 || len(rows[0].links) != 1 || rows[0].links[0].ExternalID != "abcd1234" {
 		t.Errorf("rows = %+v, err %v", rows, err)
 	}
 }
 
-func TestPixeldrainID_RejectsOtherHostsAndOddIDs(t *testing.T) {
-	cases := map[string]bool{
-		"https://pixeldrain.com/u/ozSpSjn7":       true,
-		"https://pixeldrain.com/l/ozSpSjn7":       false,
-		"https://evil.example/u/ozSpSjn7":         false,
-		"https://pixeldrain.com/u/../x":           false,
-		"https://pixeldrain.com.evil.io/u/abcdef": false,
+func TestAudioLink_ReadsEveryKnownFileHostAndSoundCloud(t *testing.T) {
+	cases := map[string]domain.AudioLink{
+		"https://pixeldrain.com/u/ozSpSjn7":                        {Provider: "pixeldrain", ExternalID: "ozSpSjn7", URL: "https://pixeldrain.com/u/ozSpSjn7"},
+		"https://pillowcase.su/f/84310b5d2c21df85e4570aec299d1ead": {Provider: "pillows", ExternalID: "84310b5d2c21df85e4570aec299d1ead", URL: "https://pillows.su/f/84310b5d2c21df85e4570aec299d1ead"},
+		"https://soundcloud.com/ken/dream?in=x":                    {Provider: "soundcloud", ExternalID: "https://soundcloud.com/ken/dream", URL: "https://soundcloud.com/ken/dream"},
 	}
-	for link, want := range cases {
-		if _, ok := pixeldrainID(link); ok != want {
-			t.Errorf("pixeldrainID(%q) ok = %v, want %v", link, ok, want)
+	for raw, want := range cases {
+		if got, ok := audioLink(raw); !ok || got != want {
+			t.Errorf("audioLink(%q) = %+v, %v, want %+v", raw, got, ok, want)
+		}
+	}
+	for _, raw := range []string{"https://pixeldrain.com/u/../x", "https://pixeldrain.com.evil.io/u/abcdef", "https://youtube.com/watch?v=dQw4w9WgXcQ", "https://mega.nz/file/x", "https://imgur.gg/f/0Q3ydhk"} {
+		if got, ok := audioLink(raw); ok {
+			t.Errorf("audioLink(%q) = %+v, want rejected", raw, got)
 		}
 	}
 }

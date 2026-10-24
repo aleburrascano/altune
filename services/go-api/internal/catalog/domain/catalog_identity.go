@@ -1,9 +1,9 @@
 package domain
 
 import (
+	"altune/go-api/internal/shared/filehost"
 	"fmt"
 	"net/url"
-	"regexp"
 	"strings"
 )
 
@@ -25,12 +25,6 @@ var knownCatalogProviders = map[string]struct{}{
 	"amazonmusic": {},
 	"applemusic":  {},
 	"spotify":     {},
-}
-
-const PixeldrainProvider = "pixeldrain"
-
-var pinOnlyCatalogProviders = map[string]*regexp.Regexp{
-	PixeldrainProvider: regexp.MustCompile(`^[A-Za-z0-9]{6,16}$`),
 }
 
 func KnownCatalogProviders() []string {
@@ -106,11 +100,10 @@ func validateCatalogProvider(s CatalogSource) error {
 	if _, known := knownCatalogProviders[s.Provider]; known {
 		return nil
 	}
-	pinID, pinOnly := pinOnlyCatalogProviders[s.Provider]
-	if !pinOnly {
+	if !filehost.IsProvider(s.Provider) {
 		return NewValidationError("sources provider is unknown: " + s.Provider)
 	}
-	if !pinID.MatchString(s.ExternalID) {
+	if !filehost.ValidID(s.Provider, s.ExternalID) {
 		return NewValidationError("sources external_id is not a valid " + s.Provider + " id")
 	}
 	return nil

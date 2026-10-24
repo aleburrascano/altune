@@ -387,8 +387,8 @@ func TestSongCatalog_SongDetail_KeepsNormalisedAudioLinks(t *testing.T) {
 	got, err := catalog.SongDetail(context.Background(), 1)
 
 	want := []domain.AudioLink{
-		{Provider: "soundcloud", URL: "https://soundcloud.com/a/b"},
-		{Provider: "youtube", URL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
+		{Provider: "soundcloud", ExternalID: "https://soundcloud.com/a/b", URL: "https://soundcloud.com/a/b"},
+		{Provider: "youtube", ExternalID: "dQw4w9WgXcQ", URL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
 	}
 	if err != nil || !reflect.DeepEqual(got.AudioLinks, want) {
 		t.Errorf("AudioLinks = (%+v, %v), want %+v", got.AudioLinks, err, want)
@@ -403,7 +403,7 @@ func TestSongCatalog_SongDetail_KeepsARepeatedAudioLinkOnce(t *testing.T) {
 
 	got, err := catalog.SongDetail(context.Background(), 1)
 
-	want := []domain.AudioLink{{Provider: "youtube", URL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}}
+	want := []domain.AudioLink{{Provider: "youtube", ExternalID: "dQw4w9WgXcQ", URL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}}
 	if err != nil || !reflect.DeepEqual(got.AudioLinks, want) {
 		t.Errorf("AudioLinks = (%+v, %v), want %+v", got.AudioLinks, err, want)
 	}

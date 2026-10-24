@@ -3,20 +3,16 @@ package catalogpin
 import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/filehost"
 	"context"
 	"log/slog"
 	"net/url"
-	"regexp"
 	"strings"
 )
 
 const SourceName acqdomain.SourceName = "catalogpin"
 
 const pinnedProvider = ports.ProviderSoundCloud
-
-const pixeldrainDownloadBase = "https://pixeldrain.com/api/file/"
-
-var pixeldrainFileID = regexp.MustCompile(`^[A-Za-z0-9]{6,16}$`)
 
 type audioFetcher interface {
 	Download(ctx context.Context, url string, outDir string) (ports.FetchedAudio, error)
@@ -42,23 +38,24 @@ func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.Audio
 }
 
 func (s *Source) pinnedCandidates(ctx context.Context, req ports.FindRequest) []ports.AudioCandidate {
-	if files := pixeldrainCandidates(ctx, req); len(files) > 0 {
+	if files := fileHostCandidates(ctx, req); len(files) > 0 {
 		return files
 	}
 	return soundCloudCandidates(ctx, req)
 }
 
-func pixeldrainCandidates(ctx context.Context, req ports.FindRequest) []ports.AudioCandidate {
+func fileHostCandidates(ctx context.Context, req ports.FindRequest) []ports.AudioCandidate {
 	var files []ports.AudioCandidate
 	for _, pin := range req.CatalogSources {
-		if pin.Provider != string(ports.ProviderPixeldrain) {
+		if !filehost.IsProvider(pin.Provider) {
 			continue
 		}
-		if !pixeldrainFileID.MatchString(pin.ExternalID) {
-			slog.WarnContext(ctx, "acquisition.catalogpin_pixeldrain_id_rejected", "title", req.Title)
+		download, ok := filehost.DownloadURL(pin.Provider, pin.ExternalID)
+		if !ok {
+			slog.WarnContext(ctx, "acquisition.catalogpin_file_id_rejected", "provider", pin.Provider, "title", req.Title)
 			continue
 		}
-		files = append(files, pinnedCandidate(req, pixeldrainDownloadBase+pin.ExternalID+"?download"))
+		files = append(files, pinnedCandidate(req, download))
 	}
 	return files
 }

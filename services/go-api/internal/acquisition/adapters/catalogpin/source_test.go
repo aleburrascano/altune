@@ -234,3 +234,15 @@ func TestFind_DropsAMalformedPixeldrainID(t *testing.T) {
 		t.Fatalf("Find = %+v, want no candidate for a malformed id", got)
 	}
 }
+
+func TestFind_RebuildsEveryFileHostPinFromItsID(t *testing.T) {
+	cases := map[string]ports.CatalogSource{
+		"https://api.pillows.su/api/download/84310b5d2c21df85e4570aec299d1ead": {Provider: "pillows", ExternalID: "84310b5d2c21df85e4570aec299d1ead", URL: "https://evil.example/x"},
+	}
+	for want, pin := range cases {
+		got, err := NewSource(&recordingFetcher{}).Find(context.Background(), requestPinning(pin))
+		if err != nil || len(got) != 1 || got[0].URL != want {
+			t.Errorf("Find(%s) = %+v, %v; want one pin at %s", pin.Provider, got, err, want)
+		}
+	}
+}

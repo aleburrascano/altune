@@ -1,18 +1,13 @@
 package trackers
 
 import (
-	"net/url"
-	"regexp"
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/filehost"
 	"slices"
 	"strings"
 )
 
-const (
-	pixeldrainHost = "pixeldrain.com"
-	headerScanRows = 5
-)
-
-var pixeldrainIDRe = regexp.MustCompile(`^[A-Za-z0-9]{6,16}$`)
+const headerScanRows = 5
 
 type columns struct {
 	name, portion, quality int
@@ -20,9 +15,9 @@ type columns struct {
 }
 
 type trackerRow struct {
-	title       string
-	quality     string
-	pixeldrains []string
+	title   string
+	quality string
+	links   []domain.AudioLink
 }
 
 func mapColumns(header gridRow) columns {
@@ -78,11 +73,11 @@ func (c columns) parseRow(row gridRow) (trackerRow, bool) {
 		return trackerRow{}, false
 	}
 	title := trimLeadingDecoration(firstLine(row.cell(c.name).FormattedValue))
-	ids := c.pixeldrainIDs(row)
-	if title == "" || len(ids) == 0 {
+	links := c.audioLinks(row)
+	if title == "" || len(links) == 0 {
 		return trackerRow{}, false
 	}
-	return trackerRow{title: title, quality: strings.TrimSpace(row.cell(c.quality).FormattedValue), pixeldrains: ids}, true
+	return trackerRow{title: title, quality: strings.TrimSpace(row.cell(c.quality).FormattedValue), links: links}, true
 }
 
 func isWholeSong(portion string) bool {
@@ -90,26 +85,21 @@ func isWholeSong(portion string) bool {
 	return strings.EqualFold(p, "full") || strings.EqualFold(p, "og file")
 }
 
-func (c columns) pixeldrainIDs(row gridRow) []string {
-	var ids []string
+func (c columns) audioLinks(row gridRow) []domain.AudioLink {
+	var links []domain.AudioLink
 	for _, col := range c.links {
-		for _, link := range row.cell(col).links() {
-			if id, ok := pixeldrainID(link); ok && !slices.Contains(ids, id) {
-				ids = append(ids, id)
+		for _, raw := range row.cell(col).links() {
+			if link, ok := audioLink(raw); ok && !slices.Contains(links, link) {
+				links = append(links, link)
 			}
 		}
 	}
-	return ids
+	return links
 }
 
-func pixeldrainID(link string) (string, bool) {
-	u, err := url.Parse(link)
-	if err != nil || !strings.EqualFold(strings.TrimPrefix(u.Hostname(), "www."), pixeldrainHost) {
-		return "", false
+func audioLink(raw string) (domain.AudioLink, bool) {
+	if file, ok := filehost.Parse(raw); ok {
+		return domain.AudioLink{Provider: domain.AudioProvider(file.Provider), ExternalID: file.ID, URL: file.PageURL}, true
 	}
-	id, found := strings.CutPrefix(u.Path, "/u/")
-	if !found || !pixeldrainIDRe.MatchString(id) {
-		return "", false
-	}
-	return id, true
+	return domain.SoundCloudLink(raw)
 }

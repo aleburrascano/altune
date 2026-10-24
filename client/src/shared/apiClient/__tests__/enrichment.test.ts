@@ -556,7 +556,13 @@ describe('getUnreleasedTracks', () => {
     genius_url: 'https://genius.com/cancun',
     release_date: '2022-07-24',
     has_media: true,
-    audio_links: [{ provider: 'soundcloud', url: 'https://soundcloud.com/a/b' }],
+    audio_links: [
+      {
+        provider: 'soundcloud',
+        external_id: 'https://soundcloud.com/a/b',
+        url: 'https://soundcloud.com/a/b',
+      },
+    ],
     extras: {},
   };
 
@@ -614,7 +620,13 @@ describe('getUnreleasedTracks', () => {
       genius_url: null,
       tracker_key: 'ken-carson:dream-v2',
       quality: 'High Quality',
-      audio_links: [{ provider: 'pixeldrain', url: 'https://pixeldrain.com/u/ozSpSjn7' }],
+      audio_links: [
+        {
+          provider: 'pixeldrain',
+          external_id: 'ozSpSjn7',
+          url: 'https://pixeldrain.com/u/ozSpSjn7',
+        },
+      ],
     };
     const nameless = { ...row, genius_id: null, genius_url: null };
     __http.reply(PATH, { status: 200, json: { items: [trackerOnly, nameless] } });
@@ -626,7 +638,13 @@ describe('getUnreleasedTracks', () => {
       key: 'ken-carson:dream-v2',
       genius_url: null,
       quality: 'High Quality',
-      audio_links: [{ provider: 'pixeldrain', url: 'https://pixeldrain.com/u/ozSpSjn7' }],
+      audio_links: [
+        {
+          provider: 'pixeldrain',
+          external_id: 'ozSpSjn7',
+          url: 'https://pixeldrain.com/u/ozSpSjn7',
+        },
+      ],
     });
   });
 
@@ -646,15 +664,21 @@ describe('getUnreleasedTracks', () => {
     ]);
   });
 
-  it('defaults audio_links to empty and drops unknown providers or malformed links', async () => {
+  it('defaults audio_links to empty and drops links without a provider, an external_id or a url', async () => {
     const missing = { ...row, genius_id: 20, audio_links: undefined };
     const notArray = { ...row, genius_id: 21, audio_links: 'x' };
     const mixed = {
       ...row,
       genius_id: 22,
       audio_links: [
+        {
+          provider: 'youtube',
+          external_id: 'dQw4w9WgXcQ',
+          url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        },
+        { provider: 'pillows', external_id: 'abc', url: 'https://pillows.su/f/abc' },
         { provider: 'youtube', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
-        { provider: 'spotify', url: 'https://open.spotify.com/track/1' },
+        { provider: 'Bad Name', external_id: 'x', url: 'https://x.example' },
         { provider: 'soundcloud' },
         'junk',
       ],
@@ -666,7 +690,14 @@ describe('getUnreleasedTracks', () => {
     expect(items.map((item) => item.audio_links)).toEqual([
       [],
       [],
-      [{ provider: 'youtube', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }],
+      [
+        {
+          provider: 'youtube',
+          external_id: 'dQw4w9WgXcQ',
+          url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        },
+        { provider: 'pillows', external_id: 'abc', url: 'https://pillows.su/f/abc' },
+      ],
     ]);
   });
 

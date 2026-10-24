@@ -197,7 +197,7 @@ func TestHandleArtistUnreleased_LeavesSongsUnstampedForAUserWhoOwnsNone(t *testi
 func TestHandleArtistUnreleased_TrackerOnlyItemHasNullGeniusFieldsOnTheWire(t *testing.T) {
 	trackers := &discoverytest.TrackerSongs{Songs: []domain.UnreleasedSong{{
 		Title: "Dream [V2]", Quality: "High Quality", TrackerKey: "ken-carson:dream-v2", HasMedia: new(true),
-		AudioLinks: []domain.AudioLink{{Provider: domain.AudioProviderPixeldrain, URL: "https://pixeldrain.com/u/ozSpSjn7"}},
+		AudioLinks: []domain.AudioLink{{Provider: "pixeldrain", ExternalID: "ozSpSjn7", URL: "https://pixeldrain.com/u/ozSpSjn7"}},
 	}}}
 	svc := unreleased.NewService(nil, &discoverytest.ArtistCatalogTitles{}, nil, unreleased.Config{MaxPages: 1, MaxDetails: 10}, unreleased.WithTrackers(trackers))
 	h := NewDiscoveryHandler(DiscoveryServices{}).WithUnreleased(svc)
@@ -208,7 +208,7 @@ func TestHandleArtistUnreleased_TrackerOnlyItemHasNullGeniusFieldsOnTheWire(t *t
 	rec := discServe(t, r, http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Ken+Carson", nil)
 
 	discAssertStatus(t, rec, http.StatusOK)
-	want := `{"items":[{"genius_id":null,"title":"Dream [V2]","cover_url":null,"genius_url":null,"release_date":null,"has_media":true,"quality":"High Quality","tracker_key":"ken-carson:dream-v2","audio_links":[{"provider":"pixeldrain","url":"https://pixeldrain.com/u/ozSpSjn7"}],"extras":{}}],"pending":false}` + "\n"
+	want := `{"items":[{"genius_id":null,"title":"Dream [V2]","cover_url":null,"genius_url":null,"release_date":null,"has_media":true,"quality":"High Quality","tracker_key":"ken-carson:dream-v2","audio_links":[{"provider":"pixeldrain","external_id":"ozSpSjn7","url":"https://pixeldrain.com/u/ozSpSjn7"}],"extras":{}}],"pending":false}` + "\n"
 	if got := rec.Body.String(); got != want {
 		t.Errorf("body = %s, want %s", got, want)
 	}

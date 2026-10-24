@@ -71,7 +71,7 @@ const DREAM = {
   ...CANCUN,
   genius_id: 789,
   title: 'Dream',
-  audio_links: [{ provider: 'soundcloud', url: SOUNDCLOUD_URL }],
+  audio_links: [{ provider: 'soundcloud', external_id: SOUNDCLOUD_URL, url: SOUNDCLOUD_URL }],
 };
 const OWNED_LOOT = {
   ...DREAM,
@@ -297,7 +297,13 @@ describe('ArtistUnreleased', () => {
       genius_url: null,
       release_date: null,
       has_media: true,
-      audio_links: [{ provider: 'pixeldrain', url: 'https://pixeldrain.com/u/ozSpSjn7' }],
+      audio_links: [
+        {
+          provider: 'pixeldrain',
+          external_id: 'ozSpSjn7',
+          url: 'https://pixeldrain.com/u/ozSpSjn7',
+        },
+      ],
       extras: {},
     };
     __http.reply(UNRELEASED, { status: 200, json: { items: [trackerOnly] } });

@@ -27,10 +27,9 @@ const DREAM: UnreleasedTrack = {
   extras: { owned_track_id: 'track-9' },
 };
 
-const YOUTUBE_URL = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
 const SOUNDCLOUD_URL = 'https://soundcloud.com/ken/dream';
-
-const PIXELDRAIN_URL = 'https://pixeldrain.com/u/ozSpSjn7';
+const PILLOWS_ID = '84310b5d2c21df85e4570aec299d1ead';
+const PILLOWS_URL = `https://pillows.su/f/${PILLOWS_ID}`;
 
 describe('unreleasedAsResult', () => {
   it('saves under the artist page, album UNRELEASED, keeping the ownership extras', () => {
@@ -40,37 +39,22 @@ describe('unreleasedAsResult', () => {
     expect(result.extras).toEqual({ owned_track_id: 'track-9', album: 'UNRELEASED' });
   });
 
-  it('pins a SoundCloud link by its url and a YouTube link by its video id', () => {
+  it('pins each link by the external id the server gave it', () => {
     const links: UnreleasedTrack['audio_links'] = [
-      { provider: 'soundcloud', url: SOUNDCLOUD_URL },
-      { provider: 'youtube', url: YOUTUBE_URL },
+      { provider: 'soundcloud', external_id: SOUNDCLOUD_URL, url: SOUNDCLOUD_URL },
+      { provider: 'pillows', external_id: PILLOWS_ID, url: PILLOWS_URL },
     ];
 
-    const { sources } = unreleasedAsResult({ ...DREAM, audio_links: links }, ARTIST);
+    const track = { ...DREAM, audio_links: links };
 
-    expect(sources).toEqual([
+    expect(unreleasedAsResult(track, ARTIST).sources).toEqual([
       { provider: 'soundcloud', external_id: SOUNDCLOUD_URL, url: SOUNDCLOUD_URL },
-      { provider: 'youtube', external_id: 'dQw4w9WgXcQ', url: YOUTUBE_URL },
+      { provider: 'pillows', external_id: PILLOWS_ID, url: PILLOWS_URL },
     ]);
+    expect(isAcquirable(track)).toBe(true);
   });
 
-  it('pins a pixeldrain link by its file id', () => {
-    const links: UnreleasedTrack['audio_links'] = [{ provider: 'pixeldrain', url: PIXELDRAIN_URL }];
-
-    const { sources } = unreleasedAsResult({ ...DREAM, audio_links: links }, ARTIST);
-
-    expect(sources).toEqual([
-      { provider: 'pixeldrain', external_id: 'ozSpSjn7', url: PIXELDRAIN_URL },
-    ]);
-  });
-
-  it('drops a YouTube link with no video id, leaving the song not acquirable', () => {
-    const track = {
-      ...DREAM,
-      audio_links: [{ provider: 'youtube' as const, url: 'https://youtube.com/x' }],
-    };
-
-    expect(unreleasedAsResult(track, ARTIST).sources).toEqual([]);
-    expect(isAcquirable(track)).toBe(false);
+  it('is not acquirable without a link', () => {
+    expect(isAcquirable(DREAM)).toBe(false);
   });
 });

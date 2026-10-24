@@ -8,8 +8,6 @@ import (
 	"unicode"
 )
 
-const pixeldrainScheme = "https://"
-
 func songsFromRows(artistName string, rows []trackerRow) []domain.UnreleasedSong {
 	songs := make([]domain.UnreleasedSong, 0, len(rows))
 	byKey := map[string]int{}
@@ -27,16 +25,12 @@ func songsFromRows(artistName string, rows []trackerRow) []domain.UnreleasedSong
 
 func songFromRow(artistName string, row trackerRow) domain.UnreleasedSong {
 	hasMedia := true
-	links := make([]domain.AudioLink, len(row.pixeldrains))
-	for i, id := range row.pixeldrains {
-		links[i] = domain.AudioLink{Provider: domain.AudioProviderPixeldrain, URL: pixeldrainScheme + pixeldrainHost + "/u/" + id}
-	}
 	return domain.UnreleasedSong{
 		Title:      row.title,
 		Quality:    row.quality,
 		TrackerKey: trackerKey(artistName, row.title),
 		HasMedia:   &hasMedia,
-		AudioLinks: links,
+		AudioLinks: row.links,
 	}
 }
 

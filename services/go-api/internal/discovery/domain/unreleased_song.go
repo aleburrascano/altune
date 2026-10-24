@@ -5,13 +5,7 @@ type AudioProvider string
 const (
 	AudioProviderSoundCloud AudioProvider = "soundcloud"
 	AudioProviderYouTube    AudioProvider = "youtube"
-	AudioProviderPixeldrain AudioProvider = "pixeldrain"
 )
-
-type AudioLink struct {
-	Provider AudioProvider `json:"provider"`
-	URL      string        `json:"url"`
-}
 
 type GeniusSongDetail struct {
 	HasMedia        bool

@@ -182,3 +182,14 @@ func TestNormalizeCatalogSources_AcceptsAPixeldrainFileID(t *testing.T) {
 		t.Fatalf("NormalizeCatalogSources = %+v, %v; want the pixeldrain pin kept", got, err)
 	}
 }
+
+func TestNormalizeCatalogSources_AcceptsEveryFileHostAndRejectsABadID(t *testing.T) {
+	for _, ok := range []CatalogSource{{Provider: "pillows", ExternalID: "84310b5d2c21df85e4570aec299d1ead"}} {
+		if _, err := NormalizeCatalogSources([]CatalogSource{ok}); err != nil {
+			t.Errorf("%s pin rejected: %v", ok.Provider, err)
+		}
+	}
+	if _, err := NormalizeCatalogSources([]CatalogSource{{Provider: "pillows", ExternalID: "../x"}}); err == nil {
+		t.Error("a malformed pillows id must be rejected")
+	}
+}
