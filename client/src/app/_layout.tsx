@@ -26,6 +26,7 @@ import { useServerEvents } from '@shared/events/useServerEvents';
 import { startKillSwitchPolling } from '@shared/killSwitch/killSwitchPoll';
 import { useScreenViews } from '@shared/events/useScreenViews';
 import { installGlobalErrorReporting } from '@shared/telemetry/clientErrorReporting';
+import { reportOtaLaunchFailures } from '@shared/telemetry/native/otaLaunchReport';
 import { PlaybackProvider, SleepTimerBridge, startPlaybackService } from '@features/playback';
 import { OfflineReconcileBridge } from '@shared/offline/ui/OfflineReconcileBridge';
 import { useWideWebLayout } from '@shared/ui/layout/useLayoutMode';
@@ -44,6 +45,9 @@ registerSearchStateSignOutReset();
 void SplashScreen.preventAutoHideAsync();
 
 installGlobalErrorReporting();
+reportOtaLaunchFailures().catch((error: unknown) => {
+  console.warn('[telemetry] reading update logs failed', error);
+});
 
 function ServerEventsBridge() {
   useServerEvents();
