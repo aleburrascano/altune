@@ -8,9 +8,10 @@ import (
 )
 
 type trackerRow struct {
-	title   string
-	quality string
-	links   []domain.AudioLink
+	title        string
+	quality      string
+	links        []domain.AudioLink
+	offStreaming bool
 }
 
 func parseSheet(body []byte) (rows []trackerRow, mapped bool, err error) {
@@ -36,7 +37,7 @@ func (c columns) parseRow(row gridRow) (trackerRow, bool) {
 		return trackerRow{}, false
 	}
 	title := trimLeadingDecoration(firstLine(row.cell(c.name).FormattedValue))
-	links := c.audioLinks(row)
+	links := c.audioLinks(row, audioLink)
 	if title == "" || len(links) == 0 {
 		return trackerRow{}, false
 	}
@@ -61,11 +62,13 @@ func isWholeSong(portion string) bool {
 	return strings.EqualFold(p, "full") || strings.EqualFold(p, "og file")
 }
 
-func (c columns) audioLinks(row gridRow) []domain.AudioLink {
+type linkReader func(raw string) (domain.AudioLink, bool)
+
+func (c columns) audioLinks(row gridRow, read linkReader) []domain.AudioLink {
 	var links []domain.AudioLink
 	for _, col := range c.links {
 		for _, raw := range row.cell(col).links() {
-			if link, ok := audioLink(raw); ok && !slices.Contains(links, link) {
+			if link, ok := read(raw); ok && !slices.Contains(links, link) {
 				links = append(links, link)
 			}
 		}

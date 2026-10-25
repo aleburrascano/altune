@@ -144,13 +144,7 @@ func TestParseSheet_ReadsFullHQAsAWholeSongWithItsQuality(t *testing.T) {
 		rows = append(rows, songRow("Era", fmt.Sprintf("Song %d", i), "Snippet - LQ", pillowsLink(i)))
 	}
 	rows = append(rows, songRow("Era", "Keeper", "Full - HQ", pillowsLink(99)), songRow("Era", "Fan cut", "Full - HQ (Unofficial)", pillowsLink(98)))
-	body, _ := json.Marshal(gridResponse{Sheets: []struct {
-		Data []struct {
-			RowData []gridRow `json:"rowData"`
-		} `json:"data"`
-	}{{Data: []struct {
-		RowData []gridRow `json:"rowData"`
-	}{{RowData: gridOf([]string{"Era", "Title", "What's Available?", "Links"}, rows...)}}}}})
+	body := gridBody(t, gridOf([]string{"Era", "Title", "What's Available?", "Links"}, rows...))
 	got, mapped, err := parseSheet(body)
 	if err != nil || !mapped || len(got) != 1 || got[0].title != "Keeper" || got[0].quality != "HQ" {
 		t.Errorf("parseSheet = %+v, mapped %v, err %v; want only Keeper at HQ", got, mapped, err)
@@ -174,4 +168,22 @@ func TestInferColumns_UsesHeaderWordsWhenASheetIsTooSmallToJudge(t *testing.T) {
 	if !ok || headerAt != 0 || cols.name != 0 || cols.portion != 1 || len(cols.links) != 1 || cols.links[0] != 2 {
 		t.Errorf("cols = %+v, header %d, ok %v; want the header's Name, Portion and Links", cols, headerAt, ok)
 	}
+}
+
+func gridBody(t *testing.T, grid []gridRow) []byte {
+	t.Helper()
+	var resp gridResponse
+	resp.Sheets = make([]struct {
+		Data []struct {
+			RowData []gridRow `json:"rowData"`
+		} `json:"data"`
+	}, 1)
+	resp.Sheets[0].Data = []struct {
+		RowData []gridRow `json:"rowData"`
+	}{{RowData: grid}}
+	body, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return body
 }

@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -51,10 +52,10 @@ func (c *Client) ArtistSongs(ctx context.Context, artistName string) ([]domain.U
 		return []domain.UnreleasedSong{}, nil
 	}
 	rows, err := c.artistRows(ctx, sheetID)
-	if err != nil {
+	if err != nil && !errors.Is(err, ports.ErrTrackerPartial) {
 		return nil, fmt.Errorf("tracker sheet: %w", err)
 	}
-	return songsFromRows(artistName, rows), nil
+	return songsFromRows(artistName, rows), err
 }
 
 func (c *Client) Artists(ctx context.Context) ([]string, error) {
@@ -98,37 +99,55 @@ func (c *Client) storeIndex(ctx context.Context, index map[string]string) {
 }
 
 func (c *Client) artistRows(ctx context.Context, sheetID string) ([]trackerRow, error) {
-	tab, found, err := c.findUnreleasedTab(ctx, sheetID)
-	if err != nil || !found {
+	tabs, err := c.findTabs(ctx, sheetID)
+	if err != nil {
 		return nil, err
+	}
+	unreleased, err := c.tabRows(ctx, sheetID, tabs.unreleased, parseSheet)
+	if err != nil {
+		return nil, err
+	}
+	released, err := c.tabRows(ctx, sheetID, tabs.released, parseReleased)
+	if err != nil {
+		slog.WarnContext(ctx, "trackers.released_tab_failed", "sheet_id", sheetID, "error", err)
+		return unreleased, fmt.Errorf("%w: released tab: %w", ports.ErrTrackerPartial, err)
+	}
+	return append(unreleased, released...), nil
+}
+
+type tabParser func(body []byte) (rows []trackerRow, mapped bool, err error)
+
+func (c *Client) tabRows(ctx context.Context, sheetID, tab string, parse tabParser) ([]trackerRow, error) {
+	if tab == "" {
+		return nil, nil
 	}
 	body, err := c.fetch(ctx, sheetID, gridQuery(tabRange(tab)))
 	if err != nil {
 		return nil, err
 	}
-	rows, mapped, err := parseSheet(body)
+	rows, mapped, err := parse(body)
 	if err != nil {
 		return nil, providerhttp.BadPayloadError{Cause: err}
 	}
 	if !mapped {
-		slog.WarnContext(ctx, "trackers.unmapped_sheet", "sheet_id", sheetID)
+		slog.WarnContext(ctx, "trackers.unmapped_sheet", "sheet_id", sheetID, "tab", tab)
 	}
 	return rows, nil
 }
 
-func (c *Client) findUnreleasedTab(ctx context.Context, sheetID string) (string, bool, error) {
+func (c *Client) findTabs(ctx context.Context, sheetID string) (sheetTabs, error) {
 	body, err := c.fetch(ctx, sheetID, url.Values{"fields": {tabsMask}})
 	if err != nil {
-		return "", false, err
+		return sheetTabs{}, err
 	}
-	tab, found, err := unreleasedTab(body)
+	tabs, err := pickTabs(body)
 	if err != nil {
-		return "", false, providerhttp.BadPayloadError{Cause: err}
+		return sheetTabs{}, providerhttp.BadPayloadError{Cause: err}
 	}
-	if !found {
+	if tabs.unreleased == "" {
 		slog.WarnContext(ctx, "trackers.unmapped_sheet", "sheet_id", sheetID, "reason", "no unreleased tab")
 	}
-	return tab, found, nil
+	return tabs, nil
 }
 
 func gridQuery(sheetRange string) url.Values {

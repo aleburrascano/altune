@@ -24,6 +24,8 @@ type UnreleasedCache interface {
 	Set(ctx context.Context, provider domain.ProviderName, externalID, nameKey string, songs []domain.UnreleasedSong, ttl time.Duration) error
 }
 
+var ErrTrackerPartial = errors.New("tracker sheet read in part")
+
 type TrackerSongs interface {
 	ArtistSongs(ctx context.Context, artistName string) ([]domain.UnreleasedSong, error)
 }

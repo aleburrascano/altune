@@ -9,7 +9,12 @@ import (
 const (
 	tabsMask       = "sheets.properties.title"
 	unreleasedWord = "unreleased"
+	releasedWord   = "released"
 )
+
+type sheetTabs struct {
+	unreleased, released string
+}
 
 type tabsResponse struct {
 	Sheets []struct {
@@ -19,17 +24,17 @@ type tabsResponse struct {
 	} `json:"sheets"`
 }
 
-func unreleasedTab(body []byte) (string, bool, error) {
+func pickTabs(body []byte) (sheetTabs, error) {
 	var resp tabsResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return "", false, err
+		return sheetTabs{}, err
 	}
 	titles := make([]string, 0, len(resp.Sheets))
 	for _, sheet := range resp.Sheets {
 		titles = append(titles, sheet.Properties.Title)
 	}
-	title, found := pickUnreleased(titles)
-	return title, found, nil
+	unreleased, _ := pickUnreleased(titles)
+	return sheetTabs{unreleased: unreleased, released: pickReleased(titles)}, nil
 }
 
 func pickUnreleased(titles []string) (string, bool) {
@@ -44,6 +49,15 @@ func pickUnreleased(titles []string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+func pickReleased(titles []string) string {
+	for _, title := range titles {
+		if lettersOnly(title) == releasedWord {
+			return title
+		}
+	}
+	return ""
 }
 
 func lettersOnly(title string) string {

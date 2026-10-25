@@ -27,8 +27,8 @@ type columns struct {
 }
 
 type columnStats struct {
-	filled, links, portions, numbers int
-	distinct                         map[string]struct{}
+	filled, links, videos, portions, numbers, yesNo int
+	distinct                                        map[string]struct{}
 }
 
 func (c columns) usable() bool {
@@ -98,20 +98,25 @@ func (s *columnStats) add(cell gridCell) {
 	}
 	s.filled++
 	s.distinct[strings.ToLower(text)] = struct{}{}
-	if hasAudioLink(cell) {
+	if hasLink(cell, audioLink) {
 		s.links++
+	} else if hasLink(cell, releasedLink) {
+		s.videos++
 	}
 	if isPortionWord(text) {
 		s.portions++
+	}
+	if streamingAnswer(text) != "" {
+		s.yesNo++
 	}
 	if isNumeric(text) || isDate(text) {
 		s.numbers++
 	}
 }
 
-func hasAudioLink(cell gridCell) bool {
+func hasLink(cell gridCell, read linkReader) bool {
 	for _, raw := range cell.links() {
-		if _, ok := audioLink(raw); ok {
+		if _, ok := read(raw); ok {
 			return true
 		}
 	}
@@ -161,9 +166,13 @@ func pickPortion(stats []columnStats) int {
 }
 
 func pickLinks(stats []columnStats) []int {
+	return pickLinksBy(stats, func(s columnStats) int { return s.links })
+}
+
+func pickLinksBy(stats []columnStats, hits func(columnStats) int) []int {
 	var links []int
 	for i, s := range stats {
-		if s.links >= minLinkHits && share(s.links, s.filled) >= minLinkShare {
+		if n := hits(s); n >= minLinkHits && share(n, s.filled) >= minLinkShare {
 			links = append(links, i)
 		}
 	}
@@ -192,7 +201,7 @@ func (c columns) free(i int) bool {
 }
 
 func (s columnStats) looksLikeTitles() bool {
-	return s.filled >= minColumnHits && s.links == 0 && s.numbers*2 < s.filled &&
+	return s.filled >= minColumnHits && s.links+s.videos == 0 && s.numbers*2 < s.filled &&
 		share(len(s.distinct), s.filled) >= minTitleDistinct
 }
 

@@ -160,3 +160,27 @@ func TestService_List_CancelledJobIsAnErrorEvenWithTrackerSongs(t *testing.T) {
 		t.Errorf("err = %v, want context.Canceled", err)
 	}
 }
+
+func TestService_List_APartTrackerReadKeepsItsSongsButCachesShort(t *testing.T) {
+	trackers := &discoverytest.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("Loot", "lootaaaa")}, Err: ports.ErrTrackerPartial}
+	cache := newMemoryCache()
+	got, err := listWith(t, nil, trackers, cache)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("got %v, err %v; want the one song read", titlesOf(got), err)
+	}
+	for key, ttl := range cache.ttls {
+		if ttl != shortTTL {
+			t.Errorf("ttl[%s] = %v, want the short TTL for a part read", key, ttl)
+		}
+	}
+}
+
+func TestService_List_AnOffStreamingTrackerSongKeepsTheGeniusQuality(t *testing.T) {
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Loot")}
+	genius.Songs[0].Quality = "CDQ"
+	tracked := domain.UnreleasedSong{Title: "Loot", TrackerKey: "ken:loot", OffStreaming: true}
+	got, err := listWith(t, genius, &discoverytest.TrackerSongs{Songs: []domain.UnreleasedSong{tracked}}, nil)
+	if err != nil || len(got) != 1 || got[0].Quality != "CDQ" || !got[0].OffStreaming {
+		t.Errorf("got %+v, err %v; want CDQ kept and the off-streaming flag", got, err)
+	}
+}

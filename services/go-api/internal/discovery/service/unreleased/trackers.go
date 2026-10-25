@@ -27,6 +27,10 @@ func (s *Service) trackerResult(ctx context.Context, artistName string, catalogT
 		return sourceResult{complete: true}
 	}
 	songs, err := s.trackers.ArtistSongs(ctx, artistName)
+	if errors.Is(err, ports.ErrTrackerPartial) {
+		slog.WarnContext(ctx, "trackers.partial", "error", err)
+		return sourceResult{songs: withoutCatalogMatches(songs, catalogTitles), used: true}
+	}
 	if err != nil {
 		slog.WarnContext(ctx, "trackers.fetch_failed", "error", err)
 		return sourceResult{used: true, err: err}
@@ -79,8 +83,11 @@ func mergeTrackerSongs(genius, trackers []domain.UnreleasedSong) []domain.Unrele
 func withTrackerFile(song, tracked domain.UnreleasedSong) domain.UnreleasedSong {
 	hasMedia := true
 	song.HasMedia = &hasMedia
-	song.Quality = tracked.Quality
+	if tracked.Quality != "" {
+		song.Quality = tracked.Quality
+	}
 	song.TrackerKey = tracked.TrackerKey
+	song.OffStreaming = song.OffStreaming || tracked.OffStreaming
 	song.AudioLinks = appendNewLinks(slices.Clone(song.AudioLinks), tracked.AudioLinks)
 	return song
 }

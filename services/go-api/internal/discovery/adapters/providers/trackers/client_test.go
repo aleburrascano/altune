@@ -3,6 +3,8 @@ package trackers
 import (
 	"altune/go-api/internal/discovery/ports"
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -31,12 +33,14 @@ func (f *fakeIndexCache) Set(_ context.Context, index map[string]string, _ time.
 
 type sheetsServer struct {
 	*httptest.Server
-	hubCalls    atomic.Int32
-	artistCalls atomic.Int32
-	lastQuery   atomic.Value
-	lastKey     atomic.Value
-	artistCode  int
-	tabs        string
+	hubCalls     atomic.Int32
+	artistCalls  atomic.Int32
+	lastQuery    atomic.Value
+	lastKey      atomic.Value
+	artistCode   int
+	tabs         string
+	released     []byte
+	releasedCode int
 }
 
 func tabsBody(titles ...string) string {
@@ -57,6 +61,11 @@ func newSheetsServer(t *testing.T, hub, artist []byte) *sheetsServer {
 			return
 		}
 		s.lastQuery.Store(r.URL.RawQuery)
+		if strings.HasSuffix(r.URL.Path, kenSheetID) && r.URL.Query().Get("ranges") == tabRange("Released") && s.released != nil {
+			w.WriteHeader(s.releasedCode)
+			_, _ = w.Write(s.released)
+			return
+		}
 		if strings.HasSuffix(r.URL.Path, kenSheetID) {
 			s.artistCalls.Add(1)
 			w.WriteHeader(s.artistCode)
@@ -93,6 +102,7 @@ func TestClient_ArtistSongsReturnsTheTrackersFullLeaks(t *testing.T) {
 
 func TestClient_SendsTheKeyInAHeaderNeverInTheURL(t *testing.T) {
 	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), readFixture(t, "ken_carson_unreleased.json"))
+	srv.tabs = tabsBody("Unreleased")
 	if _, err := srv.client(nil).ArtistSongs(context.Background(), "Ken Carson"); err != nil {
 		t.Fatal(err)
 	}
@@ -193,5 +203,46 @@ func TestNewClient_UsesItsOwnTimeoutWithoutTouchingTheSharedClient(t *testing.T)
 	c := NewClient(shared, testKey, "hub", nil)
 	if c.http.Timeout != 30*time.Second || shared.Timeout != 10*time.Second {
 		t.Errorf("timeouts = %v / %v, want 30s own and 10s shared", c.http.Timeout, shared.Timeout)
+	}
+}
+
+func offStreamingSheet(t *testing.T) []byte {
+	t.Helper()
+	var rows [][]gridCell
+	for i := range 6 {
+		rows = append(rows, releasedRow(fmt.Sprintf("Hit %d", i), "Yes", fmt.Sprintf("https://youtu.be/hit%08d", i)))
+	}
+	rows = append(rows, releasedRow("Do You Want", "No", "https://www.youtube.com/watch?v=JNprs9jO0eU"))
+	return gridBody(t, gridOf([]string{"Era", "Name", "Type", "Streaming", "Link(s)"}, rows...))
+}
+
+func TestClient_AddsTheReleasedTabsOffStreamingSongs(t *testing.T) {
+	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), readFixture(t, "ken_carson_unreleased.json"))
+	srv.released, srv.releasedCode = offStreamingSheet(t), http.StatusOK
+	songs, err := srv.client(nil).ArtistSongs(context.Background(), "Ken Carson")
+	if err != nil || len(songs) != 5 {
+		t.Fatalf("ArtistSongs = %d songs, err %v; want 4 unreleased and 1 off streaming", len(songs), err)
+	}
+	last := songs[4]
+	if last.Title != "Do You Want" || !last.OffStreaming || last.AudioLinks[0].Provider != "youtube" || songs[0].OffStreaming {
+		t.Errorf("songs = %+v, want only Do You Want flagged, with its YouTube link", songs)
+	}
+}
+
+func TestClient_KeepsTheUnreleasedSongsWhenTheReleasedTabFails(t *testing.T) {
+	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), readFixture(t, "ken_carson_unreleased.json"))
+	srv.released, srv.releasedCode = []byte(`{}`), http.StatusInternalServerError
+	songs, err := srv.client(nil).ArtistSongs(context.Background(), "Ken Carson")
+	if !errors.Is(err, ports.ErrTrackerPartial) || len(songs) != 4 {
+		t.Errorf("ArtistSongs = %d songs, err %v; want the 4 unreleased songs and a partial error", len(songs), err)
+	}
+}
+
+func TestClient_ReadsOnlyTheUnreleasedTabWhenThereIsNoReleasedTab(t *testing.T) {
+	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), readFixture(t, "ken_carson_unreleased.json"))
+	srv.tabs = tabsBody("Unreleased", "Released [old]")
+	songs, err := srv.client(nil).ArtistSongs(context.Background(), "Ken Carson")
+	if err != nil || len(songs) != 4 || srv.artistCalls.Load() != 1 {
+		t.Errorf("ArtistSongs = %d songs, err %v, %d grid reads; want 4 songs from one read", len(songs), err, srv.artistCalls.Load())
 	}
 }
