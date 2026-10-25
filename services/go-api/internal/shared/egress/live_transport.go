@@ -41,6 +41,7 @@ var providerRateLimits = map[string]rate.Limit{
 	"clienttoken.spotify.com":    2,
 	"soundcloud.com":             2,
 	"imgur.gg":                   2,
+	"krakenfiles.com":            2,
 }
 
 const defaultProviderBurst = 4

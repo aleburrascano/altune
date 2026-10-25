@@ -22,6 +22,8 @@ var pillowsID = regexp.MustCompile(`^[A-Za-z0-9]{20,40}$`)
 
 var imgurggID = regexp.MustCompile(`^[A-Za-z0-9]{5,16}$`)
 
+var krakenfilesID = regexp.MustCompile(`^[A-Za-z0-9]{10}$`)
+
 var hosts = []host{
 	{
 		provider:  "pixeldrain",
@@ -47,6 +49,16 @@ var hosts = []host{
 		page:      func(id string) string { return "https://imgur.gg/f/" + id },
 		fileOnPage: func(id string) *regexp.Regexp {
 			return regexp.MustCompile(`https://b\.imgur\.gg/` + id + `-[A-Za-z0-9._%()+-]{1,150}`)
+		},
+	},
+	{
+		provider:  "krakenfiles",
+		hostnames: []string{"krakenfiles.com"},
+		pathID:    regexp.MustCompile(`^/view/([^/]+)/file\.html$`),
+		validID:   krakenfilesID,
+		page:      func(id string) string { return "https://krakenfiles.com/view/" + id + "/file.html" },
+		fileOnPage: func(id string) *regexp.Regexp {
+			return regexp.MustCompile(`https://hs[0-9]{1,2}\.krakenfiles\.com/uploads/[0-9]{2}-[0-9]{2}-[0-9]{4}/` + id + `/music\.(m4a|mp3|wav|flac)`)
 		},
 	},
 }

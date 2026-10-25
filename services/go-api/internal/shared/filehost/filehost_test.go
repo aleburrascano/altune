@@ -9,6 +9,7 @@ func TestParse_ReadsEachHostsFileLink(t *testing.T) {
 		{"https://pillows.su/f/4d201f3332e7128f9f148d765244ce98", "pillows", "4d201f3332e7128f9f148d765244ce98", "https://pillows.su/f/4d201f3332e7128f9f148d765244ce98"},
 		{"https://pillowcase.su/f/84310b5d2c21df85e4570aec299d1ead", "pillows", "84310b5d2c21df85e4570aec299d1ead", "https://pillows.su/f/84310b5d2c21df85e4570aec299d1ead"},
 		{"https://imgur.gg/f/0Q3ydhk", "imgurgg", "0Q3ydhk", "https://imgur.gg/f/0Q3ydhk"},
+		{"https://krakenfiles.com/view/061QAmEM4q/file.html", "krakenfiles", "061QAmEM4q", "https://krakenfiles.com/view/061QAmEM4q/file.html"},
 	}
 	for _, c := range cases {
 		got, ok := Parse(c.link)
@@ -65,5 +66,22 @@ func TestFileOnPage_AcceptsOnlyThisIDsFileOnTheImgurggCDN(t *testing.T) {
 	}
 	if _, ok := FileOnPage("pixeldrain", "ozSpSjn7"); ok {
 		t.Error("pixeldrain has a direct download and no page step")
+	}
+}
+
+func TestFileOnPage_AcceptsOnlyThisIDsAudioOnTheKrakenfilesStorage(t *testing.T) {
+	page, ok := FileOnPage("krakenfiles", "061QAmEM4q")
+	if !ok || page.PageURL != "https://krakenfiles.com/view/061QAmEM4q/file.html" {
+		t.Fatalf("FileOnPage = %+v, %v", page, ok)
+	}
+	body := `m4a: 'https://evil.example/uploads/23-02-2024/061QAmEM4q/music.m4a', ` +
+		`img: 'https://hs1.krakenfiles.com/uploads/23-02-2024/061QAmEM4q/cover.png', ` +
+		`m4a: 'https://hs1.krakenfiles.com/uploads/23-02-2024/OTHERID123/music.m4a', ` +
+		`m4a: 'https://hs1.krakenfiles.com/uploads/23-02-2024/061QAmEM4q/music.m4a'`
+	if got := page.File.FindString(body); got != "https://hs1.krakenfiles.com/uploads/23-02-2024/061QAmEM4q/music.m4a" {
+		t.Errorf("file = %q, want only this id's audio on krakenfiles storage", got)
+	}
+	if _, ok := DownloadURL("krakenfiles", "061QAmEM4q"); ok {
+		t.Error("a krakenfiles page must never be handed to the downloader")
 	}
 }
