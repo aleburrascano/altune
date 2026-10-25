@@ -1,9 +1,0 @@
-{
-  "refusedPaths": [
-    "services/go-api/migrations/",
-    "services/go-api/deploy/prod-migrate.sh",
-    "services/go-api/deploy/migration-safety.sh",
-    "services/go-api/nilaway-baseline.txt"
-  ],
-  "ciContexts": ["precheck / precheck (pull_request)", "github / pr-checks"]
-}
