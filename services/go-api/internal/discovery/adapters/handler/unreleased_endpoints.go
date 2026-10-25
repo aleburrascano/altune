@@ -10,16 +10,17 @@ import (
 )
 
 type UnreleasedSongDTO struct {
-	GeniusID    *int               `json:"genius_id"`
-	Title       string             `json:"title"`
-	CoverURL    *string            `json:"cover_url"`
-	GeniusURL   *string            `json:"genius_url"`
-	ReleaseDate *string            `json:"release_date"`
-	HasMedia    *bool              `json:"has_media"`
-	Quality     *string            `json:"quality"`
-	TrackerKey  *string            `json:"tracker_key"`
-	AudioLinks  []domain.AudioLink `json:"audio_links"`
-	Extras      map[string]any     `json:"extras"`
+	GeniusID     *int               `json:"genius_id"`
+	Title        string             `json:"title"`
+	CoverURL     *string            `json:"cover_url"`
+	GeniusURL    *string            `json:"genius_url"`
+	ReleaseDate  *string            `json:"release_date"`
+	HasMedia     *bool              `json:"has_media"`
+	Quality      *string            `json:"quality"`
+	TrackerKey   *string            `json:"tracker_key"`
+	OffStreaming bool               `json:"off_streaming"`
+	AudioLinks   []domain.AudioLink `json:"audio_links"`
+	Extras       map[string]any     `json:"extras"`
 }
 
 type UnreleasedResponseDTO struct {
@@ -36,16 +37,17 @@ func unreleasedToDTO(found unreleased.Lookup) UnreleasedResponseDTO {
 	items := make([]UnreleasedSongDTO, len(found.Songs))
 	for i, s := range found.Songs {
 		items[i] = UnreleasedSongDTO{
-			GeniusID:    nonZero(s.GeniusID),
-			Title:       s.Title,
-			CoverURL:    nonEmpty(s.CoverURL),
-			GeniusURL:   nonEmpty(s.GeniusURL),
-			ReleaseDate: nonEmpty(s.ReleaseDate),
-			HasMedia:    s.HasMedia,
-			Quality:     nonEmpty(s.Quality),
-			TrackerKey:  nonEmpty(s.TrackerKey),
-			AudioLinks:  nonNilLinks(s.AudioLinks),
-			Extras:      map[string]any{},
+			GeniusID:     nonZero(s.GeniusID),
+			Title:        s.Title,
+			CoverURL:     nonEmpty(s.CoverURL),
+			GeniusURL:    nonEmpty(s.GeniusURL),
+			ReleaseDate:  nonEmpty(s.ReleaseDate),
+			HasMedia:     s.HasMedia,
+			Quality:      nonEmpty(s.Quality),
+			TrackerKey:   nonEmpty(s.TrackerKey),
+			OffStreaming: s.OffStreaming,
+			AudioLinks:   nonNilLinks(s.AudioLinks),
+			Extras:       map[string]any{},
 		}
 	}
 	return UnreleasedResponseDTO{Items: items, Pending: found.Pending}
