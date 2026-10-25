@@ -23,6 +23,7 @@ const DREAM: UnreleasedTrack = {
   genius_url: 'https://genius.com/d',
   release_date: null,
   has_media: true,
+  off_streaming: false,
   audio_links: [],
   extras: { owned_track_id: 'track-9' },
 };

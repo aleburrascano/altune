@@ -296,6 +296,7 @@ export type UnreleasedTrack = {
   genius_url: string | null;
   release_date: string | null;
   has_media: boolean | null;
+  off_streaming: boolean;
   audio_links: UnreleasedAudioLink[];
   extras: Record<string, unknown>;
 };
@@ -362,6 +363,7 @@ function parseUnreleasedDetails(r: Record<string, unknown>, at: string) {
     cover_url: nullableString(r.cover_url, `${at}.cover_url`),
     release_date: nullableString(r.release_date, `${at}.release_date`),
     has_media: nullableBoolean(r.has_media, `${at}.has_media`),
+    off_streaming: nullableBoolean(r.off_streaming, `${at}.off_streaming`) === true,
     audio_links: parseAudioLinks(r.audio_links),
     extras: parseOwnershipExtras(r.extras, `${at}.extras`),
   };

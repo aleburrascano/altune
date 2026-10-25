@@ -568,7 +568,13 @@ describe('getUnreleasedTracks', () => {
 
   type WireRow = Record<string, unknown> & { genius_id: number };
   function asParsed(wire: WireRow) {
-    return { key: String(wire.genius_id), tracker_key: null, quality: null, ...wire };
+    return {
+      key: String(wire.genius_id),
+      tracker_key: null,
+      quality: null,
+      off_streaming: false,
+      ...wire,
+    };
   }
 
   it('sends the artist name and the known ids as query params', async () => {
@@ -601,6 +607,13 @@ describe('getUnreleasedTracks', () => {
     const { items } = await getUnreleasedTracks('spotify', 'art-1', { name: 'X' });
 
     expect(items).toEqual([asParsed(row), asParsed(bare)]);
+  });
+
+  it('reads off_streaming true and treats a missing flag as false', async () => {
+    __http.reply(PATH, { status: 200, json: { items: [{ ...row, off_streaming: true }, row] } });
+
+    const { items } = await getUnreleasedTracks('spotify', 'art-1', { name: 'X' });
+    expect(items.map((item) => item.off_streaming)).toEqual([true, false]);
   });
 
   it('keeps has_media true, false and null as they arrive', async () => {

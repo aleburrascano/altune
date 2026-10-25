@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
 
 import { HorizontalRail } from '@shared/ui/primitives/HorizontalRail';
@@ -16,6 +16,7 @@ import {
   type UnreleasedCardState,
   useUnreleasedTracks,
 } from '@features/detail/hooks/useUnreleasedTracks';
+import { FilterChips, type ChipGroup } from '@features/detail/ui/DiscographySections';
 import { DETAIL_GUTTER, RELATED_CARD_WIDTH, sharedStyles } from '@features/detail/ui/detailStyles';
 import { Section } from '@features/detail/ui/Section';
 
@@ -148,11 +149,48 @@ function railStyle() {
   return { style: styles.rail, contentContainerStyle: styles.railContent };
 }
 
+const SECTION_LABEL = 'Not on streaming';
+const RELEASED = 'released';
+const UNRELEASED = 'unreleased';
+
+function trackGroups(tracks: UnreleasedTrack[]): ChipGroup[] {
+  const released = tracks.filter((t) => t.off_streaming).length;
+  const groups = [
+    { type: RELEASED, label: 'Released', count: released },
+    { type: UNRELEASED, label: 'Unreleased', count: tracks.length - released },
+  ];
+  return groups.filter((g) => g.count > 0);
+}
+
+function inGroup(tracks: UnreleasedTrack[], type: string): UnreleasedTrack[] {
+  return tracks.filter((t) => t.off_streaming === (type === RELEASED));
+}
+
+function useTrackFilter(tracks: UnreleasedTrack[]) {
+  const groups = trackGroups(tracks);
+  const [picked, setPicked] = useState<string | null>(null);
+  const activeType = groups.some((g) => g.type === picked) ? picked : groups[0]?.type;
+  return { groups, activeType: activeType ?? UNRELEASED, onSelect: setPicked };
+}
+
+const CHIP_IDS = { action: 'detail.unreleased.select', testIDPrefix: 'detail-unreleased-group' };
+
+function FilteredRail({ artist, tracks }: UnreleasedListProps): ReactElement {
+  const filter = useTrackFilter(tracks);
+  const shown = inGroup(tracks, filter.activeType);
+  return (
+    <>
+      <FilterChips {...filter} {...CHIP_IDS} />
+      <UnreleasedRail artist={artist} tracks={shown} />
+    </>
+  );
+}
+
 function UnreleasedSection(props: UnreleasedListProps): ReactElement {
   return (
     <View testID="detail-unreleased">
-      <Section label="Unreleased">
-        <UnreleasedRail {...props} />
+      <Section label={SECTION_LABEL}>
+        <FilteredRail {...props} />
       </Section>
     </View>
   );
@@ -169,7 +207,7 @@ function LoadingHint(): ReactElement {
 function UnreleasedLoading(): ReactElement {
   return (
     <View testID="detail-unreleased-loading">
-      <Section label="Unreleased">
+      <Section label={SECTION_LABEL}>
         <LoadingHint />
       </Section>
     </View>

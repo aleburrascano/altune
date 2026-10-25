@@ -172,7 +172,7 @@ describe('ArtistUnreleased', () => {
     renderSection();
 
     expect(screen.getByTestId('detail-unreleased-loading')).toBeTruthy();
-    expect(screen.getByText('UNRELEASED')).toBeTruthy();
+    expect(screen.getByText('NOT ON STREAMING')).toBeTruthy();
     expect(screen.getByText('Looking for unreleased tracks…')).toBeTruthy();
     expect(await screen.findByText('Cancun')).toBeTruthy();
     expect(screen.queryByText('Looking for unreleased tracks…')).toBeNull();
@@ -226,6 +226,18 @@ describe('ArtistUnreleased', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  it('splits off-streaming releases from unreleased tracks behind chips', async () => {
+    const offStreaming = { ...CANCUN, genius_id: 789, title: 'Do You Want', off_streaming: true };
+    __http.reply(UNRELEASED, { status: 200, json: { items: [CANCUN, offStreaming] } });
+    renderSection();
+
+    expect(await screen.findByText('Do You Want')).toBeTruthy();
+    expect(screen.queryByText('Cancun')).toBeNull();
+    fireEvent.press(screen.getByTestId('detail-unreleased-group-unreleased'));
+    expect(screen.getByText('Cancun')).toBeTruthy();
+    expect(screen.queryByText('Do You Want')).toBeNull();
   });
 
   it('lays the tracks out in a horizontal row', async () => {
