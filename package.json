@@ -8,7 +8,8 @@
     "cycles": "graft build && node scripts/check-cycles.mjs",
     "dev:up": "docker compose -f services/go-api/deploy/compose.dev.yml up -d",
     "dev:down": "docker compose -f services/go-api/deploy/compose.dev.yml down",
-    "dev:reset": "docker compose -f services/go-api/deploy/compose.dev.yml down -v"
+    "dev:reset": "docker compose -f services/go-api/deploy/compose.dev.yml down -v",
+    "precheck": "bash scripts/precheck.sh"
   },
   "devDependencies": {
     "@nanonets/graft": "0.18.0",
