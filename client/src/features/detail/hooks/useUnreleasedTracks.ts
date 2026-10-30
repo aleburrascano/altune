@@ -2,8 +2,6 @@ import {
   useQuery,
   useQueryClient,
   type NotifyOnChangeProps,
-  type QueryClient,
-  type QueryKey,
   type Query,
   type QueryFunctionContext,
 } from '@tanstack/react-query';
@@ -62,6 +60,8 @@ function unreleasedQueryOptions(artist: DiscoveryResult, port: DetailPort, isEna
   };
 }
 
+type UnreleasedOptions = ReturnType<typeof unreleasedQueryOptions>;
+
 export type UnreleasedTracksState = {
   tracks: UnreleasedTrack[];
   isLoading: boolean;
@@ -69,32 +69,40 @@ export type UnreleasedTracksState = {
   retry: () => void;
 };
 
-function useUpdateCount(options: ReturnType<typeof unreleasedQueryOptions>): number {
+function useUpdateCount(options: UnreleasedOptions): number {
   const queryClient = useQueryClient();
   return queryClient.getQueryState(options.queryKey)?.dataUpdateCount ?? 0;
 }
 
-function isBudgetSpent(response: UnreleasedTracksResponse | undefined, updateCount: number) {
-  return response?.pending === true && !isStillComputing(response, updateCount);
+type FailureState = Pick<UnreleasedTracksState, 'isFailed' | 'retry'>;
+
+function useBudgetSpent(options: UnreleasedOptions): boolean {
+  const state = useQueryClient().getQueryState<UnreleasedTracksResponse>(options.queryKey);
+  return state?.data?.pending === true && !isStillComputing(state.data, state.dataUpdateCount);
 }
 
-function restartPollBudget(queryClient: QueryClient, queryKey: QueryKey): Promise<void> {
-  return queryClient.resetQueries({ queryKey });
+function useRetry({ queryKey }: UnreleasedOptions): () => void {
+  const queryClient = useQueryClient();
+  return function retry() {
+    void queryClient.resetQueries({ queryKey });
+  };
+}
+
+function useFailure(options: UnreleasedOptions, isError: boolean): FailureState {
+  const isSpent = useBudgetSpent(options);
+  return { isFailed: isError || isSpent, retry: useRetry(options) };
 }
 
 export function useUnreleasedTracks(artist: DiscoveryResult): UnreleasedTracksState {
   const port = useDetailPort();
-  const queryClient = useQueryClient();
   const options = unreleasedQueryOptions(artist, port, useDetailFetchEnabled());
   const { data: unreleased, isLoading, isError } = useQuery(options);
-  const updateCount = useUpdateCount(options);
-  const isComputing = isStillComputing(unreleased, updateCount);
-  const retry = () => void restartPollBudget(queryClient, options.queryKey);
+  const isComputing = isStillComputing(unreleased, useUpdateCount(options));
+  const failure = useFailure(options, isError);
   return {
     tracks: unreleased?.items ?? NO_TRACKS,
     isLoading: isLoading || isComputing,
-    isFailed: isError || isBudgetSpent(unreleased, updateCount),
-    retry,
+    ...failure,
   };
 }
 

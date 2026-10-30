@@ -1,4 +1,4 @@
-import { Linking } from 'react-native';
+import { AccessibilityInfo, Linking } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
@@ -42,7 +42,7 @@ const POLL_MS = 10_000;
 const GIVE_UP_AFTER_MS = 300_000;
 const MAX_REQUESTS = 20;
 const SECOND_REQUEST = 2;
-const SKELETON_ANIMATION_TIMEOUT_MS = 60_000;
+const POLLS_AFTER_RETRY = 3;
 
 const SILENT = { ...CANCUN, genius_id: 456, title: 'Silent Demo', has_media: false };
 
@@ -63,6 +63,7 @@ function renderSection() {
 }
 
 beforeEach(() => {
+  jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
   startQueue.mockClear();
   signInTestUser();
 });
@@ -213,28 +214,24 @@ describe('ArtistUnreleased', () => {
     }
   });
 
-  it(
-    'gives up and offers a retry after about three minutes of pending',
-    async () => {
-      jest.useFakeTimers();
-      try {
-        __http.reply(UNRELEASED, { status: 200, json: { items: [], pending: true } });
-        renderSection();
-        await waitFor(() => expect(__http.countFor(UNRELEASED)).toBe(1));
+  it('gives up and offers a retry after about three minutes of pending', async () => {
+    jest.useFakeTimers();
+    try {
+      __http.reply(UNRELEASED, { status: 200, json: { items: [], pending: true } });
+      renderSection();
+      await waitFor(() => expect(__http.countFor(UNRELEASED)).toBe(1));
 
-        await act(async () => {
-          await jest.advanceTimersByTimeAsync(GIVE_UP_AFTER_MS);
-        });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(GIVE_UP_AFTER_MS);
+      });
 
-        expect(screen.queryByTestId('detail-unreleased-loading')).toBeNull();
-        expect(screen.getByText("Couldn't load unreleased tracks")).toBeTruthy();
-        expect(__http.countFor(UNRELEASED)).toBeLessThanOrEqual(MAX_REQUESTS);
-      } finally {
-        jest.useRealTimers();
-      }
-    },
-    SKELETON_ANIMATION_TIMEOUT_MS,
-  );
+      expect(screen.queryByTestId('detail-unreleased-loading')).toBeNull();
+      expect(screen.getByText("Couldn't load unreleased tracks")).toBeTruthy();
+      expect(__http.countFor(UNRELEASED)).toBeLessThanOrEqual(MAX_REQUESTS);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 
   it('splits off-streaming releases from unreleased tracks behind chips', async () => {
     const offStreaming = { ...CANCUN, genius_id: 789, title: 'Do You Want', off_streaming: true };
@@ -276,33 +273,29 @@ describe('ArtistUnreleased', () => {
     expect(__http.countFor(UNRELEASED)).toBe(SECOND_REQUEST);
   });
 
-  it(
-    'polls again within a fresh budget after Retry on a spent pending answer',
-    async () => {
-      jest.useFakeTimers();
-      try {
-        __http.reply(UNRELEASED, { status: 200, json: { items: [], pending: true } });
-        renderSection();
-        await waitFor(() => expect(__http.countFor(UNRELEASED)).toBe(1));
-        await act(async () => {
-          await jest.advanceTimersByTimeAsync(GIVE_UP_AFTER_MS);
-        });
-        const spent = __http.countFor(UNRELEASED);
+  it('polls again within a fresh budget after Retry on a spent pending answer', async () => {
+    jest.useFakeTimers();
+    try {
+      __http.reply(UNRELEASED, { status: 200, json: { items: [], pending: true } });
+      renderSection();
+      await waitFor(() => expect(__http.countFor(UNRELEASED)).toBe(1));
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(GIVE_UP_AFTER_MS);
+      });
+      const spent = __http.countFor(UNRELEASED);
 
-        __http.reply(UNRELEASED, { status: 200, json: { items: [], pending: true } });
-        fireEvent.press(screen.getByTestId('detail-unreleased-retry'));
-        await act(async () => {
-          await jest.advanceTimersByTimeAsync(POLL_MS * 3);
-        });
+      __http.reply(UNRELEASED, { status: 200, json: { items: [], pending: true } });
+      fireEvent.press(screen.getByTestId('detail-unreleased-retry'));
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(POLL_MS * POLLS_AFTER_RETRY);
+      });
 
-        expect(__http.countFor(UNRELEASED)).toBeGreaterThanOrEqual(spent + 3);
-        expect(screen.getByTestId('detail-unreleased-loading')).toBeTruthy();
-      } finally {
-        jest.useRealTimers();
-      }
-    },
-    SKELETON_ANIMATION_TIMEOUT_MS,
-  );
+      expect(__http.countFor(UNRELEASED)).toBeGreaterThanOrEqual(spent + POLLS_AFTER_RETRY);
+      expect(screen.getByTestId('detail-unreleased-loading')).toBeTruthy();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 
   it('hides the row when Retry returns a finished empty answer', async () => {
     __http.replyOnce(UNRELEASED, { status: 500, json: { code: 'internal' } });

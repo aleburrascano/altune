@@ -26,6 +26,7 @@ type UnreleasedArtistRowProps = { artist: DiscoveryResult; track: UnreleasedTrac
 type UnreleasedCardProps = { track: UnreleasedTrack; card: UnreleasedCard };
 type UnreleasedListProps = { artist: DiscoveryResult; tracks: UnreleasedTrack[] };
 type ArtistUnreleasedProps = { artist: DiscoveryResult };
+type RetryProps = { onRetry: () => void };
 type PressState = { pressed: boolean };
 
 const CARD_HINTS: Record<UnreleasedCardState, string | null> = {
@@ -207,14 +208,13 @@ function UnreleasedLoading(): ReactElement {
   );
 }
 
-function UnreleasedFailed({ onRetry }: { onRetry: () => void }): ReactElement {
+const FAILED_MESSAGE = "Couldn't load unreleased tracks";
+
+function UnreleasedFailed({ onRetry }: RetryProps): ReactElement {
+  const error = { testIDPrefix: 'detail-unreleased', message: FAILED_MESSAGE, onRetry };
   return (
     <Section label={SECTION_LABEL}>
-      <SectionError
-        testIDPrefix="detail-unreleased"
-        message="Couldn't load unreleased tracks"
-        onRetry={onRetry}
-      />
+      <SectionError {...error} />
     </Section>
   );
 }
