@@ -408,3 +408,21 @@ func TestSongCatalog_SongDetail_KeepsARepeatedAudioLinkOnce(t *testing.T) {
 		t.Errorf("AudioLinks = (%+v, %v), want %+v", got.AudioLinks, err, want)
 	}
 }
+
+func TestSongCatalog_SongDetail_ReadsAlbumCoverAndSkipsPlaceholders(t *testing.T) {
+	server := songCatalogServer(t, map[string]string{
+		"/songs/1": `{"response":{"song":{"album":{"name":"A","cover_art_url":"https://images.genius.com/a.jpg"}}}}`,
+		"/songs/2": `{"response":{"song":{"album":{"name":"A","cover_art_url":"https://assets.genius.com/images/default_cover_image.png"}}}}`,
+		"/songs/3": `{"response":{"song":{"album":{"name":"A","cover_art_url":"https://images.genius.com/no_image.png"}}}}`,
+		"/songs/4": `{"response":{"song":{"album":{"name":"A"}}}}`,
+	})
+	catalog := NewSongCatalog(providertest.NewClient(server.URL), "tok")
+
+	want := map[int]string{1: "https://images.genius.com/a.jpg", 2: "", 3: "", 4: ""}
+	for id, w := range want {
+		got, err := catalog.SongDetail(context.Background(), id)
+		if err != nil || got.AlbumCoverURL != w {
+			t.Errorf("SongDetail(%d).AlbumCoverURL = (%q, %v), want %q", id, got.AlbumCoverURL, err, w)
+		}
+	}
+}

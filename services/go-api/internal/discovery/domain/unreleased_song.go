@@ -11,6 +11,7 @@ type GeniusSongDetail struct {
 	HasMedia        bool
 	OnStreamingSite bool
 	AlbumTitle      string
+	AlbumCoverURL   string
 	AudioLinks      []AudioLink
 }
 

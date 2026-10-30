@@ -437,3 +437,24 @@ func TestService_Lookup_ServerShutdownStopsTheJob(t *testing.T) {
 		t.Fatal("the job outlived the lifecycle context")
 	}
 }
+
+func TestService_List_SongWithoutOwnArtTakesItsAlbumCover(t *testing.T) {
+	list := songs("A", "B")
+	list[1].CoverURL = "https://images.genius.com/own.jpg"
+	genius := &discoverytest.GeniusSongCatalog{
+		ArtistFound: true,
+		Songs:       list,
+		DetailByID: map[int]domain.GeniusSongDetail{
+			1: {AlbumCoverURL: "https://images.genius.com/album.jpg"},
+			2: {AlbumCoverURL: "https://images.genius.com/album.jpg"},
+		},
+	}
+	svc := NewService(genius, &discoverytest.ArtistCatalogTitles{}, nil, Config{MaxPages: 1, MaxDetails: 2, DetailConcurrency: 2})
+	got, err := svc.List(context.Background(), domain.ProviderDeezer, "1", "Artist", nil)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("List = (%d songs, %v), want 2 songs", len(got), err)
+	}
+	if got[0].CoverURL != "https://images.genius.com/album.jpg" || got[1].CoverURL != "https://images.genius.com/own.jpg" {
+		t.Errorf("covers = %q %q, want album cover then own art", got[0].CoverURL, got[1].CoverURL)
+	}
+}
