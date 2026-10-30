@@ -28,6 +28,7 @@ import {
 } from '@features/playback/domain/playerStatus';
 import { PlayerOptionsSheets } from '@features/playback/ui/PlayerOptionsSheets';
 import { Scrubber } from '@features/playback/ui/Scrubber';
+import { VolumeSlider } from '@features/playback/ui/VolumeSlider';
 import { TransportControls } from '@features/playback/ui/TransportControls';
 import { usePlaybackTransport } from '@features/playback/hooks/usePlaybackTransport';
 
@@ -286,6 +287,7 @@ function BarFooter({ transport, router, optionsOpen, setOptionsOpen }: FooterPro
           onSeek={transport.seekTo}
         />
       </View>
+      <VolumeSlider />
       <BarActions
         onLyrics={() => router.push('/player/lyrics')}
         onQueue={() => router.push('/player/queue')}

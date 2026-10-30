@@ -21,6 +21,7 @@ import {
   type WebPlayback,
 } from '@features/playback/web/webPlayer';
 import { createWebControls } from '@features/playback/web/createWebControls';
+import { bindAudioVolume } from '@features/playback/web/playbackVolume';
 import { secondsToMs } from '@features/playback/domain/time';
 
 const PHASE_EVENTS = ['play', 'pause', 'waiting', 'seeked'];
@@ -55,10 +56,12 @@ function stateOf(playback: WebPlayback): PlaybackState {
 
 function attachPlayer(player: WebAudioPlayer): () => void {
   const stopListening = listenToAudio(player);
+  const stopVolume = bindAudioVolume(player.audio);
   const unregisterSignOut = onSignOut(() => endForSignOut(player));
   return () => {
     unregisterSignOut();
     stopListening();
+    stopVolume();
     stopPlayer(player);
   };
 }

@@ -22,6 +22,7 @@ import {
   SheetScreen,
 } from '@features/playback/ui/SheetHeader';
 import { TransportControls } from '@features/playback/ui/TransportControls';
+import { VolumeSlider } from '@features/playback/ui/VolumeSlider';
 import { usePlaybackTransport } from '@features/playback/hooks/usePlaybackTransport';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
@@ -183,6 +184,8 @@ export function FullPlayer() {
       </View>
 
       <Scrubber positionMs={positionMs} durationMs={durationMs} onSeek={seekTo} />
+
+      <VolumeSlider />
 
       {isError ? (
         <View style={styles.errorControls}>
