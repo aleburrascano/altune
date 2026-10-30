@@ -15,6 +15,7 @@ import {
 } from '@features/playback/domain/playerStatus';
 import { PlayerOptionsSheets } from '@features/playback/ui/PlayerOptionsSheets';
 import { Scrubber } from '@features/playback/ui/Scrubber';
+import { VolumeSlider } from '@features/playback/web/VolumeSlider';
 import {
   SheetHeader,
   SheetHeaderCenter,
@@ -183,6 +184,8 @@ export function FullPlayer() {
       </View>
 
       <Scrubber positionMs={positionMs} durationMs={durationMs} onSeek={seekTo} />
+
+      <VolumeSlider />
 
       {isError ? (
         <View style={styles.errorControls}>

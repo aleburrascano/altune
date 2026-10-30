@@ -22,6 +22,7 @@ import {
 } from '@features/playback/domain/playbackHealth';
 import { WebPlaybackProvider } from '@features/playback/web/WebPlaybackProvider';
 import { resolveSource } from '@features/playback/web/webPresign';
+import { toVolume, usePlaybackVolumeStore } from '@features/playback/web/playbackVolume';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -60,6 +61,7 @@ class FakeAudio {
   currentTime = 0;
   duration = Number.NaN;
   playbackRate = 1;
+  volume = 1;
   paused = true;
   ended = false;
   readyState = 0;
@@ -188,6 +190,10 @@ function renderWebPlaybackWithClock(now: () => number) {
 
 const PRESIGN_TTL_MS = 60 * 60 * 1000;
 
+afterEach(() => {
+  usePlaybackVolumeStore.setState({ volume: toVolume(1) });
+});
+
 beforeEach(async () => {
   await signInTestUser();
   __http.reset();
@@ -271,6 +277,15 @@ describe('WebPlaybackProvider', () => {
     act(() => audio.emit('durationchange'));
 
     expect(playback().durationMs).toBe(0);
+  });
+
+  it('applies the volume chosen in the store to the audio element', async () => {
+    const { audio, playback } = await playing();
+    const CHOSEN_VOLUME = 0.3;
+
+    act(() => usePlaybackVolumeStore.getState().setVolume(toVolume(CHOSEN_VOLUME)));
+    expect(audio.volume).toBe(CHOSEN_VOLUME);
+    expect(playback().status).toBe('playing');
   });
 
   it('sets the playback rate on the audio element', async () => {
