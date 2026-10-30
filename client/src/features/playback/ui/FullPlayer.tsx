@@ -14,7 +14,7 @@ import {
   libraryTrackId,
 } from '@features/playback/domain/playerStatus';
 import { PlayerOptionsSheets } from '@features/playback/ui/PlayerOptionsSheets';
-import { Scrubber } from '@features/playback/ui/Scrubber';
+import { Scrubber, VolumeSlider } from '@features/playback/ui/Scrubber';
 import {
   SheetHeader,
   SheetHeaderCenter,
@@ -22,7 +22,6 @@ import {
   SheetScreen,
 } from '@features/playback/ui/SheetHeader';
 import { TransportControls } from '@features/playback/ui/TransportControls';
-import { VolumeSlider } from '@features/playback/ui/VolumeSlider';
 import { usePlaybackTransport } from '@features/playback/hooks/usePlaybackTransport';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';

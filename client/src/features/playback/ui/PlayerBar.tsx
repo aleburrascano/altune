@@ -27,8 +27,7 @@ import {
   libraryTrackId,
 } from '@features/playback/domain/playerStatus';
 import { PlayerOptionsSheets } from '@features/playback/ui/PlayerOptionsSheets';
-import { Scrubber } from '@features/playback/ui/Scrubber';
-import { VolumeSlider } from '@features/playback/ui/VolumeSlider';
+import { Scrubber, VolumeSlider } from '@features/playback/ui/Scrubber';
 import { TransportControls } from '@features/playback/ui/TransportControls';
 import { usePlaybackTransport } from '@features/playback/hooks/usePlaybackTransport';
 
