@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -498,14 +499,18 @@ func TestService_Lookup_StoreRecordsTheArtistBeforeBuildingAndWritesTheFinishedB
 	}
 }
 
-func TestService_Lookup_StoreRecordFailureIsAnErrorAndNothingIsBuilt(t *testing.T) {
-	store := &discoverytest.UnreleasedStore{RecordErr: errors.New("db down")}
+func TestService_Lookup_StoreRecordAndReadFailuresFallBackToALiveBuild(t *testing.T) {
+	logs := captureLogs(t)
+	store := &discoverytest.UnreleasedStore{RecordErr: errors.New("record down"), ReadErr: errors.New("read down")}
 	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
-	if _, err := storeService(genius, store).Lookup(context.Background(), domain.ProviderDeezer, "27", "Drake", nil); err == nil {
-		t.Fatal("Lookup error = nil, want the record failure")
+	got, err := storeService(genius, store).Lookup(context.Background(), domain.ProviderDeezer, "27", "Drake", nil)
+	if err != nil || got.Pending || !slices.Equal(titlesOf(got.Songs), []string{"Leak"}) {
+		t.Fatalf("Lookup = (%+v, %v), want the live-built song", got, err)
 	}
-	if len(genius.SearchedFor) != 0 {
-		t.Errorf("genius searched %v after a failed record", genius.SearchedFor)
+	for _, event := range []string{"unreleased.store_record_failed", "unreleased.store_read_failed"} {
+		if !strings.Contains(logs.String(), event) {
+			t.Errorf("log missing %s: %s", event, logs.String())
+		}
 	}
 }
 
@@ -536,10 +541,24 @@ func TestService_Rebuild_StoreWritesIncompleteWhenTheCatalogIsPartial(t *testing
 	}
 }
 
-func TestService_Rebuild_StoreWriteFailureIsAnError(t *testing.T) {
+func TestService_Rebuild_StoreWriteFailureLogsAndStillReturnsTheSongs(t *testing.T) {
+	logs := captureLogs(t)
 	store := &discoverytest.UnreleasedStore{WriteErr: errors.New("db down")}
 	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
-	if _, err := storeService(genius, store).Rebuild(context.Background(), drakeKey, "Drake", nil); err == nil {
-		t.Error("Rebuild error = nil, want the write failure")
+	got, err := storeService(genius, store).Rebuild(context.Background(), drakeKey, "Drake", nil)
+	if err != nil || !slices.Equal(titlesOf(got), []string{"Leak"}) {
+		t.Fatalf("Rebuild = (%v, %v), want the built song and no error", titlesOf(got), err)
+	}
+	if !strings.Contains(logs.String(), "unreleased.store_write_failed") {
+		t.Errorf("log missing unreleased.store_write_failed: %s", logs.String())
+	}
+}
+
+func TestService_Lookup_StoreWriteFailureStillAnswersTheBuiltSongs(t *testing.T) {
+	store := &discoverytest.UnreleasedStore{WriteErr: errors.New("db down")}
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
+	got, err := storeService(genius, store).Lookup(context.Background(), domain.ProviderDeezer, "27", "Drake", nil)
+	if err != nil || !slices.Equal(titlesOf(got.Songs), []string{"Leak"}) {
+		t.Errorf("Lookup = (%+v, %v), want the built song", got, err)
 	}
 }

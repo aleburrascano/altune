@@ -2052,6 +2052,18 @@ func TestValidate_TrackerHubNeededOnlyWithAKey(t *testing.T) {
 	}
 }
 
+func TestValidate_UnreleasedSourceIsStoreOrCache(t *testing.T) {
+	for source, wantErr := range map[string]bool{"store": false, "cache": false, "Cache": true, "redis": true} {
+		t.Run(source, func(t *testing.T) {
+			setEnv(t, validConfigEnv(map[string]string{"UNRELEASED_SOURCE": source}))
+			_, err := Load()
+			if (err != nil) != wantErr || (err != nil && !strings.Contains(err.Error(), source)) {
+				t.Fatalf("Load err = %v, wantErr %v (an error must name %q)", err, wantErr, source)
+			}
+		})
+	}
+}
+
 func TestLoad_UnreleasedSourceDefaultsToStore(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
 	cfg, err := Load()
