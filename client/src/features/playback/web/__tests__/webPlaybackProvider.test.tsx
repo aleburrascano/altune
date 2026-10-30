@@ -190,6 +190,10 @@ function renderWebPlaybackWithClock(now: () => number) {
 
 const PRESIGN_TTL_MS = 60 * 60 * 1000;
 
+afterEach(() => {
+  usePlaybackVolumeStore.setState({ volume: toVolume(1) });
+});
+
 beforeEach(async () => {
   await signInTestUser();
   __http.reset();
@@ -282,7 +286,6 @@ describe('WebPlaybackProvider', () => {
     act(() => usePlaybackVolumeStore.getState().setVolume(toVolume(CHOSEN_VOLUME)));
     expect(audio.volume).toBe(CHOSEN_VOLUME);
     expect(playback().status).toBe('playing');
-    usePlaybackVolumeStore.setState({ volume: toVolume(1) });
   });
 
   it('sets the playback rate on the audio element', async () => {
