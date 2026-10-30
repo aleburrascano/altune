@@ -221,13 +221,25 @@ func (a *App) buildUnreleasedService(ctx context.Context, cf clientFactory, arti
 	if (!a.cfg.HasGenius() && !a.cfg.HasTrackers()) || artistSvc == nil {
 		return nil
 	}
-	return unreleased.NewService(
-		a.geniusSongCatalog(cf),
-		artistSvc,
-		discoveryCacheAdapters.NewRedisUnreleasedCache(a.redisClient, cacheSignalOption()),
-		a.unreleasedConfig(),
-		a.unreleasedOptions(ctx, cf)...,
-	)
+	var cache discoveryPorts.UnreleasedCache
+	opts := a.unreleasedOptions(ctx, cf)
+	if store := a.unreleasedStore(ctx); store != nil {
+		opts = append(opts, unreleased.WithStore(store))
+	} else {
+		cache = discoveryCacheAdapters.NewRedisUnreleasedCache(a.redisClient, cacheSignalOption())
+	}
+	return unreleased.NewService(a.geniusSongCatalog(cf), artistSvc, cache, a.unreleasedConfig(), opts...)
+}
+
+func (a *App) unreleasedStore(ctx context.Context) discoveryPorts.UnreleasedStore {
+	if a.cfg.UnreleasedSource == "cache" {
+		return nil
+	}
+	if a.pool == nil {
+		slog.WarnContext(ctx, "unreleased.store_unavailable_using_cache", "reason", "no database pool")
+		return nil
+	}
+	return discoveryPersistence.NewPgxUnreleasedStore(a.pool)
 }
 
 func (a *App) geniusSongCatalog(cf clientFactory) discoveryPorts.GeniusSongCatalog {

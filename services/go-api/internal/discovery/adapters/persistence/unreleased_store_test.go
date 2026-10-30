@@ -19,6 +19,8 @@ func TestUnreleasedSongCodec(t *testing.T) {
 			Quality:      "snippet",
 			TrackerKey:   "tracker-1",
 			AudioLinks:   []domain.AudioLink{{Provider: domain.AudioProviderSoundCloud, ExternalID: "sc1", URL: "https://soundcloud.com/a/b"}},
+			OpenURL:      "https://open.example/x",
+			OpenHost:     "open.example",
 			OffStreaming: true,
 		},
 		"unknown media": {GeniusID: 1, Title: "Bare", GeniusURL: "https://genius.com/bare"},

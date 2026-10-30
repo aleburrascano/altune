@@ -2,6 +2,7 @@ package app
 
 import (
 	authservice "altune/go-api/internal/auth/service"
+	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
 	"altune/go-api/internal/discovery/adapters/providers/artworkchain"
 	"altune/go-api/internal/discovery/adapters/providers/coverartarchive"
@@ -284,5 +285,34 @@ func TestGeniusSongCatalog_PresentWithAToken(t *testing.T) {
 	a, cf := unreleasedWiringApp(&config.Config{GeniusAccessToken: "t"})
 	if a.geniusSongCatalog(cf) == nil {
 		t.Error("genius port missing though a token is set")
+	}
+}
+
+func TestUnreleasedStore_StoreSourceWithAPoolIsThePgxStore(t *testing.T) {
+	a := &App{cfg: &config.Config{UnreleasedSource: "store"}, pool: lazyPool(t)}
+	if _, ok := a.unreleasedStore(context.Background()).(*discoveryPersistence.PgxUnreleasedStore); !ok {
+		t.Error("store source with a pool did not yield the pgx store")
+	}
+}
+
+func TestUnreleasedStore_CacheSourceHasNoStore(t *testing.T) {
+	a := &App{cfg: &config.Config{UnreleasedSource: "cache"}, pool: lazyPool(t)}
+	if store := a.unreleasedStore(context.Background()); store != nil {
+		t.Errorf("UNRELEASED_SOURCE=cache yielded store %T", store)
+	}
+}
+
+func TestUnreleasedStore_StoreSourceWithoutAPoolFallsBackToCacheAndWarnsOnce(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	a, cf := unreleasedWiringApp(&config.Config{GoogleSheetsAPIKey: "k", TrackerHubSheetID: "hub", UnreleasedSource: "store"})
+
+	if svc := a.buildUnreleasedService(context.Background(), cf, &content.GetArtistContentService{}); svc == nil {
+		t.Fatal("service not built")
+	}
+	if got := strings.Count(buf.String(), "unreleased.store_unavailable_using_cache"); got != 1 {
+		t.Errorf("fallback warning logged %d times, want 1: %s", got, buf.String())
 	}
 }

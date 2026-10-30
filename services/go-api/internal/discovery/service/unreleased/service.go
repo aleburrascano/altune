@@ -30,6 +30,7 @@ type Service struct {
 	trackers ports.TrackerSongs
 	catalog  ports.ArtistCatalogTitles
 	cache    ports.UnreleasedCache
+	store    ports.UnreleasedStore
 	cfg      Config
 
 	lifecycle context.Context
@@ -54,10 +55,31 @@ func NewService(genius ports.GeniusSongCatalog, catalog ports.ArtistCatalogTitle
 	return s
 }
 
+func WithStore(store ports.UnreleasedStore) Option {
+	return func(s *Service) { s.store = store }
+}
+
+func (s *Service) Rebuild(ctx context.Context, key ports.UnreleasedArtistKey, artistName string, known map[domain.ProviderName]string) ([]domain.UnreleasedSong, error) {
+	startedAt := time.Now()
+	songs, complete, err := s.build(ctx, key.Provider, key.ExternalID, strings.TrimSpace(artistName), known)
+	if err != nil {
+		return nil, err
+	}
+	if s.store != nil {
+		if err := s.store.Write(ctx, key, songs, complete, startedAt); err != nil {
+			slog.WarnContext(ctx, "unreleased.store_write_failed", "error", err)
+		}
+	}
+	return songs, nil
+}
+
 func (s *Service) List(ctx context.Context, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) ([]domain.UnreleasedSong, error) {
 	artistName = strings.TrimSpace(artistName)
 	if artistName == "" {
 		return []domain.UnreleasedSong{}, nil
+	}
+	if s.store != nil {
+		return s.Rebuild(ctx, ports.UnreleasedArtistKey{Provider: provider, ExternalID: externalID}, artistName, known)
 	}
 	nameKey := textnorm.NormalizeForIdentity(artistName)
 	if s.cache != nil {

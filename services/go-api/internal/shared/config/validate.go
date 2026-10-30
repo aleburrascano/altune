@@ -48,7 +48,17 @@ func (c *Config) validate() error {
 	if err := c.validateDiscoverySearch(); err != nil {
 		return err
 	}
+	if err := c.validateUnreleasedSource(); err != nil {
+		return err
+	}
 	return c.validateRedis()
+}
+
+func (c *Config) validateUnreleasedSource() error {
+	if c.UnreleasedSource != "store" && c.UnreleasedSource != "cache" {
+		return fmt.Errorf("UNRELEASED_SOURCE must be store or cache, got %q", c.UnreleasedSource)
+	}
+	return nil
 }
 
 var DiscoverySearchProviderNames = []string{
