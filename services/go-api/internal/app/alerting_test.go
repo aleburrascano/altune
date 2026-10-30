@@ -314,6 +314,7 @@ func TestAlertableJobs_PinnedInOrder(t *testing.T) {
 		jobAcquisitionSourceCanary,
 		jobAcquisitionPrune,
 		jobAcquisitionUpgrade,
+		jobUnreleasedRefresh,
 	}
 	if !reflect.DeepEqual(alertableJobs, want) {
 		t.Fatalf("alertableJobs = %v, want %v", alertableJobs, want)

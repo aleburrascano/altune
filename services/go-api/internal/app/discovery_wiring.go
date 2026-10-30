@@ -223,12 +223,15 @@ func (a *App) buildUnreleasedService(ctx context.Context, cf clientFactory, arti
 	}
 	var cache discoveryPorts.UnreleasedCache
 	opts := a.unreleasedOptions(ctx, cf)
-	if store := a.unreleasedStore(ctx); store != nil {
+	store := a.unreleasedStore(ctx)
+	if store != nil {
 		opts = append(opts, unreleased.WithStore(store))
 	} else {
 		cache = discoveryCacheAdapters.NewRedisUnreleasedCache(a.redisClient, cacheSignalOption())
 	}
-	return unreleased.NewService(a.geniusSongCatalog(cf), artistSvc, cache, a.unreleasedConfig(), opts...)
+	svc := unreleased.NewService(a.geniusSongCatalog(cf), artistSvc, cache, a.unreleasedConfig(), opts...)
+	a.startUnreleasedRefresh(svc, store)
+	return svc
 }
 
 func (a *App) unreleasedStore(ctx context.Context) discoveryPorts.UnreleasedStore {
