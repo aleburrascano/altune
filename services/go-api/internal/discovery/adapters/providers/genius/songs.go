@@ -123,7 +123,8 @@ type geniusSongDetailBody struct {
 		Song struct {
 			AppleMusicID string `json:"apple_music_id"`
 			Album        *struct {
-				Name string `json:"name"`
+				Name        string `json:"name"`
+				CoverArtURL string `json:"cover_art_url"`
 			} `json:"album"`
 			Media []struct {
 				Provider string `json:"provider"`
@@ -146,6 +147,9 @@ func (b geniusSongDetailBody) detail() domain.GeniusSongDetail {
 	detail := domain.GeniusSongDetail{OnStreamingSite: song.AppleMusicID != ""}
 	if song.Album != nil {
 		detail.AlbumTitle = song.Album.Name
+		if !isPlaceholderImage(song.Album.CoverArtURL) {
+			detail.AlbumCoverURL = song.Album.CoverArtURL
+		}
 	}
 	for _, m := range song.Media {
 		detail.HasMedia = detail.HasMedia || m.Provider == "youtube" || m.Provider == "soundcloud"

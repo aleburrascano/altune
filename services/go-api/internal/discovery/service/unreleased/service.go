@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared/fanout"
 	"altune/go-api/internal/shared/textnorm"
+	"cmp"
 	"context"
 	"errors"
 	"log/slog"
@@ -169,6 +170,7 @@ func withoutReleasedEvidence(songs []domain.UnreleasedSong, details []lookedUpDe
 			hasMedia := details[i].detail.HasMedia
 			song.HasMedia = &hasMedia
 			song.AudioLinks = details[i].detail.AudioLinks
+			song.CoverURL = cmp.Or(song.CoverURL, details[i].detail.AlbumCoverURL)
 		}
 		kept = append(kept, song)
 	}
