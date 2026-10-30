@@ -17,3 +17,5 @@ schema_migrations skip owned by the migration runner
 track_metadata_changes skip reconcile change log, staging-local; undo targets the db it ran on
 track_length_fixes skip length fix and re-acquire log, staging-local; undo targets the db it ran on
 track_identity skip bind results for the prod library, staging-local; undo targets the db it ran on
+unreleased_artists skip derived from Genius and tracker sheets, staging rebuilds it on visit
+unreleased_songs skip derived from Genius and tracker sheets, staging rebuilds it on visit
