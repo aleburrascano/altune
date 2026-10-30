@@ -24,6 +24,24 @@ type UnreleasedCache interface {
 	Set(ctx context.Context, provider domain.ProviderName, externalID, nameKey string, songs []domain.UnreleasedSong, ttl time.Duration) error
 }
 
+type UnreleasedArtistKey struct {
+	Provider   domain.ProviderName
+	ExternalID string
+}
+
+type UnreleasedDueArtist struct {
+	Key      UnreleasedArtistKey
+	Name     string
+	KnownIDs map[domain.ProviderName]string
+}
+
+type UnreleasedStore interface {
+	Record(ctx context.Context, key UnreleasedArtistKey, name string, knownIDs map[domain.ProviderName]string) error
+	Read(ctx context.Context, key UnreleasedArtistKey) (songs []domain.UnreleasedSong, complete, built bool, err error)
+	Write(ctx context.Context, key UnreleasedArtistKey, songs []domain.UnreleasedSong, complete bool, startedAt time.Time) error
+	Due(ctx context.Context, now time.Time, limit int) ([]UnreleasedDueArtist, error)
+}
+
 var ErrTrackerPartial = errors.New("tracker sheet read in part")
 
 type TrackerSongs interface {
