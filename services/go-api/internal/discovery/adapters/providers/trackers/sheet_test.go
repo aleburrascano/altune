@@ -222,3 +222,35 @@ func gridBody(t *testing.T, grid []gridRow) []byte {
 	}
 	return body
 }
+
+func TestSongsFromRows_ALinkOutRowFollowedByARowWithLinksGainsMediaAndKeepsItsOpenURL(t *testing.T) {
+	link := domain.AudioLink{Provider: "pixeldrain", ExternalID: "abc", URL: "https://pixeldrain.com/u/abc"}
+	songs := songsFromRows("Artist", []trackerRow{
+		{title: "Song X", openURL: "https://mega.nz/file/abc", openHost: "mega.nz"},
+		{title: "Song X", links: []domain.AudioLink{link}, offStreaming: true},
+	})
+	if len(songs) != 1 {
+		t.Fatalf("songs = %+v, want one deduped song", songs)
+	}
+	s := songs[0]
+	if s.HasMedia == nil || !*s.HasMedia || len(s.AudioLinks) != 1 || s.OpenURL != "https://mega.nz/file/abc" || !s.OffStreaming {
+		t.Errorf("song = %+v, want has_media true, the pixeldrain link, the mega open link and off_streaming", s)
+	}
+}
+
+func TestFirstHTTPSLink_OpenHostDropsThePort(t *testing.T) {
+	body := openURLSheet(t, songRow("Era", "Ported", "Full", "https://files.example.com:8443/a"))
+	rows, _, err := parseSheet(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rows {
+		if r.title == "Ported" {
+			if r.openHost != "files.example.com" {
+				t.Errorf("openHost = %q, want files.example.com", r.openHost)
+			}
+			return
+		}
+	}
+	t.Fatal("row Ported was not parsed")
+}

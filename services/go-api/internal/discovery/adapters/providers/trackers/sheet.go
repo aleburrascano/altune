@@ -60,8 +60,8 @@ func (c columns) parseRow(row gridRow) (trackerRow, bool) {
 func (c columns) firstHTTPSLink(row gridRow) (rawURL, host string) {
 	for _, col := range c.links {
 		for _, raw := range row.cell(col).links() {
-			if u, err := url.Parse(raw); err == nil && u.Scheme == "https" && u.Host != "" {
-				return raw, u.Host
+			if u, err := url.Parse(raw); err == nil && u.Scheme == "https" && u.Hostname() != "" {
+				return raw, u.Hostname()
 			}
 		}
 	}
