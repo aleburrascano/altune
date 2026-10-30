@@ -3,6 +3,7 @@ package app
 import (
 	"altune/go-api/internal/discovery/adapters/providers/deezer"
 	"altune/go-api/internal/discovery/service/eval"
+	"altune/go-api/internal/discovery/service/unreleased"
 	"altune/go-api/internal/discovery/service/vocabulary"
 	"context"
 	"errors"
@@ -198,6 +199,20 @@ func (a *App) startVocabularyRefresh(ctx context.Context, cf clientFactory, voca
 	a.startSimpleJob(jobVocabularyRefresh, vocabRefreshInterval, func(ctx context.Context) error {
 		return a.vocabRefresh.RunOnce(ctx)
 	})
+}
+
+const (
+	unreleasedRefreshInterval = 30 * time.Minute
+	unreleasedRefreshPerRun   = 2
+)
+
+func (a *App) startUnreleasedRefresh(svc *unreleased.Service, store discoveryPorts.UnreleasedStore) {
+	if store == nil {
+		return
+	}
+	a.startSimpleJob(jobUnreleasedRefresh, unreleasedRefreshInterval, func(ctx context.Context) error {
+		return svc.RefreshDue(ctx, time.Now().UTC(), unreleasedRefreshPerRun)
+	}, "interval", unreleasedRefreshInterval.String())
 }
 
 func (a *App) buildChartProviders(cf clientFactory) []discoveryPorts.ChartProvider {

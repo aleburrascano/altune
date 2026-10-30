@@ -17,6 +17,7 @@ const (
 	jobStreamRecovery           jobName = "stream recovery"
 	jobAcquisitionPrune         jobName = "acquisition prune"
 	jobAcquisitionUpgrade       jobName = "acquisition upgrade"
+	jobUnreleasedRefresh        jobName = "unreleased refresh"
 )
 
 type jobSpec struct {
@@ -37,6 +38,7 @@ var jobTable = []jobSpec{
 	{jobStreamRecovery, false},
 	{jobAcquisitionPrune, true},
 	{jobAcquisitionUpgrade, true},
+	{jobUnreleasedRefresh, true},
 }
 
 var (
