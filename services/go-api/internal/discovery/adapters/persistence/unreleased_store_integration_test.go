@@ -92,7 +92,8 @@ func TestUnreleasedStoreDue(t *testing.T) {
 
 	oldest := seed(now.Add(-5*time.Hour), nil, false, 0, now)
 	middle := seed(now.Add(-3*time.Hour), ago(200*time.Hour), true, 4, now)
-	newest := seed(now.Add(-1*time.Hour), ago(2*time.Hour), false, 0, now)
+	newest := seed(now.Add(-2*time.Hour), ago(2*time.Hour), false, 0, now)
+	seed(now.Add(-10*time.Minute), nil, false, 0, now)
 	seed(now.Add(-9*time.Hour), ago(24*time.Hour), true, 4, now)
 	seed(now.Add(-9*time.Hour), ago(10*time.Minute), false, 0, now)
 	seed(now.Add(-9*time.Hour), nil, false, 0, now.Add(-31*24*time.Hour))

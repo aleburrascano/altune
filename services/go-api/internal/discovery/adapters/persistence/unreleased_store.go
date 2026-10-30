@@ -90,43 +90,61 @@ func (s *PgxUnreleasedStore) Record(ctx context.Context, key ports.UnreleasedArt
 }
 
 func (s *PgxUnreleasedStore) Read(ctx context.Context, key ports.UnreleasedArtistKey) ([]domain.UnreleasedSong, bool, bool, error) {
-	var complete bool
+	complete, built, err := s.readBuildState(ctx, key)
+	if err != nil || !built {
+		return nil, false, false, err
+	}
+	songs, err := s.readSongs(ctx, key)
+	if err != nil {
+		return nil, false, false, err
+	}
+	return songs, complete, true, nil
+}
+
+func (s *PgxUnreleasedStore) readBuildState(ctx context.Context, key ports.UnreleasedArtistKey) (complete, built bool, err error) {
 	var builtAt *time.Time
-	err := s.pool.QueryRow(ctx,
+	err = s.pool.QueryRow(ctx,
 		`SELECT complete, built_at FROM unreleased_artists WHERE provider = $1 AND external_id = $2`,
 		key.Provider.String(), key.ExternalID,
 	).Scan(&complete, &builtAt)
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && builtAt == nil) {
-		return nil, false, false, nil
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, false, nil
 	}
 	if err != nil {
-		return nil, false, false, fmt.Errorf("read unreleased artist: %w", err)
+		return false, false, fmt.Errorf("read unreleased artist: %w", err)
 	}
+	return complete, builtAt != nil, nil
+}
 
+func (s *PgxUnreleasedStore) readSongs(ctx context.Context, key ports.UnreleasedArtistKey) ([]domain.UnreleasedSong, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT song FROM unreleased_songs WHERE provider = $1 AND external_id = $2 ORDER BY position`,
 		key.Provider.String(), key.ExternalID,
 	)
 	if err != nil {
-		return nil, false, false, fmt.Errorf("read unreleased songs: %w", err)
+		return nil, fmt.Errorf("read unreleased songs: %w", err)
 	}
 	defer rows.Close()
 	songs := []domain.UnreleasedSong{}
 	for rows.Next() {
-		var raw []byte
-		if err := rows.Scan(&raw); err != nil {
-			return nil, false, false, fmt.Errorf("scan unreleased song: %w", err)
-		}
-		song, err := decodeUnreleasedSong(raw)
+		song, err := scanSong(rows)
 		if err != nil {
-			return nil, false, false, err
+			return nil, err
 		}
 		songs = append(songs, song)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, false, false, fmt.Errorf("read unreleased songs: %w", err)
+		return nil, fmt.Errorf("read unreleased songs: %w", err)
 	}
-	return songs, complete, true, nil
+	return songs, nil
+}
+
+func scanSong(rows pgx.Rows) (domain.UnreleasedSong, error) {
+	var raw []byte
+	if err := rows.Scan(&raw); err != nil {
+		return domain.UnreleasedSong{}, fmt.Errorf("scan unreleased song: %w", err)
+	}
+	return decodeUnreleasedSong(raw)
 }
 
 const claimUnreleasedBuildSQL = `
@@ -135,28 +153,54 @@ const claimUnreleasedBuildSQL = `
 	WHERE provider = $1 AND external_id = $2 AND (built_at IS NULL OR built_at < $3)`
 
 func (s *PgxUnreleasedStore) Write(ctx context.Context, key ports.UnreleasedArtistKey, songs []domain.UnreleasedSong, complete bool, startedAt time.Time) error {
-	encoded := make([][]byte, len(songs))
-	for i, song := range songs {
-		raw, err := encodeUnreleasedSong(song)
-		if err != nil {
-			return err
-		}
-		encoded[i] = raw
+	encoded, err := encodeUnreleasedSongs(songs)
+	if err != nil {
+		return err
 	}
-
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin unreleased write: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	tag, err := tx.Exec(ctx, claimUnreleasedBuildSQL, key.Provider.String(), key.ExternalID, startedAt, complete, len(songs))
+	claimed, err := claimBuild(ctx, tx, key, len(songs), complete, startedAt)
+	if err != nil || !claimed {
+		return err
+	}
+	if err := replaceSongs(ctx, tx, key, songs, encoded); err != nil {
+		return err
+	}
+	return commitUnreleasedWrite(ctx, tx)
+}
+
+func commitUnreleasedWrite(ctx context.Context, tx pgx.Tx) error {
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit unreleased write: %w", err)
+	}
+	return nil
+}
+
+func claimBuild(ctx context.Context, tx pgx.Tx, key ports.UnreleasedArtistKey, songCount int, complete bool, startedAt time.Time) (bool, error) {
+	tag, err := tx.Exec(ctx, claimUnreleasedBuildSQL, key.Provider.String(), key.ExternalID, startedAt, complete, songCount)
 	if err != nil {
-		return fmt.Errorf("update unreleased artist: %w", err)
+		return false, fmt.Errorf("update unreleased artist: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return nil
+	return tag.RowsAffected() > 0, nil
+}
+
+func encodeUnreleasedSongs(songs []domain.UnreleasedSong) ([][]byte, error) {
+	encoded := make([][]byte, len(songs))
+	for i, song := range songs {
+		raw, err := encodeUnreleasedSong(song)
+		if err != nil {
+			return nil, err
+		}
+		encoded[i] = raw
 	}
+	return encoded, nil
+}
+
+func replaceSongs(ctx context.Context, tx pgx.Tx, key ports.UnreleasedArtistKey, songs []domain.UnreleasedSong, encoded [][]byte) error {
 	if _, err := tx.Exec(ctx,
 		`DELETE FROM unreleased_songs WHERE provider = $1 AND external_id = $2`,
 		key.Provider.String(), key.ExternalID,
@@ -170,8 +214,12 @@ func (s *PgxUnreleasedStore) Write(ctx context.Context, key ports.UnreleasedArti
 			key.Provider.String(), key.ExternalID, i, song.Title, encoded[i],
 		)
 	}
+	return sendAll(ctx, tx, batch, len(songs))
+}
+
+func sendAll(ctx context.Context, tx pgx.Tx, batch *pgx.Batch, n int) error {
 	results := tx.SendBatch(ctx, batch)
-	for range songs {
+	for range n {
 		if _, err := results.Exec(); err != nil {
 			_ = results.Close()
 			return fmt.Errorf("insert unreleased song: %w", err)
@@ -179,9 +227,6 @@ func (s *PgxUnreleasedStore) Write(ctx context.Context, key ports.UnreleasedArti
 	}
 	if err := results.Close(); err != nil {
 		return fmt.Errorf("insert unreleased songs: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit unreleased write: %w", err)
 	}
 	return nil
 }
@@ -191,6 +236,7 @@ const dueUnreleasedSQL = `
 		SELECT provider, external_id, attempted_at AS prior_attempt
 		FROM unreleased_artists
 		WHERE last_requested_at > $1::timestamptz - interval '30 days'
+		  AND (attempted_at IS NULL OR attempted_at < $1::timestamptz - interval '1 hour')
 		  AND (
 			built_at IS NULL
 			OR (complete AND song_count > 0 AND built_at < $1::timestamptz - interval '168 hours')
@@ -219,27 +265,35 @@ func (s *PgxUnreleasedStore) Due(ctx context.Context, now time.Time, limit int) 
 	defer rows.Close()
 	var due []ports.UnreleasedDueArtist
 	for rows.Next() {
-		var providerKey, externalID, name string
-		var knownRaw []byte
-		if err := rows.Scan(&providerKey, &externalID, &name, &knownRaw); err != nil {
-			return nil, fmt.Errorf("scan due unreleased artist: %w", err)
-		}
-		provider, err := domain.ParseProviderName(providerKey)
-		if err != nil {
-			return nil, fmt.Errorf("due unreleased artist: %w", err)
-		}
-		known, err := decodeKnownIDs(knownRaw)
+		artist, err := scanDueArtist(rows)
 		if err != nil {
 			return nil, err
 		}
-		due = append(due, ports.UnreleasedDueArtist{
-			Key:      ports.UnreleasedArtistKey{Provider: provider, ExternalID: externalID},
-			Name:     name,
-			KnownIDs: known,
-		})
+		due = append(due, artist)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("due unreleased artists: %w", err)
 	}
 	return due, nil
+}
+
+func scanDueArtist(rows pgx.Rows) (ports.UnreleasedDueArtist, error) {
+	var providerKey, externalID, name string
+	var knownRaw []byte
+	if err := rows.Scan(&providerKey, &externalID, &name, &knownRaw); err != nil {
+		return ports.UnreleasedDueArtist{}, fmt.Errorf("scan due unreleased artist: %w", err)
+	}
+	provider, err := domain.ParseProviderName(providerKey)
+	if err != nil {
+		return ports.UnreleasedDueArtist{}, fmt.Errorf("due unreleased artist: %w", err)
+	}
+	known, err := decodeKnownIDs(knownRaw)
+	if err != nil {
+		return ports.UnreleasedDueArtist{}, err
+	}
+	return ports.UnreleasedDueArtist{
+		Key:      ports.UnreleasedArtistKey{Provider: provider, ExternalID: externalID},
+		Name:     name,
+		KnownIDs: known,
+	}, nil
 }
