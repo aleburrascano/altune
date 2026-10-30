@@ -25,4 +25,6 @@ type UnreleasedSong struct {
 	TrackerKey   string      `json:"tracker_key,omitempty"`
 	AudioLinks   []AudioLink `json:"audio_links,omitempty"`
 	OffStreaming bool        `json:"off_streaming,omitempty"`
+	OpenURL      string      `json:"open_url,omitempty"`
+	OpenHost     string      `json:"open_host,omitempty"`
 }

@@ -3,6 +3,7 @@ package trackers
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/filehost"
+	"net/url"
 	"slices"
 	"strings"
 )
@@ -12,6 +13,8 @@ type trackerRow struct {
 	quality      string
 	links        []domain.AudioLink
 	offStreaming bool
+	openURL      string
+	openHost     string
 }
 
 func parseSheet(body []byte) (rows []trackerRow, mapped bool, err error) {
@@ -38,14 +41,31 @@ func (c columns) parseRow(row gridRow) (trackerRow, bool) {
 	}
 	title := trimLeadingDecoration(firstLine(row.cell(c.name).FormattedValue))
 	links := c.audioLinks(row, audioLink)
-	if title == "" || len(links) == 0 {
+	if title == "" {
 		return trackerRow{}, false
+	}
+	var openURL, openHost string
+	if len(links) == 0 {
+		if openURL, openHost = c.firstHTTPSLink(row); openURL == "" {
+			return trackerRow{}, false
+		}
 	}
 	quality := strings.TrimSpace(row.cell(c.quality).FormattedValue)
 	if c.quality < 0 {
 		quality = portionQuality
 	}
-	return trackerRow{title: title, quality: quality, links: links}, true
+	return trackerRow{title: title, quality: quality, links: links, openURL: openURL, openHost: openHost}, true
+}
+
+func (c columns) firstHTTPSLink(row gridRow) (rawURL, host string) {
+	for _, col := range c.links {
+		for _, raw := range row.cell(col).links() {
+			if u, err := url.Parse(raw); err == nil && u.Scheme == "https" && u.Host != "" {
+				return raw, u.Host
+			}
+		}
+	}
+	return "", ""
 }
 
 func splitPortion(raw string) (portion, quality string) {

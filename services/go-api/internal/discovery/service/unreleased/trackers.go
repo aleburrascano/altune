@@ -81,14 +81,19 @@ func mergeTrackerSongs(genius, trackers []domain.UnreleasedSong) []domain.Unrele
 }
 
 func withTrackerFile(song, tracked domain.UnreleasedSong) domain.UnreleasedSong {
-	hasMedia := true
-	song.HasMedia = &hasMedia
 	if tracked.Quality != "" {
 		song.Quality = tracked.Quality
 	}
 	song.TrackerKey = tracked.TrackerKey
 	song.OffStreaming = song.OffStreaming || tracked.OffStreaming
 	song.AudioLinks = appendNewLinks(slices.Clone(song.AudioLinks), tracked.AudioLinks)
+	if len(song.AudioLinks) > 0 {
+		hasMedia := true
+		song.HasMedia = &hasMedia
+	}
+	if song.OpenURL == "" {
+		song.OpenURL, song.OpenHost = tracked.OpenURL, tracked.OpenHost
+	}
 	return song
 }
 

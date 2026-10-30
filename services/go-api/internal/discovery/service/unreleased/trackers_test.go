@@ -184,3 +184,16 @@ func TestService_List_AnOffStreamingTrackerSongKeepsTheGeniusQuality(t *testing.
 		t.Errorf("got %+v, err %v; want CDQ kept and the off-streaming flag", got, err)
 	}
 }
+
+func TestService_List_ALinkOutTrackerRowLeavesHasMediaFalseAndCarriesOpenURL(t *testing.T) {
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Loot")}
+	hasMedia := false
+	linkOut := domain.UnreleasedSong{Title: "Loot", TrackerKey: "ken:loot", HasMedia: &hasMedia, OpenURL: "https://mega.nz/file/abc", OpenHost: "mega.nz"}
+	got, err := listWith(t, genius, &discoverytest.TrackerSongs{Songs: []domain.UnreleasedSong{linkOut}}, nil)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("got %v, err %v, want one merged item", titlesOf(got), err)
+	}
+	if got[0].HasMedia != nil && *got[0].HasMedia || got[0].OpenURL != "https://mega.nz/file/abc" || got[0].OpenHost != "mega.nz" {
+		t.Errorf("merged = %+v, want has_media not true and the mega open link", got[0])
+	}
+}

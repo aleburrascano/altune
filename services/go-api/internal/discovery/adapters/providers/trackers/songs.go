@@ -16,6 +16,11 @@ func songsFromRows(artistName string, rows []trackerRow) []domain.UnreleasedSong
 		if at, dup := byKey[song.TrackerKey]; dup {
 			songs[at].AudioLinks = appendNewLinks(songs[at].AudioLinks, song.AudioLinks)
 			songs[at].OffStreaming = songs[at].OffStreaming || song.OffStreaming
+			if songs[at].OpenURL == "" {
+				songs[at].OpenURL, songs[at].OpenHost = song.OpenURL, song.OpenHost
+			}
+			hasMedia := len(songs[at].AudioLinks) > 0
+			songs[at].HasMedia = &hasMedia
 			continue
 		}
 		byKey[song.TrackerKey] = len(songs)
@@ -25,7 +30,7 @@ func songsFromRows(artistName string, rows []trackerRow) []domain.UnreleasedSong
 }
 
 func songFromRow(artistName string, row trackerRow) domain.UnreleasedSong {
-	hasMedia := true
+	hasMedia := len(row.links) > 0
 	return domain.UnreleasedSong{
 		Title:        row.title,
 		Quality:      row.quality,
@@ -33,6 +38,8 @@ func songFromRow(artistName string, row trackerRow) domain.UnreleasedSong {
 		HasMedia:     &hasMedia,
 		AudioLinks:   row.links,
 		OffStreaming: row.offStreaming,
+		OpenURL:      row.openURL,
+		OpenHost:     row.openHost,
 	}
 }
 
