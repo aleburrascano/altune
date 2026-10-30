@@ -28,7 +28,7 @@ import { useResolvedOwnedTrack } from '@features/detail/hooks/useOwnedTrack';
 import { useTrackSave } from '@features/detail/hooks/useSaveTrack';
 
 const NO_TRACKS: UnreleasedTrack[] = [];
-const REFRESH_ON_EVERY_POLL: NotifyOnChangeProps = ['data', 'dataUpdatedAt', 'isLoading'];
+const REFRESH_ON_EVERY_POLL: NotifyOnChangeProps = ['data', 'dataUpdatedAt', 'isLoading', 'error'];
 const PENDING_POLL_MS = 10_000;
 const PENDING_POLL_BUDGET_MS = 180_000;
 const MAX_PENDING_POLLS = PENDING_POLL_BUDGET_MS / PENDING_POLL_MS;
@@ -60,19 +60,50 @@ function unreleasedQueryOptions(artist: DiscoveryResult, port: DetailPort, isEna
   };
 }
 
-export type UnreleasedTracksState = { tracks: UnreleasedTrack[]; isLoading: boolean };
+type UnreleasedOptions = ReturnType<typeof unreleasedQueryOptions>;
 
-function useUpdateCount(options: ReturnType<typeof unreleasedQueryOptions>): number {
+export type UnreleasedTracksState = {
+  tracks: UnreleasedTrack[];
+  isLoading: boolean;
+  isFailed: boolean;
+  retry: () => void;
+};
+
+function useUpdateCount(options: UnreleasedOptions): number {
   const queryClient = useQueryClient();
   return queryClient.getQueryState(options.queryKey)?.dataUpdateCount ?? 0;
+}
+
+type FailureState = Pick<UnreleasedTracksState, 'isFailed' | 'retry'>;
+
+function useBudgetSpent(options: UnreleasedOptions): boolean {
+  const state = useQueryClient().getQueryState<UnreleasedTracksResponse>(options.queryKey);
+  return state?.data?.pending === true && !isStillComputing(state.data, state.dataUpdateCount);
+}
+
+function useRetry({ queryKey }: UnreleasedOptions): () => void {
+  const queryClient = useQueryClient();
+  return function retry() {
+    void queryClient.resetQueries({ queryKey });
+  };
+}
+
+function useFailure(options: UnreleasedOptions, isError: boolean): FailureState {
+  const isSpent = useBudgetSpent(options);
+  return { isFailed: isError || isSpent, retry: useRetry(options) };
 }
 
 export function useUnreleasedTracks(artist: DiscoveryResult): UnreleasedTracksState {
   const port = useDetailPort();
   const options = unreleasedQueryOptions(artist, port, useDetailFetchEnabled());
-  const { data: unreleased, isLoading } = useQuery(options);
+  const { data: unreleased, isLoading, isError } = useQuery(options);
   const isComputing = isStillComputing(unreleased, useUpdateCount(options));
-  return { tracks: unreleased?.items ?? NO_TRACKS, isLoading: isLoading || isComputing };
+  const failure = useFailure(options, isError);
+  return {
+    tracks: unreleased?.items ?? NO_TRACKS,
+    isLoading: isLoading || isComputing,
+    ...failure,
+  };
 }
 
 export type UnreleasedCardState = SaveState | 'genius' | 'play';
