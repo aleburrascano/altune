@@ -157,8 +157,18 @@ type CardActions = {
 function noAction(): void {}
 
 function cardAction(state: UnreleasedCardState, actions: CardActions): () => void {
-  if (state === 'genius' || state === 'play' || state === 'open') return actions[state];
-  return state === 'disabled' ? noAction : actions.save;
+  const byState: Record<UnreleasedCardState, () => void> = {
+    genius: actions.genius,
+    open: actions.open,
+    play: actions.play,
+    add: actions.save,
+    saving: actions.save,
+    ready: actions.save,
+    failed: actions.save,
+    rejected: actions.save,
+    disabled: noAction,
+  };
+  return byState[state];
 }
 
 export function useUnreleasedCard(target: CardTarget): UnreleasedCard {
