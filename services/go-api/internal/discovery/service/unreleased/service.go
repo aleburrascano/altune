@@ -59,9 +59,6 @@ func WithStore(store ports.UnreleasedStore) Option {
 	return func(s *Service) { s.store = store }
 }
 
-// Rebuild always builds the artist's songs and writes them, with the
-// completeness the build reached and the time the build began, to the store.
-// A failed write is logged and the built songs are still returned.
 func (s *Service) Rebuild(ctx context.Context, key ports.UnreleasedArtistKey, artistName string, known map[domain.ProviderName]string) ([]domain.UnreleasedSong, error) {
 	startedAt := time.Now()
 	songs, complete, err := s.build(ctx, key.Provider, key.ExternalID, strings.TrimSpace(artistName), known)

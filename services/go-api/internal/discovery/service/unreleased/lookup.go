@@ -58,7 +58,7 @@ func (s *Service) Lookup(ctx context.Context, provider domain.ProviderName, exte
 
 func (s *Service) lookupStored(ctx context.Context, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) (Lookup, error) {
 	key := ports.UnreleasedArtistKey{Provider: provider, ExternalID: externalID}
-	if songs, built := s.storedSongs(ctx, key, artistName, known); built {
+	if songs, built := s.storedSongsOrNotBuilt(ctx, key, artistName, known); built {
 		return Lookup{Songs: nonNil(songs)}, nil
 	}
 	jobKey := fmt.Sprintf("%s:%s:%s", provider.Key(), externalID, textnorm.NormalizeForIdentity(artistName))
@@ -68,9 +68,7 @@ func (s *Service) lookupStored(ctx context.Context, provider domain.ProviderName
 	return s.awaitJob(ctx, j)
 }
 
-// storedSongs records the artist, then reads it. A store failure is logged and
-// reads as not built, so the request falls through to a live build.
-func (s *Service) storedSongs(ctx context.Context, key ports.UnreleasedArtistKey, artistName string, known map[domain.ProviderName]string) ([]domain.UnreleasedSong, bool) {
+func (s *Service) storedSongsOrNotBuilt(ctx context.Context, key ports.UnreleasedArtistKey, artistName string, known map[domain.ProviderName]string) ([]domain.UnreleasedSong, bool) {
 	if err := s.store.Record(ctx, key, artistName, known); err != nil {
 		slog.WarnContext(ctx, "unreleased.store_record_failed", "error", err)
 	}

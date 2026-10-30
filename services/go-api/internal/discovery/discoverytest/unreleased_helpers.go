@@ -95,7 +95,6 @@ type StoredArtist struct {
 	Built    bool
 }
 
-// UnreleasedStore is an in-memory ports.UnreleasedStore that records every call in order.
 type UnreleasedStore struct {
 	Artists   map[ports.UnreleasedArtistKey]StoredArtist
 	RecordErr error

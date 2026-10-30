@@ -231,8 +231,6 @@ func (a *App) buildUnreleasedService(ctx context.Context, cf clientFactory, arti
 	return unreleased.NewService(a.geniusSongCatalog(cf), artistSvc, cache, a.unreleasedConfig(), opts...)
 }
 
-// unreleasedStore is nil when UNRELEASED_SOURCE=cache, or when there is no
-// database pool to back the store, in which case the Redis cache path serves.
 func (a *App) unreleasedStore(ctx context.Context) discoveryPorts.UnreleasedStore {
 	if a.cfg.UnreleasedSource == "cache" {
 		return nil
