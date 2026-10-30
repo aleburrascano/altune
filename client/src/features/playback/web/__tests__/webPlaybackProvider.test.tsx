@@ -22,7 +22,7 @@ import {
 } from '@features/playback/domain/playbackHealth';
 import { WebPlaybackProvider } from '@features/playback/web/WebPlaybackProvider';
 import { resolveSource } from '@features/playback/web/webPresign';
-import { usePlaybackVolumeStore } from '@features/playback/web/playbackVolume';
+import { toVolume, usePlaybackVolumeStore } from '@features/playback/web/playbackVolume';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -279,10 +279,10 @@ describe('WebPlaybackProvider', () => {
     const { audio, playback } = await playing();
     const CHOSEN_VOLUME = 0.3;
 
-    act(() => usePlaybackVolumeStore.getState().setVolume(CHOSEN_VOLUME));
+    act(() => usePlaybackVolumeStore.getState().setVolume(toVolume(CHOSEN_VOLUME)));
     expect(audio.volume).toBe(CHOSEN_VOLUME);
     expect(playback().status).toBe('playing');
-    usePlaybackVolumeStore.setState({ volume: 1 });
+    usePlaybackVolumeStore.setState({ volume: toVolume(1) });
   });
 
   it('sets the playback rate on the audio element', async () => {

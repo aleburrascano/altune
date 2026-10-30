@@ -2,12 +2,14 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { WIDE_LAYOUT_MIN_WIDTH } from '@shared/ui/layout/breakpoints';
 
-import { usePlaybackVolumeStore } from '@features/playback/web/playbackVolume';
+import { toVolume, usePlaybackVolumeStore } from '@features/playback/web/playbackVolume';
 import { VolumeSlider } from '@features/playback/web/VolumeSlider';
 
 const CHOSEN = '0.5';
 
-let mockWindowWidth = 390;
+const PHONE_WIDTH = 390;
+
+let mockWindowWidth = PHONE_WIDTH;
 let mockIsWebPlatform = true;
 
 jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
@@ -20,9 +22,9 @@ jest.mock('@shared/device/isWebPlatform', () => ({
 }));
 
 afterEach(() => {
-  mockWindowWidth = 390;
+  mockWindowWidth = PHONE_WIDTH;
   mockIsWebPlatform = true;
-  usePlaybackVolumeStore.setState({ volume: 1 });
+  usePlaybackVolumeStore.setState({ volume: toVolume(1) });
 });
 
 describe('VolumeSlider', () => {

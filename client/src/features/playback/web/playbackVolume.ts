@@ -1,17 +1,20 @@
 import { create } from 'zustand';
 
-type PlaybackVolumeState = {
-  volume: number;
-  setVolume: (volume: number) => void;
-};
+export type Volume = number & { readonly brand: 'Volume' };
 
-function clampVolume(volume: number): number {
-  return Math.min(1, Math.max(0, volume));
+export function toVolume(value: number): Volume {
+  const clamped = Number.isNaN(value) ? 0 : Math.min(1, Math.max(0, value));
+  return clamped as Volume;
 }
 
+type PlaybackVolumeState = {
+  volume: Volume;
+  setVolume: (volume: Volume) => void;
+};
+
 export const usePlaybackVolumeStore = create<PlaybackVolumeState>((set) => ({
-  volume: 1,
-  setVolume: (volume) => set({ volume: clampVolume(volume) }),
+  volume: toVolume(1),
+  setVolume: (volume) => set({ volume }),
 }));
 
 export function bindAudioVolume(audio: HTMLAudioElement): () => void {

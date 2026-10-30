@@ -3,13 +3,13 @@ import type { ChangeEvent, ReactElement } from 'react';
 import { useWideWebLayout } from '@shared/ui/layout/useLayoutMode';
 import { useTheme } from '@shared/ui/theme';
 
-import { usePlaybackVolumeStore } from '@features/playback/web/playbackVolume';
+import { toVolume, usePlaybackVolumeStore } from '@features/playback/web/playbackVolume';
 
 const VOLUME_RANGE = { min: 0, max: 1, step: 0.01 };
 const VOLUME_WIDTH_PX = 120;
 
 function setVolumeFromEvent(event: ChangeEvent<HTMLInputElement>): void {
-  usePlaybackVolumeStore.getState().setVolume(Number(event.currentTarget.value));
+  usePlaybackVolumeStore.getState().setVolume(toVolume(Number(event.currentTarget.value)));
 }
 
 function useVolumeProps() {
