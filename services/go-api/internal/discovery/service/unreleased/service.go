@@ -116,7 +116,11 @@ func (s *Service) build(ctx context.Context, provider domain.ProviderName, exter
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return nil, false, ctxErr
 	}
-	return songs, catalogComplete && complete, err
+	complete = catalogComplete && complete
+	if err == nil {
+		logCoverage(ctx, provider, externalID, artistName, songs, complete)
+	}
+	return songs, complete, err
 }
 
 func (s *Service) unreleasedSongs(ctx context.Context, artistID int, catalogTitles []string) ([]domain.UnreleasedSong, bool, error) {
