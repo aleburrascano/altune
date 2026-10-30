@@ -7,12 +7,14 @@ import (
 	"altune/go-api/internal/discovery/adapters/providers/artworkchain"
 	"altune/go-api/internal/discovery/adapters/providers/coverartarchive"
 	"altune/go-api/internal/discovery/adapters/providers/discogs"
+	"altune/go-api/internal/discovery/discoverytest"
 	discoveryDomain "altune/go-api/internal/discovery/domain"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service/content"
 	discoveryEnrich "altune/go-api/internal/discovery/service/enrich"
 	"altune/go-api/internal/discovery/service/rank"
 	"altune/go-api/internal/discovery/service/search"
+	"altune/go-api/internal/discovery/service/unreleased"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/runloop"
@@ -347,5 +349,38 @@ func TestUnreleasedRefresh_DisabledJobsAcceptsTheJobName(t *testing.T) {
 	}
 	if h := findJobHealth(t, a.JobHealth(), "unreleased refresh"); h.Enabled {
 		t.Error("unreleased refresh enabled, want disabled via DISABLED_JOBS")
+	}
+}
+
+type limitRecordingStore struct {
+	discoverytest.UnreleasedStore
+	limits []int
+}
+
+func (l *limitRecordingStore) Due(_ context.Context, _ time.Time, limit int) ([]discoveryPorts.UnreleasedDueArtist, error) {
+	l.limits = append(l.limits, limit)
+	return nil, nil
+}
+
+func TestUnreleasedRefresh_EachRunAsksTheStoreForAtMostTwoArtists(t *testing.T) {
+	store := &limitRecordingStore{}
+	svc := unreleased.NewService(nil, nil, nil, unreleased.Config{}, unreleased.WithStore(store))
+	if err := unreleasedRefreshRun(svc)(context.Background()); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !slices.Equal(store.limits, []int{2}) {
+		t.Errorf("Due limits = %v, want [2]", store.limits)
+	}
+}
+
+func TestUnreleasedRefresh_RegistrationLogsAThirtyMinuteInterval(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	a := &App{cfg: &config.Config{}}
+	a.startUnreleasedRefresh(&unreleased.Service{}, &limitRecordingStore{})
+	if !strings.Contains(buf.String(), "interval=30m0s") {
+		t.Errorf("registration log lacks interval=30m0s: %s", buf.String())
 	}
 }

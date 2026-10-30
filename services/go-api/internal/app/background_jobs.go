@@ -210,9 +210,13 @@ func (a *App) startUnreleasedRefresh(svc *unreleased.Service, store discoveryPor
 	if store == nil {
 		return
 	}
-	a.startSimpleJob(jobUnreleasedRefresh, unreleasedRefreshInterval, func(ctx context.Context) error {
+	a.startSimpleJob(jobUnreleasedRefresh, unreleasedRefreshInterval, unreleasedRefreshRun(svc), "interval", unreleasedRefreshInterval.String())
+}
+
+func unreleasedRefreshRun(svc *unreleased.Service) func(context.Context) error {
+	return func(ctx context.Context) error {
 		return svc.RefreshDue(ctx, time.Now().UTC(), unreleasedRefreshPerRun)
-	}, "interval", unreleasedRefreshInterval.String())
+	}
 }
 
 func (a *App) buildChartProviders(cf clientFactory) []discoveryPorts.ChartProvider {

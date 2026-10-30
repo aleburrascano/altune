@@ -91,3 +91,14 @@ func TestService_RefreshDue_ADueQueryFailureIsReturnedAndBuildsNothing(t *testin
 		t.Errorf("searched %v, want no builds", genius.SearchedFor)
 	}
 }
+
+func TestService_RefreshDue_NeverRebuildsMoreThanTheLimitEvenIfTheStoreReturnsMore(t *testing.T) {
+	store := &dueStore{due: []ports.UnreleasedDueArtist{dueArtist("1", "Drake"), dueArtist("2", "Future"), dueArtist("3", "Kanye")}}
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
+	if err := refreshService(genius, store).RefreshDue(context.Background(), time.Now(), 2); err != nil {
+		t.Fatalf("RefreshDue: %v", err)
+	}
+	if !slices.Equal(genius.SearchedFor, []string{"Drake", "Future"}) {
+		t.Errorf("rebuilt %v, want only the first 2", genius.SearchedFor)
+	}
+}
