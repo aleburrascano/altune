@@ -125,6 +125,19 @@ func TestHandleArtistUnreleased_SlowJobAnswersPendingWithNoItems(t *testing.T) {
 	}
 }
 
+func TestHandleArtistUnreleased_ReturnsOpenURLAndOpenHost(t *testing.T) {
+	genius := &discoverytest.GeniusSongCatalog{
+		ArtistID: 7, ArtistFound: true,
+		Songs: []domain.UnreleasedSong{{GeniusID: 1, Title: "Cancun", OpenURL: "https://mega.nz/file/abc", OpenHost: "mega.nz"}},
+	}
+	rec := discServe(t, unreleasedRouter(genius, nil), http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Artist", nil)
+
+	discAssertStatus(t, rec, http.StatusOK)
+	if body := rec.Body.String(); !strings.Contains(body, `"open_url":"https://mega.nz/file/abc"`) || !strings.Contains(body, `"open_host":"mega.nz"`) {
+		t.Errorf("body = %s, want open_url and open_host", body)
+	}
+}
+
 func TestHandleArtistUnreleased_ReturnsAudioLinksAsAlwaysAnArray(t *testing.T) {
 	genius := &discoverytest.GeniusSongCatalog{
 		ArtistID: 7, ArtistFound: true,

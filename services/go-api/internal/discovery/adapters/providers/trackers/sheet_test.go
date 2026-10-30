@@ -170,6 +170,41 @@ func TestInferColumns_UsesHeaderWordsWhenASheetIsTooSmallToJudge(t *testing.T) {
 	}
 }
 
+func openURLSheet(t *testing.T, extra ...[]gridCell) []byte {
+	t.Helper()
+	var rows [][]gridCell
+	for i := range 6 {
+		rows = append(rows, songRow("Era", fmt.Sprintf("Filler %d", i), "Full - HQ", pillowsLink(i)))
+	}
+	rows = append(rows, extra...)
+	return gridBody(t, gridOf([]string{"Era", "Title", "What's Available?", "Links"}, rows...))
+}
+
+func TestParseSheet_OpenURLKeepsAWholeSongWithOnlyAnUnsupportedHttpsLink(t *testing.T) {
+	body := openURLSheet(t,
+		songRow("Era", "Song X", "Full", "https://mega.nz/file/abc"),
+		songRow("Era", "Bad Scheme", "Full", "intent://x"),
+		songRow("Era", "Snip", "Snippet", "https://mega.nz/file/def"),
+	)
+	rows, mapped, err := parseSheet(body)
+	if err != nil || !mapped {
+		t.Fatalf("parseSheet = mapped %v, err %v", mapped, err)
+	}
+	var got []domain.UnreleasedSong
+	for _, s := range songsFromRows("Artist", rows) {
+		if s.Title == "Song X" || s.Title == "Bad Scheme" || s.Title == "Snip" {
+			got = append(got, s)
+		}
+	}
+	if len(got) != 1 || got[0].Title != "Song X" {
+		t.Fatalf("songs = %+v, want only Song X", got)
+	}
+	s := got[0]
+	if len(s.AudioLinks) != 0 || s.HasMedia == nil || *s.HasMedia || s.OpenURL != "https://mega.nz/file/abc" || s.OpenHost != "mega.nz" {
+		t.Errorf("song = %+v, want no audio, has_media false, open mega.nz", s)
+	}
+}
+
 func gridBody(t *testing.T, grid []gridRow) []byte {
 	t.Helper()
 	var resp gridResponse

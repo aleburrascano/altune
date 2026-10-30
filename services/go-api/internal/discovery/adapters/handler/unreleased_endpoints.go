@@ -19,6 +19,8 @@ type UnreleasedSongDTO struct {
 	Quality      *string            `json:"quality"`
 	TrackerKey   *string            `json:"tracker_key"`
 	OffStreaming bool               `json:"off_streaming"`
+	OpenURL      *string            `json:"open_url,omitempty"`
+	OpenHost     *string            `json:"open_host,omitempty"`
 	AudioLinks   []domain.AudioLink `json:"audio_links"`
 	Extras       map[string]any     `json:"extras"`
 }
@@ -46,6 +48,8 @@ func unreleasedToDTO(found unreleased.Lookup) UnreleasedResponseDTO {
 			Quality:      nonEmpty(s.Quality),
 			TrackerKey:   nonEmpty(s.TrackerKey),
 			OffStreaming: s.OffStreaming,
+			OpenURL:      nonEmpty(s.OpenURL),
+			OpenHost:     nonEmpty(s.OpenHost),
 			AudioLinks:   nonNilLinks(s.AudioLinks),
 			Extras:       map[string]any{},
 		}
