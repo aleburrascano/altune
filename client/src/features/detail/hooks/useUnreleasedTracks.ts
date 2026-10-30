@@ -2,6 +2,8 @@ import {
   useQuery,
   useQueryClient,
   type NotifyOnChangeProps,
+  type QueryClient,
+  type QueryKey,
   type Query,
   type QueryFunctionContext,
 } from '@tanstack/react-query';
@@ -28,7 +30,7 @@ import { useResolvedOwnedTrack } from '@features/detail/hooks/useOwnedTrack';
 import { useTrackSave } from '@features/detail/hooks/useSaveTrack';
 
 const NO_TRACKS: UnreleasedTrack[] = [];
-const REFRESH_ON_EVERY_POLL: NotifyOnChangeProps = ['data', 'dataUpdatedAt', 'isLoading'];
+const REFRESH_ON_EVERY_POLL: NotifyOnChangeProps = ['data', 'dataUpdatedAt', 'isLoading', 'error'];
 const PENDING_POLL_MS = 10_000;
 const PENDING_POLL_BUDGET_MS = 180_000;
 const MAX_PENDING_POLLS = PENDING_POLL_BUDGET_MS / PENDING_POLL_MS;
@@ -60,19 +62,40 @@ function unreleasedQueryOptions(artist: DiscoveryResult, port: DetailPort, isEna
   };
 }
 
-export type UnreleasedTracksState = { tracks: UnreleasedTrack[]; isLoading: boolean };
+export type UnreleasedTracksState = {
+  tracks: UnreleasedTrack[];
+  isLoading: boolean;
+  isFailed: boolean;
+  retry: () => void;
+};
 
 function useUpdateCount(options: ReturnType<typeof unreleasedQueryOptions>): number {
   const queryClient = useQueryClient();
   return queryClient.getQueryState(options.queryKey)?.dataUpdateCount ?? 0;
 }
 
+function isBudgetSpent(response: UnreleasedTracksResponse | undefined, updateCount: number) {
+  return response?.pending === true && !isStillComputing(response, updateCount);
+}
+
+function restartPollBudget(queryClient: QueryClient, queryKey: QueryKey): Promise<void> {
+  return queryClient.resetQueries({ queryKey });
+}
+
 export function useUnreleasedTracks(artist: DiscoveryResult): UnreleasedTracksState {
   const port = useDetailPort();
+  const queryClient = useQueryClient();
   const options = unreleasedQueryOptions(artist, port, useDetailFetchEnabled());
-  const { data: unreleased, isLoading } = useQuery(options);
-  const isComputing = isStillComputing(unreleased, useUpdateCount(options));
-  return { tracks: unreleased?.items ?? NO_TRACKS, isLoading: isLoading || isComputing };
+  const { data: unreleased, isLoading, isError } = useQuery(options);
+  const updateCount = useUpdateCount(options);
+  const isComputing = isStillComputing(unreleased, updateCount);
+  const retry = () => void restartPollBudget(queryClient, options.queryKey);
+  return {
+    tracks: unreleased?.items ?? NO_TRACKS,
+    isLoading: isLoading || isComputing,
+    isFailed: isError || isBudgetSpent(unreleased, updateCount),
+    retry,
+  };
 }
 
 export type UnreleasedCardState = SaveState | 'genius' | 'play';

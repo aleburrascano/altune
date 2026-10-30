@@ -18,7 +18,8 @@ import {
 } from '@features/detail/hooks/useUnreleasedTracks';
 import { FilterChips, type ChipGroup } from '@features/detail/ui/DiscographySections';
 import { DETAIL_GUTTER, RELATED_CARD_WIDTH, sharedStyles } from '@features/detail/ui/detailStyles';
-import { Section } from '@features/detail/ui/Section';
+import { AlbumCardsSkeleton } from '@features/detail/ui/DetailSkeleton';
+import { Section, SectionError } from '@features/detail/ui/Section';
 
 type UnreleasedRowProps = { track: UnreleasedTrack };
 type UnreleasedArtistRowProps = { artist: DiscoveryResult; track: UnreleasedTrack };
@@ -196,28 +197,33 @@ function UnreleasedSection(props: UnreleasedListProps): ReactElement {
   );
 }
 
-function LoadingHint(): ReactElement {
-  return (
-    <Text variant="caption" tone="tertiary">
-      Looking for unreleased tracks…
-    </Text>
-  );
-}
-
 function UnreleasedLoading(): ReactElement {
   return (
     <View testID="detail-unreleased-loading">
       <Section label={SECTION_LABEL}>
-        <LoadingHint />
+        <AlbumCardsSkeleton />
       </Section>
     </View>
   );
 }
 
+function UnreleasedFailed({ onRetry }: { onRetry: () => void }): ReactElement {
+  return (
+    <Section label={SECTION_LABEL}>
+      <SectionError
+        testIDPrefix="detail-unreleased"
+        message="Couldn't load unreleased tracks"
+        onRetry={onRetry}
+      />
+    </Section>
+  );
+}
+
 export function ArtistUnreleased({ artist }: ArtistUnreleasedProps): ReactElement | null {
-  const { tracks, isLoading } = useUnreleasedTracks(artist);
+  const { tracks, isLoading, isFailed, retry } = useUnreleasedTracks(artist);
   if (tracks.length > 0) return <UnreleasedSection artist={artist} tracks={tracks} />;
-  return isLoading ? <UnreleasedLoading /> : null;
+  if (isLoading) return <UnreleasedLoading />;
+  return isFailed ? <UnreleasedFailed onRetry={retry} /> : null;
 }
 
 const styles = StyleSheet.create({
