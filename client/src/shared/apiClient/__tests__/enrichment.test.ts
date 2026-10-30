@@ -573,6 +573,8 @@ describe('getUnreleasedTracks', () => {
       tracker_key: null,
       quality: null,
       off_streaming: false,
+      open_url: null,
+      open_host: null,
       ...wire,
     };
   }
@@ -607,6 +609,28 @@ describe('getUnreleasedTracks', () => {
     const { items } = await getUnreleasedTracks('spotify', 'art-1', { name: 'X' });
 
     expect(items).toEqual([asParsed(row), asParsed(bare)]);
+  });
+
+  it('keeps an https open_url and open_host, reads absent as null, and nulls an unsafe url without dropping the row', async () => {
+    const mega = {
+      ...row,
+      genius_id: 20,
+      open_url: 'https://mega.nz/file/abc',
+      open_host: 'mega.nz',
+    };
+    const intent = { ...row, genius_id: 21, open_url: 'intent://x', open_host: 'x' };
+    const script = { ...row, genius_id: 22, open_url: 'javascript:x', open_host: 'x' };
+    __http.reply(PATH, { status: 200, json: { items: [mega, row, intent, script] } });
+
+    const { items } = await getUnreleasedTracks('spotify', 'art-1', { name: 'X' });
+
+    expect(items.map((item) => item.open_url)).toEqual([
+      'https://mega.nz/file/abc',
+      null,
+      null,
+      null,
+    ]);
+    expect(items.map((item) => item.open_host)).toEqual(['mega.nz', null, 'x', 'x']);
   });
 
   it('reads off_streaming true and treats a missing flag as false', async () => {

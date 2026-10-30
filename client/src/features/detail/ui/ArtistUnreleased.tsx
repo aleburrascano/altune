@@ -7,6 +7,7 @@ import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing } from '@shared/ui/theme';
 
+import { realPhotoUrl } from '@features/detail/domain/artistPhoto';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import type { UnreleasedTrack } from '@shared/apiClient/enrichment';
 
@@ -38,9 +39,11 @@ const CARD_HINTS: Record<UnreleasedCardState, string | null> = {
   failed: "Couldn't get it · tap to retry",
   rejected: "Couldn't get it",
   disabled: null,
+  open: null,
 };
 
 function cardHint(track: UnreleasedTrack, state: UnreleasedCardState): string | null {
+  if (state === 'open') return `Open on ${track.open_host ?? 'link'}`;
   if (state === 'genius' && track.has_media === false) return 'no audio found';
   return CARD_HINTS[state];
 }
@@ -55,10 +58,12 @@ function CardHint({ track, card }: UnreleasedCardProps): ReactElement | null {
   );
 }
 
-function UnreleasedCover({ track }: UnreleasedRowProps): ReactElement {
+type UnreleasedCoverProps = { track: UnreleasedTrack; artist: DiscoveryResult };
+
+function UnreleasedCover({ track, artist }: UnreleasedCoverProps): ReactElement {
   return (
     <Artwork
-      uri={track.cover_url}
+      uri={track.cover_url ?? realPhotoUrl(artist.image_url)}
       size={RELATED_CARD_WIDTH}
       radius={radius.md}
       accessibilityLabel={track.title}
@@ -101,28 +106,46 @@ function openGenius(track: UnreleasedTrack): void {
   });
 }
 
+function openLink(track: UnreleasedTrack): void {
+  if (track.open_url === null) return;
+  Linking.openURL(track.open_url).catch((error: unknown) => {
+    console.warn('[detail] could not open the track link', {
+      key: track.key,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
+}
+
 function cardLabel(track: UnreleasedTrack, state: UnreleasedCardState): string {
   if (state === 'genius') return `Open ${track.title} on Genius`;
+  if (state === 'open') return `Open ${track.title} on ${track.open_host ?? 'link'}`;
   if (state === 'play') return `Play ${track.title}`;
   return `Save ${track.title}`;
 }
+
+const LINK_STATES: ReadonlySet<UnreleasedCardState> = new Set(['genius', 'open']);
 
 function unreleasedRowProps({ track, card }: UnreleasedCardProps) {
   return {
     action: `detail.artist.unreleased.${card.state}`,
     testID: `detail-unreleased-${track.key}`,
     onPress: card.onPress,
-    accessibilityRole: card.state === 'genius' ? ('link' as const) : ('button' as const),
+    accessibilityRole: LINK_STATES.has(card.state) ? ('link' as const) : ('button' as const),
     accessibilityLabel: cardLabel(track, card.state),
     style: pressedCardStyle,
   };
 }
 
 function UnreleasedRow({ artist, track }: UnreleasedArtistRowProps): ReactElement {
-  const card = useUnreleasedCard({ track, artist, openGenius: () => openGenius(track) });
+  const card = useUnreleasedCard({
+    track,
+    artist,
+    openGenius: () => openGenius(track),
+    openLink: () => openLink(track),
+  });
   return (
     <Tappable {...unreleasedRowProps({ track, card })}>
-      <UnreleasedCover track={track} />
+      <UnreleasedCover track={track} artist={artist} />
       <UnreleasedTitle track={track} card={card} />
     </Tappable>
   );

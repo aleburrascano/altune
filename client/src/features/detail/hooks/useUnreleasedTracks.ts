@@ -106,11 +106,16 @@ export function useUnreleasedTracks(artist: DiscoveryResult): UnreleasedTracksSt
   };
 }
 
-export type UnreleasedCardState = SaveState | 'genius' | 'play';
+export type UnreleasedCardState = SaveState | 'genius' | 'play' | 'open';
 
 export type UnreleasedCard = { state: UnreleasedCardState; onPress: () => void };
 
-type CardTarget = { track: UnreleasedTrack; artist: DiscoveryResult; openGenius: () => void };
+type CardTarget = {
+  track: UnreleasedTrack;
+  artist: DiscoveryResult;
+  openGenius: () => void;
+  openLink: () => void;
+};
 
 const LIBRARY_QUEUE = { kind: 'library' } as const;
 
@@ -129,6 +134,7 @@ function usePlayOwned(asTrack: DiscoveryResult, owned: OwnedTrack | null): () =>
 }
 
 function fallbackState(track: UnreleasedTrack): UnreleasedCardState {
+  if (track.open_url !== null) return 'open';
   return track.genius_url === null ? 'disabled' : 'genius';
 }
 
@@ -141,20 +147,27 @@ function cardState(
   return isAcquirable(track) ? save : fallbackState(track);
 }
 
-type CardActions = { genius: () => void; play: () => void; save: () => void };
+type CardActions = {
+  genius: () => void;
+  open: () => void;
+  play: () => void;
+  save: () => void;
+};
 
 function noAction(): void {}
 
 function cardAction(state: UnreleasedCardState, actions: CardActions): () => void {
-  if (state === 'genius' || state === 'play') return actions[state];
+  if (state === 'genius' || state === 'play' || state === 'open') return actions[state];
   return state === 'disabled' ? noAction : actions.save;
 }
 
-export function useUnreleasedCard({ track, artist, openGenius }: CardTarget): UnreleasedCard {
+export function useUnreleasedCard(target: CardTarget): UnreleasedCard {
+  const { track, artist } = target;
   const asTrack = unreleasedAsResult(track, artist);
   const owned = useOwnedUnreleased(asTrack);
   const save = useTrackSave(asTrack, owned);
   const play = usePlayOwned(asTrack, owned);
   const state = cardState(track, owned, save.state);
-  return { state, onPress: cardAction(state, { genius: openGenius, play, save: save.onSave }) };
+  const actions = { genius: target.openGenius, open: target.openLink, play, save: save.onSave };
+  return { state, onPress: cardAction(state, actions) };
 }

@@ -25,6 +25,8 @@ const DREAM: UnreleasedTrack = {
   has_media: true,
   off_streaming: false,
   audio_links: [],
+  open_url: null,
+  open_host: null,
   extras: { owned_track_id: 'track-9' },
 };
 
