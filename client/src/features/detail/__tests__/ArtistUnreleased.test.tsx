@@ -52,11 +52,15 @@ const startQueue = jest.fn<Promise<void>, unknown[]>(() => Promise.resolve());
 const PLAYBACK = { ...idlePlayback, startQueue };
 
 function renderSection() {
+  return renderSectionFor(ARTIST);
+}
+
+function renderSectionFor(artist: DiscoveryResult) {
   const Base = createPlaybackWrapper(createTestQueryClient({ mutations: true }), PLAYBACK);
   return render(
     <Base>
       <DetailPortProvider port={httpDetailPort}>
-        <ArtistUnreleased artist={ARTIST} />
+        <ArtistUnreleased artist={artist} />
       </DetailPortProvider>
     </Base>,
   );
@@ -386,5 +390,43 @@ describe('ArtistUnreleased', () => {
       album: 'UNRELEASED',
       sources: [{ provider: 'pixeldrain', external_id: 'ozSpSjn7' }],
     });
+  });
+
+  it('shows Open on <host> for a link-out track with no audio links and opens that URL on tap', async () => {
+    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    const linkOut = {
+      ...CANCUN,
+      genius_id: null,
+      genius_url: null,
+      tracker_key: 'ken:dream-v2',
+      title: 'Dream V2',
+      open_url: 'https://mega.nz/file/abc',
+      open_host: 'mega.nz',
+    };
+    __http.reply(UNRELEASED, { status: 200, json: { items: [linkOut] } });
+    renderSection();
+
+    expect(await screen.findByText('Open on mega.nz')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('detail-unreleased-ken:dream-v2'));
+    expect(openURL).toHaveBeenCalledWith('https://mega.nz/file/abc');
+    openURL.mockRestore();
+  });
+
+  it('falls back to the artist real photo for a track with no cover, and to the placeholder without one', async () => {
+    const photo = 'https://img.example/ken.jpg';
+    __http.reply(UNRELEASED, { status: 200, json: { items: [CANCUN] } });
+    const withPhoto = renderSectionFor({ ...ARTIST, image_url: photo });
+    const shown = await withPhoto.findByLabelText('Cancun');
+    expect(shown.props.source).toEqual([{ uri: photo }]);
+    withPhoto.unmount();
+
+    const lastfm = 'https://lastfm.example/2a96cbd8b46e442fc41c2b86b821562f.png';
+    for (const image_url of [null, lastfm]) {
+      __http.reply(UNRELEASED, { status: 200, json: { items: [CANCUN] } });
+      const bare = renderSectionFor({ ...ARTIST, image_url });
+      const cover = await bare.findByLabelText('Cancun');
+      expect(JSON.stringify(cover.props.source)).not.toContain('uri');
+      bare.unmount();
+    }
   });
 });

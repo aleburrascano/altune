@@ -298,6 +298,8 @@ export type UnreleasedTrack = {
   has_media: boolean | null;
   off_streaming: boolean;
   audio_links: UnreleasedAudioLink[];
+  open_url: string | null;
+  open_host: string | null;
   extras: Record<string, unknown>;
 };
 
@@ -357,6 +359,14 @@ function parseOwnershipExtras(value: unknown, at: string): Record<string, unknow
   return value === undefined ? EXTRAS_FROM_A_SERVER_WITHOUT_OWNERSHIP : asRecord(value, at);
 }
 
+function parseOpenUrl(value: unknown, at: string): string | null {
+  try {
+    return nullableHttpsUrl(value, at);
+  } catch {
+    return null;
+  }
+}
+
 function parseUnreleasedDetails(r: Record<string, unknown>, at: string) {
   return {
     quality: nullableString(r.quality, `${at}.quality`),
@@ -365,6 +375,8 @@ function parseUnreleasedDetails(r: Record<string, unknown>, at: string) {
     has_media: nullableBoolean(r.has_media, `${at}.has_media`),
     off_streaming: nullableBoolean(r.off_streaming, `${at}.off_streaming`) === true,
     audio_links: parseAudioLinks(r.audio_links),
+    open_url: parseOpenUrl(r.open_url, `${at}.open_url`),
+    open_host: nullableString(r.open_host, `${at}.open_host`),
     extras: parseOwnershipExtras(r.extras, `${at}.extras`),
   };
 }
