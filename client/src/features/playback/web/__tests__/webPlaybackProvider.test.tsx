@@ -22,6 +22,7 @@ import {
 } from '@features/playback/domain/playbackHealth';
 import { WebPlaybackProvider } from '@features/playback/web/WebPlaybackProvider';
 import { resolveSource } from '@features/playback/web/webPresign';
+import { usePlaybackVolumeStore } from '@features/playback/web/playbackVolume';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -60,6 +61,7 @@ class FakeAudio {
   currentTime = 0;
   duration = Number.NaN;
   playbackRate = 1;
+  volume = 1;
   paused = true;
   ended = false;
   readyState = 0;
@@ -271,6 +273,16 @@ describe('WebPlaybackProvider', () => {
     act(() => audio.emit('durationchange'));
 
     expect(playback().durationMs).toBe(0);
+  });
+
+  it('applies the volume chosen in the store to the audio element', async () => {
+    const { audio, playback } = await playing();
+    const CHOSEN_VOLUME = 0.3;
+
+    act(() => usePlaybackVolumeStore.getState().setVolume(CHOSEN_VOLUME));
+    expect(audio.volume).toBe(CHOSEN_VOLUME);
+    expect(playback().status).toBe('playing');
+    usePlaybackVolumeStore.setState({ volume: 1 });
   });
 
   it('sets the playback rate on the audio element', async () => {

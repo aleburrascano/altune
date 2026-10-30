@@ -1,15 +1,12 @@
-import type { ChangeEvent, ReactElement } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 
 import { Text } from '@shared/ui/primitives/Text';
-import { useWideWebLayout } from '@shared/ui/layout/useLayoutMode';
 import { useTheme, halved, touchTarget } from '@shared/ui/theme';
 import { spacing } from '@shared/ui/theme/tokens';
 
 import { useScrubberGesture } from '@features/playback/hooks/useScrubberGesture';
 import { msToSeconds } from '@features/playback/domain/time';
-import { usePlaybackVolumeStore } from '@features/playback/web/playbackVolume';
 
 interface ScrubberProps {
   positionMs: number;
@@ -122,31 +119,3 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
 });
-
-const VOLUME_RANGE = { min: 0, max: 1, step: 0.01 };
-const VOLUME_WIDTH_PX = 120;
-
-export function VolumeSlider(): ReactElement | null {
-  const isWide = useWideWebLayout();
-  return isWide ? <VolumeInput /> : null;
-}
-
-function setVolumeFromEvent(event: ChangeEvent<HTMLInputElement>): void {
-  usePlaybackVolumeStore.getState().setVolume(Number(event.currentTarget.value));
-}
-
-function useVolumeProps() {
-  const theme = useTheme();
-  const volume = usePlaybackVolumeStore((s) => s.volume);
-  return {
-    ...VOLUME_RANGE,
-    value: volume,
-    onChange: setVolumeFromEvent,
-    style: { width: VOLUME_WIDTH_PX, accentColor: theme.color.accent },
-  };
-}
-
-function VolumeInput(): ReactElement {
-  const props = useVolumeProps();
-  return <input type="range" aria-label="Volume" {...props} />;
-}

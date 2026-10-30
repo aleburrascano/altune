@@ -14,7 +14,8 @@ import {
   libraryTrackId,
 } from '@features/playback/domain/playerStatus';
 import { PlayerOptionsSheets } from '@features/playback/ui/PlayerOptionsSheets';
-import { Scrubber, VolumeSlider } from '@features/playback/ui/Scrubber';
+import { Scrubber } from '@features/playback/ui/Scrubber';
+import { VolumeSlider } from '@features/playback/web/VolumeSlider';
 import {
   SheetHeader,
   SheetHeaderCenter,
