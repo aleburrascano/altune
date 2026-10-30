@@ -8,6 +8,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
@@ -30,6 +31,7 @@ type Service struct {
 	trackers ports.TrackerSongs
 	catalog  ports.ArtistCatalogTitles
 	cache    ports.UnreleasedCache
+	store    ports.UnreleasedStore
 	cfg      Config
 
 	lifecycle context.Context
@@ -54,10 +56,35 @@ func NewService(genius ports.GeniusSongCatalog, catalog ports.ArtistCatalogTitle
 	return s
 }
 
+func WithStore(store ports.UnreleasedStore) Option {
+	return func(s *Service) { s.store = store }
+}
+
+func (s *Service) UsesStore() bool { return s.store != nil }
+
+// Rebuild always builds the artist's songs and writes them, with the
+// completeness the build reached and the time the build began, to the store.
+func (s *Service) Rebuild(ctx context.Context, key ports.UnreleasedArtistKey, artistName string, known map[domain.ProviderName]string) ([]domain.UnreleasedSong, error) {
+	startedAt := time.Now()
+	songs, complete, err := s.build(ctx, key.Provider, key.ExternalID, strings.TrimSpace(artistName), known)
+	if err != nil {
+		return nil, err
+	}
+	if s.store != nil {
+		if err := s.store.Write(ctx, key, songs, complete, startedAt); err != nil {
+			return nil, fmt.Errorf("write unreleased songs: %w", err)
+		}
+	}
+	return songs, nil
+}
+
 func (s *Service) List(ctx context.Context, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) ([]domain.UnreleasedSong, error) {
 	artistName = strings.TrimSpace(artistName)
 	if artistName == "" {
 		return []domain.UnreleasedSong{}, nil
+	}
+	if s.store != nil {
+		return s.Rebuild(ctx, ports.UnreleasedArtistKey{Provider: provider, ExternalID: externalID}, artistName, known)
 	}
 	nameKey := textnorm.NormalizeForIdentity(artistName)
 	if s.cache != nil {

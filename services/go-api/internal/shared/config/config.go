@@ -57,6 +57,7 @@ type Config struct {
 	GeniusUnreleasedJobTimeout        time.Duration `env:"GENIUS_UNRELEASED_JOB_TIMEOUT" envDefault:"10m"`
 	GeniusUnreleasedEmptyTTL          time.Duration `env:"GENIUS_UNRELEASED_EMPTY_TTL" envDefault:"1h"`
 	GeniusUnreleasedTTL               time.Duration `env:"GENIUS_UNRELEASED_TTL" envDefault:"168h"`
+	UnreleasedSource                  string        `env:"UNRELEASED_SOURCE" envDefault:"store"`
 
 	DiscogsToken string `env:"DISCOGS_TOKEN"`
 

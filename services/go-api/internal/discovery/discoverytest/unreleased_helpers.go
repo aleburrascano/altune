@@ -6,6 +6,7 @@ import (
 	"context"
 	"slices"
 	"sync"
+	"time"
 )
 
 type GeniusSongCatalog struct {
@@ -79,4 +80,77 @@ var _ ports.TrackerSongs = (*TrackerSongs)(nil)
 
 func (t *TrackerSongs) ArtistSongs(context.Context, string) ([]domain.UnreleasedSong, error) {
 	return append([]domain.UnreleasedSong(nil), t.Songs...), t.Err
+}
+
+type StoreWrite struct {
+	Key       ports.UnreleasedArtistKey
+	Songs     []domain.UnreleasedSong
+	Complete  bool
+	StartedAt time.Time
+}
+
+type StoredArtist struct {
+	Songs    []domain.UnreleasedSong
+	Complete bool
+	Built    bool
+}
+
+// UnreleasedStore is an in-memory ports.UnreleasedStore that records every call in order.
+type UnreleasedStore struct {
+	Artists   map[ports.UnreleasedArtistKey]StoredArtist
+	RecordErr error
+	ReadErr   error
+	WriteErr  error
+
+	mu     sync.Mutex
+	calls  []string
+	writes []StoreWrite
+}
+
+var _ ports.UnreleasedStore = (*UnreleasedStore)(nil)
+
+func (u *UnreleasedStore) Record(context.Context, ports.UnreleasedArtistKey, string, map[domain.ProviderName]string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.calls = append(u.calls, "record")
+	return u.RecordErr
+}
+
+func (u *UnreleasedStore) Read(_ context.Context, key ports.UnreleasedArtistKey) ([]domain.UnreleasedSong, bool, bool, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.calls = append(u.calls, "read")
+	artist := u.Artists[key]
+	return slices.Clone(artist.Songs), artist.Complete, artist.Built, u.ReadErr
+}
+
+func (u *UnreleasedStore) Write(_ context.Context, key ports.UnreleasedArtistKey, songs []domain.UnreleasedSong, complete bool, startedAt time.Time) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.calls = append(u.calls, "write")
+	if u.WriteErr != nil {
+		return u.WriteErr
+	}
+	u.writes = append(u.writes, StoreWrite{Key: key, Songs: slices.Clone(songs), Complete: complete, StartedAt: startedAt})
+	if u.Artists == nil {
+		u.Artists = map[ports.UnreleasedArtistKey]StoredArtist{}
+	}
+	u.Artists[key] = StoredArtist{Songs: slices.Clone(songs), Complete: complete, Built: true}
+	return nil
+}
+
+func (u *UnreleasedStore) Due(context.Context, time.Time, int) ([]ports.UnreleasedDueArtist, error) {
+	return nil, nil
+}
+
+func (u *UnreleasedStore) Calls() []string {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return slices.Clone(u.calls)
+}
+
+func (u *UnreleasedStore) Writes() []StoreWrite {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return slices.Clone(u.writes)
 }

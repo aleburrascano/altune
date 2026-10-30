@@ -286,3 +286,19 @@ func TestGeniusSongCatalog_PresentWithAToken(t *testing.T) {
 		t.Error("genius port missing though a token is set")
 	}
 }
+
+func TestBuildUnreleasedService_UsesTheStoreByDefault(t *testing.T) {
+	a, cf := unreleasedWiringApp(&config.Config{GoogleSheetsAPIKey: "k", TrackerHubSheetID: "hub", UnreleasedSource: "store"})
+	svc := a.buildUnreleasedService(context.Background(), cf, &content.GetArtistContentService{})
+	if svc == nil || !svc.UsesStore() {
+		t.Error("store source did not wire the store")
+	}
+}
+
+func TestBuildUnreleasedService_CacheSourceWiresNoStore(t *testing.T) {
+	a, cf := unreleasedWiringApp(&config.Config{GoogleSheetsAPIKey: "k", TrackerHubSheetID: "hub", UnreleasedSource: "cache"})
+	svc := a.buildUnreleasedService(context.Background(), cf, &content.GetArtistContentService{})
+	if svc == nil || svc.UsesStore() {
+		t.Error("UNRELEASED_SOURCE=cache wired the store")
+	}
+}

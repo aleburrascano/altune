@@ -221,13 +221,14 @@ func (a *App) buildUnreleasedService(ctx context.Context, cf clientFactory, arti
 	if (!a.cfg.HasGenius() && !a.cfg.HasTrackers()) || artistSvc == nil {
 		return nil
 	}
-	return unreleased.NewService(
-		a.geniusSongCatalog(cf),
-		artistSvc,
-		discoveryCacheAdapters.NewRedisUnreleasedCache(a.redisClient, cacheSignalOption()),
-		a.unreleasedConfig(),
-		a.unreleasedOptions(ctx, cf)...,
-	)
+	var cache discoveryPorts.UnreleasedCache
+	opts := a.unreleasedOptions(ctx, cf)
+	if a.cfg.UnreleasedSource == "cache" {
+		cache = discoveryCacheAdapters.NewRedisUnreleasedCache(a.redisClient, cacheSignalOption())
+	} else {
+		opts = append(opts, unreleased.WithStore(discoveryPersistence.NewPgxUnreleasedStore(a.pool)))
+	}
+	return unreleased.NewService(a.geniusSongCatalog(cf), artistSvc, cache, a.unreleasedConfig(), opts...)
 }
 
 func (a *App) geniusSongCatalog(cf clientFactory) discoveryPorts.GeniusSongCatalog {

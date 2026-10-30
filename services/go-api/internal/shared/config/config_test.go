@@ -2051,3 +2051,14 @@ func TestValidate_TrackerHubNeededOnlyWithAKey(t *testing.T) {
 		})
 	}
 }
+
+func TestLoad_UnreleasedSourceDefaultsToStore(t *testing.T) {
+	setEnv(t, validConfigEnv(nil))
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.UnreleasedSource != "store" {
+		t.Errorf("UnreleasedSource = %q, want store", cfg.UnreleasedSource)
+	}
+}

@@ -253,3 +253,28 @@ func TestUnreleasedSongDTO_CarriesEveryDomainField(t *testing.T) {
 		}
 	}
 }
+
+func TestHandleArtistUnreleased_StoreBuiltArtistAnswersFromTheStoreWithNoGeniusCalls(t *testing.T) {
+	key := ports.UnreleasedArtistKey{Provider: domain.ProviderDeezer, ExternalID: "27"}
+	store := &discoverytest.UnreleasedStore{Artists: map[ports.UnreleasedArtistKey]discoverytest.StoredArtist{key: {
+		Complete: true, Built: true,
+		Songs: []domain.UnreleasedSong{{GeniusID: 1, Title: "A"}, {GeniusID: 2, Title: "B"}, {GeniusID: 3, Title: "C"}},
+	}}}
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: []domain.UnreleasedSong{{GeniusID: 9, Title: "Other"}}}
+	svc := unreleased.NewService(genius, &discoverytest.ArtistCatalogTitles{}, nil, unreleased.Config{MaxPages: 1, MaxDetails: 10}, unreleased.WithStore(store))
+	h := NewDiscoveryHandler(DiscoveryServices{}).WithUnreleased(svc)
+	r := chi.NewRouter()
+	r.Use(middleware.Middleware(discVerifyAsTestUser))
+	r.Mount("/discovery", h.Routes())
+
+	rec := discServe(t, r, http.MethodGet, "/discovery/artists/deezer/27/unreleased?name=Drake", nil)
+
+	discAssertStatus(t, rec, http.StatusOK)
+	dto := decodeUnreleased(t, rec.Body.Bytes())
+	if len(dto.Items) != 3 || dto.Pending {
+		t.Errorf("response = %+v, want 3 items and pending false", dto)
+	}
+	if len(genius.SearchedFor) != 0 {
+		t.Errorf("genius searched %v, want 0 calls", genius.SearchedFor)
+	}
+}

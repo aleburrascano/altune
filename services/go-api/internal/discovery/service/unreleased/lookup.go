@@ -2,6 +2,7 @@ package unreleased
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared/runloop"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
@@ -40,6 +41,9 @@ func (s *Service) Lookup(ctx context.Context, provider domain.ProviderName, exte
 	if artistName == "" {
 		return Lookup{Songs: []domain.UnreleasedSong{}}, nil
 	}
+	if s.store != nil {
+		return s.lookupStored(ctx, provider, externalID, artistName, known)
+	}
 	nameKey := textnorm.NormalizeForIdentity(artistName)
 	if s.cache != nil {
 		if songs, ok := s.cache.Get(ctx, provider, externalID, nameKey); ok {
@@ -50,6 +54,32 @@ func (s *Service) Lookup(ctx context.Context, provider domain.ProviderName, exte
 		return s.List(jobCtx, provider, externalID, artistName, known)
 	})
 	return s.awaitJob(ctx, j)
+}
+
+func (s *Service) lookupStored(ctx context.Context, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) (Lookup, error) {
+	key := ports.UnreleasedArtistKey{Provider: provider, ExternalID: externalID}
+	if err := s.store.Record(ctx, key, artistName, known); err != nil {
+		return Lookup{}, fmt.Errorf("record unreleased artist: %w", err)
+	}
+	songs, _, built, err := s.store.Read(ctx, key)
+	if err != nil {
+		return Lookup{}, fmt.Errorf("read unreleased songs: %w", err)
+	}
+	if built {
+		return Lookup{Songs: nonNil(songs)}, nil
+	}
+	jobKey := fmt.Sprintf("%s:%s:%s", provider.Key(), externalID, textnorm.NormalizeForIdentity(artistName))
+	j := s.joinJob(jobKey, func(jobCtx context.Context) ([]domain.UnreleasedSong, error) {
+		return s.Rebuild(jobCtx, key, artistName, known)
+	})
+	return s.awaitJob(ctx, j)
+}
+
+func nonNil(songs []domain.UnreleasedSong) []domain.UnreleasedSong {
+	if songs == nil {
+		return []domain.UnreleasedSong{}
+	}
+	return songs
 }
 
 func (s *Service) awaitJob(ctx context.Context, j *job) (Lookup, error) {
