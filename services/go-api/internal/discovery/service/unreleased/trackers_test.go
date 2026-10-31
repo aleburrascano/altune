@@ -253,7 +253,7 @@ func TestService_List_GeniusLabelledSongStaysApartFromTheTrackerSong(t *testing.
 		t.Fatal(err)
 	}
 	want := []string{"tragic (Live from SNL)", "tragic (Remix)", "tragic"}
-	if !slices.Equal(titlesOf(got), want) {
+	if len(got) != 3 || !slices.Equal(titlesOf(got), want) {
 		t.Fatalf("titles = %v, want %v", titlesOf(got), want)
 	}
 	if got[0].Quality != "" || got[2].GeniusID != 0 {
