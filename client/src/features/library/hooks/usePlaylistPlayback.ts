@@ -1,6 +1,7 @@
 import type { PlaylistId } from '@shared/apiClient/ids';
 import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
+import type { QueueSource } from '@shared/playback/queueOrder';
 import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 
 type QueueControls = Pick<ReturnType<typeof useQueuePlayback>, 'playFromList' | 'shuffleFromList'>;
@@ -16,14 +17,16 @@ export function usePlaylistPlayback(
   playlist: PlaylistDetailResponse | undefined,
   queue: QueueControls,
 ): PlaylistPlayback {
-  const source = (name: string) => ({ kind: 'playlist' as const, playlistId, name });
+  function source(name: string): QueueSource {
+    return { kind: 'playlist', playlistId, name };
+  }
 
-  const startAt = (trackId: string): void => {
+  function startAt(trackId: string): void {
     if (!playlist) return;
     const { playable, startIndex } = buildPlayableQueue(playlist.tracks, trackId);
     if (playable.length === 0) return;
     queue.playFromList(playable, startIndex, source(playlist.name));
-  };
+  }
 
   return {
     play: () => {

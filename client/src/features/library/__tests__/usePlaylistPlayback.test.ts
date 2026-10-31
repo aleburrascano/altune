@@ -75,10 +75,11 @@ describe('usePlaylistPlayback', () => {
   });
 
   it('shuffle hands every playable track to one shuffled load', () => {
+    const playableIds = ['a', 'c'];
     const { queue, controls } = setup(playlist([track('a'), track('b', 'failed'), track('c')]));
     controls.shuffle();
     const [tracks, passedSource] = queue.shuffleFromList.mock.calls[0];
-    expect(tracks).toHaveLength(2);
+    expect(tracks).toHaveLength(playableIds.length);
     expect(passedSource).toEqual(source);
     expect(queue.playFromList).not.toHaveBeenCalled();
   });
