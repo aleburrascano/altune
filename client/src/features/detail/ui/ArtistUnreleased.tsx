@@ -22,6 +22,7 @@ import { FilterChips, type ChipGroup } from '@features/detail/ui/DiscographySect
 import { DETAIL_GUTTER, RELATED_CARD_WIDTH, sharedStyles } from '@features/detail/ui/detailStyles';
 import { AlbumCardsSkeleton } from '@features/detail/ui/DetailSkeleton';
 import { Section, SectionError } from '@features/detail/ui/Section';
+import { UnreleasedVersionsSheet } from '@features/detail/ui/UnreleasedVersionsSheet';
 
 type UnreleasedRowProps = { track: UnreleasedTrack };
 type UnreleasedArtistRowProps = { artist: DiscoveryResult; track: UnreleasedTrack };
@@ -192,6 +193,13 @@ function unreleasedRowProps({ track, card }: UnreleasedCardProps) {
   };
 }
 
+function useVersionsSheet(track: UnreleasedTrack) {
+  const [open, setOpen] = useState(false);
+  if (!hasManyVersions(track)) return { onLongPress: undefined, sheet: null };
+  const props = { track, visible: open, onClose: () => setOpen(false) };
+  return { onLongPress: () => setOpen(true), sheet: <UnreleasedVersionsSheet {...props} /> };
+}
+
 function UnreleasedRow({ artist, track }: UnreleasedArtistRowProps): ReactElement {
   const card = useUnreleasedCard({
     track,
@@ -199,11 +207,15 @@ function UnreleasedRow({ artist, track }: UnreleasedArtistRowProps): ReactElemen
     openGenius: () => openGenius(track),
     openLink: () => openLink(track),
   });
+  const versions = useVersionsSheet(track);
   return (
-    <Tappable {...unreleasedRowProps({ track, card })}>
-      <UnreleasedCover track={track} artist={artist} />
-      <UnreleasedTitle track={track} card={card} />
-    </Tappable>
+    <>
+      <Tappable {...unreleasedRowProps({ track, card })} onLongPress={versions.onLongPress}>
+        <UnreleasedCover track={track} artist={artist} />
+        <UnreleasedTitle track={track} card={card} />
+      </Tappable>
+      {versions.sheet}
+    </>
   );
 }
 
