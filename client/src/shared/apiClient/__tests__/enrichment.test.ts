@@ -823,4 +823,23 @@ describe('getUnreleasedTracks', () => {
       at: 'UnreleasedTracksResponse.items',
     });
   });
+
+  it('keeps the server best_version_title and leaves it absent when the server sent none', async () => {
+    const named = { ...row, genius_id: 30, best_version_title: 'Cancun [V2]' };
+    __http.reply(PATH, { status: 200, json: { items: [named, row] } });
+
+    const { items } = await getUnreleasedTracks('spotify', 'art-1', { name: 'X' });
+
+    expect(items[0]?.best_version_title).toBe('Cancun [V2]');
+    expect(items[1]).not.toHaveProperty('best_version_title');
+  });
+
+  it('skips a row whose best_version_title is not a string, keeping the others', async () => {
+    const bad = { ...row, genius_id: 31, best_version_title: 5 };
+    __http.reply(PATH, { status: 200, json: { items: [bad, row] } });
+
+    const { items } = await getUnreleasedTracks('spotify', 'art-1', { name: 'X' });
+
+    expect(items).toEqual([asParsed(row)]);
+  });
 });
