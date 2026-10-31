@@ -70,6 +70,7 @@ func mergeTrackerSongs(genius, trackers []domain.UnreleasedSong) []domain.Unrele
 }
 
 func splitDemos(songs []domain.UnreleasedSong) (others, demos []domain.UnreleasedSong) {
+	others = make([]domain.UnreleasedSong, 0, len(songs))
 	for _, song := range songs {
 		if demoBaseKey(song.Title) != "" {
 			demos = append(demos, song)

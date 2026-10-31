@@ -296,7 +296,7 @@ func TestService_List_DemoGeniusSongJoinsItsBaseTrackSongAsAVersion(t *testing.T
 		t.Fatal(err)
 	}
 	want := []string{"Greedy (Live)", "Greedy", "Borrow me"}
-	if !slices.Equal(titlesOf(got), want) {
+	if len(got) != len(want) || !slices.Equal(titlesOf(got), want) {
 		t.Fatalf("titles = %v, want %v", titlesOf(got), want)
 	}
 	greedy := got[1]
