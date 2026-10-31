@@ -1,13 +1,11 @@
 package unreleased
 
 import (
+	"altune/go-api/internal/shared/textnorm"
 	"altune/go-api/internal/shared/versiontag"
 	"regexp"
 	"strings"
 	"unicode"
-
-	"github.com/agnivade/levenshtein"
-	"github.com/mozillazg/go-unidecode"
 )
 
 const (
@@ -27,7 +25,7 @@ func wildcardKey(title string) string {
 }
 
 func keyWithStar(title, star string) string {
-	cleaned := strings.ReplaceAll(unidecode.Unidecode(unreleasedMarkerRe.ReplaceAllString(title, " ")), "*", star)
+	cleaned := strings.ReplaceAll(textnorm.Transliterate(unreleasedMarkerRe.ReplaceAllString(title, " ")), "*", star)
 	tokens := versiontag.Tokens(versiontag.WithoutFeatureCredits(cleaned))
 	core := strings.Join(versiontag.WithoutVersionPhrases(tokens), " ")
 	labels := strings.Join(versiontag.RecordingLabels(cleaned), ",")
@@ -76,7 +74,7 @@ func nearMatch(a, b string) bool {
 	if labelsA != labelsB || letterCount(coreA) < minNearKeyLetters || letterCount(coreB) < minNearKeyLetters {
 		return false
 	}
-	return levenshtein.ComputeDistance(coreA, coreB) <= maxNearDistance
+	return textnorm.LevenshteinDistance(coreA, coreB) <= maxNearDistance
 }
 
 func looseBase(title string) (base, versionLabel string, ok bool) {

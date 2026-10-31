@@ -3,7 +3,6 @@ module altune/go-api
 go 1.26.10
 
 require (
-	github.com/agnivade/levenshtein v1.2.2
 	github.com/alicebob/miniredis/v2 v2.39.0
 	github.com/bogem/id3v2/v2 v2.1.4
 	github.com/caarlos0/env/v11 v11.4.1
