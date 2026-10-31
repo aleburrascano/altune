@@ -15,3 +15,11 @@ func titleKey(title string) string {
 	labels := strings.Join(versiontag.RecordingLabels(cleaned), ",")
 	return core + "|" + labels
 }
+
+func baseKey(title string) string {
+	if len(versiontag.RecordingLabels(title)) > 0 {
+		return ""
+	}
+	base, _ := versiontag.BaseTitle(title)
+	return titleKey(base)
+}
