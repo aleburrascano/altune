@@ -661,6 +661,34 @@ describe('getUnreleasedTracks', () => {
     });
   });
 
+  it('keeps a version whose open link is unsafe, with no link and default extras', async () => {
+    const version = {
+      title: 'Dream [V2]',
+      label: 'V2',
+      quality: 'CD Quality',
+      open_url: 'http://x.test/a',
+      extras: 7,
+    };
+    __http.reply(PATH, {
+      status: 200,
+      json: { items: [{ ...row, genius_id: 32, versions: [version, { title: 5 }] }] },
+    });
+
+    const { items } = await getUnreleasedTracks('spotify', 'art-1', { name: 'X' });
+
+    expect(items[0]?.versions).toEqual([
+      {
+        title: 'Dream [V2]',
+        label: 'V2',
+        quality: 'CD Quality',
+        audio_links: [],
+        open_url: null,
+        open_host: null,
+        extras: {},
+      },
+    ]);
+  });
+
   it('reads off_streaming true and treats a missing flag as false', async () => {
     __http.reply(PATH, { status: 200, json: { items: [{ ...row, off_streaming: true }, row] } });
 
