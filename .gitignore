@@ -9,7 +9,7 @@ Thumbs.db
 !.vscode/launch.json
 !.vscode/extensions.json
 
-node_modules/
+node_modules
 .expo/
 .expo-shared/
 dist/
