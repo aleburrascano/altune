@@ -469,7 +469,7 @@ func storeService(genius *discoverytest.GeniusSongCatalog, store *discoverytest.
 
 func TestService_Lookup_StoreAnswersABuiltArtistWithoutCallingGenius(t *testing.T) {
 	store := &discoverytest.UnreleasedStore{Artists: map[ports.UnreleasedArtistKey]discoverytest.StoredArtist{
-		drakeKey: {Songs: songs("A", "B", "C"), Complete: true, Built: true},
+		drakeKey: {Songs: songs("A", "B", "C"), Complete: true, Built: true, BuildVersion: CurrentBuildVersion},
 	}}
 	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Other")}
 	got, err := storeService(genius, store).Lookup(context.Background(), domain.ProviderDeezer, "27", "Drake", nil)

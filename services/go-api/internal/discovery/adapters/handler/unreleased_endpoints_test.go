@@ -257,7 +257,7 @@ func TestUnreleasedSongDTO_CarriesEveryDomainField(t *testing.T) {
 func TestHandleArtistUnreleased_StoreBuiltArtistAnswersFromTheStoreWithNoGeniusCalls(t *testing.T) {
 	key := ports.UnreleasedArtistKey{Provider: domain.ProviderDeezer, ExternalID: "27"}
 	store := &discoverytest.UnreleasedStore{Artists: map[ports.UnreleasedArtistKey]discoverytest.StoredArtist{key: {
-		Complete: true, Built: true,
+		Complete: true, Built: true, BuildVersion: unreleased.CurrentBuildVersion,
 		Songs: []domain.UnreleasedSong{{GeniusID: 1, Title: "A"}, {GeniusID: 2, Title: "B"}, {GeniusID: 3, Title: "C"}},
 	}}}
 	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: []domain.UnreleasedSong{{GeniusID: 9, Title: "Other"}}}
