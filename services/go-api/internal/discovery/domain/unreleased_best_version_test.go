@@ -20,3 +20,10 @@ func TestBestVersion_RanksADecimalVersionBetweenItsNeighbours(t *testing.T) {
 		}
 	}
 }
+
+func TestBestVersion_ComparesMinorVersionNumbersAsWholeNumbers(t *testing.T) {
+	song := UnreleasedSong{Versions: []UnreleasedVersion{{Label: "V3.10"}, {Label: "V3.6"}, {Label: "V3.9"}}}
+	if got := song.BestVersion().Label; got != "V3.10" {
+		t.Errorf("best of V3.10, V3.6, V3.9 = %q, want V3.10", got)
+	}
+}
