@@ -107,6 +107,9 @@ function savedTrack() {
   };
 }
 
+const V3_LOSSLESS = /V3.*Lossless/;
+const V10_CD = /V10.*CD Quality/;
+
 describe('ArtistUnreleased', () => {
   it('stays hidden when the artist has no unreleased tracks', async () => {
     __http.reply(UNRELEASED, { status: 200, json: { items: [] } });
@@ -467,5 +470,38 @@ describe('ArtistUnreleased', () => {
       (request: RecordedRequest) => request.method === 'POST' && request.path === '/v1/tracks',
     );
     expect(JSON.parse(String(save.body))).toMatchObject({ title: 'Sports Car [V10]' });
+  });
+
+  it('opens a sheet listing each version with its quality on a long-press', async () => {
+    const grouped = {
+      ...DREAM,
+      genius_id: 811,
+      title: 'Vault Sheet Demo',
+      versions: [
+        { title: 'Vault Sheet Demo [V3]', label: 'V3', quality: 'Lossless' },
+        { title: 'Vault Sheet Demo [V10]', label: 'V10', quality: 'CD Quality' },
+        { title: 'Vault Sheet Demo [V14]', label: null, quality: null },
+      ],
+    };
+    __http.reply(UNRELEASED, { status: 200, json: { items: [grouped] } });
+    renderSection();
+
+    fireEvent(await screen.findByTestId('detail-unreleased-811'), 'longPress');
+
+    expect(screen.getByTestId('detail-unreleased-version-811-0')).toHaveTextContent(V3_LOSSLESS);
+    expect(screen.getByTestId('detail-unreleased-version-811-1')).toHaveTextContent(V10_CD);
+    expect(screen.getByTestId('detail-unreleased-version-811-2')).toHaveTextContent(
+      'Vault Sheet Demo [V14]',
+    );
+  });
+
+  it('opens no sheet on a long-press of a card with one version', async () => {
+    const single = { ...DREAM, genius_id: 812, title: 'Lone Vault Demo', versions: [] };
+    __http.reply(UNRELEASED, { status: 200, json: { items: [single] } });
+    renderSection();
+
+    fireEvent(await screen.findByTestId('detail-unreleased-812'), 'longPress');
+
+    expect(screen.queryByTestId('detail-unreleased-versions-sheet-812')).toBeNull();
   });
 });
