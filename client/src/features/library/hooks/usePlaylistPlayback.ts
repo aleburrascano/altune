@@ -3,7 +3,7 @@ import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse'
 import { buildPlayableQueue } from '@shared/playback/playFromList';
 import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 
-type QueueControls = Pick<ReturnType<typeof useQueuePlayback>, 'playFromList' | 'toggleShuffle'>;
+type QueueControls = Pick<ReturnType<typeof useQueuePlayback>, 'playFromList' | 'shuffleFromList'>;
 
 type PlaylistPlayback = {
   play: () => void;
@@ -16,13 +16,13 @@ export function usePlaylistPlayback(
   playlist: PlaylistDetailResponse | undefined,
   queue: QueueControls,
 ): PlaylistPlayback {
-  const startAt = (trackId: string, pickIndex?: (playableCount: number) => number): boolean => {
-    if (!playlist) return false;
+  const source = (name: string) => ({ kind: 'playlist' as const, playlistId, name });
+
+  const startAt = (trackId: string): void => {
+    if (!playlist) return;
     const { playable, startIndex } = buildPlayableQueue(playlist.tracks, trackId);
-    if (playable.length === 0) return false;
-    const index = pickIndex ? pickIndex(playable.length) : startIndex;
-    queue.playFromList(playable, index, { kind: 'playlist', playlistId, name: playlist.name });
-    return true;
+    if (playable.length === 0) return;
+    queue.playFromList(playable, startIndex, source(playlist.name));
   };
 
   return {
@@ -30,7 +30,10 @@ export function usePlaylistPlayback(
       startAt(playlist?.tracks[0]?.id ?? '');
     },
     shuffle: () => {
-      if (startAt('', (count) => Math.floor(Math.random() * count))) queue.toggleShuffle();
+      if (!playlist) return;
+      const { playable } = buildPlayableQueue(playlist.tracks, '');
+      if (playable.length === 0) return;
+      queue.shuffleFromList(playable, source(playlist.name));
     },
     playFrom: (trackId) => {
       startAt(trackId);

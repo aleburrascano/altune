@@ -50,7 +50,7 @@ describe('usePlaylistPlayback', () => {
   const source = { kind: 'playlist', playlistId: PLAYLIST_ID, name: 'Road Trip' };
 
   function setup(data: PlaylistDetailResponse | undefined) {
-    const queue = { playFromList: jest.fn(), toggleShuffle: jest.fn() };
+    const queue = { playFromList: jest.fn(), shuffleFromList: jest.fn() };
     const { result } = renderHook(() => usePlaylistPlayback(PLAYLIST_ID, data, queue));
     return { queue, controls: result.current };
   }
@@ -61,7 +61,7 @@ describe('usePlaylistPlayback', () => {
       controls.play();
       controls.shuffle();
       expect(queue.playFromList).not.toHaveBeenCalled();
-      expect(queue.toggleShuffle).not.toHaveBeenCalled();
+      expect(queue.shuffleFromList).not.toHaveBeenCalled();
     }
   });
 
@@ -74,12 +74,12 @@ describe('usePlaylistPlayback', () => {
     expect(queue.playFromList.mock.calls[1][0]).toHaveLength(3);
   });
 
-  it('shuffle starts at a random playable index then toggles shuffle', () => {
-    const random = jest.spyOn(Math, 'random').mockReturnValue(0.99);
-    const { queue, controls } = setup(playlist([track('a'), track('b')]));
+  it('shuffle hands every playable track to one shuffled load', () => {
+    const { queue, controls } = setup(playlist([track('a'), track('b', 'failed'), track('c')]));
     controls.shuffle();
-    expect(queue.playFromList).toHaveBeenCalledWith(expect.any(Array), 1, source);
-    expect(queue.toggleShuffle).toHaveBeenCalledTimes(1);
-    random.mockRestore();
+    const [tracks, passedSource] = queue.shuffleFromList.mock.calls[0];
+    expect(tracks).toHaveLength(2);
+    expect(passedSource).toEqual(source);
+    expect(queue.playFromList).not.toHaveBeenCalled();
   });
 });
