@@ -12,19 +12,26 @@ func qualityRank(quality string) int {
 	return qualityRanks[strings.ToLower(strings.TrimSpace(quality))]
 }
 
-func versionNumber(label string) float64 {
-	var n float64
-	if _, err := fmt.Sscanf(label, "V%g", &n); err != nil {
-		return 0
+func versionNumber(label string) [2]int {
+	var major, minor int
+	if n, _ := fmt.Sscanf(label, "V%d.%d", &major, &minor); n == 0 {
+		return [2]int{}
 	}
-	return n
+	return [2]int{major, minor}
+}
+
+func laterVersion(a, b [2]int) bool {
+	if a[0] != b[0] {
+		return a[0] > b[0]
+	}
+	return a[1] > b[1]
 }
 
 func isBetterVersion(candidate, current UnreleasedVersion) bool {
 	if cr, br := qualityRank(candidate.Quality), qualityRank(current.Quality); cr != br {
 		return cr > br
 	}
-	return versionNumber(candidate.Label) > versionNumber(current.Label)
+	return laterVersion(versionNumber(candidate.Label), versionNumber(current.Label))
 }
 
 func (s UnreleasedSong) BestVersion() UnreleasedVersion {
