@@ -3,6 +3,7 @@ import { renderHook } from '@testing-library/react-native';
 import { asPlaylistId, asTrackId } from '@shared/apiClient/ids';
 import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
 import type { TrackResponse } from '@shared/apiClient/trackResponse';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 import { trackResponseFactory } from '@testing/factories';
 
 import { usePlaylistPlayback } from '@features/library/hooks/usePlaylistPlayback';
@@ -79,7 +80,10 @@ describe('usePlaylistPlayback', () => {
     const { queue, controls } = setup(playlist([track('a'), track('b', 'failed'), track('c')]));
     controls.shuffle();
     const [tracks, passedSource] = queue.shuffleFromList.mock.calls[0];
-    expect(tracks).toHaveLength(playableIds.length);
+    const ids = (tracks as PlaybackTrack[]).map((t) =>
+      t.source.kind === 'library' ? t.source.trackId : null,
+    );
+    expect(ids).toEqual(playableIds);
     expect(passedSource).toEqual(source);
     expect(queue.playFromList).not.toHaveBeenCalled();
   });
