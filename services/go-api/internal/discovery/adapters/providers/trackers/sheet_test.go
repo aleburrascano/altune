@@ -305,3 +305,16 @@ func TestSongsFromRows_DifferentBaseTitlesStayApartAndReleasedRowsAreNotVersions
 		t.Errorf("signs = %+v, want one version, off_streaming and both links", signs)
 	}
 }
+
+func TestSongsFromRows_AVariantTitleIsNotFoldedIntoTheTaggedSong(t *testing.T) {
+	songs := songsFromRows("A", []trackerRow{
+		{title: "Song [V1]", quality: "CD Quality", links: versionLink("v1")},
+		{title: "Song (Instrumental)", quality: "Lossless", links: versionLink("inst")},
+	})
+	if len(songs) != 2 {
+		t.Fatalf("songs = %+v, want two", songs)
+	}
+	if songs[0].Title != "Song" || !slices.Equal(songs[0].AudioLinks, versionLink("v1")) || len(songs[0].Versions) != 1 {
+		t.Errorf("song = %+v, want Song with only V1's links", songs[0])
+	}
+}

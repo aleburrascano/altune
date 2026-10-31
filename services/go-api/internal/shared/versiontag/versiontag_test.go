@@ -225,6 +225,20 @@ func TestBaseTitle_SplitsTheVersionTagFromTheTitle(t *testing.T) {
 		{"Greenlight [V1] (Voice Memo)", "Greenlight", "V1 Voice Memo"},
 		{"Signs", "Signs", ""},
 		{"Song (feat. Bob) [V2]", "Song (feat. Bob)", "V2"},
+		{"Song (Demo 1)", "Song", "Demo 1"},
+		{"Song [V1 Lossless]", "Song", "V1 Lossless"},
+		{"Song [V100]", "Song", "V100"},
+		{"Song [Ver 2]", "Song", "V2"},
+		{"Song (Demo)", "Song", "Demo"},
+		{"[V1]", "[V1]", ""},
+		{"(Voice Memo)", "(Voice Memo)", ""},
+		{"Song (Instrumental)", "Song (Instrumental)", ""},
+		{"Song (Remix) [V2]", "Song (Remix)", "V2"},
+		{"Song (Live)", "Song (Live)", ""},
+		{"Song (Snippet)", "Song (Snippet)", ""},
+		{"Song (Acoustic)", "Song (Acoustic)", ""},
+		{"Song (Sped Up)", "Song (Sped Up)", ""},
+		{"Song [Lossless]", "Song [Lossless]", ""},
 	} {
 		base, label := BaseTitle(c.title)
 		if base != c.base || label != c.label {

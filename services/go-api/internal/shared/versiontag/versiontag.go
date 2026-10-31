@@ -161,7 +161,6 @@ var lexicon = []Entry{
 	{"radio edit", false, []string{"radio", "edit"}},
 	{"extended", false, []string{"extended"}},
 	{"version", false, []string{"version"}},
-	{"voice memo", true, []string{"voice", "memo"}},
 }
 
 var releaseVariants = []Entry{
@@ -340,42 +339,72 @@ func KnownLabels() map[string]bool {
 
 var versionGroupRe = regexp.MustCompile(`\[[^\[\]]*\]|\([^()]*\)`)
 
+var tagNumberRe = regexp.MustCompile(`^v(\d+)$`)
+
+var digitsRe = regexp.MustCompile(`^\d+$`)
+
+var tagQualityWords = map[string]string{
+	"lossless": "Lossless", "hq": "HQ", "cd": "CD", "quality": "Quality",
+	"high": "High", "low": "Low", "recording": "Recording",
+}
+
 func BaseTitle(title string) (base, label string) {
+	var labels []string
 	stripped := versionGroupRe.ReplaceAllStringFunc(title, func(group string) string {
-		if isVersionGroup(group[1 : len(group)-1]) {
-			return " "
+		groupLabel, ok := tagGroupLabel(group[1 : len(group)-1])
+		if !ok {
+			return group
 		}
-		return group
+		labels = append(labels, groupLabel)
+		return " "
 	})
 	base = strings.Join(strings.Fields(stripped), " ")
-	if base == strings.Join(strings.Fields(title), " ") {
-		return base, ""
+	if base == "" {
+		return strings.Join(strings.Fields(title), " "), ""
 	}
-	return base, displayLabel(ParseTags(title).Labels)
+	return base, strings.Join(labels, " ")
 }
 
-func isVersionGroup(inner string) bool {
-	numbers, rest := withoutVersionNumbers(Tokens(inner))
-	rest = WithoutVersionPhrases(rest)
-	return len(rest) == 0 && (len(numbers) > 0 || len(Matches(Tokens(inner))) > 0)
-}
-
-func displayLabel(labels []string) string {
-	var numbers, words []string
-	for _, label := range labels {
-		if versionNumberRe.MatchString(label) {
-			numbers = append(numbers, strings.ToUpper(label))
-			continue
+func tagGroupLabel(inner string) (label string, ok bool) {
+	tokens := Tokens(inner)
+	var words []string
+	tagged := false
+	for pos := 0; pos < len(tokens); {
+		word, used, isTag := tagWordAt(tokens, pos)
+		if used == 0 {
+			return "", false
 		}
-		words = append(words, titleCase(label))
+		words = append(words, word)
+		tagged = tagged || isTag
+		pos += used
 	}
-	return strings.Join(slices.Concat(numbers, words), " ")
+	return strings.Join(words, " "), tagged
 }
 
-func titleCase(label string) string {
-	words := strings.Fields(label)
-	for i, word := range words {
-		words[i] = strings.ToUpper(word[:1]) + word[1:]
+func tagWordAt(tokens []string, pos int) (word string, used int, isTag bool) {
+	token := tokens[pos]
+	next := tokenAt(tokens, pos+1)
+	switch {
+	case tagNumberRe.MatchString(token):
+		return strings.ToUpper(token), 1, true
+	case (token == "ver" || token == "version") && digitsRe.MatchString(next):
+		return "V" + next, 2, true
+	case token == "voice" && next == "memo":
+		return "Voice Memo", 2, true
+	case token == "demo" && digitsRe.MatchString(next):
+		return "Demo " + next, 2, true
+	case token == "demo":
+		return "Demo", 1, true
 	}
-	return strings.Join(words, " ")
+	if display, found := tagQualityWords[token]; found {
+		return display, 1, false
+	}
+	return "", 0, false
+}
+
+func tokenAt(tokens []string, pos int) string {
+	if pos < len(tokens) {
+		return tokens[pos]
+	}
+	return ""
 }
