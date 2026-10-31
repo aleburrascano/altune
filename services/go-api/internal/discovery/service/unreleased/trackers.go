@@ -29,13 +29,13 @@ func (s *Service) trackerResult(ctx context.Context, artistName string, catalogT
 	songs, err := s.trackers.ArtistSongs(ctx, artistName)
 	if errors.Is(err, ports.ErrTrackerPartial) {
 		slog.WarnContext(ctx, "trackers.partial", "error", err)
-		return sourceResult{songs: withoutCatalogMatches(songs, catalogTitles), used: true}
+		return sourceResult{songs: withoutReleasedVersions(songs, catalogTitles), used: true}
 	}
 	if err != nil {
 		slog.WarnContext(ctx, "trackers.fetch_failed", "error", err)
 		return sourceResult{used: true, err: err}
 	}
-	return sourceResult{songs: withoutCatalogMatches(songs, catalogTitles), complete: true, used: true}
+	return sourceResult{songs: withoutReleasedVersions(songs, catalogTitles), complete: true, used: true}
 }
 
 func (s *Service) geniusResult(ctx context.Context, artistName string, catalogTitles []string) sourceResult {
@@ -95,6 +95,45 @@ func withTrackerFile(song, tracked domain.UnreleasedSong) domain.UnreleasedSong 
 		song.OpenURL, song.OpenHost = tracked.OpenURL, tracked.OpenHost
 	}
 	return song
+}
+
+func withoutReleasedVersions(songs []domain.UnreleasedSong, catalogTitles []string) []domain.UnreleasedSong {
+	released := make(map[string]struct{}, len(catalogTitles))
+	for _, title := range catalogTitles {
+		released[titleKey(title)] = struct{}{}
+	}
+	kept := make([]domain.UnreleasedSong, 0, len(songs))
+	for _, song := range songs {
+		if len(song.Versions) == 0 {
+			if _, isReleased := released[titleKey(song.Title)]; !isReleased {
+				kept = append(kept, song)
+			}
+			continue
+		}
+		if song, ok := withoutReleasedCopies(song, released); ok {
+			kept = append(kept, song)
+		}
+	}
+	return kept
+}
+
+func withoutReleasedCopies(song domain.UnreleasedSong, released map[string]struct{}) (domain.UnreleasedSong, bool) {
+	versions := make([]domain.UnreleasedVersion, 0, len(song.Versions))
+	for _, version := range song.Versions {
+		_, isReleased := released[titleKey(version.Title)]
+		if version.Label == "" && isReleased {
+			continue
+		}
+		versions = append(versions, version)
+	}
+	if len(versions) == 0 {
+		return song, false
+	}
+	if len(versions) != len(song.Versions) {
+		song.Versions = versions
+		song.ApplyBestVersion()
+	}
+	return song, true
 }
 
 func appendNewLinks(have, more []domain.AudioLink) []domain.AudioLink {

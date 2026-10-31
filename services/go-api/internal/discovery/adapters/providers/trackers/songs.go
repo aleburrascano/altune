@@ -4,32 +4,10 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/textnorm"
 	"altune/go-api/internal/shared/versiontag"
-	"fmt"
 	"slices"
 	"strings"
 	"unicode"
 )
-
-var qualityRanks = map[string]int{"lossless": 5, "cd quality": 4, "high quality": 3, "recording": 2, "low quality": 1}
-
-func qualityRank(quality string) int {
-	return qualityRanks[strings.ToLower(strings.TrimSpace(quality))]
-}
-
-func versionNumber(label string) int {
-	var n int
-	if _, err := fmt.Sscanf(label, "V%d", &n); err != nil {
-		return 0
-	}
-	return n
-}
-
-func isBetterVersion(candidate, current domain.UnreleasedVersion) bool {
-	if cr, br := qualityRank(candidate.Quality), qualityRank(current.Quality); cr != br {
-		return cr > br
-	}
-	return versionNumber(candidate.Label) > versionNumber(current.Label)
-}
 
 func songsFromRows(artistName string, rows []trackerRow) []domain.UnreleasedSong {
 	songs := make([]domain.UnreleasedSong, 0, len(rows))
@@ -54,24 +32,12 @@ func songsFromRows(artistName string, rows []trackerRow) []domain.UnreleasedSong
 		})
 	}
 	for at := range songs {
-		applyBestVersion(&songs[at])
+		songs[at].ApplyBestVersion()
 	}
 	for _, row := range released {
 		songs = addReleasedRow(songs, byKey, artistName, row)
 	}
 	return songs
-}
-
-func applyBestVersion(song *domain.UnreleasedSong) {
-	best := song.Versions[0]
-	for _, version := range song.Versions[1:] {
-		if isBetterVersion(version, best) {
-			best = version
-		}
-	}
-	hasMedia := len(best.AudioLinks) > 0
-	song.Quality, song.AudioLinks, song.HasMedia = best.Quality, slices.Clone(best.AudioLinks), &hasMedia
-	song.OpenURL, song.OpenHost = best.OpenURL, best.OpenHost
 }
 
 func addReleasedRow(songs []domain.UnreleasedSong, byKey map[string]int, artistName string, row trackerRow) []domain.UnreleasedSong {
