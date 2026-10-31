@@ -364,6 +364,23 @@ func TestService_List_NearMatchKeepsSignAndSignsApart(t *testing.T) {
 	}
 }
 
+func TestService_List_CensoredStarsStandForOneOrMoreLetters(t *testing.T) {
+	got := mergedTitles(t, []string{"B**ch Better"}, "Bitch Better [V1]")
+	if len(got) != 1 || len(got[0].AudioLinks) != 1 || got[0].Title != "B**ch Better" {
+		t.Fatalf("got %+v, want one card with the tracker audio", got)
+	}
+}
+
+func TestService_List_NearMatchKeepsDifferentSongsApart(t *testing.T) {
+	pairs := [][2]string{{"Mask Off", "Mask On"}, {"Bad Guy", "Bad Boy"}, {"Hotel Room", "Hotel Rooms"}, {"Lucid Dreams", "Lucid Dream"}, {"Sicko Mode", "Sicko Mood"}}
+	for _, pair := range pairs {
+		got := mergedTitles(t, []string{pair[0]}, pair[1]+" [V1]")
+		if len(got) != 2 {
+			t.Errorf("%q + %q = %v, want two cards", pair[0], pair[1], titlesOf(got))
+		}
+	}
+}
+
 func TestService_List_NearMatchSkipsAnAmbiguousCandidate(t *testing.T) {
 	got := mergedTitles(t, []string{"Flawless1", "Flawless2"}, "Flawless [V1]")
 	if len(got) != 3 {

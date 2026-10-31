@@ -9,10 +9,11 @@ import (
 )
 
 const (
-	starMark          = "\ue000"
-	minNearKeyLetters = 6
-	maxNearDistance   = 2
+	starMark      = "ǂ"
+	minKeyLetters = 6
 )
+
+var starRunRe = regexp.MustCompile(`\*+`)
 
 var unreleasedMarkerRe = regexp.MustCompile(`(?i)[(\[]\s*unreleased\s*[)\]]`)
 
@@ -25,7 +26,7 @@ func wildcardKey(title string) string {
 }
 
 func keyWithStar(title, star string) string {
-	cleaned := strings.ReplaceAll(textnorm.Transliterate(unreleasedMarkerRe.ReplaceAllString(title, " ")), "*", star)
+	cleaned := starRunRe.ReplaceAllString(textnorm.Transliterate(unreleasedMarkerRe.ReplaceAllString(title, " ")), star)
 	tokens := versiontag.Tokens(versiontag.WithoutFeatureCredits(cleaned))
 	core := strings.Join(versiontag.WithoutVersionPhrases(tokens), " ")
 	labels := strings.Join(versiontag.RecordingLabels(cleaned), ",")
@@ -57,12 +58,15 @@ func splitKey(key string) (core, labels string) {
 func wildcardMatch(a, b string) bool {
 	coreA, labelsA := splitKey(wildcardKey(a))
 	coreB, labelsB := splitKey(wildcardKey(b))
-	if labelsA != labelsB || !strings.Contains(coreA+coreB, starMark) {
-		return false
-	}
 	pattern, text := coreA, coreB
 	if !strings.Contains(pattern, starMark) {
 		pattern, text = coreB, coreA
+	}
+	if labelsA != labelsB || !strings.Contains(pattern, starMark) || strings.Contains(text, starMark) {
+		return false
+	}
+	if letterCount(strings.ReplaceAll(pattern, starMark, "")) < minKeyLetters || letterCount(text) < minKeyLetters {
+		return false
 	}
 	quoted := strings.ReplaceAll(regexp.QuoteMeta(pattern), starMark, `\p{L}+`)
 	return regexp.MustCompile("^" + quoted + "$").MatchString(text)
@@ -71,10 +75,20 @@ func wildcardMatch(a, b string) bool {
 func nearMatch(a, b string) bool {
 	coreA, labelsA := splitKey(titleKey(a))
 	coreB, labelsB := splitKey(titleKey(b))
-	if labelsA != labelsB || letterCount(coreA) < minNearKeyLetters || letterCount(coreB) < minNearKeyLetters {
+	if labelsA != labelsB || letterCount(coreA) < minKeyLetters || letterCount(coreB) < minKeyLetters {
 		return false
 	}
-	return textnorm.LevenshteinDistance(coreA, coreB) <= maxNearDistance
+	runesA, runesB := []rune(coreA), []rune(coreB)
+	if len(runesA) != len(runesB) {
+		return false
+	}
+	differing := 0
+	for i := range runesA {
+		if runesA[i] != runesB[i] {
+			differing++
+		}
+	}
+	return differing == 1
 }
 
 func looseBase(title string) (base, versionLabel string, ok bool) {
