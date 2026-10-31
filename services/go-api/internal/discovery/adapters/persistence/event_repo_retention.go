@@ -43,6 +43,7 @@ var eventRetention = []struct {
 	{domain.EventTypeDownloadFailed, writeOnlyEventRetention},
 	{domain.EventTypeAuthFailed, writeOnlyEventRetention},
 	{domain.EventTypeScreenView, writeOnlyEventRetention},
+	{domain.EventTypePlayStart, writeOnlyEventRetention},
 }
 
 func (r *PgxEventStore) PruneEvents(ctx context.Context, now time.Time) (int64, error) {

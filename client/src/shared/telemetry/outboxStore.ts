@@ -33,6 +33,7 @@ const DISCOVERY_EVENT_TYPES: Record<DiscoveryEventType, true> = {
   outbox_flush_failed: true,
   download_failed: true,
   screen_view: true,
+  play_start: true,
 };
 
 function isDiscoveryEventType(value: unknown): value is DiscoveryEventType {

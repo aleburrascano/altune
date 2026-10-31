@@ -1,11 +1,20 @@
 import TrackPlayer from 'react-native-track-player';
 
+import { audioStreamUrl } from '@shared/apiClient/audio';
 import { asTrackId } from '@shared/apiClient/ids';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { type TrackKey, trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
 
 import { createNativePlaybackActions } from '@features/playback/native/createNativePlaybackActions';
-import { swapUpcomingToLocal, wasSwappedToLocal } from '@features/playback/native/nativeTrackSwap';
+import { ensurePlayerSetup } from '@features/playback/native/initPlayer';
+import { httpPlaybackPort } from '@features/playback/adapters/http/httpPlaybackPort';
+import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
+import { signInTestUser } from '@testing/signInTestUser';
+import {
+  forgetAllSwaps,
+  swapUpcomingToLocal,
+  wasSwappedToLocal,
+} from '@features/playback/native/nativeTrackSwap';
 import {
   NativeQueueTimeoutError,
   withNativeQueue,
@@ -17,13 +26,19 @@ import {
   reportQueueFailure,
 } from '@features/playback/native/queueFailureReport';
 
-import { previewTrack } from '@features/playback/__tests__/fixtures';
+import { libraryTrack, previewTrack } from '@features/playback/__tests__/fixtures';
+import { createMemoryPlaybackPort } from '@features/playback/__tests__/memoryPlaybackPort';
 
 const QUEUE_OUT_OF_SYNC_MESSAGE = 'The queue fell out of sync. Tap retry to reload it.';
 const QUEUE_UPDATE_FAILED_MESSAGE = "Couldn't update the queue. Tap retry to resync.";
 const QUEUE_OP_TIMEOUT_MS = 15_000;
+const HEADERS_MS = 400;
+const PRESIGN_MS = 900;
+const AUDIO_URLS_DEADLINE_MS = 2500;
+const SETTLE_MS = 30_000;
 
 const { __player } = jest.requireMock('react-native-track-player');
+const { __http } = require('@testing/doubles/fetch.js');
 
 function numberedPreviewTrack(n: number): PlaybackTrack {
   return previewTrack({
@@ -501,5 +516,87 @@ describe('isIndexOutOfBounds', () => {
     expect(isIndexOutOfBounds({ code: 'no_current_item' })).toBe(false);
     expect(isIndexOutOfBounds(new Error('index_out_of_bounds'))).toBe(false);
     expect(isIndexOutOfBounds(null)).toBe(false);
+  });
+});
+
+const nativePlay = TrackPlayer.play as jest.Mock;
+
+let restorePort: (() => void) | null = null;
+
+function after<T>(ms: number, value: T): Promise<T> {
+  return new Promise((resolve) => setTimeout(() => resolve(value), ms));
+}
+
+function installSlowMemoryPort(): void {
+  const port = createMemoryPlaybackPort({
+    audioUrls: { 'trk-1': { url: 'https://cdn.example/trk-1.mp3', version: 'v1' } },
+  });
+  restorePort = installPlaybackPort({
+    ...port,
+    audioRequestHeaders: () => after(HEADERS_MS, {}),
+    fetchAudioUrls: async (ids) => after(PRESIGN_MS, await port.fetchAudioUrls(ids)),
+  });
+}
+
+async function msUntilNativePlay(start: () => Promise<void>): Promise<number> {
+  let playedAt: number | null = null;
+  nativePlay.mockImplementationOnce(async () => {
+    playedAt = Date.now();
+  });
+  const startedAt = Date.now();
+  const done = start();
+  await jest.advanceTimersByTimeAsync(SETTLE_MS);
+  await done;
+  if (playedAt === null) throw new Error('TrackPlayer.play was never called');
+  return playedAt - startedAt;
+}
+
+function playThroughControls(track: PlaybackTrack): () => Promise<void> {
+  const { controls } = createNativePlaybackActions(() => undefined);
+  return () => controls.play(track);
+}
+
+describe('time from tapping play to TrackPlayer.play, with simulated network latency', () => {
+  beforeAll(async () => {
+    await ensurePlayerSetup();
+  });
+
+  beforeEach(async () => {
+    await signInTestUser();
+    useQueueStore.getState().clearQueue();
+    forgetAllSwaps();
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    restorePort?.();
+    restorePort = null;
+  });
+
+  it('a preview track starts with no network wait', async () => {
+    installSlowMemoryPort();
+
+    expect(await msUntilNativePlay(playThroughControls(previewTrack()))).toBe(0);
+  });
+
+  it('a library track waits only for the slower of headers and presign, because they run in parallel', async () => {
+    installSlowMemoryPort();
+
+    const elapsed = await msUntilNativePlay(playThroughControls(libraryTrack()));
+
+    expect(elapsed).toBe(Math.max(HEADERS_MS, PRESIGN_MS));
+  });
+
+  it('a stalled presign on a weak signal holds play only until the audio-urls deadline, then streams', async () => {
+    restorePort = installPlaybackPort(httpPlaybackPort);
+    __http.hang('POST /v1/audio-urls');
+    const track = libraryTrack({ source: { kind: 'library', trackId: asTrackId('trk-1') } });
+
+    const elapsed = await msUntilNativePlay(playThroughControls(track));
+
+    expect(elapsed).toBe(AUDIO_URLS_DEADLINE_MS);
+    const [added] = (TrackPlayer.add as jest.Mock).mock.calls.at(-1)!;
+    expect(added.url).toBe(audioStreamUrl(asTrackId('trk-1')));
   });
 });

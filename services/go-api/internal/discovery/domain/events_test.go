@@ -121,7 +121,7 @@ func TestParseEventType_RoundTrip(t *testing.T) {
 		EventTypeAcquisitionUi, EventTypeClientError,
 		EventTypeUserAction, EventTypeFailureShown,
 		EventTypeSseReconnect, EventTypeOutboxFlushFailed, EventTypeDownloadFailed,
-		EventTypeDiscographyObserved, EventTypeScreenView,
+		EventTypeDiscographyObserved, EventTypeScreenView, EventTypePlayStart,
 	}
 	for _, et := range types {
 		t.Run(et.String(), func(t *testing.T) {
@@ -161,6 +161,7 @@ func TestEventType_ClientSubmittable(t *testing.T) {
 		{EventTypeDiscographyObserved, false},
 		{EventTypeAuthFailed, false},
 		{EventTypeScreenView, true},
+		{EventTypePlayStart, true},
 		{EventType(999), false},
 	}
 

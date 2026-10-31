@@ -23,7 +23,8 @@ export type DiscoveryEventType =
   | 'sse_reconnect'
   | 'outbox_flush_failed'
   | 'download_failed'
-  | 'screen_view';
+  | 'screen_view'
+  | 'play_start';
 
 export type EventPayload = JsonObject;
 
