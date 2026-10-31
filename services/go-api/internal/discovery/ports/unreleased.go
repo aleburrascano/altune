@@ -37,8 +37,8 @@ type UnreleasedDueArtist struct {
 
 type UnreleasedStore interface {
 	Record(ctx context.Context, key UnreleasedArtistKey, name string, knownIDs map[domain.ProviderName]string) error
-	Read(ctx context.Context, key UnreleasedArtistKey) (songs []domain.UnreleasedSong, complete, built bool, err error)
-	Write(ctx context.Context, key UnreleasedArtistKey, songs []domain.UnreleasedSong, complete bool, startedAt time.Time) error
+	Read(ctx context.Context, key UnreleasedArtistKey) (songs []domain.UnreleasedSong, complete, built bool, buildVersion int, err error)
+	Write(ctx context.Context, key UnreleasedArtistKey, songs []domain.UnreleasedSong, complete bool, startedAt time.Time, buildVersion int) error
 	Due(ctx context.Context, now time.Time, limit int) ([]UnreleasedDueArtist, error)
 }
 

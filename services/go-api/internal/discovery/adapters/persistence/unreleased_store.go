@@ -89,31 +89,31 @@ func (s *PgxUnreleasedStore) Record(ctx context.Context, key ports.UnreleasedArt
 	return nil
 }
 
-func (s *PgxUnreleasedStore) Read(ctx context.Context, key ports.UnreleasedArtistKey) ([]domain.UnreleasedSong, bool, bool, error) {
-	complete, built, err := s.readBuildState(ctx, key)
+func (s *PgxUnreleasedStore) Read(ctx context.Context, key ports.UnreleasedArtistKey) ([]domain.UnreleasedSong, bool, bool, int, error) {
+	complete, built, version, err := s.readBuildState(ctx, key)
 	if err != nil || !built {
-		return nil, false, false, err
+		return nil, false, false, 0, err
 	}
 	songs, err := s.readSongs(ctx, key)
 	if err != nil {
-		return nil, false, false, err
+		return nil, false, false, 0, err
 	}
-	return songs, complete, true, nil
+	return songs, complete, true, version, nil
 }
 
-func (s *PgxUnreleasedStore) readBuildState(ctx context.Context, key ports.UnreleasedArtistKey) (complete, built bool, err error) {
+func (s *PgxUnreleasedStore) readBuildState(ctx context.Context, key ports.UnreleasedArtistKey) (complete, built bool, version int, err error) {
 	var builtAt *time.Time
 	err = s.pool.QueryRow(ctx,
-		`SELECT complete, built_at FROM unreleased_artists WHERE provider = $1 AND external_id = $2`,
+		`SELECT complete, built_at, build_version FROM unreleased_artists WHERE provider = $1 AND external_id = $2`,
 		key.Provider.String(), key.ExternalID,
-	).Scan(&complete, &builtAt)
+	).Scan(&complete, &builtAt, &version)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return false, false, nil
+		return false, false, 0, nil
 	}
 	if err != nil {
-		return false, false, fmt.Errorf("read unreleased artist: %w", err)
+		return false, false, 0, fmt.Errorf("read unreleased artist: %w", err)
 	}
-	return complete, builtAt != nil, nil
+	return complete, builtAt != nil, version, nil
 }
 
 func (s *PgxUnreleasedStore) readSongs(ctx context.Context, key ports.UnreleasedArtistKey) ([]domain.UnreleasedSong, error) {
@@ -149,10 +149,10 @@ func scanSong(rows pgx.Rows) (domain.UnreleasedSong, error) {
 
 const claimUnreleasedBuildSQL = `
 	UPDATE unreleased_artists
-	SET built_at = $3, complete = $4, song_count = $5
+	SET built_at = $3, complete = $4, song_count = $5, build_version = $6
 	WHERE provider = $1 AND external_id = $2 AND (built_at IS NULL OR built_at < $3)`
 
-func (s *PgxUnreleasedStore) Write(ctx context.Context, key ports.UnreleasedArtistKey, songs []domain.UnreleasedSong, complete bool, startedAt time.Time) error {
+func (s *PgxUnreleasedStore) Write(ctx context.Context, key ports.UnreleasedArtistKey, songs []domain.UnreleasedSong, complete bool, startedAt time.Time, buildVersion int) error {
 	encoded, err := encodeUnreleasedSongs(songs)
 	if err != nil {
 		return err
@@ -163,7 +163,7 @@ func (s *PgxUnreleasedStore) Write(ctx context.Context, key ports.UnreleasedArti
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	claimed, err := claimBuild(ctx, tx, key, len(songs), complete, startedAt)
+	claimed, err := claimBuild(ctx, tx, key, len(songs), complete, startedAt, buildVersion)
 	if err != nil || !claimed {
 		return err
 	}
@@ -180,8 +180,8 @@ func commitUnreleasedWrite(ctx context.Context, tx pgx.Tx) error {
 	return nil
 }
 
-func claimBuild(ctx context.Context, tx pgx.Tx, key ports.UnreleasedArtistKey, songCount int, complete bool, startedAt time.Time) (bool, error) {
-	tag, err := tx.Exec(ctx, claimUnreleasedBuildSQL, key.Provider.String(), key.ExternalID, startedAt, complete, songCount)
+func claimBuild(ctx context.Context, tx pgx.Tx, key ports.UnreleasedArtistKey, songCount int, complete bool, startedAt time.Time, buildVersion int) (bool, error) {
+	tag, err := tx.Exec(ctx, claimUnreleasedBuildSQL, key.Provider.String(), key.ExternalID, startedAt, complete, songCount, buildVersion)
 	if err != nil {
 		return false, fmt.Errorf("update unreleased artist: %w", err)
 	}

@@ -83,16 +83,18 @@ func (t *TrackerSongs) ArtistSongs(context.Context, string) ([]domain.Unreleased
 }
 
 type StoreWrite struct {
-	Key       ports.UnreleasedArtistKey
-	Songs     []domain.UnreleasedSong
-	Complete  bool
-	StartedAt time.Time
+	Key          ports.UnreleasedArtistKey
+	Songs        []domain.UnreleasedSong
+	Complete     bool
+	StartedAt    time.Time
+	BuildVersion int
 }
 
 type StoredArtist struct {
-	Songs    []domain.UnreleasedSong
-	Complete bool
-	Built    bool
+	Songs        []domain.UnreleasedSong
+	Complete     bool
+	Built        bool
+	BuildVersion int
 }
 
 type UnreleasedStore struct {
@@ -115,26 +117,26 @@ func (u *UnreleasedStore) Record(context.Context, ports.UnreleasedArtistKey, str
 	return u.RecordErr
 }
 
-func (u *UnreleasedStore) Read(_ context.Context, key ports.UnreleasedArtistKey) ([]domain.UnreleasedSong, bool, bool, error) {
+func (u *UnreleasedStore) Read(_ context.Context, key ports.UnreleasedArtistKey) ([]domain.UnreleasedSong, bool, bool, int, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	u.calls = append(u.calls, "read")
 	artist := u.Artists[key]
-	return slices.Clone(artist.Songs), artist.Complete, artist.Built, u.ReadErr
+	return slices.Clone(artist.Songs), artist.Complete, artist.Built, artist.BuildVersion, u.ReadErr
 }
 
-func (u *UnreleasedStore) Write(_ context.Context, key ports.UnreleasedArtistKey, songs []domain.UnreleasedSong, complete bool, startedAt time.Time) error {
+func (u *UnreleasedStore) Write(_ context.Context, key ports.UnreleasedArtistKey, songs []domain.UnreleasedSong, complete bool, startedAt time.Time, buildVersion int) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	u.calls = append(u.calls, "write")
 	if u.WriteErr != nil {
 		return u.WriteErr
 	}
-	u.writes = append(u.writes, StoreWrite{Key: key, Songs: slices.Clone(songs), Complete: complete, StartedAt: startedAt})
+	u.writes = append(u.writes, StoreWrite{Key: key, Songs: slices.Clone(songs), Complete: complete, StartedAt: startedAt, BuildVersion: buildVersion})
 	if u.Artists == nil {
 		u.Artists = map[ports.UnreleasedArtistKey]StoredArtist{}
 	}
-	u.Artists[key] = StoredArtist{Songs: slices.Clone(songs), Complete: complete, Built: true}
+	u.Artists[key] = StoredArtist{Songs: slices.Clone(songs), Complete: complete, Built: true, BuildVersion: buildVersion}
 	return nil
 }
 
