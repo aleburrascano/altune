@@ -260,7 +260,7 @@ function frameProps({ track, visible, onClose }: UnreleasedVersionsSheetProps) {
   return { visible, onClose, testID, variant: 'sheet' as const, closeAction: CLOSE_ACTION };
 }
 
-export function UnreleasedVersionsSheet(props: UnreleasedVersionsSheetProps): ReactElement {
+function UnreleasedVersionsSheet(props: UnreleasedVersionsSheetProps): ReactElement {
   return (
     <ModalFrame {...frameProps(props)}>
       <SheetBody track={props.track} />
