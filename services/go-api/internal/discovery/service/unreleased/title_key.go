@@ -23,3 +23,12 @@ func baseKey(title string) string {
 	base, _ := versiontag.BaseTitle(title)
 	return titleKey(base)
 }
+
+func demoBaseKey(title string) string {
+	base, label := versiontag.BaseTitle(title)
+	isDemo := label == "Voice Memo" || label == "Demo" || strings.HasPrefix(label, "Demo ")
+	if !isDemo || len(versiontag.RecordingLabels(base)) > 0 {
+		return ""
+	}
+	return titleKey(base)
+}

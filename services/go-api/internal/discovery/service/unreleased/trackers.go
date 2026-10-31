@@ -3,6 +3,7 @@ package unreleased
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/versiontag"
 	"context"
 	"errors"
 	"log/slog"
@@ -63,15 +64,54 @@ func combineSources(genius, trackers sourceResult) ([]domain.UnreleasedSong, boo
 }
 
 func mergeTrackerSongs(genius, trackers []domain.UnreleasedSong) []domain.UnreleasedSong {
-	merged := append([]domain.UnreleasedSong{}, genius...)
-	exact := make(map[string][]int, len(merged))
-	byBase := make(map[string][]int, len(merged))
-	for i, song := range merged {
-		exact[titleKey(song.Title)] = append(exact[titleKey(song.Title)], i)
-		if base := baseKey(song.Title); base != "" {
-			byBase[base] = append(byBase[base], i)
+	genius, demos := splitDemos(genius)
+	merged := mergeTrackerFiles(genius, trackers)
+	return joinDemoVersions(merged, demos)
+}
+
+func splitDemos(songs []domain.UnreleasedSong) (others, demos []domain.UnreleasedSong) {
+	for _, song := range songs {
+		if demoBaseKey(song.Title) != "" {
+			demos = append(demos, song)
+		} else {
+			others = append(others, song)
 		}
 	}
+	return others, demos
+}
+
+func joinDemoVersions(merged, demos []domain.UnreleasedSong) []domain.UnreleasedSong {
+	slotOf := make(map[string]int, len(merged))
+	for i := len(merged) - 1; i >= 0; i-- {
+		slotOf[titleKey(merged[i].Title)] = i
+	}
+	for _, demo := range demos {
+		i, ok := slotOf[demoBaseKey(demo.Title)]
+		if !ok {
+			slotOf[titleKey(demo.Title)] = len(merged)
+			merged = append(merged, demo)
+			continue
+		}
+		merged[i] = withDemoVersion(merged[i], demo)
+	}
+	return merged
+}
+
+func withDemoVersion(song, demo domain.UnreleasedSong) domain.UnreleasedSong {
+	versions := slices.Clone(song.Versions)
+	if len(versions) == 0 {
+		versions = []domain.UnreleasedVersion{{Title: song.Title, Quality: song.Quality, AudioLinks: song.AudioLinks, OpenURL: song.OpenURL, OpenHost: song.OpenHost}}
+	}
+	_, label := versiontag.BaseTitle(demo.Title)
+	versions = append(versions, domain.UnreleasedVersion{Title: demo.Title, Label: label, Quality: demo.Quality, AudioLinks: demo.AudioLinks, OpenURL: demo.OpenURL, OpenHost: demo.OpenHost})
+	song.Versions = versions
+	song.ApplyBestVersion()
+	return song
+}
+
+func mergeTrackerFiles(genius, trackers []domain.UnreleasedSong) []domain.UnreleasedSong {
+	merged := append([]domain.UnreleasedSong{}, genius...)
+	exact, byBase := titleSlots(merged)
 	for _, tracked := range trackers {
 		key := titleKey(tracked.Title)
 		if slots := exact[key]; len(slots) > 0 {
@@ -88,6 +128,18 @@ func mergeTrackerSongs(genius, trackers []domain.UnreleasedSong) []domain.Unrele
 		merged = append(merged, tracked)
 	}
 	return merged
+}
+
+func titleSlots(songs []domain.UnreleasedSong) (exact, byBase map[string][]int) {
+	exact = make(map[string][]int, len(songs))
+	byBase = make(map[string][]int, len(songs))
+	for i, song := range songs {
+		exact[titleKey(song.Title)] = append(exact[titleKey(song.Title)], i)
+		if base := baseKey(song.Title); base != "" {
+			byBase[base] = append(byBase[base], i)
+		}
+	}
+	return exact, byBase
 }
 
 func soleBaseMatch(byBase map[string][]int, trackerTitle string) (int, bool) {

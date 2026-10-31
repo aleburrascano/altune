@@ -287,3 +287,42 @@ func TestService_List_GeniusSongWithTheExactTrackerTitleKeepsTheTrackerVersions(
 		t.Errorf("song = %+v, want the genius identity and both tracker versions", song)
 	}
 }
+
+func TestService_List_DemoGeniusSongJoinsItsBaseTrackSongAsAVersion(t *testing.T) {
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("greedy (Demo 1)", "Greedy (Live)", "Borrow me (Voice memo)")}
+	trackers := &discoverytest.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("Greedy", "greedyaa"), trackerSong("Borrow me", "borrowaa")}}
+	got, err := listWith(t, genius, trackers, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"Greedy (Live)", "Greedy", "Borrow me"}
+	if !slices.Equal(titlesOf(got), want) {
+		t.Fatalf("titles = %v, want %v", titlesOf(got), want)
+	}
+	greedy := got[1]
+	if len(greedy.Versions) != 2 || greedy.Versions[1].Title != "greedy (Demo 1)" || greedy.Versions[1].Label != "Demo 1" {
+		t.Errorf("greedy = %+v, want the demo as a second version", greedy)
+	}
+	if greedy.HasMedia == nil || !*greedy.HasMedia || !slices.Contains(greedy.AudioLinks, pixeldrainLink("greedyaa")) {
+		t.Errorf("greedy = %+v, want the base audio kept", greedy)
+	}
+	if len(got[2].Versions) != 2 || got[2].Versions[1].Label != "Voice Memo" {
+		t.Errorf("borrow me = %+v, want the voice memo as a version", got[2])
+	}
+}
+
+func TestService_List_DemoGeniusSongJoinsTheGeniusBaseSong(t *testing.T) {
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("bedroom (demo)", "bedroom")}
+	got, err := listWith(t, genius, &discoverytest.TrackerSongs{}, nil)
+	if err != nil || len(got) != 1 || got[0].Title != "bedroom" || len(got[0].Versions) != 2 {
+		t.Fatalf("got %+v, err %v, want one bedroom card with two versions", got, err)
+	}
+}
+
+func TestService_List_DemoWithoutABaseSongStaysItsOwnCard(t *testing.T) {
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("lonely (Demo)")}
+	got, err := listWith(t, genius, &discoverytest.TrackerSongs{}, nil)
+	if err != nil || len(got) != 1 || got[0].Title != "lonely (Demo)" {
+		t.Fatalf("got %v, err %v, want the demo kept", titlesOf(got), err)
+	}
+}
