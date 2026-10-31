@@ -12,9 +12,9 @@ func qualityRank(quality string) int {
 	return qualityRanks[strings.ToLower(strings.TrimSpace(quality))]
 }
 
-func versionNumber(label string) int {
-	var n int
-	if _, err := fmt.Sscanf(label, "V%d", &n); err != nil {
+func versionNumber(label string) float64 {
+	var n float64
+	if _, err := fmt.Sscanf(label, "V%g", &n); err != nil {
 		return 0
 	}
 	return n
