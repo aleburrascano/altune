@@ -222,7 +222,7 @@ func TestHandleArtistUnreleased_TrackerOnlyItemHasNullGeniusFieldsOnTheWire(t *t
 	rec := discServe(t, r, http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Ken+Carson", nil)
 
 	discAssertStatus(t, rec, http.StatusOK)
-	want := `{"items":[{"genius_id":null,"title":"Dream [V2]","cover_url":null,"genius_url":null,"release_date":null,"has_media":true,"quality":"High Quality","tracker_key":"ken-carson:dream-v2","off_streaming":true,"audio_links":[{"provider":"pixeldrain","external_id":"ozSpSjn7","url":"https://pixeldrain.com/u/ozSpSjn7"}],"extras":{}}],"pending":false}` + "\n"
+	want := `{"items":[{"genius_id":null,"title":"Dream [V2]","cover_url":null,"genius_url":null,"release_date":null,"has_media":true,"quality":"High Quality","tracker_key":"ken-carson:dream-v2","off_streaming":true,"audio_links":[{"provider":"pixeldrain","external_id":"ozSpSjn7","url":"https://pixeldrain.com/u/ozSpSjn7"}],"extras":{},"best_version_title":"Dream [V2]"}],"pending":false}` + "\n"
 	if got := rec.Body.String(); got != want {
 		t.Errorf("body = %s, want %s", got, want)
 	}
@@ -321,5 +321,37 @@ func TestHandleArtistUnreleased_OwnedVersionIsStampedByItsFullTitleNotTheBaseTit
 	}
 	if _, has := other.Extras["owned_track_id"]; has {
 		t.Errorf("other song extras = %v, base title must not mark a grouped song owned", other.Extras)
+	}
+}
+
+func TestHandleArtistUnreleased_BestVersionTitleIsTheServersPickedVersion(t *testing.T) {
+	link := []domain.AudioLink{{Provider: domain.AudioProviderYouTube, ExternalID: "v3", URL: "https://youtu.be/v3"}}
+	versions := []domain.UnreleasedVersion{
+		{Title: "Sports Car [V1]", Label: "V1", AudioLinks: link},
+		{Title: "Sports Car [V3]", Label: "V3", AudioLinks: link},
+	}
+	genius := &discoverytest.GeniusSongCatalog{
+		ArtistFound: true,
+		Songs: []domain.UnreleasedSong{
+			{GeniusID: 1, Title: "Sports Car", Versions: versions},
+			{GeniusID: 2, Title: "Other"},
+		},
+		DetailByID: map[int]domain.GeniusSongDetail{1: {AudioLinks: link}},
+	}
+	router := unreleasedRouter(genius, nil)
+
+	rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Carti", nil)
+
+	discAssertStatus(t, rec, http.StatusOK)
+	items := decodeUnreleased(t, rec.Body.Bytes()).Items
+	if len(items) != 2 {
+		t.Fatalf("items = %+v, want 2", items)
+	}
+	best := domain.UnreleasedSong{Versions: versions}.BestVersion().Title
+	if items[0].BestVersionTitle != best {
+		t.Errorf("grouped best_version_title = %q, want %q", items[0].BestVersionTitle, best)
+	}
+	if items[1].BestVersionTitle != "Other" {
+		t.Errorf("single best_version_title = %q, want its own title", items[1].BestVersionTitle)
 	}
 }

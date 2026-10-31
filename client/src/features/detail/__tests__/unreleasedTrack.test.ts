@@ -16,6 +16,7 @@ const ARTIST: DiscoveryResult = {
 const DREAM: UnreleasedTrack = {
   key: '1',
   versions: [],
+  best_version_title: null,
   genius_id: 1,
   tracker_key: null,
   quality: null,
@@ -69,6 +70,7 @@ describe('unreleasedAsResult', () => {
     const track: UnreleasedTrack = {
       ...DREAM,
       title: 'Sports Car',
+      best_version_title: 'Sports Car [V10]',
       audio_links: [link],
       versions: [
         { ...version, title: 'Sports Car [V1]', audio_links: [other] },
@@ -77,5 +79,22 @@ describe('unreleasedAsResult', () => {
     };
 
     expect(unreleasedAsResult(track, ARTIST).title).toBe('Sports Car [V10]');
+  });
+
+  it('saves under the server best_version_title even when every version shares the same links', () => {
+    const link = { provider: 'soundcloud', external_id: SOUNDCLOUD_URL, url: SOUNDCLOUD_URL };
+    const version = { label: null, quality: null, open_url: null, open_host: null, extras: {} };
+    const track: UnreleasedTrack = {
+      ...DREAM,
+      title: 'Sports Car',
+      audio_links: [link],
+      best_version_title: 'Sports Car [V3]',
+      versions: [
+        { ...version, title: 'Sports Car [V1]', audio_links: [link] },
+        { ...version, title: 'Sports Car [V3]', audio_links: [link] },
+      ],
+    };
+
+    expect(unreleasedAsResult(track, ARTIST).title).toBe('Sports Car [V3]');
   });
 });

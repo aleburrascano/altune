@@ -311,6 +311,7 @@ export type UnreleasedTrack = {
   open_url: string | null;
   open_host: string | null;
   versions: UnreleasedVersion[];
+  best_version_title: string | null;
   extras: Record<string, unknown>;
 };
 
@@ -422,6 +423,7 @@ function parseUnreleasedDetails(r: Record<string, unknown>, at: string) {
     open_url: parseOpenUrl(r.open_url, `${at}.open_url`),
     open_host: nullableString(r.open_host, `${at}.open_host`),
     versions: parseVersions(r.versions),
+    best_version_title: optionalString(r.best_version_title),
     extras: parseOwnershipExtras(r.extras, `${at}.extras`),
   };
 }
