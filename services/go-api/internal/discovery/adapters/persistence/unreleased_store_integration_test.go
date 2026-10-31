@@ -37,32 +37,32 @@ func TestUnreleasedStoreWrite(t *testing.T) {
 	ctx := context.Background()
 	key := newUnreleasedArtist(t, pool, store)
 
-	if _, _, built, err := store.Read(ctx, key); err != nil || built {
+	if _, _, built, _, err := store.Read(ctx, key); err != nil || built {
 		t.Fatalf("Read before any write: built=%v err=%v", built, err)
 	}
 
 	t0 := time.Now().Add(-time.Hour).UTC().Truncate(time.Microsecond)
 	first := []domain.UnreleasedSong{{Title: "A"}, {Title: "B"}, {Title: "C"}}
-	if err := store.Write(ctx, key, first, true, t0); err != nil {
+	if err := store.Write(ctx, key, first, true, t0, 1); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
-	songs, complete, built, err := store.Read(ctx, key)
+	songs, complete, built, _, err := store.Read(ctx, key)
 	if err != nil || !built || !complete || len(songs) != 3 || songs[0].Title != "A" || songs[2].Title != "C" {
 		t.Fatalf("Read = %v complete=%v built=%v err=%v", unreleasedTitles(songs), complete, built, err)
 	}
 
-	if err := store.Write(ctx, key, []domain.UnreleasedSong{{Title: "Stale"}}, false, t0.Add(-time.Minute)); err != nil {
+	if err := store.Write(ctx, key, []domain.UnreleasedSong{{Title: "Stale"}}, false, t0.Add(-time.Minute), 1); err != nil {
 		t.Fatalf("stale Write: %v", err)
 	}
-	songs, complete, _, _ = store.Read(ctx, key)
+	songs, complete, _, _, _ = store.Read(ctx, key)
 	if len(songs) != 3 || !complete {
 		t.Errorf("stale write changed the store: %v complete=%v", unreleasedTitles(songs), complete)
 	}
 
-	if err := store.Write(ctx, key, []domain.UnreleasedSong{{Title: "D"}}, false, t0.Add(time.Minute)); err != nil {
+	if err := store.Write(ctx, key, []domain.UnreleasedSong{{Title: "D"}}, false, t0.Add(time.Minute), 1); err != nil {
 		t.Fatalf("newer Write: %v", err)
 	}
-	songs, complete, _, _ = store.Read(ctx, key)
+	songs, complete, _, _, _ = store.Read(ctx, key)
 	if len(songs) != 1 || songs[0].Title != "D" || complete {
 		t.Errorf("newer write = %v complete=%v, want [D] incomplete", unreleasedTitles(songs), complete)
 	}
@@ -115,5 +115,21 @@ func TestUnreleasedStoreDue(t *testing.T) {
 	}
 	if len(due) != 1 || due[0].Key != newest {
 		t.Fatalf("second Due = %+v, want only newest (others just stamped)", due)
+	}
+}
+
+func TestUnreleasedStoreBuildVersion(t *testing.T) {
+	pool := testPool(t)
+	store := NewPgxUnreleasedStore(pool)
+	ctx := context.Background()
+	key := newUnreleasedArtist(t, pool, store)
+
+	t0 := time.Now().Add(-time.Hour).UTC().Truncate(time.Microsecond)
+	if err := store.Write(ctx, key, []domain.UnreleasedSong{{Title: "A"}}, true, t0, 3); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	_, _, built, version, err := store.Read(ctx, key)
+	if err != nil || !built || version != 3 {
+		t.Errorf("Read = built=%v version=%d err=%v, want built at version 3", built, version, err)
 	}
 }

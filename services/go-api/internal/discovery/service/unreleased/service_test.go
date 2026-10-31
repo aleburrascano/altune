@@ -562,3 +562,43 @@ func TestService_Lookup_StoreWriteFailureStillAnswersTheBuiltSongs(t *testing.T)
 		t.Errorf("Lookup = (%+v, %v), want the built song", got, err)
 	}
 }
+
+func TestService_Lookup_BuildVersionOlderStoredArtistIsServedAtOnceAndRebuiltOnce(t *testing.T) {
+	store := &discoverytest.UnreleasedStore{Artists: map[ports.UnreleasedArtistKey]discoverytest.StoredArtist{
+		drakeKey: {Songs: songs("Old"), Complete: true, Built: true, BuildVersion: 0},
+	}}
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("New"), Gate: make(chan struct{})}
+	var jobs sync.WaitGroup
+	cfg := Config{MaxPages: 1, MaxDetails: 10, DetailConcurrency: 2, Wait: time.Second}
+	svc := NewService(genius, &discoverytest.ArtistCatalogTitles{}, nil, cfg, WithStore(store), WithLifecycle(context.Background(), &jobs))
+	for range 2 {
+		got, err := svc.Lookup(context.Background(), domain.ProviderDeezer, "27", "Drake", nil)
+		if err != nil || got.Pending || !slices.Equal(titlesOf(got.Songs), []string{"Old"}) {
+			t.Fatalf("Lookup = (%+v, %v), want the stored song, not pending", got, err)
+		}
+	}
+	close(genius.Gate)
+	jobs.Wait()
+	if len(genius.SearchedFor) != 1 {
+		t.Errorf("rebuild jobs started = %d, want 1", len(genius.SearchedFor))
+	}
+	writes := store.Writes()
+	if len(writes) != 1 || writes[0].BuildVersion != CurrentBuildVersion || !slices.Equal(titlesOf(writes[0].Songs), []string{"New"}) {
+		t.Errorf("writes = %+v, want one write of New at build version %d", writes, CurrentBuildVersion)
+	}
+}
+
+func TestService_Lookup_BuildVersionCurrentStoredArtistStartsNoRebuild(t *testing.T) {
+	store := &discoverytest.UnreleasedStore{Artists: map[ports.UnreleasedArtistKey]discoverytest.StoredArtist{
+		drakeKey: {Songs: songs("A"), Complete: true, Built: true, BuildVersion: CurrentBuildVersion},
+	}}
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Other")}
+	var jobs sync.WaitGroup
+	cfg := Config{MaxPages: 1, MaxDetails: 10, DetailConcurrency: 2, Wait: time.Second}
+	svc := NewService(genius, &discoverytest.ArtistCatalogTitles{}, nil, cfg, WithStore(store), WithLifecycle(context.Background(), &jobs))
+	got, err := svc.Lookup(context.Background(), domain.ProviderDeezer, "27", "Drake", nil)
+	jobs.Wait()
+	if err != nil || !slices.Equal(titlesOf(got.Songs), []string{"A"}) || len(genius.SearchedFor) != 0 || len(store.Writes()) != 0 {
+		t.Errorf("Lookup = (%+v, %v), searched %v, writes %v; want A and no rebuild", got, err, genius.SearchedFor, store.Writes())
+	}
+}

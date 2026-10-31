@@ -15,6 +15,8 @@ import (
 	"time"
 )
 
+const CurrentBuildVersion = 1
+
 type Config struct {
 	MaxPages          int
 	MaxDetails        int
@@ -66,7 +68,7 @@ func (s *Service) Rebuild(ctx context.Context, key ports.UnreleasedArtistKey, ar
 		return nil, err
 	}
 	if s.store != nil {
-		if err := s.store.Write(ctx, key, songs, complete, startedAt); err != nil {
+		if err := s.store.Write(ctx, key, songs, complete, startedAt, CurrentBuildVersion); err != nil {
 			slog.WarnContext(ctx, "unreleased.store_write_failed", "error", err)
 		}
 	}

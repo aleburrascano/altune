@@ -58,26 +58,30 @@ func (s *Service) Lookup(ctx context.Context, provider domain.ProviderName, exte
 
 func (s *Service) lookupStored(ctx context.Context, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) (Lookup, error) {
 	key := ports.UnreleasedArtistKey{Provider: provider, ExternalID: externalID}
-	if songs, built := s.storedSongsOrNotBuilt(ctx, key, artistName, known); built {
+	songs, version, built := s.storedSongsOrNotBuilt(ctx, key, artistName, known)
+	jobKey := fmt.Sprintf("%s:%s:%s", provider.Key(), externalID, textnorm.NormalizeForIdentity(artistName))
+	if built && version >= CurrentBuildVersion {
 		return Lookup{Songs: nonNil(songs)}, nil
 	}
-	jobKey := fmt.Sprintf("%s:%s:%s", provider.Key(), externalID, textnorm.NormalizeForIdentity(artistName))
 	j := s.joinJob(jobKey, func(jobCtx context.Context) ([]domain.UnreleasedSong, error) {
 		return s.Rebuild(jobCtx, key, artistName, known)
 	})
+	if built {
+		return Lookup{Songs: nonNil(songs)}, nil
+	}
 	return s.awaitJob(ctx, j)
 }
 
-func (s *Service) storedSongsOrNotBuilt(ctx context.Context, key ports.UnreleasedArtistKey, artistName string, known map[domain.ProviderName]string) ([]domain.UnreleasedSong, bool) {
+func (s *Service) storedSongsOrNotBuilt(ctx context.Context, key ports.UnreleasedArtistKey, artistName string, known map[domain.ProviderName]string) ([]domain.UnreleasedSong, int, bool) {
 	if err := s.store.Record(ctx, key, artistName, known); err != nil {
 		slog.WarnContext(ctx, "unreleased.store_record_failed", "error", err)
 	}
-	songs, _, built, err := s.store.Read(ctx, key)
+	songs, _, built, version, err := s.store.Read(ctx, key)
 	if err != nil {
 		slog.WarnContext(ctx, "unreleased.store_read_failed", "error", err)
-		return nil, false
+		return nil, 0, false
 	}
-	return songs, built
+	return songs, version, built
 }
 
 func nonNil(songs []domain.UnreleasedSong) []domain.UnreleasedSong {
