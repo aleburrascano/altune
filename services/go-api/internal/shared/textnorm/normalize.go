@@ -5,6 +5,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/mozillazg/go-unidecode"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -114,3 +115,5 @@ func FoldName(s string) string {
 }
 
 func NFKC(s string) string { return norm.NFKC.String(s) }
+
+func Transliterate(s string) string { return unidecode.Unidecode(s) }

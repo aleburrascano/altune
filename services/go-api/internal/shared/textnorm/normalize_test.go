@@ -319,3 +319,11 @@ func TestNFKCKeepsCaseAndPunctuation(t *testing.T) {
 		t.Errorf("NFKC(\"Slowed + Reverb\") = %q, want it unchanged", got)
 	}
 }
+
+func TestTransliterate_TurnsAnyScriptIntoPlainLetters(t *testing.T) {
+	for in, want := range map[string]string{"Straße": "Strasse", "Новый": "Novyi", "Beyoncé": "Beyonce"} {
+		if got := Transliterate(in); got != want {
+			t.Errorf("Transliterate(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
