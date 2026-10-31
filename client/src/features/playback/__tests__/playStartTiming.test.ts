@@ -21,12 +21,17 @@ interface SentRequest {
   body?: string;
 }
 
+interface SentEvent {
+  type?: string;
+  payload: Record<string, unknown>;
+}
+
 function sentPlayStarts(): Record<string, unknown>[] {
   return __http.requests
     .filter((r: SentRequest) => r.method === 'POST' && r.path === '/v1/discovery/events')
     .map((r: SentRequest) => JSON.parse(r.body ?? '{}'))
-    .filter((body: { type?: string }) => body.type === 'play_start')
-    .map((body: { payload: Record<string, unknown> }) => body.payload);
+    .filter((body: SentEvent) => body.type === 'play_start')
+    .map((body: SentEvent) => body.payload);
 }
 
 async function waitMs(ms: number): Promise<void> {
@@ -83,7 +88,9 @@ describe('play_start: time from a play request until the player reports playing'
     notePlaybackState(State.Playing);
     await waitMs(0);
 
-    expect(sentPlayStarts()).toEqual([expect.objectContaining({ start_ms: 2 * SILENT_MS })]);
+    expect(sentPlayStarts()).toEqual([
+      expect.objectContaining({ start_ms: SILENT_MS + SILENT_MS }),
+    ]);
   });
 
   it('ignores a remote play or resume while audio is already playing', async () => {

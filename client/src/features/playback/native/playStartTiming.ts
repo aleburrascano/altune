@@ -1,6 +1,7 @@
 import { State } from 'react-native-track-player';
 
 import { isTelemetryGated } from '@shared/failure/errors';
+import type { JsonObject } from '@shared/files/json';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import { warnPlayback } from '@features/playback/domain/playbackError';
@@ -42,24 +43,29 @@ export function notePlaybackState(state: State | undefined): void {
   if (isAudible) settle('playing');
 }
 
-function settle(outcome: 'playing' | 'never_started'): void {
+type PlayStartOutcome = 'playing' | 'never_started';
+
+function settle(outcome: PlayStartOutcome): void {
   const start = pending;
   if (start === null) return;
   pending = null;
   clearTimeout(start.giveUp);
   if (outcome === 'playing') hasBeenAudible = true;
-  recordEvent({
-    type: 'play_start',
-    payload: {
-      outcome,
-      trigger: start.trigger,
-      cold: start.cold,
-      start_ms: Date.now() - start.requestedAt,
-    },
-  }).catch((err: unknown) => {
-    if (isTelemetryGated(err)) return;
-    warnPlayback('failed to record play start', {}, err);
-  });
+  sendPlayStart(start, outcome);
+}
+
+function playStartPayload(start: PendingStart, outcome: PlayStartOutcome): JsonObject {
+  const { trigger, cold } = start;
+  return { outcome, trigger, cold, start_ms: Date.now() - start.requestedAt };
+}
+
+function warnUnlessGated(err: unknown): void {
+  if (!isTelemetryGated(err)) warnPlayback('failed to record play start', {}, err);
+}
+
+function sendPlayStart(start: PendingStart, outcome: PlayStartOutcome): void {
+  const payload = playStartPayload(start, outcome);
+  recordEvent({ type: 'play_start', payload }).catch(warnUnlessGated);
 }
 
 export function resetPlayStartTiming(): void {
