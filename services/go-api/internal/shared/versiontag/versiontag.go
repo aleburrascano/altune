@@ -161,6 +161,7 @@ var lexicon = []Entry{
 	{"radio edit", false, []string{"radio", "edit"}},
 	{"extended", false, []string{"extended"}},
 	{"version", false, []string{"version"}},
+	{"voice memo", true, []string{"voice", "memo"}},
 }
 
 var releaseVariants = []Entry{
@@ -335,4 +336,46 @@ func KnownLabels() map[string]bool {
 		labels[entry.Label] = true
 	}
 	return labels
+}
+
+var versionGroupRe = regexp.MustCompile(`\[[^\[\]]*\]|\([^()]*\)`)
+
+func BaseTitle(title string) (base, label string) {
+	stripped := versionGroupRe.ReplaceAllStringFunc(title, func(group string) string {
+		if isVersionGroup(group[1 : len(group)-1]) {
+			return " "
+		}
+		return group
+	})
+	base = strings.Join(strings.Fields(stripped), " ")
+	if base == strings.Join(strings.Fields(title), " ") {
+		return base, ""
+	}
+	return base, displayLabel(ParseTags(title).Labels)
+}
+
+func isVersionGroup(inner string) bool {
+	numbers, rest := withoutVersionNumbers(Tokens(inner))
+	rest = WithoutVersionPhrases(rest)
+	return len(rest) == 0 && (len(numbers) > 0 || len(Matches(Tokens(inner))) > 0)
+}
+
+func displayLabel(labels []string) string {
+	var numbers, words []string
+	for _, label := range labels {
+		if versionNumberRe.MatchString(label) {
+			numbers = append(numbers, strings.ToUpper(label))
+			continue
+		}
+		words = append(words, titleCase(label))
+	}
+	return strings.Join(slices.Concat(numbers, words), " ")
+}
+
+func titleCase(label string) string {
+	words := strings.Fields(label)
+	for i, word := range words {
+		words[i] = strings.ToUpper(word[:1]) + word[1:]
+	}
+	return strings.Join(words, " ")
 }

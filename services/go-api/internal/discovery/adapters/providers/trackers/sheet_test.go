@@ -254,3 +254,54 @@ func TestFirstHTTPSLink_OpenHostDropsThePort(t *testing.T) {
 	}
 	t.Fatal("row Ported was not parsed")
 }
+
+func versionLink(id string) []domain.AudioLink {
+	return []domain.AudioLink{{Provider: "pixeldrain", ExternalID: id, URL: "https://pixeldrain.com/u/" + id}}
+}
+
+func TestSongsFromRows_VersionTaggedRowsBecomeOneSongWithTheBestVersionsLinks(t *testing.T) {
+	songs := songsFromRows("Tate McRae", []trackerRow{
+		{title: "Sports Car [V3]", quality: "CD Quality", links: versionLink("v3")},
+		{title: "Sports Car [V10]", quality: "Lossless", links: versionLink("v10")},
+		{title: "Sports Car [V14]", quality: "CD Quality", links: versionLink("v14")},
+	})
+	if len(songs) != 1 {
+		t.Fatalf("songs = %+v, want one", songs)
+	}
+	s := songs[0]
+	if s.Title != "Sports Car" || s.TrackerKey != "tate-mcrae:sports-car" || len(s.Versions) != 3 {
+		t.Fatalf("song = %+v, want base title, base key and 3 versions", s)
+	}
+	if s.Quality != "Lossless" || !slices.Equal(s.AudioLinks, versionLink("v10")) || s.HasMedia == nil || !*s.HasMedia {
+		t.Errorf("song = %+v, want V10's quality, links and media", s)
+	}
+	if s.Versions[0].Title != "Sports Car [V3]" || s.Versions[0].Label != "V3" {
+		t.Errorf("first version = %+v, want the full sheet title and V3", s.Versions[0])
+	}
+}
+
+func TestSongsFromRows_EqualQualityPrefersTheHighestVersionNumber(t *testing.T) {
+	songs := songsFromRows("A", []trackerRow{
+		{title: "Song [V9]", quality: "High Quality", links: versionLink("v9")},
+		{title: "Song [V12]", quality: "high quality", links: versionLink("v12")},
+		{title: "Song [V2]", quality: "High Quality", links: versionLink("v2")},
+	})
+	if len(songs) != 1 || !slices.Equal(songs[0].AudioLinks, versionLink("v12")) {
+		t.Errorf("songs = %+v, want one song with V12's links", songs)
+	}
+}
+
+func TestSongsFromRows_DifferentBaseTitlesStayApartAndReleasedRowsAreNotVersions(t *testing.T) {
+	songs := songsFromRows("A", []trackerRow{
+		{title: "Signs [V1]", links: versionLink("a")},
+		{title: "Siren Sounds [V1]", links: versionLink("b")},
+		{title: "Signs", links: versionLink("c"), offStreaming: true},
+	})
+	if len(songs) != 2 {
+		t.Fatalf("songs = %+v, want two", songs)
+	}
+	signs := songs[0]
+	if len(signs.Versions) != 1 || !signs.OffStreaming || len(signs.AudioLinks) != 2 {
+		t.Errorf("signs = %+v, want one version, off_streaming and both links", signs)
+	}
+}
