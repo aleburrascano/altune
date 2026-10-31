@@ -355,6 +355,15 @@ describe('ArtistUnreleased', () => {
     expect(__http.countFor('POST /v1/tracks')).toBe(0);
   });
 
+  it('shows no versions line for a card with a single version', async () => {
+    const single = { ...DREAM, genius_id: 802, title: 'Quiet', versions: [{ title: 'Quiet' }] };
+    __http.reply(UNRELEASED, { status: 200, json: { items: [single] } });
+    renderSection();
+
+    expect(await screen.findByText('Tap to save')).toBeTruthy();
+    expect(screen.queryByTestId('detail-unreleased-versions-802')).toBeNull();
+  });
+
   it('renders a tracker-only song with its quality and saves it pinned to the pixeldrain file', async () => {
     const trackerOnly = {
       genius_id: null,
@@ -428,5 +437,34 @@ describe('ArtistUnreleased', () => {
       expect(JSON.stringify(cover.props.source)).not.toContain('uri');
       bare.unmount();
     }
+  });
+
+  it('says how many versions a card groups and saves the best version under its full title', async () => {
+    function version(title: string, links: unknown[]) {
+      return { title, audio_links: links };
+    }
+    const grouped = {
+      ...DREAM,
+      genius_id: 801,
+      title: 'Sports Car',
+      versions: [
+        version('Sports Car [V1]', []),
+        version('Sports Car [V10]', DREAM.audio_links),
+        version('Sports Car [V2]', []),
+      ],
+    };
+    __http.reply(UNRELEASED, { status: 200, json: { items: [grouped] } });
+    __http.reply('POST /v1/tracks', savedTrack());
+    renderSection();
+
+    expect(await screen.findByText('3 versions')).toBeTruthy();
+    expect(screen.getByText('Tap to save')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('detail-unreleased-801'));
+
+    await waitFor(() => expect(__http.countFor('POST /v1/tracks')).toBe(1));
+    const save = __http.requests.find(
+      (request: RecordedRequest) => request.method === 'POST' && request.path === '/v1/tracks',
+    );
+    expect(JSON.parse(String(save.body))).toMatchObject({ title: 'Sports Car [V10]' });
   });
 });

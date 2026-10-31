@@ -1,7 +1,12 @@
 import type { DiscoveryResult, DiscoverySource } from '@shared/apiClient/discovery';
-import type { UnreleasedAudioLink, UnreleasedTrack } from '@shared/apiClient/enrichment';
+import type {
+  UnreleasedAudioLink,
+  UnreleasedTrack,
+  UnreleasedVersion,
+} from '@shared/apiClient/enrichment';
 
 const UNRELEASED_ALBUM = 'UNRELEASED';
+const MIN_GROUPED_VERSIONS = 2;
 
 function linkSource({ provider, external_id, url }: UnreleasedAudioLink): DiscoverySource {
   return { provider, external_id, url };
@@ -15,8 +20,25 @@ function unreleasedExtras(track: UnreleasedTrack): DiscoveryResult['extras'] {
   return { ...track.extras, album: UNRELEASED_ALBUM };
 }
 
+function linkIds(links: UnreleasedAudioLink[]): string {
+  return links.map((link) => `${link.provider}:${link.external_id}`).join(' ');
+}
+
+function isBestVersion(version: UnreleasedVersion, track: UnreleasedTrack): boolean {
+  return linkIds(version.audio_links) === linkIds(track.audio_links);
+}
+
+export function hasManyVersions(track: UnreleasedTrack): boolean {
+  return track.versions.length >= MIN_GROUPED_VERSIONS;
+}
+
+function savedTitle(track: UnreleasedTrack): string {
+  const best = track.versions.find((version) => isBestVersion(version, track));
+  return best?.title ?? track.title;
+}
+
 function unreleasedShown(track: UnreleasedTrack, artist: DiscoveryResult) {
-  const shown = { title: track.title, subtitle: artist.title, image_url: track.cover_url };
+  const shown = { title: savedTitle(track), subtitle: artist.title, image_url: track.cover_url };
   return { kind: 'track' as const, confidence: 'medium' as const, ...shown };
 }
 

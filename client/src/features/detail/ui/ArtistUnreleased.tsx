@@ -8,6 +8,7 @@ import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing } from '@shared/ui/theme';
 
 import { realPhotoUrl } from '@features/detail/domain/artistPhoto';
+import { hasManyVersions } from '@features/detail/domain/unreleasedTrack';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import type { UnreleasedTrack } from '@shared/apiClient/enrichment';
 
@@ -66,6 +67,15 @@ function cardHint(track: UnreleasedTrack, state: UnreleasedCardState): string | 
   return CARD_HINTS[state](track);
 }
 
+function VersionsHint({ track }: UnreleasedRowProps): ReactElement | null {
+  if (!hasManyVersions(track)) return null;
+  return (
+    <Text variant="label" tone="tertiary" testID={`detail-unreleased-versions-${track.key}`}>
+      {`${track.versions.length} versions`}
+    </Text>
+  );
+}
+
 function CardHint({ track, card }: UnreleasedCardProps): ReactElement | null {
   const hint = cardHint(track, card.state);
   if (hint === null) return null;
@@ -106,6 +116,7 @@ function UnreleasedTitle({ track, card }: UnreleasedCardProps): ReactElement {
       </Text>
       <QualityLine track={track} />
       <CardHint track={track} card={card} />
+      <VersionsHint track={track} />
     </View>
   );
 }

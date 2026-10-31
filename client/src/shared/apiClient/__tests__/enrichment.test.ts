@@ -575,6 +575,7 @@ describe('getUnreleasedTracks', () => {
       off_streaming: false,
       open_url: null,
       open_host: null,
+      versions: [],
       ...wire,
     };
   }
@@ -631,6 +632,61 @@ describe('getUnreleasedTracks', () => {
       null,
     ]);
     expect(items.map((item) => item.open_host)).toEqual(['mega.nz', null, 'x', 'x']);
+  });
+
+  const NOT_A_VERSION = 7;
+
+  it('parses versions leniently: a bad entry is skipped, the row is kept, absent means empty', async () => {
+    const grouped = {
+      ...row,
+      genius_id: 30,
+      versions: [
+        {
+          title: 'Sports Car [V10]',
+          open_url: 'https://mega.nz/file/abc',
+          extras: { owned_track_id: 't-1' },
+        },
+        NOT_A_VERSION,
+      ],
+    };
+    __http.reply(PATH, { status: 200, json: { items: [grouped, { ...row, genius_id: 31 }] } });
+
+    const { items } = await getUnreleasedTracks('spotify', 'art-1', { name: 'X' });
+
+    expect(items.map((item) => item.versions.length)).toEqual([1, 0]);
+    expect(items[0]?.versions[0]).toMatchObject({
+      title: 'Sports Car [V10]',
+      open_url: 'https://mega.nz/file/abc',
+      extras: { owned_track_id: 't-1' },
+    });
+  });
+
+  it('keeps a version whose open link is unsafe, with no link and default extras', async () => {
+    const version = {
+      title: 'Dream [V2]',
+      label: 'V2',
+      quality: 'CD Quality',
+      open_url: 'http://x.test/a',
+      extras: 7,
+    };
+    __http.reply(PATH, {
+      status: 200,
+      json: { items: [{ ...row, genius_id: 32, versions: [version, { title: 5 }] }] },
+    });
+
+    const { items } = await getUnreleasedTracks('spotify', 'art-1', { name: 'X' });
+
+    expect(items[0]?.versions).toEqual([
+      {
+        title: 'Dream [V2]',
+        label: 'V2',
+        quality: 'CD Quality',
+        audio_links: [],
+        open_url: null,
+        open_host: null,
+        extras: {},
+      },
+    ]);
   });
 
   it('reads off_streaming true and treats a missing flag as false', async () => {
