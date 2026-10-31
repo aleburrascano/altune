@@ -81,7 +81,7 @@ func mergeTrackerSongs(genius, trackers []domain.UnreleasedSong) []domain.Unrele
 			continue
 		}
 		if i, ok := soleBaseMatch(byBase, tracked.Title); ok {
-			merged[i] = withGeniusIdentity(tracked, merged[i])
+			merged[i] = withTrackerFile(merged[i], tracked)
 			continue
 		}
 		exact[key] = []int{len(merged)}
@@ -100,17 +100,14 @@ func soleBaseMatch(byBase map[string][]int, trackerTitle string) (int, bool) {
 	return slots[0], true
 }
 
-func withGeniusIdentity(tracked, genius domain.UnreleasedSong) domain.UnreleasedSong {
-	joined := withTrackerFile(genius, tracked)
-	joined.Versions = tracked.Versions
-	return joined
-}
-
 func withTrackerFile(song, tracked domain.UnreleasedSong) domain.UnreleasedSong {
 	if tracked.Quality != "" {
 		song.Quality = tracked.Quality
 	}
 	song.TrackerKey = tracked.TrackerKey
+	if len(song.Versions) == 0 {
+		song.Versions = tracked.Versions
+	}
 	song.OffStreaming = song.OffStreaming || tracked.OffStreaming
 	song.AudioLinks = appendNewLinks(slices.Clone(song.AudioLinks), tracked.AudioLinks)
 	if len(song.AudioLinks) > 0 {

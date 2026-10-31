@@ -274,3 +274,16 @@ func TestService_List_TwoGeniusSongsWithOneTitleBothTakeTheTrackerFile(t *testin
 		}
 	}
 }
+
+func TestService_List_GeniusSongWithTheExactTrackerTitleKeepsTheTrackerVersions(t *testing.T) {
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Me")}
+	tracked := trackerSong("Me", "meaaaaaa")
+	tracked.Versions = []domain.UnreleasedVersion{{Title: "Me [V1]", Label: "V1"}, {Title: "Me [V2]", Label: "V2"}}
+	got, err := listWith(t, genius, &discoverytest.TrackerSongs{Songs: []domain.UnreleasedSong{tracked}}, nil)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("got %v, err %v, want one joined song", titlesOf(got), err)
+	}
+	if song := got[0]; song.GeniusID != 1 || len(song.Versions) != 2 {
+		t.Errorf("song = %+v, want the genius identity and both tracker versions", song)
+	}
+}
