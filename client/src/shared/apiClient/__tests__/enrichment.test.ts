@@ -576,6 +576,7 @@ describe('getUnreleasedTracks', () => {
       open_url: null,
       open_host: null,
       versions: [],
+      best_version_title: null,
       ...wire,
     };
   }
@@ -824,14 +825,14 @@ describe('getUnreleasedTracks', () => {
     });
   });
 
-  it('keeps the server best_version_title and leaves it absent when the server sent none', async () => {
+  it('keeps the server best_version_title and leaves it null when the server sent none', async () => {
     const named = { ...row, genius_id: 30, best_version_title: 'Cancun [V2]' };
     __http.reply(PATH, { status: 200, json: { items: [named, row] } });
 
     const { items } = await getUnreleasedTracks('spotify', 'art-1', { name: 'X' });
 
     expect(items[0]?.best_version_title).toBe('Cancun [V2]');
-    expect(items[1]).not.toHaveProperty('best_version_title');
+    expect(items[1]?.best_version_title).toBeNull();
   });
 
   it('keeps a row whose best_version_title is not a string, with no best version title', async () => {
@@ -841,6 +842,6 @@ describe('getUnreleasedTracks', () => {
     const { items } = await getUnreleasedTracks('spotify', 'art-1', { name: 'X' });
 
     expect(items.map((item) => item.key)).toEqual(['31', String(row.genius_id)]);
-    expect(items[0]?.best_version_title).toBeUndefined();
+    expect(items[0]?.best_version_title).toBeNull();
   });
 });

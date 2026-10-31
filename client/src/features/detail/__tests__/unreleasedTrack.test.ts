@@ -16,6 +16,7 @@ const ARTIST: DiscoveryResult = {
 const DREAM: UnreleasedTrack = {
   key: '1',
   versions: [],
+  best_version_title: null,
   genius_id: 1,
   tracker_key: null,
   quality: null,

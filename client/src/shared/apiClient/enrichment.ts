@@ -311,7 +311,7 @@ export type UnreleasedTrack = {
   open_url: string | null;
   open_host: string | null;
   versions: UnreleasedVersion[];
-  best_version_title?: string;
+  best_version_title: string | null;
   extras: Record<string, unknown>;
 };
 
@@ -412,11 +412,6 @@ function parseVersions(value: unknown): UnreleasedVersion[] {
   return versions;
 }
 
-function parseBestVersionTitle(value: unknown): { best_version_title?: string } {
-  const title = optionalString(value);
-  return title === null ? {} : { best_version_title: title };
-}
-
 function parseUnreleasedDetails(r: Record<string, unknown>, at: string) {
   return {
     quality: nullableString(r.quality, `${at}.quality`),
@@ -428,7 +423,7 @@ function parseUnreleasedDetails(r: Record<string, unknown>, at: string) {
     open_url: parseOpenUrl(r.open_url, `${at}.open_url`),
     open_host: nullableString(r.open_host, `${at}.open_host`),
     versions: parseVersions(r.versions),
-    ...parseBestVersionTitle(r.best_version_title),
+    best_version_title: optionalString(r.best_version_title),
     extras: parseOwnershipExtras(r.extras, `${at}.extras`),
   };
 }
