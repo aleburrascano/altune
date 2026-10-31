@@ -93,11 +93,12 @@ func TestService_List_ReleasedSongKeepsItsTaggedTrackerVersions(t *testing.T) {
 	trackers := &discoverytest.TrackerSongs{Songs: []domain.UnreleasedSong{sportsCar, trackerSong("Magnolia", "magnolia")}}
 	svc := NewService(nil, &discoverytest.ArtistCatalogTitles{Titles: []string{"Sports Car", "Magnolia"}}, nil, cachedConfig, WithTrackers(trackers))
 	got, err := svc.List(context.Background(), domain.ProviderDeezer, "1", "Ken Carson", nil)
-	if err != nil || !slices.Equal(titlesOf(got), []string{"Sports Car"}) {
+	if err != nil || len(got) != 1 || got[0].Title != "Sports Car" {
 		t.Fatalf("got %v, err %v, want only Sports Car", titlesOf(got), err)
 	}
-	if len(got[0].Versions) != 1 || got[0].Versions[0].Title != "Sports Car [V3]" || got[0].Quality != "High Quality" {
-		t.Errorf("song = %+v, want only the V3 version and its quality", got[0])
+	song := got[0]
+	if len(song.Versions) != 1 || song.Versions[0].Title != "Sports Car [V3]" || song.Quality != "High Quality" {
+		t.Errorf("song = %+v, want only the V3 version and its quality", song)
 	}
 }
 
