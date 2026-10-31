@@ -575,6 +575,7 @@ describe('getUnreleasedTracks', () => {
       off_streaming: false,
       open_url: null,
       open_host: null,
+      versions: [],
       ...wire,
     };
   }
