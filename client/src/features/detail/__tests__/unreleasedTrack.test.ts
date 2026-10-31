@@ -60,4 +60,21 @@ describe('unreleasedAsResult', () => {
   it('is not acquirable without a link', () => {
     expect(isAcquirable(DREAM)).toBe(false);
   });
+
+  it('saves under the full title of the version whose links match the item', () => {
+    const link = { provider: 'soundcloud', external_id: SOUNDCLOUD_URL, url: SOUNDCLOUD_URL };
+    const other = { provider: 'pillows', external_id: PILLOWS_ID, url: PILLOWS_URL };
+    const version = { label: null, quality: null, open_url: null, open_host: null, extras: {} };
+    const track: UnreleasedTrack = {
+      ...DREAM,
+      title: 'Sports Car',
+      audio_links: [link],
+      versions: [
+        { ...version, title: 'Sports Car [V1]', audio_links: [other] },
+        { ...version, title: 'Sports Car [V10]', audio_links: [link] },
+      ],
+    };
+
+    expect(unreleasedAsResult(track, ARTIST).title).toBe('Sports Car [V10]');
+  });
 });

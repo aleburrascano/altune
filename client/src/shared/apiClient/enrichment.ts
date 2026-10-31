@@ -286,6 +286,16 @@ const AUDIO_PROVIDER = /^[a-z][a-z0-9]{1,31}$/;
 
 export type UnreleasedAudioLink = { provider: string; external_id: string; url: string };
 
+export type UnreleasedVersion = {
+  title: string;
+  label: string | null;
+  quality: string | null;
+  audio_links: UnreleasedAudioLink[];
+  open_url: string | null;
+  open_host: string | null;
+  extras: Record<string, unknown>;
+};
+
 export type UnreleasedTrack = {
   key: string;
   genius_id: number | null;
@@ -300,6 +310,7 @@ export type UnreleasedTrack = {
   audio_links: UnreleasedAudioLink[];
   open_url: string | null;
   open_host: string | null;
+  versions: UnreleasedVersion[];
   extras: Record<string, unknown>;
 };
 
@@ -367,6 +378,39 @@ function parseOpenUrl(value: unknown, at: string): string | null {
   }
 }
 
+function optionalString(value: unknown): string | null {
+  return isNonEmptyString(value) ? value : null;
+}
+
+const NO_VERSION_EXTRAS: Readonly<Record<string, unknown>> = Object.freeze({});
+
+function versionExtras(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : NO_VERSION_EXTRAS;
+}
+
+function versionFields(r: Record<string, unknown>, title: string): UnreleasedVersion {
+  const links = parseAudioLinks(r.audio_links);
+  const open = { open_url: parseOpenUrl(r.open_url, 'UnreleasedVersion.open_url') };
+  const text = { label: optionalString(r.label), quality: optionalString(r.quality) };
+  const host = { open_host: optionalString(r.open_host) };
+  return { title, ...text, audio_links: links, ...open, ...host, extras: versionExtras(r.extras) };
+}
+
+function toVersion(value: unknown): UnreleasedVersion | null {
+  if (!isRecord(value) || !isNonEmptyString(value.title)) return null;
+  return versionFields(value, value.title);
+}
+
+function parseVersions(value: unknown): UnreleasedVersion[] {
+  const versions: UnreleasedVersion[] = [];
+  if (!Array.isArray(value)) return versions;
+  for (const item of value) {
+    const version = toVersion(item);
+    if (version !== null) versions.push(version);
+  }
+  return versions;
+}
+
 function parseUnreleasedDetails(r: Record<string, unknown>, at: string) {
   return {
     quality: nullableString(r.quality, `${at}.quality`),
@@ -377,6 +421,7 @@ function parseUnreleasedDetails(r: Record<string, unknown>, at: string) {
     audio_links: parseAudioLinks(r.audio_links),
     open_url: parseOpenUrl(r.open_url, `${at}.open_url`),
     open_host: nullableString(r.open_host, `${at}.open_host`),
+    versions: parseVersions(r.versions),
     extras: parseOwnershipExtras(r.extras, `${at}.extras`),
   };
 }

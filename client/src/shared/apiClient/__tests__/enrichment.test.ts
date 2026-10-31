@@ -633,6 +633,33 @@ describe('getUnreleasedTracks', () => {
     expect(items.map((item) => item.open_host)).toEqual(['mega.nz', null, 'x', 'x']);
   });
 
+  const NOT_A_VERSION = 7;
+
+  it('parses versions leniently: a bad entry is skipped, the row is kept, absent means empty', async () => {
+    const grouped = {
+      ...row,
+      genius_id: 30,
+      versions: [
+        {
+          title: 'Sports Car [V10]',
+          open_url: 'https://mega.nz/file/abc',
+          extras: { owned_track_id: 't-1' },
+        },
+        NOT_A_VERSION,
+      ],
+    };
+    __http.reply(PATH, { status: 200, json: { items: [grouped, { ...row, genius_id: 31 }] } });
+
+    const { items } = await getUnreleasedTracks('spotify', 'art-1', { name: 'X' });
+
+    expect(items.map((item) => item.versions.length)).toEqual([1, 0]);
+    expect(items[0]?.versions[0]).toMatchObject({
+      title: 'Sports Car [V10]',
+      open_url: 'https://mega.nz/file/abc',
+      extras: { owned_track_id: 't-1' },
+    });
+  });
+
   it('reads off_streaming true and treats a missing flag as false', async () => {
     __http.reply(PATH, { status: 200, json: { items: [{ ...row, off_streaming: true }, row] } });
 
