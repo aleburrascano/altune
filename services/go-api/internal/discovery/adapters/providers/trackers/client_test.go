@@ -91,7 +91,7 @@ func TestClient_ArtistSongsReturnsTheTrackersFullLeaks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ArtistSongs: %v", err)
 	}
-	if len(songs) != 4 || songs[0].Title != "Dream [V2]" || songs[0].TrackerKey != "ken-carson:dream-v2" {
+	if len(songs) != 4 || songs[0].Title != "Dream" || songs[0].TrackerKey != "ken-carson:dream" {
 		t.Fatalf("songs = %+v", songs)
 	}
 	link := songs[0].AudioLinks[0]

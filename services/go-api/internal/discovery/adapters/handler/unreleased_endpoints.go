@@ -10,19 +10,20 @@ import (
 )
 
 type UnreleasedSongDTO struct {
-	GeniusID     *int               `json:"genius_id"`
-	Title        string             `json:"title"`
-	CoverURL     *string            `json:"cover_url"`
-	GeniusURL    *string            `json:"genius_url"`
-	ReleaseDate  *string            `json:"release_date"`
-	HasMedia     *bool              `json:"has_media"`
-	Quality      *string            `json:"quality"`
-	TrackerKey   *string            `json:"tracker_key"`
-	OffStreaming bool               `json:"off_streaming"`
-	OpenURL      *string            `json:"open_url,omitempty"`
-	OpenHost     *string            `json:"open_host,omitempty"`
-	AudioLinks   []domain.AudioLink `json:"audio_links"`
-	Extras       map[string]any     `json:"extras"`
+	GeniusID     *int                       `json:"genius_id"`
+	Title        string                     `json:"title"`
+	CoverURL     *string                    `json:"cover_url"`
+	GeniusURL    *string                    `json:"genius_url"`
+	ReleaseDate  *string                    `json:"release_date"`
+	HasMedia     *bool                      `json:"has_media"`
+	Quality      *string                    `json:"quality"`
+	TrackerKey   *string                    `json:"tracker_key"`
+	OffStreaming bool                       `json:"off_streaming"`
+	OpenURL      *string                    `json:"open_url,omitempty"`
+	OpenHost     *string                    `json:"open_host,omitempty"`
+	Versions     []domain.UnreleasedVersion `json:"versions,omitempty"`
+	AudioLinks   []domain.AudioLink         `json:"audio_links"`
+	Extras       map[string]any             `json:"extras"`
 }
 
 type UnreleasedResponseDTO struct {
@@ -50,6 +51,7 @@ func unreleasedToDTO(found unreleased.Lookup) UnreleasedResponseDTO {
 			OffStreaming: s.OffStreaming,
 			OpenURL:      nonEmpty(s.OpenURL),
 			OpenHost:     nonEmpty(s.OpenHost),
+			Versions:     s.Versions,
 			AudioLinks:   nonNilLinks(s.AudioLinks),
 			Extras:       map[string]any{},
 		}

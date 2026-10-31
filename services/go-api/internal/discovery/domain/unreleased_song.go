@@ -28,4 +28,15 @@ type UnreleasedSong struct {
 	OffStreaming bool        `json:"off_streaming,omitempty"`
 	OpenURL      string      `json:"open_url,omitempty"`
 	OpenHost     string      `json:"open_host,omitempty"`
+
+	Versions []UnreleasedVersion `json:"versions,omitempty"`
+}
+
+type UnreleasedVersion struct {
+	Title      string      `json:"title"`
+	Label      string      `json:"label,omitempty"`
+	Quality    string      `json:"quality,omitempty"`
+	AudioLinks []AudioLink `json:"audio_links,omitempty"`
+	OpenURL    string      `json:"open_url,omitempty"`
+	OpenHost   string      `json:"open_host,omitempty"`
 }
