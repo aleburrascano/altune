@@ -1,0 +1,1 @@
+ALTER TABLE unreleased_artists ADD COLUMN IF NOT EXISTS build_version INTEGER NOT NULL DEFAULT 0;
