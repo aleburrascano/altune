@@ -10,20 +10,26 @@ import (
 )
 
 type UnreleasedSongDTO struct {
-	GeniusID     *int                       `json:"genius_id"`
-	Title        string                     `json:"title"`
-	CoverURL     *string                    `json:"cover_url"`
-	GeniusURL    *string                    `json:"genius_url"`
-	ReleaseDate  *string                    `json:"release_date"`
-	HasMedia     *bool                      `json:"has_media"`
-	Quality      *string                    `json:"quality"`
-	TrackerKey   *string                    `json:"tracker_key"`
-	OffStreaming bool                       `json:"off_streaming"`
-	OpenURL      *string                    `json:"open_url,omitempty"`
-	OpenHost     *string                    `json:"open_host,omitempty"`
-	Versions     []domain.UnreleasedVersion `json:"versions,omitempty"`
-	AudioLinks   []domain.AudioLink         `json:"audio_links"`
-	Extras       map[string]any             `json:"extras"`
+	GeniusID     *int                   `json:"genius_id"`
+	Title        string                 `json:"title"`
+	CoverURL     *string                `json:"cover_url"`
+	GeniusURL    *string                `json:"genius_url"`
+	ReleaseDate  *string                `json:"release_date"`
+	HasMedia     *bool                  `json:"has_media"`
+	Quality      *string                `json:"quality"`
+	TrackerKey   *string                `json:"tracker_key"`
+	OffStreaming bool                   `json:"off_streaming"`
+	OpenURL      *string                `json:"open_url,omitempty"`
+	OpenHost     *string                `json:"open_host,omitempty"`
+	Versions     []UnreleasedVersionDTO `json:"versions,omitempty"`
+	AudioLinks   []domain.AudioLink     `json:"audio_links"`
+	Extras       map[string]any         `json:"extras"`
+	ownedTitle   string
+}
+
+type UnreleasedVersionDTO struct {
+	domain.UnreleasedVersion
+	Extras map[string]any `json:"extras"`
 }
 
 type UnreleasedResponseDTO struct {
@@ -40,6 +46,7 @@ func unreleasedToDTO(found unreleased.Lookup) UnreleasedResponseDTO {
 	items := make([]UnreleasedSongDTO, len(found.Songs))
 	for i, s := range found.Songs {
 		items[i] = UnreleasedSongDTO{
+			ownedTitle:   ownedTitle(s),
 			GeniusID:     nonZero(s.GeniusID),
 			Title:        s.Title,
 			CoverURL:     nonEmpty(s.CoverURL),
@@ -51,7 +58,7 @@ func unreleasedToDTO(found unreleased.Lookup) UnreleasedResponseDTO {
 			OffStreaming: s.OffStreaming,
 			OpenURL:      nonEmpty(s.OpenURL),
 			OpenHost:     nonEmpty(s.OpenHost),
-			Versions:     s.Versions,
+			Versions:     versionDTOs(s.Versions),
 			AudioLinks:   nonNilLinks(s.AudioLinks),
 			Extras:       map[string]any{},
 		}
@@ -66,14 +73,29 @@ func nonNilLinks(links []domain.AudioLink) []domain.AudioLink {
 	return links
 }
 
+func ownedTitle(s domain.UnreleasedSong) string {
+	if len(s.Versions) == 0 {
+		return s.Title
+	}
+	return s.BestVersion().Title
+}
+
+func versionDTOs(versions []domain.UnreleasedVersion) []UnreleasedVersionDTO {
+	out := make([]UnreleasedVersionDTO, len(versions))
+	for i, v := range versions {
+		out[i] = UnreleasedVersionDTO{UnreleasedVersion: v, Extras: map[string]any{}}
+	}
+	return out
+}
+
 func unreleasedOwnableItems(artistName string, items []UnreleasedSongDTO) []ownership.OwnableItem {
-	out := make([]ownership.OwnableItem, len(items))
+	var out []ownership.OwnableItem
+	track := domain.ResultKindTrack.String()
 	for i := range items {
-		out[i] = ownership.OwnableItem{
-			Kind:   domain.ResultKindTrack.String(),
-			Title:  items[i].Title,
-			Artist: artistName,
-			Extras: &items[i].Extras,
+		out = append(out, ownership.OwnableItem{Kind: track, Title: items[i].ownedTitle, Artist: artistName, Extras: &items[i].Extras})
+		for j := range items[i].Versions {
+			v := &items[i].Versions[j]
+			out = append(out, ownership.OwnableItem{Kind: track, Title: v.Title, Artist: artistName, Extras: &v.Extras})
 		}
 	}
 	return out

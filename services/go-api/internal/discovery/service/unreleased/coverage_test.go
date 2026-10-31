@@ -48,3 +48,20 @@ func TestCoverage_StoreRebuildLogsOneEvent(t *testing.T) {
 		t.Errorf("coverage events = %d, want 1", n)
 	}
 }
+
+func TestCoverage_EventCarriesTheTotalNumberOfVersions(t *testing.T) {
+	logs := captureLogs(t)
+	list := songs("A", "B")
+	list[0].Versions = []domain.UnreleasedVersion{{Title: "A [V1]"}, {Title: "A [V2]"}, {Title: "A [V3]"}}
+	list[1].Versions = []domain.UnreleasedVersion{{Title: "B [V1]"}, {Title: "B (Demo)"}}
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: list}
+	if _, err := storeService(genius, &discoverytest.UnreleasedStore{}).Rebuild(context.Background(), drakeKey, "Drake", nil); err != nil {
+		t.Fatalf("Rebuild: %v", err)
+	}
+	out := logs.String()
+	for _, want := range []string{"total=2", "versions=5"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("log missing %q: %s", want, out)
+		}
+	}
+}
