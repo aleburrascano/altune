@@ -227,3 +227,50 @@ func TestService_List_ALinkOutTrackerRowLeavesHasMediaFalseAndCarriesOpenURL(t *
 		t.Errorf("merged = %+v, want has_media not true and the mega open link", got[0])
 	}
 }
+
+func TestService_List_GeniusSongJoinsTheTrackerSongWithTheSameBaseTitle(t *testing.T) {
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("tragic")}
+	genius.Songs[0].GeniusURL = "https://genius.com/tragic"
+	trackers := &discoverytest.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("tragic [V1]", "tragicaa")}}
+	got, err := listWith(t, genius, trackers, nil)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("got %v, err %v, want one joined song", titlesOf(got), err)
+	}
+	song := got[0]
+	if song.Title != "tragic" || song.GeniusURL != "https://genius.com/tragic" || song.GeniusID != 1 {
+		t.Errorf("song = %+v, want the genius identity", song)
+	}
+	if !slices.Contains(song.AudioLinks, pixeldrainLink("tragicaa")) || song.HasMedia == nil || !*song.HasMedia {
+		t.Errorf("song = %+v, want the pixeldrain link and has_media true", song)
+	}
+}
+
+func TestService_List_GeniusLabelledSongStaysApartFromTheTrackerSong(t *testing.T) {
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("tragic (Live from SNL)", "tragic (Remix)")}
+	trackers := &discoverytest.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("tragic", "tragicaa")}}
+	got, err := listWith(t, genius, trackers, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"tragic (Live from SNL)", "tragic (Remix)", "tragic"}
+	if len(got) != 3 || !slices.Equal(titlesOf(got), want) {
+		t.Fatalf("titles = %v, want %v", titlesOf(got), want)
+	}
+	if got[0].Quality != "" || got[2].GeniusID != 0 {
+		t.Errorf("got %+v, want the labelled songs untouched", got)
+	}
+}
+
+func TestService_List_TwoGeniusSongsWithOneTitleBothTakeTheTrackerFile(t *testing.T) {
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Loot", "Loot")}
+	trackers := &discoverytest.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("Loot", "lootaaaa")}}
+	got, err := listWith(t, genius, trackers, nil)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("got %v, err %v, want two songs", titlesOf(got), err)
+	}
+	for _, song := range got {
+		if !slices.Contains(song.AudioLinks, pixeldrainLink("lootaaaa")) {
+			t.Errorf("song = %+v, want the pixeldrain link", song)
+		}
+	}
+}

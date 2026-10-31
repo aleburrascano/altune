@@ -64,20 +64,46 @@ func combineSources(genius, trackers sourceResult) ([]domain.UnreleasedSong, boo
 
 func mergeTrackerSongs(genius, trackers []domain.UnreleasedSong) []domain.UnreleasedSong {
 	merged := append([]domain.UnreleasedSong{}, genius...)
-	at := make(map[string]int, len(merged))
+	exact := make(map[string][]int, len(merged))
+	byBase := make(map[string][]int, len(merged))
 	for i, song := range merged {
-		at[titleKey(song.Title)] = i
+		exact[titleKey(song.Title)] = append(exact[titleKey(song.Title)], i)
+		if base := baseKey(song.Title); base != "" {
+			byBase[base] = append(byBase[base], i)
+		}
 	}
 	for _, tracked := range trackers {
 		key := titleKey(tracked.Title)
-		if i, ok := at[key]; ok {
-			merged[i] = withTrackerFile(merged[i], tracked)
+		if slots := exact[key]; len(slots) > 0 {
+			for _, i := range slots {
+				merged[i] = withTrackerFile(merged[i], tracked)
+			}
 			continue
 		}
-		at[key] = len(merged)
+		if i, ok := soleBaseMatch(byBase, tracked.Title); ok {
+			merged[i] = withGeniusIdentity(tracked, merged[i])
+			continue
+		}
+		exact[key] = []int{len(merged)}
 		merged = append(merged, tracked)
 	}
 	return merged
+}
+
+func soleBaseMatch(byBase map[string][]int, trackerTitle string) (int, bool) {
+	base := baseKey(trackerTitle)
+	slots := byBase[base]
+	if base == "" || len(slots) != 1 {
+		return 0, false
+	}
+	delete(byBase, base)
+	return slots[0], true
+}
+
+func withGeniusIdentity(tracked, genius domain.UnreleasedSong) domain.UnreleasedSong {
+	joined := withTrackerFile(genius, tracked)
+	joined.Versions = tracked.Versions
+	return joined
 }
 
 func withTrackerFile(song, tracked domain.UnreleasedSong) domain.UnreleasedSong {
