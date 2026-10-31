@@ -24,6 +24,7 @@ import {
   reportingQueueFailure,
 } from '@features/playback/native/queueFailureReport';
 import { redactedPlaybackFailure, warnPlayback } from '@features/playback/domain/playbackError';
+import { markPlayRequested } from '@features/playback/native/playStartTiming';
 
 export interface NativePlaybackActions {
   controls: PlaybackControls;
@@ -50,6 +51,7 @@ type LoadCommands = Pick<PlaybackControls, 'play' | 'startQueue' | 'retry'>;
 
 async function startQueue(...args: Parameters<PlaybackControls['startQueue']>): Promise<void> {
   const [orderedTracks, startIndex] = args;
+  markPlayRequested('queue');
   clearPlaybackError();
   try {
     await loadNativeQueue(...args);
@@ -61,6 +63,7 @@ async function startQueue(...args: Parameters<PlaybackControls['startQueue']>): 
 
 function createLoadCommands(setTrack: SetDisplayedTrack, memory: PlaybackMemory): LoadCommands {
   const play: PlaybackControls['play'] = async (newTrack) => {
+    markPlayRequested('play');
     clearPlaybackError();
     setTrack(newTrack);
     memory.lastPlayedTrack = newTrack;
@@ -174,6 +177,7 @@ function createTransportCommands(
       void ignoringNativeRejection(() => withNativeQueue(() => TrackPlayer.pause()));
     },
     resume: () => {
+      markPlayRequested('resume');
       void ignoringNativeRejection(() => withNativeQueue(() => TrackPlayer.play()));
     },
     seekTo: (ms) => {

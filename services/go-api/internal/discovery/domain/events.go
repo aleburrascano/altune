@@ -31,6 +31,7 @@ const (
 	EventTypeDownloadFailed
 	EventTypeAuthFailed
 	EventTypeScreenView
+	EventTypePlayStart
 )
 
 var eventTypeNames = map[EventType]string{
@@ -56,6 +57,7 @@ var eventTypeNames = map[EventType]string{
 	EventTypeDownloadFailed:      "download_failed",
 	EventTypeAuthFailed:          "auth_failed",
 	EventTypeScreenView:          "screen_view",
+	EventTypePlayStart:           "play_start",
 }
 
 func (e EventType) String() string {
@@ -72,7 +74,7 @@ func (e EventType) ClientSubmittable() bool {
 		EventTypeSearchDegraded, EventTypePlaybackHealth, EventTypeDetailHealth,
 		EventTypeAcquisitionUi, EventTypeClientError, EventTypeUserAction, EventTypeFailureShown,
 		EventTypeSseReconnect, EventTypeOutboxFlushFailed, EventTypeDownloadFailed,
-		EventTypeScreenView:
+		EventTypeScreenView, EventTypePlayStart:
 		return true
 	}
 	return false

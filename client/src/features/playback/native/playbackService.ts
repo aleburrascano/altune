@@ -25,6 +25,11 @@ import {
   resetRecoveryBudget,
 } from '@features/playback/native/recoveryBudget';
 import { claimSessionReset } from '@features/playback/domain/loadToken';
+import {
+  markPlayRequested,
+  notePlaybackState,
+  resetPlayStartTiming,
+} from '@features/playback/native/playStartTiming';
 import { startWidgetCommands } from '@features/playback/native/widgetCommands';
 import { startWidgetSnapshotPublisher } from '@features/playback/native/widgetSnapshot';
 import { withNativeQueue } from '@features/playback/native/nativeQueueLock';
@@ -59,6 +64,7 @@ export async function resetPlaybackForSignOut(): Promise<void> {
   useQueueStore.getState().clearQueue();
   clearPlaybackError();
   resetRecoveryBudget();
+  resetPlayStartTiming();
   discardPrefetchedAudio();
   await resetNativeQueueForSignOut();
 }
@@ -198,6 +204,7 @@ export async function playbackService() {
   TrackPlayer.addEventListener(
     Event.RemotePlay,
     whenSignedIn(() => {
+      markPlayRequested('remote');
       reportingRemoteCommand('remotePlay', () => TrackPlayer.play());
     }),
   );
@@ -221,6 +228,10 @@ export async function playbackService() {
       reportingRemoteCommand('remoteSeek', () => TrackPlayer.seekTo(data.position));
     }),
   );
+
+  TrackPlayer.addEventListener(Event.PlaybackState, ({ state }) => {
+    notePlaybackState(state);
+  });
 
   TrackPlayer.addEventListener(Event.PlaybackError, (data) => {
     reportingRemoteCommand('handlePlaybackError', () => handlePlaybackError(data));
