@@ -37,6 +37,7 @@ function renderBar(value: Partial<PlaybackContextValue>) {
 }
 
 beforeEach(() => {
+  useQueueStore.getState().setRepeatMode('off');
   mockPush.mockClear();
   useQueueStore.getState().loadQueue([TRACK, NEXT_TRACK], 0, null);
 });

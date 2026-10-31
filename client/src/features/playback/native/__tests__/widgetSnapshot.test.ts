@@ -82,7 +82,7 @@ describe('startWidgetSnapshotPublisher', () => {
         source: 'Road',
         isPlaying: false,
         shuffle: false,
-        repeat: 'off',
+        repeat: 'all',
         positionSec: 12,
         durationSec: 200,
         coverFileName: 'cover.jpg',

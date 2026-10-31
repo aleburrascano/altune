@@ -44,6 +44,7 @@ function renderPlayerInError(
 }
 
 beforeEach(() => {
+  useQueueStore.getState().setRepeatMode('off');
   useQueueStore.getState().loadQueue([FAILED_TRACK, NEXT_TRACK], 0, null);
 });
 

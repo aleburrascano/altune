@@ -25,6 +25,7 @@ function loadFive() {
 
 beforeEach(() => {
   useQueueStore.setState(INITIAL_STATE, true);
+  useQueueStore.getState().setRepeatMode('off');
 });
 
 afterEach(() => {
@@ -430,6 +431,18 @@ describe('playNext', () => {
     const state = useQueueStore.getState();
     expect(state.playOrder).toEqual([0, 1, 2, 3, 4, 5]);
     expect(state.currentIndex).toBe(4);
+  });
+});
+
+describe('repeat by default', () => {
+  it('starts a fresh session on repeat all, so the last track wraps to the first', () => {
+    useQueueStore.setState(INITIAL_STATE, true);
+    const first = track('a');
+    useQueueStore.getState().loadQueue([first, track('b')], 1, { kind: 'library' });
+
+    expect(useQueueStore.getState().repeatMode).toBe('all');
+    expect(useQueueStore.getState().skipToNext()).toBe(first);
+    expect(useQueueStore.getState().currentIndex).toBe(0);
   });
 });
 

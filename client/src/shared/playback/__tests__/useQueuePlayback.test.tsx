@@ -15,6 +15,7 @@ const INITIAL_STATE = useQueueStore.getState();
 
 beforeEach(() => {
   useQueueStore.setState(INITIAL_STATE, true);
+  useQueueStore.getState().setRepeatMode('off');
 });
 
 function track(id: string): PlaybackTrack {

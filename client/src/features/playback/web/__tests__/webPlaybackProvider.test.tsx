@@ -202,6 +202,7 @@ beforeEach(async () => {
   presign.mockReset();
   presign.mockImplementation(async (ids) => ids.map((id) => presignedUrl(id)));
   useQueueStore.getState().clearQueue();
+  useQueueStore.getState().setRepeatMode('off');
 });
 
 describe('WebPlaybackProvider', () => {

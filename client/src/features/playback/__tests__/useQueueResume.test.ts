@@ -86,6 +86,7 @@ const defaultPlayerImpls = new Map(
 );
 
 beforeEach(async () => {
+  useQueueStore.getState().setRepeatMode('off');
   await signInTestUser();
   __http.reset();
   __http.reply(EVENTS_ROUTE, { status: HTTP_ACCEPTED });
@@ -990,7 +991,7 @@ describe('saving the queue state', () => {
         },
       ],
       ['shuffle', () => useQueueStore.getState().toggleShuffle()],
-      ['repeat', () => useQueueStore.getState().setRepeatMode('all')],
+      ['repeat', () => useQueueStore.getState().setRepeatMode('one')],
     ])('saves again after the %s changes', async (_name, change) => {
       renderHook(() => useQueueResume());
       await flush();
