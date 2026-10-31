@@ -203,6 +203,7 @@ beforeEach(async () => {
   presign.mockImplementation(async (ids) => ids.map((id) => presignedUrl(id)));
   useQueueStore.getState().clearQueue();
 });
+  useQueueStore.getState().setRepeatMode('off');
 
 describe('WebPlaybackProvider', () => {
   it('plays a library track from the presigned url of POST /v1/audio-urls', async () => {
@@ -911,6 +912,10 @@ describe('WebPlaybackProvider', () => {
 });
 
 describe('WebPlaybackProvider through the queue controls a caller uses', () => {
+  beforeEach(() => {
+    useQueueStore.getState().setRepeatMode('off');
+  });
+
   function renderWebQueue(now: () => number = Date.now) {
     const audio = new FakeAudio();
     const wrapper = ({ children }: { children: React.ReactNode }) => (

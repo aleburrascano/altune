@@ -45,6 +45,7 @@ describe('startWidgetCommands', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     useQueueStore.getState().clearQueue();
+    useQueueStore.getState().setRepeatMode('off');
     notifyIdentityChange('user-1');
     restorePort = installPlaybackPort(createMemoryPlaybackPort());
     startWidgetCommands({ playPrevious });
@@ -243,6 +244,7 @@ describe('startWidgetCommands probe', () => {
     jest.clearAllMocks();
     require('react-native-track-player').__player.reset();
     useQueueStore.getState().clearQueue();
+    useQueueStore.getState().setRepeatMode('off');
     notifyIdentityChange('user-1');
     restore = installPlaybackPort(createMemoryPlaybackPort());
   });
@@ -430,7 +432,7 @@ describe('startWidgetCommands probe', () => {
 
     expect(boot.calls('skipToNext')).toHaveLength(0);
     expect(boot.calls('setRepeatMode')).toHaveLength(0);
-    expect(boot.repeatMode()).toBe('off');
+    expect(boot.repeatMode()).toBe('all');
     expect(boot.reload).not.toHaveBeenCalled();
   });
 
@@ -477,8 +479,8 @@ describe('startWidgetCommands probe', () => {
     resolveSession(signedInSession);
     await settleMany();
 
-    expect(boot.repeatMode()).toBe('one');
-    expect(boot.calls('setRepeatMode')).toEqual([[RepeatMode.Queue], [RepeatMode.Track]]);
+    expect(boot.repeatMode()).toBe('off');
+    expect(boot.calls('setRepeatMode')).toEqual([[RepeatMode.Track], [RepeatMode.Off]]);
     expect(boot.calls('skipToNext')).toHaveLength(1);
     expect(boot.reload.mock.calls).toEqual([[], [], []]);
   });

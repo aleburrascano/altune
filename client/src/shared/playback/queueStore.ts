@@ -72,7 +72,7 @@ const INITIAL: QueueState = {
   upNext: [],
   appended: [],
   currentIndex: -1,
-  repeatMode: 'off',
+  repeatMode: 'all',
   shuffled: false,
   source: null,
   resumePositionMs: 0,
