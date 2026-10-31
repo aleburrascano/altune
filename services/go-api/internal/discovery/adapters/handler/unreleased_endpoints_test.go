@@ -278,3 +278,48 @@ func TestHandleArtistUnreleased_StoreBuiltArtistAnswersFromTheStoreWithNoGeniusC
 		t.Errorf("genius searched %v, want 0 calls", genius.SearchedFor)
 	}
 }
+
+func TestHandleArtistUnreleased_OwnedVersionIsStampedByItsFullTitleNotTheBaseTitle(t *testing.T) {
+	link := []domain.AudioLink{{Provider: domain.AudioProviderYouTube, ExternalID: "v3", URL: "https://youtu.be/v3"}}
+	genius := &discoverytest.GeniusSongCatalog{
+		ArtistFound: true,
+		Songs: []domain.UnreleasedSong{
+			{GeniusID: 1, Title: "Sports Car", Versions: []domain.UnreleasedVersion{
+				{Title: "Sports Car [V1]", Label: "V1"},
+				{Title: "Sports Car [V3]", Label: "V3", AudioLinks: link},
+			}},
+			{GeniusID: 2, Title: "Other", Versions: []domain.UnreleasedVersion{{Title: "Other [V1]"}}},
+		},
+		DetailByID: map[int]domain.GeniusSongDetail{1: {AudioLinks: link}},
+	}
+	svc := unreleased.NewService(genius, &discoverytest.ArtistCatalogTitles{}, nil, unreleased.Config{MaxPages: 1, MaxDetails: 10})
+	owned := goldenOwnershipReader{owned: map[string]ports.OwnedTrack{
+		domain.OwnershipKey("Sports Car [V3]", "Carti"): {TrackID: "saved-v3", AcquisitionStatus: "ready"},
+		domain.OwnershipKey("Other", "Carti"):           {TrackID: "streaming-other", AcquisitionStatus: "ready"},
+	}}
+	h := wireGoldenOwnership(NewDiscoveryHandler(DiscoveryServices{}).WithUnreleased(svc), owned, nil)
+	router := chi.NewRouter()
+	router.Use(middleware.Middleware(discVerifyAsTestUser))
+	router.Mount("/discovery", h.Routes())
+
+	rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Carti", nil)
+
+	discAssertStatus(t, rec, http.StatusOK)
+	items := decodeUnreleased(t, rec.Body.Bytes()).Items
+	if len(items) != 2 {
+		t.Fatalf("items = %+v, want 2", items)
+	}
+	sportsCar, other := items[0], items[1]
+	if got := sportsCar.Versions[1].Extras["owned_track_id"]; got != "saved-v3" {
+		t.Errorf("V3 owned_track_id = %v, want saved-v3", got)
+	}
+	if _, has := sportsCar.Versions[0].Extras["owned_track_id"]; has {
+		t.Errorf("V1 extras = %v, want not owned", sportsCar.Versions[0].Extras)
+	}
+	if got := sportsCar.Extras["owned_track_id"]; got != "saved-v3" {
+		t.Errorf("song owned_track_id = %v, want its best version's saved-v3", got)
+	}
+	if _, has := other.Extras["owned_track_id"]; has {
+		t.Errorf("other song extras = %v, base title must not mark a grouped song owned", other.Extras)
+	}
+}

@@ -27,13 +27,18 @@ func isBetterVersion(candidate, current UnreleasedVersion) bool {
 	return versionNumber(candidate.Label) > versionNumber(current.Label)
 }
 
-func (s *UnreleasedSong) ApplyBestVersion() {
+func (s UnreleasedSong) BestVersion() UnreleasedVersion {
 	best := s.Versions[0]
 	for _, version := range s.Versions[1:] {
 		if isBetterVersion(version, best) {
 			best = version
 		}
 	}
+	return best
+}
+
+func (s *UnreleasedSong) ApplyBestVersion() {
+	best := s.BestVersion()
 	hasMedia := len(best.AudioLinks) > 0
 	s.Quality, s.AudioLinks, s.HasMedia = best.Quality, slices.Clone(best.AudioLinks), &hasMedia
 	s.OpenURL, s.OpenHost = best.OpenURL, best.OpenHost

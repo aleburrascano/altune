@@ -8,6 +8,7 @@ import (
 
 type coverage struct {
 	Total    int
+	Versions int
 	Playable int
 	LinkOut  int
 	NoAudio  int
@@ -18,6 +19,7 @@ type coverage struct {
 func countCoverage(songs []domain.UnreleasedSong) coverage {
 	c := coverage{Total: len(songs), Hosts: map[string]int{}}
 	for _, song := range songs {
+		c.Versions += len(song.Versions)
 		switch {
 		case len(song.AudioLinks) > 0:
 			c.Playable++
@@ -41,6 +43,7 @@ func logCoverage(ctx context.Context, provider domain.ProviderName, externalID, 
 		"external_id", externalID,
 		"artist", artistName,
 		"total", c.Total,
+		"versions", c.Versions,
 		"playable", c.Playable,
 		"link_out", c.LinkOut,
 		"no_audio", c.NoAudio,
