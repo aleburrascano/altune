@@ -82,6 +82,36 @@ func TestService_List_ReleasedTrackerSongIsHidden(t *testing.T) {
 	}
 }
 
+func versionedTrackerSong(title string, versions ...domain.UnreleasedVersion) domain.UnreleasedSong {
+	return domain.UnreleasedSong{Title: title, TrackerKey: "ken:" + title, Versions: versions}
+}
+
+func TestService_List_ReleasedSongKeepsItsTaggedTrackerVersions(t *testing.T) {
+	sportsCar := versionedTrackerSong("Sports Car",
+		domain.UnreleasedVersion{Title: "Sports Car", Quality: "Lossless"},
+		domain.UnreleasedVersion{Title: "Sports Car [V3]", Label: "V3", Quality: "High Quality"})
+	trackers := &discoverytest.TrackerSongs{Songs: []domain.UnreleasedSong{sportsCar, trackerSong("Magnolia", "magnolia")}}
+	svc := NewService(nil, &discoverytest.ArtistCatalogTitles{Titles: []string{"Sports Car", "Magnolia"}}, nil, cachedConfig, WithTrackers(trackers))
+	got, err := svc.List(context.Background(), domain.ProviderDeezer, "1", "Ken Carson", nil)
+	if err != nil || len(got) != 1 || got[0].Title != "Sports Car" {
+		t.Fatalf("got %v, err %v, want only Sports Car", titlesOf(got), err)
+	}
+	song := got[0]
+	if len(song.Versions) != 1 || song.Versions[0].Title != "Sports Car [V3]" || song.Quality != "High Quality" {
+		t.Errorf("song = %+v, want only the V3 version and its quality", song)
+	}
+}
+
+func TestService_List_CatalogMatchDropsASongWhoseVersionsAreAllUntagged(t *testing.T) {
+	song := versionedTrackerSong("Sports Car", domain.UnreleasedVersion{Title: "Sports Car"})
+	trackers := &discoverytest.TrackerSongs{Songs: []domain.UnreleasedSong{song}}
+	svc := NewService(nil, &discoverytest.ArtistCatalogTitles{Titles: []string{"Sports Car"}}, nil, cachedConfig, WithTrackers(trackers))
+	got, err := svc.List(context.Background(), domain.ProviderDeezer, "1", "Ken Carson", nil)
+	if err != nil || len(got) != 0 {
+		t.Errorf("got %v, err %v, want nothing", titlesOf(got), err)
+	}
+}
+
 func captureLogs(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	var buf bytes.Buffer
