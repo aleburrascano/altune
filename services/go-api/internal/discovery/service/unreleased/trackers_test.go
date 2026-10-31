@@ -326,3 +326,47 @@ func TestService_List_DemoWithoutABaseSongStaysItsOwnCard(t *testing.T) {
 		t.Fatalf("got %v, err %v, want the demo kept", titlesOf(got), err)
 	}
 }
+
+func mergedTitles(t *testing.T, geniusTitles []string, trackerTitles ...string) []domain.UnreleasedSong {
+	t.Helper()
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs(geniusTitles...)}
+	tracked := make([]domain.UnreleasedSong, 0, len(trackerTitles))
+	for i, title := range trackerTitles {
+		tracked = append(tracked, trackerSong(title, "id"+string(rune('a'+i))))
+	}
+	got, err := listWith(t, genius, &discoverytest.TrackerSongs{Songs: tracked}, nil)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	return got
+}
+
+func TestService_List_CensoredGeniusTitleJoinsTheUncensoredTrackerSong(t *testing.T) {
+	got := mergedTitles(t, []string{"Crashed Dat B*tch"}, "Crashed dat bitch [V1]")
+	if len(got) != 1 || len(got[0].AudioLinks) != 1 || got[0].Title != "Crashed Dat B*tch" {
+		t.Fatalf("got %+v, want one card with the tracker audio", got)
+	}
+}
+
+func TestService_List_NearMatchJoinsMisspeltAndTransliteratedTitles(t *testing.T) {
+	for _, pair := range [][2]string{{"Flawl3ss", "Flawless"}, {"Straße", "Strasse"}, {"Новый", "Novyi"}} {
+		got := mergedTitles(t, []string{pair[0]}, pair[1]+" [V1]")
+		if len(got) != 1 || len(got[0].AudioLinks) != 1 {
+			t.Errorf("%q + %q = %v, want one joined card", pair[0], pair[1], titlesOf(got))
+		}
+	}
+}
+
+func TestService_List_NearMatchKeepsSignAndSignsApart(t *testing.T) {
+	got := mergedTitles(t, []string{"Sign"}, "Signs [V1]")
+	if len(got) != 2 {
+		t.Fatalf("got %v, want two cards", titlesOf(got))
+	}
+}
+
+func TestService_List_NearMatchSkipsAnAmbiguousCandidate(t *testing.T) {
+	got := mergedTitles(t, []string{"Flawless1", "Flawless2"}, "Flawless [V1]")
+	if len(got) != 3 {
+		t.Fatalf("got %v, want the tracker song kept apart", titlesOf(got))
+	}
+}

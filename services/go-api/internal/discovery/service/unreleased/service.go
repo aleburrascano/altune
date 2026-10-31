@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const CurrentBuildVersion = 5
+const CurrentBuildVersion = 6
 
 type Config struct {
 	MaxPages          int

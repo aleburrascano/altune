@@ -125,6 +125,10 @@ func mergeTrackerFiles(genius, trackers []domain.UnreleasedSong) []domain.Unrele
 			merged[i] = withTrackerFile(merged[i], tracked)
 			continue
 		}
+		if i, ok := soleLooseMatch(merged[:len(genius)], tracked.Title); ok {
+			merged[i] = withTrackerFile(merged[i], tracked)
+			continue
+		}
 		exact[key] = []int{len(merged)}
 		merged = append(merged, tracked)
 	}
@@ -151,6 +155,25 @@ func soleBaseMatch(byBase map[string][]int, trackerTitle string) (int, bool) {
 	}
 	delete(byBase, base)
 	return slots[0], true
+}
+
+func soleLooseMatch(genius []domain.UnreleasedSong, trackerTitle string) (int, bool) {
+	tracked, _, trackerOK := looseBase(trackerTitle)
+	if !trackerOK {
+		return 0, false
+	}
+	for _, alike := range []func(a, b string) bool{wildcardMatch, nearMatch} {
+		var found []int
+		for i, song := range genius {
+			if base, label, ok := looseBase(song.Title); ok && label == "" && alike(base, tracked) {
+				found = append(found, i)
+			}
+		}
+		if len(found) > 0 {
+			return found[0], len(found) == 1
+		}
+	}
+	return 0, false
 }
 
 func withTrackerFile(song, tracked domain.UnreleasedSong) domain.UnreleasedSong {
