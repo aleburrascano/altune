@@ -365,10 +365,15 @@ func BaseTitle(title string) (base, label string) {
 	return base, strings.Join(labels, " ")
 }
 
+var decimalTagRe = regexp.MustCompile(`(?i)\bv(\d+\.\d+)\b`)
+
 func tagGroupLabel(inner string) (label string, ok bool) {
-	tokens := Tokens(inner)
 	var words []string
-	tagged := false
+	for _, match := range decimalTagRe.FindAllStringSubmatch(inner, -1) {
+		words = append(words, "V"+match[1])
+	}
+	tokens := Tokens(decimalTagRe.ReplaceAllString(inner, " "))
+	tagged := len(words) > 0
 	for pos := 0; pos < len(tokens); {
 		word, used, isTag := tagWordAt(tokens, pos)
 		if used == 0 {

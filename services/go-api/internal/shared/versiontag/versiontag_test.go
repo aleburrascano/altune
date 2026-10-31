@@ -247,6 +247,20 @@ func TestBaseTitle_SplitsTheVersionTagFromTheTitle(t *testing.T) {
 	}
 }
 
+func TestBaseTitle_FoldsADecimalVersionTag(t *testing.T) {
+	for _, c := range []struct{ title, base, label string }{
+		{"Miss Possessive [V3.6]", "Miss Possessive", "V3.6"},
+		{"Song [v10.25 Lossless]", "Song", "V10.25 Lossless"},
+		{"Song (V3.6) [V4]", "Song", "V3.6 V4"},
+		{"Song [3.6]", "Song [3.6]", ""},
+	} {
+		base, label := BaseTitle(c.title)
+		if base != c.base || label != c.label {
+			t.Errorf("BaseTitle(%q) = %q, %q; want %q, %q", c.title, base, label, c.base, c.label)
+		}
+	}
+}
+
 func TestWithoutRerecordingPhrases_FoldsCaseAndCurlyApostrophe(t *testing.T) {
 	for title, want := range map[string]string{
 		"Love Story (Taylor’s Version)": "love story",
