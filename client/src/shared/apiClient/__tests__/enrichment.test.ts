@@ -834,12 +834,13 @@ describe('getUnreleasedTracks', () => {
     expect(items[1]).not.toHaveProperty('best_version_title');
   });
 
-  it('skips a row whose best_version_title is not a string, keeping the others', async () => {
+  it('keeps a row whose best_version_title is not a string, with no best version title', async () => {
     const bad = { ...row, genius_id: 31, best_version_title: 5 };
     __http.reply(PATH, { status: 200, json: { items: [bad, row] } });
 
     const { items } = await getUnreleasedTracks('spotify', 'art-1', { name: 'X' });
 
-    expect(items).toEqual([asParsed(row)]);
+    expect(items.map((item) => item.key)).toEqual(['31', String(row.genius_id)]);
+    expect(items[0]?.best_version_title).toBeUndefined();
   });
 });

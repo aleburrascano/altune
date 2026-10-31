@@ -447,6 +447,7 @@ describe('ArtistUnreleased', () => {
       ...DREAM,
       genius_id: 801,
       title: 'Sports Car',
+      best_version_title: 'Sports Car [V10]',
       versions: [
         version('Sports Car [V1]', []),
         version('Sports Car [V10]', DREAM.audio_links),

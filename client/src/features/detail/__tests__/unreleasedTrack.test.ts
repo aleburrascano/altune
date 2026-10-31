@@ -69,6 +69,7 @@ describe('unreleasedAsResult', () => {
     const track: UnreleasedTrack = {
       ...DREAM,
       title: 'Sports Car',
+      best_version_title: 'Sports Car [V10]',
       audio_links: [link],
       versions: [
         { ...version, title: 'Sports Car [V1]', audio_links: [other] },
