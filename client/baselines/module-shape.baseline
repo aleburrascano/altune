@@ -57,7 +57,6 @@ M8 src/features/detail/ui/AlbumTrackRow.tsx loose file in ui/
 M8 src/features/detail/ui/ArtistDetailBody.tsx loose file in ui/
 M8 src/features/detail/ui/ArtistExploreDiscography.tsx loose file in ui/
 M8 src/features/detail/ui/ArtistTopTracks.tsx loose file in ui/
-M8 src/features/detail/ui/ArtistUnreleased.tsx loose file in ui/
 M8 src/features/detail/ui/CollapsibleSectionHeader.tsx loose file in ui/
 M8 src/features/detail/ui/DetailActions.tsx loose file in ui/
 M8 src/features/detail/ui/DetailFacts.tsx loose file in ui/
@@ -212,6 +211,7 @@ M8 src/shared/playlists/ui/AddToPlaylistSheet.tsx loose file in ui/
 M8 src/shared/playlists/ui/CreatePlaylistModal.tsx loose file in ui/
 M9 src/features/detail/hooks holds more than 16 source files
 M9 src/features/detail/ui holds more than 16 source files
+M9 src/features/detail/ui holds both files and folders
 M9 src/features/discovery/adapters holds both files and folders
 M9 src/features/library/hooks holds more than 16 source files
 M9 src/features/library/ui holds more than 16 source files

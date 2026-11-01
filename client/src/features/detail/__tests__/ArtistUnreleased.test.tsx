@@ -5,7 +5,7 @@ import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { httpDetailPort } from '@features/detail/adapters/http/httpDetailPort';
 import { DetailPortProvider } from '@features/detail/ports/DetailPortProvider';
-import { ArtistUnreleased } from '@features/detail/ui/ArtistUnreleased';
+import { ArtistUnreleased } from '@features/detail/ui/unreleased/ArtistUnreleased';
 import {
   createPlaybackWrapper,
   createTestQueryClient,
@@ -493,6 +493,32 @@ describe('ArtistUnreleased', () => {
     expect(screen.getByTestId('detail-unreleased-version-811-2')).toHaveTextContent(
       'Vault Sheet Demo [V14]',
     );
+  });
+
+  it('opens the versions sheet on a tap of the versions hint, outside the card press', async () => {
+    const grouped = {
+      ...DREAM,
+      genius_id: 821,
+      title: 'Tap Vault Demo',
+      versions: [
+        { title: 'Tap Vault Demo [V3]', label: 'V3', quality: 'Lossless' },
+        { title: 'Tap Vault Demo [V10]', label: 'V10', quality: 'CD Quality' },
+        { title: 'Tap Vault Demo [V14]', label: null, quality: null },
+      ],
+    };
+    __http.reply(UNRELEASED, { status: 200, json: { items: [grouped] } });
+    renderSection();
+
+    const hint = await screen.findByLabelText('Show 3 versions of Tap Vault Demo');
+    expect(hint.props.accessibilityRole).toBe('button');
+    fireEvent.press(hint);
+
+    expect(screen.getByTestId('detail-unreleased-version-821-0')).toHaveTextContent(V3_LOSSLESS);
+    expect(screen.getByTestId('detail-unreleased-version-821-1')).toHaveTextContent(V10_CD);
+    expect(screen.getByTestId('detail-unreleased-version-821-2')).toHaveTextContent(
+      'Tap Vault Demo [V14]',
+    );
+    expect(__http.countFor('POST /v1/tracks')).toBe(0);
   });
 
   it('opens no sheet on a long-press of a card with one version', async () => {
