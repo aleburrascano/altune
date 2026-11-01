@@ -6,7 +6,7 @@ import { ApiError, correlationIdOf } from '@shared/failure/errors';
 import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
 
 export type QueryFailureSource =
-  'search' | 'suggest' | 'history' | 'record_history' | 'clear_history';
+  'search' | 'unreleased_search' | 'suggest' | 'history' | 'record_history' | 'clear_history';
 
 type SearchFailedPayload = {
   source: QueryFailureSource;

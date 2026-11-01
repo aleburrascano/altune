@@ -7,7 +7,6 @@ import { Tappable } from '@shared/ui/primitives/Tappable';
 
 import { DiscoverRow } from '@features/discovery/ui/DiscoverRow';
 import { ResultsList, type ResultsCommonProps } from '@features/discovery/ui/ResultsList';
-import { UnreleasedHitsSlot } from '@features/discovery/ports/UnreleasedHitsSlot';
 import { SectionLabel } from '@features/discovery/ui/SectionLabel';
 import { SectionGrid, useGridColumns } from '@features/discovery/ui/SectionGrid';
 import { TopResultCard } from '@features/discovery/ui/TopResultCard';
@@ -15,7 +14,6 @@ import { kindLabel, resultKey } from '@features/discovery/domain/resultDisplay';
 
 import type { ResultTapHandler } from '@features/discovery/hooks/useResultTap';
 import type { DiscoveryKind, DiscoveryResult, ResultSection } from '@shared/apiClient/discovery';
-import type { UnreleasedSearchHit } from '@shared/apiClient/enrichment';
 import { touchTarget } from '@shared/ui/theme';
 
 type SeeAllLinkProps = {
@@ -210,22 +208,6 @@ export function BlendedSection(props: BlendedSectionProps): ReactElement {
   return (
     <View style={styles.measure} onLayout={onLayout} testID="discover-blended-section">
       <ResultsList data={visible} {...rest} />
-    </View>
-  );
-}
-
-const UNRELEASED_SECTION_CAP = 5;
-
-interface UnreleasedSectionProps {
-  hits: UnreleasedSearchHit[];
-}
-
-export function UnreleasedSection({ hits }: UnreleasedSectionProps): ReactElement | null {
-  if (hits.length === 0) return null;
-  return (
-    <View testID="discover-unreleased-section" style={styles.section}>
-      <SectionLabel style={styles.sectionHeaderSpacing}>UNRELEASED</SectionLabel>
-      <UnreleasedHitsSlot hits={hits} limit={UNRELEASED_SECTION_CAP} />
     </View>
   );
 }

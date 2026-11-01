@@ -150,6 +150,19 @@ describe('unreleased search in Discover', () => {
     expect(screen.queryByTestId('discover-filter-unreleased')).toBeNull();
   });
 
+  it('hides the section and the chip when the unreleased request fails, and keeps main results', async () => {
+    __http.reply(UNRELEASED_SEARCH, { status: 500, json: { error: 'boom' } });
+    serve(1, []);
+    renderDiscover();
+
+    typeQuery('leak title');
+
+    expect(await screen.findByText('Main 0')).toBeTruthy();
+    await waitFor(() => expect(__http.countFor(UNRELEASED_SEARCH)).toBe(1));
+    expect(screen.queryByTestId('discover-unreleased-section')).toBeNull();
+    expect(screen.queryByTestId('discover-filter-unreleased')).toBeNull();
+  });
+
   it('sends the search once on the debounced query and not at all under 2 characters', async () => {
     serve(1, []);
     renderDiscover();
