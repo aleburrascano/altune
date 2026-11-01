@@ -8,7 +8,7 @@ export interface UnreleasedHitsViewProps {
   limit?: number;
 }
 
-export type UnreleasedHitsView = ComponentType<UnreleasedHitsViewProps>;
+type UnreleasedHitsView = ComponentType<UnreleasedHitsViewProps>;
 
 function RendersNothing(): null {
   return null;

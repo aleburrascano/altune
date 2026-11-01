@@ -41,6 +41,7 @@ const tsconfigAliases = Object.fromEntries(
 const houseModuleNameMapper = {
   ...tsconfigAliases,
   '^expo/virtual/env$': '<rootDir>/jest/expo-virtual-env.js',
+  '^decode-uri-component$': '<rootDir>/jest/decode-uri-component.js',
 };
 
 const nativeProject = {
