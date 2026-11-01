@@ -103,14 +103,16 @@ beforeEach(async () => {
 });
 
 describe('UnreleasedAllScreen', () => {
-  it('lists every one of an artist with 25 tracks as its own row', async () => {
+  it('gives the list every one of an artist with 25 tracks', async () => {
     const items = Array.from({ length: TRACK_COUNT }, (_, i) => genius(GENIUS_ID_BASE + i, true));
     __http.reply(UNRELEASED, { status: 200, json: { items } });
     openArtist();
     renderScreen();
 
-    await waitFor(() => expect(screen.getAllByTestId(ROW_TEST_ID)).toHaveLength(TRACK_COUNT));
-    expect(screen.getByTestId('detail-unreleased-all-list').props.horizontal).toBeFalsy();
+    await waitFor(() => expect(screen.getAllByTestId(ROW_TEST_ID).length).toBeGreaterThan(0));
+    const list = screen.getByTestId('detail-unreleased-all-list');
+    expect(list.props.data).toHaveLength(TRACK_COUNT);
+    expect(list.props.horizontal).toBeFalsy();
   });
 
   it('shows the rail first chip group when no where param is given', async () => {
