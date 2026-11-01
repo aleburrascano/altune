@@ -18,7 +18,7 @@ import {
   asyncViewForDiscoverView,
 } from '@features/discovery/domain/discoverView';
 import type { ResultsCommonProps } from '@features/discovery/ui/ResultsList';
-import type { DiscoveryResult, ResultSection } from '@shared/apiClient/discovery';
+import type { DiscoveryKind, DiscoveryResult, ResultSection } from '@shared/apiClient/discovery';
 import type { UnreleasedSearchHit } from '@shared/apiClient/enrichment';
 import type {
   HistorySlice,
@@ -119,13 +119,18 @@ function BlendedResults(props: DiscoverBodyProps): ReactElement {
   );
 }
 
+type KindResultsProps = DiscoverBodyProps & { kind: DiscoveryKind };
+
+function KindResults(props: KindResultsProps): ReactElement {
+  const results = props.results.searchData?.results ?? [];
+  return <FilteredResults kind={props.kind} results={results} common={commonFor(props)} />;
+}
+
 function ResultsContent(props: DiscoverBodyProps): ReactElement {
-  const { searchData, filter } = props.results;
+  const { filter } = props.results;
   if (filter === 'all') return <BlendedResults {...props} />;
   if (filter === 'unreleased') return <UnreleasedAllHits hits={hitsOf(props)} />;
-  return (
-    <FilteredResults kind={filter} results={searchData?.results ?? []} common={commonFor(props)} />
-  );
+  return <KindResults {...props} kind={filter} />;
 }
 
 function ResultsBody(props: DiscoverBodyProps): ReactElement {

@@ -5,6 +5,8 @@ import {
   suggestDiscovery,
 } from '@shared/apiClient/discovery';
 
+import { searchUnreleasedTracks } from '@shared/apiClient/enrichment';
+
 import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
 
 export const httpDiscoverPort: DiscoverPort = {
@@ -12,4 +14,5 @@ export const httpDiscoverPort: DiscoverPort = {
   suggestDiscovery: (...args) => suggestDiscovery(...args),
   listSearchHistory: (...args) => listSearchHistory(...args),
   recordSearchHistory: (...args) => recordSearchHistory(...args),
+  searchUnreleasedTracks: (...args) => searchUnreleasedTracks(...args),
 };

@@ -8,7 +8,7 @@ import {
 } from '@tanstack/react-query';
 
 import type { DiscoveryProviderInfo, DiscoverySearchResponse } from '@shared/apiClient/discovery';
-import { searchUnreleasedTracks, type UnreleasedSearchHit } from '@shared/apiClient/enrichment';
+import type { UnreleasedSearchHit } from '@shared/apiClient/enrichment';
 
 import { isRetryable } from '@shared/failure/errors';
 import { discoveryKeys, isSearchKeyFor } from '@shared/query/queryKeys';
@@ -190,10 +190,10 @@ function acrossPages(
 const NO_HITS: UnreleasedSearchHit[] = [];
 const UNRELEASED_SEARCH_STALE_MS = 60_000;
 
-function unreleasedSearchOptions(trimmed: string, isGateOpen: boolean) {
+function unreleasedSearchOptions(trimmed: string, port: DiscoverPort, isGateOpen: boolean) {
   return {
     queryKey: discoveryKeys.unreleasedSearch(trimmed),
-    queryFn: ({ signal }: QueryFunctionContext) => searchUnreleasedTracks(trimmed, signal),
+    queryFn: ({ signal }: QueryFunctionContext) => port.searchUnreleasedTracks(trimmed, signal),
     enabled: isGateOpen && isSearchableQuery(trimmed),
     staleTime: UNRELEASED_SEARCH_STALE_MS,
     retry: false,
@@ -202,7 +202,7 @@ function unreleasedSearchOptions(trimmed: string, isGateOpen: boolean) {
 
 export function useUnreleasedSearch(committedQuery: string): UnreleasedSearchHit[] {
   const trimmed = normalizeQuery(committedQuery);
-  const options = unreleasedSearchOptions(trimmed, useDiscoverFetchEnabled());
+  const options = unreleasedSearchOptions(trimmed, useDiscoverPort(), useDiscoverFetchEnabled());
   const { data: response, error } = useQuery(options);
   useReportQueryFailure(error, 'search');
   return response?.items ?? NO_HITS;
