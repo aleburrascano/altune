@@ -24,7 +24,7 @@ import { ArtistTopTracks } from '@features/detail/ui/ArtistTopTracks';
 import { DetailActions } from '@features/detail/ui/DetailActions';
 import { DetailScaffold, type DetailChrome } from '@features/detail/ui/DetailScaffold';
 import { DiscographySections } from '@features/detail/ui/DiscographySections';
-import { ArtistUnreleased } from '@features/detail/ui/ArtistUnreleased';
+import { ArtistUnreleased } from '@features/detail/ui/unreleased/ArtistUnreleased';
 import { LastFmEnrichmentSection } from '@features/detail/ui/LastFmEnrichmentSection';
 
 type ArtistDetailBodyProps = {
