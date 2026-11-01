@@ -3,10 +3,12 @@ package persistence
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -210,8 +212,8 @@ func replaceSongs(ctx context.Context, tx pgx.Tx, key ports.UnreleasedArtistKey,
 	batch := &pgx.Batch{}
 	for i, song := range songs {
 		batch.Queue(
-			`INSERT INTO unreleased_songs (provider, external_id, position, title, song) VALUES ($1, $2, $3, $4, $5)`,
-			key.Provider.String(), key.ExternalID, i, song.Title, encoded[i],
+			`INSERT INTO unreleased_songs (provider, external_id, position, title, song, search_key) VALUES ($1, $2, $3, $4, $5, $6)`,
+			key.Provider.String(), key.ExternalID, i, song.Title, encoded[i], domain.TitleKey(song.Title),
 		)
 	}
 	return sendAll(ctx, tx, batch, len(songs))
@@ -229,6 +231,69 @@ func sendAll(ctx context.Context, tx pgx.Tx, batch *pgx.Batch, n int) error {
 		return fmt.Errorf("insert unreleased songs: %w", err)
 	}
 	return nil
+}
+
+const searchUnreleasedSQL = `
+	SELECT a.provider, a.external_id, a.name, s.song, similarity(s.search_key, $1)
+	FROM unreleased_songs s
+	JOIN unreleased_artists a ON a.provider = s.provider AND a.external_id = s.external_id
+	WHERE s.search_key % $1
+	ORDER BY similarity(s.search_key, $1) DESC, s.provider, s.external_id, s.position
+	LIMIT $2`
+
+func (s *PgxUnreleasedStore) Search(ctx context.Context, query string, limit int) ([]ports.UnreleasedHit, error) {
+	rows, err := s.pool.Query(ctx, searchUnreleasedSQL, domain.TitleKey(query), limit)
+	if err != nil {
+		return nil, fmt.Errorf("search unreleased songs: %w", err)
+	}
+	defer rows.Close()
+	var scored []scoredHit
+	for rows.Next() {
+		hit, err := scanHit(rows)
+		if err != nil {
+			return nil, err
+		}
+		scored = append(scored, hit)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("search unreleased songs: %w", err)
+	}
+	return rankHits(scored), nil
+}
+
+type scoredHit struct {
+	ports.UnreleasedHit
+	similarity float32
+}
+
+func rankHits(scored []scoredHit) []ports.UnreleasedHit {
+	slices.SortStableFunc(scored, func(a, b scoredHit) int {
+		return cmp.Or(cmp.Compare(b.similarity, a.similarity), cmp.Compare(b.Song.QualityRank(), a.Song.QualityRank()))
+	})
+	hits := make([]ports.UnreleasedHit, len(scored))
+	for i, h := range scored {
+		hits[i] = h.UnreleasedHit
+	}
+	return hits
+}
+
+func scanHit(rows pgx.Rows) (scoredHit, error) {
+	var providerKey, externalID, name string
+	var raw []byte
+	var sim float32
+	if err := rows.Scan(&providerKey, &externalID, &name, &raw, &sim); err != nil {
+		return scoredHit{}, fmt.Errorf("scan unreleased hit: %w", err)
+	}
+	provider, err := domain.ParseProviderName(providerKey)
+	if err != nil {
+		return scoredHit{}, fmt.Errorf("unreleased hit: %w", err)
+	}
+	song, err := decodeUnreleasedSong(raw)
+	if err != nil {
+		return scoredHit{}, err
+	}
+	hit := ports.UnreleasedHit{Artist: ports.UnreleasedArtistKey{Provider: provider, ExternalID: externalID}, ArtistName: name, Song: song}
+	return scoredHit{UnreleasedHit: hit, similarity: sim}, nil
 }
 
 const dueUnreleasedSQL = `

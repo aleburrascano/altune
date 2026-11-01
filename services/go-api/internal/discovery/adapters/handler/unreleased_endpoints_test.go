@@ -376,3 +376,64 @@ func TestHandleArtistUnreleased_BestVersionTitleIsTheServersPickedVersion(t *tes
 		t.Errorf("single best_version_title = %q, want its own title", items[1].BestVersionTitle)
 	}
 }
+
+func unreleasedSearchRouter(store *discoverytest.UnreleasedStore) chi.Router {
+	svc := unreleased.NewService(&discoverytest.GeniusSongCatalog{}, &discoverytest.ArtistCatalogTitles{}, nil, unreleased.Config{MaxPages: 1, MaxDetails: 10}, unreleased.WithStore(store))
+	h := NewDiscoveryHandler(DiscoveryServices{}).WithUnreleased(svc)
+	r := chi.NewRouter()
+	r.Use(middleware.Middleware(discVerifyAsTestUser))
+	r.Mount("/discovery", h.Routes())
+	return r
+}
+
+func TestHandleUnreleasedSearch_ReturnsHitsInStoreOrderWithTheirArtist(t *testing.T) {
+	carti := ports.UnreleasedArtistKey{Provider: domain.ProviderDeezer, ExternalID: "42"}
+	store := &discoverytest.UnreleasedStore{Hits: []ports.UnreleasedHit{
+		{Artist: carti, ArtistName: "Playboi Carti", Song: domain.UnreleasedSong{GeniusID: 1, Title: "Cancún?", Quality: "lossless"}},
+		{Artist: ports.UnreleasedArtistKey{Provider: domain.ProviderDeezer, ExternalID: "7"}, ArtistName: "Don Toliver", Song: domain.UnreleasedSong{GeniusID: 2, Title: "Cancun Remix"}},
+	}}
+
+	rec := discServe(t, unreleasedSearchRouter(store), http.MethodGet, "/discovery/unreleased/search?q=cancun", nil)
+
+	discAssertStatus(t, rec, http.StatusOK)
+	var body UnreleasedSearchResponseDTO
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode %s: %v", rec.Body.Bytes(), err)
+	}
+	if len(body.Items) != 2 || body.Items[0].Title != "Cancún?" || body.Items[1].Title != "Cancun Remix" {
+		t.Fatalf("items = %+v, want the store order", body.Items)
+	}
+	if got, want := body.Items[0].Artist, (UnreleasedArtistDTO{Provider: "deezer", ExternalID: "42", Name: "Playboi Carti"}); got != want {
+		t.Errorf("artist = %+v, want %+v", got, want)
+	}
+	if body.Items[0].QualityRank != 5 || body.Items[0].AudioLinks == nil {
+		t.Errorf("item = %+v, want the artist endpoint's item shape", body.Items[0].UnreleasedSongDTO)
+	}
+	if got := store.Queries(); !reflect.DeepEqual(got, []string{"cancun"}) {
+		t.Errorf("store queries = %v, want [cancun]", got)
+	}
+}
+
+func TestHandleUnreleasedSearch_AOneCharacterQueryIsAnEmptyListAndSkipsTheStore(t *testing.T) {
+	store := &discoverytest.UnreleasedStore{Hits: []ports.UnreleasedHit{{ArtistName: "A", Song: domain.UnreleasedSong{Title: "x"}}}}
+
+	rec := discServe(t, unreleasedSearchRouter(store), http.MethodGet, "/discovery/unreleased/search?q=x", nil)
+
+	discAssertStatus(t, rec, http.StatusOK)
+	if got := rec.Body.String(); got != "{\"items\":[]}\n" {
+		t.Errorf("body = %q, want an empty items list", got)
+	}
+	if got := store.Queries(); len(got) != 0 {
+		t.Errorf("store queries = %v, want none", got)
+	}
+}
+
+func TestHandleUnreleasedSearch_StoreFailureIsAnError(t *testing.T) {
+	store := &discoverytest.UnreleasedStore{SearchErr: errors.New("db down")}
+
+	rec := discServe(t, unreleasedSearchRouter(store), http.MethodGet, "/discovery/unreleased/search?q=cancun", nil)
+
+	if rec.Code < 500 {
+		t.Errorf("status = %d, want a 5xx", rec.Code)
+	}
+}
