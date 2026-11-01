@@ -9,10 +9,7 @@ export type UnreleasedWhat = 'all' | 'playable';
 type Comparator = (a: UnreleasedTrack, b: UnreleasedTrack) => number;
 
 function byNewest(a: UnreleasedTrack, b: UnreleasedTrack): number {
-  if (a.release_date === b.release_date) return 0;
-  if (a.release_date === null) return 1;
-  if (b.release_date === null) return -1;
-  return a.release_date < b.release_date ? 1 : -1;
+  return (b.release_date ?? '').localeCompare(a.release_date ?? '');
 }
 
 const COMPARATORS: Record<UnreleasedSort, Comparator | null> = {
