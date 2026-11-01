@@ -65,8 +65,6 @@ type WarmArtist struct {
 	Known      map[domain.ProviderName]string
 }
 
-// Warm marks each artist as requested so the refresh job builds it. It returns
-// at once; the records run on the service lifecycle, bounded by warmTimeout.
 func (s *Service) Warm(artists []WarmArtist) {
 	if s.store == nil || len(artists) == 0 {
 		return
