@@ -98,7 +98,7 @@ describe('UnreleasedAllScreen', () => {
     const items = [genius(3, true), genius(4, false)];
     __http.reply(UNRELEASED, { status: 200, json: { items } });
     openArtist();
-    mockParams = { ...mockParams, where: 'released' };
+    mockParams = { ...mockParams, where: 'unreleased' };
     renderScreen();
 
     expect(await screen.findByText('Full list entry 4')).toBeTruthy();
