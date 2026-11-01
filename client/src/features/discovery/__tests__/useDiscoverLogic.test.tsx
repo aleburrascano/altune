@@ -49,6 +49,7 @@ const port: DiscoverPort = {
   suggestDiscovery: portSuggest,
   listSearchHistory: portHistory,
   recordSearchHistory: portRecordHistory,
+  searchUnreleasedTracks: jest.fn().mockResolvedValue({ items: [] }),
 };
 
 function searchResponseFixture(query: string): DiscoverySearchResponse {
