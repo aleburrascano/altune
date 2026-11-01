@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { AsyncSection, type AsyncSectionProps } from '@shared/ui/async/AsyncSection';
 import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
-import { BlendedSection } from '@features/discovery/ui/BlendedSection';
+import { BlendedSection, UnreleasedSection } from '@features/discovery/ui/BlendedSection';
 import {
   DiscoverFullError,
   DiscoverSkeleton,
@@ -10,8 +10,7 @@ import {
   DiscoverZeroResults,
 } from '@features/discovery/ui/DiscoverBodyStates';
 import { FilterChips } from '@features/discovery/ui/FilterChips';
-import { UnreleasedAllHits, UnreleasedSection } from '@features/discovery/ui/UnreleasedResults';
-import { FilteredResults } from '@features/discovery/ui/FilteredResults';
+import { FilteredResults, UnreleasedAllHits } from '@features/discovery/ui/FilteredResults';
 import { IncompleteResultsBanner, RefreshFailedNotice } from '@features/discovery/ui/ResultNotices';
 import { RecentSearches } from '@features/discovery/ui/RecentSearches';
 import {

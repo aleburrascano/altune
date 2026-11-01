@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { Text, spacing } from '@shared/ui';
 
@@ -9,6 +9,8 @@ import { ResultsList, type ResultsCommonProps } from '@features/discovery/ui/Res
 import { kindLabel, resultKey } from '@features/discovery/domain/resultDisplay';
 
 import type { DiscoveryKind, DiscoveryResult } from '@shared/apiClient/discovery';
+import type { UnreleasedSearchHit } from '@shared/apiClient/enrichment';
+import { UnreleasedHitsSlot } from '@features/discovery/ports/UnreleasedHitsSlot';
 
 export function FilteredResults({
   kind,
@@ -50,7 +52,20 @@ export function FilteredResults({
   );
 }
 
+interface UnreleasedAllHitsProps {
+  hits: UnreleasedSearchHit[];
+}
+
+export function UnreleasedAllHits({ hits }: UnreleasedAllHitsProps): ReactElement {
+  return (
+    <ScrollView testID="discover-unreleased-all" contentContainerStyle={styles.allHits}>
+      <UnreleasedHitsSlot hits={hits} />
+    </ScrollView>
+  );
+}
+
 const styles = StyleSheet.create({
+  allHits: { paddingTop: spacing.sm, paddingBottom: spacing.xl },
   filteredEmpty: {
     flex: 1,
     alignItems: 'center',

@@ -1,4 +1,4 @@
-import { createContext, use } from 'react';
+import { createContext, createElement, use } from 'react';
 import type { ComponentType, ReactElement, ReactNode } from 'react';
 
 import type { UnreleasedSearchHit } from '@shared/apiClient/enrichment';
@@ -28,6 +28,6 @@ export function UnreleasedHitsSlotProvider({
   return <UnreleasedHitsContext.Provider value={view}>{children}</UnreleasedHitsContext.Provider>;
 }
 
-export function useUnreleasedHitsView(): UnreleasedHitsView {
-  return use(UnreleasedHitsContext);
+export function UnreleasedHitsSlot(props: UnreleasedHitsViewProps): ReactElement {
+  return createElement(use(UnreleasedHitsContext), props);
 }

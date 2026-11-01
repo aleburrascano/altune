@@ -1,7 +1,10 @@
 import { type Dispatch, type SetStateAction } from 'react';
 
 import { useDebouncedSearch } from '@features/discovery/hooks/useDebouncedSearch';
-import { useDiscoverSearch } from '@features/discovery/hooks/useDiscoverSearch';
+import {
+  useDiscoverSearch,
+  useUnreleasedSearch,
+} from '@features/discovery/hooks/useDiscoverSearch';
 import { isSearchableQuery, normalizeQuery } from '@features/discovery/domain/searchPaging';
 import {
   SEARCH_DEBOUNCE_MS,
@@ -18,7 +21,6 @@ import {
   useRecordSearchHistory,
   useSearchHistory,
 } from '@features/discovery/hooks/useSearchHistory';
-import { useUnreleasedSearch } from '@features/discovery/hooks/useUnreleasedSearch';
 import { useResultsFilter } from '@features/discovery/hooks/useResultsFilter';
 import { useResultTap, type ResultTapHandler } from '@features/discovery/hooks/useResultTap';
 import { useDegradedSearchTelemetry } from '@features/discovery/hooks/useDegradedSearchTelemetry';
