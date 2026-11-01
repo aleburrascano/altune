@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, type QueryFunctionContext } from '@tanstack/react-query';
 
 import { searchUnreleasedTracks, type UnreleasedSearchHit } from '@shared/apiClient/enrichment';
 import { discoveryKeys } from '@shared/query/queryKeys';
@@ -10,16 +10,20 @@ import { useReportQueryFailure } from '@features/discovery/hooks/useReportQueryF
 const NO_HITS: UnreleasedSearchHit[] = [];
 const UNRELEASED_SEARCH_STALE_MS = 60_000;
 
-export function useUnreleasedSearch(committedQuery: string): UnreleasedSearchHit[] {
-  const trimmed = normalizeQuery(committedQuery);
-  const isGateOpen = useDiscoverFetchEnabled();
-  const { data, error } = useQuery({
+function unreleasedSearchOptions(trimmed: string, isGateOpen: boolean) {
+  return {
     queryKey: discoveryKeys.unreleasedSearch(trimmed),
-    queryFn: ({ signal }) => searchUnreleasedTracks(trimmed, signal),
+    queryFn: ({ signal }: QueryFunctionContext) => searchUnreleasedTracks(trimmed, signal),
     enabled: isGateOpen && isSearchableQuery(trimmed),
     staleTime: UNRELEASED_SEARCH_STALE_MS,
     retry: false,
-  });
+  };
+}
+
+export function useUnreleasedSearch(committedQuery: string): UnreleasedSearchHit[] {
+  const trimmed = normalizeQuery(committedQuery);
+  const options = unreleasedSearchOptions(trimmed, useDiscoverFetchEnabled());
+  const { data: response, error } = useQuery(options);
   useReportQueryFailure(error, 'search');
-  return data?.items ?? NO_HITS;
+  return response?.items ?? NO_HITS;
 }

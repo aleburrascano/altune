@@ -29,6 +29,7 @@ const SECTION_CAP = 5;
 const HIT_COUNT = 7;
 const FIRST_ID = 100;
 const DEBOUNCE_WAIT_MS = 450;
+const HIT_TEST_ID_PATTERN = /^discover-unreleased-hit-/;
 
 const startQueue = jest.fn<Promise<void>, unknown[]>(() => Promise.resolve());
 const PLAYBACK = { ...idlePlayback, startQueue };
@@ -41,7 +42,9 @@ function mainResponse(tracks: number): DiscoverySearchResponse {
     query: 'leak title',
     query_norm: 'leak title',
     results: items,
-    sections: tracks === 0 ? [] : [{ kind: 'track', items, has_more: false }],
+    sections: [{ kind: 'track' as const, items, has_more: false }].filter(
+      (section) => section.items.length > 0,
+    ),
     providers: [{ provider: 'spotify', status: 'ok', result_count: tracks, latency_ms: 10 }],
     partial: false,
     cache: { hit: false, fetched_at: null },
@@ -114,14 +117,14 @@ describe('unreleased search in Discover', () => {
 
     const section = await screen.findByTestId('discover-unreleased-section');
     expect(section).toBeTruthy();
-    expect(screen.getAllByTestId(/^discover-unreleased-hit-/)).toHaveLength(SECTION_CAP);
+    expect(screen.getAllByTestId(HIT_TEST_ID_PATTERN)).toHaveLength(SECTION_CAP);
     expect(screen.getByText('Main 0')).toBeTruthy();
     expect(screen.getByText('Artist 0')).toBeTruthy();
 
     fireEvent.press(screen.getByTestId('discover-filter-unreleased'));
 
     expect(screen.queryByTestId('discover-unreleased-section')).toBeNull();
-    expect(screen.getAllByTestId(/^discover-unreleased-hit-/)).toHaveLength(HIT_COUNT);
+    expect(screen.getAllByTestId(HIT_TEST_ID_PATTERN)).toHaveLength(HIT_COUNT);
     expect(screen.getByText('Artist 6')).toBeTruthy();
   });
 
@@ -165,7 +168,9 @@ describe('unreleased search in Discover', () => {
 
   it('plays the best version of a track the user already owns when its card is tapped', async () => {
     const owned = {
-      audio_links: [{ provider: 'soundcloud', external_id: 'sc-1', url: 'https://soundcloud.com/a' }],
+      audio_links: [
+        { provider: 'soundcloud', external_id: 'sc-1', url: 'https://soundcloud.com/a' },
+      ],
       extras: { owned_track_id: 'track-owned', owned_acquisition_status: 'ready' },
     };
     serve(1, [leakHit(0, owned)]);
