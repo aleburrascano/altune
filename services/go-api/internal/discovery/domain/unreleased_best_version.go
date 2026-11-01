@@ -12,6 +12,10 @@ func qualityRank(quality string) int {
 	return qualityRanks[strings.ToLower(strings.TrimSpace(quality))]
 }
 
+func (s UnreleasedSong) QualityRank() int {
+	return qualityRank(s.Quality)
+}
+
 func versionNumber(label string) [2]int {
 	var major, minor int
 	if n, _ := fmt.Sscanf(label, "V%d.%d", &major, &minor); n == 0 {

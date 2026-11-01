@@ -302,6 +302,7 @@ export type UnreleasedTrack = {
   tracker_key: string | null;
   title: string;
   quality: string | null;
+  quality_rank: number;
   cover_url: string | null;
   genius_url: string | null;
   release_date: string | null;
@@ -412,9 +413,14 @@ function parseVersions(value: unknown): UnreleasedVersion[] {
   return versions;
 }
 
+function lenientRank(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
 function parseUnreleasedDetails(r: Record<string, unknown>, at: string) {
   return {
     quality: nullableString(r.quality, `${at}.quality`),
+    quality_rank: lenientRank(r.quality_rank),
     cover_url: nullableString(r.cover_url, `${at}.cover_url`),
     release_date: nullableString(r.release_date, `${at}.release_date`),
     has_media: nullableBoolean(r.has_media, `${at}.has_media`),

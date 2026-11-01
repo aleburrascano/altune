@@ -572,6 +572,7 @@ describe('getUnreleasedTracks', () => {
       key: String(wire.genius_id),
       tracker_key: null,
       quality: null,
+      quality_rank: 0,
       off_streaming: false,
       open_url: null,
       open_host: null,
@@ -636,6 +637,7 @@ describe('getUnreleasedTracks', () => {
   });
 
   const NOT_A_VERSION = 7;
+  const RANKED = 5;
 
   it('parses versions leniently: a bad entry is skipped, the row is kept, absent means empty', async () => {
     const grouped = {
@@ -843,5 +845,17 @@ describe('getUnreleasedTracks', () => {
 
     expect(items.map((item) => item.key)).toEqual(['31', String(row.genius_id)]);
     expect(items[0]?.best_version_title).toBeNull();
+  });
+
+  it('keeps a finite quality_rank and reads a missing or non-numeric one as 0, keeping the row', async () => {
+    const ranked = { ...row, genius_id: 40, quality_rank: RANKED };
+    const text = { ...row, genius_id: 41, quality_rank: 'x' };
+    const infinite = { ...row, genius_id: 42, quality_rank: 1e999 };
+    __http.reply(PATH, { status: 200, json: { items: [ranked, text, row, infinite] } });
+
+    const { items } = await getUnreleasedTracks('spotify', 'art-1', { name: 'X' });
+
+    expect(items.map((item) => item.key)).toEqual(['40', '41', String(row.genius_id), '42']);
+    expect(items.map((item) => item.quality_rank)).toEqual([RANKED, 0, 0, 0]);
   });
 });

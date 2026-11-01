@@ -17,6 +17,7 @@ type UnreleasedSongDTO struct {
 	ReleaseDate      *string                `json:"release_date"`
 	HasMedia         *bool                  `json:"has_media"`
 	Quality          *string                `json:"quality"`
+	QualityRank      int                    `json:"quality_rank"`
 	TrackerKey       *string                `json:"tracker_key"`
 	OffStreaming     bool                   `json:"off_streaming"`
 	OpenURL          *string                `json:"open_url,omitempty"`
@@ -54,6 +55,7 @@ func unreleasedToDTO(found unreleased.Lookup) UnreleasedResponseDTO {
 			ReleaseDate:      nonEmpty(s.ReleaseDate),
 			HasMedia:         s.HasMedia,
 			Quality:          nonEmpty(s.Quality),
+			QualityRank:      s.QualityRank(),
 			TrackerKey:       nonEmpty(s.TrackerKey),
 			OffStreaming:     s.OffStreaming,
 			OpenURL:          nonEmpty(s.OpenURL),
