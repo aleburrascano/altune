@@ -28,7 +28,7 @@ import {
   LibraryErrorScreen,
   LibrarySkeletonScreen,
 } from '@features/library/ui/LibraryStateScreens';
-import { SortControl } from '@features/library/ui/SortControl';
+import { SortControl } from '@shared/ui/primitives/SortControl';
 import { TrackSelectionOverlay } from '@features/library/ui/TrackSelectionOverlay';
 import { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
 
@@ -107,6 +107,8 @@ export function LibraryScreen(): ReactElement {
           sortKey={sortKey}
           options={active.options}
           onSortChange={setSort}
+          action="library.sort.open"
+          testID="library-sort"
         />
         <View style={styles.body}>
           {search.hasQuery && active.count === 0 ? (

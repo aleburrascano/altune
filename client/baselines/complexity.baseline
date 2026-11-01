@@ -101,7 +101,6 @@ src/features/library/ui/LibraryRowPlayback.tsx LibraryRowPlayback
 src/features/library/ui/LibraryRowSelection.tsx LibraryRowSelection
 src/features/library/ui/LibraryRow.tsx LibraryRow
 src/features/library/ui/LibraryScreen.tsx LibraryScreen
-src/features/library/ui/SortControl.tsx SortControl
 src/features/library/ui/TracksList.tsx TracksList
 src/features/library/ui/TracksList.tsx TracksListHeader
 src/features/playback/domain/derivePlaybackState.ts derivePlaybackState
