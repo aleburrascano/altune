@@ -65,6 +65,8 @@ describe('useAlbumsView', () => {
       return (
         <>
           <SortControl
+            action="library.sort.open"
+            testID="library-sort"
             count={view.count}
             noun={view.noun}
             sortKey="recent"
@@ -250,6 +252,8 @@ describe('useArtistsView', () => {
       return (
         <>
           <SortControl
+            action="library.sort.open"
+            testID="library-sort"
             count={view.count}
             noun={view.noun}
             sortKey="az"
