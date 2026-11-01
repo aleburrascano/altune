@@ -17,7 +17,7 @@ import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider
 import { GROUP_PAGE_SIZE } from '@features/library/domain/listPaging';
 import type { ActiveView } from '@features/library/domain/libraryView';
 import { useAlbumsView, useArtistsView } from '@features/library/hooks/useGroupViews';
-import { SortControl } from '@features/library/ui/SortControl';
+import { SortControl } from '@shared/ui/primitives/SortControl';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 
 describe('useAlbumsView', () => {

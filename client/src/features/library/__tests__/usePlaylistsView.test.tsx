@@ -9,7 +9,7 @@ import type { LibraryPort } from '@features/library/ports/libraryPort';
 import { GROUP_PAGE_SIZE } from '@features/library/domain/listPaging';
 import { usePlaylistActions } from '@features/library/hooks/usePlaylistActions';
 import { usePlaylistsView } from '@features/library/hooks/usePlaylistsView';
-import { SortControl } from '@features/library/ui/SortControl';
+import { SortControl } from '@shared/ui/primitives/SortControl';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 
 const FULL_PAGES = 2;

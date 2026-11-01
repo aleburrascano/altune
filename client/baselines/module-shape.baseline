@@ -159,7 +159,6 @@ M8 src/features/library/ui/PlaylistTrackList.tsx loose file in ui/
 M8 src/features/library/ui/PlaylistTrackRow.tsx loose file in ui/
 M8 src/features/library/ui/PlaylistsGrid.tsx loose file in ui/
 M8 src/features/library/ui/SidebarPlaylists.tsx loose file in ui/
-M8 src/features/library/ui/SortControl.tsx loose file in ui/
 M8 src/features/library/ui/TrackSelectionOverlay.tsx loose file in ui/
 M8 src/features/library/ui/TracksList.tsx loose file in ui/
 M8 src/features/library/ui/WideTrackHeader.tsx loose file in ui/
