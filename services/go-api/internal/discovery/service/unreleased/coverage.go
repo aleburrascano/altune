@@ -7,13 +7,14 @@ import (
 )
 
 type coverage struct {
-	Total    int
-	Versions int
-	Playable int
-	LinkOut  int
-	NoAudio  int
-	NoCover  int
-	Hosts    map[string]int
+	Total          int
+	Versions       int
+	Playable       int
+	LinkOut        int
+	NoAudio        int
+	NoCover        int
+	NonSongDropped int
+	Hosts          map[string]int
 }
 
 func countCoverage(songs []domain.UnreleasedSong) coverage {
@@ -36,8 +37,9 @@ func countCoverage(songs []domain.UnreleasedSong) coverage {
 	return c
 }
 
-func logCoverage(ctx context.Context, provider domain.ProviderName, externalID, artistName string, songs []domain.UnreleasedSong, complete bool) {
+func logCoverage(ctx context.Context, provider domain.ProviderName, externalID, artistName string, songs []domain.UnreleasedSong, complete bool, nonSongDropped int) {
 	c := countCoverage(songs)
+	c.NonSongDropped = nonSongDropped
 	slog.InfoContext(ctx, "unreleased.coverage",
 		"provider", provider,
 		"external_id", externalID,
@@ -48,6 +50,7 @@ func logCoverage(ctx context.Context, provider domain.ProviderName, externalID, 
 		"link_out", c.LinkOut,
 		"no_audio", c.NoAudio,
 		"no_cover", c.NoCover,
+		"non_song_dropped", c.NonSongDropped,
 		"complete", complete,
 		"hosts", c.Hosts,
 	)

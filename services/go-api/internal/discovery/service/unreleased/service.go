@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const CurrentBuildVersion = 6
+const CurrentBuildVersion = 7
 
 type Config struct {
 	MaxPages          int
@@ -114,15 +114,15 @@ func (s *Service) build(ctx context.Context, provider domain.ProviderName, exter
 	if err != nil && catalogComplete {
 		return nil, false, err
 	}
-	songs, complete, err := combineSources(s.geniusResult(ctx, artistName, titles), s.trackerResult(ctx, artistName, titles))
+	combined, err := combineSources(s.geniusResult(ctx, artistName, titles), s.trackerResult(ctx, artistName, titles))
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return nil, false, ctxErr
 	}
-	complete = catalogComplete && complete
+	complete := catalogComplete && combined.complete
 	if err == nil {
-		logCoverage(ctx, provider, externalID, artistName, songs, complete)
+		logCoverage(ctx, provider, externalID, artistName, combined.songs, complete, combined.nonSongDropped)
 	}
-	return songs, complete, err
+	return combined.songs, complete, err
 }
 
 func (s *Service) unreleasedSongs(ctx context.Context, artistID int, catalogTitles []string) ([]domain.UnreleasedSong, bool, error) {

@@ -55,12 +55,19 @@ func (s *Service) geniusResult(ctx context.Context, artistName string, catalogTi
 	return sourceResult{songs: songs, complete: complete, used: true, err: err}
 }
 
-func combineSources(genius, trackers sourceResult) ([]domain.UnreleasedSong, bool, error) {
+type combinedSources struct {
+	songs          []domain.UnreleasedSong
+	complete       bool
+	nonSongDropped int
+}
+
+func combineSources(genius, trackers sourceResult) (combinedSources, error) {
 	if !genius.answered() && !trackers.answered() {
-		return nil, false, errors.Join(genius.err, trackers.err)
+		return combinedSources{}, errors.Join(genius.err, trackers.err)
 	}
 	complete := genius.complete && trackers.complete && genius.err == nil && trackers.err == nil
-	return mergeTrackerSongs(genius.songs, trackers.songs), complete, nil
+	songs, dropped := withoutNonTrackPages(mergeTrackerSongs(genius.songs, trackers.songs))
+	return combinedSources{songs: songs, complete: complete, nonSongDropped: dropped}, nil
 }
 
 func mergeTrackerSongs(genius, trackers []domain.UnreleasedSong) []domain.UnreleasedSong {
