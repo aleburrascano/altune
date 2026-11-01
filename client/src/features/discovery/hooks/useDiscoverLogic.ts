@@ -2,7 +2,7 @@ import { type Dispatch, type SetStateAction } from 'react';
 
 import { useDebouncedSearch } from '@features/discovery/hooks/useDebouncedSearch';
 import { useDiscoverSearch } from '@features/discovery/hooks/useDiscoverSearch';
-import { useUnreleasedSearch } from '@features/discovery/unreleased/useUnreleasedSearch';
+import { useUnreleasedSearch } from '@features/discovery/hooks/unreleased/useUnreleasedSearch';
 import { isSearchableQuery, normalizeQuery } from '@features/discovery/domain/searchPaging';
 import {
   SEARCH_DEBOUNCE_MS,

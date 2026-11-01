@@ -11,8 +11,8 @@ import {
 } from '@features/discovery/ui/DiscoverBodyStates';
 import { FilterChips } from '@features/discovery/ui/FilterChips';
 import { FilteredResults } from '@features/discovery/ui/FilteredResults';
-import { UnreleasedAllHits } from '@features/discovery/unreleased/UnreleasedAllHits';
-import { UnreleasedSection } from '@features/discovery/unreleased/UnreleasedSection';
+import { UnreleasedAllHits } from '@features/discovery/ui/unreleased/UnreleasedAllHits';
+import { UnreleasedSection } from '@features/discovery/ui/unreleased/UnreleasedSection';
 import { IncompleteResultsBanner, RefreshFailedNotice } from '@features/discovery/ui/ResultNotices';
 import { RecentSearches } from '@features/discovery/ui/RecentSearches';
 import {
