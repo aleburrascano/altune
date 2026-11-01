@@ -16,7 +16,7 @@ function track(key: string, over: Partial<UnreleasedTrack> = {}): UnreleasedTrac
     genius_url: null,
     release_date: null,
     has_media: null,
-    off_streaming: true,
+    off_streaming: false,
     audio_links: [],
     open_url: null,
     open_host: null,
@@ -75,8 +75,8 @@ describe('unreleasedView', () => {
     ]);
   });
 
-  it('where released keeps only streaming tracks', () => {
-    const live = track('live', { off_streaming: false });
+  it('where released keeps only tracks released and then taken off streaming', () => {
+    const live = track('live', { off_streaming: true });
     expect(keys(unreleasedView([A, live], 'popular', 'released', 'all'))).toEqual(['live']);
   });
 

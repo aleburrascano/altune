@@ -21,7 +21,7 @@ const COMPARATORS: Record<UnreleasedSort, Comparator | null> = {
 
 function matchesWhere(track: UnreleasedTrack, where: UnreleasedWhere): boolean {
   if (where === 'all') return true;
-  return track.off_streaming === (where === 'unreleased');
+  return track.off_streaming === (where === 'released');
 }
 
 function matchesWhat(track: UnreleasedTrack, what: UnreleasedWhat): boolean {

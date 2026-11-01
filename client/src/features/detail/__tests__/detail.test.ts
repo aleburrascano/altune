@@ -7,8 +7,11 @@ describe('@features/detail public surface', () => {
     );
   });
 
-  it('exports exactly DetailScreen', () => {
-    expect(Object.keys(require('@features/detail'))).toEqual(['DetailScreen']);
+  it('exports exactly DetailScreen and the unreleased full-list screen', () => {
+    expect(Object.keys(require('@features/detail')).sort()).toEqual([
+      'DetailScreen',
+      'UnreleasedAllScreen',
+    ]);
   });
 
   it('does not expose TrackDetailBody', () => {

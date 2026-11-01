@@ -30,7 +30,7 @@ function isWhere(value: string | undefined): value is UnreleasedWhere {
 }
 
 function railFirstChipWhere(tracks: UnreleasedTrack[]): UnreleasedWhere {
-  return tracks.some((t) => t.off_streaming) ? 'unreleased' : 'released';
+  return tracks.some((t) => t.off_streaming) ? 'released' : 'unreleased';
 }
 
 function rowRenderer(artist: DiscoveryResult) {
