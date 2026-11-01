@@ -161,7 +161,7 @@ function ArtistDetailContentBody(props: ArtistDetailBodyProps & { artist: Artist
       <IncompleteLibraryNotice artist={props.artist} />
       <LibraryAlbums artist={props.artist} />
       <ArtistDiscography artist={props.artist} />
-      <ArtistUnreleased artist={props.result} />
+      <ArtistUnreleased artist={props.result} detailRoute={props.detailRoute} />
       <AboutArtist lastfm={props.lastfm} lastfmError={props.lastfmError ?? false} />
     </>
   );

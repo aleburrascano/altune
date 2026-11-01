@@ -3,6 +3,8 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
+import { readDetailHandoff } from '@shared/navigation/detailHandoff';
+
 import { httpDetailPort } from '@features/detail/adapters/http/httpDetailPort';
 import { DetailPortProvider } from '@features/detail/ports/DetailPortProvider';
 import { ArtistUnreleased } from '@features/detail/ui/unreleased/ArtistUnreleased';
@@ -12,6 +14,12 @@ import {
   idlePlayback,
   signInTestUser,
 } from '@testing/queryHarness';
+
+const mockPush = jest.fn();
+
+jest.mock('expo-router', () => ({
+  useRouter: () => ({ push: mockPush, replace: jest.fn() }),
+}));
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -41,6 +49,9 @@ const CANCUN = {
 const POLL_MS = 10_000;
 const GIVE_UP_AFTER_MS = 300_000;
 const MAX_REQUESTS = 20;
+const RAIL_CAP = 20;
+const OVER_CAP = 25;
+const FIRST_ID = 1000;
 const SECOND_REQUEST = 2;
 const POLLS_AFTER_RETRY = 3;
 
@@ -60,13 +71,14 @@ function renderSectionFor(artist: DiscoveryResult) {
   return render(
     <Base>
       <DetailPortProvider port={httpDetailPort}>
-        <ArtistUnreleased artist={artist} />
+        <ArtistUnreleased artist={artist} detailRoute="/discover/detail" />
       </DetailPortProvider>
     </Base>,
   );
 }
 
 beforeEach(() => {
+  mockPush.mockClear();
   jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
   startQueue.mockClear();
   signInTestUser();
@@ -250,6 +262,37 @@ describe('ArtistUnreleased', () => {
     fireEvent.press(screen.getByTestId('detail-unreleased-group-unreleased'));
     expect(screen.getByText('Cancun')).toBeTruthy();
     expect(screen.queryByText('Do You Want')).toBeNull();
+  });
+
+  it('shows 20 cards and See all (25) for 25 tracks, and opens the full list on the chip', async () => {
+    const many = Array.from({ length: OVER_CAP }, (_, i) => ({
+      ...CANCUN,
+      genius_id: FIRST_ID + i,
+      title: `T${i}`,
+    }));
+    __http.reply(UNRELEASED, { status: 200, json: { items: many } });
+    renderSection();
+
+    fireEvent.press(await screen.findByText('See all (25)'));
+    expect(screen.getByTestId('detail-unreleased-rail').props.data).toHaveLength(RAIL_CAP);
+    const [href] = mockPush.mock.calls[0];
+    expect(href.pathname).toBe('/discover/unreleased');
+    expect(href.params.where).toBe('unreleased');
+    expect(readDetailHandoff(href.params.handoff)?.result).toBe(ARTIST);
+  });
+
+  it('shows no See all button for exactly 20 tracks', async () => {
+    const twenty = Array.from({ length: RAIL_CAP }, (_, i) => ({
+      ...CANCUN,
+      genius_id: FIRST_ID + i,
+      title: `U${i}`,
+    }));
+    __http.reply(UNRELEASED, { status: 200, json: { items: twenty } });
+    renderSection();
+
+    const rail = await screen.findByTestId('detail-unreleased-rail');
+    expect(rail.props.data).toHaveLength(RAIL_CAP);
+    expect(screen.queryByTestId('detail-unreleased-see-all')).toBeNull();
   });
 
   it('lays the tracks out in a horizontal row', async () => {

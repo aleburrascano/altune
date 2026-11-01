@@ -9,7 +9,9 @@ import {
   openDetail,
   type DetailRoute,
   featuringHref,
+  unreleasedHref,
 } from '@features/detail/domain/detailNavigation';
+import type { UnreleasedWhere } from '@features/detail/domain/unreleasedView';
 import { resolveEntityQuery } from '@features/detail/domain/resolveEntityQuery';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/ports/DetailPortProvider';
@@ -23,6 +25,13 @@ export function useOpenDetail(detailRoute: DetailRoute): (picked: DiscoveryResul
 export function useOpenFeaturing(detailRoute: DetailRoute): (artist: FeaturedArtist) => void {
   const navigator = useNavigator();
   return (artist) => navigator.push(featuringHref(detailRoute, artist));
+}
+
+export function useOpenUnreleased(
+  detailRoute: DetailRoute,
+): (artist: DiscoveryResult, where: UnreleasedWhere) => void {
+  const navigator = useNavigator();
+  return (artist, where) => navigator.push(unreleasedHref(detailRoute, artist, where));
 }
 
 type LateralNavState = 'idle' | 'searching';

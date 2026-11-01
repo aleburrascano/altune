@@ -1,9 +1,14 @@
 import { useState, type ReactElement } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
 
+import { Tappable } from '@shared/ui/primitives/Tappable';
+import { Text } from '@shared/ui/primitives/Text';
 import { HorizontalRail } from '@shared/ui/primitives/HorizontalRail';
 import { spacing } from '@shared/ui/theme';
 
+import { useOpenUnreleased } from '@features/detail/hooks/useDetailNavigation';
+import type { DetailRoute } from '@features/detail/domain/detailNavigation';
+import type { UnreleasedWhere } from '@features/detail/domain/unreleasedView';
 import { hasManyVersions } from '@features/detail/domain/unreleasedTrack';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import type { UnreleasedTrack } from '@shared/apiClient/enrichment';
@@ -18,7 +23,8 @@ import { UnreleasedVersionsSheet } from '@features/detail/ui/unreleased/Unreleas
 
 type UnreleasedArtistRowProps = { artist: DiscoveryResult; track: UnreleasedTrack };
 type UnreleasedListProps = { artist: DiscoveryResult; tracks: UnreleasedTrack[] };
-type ArtistUnreleasedProps = { artist: DiscoveryResult };
+type ArtistUnreleasedProps = { artist: DiscoveryResult; detailRoute: DetailRoute };
+type RailSectionProps = UnreleasedListProps & { detailRoute: DetailRoute };
 type RetryProps = { onRetry: () => void };
 
 function openGenius(track: UnreleasedTrack): void {
@@ -95,8 +101,8 @@ function railStyle() {
 }
 
 const SECTION_LABEL = 'Not on streaming';
-const RELEASED = 'released';
-const UNRELEASED = 'unreleased';
+const RELEASED: UnreleasedWhere = 'released';
+const UNRELEASED: UnreleasedWhere = 'unreleased';
 
 function trackGroups(tracks: UnreleasedTrack[]): ChipGroup[] {
   const released = tracks.filter((t) => t.off_streaming).length;
@@ -120,22 +126,59 @@ function useTrackFilter(tracks: UnreleasedTrack[]) {
 
 const CHIP_IDS = { action: 'detail.unreleased.select', testIDPrefix: 'detail-unreleased-group' };
 
-function FilteredRail({ artist, tracks }: UnreleasedListProps): ReactElement {
+const RAIL_CAP = 20;
+const SEE_ALL_HIT_SLOP = 8;
+
+type SeeAllProps = { total: number; onPress: () => void };
+type SeeAllWhereProps = RailSectionProps & { where: UnreleasedWhere; total: number };
+
+const SEE_ALL_STATIC = {
+  action: 'detail.artist.unreleased.see_all',
+  testID: 'detail-unreleased-see-all',
+  hitSlop: SEE_ALL_HIT_SLOP,
+  accessibilityRole: 'button' as const,
+};
+
+function seeAllPressable({ total, onPress }: SeeAllProps) {
+  return { ...SEE_ALL_STATIC, onPress, accessibilityLabel: `See all (${total})` };
+}
+
+function SeeAllButton(props: SeeAllProps): ReactElement {
+  return (
+    <Tappable {...seeAllPressable(props)} style={styles.seeAll}>
+      <Text variant="caption" tone="accent">{`See all (${props.total})`}</Text>
+    </Tappable>
+  );
+}
+
+function SeeAll(props: SeeAllWhereProps): ReactElement | null {
+  const open = useOpenUnreleased(props.detailRoute);
+  if (props.total <= RAIL_CAP) return null;
+  return <SeeAllButton total={props.total} onPress={() => open(props.artist, props.where)} />;
+}
+
+function useRailView(tracks: UnreleasedTrack[]) {
   const filter = useTrackFilter(tracks);
-  const shown = inGroup(tracks, filter.activeType);
+  const where = filter.activeType === RELEASED ? RELEASED : UNRELEASED;
+  return { filter, where, shown: inGroup(tracks, filter.activeType) };
+}
+
+function RailBody(props: RailSectionProps): ReactElement {
+  const { filter, where, shown } = useRailView(props.tracks);
   return (
     <>
       <FilterChips {...filter} {...CHIP_IDS} />
-      <UnreleasedRail artist={artist} tracks={shown} />
+      <SeeAll {...props} where={where} total={shown.length} />
+      <UnreleasedRail artist={props.artist} tracks={shown.slice(0, RAIL_CAP)} />
     </>
   );
 }
 
-function UnreleasedSection(props: UnreleasedListProps): ReactElement {
+function UnreleasedSection(props: RailSectionProps): ReactElement {
   return (
     <View testID="detail-unreleased">
       <Section label={SECTION_LABEL}>
-        <FilteredRail {...props} />
+        <RailBody {...props} />
       </Section>
     </View>
   );
@@ -162,14 +205,19 @@ function UnreleasedFailed({ onRetry }: RetryProps): ReactElement {
   );
 }
 
-export function ArtistUnreleased({ artist }: ArtistUnreleasedProps): ReactElement | null {
+export function ArtistUnreleased({
+  artist,
+  detailRoute,
+}: ArtistUnreleasedProps): ReactElement | null {
   const { tracks, isLoading, isFailed, retry } = useUnreleasedTracks(artist);
-  if (tracks.length > 0) return <UnreleasedSection artist={artist} tracks={tracks} />;
+  if (tracks.length > 0)
+    return <UnreleasedSection artist={artist} tracks={tracks} detailRoute={detailRoute} />;
   if (isLoading) return <UnreleasedLoading />;
   return isFailed ? <UnreleasedFailed onRetry={retry} /> : null;
 }
 
 const styles = StyleSheet.create({
   rail: { marginHorizontal: -DETAIL_GUTTER },
+  seeAll: { alignSelf: 'flex-end', marginBottom: spacing.sm },
   railContent: { paddingHorizontal: DETAIL_GUTTER, gap: spacing.md },
 });
