@@ -222,9 +222,30 @@ func TestHandleArtistUnreleased_TrackerOnlyItemHasNullGeniusFieldsOnTheWire(t *t
 	rec := discServe(t, r, http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Ken+Carson", nil)
 
 	discAssertStatus(t, rec, http.StatusOK)
-	want := `{"items":[{"genius_id":null,"title":"Dream [V2]","cover_url":null,"genius_url":null,"release_date":null,"has_media":true,"quality":"High Quality","tracker_key":"ken-carson:dream-v2","off_streaming":true,"audio_links":[{"provider":"pixeldrain","external_id":"ozSpSjn7","url":"https://pixeldrain.com/u/ozSpSjn7"}],"extras":{},"best_version_title":"Dream [V2]"}],"pending":false}` + "\n"
+	want := `{"items":[{"genius_id":null,"title":"Dream [V2]","cover_url":null,"genius_url":null,"release_date":null,"has_media":true,"quality":"High Quality","quality_rank":3,"tracker_key":"ken-carson:dream-v2","off_streaming":true,"audio_links":[{"provider":"pixeldrain","external_id":"ozSpSjn7","url":"https://pixeldrain.com/u/ozSpSjn7"}],"extras":{},"best_version_title":"Dream [V2]"}],"pending":false}` + "\n"
 	if got := rec.Body.String(); got != want {
 		t.Errorf("body = %s, want %s", got, want)
+	}
+}
+
+func TestHandleArtistUnreleased_QualityRankIsTheServersRankAndZeroWhenUnknown(t *testing.T) {
+	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: []domain.UnreleasedSong{
+		{GeniusID: 1, Title: "Ranked", Quality: "Lossless"},
+		{GeniusID: 2, Title: "Unranked"},
+	}}
+	rec := discServe(t, unreleasedRouter(genius, nil), http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Artist", nil)
+
+	discAssertStatus(t, rec, http.StatusOK)
+	var wire struct {
+		Items []struct {
+			QualityRank int `json:"quality_rank"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &wire); err != nil {
+		t.Fatal(err)
+	}
+	if len(wire.Items) != 2 || wire.Items[0].QualityRank != 5 || wire.Items[1].QualityRank != 0 {
+		t.Errorf("items = %+v, want ranks 5 then 0", wire.Items)
 	}
 }
 
