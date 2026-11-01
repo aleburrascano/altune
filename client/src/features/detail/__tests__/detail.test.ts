@@ -7,10 +7,11 @@ describe('@features/detail public surface', () => {
     );
   });
 
-  it('exports exactly DetailScreen and the unreleased full-list screen', () => {
+  it('exports exactly DetailScreen, the unreleased full-list screen and the unreleased search hits', () => {
     expect(Object.keys(require('@features/detail')).sort()).toEqual([
       'DetailScreen',
       'UnreleasedAllScreen',
+      'UnreleasedSearchHits',
     ]);
   });
 
