@@ -2,9 +2,11 @@ import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import type { FeaturedArtist } from '@shared/apiClient/trackResponse';
 import { detailHref } from '@shared/navigation/detailHandoff';
 import type { Href, Navigator, TabRoot } from '@shared/navigation';
+import type { UnreleasedWhere } from '@features/detail/domain/unreleasedView';
 
 export type DetailRoute = `/${TabRoot}/detail`;
 type FeaturingRoute = `/${TabRoot}/featuring`;
+type UnreleasedRoute = `/${TabRoot}/unreleased`;
 
 export function detailRouteFor(tabRoot: TabRoot): DetailRoute {
   return `/${tabRoot}/detail`;
@@ -31,4 +33,17 @@ export function featuringHref(detailRoute: DetailRoute, artist: FeaturedArtist):
       ...(artist.deezer_id != null ? { deezer_id: String(artist.deezer_id) } : {}),
     },
   };
+}
+
+function unreleasedRouteFor(detailRoute: DetailRoute): UnreleasedRoute {
+  return detailRoute === '/library/detail' ? '/library/unreleased' : '/discover/unreleased';
+}
+
+export function unreleasedHref(
+  detailRoute: DetailRoute,
+  artist: DiscoveryResult,
+  where: UnreleasedWhere,
+): Href {
+  const { pathname, params } = detailHref(unreleasedRouteFor(detailRoute), artist);
+  return { pathname, params: { ...params, where } };
 }
