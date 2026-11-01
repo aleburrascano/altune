@@ -133,3 +133,56 @@ func TestUnreleasedStoreBuildVersion(t *testing.T) {
 		t.Errorf("Read = built=%v version=%d err=%v, want built at version 3", built, version, err)
 	}
 }
+
+func unreleasedSearchKeys(t *testing.T, pool *pgxpool.Pool, key ports.UnreleasedArtistKey) []*string {
+	t.Helper()
+	rows, err := pool.Query(context.Background(), `SELECT search_key FROM unreleased_songs WHERE provider = $1 AND external_id = $2 ORDER BY position`, key.Provider.String(), key.ExternalID)
+	if err != nil {
+		t.Fatalf("read keys: %v", err)
+	}
+	defer rows.Close()
+	var keys []*string
+	for rows.Next() {
+		var k *string
+		if err := rows.Scan(&k); err != nil {
+			t.Fatalf("scan key: %v", err)
+		}
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+func TestUnreleasedSearch_RanksBySimilarityAndMatchesTyposAndAccents(t *testing.T) {
+	pool := testPool(t)
+	store := NewPgxUnreleasedStore(pool)
+	ctx := context.Background()
+	key := newUnreleasedArtist(t, pool, store)
+	songs := []domain.UnreleasedSong{
+		{Title: "Magnolia Sessions Extended", Quality: "lossless"},
+		{Title: "Magnólia"},
+		{Title: "Unrelated Title"},
+	}
+	if err := store.Write(ctx, key, songs, true, time.Now().UTC(), 1); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	keys := unreleasedSearchKeys(t, pool, key)
+	if len(keys) != 3 || keys[1] == nil || *keys[1] != domain.TitleKey("Magnólia") {
+		t.Fatalf("search keys = %v, want the title key written for every row", keys)
+	}
+
+	for _, query := range []string{"magnolia", "magnoila", "MAGNÓLIA"} {
+		hits, err := store.Search(ctx, query, 20)
+		if err != nil {
+			t.Fatalf("Search(%q): %v", query, err)
+		}
+		if len(hits) == 0 || hits[0].Song.Title != "Magnólia" || hits[0].Artist != key || hits[0].ArtistName == "" {
+			t.Errorf("Search(%q) = %+v, want Magnólia first with its artist", query, hits)
+		}
+		for _, h := range hits {
+			if h.Song.Title == "Unrelated Title" {
+				t.Errorf("Search(%q) returned the unrelated title", query)
+			}
+		}
+	}
+}

@@ -102,10 +102,13 @@ type UnreleasedStore struct {
 	RecordErr error
 	ReadErr   error
 	WriteErr  error
+	Hits      []ports.UnreleasedHit
+	SearchErr error
 
-	mu     sync.Mutex
-	calls  []string
-	writes []StoreWrite
+	mu      sync.Mutex
+	calls   []string
+	queries []string
+	writes  []StoreWrite
 }
 
 var _ ports.UnreleasedStore = (*UnreleasedStore)(nil)
@@ -142,6 +145,19 @@ func (u *UnreleasedStore) Write(_ context.Context, key ports.UnreleasedArtistKey
 
 func (u *UnreleasedStore) Due(context.Context, time.Time, int) ([]ports.UnreleasedDueArtist, error) {
 	return nil, nil
+}
+
+func (u *UnreleasedStore) Search(_ context.Context, query string, limit int) ([]ports.UnreleasedHit, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.queries = append(u.queries, query)
+	return slices.Clone(u.Hits[:min(limit, len(u.Hits))]), u.SearchErr
+}
+
+func (u *UnreleasedStore) Queries() []string {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return slices.Clone(u.queries)
 }
 
 func (u *UnreleasedStore) Calls() []string {

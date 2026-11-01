@@ -1,7 +1,7 @@
 package unreleased
 
 import (
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/versiontag"
 	"regexp"
 	"strings"
@@ -13,24 +13,12 @@ const (
 	minKeyLetters = 6
 )
 
-var starRunRe = regexp.MustCompile(`\*+`)
-
-var unreleasedMarkerRe = regexp.MustCompile(`(?i)[(\[]\s*unreleased\s*[)\]]`)
-
 func titleKey(title string) string {
-	return keyWithStar(title, "")
+	return domain.TitleKey(title)
 }
 
 func wildcardKey(title string) string {
-	return keyWithStar(title, starMark)
-}
-
-func keyWithStar(title, star string) string {
-	cleaned := starRunRe.ReplaceAllString(textnorm.Transliterate(unreleasedMarkerRe.ReplaceAllString(title, " ")), star)
-	tokens := versiontag.Tokens(versiontag.WithoutFeatureCredits(cleaned))
-	core := strings.Join(versiontag.WithoutVersionPhrases(tokens), " ")
-	labels := strings.Join(versiontag.RecordingLabels(cleaned), ",")
-	return core + "|" + labels
+	return domain.TitleKeyWithStar(title, starMark)
 }
 
 func baseKey(title string) string {
