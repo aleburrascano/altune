@@ -51,17 +51,21 @@ function useVersionsSheet(track: UnreleasedTrack) {
   return { onOpen, onLongPress: onOpen, sheet: <UnreleasedVersionsSheet {...props} /> };
 }
 
-function UnreleasedRow({ artist, track }: UnreleasedArtistRowProps): ReactElement {
-  const card = useUnreleasedCard({
+function useRowCard({ artist, track }: UnreleasedArtistRowProps) {
+  return useUnreleasedCard({
     track,
     artist,
     openGenius: () => openGenius(track),
     openLink: () => openLink(track),
   });
-  const versions = useVersionsSheet(track);
+}
+
+export function UnreleasedRow(props: UnreleasedArtistRowProps): ReactElement {
+  const card = useRowCard(props);
+  const versions = useVersionsSheet(props.track);
   return (
     <>
-      <UnreleasedCard artist={artist} track={track} card={card} versions={versions} />
+      <UnreleasedCard artist={props.artist} track={props.track} card={card} versions={versions} />
       {versions.sheet}
     </>
   );
