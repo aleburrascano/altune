@@ -56,6 +56,42 @@ func (s *Service) Lookup(ctx context.Context, provider domain.ProviderName, exte
 	return s.awaitJob(ctx, j)
 }
 
+const warmTimeout = 5 * time.Second
+
+type WarmArtist struct {
+	Provider   domain.ProviderName
+	ExternalID string
+	Name       string
+	Known      map[domain.ProviderName]string
+}
+
+func (s *Service) Warm(artists []WarmArtist) {
+	if s.store == nil || len(artists) == 0 {
+		return
+	}
+	s.jobs.Add(1)
+	go s.runWarm(artists)
+}
+
+func (s *Service) runWarm(artists []WarmArtist) {
+	defer s.jobs.Done()
+	ctx, cancel := context.WithTimeout(s.lifecycle, warmTimeout)
+	defer cancel()
+	defer runloop.RecoverContext(ctx, "unreleased.warm_panic")
+	seen := make(map[ports.UnreleasedArtistKey]bool, len(artists))
+	for _, a := range artists {
+		key := ports.UnreleasedArtistKey{Provider: a.Provider, ExternalID: a.ExternalID}
+		name := strings.TrimSpace(a.Name)
+		if name == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		if err := s.store.Record(ctx, key, name, a.Known); err != nil {
+			slog.WarnContext(ctx, "unreleased.warm_record_failed", "error", err)
+		}
+	}
+}
+
 func (s *Service) lookupStored(ctx context.Context, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) (Lookup, error) {
 	key := ports.UnreleasedArtistKey{Provider: provider, ExternalID: externalID}
 	songs, version, built := s.storedSongsOrNotBuilt(ctx, key, artistName, known)

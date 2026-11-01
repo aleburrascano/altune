@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/discovery/service/interaction"
 	"altune/go-api/internal/discovery/service/providercall"
 	"altune/go-api/internal/discovery/service/search"
+	"altune/go-api/internal/discovery/service/unreleased"
 	"altune/go-api/internal/discovery/service/vocabulary"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
@@ -1728,5 +1729,84 @@ func TestHandleRecordEvent_ClientEventSkippedWhenStoreFails(t *testing.T) {
 	discAssertStatus(t, rec, http.StatusInternalServerError)
 	if len(logger.records) != 0 {
 		t.Fatalf("records = %d, want 0", len(logger.records))
+	}
+}
+
+type recordedArtist struct {
+	key   ports.UnreleasedArtistKey
+	name  string
+	known map[discdomain.ProviderName]string
+}
+
+type recordingUnreleasedStore struct {
+	*discoverytest.UnreleasedStore
+	mu      sync.Mutex
+	artists []recordedArtist
+}
+
+func (s *recordingUnreleasedStore) Record(ctx context.Context, key ports.UnreleasedArtistKey, name string, known map[discdomain.ProviderName]string) error {
+	s.mu.Lock()
+	s.artists = append(s.artists, recordedArtist{key: key, name: name, known: known})
+	s.mu.Unlock()
+	return s.UnreleasedStore.Record(ctx, key, name, known)
+}
+
+func searchArtist(name, id string) discdomain.SearchResult {
+	return discdomain.SearchResult{
+		Kind: discdomain.ResultKindArtist, Title: name, Confidence: discdomain.ConfidenceLow,
+		Sources: []discdomain.SourceRef{{Provider: discdomain.ProviderDeezer, ExternalID: id, URL: "https://deezer.com/artist/" + id}},
+	}
+}
+
+func searchAsWarmUp(t *testing.T, store ports.UnreleasedStore, results []discdomain.SearchResult) *httptest.ResponseRecorder {
+	t.Helper()
+	var jobs sync.WaitGroup
+	svc := unreleased.NewService(nil, &discoverytest.ArtistCatalogTitles{}, nil, unreleased.Config{},
+		unreleased.WithStore(store), unreleased.WithLifecycle(context.Background(), &jobs))
+	p := &fakeSearchProvider{name: discdomain.ProviderDeezer, results: results}
+	searchSvc := search.NewService([]ports.SearchProvider{p}, providercall.NewCircuitBreaker())
+	h := NewDiscoveryHandler(DiscoveryServices{Search: searchSvc}).WithUnreleased(svc)
+	r := chi.NewRouter()
+	r.Use(middleware.Middleware(discVerifyAsTestUser))
+	r.Mount("/discovery", h.Routes())
+	rec := discServe(t, r, http.MethodGet, "/discovery/search?q=a", nil)
+	jobs.Wait()
+	return rec
+}
+
+func TestSearchWarmsUnreleased_TopThreeArtistsAreRecorded(t *testing.T) {
+	store := &recordingUnreleasedStore{UnreleasedStore: &discoverytest.UnreleasedStore{}}
+	results := []discdomain.SearchResult{
+		searchArtist("One", "1"), searchArtist("Two", "2"), searchArtist("Three", "3"), searchArtist("Four", "4"),
+	}
+
+	rec := searchAsWarmUp(t, store, results)
+
+	discAssertStatus(t, rec, http.StatusOK)
+	if len(store.artists) != 3 {
+		t.Fatalf("recorded %d artists, want 3: %+v", len(store.artists), store.artists)
+	}
+	got := store.artists[0]
+	want := ports.UnreleasedArtistKey{Provider: discdomain.ProviderDeezer, ExternalID: "1"}
+	if got.key != want || got.name != "One" || got.known[discdomain.ProviderDeezer] != "1" {
+		t.Errorf("first record = %+v, want deezer:1 One with its known id", got)
+	}
+}
+
+func TestSearchWarmsUnreleased_FailingStoreLeavesTheResponseUnchanged(t *testing.T) {
+	results := []discdomain.SearchResult{searchArtist("One", "1")}
+	healthy := searchAsWarmUp(t, &discoverytest.UnreleasedStore{}, results)
+	failing := searchAsWarmUp(t, &discoverytest.UnreleasedStore{RecordErr: errors.New("db down")}, results)
+
+	discAssertStatus(t, failing, http.StatusOK)
+	var a, b DiscoverySearchResponse
+	if err := json.Unmarshal(healthy.Body.Bytes(), &a); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(failing.Body.Bytes(), &b); err != nil {
+		t.Fatal(err)
+	}
+	if len(b.Results) != 1 || len(a.Results) != len(b.Results) || a.Results[0].Title != b.Results[0].Title {
+		t.Errorf("failing-store results = %+v, want the healthy results %+v", b.Results, a.Results)
 	}
 }
