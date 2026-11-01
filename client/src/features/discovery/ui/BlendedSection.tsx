@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { ChevronRight } from 'lucide-react-native';
 
@@ -144,6 +144,7 @@ type BlendedSectionProps = {
   topResult: DiscoveryResult | undefined;
   onSeeAll: (filter: DiscoveryKind) => void;
   common: ResultsCommonProps;
+  footerExtra?: ReactNode;
 };
 
 function blendedHeaderExtra(topResult: DiscoveryResult | undefined, common: ResultsCommonProps) {
@@ -195,6 +196,7 @@ function blendedResultsListProps({ props, ctx, visible }: ResultsListArgs) {
     pairFirstItemWithHeader: visible[0]?.kind === 'track',
     headerExtra: blendedHeaderExtra(topResult, common),
     common,
+    footerExtra: props.footerExtra,
     renderItem: blendedSectionRenderItem(ctx),
   };
 }

@@ -2,7 +2,7 @@ import { useState, type Dispatch, type SetStateAction } from 'react';
 
 import type { DiscoveryKind } from '@shared/apiClient/discovery';
 
-export type ResultsFilter = 'all' | DiscoveryKind;
+export type ResultsFilter = 'all' | 'unreleased' | DiscoveryKind;
 
 type ResultsFilterState = {
   filter: ResultsFilter;

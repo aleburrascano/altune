@@ -10,6 +10,7 @@ import {
   DiscoverZeroResults,
 } from '@features/discovery/ui/DiscoverBodyStates';
 import { FilterChips } from '@features/discovery/ui/FilterChips';
+import { UnreleasedAllHits, UnreleasedSection } from '@features/discovery/ui/UnreleasedResults';
 import { FilteredResults } from '@features/discovery/ui/FilteredResults';
 import { IncompleteResultsBanner, RefreshFailedNotice } from '@features/discovery/ui/ResultNotices';
 import { RecentSearches } from '@features/discovery/ui/RecentSearches';
@@ -19,6 +20,7 @@ import {
 } from '@features/discovery/domain/discoverView';
 import type { ResultsCommonProps } from '@features/discovery/ui/ResultsList';
 import type { DiscoveryResult, ResultSection } from '@shared/apiClient/discovery';
+import type { UnreleasedSearchHit } from '@shared/apiClient/enrichment';
 import type {
   HistorySlice,
   PaginationSlice,
@@ -36,9 +38,10 @@ interface SearchData {
 
 type ResultsProps = Omit<
   ResultsSlice,
-  'searchData' | 'resultsIncomplete' | 'searchError' | 'refreshFailed'
+  'searchData' | 'unreleased' | 'resultsIncomplete' | 'searchError' | 'refreshFailed'
 > & {
   searchData: SearchData | undefined;
+  unreleased?: UnreleasedSearchHit[] | undefined;
   resultsIncomplete?: boolean | undefined;
   searchError?: unknown;
   refreshFailed?: boolean | undefined;
@@ -98,10 +101,17 @@ function slotsFor(props: DiscoverBodyProps): SlotBuilders {
   };
 }
 
+const NO_HITS: UnreleasedSearchHit[] = [];
+
+function hitsOf(props: DiscoverBodyProps): UnreleasedSearchHit[] {
+  return props.results.unreleased ?? NO_HITS;
+}
+
 function BlendedResults(props: DiscoverBodyProps): ReactElement {
   const { searchData, setFilter } = props.results;
   return (
     <BlendedSection
+      footerExtra={<UnreleasedSection hits={hitsOf(props)} />}
       sections={searchData?.sections ?? []}
       topResult={searchData?.top_result}
       onSeeAll={setFilter}
@@ -113,6 +123,7 @@ function BlendedResults(props: DiscoverBodyProps): ReactElement {
 function ResultsContent(props: DiscoverBodyProps): ReactElement {
   const { searchData, filter } = props.results;
   if (filter === 'all') return <BlendedResults {...props} />;
+  if (filter === 'unreleased') return <UnreleasedAllHits hits={hitsOf(props)} />;
   return (
     <FilteredResults kind={filter} results={searchData?.results ?? []} common={commonFor(props)} />
   );
@@ -122,7 +133,11 @@ function ResultsBody(props: DiscoverBodyProps): ReactElement {
   const { results } = props;
   return (
     <View testID="discover-results" style={styles.results}>
-      <FilterChips active={results.filter} onSelect={results.setFilter} />
+      <FilterChips
+        active={results.filter}
+        onSelect={results.setFilter}
+        showUnreleased={hitsOf(props).length > 0}
+      />
       <IncompleteResultsBanner visible={results.resultsIncomplete} />
       <RefreshFailedNotice visible={results.refreshFailed} />
       <ResultsContent {...props} />
@@ -132,7 +147,9 @@ function ResultsBody(props: DiscoverBodyProps): ReactElement {
 
 function ReadyBody(props: DiscoverBodyProps): ReactElement {
   const { results } = props;
-  if (results.view !== 'zero-results') return <ResultsBody {...props} />;
+  if (results.view !== 'zero-results' || hitsOf(props).length > 0) {
+    return <ResultsBody {...props} />;
+  }
   return (
     <DiscoverZeroResults
       filter={results.filter}

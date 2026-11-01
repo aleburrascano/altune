@@ -17,16 +17,25 @@ const FILTER_CHIPS: readonly { filter: ResultsFilter; label: string; testID: str
   },
 ];
 
+const UNRELEASED_CHIP = {
+  filter: 'unreleased',
+  label: 'Unreleased',
+  testID: 'discover-filter-unreleased',
+} as const;
+
 export function FilterChips({
   active,
   onSelect,
+  showUnreleased = false,
 }: {
   active: ResultsFilter;
   onSelect: (filter: ResultsFilter) => void;
+  showUnreleased?: boolean;
 }): ReactElement {
+  const chips = showUnreleased ? [...FILTER_CHIPS, UNRELEASED_CHIP] : FILTER_CHIPS;
   return (
     <View style={styles.chipRow}>
-      {FILTER_CHIPS.map(({ filter, label, testID }) => (
+      {chips.map(({ filter, label, testID }) => (
         <Chip
           key={filter}
           action={`discover.filter.${filter}`}

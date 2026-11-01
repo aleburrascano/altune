@@ -29,6 +29,7 @@ type ResultsListProps<T> = {
   keyExtractor: (item: T, index: number) => string;
   renderItem: ListRenderItem<T>;
   headerExtra?: ReactNode;
+  footerExtra?: ReactNode;
   common: ResultsCommonProps;
   pairFirstItemWithHeader?: boolean;
 };
@@ -103,6 +104,7 @@ type ResultsFlatListProps<T> = {
   keyExtractor: (item: T, index: number) => string;
   renderItem: ListRenderItem<T>;
   common: ResultsCommonProps;
+  footerExtra?: ReactNode;
 };
 
 function flatListImpressionProps(common: ResultsCommonProps) {
@@ -112,10 +114,10 @@ function flatListImpressionProps(common: ResultsCommonProps) {
   };
 }
 
-function flatListChromeProps(header: ReactElement, common: ResultsCommonProps) {
+function flatListChromeProps(header: ReactElement, footer: ReactElement) {
   return {
     ListHeaderComponent: header,
-    ListFooterComponent: <ResultsFooter common={common} />,
+    ListFooterComponent: footer,
     style: styles.list,
     contentContainerStyle: styles.listContent,
     showsVerticalScrollIndicator: false,
@@ -133,11 +135,17 @@ function flatListRefreshProps(common: ResultsCommonProps) {
 }
 
 function flatListProps<T>(props: ResultsFlatListProps<T>) {
-  const { header, keyExtractor, renderItem, common } = props;
+  const { header, keyExtractor, renderItem, common, footerExtra } = props;
+  const footer = (
+    <>
+      {footerExtra}
+      <ResultsFooter common={common} />
+    </>
+  );
   return {
     keyExtractor,
     renderItem,
-    ...flatListChromeProps(header, common),
+    ...flatListChromeProps(header, footer),
     ...flatListRefreshProps(common),
   };
 }
@@ -163,8 +171,8 @@ function resultsHeaderProps<T>(props: ResultsListProps<T>, paired: boolean): Res
 }
 
 function resultsFlatListProps<T>(props: ResultsListProps<T>, listItems: T[], header: ReactElement) {
-  const { keyExtractor, renderItem, common } = props;
-  return { items: listItems, header, keyExtractor, renderItem, common };
+  const { keyExtractor, renderItem, common, footerExtra } = props;
+  return { items: listItems, header, keyExtractor, renderItem, common, footerExtra };
 }
 
 export function ResultsList<T>(props: ResultsListProps<T>): ReactElement {

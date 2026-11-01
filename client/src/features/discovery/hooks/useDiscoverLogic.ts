@@ -18,6 +18,7 @@ import {
   useRecordSearchHistory,
   useSearchHistory,
 } from '@features/discovery/hooks/useSearchHistory';
+import { useUnreleasedSearch } from '@features/discovery/hooks/useUnreleasedSearch';
 import { useResultsFilter } from '@features/discovery/hooks/useResultsFilter';
 import { useResultTap, type ResultTapHandler } from '@features/discovery/hooks/useResultTap';
 import { useDegradedSearchTelemetry } from '@features/discovery/hooks/useDegradedSearchTelemetry';
@@ -31,6 +32,7 @@ import type {
   DiscoverySuggestion,
   SearchHistoryItem,
 } from '@shared/apiClient/discovery';
+import type { UnreleasedSearchHit } from '@shared/apiClient/enrichment';
 import type { DiscoverView, SearchCorrection } from '@features/discovery/domain/discoverView';
 import type { ResultsFilter } from '@features/discovery/hooks/useResultsFilter';
 
@@ -44,6 +46,7 @@ export type ResultsSlice = {
   setFilter: Dispatch<SetStateAction<ResultsFilter>>;
   onResultTap: ResultTapHandler;
   impression: ImpressionHandlers;
+  unreleased: UnreleasedSearchHit[];
   correction: SearchCorrection | null;
   onSearchOriginal: () => void;
   onRefresh: () => void;
@@ -112,6 +115,7 @@ export function useDiscoverLogic(): DiscoverLogic {
     suggestionVisibility.canShowSuggestions,
     suggestions.data,
   );
+  const unreleased = useUnreleasedSearch(search.committedQuery);
   const history = useSearchHistory();
   const impression = useImpressionLogger(searchData);
   const { filter, setFilter } = useResultsFilter(search.committedQuery);
@@ -157,6 +161,7 @@ export function useDiscoverLogic(): DiscoverLogic {
       setFilter,
       onResultTap,
       impression,
+      unreleased,
       correction,
       onSearchOriginal: () => {
         if (correction != null) search.setQuery(correction.original);

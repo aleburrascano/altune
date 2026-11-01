@@ -450,16 +450,22 @@ function unreleasedParams({ name, knownIds }: UnreleasedTracksRequest): URLSearc
   return params;
 }
 
-function parseUnreleasedRow(value: unknown, at: string): UnreleasedTrack | null {
-  try {
-    return parseUnreleasedTrack(value, at);
-  } catch {
-    return null;
-  }
+type RowParser<T> = (value: unknown, at: string) => T;
+
+function skipMalformed<T>(parse: RowParser<T>): RowParser<T | null> {
+  return function parseOrSkip(value, at) {
+    try {
+      return parse(value, at);
+    } catch {
+      return null;
+    }
+  };
 }
 
-function isParsed(track: UnreleasedTrack | null): track is UnreleasedTrack {
-  return track !== null;
+const parseUnreleasedRow = skipMalformed(parseUnreleasedTrack);
+
+function isParsed<T>(row: T | null): row is T {
+  return row !== null;
 }
 
 function parseUnreleasedTracksResponse(value: unknown): UnreleasedTracksResponse {
@@ -488,4 +494,41 @@ export async function getUnreleasedTracks(
 ): Promise<UnreleasedTracksResponse> {
   const path = discoveryEntityPath('artists', provider, externalId, 'unreleased');
   return fetchUnreleasedTracks(withQuery(path, unreleasedParams(request)), signal);
+}
+
+export type UnreleasedArtist = { provider: string; external_id: string; name: string };
+
+export type UnreleasedSearchHit = UnreleasedTrack & { artist: UnreleasedArtist };
+
+export type UnreleasedSearchResponse = { items: UnreleasedSearchHit[] };
+
+function parseUnreleasedArtist(value: unknown, at: string): UnreleasedArtist {
+  const r = asRecord(value, at);
+  return {
+    provider: asString(r.provider, `${at}.provider`),
+    external_id: asString(r.external_id, `${at}.external_id`),
+    name: asString(r.name, `${at}.name`),
+  };
+}
+
+function parseUnreleasedHit(value: unknown, at: string): UnreleasedSearchHit {
+  const track = parseUnreleasedTrack(value, at);
+  return { ...track, artist: parseUnreleasedArtist(asRecord(value, at).artist, `${at}.artist`) };
+}
+
+const parseUnreleasedHitRow = skipMalformed(parseUnreleasedHit);
+
+function parseUnreleasedSearchResponse(value: unknown): UnreleasedSearchResponse {
+  const at = 'UnreleasedSearchResponse';
+  const body = asRecord(value, at);
+  const rows = parseArray(body.items, `${at}.items`, parseUnreleasedHitRow);
+  return { items: rows.filter(isParsed) };
+}
+
+export async function searchUnreleasedTracks(
+  query: string,
+  signal?: AbortSignal,
+): Promise<UnreleasedSearchResponse> {
+  const path = withQuery('/v1/discovery/unreleased/search', new URLSearchParams({ q: query }));
+  return parseUnreleasedSearchResponse(await apiFetch(path, signalInit(signal)));
 }

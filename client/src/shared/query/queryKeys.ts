@@ -24,6 +24,7 @@ export const discoveryKeys = {
   searchPrefix: ['discovery', 'search'] as const,
   search: (query: string) => ['discovery', 'search', query] as const,
   suggest: (query: string) => ['discovery', 'suggest', query] as const,
+  unreleasedSearch: (query: string) => ['discovery', 'unreleased-search', query] as const,
   lyrics: (title: string, artist: string) => ['discovery', 'lyrics', title, artist] as const,
 };
 
