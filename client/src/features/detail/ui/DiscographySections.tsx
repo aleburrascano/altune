@@ -55,6 +55,7 @@ type FilterChipsProps = {
   onSelect: (type: string) => void;
   action: string;
   testIDPrefix: string;
+  isActionPerChip?: boolean | undefined;
 };
 
 type ChipProps = Omit<FilterChipsProps, 'groups' | 'activeType'> & {
@@ -75,7 +76,7 @@ function chipStyle(theme: ReturnType<typeof useTheme>, on: boolean) {
 
 function chipPressableProps(props: ChipProps, theme: ReturnType<typeof useTheme>) {
   return {
-    action: props.action,
+    action: props.isActionPerChip === true ? `${props.action}.${props.group.type}` : props.action,
     testID: `${props.testIDPrefix}-${props.group.type}`,
     onPress: () => props.onSelect(props.group.type),
     accessibilityRole: 'button' as const,
@@ -99,8 +100,9 @@ function Chip(props: ChipProps): ReactElement {
 const MIN_GROUPS_FOR_CHIPS = 2;
 
 function chipPropsFor(props: FilterChipsProps, group: ChipGroup): ChipProps {
-  const { action, testIDPrefix, onSelect } = props;
-  return { group, on: group.type === props.activeType, onSelect, action, testIDPrefix };
+  const { action, testIDPrefix, onSelect, isActionPerChip } = props;
+  const on = group.type === props.activeType;
+  return { group, on, onSelect, action, testIDPrefix, isActionPerChip };
 }
 
 export function FilterChips(props: FilterChipsProps): ReactElement | null {

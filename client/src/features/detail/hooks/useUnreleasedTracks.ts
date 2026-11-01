@@ -65,6 +65,7 @@ type UnreleasedOptions = ReturnType<typeof unreleasedQueryOptions>;
 export type UnreleasedTracksState = {
   tracks: UnreleasedTrack[];
   isLoading: boolean;
+  isPending: boolean;
   isFailed: boolean;
   retry: () => void;
 };
@@ -102,6 +103,7 @@ export function useUnreleasedTracks(artist: DiscoveryResult): UnreleasedTracksSt
   return {
     tracks: unreleased?.items ?? NO_TRACKS,
     isLoading: isLoading || isComputing,
+    isPending: isComputing,
     ...failure,
   };
 }
