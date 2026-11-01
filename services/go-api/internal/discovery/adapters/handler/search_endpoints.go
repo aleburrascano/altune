@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/service/history"
 	"altune/go-api/internal/discovery/service/interaction"
+	"altune/go-api/internal/discovery/service/unreleased"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/telemetry"
@@ -138,6 +139,31 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 		Offset:         result.Offset,
 		HasMore:        result.HasMore,
 	})
+	h.warmUnreleased(result.Results)
+}
+
+const warmArtistLimit = 3
+
+func (h *DiscoveryHandler) warmUnreleased(results []domain.SearchResult) {
+	if h.unreleasedSvc == nil {
+		return
+	}
+	var artists []unreleased.WarmArtist
+	for _, res := range results {
+		if res.Kind != domain.ResultKindArtist || len(res.Sources) == 0 {
+			continue
+		}
+		known := make(map[domain.ProviderName]string, len(res.Sources))
+		for _, src := range res.Sources {
+			known[src.Provider] = src.ExternalID
+		}
+		first := res.Sources[0]
+		artists = append(artists, unreleased.WarmArtist{Provider: first.Provider, ExternalID: first.ExternalID, Name: res.Title, Known: known})
+		if len(artists) == warmArtistLimit {
+			break
+		}
+	}
+	h.unreleasedSvc.Warm(artists)
 }
 
 func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Request) {
