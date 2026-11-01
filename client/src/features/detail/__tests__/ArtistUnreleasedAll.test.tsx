@@ -15,17 +15,24 @@ import {
 
 const { __http } = require('@testing/doubles/fetch.js');
 
+type RedirectProps = { href: string };
 let mockParams: { handoff?: string; where?: string } = {};
 jest.mock('expo-router', () => {
   const { Text: RNText } = jest.requireActual('react-native');
   return {
     useLocalSearchParams: () => mockParams,
-    Redirect: ({ href }: { href: string }) => <RNText>{`redirect:${href}`}</RNText>,
+    Redirect: ({ href }: RedirectProps) => <RNText>{`redirect:${href}`}</RNText>,
   };
 });
 
 const UNRELEASED = 'GET /v1/discovery/artists/spotify/artist-1/unreleased';
 const TRACK_COUNT = 25;
+const GENIUS_ID_BASE = 9000;
+const OFF_STREAMING_ID = 9101;
+const ON_STREAMING_ID = 9102;
+const OTHER_OFF_STREAMING_ID = 9103;
+const OTHER_ON_STREAMING_ID = 9104;
+const ROW_TEST_ID = /^detail-unreleased-\d+$/;
 
 const ARTIST: DiscoveryResult = {
   kind: 'artist',
@@ -39,7 +46,7 @@ const ARTIST: DiscoveryResult = {
 
 function genius(index: number, offStreaming: boolean) {
   return {
-    genius_id: 9000 + index,
+    genius_id: index,
     title: `Full list entry ${index}`,
     cover_url: null,
     genius_url: `https://genius.com/full-list-entry-${index}-lyrics`,
@@ -73,36 +80,34 @@ beforeEach(async () => {
 
 describe('UnreleasedAllScreen', () => {
   it('lists every one of an artist with 25 tracks as its own row', async () => {
-    const items = Array.from({ length: TRACK_COUNT }, (_, i) => genius(i, true));
+    const items = Array.from({ length: TRACK_COUNT }, (_, i) => genius(GENIUS_ID_BASE + i, true));
     __http.reply(UNRELEASED, { status: 200, json: { items } });
     openArtist();
     renderScreen();
 
-    await waitFor(() =>
-      expect(screen.getAllByTestId(/^detail-unreleased-\d+$/)).toHaveLength(TRACK_COUNT),
-    );
+    await waitFor(() => expect(screen.getAllByTestId(ROW_TEST_ID)).toHaveLength(TRACK_COUNT));
     expect(screen.getByTestId('detail-unreleased-all-list').props.horizontal).toBeFalsy();
   });
 
   it('shows the rail first chip group when no where param is given', async () => {
-    const items = [genius(1, true), genius(2, false)];
+    const items = [genius(OFF_STREAMING_ID, true), genius(ON_STREAMING_ID, false)];
     __http.reply(UNRELEASED, { status: 200, json: { items } });
     openArtist();
     renderScreen();
 
-    expect(await screen.findByText('Full list entry 1')).toBeTruthy();
-    expect(screen.queryByText('Full list entry 2')).toBeNull();
+    expect(await screen.findByText(`Full list entry ${OFF_STREAMING_ID}`)).toBeTruthy();
+    expect(screen.queryByText(`Full list entry ${ON_STREAMING_ID}`)).toBeNull();
   });
 
   it('shows the other group when the where param asks for it', async () => {
-    const items = [genius(3, true), genius(4, false)];
+    const items = [genius(OTHER_OFF_STREAMING_ID, true), genius(OTHER_ON_STREAMING_ID, false)];
     __http.reply(UNRELEASED, { status: 200, json: { items } });
     openArtist();
     mockParams = { ...mockParams, where: 'unreleased' };
     renderScreen();
 
-    expect(await screen.findByText('Full list entry 4')).toBeTruthy();
-    expect(screen.queryByText('Full list entry 3')).toBeNull();
+    expect(await screen.findByText(`Full list entry ${OTHER_ON_STREAMING_ID}`)).toBeTruthy();
+    expect(screen.queryByText(`Full list entry ${OTHER_OFF_STREAMING_ID}`)).toBeNull();
   });
 
   it('redirects when the handoff is missing', () => {

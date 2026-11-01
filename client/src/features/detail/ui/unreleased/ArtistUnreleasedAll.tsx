@@ -16,6 +16,7 @@ import { UnreleasedRow } from '@features/detail/ui/unreleased/ArtistUnreleased';
 
 type ArtistProps = { artist: DiscoveryResult };
 type ListProps = ArtistProps & { tracks: UnreleasedTrack[] };
+type RowInfo = { item: UnreleasedTrack };
 type ScreenParams = { handoff?: string; where?: string };
 
 const SCREEN_TITLE = 'Not on streaming';
@@ -34,7 +35,7 @@ function railFirstChipWhere(tracks: UnreleasedTrack[]): UnreleasedWhere {
 }
 
 function rowRenderer(artist: DiscoveryResult) {
-  return function renderRow({ item }: { item: UnreleasedTrack }): ReactElement {
+  return function renderRow({ item }: RowInfo): ReactElement {
     return (
       <View style={styles.row}>
         <UnreleasedRow artist={artist} track={item} />
@@ -43,29 +44,41 @@ function rowRenderer(artist: DiscoveryResult) {
   };
 }
 
-function UnreleasedList({ artist, tracks }: ListProps): ReactElement {
+function listProps({ artist, tracks }: ListProps) {
+  return {
+    testID: 'detail-unreleased-all-list',
+    data: tracks,
+    keyExtractor: trackKey,
+    renderItem: rowRenderer(artist),
+    initialNumToRender: tracks.length,
+    contentContainerStyle: styles.content,
+  };
+}
+
+function UnreleasedList(props: ListProps): ReactElement {
+  return <FlatList {...listProps(props)} />;
+}
+
+function useShownTracks(artist: DiscoveryResult): UnreleasedTrack[] {
+  const params = useLocalSearchParams<ScreenParams>();
+  const { tracks } = useUnreleasedTracks(artist);
+  const where = isWhere(params.where) ? params.where : railFirstChipWhere(tracks);
+  return unreleasedView(tracks, 'popular', where, 'all');
+}
+
+function ScreenTitle(): ReactElement {
   return (
-    <FlatList
-      testID="detail-unreleased-all-list"
-      data={tracks}
-      keyExtractor={trackKey}
-      renderItem={rowRenderer(artist)}
-      initialNumToRender={tracks.length}
-      contentContainerStyle={styles.content}
-    />
+    <Text variant="title" style={styles.title}>
+      {SCREEN_TITLE}
+    </Text>
   );
 }
 
 function UnreleasedAllBody({ artist }: ArtistProps): ReactElement {
-  const params = useLocalSearchParams<ScreenParams>();
-  const { tracks } = useUnreleasedTracks(artist);
-  const where = isWhere(params.where) ? params.where : railFirstChipWhere(tracks);
-  const shown = unreleasedView(tracks, 'popular', where, 'all');
+  const shown = useShownTracks(artist);
   return (
     <View style={styles.screen} testID="detail-unreleased-all">
-      <Text variant="title" style={styles.title}>
-        {SCREEN_TITLE}
-      </Text>
+      <ScreenTitle />
       <UnreleasedList artist={artist} tracks={shown} />
     </View>
   );
