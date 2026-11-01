@@ -58,20 +58,21 @@ function cardHint(track: UnreleasedTrack, state: UnreleasedCardState): string | 
   return CARD_HINTS[state](track);
 }
 
-function VersionsButton({ track, onOpen }: VersionsButtonProps): ReactElement | null {
-  if (!hasManyVersions(track)) return null;
-  const count = track.versions.length;
+function versionsButtonProps({ track, onOpen }: VersionsButtonProps) {
+  return {
+    action: 'detail.artist.unreleased.versions.open',
+    testID: `detail-unreleased-versions-${track.key}`,
+    accessibilityRole: 'button' as const,
+    accessibilityLabel: `Show ${track.versions.length} versions of ${track.title}`,
+    onPress: onOpen,
+  };
+}
+
+function VersionsButton(props: VersionsButtonProps): ReactElement | null {
+  if (!hasManyVersions(props.track)) return null;
   return (
-    <Tappable
-      action="detail.artist.unreleased.versions.open"
-      testID={`detail-unreleased-versions-${track.key}`}
-      accessibilityRole="button"
-      accessibilityLabel={`Show ${count} versions of ${track.title}`}
-      onPress={onOpen}
-    >
-      <Text variant="label" tone="tertiary">
-        {`${count} versions`}
-      </Text>
+    <Tappable {...versionsButtonProps(props)}>
+      <Text variant="label" tone="tertiary">{`${props.track.versions.length} versions`}</Text>
     </Tappable>
   );
 }
@@ -177,19 +178,20 @@ type UnreleasedCardViewProps = UnreleasedCoverProps & {
   versions: VersionsAccess;
 };
 
-export function UnreleasedCard({
-  artist,
-  track,
-  card,
-  versions,
-}: UnreleasedCardViewProps): ReactElement {
+function CardPress({ artist, track, card, versions }: UnreleasedCardViewProps): ReactElement {
+  return (
+    <Tappable {...unreleasedRowProps({ track, card })} onLongPress={versions.onLongPress}>
+      <UnreleasedCover track={track} artist={artist} />
+      <UnreleasedTitle track={track} card={card} />
+    </Tappable>
+  );
+}
+
+export function UnreleasedCard(props: UnreleasedCardViewProps): ReactElement {
   return (
     <View style={styles.column}>
-      <Tappable {...unreleasedRowProps({ track, card })} onLongPress={versions.onLongPress}>
-        <UnreleasedCover track={track} artist={artist} />
-        <UnreleasedTitle track={track} card={card} />
-      </Tappable>
-      <VersionsButton track={track} onOpen={versions.onOpen} />
+      <CardPress {...props} />
+      <VersionsButton track={props.track} onOpen={props.versions.onOpen} />
     </View>
   );
 }
