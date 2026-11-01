@@ -101,6 +101,7 @@ function slotsFor(props: DiscoverBodyProps): SlotBuilders {
 }
 
 const NO_HITS: UnreleasedSearchHit[] = [];
+const NO_RESULTS: DiscoveryResult[] = [];
 
 function hitsOf(props: DiscoverBodyProps): UnreleasedSearchHit[] {
   return props.results.unreleased ?? NO_HITS;
@@ -122,7 +123,7 @@ function BlendedResults(props: DiscoverBodyProps): ReactElement {
 type KindResultsProps = DiscoverBodyProps & { kind: DiscoveryKind };
 
 function KindResults(props: KindResultsProps): ReactElement {
-  const results = props.results.searchData?.results ?? [];
+  const results = props.results.searchData?.results ?? NO_RESULTS;
   return <FilteredResults kind={props.kind} results={results} common={commonFor(props)} />;
 }
 
