@@ -70,6 +70,7 @@ const webProject = {
   displayName: 'web',
   rootDir: __dirname,
   restoreMocks: true,
+  transformIgnorePatterns: webPreset.transformIgnorePatterns.map(allowEsmOnlyDependencies),
   testMatch: [
     '**/__tests__/**/*.web.integration.test.ts',
     '**/__tests__/**/*.web.integration.test.tsx',
