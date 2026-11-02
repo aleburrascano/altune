@@ -209,9 +209,11 @@ M8 src/shared/offline/ui/OfflineReconcileBridge.tsx loose file in ui/
 M8 src/shared/playlists/ui/AddToPlaylistSheet.tsx loose file in ui/
 M8 src/shared/playlists/ui/CreatePlaylistModal.tsx loose file in ui/
 M9 src/features/detail/hooks holds more than 16 source files
-M9 src/features/detail/ui holds more than 16 source files
 M9 src/features/detail/ui holds both files and folders
+M9 src/features/detail/ui holds more than 16 source files
 M9 src/features/discovery/adapters holds both files and folders
+M9 src/features/discovery/hooks holds both files and folders
+M9 src/features/discovery/ui holds both files and folders
 M9 src/features/library/hooks holds more than 16 source files
 M9 src/features/library/ui holds more than 16 source files
 M9 src/features/playback/adapters holds both files and folders
