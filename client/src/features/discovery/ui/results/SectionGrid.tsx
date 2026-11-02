@@ -9,7 +9,7 @@ import { usePressableInteraction } from '@shared/ui/primitives/usePressableInter
 import { kindLabel, resultKey } from '@features/discovery/domain/resultDisplay';
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import type { ResultTapHandler } from '@features/discovery/hooks/useResultTap';
+import type { ResultTapHandler } from '@features/discovery/hooks/results/useResultTap';
 import { borderWidth } from '@shared/ui/theme';
 
 function gridColumnsFor(contentWidth: number): number {

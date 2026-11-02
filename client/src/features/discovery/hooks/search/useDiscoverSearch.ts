@@ -5,15 +5,15 @@ import type { DiscoveryProviderInfo, DiscoverySearchResponse } from '@shared/api
 
 import { isRetryable } from '@shared/failure/errors';
 import { discoveryKeys, isSearchKeyFor } from '@shared/query/queryKeys';
-import { useReportQueryFailure } from '@features/discovery/hooks/useReportQueryFailure';
+import { useReportQueryFailure } from '@features/discovery/hooks/search/useReportQueryFailure';
 import {
   useDiscoverFetchEnabled,
   useGatedDiscoverCall,
-} from '@features/discovery/hooks/useDiscoverFetchGate';
+} from '@features/discovery/hooks/search/useDiscoverFetchGate';
 import {
   useRefreshFromFirstPage,
   useRestartOnExpiredSlate,
-} from '@features/discovery/hooks/useSearchRefresh';
+} from '@features/discovery/hooks/search/useSearchRefresh';
 import {
   MAX_SEARCH_OFFSET,
   MAX_SEARCH_PAGES,

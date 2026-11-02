@@ -1,7 +1,7 @@
 import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import { useImpressionLogger } from '@features/discovery/hooks/useImpressionLogger';
+import { useImpressionLogger } from '@features/discovery/hooks/results/useImpressionLogger';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { makeWrapper } from '@testing/makeWrapper';
 import { signInTestUser } from '@testing/signInTestUser';

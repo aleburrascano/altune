@@ -10,9 +10,9 @@ import { signInTestUser } from '@testing/signInTestUser';
 import { httpDiscoverPort } from '@features/discovery/adapters/http/httpDiscoverPort';
 import { createMemoryDiscoverPort } from '@features/discovery/__tests__/memoryDiscoverPort';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
-import { useAutocompleteSuggestions } from '@features/discovery/hooks/useSuggestions';
-import { useDiscoverSearch } from '@features/discovery/hooks/useDiscoverSearch';
-import { useSearchHistory } from '@features/discovery/hooks/useSearchHistory';
+import { useAutocompleteSuggestions } from '@features/discovery/hooks/history/useSuggestions';
+import { useDiscoverSearch } from '@features/discovery/hooks/search/useDiscoverSearch';
+import { useSearchHistory } from '@features/discovery/hooks/history/useSearchHistory';
 import {
   DiscoverPortProvider,
   useDiscoverPort,

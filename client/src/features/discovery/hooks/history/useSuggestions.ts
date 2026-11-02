@@ -4,8 +4,8 @@ import { useQuery, type QueryFunctionContext } from '@tanstack/react-query';
 import type { DiscoverySuggestion, DiscoverySuggestResponse } from '@shared/apiClient/discovery';
 
 import { discoveryKeys } from '@shared/query/queryKeys';
-import { useReportQueryFailure } from '@features/discovery/hooks/useReportQueryFailure';
-import { useDiscoverFetchEnabled } from '@features/discovery/hooks/useDiscoverFetchGate';
+import { useReportQueryFailure } from '@features/discovery/hooks/search/useReportQueryFailure';
+import { useDiscoverFetchEnabled } from '@features/discovery/hooks/search/useDiscoverFetchGate';
 import { isSearchableQuery, normalizeQuery } from '@features/discovery/domain/searchPaging';
 import { useDiscoverPort } from '@features/discovery/ports/DiscoverPortProvider';
 import type { DiscoverPort } from '@features/discovery/ports/discoverPort';

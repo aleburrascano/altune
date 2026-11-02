@@ -6,13 +6,13 @@ import { Row, Text, pressedStyle, radius, spacing, useTheme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { Tappable } from '@shared/ui/primitives/Tappable';
-import { FavoriteButton } from '@features/discovery/ui/FavoriteButton';
+import { FavoriteButton } from '@features/discovery/ui/favorites/FavoriteButton';
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import type { ResultTapHandler } from '@features/discovery/hooks/useResultTap';
+import type { ResultTapHandler } from '@features/discovery/hooks/results/useResultTap';
 
 import { resultSecondaryLine } from '@features/discovery/domain/resultDisplay';
-import { usePreviewPlayback } from '@features/discovery/hooks/usePreviewPlayback';
+import { usePreviewPlayback } from '@features/discovery/hooks/results/usePreviewPlayback';
 import { halved } from '@shared/ui/theme';
 
 type DiscoverRowProps = {

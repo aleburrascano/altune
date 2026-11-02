@@ -5,10 +5,10 @@ import { Button, Skeleton, Text, radius, spacing } from '@shared/ui';
 
 import { describeError } from '@shared/failure/describeError';
 import { SEARCH_UNAVAILABLE_TITLE } from '@features/discovery/domain/discoverView';
-import { ART_SIZE } from '@features/discovery/ui/DiscoverRow';
-import { FilterChips } from '@features/discovery/ui/FilterChips';
-import { IncompleteResultsBanner } from '@features/discovery/ui/ResultNotices';
-import type { ResultsFilter } from '@features/discovery/hooks/useResultsFilter';
+import { ART_SIZE } from '@features/discovery/ui/results/DiscoverRow';
+import { FilterChips } from '@features/discovery/ui/results/FilterChips';
+import { IncompleteResultsBanner } from '@features/discovery/ui/results/ResultNotices';
+import type { ResultsFilter } from '@features/discovery/hooks/results/useResultsFilter';
 
 const SKELETON_ROWS = ['row-a', 'row-b', 'row-c', 'row-d', 'row-e', 'row-f'];
 

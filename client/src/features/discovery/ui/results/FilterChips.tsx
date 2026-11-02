@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { Chip, spacing } from '@shared/ui';
 
 import { kindLabel } from '@features/discovery/domain/resultDisplay';
-import type { ResultsFilter } from '@features/discovery/hooks/useResultsFilter';
+import type { ResultsFilter } from '@features/discovery/hooks/results/useResultsFilter';
 
 const FILTER_CHIPS: readonly { filter: ResultsFilter; label: string; testID: string }[] = [
   { filter: 'all', label: 'All', testID: 'discover-filter-all' },

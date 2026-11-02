@@ -1,12 +1,12 @@
 import React from 'react';
 import { render as renderBare, screen } from '@testing-library/react-native';
 
-import { FilteredResults } from '@features/discovery/ui/FilteredResults';
+import { FilteredResults } from '@features/discovery/ui/results/FilteredResults';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import type { SearchCorrection } from '@features/discovery/domain/discoverView';
-import type { ResultsCommonProps } from '@features/discovery/ui/ResultsList';
+import type { ResultsCommonProps } from '@features/discovery/ui/results/ResultsList';
 import { PlaybackContext } from '@shared/playback/usePlayback';
 import { idlePlayback } from '@testing/queryHarness';
 

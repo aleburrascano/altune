@@ -12,8 +12,8 @@ import {
   SEARCH_PAGE_SIZE,
 } from '@features/discovery/domain/searchPaging';
 import { setSearchState } from '@features/discovery/domain/searchState';
-import { useDebouncedSearch } from '@features/discovery/hooks/useDebouncedSearch';
-import { useDiscoverSearch } from '@features/discovery/hooks/useDiscoverSearch';
+import { useDebouncedSearch } from '@features/discovery/hooks/search/useDebouncedSearch';
+import { useDiscoverSearch } from '@features/discovery/hooks/search/useDiscoverSearch';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { signInTestUser } from '@testing/signInTestUser';
 import { FeaturePorts } from '@/wiring/FeaturePorts';

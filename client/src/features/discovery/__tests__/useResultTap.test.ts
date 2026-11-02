@@ -2,7 +2,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { Keyboard } from 'react-native';
 
-import { useResultTap } from '@features/discovery/hooks/useResultTap';
+import { useResultTap } from '@features/discovery/hooks/results/useResultTap';
 import { readDetailHandoff } from '@shared/navigation/detailHandoff';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';

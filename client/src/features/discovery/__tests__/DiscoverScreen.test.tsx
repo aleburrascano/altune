@@ -10,7 +10,7 @@ import { makeIdlePlayback } from '@testing/factories';
 import { useKeyboardShortcuts } from '@shared/ui/keyboard/useKeyboardShortcuts';
 import { DiscoverPortProvider } from '@features/discovery/ports/DiscoverPortProvider';
 import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
-import { DiscoverScreen } from '@features/discovery/ui/DiscoverScreen';
+import { DiscoverScreen } from '@features/discovery/ui/search/DiscoverScreen';
 
 jest.mock('decode-uri-component', () => ({ __esModule: true, default: (s: string) => s }));
 

@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import type { DiscoverySearchResponse } from '@shared/apiClient/discovery';
-import { useDiscoverLogic } from '@features/discovery/hooks/useDiscoverLogic';
+import { useDiscoverLogic } from '@features/discovery/hooks/search/useDiscoverLogic';
 import { setSearchState } from '@features/discovery/domain/searchState';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { signInTestUser } from '@testing/signInTestUser';

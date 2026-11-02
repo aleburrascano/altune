@@ -7,13 +7,13 @@ import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
 import { discoveryKeys } from '@shared/query/queryKeys';
 
-import { useAutocompleteSuggestions } from '@features/discovery/hooks/useSuggestions';
-import { useDiscoverLogic } from '@features/discovery/hooks/useDiscoverLogic';
-import { useDiscoverSearch } from '@features/discovery/hooks/useDiscoverSearch';
+import { useAutocompleteSuggestions } from '@features/discovery/hooks/history/useSuggestions';
+import { useDiscoverLogic } from '@features/discovery/hooks/search/useDiscoverLogic';
+import { useDiscoverSearch } from '@features/discovery/hooks/search/useDiscoverSearch';
 import {
   useDiscoverClearSearchHistory,
   useSearchHistory,
-} from '@features/discovery/hooks/useSearchHistory';
+} from '@features/discovery/hooks/history/useSearchHistory';
 import { setSearchState } from '@features/discovery/domain/searchState';
 import { signInTestUser } from '@testing/signInTestUser';
 import { FeaturePorts } from '@/wiring/FeaturePorts';

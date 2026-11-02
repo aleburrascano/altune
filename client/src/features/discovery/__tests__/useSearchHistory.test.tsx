@@ -9,7 +9,7 @@ import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import {
   useDiscoverClearSearchHistory,
   useSearchHistory,
-} from '@features/discovery/hooks/useSearchHistory';
+} from '@features/discovery/hooks/history/useSearchHistory';
 import { DiscoverPortProvider } from '@features/discovery/ports/DiscoverPortProvider';
 import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
 import { signInTestUser } from '@testing/signInTestUser';

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Platform, Text } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { ResultsList, type ResultsCommonProps } from '@features/discovery/ui/ResultsList';
+import { ResultsList, type ResultsCommonProps } from '@features/discovery/ui/results/ResultsList';
 import { setPlatformOS } from '@testing/setPlatformOS';
 
 const NATIVE_OS = Platform.OS;

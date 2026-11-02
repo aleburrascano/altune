@@ -8,7 +8,7 @@ import { transientRetryOptions } from '@shared/query/retryDelay';
 import {
   useAutocompleteSuggestions,
   useSuggestionVisibility,
-} from '@features/discovery/hooks/useSuggestions';
+} from '@features/discovery/hooks/history/useSuggestions';
 import { signInTestUser } from '@testing/signInTestUser';
 import { FeaturePorts } from '@/wiring/FeaturePorts';
 import { httpFeaturePorts } from '@/wiring/httpFeaturePorts';

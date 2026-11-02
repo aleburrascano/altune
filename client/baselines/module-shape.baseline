@@ -77,36 +77,6 @@ M8 src/features/detail/ui/detailStyles.ts loose file in ui/
 M8 src/features/detail/ui/formatters.ts loose file in ui/
 M8 src/features/detail/ui/secondaryLine.tsx loose file in ui/
 M8 src/features/discovery/adapters/registerSearchStateSignOutReset.ts loose file in adapters/
-M8 src/features/discovery/hooks/useDebouncedSearch.ts loose file in hooks/
-M8 src/features/discovery/hooks/useDegradedSearchTelemetry.ts loose file in hooks/
-M8 src/features/discovery/hooks/useDiscoverFetchGate.ts loose file in hooks/
-M8 src/features/discovery/hooks/useDiscoverLogic.ts loose file in hooks/
-M8 src/features/discovery/hooks/useDiscoverSearch.ts loose file in hooks/
-M8 src/features/discovery/hooks/useFavorites.ts loose file in hooks/
-M8 src/features/discovery/hooks/useImpressionLogger.ts loose file in hooks/
-M8 src/features/discovery/hooks/usePreviewPlayback.ts loose file in hooks/
-M8 src/features/discovery/hooks/useReportQueryFailure.ts loose file in hooks/
-M8 src/features/discovery/hooks/useResultTap.ts loose file in hooks/
-M8 src/features/discovery/hooks/useResultsFilter.ts loose file in hooks/
-M8 src/features/discovery/hooks/useSearchHistory.ts loose file in hooks/
-M8 src/features/discovery/hooks/useSearchRefresh.ts loose file in hooks/
-M8 src/features/discovery/hooks/useSuggestions.ts loose file in hooks/
-M8 src/features/discovery/ui/BlendedSection.tsx loose file in ui/
-M8 src/features/discovery/ui/CorrectionBanner.tsx loose file in ui/
-M8 src/features/discovery/ui/DiscoverBody.tsx loose file in ui/
-M8 src/features/discovery/ui/DiscoverBodyStates.tsx loose file in ui/
-M8 src/features/discovery/ui/DiscoverRow.tsx loose file in ui/
-M8 src/features/discovery/ui/DiscoverScreen.tsx loose file in ui/
-M8 src/features/discovery/ui/FavoriteButton.tsx loose file in ui/
-M8 src/features/discovery/ui/FilterChips.tsx loose file in ui/
-M8 src/features/discovery/ui/FilteredResults.tsx loose file in ui/
-M8 src/features/discovery/ui/RecentSearches.tsx loose file in ui/
-M8 src/features/discovery/ui/ResultNotices.tsx loose file in ui/
-M8 src/features/discovery/ui/ResultsList.tsx loose file in ui/
-M8 src/features/discovery/ui/SectionGrid.tsx loose file in ui/
-M8 src/features/discovery/ui/SectionLabel.tsx loose file in ui/
-M8 src/features/discovery/ui/SuggestionsList.tsx loose file in ui/
-M8 src/features/discovery/ui/TopResultCard.tsx loose file in ui/
 M8 src/features/library/hooks/useActiveLibraryView.ts loose file in hooks/
 M8 src/features/library/hooks/useAddableTracks.ts loose file in hooks/
 M8 src/features/library/hooks/useDeleteTracks.ts loose file in hooks/
@@ -212,8 +182,6 @@ M9 src/features/detail/hooks holds more than 16 source files
 M9 src/features/detail/ui holds both files and folders
 M9 src/features/detail/ui holds more than 16 source files
 M9 src/features/discovery/adapters holds both files and folders
-M9 src/features/discovery/hooks holds both files and folders
-M9 src/features/discovery/ui holds both files and folders
 M9 src/features/library/hooks holds more than 16 source files
 M9 src/features/library/ui holds more than 16 source files
 M9 src/features/playback/adapters holds both files and folders
@@ -225,12 +193,12 @@ N4 src/features/detail/domain/trackExtras.ts exports TrackExtras with the word E
 N4 src/features/detail/domain/trackExtras.ts exports albumExtras with the word Extras
 N4 src/features/detail/domain/trackExtras.ts exports trackExtras with the word Extras
 N4 src/features/detail/domain/trackExtras.ts name has the word Extras
-N4 src/features/discovery/hooks/useDiscoverLogic.ts exports DiscoverLogic with the word Logic
-N4 src/features/discovery/hooks/useDiscoverLogic.ts exports useDiscoverLogic with the word Logic
-N4 src/features/discovery/hooks/useDiscoverLogic.ts name has the word Logic
-N4 src/features/discovery/hooks/useImpressionLogger.ts exports ImpressionHandlers with the word Handlers
-N4 src/features/discovery/hooks/useResultTap.ts exports ResultTapHandler with the word Handler
-N4 src/features/discovery/ui/ResultsList.tsx exports ResultsCommonProps with the word Common
+N4 src/features/discovery/hooks/search/useDiscoverLogic.ts exports DiscoverLogic with the word Logic
+N4 src/features/discovery/hooks/search/useDiscoverLogic.ts exports useDiscoverLogic with the word Logic
+N4 src/features/discovery/hooks/search/useDiscoverLogic.ts name has the word Logic
+N4 src/features/discovery/hooks/results/useImpressionLogger.ts exports ImpressionHandlers with the word Handlers
+N4 src/features/discovery/hooks/results/useResultTap.ts exports ResultTapHandler with the word Handler
+N4 src/features/discovery/ui/results/ResultsList.tsx exports ResultsCommonProps with the word Common
 N4 src/features/library/ui/LibraryListParts.tsx name has the word Parts
 N4 src/shared/apiClient/featuredArtists.ts exports featuredArtistsFromExtras with the word Extras
 N4 src/shared/auth/userLocalData.ts exports forgetPreviousUsersLocalData with the word Data

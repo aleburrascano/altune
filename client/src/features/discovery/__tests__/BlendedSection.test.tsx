@@ -1,11 +1,11 @@
 import React from 'react';
 import { fireEvent, render as renderBare, screen } from '@testing-library/react-native';
 
-import { BlendedSection } from '@features/discovery/ui/BlendedSection';
+import { BlendedSection } from '@features/discovery/ui/results/BlendedSection';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 
 import type { DiscoveryResult, ResultSection } from '@shared/apiClient/discovery';
-import type { ResultsCommonProps } from '@features/discovery/ui/ResultsList';
+import type { ResultsCommonProps } from '@features/discovery/ui/results/ResultsList';
 import { PlaybackContext } from '@shared/playback/usePlayback';
 import { idlePlayback } from '@testing/queryHarness';
 

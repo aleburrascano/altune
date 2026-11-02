@@ -2,31 +2,34 @@ import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { AsyncSection, type AsyncSectionProps } from '@shared/ui/async/AsyncSection';
 import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
-import { BlendedSection } from '@features/discovery/ui/BlendedSection';
+import { BlendedSection } from '@features/discovery/ui/results/BlendedSection';
 import {
   DiscoverFullError,
   DiscoverSkeleton,
   DiscoverUnavailable,
   DiscoverZeroResults,
-} from '@features/discovery/ui/DiscoverBodyStates';
-import { FilterChips } from '@features/discovery/ui/FilterChips';
-import { FilteredResults } from '@features/discovery/ui/FilteredResults';
+} from '@features/discovery/ui/search/DiscoverBodyStates';
+import { FilterChips } from '@features/discovery/ui/results/FilterChips';
+import { FilteredResults } from '@features/discovery/ui/results/FilteredResults';
 import { UnreleasedAllHits } from '@features/discovery/ui/unreleased/UnreleasedAllHits';
 import { UnreleasedSection } from '@features/discovery/ui/unreleased/UnreleasedSection';
-import { IncompleteResultsBanner, RefreshFailedNotice } from '@features/discovery/ui/ResultNotices';
-import { RecentSearches } from '@features/discovery/ui/RecentSearches';
+import {
+  IncompleteResultsBanner,
+  RefreshFailedNotice,
+} from '@features/discovery/ui/results/ResultNotices';
+import { RecentSearches } from '@features/discovery/ui/history/RecentSearches';
 import {
   searchAnnouncement,
   asyncViewForDiscoverView,
 } from '@features/discovery/domain/discoverView';
-import type { ResultsCommonProps } from '@features/discovery/ui/ResultsList';
+import type { ResultsCommonProps } from '@features/discovery/ui/results/ResultsList';
 import type { DiscoveryKind, DiscoveryResult, ResultSection } from '@shared/apiClient/discovery';
 import type { UnreleasedSearchHit } from '@shared/apiClient/enrichment';
 import type {
   HistorySlice,
   PaginationSlice,
   ResultsSlice,
-} from '@features/discovery/hooks/useDiscoverLogic';
+} from '@features/discovery/hooks/search/useDiscoverLogic';
 
 type SlotBuilders = Pick<AsyncSectionProps, 'skeleton' | 'error' | 'empty'>;
 

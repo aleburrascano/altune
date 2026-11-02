@@ -4,8 +4,8 @@ import { fireEvent, render as renderBare, screen } from '@testing-library/react-
 
 import { darkTheme } from '@shared/ui/theme/theme';
 
-import { CorrectionBanner } from '@features/discovery/ui/CorrectionBanner';
-import { DiscoverRow } from '@features/discovery/ui/DiscoverRow';
+import { CorrectionBanner } from '@features/discovery/ui/results/CorrectionBanner';
+import { DiscoverRow } from '@features/discovery/ui/results/DiscoverRow';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { PlaybackContext } from '@shared/playback/usePlayback';
 import { idlePlayback } from '@testing/queryHarness';

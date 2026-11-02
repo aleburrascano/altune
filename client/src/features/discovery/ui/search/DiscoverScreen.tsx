@@ -6,9 +6,9 @@ import { Screen, Text, spacing, useTheme } from '@shared/ui';
 import { SearchBar } from '@shared/ui/primitives/SearchBar';
 import { DismissKeyboardArea } from '@shared/ui/keyboard/keyboard';
 import { registerSearchFocus } from '@shared/ui/keyboard/useKeyboardShortcuts';
-import { DiscoverBody } from '@features/discovery/ui/DiscoverBody';
-import { SuggestionsList } from '@features/discovery/ui/SuggestionsList';
-import { useDiscoverLogic } from '@features/discovery/hooks/useDiscoverLogic';
+import { DiscoverBody } from '@features/discovery/ui/search/DiscoverBody';
+import { SuggestionsList } from '@features/discovery/ui/history/SuggestionsList';
+import { useDiscoverLogic } from '@features/discovery/hooks/search/useDiscoverLogic';
 import { MAX_QUERY_LENGTH } from '@features/discovery/domain/searchPaging';
 
 export function DiscoverScreen(): ReactElement {

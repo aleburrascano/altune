@@ -5,14 +5,14 @@ import { ChevronRight } from 'lucide-react-native';
 import { Text, pressedStyle, spacing, useTheme, useWideWebLayout } from '@shared/ui';
 import { Tappable } from '@shared/ui/primitives/Tappable';
 
-import { DiscoverRow } from '@features/discovery/ui/DiscoverRow';
-import { ResultsList, type ResultsCommonProps } from '@features/discovery/ui/ResultsList';
-import { SectionLabel } from '@features/discovery/ui/SectionLabel';
-import { SectionGrid, useGridColumns } from '@features/discovery/ui/SectionGrid';
-import { TopResultCard } from '@features/discovery/ui/TopResultCard';
+import { DiscoverRow } from '@features/discovery/ui/results/DiscoverRow';
+import { ResultsList, type ResultsCommonProps } from '@features/discovery/ui/results/ResultsList';
+import { SectionLabel } from '@features/discovery/ui/results/SectionLabel';
+import { SectionGrid, useGridColumns } from '@features/discovery/ui/results/SectionGrid';
+import { TopResultCard } from '@features/discovery/ui/results/TopResultCard';
 import { kindLabel, resultKey } from '@features/discovery/domain/resultDisplay';
 
-import type { ResultTapHandler } from '@features/discovery/hooks/useResultTap';
+import type { ResultTapHandler } from '@features/discovery/hooks/results/useResultTap';
 import type { DiscoveryKind, DiscoveryResult, ResultSection } from '@shared/apiClient/discovery';
 import { touchTarget } from '@shared/ui/theme';
 
