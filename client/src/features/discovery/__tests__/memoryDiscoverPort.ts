@@ -110,5 +110,6 @@ export function createMemoryDiscoverPort(seed: MemoryDiscoverSeed = {}): Discove
       resolveOnLaterTick(undefined, () => {
         history.unshift(query);
       }),
+    searchUnreleasedTracks: (_query, signal) => resolveOnLaterTick(signal, () => ({ items: [] })),
   };
 }

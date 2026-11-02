@@ -6,6 +6,7 @@ import {
   getLastFmEnrichment,
   getDeezerEnrichment,
   getUnreleasedTracks,
+  searchUnreleasedTracks,
   type ContentFetchResponse,
 } from '@shared/apiClient/enrichment';
 import { supabase } from '@shared/auth/supabaseClient';
@@ -857,5 +858,67 @@ describe('getUnreleasedTracks', () => {
 
     expect(items.map((item) => item.key)).toEqual(['40', '41', String(row.genius_id), '42']);
     expect(items.map((item) => item.quality_rank)).toEqual([RANKED, 0, 0, 0]);
+  });
+});
+
+describe('searchUnreleasedTracks', () => {
+  const PATH = 'GET /v1/discovery/unreleased/search';
+  const artist = { provider: 'spotify', external_id: 'art-1', name: 'Juice WRLD' };
+  const hit = {
+    genius_id: 7,
+    title: 'Cancun',
+    cover_url: 'https://img.example/c.jpg',
+    genius_url: 'https://genius.com/cancun',
+    release_date: '2022-07-24',
+    has_media: true,
+    audio_links: [],
+    extras: {},
+    artist,
+  };
+
+  it('sends the query and abort signal, and parses every field of a hit with its artist', async () => {
+    __http.reply(PATH, { status: 200, json: { items: [hit] } });
+
+    const { items } = await searchUnreleasedTracks('cancun', new AbortController().signal);
+
+    expect(new URLSearchParams(__http.last().query).get('q')).toBe('cancun');
+    expect(items).toEqual([
+      {
+        ...hit,
+        key: '7',
+        tracker_key: null,
+        quality: null,
+        quality_rank: 0,
+        off_streaming: false,
+        open_url: null,
+        open_host: null,
+        versions: [],
+        best_version_title: null,
+      },
+    ]);
+  });
+
+  it('drops a hit with a missing or malformed artist, or a malformed track, and keeps the rest', async () => {
+    const noArtist = { ...hit, genius_id: 8, artist: undefined };
+    const badName = { ...hit, genius_id: 9, artist: { ...artist, name: 4 } };
+    const badTrack = { ...hit, genius_id: 10, title: 5 };
+    const good = { ...hit, genius_id: 11 };
+    __http.reply(PATH, {
+      status: 200,
+      json: { items: [noArtist, badName, badTrack, 'junk', good] },
+    });
+
+    const { items } = await searchUnreleasedTracks('cancun');
+
+    expect(items.map((item) => item.key)).toEqual(['11']);
+  });
+
+  it('rejects with a ContractError when items is not an array', async () => {
+    __http.reply(PATH, { status: 200, json: { items: null } });
+
+    await expect(searchUnreleasedTracks('cancun')).rejects.toMatchObject({
+      name: 'ContractError',
+      at: 'UnreleasedSearchResponse.items',
+    });
   });
 });

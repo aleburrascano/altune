@@ -1,8 +1,10 @@
 import type { ReactElement, ReactNode } from 'react';
 
+import { UnreleasedSearchHits } from '@features/detail';
 import { DetailPortProvider } from '@features/detail/ports/DetailPortProvider';
 import { DiscoverPortProvider } from '@features/discovery/ports/DiscoverPortProvider';
 import { FavoritesPortProvider } from '@features/discovery/ports/FavoritesPortProvider';
+import { UnreleasedHitsSlotProvider } from '@features/discovery/ports/UnreleasedHitsSlot';
 import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
 import { SettingsPortProvider } from '@features/settings/ports/SettingsPortProvider';
 
@@ -16,7 +18,11 @@ interface FeaturePortsProps {
 function DiscoveryPorts({ ports, children }: FeaturePortsProps): ReactElement {
   return (
     <DiscoverPortProvider port={ports.discover}>
-      <FavoritesPortProvider port={ports.favorites}>{children}</FavoritesPortProvider>
+      <FavoritesPortProvider port={ports.favorites}>
+        <UnreleasedHitsSlotProvider view={UnreleasedSearchHits}>
+          {children}
+        </UnreleasedHitsSlotProvider>
+      </FavoritesPortProvider>
     </DiscoverPortProvider>
   );
 }

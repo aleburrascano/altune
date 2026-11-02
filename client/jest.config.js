@@ -43,13 +43,19 @@ const houseModuleNameMapper = {
   '^expo/virtual/env$': '<rootDir>/jest/expo-virtual-env.js',
 };
 
+const ESM_ONLY_DEPENDENCIES = 'decode-uri-component';
+
+function allowEsmOnlyDependencies(pattern) {
+  return pattern.replace('standard-navigation))', `standard-navigation|${ESM_ONLY_DEPENDENCIES}))`);
+}
+
 const nativeProject = {
   ...preset,
   displayName: 'native',
   rootDir: __dirname,
   restoreMocks: true,
   transformIgnorePatterns: [
-    ...preset.transformIgnorePatterns,
+    ...preset.transformIgnorePatterns.map(allowEsmOnlyDependencies),
     PREBUILT_COMMONJS_RENDERER_BABEL_WOULD_NOT_CHANGE,
   ],
   testMatch: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
@@ -64,6 +70,7 @@ const webProject = {
   displayName: 'web',
   rootDir: __dirname,
   restoreMocks: true,
+  transformIgnorePatterns: webPreset.transformIgnorePatterns.map(allowEsmOnlyDependencies),
   testMatch: [
     '**/__tests__/**/*.web.integration.test.ts',
     '**/__tests__/**/*.web.integration.test.tsx',

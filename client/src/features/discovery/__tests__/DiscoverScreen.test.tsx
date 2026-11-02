@@ -29,6 +29,7 @@ const port: DiscoverPort = {
   suggestDiscovery: jest.fn().mockResolvedValue({ suggestions: [] }),
   listSearchHistory: jest.fn().mockResolvedValue({ items: [] }),
   recordSearchHistory: jest.fn().mockResolvedValue(undefined),
+  searchUnreleasedTracks: jest.fn().mockResolvedValue({ items: [] }),
 };
 
 interface FakeWindow {
