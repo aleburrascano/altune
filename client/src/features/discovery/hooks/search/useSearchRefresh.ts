@@ -3,7 +3,7 @@ import { useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react
 
 import type { DiscoverySearchResponse } from '@shared/apiClient/discovery';
 
-import { useDiscoverFetchEnabled } from '@features/discovery/hooks/useDiscoverFetchGate';
+import { useDiscoverFetchEnabled } from '@features/discovery/hooks/search/useDiscoverFetchGate';
 import type { SearchPageParam, SearchPages } from '@features/discovery/domain/searchPaging';
 
 type HeldSlate = { key: QueryKey; pages: SearchPages | undefined };

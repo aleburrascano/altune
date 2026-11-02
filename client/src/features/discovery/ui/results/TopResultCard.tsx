@@ -9,10 +9,10 @@ import {
   type PressableInteractionState,
 } from '@shared/ui/primitives/usePressableInteraction';
 
-import { SectionLabel } from '@features/discovery/ui/SectionLabel';
+import { SectionLabel } from '@features/discovery/ui/results/SectionLabel';
 import { kindLabel } from '@features/discovery/domain/resultDisplay';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import type { ResultTapHandler } from '@features/discovery/hooks/useResultTap';
+import type { ResultTapHandler } from '@features/discovery/hooks/results/useResultTap';
 import { opacity } from '@shared/ui/theme';
 
 function pressedStyle({ pressed }: PressableInteractionState) {

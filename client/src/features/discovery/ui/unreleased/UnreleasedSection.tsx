@@ -5,7 +5,7 @@ import { spacing } from '@shared/ui';
 import type { UnreleasedSearchHit } from '@shared/apiClient/enrichment';
 
 import { UnreleasedHitsSlot } from '@features/discovery/ports/UnreleasedHitsSlot';
-import { SectionLabel } from '@features/discovery/ui/SectionLabel';
+import { SectionLabel } from '@features/discovery/ui/results/SectionLabel';
 
 const UNRELEASED_SECTION_CAP = 5;
 

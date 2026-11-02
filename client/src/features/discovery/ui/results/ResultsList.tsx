@@ -6,9 +6,9 @@ import { ActivityIndicator, View } from 'react-native';
 import { Text, spacing, useTheme, useWideWebLayout } from '@shared/ui';
 import { Tappable } from '@shared/ui/primitives/Tappable';
 
-import { CorrectionBanner } from '@features/discovery/ui/CorrectionBanner';
-import type { ResultTapHandler } from '@features/discovery/hooks/useResultTap';
-import type { ImpressionHandlers } from '@features/discovery/hooks/useImpressionLogger';
+import { CorrectionBanner } from '@features/discovery/ui/results/CorrectionBanner';
+import type { ResultTapHandler } from '@features/discovery/hooks/results/useResultTap';
+import type { ImpressionHandlers } from '@features/discovery/hooks/results/useImpressionLogger';
 import type { SearchCorrection } from '@features/discovery/domain/discoverView';
 
 export type ResultsCommonProps = {

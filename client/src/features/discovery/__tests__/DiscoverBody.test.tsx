@@ -2,7 +2,7 @@ import React from 'react';
 import { Platform } from 'react-native';
 import { fireEvent, render as renderBare, screen } from '@testing-library/react-native';
 
-import { DiscoverBody } from '@features/discovery/ui/DiscoverBody';
+import { DiscoverBody } from '@features/discovery/ui/search/DiscoverBody';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 
 import type { DiscoverView } from '@features/discovery/domain/discoverView';

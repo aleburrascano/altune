@@ -46,7 +46,7 @@ const failureShownIsAnImpressionLogSyncedInEffect = {
     'src/features/detail/ui/TrackStatusBanners.tsx',
     'src/features/library/ui/LibraryRowFailure.tsx',
     'src/shared/ui/primitives/Banner.tsx',
-    'src/features/discovery/hooks/useReportQueryFailure.ts',
+    'src/features/discovery/hooks/search/useReportQueryFailure.ts',
   ],
   rules: ['react-doctor/no-event-handler'],
 };
@@ -87,7 +87,7 @@ const remainingPlaylistsLoadFollowsLoadedPages = {
 };
 
 const slateExpiryArrivesAsServerData = {
-  files: ['src/features/discovery/hooks/useSearchRefresh.ts'],
+  files: ['src/features/discovery/hooks/search/useSearchRefresh.ts'],
   rules: ['react-doctor/no-event-handler'],
 };
 
@@ -112,7 +112,7 @@ const passwordHintIsFormTextNotACredential = {
 };
 
 const resultSignatureIsASearchResultIdentityNotACryptoSignature = {
-  files: ['src/features/discovery/hooks/useResultTap.ts'],
+  files: ['src/features/discovery/hooks/results/useResultTap.ts'],
   rules: ['react-doctor/insecure-crypto-risk'],
 };
 

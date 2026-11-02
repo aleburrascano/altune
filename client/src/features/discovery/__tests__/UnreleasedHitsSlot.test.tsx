@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import type { DiscoverySearchResponse } from '@shared/apiClient/discovery';
 
 import { resetSearchState } from '@features/discovery/domain/searchState';
-import { DiscoverScreen } from '@features/discovery/ui/DiscoverScreen';
+import { DiscoverScreen } from '@features/discovery/ui/search/DiscoverScreen';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 import {

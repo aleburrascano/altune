@@ -1,7 +1,7 @@
 import { type Dispatch, type SetStateAction } from 'react';
 
-import { useDebouncedSearch } from '@features/discovery/hooks/useDebouncedSearch';
-import { useDiscoverSearch } from '@features/discovery/hooks/useDiscoverSearch';
+import { useDebouncedSearch } from '@features/discovery/hooks/search/useDebouncedSearch';
+import { useDiscoverSearch } from '@features/discovery/hooks/search/useDiscoverSearch';
 import { useUnreleasedSearch } from '@features/discovery/hooks/unreleased/useUnreleasedSearch';
 import { isSearchableQuery, normalizeQuery } from '@features/discovery/domain/searchPaging';
 import {
@@ -9,19 +9,22 @@ import {
   useAutocompleteSuggestions,
   useSuggestionVisibility,
   visibleSuggestions,
-} from '@features/discovery/hooks/useSuggestions';
+} from '@features/discovery/hooks/history/useSuggestions';
 import {
   useImpressionLogger,
   type ImpressionHandlers,
-} from '@features/discovery/hooks/useImpressionLogger';
+} from '@features/discovery/hooks/results/useImpressionLogger';
 import {
   useDiscoverClearSearchHistory,
   useRecordSearchHistory,
   useSearchHistory,
-} from '@features/discovery/hooks/useSearchHistory';
-import { useResultsFilter } from '@features/discovery/hooks/useResultsFilter';
-import { useResultTap, type ResultTapHandler } from '@features/discovery/hooks/useResultTap';
-import { useDegradedSearchTelemetry } from '@features/discovery/hooks/useDegradedSearchTelemetry';
+} from '@features/discovery/hooks/history/useSearchHistory';
+import { useResultsFilter } from '@features/discovery/hooks/results/useResultsFilter';
+import {
+  useResultTap,
+  type ResultTapHandler,
+} from '@features/discovery/hooks/results/useResultTap';
+import { useDegradedSearchTelemetry } from '@features/discovery/hooks/search/useDegradedSearchTelemetry';
 import {
   correctionForResponse,
   resultsIncompleteForState,
@@ -34,7 +37,7 @@ import type {
 } from '@shared/apiClient/discovery';
 import type { UnreleasedSearchHit } from '@shared/apiClient/enrichment';
 import type { DiscoverView, SearchCorrection } from '@features/discovery/domain/discoverView';
-import type { ResultsFilter } from '@features/discovery/hooks/useResultsFilter';
+import type { ResultsFilter } from '@features/discovery/hooks/results/useResultsFilter';
 
 export type ResultsSlice = {
   view: DiscoverView;

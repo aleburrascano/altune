@@ -3,8 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import type { DiscoverySearchResponse } from '@shared/apiClient/discovery';
-import { useDiscoverSearch } from '@features/discovery/hooks/useDiscoverSearch';
-import { useRefreshFromFirstPage } from '@features/discovery/hooks/useSearchRefresh';
+import { useDiscoverSearch } from '@features/discovery/hooks/search/useDiscoverSearch';
+import { useRefreshFromFirstPage } from '@features/discovery/hooks/search/useSearchRefresh';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { signInTestUser } from '@testing/signInTestUser';
 import { FeaturePorts } from '@/wiring/FeaturePorts';

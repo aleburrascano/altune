@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { FilterChips } from '@features/discovery/ui/FilterChips';
+import { FilterChips } from '@features/discovery/ui/results/FilterChips';
 
 describe('the discover filter row offers all and one chip per kind', () => {
   it('labels the four chips in a fixed order', () => {

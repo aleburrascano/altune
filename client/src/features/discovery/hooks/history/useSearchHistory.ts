@@ -6,11 +6,11 @@ import { isRetryable } from '@shared/failure/errors';
 import { discoveryKeys } from '@shared/query/queryKeys';
 import { useAppMutation } from '@shared/query/useAppMutation';
 import { useClearSearchHistory as useSharedClearSearchHistory } from '@shared/searchHistory/useClearSearchHistory';
-import { useReportQueryFailure } from '@features/discovery/hooks/useReportQueryFailure';
+import { useReportQueryFailure } from '@features/discovery/hooks/search/useReportQueryFailure';
 import {
   useDiscoverFetchEnabled,
   useGatedDiscoverCall,
-} from '@features/discovery/hooks/useDiscoverFetchGate';
+} from '@features/discovery/hooks/search/useDiscoverFetchGate';
 import { useDiscoverPort } from '@features/discovery/ports/DiscoverPortProvider';
 
 export function useSearchHistory() {

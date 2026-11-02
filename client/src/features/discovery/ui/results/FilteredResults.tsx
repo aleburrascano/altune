@@ -3,9 +3,9 @@ import { StyleSheet, View } from 'react-native';
 
 import { Text, spacing } from '@shared/ui';
 
-import { CorrectionBanner } from '@features/discovery/ui/CorrectionBanner';
-import { DiscoverRow } from '@features/discovery/ui/DiscoverRow';
-import { ResultsList, type ResultsCommonProps } from '@features/discovery/ui/ResultsList';
+import { CorrectionBanner } from '@features/discovery/ui/results/CorrectionBanner';
+import { DiscoverRow } from '@features/discovery/ui/results/DiscoverRow';
+import { ResultsList, type ResultsCommonProps } from '@features/discovery/ui/results/ResultsList';
 import { kindLabel, resultKey } from '@features/discovery/domain/resultDisplay';
 
 import type { DiscoveryKind, DiscoveryResult } from '@shared/apiClient/discovery';

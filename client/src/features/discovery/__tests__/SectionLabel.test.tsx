@@ -5,12 +5,12 @@ import { render as renderBare, screen } from '@testing-library/react-native';
 import { darkTheme } from '@shared/ui/theme/theme';
 import { spacing } from '@shared/ui/theme';
 
-import { BlendedSection } from '@features/discovery/ui/BlendedSection';
-import { DiscoverBody } from '@features/discovery/ui/DiscoverBody';
-import { TopResultCard } from '@features/discovery/ui/TopResultCard';
+import { BlendedSection } from '@features/discovery/ui/results/BlendedSection';
+import { DiscoverBody } from '@features/discovery/ui/search/DiscoverBody';
+import { TopResultCard } from '@features/discovery/ui/results/TopResultCard';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 
-import type { ResultsCommonProps } from '@features/discovery/ui/ResultsList';
+import type { ResultsCommonProps } from '@features/discovery/ui/results/ResultsList';
 import { PlaybackContext } from '@shared/playback/usePlayback';
 import { idlePlayback } from '@testing/queryHarness';
 

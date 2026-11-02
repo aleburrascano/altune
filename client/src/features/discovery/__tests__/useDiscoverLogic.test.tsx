@@ -4,10 +4,10 @@ import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-li
 
 import { ApiError, NetworkError } from '@shared/failure/errors';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
-import { useDiscoverLogic } from '@features/discovery/hooks/useDiscoverLogic';
+import { useDiscoverLogic } from '@features/discovery/hooks/search/useDiscoverLogic';
 import { MAX_QUERY_LENGTH, SEARCH_PAGE_SIZE } from '@features/discovery/domain/searchPaging';
 import { setSearchState } from '@features/discovery/domain/searchState';
-import { DiscoverBody } from '@features/discovery/ui/DiscoverBody';
+import { DiscoverBody } from '@features/discovery/ui/search/DiscoverBody';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { signInTestUser } from '@testing/signInTestUser';
 import { DiscoverPortProvider } from '@features/discovery/ports/DiscoverPortProvider';
