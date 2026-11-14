@@ -4,7 +4,7 @@ import { createMemoryPlaybackPort } from '@features/playback/__tests__/memoryPla
 import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
 import { startWidgetCommands } from '@features/playback/native/widgetCommands';
 import { asTrackId } from '@shared/apiClient/ids';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { notifyIdentityChange } from '@shared/session/signOutCleanup';
 import {
@@ -352,6 +352,38 @@ describe('startWidgetCommands probe', () => {
       );
     } finally {
       activeIndex.mockImplementation(originalActiveIndex);
+      queue.mockImplementation(originalQueue);
+    }
+  });
+
+  it('shuffle from mid-list drops the played tracks from native so its index matches the store', async () => {
+    const activeIndex = jest.mocked(TrackPlayer.getActiveTrackIndex);
+    const activeTrack = jest.mocked(TrackPlayer.getActiveTrack);
+    const queue = jest.mocked(TrackPlayer.getQueue);
+    const originalActiveIndex = activeIndex.getMockImplementation();
+    const originalActiveTrack = activeTrack.getMockImplementation();
+    const originalQueue = queue.getMockImplementation();
+    const tracks = [libraryTrack('a'), libraryTrack('b'), libraryTrack('c'), libraryTrack('d')];
+    const playing = 2;
+    activeIndex.mockResolvedValue(playing);
+    activeTrack.mockResolvedValue({ id: trackKey(tracks[playing]!), url: '' });
+    queue.mockResolvedValue([]);
+    try {
+      startWidgetCommands({ playPrevious });
+      useQueueStore.getState().loadQueue(tracks, playing, null);
+
+      await sendWidgetCommand('shuffle');
+      await settleMany();
+
+      expect(useQueueStore.getState().currentIndex).toBe(0);
+      expect(player.calls('remove')).toEqual([[[0, 1]]]);
+      const added = (player.calls('add') as unknown[][]).flatMap(
+        ([added]) => added as { title?: string }[],
+      );
+      expect(added.map((track) => track.title).sort()).toEqual(['Track a', 'Track b', 'Track d']);
+    } finally {
+      activeIndex.mockImplementation(originalActiveIndex);
+      activeTrack.mockImplementation(originalActiveTrack);
       queue.mockImplementation(originalQueue);
     }
   });

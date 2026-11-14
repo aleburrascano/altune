@@ -1,12 +1,12 @@
 import { asTrackId } from '@shared/apiClient/ids';
 import {
-  ascending,
   currentAfterMove,
   currentAfterRemoval,
   freshQueue,
   movedOrder,
   identityOrder,
   isPositionIn,
+  listOrderAfter,
   reorderTail,
   resolveSyncTarget,
   withAppended,
@@ -56,7 +56,7 @@ describe('reorderTail', () => {
 
   it('puts up-next first, the rest, then appended, keeping the head', () => {
     const queued = { upNext: [QUEUED_NEXT], appended: [QUEUED_LAST] };
-    const result = reorderTail(identityOrder(QUEUE_SIZE), 0, queued, ascending);
+    const result = reorderTail(identityOrder(QUEUE_SIZE), 0, queued, listOrderAfter(undefined));
     expect(result).toEqual([0, QUEUED_NEXT, FIRST_REST, SECOND_REST, QUEUED_LAST]);
   });
 });

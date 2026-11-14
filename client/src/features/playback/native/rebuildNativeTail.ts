@@ -6,6 +6,7 @@ import { activeNativeTrackId, nativeTrackBuilder } from '@features/playback/nati
 import { currentLoadToken, isStale, type LoadToken } from '@features/playback/domain/loadToken';
 import { warnPlayback } from '@features/playback/domain/playbackError';
 import { NATIVE_QUEUE_WINDOW } from '@features/playback/domain/presignWindow';
+import { identityOrder } from '@shared/playback/queueOrder';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
 
@@ -25,12 +26,26 @@ function livePositionOf(ordered: readonly PlaybackTrack[], cursor: number, key: 
   return ordered.findIndex((t) => trackKey(t) === key);
 }
 
-function liveTailAfter(keyNow: string | undefined): readonly PlaybackTrack[] | null {
-  if (keyNow === undefined) return null;
+function livePosition(keyNow: string | undefined): number {
+  if (keyNow === undefined) return -1;
   const state = useQueueStore.getState();
-  const ordered = orderedQueueTracks(state);
-  const position = livePositionOf(ordered, state.currentIndex, keyNow);
-  return position === -1 ? null : ordered.slice(position + 1);
+  return livePositionOf(orderedQueueTracks(state), state.currentIndex, keyNow);
+}
+
+function liveTailAfter(keyNow: string | undefined): readonly PlaybackTrack[] | null {
+  const position = livePosition(keyNow);
+  if (position === -1) return null;
+  return orderedQueueTracks(useQueueStore.getState()).slice(position + 1);
+}
+
+async function trimHistoryToStore(keyNow: string | undefined, fence: Fence): Promise<void> {
+  const position = livePosition(keyNow);
+  if (position === -1) return;
+  fence();
+  const activeIndex = await TrackPlayer.getActiveTrackIndex();
+  if (activeIndex === undefined || activeIndex <= position) return;
+  fence();
+  await TrackPlayer.remove(identityOrder(activeIndex - position));
 }
 
 interface RequestedTail {
@@ -147,6 +162,8 @@ async function applyTailLocked(
 ): Promise<boolean> {
   if (isStale(token)) return false;
   const keyNow = await activeNativeTrackId();
+  if (isStale(token)) return false;
+  await trimHistoryToStore(keyNow, fence);
   if (isStale(token)) return false;
   return replaceUpcomingOrRestore(windowFor(inputs, keyNow), token, fence);
 }

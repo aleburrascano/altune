@@ -17,6 +17,13 @@ function track(id: string): PlaybackTrack {
   };
 }
 
+const NO_SWAP_DRAW = 0.999;
+const PLAYED_TWO = 2;
+
+function orderTitles(): string[] {
+  return orderedQueueTracks(useQueueStore.getState()).map((t) => t.title);
+}
+
 function loadFive() {
   useQueueStore
     .getState()
@@ -236,14 +243,14 @@ describe('clearUpcoming', () => {
   it('renumbers a shuffled queue against the order it was playing, not the load order', () => {
     loadFive();
     useQueueStore.getState().skipToIndex(1);
-    jest.spyOn(Math, 'random').mockReturnValueOnce(0).mockReturnValueOnce(0);
+    jest.spyOn(Math, 'random').mockReturnValue(NO_SWAP_DRAW);
     useQueueStore.getState().toggleShuffle();
-    useQueueStore.getState().skipToIndex(2);
+    useQueueStore.getState().skipToIndex(PLAYED_TWO);
 
     useQueueStore.getState().clearUpcoming();
 
     const state = useQueueStore.getState();
-    expect(state.tracks.map((t) => t.title)).toEqual(['Track a', 'Track b', 'Track d']);
+    expect(state.tracks.map((t) => t.title)).toEqual(['Track b', 'Track a', 'Track c']);
     expect(state.playOrder).toEqual([0, 1, 2]);
   });
 
@@ -282,6 +289,7 @@ describe('clearUpcoming', () => {
     loadFive();
     jest.spyOn(Math, 'random').mockReturnValue(0);
     useQueueStore.getState().toggleShuffle();
+    useQueueStore.getState().skipToIndex(PLAYED_TWO);
 
     useQueueStore.getState().clearUpcoming();
 
@@ -308,33 +316,35 @@ describe('toggleShuffle', () => {
     expect(useQueueStore.getState().shuffled).toBe(false);
   });
 
-  it('shuffles only the upcoming tail, following the exact Fisher-Yates draws from Math.random', () => {
+  it('shuffles every other Track, played ones too, behind the playing one, following the exact Fisher-Yates draws', () => {
     loadFive();
     useQueueStore.getState().skipToIndex(1);
-    jest.spyOn(Math, 'random').mockReturnValueOnce(0).mockReturnValueOnce(0);
+    jest.spyOn(Math, 'random').mockReturnValue(0);
 
     useQueueStore.getState().toggleShuffle();
 
     const state = useQueueStore.getState();
-    expect(state.playOrder).toEqual([0, 1, 3, 4, 2]);
-    expect(state.currentIndex).toBe(1);
+    expect(orderTitles()).toEqual(['Track b', 'Track c', 'Track d', 'Track e', 'Track a']);
+    expect(state.currentIndex).toBe(0);
     expect(state.shuffled).toBe(true);
   });
 
-  it('un-shuffling sorts the upcoming tail back to natural ascending order', () => {
+  it('un-shuffling puts the list back in order after the playing Track, wrapping to the start', () => {
     loadFive();
     useQueueStore.getState().skipToIndex(1);
-    jest.spyOn(Math, 'random').mockReturnValueOnce(0).mockReturnValueOnce(0);
+    jest.spyOn(Math, 'random').mockReturnValue(NO_SWAP_DRAW);
     useQueueStore.getState().toggleShuffle();
+    expect(orderTitles()).toEqual(['Track b', 'Track a', 'Track c', 'Track d', 'Track e']);
 
     useQueueStore.getState().toggleShuffle();
 
     const state = useQueueStore.getState();
-    expect(state.playOrder).toEqual([0, 1, 2, 3, 4]);
+    expect(orderTitles()).toEqual(['Track b', 'Track c', 'Track d', 'Track e', 'Track a']);
+    expect(state.currentIndex).toBe(0);
     expect(state.shuffled).toBe(false);
   });
 
-  it('preserves the upcoming Tracks as a multiset and never touches history, for any random draw', () => {
+  it('keeps every Track exactly once with the playing Track first, for any random draw', () => {
     const tracks = [track('a'), track('b'), track('c'), track('d'), track('e'), track('f')];
 
     fc.assert(
@@ -342,21 +352,16 @@ describe('toggleShuffle', () => {
         fc.array(fc.double({ min: 0, max: 0.999, noNaN: true }), { minLength: 1, maxLength: 20 }),
         (draws) => {
           useQueueStore.setState(INITIAL_STATE, true);
-          useQueueStore.getState().loadQueue(tracks, 2, null);
+          useQueueStore.getState().loadQueue(tracks, PLAYED_TWO, null);
           let i = 0;
           jest.spyOn(Math, 'random').mockImplementation(() => draws[i++ % draws.length]!);
-
-          const before = useQueueStore.getState().playOrder;
-          const head = before.slice(0, 3);
-          const tail = before.slice(3);
 
           useQueueStore.getState().toggleShuffle();
 
           const after = useQueueStore.getState();
-          expect(after.playOrder.slice(0, 3)).toEqual(head);
-          expect([...after.playOrder.slice(3)].sort((a, b) => a - b)).toEqual(
-            [...tail].sort((a, b) => a - b),
-          );
+          expect(after.currentIndex).toBe(0);
+          expect(after.currentTrack()).toBe(tracks[PLAYED_TWO]);
+          expect([...orderTitles()].sort()).toEqual(tracks.map((t) => t.title));
 
           jest.restoreAllMocks();
         },
@@ -509,28 +514,39 @@ describe('functional: playing Track survives queue edits', () => {
     expect(useQueueStore.getState().currentTrack()).toBe(playing);
   });
 
-  it('shuffling never disturbs the currently playing Track or the history behind it', () => {
+  it('shuffling keeps the playing Track current and queues every other Track behind it', () => {
     loadFive();
     jest.spyOn(Math, 'random').mockReturnValue(0);
     const before = orderedQueueTracks(useQueueStore.getState());
-    const history = before.slice(0, 3);
+    const playing = useQueueStore.getState().currentTrack();
 
     useQueueStore.getState().toggleShuffle();
 
     const after = orderedQueueTracks(useQueueStore.getState());
-    expect(after.slice(0, 3)).toEqual(history);
-    expect(after.slice(3).map(trackKey).sort()).toEqual(before.slice(3).map(trackKey).sort());
+    expect(useQueueStore.getState().currentTrack()).toBe(playing);
+    expect(after[0]).toBe(playing);
+    expect(after.slice(1).map(trackKey).sort()).toEqual(
+      before
+        .filter((t) => t !== playing)
+        .map(trackKey)
+        .sort(),
+    );
   });
 
-  it('un-shuffling restores the upcoming Tracks to their natural order while history stays exactly as played', () => {
+  it('un-shuffling puts every Track back in list order, continuing after the playing Track', () => {
     loadFive();
-    const before = orderedQueueTracks(useQueueStore.getState());
     jest.spyOn(Math, 'random').mockReturnValue(0);
     useQueueStore.getState().toggleShuffle();
 
     useQueueStore.getState().toggleShuffle();
 
-    expect(orderedQueueTracks(useQueueStore.getState())).toEqual(before);
+    expect(orderedQueueTracks(useQueueStore.getState()).map((t) => t.title)).toEqual([
+      'Track c',
+      'Track d',
+      'Track e',
+      'Track a',
+      'Track b',
+    ]);
   });
 });
 
@@ -590,7 +606,7 @@ describe('mutators return the post-mutation slice the native player needs', () =
 
     const upcoming = useQueueStore.getState().toggleShuffle();
 
-    expect(upcoming).toEqual([track('e'), track('d')]);
+    expect(upcoming).toEqual([track('b'), track('d'), track('e'), track('a')]);
     expect(upcoming).toEqual(upcomingNow());
   });
 
@@ -690,7 +706,7 @@ describe('lifecycle', () => {
       randomSpy.mockRestore();
     });
 
-    it('un-shuffling via toggleShuffle restores the ascending library order', () => {
+    it('un-shuffling via toggleShuffle puts the library back in order after the playing Track', () => {
       const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0);
       const tracks = [track('a'), track('b'), track('c'), track('d'), track('e')];
       useQueueStore.getState().loadShuffled(tracks, null);
@@ -699,7 +715,7 @@ describe('lifecycle', () => {
 
       const state = useQueueStore.getState();
       expect(state.shuffled).toBe(false);
-      expect(state.playOrder.slice(1)).toEqual([...state.playOrder.slice(1)].sort((a, b) => a - b));
+      expect(orderTitles()).toEqual(['Track b', 'Track c', 'Track d', 'Track e', 'Track a']);
       randomSpy.mockRestore();
     });
 
@@ -1475,8 +1491,9 @@ describe('user-queued tracks', () => {
 
             useQueueStore.getState().toggleShuffle();
 
-            expect(titles().slice(0, 3)).toEqual(['a', 'b', 'c']);
+            expect(titles()[0]).toBe('c');
             expect(upcomingTitles()[0]).toBe('queued');
+            expect([...upcomingTitles()].sort()).toEqual(['a', 'b', 'd', 'e', 'f', 'queued']);
           });
         }),
       );

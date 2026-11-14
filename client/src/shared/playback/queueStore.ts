@@ -3,13 +3,13 @@ import { create } from 'zustand';
 import { clamp } from '@shared/math/math';
 
 import {
-  ascending,
   currentAfterMove,
   currentAfterRemoval,
   fisherYates,
   freshQueue,
   identityOrder,
   isPositionIn,
+  listOrderAfter,
   movedOrder,
   reorderTail,
   REPEAT_CYCLE,
@@ -18,6 +18,7 @@ import {
   withAppended,
   withoutTrack,
   withoutUpcoming,
+  withWholeQueueShuffled,
 } from '@shared/playback/queueOrder';
 import type { QueueSource, QueueState, RepeatMode } from '@shared/playback/queueOrder';
 import type { PlaybackTrack } from '@shared/playback/playbackTrack';
@@ -199,13 +200,22 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
   },
 
   toggleShuffle: () => {
-    const { tracks, playOrder, currentIndex, shuffled, upNext, appended } = get();
-    if (tracks.length <= 1) return upcomingTracks(get());
+    const state = get();
+    const { tracks, playOrder, currentIndex, shuffled } = state;
+    if (tracks.length <= 1) return upcomingTracks(state);
 
-    const arrange = shuffled ? ascending : fisherYates;
+    if (!shuffled) {
+      set(withWholeQueueShuffled(state));
+      return upcomingTracks(get());
+    }
     set({
-      playOrder: reorderTail(playOrder, currentIndex, { upNext, appended }, arrange),
-      shuffled: !shuffled,
+      playOrder: reorderTail(
+        playOrder,
+        currentIndex,
+        state,
+        listOrderAfter(playOrder[currentIndex]),
+      ),
+      shuffled: false,
     });
     return upcomingTracks(get());
   },
