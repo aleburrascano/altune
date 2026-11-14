@@ -52,6 +52,39 @@ export function reorderTail(
   return [...order.slice(0, keepThrough + 1), ...next, ...rest, ...last];
 }
 
+function unplayedQueued(state: QueueState, played: ReadonlySet<number>): UserQueued {
+  return {
+    upNext: state.upNext.filter((i) => !played.has(i)),
+    appended: state.appended.filter((i) => !played.has(i)),
+  };
+}
+
+function playingFirst(order: readonly number[], currentIndex: number, queued: UserQueued) {
+  const { next, rest, last } = partitionTail(order.slice(currentIndex + 1), queued);
+  const pool = [...order.slice(0, currentIndex), ...rest];
+  fisherYates(pool);
+  return [order[currentIndex]!, ...next, ...pool, ...last];
+}
+
+export function withWholeQueueShuffled(state: QueueState): Partial<QueueState> {
+  const { playOrder, currentIndex } = state;
+  if (currentIndex < 0) {
+    return { playOrder: reorderTail(playOrder, currentIndex, state, fisherYates), shuffled: true };
+  }
+  const queued = unplayedQueued(state, new Set(playOrder.slice(0, currentIndex)));
+  const shuffledOrder = playingFirst(playOrder, currentIndex, queued);
+  return { playOrder: shuffledOrder, currentIndex: 0, ...queued, shuffled: true };
+}
+
+export function listOrderAfter(current: number | undefined): (items: number[]) => void {
+  return (items) => {
+    ascending(items);
+    if (current === undefined) return;
+    const split = items.findIndex((i) => i > current);
+    if (split > 0) items.push(...items.splice(0, split));
+  };
+}
+
 export function fisherYates(items: number[]): void {
   for (let i = items.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -61,7 +94,7 @@ export function fisherYates(items: number[]): void {
   }
 }
 
-export function ascending(items: number[]): void {
+function ascending(items: number[]): void {
   items.sort((a, b) => a - b);
 }
 

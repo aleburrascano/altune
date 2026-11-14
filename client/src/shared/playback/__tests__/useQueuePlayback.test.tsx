@@ -561,7 +561,7 @@ describe('clearUpcoming', () => {
 });
 
 describe('toggleShuffle / cycleRepeatMode', () => {
-  it('hands native only the shuffled upcoming slice, never restarting the playing track', () => {
+  it('hands native every other track shuffled behind the playing one, never restarting it', () => {
     const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0);
     act(() => {
       useQueueStore.getState().loadQueue([track('a'), track('b'), track('c'), track('d')], 1, null);
@@ -573,7 +573,7 @@ describe('toggleShuffle / cycleRepeatMode', () => {
       result.current.toggleShuffle();
     });
 
-    expect(controls.reorderUpcoming).toHaveBeenCalledWith([track('d'), track('c')]);
+    expect(controls.reorderUpcoming).toHaveBeenCalledWith([track('c'), track('d'), track('a')]);
     const state = useQueueStore.getState();
     expect(state.shuffled).toBe(true);
     expect(state.currentTrack()).toEqual(track('b'));
