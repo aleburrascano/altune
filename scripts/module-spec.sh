@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 kit=node_modules/.bin/module-spec
-[ -x "$kit" ] || { echo "module-spec: not installed here. Run pnpm install at the repo root (it needs ssh access to gitea)." >&2; exit 3; }
+[ -x "$kit" ] || { echo "module-spec: not installed here. Run pnpm install at the repo root (it fetches the private kit from gitea, so it needs a gitea login)." >&2; exit 3; }
 [ $# -gt 0 ] || { echo "usage: bash scripts/module-spec.sh <check|baseline|api|affected|mutate|report> [flags]. Runs it in every code root that has a module-spec.json." >&2; exit 2; }
 
 rc=0

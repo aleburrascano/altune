@@ -12,7 +12,7 @@ Self-hosted music manager: discover music across providers, build a library you 
 ## Getting started
 
 ```bash
-pnpm install                    # repo tooling: husky and module-spec (needs ssh to gitea)
+pnpm install                    # repo tooling: husky and module-spec (fetched from gitea)
 pnpm dev:up                     # Postgres + Redis for local work
 cd services/go-api
 cp .env.example .env.development
