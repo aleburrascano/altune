@@ -1,0 +1,2 @@
+role: shared
+owns: "which settings the overseer runs with and when they are valid"

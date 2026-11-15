@@ -1,0 +1,3 @@
+role: app
+owns: "how the overseer server is wired from its modules and run"
+depends_on: [authn, config, core, goapi, history, shell, webui]

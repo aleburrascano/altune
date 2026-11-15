@@ -1,0 +1,2 @@
+role: shared
+owns: "which bearer tokens belong to the owner"

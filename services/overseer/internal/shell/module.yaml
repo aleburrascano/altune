@@ -1,0 +1,3 @@
+role: feature
+owns: "which dashboard routes the owner may call and what they answer"
+depends_on: [authn, core, goapi, history]
