@@ -9,8 +9,8 @@ import { signInTestUser } from '@testing/signInTestUser';
 import { idlePlayback } from '@testing/queryHarness';
 import { PlaylistDetailScreen } from '@features/library/ui/PlaylistDetailScreen';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
-import { FeaturePorts } from '@/wiring/FeaturePorts';
-import { httpFeaturePorts } from '@/wiring/httpFeaturePorts';
+import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
+import { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

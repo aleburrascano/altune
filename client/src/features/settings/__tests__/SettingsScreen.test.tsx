@@ -7,8 +7,8 @@ import { NetworkError } from '@shared/apiClient';
 import { signInTestUser } from '@testing/signInTestUser';
 
 import { SettingsScreen } from '@features/settings/ui/SettingsScreen';
-import { FeaturePorts } from '@/wiring/FeaturePorts';
-import { httpFeaturePorts } from '@/wiring/httpFeaturePorts';
+import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
+import { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
 
 const RETRY_BACKOFF_BASE_MS = 1_000;
 

@@ -128,7 +128,7 @@ export default {
     overrides: [
       {
         files: [
-          'src/shell/platformExtras.tsx',
+          'src/mobile/frame/platformExtras.tsx',
           'src/features/signIn/hooks/useAuthDeepLink.ts',
           'src/features/signIn/hooks/useOAuth.ts',
           'src/features/signIn/ui/AuthCallbackScreen.tsx',

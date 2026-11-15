@@ -1,0 +1,3 @@
+role: feature
+owns: how the saved library and its playlists are listed, sorted and edited
+depends_on: [acquisition, apiClient, concurrency, device, events, failure, navigation, offline, playback, playlists, query, session, ui]

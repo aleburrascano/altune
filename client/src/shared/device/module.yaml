@@ -1,0 +1,3 @@
+role: shared
+owns: which platform, version and origin the app runs on, and whether analytics may be shared
+depends_on: [files]

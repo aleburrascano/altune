@@ -46,20 +46,6 @@ describe('apiSend is the single JSON mutation builder', () => {
   });
 });
 
-describe('dependency direction: apiClient imports nothing from shared/telemetry or features/*', () => {
-  it('no file in this slice imports from shared/telemetry or a features/* module', () => {
-    const offenders: string[] = [];
-    for (const filePath of listApiClientSourceFiles()) {
-      const source = fs.readFileSync(filePath, 'utf8');
-      const importsTelemetry = /from\s+['"][^'"]*\btelemetry\/[^'"]*['"]/.test(source);
-      const importsFeature = /from\s+['"][^'"]*\bfeatures\/[^'"]*['"]/.test(source);
-      if (importsTelemetry || importsFeature) offenders.push(path.basename(filePath));
-    }
-
-    expect(offenders).toEqual([]);
-  });
-});
-
 describe('security: this slice never decodes, splits, or otherwise manipulates the access token', () => {
   it("contains no atob, no jwt decoding, and no split('.') anywhere in the slice", () => {
     const offenders: string[] = [];

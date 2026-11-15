@@ -7,8 +7,8 @@ import { useDiscoverLogic } from '@features/discovery/hooks/search/useDiscoverLo
 import { setSearchState } from '@features/discovery/domain/searchState';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { signInTestUser } from '@testing/signInTestUser';
-import { FeaturePorts } from '@/wiring/FeaturePorts';
-import { httpFeaturePorts } from '@/wiring/httpFeaturePorts';
+import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
+import { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),

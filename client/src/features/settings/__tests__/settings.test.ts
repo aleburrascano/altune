@@ -5,7 +5,11 @@ describe('@features/settings public surface', () => {
     );
   });
 
-  it('exports exactly SettingsScreen', () => {
-    expect(Object.keys(require('@features/settings'))).toEqual(['SettingsScreen']);
+  it('exports exactly SettingsScreen and the port the app wires', () => {
+    expect(Object.keys(require('@features/settings')).sort()).toEqual([
+      'SettingsPortProvider',
+      'SettingsScreen',
+      'httpSettingsPort',
+    ]);
   });
 });

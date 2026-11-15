@@ -11,8 +11,8 @@ import {
   type TrackSelectionOptions,
 } from '@features/library/hooks/useTrackSelection';
 import { TrackSelectionOverlay } from '@features/library/ui/TrackSelectionOverlay';
-import { FeaturePorts } from '@/wiring/FeaturePorts';
-import { httpFeaturePorts } from '@/wiring/httpFeaturePorts';
+import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
+import { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

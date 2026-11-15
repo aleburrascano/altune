@@ -16,8 +16,8 @@ import {
 } from '@features/discovery/hooks/history/useSearchHistory';
 import { setSearchState } from '@features/discovery/domain/searchState';
 import { signInTestUser } from '@testing/signInTestUser';
-import { FeaturePorts } from '@/wiring/FeaturePorts';
-import { httpFeaturePorts } from '@/wiring/httpFeaturePorts';
+import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
+import { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

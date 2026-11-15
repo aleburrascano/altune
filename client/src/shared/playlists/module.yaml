@@ -1,0 +1,3 @@
+role: shared
+owns: how a playlist is created, renamed, filled and deleted
+depends_on: [apiClient, failure, query, session, ui]

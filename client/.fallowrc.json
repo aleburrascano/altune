@@ -2,6 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
   "entry": [
     "src/app/**/*.{ts,tsx}",
+    "src/{features,shared}/*/index.ts",
     "doctor.config.ts",
     "fingerprint.config.js",
     "scripts/**/*.mjs",

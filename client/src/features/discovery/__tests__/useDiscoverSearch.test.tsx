@@ -16,8 +16,8 @@ import { useDebouncedSearch } from '@features/discovery/hooks/search/useDebounce
 import { useDiscoverSearch } from '@features/discovery/hooks/search/useDiscoverSearch';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { signInTestUser } from '@testing/signInTestUser';
-import { FeaturePorts } from '@/wiring/FeaturePorts';
-import { httpFeaturePorts } from '@/wiring/httpFeaturePorts';
+import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
+import { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 

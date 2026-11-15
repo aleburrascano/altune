@@ -1,0 +1,3 @@
+role: app
+owns: "how the client app is assembled at startup: which adapter fills each feature port, and the frame around every screen"
+depends_on: [apiClient, auth, detail, discovery, events, killSwitch, library, offline, playback, player, query, settings, signIn, telemetry, ui]
