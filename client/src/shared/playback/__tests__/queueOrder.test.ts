@@ -11,6 +11,7 @@ import {
   resolveSyncTarget,
   withAppended,
   withoutTrack,
+  withWholeQueueShuffled,
   type QueueState,
   type RepeatMode,
 } from '@shared/playback/queueOrder';
@@ -207,5 +208,28 @@ describe('queueSource', () => {
   it('RepeatMode accepts off, all and one and refuses shuffle', () => {
     expectType<IsAssignable<'off' | 'all' | 'one', RepeatMode>>();
     expectType<Not<IsAssignable<'shuffle', RepeatMode>>>();
+  });
+});
+
+describe('withWholeQueueShuffled', () => {
+  it('with nothing playing yet, shuffles every track and leaves the current index alone', () => {
+    const state: QueueState = {
+      tracks: ['a', 'b', 'c', 'd'].map(track),
+      playOrder: [0, 1, 2, 3],
+      upNext: [],
+      appended: [],
+      currentIndex: -1,
+      repeatMode: 'off',
+      shuffled: false,
+      source: null,
+      resumePositionMs: 0,
+      generation: 1,
+    };
+
+    const shuffled = withWholeQueueShuffled(state);
+
+    expect(shuffled.shuffled).toBe(true);
+    expect(shuffled.currentIndex).toBeUndefined();
+    expect([...(shuffled.playOrder ?? [])].sort()).toEqual([0, 1, 2, 3]);
   });
 });
