@@ -1,12 +1,7 @@
-MC-4b
-MOCK
 unhandled-failure
 G2
-MC-10
-N3
 unbounded-resource
 platform-branch
 weak-test
-M10
 trusted-boundary
 silent-failure

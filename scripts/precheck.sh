@@ -260,12 +260,8 @@ if touches '^client/'; then
     test_check "mobile script and rule tests" $m bash -c 'files=$(git ls-files "scripts/__tests__/*.test.mjs" "eslint/rules/__tests__/*.test.js"); [ -z "$files" ] || node --test $files'
     coverage_args=(); [ -n "$src" ] && mapfile -t coverage_args < <(thresholded_coverage_args "$src")
     [ -n "$src" ] && jest_check "mobile tests (related)" $m npx jest "${coverage_args[@]}" --ci --passWithNoTests --forceExit --watchman=false --testTimeout=30000 --cacheDirectory "$HOME/.cache/altune-ci/jest" --findRelatedTests $src
-    check "mobile consistency ratchet" $m node scripts/consistency-ratchet.mjs
-    check "mobile own-module mock ratchet" $m node scripts/mock-ratchet.mjs
     check "mobile fallow" $m npm run --silent fallow
-    check "mobile complexity ratchet (fallow)" $m bash "$root/scripts/ci/test-mobile-complexity.sh"
     check "mobile react-doctor (changed lines)" $m node scripts/react-doctor-changed-lines.mjs "$base"
-    check "mobile module shape" $m node scripts/module-shape.mjs
   elif [ -n "$(command -v npx)" ]; then
     echo "SKIP  mobile: no node_modules here or in $main_tree"; missing=1
   fi

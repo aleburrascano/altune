@@ -23,9 +23,6 @@ npm-debug.*
 yarn-debug.*
 yarn-error.*
 
-.stryker-tmp/
-reports/
-
 doctor-report.json
 
 e2e/test-results/
