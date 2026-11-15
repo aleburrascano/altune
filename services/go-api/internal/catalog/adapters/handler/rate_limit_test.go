@@ -8,7 +8,7 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	audioservice "altune/go-api/internal/catalog/service/audio"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
 	"context"
 	"fmt"

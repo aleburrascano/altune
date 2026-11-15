@@ -5,7 +5,7 @@ import (
 	trackservice "altune/go-api/internal/catalog/service/track"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/songfacts"
 	"context"
 	"fmt"

@@ -5,7 +5,7 @@ import (
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
 	featuredservice "altune/go-api/internal/catalog/service/featured"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"

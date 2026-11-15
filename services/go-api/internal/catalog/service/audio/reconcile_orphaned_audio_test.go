@@ -5,7 +5,7 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	trackservice "altune/go-api/internal/catalog/service/track"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
 	"fmt"

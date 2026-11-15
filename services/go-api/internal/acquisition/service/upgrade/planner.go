@@ -4,7 +4,7 @@ import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service/grade"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
 	"fmt"

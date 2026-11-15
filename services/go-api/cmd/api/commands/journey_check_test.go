@@ -5,7 +5,7 @@ import (
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/service/search"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
 	"context"
 	"errors"

@@ -6,7 +6,7 @@ import (
 	"altune/go-api/internal/acquisition/adapters/ytmusic"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"embed"
 	"encoding/json"
 	"errors"

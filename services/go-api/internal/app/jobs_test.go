@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
 	audioservice "altune/go-api/internal/catalog/service/audio"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/runloop"
 	"context"
 	"errors"

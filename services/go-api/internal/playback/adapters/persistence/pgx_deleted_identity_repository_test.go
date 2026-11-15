@@ -2,7 +2,7 @@ package persistence
 
 import (
 	"altune/go-api/internal/playback/ports"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
 	"testing"

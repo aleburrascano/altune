@@ -3,8 +3,8 @@ package persistence
 import (
 	"altune/go-api/internal/playback/domain"
 	"altune/go-api/internal/playback/ports"
-	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
+	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
 	"context"
 	"encoding/json"

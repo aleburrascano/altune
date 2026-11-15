@@ -3,8 +3,8 @@ package playlist
 import (
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
+	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
 	"fmt"

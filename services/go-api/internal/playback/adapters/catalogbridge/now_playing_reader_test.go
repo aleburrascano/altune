@@ -2,7 +2,7 @@ package catalogbridge
 
 import (
 	catalogPorts "altune/go-api/internal/catalog/ports"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
 	"context"
 	"errors"

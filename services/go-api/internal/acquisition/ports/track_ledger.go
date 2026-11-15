@@ -1,7 +1,7 @@
 package ports
 
 import (
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"encoding/json"
 	"errors"

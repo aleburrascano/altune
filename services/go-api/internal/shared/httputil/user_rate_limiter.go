@@ -1,7 +1,7 @@
 package httputil
 
 import (
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"net/http"
 	"sync"

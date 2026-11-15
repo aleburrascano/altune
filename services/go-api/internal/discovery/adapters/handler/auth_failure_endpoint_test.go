@@ -2,7 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/discovery/service/interaction"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"net/http"
 	"net/http/httptest"
 	"reflect"

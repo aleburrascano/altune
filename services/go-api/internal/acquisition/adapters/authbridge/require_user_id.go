@@ -2,7 +2,7 @@ package authbridge
 
 import (
 	"altune/go-api/internal/auth/adapters/middleware"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"net/http"
 )
 

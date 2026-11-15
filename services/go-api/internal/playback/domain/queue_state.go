@@ -1,7 +1,7 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"fmt"
 	"strings"
 	"time"

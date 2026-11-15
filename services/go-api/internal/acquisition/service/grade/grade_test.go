@@ -1,7 +1,7 @@
 package grade
 
 import (
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"testing"
 )
 

@@ -3,7 +3,7 @@ package discoverybridge
 import (
 	"altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/discovery/service/search"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/textnorm"
 	"altune/go-api/internal/shared/versiontag"
 	"context"

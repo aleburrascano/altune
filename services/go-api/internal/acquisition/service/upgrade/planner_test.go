@@ -6,7 +6,7 @@ import (
 	"altune/go-api/internal/acquisition/service/grade"
 	"altune/go-api/internal/acquisition/service/upgrade"
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
 	"testing"

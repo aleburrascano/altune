@@ -3,8 +3,8 @@ package persistence
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/database"
+	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"fmt"
 	"time"

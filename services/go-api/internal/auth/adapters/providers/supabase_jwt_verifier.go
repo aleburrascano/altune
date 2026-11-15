@@ -3,7 +3,7 @@ package providers
 import (
 	authdomain "altune/go-api/internal/auth/domain"
 	"altune/go-api/internal/auth/ports"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
 	"fmt"

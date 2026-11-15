@@ -1,8 +1,8 @@
 package handler
 
 import (
-	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
+	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"encoding/json"
 	"errors"

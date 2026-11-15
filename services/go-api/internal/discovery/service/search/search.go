@@ -11,7 +11,7 @@ import (
 	"altune/go-api/internal/discovery/service/rank"
 	"altune/go-api/internal/discovery/service/related"
 	"altune/go-api/internal/discovery/service/vocabulary"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/runloop"
 	"altune/go-api/internal/shared/textnorm"

@@ -1,6 +1,6 @@
 package grade
 
-import "altune/go-api/internal/shared"
+import shared "altune/go-api/internal/shared/kernel"
 
 const PipelineGeneration = 2
 

@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/auth/adapters/middleware"
 	authdomain "altune/go-api/internal/auth/domain"
 	"altune/go-api/internal/auth/ports"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
 	"context"
 	"crypto/rand"

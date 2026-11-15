@@ -1,8 +1,8 @@
 package eventtap
 
 import (
-	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
+	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"testing"

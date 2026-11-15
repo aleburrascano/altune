@@ -2,8 +2,8 @@ package handler
 
 import (
 	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
+	shared "altune/go-api/internal/shared/kernel"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"

@@ -9,7 +9,7 @@ import (
 	authdomain "altune/go-api/internal/auth/domain"
 	authports "altune/go-api/internal/auth/ports"
 	catdomain "altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"encoding/json"
 	"io"

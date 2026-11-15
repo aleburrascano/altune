@@ -2,7 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/discovery/service/smokeeval"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"context"
 )
 

@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/playback/playbacktest"
 	"altune/go-api/internal/playback/ports"
 	"altune/go-api/internal/playback/service/queue"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
 	"context"
 	"errors"

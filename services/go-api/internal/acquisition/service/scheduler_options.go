@@ -2,8 +2,8 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
+	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"log/slog"
 	"sync/atomic"
