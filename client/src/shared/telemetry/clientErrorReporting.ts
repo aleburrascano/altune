@@ -2,7 +2,6 @@ import { appVersion } from '@shared/device';
 
 import { enqueueCritical } from '@shared/telemetry/outbox';
 import type { EventPayload } from '@shared/telemetry/recordEvent';
-import { chainUncaughtErrorHandler } from '@shared/telemetry/native/uncaughtErrors';
 
 const MAX_MESSAGE_LENGTH = 500;
 const MAX_STACK_LENGTH = 4_000;
@@ -155,10 +154,12 @@ function trackUnhandledRejections(): void {
   });
 }
 
-export function installGlobalErrorReporting(): void {
+export type ChainUncaughtErrors = (onError: (error: unknown) => void) => void;
+
+export function installGlobalErrorReporting(chainUncaughtErrors: ChainUncaughtErrors): void {
   if (installed) return;
   installed = true;
-  chainUncaughtErrorHandler((error) => reportClientError(error, 'uncaught'));
+  chainUncaughtErrors((error) => reportClientError(error, 'uncaught'));
   trackUnhandledRejections();
 }
 

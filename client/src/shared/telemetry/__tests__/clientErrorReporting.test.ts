@@ -10,12 +10,7 @@ const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
-const mockPreviousHandler = jest.fn();
-const mockSetGlobalHandler = jest.fn();
-jest.mock('react-native/Libraries/vendor/core/ErrorUtils', () => ({
-  getGlobalHandler: () => mockPreviousHandler,
-  setGlobalHandler: (fn: unknown) => mockSetGlobalHandler(fn),
-}));
+const chainUncaughtErrors = jest.fn<void, [(error: unknown) => void]>();
 
 const mockEnableRejectionTracking = jest.fn();
 const globalWithHermes = globalThis as unknown as { HermesInternal?: unknown; __DEV__: boolean };
@@ -66,11 +61,10 @@ const FAKE_TIMERS: { doNotFake: ('Date' | 'setImmediate' | 'nextTick')[] } = {
 beforeEach(async () => {
   __http.replyAll({ status: 202 });
   await signInTestUser();
-  mockSetGlobalHandler.mockReset();
+  chainUncaughtErrors.mockReset();
   mockEnableRejectionTracking.mockReset();
   globalWithHermes.HermesInternal = { enablePromiseRejectionTracker: mockEnableRejectionTracking };
   globalWithHermes.__DEV__ = false;
-  mockPreviousHandler.mockReset();
   mockExpoConfig = { version: '1.2.3' };
   _resetGlobalErrorReportingForTest();
 });
@@ -308,30 +302,25 @@ describe('reportClientError dedupe', () => {
 
 describe('installGlobalErrorReporting', () => {
   it('wires the global handler and rejection tracking exactly once', () => {
-    installGlobalErrorReporting();
-    installGlobalErrorReporting();
+    installGlobalErrorReporting(chainUncaughtErrors);
+    installGlobalErrorReporting(chainUncaughtErrors);
 
-    expect(mockSetGlobalHandler).toHaveBeenCalledTimes(1);
+    expect(chainUncaughtErrors).toHaveBeenCalledTimes(1);
     expect(mockEnableRejectionTracking).toHaveBeenCalledTimes(1);
   });
 
-  it('reports an uncaught error and forwards it to the previous handler', async () => {
-    installGlobalErrorReporting();
-    const installedHandler = mockSetGlobalHandler.mock.calls[0]?.[0] as (
-      error: unknown,
-      isFatal: boolean,
-    ) => void;
+  it('reports an uncaught error', async () => {
+    installGlobalErrorReporting(chainUncaughtErrors);
+    const onUncaught = chainUncaughtErrors.mock.calls[0]?.[0];
 
-    const error = new Error('native crash');
-    installedHandler(error, true);
+    onUncaught?.(new Error('native crash'));
 
     await settle();
     expect(lastPayload()['source']).toBe('uncaught');
-    expect(mockPreviousHandler).toHaveBeenCalledWith(error, true);
   });
 
   it('reports an unhandled rejection', async () => {
-    installGlobalErrorReporting();
+    installGlobalErrorReporting(chainUncaughtErrors);
     const onUnhandled = mockEnableRejectionTracking.mock.calls[0]?.[0]?.onUnhandled as (
       id: number,
       error: unknown,
@@ -344,7 +333,7 @@ describe('installGlobalErrorReporting', () => {
   });
 
   it('reports nothing when a rejection is handled late', async () => {
-    installGlobalErrorReporting();
+    installGlobalErrorReporting(chainUncaughtErrors);
     const onHandled = mockEnableRejectionTracking.mock.calls[0]?.[0]?.onHandled as (
       id: number,
     ) => void;
@@ -358,17 +347,17 @@ describe('installGlobalErrorReporting', () => {
   it('leaves dev builds on the built-in rejection warnings', () => {
     globalWithHermes.__DEV__ = true;
 
-    installGlobalErrorReporting();
+    installGlobalErrorReporting(chainUncaughtErrors);
 
     expect(mockEnableRejectionTracking).not.toHaveBeenCalled();
-    expect(mockSetGlobalHandler).toHaveBeenCalledTimes(1);
+    expect(chainUncaughtErrors).toHaveBeenCalledTimes(1);
   });
 
   it('skips rejection tracking when the runtime is not Hermes', () => {
     delete globalWithHermes.HermesInternal;
 
-    expect(() => installGlobalErrorReporting()).not.toThrow();
-    expect(mockSetGlobalHandler).toHaveBeenCalledTimes(1);
+    expect(() => installGlobalErrorReporting(chainUncaughtErrors)).not.toThrow();
+    expect(chainUncaughtErrors).toHaveBeenCalledTimes(1);
   });
 });
 

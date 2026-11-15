@@ -3,8 +3,8 @@ export {
   reportClientError,
   _resetGlobalErrorReportingForTest,
 } from '@shared/telemetry/clientErrorReporting';
+export type { ChainUncaughtErrors } from '@shared/telemetry/clientErrorReporting';
 export { HEALTH_BATCH, createHealthTally } from '@shared/telemetry/healthTally';
-export { reportOtaLaunchFailures } from '@shared/telemetry/native/otaLaunchReport';
 export { followSignedInUser } from '@shared/telemetry/shell/outboxOwner';
 export {
   enqueueCritical,

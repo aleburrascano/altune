@@ -742,9 +742,11 @@ describe('Security: entries are owned by the user who queued them', () => {
     expect(sentEntries()[0]).not.toHaveProperty('owner_user_id');
   });
 
-  it('once the app makes it follow the signed-in user, a new identity owns what it queues next', async () => {
-    followSignedInUser();
+  it('while it follows the signed-in user, a new identity owns what it queues next, and it stops when told', async () => {
+    const stopFollowing = followSignedInUser();
     notifyIdentityChange('user-c');
+    stopFollowing();
+    notifyIdentityChange('user-d');
     serverReplies(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'theirs' }));
 

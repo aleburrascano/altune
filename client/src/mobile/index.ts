@@ -4,3 +4,7 @@ export { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
 export { TabsTitle } from '@/mobile/frame/platformExtras';
 export { StagingBanner } from '@/mobile/frame/StagingBanner';
 export type { FeaturePortSet } from '@/mobile/wiring/httpFeaturePorts';
+export { reportOtaLaunchFailures } from '@/mobile/otaLaunchReport';
+export type { UpdateLog } from '@/mobile/otaLaunchReport';
+export { chainUncaughtErrorHandler } from '@/mobile/uncaughtErrors';
+export type { GlobalErrorHandlers } from '@/mobile/uncaughtErrors';
