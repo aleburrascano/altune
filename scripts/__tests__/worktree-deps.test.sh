@@ -29,7 +29,7 @@ case "$1" in
     ;;
 esac
 EOF
-cat >"$stubbin/pnpm" <<'EOF'
+cat >"$stubbin/corepack" <<'EOF'
 #!/usr/bin/env bash
 echo "$*" >>"$STUB_PNPM_LOG"
 exit "${STUB_PNPM_EXIT:-0}"
@@ -134,8 +134,8 @@ unset STUB_NPM_CI_EXIT
 mkdir -p "$wt/pnpmroot" && : >"$wt/pnpmroot/pnpm-lock.yaml"
 export STUB_PNPM_LOG="$scratch/pnpm.log"
 run pnpmroot
-check 0 "runs a frozen pnpm install where the folder has pnpm-lock.yaml"
-grep -q -- '--frozen-lockfile' "$STUB_PNPM_LOG" 2>/dev/null \
+check 0 "runs a frozen pnpm install through corepack where the folder has pnpm-lock.yaml"
+grep -q -- '^pnpm install --frozen-lockfile' "$STUB_PNPM_LOG" 2>/dev/null \
   || { echo "FAIL pnpm install should keep the lockfile frozen, got: $(cat "$STUB_PNPM_LOG" 2>/dev/null)"; fail=1; }
 
 export STUB_PNPM_EXIT=1

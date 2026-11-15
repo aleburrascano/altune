@@ -91,7 +91,7 @@ borrow_allowed() {
 
 for dir in "$@"; do
   if [ -f "$dir/pnpm-lock.yaml" ]; then
-    (cd "$dir" && pnpm install --frozen-lockfile --prefer-offline --ignore-scripts --reporter=silent) 1>&2 || { log "$dir: pnpm install failed"; exit 1; }
+    (cd "$dir" && COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm install --frozen-lockfile --prefer-offline --ignore-scripts --reporter=silent) 1>&2 || { log "$dir: pnpm install failed"; exit 1; }
     continue
   fi
   [ -f "$dir/package-lock.json" ] || continue
