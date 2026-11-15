@@ -13,6 +13,7 @@ new_repo() {
         git init -qb main
         git config user.email test@example.com
         git config user.name test
+        git remote add gitea https://gitea.invalid/altune.git
         printf 'package keep\n' >keep.go
         git add -A
         git commit -qm baseline
@@ -85,6 +86,23 @@ add_plain_file
 run_script
 expect_rc 0
 expect_out "precheck: green"
+
+CASE="a gitea/main left over from a removed gitea remote is ignored, so the default base is origin/main"
+new_repo
+(
+    cd "$WORK/repo" || exit 1
+    git update-ref refs/remotes/origin/main HEAD
+)
+add_failing_nocomments_check
+(
+    cd "$WORK/repo" || exit 1
+    git update-ref refs/remotes/gitea/main HEAD
+    git remote remove gitea
+    git update-ref refs/remotes/gitea/main HEAD
+)
+run_script
+expect_rc 1
+expect_out "bash scripts/precheck.sh origin/main"
 
 CASE="an explicit ref argument still overrides the default and finds a failing check"
 new_repo
