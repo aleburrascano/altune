@@ -1,3 +1,3 @@
-import { AuthCallbackScreen } from '@features/auth';
+import { AuthCallbackScreen } from '@features/signIn';
 
 export default AuthCallbackScreen;

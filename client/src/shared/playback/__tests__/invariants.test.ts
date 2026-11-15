@@ -6,7 +6,7 @@ const PLAYBACK_DIR = path.resolve(__dirname, '..');
 const SRC_DIR = path.resolve(__dirname, '..', '..', '..');
 const ALLOWED_QUEUE_STORE_IMPORTERS = [
   path.join(SRC_DIR, 'shared', 'playback'),
-  path.join(SRC_DIR, 'features', 'playback'),
+  path.join(SRC_DIR, 'features', 'player'),
 ];
 
 const ACQUISITION_READY_LITERAL = /['"]ready['"]/;
@@ -82,7 +82,7 @@ describe('canPlay.ts is the only place playability is checked', () => {
 });
 
 describe('useQueueStore is reached only through the useQueuePlayback facade', () => {
-  it('finds no importer of useQueueStore outside shared/playback and features/playback', () => {
+  it('finds no importer of useQueueStore outside shared/playback and features/player', () => {
     const offenders = findQueueStoreImporters(SRC_DIR).filter(
       (file) => !isUnderAnAllowedDir(file, ALLOWED_QUEUE_STORE_IMPORTERS),
     );

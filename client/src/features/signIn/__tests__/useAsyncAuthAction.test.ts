@@ -1,0 +1,224 @@
+import { renderHook, act } from '@testing-library/react-native';
+
+import { useAsyncAuthAction } from '@features/signIn/hooks/useAsyncAuthAction';
+
+const AUTH_ACTION_TIMEOUT_MS = 20_000;
+
+type Result =
+  | { kind: 'idle' }
+  | { kind: 'pending' }
+  | { kind: 'ok' }
+  | { kind: 'error'; reason: 'network' | 'unknown' };
+
+type Outcome = Exclude<Result, { kind: 'idle' } | { kind: 'pending' }>;
+
+describe('useAsyncAuthAction: the deadline bounding a stalled SDK call', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('reaches a terminal network error when the Supabase call never resolves', async () => {
+    const neverSettles = (): Promise<{ kind: 'ok' }> => new Promise<{ kind: 'ok' }>(() => {});
+    const { result } = renderHook(() => useAsyncAuthAction<Result, []>(neverSettles));
+
+    let runCall!: Promise<void>;
+    act(() => {
+      runCall = result.current.run();
+    });
+
+    expect(result.current.state).toEqual({ kind: 'pending' });
+
+    act(() => {
+      jest.advanceTimersByTime(AUTH_ACTION_TIMEOUT_MS - 1);
+    });
+    expect(result.current.state).toEqual({ kind: 'pending' });
+
+    await act(async () => {
+      jest.advanceTimersByTime(1);
+      await runCall;
+    });
+    expect(result.current.state).toEqual({ kind: 'error', reason: 'network' });
+  });
+
+  it('lets a call that settles before the deadline reach its own terminal state', async () => {
+    const settlesOk = (): Promise<{ kind: 'ok' }> => Promise.resolve({ kind: 'ok' });
+    const { result } = renderHook(() => useAsyncAuthAction<Result, []>(settlesOk));
+
+    await act(async () => {
+      await result.current.run();
+    });
+
+    expect(result.current.state).toEqual({ kind: 'ok' });
+
+    act(() => {
+      jest.advanceTimersByTime(AUTH_ACTION_TIMEOUT_MS);
+    });
+    expect(result.current.state).toEqual({ kind: 'ok' });
+  });
+});
+
+function deferredAttempt(): {
+  attempt: jest.Mock<Promise<Outcome>, []>;
+  settleWith: (outcome: Outcome) => void;
+} {
+  let settle!: (outcome: Outcome) => void;
+  const call = new Promise<Outcome>((resolve) => {
+    settle = resolve;
+  });
+  return { attempt: jest.fn(() => call), settleWith: (outcome) => settle(outcome) };
+}
+
+describe('useAsyncAuthAction: rejecting a duplicate submit at the hook (#1643)', () => {
+  beforeEach(() => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('reaches the SDK once when a second press lands before the first settles', async () => {
+    const { attempt, settleWith } = deferredAttempt();
+    const { result } = renderHook(() => useAsyncAuthAction<Result, []>(attempt));
+
+    let presses!: Promise<unknown>;
+    act(() => {
+      presses = Promise.all([result.current.run(), result.current.run()]);
+    });
+
+    expect(attempt).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      settleWith({ kind: 'ok' });
+      await presses;
+    });
+    expect(result.current.state).toEqual({ kind: 'ok' });
+  });
+
+  it('lets the next submit through once the first has settled', async () => {
+    const attempt = jest.fn(async () => ({ kind: 'ok' }) as const);
+    const { result } = renderHook(() => useAsyncAuthAction<Result, []>(attempt));
+
+    await act(async () => {
+      await result.current.run();
+    });
+    await act(async () => {
+      await result.current.run();
+    });
+
+    expect(attempt).toHaveBeenCalledTimes(2);
+  });
+
+  it('lets the user retry after an attempt that threw', async () => {
+    const attempt = jest
+      .fn<Promise<Outcome>, []>()
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValueOnce({ kind: 'ok' });
+    const { result } = renderHook(() => useAsyncAuthAction<Result, []>(attempt));
+
+    await act(async () => {
+      await result.current.run();
+    });
+    expect(result.current.state).toEqual({ kind: 'error', reason: 'unknown' });
+
+    await act(async () => {
+      await result.current.run();
+    });
+    expect(result.current.state).toEqual({ kind: 'ok' });
+  });
+});
+
+describe('useAsyncAuthAction: the in-flight guard outlives the deadline', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('shows network at the deadline yet refuses a second attempt until the first settles', async () => {
+    const { attempt, settleWith } = deferredAttempt();
+    const { result } = renderHook(() => useAsyncAuthAction<Result, []>(attempt));
+
+    await act(async () => {
+      const first = result.current.run();
+      await jest.advanceTimersByTimeAsync(AUTH_ACTION_TIMEOUT_MS);
+      await first;
+    });
+    expect(result.current.state).toEqual({ kind: 'error', reason: 'network' });
+
+    await act(async () => {
+      await result.current.run();
+    });
+    expect(attempt).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      settleWith({ kind: 'ok' });
+      await jest.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await result.current.run();
+    });
+    expect(attempt).toHaveBeenCalledTimes(2);
+  });
+});
+
+const UNRECOGNIZED_FAILURE_LOG = '[auth] an auth action failed for an unrecognized reason';
+
+async function stateAfterRejectionWith(thrown: unknown): Promise<Result> {
+  const attempt = jest.fn<Promise<Outcome>, []>().mockRejectedValue(thrown);
+  const { result } = renderHook(() => useAsyncAuthAction<Result, []>(attempt));
+
+  await act(async () => {
+    await result.current.run();
+  });
+  return result.current.state;
+}
+
+describe('useAsyncAuthAction: what an unknown failure leaves behind (#1647)', () => {
+  let warn: jest.SpyInstance;
+
+  beforeEach(() => {
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  it("logs the thrown error's name and message, which the unknown reason alone drops", async () => {
+    const rejected = Object.assign(new Error('Database error granting user'), {
+      name: 'AuthApiError',
+    });
+
+    const state = await stateAfterRejectionWith(rejected);
+
+    expect(state).toEqual({ kind: 'error', reason: 'unknown' });
+    expect(warn).toHaveBeenCalledWith(UNRECOGNIZED_FAILURE_LOG, {
+      name: 'AuthApiError',
+      message: 'Database error granting user',
+    });
+  });
+
+  it('logs nothing for a failure the network reason already names', async () => {
+    const state = await stateAfterRejectionWith(new Error('Network request failed'));
+
+    expect(state).toEqual({ kind: 'error', reason: 'network' });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('names the type of a thrown non-Error rather than spelling the value out', async () => {
+    const state = await stateAfterRejectionWith('token_hash=super-secret-hash');
+
+    expect(state).toEqual({ kind: 'error', reason: 'unknown' });
+    expect(warn).toHaveBeenCalledWith(UNRECOGNIZED_FAILURE_LOG, {
+      name: 'string',
+      message: 'a non-Error value was thrown',
+    });
+  });
+});

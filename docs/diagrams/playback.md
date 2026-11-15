@@ -2,7 +2,7 @@
 
 ## Modules
 
-How the mobile playback modules depend on each other (`client/src/features/playback`).
+How the mobile playback modules depend on each other (`client/src/features/player`).
 
 ```mermaid
 flowchart TD

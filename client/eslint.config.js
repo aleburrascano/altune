@@ -22,21 +22,21 @@ const typedLinting = [
   },
 ];
 
-const FEATURES = ['auth', 'detail', 'discovery', 'library', 'playback', 'settings'];
+const FEATURES = ['detail', 'discovery', 'library', 'player', 'settings', 'signIn'];
 
 const TEST_FILES = ['**/__tests__/**'];
 
 const FILES_WHERE_EXPO_GO_FORCES_CONDITIONAL_REQUIRE = [
-  'src/features/playback/adapters/startPlaybackService.ts',
-  'src/features/playback/adapters/PlaybackProvider.tsx',
+  'src/features/player/adapters/startPlaybackService.ts',
+  'src/features/player/adapters/PlaybackProvider.tsx',
 ];
 
 const PLATFORM_HOOKS_MOVED_INTO_HOOKS_FOLDER = [
-  'src/features/playback/hooks/usePlaybackPosition.ts',
-  'src/features/playback/hooks/usePlaybackSignals.ts',
-  'src/features/playback/hooks/useQueueResume.ts',
-  'src/features/playback/hooks/useScrubberGesture.ts',
-  'src/features/playback/hooks/useMediaSession.ts',
+  'src/features/player/hooks/usePlaybackPosition.ts',
+  'src/features/player/hooks/usePlaybackSignals.ts',
+  'src/features/player/hooks/useQueueResume.ts',
+  'src/features/player/hooks/useScrubberGesture.ts',
+  'src/features/player/hooks/useMediaSession.ts',
   'src/features/library/hooks/useLibraryGridLayout.ts',
 ];
 

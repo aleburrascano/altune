@@ -1,0 +1,65 @@
+import { signOutOtherSessions, updatePassword } from '@shared/auth/authActions';
+
+import { withAuthDeadline } from '@shared/auth/authDeadline';
+import {
+  classifyAuthError,
+  isWeakPasswordError,
+  type SupabaseErrorDetail,
+  supabaseErrorDetail,
+  type ThrownErrorDetail,
+  thrownErrorDetail,
+  type TransientAuthReason,
+} from '@features/signIn/domain/authError';
+
+import { useAsyncAuthAction } from '@features/signIn/hooks/useAsyncAuthAction';
+
+type UpdatePasswordResult =
+  | { kind: 'idle' }
+  | { kind: 'pending' }
+  | { kind: 'ok'; othersRevoked: boolean }
+  | {
+      kind: 'error';
+      reason: TransientAuthReason | 'weak_password';
+    };
+
+const REVOKE_OTHERS_TIMEOUT_MS = 5_000;
+
+function reportRevokeFailure(detail: ThrownErrorDetail | SupabaseErrorDetail): void {
+  console.warn('[auth] revoking the other sessions after a password change failed', detail);
+}
+
+async function requestRevoke(): Promise<SupabaseErrorDetail | null> {
+  const { error } = await withAuthDeadline(signOutOtherSessions(), REVOKE_OTHERS_TIMEOUT_MS);
+  return error ? supabaseErrorDetail(error) : null;
+}
+
+async function revokeOtherSessionsOnce(): Promise<boolean> {
+  try {
+    const failure = await requestRevoke();
+    if (failure) reportRevokeFailure(failure);
+    return failure === null;
+  } catch (err) {
+    reportRevokeFailure(thrownErrorDetail(err));
+    return false;
+  }
+}
+
+async function revokeOtherSessions(): Promise<boolean> {
+  return (await revokeOtherSessionsOnce()) || (await revokeOtherSessionsOnce());
+}
+
+export function useUpdatePassword() {
+  const { state, run } = useAsyncAuthAction<UpdatePasswordResult, [string]>(async (password) => {
+    const { error } = await updatePassword({ password });
+    if (!error) {
+      return { kind: 'ok', othersRevoked: await revokeOtherSessions() };
+    }
+    console.warn('[auth] password update failed', supabaseErrorDetail(error));
+    return {
+      kind: 'error',
+      reason: classifyAuthError(error, [[isWeakPasswordError, 'weak_password']]),
+    };
+  });
+
+  return { state, updatePassword: run };
+}

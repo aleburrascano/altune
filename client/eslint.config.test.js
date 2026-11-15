@@ -119,7 +119,7 @@ describe('browser globals', () => {
   for (const file of [
     'src/shared/x.web.ts',
     'src/shared/x.web.tsx',
-    'src/features/playback/web/y.ts',
+    'src/features/player/web/y.ts',
   ]) {
     it(`allows window in ${file}`, async () => {
       assert.strictEqual((await globalErrors(file, alertCode)).length, 0);

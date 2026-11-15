@@ -1,0 +1,76 @@
+import { Link } from 'expo-router';
+import type { ComponentProps, ReactElement, ReactNode } from 'react';
+import { StyleSheet, View } from 'react-native';
+
+import { Button } from '@shared/ui/primitives/Button';
+import { Text } from '@shared/ui/primitives/Text';
+import { spacing } from '@shared/ui/theme';
+
+import { AuthErrorBanner } from '@features/signIn/ui/AuthErrorBanner';
+import { AuthHeroLayout } from '@shared/ui/hero/AuthHeroLayout';
+import { OAuthButtons } from '@features/signIn/ui/OAuthButtons';
+
+type AuthFormProps = {
+  screenTestID: string;
+  tagline: string;
+  submitLabel: string;
+  onSubmit: () => void;
+  pending: boolean;
+  canSubmit: boolean;
+  state: ComponentProps<typeof AuthErrorBanner>['state'];
+  generic: string;
+  linkHref: '/sign-in' | '/sign-up';
+  linkTestID: string;
+  linkQuestion: string;
+  linkAction: string;
+  children: ReactNode;
+};
+
+export function AuthForm({
+  screenTestID,
+  tagline,
+  submitLabel,
+  onSubmit,
+  pending,
+  canSubmit,
+  state,
+  generic,
+  linkHref,
+  linkTestID,
+  linkQuestion,
+  linkAction,
+  children,
+}: AuthFormProps): ReactElement {
+  return (
+    <AuthHeroLayout testID={screenTestID} tagline={tagline} background={false}>
+      <View style={styles.form}>
+        {children}
+        <AuthErrorBanner state={state} generic={generic} />
+        <Button
+          action={linkHref === '/sign-up' ? 'auth.sign_in' : 'auth.sign_up'}
+          testID="submit-button"
+          label={submitLabel}
+          onPress={onSubmit}
+          loading={pending}
+          disabled={!canSubmit}
+        />
+        <OAuthButtons />
+        <View style={styles.linkWrap}>
+          <Link href={linkHref} testID={linkTestID}>
+            <Text variant="label" tone="secondary">
+              {linkQuestion}{' '}
+              <Text variant="label" tone="accent">
+                {linkAction}
+              </Text>
+            </Text>
+          </Link>
+        </View>
+      </View>
+    </AuthHeroLayout>
+  );
+}
+
+const styles = StyleSheet.create({
+  form: { gap: spacing.sm },
+  linkWrap: { alignItems: 'center', paddingTop: spacing.sm },
+});

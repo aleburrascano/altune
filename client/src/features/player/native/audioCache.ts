@@ -1,0 +1,149 @@
+import { Directory, File, Paths } from 'expo-file-system';
+
+import type { TrackId } from '@shared/apiClient/ids';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+
+import { warnPlayback } from '@features/player/domain/playbackError';
+import { libraryTrackId } from '@features/player/domain/playerStatus';
+
+const CACHE_SUBDIR = 'audio-prefetch';
+const KEEP_WINDOW = 4;
+const MB = 1024 * 1024;
+const MAX_CACHE_BYTES = 300 * MB;
+export const MAX_PREFETCH_FILE_BYTES = 150 * MB;
+
+export function cacheDir(): Directory {
+  const dir = new Directory(Paths.cache, CACHE_SUBDIR);
+  if (!dir.exists) dir.create({ intermediates: true });
+  return dir;
+}
+
+function baseName(uri: string): string {
+  return uri.split('/').pop() ?? '';
+}
+
+export function buildCacheFileName(trackId: string, version: string, ext: string): string {
+  return `${trackId}.${version}${ext}`;
+}
+
+export function buildPartialCacheFileName(trackId: string, version: string, ext: string): string {
+  return `${buildCacheFileName(trackId, version, ext)}.part`;
+}
+
+function parseCacheFileName(name: string): { trackId: string; version: string; finished: boolean } {
+  const [trackId = '', version = '', ...extension] = name.split('.');
+  return { trackId, version, finished: extension.length === 1 };
+}
+
+export function findCached(trackId: TrackId, version: string): File | null {
+  for (const entry of cacheDir().list()) {
+    if (!(entry instanceof File)) continue;
+    const cached = parseCacheFileName(baseName(entry.uri));
+    if (cached.finished && cached.trackId === trackId && cached.version === version) return entry;
+  }
+  return null;
+}
+
+function cacheEntries(): (Directory | File)[] {
+  try {
+    return cacheDir().list();
+  } catch {
+    return [];
+  }
+}
+
+function cachedFiles(): File[] {
+  return cacheEntries().filter((entry): entry is File => entry instanceof File);
+}
+
+function deleteEach(entries: readonly (Directory | File)[]): void {
+  for (const entry of entries) {
+    try {
+      entry.delete();
+    } catch (err) {
+      warnPlayback('failed to delete cache entry', {}, err);
+    }
+  }
+}
+
+export function evictCachedFile(trackId: TrackId): void {
+  deleteEach(cachedFiles().filter((file) => trackIdOf(file) === trackId));
+}
+
+export function evictAllCached(): void {
+  deleteEach(cacheEntries());
+}
+
+function trackIdOf(file: File): string {
+  return parseCacheFileName(baseName(file.uri)).trackId;
+}
+
+function sizeOf(file: File): number {
+  try {
+    return file.size ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+function libraryIdAt(ordered: readonly PlaybackTrack[], index: number): string | undefined {
+  const track = ordered[index];
+  return track ? libraryTrackId(track) : undefined;
+}
+
+function windowIds(ordered: readonly PlaybackTrack[], currentIndex: number): string[] {
+  const ids = new Set<string>();
+  for (
+    let i = Math.max(0, currentIndex - 1);
+    i < ordered.length && i <= currentIndex + KEEP_WINDOW;
+    i++
+  ) {
+    const id = libraryIdAt(ordered, i);
+    if (id !== undefined) ids.add(id);
+  }
+  return [...ids];
+}
+
+function enforceByteCap(
+  kept: readonly File[],
+  ordered: readonly PlaybackTrack[],
+  currentIndex: number,
+  maxBytes: number,
+): void {
+  const sizes = new Map(kept.map((file) => [file, sizeOf(file)]));
+  let total = [...sizes.values()].reduce((sum, size) => sum + size, 0);
+  const protectedIds = new Set<string>();
+  for (const i of [currentIndex, currentIndex + 1]) {
+    const id = libraryIdAt(ordered, i);
+    if (id !== undefined) protectedIds.add(id);
+  }
+  const farthestFirst = windowIds(ordered, currentIndex).reverse();
+  for (const id of farthestFirst) {
+    if (total <= maxBytes) return;
+    if (protectedIds.has(id)) continue;
+    const files = kept.filter((file) => trackIdOf(file) === id);
+    deleteEach(files);
+    total -= files.reduce((sum, file) => sum + (sizes.get(file) ?? 0), 0);
+  }
+}
+
+export function evict(
+  ordered: readonly PlaybackTrack[],
+  currentIndex: number,
+  maxBytes: number = MAX_CACHE_BYTES,
+): void {
+  const keep = new Set(windowIds(ordered, currentIndex));
+  const files = cachedFiles();
+  deleteEach(
+    files.filter((file) => {
+      const id = trackIdOf(file);
+      return id && !keep.has(id);
+    }),
+  );
+  enforceByteCap(
+    files.filter((file) => keep.has(trackIdOf(file))),
+    ordered,
+    currentIndex,
+    maxBytes,
+  );
+}

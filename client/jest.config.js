@@ -17,11 +17,11 @@ const RATCHET_RAISE_ONLY = {
   'src/shared/failure/**': { statements: 100, branches: 100, functions: 100, lines: 100 },
   'src/shared/auth/**': { statements: 100, branches: 80, functions: 100, lines: 100 },
   'src/shared/playlists/**': { statements: 100, branches: 92, functions: 100, lines: 100 },
-  'src/features/auth/**': { statements: 0, branches: 0, functions: 0, lines: 0 },
+  'src/features/signIn/**': { statements: 0, branches: 0, functions: 0, lines: 0 },
   'src/features/detail/**': { statements: 0, branches: 0, functions: 0, lines: 0 },
   'src/features/discovery/**': { statements: 0, branches: 0, functions: 0, lines: 0 },
   'src/features/library/**': { statements: 0, branches: 0, functions: 0, lines: 0 },
-  'src/features/playback/**': { statements: 0, branches: 0, functions: 0, lines: 0 },
+  'src/features/player/**': { statements: 0, branches: 0, functions: 0, lines: 0 },
   'src/features/settings/**': { statements: 0, branches: 0, functions: 0, lines: 0 },
   global: { statements: 0, branches: 0, functions: 0, lines: 0 },
 };

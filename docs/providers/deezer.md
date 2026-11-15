@@ -247,8 +247,8 @@ Lyrics (cap 6), distinct from the public-API enrichment (the `pipe` GraphQL path
   `LyricsResponseDTO`.
 - `internal/app/build_consensus_providers.go`: `buildDetailEnrichers` wires it unconditionally.
 - Mobile: `client/src/shared/apiClient/lyrics.ts` (`getLyrics` + `LyricsResponse`),
-  `client/src/features/playback/hooks/useLyrics.ts`, and
-  `client/src/features/playback/ui/LyricsSheet.tsx`, the player's lyrics sheet.
+  `client/src/features/player/hooks/useLyrics.ts`, and
+  `client/src/features/player/ui/LyricsSheet.tsx`, the player's lyrics sheet.
 
 ## 8. Next steps
 

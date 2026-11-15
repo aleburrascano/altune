@@ -1,1 +1,1 @@
-export { LyricsSheet as default } from '@features/playback';
+export { LyricsSheet as default } from '@features/player';

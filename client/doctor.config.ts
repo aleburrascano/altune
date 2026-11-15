@@ -22,22 +22,22 @@ const downloadAwaitedBeforeCancelCheck = {
 };
 
 const queueResumeCoalescesSequentially = {
-  files: ['src/features/playback/hooks/useQueueResume.ts'],
+  files: ['src/features/player/hooks/useQueueResume.ts'],
   rules: ['react-doctor/async-await-in-loop'],
 };
 
 const nativeTailDrainRebuildsInOrder = {
-  files: ['src/features/playback/native/rebuildNativeTail.ts'],
+  files: ['src/features/player/native/rebuildNativeTail.ts'],
   rules: ['react-doctor/async-await-in-loop'],
 };
 
 const resetNativeRunsEvenWhenEmpty = {
-  files: ['src/features/playback/native/loadNativeTrack.ts'],
+  files: ['src/features/player/native/loadNativeTrack.ts'],
   rules: ['react-doctor/async-defer-await'],
 };
 
 const imageOnlyResolvesAssetSource = {
-  files: ['src/features/playback/native/nativeTrack.ts'],
+  files: ['src/features/player/native/nativeTrack.ts'],
   rules: ['react-doctor/rn-prefer-expo-image'],
 };
 
@@ -62,17 +62,17 @@ const recordEventIsFireAndForgetAndReadsNoQueryCache = {
 };
 
 const mediaSessionEffectsSyncTheBrowserMediaSession = {
-  files: ['src/features/playback/hooks/useMediaSession.ts'],
+  files: ['src/features/player/hooks/useMediaSession.ts'],
   rules: ['react-doctor/no-event-handler'],
 };
 
 const rememberTrackSyncsNativeTrackPlayer = {
-  files: ['src/features/playback/native/TrackPlayerPlaybackProvider.tsx'],
+  files: ['src/features/player/native/TrackPlayerPlaybackProvider.tsx'],
   rules: ['react-doctor/no-event-handler'],
 };
 
 const progressValueFollowsPlaybackPosition = {
-  files: ['src/features/playback/hooks/useScrubberGesture.ts'],
+  files: ['src/features/player/hooks/useScrubberGesture.ts'],
   rules: ['react-doctor/no-pass-data-to-parent'],
 };
 
@@ -107,7 +107,7 @@ const libraryChipsRailIsTheFixedChipsConstant = {
 };
 
 const passwordHintIsFormTextNotACredential = {
-  files: ['src/features/auth/domain/validation.ts'],
+  files: ['src/features/signIn/domain/validation.ts'],
   rules: ['react-doctor/no-secrets-in-client-code'],
 };
 
@@ -129,11 +129,11 @@ export default {
       {
         files: [
           'src/shell/platformExtras.tsx',
-          'src/features/auth/hooks/useAuthDeepLink.ts',
-          'src/features/auth/hooks/useOAuth.ts',
-          'src/features/auth/ui/AuthCallbackScreen.tsx',
-          'src/features/playback/adapters/PlaybackProvider.tsx',
-          'src/features/playback/domain/playsThroughTrackPlayer.ts',
+          'src/features/signIn/hooks/useAuthDeepLink.ts',
+          'src/features/signIn/hooks/useOAuth.ts',
+          'src/features/signIn/ui/AuthCallbackScreen.tsx',
+          'src/features/player/adapters/PlaybackProvider.tsx',
+          'src/features/player/domain/playsThroughTrackPlayer.ts',
           'src/shared/auth/authStorage.ts',
           'src/shared/device/isWebPlatform.ts',
           'src/shared/device/webOrigin.ts',

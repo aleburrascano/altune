@@ -231,7 +231,7 @@ test.concurrent(
 describe.each([
   [
     'MC-9',
-    path.join('src', 'features', 'auth', 'ui', '__mc9_fixture__.ts'),
+    path.join('src', 'features', 'signIn', 'ui', '__mc9_fixture__.ts'),
     "import { x } from '../adapters/http/x';\nexport const y = x;\n",
   ],
   [
