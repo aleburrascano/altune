@@ -12,6 +12,7 @@ export {
 export type { PinnedEntry } from '@shared/offline/state/pinnedIndex';
 export {
   pinnedByteTotal,
+  provideOfflinePort,
   repinIfPinned,
   resolvePinnedUri,
   usePinnedStore,
@@ -25,7 +26,6 @@ export type {
 } from '@shared/offline/state/pinnedStore';
 export { OfflineReconcileBridge } from '@shared/offline/ui/OfflineReconcileBridge';
 export type { OfflinePort } from '@shared/offline/ports/offlinePort';
-export { httpOfflinePort } from '@shared/offline/adapters/http/httpOfflinePort';
 export { createMemoryOfflinePort } from '@shared/offline/__tests__/memoryOfflinePort';
 export type { SeededAudioUrls } from '@shared/offline/__tests__/memoryOfflinePort';
 export { runDownloadQueue } from '@shared/offline/state/pinnedDownloadWorker';

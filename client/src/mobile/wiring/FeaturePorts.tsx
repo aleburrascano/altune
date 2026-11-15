@@ -1,5 +1,7 @@
 import type { ReactElement, ReactNode } from 'react';
 
+import { AcquisitionPortProvider } from '@shared/acquisition';
+import { PlaylistsPortProvider } from '@shared/playlists';
 import { DetailPortProvider, UnreleasedSearchHits } from '@features/detail';
 import {
   DiscoverPortProvider,
@@ -36,12 +38,22 @@ function CatalogPorts({ ports, children }: FeaturePortsProps): ReactElement {
   );
 }
 
+function SharedPorts({ ports, children }: FeaturePortsProps): ReactElement {
+  return (
+    <AcquisitionPortProvider port={ports.acquisition}>
+      <PlaylistsPortProvider port={ports.playlists}>{children}</PlaylistsPortProvider>
+    </AcquisitionPortProvider>
+  );
+}
+
 export function FeaturePorts({ ports, children }: FeaturePortsProps): ReactElement {
   return (
-    <SettingsPortProvider port={ports.settings}>
-      <CatalogPorts ports={ports}>
-        <DiscoveryPorts ports={ports}>{children}</DiscoveryPorts>
-      </CatalogPorts>
-    </SettingsPortProvider>
+    <SharedPorts ports={ports}>
+      <SettingsPortProvider port={ports.settings}>
+        <CatalogPorts ports={ports}>
+          <DiscoveryPorts ports={ports}>{children}</DiscoveryPorts>
+        </CatalogPorts>
+      </SettingsPortProvider>
+    </SharedPorts>
   );
 }

@@ -11,6 +11,8 @@ import { usePinnedStore } from '@shared/offline';
 import { playlistKeys } from '@shared/query';
 import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';
+import { PlaylistsPortProvider } from '@shared/playlists';
+import { apiClientPlaylistsPort } from '@testing/apiClientPorts';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -37,7 +39,12 @@ describe('usePlaylistDelete', () => {
   let alertSpy: jest.SpyInstance;
 
   function wrapper({ children }: WrapperProps) {
-    return createElement(QueryClientProvider, { client: queryClient }, children);
+    const portProps = { port: apiClientPlaylistsPort, children };
+    return createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      createElement(PlaylistsPortProvider, portProps),
+    );
   }
 
   function openDeletePrompt(navigator: Navigator): void {

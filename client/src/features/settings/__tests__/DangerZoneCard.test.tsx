@@ -5,10 +5,13 @@ import { signInTestUser } from '@testing/signInTestUser';
 
 import { ApiError, asTrackId } from '@shared/apiClient';
 import { useSignOut, type SignOutResult } from '@shared/auth';
-import { usePinnedStore } from '@shared/offline';
+import { usePinnedStore, provideOfflinePort } from '@shared/offline';
+import { apiClientOfflinePort } from '@testing/apiClientPorts';
 
 import { useRemoveDownloads, downloadStats, DangerZoneCard } from '@features/settings';
 import type { ClearHistoryState } from '@features/settings';
+
+provideOfflinePort(apiClientOfflinePort);
 const { __http } = require('@testing/doubles/fetch.js');
 
 const mockSignOut = jest.fn();

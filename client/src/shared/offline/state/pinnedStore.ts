@@ -5,7 +5,7 @@ import { onIdentityChange, onSignOut } from '@shared/session';
 import { onKillSwitchChange } from '@shared/killSwitch';
 
 import { offlineDownloadsSupported } from '@shared/offline/domain/offlineSupport';
-import { httpOfflinePort } from '@shared/offline/adapters/http/httpOfflinePort';
+import type { OfflinePort } from '@shared/offline/ports/offlinePort';
 import { runDownloadQueue } from '@shared/offline/state/pinnedDownloadWorker';
 import {
   deleteAllPinned,
@@ -47,11 +47,19 @@ function needsDownload(entry: PinnedEntry | undefined): boolean {
   return entry === undefined || entry.status === 'failed';
 }
 
+let offlinePort: OfflinePort | null = null;
+
+export function provideOfflinePort(port: OfflinePort): void {
+  offlinePort = port;
+}
+
 function runDownloadQueueIfSupported(
   set: Parameters<typeof runDownloadQueue>[0],
   get: Parameters<typeof runDownloadQueue>[1],
 ): void {
-  if (offlineDownloadsSupported) void runDownloadQueue(set, get, httpOfflinePort);
+  if (!offlineDownloadsSupported) return;
+  if (offlinePort === null) throw new Error('no offline port provided: call provideOfflinePort');
+  void runDownloadQueue(set, get, offlinePort);
 }
 
 function recordedVersion(entry: PinnedEntry): string | undefined {

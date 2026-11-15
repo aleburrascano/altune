@@ -13,6 +13,9 @@ import {
 import type { LibraryPort } from '@features/library';
 import { SortControl } from '@shared/ui';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
+import { PlaylistsPortProvider, createMemoryPlaylistsPort } from '@shared/playlists';
+
+const playlistsPort = createMemoryPlaylistsPort();
 
 const FULL_PAGES = 2;
 const PARTIAL_PAGE = 20;
@@ -74,7 +77,9 @@ let client: QueryClient;
 function wrapper({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={client}>
-      <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+      <PlaylistsPortProvider port={playlistsPort}>
+        <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+      </PlaylistsPortProvider>
     </QueryClientProvider>
   );
 }
@@ -98,9 +103,11 @@ warmUpFirstRender(async () => {
   const warmUpPort = recordingPort(playlists);
   render(
     <QueryClientProvider client={warmUpClient}>
-      <LibraryPortProvider port={warmUpPort}>
-        <WarmUpPlaylistsScreen />
-      </LibraryPortProvider>
+      <PlaylistsPortProvider port={playlistsPort}>
+        <LibraryPortProvider port={warmUpPort}>
+          <WarmUpPlaylistsScreen />
+        </LibraryPortProvider>
+      </PlaylistsPortProvider>
     </QueryClientProvider>,
   );
   await waitFor(() => expect(warmUpPort.getPlaylists).toHaveBeenCalledTimes(1));

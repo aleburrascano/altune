@@ -23,9 +23,14 @@ import {
   usePinnedStore,
   type PinnedEntry,
   type PinnedStatus,
+  provideOfflinePort,
   resolvePinnedUri,
   repinIfPinned,
 } from '@shared/offline';
+import { apiClientOfflinePort } from '@testing/apiClientPorts';
+
+provideOfflinePort(apiClientOfflinePort);
+
 const PIN_DOWNLOAD_TIMEOUT_MS = 120_000;
 const MAX_PINNED_BYTES = 8_589_934_592;
 const MIN_FREE_BYTES = 536_870_912;

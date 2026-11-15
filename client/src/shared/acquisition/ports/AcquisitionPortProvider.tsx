@@ -1,10 +1,9 @@
 import { createContext, use } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 
-import { httpAcquisitionPort } from '@shared/acquisition/adapters/http/httpAcquisitionPort';
 import type { AcquisitionPort } from '@shared/acquisition/ports/acquisitionPort';
 
-const AcquisitionPortContext = createContext<AcquisitionPort>(httpAcquisitionPort);
+const AcquisitionPortContext = createContext<AcquisitionPort | null>(null);
 
 interface AcquisitionPortProviderProps {
   port: AcquisitionPort;
@@ -19,5 +18,7 @@ export function AcquisitionPortProvider({
 }
 
 export function useAcquisitionPort(): AcquisitionPort {
-  return use(AcquisitionPortContext);
+  const port = use(AcquisitionPortContext);
+  if (port === null) throw new Error('no acquisition port provided: mount AcquisitionPortProvider');
+  return port;
 }

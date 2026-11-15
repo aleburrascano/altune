@@ -57,11 +57,9 @@ export function createPortWrapper(
     const detail = <DetailPortProvider port={ports.detail}>{children}</DetailPortProvider>;
     return (
       <QueryClientProvider client={client}>
-        {ports.acquisition === undefined ? (
-          detail
-        ) : (
-          <AcquisitionPortProvider port={ports.acquisition}>{detail}</AcquisitionPortProvider>
-        )}
+        <AcquisitionPortProvider port={ports.acquisition ?? httpFeaturePorts.acquisition}>
+          {detail}
+        </AcquisitionPortProvider>
       </QueryClientProvider>
     );
   };

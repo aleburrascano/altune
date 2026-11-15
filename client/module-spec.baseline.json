@@ -1404,7 +1404,6 @@
     "T2 src/mobile/frame/__tests__/StagingBanner.test.tsx patches with jest.spyOn",
     "T2 src/mobile/frame/__tests__/platformExtras.test.tsx patches with jest.mock",
     "T2 src/mobile/wiring/__tests__/FeaturePorts.test.tsx patches with jest.spyOn",
-    "T2 src/shared/acquisition/__tests__/acquisitionPortContract.test.ts patches with jest.mock",
     "T2 src/shared/acquisition/__tests__/acquisitionTelemetry.test.ts patches with jest.mock",
     "T2 src/shared/acquisition/__tests__/audioCacheInvalidation.test.ts patches with jest.spyOn",
     "T2 src/shared/acquisition/__tests__/trackStatusStore.test.ts patches with jest.mock",
@@ -1478,7 +1477,6 @@
     "T2 src/shared/lifecycle/__tests__/useAppState.test.ts patches with jest.spyOn",
     "T2 src/shared/navigation/__tests__/navigatorContract.test.ts patches with jest.mock",
     "T2 src/shared/offline/__tests__/OfflineReconcileBridge.test.tsx patches with jest.mock",
-    "T2 src/shared/offline/__tests__/offlinePortContract.test.ts patches with jest.mock",
     "T2 src/shared/offline/__tests__/pinnedDownloadWorker.test.ts patches with jest.mock",
     "T2 src/shared/offline/__tests__/pinnedDownloadWorker.test.ts patches with jest.spyOn",
     "T2 src/shared/offline/__tests__/pinnedFiles.test.ts patches with jest.spyOn",
@@ -1492,7 +1490,6 @@
     "T2 src/shared/playlists/__tests__/AddToPlaylistSheet.test.tsx patches with jest.spyOn",
     "T2 src/shared/playlists/__tests__/mutations.test.tsx patches with jest.mock",
     "T2 src/shared/playlists/__tests__/mutations.test.tsx patches with jest.spyOn",
-    "T2 src/shared/playlists/__tests__/playlistsPortContract.test.ts patches with jest.mock",
     "T2 src/shared/query/__tests__/retryDelay.test.ts patches with jest.spyOn",
     "T2 src/shared/query/__tests__/useAppMutation.test.tsx patches with jest.mock",
     "T2 src/shared/query/__tests__/useOptimisticMutation.test.tsx patches with jest.mock",
@@ -1547,10 +1544,7 @@
     "T3 src/features/signIn/ports/AuthPortProvider.tsx port AuthPortProvider.tsx has no contract test AuthPortProvider.contract.test.ts",
     "T3 src/features/signIn/ports/authPort.ts port authPort.ts has no contract test authPort.contract.test.ts",
     "T3 src/shared/acquisition/ports/AcquisitionPortProvider.tsx port AcquisitionPortProvider.tsx has no contract test AcquisitionPortProvider.contract.test.ts",
-    "T3 src/shared/acquisition/ports/acquisitionPort.ts port acquisitionPort.ts has no contract test acquisitionPort.contract.test.ts",
-    "T3 src/shared/offline/ports/offlinePort.ts port offlinePort.ts has no contract test offlinePort.contract.test.ts",
-    "T3 src/shared/playlists/ports/PlaylistsPortProvider.tsx port PlaylistsPortProvider.tsx has no contract test PlaylistsPortProvider.contract.test.ts",
-    "T3 src/shared/playlists/ports/playlistsPort.ts port playlistsPort.ts has no contract test playlistsPort.contract.test.ts"
+    "T3 src/shared/playlists/ports/PlaylistsPortProvider.tsx port PlaylistsPortProvider.tsx has no contract test PlaylistsPortProvider.contract.test.ts"
   ],
   "clones": 1
 }

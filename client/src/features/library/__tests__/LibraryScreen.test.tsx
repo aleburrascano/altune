@@ -16,6 +16,12 @@ import {
 import { idlePlayback } from '@testing/queryHarness';
 import type { LibraryPort } from '@features/library';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
+import { PlaylistsPortProvider, createMemoryPlaylistsPort } from '@shared/playlists';
+import { AcquisitionPortProvider, createMemoryAcquisitionPort } from '@shared/acquisition';
+
+const acquisitionPort = createMemoryAcquisitionPort().port;
+
+const playlistsPort = createMemoryPlaylistsPort();
 
 const SKELETON_TILES = 4;
 const SERVICE_UNAVAILABLE = 503;
@@ -33,9 +39,13 @@ let port: LibraryPort;
 function wrapper({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={client}>
-      <PlaybackContext.Provider value={idlePlayback}>
-        <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
-      </PlaybackContext.Provider>
+      <AcquisitionPortProvider port={acquisitionPort}>
+        <PlaylistsPortProvider port={playlistsPort}>
+          <PlaybackContext.Provider value={idlePlayback}>
+            <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+          </PlaybackContext.Provider>
+        </PlaylistsPortProvider>
+      </AcquisitionPortProvider>
     </QueryClientProvider>
   );
 }
@@ -52,11 +62,15 @@ warmUpFirstRender(async () => {
   const warmUpClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={warmUpClient}>
-      <PlaybackContext.Provider value={idlePlayback}>
-        <LibraryPortProvider port={createMemoryLibraryPort()}>
-          <LibraryScreen />
-        </LibraryPortProvider>
-      </PlaybackContext.Provider>
+      <AcquisitionPortProvider port={acquisitionPort}>
+        <PlaylistsPortProvider port={playlistsPort}>
+          <PlaybackContext.Provider value={idlePlayback}>
+            <LibraryPortProvider port={createMemoryLibraryPort()}>
+              <LibraryScreen />
+            </LibraryPortProvider>
+          </PlaybackContext.Provider>
+        </PlaylistsPortProvider>
+      </AcquisitionPortProvider>
     </QueryClientProvider>,
   );
   await waitFor(() => expect(screen.getByTestId('library-empty')).toBeTruthy());

@@ -1,13 +1,12 @@
 import { asTrackId } from '@shared/apiClient';
 import type { PlaylistResponse } from '@shared/apiClient';
+import { apiClientPlaylistsPort } from '@testing/apiClientPorts';
 import { signInTestUser } from '@testing/signInTestUser';
 import { ApiError } from '@shared/failure';
 
-import { httpPlaylistsPort, createMemoryPlaylistsPort } from '@shared/playlists';
+import { createMemoryPlaylistsPort } from '@shared/playlists';
 import type { PlaylistsPort } from '@shared/playlists';
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
-
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 const NO_CONTENT_STATUS = 204;
 const NOT_FOUND_STATUS = 404;
@@ -123,7 +122,7 @@ function serveFakeServer(): PlaylistsPort {
     }
     return fakeFetch(url, init);
   }) as typeof fetch;
-  return httpPlaylistsPort;
+  return apiClientPlaylistsPort;
 }
 
 function abortedSignal(): AbortSignal {
@@ -143,7 +142,7 @@ afterEach(() => {
 
 describe.each<[string, () => PlaylistsPort]>([
   ['createMemoryPlaylistsPort', createMemoryPlaylistsPort],
-  ['httpPlaylistsPort over HTTP', serveFakeServer],
+  ['apiClient over HTTP', serveFakeServer],
 ])('%s satisfies the PlaylistsPort contract', (_name, freshPort) => {
   it('lists no playlists and a total of 0 for an empty store', async () => {
     const page = await freshPort().getPlaylists();

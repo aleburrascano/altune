@@ -3,10 +3,11 @@ import { Alert, StyleSheet } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 
-import { AddToPlaylistSheet } from '@shared/playlists';
+import { AddToPlaylistSheet, PlaylistsPortProvider } from '@shared/playlists';
 import { playlistKeys } from '@shared/query';
 import { type PlaylistResponse, asPlaylistId, asTrackId, type TrackId } from '@shared/apiClient';
 import { signInTestUser } from '@testing/signInTestUser';
+import { apiClientPlaylistsPort } from '@testing/apiClientPorts';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -43,12 +44,14 @@ function renderSheet(options: RenderOptions = {}) {
   const resolveTrackIds = options.resolveTrackIds ?? (() => Promise.resolve([asTrackId('t1')]));
   const utils = render(
     <QueryClientProvider client={queryClient}>
-      <AddToPlaylistSheet
-        visible={options.visible ?? true}
-        label={options.label ?? '1 track'}
-        resolveTrackIds={resolveTrackIds}
-        onClose={onClose}
-      />
+      <PlaylistsPortProvider port={apiClientPlaylistsPort}>
+        <AddToPlaylistSheet
+          visible={options.visible ?? true}
+          label={options.label ?? '1 track'}
+          resolveTrackIds={resolveTrackIds}
+          onClose={onClose}
+        />
+      </PlaylistsPortProvider>
     </QueryClientProvider>,
   );
   return { ...utils, onClose, queryClient };
@@ -367,12 +370,14 @@ describe('AddToPlaylistSheet(): the playlist query is enabled only while visible
       const queryClient = freshClient();
       const { rerender } = render(
         <QueryClientProvider client={queryClient}>
-          <AddToPlaylistSheet
-            visible={false}
-            label="1 track"
-            resolveTrackIds={() => Promise.resolve([asTrackId('t1')])}
-            onClose={jest.fn()}
-          />
+          <PlaylistsPortProvider port={apiClientPlaylistsPort}>
+            <AddToPlaylistSheet
+              visible={false}
+              label="1 track"
+              resolveTrackIds={() => Promise.resolve([asTrackId('t1')])}
+              onClose={jest.fn()}
+            />
+          </PlaylistsPortProvider>
         </QueryClientProvider>,
       );
 
@@ -388,12 +393,14 @@ describe('AddToPlaylistSheet(): the playlist query is enabled only while visible
 
       rerender(
         <QueryClientProvider client={queryClient}>
-          <AddToPlaylistSheet
-            visible
-            label="1 track"
-            resolveTrackIds={() => Promise.resolve([asTrackId('t1')])}
-            onClose={jest.fn()}
-          />
+          <PlaylistsPortProvider port={apiClientPlaylistsPort}>
+            <AddToPlaylistSheet
+              visible
+              label="1 track"
+              resolveTrackIds={() => Promise.resolve([asTrackId('t1')])}
+              onClose={jest.fn()}
+            />
+          </PlaylistsPortProvider>
         </QueryClientProvider>,
       );
 

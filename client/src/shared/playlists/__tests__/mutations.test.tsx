@@ -28,6 +28,7 @@ import {
 } from '@shared/apiClient';
 import { playlistKeys } from '@shared/query';
 import { signInTestUser } from '@testing/signInTestUser';
+import { apiClientPlaylistsPort } from '@testing/apiClientPorts';
 import { runSignOutCleanups } from '@shared/session';
 import * as playlistsApi from '@shared/apiClient/playlists';
 
@@ -116,7 +117,11 @@ function newClient(): QueryClient {
 
 function createWrapper(queryClient: QueryClient) {
   return function Wrapper({ children }: { children: React.ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    return (
+      <QueryClientProvider client={queryClient}>
+        <PlaylistsPortProvider port={apiClientPlaylistsPort}>{children}</PlaylistsPortProvider>
+      </QueryClientProvider>
+    );
   };
 }
 
@@ -1743,7 +1748,11 @@ describe('after sign-out', () => {
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     });
     function Wrapper({ children }: { children: React.ReactNode }) {
-      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+      return (
+        <QueryClientProvider client={queryClient}>
+          <PlaylistsPortProvider port={apiClientPlaylistsPort}>{children}</PlaylistsPortProvider>
+        </QueryClientProvider>
+      );
     }
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
     return { queryClient, wrapper: Wrapper, invalidateSpy };

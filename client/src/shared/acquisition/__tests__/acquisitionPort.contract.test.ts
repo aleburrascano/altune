@@ -1,13 +1,12 @@
 import { asTrackId, type TrackId } from '@shared/apiClient';
+import { apiClientAcquisitionPort } from '@testing/apiClientPorts';
 import { signInTestUser } from '@testing/signInTestUser';
 import { ApiError, ContractError } from '@shared/failure';
 
-import { httpAcquisitionPort, createMemoryAcquisitionPort } from '@shared/acquisition';
+import { createMemoryAcquisitionPort } from '@shared/acquisition';
 import type { AcquisitionPort } from '@shared/acquisition';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
-
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 const RETRY_PATH_PATTERN = /^\/v1\/tracks\/([^/]+)\/retry$/;
 const NO_CONTENT_STATUS = 204;
@@ -38,7 +37,7 @@ function serveAcquisitionOverHttp(trackIds: readonly string[]): SeededPort {
     }
     return fakeFetch(url, init);
   }) as typeof fetch;
-  return { port: httpAcquisitionPort, retried: () => retried };
+  return { port: apiClientAcquisitionPort, retried: () => retried };
 }
 
 function seedMemory(trackIds: readonly string[]): SeededPort {
@@ -57,7 +56,7 @@ afterEach(() => {
 
 describe.each<[string, (trackIds: readonly string[]) => SeededPort]>([
   ['createMemoryAcquisitionPort', seedMemory],
-  ['httpAcquisitionPort over HTTP', serveAcquisitionOverHttp],
+  ['apiClient over HTTP', serveAcquisitionOverHttp],
 ])('%s satisfies the AcquisitionPort contract', (_name, seeded) => {
   it('resolves when retrying a seeded track', async () => {
     const { port, retried } = seeded(['t1']);
@@ -114,7 +113,7 @@ describe('look-alike id refusal, per implementation', () => {
     expect((failure as ApiError).status).toBe(NOT_FOUND_STATUS);
   });
 
-  it('http adapter refuses the look-alike client-side with a ContractError, sending nothing', async () => {
+  it('apiClient port refuses the look-alike client-side with a ContractError, sending nothing', async () => {
     const { port } = serveAcquisitionOverHttp(['t1']);
 
     await expect(port.retryAcquisition(LOOK_ALIKE_ID)).rejects.toBeInstanceOf(ContractError);
@@ -123,7 +122,7 @@ describe('look-alike id refusal, per implementation', () => {
   });
 });
 
-describe('httpAcquisitionPort wire format', () => {
+describe('apiClient acquisition port wire format', () => {
   it('sends POST /v1/tracks/t1/retry', async () => {
     const { port } = serveAcquisitionOverHttp(['t1']);
 

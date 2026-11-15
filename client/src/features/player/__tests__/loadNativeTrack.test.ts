@@ -2,7 +2,8 @@ import TrackPlayer, { Event } from 'react-native-track-player';
 
 import { asTrackId } from '@shared/apiClient';
 import { ApiError } from '@shared/failure';
-import { usePinnedStore } from '@shared/offline';
+import { usePinnedStore, provideOfflinePort } from '@shared/offline';
+import { apiClientOfflinePort } from '@testing/apiClientPorts';
 import { orderedQueueTracks, useQueueStore, trackKey, type PlaybackTrack } from '@shared/playback';
 import {
   type PlaybackPort,
@@ -33,6 +34,8 @@ import {
   httpPlaybackPort,
 } from '@features/player';
 import { signInTestUser } from '@testing/signInTestUser';
+
+provideOfflinePort(apiClientOfflinePort);
 const NATIVE_QUEUE_OP_TIMEOUT_MS = 15_000;
 
 const FIRST_TRACK_BUILD_LOADS_IMAGE_AND_ARTWORK_TIMEOUT_MS = 30_000;
