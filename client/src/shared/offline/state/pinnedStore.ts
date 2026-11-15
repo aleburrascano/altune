@@ -53,13 +53,16 @@ export function provideOfflinePort(port: OfflinePort): void {
   offlinePort = port;
 }
 
+function providedOfflinePort(): OfflinePort {
+  if (offlinePort === null) throw new Error('no offline port provided: call provideOfflinePort');
+  return offlinePort;
+}
+
 function runDownloadQueueIfSupported(
   set: Parameters<typeof runDownloadQueue>[0],
   get: Parameters<typeof runDownloadQueue>[1],
 ): void {
-  if (!offlineDownloadsSupported) return;
-  if (offlinePort === null) throw new Error('no offline port provided: call provideOfflinePort');
-  void runDownloadQueue(set, get, offlinePort);
+  if (offlineDownloadsSupported) void runDownloadQueue(set, get, providedOfflinePort());
 }
 
 function recordedVersion(entry: PinnedEntry): string | undefined {

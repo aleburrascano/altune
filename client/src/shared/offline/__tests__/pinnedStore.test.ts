@@ -667,6 +667,20 @@ describe('the pinned index is written through to disk and loaded back on relaunc
     });
   });
 
+  describe('a store no app has handed an offline port', () => {
+    it('refuses to start a download instead of reaching the API on its own', () => {
+      jest.isolateModules(() => {
+        const fresh = require('@shared/offline/state/pinnedStore') as {
+          usePinnedStore: typeof usePinnedStore;
+        };
+
+        expect(() => fresh.usePinnedStore.getState().pin(asTrackId('t1'))).toThrow(
+          'no offline port provided',
+        );
+      });
+    });
+  });
+
   describe('relaunch — what one session persists is exactly what a fresh module import loads back', () => {
     it('a session left with entries queued and downloading survives a fresh import unchanged', () => {
       usePinnedStore.getState().pin(asTrackId('t1'));
