@@ -143,7 +143,7 @@ test('every alias counts, in src and jest alike', (t) => {
 
 test('jest test files under the client-root __tests__ and scripts/__tests__ count too', (t) => {
   const root = fixture(t, {
-    '__tests__/layout.integration.test.tsx': "jest.mock('@features/auth/ui/AuthGate');\n",
+    '__tests__/layout.integration.test.tsx': "jest.mock('@features/signIn/ui/AuthGate');\n",
     'scripts/__tests__/tool.test.ts': "jest.mock('../tool');\n",
   });
 
@@ -151,7 +151,7 @@ test('jest test files under the client-root __tests__ and scripts/__tests__ coun
 
   assert.equal(
     baselineOf(root),
-    '__tests__/layout.integration.test.tsx @features/auth/ui/AuthGate\n' +
+    '__tests__/layout.integration.test.tsx @features/signIn/ui/AuthGate\n' +
       'scripts/__tests__/tool.test.ts ../tool\n',
   );
 });

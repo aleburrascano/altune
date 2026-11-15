@@ -1,0 +1,300 @@
+import { Platform } from 'react-native';
+import { act, renderHook } from '@testing-library/react-native';
+
+import * as nativeWebOrigin from '@shared/device/webOrigin';
+import * as browserWebOrigin from '@shared/device/webOrigin.web';
+
+import { useSignUp } from '@features/signIn/hooks/useSignUp';
+
+import {
+  createSupabaseAuthMock,
+  runAsyncAuthHook,
+} from '@features/signIn/__tests__/testUtils/authTestUtils';
+
+const AUTH_ACTION_TIMEOUT_MS = 20_000;
+
+const { signUp: supabaseSignUp } = createSupabaseAuthMock('signUp');
+
+const signUp = () => runAsyncAuthHook(useSignUp, (hook) => hook.signUp('a@b.co', 'pw'));
+
+describe('useSignUp: mapping the resolved outcome of signUp', () => {
+  it('maps a swallowed AuthRetryableFetchError to network', async () => {
+    supabaseSignUp.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { name: 'AuthRetryableFetchError', status: 0, message: 'Failed to fetch' },
+    });
+
+    expect(await signUp()).toEqual({ kind: 'error', reason: 'network' });
+  });
+
+  it('maps an AuthWeakPasswordError to weak_password', async () => {
+    supabaseSignUp.mockResolvedValue({
+      data: { user: null, session: null },
+      error: {
+        name: 'AuthWeakPasswordError',
+        status: 422,
+        code: 'weak_password',
+        message: 'Password is too weak',
+      },
+    });
+
+    expect(await signUp()).toEqual({ kind: 'error', reason: 'weak_password' });
+  });
+
+  it('maps an explicit user_already_exists error to already_registered', async () => {
+    supabaseSignUp.mockResolvedValue({
+      data: { user: null, session: null },
+      error: {
+        name: 'AuthApiError',
+        status: 422,
+        code: 'user_already_exists',
+        message: 'User already registered',
+      },
+    });
+
+    expect(await signUp()).toEqual({ kind: 'error', reason: 'already_registered' });
+  });
+
+  it('maps a signup_disabled error to signup_disabled', async () => {
+    supabaseSignUp.mockResolvedValue({
+      data: { user: null, session: null },
+      error: {
+        name: 'AuthApiError',
+        status: 422,
+        code: 'signup_disabled',
+        message: 'Signups not allowed for this instance',
+      },
+    });
+
+    expect(await signUp()).toEqual({ kind: 'error', reason: 'signup_disabled' });
+  });
+
+  it('maps the empty-identities anti-enumeration signal to already_registered, not awaiting-confirmation', async () => {
+    supabaseSignUp.mockResolvedValue({
+      data: { user: { id: 'obfuscated', identities: [] }, session: null },
+      error: null,
+    });
+
+    expect(await signUp()).toEqual({ kind: 'error', reason: 'already_registered' });
+  });
+
+  it('falls back to unknown when identities is null instead of an array', async () => {
+    supabaseSignUp.mockResolvedValue({
+      data: { user: { id: 'obfuscated', identities: null }, session: null },
+      error: null,
+    });
+
+    expect(await signUp()).toEqual({ kind: 'error', reason: 'unknown' });
+  });
+
+  it('falls back to unknown when the user carries no identities at all', async () => {
+    supabaseSignUp.mockResolvedValue({
+      data: { user: { id: 'obfuscated' }, session: null },
+      error: null,
+    });
+
+    expect(await signUp()).toEqual({ kind: 'error', reason: 'unknown' });
+  });
+
+  it('falls back to unknown when success carries neither a user nor a session', async () => {
+    supabaseSignUp.mockResolvedValue({ data: { user: null, session: null }, error: null });
+
+    expect(await signUp()).toEqual({ kind: 'error', reason: 'unknown' });
+  });
+
+  it('reports awaiting-confirmation for a fresh signup with identities but no session', async () => {
+    supabaseSignUp.mockResolvedValue({
+      data: { user: { id: 'new', identities: [{ id: 'i1' }] }, session: null },
+      error: null,
+    });
+
+    expect(await signUp()).toEqual({ kind: 'awaiting-confirmation' });
+  });
+
+  it('reports ok when a session is returned immediately', async () => {
+    supabaseSignUp.mockResolvedValue({
+      data: { user: { id: 'new', identities: [{ id: 'i1' }] }, session: {} },
+      error: null,
+    });
+
+    expect(await signUp()).toEqual({ kind: 'ok' });
+  });
+
+  it('reports ok for a session even when identities is an unexpected shape', async () => {
+    supabaseSignUp.mockResolvedValue({
+      data: { user: { id: 'new', identities: null }, session: {} },
+      error: null,
+    });
+
+    expect(await signUp()).toEqual({ kind: 'ok' });
+  });
+
+  it('falls back to unknown for an unrecognised error code', async () => {
+    supabaseSignUp.mockResolvedValue({
+      data: { user: null, session: null },
+      error: {
+        name: 'AuthApiError',
+        status: 400,
+        code: 'validation_failed',
+        message: 'Bad request',
+      },
+    });
+
+    expect(await signUp()).toEqual({ kind: 'error', reason: 'unknown' });
+  });
+});
+
+describe('useSignUp: a retry after a timed-out first call', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('does not reach signUp a second time while the first call is unsettled', async () => {
+    supabaseSignUp.mockReturnValue(new Promise(() => {}));
+    const { result } = renderHook(useSignUp);
+
+    await act(async () => {
+      const first = result.current.signUp('a@b.co', 'pw');
+      await jest.advanceTimersByTimeAsync(AUTH_ACTION_TIMEOUT_MS);
+      await first;
+    });
+    expect(result.current.state).toEqual({ kind: 'error', reason: 'network' });
+
+    await act(async () => {
+      await result.current.signUp('a@b.co', 'pw');
+    });
+
+    expect(supabaseSignUp).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('a server rate limit', () => {
+  const RATE_LIMITED = {
+    data: null,
+    error: {
+      name: 'AuthApiError',
+      status: 429,
+      code: 'over_email_send_rate_limit',
+      message: 'limit',
+    },
+  };
+
+  const RATE_LIMITED_BY_CODE = {
+    data: null,
+    error: { name: 'AuthApiError', status: 400, code: 'over_request_rate_limit', message: 'limit' },
+  };
+
+  const UNAVAILABLE = {
+    data: null,
+    error: { name: 'AuthApiError', status: 503, message: 'down' },
+  };
+
+  const RETRYABLE_429 = {
+    data: null,
+    error: { name: 'AuthRetryableFetchError', status: 429, message: 'limit' },
+  };
+
+  describe.each([
+    [
+      'sign-up',
+      supabaseSignUp,
+      () => runAsyncAuthHook(useSignUp, (hook) => hook.signUp('a@b.co', 'pw')),
+    ],
+  ] as const)('%s: a server rate limit is not a network error', (_name, mock, run) => {
+    it('maps a resolved 429 to too_many_attempts', async () => {
+      mock.mockResolvedValue(RATE_LIMITED);
+
+      expect(await run()).toEqual({ kind: 'error', reason: 'too_many_attempts' });
+    });
+
+    it('maps an over_*_rate_limit code on another status to too_many_attempts', async () => {
+      mock.mockResolvedValue(RATE_LIMITED_BY_CODE);
+
+      expect(await run()).toEqual({ kind: 'error', reason: 'too_many_attempts' });
+    });
+
+    it('maps a 429 the SDK wrapped as a retryable fetch error to too_many_attempts', async () => {
+      mock.mockResolvedValue(RETRYABLE_429);
+
+      expect(await run()).toEqual({ kind: 'error', reason: 'too_many_attempts' });
+    });
+
+    it('still maps a 503 to network', async () => {
+      mock.mockResolvedValue(UNAVAILABLE);
+
+      expect(await run()).toEqual({ kind: 'error', reason: 'network' });
+    });
+  });
+});
+
+describe('useSignUp: the confirmation redirect on web (#2837)', () => {
+  beforeEach(() => {
+    jest.spyOn(nativeWebOrigin, 'webOrigin').mockImplementation(browserWebOrigin.webOrigin);
+  });
+
+  afterEach(() => {
+    jest.mocked(nativeWebOrigin.webOrigin).mockRestore();
+    Platform.OS = 'ios';
+    Reflect.deleteProperty(globalThis, 'window');
+  });
+
+  it('emails the confirmation link back to this origin instead of the altune scheme', async () => {
+    Platform.OS = 'web';
+    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
+    supabaseSignUp.mockResolvedValue({ data: { user: null, session: {} }, error: null });
+
+    await signUp();
+
+    expect(supabaseSignUp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: { emailRedirectTo: 'https://app.altune.example/auth/confirm' },
+      }),
+    );
+  });
+});
+
+describe('useSignUp: the confirmation redirect on native (#2837)', () => {
+  it('emails the confirmation link to the altune scheme', async () => {
+    supabaseSignUp.mockResolvedValue({ data: { user: null, session: {} }, error: null });
+
+    await signUp();
+
+    expect(supabaseSignUp).toHaveBeenCalledWith(
+      expect.objectContaining({ options: { emailRedirectTo: 'altune://auth/confirm' } }),
+    );
+  });
+});
+
+describe('useSignUp: failure logging', () => {
+  it('warns when the response carries no identities list', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    supabaseSignUp.mockResolvedValue({ data: { user: { identities: undefined } }, error: null });
+
+    await signUp();
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it('warns with the projected detail and never the email or password', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    supabaseSignUp.mockResolvedValue({
+      data: null,
+      error: { name: 'AuthApiError', status: 400, code: 'x', message: 'Bad', extra: 'drop' },
+    });
+
+    await signUp();
+
+    expect(warn).toHaveBeenCalledWith('[auth] sign-up failed', {
+      name: 'AuthApiError',
+      code: 'x',
+      status: 400,
+      message: 'Bad',
+    });
+    warn.mockRestore();
+  });
+});

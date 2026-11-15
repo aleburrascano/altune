@@ -17,7 +17,7 @@ const OWNERS = {
     tracks: ['deleteTrack', 'reacquireTrack'],
   },
   'src/features/detail/adapters/http/httpDetailPort.ts': { tracks: ['createTrack'] },
-  'src/features/playback/adapters/http/httpPlaybackPort.ts': {
+  'src/features/player/adapters/http/httpPlaybackPort.ts': {
     audio: ['recoverAudio'],
     playback: ['saveQueueState'],
   },

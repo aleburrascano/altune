@@ -1,0 +1,87 @@
+import { useEffect, useEffectEvent, useRef } from 'react';
+import { Event, useTrackPlayerEvents } from 'react-native-track-player';
+
+import { useQueueStore } from '@shared/playback/queueStore';
+import { trackKey, type TrackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
+import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
+
+import { buildTrackPayload, hasCrossedListenThreshold } from '@features/player/domain/signals';
+import { progressSecondsToMs, progressSecondsToRoundedMs } from '@features/player/domain/time';
+
+const COMPLETION_EPSILON_MS = 2000;
+
+type PlayProgress = { key: TrackKey | null; emitted: boolean; stalePositionMs: number };
+
+function isFirstCrossing(ps: PlayProgress, positionMs: number, durationMs: number): boolean {
+  if (ps.emitted || positionMs === ps.stalePositionMs) return false;
+  return hasCrossedListenThreshold(positionMs, durationMs);
+}
+
+export function usePlaybackSignals(args: {
+  track: PlaybackTrack | null;
+  positionMs: number;
+  durationMs: number;
+}): void {
+  const recordEvent = useRecordEvent();
+  const queueSource = useQueueStore((s) => s.source);
+
+  const emit = (
+    type: 'play' | 'skip' | 'completed',
+    track: PlaybackTrack,
+    dwellMs?: number,
+  ): void => {
+    recordEvent.mutate({
+      type,
+      search_id: track.searchId,
+      payload: buildTrackPayload(track, queueSource, dwellMs),
+    });
+  };
+
+  const { track, positionMs, durationMs } = args;
+  const playRef = useRef<PlayProgress>({ key: null, emitted: false, stalePositionMs: 0 });
+  const key = track ? trackKey(track) : null;
+  const trackProgress = useEffectEvent((): void => {
+    const ps = playRef.current;
+    if (ps.key !== key) {
+      playRef.current = { key, emitted: false, stalePositionMs: positionMs };
+      return;
+    }
+    if (!track || !isFirstCrossing(ps, positionMs, durationMs)) return;
+    ps.emitted = true;
+    emit('play', track);
+  });
+  useEffect(() => {
+    trackProgress();
+  }, [track, key, positionMs, durationMs]);
+
+  const handledKeyRef = useRef<TrackKey | null>(null);
+  useTrackPlayerEvents([Event.PlaybackActiveTrackChanged, Event.PlaybackQueueEnded], (event) => {
+    const s = useQueueStore.getState();
+    if (event.type === Event.PlaybackActiveTrackChanged) {
+      if (event.lastIndex == null) return;
+      const trackIdx = s.playOrder[event.lastIndex];
+      const outgoing = trackIdx != null ? s.tracks[trackIdx] : undefined;
+      if (!outgoing) return;
+      const dwellMs = progressSecondsToRoundedMs(event.lastPosition ?? 0);
+      if (dwellMs <= 0) return;
+      const durMs =
+        event.lastTrack?.duration != null
+          ? progressSecondsToMs(event.lastTrack.duration)
+          : outgoing.durationSeconds != null
+            ? progressSecondsToMs(outgoing.durationSeconds)
+            : 0;
+      const completed = durMs > 0 && dwellMs >= durMs - COMPLETION_EPSILON_MS;
+      handledKeyRef.current = trackKey(outgoing);
+      emit(completed ? 'completed' : 'skip', outgoing, dwellMs);
+    } else {
+      const trackIdx = s.playOrder[event.track];
+      const ended = trackIdx != null ? s.tracks[trackIdx] : undefined;
+      if (!ended) return;
+      const alreadyHandled = handledKeyRef.current === trackKey(ended);
+      handledKeyRef.current = null;
+      if (alreadyHandled) return;
+      const dwellMs = progressSecondsToRoundedMs(event.position ?? 0) || undefined;
+      emit('completed', ended, dwellMs);
+    }
+  });
+}

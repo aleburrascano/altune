@@ -7,7 +7,7 @@ import { View } from 'react-native';
 import { useActiveDownloadItems } from '@shared/acquisition/state/downloadStore';
 import { DownloadsBar } from '@shared/acquisition/ui/DownloadsBar';
 import { DownloadsSheet } from '@shared/acquisition/ui/DownloadsSheet';
-import { MiniPlayer } from '@features/playback';
+import { MiniPlayer } from '@features/player';
 import { useWideWebLayout } from '@shared/ui/layout/useLayoutMode';
 import { TabBar } from '@shared/ui/navigation/TabBar';
 import { TabsTitle } from '@/shell/platformExtras';

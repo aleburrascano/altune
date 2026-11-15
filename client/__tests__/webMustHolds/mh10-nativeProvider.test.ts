@@ -22,7 +22,7 @@ function onPlatform<T>(os: string, load: () => T): T {
 
 function selectedProviderName(
   os: string,
-  module = '@features/playback/adapters/PlaybackProvider',
+  module = '@features/player/adapters/PlaybackProvider',
 ): string {
   return onPlatform(os, () => {
     const { PlaybackProvider } = require(module);
@@ -41,7 +41,7 @@ describe('mh10: the playback provider and session store each platform selects', 
   });
 
   it('selects the web audio provider on web', () => {
-    expect(selectedProviderName('web', '@features/playback/adapters/PlaybackProvider.web')).toBe(
+    expect(selectedProviderName('web', '@features/player/adapters/PlaybackProvider.web')).toBe(
       'WebPlaybackProvider',
     );
   });
@@ -65,7 +65,7 @@ describe('mh10: the playback provider and session store each platform selects', 
         value: 'storeClient',
         configurable: true,
       });
-      const { PlaybackProvider } = require('@features/playback/adapters/PlaybackProvider');
+      const { PlaybackProvider } = require('@features/player/adapters/PlaybackProvider');
       const element: ReactElement<unknown, { name: string }> = PlaybackProvider({ children: null });
       return element.type.name;
     });

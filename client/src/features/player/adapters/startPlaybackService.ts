@@ -1,0 +1,9 @@
+import { httpPlaybackPort } from '@features/player/adapters/http/httpPlaybackPort';
+import { playsThroughTrackPlayer } from '@features/player/domain/playsThroughTrackPlayer';
+import { installPlaybackPort } from '@features/player/ports/activePlaybackPort';
+
+export function startPlaybackService(): void {
+  installPlaybackPort(httpPlaybackPort);
+  if (!playsThroughTrackPlayer) return;
+  require('@features/player/native/playbackService').registerPlaybackService();
+}

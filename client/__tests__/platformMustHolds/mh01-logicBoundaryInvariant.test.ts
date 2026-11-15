@@ -46,11 +46,11 @@ describe('feature logic stays platform-free', () => {
 
   it.each([
     'src/features/library/ui/X.tsx',
-    'src/features/playback/native/x.ts',
-    'src/features/playback/web/x.ts',
-    'src/features/auth/hooks/x.web.ts',
-    'src/features/auth/hooks/x.native.ts',
-    'src/features/auth/__tests__/x.test.ts',
+    'src/features/player/native/x.ts',
+    'src/features/player/web/x.ts',
+    'src/features/signIn/hooks/x.web.ts',
+    'src/features/signIn/hooks/x.native.ts',
+    'src/features/signIn/__tests__/x.test.ts',
   ])('does not apply the rule to %s', async (filePath) => {
     const config = await eslint.calculateConfigForFile(path.join(CWD, filePath));
 

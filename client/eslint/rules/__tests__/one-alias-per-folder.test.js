@@ -30,9 +30,9 @@ ruleTester.run('one-alias-per-folder', rule, {
       errors: flagged('@/shared/apiClient/y', 'shared'),
     },
     {
-      code: "jest.mock('@/features/auth/store');",
-      output: "jest.mock('@features/auth/store');",
-      errors: flagged('@/features/auth/store', 'features'),
+      code: "jest.mock('@/features/signIn/store');",
+      output: "jest.mock('@features/signIn/store');",
+      errors: flagged('@/features/signIn/store', 'features'),
     },
   ],
 });

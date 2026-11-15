@@ -47,11 +47,11 @@
   "boundaries": {
     "zones": [
       { "name": "app", "patterns": ["src/app/**", "src/shell/**", "src/wiring/**"] },
-      { "name": "feature-auth", "patterns": ["src/features/auth/**"] },
+      { "name": "feature-auth", "patterns": ["src/features/signIn/**"] },
       { "name": "feature-detail", "patterns": ["src/features/detail/**"] },
       { "name": "feature-discover", "patterns": ["src/features/discovery/**"] },
       { "name": "feature-library", "patterns": ["src/features/library/**"] },
-      { "name": "feature-playback", "patterns": ["src/features/playback/**"] },
+      { "name": "feature-playback", "patterns": ["src/features/player/**"] },
       { "name": "feature-settings", "patterns": ["src/features/settings/**"] },
       { "name": "shared-acquisition", "patterns": ["src/shared/acquisition/**"] },
       { "name": "shared-apiClient", "patterns": ["src/shared/apiClient/**"] },

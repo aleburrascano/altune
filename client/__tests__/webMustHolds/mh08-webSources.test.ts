@@ -5,9 +5,9 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from '@shared/auth/supabaseClient';
 import { asTrackId } from '@shared/apiClient/ids';
 import { usePlayback } from '@shared/playback/usePlayback';
-import { WebPlaybackProvider } from '@features/playback/web/WebPlaybackProvider';
-import { httpPlaybackPort } from '@features/playback/adapters/http/httpPlaybackPort';
-import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
+import { WebPlaybackProvider } from '@features/player/web/WebPlaybackProvider';
+import { httpPlaybackPort } from '@features/player/adapters/http/httpPlaybackPort';
+import { installPlaybackPort } from '@features/player/ports/activePlaybackPort';
 
 beforeAll(() => {
   installPlaybackPort(httpPlaybackPort);
