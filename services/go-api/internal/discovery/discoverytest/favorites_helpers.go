@@ -2,7 +2,7 @@ package discoverytest
 
 import (
 	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"context"
 )
 

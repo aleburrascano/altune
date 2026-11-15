@@ -3,8 +3,8 @@ package handler
 import (
 	"altune/go-api/internal/discovery/adapters/authbridge"
 	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
+	shared "altune/go-api/internal/shared/kernel"
 	"log/slog"
 	"net/http"
 )

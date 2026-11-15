@@ -3,8 +3,8 @@ package track
 import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
-	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
+	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"encoding/json"
 	"log/slog"

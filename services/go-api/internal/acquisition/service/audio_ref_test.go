@@ -1,7 +1,7 @@
 package service
 
 import (
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"os"
 	"path/filepath"
 	"strings"

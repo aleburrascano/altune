@@ -3,7 +3,7 @@ package smokeeval
 import (
 	domain "altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/service/search"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
 	"fmt"

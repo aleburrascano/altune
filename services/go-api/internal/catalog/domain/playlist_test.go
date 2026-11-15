@@ -1,7 +1,7 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/sharedtest"
 	"strings"
 	"testing"

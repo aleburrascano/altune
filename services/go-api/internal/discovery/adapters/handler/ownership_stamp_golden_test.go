@@ -9,7 +9,7 @@ import (
 	"altune/go-api/internal/discovery/service/providercall"
 	"altune/go-api/internal/discovery/service/related"
 	"altune/go-api/internal/discovery/service/search"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"net/http"
 	"regexp"

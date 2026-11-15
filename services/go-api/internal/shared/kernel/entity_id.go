@@ -1,4 +1,4 @@
-package shared
+package kernel
 
 import (
 	"github.com/google/uuid"

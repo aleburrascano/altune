@@ -1,4 +1,4 @@
-package shared
+package kernel
 
 type AcquisitionProvenance string
 

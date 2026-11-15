@@ -10,7 +10,7 @@ import (
 	featuredservice "altune/go-api/internal/catalog/service/featured"
 	playlistservice "altune/go-api/internal/catalog/service/playlist"
 	trackservice "altune/go-api/internal/catalog/service/track"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
 	"context"
 	"encoding/json"

@@ -1,7 +1,7 @@
 package eventtap
 
 import (
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 
 	"github.com/google/uuid"
 )

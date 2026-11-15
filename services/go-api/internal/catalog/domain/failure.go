@@ -1,6 +1,6 @@
 package domain
 
-import "altune/go-api/internal/shared"
+import shared "altune/go-api/internal/shared/kernel"
 
 type FailureCode = shared.FailureCode
 

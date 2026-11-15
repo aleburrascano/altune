@@ -3,7 +3,7 @@ package service
 import (
 	"altune/go-api/internal/acquisition/adapters/catalogbridge"
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
 	"testing"

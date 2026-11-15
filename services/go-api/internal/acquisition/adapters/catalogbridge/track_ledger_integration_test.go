@@ -5,7 +5,7 @@ import (
 	"altune/go-api/internal/acquisition/ports"
 	catalogpersistence "altune/go-api/internal/catalog/adapters/persistence"
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"

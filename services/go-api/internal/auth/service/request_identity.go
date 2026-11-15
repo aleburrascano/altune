@@ -2,7 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/auth/domain"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"time"
 )

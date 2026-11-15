@@ -2,7 +2,7 @@ package handler
 
 import (
 	authservice "altune/go-api/internal/auth/service"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
 	"encoding/json"
 	"log/slog"

@@ -3,7 +3,7 @@ package handler
 import (
 	"altune/go-api/internal/catalog/catalogtest"
 	trackservice "altune/go-api/internal/catalog/service/track"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/logging"
 	"encoding/json"
 	"fmt"

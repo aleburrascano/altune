@@ -8,7 +8,7 @@ import (
 	catalogpersistence "altune/go-api/internal/catalog/adapters/persistence"
 	"altune/go-api/internal/catalog/domain"
 	catalogports "altune/go-api/internal/catalog/ports"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"

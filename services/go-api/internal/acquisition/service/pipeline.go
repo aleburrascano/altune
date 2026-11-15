@@ -6,7 +6,7 @@ import (
 	"altune/go-api/internal/acquisition/service/judge"
 	"altune/go-api/internal/acquisition/service/judgeshadow"
 	"altune/go-api/internal/acquisition/service/upgrade"
-	"altune/go-api/internal/shared"
+	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"errors"
