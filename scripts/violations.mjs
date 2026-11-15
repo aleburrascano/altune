@@ -1,36 +1,37 @@
-import { readFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { readdirSync, readFileSync } from 'node:fs'
+import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+const BASELINE = 'module-spec.baseline.json'
 const root = resolve(process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), '..'))
 
-const baselines = [
-  { path: 'client/baselines/consistency.baseline', pattern: /^(MC-\S+) (src\/\S+) /, prefix: 'client/' },
-  { path: 'client/baselines/module-shape.baseline', pattern: /^(\S+) (src\/\S+)( |$)/, prefix: 'client/' },
-  { path: 'client/baselines/mock-ratchet.baseline', pattern: /^(\S+) (\S+)$/, prefix: 'client/', rule: 'MOCK', fileGroup: 1 },
-  { path: 'services/go-api/module-shape.baseline', pattern: /^(G\d+) (internal\/[^:\s]+)/, prefix: 'services/go-api/' },
-]
+function baselines(dir) {
+  const found = []
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory() && entry.name !== 'node_modules' && !entry.name.startsWith('.')) found.push(...baselines(join(dir, entry.name)))
+    else if (entry.isFile() && entry.name === BASELINE) found.push(join(dir, entry.name))
+  }
+  return found
+}
 
 const out = []
-for (const { path, pattern, prefix, rule, fileGroup } of baselines) {
-  let text
+for (const file of baselines(root).sort()) {
+  const path = relative(root, file)
+  const prefix = dirname(path) === '.' ? '' : `${dirname(path)}/`
+  let saved
   try {
-    text = readFileSync(join(root, path), 'utf8')
-  } catch {
-    console.error(`violations: ${path} is missing`)
+    saved = JSON.parse(readFileSync(file, 'utf8'))
+  } catch (error) {
+    console.error(`violations: ${path} is not JSON: ${error.message}`)
     process.exit(1)
   }
-  const lines = text.split('\n')
-  for (let i = 0; i < lines.length; i++) {
-    const entry = lines[i]
-    if (entry === '') continue
-    const m = pattern.exec(entry)
+  for (const entry of saved.violations ?? []) {
+    const m = /^(\S+) (\S+)/.exec(entry)
     if (!m) {
-      console.error(`violations: ${path}:${i + 1} does not match`)
+      console.error(`violations: ${path} has an entry that names no rule and file: ${entry}`)
       process.exit(1)
     }
-    const file = prefix + m[fileGroup ?? 2]
-    out.push(JSON.stringify({ rule: rule ?? m[1], file, baseline: path, entry }))
+    out.push(JSON.stringify({ rule: m[1], file: prefix + m[2], baseline: path, entry }))
   }
 }
 process.stdout.on('error', (error) => {

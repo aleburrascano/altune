@@ -25,13 +25,14 @@ case "$1" in
     if [ "${STUB_NPM_CI_EXIT:-0}" = 0 ]; then
       mkdir node_modules && : >node_modules/.complete
     fi
-    if [ -n "${STUB_GRAFT:-}" ]; then
-      mkdir -p node_modules/@nanonets/graft/node_modules/tree-sitter node_modules/@nanonets/graft/node_modules/tree-sitter-go
-    fi
     exit "${STUB_NPM_CI_EXIT:-0}"
     ;;
-  rebuild) shift; echo "$*" >>"$STUB_REBUILD_LOG"; exit "${STUB_NPM_REBUILD_EXIT:-0}" ;;
 esac
+EOF
+cat >"$stubbin/pnpm" <<'EOF'
+#!/usr/bin/env bash
+echo "$*" >>"$STUB_PNPM_LOG"
+exit "${STUB_PNPM_EXIT:-0}"
 EOF
 cat >"$stubbin/rm" <<'STUB'
 #!/usr/bin/env bash
@@ -130,18 +131,18 @@ run .
 check 1 "exits 1 when npm ci fails"
 unset STUB_NPM_CI_EXIT
 
-rm -rf "$wt/node_modules"
-export STUB_NPM_CI_EXIT=0 STUB_GRAFT=1 STUB_REBUILD_LOG="$scratch/rebuild.log"
-run .
-check 0 "builds graft's tree-sitter parsers after npm ci --ignore-scripts"
-[ "$(cat "$STUB_REBUILD_LOG" 2>/dev/null)" = "tree-sitter tree-sitter-go" ] \
-  || { echo "FAIL npm rebuild should get graft's parsers, got: $(cat "$STUB_REBUILD_LOG" 2>/dev/null)"; fail=1; }
+mkdir -p "$wt/pnpmroot" && : >"$wt/pnpmroot/pnpm-lock.yaml"
+export STUB_PNPM_LOG="$scratch/pnpm.log"
+run pnpmroot
+check 0 "runs a frozen pnpm install where the folder has pnpm-lock.yaml"
+grep -q -- '--frozen-lockfile' "$STUB_PNPM_LOG" 2>/dev/null \
+  || { echo "FAIL pnpm install should keep the lockfile frozen, got: $(cat "$STUB_PNPM_LOG" 2>/dev/null)"; fail=1; }
 
-rm -rf "$wt/node_modules"
-export STUB_NPM_REBUILD_EXIT=1
-run .
-check 1 "exits 1 when building graft's parsers fails"
-unset STUB_NPM_CI_EXIT STUB_GRAFT STUB_REBUILD_LOG STUB_NPM_REBUILD_EXIT
+export STUB_PNPM_EXIT=1
+run pnpmroot
+check 1 "exits 1 when pnpm install fails"
+unset STUB_PNPM_EXIT STUB_PNPM_LOG
+rm -rf "$wt/pnpmroot"
 
 rm -rf "$wt/node_modules"
 export STUB_NODE_MAJOR=20

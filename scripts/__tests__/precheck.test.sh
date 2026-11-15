@@ -684,90 +684,61 @@ expect_log "changed-lines "
 forbid_log "whole-tree"
 forbid_log "doctor-report.json"
 
-add_client_base() {
+add_module_spec_root() {
     (
         cd "$WORK/repo" || exit 1
-        mkdir -p client/src
-        printf "import { a } from './a';\nexport const x = a;\n" >client/src/x.ts
-        printf 'export const a = 1;\n' >client/src/a.ts
-    )
-    commit_as_base
-}
-
-edit_client_file() {
-    (
-        cd "$WORK/repo" || exit 1
-        printf '%s\n' "$2" >"client/src/$1"
+        git update-ref refs/remotes/gitea/main HEAD
+        mkdir -p demo
+        printf '{}\n' >demo/module-spec.json
         git add -A
-        git commit -qm "edit $1"
+        git commit -qm "module-spec root"
     )
 }
 
-CASE="a ts change that leaves every import line alone skips the cycle check"
-new_repo
-add_mobile_stubs
-add_client_base
-edit_client_file x.ts "import { a } from './a';
-export const x = a + 1;"
-run_script_with_stubs
-forbid_out "no dependency cycles"
+add_module_spec_kit() {
+    printf '#!/usr/bin/env bash\necho "module-spec.sh $*" >>"%s/module-spec.log"\n' "$WORK" >"$WORK/repo/scripts/module-spec.sh"
+    mkdir -p "$WORK/repo/node_modules/.bin"
+    printf '#!/usr/bin/env bash\n' >"$WORK/repo/node_modules/.bin/module-spec"
+    chmod +x "$WORK/repo/node_modules/.bin/module-spec"
+}
 
-CASE="a ts change that edits an import line runs the cycle check"
+CASE="a repo with no module-spec.json runs no module-spec step"
 new_repo
-add_mobile_stubs
-add_client_base
-edit_client_file x.ts "import { a } from './b';
-export const x = a;"
+(cd "$WORK/repo" && git update-ref refs/remotes/gitea/main HEAD)
+add_plain_file
 run_script_with_stubs
-expect_out "no dependency cycles"
+forbid_out "module-spec"
 
-CASE="a ts change that adds a multi-line export-from runs the cycle check"
+CASE="a code root with module-spec.json runs check and mutate against the merge base"
 new_repo
-add_mobile_stubs
-add_client_base
-edit_client_file x.ts "import { a } from './a';
-export {
-  a,
-} from './c';"
+add_module_spec_root
+add_module_spec_kit
 run_script_with_stubs
-expect_out "no dependency cycles"
+expect_out "module-spec check"
+grep -q "^module-spec.sh check --since [0-9a-f]\{40\}$" "$WORK/module-spec.log" || fail "module-spec check should get --since <merge base>"
+grep -q "^module-spec.sh mutate --since " "$WORK/module-spec.log" || fail "module-spec mutate should run in a full precheck"
 
-CASE="a new ts file runs the cycle check"
+CASE="--lint runs module-spec check but leaves mutate to CI"
 new_repo
-add_mobile_stubs
-add_client_base
-edit_client_file z.ts "export const z = 1;"
+add_module_spec_root
+add_module_spec_kit
+run_script_with_stubs --lint
+grep -q "^module-spec.sh check " "$WORK/module-spec.log" || fail "--lint should still run module-spec check"
+grep -q "^module-spec.sh mutate" "$WORK/module-spec.log" && fail "--lint should not mutate"
+
+CASE="without the kit, module-spec is a SKIP that makes precheck incomplete"
+new_repo
+add_module_spec_root
 run_script_with_stubs
-expect_out "no dependency cycles"
+expect_out "SKIP  module-spec: not installed"
+expect_rc 3
 
-CASE="a deleted ts file runs the cycle check"
+CASE="without the kit where another job runs it, module-spec is a SKIP that keeps precheck green"
 new_repo
-add_mobile_stubs
-add_client_base
-(
-    cd "$WORK/repo" || exit 1
-    git rm -q client/src/a.ts
-    git commit -qm "delete a"
-)
-run_script_with_stubs
-expect_out "no dependency cycles"
-
-CASE="a go change that leaves the import block alone skips the cycle check, and one that edits it runs the check"
-new_repo
-add_mobile_stubs
-add_go_fixture
-edit_go_file internal/acq/a.go
-run_with_tools
-forbid_out "no dependency cycles"
-(
-    cd "$WORK/repo" || exit 1
-    git update-ref refs/remotes/gitea/main HEAD
-    printf 'package acq\n\nimport (\n\t"altune/go-api/internal/shared/s"\n\t"fmt"\n)\n\nvar _ = fmt.Sprint\n\nfunc A() int { return s.S() }\n' >services/go-api/internal/acq/a.go
-    git add -A
-    git commit -qm "import fmt"
-)
-run_with_tools
-expect_out "no dependency cycles"
+add_module_spec_root
+MODULE_SPEC_RUNS_ELSEWHERE=1 run_script_with_stubs
+expect_out "the gitea precheck job runs it"
+expect_rc 0
 
 add_contract_tests() {
     (

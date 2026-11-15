@@ -80,6 +80,10 @@ borrow_allowed() {
 }
 
 for dir in "$@"; do
+  if [ -f "$dir/pnpm-lock.yaml" ]; then
+    (cd "$dir" && pnpm install --frozen-lockfile --prefer-offline --ignore-scripts --reporter=silent) 1>&2 || { log "$dir: pnpm install failed"; exit 1; }
+    continue
+  fi
   [ -f "$dir/package-lock.json" ] || continue
   if [ -d "$dir/node_modules" ] && node_modules_matches_lockfile "$dir"; then
     log "$dir: node_modules already complete"
@@ -94,13 +98,6 @@ for dir in "$@"; do
   log "$dir: running npm ci --ignore-scripts"
   if ! (cd "$dir" && npm ci --ignore-scripts) 1>&2; then
     log "$dir: npm ci failed"
-    exit 1
-  fi
-  natives=$(cd "$dir" && ls -d node_modules/@nanonets/graft/node_modules/tree-sitter* 2>/dev/null | xargs -rn1 basename)
-  [ -z "$natives" ] && continue
-  log "$dir: building graft's parsers, which --ignore-scripts skipped"
-  if ! (cd "$dir" && npm rebuild $natives) 1>&2; then
-    log "$dir: npm rebuild failed"
     exit 1
   fi
 done

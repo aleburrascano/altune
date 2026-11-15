@@ -188,17 +188,20 @@ jobs:
           node-version-file: client/.nvmrc
           cache: npm
           cache-dependency-path: |
-            package-lock.json
+            pnpm-lock.yaml
             client/package-lock.json
             services/overseer/web/package-lock.json
       - name: go tools
         run: bash scripts/ci/go-tools.sh
       - name: node dependencies
         run: |
-          npm ci
+          corepack enable
+          pnpm install --frozen-lockfile
           npm ci --prefix client
           npm ci --prefix services/overseer/web
       - name: precheck
+        env:
+          MODULE_SPEC_RUNS_ELSEWHERE: "1"
         run: bash scripts/precheck.sh origin/main
 
   pr-checks:

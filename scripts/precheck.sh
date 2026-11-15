@@ -18,14 +18,6 @@ changed=$( { git diff --name-only --diff-filter=ACMR "$base"; untracked; } | sor
 deleted=$(git diff --name-only --no-renames --diff-filter=D "$base")
 touches() { grep -qE "$1" <<<"$changed"$'\n'"$deleted"; }
 
-import_line='^[+-][[:space:]]*(import[[:space:](]|([A-Za-z_.][A-Za-z0-9_]*[[:space:]]+)?"[^"]+"[[:space:]]*$|export[[:space:]].*[[:space:]]from[[:space:]]|\}[[:space:]]*from[[:space:]]+[^[:space:]]|from[[:space:]]+[^[:space:]])|require\(|import\('
-changes_imports() {
-  local sources='\.(go|ts|tsx)$'
-  [ -n "$(git diff --name-status --no-renames --diff-filter=AD "$base" | grep -E "$sources")" ] && return 0
-  [ -n "$(untracked | grep -E "$sources")" ] && return 0
-  [ -n "$(git diff -U0 --no-color "$base" -- '*.go' '*.ts' '*.tsx' | grep -E "$import_line")" ]
-}
-
 main_tree=$(git worktree list --porcelain | awk '/^worktree /{print $2; exit}')
 link_deps() {
   local out
@@ -312,11 +304,15 @@ if [ -f scripts/ci/pr-ci-dupes.mjs ] && need node "duplicate PR CI work" && link
   check "no duplicate PR CI work" . node scripts/ci/pr-ci-dupes.mjs
 fi
 
-if changes_imports && need npx "cycles"; then
-  if link_deps .; then
-    check "no dependency cycles" . "${heavy[@]}" sh -c 'node_modules/.bin/graft build >/dev/null && node scripts/check-cycles.mjs'
+if [ -n "$(git ls-files --cached --others --exclude-standard -- '*/module-spec.json')" ]; then
+  link_deps . || true
+  if [ -x node_modules/.bin/module-spec ]; then
+    check "module-spec check" . "${heavy[@]}" bash scripts/module-spec.sh check --since "$base"
+    test_check "module-spec mutate (changed modules)" . "${heavy[@]}" bash scripts/module-spec.sh mutate --since "$base"
+  elif [ "${MODULE_SPEC_RUNS_ELSEWHERE:-}" = 1 ]; then
+    echo "SKIP  module-spec: the kit is not reachable here, the gitea precheck job runs it"
   else
-    echo "SKIP  cycles: no root node_modules"; missing=1
+    echo "SKIP  module-spec: not installed, run pnpm install at the repo root"; missing=1
   fi
 fi
 
