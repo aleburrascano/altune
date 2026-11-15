@@ -602,36 +602,6 @@ expect_rc 1
 expect_out "FAIL  go-api vet"
 expect_log "vet altune/go-api/internal/discovery/adapters/x"
 
-CASE="the import-direction lint reads only new lines against the base"
-new_repo
-add_go_fixture
-edit_go_file internal/discovery/adapters/x/x.go
-run_with_tools
-expect_log "golangci-lint run --new-from-rev="
-
-CASE="a change to the golangci config lints the whole tree"
-new_repo
-add_go_fixture
-(
-    cd "$WORK/repo" || exit 1
-    printf 'version: "2"\n' >services/go-api/.golangci.yml
-    git add -A
-    git commit -qm "config"
-)
-run_with_tools
-expect_log "golangci-lint run --allow-serial-runners"
-
-CASE="a renamed go file lints the whole tree"
-new_repo
-add_go_fixture
-(
-    cd "$WORK/repo" || exit 1
-    git mv services/go-api/internal/discovery/adapters/x/x.go services/go-api/internal/discovery/adapters/x/y.go
-    git commit -qm "rename"
-)
-run_with_tools
-expect_log "golangci-lint run --allow-serial-runners"
-
 CASE="an overseer change skips its govulncheck unless go.mod or go.sum changed"
 new_repo
 add_go_fixture

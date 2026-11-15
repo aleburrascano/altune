@@ -1,0 +1,28 @@
+{
+  "roots": [
+    "."
+  ],
+  "maxComplexity": 5,
+  "pure": {
+    "typescript": [],
+    "python": [],
+    "go": [
+      "github.com/google/uuid",
+      "github.com/mozillazg/go-unidecode",
+      "golang.org/x/sync/",
+      "golang.org/x/text/",
+      "golang.org/x/time/rate"
+    ]
+  },
+  "ui": {
+    "typescript": [],
+    "python": [],
+    "go": []
+  },
+  "clones": {
+    "minLines": 6
+  },
+  "python": {
+    "executable": null
+  }
+}

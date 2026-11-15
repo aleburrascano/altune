@@ -1,0 +1,3 @@
+role: shared
+owns: "which backend instance is the leader"
+depends_on: [runloop]

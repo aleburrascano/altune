@@ -1,0 +1,3 @@
+role: shared
+owns: "how we call YouTube Music's innertube API within its budget"
+depends_on: [redis]

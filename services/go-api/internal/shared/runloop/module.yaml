@@ -1,0 +1,3 @@
+role: shared
+owns: "how background jobs run on a schedule under leadership"
+depends_on: [logging]
