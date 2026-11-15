@@ -213,9 +213,10 @@ describe('queueSource', () => {
 
 describe('withWholeQueueShuffled', () => {
   it('with nothing playing yet, shuffles every track and leaves the current index alone', () => {
+    const tracks = ['a', 'b', 'c', 'd'].map(track);
     const state: QueueState = {
-      tracks: ['a', 'b', 'c', 'd'].map(track),
-      playOrder: [0, 1, 2, 3],
+      tracks,
+      playOrder: identityOrder(tracks.length),
       upNext: [],
       appended: [],
       currentIndex: -1,
@@ -230,6 +231,6 @@ describe('withWholeQueueShuffled', () => {
 
     expect(shuffled.shuffled).toBe(true);
     expect(shuffled.currentIndex).toBeUndefined();
-    expect([...(shuffled.playOrder ?? [])].sort()).toEqual([0, 1, 2, 3]);
+    expect([...shuffled.playOrder!].sort((a, b) => a - b)).toEqual(identityOrder(tracks.length));
   });
 });
