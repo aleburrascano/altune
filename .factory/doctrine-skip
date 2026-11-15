@@ -1,1 +1,1 @@
-mocked-internals covered by MOCK (client/scripts/mock-ratchet.mjs)
+mocked-internals covered by module-spec T2 (tests pass fakes in, never patch)

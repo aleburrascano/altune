@@ -72,7 +72,6 @@ tmp/
 *.exe
 
 services/go-api/deploy/caddy/upstream.conf
-.stryker-tmp/
 
 /graft/
 

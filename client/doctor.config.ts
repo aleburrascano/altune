@@ -162,10 +162,6 @@ export default {
         ],
       },
       {
-        files: ['eslint/consistency/**'],
-        rules: ['deslop/unused-file'],
-      },
-      {
         files: [
           'src/shared/ui/keyboard/keyboard.ios.tsx',
           'src/shared/ui/keyboard/keyboard.tsx',

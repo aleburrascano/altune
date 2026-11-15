@@ -37,9 +37,9 @@ describe('doctor.config', () => {
     );
   });
 
-  it('silences unused-file only on the eslint consistency rules and the shared module doors', () => {
+  it('silences unused-file only on the shared module doors', () => {
     const silenced = overridesFor('deslop/unused-file').flatMap((override) => override.files);
 
-    expect(silenced).toEqual(['eslint/consistency/**', 'src/shared/*/index.ts']);
+    expect(silenced).toEqual(['src/shared/*/index.ts']);
   });
 });

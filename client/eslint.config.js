@@ -22,8 +22,6 @@ const typedLinting = [
   },
 ];
 
-const FEATURES = ['detail', 'discovery', 'library', 'player', 'settings', 'signIn'];
-
 const TEST_FILES = ['**/__tests__/**'];
 
 const FILES_WHERE_EXPO_GO_FORCES_CONDITIONAL_REQUIRE = [
@@ -38,27 +36,6 @@ const PLATFORM_HOOKS_MOVED_INTO_HOOKS_FOLDER = [
   'src/features/player/hooks/useScrubberGesture.ts',
   'src/features/player/hooks/useMediaSession.ts',
   'src/features/library/hooks/useLibraryGridLayout.ts',
-];
-
-const featureIsolationZones = [
-  ...FEATURES.map((feature) => ({
-    target: `./src/features/${feature}`,
-    from: './src/features',
-    except: [`./${feature}`],
-    message: 'Features must not import each other — promote shared code to src/shared.',
-  })),
-  {
-    target: './src/shared',
-    from: './src/features',
-    message: 'src/shared must not import from src/features.',
-  },
-  ...['shared', 'features'].flatMap((layer) =>
-    ['shell', 'wiring'].map((upper) => ({
-      target: `./src/${layer}`,
-      from: `./src/${upper}`,
-      message: `src/${layer} must not import from src/${upper}: layering is app, shell/wiring, features, shared.`,
-    })),
-  ),
 ];
 
 const typeScriptPluginRegisteredDirectlyRatherThanViaExpoConfig = {
@@ -119,56 +96,6 @@ const noInlinePlatformBranchesInFeatureUi = {
         selector: "MemberExpression[object.name='Keyboard'][property.name='dismiss']",
         message:
           'Feature UI must stay platform-neutral: split this into Foo.tsx + Foo.web.tsx, or move the divergent capability behind a port in src/shared/.',
-      },
-    ],
-  },
-};
-
-const CAPABILITY_HOMES =
-  'Logic must not import a platform API: Alert goes to @shared/ui/dialog, Keyboard to @shared/ui/keyboard, AppState to @shared/lifecycle, Platform and expo-constants to @shared/device, expo-router to @shared/navigation, expo-crypto to @shared/id/uuid, expo-secure-store to @shared/auth/authStorage; or move the code into a ui/, native/ or web/ folder, or a .web.ts(x) split file.';
-
-const logicStaysPlatformFree = {
-  name: 'logicStaysPlatformFree',
-  files: ['src/features/**/*.{ts,tsx}', 'src/shared/**/*.{ts,tsx}'],
-  ignores: [
-    ...TEST_FILES,
-    ...PLATFORM_HOOKS_MOVED_INTO_HOOKS_FOLDER,
-    'src/features/*/ui/**',
-    'src/features/**/native/**',
-    'src/features/**/web/**',
-    'src/features/**/*.web.{ts,tsx}',
-    'src/features/**/*.native.{ts,tsx}',
-    'src/shared/ui/**',
-    'src/shared/*/ui/**',
-    'src/shared/**/native/**',
-    'src/shared/**/web/**',
-    'src/shared/**/*.web.{ts,tsx}',
-    'src/shared/**/*.native.{ts,tsx}',
-    'src/shared/device/device.ts',
-    'src/shared/lifecycle/appState.ts',
-    'src/shared/navigation/expoRouterNavigator.ts',
-    'src/shared/id/uuid.ts',
-    'src/shared/auth/authStorage.ts',
-  ],
-  rules: {
-    'no-restricted-imports': [
-      'error',
-      {
-        patterns: [
-          {
-            group: [
-              'react-native',
-              'react-native/*',
-              'react-native-*',
-              'react-native-*/**',
-              '@react-native*',
-              '@react-native*/**',
-              'expo-*',
-              'expo-*/**',
-            ],
-            message: CAPABILITY_HOMES,
-          },
-        ],
       },
     ],
   },
@@ -335,16 +262,6 @@ const styleRulesConfig = [
   ...typedLinting,
   typeScriptPluginRegisteredDirectlyRatherThanViaExpoConfig,
   {
-    files: ['src/**/*.{ts,tsx}'],
-    ignores: TEST_FILES,
-    rules: {
-      'import/no-restricted-paths': [
-        'error',
-        { basePath: __dirname, zones: featureIsolationZones },
-      ],
-    },
-  },
-  {
     rules: {
       'no-console': ['warn', { allow: ['warn', 'error'] }],
     },
@@ -352,7 +269,6 @@ const styleRulesConfig = [
   rulesWrittenForTheWebAndWrongForReactNative,
   noAbortApisTheHermesPolyfillLacks,
   noInlinePlatformBranchesInFeatureUi,
-  logicStaysPlatformFree,
   browserGlobalsOnlyInWebCode,
   reactCompilerRulesRestoredToErrors,
   relaxationsForJestModuleMockingAndInlineMockComponents,

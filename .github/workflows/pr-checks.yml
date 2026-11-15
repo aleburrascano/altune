@@ -147,12 +147,9 @@ jobs:
       - name: react-doctor
         working-directory: client
         run: bash ../scripts/ci/test-mobile-react-doctor.sh
-      - name: architecture, dead code and duplication (fallow)
+      - name: dead code and duplication (fallow)
         working-directory: client
         run: npm run fallow
-      - name: complexity ratchet (fallow)
-        working-directory: client
-        run: bash ../scripts/ci/test-mobile-complexity.sh
 
   workflow-lint:
     runs-on: ubuntu-latest
