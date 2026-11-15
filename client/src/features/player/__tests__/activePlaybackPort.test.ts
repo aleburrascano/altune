@@ -1,7 +1,10 @@
-import { httpPlaybackPort } from '@features/player/adapters/http/httpPlaybackPort';
-import { startPlaybackService } from '@features/player/adapters/startPlaybackService';
-import { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlaybackPort';
-import { installPlaybackPort, playbackPort } from '@features/player/ports/activePlaybackPort';
+import {
+  httpPlaybackPort,
+  startPlaybackService,
+  createMemoryPlaybackPort,
+  installPlaybackPort,
+  playbackPort,
+} from '@features/player';
 import type * as ActivePlaybackPortModule from '@features/player/ports/activePlaybackPort';
 
 describe('activePlaybackPort', () => {

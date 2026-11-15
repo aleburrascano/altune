@@ -1,8 +1,4 @@
-import {
-  NativeQueueTimeoutError,
-  onNativeQueueTimeout,
-  withNativeQueue,
-} from '@features/player/native/nativeQueueLock';
+import { NativeQueueTimeoutError, onNativeQueueTimeout, withNativeQueue } from '@features/player';
 
 const NATIVE_QUEUE_OP_TIMEOUT_MS = 15_000;
 

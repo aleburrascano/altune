@@ -1,15 +1,14 @@
-import { defaultFileStore } from '@shared/files/defaultFileStore';
-import { NetworkError } from '@shared/failure/errors';
-import { startDeadline } from '@shared/timing/deadline';
-import { extFromUrl } from '@shared/files/urlExtension';
-import { isSafeId, type TrackId } from '@shared/apiClient/ids';
 import {
+  defaultFileStore,
+  extFromUrl,
   createFileStoreSlot,
   type FileStore,
   type StoredDirectory,
   type StoredFile,
-} from '@shared/files/fileStore';
-
+} from '@shared/files';
+import { NetworkError } from '@shared/failure';
+import { startDeadline } from '@shared/timing';
+import { isSafeId, type TrackId } from '@shared/apiClient';
 const PINNED_SUBDIR = 'offline-audio';
 
 const PIN_DOWNLOAD_TIMEOUT_MS = 120_000;

@@ -1,4 +1,4 @@
-import { isWebPlatform } from '@shared/device/device';
+import { isWebPlatform } from '@shared/device';
 
 export const CORRELATION_HEADER = 'X-Correlation-ID';
 

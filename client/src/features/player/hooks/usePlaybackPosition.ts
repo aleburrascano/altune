@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useProgress } from 'react-native-track-player';
 
-import { useQueueStore } from '@shared/playback/queueStore';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import { useQueueStore } from '@shared/playback';
+import type { PlaybackTrack } from '@shared/playback';
 
 import { useIsForeground } from '@shared/lifecycle';
 

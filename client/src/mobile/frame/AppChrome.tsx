@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { useRouter, useSegments, usePathname } from 'expo-router';
 
-import { TAB_ROUTES, type TabRoute } from '@shared/ui/navigation/tabRoutes';
+import { TAB_ROUTES, type TabRoute } from '@shared/ui';
 
 import { WideChrome } from '@/mobile/frame/wideChrome';
 

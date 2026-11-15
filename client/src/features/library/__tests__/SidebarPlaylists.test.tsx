@@ -3,17 +3,11 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { StyleSheet } from 'react-native';
 
-import { asPlaylistId } from '@shared/apiClient/ids';
-import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
-import { Sidebar } from '@shared/ui/navigation/Sidebar';
-import { darkTheme } from '@shared/ui/theme/theme';
-
-import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
-import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
-import type { LibraryPort } from '@features/library/ports/libraryPort';
-
-import { SidebarPlaylists } from '@features/library/ui/SidebarPlaylists';
-
+import { asPlaylistId } from '@shared/apiClient';
+import type { PlaylistDetailResponse } from '@shared/apiClient';
+import { Sidebar, darkTheme } from '@shared/ui';
+import { createMemoryLibraryPort, LibraryPortProvider, SidebarPlaylists } from '@features/library';
+import type { LibraryPort } from '@features/library';
 const mockPush = jest.fn();
 
 jest.mock('expo-router', () => ({

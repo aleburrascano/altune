@@ -1,5 +1,5 @@
-import { supabase } from '@shared/auth/supabaseClient';
 import {
+  supabase,
   authIntentClient,
   requestPasswordReset,
   signInWithPassword,
@@ -7,8 +7,7 @@ import {
   signUp,
   startOAuth,
   updatePassword,
-} from '@shared/auth/authActions';
-
+} from '@shared/auth';
 type AuthMethod =
   | 'signInWithPassword'
   | 'signUp'

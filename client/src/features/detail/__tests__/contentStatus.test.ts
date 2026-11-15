@@ -1,9 +1,6 @@
-import { ApiError, NetworkError } from '@shared/failure/errors';
+import { ApiError, NetworkError } from '@shared/failure';
 
-import {
-  contentFailure,
-  failFastOnSettledContentFailure,
-} from '@features/detail/domain/contentStatus';
+import { contentFailure, failFastOnSettledContentFailure } from '@features/detail';
 
 describe('isSettledContentFailure', () => {
   it.each([

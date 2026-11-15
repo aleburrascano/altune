@@ -1,7 +1,7 @@
 import { Moon } from 'lucide-react-native';
 import type { ReactElement } from 'react';
 
-import { useThemePreference } from '@shared/ui/theme/themePreference';
+import { useThemePreference } from '@shared/ui';
 import type { ColorScheme } from '@shared/ui';
 import {
   SettingsCard,

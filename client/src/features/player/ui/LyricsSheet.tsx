@@ -9,14 +9,9 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 
-import { withFeaturing } from '@shared/apiClient/featuredArtists';
-import { usePlayback } from '@shared/playback/usePlayback';
-import { Text } from '@shared/ui/primitives/Text';
-import { Tappable } from '@shared/ui/primitives/Tappable';
-import { Skeleton } from '@shared/ui/primitives/Skeleton';
-import { useReduceMotion } from '@shared/ui/motion/useMotion';
-import { spacing, doubled } from '@shared/ui/theme/tokens';
-
+import { withFeaturing } from '@shared/apiClient';
+import { usePlayback } from '@shared/playback';
+import { Text, Tappable, Skeleton, useReduceMotion, spacing, doubled } from '@shared/ui';
 import { useLyrics } from '@features/player/hooks/useLyrics';
 import { activeLineIndex, _lyricsView } from '@features/player/domain/lyricsSync';
 import {

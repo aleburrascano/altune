@@ -3,10 +3,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { ChevronDown, ChevronRight } from 'lucide-react-native';
 
-import { Tappable } from '@shared/ui/primitives/Tappable';
-import { Text } from '@shared/ui/primitives/Text';
-import { minInteractiveHeight, spacing, useTheme } from '@shared/ui/theme';
-
+import { Tappable, Text, minInteractiveHeight, spacing, useTheme } from '@shared/ui';
 import { sharedStyles } from '@features/detail/ui/detailStyles';
 
 export type CollapsibleSectionHeaderProps = {

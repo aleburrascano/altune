@@ -2,13 +2,13 @@ import { renderHook, act } from '@testing-library/react-native';
 import * as Linking from 'expo-linking';
 import { Alert, Platform } from 'react-native';
 
-import { _resetOutboxForTest } from '@shared/telemetry/outbox';
+import { _resetOutboxForTest } from '@shared/telemetry';
 
-import { _resetConsumedCredentialForTest } from '@features/signIn/domain/completeAuthIntent';
-import { useAuthDeepLink } from '@features/signIn/hooks/useAuthDeepLink';
-
-import { createSupabaseAuthMock } from '@features/signIn/__tests__/testUtils/authTestUtils';
-
+import {
+  _resetConsumedCredentialForTest,
+  useAuthDeepLink,
+  createSupabaseAuthMock,
+} from '@features/signIn';
 const mockRouter = { replace: jest.fn() };
 
 jest.mock('expo-router', () => ({ useRouter: () => mockRouter }));

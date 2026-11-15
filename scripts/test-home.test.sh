@@ -32,6 +32,7 @@ t 0 "an internal-package test file" svc/sched/scheduler_internal_test.go
 t 1 "an internal-package file named after a scenario" svc/sched/stream_health_internal_test.go
 t 1 "a property file named after a scenario" app/lib/__tests__/pinnedStore.expiry.property.test.ts
 t 0 "a property test file" app/lib/__tests__/pinnedStore.property.test.ts
+t 0 "a contract test file, the module-spec name for a test against the outside" app/lib/__tests__/pinnedStore.contract.test.ts
 t 0 "e2e trees are not judged" e2e/pinnedStore.test.ts
 t 1 "a Go test file named after the bug" svc/sched/kinds_cap_test.go
 t 1 "a TS test file named after the bug" app/lib/__tests__/signOutInFlightRepair.test.ts

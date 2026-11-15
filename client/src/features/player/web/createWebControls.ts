@@ -1,8 +1,6 @@
 import { shouldRestartOnPrevious } from '@features/player/domain/restartOnPrevious';
-import { useQueueStore } from '@shared/playback/queueStore';
-import type { PlaybackControls } from '@shared/playback/playbackContextValue';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
-
+import { useQueueStore } from '@shared/playback';
+import type { PlaybackControls, PlaybackTrack } from '@shared/playback';
 import {
   loadIfPresent,
   loadTrack,

@@ -1,6 +1,6 @@
 import * as FileSystem from 'expo-file-system';
 
-import { asTrackId } from '@shared/apiClient/ids';
+import { asTrackId } from '@shared/apiClient';
 
 import {
   buildCacheFileName,
@@ -9,10 +9,9 @@ import {
   evictAllCached,
   evictCachedFile,
   findCached,
-} from '@features/player/native/audioCache';
-
-import { previewTrack, libraryTrackWithId } from '@features/player/__tests__/fixtures';
-
+  previewTrack,
+  libraryTrackWithId,
+} from '@features/player';
 const { __fs } = FileSystem as unknown as {
   __fs: {
     seedDirectory(uri: string): void;

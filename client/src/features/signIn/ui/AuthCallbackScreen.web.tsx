@@ -1,9 +1,9 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState, type ReactElement } from 'react';
 
-import { authIntentClient } from '@shared/auth/authActions';
-import { NetworkError } from '@shared/failure/errors';
-import { Text } from '@shared/ui/primitives/Text';
+import { authIntentClient } from '@shared/auth';
+import { NetworkError } from '@shared/failure';
+import { Text } from '@shared/ui';
 
 import {
   type AuthIntentResult,

@@ -1,12 +1,11 @@
 import { renderHook } from '@testing-library/react-native';
 
-import { asPlaylistId, asTrackId } from '@shared/apiClient/ids';
-import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import { asPlaylistId, asTrackId } from '@shared/apiClient';
+import type { PlaylistDetailResponse, TrackResponse } from '@shared/apiClient';
+import type { PlaybackTrack } from '@shared/playback';
 import { trackResponseFactory } from '@testing/factories';
 
-import { usePlaylistPlayback } from '@features/library/hooks/usePlaylistPlayback';
+import { usePlaylistPlayback } from '@features/library';
 
 const PLAYLIST_ID = asPlaylistId('pl1');
 

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
+import type { PlaylistResponse } from '@shared/apiClient';
 import type { PlaylistActionsState } from '@features/library/hooks/usePlaylistActions';
 import {
   type ActiveView,

@@ -1,12 +1,12 @@
-import { getLibraryAlbums, getLibraryArtists } from '@shared/apiClient/library';
+import { getLibraryAlbums, getLibraryArtists } from '@shared/apiClient';
 import type {
   LibraryQuery,
   LibrarySort,
   ListAlbumsResponse,
   ListArtistsResponse,
-} from '@shared/apiClient/library';
-import { apiBase } from '@shared/apiClient/index';
-import { supabase } from '@shared/auth/supabaseClient';
+} from '@shared/apiClient';
+import { apiBase } from '@shared/apiConfig';
+import { supabase } from '@shared/auth';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

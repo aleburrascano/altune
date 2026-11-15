@@ -3,10 +3,7 @@ import { FlatList, StyleSheet, View, type ListRenderItemInfo } from 'react-nativ
 
 import { useDownloadPhase, type DownloadEntry } from '@shared/acquisition/state/downloadStore';
 import { phaseLabel } from '@shared/acquisition/state/stagePhase';
-import { Text, radius, spacing, useTheme } from '@shared/ui';
-import { Artwork } from '@shared/ui/primitives/Artwork';
-import { ModalFrame } from '@shared/ui/primitives/ModalFrame';
-import { sheetGrabber } from '@shared/ui/theme';
+import { Text, radius, spacing, useTheme, Artwork, ModalFrame, sheetGrabber } from '@shared/ui';
 
 interface DownloadsSheetProps {
   visible: boolean;

@@ -1,8 +1,8 @@
 import fc from 'fast-check';
 
-import { featuredArtistsFromExtras, withFeaturing } from '@shared/apiClient/featuredArtists';
+import { featuredArtistsFromExtras, withFeaturing } from '@shared/apiClient';
 
-import type { FeaturedArtist } from '@shared/apiClient/trackResponse';
+import type { FeaturedArtist } from '@shared/apiClient';
 
 describe('featuredArtistsFromExtras — Array.isArray guard', () => {
   it.each<unknown>(['not-an-array', 42, true, {}, null, undefined])(

@@ -2,14 +2,10 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import type { DiscoverySearchResponse } from '@shared/apiClient/discovery';
-import { useDiscoverSearch } from '@features/discovery/hooks/search/useDiscoverSearch';
-import { useRefreshFromFirstPage } from '@features/discovery/hooks/search/useSearchRefresh';
-import { resultFixture } from '@features/discovery/__tests__/fixtures';
+import type { DiscoverySearchResponse } from '@shared/apiClient';
+import { useDiscoverSearch, useRefreshFromFirstPage, resultFixture } from '@features/discovery';
 import { signInTestUser } from '@testing/signInTestUser';
-import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
-import { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
-
+import { FeaturePorts, httpFeaturePorts } from '@/mobile';
 const { __http } = require('@testing/doubles/fetch.js');
 
 const SEARCH = 'GET /v1/discovery/search';

@@ -2,29 +2,27 @@ import React from 'react';
 import { Text, StyleSheet } from 'react-native';
 
 import { fireEvent, render, screen, waitFor, act, within } from '@testing-library/react-native';
-import type { CreateTrackRequest } from '@shared/apiClient/trackResponse';
-import type { TrackId } from '@shared/apiClient/ids';
+import type { CreateTrackRequest, TrackId, DiscoveryResult } from '@shared/apiClient';
 import {
   linkTrackIdentity,
   patchTrackStatus,
   trackIdentityKey,
   useTrackStatusStore,
-} from '@shared/acquisition/state/trackStatusStore';
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-
-import { SaveAllPill, TrackSaveControl, TrackSavePill } from '@features/detail/ui/SaveControls';
+} from '@shared/acquisition';
 import {
+  type OwnedTrack,
+  SaveAllPill,
+  TrackSaveControl,
+  TrackSavePill,
   useOwnedPlayback,
   type OwnedPlaybackContext,
-} from '@features/detail/hooks/useOwnedPlayback';
-import { useSaveTrack } from '@features/detail/hooks/useSaveTrack';
-import { useResolvedOwnedTrack, type TrackIdentity } from '@features/detail/hooks/useOwnedTrack';
-import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
-import {
+  useSaveTrack,
+  useResolvedOwnedTrack,
+  type TrackIdentity,
   saveControlLabel,
   saveControlState,
   type SaveState,
-} from '@features/detail/domain/saveTrack';
+} from '@features/detail';
 import {
   createTestQueryClient,
   createPlaybackWrapper,

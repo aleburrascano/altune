@@ -1,8 +1,7 @@
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import { usePlayback } from '@shared/playback/usePlayback';
-import { getPreviewUrl } from '@shared/playback/previewUrl';
-import type { PlaybackState } from '@shared/playback/playbackContextValue';
-import { tapFeedback } from '@shared/ui/haptics';
+import type { DiscoveryResult } from '@shared/apiClient';
+import { usePlayback, getPreviewUrl } from '@shared/playback';
+import type { PlaybackState } from '@shared/playback';
+import { tapFeedback } from '@shared/ui';
 
 type PreviewPlayback =
   | { readonly hasPreview: false }

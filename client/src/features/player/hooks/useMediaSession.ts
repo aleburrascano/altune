@@ -1,8 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
-
+import type { PlaybackContextValue, PlaybackTrack } from '@shared/playback';
 import { usePlaybackRateStore } from '@features/player/hooks/usePlaybackRate';
 import { msToSeconds, progressSecondsToMs } from '@features/player/domain/time';
 

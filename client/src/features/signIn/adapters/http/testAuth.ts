@@ -1,9 +1,7 @@
 import type { Session, User } from '@supabase/supabase-js';
 
-import { apiBase } from '@shared/apiClient/config';
-import { injectTestSession } from '@shared/auth/injectTestSession';
-import { isTestAuthEnabled, markTestAuthBootSettled } from '@shared/auth/testAuthBoot';
-
+import { apiBase } from '@shared/apiConfig';
+import { injectTestSession, isTestAuthEnabled, markTestAuthBootSettled } from '@shared/auth';
 export { isTestAuthEnabled };
 
 const TEST_LOGIN_PATH = '/test/login';

@@ -1,6 +1,6 @@
 import * as FileSystem from 'expo-file-system';
 
-import { asTrackId, type TrackId } from '@shared/apiClient/ids';
+import { asTrackId, type TrackId } from '@shared/apiClient';
 import * as pinnedFilesModule from '@shared/offline/state/pinnedFiles';
 
 import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
@@ -14,12 +14,13 @@ import {
   pinnedFilesByTrackId,
   setPinnedFileStore,
   withPinnedBytesCached,
-} from '@shared/offline/state/pinnedFiles';
-import type { StoredDirectory, StoredFile } from '@shared/files/fileStore';
+} from '@shared/offline';
 import {
+  type StoredDirectory,
+  type StoredFile,
   createMemoryFileStore,
   type MemoryFileStore,
-} from '@shared/files/__tests__/memoryFileStore';
+} from '@shared/files';
 
 type FsFailureKind = 'write' | 'read' | 'delete' | 'download' | 'createDirectory' | 'list';
 

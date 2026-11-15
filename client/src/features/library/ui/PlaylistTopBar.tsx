@@ -3,9 +3,7 @@ import { StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { EllipsisVertical } from 'lucide-react-native';
-import { spacing, useTheme } from '@shared/ui';
-import { IconButton } from '@shared/ui/primitives/IconButton';
-import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
+import { spacing, useTheme, IconButton, ContextMenu } from '@shared/ui';
 import { goBackOrToLibrary } from '@features/library/domain/libraryRoutes';
 import { useLibraryOffline } from '@features/library/hooks/useLibraryOffline';
 import {

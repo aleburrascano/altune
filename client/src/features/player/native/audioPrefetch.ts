@@ -1,11 +1,11 @@
 import { File } from 'expo-file-system';
 
-import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import { orderedQueueTracks, useQueueStore } from '@shared/playback';
+import type { PlaybackTrack } from '@shared/playback';
 
 import { playbackPort } from '@features/player/ports/activePlaybackPort';
-import { parseTrackId, type TrackId } from '@shared/apiClient/ids';
-import { deviceFileStore, fileHandle } from '@shared/files/native/deviceFileStore';
+import { parseTrackId, type TrackId } from '@shared/apiClient';
+import { deviceFileStore, fileHandle, extFromUrl } from '@shared/files';
 import {
   MAX_PREFETCH_FILE_BYTES,
   buildCacheFileName,
@@ -16,7 +16,6 @@ import {
   evictCachedFile,
   findCached,
 } from '@features/player/native/audioCache';
-import { extFromUrl } from '@shared/files/urlExtension';
 import {
   forgetSwap,
   swapUpcomingToLocal,

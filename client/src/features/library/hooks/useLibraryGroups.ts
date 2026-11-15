@@ -5,7 +5,7 @@ import {
   type QueryKey,
   type UseInfiniteQueryResult,
 } from '@tanstack/react-query';
-import type { LibrarySort } from '@shared/apiClient/library';
+import type { LibrarySort } from '@shared/apiClient';
 import {
   pagedListControls,
   GROUP_PAGE_SIZE,
@@ -13,7 +13,7 @@ import {
 } from '@features/library/domain/listPaging';
 import { useLoggedLibraryQueryFailure } from '@features/library/hooks/useLoggedLibraryQueryFailure';
 import type { LibraryChip } from '@features/library/domain/libraryView';
-import { libraryKeys } from '@shared/query/queryKeys';
+import { libraryKeys } from '@shared/query';
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 
 interface GroupPage<T> {

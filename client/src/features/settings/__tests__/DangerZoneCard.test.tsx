@@ -1,21 +1,14 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react-native';
-import { within } from '@testing-library/react-native';
-
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react-native';
 import { signInTestUser } from '@testing/signInTestUser';
 
-import { ApiError } from '@shared/apiClient';
-import { useSignOut, type SignOutResult } from '@shared/auth/useSignOut';
+import { ApiError, asTrackId } from '@shared/apiClient';
+import { useSignOut, type SignOutResult } from '@shared/auth';
+import { usePinnedStore } from '@shared/offline';
 
-import { asTrackId } from '@shared/apiClient/ids';
-import { usePinnedStore } from '@shared/offline/state/pinnedStore';
-
-import { useRemoveDownloads } from '@features/settings/hooks/useDownloads';
-import { downloadStats } from '@features/settings/domain/downloadStatsModel';
-import type { ClearHistoryState } from '@features/settings/domain/dangerZoneActions';
-import { DangerZoneCard } from '@features/settings/ui/DangerZoneCard';
-
+import { useRemoveDownloads, downloadStats, DangerZoneCard } from '@features/settings';
+import type { ClearHistoryState } from '@features/settings';
 const { __http } = require('@testing/doubles/fetch.js');
 
 const mockSignOut = jest.fn();

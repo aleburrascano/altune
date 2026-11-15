@@ -5,8 +5,6 @@ import {
   linkTrackIdentity,
   patchTrackStatus,
   trackIdentityKey,
-} from '@shared/acquisition/state/trackStatusStore';
-import {
   isStaleDownloadPhase,
   startDownload,
   progressDownload,
@@ -15,23 +13,21 @@ import {
   rememberDownloadMeta,
   type DownloadMeta,
   type DownloadPhase,
-} from '@shared/acquisition/state/downloadStore';
-import { invalidateAudioCaches } from '@shared/acquisition/state/audioCacheInvalidation';
-import { stageToPhase } from '@shared/acquisition/state/stagePhase';
-import { offlineDownloadsSupported } from '@shared/offline/domain/offlineSupport';
-import { repinIfPinned } from '@shared/offline/state/pinnedStore';
-import { tryParseTrackResponse } from '@shared/apiClient/tracks';
-import type { TrackId } from '@shared/apiClient/ids';
+  invalidateAudioCaches,
+  stageToPhase,
+} from '@shared/acquisition';
+import { offlineDownloadsSupported, repinIfPinned } from '@shared/offline';
 import {
+  tryParseTrackResponse,
   acquisitionOf,
   toFailed,
   toPending,
   toReady,
   toTrackStatus,
-} from '@shared/apiClient/trackAcquisition';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import type { JsonObject } from '@shared/files/json';
-import { libraryKeys, playlistKeys } from '@shared/query/queryKeys';
+} from '@shared/apiClient';
+import type { TrackId, TrackResponse } from '@shared/apiClient';
+import type { JsonObject } from '@shared/files';
+import { libraryKeys, playlistKeys } from '@shared/query';
 
 import {
   forgetTrack,

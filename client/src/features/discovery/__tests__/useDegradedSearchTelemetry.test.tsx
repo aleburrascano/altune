@@ -2,14 +2,10 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import type { DiscoverySearchResponse } from '@shared/apiClient/discovery';
-import { useDiscoverLogic } from '@features/discovery/hooks/search/useDiscoverLogic';
-import { setSearchState } from '@features/discovery/domain/searchState';
-import { resultFixture } from '@features/discovery/__tests__/fixtures';
+import type { DiscoverySearchResponse } from '@shared/apiClient';
+import { useDiscoverLogic, setSearchState, resultFixture } from '@features/discovery';
 import { signInTestUser } from '@testing/signInTestUser';
-import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
-import { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
-
+import { FeaturePorts, httpFeaturePorts } from '@/mobile';
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),
   useFocusEffect: jest.fn(),

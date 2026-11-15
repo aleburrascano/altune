@@ -1,3 +1,3 @@
 role: feature
 owns: how the current track plays on native and web, and what the player screens show
-depends_on: [acquisition, apiClient, auth, device, failure, files, killSwitch, lifecycle, math, offline, playback, query, session, telemetry, timing, ui]
+depends_on: [acquisition, apiClient, apiConfig, auth, device, failure, files, killSwitch, lifecycle, math, offline, playback, query, session, telemetry, timing, ui]

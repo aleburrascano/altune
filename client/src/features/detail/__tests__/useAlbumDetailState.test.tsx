@@ -1,21 +1,20 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { QueryClient } from '@tanstack/react-query';
 
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import { asTrackId } from '@shared/apiClient/ids';
-import type { CreateTrackRequest, TrackResponse } from '@shared/apiClient/trackResponse';
-import { useTrackStatusStore } from '@shared/acquisition/state/trackStatusStore';
-import { PlaybackContext } from '@shared/playback/usePlayback';
-import { libraryKeys } from '@shared/query/queryKeys';
-import { readDetailHandoff } from '@shared/navigation/detailHandoff';
+import type { DiscoveryResult, CreateTrackRequest, TrackResponse } from '@shared/apiClient';
+import { asTrackId } from '@shared/apiClient';
+import { useTrackStatusStore } from '@shared/acquisition';
+import { PlaybackContext } from '@shared/playback';
+import { libraryKeys } from '@shared/query';
+import { readDetailHandoff } from '@shared/navigation';
 
-import { useAlbumDetailState } from '@features/detail/hooks/useAlbumDetailState';
-import { SAVE_ALL_CONCURRENCY } from '@features/detail/domain/saveTrack';
-import type { DetailPort } from '@features/detail/ports/detailPort';
 import {
+  type DetailPort,
+  useAlbumDetailState,
+  SAVE_ALL_CONCURRENCY,
   createMemoryDetailPort,
   type MemoryDetailSeed,
-} from '@features/detail/__tests__/memoryDetailPort';
+} from '@features/detail';
 import { createPortWrapper, createTestQueryClient, idlePlayback } from '@testing/queryHarness';
 
 jest.mock('expo-router', () => ({

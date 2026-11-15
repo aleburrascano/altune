@@ -2,11 +2,8 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
-import { useSignOut } from '@shared/auth/useSignOut';
-import { Button } from '@shared/ui/primitives/Button';
-import { Text } from '@shared/ui/primitives/Text';
-import { spacing, useTheme } from '@shared/ui/theme';
-
+import { useSignOut } from '@shared/auth';
+import { Button, Text, spacing, useTheme } from '@shared/ui';
 type AuthFullScreenNoticeProps = {
   children: ReactNode;
   padded?: boolean;

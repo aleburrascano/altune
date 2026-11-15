@@ -1,15 +1,11 @@
 import { renderHook } from '@testing-library/react-native';
 
-import { asTrackId } from '@shared/apiClient/ids';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { usePinnedStore } from '@shared/offline/state/pinnedStore';
+import { asTrackId } from '@shared/apiClient';
+import type { TrackResponse } from '@shared/apiClient';
+import { usePinnedStore } from '@shared/offline';
 import { trackResponseFactory } from '@testing/factories';
 
-import {
-  offlineEligibility,
-  useLibraryOffline,
-  usePinnedStatus,
-} from '@features/library/hooks/useLibraryOffline';
+import { offlineEligibility, useLibraryOffline, usePinnedStatus } from '@features/library';
 
 function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {
   return trackResponseFactory.build({

@@ -1,10 +1,11 @@
 import {
   completeAuthIntent,
   _resetConsumedCredentialForTest,
-} from '@features/signIn/domain/completeAuthIntent';
-import { type AuthLinkIntent, parseAuthLink } from '@features/signIn/domain/parseAuthLink';
-import { clearRecoveryUnlock, isRecoveryUnlocked } from '@features/signIn/domain/passwordRecovery';
-
+  type AuthLinkIntent,
+  parseAuthLink,
+  clearRecoveryUnlock,
+  isRecoveryUnlocked,
+} from '@features/signIn';
 const AUTH_ACTION_TIMEOUT_MS = 20_000;
 
 describe('the outcome it reports', () => {

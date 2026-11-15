@@ -1,10 +1,8 @@
 import { useCallback, useRef, useState, type MutableRefObject } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 
-import type { DiscoveryResult, DiscoveryKind } from '@shared/apiClient/discovery';
+import type { DiscoveryResult, DiscoveryKind, FeaturedArtist } from '@shared/apiClient';
 import { useNavigator } from '@shared/navigation';
-import type { FeaturedArtist } from '@shared/apiClient/trackResponse';
-
 import {
   openDetail,
   type DetailRoute,

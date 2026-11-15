@@ -1,7 +1,7 @@
 import type { MutationKey, UseMutationResult } from '@tanstack/react-query';
 
-import { useAppMutation } from '@shared/query/useAppMutation';
-import type { TrackId } from '@shared/apiClient/ids';
+import { useAppMutation } from '@shared/query';
+import type { TrackId } from '@shared/apiClient';
 import {
   recordRetryRequest,
   retryFailureOutcome,
@@ -9,7 +9,7 @@ import {
 } from '@shared/acquisition/state/acquisitionTelemetry';
 import { useAcquisitionPort } from '@shared/acquisition/ports/AcquisitionPortProvider';
 import type { AcquisitionPort } from '@shared/acquisition/ports/acquisitionPort';
-import { guardedMutationOptions } from '@shared/session/guardedMutation';
+import { guardedMutationOptions } from '@shared/session';
 
 export type SharedRetryOptions<TContext extends object> = {
   action: string;

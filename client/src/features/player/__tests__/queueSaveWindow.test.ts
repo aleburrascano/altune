@@ -1,10 +1,8 @@
-import { asTrackId } from '@shared/apiClient/ids';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
-import { useQueueStore } from '@shared/playback/queueStore';
+import { asTrackId } from '@shared/apiClient';
+import type { PlaybackTrack } from '@shared/playback';
+import { useQueueStore } from '@shared/playback';
 
-import { savedQueueLists } from '@features/player/domain/queueSaveWindow';
-import { libraryTrack, previewTrack } from '@features/player/__tests__/fixtures';
-
+import { savedQueueLists, libraryTrack, previewTrack } from '@features/player';
 const MAX_SAVED_QUEUE_IDS = 10_000;
 
 const OVERFLOW = 2_000;

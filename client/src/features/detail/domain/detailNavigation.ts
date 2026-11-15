@@ -1,6 +1,5 @@
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import type { FeaturedArtist } from '@shared/apiClient/trackResponse';
-import { detailHref } from '@shared/navigation/detailHandoff';
+import type { DiscoveryResult, FeaturedArtist } from '@shared/apiClient';
+import { detailHref } from '@shared/navigation';
 import type { Href, Navigator, TabRoot } from '@shared/navigation';
 import type { UnreleasedWhere } from '@features/detail/domain/unreleasedView';
 

@@ -1,15 +1,17 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
-import { ApiError, NetworkError } from '@shared/failure/errors';
-import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
-import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
-import type { LibraryPort } from '@features/library/ports/libraryPort';
-import { useLibraryAlbums, useLibraryArtists } from '@features/library/hooks/useLibraryGroups';
-import { useLibraryTracks } from '@features/library/hooks/useLibraryTracks';
-import { usePlaylistActions } from '@features/library/hooks/usePlaylistActions';
-import { usePlaylistsView } from '@features/library/hooks/usePlaylistsView';
-
+import { ApiError, NetworkError } from '@shared/failure';
+import {
+  createMemoryLibraryPort,
+  LibraryPortProvider,
+  useLibraryAlbums,
+  useLibraryArtists,
+  useLibraryTracks,
+  usePlaylistActions,
+  usePlaylistsView,
+} from '@features/library';
+import type { LibraryPort } from '@features/library';
 const SECRET = 'daft punk discovery bootleg';
 
 type FailingMethod = 'getTracks' | 'getLibraryAlbums' | 'getLibraryArtists';

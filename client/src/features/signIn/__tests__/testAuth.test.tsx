@@ -8,12 +8,8 @@ import {
   fetchTestLoginToken,
   isTestAuthEnabled,
   type TestLoginResponse,
-} from '@features/signIn/adapters/http/testAuth';
-import { injectTestSession } from '@shared/auth/injectTestSession';
-import { supabase } from '@shared/auth/supabaseClient';
-import { markTestAuthBootSettled } from '@shared/auth/testAuthBoot';
-import { useSession } from '@shared/auth/useSession';
-
+} from '@features/signIn';
+import { injectTestSession, supabase, markTestAuthBootSettled, useSession } from '@shared/auth';
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 const { __http } = require('@testing/doubles/fetch.js') as {

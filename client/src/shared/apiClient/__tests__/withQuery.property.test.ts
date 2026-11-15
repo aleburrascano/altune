@@ -1,14 +1,15 @@
 import fc from 'fast-check';
 
-import { getLibraryAlbums, type LibrarySort } from '@shared/apiClient/library';
 import {
+  getLibraryAlbums,
+  type LibrarySort,
   searchDiscovery,
   suggestDiscovery,
   listSearchHistory,
   type DiscoveryKind,
   type DiscoverySearchResponse,
-} from '@shared/apiClient/discovery';
-import { supabase } from '@shared/auth/supabaseClient';
+} from '@shared/apiClient';
+import { supabase } from '@shared/auth';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

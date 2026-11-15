@@ -1,7 +1,7 @@
 import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 
 import { warnPlayback } from '@features/player/domain/playbackError';
-import { clamp } from '@shared/math/math';
+import { clamp } from '@shared/math';
 import { msToSeconds } from '@features/player/domain/time';
 import { ensurePlayerSetup } from '@features/player/native/initPlayer';
 import {
@@ -27,8 +27,7 @@ import {
   markPresignedFrom,
   extendPresignWindow,
 } from '@features/player/domain/presignWindow';
-import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
-import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
+import { orderedQueueTracks, useQueueStore, trackKey, type PlaybackTrack } from '@shared/playback';
 
 export interface LoadNativeTrackOptions {
   autoplay?: boolean;

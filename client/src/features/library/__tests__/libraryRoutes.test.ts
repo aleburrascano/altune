@@ -1,5 +1,5 @@
-import { featuringDetailRoute, goBackOrToLibrary } from '@features/library/domain/libraryRoutes';
-import { createMemoryNavigator } from '@shared/navigation/__tests__/memoryNavigator';
+import { featuringDetailRoute, goBackOrToLibrary } from '@features/library';
+import { createMemoryNavigator } from '@shared/navigation';
 
 describe('featuringDetailRoute', () => {
   it('routes to the discover detail screen under the discover tab', () => {

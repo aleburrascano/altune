@@ -1,6 +1,6 @@
-import type { BackfillFeaturedResult } from '@shared/apiClient/tracks';
+import type { BackfillFeaturedResult } from '@shared/apiClient';
 
-import type { SettingsPort } from '@features/settings/ports/settingsPort';
+import type { SettingsPort } from '@features/settings';
 
 export interface MemorySettingsSeed {
   pages?: BackfillFeaturedResult[];

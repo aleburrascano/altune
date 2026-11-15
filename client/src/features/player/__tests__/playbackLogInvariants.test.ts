@@ -4,22 +4,21 @@ import { inspect } from 'util';
 
 import { Event } from 'react-native-track-player';
 
-import { asTrackId } from '@shared/apiClient/ids';
+import { asTrackId } from '@shared/apiClient';
 
-import { ignoringNativeRejection } from '@features/player/native/createNativePlaybackActions';
-import { playbackService } from '@features/player/native/playbackService';
-import { repairActiveToStreaming } from '@features/player/native/nativeTrackSwap';
-import { _resetPlaybackHealthForTest } from '@features/player/domain/playbackHealth';
-import { reportingQueueFailure } from '@features/player/native/queueFailureReport';
-import { redactPlaybackErrorMessage, warnPlayback } from '@features/player/domain/playbackError';
-
-import { installPlaybackPort } from '@features/player/ports/activePlaybackPort';
-
+import {
+  ignoringNativeRejection,
+  playbackService,
+  repairActiveToStreaming,
+  _resetPlaybackHealthForTest,
+  reportingQueueFailure,
+  redactPlaybackErrorMessage,
+  warnPlayback,
+  installPlaybackPort,
+  libraryTrack,
+  createMemoryPlaybackPort,
+} from '@features/player';
 import { signInTestUser } from '@testing/signInTestUser';
-
-import { libraryTrack } from '@features/player/__tests__/fixtures';
-import { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlaybackPort';
-
 const { __http } = require('@testing/doubles/fetch.js');
 const HEALTH_ROUTE = 'POST /v1/discovery/events';
 const HTTP_ACCEPTED = 202;

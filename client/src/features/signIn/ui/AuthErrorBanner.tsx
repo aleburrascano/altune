@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 
-import { Banner } from '@shared/ui/primitives/Banner';
+import { Banner } from '@shared/ui';
 
 import { authErrorText, type AuthErrorReason } from '@features/signIn/domain/authError';
 

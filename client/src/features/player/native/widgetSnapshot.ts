@@ -1,10 +1,9 @@
 import TrackPlayer, { Event, State, type Progress } from 'react-native-track-player';
 
 import { reloadWidget, writeCoverFromUrl, writeSnapshot } from '@modules/altune-widget';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
-import type { QueueSource } from '@shared/playback/queueOrder';
-import { useQueueStore } from '@shared/playback/queueStore';
-import { hasSignedInUser, onIdentityChange, onSignOut } from '@shared/session/signOutCleanup';
+import type { PlaybackTrack, QueueSource } from '@shared/playback';
+import { useQueueStore } from '@shared/playback';
+import { hasSignedInUser, onIdentityChange, onSignOut } from '@shared/session';
 
 const COVER_FILE_NAME = 'cover.jpg';
 

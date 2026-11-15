@@ -1,10 +1,8 @@
 import type { ReactNode } from 'react';
 
-import type { FeaturedArtist } from '@shared/apiClient/trackResponse';
-import { withFeaturing } from '@shared/apiClient/featuredArtists';
-import { Text } from '@shared/ui/primitives/Text';
-import { Tappable } from '@shared/ui/primitives/Tappable';
-
+import type { FeaturedArtist } from '@shared/apiClient';
+import { withFeaturing } from '@shared/apiClient';
+import { Text, Tappable } from '@shared/ui';
 import type { LateralNavHandle } from '@features/detail/hooks/useDetailNavigation';
 
 import { sharedStyles } from '@features/detail/ui/detailStyles';

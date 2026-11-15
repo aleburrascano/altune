@@ -2,14 +2,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 
-import { darkTheme } from '@shared/ui/theme/theme';
-import { spacing } from '@shared/ui/theme';
-
-import { AuthGate } from '@features/signIn/ui/AuthGate';
-import { InvalidRecoveryLinkNotice, SessionExpiredNotice } from '@features/signIn/ui/AuthNotices';
-
-import { createSupabaseAuthMock } from '@features/signIn/__tests__/testUtils/authTestUtils';
-
+import { darkTheme, spacing } from '@shared/ui';
+import {
+  AuthGate,
+  InvalidRecoveryLinkNotice,
+  SessionExpiredNotice,
+  createSupabaseAuthMock,
+} from '@features/signIn';
 jest.mock('expo-router', () => ({
   useSegments: () => [],
   useRouter: () => ({ replace: jest.fn(), push: jest.fn(), back: jest.fn() }),

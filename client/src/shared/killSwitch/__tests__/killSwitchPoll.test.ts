@@ -1,8 +1,11 @@
-import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
+import { createMemoryFileStore } from '@shared/files';
 
-import { isLoopEnabled, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
-import { refreshKillSwitches, startKillSwitchPolling } from '@shared/killSwitch/killSwitchPoll';
-
+import {
+  isLoopEnabled,
+  setKillSwitchFileStore,
+  refreshKillSwitches,
+  startKillSwitchPolling,
+} from '@shared/killSwitch';
 const { __http } = require('@testing/doubles/fetch.js');
 
 type AppStateChangeHandler = (state: string) => void;

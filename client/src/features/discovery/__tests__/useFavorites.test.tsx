@@ -3,14 +3,16 @@ import { Alert } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 
-import { useFavorites } from '@features/discovery/hooks/favorites/useFavorites';
-import type { FavoritesResponse, FavoriteTarget } from '@shared/apiClient/favorites';
-import { asFavoriteKey } from '@shared/apiClient/ids';
-import { FavoritesPortProvider } from '@features/discovery/ports/FavoritesPortProvider';
-import { createMemoryFavoritesPort } from '@features/discovery/__tests__/memoryFavoritesPort';
-import type { FavoritesPort } from '@features/discovery/ports/favoritesPort';
-import { discoveryKeys } from '@shared/query/queryKeys';
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+import {
+  useFavorites,
+  FavoritesPortProvider,
+  createMemoryFavoritesPort,
+} from '@features/discovery';
+import type { FavoritesResponse, FavoriteTarget } from '@shared/apiClient';
+import { asFavoriteKey } from '@shared/apiClient';
+import type { FavoritesPort } from '@features/discovery';
+import { discoveryKeys } from '@shared/query';
+import { runSignOutCleanups } from '@shared/session';
 
 let mockedAdd: jest.MockedFunction<FavoritesPort['addFavorite']>;
 let mockedList: jest.MockedFunction<FavoritesPort['listFavorites']>;

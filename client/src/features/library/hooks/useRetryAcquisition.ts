@@ -8,17 +8,17 @@ import {
   type UseMutationResult,
   type QueryClient,
 } from '@tanstack/react-query';
-import { type TrackId, isSafeId } from '@shared/apiClient/ids';
-import { useAppMutation } from '@shared/query/useAppMutation';
-import { forgetTrack, getTrackFromCaches } from '@shared/events/trackCachePatch';
-import { showFailureAlert } from '@shared/ui';
 import {
+  type TrackId,
+  isSafeId,
   toPending,
   acquisitionOf,
   type AcquisitionTransition,
-} from '@shared/apiClient/trackAcquisition';
-import { patchTrackInCaches } from '@shared/events/trackPatchBatch';
-import { guardedMutationOptions } from '@shared/session/guardedMutation';
+} from '@shared/apiClient';
+import { useAppMutation } from '@shared/query';
+import { forgetTrack, getTrackFromCaches, patchTrackInCaches } from '@shared/events';
+import { showFailureAlert } from '@shared/ui';
+import { guardedMutationOptions } from '@shared/session';
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 import {
@@ -32,9 +32,8 @@ import {
   recordRetryTapped,
   type RetryEntryPoint,
   type RetrySkipReason,
-} from '@shared/acquisition/state/acquisitionTelemetry';
-import { useSharedRetryAcquisition } from '@shared/acquisition/hooks/track/useRetryAcquisition';
-
+  useSharedRetryAcquisition,
+} from '@shared/acquisition';
 const trackMutationKeys = {
   retryAcquisition: ['track', 'retry-acquisition'] as const,
   reacquire: ['track', 'reacquire'] as const,

@@ -3,7 +3,7 @@ import * as Linking from 'expo-linking';
 
 import { useAuthDeepLink } from '@features/signIn/hooks/useAuthDeepLink.web';
 
-import { createSupabaseAuthMock } from '@features/signIn/__tests__/testUtils/authTestUtils';
+import { createSupabaseAuthMock } from '@features/signIn';
 
 jest.mock('expo-router', () => ({ useRouter: () => ({ replace: jest.fn() }) }));
 jest.mock('expo-linking', () => ({

@@ -1,12 +1,11 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react-native';
 
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import type { DiscoveryResult, LastFmEnrichmentResponse } from '@shared/apiClient';
 
-import { ArtistDetailBody } from '@features/detail/ui/ArtistDetailBody';
+import { ArtistDetailBody } from '@features/detail';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
-import type { LastFmEnrichmentResponse } from '@shared/apiClient/enrichment';
-import { readDetailHandoff } from '@shared/navigation/detailHandoff';
+import { readDetailHandoff } from '@shared/navigation';
 import {
   createTestQueryClient,
   createPlaybackWrapper,

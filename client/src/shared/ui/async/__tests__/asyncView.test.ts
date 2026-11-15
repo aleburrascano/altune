@@ -1,5 +1,5 @@
-import { asyncView } from '@shared/ui/async/asyncView';
-import type { AsyncInputs, AsyncView } from '@shared/ui/async/asyncView';
+import { asyncView } from '@shared/ui';
+import type { AsyncInputs, AsyncView } from '@shared/ui';
 
 describe('asyncView — precedence over the full 2^3 input space', () => {
   it.each<[AsyncInputs, AsyncView]>([

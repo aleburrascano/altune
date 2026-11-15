@@ -2,11 +2,11 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, act, waitFor } from '@testing-library/react-native';
 
-import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
+import { useRecordEvent } from '@shared/telemetry';
 import { signInTestUser } from '@testing/signInTestUser';
 
-import { applyKillSwitches } from '@shared/killSwitch/killSwitch';
-import type { DiscoveryEvent } from '@shared/telemetry/recordEvent';
+import { applyKillSwitches } from '@shared/killSwitch';
+import type { DiscoveryEvent } from '@shared/telemetry';
 
 const TRACKING_FAILED = '[discovery] event tracking failed';
 

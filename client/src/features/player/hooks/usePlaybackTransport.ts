@@ -1,8 +1,6 @@
 import { shouldRestartOnPrevious } from '@features/player/domain/restartOnPrevious';
-import { useQueueStore } from '@shared/playback/queueStore';
-import { usePlayback } from '@shared/playback/usePlayback';
-import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
-import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
+import { useQueueStore, usePlayback, useQueuePlayback } from '@shared/playback';
+import type { PlaybackContextValue } from '@shared/playback';
 import { statusFlagsOf } from '@features/player/domain/playerStatus';
 
 function useQueueTransportState() {

@@ -1,11 +1,8 @@
 import type { ReactElement } from 'react';
 import { Heart } from 'lucide-react-native';
 
-import type { FavoriteTarget } from '@shared/apiClient/favorites';
-import { tapFeedback } from '@shared/ui/haptics';
-import { IconButton } from '@shared/ui/primitives/IconButton';
-import { useTheme } from '@shared/ui';
-
+import type { FavoriteTarget } from '@shared/apiClient';
+import { tapFeedback, IconButton, useTheme } from '@shared/ui';
 import { useFavorites } from '@features/discovery/hooks/favorites/useFavorites';
 
 export type FavoriteButtonProps = {

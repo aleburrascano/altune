@@ -1,11 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import { SetNewPasswordScreen } from '@features/signIn/ui/SetNewPasswordScreen';
-import { SignUpScreen } from '@features/signIn/ui/SignUpScreen';
-
-import { authPortWrapper } from '@features/signIn/__tests__/testUtils/authTestUtils';
-
+import { SetNewPasswordScreen, SignUpScreen, authPortWrapper } from '@features/signIn';
 jest.mock('expo-router', () => ({
   useRouter: () => ({ replace: jest.fn(), push: jest.fn(), back: jest.fn() }),
   Link: ({ children }: { children: ReactNode }) => children,

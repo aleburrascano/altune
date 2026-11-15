@@ -1,4 +1,4 @@
-import { ContractError, isRetryable } from '@shared/failure/errors';
+import { ContractError, isRetryable } from '@shared/failure';
 import {
   asArray,
   asBoolean,
@@ -10,7 +10,7 @@ import {
   nullableNumber,
   nullableString,
   parseErrorBody,
-} from '@shared/apiClient/wireDecoders';
+} from '@shared/apiClient';
 
 describe('primitive narrowers return the value or throw a ContractError', () => {
   it('asRecord accepts a plain object and rejects a number, null, and an array', () => {

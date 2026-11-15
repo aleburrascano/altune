@@ -3,12 +3,8 @@ import { StyleSheet, View } from 'react-native';
 
 import { ChevronRight } from 'lucide-react-native';
 
-import { Artwork } from '@shared/ui/primitives/Artwork';
-import { Tappable } from '@shared/ui/primitives/Tappable';
-import { Text } from '@shared/ui/primitives/Text';
-import { radius, spacing, useTheme } from '@shared/ui/theme';
-
-import type { LastFmEnrichmentResponse } from '@shared/apiClient/enrichment';
+import { Artwork, Tappable, Text, radius, spacing, useTheme } from '@shared/ui';
+import type { LastFmEnrichmentResponse } from '@shared/apiClient';
 
 const MAX_SIMILAR = 6;
 const BIO_COLLAPSED_LINES = 4;

@@ -1,19 +1,24 @@
 import { memo, useCallback, useMemo, type ReactElement } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, type ListRenderItem } from 'react-native';
 import { Shuffle } from 'lucide-react-native';
-import type { TrackId } from '@shared/apiClient/ids';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { Tappable } from '@shared/ui/primitives/Tappable';
-import { Text, pressedStyle, spacing, useWideWebLayout, useTheme } from '@shared/ui';
-import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
+import type { TrackId, TrackResponse } from '@shared/apiClient';
+import {
+  Tappable,
+  Text,
+  pressedStyle,
+  spacing,
+  useWideWebLayout,
+  useTheme,
+  pillPaddingVertical,
+  radius,
+} from '@shared/ui';
+import type { MenuAnchor } from '@shared/ui';
 import type { Selection } from '@features/library/hooks/useSelection';
 import { LibraryEmptyMessage, ListLoadingMoreFooter } from '@features/library/ui/LibraryListParts';
 import { listContent } from '@features/library/ui/listContentStyles';
 import { LibraryRow } from '@features/library/ui/LibraryRow';
 import { WideTrackHeader } from '@features/library/ui/WideTrackHeader';
 import type { ListPaging, ListRefresh } from '@features/library/domain/libraryView';
-import { pillPaddingVertical, radius } from '@shared/ui/theme';
-
 type TracksListHeaderProps = {
   isWide: boolean;
   showShuffle: boolean;

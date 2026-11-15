@@ -1,11 +1,9 @@
 import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
 
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import type { TrackId } from '@shared/apiClient/ids';
-import type { FeaturedArtist } from '@shared/apiClient/trackResponse';
-import type { PlaybackSource } from '@shared/playback/playbackTrack';
+import type { DiscoveryResult, TrackId, FeaturedArtist } from '@shared/apiClient';
+import type { PlaybackSource } from '@shared/playback';
 
-import { usePlayback } from '@shared/playback/usePlayback';
+import { usePlayback } from '@shared/playback';
 
 import { resolveFeatured, trackExtras } from '@features/detail/domain/trackExtras';
 import { useDetailHandoff } from '@features/detail/hooks/useDetailHandoff';

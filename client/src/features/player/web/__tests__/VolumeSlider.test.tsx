@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/react-native';
 
-import { WIDE_LAYOUT_MIN_WIDTH } from '@shared/ui/layout/breakpoints';
+import { WIDE_LAYOUT_MIN_WIDTH } from '@shared/ui';
 
-import { VolumeSlider } from '@features/player/web/VolumeSlider';
+import { VolumeSlider } from '@features/player';
 
 let mockWindowWidth = WIDE_LAYOUT_MIN_WIDTH;
 

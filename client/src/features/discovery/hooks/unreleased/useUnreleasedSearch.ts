@@ -1,7 +1,7 @@
 import { useQuery, type QueryFunctionContext } from '@tanstack/react-query';
 
-import type { UnreleasedSearchHit } from '@shared/apiClient/enrichment';
-import { discoveryKeys } from '@shared/query/queryKeys';
+import type { UnreleasedSearchHit } from '@shared/apiClient';
+import { discoveryKeys } from '@shared/query';
 
 import { isSearchableQuery, normalizeQuery } from '@features/discovery/domain/searchPaging';
 import { useDiscoverFetchEnabled } from '@features/discovery/hooks/search/useDiscoverFetchGate';

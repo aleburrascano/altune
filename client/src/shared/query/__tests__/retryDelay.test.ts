@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 
 import * as retryDelayModule from '@shared/query/retryDelay';
-import { transientRetryOptions } from '@shared/query/retryDelay';
+import { transientRetryOptions } from '@shared/query';
 
 const RETRY_BACKOFF_BASE_MS = 1_000;
 const RETRY_BACKOFF_CAP_MS = 30_000;

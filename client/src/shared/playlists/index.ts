@@ -15,3 +15,4 @@ export {
   usePlaylistsPort,
 } from '@shared/playlists/ports/PlaylistsPortProvider';
 export type { PlaylistsPort } from '@shared/playlists/ports/playlistsPort';
+export { createMemoryPlaylistsPort } from '@shared/playlists/__tests__/memoryPlaylistsPort';

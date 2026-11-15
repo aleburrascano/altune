@@ -1,4 +1,4 @@
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import type { DiscoveryResult } from '@shared/apiClient';
 
 import {
   albumExtras,

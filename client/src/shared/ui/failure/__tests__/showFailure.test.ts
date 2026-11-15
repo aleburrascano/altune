@@ -2,9 +2,7 @@ import { Alert } from 'react-native';
 
 import { signInTestUser } from '@testing/signInTestUser';
 
-import { showFailureAlert } from '@shared/ui/failure/showFailure';
-import { showFailureAlert as showFailureAlertFromUi } from '@shared/ui';
-
+import { showFailureAlert, showFailureAlert as showFailureAlertFromUi } from '@shared/ui';
 const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));

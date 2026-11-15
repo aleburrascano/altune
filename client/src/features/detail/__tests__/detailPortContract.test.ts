@@ -1,13 +1,8 @@
-import { asTrackId } from '@shared/apiClient/ids';
-import type {
-  CreateTrackRequest,
-  ListTracksResponse,
-  TrackResponse,
-} from '@shared/apiClient/trackResponse';
+import { asTrackId } from '@shared/apiClient';
+import type { CreateTrackRequest, ListTracksResponse, TrackResponse } from '@shared/apiClient';
 
-import { httpDetailPort } from '@features/detail/adapters/http/httpDetailPort';
-import { createMemoryDetailPort } from '@features/detail/__tests__/memoryDetailPort';
-import type { DetailPort } from '@features/detail/ports/detailPort';
+import { httpDetailPort, createMemoryDetailPort } from '@features/detail';
+import type { DetailPort } from '@features/detail';
 import { signInTestUser } from '@testing/queryHarness';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');

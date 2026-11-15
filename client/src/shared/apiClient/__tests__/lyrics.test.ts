@@ -1,6 +1,6 @@
-import { getLyrics, type LyricsResponse } from '@shared/apiClient/lyrics';
-import { ContractError } from '@shared/failure/errors';
-import { supabase } from '@shared/auth/supabaseClient';
+import { getLyrics, type LyricsResponse } from '@shared/apiClient';
+import { ContractError } from '@shared/failure';
+import { supabase } from '@shared/auth';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

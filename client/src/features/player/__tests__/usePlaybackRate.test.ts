@@ -1,14 +1,10 @@
 import { renderHook } from '@testing-library/react-native';
 import React from 'react';
 
-import { PlaybackContext } from '@shared/playback/usePlayback';
+import { PlaybackContext } from '@shared/playback';
 import { makeIdlePlayback } from '@testing/factories';
 
-import {
-  PLAYBACK_RATES,
-  usePlaybackRateStore,
-  useSpeedOptions,
-} from '@features/player/hooks/usePlaybackRate';
+import { PLAYBACK_RATES, usePlaybackRateStore, useSpeedOptions } from '@features/player';
 
 type ProviderProps = { children: React.ReactNode };
 

@@ -1,5 +1,5 @@
-import { isServerEvent, parseChunk } from '@shared/events/sseFrames';
-import type { ParsedBlock } from '@shared/events/sseFrames';
+import { isServerEvent, parseChunk } from '@shared/events';
+import type { ParsedBlock } from '@shared/events';
 
 describe('parseChunk', () => {
   it('returns nothing for empty input', () => {

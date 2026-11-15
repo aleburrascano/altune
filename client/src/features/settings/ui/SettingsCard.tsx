@@ -2,10 +2,16 @@ import type { LucideIcon } from 'lucide-react-native';
 import type { ReactElement, ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { IconBadge, Text, minInteractiveHeight, radius, spacing, useTheme } from '@shared/ui';
-import { Tappable } from '@shared/ui/primitives/Tappable';
-import { opacity } from '@shared/ui/theme';
-
+import {
+  IconBadge,
+  Text,
+  minInteractiveHeight,
+  radius,
+  spacing,
+  useTheme,
+  Tappable,
+  opacity,
+} from '@shared/ui';
 type SettingsCardProps = {
   label?: string;
   danger?: boolean;

@@ -2,12 +2,10 @@ import React from 'react';
 import { StyleSheet } from 'react-native';
 import { fireEvent, render as renderBare, screen } from '@testing-library/react-native';
 
-import { darkTheme } from '@shared/ui/theme/theme';
+import { darkTheme } from '@shared/ui';
 
-import { CorrectionBanner } from '@features/discovery/ui/results/CorrectionBanner';
-import { DiscoverRow } from '@features/discovery/ui/results/DiscoverRow';
-import { resultFixture } from '@features/discovery/__tests__/fixtures';
-import { PlaybackContext } from '@shared/playback/usePlayback';
+import { CorrectionBanner, DiscoverRow, resultFixture } from '@features/discovery';
+import { PlaybackContext } from '@shared/playback';
 import { idlePlayback } from '@testing/queryHarness';
 
 function render(ui: React.ReactElement): ReturnType<typeof renderBare> {

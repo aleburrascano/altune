@@ -1,14 +1,9 @@
 import { useQueryClient, type QueryClient, type UseMutationOptions } from '@tanstack/react-query';
 
-import { useAppMutation } from '@shared/query/useAppMutation';
+import { useAppMutation, discoveryKeys } from '@shared/query';
 
-import {
-  clearSearchHistory,
-  type DiscoverySearchHistoryResponse,
-} from '@shared/apiClient/discovery';
-import { guardedMutationOptions } from '@shared/session/guardedMutation';
-import { discoveryKeys } from '@shared/query/queryKeys';
-
+import { clearSearchHistory, type DiscoverySearchHistoryResponse } from '@shared/apiClient';
+import { guardedMutationOptions } from '@shared/session';
 type ClearSearchHistoryOptions = {
   action: string;
   retryOptions: Pick<UseMutationOptions<void, Error, void>, 'retry' | 'retryDelay'>;

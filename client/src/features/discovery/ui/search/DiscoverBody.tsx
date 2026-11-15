@@ -1,7 +1,6 @@
 import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { AsyncSection, type AsyncSectionProps } from '@shared/ui/async/AsyncSection';
-import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
+import { AsyncSection, type AsyncSectionProps, useAnnounceChange } from '@shared/ui';
 import { BlendedSection } from '@features/discovery/ui/results/BlendedSection';
 import {
   DiscoverFullError,
@@ -23,8 +22,12 @@ import {
   asyncViewForDiscoverView,
 } from '@features/discovery/domain/discoverView';
 import type { ResultsCommonProps } from '@features/discovery/ui/results/ResultsList';
-import type { DiscoveryKind, DiscoveryResult, ResultSection } from '@shared/apiClient/discovery';
-import type { UnreleasedSearchHit } from '@shared/apiClient/enrichment';
+import type {
+  DiscoveryKind,
+  DiscoveryResult,
+  ResultSection,
+  UnreleasedSearchHit,
+} from '@shared/apiClient';
 import type {
   HistorySlice,
   PaginationSlice,

@@ -1,7 +1,10 @@
-import { asTrackId, type TrackId } from '@shared/apiClient/ids';
-import type { QueueStateCurrentTrack } from '@shared/apiClient/playback';
-import type { FeaturedArtist, TrackResponse } from '@shared/apiClient/trackResponse';
-
+import {
+  type QueueStateCurrentTrack,
+  type FeaturedArtist,
+  type TrackResponse,
+  asTrackId,
+  type TrackId,
+} from '@shared/apiClient';
 export type PlaybackSource =
   | { readonly kind: 'library'; readonly trackId: TrackId }
   | { readonly kind: 'preview'; readonly previewUrl: string };

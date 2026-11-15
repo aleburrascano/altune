@@ -1,12 +1,10 @@
 import React from 'react';
 import { fireEvent, render as renderBare, screen } from '@testing-library/react-native';
 
-import { BlendedSection } from '@features/discovery/ui/results/BlendedSection';
-import { resultFixture } from '@features/discovery/__tests__/fixtures';
-
-import type { DiscoveryResult, ResultSection } from '@shared/apiClient/discovery';
-import type { ResultsCommonProps } from '@features/discovery/ui/results/ResultsList';
-import { PlaybackContext } from '@shared/playback/usePlayback';
+import { BlendedSection, resultFixture } from '@features/discovery';
+import type { DiscoveryResult, ResultSection } from '@shared/apiClient';
+import type { ResultsCommonProps } from '@features/discovery';
+import { PlaybackContext } from '@shared/playback';
 import { idlePlayback } from '@testing/queryHarness';
 
 const SECTION_ITEM_CAP = 20;

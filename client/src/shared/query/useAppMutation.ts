@@ -10,15 +10,14 @@ import {
   type UseMutationResult,
 } from '@tanstack/react-query';
 
-import { correlationIdOf, isTelemetryGated, ApiError } from '@shared/failure/errors';
+import { correlationIdOf, isTelemetryGated, ApiError } from '@shared/failure';
 import {
   onlyWhileTheStartingSessionLasts,
   pinStartingSession,
   SessionEndedError,
-} from '@shared/session/guardedMutation';
-import { isSameSession } from '@shared/session/signOutCleanup';
-import { reportClientError } from '@shared/telemetry/clientErrorReporting';
-import { recordUserAction, type UserActionPayload } from '@shared/telemetry/userTelemetry';
+  isSameSession,
+} from '@shared/session';
+import { reportClientError, recordUserAction, type UserActionPayload } from '@shared/telemetry';
 import { showFailureAlert } from '@shared/ui';
 
 export type AppMutationOptions<TData, TError extends Error, TVars, TCtx> = UseMutationOptions<

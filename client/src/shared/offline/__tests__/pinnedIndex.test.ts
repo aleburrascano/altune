@@ -7,13 +7,9 @@ import {
   saveIndex,
   setPinnedIndexFileStore,
   type PinnedEntry,
-} from '@shared/offline/state/pinnedIndex';
-import {
-  createMemoryFileStore,
-  type MemoryFileStore,
-} from '@shared/files/__tests__/memoryFileStore';
-import type { StoredDirectory } from '@shared/files/fileStore';
-import { asTrackId, type TrackId } from '@shared/apiClient/ids';
+} from '@shared/offline';
+import { type StoredDirectory, createMemoryFileStore, type MemoryFileStore } from '@shared/files';
+import { asTrackId, type TrackId } from '@shared/apiClient';
 
 import { expectType, type IsExactlyAssignable, type Not } from '@testing/typeAssertions';
 

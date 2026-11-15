@@ -1,6 +1,5 @@
-import type { CreateTrackRequest, AcquisitionStatus } from '@shared/apiClient/trackResponse';
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import { asTrackId } from '@shared/apiClient/ids';
+import type { CreateTrackRequest, AcquisitionStatus, DiscoveryResult } from '@shared/apiClient';
+import { asTrackId } from '@shared/apiClient';
 
 import {
   optimisticTrack,
@@ -15,9 +14,9 @@ import {
   ownedRetryTrackId,
   saveControlInteractive,
   saveDisplayState,
-} from '@features/detail/domain/saveTrack';
-import { ownedTrack, type OwnedTrack } from '@features/detail/domain/ownedTrack';
-
+  ownedTrack,
+  type OwnedTrack,
+} from '@features/detail';
 const MAX_PINNED_SOURCES = 16;
 
 describe('save cache', () => {

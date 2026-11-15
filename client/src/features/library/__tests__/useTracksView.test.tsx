@@ -8,15 +8,16 @@ import {
 } from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';
 import { Alert, View } from 'react-native';
-import { asTrackId } from '@shared/apiClient/ids';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import type { ActiveView } from '@features/library/domain/libraryView';
-import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
-import { track } from '@features/library/__tests__/trackMutationFixtures';
-import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
-import type { LibraryPort } from '@features/library/ports/libraryPort';
-import { useSelection } from '@features/library/hooks/useSelection';
-import { useTracksView } from '@features/library/hooks/useTracksView';
+import { asTrackId } from '@shared/apiClient';
+import type { TrackResponse } from '@shared/apiClient';
+import type { ActiveView, LibraryPort } from '@features/library';
+import {
+  createMemoryLibraryPort,
+  track,
+  LibraryPortProvider,
+  useSelection,
+  useTracksView,
+} from '@features/library';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 
 const noop = () => undefined;

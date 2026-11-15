@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { spacing } from '@shared/ui/theme';
+import { spacing } from '@shared/ui';
 
 import { type ContentFailure } from '@features/detail/domain/contentStatus';
 import type { ArtistDetailState } from '@features/detail/hooks/useArtistDetailState';

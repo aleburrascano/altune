@@ -1,8 +1,8 @@
 import { render } from '@testing-library/react-native';
 
 import { signInTestUser } from '@testing/signInTestUser';
-import { applyKillSwitches } from '@shared/killSwitch/killSwitch';
-import { Banner } from '@shared/ui/primitives/Banner';
+import { applyKillSwitches } from '@shared/killSwitch';
+import { Banner } from '@shared/ui';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

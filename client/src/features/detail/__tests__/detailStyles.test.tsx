@@ -2,13 +2,15 @@ import { StyleSheet, Text } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
 import type { ReactTestRendererJSON } from 'react-test-renderer';
 
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import type { DiscoveryResult } from '@shared/apiClient';
 
-import { AlbumCardsSkeleton } from '@features/detail/ui/DetailSkeleton';
-import { DetailScaffold } from '@features/detail/ui/DetailScaffold';
-import { DiscographySections } from '@features/detail/ui/DiscographySections';
-import { RelatedTracksSection } from '@features/detail/ui/RelatedTracksSection';
-import { gridCellWidthFor } from '@features/detail/ui/detailStyles';
+import {
+  AlbumCardsSkeleton,
+  DetailScaffold,
+  DiscographySections,
+  RelatedTracksSection,
+  gridCellWidthFor,
+} from '@features/detail';
 import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
 
 const { __http } = require('@testing/doubles/fetch.js');

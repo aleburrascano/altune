@@ -2,15 +2,12 @@ import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 
-import { asTrackId } from '@shared/apiClient/ids';
-import { PlaybackContext } from '@shared/playback/usePlayback';
-import { useQueueStore } from '@shared/playback/queueStore';
-import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
+import { asTrackId } from '@shared/apiClient';
+import { PlaybackContext, useQueueStore } from '@shared/playback';
+import type { PlaybackContextValue } from '@shared/playback';
 import { makeIdlePlayback } from '@testing/factories';
 
-import { libraryTrack } from '@features/player/__tests__/fixtures';
-import { PlayerBar } from '@features/player/ui/PlayerBar';
-
+import { libraryTrack, PlayerBar } from '@features/player';
 const RESTART_THRESHOLD_MS = 3_000;
 
 const mockPush = jest.fn();

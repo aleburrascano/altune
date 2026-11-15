@@ -1,12 +1,13 @@
 import TrackPlayer, { RepeatMode, State } from 'react-native-track-player';
 
-import { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlaybackPort';
-import { installPlaybackPort } from '@features/player/ports/activePlaybackPort';
-import { startWidgetCommands } from '@features/player/native/widgetCommands';
-import { asTrackId } from '@shared/apiClient/ids';
-import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
-import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
-import { notifyIdentityChange } from '@shared/session/signOutCleanup';
+import {
+  createMemoryPlaybackPort,
+  installPlaybackPort,
+  startWidgetCommands,
+} from '@features/player';
+import { asTrackId } from '@shared/apiClient';
+import { trackKey, type PlaybackTrack, orderedQueueTracks, useQueueStore } from '@shared/playback';
+import { notifyIdentityChange } from '@shared/session';
 import {
   addWidgetCommandListener,
   drainPendingCommands,

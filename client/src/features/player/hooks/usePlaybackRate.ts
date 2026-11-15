@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
-import { usePlayback } from '@shared/playback/usePlayback';
-import type { ActionSheetOption } from '@shared/ui/primitives/ActionSheet';
+import { usePlayback } from '@shared/playback';
+import type { ActionSheetOption } from '@shared/ui';
 
 export const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 1.75, 2] as const;
 

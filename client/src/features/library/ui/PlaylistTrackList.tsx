@@ -1,9 +1,8 @@
 import type { ComponentProps, ReactElement } from 'react';
 import { FlatList, StyleSheet, View, type FlatListProps, type ListRenderItem } from 'react-native';
-import { usePlayback } from '@shared/playback/usePlayback';
-import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
+import { usePlayback, useQueuePlayback } from '@shared/playback';
 import { Button, Text, spacing, useWideWebLayout } from '@shared/ui';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
+import type { TrackResponse } from '@shared/apiClient';
 import { usePlaylistPlayback } from '@features/library/hooks/usePlaylistPlayback';
 import { useRetryAcquisition } from '@features/library/hooks/useRetryAcquisition';
 import { usePlaylistTrackRemoval } from '@features/library/hooks/usePlaylistTrackRemoval';

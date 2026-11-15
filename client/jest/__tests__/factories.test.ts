@@ -3,7 +3,7 @@ import { faker } from '@faker-js/faker';
 import { FAKER_SEED } from '@testing/fakerSeed';
 import { makeIdlePlayback, trackResponseFactory } from '@testing/factories';
 import { expectType, type IsAssignable } from '@testing/typeAssertions';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
+import type { TrackResponse } from '@shared/apiClient';
 
 describe('factories', () => {
   it('builds values typed as their models', () => {

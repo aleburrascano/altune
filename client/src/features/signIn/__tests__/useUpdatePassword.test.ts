@@ -1,12 +1,6 @@
 import { act } from '@testing-library/react-native';
 
-import { useUpdatePassword } from '@features/signIn/hooks/useUpdatePassword';
-
-import {
-  createSupabaseAuthMock,
-  runAsyncAuthHook,
-} from '@features/signIn/__tests__/testUtils/authTestUtils';
-
+import { useUpdatePassword, createSupabaseAuthMock, runAsyncAuthHook } from '@features/signIn';
 const { updateUser, signOut } = createSupabaseAuthMock('updateUser', 'signOut');
 
 const updatePassword = () =>

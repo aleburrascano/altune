@@ -12,6 +12,7 @@ import {
 } from '@shared/acquisition/state/trackStatusStore';
 import { getSessionId } from '@shared/telemetry/eventSession';
 import { enqueueCritical, flushOutbox, _resetOutboxForTest } from '@shared/telemetry/outbox';
+import { followSignedInUser } from '@shared/telemetry';
 import { useOwnedTrack } from '@features/detail/hooks/useOwnedTrack';
 import type { TrackExtras } from '@features/detail/domain/trackExtras';
 import { TrackSaveControl } from '@features/detail/ui/SaveControls';
@@ -95,6 +96,8 @@ function switchAccountTo(session: Session): void {
     authCallbacks.forEach((cb) => cb('SIGNED_IN', session));
   });
 }
+
+followSignedInUser();
 
 beforeEach(() => {
   authCallbacks = [];

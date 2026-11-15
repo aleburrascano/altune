@@ -1,5 +1,8 @@
 import * as Crypto from 'expo-crypto';
 import {
+  type CreateTrackRequest,
+  type FeaturedArtist,
+  type TrackResponse,
   backfillFeaturedArtists,
   createTrack,
   deleteTrack,
@@ -10,15 +13,11 @@ import {
   retryAcquisition,
   parseTrackResponse,
   tryParseTrackResponse,
-} from '@shared/apiClient/tracks';
-import { ContractError, NetworkError, isAbort } from '@shared/failure/errors';
-import { supabase } from '@shared/auth/supabaseClient';
-import { asTrackId, type TrackId } from '@shared/apiClient/ids';
-import type {
-  CreateTrackRequest,
-  FeaturedArtist,
-  TrackResponse,
-} from '@shared/apiClient/trackResponse';
+  asTrackId,
+  type TrackId,
+} from '@shared/apiClient';
+import { ContractError, NetworkError, isAbort } from '@shared/failure';
+import { supabase } from '@shared/auth';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

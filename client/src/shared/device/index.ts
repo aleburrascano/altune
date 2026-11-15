@@ -1,4 +1,8 @@
-export { shareAnalytics, useAnalyticsPreference } from '@shared/device/analyticsPreference';
+export {
+  shareAnalytics,
+  useAnalyticsPreference,
+  setAnalyticsPreferenceFileStore,
+} from '@shared/device/analyticsPreference';
 export {
   appVersion,
   appVersionLabel,

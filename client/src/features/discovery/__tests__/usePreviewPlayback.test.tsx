@@ -3,13 +3,13 @@ import type { ReactNode } from 'react';
 import { act, renderHook } from '@testing-library/react-native';
 import * as Haptics from 'expo-haptics';
 
-import { asTrackId } from '@shared/apiClient/ids';
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import { PlaybackContext } from '@shared/playback/usePlayback';
-import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
+import { asTrackId } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/apiClient';
+import { PlaybackContext } from '@shared/playback';
+import type { PlaybackContextValue } from '@shared/playback';
 import { makeIdlePlayback } from '@testing/factories';
 
-import { usePreviewPlayback } from '@features/discovery/hooks/results/usePreviewPlayback';
+import { usePreviewPlayback } from '@features/discovery';
 
 jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn().mockResolvedValue(undefined),

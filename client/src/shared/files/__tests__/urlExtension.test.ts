@@ -1,4 +1,4 @@
-import { extFromUrl } from '@shared/files/urlExtension';
+import { extFromUrl } from '@shared/files';
 
 describe('extFromUrl', () => {
   it.each<[string, string]>([

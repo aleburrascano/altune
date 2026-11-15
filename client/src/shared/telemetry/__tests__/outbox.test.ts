@@ -1,25 +1,24 @@
 import * as Crypto from 'expo-crypto';
 
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+import { notifyIdentityChange, runSignOutCleanups } from '@shared/session';
 import { signInTestUser } from '@testing/signInTestUser';
 
-import type { OutboxEntry } from '@shared/telemetry/outboxEntries';
+import { followSignedInUser, type OutboxEntry, type DiscoveryEvent } from '@shared/telemetry';
 import * as outboxModule from '@shared/telemetry/outbox';
 import {
   enqueueCritical,
   flushOutbox,
   setOutboxOwner,
   _resetOutboxForTest,
-} from '@shared/telemetry/outbox';
-import { capOutbox, dedupeById, withEnvelope } from '@shared/telemetry/outboxEntries';
-import {
+  capOutbox,
+  dedupeById,
+  withEnvelope,
   loadPersistedOutbox,
   persistOutbox,
   setOutboxFileStore,
-} from '@shared/telemetry/outboxStore';
-import type { DiscoveryEvent } from '@shared/telemetry/recordEvent';
-import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
-import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
+} from '@shared/telemetry';
+import { createMemoryFileStore } from '@shared/files';
+import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch';
 
 const { fakeFetch, FakeResponse, __http } = require('@testing/doubles/fetch.js');
 
@@ -741,6 +740,15 @@ describe('Security: entries are owned by the user who queued them', () => {
 
     expect(lastPersisted()?.map((e) => e.owner_user_id)).toEqual(['user-a']);
     expect(sentEntries()[0]).not.toHaveProperty('owner_user_id');
+  });
+
+  it('once the app makes it follow the signed-in user, a new identity owns what it queues next', async () => {
+    followSignedInUser();
+    notifyIdentityChange('user-c');
+    serverReplies(HTTP_UNAVAILABLE);
+    await enqueueCritical(event({ search_id: 'theirs' }));
+
+    expect(lastPersisted()?.map((e) => e.owner_user_id)).toEqual(['user-c']);
   });
 
   it("switching the owner drops the previous user's entries and keeps the new user's", async () => {

@@ -1,9 +1,8 @@
 import { QueryClient } from '@tanstack/react-query';
 
-import { asPlaylistId, asTrackId } from '@shared/apiClient/ids';
-import type { ListTracksResponse, TrackResponse } from '@shared/apiClient/trackResponse';
-import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
-import { libraryKeys, playlistKeys } from '@shared/query/queryKeys';
+import { asPlaylistId, asTrackId } from '@shared/apiClient';
+import type { ListTracksResponse, TrackResponse, PlaylistDetailResponse } from '@shared/apiClient';
+import { libraryKeys, playlistKeys } from '@shared/query';
 
 import {
   PATCH_POLICY,
@@ -13,7 +12,7 @@ import {
   TRACK_SHAPES,
   writeFamily,
   type TrackCacheShape,
-} from '@shared/events/trackCacheShapes';
+} from '@shared/events';
 
 function makeTrack(id: string): TrackResponse {
   return {

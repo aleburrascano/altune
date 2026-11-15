@@ -1,16 +1,10 @@
 import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Artwork } from '@shared/ui/primitives/Artwork';
-import { Tappable } from '@shared/ui/primitives/Tappable';
-import { Text } from '@shared/ui/primitives/Text';
-import { radius, spacing } from '@shared/ui/theme';
-
+import { Artwork, Tappable, Text, radius, spacing } from '@shared/ui';
 import { realPhotoUrl } from '@features/detail/domain/artistPhoto';
 import { hasManyVersions } from '@features/detail/domain/unreleasedTrack';
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import type { UnreleasedTrack } from '@shared/apiClient/enrichment';
-
+import type { DiscoveryResult, UnreleasedTrack } from '@shared/apiClient';
 import type {
   UnreleasedCard as UnreleasedCardModel,
   UnreleasedCardState,

@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 
-import { authIntentClient } from '@shared/auth/authActions';
+import { authIntentClient } from '@shared/auth';
 import { useNavigator } from '@shared/navigation';
-import { showFailureAlert } from '@shared/ui/failure/showFailure';
+import { showFailureAlert } from '@shared/ui';
 import {
   type AuthIntentResult,
   completeAuthIntent,

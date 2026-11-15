@@ -2,11 +2,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Button } from '@shared/ui/primitives/Button';
-import { showFailureAlert } from '@shared/ui/failure/showFailure';
-import { Text } from '@shared/ui/primitives/Text';
-import { spacing } from '@shared/ui/theme';
-
+import { Button, showFailureAlert, Text, spacing, AuthHeroLayout } from '@shared/ui';
 import { useUpdatePassword } from '@features/signIn/hooks/useUpdatePassword';
 import { clearRecoveryUnlock } from '@features/signIn/domain/passwordRecovery';
 import {
@@ -14,7 +10,6 @@ import {
   newPasswordFormState,
 } from '@features/signIn/domain/validation';
 import { AuthErrorBanner } from '@features/signIn/ui/AuthErrorBanner';
-import { AuthHeroLayout } from '@shared/ui/hero/AuthHeroLayout';
 import { FieldError, NewPasswordField } from '@features/signIn/ui/AuthFields';
 
 const OTHERS_NOT_REVOKED_TITLE = 'Password updated';

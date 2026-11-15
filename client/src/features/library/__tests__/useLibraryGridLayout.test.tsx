@@ -1,12 +1,10 @@
 import { fireEvent, render, screen, within } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 import { Platform } from 'react-native';
-import { asPlaylistId } from '@shared/apiClient/ids';
-import type { AlbumGroup, ArtistGroup } from '@shared/apiClient/library';
-import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
-import type { ListRefresh } from '@features/library/domain/libraryView';
-import { AlbumsGrid, ArtistsGrid } from '@features/library/ui/GroupGrids';
-import { PlaylistsGrid } from '@features/library/ui/PlaylistsGrid';
+import { asPlaylistId } from '@shared/apiClient';
+import type { AlbumGroup, ArtistGroup, PlaylistResponse } from '@shared/apiClient';
+import type { ListRefresh } from '@features/library';
+import { AlbumsGrid, ArtistsGrid, PlaylistsGrid } from '@features/library';
 import { setPlatformOS } from '@testing/setPlatformOS';
 
 let mockWindowWidth = 390;

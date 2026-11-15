@@ -1,16 +1,21 @@
 import { useState, type ReactElement } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
 
-import { Card, Text, radius, spacing, useTheme } from '@shared/ui';
-import { Artwork } from '@shared/ui/primitives/Artwork';
-import { Tappable } from '@shared/ui/primitives/Tappable';
-import { usePressableInteraction } from '@shared/ui/primitives/usePressableInteraction';
-
+import {
+  Card,
+  Text,
+  radius,
+  spacing,
+  useTheme,
+  Artwork,
+  Tappable,
+  usePressableInteraction,
+  borderWidth,
+} from '@shared/ui';
 import { kindLabel, resultKey } from '@features/discovery/domain/resultDisplay';
 
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import type { DiscoveryResult } from '@shared/apiClient';
 import type { ResultTapHandler } from '@features/discovery/hooks/results/useResultTap';
-import { borderWidth } from '@shared/ui/theme';
 
 function gridColumnsFor(contentWidth: number): number {
   if (contentWidth >= 1080) return 6;

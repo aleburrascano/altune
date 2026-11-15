@@ -1,4 +1,8 @@
 import {
+  type PlaylistId,
+  type PlaylistDetailResponse,
+  type PlaylistResponse,
+  type TrackResponse,
   addTracksToPlaylist,
   createPlaylist,
   deletePlaylist,
@@ -7,15 +11,13 @@ import {
   removeTracksFromPlaylist,
   renamePlaylist,
   type PlaylistPage,
-} from '@shared/apiClient/playlists';
-import { apiBase } from '@shared/apiClient/index';
-import { ApiError, ContractError, NetworkError } from '@shared/failure/errors';
-import { supabase } from '@shared/auth/supabaseClient';
-import { asPlaylistId, asTrackId, parsePlaylistId } from '@shared/apiClient/ids';
-import type { PlaylistId } from '@shared/apiClient/ids';
-import type { PlaylistDetailResponse, PlaylistResponse } from '@shared/apiClient/playlistResponse';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-
+  asPlaylistId,
+  asTrackId,
+  parsePlaylistId,
+} from '@shared/apiClient';
+import { apiBase } from '@shared/apiConfig';
+import { ApiError, ContractError, NetworkError } from '@shared/failure';
+import { supabase } from '@shared/auth';
 const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));

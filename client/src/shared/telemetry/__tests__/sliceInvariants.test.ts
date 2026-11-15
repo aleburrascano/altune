@@ -1,28 +1,20 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
-import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
-import { enqueueCritical } from '@shared/telemetry/outbox';
-import { withEnvelope } from '@shared/telemetry/outboxEntries';
-import { loadPersistedOutbox, setOutboxFileStore } from '@shared/telemetry/outboxStore';
-import type { DiscoveryEvent } from '@shared/telemetry/recordEvent';
+import { createMemoryFileStore } from '@shared/files';
+import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch';
+import {
+  enqueueCritical,
+  withEnvelope,
+  loadPersistedOutbox,
+  setOutboxFileStore,
+} from '@shared/telemetry';
+import type { DiscoveryEvent } from '@shared/telemetry';
 
 const EVENTS_ENQUEUED = 2;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
-function findRepoRoot(): string {
-  let dir = __dirname;
-  for (let hop = 0; hop < 12; hop += 1) {
-    if (fs.existsSync(path.join(dir, 'services', 'go-api'))) return dir;
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  throw new Error('repo root not found from ' + __dirname);
-}
-
-const SRC_ROOT = path.join(findRepoRoot(), 'client', 'src');
+const SRC_ROOT = path.resolve(__dirname, '..', '..', '..');
 const TELEMETRY_DIR = path.join(SRC_ROOT, 'shared', 'telemetry');
 const FEATURES_DIR = path.join(SRC_ROOT, 'features');
 const APP_DIR = path.join(SRC_ROOT, 'app');
@@ -56,11 +48,16 @@ function extractParenArg(source: string, callParenIndex: number): string {
 
 type CallSite = { file: string; types: string[] };
 
+const IMPORTS_ENQUEUE_CRITICAL =
+  /import\s*\{[^}]*\benqueueCritical\b[^}]*\}\s*from\s+['"]@shared\/telemetry(\/outbox)?['"]/;
+const IMPORTS_USE_RECORD_EVENT =
+  /import\s*\{[^}]*\buseRecordEvent\b[^}]*\}\s*from\s+['"]@shared\/telemetry(\/useRecordEvent)?['"]/;
+
 function scanEnqueueCriticalCallSites(files: string[]): CallSite[] {
   const sites: CallSite[] = [];
   for (const file of files) {
     const source = fs.readFileSync(file, 'utf8');
-    if (!/from\s+['"]@shared\/telemetry\/outbox['"]/.test(source)) continue;
+    if (!IMPORTS_ENQUEUE_CRITICAL.test(source)) continue;
     for (const m of source.matchAll(/\benqueueCritical\(/g)) {
       const parenIndex = m.index + m[0].length - 1;
       const arg = extractParenArg(source, parenIndex);
@@ -88,7 +85,7 @@ function scanFireAndForgetCallSites(files: string[]): CallSite[] {
   const sites: CallSite[] = [];
   for (const file of files) {
     const source = fs.readFileSync(file, 'utf8');
-    if (!/from\s+['"]@shared\/telemetry\/useRecordEvent['"]/.test(source)) continue;
+    if (!IMPORTS_USE_RECORD_EVENT.test(source)) continue;
     for (const m of source.matchAll(/\.mutate\(/g)) {
       const parenIndex = m.index + m[0].length - 1;
       const arg = extractParenArg(source, parenIndex);

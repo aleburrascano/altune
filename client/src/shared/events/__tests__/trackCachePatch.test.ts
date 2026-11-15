@@ -1,9 +1,8 @@
 import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 import { QueryClient, type InfiniteData } from '@tanstack/react-query';
-import { asPlaylistId, asTrackId } from '@shared/apiClient/ids';
-import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
-import type { ListTracksResponse, TrackResponse } from '@shared/apiClient/trackResponse';
-import { libraryKeys, playlistKeys } from '@shared/query/queryKeys';
+import { asPlaylistId, asTrackId, toReady, toTrackStatus } from '@shared/apiClient';
+import type { PlaylistDetailResponse, ListTracksResponse, TrackResponse } from '@shared/apiClient';
+import { libraryKeys, playlistKeys } from '@shared/query';
 import {
   getTrackFromCaches,
   invalidateLibraryDerived,
@@ -13,9 +12,7 @@ import {
   captureTrackPlacements,
   restoreTrackPlacements,
   forgetTrack,
-} from '@shared/events/trackCachePatch';
-import { patchTrackInCaches } from '@shared/events/trackPatchBatch';
-import {
+  patchTrackInCaches,
   makeInfinite,
   makePage,
   makePlaylistDetail,
@@ -23,9 +20,8 @@ import {
   newClient,
   registerUnfetchedQuery,
   seedTracksPrefix,
-} from '@shared/events/__tests__/trackCacheFixtures';
-import { toReady, toTrackStatus } from '@shared/apiClient/trackAcquisition';
-import { patchTrackStatus, useTrackStatusStore } from '@shared/acquisition/state/trackStatusStore';
+} from '@shared/events';
+import { patchTrackStatus, useTrackStatusStore } from '@shared/acquisition';
 
 describe('getTrackFromCaches', () => {
   it('returns undefined when nothing is cached', () => {

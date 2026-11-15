@@ -1,5 +1,5 @@
-import { addFavorite, listFavorites, removeFavorite } from '@shared/apiClient/favorites';
-import { supabase } from '@shared/auth/supabaseClient';
+import { addFavorite, listFavorites, removeFavorite } from '@shared/apiClient';
+import { supabase } from '@shared/auth';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

@@ -1,13 +1,8 @@
-import { randomUuid } from '@shared/id/uuid';
+import { randomUuid } from '@shared/id';
 
-import { ContractError } from '@shared/failure/errors';
-import {
-  apiFetch,
-  apiSend,
-  LONG_REQUEST_TIMEOUT_MS,
-  signalInit,
-  withQuery,
-} from '@shared/apiClient/index';
+import { ContractError } from '@shared/failure';
+import { apiFetch, apiSend, signalInit, withQuery } from '@shared/apiClient/adapters/http';
+import { LONG_REQUEST_TIMEOUT_MS } from '@shared/apiConfig';
 import { asTrackId, idPathSegment, type TrackId } from '@shared/apiClient/ids';
 import type { LibrarySort } from '@shared/apiClient/library';
 import {

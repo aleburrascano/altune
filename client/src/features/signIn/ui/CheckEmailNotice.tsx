@@ -1,12 +1,8 @@
 import { StyleSheet, View } from 'react-native';
 import type { ReactElement } from 'react';
 
-import { Banner } from '@shared/ui/primitives/Banner';
-import { Text } from '@shared/ui/primitives/Text';
-import { spacing } from '@shared/ui/theme';
-
+import { Banner, Text, spacing, AuthHeroLayout } from '@shared/ui';
 import { BackToSignInLink } from '@features/signIn/ui/BackToSignInLink';
-import { AuthHeroLayout } from '@shared/ui/hero/AuthHeroLayout';
 
 export function CheckEmailNotice(): ReactElement {
   return (

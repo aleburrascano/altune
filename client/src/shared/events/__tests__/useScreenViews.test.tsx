@@ -2,8 +2,8 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import { applyKillSwitches } from '@shared/killSwitch/killSwitch';
-import { useScreenViews } from '@shared/events/useScreenViews';
+import { applyKillSwitches } from '@shared/killSwitch';
+import { useScreenViews } from '@shared/events';
 import { signInTestUser } from '@testing/signInTestUser';
 
 const { __http } = require('@testing/doubles/fetch.js');

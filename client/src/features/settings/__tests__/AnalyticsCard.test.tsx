@@ -1,8 +1,8 @@
 import React from 'react';
 import { act, render, screen, fireEvent } from '@testing-library/react-native';
 
-import { useAnalyticsPreference } from '@shared/device/analyticsPreference';
-import { AnalyticsCard } from '@features/settings/ui/AnalyticsCard';
+import { useAnalyticsPreference } from '@shared/device';
+import { AnalyticsCard } from '@features/settings';
 
 describe('AnalyticsCard', () => {
   afterEach(() => {

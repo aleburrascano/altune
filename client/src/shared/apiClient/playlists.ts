@@ -1,4 +1,4 @@
-import { apiFetch, apiSend, signalInit, withQuery } from '@shared/apiClient/index';
+import { apiFetch, apiSend, signalInit, withQuery } from '@shared/apiClient/adapters/http';
 import { asPlaylistId, idPathSegment, type PlaylistId } from '@shared/apiClient/ids';
 import { parseTrackResponse } from '@shared/apiClient/tracks';
 import type {

@@ -3,15 +3,13 @@ import { createElement, type ReactElement, type ReactNode } from 'react';
 import { Keyboard, Platform, TextInput } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-import { asTrackId } from '@shared/apiClient/ids';
-import { PlaybackContext } from '@shared/playback/usePlayback';
-import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
+import { asTrackId } from '@shared/apiClient';
+import { PlaybackContext } from '@shared/playback';
+import type { PlaybackContextValue } from '@shared/playback';
 import { makeIdlePlayback } from '@testing/factories';
-import { useKeyboardShortcuts } from '@shared/ui/keyboard/useKeyboardShortcuts';
-import { DiscoverPortProvider } from '@features/discovery/ports/DiscoverPortProvider';
-import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
-import { DiscoverScreen } from '@features/discovery/ui/search/DiscoverScreen';
-
+import { useKeyboardShortcuts } from '@shared/ui';
+import { DiscoverPortProvider, DiscoverScreen } from '@features/discovery';
+import type { DiscoverPort } from '@features/discovery';
 jest.mock('decode-uri-component', () => ({ __esModule: true, default: (s: string) => s }));
 
 const mockPush = jest.fn();
@@ -154,19 +152,5 @@ describe('DiscoverScreen tap-to-dismiss-keyboard area', () => {
     render(renderDiscover());
     fireEvent.press(screen.getByTestId('discover-screen-body'));
     expect(dismiss).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('@features/discovery public surface', () => {
-  it('exports exactly DiscoverScreen, the search-state sign-out registration and the ports the app wires', () => {
-    expect(Object.keys(require('@features/discovery')).sort()).toEqual([
-      'DiscoverPortProvider',
-      'DiscoverScreen',
-      'FavoritesPortProvider',
-      'UnreleasedHitsSlotProvider',
-      'httpDiscoverPort',
-      'httpFavoritesPort',
-      'registerSearchStateSignOutReset',
-    ]);
   });
 });

@@ -4,7 +4,7 @@ import {
   isSearchableQuery,
   normalizeQuery,
   sliceCodePoints,
-} from '@features/discovery/domain/searchPaging';
+} from '@features/discovery';
 
 const MIN_QUERY_LENGTH = 2;
 

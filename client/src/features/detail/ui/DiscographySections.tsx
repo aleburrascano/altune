@@ -1,11 +1,8 @@
 import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import { Tappable } from '@shared/ui/primitives/Tappable';
-import { Text } from '@shared/ui/primitives/Text';
-import { radius, spacing, useTheme } from '@shared/ui/theme';
-
+import type { DiscoveryResult } from '@shared/apiClient';
+import { Tappable, Text, radius, spacing, useTheme } from '@shared/ui';
 import { useDiscographyFilter } from '@features/detail/hooks/useDiscographyFilter';
 import { AlbumRail } from '@features/detail/ui/AlbumRail';
 import { sharedStyles } from '@features/detail/ui/detailStyles';

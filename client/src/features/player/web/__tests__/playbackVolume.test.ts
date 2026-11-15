@@ -1,8 +1,4 @@
-import {
-  bindAudioVolume,
-  toVolume,
-  usePlaybackVolumeStore,
-} from '@features/player/web/playbackVolume';
+import { bindAudioVolume, toVolume, usePlaybackVolumeStore } from '@features/player';
 
 const QUIET = 0.25;
 const MID = 0.4;

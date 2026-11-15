@@ -1,6 +1,6 @@
-import { isAppActive, subscribeAppState } from '@shared/lifecycle/appState';
+import { isAppActive, subscribeAppState } from '@shared/lifecycle';
 
-import { onSignOut } from '@shared/session/signOutCleanup';
+import { onSignOut } from '@shared/session';
 
 const SESSION_INACTIVITY_MS = 1_800_000;
 

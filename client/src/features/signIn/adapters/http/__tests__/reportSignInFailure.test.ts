@@ -1,13 +1,9 @@
-import { apiBase } from '@shared/apiClient';
-import { appVersion } from '@shared/device/device';
-import { applyKillSwitches } from '@shared/killSwitch/killSwitch';
-import { _resetOutboxForTest, flushOutbox } from '@shared/telemetry/outbox';
+import { apiBase } from '@shared/apiConfig';
+import { appVersion } from '@shared/device';
+import { applyKillSwitches } from '@shared/killSwitch';
+import { _resetOutboxForTest, flushOutbox } from '@shared/telemetry';
 
-import { reportSignInFailure } from '@features/signIn/adapters/http/reportSignInFailure';
-import { thrownErrorDetail } from '@features/signIn/domain/authError';
-
-import { createSupabaseAuthMock } from '@features/signIn/__tests__/testUtils/authTestUtils';
-
+import { reportSignInFailure, thrownErrorDetail, createSupabaseAuthMock } from '@features/signIn';
 const { getSession } = createSupabaseAuthMock('getSession');
 
 const realFetch = global.fetch;

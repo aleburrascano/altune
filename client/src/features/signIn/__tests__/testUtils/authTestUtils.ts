@@ -1,11 +1,10 @@
 import { createElement, type ReactElement, type ReactNode } from 'react';
 import { act, renderHook } from '@testing-library/react-native';
 
-import { supabase } from '@shared/auth/supabaseClient';
+import { supabase } from '@shared/auth';
 
-import { _resetLockoutsForTest } from '@features/signIn/domain/attemptLockout';
-import { AuthPortProvider } from '@features/signIn/ports/AuthPortProvider';
-import type { AuthPort } from '@features/signIn/ports/authPort';
+import { _resetLockoutsForTest, AuthPortProvider } from '@features/signIn';
+import type { AuthPort } from '@features/signIn';
 
 type SupabaseAuthClient = typeof supabase.auth;
 

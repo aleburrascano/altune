@@ -1,6 +1,6 @@
-import type { AcquisitionStatus } from '@shared/apiClient/trackResponse';
+import type { AcquisitionStatus } from '@shared/apiClient';
 
-import { canPlay } from '@shared/playback/canPlay';
+import { canPlay } from '@shared/playback';
 
 describe('canPlay', () => {
   it.each([

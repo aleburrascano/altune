@@ -1,9 +1,8 @@
 import { create } from 'zustand';
 
-import type { TrackId } from '@shared/apiClient/ids';
-import type { WireTrackStatus } from '@shared/apiClient/trackAcquisition';
-import { isRetryable } from '@shared/failure/errors';
-import { onSignOut } from '@shared/session/signOutCleanup';
+import type { TrackId, WireTrackStatus } from '@shared/apiClient';
+import { isRetryable } from '@shared/failure';
+import { onSignOut } from '@shared/session';
 import {
   recordStatusChanged,
   type StatusChangeSource,

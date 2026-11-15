@@ -1,10 +1,14 @@
-import type { PlaylistId, TrackId } from '@shared/apiClient/ids';
-import { asPlaylistId } from '@shared/apiClient/ids';
-import type { PlaylistDetailResponse, PlaylistResponse } from '@shared/apiClient/playlistResponse';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { ApiError } from '@shared/failure/errors';
+import type {
+  PlaylistId,
+  TrackId,
+  PlaylistDetailResponse,
+  PlaylistResponse,
+  TrackResponse,
+} from '@shared/apiClient';
+import { asPlaylistId } from '@shared/apiClient';
+import { ApiError } from '@shared/failure';
 
-import type { PlaylistsPort } from '@shared/playlists/ports/playlistsPort';
+import type { PlaylistsPort } from '@shared/playlists';
 
 const NOT_FOUND_STATUS = 404;
 

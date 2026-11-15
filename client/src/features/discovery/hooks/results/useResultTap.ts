@@ -1,10 +1,10 @@
 import { useCallback, useRef } from 'react';
 
 import { useNavigator, useScreenFocusEffect } from '@shared/navigation';
-import { dismissKeyboard } from '@shared/ui/keyboard/keyboard';
-import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
+import { dismissKeyboard } from '@shared/ui';
+import { useRecordEvent } from '@shared/telemetry';
 import { stashHandoffForDetail } from '@features/discovery/domain/stashHandoffForDetail';
-import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/apiClient/discovery';
+import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/apiClient';
 
 export type ResultTapHandler = (tapped: DiscoveryResult, position: number) => void;
 

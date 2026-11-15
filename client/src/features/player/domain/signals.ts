@@ -1,6 +1,4 @@
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
-import type { QueueSource } from '@shared/playback/queueOrder';
-
+import type { PlaybackTrack, QueueSource } from '@shared/playback';
 import { libraryTrackId } from '@features/player/domain/playerStatus';
 
 const LISTEN_THRESHOLD_MS = 30000;

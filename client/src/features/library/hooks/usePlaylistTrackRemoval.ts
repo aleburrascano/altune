@@ -1,10 +1,7 @@
-import type { PlaylistId, TrackId } from '@shared/apiClient/ids';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { countLabel } from '@shared/ui/format/displayFormat';
-import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
+import type { PlaylistId, TrackId, TrackResponse } from '@shared/apiClient';
+import { countLabel, confirmDestructive } from '@shared/ui';
+import type { useQueuePlayback } from '@shared/playback';
 import { useRemoveTracksFromPlaylist } from '@shared/playlists';
-import { confirmDestructive } from '@shared/ui/dialog/dialog';
-
 import type { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
 import {
   useTrackSelection,

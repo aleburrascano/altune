@@ -3,11 +3,7 @@ import { Alert } from 'react-native';
 
 import { signInTestUser } from '@testing/signInTestUser';
 
-import {
-  reportPinBatch,
-  reportStorageFull,
-  reportUnpinBatch,
-} from '@features/library/hooks/useLibraryOffline';
+import { reportPinBatch, reportStorageFull, reportUnpinBatch } from '@features/library';
 
 const EVENTS = 'POST /v1/discovery/events';
 

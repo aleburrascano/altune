@@ -1,4 +1,4 @@
-import { useGatedCallback, useLoopEnabled } from '@shared/killSwitch/killSwitchGate';
+import { useGatedCallback, useLoopEnabled } from '@shared/killSwitch';
 
 export function useDiscoverFetchEnabled(): boolean {
   return useLoopEnabled('discovery');

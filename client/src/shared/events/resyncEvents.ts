@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 
-import { libraryKeys, playlistKeys } from '@shared/query/queryKeys';
+import { libraryKeys, playlistKeys } from '@shared/query';
 
 import type { ServerEventHandlers } from '@shared/events/serverEventTypes';
 import { TRACK_CACHE_FAMILIES } from '@shared/events/trackCacheShapes';

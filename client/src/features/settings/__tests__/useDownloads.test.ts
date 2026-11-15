@@ -1,18 +1,15 @@
 import { act, renderHook } from '@testing-library/react-native';
 import * as FileSystem from 'expo-file-system';
 
+import { pinnedByteTotal, usePinnedStore, type PinnedEntry } from '@shared/offline';
 import {
-  pinnedByteTotal,
-  usePinnedStore,
-  type PinnedEntry,
-} from '@shared/offline/state/pinnedStore';
-import { useDownloadStats, useRemoveDownloads } from '@features/settings/hooks/useDownloads';
-import { downloadStats } from '@features/settings/domain/downloadStatsModel';
-import {
+  useDownloadStats,
+  useRemoveDownloads,
+  downloadStats,
   buildDangerZoneActions,
   type ClearHistoryState,
-} from '@features/settings/domain/dangerZoneActions';
-import { asTrackId } from '@shared/apiClient/ids';
+} from '@features/settings';
+import { asTrackId } from '@shared/apiClient';
 
 const { __fs } = FileSystem as unknown as {
   __fs: {

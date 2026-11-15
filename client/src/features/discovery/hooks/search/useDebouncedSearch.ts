@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 
-import { onSignOut } from '@shared/session/signOutCleanup';
+import { onSignOut } from '@shared/session';
 
 import { getSearchState, setSearchState } from '@features/discovery/domain/searchState';
 import {

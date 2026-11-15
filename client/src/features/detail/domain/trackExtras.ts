@@ -1,8 +1,11 @@
-import { parseTrackId, type TrackId } from '@shared/apiClient/ids';
-import type { AcquisitionStatus, FeaturedArtist } from '@shared/apiClient/trackResponse';
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import { featuredArtistsFromExtras } from '@shared/apiClient/featuredArtists';
-
+import {
+  type AcquisitionStatus,
+  type FeaturedArtist,
+  type DiscoveryResult,
+  parseTrackId,
+  type TrackId,
+  featuredArtistsFromExtras,
+} from '@shared/apiClient';
 export type TrackExtras = {
   durationSeconds: number | null;
   album: string | null;

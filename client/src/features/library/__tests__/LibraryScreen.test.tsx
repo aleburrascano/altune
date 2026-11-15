@@ -2,17 +2,19 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
-import { ApiError } from '@shared/failure/errors';
-import { PlaybackContext } from '@shared/playback/usePlayback';
-import { libraryKeys } from '@shared/query/queryKeys';
+import { ApiError } from '@shared/failure';
+import { PlaybackContext } from '@shared/playback';
+import { libraryKeys } from '@shared/query';
 
-import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
-import { playlist, track } from '@features/library/__tests__/trackMutationFixtures';
+import {
+  createMemoryLibraryPort,
+  playlist,
+  track,
+  LibraryPortProvider,
+  LibraryScreen,
+} from '@features/library';
 import { idlePlayback } from '@testing/queryHarness';
-import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
-import type { LibraryPort } from '@features/library/ports/libraryPort';
-
-import { LibraryScreen } from '@features/library/ui/LibraryScreen';
+import type { LibraryPort } from '@features/library';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 
 const SKELETON_TILES = 4;

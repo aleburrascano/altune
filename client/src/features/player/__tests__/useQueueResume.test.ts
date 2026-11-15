@@ -4,29 +4,31 @@ import TrackPlayer from 'react-native-track-player';
 
 import { signInTestUser } from '@testing/signInTestUser';
 
-import { asTrackId } from '@shared/apiClient/ids';
-import type { ResolvedAudioUrl } from '@shared/apiClient/audio';
-import type { QueueStateResponse, SaveQueueStateRequest } from '@shared/apiClient/playback';
-import type { AcquisitionStatus, TrackResponse } from '@shared/apiClient/trackResponse';
-import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
-import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
-import { ApiError, NetworkError } from '@shared/failure/errors';
-import { _resetGlobalErrorReportingForTest } from '@shared/telemetry/clientErrorReporting';
+import { asTrackId } from '@shared/apiClient';
+import type {
+  ResolvedAudioUrl,
+  QueueStateResponse,
+  SaveQueueStateRequest,
+  AcquisitionStatus,
+  TrackResponse,
+} from '@shared/apiClient';
+import { orderedQueueTracks, useQueueStore, trackKey, type PlaybackTrack } from '@shared/playback';
+import { runSignOutCleanups } from '@shared/session';
+import { ApiError, NetworkError } from '@shared/failure';
+import { _resetGlobalErrorReportingForTest } from '@shared/telemetry';
 
-import { useQueueResume } from '@features/player/hooks/useQueueResume';
-import { loadNativeQueue } from '@features/player/native/loadNativeTrack';
 import {
+  useQueueResume,
+  loadNativeQueue,
   _resetPlaybackHealthForTest,
   flushPlaybackHealth,
-} from '@features/player/domain/playbackHealth';
-import { usePlaybackErrorStore } from '@features/player/hooks/usePlaybackErrorStore';
-
-import { libraryTrack, previewTrack } from '@features/player/__tests__/fixtures';
-import { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlaybackPort';
-import { installPlaybackPort } from '@features/player/ports/activePlaybackPort';
-import { httpPlaybackPort } from '@features/player/adapters/http/httpPlaybackPort';
-
+  usePlaybackErrorStore,
+  libraryTrack,
+  previewTrack,
+  createMemoryPlaybackPort,
+  installPlaybackPort,
+  httpPlaybackPort,
+} from '@features/player';
 beforeAll(() => {
   installPlaybackPort(httpPlaybackPort);
 });

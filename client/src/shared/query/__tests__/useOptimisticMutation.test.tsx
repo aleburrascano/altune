@@ -3,10 +3,10 @@ import { Alert } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+import { runSignOutCleanups } from '@shared/session';
 import { signInTestUser } from '@testing/signInTestUser';
 
-import { useOptimisticMutation } from '@shared/query/useAppMutation';
+import { useOptimisticMutation } from '@shared/query';
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 

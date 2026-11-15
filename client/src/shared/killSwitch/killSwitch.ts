@@ -1,7 +1,12 @@
-import { readDocument, writeDocumentAtomically } from '@shared/files/durableDocument';
-import { defaultFileStore } from '@shared/files/defaultFileStore';
-import { createFileStoreSlot, type FileStore, type StoredDirectory } from '@shared/files/fileStore';
-import type { JsonValue } from '@shared/files/json';
+import {
+  type JsonValue,
+  readDocument,
+  writeDocumentAtomically,
+  defaultFileStore,
+  createFileStoreSlot,
+  type FileStore,
+  type StoredDirectory,
+} from '@shared/files';
 
 export type KillSwitchLoop =
   'serverEvents' | 'telemetryFlush' | 'offlineDownloads' | 'detailEnrichment' | 'discovery';

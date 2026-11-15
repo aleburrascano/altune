@@ -1,31 +1,26 @@
 import TrackPlayer from 'react-native-track-player';
 
-import { audioStreamUrl } from '@shared/apiClient/audio';
-import { asTrackId } from '@shared/apiClient/ids';
-import { useQueueStore } from '@shared/playback/queueStore';
-import { type TrackKey, trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
-
-import { createNativePlaybackActions } from '@features/player/native/createNativePlaybackActions';
-import { ensurePlayerSetup } from '@features/player/native/initPlayer';
-import { httpPlaybackPort } from '@features/player/adapters/http/httpPlaybackPort';
-import { installPlaybackPort } from '@features/player/ports/activePlaybackPort';
-import { signInTestUser } from '@testing/signInTestUser';
+import { audioStreamUrl, asTrackId } from '@shared/apiClient';
+import { useQueueStore, type TrackKey, trackKey, type PlaybackTrack } from '@shared/playback';
 import {
+  createNativePlaybackActions,
+  ensurePlayerSetup,
+  httpPlaybackPort,
+  installPlaybackPort,
   forgetAllSwaps,
   swapUpcomingToLocal,
   wasSwappedToLocal,
-} from '@features/player/native/nativeTrackSwap';
-import { NativeQueueTimeoutError, withNativeQueue } from '@features/player/native/nativeQueueLock';
-import { usePlaybackErrorStore } from '@features/player/hooks/usePlaybackErrorStore';
-import {
+  NativeQueueTimeoutError,
+  withNativeQueue,
+  usePlaybackErrorStore,
   isIndexOutOfBounds,
   reportingQueueFailure,
   reportQueueFailure,
-} from '@features/player/native/queueFailureReport';
-
-import { libraryTrack, previewTrack } from '@features/player/__tests__/fixtures';
-import { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlaybackPort';
-
+  libraryTrack,
+  previewTrack,
+  createMemoryPlaybackPort,
+} from '@features/player';
+import { signInTestUser } from '@testing/signInTestUser';
 const QUEUE_OUT_OF_SYNC_MESSAGE = 'The queue fell out of sync. Tap retry to reload it.';
 const QUEUE_UPDATE_FAILED_MESSAGE = "Couldn't update the queue. Tap retry to resync.";
 const QUEUE_OP_TIMEOUT_MS = 15_000;

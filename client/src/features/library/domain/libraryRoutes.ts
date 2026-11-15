@@ -1,4 +1,4 @@
-import { tabRootFromSegments } from '@shared/navigation/navigator';
+import { tabRootFromSegments } from '@shared/navigation';
 import type { Navigator } from '@shared/navigation';
 
 export type FeaturingDetailRoute = '/library/detail' | '/discover/detail';

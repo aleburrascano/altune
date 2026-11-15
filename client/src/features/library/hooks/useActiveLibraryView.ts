@@ -1,8 +1,6 @@
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
-import type { usePlayback } from '@shared/playback/usePlayback';
-import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
-import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
+import type { TrackResponse, PlaylistResponse } from '@shared/apiClient';
+import type { usePlayback, useQueuePlayback } from '@shared/playback';
+import type { MenuAnchor } from '@shared/ui';
 import { useAlbumsView, useArtistsView } from '@features/library/hooks/useGroupViews';
 import type { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
 import type { PlaylistActionsState } from '@features/library/hooks/usePlaylistActions';

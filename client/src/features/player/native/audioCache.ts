@@ -1,7 +1,7 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
-import type { TrackId } from '@shared/apiClient/ids';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import type { TrackId } from '@shared/apiClient';
+import type { PlaybackTrack } from '@shared/playback';
 
 import { warnPlayback } from '@features/player/domain/playbackError';
 import { libraryTrackId } from '@features/player/domain/playerStatus';

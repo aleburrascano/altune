@@ -1,5 +1,5 @@
 import { DISCOVERY_KINDS } from '@shared/apiClient/discovery';
-import { apiFetch, apiSend } from '@shared/apiClient/index';
+import { apiFetch, apiSend } from '@shared/apiClient/adapters/http';
 import { asFavoriteKey } from '@shared/apiClient/ids';
 import { asRecord, asString, member, parseListEnvelope } from '@shared/apiClient/wireDecoders';
 import type { DiscoveryKind } from '@shared/apiClient/discovery';

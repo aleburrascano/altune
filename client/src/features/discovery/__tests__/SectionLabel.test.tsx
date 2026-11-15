@@ -2,16 +2,10 @@ import React from 'react';
 import { StyleSheet, type TextStyle } from 'react-native';
 import { render as renderBare, screen } from '@testing-library/react-native';
 
-import { darkTheme } from '@shared/ui/theme/theme';
-import { spacing } from '@shared/ui/theme';
-
-import { BlendedSection } from '@features/discovery/ui/results/BlendedSection';
-import { DiscoverBody } from '@features/discovery/ui/search/DiscoverBody';
-import { TopResultCard } from '@features/discovery/ui/results/TopResultCard';
-import { resultFixture } from '@features/discovery/__tests__/fixtures';
-
-import type { ResultsCommonProps } from '@features/discovery/ui/results/ResultsList';
-import { PlaybackContext } from '@shared/playback/usePlayback';
+import { darkTheme, spacing } from '@shared/ui';
+import { BlendedSection, DiscoverBody, TopResultCard, resultFixture } from '@features/discovery';
+import type { ResultsCommonProps } from '@features/discovery';
+import { PlaybackContext } from '@shared/playback';
 import { idlePlayback } from '@testing/queryHarness';
 
 function render(ui: React.ReactElement): ReturnType<typeof renderBare> {

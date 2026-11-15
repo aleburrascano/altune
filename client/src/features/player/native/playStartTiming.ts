@@ -1,8 +1,8 @@
 import { State } from 'react-native-track-player';
 
-import { isTelemetryGated } from '@shared/failure/errors';
-import type { JsonObject } from '@shared/files/json';
-import { recordEvent } from '@shared/telemetry/recordEvent';
+import { isTelemetryGated } from '@shared/failure';
+import type { JsonObject } from '@shared/files';
+import { recordEvent } from '@shared/telemetry';
 
 import { warnPlayback } from '@features/player/domain/playbackError';
 

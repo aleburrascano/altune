@@ -1,13 +1,12 @@
 import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import { useImpressionLogger } from '@features/discovery/hooks/results/useImpressionLogger';
-import { resultFixture } from '@features/discovery/__tests__/fixtures';
+import { useImpressionLogger, resultFixture } from '@features/discovery';
 import { makeWrapper } from '@testing/makeWrapper';
 import { signInTestUser } from '@testing/signInTestUser';
 
 import type { ViewToken } from 'react-native';
-import type { DiscoverySearchResponse } from '@shared/apiClient/discovery';
+import type { DiscoverySearchResponse } from '@shared/apiClient';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

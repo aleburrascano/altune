@@ -3,32 +3,28 @@ import { posix } from 'path';
 import { act, waitFor } from '@testing-library/react-native';
 import TrackPlayer from 'react-native-track-player';
 
-import { fetchAudioUrls } from '@shared/apiClient/audio';
-import { asTrackId, parseTrackId, type TrackId } from '@shared/apiClient/ids';
-import { useQueueStore } from '@shared/playback/queueStore';
-import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
-
-import { installPlaybackPort } from '@features/player/ports/activePlaybackPort';
-import type { PlaybackPort } from '@features/player/ports/playbackPort';
-import * as audioCache from '@features/player/native/audioCache';
-import { MAX_PREFETCH_FILE_BYTES, cacheDir, findCached } from '@features/player/native/audioCache';
-import { evictCached, prefetchNext } from '@features/player/native/audioPrefetch';
-import { forgetAllSwaps, wasSwappedToLocal } from '@features/player/native/nativeTrackSwap';
+import { fetchAudioUrls, asTrackId, parseTrackId, type TrackId } from '@shared/apiClient';
+import { useQueueStore, trackKey, type PlaybackTrack } from '@shared/playback';
 import {
+  type PlaybackPort,
+  installPlaybackPort,
+  MAX_PREFETCH_FILE_BYTES,
+  cacheDir,
+  findCached,
+  evictCached,
+  prefetchNext,
+  forgetAllSwaps,
+  wasSwappedToLocal,
   _resetPlaybackHealthForTest,
   flushPlaybackHealth,
-} from '@features/player/domain/playbackHealth';
-
-import {
   libraryTrack,
   libraryTrackWithId,
   cdnAudioUrls,
-} from '@features/player/__tests__/fixtures';
-import {
   createMemoryPlaybackPort,
   type MemoryPlaybackSeed,
-} from '@features/player/__tests__/memoryPlaybackPort';
-import { httpPlaybackPort } from '@features/player/adapters/http/httpPlaybackPort';
+  httpPlaybackPort,
+} from '@features/player';
+import * as audioCache from '@features/player/native/audioCache';
 import { signInTestUser } from '@testing/signInTestUser';
 
 const PREFETCH_STALL_TIMEOUT_MS = 15_000;

@@ -1,13 +1,12 @@
 import { renderHook } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import { httpPlaylistsPort } from '@shared/playlists/adapters/http/httpPlaylistsPort';
-import { createMemoryPlaylistsPort } from '@shared/playlists/__tests__/memoryPlaylistsPort';
 import {
+  httpPlaylistsPort,
+  createMemoryPlaylistsPort,
   PlaylistsPortProvider,
   usePlaylistsPort,
-} from '@shared/playlists/ports/PlaylistsPortProvider';
-
+} from '@shared/playlists';
 describe('usePlaylistsPort', () => {
   it('hands back the HTTP port when no provider is mounted', () => {
     const { result } = renderHook(() => usePlaylistsPort());

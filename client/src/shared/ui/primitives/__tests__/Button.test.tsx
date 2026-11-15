@@ -2,11 +2,8 @@ import { Text } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { signInTestUser } from '@testing/signInTestUser';
-import { applyKillSwitches } from '@shared/killSwitch/killSwitch';
-import { Button } from '@shared/ui/primitives/Button';
-import { Chip } from '@shared/ui/primitives/Chip';
-import { IconButton } from '@shared/ui/primitives/IconButton';
-
+import { applyKillSwitches } from '@shared/killSwitch';
+import { Button, Chip, IconButton } from '@shared/ui';
 const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));

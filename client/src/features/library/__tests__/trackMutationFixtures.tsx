@@ -1,21 +1,19 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider, type InfiniteData } from '@tanstack/react-query';
 
-import { asPlaylistId, asTrackId } from '@shared/apiClient/ids';
-import type { ListTracksResponse, TrackResponse } from '@shared/apiClient/trackResponse';
-import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
-import { useTrackStatusStore } from '@shared/acquisition/state/trackStatusStore';
-import type { TrackStatus } from '@shared/acquisition/state/trackStatusStore';
-import { libraryKeys, playlistKeys } from '@shared/query/queryKeys';
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
-import { AcquisitionPortProvider } from '@shared/acquisition/ports/AcquisitionPortProvider';
-import type { AcquisitionPort } from '@shared/acquisition/ports/acquisitionPort';
-import { createMemoryAcquisitionPort } from '@shared/acquisition/__tests__/memoryAcquisitionPort';
-import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
-import type { LibraryPort } from '@features/library/ports/libraryPort';
+import { asPlaylistId, asTrackId } from '@shared/apiClient';
+import type { ListTracksResponse, TrackResponse, PlaylistDetailResponse } from '@shared/apiClient';
+import {
+  useTrackStatusStore,
+  AcquisitionPortProvider,
+  createMemoryAcquisitionPort,
+} from '@shared/acquisition';
+import type { TrackStatus, AcquisitionPort } from '@shared/acquisition';
+import { libraryKeys, playlistKeys } from '@shared/query';
+import { runSignOutCleanups } from '@shared/session';
+import { LibraryPortProvider, createMemoryLibraryPort } from '@features/library';
+import type { LibraryPort } from '@features/library';
 import { trackResponseFactory } from '@testing/factories';
-
-import { createMemoryLibraryPort } from './memoryLibraryPort';
 
 export function track(id: string, overrides: Partial<TrackResponse> = {}): TrackResponse {
   return trackResponseFactory.build({

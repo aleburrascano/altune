@@ -2,10 +2,15 @@ import type { ReactElement, ReactNode } from 'react';
 import { ActivityIndicator, StyleSheet } from 'react-native';
 import { Ban, Check, Plus, RotateCw } from 'lucide-react-native';
 
-import { useTheme, minInteractiveHeight, radius, spacing, type Theme } from '@shared/ui/theme';
-import { Tappable } from '@shared/ui/primitives/Tappable';
-import { Text } from '@shared/ui/primitives/Text';
-
+import {
+  useTheme,
+  minInteractiveHeight,
+  radius,
+  spacing,
+  type Theme,
+  Tappable,
+  Text,
+} from '@shared/ui';
 import {
   type SaveControlState,
   type SaveState,

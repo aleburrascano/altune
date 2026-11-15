@@ -1,8 +1,6 @@
-import { NetworkError } from '@shared/failure/errors';
-import { authIntentClient, startOAuth } from '@shared/auth/authActions';
+import { NetworkError } from '@shared/failure';
+import { authIntentClient, startOAuth, withAuthDeadline } from '@shared/auth';
 import { useNavigator } from '@shared/navigation';
-
-import { withAuthDeadline } from '@shared/auth/authDeadline';
 import { authRedirectUrl } from '@features/signIn/domain/authRedirect';
 import { completeAuthIntent, type AuthRouter } from '@features/signIn/domain/completeAuthIntent';
 import { dismissAuthSession, openAuthSession } from '@features/signIn/native/authBrowser';

@@ -1,13 +1,18 @@
 import { StyleSheet, View } from 'react-native';
 import { Search } from 'lucide-react-native';
 
-import { KeepInputFocusArea } from '@shared/ui/keyboard/keyboard';
-import { pressedStyle } from '@shared/ui/primitives/pressedStyle';
-import { Text } from '@shared/ui/primitives/Text';
-import { Tappable } from '@shared/ui/primitives/Tappable';
-import { useTheme } from '@shared/ui/theme/useTheme';
-import { spacing, radius, touchTarget, zLayer } from '@shared/ui/theme/tokens';
-import type { DiscoverySuggestion } from '@shared/apiClient/discovery';
+import {
+  KeepInputFocusArea,
+  pressedStyle,
+  Text,
+  Tappable,
+  useTheme,
+  spacing,
+  radius,
+  touchTarget,
+  zLayer,
+} from '@shared/ui';
+import type { DiscoverySuggestion } from '@shared/apiClient';
 
 interface SuggestionsListProps {
   suggestions: DiscoverySuggestion[];

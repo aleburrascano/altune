@@ -1,10 +1,10 @@
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+import { runSignOutCleanups } from '@shared/session';
 import {
   getSearchState,
   resetSearchState,
   setSearchState,
-} from '@features/discovery/domain/searchState';
-import { registerSearchStateSignOutReset } from '@features/discovery/adapters/registerSearchStateSignOutReset';
+  registerSearchStateSignOutReset,
+} from '@features/discovery';
 import type * as SearchStateModule from '@features/discovery/domain/searchState';
 
 beforeEach(() => {

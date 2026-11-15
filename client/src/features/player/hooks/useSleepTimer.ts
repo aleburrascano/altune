@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { create } from 'zustand';
 
-import type { ActionSheetOption } from '@shared/ui/primitives/ActionSheet';
-import { monotonicNow } from '@shared/timing/monotonicNow';
+import type { ActionSheetOption } from '@shared/ui';
+import { monotonicNow } from '@shared/timing';
 
 type SleepTimerState = {
   endsAt: number | null;

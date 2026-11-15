@@ -11,15 +11,10 @@ import {
   SkipForward,
 } from 'lucide-react-native';
 
-import { withFeaturing } from '@shared/apiClient/featuredArtists';
+import { withFeaturing } from '@shared/apiClient';
 import { shouldRestartOnPrevious } from '@features/player/domain/restartOnPrevious';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
-import { Artwork } from '@shared/ui/primitives/Artwork';
-import { Text } from '@shared/ui/primitives/Text';
-import { IconButton } from '@shared/ui/primitives/IconButton';
-import { Tappable } from '@shared/ui/primitives/Tappable';
-import { useTheme } from '@shared/ui/theme';
-import { radius, spacing } from '@shared/ui/theme/tokens';
+import type { PlaybackTrack } from '@shared/playback';
+import { Artwork, Text, IconButton, Tappable, useTheme, radius, spacing } from '@shared/ui';
 import {
   canRetryPlaybackError,
   endedLabel,

@@ -1,6 +1,6 @@
-import { NetworkError } from '@shared/failure/errors';
+import { NetworkError } from '@shared/failure';
 
-import { withinAuthDeadline } from '@shared/auth/authDeadline';
+import { withinAuthDeadline } from '@shared/auth';
 
 const AUTH_CALL_TIMEOUT_MS = 15_000;
 

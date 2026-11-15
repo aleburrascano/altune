@@ -1,21 +1,23 @@
 import { QueryClient } from '@tanstack/react-query';
 
 import { act, renderHook, waitFor } from '@testing-library/react-native';
-import { isRetryable } from '@shared/failure/errors';
-import type { DiscoveryResult, DiscoverySource } from '@shared/apiClient/discovery';
-import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
-import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
+import { isRetryable } from '@shared/failure';
+import type { DiscoveryResult, DiscoverySource } from '@shared/apiClient';
+import { createMemoryFileStore } from '@shared/files';
+import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch';
 
-import { useAlbumTracks } from '@features/detail/hooks/useAlbumTracks';
-import { useArtistContent } from '@features/detail/hooks/useArtistContent';
-import { useRelatedTracks } from '@features/detail/hooks/useRelatedTracks';
+import {
+  useAlbumTracks,
+  useArtistContent,
+  useRelatedTracks,
+  useAlbumDiscovery,
+  useArtistDiscovery,
+  useDetailEnrichments,
+  useLateralNav,
+  useResolveMissingSources,
+} from '@features/detail';
 import { createWrapper, signInTestUser, createTestQueryClient } from '@testing/queryHarness';
-import { useAlbumDiscovery, useArtistDiscovery } from '@features/detail/hooks/useEntityDiscovery';
-import { useDetailEnrichments } from '@features/detail/hooks/useDetailEnrichments';
-import type { EnrichmentProvider } from '@features/detail/domain/detailHealth';
-import { useLateralNav } from '@features/detail/hooks/useDetailNavigation';
-import { useResolveMissingSources } from '@features/detail/hooks/useResolveMissingSources';
-
+import type { EnrichmentProvider } from '@features/detail';
 const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('expo-router', () => ({

@@ -1,14 +1,12 @@
 import { useRef, type ReactElement } from 'react';
 import { StyleSheet, useWindowDimensions, type View } from 'react-native';
 import { MoreVertical } from 'lucide-react-native';
-import type { TrackId } from '@shared/apiClient/ids';
-import { useTheme } from '@shared/ui';
-import { Tappable } from '@shared/ui/primitives/Tappable';
-import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
-import type { PinnedStatus } from '@shared/offline/state/pinnedStore';
+import type { TrackId } from '@shared/apiClient';
+import { useTheme, Tappable, touchTarget } from '@shared/ui';
+import type { MenuAnchor } from '@shared/ui';
+import type { PinnedStatus } from '@shared/offline';
 import { PINNED_GLYPH, PINNED_GLYPH_LABEL } from '@features/library/ui/pinnedGlyphs';
 import { pinnedStatusDisplay } from '@features/library/domain/pinnedStatusDisplay';
-import { touchTarget } from '@shared/ui/theme';
 
 export function LibraryRowMoreButton({
   trackId,

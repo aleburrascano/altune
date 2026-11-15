@@ -1,11 +1,8 @@
 import { useEffect, type ReactElement } from 'react';
 import { StyleSheet, View, ActivityIndicator, type GestureResponderEvent } from 'react-native';
-import { Text, spacing, useTheme } from '@shared/ui';
-import { Tappable, type TappableProps } from '@shared/ui/primitives/Tappable';
-import { recordFailureShownOnce } from '@shared/acquisition/state/acquisitionTelemetry';
-import type { FailedAcquisition, TrackFields } from '@shared/apiClient/trackResponse';
-import type { TrackId } from '@shared/apiClient/ids';
-
+import { Text, spacing, useTheme, Tappable, type TappableProps } from '@shared/ui';
+import { recordFailureShownOnce } from '@shared/acquisition';
+import type { FailedAcquisition, TrackFields, TrackId } from '@shared/apiClient';
 type FailedTrack = TrackFields & FailedAcquisition;
 
 export function LibraryRowFailure({

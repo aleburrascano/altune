@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { describeError } from '@shared/failure/describeError';
+import { describeError } from '@shared/failure';
 import { Button, Screen, Skeleton, Text, spacing } from '@shared/ui';
 
 const SKELETON_TILES = ['tile-a', 'tile-b', 'tile-c', 'tile-d'];

@@ -1,9 +1,8 @@
 import { QueryClient, type InfiniteData } from '@tanstack/react-query';
 
-import { asPlaylistId, asTrackId } from '@shared/apiClient/ids';
-import type { ListTracksResponse, TrackResponse } from '@shared/apiClient/trackResponse';
-import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
-import { libraryKeys } from '@shared/query/queryKeys';
+import { asPlaylistId, asTrackId } from '@shared/apiClient';
+import type { ListTracksResponse, TrackResponse, PlaylistDetailResponse } from '@shared/apiClient';
+import { libraryKeys } from '@shared/query';
 
 export function makeTrack(overrides: Partial<TrackResponse> = {}): TrackResponse {
   return {

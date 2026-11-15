@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
-import type { TrackId } from '@shared/apiClient/ids';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
+import type { TrackId, TrackResponse } from '@shared/apiClient';
 import { useLibrarySearch } from '@features/library/hooks/useLibrarySearch';
 import { useLibraryTracks } from '@features/library/hooks/useLibraryTracks';
 import { useSelection, type Selection } from '@features/library/hooks/useSelection';

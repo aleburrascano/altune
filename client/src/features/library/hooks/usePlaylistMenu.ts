@@ -1,10 +1,9 @@
-import type { PlaylistId } from '@shared/apiClient/ids';
+import type { PlaylistId, TrackResponse } from '@shared/apiClient';
 import type { Navigator } from '@shared/navigation';
 import { useDeletePlaylist } from '@shared/playlists';
-import { confirmDestructive } from '@shared/ui/dialog/dialog';
+import { confirmDestructive } from '@shared/ui';
 import { goBackOrToLibrary } from '@features/library/domain/libraryRoutes';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
+import type { ContextMenuItem } from '@shared/ui';
 import {
   offlineEligibility,
   reportPinBatch,

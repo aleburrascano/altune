@@ -6,10 +6,8 @@ import { NetworkError } from '@shared/apiClient';
 
 import { signInTestUser } from '@testing/signInTestUser';
 
-import { SettingsScreen } from '@features/settings/ui/SettingsScreen';
-import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
-import { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
-
+import { SettingsScreen } from '@features/settings';
+import { FeaturePorts, httpFeaturePorts } from '@/mobile';
 const RETRY_BACKOFF_BASE_MS = 1_000;
 
 const { __http } = require('@testing/doubles/fetch.js');

@@ -1,9 +1,7 @@
 import fc from 'fast-check';
 
-import { capOutbox, dedupeById, withEnvelope } from '@shared/telemetry/outboxEntries';
-import type { OutboxEntry } from '@shared/telemetry/outboxEntries';
-import type { DiscoveryEventType } from '@shared/telemetry/recordEvent';
-
+import { capOutbox, dedupeById, withEnvelope } from '@shared/telemetry';
+import type { OutboxEntry, DiscoveryEventType } from '@shared/telemetry';
 const EVENT_TYPES: DiscoveryEventType[] = [
   'results_shown',
   'result_clicked',

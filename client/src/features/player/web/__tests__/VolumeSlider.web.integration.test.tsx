@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import { WIDE_LAYOUT_MIN_WIDTH } from '@shared/ui/layout/breakpoints';
+import { WIDE_LAYOUT_MIN_WIDTH } from '@shared/ui';
 
 import { toVolume, usePlaybackVolumeStore } from '@features/player/web/playbackVolume';
 import { VolumeSlider } from '@features/player/web/VolumeSlider';

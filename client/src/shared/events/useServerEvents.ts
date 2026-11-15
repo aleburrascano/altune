@@ -1,12 +1,11 @@
 import { useEffect } from 'react';
-import { isAppActive, subscribeAppState } from '@shared/lifecycle/appState';
+import { isAppActive, subscribeAppState } from '@shared/lifecycle';
 import { useQueryClient } from '@tanstack/react-query';
 
-import { apiBase } from '@shared/apiClient/config';
-import { withinAuthDeadline } from '@shared/auth/authDeadline';
-import { supabase } from '@shared/auth/supabaseClient';
-import { isLoopEnabled, onKillSwitchChange } from '@shared/killSwitch/killSwitch';
-import { onSignOut } from '@shared/session/signOutCleanup';
+import { apiBase } from '@shared/apiConfig';
+import { withinAuthDeadline, supabase } from '@shared/auth';
+import { isLoopEnabled, onKillSwitchChange } from '@shared/killSwitch';
+import { onSignOut } from '@shared/session';
 import { applyServerEvent } from '@shared/events/applyServerEvent';
 import { SSEClient } from '@shared/events/sseClient';
 import type { ServerEvent } from '@shared/events/sseFrames';

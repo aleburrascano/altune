@@ -2,12 +2,10 @@ import React from 'react';
 import { Platform } from 'react-native';
 import { fireEvent, render as renderBare, screen } from '@testing-library/react-native';
 
-import { DiscoverBody } from '@features/discovery/ui/search/DiscoverBody';
-import { resultFixture } from '@features/discovery/__tests__/fixtures';
-
-import type { DiscoverView } from '@features/discovery/domain/discoverView';
-import type { ResultSection } from '@shared/apiClient/discovery';
-import { PlaybackContext } from '@shared/playback/usePlayback';
+import { DiscoverBody, resultFixture } from '@features/discovery';
+import type { DiscoverView } from '@features/discovery';
+import type { ResultSection } from '@shared/apiClient';
+import { PlaybackContext } from '@shared/playback';
 import { idlePlayback } from '@testing/queryHarness';
 import { setPlatformOS } from '@testing/setPlatformOS';
 

@@ -1,9 +1,6 @@
 import { StyleSheet, View } from 'react-native';
 
-import { pressedStyle } from '@shared/ui/primitives/pressedStyle';
-import { Text } from '@shared/ui/primitives/Text';
-import { Tappable } from '@shared/ui/primitives/Tappable';
-import { spacing } from '@shared/ui/theme/tokens';
+import { pressedStyle, Text, Tappable, spacing } from '@shared/ui';
 
 interface CorrectionBannerProps {
   correctedQuery: string;

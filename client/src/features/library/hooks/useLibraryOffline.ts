@@ -1,15 +1,14 @@
 import { useCallback } from 'react';
 
-import type { TrackId } from '@shared/apiClient/ids';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { offlineDownloadsSupported } from '@shared/offline/domain/offlineSupport';
+import type { TrackId, TrackResponse } from '@shared/apiClient';
 import {
+  offlineDownloadsSupported,
   usePinnedStore,
   type PinAdmission,
   type PinBatchResult,
   type PinnedStatus,
   type UnpinBatchResult,
-} from '@shared/offline/state/pinnedStore';
+} from '@shared/offline';
 import { showFailureAlert } from '@shared/ui';
 
 export type LibraryOffline = {

@@ -1,18 +1,22 @@
 import { Alert } from 'react-native';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClientProvider, type InfiniteData } from '@tanstack/react-query';
-import { ApiError } from '@shared/failure/errors';
-import { asTrackId, type TrackId } from '@shared/apiClient/ids';
-import { useTrackStatusStore } from '@shared/acquisition/state/trackStatusStore';
-import { usePinnedStore } from '@shared/offline/state/pinnedStore';
-import { RETRY_TAIL } from '@shared/failure/describeError';
-import { TRACK_CACHE_FAMILIES } from '@shared/events/trackCacheShapes';
-import type { ReactNode } from 'react';
-import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
-import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
-import type { LibraryPort } from '@features/library/ports/libraryPort';
-import { useDeleteTracks, useDeleteTrack } from '@features/library/hooks/useDeleteTracks';
+import { ApiError, RETRY_TAIL } from '@shared/failure';
 import {
+  type ListTracksResponse,
+  type PlaylistDetailResponse,
+  asTrackId,
+  type TrackId,
+} from '@shared/apiClient';
+import { useTrackStatusStore } from '@shared/acquisition';
+import { usePinnedStore } from '@shared/offline';
+import { TRACK_CACHE_FAMILIES } from '@shared/events';
+import type { ReactNode } from 'react';
+import {
+  createMemoryLibraryPort,
+  LibraryPortProvider,
+  useDeleteTracks,
+  useDeleteTrack,
   track,
   page,
   TRACKS_KEY,
@@ -27,10 +31,9 @@ import {
   playlist,
   PLAYLIST_KEY,
   READY,
-} from './trackMutationFixtures';
-import type { ListTracksResponse } from '@shared/apiClient/trackResponse';
-import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
-import { libraryKeys } from '@shared/query/queryKeys';
+} from '@features/library';
+import type { LibraryPort } from '@features/library';
+import { libraryKeys } from '@shared/query';
 import { signInTestUser } from '@testing/signInTestUser';
 
 const realUnpin = usePinnedStore.getState().unpin;

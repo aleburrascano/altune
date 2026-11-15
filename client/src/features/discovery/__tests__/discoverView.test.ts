@@ -6,11 +6,10 @@ import {
   asyncViewForDiscoverView,
   type DiscoverHookState,
   type DiscoverView,
-} from '@features/discovery/domain/discoverView';
-import { resultFixture } from '@features/discovery/__tests__/fixtures';
-
-import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/apiClient/discovery';
-import type { AsyncView } from '@shared/ui/async/asyncView';
+  resultFixture,
+} from '@features/discovery';
+import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/apiClient';
+import type { AsyncView } from '@shared/ui';
 
 function responseFixture(results: DiscoveryResult[], partial = false): DiscoverySearchResponse {
   return {

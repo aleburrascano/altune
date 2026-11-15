@@ -1,8 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
 
-import { Text } from '@shared/ui/primitives/Text';
-import { TextField } from '@shared/ui/primitives/TextField';
-
+import { Text, TextField } from '@shared/ui';
 import { PASSWORD_REQUIREMENTS_HINT } from '@features/signIn/domain/validation';
 
 type FieldErrorProps = {

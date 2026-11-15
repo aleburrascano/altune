@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef } from 'react';
 import TrackPlayer from 'react-native-track-player';
 
-import { useQueueStore, type QueueStore } from '@shared/playback/queueStore';
-import { trackKey } from '@shared/playback/playbackTrack';
-import { ApiError } from '@shared/failure/errors';
-import { reportClientError } from '@shared/telemetry/clientErrorReporting';
-import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
+import { useQueueStore, type QueueStore, trackKey } from '@shared/playback';
+import { ApiError } from '@shared/failure';
+import { reportClientError } from '@shared/telemetry';
+import { currentSessionEpoch, isSameSession } from '@shared/session';
 
 import { restoreSavedQueue } from '@features/player/native/restoreSavedQueue';
 import { withNativeQueue } from '@features/player/native/nativeQueueLock';

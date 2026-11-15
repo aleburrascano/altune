@@ -1,17 +1,14 @@
-import { defaultFileStore } from '@shared/files/defaultFileStore';
-import { isSafeId, parseTrackId, type TrackId } from '@shared/apiClient/ids';
 import {
+  defaultFileStore,
   readVersionedEntries,
   writeDocumentAtomically,
   type SchemaSpec,
-} from '@shared/files/durableDocument';
-import {
   createFileStoreSlot,
   type FileStore,
   type StoredDirectory,
   type StoredFile,
-} from '@shared/files/fileStore';
-
+} from '@shared/files';
+import { isSafeId, parseTrackId, type TrackId } from '@shared/apiClient';
 export type PinnedEntry =
   | { trackId: TrackId; status: 'ready'; uri: string; version?: string }
   | { trackId: TrackId; status: 'failed' }

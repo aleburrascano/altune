@@ -1,6 +1,8 @@
-import { ContractError } from '@shared/failure/errors';
-import { NO_PLAYLIST_ID, parsePlaylistId, parseTrackId } from '@shared/apiClient/ids';
+import { ContractError } from '@shared/failure';
 import {
+  NO_PLAYLIST_ID,
+  parsePlaylistId,
+  parseTrackId,
   asArray,
   asBoolean,
   asNumber,
@@ -8,14 +10,14 @@ import {
   asString,
   nullableNumber,
   nullableString,
-} from '@shared/apiClient/wireDecoders';
+} from '@shared/apiClient';
 import type {
   QueueSourceWire,
   QueueStateCurrentTrack,
   QueueStateResponse,
-} from '@shared/apiClient/playback';
-import type { AcquisitionStatus } from '@shared/apiClient/trackResponse';
-import type { QueueSource, RepeatMode } from '@shared/playback/queueOrder';
+  AcquisitionStatus,
+} from '@shared/apiClient';
+import type { QueueSource, RepeatMode } from '@shared/playback';
 
 const SOURCE_KINDS = ['library', 'playlist', 'search'] as const;
 

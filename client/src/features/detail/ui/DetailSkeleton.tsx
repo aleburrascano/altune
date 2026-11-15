@@ -1,9 +1,7 @@
 import { type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Skeleton } from '@shared/ui/primitives/Skeleton';
-import { radius, spacing } from '@shared/ui/theme/tokens';
-
+import { Skeleton, radius, spacing } from '@shared/ui';
 import { DISCOGRAPHY_SKELETON_CARD_SIZE } from '@features/detail/ui/detailStyles';
 
 export function TrackRowsSkeleton({

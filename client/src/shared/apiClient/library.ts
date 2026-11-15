@@ -1,4 +1,4 @@
-import { apiFetch, signalInit, withQuery } from '@shared/apiClient/index';
+import { apiFetch, signalInit, withQuery } from '@shared/apiClient/adapters/http';
 import {
   parseListEnvelope,
   asNumber,

@@ -1,10 +1,8 @@
 import { useEffect, type ReactElement } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
-import { Banner } from '@shared/ui/primitives/Banner';
-import { Text } from '@shared/ui/primitives/Text';
-import { spacing } from '@shared/ui/theme';
-import { recordFailureShownOnce } from '@shared/acquisition/state/acquisitionTelemetry';
+import { Banner, Text, spacing } from '@shared/ui';
+import { recordFailureShownOnce } from '@shared/acquisition';
 
 import type { LateralNavHandle } from '@features/detail/hooks/useDetailNavigation';
 import { saveFailureBanner, type SaveFailure } from '@features/detail/domain/saveTrack';

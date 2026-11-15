@@ -1,13 +1,16 @@
 import { useRouter } from 'expo-router';
 import { useState, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { countLabel } from '@shared/ui/format/displayFormat';
-import { usePlayback } from '@shared/playback/usePlayback';
-import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
-import { Screen, useTheme } from '@shared/ui';
-import { AsyncSection } from '@shared/ui/async/AsyncSection';
-import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
-import { SearchBar } from '@shared/ui/primitives/SearchBar';
+import {
+  countLabel,
+  Screen,
+  useTheme,
+  AsyncSection,
+  useAnnounceChange,
+  SearchBar,
+  SortControl,
+} from '@shared/ui';
+import { usePlayback, useQueuePlayback } from '@shared/playback';
 import { AddToPlaylistSheet, CreatePlaylistModal } from '@shared/playlists';
 import { useActiveLibraryView } from '@features/library/hooks/useActiveLibraryView';
 import { useLibraryIsEmpty } from '@features/library/hooks/useLibraryIsEmpty';
@@ -28,7 +31,6 @@ import {
   LibraryErrorScreen,
   LibrarySkeletonScreen,
 } from '@features/library/ui/LibraryStateScreens';
-import { SortControl } from '@shared/ui/primitives/SortControl';
 import { TrackSelectionOverlay } from '@features/library/ui/TrackSelectionOverlay';
 import { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
 

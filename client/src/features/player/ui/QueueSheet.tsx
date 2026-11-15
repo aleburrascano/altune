@@ -5,20 +5,23 @@ import { EllipsisVertical, Play } from 'lucide-react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Reanimated, { type SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
-import { countLabel } from '@shared/ui/format/displayFormat';
-import { withFeaturing } from '@shared/apiClient/featuredArtists';
-import { useQueueStore } from '@shared/playback/queueStore';
-import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
-import { confirmDestructive } from '@shared/ui/dialog/dialog';
-import { ActionSheet } from '@shared/ui/primitives/ActionSheet';
-import { Artwork } from '@shared/ui/primitives/Artwork';
-import { IconButton } from '@shared/ui/primitives/IconButton';
-import { Tappable } from '@shared/ui/primitives/Tappable';
-import { Text } from '@shared/ui/primitives/Text';
-import type { Theme } from '@shared/ui/theme';
-import { useTheme, halved } from '@shared/ui/theme';
-import { fontFamily, radius, spacing } from '@shared/ui/theme/tokens';
-
+import {
+  countLabel,
+  confirmDestructive,
+  ActionSheet,
+  Artwork,
+  IconButton,
+  Tappable,
+  Text,
+  useTheme,
+  halved,
+  fontFamily,
+  radius,
+  spacing,
+} from '@shared/ui';
+import { withFeaturing } from '@shared/apiClient';
+import { useQueueStore, useQueuePlayback } from '@shared/playback';
+import type { Theme } from '@shared/ui';
 import {
   buildUpNextItems,
   formatSeconds,

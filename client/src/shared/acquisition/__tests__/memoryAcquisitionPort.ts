@@ -1,7 +1,7 @@
-import type { TrackId } from '@shared/apiClient/ids';
-import { ApiError } from '@shared/failure/errors';
+import type { TrackId } from '@shared/apiClient';
+import { ApiError } from '@shared/failure';
 
-import type { AcquisitionPort } from '@shared/acquisition/ports/acquisitionPort';
+import type { AcquisitionPort } from '@shared/acquisition';
 
 const NOT_FOUND_STATUS = 404;
 

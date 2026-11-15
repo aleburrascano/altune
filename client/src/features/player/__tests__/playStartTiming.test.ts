@@ -1,13 +1,9 @@
 import { State } from 'react-native-track-player';
 
-import { applyKillSwitches } from '@shared/killSwitch/killSwitch';
+import { applyKillSwitches } from '@shared/killSwitch';
 import { signInTestUser } from '@testing/signInTestUser';
 
-import {
-  markPlayRequested,
-  notePlaybackState,
-  resetPlayStartTiming,
-} from '@features/player/native/playStartTiming';
+import { markPlayRequested, notePlaybackState, resetPlayStartTiming } from '@features/player';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

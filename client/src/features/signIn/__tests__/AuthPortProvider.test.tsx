@@ -1,8 +1,8 @@
 import { renderHook } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import { AuthPortProvider, useAuthPort } from '@features/signIn/ports/AuthPortProvider';
-import type { AuthPort } from '@features/signIn/ports/authPort';
+import { AuthPortProvider, useAuthPort } from '@features/signIn';
+import type { AuthPort } from '@features/signIn';
 
 const port: AuthPort = {
   reportSignInFailure: () => undefined,

@@ -3,6 +3,9 @@ export {
   recordFailureShownOnce,
   recordRetryRequest,
   recordRetryTapped,
+  _resetAcquisitionTelemetryForTest,
+  recordStatusChanged,
+  retryFailureOutcome,
 } from '@shared/acquisition/state/acquisitionTelemetry';
 export type {
   RetryEntryPoint,
@@ -11,6 +14,7 @@ export type {
 export {
   invalidateAudioCaches,
   registerAudioCacheInvalidator,
+  _resetAudioCacheInvalidatorsForTest,
 } from '@shared/acquisition/state/audioCacheInvalidation';
 export {
   completeDownload,
@@ -21,9 +25,15 @@ export {
   startDownload,
   useActiveDownloadItems,
   useDownloadPhase,
+  aggregatePhase,
+  useDownloadStore,
 } from '@shared/acquisition/state/downloadStore';
-export type { DownloadMeta, DownloadPhase } from '@shared/acquisition/state/downloadStore';
-export { phaseLabel, stageToPhase } from '@shared/acquisition/state/stagePhase';
+export type {
+  DownloadMeta,
+  DownloadPhase,
+  DownloadEntry,
+} from '@shared/acquisition/state/downloadStore';
+export { phaseLabel, stageToPhase, ACQUISITION_PHASES } from '@shared/acquisition/state/stagePhase';
 export {
   adoptResponseStatus,
   failedTrackStatus,
@@ -41,3 +51,9 @@ export {
 export type { TrackStatus } from '@shared/acquisition/state/trackStatusStore';
 export { DownloadsBar } from '@shared/acquisition/ui/DownloadsBar';
 export { DownloadsSheet } from '@shared/acquisition/ui/DownloadsSheet';
+export { AcquisitionPortProvider } from '@shared/acquisition/ports/AcquisitionPortProvider';
+export type { AcquisitionPort } from '@shared/acquisition/ports/acquisitionPort';
+export { createMemoryAcquisitionPort } from '@shared/acquisition/__tests__/memoryAcquisitionPort';
+export { httpAcquisitionPort } from '@shared/acquisition/adapters/http/httpAcquisitionPort';
+export type { AcquisitionPhase } from '@shared/acquisition/state/stagePhase';
+export { deriveBarDisplay } from '@shared/acquisition/ui/barDisplay';

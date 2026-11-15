@@ -1,9 +1,9 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import type { DiscoveryResult } from '@shared/apiClient';
 
-import { AlbumDetailBody } from '@features/detail/ui/AlbumDetailBody';
+import { AlbumDetailBody } from '@features/detail';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 import {
   createTestQueryClient,

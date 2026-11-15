@@ -11,3 +11,10 @@ export type { FileStore, StoredDirectory, StoredFile } from '@shared/files/fileS
 export type { JsonObject, JsonValue } from '@shared/files/json';
 export { deviceFileStore, fileHandle } from '@shared/files/native/deviceFileStore';
 export { extFromUrl } from '@shared/files/urlExtension';
+export { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
+export type { MemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
+export {
+  WEB_DOWNLOAD_UNSUPPORTED,
+  fakeLocalStorage,
+  webFileStoreOver,
+} from '@shared/files/__tests__/webStorage';

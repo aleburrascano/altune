@@ -1,4 +1,4 @@
-import { ContractError } from '@shared/failure/errors';
+import { ContractError } from '@shared/failure';
 
 export type ApiErrorBody = {
   detail?: string;

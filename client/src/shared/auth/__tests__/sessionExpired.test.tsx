@@ -6,7 +6,7 @@ import {
   markSessionExpired,
   useSessionExpired,
   getSessionExpired,
-} from '@shared/auth/sessionExpired';
+} from '@shared/auth';
 import type * as SessionExpiredModule from '@shared/auth/sessionExpired';
 
 function SessionGate() {

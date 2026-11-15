@@ -1,14 +1,15 @@
-import { searchDiscovery } from '@shared/apiClient/discovery';
-import { getLibraryAlbums, getLibraryArtists } from '@shared/apiClient/library';
-import { getPlaylist, getPlaylists } from '@shared/apiClient/playlists';
 import {
+  searchDiscovery,
+  getLibraryAlbums,
+  getLibraryArtists,
+  getPlaylist,
+  getPlaylists,
   deleteTrack,
   getAllTracks,
   getTracks,
   listTracksFeaturing,
   reacquireTrack,
-} from '@shared/apiClient/tracks';
-
+} from '@shared/apiClient';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 
 export const httpLibraryPort: LibraryPort = {

@@ -5,7 +5,7 @@ import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const GO_KINDS = ["integration", "internal", "external", "e2e", "fuzz", "bench"];
-const TS_KINDS = ["property", "integration", "e2e", "bench"];
+const TS_KINDS = ["property", "integration", "contract", "e2e", "bench"];
 const FREE_KINDS = ["integration", "e2e"];
 const CROSS_LEAD = /^(contracts?|invariants?|leak|main|export|helpers?|fixtures?|testutil|testing|examples?|doc)([_.-]|$)/i;
 const CROSS_TAIL = /[_-](contracts?|invariants?)$|[a-z0-9](Contracts?|Invariants?)$/;

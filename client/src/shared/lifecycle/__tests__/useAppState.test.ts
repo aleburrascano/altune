@@ -1,7 +1,7 @@
 import { renderHook } from '@testing-library/react-native';
 import { AppState, type AppStateStatus } from 'react-native';
 
-import { useAppStateChange } from '@shared/lifecycle/useAppState';
+import { useAppStateChange } from '@shared/lifecycle';
 
 type Listener = (state: AppStateStatus) => void;
 

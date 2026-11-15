@@ -1,11 +1,10 @@
 import { useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
 
-import type { DiscoverySearchHistoryResponse } from '@shared/apiClient/discovery';
+import type { DiscoverySearchHistoryResponse } from '@shared/apiClient';
 
-import { isRetryable } from '@shared/failure/errors';
-import { discoveryKeys } from '@shared/query/queryKeys';
-import { useAppMutation } from '@shared/query/useAppMutation';
-import { useClearSearchHistory as useSharedClearSearchHistory } from '@shared/searchHistory/useClearSearchHistory';
+import { isRetryable } from '@shared/failure';
+import { discoveryKeys, useAppMutation } from '@shared/query';
+import { useClearSearchHistory as useSharedClearSearchHistory } from '@shared/searchHistory';
 import { useReportQueryFailure } from '@features/discovery/hooks/search/useReportQueryFailure';
 import {
   useDiscoverFetchEnabled,

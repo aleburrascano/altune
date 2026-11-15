@@ -34,8 +34,8 @@ import type {
   DiscoverySearchResponse,
   DiscoverySuggestion,
   SearchHistoryItem,
-} from '@shared/apiClient/discovery';
-import type { UnreleasedSearchHit } from '@shared/apiClient/enrichment';
+  UnreleasedSearchHit,
+} from '@shared/apiClient';
 import type { DiscoverView, SearchCorrection } from '@features/discovery/domain/discoverView';
 import type { ResultsFilter } from '@features/discovery/hooks/results/useResultsFilter';
 

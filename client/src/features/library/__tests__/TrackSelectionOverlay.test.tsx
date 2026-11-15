@@ -1,19 +1,17 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useEffect, type ReactElement } from 'react';
-import { asPlaylistId, asTrackId } from '@shared/apiClient/ids';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
+import { asPlaylistId, asTrackId } from '@shared/apiClient';
+import type { TrackResponse } from '@shared/apiClient';
 import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';
 import {
   useTrackSelection,
   type TrackSelectionController,
   type TrackSelectionOptions,
-} from '@features/library/hooks/useTrackSelection';
-import { TrackSelectionOverlay } from '@features/library/ui/TrackSelectionOverlay';
-import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
-import { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
-
+  TrackSelectionOverlay,
+} from '@features/library';
+import { FeaturePorts, httpFeaturePorts } from '@/mobile';
 const { __http } = require('@testing/doubles/fetch.js');
 
 const EVENTS = 'POST /v1/discovery/events';

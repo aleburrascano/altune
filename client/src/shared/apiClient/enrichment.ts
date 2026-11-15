@@ -1,7 +1,8 @@
-import { ContractError } from '@shared/failure/errors';
+import { ContractError } from '@shared/failure';
 import { PROVIDER_STATUSES, parseDiscoveryResult } from '@shared/apiClient/discovery';
 import { discoveryEntityPath, sourceIdList } from '@shared/apiClient/ids';
-import { apiFetch, LONG_REQUEST_TIMEOUT_MS, signalInit, withQuery } from '@shared/apiClient/index';
+import { apiFetch, signalInit, withQuery } from '@shared/apiClient/adapters/http';
+import { LONG_REQUEST_TIMEOUT_MS } from '@shared/apiConfig';
 import {
   asArray,
   parseArray,

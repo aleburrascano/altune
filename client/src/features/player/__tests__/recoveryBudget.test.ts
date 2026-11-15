@@ -1,6 +1,6 @@
-import type { TrackKey } from '@shared/playback/playbackTrack';
+import type { TrackKey } from '@shared/playback';
 
-import { claimRecoveryAttempt, resetRecoveryBudget } from '@features/player/native/recoveryBudget';
+import { claimRecoveryAttempt, resetRecoveryBudget } from '@features/player';
 
 const MAX_TRACKED_RECOVERIES = 64;
 const RECOVERY_ATTEMPTS_PER_TRACK = 2;

@@ -1,10 +1,7 @@
 import { Animated, StyleSheet, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 
-import { Text } from '@shared/ui/primitives/Text';
-import { useTheme, halved, touchTarget } from '@shared/ui/theme';
-import { spacing } from '@shared/ui/theme/tokens';
-
+import { Text, useTheme, halved, touchTarget, spacing } from '@shared/ui';
 import { useScrubberGesture } from '@features/player/hooks/useScrubberGesture';
 import { msToSeconds } from '@features/player/domain/time';
 

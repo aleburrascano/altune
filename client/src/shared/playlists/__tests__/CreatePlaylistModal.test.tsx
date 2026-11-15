@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react-native';
 
-import { CreatePlaylistModal } from '@shared/playlists/ui/CreatePlaylistModal';
+import { CreatePlaylistModal } from '@shared/playlists';
 
 type RenderOptions = {
   visible?: boolean;

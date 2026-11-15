@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import { enqueueCritical } from '@shared/telemetry/outbox';
+import type { DiscoveryResult } from '@shared/apiClient';
+import { enqueueCritical } from '@shared/telemetry';
 
 import { trackExtras } from '@features/detail/domain/trackExtras';
 import { useDetailHandoff } from '@features/detail/hooks/useDetailHandoff';

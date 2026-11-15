@@ -7,16 +7,15 @@ import {
 import { waitFor } from '@testing-library/react-native';
 import fc from 'fast-check';
 
-import { asPlaylistId, asTrackId } from '@shared/apiClient/ids';
-import { toFailed, toPending, toReady } from '@shared/apiClient/trackAcquisition';
-import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
-import type { ListTracksResponse } from '@shared/apiClient/trackResponse';
-import { libraryKeys, playlistKeys } from '@shared/query/queryKeys';
+import { asPlaylistId, asTrackId, toFailed, toPending, toReady } from '@shared/apiClient';
+import type { PlaylistDetailResponse, ListTracksResponse } from '@shared/apiClient';
+import { libraryKeys, playlistKeys } from '@shared/query';
 
-import { getTrackFromCaches } from '@shared/events/trackCachePatch';
-import { patchTrackInCaches, scheduleTrackPatch } from '@shared/events/trackPatchBatch';
-import { settleTrackPatches } from '@shared/events/__tests__/settleTrackPatches';
 import {
+  getTrackFromCaches,
+  patchTrackInCaches,
+  scheduleTrackPatch,
+  settleTrackPatches,
   makeInfinite,
   makePage,
   makePlaylistDetail,
@@ -24,8 +23,7 @@ import {
   newClient,
   registerUnfetchedQuery,
   seedTracksPrefix,
-} from '@shared/events/__tests__/trackCacheFixtures';
-
+} from '@shared/events';
 describe('patchTrackInCaches', () => {
   const SEEDED_TOTAL = 9;
 

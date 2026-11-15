@@ -1,20 +1,23 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import { asTrackId } from '@shared/apiClient/ids';
+import type { DiscoveryResult } from '@shared/apiClient';
+import { asTrackId } from '@shared/apiClient';
 import {
   linkTrackIdentity,
   patchTrackStatus,
   trackIdentityKey,
   useTrackStatusStore,
-} from '@shared/acquisition/state/trackStatusStore';
+} from '@shared/acquisition';
 
-import { optimisticTrackId, toCreateTrackRequest } from '@features/detail/domain/saveTrack';
-import type { LateralNavHandle } from '@features/detail/hooks/useTrackDetailActions';
-import { RelatedTracksSection } from '@features/detail/ui/RelatedTracksSection';
-import { TrackDetailBody } from '@features/detail/ui/TrackDetailBody';
-import { readDetailHandoff } from '@shared/navigation/detailHandoff';
+import {
+  optimisticTrackId,
+  toCreateTrackRequest,
+  RelatedTracksSection,
+  TrackDetailBody,
+} from '@features/detail';
+import type { LateralNavHandle } from '@features/detail';
+import { readDetailHandoff } from '@shared/navigation';
 import {
   createTestQueryClient,
   createPlaybackWrapper,

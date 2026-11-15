@@ -1,11 +1,11 @@
 import React from 'react';
 import { act, render, waitFor } from '@testing-library/react-native';
-import { asTrackId } from '@shared/apiClient/ids';
-import { _resetAcquisitionTelemetryForTest } from '@shared/acquisition/state/acquisitionTelemetry';
-import type { FailedAcquisition, TrackFields } from '@shared/apiClient/trackResponse';
+import { asTrackId } from '@shared/apiClient';
+import { _resetAcquisitionTelemetryForTest } from '@shared/acquisition';
+import type { FailedAcquisition, TrackFields } from '@shared/apiClient';
 import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';
-import { LibraryRowFailure } from '@features/library/ui/LibraryRowFailure';
+import { LibraryRowFailure } from '@features/library';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

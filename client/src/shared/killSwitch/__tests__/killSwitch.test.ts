@@ -1,15 +1,12 @@
 import * as killSwitchModule from '@shared/killSwitch/killSwitch';
-import {
-  createMemoryFileStore,
-  type MemoryFileStore,
-} from '@shared/files/__tests__/memoryFileStore';
+import { createMemoryFileStore, type MemoryFileStore } from '@shared/files';
 
 import {
   applyKillSwitches,
   isLoopEnabled,
   onKillSwitchChange,
   setKillSwitchFileStore,
-} from '@shared/killSwitch/killSwitch';
+} from '@shared/killSwitch';
 
 const SWITCH_URI = 'memory://document/kill-switch/switches.json';
 

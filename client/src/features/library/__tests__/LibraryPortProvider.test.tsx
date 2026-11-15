@@ -3,10 +3,12 @@ import type { ReactNode } from 'react';
 
 import * as tracksApi from '@shared/apiClient/tracks';
 
-import { httpLibraryPort } from '@features/library/adapters/http/httpLibraryPort';
-import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
-import { LibraryPortProvider, useLibraryPort } from '@features/library/ports/LibraryPortProvider';
-
+import {
+  httpLibraryPort,
+  createMemoryLibraryPort,
+  LibraryPortProvider,
+  useLibraryPort,
+} from '@features/library';
 describe('useLibraryPort', () => {
   it('throws when no provider is mounted', () => {
     jest.spyOn(console, 'error').mockImplementation(() => {});

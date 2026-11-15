@@ -1,12 +1,11 @@
 import type { ReactElement } from 'react';
 import { StyleSheet } from 'react-native';
-import { useDownloadPhase } from '@shared/acquisition/state/downloadStore';
-import { withFeaturing } from '@shared/apiClient/featuredArtists';
-import { Text } from '@shared/ui';
+import { useDownloadPhase } from '@shared/acquisition';
+import { withFeaturing } from '@shared/apiClient';
+import { Text, spacing } from '@shared/ui';
 import { LibraryRowFailure } from '@features/library/ui/LibraryRowFailure';
 import { acquisitionProgressLabel, albumSuffix } from '@features/library/ui/libraryRowLabels';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { spacing } from '@shared/ui/theme';
+import type { TrackResponse } from '@shared/apiClient';
 
 export function LibraryRowDetails({
   track,

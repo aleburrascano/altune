@@ -2,20 +2,20 @@ import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions
 import { QueryClient, type InfiniteData } from '@tanstack/react-query';
 import fc from 'fast-check';
 
-import { asPlaylistId, asTrackId } from '@shared/apiClient/ids';
+import { asPlaylistId, asTrackId } from '@shared/apiClient';
 import type {
   ListPlaylistsResponse,
   PlaylistDetailResponse,
   PlaylistResponse,
-} from '@shared/apiClient/playlistResponse';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { playlistKeys } from '@shared/query/queryKeys';
+  TrackResponse,
+} from '@shared/apiClient';
+import { playlistKeys } from '@shared/query';
 
 import {
   patchPlaylistName,
   removeTrackFromPlaylistCache,
   reorderPlaylistCache,
-} from '@shared/events/playlistCachePatch';
+} from '@shared/events';
 
 function makeTrack(overrides: Partial<TrackResponse> = {}): TrackResponse {
   return {

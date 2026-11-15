@@ -1,14 +1,13 @@
-import { asPlaylistId } from '@shared/apiClient/ids';
-import type { QueueSource } from '@shared/playback/queueOrder';
+import { asPlaylistId } from '@shared/apiClient';
+import type { QueueSource } from '@shared/playback';
 
 import {
   buildUpNextItems,
   queueMenuOptions,
   queueSourceLabel,
   type QueueMenuContext,
-} from '@features/player/domain/upNextQueue';
-import { libraryTrack } from '@features/player/__tests__/fixtures';
-
+  libraryTrack,
+} from '@features/player';
 describe('queueSourceLabel', () => {
   it.each<[string, QueueSource | null, string]>([
     ['null', null, 'Queue'],

@@ -1,4 +1,4 @@
-import { signUp } from '@shared/auth/authActions';
+import { signUp } from '@shared/auth';
 
 import {
   classifyAuthError,

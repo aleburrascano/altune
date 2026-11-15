@@ -4,8 +4,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import { pressedStyle, spacing, type Theme } from '@shared/ui';
-import { borderWidth } from '@shared/ui/theme';
+import { pressedStyle, spacing, type Theme, borderWidth } from '@shared/ui';
 
 export function rowSurfaceStyle(
   theme: Theme,

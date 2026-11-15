@@ -1,8 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import type { AcquisitionPhase } from '@shared/acquisition/state/stagePhase';
-import { ACQUISITION_PHASES, phaseLabel, stageToPhase } from '@shared/acquisition/state/stagePhase';
+import type { AcquisitionPhase } from '@shared/acquisition';
+import { ACQUISITION_PHASES, phaseLabel, stageToPhase } from '@shared/acquisition';
 
 const STAGE_PHASES = [
   ['search', 'finding'],

@@ -1,6 +1,4 @@
-import { buildImpressionRows } from '@features/discovery/domain/buildImpressionRows';
-import { resultFixture } from '@features/discovery/__tests__/fixtures';
-
+import { buildImpressionRows, resultFixture } from '@features/discovery';
 describe('buildImpressionRows projects results into impression rows', () => {
   it('returns an empty array for an empty result set', () => {
     expect(buildImpressionRows([])).toEqual([]);

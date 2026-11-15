@@ -10,9 +10,9 @@ import {
   runSignOutCleanups,
   notifyIdentityChange,
   onIdentityChange,
-} from '@shared/session/signOutCleanup';
-import { guardedMutationOptions, SessionEndedError } from '@shared/session/guardedMutation';
-
+  guardedMutationOptions,
+  SessionEndedError,
+} from '@shared/session';
 describe('signOutCleanup registry', () => {
   it('runs every registered cleanup, once per registration', () => {
     const first = jest.fn();

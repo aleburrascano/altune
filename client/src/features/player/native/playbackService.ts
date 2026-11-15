@@ -6,14 +6,18 @@ import TrackPlayer, {
 } from 'react-native-track-player';
 
 import { shouldRestartOnPrevious } from '@features/player/domain/restartOnPrevious';
-import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
-import { type TrackKey, trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
-
-import { registerAudioCacheInvalidator } from '@shared/acquisition/state/audioCacheInvalidation';
-import { parseTrackId } from '@shared/apiClient/ids';
+import {
+  orderedQueueTracks,
+  useQueueStore,
+  type TrackKey,
+  trackKey,
+  type PlaybackTrack,
+} from '@shared/playback';
+import { registerAudioCacheInvalidator } from '@shared/acquisition';
+import { parseTrackId } from '@shared/apiClient';
 import { playbackPort } from '@features/player/ports/activePlaybackPort';
-import { primeSignedInUser } from '@shared/auth/primeSignedInUser';
-import { hasSignedInUser, onSignOut } from '@shared/session/signOutCleanup';
+import { primeSignedInUser } from '@shared/auth';
+import { hasSignedInUser, onSignOut } from '@shared/session';
 import {
   discardPrefetchedAudio,
   evictCached,

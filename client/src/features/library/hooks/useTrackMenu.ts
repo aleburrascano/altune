@@ -1,10 +1,7 @@
 import { useCallback, useState } from 'react';
-import type { TrackId } from '@shared/apiClient/ids';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { toPlaybackTrack, type PlaybackTrack } from '@shared/playback/playbackTrack';
-import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
-import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
-import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
+import type { TrackId, TrackResponse } from '@shared/apiClient';
+import { type useQueuePlayback, toPlaybackTrack, type PlaybackTrack } from '@shared/playback';
+import type { ContextMenuItem, MenuAnchor } from '@shared/ui';
 import {
   reportStorageFull,
   useLibraryOffline,

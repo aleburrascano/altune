@@ -1,45 +1,38 @@
 import TrackPlayer, { Event } from 'react-native-track-player';
 
-import { asTrackId } from '@shared/apiClient/ids';
-import { ApiError } from '@shared/failure/errors';
-import { usePinnedStore } from '@shared/offline/state/pinnedStore';
-import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
-import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
-
+import { asTrackId } from '@shared/apiClient';
+import { ApiError } from '@shared/failure';
+import { usePinnedStore } from '@shared/offline';
+import { orderedQueueTracks, useQueueStore, trackKey, type PlaybackTrack } from '@shared/playback';
 import {
+  type PlaybackPort,
   appendNativeTrack,
   insertNativeTrackNext,
   loadNativeQueue,
   loadNativeTrack,
   refreshUpcomingPresign,
-} from '@features/player/native/loadNativeTrack';
-import { signInTestUser } from '@testing/signInTestUser';
-import { reorderUpcomingNative } from '@features/player/native/rebuildNativeTail';
-import { claimLoad } from '@features/player/domain/loadToken';
-import { withNativeQueue } from '@features/player/native/nativeQueueLock';
-import { forgetAllSwaps } from '@features/player/native/nativeTrackSwap';
-import { toNativeTrack } from '@features/player/native/nativeTrack';
-import { usePlaybackErrorStore } from '@features/player/hooks/usePlaybackErrorStore';
-import { markPresignedFrom, NATIVE_QUEUE_WINDOW } from '@features/player/domain/presignWindow';
-import { playbackService, resetPlaybackForSignOut } from '@features/player/native/playbackService';
-
-import { installPlaybackPort } from '@features/player/ports/activePlaybackPort';
-import type { PlaybackPort } from '@features/player/ports/playbackPort';
-
-import {
+  reorderUpcomingNative,
+  claimLoad,
+  withNativeQueue,
+  forgetAllSwaps,
+  toNativeTrack,
+  usePlaybackErrorStore,
+  markPresignedFrom,
+  NATIVE_QUEUE_WINDOW,
+  playbackService,
+  resetPlaybackForSignOut,
+  installPlaybackPort,
   libraryTrack,
   previewTrack,
   libraryTrackWithId,
   libraryTrackList,
   previewTrackList,
   cdnAudioUrls,
-} from '@features/player/__tests__/fixtures';
-import {
   createMemoryPlaybackPort,
   type MemoryPlaybackSeed,
-} from '@features/player/__tests__/memoryPlaybackPort';
-import { httpPlaybackPort } from '@features/player/adapters/http/httpPlaybackPort';
-
+  httpPlaybackPort,
+} from '@features/player';
+import { signInTestUser } from '@testing/signInTestUser';
 const NATIVE_QUEUE_OP_TIMEOUT_MS = 15_000;
 
 const FIRST_TRACK_BUILD_LOADS_IMAGE_AND_ARTWORK_TIMEOUT_MS = 30_000;

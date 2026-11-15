@@ -4,10 +4,8 @@ import { render, screen, fireEvent, within } from '@testing-library/react-native
 import type { ReactNode } from 'react';
 
 import { signInTestUser } from '@testing/signInTestUser';
-import { LibraryCard } from '@features/settings/ui/LibraryCard';
-import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
-import { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
-
+import { LibraryCard } from '@features/settings';
+import { FeaturePorts, httpFeaturePorts } from '@/mobile';
 const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));

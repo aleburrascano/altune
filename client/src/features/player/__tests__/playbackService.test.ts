@@ -1,25 +1,23 @@
 import * as FileSystem from 'expo-file-system';
 import TrackPlayer, { Event, type RemoteDuckEvent } from 'react-native-track-player';
 
+import { _resetAudioCacheInvalidatorsForTest, invalidateAudioCaches } from '@shared/acquisition';
+import { asTrackId, type TrackId } from '@shared/apiClient';
+import { useQueueStore, trackKey, type PlaybackTrack } from '@shared/playback';
+import { notifyIdentityChange } from '@shared/session';
+
 import {
-  _resetAudioCacheInvalidatorsForTest,
-  invalidateAudioCaches,
-} from '@shared/acquisition/state/audioCacheInvalidation';
-import { asTrackId, type TrackId } from '@shared/apiClient/ids';
-import { useQueueStore } from '@shared/playback/queueStore';
-import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
-import { notifyIdentityChange } from '@shared/session/signOutCleanup';
-
-import { usePlaybackErrorStore } from '@features/player/hooks/usePlaybackErrorStore';
-import { redactPlaybackErrorMessage } from '@features/player/domain/playbackError';
+  usePlaybackErrorStore,
+  redactPlaybackErrorMessage,
+  playbackService,
+  resetPlaybackForSignOut,
+  previewTrack,
+  libraryTrackWithId,
+  httpPlaybackPort,
+  installPlaybackPort,
+} from '@features/player';
 import * as nativeTrackSwap from '@features/player/native/nativeTrackSwap';
-import { playbackService, resetPlaybackForSignOut } from '@features/player/native/playbackService';
-
-import { previewTrack, libraryTrackWithId } from '@features/player/__tests__/fixtures';
-import { httpPlaybackPort } from '@features/player/adapters/http/httpPlaybackPort';
 import { signInTestUser } from '@testing/signInTestUser';
-import { installPlaybackPort } from '@features/player/ports/activePlaybackPort';
-
 const RESTART_THRESHOLD_MS = 3_000;
 const QUEUE_OUT_OF_SYNC_MESSAGE = 'The queue fell out of sync. Tap retry to reload it.';
 const QUEUE_UPDATE_FAILED_MESSAGE = "Couldn't update the queue. Tap retry to resync.";

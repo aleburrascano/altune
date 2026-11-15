@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { createQueryClient } from '@shared/query/createQueryClient';
+import { createQueryClient } from '@shared/query';
 import { StagingBanner } from '@/mobile/frame/StagingBanner';
 import {
   AuthGate,
@@ -22,17 +22,22 @@ import {
   useAuthDeepLink,
 } from '@features/signIn';
 import { registerSearchStateSignOutReset } from '@features/discovery';
-import { useServerEvents } from '@shared/events/useServerEvents';
-import { startKillSwitchPolling } from '@shared/killSwitch/killSwitchPoll';
-import { useScreenViews } from '@shared/events/useScreenViews';
-import { installGlobalErrorReporting } from '@shared/telemetry/clientErrorReporting';
-import { reportOtaLaunchFailures } from '@shared/telemetry/native/otaLaunchReport';
+import { useServerEvents, useScreenViews } from '@shared/events';
+import { startKillSwitchPolling } from '@shared/killSwitch';
+import {
+  followSignedInUser,
+  installGlobalErrorReporting,
+  reportOtaLaunchFailures,
+} from '@shared/telemetry';
 import { PlaybackProvider, SleepTimerBridge, startPlaybackService } from '@features/player';
-import { OfflineReconcileBridge } from '@shared/offline/ui/OfflineReconcileBridge';
-import { useWideWebLayout } from '@shared/ui/layout/useLayoutMode';
-import { ScreenBoundary } from '@shared/ui/failure/ScreenBoundary';
-import { ThemeProvider, themes } from '@shared/ui/theme';
-import { useThemePreference } from '@shared/ui/theme/themePreference';
+import { OfflineReconcileBridge } from '@shared/offline';
+import {
+  useWideWebLayout,
+  ScreenBoundary,
+  ThemeProvider,
+  themes,
+  useThemePreference,
+} from '@shared/ui';
 import { AppChrome } from '@/mobile/frame/AppChrome';
 import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
 import { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
@@ -44,6 +49,7 @@ registerSearchStateSignOutReset();
 
 void SplashScreen.preventAutoHideAsync();
 
+followSignedInUser();
 installGlobalErrorReporting();
 reportOtaLaunchFailures().catch((error: unknown) => {
   console.warn('[telemetry] reading update logs failed', error);

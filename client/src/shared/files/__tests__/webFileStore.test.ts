@@ -1,9 +1,5 @@
-import type { FileStore } from '@shared/files/fileStore';
-import {
-  WEB_DOWNLOAD_UNSUPPORTED,
-  fakeLocalStorage,
-  webFileStoreOver,
-} from '@shared/files/__tests__/webStorage';
+import type { FileStore } from '@shared/files';
+import { WEB_DOWNLOAD_UNSUPPORTED, fakeLocalStorage, webFileStoreOver } from '@shared/files';
 
 describe('a webFileStore over localStorage', () => {
   it('opens a directory without creating it, and create() makes it exist', () => {

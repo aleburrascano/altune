@@ -1,15 +1,11 @@
-import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
-import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
-
-import { loadNativeQueue } from '@features/player/native/loadNativeTrack';
+import { orderedQueueTracks, useQueueStore, trackKey, type PlaybackTrack } from '@shared/playback';
 import {
+  loadNativeQueue,
   beginNativeLoad,
   endNativeLoad,
   shouldApplyActiveIndex,
-} from '@features/player/native/nativeSyncGuard';
-
-import { previewTrackList } from '@features/player/__tests__/fixtures';
-
+  previewTrackList,
+} from '@features/player';
 beforeEach(() => {
   endNativeLoad();
 });

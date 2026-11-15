@@ -1,10 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { libraryKeys } from '@shared/query/queryKeys';
-import type { AlbumGroup } from '@shared/apiClient/library';
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-
+import type { TrackResponse, AlbumGroup, DiscoveryResult } from '@shared/apiClient';
+import { libraryKeys } from '@shared/query';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/ports/DetailPortProvider';
 import { normalizeForCompare } from '@features/detail/domain/normalizeForCompare';

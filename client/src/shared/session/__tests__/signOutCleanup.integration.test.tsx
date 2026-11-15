@@ -13,7 +13,7 @@ function bootFreshApp() {
   jest.resetModules();
   jest.doMock('react', () => React);
   jest.doMock('@tanstack/react-query', () => ReactQuery);
-  return {
+  const app = {
     session: require('@shared/auth/useSession'),
     supabase: require('@shared/auth/supabaseClient').supabase,
     outbox: require('@shared/telemetry/outbox'),
@@ -21,6 +21,8 @@ function bootFreshApp() {
     registry: require('@shared/session/signOutCleanup'),
     expired: require('@shared/auth/sessionExpired'),
   };
+  require('@shared/telemetry').followSignedInUser();
+  return app;
 }
 
 function wrapper({ children }: { children: React.ReactNode }) {

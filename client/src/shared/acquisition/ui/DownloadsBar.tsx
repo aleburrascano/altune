@@ -7,11 +7,17 @@ import { ChevronUp } from 'lucide-react-native';
 import type { DownloadEntry } from '@shared/acquisition/state/downloadStore';
 import { deriveBarDisplay } from '@shared/acquisition/ui/barDisplay';
 import { ACQUISITION_PHASES, phaseLabel } from '@shared/acquisition/state/stagePhase';
-import { Text, pressedStyle, spacing, useTheme } from '@shared/ui';
-import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
-import { Artwork } from '@shared/ui/primitives/Artwork';
-import { Tappable } from '@shared/ui/primitives/Tappable';
-import { radius, halved } from '@shared/ui/theme/tokens';
+import {
+  Text,
+  pressedStyle,
+  spacing,
+  useTheme,
+  useAnnounceChange,
+  Artwork,
+  Tappable,
+  radius,
+  halved,
+} from '@shared/ui';
 
 interface DownloadsBarProps {
   items: DownloadEntry[];

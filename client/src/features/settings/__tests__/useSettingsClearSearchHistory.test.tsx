@@ -3,15 +3,11 @@ import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { ApiError } from '@shared/apiClient';
-import { supabase } from '@shared/auth/supabaseClient';
-import { useSession } from '@shared/auth/useSession';
-import { useSignOut } from '@shared/auth/useSignOut';
-import { discoveryKeys, libraryKeys } from '@shared/query/queryKeys';
+import { supabase, useSession, useSignOut } from '@shared/auth';
+import { discoveryKeys, libraryKeys } from '@shared/query';
 
 import { makeWrapper } from '@testing/makeWrapper';
-import { useBackfillFeatured } from '@features/settings/hooks/useBackfillFeatured';
-import { useSettingsClearSearchHistory } from '@features/settings/hooks/useSettingsClearSearchHistory';
-
+import { useBackfillFeatured, useSettingsClearSearchHistory } from '@features/settings';
 const RETRY_BACKOFF_BASE_MS = 1_000;
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');

@@ -1,9 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { formatSeconds, type QueueItem } from '@features/player/domain/upNextQueue';
-import { QueueRow } from '@features/player/ui/QueueSheet';
-
+import { formatSeconds, type QueueItem, QueueRow } from '@features/player';
 type SwipeDrag = { value: number };
 type SwipeableMockProps = { children: React.ReactNode; renderRightActions: RenderRightActions };
 type RenderRightActions = (progress: number, drag: SwipeDrag) => React.ReactNode;

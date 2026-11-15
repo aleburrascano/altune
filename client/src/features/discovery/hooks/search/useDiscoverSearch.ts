@@ -1,10 +1,10 @@
 import { useMemo } from 'react';
 import { useInfiniteQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 
-import type { DiscoveryProviderInfo, DiscoverySearchResponse } from '@shared/apiClient/discovery';
+import type { DiscoveryProviderInfo, DiscoverySearchResponse } from '@shared/apiClient';
 
-import { isRetryable } from '@shared/failure/errors';
-import { discoveryKeys, isSearchKeyFor } from '@shared/query/queryKeys';
+import { isRetryable } from '@shared/failure';
+import { discoveryKeys, isSearchKeyFor } from '@shared/query';
 import { useReportQueryFailure } from '@features/discovery/hooks/search/useReportQueryFailure';
 import {
   useDiscoverFetchEnabled,

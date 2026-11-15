@@ -1,4 +1,4 @@
-import { menuItems, type MenuEditProps } from '@features/library/ui/playlistMenuItems';
+import { menuItems, type MenuEditProps } from '@features/library';
 
 const DOWNLOAD_LABEL_PATTERN = /download/i;
 

@@ -1,4 +1,4 @@
-import type { TrackId } from '@shared/apiClient/ids';
+import type { TrackId } from '@shared/apiClient';
 
 type Invalidator = (trackId: TrackId) => void;
 

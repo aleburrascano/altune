@@ -1,10 +1,10 @@
 import TrackPlayer, { Event, State } from 'react-native-track-player';
 
-import { startWidgetSnapshotPublisher } from '@features/player/native/widgetSnapshot';
-import { asTrackId } from '@shared/apiClient/ids';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
-import { useQueueStore } from '@shared/playback/queueStore';
-import { notifyIdentityChange, runSignOutCleanups } from '@shared/session/signOutCleanup';
+import { startWidgetSnapshotPublisher } from '@features/player';
+import { asTrackId } from '@shared/apiClient';
+import type { PlaybackTrack } from '@shared/playback';
+import { useQueueStore } from '@shared/playback';
+import { notifyIdentityChange, runSignOutCleanups } from '@shared/session';
 import { reloadWidget, writeCoverFromUrl, writeSnapshot } from '@modules/altune-widget';
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));

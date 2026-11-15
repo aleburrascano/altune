@@ -2,21 +2,23 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import { asTrackId } from '@shared/apiClient/ids';
-import type { ListTracksResponse, TrackResponse } from '@shared/apiClient/trackResponse';
-import { ApiError } from '@shared/failure/errors';
-import { libraryKeys } from '@shared/query/queryKeys';
+import { asTrackId } from '@shared/apiClient';
+import type { ListTracksResponse, TrackResponse } from '@shared/apiClient';
+import { ApiError } from '@shared/failure';
+import { libraryKeys } from '@shared/query';
 import {
   removeTrackFromCaches,
   captureTrackPlacements,
   restoreTrackPlacements,
-} from '@shared/events/trackCachePatch';
+} from '@shared/events';
 
-import { useLibraryTracks } from '@features/library/hooks/useLibraryTracks';
-import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
-import { track as seededTrack } from '@features/library/__tests__/trackMutationFixtures';
-import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
-import type { LibraryPort } from '@features/library/ports/libraryPort';
+import {
+  useLibraryTracks,
+  createMemoryLibraryPort,
+  track as seededTrack,
+  LibraryPortProvider,
+} from '@features/library';
+import type { LibraryPort } from '@features/library';
 
 const SERVICE_UNAVAILABLE = 503;
 const MAX_PENDING_POLLS = 10;

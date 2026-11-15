@@ -1,10 +1,11 @@
-import { ApiError } from '@shared/failure/errors';
-import type { ResolvedAudioUrl } from '@shared/apiClient/audio';
-import type { LyricsResponse } from '@shared/apiClient/lyrics';
-import type { QueueStateResponse } from '@shared/apiClient/playback';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-
-import type { PlaybackPort } from '@features/player/ports/playbackPort';
+import { ApiError } from '@shared/failure';
+import type {
+  ResolvedAudioUrl,
+  LyricsResponse,
+  QueueStateResponse,
+  TrackResponse,
+} from '@shared/apiClient';
+import type { PlaybackPort } from '@features/player';
 
 const MAX_ALL_TRACKS = 10_000;
 const NOT_FOUND_STATUS = 404;

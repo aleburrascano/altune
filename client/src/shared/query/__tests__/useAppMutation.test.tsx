@@ -2,9 +2,8 @@ import React from 'react';
 import { isCancelledError, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 
-import { ApiError, NetworkError } from '@shared/failure/errors';
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
-import { guardedMutationOptions } from '@shared/session/guardedMutation';
+import { ApiError, NetworkError } from '@shared/failure';
+import { runSignOutCleanups, guardedMutationOptions } from '@shared/session';
 import { signInTestUser } from '@testing/signInTestUser';
 
 import {
@@ -12,7 +11,7 @@ import {
   appQueryCache,
   useAppMutation,
   useOptimisticMutation,
-} from '@shared/query/useAppMutation';
+} from '@shared/query';
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 

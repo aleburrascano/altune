@@ -4,15 +4,12 @@ import {
   listSearchHistory,
   clearSearchHistory,
   recordSearchHistory,
-} from '@shared/apiClient/discovery';
-import type {
-  DiscoveryKind,
-  DiscoveryResult,
-  DiscoverySearchResponse,
-} from '@shared/apiClient/discovery';
-import { apiBase, ApiError } from '@shared/apiClient/index';
-import { ContractError } from '@shared/failure/errors';
-import { supabase } from '@shared/auth/supabaseClient';
+  ApiError,
+} from '@shared/apiClient';
+import type { DiscoveryKind, DiscoveryResult, DiscoverySearchResponse } from '@shared/apiClient';
+import { apiBase } from '@shared/apiConfig';
+import { ContractError } from '@shared/failure';
+import { supabase } from '@shared/auth';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

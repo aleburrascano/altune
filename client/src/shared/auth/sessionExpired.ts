@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 
-import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
+import { currentSessionEpoch, isSameSession } from '@shared/session';
 
 export type CredentialStamp = { readonly epoch: number; readonly renewal: number };
 

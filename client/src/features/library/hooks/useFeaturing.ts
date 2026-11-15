@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { FeaturedArtist } from '@shared/apiClient/trackResponse';
-import { libraryKeys } from '@shared/query/queryKeys';
+import type { FeaturedArtist, DiscoveryResult } from '@shared/apiClient';
+import { libraryKeys } from '@shared/query';
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 import {
   failureLogFields,
@@ -9,9 +9,7 @@ import {
   classifyLibraryError,
 } from '@features/library/domain/libraryFailure';
 import { showFailureAlert } from '@shared/ui';
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import { detailHref } from '@shared/navigation/detailHandoff';
-import { useNavigator, type Navigator } from '@shared/navigation';
+import { detailHref, useNavigator, type Navigator } from '@shared/navigation';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 import type { FeaturingDetailRoute } from '@features/library/domain/libraryRoutes';
 

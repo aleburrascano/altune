@@ -1,4 +1,4 @@
-import { clamp } from '@shared/math/math';
+import { clamp } from '@shared/math';
 
 export type BatchOutcome<T> = { succeeded: readonly T[]; failed: readonly T[] };
 

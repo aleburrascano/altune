@@ -1,9 +1,9 @@
 import { faker } from '@faker-js/faker';
 import { Factory } from 'fishery';
 
-import { asTrackId } from '@shared/apiClient/ids';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
+import { asTrackId } from '@shared/apiClient';
+import type { TrackResponse } from '@shared/apiClient';
+import type { PlaybackContextValue } from '@shared/playback';
 
 const REFERENCE_DATE = new Date('2026-01-01T00:00:00Z');
 

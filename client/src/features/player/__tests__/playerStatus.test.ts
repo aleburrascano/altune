@@ -1,11 +1,6 @@
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
-import type { TrackId } from '@shared/apiClient/ids';
-import {
-  canRetryPlaybackError,
-  endedLabel,
-  libraryTrackId,
-  statusFlagsOf,
-} from '@features/player/domain/playerStatus';
+import type { PlaybackTrack } from '@shared/playback';
+import type { TrackId } from '@shared/apiClient';
+import { canRetryPlaybackError, endedLabel, libraryTrackId, statusFlagsOf } from '@features/player';
 
 describe('playerStatus', () => {
   it('labels an ended preview and an ended full track differently', () => {

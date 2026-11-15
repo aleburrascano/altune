@@ -1,8 +1,6 @@
 import type { ChangeEvent, ReactElement } from 'react';
 
-import { useWideWebLayout } from '@shared/ui/layout/useLayoutMode';
-import { useTheme } from '@shared/ui/theme';
-
+import { useWideWebLayout, useTheme } from '@shared/ui';
 import { toVolume, usePlaybackVolumeStore } from '@features/player/web/playbackVolume';
 
 const VOLUME_RANGE = { min: 0, max: 1, step: 0.01 };

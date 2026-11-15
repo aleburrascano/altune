@@ -1,15 +1,8 @@
 import { useState, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Artwork } from '@shared/ui/primitives/Artwork';
-import { Tappable } from '@shared/ui/primitives/Tappable';
-import { Text } from '@shared/ui/primitives/Text';
-import { radius, spacing } from '@shared/ui/theme';
-
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-
-import { formatDuration } from '@shared/ui/format/displayFormat';
-
+import { Artwork, Tappable, Text, radius, spacing, formatDuration } from '@shared/ui';
+import type { DiscoveryResult } from '@shared/apiClient';
 import { trackExtras } from '@features/detail/domain/trackExtras';
 import type { ArtistDetailState } from '@features/detail/hooks/useArtistDetailState';
 import type { OwnedTrack } from '@features/detail/domain/ownedTrack';

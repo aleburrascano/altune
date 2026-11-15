@@ -1,9 +1,7 @@
 import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Text, type TextTone } from '@shared/ui/primitives/Text';
-import { spacing, useTheme } from '@shared/ui/theme';
-
+import { Text, type TextTone, spacing, useTheme } from '@shared/ui';
 export type DetailFact = {
   label: string;
   value: string;

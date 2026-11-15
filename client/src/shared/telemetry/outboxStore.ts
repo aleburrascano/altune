@@ -3,10 +3,11 @@ import {
   readVersionedEntries,
   writeDocumentAtomically,
   type SchemaSpec,
-} from '@shared/files/durableDocument';
-import { defaultFileStore } from '@shared/files/defaultFileStore';
-import { createFileStoreSlot, type FileStore, type StoredDirectory } from '@shared/files/fileStore';
-
+  defaultFileStore,
+  createFileStoreSlot,
+  type FileStore,
+  type StoredDirectory,
+} from '@shared/files';
 import type { OutboxEntry } from '@shared/telemetry/outboxEntries';
 import type { DiscoveryEventType } from '@shared/telemetry/recordEvent';
 

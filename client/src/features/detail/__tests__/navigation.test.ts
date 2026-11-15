@@ -1,17 +1,17 @@
 import { renderHook } from '@testing-library/react-native';
 import type { ImperativeRouter } from 'expo-router';
 
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import { readDetailHandoff } from '@shared/navigation/detailHandoff';
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+import type { DiscoveryResult } from '@shared/apiClient';
+import { readDetailHandoff } from '@shared/navigation';
+import { runSignOutCleanups } from '@shared/session';
 
 import {
   detailRouteFor,
   featuringHref,
   openDetail,
-} from '@features/detail/domain/detailNavigation';
-import { useOpenDetail, useOpenFeaturing } from '@features/detail/hooks/useDetailNavigation';
-
+  useOpenDetail,
+  useOpenFeaturing,
+} from '@features/detail';
 jest.mock('expo-router', () => ({ useRouter: jest.fn() }));
 
 function track(title: string): DiscoveryResult {

@@ -1,12 +1,12 @@
-import { trackIdentityKey } from '@shared/acquisition/state/trackStatusStore';
-import { asTrackId, type TrackId } from '@shared/apiClient/ids';
-import type {
-  CatalogSourceRef,
-  CreateTrackRequest,
-  TrackResponse,
-} from '@shared/apiClient/trackResponse';
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-
+import { trackIdentityKey } from '@shared/acquisition';
+import {
+  type CatalogSourceRef,
+  type CreateTrackRequest,
+  type TrackResponse,
+  type DiscoveryResult,
+  asTrackId,
+  type TrackId,
+} from '@shared/apiClient';
 import { trackExtras, type TrackExtras } from '@features/detail/domain/trackExtras';
 import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
 

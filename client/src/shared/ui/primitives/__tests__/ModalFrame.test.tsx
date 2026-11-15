@@ -1,6 +1,6 @@
 import { Text } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { ModalFrame } from '@shared/ui/primitives/ModalFrame';
+import { ModalFrame } from '@shared/ui';
 
 function renderFrame(variant: 'center' | 'sheet' | 'popover' = 'center') {
   const onClose = jest.fn();

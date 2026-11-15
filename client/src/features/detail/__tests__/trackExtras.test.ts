@@ -1,11 +1,11 @@
-import type { FeaturedArtist } from '@shared/apiClient/trackResponse';
+import type { FeaturedArtist } from '@shared/apiClient';
 
 import {
   albumExtras,
   trackExtras,
   extractFeaturedFromText,
   resolveFeatured,
-} from '@features/detail/domain/trackExtras';
+} from '@features/detail';
 
 describe('extras accessors', () => {
   describe('trackExtras', () => {

@@ -1,5 +1,4 @@
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import type { AlbumGroup, ArtistGroup } from '@shared/apiClient/library';
+import type { DiscoveryResult, AlbumGroup, ArtistGroup } from '@shared/apiClient';
 
 export function albumToDiscoveryResult(album: AlbumGroup): DiscoveryResult {
   return {

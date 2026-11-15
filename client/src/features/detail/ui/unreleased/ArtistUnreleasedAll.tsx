@@ -2,13 +2,10 @@ import { Redirect, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState, type ReactElement } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 
-import { SortControl, type SortOption } from '@shared/ui/primitives/SortControl';
-import { Text } from '@shared/ui/primitives/Text';
-import { recordUserAction } from '@shared/telemetry/userTelemetry';
-import { spacing } from '@shared/ui/theme';
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import type { UnreleasedTrack } from '@shared/apiClient/enrichment';
-import { readDetailHandoff } from '@shared/navigation/detailHandoff';
+import { SortControl, type SortOption, Text, spacing } from '@shared/ui';
+import { recordUserAction } from '@shared/telemetry';
+import type { DiscoveryResult, UnreleasedTrack } from '@shared/apiClient';
+import { readDetailHandoff } from '@shared/navigation';
 
 import {
   unreleasedView,

@@ -1,4 +1,4 @@
-import type { TrackId } from '@shared/apiClient/ids';
+import type { TrackId } from '@shared/apiClient';
 import {
   trackIdentityKey,
   trackIdForIdentityAtCallTime,
@@ -6,7 +6,7 @@ import {
   useTrackIdForIdentity,
   useTrackStatus,
   type TrackStatus,
-} from '@shared/acquisition/state/trackStatusStore';
+} from '@shared/acquisition';
 
 import {
   ownedFromTrackInfo,
