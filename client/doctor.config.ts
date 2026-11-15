@@ -36,6 +36,11 @@ const resetNativeRunsEvenWhenEmpty = {
   rules: ['react-doctor/async-defer-await'],
 };
 
+const moduleDoorsWaitForCallersToMoveOffInternals = {
+  files: ['src/shared/*/index.ts'],
+  rules: ['deslop/unused-file'],
+};
+
 const imageOnlyResolvesAssetSource = {
   files: ['src/features/player/native/nativeTrack.ts'],
   rules: ['react-doctor/rn-prefer-expo-image'],
@@ -175,6 +180,7 @@ export default {
       nativeTailDrainRebuildsInOrder,
       resetNativeRunsEvenWhenEmpty,
       imageOnlyResolvesAssetSource,
+      moduleDoorsWaitForCallersToMoveOffInternals,
       failureShownIsAnImpressionLogSyncedInEffect,
       bannerChildrenOnlyPicksTelemetryMessage,
       mediaSessionEffectsSyncTheBrowserMediaSession,
