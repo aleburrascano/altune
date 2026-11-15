@@ -150,6 +150,17 @@ run .
 check 3 "exits 3 when no Node >= 22 is found anywhere"
 unset STUB_NODE_MAJOR
 
+later="$scratch/laterbin"; mkdir -p "$later"
+printf '#!/usr/bin/env bash\n[ "$1" = "-e" ] && { echo 22; exit 0; }\necho v22.0.0\n' >"$later/node"
+chmod +x "$later/node"
+rm -rf "$wt/node_modules"
+export STUB_NPM_CI_EXIT=0 STUB_NODE_MAJOR=20
+OUT=$(cd "$wt" && PATH="$stubbin:$later:$PATH" bash "$wd" . 2>"$wt/err.log"); CODE=$?
+check 0 "a Node 20 first on PATH and the wanted Node later on PATH uses the later one"
+grep -qx "export PATH=$later:\$PATH" <<<"$OUT" \
+  || { echo "FAIL should export the PATH of the later wanted node"; echo "$OUT" | sed 's/^/    /'; fail=1; }
+unset STUB_NPM_CI_EXIT STUB_NODE_MAJOR
+
 d="$HOME/.nvm/versions/node/v22.9.0/bin"
 mkdir -p "$d" && cp "$stubbin/node" "$d/node"
 rm -rf "$wt/node_modules"

@@ -22,6 +22,14 @@ path_node_major() {
   node_major_version node
 }
 
+path_wanted_node_bin() {
+  local bin
+  while read -r bin; do
+    [ "$(node_major_version "$bin")" = "$want_major" ] && { dirname "$bin"; return 0; }
+  done < <(type -ap node)
+  return 1
+}
+
 nvm_node_bin() {
   local best
   best=$(printf '%s\n' "$HOME"/.nvm/versions/node/v*/ | while read -r d; do
@@ -42,6 +50,8 @@ find_node_bin() {
   major=$(path_node_major)
   if is_wanted "$major"; then
     dirname "$(command -v node)"
+  elif path_wanted_node_bin; then
+    :
   elif nvm_node_bin is_wanted; then
     :
   elif is_newer "$major"; then
