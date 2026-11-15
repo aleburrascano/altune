@@ -1,33 +1,17 @@
+M1 src/features/detail/module.yaml loose root file
+M1 src/features/discovery/module.yaml loose root file
+M1 src/features/library/module.yaml loose root file
+M1 src/features/player/module.yaml loose root file
+M1 src/features/settings/module.yaml loose root file
+M1 src/features/signIn/module.yaml loose root file
+M10 src/shared/acquisition/module.yaml not a layer folder or index.ts
+M10 src/shared/offline/module.yaml not a layer folder or index.ts
+M10 src/shared/playlists/module.yaml not a layer folder or index.ts
 M10 src/shared/ui/haptics.ts loose file in shared/ui
 M10 src/shared/ui/haptics.web.ts loose file in shared/ui
+M10 src/shared/ui/module.yaml loose file in shared/ui
 M10 src/shared/ui/useAnnounceChange.ts loose file in shared/ui
-M8 src/features/signIn/hooks/useAsyncAuthAction.ts loose file in hooks/
-M8 src/features/signIn/hooks/useAuthDeepLink.ts loose file in hooks/
-M8 src/features/signIn/hooks/useAuthDeepLink.web.ts loose file in hooks/
-M8 src/features/signIn/hooks/useEmailPasswordFields.ts loose file in hooks/
-M8 src/features/signIn/hooks/useOAuth.ts loose file in hooks/
-M8 src/features/signIn/hooks/useOAuth.web.ts loose file in hooks/
-M8 src/features/signIn/hooks/useOAuthFlow.ts loose file in hooks/
-M8 src/features/signIn/hooks/useRecoveryUnlocked.ts loose file in hooks/
-M8 src/features/signIn/hooks/useResetPassword.ts loose file in hooks/
-M8 src/features/signIn/hooks/useSignIn.ts loose file in hooks/
-M8 src/features/signIn/hooks/useSignUp.ts loose file in hooks/
-M8 src/features/signIn/hooks/useUpdatePassword.ts loose file in hooks/
-M8 src/features/signIn/ui/AuthCallbackScreen.tsx loose file in ui/
-M8 src/features/signIn/ui/AuthCallbackScreen.web.tsx loose file in ui/
-M8 src/features/signIn/ui/AuthErrorBanner.tsx loose file in ui/
-M8 src/features/signIn/ui/AuthFields.tsx loose file in ui/
-M8 src/features/signIn/ui/AuthForm.tsx loose file in ui/
-M8 src/features/signIn/ui/AuthGate.tsx loose file in ui/
-M8 src/features/signIn/ui/AuthNotices.tsx loose file in ui/
-M8 src/features/signIn/ui/BackToSignInLink.tsx loose file in ui/
-M8 src/features/signIn/ui/CheckEmailNotice.tsx loose file in ui/
-M8 src/features/signIn/ui/ForgotPasswordScreen.tsx loose file in ui/
-M8 src/features/signIn/ui/OAuthButtons.tsx loose file in ui/
-M8 src/features/signIn/ui/SetNewPasswordScreen.tsx loose file in ui/
-M8 src/features/signIn/ui/SignInScreen.tsx loose file in ui/
-M8 src/features/signIn/ui/SignUpScreen.tsx loose file in ui/
-M8 src/features/signIn/ui/TestAuthBridge.tsx loose file in ui/
+M11 src/mobile not an allowed top-level entry
 M8 src/features/detail/hooks/useAlbumDetailState.ts loose file in hooks/
 M8 src/features/detail/hooks/useAlbumSaveAll.ts loose file in hooks/
 M8 src/features/detail/hooks/useAlbumTracks.ts loose file in hooks/
@@ -172,6 +156,33 @@ M8 src/features/settings/ui/LibraryCard.tsx loose file in ui/
 M8 src/features/settings/ui/OfflineDownloadsCard.tsx loose file in ui/
 M8 src/features/settings/ui/SettingsCard.tsx loose file in ui/
 M8 src/features/settings/ui/SettingsScreen.tsx loose file in ui/
+M8 src/features/signIn/hooks/useAsyncAuthAction.ts loose file in hooks/
+M8 src/features/signIn/hooks/useAuthDeepLink.ts loose file in hooks/
+M8 src/features/signIn/hooks/useAuthDeepLink.web.ts loose file in hooks/
+M8 src/features/signIn/hooks/useEmailPasswordFields.ts loose file in hooks/
+M8 src/features/signIn/hooks/useOAuth.ts loose file in hooks/
+M8 src/features/signIn/hooks/useOAuth.web.ts loose file in hooks/
+M8 src/features/signIn/hooks/useOAuthFlow.ts loose file in hooks/
+M8 src/features/signIn/hooks/useRecoveryUnlocked.ts loose file in hooks/
+M8 src/features/signIn/hooks/useResetPassword.ts loose file in hooks/
+M8 src/features/signIn/hooks/useSignIn.ts loose file in hooks/
+M8 src/features/signIn/hooks/useSignUp.ts loose file in hooks/
+M8 src/features/signIn/hooks/useUpdatePassword.ts loose file in hooks/
+M8 src/features/signIn/ui/AuthCallbackScreen.tsx loose file in ui/
+M8 src/features/signIn/ui/AuthCallbackScreen.web.tsx loose file in ui/
+M8 src/features/signIn/ui/AuthErrorBanner.tsx loose file in ui/
+M8 src/features/signIn/ui/AuthFields.tsx loose file in ui/
+M8 src/features/signIn/ui/AuthForm.tsx loose file in ui/
+M8 src/features/signIn/ui/AuthGate.tsx loose file in ui/
+M8 src/features/signIn/ui/AuthNotices.tsx loose file in ui/
+M8 src/features/signIn/ui/BackToSignInLink.tsx loose file in ui/
+M8 src/features/signIn/ui/CheckEmailNotice.tsx loose file in ui/
+M8 src/features/signIn/ui/ForgotPasswordScreen.tsx loose file in ui/
+M8 src/features/signIn/ui/OAuthButtons.tsx loose file in ui/
+M8 src/features/signIn/ui/SetNewPasswordScreen.tsx loose file in ui/
+M8 src/features/signIn/ui/SignInScreen.tsx loose file in ui/
+M8 src/features/signIn/ui/SignUpScreen.tsx loose file in ui/
+M8 src/features/signIn/ui/TestAuthBridge.tsx loose file in ui/
 M8 src/shared/acquisition/ui/DownloadsBar.tsx loose file in ui/
 M8 src/shared/acquisition/ui/DownloadsSheet.tsx loose file in ui/
 M8 src/shared/acquisition/ui/barDisplay.ts loose file in ui/
@@ -193,11 +204,11 @@ N4 src/features/detail/domain/trackExtras.ts exports TrackExtras with the word E
 N4 src/features/detail/domain/trackExtras.ts exports albumExtras with the word Extras
 N4 src/features/detail/domain/trackExtras.ts exports trackExtras with the word Extras
 N4 src/features/detail/domain/trackExtras.ts name has the word Extras
+N4 src/features/discovery/hooks/results/useImpressionLogger.ts exports ImpressionHandlers with the word Handlers
+N4 src/features/discovery/hooks/results/useResultTap.ts exports ResultTapHandler with the word Handler
 N4 src/features/discovery/hooks/search/useDiscoverLogic.ts exports DiscoverLogic with the word Logic
 N4 src/features/discovery/hooks/search/useDiscoverLogic.ts exports useDiscoverLogic with the word Logic
 N4 src/features/discovery/hooks/search/useDiscoverLogic.ts name has the word Logic
-N4 src/features/discovery/hooks/results/useImpressionLogger.ts exports ImpressionHandlers with the word Handlers
-N4 src/features/discovery/hooks/results/useResultTap.ts exports ResultTapHandler with the word Handler
 N4 src/features/discovery/ui/results/ResultsList.tsx exports ResultsCommonProps with the word Common
 N4 src/features/library/ui/LibraryListParts.tsx name has the word Parts
 N4 src/shared/apiClient/featuredArtists.ts exports featuredArtistsFromExtras with the word Extras

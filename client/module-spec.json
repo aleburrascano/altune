@@ -1,0 +1,26 @@
+{
+  "roots": ["src"],
+  "pure": {
+    "typescript": ["zustand"]
+  },
+  "ui": {
+    "typescript": [
+      "react",
+      "react-dom",
+      "react-native",
+      "react-native-web",
+      "react-native-gesture-handler",
+      "react-native-reanimated",
+      "react-native-safe-area-context",
+      "react-native-screens",
+      "react-native-svg",
+      "react-native-worklets",
+      "expo-blur",
+      "expo-image",
+      "expo-linear-gradient",
+      "expo-status-bar",
+      "lucide-react-native",
+      "@expo-google-fonts/"
+    ]
+  }
+}

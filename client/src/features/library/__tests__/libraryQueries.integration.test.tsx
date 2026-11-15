@@ -4,8 +4,8 @@ import type { ReactNode } from 'react';
 import { signInTestUser } from '@testing/signInTestUser';
 import { useLibraryAlbums, useLibraryArtists } from '@features/library/hooks/useLibraryGroups';
 import { useLibraryTracks } from '@features/library/hooks/useLibraryTracks';
-import { FeaturePorts } from '@/wiring/FeaturePorts';
-import { httpFeaturePorts } from '@/wiring/httpFeaturePorts';
+import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
+import { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

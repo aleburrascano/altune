@@ -1,14 +1,15 @@
 import type { ReactElement, ReactNode } from 'react';
 
-import { UnreleasedSearchHits } from '@features/detail';
-import { DetailPortProvider } from '@features/detail/ports/DetailPortProvider';
-import { DiscoverPortProvider } from '@features/discovery/ports/DiscoverPortProvider';
-import { FavoritesPortProvider } from '@features/discovery/ports/FavoritesPortProvider';
-import { UnreleasedHitsSlotProvider } from '@features/discovery/ports/UnreleasedHitsSlot';
-import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
-import { SettingsPortProvider } from '@features/settings/ports/SettingsPortProvider';
+import { DetailPortProvider, UnreleasedSearchHits } from '@features/detail';
+import {
+  DiscoverPortProvider,
+  FavoritesPortProvider,
+  UnreleasedHitsSlotProvider,
+} from '@features/discovery';
+import { LibraryPortProvider } from '@features/library';
+import { SettingsPortProvider } from '@features/settings';
 
-import type { FeaturePortSet } from '@/wiring/httpFeaturePorts';
+import type { FeaturePortSet } from '@/mobile/wiring/httpFeaturePorts';
 
 interface FeaturePortsProps {
   ports: FeaturePortSet;

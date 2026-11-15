@@ -1,0 +1,3 @@
+role: shared
+owns: how server data is cached, keyed and retried
+depends_on: [apiClient, failure, session, telemetry, timing, ui]

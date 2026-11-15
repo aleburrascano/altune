@@ -1,0 +1,2 @@
+role: shared
+owns: how deadlines and retry backoff are measured

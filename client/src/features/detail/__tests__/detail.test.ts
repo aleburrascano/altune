@@ -7,11 +7,13 @@ describe('@features/detail public surface', () => {
     );
   });
 
-  it('exports exactly DetailScreen, the unreleased full-list screen and the unreleased search hits', () => {
+  it('exports exactly the screens, the unreleased search hits and the port the app wires', () => {
     expect(Object.keys(require('@features/detail')).sort()).toEqual([
+      'DetailPortProvider',
       'DetailScreen',
       'UnreleasedAllScreen',
       'UnreleasedSearchHits',
+      'httpDetailPort',
     ]);
   });
 

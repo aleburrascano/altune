@@ -24,7 +24,6 @@ function findRepoRoot(): string {
 
 const SRC_ROOT = path.join(findRepoRoot(), 'client', 'src');
 const TELEMETRY_DIR = path.join(SRC_ROOT, 'shared', 'telemetry');
-const API_CLIENT_DIR = path.join(SRC_ROOT, 'shared', 'apiClient');
 const FEATURES_DIR = path.join(SRC_ROOT, 'features');
 const APP_DIR = path.join(SRC_ROOT, 'app');
 
@@ -133,28 +132,6 @@ describe('two-tier reliability: label-critical event types go through enqueueCri
     expect(sites.length).toBeGreaterThan(0);
 
     const offenders = sites.flatMap((s) => s.types.filter((t) => LABEL_CRITICAL_TYPES.has(t)));
-    expect(offenders).toEqual([]);
-  });
-});
-
-describe('dependency direction is one-way', () => {
-  it('no file in shared/telemetry imports from a features/* module', () => {
-    const offenders: string[] = [];
-    for (const file of listSourceFiles(TELEMETRY_DIR)) {
-      const source = fs.readFileSync(file, 'utf8');
-      if (/from\s+['"][^'"]*\bfeatures\/[^'"]*['"]/.test(source))
-        offenders.push(path.basename(file));
-    }
-    expect(offenders).toEqual([]);
-  });
-
-  it('nothing in shared/apiClient imports from shared/telemetry', () => {
-    const offenders: string[] = [];
-    for (const file of listSourceFiles(API_CLIENT_DIR)) {
-      const source = fs.readFileSync(file, 'utf8');
-      if (/from\s+['"][^'"]*\btelemetry\/[^'"]*['"]/.test(source))
-        offenders.push(path.basename(file));
-    }
     expect(offenders).toEqual([]);
   });
 });

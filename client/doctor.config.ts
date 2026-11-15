@@ -36,6 +36,11 @@ const resetNativeRunsEvenWhenEmpty = {
   rules: ['react-doctor/async-defer-await'],
 };
 
+const moduleDoorsWaitForCallersToMoveOffInternals = {
+  files: ['src/shared/*/index.ts'],
+  rules: ['deslop/unused-file'],
+};
+
 const imageOnlyResolvesAssetSource = {
   files: ['src/features/player/native/nativeTrack.ts'],
   rules: ['react-doctor/rn-prefer-expo-image'],
@@ -128,7 +133,7 @@ export default {
     overrides: [
       {
         files: [
-          'src/shell/platformExtras.tsx',
+          'src/mobile/frame/platformExtras.tsx',
           'src/features/signIn/hooks/useAuthDeepLink.ts',
           'src/features/signIn/hooks/useOAuth.ts',
           'src/features/signIn/ui/AuthCallbackScreen.tsx',
@@ -175,6 +180,7 @@ export default {
       nativeTailDrainRebuildsInOrder,
       resetNativeRunsEvenWhenEmpty,
       imageOnlyResolvesAssetSource,
+      moduleDoorsWaitForCallersToMoveOffInternals,
       failureShownIsAnImpressionLogSyncedInEffect,
       bannerChildrenOnlyPicksTelemetryMessage,
       mediaSessionEffectsSyncTheBrowserMediaSession,

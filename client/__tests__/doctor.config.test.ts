@@ -22,7 +22,9 @@ function defaultFilesOfPlatformPairs(directory: string): string[] {
     if (!pairMatch) return [];
     const defaultFile = relative(mobileRoot, join(directory, pairMatch[1] + pairMatch[2]));
     const isIosVariantDoctorCannotResolve = entry.name.includes('.ios.');
-    return isIosVariantDoctorCannotResolve ? [defaultFile, relative(mobileRoot, path)] : [defaultFile];
+    return isIosVariantDoctorCannotResolve
+      ? [defaultFile, relative(mobileRoot, path)]
+      : [defaultFile];
   });
 }
 
@@ -35,9 +37,9 @@ describe('doctor.config', () => {
     );
   });
 
-  it('silences unused-file on the dynamically loaded eslint consistency rules', () => {
+  it('silences unused-file only on the eslint consistency rules and the shared module doors', () => {
     const silenced = overridesFor('deslop/unused-file').flatMap((override) => override.files);
 
-    expect(silenced).toEqual(['eslint/consistency/**']);
+    expect(silenced).toEqual(['eslint/consistency/**', 'src/shared/*/index.ts']);
   });
 });
