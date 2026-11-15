@@ -25,13 +25,14 @@ case "$1" in
     if [ "${STUB_NPM_CI_EXIT:-0}" = 0 ]; then
       mkdir node_modules && : >node_modules/.complete
     fi
-    if [ -n "${STUB_GRAFT:-}" ]; then
-      mkdir -p node_modules/@nanonets/graft/node_modules/tree-sitter node_modules/@nanonets/graft/node_modules/tree-sitter-go
-    fi
     exit "${STUB_NPM_CI_EXIT:-0}"
     ;;
-  rebuild) shift; echo "$*" >>"$STUB_REBUILD_LOG"; exit "${STUB_NPM_REBUILD_EXIT:-0}" ;;
 esac
+EOF
+cat >"$stubbin/corepack" <<'EOF'
+#!/usr/bin/env bash
+echo "$*" >>"$STUB_PNPM_LOG"
+exit "${STUB_PNPM_EXIT:-0}"
 EOF
 cat >"$stubbin/rm" <<'STUB'
 #!/usr/bin/env bash
@@ -44,7 +45,12 @@ fi
 exit $rc
 STUB
 chmod +x "$stubbin"/*
-export PATH="$stubbin:$PATH"
+sysbin="$scratch/sysbin"; mkdir -p "$sysbin"
+for tool in /usr/local/bin/* /usr/bin/* /bin/*; do
+  case ${tool##*/} in node | nodejs | npm | npx | corepack | pnpm) continue ;; esac
+  [ -e "$sysbin/${tool##*/}" ] || [ -L "$sysbin/${tool##*/}" ] || ln -s "$tool" "$sysbin/${tool##*/}"
+done
+export PATH="$stubbin:$sysbin"
 
 main=$scratch/main
 git init -q "$main" && git -C "$main" config user.email t@t && git -C "$main" config user.name t
@@ -130,24 +136,35 @@ run .
 check 1 "exits 1 when npm ci fails"
 unset STUB_NPM_CI_EXIT
 
-rm -rf "$wt/node_modules"
-export STUB_NPM_CI_EXIT=0 STUB_GRAFT=1 STUB_REBUILD_LOG="$scratch/rebuild.log"
-run .
-check 0 "builds graft's tree-sitter parsers after npm ci --ignore-scripts"
-[ "$(cat "$STUB_REBUILD_LOG" 2>/dev/null)" = "tree-sitter tree-sitter-go" ] \
-  || { echo "FAIL npm rebuild should get graft's parsers, got: $(cat "$STUB_REBUILD_LOG" 2>/dev/null)"; fail=1; }
+mkdir -p "$wt/pnpmroot" && : >"$wt/pnpmroot/pnpm-lock.yaml"
+export STUB_PNPM_LOG="$scratch/pnpm.log"
+run pnpmroot
+check 0 "runs a frozen pnpm install through corepack where the folder has pnpm-lock.yaml"
+grep -q -- '^pnpm install --frozen-lockfile' "$STUB_PNPM_LOG" 2>/dev/null \
+  || { echo "FAIL pnpm install should keep the lockfile frozen, got: $(cat "$STUB_PNPM_LOG" 2>/dev/null)"; fail=1; }
 
-rm -rf "$wt/node_modules"
-export STUB_NPM_REBUILD_EXIT=1
-run .
-check 1 "exits 1 when building graft's parsers fails"
-unset STUB_NPM_CI_EXIT STUB_GRAFT STUB_REBUILD_LOG STUB_NPM_REBUILD_EXIT
+export STUB_PNPM_EXIT=1
+run pnpmroot
+check 1 "exits 1 when pnpm install fails"
+unset STUB_PNPM_EXIT STUB_PNPM_LOG
+rm -rf "$wt/pnpmroot"
 
 rm -rf "$wt/node_modules"
 export STUB_NODE_MAJOR=20
 run .
 check 3 "exits 3 when no Node >= 22 is found anywhere"
 unset STUB_NODE_MAJOR
+
+later="$scratch/laterbin"; mkdir -p "$later"
+printf '#!/usr/bin/env bash\n[ "$1" = "-e" ] && { echo 22; exit 0; }\necho v22.0.0\n' >"$later/node"
+chmod +x "$later/node"
+rm -rf "$wt/node_modules"
+export STUB_NPM_CI_EXIT=0 STUB_NODE_MAJOR=20
+OUT=$(cd "$wt" && PATH="$stubbin:$later:$PATH" bash "$wd" . 2>"$wt/err.log"); CODE=$?
+check 0 "a Node 20 first on PATH and the wanted Node later on PATH uses the later one"
+grep -qx "export PATH=$later:\$PATH" <<<"$OUT" \
+  || { echo "FAIL should export the PATH of the later wanted node"; echo "$OUT" | sed 's/^/    /'; fail=1; }
+unset STUB_NPM_CI_EXIT STUB_NODE_MAJOR
 
 d="$HOME/.nvm/versions/node/v22.9.0/bin"
 mkdir -p "$d" && cp "$stubbin/node" "$d/node"

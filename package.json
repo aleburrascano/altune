@@ -5,18 +5,20 @@
   "description": "Altune — music manager. Repo root: git-hook and repo tooling only. The mobile app is a standalone npm package under client (see ADR-0016); the Go service lives under services/go-api.",
   "scripts": {
     "prepare": "husky",
-    "cycles": "graft build && node scripts/check-cycles.mjs",
     "dev:up": "docker compose -f services/go-api/deploy/compose.dev.yml up -d",
     "dev:down": "docker compose -f services/go-api/deploy/compose.dev.yml down",
     "dev:reset": "docker compose -f services/go-api/deploy/compose.dev.yml down -v",
     "precheck": "bash scripts/precheck.sh"
   },
   "devDependencies": {
-    "@nanonets/graft": "0.18.0",
     "husky": "^9.1.6",
     "js-yaml": "4.3.2"
   },
   "engines": {
-    "node": ">=22.22.3"
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@12.21.0+sha512.66fd8278ee28935ce951792d34367ff3af5c432a2756445823029533835b8da529bbe0be5130afd56ed0713fb8789e47bad82d93bd5ae2fe54b15562d6276ef0",
+  "optionalDependencies": {
+    "module-spec": "git+https://altune-git.duckdns.org/aleburrascano/module-spec.git"
   }
 }

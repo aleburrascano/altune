@@ -22,6 +22,14 @@ path_node_major() {
   node_major_version node
 }
 
+path_wanted_node_bin() {
+  local bin
+  while read -r bin; do
+    [ "$(node_major_version "$bin")" = "$want_major" ] && { dirname "$bin"; return 0; }
+  done < <(type -ap node)
+  return 1
+}
+
 nvm_node_bin() {
   local best
   best=$(printf '%s\n' "$HOME"/.nvm/versions/node/v*/ | while read -r d; do
@@ -42,6 +50,8 @@ find_node_bin() {
   major=$(path_node_major)
   if is_wanted "$major"; then
     dirname "$(command -v node)"
+  elif path_wanted_node_bin; then
+    :
   elif nvm_node_bin is_wanted; then
     :
   elif is_newer "$major"; then
@@ -80,6 +90,10 @@ borrow_allowed() {
 }
 
 for dir in "$@"; do
+  if [ -f "$dir/pnpm-lock.yaml" ]; then
+    (cd "$dir" && COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm install --frozen-lockfile --prefer-offline --ignore-scripts --reporter=silent) 1>&2 || { log "$dir: pnpm install failed"; exit 1; }
+    continue
+  fi
   [ -f "$dir/package-lock.json" ] || continue
   if [ -d "$dir/node_modules" ] && node_modules_matches_lockfile "$dir"; then
     log "$dir: node_modules already complete"
@@ -94,13 +108,6 @@ for dir in "$@"; do
   log "$dir: running npm ci --ignore-scripts"
   if ! (cd "$dir" && npm ci --ignore-scripts) 1>&2; then
     log "$dir: npm ci failed"
-    exit 1
-  fi
-  natives=$(cd "$dir" && ls -d node_modules/@nanonets/graft/node_modules/tree-sitter* 2>/dev/null | xargs -rn1 basename)
-  [ -z "$natives" ] && continue
-  log "$dir: building graft's parsers, which --ignore-scripts skipped"
-  if ! (cd "$dir" && npm rebuild $natives) 1>&2; then
-    log "$dir: npm rebuild failed"
     exit 1
   fi
 done
