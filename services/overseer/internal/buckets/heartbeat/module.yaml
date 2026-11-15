@@ -1,0 +1,3 @@
+role: feature
+owns: "when the overseer itself counts as alive"
+depends_on: [core]

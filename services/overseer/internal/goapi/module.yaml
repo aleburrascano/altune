@@ -1,0 +1,2 @@
+role: shared
+owns: "how we read go-api's observe endpoints and classify their failures"

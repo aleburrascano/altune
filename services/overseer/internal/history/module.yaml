@@ -1,0 +1,4 @@
+role: shared
+owns: "how bucket samples persist across restarts"
+depends_on: [core]
+owns_tables: [points, rollups, signals]
