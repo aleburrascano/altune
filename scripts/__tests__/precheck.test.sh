@@ -729,7 +729,7 @@ grep -q "^module-spec.sh mutate" "$WORK/module-spec.log" && fail "--lint should 
 CASE="without the kit, module-spec is a SKIP that makes precheck incomplete"
 new_repo
 add_module_spec_root
-run_script_with_stubs
+MODULE_SPEC_RUNS_ELSEWHERE= run_script_with_stubs
 expect_out "SKIP  module-spec: not installed"
 expect_rc 3
 

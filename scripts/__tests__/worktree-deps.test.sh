@@ -45,7 +45,12 @@ fi
 exit $rc
 STUB
 chmod +x "$stubbin"/*
-export PATH="$stubbin:$PATH"
+sysbin="$scratch/sysbin"; mkdir -p "$sysbin"
+for tool in /usr/local/bin/* /usr/bin/* /bin/*; do
+  case ${tool##*/} in node | nodejs | npm | npx | corepack | pnpm) continue ;; esac
+  [ -e "$sysbin/${tool##*/}" ] || [ -L "$sysbin/${tool##*/}" ] || ln -s "$tool" "$sysbin/${tool##*/}"
+done
+export PATH="$stubbin:$sysbin"
 
 main=$scratch/main
 git init -q "$main" && git -C "$main" config user.email t@t && git -C "$main" config user.name t
