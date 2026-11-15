@@ -19,6 +19,8 @@ linters:
     - dupl
     - funlen
     - revive
+    - sloglint
+    - forbidigo
 
   settings:
     cyclop:
@@ -28,6 +30,14 @@ linters:
       min-complexity: 20
     dupl:
       threshold: 150
+    sloglint:
+      context: scope
+      no-mixed-args: false
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^http\.Error$
+          msg: write the error through httputil.HandleServiceError
     funlen:
       lines: 20
       statements: 20
@@ -60,6 +70,13 @@ linters:
           - gocritic
           - funlen
           - revive
+          - forbidigo
+      - path: internal/shared/httputil/
+        linters:
+          - forbidigo
+      - linters:
+          - sloglint
+        text: DiscardHandler
       - path: (cmd/(api/main\.go|discoveryeval/)|/eval/|/catalogtest/)
         linters:
           - dupl

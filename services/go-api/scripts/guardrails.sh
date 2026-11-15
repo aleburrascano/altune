@@ -16,12 +16,6 @@ default_base_ref() { git rev-parse --verify --quiet gitea/main >/dev/null && ech
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
-do_lint() {
-  echo "== depguard: import direction + inward layering (blocking) =="
-  have golangci-lint || go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_VERSION}"
-  golangci-lint run ./... || rc=1
-}
-
 do_strict() {
   echo "== strict linters (full backlog; CI gates only NEW findings) =="
   have golangci-lint || go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_VERSION}"
@@ -82,13 +76,12 @@ do_nilaway() {
 }
 
 case "${target}" in
-  lint)    do_lint ;;
   strict)  do_strict ;;
   fmt)     do_fmt ;;
   fmt-all) do_fmt_all ;;
   vuln)    do_vuln ;;
   nilaway) do_nilaway ;;
-  all)     do_lint; do_strict; do_vuln; do_nilaway ;;
+  all)     do_strict; do_vuln; do_nilaway ;;
   *)       echo "unknown target: ${target}"; exit 2 ;;
 esac
 

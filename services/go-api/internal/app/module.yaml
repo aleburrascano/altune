@@ -1,0 +1,3 @@
+role: app
+owns: "how the API server is wired from its modules and run"
+depends_on: [acquisition, auth, binpath, catalog, config, database, discovery, egress, events, eventstream, httptrace, httputil, kernel, leader, logging, observe, phonetics, playback, redis, reqmetrics, runloop, sharedtest, telemetry, textnorm, ytminnertube]

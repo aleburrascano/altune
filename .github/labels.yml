@@ -7,7 +7,7 @@
   description: "Security hardening, redaction, config validation"
 - name: "type:tooling"
   color: "d4c5f9"
-  description: "CI, linters, build, depguard"
+  description: "CI, linters, build, module-spec"
 - name: "type:spike"
   color: "d4c5f9"
   description: "Research or ADR-first decision work; no shippable code"

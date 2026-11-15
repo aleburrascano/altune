@@ -143,15 +143,9 @@ if touches '^services/go-api/'; then
     elif [ ${#affected[@]} -gt 0 ]; then
       check "go-api vet" $m "${heavy[@]}" go vet "${affected[@]}"
     fi
-    import_scope=(--new-from-rev="$base")
-    if touches '(^|/)\.golangci[^/]*\.yml$' || [ -n "$(git diff -M --name-only --diff-filter=RC "$base")" ] || [ -n "$(untracked | grep -E '\.go$')" ]; then
-      import_scope=()
-    fi
-    check "go-api import direction" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run "${import_scope[@]}" --allow-serial-runners
     check "go-api strict linters (new code)" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --new-from-rev="$base" --allow-serial-runners
     check "go-api no comments (whole tree)" $m go run ./scripts/lintcomments --all .
     check "go-api no new vague names" $m go run ./scripts/lintnames "$base"
-    check "go-api module shape" $m go run ./scripts/moduleshape
     mapfile -t pkgs < <(go_pkgs $m)
     [ ${#pkgs[@]} -gt 0 ] && test_check "go-api tests (changed packages)" $m "${heavy[@]}" go test -shuffle=on -count=1 "${pkgs[@]}"
     if [ $whole_module = 1 ] || grep -qE '(^| )[^ ]*/cmd/acquisitioneval( |$)' <<<"${affected[*]}"; then
@@ -203,7 +197,7 @@ if touches '^services/overseer/'; then
   if need go "overseer" && need golangci-lint "overseer lint"; then
     check "overseer build" $m "${heavy[@]}" go build ./...
     check "overseer vet" $m "${heavy[@]}" go vet ./...
-    check "overseer strict linters" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config "$root/services/go-api/.golangci.strict.yml" --disable=funlen,revive --allow-serial-runners
+    check "overseer strict linters" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config "$root/services/go-api/.golangci.strict.yml" --disable=funlen,revive,sloglint,forbidigo --allow-serial-runners
     check "overseer no comments (whole tree)" services/go-api go run ./scripts/lintcomments --all ../overseer
     test_check "overseer tests (race)" $m "${heavy[@]}" env CGO_ENABLED=1 go test -race -shuffle=on -count=1 ./...
     touches '^services/overseer/go\.(mod|sum)$' && need govulncheck "overseer govulncheck" && check "overseer govulncheck" $m "${heavy[@]}" govulncheck ./...

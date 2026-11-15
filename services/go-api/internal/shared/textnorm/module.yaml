@@ -1,0 +1,2 @@
+role: shared
+owns: "how text is normalised and fuzzily compared"
