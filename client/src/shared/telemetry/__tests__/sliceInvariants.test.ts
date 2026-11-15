@@ -14,18 +14,7 @@ import type { DiscoveryEvent } from '@shared/telemetry';
 const EVENTS_ENQUEUED = 2;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
-function findRepoRoot(): string {
-  let dir = __dirname;
-  for (let hop = 0; hop < 12; hop += 1) {
-    if (fs.existsSync(path.join(dir, 'services', 'go-api'))) return dir;
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  throw new Error('repo root not found from ' + __dirname);
-}
-
-const SRC_ROOT = path.join(findRepoRoot(), 'client', 'src');
+const SRC_ROOT = path.resolve(__dirname, '..', '..', '..');
 const TELEMETRY_DIR = path.join(SRC_ROOT, 'shared', 'telemetry');
 const FEATURES_DIR = path.join(SRC_ROOT, 'features');
 const APP_DIR = path.join(SRC_ROOT, 'app');

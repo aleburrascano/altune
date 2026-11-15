@@ -55,18 +55,21 @@ describe('apiBase startup validation', () => {
     ['http://127.0.0.1.altune.example.org'],
     ['http://localhost.altune.example.org'],
     ['http://127.0.0.1@altune.example.org'],
+    ['http://altune.example.org/localhost'],
   ])('fails at module load for the plaintext remote base %p in a production build', (value) => {
     expect(() => loadApiBase(value, false)).toThrow(
       `Insecure EXPO_PUBLIC_API_URL "${value}": a release build requires https:// for a remote host`,
     );
   });
 
-  it.each([['http://127.0.0.1:8000'], ['http://localhost:8000'], ['http://[::1]:8000']])(
-    'keeps accepting the on-device base %p in a production build',
-    (value) => {
-      expect(loadApiBase(value, false)).toBe(value);
-    },
-  );
+  it.each([
+    ['http://127.0.0.1:8000'],
+    ['http://localhost:8000'],
+    ['http://[::1]:8000'],
+    ['http://localhost'],
+  ])('keeps accepting the on-device base %p in a production build', (value) => {
+    expect(loadApiBase(value, false)).toBe(value);
+  });
 
   it('keeps accepting a plaintext LAN base in a development build', () => {
     expect(loadApiBase('http://192.168.1.20:8000', true)).toBe('http://192.168.1.20:8000');
