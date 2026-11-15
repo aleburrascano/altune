@@ -3,10 +3,10 @@ import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ListMusic, Mic2, MoreHorizontal, Pause, Play, RotateCcw } from 'lucide-react-native';
 
-import { withFeaturing } from '@shared/apiClient/featuredArtists';
+import { withFeaturing } from '@shared/apiClient';
 import { shouldRestartOnPrevious } from '@features/player/domain/restartOnPrevious';
-import { useQueueStore } from '@shared/playback/queueStore';
-import type { PlaybackErrorKind, PlaybackStatus } from '@shared/playback/playbackContextValue';
+import { useQueueStore } from '@shared/playback';
+import type { PlaybackErrorKind, PlaybackStatus } from '@shared/playback';
 import {
   canRetryPlaybackError,
   endedLabel,
@@ -24,12 +24,17 @@ import {
 } from '@features/player/ui/SheetHeader';
 import { TransportControls } from '@features/player/ui/TransportControls';
 import { usePlaybackTransport } from '@features/player/hooks/usePlaybackTransport';
-import { Artwork } from '@shared/ui/primitives/Artwork';
-import { Text } from '@shared/ui/primitives/Text';
-import { Button } from '@shared/ui/primitives/Button';
-import { IconButton } from '@shared/ui/primitives/IconButton';
-import { useTheme, halved, touchTarget } from '@shared/ui/theme';
-import { radius, spacing } from '@shared/ui/theme/tokens';
+import {
+  Artwork,
+  Text,
+  Button,
+  IconButton,
+  useTheme,
+  halved,
+  touchTarget,
+  radius,
+  spacing,
+} from '@shared/ui';
 
 function getStatusDisplay(
   status: PlaybackStatus,

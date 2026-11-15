@@ -1,8 +1,5 @@
-import { audioRequestHeaders } from '@shared/apiClient/audio';
-import { apiFetch } from '@shared/apiClient/index';
-import { supabase } from '@shared/auth/supabaseClient';
-import { clearSessionExpired } from '@shared/auth/sessionExpired';
-
+import { audioRequestHeaders, apiFetch } from '@shared/apiClient';
+import { supabase, clearSessionExpired } from '@shared/auth';
 const { __http } = require('@testing/doubles/fetch.js');
 
 beforeEach(() => {

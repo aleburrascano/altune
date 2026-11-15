@@ -1,13 +1,16 @@
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react-native';
-import { asTrackId, type TrackId } from '@shared/apiClient/ids';
-import type { TrackResponse, ListTracksResponse } from '@shared/apiClient/trackResponse';
+import {
+  type TrackResponse,
+  type ListTracksResponse,
+  type PlaylistDetailResponse,
+  asTrackId,
+  type TrackId,
+} from '@shared/apiClient';
 import { trackResponseFactory } from '@testing/factories';
 import {
   useReacquireTrack,
   useRetryAcquisition,
-} from '@features/library/hooks/useRetryAcquisition';
-import { TracksList } from '@features/library/ui/TracksList';
-import {
+  TracksList,
   setup,
   track,
   playlist,
@@ -19,18 +22,16 @@ import {
   page,
   TRACKS_KEY,
   pagedIds,
-} from '@features/library/__tests__/trackMutationFixtures';
+  createMemoryLibraryPort,
+  LibraryPortProvider,
+} from '@features/library';
 import { Alert } from 'react-native';
-import { ApiError, NetworkError } from '@shared/failure/errors';
-import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
-import { useTrackStatusStore } from '@shared/acquisition/state/trackStatusStore';
-import { usePinnedStore } from '@shared/offline/state/pinnedStore';
-import { RETRY_TAIL } from '@shared/failure/describeError';
+import { ApiError, NetworkError, RETRY_TAIL } from '@shared/failure';
+import { useTrackStatusStore } from '@shared/acquisition';
+import { usePinnedStore } from '@shared/offline';
 import type { ReactNode } from 'react';
 import { QueryClientProvider, type InfiniteData } from '@tanstack/react-query';
-import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
-import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
-import type { LibraryPort } from '@features/library/ports/libraryPort';
+import type { LibraryPort } from '@features/library';
 import { signInTestUser } from '@testing/signInTestUser';
 
 const { __http } = require('@testing/doubles/fetch.js');

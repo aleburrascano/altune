@@ -1,10 +1,10 @@
-import { randomUuid } from '@shared/id/uuid';
-import { subscribeAppState } from '@shared/lifecycle/appState';
+import { randomUuid } from '@shared/id';
+import { subscribeAppState } from '@shared/lifecycle';
 
-import { ApiError, NetworkError } from '@shared/apiClient';
-import { clampedExponent, equalJitterMs } from '@shared/timing/backoff';
-import { isLoopEnabled, onKillSwitchChange } from '@shared/killSwitch/killSwitch';
-import { onSignOut } from '@shared/session/signOutCleanup';
+import { ApiError, NetworkError } from '@shared/failure';
+import { clampedExponent, equalJitterMs } from '@shared/timing';
+import { isLoopEnabled, onKillSwitchChange } from '@shared/killSwitch';
+import { onSignOut } from '@shared/session';
 
 import { loadPersistedOutbox, persistOutbox } from '@shared/telemetry/outboxStore';
 import {

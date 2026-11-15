@@ -1,4 +1,4 @@
-import { subscribeAppState } from '@shared/lifecycle/appState';
+import { subscribeAppState } from '@shared/lifecycle';
 import { recordEvent, type DiscoveryEventType } from '@shared/telemetry/recordEvent';
 
 export const HEALTH_BATCH = 25;

@@ -4,11 +4,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { useWideWebLayout } from '@shared/ui/layout';
-import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
-import { useTheme, type Theme, spacing, withAlpha } from '@shared/ui/theme';
-import { Text } from '@shared/ui/primitives/Text';
-
+import {
+  type ContextMenuItem,
+  useWideWebLayout,
+  useTheme,
+  type Theme,
+  spacing,
+  withAlpha,
+  Text,
+} from '@shared/ui';
 import { DetailTopBar, type DetailTopBarProps } from '@features/detail/ui/DetailTopBar';
 import { DETAIL_GUTTER, WIDE_LEFT_COLUMN_WIDTH } from '@features/detail/ui/detailStyles';
 

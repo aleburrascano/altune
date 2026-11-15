@@ -1,11 +1,10 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import { asTrackId } from '@shared/apiClient/ids';
-import { useTrackStatusStore } from '@shared/acquisition/state/trackStatusStore';
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+import { asTrackId } from '@shared/apiClient';
+import { useTrackStatusStore } from '@shared/acquisition';
+import { runSignOutCleanups } from '@shared/session';
 
-import { useRetryTrack } from '@features/detail/hooks/useRetryTrack';
-import { createMemoryDetailPort } from './memoryDetailPort';
+import { useRetryTrack, createMemoryDetailPort } from '@features/detail';
 import { createPortWrapper, createTestQueryClient, signInTestUser } from '@testing/queryHarness';
 
 const { __http } = require('@testing/doubles/fetch.js');

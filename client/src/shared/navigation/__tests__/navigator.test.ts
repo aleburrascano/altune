@@ -1,4 +1,4 @@
-import { tabRootFromSegments } from '@shared/navigation/navigator';
+import { tabRootFromSegments } from '@shared/navigation';
 
 describe('tabRootFromSegments', () => {
   it('returns library for a library segment', () => {

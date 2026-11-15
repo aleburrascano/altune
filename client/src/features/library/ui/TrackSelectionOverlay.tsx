@@ -1,19 +1,25 @@
 import type { ReactElement } from 'react';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { countLabel } from '@shared/ui/format/displayFormat';
+import type { TrackResponse } from '@shared/apiClient';
+import {
+  countLabel,
+  ContextMenu,
+  HorizontalRail,
+  Tappable,
+  type TappableProps,
+  Text,
+  minInteractiveHeight,
+  radius,
+  spacing,
+  useTheme,
+  opacity,
+} from '@shared/ui';
 import { AddToPlaylistSheet } from '@shared/playlists';
-import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import { useReconcileSelection } from '@features/library/hooks/useSelection';
 import type {
   TrackSelectionController,
   SelectionAction,
 } from '@features/library/hooks/useTrackSelection';
 import { StyleSheet, View, type ListRenderItemInfo } from 'react-native';
-import { HorizontalRail } from '@shared/ui/primitives/HorizontalRail';
-import { Tappable, type TappableProps } from '@shared/ui/primitives/Tappable';
-import { Text, minInteractiveHeight, radius, spacing, useTheme } from '@shared/ui';
-import { opacity } from '@shared/ui/theme';
-
 type TrackSelectionOverlayProps = {
   controller: TrackSelectionController;
   tracks: TrackResponse[];

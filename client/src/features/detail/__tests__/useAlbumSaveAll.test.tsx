@@ -1,12 +1,10 @@
 import { act, renderHook } from '@testing-library/react-native';
 
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import type { DiscoveryResult } from '@shared/apiClient';
 
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+import { runSignOutCleanups } from '@shared/session';
 
-import { useAlbumSaveAll } from '@features/detail/hooks/useAlbumSaveAll';
-import { SAVE_ALL_CONCURRENCY } from '@features/detail/domain/saveTrack';
-
+import { useAlbumSaveAll, SAVE_ALL_CONCURRENCY } from '@features/detail';
 const SENT_TWICE = 2;
 
 const album: DiscoveryResult = {

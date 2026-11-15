@@ -1,10 +1,10 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import { detailHref } from '@shared/navigation/detailHandoff';
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+import type { DiscoveryResult } from '@shared/apiClient';
+import { detailHref } from '@shared/navigation';
+import { runSignOutCleanups } from '@shared/session';
 
-import { DetailScreen } from '@features/detail/ui/DetailScreen';
+import { DetailScreen } from '@features/detail';
 import {
   createTestQueryClient,
   createPlaybackWrapper,

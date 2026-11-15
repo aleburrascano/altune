@@ -1,16 +1,15 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-import { AcquisitionPortProvider } from '@shared/acquisition/ports/AcquisitionPortProvider';
-import type { AcquisitionPort } from '@shared/acquisition/ports/acquisitionPort';
-import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
+import { AcquisitionPortProvider } from '@shared/acquisition';
+import type { AcquisitionPort } from '@shared/acquisition';
+import type { PlaybackContextValue } from '@shared/playback';
 import { makeIdlePlayback } from '@testing/factories';
-import { PlaybackContext } from '@shared/playback/usePlayback';
+import { PlaybackContext } from '@shared/playback';
 
-import { DetailPortProvider } from '@features/detail/ports/DetailPortProvider';
-import type { DetailPort } from '@features/detail/ports/detailPort';
-import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
-import { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
+import { DetailPortProvider } from '@features/detail';
+import type { DetailPort } from '@features/detail';
+import { FeaturePorts, httpFeaturePorts } from '@/mobile';
 
 interface WrapperProps {
   children: React.ReactNode;

@@ -1,14 +1,15 @@
 import { Platform } from 'react-native';
-import { apiFetch, apiBase, ApiError, NetworkError } from '@shared/apiClient/index';
-import { supabase } from '@shared/auth/supabaseClient';
+import { apiFetch, ApiError, NetworkError } from '@shared/apiClient';
+import { apiBase } from '@shared/apiConfig';
 import {
+  supabase,
   clearSessionExpired,
   getSessionExpired,
   renewSessionCredentials,
-} from '@shared/auth/sessionExpired';
-import { ContractError } from '@shared/failure/errors';
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
-import { useAnalyticsPreference } from '@shared/device/analyticsPreference';
+} from '@shared/auth';
+import { ContractError } from '@shared/failure';
+import { runSignOutCleanups } from '@shared/session';
+import { useAnalyticsPreference } from '@shared/device';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

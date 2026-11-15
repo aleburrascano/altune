@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
+import { useRecordEvent } from '@shared/telemetry';
 
 import { buildImpressionRows } from '@features/discovery/domain/buildImpressionRows';
-import type { DiscoverySearchResponse } from '@shared/apiClient/discovery';
+import type { DiscoverySearchResponse } from '@shared/apiClient';
 
 type ViewableItem = { key: string; isViewable: boolean };
 

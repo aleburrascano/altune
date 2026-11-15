@@ -3,6 +3,7 @@
   "entry": [
     "src/app/**/*.{ts,tsx}",
     "src/{features,shared}/*/index.ts",
+    "src/mobile/index.ts",
     "doctor.config.ts",
     "fingerprint.config.js",
     "scripts/**/*.mjs",
@@ -39,5 +40,43 @@
     "unused-exports": "warn",
     "unused-types": "warn",
     "unused-dependencies": "warn"
-  }
+  },
+  "ignoreExports": [
+    {
+      "file": "src/mobile/frame/platformExtras.android.tsx",
+      "exports": ["*"]
+    },
+    {
+      "file": "src/mobile/frame/platformExtras.tsx",
+      "exports": ["*"]
+    },
+    {
+      "file": "src/shared/device/isWebPlatform.ts",
+      "exports": ["*"]
+    },
+    {
+      "file": "src/shared/device/webOrigin.ts",
+      "exports": ["*"]
+    },
+    {
+      "file": "src/shared/files/defaultFileStore.ts",
+      "exports": ["*"]
+    },
+    {
+      "file": "src/shared/ui/dialog/dialog.ts",
+      "exports": ["*"]
+    },
+    {
+      "file": "src/shared/ui/keyboard/keyboard.ios.tsx",
+      "exports": ["*"]
+    },
+    {
+      "file": "src/shared/ui/keyboard/keyboard.tsx",
+      "exports": ["*"]
+    },
+    {
+      "file": "src/shared/ui/primitives/HorizontalRail.tsx",
+      "exports": ["*"]
+    }
+  ]
 }

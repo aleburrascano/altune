@@ -1,4 +1,4 @@
-import type { TextTone } from '@shared/ui/primitives/Text';
+import type { TextTone } from '@shared/ui';
 import { failureCopyForAction } from '@features/settings/domain/failureCopyForAction';
 
 type BackfillStatus = 'idle' | 'pending' | 'error' | 'success';

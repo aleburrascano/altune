@@ -1,7 +1,6 @@
-import type { FeaturedArtist } from '@shared/apiClient/trackResponse';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
-import type { QueueSource } from '@shared/playback/queueOrder';
-import type { ActionSheetOption } from '@shared/ui/primitives/ActionSheet';
+import type { FeaturedArtist } from '@shared/apiClient';
+import type { PlaybackTrack, QueueSource } from '@shared/playback';
+import type { ActionSheetOption } from '@shared/ui';
 
 export type QueueItem = {
   trackIndex: number;

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import { PlaybackContext } from '@shared/playback/usePlayback';
-import type { PlaybackContextValue, PlaybackState } from '@shared/playback/playbackContextValue';
-import { onSignOut } from '@shared/session/signOutCleanup';
+import { PlaybackContext } from '@shared/playback';
+import type { PlaybackContextValue, PlaybackState } from '@shared/playback';
+import { onSignOut } from '@shared/session';
 
 import { derivePlaybackState } from '@features/player/domain/derivePlaybackState';
 import { useMediaSession } from '@features/player/hooks/useMediaSession';

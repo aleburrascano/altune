@@ -1,6 +1,6 @@
-import type { ResolvedAudioUrl } from '@shared/apiClient/audio';
+import type { ResolvedAudioUrl } from '@shared/apiClient';
 
-import type { OfflinePort } from '@shared/offline/ports/offlinePort';
+import type { OfflinePort } from '@shared/offline';
 
 export type SeededAudioUrls = Record<string, { url: string; version: string }>;
 

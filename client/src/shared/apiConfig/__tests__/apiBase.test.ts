@@ -1,6 +1,4 @@
-import type * as ApiClient from '@shared/apiClient/index';
-
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
+import type * as ApiConfig from '@shared/apiConfig';
 
 type DevGlobal = { __DEV__: boolean };
 
@@ -13,7 +11,7 @@ function loadApiBase(value: string | undefined, dev: boolean): string {
   (globalThis as unknown as DevGlobal).__DEV__ = dev;
   let apiBase = '';
   jest.isolateModules(() => {
-    apiBase = (require('@shared/apiClient/index') as typeof ApiClient).apiBase;
+    apiBase = (require('@shared/apiConfig') as typeof ApiConfig).apiBase;
   });
   return apiBase;
 }

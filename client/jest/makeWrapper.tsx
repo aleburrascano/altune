@@ -1,7 +1,6 @@
 import React from 'react';
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
-import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
-import { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
+import { FeaturePorts, httpFeaturePorts } from '@/mobile';
 
 export function makeWrapper(queryClient: QueryClient) {
   return function Wrapper({ children }: { children: React.ReactNode }) {

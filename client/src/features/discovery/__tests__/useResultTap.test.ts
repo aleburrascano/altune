@@ -2,14 +2,13 @@ import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { Keyboard } from 'react-native';
 
-import { useResultTap } from '@features/discovery/hooks/results/useResultTap';
-import { readDetailHandoff } from '@shared/navigation/detailHandoff';
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
-import { resultFixture } from '@features/discovery/__tests__/fixtures';
+import { useResultTap, resultFixture } from '@features/discovery';
+import { readDetailHandoff } from '@shared/navigation';
+import { runSignOutCleanups } from '@shared/session';
 import { makeWrapper } from '@testing/makeWrapper';
 import { signInTestUser } from '@testing/signInTestUser';
 
-import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/apiClient/discovery';
+import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/apiClient';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

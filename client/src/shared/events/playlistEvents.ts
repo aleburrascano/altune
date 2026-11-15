@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 
-import { playlistKeys } from '@shared/query/queryKeys';
+import { playlistKeys } from '@shared/query';
 
 import {
   asPlaylistIdOrNull,

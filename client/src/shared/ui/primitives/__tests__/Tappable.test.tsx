@@ -2,7 +2,7 @@ import { Text } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import * as userTelemetry from '@shared/telemetry/userTelemetry';
-import { Tappable } from '@shared/ui/primitives/Tappable';
+import { Tappable } from '@shared/ui';
 
 let record: jest.SpyInstance;
 

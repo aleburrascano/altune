@@ -6,14 +6,15 @@ import {
   recoverAudio,
   fetchAudioUrls,
   isAudioPrefetchEnabled,
-} from '@shared/apiClient/audio';
-import { apiBase, ApiError, NetworkError } from '@shared/apiClient/index';
-import { CORRELATION_HEADER } from '@shared/apiClient/correlationId';
-import { ContractError } from '@shared/failure/errors';
-import { asTrackId, type TrackId } from '@shared/apiClient/ids';
-import { supabase } from '@shared/auth/supabaseClient';
-import { clearSessionExpired, getSessionExpired } from '@shared/auth/sessionExpired';
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+  CORRELATION_HEADER,
+  asTrackId,
+  type TrackId,
+} from '@shared/apiClient';
+import { ApiError, NetworkError } from '@shared/apiClient';
+import { apiBase } from '@shared/apiConfig';
+import { ContractError } from '@shared/failure';
+import { supabase, clearSessionExpired, getSessionExpired } from '@shared/auth';
+import { runSignOutCleanups } from '@shared/session';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

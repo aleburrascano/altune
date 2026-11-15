@@ -1,4 +1,4 @@
-import { isAppActive, subscribeAppState } from '@shared/lifecycle/appState';
+import { isAppActive, subscribeAppState } from '@shared/lifecycle';
 
 type Handler = (state: string) => void;
 

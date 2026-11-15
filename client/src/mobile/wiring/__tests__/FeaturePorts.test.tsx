@@ -1,19 +1,16 @@
 import { renderHook } from '@testing-library/react-native';
 import type { PropsWithChildren } from 'react';
 
-import { createMemoryDetailPort } from '@features/detail/__tests__/memoryDetailPort';
-import { useDetailPort } from '@features/detail/ports/DetailPortProvider';
-import { createMemoryDiscoverPort } from '@features/discovery/__tests__/memoryDiscoverPort';
-import { createMemoryFavoritesPort } from '@features/discovery/__tests__/memoryFavoritesPort';
-import { useDiscoverPort } from '@features/discovery/ports/DiscoverPortProvider';
-import { useFavoritesPort } from '@features/discovery/ports/FavoritesPortProvider';
-import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
-import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
-import { createMemorySettingsPort } from '@features/settings/__tests__/memorySettingsPort';
-import { useSettingsPort } from '@features/settings/ports/SettingsPortProvider';
-
-import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
-import { httpFeaturePorts, type FeaturePortSet } from '@/mobile/wiring/httpFeaturePorts';
+import { createMemoryDetailPort, useDetailPort } from '@features/detail';
+import {
+  createMemoryDiscoverPort,
+  createMemoryFavoritesPort,
+  useDiscoverPort,
+  useFavoritesPort,
+} from '@features/discovery';
+import { createMemoryLibraryPort, useLibraryPort } from '@features/library';
+import { createMemorySettingsPort, useSettingsPort } from '@features/settings';
+import { FeaturePorts, httpFeaturePorts, type FeaturePortSet } from '@/mobile';
 
 function useEveryPort(): FeaturePortSet {
   return {

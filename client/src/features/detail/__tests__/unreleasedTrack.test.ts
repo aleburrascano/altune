@@ -1,7 +1,5 @@
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import type { UnreleasedTrack } from '@shared/apiClient/enrichment';
-
-import { isAcquirable, unreleasedAsResult } from '@features/detail/domain/unreleasedTrack';
+import type { DiscoveryResult, UnreleasedTrack } from '@shared/apiClient';
+import { isAcquirable, unreleasedAsResult } from '@features/detail';
 
 const ARTIST: DiscoveryResult = {
   kind: 'artist',

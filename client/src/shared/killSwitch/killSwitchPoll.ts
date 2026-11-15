@@ -1,6 +1,6 @@
-import { subscribeAppState } from '@shared/lifecycle/appState';
+import { subscribeAppState } from '@shared/lifecycle';
 
-import { startDeadline } from '@shared/timing/deadline';
+import { startDeadline } from '@shared/timing';
 
 import { applyKillSwitches } from '@shared/killSwitch/killSwitch';
 

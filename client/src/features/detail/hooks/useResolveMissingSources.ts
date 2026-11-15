@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import type { DiscoveryResult } from '@shared/apiClient';
 
 import { resolveEntityQuery } from '@features/detail/domain/resolveEntityQuery';
 import { normalizeForCompare } from '@features/detail/domain/normalizeForCompare';

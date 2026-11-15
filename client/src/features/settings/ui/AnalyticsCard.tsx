@@ -1,7 +1,7 @@
 import { ShieldCheck } from 'lucide-react-native';
 import type { ReactElement } from 'react';
 
-import { useAnalyticsPreference } from '@shared/device/analyticsPreference';
+import { useAnalyticsPreference } from '@shared/device';
 import {
   SettingsCard,
   SettingsRow,

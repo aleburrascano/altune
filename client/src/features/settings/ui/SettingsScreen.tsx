@@ -2,10 +2,10 @@ import { ChevronRight, User } from 'lucide-react-native';
 import type { ReactElement } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
-import { appVersionLabel } from '@shared/device/device';
+import { appVersionLabel } from '@shared/device';
 import { Screen, Text, spacing, useTheme } from '@shared/ui';
-import { useSignOut } from '@shared/auth/useSignOut';
-import { offlineDownloadsSupported } from '@shared/offline/domain/offlineSupport';
+import { useSignOut } from '@shared/auth';
+import { offlineDownloadsSupported } from '@shared/offline';
 import { useAccountEmail } from '@features/settings/hooks/useAccountEmail';
 import { useSettingsClearSearchHistory } from '@features/settings/hooks/useSettingsClearSearchHistory';
 import { useDownloadStats, useRemoveDownloads } from '@features/settings/hooks/useDownloads';

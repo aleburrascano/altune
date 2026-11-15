@@ -1,15 +1,17 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';
-import { asPlaylistId } from '@shared/apiClient/ids';
-import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
-import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
-import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
-import type { LibraryPort } from '@features/library/ports/libraryPort';
-import { GROUP_PAGE_SIZE } from '@features/library/domain/listPaging';
-import { usePlaylistActions } from '@features/library/hooks/usePlaylistActions';
-import { usePlaylistsView } from '@features/library/hooks/usePlaylistsView';
-import { SortControl } from '@shared/ui/primitives/SortControl';
+import { asPlaylistId } from '@shared/apiClient';
+import type { PlaylistDetailResponse } from '@shared/apiClient';
+import {
+  createMemoryLibraryPort,
+  LibraryPortProvider,
+  GROUP_PAGE_SIZE,
+  usePlaylistActions,
+  usePlaylistsView,
+} from '@features/library';
+import type { LibraryPort } from '@features/library';
+import { SortControl } from '@shared/ui';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 
 const FULL_PAGES = 2;

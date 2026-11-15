@@ -1,14 +1,14 @@
 import { File } from 'expo-file-system';
 
-import { type FileStore, createFileStoreSlot } from '@shared/files/fileStore';
-import { deviceFileStore } from '@shared/files/native/deviceFileStore';
-import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import {
+  type FileStore,
+  createFileStoreSlot,
+  deviceFileStore,
+  createMemoryFileStore,
   WEB_DOWNLOAD_UNSUPPORTED,
   fakeLocalStorage,
   webFileStoreOver,
-} from '@shared/files/__tests__/webStorage';
-
+} from '@shared/files';
 describe.each<[string, () => FileStore]>([
   ['deviceFileStore', () => deviceFileStore],
   ['createMemoryFileStore', createMemoryFileStore],

@@ -1,10 +1,9 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
-import type { DiscoverySource } from '@shared/apiClient/discovery';
+import type { DiscoverySource } from '@shared/apiClient';
 
-import { _resetDetailHealthForTest } from '@features/detail/domain/detailHealth';
-import { useRelatedTracks } from '@features/detail/hooks/useRelatedTracks';
+import { _resetDetailHealthForTest, useRelatedTracks } from '@features/detail';
 import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
 
 const { __http } = require('@testing/doubles/fetch.js');

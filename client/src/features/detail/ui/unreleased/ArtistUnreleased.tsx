@@ -1,18 +1,12 @@
 import { useState, type ReactElement } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
 
-import { Tappable } from '@shared/ui/primitives/Tappable';
-import { Text } from '@shared/ui/primitives/Text';
-import { HorizontalRail } from '@shared/ui/primitives/HorizontalRail';
-import { spacing } from '@shared/ui/theme';
-
+import { Tappable, Text, HorizontalRail, spacing } from '@shared/ui';
 import { useOpenUnreleased } from '@features/detail/hooks/useDetailNavigation';
 import type { DetailRoute } from '@features/detail/domain/detailNavigation';
 import type { UnreleasedWhere } from '@features/detail/domain/unreleasedView';
 import { hasManyVersions } from '@features/detail/domain/unreleasedTrack';
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import type { UnreleasedTrack } from '@shared/apiClient/enrichment';
-
+import type { DiscoveryResult, UnreleasedTrack } from '@shared/apiClient';
 import { useUnreleasedCard, useUnreleasedTracks } from '@features/detail/hooks/useUnreleasedTracks';
 import { FilterChips, type ChipGroup } from '@features/detail/ui/DiscographySections';
 import { DETAIL_GUTTER } from '@features/detail/ui/detailStyles';

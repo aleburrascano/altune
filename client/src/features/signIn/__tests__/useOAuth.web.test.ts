@@ -6,11 +6,7 @@ import { useOAuth } from '@features/signIn/hooks/useOAuth.web';
 import * as nativeWebOrigin from '@shared/device/webOrigin';
 import * as browserWebOrigin from '@shared/device/webOrigin.web';
 
-import {
-  authPortWrapper,
-  createAuthPortMock,
-  createSupabaseAuthMock,
-} from '@features/signIn/__tests__/testUtils/authTestUtils';
+import { authPortWrapper, createAuthPortMock, createSupabaseAuthMock } from '@features/signIn';
 
 const AUTH_ACTION_TIMEOUT_MS = 20_000;
 

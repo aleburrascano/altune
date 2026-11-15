@@ -1,14 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 
-import type { DiscoveryKind, DiscoveryResult } from '@shared/apiClient/discovery';
-import { detailKeys } from '@shared/query/queryKeys';
-import { isAbort } from '@shared/failure/errors';
 import type {
+  DiscoveryKind,
+  DiscoveryResult,
   DeezerEnrichmentResponse,
   EnrichmentResponse,
   LastFmEnrichmentResponse,
-} from '@shared/apiClient/enrichment';
-
+} from '@shared/apiClient';
+import { detailKeys } from '@shared/query';
+import { isAbort } from '@shared/failure';
 import {
   recordEnrichmentOutcome,
   type EnrichmentProvider,

@@ -2,15 +2,11 @@ import type { ReactNode } from 'react';
 
 import { act, renderHook } from '@testing-library/react-native';
 
-import { asTrackId } from '@shared/apiClient/ids';
+import { asTrackId } from '@shared/apiClient';
 
-import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
-import { useQueueStore } from '@shared/playback/queueStore';
-import { PlaybackContext } from '@shared/playback/usePlayback';
-import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
+import { useQueuePlayback, useQueueStore, PlaybackContext } from '@shared/playback';
+import type { PlaybackContextValue, PlaybackTrack } from '@shared/playback';
 import { makeIdlePlayback } from '@testing/factories';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
-
 const INITIAL_STATE = useQueueStore.getState();
 
 beforeEach(() => {

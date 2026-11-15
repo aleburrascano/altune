@@ -1,4 +1,4 @@
-import { reportOtaLaunchFailures } from '@shared/telemetry/native/otaLaunchReport';
+import { reportOtaLaunchFailures } from '@shared/telemetry';
 
 const mockUpdates = {
   isEnabled: true,

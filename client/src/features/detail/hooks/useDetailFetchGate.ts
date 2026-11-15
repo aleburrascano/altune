@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 
-import { useLoopEnabled, useGatedCallback } from '@shared/killSwitch/killSwitchGate';
+import { useLoopEnabled, useGatedCallback } from '@shared/killSwitch';
 
 import { failFastOnSettledContentFailure } from '@features/detail/domain/contentStatus';
 

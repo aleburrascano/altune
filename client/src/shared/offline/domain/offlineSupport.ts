@@ -1,3 +1,3 @@
-import { isWebPlatform } from '@shared/device/device';
+import { isWebPlatform } from '@shared/device';
 
 export const offlineDownloadsSupported: boolean = !isWebPlatform();

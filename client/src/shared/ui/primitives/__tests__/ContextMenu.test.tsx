@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
+import { ContextMenu } from '@shared/ui';
 
 describe('ContextMenu — disabled items', () => {
   it('does not run or close on a disabled item, and marks it disabled for assistive tech', () => {

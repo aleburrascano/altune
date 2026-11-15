@@ -3,8 +3,8 @@ import { StyleSheet, View } from 'react-native';
 
 import { SidebarPlaylists } from '@features/library';
 import { PlayerBar } from '@features/player';
-import { Sidebar } from '@shared/ui/navigation/Sidebar';
-import type { TabRoute } from '@shared/ui/navigation/tabRoutes';
+import { Sidebar } from '@shared/ui';
+import type { TabRoute } from '@shared/ui';
 
 export type WideChromeProps = {
   activeRoute: string;

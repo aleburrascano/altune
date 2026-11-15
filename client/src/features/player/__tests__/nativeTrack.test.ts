@@ -1,15 +1,16 @@
 import TrackPlayer from 'react-native-track-player';
 
-import { apiBase } from '@shared/apiClient/config';
-import { ContractError } from '@shared/failure/errors';
-import { asTrackId, type TrackId } from '@shared/apiClient/ids';
-
-import { activeNativeTrackId, toNativeTrack } from '@features/player/native/nativeTrack';
-
-import { libraryTrack, previewTrack } from '@features/player/__tests__/fixtures';
-import { httpPlaybackPort } from '@features/player/adapters/http/httpPlaybackPort';
-import { installPlaybackPort } from '@features/player/ports/activePlaybackPort';
-
+import { asTrackId, type TrackId } from '@shared/apiClient';
+import { apiBase } from '@shared/apiConfig';
+import { ContractError } from '@shared/failure';
+import {
+  activeNativeTrackId,
+  toNativeTrack,
+  libraryTrack,
+  previewTrack,
+  httpPlaybackPort,
+  installPlaybackPort,
+} from '@features/player';
 beforeAll(() => {
   installPlaybackPort(httpPlaybackPort);
 });

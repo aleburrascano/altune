@@ -1,6 +1,6 @@
 import { createContext, use } from 'react';
 
-import type { DetailHandoff } from '@shared/navigation/detailHandoff';
+import type { DetailHandoff } from '@shared/navigation';
 
 const DetailHandoffContext = createContext<DetailHandoff | null>(null);
 

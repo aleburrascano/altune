@@ -1,9 +1,8 @@
 import { useEffect, useEffectEvent, useRef } from 'react';
 import { Event, useTrackPlayerEvents } from 'react-native-track-player';
 
-import { useQueueStore } from '@shared/playback/queueStore';
-import { trackKey, type TrackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
-import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
+import { useQueueStore, trackKey, type TrackKey, type PlaybackTrack } from '@shared/playback';
+import { useRecordEvent } from '@shared/telemetry';
 
 import { buildTrackPayload, hasCrossedListenThreshold } from '@features/player/domain/signals';
 import { progressSecondsToMs, progressSecondsToRoundedMs } from '@features/player/domain/time';

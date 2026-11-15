@@ -1,4 +1,4 @@
-import { asTrackId } from '@shared/apiClient/ids';
+import { asTrackId } from '@shared/apiClient';
 import {
   currentAfterMove,
   currentAfterRemoval,
@@ -14,8 +14,9 @@ import {
   withWholeQueueShuffled,
   type QueueState,
   type RepeatMode,
-} from '@shared/playback/queueOrder';
-import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
+  trackKey,
+  type PlaybackTrack,
+} from '@shared/playback';
 import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 
 function track(id: string): PlaybackTrack {

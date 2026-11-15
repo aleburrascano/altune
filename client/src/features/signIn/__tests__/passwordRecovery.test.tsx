@@ -3,19 +3,15 @@ import React from 'react';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-import { useSession } from '@shared/auth/useSession';
-import { useSignOut } from '@shared/auth/useSignOut';
-
+import { useSession, useSignOut } from '@shared/auth';
 import {
   clearRecoveryUnlock,
   isRecoveryUnlocked,
   markRecoveryUnlocked,
   subscribeRecoveryUnlock,
-} from '@features/signIn/domain/passwordRecovery';
-import { useRecoveryUnlocked } from '@features/signIn/hooks/useRecoveryUnlocked';
-
-import { createSupabaseAuthMock } from '@features/signIn/__tests__/testUtils/authTestUtils';
-
+  useRecoveryUnlocked,
+  createSupabaseAuthMock,
+} from '@features/signIn';
 const { getSession, onAuthStateChange, signOut } = createSupabaseAuthMock(
   'getSession',
   'onAuthStateChange',

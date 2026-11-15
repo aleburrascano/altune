@@ -1,9 +1,9 @@
 import { act, renderHook } from '@testing-library/react-native';
 
-import { useQueueStore } from '@shared/playback/queueStore';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import { useQueueStore } from '@shared/playback';
+import type { PlaybackTrack } from '@shared/playback';
 
-import { usePlaybackPosition } from '@features/player/hooks/usePlaybackPosition';
+import { usePlaybackPosition } from '@features/player';
 
 const { __player } = jest.requireMock('react-native-track-player');
 

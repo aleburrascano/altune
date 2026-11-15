@@ -1,36 +1,36 @@
 import { useQueryClient, type QueryClient, type UseMutationResult } from '@tanstack/react-query';
 import { useRef } from 'react';
 
-import { isRetryable } from '@shared/failure/errors';
-import type { TrackId } from '@shared/apiClient/ids';
+import { isRetryable } from '@shared/failure';
 import {
+  type TrackId,
+  type CreateTrackRequest,
+  type TrackResponse,
+  type DiscoveryResult,
   acquisitionOf,
   toFailed,
   toReady,
   toTrackStatus,
   type WireTrackStatus,
-} from '@shared/apiClient/trackAcquisition';
-import type { CreateTrackRequest, TrackResponse } from '@shared/apiClient/trackResponse';
-import { rememberDownloadMeta } from '@shared/acquisition/state/downloadStore';
+} from '@shared/apiClient';
 import {
+  rememberDownloadMeta,
   adoptResponseStatus,
   linkTrackIdentity,
   failedTrackStatus,
   patchTrackStatus,
   removeTrackStatus,
   trackIdentityKey,
-} from '@shared/acquisition/state/trackStatusStore';
+} from '@shared/acquisition';
 import {
   invalidateLibraryDerived,
   removeTrackFromCaches,
   replaceTrackInCaches,
   upsertTrackInCaches,
-} from '@shared/events/trackCachePatch';
-import { useAppMutation } from '@shared/query/useAppMutation';
-import { guardedMutationOptions } from '@shared/session/guardedMutation';
-import { enqueueCritical } from '@shared/telemetry/outbox';
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-
+} from '@shared/events';
+import { useAppMutation } from '@shared/query';
+import { guardedMutationOptions } from '@shared/session';
+import { enqueueCritical } from '@shared/telemetry';
 import {
   type SaveFailure,
   optimisticTrack,

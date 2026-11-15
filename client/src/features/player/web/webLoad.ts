@@ -1,7 +1,5 @@
-import { useQueueStore } from '@shared/playback/queueStore';
-import type { PlaybackErrorKind } from '@shared/playback/playbackContextValue';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
-
+import { useQueueStore } from '@shared/playback';
+import type { PlaybackErrorKind, PlaybackTrack } from '@shared/playback';
 import { recordPlaybackFailure } from '@features/player/domain/playbackHealth';
 import { msToSeconds, secondsToMs } from '@features/player/domain/time';
 import {

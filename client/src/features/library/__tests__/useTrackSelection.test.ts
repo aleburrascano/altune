@@ -2,13 +2,13 @@ import { Alert } from 'react-native';
 
 import { Download, XCircle } from 'lucide-react-native';
 
-import { asTrackId } from '@shared/apiClient/ids';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import type { PinnedEntry, UnpinBatchResult } from '@shared/offline/state/pinnedStore';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import { asTrackId } from '@shared/apiClient';
+import type { TrackResponse } from '@shared/apiClient';
+import type { PinnedEntry, UnpinBatchResult } from '@shared/offline';
+import type { PlaybackTrack } from '@shared/playback';
 import { trackResponseFactory } from '@testing/factories';
 
-import { buildSelectionActions } from '@features/library/hooks/useTrackSelection';
+import { buildSelectionActions } from '@features/library';
 
 function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {
   return trackResponseFactory.build({

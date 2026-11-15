@@ -1,8 +1,8 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import { NetworkError } from '@shared/failure/errors';
-import { asTrackId } from '@shared/apiClient/ids';
-import { trackKey } from '@shared/playback/playbackTrack';
+import { NetworkError } from '@shared/failure';
+import { asTrackId } from '@shared/apiClient';
+import { trackKey } from '@shared/playback';
 
 import { signInTestUser } from '@testing/signInTestUser';
 import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
@@ -13,14 +13,10 @@ import {
   reportPlaybackError,
   usePlaybackErrorFor,
   usePlaybackErrorStore,
-} from '@features/player/hooks/usePlaybackErrorStore';
-import {
   _resetPlaybackHealthForTest,
   flushPlaybackHealth,
-} from '@features/player/domain/playbackHealth';
-
-import { libraryTrack } from '@features/player/__tests__/fixtures';
-
+  libraryTrack,
+} from '@features/player';
 const { __http } = require('@testing/doubles/fetch.js');
 const HEALTH_ROUTE = 'POST /v1/discovery/events';
 const HTTP_ACCEPTED = 202;

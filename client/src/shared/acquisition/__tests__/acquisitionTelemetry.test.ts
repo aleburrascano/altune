@@ -1,6 +1,6 @@
-import { ApiError } from '@shared/failure/errors';
-import { asTrackId } from '@shared/apiClient/ids';
-import { flushOutbox } from '@shared/telemetry/outbox';
+import { ApiError } from '@shared/failure';
+import { asTrackId } from '@shared/apiClient';
+import { flushOutbox } from '@shared/telemetry';
 import { signInTestUser } from '@testing/signInTestUser';
 
 import {
@@ -10,7 +10,7 @@ import {
   recordRetryTapped,
   recordStatusChanged,
   retryFailureOutcome,
-} from '@shared/acquisition/state/acquisitionTelemetry';
+} from '@shared/acquisition';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

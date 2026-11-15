@@ -1,6 +1,6 @@
 import { AccessibilityInfo, Platform } from 'react-native';
 
-import { announce } from '@shared/ui/a11y/announce';
+import { announce } from '@shared/ui';
 import { announce as announceAndroid } from '@shared/ui/a11y/announce.android';
 
 const flush = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));

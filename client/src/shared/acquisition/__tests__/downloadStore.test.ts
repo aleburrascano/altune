@@ -8,9 +8,9 @@ import {
   useDownloadStore,
   type DownloadEntry,
   type DownloadPhase,
-} from '@shared/acquisition/state/downloadStore';
-import { asTrackId } from '@shared/apiClient/ids';
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+} from '@shared/acquisition';
+import { asTrackId } from '@shared/apiClient';
+import { runSignOutCleanups } from '@shared/session';
 
 const FINISHING_DWELL_MS = 500;
 const DONE_HOLD_MS = 1_200;

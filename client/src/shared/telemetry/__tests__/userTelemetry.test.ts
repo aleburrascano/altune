@@ -1,7 +1,7 @@
 import { signInTestUser } from '@testing/signInTestUser';
-import { applyKillSwitches } from '@shared/killSwitch/killSwitch';
+import { applyKillSwitches } from '@shared/killSwitch';
 
-import { recordFailureShown, recordUserAction } from '@shared/telemetry/userTelemetry';
+import { recordFailureShown, recordUserAction } from '@shared/telemetry';
 
 const { __http } = require('@testing/doubles/fetch.js');
 const SecureStore = require('expo-secure-store');

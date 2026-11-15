@@ -1,13 +1,13 @@
 import { type UseMutationResult } from '@tanstack/react-query';
 
-import type { TrackId } from '@shared/apiClient/ids';
+import type { TrackId } from '@shared/apiClient';
 import {
   recordRetryTapped,
   type RetryEntryPoint,
-} from '@shared/acquisition/state/acquisitionTelemetry';
-import { failedTrackStatus, patchTrackStatus } from '@shared/acquisition/state/trackStatusStore';
-import { useSharedRetryAcquisition } from '@shared/acquisition/hooks/track/useRetryAcquisition';
-
+  failedTrackStatus,
+  patchTrackStatus,
+  useSharedRetryAcquisition,
+} from '@shared/acquisition';
 export type RetryTrack = Pick<UseMutationResult<void, Error, TrackId>, 'mutate' | 'isPending'>;
 
 type RetryMutateOptions = Parameters<RetryTrack['mutate']>[1];

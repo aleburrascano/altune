@@ -1,13 +1,11 @@
 import { AccessibilityInfo, Linking } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import type { DiscoveryResult } from '@shared/apiClient';
 
-import { readDetailHandoff } from '@shared/navigation/detailHandoff';
+import { readDetailHandoff } from '@shared/navigation';
 
-import { httpDetailPort } from '@features/detail/adapters/http/httpDetailPort';
-import { DetailPortProvider } from '@features/detail/ports/DetailPortProvider';
-import { ArtistUnreleased } from '@features/detail/ui/unreleased/ArtistUnreleased';
+import { httpDetailPort, DetailPortProvider, ArtistUnreleased } from '@features/detail';
 import {
   createPlaybackWrapper,
   createTestQueryClient,

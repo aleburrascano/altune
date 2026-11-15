@@ -1,16 +1,20 @@
 import { useMemo } from 'react';
 import { create } from 'zustand';
 
-import { type TrackKey, trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
-import type { PlaybackErrorKind } from '@shared/playback/playbackContextValue';
-
-import { classifyPlaybackFailure } from '@features/player/domain/playbackError';
-import { recordPlaybackFailure } from '@features/player/domain/playbackHealth';
 import {
+  type PlaybackErrorKind,
+  type TrackKey,
+  trackKey,
+  type PlaybackTrack,
+} from '@shared/playback';
+
+import {
+  classifyPlaybackFailure,
   redactPlaybackErrorMessage,
   type RedactedPlaybackFailure,
   warnPlayback,
 } from '@features/player/domain/playbackError';
+import { recordPlaybackFailure } from '@features/player/domain/playbackHealth';
 
 interface PlaybackErrorState {
   key: TrackKey | null;

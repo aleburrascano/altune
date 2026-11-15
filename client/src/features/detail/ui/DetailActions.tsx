@@ -1,11 +1,15 @@
 import type { ComponentType, ReactElement, ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { tapFeedback } from '@shared/ui/haptics';
-import { Tappable } from '@shared/ui/primitives/Tappable';
-import { Text } from '@shared/ui/primitives/Text';
-import { minInteractiveHeight, radius, spacing, useTheme } from '@shared/ui/theme';
-
+import {
+  tapFeedback,
+  Tappable,
+  Text,
+  minInteractiveHeight,
+  radius,
+  spacing,
+  useTheme,
+} from '@shared/ui';
 type Glyph = ComponentType<{ size?: number; color?: string; fill?: string }>;
 
 export type PrimaryAction = {

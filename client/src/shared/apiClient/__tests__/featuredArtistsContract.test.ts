@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { featuredArtistsFromExtras } from '@shared/apiClient/featuredArtists';
+import { featuredArtistsFromExtras } from '@shared/apiClient';
 
 function findRepoRoot(): string | null {
   let dir = __dirname;

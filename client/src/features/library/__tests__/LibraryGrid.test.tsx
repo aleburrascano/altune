@@ -1,10 +1,9 @@
 import { fireEvent, render, screen, within } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
-import type { AlbumGroup } from '@shared/apiClient/library';
-import type { ListRefresh } from '@features/library/domain/libraryView';
-import { AlbumsGrid, ArtistsGrid } from '@features/library/ui/GroupGrids';
-import { PlaylistsGrid } from '@features/library/ui/PlaylistsGrid';
+import type { AlbumGroup } from '@shared/apiClient';
+import type { ListRefresh } from '@features/library';
+import { AlbumsGrid, ArtistsGrid, PlaylistsGrid } from '@features/library';
 import { setPlatformOS } from '@testing/setPlatformOS';
 
 function idleRefresh(): ListRefresh {

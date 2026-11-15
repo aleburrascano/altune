@@ -1,10 +1,7 @@
 import { Stack } from 'expo-router';
 import { View } from 'react-native';
 
-import { ArtworkBackground } from '@shared/ui/hero/ArtworkBackground';
-import { ScreenBoundary } from '@shared/ui/failure/ScreenBoundary';
-import { themes } from '@shared/ui/theme';
-import { useThemePreference } from '@shared/ui/theme/themePreference';
+import { ArtworkBackground, ScreenBoundary, themes, useThemePreference } from '@shared/ui';
 
 export default function AuthLayout() {
   const scheme = useThemePreference((s) => s.scheme);

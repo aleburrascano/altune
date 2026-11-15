@@ -1,13 +1,16 @@
 import { useRouter } from 'expo-router';
 import { View } from 'react-native';
 
-import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
-import { asyncView } from '@shared/ui/async/asyncView';
-import { Text, type Theme, useTheme } from '@shared/ui';
-import { sidebarItemStyle } from '@shared/ui/navigation/sidebarItemStyle';
-import { Tappable } from '@shared/ui/primitives/Tappable';
-import { usePressableInteraction } from '@shared/ui/primitives/usePressableInteraction';
-
+import type { PlaylistResponse } from '@shared/apiClient';
+import {
+  asyncView,
+  Text,
+  type Theme,
+  useTheme,
+  sidebarItemStyle,
+  Tappable,
+  usePressableInteraction,
+} from '@shared/ui';
 import { usePlaylistActions } from '@features/library/hooks/usePlaylistActions';
 
 function sidebarPlaylistRowProps(playlist: PlaylistResponse, onPress: () => void) {

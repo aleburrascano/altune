@@ -1,9 +1,6 @@
-import { ApiError, NetworkError } from '@shared/failure/errors';
+import { ApiError, NetworkError } from '@shared/failure';
 
-import {
-  classifyNativePlaybackError,
-  classifyPlaybackFailure,
-} from '@features/player/domain/playbackError';
+import { classifyNativePlaybackError, classifyPlaybackFailure } from '@features/player';
 
 describe('classifyNativePlaybackError — native PlaybackError codes map to a typed kind', () => {
   it.each([

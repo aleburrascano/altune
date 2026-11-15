@@ -1,9 +1,7 @@
-import { readDetailHandoff } from '@shared/navigation/detailHandoff';
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+import { readDetailHandoff } from '@shared/navigation';
+import { runSignOutCleanups } from '@shared/session';
 
-import { stashHandoffForDetail } from '@features/discovery/domain/stashHandoffForDetail';
-import { resultFixture } from '@features/discovery/__tests__/fixtures';
-
+import { stashHandoffForDetail, resultFixture } from '@features/discovery';
 beforeEach(() => {
   runSignOutCleanups();
 });

@@ -1,20 +1,18 @@
 import * as FileSystem from 'expo-file-system';
 
-import { NetworkError } from '@shared/apiClient';
-import { asTrackId } from '@shared/apiClient/ids';
-import type { SignOutResult } from '@shared/auth/useSignOut';
-import { usePinnedStore } from '@shared/offline/state/pinnedStore';
+import { NetworkError, asTrackId } from '@shared/apiClient';
+import type { SignOutResult } from '@shared/auth';
+import { usePinnedStore } from '@shared/offline';
 
 import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 
-import { downloadStats } from '@features/settings/domain/downloadStatsModel';
-import type { RemoveDownloads } from '@features/settings/hooks/useDownloads';
 import {
+  type RemoveDownloads,
+  downloadStats,
   buildDangerZoneActions,
   type ClearHistoryState,
   type DangerZoneActionKey,
-} from '@features/settings/domain/dangerZoneActions';
-
+} from '@features/settings';
 type Opts = Parameters<typeof buildDangerZoneActions>[0];
 
 function usageOf(count: number, bytes: number) {

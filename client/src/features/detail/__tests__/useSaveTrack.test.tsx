@@ -1,19 +1,13 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
-import { ApiError } from '@shared/failure/errors';
-import { asTrackId } from '@shared/apiClient/ids';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { useDownloadStore } from '@shared/acquisition/state/downloadStore';
-import { useTrackStatusStore } from '@shared/acquisition/state/trackStatusStore';
-import { libraryKeys } from '@shared/query/queryKeys';
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-
-import { useSaveTrack, useTrackSave } from '@features/detail/hooks/useSaveTrack';
-import type { DetailPort } from '@features/detail/ports/detailPort';
-import { createMemoryDetailPort } from '@features/detail/__tests__/memoryDetailPort';
+import { ApiError } from '@shared/failure';
+import { asTrackId } from '@shared/apiClient';
+import type { TrackResponse, DiscoveryResult } from '@shared/apiClient';
+import { useDownloadStore, useTrackStatusStore } from '@shared/acquisition';
+import { libraryKeys } from '@shared/query';
+import { runSignOutCleanups } from '@shared/session';
+import { useSaveTrack, useTrackSave, createMemoryDetailPort, ownedTrack } from '@features/detail';
+import type { DetailPort } from '@features/detail';
 import { createPortWrapper, createTestQueryClient, signInTestUser } from '@testing/queryHarness';
-import { ownedTrack } from '@features/detail/domain/ownedTrack';
-
 const mockCreateTrack = jest.fn<Promise<TrackResponse>, [unknown]>();
 
 const mockRetryAcquisition = jest.fn<Promise<void>, [unknown]>();

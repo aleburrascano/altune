@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
 
-import { useSession } from '@shared/auth/useSession';
+import { useSession } from '@shared/auth';
 import { useRouteSegments } from '@shared/navigation';
-import { recordEvent } from '@shared/telemetry/recordEvent';
+import { recordEvent } from '@shared/telemetry';
 
 function sendScreenView(route: string): void {
   recordEvent({ type: 'screen_view', payload: { route } }).catch((error: unknown) => {

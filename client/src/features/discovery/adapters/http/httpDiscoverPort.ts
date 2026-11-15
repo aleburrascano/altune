@@ -3,10 +3,8 @@ import {
   recordSearchHistory,
   searchDiscovery,
   suggestDiscovery,
-} from '@shared/apiClient/discovery';
-
-import { searchUnreleasedTracks } from '@shared/apiClient/enrichment';
-
+  searchUnreleasedTracks,
+} from '@shared/apiClient';
 import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
 
 export const httpDiscoverPort: DiscoverPort = {

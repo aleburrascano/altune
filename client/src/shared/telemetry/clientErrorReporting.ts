@@ -1,4 +1,4 @@
-import { appVersion } from '@shared/device/device';
+import { appVersion } from '@shared/device';
 
 import { enqueueCritical } from '@shared/telemetry/outbox';
 import type { EventPayload } from '@shared/telemetry/recordEvent';

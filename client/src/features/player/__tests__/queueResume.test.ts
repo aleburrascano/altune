@@ -1,17 +1,14 @@
 import { waitFor } from '@testing-library/react-native';
 
-import { asTrackId } from '@shared/apiClient/ids';
-import type { QueueStateResponse } from '@shared/apiClient/playback';
-import type { AcquisitionStatus, TrackResponse } from '@shared/apiClient/trackResponse';
-import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
+import { asTrackId } from '@shared/apiClient';
+import type { QueueStateResponse, AcquisitionStatus, TrackResponse } from '@shared/apiClient';
+import { orderedQueueTracks, useQueueStore } from '@shared/playback';
 
 import { signInTestUser } from '@testing/signInTestUser';
 
 import {
   _resetPlaybackHealthForTest,
   flushPlaybackHealth,
-} from '@features/player/domain/playbackHealth';
-import {
   currentOccurrence,
   currentTrackId,
   isSavedCurrentResumable,
@@ -19,8 +16,7 @@ import {
   reconstructPlayOrder,
   resolveResumeStartIndex,
   showSavedTrackWhileRehydrating,
-} from '@features/player/domain/queueResume';
-
+} from '@features/player';
 describe('currentTrackId — resolving the saved cursor to an id', () => {
   it('returns the id at the saved index when it is in range', () => {
     expect(currentTrackId(['a', 'b', 'c'], 1)).toBe('b');

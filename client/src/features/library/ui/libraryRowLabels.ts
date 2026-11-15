@@ -1,10 +1,10 @@
-import type { DownloadPhase } from '@shared/acquisition/state/downloadStore';
-import { phaseLabel } from '@shared/acquisition/state/stagePhase';
-import type { PinnedStatus } from '@shared/offline/state/pinnedStore';
+import type { DownloadPhase } from '@shared/acquisition';
+import { phaseLabel } from '@shared/acquisition';
+import type { PinnedStatus } from '@shared/offline';
 
 import { pinnedStatusDisplay } from '@features/library/domain/pinnedStatusDisplay';
 
-import type { AcquisitionStatus, TrackResponse } from '@shared/apiClient/trackResponse';
+import type { AcquisitionStatus, TrackResponse } from '@shared/apiClient';
 
 export function albumSuffix(album: string | null): string {
   return album != null ? ` · ${album}` : '';

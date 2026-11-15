@@ -1,4 +1,4 @@
-import { apiFetch, withQuery } from '@shared/apiClient/index';
+import { apiFetch, withQuery } from '@shared/apiClient/adapters/http';
 import { asNumber, asRecord, asString, parseArray } from '@shared/apiClient/wireDecoders';
 
 export type SyncedLine = {

@@ -1,6 +1,5 @@
-import type { SaveQueueStateRequest } from '@shared/apiClient/playback';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
-import { orderedQueueTracks, type QueueStore } from '@shared/playback/queueStore';
+import type { SaveQueueStateRequest } from '@shared/apiClient';
+import { type PlaybackTrack, orderedQueueTracks, type QueueStore } from '@shared/playback';
 
 import { libraryTrackId } from '@features/player/domain/playerStatus';
 

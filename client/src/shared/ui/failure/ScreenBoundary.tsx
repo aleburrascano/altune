@@ -1,7 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
-import { reportClientError } from '@shared/telemetry/clientErrorReporting';
+import { reportClientError } from '@shared/telemetry';
 
 import { Button } from '@shared/ui/primitives/Button';
 import { Text } from '@shared/ui/primitives/Text';

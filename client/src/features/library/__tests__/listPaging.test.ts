@@ -1,8 +1,4 @@
-import {
-  GROUP_PAGE_SIZE,
-  nextGroupPageOffset,
-  pagedListControls,
-} from '@features/library/domain/listPaging';
+import { GROUP_PAGE_SIZE, nextGroupPageOffset, pagedListControls } from '@features/library';
 
 describe('nextGroupPageOffset', () => {
   it('advances past a full default-sized page', () => {

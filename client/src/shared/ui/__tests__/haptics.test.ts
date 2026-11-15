@@ -1,6 +1,6 @@
 import type * as Haptics from 'expo-haptics';
 
-import type { tapFeedback as tapFeedbackType } from '@shared/ui/haptics';
+import type { tapFeedback as tapFeedbackType } from '@shared/ui';
 
 import { impactAsync, selectionAsync } from 'expo-haptics';
 

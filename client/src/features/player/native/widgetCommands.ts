@@ -9,11 +9,14 @@ import {
 import { withNativeQueue } from '@features/player/native/nativeQueueLock';
 import { reorderUpcomingNative } from '@features/player/native/rebuildNativeTail';
 import { reportingQueueFailure } from '@features/player/native/queueFailureReport';
-import { primeSignedInUser } from '@shared/auth/primeSignedInUser';
-import { useQueueStore } from '@shared/playback/queueStore';
-import { trackKey, type TrackKey } from '@shared/playback/playbackTrack';
-import type { RepeatMode as QueueRepeatMode } from '@shared/playback/queueOrder';
-import { hasSignedInUser } from '@shared/session/signOutCleanup';
+import { primeSignedInUser } from '@shared/auth';
+import {
+  type RepeatMode as QueueRepeatMode,
+  useQueueStore,
+  trackKey,
+  type TrackKey,
+} from '@shared/playback';
+import { hasSignedInUser } from '@shared/session';
 
 const NATIVE_REPEAT: Record<QueueRepeatMode, RepeatMode> = {
   off: RepeatMode.Off,

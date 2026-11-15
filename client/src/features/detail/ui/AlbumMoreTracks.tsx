@@ -1,11 +1,8 @@
 import { type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Button } from '@shared/ui/primitives/Button';
-import { Text } from '@shared/ui/primitives/Text';
-import { spacing } from '@shared/ui/theme';
-
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import { Button, Text, spacing } from '@shared/ui';
+import type { DiscoveryResult } from '@shared/apiClient';
 
 import { type ContentFailure } from '@features/detail/domain/contentStatus';
 import { type LastBatch } from '@features/detail/hooks/useAlbumSaveAll';

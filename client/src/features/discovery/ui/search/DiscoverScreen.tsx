@@ -2,10 +2,15 @@ import { useCallback, useRef, type ReactElement } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { StyleSheet, View, type TextInput } from 'react-native';
 
-import { Screen, Text, spacing, useTheme } from '@shared/ui';
-import { SearchBar } from '@shared/ui/primitives/SearchBar';
-import { DismissKeyboardArea } from '@shared/ui/keyboard/keyboard';
-import { registerSearchFocus } from '@shared/ui/keyboard/useKeyboardShortcuts';
+import {
+  Screen,
+  Text,
+  spacing,
+  useTheme,
+  SearchBar,
+  DismissKeyboardArea,
+  registerSearchFocus,
+} from '@shared/ui';
 import { DiscoverBody } from '@features/discovery/ui/search/DiscoverBody';
 import { SuggestionsList } from '@features/discovery/ui/history/SuggestionsList';
 import { useDiscoverLogic } from '@features/discovery/hooks/search/useDiscoverLogic';

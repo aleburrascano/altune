@@ -1,6 +1,6 @@
 import { renderHook } from '@testing-library/react-native';
 
-import { useSleepOptions, useSleepTimerStore } from '@features/player/hooks/useSleepTimer';
+import { useSleepOptions, useSleepTimerStore } from '@features/player';
 
 const T0 = 1_700_000_000_000;
 const THIRTY_MIN_MS = 30 * 60_000;

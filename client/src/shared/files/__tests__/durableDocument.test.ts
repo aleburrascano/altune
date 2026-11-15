@@ -1,16 +1,13 @@
 import {
+  type StoredDirectory,
   deleteDocument,
   readDocument,
   readVersionedEntries,
   writeDocumentAtomically,
   type SchemaSpec,
-} from '@shared/files/durableDocument';
-import type { StoredDirectory } from '@shared/files/fileStore';
-import {
   createMemoryFileStore,
   type MemoryFileStore,
-} from '@shared/files/__tests__/memoryFileStore';
-
+} from '@shared/files';
 const DIR_URI = 'memory://document/docs';
 const FILE_URI = `${DIR_URI}/doc.json`;
 const TEMP_URI = `${DIR_URI}/doc.json.tmp`;

@@ -1,13 +1,10 @@
-import {
-  createMemoryFileStore,
-  type MemoryFileStore,
-} from '@shared/files/__tests__/memoryFileStore';
+import { createMemoryFileStore, type MemoryFileStore } from '@shared/files';
 
 import {
   setAnalyticsPreferenceFileStore,
   shareAnalytics,
   useAnalyticsPreference,
-} from '@shared/device/analyticsPreference';
+} from '@shared/device';
 
 const PREF_URI = 'memory://document/preferences/analytics.json';
 const DISK_FULL = new Error('ENOSPC: no space left on device');

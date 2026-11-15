@@ -1,11 +1,11 @@
 import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
-import { asTrackId } from '@shared/apiClient/ids';
+import { asTrackId } from '@shared/apiClient';
 
 import {
   registerAudioCacheInvalidator,
   invalidateAudioCaches,
   _resetAudioCacheInvalidatorsForTest,
-} from '@shared/acquisition/state/audioCacheInvalidation';
+} from '@shared/acquisition';
 
 let warnSpy: jest.SpyInstance;
 

@@ -2,12 +2,12 @@ import { createElement, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import { asPlaylistId } from '@shared/apiClient/ids';
-import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
-import { playlistKeys } from '@shared/query/queryKeys';
+import { asPlaylistId } from '@shared/apiClient';
+import type { PlaylistResponse } from '@shared/apiClient';
+import { playlistKeys } from '@shared/query';
 import { signInTestUser } from '@testing/signInTestUser';
 
-import { usePlaylistRename } from '@features/library/hooks/usePlaylistRename';
+import { usePlaylistRename } from '@features/library';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

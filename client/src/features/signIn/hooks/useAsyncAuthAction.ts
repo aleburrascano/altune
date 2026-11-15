@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react';
 
-import { isNetworkError } from '@shared/failure/errors';
+import { isNetworkError } from '@shared/failure';
 
-import { withAuthDeadline } from '@shared/auth/authDeadline';
+import { withAuthDeadline } from '@shared/auth';
 import { thrownErrorDetail } from '@features/signIn/domain/authError';
 
 function reportUnrecognizedFailure(err: unknown): void {

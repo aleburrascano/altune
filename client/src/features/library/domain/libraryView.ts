@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
-import type { LibrarySort } from '@shared/apiClient/library';
-import { asyncView, type AsyncView } from '@shared/ui/async/asyncView';
+import type { LibrarySort } from '@shared/apiClient';
+import { asyncView, type AsyncView } from '@shared/ui';
 
 export type LibraryChip = 'playlists' | 'tracks' | 'albums' | 'artists';
 

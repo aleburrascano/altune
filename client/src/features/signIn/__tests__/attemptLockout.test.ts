@@ -5,7 +5,7 @@ import {
   recordFailedAttempt,
   _resetLockoutsForTest,
   type LockoutAction,
-} from '@features/signIn/domain/attemptLockout';
+} from '@features/signIn';
 
 const START = 1_000_000;
 const LOCKOUT_AFTER_FAILURES = 5;

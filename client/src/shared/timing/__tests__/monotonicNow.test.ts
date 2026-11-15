@@ -1,4 +1,4 @@
-import { monotonicNow } from '@shared/timing/monotonicNow';
+import { monotonicNow } from '@shared/timing';
 
 const PERFORMANCE_NOW_MS = 1234.5;
 

@@ -1,4 +1,4 @@
-import { webOrigin } from '@shared/device/device';
+import { webOrigin } from '@shared/device';
 
 import { LINK_PATH, SCHEME } from '@features/signIn/domain/authRedirect';
 

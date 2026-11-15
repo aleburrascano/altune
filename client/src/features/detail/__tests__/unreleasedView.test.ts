@@ -1,6 +1,6 @@
-import type { UnreleasedAudioLink, UnreleasedTrack } from '@shared/apiClient/enrichment';
+import type { UnreleasedAudioLink, UnreleasedTrack } from '@shared/apiClient';
 
-import { unreleasedView } from '@features/detail/domain/unreleasedView';
+import { unreleasedView } from '@features/detail';
 
 function track(key: string, over: Partial<UnreleasedTrack> = {}): UnreleasedTrack {
   return {

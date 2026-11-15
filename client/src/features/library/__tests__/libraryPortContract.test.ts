@@ -1,10 +1,8 @@
-import { asTrackId } from '@shared/apiClient/ids';
-import type { ListTracksResponse, TrackResponse } from '@shared/apiClient/trackResponse';
+import { asTrackId } from '@shared/apiClient';
+import type { ListTracksResponse, TrackResponse } from '@shared/apiClient';
 
-import { httpLibraryPort } from '@features/library/adapters/http/httpLibraryPort';
-import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
-import { track } from '@features/library/__tests__/trackMutationFixtures';
-import type { LibraryPort } from '@features/library/ports/libraryPort';
+import { httpLibraryPort, createMemoryLibraryPort, track } from '@features/library';
+import type { LibraryPort } from '@features/library';
 import { signInTestUser } from '@testing/signInTestUser';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');

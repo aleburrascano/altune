@@ -1,13 +1,16 @@
 import type { ReactElement, ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Tappable } from '@shared/ui/primitives/Tappable';
-import { Text, type TextTone } from '@shared/ui/primitives/Text';
-import { spacing, type TypographyVariant } from '@shared/ui/theme';
-import { Button } from '@shared/ui/primitives/Button';
-import { asyncView } from '@shared/ui/async/asyncView';
-import { AsyncSection } from '@shared/ui/async/AsyncSection';
-
+import {
+  Tappable,
+  Text,
+  type TextTone,
+  spacing,
+  type TypographyVariant,
+  Button,
+  asyncView,
+  AsyncSection,
+} from '@shared/ui';
 import { sharedStyles } from '@features/detail/ui/detailStyles';
 import type { ContentFailure } from '@features/detail/domain/contentStatus';
 

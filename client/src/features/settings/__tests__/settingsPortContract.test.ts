@@ -2,18 +2,19 @@ import React from 'react';
 import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import type { BackfillFeaturedResult } from '@shared/apiClient/tracks';
+import type { BackfillFeaturedResult } from '@shared/apiClient';
 import { makeWrapper } from '@testing/makeWrapper';
 import { signInTestUser } from '@testing/signInTestUser';
-import { httpSettingsPort } from '@features/settings/adapters/http/httpSettingsPort';
-import { createMemorySettingsPort } from '@features/settings/__tests__/memorySettingsPort';
-import { useBackfillFeatured } from '@features/settings/hooks/useBackfillFeatured';
-import { SettingsPortProvider } from '@features/settings/ports/SettingsPortProvider';
-import type { SettingsPort } from '@features/settings/ports/settingsPort';
-import { useSettingsPort } from '@features/settings/ports/SettingsPortProvider';
-import { ApiError, LONG_REQUEST_TIMEOUT_MS, NetworkError } from '@shared/apiClient';
-import { REQUEST_TIMEOUT_MS } from '@shared/apiClient/config';
-
+import {
+  httpSettingsPort,
+  createMemorySettingsPort,
+  useBackfillFeatured,
+  SettingsPortProvider,
+  useSettingsPort,
+} from '@features/settings';
+import type { SettingsPort } from '@features/settings';
+import { ApiError, NetworkError } from '@shared/apiClient';
+import { LONG_REQUEST_TIMEOUT_MS, REQUEST_TIMEOUT_MS } from '@shared/apiConfig';
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));

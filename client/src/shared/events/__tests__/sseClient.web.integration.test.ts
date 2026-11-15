@@ -1,4 +1,4 @@
-import { SSEClient } from '@shared/events/sseClient';
+import { SSEClient } from '@shared/events';
 
 describe('SSEClient on web', () => {
   it('omits the correlation header, where the API CORS policy would reject the preflight', async () => {

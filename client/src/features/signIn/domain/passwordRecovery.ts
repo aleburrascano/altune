@@ -1,5 +1,5 @@
-import { onSignOut } from '@shared/session/signOutCleanup';
-import { monotonicNow } from '@shared/timing/monotonicNow';
+import { onSignOut } from '@shared/session';
+import { monotonicNow } from '@shared/timing';
 
 export const RESET_PASSWORD_ROUTE_SEGMENT = 'reset-password';
 

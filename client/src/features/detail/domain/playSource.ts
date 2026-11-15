@@ -1,9 +1,9 @@
-import { canPlay } from '@shared/playback/canPlay';
 import {
+  type PlaybackSource,
+  canPlay,
   isCurrentlyPlaying,
   type PlaybackContextValue,
-} from '@shared/playback/playbackContextValue';
-import type { PlaybackSource } from '@shared/playback/playbackTrack';
+} from '@shared/playback';
 
 import type { TrackExtras } from '@features/detail/domain/trackExtras';
 import type { OwnedTrack } from '@features/detail/domain/ownedTrack';

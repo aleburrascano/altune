@@ -1,4 +1,31 @@
 export { SettingsScreen } from '@features/settings/ui/SettingsScreen';
-export { SettingsPortProvider } from '@features/settings/ports/SettingsPortProvider';
+export {
+  SettingsPortProvider,
+  useSettingsPort,
+} from '@features/settings/ports/SettingsPortProvider';
 export { httpSettingsPort } from '@features/settings/adapters/http/httpSettingsPort';
 export type { SettingsPort } from '@features/settings/ports/settingsPort';
+export { AnalyticsCard } from '@features/settings/ui/AnalyticsCard';
+export { AppearanceCard } from '@features/settings/ui/AppearanceCard';
+export {
+  backfillActionLabel,
+  backfillActionTone,
+  backfillDetail,
+} from '@features/settings/domain/backfillStatus';
+export { downloadStats } from '@features/settings/domain/downloadStatsModel';
+export type { RemoveDownloads } from '@features/settings/hooks/useDownloads';
+export { buildDangerZoneActions } from '@features/settings/domain/dangerZoneActions';
+export type {
+  ClearHistoryState,
+  DangerZoneActionKey,
+} from '@features/settings/domain/dangerZoneActions';
+export { useDownloadStats, useRemoveDownloads } from '@features/settings/hooks/useDownloads';
+export { DangerZoneCard } from '@features/settings/ui/DangerZoneCard';
+export { failureCopyForAction } from '@features/settings/domain/failureCopyForAction';
+export { LibraryCard } from '@features/settings/ui/LibraryCard';
+export type { DownloadStats } from '@features/settings/domain/downloadStatsModel';
+export { OfflineDownloadsCard } from '@features/settings/ui/OfflineDownloadsCard';
+export { createMemorySettingsPort } from '@features/settings/__tests__/memorySettingsPort';
+export { useBackfillFeatured } from '@features/settings/hooks/useBackfillFeatured';
+export { accountEmail } from '@features/settings/hooks/useAccountEmail';
+export { useSettingsClearSearchHistory } from '@features/settings/hooks/useSettingsClearSearchHistory';

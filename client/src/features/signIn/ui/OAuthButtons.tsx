@@ -2,10 +2,7 @@ import { StyleSheet, View } from 'react-native';
 import type { ReactElement } from 'react';
 import Svg, { Path } from 'react-native-svg';
 
-import { Tappable } from '@shared/ui/primitives/Tappable';
-import { Text } from '@shared/ui/primitives/Text';
-import { radius, spacing, useTheme } from '@shared/ui/theme';
-
+import { Tappable, Text, radius, spacing, useTheme } from '@shared/ui';
 import { useOAuth } from '@features/signIn/hooks/useOAuth';
 import { AuthErrorBanner } from '@features/signIn/ui/AuthErrorBanner';
 

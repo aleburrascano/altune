@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { isCancelledError } from '@tanstack/react-query';
 
-import { ApiError, correlationIdOf } from '@shared/failure/errors';
+import { ApiError, correlationIdOf } from '@shared/failure';
 
-import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
+import { useRecordEvent } from '@shared/telemetry';
 
 export type QueryFailureSource =
   'search' | 'unreleased_search' | 'suggest' | 'history' | 'record_history' | 'clear_history';

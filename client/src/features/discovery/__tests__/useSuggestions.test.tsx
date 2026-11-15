@@ -2,17 +2,11 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import { NetworkError } from '@shared/apiClient';
-import { CORRELATION_HEADER } from '@shared/apiClient/correlationId';
-import { transientRetryOptions } from '@shared/query/retryDelay';
-import {
-  useAutocompleteSuggestions,
-  useSuggestionVisibility,
-} from '@features/discovery/hooks/history/useSuggestions';
+import { NetworkError, CORRELATION_HEADER } from '@shared/apiClient';
+import { transientRetryOptions } from '@shared/query';
+import { useAutocompleteSuggestions, useSuggestionVisibility } from '@features/discovery';
 import { signInTestUser } from '@testing/signInTestUser';
-import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
-import { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
-
+import { FeaturePorts, httpFeaturePorts } from '@/mobile';
 const { __http } = require('@testing/doubles/fetch.js');
 
 const SUGGEST = 'GET /v1/discovery/suggest';

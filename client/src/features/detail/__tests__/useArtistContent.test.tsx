@@ -1,14 +1,14 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
-import type { DiscoverySource } from '@shared/apiClient/discovery';
-import type { ArtistContentResponse } from '@shared/apiClient/enrichment';
-
-import { useArtistContent } from '@features/detail/hooks/useArtistContent';
-import { _resetDetailHealthForTest } from '@features/detail/domain/detailHealth';
-import { DetailPortProvider } from '@features/detail/ports/DetailPortProvider';
-import type { DetailPort } from '@features/detail/ports/detailPort';
-import { createMemoryDetailPort } from '@features/detail/__tests__/memoryDetailPort';
+import type { DiscoverySource, ArtistContentResponse } from '@shared/apiClient';
+import {
+  useArtistContent,
+  _resetDetailHealthForTest,
+  DetailPortProvider,
+  createMemoryDetailPort,
+} from '@features/detail';
+import type { DetailPort } from '@features/detail';
 import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
 
 const { __http } = require('@testing/doubles/fetch.js');

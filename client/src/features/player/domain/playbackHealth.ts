@@ -1,5 +1,5 @@
-import type { PlaybackErrorKind } from '@shared/playback/playbackContextValue';
-import { HEALTH_BATCH, createHealthTally } from '@shared/telemetry/healthTally';
+import type { PlaybackErrorKind } from '@shared/playback';
+import { HEALTH_BATCH, createHealthTally } from '@shared/telemetry';
 
 import { warnPlayback } from '@features/player/domain/playbackError';
 

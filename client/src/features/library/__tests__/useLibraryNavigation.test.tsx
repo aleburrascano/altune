@@ -1,9 +1,9 @@
 import { renderHook } from '@testing-library/react-native';
 
-import { asPlaylistId } from '@shared/apiClient/ids';
-import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
+import { asPlaylistId } from '@shared/apiClient';
+import type { PlaylistResponse } from '@shared/apiClient';
 
-import { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
+import { useLibraryNavigation } from '@features/library';
 
 function makeRouter() {
   return { push: jest.fn() } as unknown as Parameters<typeof useLibraryNavigation>[0];

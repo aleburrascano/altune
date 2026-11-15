@@ -7,4 +7,9 @@ export {
   playlistKeys,
 } from '@shared/query/queryKeys';
 export { transientRetryOptions } from '@shared/query/retryDelay';
-export { useAppMutation, useOptimisticMutation } from '@shared/query/useAppMutation';
+export {
+  useAppMutation,
+  useOptimisticMutation,
+  appMutationCache,
+  appQueryCache,
+} from '@shared/query/useAppMutation';

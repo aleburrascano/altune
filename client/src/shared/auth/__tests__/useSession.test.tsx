@@ -4,17 +4,16 @@ import { renderHook, act } from '@testing-library/react-native';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import * as FileSystem from 'expo-file-system';
 
-import { usePinnedStore } from '@shared/offline/state/pinnedStore';
+import { usePinnedStore } from '@shared/offline';
 
-import { useSession } from '@shared/auth/useSession';
-import { supabase } from '@shared/auth/supabaseClient';
 import {
+  useSession,
+  supabase,
   clearSessionExpired,
   getSessionExpired,
   markSessionExpired,
   stampCredentials,
-} from '@shared/auth/sessionExpired';
-import { asTrackId } from '@shared/apiClient/ids';
+} from '@shared/auth';
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
@@ -109,6 +108,8 @@ function pinnedUri(trackId: string): string {
   return `file:///document/offline-audio/${trackId}.mp3`;
 }
 
+type PinnedTrackId = ReturnType<typeof usePinnedStore.getState>['entries'][string]['trackId'];
+
 function seedLocalData(queryClient: QueryClient, trackId = 't1'): void {
   queryClient.setQueryData(LIBRARY_KEY, ['seed']);
   queryClient.setQueryData(PLAYLIST_KEY, { id: 'p1' });
@@ -117,7 +118,7 @@ function seedLocalData(queryClient: QueryClient, trackId = 't1'): void {
   __fs.seedFile(pinnedUri(trackId), 'audio-bytes');
   usePinnedStore.setState({
     entries: {
-      [trackId]: { trackId: asTrackId(trackId), status: 'ready', uri: pinnedUri(trackId) },
+      [trackId]: { trackId: trackId as PinnedTrackId, status: 'ready', uri: pinnedUri(trackId) },
     },
     queue: [],
     isWorking: false,

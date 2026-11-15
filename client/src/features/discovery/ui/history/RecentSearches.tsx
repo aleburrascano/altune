@@ -2,12 +2,10 @@ import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Search } from 'lucide-react-native';
 
-import { Button, Chip, Text, pressedStyle, spacing, useTheme } from '@shared/ui';
-import { Tappable } from '@shared/ui/primitives/Tappable';
-
+import { Button, Chip, Text, pressedStyle, spacing, useTheme, Tappable } from '@shared/ui';
 import { sliceCodePoints } from '@features/discovery/domain/searchPaging';
 import { SectionLabel } from '@features/discovery/ui/results/SectionLabel';
-import type { SearchHistoryItem } from '@shared/apiClient/discovery';
+import type { SearchHistoryItem } from '@shared/apiClient';
 
 const HISTORY_LABEL_MAX_CHARS = 40;
 

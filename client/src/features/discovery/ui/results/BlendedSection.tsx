@@ -2,9 +2,15 @@ import type { ReactElement, ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { ChevronRight } from 'lucide-react-native';
 
-import { Text, pressedStyle, spacing, useTheme, useWideWebLayout } from '@shared/ui';
-import { Tappable } from '@shared/ui/primitives/Tappable';
-
+import {
+  Text,
+  pressedStyle,
+  spacing,
+  useTheme,
+  useWideWebLayout,
+  Tappable,
+  touchTarget,
+} from '@shared/ui';
 import { DiscoverRow } from '@features/discovery/ui/results/DiscoverRow';
 import { ResultsList, type ResultsCommonProps } from '@features/discovery/ui/results/ResultsList';
 import { SectionLabel } from '@features/discovery/ui/results/SectionLabel';
@@ -13,9 +19,7 @@ import { TopResultCard } from '@features/discovery/ui/results/TopResultCard';
 import { kindLabel, resultKey } from '@features/discovery/domain/resultDisplay';
 
 import type { ResultTapHandler } from '@features/discovery/hooks/results/useResultTap';
-import type { DiscoveryKind, DiscoveryResult, ResultSection } from '@shared/apiClient/discovery';
-import { touchTarget } from '@shared/ui/theme';
-
+import type { DiscoveryKind, DiscoveryResult, ResultSection } from '@shared/apiClient';
 type SeeAllLinkProps = {
   kind: DiscoveryKind;
   title: string;

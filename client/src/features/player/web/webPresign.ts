@@ -1,13 +1,13 @@
 import { playbackPort } from '@features/player/ports/activePlaybackPort';
-import { isPlayablePreviewUrl } from '@shared/playback/previewUrl';
-import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import {
+  isPlayablePreviewUrl,
+  orderedQueueTracks,
+  useQueueStore,
   trackKey,
   type TrackKey,
   type PlaybackSource,
   type PlaybackTrack,
-} from '@shared/playback/playbackTrack';
-
+} from '@shared/playback';
 import {
   redactedPlaybackFailure,
   type RedactedPlaybackFailure,

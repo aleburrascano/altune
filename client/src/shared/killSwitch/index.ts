@@ -1,3 +1,8 @@
-export { isLoopEnabled, onKillSwitchChange } from '@shared/killSwitch/killSwitch';
+export {
+  isLoopEnabled,
+  onKillSwitchChange,
+  applyKillSwitches,
+  setKillSwitchFileStore,
+} from '@shared/killSwitch/killSwitch';
 export { useGatedCallback, useLoopEnabled } from '@shared/killSwitch/killSwitchGate';
-export { startKillSwitchPolling } from '@shared/killSwitch/killSwitchPoll';
+export { startKillSwitchPolling, refreshKillSwitches } from '@shared/killSwitch/killSwitchPoll';

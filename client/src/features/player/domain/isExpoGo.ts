@@ -1,3 +1,3 @@
-import { isExpoGoRuntime } from '@shared/device/device';
+import { isExpoGoRuntime } from '@shared/device';
 
 export const isExpoGo = isExpoGoRuntime();

@@ -11,12 +11,18 @@ import {
   useTrackStatus,
   useTrackStatusStore,
   type TrackStatus,
-} from '@shared/acquisition/state/trackStatusStore';
-import { asTrackId, type TrackId } from '@shared/apiClient/ids';
-import { toFailed, toPending, toReady, toTrackStatus } from '@shared/apiClient/trackAcquisition';
-import type { AcquisitionStatus } from '@shared/apiClient/trackResponse';
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
-import { flushOutbox } from '@shared/telemetry/outbox';
+} from '@shared/acquisition';
+import {
+  type AcquisitionStatus,
+  asTrackId,
+  type TrackId,
+  toFailed,
+  toPending,
+  toReady,
+  toTrackStatus,
+} from '@shared/apiClient';
+import { runSignOutCleanups } from '@shared/session';
+import { flushOutbox } from '@shared/telemetry';
 import { signInTestUser } from '@testing/signInTestUser';
 
 const { __http } = require('@testing/doubles/fetch.js');

@@ -1,6 +1,6 @@
 import { signInTestUser } from '@testing/signInTestUser';
 
-import { HEALTH_BATCH, createHealthTally } from '@shared/telemetry/healthTally';
+import { HEALTH_BATCH, createHealthTally } from '@shared/telemetry';
 
 type AppStateChangeHandler = (state: string) => void;
 

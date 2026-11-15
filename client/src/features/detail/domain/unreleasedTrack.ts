@@ -1,6 +1,9 @@
-import type { DiscoveryResult, DiscoverySource } from '@shared/apiClient/discovery';
-import type { UnreleasedAudioLink, UnreleasedTrack } from '@shared/apiClient/enrichment';
-
+import type {
+  DiscoveryResult,
+  DiscoverySource,
+  UnreleasedAudioLink,
+  UnreleasedTrack,
+} from '@shared/apiClient';
 const UNRELEASED_ALBUM = 'UNRELEASED';
 const MIN_GROUPED_VERSIONS = 2;
 

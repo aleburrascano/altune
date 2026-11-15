@@ -3,9 +3,9 @@ import type {
   DiscoverySearchHistoryResponse,
   DiscoverySearchResponse,
   DiscoverySuggestResponse,
-} from '@shared/apiClient/discovery';
+} from '@shared/apiClient';
 
-import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
+import type { DiscoverPort } from '@features/discovery';
 
 const SUGGESTION_KIND = 'query';
 const SUGGESTION_POPULARITY = 0;

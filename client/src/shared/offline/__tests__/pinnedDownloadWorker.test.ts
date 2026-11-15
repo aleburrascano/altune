@@ -1,18 +1,12 @@
 import * as FileSystem from 'expo-file-system';
 
-import { ApiError, NetworkError } from '@shared/failure/errors';
-import {
-  createMemoryFileStore,
-  type MemoryFileStore,
-} from '@shared/files/__tests__/memoryFileStore';
+import { ApiError, NetworkError } from '@shared/failure';
+import { createMemoryFileStore, type MemoryFileStore } from '@shared/files';
 
-import { createMemoryOfflinePort } from '@shared/offline/__tests__/memoryOfflinePort';
-import { runDownloadQueue } from '@shared/offline/state/pinnedDownloadWorker';
-import { setPinnedFileStore } from '@shared/offline/state/pinnedFiles';
-import type { OfflinePort } from '@shared/offline/ports/offlinePort';
-import type { PinnedEntry } from '@shared/offline/state/pinnedIndex';
+import { createMemoryOfflinePort, runDownloadQueue, setPinnedFileStore } from '@shared/offline';
+import type { OfflinePort, PinnedEntry } from '@shared/offline';
 import { signInTestUser } from '@testing/signInTestUser';
-import { asTrackId, type TrackId } from '@shared/apiClient/ids';
+import { asTrackId, type TrackId } from '@shared/apiClient';
 
 const DOWNLOAD_RETRY_BASE_MS = 2_000;
 const PIN_DOWNLOAD_TIMEOUT_MS = 120_000;

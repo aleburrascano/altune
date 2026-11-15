@@ -1,6 +1,6 @@
 import { apiFetch } from '@shared/apiClient';
-import type { JsonObject } from '@shared/files/json';
-import { isLoopEnabled } from '@shared/killSwitch/killSwitch';
+import type { JsonObject } from '@shared/files';
+import { isLoopEnabled } from '@shared/killSwitch';
 
 import { getSessionId } from '@shared/telemetry/eventSession';
 

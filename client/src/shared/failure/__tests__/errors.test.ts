@@ -7,12 +7,11 @@ import {
   isSessionFetchFailure,
   isNetworkError,
   isTelemetryGated,
-} from '@shared/failure/errors';
+  describeError,
+} from '@shared/failure';
 import { apiFetch } from '@shared/apiClient';
-import { supabase } from '@shared/auth/supabaseClient';
+import { supabase } from '@shared/auth';
 import { signInTestUser } from '@testing/signInTestUser';
-import { describeError } from '@shared/failure/describeError';
-
 describe('isRetryable — consumed by the QueryClient predicate (retry: (n, error) => isRetryable(error) && n < 5)', () => {
   it('ApiError carries the "ApiError" discriminator alongside its status, the same way NetworkError carries "NetworkError"', () => {
     const error = new ApiError(500, 'x');

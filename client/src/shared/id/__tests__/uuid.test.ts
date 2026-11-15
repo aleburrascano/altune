@@ -1,6 +1,6 @@
 import * as Crypto from 'expo-crypto';
 
-import { randomUuid } from '@shared/id/uuid';
+import { randomUuid } from '@shared/id';
 
 afterEach(() => {
   jest.restoreAllMocks();

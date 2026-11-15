@@ -1,7 +1,4 @@
-import { ApiError, ContractError } from '@shared/failure/errors';
-
-import { RETRY_TAIL, describeError } from '@shared/failure/describeError';
-
+import { ApiError, ContractError, RETRY_TAIL, describeError } from '@shared/failure';
 describe('describeError — network vs 5xx vs generic', () => {
   it('maps a transport failure to the offline copy', () => {
     expect(describeError(new Error('network request failed'))).toEqual({

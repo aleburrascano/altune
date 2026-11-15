@@ -2,9 +2,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { ChevronLeft } from 'lucide-react-native';
 
-import { spacing } from '@shared/ui';
-import { IconButton } from '@shared/ui/primitives/IconButton';
-
+import { spacing, IconButton } from '@shared/ui';
 type BackHeaderProps = {
   onBack: () => void;
   children?: ReactNode;

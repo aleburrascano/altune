@@ -1,7 +1,5 @@
 import type * as OutboxNamespace from '@shared/telemetry/outbox';
-import type { OutboxEntry } from '@shared/telemetry/outboxEntries';
-import type { DiscoveryEvent } from '@shared/telemetry/recordEvent';
-
+import type { OutboxEntry, DiscoveryEvent } from '@shared/telemetry';
 const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));

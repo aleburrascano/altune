@@ -1,4 +1,4 @@
-import type { TrackKey } from '@shared/playback/playbackTrack';
+import type { TrackKey } from '@shared/playback';
 
 const RECOVERY_ATTEMPTS_PER_TRACK = 2;
 

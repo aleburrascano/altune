@@ -2,18 +2,16 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import { asPlaylistId } from '@shared/apiClient/ids';
-import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
+import { asPlaylistId } from '@shared/apiClient';
+import type { PlaybackContextValue } from '@shared/playback';
 import { makeIdlePlayback } from '@testing/factories';
-import { PlaybackContext } from '@shared/playback/usePlayback';
-import { pageTitleFor } from '@shared/ui/navigation/tabRoutes';
+import { PlaybackContext } from '@shared/playback';
+import { pageTitleFor } from '@shared/ui';
 import * as base from '@/mobile/frame/platformExtras';
 import * as android from '@/mobile/frame/platformExtras.android';
 import * as web from '@/mobile/frame/platformExtras.web';
 
-import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
-import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
-
+import { createMemoryLibraryPort, LibraryPortProvider } from '@features/library';
 const mockNavigationBar = jest.fn();
 
 jest.mock('expo-navigation-bar', () => ({

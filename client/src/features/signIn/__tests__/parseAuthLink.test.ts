@@ -1,15 +1,12 @@
 import { Platform } from 'react-native';
 
 import appJson from '@/../app.json';
-import { completeAuthIntent } from '@features/signIn/domain/completeAuthIntent';
+import { completeAuthIntent, authRedirectUrl, parseAuthLink } from '@features/signIn';
 import * as nativeWebOrigin from '@shared/device/webOrigin';
 import type * as NativeWebOriginModule from '@shared/device/webOrigin';
 import * as browserWebOrigin from '@shared/device/webOrigin.web';
 import type * as AuthRedirectModule from '@features/signIn/domain/authRedirect';
-import { authRedirectUrl } from '@features/signIn/domain/authRedirect';
 import type * as ParseAuthLinkModule from '@features/signIn/domain/parseAuthLink';
-import { parseAuthLink } from '@features/signIn/domain/parseAuthLink';
-
 beforeEach(() => {
   jest
     .spyOn(nativeWebOrigin, 'webOrigin')

@@ -1,10 +1,15 @@
 import { memo, type ReactElement } from 'react';
 import { StyleSheet, View, type StyleProp, type TextStyle } from 'react-native';
-import { Tappable } from '@shared/ui/primitives/Tappable';
-import { formatDuration } from '@shared/ui/format/displayFormat';
-import { Text, useWideWebLayout, useTheme, type Theme } from '@shared/ui';
-import { Artwork } from '@shared/ui/primitives/Artwork';
-import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
+import {
+  type MenuAnchor,
+  Tappable,
+  formatDuration,
+  Text,
+  useWideWebLayout,
+  useTheme,
+  type Theme,
+  Artwork,
+} from '@shared/ui';
 import { usePinnedStatus } from '@features/library/hooks/useLibraryOffline';
 import { LibraryRowDetails } from '@features/library/ui/LibraryRowDetails';
 import { LibraryRowFailure } from '@features/library/ui/LibraryRowFailure';
@@ -16,7 +21,7 @@ import { LibraryRowPlayback } from '@features/library/ui/LibraryRowPlayback';
 import { LibraryRowSelection } from '@features/library/ui/LibraryRowSelection';
 import { libraryRowAccessibilityLabel } from '@features/library/ui/libraryRowLabels';
 import { libraryRowWideStyle, WIDE_TRACK_COLUMNS } from '@features/library/ui/libraryRowStyle';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
+import type { TrackResponse } from '@shared/apiClient';
 
 type WideRowProps = {
   track: TrackResponse;

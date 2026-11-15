@@ -1,19 +1,12 @@
 import { useState, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Banner } from '@shared/ui/primitives/Banner';
-import { Button } from '@shared/ui/primitives/Button';
-import { Text } from '@shared/ui/primitives/Text';
-import { TextField } from '@shared/ui/primitives/TextField';
-import { spacing } from '@shared/ui/theme';
-
+import { Banner, Button, Text, TextField, spacing, AuthHeroLayout } from '@shared/ui';
 import { useResetPassword } from '@features/signIn/hooks/useResetPassword';
 import { isValidEmail } from '@features/signIn/domain/validation';
 import { AuthErrorBanner } from '@features/signIn/ui/AuthErrorBanner';
 import { BackToSignInLink } from '@features/signIn/ui/BackToSignInLink';
 import { FieldError } from '@features/signIn/ui/AuthFields';
-import { AuthHeroLayout } from '@shared/ui/hero/AuthHeroLayout';
-
 const GENERIC_ERROR = "Couldn't send the reset email. Please try again.";
 const SENT_COPY =
   "If an account exists for that email, we've sent a reset link. Check your email and follow it to choose a new password.";

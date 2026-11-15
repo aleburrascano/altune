@@ -1,6 +1,6 @@
 import type * as signOutCleanup from '@shared/session/signOutCleanup';
 import type * as primeModule from '@shared/auth/primeSignedInUser';
-import type { supabase } from '@shared/auth/supabaseClient';
+import type { supabase } from '@shared/auth';
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 

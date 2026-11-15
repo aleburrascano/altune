@@ -1,7 +1,7 @@
-import { detailHref, readDetailHandoff } from '@shared/navigation/detailHandoff';
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+import { detailHref, readDetailHandoff } from '@shared/navigation';
+import { runSignOutCleanups } from '@shared/session';
 
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import type { DiscoveryResult } from '@shared/apiClient';
 
 function makeResult(overrides: Partial<DiscoveryResult> = {}): DiscoveryResult {
   return {

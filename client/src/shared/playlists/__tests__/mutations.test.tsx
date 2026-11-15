@@ -11,21 +11,24 @@ import {
   useRenamePlaylist,
   useCreatePlaylist,
   useCreatePlaylistWithTracks,
-} from '@shared/playlists/hooks/playlist/mutations';
-import { ApiError, ContractError, NetworkError } from '@shared/failure/errors';
-import { PlaylistsPortProvider } from '@shared/playlists/ports/PlaylistsPortProvider';
-import type { PlaylistsPort } from '@shared/playlists/ports/playlistsPort';
-import { createMemoryPlaylistsPort } from '@shared/playlists/__tests__/memoryPlaylistsPort';
-import { asPlaylistId, asTrackId, type TrackId, type PlaylistId } from '@shared/apiClient/ids';
-import type {
-  ListPlaylistsResponse,
-  PlaylistDetailResponse,
-  PlaylistResponse,
-} from '@shared/apiClient/playlistResponse';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { playlistKeys } from '@shared/query/queryKeys';
+  PlaylistsPortProvider,
+  createMemoryPlaylistsPort,
+} from '@shared/playlists';
+import { ApiError, ContractError, NetworkError } from '@shared/failure';
+import type { PlaylistsPort } from '@shared/playlists';
+import {
+  type ListPlaylistsResponse,
+  type PlaylistDetailResponse,
+  type PlaylistResponse,
+  type TrackResponse,
+  asPlaylistId,
+  asTrackId,
+  type TrackId,
+  type PlaylistId,
+} from '@shared/apiClient';
+import { playlistKeys } from '@shared/query';
 import { signInTestUser } from '@testing/signInTestUser';
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+import { runSignOutCleanups } from '@shared/session';
 import * as playlistsApi from '@shared/apiClient/playlists';
 
 const { __http } = require('@testing/doubles/fetch.js');

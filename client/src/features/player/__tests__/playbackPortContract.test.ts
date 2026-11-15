@@ -1,10 +1,9 @@
-import { asTrackId } from '@shared/apiClient/ids';
-import type { QueueStateResponse } from '@shared/apiClient/playback';
-import { ContractError } from '@shared/failure/errors';
+import { asTrackId } from '@shared/apiClient';
+import type { QueueStateResponse } from '@shared/apiClient';
+import { ContractError } from '@shared/failure';
 
-import { httpPlaybackPort } from '@features/player/adapters/http/httpPlaybackPort';
-import { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlaybackPort';
-import type { PlaybackPort } from '@features/player/ports/playbackPort';
+import { httpPlaybackPort, createMemoryPlaybackPort } from '@features/player';
+import type { PlaybackPort } from '@features/player';
 import { signInTestUser } from '@testing/signInTestUser';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');

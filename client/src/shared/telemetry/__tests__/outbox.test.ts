@@ -1,25 +1,24 @@
 import * as Crypto from 'expo-crypto';
 
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+import { runSignOutCleanups } from '@shared/session';
 import { signInTestUser } from '@testing/signInTestUser';
 
-import type { OutboxEntry } from '@shared/telemetry/outboxEntries';
+import type { OutboxEntry, DiscoveryEvent } from '@shared/telemetry';
 import * as outboxModule from '@shared/telemetry/outbox';
 import {
   enqueueCritical,
   flushOutbox,
   setOutboxOwner,
   _resetOutboxForTest,
-} from '@shared/telemetry/outbox';
-import { capOutbox, dedupeById, withEnvelope } from '@shared/telemetry/outboxEntries';
-import {
+  capOutbox,
+  dedupeById,
+  withEnvelope,
   loadPersistedOutbox,
   persistOutbox,
   setOutboxFileStore,
-} from '@shared/telemetry/outboxStore';
-import type { DiscoveryEvent } from '@shared/telemetry/recordEvent';
-import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
-import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
+} from '@shared/telemetry';
+import { createMemoryFileStore } from '@shared/files';
+import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch';
 
 const { fakeFetch, FakeResponse, __http } = require('@testing/doubles/fetch.js');
 

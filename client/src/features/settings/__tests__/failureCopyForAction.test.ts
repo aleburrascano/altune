@@ -1,5 +1,5 @@
 import { ApiError, NetworkError } from '@shared/apiClient';
-import { failureCopyForAction } from '@features/settings/domain/failureCopyForAction';
+import { failureCopyForAction } from '@features/settings';
 
 describe('failureCopyForAction', () => {
   it('maps network, auth, server and unknown failures to distinct copy', () => {

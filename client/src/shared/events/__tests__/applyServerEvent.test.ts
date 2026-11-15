@@ -3,24 +3,24 @@ import { QueryClient, type InfiniteData } from '@tanstack/react-query';
 import {
   registerAudioCacheInvalidator,
   _resetAudioCacheInvalidatorsForTest,
-} from '@shared/acquisition/state/audioCacheInvalidation';
-import { useDownloadStore } from '@shared/acquisition/state/downloadStore';
-import { trackIdentityKey, useTrackStatusStore } from '@shared/acquisition/state/trackStatusStore';
-import { asPlaylistId, asTrackId } from '@shared/apiClient/ids';
+  useDownloadStore,
+  trackIdentityKey,
+  useTrackStatusStore,
+} from '@shared/acquisition';
+import { asPlaylistId, asTrackId } from '@shared/apiClient';
 import type {
   ListPlaylistsResponse,
   PlaylistDetailResponse,
   PlaylistResponse,
-} from '@shared/apiClient/playlistResponse';
-import type { ListTracksResponse, TrackResponse } from '@shared/apiClient/trackResponse';
-import { libraryKeys, playlistKeys } from '@shared/query/queryKeys';
-import { usePinnedStore } from '@shared/offline/state/pinnedStore';
+  ListTracksResponse,
+  TrackResponse,
+} from '@shared/apiClient';
+import { libraryKeys, playlistKeys } from '@shared/query';
+import { usePinnedStore } from '@shared/offline';
 
-import { applyServerEvent } from '@shared/events/applyServerEvent';
-import type { JsonObject } from '@shared/files/json';
-import type { ServerEvent } from '@shared/events/sseFrames';
-import { settleTrackPatches } from '@shared/events/__tests__/settleTrackPatches';
-
+import { applyServerEvent, settleTrackPatches } from '@shared/events';
+import type { JsonObject } from '@shared/files';
+import type { ServerEvent } from '@shared/events';
 type TrackPages = InfiniteData<ListTracksResponse>;
 
 function makeClient(): QueryClient {

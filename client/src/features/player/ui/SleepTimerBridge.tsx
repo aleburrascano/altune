@@ -1,10 +1,10 @@
 import { useEffect, useEffectEvent, type ReactElement } from 'react';
 
-import { usePlayback } from '@shared/playback/usePlayback';
+import { usePlayback } from '@shared/playback';
 
 import { useAppStateChange } from '@shared/lifecycle';
 import { useSleepTimerStore } from '@features/player/hooks/useSleepTimer';
-import { monotonicNow as defaultMonotonicNow } from '@shared/timing/monotonicNow';
+import { monotonicNow as defaultMonotonicNow } from '@shared/timing';
 
 const MAX_SLEEP_CHECK_MS = 60_000;
 

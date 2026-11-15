@@ -1,6 +1,6 @@
 import { renderHook, act } from '@testing-library/react-native';
 
-import { useAsyncAuthAction } from '@features/signIn/hooks/useAsyncAuthAction';
+import { useAsyncAuthAction } from '@features/signIn';
 
 const AUTH_ACTION_TIMEOUT_MS = 20_000;
 

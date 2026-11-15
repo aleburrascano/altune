@@ -2,17 +2,11 @@ import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 
-import { asTrackId } from '@shared/apiClient/ids';
-import { PlaybackContext } from '@shared/playback/usePlayback';
-import { useQueueStore } from '@shared/playback/queueStore';
-import type {
-  PlaybackContextValue,
-  PlaybackErrorKind,
-} from '@shared/playback/playbackContextValue';
+import { asTrackId } from '@shared/apiClient';
+import { PlaybackContext, useQueueStore } from '@shared/playback';
+import type { PlaybackContextValue, PlaybackErrorKind } from '@shared/playback';
 
-import { libraryTrack } from '@features/player/__tests__/fixtures';
-import { FullPlayer } from '@features/player/ui/FullPlayer';
-
+import { libraryTrack, FullPlayer } from '@features/player';
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), back: jest.fn(), replace: jest.fn() }),
 }));

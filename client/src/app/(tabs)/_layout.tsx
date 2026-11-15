@@ -4,13 +4,10 @@ import { usePathname } from 'expo-router';
 import { useState } from 'react';
 import { View } from 'react-native';
 
-import { useActiveDownloadItems } from '@shared/acquisition/state/downloadStore';
-import { DownloadsBar } from '@shared/acquisition/ui/DownloadsBar';
-import { DownloadsSheet } from '@shared/acquisition/ui/DownloadsSheet';
+import { useActiveDownloadItems, DownloadsBar, DownloadsSheet } from '@shared/acquisition';
 import { MiniPlayer } from '@features/player';
-import { useWideWebLayout } from '@shared/ui/layout/useLayoutMode';
-import { TabBar } from '@shared/ui/navigation/TabBar';
-import { TabsTitle } from '@/mobile/frame/platformExtras';
+import { useWideWebLayout, TabBar } from '@shared/ui';
+import { TabsTitle } from '@/mobile';
 
 function ActivityDock() {
   const downloads = useActiveDownloadItems();

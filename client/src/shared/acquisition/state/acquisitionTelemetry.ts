@@ -1,7 +1,7 @@
-import { ApiError, correlationIdOf } from '@shared/failure/errors';
-import type { TrackId } from '@shared/apiClient/ids';
-import { enqueueCritical } from '@shared/telemetry/outbox';
-import type { EventPayload } from '@shared/telemetry/recordEvent';
+import { ApiError, correlationIdOf } from '@shared/failure';
+import type { TrackId } from '@shared/apiClient';
+import { enqueueCritical } from '@shared/telemetry';
+import type { EventPayload } from '@shared/telemetry';
 
 const MAX_MESSAGE_LENGTH = 500;
 

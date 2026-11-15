@@ -1,7 +1,5 @@
-import type { TrackId } from '@shared/apiClient/ids';
-import type { AcquisitionStatus } from '@shared/apiClient/trackResponse';
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import type { TrackId, AcquisitionStatus, DiscoveryResult } from '@shared/apiClient';
+import type { PlaybackTrack } from '@shared/playback';
 
 import { trackExtras, type TrackExtras } from '@features/detail/domain/trackExtras';
 

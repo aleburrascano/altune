@@ -1,11 +1,11 @@
 import { Alert } from 'react-native';
 
-import { asTrackId } from '@shared/apiClient/ids';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { usePinnedStore, type PinnedEntry } from '@shared/offline/state/pinnedStore';
+import { asTrackId } from '@shared/apiClient';
+import type { TrackResponse } from '@shared/apiClient';
+import { usePinnedStore, type PinnedEntry } from '@shared/offline';
 import { trackResponseFactory } from '@testing/factories';
 
-import { buildTrackMenuItems } from '@features/library/hooks/useTrackMenu';
+import { buildTrackMenuItems } from '@features/library';
 
 function readyPin(trackId: string): PinnedEntry {
   return {

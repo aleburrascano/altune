@@ -1,9 +1,9 @@
 import React from 'react';
 
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { darkTheme } from '@shared/ui/theme/theme';
+import { darkTheme } from '@shared/ui';
 
-import { SectionError } from '@features/detail/ui/Section';
+import { SectionError } from '@features/detail';
 
 describe('SectionError', () => {
   describe('SectionError', () => {

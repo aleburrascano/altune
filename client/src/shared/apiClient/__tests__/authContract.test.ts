@@ -2,9 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { apiFetch } from '@shared/apiClient';
-import { supabase } from '@shared/auth/supabaseClient';
-import { clearSessionExpired, getSessionExpired } from '@shared/auth/sessionExpired';
-
+import { supabase, clearSessionExpired, getSessionExpired } from '@shared/auth';
 const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
@@ -93,7 +91,7 @@ function middlewareSource(): string {
 
 function apiClientSource(): string {
   return fs.readFileSync(
-    path.join(REPO_ROOT!, 'client', 'src', 'shared', 'apiClient', 'index.ts'),
+    path.join(REPO_ROOT!, 'client', 'src', 'shared', 'apiClient', 'adapters', 'http.ts'),
     'utf8',
   );
 }

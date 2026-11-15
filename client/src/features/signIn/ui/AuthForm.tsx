@@ -2,12 +2,8 @@ import { Link } from 'expo-router';
 import type { ComponentProps, ReactElement, ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Button } from '@shared/ui/primitives/Button';
-import { Text } from '@shared/ui/primitives/Text';
-import { spacing } from '@shared/ui/theme';
-
+import { Button, Text, spacing, AuthHeroLayout } from '@shared/ui';
 import { AuthErrorBanner } from '@features/signIn/ui/AuthErrorBanner';
-import { AuthHeroLayout } from '@shared/ui/hero/AuthHeroLayout';
 import { OAuthButtons } from '@features/signIn/ui/OAuthButtons';
 
 type AuthFormProps = {

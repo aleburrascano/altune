@@ -1,20 +1,18 @@
-import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/apiClient/discovery';
 import type {
+  DiscoveryResult,
+  DiscoverySearchResponse,
   ArtistContentResponse,
   ContentFetchResponse,
   DeezerEnrichmentResponse,
   EnrichmentResponse,
   LastFmEnrichmentResponse,
-} from '@shared/apiClient/enrichment';
-import type { AlbumGroup } from '@shared/apiClient/library';
-import { asTrackId } from '@shared/apiClient/ids';
-import type {
+  AlbumGroup,
   CreateTrackRequest,
   ListTracksResponse,
   TrackResponse,
-} from '@shared/apiClient/trackResponse';
-
-import type { DetailPort } from '@features/detail/ports/detailPort';
+} from '@shared/apiClient';
+import { asTrackId } from '@shared/apiClient';
+import type { DetailPort } from '@features/detail';
 
 export interface MemoryDetailSeed {
   tracks?: TrackResponse[];

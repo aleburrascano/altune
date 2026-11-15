@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react-native';
 
-import { Artwork } from '@shared/ui/primitives/Artwork';
+import { Artwork } from '@shared/ui';
 
 const COVER = 'https://cdn.altune.test/cover.jpg';
 

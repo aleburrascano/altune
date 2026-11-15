@@ -1,12 +1,12 @@
 import { Platform } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { asTrackId } from '@shared/apiClient/ids';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { usePinnedStore, type PinnedEntry } from '@shared/offline/state/pinnedStore';
+import { asTrackId } from '@shared/apiClient';
+import type { TrackResponse } from '@shared/apiClient';
+import { usePinnedStore, type PinnedEntry } from '@shared/offline';
 import { trackResponseFactory } from '@testing/factories';
 
-import { LibraryRow } from '@features/library/ui/LibraryRow';
+import { LibraryRow } from '@features/library';
 import { setPlatformOS } from '@testing/setPlatformOS';
 
 let mockWindowWidth = 390;

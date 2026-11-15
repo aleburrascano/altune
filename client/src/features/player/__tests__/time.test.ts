@@ -3,7 +3,7 @@ import {
   progressSecondsToMs,
   progressSecondsToRoundedMs,
   secondsToMs,
-} from '@features/player/domain/time';
+} from '@features/player';
 
 describe('progressSecondsToMs — native TrackPlayer seconds to milliseconds', () => {
   it('keeps sub-millisecond precision', () => {

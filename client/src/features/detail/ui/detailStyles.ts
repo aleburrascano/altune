@@ -1,7 +1,7 @@
 import { StyleSheet } from 'react-native';
 
-import { clamp } from '@shared/math/math';
-import { spacing, minInteractiveHeight, opacity } from '@shared/ui/theme/tokens';
+import { clamp } from '@shared/math';
+import { spacing, minInteractiveHeight, opacity } from '@shared/ui';
 
 export const sharedStyles = StyleSheet.create({
   trackRow: {

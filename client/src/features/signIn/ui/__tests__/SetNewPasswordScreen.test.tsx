@@ -1,10 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 
-import { SetNewPasswordScreen } from '@features/signIn/ui/SetNewPasswordScreen';
-
-import { createSupabaseAuthMock } from '@features/signIn/__tests__/testUtils/authTestUtils';
-
+import { SetNewPasswordScreen, createSupabaseAuthMock } from '@features/signIn';
 const mockReplace = jest.fn();
 
 jest.mock('expo-router', () => ({ useRouter: () => ({ replace: mockReplace }) }));

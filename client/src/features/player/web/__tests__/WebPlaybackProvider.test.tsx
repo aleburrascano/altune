@@ -1,29 +1,26 @@
 import React from 'react';
 import { act, renderHook } from '@testing-library/react-native';
 
-import type { ResolvedAudioUrl } from '@shared/apiClient/audio';
-import { ApiError } from '@shared/apiClient';
-import { asTrackId } from '@shared/apiClient/ids';
-import { useQueueStore } from '@shared/playback/queueStore';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
-import { usePlayback } from '@shared/playback/usePlayback';
-import { orderedQueueTracks } from '@shared/playback/queueStore';
-import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+import type { ResolvedAudioUrl } from '@shared/apiClient';
+import { ApiError, asTrackId } from '@shared/apiClient';
+import { useQueueStore, usePlayback, orderedQueueTracks, useQueuePlayback } from '@shared/playback';
+import type { PlaybackTrack } from '@shared/playback';
+import { runSignOutCleanups } from '@shared/session';
 
 import { signInTestUser } from '@testing/signInTestUser';
 
-import { libraryTrack, previewTrack } from '@features/player/__tests__/fixtures';
-import { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlaybackPort';
-import { installPlaybackPort } from '@features/player/ports/activePlaybackPort';
 import {
+  libraryTrack,
+  previewTrack,
+  createMemoryPlaybackPort,
+  installPlaybackPort,
   _resetPlaybackHealthForTest,
   flushPlaybackHealth,
-} from '@features/player/domain/playbackHealth';
-import { WebPlaybackProvider } from '@features/player/web/WebPlaybackProvider';
-import { resolveSource } from '@features/player/web/webPresign';
-import { toVolume, usePlaybackVolumeStore } from '@features/player/web/playbackVolume';
-
+  WebPlaybackProvider,
+  resolveSource,
+  toVolume,
+  usePlaybackVolumeStore,
+} from '@features/player';
 const { __http } = require('@testing/doubles/fetch.js');
 
 const HEALTH_ROUTE = 'POST /v1/discovery/events';

@@ -1,7 +1,6 @@
 import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Text, spacing } from '@shared/ui';
-import { Tappable } from '@shared/ui/primitives/Tappable';
+import { Text, spacing, Tappable } from '@shared/ui';
 
 export function LibraryEmptyMessage({ label }: { label: string }): ReactElement {
   return (

@@ -2,10 +2,10 @@ import 'react-native-gesture-handler/jestSetup';
 import { render } from '@testing-library/react-native';
 import type { ComponentType, ReactNode } from 'react';
 
-import { supabase } from '@shared/auth/supabaseClient';
-import { ThemeProvider } from '@shared/ui/theme';
+import { supabase } from '@shared/auth';
+import { ThemeProvider } from '@shared/ui';
 
-import { StagingBanner } from '@/mobile/frame/StagingBanner';
+import { StagingBanner } from '@/mobile';
 
 jest.mock('expo-router', () => {
   const { View } = require('react-native');

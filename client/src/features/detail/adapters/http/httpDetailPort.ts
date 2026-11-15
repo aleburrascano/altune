@@ -1,5 +1,5 @@
-import { searchDiscovery } from '@shared/apiClient/discovery';
 import {
+  searchDiscovery,
   getAlbumTracks,
   getArtistContent,
   getDeezerEnrichment,
@@ -7,10 +7,10 @@ import {
   getLastFmEnrichment,
   getRelatedTracks,
   getUnreleasedTracks,
-} from '@shared/apiClient/enrichment';
-import { getLibraryAlbums } from '@shared/apiClient/library';
-import { createTrack, getTracks } from '@shared/apiClient/tracks';
-
+  getLibraryAlbums,
+  createTrack,
+  getTracks,
+} from '@shared/apiClient';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 
 export const httpDetailPort: DetailPort = {

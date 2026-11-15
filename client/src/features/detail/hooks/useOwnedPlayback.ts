@@ -1,6 +1,6 @@
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import type { RetryEntryPoint } from '@shared/acquisition/state/acquisitionTelemetry';
-import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
+import type { DiscoveryResult } from '@shared/apiClient';
+import type { RetryEntryPoint } from '@shared/acquisition';
+import { useQueuePlayback } from '@shared/playback';
 
 import { trackExtras } from '@features/detail/domain/trackExtras';
 import {

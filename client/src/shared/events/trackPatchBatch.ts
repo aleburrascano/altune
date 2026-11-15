@@ -7,9 +7,7 @@ import type {
   QueryKey,
 } from '@tanstack/react-query';
 
-import type { TrackId } from '@shared/apiClient/ids';
-import type { AcquisitionTransition } from '@shared/apiClient/trackAcquisition';
-import type { TrackFields, TrackResponse } from '@shared/apiClient/trackResponse';
+import type { TrackId, AcquisitionTransition, TrackFields, TrackResponse } from '@shared/apiClient';
 import {
   PATCH_POLICY,
   TRACK_CACHE_FAMILY_LIST,

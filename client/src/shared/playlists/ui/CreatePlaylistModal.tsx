@@ -1,10 +1,7 @@
 import { useState, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Button, Text, spacing } from '@shared/ui';
-import { ModalFrame } from '@shared/ui/primitives/ModalFrame';
-import { TextField } from '@shared/ui/primitives/TextField';
-
+import { Button, Text, spacing, ModalFrame, TextField } from '@shared/ui';
 type CreatePlaylistModalProps = {
   visible: boolean;
   onClose: () => void;

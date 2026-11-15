@@ -1,4 +1,4 @@
-import type { UnreleasedTrack } from '@shared/apiClient/enrichment';
+import type { UnreleasedTrack } from '@shared/apiClient';
 
 import { isAcquirable } from '@features/detail/domain/unreleasedTrack';
 

@@ -1,8 +1,7 @@
 import { useCallback, useState } from 'react';
 import { Download, ListEnd, ListPlus, Trash2, XCircle, type LucideIcon } from 'lucide-react-native';
-import type { TrackId } from '@shared/apiClient/ids';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { toPlaybackTrack, type PlaybackTrack } from '@shared/playback/playbackTrack';
+import type { TrackId, TrackResponse } from '@shared/apiClient';
+import { toPlaybackTrack, type PlaybackTrack } from '@shared/playback';
 import { useSelection, type Selection } from '@features/library/hooks/useSelection';
 import {
   offlineEligibility,

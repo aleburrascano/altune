@@ -1,21 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { useAppMutation } from '@shared/query/useAppMutation';
+import { useAppMutation, libraryKeys } from '@shared/query';
 import { showFailureAlert } from '@shared/ui';
-import { runBounded } from '@shared/concurrency/runBounded';
-import type { TrackId } from '@shared/apiClient/ids';
+import { runBounded } from '@shared/concurrency';
+import type { TrackId } from '@shared/apiClient';
 import {
   forgetTrack,
   invalidateLibraryDerived,
   captureTrackPlacements,
   restoreTrackPlacements,
   type TrackCachePlacement,
-} from '@shared/events/trackCachePatch';
-import { TRACK_CACHE_FAMILIES } from '@shared/events/trackCacheShapes';
-import { usePinnedStore } from '@shared/offline/state/pinnedStore';
-import { libraryKeys } from '@shared/query/queryKeys';
-import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
-import { guardedMutationOptions } from '@shared/session/guardedMutation';
+  TRACK_CACHE_FAMILIES,
+} from '@shared/events';
+import { usePinnedStore } from '@shared/offline';
+import { currentSessionEpoch, isSameSession, guardedMutationOptions } from '@shared/session';
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 import {
@@ -26,11 +24,7 @@ import {
   failureTail,
   type LibraryFailure,
 } from '@features/library/domain/libraryFailure';
-import {
-  patchTrackStatus,
-  useTrackStatusStore,
-  type TrackStatus,
-} from '@shared/acquisition/state/trackStatusStore';
+import { patchTrackStatus, useTrackStatusStore, type TrackStatus } from '@shared/acquisition';
 
 function deleteEndpoint(trackId: TrackId) {
   return `DELETE /v1/tracks/${trackId}`;

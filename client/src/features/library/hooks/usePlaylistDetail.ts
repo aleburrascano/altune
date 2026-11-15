@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import type { PlaylistId } from '@shared/apiClient/ids';
-import { playlistKeys } from '@shared/query/queryKeys';
+import type { PlaylistId } from '@shared/apiClient';
+import { playlistKeys } from '@shared/query';
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 import { useEffect } from 'react';
 import { failureLogFields } from '@features/library/domain/libraryFailure';

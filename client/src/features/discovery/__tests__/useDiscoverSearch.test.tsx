@@ -2,23 +2,20 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import { NetworkError } from '@shared/apiClient';
-import { CORRELATION_HEADER } from '@shared/apiClient/correlationId';
-import { transientRetryOptions } from '@shared/query/retryDelay';
-import type { DiscoverySearchResponse } from '@shared/apiClient/discovery';
+import { NetworkError, CORRELATION_HEADER } from '@shared/apiClient';
+import { transientRetryOptions } from '@shared/query';
+import type { DiscoverySearchResponse } from '@shared/apiClient';
 import {
   MAX_SEARCH_OFFSET,
   MAX_SEARCH_PAGES,
   SEARCH_PAGE_SIZE,
-} from '@features/discovery/domain/searchPaging';
-import { setSearchState } from '@features/discovery/domain/searchState';
-import { useDebouncedSearch } from '@features/discovery/hooks/search/useDebouncedSearch';
-import { useDiscoverSearch } from '@features/discovery/hooks/search/useDiscoverSearch';
-import { resultFixture } from '@features/discovery/__tests__/fixtures';
+  setSearchState,
+  useDebouncedSearch,
+  useDiscoverSearch,
+  resultFixture,
+} from '@features/discovery';
 import { signInTestUser } from '@testing/signInTestUser';
-import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
-import { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
-
+import { FeaturePorts, httpFeaturePorts } from '@/mobile';
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
 const SEARCH = 'GET /v1/discovery/search';

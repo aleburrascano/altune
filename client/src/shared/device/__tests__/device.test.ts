@@ -8,7 +8,7 @@ import {
   isExpoGoRuntime,
   isWebPlatform,
   webOrigin,
-} from '@shared/device/device';
+} from '@shared/device';
 
 let mockExpoConfig: Record<string, unknown> | null = null;
 let mockExecutionEnvironment = 'bare';

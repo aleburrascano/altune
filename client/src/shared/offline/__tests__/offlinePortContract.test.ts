@@ -1,11 +1,11 @@
 import { signInTestUser } from '@testing/signInTestUser';
 
-import { httpOfflinePort } from '@shared/offline/adapters/http/httpOfflinePort';
 import {
+  type OfflinePort,
+  httpOfflinePort,
   createMemoryOfflinePort,
   type SeededAudioUrls,
-} from '@shared/offline/__tests__/memoryOfflinePort';
-import type { OfflinePort } from '@shared/offline/ports/offlinePort';
+} from '@shared/offline';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 

@@ -8,16 +8,17 @@ import {
 } from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';
 import { View } from 'react-native';
-import type { AlbumGroup, ArtistGroup } from '@shared/apiClient/library';
+import type { AlbumGroup, ArtistGroup } from '@shared/apiClient';
 import {
+  type ActiveView,
   createMemoryLibraryPort,
   type MemoryLibrarySeed,
-} from '@features/library/__tests__/memoryLibraryPort';
-import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
-import { GROUP_PAGE_SIZE } from '@features/library/domain/listPaging';
-import type { ActiveView } from '@features/library/domain/libraryView';
-import { useAlbumsView, useArtistsView } from '@features/library/hooks/useGroupViews';
-import { SortControl } from '@shared/ui/primitives/SortControl';
+  LibraryPortProvider,
+  GROUP_PAGE_SIZE,
+  useAlbumsView,
+  useArtistsView,
+} from '@features/library';
+import { SortControl } from '@shared/ui';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 
 describe('useAlbumsView', () => {

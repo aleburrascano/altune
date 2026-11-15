@@ -1,12 +1,9 @@
 import type { ReactElement, ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Tappable } from '@shared/ui/primitives/Tappable';
+import { Tappable, Row, useTheme, Artwork, halved } from '@shared/ui';
 import { Check } from 'lucide-react-native';
-import { Row, useTheme } from '@shared/ui';
-import { Artwork } from '@shared/ui/primitives/Artwork';
 import { rowSurfaceStyle } from '@features/library/ui/libraryRowStyle';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { halved } from '@shared/ui/theme';
+import type { TrackResponse } from '@shared/apiClient';
 
 export function LibraryRowSelection({
   track,

@@ -1,7 +1,6 @@
 import type { ReactElement } from 'react';
 import { StyleSheet, type ViewStyle } from 'react-native';
-import { Chip, spacing } from '@shared/ui';
-import { HorizontalRail } from '@shared/ui/primitives/HorizontalRail';
+import { Chip, spacing, HorizontalRail } from '@shared/ui';
 import type { LibraryChip } from '@features/library/domain/libraryView';
 
 const CHIPS: ChipItem[] = [

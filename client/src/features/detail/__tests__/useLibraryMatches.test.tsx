@@ -1,13 +1,13 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import { renderHook, waitFor } from '@testing-library/react-native';
-import { libraryKeys } from '@shared/query/queryKeys';
+import { libraryKeys } from '@shared/query';
 
 import {
   useLibraryTracksForAlbum,
   useLibraryTracksForArtist,
   useLibraryAlbumsForArtist,
-} from '@features/detail/hooks/useLibraryMatches';
+} from '@features/detail';
 import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
 
 const { __http } = require('@testing/doubles/fetch.js');

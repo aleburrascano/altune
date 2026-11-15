@@ -1,15 +1,12 @@
 import { renderHook } from '@testing-library/react-native';
 import { createElement, type ReactElement, type ReactNode } from 'react';
 
-import { asTrackId } from '@shared/apiClient/ids';
-import { PlaybackContext } from '@shared/playback/usePlayback';
-import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
+import { asTrackId } from '@shared/apiClient';
+import { PlaybackContext } from '@shared/playback';
+import type { PlaybackContextValue } from '@shared/playback';
 import { makeIdlePlayback } from '@testing/factories';
 
-import {
-  registerSearchFocus,
-  useKeyboardShortcuts,
-} from '@shared/ui/keyboard/useKeyboardShortcuts';
+import { registerSearchFocus, useKeyboardShortcuts } from '@shared/ui';
 
 const FOCUS_REQUEST_TTL_MS = 5_000;
 

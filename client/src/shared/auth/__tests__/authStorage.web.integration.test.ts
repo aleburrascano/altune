@@ -1,5 +1,5 @@
-import type { authStorage } from '@shared/auth/authStorage.web';
-import { clearPersistedAuthSession } from '@shared/auth/supabaseClient';
+import type { authStorage } from '@shared/auth';
+import { clearPersistedAuthSession } from '@shared/auth';
 
 const SESSION_KEY = 'sb-fixture-auth-token';
 const SESSION_VALUE = JSON.stringify({ access_token: 'a', refresh_token: 'r' });

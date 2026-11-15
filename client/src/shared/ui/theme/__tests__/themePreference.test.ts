@@ -1,9 +1,6 @@
-import {
-  createMemoryFileStore,
-  type MemoryFileStore,
-} from '@shared/files/__tests__/memoryFileStore';
+import { createMemoryFileStore, type MemoryFileStore } from '@shared/files';
 
-import { setThemePreferenceFileStore, useThemePreference } from '@shared/ui/theme/themePreference';
+import { setThemePreferenceFileStore, useThemePreference } from '@shared/ui';
 
 const PREF_URI = 'memory://document/preferences/theme.json';
 const LIGHT_ON_DISK = '"light"';

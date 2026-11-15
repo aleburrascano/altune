@@ -3,17 +3,15 @@ import type { ReactNode } from 'react';
 import { Alert } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
-import { asTrackId } from '@shared/apiClient/ids';
-import { ApiError, NetworkError } from '@shared/failure/errors';
+import { asTrackId } from '@shared/apiClient';
+import { ApiError, NetworkError } from '@shared/failure';
 
-import { createMemoryLibraryPort } from './memoryLibraryPort';
-import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
-import type { LibraryPort } from '@features/library/ports/libraryPort';
-import { FeaturingScreen } from '@features/library/ui/FeaturingScreen';
+import { createMemoryLibraryPort, LibraryPortProvider, FeaturingScreen } from '@features/library';
+import type { LibraryPort } from '@features/library';
 import * as detailHandoff from '@shared/navigation/detailHandoff';
 import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';
-import { PlaybackContext } from '@shared/playback/usePlayback';
+import { PlaybackContext } from '@shared/playback';
 import { idlePlayback } from '@testing/queryHarness';
 
 const { __http } = require('@testing/doubles/fetch.js');

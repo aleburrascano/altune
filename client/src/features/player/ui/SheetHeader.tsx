@@ -3,9 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronDown } from 'lucide-react-native';
 
-import { IconButton } from '@shared/ui/primitives/IconButton';
-import { useTheme } from '@shared/ui/theme';
-import { spacing } from '@shared/ui/theme/tokens';
+import { IconButton, useTheme, spacing } from '@shared/ui';
 
 export function SheetScreen({
   testID,

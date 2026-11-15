@@ -3,17 +3,17 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
 import {
+  type ServerEvent,
   useServerEvents,
   type ServerEventsClient,
   type ServerEventsClientFactory,
-} from '@shared/events/useServerEvents';
-import { SSEClient } from '@shared/events/sseClient';
-import type { ServerEvent } from '@shared/events/sseFrames';
-import { supabase } from '@shared/auth/supabaseClient';
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
-import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
-import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
-import { playlistKeys } from '@shared/query/queryKeys';
+  SSEClient,
+} from '@shared/events';
+import { supabase } from '@shared/auth';
+import { runSignOutCleanups } from '@shared/session';
+import { createMemoryFileStore } from '@shared/files';
+import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch';
+import { playlistKeys } from '@shared/query';
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 

@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 
-import { parseTrackId, type TrackId } from '@shared/apiClient/ids';
-import { onIdentityChange, onSignOut } from '@shared/session/signOutCleanup';
-import { onKillSwitchChange } from '@shared/killSwitch/killSwitch';
+import { parseTrackId, type TrackId } from '@shared/apiClient';
+import { onIdentityChange, onSignOut } from '@shared/session';
+import { onKillSwitchChange } from '@shared/killSwitch';
 
 import { offlineDownloadsSupported } from '@shared/offline/domain/offlineSupport';
 import { httpOfflinePort } from '@shared/offline/adapters/http/httpOfflinePort';
@@ -31,7 +31,7 @@ import {
 
 export { pinnedBytes as pinnedByteTotal } from '@shared/offline/state/pinnedFiles';
 
-export type { PinnedEntry, PinnedStatus } from '@shared/offline/state/pinnedIndex';
+export type { PinnedStatus } from '@shared/offline/state/pinnedIndex';
 
 function readyWithFileOnDisk(entries: Record<string, PinnedEntry>): Record<string, PinnedEntry> {
   const kept: Record<string, PinnedEntry> = {};

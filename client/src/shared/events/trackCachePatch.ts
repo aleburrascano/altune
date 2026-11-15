@@ -1,9 +1,8 @@
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
 
-import type { TrackId } from '@shared/apiClient/ids';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { removeTrackStatus } from '@shared/acquisition/state/trackStatusStore';
-import { libraryKeys } from '@shared/query/queryKeys';
+import type { TrackId, TrackResponse } from '@shared/apiClient';
+import { removeTrackStatus } from '@shared/acquisition';
+import { libraryKeys } from '@shared/query';
 import {
   pagedAccessor,
   PATCH_POLICY,

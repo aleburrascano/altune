@@ -2,10 +2,10 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, act } from '@testing-library/react-native';
 
-import { ApiError, NetworkError } from '@shared/failure/errors';
+import { ApiError, NetworkError } from '@shared/failure';
 
-import { useSignOut } from '@shared/auth/useSignOut';
-import { onSignOut } from '@shared/session/signOutCleanup';
+import { useSignOut } from '@shared/auth';
+import { onSignOut } from '@shared/session';
 
 const mockSignOut = jest.fn();
 

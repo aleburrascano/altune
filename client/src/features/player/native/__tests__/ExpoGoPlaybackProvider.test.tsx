@@ -1,12 +1,10 @@
 import React from 'react';
 import { act, renderHook } from '@testing-library/react-native';
 
-import { asTrackId } from '@shared/apiClient/ids';
-import { usePlayback } from '@shared/playback/usePlayback';
-import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
-
-import { ExpoGoPlaybackProvider } from '@features/player/native/ExpoGoPlaybackProvider';
+import { asTrackId } from '@shared/apiClient';
+import { usePlayback } from '@shared/playback';
+import type { PlaybackContextValue, PlaybackTrack } from '@shared/playback';
+import { ExpoGoPlaybackProvider } from '@features/player';
 
 const devFlag = globalThis as unknown as { __DEV__: boolean };
 

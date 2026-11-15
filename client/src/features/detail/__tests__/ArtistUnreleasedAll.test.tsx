@@ -1,12 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import type { DiscoveryResult } from '@shared/apiClient';
 import * as userTelemetry from '@shared/telemetry/userTelemetry';
-import { detailHref } from '@shared/navigation/detailHandoff';
+import { detailHref } from '@shared/navigation';
 
-import { httpDetailPort } from '@features/detail/adapters/http/httpDetailPort';
-import { DetailPortProvider } from '@features/detail/ports/DetailPortProvider';
-import { UnreleasedAllScreen } from '@features/detail/ui/unreleased/ArtistUnreleasedAll';
+import { httpDetailPort, DetailPortProvider, UnreleasedAllScreen } from '@features/detail';
 import {
   createPlaybackWrapper,
   createTestQueryClient,

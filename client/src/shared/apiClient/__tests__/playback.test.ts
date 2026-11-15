@@ -1,7 +1,6 @@
-import { getQueueState, saveQueueState } from '@shared/apiClient/playback';
-import type { QueueStateResponse, SaveQueueStateRequest } from '@shared/apiClient/playback';
-import { ApiError, NetworkError } from '@shared/apiClient/index';
-import { supabase } from '@shared/auth/supabaseClient';
+import { getQueueState, saveQueueState, ApiError, NetworkError } from '@shared/apiClient';
+import type { QueueStateResponse, SaveQueueStateRequest } from '@shared/apiClient';
+import { supabase } from '@shared/auth';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

@@ -1,10 +1,10 @@
 import React from 'react';
 import { renderHook } from '@testing-library/react-native';
 
-import { asTrackId } from '@shared/apiClient/ids';
+import { asTrackId } from '@shared/apiClient';
 
-import { usePlayback, PlaybackContext } from '@shared/playback/usePlayback';
-import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
+import { usePlayback, PlaybackContext } from '@shared/playback';
+import type { PlaybackContextValue } from '@shared/playback';
 import { makeIdlePlayback } from '@testing/factories';
 
 function buildContextValue(): PlaybackContextValue {

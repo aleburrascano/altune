@@ -2,11 +2,16 @@ import { useState, type ReactElement } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
 import { ChevronLeft, MoreHorizontal, type LucideIcon } from 'lucide-react-native';
 
-import { Tappable } from '@shared/ui/primitives/Tappable';
-import { Text } from '@shared/ui/primitives/Text';
-import { ContextMenu, type ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
-import { spacing, useTheme, withAlpha, halved } from '@shared/ui/theme';
-
+import {
+  Tappable,
+  Text,
+  ContextMenu,
+  type ContextMenuItem,
+  spacing,
+  useTheme,
+  withAlpha,
+  halved,
+} from '@shared/ui';
 import { sharedStyles } from '@features/detail/ui/detailStyles';
 
 type GlassButtonProps = {

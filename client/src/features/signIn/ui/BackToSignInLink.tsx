@@ -2,8 +2,7 @@ import { Link } from 'expo-router';
 import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Text } from '@shared/ui/primitives/Text';
-import { spacing } from '@shared/ui/theme';
+import { Text, spacing } from '@shared/ui';
 
 export function BackToSignInLink({
   testID = 'back-to-sign-in',

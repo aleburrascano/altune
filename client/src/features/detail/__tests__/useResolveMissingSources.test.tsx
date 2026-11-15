@@ -1,12 +1,11 @@
 import { renderHook, waitFor, act } from '@testing-library/react-native';
 
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import type { DiscoveryResult } from '@shared/apiClient';
 
-import { applyKillSwitches } from '@shared/killSwitch/killSwitch';
+import { applyKillSwitches } from '@shared/killSwitch';
 
-import { useResolveMissingSources } from '@features/detail/hooks/useResolveMissingSources';
-import type { DetailPort } from '@features/detail/ports/detailPort';
-import { createMemoryDetailPort } from '@features/detail/__tests__/memoryDetailPort';
+import { useResolveMissingSources, createMemoryDetailPort } from '@features/detail';
+import type { DetailPort } from '@features/detail';
 import { createPortWrapper, createTestQueryClient } from '@testing/queryHarness';
 
 function track(overrides: Partial<DiscoveryResult> = {}): DiscoveryResult {

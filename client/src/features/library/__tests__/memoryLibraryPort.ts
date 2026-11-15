@@ -1,14 +1,17 @@
-import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/apiClient/discovery';
-import type { AlbumGroup, ArtistGroup } from '@shared/apiClient/library';
 import type {
+  DiscoveryResult,
+  DiscoverySearchResponse,
+  AlbumGroup,
+  ArtistGroup,
   FeaturedArtist,
   ListTracksResponse,
   TrackResponse,
-} from '@shared/apiClient/trackResponse';
-import type { PlaylistDetailResponse, PlaylistResponse } from '@shared/apiClient/playlistResponse';
-import { ApiError } from '@shared/failure/errors';
+  PlaylistDetailResponse,
+  PlaylistResponse,
+} from '@shared/apiClient';
+import { ApiError } from '@shared/failure';
 
-import type { LibraryPort } from '@features/library/ports/libraryPort';
+import type { LibraryPort } from '@features/library';
 
 const MAX_ALL_TRACKS = 10_000;
 const NOT_FOUND_STATUS = 404;

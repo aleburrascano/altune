@@ -1,4 +1,4 @@
-import type { FileStore } from '@shared/files/fileStore';
+import type { FileStore } from '@shared/files';
 
 export function fakeLocalStorage(): Storage {
   const data = new Map<string, string>();

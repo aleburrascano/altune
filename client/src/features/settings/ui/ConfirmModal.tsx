@@ -2,9 +2,7 @@ import type { LucideIcon } from 'lucide-react-native';
 import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Button, IconBadge, Text, radius, spacing, useTheme } from '@shared/ui';
-import { ModalFrame } from '@shared/ui/primitives/ModalFrame';
-
+import { Button, IconBadge, Text, radius, spacing, useTheme, ModalFrame } from '@shared/ui';
 type ConfirmModalProps = {
   visible: boolean;
   title: string;

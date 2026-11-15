@@ -1,40 +1,30 @@
 import { waitFor } from '@testing-library/react-native';
 import TrackPlayer from 'react-native-track-player';
 
-import type { ResolvedAudioUrl } from '@shared/apiClient/audio';
-import { asTrackId } from '@shared/apiClient/ids';
-import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
-import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
-
+import type { ResolvedAudioUrl } from '@shared/apiClient';
+import { asTrackId } from '@shared/apiClient';
+import { orderedQueueTracks, useQueueStore, trackKey, type PlaybackTrack } from '@shared/playback';
 import {
+  type PlaybackPort,
   forgetAllSwaps,
   repairActiveToStreaming,
   swapUpcomingToLocal,
   wasSwappedToLocal,
-} from '@features/player/native/nativeTrackSwap';
-import { usePlaybackErrorStore } from '@features/player/hooks/usePlaybackErrorStore';
-import {
+  usePlaybackErrorStore,
   _resetPlaybackHealthForTest,
   flushPlaybackHealth,
-} from '@features/player/domain/playbackHealth';
-import { resetPlaybackForSignOut } from '@features/player/native/playbackService';
-import '@features/player/native/loadNativeTrack';
-import { withNativeQueue } from '@features/player/native/nativeQueueLock';
-
-import { installPlaybackPort } from '@features/player/ports/activePlaybackPort';
-import type { PlaybackPort } from '@features/player/ports/playbackPort';
-
-import {
+  resetPlaybackForSignOut,
+  withNativeQueue,
+  installPlaybackPort,
   libraryTrack,
   previewTrack,
   libraryTrackWithId,
   cdnAudioUrls,
-} from '@features/player/__tests__/fixtures';
-import {
   createMemoryPlaybackPort,
   type MemoryPlaybackSeed,
-} from '@features/player/__tests__/memoryPlaybackPort';
-import { httpPlaybackPort } from '@features/player/adapters/http/httpPlaybackPort';
+  httpPlaybackPort,
+} from '@features/player';
+import '@features/player/native/loadNativeTrack';
 import { signInTestUser } from '@testing/signInTestUser';
 
 const NATIVE_QUEUE_OP_TIMEOUT_MS = 15_000;

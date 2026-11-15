@@ -1,4 +1,4 @@
-import { signInWithPassword } from '@shared/auth/authActions';
+import { signInWithPassword } from '@shared/auth';
 
 import { lockoutOnRepeatedFailure } from '@features/signIn/domain/attemptLockout';
 import {

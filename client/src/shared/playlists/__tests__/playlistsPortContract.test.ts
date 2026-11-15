@@ -1,12 +1,10 @@
-import { asTrackId } from '@shared/apiClient/ids';
-import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
+import { asTrackId } from '@shared/apiClient';
+import type { PlaylistResponse } from '@shared/apiClient';
 import { signInTestUser } from '@testing/signInTestUser';
-import { ApiError } from '@shared/failure/errors';
+import { ApiError } from '@shared/failure';
 
-import { httpPlaylistsPort } from '@shared/playlists/adapters/http/httpPlaylistsPort';
-import type { PlaylistsPort } from '@shared/playlists/ports/playlistsPort';
-import { createMemoryPlaylistsPort } from '@shared/playlists/__tests__/memoryPlaylistsPort';
-
+import { httpPlaylistsPort, createMemoryPlaylistsPort } from '@shared/playlists';
+import type { PlaylistsPort } from '@shared/playlists';
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));

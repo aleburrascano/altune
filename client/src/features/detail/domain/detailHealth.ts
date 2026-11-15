@@ -1,6 +1,6 @@
-import { isAbort } from '@shared/failure/errors';
-import { createHealthTally } from '@shared/telemetry/healthTally';
-import type { DiscoveryProviderStatus } from '@shared/apiClient/discovery';
+import { isAbort } from '@shared/failure';
+import { createHealthTally } from '@shared/telemetry';
+import type { DiscoveryProviderStatus } from '@shared/apiClient';
 
 import { hasDegradedStatus } from '@features/detail/domain/contentStatus';
 

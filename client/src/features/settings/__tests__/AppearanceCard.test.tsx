@@ -1,8 +1,8 @@
 import React from 'react';
 import { act, render, screen, fireEvent } from '@testing-library/react-native';
 
-import { useThemePreference } from '@shared/ui/theme/themePreference';
-import { AppearanceCard } from '@features/settings/ui/AppearanceCard';
+import { useThemePreference } from '@shared/ui';
+import { AppearanceCard } from '@features/settings';
 
 describe('AppearanceCard', () => {
   afterEach(() => {

@@ -1,19 +1,23 @@
 import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Card, Row, Text, radius, spacing, useTheme } from '@shared/ui';
-import { Artwork } from '@shared/ui/primitives/Artwork';
-import { Tappable } from '@shared/ui/primitives/Tappable';
 import {
+  Card,
+  Row,
+  Text,
+  radius,
+  spacing,
+  useTheme,
+  Artwork,
+  Tappable,
   usePressableInteraction,
   type PressableInteractionState,
-} from '@shared/ui/primitives/usePressableInteraction';
-
+  opacity,
+} from '@shared/ui';
 import { SectionLabel } from '@features/discovery/ui/results/SectionLabel';
 import { kindLabel } from '@features/discovery/domain/resultDisplay';
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import type { DiscoveryResult } from '@shared/apiClient';
 import type { ResultTapHandler } from '@features/discovery/hooks/results/useResultTap';
-import { opacity } from '@shared/ui/theme';
 
 function pressedStyle({ pressed }: PressableInteractionState) {
   return pressed ? styles.pressed : null;

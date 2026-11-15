@@ -1,9 +1,9 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import { useQuery, type QueryFunctionContext } from '@tanstack/react-query';
 
-import type { DiscoverySuggestion, DiscoverySuggestResponse } from '@shared/apiClient/discovery';
+import type { DiscoverySuggestion, DiscoverySuggestResponse } from '@shared/apiClient';
 
-import { discoveryKeys } from '@shared/query/queryKeys';
+import { discoveryKeys } from '@shared/query';
 import { useReportQueryFailure } from '@features/discovery/hooks/search/useReportQueryFailure';
 import { useDiscoverFetchEnabled } from '@features/discovery/hooks/search/useDiscoverFetchGate';
 import { isSearchableQuery, normalizeQuery } from '@features/discovery/domain/searchPaging';

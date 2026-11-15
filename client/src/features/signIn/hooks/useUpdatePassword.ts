@@ -1,6 +1,4 @@
-import { signOutOtherSessions, updatePassword } from '@shared/auth/authActions';
-
-import { withAuthDeadline } from '@shared/auth/authDeadline';
+import { signOutOtherSessions, updatePassword, withAuthDeadline } from '@shared/auth';
 import {
   classifyAuthError,
   isWeakPasswordError,

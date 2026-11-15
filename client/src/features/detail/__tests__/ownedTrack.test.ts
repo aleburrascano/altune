@@ -1,9 +1,8 @@
-import { asTrackId } from '@shared/apiClient/ids';
-import type { AcquisitionStatus } from '@shared/apiClient/trackResponse';
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import { canPlay } from '@shared/playback/canPlay';
+import { asTrackId } from '@shared/apiClient';
+import type { AcquisitionStatus, DiscoveryResult } from '@shared/apiClient';
+import { canPlay } from '@shared/playback';
 
-import { playButtonState, splitOwned, toPlaybackQueue } from '@features/detail/domain/ownedTrack';
+import { playButtonState, splitOwned, toPlaybackQueue } from '@features/detail';
 
 describe('owned playback', () => {
   type ResultOverrides = {

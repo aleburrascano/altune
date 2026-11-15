@@ -1,8 +1,6 @@
 import * as WebBrowser from 'expo-web-browser';
 
-import { startOAuth } from '@shared/auth/authActions';
-
-import { withAuthDeadline } from '@shared/auth/authDeadline';
+import { startOAuth, withAuthDeadline } from '@shared/auth';
 import {
   failureReason,
   thrownFailure,

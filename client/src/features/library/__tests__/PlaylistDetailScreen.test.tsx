@@ -2,16 +2,14 @@ import type { ReactNode } from 'react';
 import { setPlatformOS } from '@testing/setPlatformOS';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
-import { asTrackId } from '@shared/apiClient/ids';
-import { PlaybackContext } from '@shared/playback/usePlayback';
+import { asTrackId } from '@shared/apiClient';
+import { PlaybackContext } from '@shared/playback';
 import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';
 import { idlePlayback } from '@testing/queryHarness';
-import { PlaylistDetailScreen } from '@features/library/ui/PlaylistDetailScreen';
+import { PlaylistDetailScreen } from '@features/library';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
-import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
-import { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
-
+import { FeaturePorts, httpFeaturePorts } from '@/mobile';
 const { __http } = require('@testing/doubles/fetch.js');
 
 let mockParams: { id?: string } = {};

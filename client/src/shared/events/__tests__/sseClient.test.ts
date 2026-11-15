@@ -1,10 +1,6 @@
-import { SSEClient } from '@shared/events/sseClient';
-import type { ServerEvent } from '@shared/events/sseFrames';
-import {
-  clearSessionExpired,
-  getSessionExpired,
-  renewSessionCredentials,
-} from '@shared/auth/sessionExpired';
+import { SSEClient } from '@shared/events';
+import type { ServerEvent } from '@shared/events';
+import { clearSessionExpired, getSessionExpired, renewSessionCredentials } from '@shared/auth';
 
 import { signInTestUser } from '@testing/signInTestUser';
 

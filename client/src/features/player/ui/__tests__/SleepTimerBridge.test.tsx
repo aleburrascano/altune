@@ -2,12 +2,10 @@ import React from 'react';
 import { act, render } from '@testing-library/react-native';
 import { AppState, type AppStateStatus } from 'react-native';
 
-import { PlaybackContext } from '@shared/playback/usePlayback';
-import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
+import { PlaybackContext } from '@shared/playback';
+import type { PlaybackContextValue } from '@shared/playback';
 
-import { useSleepTimerStore } from '@features/player/hooks/useSleepTimer';
-import { SleepTimerBridge } from '@features/player/ui/SleepTimerBridge';
-
+import { useSleepTimerStore, SleepTimerBridge } from '@features/player';
 const T0 = 1_700_000_000_000;
 const THIRTY_MIN_MS = 30 * 60_000;
 

@@ -4,11 +4,9 @@ import { renderHook, act } from '@testing-library/react-native';
 import fc from 'fast-check';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
-import { usePinnedStore } from '@shared/offline/state/pinnedStore';
+import { usePinnedStore } from '@shared/offline';
 
-import { useSession } from '@shared/auth/useSession';
-import { supabase } from '@shared/auth/supabaseClient';
-
+import { useSession, supabase } from '@shared/auth';
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 type LooseAuth = {

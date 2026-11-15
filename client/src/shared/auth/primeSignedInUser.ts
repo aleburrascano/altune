@@ -1,5 +1,5 @@
 import { supabase } from '@shared/auth/supabaseClient';
-import { primeSignedInState } from '@shared/session/signOutCleanup';
+import { primeSignedInState } from '@shared/session';
 
 export async function primeSignedInUser(): Promise<void> {
   try {

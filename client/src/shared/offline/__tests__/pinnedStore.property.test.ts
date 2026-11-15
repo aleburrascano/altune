@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 
-import { usePinnedStore } from '@shared/offline/state/pinnedStore';
-import { asTrackId } from '@shared/apiClient/ids';
+import { usePinnedStore } from '@shared/offline';
+import { asTrackId } from '@shared/apiClient';
 import { signInTestUser } from '@testing/signInTestUser';
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));

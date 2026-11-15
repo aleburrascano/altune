@@ -1,10 +1,9 @@
-import { asTrackId, type TrackId } from '@shared/apiClient/ids';
+import { asTrackId, type TrackId } from '@shared/apiClient';
 import { signInTestUser } from '@testing/signInTestUser';
-import { ApiError, ContractError } from '@shared/failure/errors';
+import { ApiError, ContractError } from '@shared/failure';
 
-import { httpAcquisitionPort } from '@shared/acquisition/adapters/http/httpAcquisitionPort';
-import { createMemoryAcquisitionPort } from '@shared/acquisition/__tests__/memoryAcquisitionPort';
-import type { AcquisitionPort } from '@shared/acquisition/ports/acquisitionPort';
+import { httpAcquisitionPort, createMemoryAcquisitionPort } from '@shared/acquisition';
+import type { AcquisitionPort } from '@shared/acquisition';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 

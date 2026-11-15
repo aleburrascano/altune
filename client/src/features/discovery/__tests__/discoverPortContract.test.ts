@@ -3,21 +3,21 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
 import * as discoveryApi from '@shared/apiClient/discovery';
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import { ApiError } from '@shared/failure/errors';
+import type { DiscoveryResult } from '@shared/apiClient';
+import { ApiError } from '@shared/failure';
 
 import { signInTestUser } from '@testing/signInTestUser';
-import { httpDiscoverPort } from '@features/discovery/adapters/http/httpDiscoverPort';
-import { createMemoryDiscoverPort } from '@features/discovery/__tests__/memoryDiscoverPort';
-import { resultFixture } from '@features/discovery/__tests__/fixtures';
-import { useAutocompleteSuggestions } from '@features/discovery/hooks/history/useSuggestions';
-import { useDiscoverSearch } from '@features/discovery/hooks/search/useDiscoverSearch';
-import { useSearchHistory } from '@features/discovery/hooks/history/useSearchHistory';
 import {
+  httpDiscoverPort,
+  createMemoryDiscoverPort,
+  resultFixture,
+  useAutocompleteSuggestions,
+  useDiscoverSearch,
+  useSearchHistory,
   DiscoverPortProvider,
   useDiscoverPort,
-} from '@features/discovery/ports/DiscoverPortProvider';
-import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
+} from '@features/discovery';
+import type { DiscoverPort } from '@features/discovery';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 

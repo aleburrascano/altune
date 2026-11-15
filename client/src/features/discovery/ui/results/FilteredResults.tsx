@@ -8,7 +8,7 @@ import { DiscoverRow } from '@features/discovery/ui/results/DiscoverRow';
 import { ResultsList, type ResultsCommonProps } from '@features/discovery/ui/results/ResultsList';
 import { kindLabel, resultKey } from '@features/discovery/domain/resultDisplay';
 
-import type { DiscoveryKind, DiscoveryResult } from '@shared/apiClient/discovery';
+import type { DiscoveryKind, DiscoveryResult } from '@shared/apiClient';
 
 export function FilteredResults({
   kind,

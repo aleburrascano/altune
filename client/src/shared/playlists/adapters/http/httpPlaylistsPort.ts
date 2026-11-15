@@ -6,7 +6,7 @@ import {
   getPlaylists,
   removeTracksFromPlaylist,
   renamePlaylist,
-} from '@shared/apiClient/playlists';
+} from '@shared/apiClient';
 
 import type { PlaylistsPort } from '@shared/playlists/ports/playlistsPort';
 

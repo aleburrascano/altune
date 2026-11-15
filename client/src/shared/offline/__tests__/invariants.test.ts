@@ -2,9 +2,9 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { asTrackId } from '@shared/apiClient/ids';
+import { asTrackId } from '@shared/apiClient';
 
-import { downloadPinned } from '@shared/offline/state/pinnedFiles';
+import { downloadPinned } from '@shared/offline';
 
 const OFFLINE_DIR = path.resolve(__dirname, '..');
 const FILE_STORE_DIR = path.resolve(__dirname, '..', '..', 'files');

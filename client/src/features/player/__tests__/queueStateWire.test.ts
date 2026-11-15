@@ -1,13 +1,8 @@
-import { ContractError } from '@shared/failure/errors';
-import { asPlaylistId } from '@shared/apiClient/ids';
-import { canPlay } from '@shared/playback/canPlay';
+import { ContractError } from '@shared/failure';
+import { asPlaylistId } from '@shared/apiClient';
+import { canPlay } from '@shared/playback';
 
-import {
-  asRepeatMode,
-  fromWireSource,
-  parseQueueState,
-  toWireSource,
-} from '@features/player/domain/queueStateWire';
+import { asRepeatMode, fromWireSource, parseQueueState, toWireSource } from '@features/player';
 
 describe('toWireSource — store source to snake_case wire shape', () => {
   it('maps null to null', () => {

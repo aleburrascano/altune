@@ -1,16 +1,15 @@
 import { act } from '@testing-library/react-native';
 import TrackPlayer, { Event } from 'react-native-track-player';
 
-import { useQueueStore } from '@shared/playback/queueStore';
-import { trackKey } from '@shared/playback/playbackTrack';
-
+import { useQueueStore, trackKey } from '@shared/playback';
 import { signInTestUser } from '@testing/signInTestUser';
 
-import { prefetchNext } from '@features/player/native/audioPrefetch';
-import { reportQueueFailure } from '@features/player/native/queueFailureReport';
-import { loadNativeQueue } from '@features/player/native/loadNativeTrack';
-import { forgetAllSwaps } from '@features/player/native/nativeTrackSwap';
 import {
+  type PlaybackPort,
+  prefetchNext,
+  reportQueueFailure,
+  loadNativeQueue,
+  forgetAllSwaps,
   PLAYBACK_HEALTH_BATCH,
   _resetPlaybackHealthForTest,
   flushPlaybackHealth,
@@ -19,22 +18,14 @@ import {
   recordQueueSaveFailure,
   recordQueueStateRejected,
   type QueueRestoreStage,
-} from '@features/player/domain/playbackHealth';
-import { playbackService } from '@features/player/native/playbackService';
-
-import { installPlaybackPort } from '@features/player/ports/activePlaybackPort';
-import type { PlaybackPort } from '@features/player/ports/playbackPort';
-
-import {
+  playbackService,
+  installPlaybackPort,
   previewTrack,
   libraryTrackWithId,
   cdnAudioUrls,
-} from '@features/player/__tests__/fixtures';
-import {
   createMemoryPlaybackPort,
   type MemoryPlaybackSeed,
-} from '@features/player/__tests__/memoryPlaybackPort';
-
+} from '@features/player';
 type AppStateChangeHandler = (state: string) => void;
 
 jest.mock('react-native/Libraries/AppState/AppState', () => {

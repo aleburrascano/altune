@@ -1,4 +1,4 @@
-import { declaredAppScheme, webOrigin } from '@shared/device/device';
+import { declaredAppScheme, webOrigin } from '@shared/device';
 
 function configuredSchemePrefix(): string {
   const declared = declaredAppScheme();

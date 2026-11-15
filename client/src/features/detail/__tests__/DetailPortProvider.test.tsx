@@ -1,9 +1,7 @@
 import { renderHook } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import { createMemoryDetailPort } from '@features/detail/__tests__/memoryDetailPort';
-import { DetailPortProvider, useDetailPort } from '@features/detail/ports/DetailPortProvider';
-
+import { createMemoryDetailPort, DetailPortProvider, useDetailPort } from '@features/detail';
 describe('useDetailPort', () => {
   it('throws when no provider is mounted', () => {
     jest.spyOn(console, 'error').mockImplementation(() => {});

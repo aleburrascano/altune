@@ -1,12 +1,10 @@
 import React from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
-import { PlaybackContext } from '@shared/playback/usePlayback';
-import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
+import { PlaybackContext } from '@shared/playback';
+import type { PlaybackContextValue } from '@shared/playback';
 
-import { usePlaybackRateStore } from '@features/player/hooks/usePlaybackRate';
-import { useSleepTimerStore } from '@features/player/hooks/useSleepTimer';
-import { PlayerOptionsSheets } from '@features/player/ui/PlayerOptionsSheets';
+import { usePlaybackRateStore, useSleepTimerStore, PlayerOptionsSheets } from '@features/player';
 
 function renderSheets(setRate = jest.fn(), onClose = jest.fn()): void {
   const value = { setRate } as unknown as PlaybackContextValue;

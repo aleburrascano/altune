@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 import { QueryClient } from '@tanstack/react-query';
 
-import { asPlaylistId } from '@shared/apiClient/ids';
+import { asPlaylistId } from '@shared/apiClient';
 
 import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 
@@ -11,7 +11,7 @@ import {
   libraryKeys,
   playlistKeys,
   isSearchKeyFor,
-} from '@shared/query/queryKeys';
+} from '@shared/query';
 
 function makeClient(): QueryClient {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });

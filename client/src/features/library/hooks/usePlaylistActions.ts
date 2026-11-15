@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { playlistKeys } from '@shared/query/queryKeys';
+import type { PlaylistResponse, TrackResponse } from '@shared/apiClient';
+import { playlistKeys } from '@shared/query';
 import { useCreatePlaylist } from '@shared/playlists';
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 import {

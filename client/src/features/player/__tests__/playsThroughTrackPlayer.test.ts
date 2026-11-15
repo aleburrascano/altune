@@ -1,6 +1,4 @@
-import { isExpoGo } from '@features/player/domain/isExpoGo';
-
-import { playsThroughTrackPlayer } from '@features/player/domain/playsThroughTrackPlayer';
+import { isExpoGo, playsThroughTrackPlayer } from '@features/player';
 import { playsThroughTrackPlayer as playsThroughTrackPlayerWeb } from '@features/player/domain/playsThroughTrackPlayer.web';
 
 describe('playsThroughTrackPlayer', () => {

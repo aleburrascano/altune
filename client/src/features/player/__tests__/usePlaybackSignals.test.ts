@@ -4,13 +4,10 @@ import { act, renderHook } from '@testing-library/react-native';
 
 import { signInTestUser } from '@testing/signInTestUser';
 
-import { useQueueStore } from '@shared/playback/queueStore';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import { useQueueStore } from '@shared/playback';
+import type { PlaybackTrack } from '@shared/playback';
 
-import { usePlaybackSignals } from '@features/player/hooks/usePlaybackSignals';
-
-import { previewTrack } from '@features/player/__tests__/fixtures';
-
+import { usePlaybackSignals, previewTrack } from '@features/player';
 const { __http } = require('@testing/doubles/fetch.js');
 
 const EVENTS_ROUTE = 'POST /v1/discovery/events';

@@ -1,10 +1,10 @@
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import type { PlaybackTrack } from '@shared/playback';
 
 import {
+  type RedactedPlaybackFailure,
   derivePlaybackState,
   type DerivePlaybackStateInput,
-} from '@features/player/domain/derivePlaybackState';
-import type { RedactedPlaybackFailure } from '@features/player/domain/playbackError';
+} from '@features/player';
 
 const TRACK: PlaybackTrack = {
   source: { kind: 'preview', previewUrl: 'https://cdn.example/p.mp3' },

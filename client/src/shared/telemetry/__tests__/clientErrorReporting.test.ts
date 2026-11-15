@@ -4,7 +4,7 @@ import {
   _resetGlobalErrorReportingForTest,
   installGlobalErrorReporting,
   reportClientError,
-} from '@shared/telemetry/clientErrorReporting';
+} from '@shared/telemetry';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

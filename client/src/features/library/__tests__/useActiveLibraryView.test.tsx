@@ -1,29 +1,25 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';
-import { asPlaylistId, asTrackId } from '@shared/apiClient/ids';
-import type { AlbumGroup, ArtistGroup } from '@shared/apiClient/library';
-import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { useActiveLibraryView } from '@features/library/hooks/useActiveLibraryView';
-import { useSelection } from '@features/library/hooks/useSelection';
+import { asPlaylistId, asTrackId } from '@shared/apiClient';
+import type { AlbumGroup, ArtistGroup, PlaylistResponse, TrackResponse } from '@shared/apiClient';
 import {
+  type LibraryPort,
+  useActiveLibraryView,
+  useSelection,
   ALBUM_SORT_OPTIONS,
   ARTIST_SORT_OPTIONS,
   PLAYLIST_SORT_OPTIONS,
   TRACK_SORT_OPTIONS,
   type LibraryChip,
   type SortKey,
-} from '@features/library/domain/libraryView';
-import {
   createMemoryLibraryPort,
   type MemoryLibrarySeed,
-} from '@features/library/__tests__/memoryLibraryPort';
-import { track } from '@features/library/__tests__/trackMutationFixtures';
-import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
-import type { LibraryPort } from '@features/library/ports/libraryPort';
-import { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
-import type { Navigator } from '@shared/navigation/navigator';
+  track,
+  LibraryPortProvider,
+  useLibraryNavigation,
+} from '@features/library';
+import type { Navigator } from '@shared/navigation';
 
 type ActiveLibraryView = ReturnType<typeof useActiveLibraryView>;
 type Deps = Parameters<typeof useActiveLibraryView>[3];

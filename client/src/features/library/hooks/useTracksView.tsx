@@ -1,11 +1,9 @@
 import { showFailureAlert } from '@shared/ui';
 import { useRef, useState } from 'react';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { isCurrentlyPlaying } from '@shared/playback/playbackContextValue';
-import { buildPlayableQueue } from '@shared/playback/playFromList';
-import type { usePlayback } from '@shared/playback/usePlayback';
-import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
-import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
+import type { TrackResponse } from '@shared/apiClient';
+import { isCurrentlyPlaying, buildPlayableQueue } from '@shared/playback';
+import type { usePlayback, useQueuePlayback } from '@shared/playback';
+import type { MenuAnchor } from '@shared/ui';
 import { libraryFailureAlert } from '@features/library/domain/libraryFailure';
 import { useLibraryTracks } from '@features/library/hooks/useLibraryTracks';
 import type { useRetryAcquisition } from '@features/library/hooks/useRetryAcquisition';

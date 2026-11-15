@@ -1,5 +1,5 @@
-import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import { orderedQueueTracks, useQueueStore } from '@shared/playback';
+import type { PlaybackTrack } from '@shared/playback';
 
 export const MAX_PRESIGN = 25;
 const PRESIGN_REFRESH_MARGIN = 5;

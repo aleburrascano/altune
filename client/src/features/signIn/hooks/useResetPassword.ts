@@ -1,4 +1,4 @@
-import { requestPasswordReset } from '@shared/auth/authActions';
+import { requestPasswordReset } from '@shared/auth';
 
 import { lockoutOnRepeatedFailure } from '@features/signIn/domain/attemptLockout';
 import {

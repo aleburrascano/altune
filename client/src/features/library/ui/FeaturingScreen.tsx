@@ -2,18 +2,26 @@ import { useLocalSearchParams, useRouter, useSegments } from 'expo-router';
 import { useMemo, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { ChevronLeft } from 'lucide-react-native';
-import type { FeaturedArtist, TrackResponse } from '@shared/apiClient/trackResponse';
-import { detailHref } from '@shared/navigation/detailHandoff';
-import { trackToDiscoveryResult } from '@shared/apiClient/trackToDiscoveryResult';
-import { asyncView } from '@shared/ui/async/asyncView';
-import { isCurrentlyPlaying } from '@shared/playback/playbackContextValue';
-import { buildPlayableQueue } from '@shared/playback/playFromList';
-import { usePlayback } from '@shared/playback/usePlayback';
-import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
-import { Button, Screen, Skeleton, Text, spacing } from '@shared/ui';
-import { AsyncSection } from '@shared/ui/async/AsyncSection';
-import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
-import { IconButton } from '@shared/ui/primitives/IconButton';
+import type { FeaturedArtist, TrackResponse } from '@shared/apiClient';
+import { detailHref } from '@shared/navigation';
+import { trackToDiscoveryResult } from '@shared/apiClient';
+import {
+  asyncView,
+  Button,
+  Screen,
+  Skeleton,
+  Text,
+  spacing,
+  AsyncSection,
+  ContextMenu,
+  IconButton,
+} from '@shared/ui';
+import {
+  isCurrentlyPlaying,
+  buildPlayableQueue,
+  usePlayback,
+  useQueuePlayback,
+} from '@shared/playback';
 import { featuringDetailRoute, goBackOrToLibrary } from '@features/library/domain/libraryRoutes';
 import { useDeleteTrack } from '@features/library/hooks/useDeleteTracks';
 import {

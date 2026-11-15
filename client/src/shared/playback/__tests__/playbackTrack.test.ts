@@ -1,12 +1,11 @@
-import { asTrackId } from '@shared/apiClient/ids';
+import { asTrackId } from '@shared/apiClient';
 import {
   type PlaybackTrack,
   trackKey,
   currentTrackToPlaybackTrack,
   toPlaybackTrack,
-} from '@shared/playback/playbackTrack';
-import type { QueueStateCurrentTrack } from '@shared/apiClient/playback';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
+} from '@shared/playback';
+import type { QueueStateCurrentTrack, TrackResponse } from '@shared/apiClient';
 
 function track(source: PlaybackTrack['source']): PlaybackTrack {
   return { source, title: 'Title', artist: 'Artist', artworkUrl: null };

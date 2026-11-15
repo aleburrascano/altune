@@ -1,6 +1,6 @@
-import { formatBytes } from '@shared/offline/state/pinnedFiles';
-import type { PinnedEntry } from '@shared/offline/state/pinnedIndex';
-import { countLabel } from '@shared/ui/format/displayFormat';
+import { formatBytes } from '@shared/offline';
+import type { PinnedEntry } from '@shared/offline';
+import { countLabel } from '@shared/ui';
 
 export type DownloadUsage = 'none' | 'leftover' | 'tracks';
 

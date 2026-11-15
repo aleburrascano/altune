@@ -1,4 +1,4 @@
-import type { JsonObject } from '@shared/files/json';
+import type { JsonObject } from '@shared/files';
 
 export interface ServerEvent {
   id: string;

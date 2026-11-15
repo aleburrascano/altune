@@ -3,13 +3,18 @@ import * as SecureStore from 'expo-secure-store';
 
 import { signInTestUser } from '@testing/signInTestUser';
 
-import { recordEvent, type DiscoveryEvent } from '@shared/telemetry/recordEvent';
-import { getSessionId } from '@shared/telemetry/eventSession';
-import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
-import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
-import { _resetOutboxForTest, enqueueCritical, flushOutbox } from '@shared/telemetry/outbox';
-import { loadPersistedOutbox, setOutboxFileStore } from '@shared/telemetry/outboxStore';
-
+import {
+  recordEvent,
+  type DiscoveryEvent,
+  getSessionId,
+  _resetOutboxForTest,
+  enqueueCritical,
+  flushOutbox,
+  loadPersistedOutbox,
+  setOutboxFileStore,
+} from '@shared/telemetry';
+import { createMemoryFileStore } from '@shared/files';
+import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch';
 const { __http } = require('@testing/doubles/fetch.js');
 
 const TELEMETRY_GATED = {

@@ -1,4 +1,4 @@
-import { clampedExponent, equalJitterMs } from '@shared/timing/backoff';
+import { clampedExponent, equalJitterMs } from '@shared/timing';
 
 describe('clampedExponent', () => {
   it.each([

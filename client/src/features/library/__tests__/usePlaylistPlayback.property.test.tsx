@@ -3,17 +3,13 @@ import type { ReactNode } from 'react';
 import { act, renderHook } from '@testing-library/react-native';
 import fc from 'fast-check';
 
-import { asPlaylistId, asTrackId } from '@shared/apiClient/ids';
-import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { canPlay } from '@shared/playback/canPlay';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
-import { useQueueStore } from '@shared/playback/queueStore';
-import { PlaybackContext } from '@shared/playback/usePlayback';
-import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
+import { asPlaylistId, asTrackId } from '@shared/apiClient';
+import type { PlaylistDetailResponse, TrackResponse } from '@shared/apiClient';
+import { canPlay, useQueueStore, PlaybackContext, useQueuePlayback } from '@shared/playback';
+import type { PlaybackTrack } from '@shared/playback';
 import { makeIdlePlayback, trackResponseFactory } from '@testing/factories';
 
-import { usePlaylistPlayback } from '@features/library/hooks/usePlaylistPlayback';
+import { usePlaylistPlayback } from '@features/library';
 
 const INITIAL_STATE = useQueueStore.getState();
 const PLAYLIST_ID = asPlaylistId('pl1');

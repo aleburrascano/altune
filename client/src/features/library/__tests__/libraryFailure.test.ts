@@ -1,13 +1,12 @@
-import { ApiError, ContractError, NetworkError } from '@shared/failure/errors';
-import { RETRY_TAIL } from '@shared/failure/describeError';
+import { ApiError, ContractError, NetworkError, RETRY_TAIL } from '@shared/failure';
 import {
   classifyLibraryError,
   failureTail,
   libraryFailureAlert,
   logTrackMutationFailure,
   trackNotFoundAlert,
-} from '@features/library/domain/libraryFailure';
-import { asTrackId, type TrackId } from '@shared/apiClient/ids';
+} from '@features/library';
+import { asTrackId, type TrackId } from '@shared/apiClient';
 
 describe('classifyLibraryError — one boundary, typed errors only', () => {
   it.each([

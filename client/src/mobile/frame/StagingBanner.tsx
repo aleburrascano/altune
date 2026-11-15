@@ -1,8 +1,6 @@
 import { StyleSheet, View } from 'react-native';
 
-import { Text } from '@shared/ui/primitives/Text';
-import { spacing, useTheme } from '@shared/ui/theme';
-
+import { Text, spacing, useTheme } from '@shared/ui';
 const STAGING_SUPABASE_PROJECT_REF = 'ijyjoyxhwmbmriwzazbx';
 
 const STAGING_BANNER_COPY =

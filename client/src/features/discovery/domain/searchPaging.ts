@@ -1,6 +1,6 @@
 import type { InfiniteData } from '@tanstack/react-query';
 
-import type { DiscoverySearchResponse } from '@shared/apiClient/discovery';
+import type { DiscoverySearchResponse } from '@shared/apiClient';
 
 export type SearchPageParam = { offset: number; searchId: string | undefined };
 

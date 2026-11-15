@@ -1,7 +1,6 @@
 import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 
-import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
-import { ACQUISITION_STATUSES, type TrackResponse } from '@shared/apiClient/trackResponse';
+import { type PlaylistResponse, ACQUISITION_STATUSES, type TrackResponse } from '@shared/apiClient';
 
 describe('trackResponse', () => {
   it('refuses a PlaylistResponse where a TrackResponse belongs', () => {

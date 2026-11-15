@@ -1,8 +1,12 @@
 import { renderHook } from '@testing-library/react-native';
 
-import { CONTENT_MAX_WIDTH, WIDE_LAYOUT_MIN_WIDTH } from '@shared/ui/layout/breakpoints';
-import { useLayoutMode, useWideWebLayout, type LayoutMode } from '@shared/ui/layout/useLayoutMode';
-
+import {
+  CONTENT_MAX_WIDTH,
+  WIDE_LAYOUT_MIN_WIDTH,
+  useLayoutMode,
+  useWideWebLayout,
+  type LayoutMode,
+} from '@shared/ui';
 let mockWindowWidth = 390;
 
 jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({

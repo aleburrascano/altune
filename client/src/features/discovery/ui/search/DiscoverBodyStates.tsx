@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { Button, Skeleton, Text, radius, spacing } from '@shared/ui';
 
-import { describeError } from '@shared/failure/describeError';
+import { describeError } from '@shared/failure';
 import { SEARCH_UNAVAILABLE_TITLE } from '@features/discovery/domain/discoverView';
 import { ART_SIZE } from '@features/discovery/ui/results/DiscoverRow';
 import { FilterChips } from '@features/discovery/ui/results/FilterChips';

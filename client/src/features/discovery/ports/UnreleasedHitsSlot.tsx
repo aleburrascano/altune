@@ -1,7 +1,7 @@
 import { createContext, createElement, use } from 'react';
 import type { ComponentType, ReactElement, ReactNode } from 'react';
 
-import type { UnreleasedSearchHit } from '@shared/apiClient/enrichment';
+import type { UnreleasedSearchHit } from '@shared/apiClient';
 
 export interface UnreleasedHitsViewProps {
   hits: UnreleasedSearchHit[];

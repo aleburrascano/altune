@@ -6,11 +6,10 @@ import {
   type QueryFunctionContext,
 } from '@tanstack/react-query';
 
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import type { UnreleasedTrack, UnreleasedTracksResponse } from '@shared/apiClient/enrichment';
-import { sourceIdList } from '@shared/apiClient/ids';
-import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
-import { detailKeys } from '@shared/query/queryKeys';
+import type { DiscoveryResult, UnreleasedTrack, UnreleasedTracksResponse } from '@shared/apiClient';
+import { sourceIdList } from '@shared/apiClient';
+import { useQueuePlayback } from '@shared/playback';
+import { detailKeys } from '@shared/query';
 
 import { DETAIL_CONTENT_STALE_MS } from '@features/detail/domain/contentStatus';
 import {

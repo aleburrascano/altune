@@ -2,16 +2,16 @@ import { Animated } from 'react-native';
 
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react-native';
 
-import { DownloadsBar } from '@shared/acquisition/ui/DownloadsBar';
-import { deriveBarDisplay } from '@shared/acquisition/ui/barDisplay';
 import {
+  DownloadsBar,
+  deriveBarDisplay,
   useActiveDownloadItems,
   useDownloadStore,
   type DownloadEntry,
-} from '@shared/acquisition/state/downloadStore';
-import { ACQUISITION_PHASES } from '@shared/acquisition/state/stagePhase';
+  ACQUISITION_PHASES,
+} from '@shared/acquisition';
 import * as announceModule from '@shared/ui/a11y/announce';
-import { asTrackId } from '@shared/apiClient/ids';
+import { asTrackId } from '@shared/apiClient';
 
 const FINISHING_DWELL_MS = 500;
 const FAILED_HOLD_MS = 4_000;

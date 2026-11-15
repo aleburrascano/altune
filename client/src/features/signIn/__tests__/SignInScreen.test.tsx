@@ -1,14 +1,12 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import { SignInScreen } from '@features/signIn/ui/SignInScreen';
-
 import {
+  SignInScreen,
   authPortWrapper,
   createAuthPortMock,
   createSupabaseAuthMock,
-} from '@features/signIn/__tests__/testUtils/authTestUtils';
-
+} from '@features/signIn';
 jest.mock('expo-router', () => {
   const { View } = require('react-native');
   return {

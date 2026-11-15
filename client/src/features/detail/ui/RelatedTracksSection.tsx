@@ -1,13 +1,8 @@
 import type { ComponentProps, ReactElement } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { Artwork } from '@shared/ui/primitives/Artwork';
-import { HorizontalRail } from '@shared/ui/primitives/HorizontalRail';
-import { Tappable } from '@shared/ui/primitives/Tappable';
-import { Text } from '@shared/ui/primitives/Text';
-import { radius, spacing } from '@shared/ui/theme/tokens';
-
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import { Artwork, HorizontalRail, Tappable, Text, radius, spacing } from '@shared/ui';
+import type { DiscoveryResult } from '@shared/apiClient';
 
 import { useRelatedTracks } from '@features/detail/hooks/useRelatedTracks';
 import { type DetailRoute } from '@features/detail/domain/detailNavigation';

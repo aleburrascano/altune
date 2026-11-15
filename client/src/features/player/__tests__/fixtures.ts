@@ -1,6 +1,6 @@
-import { asTrackId } from '@shared/apiClient/ids';
-import type { ResolvedAudioUrl } from '@shared/apiClient/audio';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import { asTrackId } from '@shared/apiClient';
+import type { ResolvedAudioUrl } from '@shared/apiClient';
+import type { PlaybackTrack } from '@shared/playback';
 
 export function libraryTrack(overrides: Partial<PlaybackTrack> = {}): PlaybackTrack {
   return {

@@ -1,6 +1,6 @@
-import { startDeadline } from '@shared/timing/deadline';
-import type { Deadline } from '@shared/timing/deadline';
-import { NetworkError } from '@shared/failure/errors';
+import { startDeadline } from '@shared/timing';
+import type { Deadline } from '@shared/timing';
+import { NetworkError } from '@shared/failure';
 
 const AUTH_CALL_TIMEOUT_MS = 15_000;
 

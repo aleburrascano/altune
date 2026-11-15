@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
-import { trackIdentityKey } from '@shared/acquisition/state/trackStatusStore';
+import type { DiscoveryResult } from '@shared/apiClient';
+import { currentSessionEpoch, isSameSession } from '@shared/session';
+import { trackIdentityKey } from '@shared/acquisition';
 
-import { runBounded, type BatchOutcome } from '@shared/concurrency/runBounded';
+import { runBounded, type BatchOutcome } from '@shared/concurrency';
 
 import { toCreateTrackRequest, SAVE_ALL_CONCURRENCY } from '@features/detail/domain/saveTrack';
 import { trackExtras } from '@features/detail/domain/trackExtras';

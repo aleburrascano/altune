@@ -1,15 +1,17 @@
-import type { QueueStateResponse } from '@shared/apiClient/playback';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { canPlay } from '@shared/playback/canPlay';
-import { useQueueStore } from '@shared/playback/queueStore';
-import { currentTrackToPlaybackTrack, toPlaybackTrack } from '@shared/playback/playbackTrack';
-import type { QueueSource } from '@shared/playback/queueOrder';
+import type { QueueStateResponse, TrackResponse } from '@shared/apiClient';
+import {
+  canPlay,
+  useQueueStore,
+  currentTrackToPlaybackTrack,
+  toPlaybackTrack,
+} from '@shared/playback';
+import type { QueueSource } from '@shared/playback';
 
 import {
   recordQueueRebuildOutcome,
   type QueueRebuildRung,
 } from '@features/player/domain/playbackHealth';
-import { clamp } from '@shared/math/math';
+import { clamp } from '@shared/math';
 import { fromWireSource } from '@features/player/domain/queueStateWire';
 
 function savedCursor(savedTrackIds: readonly string[], savedCurrentIndex: number): number {

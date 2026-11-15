@@ -1,6 +1,6 @@
 import { renderHook, waitFor } from '@testing-library/react-native';
 
-import { useAlbumDiscovery, useArtistDiscovery } from '@features/detail/hooks/useEntityDiscovery';
+import { useAlbumDiscovery, useArtistDiscovery } from '@features/detail';
 import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
 
 const { __http } = require('@testing/doubles/fetch.js');

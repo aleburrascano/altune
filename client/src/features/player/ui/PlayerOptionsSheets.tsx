@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactElement } from 'react';
 
-import { ActionSheet, type ActionSheetOption } from '@shared/ui/primitives/ActionSheet';
+import { ActionSheet, type ActionSheetOption } from '@shared/ui';
 
 import { useSleepOptions } from '@features/player/hooks/useSleepTimer';
 import { useSpeedOptions } from '@features/player/hooks/usePlaybackRate';

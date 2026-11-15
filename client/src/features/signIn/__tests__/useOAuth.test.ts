@@ -1,22 +1,18 @@
 import { renderHook, act } from '@testing-library/react-native';
 import * as WebBrowser from 'expo-web-browser';
 
-import { supabase } from '@shared/auth/supabaseClient';
+import { supabase } from '@shared/auth';
 
 import {
   _resetConsumedCredentialForTest,
   completeAuthIntent,
-} from '@features/signIn/domain/completeAuthIntent';
-import { parseAuthLink } from '@features/signIn/domain/parseAuthLink';
-import { OAUTH_BROWSER_TIMEOUT_MS } from '@features/signIn/domain/oauthResult';
-import { useOAuth } from '@features/signIn/hooks/useOAuth';
-
-import {
+  parseAuthLink,
+  OAUTH_BROWSER_TIMEOUT_MS,
+  useOAuth,
   authPortWrapper,
   createAuthPortMock,
   createSupabaseAuthMock,
-} from '@features/signIn/__tests__/testUtils/authTestUtils';
-
+} from '@features/signIn';
 const AUTH_ACTION_TIMEOUT_MS = 20_000;
 
 const mockStateUpdates: unknown[] = [];

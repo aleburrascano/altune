@@ -1,13 +1,8 @@
 import fc from 'fast-check';
 
-import { asTrackId } from '@shared/apiClient/ids';
-import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
-import {
-  deleteAllPinned,
-  downloadPinned,
-  formatBytes,
-  setPinnedFileStore,
-} from '@shared/offline/state/pinnedFiles';
+import { asTrackId } from '@shared/apiClient';
+import { createMemoryFileStore } from '@shared/files';
+import { deleteAllPinned, downloadPinned, formatBytes, setPinnedFileStore } from '@shared/offline';
 
 const PINNED_T1 = 'memory://document/offline-audio/t1';
 

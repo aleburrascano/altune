@@ -1,8 +1,8 @@
 import { act, renderHook } from '@testing-library/react-native';
 
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import type { DiscoveryResult } from '@shared/apiClient';
 
-import { useDiscographyFilter } from '@features/detail/hooks/useDiscographyFilter';
+import { useDiscographyFilter } from '@features/detail';
 
 function album(title: string, recordType: string): DiscoveryResult {
   return {

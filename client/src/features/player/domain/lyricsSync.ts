@@ -1,4 +1,4 @@
-import type { SyncedLine } from '@shared/apiClient/lyrics';
+import type { SyncedLine } from '@shared/apiClient';
 
 export function activeLineIndex(lines: SyncedLine[], positionMs: number): number {
   let active = -1;

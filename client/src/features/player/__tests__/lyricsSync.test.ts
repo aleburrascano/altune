@@ -1,6 +1,6 @@
-import type { SyncedLine } from '@shared/apiClient/lyrics';
+import type { SyncedLine } from '@shared/apiClient';
 
-import { activeLineIndex, _lyricsView } from '@features/player/domain/lyricsSync';
+import { activeLineIndex, _lyricsView } from '@features/player';
 
 function line(milliseconds: number): SyncedLine {
   return { timecode: '00:00', line: `line@${String(milliseconds)}`, milliseconds, duration: 500 };

@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import type { DiscoveryResult } from '@shared/apiClient';
 
-import { DiscographySections } from '@features/detail/ui/DiscographySections';
+import { DiscographySections } from '@features/detail';
 
 import { StyleSheet } from 'react-native';
 import { setPlatformOS } from '@testing/setPlatformOS';

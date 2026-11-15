@@ -1,11 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 
-import {
-  parsePlaylistId,
-  parseTrackId,
-  type PlaylistId,
-  type TrackId,
-} from '@shared/apiClient/ids';
+import { parsePlaylistId, parseTrackId, type PlaylistId, type TrackId } from '@shared/apiClient';
 
 import type { ServerEvent } from '@shared/events/sseFrames';
 

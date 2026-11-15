@@ -1,4 +1,4 @@
-import { addFavorite, listFavorites, removeFavorite } from '@shared/apiClient/favorites';
+import { addFavorite, listFavorites, removeFavorite } from '@shared/apiClient';
 
 import type { FavoritesPort } from '@features/discovery/ports/favoritesPort';
 

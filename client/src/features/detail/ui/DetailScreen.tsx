@@ -1,10 +1,8 @@
 import { Redirect, useLocalSearchParams, useRouter, useSegments } from 'expo-router';
 import type { ReactElement } from 'react';
 
-import { readDetailHandoff, type DetailHandoff } from '@shared/navigation/detailHandoff';
-import { featuredArtistsFromExtras } from '@shared/apiClient/featuredArtists';
-import { tabRootFromSegments } from '@shared/navigation';
-
+import { readDetailHandoff, type DetailHandoff, tabRootFromSegments } from '@shared/navigation';
+import { featuredArtistsFromExtras } from '@shared/apiClient';
 import { useArtistDiscovery } from '@features/detail/hooks/useEntityDiscovery';
 import { realPhotoUrl } from '@features/detail/domain/artistPhoto';
 import { useDetailEnrichments } from '@features/detail/hooks/useDetailEnrichments';

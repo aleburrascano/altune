@@ -1,12 +1,11 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import { asTrackId } from '@shared/apiClient/ids';
+import type { DiscoveryResult } from '@shared/apiClient';
+import { asTrackId } from '@shared/apiClient';
 
-import type { AlbumDetailState } from '@features/detail/hooks/useAlbumDetailState';
-import { ownedTrack } from '@features/detail/domain/ownedTrack';
-import { AlbumTrackList } from '@features/detail/ui/AlbumTrackList';
+import type { AlbumDetailState } from '@features/detail';
+import { ownedTrack, AlbumTrackList } from '@features/detail';
 
 function track(title: string): DiscoveryResult {
   return {

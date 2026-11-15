@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 
-import type { DiscoveryResult, DiscoverySource } from '@shared/apiClient/discovery';
-import { sourceIdList } from '@shared/apiClient/ids';
-import { detailKeys } from '@shared/query/queryKeys';
+import type { DiscoveryResult, DiscoverySource } from '@shared/apiClient';
+import { sourceIdList } from '@shared/apiClient';
+import { detailKeys } from '@shared/query';
 
 import {
   contentFailure,

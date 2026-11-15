@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
-import { ApiError, NetworkError, isSessionFetchFailure } from '@shared/failure/errors';
+import { ApiError, NetworkError, isSessionFetchFailure } from '@shared/failure';
 
 import { withinAuthDeadline } from '@shared/auth/authDeadline';
 import { forgetPreviousUsersLocalData } from '@shared/auth/userLocalData';

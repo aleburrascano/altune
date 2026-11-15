@@ -1,15 +1,15 @@
 import { QueryClient } from '@tanstack/react-query';
 
-import { asPlaylistId, asTrackId } from '@shared/apiClient/ids';
+import { asPlaylistId, asTrackId } from '@shared/apiClient';
 import type {
   ListPlaylistsResponse,
   PlaylistDetailResponse,
-} from '@shared/apiClient/playlistResponse';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { playlistKeys } from '@shared/query/queryKeys';
-import { PLAYLIST_HANDLERS } from '@shared/events/playlistEvents';
-import type { JsonObject } from '@shared/files/json';
-import type { ServerEvent } from '@shared/events/sseFrames';
+  TrackResponse,
+} from '@shared/apiClient';
+import { playlistKeys } from '@shared/query';
+import { PLAYLIST_HANDLERS } from '@shared/events';
+import type { JsonObject } from '@shared/files';
+import type { ServerEvent } from '@shared/events';
 
 const PATCHED_CACHES = 3;
 

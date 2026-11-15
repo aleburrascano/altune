@@ -1,10 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { isAbort } from '@shared/failure/errors';
-import type { ArtistContentOptions, ArtistContentResponse } from '@shared/apiClient/enrichment';
-import { sourceIdList } from '@shared/apiClient/ids';
-import type { DiscoveryResult, DiscoverySource } from '@shared/apiClient/discovery';
-import { detailKeys } from '@shared/query/queryKeys';
+import { isAbort } from '@shared/failure';
+import type {
+  ArtistContentOptions,
+  ArtistContentResponse,
+  DiscoveryResult,
+  DiscoverySource,
+} from '@shared/apiClient';
+import { sourceIdList } from '@shared/apiClient';
+import { detailKeys } from '@shared/query';
 
 import {
   contentFailure,

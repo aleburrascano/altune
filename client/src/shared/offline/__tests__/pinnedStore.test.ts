@@ -1,18 +1,18 @@
 import { act } from '@testing-library/react-native';
 import * as FileSystem from 'expo-file-system';
-import type { ResolvedAudioUrl } from '@shared/apiClient/audio';
-import { ApiError } from '@shared/failure/errors';
+import { type ResolvedAudioUrl, asTrackId, type TrackId } from '@shared/apiClient';
+import { ApiError } from '@shared/failure';
 import { signInTestUser } from '@testing/signInTestUser';
-import { asTrackId, type TrackId } from '@shared/apiClient/ids';
 import {
+  type StoredDirectory,
+  type StoredFile,
   createMemoryFileStore,
   type MemoryFileStore,
-} from '@shared/files/__tests__/memoryFileStore';
-import type { StoredDirectory, StoredFile } from '@shared/files/fileStore';
-import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
-import { notifyIdentityChange, runSignOutCleanups } from '@shared/session/signOutCleanup';
-import { setPinnedFileStore } from '@shared/offline/state/pinnedFiles';
+} from '@shared/files';
+import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch';
+import { notifyIdentityChange, runSignOutCleanups } from '@shared/session';
 import {
+  setPinnedFileStore,
   flushIndex,
   loadIndex,
   readOwner,
@@ -20,15 +20,12 @@ import {
   scheduleSaveIndex,
   setPinnedIndexFileStore,
   writeOwner,
-} from '@shared/offline/state/pinnedIndex';
-import {
   usePinnedStore,
   type PinnedEntry,
   type PinnedStatus,
   resolvePinnedUri,
   repinIfPinned,
-} from '@shared/offline/state/pinnedStore';
-
+} from '@shared/offline';
 const PIN_DOWNLOAD_TIMEOUT_MS = 120_000;
 const MAX_PINNED_BYTES = 8_589_934_592;
 const MIN_FREE_BYTES = 536_870_912;

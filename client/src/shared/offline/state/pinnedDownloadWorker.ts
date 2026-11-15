@@ -1,9 +1,8 @@
-import type { ResolvedAudioUrl } from '@shared/apiClient/audio';
-import { equalJitterMs } from '@shared/timing/backoff';
-import { isRetryable } from '@shared/failure/errors';
-import type { TrackId } from '@shared/apiClient/ids';
-import { isLoopEnabled } from '@shared/killSwitch/killSwitch';
-import { recordEvent } from '@shared/telemetry/recordEvent';
+import type { ResolvedAudioUrl, TrackId } from '@shared/apiClient';
+import { equalJitterMs } from '@shared/timing';
+import { isRetryable } from '@shared/failure';
+import { isLoopEnabled } from '@shared/killSwitch';
+import { recordEvent } from '@shared/telemetry';
 
 import {
   deletePinned,

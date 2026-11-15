@@ -5,21 +5,18 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import * as FileSystem from 'expo-file-system';
 import TrackPlayer, { Event } from 'react-native-track-player';
 
-import { asTrackId } from '@shared/apiClient/ids';
-import { useSession } from '@shared/auth/useSession';
-import { supabase } from '@shared/auth/supabaseClient';
-import { useQueueStore } from '@shared/playback/queueStore';
-import { usePlayback } from '@shared/playback/usePlayback';
-
-import { prefetchNext } from '@features/player/native/audioPrefetch';
-import { TrackPlayerPlaybackProvider } from '@features/player/native/TrackPlayerPlaybackProvider';
-import { registerPlaybackService, playbackService } from '@features/player/native/playbackService';
-
-import { installPlaybackPort } from '@features/player/ports/activePlaybackPort';
-
-import { libraryTrack } from '@features/player/__tests__/fixtures';
-import { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlaybackPort';
-
+import { asTrackId } from '@shared/apiClient';
+import { useSession, supabase } from '@shared/auth';
+import { useQueueStore, usePlayback } from '@shared/playback';
+import {
+  prefetchNext,
+  TrackPlayerPlaybackProvider,
+  registerPlaybackService,
+  playbackService,
+  installPlaybackPort,
+  libraryTrack,
+  createMemoryPlaybackPort,
+} from '@features/player';
 const { __player } = jest.requireMock('react-native-track-player');
 
 type AuthCallback = (event: string, session: Session | null) => void;

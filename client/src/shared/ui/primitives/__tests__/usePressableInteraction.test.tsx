@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react-native';
 
-import { usePressableInteraction } from '@shared/ui/primitives/usePressableInteraction';
+import { usePressableInteraction } from '@shared/ui';
 
 function renderInteraction() {
   return renderHook(() => usePressableInteraction(() => null));

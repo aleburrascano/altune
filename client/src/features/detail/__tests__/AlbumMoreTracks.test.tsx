@@ -2,9 +2,9 @@ import React from 'react';
 import { StyleSheet } from 'react-native';
 import { render, screen, fireEvent } from '@testing-library/react-native';
 
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import type { DiscoveryResult } from '@shared/apiClient';
 
-import { AlbumMoreTracks } from '@features/detail/ui/AlbumMoreTracks';
+import { AlbumMoreTracks } from '@features/detail';
 
 function track(title: string): DiscoveryResult {
   return {

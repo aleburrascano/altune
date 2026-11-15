@@ -4,10 +4,10 @@ import {
   NetworkError,
   isSessionFetchFailure,
   correlationIdOf,
-} from '@shared/failure/errors';
-import { RETRY_TAIL } from '@shared/failure/describeError';
+  RETRY_TAIL,
+} from '@shared/failure';
 import type { FailureAlert } from '@shared/ui';
-import type { TrackId } from '@shared/apiClient/ids';
+import type { TrackId } from '@shared/apiClient';
 
 export type LibraryFailure = 'network' | 'auth' | 'not-found' | 'server' | 'unknown';
 

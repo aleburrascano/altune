@@ -1,16 +1,15 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 
-import { ApiError, isServerFaultStatus } from '@shared/failure/errors';
-import type { PlaylistId, TrackId } from '@shared/apiClient/ids';
-import type { PlaylistDetailResponse, PlaylistResponse } from '@shared/apiClient/playlistResponse';
-import { RETRY_TAIL } from '@shared/failure/describeError';
-import { countLabel } from '@shared/ui/format/displayFormat';
-import { playlistKeys } from '@shared/query/queryKeys';
-import { useAppMutation, useOptimisticMutation } from '@shared/query/useAppMutation';
-import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
-import { guardedMutationOptions } from '@shared/session/guardedMutation';
-import { showFailureAlert } from '@shared/ui';
-
+import { ApiError, isServerFaultStatus, RETRY_TAIL } from '@shared/failure';
+import type {
+  PlaylistId,
+  TrackId,
+  PlaylistDetailResponse,
+  PlaylistResponse,
+} from '@shared/apiClient';
+import { countLabel, showFailureAlert } from '@shared/ui';
+import { playlistKeys, useAppMutation, useOptimisticMutation } from '@shared/query';
+import { currentSessionEpoch, isSameSession, guardedMutationOptions } from '@shared/session';
 import { usePlaylistsPort } from '@shared/playlists/ports/PlaylistsPortProvider';
 import type { PlaylistsPort } from '@shared/playlists/ports/playlistsPort';
 

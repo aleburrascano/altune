@@ -1,5 +1,5 @@
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import { formatDuration } from '@shared/ui/format/displayFormat';
+import type { DiscoveryResult } from '@shared/apiClient';
+import { formatDuration } from '@shared/ui';
 
 import { trackExtras } from '@features/detail/domain/trackExtras';
 import type { DetailFact } from '@features/detail/ui/DetailFacts';

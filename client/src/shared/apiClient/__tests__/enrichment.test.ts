@@ -8,8 +8,8 @@ import {
   getUnreleasedTracks,
   searchUnreleasedTracks,
   type ContentFetchResponse,
-} from '@shared/apiClient/enrichment';
-import { supabase } from '@shared/auth/supabaseClient';
+} from '@shared/apiClient';
+import { supabase } from '@shared/auth';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

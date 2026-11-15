@@ -2,10 +2,8 @@ import Head from 'expo-router/head';
 import type { ReactElement } from 'react';
 
 import { usePlaylistActions } from '@features/library';
-import { usePlayback } from '@shared/playback/usePlayback';
-import { useKeyboardShortcuts } from '@shared/ui/keyboard/useKeyboardShortcuts';
-import { pageTitleFor } from '@shared/ui/navigation/tabRoutes';
-
+import { usePlayback } from '@shared/playback';
+import { useKeyboardShortcuts, pageTitleFor } from '@shared/ui';
 const PLAYLIST_PATH_PREFIX = '/library/playlist/';
 
 export function SystemNavigationBar(_props: { scheme: 'light' | 'dark' }): ReactElement | null {

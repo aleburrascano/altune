@@ -1,16 +1,17 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import { asTrackId } from '@shared/apiClient/ids';
-import { PlaybackContext } from '@shared/playback/usePlayback';
-import { trackIdentityKey, useTrackStatusStore } from '@shared/acquisition/state/trackStatusStore';
+import type { DiscoveryResult } from '@shared/apiClient';
+import { asTrackId } from '@shared/apiClient';
+import { PlaybackContext } from '@shared/playback';
+import { trackIdentityKey, useTrackStatusStore } from '@shared/acquisition';
 
 import {
   useOwnedPlayback,
   type OwnedPlaybackContext,
-} from '@features/detail/hooks/useOwnedPlayback';
-import { useSaveTrack, type SaveTrack } from '@features/detail/hooks/useSaveTrack';
-import { createMemoryDetailPort } from './memoryDetailPort';
+  useSaveTrack,
+  type SaveTrack,
+  createMemoryDetailPort,
+} from '@features/detail';
 import {
   createPortWrapper,
   createTestQueryClient,

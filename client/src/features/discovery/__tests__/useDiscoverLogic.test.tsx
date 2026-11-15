@@ -2,18 +2,21 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react-native';
 
-import { ApiError, NetworkError } from '@shared/failure/errors';
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
-import { useDiscoverLogic } from '@features/discovery/hooks/search/useDiscoverLogic';
-import { MAX_QUERY_LENGTH, SEARCH_PAGE_SIZE } from '@features/discovery/domain/searchPaging';
-import { setSearchState } from '@features/discovery/domain/searchState';
-import { DiscoverBody } from '@features/discovery/ui/search/DiscoverBody';
-import { resultFixture } from '@features/discovery/__tests__/fixtures';
+import { ApiError, NetworkError } from '@shared/failure';
+import { runSignOutCleanups } from '@shared/session';
+import {
+  useDiscoverLogic,
+  MAX_QUERY_LENGTH,
+  SEARCH_PAGE_SIZE,
+  setSearchState,
+  DiscoverBody,
+  resultFixture,
+  DiscoverPortProvider,
+} from '@features/discovery';
 import { signInTestUser } from '@testing/signInTestUser';
-import { DiscoverPortProvider } from '@features/discovery/ports/DiscoverPortProvider';
-import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
+import type { DiscoverPort } from '@features/discovery';
 
-import type { DiscoverySearchResponse } from '@shared/apiClient/discovery';
+import type { DiscoverySearchResponse } from '@shared/apiClient';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),

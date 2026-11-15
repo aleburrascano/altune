@@ -4,18 +4,20 @@ import type { LayoutChangeEvent } from 'react-native';
 
 import { ChevronRight } from 'lucide-react-native';
 
-import { useWideWebLayout } from '@shared/ui/layout';
-import { HorizontalRail } from '@shared/ui/primitives/HorizontalRail';
-import { Artwork } from '@shared/ui/primitives/Artwork';
-import { Tappable } from '@shared/ui/primitives/Tappable';
-import { Text } from '@shared/ui/primitives/Text';
 import {
+  useWideWebLayout,
+  HorizontalRail,
+  Artwork,
+  Tappable,
+  Text,
   usePressableInteraction,
   type PressableInteractionState,
-} from '@shared/ui/primitives/usePressableInteraction';
-import { radius, spacing, useTheme, borderWidth } from '@shared/ui/theme';
-
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
+  radius,
+  spacing,
+  useTheme,
+  borderWidth,
+} from '@shared/ui';
+import type { DiscoveryResult } from '@shared/apiClient';
 
 import { albumExtras } from '@features/detail/domain/trackExtras';
 import { SECTION_CAP } from '@features/detail/hooks/useDiscographyFilter';

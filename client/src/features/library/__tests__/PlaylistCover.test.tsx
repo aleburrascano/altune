@@ -3,7 +3,7 @@ import { render } from '@testing-library/react-native';
 
 import { radius } from '@shared/ui';
 
-import { PlaylistCover } from '@features/library/ui/PlaylistCover';
+import { PlaylistCover } from '@features/library';
 
 const ARTWORK = [
   'https://cdn.test/a.jpg',

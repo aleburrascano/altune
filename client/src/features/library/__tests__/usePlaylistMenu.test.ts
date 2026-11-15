@@ -1,17 +1,14 @@
 import { createElement, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, act, waitFor } from '@testing-library/react-native';
-import { asPlaylistId, asTrackId } from '@shared/apiClient/ids';
+import { asPlaylistId, asTrackId } from '@shared/apiClient';
 import type { Navigator } from '@shared/navigation';
-import { createMemoryNavigator } from '@shared/navigation/__tests__/memoryNavigator';
-import {
-  usePlaylistDelete,
-  usePlaylistOfflineAction,
-} from '@features/library/hooks/usePlaylistMenu';
+import { createMemoryNavigator } from '@shared/navigation';
+import { usePlaylistDelete, usePlaylistOfflineAction } from '@features/library';
 import { Alert, type AlertButton } from 'react-native';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { usePinnedStore } from '@shared/offline/state/pinnedStore';
-import { playlistKeys } from '@shared/query/queryKeys';
+import type { TrackResponse } from '@shared/apiClient';
+import { usePinnedStore } from '@shared/offline';
+import { playlistKeys } from '@shared/query';
 import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';
 

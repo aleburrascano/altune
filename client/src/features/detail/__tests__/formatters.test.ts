@@ -1,11 +1,11 @@
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import type { DiscoveryResult } from '@shared/apiClient';
 
 import {
   albumYear,
   compactCount,
   formatRuntime,
   trackSubtitleWithFeaturing,
-} from '@features/detail/ui/formatters';
+} from '@features/detail';
 
 function album(extras: Record<string, unknown>): DiscoveryResult {
   return {
