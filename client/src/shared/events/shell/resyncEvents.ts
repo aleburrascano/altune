@@ -1,9 +1,8 @@
-import type { QueryClient } from '@tanstack/react-query';
-
 import { libraryKeys, playlistKeys } from '@shared/query';
 
-import type { ServerEventHandlers } from '@shared/events/serverEventTypes';
-import { TRACK_CACHE_FAMILIES } from '@shared/events/trackCacheShapes';
+import type { EventCache } from '@shared/events/core/eventCache';
+import type { ServerEventHandlers } from '@shared/events/core/serverEventTypes';
+import { TRACK_CACHE_FAMILIES } from '@shared/events/core/trackCacheShapes';
 
 const RESYNC_KEYS: readonly (readonly string[])[] = [
   TRACK_CACHE_FAMILIES.pagedLibrary.prefix,
@@ -16,9 +15,9 @@ const RESYNC_KEYS: readonly (readonly string[])[] = [
   TRACK_CACHE_FAMILIES.playlistDetails.prefix,
 ];
 
-function handleResync(queryClient: QueryClient): void {
+function handleResync(cache: EventCache): void {
   for (const queryKey of RESYNC_KEYS) {
-    void queryClient.invalidateQueries({ queryKey });
+    void cache.invalidateQueries({ queryKey });
   }
 }
 

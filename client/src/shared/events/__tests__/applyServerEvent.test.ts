@@ -23,6 +23,8 @@ import { applyServerEvent, settleTrackPatches } from '@shared/events';
 import type { JsonObject } from '@shared/files';
 import type { ServerEvent } from '@shared/events';
 
+import { recordingCache } from '@shared/events/__tests__/recordingCache';
+
 provideOfflinePort(apiClientOfflinePort);
 type TrackPages = InfiniteData<ListTracksResponse>;
 
@@ -34,10 +36,6 @@ function makeClient(): QueryClient {
 
 function serverEvent(type: string, data: JsonObject = {}): ServerEvent {
   return { id: '1', type, data };
-}
-
-function invalidatedKeys(spy: jest.SpyInstance): unknown[] {
-  return spy.mock.calls.map(([filters]) => (filters as { queryKey: unknown }).queryKey);
 }
 
 function trackFixture(overrides: Partial<TrackResponse> = {}): TrackResponse {
@@ -118,37 +116,29 @@ afterEach(() => {
 });
 
 describe('unrecognized event type', () => {
-  let warn: jest.SpyInstance;
-
-  beforeEach(() => {
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  });
-
-  afterEach(() => {
-    warn.mockRestore();
-  });
-
-  it('warns instead of throwing or invalidating anything', () => {
+  it('reports it unhandled instead of throwing or touching the cache', () => {
     const queryClient = makeClient();
-    const spy = jest.spyOn(queryClient, 'invalidateQueries');
+    const spy = recordingCache(queryClient);
 
-    expect(() =>
-      applyServerEvent(queryClient, serverEvent('track_favourited', { track_id: 't1' })),
-    ).not.toThrow();
+    expect(applyServerEvent(spy, serverEvent('track_favourited', { track_id: 't1' }))).toBe(false);
 
-    expect(warn).toHaveBeenCalledWith(expect.any(String), { type: 'track_favourited' });
-    expect(spy).not.toHaveBeenCalled();
+    expect(spy.invalidated).toEqual([]);
+    expect(spy.writes).toEqual([]);
+  });
+
+  it('reports a known type handled', () => {
+    expect(applyServerEvent(makeClient(), serverEvent('resync'))).toBe(true);
   });
 });
 
 describe('resync', () => {
   it('invalidates exactly the resync key set, in the declared order, once each', () => {
     const queryClient = makeClient();
-    const spy = jest.spyOn(queryClient, 'invalidateQueries');
+    const spy = recordingCache(queryClient);
 
-    applyServerEvent(queryClient, serverEvent('resync'));
+    applyServerEvent(spy, serverEvent('resync'));
 
-    expect(invalidatedKeys(spy)).toEqual([
+    expect(spy.invalidated).toEqual([
       libraryKeys.tracksPrefix,
       libraryKeys.lookupPrefix,
       libraryKeys.albumsPrefix,
@@ -280,11 +270,11 @@ describe('track_added_to_library', () => {
     ['acquisition_status', { id: '1', title: 't', artist: 'a', added_at: 'd' }],
   ])('falls back to refetch-invalidation when the payload is missing %s', (_label, payload) => {
     const queryClient = makeClient();
-    const spy = jest.spyOn(queryClient, 'invalidateQueries');
+    const spy = recordingCache(queryClient);
 
-    applyServerEvent(queryClient, serverEvent('track_added_to_library', payload));
+    applyServerEvent(spy, serverEvent('track_added_to_library', payload));
 
-    expect(invalidatedKeys(spy)).toEqual([
+    expect(spy.invalidated).toEqual([
       libraryKeys.albumsPrefix,
       libraryKeys.artistsPrefix,
       libraryKeys.summary,
@@ -297,10 +287,10 @@ describe('track_added_to_library', () => {
   it('rejects an off-contract acquisition_status instead of seeding the cache with it', () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, []);
-    const spy = jest.spyOn(queryClient, 'invalidateQueries');
+    const spy = recordingCache(queryClient);
 
     applyServerEvent(
-      queryClient,
+      spy,
       serverEvent('track_added_to_library', {
         id: 't1',
         title: 'Song Title',
@@ -312,7 +302,7 @@ describe('track_added_to_library', () => {
 
     expect(readTrackPages(queryClient, key).items).toHaveLength(0);
     expect(useTrackStatusStore.getState().statuses.t1).toBeUndefined();
-    expect(invalidatedKeys(spy)).toEqual([
+    expect(spy.invalidated).toEqual([
       libraryKeys.albumsPrefix,
       libraryKeys.artistsPrefix,
       libraryKeys.summary,
@@ -372,8 +362,8 @@ describe('track_deleted', () => {
       .getState()
       .patch(asTrackId('t1'), { acquisitionStatus: 'ready', failureMessage: null });
 
-    const spy = jest.spyOn(queryClient, 'invalidateQueries');
-    applyServerEvent(queryClient, serverEvent('track_deleted', { track_id: 't1' }));
+    const spy = recordingCache(queryClient);
+    applyServerEvent(spy, serverEvent('track_deleted', { track_id: 't1' }));
 
     const page = readTrackPages(queryClient, key);
     expect(page.items).toHaveLength(0);
@@ -383,7 +373,7 @@ describe('track_deleted', () => {
         .tracks,
     ).toHaveLength(0);
     expect(useTrackStatusStore.getState().statuses.t1).toBeUndefined();
-    expect(invalidatedKeys(spy)).toEqual([
+    expect(spy.invalidated).toEqual([
       libraryKeys.albumsPrefix,
       libraryKeys.artistsPrefix,
       libraryKeys.summary,
@@ -394,11 +384,11 @@ describe('track_deleted', () => {
 
   it('still invalidates library and playlist summaries when track_id is missing', () => {
     const queryClient = makeClient();
-    const spy = jest.spyOn(queryClient, 'invalidateQueries');
+    const spy = recordingCache(queryClient);
 
-    applyServerEvent(queryClient, serverEvent('track_deleted', {}));
+    applyServerEvent(spy, serverEvent('track_deleted', {}));
 
-    expect(invalidatedKeys(spy)).toEqual([
+    expect(spy.invalidated).toEqual([
       libraryKeys.albumsPrefix,
       libraryKeys.artistsPrefix,
       libraryKeys.summary,
@@ -1186,11 +1176,11 @@ describe('invalidate-only events', () => {
     ['tracks_added_to_playlist', [playlistKeys.details, playlistKeys.list]],
   ])('invalidates exactly the mapped keys for %s', (type, expectedKeys) => {
     const queryClient = makeClient();
-    const spy = jest.spyOn(queryClient, 'invalidateQueries');
+    const spy = recordingCache(queryClient);
 
-    applyServerEvent(queryClient, serverEvent(type, { playlist_id: 'p1' }));
+    applyServerEvent(spy, serverEvent(type, { playlist_id: 'p1' }));
 
-    expect(invalidatedKeys(spy)).toEqual(expectedKeys);
+    expect(spy.invalidated).toEqual(expectedKeys);
   });
 });
 

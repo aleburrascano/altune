@@ -11,6 +11,8 @@ import { PLAYLIST_HANDLERS } from '@shared/events';
 import type { JsonObject } from '@shared/files';
 import type { ServerEvent } from '@shared/events';
 
+import { recordingCache } from '@shared/events/__tests__/recordingCache';
+
 const PATCHED_CACHES = 3;
 
 const BATCH_PLAYLIST = 3000;
@@ -79,16 +81,15 @@ describe('removing a large batch of tracks from a tracks_removed_from_playlist e
     const tracks = makeTracks(BATCH_PLAYLIST);
     seedPlaylist(queryClient, tracks);
     const removedIds = tracks.slice(0, BATCH_PLAYLIST / 2).map((t) => t.id);
-    const reads = jest.spyOn(queryClient, 'getQueryData');
-    const writes = jest.spyOn(queryClient, 'setQueryData');
+    const cache = recordingCache(queryClient);
 
     PLAYLIST_HANDLERS.tracks_removed_from_playlist(
-      queryClient,
+      cache,
       serverEvent('tracks_removed_from_playlist', { playlist_id: 'p1', track_ids: removedIds }),
     );
 
-    expect(writes.mock.calls).toHaveLength(PATCHED_CACHES);
-    expect(reads.mock.calls).toHaveLength(1);
+    expect(cache.writes).toHaveLength(PATCHED_CACHES);
+    expect(cache.reads).toHaveLength(1);
   });
 
   it('leaves exactly the tracks the batch did not name, with both track counts agreeing', () => {

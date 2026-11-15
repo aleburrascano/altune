@@ -1,10 +1,8 @@
 import { SSEClient } from '@shared/events';
-import type { ServerEvent } from '@shared/events';
+import type { ServerEvent, StreamIO, StreamRequest } from '@shared/events';
 import { clearSessionExpired, getSessionExpired, renewSessionCredentials } from '@shared/auth';
 
 import { signInTestUser } from '@testing/signInTestUser';
-
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -12,8 +10,20 @@ const HEARTBEAT_WATCHDOG_MS = 60_000;
 const MAX_RESPONSE_BYTES = 524_288;
 const EVENTS_PATH = '/v1/discovery/events';
 const CORRELATION_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+const MIDDLE_JITTER = 0.5;
+const NEAR_FULL_JITTER = 0.99;
 
 type SentRequest = { path: string };
+
+let jitter = MIDDLE_JITTER;
+
+function streamIO(openRequest: () => StreamRequest): StreamIO {
+  return { openRequest, random: () => jitter };
+}
+
+beforeEach(() => {
+  jitter = MIDDLE_JITTER;
+});
 
 function reconnectEventsSent(): number {
   return __http.requests.filter((r: SentRequest) => r.path === EVENTS_PATH).length;
@@ -25,6 +35,7 @@ class FakeXHR {
   static instances: FakeXHR[] = [];
 
   responseText = '';
+  status = 0;
   method = '';
   url = '';
   requestHeaders: Record<string, string> = {};
@@ -46,6 +57,10 @@ class FakeXHR {
 
   setRequestHeader(name: string, value: string): void {
     this.requestHeaders[name] = value;
+  }
+
+  getResponseHeader(): string | null {
+    return null;
   }
 
   send(): void {
@@ -100,14 +115,19 @@ async function flush(): Promise<void> {
 function makeClient(getToken = jest.fn<Promise<string | null>, []>().mockResolvedValue('token-1')) {
   const onEvent = jest.fn<void, [ServerEvent]>();
   const onError = jest.fn<void, [unknown]>();
-  const client = new SSEClient('https://api.example.com/v1/events', getToken, onEvent, onError);
+  const client = new SSEClient(
+    'https://api.example.com/v1/events',
+    getToken,
+    onEvent,
+    onError,
+    streamIO(() => new FakeXHR()),
+  );
   return { client, onEvent, onError, getToken };
 }
 
 describe('SSEClient', () => {
   beforeEach(() => {
     FakeXHR.instances = [];
-    (global as unknown as { XMLHttpRequest: unknown }).XMLHttpRequest = FakeXHR;
     jest.useFakeTimers();
   });
 
@@ -411,7 +431,7 @@ describe('SSEClient', () => {
     });
 
     it('does not double-schedule a reconnect when error and loadend both fire for one failure', async () => {
-      jest.spyOn(Math, 'random').mockReturnValue(0);
+      jitter = 0;
       const { client } = makeClient();
       await client.connect();
 
@@ -433,7 +453,7 @@ describe('SSEClient', () => {
     });
 
     it('reconnects after a backoff delay, not immediately, when the buffered response exceeds MAX_RESPONSE_BYTES without lastEventId progress', async () => {
-      jest.spyOn(Math, 'random').mockReturnValue(0);
+      jitter = 0;
       const { client } = makeClient();
       await client.connect();
 
@@ -614,7 +634,7 @@ describe('SSEClient', () => {
 
   describe('timing and dwell', () => {
     it('jitters the reconnect delay into [base, 2*base) rather than firing at base', async () => {
-      jest.spyOn(Math, 'random').mockReturnValue(0.99);
+      jitter = NEAR_FULL_JITTER;
       const { client } = makeClient();
       await client.connect();
 
@@ -667,7 +687,7 @@ describe('SSEClient', () => {
     });
 
     it('reconnects at the exact base backoff delay after the first failure', async () => {
-      jest.spyOn(Math, 'random').mockReturnValue(0);
+      jitter = 0;
       const { client } = makeClient();
       await client.connect();
 
@@ -680,7 +700,7 @@ describe('SSEClient', () => {
     });
 
     it('doubles the backoff on consecutive failures and resets it after a successful data receipt', async () => {
-      jest.spyOn(Math, 'random').mockReturnValue(0);
+      jitter = 0;
       const { client } = makeClient();
       await client.connect();
 
@@ -703,7 +723,7 @@ describe('SSEClient', () => {
     });
 
     it('caps the backoff delay at MAX_RECONNECT_MS after repeated failures', async () => {
-      jest.spyOn(Math, 'random').mockReturnValue(0);
+      jitter = 0;
       const { client } = makeClient();
       await client.connect();
 
@@ -730,7 +750,7 @@ describe('SSEClient', () => {
     });
 
     it('sends the last seen id as Last-Event-ID on reconnect', async () => {
-      jest.spyOn(Math, 'random').mockReturnValue(0);
+      jitter = 0;
       const { client } = makeClient();
       await client.connect();
 
@@ -779,6 +799,7 @@ describe('response cap reconnect', () => {
       jest.fn<Promise<string | null>, []>().mockResolvedValue('token-1'),
       jest.fn(),
       jest.fn(),
+      streamIO(() => new CapXHR()),
     );
   }
 
@@ -791,9 +812,8 @@ describe('response cap reconnect', () => {
   describe('SSEClient response cap reconnect', () => {
     beforeEach(() => {
       CapXHR.instances = [];
-      (global as unknown as { XMLHttpRequest: unknown }).XMLHttpRequest = CapXHR;
       jest.useFakeTimers();
-      jest.spyOn(Math, 'random').mockReturnValue(0);
+      jitter = 0;
     });
 
     afterEach(() => {
@@ -904,6 +924,7 @@ describe('HTTP status handling', () => {
       jest.fn<Promise<string | null>, []>().mockResolvedValue('token-1'),
       onEvent,
       onError,
+      streamIO(() => new StatusXHR()),
     );
     return { client, onEvent, onError };
   }
@@ -922,9 +943,8 @@ describe('HTTP status handling', () => {
   describe('SSEClient HTTP status handling', () => {
     beforeEach(() => {
       StatusXHR.instances = [];
-      (global as unknown as { XMLHttpRequest: unknown }).XMLHttpRequest = StatusXHR;
       jest.useFakeTimers();
-      jest.spyOn(Math, 'random').mockReturnValue(0);
+      jitter = 0;
       clearSessionExpired();
     });
 
@@ -1062,7 +1082,6 @@ describe('HTTP status handling', () => {
 describe('SSEClient reconnect telemetry', () => {
   beforeEach(async () => {
     FakeXHR.instances = [];
-    (global as unknown as { XMLHttpRequest: unknown }).XMLHttpRequest = FakeXHR;
     jest.useFakeTimers();
     await signInTestUser();
     __http.reply(`POST ${EVENTS_PATH}`, { status: 202 });

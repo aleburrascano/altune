@@ -1,8 +1,5 @@
-import type { QueryClient } from '@tanstack/react-query';
-
-import { parsePlaylistId, parseTrackId, type PlaylistId, type TrackId } from '@shared/apiClient';
-
-import type { ServerEvent } from '@shared/events/sseFrames';
+import type { EventCache } from '@shared/events/core/eventCache';
+import type { ServerEvent } from '@shared/events/core/sseFrames';
 
 export const SERVER_EVENT_TYPES = [
   'resync',
@@ -31,30 +28,12 @@ export function isServerEventType(value: string): value is ServerEventType {
   return KNOWN.has(value);
 }
 
-export function recordUnhandledEvent(type: string): void {
-  console.warn('[sse] unrecognized event type', { type });
-}
-
-export type ServerEventHandler = (queryClient: QueryClient, event: ServerEvent) => void;
+export type ServerEventHandler = (cache: EventCache, event: ServerEvent) => void;
 
 export type ServerEventHandlers<K extends ServerEventType> = Record<K, ServerEventHandler>;
 
 export function asString(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
-}
-
-export function asTrackIdOrNull(value: unknown): TrackId | null {
-  const raw = asString(value);
-  if (raw === null) return null;
-  const parsed = parseTrackId(raw);
-  return parsed.ok ? parsed.id : null;
-}
-
-export function asPlaylistIdOrNull(value: unknown): PlaylistId | null {
-  const raw = asString(value);
-  if (raw === null) return null;
-  const parsed = parsePlaylistId(raw);
-  return parsed.ok ? parsed.id : null;
 }
 
 export function asStringArray(value: unknown): string[] | null {

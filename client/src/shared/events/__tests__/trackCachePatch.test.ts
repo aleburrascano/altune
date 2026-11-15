@@ -23,6 +23,8 @@ import {
 } from '@shared/events';
 import { patchTrackStatus, useTrackStatusStore } from '@shared/acquisition';
 
+import { recordingCache } from '@shared/events/__tests__/recordingCache';
+
 describe('getTrackFromCaches', () => {
   it('returns undefined when nothing is cached', () => {
     const client = newClient();
@@ -482,12 +484,11 @@ describe('paged offsets stay consistent with the rows the cache holds', () => {
 
 describe('invalidateLibraryDerived', () => {
   it('invalidates every cache derived from library membership, once each', () => {
-    const queryClient = new QueryClient();
-    const spy = jest.spyOn(queryClient, 'invalidateQueries');
+    const cache = recordingCache(new QueryClient());
 
-    invalidateLibraryDerived(queryClient);
+    invalidateLibraryDerived(cache);
 
-    expect(spy.mock.calls.map(([filters]) => filters?.queryKey)).toEqual([
+    expect(cache.invalidated).toEqual([
       libraryKeys.albumsPrefix,
       libraryKeys.artistsPrefix,
       libraryKeys.summary,

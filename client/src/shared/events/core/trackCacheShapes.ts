@@ -1,9 +1,10 @@
-import type { InfiniteData, QueryClient, QueryFilters } from '@tanstack/react-query';
-
 import type { ListTracksResponse, TrackResponse, PlaylistDetailResponse } from '@shared/apiClient';
 import { libraryKeys, playlistKeys } from '@shared/query';
 
-export type TrackPages = InfiniteData<ListTracksResponse>;
+export interface TrackPages {
+  pages: ListTracksResponse[];
+  pageParams: unknown[];
+}
 
 export type TrackCacheShape = 'paged' | 'flat' | 'playlistDetails';
 
@@ -117,16 +118,6 @@ export const TRACK_SHAPES: Record<TrackCacheShape, ShapeAccessor<TrackCacheValue
   playlistDetails: playlistDetailsAccessor,
 };
 
-function updaterFor(shape: TrackCacheShape, mapItems: MapItems, policy: WritePolicy) {
+export function updaterFor(shape: TrackCacheShape, mapItems: MapItems, policy: WritePolicy) {
   return (prev: TrackCacheValue | undefined) => TRACK_SHAPES[shape].write(prev, mapItems, policy);
-}
-
-export function writeFamily(
-  queryClient: QueryClient,
-  family: TrackCacheFamily,
-  filters: QueryFilters,
-  mapItems: MapItems,
-  policy: WritePolicy,
-): void {
-  queryClient.setQueriesData<TrackCacheValue>(filters, updaterFor(family.shape, mapItems, policy));
 }

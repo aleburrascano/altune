@@ -1,22 +1,20 @@
-import type { QueryClient } from '@tanstack/react-query';
-
 import { playlistKeys } from '@shared/query';
 
+import type { EventCache } from '@shared/events/core/eventCache';
 import {
-  asPlaylistIdOrNull,
   asString,
   asStringArray,
-  asTrackIdOrNull,
   type ServerEventHandler,
   type ServerEventHandlers,
-} from '@shared/events/serverEventTypes';
+} from '@shared/events/core/serverEventTypes';
+import type { ServerEvent } from '@shared/events/core/sseFrames';
+import { asPlaylistIdOrNull, asTrackIdOrNull } from '@shared/events/shell/eventIds';
 import {
   patchPlaylistName,
   removeTrackFromPlaylistCache,
   removeTracksFromPlaylistCache,
   reorderPlaylistCache,
-} from '@shared/events/playlistCachePatch';
-import type { ServerEvent } from '@shared/events/sseFrames';
+} from '@shared/events/shell/playlistCachePatch';
 
 type PlaylistEventType =
   | 'track_added_to_playlist'
@@ -29,36 +27,36 @@ type PlaylistEventType =
   | 'playlist_reordered';
 
 function invalidateKeys(keys: readonly (readonly string[])[]): ServerEventHandler {
-  return (queryClient) => {
+  return (cache) => {
     for (const queryKey of keys) {
-      void queryClient.invalidateQueries({ queryKey });
+      void cache.invalidateQueries({ queryKey });
     }
   };
 }
 
-function handlePlaylistRenamed(queryClient: QueryClient, event: ServerEvent): void {
+function handlePlaylistRenamed(cache: EventCache, event: ServerEvent): void {
   const playlistId = asPlaylistIdOrNull(event.data.playlist_id);
   const name = asString(event.data.name);
-  if (playlistId && name != null) patchPlaylistName(queryClient, playlistId, name);
+  if (playlistId && name != null) patchPlaylistName(cache, playlistId, name);
 }
 
-function handleTrackRemovedFromPlaylist(queryClient: QueryClient, event: ServerEvent): void {
+function handleTrackRemovedFromPlaylist(cache: EventCache, event: ServerEvent): void {
   const playlistId = asPlaylistIdOrNull(event.data.playlist_id);
   const trackId = asTrackIdOrNull(event.data.track_id);
-  if (playlistId && trackId) removeTrackFromPlaylistCache(queryClient, playlistId, trackId);
+  if (playlistId && trackId) removeTrackFromPlaylistCache(cache, playlistId, trackId);
 }
 
-function handleTracksRemovedFromPlaylist(queryClient: QueryClient, event: ServerEvent): void {
+function handleTracksRemovedFromPlaylist(cache: EventCache, event: ServerEvent): void {
   const playlistId = asPlaylistIdOrNull(event.data.playlist_id);
   const trackIds = asStringArray(event.data.track_ids);
   if (!playlistId || !trackIds) return;
-  removeTracksFromPlaylistCache(queryClient, playlistId, trackIds);
+  removeTracksFromPlaylistCache(cache, playlistId, trackIds);
 }
 
-function handlePlaylistReordered(queryClient: QueryClient, event: ServerEvent): void {
+function handlePlaylistReordered(cache: EventCache, event: ServerEvent): void {
   const playlistId = asPlaylistIdOrNull(event.data.playlist_id);
   const trackIds = asStringArray(event.data.track_ids);
-  if (playlistId && trackIds) reorderPlaylistCache(queryClient, playlistId, trackIds);
+  if (playlistId && trackIds) reorderPlaylistCache(cache, playlistId, trackIds);
 }
 
 export const PLAYLIST_HANDLERS: ServerEventHandlers<PlaylistEventType> = {

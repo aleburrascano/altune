@@ -23,7 +23,6 @@ import {
   useAuthDeepLink,
 } from '@features/signIn';
 import { registerSearchStateSignOutReset } from '@features/discovery';
-import { useServerEvents, useScreenViews } from '@shared/events';
 import { followSignedInUser, installGlobalErrorReporting } from '@shared/telemetry';
 import { PlaybackProvider, SleepTimerBridge, startPlaybackService } from '@features/player';
 import { OfflineReconcileBridge, provideOfflinePort } from '@shared/offline';
@@ -40,6 +39,7 @@ import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
 import { httpFeaturePorts, httpOfflinePort } from '@/mobile/wiring/httpFeaturePorts';
 import { PlaybackShortcuts, SystemNavigationBar } from '@/mobile/frame/platformExtras';
 import { reportOtaLaunchFailures } from '@/mobile/otaLaunchReport';
+import { ScreenViewsBridge, ServerEventsBridge } from '@/mobile/serverEvents';
 import { chainUncaughtErrorHandler } from '@/mobile/uncaughtErrors';
 
 provideOfflinePort(httpOfflinePort);
@@ -54,16 +54,6 @@ installGlobalErrorReporting(chainUncaughtErrorHandler);
 reportOtaLaunchFailures().catch((error: unknown) => {
   console.warn('[telemetry] reading update logs failed', error);
 });
-
-function ServerEventsBridge() {
-  useServerEvents();
-  return null;
-}
-
-function ScreenViewsBridge() {
-  useScreenViews();
-  return null;
-}
 
 function AuthDeepLinkBridge() {
   useAuthDeepLink();

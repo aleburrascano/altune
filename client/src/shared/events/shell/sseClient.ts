@@ -1,81 +1,49 @@
 import { CORRELATION_HEADER, newCorrelationId } from '@shared/apiClient';
-import { markSessionExpired, stampCredentials } from '@shared/auth';
+import { markSessionExpired, stampCredentials, type CredentialStamp } from '@shared/auth';
 import { HTTP_UNAUTHORIZED } from '@shared/failure';
-import { isServerEvent, parseChunk } from '@shared/events/sseFrames';
-import type { ServerEvent } from '@shared/events/sseFrames';
 import { recordEvent } from '@shared/telemetry';
+
+import { isRefusal, reconnectDelayMs, retryAfterMs } from '@shared/events/core/reconnect';
+import { isServerEvent, parseChunk, type ServerEvent } from '@shared/events/core/sseFrames';
+import {
+  ServerEventHandlerError,
+  SSEConnectionError,
+  SSEHttpError,
+} from '@shared/events/core/streamErrors';
 
 const HEARTBEAT_WATCHDOG_MS = 60_000;
 const MAX_RESPONSE_BYTES = 524_288;
 
-const BASE_RECONNECT_MS = 1_000;
-const MAX_RECONNECT_MS = 30_000;
-const MAX_RETRY_AFTER_MS = 5 * 60_000;
-
-function reconnectDelayMs(attempt: number, minimumDelayMs: number): number {
-  const base = Math.min(BASE_RECONNECT_MS * 2 ** attempt, MAX_RECONNECT_MS);
-  return Math.max(base + Math.random() * base, minimumDelayMs);
-}
-
-class ServerEventHandlerError extends Error {
-  readonly eventId: string;
-  readonly eventType: string;
-
-  constructor(eventId: string, eventType: string, cause: unknown) {
-    super(`SSE event handler threw (type=${eventType}, id=${eventId || '<none>'})`, { cause });
-    this.name = 'ServerEventHandlerError';
-    this.eventId = eventId;
-    this.eventType = eventType;
-  }
-}
-
-class SSEConnectionError extends Error {
-  readonly correlationId: string | null;
-
-  constructor(correlationId: string | null) {
-    super(
-      correlationId === null
-        ? 'SSE connection error'
-        : `SSE connection error (correlation_id=${correlationId})`,
-    );
-    this.name = 'SSEConnectionError';
-    this.correlationId = correlationId;
-  }
-}
-
-class SSEHttpError extends Error {
-  readonly status: number;
-  readonly correlationId: string | null;
-
-  constructor(status: number, correlationId: string | null) {
-    super(
-      correlationId === null
-        ? `SSE stream refused (status=${status})`
-        : `SSE stream refused (status=${status}, correlation_id=${correlationId})`,
-    );
-    this.name = 'SSEHttpError';
-    this.status = status;
-    this.correlationId = correlationId;
-  }
-}
-
-function isRefusal(status: number): boolean {
-  return status >= 300;
-}
-
-function retryAfterMs(header: string | null, now: number): number {
-  if (header === null) return 0;
-  const value = header.trim();
-  const wait = /^\d+$/.test(value) ? Number(value) * 1_000 : Date.parse(value) - now;
-  if (Number.isNaN(wait)) return 0;
-  return Math.min(Math.max(wait, 0), MAX_RETRY_AFTER_MS);
-}
-
 type EventHandler = (event: ServerEvent) => void;
 type ErrorHandler = (error: unknown) => void;
+type RequestListener = ((event: never) => unknown) | null;
+
+export interface StreamRequest {
+  readonly responseText: string;
+  readonly status: number;
+  onprogress: RequestListener;
+  onerror: RequestListener;
+  onloadend: RequestListener;
+  open(method: string, url: string): void;
+  setRequestHeader(name: string, value: string): void;
+  getResponseHeader(name: string): string | null;
+  send(): void;
+  abort(): void;
+}
+
+export interface StreamIO {
+  openRequest(): StreamRequest;
+  random(): number;
+}
+
+interface OpenedRequest {
+  readonly xhr: StreamRequest;
+  readonly correlationId: string | null;
+  readonly sentWith: CredentialStamp;
+}
 
 export class SSEClient {
-  private xhr: XMLHttpRequest | null = null;
+  private xhr: StreamRequest | null = null;
   private lastEventId = '';
   private processedLength = 0;
   private buffer = '';
@@ -93,17 +61,20 @@ export class SSEClient {
   private getToken: () => Promise<string | null>;
   private onEvent: EventHandler;
   private onError: ErrorHandler;
+  private io: StreamIO;
 
   constructor(
     url: string,
     getToken: () => Promise<string | null>,
     onEvent: EventHandler,
     onError: ErrorHandler,
+    io: StreamIO,
   ) {
     this.url = url;
     this.getToken = getToken;
     this.onEvent = onEvent;
     this.onError = onError;
+    this.io = io;
   }
 
   async connect(): Promise<void> {
@@ -118,78 +89,95 @@ export class SSEClient {
     }
   }
 
+  private abandoned(): boolean {
+    return this.disposed || !this.connectionRequested;
+  }
+
   private async openStream(): Promise<void> {
     const sentWith = stampCredentials();
     let token: string | null;
     try {
       token = await this.getToken();
     } catch (error) {
-      if (this.disposed || !this.connectionRequested) return;
-      this.onError(error);
-      this.scheduleReconnect();
+      this.failTokenLookup(error);
       return;
     }
-    if (this.disposed || !this.connectionRequested) return;
+    if (this.abandoned()) return;
     if (!token) {
       this.scheduleReconnect();
       return;
     }
+    this.openRequest(token, sentWith);
+  }
 
+  private failTokenLookup(error: unknown): void {
+    if (this.abandoned()) return;
+    this.onError(error);
+    this.scheduleReconnect();
+  }
+
+  private openRequest(token: string, sentWith: CredentialStamp): void {
+    const xhr = this.freshRequest();
+    const opened = { xhr, correlationId: this.sendHeaders(xhr, token), sentWith };
+    xhr.onprogress = () => this.receive(xhr);
+    xhr.onerror = () => this.failConnection(opened.correlationId);
+    xhr.onloadend = () => this.endStream(opened);
+    this.armWatchdog();
+    xhr.send();
+  }
+
+  private freshRequest(): StreamRequest {
     this.closeConnection();
-
     this.processedLength = 0;
     this.buffer = '';
     this.lastEventIdAtOpen = this.lastEventId;
+    this.xhr = this.io.openRequest();
+    return this.xhr;
+  }
 
-    const xhr = new XMLHttpRequest();
-    this.xhr = xhr;
-
+  private sendHeaders(xhr: StreamRequest, token: string): string | null {
     xhr.open('GET', this.url);
     xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     xhr.setRequestHeader('Accept', 'text/event-stream');
     const correlationId = newCorrelationId();
-    if (correlationId !== null) {
-      xhr.setRequestHeader(CORRELATION_HEADER, correlationId);
+    if (correlationId !== null) xhr.setRequestHeader(CORRELATION_HEADER, correlationId);
+    if (this.lastEventId) xhr.setRequestHeader('Last-Event-ID', this.lastEventId);
+    return correlationId;
+  }
+
+  private receive(xhr: StreamRequest): void {
+    if (this.disposed || isRefusal(xhr.status)) return;
+    const newText = xhr.responseText.substring(this.processedLength);
+    this.processedLength = xhr.responseText.length;
+    if (newText.length > 0) this.markAlive();
+    this.applyChunk(newText);
+    if (xhr.responseText.length >= MAX_RESPONSE_BYTES) {
+      this.reconnectAtCap();
     }
-    if (this.lastEventId) {
-      xhr.setRequestHeader('Last-Event-ID', this.lastEventId);
-    }
+  }
 
-    xhr.onprogress = () => {
-      if (this.disposed || isRefusal(xhr.status)) return;
-      const newText = xhr.responseText.substring(this.processedLength);
-      this.processedLength = xhr.responseText.length;
-      if (newText.length > 0) {
-        this.reconnectAttempt = 0;
-        this.episodeReported = false;
-        this.armWatchdog();
-      }
-      this.applyChunk(newText);
-      if (xhr.responseText.length >= MAX_RESPONSE_BYTES) {
-        this.reconnectAtCap();
-      }
-    };
-
-    xhr.onerror = () => {
-      if (!this.disposed) {
-        this.onError(new SSEConnectionError(correlationId));
-        this.scheduleReconnect();
-      }
-    };
-
-    xhr.onloadend = () => {
-      if (this.disposed) return;
-      if (!isRefusal(xhr.status)) {
-        this.scheduleReconnect();
-        return;
-      }
-      if (xhr.status === HTTP_UNAUTHORIZED) markSessionExpired(sentWith);
-      this.onError(new SSEHttpError(xhr.status, correlationId));
-      this.scheduleReconnect(retryAfterMs(xhr.getResponseHeader('Retry-After'), Date.now()));
-    };
-
+  private markAlive(): void {
+    this.reconnectAttempt = 0;
+    this.episodeReported = false;
     this.armWatchdog();
-    xhr.send();
+  }
+
+  private failConnection(correlationId: string | null): void {
+    if (this.disposed) return;
+    this.onError(new SSEConnectionError(correlationId));
+    this.scheduleReconnect();
+  }
+
+  private endStream(opened: OpenedRequest): void {
+    if (this.disposed) return;
+    if (isRefusal(opened.xhr.status)) this.refuse(opened);
+    else this.scheduleReconnect();
+  }
+
+  private refuse({ xhr, correlationId, sentWith }: OpenedRequest): void {
+    if (xhr.status === HTTP_UNAUTHORIZED) markSessionExpired(sentWith);
+    this.onError(new SSEHttpError(xhr.status, correlationId));
+    this.scheduleReconnect(retryAfterMs(xhr.getResponseHeader('Retry-After'), Date.now()));
   }
 
   disconnect(): void {
@@ -235,7 +223,7 @@ export class SSEClient {
 
   private backOffAtCap(): void {
     this.closeConnection();
-    this.scheduleReconnect(reconnectDelayMs(this.stalledCaps, 0));
+    this.scheduleReconnect(reconnectDelayMs(this.stalledCaps, 0, this.io.random()));
     this.stalledCaps += 1;
   }
 
@@ -257,18 +245,21 @@ export class SSEClient {
   private scheduleReconnect(minimumDelayMs = 0): void {
     if (this.disposed || this.reconnectTimer) return;
     this.clearWatchdog();
-    if (!this.episodeReported) {
-      this.episodeReported = true;
-      recordEvent({ type: 'sse_reconnect', payload: {} }).catch((error: unknown) => {
-        console.warn('[sse] recording reconnect event failed', error);
-      });
-    }
-    const delay = reconnectDelayMs(this.reconnectAttempt, minimumDelayMs);
+    this.reportEpisode();
+    const delay = reconnectDelayMs(this.reconnectAttempt, minimumDelayMs, this.io.random());
     this.reconnectAttempt += 1;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       void this.connect();
     }, delay);
+  }
+
+  private reportEpisode(): void {
+    if (this.episodeReported) return;
+    this.episodeReported = true;
+    recordEvent({ type: 'sse_reconnect', payload: {} }).catch((error: unknown) => {
+      console.warn('[sse] recording reconnect event failed', error);
+    });
   }
 
   private applyChunk(text: string): void {
