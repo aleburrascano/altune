@@ -294,7 +294,7 @@ if [ -f scripts/ci/pr-ci-dupes.mjs ] && need node "duplicate PR CI work" && link
   check "no duplicate PR CI work" . node scripts/ci/pr-ci-dupes.mjs
 fi
 
-if [ -n "$(git ls-files --cached --others --exclude-standard -- '*/module-spec.json')" ]; then
+if [ -n "$(bash scripts/module-spec.sh roots 2>/dev/null)" ]; then
   link_deps . || true
   if [ -x node_modules/.bin/module-spec ]; then
     check "module-spec check" . "${heavy[@]}" bash scripts/module-spec.sh check --since "$base"

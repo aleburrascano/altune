@@ -7,7 +7,7 @@ FAILURES=0
 new_repo() {
     WORK=$(mktemp -d)
     mkdir -p "$WORK/repo/scripts/__tests__"
-    cp "$HERE/precheck.sh" "$WORK/repo/scripts/"
+    cp "$HERE/precheck.sh" "$HERE/module-spec.sh" "$WORK/repo/scripts/"
     (
         cd "$WORK/repo" || exit 1
         git init -qb main
@@ -684,9 +684,8 @@ add_module_spec_root() {
 }
 
 add_module_spec_kit() {
-    printf '#!/usr/bin/env bash\necho "module-spec.sh $*" >>"%s/module-spec.log"\n' "$WORK" >"$WORK/repo/scripts/module-spec.sh"
     mkdir -p "$WORK/repo/node_modules/.bin"
-    printf '#!/usr/bin/env bash\n' >"$WORK/repo/node_modules/.bin/module-spec"
+    printf '#!/usr/bin/env bash\necho "kit $*" >>"%s/module-spec.log"\n' "$WORK" >"$WORK/repo/node_modules/.bin/module-spec"
     chmod +x "$WORK/repo/node_modules/.bin/module-spec"
 }
 
@@ -703,16 +702,16 @@ add_module_spec_root
 add_module_spec_kit
 run_script_with_stubs
 expect_out "module-spec check"
-grep -q "^module-spec.sh check --since [0-9a-f]\{40\}$" "$WORK/module-spec.log" || fail "module-spec check should get --since <merge base>"
-grep -q "^module-spec.sh mutate --since " "$WORK/module-spec.log" || fail "module-spec mutate should run in a full precheck"
+grep -q "^kit check --since [0-9a-f]\{40\} --root demo$" "$WORK/module-spec.log" || fail "module-spec check should get --since <merge base> for each root"
+grep -q "^kit mutate --since " "$WORK/module-spec.log" || fail "module-spec mutate should run in a full precheck"
 
 CASE="--lint runs module-spec check but leaves mutate to CI"
 new_repo
 add_module_spec_root
 add_module_spec_kit
 run_script_with_stubs --lint
-grep -q "^module-spec.sh check " "$WORK/module-spec.log" || fail "--lint should still run module-spec check"
-grep -q "^module-spec.sh mutate" "$WORK/module-spec.log" && fail "--lint should not mutate"
+grep -q "^kit check " "$WORK/module-spec.log" || fail "--lint should still run module-spec check"
+grep -q "^kit mutate" "$WORK/module-spec.log" && fail "--lint should not mutate"
 
 CASE="without the kit, module-spec is a SKIP that makes precheck incomplete"
 new_repo
