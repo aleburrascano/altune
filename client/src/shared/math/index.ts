@@ -1,1 +1,1 @@
-export { clamp } from '@shared/math/math';
+export { clamp } from '@shared/math/core/math';
