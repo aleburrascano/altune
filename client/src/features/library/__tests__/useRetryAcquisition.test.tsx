@@ -33,6 +33,7 @@ import type { ReactNode } from 'react';
 import { QueryClientProvider, type InfiniteData } from '@tanstack/react-query';
 import type { LibraryPort } from '@features/library';
 import { signInTestUser } from '@testing/signInTestUser';
+import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -86,6 +87,12 @@ describe('useOneRunPerTrack', () => {
       />
     );
   }
+
+  warmUpFirstRender(async () => {
+    const { wrapper } = setup(ports);
+    render(<FailedTracksList tracks={[failedTrack('warm-up')]} />, { wrapper });
+    await screen.findByTestId('library-row-retry-warm-up');
+  });
 
   const retryButton = (id: string) => screen.queryByTestId(`library-row-retry-${id}`);
 
