@@ -42,7 +42,7 @@ import {
   type SaveState,
   toCreateTrackRequest,
 } from '@features/detail/domain/saveTrack';
-import { useDetailHandoff } from '@features/detail/hooks/useDetailHandoff';
+import { useDetailHandoff } from '@features/detail/view/useDetailHandoff';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/ports/DetailPortProvider';
 import type { OwnedTrack } from '@features/detail/domain/ownedTrack';

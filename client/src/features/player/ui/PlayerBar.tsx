@@ -20,10 +20,10 @@ import {
   isPreviewTrack,
   libraryTrackId,
 } from '@features/player/domain/playerStatus';
-import { PlayerOptionsSheets } from '@features/player/ui/PlayerOptionsSheets';
-import { Scrubber } from '@features/player/ui/Scrubber';
-import { VolumeSlider } from '@features/player/web/VolumeSlider';
-import { TransportControls } from '@features/player/ui/TransportControls';
+import { PlayerOptionsSheets } from '@features/player/view/PlayerOptionsSheets';
+import { Scrubber } from '@features/player/view/Scrubber';
+import { VolumeSlider } from '@features/player/view/web/VolumeSlider';
+import { TransportControls } from '@features/player/view/TransportControls';
 import { usePlaybackTransport } from '@features/player/hooks/usePlaybackTransport';
 
 type Transport = ReturnType<typeof usePlaybackTransport>;

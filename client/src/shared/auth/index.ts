@@ -8,10 +8,10 @@ export {
   startOAuth,
   supabase,
   updatePassword,
-} from '@shared/auth/authActions';
-export type { AuthClient } from '@shared/auth/authActions';
+} from '@shared/auth/adapters/authActions';
+export type { AuthClient } from '@shared/auth/adapters/authActions';
 export { withAuthDeadline, withinAuthDeadline } from '@shared/auth/authDeadline';
-export { injectTestSession } from '@shared/auth/injectTestSession';
+export { injectTestSession } from '@shared/auth/adapters/injectTestSession';
 export { primeSignedInUser } from '@shared/auth/primeSignedInUser';
 export {
   markSessionExpired,
@@ -20,8 +20,8 @@ export {
   clearSessionExpired,
   getSessionExpired,
   renewSessionCredentials,
-} from '@shared/auth/sessionExpired';
-export type { CredentialStamp } from '@shared/auth/sessionExpired';
+} from '@shared/auth/view/sessionExpired';
+export type { CredentialStamp } from '@shared/auth/view/sessionExpired';
 export { isTestAuthEnabled, markTestAuthBootSettled } from '@shared/auth/testAuthBoot';
 export { useSession } from '@shared/auth/useSession';
 export type { SessionState } from '@shared/auth/useSession';

@@ -18,7 +18,7 @@ import {
   SheetHeaderCenter,
   SheetHeaderTrailing,
   SheetScreen,
-} from '@features/player/ui/SheetHeader';
+} from '@features/player/view/SheetHeader';
 
 const SCROLL_LEAD_PX = 140;
 

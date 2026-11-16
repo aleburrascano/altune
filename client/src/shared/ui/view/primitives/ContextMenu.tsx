@@ -1,0 +1,123 @@
+import { useCallback, type ReactElement } from 'react';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { ModalFrame } from '@shared/ui/view/primitives/ModalFrame';
+import { Text } from '@shared/ui/primitives/Text';
+import { resolveMenuPlacement, type MenuAnchor } from '@shared/ui/primitives/menuPlacement';
+import { useTheme } from '@shared/ui/view/theme/useTheme';
+import { radius, spacing } from '@shared/ui/theme/tokens';
+
+export type ContextMenuItem = {
+  label: string;
+  onPress: () => void;
+  tone?: 'default' | 'danger';
+  disabled?: boolean;
+};
+
+type ContextMenuProps = {
+  visible: boolean;
+  items: ContextMenuItem[];
+  onClose: () => void;
+  anchorRight?: number;
+  anchorTop?: number;
+  anchor?: MenuAnchor | undefined;
+};
+
+export function ContextMenu({
+  visible,
+  items,
+  onClose,
+  anchorRight = spacing.lg,
+  anchorTop = 52,
+  anchor,
+}: ContextMenuProps): ReactElement | null {
+  const theme = useTheme();
+  const { height: windowHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+
+  const handlePress = useCallback(
+    (item: ContextMenuItem) => {
+      onClose();
+      item.onPress();
+    },
+    [onClose],
+  );
+
+  if (!visible) return null;
+
+  const position = anchor
+    ? resolveMenuPlacement({
+        anchor,
+        itemCount: items.length,
+        windowHeight,
+        insetBottom: insets.bottom,
+      })
+    : { right: anchorRight, top: anchorTop };
+
+  return (
+    <ModalFrame
+      visible
+      variant="popover"
+      onClose={onClose}
+      closeAction="ui.context_menu.close"
+      closeLabel="Close menu"
+    >
+      <View
+        style={[
+          styles.menu,
+          position,
+          {
+            backgroundColor: theme.color.surface2,
+            borderColor: theme.color.border,
+          },
+        ]}
+      >
+        {items.map((item, i) => (
+          <Pressable
+            key={item.label}
+            onPress={() => handlePress(item)}
+            disabled={item.disabled}
+            style={({ pressed }) => [
+              styles.item,
+              i < items.length - 1
+                ? {
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                    borderBottomColor: theme.color.border,
+                  }
+                : null,
+              pressed ? { backgroundColor: theme.color.surface1 } : null,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={item.label}
+            accessibilityState={{ disabled: item.disabled === true }}
+          >
+            <Text
+              variant="body"
+              tone={item.disabled ? 'tertiary' : 'primary'}
+              style={item.tone === 'danger' ? { color: theme.color.danger } : undefined}
+            >
+              {item.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </ModalFrame>
+  );
+}
+
+const MENU_MIN_WIDTH = 180;
+
+const styles = StyleSheet.create({
+  menu: {
+    position: 'absolute',
+    minWidth: MENU_MIN_WIDTH,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  item: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+});

@@ -13,7 +13,7 @@ import {
   useLoggedPlaylistDetailFailure,
   usePlaylistDetail,
 } from '@features/library/hooks/usePlaylistDetail';
-import { BackHeader } from '@features/library/ui/BackHeader';
+import { BackHeader } from '@features/library/view/BackHeader';
 import {
   PlaylistDetailContent,
   type ContentProps,

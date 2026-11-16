@@ -240,7 +240,7 @@ describe('mobile eslint config keeps raw style numbers out of StyleSheet.create'
     const code =
       "import { StyleSheet } from 'react-native';\nexport const styles = StyleSheet.create({ a: { width: 44 } });\n";
     assert.strictEqual(
-      (await rawStyleErrors('src/shared/ui/theme/ThemeProvider.tsx', code)).length,
+      (await rawStyleErrors('src/shared/ui/view/theme/ThemeProvider.tsx', code)).length,
       0,
     );
   });

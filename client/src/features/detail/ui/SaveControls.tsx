@@ -20,7 +20,7 @@ import {
   saveControlText,
   saveDisplayState,
 } from '@features/detail/domain/saveTrack';
-import { sharedStyles } from '@features/detail/ui/detailStyles';
+import { sharedStyles } from '@features/detail/view/detailStyles';
 import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
 import { useResolvedOwnedTrack, type TrackIdentity } from '@features/detail/hooks/useOwnedTrack';
 

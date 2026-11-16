@@ -14,10 +14,10 @@ import {
 import {
   createNativePlaybackActions,
   ignoringNativeRejection,
-} from '@features/player/native/createNativePlaybackActions';
+} from '@features/player/adapters/native/createNativePlaybackActions';
 import { derivePlaybackState, type PlayerPhase } from '@features/player/domain/derivePlaybackState';
-import { ensurePlayerSetup } from '@features/player/native/initPlayer';
-import { usePlaybackErrorFor } from '@features/player/hooks/usePlaybackErrorStore';
+import { ensurePlayerSetup } from '@features/player/adapters/native/initPlayer';
+import { usePlaybackErrorFor } from '@features/player/view/usePlaybackErrorStore';
 import { usePlaybackPosition } from '@features/player/hooks/usePlaybackPosition';
 import { usePlaybackSignals } from '@features/player/hooks/usePlaybackSignals';
 import { useQueueResume } from '@features/player/hooks/useQueueResume';

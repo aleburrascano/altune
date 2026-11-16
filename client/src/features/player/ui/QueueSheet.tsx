@@ -34,7 +34,7 @@ import {
   SheetHeaderCenter,
   SheetHeaderTrailing,
   SheetScreen,
-} from '@features/player/ui/SheetHeader';
+} from '@features/player/view/SheetHeader';
 
 const REMOVE_ACTION_WIDTH = 80;
 

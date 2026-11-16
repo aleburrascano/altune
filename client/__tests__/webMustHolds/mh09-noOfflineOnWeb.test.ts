@@ -105,7 +105,7 @@ describe('mh09: the reconcile bridge does nothing on web', () => {
   function statusAfterMountOn(os: 'ios'): string | undefined {
     const { usePinnedStore, OfflineReconcileBridge } = onPlatform(os, () => ({
       usePinnedStore: require('@shared/offline/state/pinnedStore').usePinnedStore,
-      OfflineReconcileBridge: require('@shared/offline/ui/OfflineReconcileBridge')
+      OfflineReconcileBridge: require('@shared/offline/view/OfflineReconcileBridge')
         .OfflineReconcileBridge,
     }));
     usePinnedStore.setState({

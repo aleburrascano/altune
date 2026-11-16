@@ -3,7 +3,7 @@ import { Text } from 'react-native';
 import type { ReactNode } from 'react';
 import { act, renderRouter, screen, within } from 'expo-router/testing-library';
 
-import { PlaybackContext } from '@shared/playback/usePlayback';
+import { PlaybackContext } from '@shared/playback/view/usePlayback';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
 import { makeIdlePlayback } from '@testing/factories';
 import { asTrackId } from '@shared/catalog';

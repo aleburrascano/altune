@@ -1,9 +1,9 @@
 export { AuthCallbackScreen } from '@features/signIn/ui/AuthCallbackScreen';
 export { AuthGate } from '@features/signIn/ui/AuthGate';
-export { ForgotPasswordScreen } from '@features/signIn/ui/ForgotPasswordScreen';
+export { ForgotPasswordScreen } from '@features/signIn/view/ForgotPasswordScreen';
 export { SetNewPasswordScreen } from '@features/signIn/ui/SetNewPasswordScreen';
 export { SignInScreen } from '@features/signIn/ui/SignInScreen';
-export { SignUpScreen } from '@features/signIn/ui/SignUpScreen';
+export { SignUpScreen } from '@features/signIn/view/SignUpScreen';
 export { TestAuthBridge } from '@features/signIn/ui/TestAuthBridge';
 export { useAuthDeepLink } from '@features/signIn/hooks/useAuthDeepLink';
 export { AuthPortProvider, useAuthPort } from '@features/signIn/ports/AuthPortProvider';
@@ -25,7 +25,7 @@ export {
 export {
   _resetConsumedCredentialForTest,
   completeAuthIntent,
-} from '@features/signIn/domain/completeAuthIntent';
+} from '@features/signIn/adapters/completeAuthIntent';
 export {
   authErrorText,
   classifyAuthError,
@@ -45,11 +45,11 @@ export { InvalidRecoveryLinkNotice, SessionExpiredNotice } from '@features/signI
 export type { AuthPort } from '@features/signIn/ports/authPort';
 export type { AuthLinkIntent } from '@features/signIn/domain/parseAuthLink';
 export { parseAuthLink } from '@features/signIn/domain/parseAuthLink';
-export { initialUrl, subscribeUrl } from '@features/signIn/native/linkEvents';
-export { OAuthButtons } from '@features/signIn/ui/OAuthButtons';
+export { initialUrl, subscribeUrl } from '@features/signIn/adapters/native/linkEvents';
+export { OAuthButtons } from '@features/signIn/view/OAuthButtons';
 export { authRedirectUrl } from '@features/signIn/domain/authRedirect';
-export { useRecoveryUnlocked } from '@features/signIn/hooks/useRecoveryUnlocked';
-export { CheckEmailNotice } from '@features/signIn/ui/CheckEmailNotice';
+export { useRecoveryUnlocked } from '@features/signIn/view/useRecoveryUnlocked';
+export { CheckEmailNotice } from '@features/signIn/view/CheckEmailNotice';
 export {
   PASSWORD_REQUIREMENTS_HINT,
   newPasswordFormState,

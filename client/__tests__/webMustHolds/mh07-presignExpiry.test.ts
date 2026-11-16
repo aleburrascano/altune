@@ -5,10 +5,10 @@ import type { Session } from '@supabase/supabase-js';
 
 import { supabase } from '@shared/auth';
 import { asTrackId } from '@shared/catalog';
-import { usePlayback } from '@shared/playback/usePlayback';
+import { usePlayback } from '@shared/playback/view/usePlayback';
 
 import { libraryTrack } from '@features/player/__tests__/fixtures';
-import { WebPlaybackProvider } from '@features/player/web/WebPlaybackProvider';
+import { WebPlaybackProvider } from '@features/player/view/web/WebPlaybackProvider';
 import { httpPlaybackPort } from '@features/player/adapters/http/httpPlaybackPort';
 import { installPlaybackPort } from '@features/player/ports/activePlaybackPort';
 

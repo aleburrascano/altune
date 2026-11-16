@@ -16,7 +16,7 @@ import {
   httpPlaybackPort,
   installPlaybackPort,
 } from '@features/player';
-import * as nativeTrackSwap from '@features/player/native/nativeTrackSwap';
+import * as nativeTrackSwap from '@features/player/adapters/native/nativeTrackSwap';
 import { signInTestUser } from '@testing/signInTestUser';
 const RESTART_THRESHOLD_MS = 3_000;
 const QUEUE_OUT_OF_SYNC_MESSAGE = 'The queue fell out of sync. Tap retry to reload it.';

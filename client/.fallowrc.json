@@ -63,15 +63,15 @@
       "exports": ["*"]
     },
     {
-      "file": "src/shared/ui/keyboard/keyboard.ios.tsx",
+      "file": "src/shared/ui/view/keyboard/keyboard.ios.tsx",
       "exports": ["*"]
     },
     {
-      "file": "src/shared/ui/keyboard/keyboard.tsx",
+      "file": "src/shared/ui/view/keyboard/keyboard.tsx",
       "exports": ["*"]
     },
     {
-      "file": "src/shared/ui/primitives/HorizontalRail.tsx",
+      "file": "src/shared/ui/view/primitives/HorizontalRail.tsx",
       "exports": ["*"]
     }
   ]

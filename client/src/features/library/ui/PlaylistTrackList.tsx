@@ -6,16 +6,16 @@ import type { TrackResponse } from '@shared/catalog';
 import { usePlaylistPlayback } from '@features/library/hooks/usePlaylistPlayback';
 import { useRetryAcquisition } from '@features/library/hooks/useRetryAcquisition';
 import { usePlaylistTrackRemoval } from '@features/library/hooks/usePlaylistTrackRemoval';
-import type { TrackSelectionController } from '@features/library/hooks/useTrackSelection';
+import type { TrackSelectionController } from '@features/library/view/useTrackSelection';
 import { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
-import { listContent } from '@features/library/ui/listContentStyles';
-import type { DetailActions, DetailProps } from '@features/library/ui/playlistDetailTypes';
-import { PlaylistHero } from '@features/library/ui/PlaylistHero';
+import { listContent } from '@features/library/view/listContentStyles';
+import type { DetailActions, DetailProps } from '@features/library/adapters/playlistDetailTypes';
+import { PlaylistHero } from '@features/library/view/PlaylistHero';
 import {
   PlaylistTrackRow,
   type PlaylistTrackRowProps,
-} from '@features/library/ui/PlaylistTrackRow';
-import { TrackSelectionOverlay } from '@features/library/ui/TrackSelectionOverlay';
+} from '@features/library/view/PlaylistTrackRow';
+import { TrackSelectionOverlay } from '@features/library/view/TrackSelectionOverlay';
 
 type HeroProps = ComponentProps<typeof PlaylistHero>;
 type RenameHeroProps = Pick<

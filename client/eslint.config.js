@@ -33,8 +33,8 @@ const PLATFORM_HOOKS_MOVED_INTO_HOOKS_FOLDER = [
   'src/features/player/hooks/usePlaybackPosition.ts',
   'src/features/player/hooks/usePlaybackSignals.ts',
   'src/features/player/hooks/useQueueResume.ts',
-  'src/features/player/hooks/useScrubberGesture.ts',
-  'src/features/player/hooks/useMediaSession.ts',
+  'src/features/player/view/useScrubberGesture.ts',
+  'src/features/player/view/useMediaSession.ts',
   'src/features/library/hooks/useLibraryGridLayout.ts',
 ];
 
@@ -81,7 +81,11 @@ const noAbortApisTheHermesPolyfillLacks = {
 
 const noInlinePlatformBranchesInFeatureUi = {
   name: 'noInlinePlatformBranchesInFeatureUi',
-  files: ['src/features/*/ui/**/*.{ts,tsx}', 'src/app/**/*.{ts,tsx}'],
+  files: [
+    'src/features/*/ui/**/*.{ts,tsx}',
+    'src/features/*/view/**/*.{ts,tsx}',
+    'src/app/**/*.{ts,tsx}',
+  ],
   ignores: TEST_FILES,
   rules: {
     'no-restricted-syntax': [
@@ -243,7 +247,7 @@ const topLevelFunctionDeclarations = {
 
 const noRawStyleNumbers = {
   files: ['src/**/*.{ts,tsx}'],
-  ignores: [...TEST_FILES, 'src/shared/ui/theme/**'],
+  ignores: [...TEST_FILES, 'src/shared/ui/theme/**', 'src/shared/ui/view/theme/**'],
   plugins: { local: localPlugin },
   rules: { 'local/no-raw-style-numbers': 'error' },
 };

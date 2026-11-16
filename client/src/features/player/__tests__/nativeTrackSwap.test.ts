@@ -24,7 +24,7 @@ import {
   type MemoryPlaybackSeed,
   httpPlaybackPort,
 } from '@features/player';
-import '@features/player/native/loadNativeTrack';
+import '@features/player/adapters/native/loadNativeTrack';
 import { signInTestUser } from '@testing/signInTestUser';
 
 const NATIVE_QUEUE_OP_TIMEOUT_MS = 15_000;

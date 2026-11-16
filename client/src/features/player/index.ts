@@ -1,5 +1,5 @@
 export { PlaybackProvider } from '@features/player/adapters/PlaybackProvider';
-export { SleepTimerBridge } from '@features/player/ui/SleepTimerBridge';
+export { SleepTimerBridge } from '@features/player/view/SleepTimerBridge';
 export { MiniPlayer } from '@features/player/ui/MiniPlayer';
 export { PlayerBar } from '@features/player/ui/PlayerBar';
 export { FullPlayer } from '@features/player/ui/FullPlayer';
@@ -17,7 +17,7 @@ export {
   evictAllCached,
   evictCachedFile,
   findCached,
-} from '@features/player/native/audioCache';
+} from '@features/player/adapters/native/audioCache';
 export {
   cdnAudioUrls,
   libraryTrack,
@@ -27,13 +27,13 @@ export {
   previewTrackList,
 } from '@features/player/__tests__/fixtures';
 export type { PlaybackPort } from '@features/player/ports/playbackPort';
-export { evictCached, prefetchNext } from '@features/player/native/audioPrefetch';
+export { evictCached, prefetchNext } from '@features/player/adapters/native/audioPrefetch';
 export {
   forgetAllSwaps,
   repairActiveToStreaming,
   swapUpcomingToLocal,
   wasSwappedToLocal,
-} from '@features/player/native/nativeTrackSwap';
+} from '@features/player/adapters/native/nativeTrackSwap';
 export {
   PLAYBACK_HEALTH_BATCH,
   _resetPlaybackHealthForTest,
@@ -47,8 +47,8 @@ export type { MemoryPlaybackSeed } from '@features/player/__tests__/memoryPlayba
 export {
   createNativePlaybackActions,
   ignoringNativeRejection,
-} from '@features/player/native/createNativePlaybackActions';
-export { ensurePlayerSetup } from '@features/player/native/initPlayer';
+} from '@features/player/adapters/native/createNativePlaybackActions';
+export { ensurePlayerSetup } from '@features/player/adapters/native/initPlayer';
 export {
   NativeQueueTimeoutError,
   onNativeQueueTimeout,
@@ -60,7 +60,7 @@ export {
   reportPlaybackError,
   usePlaybackErrorFor,
   usePlaybackErrorStore,
-} from '@features/player/hooks/usePlaybackErrorStore';
+} from '@features/player/view/usePlaybackErrorStore';
 export {
   isIndexOutOfBounds,
   reportQueueFailure,
@@ -75,8 +75,8 @@ export {
   loadNativeQueue,
   loadNativeTrack,
   refreshUpcomingPresign,
-} from '@features/player/native/loadNativeTrack';
-export { reorderUpcomingNative } from '@features/player/native/rebuildNativeTail';
+} from '@features/player/adapters/native/loadNativeTrack';
+export { reorderUpcomingNative } from '@features/player/adapters/native/rebuildNativeTail';
 export { claimLoad } from '@features/player/domain/loadToken';
 export { activeNativeTrackId, toNativeTrack } from '@features/player/native/nativeTrack';
 export { NATIVE_QUEUE_WINDOW, markPresignedFrom } from '@features/player/domain/presignWindow';
@@ -84,7 +84,7 @@ export {
   playbackService,
   registerPlaybackService,
   resetPlaybackForSignOut,
-} from '@features/player/native/playbackService';
+} from '@features/player/adapters/native/playbackService';
 export { _lyricsView, activeLineIndex } from '@features/player/domain/lyricsSync';
 export {
   beginNativeLoad,
@@ -103,8 +103,8 @@ export {
   usePlaybackRateStore,
   useSpeedOptions,
 } from '@features/player/hooks/usePlaybackRate';
-export { useSleepOptions, useSleepTimerStore } from '@features/player/hooks/useSleepTimer';
-export { PlayerOptionsSheets } from '@features/player/ui/PlayerOptionsSheets';
+export { useSleepOptions, useSleepTimerStore } from '@features/player/view/useSleepTimer';
+export { PlayerOptionsSheets } from '@features/player/view/PlayerOptionsSheets';
 export {
   canRetryPlaybackError,
   endedLabel,
@@ -115,7 +115,7 @@ export {
   markPlayRequested,
   notePlaybackState,
   resetPlayStartTiming,
-} from '@features/player/native/playStartTiming';
+} from '@features/player/adapters/native/playStartTiming';
 export { isExpoGo } from '@features/player/domain/isExpoGo';
 export { playsThroughTrackPlayer } from '@features/player/domain/playsThroughTrackPlayer';
 export {
@@ -150,25 +150,25 @@ export {
   queueSourceLabel,
 } from '@features/player/domain/upNextQueue';
 export type { QueueItem, QueueMenuContext } from '@features/player/domain/upNextQueue';
-export { useMediaSession } from '@features/player/hooks/useMediaSession';
+export { useMediaSession } from '@features/player/view/useMediaSession';
 export { usePlaybackPosition } from '@features/player/hooks/usePlaybackPosition';
 export { usePlaybackSignals } from '@features/player/hooks/usePlaybackSignals';
 export { useQueueResume } from '@features/player/hooks/useQueueResume';
-export { ExpoGoPlaybackProvider } from '@features/player/native/ExpoGoPlaybackProvider';
-export { startWidgetCommands } from '@features/player/native/widgetCommands';
-export { startWidgetSnapshotPublisher } from '@features/player/native/widgetSnapshot';
-export { Scrubber } from '@features/player/ui/Scrubber';
+export { ExpoGoPlaybackProvider } from '@features/player/view/native/ExpoGoPlaybackProvider';
+export { startWidgetCommands } from '@features/player/adapters/native/widgetCommands';
+export { startWidgetSnapshotPublisher } from '@features/player/adapters/native/widgetSnapshot';
+export { Scrubber } from '@features/player/view/Scrubber';
 export {
   SheetHeader,
   SheetHeaderCenter,
   SheetHeaderTrailing,
   SheetScreen,
-} from '@features/player/ui/SheetHeader';
+} from '@features/player/view/SheetHeader';
 export {
   bindAudioVolume,
   toVolume,
   usePlaybackVolumeStore,
 } from '@features/player/web/playbackVolume';
-export { VolumeSlider } from '@features/player/web/VolumeSlider';
-export { WebPlaybackProvider } from '@features/player/web/WebPlaybackProvider';
+export { VolumeSlider } from '@features/player/view/web/VolumeSlider';
+export { WebPlaybackProvider } from '@features/player/view/web/WebPlaybackProvider';
 export { resolveSource } from '@features/player/web/webPresign';

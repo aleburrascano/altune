@@ -19,7 +19,7 @@ import {
 } from '@shared/ui';
 import type { DiscoveryResult } from '@shared/catalog';
 import { albumExtras } from '@features/detail/domain/trackExtras';
-import { SECTION_CAP } from '@features/detail/hooks/useDiscographyFilter';
+import { SECTION_CAP } from '@features/detail/view/useDiscographyFilter';
 import { albumYear } from '@features/detail/ui/formatters';
 import {
   DETAIL_GUTTER,
@@ -27,7 +27,7 @@ import {
   gridCellWidthFor,
   gridColumnsFor,
   sharedStyles,
-} from '@features/detail/ui/detailStyles';
+} from '@features/detail/view/detailStyles';
 
 function railKey(album: DiscoveryResult, index: number): string {
   return `${album.title}-${album.sources[0]?.external_id ?? index}`;

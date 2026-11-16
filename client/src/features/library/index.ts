@@ -25,9 +25,9 @@ export type {
   LibraryChip,
   ListRefresh,
   SortKey,
-} from '@features/library/domain/libraryView';
-export { AlbumsGrid, ArtistsGrid } from '@features/library/ui/GroupGrids';
-export { PlaylistsGrid } from '@features/library/ui/PlaylistsGrid';
+} from '@features/library/view/libraryView';
+export { AlbumsGrid, ArtistsGrid } from '@features/library/view/GroupGrids';
+export { PlaylistsGrid } from '@features/library/view/PlaylistsGrid';
 export {
   LIBRARY_DERIVED,
   PLAYLIST_KEY,
@@ -48,9 +48,9 @@ export { useLibraryAlbums, useLibraryArtists } from '@features/library/hooks/use
 export { useLibraryTracks } from '@features/library/hooks/useLibraryTracks';
 export { featuringDetailRoute, goBackOrToLibrary } from '@features/library/domain/libraryRoutes';
 export { LibraryRow } from '@features/library/ui/LibraryRow';
-export { LibraryRowPinnedIcon } from '@features/library/ui/LibraryRowAccessories';
-export { PINNED_GLYPH } from '@features/library/ui/pinnedGlyphs';
-export { libraryRowWideStyle } from '@features/library/ui/libraryRowStyle';
+export { LibraryRowPinnedIcon } from '@features/library/view/LibraryRowAccessories';
+export { PINNED_GLYPH } from '@features/library/view/pinnedGlyphs';
+export { libraryRowWideStyle } from '@features/library/view/libraryRowStyle';
 export {
   albumToDiscoveryResult,
   artistToDiscoveryResult,
@@ -61,7 +61,7 @@ export {
   PLAYLIST_SORT_OPTIONS,
   TRACK_SORT_OPTIONS,
   librarySection,
-} from '@features/library/domain/libraryView';
+} from '@features/library/view/libraryView';
 export {
   GROUP_PAGE_SIZE,
   nextGroupPageOffset,
@@ -74,22 +74,19 @@ export {
   reportUnpinBatch,
   useLibraryOffline,
   usePinnedStatus,
-} from '@features/library/hooks/useLibraryOffline';
+} from '@features/library/view/useLibraryOffline';
 export { pinnedStatusDisplay } from '@features/library/domain/pinnedStatusDisplay';
-export { PlaylistCover } from '@features/library/ui/PlaylistCover';
-export { PlaylistHero } from '@features/library/ui/PlaylistHero';
-export {
-  buildSelectionActions,
-  useTrackSelection,
-} from '@features/library/hooks/useTrackSelection';
+export { PlaylistCover } from '@features/library/view/PlaylistCover';
+export { PlaylistHero } from '@features/library/view/PlaylistHero';
+export { buildSelectionActions, useTrackSelection } from '@features/library/view/useTrackSelection';
 export type {
   TrackSelectionController,
   TrackSelectionOptions,
-} from '@features/library/hooks/useTrackSelection';
-export { TrackSelectionOverlay } from '@features/library/ui/TrackSelectionOverlay';
+} from '@features/library/view/useTrackSelection';
+export { TrackSelectionOverlay } from '@features/library/view/TrackSelectionOverlay';
 export { TracksList } from '@features/library/ui/TracksList';
 export { useActiveLibraryView } from '@features/library/hooks/useActiveLibraryView';
-export { useSelection } from '@features/library/hooks/useSelection';
+export { useSelection } from '@features/library/view/useSelection';
 export type { MemoryLibrarySeed } from '@features/library/__tests__/memoryLibraryPort';
 export { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
 export { useDeleteTrack, useDeleteTracks } from '@features/library/hooks/useDeleteTracks';
@@ -98,23 +95,23 @@ export {
   parseStringParam,
   useTracksFeaturing,
 } from '@features/library/hooks/useFeaturing';
-export { useAlbumsView, useArtistsView } from '@features/library/hooks/useGroupViews';
-export { useLibrarySearch } from '@features/library/hooks/useLibrarySearch';
-export { usePlaylistsView } from '@features/library/hooks/usePlaylistsView';
+export { useAlbumsView, useArtistsView } from '@features/library/view/useGroupViews';
+export { useLibrarySearch } from '@features/library/view/useLibrarySearch';
+export { usePlaylistsView } from '@features/library/view/usePlaylistsView';
 export { usePlaylistDetail } from '@features/library/hooks/usePlaylistDetail';
 export {
   usePlaylistDelete,
   usePlaylistOfflineAction,
 } from '@features/library/hooks/usePlaylistMenu';
 export { usePlaylistPlayback } from '@features/library/hooks/usePlaylistPlayback';
-export { usePlaylistRename } from '@features/library/hooks/usePlaylistRename';
+export { usePlaylistRename } from '@features/library/view/usePlaylistRename';
 export {
   useReacquireTrack,
   useRetryAcquisition,
 } from '@features/library/hooks/useRetryAcquisition';
-export { buildTrackMenuItems } from '@features/library/hooks/useTrackMenu';
-export { useTracksView } from '@features/library/hooks/useTracksView';
-export { WideTrackHeader } from '@features/library/ui/WideTrackHeader';
-export { LibraryRowFailure } from '@features/library/ui/LibraryRowFailure';
+export { buildTrackMenuItems } from '@features/library/view/useTrackMenu';
+export { useTracksView } from '@features/library/view/useTracksView';
+export { WideTrackHeader } from '@features/library/view/WideTrackHeader';
+export { LibraryRowFailure } from '@features/library/view/LibraryRowFailure';
 export { menuItems } from '@features/library/ui/playlistMenuItems';
 export type { MenuEditProps } from '@features/library/ui/playlistMenuItems';

@@ -13,12 +13,15 @@ import {
   radius,
 } from '@shared/ui';
 import type { MenuAnchor } from '@shared/ui';
-import type { Selection } from '@features/library/hooks/useSelection';
-import { LibraryEmptyMessage, ListLoadingMoreFooter } from '@features/library/ui/LibraryListParts';
-import { listContent } from '@features/library/ui/listContentStyles';
+import type { Selection } from '@features/library/view/useSelection';
+import {
+  LibraryEmptyMessage,
+  ListLoadingMoreFooter,
+} from '@features/library/view/LibraryListParts';
+import { listContent } from '@features/library/view/listContentStyles';
 import { LibraryRow } from '@features/library/ui/LibraryRow';
-import { WideTrackHeader } from '@features/library/ui/WideTrackHeader';
-import type { ListPaging, ListRefresh } from '@features/library/domain/libraryView';
+import { WideTrackHeader } from '@features/library/view/WideTrackHeader';
+import type { ListPaging, ListRefresh } from '@features/library/view/libraryView';
 type TracksListHeaderProps = {
   isWide: boolean;
   showShuffle: boolean;

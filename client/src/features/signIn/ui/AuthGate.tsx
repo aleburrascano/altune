@@ -2,7 +2,7 @@ import { Redirect, useSegments } from 'expo-router';
 
 import { useSessionExpired, useSession } from '@shared/auth';
 import { Text, Wordmark } from '@shared/ui';
-import { useRecoveryUnlocked } from '@features/signIn/hooks/useRecoveryUnlocked';
+import { useRecoveryUnlocked } from '@features/signIn/view/useRecoveryUnlocked';
 import { RESET_PASSWORD_ROUTE_SEGMENT } from '@features/signIn/domain/passwordRecovery';
 
 import {

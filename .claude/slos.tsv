@@ -11,4 +11,4 @@ find music	correctness	services/go-api/internal/app/eval_runner.go:117 eval scor
 find music	correctness	none: discography completeness needs an expected-release reference set per artist (discography_observed counts contamination)	TBD	28d	200	measuring	-	2026-11-30	-
 sign in	availability	none: sign_in event with outcome/reason in client/src/features/signIn/hooks/useSignIn.ts	TBD	28d	200	measuring	wrong password	2026-11-30	-
 sign in	latency	none: duration_ms on the sign_in event	TBD	28d	200	measuring	wrong password	2026-11-30	-
-sign in	correctness	none: session_expired event with session age (client/src/shared/auth/sessionExpired.ts:23)	TBD	28d	200	measuring	-	2026-11-30	-
+sign in	correctness	none: session_expired event with session age (client/src/shared/auth/view/sessionExpired.ts:23)	TBD	28d	200	measuring	-	2026-11-30	-

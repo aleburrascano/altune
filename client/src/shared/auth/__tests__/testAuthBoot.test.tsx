@@ -30,7 +30,7 @@ function loadFreshModules() {
   const { useSession } = require('@shared/auth/useSession');
   const client = fakeAuthClient();
   require('@shared/auth').installAuthClient(client);
-  const { injectTestSession } = require('@shared/auth/injectTestSession');
+  const { injectTestSession } = require('@shared/auth/adapters/injectTestSession');
   const testAuthBoot = require('@shared/auth/testAuthBoot') as typeof TestAuthBootModule;
 
   function renderSession() {

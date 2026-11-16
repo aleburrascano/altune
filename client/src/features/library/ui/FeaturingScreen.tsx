@@ -31,7 +31,7 @@ import {
   useTracksFeaturing,
 } from '@features/library/hooks/useFeaturing';
 import { useRetryAcquisition } from '@features/library/hooks/useRetryAcquisition';
-import { useTrackMenu } from '@features/library/hooks/useTrackMenu';
+import { useTrackMenu } from '@features/library/view/useTrackMenu';
 import { classifyLibraryError, failureTail } from '@features/library/domain/libraryFailure';
 import { TracksList } from '@features/library/ui/TracksList';
 

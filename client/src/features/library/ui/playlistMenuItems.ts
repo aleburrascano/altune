@@ -1,7 +1,7 @@
 import type { ComponentProps } from 'react';
 
 import type { ContextMenu } from '@shared/ui';
-import type { DetailProps } from '@features/library/ui/playlistDetailTypes';
+import type { DetailProps } from '@features/library/adapters/playlistDetailTypes';
 
 export type MenuItems = ComponentProps<typeof ContextMenu>['items'];
 

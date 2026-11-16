@@ -25,7 +25,7 @@ function bootFreshApp() {
     outbox: require('@shared/telemetry/outbox'),
     pinned: require('@shared/offline/state/pinnedStore'),
     registry: require('@shared/session/signOutCleanup'),
-    expired: require('@shared/auth/sessionExpired'),
+    expired: require('@shared/auth/view/sessionExpired'),
   };
   require('@shared/telemetry').followSignedInUser();
   return app;

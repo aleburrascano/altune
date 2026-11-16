@@ -5,14 +5,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { EllipsisVertical } from 'lucide-react-native';
 import { spacing, useTheme, IconButton, ContextMenu } from '@shared/ui';
 import { goBackOrToLibrary } from '@features/library/domain/libraryRoutes';
-import { useLibraryOffline } from '@features/library/hooks/useLibraryOffline';
+import { useLibraryOffline } from '@features/library/view/useLibraryOffline';
 import {
   usePlaylistDelete,
   usePlaylistOfflineAction,
 } from '@features/library/hooks/usePlaylistMenu';
-import { BackHeader } from '@features/library/ui/BackHeader';
+import { BackHeader } from '@features/library/view/BackHeader';
 import { menuItems, type MenuItems } from '@features/library/ui/playlistMenuItems';
-import type { DetailProps } from '@features/library/ui/playlistDetailTypes';
+import type { DetailProps } from '@features/library/adapters/playlistDetailTypes';
 
 function PlaylistGradient(): ReactElement {
   const { color } = useTheme();

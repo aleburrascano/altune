@@ -6,8 +6,8 @@ import { isSessionFetchFailure } from '@shared/failure';
 import { forgetPreviousUsersLocalData } from '@shared/auth/userLocalData';
 import { notifyIdentityChange } from '@shared/session';
 
-import { renewSessionCredentials } from '@shared/auth/sessionExpired';
-import { supabase } from '@shared/auth/authActions';
+import { renewSessionCredentials } from '@shared/auth/view/sessionExpired';
+import { supabase } from '@shared/auth/adapters/authActions';
 import { isTestAuthEnabled, testAuthBootSettled } from '@shared/auth/testAuthBoot';
 
 export type SessionState =

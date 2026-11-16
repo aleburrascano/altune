@@ -1,0 +1,100 @@
+import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
+
+import { reportClientError } from '@shared/telemetry';
+
+import { Button } from '@shared/ui/primitives/Button';
+import { Text } from '@shared/ui/primitives/Text';
+import { spacing } from '@shared/ui/theme/tokens';
+import { useTheme } from '@shared/ui/view/theme/useTheme';
+
+type ScreenBoundaryProps = { children: ReactNode };
+type ScreenBoundaryState = { error: Error | null; componentStack: string | null };
+
+function ScreenErrorFallback({
+  error,
+  componentStack,
+  onRetry,
+}: {
+  error: Error;
+  componentStack: string | null;
+  onRetry: () => void;
+}): ReactNode {
+  const theme = useTheme();
+  return (
+    <View testID="screen-error" style={[styles.container, { backgroundColor: theme.color.canvas }]}>
+      <Text variant="displayL" style={styles.title}>
+        Something went wrong
+      </Text>
+      <Text variant="body" tone="secondary" style={styles.body}>
+        This screen hit an unexpected error. You can try again.
+      </Text>
+      <Button
+        action="screen.error.retry"
+        testID="screen-error-retry"
+        label="Try again"
+        onPress={onRetry}
+      />
+      {__DEV__ ? (
+        <ScrollView style={styles.devBox} contentContainerStyle={styles.devContent}>
+          <Text testID="screen-error-detail" variant="label" tone="tertiary" style={styles.devText}>
+            {error.message}
+          </Text>
+          {componentStack !== null ? (
+            <Text variant="caption" tone="tertiary" style={styles.devText}>
+              {componentStack.trim()}
+            </Text>
+          ) : null}
+        </ScrollView>
+      ) : null}
+    </View>
+  );
+}
+
+export class ScreenBoundary extends Component<ScreenBoundaryProps, ScreenBoundaryState> {
+  override state: ScreenBoundaryState = { error: null, componentStack: null };
+
+  static getDerivedStateFromError(error: Error): Partial<ScreenBoundaryState> {
+    return { error };
+  }
+
+  override componentDidCatch(error: Error, info: ErrorInfo): void {
+    console.error('[ScreenBoundary] render error', error, info.componentStack);
+    reportClientError(error, 'boundary');
+    this.setState({ componentStack: info.componentStack ?? null });
+  }
+
+  private reset = (): void => {
+    this.setState({ error: null, componentStack: null });
+  };
+
+  override render(): ReactNode {
+    if (this.state.error !== null) {
+      return (
+        <ScreenErrorFallback
+          error={this.state.error}
+          componentStack={this.state.componentStack}
+          onRetry={this.reset}
+        />
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const DEV_BOX_MAX_HEIGHT = 220;
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+    gap: spacing.md,
+  },
+  title: { textAlign: 'center' },
+  body: { textAlign: 'center' },
+  devBox: { maxHeight: DEV_BOX_MAX_HEIGHT, marginTop: spacing.lg, alignSelf: 'stretch' },
+  devContent: { gap: spacing.sm },
+  devText: { textAlign: 'left' },
+});

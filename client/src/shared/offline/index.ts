@@ -25,7 +25,7 @@ export type {
   UnpinAllOutcome,
   UnpinBatchResult,
 } from '@shared/offline/state/pinnedStore';
-export { OfflineReconcileBridge } from '@shared/offline/ui/OfflineReconcileBridge';
+export { OfflineReconcileBridge } from '@shared/offline/view/OfflineReconcileBridge';
 export type { OfflinePort } from '@shared/offline/ports/offlinePort';
 export { createMemoryOfflinePort } from '@shared/offline/__tests__/memoryOfflinePort';
 export type { SeededAudioUrls } from '@shared/offline/__tests__/memoryOfflinePort';
