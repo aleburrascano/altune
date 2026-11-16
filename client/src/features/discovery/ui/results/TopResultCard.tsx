@@ -23,6 +23,30 @@ function pressedStyle({ pressed }: PressableInteractionState) {
   return pressed ? styles.pressed : null;
 }
 
+function TopResultText({
+  result,
+  label,
+}: {
+  result: DiscoveryResult;
+  label: string;
+}): ReactElement {
+  return (
+    <View>
+      <Text variant="title" numberOfLines={2}>
+        {result.title}
+      </Text>
+      {result.subtitle != null && result.subtitle.length > 0 ? (
+        <Text variant="body" tone="secondary" numberOfLines={1} style={styles.subtext}>
+          {result.subtitle}
+        </Text>
+      ) : null}
+      <Text variant="body" tone="tertiary" style={styles.subtext}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
 export function TopResultCard({
   result,
   onPress,
@@ -63,19 +87,7 @@ export function TopResultCard({
               />
             }
           >
-            <View>
-              <Text variant="title" numberOfLines={2}>
-                {result.title}
-              </Text>
-              {result.subtitle != null && result.subtitle.length > 0 ? (
-                <Text variant="body" tone="secondary" numberOfLines={1} style={styles.subtext}>
-                  {result.subtitle}
-                </Text>
-              ) : null}
-              <Text variant="body" tone="tertiary" style={styles.subtext}>
-                {label}
-              </Text>
-            </View>
+            <TopResultText result={result} label={label} />
           </Row>
         </Card>
       </Tappable>

@@ -14,6 +14,16 @@ export type ImpressionHandlers = {
   onViewableItemsChanged: (info: ViewableItemsChange) => void;
 };
 
+function unreportedSearch(
+  data: DiscoverySearchResponse | undefined,
+  viewableItems: readonly ViewableItem[],
+  emittedFor: string | null,
+): { searchId: string; results: DiscoverySearchResponse['results'] } | null {
+  const searchId = data?.search_id;
+  if (!searchId || viewableItems.length === 0) return null;
+  return emittedFor === searchId ? null : { searchId, results: data.results };
+}
+
 export function useImpressionLogger(
   searchData: DiscoverySearchResponse | undefined,
 ): ImpressionHandlers {
@@ -30,16 +40,14 @@ export function useImpressionLogger(
   const [handlers] = useState<ImpressionHandlers>(() => ({
     viewabilityConfig: { itemVisiblePercentThreshold: 50 },
     onViewableItemsChanged: ({ viewableItems }) => {
-      const data = dataRef.current;
-      const searchId = data?.search_id;
-      if (!searchId || viewableItems.length === 0) return;
-      if (emittedFor.current === searchId) return;
-      const rows = buildImpressionRows(data.results);
+      const search = unreportedSearch(dataRef.current, viewableItems, emittedFor.current);
+      if (search === null) return;
+      const rows = buildImpressionRows(search.results);
       if (rows.length === 0) return;
-      emittedFor.current = searchId;
+      emittedFor.current = search.searchId;
       recordRef.current.mutate({
         type: 'results_shown',
-        search_id: searchId,
+        search_id: search.searchId,
         payload: { results: rows },
       });
     },

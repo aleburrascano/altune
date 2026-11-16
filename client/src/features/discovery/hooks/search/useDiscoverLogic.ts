@@ -89,6 +89,25 @@ export type DiscoverLogic = {
   history: HistorySlice;
 };
 
+function historySlice(
+  history: ReturnType<typeof useSearchHistory>,
+  clearHistory: ReturnType<typeof useDiscoverClearSearchHistory>,
+  onSuggestionSelect: (text: string) => void,
+): HistorySlice {
+  return {
+    items: history.data?.items ?? [],
+    failed: history.error !== null && history.data === undefined,
+    clearFailed: clearHistory.error !== null,
+    onTap: (item: SearchHistoryItem) => {
+      onSuggestionSelect(item.query);
+    },
+    onRetry: () => {
+      void history.refetch();
+    },
+    onClear: clearHistory.clear,
+  };
+}
+
 export function useDiscoverLogic(): DiscoverLogic {
   const recordSearch = useRecordSearchHistory();
   const search = useDebouncedSearch({
@@ -185,17 +204,6 @@ export function useDiscoverLogic(): DiscoverLogic {
         if (!isFetchingNextPage && !isRefreshing) void fetchNextPage({ cancelRefetch: false });
       },
     },
-    history: {
-      items: history.data?.items ?? [],
-      failed: history.error !== null && history.data === undefined,
-      clearFailed: clearHistory.error !== null,
-      onTap: (item: SearchHistoryItem) => {
-        suggestionVisibility.onSuggestionSelect(item.query);
-      },
-      onRetry: () => {
-        void history.refetch();
-      },
-      onClear: clearHistory.clear,
-    },
+    history: historySlice(history, clearHistory, suggestionVisibility.onSuggestionSelect),
   };
 }

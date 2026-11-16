@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 
 import { act, renderHook } from '@testing-library/react-native';
-import * as Haptics from 'expo-haptics';
 import { asTrackId } from '@shared/catalog';
 import type { DiscoveryResult } from '@shared/catalog';
 import { PlaybackContext } from '@shared/playback';
@@ -9,11 +8,6 @@ import type { PlaybackContextValue } from '@shared/playback';
 import { makeIdlePlayback } from '@testing/factories';
 
 import { usePreviewPlayback } from '@features/discovery';
-
-jest.mock('expo-haptics', () => ({
-  impactAsync: jest.fn().mockResolvedValue(undefined),
-  ImpactFeedbackStyle: { Light: 'light' },
-}));
 
 const PREVIEW_URL = 'https://cdn.example/preview.mp3';
 
@@ -41,15 +35,17 @@ function playingPreview(previewUrl: string): Partial<PlaybackContextValue> {
   };
 }
 
+let feedback: jest.Mock;
+
 function setup(result: DiscoveryResult, playback: PlaybackContextValue) {
   function Wrapper({ children }: { children: ReactNode }) {
     return <PlaybackContext.Provider value={playback}>{children}</PlaybackContext.Provider>;
   }
-  return renderHook(() => usePreviewPlayback(result), { wrapper: Wrapper });
+  return renderHook(() => usePreviewPlayback(result, feedback), { wrapper: Wrapper });
 }
 
 beforeEach(() => {
-  jest.clearAllMocks();
+  feedback = jest.fn();
 });
 
 describe('usePreviewPlayback', () => {
@@ -109,7 +105,7 @@ describe('usePreviewPlayback', () => {
       artworkUrl: 'https://img.example/a.jpg',
     });
     expect(playback.pause).not.toHaveBeenCalled();
-    expect(Haptics.impactAsync).toHaveBeenCalledWith(Haptics.ImpactFeedbackStyle.Light);
+    expect(feedback).toHaveBeenCalledWith('light');
   });
 
   it('pauses instead of restarting when this preview is already playing', () => {
@@ -122,6 +118,6 @@ describe('usePreviewPlayback', () => {
 
     expect(playback.pause).toHaveBeenCalledTimes(1);
     expect(playback.play).not.toHaveBeenCalled();
-    expect(Haptics.impactAsync).toHaveBeenCalledTimes(1);
+    expect(feedback).toHaveBeenCalledTimes(1);
   });
 });

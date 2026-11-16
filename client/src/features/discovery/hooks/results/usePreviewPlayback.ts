@@ -22,7 +22,10 @@ function isPreviewPlaying(
   );
 }
 
-export function usePreviewPlayback(result: DiscoveryResult): PreviewPlayback {
+export function usePreviewPlayback(
+  result: DiscoveryResult,
+  feedback: typeof tapFeedback = tapFeedback,
+): PreviewPlayback {
   const { track, status, play, pause } = usePlayback();
   const previewUrl = result.kind === 'track' ? getPreviewUrl(result.extras) : null;
 
@@ -31,7 +34,7 @@ export function usePreviewPlayback(result: DiscoveryResult): PreviewPlayback {
   const isPlaying = isPreviewPlaying({ track, status }, previewUrl);
 
   const togglePreview = (): void => {
-    tapFeedback();
+    feedback('light');
     if (isPlaying) {
       pause();
       return;

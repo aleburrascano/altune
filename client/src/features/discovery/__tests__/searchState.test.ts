@@ -5,7 +5,7 @@ import {
   setSearchState,
   registerSearchStateSignOutReset,
 } from '@features/discovery';
-import type * as SearchStateModule from '@features/discovery/domain/searchState';
+import type * as Discovery from '@features/discovery';
 
 beforeEach(() => {
   setSearchState('', '');
@@ -44,7 +44,7 @@ describe('searchState preserves the last query across a detail round trip', () =
 
   it('defaults both fields to empty strings before anything has been written', () => {
     jest.isolateModules(() => {
-      const fresh: typeof SearchStateModule = require('@features/discovery/domain/searchState');
+      const fresh: typeof Discovery = require('@features/discovery');
 
       expect(fresh.getSearchState()).toEqual({ query: '', inputValue: '' });
     });

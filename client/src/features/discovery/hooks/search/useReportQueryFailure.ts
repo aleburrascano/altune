@@ -16,6 +16,14 @@ type SearchFailedPayload = {
 
 const reported = new WeakSet<Error>();
 
+function searchFailedPayload(error: Error, source: QueryFailureSource): SearchFailedPayload {
+  const payload: SearchFailedPayload = { source };
+  if (error instanceof ApiError) payload.status = error.status;
+  const correlationId = correlationIdOf(error);
+  if (correlationId !== undefined) payload.correlationId = correlationId;
+  return payload;
+}
+
 export function useReportQueryFailure(error: Error | null, source: QueryFailureSource): void {
   const recordEvent = useRecordEvent();
   const recordRef = useRef(recordEvent);
@@ -27,10 +35,9 @@ export function useReportQueryFailure(error: Error | null, source: QueryFailureS
   useEffect(() => {
     if (error === null || isCancelledError(error) || reported.has(error)) return;
     reported.add(error);
-    const payload: SearchFailedPayload = { source };
-    if (error instanceof ApiError) payload.status = error.status;
-    const correlationId = correlationIdOf(error);
-    if (correlationId !== undefined) payload.correlationId = correlationId;
-    recordRef.current.mutate({ type: 'search_failed', payload });
+    recordRef.current.mutate({
+      type: 'search_failed',
+      payload: searchFailedPayload(error, source),
+    });
   }, [error, source]);
 }

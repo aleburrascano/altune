@@ -28,6 +28,51 @@ type DiscoverRowProps = {
 
 export const ART_SIZE = 56;
 
+function RowFavorite({
+  result,
+  position,
+}: {
+  result: DiscoveryResult;
+  position: number;
+}): ReactElement | null {
+  if (result.favorite_key == null) return null;
+  return (
+    <FavoriteButton
+      testID={`discover-favorite-${position}`}
+      target={{
+        kind: result.kind,
+        favorite_key: result.favorite_key,
+        title: result.title,
+        subtitle: result.subtitle ?? '',
+        image_url: result.image_url ?? undefined,
+      }}
+    />
+  );
+}
+
+function RowPreview({
+  preview,
+  position,
+}: {
+  preview: ReturnType<typeof usePreviewPlayback>;
+  position: number;
+}): ReactElement | null {
+  const theme = useTheme();
+  if (!preview.hasPreview) return null;
+  return (
+    <View style={[styles.previewWrap, { backgroundColor: theme.color.surface2 }]}>
+      <IconButton
+        action="discover.preview.toggle"
+        testID={`discover-preview-${position}`}
+        icon={preview.isPlaying ? Pause : Play}
+        size={18}
+        onPress={preview.togglePreview}
+        accessibilityLabel={preview.isPlaying ? 'Pause preview' : 'Play preview'}
+      />
+    </View>
+  );
+}
+
 export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): ReactElement {
   const testId = `discover-row-${result.kind}-${position}`;
   const isArtist = result.kind === 'artist';
@@ -60,30 +105,8 @@ export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): Re
         }
         trailing={
           <View style={styles.trailing}>
-            {result.favorite_key != null ? (
-              <FavoriteButton
-                testID={`discover-favorite-${position}`}
-                target={{
-                  kind: result.kind,
-                  favorite_key: result.favorite_key,
-                  title: result.title,
-                  subtitle: result.subtitle ?? '',
-                  image_url: result.image_url ?? undefined,
-                }}
-              />
-            ) : null}
-            {preview.hasPreview ? (
-              <View style={[styles.previewWrap, { backgroundColor: theme.color.surface2 }]}>
-                <IconButton
-                  action="discover.preview.toggle"
-                  testID={`discover-preview-${position}`}
-                  icon={preview.isPlaying ? Pause : Play}
-                  size={18}
-                  onPress={preview.togglePreview}
-                  accessibilityLabel={preview.isPlaying ? 'Pause preview' : 'Play preview'}
-                />
-              </View>
-            ) : null}
+            <RowFavorite result={result} position={position} />
+            <RowPreview preview={preview} position={position} />
           </View>
         }
       >
