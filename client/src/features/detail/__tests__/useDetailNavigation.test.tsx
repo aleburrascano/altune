@@ -3,7 +3,7 @@ import type { DiscoveryResult } from '@shared/catalog';
 import { readDetailHandoff } from '@shared/navigation';
 
 import { useLateralNav, createMemoryDetailPort } from '@features/detail';
-import type { DetailPort } from '@features/detail';
+import type { DetailPort, DetailWarning, MemoryDetailPort } from '@features/detail';
 import { createPortWrapper, createTestQueryClient } from '@testing/queryHarness';
 
 const mockPush = jest.fn();
@@ -26,12 +26,13 @@ function artist(title: string): DiscoveryResult {
 
 type Search = { q: string; kinds: readonly string[] | undefined; limit: number | undefined };
 type Searches = Search[];
-type CountingPort = { port: DetailPort; searches: Searches };
+type CountingPort = { port: DetailPort; searches: Searches; warnings: DetailWarning[] };
 
-function countingPort(port: DetailPort): CountingPort {
+function countingPort(port: MemoryDetailPort): CountingPort {
   const searches: Searches = [];
   return {
     searches,
+    warnings: port.warnings,
     port: {
       ...port,
       searchDiscovery: (params, signal) => {
@@ -65,45 +66,40 @@ function pushedResults(): (DiscoveryResult | undefined)[] {
 
 describe('useLateralNav', () => {
   describe('logging a failed lateral navigation', () => {
-    let warnSpy: jest.SpyInstance;
-
     beforeEach(() => {
       jest.clearAllMocks();
-      warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    });
-
-    afterEach(() => {
-      warnSpy.mockRestore();
     });
 
     describe('useLateralNav logs non-"not found" fetch failures', () => {
       it('logs the query/kind and error when the resolve fetch throws', async () => {
-        const { result } = renderLateralNav(failing('transport failed').port);
+        const { port, warnings } = failing('transport failed');
+        const { result } = renderLateralNav(port);
 
         await act(async () => {
           await result.current.navigateTo('Boom', 'artist');
         });
 
-        expect(warnSpy).toHaveBeenCalledWith(
+        expect(warnings).toContainEqual([
           '[detail] lateral nav fetch failed',
           expect.objectContaining({
             query: 'Boom',
             kind: 'artist',
             error: 'transport failed',
           }),
-        );
+        ]);
         expect(result.current.state).toBe('idle');
         expect(mockPush).not.toHaveBeenCalled();
       });
 
       it('does not log the ordinary "not found" result', async () => {
-        const { result } = renderLateralNav(seeded([]).port);
+        const { port, warnings } = seeded([]);
+        const { result } = renderLateralNav(port);
 
         await act(async () => {
           await result.current.navigateTo('Nobody', 'artist');
         });
 
-        expect(warnSpy).not.toHaveBeenCalled();
+        expect(warnings).toEqual([]);
         expect(result.current.error).toBe('Artist not found: "Nobody"');
         expect(mockPush).not.toHaveBeenCalled();
       });
@@ -154,7 +150,6 @@ describe('useLateralNav', () => {
     });
 
     it('shows a user-facing message when the lookup rejects', async () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
       const { result } = renderLateralNav(failing('transport failed').port);
 
       await act(async () => {
@@ -162,7 +157,6 @@ describe('useLateralNav', () => {
       });
 
       expect(result.current.error).toBe("Couldn't search, try again");
-      warnSpy.mockRestore();
     });
   });
 });

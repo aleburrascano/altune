@@ -2,8 +2,14 @@ import type { QueryClient } from '@tanstack/react-query';
 
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { DiscoveryResult } from '@shared/catalog';
-import { _resetDetailHealthForTest, useDetailEnrichments } from '@features/detail';
-import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
+import { _resetDetailHealthForTest, httpDetailPort, useDetailEnrichments } from '@features/detail';
+import type { DetailPort, DetailWarning } from '@features/detail';
+import {
+  createPortWrapper,
+  createTestQueryClient,
+  createWrapper,
+  signInTestUser,
+} from '@testing/queryHarness';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -178,16 +184,22 @@ describe('useDetailEnrichments', () => {
     album: '',
   };
 
-  let warnSpy: jest.SpyInstance;
+  let warnings: DetailWarning[];
+
+  function recordingWrapper(queryClient: QueryClient) {
+    const detail: DetailPort = {
+      ...httpDetailPort,
+      warn: (message, context) => {
+        warnings.push([message, context]);
+      },
+    };
+    return createPortWrapper(queryClient, { detail });
+  }
 
   beforeEach(async () => {
     await signInTestUser();
     __http.reply('GET /v1/discovery/enrichment', { status: 200, json: emptyEnrichment });
-    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    warnSpy.mockRestore();
+    warnings = [];
   });
 
   describe('useDetailEnrichments: asking only the providers a page shows', () => {
@@ -196,7 +208,7 @@ describe('useDetailEnrichments', () => {
       const queryClient = createTestQueryClient();
 
       const { result } = renderHook(() => useDetailEnrichments(artistResult()), {
-        wrapper: createWrapper(queryClient),
+        wrapper: recordingWrapper(queryClient),
       });
 
       await waitFor(() => expect(__http.countFor('GET /v1/discovery/enrichment/lastfm')).toBe(1));
@@ -211,7 +223,7 @@ describe('useDetailEnrichments', () => {
       const queryClient = createTestQueryClient();
 
       const { result } = renderHook(() => useDetailEnrichments(artistResult()), {
-        wrapper: createWrapper(queryClient),
+        wrapper: recordingWrapper(queryClient),
       });
 
       await waitFor(() => expect(result.current.errors.lastfm).toBe(true));
@@ -226,7 +238,7 @@ describe('useDetailEnrichments', () => {
       const queryClient = createTestQueryClient();
 
       const { result } = renderHook(() => useDetailEnrichments(artistResult()), {
-        wrapper: createWrapper(queryClient),
+        wrapper: recordingWrapper(queryClient),
       });
 
       await waitFor(() => expect(result.current.lastfm).toBeNull());
@@ -240,12 +252,12 @@ describe('useDetailEnrichments', () => {
       const queryClient = createTestQueryClient();
 
       const { result } = renderHook(() => useDetailEnrichments(artistResult()), {
-        wrapper: createWrapper(queryClient),
+        wrapper: recordingWrapper(queryClient),
       });
 
       await waitFor(() => expect(result.current.errors.lastfm).toBe(true));
 
-      expect(warnSpy).toHaveBeenCalledWith(
+      expect(warnings).toContainEqual([
         '[detail] enrichment fetch failed',
         expect.objectContaining({
           provider: 'lastfm',
@@ -253,7 +265,7 @@ describe('useDetailEnrichments', () => {
           title: 'Radiohead',
           error: expect.stringContaining('unreachable'),
         }),
-      );
+      ]);
     });
 
     it('stays silent when Last.fm genuinely has no content for this artist', async () => {
@@ -264,15 +276,12 @@ describe('useDetailEnrichments', () => {
       const queryClient = createTestQueryClient();
 
       const { result } = renderHook(() => useDetailEnrichments(artistResult()), {
-        wrapper: createWrapper(queryClient),
+        wrapper: recordingWrapper(queryClient),
       });
 
       await waitFor(() => expect(result.current.lastfm).toBeNull());
 
-      expect(warnSpy).not.toHaveBeenCalledWith(
-        '[detail] enrichment fetch failed',
-        expect.anything(),
-      );
+      expect(warnings).not.toContainEqual(['[detail] enrichment fetch failed', expect.anything()]);
     });
   });
 });

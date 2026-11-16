@@ -31,18 +31,19 @@ type SearchedEntity = {
   artist: string | null;
 };
 
-function warnSearchFailure(error: Error, searched: SearchedEntity): void {
-  console.warn('[detail] discovery search failed', { ...searched, error: error.message });
+function warnSearchFailure(port: DetailPort, error: Error, searched: SearchedEntity): void {
+  port.warn('[detail] discovery search failed', { ...searched, error: error.message });
 }
 
 function useLoggedSearchFailure(error: Error | null, searched: SearchedEntity): void {
+  const port = useDetailPort();
   const { kind, title, artist } = searched;
   useEffect(() => {
     if (error === null) {
       return;
     }
-    warnSearchFailure(error, { kind, title, artist });
-  }, [error, kind, title, artist]);
+    warnSearchFailure(port, error, { kind, title, artist });
+  }, [port, error, kind, title, artist]);
 }
 
 type AlbumSearchInput = {

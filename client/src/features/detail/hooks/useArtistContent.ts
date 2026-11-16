@@ -28,20 +28,23 @@ type ContentFetchContext = {
   knownIds: readonly DiscoverySource[];
 };
 
-function logContentStatuses(content: ArtistContentResponse, ctx: ContentFetchContext): void {
-  const where = logContext(ctx);
-  if (content.top_tracks.status !== 'ok') {
-    console.warn('[detail] artist top_tracks fetch degraded', {
-      ...where,
-      status: content.top_tracks.status,
-    });
-  }
-  if (content.albums.status !== 'ok') {
-    console.warn('[detail] artist albums fetch degraded', {
-      ...where,
-      status: content.albums.status,
-    });
-  }
+type ContentReport = {
+  port: DetailPort;
+  content: ArtistContentResponse;
+  ctx: ContentFetchContext;
+};
+
+type ContentSide = 'top_tracks' | 'albums';
+
+function warnIfDegraded({ port, content, ctx }: ContentReport, side: ContentSide): void {
+  const { status } = content[side];
+  if (status === 'ok') return;
+  port.warn(`[detail] artist ${side} fetch degraded`, { ...logContext(ctx), status });
+}
+
+function logContentStatuses(report: ContentReport): void {
+  warnIfDegraded(report, 'top_tracks');
+  warnIfDegraded(report, 'albums');
 }
 
 function logContext({ provider, externalId }: ContentFetchContext) {
@@ -69,10 +72,10 @@ type UseArtistContentReturn = {
 
 const TOP_TRACKS_LIMIT = 5;
 
-function reportContentFailure(error: unknown, ctx: ContentFetchContext): void {
+function reportContentFailure(port: DetailPort, error: unknown, ctx: ContentFetchContext): void {
   if (isAbort(error)) return;
   recordContentFetchOutcome('artist_content', false);
-  console.warn('[detail] artist content fetch failed', {
+  port.warn('[detail] artist content fetch failed', {
     ...logContext(ctx),
     error: error instanceof Error ? error.message : String(error),
   });
@@ -86,15 +89,15 @@ function contentParams(ctx: ContentFetchContext): ArtistContentOptions {
   };
 }
 
-function recordContent(content: ArtistContentResponse, ctx: ContentFetchContext): void {
-  logContentStatuses(content, ctx);
-  recordContentFetchOutcome('artist_content', isFullyServed(content));
+function recordContent(report: ContentReport): void {
+  logContentStatuses(report);
+  recordContentFetchOutcome('artist_content', isFullyServed(report.content));
 }
 
 async function fetchContent(port: DetailPort, ctx: ContentFetchContext, signal: AbortSignal) {
   const params = contentParams(ctx);
   const content = await port.getArtistContent(ctx.provider, ctx.externalId, params, signal);
-  recordContent(content, ctx);
+  recordContent({ port, content, ctx });
   return content;
 }
 
@@ -113,7 +116,7 @@ async function fetchReporting(port: DetailPort, ctx: ContentFetchContext, signal
   try {
     return await fetchContent(port, ctx, signal);
   } catch (error) {
-    reportContentFailure(error, ctx);
+    reportContentFailure(port, error, ctx);
     throw error;
   }
 }

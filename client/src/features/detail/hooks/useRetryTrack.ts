@@ -7,6 +7,9 @@ import {
   patchTrackStatus,
   useSharedRetryAcquisition,
 } from '@shared/acquisition';
+import type { DetailPort } from '@features/detail/ports/detailPort';
+import { useDetailPort } from '@features/detail/view/DetailPortProvider';
+
 export type RetryTrack = Pick<UseMutationResult<void, Error, TrackId>, 'mutate' | 'isPending'>;
 
 type RetryMutateOptions = Parameters<RetryTrack['mutate']>[1];
@@ -16,17 +19,18 @@ function markPending(trackId: TrackId): Record<string, never> {
   return {};
 }
 
-function markFailed(error: Error, trackId: TrackId): void {
-  console.warn('[detail] retry track failed', { trackId, error: error.message });
+function markFailed(port: DetailPort, error: Error, trackId: TrackId): void {
+  port.warn('[detail] retry track failed', { trackId, error: error.message });
   patchTrackStatus(trackId, failedTrackStatus(error));
 }
 
 function useRetryMutation(entryPoint: RetryEntryPoint) {
+  const port = useDetailPort();
   return useSharedRetryAcquisition({
     action: 'detail.retry',
     entryPoint,
     onMutate: markPending,
-    onError: markFailed,
+    onError: (error, trackId) => markFailed(port, error, trackId),
   });
 }
 

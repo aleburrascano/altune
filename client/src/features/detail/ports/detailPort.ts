@@ -15,4 +15,5 @@ export interface DetailPort {
   createTrack: typeof tracks.createTrack;
   getTracks: typeof tracks.getTracks;
   getLibraryAlbums: typeof library.getLibraryAlbums;
+  warn(message: string, detail: Record<string, unknown>): void;
 }
