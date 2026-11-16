@@ -37,9 +37,10 @@ export function detailHref<P extends string>(
   return { pathname, params: { handoff: registerDetailHandoff(result, searchId) } };
 }
 
+const handoffsByAnyRouteParam: ReadonlyMap<unknown, DetailHandoff> = handoffs;
+
 export function readDetailHandoff(id: string | string[] | undefined): DetailHandoff | null {
-  if (typeof id !== 'string') return null;
-  return handoffs.get(id) ?? null;
+  return handoffsByAnyRouteParam.get(id) ?? null;
 }
 
 function clearDetailHandoffs(): void {

@@ -45,7 +45,7 @@ describe('detailKeys — literal shape', () => {
     expect(detailKeys.enrichment(provider, 'album', 't|a')).toEqual([root, 'album', 't|a']);
   });
 
-  it('resolveEntity, albumDiscoveryTracks, artistContent and relatedTracks keep their literal shapes', () => {
+  it('resolveEntity, albumDiscoveryTracks, artistContent, relatedTracks and unreleasedTracks keep their literal shapes', () => {
     expect(detailKeys.resolveEntity('album', 'q', 1)).toEqual(['resolve-entity', 'album', 'q', 1]);
     expect(detailKeys.albumDiscoveryTracks('deezer', '9')).toEqual([
       'album-discovery-tracks',
@@ -59,6 +59,10 @@ describe('detailKeys — literal shape', () => {
       'ids',
     ]);
     expect(detailKeys.relatedTracks('42')).toEqual(['related-tracks', '42']);
+    expect(detailKeys.unreleasedTracks('deezer:1,spotify:2')).toEqual([
+      'unreleased-tracks',
+      'deezer:1,spotify:2',
+    ]);
   });
 });
 
@@ -87,8 +91,8 @@ describe('libraryKeys — literal shape', () => {
     expect(libraryKeys.albumsPrefix).toEqual(['library', 'albums']);
   });
 
-  it('albums(query, sort) appends query then sort, in that order', () => {
-    expect(libraryKeys.albums('beatles', 'recent')).toEqual([
+  it('albums(query, sort) appends query then sort, in that order, and nothing after', () => {
+    expect(libraryKeys.albums('beatles', 'recent')).toStrictEqual([
       'library',
       'albums',
       'beatles',

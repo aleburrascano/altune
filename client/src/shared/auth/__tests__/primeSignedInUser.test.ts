@@ -85,6 +85,7 @@ describe('primeSignedInUser, failure and race paths', () => {
     await primeSignedInUser();
 
     expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith('[auth] headless sign-in prime failed', expect.any(Error));
     expect(log).not.toHaveBeenCalled();
     warn.mockRestore();
     log.mockRestore();

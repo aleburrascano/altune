@@ -1,6 +1,7 @@
 import fc from 'fast-check';
 
 import * as retryDelayModule from '@shared/query/core/retryDelay';
+import { ApiError, NetworkError } from '@shared/failure';
 import { transientRetryOptions } from '@shared/query';
 
 const RETRY_BACKOFF_BASE_MS = 1_000;
@@ -89,6 +90,31 @@ describe('the app-wide QueryClient retries on the jittered schedule', () => {
         expect(delay).toBeLessThanOrEqual(retryDelayMs(failureCount, 1));
       }
     }
+  });
+});
+
+describe('the app-wide QueryClient retries only transient failures, at most five times', () => {
+  const { retry } = transientRetryOptions;
+  const transient = new NetworkError('transport', 'the API is unreachable');
+
+  const RETRIES = 5;
+  const NOT_FOUND = 404;
+
+  it('retries a transient failure for the first five failed attempts', () => {
+    expect(ATTEMPTS_IN_A_SESSION.map((failureCount) => retry(failureCount, transient))).toEqual(
+      ATTEMPTS_IN_A_SESSION.map(() => true),
+    );
+    expect(ATTEMPTS_IN_A_SESSION).toHaveLength(RETRIES);
+  });
+
+  it('gives up on the fifth failure and after it', () => {
+    expect(retry(RETRIES, transient)).toBe(false);
+    expect(retry(RETRIES + 1, transient)).toBe(false);
+  });
+
+  it('never retries a failure that a retry cannot fix', () => {
+    expect(retry(0, new ApiError(NOT_FOUND, 'not found'))).toBe(false);
+    expect(retry(0, new Error('bug'))).toBe(false);
   });
 });
 

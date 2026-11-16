@@ -52,9 +52,9 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function parseSwitches(document: unknown): LoopFlags | null {
   if (!isPlainObject(document)) return null;
-  const parsed = { ...ALL_ENABLED };
-  for (const loop of LOOPS) parsed[loop] = document[KILL_SWITCH_KEYS[loop]] !== false;
-  return parsed;
+  return Object.fromEntries(
+    LOOPS.map((loop) => [loop, document[KILL_SWITCH_KEYS[loop]] !== false]),
+  ) as LoopFlags;
 }
 
 function toDocument(next: LoopFlags): SwitchDocument {
@@ -63,12 +63,15 @@ function toDocument(next: LoopFlags): SwitchDocument {
   return document;
 }
 
+function documentOrNull(read: ReturnType<typeof readDocument>): unknown {
+  return { document: null, ...read }.document;
+}
+
 function ensureRestored(): void {
   if (restored) return;
   restored = true;
   const read = readDocument(TAG, SWITCH_FILE, openSwitchDir);
-  if (read.status !== 'read') return;
-  flags = parseSwitches(read.document) ?? ALL_ENABLED;
+  flags = parseSwitches(documentOrNull(read)) ?? ALL_ENABLED;
 }
 
 function persist(next: LoopFlags): void {

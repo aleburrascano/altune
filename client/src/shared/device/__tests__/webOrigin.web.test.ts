@@ -1,8 +1,11 @@
 import { webOrigin } from '@shared/device/core/webOrigin.web';
 
-afterEach(() => {
+function removeWindow(): void {
   Reflect.deleteProperty(globalThis, 'window');
-});
+}
+
+beforeEach(removeWindow);
+afterEach(removeWindow);
 
 describe('webOrigin (web)', () => {
   it('returns the window origin', () => {

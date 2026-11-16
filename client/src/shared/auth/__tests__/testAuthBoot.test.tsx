@@ -146,4 +146,12 @@ describe('the real testAuthBoot module', () => {
     expect(real.isTestAuthEnabled()).toBe(false);
     await expect(real.testAuthBootSettled()).resolves.toBeUndefined();
   });
+
+  it('keeps test auth off in a release build even when the test-auth flag is set', () => {
+    setTestAuth(true);
+    globals.__DEV__ = false;
+    const { testAuthBoot: real } = loadFreshModules();
+
+    expect(real.isTestAuthEnabled()).toBe(false);
+  });
 });
