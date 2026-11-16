@@ -1,7 +1,7 @@
 import type { PlaylistId, TrackResponse } from '@shared/catalog';
 import type { Navigator } from '@shared/navigation';
 import { useDeletePlaylist } from '@shared/playlists';
-import { confirmDestructive } from '@shared/ui';
+import { confirmDestructive, showFailureAlert } from '@shared/ui';
 import { goBackOrToLibrary } from '@features/library/domain/libraryRoutes';
 import type { ContextMenuItem } from '@shared/ui';
 import {
@@ -35,7 +35,9 @@ export function usePlaylistOfflineAction(tracks: readonly TrackResponse[]): Cont
     return {
       label: 'Remove downloads',
       onPress: () => {
-        void offline.unpinMany(downloadableIds).then(reportUnpinBatch);
+        void offline
+          .unpinMany(downloadableIds)
+          .then((batch) => reportUnpinBatch(showFailureAlert, batch));
       },
     };
   }
@@ -43,7 +45,9 @@ export function usePlaylistOfflineAction(tracks: readonly TrackResponse[]): Cont
   return {
     label: pinnedCount > 0 ? `Download rest (${remaining})` : `Download all (${remaining})`,
     onPress: () => {
-      void offline.pinMany(downloadableIds).then(reportPinBatch);
+      void offline
+        .pinMany(downloadableIds)
+        .then((batch) => reportPinBatch(showFailureAlert, batch));
     },
   };
 }

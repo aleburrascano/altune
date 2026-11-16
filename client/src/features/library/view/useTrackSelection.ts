@@ -16,6 +16,7 @@ import {
   type TrackMenuController,
   type TrackMenuOptions,
 } from '@features/library/view/useTrackMenu';
+import type { ShowFailure } from '@features/library/domain/libraryFailure';
 
 export type SelectionAction = {
   key: string;
@@ -34,6 +35,7 @@ export type SelectionActionOptions = {
   onAddToPlaylist: () => void;
   onDone: () => void;
   danger: DangerAction;
+  showFailure: ShowFailure;
 };
 
 type OfflineEligibility = ReturnType<typeof offlineEligibility>;
@@ -48,10 +50,18 @@ function playlistAction(selected: TrackResponse[], opts: SelectionActionOptions)
   };
 }
 
+function removeDownloads(trackIds: TrackId[], opts: SelectionActionOptions): void {
+  void opts.offline.unpinMany(trackIds).then((batch) => reportUnpinBatch(opts.showFailure, batch));
+}
+
+function addDownloads(trackIds: TrackId[], opts: SelectionActionOptions): void {
+  void opts.offline.pinMany(trackIds).then((batch) => reportPinBatch(opts.showFailure, batch));
+}
+
 function pressOffline(eligibility: OfflineEligibility, opts: SelectionActionOptions): void {
   const { downloadableIds, allPinned } = eligibility;
-  if (allPinned) void opts.offline.unpinMany(downloadableIds).then(reportUnpinBatch);
-  else void opts.offline.pinMany(downloadableIds).then(reportPinBatch);
+  if (allPinned) removeDownloads(downloadableIds, opts);
+  else addDownloads(downloadableIds, opts);
   opts.onDone();
 }
 
@@ -206,6 +216,7 @@ function selectionActionOptions(deps: SelectionActionDeps, tracks: TrackResponse
     onAddToPlaylist: deps.openBulkSheet,
     onDone: deps.selection.clear,
     danger: removeSelectedAction(deps.selection, tracks, deps.opts.selectionDanger),
+    showFailure: deps.opts.showFailure,
   };
 }
 

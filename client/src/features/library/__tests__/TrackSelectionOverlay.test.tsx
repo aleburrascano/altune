@@ -55,6 +55,7 @@ function Harness({
     onViewDetails: jest.fn(),
     trackDanger: () => ({ label: 'Remove', onPress: jest.fn() }),
     selectionDanger: { label: 'Remove', onRemove },
+    showFailure: jest.fn(),
   });
   useEffect(() => expose(current));
   return (

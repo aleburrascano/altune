@@ -7,10 +7,11 @@ import {
   failureLogFields,
   libraryFailureAlert,
   classifyLibraryError,
+  type LibraryWarn,
 } from '@features/library/domain/libraryFailure';
 import { showFailureAlert, type FailureAlert } from '@shared/ui';
 import { detailHref, useNavigator, type Navigator } from '@shared/navigation';
-import type { LibraryPort, LibraryWarn } from '@features/library/ports/libraryPort';
+import type { LibraryPort } from '@features/library/ports/libraryPort';
 import type { FeaturingDetailRoute } from '@features/library/domain/libraryRoutes';
 
 const DIGITS = /^[0-9]+$/;

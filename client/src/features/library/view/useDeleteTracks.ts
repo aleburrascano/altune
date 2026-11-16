@@ -15,7 +15,7 @@ import {
 import { usePinnedStore } from '@shared/offline';
 import { currentSessionEpoch, isSameSession, guardedMutationOptions } from '@shared/session';
 import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
-import type { LibraryPort, LibraryWarn } from '@features/library/ports/libraryPort';
+import type { LibraryPort } from '@features/library/ports/libraryPort';
 import {
   logTrackMutationFailure,
   failureLogFields,
@@ -23,6 +23,7 @@ import {
   classifyLibraryError,
   failureTail,
   type LibraryFailure,
+  type LibraryWarn,
 } from '@features/library/domain/libraryFailure';
 import { patchTrackStatus, useTrackStatusStore, type TrackStatus } from '@shared/acquisition';
 

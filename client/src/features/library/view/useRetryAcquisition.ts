@@ -20,13 +20,14 @@ import { forgetTrack, getTrackFromCaches, patchTrackInCaches } from '@shared/eve
 import { showFailureAlert, type FailureAlert } from '@shared/ui';
 import { guardedMutationOptions } from '@shared/session';
 import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
-import type { LibraryPort, LibraryWarn } from '@features/library/ports/libraryPort';
+import type { LibraryPort } from '@features/library/ports/libraryPort';
 import {
   trackNotFoundAlert,
   logTrackMutationFailure,
   libraryFailureAlert,
   classifyLibraryError,
   type LibraryFailure,
+  type LibraryWarn,
 } from '@features/library/domain/libraryFailure';
 import {
   recordRetryRequest,

@@ -1,5 +1,5 @@
 import type { PlaylistId, TrackId, TrackResponse } from '@shared/catalog';
-import { countLabel, confirmDestructive } from '@shared/ui';
+import { countLabel, confirmDestructive, showFailureAlert } from '@shared/ui';
 import type { useQueuePlayback } from '@shared/playback';
 import { useRemoveTracksFromPlaylist } from '@shared/playlists';
 import type { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
@@ -65,5 +65,6 @@ export function usePlaylistTrackRemoval(args: PlaylistTrackRemovalArgs): TrackSe
     onViewDetails: args.navigateToTrack,
     trackDanger: trackDanger(removeMut),
     selectionDanger: selectionDanger(args.playlist.name, removeMut),
+    showFailure: showFailureAlert,
   });
 }

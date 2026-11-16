@@ -1,5 +1,5 @@
 import type { TrackId, TrackResponse } from '@shared/catalog';
-import { countLabel, confirmDestructive } from '@shared/ui';
+import { countLabel, confirmDestructive, showFailureAlert } from '@shared/ui';
 import type { useQueuePlayback } from '@shared/playback';
 import { useDeleteTrack, useDeleteTracks } from '@features/library/view/useDeleteTracks';
 import type { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
@@ -52,6 +52,7 @@ export function useLibraryTrackSelection(deps: Deps): TrackSelectionController {
     queue,
     onViewDetails: navigation.navigateToTrack,
     onAddTrackToPlaylist: (track) => pl.setAddToPlaylistTrack(track),
+    showFailure: showFailureAlert,
     ...useRemovalDanger(),
   });
 }

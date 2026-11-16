@@ -8,7 +8,8 @@ import {
   type PinnedStatus,
   type UnpinBatchResult,
 } from '@shared/offline';
-import { showFailureAlert } from '@shared/ui';
+import type { FailureAlert } from '@shared/ui';
+import type { ShowFailure } from '@features/library/domain/libraryFailure';
 
 export type LibraryOffline = {
   supported: boolean;
@@ -50,27 +51,35 @@ export function offlineEligibility(
   return { downloadableIds, pinnedCount, allPinned };
 }
 
-export function reportPinBatch({ requested, failed, refused }: PinBatchResult): void {
-  if (refused === 'storage-full') return reportStorageFull();
-  if (failed === 0) return;
-  showFailureAlert({
+function pinBatchFailedAlert({ requested, failed }: PinBatchResult): FailureAlert {
+  return {
     surface: 'library.pin_batch',
     title: 'Some downloads failed',
     message: `${failed} of ${requested} downloads failed. Retry them from each track's menu.`,
-  });
+  };
 }
 
-export function reportUnpinBatch({ requested, failed }: UnpinBatchResult): void {
-  if (failed === 0) return;
-  showFailureAlert({
+export function reportPinBatch(showFailure: ShowFailure, batch: PinBatchResult): void {
+  if (batch.refused === 'storage-full') return reportStorageFull(showFailure);
+  if (batch.failed === 0) return;
+  showFailure(pinBatchFailedAlert(batch));
+}
+
+function unpinBatchFailedAlert({ requested, failed }: UnpinBatchResult): FailureAlert {
+  return {
     surface: 'library.unpin_batch',
     title: 'Some downloads remain',
     message: `${failed} of ${requested} downloads could not be removed. Try removing them again.`,
-  });
+  };
 }
 
-export function reportStorageFull(): void {
-  showFailureAlert({
+export function reportUnpinBatch(showFailure: ShowFailure, batch: UnpinBatchResult): void {
+  if (batch.failed === 0) return;
+  showFailure(unpinBatchFailedAlert(batch));
+}
+
+export function reportStorageFull(showFailure: ShowFailure): void {
+  showFailure({
     surface: 'library.storage_full',
     title: 'Not enough storage',
     message:

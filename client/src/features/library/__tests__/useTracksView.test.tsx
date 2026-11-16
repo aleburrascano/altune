@@ -7,7 +7,7 @@ import {
   waitForElementToBeRemoved,
 } from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';
-import { Alert, View } from 'react-native';
+import { View } from 'react-native';
 import { asTrackId } from '@shared/catalog';
 import type { TrackResponse } from '@shared/catalog';
 import type { ActiveView, LibraryPort } from '@features/library';
@@ -21,6 +21,11 @@ import {
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 
 const noop = () => undefined;
+const showFailure = jest.fn();
+
+beforeEach(() => {
+  showFailure.mockReset();
+});
 
 function spiedPort(tracks: TrackResponse[]) {
   const memory = createMemoryLibraryPort({ tracks });
@@ -55,6 +60,7 @@ function TracksScreen({ queue = {} }: TracksScreenProps): ReactElement {
     retryMutation: { isInFlight: () => false } as never,
     onTrackPress: noop,
     onTrackMore: noop,
+    showFailure,
   });
   return <Screen view={view} />;
 }
@@ -153,7 +159,6 @@ describe('whole-library play and shuffle', () => {
 
   it('tells the user only the loaded tracks play when the whole-library fetch fails', async () => {
     const shuffleFromList = jest.fn();
-    const alert = jest.spyOn(Alert, 'alert').mockImplementation(noop);
     const port = spiedPort(library(['a', 'b']));
     port.getAllTracks.mockRejectedValue(new Error('offline'));
     const client = renderTracks(port, { shuffleFromList });
@@ -162,13 +167,17 @@ describe('whole-library play and shuffle', () => {
     fireEvent.press(screen.getByTestId('library-shuffle-all'));
 
     await waitFor(() => expect(shuffleFromList).toHaveBeenCalledTimes(1));
-    expect(alert).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.stringContaining('Playing the 2 tracks loaded so far'),
-    );
+    expect(showFailure.mock.calls).toEqual([
+      [
+        {
+          surface: 'library.load_all',
+          title: 'Playing loaded tracks only',
+          message: expect.stringContaining('Playing the 2 tracks loaded so far'),
+        },
+      ],
+    ]);
     const [shuffled] = shuffleFromList.mock.calls[0] as [{ source: { trackId: string } }[]];
     expect(shuffled.map((t) => t.source.trackId).sort()).toEqual(['a', 'b']);
-    alert.mockRestore();
     client.clear();
   });
 
