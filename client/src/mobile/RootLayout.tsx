@@ -24,11 +24,7 @@ import {
 import { registerSearchStateSignOutReset } from '@features/discovery';
 import { useServerEvents, useScreenViews } from '@shared/events';
 import { startKillSwitchPolling } from '@shared/killSwitch';
-import {
-  followSignedInUser,
-  installGlobalErrorReporting,
-  reportOtaLaunchFailures,
-} from '@shared/telemetry';
+import { followSignedInUser, installGlobalErrorReporting } from '@shared/telemetry';
 import { PlaybackProvider, SleepTimerBridge, startPlaybackService } from '@features/player';
 import { OfflineReconcileBridge } from '@shared/offline';
 import {
@@ -42,6 +38,8 @@ import { AppChrome } from '@/mobile/frame/AppChrome';
 import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
 import { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
 import { PlaybackShortcuts, SystemNavigationBar } from '@/mobile/frame/platformExtras';
+import { reportOtaLaunchFailures } from '@/mobile/otaLaunchReport';
+import { chainUncaughtErrorHandler } from '@/mobile/uncaughtErrors';
 
 startPlaybackService();
 
@@ -50,7 +48,7 @@ registerSearchStateSignOutReset();
 void SplashScreen.preventAutoHideAsync();
 
 followSignedInUser();
-installGlobalErrorReporting();
+installGlobalErrorReporting(chainUncaughtErrorHandler);
 reportOtaLaunchFailures().catch((error: unknown) => {
   console.warn('[telemetry] reading update logs failed', error);
 });
