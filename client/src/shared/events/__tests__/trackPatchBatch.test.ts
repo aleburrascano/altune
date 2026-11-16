@@ -420,7 +420,7 @@ describe('a late REST response cannot regress a patch that landed mid-fetch', ()
     expect(client.getQueryCache().hasListeners()).toBe(false);
   });
 
-  it("lets another family's in-flight fetch land as the server sent it", async () => {
+  it('does not apply the library writer to a playlist detail fetch', async () => {
     const detailKey = playlistKeys.detail(asPlaylistId('p1'));
     const served = makePlaylistDetail('p1', [makeTrack({ id: asTrackId('x') })]);
     let release: (() => void) | undefined;
