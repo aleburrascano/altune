@@ -1,9 +1,14 @@
 import * as SecureStore from 'expo-secure-store';
 
+const { ensureAppAuthClient } = require('./appAuthClient.js') as {
+  ensureAppAuthClient: () => void;
+};
+
 const SESSION_SECONDS = 3600;
 const MS_PER_SECOND = 1000;
 
 export async function signInTestUser(): Promise<void> {
+  ensureAppAuthClient();
   const session = {
     access_token: 'tok',
     refresh_token: 'refresh',

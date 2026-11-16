@@ -5,7 +5,7 @@ import { Text } from 'react-native';
 import type { ReactNode } from 'react';
 import { act, renderRouter, screen } from 'expo-router/testing-library';
 
-import { supabase } from '@shared/auth/supabaseClient';
+import { supabase } from '@shared/auth';
 
 import { AuthGate } from '@features/signIn/ui/AuthGate';
 import { useAuthDeepLink } from '@features/signIn/hooks/useAuthDeepLink';

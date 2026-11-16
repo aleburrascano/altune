@@ -13,6 +13,9 @@ import {
   drainPendingCommands,
   reloadWidget,
 } from '@modules/altune-widget';
+import { fakeAuthClient } from '@testing/fakeAuthClient';
+
+type LooseAuth = { getSession: () => Promise<unknown> };
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 jest.mock('@modules/altune-widget', () => ({
@@ -122,8 +125,9 @@ describe('startWidgetCommands', () => {
     let reload!: jest.Mock;
     let send!: (command: string) => void;
     jest.isolateModules(() => {
-      const client = jest.requireActual('@shared/auth/supabaseClient');
-      jest.spyOn(client.supabase.auth, 'getSession').mockResolvedValue({
+      const client = fakeAuthClient();
+      jest.requireActual('@shared/auth').installAuthClient(client);
+      jest.spyOn(client.auth as LooseAuth, 'getSession').mockResolvedValue({
         data: { session: { user: { id: 'user-1' } } },
         error: null,
       });
@@ -207,8 +211,9 @@ function bootHeadless(
 ): HeadlessBoot {
   let boot!: HeadlessBoot;
   jest.isolateModules(() => {
-    const client = jest.requireActual('@shared/auth/supabaseClient');
-    jest.spyOn(client.supabase.auth, 'getSession').mockImplementation(getSession);
+    const client = fakeAuthClient();
+    jest.requireActual('@shared/auth').installAuthClient(client);
+    jest.spyOn(client.auth as LooseAuth, 'getSession').mockImplementation(getSession);
     const widget = jest.requireMock('@modules/altune-widget');
     const session = jest.requireActual('@shared/session/signOutCleanup');
     const queue = jest.requireActual('@shared/playback/queueStore');

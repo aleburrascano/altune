@@ -1,4 +1,4 @@
-import { supabase } from '@shared/auth/supabaseClient';
+import { supabase } from '@shared/auth/authActions';
 import { primeSignedInState } from '@shared/session';
 
 export async function primeSignedInUser(): Promise<void> {

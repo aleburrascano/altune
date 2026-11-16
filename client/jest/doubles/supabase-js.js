@@ -37,4 +37,8 @@ function createClient(_url, _key, options) {
   return { auth };
 }
 
-module.exports = { createClient };
+function emitAuthEvent(auth, event, session) {
+  return auth._notifyAllSubscribers(event, session);
+}
+
+module.exports = { createClient, emitAuthEvent };

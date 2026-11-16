@@ -31,8 +31,9 @@ import type * as PinnedStoreModule from '@shared/offline/state/pinnedStore';
 
 import { useSession } from '@shared/auth/useSession';
 import { useSignOut } from '@shared/auth/useSignOut';
-import { supabase } from '@shared/auth/supabaseClient';
-import type * as SupabaseClientModule from '@shared/auth/supabaseClient';
+import { installAuthClient, supabase } from '@shared/auth';
+import type * as AuthDoor from '@shared/auth';
+import { createAuthClient } from '@/mobile/authClient';
 import type * as UseSessionModule from '@shared/auth/useSession';
 import { asTrackId } from '@shared/catalog';
 
@@ -45,6 +46,14 @@ jest.mock('react-native/Libraries/AppState/AppState', () => ({
 }));
 
 const { __http } = require('@testing/doubles/fetch.js');
+const { ensureAppAuthClient } = require('@testing/appAuthClient.js') as {
+  ensureAppAuthClient: () => void;
+};
+
+function freshAppAuth(): typeof AuthDoor {
+  ensureAppAuthClient();
+  return require('@shared/auth') as typeof AuthDoor;
+}
 const { __fs: outboxFs } = require('expo-file-system') as { __fs: never };
 
 type AuthCallback = (event: string, session: Session | null) => void;
@@ -234,16 +243,14 @@ describe('session restore across process death', () => {
     beforeEach(() => {
       const { __secureStore } = require('expo-secure-store');
       __secureStore.reset();
-      delete require.cache[require.resolve('@shared/auth/supabaseClient')];
     });
 
     it('restores the previously written session after the app "restarts" — no re-authentication is asked of the user', async () => {
-      const first = require('@shared/auth/supabaseClient');
-      await first.supabase.auth.getSession();
-      await first.supabase.auth._saveSession(seedSession());
-      await first.supabase.auth.stopAutoRefresh();
+      const { setItemAsync } = require('expo-secure-store');
+      await setItemAsync('sb-fixture-auth-token', JSON.stringify(seedSession()));
 
-      delete require.cache[require.resolve('@shared/auth/supabaseClient')];
+      const restarted = createAuthClient();
+      installAuthClient(restarted);
 
       const { useSession } = require('@shared/auth/useSession');
       const queryClient = new QueryClient();
@@ -263,8 +270,7 @@ describe('session restore across process death', () => {
       });
 
       unmount();
-      const second = require('@shared/auth/supabaseClient');
-      await second.supabase.auth.stopAutoRefresh();
+      await restarted.auth.stopAutoRefresh();
     });
 
     it('a device with no previously written session comes back signed-out, not stuck loading', async () => {
@@ -279,8 +285,7 @@ describe('session restore across process death', () => {
       });
 
       unmount();
-      const client = require('@shared/auth/supabaseClient');
-      await client.supabase.auth.stopAutoRefresh();
+      await supabase.auth.stopAutoRefresh();
     });
   });
 });
@@ -782,7 +787,7 @@ describe('pinned downloads across a killed sign-out', () => {
 
   type App = {
     session: typeof UseSessionModule;
-    supabase: (typeof SupabaseClientModule)['supabase'];
+    supabase: (typeof AuthDoor)['supabase'];
     pinned: typeof PinnedStoreModule;
   };
 
@@ -810,7 +815,7 @@ describe('pinned downloads across a killed sign-out', () => {
     jest.doMock('@tanstack/react-query', () => ReactQuery);
     const app: App = {
       session: require('@shared/auth/useSession'),
-      supabase: (require('@shared/auth/supabaseClient') as typeof SupabaseClientModule).supabase,
+      supabase: freshAppAuth().supabase,
       pinned: require('@shared/offline/state/pinnedStore'),
     };
     app.pinned.provideOfflinePort(require('@testing/apiClientPorts').apiClientOfflinePort);

@@ -7,7 +7,7 @@ import { forgetPreviousUsersLocalData } from '@shared/auth/userLocalData';
 import { notifyIdentityChange } from '@shared/session';
 
 import { renewSessionCredentials } from '@shared/auth/sessionExpired';
-import { supabase } from '@shared/auth/supabaseClient';
+import { supabase } from '@shared/auth/authActions';
 import { isTestAuthEnabled, testAuthBootSettled } from '@shared/auth/testAuthBoot';
 
 export type SessionState =

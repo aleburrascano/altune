@@ -32,7 +32,7 @@ jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
   default: () => ({ width: mockWindowWidth, height: 900, scale: 2, fontScale: 1 }),
 }));
 
-const { supabase } = require('@shared/auth/supabaseClient');
+const { supabase } = require('@shared/auth');
 const RN = require('react-native');
 const NATIVE_OS: string = RN.Platform.OS;
 

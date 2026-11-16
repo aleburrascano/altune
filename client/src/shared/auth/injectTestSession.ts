@@ -1,7 +1,7 @@
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 import { isTestAuthEnabled } from '@shared/auth/testAuthBoot';
-import { supabase } from '@shared/auth/supabaseClient';
+import { supabase } from '@shared/auth/authActions';
 
 type SessionStore = {
   storageKey: string;

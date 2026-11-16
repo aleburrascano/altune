@@ -1,3 +1,4 @@
+export { asTrackId } from '@shared/catalog';
 export { offlineDownloadsSupported } from '@shared/offline/domain/offlineSupport';
 export {
   formatBytes,

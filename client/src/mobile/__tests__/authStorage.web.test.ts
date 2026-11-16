@@ -1,43 +1,14 @@
-import { createElement, useEffect, useState } from 'react';
+import { createElement } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
-type StorageAdapter = {
-  getItem: (key: string) => Promise<string | null>;
-  setItem: (key: string, value: string) => Promise<void>;
-  removeItem: (key: string) => Promise<void>;
-};
+import { installAuthClient, useSession } from '@shared/auth';
+import { createAuthClient, createWebAuthStorage } from '@/mobile';
+import type { AuthClientParts } from '@/mobile';
 
-type SecureStoreDouble = {
-  AFTER_FIRST_UNLOCK: string;
-  getItemAsync: (...args: unknown[]) => Promise<string | null>;
-  setItemAsync: (...args: unknown[]) => Promise<void>;
-  deleteItemAsync: (...args: unknown[]) => Promise<void>;
-  __secureStore: {
-    reset(): void;
-    seed(key: string, value: string): void;
-    read(key: string): string | undefined;
-    keys(): string[];
-    failNext(operation: 'get' | 'set' | 'delete' | 'unavailable', error?: Error): void;
-  };
-};
+const { __secureStore } = require('expo-secure-store') as { __secureStore: { keys(): string[] } };
 
-type CapturedAuthOptions = {
-  auth: {
-    storage: StorageAdapter;
-    persistSession: boolean;
-    autoRefreshToken: boolean;
-    detectSessionInUrl: boolean;
-  };
-};
-let capturedOptions: CapturedAuthOptions | undefined;
-
-jest.mock('@supabase/supabase-js', () => ({
-  createClient: (_url: string, _key: string, options: CapturedAuthOptions): { __fake: true } => {
-    capturedOptions = options;
-    return { __fake: true };
-  },
-}));
+const FIXTURE = { url: 'https://fixture.supabase.co', anonKey: 'fixture-anon-key' };
 
 function installWorkingLocalStorage(backing: Map<string, string> = new Map()): Map<string, string> {
   Object.defineProperty(window, 'localStorage', {
@@ -63,54 +34,38 @@ beforeEach(() => {
 
 afterEach(() => {
   installWorkingLocalStorage();
-  jest.resetModules();
-  remockCreateClient();
 });
+
+type WebStorageScenario = { storage: AuthClientParts['storage']; backing: Map<string, string> };
 
 function webStorageUnder(
   scenario: 'with-local-storage' | 'no-window' | 'no-local-storage',
   existingBacking: Map<string, string> = new Map(),
-): {
-  storage: StorageAdapter;
-  backing: Map<string, string>;
-  SecureStore: SecureStoreDouble;
-} {
-  capturedOptions = undefined;
-  let SecureStore: SecureStoreDouble | undefined;
-  let backing = new Map<string, string>();
+): WebStorageScenario {
+  if (scenario === 'no-window') {
+    const globalWithWindow = global as unknown as { window?: unknown };
+    const originalWindow = globalWithWindow.window;
+    delete globalWithWindow.window;
+    const storage = createWebAuthStorage();
+    globalWithWindow.window = originalWindow;
+    return { storage, backing: installWorkingLocalStorage() };
+  }
+  if (scenario === 'no-local-storage') {
+    Object.defineProperty(window, 'localStorage', {
+      value: undefined,
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    });
+    const storage = createWebAuthStorage();
+    return { storage, backing: installWorkingLocalStorage() };
+  }
+  const backing = installWorkingLocalStorage(existingBacking);
+  return { storage: createWebAuthStorage(), backing };
+}
 
-  jest.isolateModules(() => {
-    SecureStore = require('expo-secure-store') as SecureStoreDouble;
-    SecureStore.__secureStore.reset();
-
-    if (scenario === 'no-window') {
-      const globalWithWindow = global as unknown as { window?: unknown };
-      const originalWindow = globalWithWindow.window;
-      delete globalWithWindow.window;
-      require('@shared/auth/supabaseClient');
-      globalWithWindow.window = originalWindow;
-      backing = installWorkingLocalStorage();
-      return;
-    }
-    if (scenario === 'no-local-storage') {
-      Object.defineProperty(window, 'localStorage', {
-        value: undefined,
-        writable: true,
-        configurable: true,
-        enumerable: true,
-      });
-      require('@shared/auth/supabaseClient');
-      backing = installWorkingLocalStorage();
-      return;
-    }
-    backing = installWorkingLocalStorage(existingBacking);
-    require('@shared/auth/supabaseClient');
-  });
-
-  const options = capturedOptions as CapturedAuthOptions | undefined;
-  if (!options || !SecureStore)
-    throw new Error('createClient was never called — construction did not happen');
-  return { storage: options.auth.storage, backing, SecureStore };
+function clientOver(storage: AuthClientParts['storage']) {
+  return createAuthClient(FIXTURE, { storage, fetch: () => new Promise(() => undefined) });
 }
 
 const TOKEN_SHAPED_SESSION = JSON.stringify({
@@ -175,7 +130,7 @@ describe('webStorage adapter — the session is kept in window.localStorage so i
     await expect(storage.getItem('sb-auth-token')).resolves.toBeNull();
   });
 
-  it('survives a page reload — a fresh module instance still reads the session written before reload', async () => {
+  it('survives a page reload — a fresh storage still reads the session written before reload', async () => {
     const sameBrowserProfile = new Map<string, string>();
     const first = webStorageUnder('with-local-storage', sameBrowserProfile);
     await first.storage.setItem('sb-auth-token', TOKEN_SHAPED_SESSION);
@@ -186,11 +141,11 @@ describe('webStorage adapter — the session is kept in window.localStorage so i
   });
 
   it('never routes web session writes through the native keychain adapter', async () => {
-    const { storage, SecureStore } = webStorageUnder('with-local-storage');
+    const { storage } = webStorageUnder('with-local-storage');
 
     await storage.setItem('sb-auth-token', TOKEN_SHAPED_SESSION);
 
-    expect(SecureStore.__secureStore.keys()).toEqual([]);
+    expect(__secureStore.keys()).toEqual([]);
   });
 });
 
@@ -201,29 +156,19 @@ describe('webStorage — a static web prerender in Node has no window.localStora
   ] as const)(
     '%s: installs the in-memory adapter and persists nothing to disk',
     async (_label, scenario) => {
-      const { storage, backing, SecureStore } = webStorageUnder(scenario);
+      const { storage, backing } = webStorageUnder(scenario);
 
       await expect(storage.setItem('sb-auth-token', 'value')).resolves.toBeUndefined();
       await expect(storage.getItem('sb-auth-token')).resolves.toBe('value');
       await expect(storage.removeItem('sb-auth-token')).resolves.toBeUndefined();
       await expect(storage.getItem('sb-auth-token')).resolves.toBeNull();
       expect(backing.size).toBe(0);
-      expect(SecureStore.__secureStore.keys()).toEqual([]);
+      expect(__secureStore.keys()).toEqual([]);
     },
   );
 });
 
 describe('webStorage adapter — the session survives a page reload (localStorage-backed)', () => {
-  it('a session written before a simulated reload is readable by a freshly constructed client afterwards', async () => {
-    const sameBrowserProfile = new Map<string, string>();
-    const beforeReload = webStorageUnder('with-local-storage', sameBrowserProfile);
-    await beforeReload.storage.setItem('sb-auth-token', TOKEN_SHAPED_SESSION);
-
-    const afterReload = webStorageUnder('with-local-storage', sameBrowserProfile);
-
-    await expect(afterReload.storage.getItem('sb-auth-token')).resolves.toBe(TOKEN_SHAPED_SESSION);
-  });
-
   it('a localStorage call that throws after construction (private-mode write, quota exceeded) degrades to a no-op rather than crashing', async () => {
     const { storage, backing } = webStorageUnder('with-local-storage');
     const realSetItem = window.localStorage.setItem.bind(window.localStorage);
@@ -263,111 +208,8 @@ describe('webStorage adapter — the session survives a page reload (localStorag
   });
 });
 
-describe('clearPersistedAuthSession() — the sign-out guarantee independent of the network call', () => {
-  it('removes the persisted auth session key from localStorage on web', async () => {
-    const sameBrowserProfile = new Map<string, string>([
-      ['sb-fixture-auth-token', TOKEN_SHAPED_SESSION],
-    ]);
-    let clearPersistedAuthSession: (() => Promise<void>) | undefined;
-
-    jest.isolateModules(() => {
-      installWorkingLocalStorage(sameBrowserProfile);
-      ({ clearPersistedAuthSession } = require('@shared/auth/supabaseClient') as {
-        clearPersistedAuthSession: () => Promise<void>;
-      });
-    });
-
-    await clearPersistedAuthSession!();
-
-    expect(sameBrowserProfile.has('sb-fixture-auth-token')).toBe(false);
-  });
-});
-
-describe('the wired real client — a session written by sign-in is readable after a simulated reload (Done when #1)', () => {
-  it('a session seeded in localStorage before construction is returned by the real supabase-js client, and useSession reports signed in', async () => {
-    const persistedSession = {
-      access_token: 'access-token',
-      refresh_token: 'refresh-token',
-      expires_at: Math.floor(Date.now() / 1000) + 3600,
-      expires_in: 3600,
-      token_type: 'bearer',
-      user: { id: 'user-1' },
-    };
-    const sameBrowserProfile = new Map<string, string>([
-      ['sb-fixture-auth-token', JSON.stringify(persistedSession)],
-    ]);
-
-    let realSupabase: { auth: { getSession: () => Promise<{ data: { session: unknown } }> } };
-    let useRealSession: () => { status: string };
-
-    jest.isolateModules(() => {
-      jest.unmock('@supabase/supabase-js');
-      installWorkingLocalStorage(sameBrowserProfile);
-      ({ supabase: realSupabase } =
-        require('@shared/auth/supabaseClient') as typeof realSupabase extends never
-          ? never
-          : { supabase: typeof realSupabase });
-      ({ useSession: useRealSession } = require('@shared/auth/useSession') as {
-        useSession: typeof useRealSession;
-      });
-    });
-
-    const isolatedSupabase = realSupabase!;
-    useRealSession = function useSessionRestoredFromRealClient(): { status: string } {
-      const [state, setState] = useState<{ status: string }>({ status: 'loading' });
-      useEffect(() => {
-        let active = true;
-        isolatedSupabase.auth.getSession().then((result) => {
-          if (!active) return;
-          const session = (result as { data: { session: unknown } }).data.session;
-          setState(session ? { status: 'signed-in' } : { status: 'signed-out' });
-        });
-        return () => {
-          active = false;
-        };
-      }, []);
-      return state;
-    };
-
-    await expect(realSupabase!.auth.getSession()).resolves.toMatchObject({
-      data: { session: { access_token: 'access-token', user: { id: 'user-1' } } },
-    });
-
-    const queryClient = new QueryClient();
-    const { result } = renderHook(() => useRealSession(), {
-      wrapper: ({ children }) =>
-        createElement(QueryClientProvider, { client: queryClient }, children),
-    });
-
-    await waitFor(() => {
-      expect(result.current).toMatchObject({ status: 'signed-in' });
-    });
-
-    jest.mock('@supabase/supabase-js', () => ({
-      createClient: (
-        _url: string,
-        _key: string,
-        options: CapturedAuthOptions,
-      ): { __fake: true } => {
-        capturedOptions = options;
-        return { __fake: true };
-      },
-    }));
-  });
-});
-
-function remockCreateClient(): void {
-  jest.doMock('@supabase/supabase-js', () => ({
-    createClient: (_url: string, _key: string, options: CapturedAuthOptions): { __fake: true } => {
-      capturedOptions = options;
-      return { __fake: true };
-    },
-  }));
-}
-
 describe('webStorage adapter — a localStorage method that throws (not the localStorage getter itself)', () => {
   it('a localStorage.getItem that throws degrades to null instead of crashing', async () => {
-    remockCreateClient();
     const { storage } = webStorageUnder('with-local-storage');
     Object.defineProperty(window.localStorage, 'getItem', {
       value: () => {
@@ -380,7 +222,6 @@ describe('webStorage adapter — a localStorage method that throws (not the loca
   });
 
   it('a localStorage.removeItem that throws is a no-op on disk but still clears the in-memory fallback', async () => {
-    remockCreateClient();
     const { storage, backing } = webStorageUnder('with-local-storage');
     const realSetItem = window.localStorage.setItem.bind(window.localStorage);
     Object.defineProperty(window.localStorage, 'setItem', {
@@ -409,7 +250,6 @@ describe('webStorage adapter — a localStorage method that throws (not the loca
   });
 
   it('window disappearing after construction (not just before it) still resolves reads through the in-memory fallback', async () => {
-    remockCreateClient();
     const { storage } = webStorageUnder('with-local-storage');
     const globalWithWindow = global as unknown as { window?: unknown };
     const originalWindow = globalWithWindow.window;
@@ -418,5 +258,67 @@ describe('webStorage adapter — a localStorage method that throws (not the loca
     await expect(storage.getItem('sb-auth-token')).resolves.toBeNull();
 
     globalWithWindow.window = originalWindow;
+  });
+});
+
+describe('clearPersistedSession() — the sign-out guarantee independent of the network call', () => {
+  it('removes the persisted auth session key from localStorage on web', async () => {
+    const sameBrowserProfile = new Map<string, string>();
+    const { storage } = webStorageUnder('with-local-storage', sameBrowserProfile);
+    const client = clientOver(storage);
+    await client.auth.getSession();
+    sameBrowserProfile.set('sb-fixture-auth-token', TOKEN_SHAPED_SESSION);
+
+    await client.clearPersistedSession();
+
+    expect(sameBrowserProfile.has('sb-fixture-auth-token')).toBe(false);
+  });
+
+  it('mh04: keeps a signed-in user signed in across a reload, and leaves no Supabase session in localStorage after sign-out', async () => {
+    const sameBrowserProfile = new Map<string, string>();
+    await webStorageUnder('with-local-storage', sameBrowserProfile).storage.setItem(
+      'sb-fixture-auth-token',
+      TOKEN_SHAPED_SESSION,
+    );
+    expect(sameBrowserProfile.get('sb-fixture-auth-token')).toBe(TOKEN_SHAPED_SESSION);
+
+    const reloaded = webStorageUnder('with-local-storage', sameBrowserProfile).storage;
+    await expect(reloaded.getItem('sb-fixture-auth-token')).resolves.toBe(TOKEN_SHAPED_SESSION);
+
+    await clientOver(reloaded).clearPersistedSession();
+
+    expect(sameBrowserProfile.has('sb-fixture-auth-token')).toBe(false);
+  });
+});
+
+describe('the wired real client — a session written by sign-in is readable after a simulated reload (Done when #1)', () => {
+  it('a session seeded in localStorage before construction is returned by the real supabase-js client, and useSession reports signed in', async () => {
+    const persistedSession = {
+      access_token: 'access-token',
+      refresh_token: 'refresh-token',
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      expires_in: 3600,
+      token_type: 'bearer',
+      user: { id: 'user-1' },
+    };
+    const sameBrowserProfile = new Map<string, string>([
+      ['sb-fixture-auth-token', JSON.stringify(persistedSession)],
+    ]);
+    const client = clientOver(webStorageUnder('with-local-storage', sameBrowserProfile).storage);
+
+    await expect(client.auth.getSession()).resolves.toMatchObject({
+      data: { session: { access_token: 'access-token', user: { id: 'user-1' } } },
+    });
+
+    installAuthClient(client);
+    const queryClient = new QueryClient();
+    const { result } = renderHook(() => useSession(), {
+      wrapper: ({ children }) =>
+        createElement(QueryClientProvider, { client: queryClient }, children),
+    });
+
+    await waitFor(() => {
+      expect(result.current).toMatchObject({ status: 'signed-in' });
+    });
   });
 });

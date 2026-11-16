@@ -1,7 +1,7 @@
 const { getConfig } = require('@testing-library/react-native/build/config');
 
 const { __http } = require('../doubles/fetch.js');
-const { supabase } = require('../../src/shared/auth/supabaseClient');
+const { supabase } = require('../../src/shared/auth');
 
 beforeEach(() => {
   jest.spyOn(supabase.auth, 'getSession').mockResolvedValue({
@@ -12,6 +12,10 @@ beforeEach(() => {
 });
 
 describe('setup-after-env', () => {
+  it('installs the app auth client, so code that reads the session has one', () => {
+    expect(supabase.auth.storageKey).toBe('sb-fixture-auth-token');
+  });
+
   it('raises the RNTL asyncUtilTimeout so waitFor tolerates a loaded machine', () => {
     expect(getConfig().asyncUtilTimeout).toBe(5000);
   });
