@@ -1,24 +1,26 @@
-package eval
+package eval_test
 
 import (
+	"altune/go-api/internal/discovery"
 	"context"
 	"testing"
 )
 
 type fakeDetailSvc struct {
-	albums []DetailItem
-	tracks []DetailItem
+	albums []discovery.DetailItem
+	tracks []discovery.DetailItem
 }
 
-func (f fakeDetailSvc) Albums(context.Context, string, string, string) []DetailItem {
+func (f fakeDetailSvc) Albums(context.Context, string, string, string) []discovery.DetailItem {
 	return f.albums
 }
-func (f fakeDetailSvc) TopTracks(context.Context, string, string, string) []DetailItem {
+
+func (f fakeDetailSvc) TopTracks(context.Context, string, string, string) []discovery.DetailItem {
 	return f.tracks
 }
 
 func TestRunDetailEval_scores(t *testing.T) {
-	goldens := []DetailGolden{{
+	goldens := []discovery.DetailGolden{{
 		Name:              "X",
 		SeedProvider:      "deezer",
 		SeedID:            "1",
@@ -28,17 +30,17 @@ func TestRunDetailEval_scores(t *testing.T) {
 		ForbiddenTitles:   []string{"soul song"},
 	}}
 	svc := fakeDetailSvc{
-		albums: []DetailItem{
+		albums: []discovery.DetailItem{
 			{Title: "Real Album (Deluxe)", Sources: []string{"spotify"}, HasArtwork: true, Year: 2020},
 			{Title: "Wrong One", Sources: []string{"deezer"}, HasArtwork: true, Year: 2019},
 		},
-		tracks: []DetailItem{
+		tracks: []discovery.DetailItem{
 			{Title: "Real Track", Sources: []string{"spotify"}},
 			{Title: "Soul Song", Sources: []string{"applemusic"}},
 		},
 	}
 
-	rep := RunDetailEval(context.Background(), goldens, svc)
+	rep := discovery.RunDetailEval(context.Background(), goldens, svc)
 
 	if rep.ContaminationCount != 2 {
 		t.Errorf("contamination = %d, want 2 (deezer-sourced album + forbidden-title track)", rep.ContaminationCount)
@@ -58,13 +60,13 @@ func TestRunDetailEval_scores(t *testing.T) {
 }
 
 func TestRunDetailEval_controlExcludedFromRecall(t *testing.T) {
-	goldens := []DetailGolden{
+	goldens := []discovery.DetailGolden{
 		{Name: "scored", SeedProvider: "deezer", SeedID: "1", ExpectedAlbums: []string{"a"}},
 		{Name: "control", SeedProvider: "deezer", SeedID: "2"},
 	}
-	svc := fakeDetailSvc{albums: []DetailItem{{Title: "B", HasArtwork: true, Year: 2021}}}
+	svc := fakeDetailSvc{albums: []discovery.DetailItem{{Title: "B", HasArtwork: true, Year: 2021}}}
 
-	rep := RunDetailEval(context.Background(), goldens, svc)
+	rep := discovery.RunDetailEval(context.Background(), goldens, svc)
 
 	if rep.AlbumRecall != 0 {
 		t.Errorf("album_recall = %.2f, want 0 (only the scored golden counts; the control's empty-expected 1.0 is excluded)", rep.AlbumRecall)
@@ -72,7 +74,7 @@ func TestRunDetailEval_controlExcludedFromRecall(t *testing.T) {
 }
 
 func TestDetailReport_MetricsDirections(t *testing.T) {
-	r := DetailReport{ContaminationCount: 2, AlbumRecall: 0.9, TrackRecall: 0.8, MetadataCoverage: 0.7}
+	r := discovery.DetailReport{ContaminationCount: 2, AlbumRecall: 0.9, TrackRecall: 0.8, MetadataCoverage: 0.7}
 	m := metricByName(t, r.Metrics())
 	if got := m["detail.contamination"]; got.Value != 2 || got.HigherIsBetter {
 		t.Errorf("contamination = %+v, want 2 lower-is-better", got)
@@ -89,7 +91,7 @@ func TestDetailReport_MetricsDirections(t *testing.T) {
 }
 
 func TestRunDetailEval_EmptyGoldens(t *testing.T) {
-	rep := RunDetailEval(context.Background(), nil, fakeDetailSvc{})
+	rep := discovery.RunDetailEval(context.Background(), nil, fakeDetailSvc{})
 	if rep.Goldens != 0 || rep.AlbumRecall != 0 || rep.TrackRecall != 0 || rep.MetadataCoverage != 0 {
 		t.Errorf("empty run must report zeros, got %+v", rep)
 	}
@@ -99,10 +101,10 @@ func TestRunDetailEval_EmptyGoldens(t *testing.T) {
 }
 
 func TestRunDetailEval_NoAlbumsExcludedFromCoverage(t *testing.T) {
-	goldens := []DetailGolden{
+	goldens := []discovery.DetailGolden{
 		{Name: "empty", SeedProvider: "deezer", SeedID: "1"},
 	}
-	rep := RunDetailEval(context.Background(), goldens, fakeDetailSvc{})
+	rep := discovery.RunDetailEval(context.Background(), goldens, fakeDetailSvc{})
 	if rep.MetadataCoverage != 0 {
 		t.Errorf("coverage = %v, want 0 (nothing measured)", rep.MetadataCoverage)
 	}

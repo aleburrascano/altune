@@ -49,3 +49,19 @@ const (
 	VocabKindArtist          = domain.VocabKindArtist
 	VocabKindTrack           = domain.VocabKindTrack
 )
+
+type (
+	AudioLink          = domain.AudioLink
+	GeniusSongDetail   = domain.GeniusSongDetail
+	ProviderStatus     = domain.ProviderStatus
+	SearchHistoryEntry = domain.SearchHistoryEntry
+	UnreleasedVersion  = domain.UnreleasedVersion
+)
+
+const (
+	ConfidenceLow       = domain.ConfidenceLow
+	ProviderStatusError = domain.ProviderStatusError
+	ProviderStatusOK    = domain.ProviderStatusOK
+	ProviderTheAudioDB  = domain.ProviderTheAudioDB
+	ResultKindPlaylist  = domain.ResultKindPlaylist
+)

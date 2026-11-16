@@ -1,12 +1,13 @@
-package eval
+package eval_test
 
 import (
+	"altune/go-api/internal/discovery"
 	"testing"
 )
 
-func metricByName(t *testing.T, metrics []NamedMetric) map[string]NamedMetric {
+func metricByName(t *testing.T, metrics []discovery.NamedMetric) map[string]discovery.NamedMetric {
 	t.Helper()
-	out := make(map[string]NamedMetric, len(metrics))
+	out := make(map[string]discovery.NamedMetric, len(metrics))
 	for _, m := range metrics {
 		out[m.Name] = m
 	}
@@ -14,7 +15,7 @@ func metricByName(t *testing.T, metrics []NamedMetric) map[string]NamedMetric {
 }
 
 func TestEvalReport_MetricsCorpusPrefix(t *testing.T) {
-	plain := EvalReport{Evaluated: 4, Top1Passed: 1, TopKPassed: 2}
+	plain := discovery.EvalReport{Evaluated: 4, Top1Passed: 1, TopKPassed: 2}
 	m := metricByName(t, plain.Metrics())
 	if got := m["eval.top1_rate"]; got.Value != 0.25 || !got.HigherIsBetter {
 		t.Errorf("eval.top1_rate = %+v, want 0.25 higher-is-better", got)
@@ -23,7 +24,7 @@ func TestEvalReport_MetricsCorpusPrefix(t *testing.T) {
 		t.Errorf("eval.topk_rate = %+v, want 0.5", got)
 	}
 
-	hard := EvalReport{Corpus: "hard", Evaluated: 2, Top1Passed: 1, TopKPassed: 1}
+	hard := discovery.EvalReport{Corpus: "hard", Evaluated: 2, Top1Passed: 1, TopKPassed: 1}
 	hm := metricByName(t, hard.Metrics())
 	if _, ok := hm["eval.hard_top1_rate"]; !ok {
 		t.Errorf("hard corpus must produce distinct gate names, got %v", hm)
@@ -31,7 +32,7 @@ func TestEvalReport_MetricsCorpusPrefix(t *testing.T) {
 }
 
 func TestEvalReport_ZeroEvaluatedRates(t *testing.T) {
-	var r EvalReport
+	var r discovery.EvalReport
 	if r.Top1Rate() != 0 || r.TopKRate() != 0 {
 		t.Error("zero-evaluated report must yield 0 rates")
 	}
@@ -42,13 +43,13 @@ func TestEvalReport_ZeroEvaluatedRates(t *testing.T) {
 }
 
 func TestEvalReport_Failures(t *testing.T) {
-	top := &ResultSummary{Kind: "album", Title: "X", Subtitle: "Y"}
-	r := EvalReport{Results: []EvalResult{
-		{Query: "good one", Outcome: EvalPass},
-		{Query: "skipped", Outcome: EvalSkipped},
-		{Query: "ghost", Outcome: EvalFailNoResults},
-		{Query: "erred", Outcome: EvalFailNoResults, Error: "boom"},
-		{Query: "usurped", Outcome: EvalFailWrongTop, Top: top},
+	top := &discovery.ResultSummary{Kind: "album", Title: "X", Subtitle: "Y"}
+	r := discovery.EvalReport{Results: []discovery.EvalResult{
+		{Query: "good one", Outcome: discovery.EvalPass},
+		{Query: "skipped", Outcome: discovery.EvalSkipped},
+		{Query: "ghost", Outcome: discovery.EvalFailNoResults},
+		{Query: "erred", Outcome: discovery.EvalFailNoResults, Error: "boom"},
+		{Query: "usurped", Outcome: discovery.EvalFailWrongTop, Top: top},
 	}}
 	fails := r.Failures()
 	if len(fails) != 3 {
@@ -69,9 +70,9 @@ func TestEvalReport_Failures(t *testing.T) {
 }
 
 func TestCoverageReportA_MetricsAndFailures(t *testing.T) {
-	r := &CoverageReportA{
-		Strong:    []CoverageGap{{QueryNorm: "obscure band", Count: 7}},
-		Abandoned: []CoverageGap{{QueryNorm: "gave up", Count: 3}, {QueryNorm: "again", Count: 2}},
+	r := &discovery.CoverageReportA{
+		Strong:    []discovery.CoverageGap{{QueryNorm: "obscure band", Count: 7}},
+		Abandoned: []discovery.CoverageGap{{QueryNorm: "gave up", Count: 3}, {QueryNorm: "again", Count: 2}},
 	}
 	m := metricByName(t, r.Metrics())
 	if got := m["signal_a.strong_gaps"]; got.Value != 1 || got.HigherIsBetter {
@@ -94,12 +95,12 @@ func TestCoverageReportA_MetricsAndFailures(t *testing.T) {
 }
 
 func TestCoverageReportB_MetricsAndFailures(t *testing.T) {
-	empty := &CoverageReportB{}
+	empty := &discovery.CoverageReportB{}
 	if got := empty.Metrics()[0].Value; got != 0 {
 		t.Errorf("empty report mean gap = %v, want 0 (no division by zero)", got)
 	}
 
-	r := &CoverageReportB{ProviderGaps: []ProviderGap{
+	r := &discovery.CoverageReportB{ProviderGaps: []discovery.ProviderGap{
 		{Provider: "deezer", Missing: 1, Union: 10, GapPct: 0.10, Unique: 2},
 		{Provider: "itunes", Missing: 3, Union: 10, GapPct: 0.30, Unique: 0},
 	}}
@@ -117,14 +118,14 @@ func TestCoverageReportB_MetricsAndFailures(t *testing.T) {
 }
 
 func TestMergeReport_MetricsAndFailures(t *testing.T) {
-	r := MergeReport{
+	r := discovery.MergeReport{
 		ResultsSeen:         100,
 		UnderMergeIncidents: 5,
 		DistinctSeen:        50,
 		OverMerged:          1,
 		Evaluated:           10,
 		CleanQueries:        8,
-		Results: []MergeResult{
+		Results: []discovery.MergeResult{
 			{Query: "clean", UnderMergeIncidents: 0},
 			{Query: "dupey", UnderMergeIncidents: 2},
 		},
@@ -147,20 +148,20 @@ func TestMergeReport_MetricsAndFailures(t *testing.T) {
 }
 
 func TestMergeReport_ZeroDenominators(t *testing.T) {
-	var r MergeReport
+	var r discovery.MergeReport
 	if r.UnderMergeRate() != 0 || r.OverMergeRate() != 0 || r.CleanMergeRate() != 0 {
 		t.Error("zero-denominator rates must be 0")
 	}
 }
 
 func TestCorrectionReport_MetricsAndFailures(t *testing.T) {
-	r := CorrectionReport{
+	r := discovery.CorrectionReport{
 		Terms:       10,
 		Corrupted:   1,
 		TyposTested: 20,
 		Recovered:   15,
-		Corruptions: []FailureRecord{{Query: "valid", Reason: "corrupted_valid_query"}},
-		RecallMisses: []FailureRecord{
+		Corruptions: []discovery.FailureRecord{{Query: "valid", Reason: "corrupted_valid_query"}},
+		RecallMisses: []discovery.FailureRecord{
 			{Query: "tpyo", Reason: "not_recovered"},
 		},
 	}
@@ -178,20 +179,20 @@ func TestCorrectionReport_MetricsAndFailures(t *testing.T) {
 }
 
 func TestCorrectionReport_ZeroDenominators(t *testing.T) {
-	var r CorrectionReport
+	var r discovery.CorrectionReport
 	if r.RecallRate() != 0 || r.PrecisionRate() != 0 {
 		t.Error("zero-denominator rates must be 0")
 	}
 }
 
 func TestDiversityReport_MetricsAndFailures(t *testing.T) {
-	loss := FailureRecord{Query: "humble", Reason: "lost_to_reshape"}
-	r := DiversityReport{
+	loss := discovery.FailureRecord{Query: "humble", Reason: "lost_to_reshape"}
+	r := discovery.DiversityReport{
 		Evaluated:            10,
 		LostToReshape:        1,
 		ConcentrationWith:    0.2,
 		ConcentrationWithout: 0.5,
-		Losses:               []FailureRecord{loss},
+		Losses:               []discovery.FailureRecord{loss},
 	}
 	m := r.Metrics()[0]
 	if m.Name != "diversity.cost_rate" || m.Value != 0.1 || m.HigherIsBetter {
@@ -204,7 +205,7 @@ func TestDiversityReport_MetricsAndFailures(t *testing.T) {
 		t.Errorf("failures = %+v", fails)
 	}
 
-	hard := DiversityReport{Corpus: "hard"}
+	hard := discovery.DiversityReport{Corpus: "hard"}
 	if got := hard.Metrics()[0].Name; got != "diversity.hard_cost_rate" {
 		t.Errorf("hard corpus metric name = %q", got)
 	}

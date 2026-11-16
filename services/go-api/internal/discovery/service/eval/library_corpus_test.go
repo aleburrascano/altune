@@ -1,6 +1,7 @@
-package eval
+package eval_test
 
 import (
+	"altune/go-api/internal/discovery"
 	"os"
 	"path/filepath"
 	"slices"
@@ -8,7 +9,7 @@ import (
 )
 
 func TestNewLibraryCorpus_SortsForDeterminism(t *testing.T) {
-	corpus := NewLibraryCorpus("2026-07-25", []LibraryEntity{
+	corpus := discovery.NewLibraryCorpus("2026-07-25", []discovery.LibraryEntity{
 		{Title: "Zebra", Artist: "Beta"},
 		{Title: "Alpha", Artist: "Beta"},
 		{Title: "Anything", Artist: "Alpha"},
@@ -26,7 +27,7 @@ func TestNewLibraryCorpus_SortsForDeterminism(t *testing.T) {
 
 func TestLibraryCorpus_SaveLoadRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "corpus-library.json")
-	original := NewLibraryCorpus("2026-07-25", []LibraryEntity{
+	original := discovery.NewLibraryCorpus("2026-07-25", []discovery.LibraryEntity{
 		{Title: "Hello", Artist: "Adele"},
 		{Title: "Alright", Artist: "Kendrick Lamar"},
 	})
@@ -34,7 +35,7 @@ func TestLibraryCorpus_SaveLoadRoundTrip(t *testing.T) {
 	if err := original.Save(path); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	loaded, err := LoadLibraryCorpus(path)
+	loaded, err := discovery.LoadLibraryCorpus(path)
 	if err != nil {
 		t.Fatalf("LoadLibraryCorpus: %v", err)
 	}
@@ -51,13 +52,13 @@ func TestLoadLibraryCorpus_RejectsEmpty(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"generated_at":"x","entities":[]}`), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	if _, err := LoadLibraryCorpus(path); err == nil {
+	if _, err := discovery.LoadLibraryCorpus(path); err == nil {
 		t.Fatal("expected an error for an empty corpus, got nil")
 	}
 }
 
 func TestLibraryCorpus_ArtistsAndTermsAreDistinctAndSorted(t *testing.T) {
-	corpus := NewLibraryCorpus("2026-07-25", []LibraryEntity{
+	corpus := discovery.NewLibraryCorpus("2026-07-25", []discovery.LibraryEntity{
 		{Title: "Alright", Artist: "Kendrick Lamar"},
 		{Title: "DNA.", Artist: "Kendrick Lamar"},
 		{Title: "Hello", Artist: "Adele"},

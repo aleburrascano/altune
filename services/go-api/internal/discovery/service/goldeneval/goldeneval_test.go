@@ -1,7 +1,7 @@
-package goldeneval
+package goldeneval_test
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"context"
 	"errors"
 	"strings"
@@ -17,21 +17,21 @@ const (
 	nirvanaUK   = "9282c8b4-ca0b-4c6b-b7e3-4f7762dfc4d6"
 )
 
-func goldenTrackResult(title, isrc string) domain.SearchResult {
-	return domain.SearchResult{Kind: domain.ResultKindTrack, Title: title, Subtitle: "Queen", ISRC: isrc}
+func goldenTrackResult(title, isrc string) discovery.SearchResult {
+	return discovery.SearchResult{Kind: discovery.ResultKindTrack, Title: title, Subtitle: "Queen", ISRC: isrc}
 }
 
-func goldenAlbumResult(title, mbid string) domain.SearchResult {
-	return domain.SearchResult{Kind: domain.ResultKindAlbum, Title: title, Subtitle: "Weezer", ReleaseGroupMBID: mbid}
+func goldenAlbumResult(title, mbid string) discovery.SearchResult {
+	return discovery.SearchResult{Kind: discovery.ResultKindAlbum, Title: title, Subtitle: "Weezer", ReleaseGroupMBID: mbid}
 }
 
-func goldenArtistResult(mbid string) domain.SearchResult {
-	return domain.SearchResult{Kind: domain.ResultKindArtist, Title: "Nirvana", ArtistMBID: mbid}
+func goldenArtistResult(mbid string) discovery.SearchResult {
+	return discovery.SearchResult{Kind: discovery.ResultKindArtist, Title: "Nirvana", ArtistMBID: mbid}
 }
 
-func parseOne(t *testing.T, caseJSON string) Case {
+func parseOne(t *testing.T, caseJSON string) discovery.GoldenCase {
 	t.Helper()
-	cases, err := Parse([]byte("[" + caseJSON + "]"))
+	cases, err := discovery.ParseGoldenCases([]byte("[" + caseJSON + "]"))
 	if err != nil {
 		t.Fatalf("Parse(%s) = %v", caseJSON, err)
 	}
@@ -58,7 +58,7 @@ func TestParse_RejectsWhatCouldNotBeScoredStrictly(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := Parse([]byte("[" + tt.caseJSON + "]"))
+			_, err := discovery.ParseGoldenCases([]byte("[" + tt.caseJSON + "]"))
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("Parse error = %v, want it to contain %q", err, tt.wantErr)
 			}
@@ -67,7 +67,7 @@ func TestParse_RejectsWhatCouldNotBeScoredStrictly(t *testing.T) {
 }
 
 func TestParse_RejectsDuplicateCases(t *testing.T) {
-	_, err := Parse([]byte("[" + studioCaseJSON + "," + studioCaseJSON + "]"))
+	_, err := discovery.ParseGoldenCases([]byte("[" + studioCaseJSON + "," + studioCaseJSON + "]"))
 
 	if err == nil || !strings.Contains(err.Error(), "duplicate") {
 		t.Fatalf("Parse error = %v, want a duplicate-case error", err)
@@ -78,7 +78,7 @@ func TestCase_HitsTrackByCanonicalISRCAndLabels(t *testing.T) {
 	studio := parseOne(t, studioCaseJSON)
 	tests := []struct {
 		name   string
-		result domain.SearchResult
+		result discovery.SearchResult
 		want   bool
 	}{
 		{"same ISRC in provider formatting", goldenTrackResult("Bohemian Rhapsody", "gb-um7 1029604"), true},
@@ -87,7 +87,7 @@ func TestCase_HitsTrackByCanonicalISRCAndLabels(t *testing.T) {
 		{"the Live Aid recording is another ISRC", goldenTrackResult("Bohemian Rhapsody (Live Aid)", liveAidISRC), false},
 		{"studio ISRC under a live title is a version mismatch", goldenTrackResult("Bohemian Rhapsody (Live Aid)", studioISRC), false},
 		{"right title with no ISRC proves nothing", goldenTrackResult("Bohemian Rhapsody", ""), false},
-		{"an album with the same ISRC field is not a track", domain.SearchResult{Kind: domain.ResultKindAlbum, Title: "Bohemian Rhapsody", ISRC: studioISRC}, false},
+		{"an album with the same ISRC field is not a track", discovery.SearchResult{Kind: discovery.ResultKindAlbum, Title: "Bohemian Rhapsody", ISRC: studioISRC}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -117,28 +117,28 @@ func TestCase_HitsAlbumAndArtistByMBID(t *testing.T) {
 }
 
 type cannedSearcher struct {
-	byQuery map[string][]domain.SearchResult
+	byQuery map[string][]discovery.SearchResult
 	err     error
 }
 
-func (f cannedSearcher) Search(_ context.Context, query string) ([]domain.SearchResult, error) {
+func (f cannedSearcher) Search(_ context.Context, query string) ([]discovery.SearchResult, error) {
 	return f.byQuery[query], f.err
 }
 
-func goldenSearcher(byQuery map[string][]domain.SearchResult) cannedSearcher {
+func goldenSearcher(byQuery map[string][]discovery.SearchResult) cannedSearcher {
 	return cannedSearcher{byQuery: byQuery}
 }
 
 func TestRun_LiveAidRankedFirstIsAFailureForTheStudioSong(t *testing.T) {
 	studio := parseOne(t, strings.Replace(studioCaseJSON, `"labels":[]`, `"labels":[],"within":1`, 1))
-	searcher := goldenSearcher(map[string][]domain.SearchResult{
+	searcher := goldenSearcher(map[string][]discovery.SearchResult{
 		studio.Query: {goldenTrackResult("Bohemian Rhapsody (Live Aid)", liveAidISRC), goldenTrackResult("Bohemian Rhapsody", studioISRC)},
 	})
 
-	report := Run(context.Background(), []Case{studio}, searcher, 1)
+	report := discovery.RunGoldenEval(context.Background(), []discovery.GoldenCase{studio}, searcher, 1)
 
 	got := report.Results[0]
-	if got.Verdict != Fail || got.Position != 1 {
+	if got.Verdict != discovery.GoldenFail || got.Position != 1 {
 		t.Fatalf("verdict = %v at position %d, want a failure with the studio song at position 1", got.Verdict, got.Position)
 	}
 	if report.Unexpected() != 1 {
@@ -148,29 +148,29 @@ func TestRun_LiveAidRankedFirstIsAFailureForTheStudioSong(t *testing.T) {
 
 func TestRun_PositionCountsOnlyResultsOfTheExpectedKind(t *testing.T) {
 	studio := parseOne(t, studioCaseJSON)
-	searcher := goldenSearcher(map[string][]domain.SearchResult{
+	searcher := goldenSearcher(map[string][]discovery.SearchResult{
 		studio.Query: {goldenArtistResult(nirvanaUS), goldenAlbumResult("Queen", blueAlbum), goldenTrackResult("Bohemian Rhapsody", studioISRC)},
 	})
 
-	report := Run(context.Background(), []Case{studio}, searcher, 1)
+	report := discovery.RunGoldenEval(context.Background(), []discovery.GoldenCase{studio}, searcher, 1)
 
-	if got := report.Results[0]; got.Verdict != Pass || got.Position != 0 {
+	if got := report.Results[0]; got.Verdict != discovery.GoldenPass || got.Position != 0 {
 		t.Fatalf("verdict = %v at position %d, want pass at track position 0", got.Verdict, got.Position)
 	}
 }
 
 func TestRun_KnownFailingFlipsTheRunWhenItStartsPassing(t *testing.T) {
 	failing := parseOne(t, strings.Replace(studioCaseJSON, `"labels":[]`, `"labels":[],"known_failing":"#2750"`, 1))
-	broken := goldenSearcher(map[string][]domain.SearchResult{failing.Query: {goldenTrackResult("Bohemian Rhapsody (Live Aid)", liveAidISRC)}})
-	fixed := goldenSearcher(map[string][]domain.SearchResult{failing.Query: {goldenTrackResult("Bohemian Rhapsody", studioISRC)}})
+	broken := goldenSearcher(map[string][]discovery.SearchResult{failing.Query: {goldenTrackResult("Bohemian Rhapsody (Live Aid)", liveAidISRC)}})
+	fixed := goldenSearcher(map[string][]discovery.SearchResult{failing.Query: {goldenTrackResult("Bohemian Rhapsody", studioISRC)}})
 
-	stillBroken := Run(context.Background(), []Case{failing}, broken, 1)
-	nowFixed := Run(context.Background(), []Case{failing}, fixed, 1)
+	stillBroken := discovery.RunGoldenEval(context.Background(), []discovery.GoldenCase{failing}, broken, 1)
+	nowFixed := discovery.RunGoldenEval(context.Background(), []discovery.GoldenCase{failing}, fixed, 1)
 
-	if stillBroken.Results[0].Verdict != StillFailing || stillBroken.Unexpected() != 0 {
+	if stillBroken.Results[0].Verdict != discovery.GoldenStillFailing || stillBroken.Unexpected() != 0 {
 		t.Errorf("a still-broken known-failing case must be tolerated: verdict %v, unexpected %d", stillBroken.Results[0].Verdict, stillBroken.Unexpected())
 	}
-	if nowFixed.Results[0].Verdict != Fixed || nowFixed.Unexpected() != 1 {
+	if nowFixed.Results[0].Verdict != discovery.GoldenFixed || nowFixed.Unexpected() != 1 {
 		t.Errorf("a fixed known-failing case must fail the run until its marker is removed: verdict %v, unexpected %d", nowFixed.Results[0].Verdict, nowFixed.Unexpected())
 	}
 }
@@ -179,10 +179,10 @@ func TestRun_AnErroredQueryIsAFailureEvenWhenKnownFailing(t *testing.T) {
 	failing := parseOne(t, strings.Replace(studioCaseJSON, `"labels":[]`, `"labels":[],"known_failing":"#2750"`, 1))
 	searcher := cannedSearcher{err: errors.New("provider down")}
 
-	report := Run(context.Background(), []Case{failing}, searcher, 1)
+	report := discovery.RunGoldenEval(context.Background(), []discovery.GoldenCase{failing}, searcher, 1)
 
 	got := report.Results[0]
-	if got.Verdict != Errored || got.Error == "" || report.Unexpected() != 1 {
+	if got.Verdict != discovery.GoldenErrored || got.Error == "" || report.Unexpected() != 1 {
 		t.Fatalf("verdict = %v, error %q, unexpected %d, want an errored failure that known_failing cannot absorb", got.Verdict, got.Error, report.Unexpected())
 	}
 }
@@ -190,12 +190,12 @@ func TestRun_AnErroredQueryIsAFailureEvenWhenKnownFailing(t *testing.T) {
 func TestReport_MetricsCountKnownFailingAsMisses(t *testing.T) {
 	studio := parseOne(t, studioCaseJSON)
 	failing := parseOne(t, `{"query":"queen live aid","kind":"track","artist":"Queen","title":"Bohemian Rhapsody (Live Aid)","isrcs":["GBUM71805979"],"labels":["live"],"known_failing":"#2750"}`)
-	searcher := goldenSearcher(map[string][]domain.SearchResult{
+	searcher := goldenSearcher(map[string][]discovery.SearchResult{
 		studio.Query:  {goldenTrackResult("Bohemian Rhapsody", studioISRC)},
 		failing.Query: {goldenTrackResult("Bohemian Rhapsody", studioISRC)},
 	})
 
-	report := Run(context.Background(), []Case{studio, failing}, searcher, 1)
+	report := discovery.RunGoldenEval(context.Background(), []discovery.GoldenCase{studio, failing}, searcher, 1)
 
 	metrics := map[string]float64{}
 	for _, m := range report.Metrics() {

@@ -14,3 +14,10 @@ var (
 )
 
 const GoldenPass = goldeneval.Pass
+
+const (
+	GoldenErrored      = goldeneval.Errored
+	GoldenFail         = goldeneval.Fail
+	GoldenFixed        = goldeneval.Fixed
+	GoldenStillFailing = goldeneval.StillFailing
+)

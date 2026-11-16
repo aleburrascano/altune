@@ -77,3 +77,15 @@ const (
 	ScriptAttr         = eval.ScriptAttr
 	TokenCountAttr     = eval.TokenCountAttr
 )
+
+type (
+	EvalResult  = eval.EvalResult
+	MergeResult = eval.MergeResult
+	ProviderGap = eval.ProviderGap
+)
+
+const (
+	GapAbandoned = eval.GapAbandoned
+	GapStrong    = eval.GapStrong
+	GapWeak      = eval.GapWeak
+)

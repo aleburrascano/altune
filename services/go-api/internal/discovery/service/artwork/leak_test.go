@@ -1,4 +1,4 @@
-package artwork
+package artwork_test
 
 import (
 	"testing"

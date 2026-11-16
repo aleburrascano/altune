@@ -12,3 +12,5 @@ var (
 	NewSuggestService           = vocabulary.NewSuggestService
 	NewVocabularyRefreshService = vocabulary.NewVocabularyRefreshService
 )
+
+type CorrectionResult = vocabulary.CorrectionResult

@@ -1,18 +1,18 @@
-package vocabulary
+package vocabulary_test
 
 import (
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/discoverytest"
-	"altune/go-api/internal/discovery/domain"
 	"context"
 	"errors"
 	"testing"
 )
 
-func vocabEntry(term string) domain.VocabularyEntry {
-	return domain.VocabularyEntry{Term: term, TermNorm: term, Kind: domain.VocabKindArtist}
+func vocabEntry(term string) discovery.VocabularyEntry {
+	return discovery.VocabularyEntry{Term: term, TermNorm: term, Kind: discovery.VocabKindArtist}
 }
 
-func suggestTerms(entries []domain.VocabularyEntry) []string {
+func suggestTerms(entries []discovery.VocabularyEntry) []string {
 	out := make([]string, len(entries))
 	for i, e := range entries {
 		out[i] = e.Term
@@ -22,14 +22,14 @@ func suggestTerms(entries []domain.VocabularyEntry) []string {
 
 func TestSuggest_PrefixFirstThenFuzzyTopUp(t *testing.T) {
 	store := &discoverytest.FakeVocabularyStore{
-		SuggestByPrefixFn: func(_ string, _ int) ([]domain.VocabularyEntry, error) {
-			return []domain.VocabularyEntry{vocabEntry("drake"), vocabEntry("drakeo")}, nil
+		SuggestByPrefixFn: func(_ string, _ int) ([]discovery.VocabularyEntry, error) {
+			return []discovery.VocabularyEntry{vocabEntry("drake"), vocabEntry("drakeo")}, nil
 		},
-		FindClosestFn: func(_ string, _ int) ([]domain.VocabularyEntry, error) {
-			return []domain.VocabularyEntry{vocabEntry("dremke"), vocabEntry("droke")}, nil
+		FindClosestFn: func(_ string, _ int) ([]discovery.VocabularyEntry, error) {
+			return []discovery.VocabularyEntry{vocabEntry("dremke"), vocabEntry("droke")}, nil
 		},
 	}
-	svc := NewSuggestService(store)
+	svc := discovery.NewSuggestService(store)
 
 	got, err := svc.Execute(context.Background(), "drak", 4)
 	if err != nil {
@@ -48,14 +48,14 @@ func TestSuggest_PrefixFirstThenFuzzyTopUp(t *testing.T) {
 
 func TestSuggest_FuzzyDuplicatesDeduped(t *testing.T) {
 	store := &discoverytest.FakeVocabularyStore{
-		SuggestByPrefixFn: func(_ string, _ int) ([]domain.VocabularyEntry, error) {
-			return []domain.VocabularyEntry{vocabEntry("drake")}, nil
+		SuggestByPrefixFn: func(_ string, _ int) ([]discovery.VocabularyEntry, error) {
+			return []discovery.VocabularyEntry{vocabEntry("drake")}, nil
 		},
-		FindClosestFn: func(_ string, _ int) ([]domain.VocabularyEntry, error) {
-			return []domain.VocabularyEntry{vocabEntry("drake"), vocabEntry("droke")}, nil
+		FindClosestFn: func(_ string, _ int) ([]discovery.VocabularyEntry, error) {
+			return []discovery.VocabularyEntry{vocabEntry("drake"), vocabEntry("droke")}, nil
 		},
 	}
-	svc := NewSuggestService(store)
+	svc := discovery.NewSuggestService(store)
 
 	got, err := svc.Execute(context.Background(), "drak", 5)
 	if err != nil {
@@ -69,11 +69,11 @@ func TestSuggest_FuzzyDuplicatesDeduped(t *testing.T) {
 
 func TestSuggest_PrefixFillsLimitSkipsFuzzy(t *testing.T) {
 	store := &discoverytest.FakeVocabularyStore{
-		SuggestByPrefixFn: func(_ string, _ int) ([]domain.VocabularyEntry, error) {
-			return []domain.VocabularyEntry{vocabEntry("drake"), vocabEntry("drakeo")}, nil
+		SuggestByPrefixFn: func(_ string, _ int) ([]discovery.VocabularyEntry, error) {
+			return []discovery.VocabularyEntry{vocabEntry("drake"), vocabEntry("drakeo")}, nil
 		},
 	}
-	svc := NewSuggestService(store)
+	svc := discovery.NewSuggestService(store)
 
 	got, err := svc.Execute(context.Background(), "drak", 2)
 	if err != nil {
@@ -89,14 +89,14 @@ func TestSuggest_PrefixFillsLimitSkipsFuzzy(t *testing.T) {
 
 func TestSuggest_LimitCapsCombined(t *testing.T) {
 	store := &discoverytest.FakeVocabularyStore{
-		SuggestByPrefixFn: func(_ string, _ int) ([]domain.VocabularyEntry, error) {
-			return []domain.VocabularyEntry{vocabEntry("drake")}, nil
+		SuggestByPrefixFn: func(_ string, _ int) ([]discovery.VocabularyEntry, error) {
+			return []discovery.VocabularyEntry{vocabEntry("drake")}, nil
 		},
-		FindClosestFn: func(_ string, _ int) ([]domain.VocabularyEntry, error) {
-			return []domain.VocabularyEntry{vocabEntry("droke"), vocabEntry("dreke"), vocabEntry("druke")}, nil
+		FindClosestFn: func(_ string, _ int) ([]discovery.VocabularyEntry, error) {
+			return []discovery.VocabularyEntry{vocabEntry("droke"), vocabEntry("dreke"), vocabEntry("druke")}, nil
 		},
 	}
-	svc := NewSuggestService(store)
+	svc := discovery.NewSuggestService(store)
 
 	got, err := svc.Execute(context.Background(), "drak", 2)
 	if err != nil {
@@ -109,7 +109,7 @@ func TestSuggest_LimitCapsCombined(t *testing.T) {
 
 func TestSuggest_EmptyQueryReturnsEmptyWithoutStoreCalls(t *testing.T) {
 	store := &discoverytest.FakeVocabularyStore{}
-	svc := NewSuggestService(store)
+	svc := discovery.NewSuggestService(store)
 
 	got, err := svc.Execute(context.Background(), "  !!  ", 5)
 	if err != nil {
@@ -126,11 +126,11 @@ func TestSuggest_EmptyQueryReturnsEmptyWithoutStoreCalls(t *testing.T) {
 
 func TestSuggest_PrefixErrorPropagates(t *testing.T) {
 	store := &discoverytest.FakeVocabularyStore{
-		SuggestByPrefixFn: func(_ string, _ int) ([]domain.VocabularyEntry, error) {
+		SuggestByPrefixFn: func(_ string, _ int) ([]discovery.VocabularyEntry, error) {
 			return nil, errors.New("redis down")
 		},
 	}
-	svc := NewSuggestService(store)
+	svc := discovery.NewSuggestService(store)
 
 	if _, err := svc.Execute(context.Background(), "drak", 5); err == nil {
 		t.Fatal("want the prefix lookup error propagated, got nil")
@@ -139,14 +139,14 @@ func TestSuggest_PrefixErrorPropagates(t *testing.T) {
 
 func TestSuggest_FuzzyErrorDegradesToPrefixOnly(t *testing.T) {
 	store := &discoverytest.FakeVocabularyStore{
-		SuggestByPrefixFn: func(_ string, _ int) ([]domain.VocabularyEntry, error) {
-			return []domain.VocabularyEntry{vocabEntry("drake")}, nil
+		SuggestByPrefixFn: func(_ string, _ int) ([]discovery.VocabularyEntry, error) {
+			return []discovery.VocabularyEntry{vocabEntry("drake")}, nil
 		},
-		FindClosestFn: func(_ string, _ int) ([]domain.VocabularyEntry, error) {
+		FindClosestFn: func(_ string, _ int) ([]discovery.VocabularyEntry, error) {
 			return nil, errors.New("redis down")
 		},
 	}
-	svc := NewSuggestService(store)
+	svc := discovery.NewSuggestService(store)
 
 	got, err := svc.Execute(context.Background(), "drak", 5)
 	if err != nil {

@@ -1,7 +1,7 @@
-package eval
+package eval_test
 
 import (
-	"altune/go-api/internal/discovery/internal/core/ports"
+	"altune/go-api/internal/discovery"
 	"context"
 	"errors"
 	"os"
@@ -11,19 +11,19 @@ import (
 )
 
 type fakeLabelStore struct {
-	labels []ports.BehavioralLabel
+	labels []discovery.BehavioralLabel
 }
 
-func (f fakeLabelStore) BehavioralLabels(context.Context, time.Time) ([]ports.BehavioralLabel, error) {
+func (f fakeLabelStore) BehavioralLabels(context.Context, time.Time) ([]discovery.BehavioralLabel, error) {
 	return f.labels, nil
 }
 
 func TestCorpusBuilder_BuildMapsLabels(t *testing.T) {
-	store := fakeLabelStore{labels: []ports.BehavioralLabel{
+	store := fakeLabelStore{labels: []discovery.BehavioralLabel{
 		{QueryNorm: "adele hello", ResultSignature: "track|hello|adele", Title: "Hello", Subtitle: "Adele", Polarity: 1},
 		{QueryNorm: "wrong one", ResultSignature: "album|x|y", Title: "X", Subtitle: "Y", Polarity: -1},
 	}}
-	builder := NewCorpusBuilder(store)
+	builder := discovery.NewCorpusBuilder(store)
 
 	corpus, err := builder.Build(context.Background(), time.Unix(0, 0), "2026-06-01")
 	if err != nil {
@@ -41,16 +41,16 @@ func TestCorpusBuilder_BuildMapsLabels(t *testing.T) {
 }
 
 func TestCorpusBuilder_MaterializeRoundTrip(t *testing.T) {
-	store := fakeLabelStore{labels: []ports.BehavioralLabel{
+	store := fakeLabelStore{labels: []discovery.BehavioralLabel{
 		{QueryNorm: "q", ResultSignature: "s", Title: "T", Subtitle: "Sub", Polarity: 1},
 	}}
-	builder := NewCorpusBuilder(store)
+	builder := discovery.NewCorpusBuilder(store)
 	path := filepath.Join(t.TempDir(), "behavioral_corpus.json")
 
 	if err := builder.Materialize(context.Background(), time.Unix(0, 0), "win", path); err != nil {
 		t.Fatalf("Materialize: %v", err)
 	}
-	loaded, err := LoadBehavioralCorpus(path)
+	loaded, err := discovery.LoadBehavioralCorpus(path)
 	if err != nil {
 		t.Fatalf("LoadBehavioralCorpus: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestCorpusBuilder_MaterializeRoundTrip(t *testing.T) {
 }
 
 func TestLoadBehavioralCorpus_MissingFile(t *testing.T) {
-	if _, err := LoadBehavioralCorpus(filepath.Join(t.TempDir(), "absent.json")); err == nil {
+	if _, err := discovery.LoadBehavioralCorpus(filepath.Join(t.TempDir(), "absent.json")); err == nil {
 		t.Fatal("want an error for a missing corpus file")
 	}
 }
@@ -70,19 +70,19 @@ func TestLoadBehavioralCorpus_BadJSON(t *testing.T) {
 	if err := os.WriteFile(path, []byte("{not json"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := LoadBehavioralCorpus(path); err == nil {
+	if _, err := discovery.LoadBehavioralCorpus(path); err == nil {
 		t.Fatal("want a parse error for malformed JSON")
 	}
 }
 
 type erroringLabelStore struct{}
 
-func (erroringLabelStore) BehavioralLabels(context.Context, time.Time) ([]ports.BehavioralLabel, error) {
+func (erroringLabelStore) BehavioralLabels(context.Context, time.Time) ([]discovery.BehavioralLabel, error) {
 	return nil, errors.New("db down")
 }
 
 func TestCorpusBuilder_BuildAndMaterializePropagateStoreError(t *testing.T) {
-	builder := NewCorpusBuilder(erroringLabelStore{})
+	builder := discovery.NewCorpusBuilder(erroringLabelStore{})
 	if _, err := builder.Build(context.Background(), time.Unix(0, 0), "x"); err == nil {
 		t.Error("Build must propagate the label-store error")
 	}
@@ -97,7 +97,7 @@ func TestCorpusBuilder_BuildAndMaterializePropagateStoreError(t *testing.T) {
 
 func TestCorpusBuilder_MaterializeUnwritablePath(t *testing.T) {
 	store := fakeLabelStore{}
-	builder := NewCorpusBuilder(store)
+	builder := discovery.NewCorpusBuilder(store)
 	path := filepath.Join(t.TempDir(), "no-such-dir", "corpus.json")
 	if err := builder.Materialize(context.Background(), time.Unix(0, 0), "x", path); err == nil {
 		t.Error("Materialize must surface the write error")

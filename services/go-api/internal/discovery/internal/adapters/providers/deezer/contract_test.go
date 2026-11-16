@@ -1,7 +1,7 @@
-package deezer
+package deezer_test
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/internal/adapters/providers/providertest"
 	"net/http/httptest"
 	"testing"
@@ -12,10 +12,10 @@ func TestProviderContracts(t *testing.T) {
 		{
 			Name:   "deezer track",
 			Golden: "contract_deezer_track.json",
-			Search: func(t *testing.T, srv *httptest.Server) ([]domain.SearchResult, error) {
-				return NewDeezerAdapter(providertest.NewClient(srv.URL)).Search(t.Context(), "bohemian rhapsody", providertest.TrackKinds())
+			Search: func(t *testing.T, srv *httptest.Server) ([]discovery.SearchResult, error) {
+				return discovery.NewDeezerAdapter(providertest.NewClient(srv.URL)).Search(t.Context(), "bohemian rhapsody", providertest.TrackKinds())
 			},
-			Required: func(t *testing.T, r domain.SearchResult) {
+			Required: func(t *testing.T, r discovery.SearchResult) {
 				if r.ISRC == "" {
 					t.Error("ISRC empty — merge's identifier tier consumes it")
 				}
@@ -36,10 +36,10 @@ func TestProviderContracts(t *testing.T) {
 		{
 			Name:   "deezer artist",
 			Golden: "contract_deezer_artist.json",
-			Search: func(t *testing.T, srv *httptest.Server) ([]domain.SearchResult, error) {
-				return NewDeezerAdapter(providertest.NewClient(srv.URL)).Search(t.Context(), "radiohead", providertest.ArtistKinds())
+			Search: func(t *testing.T, srv *httptest.Server) ([]discovery.SearchResult, error) {
+				return discovery.NewDeezerAdapter(providertest.NewClient(srv.URL)).Search(t.Context(), "radiohead", providertest.ArtistKinds())
 			},
-			Required: func(t *testing.T, r domain.SearchResult) {
+			Required: func(t *testing.T, r discovery.SearchResult) {
 				if r.FanCount == 0 {
 					t.Error("FanCount zero — artist prominence consumes it")
 				}
@@ -48,10 +48,10 @@ func TestProviderContracts(t *testing.T) {
 		{
 			Name:   "deezer album",
 			Golden: "contract_deezer_album.json",
-			Search: func(t *testing.T, srv *httptest.Server) ([]domain.SearchResult, error) {
-				return NewDeezerAdapter(providertest.NewClient(srv.URL)).Search(t.Context(), "ok computer", providertest.AlbumKinds())
+			Search: func(t *testing.T, srv *httptest.Server) ([]discovery.SearchResult, error) {
+				return discovery.NewDeezerAdapter(providertest.NewClient(srv.URL)).Search(t.Context(), "ok computer", providertest.AlbumKinds())
 			},
-			Required: func(t *testing.T, r domain.SearchResult) {
+			Required: func(t *testing.T, r discovery.SearchResult) {
 				if r.ReleaseDate == "" {
 					t.Error("ReleaseDate empty — discography ordering consumes it")
 				}
@@ -68,9 +68,9 @@ func TestProviderContracts(t *testing.T) {
 
 func TestAdapterNames(t *testing.T) {
 	tests := []struct {
-		got, want domain.ProviderName
+		got, want discovery.ProviderName
 	}{
-		{(&DeezerAdapter{}).Name(), domain.ProviderDeezer},
+		{(&discovery.DeezerAdapter{}).Name(), discovery.ProviderDeezer},
 	}
 	for _, tt := range tests {
 		if tt.got != tt.want {
@@ -80,10 +80,10 @@ func TestAdapterNames(t *testing.T) {
 }
 
 func TestAdapterSupportedKinds_allThree(t *testing.T) {
-	for name, kinds := range map[string]map[domain.ResultKind]bool{
-		"deezer": (&DeezerAdapter{}).SupportedKinds(),
+	for name, kinds := range map[string]map[discovery.ResultKind]bool{
+		"deezer": (&discovery.DeezerAdapter{}).SupportedKinds(),
 	} {
-		if !kinds[domain.ResultKindTrack] || !kinds[domain.ResultKindAlbum] || !kinds[domain.ResultKindArtist] {
+		if !kinds[discovery.ResultKindTrack] || !kinds[discovery.ResultKindAlbum] || !kinds[discovery.ResultKindArtist] {
 			t.Errorf("%s SupportedKinds = %v, want track+album+artist", name, kinds)
 		}
 	}
@@ -91,10 +91,10 @@ func TestAdapterSupportedKinds_allThree(t *testing.T) {
 
 func TestArtworkSourceTags(t *testing.T) {
 	tests := []struct {
-		got  domain.ProviderKey
+		got  discovery.ProviderKey
 		want string
 	}{
-		{(&DeezerAdapter{}).ArtworkSource(), "deezer"},
+		{(&discovery.DeezerAdapter{}).ArtworkSource(), "deezer"},
 	}
 	for _, tt := range tests {
 		if tt.got.String() != tt.want {

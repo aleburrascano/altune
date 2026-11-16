@@ -40,3 +40,11 @@ var ParseDiscographyGroupBy = ports.ParseDiscographyGroupBy
 var ErrIdentityStoreUnavailable = ports.ErrIdentityStoreUnavailable
 
 const GroupByProvider = ports.GroupByProvider
+
+type ArtworkIdentity = ports.ArtworkIdentity
+
+var (
+	ErrArtworkDegraded    = ports.ErrArtworkDegraded
+	ErrArtworkUnavailable = ports.ErrArtworkUnavailable
+	ErrPartialCatalog     = ports.ErrPartialCatalog
+)

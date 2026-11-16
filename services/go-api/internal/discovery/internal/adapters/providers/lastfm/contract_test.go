@@ -1,7 +1,7 @@
-package lastfm
+package lastfm_test
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/internal/adapters/providers/providertest"
 	"net/http/httptest"
 	"testing"
@@ -13,10 +13,10 @@ func TestProviderContracts(t *testing.T) {
 		{
 			Name:   "lastfm track",
 			Golden: "contract_lastfm_track.json",
-			Search: func(t *testing.T, srv *httptest.Server) ([]domain.SearchResult, error) {
-				return NewLastFmAdapter(providertest.NewClient(srv.URL), "test-api-key").Search(t.Context(), "small talk", providertest.TrackKinds())
+			Search: func(t *testing.T, srv *httptest.Server) ([]discovery.SearchResult, error) {
+				return discovery.NewLastFmAdapter(providertest.NewClient(srv.URL), "test-api-key").Search(t.Context(), "small talk", providertest.TrackKinds())
 			},
-			Required: func(t *testing.T, r domain.SearchResult) {
+			Required: func(t *testing.T, r discovery.SearchResult) {
 				if r.RecordingMBID == "" {
 					t.Error("RecordingMBID empty — merge's identifier tier consumes it")
 				}
@@ -25,10 +25,10 @@ func TestProviderContracts(t *testing.T) {
 		{
 			Name:   "lastfm album",
 			Golden: "contract_lastfm_album.json",
-			Search: func(t *testing.T, srv *httptest.Server) ([]domain.SearchResult, error) {
-				return NewLastFmAdapter(providertest.NewClient(srv.URL), "test-api-key").Search(t.Context(), "ok computer", providertest.AlbumKinds())
+			Search: func(t *testing.T, srv *httptest.Server) ([]discovery.SearchResult, error) {
+				return discovery.NewLastFmAdapter(providertest.NewClient(srv.URL), "test-api-key").Search(t.Context(), "ok computer", providertest.AlbumKinds())
 			},
-			Required: func(t *testing.T, r domain.SearchResult) {
+			Required: func(t *testing.T, r discovery.SearchResult) {
 				if r.EntityMBID() != "" {
 					t.Errorf("album MBID stamped (%q) — Last.fm album-search mbids are RELEASE MBIDs, a different UUID namespace than the RELEASE-GROUP MBIDs MusicBrainz album results carry; stamping one makes the MBID hard-stop block every MB↔Last.fm album merge", r.EntityMBID())
 				}
@@ -37,10 +37,10 @@ func TestProviderContracts(t *testing.T) {
 		{
 			Name:   "lastfm artist",
 			Golden: "contract_lastfm_artist.json",
-			Search: func(t *testing.T, srv *httptest.Server) ([]domain.SearchResult, error) {
-				return NewLastFmAdapter(providertest.NewClient(srv.URL), "test-api-key").Search(t.Context(), "the weeknd", providertest.ArtistKinds())
+			Search: func(t *testing.T, srv *httptest.Server) ([]discovery.SearchResult, error) {
+				return discovery.NewLastFmAdapter(providertest.NewClient(srv.URL), "test-api-key").Search(t.Context(), "the weeknd", providertest.ArtistKinds())
 			},
-			Required: func(t *testing.T, r domain.SearchResult) {
+			Required: func(t *testing.T, r discovery.SearchResult) {
 				if r.ArtistMBID == "" {
 					t.Error("ArtistMBID empty — merge's identifier tier consumes it")
 				}
@@ -51,9 +51,9 @@ func TestProviderContracts(t *testing.T) {
 
 func TestAdapterNames(t *testing.T) {
 	tests := []struct {
-		got, want domain.ProviderName
+		got, want discovery.ProviderName
 	}{
-		{(&LastFmAdapter{}).Name(), domain.ProviderLastFM},
+		{(&discovery.LastFmAdapter{}).Name(), discovery.ProviderLastFM},
 	}
 	for _, tt := range tests {
 		if tt.got != tt.want {
@@ -68,7 +68,7 @@ func TestAdapterSearchTimeouts(t *testing.T) {
 		got  time.Duration
 		want time.Duration
 	}{
-		{"lastfm", (&LastFmAdapter{}).SearchTimeout(), 4 * time.Second},
+		{"lastfm", (&discovery.LastFmAdapter{}).SearchTimeout(), 4 * time.Second},
 	}
 	for _, tt := range tests {
 		if tt.got != tt.want {

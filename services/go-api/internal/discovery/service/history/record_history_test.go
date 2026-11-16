@@ -1,8 +1,8 @@
-package history
+package history_test
 
 import (
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/discoverytest"
-	"altune/go-api/internal/discovery/domain"
 	"context"
 	"errors"
 	"strings"
@@ -12,7 +12,7 @@ import (
 
 func TestRecordHistory_InsertFailureLogsUserAndSearchFingerprint(t *testing.T) {
 	repo := &discoverytest.FakeHistoryWriter{
-		InsertFn: func(context.Context, *domain.SearchHistoryEntry) error {
+		InsertFn: func(context.Context, *discovery.SearchHistoryEntry) error {
 			return errors.New("db down")
 		},
 	}
@@ -20,7 +20,7 @@ func TestRecordHistory_InsertFailureLogsUserAndSearchFingerprint(t *testing.T) {
 	const raw = "zqxj private diagnosis clinic"
 	ring := discoverytest.CaptureDetachedLogs(t)
 
-	NewRecordSearchHistoryService(repo).Record(context.Background(), user, discoverytest.NewQuery(t, raw), raw, true, time.Now())
+	discovery.NewRecordSearchHistoryService(repo).Record(context.Background(), user, discoverytest.NewQuery(t, raw), raw, true, time.Now())
 
 	rec := discoverytest.OnlyRecord(t, ring, "search.v2.history_persist_failed")
 	if rec.Attrs["user_id"] != user.String() {

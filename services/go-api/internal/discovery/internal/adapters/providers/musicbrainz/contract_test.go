@@ -1,7 +1,7 @@
-package musicbrainz
+package musicbrainz_test
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/internal/adapters/providers/providertest"
 	"net/http/httptest"
 	"testing"
@@ -13,10 +13,10 @@ func TestProviderContracts(t *testing.T) {
 		{
 			Name:   "musicbrainz recording",
 			Golden: "contract_musicbrainz_recording.json",
-			Search: func(t *testing.T, srv *httptest.Server) ([]domain.SearchResult, error) {
-				return NewMusicBrainzAdapter(providertest.NewClient(srv.URL), "altune-test/1.0").Search(t.Context(), "paranoid android", providertest.TrackKinds())
+			Search: func(t *testing.T, srv *httptest.Server) ([]discovery.SearchResult, error) {
+				return discovery.NewMusicBrainzAdapter(providertest.NewClient(srv.URL), "altune-test/1.0").Search(t.Context(), "paranoid android", providertest.TrackKinds())
 			},
-			Required: func(t *testing.T, r domain.SearchResult) {
+			Required: func(t *testing.T, r discovery.SearchResult) {
 				if r.ISRC == "" {
 					t.Error("ISRC empty — merge's identifier tier consumes it")
 				}
@@ -28,10 +28,10 @@ func TestProviderContracts(t *testing.T) {
 		{
 			Name:   "musicbrainz artist",
 			Golden: "contract_musicbrainz_artist.json",
-			Search: func(t *testing.T, srv *httptest.Server) ([]domain.SearchResult, error) {
-				return NewMusicBrainzAdapter(providertest.NewClient(srv.URL), "altune-test/1.0").Search(t.Context(), "radiohead", providertest.ArtistKinds())
+			Search: func(t *testing.T, srv *httptest.Server) ([]discovery.SearchResult, error) {
+				return discovery.NewMusicBrainzAdapter(providertest.NewClient(srv.URL), "altune-test/1.0").Search(t.Context(), "radiohead", providertest.ArtistKinds())
 			},
-			Required: func(t *testing.T, r domain.SearchResult) {
+			Required: func(t *testing.T, r discovery.SearchResult) {
 				if r.ArtistMBID == "" {
 					t.Error("ArtistMBID empty — artist identity resolution consumes it")
 				}
@@ -42,9 +42,9 @@ func TestProviderContracts(t *testing.T) {
 
 func TestAdapterNames(t *testing.T) {
 	tests := []struct {
-		got, want domain.ProviderName
+		got, want discovery.ProviderName
 	}{
-		{(&MusicBrainzAdapter{}).Name(), domain.ProviderMusicBrainz},
+		{(&discovery.MusicBrainzAdapter{}).Name(), discovery.ProviderMusicBrainz},
 	}
 	for _, tt := range tests {
 		if tt.got != tt.want {
@@ -59,7 +59,7 @@ func TestAdapterSearchTimeouts(t *testing.T) {
 		got  time.Duration
 		want time.Duration
 	}{
-		{"musicbrainz", (&MusicBrainzAdapter{}).SearchTimeout(), 5 * time.Second},
+		{"musicbrainz", (&discovery.MusicBrainzAdapter{}).SearchTimeout(), 5 * time.Second},
 	}
 	for _, tt := range tests {
 		if tt.got != tt.want {
@@ -69,10 +69,10 @@ func TestAdapterSearchTimeouts(t *testing.T) {
 }
 
 func TestAdapterSupportedKinds_allThree(t *testing.T) {
-	for name, kinds := range map[string]map[domain.ResultKind]bool{
-		"musicbrainz": (&MusicBrainzAdapter{}).SupportedKinds(),
+	for name, kinds := range map[string]map[discovery.ResultKind]bool{
+		"musicbrainz": (&discovery.MusicBrainzAdapter{}).SupportedKinds(),
 	} {
-		if !kinds[domain.ResultKindTrack] || !kinds[domain.ResultKindAlbum] || !kinds[domain.ResultKindArtist] {
+		if !kinds[discovery.ResultKindTrack] || !kinds[discovery.ResultKindAlbum] || !kinds[discovery.ResultKindArtist] {
 			t.Errorf("%s SupportedKinds = %v, want track+album+artist", name, kinds)
 		}
 	}
