@@ -48,6 +48,8 @@ const (
 	ResultKindTrack          = domain.ResultKindTrack
 	VocabKindArtist          = domain.VocabKindArtist
 	VocabKindTrack           = domain.VocabKindTrack
+	ProviderTheAudioDB       = domain.ProviderTheAudioDB
+	ResultKindPlaylist       = domain.ResultKindPlaylist
 )
 
 type (
@@ -58,10 +60,9 @@ type (
 	UnreleasedVersion  = domain.UnreleasedVersion
 )
 
+const ConfidenceLow = domain.ConfidenceLow
+
 const (
-	ConfidenceLow       = domain.ConfidenceLow
 	ProviderStatusError = domain.ProviderStatusError
 	ProviderStatusOK    = domain.ProviderStatusOK
-	ProviderTheAudioDB  = domain.ProviderTheAudioDB
-	ResultKindPlaylist  = domain.ResultKindPlaylist
 )
