@@ -44,7 +44,7 @@ export {
   track,
   userBLibrary,
 } from '@features/library/__tests__/trackMutationFixtures';
-export { useLibraryAlbums, useLibraryArtists } from '@features/library/hooks/useLibraryGroups';
+export { useLibraryAlbums, useLibraryArtists } from '@features/library/view/useLibraryGroups';
 export { useLibraryTracks } from '@features/library/view/useLibraryTracks';
 export { featuringDetailRoute, goBackOrToLibrary } from '@features/library/domain/libraryRoutes';
 export { LibraryRow } from '@features/library/view/LibraryRow';
@@ -85,7 +85,7 @@ export type {
 } from '@features/library/view/useTrackSelection';
 export { TrackSelectionOverlay } from '@features/library/view/TrackSelectionOverlay';
 export { TracksList } from '@features/library/view/TracksList';
-export { useActiveLibraryView } from '@features/library/hooks/useActiveLibraryView';
+export { useActiveLibraryView } from '@features/library/view/useActiveLibraryView';
 export { useSelection } from '@features/library/view/useSelection';
 export type { MemoryLibrarySeed } from '@features/library/__tests__/memoryLibraryPort';
 export { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
@@ -102,8 +102,8 @@ export { usePlaylistDetail } from '@features/library/view/usePlaylistDetail';
 export {
   usePlaylistDelete,
   usePlaylistOfflineAction,
-} from '@features/library/hooks/usePlaylistMenu';
-export { usePlaylistPlayback } from '@features/library/hooks/usePlaylistPlayback';
+} from '@features/library/view/usePlaylistMenu';
+export { usePlaylistPlayback } from '@features/library/view/usePlaylistPlayback';
 export { usePlaylistRename } from '@features/library/view/usePlaylistRename';
 export { useReacquireTrack, useRetryAcquisition } from '@features/library/view/useRetryAcquisition';
 export { buildTrackMenuItems } from '@features/library/view/useTrackMenu';

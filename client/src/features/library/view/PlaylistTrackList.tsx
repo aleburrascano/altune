@@ -3,9 +3,9 @@ import { FlatList, StyleSheet, View, type FlatListProps, type ListRenderItem } f
 import { usePlayback, useQueuePlayback } from '@shared/playback';
 import { Button, Text, spacing, useWideWebLayout } from '@shared/ui';
 import type { TrackResponse } from '@shared/catalog';
-import { usePlaylistPlayback } from '@features/library/hooks/usePlaylistPlayback';
+import { usePlaylistPlayback } from '@features/library/view/usePlaylistPlayback';
 import { useRetryAcquisition } from '@features/library/view/useRetryAcquisition';
-import { usePlaylistTrackRemoval } from '@features/library/hooks/usePlaylistTrackRemoval';
+import { usePlaylistTrackRemoval } from '@features/library/view/usePlaylistTrackRemoval';
 import type { TrackSelectionController } from '@features/library/view/useTrackSelection';
 import { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
 import { listContent } from '@features/library/view/listContentStyles';

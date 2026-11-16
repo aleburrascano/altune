@@ -12,10 +12,10 @@ import {
 } from '@shared/ui';
 import { usePlayback, useQueuePlayback } from '@shared/playback';
 import { AddToPlaylistSheet, CreatePlaylistModal } from '@shared/playlists';
-import { useActiveLibraryView } from '@features/library/hooks/useActiveLibraryView';
-import { useLibraryIsEmpty } from '@features/library/hooks/useLibraryIsEmpty';
+import { useActiveLibraryView } from '@features/library/view/useActiveLibraryView';
+import { useLibraryIsEmpty } from '@features/library/view/useLibraryIsEmpty';
 import { useLibrarySearch } from '@features/library/view/useLibrarySearch';
-import { useLibraryTrackSelection } from '@features/library/hooks/useLibraryTrackSelection';
+import { useLibraryTrackSelection } from '@features/library/view/useLibraryTrackSelection';
 import { usePlaylistActions } from '@features/library/view/usePlaylistActions';
 import { useRetryAcquisition } from '@features/library/view/useRetryAcquisition';
 import { librarySection, type LibraryChip, type SortKey } from '@features/library/view/libraryView';
