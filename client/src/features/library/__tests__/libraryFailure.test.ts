@@ -64,6 +64,7 @@ describe('libraryFailureAlert — the payload carries the surface, the title as 
 });
 
 const SECRET = 'bearer-eyJ-private-search-term';
+const SERVER_ERROR = 500;
 const trackId = asTrackId('t1');
 const deleteEndpoint = () => 'DELETE /v1/tracks/t1';
 
@@ -86,7 +87,7 @@ describe('logTrackMutationFailure carries triage fields and nothing the error dr
       'delete track',
       deleteEndpoint,
       trackId,
-      new ApiError(500, SECRET),
+      new ApiError(SERVER_ERROR, SECRET),
     );
 
     expect(loggedText()).not.toContain(SECRET);
@@ -158,9 +159,8 @@ describe('logTrackMutationFailure carries triage fields and nothing the error dr
     logTrackMutationFailure(warn, 'delete track', deleteEndpoint, trackId, undefined);
 
     expect(loggedText()).not.toContain(SECRET);
-    expect(warn).toHaveBeenNthCalledWith(1, '[library] delete track failed', unclassified);
-    expect(warn).toHaveBeenNthCalledWith(2, '[library] delete track failed', unclassified);
-    expect(warn).toHaveBeenNthCalledWith(3, '[library] delete track failed', unclassified);
+    const unclassifiedLog = ['[library] delete track failed', unclassified];
+    expect(warn.mock.calls).toEqual([unclassifiedLog, unclassifiedLog, unclassifiedLog]);
   });
 
   it('strips a query string an endpoint builder puts in the path', () => {

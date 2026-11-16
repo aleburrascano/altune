@@ -41,11 +41,13 @@ function logPollFailure(warn: LibraryWarn, offset: number, cause: unknown) {
 
 type FallbackHandler = (failure: LibraryFailure, loaded: number) => void;
 
-function loadedPagesOnFailure(
-  warn: LibraryWarn,
-  tracks: TrackResponse[],
-  onFallback: FallbackHandler | undefined,
-) {
+type LoadedPagesFallback = {
+  warn: LibraryWarn;
+  tracks: TrackResponse[];
+  onFallback: FallbackHandler | undefined;
+};
+
+function loadedPagesOnFailure({ warn, tracks, onFallback }: LoadedPagesFallback) {
   return (error: unknown): TrackResponse[] => {
     warn('[library] whole-library fetch failed; using loaded pages', {
       loaded: tracks.length,
@@ -220,6 +222,6 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
           staleTime: 0,
           gcTime: 0,
         })
-        .catch(loadedPagesOnFailure(port.warn, tracks, onFallback)),
+        .catch(loadedPagesOnFailure({ warn: port.warn, tracks, onFallback })),
   };
 }

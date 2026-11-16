@@ -7,10 +7,10 @@ import type { PlaylistResponse } from '@shared/catalog';
 import type { ListRefresh } from '@features/library';
 import { AlbumsGrid, ArtistsGrid, PlaylistsGrid } from '@features/library';
 import { setPlatformOS } from '@testing/setPlatformOS';
-import { PHONE_WINDOW_WIDTH, setWindowWidth } from '@features/library/__tests__/setWindowWidth';
+import { WINDOW_WIDTH, setWindowWidth } from '@features/library/__tests__/setWindowWidth';
 
 beforeEach(() => {
-  setWindowWidth(PHONE_WINDOW_WIDTH);
+  setWindowWidth(WINDOW_WIDTH.phone);
 });
 
 function idleRefresh(): ListRefresh {
@@ -143,7 +143,7 @@ describe('a measured content width narrower than the window overrides the window
 
   beforeEach(() => {
     setPlatformOS('web');
-    setWindowWidth(1440);
+    setWindowWidth(WINDOW_WIDTH.desktop);
   });
 
   afterEach(() => {
@@ -172,7 +172,7 @@ describe('a measured content width narrower than the window overrides the window
 describe('a native tablet just under the wide breakpoint keeps its column count', () => {
   const tablet = { coverColumns: 3 };
   beforeEach(() => {
-    setWindowWidth(999);
+    setWindowWidth(WINDOW_WIDTH.justUnderWideWeb);
   });
 
   it('gives AlbumsGrid 3 cover columns at a 999pt-wide window', () => {
@@ -188,7 +188,7 @@ describe('narrow web keeps its pre-#2842 grid once the grid measures itself', ()
 
   beforeEach(() => {
     setPlatformOS('web');
-    setWindowWidth(360);
+    setWindowWidth(WINDOW_WIDTH.smallPhone);
   });
 
   afterEach(() => {
@@ -241,7 +241,7 @@ describe('web below the wide-web threshold behaves like main, uncapped and uncro
 
   beforeEach(() => {
     setPlatformOS('web');
-    setWindowWidth(900);
+    setWindowWidth(WINDOW_WIDTH.belowWideWeb);
   });
 
   afterEach(() => {

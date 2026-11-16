@@ -8,7 +8,7 @@ import {
   libraryFailureAlert,
   classifyLibraryError,
 } from '@features/library/domain/libraryFailure';
-import { showFailureAlert } from '@shared/ui';
+import { showFailureAlert, type FailureAlert } from '@shared/ui';
 import { detailHref, useNavigator, type Navigator } from '@shared/navigation';
 import type { LibraryPort, LibraryWarn } from '@features/library/ports/libraryPort';
 import type { FeaturingDetailRoute } from '@features/library/domain/libraryRoutes';
@@ -65,18 +65,21 @@ type ExploreArtist = {
   exploring: boolean;
 };
 
+function exploreFailureAlert(artist: string, error: unknown): FailureAlert {
+  const lead = `Could not search for ${artist}.`;
+  return libraryFailureAlert(
+    'library.explore_artist',
+    'Search failed',
+    lead,
+    classifyLibraryError(error),
+  );
+}
+
 function reportExploreFailure(warn: LibraryWarn, artist: string, error: unknown): void {
   warn('[library] featuring explore search failed', {
     ...failureLogFields(error),
   });
-  showFailureAlert(
-    libraryFailureAlert(
-      'library.explore_artist',
-      'Search failed',
-      `Could not search for ${artist}.`,
-      classifyLibraryError(error),
-    ),
-  );
+  showFailureAlert(exploreFailureAlert(artist, error));
 }
 
 function topMatchQuery(artist: string) {

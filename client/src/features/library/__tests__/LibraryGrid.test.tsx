@@ -5,7 +5,7 @@ import type { AlbumGroup } from '@shared/apiClient';
 import type { ListRefresh } from '@features/library';
 import { AlbumsGrid, ArtistsGrid, PlaylistsGrid } from '@features/library';
 import { setPlatformOS } from '@testing/setPlatformOS';
-import { PHONE_WINDOW_WIDTH, setWindowWidth } from '@features/library/__tests__/setWindowWidth';
+import { WINDOW_WIDTH, setWindowWidth } from '@features/library/__tests__/setWindowWidth';
 
 function idleRefresh(): ListRefresh {
   return { onRefresh: jest.fn(), refreshing: false };
@@ -107,7 +107,7 @@ describe('library list shells — pull to refresh', () => {
 const { Platform } = require('react-native');
 
 beforeEach(() => {
-  setWindowWidth(PHONE_WINDOW_WIDTH);
+  setWindowWidth(WINDOW_WIDTH.phone);
 });
 
 const { asPlaylistId: probeAsPlaylistId } = require('@shared/catalog');
@@ -208,7 +208,7 @@ describe('library grids — wide web layout', () => {
 
   beforeEach(() => {
     setPlatformOS('web');
-    setWindowWidth(1440);
+    setWindowWidth(WINDOW_WIDTH.desktop);
   });
 
   afterEach(() => {
@@ -257,7 +257,7 @@ describe('library grids — wide web, measured inside the app shell (#2842)', ()
 
   beforeEach(() => {
     setPlatformOS('web');
-    setWindowWidth(1440);
+    setWindowWidth(WINDOW_WIDTH.desktop);
   });
 
   afterEach(() => {
@@ -337,7 +337,7 @@ describe('library grids — wide web, measured inside the app shell (#2842)', ()
   });
 
   it('keeps the tablet tier of 3 cover columns at 999px on web', () => {
-    setWindowWidth(999);
+    setWindowWidth(WINDOW_WIDTH.justUnderWideWeb);
     probeAlbums();
 
     expect(gridColumnCount()).toBe(3);
@@ -353,7 +353,7 @@ describe('library grids — native and narrow web keep their pre-#2842 columns o
 
   it('keeps 3 albums columns on a 720pt native tablet whose grid measures 688 inside the padding', () => {
     setPlatformOS('ios');
-    setWindowWidth(720);
+    setWindowWidth(WINDOW_WIDTH.tablet);
     probeAlbums();
 
     measureGrid(688);
@@ -363,7 +363,7 @@ describe('library grids — native and narrow web keep their pre-#2842 columns o
 
   it('keeps 221pt playlist covers on a 720pt native tablet once measured', () => {
     setPlatformOS('ios');
-    setWindowWidth(720);
+    setWindowWidth(WINDOW_WIDTH.tablet);
     probePlaylists();
 
     measureGrid(688);
@@ -374,7 +374,7 @@ describe('library grids — native and narrow web keep their pre-#2842 columns o
 
   it('keeps 4 albums columns on a 1000pt native tablet whose grid measures 968', () => {
     setPlatformOS('android');
-    setWindowWidth(1000);
+    setWindowWidth(WINDOW_WIDTH.wideWeb);
     probeAlbums();
 
     measureGrid(968);
@@ -384,7 +384,7 @@ describe('library grids — native and narrow web keep their pre-#2842 columns o
 
   it('keeps 5 artists columns on a 720pt native tablet once measured', () => {
     setPlatformOS('ios');
-    setWindowWidth(720);
+    setWindowWidth(WINDOW_WIDTH.tablet);
     probeArtists();
 
     measureGrid(688);
@@ -394,7 +394,7 @@ describe('library grids — native and narrow web keep their pre-#2842 columns o
 
   it('keeps 3 albums columns on a 720px narrow web window whose grid measures 688', () => {
     setPlatformOS('web');
-    setWindowWidth(720);
+    setWindowWidth(WINDOW_WIDTH.tablet);
     probeAlbums();
 
     measureGrid(688);
@@ -408,7 +408,7 @@ describe('library grids — playlist cover size at a tiny measured width', () =>
 
   beforeEach(() => {
     setPlatformOS('web');
-    setWindowWidth(1440);
+    setWindowWidth(WINDOW_WIDTH.desktop);
   });
 
   afterEach(() => {

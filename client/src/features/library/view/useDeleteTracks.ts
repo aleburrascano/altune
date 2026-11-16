@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useAppMutation, libraryKeys } from '@shared/query';
-import { showFailureAlert } from '@shared/ui';
+import { showFailureAlert, type FailureAlert } from '@shared/ui';
 import { runBounded } from '@shared/concurrency';
 import type { TrackId } from '@shared/catalog';
 import {
@@ -180,20 +180,20 @@ function bulkFailureMessage(requested: number, deleted: number, failures: Delete
   return `${requested - deleted} of ${requested} tracks could not be removed. ${tail}`;
 }
 
-function reportBulkOutcome(
-  queryClient: QueryClient,
-  warn: LibraryWarn,
-  summary: DeleteTracksResult,
-) {
-  const { deleted, requested, failures, cancelled } = summary;
-  if (deleted > 0) invalidateLibraryDerived(queryClient);
-  failures.forEach(logBulkFailure(warn));
-  if (cancelled || deleted === requested) return;
-  showFailureAlert({
+function bulkFailureAlert({ requested, deleted, failures }: DeleteTracksResult): FailureAlert {
+  return {
     surface: 'library.delete_tracks',
     title: 'Delete failed',
     message: bulkFailureMessage(requested, deleted, failures),
-  });
+  };
+}
+
+function reportBulkOutcome(queryClient: QueryClient, warn: LibraryWarn, run: DeleteTracksResult) {
+  const { deleted, requested, failures, cancelled } = run;
+  if (deleted > 0) invalidateLibraryDerived(queryClient);
+  failures.forEach(logBulkFailure(warn));
+  if (cancelled || deleted === requested) return;
+  showFailureAlert(bulkFailureAlert(run));
 }
 
 const LOGGED_TRACK_IDS = 20;
@@ -210,15 +210,15 @@ function recoverFailedBulkRun(queryClient: QueryClient, warn: LibraryWarn) {
     invalidateLibraryDerived(queryClient);
     void queryClient.invalidateQueries({ queryKey: libraryKeys.tracksPrefix });
     logBulkRunFailure(warn, error, trackIds);
-    showFailureAlert(
-      libraryFailureAlert(
-        'library.delete_tracks',
-        'Delete failed',
-        'Could not remove these tracks.',
-        classifyLibraryError(error),
-      ),
-    );
+    showFailureAlert(deleteFailedAlert('library.delete_tracks', BULK_RUN_FAILED, error));
   };
+}
+
+const BULK_RUN_FAILED = 'Could not remove these tracks.';
+const TRACK_DELETE_FAILED = 'Could not remove the track.';
+
+function deleteFailedAlert(surface: string, lead: string, error: unknown): FailureAlert {
+  return libraryFailureAlert(surface, 'Delete failed', lead, classifyLibraryError(error));
 }
 
 export function useDeleteTracks() {
@@ -269,14 +269,7 @@ function undoFailedRemoval(queryClient: QueryClient, warn: LibraryWarn) {
     if (failure === 'not-found') return unpin(trackId);
     logTrackMutationFailure(warn, 'delete track', deleteEndpoint, trackId, error);
     putTrackBack(queryClient, trackId, removed);
-    showFailureAlert(
-      libraryFailureAlert(
-        'library.delete_track',
-        'Delete failed',
-        'Could not remove the track.',
-        failure,
-      ),
-    );
+    showFailureAlert(deleteFailedAlert('library.delete_track', TRACK_DELETE_FAILED, error));
   };
 }
 

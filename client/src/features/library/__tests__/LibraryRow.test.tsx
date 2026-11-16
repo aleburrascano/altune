@@ -7,10 +7,10 @@ import { trackResponseFactory } from '@testing/factories';
 
 import { LibraryRow } from '@features/library';
 import { setPlatformOS } from '@testing/setPlatformOS';
-import { PHONE_WINDOW_WIDTH, setWindowWidth } from '@features/library/__tests__/setWindowWidth';
+import { WINDOW_WIDTH, setWindowWidth } from '@features/library/__tests__/setWindowWidth';
 
 beforeEach(() => {
-  setWindowWidth(PHONE_WINDOW_WIDTH);
+  setWindowWidth(WINDOW_WIDTH.phone);
 });
 
 const ID = asTrackId('track-1');
@@ -318,7 +318,7 @@ describe('LibraryRow — wide web layout', () => {
 
   beforeEach(() => {
     setPlatformOS('web');
-    setWindowWidth(1440);
+    setWindowWidth(WINDOW_WIDTH.desktop);
   });
 
   afterEach(() => {
@@ -370,7 +370,7 @@ describe('LibraryRow — wide web row keeps the compact row behaviours (#2842)',
 
   beforeEach(() => {
     setPlatformOS('web');
-    setWindowWidth(1440);
+    setWindowWidth(WINDOW_WIDTH.desktop);
   });
 
   afterEach(() => {
