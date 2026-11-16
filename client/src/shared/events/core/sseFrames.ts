@@ -67,14 +67,13 @@ function collectFields(block: string): BlockFields {
   return fields;
 }
 
-function isJsonObject(value: unknown): value is JsonObject {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+function objectOrNull(value: unknown): JsonObject | null {
+  return typeof value !== 'object' || Array.isArray(value) ? null : (value as JsonObject | null);
 }
 
 function parsedObject(payload: string): JsonObject | null {
   try {
-    const parsed: unknown = JSON.parse(payload);
-    return isJsonObject(parsed) ? parsed : null;
+    return objectOrNull(JSON.parse(payload));
   } catch {
     return null;
   }
