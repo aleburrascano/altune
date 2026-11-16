@@ -8,6 +8,8 @@ import { playlistKeys } from '@shared/query';
 import { signInTestUser } from '@testing/signInTestUser';
 
 import { usePlaylistRename } from '@features/library';
+import { PlaylistsPortProvider } from '@shared/playlists';
+import { apiClientPlaylistsPort } from '@testing/apiClientPorts';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -46,7 +48,12 @@ function renamed(name: string): PlaylistResponse {
 let queryClient: QueryClient;
 
 function wrapper({ children }: WrapperProps) {
-  return createElement(QueryClientProvider, { client: queryClient }, children);
+  const portProps = { port: apiClientPlaylistsPort, children };
+  return createElement(
+    QueryClientProvider,
+    { client: queryClient },
+    createElement(PlaylistsPortProvider, portProps),
+  );
 }
 
 function renderRename(currentName: string | undefined) {

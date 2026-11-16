@@ -26,7 +26,7 @@ import { useServerEvents, useScreenViews } from '@shared/events';
 import { startKillSwitchPolling } from '@shared/killSwitch';
 import { followSignedInUser, installGlobalErrorReporting } from '@shared/telemetry';
 import { PlaybackProvider, SleepTimerBridge, startPlaybackService } from '@features/player';
-import { OfflineReconcileBridge } from '@shared/offline';
+import { OfflineReconcileBridge, provideOfflinePort } from '@shared/offline';
 import {
   useWideWebLayout,
   ScreenBoundary,
@@ -36,11 +36,12 @@ import {
 } from '@shared/ui';
 import { AppChrome } from '@/mobile/frame/AppChrome';
 import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
-import { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
+import { httpFeaturePorts, httpOfflinePort } from '@/mobile/wiring/httpFeaturePorts';
 import { PlaybackShortcuts, SystemNavigationBar } from '@/mobile/frame/platformExtras';
 import { reportOtaLaunchFailures } from '@/mobile/otaLaunchReport';
 import { chainUncaughtErrorHandler } from '@/mobile/uncaughtErrors';
 
+provideOfflinePort(httpOfflinePort);
 startPlaybackService();
 
 registerSearchStateSignOutReset();

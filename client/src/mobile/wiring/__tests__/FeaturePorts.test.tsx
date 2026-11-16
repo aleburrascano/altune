@@ -1,6 +1,8 @@
 import { renderHook } from '@testing-library/react-native';
 import type { PropsWithChildren } from 'react';
 
+import { createMemoryAcquisitionPort, useAcquisitionPort } from '@shared/acquisition';
+import { createMemoryPlaylistsPort, usePlaylistsPort } from '@shared/playlists';
 import { createMemoryDetailPort, useDetailPort } from '@features/detail';
 import {
   createMemoryDiscoverPort,
@@ -14,10 +16,12 @@ import { FeaturePorts, httpFeaturePorts, type FeaturePortSet } from '@/mobile';
 
 function useEveryPort(): FeaturePortSet {
   return {
+    acquisition: useAcquisitionPort(),
     detail: useDetailPort(),
     discover: useDiscoverPort(),
     favorites: useFavoritesPort(),
     library: useLibraryPort(),
+    playlists: usePlaylistsPort(),
     settings: useSettingsPort(),
   };
 }
@@ -40,10 +44,12 @@ describe('FeaturePorts', () => {
 
   it('hands every feature hook the in-memory port it was given', () => {
     const memory: FeaturePortSet = {
+      acquisition: createMemoryAcquisitionPort({ trackIds: [] }).port,
       detail: createMemoryDetailPort(),
       discover: createMemoryDiscoverPort(),
       favorites: createMemoryFavoritesPort(),
       library: createMemoryLibraryPort(),
+      playlists: createMemoryPlaylistsPort(),
       settings: createMemorySettingsPort(),
     };
 
@@ -55,10 +61,12 @@ describe('FeaturePorts', () => {
   });
 
   it.each([
+    ['acquisition', useAcquisitionPort],
     ['detail', useDetailPort],
     ['discover', useDiscoverPort],
     ['favorites', useFavoritesPort],
     ['library', useLibraryPort],
+    ['playlists', usePlaylistsPort],
     ['settings', useSettingsPort],
   ])('throws for the %s port when nothing provides it', (name, usePort) => {
     jest.spyOn(console, 'error').mockImplementation(() => {});

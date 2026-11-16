@@ -16,11 +16,14 @@ import type {
   TrackResponse,
 } from '@shared/apiClient';
 import { libraryKeys, playlistKeys } from '@shared/query';
-import { usePinnedStore } from '@shared/offline';
+import { usePinnedStore, provideOfflinePort } from '@shared/offline';
+import { apiClientOfflinePort } from '@testing/apiClientPorts';
 
 import { applyServerEvent, settleTrackPatches } from '@shared/events';
 import type { JsonObject } from '@shared/files';
 import type { ServerEvent } from '@shared/events';
+
+provideOfflinePort(apiClientOfflinePort);
 type TrackPages = InfiniteData<ListTracksResponse>;
 
 function makeClient(): QueryClient {

@@ -1,15 +1,9 @@
+import { apiClientOfflinePort } from '@testing/apiClientPorts';
 import { signInTestUser } from '@testing/signInTestUser';
 
-import {
-  type OfflinePort,
-  httpOfflinePort,
-  createMemoryOfflinePort,
-  type SeededAudioUrls,
-} from '@shared/offline';
+import { type OfflinePort, createMemoryOfflinePort, type SeededAudioUrls } from '@shared/offline';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
-
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 const AUDIO_URLS_PATH = '/v1/audio-urls';
 const T1_URL = 'https://cdn.example.com/t1.mp3?sig=a';
@@ -32,7 +26,7 @@ function serveAudioUrlsOverHttp(urls: SeededAudioUrls): OfflinePort {
     }
     return fakeFetch(url, init);
   }) as typeof fetch;
-  return httpOfflinePort;
+  return apiClientOfflinePort;
 }
 
 beforeEach(async () => {
@@ -45,14 +39,14 @@ afterEach(() => {
 
 describe.each<[string, (urls: SeededAudioUrls) => OfflinePort]>([
   ['createMemoryOfflinePort', (urls) => createMemoryOfflinePort({ urls })],
-  ['httpOfflinePort over HTTP', serveAudioUrlsOverHttp],
+  ['apiClient over HTTP', serveAudioUrlsOverHttp],
 ])('%s satisfies the OfflinePort contract', (name, portFor) => {
   it('resolves no urls for no track ids, sending nothing over the wire', async () => {
     const port = portFor({ t1: { url: T1_URL, version: 'v1' } });
 
     await expect(port.fetchAudioUrls([])).resolves.toEqual([]);
 
-    if (name.startsWith('http')) expect(__http.requests).toEqual([]);
+    if (name.startsWith('apiClient')) expect(__http.requests).toEqual([]);
   });
 
   it('resolves the seeded url and version of one track id', async () => {
@@ -84,7 +78,7 @@ describe.each<[string, (urls: SeededAudioUrls) => OfflinePort]>([
   });
 });
 
-describe('httpOfflinePort', () => {
+describe('apiClient offline port', () => {
   it('sends POST /v1/audio-urls with the requested ids as track_ids', async () => {
     const port = serveAudioUrlsOverHttp({ t1: { url: T1_URL, version: 'v1' } });
 

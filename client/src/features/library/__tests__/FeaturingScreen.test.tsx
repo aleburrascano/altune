@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Alert } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
+import { AcquisitionPortProvider } from '@shared/acquisition';
 import { asTrackId } from '@shared/apiClient';
 import { ApiError, NetworkError } from '@shared/failure';
 
@@ -13,6 +14,7 @@ import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';
 import { PlaybackContext } from '@shared/playback';
 import { idlePlayback } from '@testing/queryHarness';
+import { apiClientAcquisitionPort } from '@testing/apiClientPorts';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -43,7 +45,9 @@ function wrapper({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={client}>
       <PlaybackContext.Provider value={idlePlayback}>
-        <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+        <AcquisitionPortProvider port={apiClientAcquisitionPort}>
+          <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+        </AcquisitionPortProvider>
       </PlaybackContext.Provider>
     </QueryClientProvider>
   );

@@ -1,10 +1,9 @@
 import { createContext, use } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 
-import { httpPlaylistsPort } from '@shared/playlists/adapters/http/httpPlaylistsPort';
 import type { PlaylistsPort } from '@shared/playlists/ports/playlistsPort';
 
-const PlaylistsPortContext = createContext<PlaylistsPort>(httpPlaylistsPort);
+const PlaylistsPortContext = createContext<PlaylistsPort | null>(null);
 
 interface PlaylistsPortProviderProps {
   port: PlaylistsPort;
@@ -19,5 +18,7 @@ export function PlaylistsPortProvider({
 }
 
 export function usePlaylistsPort(): PlaylistsPort {
-  return use(PlaylistsPortContext);
+  const port = use(PlaylistsPortContext);
+  if (port === null) throw new Error('no playlists port provided: mount PlaylistsPortProvider');
+  return port;
 }

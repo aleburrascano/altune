@@ -12,6 +12,9 @@ import * as android from '@/mobile/frame/platformExtras.android';
 import * as web from '@/mobile/frame/platformExtras.web';
 
 import { createMemoryLibraryPort, LibraryPortProvider } from '@features/library';
+import { PlaylistsPortProvider, createMemoryPlaylistsPort } from '@shared/playlists';
+
+const playlistsPort = createMemoryPlaylistsPort();
 const mockNavigationBar = jest.fn();
 
 jest.mock('expo-navigation-bar', () => ({
@@ -57,7 +60,9 @@ interface ProvidersProps {
 function Providers({ children }: ProvidersProps) {
   return (
     <QueryClientProvider client={client}>
-      <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+      <PlaylistsPortProvider port={playlistsPort}>
+        <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+      </PlaylistsPortProvider>
     </QueryClientProvider>
   );
 }

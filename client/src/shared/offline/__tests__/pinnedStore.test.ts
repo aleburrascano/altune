@@ -23,9 +23,14 @@ import {
   usePinnedStore,
   type PinnedEntry,
   type PinnedStatus,
+  provideOfflinePort,
   resolvePinnedUri,
   repinIfPinned,
 } from '@shared/offline';
+import { apiClientOfflinePort } from '@testing/apiClientPorts';
+
+provideOfflinePort(apiClientOfflinePort);
+
 const PIN_DOWNLOAD_TIMEOUT_MS = 120_000;
 const MAX_PINNED_BYTES = 8_589_934_592;
 const MIN_FREE_BYTES = 536_870_912;
@@ -659,6 +664,20 @@ describe('the pinned index is written through to disk and loaded back on relaunc
         status: 'downloading',
       });
       warn.mockRestore();
+    });
+  });
+
+  describe('a store no app has handed an offline port', () => {
+    it('refuses to start a download instead of reaching the API on its own', () => {
+      jest.isolateModules(() => {
+        const fresh = require('@shared/offline/state/pinnedStore') as {
+          usePinnedStore: typeof usePinnedStore;
+        };
+
+        expect(() => fresh.usePinnedStore.getState().pin(asTrackId('t1'))).toThrow(
+          'no offline port provided',
+        );
+      });
     });
   });
 

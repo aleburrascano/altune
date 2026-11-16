@@ -12,6 +12,9 @@ import {
   usePlaylistsView,
 } from '@features/library';
 import type { LibraryPort } from '@features/library';
+import { PlaylistsPortProvider, createMemoryPlaylistsPort } from '@shared/playlists';
+
+const playlistsPort = createMemoryPlaylistsPort();
 const SECRET = 'daft punk discovery bootleg';
 
 type FailingMethod = 'getTracks' | 'getLibraryAlbums' | 'getLibraryArtists';
@@ -23,7 +26,9 @@ function wrapperFor(port: LibraryPort) {
   return function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>
-        <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+        <PlaylistsPortProvider port={playlistsPort}>
+          <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+        </PlaylistsPortProvider>
       </QueryClientProvider>
     );
   };

@@ -1,9 +1,17 @@
 import { act, render } from '@testing-library/react-native';
 import * as FileSystem from 'expo-file-system';
 
-import { OfflineReconcileBridge, usePinnedStore, type PinnedEntry } from '@shared/offline';
+import {
+  OfflineReconcileBridge,
+  usePinnedStore,
+  type PinnedEntry,
+  provideOfflinePort,
+} from '@shared/offline';
+import { apiClientOfflinePort } from '@testing/apiClientPorts';
 import { asTrackId, type TrackId } from '@shared/apiClient';
 import { signInTestUser } from '@testing/signInTestUser';
+
+provideOfflinePort(apiClientOfflinePort);
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 

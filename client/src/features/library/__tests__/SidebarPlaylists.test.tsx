@@ -8,6 +8,9 @@ import type { PlaylistDetailResponse } from '@shared/apiClient';
 import { Sidebar, darkTheme } from '@shared/ui';
 import { createMemoryLibraryPort, LibraryPortProvider, SidebarPlaylists } from '@features/library';
 import type { LibraryPort } from '@features/library';
+import { PlaylistsPortProvider, createMemoryPlaylistsPort } from '@shared/playlists';
+
+const playlistsPort = createMemoryPlaylistsPort();
 const mockPush = jest.fn();
 
 jest.mock('expo-router', () => ({
@@ -51,7 +54,9 @@ let port: LibraryPort;
 function wrapper({ children }: WrapperProps) {
   return (
     <QueryClientProvider client={client}>
-      <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+      <PlaylistsPortProvider port={playlistsPort}>
+        <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+      </PlaylistsPortProvider>
     </QueryClientProvider>
   );
 }

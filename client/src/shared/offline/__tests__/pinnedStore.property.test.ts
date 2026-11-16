@@ -1,8 +1,11 @@
 import fc from 'fast-check';
 
-import { usePinnedStore } from '@shared/offline';
+import { usePinnedStore, provideOfflinePort } from '@shared/offline';
+import { apiClientOfflinePort } from '@testing/apiClientPorts';
 import { asTrackId } from '@shared/apiClient';
 import { signInTestUser } from '@testing/signInTestUser';
+
+provideOfflinePort(apiClientOfflinePort);
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 

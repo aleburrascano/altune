@@ -51,9 +51,11 @@ export {
 export type { TrackStatus } from '@shared/acquisition/state/trackStatusStore';
 export { DownloadsBar } from '@shared/acquisition/ui/DownloadsBar';
 export { DownloadsSheet } from '@shared/acquisition/ui/DownloadsSheet';
-export { AcquisitionPortProvider } from '@shared/acquisition/ports/AcquisitionPortProvider';
+export {
+  AcquisitionPortProvider,
+  useAcquisitionPort,
+} from '@shared/acquisition/ports/AcquisitionPortProvider';
 export type { AcquisitionPort } from '@shared/acquisition/ports/acquisitionPort';
 export { createMemoryAcquisitionPort } from '@shared/acquisition/__tests__/memoryAcquisitionPort';
-export { httpAcquisitionPort } from '@shared/acquisition/adapters/http/httpAcquisitionPort';
 export type { AcquisitionPhase } from '@shared/acquisition/state/stagePhase';
 export { deriveBarDisplay } from '@shared/acquisition/ui/barDisplay';

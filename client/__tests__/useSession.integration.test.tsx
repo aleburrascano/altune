@@ -794,11 +794,13 @@ describe('pinned downloads across a killed sign-out', () => {
   function bootApp(): App {
     jest.doMock('react', () => React);
     jest.doMock('@tanstack/react-query', () => ReactQuery);
-    return {
+    const app: App = {
       session: require('@shared/auth/useSession'),
       supabase: (require('@shared/auth/supabaseClient') as typeof SupabaseClientModule).supabase,
       pinned: require('@shared/offline/state/pinnedStore'),
     };
+    app.pinned.provideOfflinePort(require('@testing/apiClientPorts').apiClientOfflinePort);
+    return app;
   }
 
   function killAndRelaunch(): App {
