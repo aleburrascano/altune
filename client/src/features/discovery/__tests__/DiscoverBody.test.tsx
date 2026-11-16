@@ -29,6 +29,13 @@ function render(ui: React.ReactElement): ReturnType<typeof renderBare> {
   });
 }
 
+const COMPACT_WIDTH = 390;
+const WIDE_WIDTH = 1440;
+const BREAKPOINT_WIDTH = 1000;
+const BELOW_BREAKPOINT_WIDTH = 999;
+const SMALL_PHONE_WIDTH = 360;
+const FIVE_COLUMNS_WIDTH = 1280;
+const FOUR_COLUMNS_WIDTH = 1279;
 const DEVICE_WINDOW = Dimensions.get('window');
 
 function setWindowWidth(width: number): void {
@@ -41,7 +48,7 @@ function setWindowWidth(width: number): void {
 }
 
 beforeEach(() => {
-  setWindowWidth(390);
+  setWindowWidth(COMPACT_WIDTH);
 });
 
 afterAll(() => {
@@ -308,11 +315,11 @@ function gridCardBorderColor(kind: string, position: number): unknown {
 describe('wide layout pairs the top result with tracks and grids albums', () => {
   useWebPlatform();
   afterEach(() => {
-    setWindowWidth(390);
+    setWindowWidth(COMPACT_WIDTH);
   });
 
   it('pairs the top result beside the first tracks section and grids albums at 1440px', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     renderBlendedBody();
 
     expect(screen.getByTestId('discover-top-pair')).toBeTruthy();
@@ -321,7 +328,7 @@ describe('wide layout pairs the top result with tracks and grids albums', () => 
   });
 
   it('stacks the top result above sections and keeps album rows on a compact screen', () => {
-    setWindowWidth(390);
+    setWindowWidth(COMPACT_WIDTH);
     renderBlendedBody();
 
     expect(screen.queryByTestId('discover-top-pair')).toBeNull();
@@ -330,7 +337,7 @@ describe('wide layout pairs the top result with tracks and grids albums', () => 
   });
 
   it('rings the top result card on keyboard focus', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     renderBlendedBody();
     expect(cardBorderColor()).toBe('transparent');
 
@@ -339,7 +346,7 @@ describe('wide layout pairs the top result with tracks and grids albums', () => 
   });
 
   it('rings the top result card on hover, and unrings it on hover-out and blur', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     renderBlendedBody();
     expect(cardBorderColor()).toBe('transparent');
 
@@ -358,11 +365,11 @@ describe('wide layout pairs the top result with tracks and grids albums', () => 
 describe('wide layout grids every eligible kind and drops empty sections', () => {
   useWebPlatform();
   afterEach(() => {
-    setWindowWidth(390);
+    setWindowWidth(COMPACT_WIDTH);
   });
 
   it('grids an artist section and renders no section for an empty one, at 1440px', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     renderArtistGridBody();
 
     expect(screen.getByTestId('discover-grid-artist')).toBeTruthy();
@@ -372,7 +379,7 @@ describe('wide layout grids every eligible kind and drops empty sections', () =>
   });
 
   it('sizes grid cards for five columns between 920 and 1080px of content width', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     renderArtistGridBody();
 
     fireEvent(screen.getByTestId('discover-blended-section'), 'layout', {
@@ -384,7 +391,7 @@ describe('wide layout grids every eligible kind and drops empty sections', () =>
   });
 
   it('uses six columns at exactly 1080px of content width, and five columns just below it', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     renderArtistGridBody();
 
     fireEvent(screen.getByTestId('discover-blended-section'), 'layout', {
@@ -407,7 +414,7 @@ describe('wide layout grids every eligible kind and drops empty sections', () =>
   });
 
   it('uses four columns just under 1280px', () => {
-    setWindowWidth(1279);
+    setWindowWidth(FOUR_COLUMNS_WIDTH);
     renderArtistGridBody();
     expect(
       flatStyle(screen.getByTestId('discover-grid-card-artist-0').props.style).some(
@@ -417,7 +424,7 @@ describe('wide layout grids every eligible kind and drops empty sections', () =>
   });
 
   it('rings a grid card on hover, and unrings it on hover-out, focus, and blur', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     renderArtistGridBody();
     const card = () => screen.getByTestId('discover-grid-card-artist-0');
     expect(gridCardBorderColor('artist', 0)).toBe('transparent');
@@ -434,7 +441,7 @@ describe('wide layout grids every eligible kind and drops empty sections', () =>
   });
 
   it('does not pair the top result when the first section is not tracks', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     renderNoTrackFirstBody();
 
     expect(screen.queryByTestId('discover-top-pair')).toBeNull();
@@ -445,11 +452,11 @@ describe('wide layout grids every eligible kind and drops empty sections', () =>
 describe('wide layout grid column exactness and card taps', () => {
   useWebPlatform();
   afterEach(() => {
-    setWindowWidth(390);
+    setWindowWidth(COMPACT_WIDTH);
   });
 
   it('uses five columns at exactly 920px of content width, and four columns just below it', () => {
-    setWindowWidth(1280);
+    setWindowWidth(FIVE_COLUMNS_WIDTH);
     renderArtistGridBody();
 
     fireEvent(screen.getByTestId('discover-blended-section'), 'layout', {
@@ -472,7 +479,7 @@ describe('wide layout grid column exactness and card taps', () => {
   });
 
   it('renders artwork for a grid card and taps it through to onResultTap', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     const onResultTap = jest.fn();
     const topResult = resultFixture({ kind: 'track', title: 'Top' });
     render(
@@ -587,11 +594,11 @@ function probeBody(
 describe('the wide layout starts at the shared 1000px breakpoint and follows a resize', () => {
   useWebPlatform();
   afterEach(() => {
-    setWindowWidth(390);
+    setWindowWidth(COMPACT_WIDTH);
   });
 
   it('pairs the top result and grids albums and artists at exactly 1000px', () => {
-    setWindowWidth(1000);
+    setWindowWidth(BREAKPOINT_WIDTH);
     render(probeBody(probeStandardSections(), probeItem('track', 9)));
 
     expect(screen.getByTestId('discover-top-pair')).toBeTruthy();
@@ -601,7 +608,7 @@ describe('the wide layout starts at the shared 1000px breakpoint and follows a r
   });
 
   it('uses between four and six grid columns at exactly 1000px', () => {
-    setWindowWidth(1000);
+    setWindowWidth(BREAKPOINT_WIDTH);
     render(probeBody(probeStandardSections(), probeItem('track', 9)));
 
     const bases = flatStyle(screen.getByTestId('discover-grid-card-album-0').props.style)
@@ -611,7 +618,7 @@ describe('the wide layout starts at the shared 1000px breakpoint and follows a r
   });
 
   it('keeps album and artist rows and no pairing at 999px', () => {
-    setWindowWidth(999);
+    setWindowWidth(BELOW_BREAKPOINT_WIDTH);
     render(probeBody(probeStandardSections(), probeItem('track', 9)));
 
     expect(screen.queryByTestId('discover-top-pair')).toBeNull();
@@ -622,7 +629,7 @@ describe('the wide layout starts at the shared 1000px breakpoint and follows a r
   });
 
   it('keeps album and artist rows and a stacked top result at 360px', () => {
-    setWindowWidth(360);
+    setWindowWidth(SMALL_PHONE_WIDTH);
     render(probeBody(probeStandardSections(), probeItem('track', 9)));
 
     expect(screen.queryByTestId('discover-top-pair')).toBeNull();
@@ -633,17 +640,17 @@ describe('the wide layout starts at the shared 1000px breakpoint and follows a r
   });
 
   it('switches to grids when the window widens past the breakpoint and back to rows when it narrows', () => {
-    setWindowWidth(999);
+    setWindowWidth(BELOW_BREAKPOINT_WIDTH);
     const { rerender } = render(probeBody(probeStandardSections(), probeItem('track', 9)));
     expect(screen.queryByTestId('discover-grid-album')).toBeNull();
 
-    setWindowWidth(1000);
+    setWindowWidth(BREAKPOINT_WIDTH);
     rerender(probeBody(probeStandardSections(), probeItem('track', 9)));
     expect(screen.getByTestId('discover-grid-album')).toBeTruthy();
     expect(screen.getByTestId('discover-top-pair')).toBeTruthy();
     expect(screen.queryByTestId('discover-row-album-0')).toBeNull();
 
-    setWindowWidth(999);
+    setWindowWidth(BELOW_BREAKPOINT_WIDTH);
     rerender(probeBody(probeStandardSections(), probeItem('track', 9)));
     expect(screen.queryByTestId('discover-grid-album')).toBeNull();
     expect(screen.queryByTestId('discover-top-pair')).toBeNull();
@@ -655,11 +662,11 @@ describe('the wide layout starts at the shared 1000px breakpoint and follows a r
 describe('the wide top result survives a search with no tracks', () => {
   useWebPlatform();
   afterEach(() => {
-    setWindowWidth(390);
+    setWindowWidth(COMPACT_WIDTH);
   });
 
   it('still shows the top result when the search has no sections at 1440px', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     render(probeBody([], probeItem('track', 9)));
 
     expect(screen.getByTestId('discover-top-result')).toBeTruthy();
@@ -668,7 +675,7 @@ describe('the wide top result survives a search with no tracks', () => {
   });
 
   it('shows the top result once and no track rows when the tracks section is empty at 1440px', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     render(probeBody([probeSection('track', 0), probeSection('album', 2)], probeItem('album', 9)));
 
     expect(screen.getAllByTestId('discover-top-result')).toHaveLength(1);
@@ -677,7 +684,7 @@ describe('the wide top result survives a search with no tracks', () => {
   });
 
   it('shows the top result and every track of the paired section exactly once at 1440px', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     render(probeBody([probeSection('track', 3), probeSection('album', 1)], probeItem('track', 9)));
 
     expect(screen.getByTestId('discover-top-pair')).toBeTruthy();
@@ -691,18 +698,18 @@ describe('the wide top result survives a search with no tracks', () => {
 describe('wide grids hold one card, cap many, and give way to filters', () => {
   useWebPlatform();
   afterEach(() => {
-    setWindowWidth(390);
+    setWindowWidth(COMPACT_WIDTH);
   });
 
   it('grids a single album as one card', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     render(probeBody([probeSection('track', 1), probeSection('album', 1)], probeItem('track', 9)));
 
     expect(screen.getAllByTestId(/^discover-grid-card-album-\d+$/)).toHaveLength(1);
   });
 
   it('keeps the twenty-item section cap and see-all in a wide grid', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     render(
       probeBody([probeSection('track', 1), probeSection('album', 45, true)], probeItem('track', 9)),
     );
@@ -714,7 +721,7 @@ describe('wide grids hold one card, cap many, and give way to filters', () => {
   });
 
   it('drops an empty artist section while gridding the albums after it', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     render(
       probeBody(
         [probeSection('track', 1), probeSection('artist', 0), probeSection('album', 3)],
@@ -728,7 +735,7 @@ describe('wide grids hold one card, cap many, and give way to filters', () => {
   });
 
   it('shows the filtered empty view, not a grid, when the album filter matches nothing at 1440px', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     render(probeBody([probeSection('track', 2)], probeItem('track', 9), jest.fn(), 'album'));
 
     expect(screen.getByTestId('discover-filtered-empty')).toBeTruthy();
@@ -739,11 +746,11 @@ describe('wide grids hold one card, cap many, and give way to filters', () => {
 describe('wide cards keep focus and hover visible and still open on press', () => {
   useWebPlatform();
   afterEach(() => {
-    setWindowWidth(390);
+    setWindowWidth(COMPACT_WIDTH);
   });
 
   it('keeps the focus ring on a grid card after the pointer leaves it', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     render(probeBody(probeStandardSections(), probeItem('track', 9)));
     const card = screen.getByTestId('discover-grid-card-album-1');
 
@@ -757,7 +764,7 @@ describe('wide cards keep focus and hover visible and still open on press', () =
   });
 
   it('keeps the hover ring on the top result after focus leaves it while still hovered', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     render(probeBody(probeStandardSections(), probeItem('track', 9)));
     const card = screen.getByTestId('discover-top-result');
 
@@ -768,7 +775,7 @@ describe('wide cards keep focus and hover visible and still open on press', () =
   });
 
   it('rings only the grid card under the pointer', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     render(probeBody(probeStandardSections(), probeItem('track', 9)));
 
     fireEvent(screen.getByTestId('discover-grid-card-album-2'), 'hoverIn');
@@ -778,7 +785,7 @@ describe('wide cards keep focus and hover visible and still open on press', () =
   });
 
   it('exposes grid cards and the top result as buttons, so Enter can activate them', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     render(probeBody(probeStandardSections(), probeItem('track', 9)));
 
     const role = (testID: string) => {
@@ -791,7 +798,7 @@ describe('wide cards keep focus and hover visible and still open on press', () =
   });
 
   it('opens the top result when pressed in the wide pair', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     const onResultTap = jest.fn();
     render(probeBody(probeStandardSections(), probeItem('track', 9), onResultTap));
 
@@ -805,7 +812,7 @@ describe('wide cards keep focus and hover visible and still open on press', () =
 
   it('reports the same result and position for a press at 1440px as for the same item at 390px', () => {
     const narrowTap = jest.fn();
-    setWindowWidth(390);
+    setWindowWidth(COMPACT_WIDTH);
     const { unmount } = render(
       probeBody(probeStandardSections(), probeItem('track', 9), narrowTap),
     );
@@ -816,7 +823,7 @@ describe('wide cards keep focus and hover visible and still open on press', () =
     unmount();
 
     const wideTap = jest.fn();
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     render(probeBody(probeStandardSections(), probeItem('track', 9), wideTap));
     fireEvent.press(screen.getByTestId('discover-grid-card-album-2'));
     fireEvent.press(screen.getByTestId('discover-grid-card-artist-1'));
@@ -831,11 +838,11 @@ describe('wide cards keep focus and hover visible and still open on press', () =
 describe('the wide top pair needs a top result to pair with', () => {
   useWebPlatform();
   afterEach(() => {
-    setWindowWidth(390);
+    setWindowWidth(COMPACT_WIDTH);
   });
 
   it('renders the tracks and no pair when there is no top result at 1440px', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     render(probeBody([probeSection('track', 2), probeSection('album', 1)], undefined));
 
     expect(screen.queryByTestId('discover-top-pair')).toBeNull();
@@ -848,11 +855,11 @@ describe('the wide top pair needs a top result to pair with', () => {
 
 describe('wide Discover is web only', () => {
   afterEach(() => {
-    setWindowWidth(390);
+    setWindowWidth(COMPACT_WIDTH);
   });
 
   it('keeps rows and no pairing at 1440px on native', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     render(probeBody(probeStandardSections(), probeItem('track', 9)));
 
     expect(screen.queryByTestId('discover-top-pair')).toBeNull();
@@ -867,11 +874,11 @@ describe('wide Discover is web only', () => {
 describe("wide layout grid columns follow the grid's own measured width, not the window", () => {
   useWebPlatform();
   afterEach(() => {
-    setWindowWidth(390);
+    setWindowWidth(COMPACT_WIDTH);
   });
 
   it('sizes columns from a layout event reporting a narrower content width than the window', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     renderArtistGridBody();
 
     fireEvent(screen.getByTestId('discover-blended-section'), 'layout', {
@@ -886,7 +893,7 @@ describe("wide layout grid columns follow the grid's own measured width, not the
   });
 
   it('uses six columns once the measured content is 1080px wide or more', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     renderArtistGridBody();
 
     fireEvent(screen.getByTestId('discover-blended-section'), 'layout', {
@@ -901,7 +908,7 @@ describe("wide layout grid columns follow the grid's own measured width, not the
   });
 
   it('uses five columns for content between 920px and 1080px', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     renderArtistGridBody();
 
     fireEvent(screen.getByTestId('discover-blended-section'), 'layout', {
@@ -919,11 +926,11 @@ describe("wide layout grid columns follow the grid's own measured width, not the
 describe('wide layout grid cards name their kind for assistive tech', () => {
   useWebPlatform();
   afterEach(() => {
-    setWindowWidth(390);
+    setWindowWidth(COMPACT_WIDTH);
   });
 
   it('labels a grid card with the result title and its kind', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     renderArtistGridBody();
 
     expect(screen.getByTestId('discover-grid-card-artist-0').props.accessibilityLabel).toBe(

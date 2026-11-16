@@ -89,23 +89,33 @@ export type DiscoverLogic = {
   history: HistorySlice;
 };
 
-function historySlice(
-  history: ReturnType<typeof useSearchHistory>,
-  clearHistory: ReturnType<typeof useDiscoverClearSearchHistory>,
-  onSuggestionSelect: (text: string) => void,
-): HistorySlice {
+type HistoryParts = {
+  history: ReturnType<typeof useSearchHistory>;
+  clearHistory: ReturnType<typeof useDiscoverClearSearchHistory>;
+  onSuggestionSelect: (text: string) => void;
+};
+
+type HistoryStatus = Pick<HistorySlice, 'items' | 'failed' | 'clearFailed'>;
+type HistoryActions = Pick<HistorySlice, 'onTap' | 'onRetry' | 'onClear'>;
+
+function historyStatus({ history, clearHistory }: HistoryParts): HistoryStatus {
   return {
     items: history.data?.items ?? [],
     failed: history.error !== null && history.data === undefined,
     clearFailed: clearHistory.error !== null,
-    onTap: (item: SearchHistoryItem) => {
-      onSuggestionSelect(item.query);
-    },
-    onRetry: () => {
-      void history.refetch();
-    },
-    onClear: clearHistory.clear,
   };
+}
+
+function historyActions(parts: HistoryParts): HistoryActions {
+  return {
+    onTap: (item: SearchHistoryItem): void => parts.onSuggestionSelect(item.query),
+    onRetry: (): void => void parts.history.refetch(),
+    onClear: parts.clearHistory.clear,
+  };
+}
+
+function historySlice(parts: HistoryParts): HistorySlice {
+  return { ...historyStatus(parts), ...historyActions(parts) };
 }
 
 export function useDiscoverLogic(): DiscoverLogic {
@@ -204,6 +214,10 @@ export function useDiscoverLogic(): DiscoverLogic {
         if (!isFetchingNextPage && !isRefreshing) void fetchNextPage({ cancelRefetch: false });
       },
     },
-    history: historySlice(history, clearHistory, suggestionVisibility.onSuggestionSelect),
+    history: historySlice({
+      history,
+      clearHistory,
+      onSuggestionSelect: suggestionVisibility.onSuggestionSelect,
+    }),
   };
 }

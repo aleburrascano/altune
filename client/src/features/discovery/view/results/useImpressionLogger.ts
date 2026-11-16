@@ -14,14 +14,16 @@ export type ImpressionHandlers = {
   onViewableItemsChanged: (info: ViewableItemsChange) => void;
 };
 
+type UnreportedSearch = { searchId: string; results: DiscoverySearchResponse['results'] };
+
 function unreportedSearch(
-  data: DiscoverySearchResponse | undefined,
+  response: DiscoverySearchResponse | undefined,
   viewableItems: readonly ViewableItem[],
   emittedFor: string | null,
-): { searchId: string; results: DiscoverySearchResponse['results'] } | null {
-  const searchId = data?.search_id;
+): UnreportedSearch | null {
+  const searchId = response?.search_id;
   if (!searchId || viewableItems.length === 0) return null;
-  return emittedFor === searchId ? null : { searchId, results: data.results };
+  return emittedFor === searchId ? null : { searchId, results: response.results };
 }
 
 export function useImpressionLogger(

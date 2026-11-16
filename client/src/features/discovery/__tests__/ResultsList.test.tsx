@@ -6,6 +6,7 @@ import { ResultsList, type ResultsCommonProps } from '@features/discovery';
 import { setPlatformOS } from '@testing/setPlatformOS';
 
 const NATIVE_OS = Platform.OS;
+const COMPACT_WIDTH = 390;
 const DEVICE_WINDOW = Dimensions.get('window');
 
 function setWindowWidth(width: number): void {
@@ -18,7 +19,7 @@ function setWindowWidth(width: number): void {
 }
 
 beforeEach(() => {
-  setWindowWidth(390);
+  setWindowWidth(COMPACT_WIDTH);
 });
 
 afterAll(() => {
@@ -105,11 +106,11 @@ describe('pairing the header with the first item on a wide screen', () => {
 
   afterEach(() => {
     setPlatformOS(NATIVE_OS);
-    setWindowWidth(390);
+    setWindowWidth(COMPACT_WIDTH);
   });
 
   it('renders the header beside the first item once, at 1440px', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     render(
       <ResultsList
         data={[1, 2, 3]}
@@ -137,7 +138,7 @@ describe('pairing the header with the first item on a wide screen', () => {
   });
 
   it('renders the header above the full list unchanged on a compact screen', () => {
-    setWindowWidth(390);
+    setWindowWidth(COMPACT_WIDTH);
     render(
       <ResultsList
         data={[1, 2, 3]}
@@ -155,7 +156,7 @@ describe('pairing the header with the first item on a wide screen', () => {
   });
 
   it('does not pair when the list has no items even at 1440px', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     render(
       <ResultsList
         data={[]}
@@ -172,7 +173,7 @@ describe('pairing the header with the first item on a wide screen', () => {
   });
 
   it('does not pair at 1440px when pairing was not requested', () => {
-    setWindowWidth(1440);
+    setWindowWidth(WIDE_WIDTH);
     render(
       <ResultsList
         data={[FIRST_ITEM, SECOND_ITEM]}

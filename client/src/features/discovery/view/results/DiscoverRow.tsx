@@ -1,5 +1,11 @@
-import type { ReactElement } from 'react';
-import { StyleSheet, View } from 'react-native';
+import type { ComponentProps, ReactElement, ReactNode } from 'react';
+import {
+  StyleSheet,
+  View,
+  type PressableStateCallbackType,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { Pause, Play } from 'lucide-react-native';
 
 import {
@@ -14,110 +20,157 @@ import {
   Tappable,
   halved,
 } from '@shared/ui';
-import { FavoriteButton } from '@features/discovery/view/favorites/FavoriteButton';
-import type { DiscoveryResult } from '@shared/catalog';
+import {
+  FavoriteButton,
+  type FavoriteButtonProps,
+} from '@features/discovery/view/favorites/FavoriteButton';
+import type { DiscoveryResult, FavoriteKey } from '@shared/catalog';
 import type { ResultTapHandler } from '@features/discovery/hooks/results/useResultTap';
 
 import { resultSecondaryLine } from '@features/discovery/domain/resultDisplay';
-import { usePreviewPlayback } from '@features/discovery/hooks/results/usePreviewPlayback';
+import {
+  usePreviewPlayback,
+  type PreviewPlayback,
+} from '@features/discovery/hooks/results/usePreviewPlayback';
 type DiscoverRowProps = {
   result: DiscoveryResult;
   position: number;
   onPress: ResultTapHandler;
 };
 
-export const ART_SIZE = 56;
+type RowItemProps = { item: DiscoveryResult; position: number };
+type RowArtworkProps = { item: DiscoveryResult };
+type RowTextProps = { title: string; secondary: string };
+type RowBodyProps = RowItemProps & { secondary: string };
+type RowTapArgs = RowBodyProps & { onPress: ResultTapHandler };
+type RowTappableProps = RowTapArgs & { children: ReactNode };
+type RowTapProps = Pick<
+  ComponentProps<typeof Tappable>,
+  'action' | 'testID' | 'onPress' | 'accessibilityRole' | 'accessibilityLabel'
+>;
+type RowPreviewProps = { preview: PreviewPlayback; position: number };
+type ShownPreview = Extract<PreviewPlayback, { hasPreview: true }>;
+type FavoriteTarget = FavoriteButtonProps['target'];
+type IconButtonProps = ComponentProps<typeof IconButton>;
+type PressedRowStyle = (state: PressableStateCallbackType) => StyleProp<ViewStyle>;
 
-function RowFavorite({
-  result,
-  position,
-}: {
-  result: DiscoveryResult;
-  position: number;
-}): ReactElement | null {
-  if (result.favorite_key == null) return null;
-  return (
-    <FavoriteButton
-      testID={`discover-favorite-${position}`}
-      target={{
-        kind: result.kind,
-        favorite_key: result.favorite_key,
-        title: result.title,
-        subtitle: result.subtitle ?? '',
-        image_url: result.image_url ?? undefined,
-      }}
-    />
-  );
+export const ART_SIZE = 56;
+const PREVIEW_ICON_SIZE = 18;
+
+function favoriteTarget(item: DiscoveryResult, key: FavoriteKey): FavoriteTarget {
+  return {
+    kind: item.kind,
+    favorite_key: key,
+    title: item.title,
+    subtitle: item.subtitle ?? '',
+    image_url: item.image_url ?? undefined,
+  };
 }
 
-function RowPreview({
-  preview,
-  position,
-}: {
-  preview: ReturnType<typeof usePreviewPlayback>;
-  position: number;
-}): ReactElement | null {
+function RowFavorite({ item, position }: RowItemProps): ReactElement | null {
+  if (item.favorite_key == null) return null;
+  const target = favoriteTarget(item, item.favorite_key);
+  return <FavoriteButton testID={`discover-favorite-${position}`} target={target} />;
+}
+
+function previewToggleProps(preview: ShownPreview, position: number): IconButtonProps {
+  return {
+    action: 'discover.preview.toggle',
+    testID: `discover-preview-${position}`,
+    icon: preview.isPlaying ? Pause : Play,
+    size: PREVIEW_ICON_SIZE,
+    onPress: preview.togglePreview,
+    accessibilityLabel: preview.isPlaying ? 'Pause preview' : 'Play preview',
+  };
+}
+
+function RowPreview({ preview, position }: RowPreviewProps): ReactElement | null {
   const theme = useTheme();
   if (!preview.hasPreview) return null;
   return (
     <View style={[styles.previewWrap, { backgroundColor: theme.color.surface2 }]}>
-      <IconButton
-        action="discover.preview.toggle"
-        testID={`discover-preview-${position}`}
-        icon={preview.isPlaying ? Pause : Play}
-        size={18}
-        onPress={preview.togglePreview}
-        accessibilityLabel={preview.isPlaying ? 'Pause preview' : 'Play preview'}
-      />
+      <IconButton {...previewToggleProps(preview, position)} />
     </View>
   );
 }
 
-export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): ReactElement {
-  const testId = `discover-row-${result.kind}-${position}`;
-  const isArtist = result.kind === 'artist';
-  const secondary = resultSecondaryLine(result);
-  const a11yLabel = `${result.title}${secondary ? `, ${secondary}` : ''}`;
-  const theme = useTheme();
-  const preview = usePreviewPlayback(result);
-
+function RowTrailing({ item, position }: RowItemProps): ReactElement {
+  const preview = usePreviewPlayback(item);
   return (
-    <Tappable
-      action="discover.row.open"
-      testID={testId}
-      onPress={() => onPress(result, position)}
-      accessibilityRole="button"
-      accessibilityLabel={a11yLabel}
-      style={({ pressed }) => [
-        styles.row,
-        pressedStyle(pressed),
-        pressed ? { backgroundColor: theme.color.surface1 } : null,
-      ]}
-    >
-      <Row
-        leading={
-          <Artwork
-            uri={result.image_url}
-            size={ART_SIZE}
-            radius={isArtist ? radius.full : radius.md}
-            accessibilityLabel={result.title}
-          />
-        }
-        trailing={
-          <View style={styles.trailing}>
-            <RowFavorite result={result} position={position} />
-            <RowPreview preview={preview} position={position} />
-          </View>
-        }
-      >
-        <Text variant="bodyStrong" numberOfLines={1}>
-          {result.title}
-        </Text>
-        <Text variant="label" tone="secondary" numberOfLines={1} style={styles.secondary}>
-          {secondary}
-        </Text>
-      </Row>
+    <View style={styles.trailing}>
+      <RowFavorite item={item} position={position} />
+      <RowPreview preview={preview} position={position} />
+    </View>
+  );
+}
+
+function RowArtwork({ item }: RowArtworkProps): ReactElement {
+  const shape = item.kind === 'artist' ? radius.full : radius.md;
+  return (
+    <Artwork uri={item.image_url} size={ART_SIZE} radius={shape} accessibilityLabel={item.title} />
+  );
+}
+
+function RowTitle({ title }: Pick<RowTextProps, 'title'>): ReactElement {
+  return (
+    <Text variant="bodyStrong" numberOfLines={1}>
+      {title}
+    </Text>
+  );
+}
+
+function RowSecondary({ secondary }: Pick<RowTextProps, 'secondary'>): ReactElement {
+  return (
+    <Text variant="label" tone="secondary" numberOfLines={1} style={styles.secondary}>
+      {secondary}
+    </Text>
+  );
+}
+
+function RowBody({ item, position, secondary }: RowBodyProps): ReactElement {
+  const leading = <RowArtwork item={item} />;
+  const trailing = <RowTrailing item={item} position={position} />;
+  return (
+    <Row leading={leading} trailing={trailing}>
+      <RowTitle title={item.title} />
+      <RowSecondary secondary={secondary} />
+    </Row>
+  );
+}
+
+function rowTapProps({ item, position, onPress, secondary }: RowTapArgs): RowTapProps {
+  return {
+    action: 'discover.row.open',
+    testID: `discover-row-${item.kind}-${position}`,
+    onPress: () => onPress(item, position),
+    accessibilityRole: 'button',
+    accessibilityLabel: `${item.title}${secondary ? `, ${secondary}` : ''}`,
+  };
+}
+
+function pressedRowStyle(pressedColor: string): PressedRowStyle {
+  return ({ pressed }) => [
+    styles.row,
+    pressedStyle(pressed),
+    pressed ? { backgroundColor: pressedColor } : null,
+  ];
+}
+
+function RowTappable({ children, ...tap }: RowTappableProps): ReactElement {
+  const theme = useTheme();
+  return (
+    <Tappable {...rowTapProps(tap)} style={pressedRowStyle(theme.color.surface1)}>
+      {children}
     </Tappable>
+  );
+}
+
+export function DiscoverRow({ result: item, position, onPress }: DiscoverRowProps): ReactElement {
+  const secondary = resultSecondaryLine(item);
+  return (
+    <RowTappable item={item} position={position} onPress={onPress} secondary={secondary}>
+      <RowBody item={item} position={position} secondary={secondary} />
+    </RowTappable>
   );
 }
 
