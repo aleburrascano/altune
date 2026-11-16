@@ -3,7 +3,7 @@ import { ApiError } from '@shared/failure';
 import { asTrackId } from '@shared/catalog';
 import type { TrackResponse, DiscoveryResult } from '@shared/catalog';
 import { useDownloadStore, useTrackStatusStore } from '@shared/acquisition';
-import { libraryKeys } from '@shared/query';
+import { discoveryKeys, libraryKeys } from '@shared/query';
 import { runSignOutCleanups } from '@shared/session';
 import { useSaveTrack, useTrackSave, createMemoryDetailPort, ownedTrack } from '@features/detail';
 import type { DetailPort } from '@features/detail';
@@ -132,13 +132,20 @@ describe('useSaveTrack', () => {
       } as TrackResponse;
     }
 
-    const cachedKeys = [
+    const derivedKeys = [
       libraryKeys.albums('', 'recent'),
       libraryKeys.artists('', 'recent'),
       libraryKeys.summary,
       libraryKeys.lookup('idioteque'),
-      libraryKeys.featuring('radiohead'),
     ];
+
+    const keysThatStayValid = [
+      libraryKeys.featuring('radiohead'),
+      libraryKeys.tracksAll('', 'recent'),
+      discoveryKeys.history,
+    ];
+
+    const cachedKeys = [...derivedKeys, ...keysThatStayValid];
 
     function setup() {
       const queryClient = createTestQueryClient({ mutations: true });
@@ -158,7 +165,7 @@ describe('useSaveTrack', () => {
     });
 
     describe('useSaveTrack — derived caches', () => {
-      it('invalidates every membership-derived cache once the save lands', async () => {
+      it('invalidates every membership-derived cache once the save lands, and nothing else', async () => {
         const { queryClient, wrapper } = setup();
         mockCreateTrack.mockResolvedValue(saved());
 
@@ -167,12 +174,7 @@ describe('useSaveTrack', () => {
           await result.current.mutateAsync({ title: 'Idioteque', artist: 'Radiohead' } as never);
         });
 
-        expect(invalidatedKeys(queryClient)).toEqual([
-          libraryKeys.albums('', 'recent'),
-          libraryKeys.artists('', 'recent'),
-          libraryKeys.summary,
-          libraryKeys.lookup('idioteque'),
-        ]);
+        expect(invalidatedKeys(queryClient)).toEqual(derivedKeys);
       });
 
       it('invalidates nothing when the save fails', async () => {
