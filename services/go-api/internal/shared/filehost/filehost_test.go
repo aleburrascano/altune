@@ -61,7 +61,7 @@ func TestValidID_AcceptsOnlyAKnownHostsIDShape(t *testing.T) {
 			t.Errorf("ValidID(%q, %q) = false, want true", in[0], in[1])
 		}
 	}
-	for _, in := range [][2]string{{"pixeldrain", "../../x"}, {"pillows", "short"}, {"krakenfiles", "061QAmEM4"}, {"soundcloud", "ozSpSjn7"}} {
+	for _, in := range [][2]string{{"pixeldrain", "../../x"}, {"pillows", "short"}, {"imgurgg", "abc"}, {"krakenfiles", "061QAmEM4"}, {"soundcloud", "ozSpSjn7"}} {
 		if filehost.ValidID(in[0], in[1]) {
 			t.Errorf("ValidID(%q, %q) = true, want false", in[0], in[1])
 		}

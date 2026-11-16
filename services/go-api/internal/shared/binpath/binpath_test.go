@@ -23,15 +23,18 @@ func TestResolve_PrefersTheBinaryInDir(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if got := binpath.Resolve("fpcalc", dir); filepath.Dir(got) != dir {
+	got := binpath.Resolve("fpcalc", dir)
+	if got != filepath.Join(dir, "fpcalc") && got != filepath.Join(dir, "fpcalc.exe") {
 		t.Errorf("Resolve = %q, want the binary in %q", got, dir)
 	}
 }
 
 func TestRunnable_BareNameIsLookedUpOnPATH(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "fpcalc"), []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatal(err)
+	for _, file := range []string{"fpcalc", "fpcalc.exe"} {
+		if err := os.WriteFile(filepath.Join(dir, file), []byte("#!/bin/sh\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
 	t.Setenv("PATH", dir)
 	if !binpath.Runnable("fpcalc") {
