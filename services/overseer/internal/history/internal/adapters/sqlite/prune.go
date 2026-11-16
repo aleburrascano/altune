@@ -1,4 +1,4 @@
-package history
+package sqlite
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 
 const (
 	pruneInterval = 10 * time.Minute
-	pruneBatch    = 2000
+	PruneBatch    = 2000
 	minuteOfAt    = "(at - ((at % 60000) + 60000) % 60000)"
 )
 
@@ -46,7 +46,7 @@ DELETE FROM rollups WHERE rowid IN (
 	LIMIT ? OFFSET ?
 )`
 
-func (d *disk) RunPruner(ctx context.Context) {
+func (d *Disk) RunPruner(ctx context.Context) {
 	d.logPrune(ctx)
 	ticker := time.NewTicker(pruneInterval)
 	defer ticker.Stop()
@@ -60,13 +60,13 @@ func (d *disk) RunPruner(ctx context.Context) {
 	}
 }
 
-func (d *disk) logPrune(ctx context.Context) {
-	if err := d.prune(ctx); err != nil && ctx.Err() == nil {
+func (d *Disk) logPrune(ctx context.Context) {
+	if err := d.Prune(ctx); err != nil && ctx.Err() == nil {
 		slog.WarnContext(ctx, "history.prune_failed", "error", err)
 	}
 }
 
-func (d *disk) prune(ctx context.Context) error {
+func (d *Disk) Prune(ctx context.Context) error {
 	now := d.now()
 	expired := now.Add(-d.retention).UnixMilli()
 	if err := d.deleteInBatches(ctx, dropExpiredPointsSQL, expired); err != nil {
@@ -87,35 +87,35 @@ func (d *disk) prune(ctx context.Context) error {
 	return nil
 }
 
-func (d *disk) deleteInBatches(ctx context.Context, statement string, cutoffMillis int64) error {
+func (d *Disk) deleteInBatches(ctx context.Context, statement string, cutoffMillis int64) error {
 	for {
 		deleted, err := d.deleteBatch(ctx, statement, cutoffMillis)
-		if err != nil || deleted < pruneBatch {
+		if err != nil || deleted < PruneBatch {
 			return err
 		}
 	}
 }
 
-func (d *disk) deleteBatch(ctx context.Context, statement string, cutoffMillis int64) (int64, error) {
+func (d *Disk) deleteBatch(ctx context.Context, statement string, cutoffMillis int64) (int64, error) {
 	ctx, cancel := context.WithTimeout(ctx, opTimeout)
 	defer cancel()
-	result, err := d.db.ExecContext(ctx, statement, cutoffMillis, pruneBatch)
+	result, err := d.db.ExecContext(ctx, statement, cutoffMillis, PruneBatch)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected()
 }
 
-func (d *disk) foldRawBefore(ctx context.Context, cutoffMillis int64) error {
+func (d *Disk) foldRawBefore(ctx context.Context, cutoffMillis int64) error {
 	for {
 		folded, err := d.foldBatch(ctx, cutoffMillis)
-		if err != nil || folded < pruneBatch {
+		if err != nil || folded < PruneBatch {
 			return err
 		}
 	}
 }
 
-func (d *disk) foldBatch(ctx context.Context, cutoffMillis int64) (int64, error) {
+func (d *Disk) foldBatch(ctx context.Context, cutoffMillis int64) (int64, error) {
 	ctx, cancel := context.WithTimeout(ctx, opTimeout)
 	defer cancel()
 	tx, err := d.db.BeginTx(ctx, nil)
@@ -146,7 +146,7 @@ func foldOldest(ctx context.Context, tx *sql.Tx, cutoffMillis int64) (int64, err
 
 func foldBound(ctx context.Context, tx *sql.Tx, cutoffMillis int64) (int64, error) {
 	var lastInBatch int64
-	err := tx.QueryRowContext(ctx, foldBoundSQL, cutoffMillis, pruneBatch-1).Scan(&lastInBatch)
+	err := tx.QueryRowContext(ctx, foldBoundSQL, cutoffMillis, PruneBatch-1).Scan(&lastInBatch)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return cutoffMillis, nil
@@ -161,7 +161,7 @@ type seriesKey struct {
 	series string
 }
 
-func (d *disk) trimOverCap(ctx context.Context, overCapSQL, trimBatchSQL string) error {
+func (d *Disk) trimOverCap(ctx context.Context, overCapSQL, trimBatchSQL string) error {
 	overCap, err := d.seriesOverCap(ctx, overCapSQL)
 	if err != nil {
 		return err
@@ -174,26 +174,26 @@ func (d *disk) trimOverCap(ctx context.Context, overCapSQL, trimBatchSQL string)
 	return nil
 }
 
-func (d *disk) trimSeriesOverCap(ctx context.Context, trimBatchSQL string, key seriesKey) error {
+func (d *Disk) trimSeriesOverCap(ctx context.Context, trimBatchSQL string, key seriesKey) error {
 	for {
 		trimmed, err := d.trimBatch(ctx, trimBatchSQL, key)
-		if err != nil || trimmed < pruneBatch {
+		if err != nil || trimmed < PruneBatch {
 			return err
 		}
 	}
 }
 
-func (d *disk) trimBatch(ctx context.Context, trimBatchSQL string, key seriesKey) (int64, error) {
+func (d *Disk) trimBatch(ctx context.Context, trimBatchSQL string, key seriesKey) (int64, error) {
 	ctx, cancel := context.WithTimeout(ctx, opTimeout)
 	defer cancel()
-	result, err := d.db.ExecContext(ctx, trimBatchSQL, key.bucket, key.series, pruneBatch, d.rowCap)
+	result, err := d.db.ExecContext(ctx, trimBatchSQL, key.bucket, key.series, PruneBatch, d.rowCap)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected()
 }
 
-func (d *disk) seriesOverCap(ctx context.Context, overCapSQL string) ([]seriesKey, error) {
+func (d *Disk) seriesOverCap(ctx context.Context, overCapSQL string) ([]seriesKey, error) {
 	ctx, cancel := context.WithTimeout(ctx, opTimeout)
 	defer cancel()
 	rows, err := d.db.QueryContext(ctx, overCapSQL, d.rowCap)

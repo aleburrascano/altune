@@ -2,15 +2,10 @@ package history
 
 import (
 	"altune/overseer/internal/core"
+	"altune/overseer/internal/history/internal/adapters/sqlite"
 	"context"
 	"log/slog"
 	"time"
-)
-
-const (
-	DefaultCap       = 20000
-	DefaultRetention = 7 * 24 * time.Hour
-	RawRetention     = 24 * time.Hour
 )
 
 type Store interface {
@@ -20,8 +15,20 @@ type Store interface {
 	Close() error
 }
 
-func Open(path string, opts ...Option) Database {
-	store, err := openDisk(path, opts...)
+type Signals interface {
+	LoadSignals(ctx context.Context, bucket, ring string, limit int) ([]core.Signal, error)
+	AppendSignals(bucket, ring string, capacity int, fresh []core.Signal)
+}
+
+type Database interface {
+	Store
+	Signals
+}
+
+var WithSchemaTimeout = sqlite.WithSchemaTimeout
+
+func Open(path string, opts ...sqlite.Option) Database {
+	store, err := sqlite.Open(path, opts...)
 	if err != nil {
 		slog.Error("history: unavailable", "path", path, "error", err)
 		return unavailable{}
@@ -42,3 +49,9 @@ func (unavailable) Names(string) ([]string, error) { return nil, nil }
 func (unavailable) RunPruner(context.Context) {}
 
 func (unavailable) Close() error { return nil }
+
+func (unavailable) LoadSignals(context.Context, string, string, int) ([]core.Signal, error) {
+	return nil, nil
+}
+
+func (unavailable) AppendSignals(string, string, int, []core.Signal) {}

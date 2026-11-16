@@ -1,7 +1,8 @@
-package history
+package sqlite_test
 
 import (
 	"altune/overseer/internal/core"
+	"altune/overseer/internal/history/internal/adapters/sqlite"
 	"bytes"
 	"os"
 	"path/filepath"
@@ -10,14 +11,10 @@ import (
 	"time"
 )
 
-func withCheckTimeout(timeout time.Duration) Option {
-	return func(d *disk) { d.checkTimeout = timeout }
-}
-
 func TestSlowIntegrityCheckKeepsHistoryOnDisk(t *testing.T) {
 	logs := captureLog(t)
 
-	d, _ := openTemp(t, withCheckTimeout(time.Nanosecond))
+	d, _ := openTemp(t, sqlite.WithCheckTimeout(time.Nanosecond))
 	d.Record("reliability", "up", core.Point{At: base, Value: 1})
 
 	if got := countRows(t, d, "reliability", "up"); got != 1 {
@@ -34,7 +31,7 @@ func TestCorruptFileStillFailsUnderTheIntegrityTimeout(t *testing.T) {
 		t.Fatalf("write corrupt file: %v", err)
 	}
 
-	if _, err := openDisk(path); err == nil {
-		t.Fatal("openDisk accepted a corrupt file")
+	if _, err := sqlite.Open(path); err == nil {
+		t.Fatal("sqlite.Open accepted a corrupt file")
 	}
 }

@@ -1,11 +1,11 @@
-package history
+package history_test
 
 import (
 	"altune/overseer/internal/core"
+	"altune/overseer/internal/history"
 	"bytes"
 	"context"
 	"log/slog"
-	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,31 +14,6 @@ import (
 )
 
 var base = time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
-
-func openTemp(t *testing.T, opts ...Option) (*disk, string) {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), "history.db")
-	deadline := time.Now().Add(2 * time.Minute)
-	for {
-		d, err := openDisk(path, opts...)
-		if err == nil {
-			t.Cleanup(func() { _ = d.Close() })
-			return d, path
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("openDisk: %v", err)
-		}
-	}
-}
-
-func countRows(t *testing.T, d *disk, bucket, series string) int {
-	t.Helper()
-	var n int
-	if err := d.db.QueryRow("SELECT COUNT(*) FROM points WHERE bucket = ? AND series = ?", bucket, series).Scan(&n); err != nil {
-		t.Fatalf("count rows: %v", err)
-	}
-	return n
-}
 
 func captureLog(t *testing.T) *bytes.Buffer {
 	t.Helper()
@@ -49,95 +24,56 @@ func captureLog(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-func TestWritingPastTheCapLeavesExactlyTheCapNewestPoints(t *testing.T) {
-	const rowCap, extra = 50, 17
-	d, _ := openTemp(t, WithCap(rowCap))
-
-	for i := range rowCap + extra {
-		d.Record("reliability", "up", core.Point{At: base.Add(time.Duration(i) * time.Second), Value: float64(i)})
-	}
-
-	if got := countRows(t, d, "reliability", "up"); got != rowCap {
-		t.Fatalf("rows after %d writes = %d, want exactly the cap %d", rowCap+extra, got, rowCap)
-	}
-	points, err := d.Query("reliability", "up", base, base.Add(time.Hour))
+func keepsAPoint(t *testing.T, store history.Database) bool {
+	t.Helper()
+	store.Record("reliability", "up", core.Point{At: base, Value: 1})
+	points, err := store.Query("reliability", "up", base.Add(-time.Minute), base.Add(time.Minute))
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
-	if len(points) != rowCap {
-		t.Fatalf("Query returned %d points, want %d", len(points), rowCap)
+	return len(points) == 1
+}
+
+func TestAShortSchemaTimeoutMakesOpenFallBackToUnavailable(t *testing.T) {
+	logs := captureLog(t)
+	store := history.Open(filepath.Join(t.TempDir(), "history.db"), history.WithSchemaTimeout(time.Nanosecond))
+	t.Cleanup(func() { _ = store.Close() })
+
+	if keepsAPoint(t, store) {
+		t.Fatal("Open under a 1ns schema timeout kept a point, want the unavailable store")
 	}
-	if first := points[0].Value; first != float64(extra) {
-		t.Fatalf("oldest retained value = %v, want %v (the oldest points are the ones evicted)", first, float64(extra))
+	if !strings.Contains(logs.String(), "history: unavailable") {
+		t.Fatalf("log does not say history is unavailable: %s", logs.String())
 	}
 }
 
-func TestCapIsPerSeries(t *testing.T) {
-	d, _ := openTemp(t, WithCap(5))
-	for i := range 8 {
-		d.Record("reliability", "up", core.Point{At: base.Add(time.Duration(i) * time.Second), Value: 1})
-	}
-	d.Record("reliability", "latency_ms", core.Point{At: base, Value: 12})
+func TestTheDefaultSchemaTimeoutKeepsHistoryAvailable(t *testing.T) {
+	store := history.Open(filepath.Join(t.TempDir(), "history.db"))
+	t.Cleanup(func() { _ = store.Close() })
 
-	if got := countRows(t, d, "reliability", "latency_ms"); got != 1 {
-		t.Fatalf("latency_ms rows = %d, want 1: one series filling its cap must not evict another", got)
+	if !keepsAPoint(t, store) {
+		t.Fatal("Open with the default schema timeout lost a point, want a store on disk")
 	}
 }
 
-func TestPruneDropsPointsOlderThanRetention(t *testing.T) {
-	now := base.Add(30 * 24 * time.Hour)
-	d, _ := openTemp(t, WithClock(func() time.Time { return now }))
-	d.Record("reliability", "up", core.Point{At: now.Add(-DefaultRetention - time.Minute), Value: 1})
-	d.Record("reliability", "up", core.Point{At: now.Add(-DefaultRetention + time.Minute), Value: 2})
+func TestANonPositiveSchemaTimeoutKeepsTheDefault(t *testing.T) {
+	store := history.Open(filepath.Join(t.TempDir(), "history.db"), history.WithSchemaTimeout(0))
+	t.Cleanup(func() { _ = store.Close() })
 
-	if err := d.prune(context.Background()); err != nil {
-		t.Fatalf("prune: %v", err)
-	}
-
-	points, err := d.Query("reliability", "up", now.Add(-60*24*time.Hour), now)
-	if err != nil {
-		t.Fatalf("Query: %v", err)
-	}
-	if len(points) != 1 || points[0].Value != 2 {
-		t.Fatalf("points after prune = %+v, want only the one inside 7d", points)
-	}
-}
-
-func TestPruneTrimsASeriesLeftOverALoweredCap(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "history.db")
-	wide, err := openDisk(path, WithCap(20))
-	if err != nil {
-		t.Fatalf("openDisk: %v", err)
-	}
-	for i := range 20 {
-		wide.Record("reliability", "up", core.Point{At: base.Add(time.Duration(i) * time.Second), Value: 1})
-	}
-	if err := wide.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
-
-	narrow, err := openDisk(path, WithCap(5), WithClock(func() time.Time { return base }))
-	if err != nil {
-		t.Fatalf("reopen: %v", err)
-	}
-	t.Cleanup(func() { _ = narrow.Close() })
-	if err := narrow.prune(context.Background()); err != nil {
-		t.Fatalf("prune: %v", err)
-	}
-	if got := countRows(t, narrow, "reliability", "up"); got != 5 {
-		t.Fatalf("rows after prune = %d, want 5", got)
+	if !keepsAPoint(t, store) {
+		t.Fatal("Open with a zero schema timeout lost a point, want the default timeout kept and a store on disk")
 	}
 }
 
 func TestPointsSurviveReopen(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "history.db")
-	first := Open(path)
+	first := history.Open(path)
 	first.Record("reliability", "latency_ms", core.Point{At: base, Value: 42.5})
 	if err := first.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
 
-	second := Open(path)
+	second := history.Open(path)
 	t.Cleanup(func() { _ = second.Close() })
 	points, err := second.Query("reliability", "latency_ms", base.Add(-time.Minute), base.Add(time.Minute))
 	if err != nil {
@@ -148,55 +84,6 @@ func TestPointsSurviveReopen(t *testing.T) {
 	}
 }
 
-func TestQueryReturnsOnlyTheWindowOldestFirst(t *testing.T) {
-	d, _ := openTemp(t)
-	for i := range 5 {
-		d.Record("reliability", "up", core.Point{At: base.Add(time.Duration(4-i) * time.Minute), Value: float64(4 - i)})
-	}
-
-	points, err := d.Query("reliability", "up", base.Add(time.Minute), base.Add(3*time.Minute))
-	if err != nil {
-		t.Fatalf("Query: %v", err)
-	}
-	var got []float64
-	for _, p := range points {
-		got = append(got, p.Value)
-	}
-	if len(got) != 3 || got[0] != 1 || got[1] != 2 || got[2] != 3 {
-		t.Fatalf("window values = %v, want [1 2 3]", got)
-	}
-}
-
-func TestNamesListsOnlyTheBucketsOwnSeries(t *testing.T) {
-	d, _ := openTemp(t)
-	d.Record("reliability", "up", core.Point{At: base, Value: 1})
-	d.Record("reliability", "latency_ms", core.Point{At: base, Value: 9})
-	d.Record("cost", "spend", core.Point{At: base, Value: 3})
-
-	names, err := d.Names("reliability")
-	if err != nil {
-		t.Fatalf("Names: %v", err)
-	}
-	if strings.Join(names, ",") != "latency_ms,up" {
-		t.Fatalf("Names = %v, want [latency_ms up]", names)
-	}
-}
-
-func TestNonFiniteValueIsRefusedAndLoggedOnce(t *testing.T) {
-	d, _ := openTemp(t)
-	logs := captureLog(t)
-
-	d.Record("reliability", "latency_ms", core.Point{At: base, Value: math.NaN()})
-	d.Record("reliability", "latency_ms", core.Point{At: base, Value: math.Inf(1)})
-
-	if got := countRows(t, d, "reliability", "latency_ms"); got != 0 {
-		t.Fatalf("stored %d non-finite points, want 0", got)
-	}
-	if got := strings.Count(logs.String(), "history.write_failed"); got != 1 {
-		t.Fatalf("write_failed logged %d times, want once per failing run", got)
-	}
-}
-
 func TestCorruptFileStartsUnavailableAndSaysSo(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "history.db")
 	if err := os.WriteFile(path, bytes.Repeat([]byte("not a sqlite database "), 400), 0o600); err != nil {
@@ -204,7 +91,7 @@ func TestCorruptFileStartsUnavailableAndSaysSo(t *testing.T) {
 	}
 	logs := captureLog(t)
 
-	store := Open(path)
+	store := history.Open(path)
 	store.Record("reliability", "up", core.Point{At: base, Value: 1})
 
 	if !strings.Contains(logs.String(), "history: unavailable") {
@@ -222,10 +109,10 @@ func TestCorruptFileStartsUnavailableAndSaysSo(t *testing.T) {
 
 func TestMissingDirectoryStartsUnavailable(t *testing.T) {
 	logs := captureLog(t)
-	store := Open(filepath.Join(t.TempDir(), "absent", "history.db"))
+	store := history.Open(filepath.Join(t.TempDir(), "absent", "history.db"))
 
-	if _, isUnavailable := store.(unavailable); !isUnavailable {
-		t.Fatalf("Open on a missing directory returned %T, want the unavailable store", store)
+	if keepsAPoint(t, store) {
+		t.Fatal("Open on a missing directory kept a point, want the unavailable store")
 	}
 	if !strings.Contains(logs.String(), "history: unavailable") {
 		t.Fatalf("log does not say history is unavailable: %s", logs.String())
@@ -233,31 +120,30 @@ func TestMissingDirectoryStartsUnavailable(t *testing.T) {
 }
 
 func TestMissingFileStartsEmptyOnDisk(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "history.db")
-	store := Open(path)
+	store := history.Open(filepath.Join(t.TempDir(), "history.db"))
 	t.Cleanup(func() { _ = store.Close() })
 
-	if _, isDisk := store.(*disk); !isDisk {
-		t.Fatalf("Open on a missing file returned %T, want a fresh disk store", store)
-	}
 	names, err := store.Names("reliability")
 	if err != nil || len(names) != 0 {
 		t.Fatalf("fresh store Names = %v, %v; want empty", names, err)
 	}
+	if !keepsAPoint(t, store) {
+		t.Fatal("Open on a missing file lost a point, want a fresh store on disk")
+	}
 }
 
-func TestRunPrunerStopsOnCancel(t *testing.T) {
-	d, _ := openTemp(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		d.RunPruner(ctx)
-		close(done)
-	}()
-	cancel()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("RunPruner did not return within 2s of cancel")
+func TestAnUnavailableHistoryRestoresNothingAndAcceptsWrites(t *testing.T) {
+	captureLog(t)
+	store := history.Open(filepath.Join(t.TempDir(), "absent", "history.db"))
+
+	store.AppendSignals("heartbeat", "ticks", 10, []core.Signal{{At: base, Kind: "tick", Text: "tick-0"}})
+	loaded, err := store.LoadSignals(context.Background(), "heartbeat", "ticks", 10)
+
+	if err != nil || len(loaded) != 0 {
+		t.Fatalf("unavailable LoadSignals = %+v, %v; want nothing", loaded, err)
+	}
+	store.RunPruner(context.Background())
+	if err := store.Close(); err != nil {
+		t.Fatalf("unavailable Close = %v, want nil", err)
 	}
 }

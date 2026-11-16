@@ -1,7 +1,8 @@
-package history
+package sqlite_test
 
 import (
 	"altune/overseer/internal/core"
+	"altune/overseer/internal/history/internal/adapters/sqlite"
 	"context"
 	"database/sql"
 	"path/filepath"
@@ -12,27 +13,27 @@ import (
 
 var rollupNow = base.Add(30 * 24 * time.Hour)
 
-func fixedClock(now time.Time) Option {
-	return WithClock(func() time.Time { return now })
+func fixedClock(now time.Time) sqlite.Option {
+	return sqlite.WithClock(func() time.Time { return now })
 }
 
-func mustPrune(t *testing.T, d *disk) {
+func mustPrune(t *testing.T, d *store) {
 	t.Helper()
-	if err := d.prune(context.Background()); err != nil {
+	if err := d.Prune(context.Background()); err != nil {
 		t.Fatalf("prune: %v", err)
 	}
 }
 
-func countWhere(t *testing.T, d *disk, query string, args ...any) int {
+func countWhere(t *testing.T, d *store, query string, args ...any) int {
 	t.Helper()
 	var n int
-	if err := d.db.QueryRow(query, args...).Scan(&n); err != nil {
+	if err := d.raw.QueryRow(query, args...).Scan(&n); err != nil {
 		t.Fatalf("%s: %v", query, err)
 	}
 	return n
 }
 
-func mustMinutes(t *testing.T, d *disk, series string, from, to time.Time) []core.Minute {
+func mustMinutes(t *testing.T, d *store, series string, from, to time.Time) []core.Minute {
 	t.Helper()
 	minutes, err := d.Minutes("reliability", series, from, to)
 	if err != nil {
@@ -41,9 +42,9 @@ func mustMinutes(t *testing.T, d *disk, series string, from, to time.Time) []cor
 	return minutes
 }
 
-func seedPoints(t testing.TB, d *disk, series string, points []core.Point) {
+func seedPoints(t testing.TB, d *store, series string, points []core.Point) {
 	t.Helper()
-	tx, err := d.db.Begin()
+	tx, err := d.raw.Begin()
 	if err != nil {
 		t.Fatalf("begin seed: %v", err)
 	}
@@ -84,7 +85,7 @@ func TestPruneKeepsRawForTheLastDayAndFoldsOlderPointsIntoMinuteRollups(t *testi
 
 	mustPrune(t, d)
 
-	rawCutoff := rollupNow.Add(-RawRetention)
+	rawCutoff := rollupNow.Add(-sqlite.RawRetention)
 	if stale := countWhere(t, d, "SELECT COUNT(*) FROM points WHERE at < ?", rawCutoff.UnixMilli()); stale != 0 {
 		t.Fatalf("%d raw points older than 24h survived the prune", stale)
 	}
@@ -106,7 +107,7 @@ func TestPruneKeepsRawForTheLastDayAndFoldsOlderPointsIntoMinuteRollups(t *testi
 
 func TestRollupRowsPerSeriesNeverExceedTheCap(t *testing.T) {
 	const rowCap = 100
-	d, _ := openTemp(t, WithCap(rowCap), fixedClock(rollupNow))
+	d, _ := openTemp(t, sqlite.WithCap(rowCap), fixedClock(rollupNow))
 	oldest := rollupNow.Add(-3 * 24 * time.Hour)
 
 	for round := range 3 {
@@ -134,9 +135,9 @@ func TestRollupRowsPerSeriesNeverExceedTheCap(t *testing.T) {
 
 func TestPruneDropsRollupsThatAgePastRetention(t *testing.T) {
 	now := rollupNow.Add(-5 * 24 * time.Hour)
-	d, _ := openTemp(t, WithClock(func() time.Time { return now }))
-	d.Record("reliability", "up", core.Point{At: rollupNow.Add(-DefaultRetention - time.Minute), Value: 1})
-	d.Record("reliability", "up", core.Point{At: rollupNow.Add(-DefaultRetention + time.Minute), Value: 2})
+	d, _ := openTemp(t, sqlite.WithClock(func() time.Time { return now }))
+	d.Record("reliability", "up", core.Point{At: rollupNow.Add(-sqlite.DefaultRetention - time.Minute), Value: 1})
+	d.Record("reliability", "up", core.Point{At: rollupNow.Add(-sqlite.DefaultRetention + time.Minute), Value: 2})
 	mustPrune(t, d)
 	now = rollupNow
 
@@ -146,7 +147,7 @@ func TestPruneDropsRollupsThatAgePastRetention(t *testing.T) {
 	if len(minutes) != 1 || minutes[0].Avg != 2 {
 		t.Fatalf("minutes after prune = %+v, want only the one inside 7d", minutes)
 	}
-	if expired := countWhere(t, d, "SELECT COUNT(*) FROM rollups WHERE minute < ?", rollupNow.Add(-DefaultRetention).UnixMilli()); expired != 0 {
+	if expired := countWhere(t, d, "SELECT COUNT(*) FROM rollups WHERE minute < ?", rollupNow.Add(-sqlite.DefaultRetention).UnixMilli()); expired != 0 {
 		t.Fatalf("%d rollups older than 7d survived the prune", expired)
 	}
 }
@@ -155,11 +156,11 @@ func TestPruningTwiceLeavesTheSameRollups(t *testing.T) {
 	d, _ := openTemp(t, fixedClock(rollupNow))
 	seedPoints(t, d, "up", threeSamplesPerMinute(rollupNow.Add(-26*time.Hour), 60))
 	mustPrune(t, d)
-	first := mustMinutes(t, d, "up", rollupNow.Add(-DefaultRetention), rollupNow)
+	first := mustMinutes(t, d, "up", rollupNow.Add(-sqlite.DefaultRetention), rollupNow)
 
 	mustPrune(t, d)
 
-	second := mustMinutes(t, d, "up", rollupNow.Add(-DefaultRetention), rollupNow)
+	second := mustMinutes(t, d, "up", rollupNow.Add(-sqlite.DefaultRetention), rollupNow)
 	if len(first) != 60 || len(second) != len(first) || second[59] != first[59] {
 		t.Fatalf("second prune changed the rollups: %d minutes then %d", len(first), len(second))
 	}
@@ -185,7 +186,7 @@ func TestALatePointMergesIntoItsAlreadyFoldedMinute(t *testing.T) {
 func TestAMinuteSplitByThePruneCutoffReadsAsOneMinute(t *testing.T) {
 	now := rollupNow.Add(30 * time.Second)
 	d, _ := openTemp(t, fixedClock(now))
-	minute := rollupNow.Add(-RawRetention)
+	minute := rollupNow.Add(-sqlite.RawRetention)
 	for i, value := range []float64{1, 2, 3, 4, 5} {
 		d.Record("reliability", "up", core.Point{At: minute.Add(time.Duration(i) * 12 * time.Second), Value: value})
 	}
@@ -252,11 +253,7 @@ INSERT INTO points VALUES ('reliability', 'up', ?1, 1), ('reliability', 'up', ?2
 	if err := legacy.Close(); err != nil {
 		t.Fatalf("close legacy: %v", err)
 	}
-	d, err := openDisk(path, fixedClock(rollupNow))
-	if err != nil {
-		t.Fatalf("openDisk on a pre-rollup store: %v", err)
-	}
-	t.Cleanup(func() { _ = d.Close() })
+	d := openStore(t, path, fixedClock(rollupNow))
 
 	mustPrune(t, d)
 
