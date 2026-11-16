@@ -18,9 +18,12 @@ import {
 import type { LateralNavHandle } from '@features/detail';
 import { readDetailHandoff } from '@shared/navigation';
 import {
+  createRecordingPorts,
   createTestQueryClient,
   createPlaybackWrapper,
+  idlePlayback,
   signInTestUser,
+  type RecordingFeaturePorts,
 } from '@testing/queryHarness';
 
 const { __http } = require('@testing/doubles/fetch.js');
@@ -58,7 +61,9 @@ const lateralNav: LateralNavHandle = {
   error: null,
 };
 
-function renderDetail(): void {
+function renderDetail(): RecordingFeaturePorts {
+  const ports = createRecordingPorts();
+  const client = createTestQueryClient({ mutations: true });
   render(
     <TrackDetailBody
       chrome={{ title: TITLE, artworkUrl: null, onBack: () => {} }}
@@ -66,8 +71,9 @@ function renderDetail(): void {
       lateralNav={lateralNav}
       detailRoute="/discover/detail"
     />,
-    { wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })) },
+    { wrapper: createPlaybackWrapper(client, idlePlayback, ports) },
   );
+  return ports;
 }
 
 async function pressSave(): Promise<void> {
@@ -84,28 +90,28 @@ function saveIsInteractive(): boolean {
   return screen.getByTestId('detail-save').props.accessibilityState.disabled === false;
 }
 
-let warnSpy: jest.SpyInstance;
-
 beforeEach(async () => {
   await signInTestUser();
   __http.replyAll({ status: 204 });
-  warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   useTrackStatusStore.getState().reset();
 });
 
 afterEach(() => {
-  warnSpy.mockRestore();
   useTrackStatusStore.getState().reset();
 });
 
 describe('TrackDetailBody save failure', () => {
   it('offers a retry and says so when the save failed for a transient reason', async () => {
     __http.reply('POST /v1/tracks', { status: 503 });
-    renderDetail();
+    const ports = renderDetail();
 
     await pressSave();
 
     await waitFor(() => expect(screen.getByTestId('detail-save-error')).toBeTruthy());
+    expect(ports.detail.warnings).toContainEqual([
+      '[detail] save track failed',
+      expect.objectContaining({ title: TITLE, retryable: true }),
+    ]);
     expect(banner().getByText(/Tap Retry\./)).toBeTruthy();
     expect(banner().getByText(/returned 503/)).toBeTruthy();
     expect(saveIsInteractive()).toBe(true);
@@ -114,11 +120,15 @@ describe('TrackDetailBody save failure', () => {
 
   it('offers no retry and names the refusal when the save failed permanently', async () => {
     __http.reply('POST /v1/tracks', { status: 400, json: { code: 'duplicate_track' } });
-    renderDetail();
+    const ports = renderDetail();
 
     await pressSave();
 
     await waitFor(() => expect(screen.getByTestId('detail-save-error')).toBeTruthy());
+    expect(ports.detail.warnings).toContainEqual([
+      '[detail] save track failed',
+      expect.objectContaining({ title: TITLE, retryable: false }),
+    ]);
     expect(banner().getByText(/Retrying won't help\./)).toBeTruthy();
     expect(banner().getByText(/returned 400/)).toBeTruthy();
     expect(saveIsInteractive()).toBe(false);
@@ -155,7 +165,13 @@ function renderOwnedFailedDetail(): void {
       lateralNav={lateralNav}
       detailRoute="/discover/detail"
     />,
-    { wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })) },
+    {
+      wrapper: createPlaybackWrapper(
+        createTestQueryClient({ mutations: true }),
+        idlePlayback,
+        createRecordingPorts(),
+      ),
+    },
   );
 }
 
@@ -188,7 +204,13 @@ function renderDetailOf(result: DiscoveryResult, title: string = result.title): 
       lateralNav={lateralNav}
       detailRoute="/discover/detail"
     />,
-    { wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })) },
+    {
+      wrapper: createPlaybackWrapper(
+        createTestQueryClient({ mutations: true }),
+        idlePlayback,
+        createRecordingPorts(),
+      ),
+    },
   );
 }
 
@@ -297,7 +319,13 @@ describe('TrackDetailBody pins its router calls', () => {
         lateralNav={lateralNav}
         detailRoute="/discover/detail"
       />,
-      { wrapper: createPlaybackWrapper(createTestQueryClient()) },
+      {
+        wrapper: createPlaybackWrapper(
+          createTestQueryClient(),
+          idlePlayback,
+          createRecordingPorts(),
+        ),
+      },
     );
 
     fireEvent.press(screen.getByLabelText('Tracks featuring Guest Artist'));
@@ -337,7 +365,7 @@ describe('TrackDetailBody pins its router calls', () => {
     };
 
     render(<RelatedTracksSection result={result} detailRoute="/discover/detail" />, {
-      wrapper: createPlaybackWrapper(createTestQueryClient()),
+      wrapper: createPlaybackWrapper(createTestQueryClient(), idlePlayback, createRecordingPorts()),
     });
 
     fireEvent.press(await screen.findByTestId('detail-related-0'));

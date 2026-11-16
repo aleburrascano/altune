@@ -3,7 +3,7 @@ import { asTrackId } from '@shared/catalog';
 import { useTrackStatusStore } from '@shared/acquisition';
 import { runSignOutCleanups } from '@shared/session';
 
-import { useRetryTrack, createMemoryDetailPort, type MemoryDetailPort } from '@features/detail';
+import { useRetryTrack, createMemoryDetailPort, type RecordingDetailPort } from '@features/detail';
 import { createPortWrapper, createTestQueryClient, signInTestUser } from '@testing/queryHarness';
 
 const { __http } = require('@testing/doubles/fetch.js');
@@ -22,7 +22,7 @@ function postedEvents(): PostedEvent[] {
 const mockRetryAcquisition = jest.fn<Promise<void>, [unknown]>();
 
 let wrapper: ReturnType<typeof createPortWrapper>;
-let detail: MemoryDetailPort;
+let detail: RecordingDetailPort;
 
 beforeEach(() => {
   detail = createMemoryDetailPort();

@@ -32,7 +32,10 @@ export {
 export { useAlbumTracks } from '@features/detail/hooks/useAlbumTracks';
 export { useDetailEnrichments } from '@features/detail/hooks/useDetailEnrichments';
 export { useArtistContent } from '@features/detail/hooks/useArtistContent';
-export { createMemoryDetailPort } from '@features/detail/__tests__/memoryDetailPort';
+export {
+  createMemoryDetailPort,
+  recordWarnings,
+} from '@features/detail/__tests__/memoryDetailPort';
 export { DetailBodyLayout, DetailScaffold } from '@features/detail/view/DetailScaffold';
 export { DiscographySections } from '@features/detail/view/DiscographySections';
 export { AlbumCardsSkeleton } from '@features/detail/view/DetailSkeleton';
@@ -86,7 +89,7 @@ export { unreleasedView } from '@features/detail/domain/unreleasedView';
 export { useAlbumDetailState } from '@features/detail/view/useAlbumDetailState';
 export type {
   DetailWarning,
-  MemoryDetailPort,
+  RecordingDetailPort,
   MemoryDetailSeed,
 } from '@features/detail/__tests__/memoryDetailPort';
 export { useAlbumSaveAll } from '@features/detail/view/useAlbumSaveAll';

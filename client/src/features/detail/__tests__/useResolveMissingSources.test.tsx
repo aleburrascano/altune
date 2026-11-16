@@ -3,7 +3,7 @@ import type { DiscoveryResult } from '@shared/catalog';
 import { applyKillSwitches } from '@shared/killSwitch';
 
 import { useResolveMissingSources, createMemoryDetailPort } from '@features/detail';
-import type { DetailPort, DetailWarning, MemoryDetailPort } from '@features/detail';
+import type { DetailPort, DetailWarning, RecordingDetailPort } from '@features/detail';
 import { createPortWrapper, createTestQueryClient } from '@testing/queryHarness';
 
 function track(overrides: Partial<DiscoveryResult> = {}): DiscoveryResult {
@@ -28,7 +28,7 @@ type Search = { q: string; kinds: readonly string[] | undefined };
 type Searches = Search[];
 type CountingPort = { port: DetailPort; searches: Searches; warnings: DetailWarning[] };
 
-function countingPort(port: MemoryDetailPort): CountingPort {
+function countingPort(port: RecordingDetailPort): CountingPort {
   const searches: Searches = [];
   return {
     searches,

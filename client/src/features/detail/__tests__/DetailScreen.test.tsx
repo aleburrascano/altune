@@ -5,6 +5,7 @@ import { runSignOutCleanups } from '@shared/session';
 
 import { DetailScreen } from '@features/detail';
 import {
+  createRecordingPorts,
   createTestQueryClient,
   createPlaybackWrapper,
   idlePlayback,
@@ -55,7 +56,11 @@ function track(title: string, extras: DiscoveryResult['extras'] = {}): Discovery
 
 function renderScreen(playback = idlePlayback) {
   render(<DetailScreen />, {
-    wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true }), playback),
+    wrapper: createPlaybackWrapper(
+      createTestQueryClient({ mutations: true }),
+      playback,
+      createRecordingPorts(),
+    ),
   });
 }
 
@@ -85,7 +90,6 @@ beforeEach(async () => {
   mockReplace.mockClear();
   await signInTestUser();
   __http.replyAll({ status: 200, json: { items: [], total: 0 } });
-  jest.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
 describe('DetailScreen on a library artist page', () => {

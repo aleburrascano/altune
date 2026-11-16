@@ -7,9 +7,9 @@ import type { PlaybackContextValue } from '@shared/playback';
 import { makeIdlePlayback } from '@testing/factories';
 import { PlaybackContext } from '@shared/playback';
 
-import { DetailPortProvider } from '@features/detail';
-import type { DetailPort } from '@features/detail';
-import { FeaturePorts, httpFeaturePorts } from '@/mobile';
+import { DetailPortProvider, recordWarnings } from '@features/detail';
+import type { DetailPort, RecordingDetailPort } from '@features/detail';
+import { FeaturePorts, httpFeaturePorts, type FeaturePortSet } from '@/mobile';
 
 interface WrapperProps {
   children: React.ReactNode;
@@ -25,11 +25,17 @@ export function createTestQueryClient({ mutations = false }: { mutations?: boole
   });
 }
 
-export function createWrapper(client: QueryClient) {
+export type RecordingFeaturePorts = FeaturePortSet & { detail: RecordingDetailPort };
+
+export function createRecordingPorts(): RecordingFeaturePorts {
+  return { ...httpFeaturePorts, detail: recordWarnings(httpFeaturePorts.detail) };
+}
+
+export function createWrapper(client: QueryClient, ports: FeaturePortSet = httpFeaturePorts) {
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return (
       <QueryClientProvider client={client}>
-        <FeaturePorts ports={httpFeaturePorts}>{children}</FeaturePorts>
+        <FeaturePorts ports={ports}>{children}</FeaturePorts>
       </QueryClientProvider>
     );
   };
@@ -38,8 +44,9 @@ export function createWrapper(client: QueryClient) {
 export function createPlaybackWrapper(
   client: QueryClient,
   playback: PlaybackContextValue = idlePlayback,
+  ports: FeaturePortSet = httpFeaturePorts,
 ) {
-  const Base = createWrapper(client);
+  const Base = createWrapper(client, ports);
   return function Wrapper({ children }: WrapperProps) {
     return (
       <PlaybackContext.Provider value={playback}>
