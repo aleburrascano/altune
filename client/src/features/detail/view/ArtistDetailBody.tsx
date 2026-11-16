@@ -10,7 +10,7 @@ import type { DiscoveryResult } from '@shared/catalog';
 import {
   useArtistDetailState,
   type ArtistDetailState,
-} from '@features/detail/hooks/useArtistDetailState';
+} from '@features/detail/view/useArtistDetailState';
 import type { DetailRoute } from '@features/detail/domain/detailNavigation';
 
 import { compactCount } from '@features/detail/ui/formatters';
@@ -24,7 +24,7 @@ import { DetailActions } from '@features/detail/view/DetailActions';
 import { DetailScaffold, type DetailChrome } from '@features/detail/view/DetailScaffold';
 import { DiscographySections } from '@features/detail/view/DiscographySections';
 import { ArtistUnreleased } from '@features/detail/view/unreleased/ArtistUnreleased';
-import { LastFmEnrichmentSection } from '@features/detail/ui/LastFmEnrichmentSection';
+import { LastFmEnrichmentSection } from '@features/detail/view/LastFmEnrichmentSection';
 
 type ArtistDetailBodyProps = {
   chrome: DetailChrome;

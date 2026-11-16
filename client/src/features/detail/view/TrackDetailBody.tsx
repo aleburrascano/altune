@@ -7,7 +7,7 @@ import type { DiscoveryResult, FeaturedArtist } from '@shared/catalog';
 import {
   useTrackDetailActions,
   type TrackDetailActions,
-} from '@features/detail/hooks/useTrackDetailActions';
+} from '@features/detail/view/useTrackDetailActions';
 import type { LateralNavHandle } from '@features/detail/hooks/useDetailNavigation';
 import { type DetailRoute } from '@features/detail/domain/detailNavigation';
 
@@ -21,7 +21,7 @@ import { buildTrackFacts } from '@features/detail/ui/buildDetailFacts';
 import { DetailScaffold, type DetailChrome } from '@features/detail/view/DetailScaffold';
 import { RelatedTracksSection } from '@features/detail/view/RelatedTracksSection';
 import { TrackInfoSection } from '@features/detail/view/TrackInfoSection';
-import { TrackSavePill } from '@features/detail/ui/SaveControls';
+import { TrackSavePill } from '@features/detail/view/SaveControls';
 import { TrackStatusBanners } from '@features/detail/view/TrackStatusBanners';
 
 function wrongAlbumMenu(actions: TrackDetailActions): { label: string; onPress: () => void }[] {

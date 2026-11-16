@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { spacing } from '@shared/ui';
 
 import { type ContentFailure } from '@features/detail/domain/contentStatus';
-import type { ArtistDetailState } from '@features/detail/hooks/useArtistDetailState';
+import type { ArtistDetailState } from '@features/detail/view/useArtistDetailState';
 
 import { AsyncListSection } from '@features/detail/view/Section';
 import { AlbumCardsSkeleton } from '@features/detail/view/DetailSkeleton';

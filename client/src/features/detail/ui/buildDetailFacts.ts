@@ -4,7 +4,7 @@ import { formatDuration } from '@shared/ui';
 import { trackExtras } from '@features/detail/domain/trackExtras';
 import type { DetailFact } from '@features/detail/view/DetailFacts';
 import { formatRuntime } from '@features/detail/ui/formatters';
-import type { TrackDetailActions } from '@features/detail/hooks/useTrackDetailActions';
+import type { TrackDetailActions } from '@features/detail/view/useTrackDetailActions';
 
 export type ArtistFactsInput = {
   releases: number;

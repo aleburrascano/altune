@@ -4,13 +4,13 @@ import { StyleSheet, View } from 'react-native';
 import { Artwork, Tappable, Text, radius, spacing, formatDuration } from '@shared/ui';
 import type { DiscoveryResult } from '@shared/catalog';
 import { trackExtras } from '@features/detail/domain/trackExtras';
-import type { ArtistDetailState } from '@features/detail/hooks/useArtistDetailState';
+import type { ArtistDetailState } from '@features/detail/view/useArtistDetailState';
 import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
 
 import { sharedStyles } from '@features/detail/view/detailStyles';
 import { AsyncListSection, Section } from '@features/detail/view/Section';
 import { TrackRowsSkeleton } from '@features/detail/view/DetailSkeleton';
-import { TrackSaveControl } from '@features/detail/ui/SaveControls';
+import { TrackSaveControl } from '@features/detail/view/SaveControls';
 
 const TRACK_CAP = 5;
 

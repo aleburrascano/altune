@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import type { DiscoveryResult } from '@shared/catalog';
 import { Tappable, Text, radius, spacing, useTheme } from '@shared/ui';
 import { useDiscographyFilter } from '@features/detail/view/useDiscographyFilter';
-import { AlbumRail } from '@features/detail/ui/AlbumRail';
+import { AlbumRail } from '@features/detail/view/AlbumRail';
 import { sharedStyles } from '@features/detail/view/detailStyles';
 
 export function DiscographySections({

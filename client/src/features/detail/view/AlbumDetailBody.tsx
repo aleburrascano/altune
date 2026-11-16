@@ -9,7 +9,7 @@ import type { DiscoveryResult } from '@shared/catalog';
 import {
   useAlbumDetailState,
   type AlbumDetailState,
-} from '@features/detail/hooks/useAlbumDetailState';
+} from '@features/detail/view/useAlbumDetailState';
 import type { DetailRoute } from '@features/detail/domain/detailNavigation';
 
 import { albumYear } from '@features/detail/ui/formatters';
@@ -18,7 +18,7 @@ import { buildAlbumFacts } from '@features/detail/ui/buildDetailFacts';
 import { AlbumTrackList } from '@features/detail/view/AlbumTrackList';
 import { DetailActions } from '@features/detail/view/DetailActions';
 import { DetailScaffold, type DetailChrome } from '@features/detail/view/DetailScaffold';
-import { SaveAllPill } from '@features/detail/ui/SaveControls';
+import { SaveAllPill } from '@features/detail/view/SaveControls';
 
 type AlbumDetailBodyProps = {
   chrome: DetailChrome;

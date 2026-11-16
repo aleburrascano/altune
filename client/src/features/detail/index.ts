@@ -6,8 +6,8 @@ export { httpDetailPort } from '@features/detail/adapters/http/httpDetailPort';
 export type { DetailPort } from '@features/detail/ports/detailPort';
 export { AlbumDetailBody } from '@features/detail/view/AlbumDetailBody';
 export { AlbumMoreTracks } from '@features/detail/view/AlbumMoreTracks';
-export { AlbumRail } from '@features/detail/ui/AlbumRail';
-export type { AlbumDetailState } from '@features/detail/hooks/useAlbumDetailState';
+export { AlbumRail } from '@features/detail/view/AlbumRail';
+export type { AlbumDetailState } from '@features/detail/view/useAlbumDetailState';
 export {
   ownedTrack,
   playButtonState,
@@ -44,7 +44,7 @@ export {
   formatRuntime,
   trackSubtitleWithFeaturing,
 } from '@features/detail/ui/formatters';
-export { LastFmEnrichmentSection } from '@features/detail/ui/LastFmEnrichmentSection';
+export { LastFmEnrichmentSection } from '@features/detail/view/LastFmEnrichmentSection';
 export {
   detailRouteFor,
   featuringHref,
@@ -83,11 +83,11 @@ export type { SaveControlState, SaveState } from '@features/detail/domain/saveTr
 export { SectionError } from '@features/detail/view/Section';
 export { isAcquirable, unreleasedAsResult } from '@features/detail/domain/unreleasedTrack';
 export { unreleasedView } from '@features/detail/domain/unreleasedView';
-export { useAlbumDetailState } from '@features/detail/hooks/useAlbumDetailState';
+export { useAlbumDetailState } from '@features/detail/view/useAlbumDetailState';
 export type { MemoryDetailSeed } from '@features/detail/__tests__/memoryDetailPort';
 export { useAlbumSaveAll } from '@features/detail/view/useAlbumSaveAll';
 export { useRelatedTracks } from '@features/detail/hooks/useRelatedTracks';
-export { useAlbumDiscovery, useArtistDiscovery } from '@features/detail/hooks/useEntityDiscovery';
+export { useAlbumDiscovery, useArtistDiscovery } from '@features/detail/view/useEntityDiscovery';
 export type { EnrichmentProvider } from '@features/detail/domain/detailHealth';
 export { useResolveMissingSources } from '@features/detail/view/useResolveMissingSources';
 export { useDiscographyFilter } from '@features/detail/view/useDiscographyFilter';
@@ -103,8 +103,8 @@ export type { SaveTrack } from '@features/detail/view/useSaveTrack';
 export { DetailHandoffProvider } from '@features/detail/view/useDetailHandoff';
 export { useReportWrongAlbum } from '@features/detail/view/useReportWrongAlbum';
 export { useRetryTrack } from '@features/detail/hooks/useRetryTrack';
-export { SaveAllPill, TrackSaveControl, TrackSavePill } from '@features/detail/ui/SaveControls';
+export { SaveAllPill, TrackSaveControl, TrackSavePill } from '@features/detail/view/SaveControls';
 export { useResolvedOwnedTrack } from '@features/detail/hooks/useOwnedTrack';
 export type { TrackIdentity } from '@features/detail/hooks/useOwnedTrack';
-export type { LateralNavHandle } from '@features/detail/hooks/useTrackDetailActions';
+export type { LateralNavHandle } from '@features/detail/view/useTrackDetailActions';
 export { TrackDetailBody } from '@features/detail/view/TrackDetailBody';

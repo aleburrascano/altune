@@ -285,14 +285,28 @@ function albumCardLabel(
   return `${props.typeLabel}: ${props.album.title}${yearPart}${trackPart}`;
 }
 
+type CardTheme = ReturnType<typeof useTheme>;
+
+function gridHoverStyle(theme: CardTheme, hovered: boolean) {
+  return hovered ? { backgroundColor: theme.color.surface2 } : null;
+}
+
+function gridBorderStyle(theme: CardTheme, focused: boolean) {
+  return { borderColor: focused ? theme.color.accent : 'transparent' };
+}
+
+function gridCardStyles(theme: CardTheme, isGrid: boolean, state: PressableInteractionState) {
+  if (!isGrid) return [null, null, null];
+  const { hovered, focused } = state;
+  return [styles.gridCard, gridHoverStyle(theme, hovered), gridBorderStyle(theme, focused)];
+}
+
 function albumCardStyle(theme: ReturnType<typeof useTheme>, cardWidth: number, isGrid: boolean) {
-  return ({ pressed, hovered, focused }: PressableInteractionState) => [
+  return (interaction: PressableInteractionState) => [
     styles.card,
     { width: cardWidth },
-    isGrid ? styles.gridCard : null,
-    isGrid && hovered ? { backgroundColor: theme.color.surface2 } : null,
-    isGrid ? { borderColor: focused ? theme.color.accent : 'transparent' } : null,
-    pressed ? sharedStyles.pressed : null,
+    ...gridCardStyles(theme, isGrid, interaction),
+    interaction.pressed ? sharedStyles.pressed : null,
   ];
 }
 

@@ -20,14 +20,13 @@ export function LastFmEnrichmentSection({
   if (enrichment === null) {
     return isError ? <View testID="detail-lastfm-unavailable" /> : null;
   }
+  return <LastFmContent bio={enrichment.bio} similar={enrichment.similar.slice(0, MAX_SIMILAR)} />;
+}
 
-  const bio = enrichment.bio;
-  const similar = enrichment.similar.slice(0, MAX_SIMILAR);
+type LastFmContentProps = { bio: string; similar: string[] };
 
-  if (bio === '' && similar.length === 0) {
-    return null;
-  }
-
+function LastFmContent({ bio, similar }: LastFmContentProps): ReactElement | null {
+  if (bio === '' && similar.length === 0) return null;
   return (
     <View testID="detail-lastfm" style={styles.section}>
       {bio !== '' ? <ArtistBio bio={bio} /> : null}
