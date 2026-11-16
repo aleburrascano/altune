@@ -127,6 +127,22 @@ describe('useAppMutation()', () => {
     ]);
   });
 
+  it('records the status of API errors only, not of another error that carries one', async () => {
+    const authFailure = Object.assign(new Error('invalid login'), { status: 400 });
+    const { result } = render(newClient(), () =>
+      useAppMutation({
+        action: 'demo.signIn',
+        mutationFn: async (_: void) => {
+          throw authFailure;
+        },
+      }),
+    );
+    await settle(() => result.current.mutateAsync());
+    expect(await userActions()).toEqual([
+      { action: 'demo.signIn', outcome: 'failed', error: 'invalid login' },
+    ]);
+  });
+
   it('records nothing for a mutation fenced by sign-out', async () => {
     const { result } = render(newClient(), () =>
       useAppMutation({
@@ -142,6 +158,45 @@ describe('useAppMutation()', () => {
     );
     await settle(() => result.current.mutateAsync());
     expect(await userActions()).toEqual([]);
+  });
+});
+
+describe('useOptimisticMutation() when its optimistic write throws', () => {
+  it('fails with that error and leaves no stray error behind', async () => {
+    const stray: unknown[] = [];
+    function recordStray(reason: unknown): void {
+      stray.push(reason);
+    }
+    process.on('unhandledRejection', recordStray);
+    try {
+      const queryClient = newClient();
+      queryClient.setQueryData(['n'], 1);
+      const { result } = render(queryClient, () =>
+        useOptimisticMutation({
+          action: 'demo.broken',
+          queryKey: ['n'],
+          mutationFn: async (_: void) => 1,
+          applyOptimistic: (): number => {
+            throw new Error('bad write');
+          },
+          revertOptimistic: (current: number) => current,
+        }),
+      );
+      let failure: unknown;
+      await settle(() =>
+        result.current.mutateAsync().catch((error: unknown) => {
+          failure = error;
+        }),
+      );
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      expect(failure).toMatchObject({ message: 'bad write' });
+      expect(stray).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', recordStray);
+    }
   });
 });
 
@@ -186,6 +241,22 @@ describe('appMutationCache() and appQueryCache()', () => {
       })
       .catch((error) => error);
     await queryClient.cancelQueries({ queryKey: ['slow'] });
+    expect(isCancelledError(await pending)).toBe(true);
+    expect(await clientErrors()).toEqual([]);
+  });
+
+  it('skips a query cancelled without a revert, which React Query hands to the cache as an error', async () => {
+    const queryClient = newClient();
+    const pending = queryClient
+      .fetchQuery({
+        queryKey: ['slow'],
+        queryFn: ({ signal }) =>
+          new Promise((_, reject) => {
+            signal.addEventListener('abort', () => reject(new Error('aborted')));
+          }),
+      })
+      .catch((error) => error);
+    await queryClient.cancelQueries({ queryKey: ['slow'] }, { revert: false });
     expect(isCancelledError(await pending)).toBe(true);
     expect(await clientErrors()).toEqual([]);
   });

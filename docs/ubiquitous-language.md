@@ -100,7 +100,7 @@ When `/feature-spec` or domain modeling introduces a new term:
 - **Settings** — the client screen for a user's preferences (appearance, library, offline downloads) and sign-out. Code in `client/src/features/settings/`.
 - **Player** — the client feature that plays the current track, through react-native-track-player on native and the browser's audio on the web, and draws the mini player, full player, lyrics and queue screens. Code in `client/src/features/player/`.
 - **SignIn** — the client screens for signing in, signing up, resetting a password and returning from an email link, and the gate that keeps a signed-out user on them. Code in `client/src/features/signIn/`.
-- **KillSwitch** — a remote flag that turns off one client background loop (`serverEvents`, `telemetryFlush`, `offlineDownloads`, `detailEnrichment`, `discovery`) without an app release. The last fetched flags persist on the device. Defined in `client/src/shared/killSwitch/killSwitch.ts`.
+- **KillSwitch** — a remote flag that turns off one client background loop (`serverEvents`, `telemetryFlush`, `offlineDownloads`, `detailEnrichment`, `discovery`) without an app release. The last fetched flags persist on the device. Defined in `client/src/shared/killSwitch/core/killSwitch.ts`.
 - **Offline** — playback with no network, from tracks the user pinned and the app downloaded to the device. Native only; web has no offline downloads. Code in `client/src/shared/offline/`.
 
 

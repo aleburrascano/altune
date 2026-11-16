@@ -1,7 +1,7 @@
 import type React from 'react';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
-import type * as TestAuthBootModule from '@shared/auth/testAuthBoot';
+import type * as TestAuthBootModule from '@shared/auth/core/testAuthBoot';
 import { fakeAuthClient } from '@testing/fakeAuthClient';
 
 const globals = globalThis as unknown as { __DEV__: boolean };
@@ -31,7 +31,7 @@ function loadFreshModules() {
   const client = fakeAuthClient();
   require('@shared/auth').installAuthClient(client);
   const { injectTestSession } = require('@shared/auth/adapters/injectTestSession');
-  const testAuthBoot = require('@shared/auth/testAuthBoot') as typeof TestAuthBootModule;
+  const testAuthBoot = require('@shared/auth/core/testAuthBoot') as typeof TestAuthBootModule;
 
   function renderSession() {
     const queryClient = new QueryClient();
@@ -145,5 +145,13 @@ describe('the real testAuthBoot module', () => {
 
     expect(real.isTestAuthEnabled()).toBe(false);
     await expect(real.testAuthBootSettled()).resolves.toBeUndefined();
+  });
+
+  it('keeps test auth off in a release build even when the test-auth flag is set', () => {
+    setTestAuth(true);
+    globals.__DEV__ = false;
+    const { testAuthBoot: real } = loadFreshModules();
+
+    expect(real.isTestAuthEnabled()).toBe(false);
   });
 });

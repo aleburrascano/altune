@@ -1,8 +1,8 @@
 import { Platform } from 'react-native';
 
 import { useResetPassword, createSupabaseAuthMock, runAsyncAuthHook } from '@features/signIn';
-import * as nativeWebOrigin from '@shared/device/webOrigin';
-import * as browserWebOrigin from '@shared/device/webOrigin.web';
+import * as nativeWebOrigin from '@shared/device/core/webOrigin';
+import * as browserWebOrigin from '@shared/device/core/webOrigin.web';
 const { resetPasswordForEmail } = createSupabaseAuthMock('resetPasswordForEmail');
 
 const requestResetFor = (email: string) =>

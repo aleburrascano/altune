@@ -99,6 +99,8 @@ async function fakeFetch(url, init = {}) {
 
   if (rule.reject !== undefined) throw rule.reject;
 
+  if (rule.gate !== undefined) await rule.gate;
+
   return new FakeResponse(rule);
 }
 
@@ -127,6 +129,15 @@ const __http = {
   hang(spec) {
     rules.push({ ...parseSpec(spec), hang: true, once: false });
     return __http;
+  },
+
+  hold(spec, response) {
+    let release = () => {};
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    rules.push({ ...parseSpec(spec), ...normalize(response), gate, once: false });
+    return release;
   },
 
   fail(spec, error) {

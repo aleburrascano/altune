@@ -2,6 +2,8 @@ import { detailHref, readDetailHandoff } from '@shared/navigation';
 import { runSignOutCleanups } from '@shared/session';
 import type { DiscoveryResult } from '@shared/catalog';
 
+const SHORT_PREFIX_DASH_COUNT = /^[a-z0-9]{1,8}-\d+$/;
+
 function makeResult(overrides: Partial<DiscoveryResult> = {}): DiscoveryResult {
   return {
     kind: 'track',
@@ -24,6 +26,15 @@ describe('detail-handoff — href carries a keyed handoff to the detail route', 
     const href = detailHref('/library/detail', makeResult());
     expect(href.pathname).toBe('/library/detail');
     expect(typeof href.params.handoff).toBe('string');
+  });
+
+  it('mints short, URL-safe ids: a launch prefix, then a count that goes up', () => {
+    const first = detailHref('/discover/detail', makeResult()).params.handoff;
+    const second = detailHref('/discover/detail', makeResult()).params.handoff;
+
+    expect(first).toMatch(SHORT_PREFIX_DASH_COUNT);
+    const [prefix, count] = first.split('-');
+    expect(second).toBe(`${prefix}-${Number(count) + 1}`);
   });
 
   it('reads back the exact result and search id that were handed off', () => {
@@ -86,13 +97,15 @@ describe('detail-handoff — rapid and re-entrant navigation', () => {
     expect(readDetailHandoff(before.params.handoff)).toBeNull();
   });
 
-  it('bounds memory by evicting only the oldest handoffs', () => {
+  it('bounds memory at 100 handoffs by evicting only the oldest', () => {
     const first = detailHref('/discover/detail', makeResult({ title: 'first' }));
-    let last = first;
-    for (let i = 0; i < 100; i += 1) {
-      last = detailHref('/discover/detail', makeResult({ title: `t${i}` }));
-    }
+    const hrefs = Array.from({ length: 100 }, (_, i) =>
+      detailHref('/discover/detail', makeResult({ title: `t${i}` })),
+    );
+    const [second] = hrefs;
+    const last = hrefs[hrefs.length - 1] ?? first;
     expect(readDetailHandoff(first.params.handoff)).toBeNull();
+    expect(readDetailHandoff(second?.params.handoff)?.result.title).toBe('t0');
     expect(readDetailHandoff(last.params.handoff)?.result.title).toBe('t99');
   });
 });

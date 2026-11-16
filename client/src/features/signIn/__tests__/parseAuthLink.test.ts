@@ -2,9 +2,9 @@ import { Platform } from 'react-native';
 
 import appJson from '@/../app.json';
 import { completeAuthIntent, authRedirectUrl, parseAuthLink } from '@features/signIn';
-import * as nativeWebOrigin from '@shared/device/webOrigin';
-import type * as NativeWebOriginModule from '@shared/device/webOrigin';
-import * as browserWebOrigin from '@shared/device/webOrigin.web';
+import * as nativeWebOrigin from '@shared/device/core/webOrigin';
+import type * as NativeWebOriginModule from '@shared/device/core/webOrigin';
+import * as browserWebOrigin from '@shared/device/core/webOrigin.web';
 import type * as AuthRedirectModule from '@features/signIn/domain/authRedirect';
 import type * as ParseAuthLinkModule from '@features/signIn/domain/parseAuthLink';
 beforeEach(() => {
@@ -383,7 +383,7 @@ describe('parseAuthLink reads its scheme and web origin through the device port'
       default: { expoConfig: { scheme: 'portscheme' } },
     }));
     jest
-      .spyOn(require('@shared/device/webOrigin') as typeof NativeWebOriginModule, 'webOrigin')
+      .spyOn(require('@shared/device/core/webOrigin') as typeof NativeWebOriginModule, 'webOrigin')
       .mockReturnValue('https://port.example');
     const loaded = {
       ...(require('@features/signIn/domain/authRedirect') as typeof AuthRedirectModule),

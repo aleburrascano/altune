@@ -34,28 +34,27 @@ function isExpectedFailure(error: unknown): boolean {
   return isCancelledError(error) || error instanceof SessionEndedError || isTelemetryGated(error);
 }
 
-function optionally<K extends string, V>(key: K, value: V | undefined): { [P in K]?: V } {
-  return value === undefined ? {} : ({ [key]: value } as { [P in K]?: V });
-}
+type UserActionFieldsBeforeJson = {
+  [K in keyof UserActionPayload]?: UserActionPayload[K] | undefined;
+};
 
-type FailureFields = Pick<UserActionPayload, 'status' | 'correlation_id' | 'error'>;
-
-function failureFields(failure: Error): FailureFields {
+function failureFields(failure: Error): UserActionFieldsBeforeJson {
   return {
-    ...optionally('status', failure instanceof ApiError ? failure.status : undefined),
-    ...optionally('correlation_id', correlationIdOf(failure)),
+    status: failure instanceof ApiError ? failure.status : undefined,
+    correlation_id: correlationIdOf(failure),
     error: failure.message,
   };
 }
 
 function recordOutcome(action: string, trackId: string | undefined, failure?: Error): void {
   if (failure instanceof SessionEndedError) return;
-  recordUserAction({
+  const fields: UserActionFieldsBeforeJson = {
     action,
     outcome: failure ? 'failed' : 'succeeded',
-    ...optionally('track_id', trackId),
+    track_id: trackId,
     ...(failure ? failureFields(failure) : {}),
-  });
+  };
+  recordUserAction(fields as UserActionPayload);
 }
 
 type TrackIdOf<TVars> = ((vars: TVars) => string | undefined) | undefined;
@@ -99,7 +98,6 @@ export function useAppMutation<TData, TError extends Error, TVars, TCtx>(
   const { action, trackIdOf, ...rest } = options;
   return useMutation<TData, TError, TVars, TCtx>({
     ...rest,
-    meta: { ...rest.meta, action },
     ...recordingHandlers(action, trackIdOf, rest),
   });
 }
@@ -147,11 +145,17 @@ type SuccessCallback<TData, TVariables, TCache> = (
   run: MutationFunctionContext,
 ) => void;
 
+function takenInThisSession<TCache>(
+  snapshot: Snapshot<TCache> | undefined,
+): snapshot is Snapshot<TCache> {
+  return isSameSession(snapshot?.epoch);
+}
+
 function onlyInTheStartingSession<TData, TVariables, TCache>(
   onSuccess: SuccessCallback<TData, TVariables, TCache>,
 ): SuccessCallback<TData, TVariables, TCache> {
   return (settled, variables, snapshot, run) => {
-    if (isSameSession(snapshot?.epoch)) onSuccess(settled, variables, snapshot, run);
+    if (takenInThisSession(snapshot)) onSuccess(settled, variables, snapshot, run);
   };
 }
 
@@ -185,13 +189,12 @@ export function useOptimisticMutation<TData, TVariables, TCache>(
     return { previous, epoch };
   };
 
-  const rollback = (variables: TVariables, context: Snapshot<TCache> | undefined): void => {
-    const previous = context?.previous;
+  function rollback(variables: TVariables, { previous }: Snapshot<TCache>): void {
     if (!previous) return;
     queryClient.setQueryData<TCache>(queryKey, (current) =>
       current ? options.revertOptimistic(current, variables, previous) : current,
     );
-  };
+  }
 
   return useAppMutation<TData, Error, TVariables, Snapshot<TCache>>({
     action: options.action,
@@ -203,12 +206,12 @@ export function useOptimisticMutation<TData, TVariables, TCache>(
     },
     ...(options.onSuccess ? { onSuccess: onlyInTheStartingSession(options.onSuccess) } : {}),
     onError: (_error, variables, context) => {
-      if (!isSameSession(context?.epoch)) return;
+      if (!takenInThisSession(context)) return;
       rollback(variables, context);
       alertAfterRollback(options.action, alertOnError, variables);
     },
     onSettled: (_data, _error, variables, context) => {
-      if (!isSameSession(context?.epoch)) return undefined;
+      if (!takenInThisSession(context)) return undefined;
       return Promise.all(
         invalidationKeys(variables).map((key) => queryClient.invalidateQueries({ queryKey: key })),
       );

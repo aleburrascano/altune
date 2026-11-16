@@ -3,8 +3,8 @@ import { useState } from 'react';
 
 import { ApiError, NetworkError, isSessionFetchFailure } from '@shared/failure';
 
-import { withinAuthDeadline } from '@shared/auth/authDeadline';
-import { forgetPreviousUsersLocalData } from '@shared/auth/userLocalData';
+import { withinAuthDeadline } from '@shared/auth/shell/authDeadline';
+import { forgetPreviousUsersLocalData } from '@shared/auth/core/userLocalData';
 import { clearPersistedAuthSession, supabase } from '@shared/auth/adapters/authActions';
 
 export type SignOutResult =

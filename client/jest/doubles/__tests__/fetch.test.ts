@@ -6,6 +6,7 @@ const { __http } = require('../fetch.js') as {
       response?: { status?: number; json?: unknown; malformed?: boolean },
     ): void;
     hang(spec: string): void;
+    hold(spec: string, response?: { status?: number; json?: unknown }): () => void;
     fail(spec: string, error?: Error): void;
     last(): { method: string; path: string; query: string; headers: Record<string, string> };
     requests: unknown[];
@@ -93,6 +94,22 @@ describe('http double', () => {
     await expect(
       fetch('http://api.test/v1/tracks', { signal: controller.signal }),
     ).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('holds a response until it is released', async () => {
+    const release = __http.hold('DELETE /v1/tracks/t1', { status: 204 });
+    let status: number | null = null;
+    const pending = fetch('http://api.test/v1/tracks/t1', { method: 'DELETE' }).then((response) => {
+      status = response.status;
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(status).toBeNull();
+
+    release();
+    await pending;
+
+    expect(status).toBe(204);
   });
 
   it('consumes a replyOnce rule so a second call falls through', async () => {

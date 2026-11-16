@@ -1,7 +1,7 @@
 import { QueryClient } from '@tanstack/react-query';
 
-import { transientRetryOptions } from '@shared/query/retryDelay';
-import { appMutationCache, appQueryCache } from '@shared/query/useAppMutation';
+import { transientRetryOptions } from '@shared/query/core/retryDelay';
+import { appMutationCache, appQueryCache } from '@shared/query/shell/useAppMutation';
 
 const QUERY_STALE_TIME_MS = 30_000;
 

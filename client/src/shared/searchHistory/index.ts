@@ -1,1 +1,1 @@
-export { useClearSearchHistory } from '@shared/searchHistory/useClearSearchHistory';
+export { useClearSearchHistory } from '@shared/searchHistory/shell/useClearSearchHistory';

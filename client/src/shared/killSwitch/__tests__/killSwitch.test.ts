@@ -1,5 +1,5 @@
-import * as killSwitchModule from '@shared/killSwitch/killSwitch';
-import { createMemoryFileStore, type MemoryFileStore } from '@shared/files';
+import * as killSwitchModule from '@shared/killSwitch/core/killSwitch';
+import { createMemoryFileStore, type FileStore, type MemoryFileStore } from '@shared/files';
 
 import {
   applyKillSwitches,
@@ -118,6 +118,57 @@ describe('kill switches', () => {
 
     expect(isLoopEnabled('telemetryFlush')).toBe(false);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('failed to persist'));
+  });
+
+  it('on a cold start, with no setup call, reads the switches the last session persisted', () => {
+    jest.isolateModules(() => {
+      const files = require('@shared/files') as {
+        createMemoryFileStore: typeof createMemoryFileStore;
+        setDeviceFileStore: (device: FileStore) => void;
+      };
+      const fresh = require('@shared/killSwitch') as { isLoopEnabled: typeof isLoopEnabled };
+      const device = files.createMemoryFileStore();
+      device.files.set(SWITCH_URI, JSON.stringify({ sse_enabled: false }));
+      files.setDeviceFileStore(device);
+
+      expect(fresh.isLoopEnabled('serverEvents')).toBe(false);
+    });
+  });
+
+  it('reads the persisted switches once per launch, not on every check', () => {
+    applyKillSwitches({ sse_enabled: false });
+    store.files.set(SWITCH_URI, JSON.stringify({ sse_enabled: true }));
+
+    expect(isLoopEnabled('serverEvents')).toBe(false);
+  });
+
+  it('compares a fresh document with the persisted switches, not the defaults, after a relaunch', () => {
+    applyKillSwitches({ sse_enabled: false });
+    relaunch();
+    const listener = jest.fn();
+    const unsubscribe = onKillSwitchChange(listener);
+
+    applyKillSwitches({ sse_enabled: false });
+    unsubscribe();
+
+    expect(listener).not.toHaveBeenCalled();
+    expect(isLoopEnabled('serverEvents')).toBe(false);
+  });
+
+  it('writes nothing when a document flips no loop', () => {
+    applyKillSwitches({ sse_enabled: true });
+
+    expect(store.files.size).toBe(0);
+  });
+
+  it('logs each remote flip with the loop and its new state', () => {
+    applyKillSwitches({ telemetry_enabled: false });
+    applyKillSwitches({});
+
+    expect(warn.mock.calls).toEqual([
+      ['[kill-switch] telemetryFlush disabled remotely'],
+      ['[kill-switch] telemetryFlush enabled remotely'],
+    ]);
   });
 
   it('tells listeners about each loop that flipped, and only those', () => {

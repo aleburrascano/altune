@@ -4,7 +4,7 @@ import {
   isLoopEnabled,
   onKillSwitchChange,
   type KillSwitchLoop,
-} from '@shared/killSwitch/killSwitch';
+} from '@shared/killSwitch/core/killSwitch';
 
 export function useLoopEnabled(loop: KillSwitchLoop): boolean {
   const subscribe = useCallback(

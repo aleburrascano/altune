@@ -25,7 +25,7 @@ import { startDownload, useDownloadStore } from '@shared/acquisition/view/downlo
 import { getSearchState, setSearchState } from '@features/discovery/domain/searchState';
 import { registerSearchStateSignOutReset } from '@features/discovery/adapters/registerSearchStateSignOutReset';
 import type { DiscoveryResult } from '@shared/catalog';
-import { detailHref, readDetailHandoff } from '@shared/navigation/detailHandoff';
+import { detailHref, readDetailHandoff } from '@shared/navigation/core/detailHandoff';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import type * as PinnedStoreModule from '@shared/offline/state/pinnedStore';
 

@@ -3,8 +3,8 @@ import { Platform } from 'react-native';
 
 import { _resetConsumedCredentialForTest, createSupabaseAuthMock } from '@features/signIn';
 import { AuthCallbackScreen } from '@features/signIn/ui/AuthCallbackScreen.web';
-import * as nativeWebOrigin from '@shared/device/webOrigin';
-import * as browserWebOrigin from '@shared/device/webOrigin.web';
+import * as nativeWebOrigin from '@shared/device/core/webOrigin';
+import * as browserWebOrigin from '@shared/device/core/webOrigin.web';
 const AUTH_ACTION_TIMEOUT_MS = 20_000;
 
 const mockRouter = { replace: jest.fn() };

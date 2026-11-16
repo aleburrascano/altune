@@ -1,4 +1,4 @@
-import { isWebPlatform } from '@shared/device/isWebPlatform.web';
+import { isWebPlatform } from '@shared/device/core/isWebPlatform.web';
 
 describe('isWebPlatform (web)', () => {
   it('returns true', () => {

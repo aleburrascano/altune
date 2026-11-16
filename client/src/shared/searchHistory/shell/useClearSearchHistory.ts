@@ -30,9 +30,7 @@ function rollbackClear(
   queryClient: QueryClient,
   previous: DiscoverySearchHistoryResponse | undefined,
 ) {
-  if (previous !== undefined) {
-    queryClient.setQueryData(discoveryKeys.history, previous);
-  }
+  queryClient.setQueryData(discoveryKeys.history, previous);
   void queryClient.invalidateQueries({ queryKey: discoveryKeys.history });
 }
 

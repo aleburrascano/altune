@@ -2,7 +2,7 @@ export {
   shareAnalytics,
   useAnalyticsPreference,
   setAnalyticsPreferenceFileStore,
-} from '@shared/device/analyticsPreference';
+} from '@shared/device/core/analyticsPreference';
 export {
   appVersion,
   appVersionLabel,

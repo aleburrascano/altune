@@ -1,5 +1,5 @@
 import type * as signOutCleanup from '@shared/session/signOutCleanup';
-import type * as primeModule from '@shared/auth/primeSignedInUser';
+import type * as primeModule from '@shared/auth/shell/primeSignedInUser';
 import type * as authDoor from '@shared/auth';
 import { authClientOver } from '@testing/fakeAuthClient';
 
@@ -15,7 +15,8 @@ function freshModules(getSession: () => Promise<unknown>): Modules {
     auth.installAuthClient(authClientOver({ getSession }));
     modules = {
       registry: jest.requireActual('@shared/session/signOutCleanup'),
-      primeSignedInUser: jest.requireActual('@shared/auth/primeSignedInUser').primeSignedInUser,
+      primeSignedInUser: jest.requireActual('@shared/auth/shell/primeSignedInUser')
+        .primeSignedInUser,
     };
   });
   return modules;
@@ -84,6 +85,7 @@ describe('primeSignedInUser, failure and race paths', () => {
     await primeSignedInUser();
 
     expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith('[auth] headless sign-in prime failed', expect.any(Error));
     expect(log).not.toHaveBeenCalled();
     warn.mockRestore();
     log.mockRestore();

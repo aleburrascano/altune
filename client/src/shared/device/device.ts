@@ -41,5 +41,5 @@ export function isExpoGoRuntime(): boolean {
   return Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 }
 
-export { isWebPlatform } from '@shared/device/isWebPlatform';
-export { webOrigin } from '@shared/device/webOrigin';
+export { isWebPlatform } from '@shared/device/core/isWebPlatform';
+export { webOrigin } from '@shared/device/core/webOrigin';

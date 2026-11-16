@@ -9,7 +9,7 @@ import { ApiError, NetworkError } from '@shared/failure';
 
 import { createMemoryLibraryPort, LibraryPortProvider, FeaturingScreen } from '@features/library';
 import type { LibraryPort } from '@features/library';
-import * as detailHandoff from '@shared/navigation/detailHandoff';
+import * as detailHandoff from '@shared/navigation/core/detailHandoff';
 import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';
 import { PlaybackContext } from '@shared/playback';

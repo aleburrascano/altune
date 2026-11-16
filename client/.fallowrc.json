@@ -51,11 +51,11 @@
       "exports": ["*"]
     },
     {
-      "file": "src/shared/device/isWebPlatform.ts",
+      "file": "src/shared/device/core/isWebPlatform.ts",
       "exports": ["*"]
     },
     {
-      "file": "src/shared/device/webOrigin.ts",
+      "file": "src/shared/device/core/webOrigin.ts",
       "exports": ["*"]
     },
     {
