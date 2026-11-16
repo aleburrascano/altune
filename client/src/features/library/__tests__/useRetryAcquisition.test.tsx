@@ -193,17 +193,18 @@ describe('useReacquireTrack', () => {
 
   const mockReacquireTrack = jest.fn<Promise<void>, [TrackId]>();
 
+  const warn = jest.fn<void, [string, Record<string, unknown>]>();
+
   const ports = {
     library: {
       deleteTrack: mockDeleteTrack,
       reacquireTrack: mockReacquireTrack,
+      warn,
     },
     acquisition: { retryAcquisition: mockRetryAcquisition },
   };
 
   let alertSpy: jest.SpyInstance;
-
-  let warnSpy: jest.SpyInstance;
 
   beforeEach(() => {
     mockDeleteTrack.mockReset();
@@ -212,12 +213,11 @@ describe('useReacquireTrack', () => {
     useTrackStatusStore.getState().reset();
     usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
     alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
-    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    warn.mockReset();
   });
 
   afterEach(() => {
     alertSpy.mockRestore();
-    warnSpy.mockRestore();
   });
 
   describe('useReacquireTrack — a started re-acquisition is a whole pending state', () => {
@@ -260,7 +260,7 @@ describe('useReacquireTrack', () => {
       act(() => result.current.mutate(asTrackId('t1')));
       await waitFor(() => expect(result.current.isError).toBe(true));
 
-      expect(warnSpy).toHaveBeenCalledWith('[library] re-acquire track failed', {
+      expect(warn).toHaveBeenCalledWith('[library] re-acquire track failed', {
         trackId: 't1',
         endpoint: 'POST /v1/tracks/t1/reacquire',
         status: 409,
@@ -438,10 +438,13 @@ describe('useRetryAcquisition', () => {
 
   const mockReacquireTrack = jest.fn<Promise<void>, [TrackId]>();
 
+  const warn = jest.fn<void, [string, Record<string, unknown>]>();
+
   const ports = {
     library: {
       deleteTrack: mockDeleteTrack,
       reacquireTrack: mockReacquireTrack,
+      warn,
     },
     acquisition: { retryAcquisition: mockRetryAcquisition },
   };
@@ -459,8 +462,6 @@ describe('useRetryAcquisition', () => {
 
   let alertSpy: jest.SpyInstance;
 
-  let warnSpy: jest.SpyInstance;
-
   beforeEach(() => {
     mockDeleteTrack.mockReset();
     mockRetryAcquisition.mockReset();
@@ -468,12 +469,11 @@ describe('useRetryAcquisition', () => {
     useTrackStatusStore.getState().reset();
     usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
     alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
-    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    warn.mockReset();
   });
 
   afterEach(() => {
     alertSpy.mockRestore();
-    warnSpy.mockRestore();
   });
 
   describe('useRetryAcquisition — a failed retry does not strand the track in fake pending', () => {
@@ -569,7 +569,7 @@ describe('useRetryAcquisition', () => {
       act(() => result.current.mutate(asTrackId('t1')));
       await waitFor(() => expect(result.current.isError).toBe(true));
 
-      expect(warnSpy).toHaveBeenCalledWith('[library] retry acquisition failed', {
+      expect(warn).toHaveBeenCalledWith('[library] retry acquisition failed', {
         trackId: 't1',
         endpoint: 'POST /v1/tracks/t1/retry',
         status: 500,

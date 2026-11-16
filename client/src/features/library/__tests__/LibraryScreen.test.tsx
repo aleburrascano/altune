@@ -92,7 +92,6 @@ describe('LibraryScreen states', () => {
   });
 
   it('shows the error and retries through the retry button', async () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     const memory = createMemoryLibraryPort({ playlists: [playlist([track('t1')])] });
     port = {
       ...memory,
@@ -109,7 +108,6 @@ describe('LibraryScreen states', () => {
 
     await waitFor(() => expect(screen.getByText('Road Trip')).toBeTruthy());
     expect(screen.queryByTestId('library-error')).toBeNull();
-    warn.mockRestore();
   });
 
   it('shows the empty screen for an empty library and routes to discover', async () => {

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import type { LibrarySort } from '@shared/apiClient';
 import { failureLogFields } from '@features/library/domain/libraryFailure';
+import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
 import type { LibraryChip, SortKey } from '@features/library/view/libraryView';
 
 type LibraryQueryChip = LibraryChip;
@@ -15,14 +16,15 @@ export function useLoggedLibraryQueryFailure(
   error: Error | null,
   { chip, sort, isSearching }: LibraryQueryContext,
 ): void {
+  const { warn } = useLibraryPort();
   useEffect(() => {
     if (error === null) {
       return;
     }
-    console.warn(`[library] ${chip} query failed`, {
+    warn(`[library] ${chip} query failed`, {
       sort,
       isSearching,
       ...failureLogFields(error),
     });
-  }, [error, chip, sort, isSearching]);
+  }, [warn, error, chip, sort, isSearching]);
 }

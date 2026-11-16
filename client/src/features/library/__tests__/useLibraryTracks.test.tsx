@@ -144,8 +144,8 @@ describe('useLibraryTracks loadAll', () => {
   it('falls back to the loaded pages on failure and records that the fallback fired', async () => {
     const spied = spiedPort(whole);
     spied.getAllTracks.mockRejectedValue(new Error('boom'));
-    port = spied;
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const warn = jest.fn();
+    port = { ...spied, warn };
     const { result } = await loadFirstPage();
 
     let resolved: TrackResponse[] = [];
@@ -158,7 +158,6 @@ describe('useLibraryTracks loadAll', () => {
       expect.stringContaining('[library]'),
       expect.objectContaining({ loaded: TRACKS_PAGE_SIZE }),
     );
-    warn.mockRestore();
   });
 
   it('logs status, failure class and correlation id when the fetch is rejected', async () => {
@@ -166,8 +165,8 @@ describe('useLibraryTracks loadAll', () => {
     spied.getAllTracks.mockRejectedValue(
       new ApiError(SERVICE_UNAVAILABLE, 'unavailable', undefined, 'corr-1'),
     );
-    port = spied;
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const warn = jest.fn();
+    port = { ...spied, warn };
     const { result } = await loadFirstPage();
 
     await act(async () => {
@@ -183,7 +182,6 @@ describe('useLibraryTracks loadAll', () => {
         correlationId: 'corr-1',
       }),
     );
-    warn.mockRestore();
   });
 
   it('refetches the whole library on every loadAll', async () => {

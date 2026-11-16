@@ -22,9 +22,10 @@ const EVENTS = 'POST /v1/discovery/events';
 
 const mockSearchDiscovery = jest.fn();
 const mockListTracksFeaturing = jest.fn();
+const warn = jest.fn<void, [string, Record<string, unknown>]>();
 
 const port: LibraryPort = {
-  ...createMemoryLibraryPort(),
+  ...createMemoryLibraryPort({ warn }),
   searchDiscovery: (params) => mockSearchDiscovery(params),
   listTracksFeaturing: (featured) => mockListTracksFeaturing(featured),
 };
@@ -54,7 +55,7 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 function loggedText(): string {
-  return JSON.stringify(warnSpy.mock.calls, (_key, value: unknown) =>
+  return JSON.stringify([...warnSpy.mock.calls, ...warn.mock.calls], (_key, value: unknown) =>
     value instanceof Error ? `${value.name}: ${value.message} ${value.stack ?? ''}` : value,
   );
 }
@@ -62,6 +63,7 @@ function loggedText(): string {
 beforeEach(async () => {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  warn.mockReset();
   alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   await signInTestUser();
   __http.reply(EVENTS, { status: 204 });
@@ -91,7 +93,7 @@ describe('a failed "Explore artist" search', () => {
     await tapExplore();
 
     await waitFor(() =>
-      expect(warnSpy).toHaveBeenCalledWith('[library] featuring explore search failed', {
+      expect(warn).toHaveBeenCalledWith('[library] featuring explore search failed', {
         status: 503,
         code: 'discovery_down',
         failure: 'server',
@@ -153,6 +155,7 @@ describe('a failed "Explore artist" search', () => {
       }),
     );
     expect(warnSpy).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
     expect(alertSpy).not.toHaveBeenCalled();
   });
 });
@@ -164,7 +167,7 @@ describe('a failed featuring load', () => {
 
     await waitFor(() => expect(screen.getByText("Couldn't load tracks.")).toBeTruthy());
 
-    expect(warnSpy).toHaveBeenCalledWith('[library] featuring query failed', {
+    expect(warn).toHaveBeenCalledWith('[library] featuring query failed', {
       key: 'name',
       status: 500,
       failure: 'server',
@@ -178,7 +181,7 @@ describe('a failed featuring load', () => {
     render(<FeaturingScreen />, { wrapper });
 
     await waitFor(() =>
-      expect(warnSpy).toHaveBeenCalledWith('[library] featuring query failed', {
+      expect(warn).toHaveBeenCalledWith('[library] featuring query failed', {
         key: 'name',
         failure: 'network',
       }),
@@ -194,6 +197,7 @@ describe('a failed featuring load', () => {
       ),
     );
     expect(warnSpy).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
   });
 });
 

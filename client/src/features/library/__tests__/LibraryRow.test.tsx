@@ -7,13 +7,11 @@ import { trackResponseFactory } from '@testing/factories';
 
 import { LibraryRow } from '@features/library';
 import { setPlatformOS } from '@testing/setPlatformOS';
+import { WINDOW_WIDTH, setWindowWidth } from '@features/library/__tests__/setWindowWidth';
 
-let mockWindowWidth = 390;
-
-jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
-  __esModule: true,
-  default: () => ({ width: mockWindowWidth, height: 800, scale: 2, fontScale: 1 }),
-}));
+beforeEach(() => {
+  setWindowWidth(WINDOW_WIDTH.phone);
+});
 
 const ID = asTrackId('track-1');
 
@@ -320,12 +318,11 @@ describe('LibraryRow — wide web layout', () => {
 
   beforeEach(() => {
     setPlatformOS('web');
-    mockWindowWidth = 1440;
+    setWindowWidth(WINDOW_WIDTH.desktop);
   });
 
   afterEach(() => {
     setPlatformOS(originalOS);
-    mockWindowWidth = 390;
   });
 
   it('splits the artist and album into their own columns instead of one subtitle', () => {
@@ -373,12 +370,11 @@ describe('LibraryRow — wide web row keeps the compact row behaviours (#2842)',
 
   beforeEach(() => {
     setPlatformOS('web');
-    mockWindowWidth = 1440;
+    setWindowWidth(WINDOW_WIDTH.desktop);
   });
 
   afterEach(() => {
     setPlatformOS(originalOS);
-    mockWindowWidth = 390;
   });
 
   it('opens a track that is not ready instead of playing it', () => {

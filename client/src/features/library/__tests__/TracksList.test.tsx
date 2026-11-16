@@ -3,6 +3,7 @@ import { trackResponseFactory } from '@testing/factories';
 import type { ListRefresh } from '@features/library';
 import { TracksList } from '@features/library';
 import { setPlatformOS } from '@testing/setPlatformOS';
+import { WINDOW_WIDTH, setWindowWidth } from '@features/library/__tests__/setWindowWidth';
 
 function idleRefresh(): ListRefresh {
   return { onRefresh: jest.fn(), refreshing: false };
@@ -49,12 +50,9 @@ describe('library list shells — pull to refresh', () => {
 const { Platform } = require('react-native');
 const { asTrackId } = require('@shared/catalog');
 
-let mockWideWindowWidth = 390;
-
-jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
-  __esModule: true,
-  default: () => ({ width: mockWideWindowWidth, height: 800, scale: 2, fontScale: 1 }),
-}));
+beforeEach(() => {
+  setWindowWidth(WINDOW_WIDTH.phone);
+});
 
 const oneTrack = [
   trackResponseFactory.build({
@@ -97,12 +95,11 @@ describe('library list shells — wide web header', () => {
 
   beforeEach(() => {
     setPlatformOS('web');
-    mockWideWindowWidth = 1440;
+    setWindowWidth(WINDOW_WIDTH.desktop);
   });
 
   afterEach(() => {
     setPlatformOS(originalOS);
-    mockWideWindowWidth = 390;
   });
 
   it('shows the column headers above a non-empty wide tracks list', () => {
@@ -118,7 +115,7 @@ describe('library list shells — wide web header', () => {
   });
 
   it('shows no column headers on a compact width even on web', () => {
-    mockWideWindowWidth = 390;
+    setWindowWidth(WINDOW_WIDTH.phone);
     renderTracksList(idleRefresh(), oneTrack);
 
     expect(screen.queryByTestId('library-wide-track-header')).toBeNull();
@@ -202,12 +199,11 @@ describe('TracksList — wide web table, from the outside (#2842)', () => {
 
   beforeEach(() => {
     setPlatformOS('web');
-    mockWideWindowWidth = 1440;
+    setWindowWidth(WINDOW_WIDTH.desktop);
   });
 
   afterEach(() => {
     setPlatformOS(originalOS);
-    mockWideWindowWidth = 390;
   });
 
   it('shows one header above many rows, not one per row', () => {
@@ -333,14 +329,14 @@ describe('TracksList — wide web table, from the outside (#2842)', () => {
   });
 
   it('shows the table headers from exactly 1000px on web', () => {
-    mockWideWindowWidth = 1000;
+    setWindowWidth(WINDOW_WIDTH.wideWeb);
     renderProbeTracksList([probeTrack('a')]);
 
     expect(screen.getByTestId('library-wide-track-header')).toBeTruthy();
   });
 
   it('keeps the compact list with no headers at 999px on web', () => {
-    mockWideWindowWidth = 999;
+    setWindowWidth(WINDOW_WIDTH.justUnderWideWeb);
     renderProbeTracksList([probeTrack('a')]);
 
     expect(screen.queryByTestId('library-wide-track-header')).toBeNull();
@@ -349,7 +345,7 @@ describe('TracksList — wide web table, from the outside (#2842)', () => {
 
   it('keeps the compact row on native at 999pt', () => {
     setPlatformOS('ios');
-    mockWideWindowWidth = 999;
+    setWindowWidth(WINDOW_WIDTH.justUnderWideWeb);
     renderProbeTracksList([probeTrack('a')]);
 
     expect(screen.queryByTestId('library-wide-track-header')).toBeNull();
@@ -364,7 +360,7 @@ describe('TracksList — wide web table, from the outside (#2842)', () => {
   });
 
   it('keeps the compact row at 360px on web', () => {
-    mockWideWindowWidth = 360;
+    setWindowWidth(WINDOW_WIDTH.smallPhone);
     renderProbeTracksList([probeTrack('a')]);
 
     expect(screen.getByText('Artist a · Album a')).toBeTruthy();

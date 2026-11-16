@@ -153,7 +153,6 @@ describe('whole-library play and shuffle', () => {
 
   it('tells the user only the loaded tracks play when the whole-library fetch fails', async () => {
     const shuffleFromList = jest.fn();
-    const warn = jest.spyOn(console, 'warn').mockImplementation(noop);
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(noop);
     const port = spiedPort(library(['a', 'b']));
     port.getAllTracks.mockRejectedValue(new Error('offline'));
@@ -170,7 +169,6 @@ describe('whole-library play and shuffle', () => {
     const [shuffled] = shuffleFromList.mock.calls[0] as [{ source: { trackId: string } }[]];
     expect(shuffled.map((t) => t.source.trackId).sort()).toEqual(['a', 'b']);
     alert.mockRestore();
-    warn.mockRestore();
     client.clear();
   });
 

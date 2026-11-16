@@ -64,34 +64,37 @@ describe('libraryFailureAlert — the payload carries the surface, the title as 
 });
 
 const SECRET = 'bearer-eyJ-private-search-term';
+const SERVER_ERROR = 500;
 const trackId = asTrackId('t1');
 const deleteEndpoint = () => 'DELETE /v1/tracks/t1';
 
-let warnSpy: jest.SpyInstance;
+let warn: jest.Mock;
 
 beforeEach(() => {
-  warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-});
-
-afterEach(() => {
-  warnSpy.mockRestore();
+  warn = jest.fn();
 });
 
 function loggedText(): string {
-  return JSON.stringify(warnSpy.mock.calls, (_key, value: unknown) =>
+  return JSON.stringify(warn.mock.calls, (_key, value: unknown) =>
     value instanceof Error ? `${value.name}: ${value.message} ${value.stack ?? ''}` : value,
   );
 }
 
 describe('logTrackMutationFailure carries triage fields and nothing the error dragged in', () => {
   it('omits the message of the caught ApiError, which can hold a server message', () => {
-    logTrackMutationFailure('delete track', deleteEndpoint, trackId, new ApiError(500, SECRET));
+    logTrackMutationFailure(
+      warn,
+      'delete track',
+      deleteEndpoint,
+      trackId,
+      new ApiError(SERVER_ERROR, SECRET),
+    );
 
     expect(loggedText()).not.toContain(SECRET);
   });
 
   it('omits the message and stack of a plain Error', () => {
-    logTrackMutationFailure('delete track', deleteEndpoint, trackId, new Error(SECRET));
+    logTrackMutationFailure(warn, 'delete track', deleteEndpoint, trackId, new Error(SECRET));
 
     expect(loggedText()).not.toContain(SECRET);
   });
@@ -99,9 +102,9 @@ describe('logTrackMutationFailure carries triage fields and nothing the error dr
   it('logs status, code, failure class and correlation id for an ApiError', () => {
     const error = new ApiError(409, 'conflict', 'track_locked', 'corr-1');
 
-    logTrackMutationFailure('delete track', deleteEndpoint, trackId, error);
+    logTrackMutationFailure(warn, 'delete track', deleteEndpoint, trackId, error);
 
-    expect(warnSpy).toHaveBeenCalledWith('[library] delete track failed', {
+    expect(warn).toHaveBeenCalledWith('[library] delete track failed', {
       trackId: 't1',
       endpoint: 'DELETE /v1/tracks/t1',
       status: 409,
@@ -114,9 +117,15 @@ describe('logTrackMutationFailure carries triage fields and nothing the error dr
   it('logs the failure class and correlation id for a NetworkError, which has no status', () => {
     const error = new NetworkError('timeout', `API ${SECRET} timed out`, 'corr-2');
 
-    logTrackMutationFailure('retry acquisition', () => 'POST /v1/tracks/t1/retry', trackId, error);
+    logTrackMutationFailure(
+      warn,
+      'retry acquisition',
+      () => 'POST /v1/tracks/t1/retry',
+      trackId,
+      error,
+    );
 
-    expect(warnSpy).toHaveBeenCalledWith('[library] retry acquisition failed', {
+    expect(warn).toHaveBeenCalledWith('[library] retry acquisition failed', {
       trackId: 't1',
       endpoint: 'POST /v1/tracks/t1/retry',
       failure: 'network',
@@ -125,9 +134,9 @@ describe('logTrackMutationFailure carries triage fields and nothing the error dr
   });
 
   it('logs a plain Error as an unclassified failure with no status or correlation id', () => {
-    logTrackMutationFailure('delete track', deleteEndpoint, trackId, new Error('boom'));
+    logTrackMutationFailure(warn, 'delete track', deleteEndpoint, trackId, new Error('boom'));
 
-    expect(warnSpy).toHaveBeenCalledWith('[library] delete track failed', {
+    expect(warn).toHaveBeenCalledWith('[library] delete track failed', {
       trackId: 't1',
       endpoint: 'DELETE /v1/tracks/t1',
       failure: 'unknown',
@@ -141,22 +150,22 @@ describe('logTrackMutationFailure carries triage fields and nothing the error dr
       failure: 'unknown',
     };
 
-    logTrackMutationFailure('delete track', deleteEndpoint, trackId, SECRET);
-    logTrackMutationFailure('delete track', deleteEndpoint, trackId, {
+    logTrackMutationFailure(warn, 'delete track', deleteEndpoint, trackId, SECRET);
+    logTrackMutationFailure(warn, 'delete track', deleteEndpoint, trackId, {
       status: 500,
       code: SECRET,
       correlationId: SECRET,
     });
-    logTrackMutationFailure('delete track', deleteEndpoint, trackId, undefined);
+    logTrackMutationFailure(warn, 'delete track', deleteEndpoint, trackId, undefined);
 
     expect(loggedText()).not.toContain(SECRET);
-    expect(warnSpy).toHaveBeenNthCalledWith(1, '[library] delete track failed', unclassified);
-    expect(warnSpy).toHaveBeenNthCalledWith(2, '[library] delete track failed', unclassified);
-    expect(warnSpy).toHaveBeenNthCalledWith(3, '[library] delete track failed', unclassified);
+    const unclassifiedLog = ['[library] delete track failed', unclassified];
+    expect(warn.mock.calls).toEqual([unclassifiedLog, unclassifiedLog, unclassifiedLog]);
   });
 
   it('strips a query string an endpoint builder puts in the path', () => {
     logTrackMutationFailure(
+      warn,
       'delete track',
       (id) => `DELETE /v1/tracks/${id}?q=${SECRET}`,
       trackId,
@@ -164,7 +173,7 @@ describe('logTrackMutationFailure carries triage fields and nothing the error dr
     );
 
     expect(loggedText()).not.toContain(SECRET);
-    expect(warnSpy).toHaveBeenCalledWith(
+    expect(warn).toHaveBeenCalledWith(
       '[library] delete track failed',
       expect.objectContaining({ endpoint: 'DELETE /v1/tracks/t1' }),
     );

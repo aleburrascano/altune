@@ -8,9 +8,9 @@ import {
   libraryFailureAlert,
   classifyLibraryError,
 } from '@features/library/domain/libraryFailure';
-import { showFailureAlert } from '@shared/ui';
+import { showFailureAlert, type FailureAlert } from '@shared/ui';
 import { detailHref, useNavigator, type Navigator } from '@shared/navigation';
-import type { LibraryPort } from '@features/library/ports/libraryPort';
+import type { LibraryPort, LibraryWarn } from '@features/library/ports/libraryPort';
 import type { FeaturingDetailRoute } from '@features/library/domain/libraryRoutes';
 
 const DIGITS = /^[0-9]+$/;
@@ -27,12 +27,13 @@ export function parseStringParam(raw: string | string[] | undefined): string | n
 }
 
 function useLoggedFeaturingQueryFailure(error: Error | null, key: string): void {
+  const { warn } = useLibraryPort();
   useEffect(() => {
     if (error === null) {
       return;
     }
-    console.warn('[library] featuring query failed', { key, ...failureLogFields(error) });
-  }, [error, key]);
+    warn('[library] featuring query failed', { key, ...failureLogFields(error) });
+  }, [warn, error, key]);
 }
 
 export function useTracksFeaturing(input: FeaturedArtist) {
@@ -64,18 +65,21 @@ type ExploreArtist = {
   exploring: boolean;
 };
 
-function reportExploreFailure(artist: string, error: unknown): void {
-  console.warn('[library] featuring explore search failed', {
+function exploreFailureAlert(artist: string, error: unknown): FailureAlert {
+  const lead = `Could not search for ${artist}.`;
+  return libraryFailureAlert(
+    'library.explore_artist',
+    'Search failed',
+    lead,
+    classifyLibraryError(error),
+  );
+}
+
+function reportExploreFailure(warn: LibraryWarn, artist: string, error: unknown): void {
+  warn('[library] featuring explore search failed', {
     ...failureLogFields(error),
   });
-  showFailureAlert(
-    libraryFailureAlert(
-      'library.explore_artist',
-      'Search failed',
-      `Could not search for ${artist}.`,
-      classifyLibraryError(error),
-    ),
-  );
+  showFailureAlert(exploreFailureAlert(artist, error));
 }
 
 function topMatchQuery(artist: string) {
@@ -107,7 +111,7 @@ async function openTopMatch({ port, artist, detailPath, navigator }: OpenTopMatc
     const topMatch = await searchTopMatch(port, artist);
     if (topMatch !== undefined) navigator.push(detailHref(detailPath, topMatch));
   } catch (error) {
-    reportExploreFailure(artist, error);
+    reportExploreFailure(port.warn, artist, error);
   }
 }
 

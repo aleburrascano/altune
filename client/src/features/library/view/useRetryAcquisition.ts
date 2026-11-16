@@ -17,15 +17,16 @@ import {
 } from '@shared/catalog';
 import { useAppMutation } from '@shared/query';
 import { forgetTrack, getTrackFromCaches, patchTrackInCaches } from '@shared/events';
-import { showFailureAlert } from '@shared/ui';
+import { showFailureAlert, type FailureAlert } from '@shared/ui';
 import { guardedMutationOptions } from '@shared/session';
 import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
-import type { LibraryPort } from '@features/library/ports/libraryPort';
+import type { LibraryPort, LibraryWarn } from '@features/library/ports/libraryPort';
 import {
   trackNotFoundAlert,
   logTrackMutationFailure,
   libraryFailureAlert,
   classifyLibraryError,
+  type LibraryFailure,
 } from '@features/library/domain/libraryFailure';
 import {
   recordRetryRequest,
@@ -101,17 +102,21 @@ function markReacquirePending(queryClient: QueryClient) {
   };
 }
 
-function reportFailedReacquire(queryClient: QueryClient) {
+function forgetMissingTrack(queryClient: QueryClient, trackId: TrackId): void {
+  forgetTrack(queryClient, trackId);
+  showFailureAlert(trackNotFoundAlert(trackId));
+}
+
+function reacquireFailedAlert(failure: LibraryFailure): FailureAlert {
+  return libraryFailureAlert('library.reacquire', 'Re-acquire failed', REACQUIRE_FAILED, failure);
+}
+
+function reportFailedReacquire(queryClient: QueryClient, warn: LibraryWarn) {
   return (error: Error, trackId: TrackId): void => {
     const failure = classifyLibraryError(error);
-    if (failure === 'not-found') {
-      forgetTrack(queryClient, trackId);
-      return showFailureAlert(trackNotFoundAlert(trackId));
-    }
-    logTrackMutationFailure('re-acquire track', reacquireEndpoint, trackId, error);
-    showFailureAlert(
-      libraryFailureAlert('library.reacquire', 'Re-acquire failed', REACQUIRE_FAILED, failure),
-    );
+    if (failure === 'not-found') return forgetMissingTrack(queryClient, trackId);
+    logTrackMutationFailure(warn, 're-acquire track', reacquireEndpoint, trackId, error);
+    showFailureAlert(reacquireFailedAlert(failure));
   };
 }
 
@@ -119,7 +124,7 @@ function reacquireOptions(queryClient: QueryClient, port: LibraryPort) {
   return guardedMutationOptions({
     mutationFn: (trackId: TrackId) => port.reacquireTrack(trackId),
     onSuccess: markReacquirePending(queryClient),
-    onError: reportFailedReacquire(queryClient),
+    onError: reportFailedReacquire(queryClient, port.warn),
   });
 }
 
@@ -166,24 +171,23 @@ function restorePrior(queryClient: QueryClient, trackId: TrackId, { prior }: Pri
   }
 }
 
-function recoverFailedRetry(queryClient: QueryClient) {
+function recoverFailedRetry(queryClient: QueryClient, warn: LibraryWarn) {
   return (error: Error, trackId: TrackId, context: PriorAcquisition): void => {
     const failure = classifyLibraryError(error);
-    if (failure === 'not-found') {
-      forgetTrack(queryClient, trackId);
-      return showFailureAlert(trackNotFoundAlert(trackId));
-    }
-    logTrackMutationFailure('retry acquisition', retryEndpoint, trackId, error);
+    if (failure === 'not-found') return forgetMissingTrack(queryClient, trackId);
+    logTrackMutationFailure(warn, 'retry acquisition', retryEndpoint, trackId, error);
     restorePrior(queryClient, trackId, context);
-    showFailureAlert(
-      libraryFailureAlert(
-        'library.retry',
-        'Retry failed',
-        'Could not restart acquisition.',
-        failure,
-      ),
-    );
+    showFailureAlert(retryFailedAlert(failure));
   };
+}
+
+function retryFailedAlert(failure: LibraryFailure): FailureAlert {
+  return libraryFailureAlert(
+    'library.retry',
+    'Retry failed',
+    'Could not restart acquisition.',
+    failure,
+  );
 }
 
 function skipReason(trackId: TrackId, isInFlight: InFlightCheck): RetrySkipReason | undefined {
@@ -213,12 +217,13 @@ function guardedMutate(entryPoint: EntryPoint, run: TrackMutation<void, RetryCon
 
 function useRetryRun(entryPoint: EntryPoint) {
   const queryClient = useQueryClient();
+  const port = useLibraryPort();
   const mutation = useSharedRetryAcquisition({
     action: 'library.retry',
     entryPoint,
     mutationKey: trackMutationKeys.retryAcquisition,
     onMutate: markPending(queryClient),
-    onError: recoverFailedRetry(queryClient),
+    onError: recoverFailedRetry(queryClient, port.warn),
   });
   return useOneRunPerTrack(mutation, trackMutationKeys.retryAcquisition);
 }
