@@ -7,7 +7,7 @@ import type { DiscoveryResult, PlaylistResponse, TrackResponse } from '@shared/c
 import {
   albumToDiscoveryResult,
   artistToDiscoveryResult,
-} from '@features/library/domain/libraryToDiscovery';
+} from '@features/library/core/libraryToDiscovery';
 
 function toDetail(item: DiscoveryResult) {
   return detailHref('/library/detail', item);

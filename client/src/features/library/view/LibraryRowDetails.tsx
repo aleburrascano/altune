@@ -4,7 +4,7 @@ import { useDownloadPhase } from '@shared/acquisition';
 import { withFeaturing } from '@shared/catalog';
 import { Text, spacing } from '@shared/ui';
 import { LibraryRowFailure } from '@features/library/view/LibraryRowFailure';
-import { acquisitionProgressLabel, albumSuffix } from '@features/library/ui/libraryRowLabels';
+import { acquisitionProgressLabel, albumSuffix } from '@features/library/core/libraryRowLabels';
 import type { TrackResponse } from '@shared/catalog';
 
 export function LibraryRowDetails({

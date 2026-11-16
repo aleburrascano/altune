@@ -12,14 +12,14 @@ export {
   cellSize,
   coverColumns,
   wideCoverColumns,
-} from '@features/library/domain/gridColumns';
+} from '@features/library/core/gridColumns';
 export {
   classifyLibraryError,
   failureTail,
   libraryFailureAlert,
   logTrackMutationFailure,
   trackNotFoundAlert,
-} from '@features/library/domain/libraryFailure';
+} from '@features/library/core/libraryFailure';
 export type {
   ActiveView,
   LibraryChip,
@@ -54,7 +54,7 @@ export { libraryRowWideStyle } from '@features/library/view/libraryRowStyle';
 export {
   albumToDiscoveryResult,
   artistToDiscoveryResult,
-} from '@features/library/domain/libraryToDiscovery';
+} from '@features/library/core/libraryToDiscovery';
 export {
   ALBUM_SORT_OPTIONS,
   ARTIST_SORT_OPTIONS,
@@ -66,7 +66,7 @@ export {
   GROUP_PAGE_SIZE,
   nextGroupPageOffset,
   pagedListControls,
-} from '@features/library/domain/listPaging';
+} from '@features/library/core/listPaging';
 export {
   offlineEligibility,
   reportPinBatch,
@@ -75,7 +75,7 @@ export {
   useLibraryOffline,
   usePinnedStatus,
 } from '@features/library/view/useLibraryOffline';
-export { pinnedStatusDisplay } from '@features/library/domain/pinnedStatusDisplay';
+export { pinnedStatusDisplay } from '@features/library/core/pinnedStatusDisplay';
 export { PlaylistCover } from '@features/library/view/PlaylistCover';
 export { PlaylistHero } from '@features/library/view/PlaylistHero';
 export { buildSelectionActions, useTrackSelection } from '@features/library/view/useTrackSelection';

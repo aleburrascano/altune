@@ -2,7 +2,7 @@ import type { DownloadPhase } from '@shared/acquisition';
 import { phaseLabel } from '@shared/acquisition';
 import type { PinnedStatus } from '@shared/offline';
 
-import { pinnedStatusDisplay } from '@features/library/domain/pinnedStatusDisplay';
+import { pinnedStatusDisplay } from '@features/library/core/pinnedStatusDisplay';
 import type { AcquisitionStatus, TrackResponse } from '@shared/catalog';
 
 export function albumSuffix(album: string | null): string {

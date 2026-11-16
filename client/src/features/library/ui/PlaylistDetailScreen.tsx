@@ -19,7 +19,7 @@ import {
   type ContentProps,
 } from '@features/library/view/PlaylistDetailContent';
 import { describeError } from '@shared/failure';
-import { classifyLibraryError } from '@features/library/domain/libraryFailure';
+import { classifyLibraryError } from '@features/library/core/libraryFailure';
 
 type Router = ReturnType<typeof useRouter>;
 

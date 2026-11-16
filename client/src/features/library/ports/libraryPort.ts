@@ -10,7 +10,7 @@ import type {
   reacquireTrack,
   searchDiscovery,
 } from '@shared/apiClient';
-import type { LibraryWarn } from '@features/library/domain/libraryFailure';
+import type { LibraryWarn } from '@features/library/core/libraryFailure';
 
 export interface LibraryPort {
   warn: LibraryWarn;

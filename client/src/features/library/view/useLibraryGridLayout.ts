@@ -13,7 +13,7 @@ import {
   cellSize,
   coverColumns,
   wideCoverColumns,
-} from '@features/library/domain/gridColumns';
+} from '@features/library/core/gridColumns';
 
 export const GRID_GAP = spacing.md;
 
