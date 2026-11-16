@@ -23,14 +23,14 @@ import {
   useQueuePlayback,
 } from '@shared/playback';
 import { featuringDetailRoute, goBackOrToLibrary } from '@features/library/domain/libraryRoutes';
-import { useDeleteTrack } from '@features/library/hooks/useDeleteTracks';
+import { useDeleteTrack } from '@features/library/view/useDeleteTracks';
 import {
   useExploreArtist,
   parseDeezerIdParam,
   parseStringParam,
   useTracksFeaturing,
 } from '@features/library/hooks/useFeaturing';
-import { useRetryAcquisition } from '@features/library/hooks/useRetryAcquisition';
+import { useRetryAcquisition } from '@features/library/view/useRetryAcquisition';
 import { useTrackMenu } from '@features/library/view/useTrackMenu';
 import { classifyLibraryError, failureTail } from '@features/library/domain/libraryFailure';
 import { TracksList } from '@features/library/ui/TracksList';

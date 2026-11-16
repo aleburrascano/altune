@@ -22,7 +22,7 @@ import {
 } from '@shared/ui';
 import { playlistKeys } from '@shared/query';
 import { CreatePlaylistModal } from '@shared/playlists/view/CreatePlaylistModal';
-import { usePlaylistsPort } from '@shared/playlists/ports/PlaylistsPortProvider';
+import { usePlaylistsPort } from '@shared/playlists/view/PlaylistsPortProvider';
 import {
   useAddTracksToPlaylist,
   useCreatePlaylistWithTracks,

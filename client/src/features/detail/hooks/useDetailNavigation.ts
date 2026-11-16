@@ -11,7 +11,7 @@ import {
 import type { UnreleasedWhere } from '@features/detail/domain/unreleasedView';
 import { resolveEntityQuery } from '@features/detail/domain/resolveEntityQuery';
 import type { DetailPort } from '@features/detail/ports/detailPort';
-import { useDetailPort } from '@features/detail/ports/DetailPortProvider';
+import { useDetailPort } from '@features/detail/view/DetailPortProvider';
 import { useDetailFetchEnabled } from '@features/detail/hooks/useDetailFetchGate';
 
 export function useOpenDetail(detailRoute: DetailRoute): (picked: DiscoveryResult) => void {

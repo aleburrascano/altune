@@ -10,8 +10,8 @@ import {
 } from '@features/discovery/view/search/DiscoverBodyStates';
 import { FilterChips } from '@features/discovery/view/results/FilterChips';
 import { FilteredResults } from '@features/discovery/view/results/FilteredResults';
-import { UnreleasedAllHits } from '@features/discovery/ui/unreleased/UnreleasedAllHits';
-import { UnreleasedSection } from '@features/discovery/ui/unreleased/UnreleasedSection';
+import { UnreleasedAllHits } from '@features/discovery/view/unreleased/UnreleasedAllHits';
+import { UnreleasedSection } from '@features/discovery/view/unreleased/UnreleasedSection';
 import {
   IncompleteResultsBanner,
   RefreshFailedNotice,

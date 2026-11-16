@@ -12,6 +12,6 @@ export { useSingleFlightAction } from '@shared/playlists/view/playlist/useSingle
 export {
   PlaylistsPortProvider,
   usePlaylistsPort,
-} from '@shared/playlists/ports/PlaylistsPortProvider';
+} from '@shared/playlists/view/PlaylistsPortProvider';
 export type { PlaylistsPort } from '@shared/playlists/ports/playlistsPort';
 export { createMemoryPlaylistsPort } from '@shared/playlists/__tests__/memoryPlaylistsPort';

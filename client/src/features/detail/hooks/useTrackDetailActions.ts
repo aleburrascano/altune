@@ -12,7 +12,7 @@ import {
 } from '@features/detail/hooks/useDetailNavigation';
 import { useOwnedTrack } from '@features/detail/hooks/useOwnedTrack';
 import { useReportWrongAlbum } from '@features/detail/view/useReportWrongAlbum';
-import { useSaveTrack, useTrackSave, type TrackSave } from '@features/detail/hooks/useSaveTrack';
+import { useSaveTrack, useTrackSave, type TrackSave } from '@features/detail/view/useSaveTrack';
 import { type DetailRoute } from '@features/detail/domain/detailNavigation';
 import { isResultPlaying, resolvePlaySource } from '@features/detail/domain/playSource';
 import { isOptimisticTrackId, toCreateTrackRequest } from '@features/detail/domain/saveTrack';

@@ -12,12 +12,12 @@ import { goBackOrToLibrary } from '@features/library/domain/libraryRoutes';
 import {
   useLoggedPlaylistDetailFailure,
   usePlaylistDetail,
-} from '@features/library/hooks/usePlaylistDetail';
+} from '@features/library/view/usePlaylistDetail';
 import { BackHeader } from '@features/library/view/BackHeader';
 import {
   PlaylistDetailContent,
   type ContentProps,
-} from '@features/library/ui/PlaylistDetailContent';
+} from '@features/library/view/PlaylistDetailContent';
 import { describeError } from '@shared/failure';
 import { classifyLibraryError } from '@features/library/domain/libraryFailure';
 

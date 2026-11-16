@@ -8,7 +8,7 @@ import {
   type SignInFailureReason,
   type SupabaseAuthErrorLike,
 } from '@features/signIn/domain/authError';
-import { useAuthPort } from '@features/signIn/ports/AuthPortProvider';
+import { useAuthPort } from '@features/signIn/view/AuthPortProvider';
 
 import { useAsyncAuthAction } from '@features/signIn/hooks/useAsyncAuthAction';
 

@@ -4,12 +4,12 @@ import { usePlayback, useQueuePlayback } from '@shared/playback';
 import { Button, Text, spacing, useWideWebLayout } from '@shared/ui';
 import type { TrackResponse } from '@shared/catalog';
 import { usePlaylistPlayback } from '@features/library/hooks/usePlaylistPlayback';
-import { useRetryAcquisition } from '@features/library/hooks/useRetryAcquisition';
+import { useRetryAcquisition } from '@features/library/view/useRetryAcquisition';
 import { usePlaylistTrackRemoval } from '@features/library/hooks/usePlaylistTrackRemoval';
 import type { TrackSelectionController } from '@features/library/view/useTrackSelection';
 import { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
 import { listContent } from '@features/library/view/listContentStyles';
-import type { DetailActions, DetailProps } from '@features/library/adapters/playlistDetailTypes';
+import type { DetailActions, DetailProps } from '@features/library/view/playlistDetailTypes';
 import { PlaylistHero } from '@features/library/view/PlaylistHero';
 import {
   PlaylistTrackRow,

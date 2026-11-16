@@ -10,7 +10,7 @@ import {
   type ContentFailure,
 } from '@features/detail/domain/contentStatus';
 import { fetchTallyingOutcome } from '@features/detail/domain/detailHealth';
-import { useDetailPort } from '@features/detail/ports/DetailPortProvider';
+import { useDetailPort } from '@features/detail/view/DetailPortProvider';
 import {
   useDetailFetchEnabled,
   useGatedRefetch,

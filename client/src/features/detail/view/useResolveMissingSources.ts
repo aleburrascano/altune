@@ -4,7 +4,7 @@ import type { DiscoveryResult } from '@shared/catalog';
 import { resolveEntityQuery } from '@features/detail/domain/resolveEntityQuery';
 import { normalizeForCompare } from '@features/detail/domain/normalizeForCompare';
 import { realPhotoUrl } from '@features/detail/domain/artistPhoto';
-import { useDetailPort } from '@features/detail/ports/DetailPortProvider';
+import { useDetailPort } from '@features/detail/view/DetailPortProvider';
 import { useDetailFetchEnabled } from '@features/detail/hooks/useDetailFetchGate';
 
 function useLoggedResolveFailure(result: DiscoveryResult, error: Error | null): void {

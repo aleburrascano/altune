@@ -9,7 +9,7 @@ import {
 } from '@features/detail/domain/contentStatus';
 import { fetchTallyingOutcome } from '@features/detail/domain/detailHealth';
 import type { DetailPort } from '@features/detail/ports/detailPort';
-import { useDetailPort } from '@features/detail/ports/DetailPortProvider';
+import { useDetailPort } from '@features/detail/view/DetailPortProvider';
 import {
   useDetailFetchEnabled,
   useContentFetchRetry,

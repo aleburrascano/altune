@@ -19,7 +19,7 @@ import { useAppMutation } from '@shared/query';
 import { forgetTrack, getTrackFromCaches, patchTrackInCaches } from '@shared/events';
 import { showFailureAlert } from '@shared/ui';
 import { guardedMutationOptions } from '@shared/session';
-import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
+import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 import {
   trackNotFoundAlert,

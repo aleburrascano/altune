@@ -4,7 +4,7 @@ import type { BackfillFeaturedResult } from '@shared/apiClient';
 import { guardedMutationOptions } from '@shared/session';
 import { detailKeys, libraryKeys, useAppMutation, transientRetryOptions } from '@shared/query';
 import { ContractError, NetworkError } from '@shared/failure';
-import { useSettingsPort } from '@features/settings/ports/SettingsPortProvider';
+import { useSettingsPort } from '@features/settings/view/SettingsPortProvider';
 import type { SettingsPort } from '@features/settings/ports/settingsPort';
 
 function nextBackfillOffset(page: BackfillFeaturedResult, offset: number): number {

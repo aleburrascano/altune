@@ -54,7 +54,7 @@ export { DownloadsSheet } from '@shared/acquisition/view/DownloadsSheet';
 export {
   AcquisitionPortProvider,
   useAcquisitionPort,
-} from '@shared/acquisition/ports/AcquisitionPortProvider';
+} from '@shared/acquisition/view/AcquisitionPortProvider';
 export type { AcquisitionPort } from '@shared/acquisition/ports/acquisitionPort';
 export { createMemoryAcquisitionPort } from '@shared/acquisition/__tests__/memoryAcquisitionPort';
 export type { AcquisitionPhase } from '@shared/acquisition/state/stagePhase';

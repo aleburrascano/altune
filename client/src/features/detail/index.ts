@@ -1,7 +1,7 @@
 export { DetailScreen } from '@features/detail/ui/DetailScreen';
 export { UnreleasedAllScreen } from '@features/detail/ui/unreleased/ArtistUnreleasedAll';
 export { UnreleasedSearchHits } from '@features/detail/view/unreleased/UnreleasedSearchHits';
-export { DetailPortProvider, useDetailPort } from '@features/detail/ports/DetailPortProvider';
+export { DetailPortProvider, useDetailPort } from '@features/detail/view/DetailPortProvider';
 export { httpDetailPort } from '@features/detail/adapters/http/httpDetailPort';
 export type { DetailPort } from '@features/detail/ports/detailPort';
 export { AlbumDetailBody } from '@features/detail/view/AlbumDetailBody';
@@ -89,7 +89,7 @@ export { useAlbumSaveAll } from '@features/detail/view/useAlbumSaveAll';
 export { useRelatedTracks } from '@features/detail/hooks/useRelatedTracks';
 export { useAlbumDiscovery, useArtistDiscovery } from '@features/detail/hooks/useEntityDiscovery';
 export type { EnrichmentProvider } from '@features/detail/domain/detailHealth';
-export { useResolveMissingSources } from '@features/detail/hooks/useResolveMissingSources';
+export { useResolveMissingSources } from '@features/detail/view/useResolveMissingSources';
 export { useDiscographyFilter } from '@features/detail/view/useDiscographyFilter';
 export {
   useLibraryAlbumsForArtist,
@@ -98,8 +98,8 @@ export {
 } from '@features/detail/hooks/useLibraryMatches';
 export { useOwnedPlayback } from '@features/detail/hooks/useOwnedPlayback';
 export type { OwnedPlaybackContext } from '@features/detail/hooks/useOwnedPlayback';
-export { useSaveTrack, useTrackSave } from '@features/detail/hooks/useSaveTrack';
-export type { SaveTrack } from '@features/detail/hooks/useSaveTrack';
+export { useSaveTrack, useTrackSave } from '@features/detail/view/useSaveTrack';
+export type { SaveTrack } from '@features/detail/view/useSaveTrack';
 export { DetailHandoffProvider } from '@features/detail/view/useDetailHandoff';
 export { useReportWrongAlbum } from '@features/detail/view/useReportWrongAlbum';
 export { useRetryTrack } from '@features/detail/hooks/useRetryTrack';

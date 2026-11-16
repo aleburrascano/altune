@@ -8,7 +8,7 @@ import {
   useDiscoverFetchEnabled,
   useGatedDiscoverCall,
 } from '@features/discovery/hooks/search/useDiscoverFetchGate';
-import { useDiscoverPort } from '@features/discovery/ports/DiscoverPortProvider';
+import { useDiscoverPort } from '@features/discovery/view/DiscoverPortProvider';
 
 export function useSearchHistory() {
   const port = useDiscoverPort();

@@ -5,13 +5,13 @@ import type {
   ContentProps,
   DetailActions,
   DetailProps,
-} from '@features/library/adapters/playlistDetailTypes';
-import { PlaylistTopBar } from '@features/library/ui/PlaylistTopBar';
-import { PlaylistTrackList as PlaylistTracks } from '@features/library/ui/PlaylistTrackList';
+} from '@features/library/view/playlistDetailTypes';
+import { PlaylistTopBar } from '@features/library/view/PlaylistTopBar';
+import { PlaylistTrackList as PlaylistTracks } from '@features/library/view/PlaylistTrackList';
 import { useAddTracksToPlaylist } from '@shared/playlists';
 import { AddTracksToPlaylistModal } from '@features/library/view/AddTracksToPlaylistModal';
 
-export type { ContentProps } from '@features/library/adapters/playlistDetailTypes';
+export type { ContentProps } from '@features/library/view/playlistDetailTypes';
 
 function usePlaylistDetailActions(props: ContentProps): DetailActions {
   const [addVisible, setAddVisible] = useState(false);

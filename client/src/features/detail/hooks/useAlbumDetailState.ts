@@ -9,7 +9,7 @@ import { useOpenDetail } from '@features/detail/hooks/useDetailNavigation';
 import { useAlbumDiscovery } from '@features/detail/hooks/useEntityDiscovery';
 import { useAlbumTracks } from '@features/detail/hooks/useAlbumTracks';
 import { useLibraryTracksForAlbum } from '@features/detail/hooks/useLibraryMatches';
-import { useSaveTrack } from '@features/detail/hooks/useSaveTrack';
+import { useSaveTrack } from '@features/detail/view/useSaveTrack';
 import {
   enrichAlbumTrack,
   useAlbumSaveAll,

@@ -1,9 +1,9 @@
 export { FeaturingScreen } from '@features/library/ui/FeaturingScreen';
 export { LibraryScreen } from '@features/library/ui/LibraryScreen';
 export { PlaylistDetailScreen } from '@features/library/ui/PlaylistDetailScreen';
-export { usePlaylistActions } from '@features/library/hooks/usePlaylistActions';
+export { usePlaylistActions } from '@features/library/view/usePlaylistActions';
 export { SidebarPlaylists } from '@features/library/ui/SidebarPlaylists';
-export { LibraryPortProvider, useLibraryPort } from '@features/library/ports/LibraryPortProvider';
+export { LibraryPortProvider, useLibraryPort } from '@features/library/view/LibraryPortProvider';
 export { httpLibraryPort } from '@features/library/adapters/http/httpLibraryPort';
 export type { LibraryPort } from '@features/library/ports/libraryPort';
 export { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
@@ -89,7 +89,7 @@ export { useActiveLibraryView } from '@features/library/hooks/useActiveLibraryVi
 export { useSelection } from '@features/library/view/useSelection';
 export type { MemoryLibrarySeed } from '@features/library/__tests__/memoryLibraryPort';
 export { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
-export { useDeleteTrack, useDeleteTracks } from '@features/library/hooks/useDeleteTracks';
+export { useDeleteTrack, useDeleteTracks } from '@features/library/view/useDeleteTracks';
 export {
   parseDeezerIdParam,
   parseStringParam,
@@ -98,20 +98,17 @@ export {
 export { useAlbumsView, useArtistsView } from '@features/library/view/useGroupViews';
 export { useLibrarySearch } from '@features/library/view/useLibrarySearch';
 export { usePlaylistsView } from '@features/library/view/usePlaylistsView';
-export { usePlaylistDetail } from '@features/library/hooks/usePlaylistDetail';
+export { usePlaylistDetail } from '@features/library/view/usePlaylistDetail';
 export {
   usePlaylistDelete,
   usePlaylistOfflineAction,
 } from '@features/library/hooks/usePlaylistMenu';
 export { usePlaylistPlayback } from '@features/library/hooks/usePlaylistPlayback';
 export { usePlaylistRename } from '@features/library/view/usePlaylistRename';
-export {
-  useReacquireTrack,
-  useRetryAcquisition,
-} from '@features/library/hooks/useRetryAcquisition';
+export { useReacquireTrack, useRetryAcquisition } from '@features/library/view/useRetryAcquisition';
 export { buildTrackMenuItems } from '@features/library/view/useTrackMenu';
 export { useTracksView } from '@features/library/view/useTracksView';
 export { WideTrackHeader } from '@features/library/view/WideTrackHeader';
 export { LibraryRowFailure } from '@features/library/view/LibraryRowFailure';
-export { menuItems } from '@features/library/ui/playlistMenuItems';
-export type { MenuEditProps } from '@features/library/ui/playlistMenuItems';
+export { menuItems } from '@features/library/view/playlistMenuItems';
+export type { MenuEditProps } from '@features/library/view/playlistMenuItems';

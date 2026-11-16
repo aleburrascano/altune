@@ -6,7 +6,7 @@ import { featuredArtistsFromExtras } from '@shared/catalog';
 import { useArtistDiscovery } from '@features/detail/hooks/useEntityDiscovery';
 import { realPhotoUrl } from '@features/detail/domain/artistPhoto';
 import { useDetailEnrichments } from '@features/detail/hooks/useDetailEnrichments';
-import { useResolveMissingSources } from '@features/detail/hooks/useResolveMissingSources';
+import { useResolveMissingSources } from '@features/detail/view/useResolveMissingSources';
 import { useLateralNav } from '@features/detail/hooks/useDetailNavigation';
 import { DetailHandoffProvider } from '@features/detail/view/useDetailHandoff';
 import { detailRouteFor } from '@features/detail/domain/detailNavigation';
