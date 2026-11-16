@@ -1,8 +1,8 @@
 package catalogtest_test
 
 import (
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/catalog/domain"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"testing"
@@ -15,9 +15,9 @@ type playlistRepoWithTracks struct {
 	tracks *catalogtest.TrackRepo
 }
 
-func (r *playlistRepoWithTracks) SeedTrack(t *testing.T, userId shared.UserId) domain.TrackId {
+func (r *playlistRepoWithTracks) SeedTrack(t *testing.T, userId shared.UserId) catalog.TrackId {
 	t.Helper()
-	track, err := domain.NewTrack(userId, "Title-"+uuid.NewString()[:8], "Artist-"+uuid.NewString()[:8], "Album")
+	track, err := catalog.NewTrack(userId, "Title-"+uuid.NewString()[:8], "Artist-"+uuid.NewString()[:8], "Album")
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}

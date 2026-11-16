@@ -1,13 +1,13 @@
-package storage
+package storage_test
 
 import (
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/catalog/internal/core/ports"
 	"testing"
 )
 
 func TestFilesystemAudioStore_Contract(t *testing.T) {
-	catalogtest.AudioStoreContract(t, func(t *testing.T) ports.AudioStore {
-		return NewFilesystemAudioStore(t.TempDir())
+	catalogtest.AudioStoreContract(t, func(t *testing.T) catalog.AudioStore {
+		return catalog.NewFilesystemAudioStore(t.TempDir())
 	})
 }

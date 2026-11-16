@@ -1,4 +1,4 @@
-package storage
+package storage_test
 
 import (
 	"context"
@@ -10,7 +10,8 @@ import (
 )
 
 import (
-	"altune/go-api/internal/catalog/internal/core/ports"
+	"altune/go-api/internal/catalog"
+	"altune/go-api/internal/catalog/internal/adapters/storage"
 	"time"
 )
 
@@ -43,10 +44,10 @@ func testS3Env(t *testing.T) s3Env {
 	}
 }
 
-func testObjectStore(t *testing.T) *ObjectStorageAudioStore {
+func testObjectStore(t *testing.T) *storage.ObjectStorageAudioStore {
 	t.Helper()
 	env := testS3Env(t)
-	store, err := NewObjectStorageAudioStore(ObjectStorageConfig{
+	store, err := storage.NewObjectStorageAudioStore(storage.ObjectStorageConfig{
 		Endpoint:  env.endpoint,
 		AccessKey: env.accessKey,
 		SecretKey: env.secretKey,
@@ -187,7 +188,7 @@ func TestObjectStorageAudioStore_ListWithAge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListWithAge: %v", err)
 	}
-	var found *ports.ObjectAge
+	var found *catalog.ObjectAge
 	for i := range objects {
 		if objects[i].AudioRef == audioRef {
 			found = &objects[i]

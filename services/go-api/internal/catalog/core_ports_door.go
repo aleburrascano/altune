@@ -22,3 +22,7 @@ var (
 	ErrTrackMissing         = ports.ErrTrackMissing
 	ErrTrackVersionConflict = ports.ErrTrackVersionConflict
 )
+
+type FeaturedArtistResolver = ports.FeaturedArtistResolver
+
+const MaxPresignTTL = ports.MaxPresignTTL

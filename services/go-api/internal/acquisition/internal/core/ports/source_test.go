@@ -1,22 +1,25 @@
-package ports
+package ports_test
 
-import "testing"
+import (
+	"altune/go-api/internal/acquisition"
+	"testing"
+)
 
 func TestSourceFormat_IsLowBitrate(t *testing.T) {
 	cases := []struct {
 		name   string
-		format SourceFormat
+		format acquisition.SourceFormat
 		floor  int
 		want   bool
 	}{
-		{"the muxed fallback is low", SourceFormat{ID: "18", Kbps: 96}, 112, true},
-		{"the muxed fallback is low whatever its reported bitrate", SourceFormat{ID: "18"}, 112, true},
-		{"a bitrate under the floor is low", SourceFormat{ID: "139", Kbps: 96}, 112, true},
-		{"a bitrate above the floor is not low", SourceFormat{ID: "140", Kbps: 130}, 112, false},
-		{"a bitrate at the floor is not low", SourceFormat{ID: "140", Kbps: 112}, 112, false},
-		{"an unknown bitrate on another format is not low", SourceFormat{ID: "140"}, 112, false},
-		{"a zero floor never calls the muxed fallback low", SourceFormat{ID: "18", Kbps: 96}, 0, false},
-		{"a zero floor never calls a low bitrate low", SourceFormat{ID: "139", Kbps: 48}, 0, false},
+		{"the muxed fallback is low", acquisition.SourceFormat{ID: "18", Kbps: 96}, 112, true},
+		{"the muxed fallback is low whatever its reported bitrate", acquisition.SourceFormat{ID: "18"}, 112, true},
+		{"a bitrate under the floor is low", acquisition.SourceFormat{ID: "139", Kbps: 96}, 112, true},
+		{"a bitrate above the floor is not low", acquisition.SourceFormat{ID: "140", Kbps: 130}, 112, false},
+		{"a bitrate at the floor is not low", acquisition.SourceFormat{ID: "140", Kbps: 112}, 112, false},
+		{"an unknown bitrate on another format is not low", acquisition.SourceFormat{ID: "140"}, 112, false},
+		{"a zero floor never calls the muxed fallback low", acquisition.SourceFormat{ID: "18", Kbps: 96}, 0, false},
+		{"a zero floor never calls a low bitrate low", acquisition.SourceFormat{ID: "139", Kbps: 48}, 0, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

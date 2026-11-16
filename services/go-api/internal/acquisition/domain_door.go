@@ -14,3 +14,10 @@ var (
 	ErrIdentifyThrottled = domain.ErrIdentifyThrottled
 	LengthAuthoritative  = domain.LengthAuthoritative
 )
+
+type LengthTolerance = domain.LengthTolerance
+
+var (
+	LengthLoose = domain.LengthLoose
+	LengthTight = domain.LengthTight
+)

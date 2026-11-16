@@ -51,3 +51,5 @@ var (
 	WithVerifySkipCount               = service.WithVerifySkipCount
 	WithVerifySkips                   = service.WithVerifySkips
 )
+
+type DownloadLimiter = service.DownloadLimiter

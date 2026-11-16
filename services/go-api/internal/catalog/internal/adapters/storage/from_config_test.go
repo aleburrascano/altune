@@ -1,6 +1,7 @@
-package storage
+package storage_test
 
 import (
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"log/slog"
@@ -12,7 +13,7 @@ import (
 
 func TestFromConfigScopesKeysWhenPrefixSet(t *testing.T) {
 	dir := t.TempDir()
-	store, err := FromConfig(&config.Config{MusicDir: dir, AudioKeyPrefix: "staging/"}, slog.Default())
+	store, err := catalog.FromConfig(&config.Config{MusicDir: dir, AudioKeyPrefix: "staging/"}, slog.Default())
 	if err != nil {
 		t.Fatalf("FromConfig: %v", err)
 	}
@@ -43,7 +44,7 @@ func TestFromConfigFailsWhenOCIConfigIsBroken(t *testing.T) {
 		MusicDir:       t.TempDir(),
 	}
 
-	store, err := FromConfig(cfg, slog.Default())
+	store, err := catalog.FromConfig(cfg, slog.Default())
 	if err == nil {
 		t.Fatalf("broken OCI config must not fall back to a local store, got %v", store)
 	}
@@ -66,7 +67,7 @@ func TestFromConfigRejectsMisconfiguration(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := FromConfig(tt.cfg, slog.Default())
+			_, err := catalog.FromConfig(tt.cfg, slog.Default())
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("want error naming %q, got %v", tt.want, err)
 			}

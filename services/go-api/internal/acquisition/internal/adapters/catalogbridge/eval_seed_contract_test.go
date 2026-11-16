@@ -1,7 +1,8 @@
-package catalogbridge
+package catalogbridge_test
 
 import (
-	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/acquisition/internal/adapters/catalogbridge"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"encoding/json"
@@ -9,9 +10,9 @@ import (
 	"testing"
 )
 
-func seededSnapshot(t *testing.T, seed SeededTrack) (*SeededLedger, *ports.TrackSnapshot) {
+func seededSnapshot(t *testing.T, seed catalogbridge.SeededTrack) (*catalogbridge.SeededLedger, *acquisition.TrackSnapshot) {
 	t.Helper()
-	ledger, err := NewSeededLedger(seed)
+	ledger, err := catalogbridge.NewSeededLedger(seed)
 	if err != nil {
 		t.Fatalf("NewSeededLedger: %v", err)
 	}
@@ -24,9 +25,9 @@ func seededSnapshot(t *testing.T, seed SeededTrack) (*SeededLedger, *ports.Track
 
 func TestNewSeededLedger_SnapshotCarriesTheSeededFields(t *testing.T) {
 	explicit := true
-	sources := []ports.CatalogSource{{Provider: "musicbrainz", ExternalID: "abc"}}
+	sources := []acquisition.CatalogSource{{Provider: "musicbrainz", ExternalID: "abc"}}
 
-	_, snapshot := seededSnapshot(t, SeededTrack{
+	_, snapshot := seededSnapshot(t, catalogbridge.SeededTrack{
 		Title: "Over", Artist: "LUCKI", Album: "", ISRC: "CA5KR1827984",
 		CatalogDuration: 135.96, CatalogMBID: "pinned", CatalogExplicit: &explicit,
 		CatalogSources: sources, RejectedSourceKeys: []string{"youtube:FjkkqbEbFOY"},
@@ -53,19 +54,19 @@ func TestNewSeededLedger_SnapshotCarriesTheSeededFields(t *testing.T) {
 	if !slices.Equal(snapshot.RejectedSourceKeys, []string{"youtube:FjkkqbEbFOY"}) {
 		t.Errorf("RejectedSourceKeys = %v", snapshot.RejectedSourceKeys)
 	}
-	if snapshot.Status != ports.TrackPending {
+	if snapshot.Status != acquisition.TrackPending {
 		t.Errorf("Status = %v, want pending without a stored file", snapshot.Status)
 	}
 }
 
 func TestNewSeededLedger_AStoredFileMakesTheTrackReadyWithItsMeasuredLength(t *testing.T) {
-	_, snapshot := seededSnapshot(t, SeededTrack{
+	_, snapshot := seededSnapshot(t, catalogbridge.SeededTrack{
 		Title: "Phone (Interlude)", Artist: "SLAYR",
 		AudioSourceURL: "https://www.youtube.com/watch?v=TB0z2HVFxEE",
-		Stored:         &SeededFile{Duration: 112},
+		Stored:         &catalogbridge.SeededFile{Duration: 112},
 	})
 
-	if snapshot.Status != ports.TrackReady || snapshot.AudioRef == nil {
+	if snapshot.Status != acquisition.TrackReady || snapshot.AudioRef == nil {
 		t.Fatalf("Status = %v, AudioRef = %v, want a ready track holding a file", snapshot.Status, snapshot.AudioRef)
 	}
 	if snapshot.StoredDurationSeconds == nil || *snapshot.StoredDurationSeconds != 112 {
@@ -80,10 +81,10 @@ func TestNewSeededLedger_AStoredFileMakesTheTrackReadyWithItsMeasuredLength(t *t
 }
 
 func TestNewSeededLedger_SavedReadsBackWhatCompleteWrote(t *testing.T) {
-	ledger, _ := seededSnapshot(t, SeededTrack{Title: "Song", Artist: "Artist"})
+	ledger, _ := seededSnapshot(t, catalogbridge.SeededTrack{Title: "Song", Artist: "Artist"})
 	evidence := json.RawMessage(`{"isrc_source":"fingerprint"}`)
 
-	err := ledger.Complete(context.Background(), ledger.TrackID(), ledger.UserID(), 0, ports.Completion{
+	err := ledger.Complete(context.Background(), ledger.TrackID(), ledger.UserID(), 0, acquisition.Completion{
 		AudioRef: "ref", Duration: 237, ISRC: "CAA509814003",
 		Provenance: shared.AcquisitionProvenance("verified"), RejectedSourceKeys: []string{"youtube:abc"},
 		Confidence: 0.9, Evidence: evidence,
@@ -102,13 +103,13 @@ func TestNewSeededLedger_SavedReadsBackWhatCompleteWrote(t *testing.T) {
 }
 
 func TestNewSeededLedger_RefusesATrackTheCatalogWouldNotHold(t *testing.T) {
-	if _, err := NewSeededLedger(SeededTrack{Artist: "Artist"}); err == nil {
+	if _, err := catalogbridge.NewSeededLedger(catalogbridge.SeededTrack{Artist: "Artist"}); err == nil {
 		t.Fatal("NewSeededLedger accepted a track with no title")
 	}
 }
 
 func TestNewSeededLedger_ATrackSourceURLReachesTheSnapshotWithNoStoredFile(t *testing.T) {
-	_, snapshot := seededSnapshot(t, SeededTrack{
+	_, snapshot := seededSnapshot(t, catalogbridge.SeededTrack{
 		Title: "Time After Time", Artist: "Cyndi Lauper",
 		AudioSourceURL: "https://music.youtube.com/watch?v=7wBgcalM4c4",
 	})

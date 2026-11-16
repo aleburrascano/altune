@@ -1,7 +1,8 @@
-package storage
+package storage_test
 
 import (
-	"altune/go-api/internal/catalog/internal/core/ports"
+	"altune/go-api/internal/catalog"
+	"altune/go-api/internal/catalog/internal/adapters/storage"
 	"context"
 	"net/url"
 	"strconv"
@@ -10,9 +11,9 @@ import (
 	"time"
 )
 
-func newOfflineObjectStore(t *testing.T) *ObjectStorageAudioStore {
+func newOfflineObjectStore(t *testing.T) *storage.ObjectStorageAudioStore {
 	t.Helper()
-	store, err := NewObjectStorageAudioStore(ObjectStorageConfig{
+	store, err := storage.NewObjectStorageAudioStore(storage.ObjectStorageConfig{
 		Endpoint:  "https://objectstorage.invalid",
 		AccessKey: "ak",
 		SecretKey: "sk",
@@ -48,9 +49,9 @@ func TestObjectStorageAudioStore_PresignGet_TTLCeiling(t *testing.T) {
 		want time.Duration
 	}{
 		{name: "within ceiling is honored", ttl: 10 * time.Minute, want: 10 * time.Minute},
-		{name: "at ceiling is honored", ttl: ports.MaxPresignTTL, want: ports.MaxPresignTTL},
-		{name: "above ceiling is clamped", ttl: 7 * 24 * time.Hour, want: ports.MaxPresignTTL},
-		{name: "beyond the s3 maximum is clamped, not rejected", ttl: 365 * 24 * time.Hour, want: ports.MaxPresignTTL},
+		{name: "at ceiling is honored", ttl: catalog.MaxPresignTTL, want: catalog.MaxPresignTTL},
+		{name: "above ceiling is clamped", ttl: 7 * 24 * time.Hour, want: catalog.MaxPresignTTL},
+		{name: "beyond the s3 maximum is clamped, not rejected", ttl: 365 * 24 * time.Hour, want: catalog.MaxPresignTTL},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -66,7 +67,7 @@ func TestObjectStorageAudioStore_PresignGet_TTLCeiling(t *testing.T) {
 }
 
 func TestNewObjectStorageAudioStore_BindsConfigFieldsByName(t *testing.T) {
-	store, err := NewObjectStorageAudioStore(ObjectStorageConfig{
+	store, err := storage.NewObjectStorageAudioStore(storage.ObjectStorageConfig{
 		Endpoint:  "http://objectstorage.invalid:9000/",
 		AccessKey: "test-access-key",
 		SecretKey: "test-secret-key",

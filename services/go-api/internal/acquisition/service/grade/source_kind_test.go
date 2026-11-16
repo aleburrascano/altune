@@ -1,15 +1,18 @@
-package grade
+package grade_test
 
-import "testing"
+import (
+	"altune/go-api/internal/acquisition"
+	"testing"
+)
 
 func TestSourceKind_IsOfficial(t *testing.T) {
-	cases := map[SourceKind]bool{
-		ArtTrack:      true,
-		OfficialVideo: true,
-		LabelUpload:   true,
-		FanUpload:     false,
-		UserUpload:    false,
-		"":            false,
+	cases := map[acquisition.SourceKind]bool{
+		acquisition.ArtTrack:      true,
+		acquisition.OfficialVideo: true,
+		acquisition.LabelUpload:   true,
+		acquisition.FanUpload:     false,
+		acquisition.UserUpload:    false,
+		"":                        false,
 	}
 	for kind, want := range cases {
 		if got := kind.IsOfficial(); got != want {
