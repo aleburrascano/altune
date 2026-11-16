@@ -15,7 +15,7 @@ import { enqueueCritical, flushOutbox, _resetOutboxForTest } from '@shared/telem
 import { followSignedInUser } from '@shared/telemetry';
 import { useOwnedTrack } from '@features/detail/hooks/useOwnedTrack';
 import type { TrackExtras } from '@features/detail/domain/trackExtras';
-import { TrackSaveControl } from '@features/detail/ui/SaveControls';
+import { TrackSaveControl } from '@features/detail/view/SaveControls';
 import {
   startServerEvents,
   type ServerEvent,

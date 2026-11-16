@@ -2,11 +2,11 @@ import { type ReactElement, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import type { DiscoveryResult } from '@shared/catalog';
 import { asyncView, AsyncSection, Text, spacing } from '@shared/ui';
-import type { AlbumDetailState } from '@features/detail/hooks/useAlbumDetailState';
+import type { AlbumDetailState } from '@features/detail/view/useAlbumDetailState';
 
 import { trackSubtitleWithFeaturing } from '@features/detail/ui/formatters';
 import { AlbumMoreTracks } from '@features/detail/view/AlbumMoreTracks';
-import { AlbumTrackRow } from '@features/detail/ui/AlbumTrackRow';
+import { AlbumTrackRow } from '@features/detail/view/AlbumTrackRow';
 import { TrackRowsSkeleton } from '@features/detail/view/DetailSkeleton';
 import { Section, SectionError } from '@features/detail/view/Section';
 

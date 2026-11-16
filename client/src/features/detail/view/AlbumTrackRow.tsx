@@ -6,7 +6,7 @@ import type { DiscoveryResult } from '@shared/catalog';
 import { trackExtras } from '@features/detail/domain/trackExtras';
 import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
 import { sharedStyles } from '@features/detail/view/detailStyles';
-import { TrackSaveControl } from '@features/detail/ui/SaveControls';
+import { TrackSaveControl } from '@features/detail/view/SaveControls';
 
 type AlbumTrackRowProps = {
   track: DiscoveryResult;

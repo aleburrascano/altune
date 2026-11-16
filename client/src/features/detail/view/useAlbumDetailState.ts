@@ -6,7 +6,7 @@ import { type ContentFailure } from '@features/detail/domain/contentStatus';
 
 import { type DetailRoute } from '@features/detail/domain/detailNavigation';
 import { useOpenDetail } from '@features/detail/hooks/useDetailNavigation';
-import { useAlbumDiscovery } from '@features/detail/hooks/useEntityDiscovery';
+import { useAlbumDiscovery } from '@features/detail/view/useEntityDiscovery';
 import { useAlbumTracks } from '@features/detail/hooks/useAlbumTracks';
 import { useLibraryTracksForAlbum } from '@features/detail/hooks/useLibraryMatches';
 import { useSaveTrack } from '@features/detail/view/useSaveTrack';
