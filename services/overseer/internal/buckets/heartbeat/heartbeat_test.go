@@ -6,7 +6,12 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 )
+
+func newHeartbeat() *heartbeat.Bucket {
+	return heartbeat.New(heartbeat.Deps{Now: time.Now})
+}
 
 func snapshotData(t *testing.T, snap core.Snapshot) heartbeat.Data {
 	t.Helper()
@@ -18,7 +23,7 @@ func snapshotData(t *testing.T, snap core.Snapshot) heartbeat.Data {
 }
 
 func TestHeartbeatCollectStoreSnapshot(t *testing.T) {
-	b := heartbeat.New()
+	b := newHeartbeat()
 
 	empty := b.Snapshot()
 	if empty.State != core.StateLive {
@@ -45,7 +50,7 @@ func TestHeartbeatCollectStoreSnapshot(t *testing.T) {
 }
 
 func TestHeartbeatHeadlineTracksTheTicks(t *testing.T) {
-	b := heartbeat.New()
+	b := newHeartbeat()
 
 	if snap := b.Snapshot(); snap.Severity != core.SeverityOK || snap.Headline != "no ticks yet" {
 		t.Errorf("empty grade = %q/%q, want ok/no ticks yet", snap.Severity, snap.Headline)
@@ -69,12 +74,24 @@ func TestHeartbeatHeadlineTracksTheTicks(t *testing.T) {
 }
 
 func TestHeartbeatStaysBounded(t *testing.T) {
-	b := heartbeat.New()
+	b := newHeartbeat()
 	for i := 0; i < 500; i++ {
 		signals, _ := b.Collect(context.Background())
 		b.Store(signals)
 	}
 	if got := len(snapshotData(t, b.Snapshot()).Ticks); got != 60 {
 		t.Errorf("ticks = %d, want cap 60", got)
+	}
+}
+
+func TestHeartbeatWithNoClockUsesTheWallClock(t *testing.T) {
+	before := time.Now()
+	signals, err := heartbeat.New(heartbeat.Deps{}).Collect(context.Background())
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+
+	if len(signals) != 1 || signals[0].At.Before(before) || signals[0].At.After(time.Now()) {
+		t.Fatalf("signals = %+v, want one tick stamped by the wall clock", signals)
 	}
 }

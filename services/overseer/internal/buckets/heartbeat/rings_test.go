@@ -1,14 +1,13 @@
 package heartbeat_test
 
 import (
-	"altune/overseer/internal/buckets/heartbeat"
 	"altune/overseer/internal/core"
 	"testing"
 	"time"
 )
 
 func TestRestoredTicksShowInTheSnapshotAndDateIt(t *testing.T) {
-	b := heartbeat.New()
+	b := newHeartbeat()
 	last := time.Date(2026, 9, 1, 12, 0, 30, 0, time.UTC)
 	restored := []core.Signal{{At: last.Add(-30 * time.Second), Kind: "tick", Text: "alive"}, {At: last, Kind: "tick", Text: "alive"}}
 

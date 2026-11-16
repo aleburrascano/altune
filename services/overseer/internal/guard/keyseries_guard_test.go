@@ -1,21 +1,12 @@
 package guard_test
 
 import (
+	"altune/overseer/internal/app"
 	"altune/overseer/internal/core"
 	"context"
 	"sync"
 	"testing"
 	"time"
-
-	_ "altune/overseer/internal/buckets/backendperf"
-	_ "altune/overseer/internal/buckets/cost"
-	_ "altune/overseer/internal/buckets/domainquality"
-	_ "altune/overseer/internal/buckets/heartbeat"
-	_ "altune/overseer/internal/buckets/liveactivity"
-	_ "altune/overseer/internal/buckets/logs"
-	_ "altune/overseer/internal/buckets/reliability"
-	_ "altune/overseer/internal/buckets/security"
-	_ "altune/overseer/internal/buckets/usage"
 )
 
 type recordingSeries struct {
@@ -80,7 +71,7 @@ var offlineProofByBucket = map[string]string{
 }
 
 func TestRealBucketsWriteUnderTheirDeclaredKeySeries(t *testing.T) {
-	for _, b := range core.Default.Buckets() {
+	for _, b := range app.Buckets() {
 		b := b
 		id := b.Meta().ID
 		keyed, ok := b.(core.KeySeries)
