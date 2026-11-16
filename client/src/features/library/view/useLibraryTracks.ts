@@ -143,8 +143,13 @@ function usePendingPoll(active: boolean, query: string, sort: LibrarySort) {
   }, [active, query, sort, queryClient, port]);
 }
 
-function loadedTracks(data: { pages: ListTracksResponse[] } | undefined) {
-  const pages = data?.pages ?? [];
+type LoadedPages = { pages: ListTracksResponse[] };
+
+type LoadedTracks = { tracks: TrackResponse[]; total: number; anyPending: boolean };
+
+function loadedTracks(loaded: LoadedPages | undefined): LoadedTracks {
+  if (loaded === undefined) return { tracks: [], total: 0, anyPending: false };
+  const { pages } = loaded;
   return {
     tracks: pages.flatMap((page) => page.items),
     total: pages[0]?.total ?? 0,

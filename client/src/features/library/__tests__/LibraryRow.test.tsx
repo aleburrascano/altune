@@ -474,9 +474,13 @@ describe('LibraryRow — redraws when what it shows changes', () => {
   it('shows a new failure message', () => {
     const view = render(<LibraryRow track={failedTrack} {...base} />);
 
-    view.rerender(
-      <LibraryRow track={{ ...failedTrack, failure_message: 'Source blocked' }} {...base} />,
-    );
+    const blocked = trackResponseFactory.build({
+      ...fields,
+      acquisition_status: 'failed',
+      failure_reason: 'no_source',
+      failure_message: 'Source blocked',
+    });
+    view.rerender(<LibraryRow track={blocked} {...base} />);
 
     expect(screen.getByTestId(`library-row-failed-${ID}`).props.children).toBe('Source blocked');
   });

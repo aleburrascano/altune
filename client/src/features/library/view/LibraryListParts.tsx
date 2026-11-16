@@ -69,11 +69,9 @@ function ListLoadingMoreFooter({
   return loading ? <LoadingFooter /> : null;
 }
 
-export function ListPagingFooter({
-  paging,
-}: {
-  paging: ListPaging | undefined;
-}): ReactElement | null {
+type ListPagingFooterProps = { paging: ListPaging | undefined };
+
+export function ListPagingFooter({ paging }: ListPagingFooterProps): ReactElement | null {
   return (
     <ListLoadingMoreFooter
       loading={paging?.isFetchingNextPage === true}
