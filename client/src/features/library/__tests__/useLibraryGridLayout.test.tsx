@@ -7,13 +7,11 @@ import type { PlaylistResponse } from '@shared/catalog';
 import type { ListRefresh } from '@features/library';
 import { AlbumsGrid, ArtistsGrid, PlaylistsGrid } from '@features/library';
 import { setPlatformOS } from '@testing/setPlatformOS';
+import { PHONE_WINDOW_WIDTH, setWindowWidth } from '@features/library/__tests__/setWindowWidth';
 
-let mockWindowWidth = 390;
-
-jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
-  __esModule: true,
-  default: () => ({ width: mockWindowWidth, height: 800, scale: 2, fontScale: 1 }),
-}));
+beforeEach(() => {
+  setWindowWidth(PHONE_WINDOW_WIDTH);
+});
 
 function idleRefresh(): ListRefresh {
   return { onRefresh: jest.fn(), refreshing: false };
@@ -108,7 +106,7 @@ describe.each([
   { label: 'a wide screen', width: 1200, cover: 4, avatar: 6, coverSide: 283 },
 ])('at $label width ($width px)', (expected) => {
   beforeEach(() => {
-    mockWindowWidth = expected.width;
+    setWindowWidth(expected.width);
   });
 
   it(`lays out ${expected.cover} albums per row`, () => {
@@ -145,7 +143,7 @@ describe('a measured content width narrower than the window overrides the window
 
   beforeEach(() => {
     setPlatformOS('web');
-    mockWindowWidth = 1440;
+    setWindowWidth(1440);
   });
 
   afterEach(() => {
@@ -174,7 +172,7 @@ describe('a measured content width narrower than the window overrides the window
 describe('a native tablet just under the wide breakpoint keeps its column count', () => {
   const tablet = { coverColumns: 3 };
   beforeEach(() => {
-    mockWindowWidth = 999;
+    setWindowWidth(999);
   });
 
   it('gives AlbumsGrid 3 cover columns at a 999pt-wide window', () => {
@@ -190,12 +188,11 @@ describe('narrow web keeps its pre-#2842 grid once the grid measures itself', ()
 
   beforeEach(() => {
     setPlatformOS('web');
-    mockWindowWidth = 360;
+    setWindowWidth(360);
   });
 
   afterEach(() => {
     setPlatformOS(originalOS);
-    mockWindowWidth = 390;
   });
 
   it('gives AlbumsGrid 2 columns at 360px on web before any layout', () => {
@@ -222,7 +219,7 @@ describe.each([
   { width: 1440, coverColumns: 4, coverSide: 343 },
 ])('a native window of $width pt matches origin/main, uncapped and uncropped', (expected) => {
   beforeEach(() => {
-    mockWindowWidth = expected.width;
+    setWindowWidth(expected.width);
   });
 
   it(`gives AlbumsGrid ${expected.coverColumns} columns`, () => {
@@ -244,12 +241,11 @@ describe('web below the wide-web threshold behaves like main, uncapped and uncro
 
   beforeEach(() => {
     setPlatformOS('web');
-    mockWindowWidth = 900;
+    setWindowWidth(900);
   });
 
   afterEach(() => {
     setPlatformOS(originalBelowWideOS);
-    mockWindowWidth = 390;
   });
 
   it('gives AlbumsGrid 3 columns, not the wide-web 5-column tier', () => {

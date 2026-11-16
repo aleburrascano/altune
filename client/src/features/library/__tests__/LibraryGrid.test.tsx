@@ -5,6 +5,7 @@ import type { AlbumGroup } from '@shared/apiClient';
 import type { ListRefresh } from '@features/library';
 import { AlbumsGrid, ArtistsGrid, PlaylistsGrid } from '@features/library';
 import { setPlatformOS } from '@testing/setPlatformOS';
+import { PHONE_WINDOW_WIDTH, setWindowWidth } from '@features/library/__tests__/setWindowWidth';
 
 function idleRefresh(): ListRefresh {
   return { onRefresh: jest.fn(), refreshing: false };
@@ -105,12 +106,9 @@ describe('library list shells — pull to refresh', () => {
 
 const { Platform } = require('react-native');
 
-let mockWideGridWindowWidth = 390;
-
-jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
-  __esModule: true,
-  default: () => ({ width: mockWideGridWindowWidth, height: 800, scale: 2, fontScale: 1 }),
-}));
+beforeEach(() => {
+  setWindowWidth(PHONE_WINDOW_WIDTH);
+});
 
 const { asPlaylistId: probeAsPlaylistId } = require('@shared/catalog');
 
@@ -210,12 +208,11 @@ describe('library grids — wide web layout', () => {
 
   beforeEach(() => {
     setPlatformOS('web');
-    mockWideGridWindowWidth = 1440;
+    setWindowWidth(1440);
   });
 
   afterEach(() => {
     setPlatformOS(originalOS);
-    mockWideGridWindowWidth = 390;
   });
 
   it('gives the albums grid at least 5 columns at 1440px', () => {
@@ -260,12 +257,11 @@ describe('library grids — wide web, measured inside the app shell (#2842)', ()
 
   beforeEach(() => {
     setPlatformOS('web');
-    mockWideGridWindowWidth = 1440;
+    setWindowWidth(1440);
   });
 
   afterEach(() => {
     setPlatformOS(originalOS);
-    mockWideGridWindowWidth = 390;
   });
 
   it('gives the artists grid at least 5 columns at 1440px', () => {
@@ -341,7 +337,7 @@ describe('library grids — wide web, measured inside the app shell (#2842)', ()
   });
 
   it('keeps the tablet tier of 3 cover columns at 999px on web', () => {
-    mockWideGridWindowWidth = 999;
+    setWindowWidth(999);
     probeAlbums();
 
     expect(gridColumnCount()).toBe(3);
@@ -353,12 +349,11 @@ describe('library grids — native and narrow web keep their pre-#2842 columns o
 
   afterEach(() => {
     setPlatformOS(originalOS);
-    mockWideGridWindowWidth = 390;
   });
 
   it('keeps 3 albums columns on a 720pt native tablet whose grid measures 688 inside the padding', () => {
     setPlatformOS('ios');
-    mockWideGridWindowWidth = 720;
+    setWindowWidth(720);
     probeAlbums();
 
     measureGrid(688);
@@ -368,7 +363,7 @@ describe('library grids — native and narrow web keep their pre-#2842 columns o
 
   it('keeps 221pt playlist covers on a 720pt native tablet once measured', () => {
     setPlatformOS('ios');
-    mockWideGridWindowWidth = 720;
+    setWindowWidth(720);
     probePlaylists();
 
     measureGrid(688);
@@ -379,7 +374,7 @@ describe('library grids — native and narrow web keep their pre-#2842 columns o
 
   it('keeps 4 albums columns on a 1000pt native tablet whose grid measures 968', () => {
     setPlatformOS('android');
-    mockWideGridWindowWidth = 1000;
+    setWindowWidth(1000);
     probeAlbums();
 
     measureGrid(968);
@@ -389,7 +384,7 @@ describe('library grids — native and narrow web keep their pre-#2842 columns o
 
   it('keeps 5 artists columns on a 720pt native tablet once measured', () => {
     setPlatformOS('ios');
-    mockWideGridWindowWidth = 720;
+    setWindowWidth(720);
     probeArtists();
 
     measureGrid(688);
@@ -399,7 +394,7 @@ describe('library grids — native and narrow web keep their pre-#2842 columns o
 
   it('keeps 3 albums columns on a 720px narrow web window whose grid measures 688', () => {
     setPlatformOS('web');
-    mockWideGridWindowWidth = 720;
+    setWindowWidth(720);
     probeAlbums();
 
     measureGrid(688);
@@ -413,12 +408,11 @@ describe('library grids — playlist cover size at a tiny measured width', () =>
 
   beforeEach(() => {
     setPlatformOS('web');
-    mockWideGridWindowWidth = 1440;
+    setWindowWidth(1440);
   });
 
   afterEach(() => {
     setPlatformOS(originalOS);
-    mockWideGridWindowWidth = 390;
   });
 
   it('never returns a negative playlist cover size once the grid measures a very narrow width', () => {
