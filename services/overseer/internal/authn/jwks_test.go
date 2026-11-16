@@ -1,7 +1,6 @@
 package authn_test
 
 import (
-	"altune/overseer/internal/authn"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -17,7 +16,7 @@ func TestJWKSThrottlesFetchesDuringOutage(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer srv.Close()
-	v := authn.New(srv.URL, testIssuer, "", srv.Client())
+	v := jwksVerifier(srv)
 
 	key := genKey(t)
 	for i := 0; i < 50; i++ {
@@ -38,7 +37,7 @@ func TestJWKSThrottlesConcurrentFloodDuringOutage(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer srv.Close()
-	v := authn.New(srv.URL, testIssuer, "", srv.Client())
+	v := jwksVerifier(srv)
 
 	key := genKey(t)
 	const workers = 32
@@ -69,7 +68,7 @@ func TestJWKSRefetchesAfterSuccess(t *testing.T) {
 		base.Config.Handler.ServeHTTP(w, r)
 	}))
 	defer srv.Close()
-	v := authn.New(srv.URL, testIssuer, "", srv.Client())
+	v := jwksVerifier(srv)
 
 	valid := es256Token(t, key, "kid-1", validClaims("owner-sub"))
 	if _, err := v.Verify(context.Background(), valid); err != nil {

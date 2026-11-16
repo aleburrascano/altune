@@ -1,4 +1,4 @@
-package authn
+package verifier
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 
 var (
 	ErrNoKey          = errors.New("authn: no verification key for token")
-	ErrUnsupportedAlg = errors.New("authn: unsupported token algorithm")
+	errUnsupportedAlg = errors.New("authn: unsupported token algorithm")
 	ErrNoSubject      = errors.New("authn: token has no subject claim")
 	ErrNoIssuer       = errors.New("authn: verifier has no expected issuer")
 )
@@ -80,7 +80,7 @@ func (v *Verifier) keyfunc(ctx context.Context) jwt.Keyfunc {
 			kid, _ := t.Header["kid"].(string)
 			return v.jwks.key(ctx, kid)
 		default:
-			return nil, ErrUnsupportedAlg
+			return nil, errUnsupportedAlg
 		}
 	}
 }

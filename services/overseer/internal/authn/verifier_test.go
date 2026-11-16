@@ -61,6 +61,10 @@ const (
 	testAudience = "authenticated"
 )
 
+func jwksVerifier(srv *httptest.Server) *authn.Verifier {
+	return authn.New(srv.URL, testIssuer, "", srv.Client())
+}
+
 func validClaims(sub string) jwt.RegisteredClaims {
 	return jwt.RegisteredClaims{
 		Subject:   sub,
@@ -75,7 +79,7 @@ func TestVerifiesValidES256Token(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
 	defer srv.Close()
-	v := authn.New(srv.URL, testIssuer, "", srv.Client())
+	v := jwksVerifier(srv)
 
 	token := es256Token(t, key, "kid-1", validClaims("owner-sub"))
 	claims, err := v.Verify(context.Background(), token)
@@ -91,7 +95,7 @@ func TestRejectsExpiredToken(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
 	defer srv.Close()
-	v := authn.New(srv.URL, testIssuer, "", srv.Client())
+	v := jwksVerifier(srv)
 
 	claims := validClaims("owner-sub")
 	claims.ExpiresAt = jwt.NewNumericDate(time.Now().Add(-time.Hour))
@@ -106,7 +110,7 @@ func TestRejectsWrongSignature(t *testing.T) {
 	attackerKey := genKey(t)
 	srv := jwksServer(t, "kid-1", srvKey)
 	defer srv.Close()
-	v := authn.New(srv.URL, testIssuer, "", srv.Client())
+	v := jwksVerifier(srv)
 
 	token := es256Token(t, attackerKey, "kid-1", validClaims("owner-sub"))
 	if _, err := v.Verify(context.Background(), token); err == nil {
@@ -118,7 +122,7 @@ func TestRejectsAlgNone(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
 	defer srv.Close()
-	v := authn.New(srv.URL, testIssuer, "", srv.Client())
+	v := jwksVerifier(srv)
 
 	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
 	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"sub":"owner-sub","exp":9999999999}`))
@@ -132,7 +136,7 @@ func TestRejectsHS256WhenNoSecret(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
 	defer srv.Close()
-	v := authn.New(srv.URL, testIssuer, "", srv.Client())
+	v := jwksVerifier(srv)
 
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, validClaims("owner-sub"))
 	signed, err := tok.SignedString([]byte("attacker-guess"))
@@ -166,11 +170,11 @@ func TestRejectsUnknownKid(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
 	defer srv.Close()
-	v := authn.New(srv.URL, testIssuer, "", srv.Client())
+	v := jwksVerifier(srv)
 
 	token := es256Token(t, key, "kid-unknown", validClaims("owner-sub"))
-	if _, err := v.Verify(context.Background(), token); err == nil {
-		t.Fatal("unknown-kid token verified, want error")
+	if _, err := v.Verify(context.Background(), token); !errors.Is(err, authn.ErrNoKey) {
+		t.Fatalf("unknown-kid token: err = %v, want ErrNoKey", err)
 	}
 }
 
@@ -178,12 +182,12 @@ func TestRejectsMissingSubject(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
 	defer srv.Close()
-	v := authn.New(srv.URL, testIssuer, "", srv.Client())
+	v := jwksVerifier(srv)
 
 	claims := validClaims("")
 	token := es256Token(t, key, "kid-1", claims)
-	if _, err := v.Verify(context.Background(), token); err == nil {
-		t.Fatal("no-subject token verified, want error")
+	if _, err := v.Verify(context.Background(), token); !errors.Is(err, authn.ErrNoSubject) {
+		t.Fatalf("no-subject token: err = %v, want ErrNoSubject", err)
 	}
 }
 
@@ -191,7 +195,7 @@ func TestVerifiesTokenWithStringEncodedAudience(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
 	defer srv.Close()
-	v := authn.New(srv.URL, testIssuer, "", srv.Client())
+	v := jwksVerifier(srv)
 
 	wireClaims := jwt.MapClaims{
 		"sub": "owner-sub",
@@ -218,7 +222,7 @@ func TestRejectsForeignIssuer(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
 	defer srv.Close()
-	v := authn.New(srv.URL, testIssuer, "", srv.Client())
+	v := jwksVerifier(srv)
 
 	claims := validClaims("owner-sub")
 	claims.Issuer = "https://other-project.supabase.co/auth/v1"
@@ -232,7 +236,7 @@ func TestRejectsForeignAudience(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
 	defer srv.Close()
-	v := authn.New(srv.URL, testIssuer, "", srv.Client())
+	v := jwksVerifier(srv)
 
 	claims := validClaims("owner-sub")
 	claims.Audience = jwt.ClaimStrings{"service_role"}
@@ -246,7 +250,7 @@ func TestRejectsAbsentIssuerClaim(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
 	defer srv.Close()
-	v := authn.New(srv.URL, testIssuer, "", srv.Client())
+	v := jwksVerifier(srv)
 
 	claims := validClaims("owner-sub")
 	claims.Issuer = ""
@@ -260,7 +264,7 @@ func TestRejectsAbsentAudienceClaim(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
 	defer srv.Close()
-	v := authn.New(srv.URL, testIssuer, "", srv.Client())
+	v := jwksVerifier(srv)
 
 	claims := validClaims("owner-sub")
 	claims.Audience = nil
