@@ -7,7 +7,7 @@ import { useReportQueryFailure } from '@features/discovery/view/search/useReport
 import {
   useDiscoverFetchEnabled,
   useGatedDiscoverCall,
-} from '@features/discovery/hooks/search/useDiscoverFetchGate';
+} from '@features/discovery/view/search/useDiscoverFetchGate';
 import {
   useRefreshFromFirstPage,
   useRestartOnExpiredSlate,

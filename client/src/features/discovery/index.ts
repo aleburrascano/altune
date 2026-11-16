@@ -32,7 +32,7 @@ export { useDiscoverSearch } from '@features/discovery/view/search/useDiscoverSe
 export {
   useDiscoverClearSearchHistory,
   useSearchHistory,
-} from '@features/discovery/hooks/history/useSearchHistory';
+} from '@features/discovery/view/history/useSearchHistory';
 export { CorrectionBanner } from '@features/discovery/view/results/CorrectionBanner';
 export { DiscoverRow } from '@features/discovery/view/results/DiscoverRow';
 export {
@@ -71,9 +71,9 @@ export { TopResultCard } from '@features/discovery/view/results/TopResultCard';
 export { stashHandoffForDetail } from '@features/discovery/domain/stashHandoffForDetail';
 export { useDebouncedSearch } from '@features/discovery/view/search/useDebouncedSearch';
 export { useDiscoverLogic } from '@features/discovery/view/search/useDiscoverLogic';
-export { useFavorites } from '@features/discovery/hooks/favorites/useFavorites';
+export { useFavorites } from '@features/discovery/view/favorites/useFavorites';
 export { useImpressionLogger } from '@features/discovery/view/results/useImpressionLogger';
-export { usePreviewPlayback } from '@features/discovery/hooks/results/usePreviewPlayback';
+export { usePreviewPlayback } from '@features/discovery/view/results/usePreviewPlayback';
 export { useResultsFilter } from '@features/discovery/view/results/useResultsFilter';
 export { useResultTap } from '@features/discovery/hooks/results/useResultTap';
 export { useRefreshFromFirstPage } from '@features/discovery/view/search/useSearchRefresh';

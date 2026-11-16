@@ -31,7 +31,7 @@ import { resultSecondaryLine } from '@features/discovery/domain/resultDisplay';
 import {
   usePreviewPlayback,
   type PreviewPlayback,
-} from '@features/discovery/hooks/results/usePreviewPlayback';
+} from '@features/discovery/view/results/usePreviewPlayback';
 type DiscoverRowProps = {
   result: DiscoveryResult;
   position: number;
