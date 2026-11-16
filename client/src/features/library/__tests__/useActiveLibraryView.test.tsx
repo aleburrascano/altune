@@ -205,7 +205,6 @@ describe('useActiveLibraryView — the chip picks its own view', () => {
     }
 
     it("surfaces the selected chip's own failure, never a neighbour's", async () => {
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
       const albums = renderActive('albums', failingAlbumsPort());
       await waitFor(() => expect(albums().active.error).toBe(albumsError));
 
@@ -216,7 +215,6 @@ describe('useActiveLibraryView — the chip picks its own view', () => {
       const artists = renderActive('artists', failingAlbumsPort());
       await waitFor(() => expect(artists().active.count).toBe(SEEDED_ARTISTS));
       expect(artists().active.error).toBeNull();
-      warn.mockRestore();
     });
   });
 

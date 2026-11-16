@@ -9,7 +9,7 @@ import { useEffect } from 'react';
 import type { LibrarySort } from '@shared/apiClient';
 import type { ListTracksResponse, TrackResponse } from '@shared/catalog';
 import { libraryKeys } from '@shared/query';
-import type { LibraryPort } from '@features/library/ports/libraryPort';
+import type { LibraryPort, LibraryWarn } from '@features/library/ports/libraryPort';
 import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
 import {
   failureLogFields,
@@ -35,15 +35,19 @@ function mergePage(old: TracksData | undefined, fresh: ListTracksResponse) {
     : old;
 }
 
-function logPollFailure(offset: number, cause: unknown) {
-  console.warn('[library] pending poll refresh failed', { offset, ...failureLogFields(cause) });
+function logPollFailure(warn: LibraryWarn, offset: number, cause: unknown) {
+  warn('[library] pending poll refresh failed', { offset, ...failureLogFields(cause) });
 }
 
 type FallbackHandler = (failure: LibraryFailure, loaded: number) => void;
 
-function loadedPagesOnFailure(tracks: TrackResponse[], onFallback: FallbackHandler | undefined) {
+function loadedPagesOnFailure(
+  warn: LibraryWarn,
+  tracks: TrackResponse[],
+  onFallback: FallbackHandler | undefined,
+) {
   return (error: unknown): TrackResponse[] => {
-    console.warn('[library] whole-library fetch failed; using loaded pages', {
+    warn('[library] whole-library fetch failed; using loaded pages', {
       loaded: tracks.length,
       ...failureLogFields(error),
     });
@@ -81,7 +85,7 @@ function refreshPage(target: PollTarget, offset: number) {
   return fetchUnlessSuperseded(target, offset)
     .then(writeFresh(target))
     .catch((cause: unknown) => {
-      if (!target.signal.aborted) logPollFailure(offset, cause);
+      if (!target.signal.aborted) logPollFailure(target.port.warn, offset, cause);
     });
 }
 
@@ -216,6 +220,6 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
           staleTime: 0,
           gcTime: 0,
         })
-        .catch(loadedPagesOnFailure(tracks, onFallback)),
+        .catch(loadedPagesOnFailure(port.warn, tracks, onFallback)),
   };
 }

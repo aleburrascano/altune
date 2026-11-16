@@ -8,6 +8,7 @@ import {
 } from '@shared/failure';
 import type { FailureAlert } from '@shared/ui';
 import type { TrackId } from '@shared/catalog';
+import type { LibraryWarn } from '@features/library/ports/libraryPort';
 
 export type LibraryFailure = 'network' | 'auth' | 'not-found' | 'server' | 'unknown';
 
@@ -53,12 +54,13 @@ export function libraryFailureAlert(
 }
 
 export function logTrackMutationFailure(
+  warn: LibraryWarn,
   action: string,
   endpoint: (trackId: TrackId) => string,
   trackId: TrackId,
   error: unknown,
 ): void {
-  console.warn(`[library] ${action} failed`, {
+  warn(`[library] ${action} failed`, {
     trackId,
     endpoint: endpoint(trackId).split('?')[0],
     ...failureLogFields(error),

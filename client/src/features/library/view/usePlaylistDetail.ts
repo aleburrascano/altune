@@ -16,13 +16,14 @@ export function usePlaylistDetail(playlistId: PlaylistId) {
 }
 
 export function useLoggedPlaylistDetailFailure(playlistId: PlaylistId, error: Error | null): void {
+  const { warn } = useLibraryPort();
   useEffect(() => {
     if (error === null) {
       return;
     }
-    console.warn('[library] playlist detail query failed', {
+    warn('[library] playlist detail query failed', {
       playlistId,
       ...failureLogFields(error),
     });
-  }, [playlistId, error]);
+  }, [warn, playlistId, error]);
 }

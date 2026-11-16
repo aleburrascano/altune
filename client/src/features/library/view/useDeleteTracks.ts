@@ -15,7 +15,7 @@ import {
 import { usePinnedStore } from '@shared/offline';
 import { currentSessionEpoch, isSameSession, guardedMutationOptions } from '@shared/session';
 import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
-import type { LibraryPort } from '@features/library/ports/libraryPort';
+import type { LibraryPort, LibraryWarn } from '@features/library/ports/libraryPort';
 import {
   logTrackMutationFailure,
   failureLogFields,
@@ -78,13 +78,13 @@ async function deleteInBatches(items: BulkItem[], proceed: BatchRun, worker: Bul
   return succeeded.length + failed.length;
 }
 
-type CleanupState = { failed: boolean };
+type CleanupState = { failed: boolean; warn: LibraryWarn };
 function guardCleanup(state: CleanupState, trackId: TrackId, step: () => void): void {
   try {
     step();
   } catch (error) {
     state.failed = true;
-    console.warn('[library] delete cleanup failed', { trackId, ...failureLogFields(error) });
+    state.warn('[library] delete cleanup failed', { trackId, ...failureLogFields(error) });
   }
 }
 
@@ -135,14 +135,14 @@ async function runBulkDelete(
   queryClient: QueryClient,
   handle: RunHandle,
   trackIds: TrackId[],
-  remove: RemoveTrack,
+  port: LibraryPort,
 ): Promise<DeleteTracksResult> {
   const { run, done } = openTimedRun(handle);
-  const cleanup: CleanupState = { failed: false };
+  const cleanup: CleanupState = { failed: false, warn: port.warn };
   const onDeleted = removeTrackEverywhere(queryClient, handle, cleanup);
   const failures: DeleteTrackFailure[] = [];
   const items = trackIds.map((trackId, index) => ({ trackId, index }));
-  const worker = bulkWorker(remove, onDeleted, failures);
+  const worker = bulkWorker((id) => deleteOne(port, id), onDeleted, failures);
   const sent = await deleteInBatches(items, run, worker).finally(done);
   if (cleanup.failed && handle.inStartingSession()) resyncTrackCaches(queryClient);
   return summarizeRun(trackIds, { sent, failures: failures.filter(Boolean) }, handle.stopped());
@@ -165,8 +165,9 @@ function useUnmountStop(): () => RunHandle {
   return useCallback(() => createRunHandle(stops), [stops]);
 }
 
-function logBulkFailure({ trackId, error }: DeleteTrackFailure): void {
-  logTrackMutationFailure('delete track', deleteEndpoint, trackId, error);
+function logBulkFailure(warn: LibraryWarn) {
+  return ({ trackId, error }: DeleteTrackFailure): void =>
+    logTrackMutationFailure(warn, 'delete track', deleteEndpoint, trackId, error);
 }
 
 function dominantFailure(failures: DeleteTrackFailure[]): LibraryFailure {
@@ -179,10 +180,14 @@ function bulkFailureMessage(requested: number, deleted: number, failures: Delete
   return `${requested - deleted} of ${requested} tracks could not be removed. ${tail}`;
 }
 
-function reportBulkOutcome(queryClient: QueryClient, summary: DeleteTracksResult): void {
+function reportBulkOutcome(
+  queryClient: QueryClient,
+  warn: LibraryWarn,
+  summary: DeleteTracksResult,
+) {
   const { deleted, requested, failures, cancelled } = summary;
   if (deleted > 0) invalidateLibraryDerived(queryClient);
-  failures.forEach(logBulkFailure);
+  failures.forEach(logBulkFailure(warn));
   if (cancelled || deleted === requested) return;
   showFailureAlert({
     surface: 'library.delete_tracks',
@@ -192,19 +197,19 @@ function reportBulkOutcome(queryClient: QueryClient, summary: DeleteTracksResult
 }
 
 const LOGGED_TRACK_IDS = 20;
-function logBulkRunFailure(error: unknown, trackIds: TrackId[]): void {
-  console.warn('[library] bulk delete failed', {
+function logBulkRunFailure(warn: LibraryWarn, error: unknown, trackIds: TrackId[]): void {
+  warn('[library] bulk delete failed', {
     requested: trackIds.length,
     trackIds: trackIds.slice(0, LOGGED_TRACK_IDS),
     ...failureLogFields(error),
   });
 }
 
-function recoverFailedBulkRun(queryClient: QueryClient) {
+function recoverFailedBulkRun(queryClient: QueryClient, warn: LibraryWarn) {
   return (error: Error, trackIds: TrackId[]): void => {
     invalidateLibraryDerived(queryClient);
     void queryClient.invalidateQueries({ queryKey: libraryKeys.tracksPrefix });
-    logBulkRunFailure(error, trackIds);
+    logBulkRunFailure(warn, error, trackIds);
     showFailureAlert(
       libraryFailureAlert(
         'library.delete_tracks',
@@ -222,10 +227,10 @@ export function useDeleteTracks() {
   const port = useLibraryPort();
   return useAppMutation({
     ...guardedMutationOptions({
-      mutationFn: (trackIds: TrackId[]) =>
-        runBulkDelete(queryClient, startRun(), trackIds, (id) => deleteOne(port, id)),
-      onSuccess: (summary: DeleteTracksResult) => reportBulkOutcome(queryClient, summary),
-      onError: recoverFailedBulkRun(queryClient),
+      mutationFn: (trackIds: TrackId[]) => runBulkDelete(queryClient, startRun(), trackIds, port),
+      onSuccess: (summary: DeleteTracksResult) =>
+        reportBulkOutcome(queryClient, port.warn, summary),
+      onError: recoverFailedBulkRun(queryClient, port.warn),
     }),
     action: 'library.delete_tracks',
   });
@@ -258,11 +263,11 @@ function putTrackBack(queryClient: QueryClient, trackId: TrackId, removed: Remov
   if (removed.status) patchTrackStatus(trackId, removed.status);
 }
 
-function undoFailedRemoval(queryClient: QueryClient) {
+function undoFailedRemoval(queryClient: QueryClient, warn: LibraryWarn) {
   return (error: Error, trackId: TrackId, removed: RemovedTrack): void => {
     const failure = classifyLibraryError(error);
     if (failure === 'not-found') return unpin(trackId);
-    logTrackMutationFailure('delete track', deleteEndpoint, trackId, error);
+    logTrackMutationFailure(warn, 'delete track', deleteEndpoint, trackId, error);
     putTrackBack(queryClient, trackId, removed);
     showFailureAlert(
       libraryFailureAlert(
@@ -280,7 +285,7 @@ function deleteTrackOptions(queryClient: QueryClient, port: LibraryPort) {
     mutationFn: (trackId: TrackId) => deleteOne(port, trackId),
     onMutate: removeOptimistically(queryClient),
     onSuccess: confirmRemoval(queryClient),
-    onError: undoFailedRemoval(queryClient),
+    onError: undoFailedRemoval(queryClient, port.warn),
   });
 }
 

@@ -21,7 +21,10 @@ export interface MemoryLibrarySeed {
   artists?: ArtistGroup[];
   playlists?: PlaylistDetailResponse[];
   discovery?: DiscoveryResult[];
+  warn?: LibraryPort['warn'];
 }
+
+function ignoreWarning(): void {}
 
 interface PageWindow {
   limit?: number | undefined;
@@ -119,6 +122,7 @@ export function createMemoryLibraryPort(seed: MemoryLibrarySeed = {}): LibraryPo
   const discovery = [...(seed.discovery ?? [])];
 
   return {
+    warn: seed.warn ?? ignoreWarning,
     getTracks: ({ limit, offset }, signal) =>
       resolveOnLaterTick(signal, () => trackPage(tracks, { limit, offset })),
     getAllTracks: ({ signal }) =>

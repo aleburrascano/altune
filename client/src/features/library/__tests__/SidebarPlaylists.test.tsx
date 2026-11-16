@@ -115,7 +115,6 @@ describe('SidebarPlaylists', () => {
   });
 
   it('shows an error message with a retry after a failed fetch, not the empty hint', async () => {
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     port = failingOnce(createMemoryLibraryPort({ playlists: [playlist('1', 'Late Night')] }));
 
     renderSidebar();

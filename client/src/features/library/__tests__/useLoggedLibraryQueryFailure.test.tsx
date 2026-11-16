@@ -20,7 +20,7 @@ const SECRET = 'daft punk discovery bootleg';
 type FailingMethod = 'getTracks' | 'getLibraryAlbums' | 'getLibraryArtists';
 
 let client: QueryClient;
-let warnSpy: jest.SpyInstance;
+let warn: jest.Mock;
 
 function wrapperFor(port: LibraryPort) {
   return function Wrapper({ children }: { children: ReactNode }) {
@@ -35,22 +35,21 @@ function wrapperFor(port: LibraryPort) {
 }
 
 function failingPort(method: FailingMethod, err: Error): LibraryPort {
-  return { ...createMemoryLibraryPort(), [method]: jest.fn(() => Promise.reject(err)) };
+  return { ...createMemoryLibraryPort({ warn }), [method]: jest.fn(() => Promise.reject(err)) };
 }
 
 function loggedText(): string {
-  return JSON.stringify(warnSpy.mock.calls, (_key, value: unknown) =>
+  return JSON.stringify(warn.mock.calls, (_key, value: unknown) =>
     value instanceof Error ? `${value.name}: ${value.message} ${value.stack ?? ''}` : value,
   );
 }
 
 beforeEach(() => {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  warn = jest.fn();
 });
 
 afterEach(() => {
-  warnSpy.mockRestore();
   client.clear();
 });
 
@@ -65,7 +64,7 @@ describe.each([
 
     await waitFor(() => expect(result.current.error).not.toBeNull());
 
-    expect(warnSpy).toHaveBeenCalledWith(`[library] ${chip} query failed`, {
+    expect(warn).toHaveBeenCalledWith(`[library] ${chip} query failed`, {
       sort: 'az',
       isSearching: false,
       status: 503,
@@ -84,7 +83,7 @@ describe.each([
     await waitFor(() => expect(result.current.error).not.toBeNull());
 
     expect(loggedText()).not.toContain(SECRET);
-    expect(warnSpy).toHaveBeenCalledWith(`[library] ${chip} query failed`, {
+    expect(warn).toHaveBeenCalledWith(`[library] ${chip} query failed`, {
       sort: 'recent',
       isSearching: true,
       failure: 'network',
@@ -93,18 +92,18 @@ describe.each([
 
   it('logs nothing while the query keeps answering', async () => {
     const { result } = renderHook(() => useHook('', 'recent', true), {
-      wrapper: wrapperFor(createMemoryLibraryPort()),
+      wrapper: wrapperFor(createMemoryLibraryPort({ warn })),
     });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    expect(warnSpy).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
   });
 });
 
 describe('a failed usePlaylistActions load', () => {
   it('logs the chip and surfaces the error on the playlists view', async () => {
-    const memory = createMemoryLibraryPort();
+    const memory = createMemoryLibraryPort({ warn });
     const port = {
       ...memory,
       getPlaylists: jest.fn(() => Promise.reject(new ApiError(500, SECRET, 'internal', 'corr-2'))),
@@ -120,7 +119,7 @@ describe('a failed usePlaylistActions load', () => {
     await waitFor(() => expect(result.current.view.error).not.toBeNull());
 
     expect(loggedText()).not.toContain(SECRET);
-    expect(warnSpy).toHaveBeenCalledWith('[library] playlists query failed', {
+    expect(warn).toHaveBeenCalledWith('[library] playlists query failed', {
       isSearching: false,
       status: 500,
       code: 'internal',

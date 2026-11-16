@@ -3,7 +3,10 @@ import type * as library from '@shared/apiClient/library';
 import type * as playlists from '@shared/apiClient/playlists';
 import type * as tracks from '@shared/apiClient/tracks';
 
+export type LibraryWarn = (message: string, fields: Record<string, unknown>) => void;
+
 export interface LibraryPort {
+  warn: LibraryWarn;
   getTracks: typeof tracks.getTracks;
   getAllTracks: typeof tracks.getAllTracks;
   listTracksFeaturing: typeof tracks.listTracksFeaturing;
