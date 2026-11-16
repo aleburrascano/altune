@@ -49,11 +49,11 @@ interface OpenedRequest {
 export class SSEClient {
   private xhr: StreamRequest | null = null;
   private lastEventId = '';
-  private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempt = 0;
   private episodeReported = false;
   private stalledCaps = 0;
-  private watchdogTimer: ReturnType<typeof setTimeout> | undefined;
+  private watchdogTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
   private connecting = false;
   private connectionRequested: boolean | undefined;
@@ -188,8 +188,8 @@ export class SSEClient {
 
   disconnect(): void {
     this.connectionRequested = false;
-    clearTimeout(this.reconnectTimer);
-    this.reconnectTimer = undefined;
+    clearTimeout(this.reconnectTimer ?? undefined);
+    this.reconnectTimer = null;
     this.closeConnection();
   }
 
@@ -235,7 +235,7 @@ export class SSEClient {
   }
 
   private clearWatchdog(): void {
-    clearTimeout(this.watchdogTimer);
+    clearTimeout(this.watchdogTimer ?? undefined);
   }
 
   private scheduleReconnect(minimumDelayMs = 0): void {
@@ -245,7 +245,7 @@ export class SSEClient {
     const delay = reconnectDelayMs(this.reconnectAttempt, minimumDelayMs, this.io.random());
     this.reconnectAttempt += 1;
     this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = undefined;
+      this.reconnectTimer = null;
       void this.connect();
     }, delay);
   }
