@@ -55,6 +55,28 @@ describe('useAlbumTracks sends the ids the album card knows', () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     expect(new URLSearchParams(__http.last().query).get('ids')).toBe('deezer:d-1,spotify:album-1');
+    expect(new URLSearchParams(__http.last().query).get('mbid')).toBeNull();
+  });
+
+  it('sends the MusicBrainz id when the album card knows one', async () => {
+    __http.reply(ALBUM_TRACKS_PATH, { status: 200, json: emptyContent });
+
+    const { result } = renderHook(
+      () =>
+        useAlbumTracks({
+          provider: 'spotify',
+          externalId: 'album-1',
+          allSources: [
+            { provider: 'deezer', external_id: 'd-1', url: '' },
+            { provider: 'musicbrainz', external_id: 'mb-1', url: '' },
+          ],
+        }),
+      { wrapper: createWrapper(createTestQueryClient()) },
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(new URLSearchParams(__http.last().query).get('mbid')).toBe('mb-1');
   });
 });
 

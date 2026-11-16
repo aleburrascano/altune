@@ -3,11 +3,13 @@ import { renderHook, waitFor } from '@testing-library/react-native';
 
 import type { ArtistContentResponse } from '@shared/apiClient';
 import type { DiscoverySource } from '@shared/catalog';
+import { detailKeys } from '@shared/query';
 import {
   useArtistContent,
   _resetDetailHealthForTest,
   DetailPortProvider,
   createMemoryDetailPort,
+  flushDetailHealth,
 } from '@features/detail';
 import type { DetailPort } from '@features/detail';
 import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
@@ -15,6 +17,8 @@ import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/q
 const { __http } = require('@testing/doubles/fetch.js');
 
 const ARTIST_CONTENT_PATH = 'GET /v1/discovery/artists/spotify/artist-1/content';
+
+const servedList = { items: [], provider_name: 'spotify', status: 'ok' };
 
 function createPortWrapper(port: DetailPort) {
   const Base = createWrapper(createTestQueryClient());
@@ -298,5 +302,151 @@ describe('useArtistContent through the detail port', () => {
     rerender({ sources: bjork });
 
     await waitFor(() => expect(result.current.topTracks[0]).toMatchObject({ title: 'Joga' }));
+  });
+});
+
+describe('useArtistContent tallies each fetch for the detail health metric', () => {
+  const EVENTS = 'POST /v1/discovery/events';
+  const spotifyArtist = [{ provider: 'spotify', external_id: 'artist-1', url: '' }];
+
+  function sentHealth(): Record<string, unknown>[] {
+    return (__http.requests as { method: string; path: string; body: string }[])
+      .filter((request) => request.method === 'POST' && request.path === '/v1/discovery/events')
+      .map(
+        (request) => JSON.parse(request.body) as { type: string; payload: Record<string, unknown> },
+      )
+      .filter((event) => event.type === 'detail_health')
+      .map((event) => event.payload);
+  }
+
+  async function renderAndFlush(): Promise<void> {
+    const { result } = renderHook(() => useArtistContent({ sources: spotifyArtist }), {
+      wrapper: createWrapper(createTestQueryClient()),
+    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    flushDetailHealth();
+  }
+
+  beforeEach(() => {
+    _resetDetailHealthForTest();
+    __http.reply(EVENTS, { status: 204 });
+  });
+
+  it('counts a fully served artist page as a success', async () => {
+    __http.reply(ARTIST_CONTENT_PATH, {
+      status: 200,
+      json: { top_tracks: servedList, albums: servedList },
+    });
+
+    await renderAndFlush();
+
+    await waitFor(() =>
+      expect(sentHealth()).toEqual([
+        expect.objectContaining({ content_artist_content_ok: 1, content_artist_content_failed: 0 }),
+      ]),
+    );
+  });
+
+  it('counts a request the provider refused as a failure', async () => {
+    __http.reply(ARTIST_CONTENT_PATH, {
+      status: 502,
+      json: { status: 'error', code: 'discovery.provider_error' },
+    });
+
+    await renderAndFlush();
+
+    await waitFor(() =>
+      expect(sentHealth()).toEqual([
+        expect.objectContaining({ content_artist_content_ok: 0, content_artist_content_failed: 1 }),
+      ]),
+    );
+  });
+});
+
+describe('useArtistContent albums', () => {
+  const spotifyArtist = [{ provider: 'spotify', external_id: 'artist-1', url: '' }];
+  const album = {
+    kind: 'album',
+    title: 'Kid A',
+    subtitle: 'Radiohead',
+    image_url: null,
+    confidence: 'high',
+    sources: [{ provider: 'spotify', external_id: 'kid-a', url: '' }],
+    extras: {},
+  };
+
+  function replyAlbums(status: string): void {
+    __http.reply(ARTIST_CONTENT_PATH, {
+      status: 200,
+      json: {
+        top_tracks: servedList,
+        albums: { ...servedList, items: [album], status },
+      },
+    });
+  }
+
+  it('shows the albums of a served page', async () => {
+    replyAlbums('ok');
+
+    const { result } = renderHook(() => useArtistContent({ sources: spotifyArtist }), {
+      wrapper: createWrapper(createTestQueryClient()),
+    });
+
+    await waitFor(() => expect(result.current.albums).toHaveLength(1));
+    expect(result.current.albums[0]).toMatchObject({ title: 'Kid A' });
+    expect(result.current.isErrorAlbums).toBe(false);
+  });
+
+  it('shows no albums and an albums error when the albums side is degraded', async () => {
+    replyAlbums('timeout');
+
+    const { result } = renderHook(() => useArtistContent({ sources: spotifyArtist }), {
+      wrapper: createWrapper(createTestQueryClient()),
+    });
+
+    await waitFor(() => expect(result.current.isErrorAlbums).toBe(true));
+    expect(result.current.albums).toEqual([]);
+  });
+});
+
+describe('useArtistContent with no source to ask', () => {
+  const { act } = require('@testing-library/react-native');
+
+  it('sends nothing and reports no failure', async () => {
+    const queryClient = createTestQueryClient();
+
+    const { result } = renderHook(() => useArtistContent({ sources: [] }), {
+      wrapper: createWrapper(queryClient),
+    });
+    await act(async () => {
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+
+    expect(__http.requests).toHaveLength(0);
+    expect(result.current.tracksFailure).toBeNull();
+    expect(result.current.albumsFailure).toBeNull();
+    expect(queryClient.getQueryState(detailKeys.artistContent('', '', ''))).toBeDefined();
+  });
+});
+
+describe('useArtistContent caches per artist', () => {
+  it('keys the cache by the first source and every known id', async () => {
+    __http.reply(ARTIST_CONTENT_PATH, {
+      status: 200,
+      json: { top_tracks: servedList, albums: servedList },
+    });
+    const queryClient = createTestQueryClient();
+    const sources = [
+      { provider: 'spotify', external_id: 'artist-1', url: '' },
+      { provider: 'applemusic', external_id: '42', url: '' },
+    ];
+
+    const { result } = renderHook(() => useArtistContent({ sources }), {
+      wrapper: createWrapper(queryClient),
+    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    const key = detailKeys.artistContent('spotify', 'artist-1', 'spotify:artist-1,applemusic:42');
+    expect(queryClient.getQueryState(key)?.status).toBe('success');
   });
 });
