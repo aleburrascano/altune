@@ -1,75 +1,63 @@
 import { createMemoryFileStore } from '@shared/files';
+import { isLoopEnabled, setKillSwitchFileStore } from '@shared/killSwitch';
 
-import {
-  isLoopEnabled,
-  setKillSwitchFileStore,
-  refreshKillSwitches,
-  startKillSwitchPolling,
-} from '@shared/killSwitch';
+import { startKillSwitchPolling } from '@/mobile';
+
 const { __http } = require('@testing/doubles/fetch.js');
 
-type AppStateChangeHandler = (state: string) => void;
+type AppState = 'active' | 'background' | 'inactive';
+type AppStateChangeHandler = (state: AppState) => void;
 
-jest.mock('react-native/Libraries/AppState/AppState', () => {
-  const listeners: AppStateChangeHandler[] = [];
-  return {
-    default: {
-      currentState: 'active',
-      isAvailable: true,
-      addEventListener: jest.fn((_type: string, handler: AppStateChangeHandler) => {
-        listeners.push(handler);
-        return {
-          remove: jest.fn(() => {
-            listeners.splice(listeners.indexOf(handler), 1);
-          }),
-        };
-      }),
-    },
-    __listeners: listeners,
+const appStateListeners: AppStateChangeHandler[] = [];
+
+function fakeAppState(listener: AppStateChangeHandler): () => void {
+  appStateListeners.push(listener);
+  return () => {
+    appStateListeners.splice(appStateListeners.indexOf(listener), 1);
   };
-});
-
-const { __listeners: appStateListeners } = jest.requireMock(
-  'react-native/Libraries/AppState/AppState',
-) as { __listeners: AppStateChangeHandler[] };
+}
 
 const DEFAULT_KILL_SWITCH_URL =
   'https://raw.githubusercontent.com/aleburrascano/altune/main/kill-switches.json';
 const KILL_SWITCH_TIMEOUT_MS = 5_000;
 const KILL_SWITCH_POLL_MS = 300_000;
 const SWITCH_GET = 'GET /aleburrascano/altune/main/kill-switches.json';
-
-let warn: jest.SpyInstance;
+const TWO_REFRESHES = 2;
 
 beforeEach(() => {
   __http.reset();
   setKillSwitchFileStore(createMemoryFileStore());
-  warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
 
 afterEach(() => {
   jest.useRealTimers();
   setKillSwitchFileStore();
-  warn.mockRestore();
+  appStateListeners.length = 0;
   delete process.env.EXPO_PUBLIC_KILL_SWITCH_URL;
 });
+
+async function refreshOnce(): Promise<void> {
+  const stop = startKillSwitchPolling(fakeAppState);
+  await settle();
+  stop();
+}
 
 async function settle(): Promise<void> {
   for (let i = 0; i < 10; i += 1) await Promise.resolve();
 }
 
-function emitAppState(state: string): void {
+function emitAppState(state: AppState): void {
   [...appStateListeners].forEach((handler) => handler(state));
 }
 
-describe('refreshKillSwitches', () => {
+describe('a kill-switch refresh', () => {
   it('fetches the switch file at the root of the public repository by default and applies it', async () => {
     expect(DEFAULT_KILL_SWITCH_URL).toBe(
       'https://raw.githubusercontent.com/aleburrascano/altune/main/kill-switches.json',
     );
     __http.reply(SWITCH_GET, { json: { sse_enabled: false } });
 
-    await refreshKillSwitches();
+    await refreshOnce();
 
     expect(__http.countFor(SWITCH_GET)).toBe(1);
     expect(__http.last().url).toBe(DEFAULT_KILL_SWITCH_URL);
@@ -80,7 +68,7 @@ describe('refreshKillSwitches', () => {
     process.env.EXPO_PUBLIC_KILL_SWITCH_URL = 'https://flags.example/altune.json';
     __http.reply('GET /altune.json', { json: { telemetry_enabled: false } });
 
-    await refreshKillSwitches();
+    await refreshOnce();
 
     expect(isLoopEnabled('telemetryFlush')).toBe(false);
   });
@@ -90,22 +78,23 @@ describe('refreshKillSwitches', () => {
     ['a malformed body', { malformed: true }],
   ])('keeps the current switches on %s', async (_label, response) => {
     __http.replyOnce(SWITCH_GET, { json: { offline_downloads_enabled: false } });
-    await refreshKillSwitches();
+    await refreshOnce();
     __http.reply(SWITCH_GET, response);
 
-    await refreshKillSwitches();
+    await refreshOnce();
 
+    expect(__http.countFor(SWITCH_GET)).toBe(TWO_REFRESHES);
     expect(isLoopEnabled('offlineDownloads')).toBe(false);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('refresh failed'), expect.anything());
   });
 
   it('abandons a fetch that outlives the timeout and keeps the current switches', async () => {
     jest.useFakeTimers();
     __http.hang(SWITCH_GET);
 
-    const done = refreshKillSwitches();
+    const stop = startKillSwitchPolling(fakeAppState);
     jest.advanceTimersByTime(KILL_SWITCH_TIMEOUT_MS);
-    await done;
+    await settle();
+    stop();
 
     expect(__http.last().signal.aborted).toBe(true);
     expect(isLoopEnabled('serverEvents')).toBe(true);
@@ -113,16 +102,12 @@ describe('refreshKillSwitches', () => {
 });
 
 describe('startKillSwitchPolling', () => {
-  afterEach(() => {
-    appStateListeners.length = 0;
-  });
-
   it('refreshes at start, periodically while active, and on each return to the foreground', async () => {
     jest.useFakeTimers();
     __http.replyAll({ json: {} });
     const count = (): number => __http.countFor(SWITCH_GET);
 
-    const stop = startKillSwitchPolling();
+    const stop = startKillSwitchPolling(fakeAppState);
     await settle();
     expect(count()).toBe(1);
 
@@ -155,7 +140,7 @@ describe('startKillSwitchPolling', () => {
   it('does not refresh on a return to the foreground after the stop function ran', async () => {
     __http.replyAll({ json: {} });
 
-    const stop = startKillSwitchPolling();
+    const stop = startKillSwitchPolling(fakeAppState);
     await settle();
     stop();
     const before = __http.countFor(SWITCH_GET);
@@ -169,7 +154,7 @@ describe('startKillSwitchPolling', () => {
   it('lets the switches flip a loop off through the poll', async () => {
     __http.reply(SWITCH_GET, { json: { offline_downloads_enabled: false } });
 
-    const stop = startKillSwitchPolling();
+    const stop = startKillSwitchPolling(fakeAppState);
     await settle();
 
     expect(isLoopEnabled('offlineDownloads')).toBe(false);

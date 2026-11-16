@@ -134,6 +134,7 @@ export default {
       {
         files: [
           'src/mobile/frame/platformExtras.tsx',
+          'src/mobile/deviceFileStore.ts',
           'src/features/signIn/hooks/useAuthDeepLink.ts',
           'src/features/signIn/hooks/useOAuth.ts',
           'src/features/signIn/ui/AuthCallbackScreen.tsx',
@@ -142,7 +143,6 @@ export default {
           'src/shared/auth/authStorage.ts',
           'src/shared/device/isWebPlatform.ts',
           'src/shared/device/webOrigin.ts',
-          'src/shared/files/defaultFileStore.ts',
           'src/shared/ui/a11y/announce.ts',
           'src/shared/ui/dialog/dialog.ts',
           'src/shared/ui/haptics.ts',

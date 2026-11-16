@@ -1,3 +1,3 @@
 role: shared
 owns: which background loops the server has switched off
-depends_on: [files, lifecycle, timing]
+depends_on: [files]

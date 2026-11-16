@@ -1,3 +1,4 @@
+import '@/mobile/installDeviceFileStore';
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import {
   PlusJakartaSans_600SemiBold,
@@ -23,7 +24,6 @@ import {
 } from '@features/signIn';
 import { registerSearchStateSignOutReset } from '@features/discovery';
 import { useServerEvents, useScreenViews } from '@shared/events';
-import { startKillSwitchPolling } from '@shared/killSwitch';
 import { followSignedInUser, installGlobalErrorReporting } from '@shared/telemetry';
 import { PlaybackProvider, SleepTimerBridge, startPlaybackService } from '@features/player';
 import { OfflineReconcileBridge, provideOfflinePort } from '@shared/offline';
@@ -35,6 +35,7 @@ import {
   useThemePreference,
 } from '@shared/ui';
 import { AppChrome } from '@/mobile/frame/AppChrome';
+import { startKillSwitchPolling } from '@/mobile/killSwitchPoll';
 import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
 import { httpFeaturePorts, httpOfflinePort } from '@/mobile/wiring/httpFeaturePorts';
 import { PlaybackShortcuts, SystemNavigationBar } from '@/mobile/frame/platformExtras';

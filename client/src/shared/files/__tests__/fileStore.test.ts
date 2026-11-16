@@ -1,174 +1,30 @@
-import { File } from 'expo-file-system';
+import { type FileStore, createFileStoreSlot, createMemoryFileStore } from '@shared/files';
 
-import {
-  type FileStore,
-  createFileStoreSlot,
-  deviceFileStore,
-  createMemoryFileStore,
-  WEB_DOWNLOAD_UNSUPPORTED,
-  fakeLocalStorage,
-  webFileStoreOver,
-} from '@shared/files';
-describe.each<[string, () => FileStore]>([
-  ['deviceFileStore', () => deviceFileStore],
-  ['createMemoryFileStore', createMemoryFileStore],
-  ['webFileStore', () => webFileStoreOver(fakeLocalStorage())],
-])('%s satisfies the FileStore contract', (_name, makeStore) => {
-  let store: FileStore;
+function onProgress(): void {}
 
-  beforeEach(() => {
-    store = makeStore();
+type FilesDoor = {
+  defaultFileStore: FileStore;
+  setDeviceFileStore(store: FileStore): void;
+};
+
+function filesBeforeTheAppSetsAStore(): FilesDoor {
+  let files!: FilesDoor;
+  jest.isolateModules(() => {
+    files = jest.requireActual('@shared/files');
   });
+  return files;
+}
 
-  it('opens a directory without creating it, and create() makes it exist', () => {
-    const dir = store.openDirectory('contract');
-
-    expect(dir.exists).toBe(false);
-    dir.create();
-    expect(dir.exists).toBe(true);
-    expect(store.openDirectory('contract').exists).toBe(true);
-  });
-
-  it('list() throws for a directory that does not exist', () => {
-    expect(() => store.openDirectory('missing').list()).toThrow();
-  });
-
-  it('opens a file without creating it; write, read, size and delete round-trip', () => {
-    const dir = store.openDirectory('contract');
-    dir.create();
-    const file = dir.openFile('a.json');
-
-    expect(file.uri).toBe(`${dir.uri}/a.json`);
-    expect(file.exists).toBe(false);
-    expect(file.size).toBeNull();
-    expect(() => file.textSync()).toThrow();
-
-    file.write('hello');
-    expect(file.exists).toBe(true);
-    expect(file.size).toBe(5);
-    expect(dir.openFile('a.json').textSync()).toBe('hello');
-
-    file.write('replaced');
-    expect(file.textSync()).toBe('replaced');
-
-    file.delete();
-    expect(file.exists).toBe(false);
-    expect(file.size).toBeNull();
-  });
-
-  it('moveTo() renames a file onto another, replacing what was there', () => {
-    const dir = store.openDirectory('contract');
-    dir.create();
-    const temp = dir.openFile('a.json.tmp');
-    temp.write('new');
-    dir.openFile('a.json').write('old');
-
-    temp.moveTo(dir.openFile('a.json'));
-
-    expect(dir.openFile('a.json').textSync()).toBe('new');
-    expect(dir.openFile('a.json.tmp').exists).toBe(false);
-  });
-
-  it('moveTo() onto a file that does not exist yet creates it', () => {
-    const dir = store.openDirectory('contract');
-    dir.create();
-    dir.openFile('a.json.tmp').write('new');
-
-    dir.openFile('a.json.tmp').moveTo(dir.openFile('a.json'));
-
-    expect(dir.openFile('a.json').textSync()).toBe('new');
-  });
-
-  it('moveTo() throws for a source file that does not exist', () => {
-    const dir = store.openDirectory('contract');
-    dir.create();
-
-    expect(() => dir.openFile('missing').moveTo(dir.openFile('a.json'))).toThrow();
-  });
-
-  it('list() returns only the files directly inside the directory', () => {
-    const dir = store.openDirectory('contract');
-    dir.create();
-    dir.openFile('a.mp3').write('a');
-    dir.openFile('b.mp3').write('b');
-    const other = store.openDirectory('contract-other');
-    other.create();
-    other.openFile('c.mp3').write('c');
-    const nested = store.openDirectory('contract/nested');
-    nested.create();
-    nested.openFile('d.mp3').write('d');
-
-    expect(
-      dir
-        .list()
-        .map((f) => f.uri)
-        .sort(),
-    ).toEqual([`${dir.uri}/a.mp3`, `${dir.uri}/b.mp3`]);
-  });
-
-  it('availableBytes() reports a non-negative byte count', () => {
-    const bytes = store.availableBytes();
-
-    expect(Number.isFinite(bytes)).toBe(true);
-    expect(bytes).toBeGreaterThanOrEqual(0);
-  });
-});
-
-describe.each<[string, () => FileStore]>([
-  ['deviceFileStore', () => deviceFileStore],
-  ['createMemoryFileStore', createMemoryFileStore],
-])('%s download() actually downloads', (_name, makeStore) => {
-  let store: FileStore;
-
-  beforeEach(() => {
-    store = makeStore();
-  });
-
-  it('download() writes into the destination file and resolves to its uri', async () => {
-    const dir = store.openDirectory('contract');
-    dir.create();
-    const dest = dir.openFile('t1.mp3');
-
-    await expect(
-      store.download('https://cdn.example.com/t1.mp3', dest, new AbortController().signal),
-    ).resolves.toBe(dest.uri);
-    expect(dest.exists).toBe(true);
-  });
-
-  it('download() rejects without writing when its signal is already aborted', async () => {
-    const dir = store.openDirectory('contract');
-    dir.create();
-    const dest = dir.openFile('t1.mp3');
-    const controller = new AbortController();
-    controller.abort();
-
-    await expect(
-      store.download('https://cdn.example.com/t1.mp3', dest, controller.signal),
-    ).rejects.toThrow();
-    expect(dest.exists).toBe(false);
-  });
-});
-
-describe('webFileStore download() is unsupported', () => {
-  it('download() rejects with WebDownloadUnsupportedError and writes nothing', async () => {
-    const store = webFileStoreOver(fakeLocalStorage());
-    const dir = store.openDirectory('contract');
-    dir.create();
-    const dest = dir.openFile('t1.mp3');
-
-    await expect(
-      store.download('https://cdn.example.com/t1.mp3', dest, new AbortController().signal),
-    ).rejects.toMatchObject(WEB_DOWNLOAD_UNSUPPORTED);
-    expect(dest.exists).toBe(false);
-  });
-});
+const NO_STORE = /no device file store/;
+const FREE_BYTES = 1234;
 
 describe('createFileStoreSlot', () => {
   describe('a file store slot', () => {
     it('starts bound to the default it was created with', () => {
-      const slot = createFileStoreSlot(deviceFileStore);
+      const store = createMemoryFileStore();
+      const slot = createFileStoreSlot(store);
 
-      expect(slot.get()).toBe(deviceFileStore);
+      expect(slot.get()).toBe(store);
     });
 
     it('ensureDir() creates a directory that is not there yet', () => {
@@ -215,47 +71,63 @@ describe('createFileStoreSlot', () => {
 });
 
 describe('the default file store', () => {
-  it('is the device filesystem natively', () => {
-    const { defaultFileStore } = require('@shared/files/defaultFileStore');
+  it('refuses every call until the app sets the device file store', () => {
+    const { defaultFileStore } = filesBeforeTheAppSetsAStore();
+    const dest = createMemoryFileStore().openDirectory('a').openFile('t1.mp3');
 
-    expect(defaultFileStore).toBe(deviceFileStore);
+    expect(() => defaultFileStore.openDirectory('preferences')).toThrow(NO_STORE);
+    expect(() => defaultFileStore.availableBytes()).toThrow(NO_STORE);
+    expect(() =>
+      defaultFileStore.download(
+        'https://cdn.example.com/t1.mp3',
+        dest,
+        new AbortController().signal,
+      ),
+    ).toThrow(NO_STORE);
   });
 
-  it('is the localStorage-backed store on web', () => {
-    const { defaultFileStore } = require('@shared/files/defaultFileStore.web');
-    const { webFileStore } = require('@shared/files/web/webFileStore');
+  it('reads and writes the device file store the app set', () => {
+    const { defaultFileStore, setDeviceFileStore } = filesBeforeTheAppSetsAStore();
+    const device = createMemoryFileStore();
+    device.freeBytes = FREE_BYTES;
 
-    expect(defaultFileStore).toBe(webFileStore);
+    setDeviceFileStore(device);
+    defaultFileStore.openDirectory('preferences').create();
+
+    expect(device.openDirectory('preferences').exists).toBe(true);
+    expect(defaultFileStore.availableBytes()).toBe(FREE_BYTES);
   });
 
-  it('does not pick the web store natively', () => {
-    const { defaultFileStore } = require('@shared/files/defaultFileStore');
-    const { webFileStore } = require('@shared/files/web/webFileStore');
+  it('hands download() every argument, progress listener included', async () => {
+    const { defaultFileStore, setDeviceFileStore } = filesBeforeTheAppSetsAStore();
+    const calls: Parameters<FileStore['download']>[] = [];
+    setDeviceFileStore({
+      ...createMemoryFileStore(),
+      download: (...args) => {
+        calls.push(args);
+        return Promise.resolve('file:///t1.mp3');
+      },
+    });
+    const dest = createMemoryFileStore().openDirectory('a').openFile('t1.mp3');
+    const { signal } = new AbortController();
 
-    expect(defaultFileStore).not.toBe(webFileStore);
+    await expect(
+      defaultFileStore.download('https://cdn.example.com/t1.mp3', dest, signal, onProgress),
+    ).resolves.toBe('file:///t1.mp3');
+
+    expect(calls).toEqual([['https://cdn.example.com/t1.mp3', dest, signal, onProgress]]);
   });
-});
 
-describe('deviceFileStore download() progress', () => {
-  it('download() relays the platform progress events to the caller', async () => {
-    const download = jest
-      .spyOn(File, 'downloadFileAsync')
-      .mockImplementation(async (_url, dest, options) => {
-        options?.onProgress?.({ bytesWritten: 5, totalBytes: 10 });
-        return dest as File;
-      });
-    const dir = deviceFileStore.openDirectory('progress');
-    dir.create();
-    const seen: { bytesWritten: number; totalBytes: number }[] = [];
+  it('follows the store set last', () => {
+    const { defaultFileStore, setDeviceFileStore } = filesBeforeTheAppSetsAStore();
+    const first = createMemoryFileStore();
+    const second = createMemoryFileStore();
 
-    await deviceFileStore.download(
-      'https://cdn.example.com/t1.mp3',
-      dir.openFile('t1.mp3'),
-      new AbortController().signal,
-      (progress) => seen.push(progress),
-    );
+    setDeviceFileStore(first);
+    setDeviceFileStore(second);
+    defaultFileStore.openDirectory('preferences').create();
 
-    expect(seen).toEqual([{ bytesWritten: 5, totalBytes: 10 }]);
-    download.mockRestore();
+    expect(second.openDirectory('preferences').exists).toBe(true);
+    expect(first.openDirectory('preferences').exists).toBe(false);
   });
 });

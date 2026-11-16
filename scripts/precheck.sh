@@ -174,7 +174,7 @@ if touches '^services/go-api/deploy/|^scripts/ci/test-backend-shellcheck\.sh$' &
   check "go-api deploy shellcheck" services/go-api bash "$root/scripts/ci/test-backend-shellcheck.sh"
 fi
 
-if touches '^(services/go-api/(deploy|migrations)/|client/src/shared/killSwitch/killSwitchPoll\.ts$)' && need docker "go-api deploy self-tests"; then
+if touches '^(services/go-api/(deploy|migrations)/|client/src/mobile/killSwitchPoll\.ts$)' && need docker "go-api deploy self-tests"; then
   test_check "go-api deploy self-tests" services/go-api bash -c 'for t in deploy/__tests__/*.test.sh; do bash "$t" || exit 1; done; bash deploy/migration-safety.sh'
 fi
 

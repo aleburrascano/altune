@@ -11,6 +11,8 @@ const pendingFailures = {
   move: null,
 };
 
+const pendingProgress = [];
+
 const DEFAULT_AVAILABLE_DISK_SPACE = 64 * 1024 ** 3;
 let availableDiskSpace = DEFAULT_AVAILABLE_DISK_SPACE;
 
@@ -129,6 +131,7 @@ class File {
   static async downloadFileAsync(url, dest, options) {
     takeFailure('download');
     if (options?.signal?.aborted) throw new Error('AbortError: download aborted');
+    for (const progress of pendingProgress.splice(0)) options?.onProgress?.(progress);
     fileContents.set(dest.uri, `downloaded:${url}`);
     return fileFromUri(dest.uri);
   }
@@ -147,6 +150,7 @@ const __fs = {
     fileContents.clear();
     directories.clear();
     for (const kind of Object.keys(pendingFailures)) pendingFailures[kind] = null;
+    pendingProgress.length = 0;
     availableDiskSpace = DEFAULT_AVAILABLE_DISK_SPACE;
   },
 
@@ -170,6 +174,10 @@ const __fs = {
 
   allFiles() {
     return Object.fromEntries(fileContents);
+  },
+
+  reportNextDownloadProgress(...progress) {
+    pendingProgress.push(...progress);
   },
 
   failNext(kind, error) {

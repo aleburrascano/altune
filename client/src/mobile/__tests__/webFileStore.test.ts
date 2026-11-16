@@ -1,5 +1,10 @@
-import type { FileStore } from '@shared/files';
-import { WEB_DOWNLOAD_UNSUPPORTED, fakeLocalStorage, webFileStoreOver } from '@shared/files';
+import { openWebFileStore } from '@/mobile';
+
+import {
+  WEB_DOWNLOAD_UNSUPPORTED,
+  fakeLocalStorage,
+  webFileStoreOver,
+} from '@/mobile/__tests__/webStorage';
 
 describe('a webFileStore over localStorage', () => {
   it('opens a directory without creating it, and create() makes it exist', () => {
@@ -127,7 +132,7 @@ describe('a webFileStore over localStorage', () => {
   });
 });
 
-describe('the webFileStore singleton', () => {
+describe('a webFileStore over the browser storage', () => {
   async function withThrowingLocalStorage<T>(
     run: (getter: jest.Mock) => Promise<T> | T,
   ): Promise<T> {
@@ -142,22 +147,16 @@ describe('the webFileStore singleton', () => {
     }
   }
 
-  it('never touches localStorage while the module is imported', async () => {
+  it('never touches localStorage until it is first used', async () => {
     await withThrowingLocalStorage((getter) => {
-      jest.isolateModules(() => {
-        require('@shared/files/web/webFileStore');
-      });
+      openWebFileStore();
       expect(getter).not.toHaveBeenCalled();
     });
   });
 
   it('degrades to an in-memory store instead of throwing when localStorage is unreachable', async () => {
     await withThrowingLocalStorage(async () => {
-      let webFileStore!: FileStore;
-      jest.isolateModules(() => {
-        const isolated = require('@shared/files/web/webFileStore');
-        webFileStore = isolated.webFileStore;
-      });
+      const webFileStore = openWebFileStore();
 
       const dir = webFileStore.openDirectory('contract');
       expect(dir.exists).toBe(false);
@@ -178,10 +177,7 @@ describe('the webFileStore singleton', () => {
   });
 
   it('falls back to an in-memory store when there is no localStorage at all, without throwing', () => {
-    let webFileStore!: FileStore;
-    jest.isolateModules(() => {
-      ({ webFileStore } = require('@shared/files/web/webFileStore'));
-    });
+    const webFileStore = openWebFileStore();
 
     const dir = webFileStore.openDirectory('contract');
     dir.create();
@@ -193,10 +189,7 @@ describe('the webFileStore singleton', () => {
     const storage = fakeLocalStorage();
     Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: storage });
     try {
-      let webFileStore!: FileStore;
-      jest.isolateModules(() => {
-        ({ webFileStore } = require('@shared/files/web/webFileStore'));
-      });
+      const webFileStore = openWebFileStore();
 
       webFileStore.openDirectory('contract').create();
 

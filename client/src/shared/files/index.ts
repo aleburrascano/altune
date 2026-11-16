@@ -1,4 +1,4 @@
-export { defaultFileStore } from '@shared/files/defaultFileStore';
+export { defaultFileStore, setDeviceFileStore } from '@shared/files/defaultFileStore';
 export {
   deleteDocument,
   readDocument,
@@ -9,12 +9,6 @@ export type { SchemaSpec } from '@shared/files/durableDocument';
 export { createFileStoreSlot } from '@shared/files/fileStore';
 export type { FileStore, StoredDirectory, StoredFile } from '@shared/files/fileStore';
 export type { JsonObject, JsonValue } from '@shared/files/json';
-export { deviceFileStore, fileHandle } from '@shared/files/native/deviceFileStore';
 export { extFromUrl } from '@shared/files/urlExtension';
 export { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 export type { MemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
-export {
-  WEB_DOWNLOAD_UNSUPPORTED,
-  fakeLocalStorage,
-  webFileStoreOver,
-} from '@shared/files/__tests__/webStorage';

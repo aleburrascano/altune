@@ -1,5 +1,7 @@
 import type { FileStore } from '@shared/files';
 
+import { openWebFileStore } from '@/mobile';
+
 export function fakeLocalStorage(): Storage {
   const data = new Map<string, string>();
   return {
@@ -23,18 +25,10 @@ export const WEB_DOWNLOAD_UNSUPPORTED = {
   message: 'download() is not supported on web',
 };
 
-function freshWebFileStore(): FileStore {
-  let store!: FileStore;
-  jest.isolateModules(() => {
-    ({ webFileStore: store } = require('@shared/files/web/webFileStore'));
-  });
-  return store;
-}
-
 export function webFileStoreOver(storage: Storage): FileStore {
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: storage });
   try {
-    const store = freshWebFileStore();
+    const store = openWebFileStore();
     store.availableBytes();
     return store;
   } finally {

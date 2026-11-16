@@ -1,4 +1,4 @@
-import type { FileStore, StoredDirectory, StoredFile } from '@shared/files/fileStore';
+import type { FileStore, StoredDirectory, StoredFile } from '@shared/files';
 
 const KEY_PREFIX = 'altune:file:';
 const ROOT = 'localstorage://document';
@@ -163,17 +163,21 @@ function resolveBrowserOrFallbackStorage(): KeyValueStore {
   }
 }
 
-let lazilyCreatedWebFileStore: FileStore | undefined;
-
-function currentStore(): FileStore {
-  if (!lazilyCreatedWebFileStore) {
-    lazilyCreatedWebFileStore = createWebFileStore(resolveBrowserOrFallbackStorage());
-  }
-  return lazilyCreatedWebFileStore;
+function onFirstUse(open: () => FileStore): () => FileStore {
+  let store: FileStore | undefined;
+  return () => {
+    store ??= open();
+    return store;
+  };
 }
 
-export const webFileStore: FileStore = {
-  openDirectory: (name) => currentStore().openDirectory(name),
-  download: (url, dest, signal) => currentStore().download(url, dest, signal),
-  availableBytes: () => currentStore().availableBytes(),
-};
+export function openWebFileStore(): FileStore {
+  const currentStore = onFirstUse(() => createWebFileStore(resolveBrowserOrFallbackStorage()));
+  return {
+    openDirectory: (name) => currentStore().openDirectory(name),
+    download: (url, dest, signal) => currentStore().download(url, dest, signal),
+    availableBytes: () => currentStore().availableBytes(),
+  };
+}
+
+export const webFileStore: FileStore = openWebFileStore();

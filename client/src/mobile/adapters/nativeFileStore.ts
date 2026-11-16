@@ -1,6 +1,6 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
-import type { FileStore, StoredDirectory, StoredFile } from '@shared/files/fileStore';
+import type { FileStore, StoredDirectory, StoredFile } from '@shared/files';
 
 function fileSize(file: File): number | null {
   return file.exists ? file.size : null;
@@ -27,7 +27,7 @@ function fileOperations(file: File): Omit<StoredFile, 'exists' | 'size'> {
   };
 }
 
-export function fileHandle(file: File): StoredFile {
+function fileHandle(file: File): StoredFile {
   const state = Object.getOwnPropertyDescriptors(fileState(file));
   return Object.defineProperties({ ...fileOperations(file) }, state) as StoredFile;
 }
@@ -61,7 +61,7 @@ function directoryHandle(dir: Directory): StoredDirectory {
   return Object.defineProperties({ ...directoryOperations(dir) }, state) as StoredDirectory;
 }
 
-export const deviceFileStore: FileStore = {
+export const nativeFileStore: FileStore = {
   openDirectory: (name) => directoryHandle(new Directory(Paths.document, name)),
   download: (url, dest, signal, onProgress) =>
     File.downloadFileAsync(url, new File(dest.uri), {

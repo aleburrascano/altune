@@ -59,10 +59,6 @@
       "exports": ["*"]
     },
     {
-      "file": "src/shared/files/defaultFileStore.ts",
-      "exports": ["*"]
-    },
-    {
       "file": "src/shared/ui/dialog/dialog.ts",
       "exports": ["*"]
     },

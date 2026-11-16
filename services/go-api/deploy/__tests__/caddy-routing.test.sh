@@ -264,7 +264,7 @@ CASE="connect-src opens raw.githubusercontent.com only at the kill-switch file t
 publish_export
 fetch "$STAGING" / >/dev/null
 KILL_SWITCH_URL=$(sed -n "s|^ *'\(https://raw\.githubusercontent\.com/[^']*\)';$|\1|p" \
-    "$HERE/../../../client/src/shared/killSwitch/killSwitchPoll.ts")
+    "$HERE/../../../client/src/mobile/killSwitchPoll.ts")
 [ -n "$KILL_SWITCH_URL" ] || fail "could not read DEFAULT_KILL_SWITCH_URL from killSwitchPoll.ts"
 CONNECT_SRC=$(header_of Content-Security-Policy | tr ';' '\n' | sed -n 's/^ *connect-src//p')
 grep -qxF "$KILL_SWITCH_URL" < <(tr ' ' '\n' <<<"$CONNECT_SRC") || fail "connect-src '$CONNECT_SRC' lacks $KILL_SWITCH_URL"
