@@ -41,7 +41,7 @@ func main() {
 	}
 	fmt.Println("Checking added lines for vague identifier names in:")
 	for _, file := range files {
-		fmt.Printf("  %s\n", file)
+		fmt.Printf("  %s\n", file.path)
 	}
 	hits := 0
 	for _, file := range files {
@@ -53,20 +53,43 @@ func main() {
 	}
 }
 
-func changedGoFiles(base string) []string {
-	out := git("diff", "--name-only", "--relative", "--diff-filter=ACMR", base, "--", ".")
-	var files []string
+type changedFile struct {
+	path string
+	from string
+}
+
+func changedGoFiles(base string) []changedFile {
+	out := git("diff", "-M", "--name-status", "--relative", "--diff-filter=ACMR", base, "--", ".")
+	var files []changedFile
 	for _, line := range strings.Split(out, "\n") {
-		if strings.HasSuffix(line, ".go") && !strings.HasSuffix(line, "_test.go") {
-			files = append(files, line)
+		file := parseNameStatus(line)
+		if strings.HasSuffix(file.path, ".go") && !strings.HasSuffix(file.path, "_test.go") {
+			files = append(files, file)
 		}
 	}
 	return files
 }
 
-func addedLines(base, file string) map[int]bool {
+func parseNameStatus(line string) changedFile {
+	fields := strings.Split(line, "\t")
+	file := changedFile{path: fields[len(fields)-1]}
+	if len(fields) == 3 && strings.HasPrefix(fields[0], "R") {
+		file.from = fields[1]
+	}
+	return file
+}
+
+func diffOf(base string, file changedFile) string {
+	args := []string{"diff", "-M", "-U0", base, "--", file.path}
+	if file.from != "" {
+		args = append(args, file.from)
+	}
+	return git(args...)
+}
+
+func addedLines(base string, file changedFile) map[int]bool {
 	added := map[int]bool{}
-	for _, line := range strings.Split(git("diff", "-U0", base, "--", file), "\n") {
+	for _, line := range strings.Split(diffOf(base, file), "\n") {
 		match := hunkHeader.FindStringSubmatch(line)
 		if match == nil {
 			continue
@@ -83,20 +106,20 @@ func addedLines(base, file string) map[int]bool {
 	return added
 }
 
-func reportFile(base, file string) int {
+func reportFile(base string, file changedFile) int {
 	added := addedLines(base, file)
 	if len(added) == 0 {
 		return 0
 	}
 	fset := token.NewFileSet()
-	parsed, err := parser.ParseFile(fset, file, nil, parser.SkipObjectResolution)
+	parsed, err := parser.ParseFile(fset, file.path, nil, parser.SkipObjectResolution)
 	if parsed == nil {
-		fmt.Fprintf(os.Stderr, "parse %s: %v\n", file, err)
+		fmt.Fprintf(os.Stderr, "parse %s: %v\n", file.path, err)
 		os.Exit(2)
 	}
 	hits := 0
 	for _, ident := range declaredNames(parsed) {
-		hits += reportIdent(fset, file, added, ident)
+		hits += reportIdent(fset, file.path, added, ident)
 	}
 	return hits
 }
