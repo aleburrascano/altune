@@ -1,5 +1,5 @@
 import type { AlbumGroup, ArtistGroup } from '@shared/apiClient';
-import { useLibraryAlbums, useLibraryArtists } from '@features/library/hooks/useLibraryGroups';
+import { useLibraryAlbums, useLibraryArtists } from '@features/library/view/useLibraryGroups';
 import {
   type ActiveView,
   type ListPaging,

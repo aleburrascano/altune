@@ -9,7 +9,7 @@ import { useLibraryOffline } from '@features/library/view/useLibraryOffline';
 import {
   usePlaylistDelete,
   usePlaylistOfflineAction,
-} from '@features/library/hooks/usePlaylistMenu';
+} from '@features/library/view/usePlaylistMenu';
 import { BackHeader } from '@features/library/view/BackHeader';
 import { menuItems, type MenuItems } from '@features/library/view/playlistMenuItems';
 import type { DetailProps } from '@features/library/view/playlistDetailTypes';

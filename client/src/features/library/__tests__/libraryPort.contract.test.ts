@@ -1,7 +1,8 @@
 import { asTrackId } from '@shared/catalog';
 import type { ListTracksResponse, TrackResponse } from '@shared/catalog';
-import { httpLibraryPort, createMemoryLibraryPort, track } from '@features/library';
-import type { LibraryPort } from '@features/library';
+import { createMemoryLibraryPort, track } from '@features/library';
+import { httpLibraryPort } from '@features/library/adapters/http/httpLibraryPort';
+import type { LibraryPort } from '@features/library/ports/libraryPort';
 import { signInTestUser } from '@testing/signInTestUser';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');

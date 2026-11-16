@@ -9,7 +9,9 @@ import { signInTestUser } from '@testing/signInTestUser';
 import { idlePlayback } from '@testing/queryHarness';
 import { PlaylistDetailScreen } from '@features/library';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
-import { FeaturePorts, httpFeaturePorts } from '@/mobile';
+import { usePinnedStore } from '@shared/offline';
+import { HttpLibraryPorts } from '@features/library/__tests__/HttpLibraryPorts';
+import { acceptTelemetry, shownFailureSurfaces } from '@features/library/__tests__/failureShown';
 const { __http } = require('@testing/doubles/fetch.js');
 
 let mockParams: { id?: string } = {};
@@ -40,7 +42,7 @@ function wrapper({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={client}>
       <PlaybackContext.Provider value={idlePlayback}>
-        <FeaturePorts ports={httpFeaturePorts}>{children}</FeaturePorts>
+        <HttpLibraryPorts>{children}</HttpLibraryPorts>
       </PlaybackContext.Provider>
     </QueryClientProvider>
   );
@@ -258,6 +260,32 @@ describe('PlaylistDetailScreen — offline download controls on native', () => {
     fireEvent(screen.getByTestId('library-row-t1'), 'longPress');
     expect(screen.getByText('Download')).toBeTruthy();
   }, 60000);
+
+  describe('when a selected download fails', () => {
+    const SLOW_RENDER_TIMEOUT_MS = 60000;
+    const realPinMany = usePinnedStore.getState().pinMany;
+
+    afterEach(() => {
+      usePinnedStore.setState({ pinMany: realPinMany });
+    });
+
+    it(
+      'shows the app failure alert for the batch',
+      async () => {
+        acceptTelemetry();
+        usePinnedStore.setState({
+          pinMany: jest.fn().mockResolvedValue({ requested: 1, failed: 1, refused: null }),
+        });
+        const screen = await renderLoaded();
+
+        fireEvent(screen.getByTestId('library-row-t1'), 'longPress');
+        fireEvent.press(screen.getByText('Download'));
+
+        await waitFor(() => expect(shownFailureSurfaces()).toEqual(['library.pin_batch']));
+      },
+      SLOW_RENDER_TIMEOUT_MS,
+    );
+  });
 });
 
 const { Platform: RNPlatform } = require('react-native');
