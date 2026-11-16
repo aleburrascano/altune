@@ -16,7 +16,7 @@ import {
   type TrackMenuController,
   type TrackMenuOptions,
 } from '@features/library/view/useTrackMenu';
-import type { ShowFailure } from '@features/library/domain/libraryFailure';
+import type { ShowFailure } from '@features/library/core/libraryFailure';
 
 export type SelectionAction = {
   key: string;

@@ -3,7 +3,7 @@ import type { TrackResponse } from '@shared/catalog';
 import { isCurrentlyPlaying, buildPlayableQueue } from '@shared/playback';
 import type { usePlayback, useQueuePlayback } from '@shared/playback';
 import type { MenuAnchor } from '@shared/ui';
-import { libraryFailureAlert, type ShowFailure } from '@features/library/domain/libraryFailure';
+import { libraryFailureAlert, type ShowFailure } from '@features/library/core/libraryFailure';
 import { useLibraryTracks } from '@features/library/view/useLibraryTracks';
 import type { useRetryAcquisition } from '@features/library/view/useRetryAcquisition';
 import type { Selection } from '@features/library/view/useSelection';

@@ -33,7 +33,7 @@ import {
 } from '@features/library/hooks/useFeaturing';
 import { useRetryAcquisition } from '@features/library/view/useRetryAcquisition';
 import { useTrackMenu } from '@features/library/view/useTrackMenu';
-import { classifyLibraryError, failureTail } from '@features/library/domain/libraryFailure';
+import { classifyLibraryError, failureTail } from '@features/library/core/libraryFailure';
 import { TracksList } from '@features/library/view/TracksList';
 
 export function FeaturingScreen(): ReactElement {

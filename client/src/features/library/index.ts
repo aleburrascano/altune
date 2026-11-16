@@ -19,7 +19,7 @@ export {
   libraryFailureAlert,
   logTrackMutationFailure,
   trackNotFoundAlert,
-} from '@features/library/domain/libraryFailure';
+} from '@features/library/core/libraryFailure';
 export type {
   ActiveView,
   LibraryChip,

@@ -24,7 +24,7 @@ import {
   failureTail,
   type LibraryFailure,
   type LibraryWarn,
-} from '@features/library/domain/libraryFailure';
+} from '@features/library/core/libraryFailure';
 import { patchTrackStatus, useTrackStatusStore, type TrackStatus } from '@shared/acquisition';
 
 function deleteEndpoint(trackId: TrackId) {

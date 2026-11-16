@@ -16,7 +16,7 @@ import {
   classifyLibraryError,
   type LibraryFailure,
   type LibraryWarn,
-} from '@features/library/domain/libraryFailure';
+} from '@features/library/core/libraryFailure';
 import { pagedListControls } from '@features/library/core/listPaging';
 import { useLoggedLibraryQueryFailure } from '@features/library/view/useLoggedLibraryQueryFailure';
 

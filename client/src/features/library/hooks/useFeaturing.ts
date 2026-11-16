@@ -8,7 +8,7 @@ import {
   libraryFailureAlert,
   classifyLibraryError,
   type LibraryWarn,
-} from '@features/library/domain/libraryFailure';
+} from '@features/library/core/libraryFailure';
 import { showFailureAlert, type FailureAlert } from '@shared/ui';
 import { detailHref, useNavigator, type Navigator } from '@shared/navigation';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
