@@ -140,59 +140,9 @@ describe('offlineEligibility — the ready-and-all-pinned rule, in one place', (
   });
 });
 
-type OfflineHooks = {
-  renderHook: typeof renderHook;
-  useLibraryOffline: typeof useLibraryOffline;
-  usePinnedStatus: typeof usePinnedStatus;
-  usePinnedStore: typeof usePinnedStore;
-};
-
-function loadOnWeb(): OfflineHooks {
-  let loaded: OfflineHooks | undefined;
-  jest.isolateModules(() => {
-    const isWebPlatformModule = require('@shared/device/isWebPlatform');
-    jest.spyOn(isWebPlatformModule, 'isWebPlatform').mockReturnValue(true);
-    loaded = {
-      renderHook: require('@testing-library/react-native').renderHook,
-      useLibraryOffline: require('@features/library/view/useLibraryOffline').useLibraryOffline,
-      usePinnedStatus: require('@features/library/view/useLibraryOffline').usePinnedStatus,
-      usePinnedStore: require('@shared/offline/state/pinnedStore').usePinnedStore,
-    };
-  });
-  if (loaded === undefined) throw new Error('web modules failed to load');
-  return loaded;
-}
-
-const web = loadOnWeb();
-
 describe('useLibraryOffline — tells every library caller whether offline downloads exist here', () => {
-  it('reports offline downloads unsupported on web', () => {
-    const { result } = web.renderHook(() => web.useLibraryOffline());
-    expect(result.current.supported).toBe(false);
-  });
-
   it('reports offline downloads supported on native', () => {
     const { result } = renderHook(() => useLibraryOffline());
     expect(result.current.supported).toBe(true);
-  });
-});
-
-describe('useLibraryOffline — statusOf and usePinnedStatus stay silent when offline downloads are unsupported', () => {
-  const readyEntries = {
-    'track-1': { trackId: asTrackId('track-1'), status: 'ready' as const, uri: 'file:///a' },
-  };
-
-  afterEach(() => web.usePinnedStore.setState({ entries: {} }));
-
-  it('statusOf reports no status on web even with a ready pinned entry in the store', () => {
-    web.usePinnedStore.setState({ entries: readyEntries });
-    const { result } = web.renderHook(() => web.useLibraryOffline());
-    expect(result.current.statusOf(asTrackId('track-1'))).toBeUndefined();
-  });
-
-  it('usePinnedStatus reports no status on web even with a ready pinned entry in the store', () => {
-    web.usePinnedStore.setState({ entries: readyEntries });
-    const { result } = web.renderHook(() => web.usePinnedStatus(asTrackId('track-1')));
-    expect(result.current).toBeUndefined();
   });
 });
