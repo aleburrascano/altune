@@ -20,6 +20,11 @@ import {
   useContentFetchRetry,
 } from '@features/detail/hooks/useDetailFetchGate';
 
+type ReadQueryFields<T> = Pick<
+  UseQueryResult<T>,
+  'data' | 'isLoading' | 'isError' | 'error' | 'refetch'
+>;
+
 type SearchedEntity = {
   kind: DiscoveryKind;
   title: string;
@@ -59,7 +64,7 @@ function albumSearchQuery({ albumTitle, artist, canFetch, port }: AlbumSearchInp
   return { ...resolveEntityQuery('album', searchQuery, 1, port), enabled: canFetch };
 }
 
-function albumSearchOf(search: UseQueryResult<DiscoveryResult[]>): AlbumSearch {
+function albumSearchOf(search: ReadQueryFields<DiscoveryResult[]>): AlbumSearch {
   return {
     searchResult: search.data?.[0] ?? null,
     isSearching: search.isLoading,
@@ -69,10 +74,10 @@ function albumSearchOf(search: UseQueryResult<DiscoveryResult[]>): AlbumSearch {
 }
 
 function useAlbumSearch(input: AlbumSearchInput): AlbumSearch {
-  const search = useQuery(albumSearchQuery(input));
+  const { data: found, isLoading, isError, error, refetch } = useQuery(albumSearchQuery(input));
   const searched = { kind: 'album' as const, title: input.albumTitle, artist: input.artist };
-  useLoggedSearchFailure(search.error, searched);
-  return albumSearchOf(search);
+  useLoggedSearchFailure(error, searched);
+  return albumSearchOf({ data: found, isLoading, isError, error, refetch });
 }
 
 type AlbumSource = DiscoveryResult['sources'][number];
@@ -129,7 +134,7 @@ function albumTracksQuery(input: AlbumTracksQueryInput) {
   };
 }
 
-function discoveredTracksOf(query: UseQueryResult<AlbumTracksPage>): DiscoveredTracks {
+function discoveredTracksOf(query: ReadQueryFields<AlbumTracksPage>): DiscoveredTracks {
   const { data: tracksData, isLoading: isLoadingTracks, refetch: refetchTracks } = query;
   const tracks: DiscoveryResult[] = tracksData?.items ?? [];
   const tracksFailure = contentFailure(query.isError, query.error, tracksData);
@@ -139,8 +144,9 @@ function discoveredTracksOf(query: UseQueryResult<AlbumTracksPage>): DiscoveredT
 function useDiscoveredAlbumTracks(input: AlbumTracksInput): DiscoveredTracks {
   const source = input.searchResult?.sources[0];
   const retry = useContentFetchRetry();
-  const query = useQuery({ ...albumTracksQuery({ ...input, source }), retry });
-  return discoveredTracksOf(query);
+  const options = { ...albumTracksQuery({ ...input, source }), retry };
+  const { data: page, isLoading, isError, error, refetch } = useQuery(options);
+  return discoveredTracksOf({ data: page, isLoading, isError, error, refetch });
 }
 
 export function useAlbumDiscovery({
