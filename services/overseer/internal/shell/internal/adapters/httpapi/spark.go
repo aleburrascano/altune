@@ -1,4 +1,4 @@
-package shell
+package httpapi
 
 import (
 	"altune/overseer/internal/core"
@@ -32,7 +32,7 @@ func (h *Handler) spark(b core.Bucket, id string) (spark []core.SparkPoint) {
 	if name == "" {
 		return nil
 	}
-	return h.sparkCache.load(id, func() ([]core.SparkPoint, error) {
+	return h.sparkCache.Load(id, func() ([]core.SparkPoint, error) {
 		return h.readSpark(id, name)
 	})
 }
@@ -71,17 +71,17 @@ type sparkEntry struct {
 	failing   bool
 }
 
-type sparkCache struct {
+type SparkCache struct {
 	mu      sync.Mutex
 	entries map[string]*sparkEntry
 	now     func() time.Time
 }
 
-func newSparkCache() *sparkCache {
-	return &sparkCache{entries: map[string]*sparkEntry{}, now: time.Now}
+func NewSparkCache(now func() time.Time) *SparkCache {
+	return &SparkCache{entries: map[string]*sparkEntry{}, now: now}
 }
 
-func (c *sparkCache) entry(id string) *sparkEntry {
+func (c *SparkCache) entry(id string) *sparkEntry {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	e, ok := c.entries[id]
@@ -92,7 +92,7 @@ func (c *sparkCache) entry(id string) *sparkEntry {
 	return e
 }
 
-func (c *sparkCache) load(id string, read func() ([]core.SparkPoint, error)) []core.SparkPoint {
+func (c *SparkCache) Load(id string, read func() ([]core.SparkPoint, error)) []core.SparkPoint {
 	e := c.entry(id)
 	e.mu.Lock()
 	defer e.mu.Unlock()

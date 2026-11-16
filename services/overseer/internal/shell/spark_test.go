@@ -191,3 +191,43 @@ func TestStreamSurvivesAPanickingKeySeries(t *testing.T) {
 		t.Fatalf("stream body is empty, want the initial frame despite the panic")
 	}
 }
+
+type recordingTailReader struct {
+	calls int
+	limit int
+}
+
+func (r *recordingTailReader) Names(string) ([]string, error) { return nil, nil }
+
+func (r *recordingTailReader) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
+	r.calls++
+	return []core.Point{{At: time.Now(), Value: -1}}, nil
+}
+
+func (r *recordingTailReader) Tail(_, _ string, _, _ time.Time, limit int) ([]core.Point, error) {
+	r.limit = limit
+	return []core.Point{{At: time.Now(), Value: 1}}, nil
+}
+
+func TestBucketsSparkPrefersTheTailReaderPushDown(t *testing.T) {
+	reader := &recordingTailReader{}
+	reg := fixedRegistry{buckets: []core.Bucket{
+		keyedStubBucket{stubBucket: stubBucket{id: "reliability", state: core.StateLive}, key: "latency_ms"},
+	}}
+	srv := newServer(reg, shell.WithSeries(reader))
+
+	rec, body := getBuckets(t, srv)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (%s)", rec.Code, rec.Body.String())
+	}
+	if reader.calls != 0 {
+		t.Fatalf("Query called %d times, want 0: TailReader should be preferred", reader.calls)
+	}
+	if reader.limit != 30 {
+		t.Fatalf("Tail limit = %d, want 30", reader.limit)
+	}
+	if spark := body.Buckets[0].Spark; len(spark) != 1 || spark[0].V != 1 {
+		t.Fatalf("spark = %+v, want the Tail result", spark)
+	}
+}
