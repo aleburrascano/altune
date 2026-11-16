@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 
-import * as retryDelayModule from '@shared/query/retryDelay';
+import * as retryDelayModule from '@shared/query/core/retryDelay';
 import { transientRetryOptions } from '@shared/query';
 
 const RETRY_BACKOFF_BASE_MS = 1_000;

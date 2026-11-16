@@ -3,8 +3,8 @@ import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 
 import { useOAuth } from '@features/signIn/hooks/useOAuth.web';
-import * as nativeWebOrigin from '@shared/device/webOrigin';
-import * as browserWebOrigin from '@shared/device/webOrigin.web';
+import * as nativeWebOrigin from '@shared/device/core/webOrigin';
+import * as browserWebOrigin from '@shared/device/core/webOrigin.web';
 
 import { authPortWrapper, createAuthPortMock, createSupabaseAuthMock } from '@features/signIn';
 

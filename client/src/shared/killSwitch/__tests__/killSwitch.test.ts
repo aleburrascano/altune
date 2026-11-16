@@ -1,4 +1,4 @@
-import * as killSwitchModule from '@shared/killSwitch/killSwitch';
+import * as killSwitchModule from '@shared/killSwitch/core/killSwitch';
 import { createMemoryFileStore, type MemoryFileStore } from '@shared/files';
 
 import {

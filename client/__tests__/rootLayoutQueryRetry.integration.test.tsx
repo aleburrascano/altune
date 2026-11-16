@@ -3,7 +3,7 @@ import { act, render, screen } from '@testing-library/react-native';
 import { Text } from 'react-native';
 
 import { ApiError, NetworkError } from '@shared/failure/errors';
-import { createQueryClient } from '@shared/query/createQueryClient';
+import { createQueryClient } from '@shared/query/shell/createQueryClient';
 
 const FIRST_TRY_PLUS_FIVE_RETRIES = 6;
 const REQUESTS_FOR_A_TRANSIENT_FAILURE = FIRST_TRY_PLUS_FIVE_RETRIES;

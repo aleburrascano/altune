@@ -3,5 +3,5 @@ export {
   onKillSwitchChange,
   applyKillSwitches,
   setKillSwitchFileStore,
-} from '@shared/killSwitch/killSwitch';
+} from '@shared/killSwitch/core/killSwitch';
 export { useGatedCallback, useLoopEnabled } from '@shared/killSwitch/view/killSwitchGate';

@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 
-import * as isWebPlatformModule from '@shared/device/isWebPlatform';
+import * as isWebPlatformModule from '@shared/device/core/isWebPlatform';
 
 export function setPlatformOS(os: string): void {
   Platform.OS = os as typeof Platform.OS;

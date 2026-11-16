@@ -1,4 +1,4 @@
-import { webOrigin } from '@shared/device/webOrigin.web';
+import { webOrigin } from '@shared/device/core/webOrigin.web';
 
 afterEach(() => {
   Reflect.deleteProperty(globalThis, 'window');

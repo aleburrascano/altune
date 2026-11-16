@@ -1,15 +1,15 @@
-export { createQueryClient } from '@shared/query/createQueryClient';
+export { createQueryClient } from '@shared/query/shell/createQueryClient';
 export {
   detailKeys,
   discoveryKeys,
   isSearchKeyFor,
   libraryKeys,
   playlistKeys,
-} from '@shared/query/queryKeys';
-export { transientRetryOptions } from '@shared/query/retryDelay';
+} from '@shared/query/core/queryKeys';
+export { transientRetryOptions } from '@shared/query/core/retryDelay';
 export {
   useAppMutation,
   useOptimisticMutation,
   appMutationCache,
   appQueryCache,
-} from '@shared/query/useAppMutation';
+} from '@shared/query/shell/useAppMutation';

@@ -3,12 +3,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 import { isSessionFetchFailure } from '@shared/failure';
-import { forgetPreviousUsersLocalData } from '@shared/auth/userLocalData';
+import { forgetPreviousUsersLocalData } from '@shared/auth/core/userLocalData';
 import { notifyIdentityChange } from '@shared/session';
 
 import { renewSessionCredentials } from '@shared/auth/view/sessionExpired';
 import { supabase } from '@shared/auth/adapters/authActions';
-import { isTestAuthEnabled, testAuthBootSettled } from '@shared/auth/testAuthBoot';
+import { isTestAuthEnabled, testAuthBootSettled } from '@shared/auth/core/testAuthBoot';
 
 export type SessionState =
   { status: 'loading' } | { status: 'signed-in'; session: Session } | { status: 'signed-out' };
