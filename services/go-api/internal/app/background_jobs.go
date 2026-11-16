@@ -1,7 +1,8 @@
 package app
 
 import (
-	"altune/go-api/internal/discovery/adapters/providers/deezer"
+	"altune/go-api/internal/catalog"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/service/eval"
 	"altune/go-api/internal/discovery/service/unreleased"
 	"altune/go-api/internal/discovery/service/vocabulary"
@@ -11,12 +12,10 @@ import (
 	"log/slog"
 	"time"
 
-	catalogMetrics "altune/go-api/internal/catalog/adapters/metrics"
 	catalogPorts "altune/go-api/internal/catalog/ports"
 	audioservice "altune/go-api/internal/catalog/service/audio"
 
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
-	discoveryPorts "altune/go-api/internal/discovery/ports"
 
 	playbackErasure "altune/go-api/internal/playback/service/erasure"
 )
@@ -55,7 +54,7 @@ func (a *App) startOrphanedAudioReconcile(ctx context.Context, queue catalogPort
 	}
 	svc := audioservice.NewReconcileOrphanedAudioService(queue, audioStore,
 		audioservice.WithReconcileSwitch(a.jobSwitch(jobOrphanedAudioReconcile)),
-		audioservice.WithReconcileMetrics(catalogMetrics.NewExpvarAudioStoreMetrics()),
+		audioservice.WithReconcileMetrics(catalog.NewExpvarAudioStoreMetrics()),
 	)
 	a.startSimpleJob(jobOrphanedAudioReconcile, orphanedAudioReconcileInterval, func(ctx context.Context) error {
 		_, err := svc.Execute(ctx)
@@ -73,21 +72,20 @@ func (a *App) startDeletedIdentityErasure(ctx context.Context, svc *playbackEras
 	}, "interval", deletedIdentityErasureInterval.String())
 }
 
-func (a *App) discoveryDeletedIdentityErasers() []discoveryPorts.DeletedIdentityEraser {
-	return []discoveryPorts.DeletedIdentityEraser{
+func (a *App) discoveryDeletedIdentityErasers() []discovery.DeletedIdentityEraser {
+	return []discovery.DeletedIdentityEraser{
 		discoveryPersistence.NewPgxSearchHistoryRepository(a.pool),
 		discoveryPersistence.NewPgxFavoritesRepository(a.pool),
 		discoveryPersistence.NewPgxEventStore(a.pool),
 	}
 }
 
-func eraseDiscoveryRowsOfDeletedIdentities(ctx context.Context, erasers []discoveryPorts.DeletedIdentityEraser) error {
-	var erased int64
+func eraseDiscoveryRowsOfDeletedIdentities(ctx context.Context, erasers []discovery.DeletedIdentityEraser) error {
 	var failures []error
-	var idle int
+	erased, idle := int64(0), 0
 	for _, eraser := range erasers {
 		rows, err := eraser.EraseRowsOfDeletedIdentities(ctx)
-		if errors.Is(err, discoveryPorts.ErrIdentityStoreUnavailable) {
+		if errors.Is(err, discovery.ErrIdentityStoreUnavailable) {
 			slog.WarnContext(ctx, "discovery.deleted_identity_sweep_idle", "error", err)
 			idle++
 			continue
@@ -99,7 +97,7 @@ func eraseDiscoveryRowsOfDeletedIdentities(ctx context.Context, erasers []discov
 		erased += rows
 	}
 	if idle > 0 && idle == len(erasers) {
-		failures = append(failures, fmt.Errorf("discovery erasure sweep idle, every eraser unavailable: %w", discoveryPorts.ErrIdentityStoreUnavailable))
+		failures = append(failures, fmt.Errorf("discovery erasure sweep idle, every eraser unavailable: %w", discovery.ErrIdentityStoreUnavailable))
 	}
 	logDiscoveryErasureSweep(ctx, erased)
 	return errors.Join(failures...)
@@ -112,7 +110,7 @@ func logDiscoveryErasureSweep(ctx context.Context, erased int64) {
 	slog.InfoContext(ctx, "discovery.deleted_identity_rows_erased", "rows", erased)
 }
 
-func (a *App) startCorpusRefresh(ctx context.Context, store discoveryPorts.BehavioralLabelStore) {
+func (a *App) startCorpusRefresh(ctx context.Context, store discovery.BehavioralLabelStore) {
 	if a.cfg.BehavioralCorpusPath == "" {
 		return
 	}
@@ -184,7 +182,7 @@ func (a *App) startAcquisitionPrune(ctx context.Context, outcomes, rejections ac
 	}, "interval", acquisitionPruneInterval.String())
 }
 
-func (a *App) startVocabularyRefresh(ctx context.Context, cf clientFactory, vocabStore discoveryPorts.VocabularyStore) {
+func (a *App) startVocabularyRefresh(ctx context.Context, cf clientFactory, vocabStore discovery.VocabularyStore) {
 	if vocabStore == nil {
 		return
 	}
@@ -206,7 +204,7 @@ const (
 	unreleasedRefreshPerRun   = 2
 )
 
-func (a *App) startUnreleasedRefresh(svc *unreleased.Service, store discoveryPorts.UnreleasedStore) {
+func (a *App) startUnreleasedRefresh(svc *unreleased.Service, store discovery.UnreleasedStore) {
 	if store == nil {
 		return
 	}
@@ -219,10 +217,10 @@ func unreleasedRefreshRun(svc *unreleased.Service) func(context.Context) error {
 	}
 }
 
-func (a *App) buildChartProviders(cf clientFactory) []discoveryPorts.ChartProvider {
-	var charts []discoveryPorts.ChartProvider
+func (a *App) buildChartProviders(cf clientFactory) []discovery.ChartProvider {
+	var charts []discovery.ChartProvider
 	deezerClient := cf.chart()
-	charts = append(charts, deezer.NewDeezerAdapter(deezerClient))
+	charts = append(charts, discovery.NewDeezerAdapter(deezerClient))
 	if lfm := buildLastFMAdapter(a.cfg, cf.chart()); lfm != nil {
 		charts = append(charts, lfm)
 	}

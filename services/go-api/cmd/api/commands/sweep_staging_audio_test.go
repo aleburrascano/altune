@@ -1,7 +1,7 @@
 package commands
 
 import (
-	"altune/go-api/internal/catalog/adapters/storage"
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared/config"
 	"context"
@@ -58,7 +58,7 @@ func newSweepFixture(t *testing.T, mtime time.Time, refs ...string) (*config.Con
 
 func runSweepFixture(t *testing.T, cfg *config.Config, refs *fakeRefLister, execute bool, now time.Time) (deleted, keptReferenced, keptFresh, failed int) {
 	t.Helper()
-	store, err := storage.FromConfig(cfg, slog.Default())
+	store, err := catalog.FromConfig(cfg, slog.Default())
 	if err != nil {
 		t.Fatalf("storage.FromConfig: %v", err)
 	}

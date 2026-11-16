@@ -2,17 +2,15 @@ package app
 
 import (
 	acqService "altune/go-api/internal/acquisition/service"
-	authmetrics "altune/go-api/internal/auth/adapters/metrics"
+	"altune/go-api/internal/auth"
 	authdomain "altune/go-api/internal/auth/domain"
-	authports "altune/go-api/internal/auth/ports"
-	catalogmetrics "altune/go-api/internal/catalog/adapters/metrics"
-	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
-	observeHandler "altune/go-api/internal/observe/adapters/handler"
-	observeNotifier "altune/go-api/internal/observe/adapters/notifier"
+	"altune/go-api/internal/catalog"
+	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/observe"
 	observeAlert "altune/go-api/internal/observe/service/alert"
 	"altune/go-api/internal/observe/service/evalmeter"
 	"altune/go-api/internal/observe/service/eventtap"
-	playbackmetrics "altune/go-api/internal/playback/adapters/metrics"
+	"altune/go-api/internal/playback"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/events"
 	shared "altune/go-api/internal/shared/kernel"
@@ -56,13 +54,13 @@ func newObserveSubjects() observeSubjects {
 	}
 }
 
-func (s observeSubjects) verifier() authports.TokenVerifier {
+func (s observeSubjects) verifier() auth.TokenVerifier {
 	byToken := map[string]shared.UserId{
 		observePrincipalToken: s.principal,
 		observeStrangerToken:  s.stranger,
 		observeReadOnlyToken:  s.readOnly,
 	}
-	return authports.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
+	return auth.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
 		subject, known := byToken[token]
 		if !known {
 			return authdomain.VerifiedToken{}, &authdomain.InvalidTokenError{Reason: authdomain.ReasonSignatureInvalid}
@@ -71,24 +69,24 @@ func (s observeSubjects) verifier() authports.TokenVerifier {
 	})
 }
 
-func observeTestDeps() observeHandler.Deps {
+func observeTestDeps() observe.Deps {
 	shutdown := make(chan struct{})
 	close(shutdown)
-	return observeHandler.Deps{
-		Health: func(context.Context) observeHandler.DependencyHealth {
-			return observeHandler.DependencyHealth{DB: observeHandler.DepUp, Redis: observeHandler.DepUp, Auth: observeHandler.DepUp}
+	return observe.Deps{
+		Health: func(context.Context) observe.DependencyHealth {
+			return observe.DependencyHealth{DB: observe.DepUp, Redis: observe.DepUp, Auth: observe.DepUp}
 		},
 		Logs:        logging.NewRingBuffer(8),
 		Events:      eventtap.NewFeed(),
 		Eval:        evalmeter.New(false, 0, nil),
-		LiveMetrics: func() observeHandler.LiveMetrics { return observeHandler.LiveMetrics{} },
+		LiveMetrics: func() observe.LiveMetrics { return observe.LiveMetrics{} },
 		Shutdown:    shutdown,
 	}
 }
 
 func mountedObserveTree(subjects observeSubjects, cfg *config.Config) *chi.Mux {
 	r := chi.NewRouter()
-	mountObserve(r, subjects.verifier(), cfg.OverseerPrincipalID, observeHandler.NewObserveHandler(observeTestDeps()))
+	mountObserve(r, subjects.verifier(), cfg.OverseerPrincipalID, observe.NewObserveHandler(observeTestDeps()))
 	return r
 }
 
@@ -227,11 +225,11 @@ func callObserveAs(t *testing.T, srv http.Handler, method, path, token string) (
 	return rec.Code, rec.Body.Bytes()
 }
 
-func mountObserveLiveMetrics(r chi.Router, verifier authports.TokenVerifier, principal shared.UserId, source observeHandler.LiveMetricsSource) {
-	mountObserve(r, verifier, principal.String(), observeHandler.NewObserveHandler(observeHandler.Deps{LiveMetrics: source}))
+func mountObserveLiveMetrics(r chi.Router, verifier auth.TokenVerifier, principal shared.UserId, source observe.LiveMetricsSource) {
+	mountObserve(r, verifier, principal.String(), observe.NewObserveHandler(observe.Deps{LiveMetrics: source}))
 }
 
-func readObservedLiveMetrics(t *testing.T, source observeHandler.LiveMetricsSource) []byte {
+func readObservedLiveMetrics(t *testing.T, source observe.LiveMetricsSource) []byte {
 	t.Helper()
 	subjects := newObserveSubjects()
 	r := chi.NewRouter()
@@ -273,11 +271,11 @@ func readObservedCounterWire(t *testing.T) observedCounterWire {
 func TestObserveLiveMetrics_CarriesAuthCatalogAndPlaybackFailureCounters(t *testing.T) {
 	before := readObservedCounterWire(t)
 
-	authmetrics.NewExpvarAuthMetrics().TokenRejected("signature_invalid")
-	authmetrics.NewExpvarAuthMetrics().VerifierUnavailable()
-	authmetrics.NewExpvarAuthMetrics().JWKSFetchFailed()
-	catalogmetrics.NewExpvarAudioStoreMetrics().PresignFailed()
-	pb := playbackmetrics.NewExpvarPlaybackMetrics()
+	auth.NewExpvarAuthMetrics().TokenRejected("signature_invalid")
+	auth.NewExpvarAuthMetrics().VerifierUnavailable()
+	auth.NewExpvarAuthMetrics().JWKSFetchFailed()
+	catalog.NewExpvarAudioStoreMetrics().PresignFailed()
+	pb := playback.NewExpvarPlaybackMetrics()
 	pb.EnrichmentFailed()
 	pb.CorruptStoredState()
 	pb.QueueStateOpTimedOut()
@@ -358,7 +356,7 @@ func TestObserveLiveMetrics_ReportsEventBusDrops(t *testing.T) {
 }
 
 func TestObserveLiveMetrics_CarriesAlertMonitorHealthWhenBuilt(t *testing.T) {
-	a := &App{alertMonitor: observeAlert.NewMonitor(observeNotifier.NopNotifier{}, time.Second)}
+	a := &App{alertMonitor: observeAlert.NewMonitor(observe.NopNotifier{}, time.Second)}
 	var out map[string]json.RawMessage
 	if err := json.Unmarshal(readObservedLiveMetrics(t, a.liveMetrics), &out); err != nil {
 		t.Fatal(err)
@@ -429,13 +427,13 @@ func TestObserveLiveMetrics_CarriesProviderBreakerAndLatency(t *testing.T) {
 		"https://api.deezer.com/search?q=" + secret:     http.StatusOK,
 		"https://api.spotify.com/v1/search?q=" + secret: http.StatusTooManyRequests,
 	} {
-		resp, err := providermetrics.NewCountingTransport(observedStatusTransport{status}).RoundTrip(httptest.NewRequest(http.MethodGet, url, nil))
+		resp, err := discovery.NewCountingTransport(observedStatusTransport{status}).RoundTrip(httptest.NewRequest(http.MethodGet, url, nil))
 		if err != nil {
 			t.Fatal(err)
 		}
 		_ = resp.Body.Close()
 	}
-	pb := playbackmetrics.NewExpvarPlaybackMetrics()
+	pb := playback.NewExpvarPlaybackMetrics()
 	pb.EnrichmentBreakerOpened()
 	pb.EnrichmentBreakerRejected()
 	defer pb.EnrichmentBreakerClosed()
@@ -466,7 +464,7 @@ func TestObserveLiveMetrics_CarriesProviderBreakerAndLatency(t *testing.T) {
 func TestDependencyHealth_UnconfiguredIsHealthy(t *testing.T) {
 	got := (&App{}).dependencyHealth(context.Background())
 
-	if got.DB != observeHandler.DepNotConfigured || got.Redis != observeHandler.DepNotConfigured || got.Auth != observeHandler.DepNotConfigured {
+	if got.DB != observe.DepNotConfigured || got.Redis != observe.DepNotConfigured || got.Auth != observe.DepNotConfigured {
 		t.Errorf("statuses = %q/%q/%q, want all not_configured", got.DB, got.Redis, got.Auth)
 	}
 	if !got.Healthy() {

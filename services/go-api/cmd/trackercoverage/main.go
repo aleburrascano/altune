@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/discovery/adapters/providers/trackers"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/domain"
 	"context"
 	"flag"
@@ -37,7 +37,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "GOOGLE_SHEETS_API_KEY is not set")
 		os.Exit(2)
 	}
-	client := trackers.NewClient(http.DefaultClient, key, *hub, &memoryIndex{})
+	client := discovery.NewTrackersClient(http.DefaultClient, key, *hub, &memoryIndex{})
 	if err := run(context.Background(), client, os.Stdout, *pause, *limit); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

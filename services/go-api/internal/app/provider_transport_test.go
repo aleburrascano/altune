@@ -1,6 +1,7 @@
 package app
 
 import (
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/egress"
 	"altune/go-api/internal/shared/httptrace"
@@ -17,8 +18,6 @@ import (
 	"sync"
 	"syscall"
 	"testing"
-
-	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
 )
 
 func writeFixture(t *testing.T) string {
@@ -102,7 +101,7 @@ func TestTheDefaultTransportCountsEveryProviderCall(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	before := providermetrics.ReadSnapshot()
+	before := discovery.ReadSnapshot()
 	counting := countedProviderTransport(&http.Transport{DialContext: allowLoopbackThenGuard})
 	resp, err := newClientFactory(counting).discovery().Get(upstream.URL)
 	if err != nil {
@@ -110,7 +109,7 @@ func TestTheDefaultTransportCountsEveryProviderCall(t *testing.T) {
 	}
 	_ = resp.Body.Close()
 
-	counted := totalProviderCounts(providermetrics.ReadSnapshot()) - totalProviderCounts(before)
+	counted := totalProviderCounts(discovery.ReadSnapshot()) - totalProviderCounts(before)
 	if counted != 1 {
 		t.Errorf("provider counters moved by %d over one call on the default transport, want 1", counted)
 	}

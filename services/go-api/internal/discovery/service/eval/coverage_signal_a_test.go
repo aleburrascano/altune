@@ -1,7 +1,7 @@
 package eval
 
 import (
-	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/internal/core/ports"
 	"altune/go-api/internal/discovery/service/vocabulary"
 	"context"
 	"testing"

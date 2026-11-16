@@ -1,9 +1,10 @@
 package handler
 
 import (
+	"altune/go-api/internal/auth"
 	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/discovery/discoverytest"
-	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/internal/core/ports"
 	"altune/go-api/internal/discovery/service/content"
 	"altune/go-api/internal/discovery/service/enrich"
 	"altune/go-api/internal/discovery/service/history"
@@ -24,7 +25,6 @@ import (
 	"time"
 
 	authdomain "altune/go-api/internal/auth/domain"
-	authports "altune/go-api/internal/auth/ports"
 
 	discdomain "altune/go-api/internal/discovery/domain"
 
@@ -37,7 +37,7 @@ var (
 	discTestUserId   = shared.NewUserId(discTestUserUUID)
 )
 
-var discVerifyAsTestUser = authports.VerifierFunc(func(context.Context, string) (authdomain.VerifiedToken, error) {
+var discVerifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (authdomain.VerifiedToken, error) {
 	return authdomain.VerifiedToken{UserID: discTestUserId, ExpiresAt: time.Now().Add(time.Hour)}, nil
 })
 

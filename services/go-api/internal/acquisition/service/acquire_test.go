@@ -1,9 +1,9 @@
 package service
 
 import (
-	"altune/go-api/internal/acquisition/adapters/catalogbridge"
-	"altune/go-api/internal/acquisition/adapters/catalogpin"
 	acqdomain "altune/go-api/internal/acquisition/domain"
+	"altune/go-api/internal/acquisition/internal/adapters/catalogbridge"
+	"altune/go-api/internal/acquisition/internal/adapters/catalogpin"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service/grade"
 	"altune/go-api/internal/acquisition/service/upgrade"

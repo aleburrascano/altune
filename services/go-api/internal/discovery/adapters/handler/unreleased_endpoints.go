@@ -1,9 +1,9 @@
 package handler
 
 import (
-	"altune/go-api/internal/discovery/adapters/authbridge"
 	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/internal/adapters/authbridge"
+	"altune/go-api/internal/discovery/internal/core/ports"
 	"altune/go-api/internal/discovery/service/ownership"
 	"altune/go-api/internal/discovery/service/unreleased"
 	"altune/go-api/internal/shared/httputil"

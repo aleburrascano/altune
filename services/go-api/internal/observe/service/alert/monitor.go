@@ -2,7 +2,7 @@ package alert
 
 import (
 	"altune/go-api/internal/observe/domain"
-	"altune/go-api/internal/observe/ports"
+	"altune/go-api/internal/observe/internal/core/ports"
 	"altune/go-api/internal/shared/runloop"
 	"context"
 	"log/slog"

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/adapters/persistence"
+	"altune/go-api/internal/acquisition"
 	"context"
 	"errors"
 	"flag"
@@ -138,7 +138,7 @@ func run(opts options, env func(string) string, out io.Writer) error {
 	if !opts.apply && !opts.undo {
 		access = pgx.ReadOnly
 	}
-	return dispatch(ctx, opts, store{pool: pool, queue: persistence.NewPgxJobQueue(pool), access: access}, limit, out)
+	return dispatch(ctx, opts, store{pool: pool, queue: acquisition.NewPgxJobQueue(pool), access: access}, limit, out)
 }
 
 func dispatch(ctx context.Context, opts options, s store, limit int, out io.Writer) error {

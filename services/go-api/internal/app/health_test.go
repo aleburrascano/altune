@@ -1,7 +1,7 @@
 package app
 
 import (
-	observeHandler "altune/go-api/internal/observe/adapters/handler"
+	"altune/go-api/internal/observe"
 	"altune/go-api/internal/shared/database"
 	"context"
 	"encoding/json"
@@ -50,7 +50,7 @@ func TestDependencyHealth_HangingDBRespectsTimeout(t *testing.T) {
 		},
 	}
 
-	done := make(chan observeHandler.DependencyHealth, 1)
+	done := make(chan observe.DependencyHealth, 1)
 	go func() { done <- a.dependencyHealth(context.Background()) }()
 
 	select {
@@ -163,9 +163,9 @@ func TestHealthCache_ReprobesOnceClockPassesTTL(t *testing.T) {
 	current := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	cache := &healthCache{now: func() time.Time { return current }}
 	probes := 0
-	probe := func() observeHandler.DependencyHealth {
+	probe := func() observe.DependencyHealth {
 		probes++
-		return observeHandler.DependencyHealth{}
+		return observe.DependencyHealth{}
 	}
 
 	cache.get(probe)

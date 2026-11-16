@@ -1,7 +1,7 @@
 package service
 
 import (
-	"altune/go-api/internal/acquisition/adapters/catalogbridge"
+	"altune/go-api/internal/acquisition/internal/adapters/catalogbridge"
 	"altune/go-api/internal/catalog/domain"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"

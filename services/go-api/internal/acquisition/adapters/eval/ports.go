@@ -1,11 +1,11 @@
 package eval
 
 import (
-	"altune/go-api/internal/acquisition/adapters/catalogpin"
 	"altune/go-api/internal/acquisition/adapters/ytdlp"
 	"altune/go-api/internal/acquisition/adapters/ytmsearch"
 	"altune/go-api/internal/acquisition/adapters/ytmusic"
 	acqdomain "altune/go-api/internal/acquisition/domain"
+	"altune/go-api/internal/acquisition/internal/adapters/catalogpin"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service"
 	"context"

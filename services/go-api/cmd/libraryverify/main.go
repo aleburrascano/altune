@@ -3,7 +3,7 @@ package main
 import (
 	"altune/go-api/internal/acquisition/adapters/chromaprint"
 	"altune/go-api/internal/acquisition/adapters/deezerpreview"
-	"altune/go-api/internal/catalog/adapters/storage"
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/config"
 	"context"
@@ -232,7 +232,7 @@ func verifierFromConfig(cfg *config.Config, tuning settings, previewTuning previ
 	if cfg.AcoustIDAPIKey == "" {
 		return nil, errMissingAcoustIDKey
 	}
-	audioStore, err := storage.FromConfig(cfg, slog.Default())
+	audioStore, err := catalog.FromConfig(cfg, slog.Default())
 	if err != nil {
 		return nil, err
 	}

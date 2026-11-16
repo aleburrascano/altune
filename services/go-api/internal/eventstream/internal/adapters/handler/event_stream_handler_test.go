@@ -1,0 +1,1018 @@
+package handler
+
+import (
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/auth/adapters/middleware"
+	authdomain "altune/go-api/internal/auth/domain"
+	authservice "altune/go-api/internal/auth/service"
+	"altune/go-api/internal/eventstream/service/connlimit"
+	"altune/go-api/internal/shared/events"
+	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/logging"
+	"bufio"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"strconv"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+func newTestSSEServer(t *testing.T, bus *events.InProcessBus, uid shared.UserId, heartbeat time.Duration) *httptest.Server {
+	t.Helper()
+	h := NewEventStreamHandler(bus, 0)
+	h.heartbeat = heartbeat
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r = r.WithContext(authservice.ContextWithUserID(r.Context(), uid))
+		h.ServeHTTP(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func readUntil(t *testing.T, r *bufio.Reader, match func(string) bool) string {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		line, err := r.ReadString('\n')
+		if err != nil {
+			t.Fatalf("reading stream: %v", err)
+		}
+		if match(strings.TrimRight(line, "\n")) {
+			return line
+		}
+	}
+	t.Fatal("timed out waiting for expected line")
+	return ""
+}
+
+func TestSSEHandler_CaughtUpReconnectStreamsLiveEvents(t *testing.T) {
+	bus := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	bus.Publish(context.Background(), uid, "seed", map[string]any{"k": "v"})
+
+	srv := newTestSSEServer(t, bus, uid, 50*time.Millisecond)
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Last-Event-ID", "1")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (must not 204 on caught-up reconnect)", resp.StatusCode)
+	}
+
+	br := bufio.NewReader(resp.Body)
+	readUntil(t, br, func(l string) bool { return strings.HasPrefix(l, ":") })
+
+	bus.Publish(context.Background(), uid, "live", map[string]any{"hello": "world"})
+	readUntil(t, br, func(l string) bool { return l == "event: live" })
+}
+
+func TestSSEHandler_ReplayGapEmitsResync(t *testing.T) {
+	bus := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	bus.Publish(context.Background(), uid, "seed", map[string]any{"k": "v"})
+
+	srv := newTestSSEServer(t, bus, uid, 50*time.Millisecond)
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Last-Event-ID", "1")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	br := bufio.NewReader(resp.Body)
+	readUntil(t, br, func(l string) bool { return l == "event: resync" })
+}
+
+func TestSSEHandler_MarshalFailureEmitsResync(t *testing.T) {
+	bus := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+
+	srv := newTestSSEServer(t, bus, uid, 50*time.Millisecond)
+
+	resp, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	br := bufio.NewReader(resp.Body)
+	readUntil(t, br, func(l string) bool { return strings.HasPrefix(l, ":") })
+
+	bus.Publish(context.Background(), uid, "unmarshalable", map[string]any{"bad": make(chan int)})
+	readUntil(t, br, func(l string) bool { return l == "event: resync" })
+}
+
+func TestSSEHandler_MalformedLastEventIDEmitsResync(t *testing.T) {
+	bus := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	bus.Publish(context.Background(), uid, "seed", map[string]any{"k": "v"})
+
+	srv := newTestSSEServer(t, bus, uid, 50*time.Millisecond)
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Last-Event-ID", "not-a-number")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	br := bufio.NewReader(resp.Body)
+	readUntil(t, br, func(l string) bool { return l == "event: resync" })
+}
+
+func TestSSEHandler_OutOfRangeLastEventIDResyncsAndStreamsLive(t *testing.T) {
+	bus := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	issued, err := strconv.ParseUint(lastEventIDFor(t, bus, uid), 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := newTestSSEServer(t, bus, uid, 50*time.Millisecond)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Last-Event-ID", strconv.FormatUint(issued+1_000_000, 10))
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	br := bufio.NewReader(resp.Body)
+	readUntil(t, br, func(l string) bool { return l == "event: resync" })
+	readUntil(t, br, func(l string) bool { return l == ":ok" })
+
+	bus.Publish(context.Background(), uid, "live", map[string]any{"hello": "world"})
+	readUntil(t, br, func(l string) bool { return l == "event: live" })
+}
+
+func TestSSEHandler_LastEventIDAtHighWaterMarkIsCaughtUp(t *testing.T) {
+	bus := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	lastID := lastEventIDFor(t, bus, uid)
+
+	srv := newTestSSEServer(t, bus, uid, time.Hour)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Last-Event-ID", lastID)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	br := bufio.NewReader(resp.Body)
+	first := readUntil(t, br, func(l string) bool { return l != "" })
+	if strings.TrimRight(first, "\n") != ":ok" {
+		t.Fatalf("first frame line = %q, want :ok (no resync for a caught-up resume)", first)
+	}
+}
+
+func waitForLog(t *testing.T, ring *logging.RingBuffer, msg string) logging.CapturedRecord {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		for _, r := range ring.Snapshot() {
+			if r.Message == msg {
+				return r
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %q log line", msg)
+	return logging.CapturedRecord{}
+}
+
+func TestSSEHandler_ConnectDisconnectLogsCarryCorrelationID(t *testing.T) {
+	prev := slog.Default()
+	defer slog.SetDefault(prev)
+	ring := logging.Setup("debug", false)
+
+	const corrID = "corr-sse-1234"
+	bus := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	h := NewEventStreamHandler(bus, 0)
+	h.heartbeat = 50 * time.Millisecond
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := logging.WithCorrelationID(authservice.ContextWithUserID(r.Context(), uid), corrID)
+		h.ServeHTTP(w, r.WithContext(ctx))
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+
+	br := bufio.NewReader(resp.Body)
+	readUntil(t, br, func(l string) bool { return strings.HasPrefix(l, ":") })
+
+	cancel()
+	resp.Body.Close()
+
+	if got := waitForLog(t, ring, "sse.connected").Attrs["corr_id"]; got != corrID {
+		t.Errorf("sse.connected corr_id = %q, want %q", got, corrID)
+	}
+	if got := waitForLog(t, ring, "sse.disconnected").Attrs["corr_id"]; got != corrID {
+		t.Errorf("sse.disconnected corr_id = %q, want %q", got, corrID)
+	}
+}
+
+func TestReplayGapped(t *testing.T) {
+	tests := []struct {
+		name     string
+		replayed []events.Event
+		afterID  uint64
+		want     bool
+	}{
+		{name: "empty replay is not a gap", replayed: nil, afterID: 5, want: false},
+		{name: "contiguous tail is not a gap", replayed: []events.Event{{ID: 6}}, afterID: 5, want: false},
+		{name: "skipped tail is a gap", replayed: []events.Event{{ID: 9}}, afterID: 5, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := replayGapped(tt.replayed, tt.afterID); got != tt.want {
+				t.Errorf("replayGapped(%v, %d) = %v, want %v", tt.replayed, tt.afterID, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSSEStreamGapped(t *testing.T) {
+	tests := []struct {
+		name               string
+		deliveredThroughID uint64
+		nextID             uint64
+		want               bool
+	}{
+		{name: "nothing delivered yet is not a gap", deliveredThroughID: 0, nextID: 900, want: false},
+		{name: "consecutive id is not a gap", deliveredThroughID: 5, nextID: 6, want: false},
+		{name: "one skipped id is a gap", deliveredThroughID: 5, nextID: 7, want: true},
+		{name: "a whole dropped burst is a gap", deliveredThroughID: 5, nextID: 25, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := streamGapped(tt.deliveredThroughID, tt.nextID); got != tt.want {
+				t.Errorf("streamGapped(%d, %d) = %v, want %v", tt.deliveredThroughID, tt.nextID, got, tt.want)
+			}
+		})
+	}
+}
+
+type busWithGapPublish struct {
+	*events.InProcessBus
+	uid  shared.UserId
+	once sync.Once
+}
+
+func (b *busWithGapPublish) Replay(userId shared.UserId, afterID uint64) []events.Event {
+	snapshot := b.InProcessBus.Replay(userId, afterID)
+	b.once.Do(func() {
+		b.Publish(context.Background(), b.uid, "gap", map[string]any{"in": "window"})
+	})
+	return snapshot
+}
+
+type busWithDupPublish struct {
+	*events.InProcessBus
+	uid  shared.UserId
+	once sync.Once
+}
+
+func (b *busWithDupPublish) Subscribe(userId shared.UserId) (<-chan events.Event, func()) {
+	ch, cancel := b.InProcessBus.Subscribe(userId)
+	b.once.Do(func() {
+		b.Publish(context.Background(), b.uid, "dup", map[string]any{"seen": "once"})
+	})
+	return ch, cancel
+}
+
+type busWithOverflowingSubscriber struct {
+	*events.InProcessBus
+	uid   shared.UserId
+	burst int
+	once  sync.Once
+}
+
+func (b *busWithOverflowingSubscriber) Subscribe(userId shared.UserId) (<-chan events.Event, func()) {
+	ch, cancel := b.InProcessBus.Subscribe(userId)
+	b.once.Do(func() {
+		for i := 0; i < b.burst; i++ {
+			b.Publish(context.Background(), b.uid, events.EventType(fmt.Sprintf("burst-%d", i)), map[string]any{"i": i})
+		}
+	})
+	return ch, cancel
+}
+
+const burstBufferedByBus = 16
+
+func TestSSEHandler_DroppedLiveEventsEmitResyncBeforeNextEvent(t *testing.T) {
+	real := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+
+	overflowing := &busWithOverflowingSubscriber{InProcessBus: real, uid: uid, burst: burstBufferedByBus + 4}
+	h := NewEventStreamHandler(overflowing, 0)
+	h.heartbeat = time.Hour
+	srv := serveSSE(t, h, uid)
+
+	resp, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	br := bufio.NewReader(resp.Body)
+	lastBuffered := fmt.Sprintf("event: burst-%d", burstBufferedByBus-1)
+	readUntil(t, br, func(l string) bool { return l == lastBuffered })
+
+	real.Publish(context.Background(), uid, "after", map[string]any{"k": "v"})
+
+	got := readUntil(t, br, func(l string) bool { return l == "event: resync" || l == "event: after" })
+	if strings.TrimRight(got, "\n") != "event: resync" {
+		t.Fatalf("first event frame after the dropped burst = %q, want event: resync", got)
+	}
+}
+
+func lastEventIDFor(t *testing.T, bus *events.InProcessBus, uid shared.UserId) string {
+	t.Helper()
+	ch, cancel := bus.Subscribe(uid)
+	defer cancel()
+	bus.Publish(context.Background(), uid, "seed", map[string]any{"k": "v"})
+	return strconv.FormatUint((<-ch).ID, 10)
+}
+
+func serveSSE(t *testing.T, h *EventStreamHandler, uid shared.UserId) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r = r.WithContext(authservice.ContextWithUserID(r.Context(), uid))
+		h.ServeHTTP(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestSSEHandler_EventInReplaySubscribeGapIsDelivered(t *testing.T) {
+	real := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	lastID := lastEventIDFor(t, real, uid)
+
+	h := NewEventStreamHandler(&busWithGapPublish{InProcessBus: real, uid: uid}, 0)
+	h.heartbeat = 50 * time.Millisecond
+	srv := serveSSE(t, h, uid)
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Last-Event-ID", lastID)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	br := bufio.NewReader(resp.Body)
+	readUntil(t, br, func(l string) bool { return l == "event: gap" })
+}
+
+func TestSSEHandler_ReplayLiveOverlapDedupesByID(t *testing.T) {
+	real := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	lastID := lastEventIDFor(t, real, uid)
+
+	h := NewEventStreamHandler(&busWithDupPublish{InProcessBus: real, uid: uid}, 0)
+	h.heartbeat = 50 * time.Millisecond
+	srv := serveSSE(t, h, uid)
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Last-Event-ID", lastID)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	real.Publish(context.Background(), uid, "after", map[string]any{"k": "v"})
+
+	br := bufio.NewReader(resp.Body)
+	dupCount := 0
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		line, err := br.ReadString('\n')
+		if err != nil {
+			t.Fatalf("reading stream: %v", err)
+		}
+		switch strings.TrimRight(line, "\n") {
+		case "event: dup":
+			dupCount++
+		case "event: after":
+			if dupCount != 1 {
+				t.Fatalf("overlapping event delivered %d times, want exactly 1", dupCount)
+			}
+			return
+		}
+	}
+	t.Fatal("timed out waiting for sentinel event")
+}
+
+func TestSSEHandler_EmitsHeartbeat(t *testing.T) {
+	bus := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+
+	srv := newTestSSEServer(t, bus, uid, 30*time.Millisecond)
+
+	resp, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	br := bufio.NewReader(resp.Body)
+	readUntil(t, br, func(l string) bool { return strings.HasPrefix(l, ":") })
+	readUntil(t, br, func(l string) bool { return strings.HasPrefix(l, ":") })
+}
+
+type blockingFlushWriter struct {
+	header http.Header
+	mu     sync.Mutex
+	dl     time.Time
+	stop   chan struct{}
+}
+
+func newBlockingFlushWriter() *blockingFlushWriter {
+	return &blockingFlushWriter{header: make(http.Header), stop: make(chan struct{})}
+}
+
+func (w *blockingFlushWriter) close() { close(w.stop) }
+
+func (w *blockingFlushWriter) Header() http.Header         { return w.header }
+func (w *blockingFlushWriter) WriteHeader(int)             {}
+func (w *blockingFlushWriter) Write(p []byte) (int, error) { return len(p), nil }
+func (w *blockingFlushWriter) Flush()                      {}
+
+func (w *blockingFlushWriter) SetWriteDeadline(t time.Time) error {
+	w.mu.Lock()
+	w.dl = t
+	w.mu.Unlock()
+	return nil
+}
+
+func (w *blockingFlushWriter) FlushError() error {
+	w.mu.Lock()
+	dl := w.dl
+	w.mu.Unlock()
+
+	if dl.IsZero() {
+		select {
+		case <-w.stop:
+			return errors.New("stream closed")
+		case <-time.After(10 * time.Second):
+			return errors.New("flush blocked with no deadline")
+		}
+	}
+	if d := time.Until(dl); d > 0 {
+		timer := time.NewTimer(d)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+		case <-w.stop:
+			return errors.New("stream closed")
+		}
+	}
+	return os.ErrDeadlineExceeded
+}
+
+func TestSSEHandler_WriteDeadlineUnblocksStalledClient(t *testing.T) {
+	bus := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	h := NewEventStreamHandler(bus, 0)
+	h.writeTimeout = 150 * time.Millisecond
+
+	w := newBlockingFlushWriter()
+	defer w.close()
+	r := httptest.NewRequest(http.MethodGet, "/v1/events", nil)
+	r = r.WithContext(authservice.ContextWithUserID(r.Context(), uid))
+
+	done := make(chan struct{})
+	go func() {
+		h.ServeHTTP(w, r)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not return: stalled client blocked the goroutine past the write deadline")
+	}
+}
+
+func TestSSEHandler_ContextCancelStopsStream(t *testing.T) {
+	bus := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	h := NewEventStreamHandler(bus, 0)
+	h.heartbeat = time.Hour
+
+	ctx, cancel := context.WithCancel(authservice.ContextWithUserID(context.Background(), uid))
+	r := httptest.NewRequest(http.MethodGet, "/v1/events", nil).WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	done := make(chan struct{})
+	go func() {
+		h.ServeHTTP(w, r)
+		close(done)
+	}()
+
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not return after context cancel: shutdown would block")
+	}
+}
+
+func TestSSEHandler_DefaultPerUserCapRejectsNinthStreamWithPlainText(t *testing.T) {
+	uid := shared.NewUserId(uuid.New())
+	h := NewEventStreamHandler(events.NewInProcessBus(), 0)
+	h.heartbeat = time.Hour
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.ServeHTTP(w, r.WithContext(authservice.ContextWithUserID(r.Context(), uid)))
+	}))
+	defer srv.Close()
+
+	for i := 0; i < 8; i++ {
+		resp, err := http.Get(srv.URL)
+		if err != nil {
+			t.Fatalf("open stream %d: %v", i+1, err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("stream %d status = %d, want 200", i+1, resp.StatusCode)
+		}
+	}
+
+	resp, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("ninth stream: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("ninth status = %d, want 429", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Content-Type"); got != "text/plain; charset=utf-8" {
+		t.Fatalf("content type = %q", got)
+	}
+	if string(body) != "too many event streams\n" {
+		t.Fatalf("body = %q", body)
+	}
+}
+
+func TestSSEHandler_PerUserConnectionCapRejectsOverflow(t *testing.T) {
+	bus := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	h := NewEventStreamHandler(bus, 0)
+	h.limiter = connlimit.New(2, 0)
+	h.heartbeat = time.Hour
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r = r.WithContext(authservice.ContextWithUserID(r.Context(), uid))
+		h.ServeHTTP(w, r)
+	}))
+	defer srv.Close()
+
+	for i := 0; i < 2; i++ {
+		resp, err := http.Get(srv.URL)
+		if err != nil {
+			t.Fatalf("open stream %d: %v", i, err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("stream %d status = %d, want 200", i, resp.StatusCode)
+		}
+	}
+
+	resp, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("overflow stream: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("overflow status = %d, want 429", resp.StatusCode)
+	}
+}
+
+func TestSSEHandler_GlobalConnectionCapRejectsOverflowAcrossUsers(t *testing.T) {
+	const globalCap = 3
+	bus := events.NewInProcessBus()
+	h := NewEventStreamHandler(bus, globalCap)
+	h.heartbeat = time.Hour
+	srv := newMultiUserSSEServer(t, h)
+
+	users := make([]shared.UserId, globalCap)
+	bodies := make([]io.Closer, globalCap)
+	readers := make([]*bufio.Reader, globalCap)
+	for i := range users {
+		users[i] = shared.NewUserId(uuid.New())
+		status, body := openUserStream(t, srv.URL, users[i])
+		if status != http.StatusOK {
+			t.Fatalf("user %d status = %d, want 200 (under the global cap)", i, status)
+		}
+		bodies[i] = body
+		readers[i] = bufio.NewReader(body)
+		readUntil(t, readers[i], func(l string) bool { return l == ":ok" })
+	}
+
+	status, overflow := openUserStream(t, srv.URL, shared.NewUserId(uuid.New()))
+	if status != http.StatusTooManyRequests {
+		t.Fatalf("overflow status = %d, want 429 past the global cap", status)
+	}
+	msg, _ := io.ReadAll(overflow)
+	if got := strings.TrimSpace(string(msg)); got != "too many event streams" {
+		t.Fatalf("overflow body = %q, want the per-user rejection message", got)
+	}
+
+	assertStreamsStillLive(t, bus, users, readers)
+
+	bodies[0].Close()
+	waitForSlotRelease(t, srv.URL)
+}
+
+func newMultiUserSSEServer(t *testing.T, h *EventStreamHandler) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		uid, err := uuid.Parse(r.Header.Get("X-Test-User"))
+		if err != nil {
+			http.Error(w, "bad test user", http.StatusBadRequest)
+			return
+		}
+		r = r.WithContext(authservice.ContextWithUserID(r.Context(), shared.NewUserId(uid)))
+		h.ServeHTTP(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func openUserStream(t *testing.T, url string, uid shared.UserId) (int, io.ReadCloser) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("X-Test-User", uid.String())
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil || resp == nil {
+		t.Fatalf("open stream for %s: %v", uid, err)
+		return 0, http.NoBody
+	}
+	t.Cleanup(func() { resp.Body.Close() })
+	return resp.StatusCode, resp.Body
+}
+
+func assertStreamsStillLive(t *testing.T, bus *events.InProcessBus, users []shared.UserId, readers []*bufio.Reader) {
+	t.Helper()
+	for i, uid := range users {
+		bus.Publish(context.Background(), uid, "still_live", map[string]any{"i": i})
+		readUntil(t, readers[i], func(l string) bool { return l == "event: still_live" })
+	}
+}
+
+func waitForSlotRelease(t *testing.T, url string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		status, body := openUserStream(t, url, shared.NewUserId(uuid.New()))
+		if status == http.StatusOK {
+			return
+		}
+		body.Close()
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("closing an open stream never freed a global slot")
+}
+
+func serveSSEWithTokenExpiry(t *testing.T, h *EventStreamHandler, uid shared.UserId, expiresAt time.Time) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := authservice.ContextWithTokenExpiry(authservice.ContextWithUserID(r.Context(), uid), expiresAt)
+		h.ServeHTTP(w, r.WithContext(ctx))
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func readToEOF(t *testing.T, body io.Reader, within time.Duration) error {
+	t.Helper()
+	drained := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(io.Discard, body)
+		drained <- err
+	}()
+	select {
+	case err := <-drained:
+		return err
+	case <-time.After(within):
+		return errors.New("stream still open")
+	}
+}
+
+func TestSSEHandler_StreamEndsAtTokenExpiry(t *testing.T) {
+	bus := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	h := NewEventStreamHandler(bus, 0)
+	h.heartbeat = 20 * time.Millisecond
+	srv := serveSSEWithTokenExpiry(t, h, uid, time.Now().Add(300*time.Millisecond))
+
+	resp, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	br := bufio.NewReader(resp.Body)
+	readUntil(t, br, func(l string) bool { return strings.HasPrefix(l, ":ok") })
+
+	if err := readToEOF(t, br, 2*time.Second); err != nil {
+		t.Fatalf("stream outlived the token that authenticated it: %v", err)
+	}
+}
+
+func TestSSEHandler_StreamEndingAtTokenExpiryFreesUserSlot(t *testing.T) {
+	bus := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	h := NewEventStreamHandler(bus, 0)
+	h.limiter = connlimit.New(1, 0)
+	srv := serveSSEWithTokenExpiry(t, h, uid, time.Now().Add(200*time.Millisecond))
+
+	first, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer first.Body.Close()
+	if err := readToEOF(t, first.Body, 2*time.Second); err != nil {
+		t.Fatalf("first stream: %v", err)
+	}
+
+	second, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer second.Body.Close()
+	if second.StatusCode != http.StatusOK {
+		t.Fatalf("reconnect status = %d, want 200: the expired stream kept its slot", second.StatusCode)
+	}
+}
+
+func TestSSEHandler_TokenWithoutExpiryOpensNoStream(t *testing.T) {
+	bus := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	verifier := auth.VerifierFunc(func(context.Context, string) (authdomain.VerifiedToken, error) {
+		return authdomain.VerifiedToken{UserID: uid}, nil
+	})
+	srv := httptest.NewServer(middleware.Middleware(verifier)(NewEventStreamHandler(bus, 0)))
+	t.Cleanup(srv.Close)
+
+	req, err := http.NewRequest(http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer token")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401: a token with no expiry opened an unbounded stream", resp.StatusCode)
+	}
+}
+
+func TestShutdown_SSEStreamEndsOnShutdownSignal(t *testing.T) {
+	uid := shared.NewUserId(uuid.New())
+	done := make(chan struct{})
+	h := NewEventStreamHandler(events.NewInProcessBus(), 0).WithShutdown(done)
+	h.heartbeat = time.Hour
+	r := httptest.NewRequest(http.MethodGet, "/v1/events", nil).
+		WithContext(authservice.ContextWithUserID(context.Background(), uid))
+
+	returned := make(chan struct{})
+	go func() {
+		h.ServeHTTP(httptest.NewRecorder(), r)
+		close(returned)
+	}()
+	time.Sleep(20 * time.Millisecond)
+	close(done)
+
+	select {
+	case <-returned:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stream did not end on shutdown signal")
+	}
+}
+
+func TestSSEHandler_DroppedTailEventResyncsAtNextHeartbeat(t *testing.T) {
+	real := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+
+	overflowing := &busWithOverflowingSubscriber{InProcessBus: real, uid: uid, burst: burstBufferedByBus + 4}
+	h := NewEventStreamHandler(overflowing, 0)
+	h.heartbeat = 50 * time.Millisecond
+	srv := serveSSE(t, h, uid)
+
+	resp, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	br := bufio.NewReader(resp.Body)
+	readUntil(t, br, func(l string) bool { return l == "event: resync" })
+}
+
+func TestSSEHandler_CaughtUpClientGetsNoResyncAtHeartbeat(t *testing.T) {
+	real := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	srv := newTestSSEServer(t, real, uid, 20*time.Millisecond)
+
+	resp, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	br := bufio.NewReader(resp.Body)
+	readUntil(t, br, func(l string) bool { return l == ":ok" })
+	real.Publish(context.Background(), uid, "one", map[string]any{"k": "v"})
+	readUntil(t, br, func(l string) bool { return l == "event: one" })
+
+	pings := 0
+	for pings < 3 {
+		line := readUntil(t, br, func(l string) bool { return l == ":ping" || l == "event: resync" })
+		if strings.TrimRight(line, "\n") == "event: resync" {
+			t.Fatal("caught-up client received resync")
+		}
+		pings++
+	}
+}
+
+func TestSSEHandler_FreshConnectWithHistoryGetsNoResyncAtHeartbeat(t *testing.T) {
+	real := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	for i := 0; i < 5; i++ {
+		real.Publish(context.Background(), uid, "old", map[string]any{"i": i})
+	}
+	srv := newTestSSEServer(t, real, uid, 20*time.Millisecond)
+
+	resp, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	br := bufio.NewReader(resp.Body)
+	readUntil(t, br, func(l string) bool { return l == ":ok" })
+
+	pings := 0
+	for pings < 3 {
+		line := readUntil(t, br, func(l string) bool { return l == ":ping" || l == "event: resync" })
+		if strings.TrimRight(line, "\n") == "event: resync" {
+			t.Fatal("fresh connect with prior history received resync")
+		}
+		pings++
+	}
+}
+
+func TestSSEHandler_RequestWithoutUserIsRejected(t *testing.T) {
+	h := NewEventStreamHandler(events.NewInProcessBus(), 0)
+	rec := httptest.NewRecorder()
+
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/events", nil))
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+	if got := rec.Header().Get("Content-Type"); got == "text/event-stream" {
+		t.Fatal("unauthenticated request received an event-stream response")
+	}
+}
+
+type nonFlushingWriter struct {
+	header http.Header
+	status int
+}
+
+func (w *nonFlushingWriter) Header() http.Header         { return w.header }
+func (w *nonFlushingWriter) Write(b []byte) (int, error) { return len(b), nil }
+func (w *nonFlushingWriter) WriteHeader(status int)      { w.status = status }
+
+func TestSSEHandler_WriterWithoutFlushIsRejected(t *testing.T) {
+	h := NewEventStreamHandler(events.NewInProcessBus(), 0)
+	w := &nonFlushingWriter{header: http.Header{}}
+	uid := shared.NewUserId(uuid.New())
+	r := httptest.NewRequest(http.MethodGet, "/v1/events", nil)
+	r = r.WithContext(authservice.ContextWithUserID(r.Context(), uid))
+
+	h.ServeHTTP(w, r)
+
+	if w.status != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", w.status)
+	}
+	if err := h.limiter.Acquire(uid.String()); err != nil {
+		t.Fatalf("rejected request held a connection slot: %v", err)
+	}
+}
+
+func TestSSEHandler_WriterWithoutFlushGetsPlainTextBody(t *testing.T) {
+	h := NewEventStreamHandler(events.NewInProcessBus(), 0)
+	uid := shared.NewUserId(uuid.New())
+	r := httptest.NewRequest(http.MethodGet, "/v1/events", nil)
+	r = r.WithContext(authservice.ContextWithUserID(r.Context(), uid))
+	rec := httptest.NewRecorder()
+	w := &bodyCapturingWriter{rec: rec}
+
+	h.ServeHTTP(w, r)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", rec.Code)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "text/plain; charset=utf-8" {
+		t.Fatalf("content type = %q", got)
+	}
+	if got := rec.Body.String(); got != "streaming not supported\n" {
+		t.Fatalf("body = %q", got)
+	}
+}
+
+type bodyCapturingWriter struct{ rec *httptest.ResponseRecorder }
+
+func (w *bodyCapturingWriter) Header() http.Header         { return w.rec.Header() }
+func (w *bodyCapturingWriter) Write(b []byte) (int, error) { return w.rec.Write(b) }
+func (w *bodyCapturingWriter) WriteHeader(status int)      { w.rec.WriteHeader(status) }
+
+func TestSSEHandler_ResumeAfterUserStateLostResyncsWithNothingPublished(t *testing.T) {
+	bus := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	lastID := lastEventIDFor(t, bus, uid)
+	restarted := events.NewInProcessBus()
+
+	srv := newTestSSEServer(t, restarted, uid, time.Hour)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Last-Event-ID", lastID)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	readUntil(t, bufio.NewReader(resp.Body), func(l string) bool { return l == "event: resync" })
+}

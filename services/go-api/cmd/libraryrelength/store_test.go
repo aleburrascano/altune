@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/adapters/persistence"
+	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/acquisition/ports"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
@@ -29,7 +29,7 @@ func testStore(t *testing.T) store {
 		t.Fatalf("connect: %v", err)
 	}
 	t.Cleanup(pool.Close)
-	return store{pool: pool, queue: persistence.NewPgxJobQueue(pool)}
+	return store{pool: pool, queue: acquisition.NewPgxJobQueue(pool)}
 }
 
 type seeded struct {

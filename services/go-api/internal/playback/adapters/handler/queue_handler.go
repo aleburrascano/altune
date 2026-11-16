@@ -1,9 +1,9 @@
 package handler
 
 import (
-	"altune/go-api/internal/playback/adapters/authbridge"
 	"altune/go-api/internal/playback/domain"
-	"altune/go-api/internal/playback/ports"
+	"altune/go-api/internal/playback/internal/adapters/authbridge"
+	"altune/go-api/internal/playback/internal/core/ports"
 	"altune/go-api/internal/playback/service/queue"
 	"altune/go-api/internal/shared/httputil"
 	"context"

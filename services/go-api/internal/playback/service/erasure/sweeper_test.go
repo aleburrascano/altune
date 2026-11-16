@@ -1,8 +1,8 @@
 package erasure
 
 import (
-	"altune/go-api/internal/playback/playbacktest"
-	"altune/go-api/internal/playback/ports"
+	"altune/go-api/internal/playback/internal/adapters/playbacktest"
+	"altune/go-api/internal/playback/internal/core/ports"
 	"altune/go-api/internal/playback/service/queue"
 	shared "altune/go-api/internal/shared/kernel"
 	"bytes"

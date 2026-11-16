@@ -2,7 +2,7 @@ package smokeeval
 
 import (
 	domain "altune/go-api/internal/discovery/domain"
-	discoveryPorts "altune/go-api/internal/discovery/ports"
+	discoveryPorts "altune/go-api/internal/discovery/internal/core/ports"
 	"altune/go-api/internal/discovery/service/providercall"
 	"altune/go-api/internal/discovery/service/search"
 	shared "altune/go-api/internal/shared/kernel"

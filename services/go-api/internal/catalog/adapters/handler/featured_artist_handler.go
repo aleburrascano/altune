@@ -1,8 +1,8 @@
 package handler
 
 import (
-	"altune/go-api/internal/catalog/adapters/authbridge"
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/internal/adapters/authbridge"
 	featuredservice "altune/go-api/internal/catalog/service/featured"
 	"altune/go-api/internal/shared/httputil"
 	"log/slog"

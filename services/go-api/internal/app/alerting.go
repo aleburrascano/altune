@@ -1,21 +1,18 @@
 package app
 
 import (
+	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/observe"
 	"altune/go-api/internal/shared/runloop"
 	"context"
 	"fmt"
 	"log/slog"
 	"time"
 
-	observeHandler "altune/go-api/internal/observe/adapters/handler"
-	observeNotifier "altune/go-api/internal/observe/adapters/notifier"
 	observeDomain "altune/go-api/internal/observe/domain"
-	observePorts "altune/go-api/internal/observe/ports"
 	observeAlert "altune/go-api/internal/observe/service/alert"
 
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
-
-	discoveryPorts "altune/go-api/internal/discovery/ports"
 )
 
 func (a *App) startAlertMonitor(ctx context.Context) {
@@ -36,15 +33,15 @@ func (a *App) startAlertMonitor(ctx context.Context) {
 	a.whenLeaderUnlessDisabled(jobAlertMonitor, a.alertMonitor.Start)
 }
 
-func (a *App) alertNotifier(ctx context.Context) observePorts.AlertNotifier {
+func (a *App) alertNotifier(ctx context.Context) observe.AlertNotifier {
 	if a.cfg.AlertWebhookURL == "" {
 		slog.WarnContext(ctx, "alerts are log-only: ALERT_WEBHOOK_URL is not set")
-		return observeNotifier.NopNotifier{}
+		return observe.NopNotifier{}
 	}
-	return observeNotifier.NewWebhookNotifier(a.cfg.AlertWebhookURL)
+	return observe.NewWebhookNotifier(a.cfg.AlertWebhookURL)
 }
 
-func buildDependencyCondition(health func(context.Context) observeHandler.DependencyHealth) observeDomain.Condition {
+func buildDependencyCondition(health func(context.Context) observe.DependencyHealth) observeDomain.Condition {
 	return observeDomain.Condition{
 		Key: "dependency_down",
 		Eval: func(ctx context.Context) *observeDomain.Alert {
@@ -61,7 +58,7 @@ func buildDependencyCondition(health func(context.Context) observeHandler.Depend
 	}
 }
 
-func dependencyDownMessage(h observeHandler.DependencyHealth) string {
+func dependencyDownMessage(h observe.DependencyHealth) string {
 	msg := "dependencies down:"
 	for _, name := range downDependencies(h) {
 		msg += " " + name
@@ -69,13 +66,13 @@ func dependencyDownMessage(h observeHandler.DependencyHealth) string {
 	return msg
 }
 
-func downDependencies(h observeHandler.DependencyHealth) []string {
+func downDependencies(h observe.DependencyHealth) []string {
 	var names []string
 	for _, dep := range []struct {
 		name   string
-		status observeHandler.DepStatus
+		status observe.DepStatus
 	}{{"db", h.DB}, {"redis", h.Redis}, {"auth", h.Auth}} {
-		if dep.status == observeHandler.DepDown {
+		if dep.status == observe.DepDown {
 			names = append(names, dep.name)
 		}
 	}
@@ -84,7 +81,7 @@ func downDependencies(h observeHandler.DependencyHealth) []string {
 
 type coverageEvents interface {
 	ZeroResultTotal(ctx context.Context, since time.Time) (int, error)
-	ZeroResultQueries(ctx context.Context, since time.Time, limit int) ([]discoveryPorts.QueryCount, error)
+	ZeroResultQueries(ctx context.Context, since time.Time, limit int) ([]discovery.QueryCount, error)
 }
 
 const coverageQueryFailureEscalation = 3

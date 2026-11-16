@@ -1,14 +1,7 @@
 package app
 
 import (
-	"altune/go-api/internal/discovery/adapters/providers/amazonmusic"
-	"altune/go-api/internal/discovery/adapters/providers/applemusic"
-	"altune/go-api/internal/discovery/adapters/providers/deezer"
-	"altune/go-api/internal/discovery/adapters/providers/lastfm"
-	"altune/go-api/internal/discovery/adapters/providers/musicbrainz"
-	"altune/go-api/internal/discovery/adapters/providers/soundcloud"
-	"altune/go-api/internal/discovery/adapters/providers/spotify"
-	"altune/go-api/internal/discovery/adapters/providers/ytmusic"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/service/identity"
 	"altune/go-api/internal/discovery/service/providercall"
 	"altune/go-api/internal/discovery/service/rank"
@@ -21,11 +14,9 @@ import (
 	"slices"
 	"time"
 
-	discoveryCacheAdapters "altune/go-api/internal/discovery/adapters/cache"
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 
 	domain "altune/go-api/internal/discovery/domain"
-	discoveryPorts "altune/go-api/internal/discovery/ports"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
@@ -36,7 +27,7 @@ func BuildSearchService(
 	cfg *config.Config,
 	pool *pgxpool.Pool,
 	redisClient *goredis.Client,
-	eventStore discoveryPorts.EventStore,
+	eventStore discovery.EventStore,
 ) *search.Service {
 	return BuildSearchServiceWithTransport(ctx, cfg, pool, redisClient, eventStore, nil, nil)
 }
@@ -46,9 +37,9 @@ func BuildSearchServiceWithTransport(
 	cfg *config.Config,
 	pool *pgxpool.Pool,
 	redisClient *goredis.Client,
-	eventStore discoveryPorts.EventStore,
+	eventStore discovery.EventStore,
 	transport http.RoundTripper,
-	vocabStore discoveryPorts.VocabularyStore,
+	vocabStore discovery.VocabularyStore,
 	extra ...search.Option,
 ) *search.Service {
 	w := newSearchWiring(ctx, cfg, transport)
@@ -69,8 +60,8 @@ func BuildRankingOnlySearchService(
 
 type searchWiring struct {
 	cf        clientFactory
-	sharedMB  *musicbrainz.MusicBrainzAdapter
-	providers []discoveryPorts.SearchProvider
+	sharedMB  *discovery.MusicBrainzAdapter
+	providers []discovery.SearchProvider
 	breaker   *providercall.CircuitBreaker
 }
 
@@ -94,8 +85,8 @@ func contentServiceOptions(
 	cfg *config.Config,
 	pool *pgxpool.Pool,
 	redisClient *goredis.Client,
-	eventStore discoveryPorts.EventStore,
-	vocabStore discoveryPorts.VocabularyStore,
+	eventStore discovery.EventStore,
+	vocabStore discovery.VocabularyStore,
 ) []search.Option {
 	opts := baseSearchOptions(cfg, pool)
 	opts = append(opts, explorationSearchOptions(cfg)...)
@@ -119,8 +110,8 @@ func sharedSearchOptions(
 	w searchWiring,
 	cfg *config.Config,
 	redisClient *goredis.Client,
-	eventStore discoveryPorts.EventStore,
-	vocabStore discoveryPorts.VocabularyStore,
+	eventStore discovery.EventStore,
+	vocabStore discovery.VocabularyStore,
 ) []search.Option {
 	opts := cacheSearchOptions(redisClient)
 	opts = append(opts, vocabularySearchOptions(redisClient, vocabStore)...)
@@ -153,10 +144,10 @@ func contentSearchOptions(
 	cfg *config.Config,
 	pool *pgxpool.Pool,
 	redisClient *goredis.Client,
-	sharedMB *musicbrainz.MusicBrainzAdapter,
+	sharedMB *discovery.MusicBrainzAdapter,
 	breaker *providercall.CircuitBreaker,
 ) []search.Option {
-	deezerContent := deezer.NewDeezerAdapter(cf.discovery())
+	deezerContent := discovery.NewDeezerAdapter(cf.discovery())
 	relationshipQuerier := discoveryPersistence.NewPgxRelationshipQuerier(pool)
 	findRelatedSvc := related.NewFindRelatedService(
 		relationshipQuerier, deezerContent, deezerContent,
@@ -170,7 +161,7 @@ func contentSearchOptions(
 		opts = append(opts, search.WithFavorites(
 			discoveryPersistence.NewPgxFavoritesRepository(pool),
 		))
-		identityStore := discoveryCacheAdapters.NewRedisIdentityStore(
+		identityStore := discovery.NewRedisIdentityStore(
 			discoveryPersistence.NewPgxIdentityStore(pool),
 			redisClient,
 			cacheSignalOption(),
@@ -194,19 +185,19 @@ func resultCacheSearchOptions(cfg *config.Config, redisClient *goredis.Client) [
 	}
 	return []search.Option{
 		search.WithResultCache(
-			discoveryCacheAdapters.NewRedisResultCache(redisClient, cacheSignalOption()),
+			discovery.NewRedisResultCache(redisClient, cacheSignalOption()),
 		),
 		search.WithProviderResultCache(
-			discoveryCacheAdapters.NewRedisProviderResultCache(redisClient, providerCacheTTLs(cfg), cacheSignalOption()),
+			discovery.NewRedisProviderResultCache(redisClient, providerCacheTTLs(cfg), cacheSignalOption()),
 		),
 		search.WithHeldSlateCache(
-			discoveryCacheAdapters.NewRedisHeldSlateCache(redisClient, cacheSignalOption()),
+			discovery.NewRedisHeldSlateCache(redisClient, cacheSignalOption()),
 		),
 	}
 }
 
-func providerCacheTTLs(cfg *config.Config) discoveryCacheAdapters.ProviderCacheTTLs {
-	return discoveryCacheAdapters.ProviderCacheTTLs{
+func providerCacheTTLs(cfg *config.Config) discovery.ProviderCacheTTLs {
+	return discovery.ProviderCacheTTLs{
 		Default:  cfg.DiscoveryProviderCacheTTL,
 		Provider: map[domain.ProviderName]time.Duration{domain.ProviderMusicBrainz: cfg.DiscoveryMusicBrainzCacheTTL},
 	}
@@ -216,15 +207,15 @@ func cacheSearchOptions(redisClient *goredis.Client) []search.Option {
 	if redisClient == nil {
 		return nil
 	}
-	enrichmentCache := discoveryCacheAdapters.NewRedisEnrichmentCache(redisClient, cacheSignalOption())
+	enrichmentCache := discovery.NewRedisEnrichmentCache(redisClient, cacheSignalOption())
 	return []search.Option{
-		search.WithArtworkCache(discoveryCacheAdapters.NewRedisArtworkCache(redisClient, cacheSignalOption())),
+		search.WithArtworkCache(discovery.NewRedisArtworkCache(redisClient, cacheSignalOption())),
 		search.WithIdentityBridge(enrichmentCache),
 		search.WithMBIDIndex(enrichmentCache),
 	}
 }
 
-func vocabularySearchOptions(redisClient *goredis.Client, vocabStore discoveryPorts.VocabularyStore) []search.Option {
+func vocabularySearchOptions(redisClient *goredis.Client, vocabStore discovery.VocabularyStore) []search.Option {
 	vs := vocabStore
 	if vs == nil {
 		vs = BuildVocabularyStore(redisClient)
@@ -235,13 +226,13 @@ func vocabularySearchOptions(redisClient *goredis.Client, vocabStore discoveryPo
 	return []search.Option{search.WithVocabularyStore(vs)}
 }
 
-func eventSearchOptions(cfg *config.Config, eventStore discoveryPorts.EventStore) []search.Option {
+func eventSearchOptions(cfg *config.Config, eventStore discovery.EventStore) []search.Option {
 	if eventStore == nil {
 		return nil
 	}
 	opts := []search.Option{search.WithEventStore(eventStore)}
 	if cfg.BehavioralRankingEnabled {
-		if store, ok := eventStore.(discoveryPorts.BehavioralSignalStore); ok {
+		if store, ok := eventStore.(discovery.BehavioralSignalStore); ok {
 			opts = append(opts, search.WithBehavioralRanking(
 				rank.NewSatisfactionConsumer(store),
 			))
@@ -250,15 +241,15 @@ func eventSearchOptions(cfg *config.Config, eventStore discoveryPorts.EventStore
 	return opts
 }
 
-func BuildDiscoveryProviders(ctx context.Context, cfg *config.Config, transport http.RoundTripper) []discoveryPorts.SearchProvider {
+func BuildDiscoveryProviders(ctx context.Context, cfg *config.Config, transport http.RoundTripper) []discovery.SearchProvider {
 	cf := newClientFactory(transport)
 	mb := buildMusicBrainzAdapter(cf, cfg)
 	return buildSearchProviderList(ctx, cf, cfg, mb)
 }
 
-func buildSearchProviderList(ctx context.Context, cf clientFactory, cfg *config.Config, mb *musicbrainz.MusicBrainzAdapter) []discoveryPorts.SearchProvider {
-	var providerList []discoveryPorts.SearchProvider
-	providerList = append(providerList, deezer.NewDeezerAdapter(cf.discovery()))
+func buildSearchProviderList(ctx context.Context, cf clientFactory, cfg *config.Config, mb *discovery.MusicBrainzAdapter) []discovery.SearchProvider {
+	var providerList []discovery.SearchProvider
+	providerList = append(providerList, discovery.NewDeezerAdapter(cf.discovery()))
 	if am := buildAppleMusicAdapter(cf, cfg); am != nil {
 		providerList = append(providerList, am)
 	}
@@ -274,25 +265,25 @@ func buildSearchProviderList(ctx context.Context, cf clientFactory, cfg *config.
 	return providerList
 }
 
-func onlyChosenSearchProviders(list []discoveryPorts.SearchProvider, chosen []string) []discoveryPorts.SearchProvider {
+func onlyChosenSearchProviders(list []discovery.SearchProvider, chosen []string) []discovery.SearchProvider {
 	if len(chosen) == 0 {
 		return list
 	}
-	return slices.DeleteFunc(list, func(p discoveryPorts.SearchProvider) bool {
+	return slices.DeleteFunc(list, func(p discovery.SearchProvider) bool {
 		return !slices.Contains(chosen, p.Name().String())
 	})
 }
 
-func buildScrapedSearchProviders(cf clientFactory, cfg *config.Config) []discoveryPorts.SearchProvider {
-	var list []discoveryPorts.SearchProvider
+func buildScrapedSearchProviders(cf clientFactory, cfg *config.Config) []discovery.SearchProvider {
+	var list []discovery.SearchProvider
 	if sc := buildSoundCloudSearchAdapter(cf, cfg); sc != nil {
 		list = append(list, sc)
 	}
 	if cfg.HasYouTubeMusic() {
-		list = append(list, ytmusic.NewYouTubeMusicAdapter(cf.roundTripper()))
+		list = append(list, discovery.NewYouTubeMusicAdapter(cf.roundTripper()))
 	}
 	if cfg.HasAmazonMusic() {
-		list = append(list, amazonmusic.NewAmazonMusicAdapter(cf.discovery()))
+		list = append(list, discovery.NewAmazonMusicAdapter(cf.discovery()))
 	}
 	if sp := buildSpotifyAdapter(cf, cfg); sp != nil {
 		list = append(list, sp)
@@ -300,49 +291,49 @@ func buildScrapedSearchProviders(cf clientFactory, cfg *config.Config) []discove
 	return list
 }
 
-func buildLastFMAdapter(cfg *config.Config, client *http.Client) *lastfm.LastFmAdapter {
+func buildLastFMAdapter(cfg *config.Config, client *http.Client) *discovery.LastFmAdapter {
 	if !cfg.HasLastFM() {
 		return nil
 	}
-	return lastfm.NewLastFmAdapter(client, cfg.LastFMAPIKey)
+	return discovery.NewLastFmAdapter(client, cfg.LastFMAPIKey)
 }
 
-func buildMusicBrainzAdapter(cf clientFactory, cfg *config.Config) *musicbrainz.MusicBrainzAdapter {
+func buildMusicBrainzAdapter(cf clientFactory, cfg *config.Config) *discovery.MusicBrainzAdapter {
 	if !cfg.HasMusicBrainz() {
 		return nil
 	}
-	return musicbrainz.NewMusicBrainzAdapter(cf.discovery(), cfg.MusicBrainzUserAgent)
+	return discovery.NewMusicBrainzAdapter(cf.discovery(), cfg.MusicBrainzUserAgent)
 }
 
-func buildAppleMusicAdapter(cf clientFactory, cfg *config.Config) *applemusic.AppleMusicAdapter {
+func buildAppleMusicAdapter(cf clientFactory, cfg *config.Config) *discovery.AppleMusicAdapter {
 	if !cfg.HasAppleMusic() {
 		return nil
 	}
-	return applemusic.NewAppleMusicAdapter(cf.discovery())
+	return discovery.NewAppleMusicAdapter(cf.discovery())
 }
 
-func buildSpotifyAdapter(cf clientFactory, cfg *config.Config) *spotify.SpotifyAdapter {
+func buildSpotifyAdapter(cf clientFactory, cfg *config.Config) *discovery.SpotifyAdapter {
 	if !cfg.HasSpotify() {
 		return nil
 	}
-	return spotify.NewSpotifyAdapter(cf.discovery())
+	return discovery.NewSpotifyAdapter(cf.discovery())
 }
 
-func buildSoundCloudAdapter(cf clientFactory, cfg *config.Config) *soundcloud.SoundCloudAPIAdapter {
+func buildSoundCloudAdapter(cf clientFactory, cfg *config.Config) *discovery.SoundCloudAPIAdapter {
 	return newSoundCloudAdapter(cf, cfg, nil)
 }
 
-func buildSoundCloudSearchAdapter(cf clientFactory, cfg *config.Config) *soundcloud.SoundCloudAPIAdapter {
-	return newSoundCloudAdapter(cf, cfg, soundcloud.NewSoundCloudAdapter())
+func buildSoundCloudSearchAdapter(cf clientFactory, cfg *config.Config) *discovery.SoundCloudAPIAdapter {
+	return newSoundCloudAdapter(cf, cfg, discovery.NewSoundCloudAdapter())
 }
 
 type soundCloudSearchFallback interface {
 	Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error)
 }
 
-func newSoundCloudAdapter(cf clientFactory, cfg *config.Config, fallback soundCloudSearchFallback) *soundcloud.SoundCloudAPIAdapter {
+func newSoundCloudAdapter(cf clientFactory, cfg *config.Config, fallback soundCloudSearchFallback) *discovery.SoundCloudAPIAdapter {
 	if !cfg.HasSoundCloud() {
 		return nil
 	}
-	return soundcloud.NewSoundCloudAPIAdapter(cf.discovery(), fallback)
+	return discovery.NewSoundCloudAPIAdapter(cf.discovery(), fallback)
 }

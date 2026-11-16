@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/discovery/adapters/authbridge"
+	"altune/go-api/internal/discovery/internal/adapters/authbridge"
 	"altune/go-api/internal/discovery/service/ownership"
 	"altune/go-api/internal/discovery/service/providercall"
 	"altune/go-api/internal/discovery/service/search"

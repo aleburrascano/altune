@@ -1,11 +1,11 @@
 package app
 
 import (
+	"altune/go-api/internal/auth"
 	authdomain "altune/go-api/internal/auth/domain"
-	authports "altune/go-api/internal/auth/ports"
 	authservice "altune/go-api/internal/auth/service"
 	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
-	eventstream "altune/go-api/internal/eventstream/adapters/handler"
+	"altune/go-api/internal/eventstream"
 	"altune/go-api/internal/observe/service/eventtap"
 	playbackHandler "altune/go-api/internal/playback/adapters/handler"
 	"altune/go-api/internal/shared/config"
@@ -171,7 +171,7 @@ func productionRouter(t *testing.T) *chi.Mux {
 	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
 	}
-	verifier := authports.VerifierFunc(func(context.Context, string) (authdomain.VerifiedToken, error) {
+	verifier := auth.VerifierFunc(func(context.Context, string) (authdomain.VerifiedToken, error) {
 		return authdomain.VerifiedToken{}, &authdomain.InvalidTokenError{Reason: authdomain.ReasonSignatureInvalid}
 	})
 	r := a.mountRoutes(verifier, cat, playbackHandler.NewQueueHandler(nil),

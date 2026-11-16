@@ -3,7 +3,7 @@ package handler
 import (
 	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/discovery/discoverytest"
-	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/internal/core/ports"
 	"altune/go-api/internal/discovery/service/content"
 	"altune/go-api/internal/discovery/service/related"
 	"context"

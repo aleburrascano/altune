@@ -1,14 +1,13 @@
 package app
 
 import (
+	"altune/go-api/internal/auth"
 	authdomain "altune/go-api/internal/auth/domain"
-	authports "altune/go-api/internal/auth/ports"
 	authservice "altune/go-api/internal/auth/service"
 	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
+	"altune/go-api/internal/playback"
 	playbackHandler "altune/go-api/internal/playback/adapters/handler"
-	playbackMetrics "altune/go-api/internal/playback/adapters/metrics"
 	"altune/go-api/internal/playback/domain"
-	"altune/go-api/internal/playback/ports"
 	"altune/go-api/internal/shared/config"
 	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
@@ -49,7 +48,7 @@ func (s *storedQueue) UpdatePosition(context.Context, *domain.QueuePosition) err
 
 func (s *storedQueue) DeleteForUser(context.Context, shared.UserId) error { return nil }
 
-var _ ports.QueueStateRepository = (*storedQueue)(nil)
+var _ playback.QueueStateRepository = (*storedQueue)(nil)
 
 func TestPlaybackEnrichmentFailure_ReachesOperatorLiveMetrics(t *testing.T) {
 	if testing.Short() {
@@ -74,10 +73,10 @@ func TestPlaybackEnrichmentFailure_ReachesOperatorLiveMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewQueueState: %v", err)
 	}
-	metrics := playbackMetrics.NewExpvarPlaybackMetrics()
+	metrics := playback.NewExpvarPlaybackMetrics()
 	queue := newQueueHandler(newQueueService(t.Context(), &storedQueue{state: state}, cat.trackRepo, metrics, true), metrics, playbackHandler.DefaultQueueStateRateLimit)
 
-	verifier := authports.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
+	verifier := auth.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
 		if token == operatorToken {
 			return authdomain.VerifiedToken{UserID: operator, ExpiresAt: time.Now().Add(time.Hour)}, nil
 		}
@@ -92,7 +91,7 @@ func TestPlaybackEnrichmentFailure_ReachesOperatorLiveMetrics(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	before := playbackMetrics.ReadSnapshot()
+	before := playback.ReadSnapshot()
 	code, body := callObserveAs(t, r, http.MethodGet, "/v1/playback/queue-state", operatorToken)
 	if code != http.StatusOK {
 		t.Fatalf("resume against a wedged catalog: status %d, want 200; body %s", code, body)
@@ -106,7 +105,7 @@ func TestPlaybackEnrichmentFailure_ReachesOperatorLiveMetrics(t *testing.T) {
 		t.Fatalf("operator metrics read: status %d, want 200; body %s", code, body)
 	}
 	var got struct {
-		Playback playbackMetrics.Snapshot `json:"playback"`
+		Playback playback.MetricsSnapshot `json:"playback"`
 	}
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatalf("decode %s: %v", body, err)
@@ -149,12 +148,12 @@ func TestPlaybackEnrichmentKillSwitch_ShedsCatalogLookupOnResume(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewQueueState: %v", err)
 	}
-	metrics := playbackMetrics.NewExpvarPlaybackMetrics()
+	metrics := playback.NewExpvarPlaybackMetrics()
 	queue := newQueueHandler(
 		newQueueService(t.Context(), &storedQueue{state: state}, cat.trackRepo, metrics, a.cfg.HasNowPlayingEnrichment()),
 		metrics, playbackHandler.DefaultQueueStateRateLimit)
 
-	verifier := authports.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
+	verifier := auth.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
 		if token == operatorToken {
 			return authdomain.VerifiedToken{UserID: user, ExpiresAt: time.Now().Add(time.Hour)}, nil
 		}
@@ -163,7 +162,7 @@ func TestPlaybackEnrichmentKillSwitch_ShedsCatalogLookupOnResume(t *testing.T) {
 	r := a.mountRoutes(verifier, cat, queue,
 		discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{}))
 
-	before := playbackMetrics.ReadSnapshot()
+	before := playback.ReadSnapshot()
 	start := time.Now()
 	code, body := callObserveAs(t, r, http.MethodGet, "/v1/playback/queue-state", operatorToken)
 	elapsed := time.Since(start)
@@ -180,7 +179,7 @@ func TestPlaybackEnrichmentKillSwitch_ShedsCatalogLookupOnResume(t *testing.T) {
 	if bytes.Contains(body, []byte(`current_track`)) {
 		t.Errorf("disabled enrichment must emit neither current_track nor current_track_unavailable: %s", body)
 	}
-	after := playbackMetrics.ReadSnapshot()
+	after := playback.ReadSnapshot()
 	if after.EnrichmentFailures != before.EnrichmentFailures || after.NowPlayingLookupTimeouts != before.NowPlayingLookupTimeouts {
 		t.Errorf("a disabled lookup must not run: enrichment failures %d->%d, timeouts %d->%d",
 			before.EnrichmentFailures, after.EnrichmentFailures, before.NowPlayingLookupTimeouts, after.NowPlayingLookupTimeouts)
@@ -212,7 +211,7 @@ func TestQueueRateLimit_EnvThrottlesQueueStateAtConfiguredBurst(t *testing.T) {
 		t.Fatalf("config.Load: %v", err)
 	}
 	user := shared.NewUserId(uuid.New())
-	metrics := playbackMetrics.NewExpvarPlaybackMetrics()
+	metrics := playback.NewExpvarPlaybackMetrics()
 	queue := newQueueHandler(newQueueService(t.Context(), &storedQueue{}, nil, metrics, false), metrics, queueRateLimit(cfg))
 	routes := queue.Routes()
 

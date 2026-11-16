@@ -1,9 +1,8 @@
 package app
 
 import (
-	"altune/go-api/internal/auth/adapters/testauth"
+	"altune/go-api/internal/auth"
 	authdomain "altune/go-api/internal/auth/domain"
-	authports "altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/shared/config"
 	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
@@ -19,8 +18,6 @@ import (
 	"testing"
 	"time"
 
-	authMetrics "altune/go-api/internal/auth/adapters/metrics"
-
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/lestrrat-go/jwx/v2/jwa"
@@ -34,7 +31,7 @@ const operatorToken = "operator-token"
 
 func TestMountObserve_AuthRejectionsAndOutagesReachLiveMetrics(t *testing.T) {
 	operator := shared.NewUserId(uuid.New())
-	verifier := authports.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
+	verifier := auth.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
 		switch token {
 		case operatorToken:
 			return authdomain.VerifiedToken{UserID: operator, ExpiresAt: time.Now().Add(time.Hour)}, nil
@@ -46,7 +43,7 @@ func TestMountObserve_AuthRejectionsAndOutagesReachLiveMetrics(t *testing.T) {
 	r := chi.NewRouter()
 	mountObserveLiveMetrics(r, verifier, operator, liveMetricsSnapshot)
 
-	before := authMetrics.ReadSnapshot()
+	before := auth.ReadSnapshot()
 	if code, _ := callObserveAs(t, r, http.MethodGet, "/observe/metrics/live", "forged"); code != http.StatusUnauthorized {
 		t.Fatalf("forged token: status %d, want 401", code)
 	}
@@ -59,7 +56,7 @@ func TestMountObserve_AuthRejectionsAndOutagesReachLiveMetrics(t *testing.T) {
 		t.Fatalf("operator metrics read: status %d, want 200; body %s", code, body)
 	}
 	var got struct {
-		Auth authMetrics.Snapshot `json:"auth"`
+		Auth auth.MetricsSnapshot `json:"auth"`
 	}
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatalf("decode %s: %v", body, err)
@@ -137,8 +134,8 @@ var (
 	errNotSupabse = errors.New("not a supabase token")
 )
 
-func stubSupabaseVerifier() authports.TokenVerifier {
-	return authports.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
+func stubSupabaseVerifier() auth.TokenVerifier {
+	return auth.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
 		if token == realTokenStr {
 			return authdomain.VerifiedToken{UserID: realUser, ExpiresAt: time.Now().Add(time.Hour)}, nil
 		}
@@ -202,7 +199,7 @@ func TestWiring_ProdHasNoTestLoginAndRejectsTestTokens(t *testing.T) {
 		t.Errorf("/test/login in prod: got %d, want 404", rec.Code)
 	}
 
-	ta, err := testauth.New()
+	ta, err := auth.NewTestAuth()
 	if err != nil {
 		t.Fatalf("testauth.New: %v", err)
 	}
@@ -227,7 +224,7 @@ func assertBackdoorClosed(t *testing.T, cfg testAuthConfig) {
 		t.Errorf("/test/login: got %d, want 404", rec.Code)
 	}
 
-	ta, err := testauth.New()
+	ta, err := auth.NewTestAuth()
 	if err != nil {
 		t.Fatalf("testauth.New: %v", err)
 	}
@@ -263,8 +260,8 @@ func TestWiring_RealConfigFailsClosedWithoutExplicitOptIn(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("/whoami with test token: got %d, want 200", rec.Code)
 		}
-		if got := rec.Body.String(); got != testauth.TestUserId().String() {
-			t.Errorf("authenticated as %s, want the test user %s", got, testauth.TestUserId())
+		if got := rec.Body.String(); got != auth.TestUserId().String() {
+			t.Errorf("authenticated as %s, want the test user %s", got, auth.TestUserId())
 		}
 	})
 }
@@ -279,8 +276,8 @@ func TestWiring_NonProdLoginIssuesAcceptedTestUserToken(t *testing.T) {
 		t.Fatalf("/whoami with test token: got %d, want 200", rec.Code)
 	}
 	got := rec.Body.String()
-	if got != testauth.TestUserId().String() {
-		t.Errorf("authenticated as %s, want the test user %s", got, testauth.TestUserId())
+	if got != auth.TestUserId().String() {
+		t.Errorf("authenticated as %s, want the test user %s", got, auth.TestUserId())
 	}
 	if got == realUser.String() {
 		t.Error("test login authenticated as a real user id")

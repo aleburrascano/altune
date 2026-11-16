@@ -1,6 +1,10 @@
 package app
 
 import (
+	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/observe"
+	"altune/go-api/internal/playback"
+	"altune/go-api/internal/shared/config"
 	"bytes"
 	"context"
 	"errors"
@@ -11,15 +15,11 @@ import (
 	"testing"
 	"time"
 
-	discoveryPorts "altune/go-api/internal/discovery/ports"
-	observeHandler "altune/go-api/internal/observe/adapters/handler"
 	observeDomain "altune/go-api/internal/observe/domain"
-	playbackPorts "altune/go-api/internal/playback/ports"
-	"altune/go-api/internal/shared/config"
 )
 
 type fakeCoverageEvents struct {
-	topN     []discoveryPorts.QueryCount
+	topN     []discovery.QueryCount
 	total    int
 	totalErr error
 }
@@ -31,7 +31,7 @@ func (f *fakeCoverageEvents) ZeroResultTotal(context.Context, time.Time) (int, e
 	return f.total, nil
 }
 
-func (f *fakeCoverageEvents) ZeroResultQueries(_ context.Context, _ time.Time, limit int) ([]discoveryPorts.QueryCount, error) {
+func (f *fakeCoverageEvents) ZeroResultQueries(_ context.Context, _ time.Time, limit int) ([]discovery.QueryCount, error) {
 	if len(f.topN) > limit {
 		return f.topN[:limit], nil
 	}
@@ -42,9 +42,9 @@ func TestBuildCoverageCondition(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("breach beyond the top-1000 cap still fires (undercount regression)", func(t *testing.T) {
-		rows := make([]discoveryPorts.QueryCount, 1500)
+		rows := make([]discovery.QueryCount, 1500)
 		for i := range rows {
-			rows[i] = discoveryPorts.QueryCount{QueryNorm: "q", Count: 1}
+			rows[i] = discovery.QueryCount{QueryNorm: "q", Count: 1}
 		}
 		events := &fakeCoverageEvents{topN: rows, total: 1500}
 
@@ -66,7 +66,7 @@ func TestBuildCoverageCondition(t *testing.T) {
 
 	t.Run("true total below threshold does not fire", func(t *testing.T) {
 		events := &fakeCoverageEvents{
-			topN:  []discoveryPorts.QueryCount{{QueryNorm: "rare", Count: 3}},
+			topN:  []discovery.QueryCount{{QueryNorm: "rare", Count: 3}},
 			total: 3,
 		}
 		gap, _ := buildCoverageConditions(events, 10)
@@ -77,7 +77,7 @@ func TestBuildCoverageCondition(t *testing.T) {
 
 	t.Run("true total at threshold fires", func(t *testing.T) {
 		events := &fakeCoverageEvents{
-			topN:  []discoveryPorts.QueryCount{{QueryNorm: "missing band", Count: 42}},
+			topN:  []discovery.QueryCount{{QueryNorm: "missing band", Count: 42}},
 			total: 50,
 		}
 		gap, _ := buildCoverageConditions(events, 50)
@@ -94,7 +94,7 @@ func TestBuildCoverageCondition(t *testing.T) {
 func TestBuildCoverageCondition_MessageExcludesQueryText(t *testing.T) {
 	const query = "my private search \"quoted\" term"
 	events := &fakeCoverageEvents{
-		topN:  []discoveryPorts.QueryCount{{QueryNorm: query, Count: 42}},
+		topN:  []discovery.QueryCount{{QueryNorm: query, Count: 42}},
 		total: 50,
 	}
 	gap, _ := buildCoverageConditions(events, 10)
@@ -179,21 +179,21 @@ func TestBuildCoverageConditions_QueryFailureIsNotHealthy(t *testing.T) {
 
 func TestBuildDependencyCondition(t *testing.T) {
 	ctx := context.Background()
-	up := observeHandler.DependencyHealth{DB: observeHandler.DepUp, Redis: observeHandler.DepUp, Auth: observeHandler.DepUp}
+	up := observe.DependencyHealth{DB: observe.DepUp, Redis: observe.DepUp, Auth: observe.DepUp}
 
 	cases := []struct {
 		name    string
-		health  observeHandler.DependencyHealth
+		health  observe.DependencyHealth
 		wantMsg string
 	}{
-		{"auth only down names auth", observeHandler.DependencyHealth{DB: observeHandler.DepUp, Redis: observeHandler.DepUp, Auth: observeHandler.DepDown}, "dependencies down: auth"},
-		{"db only down names db", observeHandler.DependencyHealth{DB: observeHandler.DepDown, Redis: observeHandler.DepUp, Auth: observeHandler.DepUp}, "dependencies down: db"},
-		{"redis only down names redis", observeHandler.DependencyHealth{DB: observeHandler.DepUp, Redis: observeHandler.DepDown, Auth: observeHandler.DepUp}, "dependencies down: redis"},
-		{"all down names all", observeHandler.DependencyHealth{DB: observeHandler.DepDown, Redis: observeHandler.DepDown, Auth: observeHandler.DepDown}, "dependencies down: db redis auth"},
+		{"auth only down names auth", observe.DependencyHealth{DB: observe.DepUp, Redis: observe.DepUp, Auth: observe.DepDown}, "dependencies down: auth"},
+		{"db only down names db", observe.DependencyHealth{DB: observe.DepDown, Redis: observe.DepUp, Auth: observe.DepUp}, "dependencies down: db"},
+		{"redis only down names redis", observe.DependencyHealth{DB: observe.DepUp, Redis: observe.DepDown, Auth: observe.DepUp}, "dependencies down: redis"},
+		{"all down names all", observe.DependencyHealth{DB: observe.DepDown, Redis: observe.DepDown, Auth: observe.DepDown}, "dependencies down: db redis auth"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cond := buildDependencyCondition(func(context.Context) observeHandler.DependencyHealth { return tc.health })
+			cond := buildDependencyCondition(func(context.Context) observe.DependencyHealth { return tc.health })
 			if cond.Key != "dependency_down" {
 				t.Fatalf("key = %q, want dependency_down", cond.Key)
 			}
@@ -208,7 +208,7 @@ func TestBuildDependencyCondition(t *testing.T) {
 	}
 
 	t.Run("healthy does not fire", func(t *testing.T) {
-		cond := buildDependencyCondition(func(context.Context) observeHandler.DependencyHealth { return up })
+		cond := buildDependencyCondition(func(context.Context) observe.DependencyHealth { return up })
 		if alert := cond.Eval(ctx); alert != nil {
 			t.Fatalf("alert = %+v, want nil", alert)
 		}
@@ -292,7 +292,7 @@ func TestJobFailingCondition_UnreadableIdentityStoreFiresAfterEscalation(t *test
 	name := jobDeletedIdentityErasure
 	jc := a.job(name)
 	cond := buildJobCondition(name, jc)
-	sweepErr := fmt.Errorf("deleted identity sweep idle: %w", playbackPorts.ErrIdentityStoreUnavailable)
+	sweepErr := fmt.Errorf("deleted identity sweep idle: %w", playback.ErrIdentityStoreUnavailable)
 
 	for range jobFailureEscalation {
 		jc.Record(sweepErr)
