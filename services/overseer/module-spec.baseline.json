@@ -1,8 +1,5 @@
 {
   "violations": [
-    "B3 internal/authn/jwks.go imports net/http",
-    "B3 internal/authn/verifier.go imports github.com/golang-jwt/jwt/v5, which module-spec.json does not list under pure",
-    "B3 internal/authn/verifier.go imports net/http",
     "B3 internal/buckets/cost/cost.go imports os",
     "B3 internal/buckets/logs/logs.go imports os",
     "B3 internal/buckets/reliability/reliability.go imports os",
@@ -42,10 +39,6 @@
     "B3 internal/shell/series.go imports net/url",
     "B3 internal/shell/shell.go imports github.com/go-chi/chi/v5, which module-spec.json does not list under pure",
     "B3 internal/shell/shell.go imports net/http",
-    "C4 internal/authn/verifier.go exports ErrNoKey, which nothing outside authn imports and no test of its own imports through the door",
-    "C4 internal/authn/verifier.go exports ErrNoSubject, which nothing outside authn imports and no test of its own imports through the door",
-    "C4 internal/authn/verifier.go exports ErrUnsupportedAlg, which nothing outside authn imports and no test of its own imports through the door",
-    "C4 internal/authn/verifier.go exports Verifier, which nothing outside authn imports and no test of its own imports through the door",
     "C4 internal/buckets/backendperf/backendperf.go exports Bucket, which nothing outside backendperf imports and no test of its own imports through the door",
     "C4 internal/buckets/backendperf/backendperf.go exports Data, which nothing outside backendperf imports and no test of its own imports through the door",
     "C4 internal/buckets/backendperf/backendperf.go exports New, which nothing outside backendperf imports and no test of its own imports through the door",
