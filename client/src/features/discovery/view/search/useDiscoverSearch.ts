@@ -3,7 +3,7 @@ import { useInfiniteQuery, useQueryClient, type QueryKey } from '@tanstack/react
 import type { DiscoveryProviderInfo, DiscoverySearchResponse } from '@shared/catalog';
 import { isRetryable } from '@shared/failure';
 import { discoveryKeys, isSearchKeyFor } from '@shared/query';
-import { useReportQueryFailure } from '@features/discovery/hooks/search/useReportQueryFailure';
+import { useReportQueryFailure } from '@features/discovery/view/search/useReportQueryFailure';
 import {
   useDiscoverFetchEnabled,
   useGatedDiscoverCall,
@@ -94,6 +94,19 @@ function useSearchInfiniteQuery(args: SearchQueryArgs) {
   });
 }
 
+type SearchPaging = Pick<
+  ReturnType<typeof useSearchInfiniteQuery>,
+  'fetchNextPage' | 'hasNextPage' | 'isPlaceholderData'
+>;
+
+function nextPageControls(paging: SearchPaging, isSearchEnabled: boolean) {
+  return {
+    fetchNextPage:
+      isSearchEnabled && !paging.isPlaceholderData ? paging.fetchNextPage : noPageToFetch,
+    hasNextPage: paging.hasNextPage && !paging.isPlaceholderData,
+  };
+}
+
 export function useDiscoverSearch(query: string) {
   const trimmed = normalizeQuery(query);
   const port = useDiscoverPort();
@@ -134,8 +147,7 @@ export function useDiscoverSearch(query: string) {
     error,
     isUnavailable: !isSearchEnabled,
     refetch: retrySearch,
-    fetchNextPage: isSearchEnabled && !isPlaceholderData ? fetchNextPage : noPageToFetch,
-    hasNextPage: hasNextPage && !isPlaceholderData,
+    ...nextPageControls({ fetchNextPage, hasNextPage, isPlaceholderData }, isSearchEnabled),
     isShowingPrevious: isPlaceholderData,
     isFetchingNextPage,
     isFetchNextPageError,

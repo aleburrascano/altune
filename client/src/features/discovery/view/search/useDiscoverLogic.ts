@@ -1,7 +1,7 @@
 import { type Dispatch, type SetStateAction } from 'react';
 
 import { useDebouncedSearch } from '@features/discovery/view/search/useDebouncedSearch';
-import { useDiscoverSearch } from '@features/discovery/hooks/search/useDiscoverSearch';
+import { useDiscoverSearch } from '@features/discovery/view/search/useDiscoverSearch';
 import { useUnreleasedSearch } from '@features/discovery/hooks/unreleased/useUnreleasedSearch';
 import { isSearchableQuery, normalizeQuery } from '@features/discovery/domain/searchPaging';
 import {
@@ -13,7 +13,7 @@ import {
 import {
   useImpressionLogger,
   type ImpressionHandlers,
-} from '@features/discovery/hooks/results/useImpressionLogger';
+} from '@features/discovery/view/results/useImpressionLogger';
 import {
   useDiscoverClearSearchHistory,
   useRecordSearchHistory,
@@ -88,6 +88,35 @@ export type DiscoverLogic = {
   pagination: PaginationSlice;
   history: HistorySlice;
 };
+
+type HistoryParts = {
+  history: ReturnType<typeof useSearchHistory>;
+  clearHistory: ReturnType<typeof useDiscoverClearSearchHistory>;
+  onSuggestionSelect: (text: string) => void;
+};
+
+type HistoryStatus = Pick<HistorySlice, 'items' | 'failed' | 'clearFailed'>;
+type HistoryActions = Pick<HistorySlice, 'onTap' | 'onRetry' | 'onClear'>;
+
+function historyStatus({ history, clearHistory }: HistoryParts): HistoryStatus {
+  return {
+    items: history.data?.items ?? [],
+    failed: history.error !== null && history.data === undefined,
+    clearFailed: clearHistory.error !== null,
+  };
+}
+
+function historyActions(parts: HistoryParts): HistoryActions {
+  return {
+    onTap: (item: SearchHistoryItem): void => parts.onSuggestionSelect(item.query),
+    onRetry: (): void => void parts.history.refetch(),
+    onClear: parts.clearHistory.clear,
+  };
+}
+
+function historySlice(parts: HistoryParts): HistorySlice {
+  return { ...historyStatus(parts), ...historyActions(parts) };
+}
 
 export function useDiscoverLogic(): DiscoverLogic {
   const recordSearch = useRecordSearchHistory();
@@ -185,17 +214,10 @@ export function useDiscoverLogic(): DiscoverLogic {
         if (!isFetchingNextPage && !isRefreshing) void fetchNextPage({ cancelRefetch: false });
       },
     },
-    history: {
-      items: history.data?.items ?? [],
-      failed: history.error !== null && history.data === undefined,
-      clearFailed: clearHistory.error !== null,
-      onTap: (item: SearchHistoryItem) => {
-        suggestionVisibility.onSuggestionSelect(item.query);
-      },
-      onRetry: () => {
-        void history.refetch();
-      },
-      onClear: clearHistory.clear,
-    },
+    history: historySlice({
+      history,
+      clearHistory,
+      onSuggestionSelect: suggestionVisibility.onSuggestionSelect,
+    }),
   };
 }

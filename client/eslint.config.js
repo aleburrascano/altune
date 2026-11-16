@@ -144,7 +144,7 @@ const relaxationForNativeModulesExpoGoDoesNotBundle = {
   },
 };
 
-const QUERY_ADAPTER_HOOKS = ['src/features/discovery/hooks/search/useDiscoverSearch.ts'];
+const QUERY_ADAPTER_HOOKS = ['src/features/discovery/view/search/useDiscoverSearch.ts'];
 
 const mechanicalStyleEnforcedOnChangedCodeOnly =
   process.env.ESLINT_DIFF_SCOPED === '1'

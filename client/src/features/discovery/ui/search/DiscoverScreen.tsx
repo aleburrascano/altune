@@ -13,7 +13,7 @@ import {
 } from '@shared/ui';
 import { DiscoverBody } from '@features/discovery/view/search/DiscoverBody';
 import { SuggestionsList } from '@features/discovery/view/history/SuggestionsList';
-import { useDiscoverLogic } from '@features/discovery/hooks/search/useDiscoverLogic';
+import { useDiscoverLogic } from '@features/discovery/view/search/useDiscoverLogic';
 import { MAX_QUERY_LENGTH } from '@features/discovery/domain/searchPaging';
 
 export function DiscoverScreen(): ReactElement {

@@ -11,11 +11,11 @@ import {
   Tappable,
   touchTarget,
 } from '@shared/ui';
-import { DiscoverRow } from '@features/discovery/ui/results/DiscoverRow';
+import { DiscoverRow } from '@features/discovery/view/results/DiscoverRow';
 import { ResultsList, type ResultsCommonProps } from '@features/discovery/view/results/ResultsList';
 import { SectionLabel } from '@features/discovery/view/results/SectionLabel';
 import { SectionGrid, useGridColumns } from '@features/discovery/view/results/SectionGrid';
-import { TopResultCard } from '@features/discovery/ui/results/TopResultCard';
+import { TopResultCard } from '@features/discovery/view/results/TopResultCard';
 import { kindLabel, resultKey } from '@features/discovery/domain/resultDisplay';
 
 import type { ResultTapHandler } from '@features/discovery/hooks/results/useResultTap';

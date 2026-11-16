@@ -3,13 +3,22 @@ import { usePlayback, getPreviewUrl } from '@shared/playback';
 import type { PlaybackState } from '@shared/playback';
 import { tapFeedback } from '@shared/ui';
 
-type PreviewPlayback =
+export type PreviewPlayback =
   | { readonly hasPreview: false }
   | {
       readonly hasPreview: true;
       readonly isPlaying: boolean;
       readonly togglePreview: () => void;
     };
+
+type Playback = ReturnType<typeof usePlayback>;
+
+type PreviewToggle = Pick<Playback, 'play' | 'pause'> & {
+  isPlaying: boolean;
+  feedback: typeof tapFeedback;
+  item: DiscoveryResult;
+  previewUrl: string;
+};
 
 function isPreviewPlaying(
   { track, status }: Pick<PlaybackState, 'track' | 'status'>,
@@ -22,27 +31,37 @@ function isPreviewPlaying(
   );
 }
 
-export function usePreviewPlayback(result: DiscoveryResult): PreviewPlayback {
-  const { track, status, play, pause } = usePlayback();
-  const previewUrl = result.kind === 'track' ? getPreviewUrl(result.extras) : null;
+function previewUrlOf(item: DiscoveryResult): string | null {
+  return item.kind === 'track' ? getPreviewUrl(item.extras) : null;
+}
 
-  if (previewUrl === null) return { hasPreview: false };
-
-  const isPlaying = isPreviewPlaying({ track, status }, previewUrl);
-
-  const togglePreview = (): void => {
-    tapFeedback();
-    if (isPlaying) {
-      pause();
-      return;
-    }
-    void play({
-      source: { kind: 'preview', previewUrl },
-      title: result.title,
-      artist: result.subtitle ?? '',
-      artworkUrl: result.image_url,
-    });
+function previewTrack(item: DiscoveryResult, previewUrl: string): Parameters<Playback['play']>[0] {
+  return {
+    source: { kind: 'preview', previewUrl },
+    title: item.title,
+    artist: item.subtitle ?? '',
+    artworkUrl: item.image_url,
   };
+}
 
-  return { hasPreview: true, isPlaying, togglePreview };
+function togglePreview(toggle: PreviewToggle): void {
+  toggle.feedback('light');
+  if (toggle.isPlaying) {
+    toggle.pause();
+    return;
+  }
+  void toggle.play(previewTrack(toggle.item, toggle.previewUrl));
+}
+
+function previewToggle(toggle: PreviewToggle): () => void {
+  return () => togglePreview(toggle);
+}
+
+export function usePreviewPlayback(item: DiscoveryResult, feedback = tapFeedback): PreviewPlayback {
+  const { track, status, play, pause } = usePlayback();
+  const previewUrl = previewUrlOf(item);
+  if (previewUrl === null) return { hasPreview: false };
+  const isPlaying = isPreviewPlaying({ track, status }, previewUrl);
+  const toggle = previewToggle({ isPlaying, play, pause, feedback, item, previewUrl });
+  return { hasPreview: true, isPlaying, togglePreview: toggle };
 }

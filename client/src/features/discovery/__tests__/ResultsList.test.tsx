@@ -1,18 +1,32 @@
 import React, { useState } from 'react';
-import { Platform, Text } from 'react-native';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { Dimensions, Platform, Text } from 'react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
 import { ResultsList, type ResultsCommonProps } from '@features/discovery';
 import { setPlatformOS } from '@testing/setPlatformOS';
 
 const NATIVE_OS = Platform.OS;
+const COMPACT_WIDTH = 390;
+const DEVICE_WINDOW = Dimensions.get('window');
 
-let mockWindowWidth = 390;
+function setWindowWidth(width: number): void {
+  act(() => {
+    Dimensions.set({
+      window: { width, height: 900, scale: 2, fontScale: 1 },
+      screen: Dimensions.get('screen'),
+    });
+  });
+}
 
-jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
-  __esModule: true,
-  default: () => ({ width: mockWindowWidth, height: 900, scale: 2, fontScale: 1 }),
-}));
+beforeEach(() => {
+  setWindowWidth(COMPACT_WIDTH);
+});
+
+afterAll(() => {
+  act(() => {
+    Dimensions.set({ window: DEVICE_WINDOW, screen: Dimensions.get('screen') });
+  });
+});
 
 const common = (over: Partial<ResultsCommonProps>): ResultsCommonProps => ({
   onResultTap: jest.fn(),
@@ -92,11 +106,11 @@ describe('pairing the header with the first item on a wide screen', () => {
 
   afterEach(() => {
     setPlatformOS(NATIVE_OS);
-    mockWindowWidth = 390;
+    setWindowWidth(COMPACT_WIDTH);
   });
 
   it('renders the header beside the first item once, at 1440px', () => {
-    mockWindowWidth = 1440;
+    setWindowWidth(WIDE_WIDTH);
     render(
       <ResultsList
         data={[1, 2, 3]}
@@ -115,7 +129,7 @@ describe('pairing the header with the first item on a wide screen', () => {
   });
 
   it('keeps the paired item mounted and its state when the parent rerenders with a new renderItem', () => {
-    mockWindowWidth = WIDE_WIDTH;
+    setWindowWidth(WIDE_WIDTH);
     const view = render(pairedTree());
     fireEvent.press(screen.getByTestId('item-1'));
     view.rerender(pairedTree());
@@ -124,7 +138,7 @@ describe('pairing the header with the first item on a wide screen', () => {
   });
 
   it('renders the header above the full list unchanged on a compact screen', () => {
-    mockWindowWidth = 390;
+    setWindowWidth(COMPACT_WIDTH);
     render(
       <ResultsList
         data={[1, 2, 3]}
@@ -142,7 +156,7 @@ describe('pairing the header with the first item on a wide screen', () => {
   });
 
   it('does not pair when the list has no items even at 1440px', () => {
-    mockWindowWidth = 1440;
+    setWindowWidth(WIDE_WIDTH);
     render(
       <ResultsList
         data={[]}
@@ -159,7 +173,7 @@ describe('pairing the header with the first item on a wide screen', () => {
   });
 
   it('does not pair at 1440px when pairing was not requested', () => {
-    mockWindowWidth = 1440;
+    setWindowWidth(WIDE_WIDTH);
     render(
       <ResultsList
         data={[FIRST_ITEM, SECOND_ITEM]}

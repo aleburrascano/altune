@@ -28,13 +28,13 @@ export {
   useAutocompleteSuggestions,
   useSuggestionVisibility,
 } from '@features/discovery/view/history/useSuggestions';
-export { useDiscoverSearch } from '@features/discovery/hooks/search/useDiscoverSearch';
+export { useDiscoverSearch } from '@features/discovery/view/search/useDiscoverSearch';
 export {
   useDiscoverClearSearchHistory,
   useSearchHistory,
 } from '@features/discovery/hooks/history/useSearchHistory';
 export { CorrectionBanner } from '@features/discovery/view/results/CorrectionBanner';
-export { DiscoverRow } from '@features/discovery/ui/results/DiscoverRow';
+export { DiscoverRow } from '@features/discovery/view/results/DiscoverRow';
 export {
   asyncViewForDiscoverView,
   correctionForResponse,
@@ -67,12 +67,12 @@ export {
   setSearchState,
 } from '@features/discovery/domain/searchState';
 export { SectionGrid } from '@features/discovery/view/results/SectionGrid';
-export { TopResultCard } from '@features/discovery/ui/results/TopResultCard';
+export { TopResultCard } from '@features/discovery/view/results/TopResultCard';
 export { stashHandoffForDetail } from '@features/discovery/domain/stashHandoffForDetail';
 export { useDebouncedSearch } from '@features/discovery/view/search/useDebouncedSearch';
-export { useDiscoverLogic } from '@features/discovery/hooks/search/useDiscoverLogic';
+export { useDiscoverLogic } from '@features/discovery/view/search/useDiscoverLogic';
 export { useFavorites } from '@features/discovery/hooks/favorites/useFavorites';
-export { useImpressionLogger } from '@features/discovery/hooks/results/useImpressionLogger';
+export { useImpressionLogger } from '@features/discovery/view/results/useImpressionLogger';
 export { usePreviewPlayback } from '@features/discovery/hooks/results/usePreviewPlayback';
 export { useResultsFilter } from '@features/discovery/view/results/useResultsFilter';
 export { useResultTap } from '@features/discovery/hooks/results/useResultTap';

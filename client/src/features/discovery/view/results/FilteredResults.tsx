@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { Text, spacing } from '@shared/ui';
 
 import { CorrectionBanner } from '@features/discovery/view/results/CorrectionBanner';
-import { DiscoverRow } from '@features/discovery/ui/results/DiscoverRow';
+import { DiscoverRow } from '@features/discovery/view/results/DiscoverRow';
 import { ResultsList, type ResultsCommonProps } from '@features/discovery/view/results/ResultsList';
 import { kindLabel, resultKey } from '@features/discovery/domain/resultDisplay';
 import type { DiscoveryKind, DiscoveryResult } from '@shared/catalog';

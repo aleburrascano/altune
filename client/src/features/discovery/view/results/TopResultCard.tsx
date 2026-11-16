@@ -23,15 +23,55 @@ function pressedStyle({ pressed }: PressableInteractionState) {
   return pressed ? styles.pressed : null;
 }
 
+type TopResultTextProps = { item: DiscoveryResult; label: string };
+type TopResultTitleProps = { title: string };
+type TopResultSubtitleProps = { subtitle: string | null };
+type TopResultKindProps = { label: string };
+
+function TopResultTitle({ title }: TopResultTitleProps): ReactElement {
+  return (
+    <Text variant="title" numberOfLines={2}>
+      {title}
+    </Text>
+  );
+}
+
+function TopResultSubtitle({ subtitle }: TopResultSubtitleProps): ReactElement | null {
+  if (subtitle == null || subtitle.length === 0) return null;
+  return (
+    <Text variant="body" tone="secondary" numberOfLines={1} style={styles.subtext}>
+      {subtitle}
+    </Text>
+  );
+}
+
+function TopResultKind({ label }: TopResultKindProps): ReactElement {
+  return (
+    <Text variant="body" tone="tertiary" style={styles.subtext}>
+      {label}
+    </Text>
+  );
+}
+
+function TopResultText({ item, label }: TopResultTextProps): ReactElement {
+  return (
+    <View>
+      <TopResultTitle title={item.title} />
+      <TopResultSubtitle subtitle={item.subtitle} />
+      <TopResultKind label={label} />
+    </View>
+  );
+}
+
 export function TopResultCard({
-  result,
+  result: item,
   onPress,
 }: {
   result: DiscoveryResult;
   onPress: ResultTapHandler;
 }): ReactElement {
-  const isArtist = result.kind === 'artist';
-  const label = kindLabel(result.kind);
+  const isArtist = item.kind === 'artist';
+  const label = kindLabel(item.kind);
   const theme = useTheme();
   const { hovered, focused, pressableProps } = usePressableInteraction(pressedStyle);
   const highlighted = hovered || focused;
@@ -41,10 +81,10 @@ export function TopResultCard({
       <Tappable
         action="discover.top_result.open"
         testID="discover-top-result"
-        onPress={() => onPress(result, 0)}
+        onPress={() => onPress(item, 0)}
         {...pressableProps}
         accessibilityRole="button"
-        accessibilityLabel={`${result.title}${result.subtitle ? `, ${result.subtitle}` : ''}, ${label}`}
+        accessibilityLabel={`${item.title}${item.subtitle ? `, ${item.subtitle}` : ''}, ${label}`}
       >
         <Card
           testID="discover-top-result-card"
@@ -56,26 +96,14 @@ export function TopResultCard({
           <Row
             leading={
               <Artwork
-                uri={result.image_url}
+                uri={item.image_url}
                 size={96}
                 radius={isArtist ? radius.full : radius.lg}
-                accessibilityLabel={result.title}
+                accessibilityLabel={item.title}
               />
             }
           >
-            <View>
-              <Text variant="title" numberOfLines={2}>
-                {result.title}
-              </Text>
-              {result.subtitle != null && result.subtitle.length > 0 ? (
-                <Text variant="body" tone="secondary" numberOfLines={1} style={styles.subtext}>
-                  {result.subtitle}
-                </Text>
-              ) : null}
-              <Text variant="body" tone="tertiary" style={styles.subtext}>
-                {label}
-              </Text>
-            </View>
+            <TopResultText item={item} label={label} />
           </Row>
         </Card>
       </Tappable>
