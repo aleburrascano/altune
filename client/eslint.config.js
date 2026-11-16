@@ -29,14 +29,7 @@ const FILES_WHERE_EXPO_GO_FORCES_CONDITIONAL_REQUIRE = [
   'src/features/player/adapters/PlaybackProvider.tsx',
 ];
 
-const PLATFORM_HOOKS_THAT_READ_BROWSER_GLOBALS = [
-  'src/features/player/hooks/usePlaybackPosition.ts',
-  'src/features/player/hooks/usePlaybackSignals.ts',
-  'src/features/player/hooks/useQueueResume.ts',
-  'src/features/player/view/useScrubberGesture.ts',
-  'src/features/player/view/useMediaSession.ts',
-  'src/features/library/hooks/useLibraryGridLayout.ts',
-];
+const PLATFORM_HOOKS_THAT_READ_BROWSER_GLOBALS = ['src/features/player/view/useMediaSession.ts'];
 
 const typeScriptPluginRegisteredDirectlyRatherThanViaExpoConfig = {
   files: ['**/*.{ts,tsx}'],
