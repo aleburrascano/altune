@@ -162,11 +162,11 @@ export function violations(added, repo) {
   return out;
 }
 
-function pureMoves(nameStatus) {
+function sameNameMoves(nameStatus) {
   const moved = new Set();
   for (const line of nameStatus.split("\n")) {
     const [status, from, to] = line.split("\t");
-    if (status === "R100" && from && to && posix.basename(from) === posix.basename(to)) moved.add(to);
+    if (status?.startsWith("R") && from && to && posix.basename(from) === posix.basename(to)) moved.add(to);
   }
   return moved;
 }
@@ -183,7 +183,7 @@ function main() {
       ...git(["ls-files", "--others", "--exclude-standard"]).split("\n"),
     ].filter(Boolean))];
     removed = git(["diff", "--no-renames", "--name-only", "--diff-filter=D", base]).split("\n").filter(Boolean);
-    const moved = pureMoves(git(["diff", "--find-renames=100%", "--name-status", "--diff-filter=R", base]));
+    const moved = sameNameMoves(git(["diff", "--find-renames", "--name-status", "--diff-filter=R", base]));
     repo = gitRepo(".", base, added, removed);
     added = added.filter((path) => !moved.has(path));
   } catch (e) {

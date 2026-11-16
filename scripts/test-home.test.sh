@@ -80,12 +80,20 @@ git mv svc server && git commit -qm move
 node "$th" origin/main >/dev/null 2>&1 || { echo "FAIL a folder moved unchanged carries its old scenario test files with it"; fail=1; }
 
 git checkout -q -B moved-edited origin/main && git clean -qfd
-git mv svc server && printf 'package sched\n' > server/sched/drain_edge_test.go && git commit -qam move-edit
-node "$th" origin/main >/dev/null 2>&1 && { echo "FAIL a moved scenario test file that was also edited is still judged"; fail=1; }
+for i in 1 2 3 4 5 6 7 8; do printf 'func TestDrain%s(t *testing.T) { drain(%s) }\n' "$i" "$i"; done > svc/sched/drain_edge_test.go
+git commit -qam scenario && git update-ref refs/heads/rewrite-base HEAD
+git mv svc server && printf 'package sched\n\nfunc TestOther(t *testing.T) {}\n' > server/sched/drain_edge_test.go && git commit -qam move-edit
+node "$th" rewrite-base >/dev/null 2>&1 && { echo "FAIL a moved scenario test file that was also rewritten is still judged"; fail=1; }
 
 git checkout -q -B moved-unit-edited origin/main && git clean -qfd
 git mv app client && printf 'it("x")\n' > client/lib/__tests__/pinnedStore.test.ts && git commit -qam move-edit
 node "$th" origin/main >/dev/null 2>&1 || { echo "FAIL an edited test file finds its unit that moved with it"; fail=1; }
+
+git checkout -q -B moved-imports origin/main && git clean -qfd
+for i in 1 2 3 4 5 6 7 8; do printf 'func TestDrain%s(t *testing.T) { drain(%s) }\n' "$i" "$i"; done > svc/sched/drain_edge_test.go
+git commit -qam scenario && git update-ref refs/heads/scenario-base HEAD
+git mv svc server && sed -i '1i import "example.com/server/sched"' server/sched/drain_edge_test.go && git commit -qam move-imports
+node "$th" scenario-base >/dev/null 2>&1 || { echo "FAIL a moved test file whose imports were rewritten still counts as moved"; fail=1; }
 
 [ $fail = 0 ] && echo "test-home.test.sh: all cases pass"
 exit $fail

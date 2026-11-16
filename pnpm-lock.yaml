@@ -184,7 +184,7 @@ importers:
     optionalDependencies:
       module-spec:
         specifier: git+https://altune-git.duckdns.org/aleburrascano/module-spec.git
-        version: git+https://altune-git.duckdns.org/aleburrascano/module-spec.git#3b31afa16e858a7a04be30b010ab655ecef4f87f(supports-color@7.2.0)(vitest@5.1.0(vite@8.3.8(yaml@2.9.1)))
+        version: git+https://altune-git.duckdns.org/aleburrascano/module-spec.git#78d148a3bde6937c7e6e3172e68ea083588d9b40(supports-color@7.2.0)(vitest@5.1.0(vite@8.3.8(yaml@2.9.1)))
 
 packages:
 
@@ -1598,8 +1598,8 @@ packages:
   minimist@1.2.8:
     resolution: {integrity: sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA==}
 
-  module-spec@git+https://altune-git.duckdns.org/aleburrascano/module-spec.git#3b31afa16e858a7a04be30b010ab655ecef4f87f:
-    resolution: {commit: 3b31afa16e858a7a04be30b010ab655ecef4f87f, repo: https://altune-git.duckdns.org/aleburrascano/module-spec.git, type: git}
+  module-spec@git+https://altune-git.duckdns.org/aleburrascano/module-spec.git#78d148a3bde6937c7e6e3172e68ea083588d9b40:
+    resolution: {commit: 78d148a3bde6937c7e6e3172e68ea083588d9b40, repo: https://altune-git.duckdns.org/aleburrascano/module-spec.git, type: git}
     version: 0.4.0
     engines: {node: '>=24'}
     hasBin: true
@@ -3819,7 +3819,7 @@ snapshots:
   minimist@1.2.8:
     optional: true
 
-  module-spec@git+https://altune-git.duckdns.org/aleburrascano/module-spec.git#3b31afa16e858a7a04be30b010ab655ecef4f87f(supports-color@7.2.0)(vitest@5.1.0(vite@8.3.8(yaml@2.9.1))):
+  module-spec@git+https://altune-git.duckdns.org/aleburrascano/module-spec.git#78d148a3bde6937c7e6e3172e68ea083588d9b40(supports-color@7.2.0)(vitest@5.1.0(vite@8.3.8(yaml@2.9.1))):
     dependencies:
       '@stryker-mutator/core': 10.1.1
       '@stryker-mutator/vitest-runner': 10.1.1(@stryker-mutator/core@10.1.1)(vitest@5.1.0(vite@8.3.8(yaml@2.9.1)))
