@@ -10,7 +10,7 @@ import {
   ConfirmButton,
   SelectAllButton,
 } from '@features/library/view/AddTracksControls';
-import { LibraryRow } from '@features/library/ui/LibraryRow';
+import { LibraryRow } from '@features/library/view/LibraryRow';
 import {
   useAddableTracks,
   type AddableTracksState,

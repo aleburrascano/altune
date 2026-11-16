@@ -8,12 +8,9 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { useWideWebLayout, doubled } from '@shared/ui';
-import {
-  LibraryEmptyMessage,
-  ListLoadingMoreFooter,
-} from '@features/library/view/LibraryListParts';
+import { LibraryEmptyMessage, ListPagingFooter } from '@features/library/view/LibraryListParts';
 import { listContent } from '@features/library/view/listContentStyles';
-import { GRID_GAP } from '@features/library/hooks/useLibraryGridLayout';
+import { GRID_GAP } from '@features/library/view/useLibraryGridLayout';
 import type { ListPaging, ListRefresh } from '@features/library/view/libraryView';
 type LibraryGridProps<TItem> = {
   testID: string;
@@ -61,13 +58,7 @@ export function LibraryGrid<TItem>({
       refreshing={refresh.refreshing}
       onEndReached={paging?.onEndReached}
       onEndReachedThreshold={0.5}
-      ListFooterComponent={
-        <ListLoadingMoreFooter
-          loading={paging?.isFetchingNextPage === true}
-          failed={paging?.nextPageFailed === true}
-          onRetry={paging?.onRetryNextPage}
-        />
-      }
+      ListFooterComponent={<ListPagingFooter paging={paging} />}
       ListEmptyComponent={emptyLabel != null ? <LibraryEmptyMessage label={emptyLabel} /> : null}
       renderItem={renderItem}
     />

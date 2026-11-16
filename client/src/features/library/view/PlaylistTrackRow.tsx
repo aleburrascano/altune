@@ -7,7 +7,7 @@ import { spacing } from '@shared/ui';
 import type { MenuAnchor } from '@shared/ui';
 import type { Selection } from '@features/library/view/useSelection';
 import type { useRetryAcquisition } from '@features/library/view/useRetryAcquisition';
-import { LibraryRow } from '@features/library/ui/LibraryRow';
+import { LibraryRow } from '@features/library/view/LibraryRow';
 
 export type PlaylistTrackRowProps = {
   track: TrackResponse;

@@ -250,25 +250,45 @@ function LibraryRowImpl({
   );
 }
 
-export const LibraryRow = memo(LibraryRowImpl, (prev, next) => {
-  const a = prev.track;
-  const b = next.track;
+const DRAWN_TRACK_FIELDS = [
+  'id',
+  'title',
+  'artist',
+  'album',
+  'artwork_url',
+  'duration_seconds',
+  'acquisition_status',
+  'failure_reason',
+  'failure_message',
+] as const satisfies readonly (keyof TrackResponse)[];
+
+const PRESENCE_PROPS = [
+  'selectable',
+  'onLongPress',
+  'onPlay',
+  'onRetry',
+] as const satisfies readonly (keyof LibraryRowProps)[];
+
+function sameDrawnTrack(a: TrackResponse, b: TrackResponse): boolean {
+  return DRAWN_TRACK_FIELDS.every((field) => a[field] === b[field]);
+}
+
+function samePresence(prev: LibraryRowProps, next: LibraryRowProps): boolean {
+  return PRESENCE_PROPS.every((prop) => (prev[prop] == null) === (next[prop] == null));
+}
+
+function selectedOf(props: LibraryRowProps): boolean | undefined {
+  return props.selectable?.selected;
+}
+
+function sameRowProps(prev: LibraryRowProps, next: LibraryRowProps): boolean {
   return (
-    a.id === b.id &&
-    a.title === b.title &&
-    a.artist === b.artist &&
-    a.album === b.album &&
-    a.artwork_url === b.artwork_url &&
-    a.duration_seconds === b.duration_seconds &&
-    a.acquisition_status === b.acquisition_status &&
-    a.failure_reason === b.failure_reason &&
-    a.failure_message === b.failure_message &&
+    sameDrawnTrack(prev.track, next.track) &&
     prev.retrying === next.retrying &&
     prev.isPlaying === next.isPlaying &&
-    prev.selectable?.selected === next.selectable?.selected &&
-    (prev.selectable == null) === (next.selectable == null) &&
-    (prev.onLongPress == null) === (next.onLongPress == null) &&
-    (prev.onPlay == null) === (next.onPlay == null) &&
-    (prev.onRetry == null) === (next.onRetry == null)
+    selectedOf(prev) === selectedOf(next) &&
+    samePresence(prev, next)
   );
-});
+}
+
+export const LibraryRow = memo(LibraryRowImpl, sameRowProps);

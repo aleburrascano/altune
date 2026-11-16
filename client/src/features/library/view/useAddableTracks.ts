@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { TrackId, TrackResponse } from '@shared/catalog';
 import { useLibrarySearch } from '@features/library/view/useLibrarySearch';
-import { useLibraryTracks } from '@features/library/hooks/useLibraryTracks';
+import { useLibraryTracks } from '@features/library/view/useLibraryTracks';
 import { useSelection, type Selection } from '@features/library/view/useSelection';
 
 export type SearchApi = ReturnType<typeof useLibrarySearch>;

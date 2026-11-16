@@ -45,9 +45,9 @@ export {
   userBLibrary,
 } from '@features/library/__tests__/trackMutationFixtures';
 export { useLibraryAlbums, useLibraryArtists } from '@features/library/hooks/useLibraryGroups';
-export { useLibraryTracks } from '@features/library/hooks/useLibraryTracks';
+export { useLibraryTracks } from '@features/library/view/useLibraryTracks';
 export { featuringDetailRoute, goBackOrToLibrary } from '@features/library/domain/libraryRoutes';
-export { LibraryRow } from '@features/library/ui/LibraryRow';
+export { LibraryRow } from '@features/library/view/LibraryRow';
 export { LibraryRowPinnedIcon } from '@features/library/view/LibraryRowAccessories';
 export { PINNED_GLYPH } from '@features/library/view/pinnedGlyphs';
 export { libraryRowWideStyle } from '@features/library/view/libraryRowStyle';
@@ -84,7 +84,7 @@ export type {
   TrackSelectionOptions,
 } from '@features/library/view/useTrackSelection';
 export { TrackSelectionOverlay } from '@features/library/view/TrackSelectionOverlay';
-export { TracksList } from '@features/library/ui/TracksList';
+export { TracksList } from '@features/library/view/TracksList';
 export { useActiveLibraryView } from '@features/library/hooks/useActiveLibraryView';
 export { useSelection } from '@features/library/view/useSelection';
 export type { MemoryLibrarySeed } from '@features/library/__tests__/memoryLibraryPort';

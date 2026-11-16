@@ -143,6 +143,20 @@ function usePendingPoll(active: boolean, query: string, sort: LibrarySort) {
   }, [active, query, sort, queryClient, port]);
 }
 
+type LoadedPages = { pages: ListTracksResponse[] };
+
+type LoadedTracks = { tracks: TrackResponse[]; total: number; anyPending: boolean };
+
+function loadedTracks(loaded: LoadedPages | undefined): LoadedTracks {
+  if (loaded === undefined) return { tracks: [], total: 0, anyPending: false };
+  const { pages } = loaded;
+  return {
+    tracks: pages.flatMap((page) => page.items),
+    total: pages[0]?.total ?? 0,
+    anyPending: pages.some(hasPending),
+  };
+}
+
 export function useLibraryTracks(query: string, sort: LibrarySort, enabled: boolean) {
   const port = useLibraryPort();
   const queryClient = useQueryClient();
@@ -170,17 +184,14 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
     placeholderData: keepPreviousData,
   });
 
-  const anyPending = tracksData?.pages.some(hasPending) === true;
+  const { tracks, total, anyPending } = loadedTracks(tracksData);
   usePendingPoll(enabled && anyPending, query, sort);
 
   useLoggedLibraryQueryFailure(error, { chip: 'tracks', sort, isSearching: query !== '' });
 
-  const pages = tracksData?.pages ?? [];
-  const tracks = pages.flatMap((page) => page.items);
-
   return {
     tracks,
-    total: pages[0]?.total ?? 0,
+    total,
     isLoading,
     isRefetching,
     error: error,

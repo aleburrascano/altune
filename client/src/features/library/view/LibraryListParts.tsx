@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Text, spacing, Tappable } from '@shared/ui';
+import type { ListPaging } from '@features/library/view/libraryView';
 
 export function LibraryEmptyMessage({ label }: { label: string }): ReactElement {
   return (
@@ -59,13 +60,25 @@ function LoadingFooter(): ReactElement {
   );
 }
 
-export function ListLoadingMoreFooter({
+function ListLoadingMoreFooter({
   loading,
   failed,
   onRetry,
 }: ListLoadingMoreFooterProps): ReactElement | null {
   if (failed && !loading) return <RetryFooter onRetry={onRetry} />;
   return loading ? <LoadingFooter /> : null;
+}
+
+type ListPagingFooterProps = { paging: ListPaging | undefined };
+
+export function ListPagingFooter({ paging }: ListPagingFooterProps): ReactElement | null {
+  return (
+    <ListLoadingMoreFooter
+      loading={paging?.isFetchingNextPage === true}
+      failed={paging?.nextPageFailed === true}
+      onRetry={paging?.onRetryNextPage}
+    />
+  );
 }
 
 const footerStyles = StyleSheet.create({

@@ -2,9 +2,9 @@ import { useCallback, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 import type { PlaylistResponse } from '@shared/catalog';
 import { countLabel, Tappable, Text, pressedStyle, radius, spacing, useTheme } from '@shared/ui';
-import { LibraryGrid } from '@features/library/ui/LibraryGrid';
+import { LibraryGrid } from '@features/library/view/LibraryGrid';
 import { PlaylistCover } from '@features/library/view/PlaylistCover';
-import { useLibraryGridLayout } from '@features/library/hooks/useLibraryGridLayout';
+import { useLibraryGridLayout } from '@features/library/view/useLibraryGridLayout';
 import type { ListPaging, ListRefresh } from '@features/library/view/libraryView';
 
 type Cell = { kind: 'create' } | { kind: 'playlist'; playlist: PlaylistResponse };
