@@ -10,7 +10,7 @@ import type {
 import { countLabel, showFailureAlert } from '@shared/ui';
 import { playlistKeys, useAppMutation, useOptimisticMutation } from '@shared/query';
 import { currentSessionEpoch, isSameSession, guardedMutationOptions } from '@shared/session';
-import { usePlaylistsPort } from '@shared/playlists/ports/PlaylistsPortProvider';
+import { usePlaylistsPort } from '@shared/playlists/view/PlaylistsPortProvider';
 import type { PlaylistsPort } from '@shared/playlists/ports/playlistsPort';
 
 type AddTracksVariables = { playlistId: PlaylistId; trackIds: TrackId[] };

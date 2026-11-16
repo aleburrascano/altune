@@ -14,7 +14,7 @@ import {
 import { useLoggedLibraryQueryFailure } from '@features/library/view/useLoggedLibraryQueryFailure';
 import type { LibraryChip } from '@features/library/view/libraryView';
 import { libraryKeys } from '@shared/query';
-import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
+import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
 
 interface GroupPage<T> {
   items: T[];

@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { libraryKeys } from '@shared/query';
 
-import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
+import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
 
 export function useLibraryIsEmpty(): boolean {
   const port = useLibraryPort();

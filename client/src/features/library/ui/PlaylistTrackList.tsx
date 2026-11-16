@@ -9,7 +9,7 @@ import { usePlaylistTrackRemoval } from '@features/library/hooks/usePlaylistTrac
 import type { TrackSelectionController } from '@features/library/view/useTrackSelection';
 import { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
 import { listContent } from '@features/library/view/listContentStyles';
-import type { DetailActions, DetailProps } from '@features/library/adapters/playlistDetailTypes';
+import type { DetailActions, DetailProps } from '@features/library/view/playlistDetailTypes';
 import { PlaylistHero } from '@features/library/view/PlaylistHero';
 import {
   PlaylistTrackRow,

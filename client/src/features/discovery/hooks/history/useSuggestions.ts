@@ -5,7 +5,7 @@ import { discoveryKeys } from '@shared/query';
 import { useReportQueryFailure } from '@features/discovery/hooks/search/useReportQueryFailure';
 import { useDiscoverFetchEnabled } from '@features/discovery/hooks/search/useDiscoverFetchGate';
 import { isSearchableQuery, normalizeQuery } from '@features/discovery/domain/searchPaging';
-import { useDiscoverPort } from '@features/discovery/ports/DiscoverPortProvider';
+import { useDiscoverPort } from '@features/discovery/view/DiscoverPortProvider';
 import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
 
 const SUGGEST_DEBOUNCE_MS = 150;

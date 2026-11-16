@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { FeaturedArtist, DiscoveryResult } from '@shared/catalog';
 import { libraryKeys } from '@shared/query';
-import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
+import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
 import {
   failureLogFields,
   libraryFailureAlert,

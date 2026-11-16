@@ -4,7 +4,7 @@ import type { AlbumGroup } from '@shared/apiClient';
 import type { TrackResponse, DiscoveryResult } from '@shared/catalog';
 import { libraryKeys } from '@shared/query';
 import type { DetailPort } from '@features/detail/ports/detailPort';
-import { useDetailPort } from '@features/detail/ports/DetailPortProvider';
+import { useDetailPort } from '@features/detail/view/DetailPortProvider';
 import { normalizeForCompare } from '@features/detail/domain/normalizeForCompare';
 import { DETAIL_LIST_CAP } from '@features/detail/domain/contentStatus';
 

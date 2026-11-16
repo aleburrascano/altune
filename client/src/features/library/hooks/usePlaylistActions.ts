@@ -3,7 +3,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import type { PlaylistResponse, TrackResponse } from '@shared/catalog';
 import { playlistKeys } from '@shared/query';
 import { useCreatePlaylist } from '@shared/playlists';
-import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
+import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
 import {
   pagedListControls,
   GROUP_PAGE_SIZE,

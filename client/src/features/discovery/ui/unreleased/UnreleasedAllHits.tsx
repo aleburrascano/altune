@@ -4,7 +4,7 @@ import { ScrollView, StyleSheet } from 'react-native';
 import { spacing } from '@shared/ui';
 import type { UnreleasedSearchHit } from '@shared/apiClient';
 
-import { UnreleasedHitsSlot } from '@features/discovery/ports/UnreleasedHitsSlot';
+import { UnreleasedHitsSlot } from '@features/discovery/view/UnreleasedHitsSlot';
 
 interface UnreleasedAllHitsProps {
   hits: UnreleasedSearchHit[];

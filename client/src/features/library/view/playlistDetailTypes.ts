@@ -1,15 +1,13 @@
-import type { useRouter } from 'expo-router';
 import type { PlaylistId, PlaylistDetailResponse } from '@shared/catalog';
+import type { Navigator } from '@shared/navigation';
 import type { usePlaylistRename } from '@features/library/view/usePlaylistRename';
-
-type Router = ReturnType<typeof useRouter>;
 
 export type ContentProps = {
   playlistId: PlaylistId;
   playlist: PlaylistDetailResponse;
   refreshing: boolean;
   onRefresh: () => void;
-  router: Router;
+  router: Navigator;
 };
 
 export type DetailActions = {

@@ -7,7 +7,7 @@ import {
   retryFailureOutcome,
   type RetryEntryPoint,
 } from '@shared/acquisition/state/acquisitionTelemetry';
-import { useAcquisitionPort } from '@shared/acquisition/ports/AcquisitionPortProvider';
+import { useAcquisitionPort } from '@shared/acquisition/view/AcquisitionPortProvider';
 import type { AcquisitionPort } from '@shared/acquisition/ports/acquisitionPort';
 import { guardedMutationOptions } from '@shared/session';
 

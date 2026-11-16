@@ -14,7 +14,7 @@ import {
 } from '@shared/events';
 import { usePinnedStore } from '@shared/offline';
 import { currentSessionEpoch, isSameSession, guardedMutationOptions } from '@shared/session';
-import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
+import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 import {
   logTrackMutationFailure,

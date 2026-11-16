@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-import { useAuthPort } from '@features/signIn/ports/AuthPortProvider';
+import { useAuthPort } from '@features/signIn/view/AuthPortProvider';
 
 export function TestAuthBridge(): null {
   const authPort = useAuthPort();

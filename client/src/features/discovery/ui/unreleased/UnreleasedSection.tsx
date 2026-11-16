@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { spacing } from '@shared/ui';
 import type { UnreleasedSearchHit } from '@shared/apiClient';
 
-import { UnreleasedHitsSlot } from '@features/discovery/ports/UnreleasedHitsSlot';
+import { UnreleasedHitsSlot } from '@features/discovery/view/UnreleasedHitsSlot';
 import { SectionLabel } from '@features/discovery/view/results/SectionLabel';
 
 const UNRELEASED_SECTION_CAP = 5;

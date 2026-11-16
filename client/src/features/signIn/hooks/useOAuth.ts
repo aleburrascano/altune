@@ -13,7 +13,7 @@ import {
   type OAuthProvider,
 } from '@features/signIn/domain/oauthResult';
 import { parseAuthLink } from '@features/signIn/domain/parseAuthLink';
-import { useAuthPort } from '@features/signIn/ports/AuthPortProvider';
+import { useAuthPort } from '@features/signIn/view/AuthPortProvider';
 import type { AuthPort } from '@features/signIn/ports/authPort';
 
 import { useOAuthFlow } from '@features/signIn/view/useOAuthFlow';

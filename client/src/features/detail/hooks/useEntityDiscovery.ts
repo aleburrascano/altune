@@ -11,7 +11,7 @@ import {
 import { fetchTallyingOutcome } from '@features/detail/domain/detailHealth';
 import { resolveEntityQuery } from '@features/detail/domain/resolveEntityQuery';
 import { realPhotoUrl } from '@features/detail/domain/artistPhoto';
-import { useDetailPort } from '@features/detail/ports/DetailPortProvider';
+import { useDetailPort } from '@features/detail/view/DetailPortProvider';
 import {
   useDetailFetchEnabled,
   useGatedRefetch,

@@ -3,12 +3,12 @@ export { registerSearchStateSignOutReset } from '@features/discovery/adapters/re
 export {
   DiscoverPortProvider,
   useDiscoverPort,
-} from '@features/discovery/ports/DiscoverPortProvider';
+} from '@features/discovery/view/DiscoverPortProvider';
 export {
   FavoritesPortProvider,
   useFavoritesPort,
-} from '@features/discovery/ports/FavoritesPortProvider';
-export { UnreleasedHitsSlotProvider } from '@features/discovery/ports/UnreleasedHitsSlot';
+} from '@features/discovery/view/FavoritesPortProvider';
+export { UnreleasedHitsSlotProvider } from '@features/discovery/view/UnreleasedHitsSlot';
 export { httpDiscoverPort } from '@features/discovery/adapters/http/httpDiscoverPort';
 export { httpFavoritesPort } from '@features/discovery/adapters/http/httpFavoritesPort';
 export type { DiscoverPort } from '@features/discovery/ports/discoverPort';

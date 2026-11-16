@@ -7,7 +7,7 @@ import { isSearchableQuery, normalizeQuery } from '@features/discovery/domain/se
 import { useDiscoverFetchEnabled } from '@features/discovery/hooks/search/useDiscoverFetchGate';
 import { useReportQueryFailure } from '@features/discovery/hooks/search/useReportQueryFailure';
 import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
-import { useDiscoverPort } from '@features/discovery/ports/DiscoverPortProvider';
+import { useDiscoverPort } from '@features/discovery/view/DiscoverPortProvider';
 
 const NO_HITS: UnreleasedSearchHit[] = [];
 const UNRELEASED_SEARCH_STALE_MS = 60_000;

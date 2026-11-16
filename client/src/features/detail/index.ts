@@ -1,7 +1,7 @@
 export { DetailScreen } from '@features/detail/ui/DetailScreen';
 export { UnreleasedAllScreen } from '@features/detail/ui/unreleased/ArtistUnreleasedAll';
 export { UnreleasedSearchHits } from '@features/detail/view/unreleased/UnreleasedSearchHits';
-export { DetailPortProvider, useDetailPort } from '@features/detail/ports/DetailPortProvider';
+export { DetailPortProvider, useDetailPort } from '@features/detail/view/DetailPortProvider';
 export { httpDetailPort } from '@features/detail/adapters/http/httpDetailPort';
 export type { DetailPort } from '@features/detail/ports/detailPort';
 export { AlbumDetailBody } from '@features/detail/view/AlbumDetailBody';

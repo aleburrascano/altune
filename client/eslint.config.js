@@ -29,7 +29,7 @@ const FILES_WHERE_EXPO_GO_FORCES_CONDITIONAL_REQUIRE = [
   'src/features/player/adapters/PlaybackProvider.tsx',
 ];
 
-const PLATFORM_HOOKS_MOVED_INTO_HOOKS_FOLDER = [
+const PLATFORM_HOOKS_THAT_READ_BROWSER_GLOBALS = [
   'src/features/player/hooks/usePlaybackPosition.ts',
   'src/features/player/hooks/usePlaybackSignals.ts',
   'src/features/player/hooks/useQueueResume.ts',
@@ -112,7 +112,7 @@ const browserGlobalsOnlyInWebCode = {
   files: ['src/**/*.{ts,tsx}'],
   ignores: [
     ...TEST_FILES,
-    ...PLATFORM_HOOKS_MOVED_INTO_HOOKS_FOLDER,
+    ...PLATFORM_HOOKS_THAT_READ_BROWSER_GLOBALS,
     'src/**/web/**',
     'src/**/*.web.{ts,tsx}',
   ],

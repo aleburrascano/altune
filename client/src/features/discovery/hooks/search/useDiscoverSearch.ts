@@ -21,7 +21,7 @@ import {
   type SearchPages,
 } from '@features/discovery/domain/searchPaging';
 import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
-import { useDiscoverPort } from '@features/discovery/ports/DiscoverPortProvider';
+import { useDiscoverPort } from '@features/discovery/view/DiscoverPortProvider';
 
 function noPageToFetch(): Promise<void> {
   return Promise.resolve();

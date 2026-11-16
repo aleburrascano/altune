@@ -6,7 +6,9 @@ type StackProps = { children?: ReactNode };
 
 jest.mock('expo-router', () => {
   const { Text } = require('react-native');
-  const { useSettingsPort: useSettingsPortUnderTest } = require('@features/settings/ports/SettingsPortProvider');
+  const {
+    useSettingsPort: useSettingsPortUnderTest,
+  } = require('@features/settings/view/SettingsPortProvider');
   function RouteChild() {
     const port = useSettingsPortUnderTest();
     return <Text>{typeof port === 'object' ? 'settings port resolved' : 'no port'}</Text>;
