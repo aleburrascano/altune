@@ -294,7 +294,8 @@ if [ -f scripts/ci/pr-ci-dupes.mjs ] && need node "duplicate PR CI work" && link
   check "no duplicate PR CI work" . node scripts/ci/pr-ci-dupes.mjs
 fi
 
-if [ -n "$(bash scripts/module-spec.sh roots 2>/dev/null)" ]; then
+spec_roots=$(bash scripts/module-spec.sh roots) || { echo "FAIL  module-spec: could not list the code roots (error above)"; failed=1; spec_roots=; }
+if [ -n "$spec_roots" ]; then
   link_deps . || true
   if [ -x node_modules/.bin/module-spec ]; then
     check "module-spec check" . "${heavy[@]}" bash scripts/module-spec.sh check --since "$base"

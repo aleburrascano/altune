@@ -727,6 +727,29 @@ MODULE_SPEC_RUNS_ELSEWHERE=1 run_script_with_stubs
 expect_out "the gitea precheck job runs it"
 expect_rc 0
 
+CASE="roots prints a root whose path holds a space whole"
+new_repo
+(cd "$WORK/repo" && mkdir -p "a b" && printf '{}\n' >"a b/module-spec.json")
+[ "$(cd "$WORK/repo" && bash scripts/module-spec.sh roots)" = "a b" ] || fail "roots should print 'a b' as one root"
+
+CASE="when roots cannot list the code roots, precheck shows the error and ends red"
+new_repo
+(cd "$WORK/repo" && git update-ref refs/remotes/gitea/main HEAD)
+add_plain_file
+printf '#!/usr/bin/env bash\necho "roots broke" >&2\nexit 1\n' >"$WORK/repo/scripts/module-spec.sh"
+run_script_with_stubs
+expect_out "roots broke"
+expect_out "FAIL  module-spec: could not list the code roots"
+expect_rc 1
+
+CASE="check with no code roots fails rather than passing having checked nothing"
+new_repo
+add_module_spec_kit
+(cd "$WORK/repo" && bash scripts/module-spec.sh check >"$WORK/out.log" 2>&1)
+RC=$?
+expect_rc 2
+expect_out "no module-spec.json in this repo"
+
 add_contract_tests() {
     (
         cd "$WORK/repo" || exit 1
