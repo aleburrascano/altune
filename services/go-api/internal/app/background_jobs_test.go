@@ -319,11 +319,11 @@ func TestBackgroundChartCallsAreCounted(t *testing.T) {
 	if len(charts) == 0 {
 		t.Fatal("precondition: the Deezer chart provider must be wired")
 	}
-	before := discovery.ReadSnapshot()
+	before := discovery.ReadProviderMetricsSnapshot()
 	if _, err := charts[0].FetchCharts(context.Background(), 1); err != nil {
 		t.Fatalf("fetch charts: %v", err)
 	}
-	counted := totalProviderCounts(discovery.ReadSnapshot()) - totalProviderCounts(before)
+	counted := totalProviderCounts(discovery.ReadProviderMetricsSnapshot()) - totalProviderCounts(before)
 
 	if rt.roundTrips() == 0 {
 		t.Fatal("the chart fetch made no provider call, so it proves nothing about the transport")

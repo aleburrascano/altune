@@ -13,7 +13,7 @@ import (
 func TestContract_MetricsLiveMatchesFixture(t *testing.T) {
 	reqmetrics.Observe("/v1/tracks/{trackId}", 5*time.Millisecond, 200)
 	deps := Deps{LiveMetrics: func() LiveMetrics {
-		return LiveMetrics{"latency": reqmetrics.ReadSnapshot(), "providers": discovery.ReadSnapshot()}
+		return LiveMetrics{"latency": reqmetrics.ReadSnapshot(), "providers": discovery.ReadProviderMetricsSnapshot()}
 	}}
 	rec := serveRead(t, deps, "/metrics/live")
 	assertMatchesFixture(t, "observe_metrics_live.json", rec.Body.Bytes())

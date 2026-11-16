@@ -76,11 +76,11 @@ func TestRequestPathProviderCallsAreCountedOnce(t *testing.T) {
 			rt := &countingProviderRT{}
 			a := &App{cfg: &config.Config{MusicBrainzUserAgent: "altune-test/1.0"}}
 			disc := a.wireDiscovery(context.Background(), newClientFactory(countedProviderTransport(rt)))
-			before := discovery.ReadSnapshot()
+			before := discovery.ReadProviderMetricsSnapshot()
 			req := httptest.NewRequest(http.MethodGet, route.target, nil)
 			req = req.WithContext(authservice.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
 			disc.handler.Routes().ServeHTTP(httptest.NewRecorder(), req)
-			counted := totalProviderCounts(discovery.ReadSnapshot()) - totalProviderCounts(before)
+			counted := totalProviderCounts(discovery.ReadProviderMetricsSnapshot()) - totalProviderCounts(before)
 
 			if rt.roundTrips() == 0 {
 				t.Fatalf("%s made no provider call, so it proves nothing about the transport", route.target)

@@ -320,9 +320,9 @@ func TestAudioSources_TheSongsSearchOutranksTheCatalogLinkForTheSameVideo(t *tes
 	a := &App{cfg: &config.Config{YtMusicEnabled: true, YtDLPEnabled: true}}
 	first := sourceNames(a.audioSourcesFor(t.Context(), ytdlp.NewYtDlpAudioSearcher("", "", "")).first)
 
-	if len(first) != 3 || first[0] != acquisition.CatalogpinSourceName || first[1] != ytmsearch.SourceName || first[2] != ytmusic.SourceName {
+	if len(first) != 3 || first[0] != acquisition.CatalogPinSourceName || first[1] != ytmsearch.SourceName || first[2] != ytmusic.SourceName {
 		t.Errorf("first tier = %v, want [%s %s %s]: duplicates keep the earlier source, and only the songs search carries the video's own length",
-			first, acquisition.CatalogpinSourceName, ytmsearch.SourceName, ytmusic.SourceName)
+			first, acquisition.CatalogPinSourceName, ytmsearch.SourceName, ytmusic.SourceName)
 	}
 }
 

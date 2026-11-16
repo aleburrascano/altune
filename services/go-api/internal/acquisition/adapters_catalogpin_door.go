@@ -8,4 +8,4 @@ var (
 	WithPageReader    = catalogpin.WithPageReader
 )
 
-const CatalogpinSourceName = catalogpin.SourceName
+const CatalogPinSourceName = catalogpin.SourceName

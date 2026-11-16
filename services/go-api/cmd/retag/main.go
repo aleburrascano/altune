@@ -130,7 +130,7 @@ func productionRetagger(cfg *config.Config, audioStore catalogPorts.AudioStore, 
 	ffmpeg := binpath.Resolve("ffmpeg", cfg.FFmpegLocation)
 	return retagger{
 		store:       audioStore,
-		tagger:      acquisition.NewFfmpegtagTagger(ffmpeg, acquisition.NewId3Tagger()),
+		tagger:      acquisition.NewFFmpegTagger(ffmpeg, acquisition.NewId3Tagger()),
 		media:       ffmpegTools{ffprobe: binpath.Resolve("ffprobe", cfg.FFmpegLocation), ffmpeg: ffmpeg},
 		attemptID:   shared.RandomID,
 		stillServes: tracks.stillServes,

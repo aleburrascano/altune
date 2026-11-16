@@ -34,7 +34,7 @@ func buildTestAuthVerifier(cfg testAuthConfig, supa auth.TokenVerifier) (*auth.T
 	if err != nil {
 		return nil, nil, err
 	}
-	return ta, auth.Combine(ta, supa), nil
+	return ta, auth.CombineTestVerifier(ta, supa), nil
 }
 
 type testAuthConfig interface {

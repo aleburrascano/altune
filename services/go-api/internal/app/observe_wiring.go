@@ -63,7 +63,7 @@ func liveMetricsSnapshot() observe.LiveMetrics {
 		"auth":      auth.ReadSnapshot(),
 		"catalog":   catalog.ReadSnapshot(),
 		"playback":  playback.ReadSnapshot(),
-		"providers": discovery.ReadSnapshot(),
+		"providers": discovery.ReadProviderMetricsSnapshot(),
 		"latency":   reqmetrics.ReadSnapshot(),
 	}
 }

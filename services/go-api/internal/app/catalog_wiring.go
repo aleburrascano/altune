@@ -148,7 +148,7 @@ func (a *App) buildAcquisitionScheduler(
 		acqService.WithSupersededAudioGrace(a.cfg.AcquisitionSupersededAudioGrace),
 		acqService.WithAudioProber(audioProber),
 		acqService.WithVerifySkips(skips),
-		acqService.WithAudioTagger(acquisition.NewFfmpegtagTagger(binpath.Resolve("ffmpeg", a.cfg.FFmpegLocation), acquisition.NewId3Tagger())),
+		acqService.WithAudioTagger(acquisition.NewFFmpegTagger(binpath.Resolve("ffmpeg", a.cfg.FFmpegLocation), acquisition.NewId3Tagger())),
 		acqService.WithAcquireStoreKeyPrefix(a.cfg.AudioKeyPrefix),
 		acqService.WithRejectionStore(acquisition.NewPgxRejectionStore(a.pool)),
 	}
