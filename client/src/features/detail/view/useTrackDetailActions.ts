@@ -10,7 +10,7 @@ import {
   type LateralNavHandle,
   useOpenFeaturing,
 } from '@features/detail/hooks/useDetailNavigation';
-import { useOwnedTrack } from '@features/detail/hooks/useOwnedTrack';
+import { useOwnedTrack } from '@features/detail/core/useOwnedTrack';
 import { useReportWrongAlbum } from '@features/detail/view/useReportWrongAlbum';
 import { useSaveTrack, useTrackSave, type TrackSave } from '@features/detail/view/useSaveTrack';
 import { type DetailRoute } from '@features/detail/domain/detailNavigation';

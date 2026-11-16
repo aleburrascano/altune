@@ -29,9 +29,9 @@ export {
   flushDetailHealth,
   recordContentFetchOutcome,
 } from '@features/detail/domain/detailHealth';
-export { useAlbumTracks } from '@features/detail/hooks/useAlbumTracks';
+export { useAlbumTracks } from '@features/detail/core/useAlbumTracks';
 export { useDetailEnrichments } from '@features/detail/hooks/useDetailEnrichments';
-export { useArtistContent } from '@features/detail/hooks/useArtistContent';
+export { useArtistContent } from '@features/detail/core/useArtistContent';
 export {
   createMemoryDetailPort,
   recordWarnings,
@@ -111,7 +111,7 @@ export { DetailHandoffProvider } from '@features/detail/view/useDetailHandoff';
 export { useReportWrongAlbum } from '@features/detail/view/useReportWrongAlbum';
 export { useRetryTrack } from '@features/detail/hooks/useRetryTrack';
 export { SaveAllPill, TrackSaveControl, TrackSavePill } from '@features/detail/view/SaveControls';
-export { useResolvedOwnedTrack } from '@features/detail/hooks/useOwnedTrack';
-export type { TrackIdentity } from '@features/detail/hooks/useOwnedTrack';
+export { useResolvedOwnedTrack } from '@features/detail/core/useOwnedTrack';
+export type { TrackIdentity } from '@features/detail/core/useOwnedTrack';
 export type { LateralNavHandle } from '@features/detail/view/useTrackDetailActions';
 export { TrackDetailBody } from '@features/detail/view/TrackDetailBody';
