@@ -42,14 +42,14 @@ const (
 	ProviderMusicBrainz      = domain.ProviderMusicBrainz
 	ProviderSoundCloud       = domain.ProviderSoundCloud
 	ProviderSpotify          = domain.ProviderSpotify
+	ProviderTheAudioDB       = domain.ProviderTheAudioDB
 	ProviderYouTube          = domain.ProviderYouTube
 	ResultKindAlbum          = domain.ResultKindAlbum
 	ResultKindArtist         = domain.ResultKindArtist
+	ResultKindPlaylist       = domain.ResultKindPlaylist
 	ResultKindTrack          = domain.ResultKindTrack
 	VocabKindArtist          = domain.VocabKindArtist
 	VocabKindTrack           = domain.VocabKindTrack
-	ProviderTheAudioDB       = domain.ProviderTheAudioDB
-	ResultKindPlaylist       = domain.ResultKindPlaylist
 )
 
 type (
