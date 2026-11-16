@@ -5,8 +5,10 @@ import { runSignOutCleanups } from '@shared/session';
 
 import { DetailScreen } from '@features/detail';
 import {
+  createRecordingPorts,
   createTestQueryClient,
   createPlaybackWrapper,
+  idlePlayback,
   signInTestUser,
 } from '@testing/queryHarness';
 
@@ -161,7 +163,11 @@ function libraryResult(kind: 'album' | 'artist'): DiscoveryResult {
 function renderDetail(result: DiscoveryResult): void {
   mockParams = { handoff: detailHref('/library/detail', result, 'search-1').params.handoff };
   render(<DetailScreen />, {
-    wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })),
+    wrapper: createPlaybackWrapper(
+      createTestQueryClient({ mutations: true }),
+      idlePlayback,
+      createRecordingPorts(),
+    ),
   });
 }
 
@@ -170,7 +176,6 @@ beforeEach(async () => {
   mockParams = {};
   await signInTestUser();
   replyWithCatalogue();
-  jest.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
 describe('DetailScreen after the resolver backfills a library result its sources', () => {

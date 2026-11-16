@@ -7,9 +7,12 @@ import { ArtistDetailBody } from '@features/detail';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 import { readDetailHandoff } from '@shared/navigation';
 import {
+  createRecordingPorts,
   createTestQueryClient,
   createPlaybackWrapper,
+  idlePlayback,
   signInTestUser,
+  type RecordingFeaturePorts,
 } from '@testing/queryHarness';
 import { setPlatformOS } from '@testing/setPlatformOS';
 export type ArtistDetailBodyLastfmFixture = LastFmEnrichmentResponse;
@@ -34,14 +37,18 @@ function libraryArtist(): DiscoveryResult {
   };
 }
 
-function renderBody() {
+function bodyWrapper(ports: RecordingFeaturePorts = createRecordingPorts()) {
+  return createPlaybackWrapper(createTestQueryClient({ mutations: true }), idlePlayback, ports);
+}
+
+function renderBody(ports?: RecordingFeaturePorts) {
   return render(
     <ArtistDetailBody
       chrome={{ title: 'Boards of Canada', artworkUrl: null, onBack: jest.fn() }}
       result={libraryArtist()}
       detailRoute="/library/detail"
     />,
-    { wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })) },
+    { wrapper: bodyWrapper(ports) },
   );
 }
 
@@ -55,16 +62,22 @@ warmUpFirstRender(async () => {
 });
 
 describe('ArtistDetailBody: explore-discography Retry after a failed search step', () => {
-  let warnSpy: jest.SpyInstance;
-
   beforeEach(() => {
-    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     __http.replyAll({ status: 200, json: { items: [], total: 0 } });
     __http.fail(SEARCH);
   });
 
-  afterEach(() => {
-    warnSpy.mockRestore();
+  it('reports the failed search through the detail port', async () => {
+    const ports = createRecordingPorts();
+    renderBody(ports);
+
+    fireEvent.press(screen.getByTestId('detail-explore-discography'));
+
+    await screen.findByTestId('detail-explore-error');
+    expect(ports.detail.warnings).toContainEqual([
+      '[detail] discovery search failed',
+      expect.objectContaining({ kind: 'artist', title: 'Boards of Canada', artist: null }),
+    ]);
   });
 
   it('re-invokes the discovery search query when Retry is tapped (was a no-op)', async () => {
@@ -134,25 +147,18 @@ function renderLibraryArtistBody(
       lastfm={options.lastfm}
       lastfmError={options.lastfmError}
     />,
-    { wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })) },
+    { wrapper: bodyWrapper() },
   );
 }
 
 describe('ArtistDetailBody: section composition, top-tracks cap, explore toggle and facts', () => {
-  let warnSpy: jest.SpyInstance;
-
   beforeEach(() => {
-    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     __http.replyAll({ status: 200, json: { items: [], total: 0 } });
     const rows = Array.from({ length: 7 }, (_, i) => libraryTrackRow(i, 'Boards of Canada'));
     __http.reply(TRACKS, {
       status: 200,
       json: { items: rows, total: rows.length, limit: 200, offset: 0, has_more: false },
     });
-  });
-
-  afterEach(() => {
-    warnSpy.mockRestore();
   });
 
   it('orders the sections: top tracks, then explore discography, then about', async () => {
@@ -286,16 +292,9 @@ function flatStyle(node: { props: { style?: unknown } }) {
 }
 
 describe('ArtistDetailBody probe: section order when a section is empty or missing', () => {
-  let warnSpy: jest.SpyInstance;
-
   beforeEach(() => {
-    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     __http.reset();
     __http.replyAll({ status: 200, json: { items: [], total: 0 } });
-  });
-
-  afterEach(() => {
-    warnSpy.mockRestore();
   });
 
   it('keeps explore discography ahead of about when the artist has no top tracks', async () => {
@@ -328,16 +327,9 @@ describe('ArtistDetailBody probe: section order when a section is empty or missi
 });
 
 describe('ArtistDetailBody probe: the top-tracks cap of 5', () => {
-  let warnSpy: jest.SpyInstance;
-
   beforeEach(() => {
-    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     __http.reset();
     __http.replyAll({ status: 200, json: { items: [], total: 0 } });
-  });
-
-  afterEach(() => {
-    warnSpy.mockRestore();
   });
 
   it('shows all 4 tracks of an artist below the cap with no Show all', async () => {
@@ -373,17 +365,10 @@ describe('ArtistDetailBody probe: the top-tracks cap of 5', () => {
 });
 
 describe('ArtistDetailBody probe: explore discography collapses back', () => {
-  let warnSpy: jest.SpyInstance;
-
   beforeEach(() => {
-    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     __http.reset();
     __http.replyAll({ status: 200, json: { items: [], total: 0 } });
     replyLibraryTracks(0);
-  });
-
-  afterEach(() => {
-    warnSpy.mockRestore();
   });
 
   it('returns to the Explore label under the same testID on a second press', async () => {
@@ -415,15 +400,8 @@ describe('ArtistDetailBody probe: explore discography collapses back', () => {
 });
 
 describe('ArtistDetailBody probe: the facts row with each fact alone', () => {
-  let warnSpy: jest.SpyInstance;
-
   beforeEach(() => {
-    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     __http.reset();
-  });
-
-  afterEach(() => {
-    warnSpy.mockRestore();
   });
 
   it('shows only Listeners for an artist with no library tracks or releases', async () => {
@@ -468,17 +446,13 @@ describe('ArtistDetailBody probe: the facts row with each fact alone', () => {
 });
 
 describe('ArtistDetailBody probe: the wide web layout still composes the artist sections', () => {
-  let warnSpy: jest.SpyInstance;
-
   beforeEach(() => {
-    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     __http.reset();
     __http.replyAll({ status: 200, json: { items: [], total: 0 } });
     replyLibraryTracks(2);
   });
 
   afterEach(() => {
-    warnSpy.mockRestore();
     setPlatformOS('ios');
     mockProbeWindowWidth = null;
   });
@@ -497,7 +471,7 @@ describe('ArtistDetailBody probe: the wide web layout still composes the artist 
         detailRoute="/library/detail"
         lastfmError
       />,
-      { wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })) },
+      { wrapper: bodyWrapper() },
     );
 
     await screen.findByTestId('detail-top-track-0');
@@ -512,10 +486,7 @@ describe('ArtistDetailBody probe: the wide web layout still composes the artist 
 });
 
 describe('ArtistDetailBody: top track and album taps pin the exact router push', () => {
-  let warnSpy: jest.SpyInstance;
-
   beforeEach(() => {
-    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     __http.reset();
     __http.replyAll({ status: 200, json: { items: [], total: 0 } });
     replyLibraryTracks(1);
@@ -523,10 +494,6 @@ describe('ArtistDetailBody: top track and album taps pin the exact router push',
       status: 200,
       json: { items: [libraryAlbumGroup(0)], total: 1 },
     });
-  });
-
-  afterEach(() => {
-    warnSpy.mockRestore();
   });
 
   it('pushes the exact top track tapped', async () => {
@@ -561,15 +528,8 @@ describe('ArtistDetailBody: top track and album taps pin the exact router push',
 });
 
 describe('ArtistDetailBody: incomplete library track lookup', () => {
-  let warnSpy: jest.SpyInstance;
-
   beforeEach(() => {
-    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     __http.replyAll({ status: 200, json: { items: [], total: 0 } });
-  });
-
-  afterEach(() => {
-    warnSpy.mockRestore();
   });
 
   it('warns that the library list may be partial when the lookup has more pages than fetched', async () => {
@@ -620,7 +580,7 @@ describe('ArtistDetailBody: the artist content request', () => {
         }}
         detailRoute="/discover/detail"
       />,
-      { wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })) },
+      { wrapper: bodyWrapper() },
     );
 
     await waitFor(() => expect(__http.countFor(CONTENT)).toBe(1));

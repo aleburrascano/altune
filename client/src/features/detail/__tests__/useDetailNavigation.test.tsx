@@ -3,7 +3,7 @@ import type { DiscoveryResult } from '@shared/catalog';
 import { readDetailHandoff } from '@shared/navigation';
 
 import { useLateralNav, createMemoryDetailPort } from '@features/detail';
-import type { DetailPort, DetailWarning, MemoryDetailPort } from '@features/detail';
+import type { DetailPort, DetailWarning, RecordingDetailPort } from '@features/detail';
 import { createPortWrapper, createTestQueryClient } from '@testing/queryHarness';
 
 const mockPush = jest.fn();
@@ -28,7 +28,7 @@ type Search = { q: string; kinds: readonly string[] | undefined; limit: number |
 type Searches = Search[];
 type CountingPort = { port: DetailPort; searches: Searches; warnings: DetailWarning[] };
 
-function countingPort(port: MemoryDetailPort): CountingPort {
+function countingPort(port: RecordingDetailPort): CountingPort {
   const searches: Searches = [];
   return {
     searches,

@@ -155,12 +155,22 @@ function discoveryPage(
 
 export type DetailWarning = [message: string, detail: Record<string, unknown>];
 
-export interface MemoryDetailPort extends DetailPort {
+export interface RecordingDetailPort extends DetailPort {
   warnings: DetailWarning[];
 }
 
-export function createMemoryDetailPort(seed: MemoryDetailSeed = {}): MemoryDetailPort {
+export function recordWarnings(base: Omit<DetailPort, 'warn'>): RecordingDetailPort {
   const warnings: DetailWarning[] = [];
+  return {
+    ...base,
+    warn: (message, detail) => {
+      warnings.push([message, detail]);
+    },
+    warnings,
+  };
+}
+
+export function createMemoryDetailPort(seed: MemoryDetailSeed = {}): RecordingDetailPort {
   const tracks = [...(seed.tracks ?? [])];
   const albums = [...(seed.albums ?? [])];
   const discovery = [...(seed.discovery ?? [])];
@@ -173,7 +183,7 @@ export function createMemoryDetailPort(seed: MemoryDetailSeed = {}): MemoryDetai
   const createdByKey = new Map<string, TrackResponse>();
   let created = 0;
 
-  return {
+  return recordWarnings({
     searchDiscovery: (params, signal) =>
       resolveOnLaterTick(signal, () => discoveryPage(discovery, params)),
     getEnrichment: ({ title = '', signal }) =>
@@ -206,9 +216,5 @@ export function createMemoryDetailPort(seed: MemoryDetailSeed = {}): MemoryDetai
       resolveOnLaterTick(signal, () => trackPage(tracks, limit, offset)),
     getLibraryAlbums: (query = {}, signal) =>
       resolveOnLaterTick(signal, () => ({ items: windowOf(albums, query), total: albums.length })),
-    warn: (message, detail) => {
-      warnings.push([message, detail]);
-    },
-    warnings,
-  };
+  });
 }

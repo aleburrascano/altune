@@ -4,9 +4,12 @@ import type { DiscoveryResult } from '@shared/catalog';
 import { AlbumDetailBody } from '@features/detail';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 import {
+  createRecordingPorts,
   createTestQueryClient,
   createPlaybackWrapper,
+  idlePlayback,
   signInTestUser,
+  type RecordingFeaturePorts,
 } from '@testing/queryHarness';
 
 const { __http } = require('@testing/doubles/fetch.js');
@@ -164,14 +167,15 @@ describe('a library album\'s "More from this album" section', () => {
     },
   };
 
-  function renderBody() {
+  function renderBody(ports?: RecordingFeaturePorts) {
+    const client = createTestQueryClient({ mutations: true });
     return render(
       <AlbumDetailBody
         chrome={{ title: 'Rumours', artworkUrl: null, onBack: jest.fn() }}
         result={libraryAlbum()}
         detailRoute="/library/detail"
       />,
-      { wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })) },
+      { wrapper: createPlaybackWrapper(client, idlePlayback, ports) },
     );
   }
 
@@ -257,27 +261,33 @@ describe('a library album\'s "More from this album" section', () => {
   });
 
   describe('AlbumDetailBody: "More from this album" when the source-search step fails', () => {
-    let warnSpy: jest.SpyInstance;
+    let ports: RecordingFeaturePorts;
 
     beforeEach(() => {
-      warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      ports = createRecordingPorts();
       __http.replyAll({ status: 200, json: { items: [], provider_name: 'deezer', status: 'ok' } });
       __http.fail(SEARCH);
     });
 
-    afterEach(() => {
-      warnSpy.mockRestore();
-    });
-
     it('surfaces an error+retry instead of rendering nothing', async () => {
-      renderBody();
+      renderBody(ports);
 
       expect(await screen.findByTestId('detail-more-from-album-error')).toBeTruthy();
       expect(screen.getByTestId('detail-more-from-album-retry')).toBeTruthy();
     });
 
+    it('reports the failed search through the detail port', async () => {
+      renderBody(ports);
+
+      await screen.findByTestId('detail-more-from-album-error');
+      expect(ports.detail.warnings).toContainEqual([
+        '[detail] discovery search failed',
+        expect.objectContaining({ kind: 'album', title: 'Rumours', artist: 'Fleetwood Mac' }),
+      ]);
+    });
+
     it('re-invokes the search request when Retry is tapped', async () => {
-      renderBody();
+      renderBody(ports);
 
       await waitFor(() => expect(__http.countFor(SEARCH)).toBe(1));
 
@@ -411,14 +421,15 @@ describe('AlbumDetailBody: the Save N pill', () => {
     };
   }
 
-  function renderBody() {
+  function renderBody(ports?: RecordingFeaturePorts) {
+    const client = createTestQueryClient({ mutations: true });
     return render(
       <AlbumDetailBody
         chrome={{ title: 'Rumours', artworkUrl: null, onBack: jest.fn() }}
         result={sourcedAlbum()}
         detailRoute="/library/detail"
       />,
-      { wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })) },
+      { wrapper: createPlaybackWrapper(client, idlePlayback, ports) },
     );
   }
 
@@ -497,13 +508,17 @@ describe('AlbumDetailBody: the Save N pill', () => {
       json: { ...ALBUM_TRACKS_ITEMS.json, provider_name: 'deezer', status: 'ok' },
     });
     __http.reply('POST /v1/tracks', { status: 500, json: { code: 'internal' } });
-    renderBody();
+    const ports = createRecordingPorts();
+    renderBody(ports);
 
-    jest.spyOn(console, 'warn').mockImplementation(() => {});
     await screen.findByTestId('detail-tracklist');
     fireEvent.press(screen.getByTestId('detail-save-all'));
 
     expect(await screen.findByText("1 couldn't be saved")).toBeTruthy();
+    expect(ports.detail.warnings).toContainEqual([
+      '[detail] save track failed',
+      expect.objectContaining({ artist: 'Fleetwood Mac' }),
+    ]);
   });
 });
 

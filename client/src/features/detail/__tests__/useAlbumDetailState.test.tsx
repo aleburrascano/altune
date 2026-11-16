@@ -137,15 +137,11 @@ async function renderAlbum(port: DetailPort, album: DiscoveryResult = albumResul
   return { ...hook, client };
 }
 
-let warnSpy: jest.SpyInstance;
-
 beforeEach(() => {
   useTrackStatusStore.getState().reset();
-  warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
 
 afterEach(() => {
-  warnSpy.mockRestore();
   useTrackStatusStore.getState().reset();
 });
 
