@@ -9,7 +9,6 @@ import {
   parseStringParam,
   useTracksFeaturing,
 } from '@features/library';
-jest.mock('decode-uri-component', () => ({ __esModule: true, default: (s: string) => s }));
 
 const memory = createMemoryLibraryPort();
 const mockListTracksFeaturing = jest.fn(memory.listTracksFeaturing);
