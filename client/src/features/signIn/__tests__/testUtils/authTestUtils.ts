@@ -6,6 +6,10 @@ import { supabase } from '@shared/auth';
 import { _resetLockoutsForTest, AuthPortProvider } from '@features/signIn';
 import type { AuthPort } from '@features/signIn';
 
+const { ensureAppAuthClient } = require('@testing/appAuthClient.js') as {
+  ensureAppAuthClient: () => void;
+};
+
 type SupabaseAuthClient = typeof supabase.auth;
 
 export function createSupabaseAuthMock<M extends keyof SupabaseAuthClient>(
@@ -13,6 +17,7 @@ export function createSupabaseAuthMock<M extends keyof SupabaseAuthClient>(
 ): Record<M, jest.Mock> {
   const mocked = methods.map((method) => [method, jest.fn()] as const);
   const mockedByMethod = Object.fromEntries(mocked) as Record<M, jest.Mock>;
+  ensureAppAuthClient();
   Object.assign(supabase.auth, mockedByMethod);
   beforeEach(() => {
     for (const [, mock] of mocked) mock.mockReset();

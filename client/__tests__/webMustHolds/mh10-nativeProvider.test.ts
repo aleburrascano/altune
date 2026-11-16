@@ -49,7 +49,7 @@ describe('mh10: the playback provider and session store each platform selects', 
   it.each(['ios', 'android'])('persists the native session in secure-store on %s', async (os) => {
     const secureStore = onPlatform(os, () => {
       capturedStorage = undefined;
-      require('@shared/auth/supabaseClient');
+      require('@/mobile/authClient').createAuthClient();
       return require('expo-secure-store').__secureStore;
     });
 

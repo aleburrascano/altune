@@ -3,6 +3,10 @@ import * as ReactQuery from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { Session } from '@supabase/supabase-js';
 
+import { authClientOver, fakeAuthClient } from '@testing/fakeAuthClient';
+
+type AuthListener = (event: string, session: Session) => void;
+
 const USER_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
 function sessionFor(userId: string): Session {
@@ -13,9 +17,11 @@ function bootFreshApp() {
   jest.resetModules();
   jest.doMock('react', () => React);
   jest.doMock('@tanstack/react-query', () => ReactQuery);
+  const auth = require('@shared/auth');
+  auth.installAuthClient(fakeAuthClient());
   const app = {
+    auth,
     session: require('@shared/auth/useSession'),
-    supabase: require('@shared/auth/supabaseClient').supabase,
     outbox: require('@shared/telemetry/outbox'),
     pinned: require('@shared/offline/state/pinnedStore'),
     registry: require('@shared/session/signOutCleanup'),
@@ -33,11 +39,15 @@ function wrapper({ children }: { children: React.ReactNode }) {
 }
 
 async function signInAfterBootAsSignedOut(app: ReturnType<typeof bootFreshApp>) {
-  app.supabase.auth.getSession = jest.fn().mockResolvedValue({ data: { session: null } });
-  app.supabase.auth.onAuthStateChange = jest.fn((listener) => {
-    setTimeout(() => listener('SIGNED_IN', sessionFor(USER_ID)), 0);
-    return { data: { subscription: { unsubscribe: jest.fn() } } };
-  });
+  app.auth.installAuthClient(
+    authClientOver({
+      getSession: jest.fn().mockResolvedValue({ data: { session: null } }),
+      onAuthStateChange: jest.fn((listener: AuthListener) => {
+        setTimeout(() => listener('SIGNED_IN', sessionFor(USER_ID)), 0);
+        return { data: { subscription: { unsubscribe: jest.fn() } } };
+      }),
+    }),
+  );
   const { result } = renderHook(() => app.session.useSession(), { wrapper });
   await waitFor(() => expect(result.current.status).toBe('signed-in'));
 }

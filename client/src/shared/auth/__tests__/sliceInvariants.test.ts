@@ -44,12 +44,12 @@ describe('sanity: this suite is actually scanning the real slice', () => {
 });
 
 describe('architecture: @supabase/supabase-js is value-imported from exactly one file', () => {
-  it('every file under src that value-imports @supabase/supabase-js is shared/auth/supabaseClient.ts', () => {
+  it('every file under src that value-imports @supabase/supabase-js is mobile/authClient.ts, where the app builds the client', () => {
     const offenders = listSourceFiles(SRC_ROOT)
       .filter((file) => valueImportsOf(fs.readFileSync(file, 'utf8'), '@supabase/supabase-js'))
       .map((file) => path.relative(SRC_ROOT, file));
 
-    expect(offenders).toEqual([path.join('shared', 'auth', 'supabaseClient.ts')]);
+    expect(offenders).toEqual([path.join('mobile', 'authClient.ts')]);
   });
 
   it('a type-only import of @supabase/supabase-js does not count as a value import, a bare import does', () => {
@@ -69,7 +69,7 @@ describe('architecture: @supabase/supabase-js is value-imported from exactly one
 });
 
 describe('architecture: exactly one createClient( call exists in the app', () => {
-  it('summed across every file that imports createClient from @supabase/supabase-js, there is exactly one call site, in supabaseClient.ts', () => {
+  it('summed across every file that imports createClient from @supabase/supabase-js, there is exactly one call site, in mobile/authClient.ts', () => {
     const sites = listSourceFiles(SRC_ROOT)
       .map((file) => ({ file, source: fs.readFileSync(file, 'utf8') }))
       .filter(({ source }) => valueImportsOf(source, '@supabase/supabase-js'))
@@ -77,7 +77,7 @@ describe('architecture: exactly one createClient( call exists in the app', () =>
         Array<string>(createClientCallCount(source)).fill(path.relative(SRC_ROOT, file)),
       );
 
-    expect(sites).toEqual([path.join('shared', 'auth', 'supabaseClient.ts')]);
+    expect(sites).toEqual([path.join('mobile', 'authClient.ts')]);
   });
 });
 

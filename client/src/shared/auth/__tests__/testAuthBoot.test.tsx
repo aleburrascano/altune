@@ -2,12 +2,7 @@ import type React from 'react';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 import type * as TestAuthBootModule from '@shared/auth/testAuthBoot';
-
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
-
-type Notifier = {
-  _notifyAllSubscribers: (event: AuthChangeEvent, session: Session | null) => Promise<void>;
-};
+import { fakeAuthClient } from '@testing/fakeAuthClient';
 
 const globals = globalThis as unknown as { __DEV__: boolean };
 const devMode = globals.__DEV__;
@@ -33,10 +28,10 @@ function loadFreshModules() {
   cleanups.push(cleanup);
   const react = require('react') as typeof React;
   const { useSession } = require('@shared/auth/useSession');
-  const { supabase } = require('@shared/auth/supabaseClient');
+  const client = fakeAuthClient();
+  require('@shared/auth').installAuthClient(client);
   const { injectTestSession } = require('@shared/auth/injectTestSession');
   const testAuthBoot = require('@shared/auth/testAuthBoot') as typeof TestAuthBootModule;
-  const auth: Notifier = supabase.auth;
 
   function renderSession() {
     const queryClient = new QueryClient();
@@ -59,8 +54,7 @@ function loadFreshModules() {
     renderSession,
     flush,
     act: act as (fn: () => Promise<void> | void) => Promise<void>,
-    emit: (event: AuthChangeEvent, session: Session | null) =>
-      auth._notifyAllSubscribers(event, session),
+    emit: (event: AuthChangeEvent, session: Session | null) => client.emit(event, session),
     login: (session: Session) => injectTestSession(session) as Promise<void>,
   };
 }

@@ -1,4 +1,9 @@
 export { default as RootLayout } from '@/mobile/RootLayout';
+export { createAuthClient } from '@/mobile/authClient';
+export type { AuthClientConfig, AuthClientParts } from '@/mobile/authClient';
+export { fetchWithinAuthDeadline } from '@/mobile/authFetch';
+export { createAuthStorage } from '@/mobile/authStorage';
+export { createAuthStorage as createWebAuthStorage } from '@/mobile/authStorage.web';
 export { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
 export { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
 export { TabsTitle } from '@/mobile/frame/platformExtras';

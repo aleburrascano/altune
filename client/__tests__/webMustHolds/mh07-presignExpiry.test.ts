@@ -3,7 +3,7 @@ import { act, renderHook } from '@testing-library/react-native';
 
 import type { Session } from '@supabase/supabase-js';
 
-import { supabase } from '@shared/auth/supabaseClient';
+import { supabase } from '@shared/auth';
 import { asTrackId } from '@shared/catalog';
 import { usePlayback } from '@shared/playback/usePlayback';
 

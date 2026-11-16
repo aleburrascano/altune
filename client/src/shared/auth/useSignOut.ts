@@ -5,7 +5,7 @@ import { ApiError, NetworkError, isSessionFetchFailure } from '@shared/failure';
 
 import { withinAuthDeadline } from '@shared/auth/authDeadline';
 import { forgetPreviousUsersLocalData } from '@shared/auth/userLocalData';
-import { clearPersistedAuthSession, supabase } from '@shared/auth/supabaseClient';
+import { clearPersistedAuthSession, supabase } from '@shared/auth/authActions';
 
 export type SignOutResult =
   | { status: 'idle' }

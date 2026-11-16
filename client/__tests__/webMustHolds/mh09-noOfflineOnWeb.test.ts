@@ -3,6 +3,10 @@ import { QueryClient } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react-native';
 import { asTrackId } from '@shared/catalog';
 
+const { ensureAppAuthClient } = require('@testing/appAuthClient.js') as {
+  ensureAppAuthClient: () => void;
+};
+
 const INDEX_URI = 'file:///document/offline/pinned.json';
 
 const sharedReact = jest.requireActual('react');
@@ -18,6 +22,7 @@ function onPlatform<T>(os: 'ios', load: () => T): T {
       jest.doMock('react-native', () => sharedReactNative);
       jest.doMock('@tanstack/react-query', () => sharedReactQuery);
       sharedReactNative.Platform.OS = os;
+      ensureAppAuthClient();
       loaded = load();
     });
   } finally {

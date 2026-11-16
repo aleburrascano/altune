@@ -1,6 +1,8 @@
+import { authClientOver } from '@testing/fakeAuthClient';
 import {
   supabase,
   authIntentClient,
+  installAuthClient,
   requestPasswordReset,
   signInWithPassword,
   signOutOtherSessions,
@@ -16,16 +18,33 @@ type AuthMethod =
   | 'signOut'
   | 'signInWithOAuth';
 
-const original = { ...supabase.auth };
+let fakeAuth: Partial<Record<AuthMethod, jest.Mock>>;
+
+beforeEach(() => {
+  fakeAuth = {};
+  installAuthClient(authClientOver(fakeAuth));
+});
 
 function stub(method: AuthMethod, result: unknown): jest.Mock {
   const mock = jest.fn().mockResolvedValue(result);
-  Object.assign(supabase.auth, { [method]: mock });
+  fakeAuth[method] = mock;
   return mock;
 }
 
-afterEach(() => {
-  Object.assign(supabase.auth, original);
+describe('the auth client slot', () => {
+  it('hands every action the client the app installed', () => {
+    expect(supabase.auth).toBe(fakeAuth);
+  });
+
+  it('refuses to act before the app installs a client, naming the missing step', () => {
+    jest.isolateModules(() => {
+      const fresh = require('@shared/auth') as { supabase: { auth: unknown } };
+
+      expect(() => fresh.supabase.auth).toThrow(
+        'auth has no client: the app installs one at startup, a test passes in a fake',
+      );
+    });
+  });
 });
 
 describe('authActions', () => {

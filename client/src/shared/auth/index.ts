@@ -1,17 +1,16 @@
 export {
   authIntentClient,
+  installAuthClient,
   requestPasswordReset,
   signInWithPassword,
   signOutOtherSessions,
   signUp,
   startOAuth,
+  supabase,
   updatePassword,
 } from '@shared/auth/authActions';
-export {
-  withAuthDeadline,
-  withinAuthDeadline,
-  fetchWithinAuthDeadline,
-} from '@shared/auth/authDeadline';
+export type { AuthClient } from '@shared/auth/authActions';
+export { withAuthDeadline, withinAuthDeadline } from '@shared/auth/authDeadline';
 export { injectTestSession } from '@shared/auth/injectTestSession';
 export { primeSignedInUser } from '@shared/auth/primeSignedInUser';
 export {
@@ -23,10 +22,8 @@ export {
   renewSessionCredentials,
 } from '@shared/auth/sessionExpired';
 export type { CredentialStamp } from '@shared/auth/sessionExpired';
-export { supabase, clearPersistedAuthSession } from '@shared/auth/supabaseClient';
 export { isTestAuthEnabled, markTestAuthBootSettled } from '@shared/auth/testAuthBoot';
 export { useSession } from '@shared/auth/useSession';
 export type { SessionState } from '@shared/auth/useSession';
 export { useSignOut } from '@shared/auth/useSignOut';
 export type { SignOutResult } from '@shared/auth/useSignOut';
-export { authStorage } from '@shared/auth/authStorage.web';

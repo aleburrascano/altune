@@ -1,4 +1,4 @@
-type AuthStorage = {
+export type AuthStorage = {
   getItem: (key: string) => Promise<string | null>;
   setItem: (key: string, value: string) => Promise<void>;
   removeItem: (key: string) => Promise<void>;
@@ -58,7 +58,7 @@ function deleteFromWebStorage(fallback: Map<string, string>, key: string): Promi
   return Promise.resolve();
 }
 
-function createLocalStorageWebStorage(): AuthStorage {
+export function createAuthStorage(): AuthStorage {
   const unreachableFallback = new Map<string, string>();
 
   return {
@@ -67,5 +67,3 @@ function createLocalStorageWebStorage(): AuthStorage {
     removeItem: (key) => deleteFromWebStorage(unreachableFallback, key),
   };
 }
-
-export const authStorage = createLocalStorageWebStorage();

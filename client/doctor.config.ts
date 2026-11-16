@@ -140,7 +140,7 @@ export default {
           'src/features/signIn/ui/AuthCallbackScreen.tsx',
           'src/features/player/adapters/PlaybackProvider.tsx',
           'src/features/player/domain/playsThroughTrackPlayer.ts',
-          'src/shared/auth/authStorage.ts',
+          'src/mobile/authStorage.ts',
           'src/shared/device/isWebPlatform.ts',
           'src/shared/device/webOrigin.ts',
           'src/shared/ui/a11y/announce.ts',

@@ -1,7 +1,11 @@
 import * as SecureStore from 'expo-secure-store';
 
 const { __secureStore } = SecureStore as unknown as {
-  __secureStore: { read(key: string): string | undefined; failNext(op: string, e?: Error): void };
+  __secureStore: {
+    read(key: string): string | undefined;
+    failNext(op: string, e?: Error): void;
+    optionsOf(op: 'get' | 'set' | 'delete'): unknown[];
+  };
 };
 
 describe('secure-store double', () => {
@@ -20,5 +24,16 @@ describe('secure-store double', () => {
       'keychain unavailable',
     );
     expect(__secureStore.read('session')).toBeUndefined();
+  });
+
+  it('records the options each call was made with', async () => {
+    const options = { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK };
+    await SecureStore.setItemAsync('session', 'token', options);
+    await SecureStore.getItemAsync('session');
+    await SecureStore.deleteItemAsync('session', options);
+
+    expect(__secureStore.optionsOf('set')).toEqual([options]);
+    expect(__secureStore.optionsOf('get')).toEqual([undefined]);
+    expect(__secureStore.optionsOf('delete')).toEqual([options]);
   });
 });

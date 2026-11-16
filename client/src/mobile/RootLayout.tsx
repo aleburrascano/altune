@@ -13,7 +13,9 @@ import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { installAuthClient } from '@shared/auth';
 import { createQueryClient } from '@shared/query';
+import { createAuthClient } from '@/mobile/authClient';
 import { StagingBanner } from '@/mobile/frame/StagingBanner';
 import {
   AuthGate,
@@ -42,7 +44,9 @@ import { reportOtaLaunchFailures } from '@/mobile/otaLaunchReport';
 import { ScreenViewsBridge, ServerEventsBridge } from '@/mobile/serverEvents';
 import { chainUncaughtErrorHandler } from '@/mobile/uncaughtErrors';
 
+installAuthClient(createAuthClient());
 provideOfflinePort(httpOfflinePort);
+
 startPlaybackService();
 
 registerSearchStateSignOutReset();

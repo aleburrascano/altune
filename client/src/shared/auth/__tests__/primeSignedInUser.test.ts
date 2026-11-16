@@ -1,22 +1,18 @@
 import type * as signOutCleanup from '@shared/session/signOutCleanup';
 import type * as primeModule from '@shared/auth/primeSignedInUser';
-import type { supabase } from '@shared/auth';
-
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
+import type * as authDoor from '@shared/auth';
+import { authClientOver } from '@testing/fakeAuthClient';
 
 type Modules = {
   registry: typeof signOutCleanup;
   primeSignedInUser: typeof primeModule.primeSignedInUser;
 };
-type SessionResult = Awaited<ReturnType<typeof supabase.auth.getSession>>;
 
 function freshModules(getSession: () => Promise<unknown>): Modules {
   let modules!: Modules;
   jest.isolateModules(() => {
-    const client: { supabase: typeof supabase } = jest.requireActual('@shared/auth/supabaseClient');
-    jest
-      .spyOn(client.supabase.auth, 'getSession')
-      .mockImplementation(getSession as () => Promise<SessionResult>);
+    const auth: typeof authDoor = jest.requireActual('@shared/auth');
+    auth.installAuthClient(authClientOver({ getSession }));
     modules = {
       registry: jest.requireActual('@shared/session/signOutCleanup'),
       primeSignedInUser: jest.requireActual('@shared/auth/primeSignedInUser').primeSignedInUser,

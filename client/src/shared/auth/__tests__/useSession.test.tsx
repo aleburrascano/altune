@@ -4,7 +4,7 @@ import { renderHook, act } from '@testing-library/react-native';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import * as FileSystem from 'expo-file-system';
 
-import { usePinnedStore } from '@shared/offline';
+import { asTrackId, readyEntry, usePinnedStore } from '@shared/offline';
 
 import {
   useSession,
@@ -108,8 +108,6 @@ function pinnedUri(trackId: string): string {
   return `file:///document/offline-audio/${trackId}.mp3`;
 }
 
-type PinnedTrackId = ReturnType<typeof usePinnedStore.getState>['entries'][string]['trackId'];
-
 function seedLocalData(queryClient: QueryClient, trackId = 't1'): void {
   queryClient.setQueryData(LIBRARY_KEY, ['seed']);
   queryClient.setQueryData(PLAYLIST_KEY, { id: 'p1' });
@@ -118,7 +116,7 @@ function seedLocalData(queryClient: QueryClient, trackId = 't1'): void {
   __fs.seedFile(pinnedUri(trackId), 'audio-bytes');
   usePinnedStore.setState({
     entries: {
-      [trackId]: { trackId: trackId as PinnedTrackId, status: 'ready', uri: pinnedUri(trackId) },
+      [trackId]: readyEntry(asTrackId(trackId), pinnedUri(trackId)),
     },
     queue: [],
     isWorking: false,

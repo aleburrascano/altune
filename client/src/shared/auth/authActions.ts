@@ -1,10 +1,36 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { supabase } from '@shared/auth/supabaseClient';
-
 type Auth = SupabaseClient['auth'];
 
 type PasswordChange = { password: string };
+
+export type AuthClient = {
+  readonly auth: Auth;
+  clearPersistedSession(): Promise<void>;
+};
+
+let installed: AuthClient | undefined;
+
+export function installAuthClient(client: AuthClient): void {
+  installed = client;
+}
+
+function authClient(): AuthClient {
+  if (installed === undefined) {
+    throw new Error('auth has no client: the app installs one at startup, a test passes in a fake');
+  }
+  return installed;
+}
+
+export const supabase: { readonly auth: Auth } = {
+  get auth() {
+    return authClient().auth;
+  },
+};
+
+export function clearPersistedAuthSession(): Promise<void> {
+  return authClient().clearPersistedSession();
+}
 
 export function signInWithPassword(...args: Parameters<Auth['signInWithPassword']>) {
   return supabase.auth.signInWithPassword(...args);
