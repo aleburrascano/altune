@@ -77,6 +77,8 @@ describe('reportOtaLaunchFailures', () => {
     await reportOtaLaunchFailures(clean, report);
     await reportOtaLaunchFailures(off, report);
     expect(report).not.toHaveBeenCalled();
+    expect(clean.readLogEntriesAsync).toHaveBeenCalledTimes(1);
+    expect(clean.clearLogEntriesAsync).not.toHaveBeenCalled();
     expect(off.readLogEntriesAsync).not.toHaveBeenCalled();
   });
 
