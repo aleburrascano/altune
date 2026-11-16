@@ -1,8 +1,8 @@
-package history
+package history_test
 
 import (
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/discoverytest"
-	"altune/go-api/internal/discovery/domain"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
@@ -15,7 +15,7 @@ import (
 func TestListSearchHistoryService_Execute(t *testing.T) {
 	userID := shared.NewUserId(uuid.New())
 
-	fixedEntries := []*domain.SearchHistoryEntry{
+	fixedEntries := []*discovery.SearchHistoryEntry{
 		{
 			ID:         shared.NewEntityId(),
 			UserId:     userID,
@@ -43,7 +43,7 @@ func TestListSearchHistoryService_Execute(t *testing.T) {
 		{
 			name: "happy path returns entries",
 			repo: &discoverytest.FakeHistoryReader{
-				ListDistinctFn: func(_ context.Context, _ shared.UserId, limit int) ([]*domain.SearchHistoryEntry, error) {
+				ListDistinctFn: func(_ context.Context, _ shared.UserId, limit int) ([]*discovery.SearchHistoryEntry, error) {
 					if limit != 5 {
 						t.Errorf("expected limit 5, got %d", limit)
 					}
@@ -57,7 +57,7 @@ func TestListSearchHistoryService_Execute(t *testing.T) {
 		{
 			name: "zero limit defaults to 10",
 			repo: &discoverytest.FakeHistoryReader{
-				ListDistinctFn: func(_ context.Context, _ shared.UserId, limit int) ([]*domain.SearchHistoryEntry, error) {
+				ListDistinctFn: func(_ context.Context, _ shared.UserId, limit int) ([]*discovery.SearchHistoryEntry, error) {
 					if limit != 10 {
 						t.Errorf("expected default limit 10, got %d", limit)
 					}
@@ -71,7 +71,7 @@ func TestListSearchHistoryService_Execute(t *testing.T) {
 		{
 			name: "negative limit defaults to 10",
 			repo: &discoverytest.FakeHistoryReader{
-				ListDistinctFn: func(_ context.Context, _ shared.UserId, limit int) ([]*domain.SearchHistoryEntry, error) {
+				ListDistinctFn: func(_ context.Context, _ shared.UserId, limit int) ([]*discovery.SearchHistoryEntry, error) {
 					if limit != 10 {
 						t.Errorf("expected default limit 10 for negative input, got %d", limit)
 					}
@@ -92,7 +92,7 @@ func TestListSearchHistoryService_Execute(t *testing.T) {
 		{
 			name: "repo error propagates",
 			repo: &discoverytest.FakeHistoryReader{
-				ListDistinctFn: func(_ context.Context, _ shared.UserId, _ int) ([]*domain.SearchHistoryEntry, error) {
+				ListDistinctFn: func(_ context.Context, _ shared.UserId, _ int) ([]*discovery.SearchHistoryEntry, error) {
 					return nil, errors.New("db unavailable")
 				},
 			},
@@ -103,11 +103,11 @@ func TestListSearchHistoryService_Execute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var svc *ListSearchHistoryService
+			var svc *discovery.ListSearchHistoryService
 			if tt.nilRepo {
-				svc = NewListSearchHistoryService(nil)
+				svc = discovery.NewListSearchHistoryService(nil)
 			} else {
-				svc = NewListSearchHistoryService(tt.repo)
+				svc = discovery.NewListSearchHistoryService(tt.repo)
 			}
 
 			entries, err := svc.Execute(context.Background(), userID, tt.limit)

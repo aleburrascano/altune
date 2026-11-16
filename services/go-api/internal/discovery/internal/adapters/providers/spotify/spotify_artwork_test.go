@@ -1,10 +1,8 @@
-package spotify
+package spotify_test
 
 import (
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/internal/adapters/providers/artworkchain"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/internal/adapters/providers/providertest"
-	"altune/go-api/internal/discovery/internal/core/ports"
 	"context"
 	"errors"
 	"io"
@@ -31,11 +29,11 @@ func oembedClient(status int, thumbnail string, capture *string) *http.Client {
 func TestSpotifyArtworkResolver_ResolveByIdentity(t *testing.T) {
 	t.Run("artist id resolves and upgrades to 640px", func(t *testing.T) {
 		var gotURL string
-		r := NewSpotifyArtworkResolver(oembedClient(200,
+		r := discovery.NewSpotifyArtworkResolver(oembedClient(200,
 			"https://image-cdn-ak.spotifycdn.com/image/ab67616100005174HASH", &gotURL))
 
-		url, err := r.ResolveByIdentity(context.Background(), domain.ResultKindArtist,
-			ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"spotify": "SPID123"}})
+		url, err := r.ResolveByIdentity(context.Background(), discovery.ResultKindArtist,
+			discovery.ArtworkIdentity{ExternalIDs: map[discovery.ProviderKey]string{"spotify": "SPID123"}})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -49,27 +47,27 @@ func TestSpotifyArtworkResolver_ResolveByIdentity(t *testing.T) {
 	})
 
 	t.Run("no spotify id is a clean miss", func(t *testing.T) {
-		r := NewSpotifyArtworkResolver(oembedClient(200, "x", nil))
-		url, err := r.ResolveByIdentity(context.Background(), domain.ResultKindArtist,
-			ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "1"}})
+		r := discovery.NewSpotifyArtworkResolver(oembedClient(200, "x", nil))
+		url, err := r.ResolveByIdentity(context.Background(), discovery.ResultKindArtist,
+			discovery.ArtworkIdentity{ExternalIDs: map[discovery.ProviderKey]string{"discogs": "1"}})
 		if err != nil || url != "" {
 			t.Errorf("got (%q, %v), want clean miss", url, err)
 		}
 	})
 
 	t.Run("unsupported kind is a clean miss", func(t *testing.T) {
-		r := NewSpotifyArtworkResolver(oembedClient(200, "x", nil))
-		url, _ := r.ResolveByIdentity(context.Background(), domain.ResultKindPlaylist,
-			ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"spotify": "SPID123"}})
+		r := discovery.NewSpotifyArtworkResolver(oembedClient(200, "x", nil))
+		url, _ := r.ResolveByIdentity(context.Background(), discovery.ResultKindPlaylist,
+			discovery.ArtworkIdentity{ExternalIDs: map[discovery.ProviderKey]string{"spotify": "SPID123"}})
 		if url != "" {
 			t.Errorf("url = %q, want miss for unsupported kind", url)
 		}
 	})
 
 	t.Run("non-200 is a clean miss, not an error", func(t *testing.T) {
-		r := NewSpotifyArtworkResolver(oembedClient(404, "x", nil))
-		url, err := r.ResolveByIdentity(context.Background(), domain.ResultKindArtist,
-			ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"spotify": "SPID123"}})
+		r := discovery.NewSpotifyArtworkResolver(oembedClient(404, "x", nil))
+		url, err := r.ResolveByIdentity(context.Background(), discovery.ResultKindArtist,
+			discovery.ArtworkIdentity{ExternalIDs: map[discovery.ProviderKey]string{"spotify": "SPID123"}})
 		if err != nil || url != "" {
 			t.Errorf("got (%q, %v), want clean miss", url, err)
 		}
@@ -77,21 +75,21 @@ func TestSpotifyArtworkResolver_ResolveByIdentity(t *testing.T) {
 }
 
 func TestSpotifyArtworkResolver_ResolveByIdentity_500IsArtworkUnavailable(t *testing.T) {
-	r := NewSpotifyArtworkResolver(oembedClient(500, "x", nil))
-	url, err := r.ResolveByIdentity(context.Background(), domain.ResultKindArtist,
-		ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"spotify": "SPID123"}})
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	r := discovery.NewSpotifyArtworkResolver(oembedClient(500, "x", nil))
+	url, err := r.ResolveByIdentity(context.Background(), discovery.ResultKindArtist,
+		discovery.ArtworkIdentity{ExternalIDs: map[discovery.ProviderKey]string{"spotify": "SPID123"}})
+	if url != "" || !errors.Is(err, discovery.ErrArtworkUnavailable) {
 		t.Errorf("got (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
 
 func TestSpotifyArtworkResolver_NameResolveIsNoop(t *testing.T) {
 	called := false
-	r := NewSpotifyArtworkResolver(&http.Client{Transport: providertest.FakeRoundTripper{Fn: func(*http.Request) (*http.Response, error) {
+	r := discovery.NewSpotifyArtworkResolver(&http.Client{Transport: providertest.FakeRoundTripper{Fn: func(*http.Request) (*http.Response, error) {
 		called = true
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("{}")), Header: make(http.Header)}, nil
 	}}})
-	url, _ := r.Resolve(context.Background(), domain.ResultKindArtist, "Che", "", "")
+	url, _ := r.Resolve(context.Background(), discovery.ResultKindArtist, "Che", "", "")
 	if url != "" || called {
 		t.Errorf("Resolve should be a no-op (url=%q called=%v)", url, called)
 	}
@@ -100,8 +98,8 @@ func TestSpotifyArtworkResolver_NameResolveIsNoop(t *testing.T) {
 	}
 }
 
-func spotifyIdentity() ports.ArtworkIdentity {
-	return ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"spotify": "SPID123"}}
+func spotifyIdentity() discovery.ArtworkIdentity {
+	return discovery.ArtworkIdentity{ExternalIDs: map[discovery.ProviderKey]string{"spotify": "SPID123"}}
 }
 
 func TestSpotifyArtworkResolver_ResolveByIdentity_RateLimitIsArtworkUnavailable(t *testing.T) {
@@ -110,8 +108,8 @@ func TestSpotifyArtworkResolver_ResolveByIdentity_RateLimitIsArtworkUnavailable(
 	}))
 	defer server.Close()
 
-	url, err := NewSpotifyArtworkResolver(providertest.NewClient(server.URL)).ResolveByIdentity(context.Background(), domain.ResultKindArtist, spotifyIdentity())
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	url, err := discovery.NewSpotifyArtworkResolver(providertest.NewClient(server.URL)).ResolveByIdentity(context.Background(), discovery.ResultKindArtist, spotifyIdentity())
+	if url != "" || !errors.Is(err, discovery.ErrArtworkUnavailable) {
 		t.Errorf("ResolveByIdentity on HTTP 429 = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
@@ -122,7 +120,7 @@ func TestSpotifyArtworkResolver_ResolveByIdentity_BadRequestIsAVerifiedMiss(t *t
 	}))
 	defer server.Close()
 
-	url, err := NewSpotifyArtworkResolver(providertest.NewClient(server.URL)).ResolveByIdentity(context.Background(), domain.ResultKindAlbum, spotifyIdentity())
+	url, err := discovery.NewSpotifyArtworkResolver(providertest.NewClient(server.URL)).ResolveByIdentity(context.Background(), discovery.ResultKindAlbum, spotifyIdentity())
 	if url != "" || err != nil {
 		t.Errorf("ResolveByIdentity on HTTP 400 = (%q, %v), want (\"\", nil)", url, err)
 	}
@@ -135,8 +133,8 @@ func TestSpotifyArtworkResolver_ResolveByIdentity_MalformedBodyIsArtworkUnavaila
 	}))
 	defer server.Close()
 
-	url, err := NewSpotifyArtworkResolver(providertest.NewClient(server.URL)).ResolveByIdentity(context.Background(), domain.ResultKindArtist, spotifyIdentity())
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	url, err := discovery.NewSpotifyArtworkResolver(providertest.NewClient(server.URL)).ResolveByIdentity(context.Background(), discovery.ResultKindArtist, spotifyIdentity())
+	if url != "" || !errors.Is(err, discovery.ErrArtworkUnavailable) {
 		t.Errorf("ResolveByIdentity on a truncated body = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
@@ -148,7 +146,7 @@ func TestSpotifyArtworkResolver_ResolveByIdentity_EmptyThumbnailIsAVerifiedMiss(
 	}))
 	defer server.Close()
 
-	url, err := NewSpotifyArtworkResolver(providertest.NewClient(server.URL)).ResolveByIdentity(context.Background(), domain.ResultKindArtist, spotifyIdentity())
+	url, err := discovery.NewSpotifyArtworkResolver(providertest.NewClient(server.URL)).ResolveByIdentity(context.Background(), discovery.ResultKindArtist, spotifyIdentity())
 	if url != "" || err != nil {
 		t.Errorf("ResolveByIdentity with no thumbnail = (%q, %v), want (\"\", nil)", url, err)
 	}
@@ -159,8 +157,8 @@ func TestSpotifyArtworkResolver_ResolveByIdentity_TransportErrorIsArtworkUnavail
 	serverURL := server.URL
 	server.Close()
 
-	url, err := NewSpotifyArtworkResolver(providertest.NewClient(serverURL)).ResolveByIdentity(context.Background(), domain.ResultKindArtist, spotifyIdentity())
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	url, err := discovery.NewSpotifyArtworkResolver(providertest.NewClient(serverURL)).ResolveByIdentity(context.Background(), discovery.ResultKindArtist, spotifyIdentity())
+	if url != "" || !errors.Is(err, discovery.ErrArtworkUnavailable) {
 		t.Errorf("ResolveByIdentity against an unreachable host = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
@@ -171,8 +169,8 @@ func TestSpotifyArtworkResolver_ResolveByIdentity_CancelledContextIsUnavailableA
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	url, err := NewSpotifyArtworkResolver(providertest.NewClient(server.URL)).ResolveByIdentity(ctx, domain.ResultKindArtist, spotifyIdentity())
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
+	url, err := discovery.NewSpotifyArtworkResolver(providertest.NewClient(server.URL)).ResolveByIdentity(ctx, discovery.ResultKindArtist, spotifyIdentity())
+	if url != "" || !errors.Is(err, discovery.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
 		t.Errorf("ResolveByIdentity with a cancelled context = (%q, %v), want (\"\", ErrArtworkUnavailable wrapping context.Canceled)", url, err)
 	}
 }
@@ -183,7 +181,7 @@ func TestSpotifyArtworkResolver_ResolveByIdentity_FailureNamesSpotify(t *testing
 	}))
 	defer server.Close()
 
-	_, err := NewSpotifyArtworkResolver(providertest.NewClient(server.URL)).ResolveByIdentity(context.Background(), domain.ResultKindArtist, spotifyIdentity())
+	_, err := discovery.NewSpotifyArtworkResolver(providertest.NewClient(server.URL)).ResolveByIdentity(context.Background(), discovery.ResultKindArtist, spotifyIdentity())
 	if err == nil || !strings.Contains(err.Error(), "spotify") {
 		t.Errorf("err = %v, want a failure that names spotify", err)
 	}
@@ -195,9 +193,9 @@ func TestChainedArtworkResolver_SpotifyIdentityOn503IsDegradedAndUnavailable(t *
 	}))
 	defer server.Close()
 
-	chain := artworkchain.NewChainedArtworkResolver(NewSpotifyArtworkResolver(providertest.NewClient(server.URL)))
-	url, _, err := chain.ResolveWithIdentityTagged(context.Background(), domain.ResultKindArtist, "Che", "", spotifyIdentity())
-	if url != "" || !errors.Is(err, ports.ErrArtworkDegraded) || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	chain := discovery.NewChainedArtworkResolver(discovery.NewSpotifyArtworkResolver(providertest.NewClient(server.URL)))
+	url, _, err := chain.ResolveWithIdentityTagged(context.Background(), discovery.ResultKindArtist, "Che", "", spotifyIdentity())
+	if url != "" || !errors.Is(err, discovery.ErrArtworkDegraded) || !errors.Is(err, discovery.ErrArtworkUnavailable) {
 		t.Errorf("ResolveWithIdentityTagged on Spotify 503 = (%q, %v), want (\"\", ErrArtworkDegraded and ErrArtworkUnavailable)", url, err)
 	}
 }

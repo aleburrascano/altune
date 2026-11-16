@@ -1,6 +1,7 @@
-package history
+package history_test
 
 import (
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/discoverytest"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
@@ -52,17 +53,17 @@ func TestClearSearchHistoryService_Execute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var svc *ClearSearchHistoryService
+			var svc *discovery.ClearSearchHistoryService
 			var called bool
 			if tt.nilRepo {
-				svc = NewClearSearchHistoryService(nil)
+				svc = discovery.NewClearSearchHistoryService(nil)
 			} else {
 				inner := tt.repo.EraseFn
 				tt.repo.EraseFn = func(ctx context.Context, u shared.UserId) error {
 					called = true
 					return inner(ctx, u)
 				}
-				svc = NewClearSearchHistoryService(tt.repo)
+				svc = discovery.NewClearSearchHistoryService(tt.repo)
 			}
 
 			err := svc.Execute(context.Background(), userID)

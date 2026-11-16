@@ -1,4 +1,4 @@
-package related
+package related_test
 
 import (
 	"testing"

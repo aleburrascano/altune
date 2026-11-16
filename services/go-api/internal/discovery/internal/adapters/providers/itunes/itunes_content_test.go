@@ -1,7 +1,7 @@
-package itunes
+package itunes_test
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/internal/adapters/providers/providertest"
 	"context"
 	"net/http"
@@ -26,15 +26,15 @@ func TestITunesAdapter_GetArtistTopTracks(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewITunesAdapter(providertest.NewClient(server.URL))
-	tracks, err := adapter.GetArtistTopTracks(context.Background(), domain.ProviderITunes, "42")
+	adapter := discovery.NewITunesAdapter(providertest.NewClient(server.URL))
+	tracks, err := adapter.GetArtistTopTracks(context.Background(), discovery.ProviderITunes, "42")
 	if err != nil {
 		t.Fatalf("GetArtistTopTracks: %v", err)
 	}
 	if len(tracks) != 1 {
 		t.Fatalf("tracks = %d, want 1 (parent wrapper dropped)", len(tracks))
 	}
-	if tracks[0].Kind != domain.ResultKindTrack || tracks[0].Title != "Los Santos" {
+	if tracks[0].Kind != discovery.ResultKindTrack || tracks[0].Title != "Los Santos" {
 		t.Errorf("track = %+v", tracks[0])
 	}
 }

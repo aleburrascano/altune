@@ -1,4 +1,4 @@
-package favorites
+package favorites_test
 
 import (
 	"testing"

@@ -1,7 +1,7 @@
-package deezer
+package deezer_test
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/internal/adapters/providers/providertest"
 	"context"
 	"net/http"
@@ -31,9 +31,9 @@ func deezerEnrichmentServer() *httptest.Server {
 func TestDeezerAdapter_ResolveAndLookupTrack(t *testing.T) {
 	server := deezerEnrichmentServer()
 	defer server.Close()
-	adapter := NewDeezerAdapter(providertest.NewClient(server.URL))
+	adapter := discovery.NewDeezerAdapter(providertest.NewClient(server.URL))
 
-	id, err := adapter.ResolveID(context.Background(), domain.ResultKindTrack, "Eminem", "Lose Yourself")
+	id, err := adapter.ResolveID(context.Background(), discovery.ResultKindTrack, "Eminem", "Lose Yourself")
 	if err != nil {
 		t.Fatalf("ResolveID: %v", err)
 	}
@@ -41,7 +41,7 @@ func TestDeezerAdapter_ResolveAndLookupTrack(t *testing.T) {
 		t.Fatalf("ResolveID: got %q, want 1109731", id)
 	}
 
-	e, err := adapter.Lookup(context.Background(), domain.ResultKindTrack, id)
+	e, err := adapter.Lookup(context.Background(), discovery.ResultKindTrack, id)
 	if err != nil {
 		t.Fatalf("Lookup: %v", err)
 	}
@@ -59,9 +59,9 @@ func TestDeezerAdapter_ResolveAndLookupTrack(t *testing.T) {
 func TestDeezerAdapter_ResolveAndLookupAlbum(t *testing.T) {
 	server := deezerEnrichmentServer()
 	defer server.Close()
-	adapter := NewDeezerAdapter(providertest.NewClient(server.URL))
+	adapter := discovery.NewDeezerAdapter(providertest.NewClient(server.URL))
 
-	id, err := adapter.ResolveID(context.Background(), domain.ResultKindAlbum, "Daft Punk", "Discovery")
+	id, err := adapter.ResolveID(context.Background(), discovery.ResultKindAlbum, "Daft Punk", "Discovery")
 	if err != nil {
 		t.Fatalf("ResolveID: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestDeezerAdapter_ResolveAndLookupAlbum(t *testing.T) {
 		t.Fatalf("ResolveID: got %q, want 302127", id)
 	}
 
-	e, err := adapter.Lookup(context.Background(), domain.ResultKindAlbum, id)
+	e, err := adapter.Lookup(context.Background(), discovery.ResultKindAlbum, id)
 	if err != nil {
 		t.Fatalf("Lookup: %v", err)
 	}
@@ -90,9 +90,9 @@ func TestDeezerAdapter_ResolveAndLookupAlbum(t *testing.T) {
 func TestDeezerAdapter_ArtistKindResolvesToEmpty(t *testing.T) {
 	server := deezerEnrichmentServer()
 	defer server.Close()
-	adapter := NewDeezerAdapter(providertest.NewClient(server.URL))
+	adapter := discovery.NewDeezerAdapter(providertest.NewClient(server.URL))
 
-	id, err := adapter.ResolveID(context.Background(), domain.ResultKindArtist, "Daft Punk", "Daft Punk")
+	id, err := adapter.ResolveID(context.Background(), discovery.ResultKindArtist, "Daft Punk", "Daft Punk")
 	if err != nil {
 		t.Fatalf("ResolveID: %v", err)
 	}
@@ -107,9 +107,9 @@ func TestDeezerAdapter_Resolve_PrefersXLArtwork(t *testing.T) {
 		w.Write([]byte(`{"data":[{"id":302127,"title":"Discovery","cover_big":"https://cdn.deezer.com/500x500.jpg","cover_xl":"https://cdn.deezer.com/1000x1000.jpg","artist":{"id":27,"name":"Daft Punk"}}]}`))
 	}))
 	defer server.Close()
-	adapter := NewDeezerAdapter(providertest.NewClient(server.URL))
+	adapter := discovery.NewDeezerAdapter(providertest.NewClient(server.URL))
 
-	img, err := adapter.Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	img, err := adapter.Resolve(context.Background(), discovery.ResultKindAlbum, "Discovery", "Daft Punk", "")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}

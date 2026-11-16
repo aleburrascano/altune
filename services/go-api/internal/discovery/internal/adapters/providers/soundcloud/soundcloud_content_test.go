@@ -1,7 +1,7 @@
-package soundcloud
+package soundcloud_test
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"context"
 	"net/http"
 	"os"
@@ -13,10 +13,10 @@ func TestSoundCloudDiscographyLive(t *testing.T) {
 	if os.Getenv("SC_LIVE") != "1" {
 		t.Skip("set SC_LIVE=1")
 	}
-	a := NewSoundCloudAPIAdapter(&http.Client{Timeout: 20 * time.Second}, nil)
+	a := discovery.NewSoundCloudAPIAdapter(&http.Client{Timeout: 20 * time.Second}, nil)
 	ctx := context.Background()
 
-	albums, err := a.GetArtistAlbums(ctx, domain.ProviderSoundCloud, "che")
+	albums, err := a.GetArtistAlbums(ctx, discovery.ProviderSoundCloud, "che")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums(handle): %v", err)
 	}
@@ -47,10 +47,10 @@ func TestSoundCloudAlbumTracksLive(t *testing.T) {
 	if os.Getenv("SC_LIVE") != "1" {
 		t.Skip("set SC_LIVE=1")
 	}
-	a := NewSoundCloudAPIAdapter(&http.Client{Timeout: 20 * time.Second}, nil)
+	a := discovery.NewSoundCloudAPIAdapter(&http.Client{Timeout: 20 * time.Second}, nil)
 	ctx := context.Background()
 
-	albums, err := a.GetArtistAlbums(ctx, domain.ProviderSoundCloud, "che")
+	albums, err := a.GetArtistAlbums(ctx, discovery.ProviderSoundCloud, "che")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestSoundCloudAlbumTracksLive(t *testing.T) {
 		t.Fatal("did not find '14 HAHAHA LOL' to test")
 	}
 
-	single, err := a.GetAlbumTracks(ctx, domain.ProviderSoundCloud, singleID)
+	single, err := a.GetAlbumTracks(ctx, discovery.ProviderSoundCloud, singleID)
 	if err != nil {
 		t.Fatalf("GetAlbumTracks(single): %v", err)
 	}
@@ -77,7 +77,7 @@ func TestSoundCloudAlbumTracksLive(t *testing.T) {
 	}
 
 	if epID != "" {
-		ep, err := a.GetAlbumTracks(ctx, domain.ProviderSoundCloud, epID)
+		ep, err := a.GetAlbumTracks(ctx, discovery.ProviderSoundCloud, epID)
 		if err != nil {
 			t.Fatalf("GetAlbumTracks(ep): %v", err)
 		}
@@ -88,7 +88,7 @@ func TestSoundCloudAlbumTracksLive(t *testing.T) {
 	}
 }
 
-func titleOf(rs []domain.SearchResult) string {
+func titleOf(rs []discovery.SearchResult) string {
 	if len(rs) == 0 {
 		return ""
 	}

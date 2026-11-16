@@ -1,4 +1,4 @@
-package content
+package content_test
 
 import (
 	"testing"

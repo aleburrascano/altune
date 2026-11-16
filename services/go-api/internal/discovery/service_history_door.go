@@ -7,3 +7,8 @@ var (
 	NewListSearchHistoryService   = history.NewListSearchHistoryService
 	NewRecordSearchHistoryService = history.NewRecordSearchHistoryService
 )
+
+type (
+	ClearSearchHistoryService = history.ClearSearchHistoryService
+	ListSearchHistoryService  = history.ListSearchHistoryService
+)

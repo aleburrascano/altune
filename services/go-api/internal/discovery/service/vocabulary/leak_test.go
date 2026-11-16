@@ -1,4 +1,4 @@
-package vocabulary
+package vocabulary_test
 
 import (
 	"testing"

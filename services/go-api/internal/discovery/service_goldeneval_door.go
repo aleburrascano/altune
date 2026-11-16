@@ -13,4 +13,10 @@ var (
 	RunGoldenEval    = goldeneval.Run
 )
 
-const GoldenPass = goldeneval.Pass
+const (
+	GoldenPass         = goldeneval.Pass
+	GoldenErrored      = goldeneval.Errored
+	GoldenFail         = goldeneval.Fail
+	GoldenFixed        = goldeneval.Fixed
+	GoldenStillFailing = goldeneval.StillFailing
+)

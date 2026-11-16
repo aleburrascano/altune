@@ -14,3 +14,5 @@ var (
 	WithUnreleasedStore     = unreleased.WithStore
 	WithUnreleasedTrackers  = unreleased.WithTrackers
 )
+
+type WarmArtist = unreleased.WarmArtist

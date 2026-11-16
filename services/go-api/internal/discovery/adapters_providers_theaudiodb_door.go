@@ -6,3 +6,5 @@ var (
 	NewTheAudioDBAdapter = theaudiodb.New
 	WithTheAudioDBAPIKey = theaudiodb.WithAPIKey
 )
+
+type TheAudioDBAdapter = theaudiodb.Adapter

@@ -1,68 +1,67 @@
-package related
+package related_test
 
 import (
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/discoverytest"
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/internal/core/ports"
 	"context"
 	"errors"
 	"testing"
 )
 
-func relatedTrack(title string) domain.SearchResult {
-	return domain.SearchResult{Kind: domain.ResultKindTrack, Title: title}
+func relatedTrack(title string) discovery.SearchResult {
+	return discovery.SearchResult{Kind: discovery.ResultKindTrack, Title: title}
 }
 
 func TestGetRelatedTracksService_Execute(t *testing.T) {
 	tests := []struct {
 		name       string
-		provider   domain.ProviderName
+		provider   discovery.ProviderName
 		fake       *discoverytest.FakeRelatedProvider
 		limit      int
-		wantStatus domain.ProviderStatus
+		wantStatus discovery.ProviderStatus
 		wantCount  int
 	}{
 		{
 			name:       "unknown provider",
-			provider:   domain.ProviderDeezer,
-			fake:       &discoverytest.FakeRelatedProvider{Results: []domain.SearchResult{relatedTrack("a")}},
+			provider:   discovery.ProviderDeezer,
+			fake:       &discoverytest.FakeRelatedProvider{Results: []discovery.SearchResult{relatedTrack("a")}},
 			limit:      20,
-			wantStatus: domain.ProviderStatusError,
+			wantStatus: discovery.ProviderStatusError,
 			wantCount:  0,
 		},
 		{
 			name:       "provider returns error",
-			provider:   domain.ProviderSoundCloud,
+			provider:   discovery.ProviderSoundCloud,
 			fake:       &discoverytest.FakeRelatedProvider{Err: errors.New("boom")},
 			limit:      20,
-			wantStatus: domain.ProviderStatusError,
+			wantStatus: discovery.ProviderStatusError,
 			wantCount:  0,
 		},
 		{
 			name:     "ok slices to limit",
-			provider: domain.ProviderSoundCloud,
-			fake: &discoverytest.FakeRelatedProvider{Results: []domain.SearchResult{
+			provider: discovery.ProviderSoundCloud,
+			fake: &discoverytest.FakeRelatedProvider{Results: []discovery.SearchResult{
 				relatedTrack("a"), relatedTrack("b"), relatedTrack("c"),
 			}},
 			limit:      2,
-			wantStatus: domain.ProviderStatusOK,
+			wantStatus: discovery.ProviderStatusOK,
 			wantCount:  2,
 		},
 		{
 			name:     "ok no truncation when under limit",
-			provider: domain.ProviderSoundCloud,
-			fake: &discoverytest.FakeRelatedProvider{Results: []domain.SearchResult{
+			provider: discovery.ProviderSoundCloud,
+			fake: &discoverytest.FakeRelatedProvider{Results: []discovery.SearchResult{
 				relatedTrack("a"),
 			}},
 			limit:      20,
-			wantStatus: domain.ProviderStatusOK,
+			wantStatus: discovery.ProviderStatusOK,
 			wantCount:  1,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := NewGetRelatedTracksService(map[string]ports.RelatedTracksProvider{
+			svc := discovery.NewGetRelatedTracksService(map[string]discovery.RelatedTracksProvider{
 				"soundcloud": tt.fake,
 			})
 

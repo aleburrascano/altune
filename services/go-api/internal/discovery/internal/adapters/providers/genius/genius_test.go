@@ -1,9 +1,8 @@
-package genius
+package genius_test
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/internal/adapters/providers/providertest"
-	"altune/go-api/internal/discovery/internal/core/ports"
 	"context"
 	"errors"
 	"fmt"
@@ -38,8 +37,8 @@ func TestGeniusArtworkResolver_Resolve_Song(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resolver := NewGeniusArtworkResolver(providertest.NewClient(server.URL), "test-token-123")
-	url, err := resolver.Resolve(context.Background(), domain.ResultKindTrack, "Creep", "Radiohead", "")
+	resolver := discovery.NewGeniusArtworkResolver(providertest.NewClient(server.URL), "test-token-123")
+	url, err := resolver.Resolve(context.Background(), discovery.ResultKindTrack, "Creep", "Radiohead", "")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
 	}
@@ -68,8 +67,8 @@ func TestGeniusArtworkResolver_Resolve_Song_FallbackToHeader(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resolver := NewGeniusArtworkResolver(providertest.NewClient(server.URL), "token")
-	url, err := resolver.Resolve(context.Background(), domain.ResultKindTrack, "Creep", "Radiohead", "")
+	resolver := discovery.NewGeniusArtworkResolver(providertest.NewClient(server.URL), "token")
+	url, err := resolver.Resolve(context.Background(), discovery.ResultKindTrack, "Creep", "Radiohead", "")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
 	}
@@ -96,8 +95,8 @@ func TestGeniusArtworkResolver_Resolve_Artist(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resolver := NewGeniusArtworkResolver(providertest.NewClient(server.URL), "token")
-	url, err := resolver.Resolve(context.Background(), domain.ResultKindArtist, "Radiohead", "", "")
+	resolver := discovery.NewGeniusArtworkResolver(providertest.NewClient(server.URL), "token")
+	url, err := resolver.Resolve(context.Background(), discovery.ResultKindArtist, "Radiohead", "", "")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
 	}
@@ -126,8 +125,8 @@ func TestGeniusArtworkResolver_Resolve_SkipsDefaultImages(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resolver := NewGeniusArtworkResolver(providertest.NewClient(server.URL), "token")
-	url, err := resolver.Resolve(context.Background(), domain.ResultKindTrack, "Something", "Test", "")
+	resolver := discovery.NewGeniusArtworkResolver(providertest.NewClient(server.URL), "token")
+	url, err := resolver.Resolve(context.Background(), discovery.ResultKindTrack, "Something", "Test", "")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
 	}
@@ -137,8 +136,8 @@ func TestGeniusArtworkResolver_Resolve_SkipsDefaultImages(t *testing.T) {
 }
 
 func TestGeniusArtworkResolver_Resolve_NoSubtitle(t *testing.T) {
-	resolver := NewGeniusArtworkResolver(http.DefaultClient, "token")
-	url, err := resolver.Resolve(context.Background(), domain.ResultKindTrack, "Song", "", "")
+	resolver := discovery.NewGeniusArtworkResolver(http.DefaultClient, "token")
+	url, err := resolver.Resolve(context.Background(), discovery.ResultKindTrack, "Song", "", "")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
 	}
@@ -153,9 +152,9 @@ func TestGeniusArtworkResolver_Resolve_HTTPErrorIsUnavailable(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resolver := NewGeniusArtworkResolver(providertest.NewClient(server.URL), "token")
-	url, err := resolver.Resolve(context.Background(), domain.ResultKindTrack, "Song", "Artist", "")
-	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+	resolver := discovery.NewGeniusArtworkResolver(providertest.NewClient(server.URL), "token")
+	url, err := resolver.Resolve(context.Background(), discovery.ResultKindTrack, "Song", "Artist", "")
+	if !errors.Is(err, discovery.ErrArtworkUnavailable) {
 		t.Fatalf("expected ErrArtworkUnavailable on HTTP 500, got: %v", err)
 	}
 	if url != "" {
@@ -169,9 +168,9 @@ func TestGeniusArtworkResolver_Resolve_Artist_HTTPError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resolver := NewGeniusArtworkResolver(providertest.NewClient(server.URL), "token")
-	url, err := resolver.Resolve(context.Background(), domain.ResultKindArtist, "Radiohead", "", "")
-	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+	resolver := discovery.NewGeniusArtworkResolver(providertest.NewClient(server.URL), "token")
+	url, err := resolver.Resolve(context.Background(), discovery.ResultKindArtist, "Radiohead", "", "")
+	if !errors.Is(err, discovery.ErrArtworkUnavailable) {
 		t.Fatalf("expected ErrArtworkUnavailable on HTTP 500, got: %v", err)
 	}
 	if url != "" {
@@ -181,14 +180,14 @@ func TestGeniusArtworkResolver_Resolve_Artist_HTTPError(t *testing.T) {
 
 func TestGeniusArtworkResolver_Resolve_ProviderFailureIsUnavailable(t *testing.T) {
 	for name, handler := range providertest.ArtworkFailureHandlers() {
-		for _, kind := range []domain.ResultKind{domain.ResultKindTrack, domain.ResultKindArtist} {
+		for _, kind := range []discovery.ResultKind{discovery.ResultKindTrack, discovery.ResultKindArtist} {
 			t.Run(name+" "+kind.String(), func(t *testing.T) {
 				srv := httptest.NewServer(handler)
 				defer srv.Close()
 
-				resolver := NewGeniusArtworkResolver(providertest.NewClient(srv.URL), "token")
+				resolver := discovery.NewGeniusArtworkResolver(providertest.NewClient(srv.URL), "token")
 				url, err := resolver.Resolve(context.Background(), kind, "Creep", "Radiohead", "")
-				if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+				if url != "" || !errors.Is(err, discovery.ErrArtworkUnavailable) {
 					t.Fatalf("Resolve(%s) on %s = (%q, %v), want (\"\", ErrArtworkUnavailable)", kind, name, url, err)
 				}
 				if !strings.Contains(err.Error(), "genius") {
@@ -206,12 +205,12 @@ func TestGeniusArtworkResolver_Resolve_VerifiedMissIsEmptyWithoutError(t *testin
 		_, _ = w.Write([]byte(`{"response":{"hits":[]}}`))
 	}
 	for name, handler := range handlers {
-		for _, kind := range []domain.ResultKind{domain.ResultKindTrack, domain.ResultKindArtist} {
+		for _, kind := range []discovery.ResultKind{discovery.ResultKindTrack, discovery.ResultKindArtist} {
 			t.Run(name+" "+kind.String(), func(t *testing.T) {
 				srv := httptest.NewServer(handler)
 				defer srv.Close()
 
-				resolver := NewGeniusArtworkResolver(providertest.NewClient(srv.URL), "token")
+				resolver := discovery.NewGeniusArtworkResolver(providertest.NewClient(srv.URL), "token")
 				url, err := resolver.Resolve(context.Background(), kind, "Creep", "Radiohead", "")
 				if url != "" || err != nil {
 					t.Errorf("Resolve(%s) on %s = (%q, %v), want (\"\", nil)", kind, name, url, err)
@@ -224,9 +223,9 @@ func TestGeniusArtworkResolver_Resolve_VerifiedMissIsEmptyWithoutError(t *testin
 func TestGeniusArtworkResolver_Resolve_CancelledMidRequestIsUnavailable(t *testing.T) {
 	srv, ctx := providertest.CancelMidRequestServer(t)
 
-	resolver := NewGeniusArtworkResolver(providertest.NewClient(srv.URL), "token")
-	url, err := resolver.Resolve(ctx, domain.ResultKindTrack, "Creep", "Radiohead", "")
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
+	resolver := discovery.NewGeniusArtworkResolver(providertest.NewClient(srv.URL), "token")
+	url, err := resolver.Resolve(ctx, discovery.ResultKindTrack, "Creep", "Radiohead", "")
+	if url != "" || !errors.Is(err, discovery.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
 		t.Errorf("Resolve cancelled mid-request = (%q, %v), want ErrArtworkUnavailable wrapping context.Canceled", url, err)
 	}
 }
@@ -256,7 +255,7 @@ func TestSongCatalog_ArtistSongs_KeepsPrimaryArtistSongsAndNeverUsesTheArtistPho
 		{"id":3,"title":"Header Only","url":"https://genius.com/h","song_art_image_url":"https://images.genius.com/x.jpg","header_image_url":"","primary_artist":{"id":7,"image_url":"https://images.genius.com/y.jpg","header_image_url":"https://images.genius.com/x.jpg"}},
 		{"id":4,"title":"Feature","url":"https://genius.com/f","song_art_image_url":"https://images.genius.com/f.jpg","primary_artist":{"id":99}}
 	]}}`})
-	catalog := NewSongCatalog(providertest.NewClient(server.URL), "tok")
+	catalog := discovery.NewSongCatalog(providertest.NewClient(server.URL), "tok")
 
 	songs, err := catalog.ArtistSongs(context.Background(), 7, 3)
 	if err != nil {
@@ -284,7 +283,7 @@ func TestSongCatalog_ArtistSongs_StopsAtThePageCap(t *testing.T) {
 		fmt.Fprintf(w, `{"response":{"next_page":%d,"songs":[]}}`, pages+1)
 	}))
 	defer server.Close()
-	catalog := NewSongCatalog(providertest.NewClient(server.URL), "tok")
+	catalog := discovery.NewSongCatalog(providertest.NewClient(server.URL), "tok")
 
 	if _, err := catalog.ArtistSongs(context.Background(), 7, 2); err != nil {
 		t.Fatalf("ArtistSongs: %v", err)
@@ -300,7 +299,7 @@ func TestSongCatalog_FindArtistID_RequiresAnExactPrimaryArtistName(t *testing.T)
 		{"result":{"primary_artist":{"id":22,"name":"Don Toliver Jr"}}},
 		{"result":{"primary_artist":{"id":33,"name":"don toliver"}}}
 	]}}`})
-	catalog := NewSongCatalog(providertest.NewClient(server.URL), "tok")
+	catalog := discovery.NewSongCatalog(providertest.NewClient(server.URL), "tok")
 
 	id, found, err := catalog.FindArtistID(context.Background(), "Don Toliver", nil)
 
@@ -311,7 +310,7 @@ func TestSongCatalog_FindArtistID_RequiresAnExactPrimaryArtistName(t *testing.T)
 
 func TestSongCatalog_FindArtistID_NoMatchIsNotFound(t *testing.T) {
 	server := songCatalogServer(t, map[string]string{"/search": `{"response":{"hits":[{"result":{"primary_artist":{"id":11,"name":"Internet Money"}}}]}}`})
-	catalog := NewSongCatalog(providertest.NewClient(server.URL), "tok")
+	catalog := discovery.NewSongCatalog(providertest.NewClient(server.URL), "tok")
 
 	_, found, err := catalog.FindArtistID(context.Background(), "Don Toliver", []string{"Magnolia"})
 
@@ -322,10 +321,10 @@ func TestSongCatalog_FindArtistID_NoMatchIsNotFound(t *testing.T) {
 
 func TestArtworkSourceTags(t *testing.T) {
 	tests := []struct {
-		got  domain.ProviderKey
+		got  discovery.ProviderKey
 		want string
 	}{
-		{(&GeniusArtworkResolver{}).ArtworkSource(), "genius"},
+		{(&discovery.GeniusArtworkResolver{}).ArtworkSource(), "genius"},
 	}
 	for _, tt := range tests {
 		if tt.got.String() != tt.want {
@@ -345,8 +344,8 @@ func TestGeniusArtworkResolver_Resolve_MalformedHitFailsTheResponse(t *testing.T
 			}))
 			defer server.Close()
 
-			resolver := NewGeniusArtworkResolver(providertest.NewClient(server.URL), "t")
-			got, err := resolver.Resolve(context.Background(), domain.ResultKindTrack, "Creep", "Radiohead", "")
+			resolver := discovery.NewGeniusArtworkResolver(providertest.NewClient(server.URL), "t")
+			got, err := resolver.Resolve(context.Background(), discovery.ResultKindTrack, "Creep", "Radiohead", "")
 			if err == nil {
 				t.Fatalf("Resolve: got %q and no error, want an error", got)
 			}
@@ -363,9 +362,9 @@ func TestSongCatalog_SongDetail_ReadsStreamingLinksAndAlbum(t *testing.T) {
 		"/songs/2": `{"response":{"song":{"album":null,"apple_music_id":"1440","media":[]}}}`,
 		"/songs/3": `{"response":{"song":{"apple_music_id":"","media":[{"provider":"soundcloud"},{"provider":"apple_music"}]}}}`,
 	})
-	catalog := NewSongCatalog(providertest.NewClient(server.URL), "tok")
+	catalog := discovery.NewSongCatalog(providertest.NewClient(server.URL), "tok")
 
-	want := map[int]domain.GeniusSongDetail{
+	want := map[int]discovery.GeniusSongDetail{
 		1: {HasMedia: true, OnStreamingSite: true, AlbumTitle: "Heaven or Hell"},
 		2: {OnStreamingSite: true},
 		3: {HasMedia: true},
@@ -382,11 +381,11 @@ func TestSongCatalog_SongDetail_KeepsNormalisedAudioLinks(t *testing.T) {
 	server := songCatalogServer(t, map[string]string{
 		"/songs/1": `{"response":{"song":{"media":[{"provider":"soundcloud","url":"http://soundcloud.com/a/b?in=x"},{"provider":"youtube","url":"https://youtu.be/dQw4w9WgXcQ"},{"provider":"youtube","url":"https://youtube.com/nope"},{"provider":"spotify","url":"https://open.spotify.com/t/1"}]}}}`,
 	})
-	catalog := NewSongCatalog(providertest.NewClient(server.URL), "tok")
+	catalog := discovery.NewSongCatalog(providertest.NewClient(server.URL), "tok")
 
 	got, err := catalog.SongDetail(context.Background(), 1)
 
-	want := []domain.AudioLink{
+	want := []discovery.AudioLink{
 		{Provider: "soundcloud", ExternalID: "https://soundcloud.com/a/b", URL: "https://soundcloud.com/a/b"},
 		{Provider: "youtube", ExternalID: "dQw4w9WgXcQ", URL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
 	}
@@ -399,11 +398,11 @@ func TestSongCatalog_SongDetail_KeepsARepeatedAudioLinkOnce(t *testing.T) {
 	server := songCatalogServer(t, map[string]string{
 		"/songs/1": `{"response":{"song":{"media":[{"provider":"youtube","url":"https://youtu.be/dQw4w9WgXcQ"},{"provider":"youtube","url":"http://www.youtube.com/watch?v=dQw4w9WgXcQ"}]}}}`,
 	})
-	catalog := NewSongCatalog(providertest.NewClient(server.URL), "tok")
+	catalog := discovery.NewSongCatalog(providertest.NewClient(server.URL), "tok")
 
 	got, err := catalog.SongDetail(context.Background(), 1)
 
-	want := []domain.AudioLink{{Provider: "youtube", ExternalID: "dQw4w9WgXcQ", URL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}}
+	want := []discovery.AudioLink{{Provider: "youtube", ExternalID: "dQw4w9WgXcQ", URL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}}
 	if err != nil || !reflect.DeepEqual(got.AudioLinks, want) {
 		t.Errorf("AudioLinks = (%+v, %v), want %+v", got.AudioLinks, err, want)
 	}
@@ -416,7 +415,7 @@ func TestSongCatalog_SongDetail_ReadsAlbumCoverAndSkipsPlaceholders(t *testing.T
 		"/songs/3": `{"response":{"song":{"album":{"name":"A","cover_art_url":"https://images.genius.com/no_image.png"}}}}`,
 		"/songs/4": `{"response":{"song":{"album":{"name":"A"}}}}`,
 	})
-	catalog := NewSongCatalog(providertest.NewClient(server.URL), "tok")
+	catalog := discovery.NewSongCatalog(providertest.NewClient(server.URL), "tok")
 
 	want := map[int]string{1: "https://images.genius.com/a.jpg", 2: "", 3: "", 4: ""}
 	for id, w := range want {

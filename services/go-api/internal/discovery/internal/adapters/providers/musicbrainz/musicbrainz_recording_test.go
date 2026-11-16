@@ -1,7 +1,7 @@
-package musicbrainz
+package musicbrainz_test
 
 import (
-	"altune/go-api/internal/discovery/internal/core/ports"
+	"altune/go-api/internal/discovery"
 	"context"
 	"net/http"
 	"reflect"
@@ -16,7 +16,7 @@ const (
 	recordingLookup = "/ws/2/recording/"
 )
 
-func recordingServer(t *testing.T, bodies map[string]string) *MusicBrainzAdapter {
+func recordingServer(t *testing.T, bodies map[string]string) *discovery.MusicBrainzAdapter {
 	t.Helper()
 	return mbServer(t, func(w http.ResponseWriter, r *http.Request) {
 		body, known := bodies[r.URL.Path]
@@ -37,12 +37,12 @@ func TestMusicBrainzAdapter_RecordingByMBID(t *testing.T) {
 	tests := []struct {
 		name string
 		mbid string
-		want ports.MBRecording
+		want discovery.MBRecording
 	}{
 		{
 			name: "isrcs, length and artists of a studio recording",
 			mbid: bohemianMBID,
-			want: ports.MBRecording{
+			want: discovery.MBRecording{
 				MBID: bohemianMBID, Title: "Bohemian Rhapsody", Artists: []string{"Queen"},
 				ISRCs:    []string{"GBCEE0100112", "GBCEE0500364", "GBUM71029604"},
 				Duration: 355.106,
@@ -51,7 +51,7 @@ func TestMusicBrainzAdapter_RecordingByMBID(t *testing.T) {
 		{
 			name: "disambiguation of a live recording",
 			mbid: " " + cureLiveMBID + " ",
-			want: ports.MBRecording{
+			want: discovery.MBRecording{
 				MBID: cureLiveMBID, Title: "Boys Don’t Cry", Artists: []string{"The Cure"},
 				Disambiguation: "live, 1991-03-03: The Limehouse, London, UK",
 				ISRCs:          []string{},

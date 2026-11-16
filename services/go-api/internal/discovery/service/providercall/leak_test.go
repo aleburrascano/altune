@@ -1,4 +1,4 @@
-package providercall
+package providercall_test
 
 import (
 	"testing"

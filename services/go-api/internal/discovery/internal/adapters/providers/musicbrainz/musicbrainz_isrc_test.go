@@ -1,4 +1,4 @@
-package musicbrainz
+package musicbrainz_test
 
 import (
 	"context"

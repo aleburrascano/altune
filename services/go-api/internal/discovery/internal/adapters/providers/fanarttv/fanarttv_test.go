@@ -1,9 +1,8 @@
-package fanarttv
+package fanarttv_test
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/internal/adapters/providers/providertest"
-	"altune/go-api/internal/discovery/internal/core/ports"
 	"context"
 	"errors"
 	"net/http"
@@ -26,8 +25,8 @@ func TestFanartTvArtworkResolver_Resolve_ArtistThumb(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resolver := NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "test-api-key")
-	url, err := resolver.Resolve(context.Background(), domain.ResultKindArtist, "Radiohead", "", "a74b1b7f-mbid")
+	resolver := discovery.NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "test-api-key")
+	url, err := resolver.Resolve(context.Background(), discovery.ResultKindArtist, "Radiohead", "", "a74b1b7f-mbid")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
 	}
@@ -47,8 +46,8 @@ func TestFanartTvArtworkResolver_Resolve_ArtistBackground_Fallback(t *testing.T)
 	}))
 	defer server.Close()
 
-	resolver := NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "test-api-key")
-	url, err := resolver.Resolve(context.Background(), domain.ResultKindArtist, "Radiohead", "", "some-mbid")
+	resolver := discovery.NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "test-api-key")
+	url, err := resolver.Resolve(context.Background(), discovery.ResultKindArtist, "Radiohead", "", "some-mbid")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
 	}
@@ -78,8 +77,8 @@ func TestFanartTvArtworkResolver_Resolve_AlbumCover(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resolver := NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "test-api-key")
-	url, err := resolver.Resolve(context.Background(), domain.ResultKindAlbum, "Higher Power", "Coldplay", rgMbid)
+	resolver := discovery.NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "test-api-key")
+	url, err := resolver.Resolve(context.Background(), discovery.ResultKindAlbum, "Higher Power", "Coldplay", rgMbid)
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
 	}
@@ -98,8 +97,8 @@ func TestFanartTvArtworkResolver_Resolve_EmptyMbid(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resolver := NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "test-api-key")
-	url, err := resolver.Resolve(context.Background(), domain.ResultKindArtist, "Radiohead", "", "")
+	resolver := discovery.NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "test-api-key")
+	url, err := resolver.Resolve(context.Background(), discovery.ResultKindArtist, "Radiohead", "", "")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
 	}
@@ -117,8 +116,8 @@ func TestFanartTvArtworkResolver_Resolve_404(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resolver := NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "test-api-key")
-	url, err := resolver.Resolve(context.Background(), domain.ResultKindArtist, "Unknown", "", "unknown-mbid")
+	resolver := discovery.NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "test-api-key")
+	url, err := resolver.Resolve(context.Background(), discovery.ResultKindArtist, "Unknown", "", "unknown-mbid")
 	if err != nil {
 		t.Fatalf("expected nil error on HTTP 404, got: %v", err)
 	}
@@ -133,9 +132,9 @@ func TestFanartTvArtworkResolver_Resolve_500IsArtworkUnavailable(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resolver := NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "test-api-key")
-	url, err := resolver.Resolve(context.Background(), domain.ResultKindArtist, "Unknown", "", "some-mbid")
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	resolver := discovery.NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "test-api-key")
+	url, err := resolver.Resolve(context.Background(), discovery.ResultKindArtist, "Unknown", "", "some-mbid")
+	if url != "" || !errors.Is(err, discovery.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on HTTP 500 = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
@@ -143,16 +142,16 @@ func TestFanartTvArtworkResolver_Resolve_500IsArtworkUnavailable(t *testing.T) {
 func TestFanartTvArtworkResolver_EscapesMBIDInRequestURL(t *testing.T) {
 	cases := []struct {
 		name     string
-		kind     domain.ResultKind
+		kind     discovery.ResultKind
 		wantPath string
 	}{
-		{"artist", domain.ResultKindArtist, "/v3/music/a%2Fb%3Fc%23d"},
-		{"album", domain.ResultKindAlbum, "/v3/music/albums/a%2Fb%3Fc%23d"},
+		{"artist", discovery.ResultKindArtist, "/v3/music/a%2Fb%3Fc%23d"},
+		{"album", discovery.ResultKindAlbum, "/v3/music/albums/a%2Fb%3Fc%23d"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var got *http.Request
-			r := NewFanartTvArtworkResolver(providertest.CapturingClient(&got), "key-1")
+			r := discovery.NewFanartTvArtworkResolver(providertest.CapturingClient(&got), "key-1")
 			if _, err := r.Resolve(context.Background(), tc.kind, "X", "Y", providertest.HostileMBID); err != nil {
 				t.Fatalf("Resolve: %v", err)
 			}
@@ -179,8 +178,8 @@ func TestFanartTvArtworkResolver_Resolve_RateLimitIsArtworkUnavailable(t *testin
 	}))
 	defer server.Close()
 
-	url, err := NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "k").Resolve(context.Background(), domain.ResultKindArtist, "Radiohead", "", "some-mbid")
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	url, err := discovery.NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "k").Resolve(context.Background(), discovery.ResultKindArtist, "Radiohead", "", "some-mbid")
+	if url != "" || !errors.Is(err, discovery.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on HTTP 429 = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
@@ -191,7 +190,7 @@ func TestFanartTvArtworkResolver_Resolve_BadRequestIsAVerifiedMiss(t *testing.T)
 	}))
 	defer server.Close()
 
-	url, err := NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "k").Resolve(context.Background(), domain.ResultKindArtist, "Radiohead", "", "not-a-uuid")
+	url, err := discovery.NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "k").Resolve(context.Background(), discovery.ResultKindArtist, "Radiohead", "", "not-a-uuid")
 	if url != "" || err != nil {
 		t.Errorf("Resolve on HTTP 400 = (%q, %v), want (\"\", nil)", url, err)
 	}
@@ -203,7 +202,7 @@ func TestFanartTvArtworkResolver_Resolve_AlbumNotFoundIsAVerifiedMiss(t *testing
 	}))
 	defer server.Close()
 
-	url, err := NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "k").Resolve(context.Background(), domain.ResultKindAlbum, "Higher Power", "Coldplay", "rg-mbid")
+	url, err := discovery.NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "k").Resolve(context.Background(), discovery.ResultKindAlbum, "Higher Power", "Coldplay", "rg-mbid")
 	if url != "" || err != nil {
 		t.Errorf("album Resolve on HTTP 404 = (%q, %v), want (\"\", nil)", url, err)
 	}
@@ -215,8 +214,8 @@ func TestFanartTvArtworkResolver_Resolve_AlbumServerErrorIsArtworkUnavailable(t 
 	}))
 	defer server.Close()
 
-	url, err := NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "k").Resolve(context.Background(), domain.ResultKindAlbum, "Higher Power", "Coldplay", "rg-mbid")
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	url, err := discovery.NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "k").Resolve(context.Background(), discovery.ResultKindAlbum, "Higher Power", "Coldplay", "rg-mbid")
+	if url != "" || !errors.Is(err, discovery.ErrArtworkUnavailable) {
 		t.Errorf("album Resolve on HTTP 500 = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
@@ -228,7 +227,7 @@ func TestFanartTvArtworkResolver_Resolve_NoImagesIsAVerifiedMiss(t *testing.T) {
 	}))
 	defer server.Close()
 
-	url, err := NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "k").Resolve(context.Background(), domain.ResultKindArtist, "Radiohead", "", "some-mbid")
+	url, err := discovery.NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "k").Resolve(context.Background(), discovery.ResultKindArtist, "Radiohead", "", "some-mbid")
 	if url != "" || err != nil {
 		t.Errorf("Resolve with no images = (%q, %v), want (\"\", nil)", url, err)
 	}
@@ -241,8 +240,8 @@ func TestFanartTvArtworkResolver_Resolve_MalformedBodyIsArtworkUnavailable(t *te
 	}))
 	defer server.Close()
 
-	url, err := NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "k").Resolve(context.Background(), domain.ResultKindArtist, "Radiohead", "", "some-mbid")
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	url, err := discovery.NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "k").Resolve(context.Background(), discovery.ResultKindArtist, "Radiohead", "", "some-mbid")
+	if url != "" || !errors.Is(err, discovery.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on a non-JSON body = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
@@ -252,8 +251,8 @@ func TestFanartTvArtworkResolver_Resolve_TransportErrorIsArtworkUnavailable(t *t
 	serverURL := server.URL
 	server.Close()
 
-	url, err := NewFanartTvArtworkResolver(providertest.NewClient(serverURL), "k").Resolve(context.Background(), domain.ResultKindArtist, "Radiohead", "", "some-mbid")
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	url, err := discovery.NewFanartTvArtworkResolver(providertest.NewClient(serverURL), "k").Resolve(context.Background(), discovery.ResultKindArtist, "Radiohead", "", "some-mbid")
+	if url != "" || !errors.Is(err, discovery.ErrArtworkUnavailable) {
 		t.Errorf("Resolve against an unreachable host = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
@@ -264,8 +263,8 @@ func TestFanartTvArtworkResolver_Resolve_CancelledContextIsUnavailableAndKeepsTh
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	url, err := NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "k").Resolve(ctx, domain.ResultKindArtist, "Radiohead", "", "some-mbid")
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
+	url, err := discovery.NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "k").Resolve(ctx, discovery.ResultKindArtist, "Radiohead", "", "some-mbid")
+	if url != "" || !errors.Is(err, discovery.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
 		t.Errorf("Resolve with a cancelled context = (%q, %v), want (\"\", ErrArtworkUnavailable wrapping context.Canceled)", url, err)
 	}
 }
@@ -276,7 +275,7 @@ func TestFanartTvArtworkResolver_Resolve_FailureNamesFanart(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "k").Resolve(context.Background(), domain.ResultKindArtist, "Radiohead", "", "some-mbid")
+	_, err := discovery.NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "k").Resolve(context.Background(), discovery.ResultKindArtist, "Radiohead", "", "some-mbid")
 	if err == nil || !strings.Contains(err.Error(), "fanart") {
 		t.Errorf("err = %v, want a failure that names fanart", err)
 	}
@@ -284,10 +283,10 @@ func TestFanartTvArtworkResolver_Resolve_FailureNamesFanart(t *testing.T) {
 
 func TestArtworkSourceTags(t *testing.T) {
 	tests := []struct {
-		got  domain.ProviderKey
+		got  discovery.ProviderKey
 		want string
 	}{
-		{(&FanartTvArtworkResolver{}).ArtworkSource(), "fanart"},
+		{(&discovery.FanartTvArtworkResolver{}).ArtworkSource(), "fanart"},
 	}
 	for _, tt := range tests {
 		if tt.got.String() != tt.want {
@@ -307,8 +306,8 @@ func TestFanartTvArtworkResolver_Resolve_RanksByEnglishThenLikes(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resolver := NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "k")
-	got, err := resolver.Resolve(context.Background(), domain.ResultKindArtist, "A", "", "mbid")
+	resolver := discovery.NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "k")
+	got, err := resolver.Resolve(context.Background(), discovery.ResultKindArtist, "A", "", "mbid")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
 	}
@@ -328,8 +327,8 @@ func TestFanartTvArtworkResolver_Resolve_MalformedImageEntryFailsTheResponse(t *
 			}))
 			defer server.Close()
 
-			resolver := NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "k")
-			got, err := resolver.Resolve(context.Background(), domain.ResultKindArtist, "A", "", "mbid")
+			resolver := discovery.NewFanartTvArtworkResolver(providertest.NewClient(server.URL), "k")
+			got, err := resolver.Resolve(context.Background(), discovery.ResultKindArtist, "A", "", "mbid")
 			if err == nil {
 				t.Fatalf("Resolve: got %q and no error, want an error", got)
 			}

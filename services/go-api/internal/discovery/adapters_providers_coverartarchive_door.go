@@ -6,3 +6,5 @@ var (
 	NewCoverArtArchiveIdentityResolver = coverartarchive.NewCoverArtArchiveIdentityResolver
 	NewCoverArtArchiveResolver         = coverartarchive.NewCoverArtArchiveResolver
 )
+
+type CoverArtArchiveResolver = coverartarchive.CoverArtArchiveResolver

@@ -1,7 +1,7 @@
-package musicbrainz
+package musicbrainz_test
 
 import (
-	"altune/go-api/internal/discovery/internal/core/ports"
+	"altune/go-api/internal/discovery"
 	"context"
 	"net/http"
 	"reflect"
@@ -27,7 +27,7 @@ const (
 	classicDetail = `{"id":"25d68187-ee71-4f06-9e58-0b49d66bf8a8","title":"It’s Only Love (classic version)","length":194000,"first-release-date":"2025-04-25","isrcs":["IETLH2500023"],"artist-credit":[{"name":"Bryan Adams","joinphrase":" & ","artist":{"id":"4dbf5678-7a31-406a-abbe-232f8ac2cd63","name":"Bryan Adams"}},{"name":"Tina Turner","joinphrase":"","artist":{"id":"9072df14-b61e-42e2-b4f4-6bbb7fdb5586","name":"Tina Turner"}}],"releases":[{"title":"It’s Only Love","date":"2025-04-25","status":"Official"}]}`
 )
 
-func workServer(t *testing.T, status int) *MusicBrainzAdapter {
+func workServer(t *testing.T, status int) *discovery.MusicBrainzAdapter {
 	t.Helper()
 	return mbServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if status != http.StatusOK {
@@ -55,7 +55,7 @@ func TestMusicBrainzAdapter_WorkRecordings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []ports.MBWorkRecording{
+	want := []discovery.MBWorkRecording{
 		{MBID: classicVersionMBID, Title: "It’s Only Love (classic version)", ArtistIDs: []string{bryanAdamsID, tinaTurnerID}, Duration: 194},
 		{MBID: hammersmithLiveMBID, Title: "It’s Only Love", Disambiguation: "live, 1985-04: Hammersmith Odeon, London, England, UK", ArtistIDs: []string{bryanAdamsID}, Live: true},
 	}
@@ -86,11 +86,11 @@ func TestMusicBrainzAdapter_RecordingDetail(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("got ok=%v err=%v", ok, err)
 	}
-	want := ports.MBRecordingDetail{
+	want := discovery.MBRecordingDetail{
 		MBID: classicVersionMBID, Title: "It’s Only Love (classic version)",
 		ArtistIDs: []string{bryanAdamsID, tinaTurnerID}, ISRCs: []string{"IETLH2500023"},
 		Duration: 194, FirstReleaseDate: "2025-04-25",
-		Releases: []ports.MBRelease{{Title: "It’s Only Love", Date: "2025-04-25", Status: "Official"}},
+		Releases: []discovery.MBRelease{{Title: "It’s Only Love", Date: "2025-04-25", Status: "Official"}},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v, want %+v", got, want)
@@ -101,7 +101,7 @@ func TestMusicBrainzAdapter_RecordingDetail(t *testing.T) {
 	}
 }
 
-func probeServer(t *testing.T, bodies map[string]string) *MusicBrainzAdapter {
+func probeServer(t *testing.T, bodies map[string]string) *discovery.MusicBrainzAdapter {
 	t.Helper()
 	return mbServer(t, func(w http.ResponseWriter, r *http.Request) {
 		body, known := bodies[r.URL.Path+"?"+r.URL.Query().Get("inc")]
@@ -225,7 +225,7 @@ func TestMusicBrainzAdapter_RecordingDetail_recordingWithoutISRCOrLength(t *test
 	if len(got.ISRCs) != 0 || got.Duration != 0 || got.FirstReleaseDate != "" {
 		t.Fatalf("got ISRCs=%v Duration=%v FirstReleaseDate=%q; want none, 0, \"\"", got.ISRCs, got.Duration, got.FirstReleaseDate)
 	}
-	if want := []ports.MBRelease{{Title: "Bryan Adams: Classic", Date: "2025-05-09", Status: "Official"}}; !reflect.DeepEqual(got.Releases, want) {
+	if want := []discovery.MBRelease{{Title: "Bryan Adams: Classic", Date: "2025-05-09", Status: "Official"}}; !reflect.DeepEqual(got.Releases, want) {
 		t.Fatalf("releases %+v, want %+v", got.Releases, want)
 	}
 	if got.MBID != classicDupMBID || !reflect.DeepEqual(got.ArtistIDs, []string{bryanAdamsID}) {

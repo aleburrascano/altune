@@ -1,9 +1,8 @@
-package deezer
+package deezer_test
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/internal/adapters/providers/providertest"
-	"altune/go-api/internal/discovery/internal/core/ports"
 	"context"
 	"errors"
 	"net/http"
@@ -18,9 +17,9 @@ func TestDeezerAdapter_Resolve_500IsArtworkUnavailable(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewDeezerAdapter(providertest.NewClient(server.URL))
-	art, err := adapter.Resolve(context.Background(), domain.ResultKindTrack, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	adapter := discovery.NewDeezerAdapter(providertest.NewClient(server.URL))
+	art, err := adapter.Resolve(context.Background(), discovery.ResultKindTrack, "Discovery", "Daft Punk", "")
+	if art != "" || !errors.Is(err, discovery.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on HTTP 500 = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
 }
@@ -38,8 +37,8 @@ func TestDeezerAdapter_Resolve_Hit(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewDeezerAdapter(providertest.NewClient(server.URL))
-	art, err := adapter.Resolve(context.Background(), domain.ResultKindTrack, "Discovery", "Daft Punk", "")
+	adapter := discovery.NewDeezerAdapter(providertest.NewClient(server.URL))
+	art, err := adapter.Resolve(context.Background(), discovery.ResultKindTrack, "Discovery", "Daft Punk", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -54,8 +53,8 @@ func TestDeezerAdapter_Resolve_RateLimitIsArtworkUnavailable(t *testing.T) {
 	}))
 	defer server.Close()
 
-	art, err := NewDeezerAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	art, err := discovery.NewDeezerAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), discovery.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	if art != "" || !errors.Is(err, discovery.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on HTTP 429 = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
 }
@@ -67,8 +66,8 @@ func TestDeezerAdapter_Resolve_QuotaErrorBodyIsArtworkUnavailable(t *testing.T) 
 	}))
 	defer server.Close()
 
-	art, err := NewDeezerAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	art, err := discovery.NewDeezerAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), discovery.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	if art != "" || !errors.Is(err, discovery.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on a Deezer quota error body = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
 }
@@ -79,7 +78,7 @@ func TestDeezerAdapter_Resolve_BadRequestIsAVerifiedMiss(t *testing.T) {
 	}))
 	defer server.Close()
 
-	art, err := NewDeezerAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	art, err := discovery.NewDeezerAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), discovery.ResultKindAlbum, "Discovery", "Daft Punk", "")
 	if art != "" || err != nil {
 		t.Errorf("Resolve on HTTP 400 = (%q, %v), want (\"\", nil)", art, err)
 	}
@@ -91,7 +90,7 @@ func TestDeezerAdapter_Resolve_NotFoundIsAVerifiedMiss(t *testing.T) {
 	}))
 	defer server.Close()
 
-	art, err := NewDeezerAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	art, err := discovery.NewDeezerAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), discovery.ResultKindAlbum, "Discovery", "Daft Punk", "")
 	if art != "" || err != nil {
 		t.Errorf("Resolve on HTTP 404 = (%q, %v), want (\"\", nil)", art, err)
 	}
@@ -104,7 +103,7 @@ func TestDeezerAdapter_Resolve_NoMatchIsAVerifiedMiss(t *testing.T) {
 	}))
 	defer server.Close()
 
-	art, err := NewDeezerAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), domain.ResultKindAlbum, "Nothing", "Nobody", "")
+	art, err := discovery.NewDeezerAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), discovery.ResultKindAlbum, "Nothing", "Nobody", "")
 	if art != "" || err != nil {
 		t.Errorf("Resolve with no match = (%q, %v), want (\"\", nil)", art, err)
 	}
@@ -117,8 +116,8 @@ func TestDeezerAdapter_Resolve_MalformedBodyIsArtworkUnavailable(t *testing.T) {
 	}))
 	defer server.Close()
 
-	art, err := NewDeezerAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	art, err := discovery.NewDeezerAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), discovery.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	if art != "" || !errors.Is(err, discovery.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on a truncated body = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
 }
@@ -128,8 +127,8 @@ func TestDeezerAdapter_Resolve_TransportErrorIsArtworkUnavailable(t *testing.T) 
 	serverURL := server.URL
 	server.Close()
 
-	art, err := NewDeezerAdapter(providertest.NewClient(serverURL)).Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	art, err := discovery.NewDeezerAdapter(providertest.NewClient(serverURL)).Resolve(context.Background(), discovery.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	if art != "" || !errors.Is(err, discovery.ErrArtworkUnavailable) {
 		t.Errorf("Resolve against an unreachable host = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
 }
@@ -140,8 +139,8 @@ func TestDeezerAdapter_Resolve_CancelledContextIsUnavailableAndKeepsTheCause(t *
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	art, err := NewDeezerAdapter(providertest.NewClient(server.URL)).Resolve(ctx, domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
+	art, err := discovery.NewDeezerAdapter(providertest.NewClient(server.URL)).Resolve(ctx, discovery.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	if art != "" || !errors.Is(err, discovery.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
 		t.Errorf("Resolve with a cancelled context = (%q, %v), want (\"\", ErrArtworkUnavailable wrapping context.Canceled)", art, err)
 	}
 }
@@ -152,7 +151,7 @@ func TestDeezerAdapter_Resolve_FailureNamesDeezer(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := NewDeezerAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	_, err := discovery.NewDeezerAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), discovery.ResultKindAlbum, "Discovery", "Daft Punk", "")
 	if err == nil || !strings.Contains(err.Error(), "deezer") {
 		t.Errorf("err = %v, want a failure that names deezer", err)
 	}

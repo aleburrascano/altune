@@ -1,13 +1,12 @@
-package soundcloud
+package soundcloud_test
 
 import (
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"os/exec"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func TestSoundCloudAdapter_Search_Integration(t *testing.T) {
@@ -16,12 +15,12 @@ func TestSoundCloudAdapter_Search_Integration(t *testing.T) {
 		t.Skip("yt-dlp not installed, skipping integration test")
 	}
 
-	adapter := NewSoundCloudAdapter()
+	adapter := discovery.NewSoundCloudAdapter()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	results, err := adapter.Search(ctx, "Daft Punk Around The World", map[domain.ResultKind]bool{
-		domain.ResultKindTrack: true,
+	results, err := adapter.Search(ctx, "Daft Punk Around The World", map[discovery.ResultKind]bool{
+		discovery.ResultKindTrack: true,
 	})
 	if err != nil {
 		t.Fatalf("Search returned error: %v", err)
@@ -31,8 +30,8 @@ func TestSoundCloudAdapter_Search_Integration(t *testing.T) {
 	}
 
 	first := results[0]
-	if first.Kind != domain.ResultKindTrack {
-		t.Errorf("kind: got %v, want %v", first.Kind, domain.ResultKindTrack)
+	if first.Kind != discovery.ResultKindTrack {
+		t.Errorf("kind: got %v, want %v", first.Kind, discovery.ResultKindTrack)
 	}
 	if first.Title == "" {
 		t.Error("first result has empty title")
@@ -40,8 +39,8 @@ func TestSoundCloudAdapter_Search_Integration(t *testing.T) {
 	if len(first.Sources) != 1 {
 		t.Fatalf("expected 1 source, got %d", len(first.Sources))
 	}
-	if first.Sources[0].Provider != domain.ProviderSoundCloud {
-		t.Errorf("provider: got %v, want %v", first.Sources[0].Provider, domain.ProviderSoundCloud)
+	if first.Sources[0].Provider != discovery.ProviderSoundCloud {
+		t.Errorf("provider: got %v, want %v", first.Sources[0].Provider, discovery.ProviderSoundCloud)
 	}
 	if pc, ok := first.Extras["playback_count"]; ok {
 		if _, isInt := pc.(int64); !isInt {

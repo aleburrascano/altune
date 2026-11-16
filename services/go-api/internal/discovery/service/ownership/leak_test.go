@@ -1,4 +1,4 @@
-package ownership
+package ownership_test
 
 import (
 	"testing"
