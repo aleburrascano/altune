@@ -3,7 +3,7 @@ import type { DiscoverySearchHistoryResponse } from '@shared/catalog';
 import { isRetryable } from '@shared/failure';
 import { discoveryKeys, useAppMutation } from '@shared/query';
 import { useClearSearchHistory as useSharedClearSearchHistory } from '@shared/searchHistory';
-import { useReportQueryFailure } from '@features/discovery/hooks/search/useReportQueryFailure';
+import { useReportQueryFailure } from '@features/discovery/view/search/useReportQueryFailure';
 import {
   useDiscoverFetchEnabled,
   useGatedDiscoverCall,

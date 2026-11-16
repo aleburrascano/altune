@@ -1,7 +1,7 @@
 import { type Dispatch, type SetStateAction } from 'react';
 
 import { useDebouncedSearch } from '@features/discovery/view/search/useDebouncedSearch';
-import { useDiscoverSearch } from '@features/discovery/hooks/search/useDiscoverSearch';
+import { useDiscoverSearch } from '@features/discovery/view/search/useDiscoverSearch';
 import { useUnreleasedSearch } from '@features/discovery/hooks/unreleased/useUnreleasedSearch';
 import { isSearchableQuery, normalizeQuery } from '@features/discovery/domain/searchPaging';
 import {
@@ -13,7 +13,7 @@ import {
 import {
   useImpressionLogger,
   type ImpressionHandlers,
-} from '@features/discovery/hooks/results/useImpressionLogger';
+} from '@features/discovery/view/results/useImpressionLogger';
 import {
   useDiscoverClearSearchHistory,
   useRecordSearchHistory,

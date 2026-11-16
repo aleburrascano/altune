@@ -2,7 +2,7 @@ import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import { useQuery, type QueryFunctionContext } from '@tanstack/react-query';
 import type { DiscoverySuggestion, DiscoverySuggestResponse } from '@shared/catalog';
 import { discoveryKeys } from '@shared/query';
-import { useReportQueryFailure } from '@features/discovery/hooks/search/useReportQueryFailure';
+import { useReportQueryFailure } from '@features/discovery/view/search/useReportQueryFailure';
 import { useDiscoverFetchEnabled } from '@features/discovery/hooks/search/useDiscoverFetchGate';
 import { isSearchableQuery, normalizeQuery } from '@features/discovery/domain/searchPaging';
 import { useDiscoverPort } from '@features/discovery/view/DiscoverPortProvider';

@@ -51,7 +51,7 @@ const failureShownIsAnImpressionLogSyncedInEffect = {
     'src/features/detail/view/TrackStatusBanners.tsx',
     'src/features/library/view/LibraryRowFailure.tsx',
     'src/shared/ui/view/primitives/Banner.tsx',
-    'src/features/discovery/hooks/search/useReportQueryFailure.ts',
+    'src/features/discovery/view/search/useReportQueryFailure.ts',
   ],
   rules: ['react-doctor/no-event-handler'],
 };

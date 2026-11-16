@@ -3,7 +3,7 @@ import { useInfiniteQuery, useQueryClient, type QueryKey } from '@tanstack/react
 import type { DiscoveryProviderInfo, DiscoverySearchResponse } from '@shared/catalog';
 import { isRetryable } from '@shared/failure';
 import { discoveryKeys, isSearchKeyFor } from '@shared/query';
-import { useReportQueryFailure } from '@features/discovery/hooks/search/useReportQueryFailure';
+import { useReportQueryFailure } from '@features/discovery/view/search/useReportQueryFailure';
 import {
   useDiscoverFetchEnabled,
   useGatedDiscoverCall,

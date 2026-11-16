@@ -28,7 +28,7 @@ import type {
   HistorySlice,
   PaginationSlice,
   ResultsSlice,
-} from '@features/discovery/hooks/search/useDiscoverLogic';
+} from '@features/discovery/view/search/useDiscoverLogic';
 
 type SlotBuilders = Pick<AsyncSectionProps, 'skeleton' | 'error' | 'empty'>;
 
