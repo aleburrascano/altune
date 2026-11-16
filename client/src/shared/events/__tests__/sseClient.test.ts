@@ -171,7 +171,11 @@ describe('SSEClient', () => {
       const sent = xhrAt(0).requestHeaders['X-Correlation-ID'];
       expect(sent).toMatch(CORRELATION_ID_PATTERN);
       expect(onError).toHaveBeenCalledWith(
-        expect.objectContaining({ name: 'SSEConnectionError', correlationId: sent }),
+        expect.objectContaining({
+          name: 'SSEConnectionError',
+          correlationId: sent,
+          message: `SSE connection error (correlation_id=${sent})`,
+        }),
       );
     });
   });
@@ -339,6 +343,22 @@ describe('SSEClient', () => {
         eventType: 'resync',
       });
       expect((error as Error).cause).toBe(thrown);
+      expect((error as Error).message).toBe('SSE event handler threw (type=resync, id=7)');
+    });
+
+    it('names an id-less event <none> when its handler throws', async () => {
+      const { client, onEvent, onError } = makeClient();
+      await client.connect();
+      onEvent.mockImplementationOnce(() => {
+        throw new Error('handler bug');
+      });
+
+      xhrAt(0).emit(block({ type: 'resync', data: { seq: 1 } }));
+
+      expect(onError.mock.calls[0]?.[0]).toMatchObject({
+        eventId: '',
+        message: 'SSE event handler threw (type=resync, id=<none>)',
+      });
     });
 
     it('does not report a well-formed block through onError', async () => {
@@ -980,6 +1000,9 @@ describe('HTTP status handling', () => {
       expect(onError).toHaveBeenCalledTimes(1);
       const error = onError.mock.calls[0]?.[0];
       expect(error).toMatchObject({ name: 'SSEHttpError', status: 502, correlationId: sent });
+      expect((error as Error).message).toBe(
+        `SSE stream refused (status=502, correlation_id=${sent})`,
+      );
     });
 
     it('does not feed an error body to the event parser', async () => {
