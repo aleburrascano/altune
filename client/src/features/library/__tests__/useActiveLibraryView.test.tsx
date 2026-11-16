@@ -21,6 +21,8 @@ import {
   useLibraryNavigation,
 } from '@features/library';
 import type { Navigator } from '@shared/navigation';
+import { signInTestUser } from '@testing/signInTestUser';
+import { acceptTelemetry, shownFailureSurfaces } from '@features/library/__tests__/failureShown';
 
 type ActiveLibraryView = ReturnType<typeof useActiveLibraryView>;
 type Deps = Parameters<typeof useActiveLibraryView>[3];
@@ -300,6 +302,20 @@ describe('useActiveLibraryView — shuffleWholeLibrary', () => {
     expect(source).toEqual({ kind: 'library' });
     const seededIds = (playable as { source: { trackId: string } }[]).map((t) => t.source.trackId);
     expect(seededIds).toContain(fullLibrary[fullLibrary.length - 1]!.id);
+  });
+
+  it('shows the app failure alert when the whole library cannot load', async () => {
+    await signInTestUser();
+    acceptTelemetry();
+    const port = { ...seededPort(), getAllTracks: () => Promise.reject(new Error('offline')) };
+    const view = renderActive('tracks', port);
+    await waitFor(() => expect(view().tracks).toHaveLength(SEEDED_TRACKS));
+
+    await act(async () => {
+      await view().shuffleWholeLibrary();
+    });
+
+    await waitFor(() => expect(shownFailureSurfaces()).toEqual(['library.load_all']));
   });
 });
 

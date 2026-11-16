@@ -18,6 +18,9 @@ import type { LibraryPort } from '@features/library';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 import { PlaylistsPortProvider, createMemoryPlaylistsPort } from '@shared/playlists';
 import { AcquisitionPortProvider, createMemoryAcquisitionPort } from '@shared/acquisition';
+import { usePinnedStore } from '@shared/offline';
+import { signInTestUser } from '@testing/signInTestUser';
+import { acceptTelemetry, shownFailureSurfaces } from '@features/library/__tests__/failureShown';
 
 const acquisitionPort = createMemoryAcquisitionPort().port;
 
@@ -127,5 +130,30 @@ describe('LibraryScreen states', () => {
     );
     expect(screen.queryByTestId('library-empty')).toBeNull();
     expect(screen.getByTestId('library-search-input')).toBeTruthy();
+  });
+});
+
+describe('LibraryScreen selection downloads', () => {
+  const realPinMany = usePinnedStore.getState().pinMany;
+
+  afterEach(() => {
+    usePinnedStore.setState({ pinMany: realPinMany });
+  });
+
+  it('shows the app failure alert when a selected download fails', async () => {
+    await signInTestUser();
+    acceptTelemetry();
+    usePinnedStore.setState({
+      pinMany: jest.fn().mockResolvedValue({ requested: 1, failed: 1, refused: null }),
+    });
+    port = createMemoryLibraryPort({ tracks: [track('t1')] });
+    render(<LibraryScreen />, { wrapper });
+    fireEvent.press(screen.getByTestId('library-chip-tracks'));
+    await waitFor(() => expect(screen.getByTestId('library-row-t1')).toBeTruthy());
+
+    fireEvent(screen.getByTestId('library-row-t1'), 'longPress');
+    fireEvent.press(screen.getByText('Download'));
+
+    await waitFor(() => expect(shownFailureSurfaces()).toEqual(['library.pin_batch']));
   });
 });

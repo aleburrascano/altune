@@ -11,7 +11,7 @@ import {
   type TrackSelectionOptions,
   TrackSelectionOverlay,
 } from '@features/library';
-import { FeaturePorts, httpFeaturePorts } from '@/mobile';
+import { HttpLibraryPorts } from '@features/library/__tests__/HttpLibraryPorts';
 const { __http } = require('@testing/doubles/fetch.js');
 
 const EVENTS = 'POST /v1/discovery/events';
@@ -71,14 +71,14 @@ function renderWith(tracks: TrackResponse[]) {
   const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
   const ui = (list: TrackResponse[]) => (
     <QueryClientProvider client={client}>
-      <FeaturePorts ports={httpFeaturePorts}>
+      <HttpLibraryPorts>
         <Harness
           tracks={list}
           expose={(c) => {
             controller = c;
           }}
         />
-      </FeaturePorts>
+      </HttpLibraryPorts>
     </QueryClientProvider>
   );
   const utils = render(ui(tracks));
