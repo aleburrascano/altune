@@ -1,6 +1,7 @@
-package fanout
+package fanout_test
 
 import (
+	"altune/go-api/internal/shared/fanout"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -11,7 +12,7 @@ func TestGroupRunsAllWithinLimit(t *testing.T) {
 	var running, peak, done int32
 	started := make(chan struct{}, n)
 	release := make(chan struct{})
-	g := New(limit)
+	g := fanout.New(limit)
 	submitted := make(chan struct{})
 	go func() {
 		defer close(submitted)

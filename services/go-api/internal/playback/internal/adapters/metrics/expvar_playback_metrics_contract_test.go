@@ -1,6 +1,7 @@
-package metrics
+package metrics_test
 
 import (
+	"altune/go-api/internal/playback/internal/adapters/metrics"
 	"expvar"
 	"strconv"
 	"testing"
@@ -20,21 +21,21 @@ func varValue(t *testing.T, name string) int64 {
 }
 
 func TestExpvarPlaybackMetrics_PublishesAndIncrements(t *testing.T) {
-	m := NewExpvarPlaybackMetrics()
+	m := metrics.NewExpvarPlaybackMetrics()
 
 	cases := []struct {
 		name    string
 		varName string
 		inc     func()
 	}{
-		{"enrichment failures", EnrichmentFailuresVar, m.EnrichmentFailed},
-		{"corrupt stored state", CorruptStoredStateVar, m.CorruptStoredState},
-		{"queue-state op timeouts", QueueStateOpTimeoutsVar, m.QueueStateOpTimedOut},
-		{"queue-state transient failures", QueueStateTransientFailuresVar, m.QueueStateOpFailedTransient},
-		{"queue-state stale writes", QueueStateStaleWritesVar, m.QueueStateStaleWrite},
-		{"now-playing lookup timeouts", NowPlayingLookupTimeoutsVar, m.NowPlayingLookupTimedOut},
-		{"queue-state rate-limit rejections", QueueStateRateLimitedVar, m.QueueStateRateLimited},
-		{"enrichment breaker rejections", EnrichmentBreakerRejectionsVar, m.EnrichmentBreakerRejected},
+		{"enrichment failures", metrics.EnrichmentFailuresVar, m.EnrichmentFailed},
+		{"corrupt stored state", metrics.CorruptStoredStateVar, m.CorruptStoredState},
+		{"queue-state op timeouts", metrics.QueueStateOpTimeoutsVar, m.QueueStateOpTimedOut},
+		{"queue-state transient failures", metrics.QueueStateTransientFailuresVar, m.QueueStateOpFailedTransient},
+		{"queue-state stale writes", metrics.QueueStateStaleWritesVar, m.QueueStateStaleWrite},
+		{"now-playing lookup timeouts", metrics.NowPlayingLookupTimeoutsVar, m.NowPlayingLookupTimedOut},
+		{"queue-state rate-limit rejections", metrics.QueueStateRateLimitedVar, m.QueueStateRateLimited},
+		{"enrichment breaker rejections", metrics.EnrichmentBreakerRejectionsVar, m.EnrichmentBreakerRejected},
 	}
 
 	for _, tc := range cases {
@@ -49,39 +50,39 @@ func TestExpvarPlaybackMetrics_PublishesAndIncrements(t *testing.T) {
 }
 
 func TestReadSnapshot_ReportsRateLimitRejections(t *testing.T) {
-	before := ReadSnapshot()
+	before := metrics.ReadSnapshot()
 
-	NewExpvarPlaybackMetrics().QueueStateRateLimited()
+	metrics.NewExpvarPlaybackMetrics().QueueStateRateLimited()
 
-	if after := ReadSnapshot(); after.QueueStateRateLimited != before.QueueStateRateLimited+1 {
+	if after := metrics.ReadSnapshot(); after.QueueStateRateLimited != before.QueueStateRateLimited+1 {
 		t.Errorf("queue_state_rate_limited_total = %d, want %d", after.QueueStateRateLimited, before.QueueStateRateLimited+1)
 	}
 }
 
 func TestReadSnapshot_TracksBreakerOpenAndClosed(t *testing.T) {
-	m := NewExpvarPlaybackMetrics()
+	m := metrics.NewExpvarPlaybackMetrics()
 
 	m.EnrichmentBreakerOpened()
-	if !ReadSnapshot().EnrichmentBreakerOpen {
+	if !metrics.ReadSnapshot().EnrichmentBreakerOpen {
 		t.Error("now_playing_enrichment_breaker_open = false while the breaker is open, want true")
 	}
 
 	m.EnrichmentBreakerClosed()
-	if ReadSnapshot().EnrichmentBreakerOpen {
+	if metrics.ReadSnapshot().EnrichmentBreakerOpen {
 		t.Error("now_playing_enrichment_breaker_open = true after the breaker closed, want false")
 	}
 }
 
 func TestReadSnapshot_ReportsErasureSweep(t *testing.T) {
-	before := ReadSnapshot()
-	m := NewExpvarPlaybackMetrics()
+	before := metrics.ReadSnapshot()
+	m := metrics.NewExpvarPlaybackMetrics()
 
 	m.SweepIdle()
 	m.QueueStateErased(3)
 	m.OwnerScanTimedOut()
 	m.RetryOwnerDropped()
 
-	after := ReadSnapshot()
+	after := metrics.ReadSnapshot()
 	if after.ErasureRetryOwnersDropped != before.ErasureRetryOwnersDropped+1 {
 		t.Errorf("erasure_retry_owners_dropped_total = %d, want %d", after.ErasureRetryOwnersDropped, before.ErasureRetryOwnersDropped+1)
 	}
@@ -97,13 +98,13 @@ func TestReadSnapshot_ReportsErasureSweep(t *testing.T) {
 }
 
 func TestReadSnapshot_ReportsQueueStateFailures(t *testing.T) {
-	before := ReadSnapshot()
+	before := metrics.ReadSnapshot()
 
-	m := NewExpvarPlaybackMetrics()
+	m := metrics.NewExpvarPlaybackMetrics()
 	m.QueueStateOpFailedTransient()
 	m.QueueStateStaleWrite()
 
-	after := ReadSnapshot()
+	after := metrics.ReadSnapshot()
 	if after.QueueStateTransientFailures != before.QueueStateTransientFailures+1 {
 		t.Errorf("queue_state_op_transient_failures_total = %d, want %d", after.QueueStateTransientFailures, before.QueueStateTransientFailures+1)
 	}

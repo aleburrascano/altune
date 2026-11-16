@@ -1,6 +1,7 @@
-package kernel
+package kernel_test
 
 import (
+	"altune/go-api/internal/shared/kernel"
 	"encoding/json"
 	"testing"
 
@@ -25,7 +26,7 @@ func TestParseTrackId(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			id, err := ParseTrackId(tt.input)
+			id, err := kernel.ParseTrackId(tt.input)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error for input %q, got nil", tt.input)
@@ -44,8 +45,8 @@ func TestParseTrackId(t *testing.T) {
 
 func TestTrackIdRoundTrip(t *testing.T) {
 	t.Parallel()
-	id := NewTrackId()
-	got, err := ParseTrackId(id.String())
+	id := kernel.NewTrackId()
+	got, err := kernel.ParseTrackId(id.String())
 	if err != nil {
 		t.Fatalf("ParseTrackId(%q) error = %v", id.String(), err)
 	}
@@ -57,7 +58,7 @@ func TestTrackIdRoundTrip(t *testing.T) {
 func TestTrackIdFromUUID(t *testing.T) {
 	t.Parallel()
 	raw := uuid.New()
-	id := TrackIdFromUUID(raw)
+	id := kernel.TrackIdFromUUID(raw)
 
 	if id.UUID() != raw {
 		t.Errorf("UUID() = %v, want %v", id.UUID(), raw)
@@ -70,8 +71,8 @@ func TestTrackIdFromUUID(t *testing.T) {
 func TestTrackIdFromUUIDMatchesParse(t *testing.T) {
 	t.Parallel()
 	raw := uuid.New()
-	id := TrackIdFromUUID(raw)
-	parsed, err := ParseTrackId(raw.String())
+	id := kernel.TrackIdFromUUID(raw)
+	parsed, err := kernel.ParseTrackId(raw.String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,12 +85,12 @@ func TestTrackId_IsZero(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name string
-		id   TrackId
+		id   kernel.TrackId
 		want bool
 	}{
-		{name: "nil UUID is zero", id: TrackIdFromUUID(uuid.Nil), want: true},
-		{name: "non-nil UUID is not zero", id: TrackIdFromUUID(uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")), want: false},
-		{name: "default value is zero", id: TrackId{}, want: true},
+		{name: "nil UUID is zero", id: kernel.TrackIdFromUUID(uuid.Nil), want: true},
+		{name: "non-nil UUID is not zero", id: kernel.TrackIdFromUUID(uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")), want: false},
+		{name: "default value is zero", id: kernel.TrackId{}, want: true},
 	}
 
 	for _, tt := range tests {
@@ -104,7 +105,7 @@ func TestTrackId_IsZero(t *testing.T) {
 
 func TestTrackIdJSONUnchanged(t *testing.T) {
 	t.Parallel()
-	raw, err := json.Marshal(struct{ ID TrackId }{})
+	raw, err := json.Marshal(struct{ ID kernel.TrackId }{})
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
@@ -115,8 +116,8 @@ func TestTrackIdJSONUnchanged(t *testing.T) {
 
 func TestTrackIdIsMapKey(t *testing.T) {
 	t.Parallel()
-	a, b := NewTrackId(), NewTrackId()
-	m := map[TrackId]string{a: "a", b: "b"}
+	a, b := kernel.NewTrackId(), kernel.NewTrackId()
+	m := map[kernel.TrackId]string{a: "a", b: "b"}
 	if m[a] != "a" || m[b] != "b" || len(m) != 2 {
 		t.Errorf("TrackId map lookup failed: %v", m)
 	}

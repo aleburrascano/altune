@@ -1,6 +1,7 @@
-package kernel
+package kernel_test
 
 import (
+	"altune/go-api/internal/shared/kernel"
 	"errors"
 	"testing"
 
@@ -9,7 +10,7 @@ import (
 
 func TestNewUserId(t *testing.T) {
 	raw := uuid.New()
-	uid := NewUserId(raw)
+	uid := kernel.NewUserId(raw)
 
 	if uid.UUID() != raw {
 		t.Errorf("NewUserId round-trip: got UUID()=%v, want %v", uid.UUID(), raw)
@@ -41,7 +42,7 @@ func TestParseUserId(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uid, err := ParseUserId(tt.input)
+			uid, err := kernel.ParseUserId(tt.input)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("ParseUserId(%q): expected error, got nil", tt.input)
@@ -60,7 +61,7 @@ func TestParseUserId(t *testing.T) {
 
 func TestUserId_String(t *testing.T) {
 	const raw = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
-	uid, err := ParseUserId(raw)
+	uid, err := kernel.ParseUserId(raw)
 	if err != nil {
 		t.Fatalf("ParseUserId(%q): unexpected error: %v", raw, err)
 	}
@@ -74,29 +75,29 @@ func TestUserId_String(t *testing.T) {
 func TestGuardNotSystem(t *testing.T) {
 	tests := []struct {
 		name       string
-		uid        UserId
+		uid        kernel.UserId
 		wantReject bool
 	}{
 		{
 			name:       "the system identity is rejected",
-			uid:        SystemUserId(),
+			uid:        kernel.SystemUserId(),
 			wantReject: true,
 		},
 		{
 			name:       "a real user is allowed",
-			uid:        NewUserId(uuid.New()),
+			uid:        kernel.NewUserId(uuid.New()),
 			wantReject: false,
 		},
 		{
 			name:       "the zero user id is not the system identity",
-			uid:        UserId{},
+			uid:        kernel.UserId{},
 			wantReject: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := GuardNotSystem(tt.uid)
+			err := kernel.GuardNotSystem(tt.uid)
 
 			if !tt.wantReject {
 				if err != nil {
@@ -104,7 +105,7 @@ func TestGuardNotSystem(t *testing.T) {
 				}
 				return
 			}
-			if !errors.Is(err, ErrSystemUserPersonalization) {
+			if !errors.Is(err, kernel.ErrSystemUserPersonalization) {
 				t.Fatalf("GuardNotSystem(%v)=%v, want ErrSystemUserPersonalization", tt.uid, err)
 			}
 		})
@@ -114,22 +115,22 @@ func TestGuardNotSystem(t *testing.T) {
 func TestUserId_IsZero(t *testing.T) {
 	tests := []struct {
 		name string
-		uid  UserId
+		uid  kernel.UserId
 		want bool
 	}{
 		{
 			name: "nil UUID is zero",
-			uid:  NewUserId(uuid.Nil),
+			uid:  kernel.NewUserId(uuid.Nil),
 			want: true,
 		},
 		{
 			name: "zero-value struct is zero",
-			uid:  UserId{},
+			uid:  kernel.UserId{},
 			want: true,
 		},
 		{
 			name: "valid UUID is not zero",
-			uid:  NewUserId(uuid.New()),
+			uid:  kernel.NewUserId(uuid.New()),
 			want: false,
 		},
 	}
