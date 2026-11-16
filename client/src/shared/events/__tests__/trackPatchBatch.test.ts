@@ -24,6 +24,9 @@ import {
   registerUnfetchedQuery,
   seedTracksPrefix,
 } from '@shared/events';
+
+import { recordingCache } from '@shared/events/__tests__/recordingCache';
+
 describe('patchTrackInCaches', () => {
   const SEEDED_TOTAL = 9;
 
@@ -249,13 +252,18 @@ describe('a late REST response cannot regress a patch that landed mid-fetch', ()
     return { queryFn, release: () => release?.() };
   }
 
-  function mountLibrary(queryFn: () => Promise<ListTracksResponse>, rendered: string[] = []) {
+  function mountLibrary(
+    queryFn: () => Promise<ListTracksResponse>,
+    rendered: string[] = [],
+    retry = 0,
+  ) {
     const observer = new InfiniteQueryObserver(client, {
       queryKey: key,
       queryFn,
       initialPageParam: 0,
       getNextPageParam: () => undefined,
-      retry: false,
+      retry,
+      retryDelay: 0,
     });
     return observer.subscribe(
       notifyManager.batchCalls(() => {
@@ -264,6 +272,25 @@ describe('a late REST response cannot regress a patch that landed mid-fetch', ()
         if (x) rendered.push(x.acquisition_status);
       }),
     );
+  }
+
+  function failingServer() {
+    let fail: (() => void) | undefined;
+    const queryFn = jest.fn(() => {
+      if (queryFn.mock.calls.length > 1) return Promise.resolve(trackX(toPending()));
+      return new Promise<ListTracksResponse>((_resolve, reject) => {
+        fail = () => reject(new Error('flaky'));
+      });
+    });
+    return { queryFn, fail: () => fail?.() };
+  }
+
+  async function untilFetching(queryKey: readonly unknown[] = key): Promise<void> {
+    await waitFor(() => expect(client.getQueryState(queryKey)?.fetchStatus).toBe('fetching'));
+  }
+
+  async function untilIdle(): Promise<void> {
+    await waitFor(() => expect(client.getQueryState(key)?.fetchStatus).toBe('idle'));
   }
 
   function statusOfX() {
@@ -333,5 +360,80 @@ describe('a late REST response cannot regress a patch that landed mid-fetch', ()
     unmount();
 
     expect(statusOfX()).toBe('pending');
+  });
+
+  it('keeps replaying through an attempt that fails and is retried', async () => {
+    client.setQueryData(key, makeInfinite([trackX(toPending())]));
+    const server = failingServer();
+    const unmount = mountLibrary(server.queryFn, [], 1);
+    await untilFetching();
+
+    patchTrackInCaches(client, asTrackId('x'), toReady());
+    server.fail();
+    await untilIdle();
+    unmount();
+
+    expect(statusOfX()).toBe('ready');
+  });
+
+  it('writes nothing over a fetch that fails', async () => {
+    client.setQueryData(key, makeInfinite([trackX(toPending())]));
+    const cache = recordingCache(client);
+    const server = failingServer();
+    const unmount = mountLibrary(server.queryFn);
+    await untilFetching();
+
+    patchTrackInCaches(cache, asTrackId('x'), toReady());
+    server.fail();
+    await untilIdle();
+    unmount();
+
+    expect(cache.writes).toEqual([]);
+  });
+
+  it('keeps replaying when another query leaves the cache mid-fetch', async () => {
+    client.setQueryData(key, makeInfinite([trackX(toPending())]));
+    client.setQueryData(libraryKeys.lookup('q'), makePage([]));
+    const server = slowStaleServer();
+    const unmount = mountLibrary(server.queryFn);
+    await untilFetching();
+
+    patchTrackInCaches(client, asTrackId('x'), toReady());
+    client.removeQueries({ queryKey: libraryKeys.lookup('q') });
+    server.release();
+    await untilIdle();
+    unmount();
+
+    expect(statusOfX()).toBe('ready');
+  });
+
+  it('stops listening once the raced query leaves the cache', async () => {
+    client.setQueryData(key, makeInfinite([trackX(toPending())]));
+    const unmount = mountLibrary(slowStaleServer().queryFn);
+    await untilFetching();
+    patchTrackInCaches(client, asTrackId('x'), toReady());
+    expect(client.getQueryCache().hasListeners()).toBe(true);
+
+    unmount();
+    client.removeQueries({ queryKey: key });
+
+    expect(client.getQueryCache().hasListeners()).toBe(false);
+  });
+
+  it("lets another family's in-flight fetch land as the server sent it", async () => {
+    const detailKey = playlistKeys.detail(asPlaylistId('p1'));
+    const served = makePlaylistDetail('p1', [makeTrack({ id: asTrackId('x') })]);
+    let release: (() => void) | undefined;
+    const fetched = client.fetchQuery({
+      queryKey: detailKey,
+      queryFn: () =>
+        new Promise<PlaylistDetailResponse>((resolve) => (release = () => resolve(served))),
+    });
+    await untilFetching(detailKey);
+
+    patchTrackInCaches(client, asTrackId('y'), toReady());
+    release?.();
+
+    await expect(fetched).resolves.toEqual(served);
   });
 });

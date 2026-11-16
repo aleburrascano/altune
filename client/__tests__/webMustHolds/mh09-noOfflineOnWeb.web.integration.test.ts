@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react-native';
 
 import { asTrackId } from '@shared/apiClient/ids';
-import { applyServerEvent } from '@shared/events/applyServerEvent';
+import { applyServerEvent } from '@shared/events/shell/applyServerEvent';
 import { notifyIdentityChange } from '@shared/session/signOutCleanup';
 import { readOwner } from '@shared/offline/state/pinnedIndex';
 import { usePinnedStore } from '@shared/offline/state/pinnedStore';

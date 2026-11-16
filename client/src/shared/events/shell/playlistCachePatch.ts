@@ -1,5 +1,3 @@
-import type { InfiniteData, QueryClient } from '@tanstack/react-query';
-
 import type {
   PlaylistId,
   TrackId,
@@ -10,57 +8,58 @@ import type {
 } from '@shared/apiClient';
 import { playlistKeys } from '@shared/query';
 
+import type { EventCache } from '@shared/events/core/eventCache';
+
+interface PlaylistPages {
+  pages: ListPlaylistsResponse[];
+  pageParams: number[];
+}
+
 function revisePlaylistEverywhere(
-  queryClient: QueryClient,
+  cache: EventCache,
   playlistId: PlaylistId,
   revise: (playlist: PlaylistResponse) => PlaylistResponse,
 ): void {
   const reviseOne = (p: PlaylistResponse): PlaylistResponse =>
     p.id === playlistId ? revise(p) : p;
 
-  queryClient.setQueryData<ListPlaylistsResponse>(playlistKeys.list, (prev) =>
+  cache.setQueryData<ListPlaylistsResponse>(playlistKeys.list, (prev) =>
     prev ? { ...prev, items: prev.items.map(reviseOne) } : prev,
   );
-  queryClient.setQueryData<InfiniteData<ListPlaylistsResponse, number>>(
-    playlistKeys.paged,
-    (prev) =>
-      prev
-        ? {
-            ...prev,
-            pages: prev.pages.map((page) => ({ ...page, items: page.items.map(reviseOne) })),
-          }
-        : prev,
+  cache.setQueryData<PlaylistPages>(playlistKeys.paged, (prev) =>
+    prev
+      ? {
+          ...prev,
+          pages: prev.pages.map((page) => ({ ...page, items: page.items.map(reviseOne) })),
+        }
+      : prev,
   );
 }
 
-export function patchPlaylistName(
-  queryClient: QueryClient,
-  playlistId: PlaylistId,
-  name: string,
-): void {
-  queryClient.setQueryData<PlaylistDetailResponse>(playlistKeys.detail(playlistId), (prev) =>
+export function patchPlaylistName(cache: EventCache, playlistId: PlaylistId, name: string): void {
+  cache.setQueryData<PlaylistDetailResponse>(playlistKeys.detail(playlistId), (prev) =>
     prev ? { ...prev, name } : prev,
   );
-  revisePlaylistEverywhere(queryClient, playlistId, (p) => ({ ...p, name }));
+  revisePlaylistEverywhere(cache, playlistId, (p) => ({ ...p, name }));
 }
 
 function reviseTrackCountEverywhere(
-  queryClient: QueryClient,
+  cache: EventCache,
   playlistId: PlaylistId,
   nextCount: (current: number) => number,
 ): void {
-  revisePlaylistEverywhere(queryClient, playlistId, (p) => ({
+  revisePlaylistEverywhere(cache, playlistId, (p) => ({
     ...p,
     track_count: nextCount(p.track_count),
   }));
 }
 
 function dropTracksFromDetail(
-  queryClient: QueryClient,
+  cache: EventCache,
   playlistId: PlaylistId,
   removedIds: ReadonlySet<string>,
 ): void {
-  queryClient.setQueryData<PlaylistDetailResponse>(playlistKeys.detail(playlistId), (prev) => {
+  cache.setQueryData<PlaylistDetailResponse>(playlistKeys.detail(playlistId), (prev) => {
     if (!prev) return prev;
     const tracks = prev.tracks.filter((t) => !removedIds.has(t.id));
     return { ...prev, tracks, track_count: tracks.length };
@@ -68,40 +67,38 @@ function dropTracksFromDetail(
 }
 
 export function removeTracksFromPlaylistCache(
-  queryClient: QueryClient,
+  cache: EventCache,
   playlistId: PlaylistId,
   trackIds: readonly string[],
 ): void {
   const removedIds = new Set(trackIds);
   if (removedIds.size === 0) return;
-  const before = queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail(playlistId));
-  dropTracksFromDetail(queryClient, playlistId, removedIds);
+  const before = cache.getQueryData<PlaylistDetailResponse>(playlistKeys.detail(playlistId));
+  dropTracksFromDetail(cache, playlistId, removedIds);
   if (!before) {
-    reviseTrackCountEverywhere(queryClient, playlistId, (count) =>
-      Math.max(0, count - removedIds.size),
-    );
+    reviseTrackCountEverywhere(cache, playlistId, (count) => Math.max(0, count - removedIds.size));
     return;
   }
   const remainingCount = before.tracks.filter((t) => !removedIds.has(t.id)).length;
   if (remainingCount < before.tracks.length) {
-    reviseTrackCountEverywhere(queryClient, playlistId, () => remainingCount);
+    reviseTrackCountEverywhere(cache, playlistId, () => remainingCount);
   }
 }
 
 export function removeTrackFromPlaylistCache(
-  queryClient: QueryClient,
+  cache: EventCache,
   playlistId: PlaylistId,
   trackId: TrackId,
 ): void {
-  removeTracksFromPlaylistCache(queryClient, playlistId, [trackId]);
+  removeTracksFromPlaylistCache(cache, playlistId, [trackId]);
 }
 
 export function reorderPlaylistCache(
-  queryClient: QueryClient,
+  cache: EventCache,
   playlistId: PlaylistId,
   trackIds: string[],
 ): void {
-  queryClient.setQueryData<PlaylistDetailResponse>(playlistKeys.detail(playlistId), (prev) => {
+  cache.setQueryData<PlaylistDetailResponse>(playlistKeys.detail(playlistId), (prev) => {
     if (!prev) return prev;
     const byId = new Map<string, TrackResponse>(prev.tracks.map((t) => [t.id, t]));
     const namedIds = new Set(trackIds);

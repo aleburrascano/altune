@@ -1,5 +1,3 @@
-import type { QueryClient } from '@tanstack/react-query';
-
 import {
   isTrackStatusReady,
   linkTrackIdentity,
@@ -29,19 +27,17 @@ import type { TrackId, TrackResponse } from '@shared/apiClient';
 import type { JsonObject } from '@shared/files';
 import { libraryKeys, playlistKeys } from '@shared/query';
 
+import type { EventCache } from '@shared/events/core/eventCache';
+import { asString, type ServerEventHandlers } from '@shared/events/core/serverEventTypes';
+import type { ServerEvent } from '@shared/events/core/sseFrames';
+import { asTrackIdOrNull } from '@shared/events/shell/eventIds';
 import {
   forgetTrack,
   getTrackFromCaches,
   invalidateLibraryDerived,
   upsertTrackInCaches,
-} from '@shared/events/trackCachePatch';
-import {
-  asString,
-  asTrackIdOrNull,
-  type ServerEventHandlers,
-} from '@shared/events/serverEventTypes';
-import { scheduleTrackPatch } from '@shared/events/trackPatchBatch';
-import type { ServerEvent } from '@shared/events/sseFrames';
+} from '@shared/events/shell/trackCachePatch';
+import { scheduleTrackPatch, type TrackPatch } from '@shared/events/shell/trackPatchBatch';
 
 type AcquisitionEventType =
   | 'track_added_to_library'
@@ -57,8 +53,7 @@ function parseAddedTrack(data: Record<string, unknown>): TrackResponse | null {
   return tryParseTrackResponse(payload);
 }
 
-function trackMeta(track: TrackResponse | undefined): DownloadMeta | undefined {
-  if (!track) return undefined;
+function trackMeta(track: TrackResponse): DownloadMeta {
   return { title: track.title, artist: track.artist, artworkUrl: track.artwork_url };
 }
 
@@ -66,114 +61,118 @@ function nonEmpty(text: string | null): string | null {
   return text === '' ? null : text;
 }
 
-function eventMeta(payload: JsonObject): DownloadMeta | undefined {
-  const title = nonEmpty(asString(payload.title));
-  const artist = nonEmpty(asString(payload.artist));
-  if (title === null && artist === null) return undefined;
-  return { title, artist };
+function eventMeta(payload: JsonObject): DownloadMeta {
+  return { title: nonEmpty(asString(payload.title)), artist: nonEmpty(asString(payload.artist)) };
 }
 
-function downloadMeta(
-  queryClient: QueryClient,
-  trackId: TrackId,
-  payload: JsonObject,
-): DownloadMeta | undefined {
-  return trackMeta(getTrackFromCaches(queryClient, trackId)) ?? eventMeta(payload);
+function downloadMeta(cache: EventCache, trackId: TrackId, payload: JsonObject): DownloadMeta {
+  const cached = getTrackFromCaches(cache, trackId);
+  return cached ? trackMeta(cached) : eventMeta(payload);
 }
+
+const PROGRESS_PHASE: Record<ReturnType<typeof stageToPhase>, DownloadPhase | null> = {
+  finding: 'finding',
+  downloading: 'downloading',
+  finishing: 'finishing',
+  done: null,
+  failed: null,
+  working: null,
+};
 
 function progressPhase(stage: string | null): DownloadPhase | null {
-  const phase = stageToPhase(stage);
-  switch (phase) {
-    case 'finding':
-    case 'downloading':
-    case 'finishing':
-      return phase;
-    case 'done':
-    case 'failed':
-    case 'working':
-      return null;
-  }
+  return PROGRESS_PHASE[stageToPhase(stage)];
 }
 
-function handleTrackAddedToLibrary(queryClient: QueryClient, event: ServerEvent): void {
-  const track = parseAddedTrack(event.data);
-  invalidateLibraryDerived(queryClient);
-  if (!track) {
-    void queryClient.invalidateQueries({ queryKey: libraryKeys.tracksPrefix });
-    void queryClient.invalidateQueries({ queryKey: libraryKeys.featuringPrefix });
-    return;
-  }
-  upsertTrackInCaches(queryClient, track);
+function refetchTrackLists(cache: EventCache): void {
+  void cache.invalidateQueries({ queryKey: libraryKeys.tracksPrefix });
+  void cache.invalidateQueries({ queryKey: libraryKeys.featuringPrefix });
+}
+
+function addTrack(cache: EventCache, track: TrackResponse): void {
+  upsertTrackInCaches(cache, track);
   patchTrackStatus(track.id, toTrackStatus(acquisitionOf(track)), 'sse');
   linkTrackIdentity(trackIdentityKey(track.title, track.artist), track.id);
-  const meta = trackMeta(track);
-  if (meta) rememberDownloadMeta(track.id, meta);
+  rememberDownloadMeta(track.id, trackMeta(track));
 }
 
-function handleTrackDeleted(queryClient: QueryClient, event: ServerEvent): void {
+function handleTrackAddedToLibrary(cache: EventCache, event: ServerEvent): void {
+  const track = parseAddedTrack(event.data);
+  invalidateLibraryDerived(cache);
+  if (track) addTrack(cache, track);
+  else refetchTrackLists(cache);
+}
+
+function handleTrackDeleted(cache: EventCache, event: ServerEvent): void {
   const trackId = asTrackIdOrNull(event.data.track_id);
   if (trackId) {
-    forgetTrack(queryClient, trackId);
+    forgetTrack(cache, trackId);
   }
-  invalidateLibraryDerived(queryClient);
-  void queryClient.invalidateQueries({ queryKey: playlistKeys.list });
+  invalidateLibraryDerived(cache);
+  void cache.invalidateQueries({ queryKey: playlistKeys.list });
 }
 
 function isStaleStart(trackId: TrackId): boolean {
   return isTrackStatusReady(trackId) || isStaleDownloadPhase(trackId, 'finding');
 }
 
-function handleTrackAcquisitionStarted(queryClient: QueryClient, event: ServerEvent): void {
+function handleTrackAcquisitionStarted(cache: EventCache, event: ServerEvent): void {
   const trackId = asTrackIdOrNull(event.data.track_id);
   if (!trackId) return;
   if (isStaleStart(trackId)) return;
   const pending = toPending();
-  startDownload(trackId, downloadMeta(queryClient, trackId, event.data));
-  scheduleTrackPatch(queryClient, trackId, pending);
+  startDownload(trackId, downloadMeta(cache, trackId, event.data));
+  scheduleTrackPatch(cache, trackId, pending);
   patchTrackStatus(trackId, toTrackStatus(pending), 'sse');
 }
 
-function handleTrackAcquisitionProgress(queryClient: QueryClient, event: ServerEvent): void {
+function handleTrackAcquisitionProgress(cache: EventCache, event: ServerEvent): void {
   const trackId = asTrackIdOrNull(event.data.track_id);
   const phase = progressPhase(asString(event.data.stage));
   if (trackId && phase) {
-    progressDownload(trackId, phase, downloadMeta(queryClient, trackId, event.data));
+    progressDownload(trackId, phase, downloadMeta(cache, trackId, event.data));
   }
 }
 
-function handleTrackAcquisitionCompleted(queryClient: QueryClient, event: ServerEvent): void {
+function readyPatch(audioRef: string | null): TrackPatch {
+  const ready = toReady();
+  return audioRef === null ? ready : { ...ready, audio_ref: audioRef };
+}
+
+function handleTrackAcquisitionCompleted(cache: EventCache, event: ServerEvent): void {
   const trackId = asTrackIdOrNull(event.data.track_id);
   if (!trackId) return;
-  const ready = toReady();
-  const audioRef = asString(event.data.audio_ref);
-  scheduleTrackPatch(queryClient, trackId, {
-    ...ready,
-    ...(audioRef === null ? {} : { audio_ref: audioRef }),
-  });
-  patchTrackStatus(trackId, toTrackStatus(ready), 'sse');
+  scheduleTrackPatch(cache, trackId, readyPatch(asString(event.data.audio_ref)));
+  patchTrackStatus(trackId, toTrackStatus(toReady()), 'sse');
   completeDownload(trackId);
   invalidateAudioCaches(trackId);
   if (offlineDownloadsSupported) repinIfPinned(trackId);
 }
 
-function handleTrackReplaceFailed(queryClient: QueryClient, event: ServerEvent): void {
+function handleTrackReplaceFailed(cache: EventCache, event: ServerEvent): void {
   const trackId = asTrackIdOrNull(event.data.track_id);
   if (!trackId) return;
   const ready = toReady();
-  scheduleTrackPatch(queryClient, trackId, ready);
+  scheduleTrackPatch(cache, trackId, ready);
   patchTrackStatus(trackId, toTrackStatus(ready), 'sse');
   failDownload(trackId);
 }
 
-function handleTrackAcquisitionFailed(queryClient: QueryClient, event: ServerEvent): void {
+function failedPatch(
+  failure: ReturnType<typeof toFailed>,
+  cachedMessage: string | null,
+): TrackPatch {
+  return {
+    ...toFailed(failure.failure_reason, failure.failure_message ?? cachedMessage),
+    audio_ref: null,
+  };
+}
+
+function handleTrackAcquisitionFailed(cache: EventCache, event: ServerEvent): void {
   const trackId = asTrackIdOrNull(event.data.track_id);
   if (!trackId) return;
   const failure = toFailed(asString(event.data.reason), asString(event.data.failure_message));
-  const cachedMessage = getTrackFromCaches(queryClient, trackId)?.failure_message ?? null;
-  scheduleTrackPatch(queryClient, trackId, {
-    ...toFailed(failure.failure_reason, failure.failure_message ?? cachedMessage),
-    audio_ref: null,
-  });
+  const cachedMessage = getTrackFromCaches(cache, trackId)?.failure_message ?? null;
+  scheduleTrackPatch(cache, trackId, failedPatch(failure, cachedMessage));
   patchTrackStatus(trackId, toTrackStatus(failure), 'sse');
   failDownload(trackId);
 }

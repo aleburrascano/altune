@@ -11,9 +11,13 @@ import { PLAYLIST_HANDLERS } from '@shared/events';
 import type { JsonObject } from '@shared/files';
 import type { ServerEvent } from '@shared/events';
 
+import { recordingCache } from '@shared/events/__tests__/recordingCache';
+
 const PATCHED_CACHES = 3;
 
 const BATCH_PLAYLIST = 3000;
+const LISTED_COUNT = 9;
+const NUMERIC_ID = 7;
 
 function makeTrack(id: string): TrackResponse {
   return {
@@ -65,6 +69,16 @@ function seedPlaylist(queryClient: QueryClient, tracks: TrackResponse[]): void {
   });
 }
 
+function listedCount(queryClient: QueryClient): number | undefined {
+  return queryClient.getQueryData<ListPlaylistsResponse>(playlistKeys.list)?.items[0]?.track_count;
+}
+
+function reviseListedCount(queryClient: QueryClient, trackCount: number): void {
+  queryClient.setQueryData<ListPlaylistsResponse>(playlistKeys.list, (prev) =>
+    prev ? { ...prev, items: prev.items.map((p) => ({ ...p, track_count: trackCount })) } : prev,
+  );
+}
+
 function cachedDetail(queryClient: QueryClient): PlaylistDetailResponse {
   return queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail(asPlaylistId('p1')))!;
 }
@@ -79,16 +93,15 @@ describe('removing a large batch of tracks from a tracks_removed_from_playlist e
     const tracks = makeTracks(BATCH_PLAYLIST);
     seedPlaylist(queryClient, tracks);
     const removedIds = tracks.slice(0, BATCH_PLAYLIST / 2).map((t) => t.id);
-    const reads = jest.spyOn(queryClient, 'getQueryData');
-    const writes = jest.spyOn(queryClient, 'setQueryData');
+    const cache = recordingCache(queryClient);
 
     PLAYLIST_HANDLERS.tracks_removed_from_playlist(
-      queryClient,
+      cache,
       serverEvent('tracks_removed_from_playlist', { playlist_id: 'p1', track_ids: removedIds }),
     );
 
-    expect(writes.mock.calls).toHaveLength(PATCHED_CACHES);
-    expect(reads.mock.calls).toHaveLength(1);
+    expect(cache.writes).toHaveLength(PATCHED_CACHES);
+    expect(cache.reads).toHaveLength(1);
   });
 
   it('leaves exactly the tracks the batch did not name, with both track counts agreeing', () => {
@@ -109,5 +122,56 @@ describe('removing a large batch of tracks from a tracks_removed_from_playlist e
     expect(
       queryClient.getQueryData<ListPlaylistsResponse>(playlistKeys.list)!.items[0]!.track_count,
     ).toBe(BATCH_PLAYLIST / 2);
+  });
+});
+
+describe('playlist events that name no usable target', () => {
+  it.each<[keyof typeof PLAYLIST_HANDLERS, JsonObject]>([
+    ['track_removed_from_playlist', { track_id: 't1' }],
+    ['track_removed_from_playlist', { playlist_id: 'p1' }],
+    ['tracks_removed_from_playlist', { track_ids: ['t1'] }],
+    ['tracks_removed_from_playlist', { playlist_id: 'p1' }],
+    ['tracks_removed_from_playlist', { playlist_id: 'p1', track_ids: [] }],
+    ['playlist_reordered', { track_ids: ['t1'] }],
+    ['playlist_reordered', { playlist_id: 'p1' }],
+  ])('writes no cache for %s with %j', (type, data) => {
+    const queryClient = new QueryClient();
+    seedPlaylist(queryClient, makeTracks(PATCHED_CACHES));
+    const cache = recordingCache(queryClient);
+
+    PLAYLIST_HANDLERS[type](cache, serverEvent(type, data));
+
+    expect(cache.writes).toEqual([]);
+  });
+});
+
+describe('a removal the cached playlist detail does not hold', () => {
+  it('keeps the listed track count when no named track was in the detail', () => {
+    const queryClient = new QueryClient();
+    seedPlaylist(queryClient, makeTracks(PATCHED_CACHES));
+    reviseListedCount(queryClient, LISTED_COUNT);
+
+    PLAYLIST_HANDLERS.tracks_removed_from_playlist(
+      queryClient,
+      serverEvent('tracks_removed_from_playlist', { playlist_id: 'p1', track_ids: ['elsewhere'] }),
+    );
+
+    expect(listedCount(queryClient)).toBe(LISTED_COUNT);
+  });
+
+  it('counts only the string ids when no detail is cached', () => {
+    const queryClient = new QueryClient();
+    seedPlaylist(queryClient, makeTracks(PATCHED_CACHES));
+    queryClient.removeQueries({ queryKey: playlistKeys.detail(asPlaylistId('p1')) });
+
+    PLAYLIST_HANDLERS.tracks_removed_from_playlist(
+      queryClient,
+      serverEvent('tracks_removed_from_playlist', {
+        playlist_id: 'p1',
+        track_ids: ['t0', NUMERIC_ID],
+      }),
+    );
+
+    expect(listedCount(queryClient)).toBe(PATCHED_CACHES - 1);
   });
 });

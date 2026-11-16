@@ -24,13 +24,10 @@ class MalformedSSEEventError extends Error {
 
 type WireField = { name: string; value: string };
 
-function fieldOf(line: string): WireField | null {
-  if (line.startsWith(':')) return null;
+function fieldOf(line: string): WireField {
   const colon = line.indexOf(':');
-  if (colon === -1) return null;
-  const name = line.substring(0, colon);
   const raw = line.substring(colon + 1);
-  return { name, value: raw.startsWith(' ') ? raw.substring(1) : raw };
+  return { name: line.substring(0, colon), value: raw.startsWith(' ') ? raw.substring(1) : raw };
 }
 
 export type ParsedBlock = ServerEvent | MalformedSSEEventError;
@@ -66,29 +63,27 @@ function applyField(fields: BlockFields, field: WireField): void {
 
 function collectFields(block: string): BlockFields {
   const fields: BlockFields = { id: '', type: 'message', dataLines: [] };
-  for (const line of block.split('\n')) {
-    const field = fieldOf(line);
-    if (field !== null) applyField(fields, field);
-  }
+  for (const line of block.split('\n')) applyField(fields, fieldOf(line));
   return fields;
 }
 
-function isJsonObject(value: unknown): value is JsonObject {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+function objectOrNull(value: unknown): JsonObject | null {
+  return typeof value !== 'object' || Array.isArray(value) ? null : (value as JsonObject | null);
 }
 
-function parseJson(payload: string): unknown {
+function parsedObject(payload: string): JsonObject | null {
   try {
-    return JSON.parse(payload) as unknown;
+    return objectOrNull(JSON.parse(payload));
   } catch {
-    return undefined;
+    return null;
   }
 }
 
 function parsePayload(id: string, type: string, payload: string): ParsedBlock {
-  const parsed = parseJson(payload);
-  if (isJsonObject(parsed)) return { id, type, data: parsed };
-  return new MalformedSSEEventError(id, type, payload.length);
+  const fields = parsedObject(payload);
+  return fields === null
+    ? new MalformedSSEEventError(id, type, payload.length)
+    : { id, type, data: fields };
 }
 
 function parseBlock(block: string): ParsedBlock | null {
@@ -107,7 +102,7 @@ function latestEventId(blocks: ParsedBlock[], fallback: string): string {
 
 export function parseChunk(buffer: string, chunk: string, lastEventId: string): ParsedChunk {
   const rawBlocks = (buffer + withUnixLineEndings(chunk)).split('\n\n');
-  const remainder = rawBlocks.pop() ?? '';
+  const remainder = rawBlocks.pop() as string;
   const blocks: ParsedBlock[] = [];
   for (const raw of rawBlocks) {
     const block = parseBlock(raw);

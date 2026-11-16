@@ -1,7 +1,7 @@
-import React, { type ReactNode } from 'react';
+import React, { type ReactNode, useEffect } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import * as ReactQuery from '@tanstack/react-query';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { renderHook, render, act, waitFor, screen } from '@testing-library/react-native';
 
 import {
@@ -16,12 +16,11 @@ import { followSignedInUser } from '@shared/telemetry';
 import { useOwnedTrack } from '@features/detail/hooks/useOwnedTrack';
 import type { TrackExtras } from '@features/detail/domain/trackExtras';
 import { TrackSaveControl } from '@features/detail/ui/SaveControls';
-import type { ServerEvent } from '@shared/events/sseFrames';
 import {
-  useServerEvents,
-  type ServerEventsClient,
+  startServerEvents,
+  type ServerEvent,
   type ServerEventsClientFactory,
-} from '@shared/events/useServerEvents';
+} from '@shared/events';
 import { startDownload, useDownloadStore } from '@shared/acquisition/state/downloadStore';
 import { getSearchState, setSearchState } from '@features/discovery/domain/searchState';
 import { registerSearchStateSignOutReset } from '@features/discovery/adapters/registerSearchStateSignOutReset';
@@ -304,9 +303,9 @@ describe('server event stream across an account switch', () => {
     return { id: `evt-${trackId}`, type: 'track_acquisition_started', data: { track_id: trackId } };
   }
 
-  interface FakeStream extends ServerEventsClient {
+  type FakeStream = ReturnType<ServerEventsClientFactory> & {
     deliver: (event: ServerEvent) => void;
-  }
+  };
 
   let streams: FakeStream[] = [];
 
@@ -331,6 +330,21 @@ describe('server event stream across an account switch', () => {
     streams.push(stream);
     return stream;
   };
+
+  function useFakeServerEvents(): void {
+    const cache = useQueryClient();
+    useEffect(
+      () =>
+        startServerEvents({
+          cache,
+          createClient: openFakeStream,
+          getToken: async () => null,
+          foreground: { isActive: () => true, subscribe: () => () => undefined },
+          warn: () => undefined,
+        }),
+      [cache],
+    );
+  }
 
   function streamAt(index: number): FakeStream {
     const stream = streams[index];
@@ -371,7 +385,7 @@ describe('server event stream across an account switch', () => {
     const rendered = renderHook(
       () => {
         useSession();
-        useServerEvents(openFakeStream);
+        useFakeServerEvents();
       },
       { wrapper: makeWrapper(new QueryClient()) },
     );

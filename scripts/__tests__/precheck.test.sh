@@ -219,7 +219,7 @@ add_mobile_stubs
 run_script_with_stubs
 expect_npx "eslint scripts/tool.mjs"
 
-CASE="mobile event contracts keep the jest cache under HOME, not the /tmp tmpfs"
+CASE="mobile contract tests run by kind and keep the jest cache under HOME, not the /tmp tmpfs"
 new_repo
 add_mobile_stubs
 (
@@ -230,7 +230,7 @@ add_mobile_stubs
     git commit -qm "events change"
 )
 run_script_with_stubs
-expect_npx "eventContract.test.ts"
+expect_npx "\\.contract\\.test\\.tsx?\$"
 expect_npx "--cacheDirectory $WORK/home/.cache/altune-ci/jest"
 
 add_gate_parity_stub() {

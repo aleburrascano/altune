@@ -1,19 +1,44 @@
 import { SSEClient } from '@shared/events';
-import type { ServerEvent } from '@shared/events';
+import type { ServerEvent, StreamIO, StreamRequest } from '@shared/events';
 import { clearSessionExpired, getSessionExpired, renewSessionCredentials } from '@shared/auth';
 
 import { signInTestUser } from '@testing/signInTestUser';
 
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
-
 const { __http } = require('@testing/doubles/fetch.js');
 
 const HEARTBEAT_WATCHDOG_MS = 60_000;
+const PAST_FIRST_BACKOFF_MS = 2_000;
+const BOTH_REQUESTS = 2;
+const FIRST_BACKOFF_MS = 1_000;
+const TWELVE_SECONDS_MS = 12_000;
+const FIVE_MINUTES_MS = 300_000;
+const MULTIPLE_CHOICES = 300;
+const TOO_MANY_REQUESTS = 429;
+const PAST_SECOND_BACKOFF_MS = 10_000;
+const PAST_WATCHDOG_MS = 120_000;
 const MAX_RESPONSE_BYTES = 524_288;
 const EVENTS_PATH = '/v1/discovery/events';
 const CORRELATION_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+const MIDDLE_JITTER = 0.5;
+const NEAR_FULL_JITTER = 0.99;
 
 type SentRequest = { path: string };
+
+let jitter = MIDDLE_JITTER;
+let warnings: [string, unknown][] = [];
+
+function streamIO(openRequest: () => StreamRequest): StreamIO {
+  return {
+    openRequest,
+    random: () => jitter,
+    warn: (message, error) => warnings.push([message, error]),
+  };
+}
+
+beforeEach(() => {
+  jitter = MIDDLE_JITTER;
+  warnings = [];
+});
 
 function reconnectEventsSent(): number {
   return __http.requests.filter((r: SentRequest) => r.path === EVENTS_PATH).length;
@@ -25,6 +50,7 @@ class FakeXHR {
   static instances: FakeXHR[] = [];
 
   responseText = '';
+  status = 0;
   method = '';
   url = '';
   requestHeaders: Record<string, string> = {};
@@ -46,6 +72,10 @@ class FakeXHR {
 
   setRequestHeader(name: string, value: string): void {
     this.requestHeaders[name] = value;
+  }
+
+  getResponseHeader(): string | null {
+    return null;
   }
 
   send(): void {
@@ -100,14 +130,19 @@ async function flush(): Promise<void> {
 function makeClient(getToken = jest.fn<Promise<string | null>, []>().mockResolvedValue('token-1')) {
   const onEvent = jest.fn<void, [ServerEvent]>();
   const onError = jest.fn<void, [unknown]>();
-  const client = new SSEClient('https://api.example.com/v1/events', getToken, onEvent, onError);
+  const client = new SSEClient(
+    'https://api.example.com/v1/events',
+    getToken,
+    onEvent,
+    onError,
+    streamIO(() => new FakeXHR()),
+  );
   return { client, onEvent, onError, getToken };
 }
 
 describe('SSEClient', () => {
   beforeEach(() => {
     FakeXHR.instances = [];
-    (global as unknown as { XMLHttpRequest: unknown }).XMLHttpRequest = FakeXHR;
     jest.useFakeTimers();
   });
 
@@ -151,7 +186,11 @@ describe('SSEClient', () => {
       const sent = xhrAt(0).requestHeaders['X-Correlation-ID'];
       expect(sent).toMatch(CORRELATION_ID_PATTERN);
       expect(onError).toHaveBeenCalledWith(
-        expect.objectContaining({ name: 'SSEConnectionError', correlationId: sent }),
+        expect.objectContaining({
+          name: 'SSEConnectionError',
+          correlationId: sent,
+          message: `SSE connection error (correlation_id=${sent})`,
+        }),
       );
     });
   });
@@ -319,6 +358,22 @@ describe('SSEClient', () => {
         eventType: 'resync',
       });
       expect((error as Error).cause).toBe(thrown);
+      expect((error as Error).message).toBe('SSE event handler threw (type=resync, id=7)');
+    });
+
+    it('names an id-less event <none> when its handler throws', async () => {
+      const { client, onEvent, onError } = makeClient();
+      await client.connect();
+      onEvent.mockImplementationOnce(() => {
+        throw new Error('handler bug');
+      });
+
+      xhrAt(0).emit(block({ type: 'resync', data: { seq: 1 } }));
+
+      expect(onError.mock.calls[0]?.[0]).toMatchObject({
+        eventId: '',
+        message: 'SSE event handler threw (type=resync, id=<none>)',
+      });
     });
 
     it('does not report a well-formed block through onError', async () => {
@@ -411,7 +466,7 @@ describe('SSEClient', () => {
     });
 
     it('does not double-schedule a reconnect when error and loadend both fire for one failure', async () => {
-      jest.spyOn(Math, 'random').mockReturnValue(0);
+      jitter = 0;
       const { client } = makeClient();
       await client.connect();
 
@@ -433,7 +488,7 @@ describe('SSEClient', () => {
     });
 
     it('reconnects after a backoff delay, not immediately, when the buffered response exceeds MAX_RESPONSE_BYTES without lastEventId progress', async () => {
-      jest.spyOn(Math, 'random').mockReturnValue(0);
+      jitter = 0;
       const { client } = makeClient();
       await client.connect();
 
@@ -537,6 +592,60 @@ describe('SSEClient', () => {
       expect(FakeXHR.instances.length).toBe(1);
     });
 
+    it('aborts the open request on disconnect()', async () => {
+      const { client } = makeClient();
+      await client.connect();
+
+      client.disconnect();
+
+      expect(xhrAt(0).aborted).toBe(true);
+    });
+
+    it('aborts the open request on dispose()', async () => {
+      const { client } = makeClient();
+      await client.connect();
+
+      client.dispose();
+
+      expect(xhrAt(0).aborted).toBe(true);
+    });
+
+    it('stays closed past the watchdog timeout after disconnect()', async () => {
+      const { client } = makeClient();
+      await client.connect();
+
+      client.disconnect();
+      await jest.advanceTimersByTimeAsync(PAST_WATCHDOG_MS);
+
+      expect(FakeXHR.instances.length).toBe(1);
+    });
+
+    it('detaches a replaced request, so its late end schedules nothing', async () => {
+      const { client } = makeClient();
+      await client.connect();
+      xhrAt(0).triggerError();
+      await jest.advanceTimersByTimeAsync(PAST_FIRST_BACKOFF_MS);
+
+      xhrAt(0).triggerLoadEnd();
+      await jest.advanceTimersByTimeAsync(PAST_SECOND_BACKOFF_MS);
+
+      expect(xhrAt(0).aborted).toBe(true);
+      expect(FakeXHR.instances.length).toBe(BOTH_REQUESTS);
+    });
+
+    it('aborts the silent request as soon as the watchdog fires, before the next token arrives', async () => {
+      const getToken = jest
+        .fn<Promise<string | null>, []>()
+        .mockResolvedValueOnce('token-1')
+        .mockReturnValue(new Promise<string | null>(() => undefined));
+      const { client } = makeClient(getToken);
+      await client.connect();
+
+      await jest.advanceTimersByTimeAsync(HEARTBEAT_WATCHDOG_MS);
+
+      expect(xhrAt(0).aborted).toBe(true);
+    });
+
     it('does not connect when dispose() happens while the token fetch is still in flight', async () => {
       let resolveToken!: (value: string | null) => void;
       const getToken = jest.fn<Promise<string | null>, []>(
@@ -614,7 +723,7 @@ describe('SSEClient', () => {
 
   describe('timing and dwell', () => {
     it('jitters the reconnect delay into [base, 2*base) rather than firing at base', async () => {
-      jest.spyOn(Math, 'random').mockReturnValue(0.99);
+      jitter = NEAR_FULL_JITTER;
       const { client } = makeClient();
       await client.connect();
 
@@ -667,7 +776,7 @@ describe('SSEClient', () => {
     });
 
     it('reconnects at the exact base backoff delay after the first failure', async () => {
-      jest.spyOn(Math, 'random').mockReturnValue(0);
+      jitter = 0;
       const { client } = makeClient();
       await client.connect();
 
@@ -680,7 +789,7 @@ describe('SSEClient', () => {
     });
 
     it('doubles the backoff on consecutive failures and resets it after a successful data receipt', async () => {
-      jest.spyOn(Math, 'random').mockReturnValue(0);
+      jitter = 0;
       const { client } = makeClient();
       await client.connect();
 
@@ -703,7 +812,7 @@ describe('SSEClient', () => {
     });
 
     it('caps the backoff delay at MAX_RECONNECT_MS after repeated failures', async () => {
-      jest.spyOn(Math, 'random').mockReturnValue(0);
+      jitter = 0;
       const { client } = makeClient();
       await client.connect();
 
@@ -730,7 +839,7 @@ describe('SSEClient', () => {
     });
 
     it('sends the last seen id as Last-Event-ID on reconnect', async () => {
-      jest.spyOn(Math, 'random').mockReturnValue(0);
+      jitter = 0;
       const { client } = makeClient();
       await client.connect();
 
@@ -751,6 +860,7 @@ describe('response cap reconnect', () => {
 
     responseText = '';
     status = 200;
+    aborted = false;
     onprogress: Handler | null = null;
     onerror: Handler | null = null;
     onloadend: Handler | null = null;
@@ -765,7 +875,9 @@ describe('response cap reconnect', () => {
       return null;
     }
     send(): void {}
-    abort(): void {}
+    abort(): void {
+      this.aborted = true;
+    }
 
     emit(chunk: string): void {
       this.responseText += chunk;
@@ -779,6 +891,7 @@ describe('response cap reconnect', () => {
       jest.fn<Promise<string | null>, []>().mockResolvedValue('token-1'),
       jest.fn(),
       jest.fn(),
+      streamIO(() => new CapXHR()),
     );
   }
 
@@ -791,9 +904,8 @@ describe('response cap reconnect', () => {
   describe('SSEClient response cap reconnect', () => {
     beforeEach(() => {
       CapXHR.instances = [];
-      (global as unknown as { XMLHttpRequest: unknown }).XMLHttpRequest = CapXHR;
       jest.useFakeTimers();
-      jest.spyOn(Math, 'random').mockReturnValue(0);
+      jitter = 0;
     });
 
     afterEach(() => {
@@ -811,6 +923,16 @@ describe('response cap reconnect', () => {
       expect(CapXHR.instances.length).toBe(1);
       await jest.advanceTimersByTimeAsync(1_000);
       expect(CapXHR.instances.length).toBe(2);
+    });
+
+    it('closes the stalled request at the cap while it waits to reconnect', async () => {
+      const client = makeClient();
+      await client.connect();
+
+      opened(0).emit('x'.repeat(MAX_RESPONSE_BYTES));
+
+      expect(opened(0).aborted).toBe(true);
+      expect(CapXHR.instances.length).toBe(1);
     });
 
     it('grows the delay while the same oversized block keeps stalling', async () => {
@@ -904,6 +1026,7 @@ describe('HTTP status handling', () => {
       jest.fn<Promise<string | null>, []>().mockResolvedValue('token-1'),
       onEvent,
       onError,
+      streamIO(() => new StatusXHR()),
     );
     return { client, onEvent, onError };
   }
@@ -922,9 +1045,8 @@ describe('HTTP status handling', () => {
   describe('SSEClient HTTP status handling', () => {
     beforeEach(() => {
       StatusXHR.instances = [];
-      (global as unknown as { XMLHttpRequest: unknown }).XMLHttpRequest = StatusXHR;
       jest.useFakeTimers();
-      jest.spyOn(Math, 'random').mockReturnValue(0);
+      jitter = 0;
       clearSessionExpired();
     });
 
@@ -960,6 +1082,9 @@ describe('HTTP status handling', () => {
       expect(onError).toHaveBeenCalledTimes(1);
       const error = onError.mock.calls[0]?.[0];
       expect(error).toMatchObject({ name: 'SSEHttpError', status: 502, correlationId: sent });
+      expect((error as Error).message).toBe(
+        `SSE stream refused (status=502, correlation_id=${sent})`,
+      );
     });
 
     it('does not feed an error body to the event parser', async () => {
@@ -1041,6 +1166,47 @@ describe('HTTP status handling', () => {
       expect(await msUntilNextOpen()).toBe(1_000);
     });
 
+    it('reconnects without reporting an error when a 200 stream ends', async () => {
+      const { client, onError } = makeClient();
+      await client.connect();
+
+      latest().stream('id: 1\ndata: {"a":1}\n\n');
+      latest().onloadend?.();
+
+      expect(onError).not.toHaveBeenCalled();
+      expect(await msUntilNextOpen()).toBe(FIRST_BACKOFF_MS);
+    });
+
+    it('treats a 300 as a refusal', async () => {
+      const { client, onError } = makeClient();
+      await client.connect();
+
+      latest().respond(MULTIPLE_CHOICES, ERROR_BODY);
+
+      expect(onError.mock.calls[0]?.[0]).toMatchObject({
+        name: 'SSEHttpError',
+        status: MULTIPLE_CHOICES,
+      });
+    });
+
+    it('reads a Retry-After padded with whitespace', async () => {
+      const { client } = makeClient();
+      await client.connect();
+
+      latest().respond(TOO_MANY_REQUESTS, ERROR_BODY, { 'Retry-After': ' 12 ' });
+
+      expect(await msUntilNextOpen()).toBe(TWELVE_SECONDS_MS);
+    });
+
+    it('reads a Retry-After date that starts and ends with digits as a date', async () => {
+      const { client } = makeClient();
+      await client.connect();
+
+      latest().respond(TOO_MANY_REQUESTS, ERROR_BODY, { 'Retry-After': '2099-01-01T00:00:00' });
+
+      expect(await msUntilNextOpen()).toBe(FIVE_MINUTES_MS);
+    });
+
     it('resets the backoff once a 200 stream delivers bytes after refusals', async () => {
       const { client, onEvent } = makeClient();
       await client.connect();
@@ -1062,7 +1228,6 @@ describe('HTTP status handling', () => {
 describe('SSEClient reconnect telemetry', () => {
   beforeEach(async () => {
     FakeXHR.instances = [];
-    (global as unknown as { XMLHttpRequest: unknown }).XMLHttpRequest = FakeXHR;
     jest.useFakeTimers();
     await signInTestUser();
     __http.reply(`POST ${EVENTS_PATH}`, { status: 202 });
@@ -1101,5 +1266,27 @@ describe('SSEClient reconnect telemetry', () => {
     await jest.advanceTimersByTimeAsync(30_000);
 
     expect(FakeXHR.instances.length).toBe(2);
+  });
+});
+
+describe('SSEClient reconnect telemetry while signed out', () => {
+  beforeEach(() => {
+    FakeXHR.instances = [];
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('warns that the reconnect event was not recorded, and still reconnects', async () => {
+    const { client } = makeClient();
+    await client.connect();
+
+    xhrAt(0).triggerError();
+    await jest.advanceTimersByTimeAsync(PAST_FIRST_BACKOFF_MS);
+
+    expect(FakeXHR.instances.length).toBe(BOTH_REQUESTS);
+    expect(warnings).toEqual([['[sse] recording reconnect event failed', expect.any(Error)]]);
   });
 });

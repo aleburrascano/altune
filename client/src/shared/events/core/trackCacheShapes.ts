@@ -1,9 +1,10 @@
-import type { InfiniteData, QueryClient, QueryFilters } from '@tanstack/react-query';
-
 import type { ListTracksResponse, TrackResponse, PlaylistDetailResponse } from '@shared/apiClient';
 import { libraryKeys, playlistKeys } from '@shared/query';
 
-export type TrackPages = InfiniteData<ListTracksResponse>;
+export interface TrackPages {
+  pages: ListTracksResponse[];
+  pageParams: unknown[];
+}
 
 export type TrackCacheShape = 'paged' | 'flat' | 'playlistDetails';
 
@@ -49,15 +50,11 @@ export const PATCH_POLICY: WritePolicy = {
 
 type Pages = readonly ListTracksResponse[];
 
-function shiftOffset(page: ListTracksResponse, shift: number): ListTracksResponse {
-  return shift === 0 ? page : { ...page, offset: Math.max(0, page.offset + shift) };
-}
-
 export function reflowOffsets(before: Pages, after: Pages): ListTracksResponse[] {
   let shift = 0;
   return after.map((page, i) => {
-    const shifted = shiftOffset(page, shift);
-    shift += page.items.length - (before[i]?.items.length ?? page.items.length);
+    const shifted = { ...page, offset: Math.max(0, page.offset + shift) };
+    shift += page.items.length - (before[i] ?? page).items.length;
     return shifted;
   });
 }
@@ -117,16 +114,6 @@ export const TRACK_SHAPES: Record<TrackCacheShape, ShapeAccessor<TrackCacheValue
   playlistDetails: playlistDetailsAccessor,
 };
 
-function updaterFor(shape: TrackCacheShape, mapItems: MapItems, policy: WritePolicy) {
+export function updaterFor(shape: TrackCacheShape, mapItems: MapItems, policy: WritePolicy) {
   return (prev: TrackCacheValue | undefined) => TRACK_SHAPES[shape].write(prev, mapItems, policy);
-}
-
-export function writeFamily(
-  queryClient: QueryClient,
-  family: TrackCacheFamily,
-  filters: QueryFilters,
-  mapItems: MapItems,
-  policy: WritePolicy,
-): void {
-  queryClient.setQueriesData<TrackCacheValue>(filters, updaterFor(family.shape, mapItems, policy));
 }

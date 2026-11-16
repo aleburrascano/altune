@@ -215,11 +215,11 @@ if touches '^services/overseer/'; then
   fi
 fi
 
-if touches '^services/go-api/internal/(shared/events/|discovery/domain/events\.go)' && need npx "mobile event contracts"; then
+if touches '^services/go-api/internal/(shared/events/|discovery/domain/events\.go)' && need npx "mobile contract tests"; then
   if link_deps client; then
-    jest_check "mobile event contracts (go-api events changed)" client npx jest --ci --forceExit --watchman=false --cacheDirectory "$HOME/.cache/altune-ci/jest" src/shared/events/__tests__/eventContract.test.ts src/shared/telemetry/__tests__/recordEvent.contract.test.ts
+    jest_check "mobile contract tests (go-api events changed)" client npx jest --ci --forceExit --watchman=false --cacheDirectory "$HOME/.cache/altune-ci/jest" '\.contract\.test\.tsx?$'
   else
-    echo "SKIP  mobile event contracts: no node_modules here or in $main_tree"; missing=1
+    echo "SKIP  mobile contract tests: no node_modules here or in $main_tree"; missing=1
   fi
 fi
 
