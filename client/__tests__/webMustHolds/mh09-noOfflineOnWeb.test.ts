@@ -70,7 +70,7 @@ describe('mh09: an acquisition completing never restarts a stale pin on web', ()
   function statusAfterCompletion(os: 'ios'): string | undefined {
     return onPlatform(os, () => {
       const { usePinnedStore } = require('@shared/offline/state/pinnedStore');
-      const { applyServerEvent } = require('@shared/events/applyServerEvent');
+      const { applyServerEvent } = require('@shared/events/shell/applyServerEvent');
       require('@shared/offline/state/pinnedStore').provideOfflinePort(
         require('@testing/apiClientPorts').apiClientOfflinePort,
       );
