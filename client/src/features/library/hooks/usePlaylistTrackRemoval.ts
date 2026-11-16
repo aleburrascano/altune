@@ -7,7 +7,7 @@ import {
   useTrackSelection,
   type TrackSelectionController,
   type TrackSelectionOptions,
-} from '@features/library/hooks/useTrackSelection';
+} from '@features/library/view/useTrackSelection';
 
 type PlaylistTrackRemovalArgs = {
   playlistId: PlaylistId;

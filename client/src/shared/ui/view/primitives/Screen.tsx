@@ -1,0 +1,42 @@
+import type { ReactNode } from 'react';
+import { View } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { useTheme } from '@shared/ui/view/theme/useTheme';
+import { CONTENT_MAX_WIDTH } from '@shared/ui/layout/breakpoints';
+import { useLayoutMode } from '@shared/ui/view/layout/useLayoutMode';
+import { spacing } from '@shared/ui/theme/tokens';
+
+export const SCREEN_HORIZONTAL_PADDING = spacing.lg;
+
+export type ScreenProps = {
+  children: ReactNode;
+  padded?: boolean;
+  style?: StyleProp<ViewStyle>;
+  testID?: string;
+};
+
+export function Screen({ children, padded = true, style, testID }: ScreenProps) {
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const layoutMode = useLayoutMode();
+  const isWide = layoutMode === 'wide';
+  return (
+    <View
+      testID={testID}
+      style={[
+        { flex: 1, backgroundColor: theme.color.canvas, paddingTop: insets.top },
+        isWide ? { alignItems: 'center' } : null,
+        padded ? { paddingHorizontal: SCREEN_HORIZONTAL_PADDING } : null,
+        style,
+      ]}
+    >
+      {isWide ? (
+        <View style={{ width: '100%', maxWidth: CONTENT_MAX_WIDTH, flex: 1 }}>{children}</View>
+      ) : (
+        children
+      )}
+    </View>
+  );
+}

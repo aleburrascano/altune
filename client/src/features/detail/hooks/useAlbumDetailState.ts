@@ -14,7 +14,7 @@ import {
   enrichAlbumTrack,
   useAlbumSaveAll,
   type LastBatch,
-} from '@features/detail/hooks/useAlbumSaveAll';
+} from '@features/detail/view/useAlbumSaveAll';
 import { useOwnedPlayback } from '@features/detail/hooks/useOwnedPlayback';
 import { trackExtras } from '@features/detail/domain/trackExtras';
 import { normalizeForCompare } from '@features/detail/domain/normalizeForCompare';

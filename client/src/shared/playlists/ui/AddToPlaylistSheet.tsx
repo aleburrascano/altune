@@ -21,13 +21,13 @@ import {
   sheetTopRadius,
 } from '@shared/ui';
 import { playlistKeys } from '@shared/query';
-import { CreatePlaylistModal } from '@shared/playlists/ui/CreatePlaylistModal';
+import { CreatePlaylistModal } from '@shared/playlists/view/CreatePlaylistModal';
 import { usePlaylistsPort } from '@shared/playlists/ports/PlaylistsPortProvider';
 import {
   useAddTracksToPlaylist,
   useCreatePlaylistWithTracks,
 } from '@shared/playlists/hooks/playlist/mutations';
-import { useSingleFlightAction } from '@shared/playlists/hooks/playlist/useSingleFlightAction';
+import { useSingleFlightAction } from '@shared/playlists/view/playlist/useSingleFlightAction';
 const SHEET_PLAYLIST_CAP = 2000;
 
 function reportUnresolvedTracks(error: unknown): void {

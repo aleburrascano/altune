@@ -14,7 +14,7 @@ import {
   type PressableInteractionState,
   opacity,
 } from '@shared/ui';
-import { SectionLabel } from '@features/discovery/ui/results/SectionLabel';
+import { SectionLabel } from '@features/discovery/view/results/SectionLabel';
 import { kindLabel } from '@features/discovery/domain/resultDisplay';
 import type { DiscoveryResult } from '@shared/catalog';
 import type { ResultTapHandler } from '@features/discovery/hooks/results/useResultTap';

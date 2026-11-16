@@ -2,10 +2,10 @@ import { ActivityIndicator, Animated, Pressable, StyleSheet } from 'react-native
 import type { StyleProp, ViewStyle } from 'react-native';
 
 import { tapFeedback } from '@shared/ui/haptics';
-import { usePressScale } from '@shared/ui/motion/useMotion';
+import { usePressScale } from '@shared/ui/view/motion/useMotion';
 import type { Theme } from '@shared/ui/theme/theme';
 import { minInteractiveHeight, radius, spacing } from '@shared/ui/theme/tokens';
-import { useTheme } from '@shared/ui/theme/useTheme';
+import { useTheme } from '@shared/ui/view/theme/useTheme';
 import { recordTap } from '@shared/ui/primitives/recordTap';
 import { Text } from '@shared/ui/primitives/Text';
 import type { TextTone } from '@shared/ui/primitives/Text';

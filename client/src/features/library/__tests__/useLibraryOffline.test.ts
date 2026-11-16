@@ -154,8 +154,8 @@ function loadOnWeb(): OfflineHooks {
     jest.spyOn(isWebPlatformModule, 'isWebPlatform').mockReturnValue(true);
     loaded = {
       renderHook: require('@testing-library/react-native').renderHook,
-      useLibraryOffline: require('@features/library/hooks/useLibraryOffline').useLibraryOffline,
-      usePinnedStatus: require('@features/library/hooks/useLibraryOffline').usePinnedStatus,
+      useLibraryOffline: require('@features/library/view/useLibraryOffline').useLibraryOffline,
+      usePinnedStatus: require('@features/library/view/useLibraryOffline').usePinnedStatus,
       usePinnedStore: require('@shared/offline/state/pinnedStore').usePinnedStore,
     };
   });

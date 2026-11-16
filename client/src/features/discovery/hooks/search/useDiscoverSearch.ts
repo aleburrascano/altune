@@ -11,7 +11,7 @@ import {
 import {
   useRefreshFromFirstPage,
   useRestartOnExpiredSlate,
-} from '@features/discovery/hooks/search/useSearchRefresh';
+} from '@features/discovery/view/search/useSearchRefresh';
 import {
   MAX_SEARCH_OFFSET,
   MAX_SEARCH_PAGES,

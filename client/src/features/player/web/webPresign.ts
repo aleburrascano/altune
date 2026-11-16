@@ -17,7 +17,7 @@ import {
   type PendingPresign,
   type SourceOutcome,
   type WebAudioPlayer,
-} from '@features/player/web/webPlayer';
+} from '@features/player/view/web/webPlayer';
 
 const NO_AUDIO_URL: RedactedPlaybackFailure = {
   kind: 'not_found',

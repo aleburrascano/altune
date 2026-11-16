@@ -1,17 +1,17 @@
 import { useState, type ReactElement, type ComponentProps } from 'react';
 import { Screen } from '@shared/ui';
-import { usePlaylistRename } from '@features/library/hooks/usePlaylistRename';
+import { usePlaylistRename } from '@features/library/view/usePlaylistRename';
 import type {
   ContentProps,
   DetailActions,
   DetailProps,
-} from '@features/library/ui/playlistDetailTypes';
+} from '@features/library/adapters/playlistDetailTypes';
 import { PlaylistTopBar } from '@features/library/ui/PlaylistTopBar';
 import { PlaylistTrackList as PlaylistTracks } from '@features/library/ui/PlaylistTrackList';
 import { useAddTracksToPlaylist } from '@shared/playlists';
-import { AddTracksToPlaylistModal } from '@features/library/ui/AddTracksToPlaylistModal';
+import { AddTracksToPlaylistModal } from '@features/library/view/AddTracksToPlaylistModal';
 
-export type { ContentProps } from '@features/library/ui/playlistDetailTypes';
+export type { ContentProps } from '@features/library/adapters/playlistDetailTypes';
 
 function usePlaylistDetailActions(props: ContentProps): DetailActions {
   const [addVisible, setAddVisible] = useState(false);

@@ -1,4 +1,4 @@
-import type * as InitPlayer from '@features/player/native/initPlayer';
+import type * as InitPlayer from '@features/player/adapters/native/initPlayer';
 
 const PLAYER_SETUP_TIMEOUT_MS = 15_000;
 
@@ -11,7 +11,7 @@ function freshInitPlayer(): InitPlayerModule {
   let loaded: InitPlayerModule | undefined;
   jest.isolateModules(() => {
     jest.doMock('react-native-track-player', () => trackPlayerDouble);
-    loaded = require('@features/player/native/initPlayer');
+    loaded = require('@features/player/adapters/native/initPlayer');
   });
   if (!loaded) throw new Error('initPlayer did not load');
   return loaded;

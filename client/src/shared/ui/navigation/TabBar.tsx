@@ -4,12 +4,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@shared/ui/primitives/Text';
 import { spacing, opacity } from '@shared/ui/theme/tokens';
-import { useTheme } from '@shared/ui/theme/useTheme';
+import { useTheme } from '@shared/ui/view/theme/useTheme';
 import {
   TAB_ROUTE_INFO_BY_ROUTE,
   TAB_ROUTES,
   type TabRoute,
-} from '@shared/ui/navigation/tabRoutes';
+} from '@shared/ui/view/navigation/tabRoutes';
 
 export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const theme = useTheme();

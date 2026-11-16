@@ -1,1 +1,1 @@
-export { randomUuid } from '@shared/id/uuid';
+export { randomUuid } from '@shared/id/adapters/uuid';

@@ -27,12 +27,12 @@ export {
   useDownloadPhase,
   aggregatePhase,
   useDownloadStore,
-} from '@shared/acquisition/state/downloadStore';
+} from '@shared/acquisition/view/downloadStore';
 export type {
   DownloadMeta,
   DownloadPhase,
   DownloadEntry,
-} from '@shared/acquisition/state/downloadStore';
+} from '@shared/acquisition/view/downloadStore';
 export { phaseLabel, stageToPhase, ACQUISITION_PHASES } from '@shared/acquisition/state/stagePhase';
 export {
   adoptResponseStatus,
@@ -49,8 +49,8 @@ export {
   useTrackStatusStore,
 } from '@shared/acquisition/state/trackStatusStore';
 export type { TrackStatus } from '@shared/acquisition/state/trackStatusStore';
-export { DownloadsBar } from '@shared/acquisition/ui/DownloadsBar';
-export { DownloadsSheet } from '@shared/acquisition/ui/DownloadsSheet';
+export { DownloadsBar } from '@shared/acquisition/view/DownloadsBar';
+export { DownloadsSheet } from '@shared/acquisition/view/DownloadsSheet';
 export {
   AcquisitionPortProvider,
   useAcquisitionPort,

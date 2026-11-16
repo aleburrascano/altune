@@ -25,7 +25,7 @@ import {
   type MemoryPlaybackSeed,
   httpPlaybackPort,
 } from '@features/player';
-import * as audioCache from '@features/player/native/audioCache';
+import * as audioCache from '@features/player/adapters/native/audioCache';
 import { signInTestUser } from '@testing/signInTestUser';
 
 const PREFETCH_STALL_TIMEOUT_MS = 15_000;

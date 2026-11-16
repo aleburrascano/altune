@@ -1,0 +1,128 @@
+import type { ReactElement } from 'react';
+import { useEffect, useState } from 'react';
+import { Animated, StyleSheet, View } from 'react-native';
+
+import { ChevronUp } from 'lucide-react-native';
+
+import type { DownloadEntry } from '@shared/acquisition/view/downloadStore';
+import { deriveBarDisplay } from '@shared/acquisition/ui/barDisplay';
+import { ACQUISITION_PHASES, phaseLabel } from '@shared/acquisition/state/stagePhase';
+import {
+  Text,
+  pressedStyle,
+  spacing,
+  useTheme,
+  useAnnounceChange,
+  Artwork,
+  Tappable,
+  radius,
+  halved,
+} from '@shared/ui';
+
+interface DownloadsBarProps {
+  items: DownloadEntry[];
+  onPress: () => void;
+}
+
+export function DownloadsBar({ items, onPress }: DownloadsBarProps): ReactElement | null {
+  const theme = useTheme();
+  const first = items[0];
+
+  const [enter] = useState(() => new Animated.Value(0));
+  const [pulse] = useState(() => new Animated.Value(0.5));
+  useEffect(() => {
+    Animated.timing(enter, { toValue: 1, duration: 240, useNativeDriver: true }).start();
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 720, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.45, duration: 720, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [enter, pulse]);
+
+  const { phase, activeIndex, heading } = deriveBarDisplay(items);
+
+  useAnnounceChange(first == null ? '' : `${heading}. ${phaseLabel(phase)}`);
+
+  if (first == null) return null;
+
+  return (
+    <Animated.View
+      accessibilityLiveRegion="polite"
+      style={{
+        opacity: enter,
+        transform: [
+          { translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) },
+        ],
+      }}
+    >
+      <Tappable
+        action="acquisition.downloads_bar.expand"
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`${heading}. ${phaseLabel(phase)}. Tap to expand.`}
+        style={({ pressed }) => [
+          styles.bar,
+          { backgroundColor: theme.color.surface1, borderTopColor: theme.color.border },
+          pressedStyle(pressed),
+        ]}
+      >
+        <Artwork
+          uri={first.artworkUrl}
+          size={40}
+          radius={radius.sm}
+          accessibilityLabel="Album art"
+        />
+        <View style={styles.body}>
+          <View style={styles.topRow}>
+            <Text variant="label" numberOfLines={1} style={styles.heading}>
+              {heading}
+            </Text>
+            <ChevronUp size={18} color={theme.color.textTertiary} />
+          </View>
+          <Text variant="caption" tone="accent" numberOfLines={1}>
+            {phaseLabel(phase)}
+          </Text>
+          <View style={styles.segments}>
+            {ACQUISITION_PHASES.map((p, i) => {
+              const filled = i <= activeIndex;
+              const isActive = i === activeIndex;
+              return (
+                <Animated.View
+                  key={p}
+                  style={[
+                    styles.segment,
+                    {
+                      backgroundColor: filled ? theme.color.accent : theme.color.border,
+                      opacity: isActive ? pulse : 1,
+                    },
+                  ]}
+                />
+              );
+            })}
+          </View>
+        </View>
+      </Tappable>
+    </Animated.View>
+  );
+}
+
+const SEGMENT_HEIGHT = 4;
+
+const styles = StyleSheet.create({
+  bar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  body: { flex: 1, gap: spacing.xs },
+  topRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  heading: { flex: 1 },
+  segments: { flexDirection: 'row', gap: spacing.xs, marginTop: spacing['2xs'] },
+  segment: { flex: 1, height: SEGMENT_HEIGHT, borderRadius: halved(SEGMENT_HEIGHT) },
+});

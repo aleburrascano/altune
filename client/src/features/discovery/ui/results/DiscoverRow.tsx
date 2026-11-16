@@ -14,7 +14,7 @@ import {
   Tappable,
   halved,
 } from '@shared/ui';
-import { FavoriteButton } from '@features/discovery/ui/favorites/FavoriteButton';
+import { FavoriteButton } from '@features/discovery/view/favorites/FavoriteButton';
 import type { DiscoveryResult } from '@shared/catalog';
 import type { ResultTapHandler } from '@features/discovery/hooks/results/useResultTap';
 

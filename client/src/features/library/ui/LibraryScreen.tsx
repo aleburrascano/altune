@@ -14,24 +14,20 @@ import { usePlayback, useQueuePlayback } from '@shared/playback';
 import { AddToPlaylistSheet, CreatePlaylistModal } from '@shared/playlists';
 import { useActiveLibraryView } from '@features/library/hooks/useActiveLibraryView';
 import { useLibraryIsEmpty } from '@features/library/hooks/useLibraryIsEmpty';
-import { useLibrarySearch } from '@features/library/hooks/useLibrarySearch';
+import { useLibrarySearch } from '@features/library/view/useLibrarySearch';
 import { useLibraryTrackSelection } from '@features/library/hooks/useLibraryTrackSelection';
 import { usePlaylistActions } from '@features/library/hooks/usePlaylistActions';
 import { useRetryAcquisition } from '@features/library/hooks/useRetryAcquisition';
-import {
-  librarySection,
-  type LibraryChip,
-  type SortKey,
-} from '@features/library/domain/libraryView';
-import { LibraryChips } from '@features/library/ui/LibraryChips';
+import { librarySection, type LibraryChip, type SortKey } from '@features/library/view/libraryView';
+import { LibraryChips } from '@features/library/view/LibraryChips';
 import {
   LibraryHeader,
   LibraryNoResults,
   LibraryEmptyScreen,
   LibraryErrorScreen,
   LibrarySkeletonScreen,
-} from '@features/library/ui/LibraryStateScreens';
-import { TrackSelectionOverlay } from '@features/library/ui/TrackSelectionOverlay';
+} from '@features/library/view/LibraryStateScreens';
+import { TrackSelectionOverlay } from '@features/library/view/TrackSelectionOverlay';
 import { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
 
 const DEFAULT_SORTS: Record<LibraryChip, SortKey> = {

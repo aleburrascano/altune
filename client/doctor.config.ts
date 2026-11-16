@@ -27,12 +27,12 @@ const queueResumeCoalescesSequentially = {
 };
 
 const nativeTailDrainRebuildsInOrder = {
-  files: ['src/features/player/native/rebuildNativeTail.ts'],
+  files: ['src/features/player/adapters/native/rebuildNativeTail.ts'],
   rules: ['react-doctor/async-await-in-loop'],
 };
 
 const resetNativeRunsEvenWhenEmpty = {
-  files: ['src/features/player/native/loadNativeTrack.ts'],
+  files: ['src/features/player/adapters/native/loadNativeTrack.ts'],
   rules: ['react-doctor/async-defer-await'],
 };
 
@@ -48,16 +48,16 @@ const imageOnlyResolvesAssetSource = {
 
 const failureShownIsAnImpressionLogSyncedInEffect = {
   files: [
-    'src/features/detail/ui/TrackStatusBanners.tsx',
-    'src/features/library/ui/LibraryRowFailure.tsx',
-    'src/shared/ui/primitives/Banner.tsx',
+    'src/features/detail/view/TrackStatusBanners.tsx',
+    'src/features/library/view/LibraryRowFailure.tsx',
+    'src/shared/ui/view/primitives/Banner.tsx',
     'src/features/discovery/hooks/search/useReportQueryFailure.ts',
   ],
   rules: ['react-doctor/no-event-handler'],
 };
 
 const bannerChildrenOnlyPicksTelemetryMessage = {
-  files: ['src/shared/ui/primitives/Banner.tsx'],
+  files: ['src/shared/ui/view/primitives/Banner.tsx'],
   rules: ['react-doctor/no-polymorphic-children'],
 };
 
@@ -67,7 +67,7 @@ const recordEventIsFireAndForgetAndReadsNoQueryCache = {
 };
 
 const mediaSessionEffectsSyncTheBrowserMediaSession = {
-  files: ['src/features/player/hooks/useMediaSession.ts'],
+  files: ['src/features/player/view/useMediaSession.ts'],
   rules: ['react-doctor/no-event-handler'],
 };
 
@@ -77,37 +77,37 @@ const rememberTrackSyncsNativeTrackPlayer = {
 };
 
 const progressValueFollowsPlaybackPosition = {
-  files: ['src/features/player/hooks/useScrubberGesture.ts'],
+  files: ['src/features/player/view/useScrubberGesture.ts'],
   rules: ['react-doctor/no-pass-data-to-parent'],
 };
 
 const closeGuardsClearOnlyOnceTheParentHasClosedTheSurface = {
-  files: ['src/shared/playlists/hooks/playlist/useSingleFlightAction.ts'],
+  files: ['src/shared/playlists/view/playlist/useSingleFlightAction.ts'],
   rules: ['react-doctor/no-event-handler'],
 };
 
 const remainingPlaylistsLoadFollowsLoadedPages = {
-  files: ['src/features/library/hooks/usePlaylistsView.tsx'],
+  files: ['src/features/library/view/usePlaylistsView.tsx'],
   rules: ['react-doctor/no-event-handler'],
 };
 
 const slateExpiryArrivesAsServerData = {
-  files: ['src/features/discovery/hooks/search/useSearchRefresh.ts'],
+  files: ['src/features/discovery/view/search/useSearchRefresh.ts'],
   rules: ['react-doctor/no-event-handler'],
 };
 
 const screenReaderAnnouncementSyncsAnExternalSystem = {
-  files: ['src/shared/ui/useAnnounceChange.ts'],
+  files: ['src/shared/ui/view/useAnnounceChange.ts'],
   rules: ['react-doctor/no-event-handler'],
 };
 
 const relatedRailIsCappedAtTwentyTracks = {
-  files: ['src/features/detail/ui/RelatedTracksSection.tsx'],
+  files: ['src/features/detail/view/RelatedTracksSection.tsx'],
   rules: ['react-doctor/rn-no-scrollview-mapped-list'],
 };
 
 const libraryChipsRailIsTheFixedChipsConstant = {
-  files: ['src/features/library/ui/LibraryChips.tsx'],
+  files: ['src/features/library/view/LibraryChips.tsx'],
   rules: ['react-doctor/rn-no-scrollview-mapped-list'],
 };
 
@@ -146,9 +146,9 @@ export default {
           'src/shared/ui/a11y/announce.ts',
           'src/shared/ui/dialog/dialog.ts',
           'src/shared/ui/haptics.ts',
-          'src/shared/ui/keyboard/keyboard.ios.tsx',
-          'src/shared/ui/keyboard/keyboard.tsx',
-          'src/shared/ui/primitives/HorizontalRail.tsx',
+          'src/shared/ui/view/keyboard/keyboard.ios.tsx',
+          'src/shared/ui/view/keyboard/keyboard.tsx',
+          'src/shared/ui/view/primitives/HorizontalRail.tsx',
         ],
         rules: ['deslop/unused-export'],
       },
@@ -163,9 +163,9 @@ export default {
       },
       {
         files: [
-          'src/shared/ui/keyboard/keyboard.ios.tsx',
-          'src/shared/ui/keyboard/keyboard.tsx',
-          'src/shared/ui/keyboard/keyboard.web.tsx',
+          'src/shared/ui/view/keyboard/keyboard.ios.tsx',
+          'src/shared/ui/view/keyboard/keyboard.tsx',
+          'src/shared/ui/view/keyboard/keyboard.web.tsx',
         ],
         rules: ['react-doctor/only-export-components'],
       },

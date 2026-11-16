@@ -11,7 +11,7 @@ import { authRedirectUrl } from '@features/signIn/domain/authRedirect';
 import { useAuthPort } from '@features/signIn/ports/AuthPortProvider';
 import type { AuthPort } from '@features/signIn/ports/authPort';
 
-import { useOAuthFlow } from '@features/signIn/hooks/useOAuthFlow';
+import { useOAuthFlow } from '@features/signIn/view/useOAuthFlow';
 
 WebBrowser.maybeCompleteAuthSession();
 

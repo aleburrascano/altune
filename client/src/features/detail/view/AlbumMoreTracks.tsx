@@ -1,0 +1,145 @@
+import { type ReactElement } from 'react';
+import { StyleSheet, View } from 'react-native';
+
+import { Button, Text, spacing } from '@shared/ui';
+import type { DiscoveryResult } from '@shared/catalog';
+import { type ContentFailure } from '@features/detail/domain/contentStatus';
+import { type LastBatch } from '@features/detail/view/useAlbumSaveAll';
+import { type AlbumDetailState } from '@features/detail/hooks/useAlbumDetailState';
+
+import { trackSubtitleWithFeaturing } from '@features/detail/ui/formatters';
+import { AlbumTrackRow } from '@features/detail/ui/AlbumTrackRow';
+import { CollapsibleSectionHeader } from '@features/detail/view/CollapsibleSectionHeader';
+import { SectionError } from '@features/detail/view/Section';
+
+type AlbumMoreTracksRowActions = Pick<
+  AlbumDetailState,
+  'ownedFor' | 'isSavingInBatch' | 'onTrackPress' | 'onQuickSave'
+>;
+
+type AlbumMoreTracksProps = {
+  tracks: DiscoveryResult[];
+  baseIndex: number;
+  expanded: boolean;
+  onToggle: () => void;
+  savingAll: boolean;
+  onSaveAll: () => void;
+  lastBatch?: LastBatch | null | undefined;
+  rowActions: AlbumMoreTracksRowActions;
+  failure: ContentFailure | null;
+  onRetry: () => void;
+};
+
+type MoreTracksFailureProps = { failure: ContentFailure; onRetry: () => void };
+
+function moreTracksErrorProps(props: MoreTracksFailureProps) {
+  return {
+    testIDPrefix: 'detail-more-from-album',
+    message: "Couldn't load more tracks.",
+    onRetry: props.onRetry,
+    failure: props.failure,
+  };
+}
+
+function MoreTracksFailure(props: MoreTracksFailureProps): ReactElement {
+  return (
+    <View style={styles.moreSection}>
+      <CollapsibleSectionHeader label="More from this album" expanded={false} />
+      <SectionError {...moreTracksErrorProps(props)} />
+    </View>
+  );
+}
+
+function trackRowMeta(props: AlbumMoreTracksProps, track: DiscoveryResult) {
+  return {
+    subtitle: trackSubtitleWithFeaturing(track),
+    owned: props.rowActions.ownedFor(track),
+    savingInBatch: props.rowActions.isSavingInBatch(track),
+  };
+}
+
+function trackRowProps(props: AlbumMoreTracksProps, track: DiscoveryResult, index: number) {
+  return {
+    track,
+    index: props.baseIndex + index,
+    ...trackRowMeta(props, track),
+    onPress: () => props.rowActions.onTrackPress(track),
+    onQuickSave: () => props.rowActions.onQuickSave(track),
+  };
+}
+
+function MoreTrackRows(props: AlbumMoreTracksProps): ReactElement[] {
+  return props.tracks.map((track, index) => (
+    <AlbumTrackRow
+      key={track.sources[0]?.external_id ?? `more-${index}`}
+      {...trackRowProps(props, track, index)}
+    />
+  ));
+}
+
+function moreSaveAllProps(props: AlbumMoreTracksProps) {
+  return {
+    action: 'detail.album.save_all_more',
+    testID: 'detail-save-all-more',
+    label: props.savingAll ? 'Saving…' : 'Save all',
+    variant: 'secondary' as const,
+    onPress: props.onSaveAll,
+    disabled: props.savingAll,
+    style: styles.moreSaveAll,
+  };
+}
+
+function SaveAllFailure({ batch }: { batch: LastBatch | null | undefined }): ReactElement | null {
+  if (!batch || batch.failed === 0) return null;
+  return (
+    <Text variant="body" tone="danger" testID="detail-save-all-more-failed">
+      {`${batch.failed} couldn't be saved`}
+    </Text>
+  );
+}
+
+function MoreTracksExpanded(props: AlbumMoreTracksProps): ReactElement {
+  return (
+    <>
+      <MoreTrackRows {...props} />
+      <SaveAllFailure batch={props.lastBatch} />
+      <Button {...moreSaveAllProps(props)} />
+    </>
+  );
+}
+
+function moreTracksAccessibilityLabel(expanded: boolean): string {
+  return expanded ? 'Collapse more tracks' : 'Show more from this album';
+}
+
+function moreTracksHeaderProps(props: AlbumMoreTracksProps) {
+  return {
+    label: 'More from this album',
+    expanded: props.expanded,
+    onToggle: props.onToggle,
+    testID: 'detail-more-from-album',
+    accessibilityLabel: moreTracksAccessibilityLabel(props.expanded),
+  };
+}
+
+function MoreTracksReady(props: AlbumMoreTracksProps): ReactElement {
+  return (
+    <View style={styles.moreSection}>
+      <CollapsibleSectionHeader {...moreTracksHeaderProps(props)} />
+      {props.expanded ? <MoreTracksExpanded {...props} /> : null}
+    </View>
+  );
+}
+
+export function AlbumMoreTracks(props: AlbumMoreTracksProps): ReactElement | null {
+  if (props.failure !== null) {
+    return <MoreTracksFailure failure={props.failure} onRetry={props.onRetry} />;
+  }
+  if (props.tracks.length === 0) return null;
+  return <MoreTracksReady {...props} />;
+}
+
+const styles = StyleSheet.create({
+  moreSaveAll: { marginTop: spacing.lg },
+  moreSection: { marginTop: spacing.xl },
+});

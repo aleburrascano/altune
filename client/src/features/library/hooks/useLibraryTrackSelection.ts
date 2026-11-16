@@ -7,7 +7,7 @@ import type { PlaylistActionsState } from '@features/library/hooks/usePlaylistAc
 import {
   useTrackSelection,
   type TrackSelectionController,
-} from '@features/library/hooks/useTrackSelection';
+} from '@features/library/view/useTrackSelection';
 
 type Deps = {
   queue: ReturnType<typeof useQueuePlayback>;

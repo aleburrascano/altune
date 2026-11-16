@@ -1,14 +1,14 @@
 import type { TrackResponse, PlaylistResponse } from '@shared/catalog';
 import type { usePlayback, useQueuePlayback } from '@shared/playback';
 import type { MenuAnchor } from '@shared/ui';
-import { useAlbumsView, useArtistsView } from '@features/library/hooks/useGroupViews';
+import { useAlbumsView, useArtistsView } from '@features/library/view/useGroupViews';
 import type { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
 import type { PlaylistActionsState } from '@features/library/hooks/usePlaylistActions';
-import { usePlaylistsView } from '@features/library/hooks/usePlaylistsView';
+import { usePlaylistsView } from '@features/library/view/usePlaylistsView';
 import type { useRetryAcquisition } from '@features/library/hooks/useRetryAcquisition';
-import type { Selection } from '@features/library/hooks/useSelection';
-import { useTracksView } from '@features/library/hooks/useTracksView';
-import type { ActiveView, LibraryChip, SortKey } from '@features/library/domain/libraryView';
+import type { Selection } from '@features/library/view/useSelection';
+import { useTracksView } from '@features/library/view/useTracksView';
+import type { ActiveView, LibraryChip, SortKey } from '@features/library/view/libraryView';
 
 type ActiveLibraryViewDeps = {
   pl: PlaylistActionsState;

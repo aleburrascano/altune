@@ -32,5 +32,5 @@ export {
 export type { QueueSource, RepeatMode, QueueState } from '@shared/playback/queueOrder';
 export { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 export type { QueueStore } from '@shared/playback/queueStore';
-export { PlaybackContext, usePlayback } from '@shared/playback/usePlayback';
-export { useQueuePlayback } from '@shared/playback/useQueuePlayback';
+export { PlaybackContext, usePlayback } from '@shared/playback/view/usePlayback';
+export { useQueuePlayback } from '@shared/playback/view/useQueuePlayback';

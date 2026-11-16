@@ -9,7 +9,7 @@ import {
   stopPlayer,
 } from '@features/player/web/webLoad';
 import { msToSeconds, secondsToMs } from '@features/player/domain/time';
-import { isSourceStale, type WebAudioPlayer } from '@features/player/web/webPlayer';
+import { isSourceStale, type WebAudioPlayer } from '@features/player/view/web/webPlayer';
 import { prefetchNextTrack } from '@features/player/web/webPresign';
 
 function resumeAudio(player: WebAudioPlayer): void {

@@ -3,8 +3,8 @@ import type { ComponentProps, ReactElement, ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button, Text, spacing, AuthHeroLayout } from '@shared/ui';
-import { AuthErrorBanner } from '@features/signIn/ui/AuthErrorBanner';
-import { OAuthButtons } from '@features/signIn/ui/OAuthButtons';
+import { AuthErrorBanner } from '@features/signIn/view/AuthErrorBanner';
+import { OAuthButtons } from '@features/signIn/view/OAuthButtons';
 
 type AuthFormProps = {
   screenTestID: string;

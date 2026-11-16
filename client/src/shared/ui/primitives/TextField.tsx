@@ -10,7 +10,7 @@ import {
   typography,
   touchTarget,
 } from '@shared/ui/theme/tokens';
-import { useTheme } from '@shared/ui/theme/useTheme';
+import { useTheme } from '@shared/ui/view/theme/useTheme';
 
 export interface TextFieldProps extends Omit<
   TextInputProps,

@@ -5,8 +5,8 @@ import type { ReactNode } from 'react';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 
 import { supabase } from '@shared/auth';
-import { useWideWebLayout } from '@shared/ui/layout/useLayoutMode';
-import { PlaybackContext, usePlayback } from '@shared/playback/usePlayback';
+import { useWideWebLayout } from '@shared/ui/view/layout/useLayoutMode';
+import { PlaybackContext, usePlayback } from '@shared/playback/view/usePlayback';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
 import { makeIdlePlayback } from '@testing/factories';
 import { useKeyboardShortcuts } from '@shared/ui/keyboard/useKeyboardShortcuts';

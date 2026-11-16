@@ -9,8 +9,8 @@ import {
   PASSWORD_REQUIREMENTS_HINT,
   newPasswordFormState,
 } from '@features/signIn/domain/validation';
-import { AuthErrorBanner } from '@features/signIn/ui/AuthErrorBanner';
-import { FieldError, NewPasswordField } from '@features/signIn/ui/AuthFields';
+import { AuthErrorBanner } from '@features/signIn/view/AuthErrorBanner';
+import { FieldError, NewPasswordField } from '@features/signIn/view/AuthFields';
 
 const OTHERS_NOT_REVOKED_TITLE = 'Password updated';
 const OTHERS_NOT_REVOKED_MESSAGE =

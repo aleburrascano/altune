@@ -9,7 +9,7 @@ import {
   reportPinBatch,
   reportUnpinBatch,
   useLibraryOffline,
-} from '@features/library/hooks/useLibraryOffline';
+} from '@features/library/view/useLibraryOffline';
 
 const DELETE_PROMPT = {
   title: 'Delete Playlist',

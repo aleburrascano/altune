@@ -8,14 +8,14 @@ import { realPhotoUrl } from '@features/detail/domain/artistPhoto';
 import { useDetailEnrichments } from '@features/detail/hooks/useDetailEnrichments';
 import { useResolveMissingSources } from '@features/detail/hooks/useResolveMissingSources';
 import { useLateralNav } from '@features/detail/hooks/useDetailNavigation';
-import { DetailHandoffProvider } from '@features/detail/hooks/useDetailHandoff';
+import { DetailHandoffProvider } from '@features/detail/view/useDetailHandoff';
 import { detailRouteFor } from '@features/detail/domain/detailNavigation';
 
-import { TrackDetailBody } from '@features/detail/ui/TrackDetailBody';
-import { AlbumDetailBody } from '@features/detail/ui/AlbumDetailBody';
-import { ArtistDetailBody } from '@features/detail/ui/ArtistDetailBody';
-import type { DetailChrome } from '@features/detail/ui/DetailScaffold';
-import { secondaryLine } from '@features/detail/ui/secondaryLine';
+import { TrackDetailBody } from '@features/detail/view/TrackDetailBody';
+import { AlbumDetailBody } from '@features/detail/view/AlbumDetailBody';
+import { ArtistDetailBody } from '@features/detail/view/ArtistDetailBody';
+import type { DetailChrome } from '@features/detail/view/DetailScaffold';
+import { secondaryLine } from '@features/detail/view/secondaryLine';
 
 export function DetailScreen(): ReactElement {
   const params = useLocalSearchParams<{ handoff?: string }>();

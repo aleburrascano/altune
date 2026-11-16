@@ -1,5 +1,5 @@
-export { ThemeProvider } from '@shared/ui/theme/ThemeProvider';
-export { useTheme } from '@shared/ui/theme/useTheme';
+export { ThemeProvider } from '@shared/ui/view/theme/ThemeProvider';
+export { useTheme } from '@shared/ui/view/theme/useTheme';
 export { themes } from '@shared/ui/theme/theme';
 export {
   spacing,

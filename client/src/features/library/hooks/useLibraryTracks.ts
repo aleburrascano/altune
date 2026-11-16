@@ -17,7 +17,7 @@ import {
   type LibraryFailure,
 } from '@features/library/domain/libraryFailure';
 import { pagedListControls } from '@features/library/domain/listPaging';
-import { useLoggedLibraryQueryFailure } from '@features/library/hooks/useLoggedLibraryQueryFailure';
+import { useLoggedLibraryQueryFailure } from '@features/library/view/useLoggedLibraryQueryFailure';
 
 const TRACKS_PAGE_SIZE = 200;
 const PENDING_POLL_MS = 60_000;

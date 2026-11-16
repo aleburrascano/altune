@@ -1,0 +1,181 @@
+import TrackPlayer, { type AddTrack, type Track } from 'react-native-track-player';
+
+import { trackKey, type PlaybackTrack } from '@shared/playback';
+
+import { playbackPort } from '@features/player/ports/activePlaybackPort';
+import type { TrackId } from '@shared/catalog';
+import { currentLoadToken, isStale } from '@features/player/domain/loadToken';
+import {
+  NativeQueueTimeoutError,
+  withNativeQueue,
+  type Fence,
+} from '@features/player/native/nativeQueueLock';
+import { activeNativeTrackId, toNativeTrack } from '@features/player/native/nativeTrack';
+import { reportLoadFailure } from '@features/player/view/usePlaybackErrorStore';
+import { recordPresignOutcome } from '@features/player/domain/playbackHealth';
+import { warnPlayback } from '@features/player/domain/playbackError';
+
+const LOAD_FAILED_MESSAGE = 'Could not load this track';
+
+const swappedToLocal = new Set<string>();
+
+export function wasSwappedToLocal(trackId: TrackId): boolean {
+  return swappedToLocal.has(trackId);
+}
+
+export function forgetAllSwaps(): void {
+  swappedToLocal.clear();
+}
+
+export function forgetSwap(trackId: TrackId): void {
+  swappedToLocal.delete(trackId);
+}
+
+async function presignedUrlOrNull(trackId: TrackId): Promise<string | null> {
+  try {
+    const [resolved] = await playbackPort().fetchAudioUrls([trackId]);
+    recordPresignOutcome(true);
+    return resolved?.url ?? null;
+  } catch (err) {
+    warnPlayback('presign failed', { trackIds: [trackId] }, err);
+    recordPresignOutcome(false);
+    return null;
+  }
+}
+
+async function toStreamingNative(track: PlaybackTrack): Promise<AddTrack> {
+  if (track.source.kind === 'preview') return toNativeTrack(track);
+  const presignedUrl = await presignedUrlOrNull(track.source.trackId);
+  if (presignedUrl) return toNativeTrack(track, { streamUrl: presignedUrl });
+  return toNativeTrack(track, { headers: await playbackPort().audioRequestHeaders() });
+}
+
+async function loadAndPlay(native: AddTrack, fence: Fence): Promise<void> {
+  fence();
+  await TrackPlayer.load(native);
+  try {
+    fence();
+  } catch (err) {
+    throw new LoadedWithoutPlayError(err);
+  }
+  await TrackPlayer.play();
+}
+
+class LoadedWithoutPlayError extends Error {
+  constructor(cause: unknown) {
+    super('track loaded but the lock deadline passed before play', { cause });
+  }
+}
+
+async function reloadActive(track: PlaybackTrack, native: AddTrack, fence: Fence): Promise<void> {
+  try {
+    await loadAndPlay(native, fence);
+  } catch (err) {
+    if (err instanceof NativeQueueTimeoutError) throw err;
+    if (err instanceof LoadedWithoutPlayError) {
+      reportLoadFailure(track, err, LOAD_FAILED_MESSAGE);
+      return;
+    }
+    reportLoadFailure(track, err, LOAD_FAILED_MESSAGE);
+  }
+}
+
+export async function repairActiveToStreaming(track: PlaybackTrack): Promise<void> {
+  const token = currentLoadToken();
+  const native = await toStreamingNative(track);
+  await withNativeQueue(async (fence) => {
+    if (isStale(token)) return;
+    const activeKey = await activeNativeTrackId();
+    if (activeKey !== undefined && activeKey !== trackKey(track)) return;
+    fence();
+    if (track.source.kind === 'library') swappedToLocal.delete(track.source.trackId);
+    await reloadActive(track, native, fence);
+  });
+}
+
+interface UpcomingSlot {
+  index: number;
+  entry: Track;
+}
+
+async function upcomingSlotOf(key: string, fence: Fence): Promise<UpcomingSlot | null> {
+  const queue = await TrackPlayer.getQueue().catch((err: unknown): Track[] => {
+    warnPlayback('could not read the native queue', {}, err);
+    return [];
+  });
+  fence();
+  const activeIndex = await TrackPlayer.getActiveTrackIndex().catch((err: unknown) => {
+    warnPlayback('could not read the active track index', {}, err);
+    return undefined;
+  });
+  const after = activeIndex ?? -1;
+  const index = queue.findIndex((t, i) => i > after && t.id === key);
+  const entry = queue[index];
+  return entry == null ? null : { index, entry };
+}
+
+export type SwapOutcome = 'swapped' | 'streaming' | 'failed' | 'skipped';
+
+export async function swapUpcomingToLocal(track: PlaybackTrack, uri: string): Promise<SwapOutcome> {
+  return withNativeQueue(async (fence): Promise<SwapOutcome> => {
+    const slot = await upcomingSlotOf(trackKey(track), fence);
+    if (slot === null) return 'skipped';
+
+    fence();
+    await TrackPlayer.remove(slot.index);
+    return refillSlot({ slot, track, uri }, fence);
+  });
+}
+
+interface Refill {
+  slot: UpcomingSlot;
+  track: PlaybackTrack;
+  uri: string;
+}
+
+async function refillSlot(job: Refill, fence: Fence): Promise<SwapOutcome> {
+  if (await refilledWithLocalFile(job, fence)) return 'swapped';
+  return refillStreamingOrRestore(job, fence);
+}
+
+async function refillStreamingOrRestore(job: Refill, fence: Fence): Promise<SwapOutcome> {
+  try {
+    await refillStreaming(job, fence);
+    return 'streaming';
+  } catch (err) {
+    await restoreSlot(job.slot, fence);
+    reportLoadFailure(job.track, err, LOAD_FAILED_MESSAGE);
+    return 'failed';
+  }
+}
+
+async function refillStreaming({ slot, track }: Refill, fence: Fence): Promise<void> {
+  const native = await toStreamingNative(track);
+  fence();
+  await TrackPlayer.add(native, slot.index);
+}
+
+async function refilledWithLocalFile({ slot, track, uri }: Refill, fence: Fence): Promise<boolean> {
+  fence();
+  try {
+    await TrackPlayer.add(toNativeTrack(track, { streamUrl: uri }), slot.index);
+  } catch (err) {
+    warnPlayback('swap local add failed', { trackId: trackKey(track) }, err);
+    return false;
+  }
+  if (track.source.kind === 'library') swappedToLocal.add(track.source.trackId);
+  return true;
+}
+
+function warnRestoreFailed(entry: Track, err: unknown): void {
+  warnPlayback('swap slot restore failed', { trackId: entry.id }, err);
+}
+
+async function restoreSlot({ index, entry }: UpcomingSlot, fence: Fence): Promise<void> {
+  fence();
+  try {
+    await TrackPlayer.add(entry, index);
+  } catch (err) {
+    warnRestoreFailed(entry, err);
+  }
+}

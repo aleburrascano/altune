@@ -10,17 +10,17 @@ import {
   type Theme,
   Artwork,
 } from '@shared/ui';
-import { usePinnedStatus } from '@features/library/hooks/useLibraryOffline';
-import { LibraryRowDetails } from '@features/library/ui/LibraryRowDetails';
-import { LibraryRowFailure } from '@features/library/ui/LibraryRowFailure';
+import { usePinnedStatus } from '@features/library/view/useLibraryOffline';
+import { LibraryRowDetails } from '@features/library/view/LibraryRowDetails';
+import { LibraryRowFailure } from '@features/library/view/LibraryRowFailure';
 import {
   LibraryRowMoreButton,
   LibraryRowPinnedIcon,
-} from '@features/library/ui/LibraryRowAccessories';
-import { LibraryRowPlayback } from '@features/library/ui/LibraryRowPlayback';
-import { LibraryRowSelection } from '@features/library/ui/LibraryRowSelection';
+} from '@features/library/view/LibraryRowAccessories';
+import { LibraryRowPlayback } from '@features/library/view/LibraryRowPlayback';
+import { LibraryRowSelection } from '@features/library/view/LibraryRowSelection';
 import { libraryRowAccessibilityLabel } from '@features/library/ui/libraryRowLabels';
-import { libraryRowWideStyle, WIDE_TRACK_COLUMNS } from '@features/library/ui/libraryRowStyle';
+import { libraryRowWideStyle, WIDE_TRACK_COLUMNS } from '@features/library/view/libraryRowStyle';
 import type { TrackResponse } from '@shared/catalog';
 
 type WideRowProps = {

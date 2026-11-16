@@ -8,7 +8,7 @@ function selectPlaybackProvider(): ProviderComponent {
   if (playsThroughTrackPlayer)
     return require('@features/player/native/TrackPlayerPlaybackProvider')
       .TrackPlayerPlaybackProvider;
-  return require('@features/player/native/ExpoGoPlaybackProvider').ExpoGoPlaybackProvider;
+  return require('@features/player/view/native/ExpoGoPlaybackProvider').ExpoGoPlaybackProvider;
 }
 
 const PlaybackProviderImpl = selectPlaybackProvider();

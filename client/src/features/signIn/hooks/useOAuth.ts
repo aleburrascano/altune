@@ -2,8 +2,8 @@ import { NetworkError } from '@shared/failure';
 import { authIntentClient, startOAuth, withAuthDeadline } from '@shared/auth';
 import { useNavigator } from '@shared/navigation';
 import { authRedirectUrl } from '@features/signIn/domain/authRedirect';
-import { completeAuthIntent, type AuthRouter } from '@features/signIn/domain/completeAuthIntent';
-import { dismissAuthSession, openAuthSession } from '@features/signIn/native/authBrowser';
+import { completeAuthIntent, type AuthRouter } from '@features/signIn/adapters/completeAuthIntent';
+import { dismissAuthSession, openAuthSession } from '@features/signIn/adapters/native/authBrowser';
 import {
   failureReason,
   OAUTH_BROWSER_TIMEOUT_MS,
@@ -16,7 +16,7 @@ import { parseAuthLink } from '@features/signIn/domain/parseAuthLink';
 import { useAuthPort } from '@features/signIn/ports/AuthPortProvider';
 import type { AuthPort } from '@features/signIn/ports/authPort';
 
-import { useOAuthFlow } from '@features/signIn/hooks/useOAuthFlow';
+import { useOAuthFlow } from '@features/signIn/view/useOAuthFlow';
 
 type AuthorizationRequest = { kind: 'authorization_url'; url: string } | OAuthFailure;
 

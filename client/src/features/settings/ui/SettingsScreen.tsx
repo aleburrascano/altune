@@ -8,12 +8,12 @@ import { useSignOut } from '@shared/auth';
 import { offlineDownloadsSupported } from '@shared/offline';
 import { useAccountEmail } from '@features/settings/hooks/useAccountEmail';
 import { useSettingsClearSearchHistory } from '@features/settings/hooks/useSettingsClearSearchHistory';
-import { useDownloadStats, useRemoveDownloads } from '@features/settings/hooks/useDownloads';
-import { AnalyticsCard } from '@features/settings/ui/AnalyticsCard';
-import { AppearanceCard } from '@features/settings/ui/AppearanceCard';
-import { DangerZoneCard } from '@features/settings/ui/DangerZoneCard';
-import { LibraryCard } from '@features/settings/ui/LibraryCard';
-import { OfflineDownloadsCard } from '@features/settings/ui/OfflineDownloadsCard';
+import { useDownloadStats, useRemoveDownloads } from '@features/settings/view/useDownloads';
+import { AnalyticsCard } from '@features/settings/view/AnalyticsCard';
+import { AppearanceCard } from '@features/settings/view/AppearanceCard';
+import { DangerZoneCard } from '@features/settings/view/DangerZoneCard';
+import { LibraryCard } from '@features/settings/view/LibraryCard';
+import { OfflineDownloadsCard } from '@features/settings/view/OfflineDownloadsCard';
 import { SettingsCard, SettingsRow } from '@features/settings/ui/SettingsCard';
 
 export function SettingsScreen(): ReactElement {

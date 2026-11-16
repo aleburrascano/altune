@@ -6,7 +6,7 @@ import { applyServerEvent } from '@shared/events/shell/applyServerEvent';
 import { notifyIdentityChange } from '@shared/session/signOutCleanup';
 import { readOwner } from '@shared/offline/state/pinnedIndex';
 import { usePinnedStore } from '@shared/offline/state/pinnedStore';
-import { OfflineReconcileBridge } from '@shared/offline/ui/OfflineReconcileBridge';
+import { OfflineReconcileBridge } from '@shared/offline/view/OfflineReconcileBridge';
 import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
 import { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
 import { SettingsScreen } from '@features/settings/ui/SettingsScreen';

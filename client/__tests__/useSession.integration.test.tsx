@@ -21,7 +21,7 @@ import {
   type ServerEvent,
   type ServerEventsClientFactory,
 } from '@shared/events';
-import { startDownload, useDownloadStore } from '@shared/acquisition/state/downloadStore';
+import { startDownload, useDownloadStore } from '@shared/acquisition/view/downloadStore';
 import { getSearchState, setSearchState } from '@features/discovery/domain/searchState';
 import { registerSearchStateSignOutReset } from '@features/discovery/adapters/registerSearchStateSignOutReset';
 import type { DiscoveryResult } from '@shared/catalog';

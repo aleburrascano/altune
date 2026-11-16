@@ -6,9 +6,9 @@ import { showFailureAlert } from '@shared/ui';
 import {
   type AuthIntentResult,
   completeAuthIntent,
-} from '@features/signIn/domain/completeAuthIntent';
+} from '@features/signIn/adapters/completeAuthIntent';
 import { thrownErrorDetail } from '@features/signIn/domain/authError';
-import { initialUrl, subscribeUrl } from '@features/signIn/native/linkEvents';
+import { initialUrl, subscribeUrl } from '@features/signIn/adapters/native/linkEvents';
 import { type AuthLinkIntent, parseAuthLink } from '@features/signIn/domain/parseAuthLink';
 
 type LinkKind = AuthLinkIntent['kind'];

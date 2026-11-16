@@ -14,16 +14,16 @@ import {
   type UnreleasedWhat,
   type UnreleasedWhere,
 } from '@features/detail/domain/unreleasedView';
-import { DetailHandoffProvider } from '@features/detail/hooks/useDetailHandoff';
+import { DetailHandoffProvider } from '@features/detail/view/useDetailHandoff';
 import {
   useUnreleasedTracks,
   type UnreleasedTracksState,
 } from '@features/detail/hooks/useUnreleasedTracks';
-import { DETAIL_GUTTER } from '@features/detail/ui/detailStyles';
-import { FilterChips, type ChipGroup } from '@features/detail/ui/DiscographySections';
-import { AlbumCardsSkeleton } from '@features/detail/ui/DetailSkeleton';
-import { SectionError } from '@features/detail/ui/Section';
-import { UnreleasedRow } from '@features/detail/ui/unreleased/ArtistUnreleased';
+import { DETAIL_GUTTER } from '@features/detail/view/detailStyles';
+import { FilterChips, type ChipGroup } from '@features/detail/view/DiscographySections';
+import { AlbumCardsSkeleton } from '@features/detail/view/DetailSkeleton';
+import { SectionError } from '@features/detail/view/Section';
+import { UnreleasedRow } from '@features/detail/view/unreleased/ArtistUnreleased';
 
 type ArtistProps = { artist: DiscoveryResult };
 type ListProps = ArtistProps & { tracks: UnreleasedTrack[] };

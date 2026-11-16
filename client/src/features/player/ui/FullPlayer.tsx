@@ -12,16 +12,16 @@ import {
   isPreviewTrack,
   libraryTrackId,
 } from '@features/player/domain/playerStatus';
-import { PlayerOptionsSheets } from '@features/player/ui/PlayerOptionsSheets';
-import { Scrubber } from '@features/player/ui/Scrubber';
-import { VolumeSlider } from '@features/player/web/VolumeSlider';
+import { PlayerOptionsSheets } from '@features/player/view/PlayerOptionsSheets';
+import { Scrubber } from '@features/player/view/Scrubber';
+import { VolumeSlider } from '@features/player/view/web/VolumeSlider';
 import {
   SheetHeader,
   SheetHeaderCenter,
   SheetHeaderTrailing,
   SheetScreen,
-} from '@features/player/ui/SheetHeader';
-import { TransportControls } from '@features/player/ui/TransportControls';
+} from '@features/player/view/SheetHeader';
+import { TransportControls } from '@features/player/view/TransportControls';
 import { usePlaybackTransport } from '@features/player/hooks/usePlaybackTransport';
 import {
   Artwork,

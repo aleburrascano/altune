@@ -9,7 +9,7 @@ import {
   type AuthIntentResult,
   type AuthRouter,
   completeAuthIntent,
-} from '@features/signIn/domain/completeAuthIntent';
+} from '@features/signIn/adapters/completeAuthIntent';
 import { thrownErrorDetail } from '@features/signIn/domain/authError';
 import { type AuthLinkIntent, parseAuthLink } from '@features/signIn/domain/parseAuthLink';
 

@@ -9,7 +9,7 @@ import {
   GROUP_PAGE_SIZE,
   nextGroupPageOffset,
 } from '@features/library/domain/listPaging';
-import { useLoggedLibraryQueryFailure } from '@features/library/hooks/useLoggedLibraryQueryFailure';
+import { useLoggedLibraryQueryFailure } from '@features/library/view/useLoggedLibraryQueryFailure';
 
 export type PlaylistActionsState = {
   playlists: PlaylistResponse[];

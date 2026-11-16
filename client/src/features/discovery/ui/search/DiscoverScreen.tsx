@@ -11,8 +11,8 @@ import {
   DismissKeyboardArea,
   registerSearchFocus,
 } from '@shared/ui';
-import { DiscoverBody } from '@features/discovery/ui/search/DiscoverBody';
-import { SuggestionsList } from '@features/discovery/ui/history/SuggestionsList';
+import { DiscoverBody } from '@features/discovery/view/search/DiscoverBody';
+import { SuggestionsList } from '@features/discovery/view/history/SuggestionsList';
 import { useDiscoverLogic } from '@features/discovery/hooks/search/useDiscoverLogic';
 import { MAX_QUERY_LENGTH } from '@features/discovery/domain/searchPaging';
 
