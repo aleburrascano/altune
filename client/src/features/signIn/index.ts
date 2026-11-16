@@ -14,14 +14,15 @@ export {
   isLockedOut,
   lockoutOnRepeatedFailure,
   recordFailedAttempt,
-} from '@features/signIn/domain/attemptLockout';
-export type { LockoutAction } from '@features/signIn/domain/attemptLockout';
+} from '@features/signIn/shell/attemptLockout';
+export type { LockoutAction } from '@features/signIn/shell/attemptLockout';
 export {
   authPortWrapper,
   createAuthPortMock,
   createSupabaseAuthMock,
   runAsyncAuthHook,
 } from '@features/signIn/__tests__/testUtils/authTestUtils';
+export { createMemoryAuthPort } from '@features/signIn/__tests__/memoryAuthPort';
 export {
   _resetConsumedCredentialForTest,
   completeAuthIntent,
@@ -33,8 +34,8 @@ export {
   isSignupDisabledError,
   isUnconfirmedEmailError,
   thrownErrorDetail,
-} from '@features/signIn/domain/authError';
-export type { AuthErrorReason } from '@features/signIn/domain/authError';
+} from '@features/signIn/core/authError';
+export type { AuthErrorReason } from '@features/signIn/core/authError';
 export {
   clearRecoveryUnlock,
   isRecoveryUnlocked,
@@ -43,17 +44,15 @@ export {
 } from '@features/signIn/domain/passwordRecovery';
 export { InvalidRecoveryLinkNotice, SessionExpiredNotice } from '@features/signIn/ui/AuthNotices';
 export type { AuthPort } from '@features/signIn/ports/authPort';
-export type { AuthLinkIntent } from '@features/signIn/domain/parseAuthLink';
-export { parseAuthLink } from '@features/signIn/domain/parseAuthLink';
+export type { AuthLinkIntent } from '@features/signIn/core/parseAuthLink';
+export { parseAuthLink } from '@features/signIn/core/parseAuthLink';
 export { initialUrl, subscribeUrl } from '@features/signIn/adapters/native/linkEvents';
 export { OAuthButtons } from '@features/signIn/view/OAuthButtons';
-export { authRedirectUrl } from '@features/signIn/domain/authRedirect';
+export { authRedirectUrl, schemePrefix } from '@features/signIn/core/authRedirect';
+export type { AuthLinkHost } from '@features/signIn/core/authRedirect';
 export { useRecoveryUnlocked } from '@features/signIn/view/useRecoveryUnlocked';
 export { CheckEmailNotice } from '@features/signIn/view/CheckEmailNotice';
-export {
-  PASSWORD_REQUIREMENTS_HINT,
-  newPasswordFormState,
-} from '@features/signIn/domain/validation';
+export { PASSWORD_REQUIREMENTS_HINT, newPasswordFormState } from '@features/signIn/core/validation';
 export {
   bootstrapTestAuth,
   buildTestSession,
@@ -62,7 +61,7 @@ export {
 } from '@features/signIn/adapters/http/testAuth';
 export type { TestLoginResponse } from '@features/signIn/adapters/http/testAuth';
 export { useAsyncAuthAction } from '@features/signIn/hooks/useAsyncAuthAction';
-export { OAUTH_BROWSER_TIMEOUT_MS } from '@features/signIn/domain/oauthResult';
+export { OAUTH_BROWSER_TIMEOUT_MS } from '@features/signIn/core/oauthResult';
 export { useOAuth } from '@features/signIn/hooks/useOAuth';
 export { useResetPassword } from '@features/signIn/hooks/useResetPassword';
 export { useSignIn } from '@features/signIn/hooks/useSignIn';

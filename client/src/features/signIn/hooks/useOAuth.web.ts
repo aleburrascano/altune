@@ -6,8 +6,8 @@ import {
   thrownFailure,
   type OAuthFailure,
   type OAuthProvider,
-} from '@features/signIn/domain/oauthResult';
-import { authRedirectUrl } from '@features/signIn/domain/authRedirect';
+} from '@features/signIn/core/oauthResult';
+import { authRedirectUrl } from '@features/signIn/core/authRedirect';
 import { useAuthPort } from '@features/signIn/view/AuthPortProvider';
 import type { AuthPort } from '@features/signIn/ports/authPort';
 

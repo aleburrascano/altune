@@ -7,8 +7,8 @@ import {
   type SupabaseErrorDetail,
   supabaseErrorDetail,
   thrownErrorDetail,
-} from '@features/signIn/domain/authError';
-import type { AuthLinkIntent, AuthLinkParams } from '@features/signIn/domain/parseAuthLink';
+} from '@features/signIn/core/authError';
+import type { AuthLinkIntent, AuthLinkParams } from '@features/signIn/core/parseAuthLink';
 import {
   markRecoveryUnlocked,
   RESET_PASSWORD_ROUTE_SEGMENT,

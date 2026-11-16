@@ -1,9 +1,7 @@
 import { renderHook, act } from '@testing-library/react-native';
 import * as Linking from 'expo-linking';
 
-import { useAuthDeepLink } from '@features/signIn/hooks/useAuthDeepLink.web';
-
-import { createSupabaseAuthMock } from '@features/signIn';
+import { createSupabaseAuthMock, useAuthDeepLink } from '@features/signIn';
 
 jest.mock('expo-router', () => ({ useRouter: () => ({ replace: jest.fn() }) }));
 jest.mock('expo-linking', () => ({
@@ -24,7 +22,9 @@ function expectNoCredentialSpent(): void {
   expect(verifyOtp).not.toHaveBeenCalled();
 }
 
-const flushMacrotask = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+function flushMacrotask(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 describe('useAuthDeepLink on web leaves the page URL to the route (#2924)', () => {
   beforeEach(() => {

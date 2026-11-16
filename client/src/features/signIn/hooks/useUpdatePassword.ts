@@ -7,7 +7,7 @@ import {
   type ThrownErrorDetail,
   thrownErrorDetail,
   type TransientAuthReason,
-} from '@features/signIn/domain/authError';
+} from '@features/signIn/core/authError';
 
 import { useAsyncAuthAction } from '@features/signIn/hooks/useAsyncAuthAction';
 

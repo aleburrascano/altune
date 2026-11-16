@@ -7,9 +7,9 @@ import {
   type AuthIntentResult,
   completeAuthIntent,
 } from '@features/signIn/adapters/completeAuthIntent';
-import { thrownErrorDetail } from '@features/signIn/domain/authError';
+import { thrownErrorDetail } from '@features/signIn/core/authError';
 import { initialUrl, subscribeUrl } from '@features/signIn/adapters/native/linkEvents';
-import { type AuthLinkIntent, parseAuthLink } from '@features/signIn/domain/parseAuthLink';
+import { type AuthLinkIntent, parseAuthLink } from '@features/signIn/core/parseAuthLink';
 
 type LinkKind = AuthLinkIntent['kind'];
 

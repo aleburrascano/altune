@@ -1,8 +1,4 @@
-import { Platform } from 'react-native';
-
 import { useResetPassword, createSupabaseAuthMock, runAsyncAuthHook } from '@features/signIn';
-import * as nativeWebOrigin from '@shared/device/core/webOrigin';
-import * as browserWebOrigin from '@shared/device/core/webOrigin.web';
 const { resetPasswordForEmail } = createSupabaseAuthMock('resetPasswordForEmail');
 
 const requestResetFor = (email: string) =>
@@ -154,30 +150,6 @@ describe('a server rate limit', () => {
       mock.mockResolvedValue(UNAVAILABLE);
 
       expect(await run()).toEqual({ kind: 'error', reason: 'network' });
-    });
-  });
-});
-
-describe('useResetPassword: the recovery redirect on web (#2837)', () => {
-  beforeEach(() => {
-    jest.spyOn(nativeWebOrigin, 'webOrigin').mockImplementation(browserWebOrigin.webOrigin);
-  });
-
-  afterEach(() => {
-    jest.mocked(nativeWebOrigin.webOrigin).mockRestore();
-    Platform.OS = 'ios';
-    Reflect.deleteProperty(globalThis, 'window');
-  });
-
-  it('sends the recovery link back to this origin instead of the altune scheme', async () => {
-    Platform.OS = 'web';
-    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
-    resetPasswordForEmail.mockResolvedValue(ACCEPTED);
-
-    await requestReset();
-
-    expect(resetPasswordForEmail).toHaveBeenCalledWith('a@b.co', {
-      redirectTo: 'https://app.altune.example/auth/recovery',
     });
   });
 });

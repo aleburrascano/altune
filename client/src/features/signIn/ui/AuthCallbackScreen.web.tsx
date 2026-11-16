@@ -10,8 +10,8 @@ import {
   type AuthRouter,
   completeAuthIntent,
 } from '@features/signIn/adapters/completeAuthIntent';
-import { thrownErrorDetail } from '@features/signIn/domain/authError';
-import { type AuthLinkIntent, parseAuthLink } from '@features/signIn/domain/parseAuthLink';
+import { thrownErrorDetail } from '@features/signIn/core/authError';
+import { type AuthLinkIntent, parseAuthLink } from '@features/signIn/core/parseAuthLink';
 
 import { AuthFullScreenNotice } from '@features/signIn/ui/AuthNotices';
 import { BackToSignInLink } from '@features/signIn/ui/BackToSignInLink';

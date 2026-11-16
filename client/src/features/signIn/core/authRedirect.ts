@@ -1,7 +1,8 @@
 import { declaredAppScheme, webOrigin } from '@shared/device';
 
-function configuredSchemePrefix(): string {
-  const declared = declaredAppScheme();
+export type AuthLinkHost = { scheme: string; origin: string | null };
+
+export function schemePrefix(declared: string | string[] | undefined): string {
   const primary = Array.isArray(declared) ? declared[0] : declared;
   if (typeof primary !== 'string' || primary === '') {
     throw new Error('Missing required Expo config field `scheme` (client/app.json)');
@@ -9,7 +10,11 @@ function configuredSchemePrefix(): string {
   return `${primary.toLowerCase()}://`;
 }
 
-export const SCHEME = configuredSchemePrefix();
+const APP_SCHEME = schemePrefix(declaredAppScheme());
+
+export function appLinkHost(): AuthLinkHost {
+  return { scheme: APP_SCHEME, origin: webOrigin() };
+}
 
 export const LINK_PATH = {
   recovery: 'auth/recovery',
@@ -25,8 +30,10 @@ const REDIRECT_PATH_FOR_INTENT: Record<AuthRedirectIntent, string> = {
   recovery: LINK_PATH.recovery,
 };
 
-export function authRedirectUrl(intent: AuthRedirectIntent): string {
+export function authRedirectUrl(
+  intent: AuthRedirectIntent,
+  host: AuthLinkHost = appLinkHost(),
+): string {
   const path = REDIRECT_PATH_FOR_INTENT[intent];
-  const origin = webOrigin();
-  return origin ? `${origin}/${path}` : `${SCHEME}${path}`;
+  return host.origin ? `${host.origin}/${path}` : `${host.scheme}${path}`;
 }

@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 
 import { Banner } from '@shared/ui';
 
-import { authErrorText, type AuthErrorReason } from '@features/signIn/domain/authError';
+import { authErrorText, type AuthErrorReason } from '@features/signIn/core/authError';
 
 type AuthErrorBannerState =
   | { kind: 'error'; reason: AuthErrorReason }
