@@ -6,7 +6,7 @@ import { useTheme, Tappable, touchTarget } from '@shared/ui';
 import type { MenuAnchor } from '@shared/ui';
 import type { PinnedStatus } from '@shared/offline';
 import { PINNED_GLYPH, PINNED_GLYPH_LABEL } from '@features/library/view/pinnedGlyphs';
-import { pinnedStatusDisplay } from '@features/library/domain/pinnedStatusDisplay';
+import { pinnedStatusDisplay } from '@features/library/core/pinnedStatusDisplay';
 
 export function LibraryRowMoreButton({
   trackId,

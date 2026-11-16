@@ -8,7 +8,7 @@ import {
   pagedListControls,
   GROUP_PAGE_SIZE,
   nextGroupPageOffset,
-} from '@features/library/domain/listPaging';
+} from '@features/library/core/listPaging';
 import { useLoggedLibraryQueryFailure } from '@features/library/view/useLoggedLibraryQueryFailure';
 
 export type PlaylistActionsState = {

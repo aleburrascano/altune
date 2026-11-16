@@ -7,7 +7,7 @@ import {
   useLibraryOffline,
   type LibraryOffline,
 } from '@features/library/view/useLibraryOffline';
-import { pinnedStatusDisplay } from '@features/library/domain/pinnedStatusDisplay';
+import { pinnedStatusDisplay } from '@features/library/core/pinnedStatusDisplay';
 import type { ShowFailure } from '@features/library/domain/libraryFailure';
 import { useReacquireTrack } from '@features/library/view/useRetryAcquisition';
 

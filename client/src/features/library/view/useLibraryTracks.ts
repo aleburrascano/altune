@@ -17,7 +17,7 @@ import {
   type LibraryFailure,
   type LibraryWarn,
 } from '@features/library/domain/libraryFailure';
-import { pagedListControls } from '@features/library/domain/listPaging';
+import { pagedListControls } from '@features/library/core/listPaging';
 import { useLoggedLibraryQueryFailure } from '@features/library/view/useLoggedLibraryQueryFailure';
 
 const TRACKS_PAGE_SIZE = 200;

@@ -19,7 +19,7 @@ import {
 } from '@features/library/view/LibraryRowAccessories';
 import { LibraryRowPlayback } from '@features/library/view/LibraryRowPlayback';
 import { LibraryRowSelection } from '@features/library/view/LibraryRowSelection';
-import { libraryRowAccessibilityLabel } from '@features/library/ui/libraryRowLabels';
+import { libraryRowAccessibilityLabel } from '@features/library/core/libraryRowLabels';
 import { libraryRowWideStyle, WIDE_TRACK_COLUMNS } from '@features/library/view/libraryRowStyle';
 import type { TrackResponse } from '@shared/catalog';
 
