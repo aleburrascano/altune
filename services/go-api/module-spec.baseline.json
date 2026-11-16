@@ -1115,6 +1115,8 @@
     "T1 internal/catalog/internal/adapters/storage/helpers_darwin_test.go is in package storage, so it sees inside the module: use package storage_test and import the door",
     "T1 internal/catalog/internal/adapters/storage/helpers_linux_test.go is in package storage, so it sees inside the module: use package storage_test and import the door",
     "T1 internal/catalog/internal/adapters/storage/helpers_windows_test.go is in package storage, so it sees inside the module: use package storage_test and import the door",
+    "T1 internal/catalog/internal/adapters/storage/object_storage_test.go imports internal/core/ports/audio_store.go, behind catalog's door",
+    "T1 internal/catalog/internal/adapters/storage/object_storage_test.go is in package storage, so it sees inside the module: use package storage_test and import the door",
     "T1 internal/catalog/internal/adapters/storage/scoped_store_test.go imports internal/core/ports/audio_store.go, behind catalog's door",
     "T1 internal/catalog/internal/adapters/storage/scoped_store_test.go is in package storage, so it sees inside the module: use package storage_test and import the door",
     "T1 internal/catalog/service/audio/audio_url_test.go imports catalogtest/audio_store_fake.go, behind catalog's door",

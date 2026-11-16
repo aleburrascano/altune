@@ -24,5 +24,3 @@ var (
 )
 
 type FeaturedArtistResolver = ports.FeaturedArtistResolver
-
-const MaxPresignTTL = ports.MaxPresignTTL

@@ -11,9 +11,11 @@ var GradeOf = grade.Of
 
 const (
 	GradeA                 = grade.A
+	GradeAUser             = grade.AUser
 	Approximates           = grade.Approximates
 	ArtTrack               = grade.ArtTrack
 	GradeB                 = grade.B
+	GradeBestAvailable     = grade.BestAvailable
 	GradeC                 = grade.C
 	Contradicts            = grade.Contradicts
 	GradeD                 = grade.D
@@ -22,11 +24,9 @@ const (
 	LabelUpload            = grade.LabelUpload
 	Matches                = grade.Matches
 	OfficialVideo          = grade.OfficialVideo
-	UserUpload             = grade.UserUpload
-	GradeAUser             = grade.AUser
-	GradeBestAvailable     = grade.BestAvailable
 	FingerprintSilent      = grade.Silent
 	FingerprintUnsupported = grade.Unsupported
+	UserUpload             = grade.UserUpload
 )
 
 type GradeFingerprint = grade.Fingerprint
