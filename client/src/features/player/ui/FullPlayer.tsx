@@ -22,7 +22,7 @@ import {
   SheetScreen,
 } from '@features/player/view/SheetHeader';
 import { TransportControls } from '@features/player/view/TransportControls';
-import { usePlaybackTransport } from '@features/player/hooks/usePlaybackTransport';
+import { usePlaybackTransport } from '@features/player/view/usePlaybackTransport';
 import {
   Artwork,
   Text,

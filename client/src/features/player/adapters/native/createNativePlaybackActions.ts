@@ -24,7 +24,7 @@ import { clearPlaybackError, reportLoadFailure } from '@features/player/view/use
 import {
   isIndexOutOfBounds,
   reportingQueueFailure,
-} from '@features/player/native/queueFailureReport';
+} from '@features/player/adapters/native/queueFailureReport';
 import { redactedPlaybackFailure, warnPlayback } from '@features/player/domain/playbackError';
 import { markPlayRequested } from '@features/player/adapters/native/playStartTiming';
 

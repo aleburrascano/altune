@@ -2,7 +2,8 @@ import { asTrackId } from '@shared/catalog';
 import type { QueueStateResponse } from '@shared/apiClient';
 import { ContractError } from '@shared/failure';
 
-import { httpPlaybackPort, createMemoryPlaybackPort } from '@features/player';
+import { createMemoryPlaybackPort } from '@features/player';
+import { httpPlaybackPort } from '@features/player/adapters/http/httpPlaybackPort';
 import type { PlaybackPort } from '@features/player';
 import { signInTestUser } from '@testing/signInTestUser';
 

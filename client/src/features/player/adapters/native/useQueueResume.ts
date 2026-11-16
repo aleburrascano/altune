@@ -6,10 +6,10 @@ import { ApiError } from '@shared/failure';
 import { reportClientError } from '@shared/telemetry';
 import { currentSessionEpoch, isSameSession } from '@shared/session';
 
-import { restoreSavedQueue } from '@features/player/native/restoreSavedQueue';
+import { restoreSavedQueue } from '@features/player/adapters/native/restoreSavedQueue';
 import { withNativeQueue } from '@features/player/native/nativeQueueLock';
-import { activeNativeTrackId } from '@features/player/native/nativeTrack';
-import { playbackPort } from '@features/player/ports/activePlaybackPort';
+import { activeNativeTrackId } from '@features/player/adapters/native/nativeTrack';
+import { playbackPort } from '@features/player/shell/activePlaybackPort';
 import { toWireSource } from '@features/player/domain/queueStateWire';
 import { recordQueueSaveFailure } from '@features/player/domain/playbackHealth';
 import { savedQueueLists } from '@features/player/domain/queueSaveWindow';

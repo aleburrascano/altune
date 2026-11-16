@@ -8,7 +8,7 @@ import {
 } from '@modules/altune-widget';
 import { withNativeQueue } from '@features/player/native/nativeQueueLock';
 import { reorderUpcomingNative } from '@features/player/adapters/native/rebuildNativeTail';
-import { reportingQueueFailure } from '@features/player/native/queueFailureReport';
+import { reportingQueueFailure } from '@features/player/adapters/native/queueFailureReport';
 import { primeSignedInUser } from '@shared/auth';
 import {
   type RepeatMode as QueueRepeatMode,

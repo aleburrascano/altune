@@ -24,7 +24,7 @@ import { PlayerOptionsSheets } from '@features/player/view/PlayerOptionsSheets';
 import { Scrubber } from '@features/player/view/Scrubber';
 import { VolumeSlider } from '@features/player/view/web/VolumeSlider';
 import { TransportControls } from '@features/player/view/TransportControls';
-import { usePlaybackTransport } from '@features/player/hooks/usePlaybackTransport';
+import { usePlaybackTransport } from '@features/player/view/usePlaybackTransport';
 
 type Transport = ReturnType<typeof usePlaybackTransport>;
 type Theme = ReturnType<typeof useTheme>;
