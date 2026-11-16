@@ -1,6 +1,7 @@
-package catalogpin
+package catalogpin_test
 
 import (
+	"altune/go-api/internal/acquisition"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -18,7 +19,7 @@ func TestHTTPPageReader_ReadsAPageButRefusesARedirect(t *testing.T) {
 		_, _ = w.Write([]byte("page body"))
 	}))
 	t.Cleanup(srv.Close)
-	reader := NewHTTPPageReader(srv.Client().Transport, time.Second)
+	reader := acquisition.NewHTTPPageReader(srv.Client().Transport, time.Second)
 
 	body, err := reader.ReadPage(context.Background(), srv.URL+"/f/x")
 	if err != nil || string(body) != "page body" {

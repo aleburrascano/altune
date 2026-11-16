@@ -42,9 +42,11 @@ const (
 	ProviderMusicBrainz      = domain.ProviderMusicBrainz
 	ProviderSoundCloud       = domain.ProviderSoundCloud
 	ProviderSpotify          = domain.ProviderSpotify
+	ProviderTheAudioDB       = domain.ProviderTheAudioDB
 	ProviderYouTube          = domain.ProviderYouTube
 	ResultKindAlbum          = domain.ResultKindAlbum
 	ResultKindArtist         = domain.ResultKindArtist
+	ResultKindPlaylist       = domain.ResultKindPlaylist
 	ResultKindTrack          = domain.ResultKindTrack
 	VocabKindArtist          = domain.VocabKindArtist
 	VocabKindTrack           = domain.VocabKindTrack
@@ -58,10 +60,9 @@ type (
 	UnreleasedVersion  = domain.UnreleasedVersion
 )
 
+const ConfidenceLow = domain.ConfidenceLow
+
 const (
-	ConfidenceLow       = domain.ConfidenceLow
 	ProviderStatusError = domain.ProviderStatusError
 	ProviderStatusOK    = domain.ProviderStatusOK
-	ProviderTheAudioDB  = domain.ProviderTheAudioDB
-	ResultKindPlaylist  = domain.ResultKindPlaylist
 )

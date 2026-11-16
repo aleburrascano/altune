@@ -1,8 +1,9 @@
-package ffmpegtag
+package ffmpegtag_test
 
 import (
+	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/acquisition/internal/adapters/ffmpegtag"
 	"altune/go-api/internal/acquisition/internal/adapters/id3"
-	"altune/go-api/internal/acquisition/internal/core/ports"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -37,12 +38,12 @@ func audioFile(t *testing.T, name, content string) string {
 
 type recordingTagger struct{ paths []string }
 
-func (r *recordingTagger) Tag(_ context.Context, filePath string, _ ports.TrackTags) error {
+func (r *recordingTagger) Tag(_ context.Context, filePath string, _ acquisition.TrackTags) error {
 	r.paths = append(r.paths, filePath)
 	return nil
 }
 
-var fullTags = ports.TrackTags{
+var fullTags = acquisition.TrackTags{
 	Title: "Remember Them Days", Artist: "Slayr", Album: "Remember Them Days",
 	AlbumArtist: "Slayr", Year: 2024, TrackNumber: 3, Genre: "Hip-Hop",
 }
@@ -51,7 +52,7 @@ func TestTagger_WritesTagsInACopyPassAndReplacesTheFile(t *testing.T) {
 	binary, argvFile := fakeFfmpeg(t, `printf tagged > "$last"`)
 	path := audioFile(t, "audio.m4a", "original")
 
-	if err := NewTagger(binary, &recordingTagger{}).Tag(context.Background(), path, fullTags); err != nil {
+	if err := ffmpegtag.NewTagger(binary, &recordingTagger{}).Tag(context.Background(), path, fullTags); err != nil {
 		t.Fatalf("Tag() = %v", err)
 	}
 
@@ -82,8 +83,8 @@ func TestTagger_LeavesOptionalTagsOutWhenUnknown(t *testing.T) {
 	binary, argvFile := fakeFfmpeg(t, `printf tagged > "$last"`)
 	path := audioFile(t, "audio.m4a", "original")
 
-	tags := ports.TrackTags{Title: "Gorah", Artist: "Nitefreak"}
-	if err := NewTagger(binary, &recordingTagger{}).Tag(context.Background(), path, tags); err != nil {
+	tags := acquisition.TrackTags{Title: "Gorah", Artist: "Nitefreak"}
+	if err := ffmpegtag.NewTagger(binary, &recordingTagger{}).Tag(context.Background(), path, tags); err != nil {
 		t.Fatalf("Tag() = %v", err)
 	}
 	raw, _ := os.ReadFile(argvFile)
@@ -98,7 +99,7 @@ func TestTagger_KeepsTheOriginalWhenFfmpegFails(t *testing.T) {
 	binary, _ := fakeFfmpeg(t, `printf partial > "$last"; echo 'moov atom not found' >&2; exit 1`)
 	path := audioFile(t, "audio.m4a", "original")
 
-	err := NewTagger(binary, &recordingTagger{}).Tag(context.Background(), path, fullTags)
+	err := ffmpegtag.NewTagger(binary, &recordingTagger{}).Tag(context.Background(), path, fullTags)
 	if err == nil || !strings.Contains(err.Error(), "moov atom not found") {
 		t.Fatalf("Tag() = %v, want ffmpeg's error", err)
 	}
@@ -115,7 +116,7 @@ func TestTagger_HandsNonM4AFilesToTheFallback(t *testing.T) {
 	path := audioFile(t, "audio.mp3", "mp3 bytes")
 	fallback := &recordingTagger{}
 
-	if err := NewTagger(binary, fallback).Tag(context.Background(), path, fullTags); err != nil {
+	if err := ffmpegtag.NewTagger(binary, fallback).Tag(context.Background(), path, fullTags); err != nil {
 		t.Fatalf("Tag() = %v", err)
 	}
 	if len(fallback.paths) != 1 || fallback.paths[0] != path {
@@ -130,7 +131,7 @@ func TestTagger_AnUntaggableContainerSurfacesThroughTheFallback(t *testing.T) {
 	binary, argvFile := fakeFfmpeg(t, "exit 1")
 	path := audioFile(t, "audio.opus", "opus bytes")
 
-	err := NewTagger(binary, id3.NewTagger()).Tag(context.Background(), path, fullTags)
+	err := ffmpegtag.NewTagger(binary, id3.NewTagger()).Tag(context.Background(), path, fullTags)
 	if !errors.Is(err, id3.ErrUnsupportedContainer) {
 		t.Fatalf("Tag() = %v, want ErrUnsupportedContainer", err)
 	}
@@ -189,7 +190,7 @@ func TestTagger_EmbedsTheISRCWithoutMovingTheStandardTags(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	tagger := NewTagger(ffmpeg, &recordingTagger{})
+	tagger := ffmpegtag.NewTagger(ffmpeg, &recordingTagger{})
 	tags := fullTags
 	if err := tagger.Tag(context.Background(), without, tags); err != nil {
 		t.Fatalf("Tag() = %v", err)
@@ -301,7 +302,7 @@ func TestTagger_EmbeddingTheISRCKeepsEveryM4AShapePlayableAndTheAudioIdentical(t
 			tags := fullTags
 			tags.ISRC = "USRC17607839"
 
-			if err := NewTagger(ffmpeg, &recordingTagger{}).Tag(context.Background(), path, tags); err != nil {
+			if err := ffmpegtag.NewTagger(ffmpeg, &recordingTagger{}).Tag(context.Background(), path, tags); err != nil {
 				t.Fatalf("Tag() = %v", err)
 			}
 
@@ -325,7 +326,7 @@ func TestTagger_LeavesAFragmentedM4AEitherUntouchedOrPlayable(t *testing.T) {
 	tags := fullTags
 	tags.ISRC = "USRC17607839"
 
-	err := NewTagger(ffmpeg, &recordingTagger{}).Tag(context.Background(), path, tags)
+	err := ffmpegtag.NewTagger(ffmpeg, &recordingTagger{}).Tag(context.Background(), path, tags)
 
 	t.Logf("Tag() on a fragmented m4a = %v", err)
 	if err != nil {
@@ -347,7 +348,7 @@ func TestTagger_RetaggingAFileHoldsOneISRCAtomWithTheLatestValue(t *testing.T) {
 	ffmpeg, ffprobe := probeTools(t)
 	path := probeFixture(t, ffmpeg, t.TempDir(), "audio.m4a", "-f", "lavfi", "-i", "sine=duration=3", "-c:a", "aac")
 	before := probeAudioMD5(t, ffmpeg, path)
-	tagger := NewTagger(ffmpeg, &recordingTagger{})
+	tagger := ffmpegtag.NewTagger(ffmpeg, &recordingTagger{})
 	tags := fullTags
 
 	for _, isrc := range []string{"USRC17607839", "USRC17607839", "GBAYE0601498"} {
@@ -377,7 +378,7 @@ func TestTagger_WithoutAnISRCWritesTheSameBytesAsATagPassWithoutOne(t *testing.T
 	ffmpeg, _ := probeTools(t)
 	dir := t.TempDir()
 	source := probeFixture(t, ffmpeg, dir, "source.m4a", "-f", "lavfi", "-i", "sine=duration=3", "-c:a", "aac")
-	tagger := NewTagger(ffmpeg, &recordingTagger{})
+	tagger := ffmpegtag.NewTagger(ffmpeg, &recordingTagger{})
 	var outputs [][]byte
 	for _, name := range []string{"a.m4a", "b.m4a"} {
 		raw, _ := os.ReadFile(source)

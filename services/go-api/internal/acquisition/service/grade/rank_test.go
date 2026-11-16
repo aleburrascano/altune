@@ -1,12 +1,15 @@
-package grade
+package grade_test
 
-import "testing"
+import (
+	"altune/go-api/internal/acquisition"
+	"testing"
+)
 
 func TestBeats_AUserIsTheTopOfTheScale(t *testing.T) {
-	if !AUser.Beats(A) || A.Beats(AUser) || AUser.Beats(AUser) {
+	if !acquisition.GradeAUser.Beats(acquisition.GradeA) || acquisition.GradeA.Beats(acquisition.GradeAUser) || acquisition.GradeAUser.Beats(acquisition.GradeAUser) {
 		t.Error("A_user must beat A, and nothing beats A_user")
 	}
-	if !AUser.IsKnown() || !AUser.IsTop() || !A.IsTop() || B.IsTop() {
+	if !acquisition.GradeAUser.IsKnown() || !acquisition.GradeAUser.IsTop() || !acquisition.GradeA.IsTop() || acquisition.GradeB.IsTop() {
 		t.Error("only A and A_user are top grades")
 	}
 }
@@ -14,20 +17,20 @@ func TestBeats_AUserIsTheTopOfTheScale(t *testing.T) {
 func TestBeats(t *testing.T) {
 	cases := []struct {
 		name      string
-		candidate Grade
-		current   Grade
+		candidate acquisition.Grade
+		current   acquisition.Grade
 		want      bool
 	}{
-		{"A beats B", A, B, true},
-		{"B beats C", B, C, true},
-		{"C beats D", C, D, true},
-		{"D beats F", D, F, true},
-		{"A beats F", A, F, true},
-		{"an equal grade does not beat itself", C, C, false},
-		{"B does not beat A", B, A, false},
-		{"F does not beat D", F, D, false},
-		{"an unknown candidate beats nothing", Grade("Z"), F, false},
-		{"nothing is beaten by an unknown current grade", A, Grade(""), false},
+		{"A beats B", acquisition.GradeA, acquisition.GradeB, true},
+		{"B beats C", acquisition.GradeB, acquisition.GradeC, true},
+		{"C beats D", acquisition.GradeC, acquisition.GradeD, true},
+		{"D beats F", acquisition.GradeD, acquisition.GradeF, true},
+		{"A beats F", acquisition.GradeA, acquisition.GradeF, true},
+		{"an equal grade does not beat itself", acquisition.GradeC, acquisition.GradeC, false},
+		{"B does not beat A", acquisition.GradeB, acquisition.GradeA, false},
+		{"F does not beat D", acquisition.GradeF, acquisition.GradeD, false},
+		{"an unknown candidate beats nothing", acquisition.Grade("Z"), acquisition.GradeF, false},
+		{"nothing is beaten by an unknown current grade", acquisition.GradeA, acquisition.Grade(""), false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

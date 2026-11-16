@@ -1,6 +1,7 @@
-package persistence
+package persistence_test
 
 import (
+	"altune/go-api/internal/acquisition"
 	"bytes"
 	"context"
 	"log/slog"
@@ -42,7 +43,7 @@ func TestPgxJobNotifier_LogsWhenItCannotListen(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		NewPgxJobNotifier(pool).Listen(ctx, make(chan struct{}, 1))
+		acquisition.NewPgxJobNotifier(pool).Listen(ctx, make(chan struct{}, 1))
 		close(done)
 	}()
 

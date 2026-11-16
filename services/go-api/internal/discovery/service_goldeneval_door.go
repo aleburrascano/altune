@@ -14,9 +14,9 @@ var (
 )
 
 const (
-	GoldenPass         = goldeneval.Pass
 	GoldenErrored      = goldeneval.Errored
 	GoldenFail         = goldeneval.Fail
 	GoldenFixed        = goldeneval.Fixed
+	GoldenPass         = goldeneval.Pass
 	GoldenStillFailing = goldeneval.StillFailing
 )

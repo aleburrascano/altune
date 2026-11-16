@@ -27,3 +27,11 @@ const (
 	AcquisitionFailed = domain.AcquisitionFailed
 	AcquisitionReady  = domain.AcquisitionReady
 )
+
+type (
+	AlbumGroup     = domain.AlbumGroup
+	FeaturedArtist = domain.FeaturedArtist
+	LibraryQuery   = domain.LibraryQuery
+)
+
+const SortYear = domain.SortYear

@@ -28,3 +28,24 @@ const (
 	JobKindUpgrade  = ports.JobKindUpgrade
 	ProviderYouTube = ports.ProviderYouTube
 )
+
+type (
+	AudioCandidate = ports.AudioCandidate
+	CandidateKind  = ports.CandidateKind
+	Completion     = ports.Completion
+	FindRequest    = ports.FindRequest
+	OrphanedAudio  = ports.OrphanedAudio
+	ProviderRef    = ports.ProviderRef
+	SourceFormat   = ports.SourceFormat
+)
+
+const (
+	KindArtTrack    = ports.KindArtTrack
+	KindPinnedVideo = ports.KindPinnedVideo
+	KindUpload      = ports.KindUpload
+)
+
+const (
+	TrackPending = ports.TrackPending
+	TrackReady   = ports.TrackReady
+)

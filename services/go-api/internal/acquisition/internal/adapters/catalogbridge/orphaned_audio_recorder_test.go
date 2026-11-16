@@ -1,7 +1,7 @@
-package catalogbridge
+package catalogbridge_test
 
 import (
-	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/catalog"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
@@ -23,9 +23,9 @@ func (q *stubQueue) RecordOrphanedAudio(_ context.Context, o catalog.OrphanedAud
 
 func TestOrphanedAudioRecorderPassesFieldsThrough(t *testing.T) {
 	q := &stubQueue{}
-	orphan := ports.OrphanedAudio{AudioRef: "u/a.mp3", UserId: shared.NewUserId(uuid.New()), TrackId: shared.NewTrackId()}
+	orphan := acquisition.OrphanedAudio{AudioRef: "u/a.mp3", UserId: shared.NewUserId(uuid.New()), TrackId: shared.NewTrackId()}
 
-	if err := NewOrphanedAudioRecorder(q).RecordOrphanedAudio(context.Background(), orphan); err != nil {
+	if err := acquisition.NewOrphanedAudioRecorder(q).RecordOrphanedAudio(context.Background(), orphan); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -39,7 +39,7 @@ func TestOrphanedAudioRecorderReturnsQueueError(t *testing.T) {
 	boom := errors.New("queue down")
 	q := &stubQueue{err: boom}
 
-	err := NewOrphanedAudioRecorder(q).RecordOrphanedAudio(context.Background(), ports.OrphanedAudio{})
+	err := acquisition.NewOrphanedAudioRecorder(q).RecordOrphanedAudio(context.Background(), acquisition.OrphanedAudio{})
 	if !errors.Is(err, boom) {
 		t.Errorf("got %v, want %v", err, boom)
 	}

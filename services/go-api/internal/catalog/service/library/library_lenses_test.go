@@ -1,8 +1,8 @@
-package library
+package library_test
 
 import (
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/catalog/domain"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
@@ -11,8 +11,8 @@ import (
 )
 
 func TestLibraryLensService_RejectsNegativeOffset(t *testing.T) {
-	svc := NewLibraryLensService(catalogtest.NewTrackRepo())
-	query := domain.LibraryQuery{Offset: -1}
+	svc := catalog.NewLibraryLensService(catalogtest.NewTrackRepo())
+	query := catalog.LibraryQuery{Offset: -1}
 
 	cases := []struct {
 		name string
@@ -44,9 +44,9 @@ func TestLibraryLensService_RejectsNegativeOffset(t *testing.T) {
 }
 
 func TestLibraryLensService_ArtistsRejectYearSort(t *testing.T) {
-	svc := NewLibraryLensService(catalogtest.NewTrackRepo())
+	svc := catalog.NewLibraryLensService(catalogtest.NewTrackRepo())
 
-	_, err := svc.Artists(context.Background(), catalogtest.UserId(), domain.LibraryQuery{Sort: domain.SortYear})
+	_, err := svc.Artists(context.Background(), catalogtest.UserId(), catalog.LibraryQuery{Sort: catalog.SortYear})
 
 	if err == nil {
 		t.Fatal("expected a validation error for sort=year on artists")
@@ -58,9 +58,9 @@ func TestLibraryLensService_ArtistsRejectYearSort(t *testing.T) {
 }
 
 func TestLibraryLensService_ArtistsReportYearSortBeforeOffset(t *testing.T) {
-	svc := NewLibraryLensService(catalogtest.NewTrackRepo())
+	svc := catalog.NewLibraryLensService(catalogtest.NewTrackRepo())
 
-	_, err := svc.Artists(context.Background(), catalogtest.UserId(), domain.LibraryQuery{Sort: domain.SortYear, Offset: -1})
+	_, err := svc.Artists(context.Background(), catalogtest.UserId(), catalog.LibraryQuery{Sort: catalog.SortYear, Offset: -1})
 
 	if err == nil {
 		t.Fatal("expected a validation error")
@@ -88,7 +88,7 @@ func TestLibraryLensService_GroupsOwnedTracks(t *testing.T) {
 		t.Errorf("TrackCount = %d, want 2", albums[0].TrackCount)
 	}
 
-	artists, err := NewLibraryLensService(repo).Artists(ctx, userId, domain.LibraryQuery{})
+	artists, err := catalog.NewLibraryLensService(repo).Artists(ctx, userId, catalog.LibraryQuery{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -114,16 +114,16 @@ func TestLibraryLensService_ClampsLimit(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			repo := catalogtest.NewTrackRepo()
-			svc := NewLibraryLensService(repo)
+			svc := catalog.NewLibraryLensService(repo)
 
-			if _, err := svc.Albums(ctx, userId, domain.LibraryQuery{Limit: c.in}); err != nil {
+			if _, err := svc.Albums(ctx, userId, catalog.LibraryQuery{Limit: c.in}); err != nil {
 				t.Fatalf("Albums: %v", err)
 			}
 			if repo.LastAlbumsQuery.Limit != c.want {
 				t.Errorf("albums limit = %d, want %d", repo.LastAlbumsQuery.Limit, c.want)
 			}
 
-			if _, err := svc.Artists(ctx, userId, domain.LibraryQuery{Limit: c.in}); err != nil {
+			if _, err := svc.Artists(ctx, userId, catalog.LibraryQuery{Limit: c.in}); err != nil {
 				t.Fatalf("Artists: %v", err)
 			}
 			if repo.LastArtistsQuery.Limit != c.want {
@@ -133,6 +133,6 @@ func TestLibraryLensService_ClampsLimit(t *testing.T) {
 	}
 }
 
-func svcAlbums(ctx context.Context, repo *catalogtest.TrackRepo, userId shared.UserId) ([]domain.AlbumGroup, error) {
-	return NewLibraryLensService(repo).Albums(ctx, userId, domain.LibraryQuery{})
+func svcAlbums(ctx context.Context, repo *catalogtest.TrackRepo, userId shared.UserId) ([]catalog.AlbumGroup, error) {
+	return catalog.NewLibraryLensService(repo).Albums(ctx, userId, catalog.LibraryQuery{})
 }

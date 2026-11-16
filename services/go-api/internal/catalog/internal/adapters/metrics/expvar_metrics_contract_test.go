@@ -1,6 +1,7 @@
-package metrics
+package metrics_test
 
 import (
+	"altune/go-api/internal/catalog/internal/adapters/metrics"
 	"expvar"
 	"strconv"
 	"testing"
@@ -20,18 +21,18 @@ func varValue(t *testing.T, name string) int64 {
 }
 
 func TestExpvarAudioStoreMetrics_PublishesAndIncrements(t *testing.T) {
-	m := NewExpvarAudioStoreMetrics()
+	m := metrics.NewExpvarAudioStoreMetrics()
 
 	cases := []struct {
 		name    string
 		varName string
 		inc     func()
 	}{
-		{"presign failures", PresignFailuresVar, m.PresignFailed},
-		{"orphaned deletes", OrphanedDeletesVar, m.OrphanedDelete},
-		{"stream recoveries", StreamRecoveriesVar, m.StreamRecoveryTriggered},
-		{"orphaned audio reconcile failures", OrphanedAudioReconcileFailuresVar, m.OrphanedAudioReconcileFailed},
-		{"db call timeouts", DBCallTimeoutsVar, NewExpvarDBCallMetrics().DBCallTimedOut},
+		{"presign failures", metrics.PresignFailuresVar, m.PresignFailed},
+		{"orphaned deletes", metrics.OrphanedDeletesVar, m.OrphanedDelete},
+		{"stream recoveries", metrics.StreamRecoveriesVar, m.StreamRecoveryTriggered},
+		{"orphaned audio reconcile failures", metrics.OrphanedAudioReconcileFailuresVar, m.OrphanedAudioReconcileFailed},
+		{"db call timeouts", metrics.DBCallTimeoutsVar, metrics.NewExpvarDBCallMetrics().DBCallTimedOut},
 	}
 
 	for _, tc := range cases {
@@ -46,9 +47,9 @@ func TestExpvarAudioStoreMetrics_PublishesAndIncrements(t *testing.T) {
 }
 
 func TestReadSnapshot_CarriesOrphanedAudioReconcileFailures(t *testing.T) {
-	before := ReadSnapshot().OrphanedAudioReconcileFailures
-	NewExpvarAudioStoreMetrics().OrphanedAudioReconcileFailed()
-	if after := ReadSnapshot().OrphanedAudioReconcileFailures; after != before+1 {
+	before := metrics.ReadSnapshot().OrphanedAudioReconcileFailures
+	metrics.NewExpvarAudioStoreMetrics().OrphanedAudioReconcileFailed()
+	if after := metrics.ReadSnapshot().OrphanedAudioReconcileFailures; after != before+1 {
 		t.Errorf("snapshot orphaned_audio_reconcile_failures_total = %d, want %d", after, before+1)
 	}
 }

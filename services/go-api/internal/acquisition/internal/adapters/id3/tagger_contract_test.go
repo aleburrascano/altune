@@ -1,7 +1,8 @@
-package id3
+package id3_test
 
 import (
-	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/acquisition/internal/adapters/id3"
 	"context"
 	"errors"
 	"os"
@@ -11,7 +12,7 @@ import (
 	"github.com/bogem/id3v2/v2"
 )
 
-var _ ports.AudioTagger = (*Tagger)(nil)
+var _ acquisition.AudioTagger = (*id3.Tagger)(nil)
 
 func TestTagger_SkipsNonMp3(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "track.m4a")
@@ -20,7 +21,7 @@ func TestTagger_SkipsNonMp3(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := NewTagger().Tag(context.Background(), file, ports.TrackTags{Title: "T", Artist: "A"}); !errors.Is(err, ErrUnsupportedContainer) {
+	if err := id3.NewTagger().Tag(context.Background(), file, acquisition.TrackTags{Title: "T", Artist: "A"}); !errors.Is(err, id3.ErrUnsupportedContainer) {
 		t.Fatalf("Tag() = %v, want ErrUnsupportedContainer", err)
 	}
 
@@ -40,8 +41,8 @@ func TestTagger_AnUnsupportedContainerIsAnError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := NewTagger().Tag(context.Background(), file, ports.TrackTags{Title: "T", Artist: "A"})
-	if !errors.Is(err, ErrUnsupportedContainer) {
+	err := id3.NewTagger().Tag(context.Background(), file, acquisition.TrackTags{Title: "T", Artist: "A"})
+	if !errors.Is(err, id3.ErrUnsupportedContainer) {
 		t.Fatalf("Tag() = %v, want ErrUnsupportedContainer", err)
 	}
 
@@ -56,7 +57,7 @@ func TestTagger_AnUnsupportedContainerIsAnError(t *testing.T) {
 
 func TestTagger_BadPath_ReturnsError(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "does-not-exist.mp3")
-	if err := NewTagger().Tag(context.Background(), path, ports.TrackTags{Title: "T", Artist: "A"}); err == nil {
+	if err := id3.NewTagger().Tag(context.Background(), path, acquisition.TrackTags{Title: "T", Artist: "A"}); err == nil {
 		t.Fatal("expected an error for a missing file, got nil")
 	}
 }
@@ -67,14 +68,14 @@ func TestTagger_WritesTags(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tags := ports.TrackTags{
+	tags := acquisition.TrackTags{
 		Title:  "Blinding Lights",
 		Artist: "The Weeknd",
 		Album:  "After Hours",
 		Year:   2020,
 		Genre:  "Pop",
 	}
-	if err := NewTagger().Tag(context.Background(), file, tags); err != nil {
+	if err := id3.NewTagger().Tag(context.Background(), file, tags); err != nil {
 		t.Fatalf("Tag error: %v", err)
 	}
 
@@ -100,7 +101,7 @@ func TestTagger_WritesTheISRCFrame(t *testing.T) {
 	if err := os.WriteFile(file, []byte{}, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := NewTagger().Tag(context.Background(), file, ports.TrackTags{Title: "T", Artist: "A", ISRC: "USRC17607839"}); err != nil {
+	if err := id3.NewTagger().Tag(context.Background(), file, acquisition.TrackTags{Title: "T", Artist: "A", ISRC: "USRC17607839"}); err != nil {
 		t.Fatalf("Tag error: %v", err)
 	}
 	tag, err := id3v2.Open(file, id3v2.Options{Parse: true})

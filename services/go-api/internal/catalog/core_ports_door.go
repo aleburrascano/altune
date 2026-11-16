@@ -22,3 +22,5 @@ var (
 	ErrTrackMissing         = ports.ErrTrackMissing
 	ErrTrackVersionConflict = ports.ErrTrackVersionConflict
 )
+
+type FeaturedArtistResolver = ports.FeaturedArtistResolver
