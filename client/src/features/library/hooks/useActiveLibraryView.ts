@@ -1,6 +1,6 @@
 import type { TrackResponse, PlaylistResponse } from '@shared/catalog';
 import type { usePlayback, useQueuePlayback } from '@shared/playback';
-import type { MenuAnchor } from '@shared/ui';
+import { showFailureAlert, type MenuAnchor } from '@shared/ui';
 import { useAlbumsView, useArtistsView } from '@features/library/view/useGroupViews';
 import type { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
 import type { PlaylistActionsState } from '@features/library/view/usePlaylistActions';
@@ -45,6 +45,7 @@ export function useActiveLibraryView(
     retryMutation,
     onTrackPress: navigation.navigateToTrack,
     onTrackMore,
+    showFailure: showFailureAlert,
   });
 
   const albumsView = useAlbumsView({

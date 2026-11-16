@@ -15,6 +15,7 @@ import {
   AsyncSection,
   ContextMenu,
   IconButton,
+  showFailureAlert,
 } from '@shared/ui';
 import {
   isCurrentlyPlaying,
@@ -90,6 +91,7 @@ export function FeaturingScreen(): ReactElement {
       label: 'Remove from Library',
       onPress: () => deleteMutation.mutate(track.id),
     }),
+    showFailure: showFailureAlert,
   });
 
   if (linkIsIncomplete) {

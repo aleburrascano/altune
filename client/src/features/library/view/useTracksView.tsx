@@ -1,10 +1,9 @@
-import { showFailureAlert } from '@shared/ui';
 import { useRef, useState } from 'react';
 import type { TrackResponse } from '@shared/catalog';
 import { isCurrentlyPlaying, buildPlayableQueue } from '@shared/playback';
 import type { usePlayback, useQueuePlayback } from '@shared/playback';
 import type { MenuAnchor } from '@shared/ui';
-import { libraryFailureAlert } from '@features/library/domain/libraryFailure';
+import { libraryFailureAlert, type ShowFailure } from '@features/library/domain/libraryFailure';
 import { useLibraryTracks } from '@features/library/view/useLibraryTracks';
 import type { useRetryAcquisition } from '@features/library/view/useRetryAcquisition';
 import type { Selection } from '@features/library/view/useSelection';
@@ -27,6 +26,7 @@ type TracksViewDeps = {
   retryMutation: ReturnType<typeof useRetryAcquisition>;
   onTrackPress: (track: TrackResponse) => void;
   onTrackMore: (track: TrackResponse, anchor: MenuAnchor) => void;
+  showFailure: ShowFailure;
 };
 
 type TracksView = {
@@ -65,6 +65,7 @@ export function useTracksView({
   retryMutation,
   onTrackPress,
   onTrackMore,
+  showFailure,
 }: TracksViewDeps): TracksView {
   const tracksState = useLibraryTracks(query, sort, isActive);
 
@@ -72,7 +73,7 @@ export function useTracksView({
 
   const loadAllOrWarn = () =>
     tracksState.loadAll((failure, loaded) =>
-      showFailureAlert(
+      showFailure(
         libraryFailureAlert(
           'library.load_all',
           'Playing loaded tracks only',

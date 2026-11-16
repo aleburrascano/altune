@@ -8,6 +8,7 @@ import {
   type LibraryOffline,
 } from '@features/library/view/useLibraryOffline';
 import { pinnedStatusDisplay } from '@features/library/domain/pinnedStatusDisplay';
+import type { ShowFailure } from '@features/library/domain/libraryFailure';
 import { useReacquireTrack } from '@features/library/view/useRetryAcquisition';
 
 type TrackAction = { track: TrackResponse; anchor: MenuAnchor };
@@ -27,17 +28,23 @@ export type TrackMenuItemOptions = {
   reacquiring?: boolean;
   onAddToPlaylist?: () => void;
   danger: DangerAction;
+  showFailure: ShowFailure;
 };
 
-function offlineItem(trackId: TrackId, offline: LibraryOffline): ContextMenuItem {
-  const { label, action } = pinnedStatusDisplay(offline.statusOf(trackId)).menu;
-  if (action === 'unpin') return { label, onPress: () => offline.unpin(trackId) };
+function pinItem(trackId: TrackId, label: string, opts: TrackMenuItemOptions): ContextMenuItem {
   return {
     label,
     onPress: () => {
-      if (offline.pin(trackId) === 'storage-full') reportStorageFull();
+      if (opts.offline.pin(trackId) === 'storage-full') reportStorageFull(opts.showFailure);
     },
   };
+}
+
+function offlineItem(trackId: TrackId, opts: TrackMenuItemOptions): ContextMenuItem {
+  const { offline } = opts;
+  const { label, action } = pinnedStatusDisplay(offline.statusOf(trackId)).menu;
+  if (action === 'unpin') return { label, onPress: () => offline.unpin(trackId) };
+  return pinItem(trackId, label, opts);
 }
 
 function queueItems(track: TrackResponse, opts: TrackMenuItemOptions): ContextMenuItem[] {
@@ -59,7 +66,7 @@ function optionalItems(track: TrackResponse, opts: TrackMenuItemOptions): Contex
   const ready = track.acquisition_status === 'ready';
   const items: ContextMenuItem[] = [];
   if (opts.onAddToPlaylist) items.push({ label: 'Add to Playlist', onPress: opts.onAddToPlaylist });
-  if (ready && opts.offline.supported) items.push(offlineItem(track.id, opts.offline));
+  if (ready && opts.offline.supported) items.push(offlineItem(track.id, opts));
   if (ready) items.push(...reacquireItems(opts));
   return items;
 }
@@ -83,6 +90,7 @@ export type TrackMenuOptions = {
   onViewDetails: (track: TrackResponse) => void;
   onAddTrackToPlaylist?: (track: TrackResponse) => void;
   trackDanger: (track: TrackResponse) => DangerAction;
+  showFailure: ShowFailure;
 };
 
 export type TrackMenuController = {
@@ -117,6 +125,7 @@ function trackMenuActions(track: TrackResponse, opts: TrackMenuOptions) {
       ? { onAddToPlaylist: () => opts.onAddTrackToPlaylist?.(track) }
       : {}),
     danger: opts.trackDanger(track),
+    showFailure: opts.showFailure,
   };
 }
 

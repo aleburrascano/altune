@@ -1,10 +1,9 @@
-import { Alert } from 'react-native';
-
 import { Download, XCircle } from 'lucide-react-native';
 import { asTrackId } from '@shared/catalog';
 import type { TrackResponse } from '@shared/catalog';
 import type { PinnedEntry, UnpinBatchResult } from '@shared/offline';
 import type { PlaybackTrack } from '@shared/playback';
+import type { FailureAlert } from '@shared/ui';
 import { trackResponseFactory } from '@testing/factories';
 
 import { buildSelectionActions } from '@features/library';
@@ -63,6 +62,7 @@ function makeOpts(over: MakeOptsInput = {}): Opts {
     onAddToPlaylist: jest.fn(),
     onDone: jest.fn(),
     danger: { label: 'Delete', onPress: jest.fn() },
+    showFailure: jest.fn(),
     ...rest,
   };
 }
@@ -256,13 +256,12 @@ describe('buildSelectionActions — a bulk action costs one call, whatever the s
   });
 });
 
+function shownAlerts(opts: Opts): FailureAlert[] {
+  return jest.mocked(opts.showFailure).mock.calls.map(([alert]) => alert);
+}
+
 describe('buildSelectionActions — batch download summary', () => {
   const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
-
-  beforeEach(() => {
-    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-  });
-  afterEach(() => jest.restoreAllMocks());
 
   it('shows "N of M downloads failed" once a mixed batch settles', async () => {
     const opts = makeOpts({ pinMany: jest.fn().mockResolvedValue({ requested: 10, failed: 3 }) });
@@ -270,8 +269,8 @@ describe('buildSelectionActions — batch download summary', () => {
       .find((a) => a.key === 'offline')!
       .onPress();
     await flush();
-    expect(Alert.alert).toHaveBeenCalledTimes(1);
-    expect(jest.mocked(Alert.alert).mock.calls[0]?.[1]).toContain('3 of 10 downloads failed');
+    expect(shownAlerts(opts)).toHaveLength(1);
+    expect(shownAlerts(opts)[0]?.message).toContain('3 of 10 downloads failed');
   });
 
   it('tells the user the batch was refused when pinned storage is full', async () => {
@@ -282,8 +281,8 @@ describe('buildSelectionActions — batch download summary', () => {
       .find((a) => a.key === 'offline')!
       .onPress();
     await flush();
-    expect(Alert.alert).toHaveBeenCalledTimes(1);
-    expect(jest.mocked(Alert.alert).mock.calls[0]?.[0]).toBe('Not enough storage');
+    expect(shownAlerts(opts)).toHaveLength(1);
+    expect(shownAlerts(opts)[0]?.title).toBe('Not enough storage');
   });
 
   it('stays quiet when every download in the batch succeeded', async () => {
@@ -292,17 +291,12 @@ describe('buildSelectionActions — batch download summary', () => {
       .find((a) => a.key === 'offline')!
       .onPress();
     await flush();
-    expect(Alert.alert).not.toHaveBeenCalled();
+    expect(shownAlerts(opts)).toEqual([]);
   });
 });
 
 describe('buildSelectionActions — batch download-removal summary', () => {
   const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
-
-  beforeEach(() => {
-    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-  });
-  afterEach(() => jest.restoreAllMocks());
 
   function removing(selected: TrackResponse[], result: UnpinBatchResult): Opts {
     return makeOpts({
@@ -320,10 +314,8 @@ describe('buildSelectionActions — batch download-removal summary', () => {
       .onPress();
     await flush();
 
-    expect(Alert.alert).toHaveBeenCalledTimes(1);
-    expect(jest.mocked(Alert.alert).mock.calls[0]?.[1]).toContain(
-      '4 of 10 downloads could not be removed',
-    );
+    expect(shownAlerts(opts)).toHaveLength(1);
+    expect(shownAlerts(opts)[0]?.message).toContain('4 of 10 downloads could not be removed');
   });
 
   it('stays quiet when every download in the selection was removed', async () => {
@@ -335,7 +327,7 @@ describe('buildSelectionActions — batch download-removal summary', () => {
       .onPress();
     await flush();
 
-    expect(Alert.alert).not.toHaveBeenCalled();
+    expect(shownAlerts(opts)).toEqual([]);
   });
 });
 

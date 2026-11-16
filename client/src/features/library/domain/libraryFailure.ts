@@ -8,7 +8,10 @@ import {
 } from '@shared/failure';
 import type { FailureAlert } from '@shared/ui';
 import type { TrackId } from '@shared/catalog';
-import type { LibraryWarn } from '@features/library/ports/libraryPort';
+
+export type LibraryWarn = (message: string, fields: Record<string, unknown>) => void;
+
+export type ShowFailure = (alert: FailureAlert) => void;
 
 export type LibraryFailure = 'network' | 'auth' | 'not-found' | 'server' | 'unknown';
 

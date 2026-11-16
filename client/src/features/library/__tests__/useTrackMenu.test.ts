@@ -1,4 +1,3 @@
-import { Alert } from 'react-native';
 import { asTrackId } from '@shared/catalog';
 import type { TrackResponse } from '@shared/catalog';
 import { usePinnedStore, type PinnedEntry } from '@shared/offline';
@@ -40,6 +39,7 @@ type Opts = Parameters<typeof buildTrackMenuItems>[1];
 let pin: jest.Mock;
 let unpin: jest.Mock;
 let pinnedEntries: Record<string, PinnedEntry>;
+const showFailure = jest.fn();
 
 function setPinned(entries: Record<string, PinnedEntry>): void {
   pin = jest.fn();
@@ -60,6 +60,7 @@ function makeOpts(over: Partial<Opts> = {}): Opts {
     queue: { playNext: jest.fn(), addToQueue: jest.fn() },
     onViewDetails: jest.fn(),
     danger: { label: 'Delete', onPress: jest.fn() },
+    showFailure,
     ...over,
   };
 }
@@ -67,6 +68,7 @@ function makeOpts(over: Partial<Opts> = {}): Opts {
 beforeEach(() => {
   usePinnedStore.setState({ entries: {} });
   setPinned({});
+  showFailure.mockReset();
 });
 
 const labels = (items: { label: string }[]) => items.map((i) => i.label);
@@ -157,7 +159,6 @@ describe('buildTrackMenuItems — pressing an item performs its action on the ex
   });
 
   it('Download pins the track quietly when there is room', () => {
-    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     pin.mockReturnValue('accepted');
     buildTrackMenuItems(
       makeTrack({ id: asTrackId('track-9'), acquisition_status: 'ready' }),
@@ -166,12 +167,10 @@ describe('buildTrackMenuItems — pressing an item performs its action on the ex
       .find((i) => i.label === 'Download')!
       .onPress();
     expect(pin).toHaveBeenCalledWith('track-9');
-    expect(alert).not.toHaveBeenCalled();
-    alert.mockRestore();
+    expect(showFailure).not.toHaveBeenCalled();
   });
 
   it('Download tells the user when the pin is refused because storage is full', () => {
-    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     pin.mockReturnValue('storage-full');
     buildTrackMenuItems(
       makeTrack({ id: asTrackId('track-9'), acquisition_status: 'ready' }),
@@ -179,8 +178,15 @@ describe('buildTrackMenuItems — pressing an item performs its action on the ex
     )
       .find((i) => i.label === 'Download')!
       .onPress();
-    expect(alert).toHaveBeenCalledWith('Not enough storage', expect.any(String));
-    alert.mockRestore();
+    expect(showFailure.mock.calls).toEqual([
+      [
+        {
+          surface: 'library.storage_full',
+          title: 'Not enough storage',
+          message: expect.any(String),
+        },
+      ],
+    ]);
   });
 
   it('Cancel download unpins the in-flight track', () => {

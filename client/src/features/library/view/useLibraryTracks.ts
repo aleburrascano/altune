@@ -9,12 +9,13 @@ import { useEffect } from 'react';
 import type { LibrarySort } from '@shared/apiClient';
 import type { ListTracksResponse, TrackResponse } from '@shared/catalog';
 import { libraryKeys } from '@shared/query';
-import type { LibraryPort, LibraryWarn } from '@features/library/ports/libraryPort';
+import type { LibraryPort } from '@features/library/ports/libraryPort';
 import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
 import {
   failureLogFields,
   classifyLibraryError,
   type LibraryFailure,
+  type LibraryWarn,
 } from '@features/library/domain/libraryFailure';
 import { pagedListControls } from '@features/library/domain/listPaging';
 import { useLoggedLibraryQueryFailure } from '@features/library/view/useLoggedLibraryQueryFailure';
