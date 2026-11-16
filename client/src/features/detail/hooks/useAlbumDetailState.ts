@@ -54,6 +54,45 @@ export type AlbumDetailState = {
   onPlayOwned: () => void;
 };
 
+type AlbumSource = DiscoveryResult['sources'][number];
+
+function effectiveSourceOf(album: DiscoveryResult): AlbumSource | undefined {
+  return album.sources.find((s) => s.provider === 'deezer') ?? album.sources[0];
+}
+
+function sourceLookup(source: AlbumSource | undefined) {
+  return {
+    provider: source?.provider ?? 'deezer',
+    externalId: source?.external_id ?? '_',
+  };
+}
+
+function albumTracksArgs(album: DiscoveryResult, source: AlbumSource | undefined) {
+  return {
+    ...sourceLookup(source),
+    albumTitle: album.title,
+    albumArtist: album.subtitle ?? undefined,
+    allSources: album.sources,
+    enabled: source !== undefined || album.title !== '',
+  };
+}
+
+type ShownTracks = Pick<AlbumDetailState, 'tracks' | 'isLoading' | 'failure'>;
+
+function shownTracks(
+  hasSources: boolean,
+  api: ShownTracks,
+  local: { tracks: DiscoveryResult[]; hasAny: boolean; discoveryLoading: boolean },
+): ShownTracks {
+  return hasSources
+    ? api
+    : {
+        tracks: local.tracks,
+        isLoading: local.hasAny && local.discoveryLoading,
+        failure: null,
+      };
+}
+
 export function useAlbumDetailState(
   album: DiscoveryResult,
   detailRoute: DetailRoute,
@@ -61,7 +100,7 @@ export function useAlbumDetailState(
   const openDetail = useOpenDetail(detailRoute);
   const save = useSaveTrack();
 
-  const effectiveSource = album.sources.find((s) => s.provider === 'deezer') ?? album.sources[0];
+  const effectiveSource = effectiveSourceOf(album);
   const hasSources = effectiveSource !== undefined;
 
   const {
@@ -69,14 +108,7 @@ export function useAlbumDetailState(
     isLoading: apiLoading,
     failure: apiFailure,
     refetch,
-  } = useAlbumTracks({
-    provider: effectiveSource?.provider ?? 'deezer',
-    externalId: effectiveSource?.external_id ?? '_',
-    albumTitle: album.title,
-    albumArtist: album.subtitle ?? undefined,
-    allSources: album.sources,
-    enabled: hasSources || album.title !== '',
-  });
+  } = useAlbumTracks(albumTracksArgs(album, effectiveSource));
 
   const localTracks = useLibraryTracksForAlbum(album.title, album.subtitle);
   const localAsDiscovery = [...localTracks.map(trackToDiscoveryResult)].sort(byTrackPosition);
@@ -92,13 +124,15 @@ export function useAlbumDetailState(
   const ownedTitles = new Set(localTracks.map((t) => normalizeForCompare(t.title)));
   const moreTracks = discovery.tracks.filter((t) => !_isTrackOwned(t.title, ownedTitles));
 
-  const { tracks, isLoading, failure } = hasSources
-    ? { tracks: apiTracks, isLoading: apiLoading, failure: apiFailure }
-    : {
-        tracks: localAsDiscovery,
-        isLoading: localTracks.length > 0 && discovery.isLoading,
-        failure: null,
-      };
+  const { tracks, isLoading, failure } = shownTracks(
+    hasSources,
+    { tracks: apiTracks, isLoading: apiLoading, failure: apiFailure },
+    {
+      tracks: localAsDiscovery,
+      hasAny: localTracks.length > 0,
+      discoveryLoading: discovery.isLoading,
+    },
+  );
 
   const onTrackPress = (track: DiscoveryResult): void => {
     openDetail(enrichAlbumTrack(track, album));

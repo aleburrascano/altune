@@ -100,6 +100,29 @@ const savePillShellStyles = StyleSheet.create({
 
 const SIZE = 40;
 
+function useTrackSaveControlState(
+  owned: OwnedTrack | null,
+  title: string,
+  artist: string | null | undefined,
+  savingInBatch: boolean,
+): { effective: SaveControlState; interactive: boolean } {
+  const identity: TrackIdentity | undefined = artist != null ? { title, artist } : undefined;
+  const resolved = useResolvedOwnedTrack(owned, identity);
+
+  const ownState: SaveControlState = saveControlState(resolved);
+  const effective: SaveControlState = savingInBatch && ownState === 'add' ? 'saving' : ownState;
+  const interactive = !savingInBatch && saveControlInteractive(effective);
+  return { effective, interactive };
+}
+
+function trackSaveStateStyles(theme: Theme, effective: SaveControlState) {
+  return [
+    effective === 'add' ? { borderWidth: 1.5, borderColor: theme.color.border } : null,
+    effective === 'ready' ? { backgroundColor: `${theme.color.success}28` } : null,
+    effective === 'failed' ? { backgroundColor: `${theme.color.danger}28` } : null,
+  ];
+}
+
 export function TrackSaveControl({
   owned,
   onPress,
@@ -116,12 +139,7 @@ export function TrackSaveControl({
   testID?: string;
 }): ReactElement {
   const theme = useTheme();
-  const identity: TrackIdentity | undefined = artist != null ? { title, artist } : undefined;
-  const resolved = useResolvedOwnedTrack(owned, identity);
-
-  const ownState: SaveControlState = saveControlState(resolved);
-  const effective: SaveControlState = savingInBatch && ownState === 'add' ? 'saving' : ownState;
-  const interactive = !savingInBatch && saveControlInteractive(effective);
+  const { effective, interactive } = useTrackSaveControlState(owned, title, artist, savingInBatch);
 
   return (
     <Tappable
@@ -137,9 +155,7 @@ export function TrackSaveControl({
       hitSlop={8}
       style={({ pressed }) => [
         trackSaveControlStyles.base,
-        effective === 'add' ? { borderWidth: 1.5, borderColor: theme.color.border } : null,
-        effective === 'ready' ? { backgroundColor: `${theme.color.success}28` } : null,
-        effective === 'failed' ? { backgroundColor: `${theme.color.danger}28` } : null,
+        ...trackSaveStateStyles(theme, effective),
         pressed && interactive ? sharedStyles.pressed : null,
       ]}
     >

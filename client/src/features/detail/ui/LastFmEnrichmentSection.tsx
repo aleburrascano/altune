@@ -20,10 +20,10 @@ export function LastFmEnrichmentSection({
   if (enrichment === null) {
     return isError ? <View testID="detail-lastfm-unavailable" /> : null;
   }
+  return <LastFmContent bio={enrichment.bio} similar={enrichment.similar.slice(0, MAX_SIMILAR)} />;
+}
 
-  const bio = enrichment.bio;
-  const similar = enrichment.similar.slice(0, MAX_SIMILAR);
-
+function LastFmContent({ bio, similar }: { bio: string; similar: string[] }): ReactElement | null {
   if (bio === '' && similar.length === 0) {
     return null;
   }

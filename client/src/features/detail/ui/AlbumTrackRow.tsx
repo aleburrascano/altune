@@ -18,6 +18,36 @@ type AlbumTrackRowProps = {
   savingInBatch?: boolean;
 };
 
+function rowPositionAndDuration(
+  track: DiscoveryResult,
+  index: number,
+): { position: number; duration: string | null } {
+  const te = trackExtras(track.extras);
+  const position = te.trackPosition ?? index + 1;
+  const duration = te.durationSeconds != null ? formatDuration(te.durationSeconds) : null;
+  return { position, duration };
+}
+
+function rowLabel(position: number, title: string, duration: string | null): string {
+  return `Track ${position}: ${title}${duration ? `, ${duration}` : ''}`;
+}
+
+function RowSubtitle({ subtitle }: { subtitle: string }): ReactElement | null {
+  return subtitle.length > 0 ? (
+    <Text variant="label" tone="secondary" numberOfLines={1}>
+      {subtitle}
+    </Text>
+  ) : null;
+}
+
+function RowDuration({ duration }: { duration: string | null }): ReactElement | null {
+  return duration ? (
+    <Text variant="label" tone="tertiary" style={styles.duration}>
+      {duration}
+    </Text>
+  ) : null;
+}
+
 export function AlbumTrackRow({
   track,
   index,
@@ -27,9 +57,7 @@ export function AlbumTrackRow({
   onQuickSave,
   savingInBatch = false,
 }: AlbumTrackRowProps): ReactElement {
-  const te = trackExtras(track.extras);
-  const position = te.trackPosition ?? index + 1;
-  const duration = te.durationSeconds != null ? formatDuration(te.durationSeconds) : null;
+  const { position, duration } = rowPositionAndDuration(track, index);
 
   return (
     <Tappable
@@ -37,7 +65,7 @@ export function AlbumTrackRow({
       testID={`detail-track-${index}`}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Track ${position}: ${track.title}${duration ? `, ${duration}` : ''}`}
+      accessibilityLabel={rowLabel(position, track.title, duration)}
       style={({ pressed }) => [sharedStyles.trackRow, pressed ? sharedStyles.pressed : null]}
     >
       <Text variant="label" tone="tertiary" style={styles.position}>
@@ -47,17 +75,9 @@ export function AlbumTrackRow({
         <Text variant="body" numberOfLines={1}>
           {track.title}
         </Text>
-        {subtitle.length > 0 ? (
-          <Text variant="label" tone="secondary" numberOfLines={1}>
-            {subtitle}
-          </Text>
-        ) : null}
+        <RowSubtitle subtitle={subtitle} />
       </View>
-      {duration ? (
-        <Text variant="label" tone="tertiary" style={styles.duration}>
-          {duration}
-        </Text>
-      ) : null}
+      <RowDuration duration={duration} />
       <TrackSaveControl
         testID={`detail-track-save-${index}`}
         owned={owned}

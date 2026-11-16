@@ -42,6 +42,27 @@ export type ArtistDetailState = {
   onPlayOwned: () => void;
 };
 
+function contentSourcesFor(
+  artist: DiscoveryResult,
+  hasSources: boolean,
+  discoverySources: DiscoveryResult['sources'],
+): DiscoveryResult['sources'] {
+  if (hasSources) return artist.sources;
+  return discoverySources.length > 0 ? discoverySources : artist.sources;
+}
+
+type ShownTopTracks = Pick<ArtistDetailState, 'topTracks' | 'isLoadingTracks' | 'tracksFailure'>;
+
+function shownTopTracks(
+  hasSources: boolean,
+  api: ShownTopTracks,
+  libraryTracks: DiscoveryResult[],
+): ShownTopTracks {
+  return hasSources
+    ? api
+    : { topTracks: libraryTracks, isLoadingTracks: false, tracksFailure: null };
+}
+
 export function useArtistDetailState(
   artist: DiscoveryResult,
   detailRoute: DetailRoute,
@@ -60,11 +81,7 @@ export function useArtistDetailState(
     enabled: !hasSources && (exploreExpanded || hasLibraryTracks),
   });
 
-  const effectiveSources = hasSources
-    ? artist.sources
-    : discoverySearch.sources.length > 0
-      ? discoverySearch.sources
-      : artist.sources;
+  const effectiveSources = contentSourcesFor(artist, hasSources, discoverySearch.sources);
   const shouldFetchContent = effectiveSources.length > 0 && (hasSources || exploreExpanded);
 
   const {
@@ -83,17 +100,15 @@ export function useArtistDetailState(
   const libraryTracksAsDiscovery = localTracks.map(trackToDiscoveryResult);
   const libraryAlbums = useLibraryAlbumsForArtist(artist.title, !hasSources);
 
-  const { topTracks, isLoadingTracks, tracksFailure } = hasSources
-    ? {
-        topTracks: apiTopTracks,
-        isLoadingTracks: apiContentLoading,
-        tracksFailure: apiTracksFailure,
-      }
-    : {
-        topTracks: libraryTracksAsDiscovery,
-        isLoadingTracks: false,
-        tracksFailure: null,
-      };
+  const { topTracks, isLoadingTracks, tracksFailure } = shownTopTracks(
+    hasSources,
+    {
+      topTracks: apiTopTracks,
+      isLoadingTracks: apiContentLoading,
+      tracksFailure: apiTracksFailure,
+    },
+    libraryTracksAsDiscovery,
+  );
 
   const onTrackPress = (track: DiscoveryResult): void => {
     openDetail({

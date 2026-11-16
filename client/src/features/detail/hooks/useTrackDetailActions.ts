@@ -24,6 +24,23 @@ function releasedYear(mbYear: number | undefined, extrasYear: number | null): st
   return extrasYear != null ? String(extrasYear) : null;
 }
 
+function playRequest(
+  source: PlaybackSource,
+  result: DiscoveryResult,
+  durationSeconds: number | null | undefined,
+  searchId: string | null | undefined,
+) {
+  return {
+    source,
+    title: result.title,
+    artist: result.subtitle ?? '',
+    artworkUrl: result.image_url,
+    durationSeconds: durationSeconds ?? undefined,
+    searchId: searchId ?? undefined,
+    resultSignature: result.result_signature ?? undefined,
+  };
+}
+
 export type TrackDetailActions = {
   albumName: string | null;
   featured: FeaturedArtist[];
@@ -86,15 +103,7 @@ export function useTrackDetailActions({
     if (source === null) {
       return;
     }
-    void playback.play({
-      source,
-      title: result.title,
-      artist: result.subtitle ?? '',
-      artworkUrl: result.image_url,
-      durationSeconds: te.durationSeconds ?? undefined,
-      searchId: searchId ?? undefined,
-      resultSignature: result.result_signature ?? undefined,
-    });
+    void playback.play(playRequest(source, result, te.durationSeconds, searchId));
   };
 
   const resolveTrackIds = useCallback(async (): Promise<TrackId[]> => {
