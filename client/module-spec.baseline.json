@@ -243,7 +243,6 @@
     "C12 src/shared/files/json.ts json.ts is in no part: it is not the door, and sits at the root of a shared module",
     "C12 src/shared/files/urlExtension.ts urlExtension.ts is in no part: it is not the door, and sits at the root of a shared module",
     "C12 src/shared/killSwitch/killSwitch.ts killSwitch.ts is in no part: it is not the door, and sits at the root of a shared module",
-    "C12 src/shared/math/math.ts math.ts is in no part: it is not the door, and sits at the root of a shared module",
     "C12 src/shared/navigation/detailHandoff.ts detailHandoff.ts is in no part: it is not the door, and sits at the root of a shared module",
     "C12 src/shared/navigation/navigator.ts navigator.ts is in no part: it is not the door, and sits at the root of a shared module",
     "C12 src/shared/offline/domain/offlineSupport.ts domain/offlineSupport.ts is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a shared module",

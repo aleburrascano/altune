@@ -65,7 +65,7 @@ export function useArtistDetailState(
     : discoverySearch.sources.length > 0
       ? discoverySearch.sources
       : artist.sources;
-  const shouldFetchContent = effectiveSources.length > 0 && exploreExpanded;
+  const shouldFetchContent = effectiveSources.length > 0 && (hasSources || exploreExpanded);
 
   const {
     topTracks: apiTopTracks,
