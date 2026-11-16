@@ -23,11 +23,10 @@ export function LastFmEnrichmentSection({
   return <LastFmContent bio={enrichment.bio} similar={enrichment.similar.slice(0, MAX_SIMILAR)} />;
 }
 
-function LastFmContent({ bio, similar }: { bio: string; similar: string[] }): ReactElement | null {
-  if (bio === '' && similar.length === 0) {
-    return null;
-  }
+type LastFmContentProps = { bio: string; similar: string[] };
 
+function LastFmContent({ bio, similar }: LastFmContentProps): ReactElement | null {
+  if (bio === '' && similar.length === 0) return null;
   return (
     <View testID="detail-lastfm" style={styles.section}>
       {bio !== '' ? <ArtistBio bio={bio} /> : null}

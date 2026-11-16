@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import type { DiscoveryKind, DiscoveryResult } from '@shared/catalog';
 import { detailKeys } from '@shared/query';
 
@@ -7,6 +7,7 @@ import {
   contentFailure,
   DETAIL_CONTENT_STALE_MS,
   DETAIL_LIST_CAP,
+  type ContentFailure,
 } from '@features/detail/domain/contentStatus';
 import { fetchTallyingOutcome } from '@features/detail/domain/detailHealth';
 import { resolveEntityQuery } from '@features/detail/domain/resolveEntityQuery';
@@ -39,79 +40,107 @@ function useLoggedSearchFailure(error: Error | null, searched: SearchedEntity): 
   }, [error, kind, title, artist]);
 }
 
-function useAlbumSearch(
-  albumTitle: string,
-  artist: string | null,
-  canFetch: boolean,
-  port: DetailPort,
-) {
+type AlbumSearchInput = {
+  albumTitle: string;
+  artist: string | null;
+  canFetch: boolean;
+  port: DetailPort;
+};
+
+type AlbumSearch = {
+  searchResult: DiscoveryResult | null;
+  isSearching: boolean;
+  searchFailure: ContentFailure | null;
+  refetchSearch: () => Promise<unknown>;
+};
+
+function albumSearchQuery({ albumTitle, artist, canFetch, port }: AlbumSearchInput) {
   const searchQuery = `${albumTitle} ${artist ?? ''}`.trim();
-  const {
-    data,
-    isLoading: isSearching,
-    isError: isSearchError,
-    error: searchError,
-    refetch: refetchSearch,
-  } = useQuery({
-    ...resolveEntityQuery('album', searchQuery, 1, port),
-    enabled: canFetch,
-  });
-  const searchResult = data?.[0] ?? null;
+  return { ...resolveEntityQuery('album', searchQuery, 1, port), enabled: canFetch };
+}
 
-  useLoggedSearchFailure(searchError, { kind: 'album', title: albumTitle, artist });
+function albumSearchOf(search: UseQueryResult<DiscoveryResult[]>): AlbumSearch {
+  return {
+    searchResult: search.data?.[0] ?? null,
+    isSearching: search.isLoading,
+    searchFailure: contentFailure(search.isError, search.error, null),
+    refetchSearch: search.refetch,
+  };
+}
 
-  const searchFailure = contentFailure(isSearchError, searchError, null);
-  return { searchResult, isSearching, searchFailure, refetchSearch };
+function useAlbumSearch(input: AlbumSearchInput): AlbumSearch {
+  const search = useQuery(albumSearchQuery(input));
+  const searched = { kind: 'album' as const, title: input.albumTitle, artist: input.artist };
+  useLoggedSearchFailure(search.error, searched);
+  return albumSearchOf(search);
 }
 
 type AlbumSource = DiscoveryResult['sources'][number];
 
-function albumTracksQuery(
-  source: AlbumSource | undefined,
-  searchResult: DiscoveryResult | null,
-  canFetch: boolean,
-  port: DetailPort,
-) {
+type AlbumTracksPage = Awaited<ReturnType<DetailPort['getAlbumTracks']>>;
+
+type QuerySignal = { signal: AbortSignal };
+
+type AlbumTracksInput = {
+  searchResult: DiscoveryResult | null;
+  canFetch: boolean;
+  port: DetailPort;
+};
+
+type AlbumTracksQueryInput = AlbumTracksInput & { source: AlbumSource | undefined };
+
+type AlbumTracksRequestInput = QuerySignal & {
+  searchResult: DiscoveryResult | null;
+  source: AlbumSource;
+};
+
+type DiscoveredTracks = {
+  tracks: DiscoveryResult[];
+  isLoadingTracks: boolean;
+  tracksFailure: ContentFailure | null;
+  refetchTracks: () => Promise<unknown>;
+};
+
+function albumTracksRequest({ searchResult, source, signal }: AlbumTracksRequestInput) {
+  return {
+    provider: source.provider,
+    externalId: source.external_id,
+    limit: DETAIL_LIST_CAP,
+    albumTitle: searchResult?.title,
+    albumArtist: searchResult?.subtitle ?? undefined,
+    signal,
+  };
+}
+
+function albumTracksQueryFn({ searchResult, source, port }: AlbumTracksQueryInput) {
+  return ({ signal }: QuerySignal) =>
+    fetchTallyingOutcome('album_tracks', () =>
+      port.getAlbumTracks(albumTracksRequest({ searchResult, source: source!, signal })),
+    );
+}
+
+function albumTracksQuery(input: AlbumTracksQueryInput) {
+  const { source } = input;
   return {
     queryKey: detailKeys.albumDiscoveryTracks(source?.provider, source?.external_id),
-    queryFn: ({ signal }: { signal: AbortSignal }) =>
-      fetchTallyingOutcome('album_tracks', () =>
-        port.getAlbumTracks({
-          provider: source!.provider,
-          externalId: source!.external_id,
-          limit: DETAIL_LIST_CAP,
-          albumTitle: searchResult?.title,
-          albumArtist: searchResult?.subtitle ?? undefined,
-          signal,
-        }),
-      ),
-    enabled: canFetch && source != null,
+    queryFn: albumTracksQueryFn(input),
+    enabled: input.canFetch && source != null,
     staleTime: DETAIL_CONTENT_STALE_MS,
   };
 }
 
-function useDiscoveredAlbumTracks(
-  searchResult: DiscoveryResult | null,
-  canFetch: boolean,
-  port: DetailPort,
-) {
-  const source = searchResult?.sources[0];
-  const retry = useContentFetchRetry();
-
-  const {
-    data: tracksData,
-    isLoading: isLoadingTracks,
-    isError: isTracksQueryError,
-    error: tracksError,
-    refetch: refetchTracks,
-  } = useQuery({
-    ...albumTracksQuery(source, searchResult, canFetch, port),
-    retry,
-  });
-
+function discoveredTracksOf(query: UseQueryResult<AlbumTracksPage>): DiscoveredTracks {
+  const { data: tracksData, isLoading: isLoadingTracks, refetch: refetchTracks } = query;
   const tracks: DiscoveryResult[] = tracksData?.items ?? [];
-  const tracksFailure = contentFailure(isTracksQueryError, tracksError, tracksData);
+  const tracksFailure = contentFailure(query.isError, query.error, tracksData);
   return { tracks, isLoadingTracks, tracksFailure, refetchTracks };
+}
+
+function useDiscoveredAlbumTracks(input: AlbumTracksInput): DiscoveredTracks {
+  const source = input.searchResult?.sources[0];
+  const retry = useContentFetchRetry();
+  const query = useQuery({ ...albumTracksQuery({ ...input, source }), retry });
+  return discoveredTracksOf(query);
 }
 
 export function useAlbumDiscovery({
@@ -127,17 +156,17 @@ export function useAlbumDiscovery({
   const port = useDetailPort();
   const canFetch = enabled && isFetchEnabled;
 
-  const { searchResult, isSearching, searchFailure, refetchSearch } = useAlbumSearch(
+  const { searchResult, isSearching, searchFailure, refetchSearch } = useAlbumSearch({
     albumTitle,
     artist,
     canFetch,
     port,
-  );
-  const { tracks, isLoadingTracks, tracksFailure, refetchTracks } = useDiscoveredAlbumTracks(
+  });
+  const { tracks, isLoadingTracks, tracksFailure, refetchTracks } = useDiscoveredAlbumTracks({
     searchResult,
     canFetch,
     port,
-  );
+  });
 
   const failure = searchFailure ?? tracksFailure;
 

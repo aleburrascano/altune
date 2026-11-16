@@ -79,18 +79,12 @@ function albumTracksArgs(album: DiscoveryResult, source: AlbumSource | undefined
 
 type ShownTracks = Pick<AlbumDetailState, 'tracks' | 'isLoading' | 'failure'>;
 
-function shownTracks(
-  hasSources: boolean,
-  api: ShownTracks,
-  local: { tracks: DiscoveryResult[]; hasAny: boolean; discoveryLoading: boolean },
-): ShownTracks {
-  return hasSources
-    ? api
-    : {
-        tracks: local.tracks,
-        isLoading: local.hasAny && local.discoveryLoading,
-        failure: null,
-      };
+type LocalAlbumTracks = { tracks: DiscoveryResult[]; hasAny: boolean; discoveryLoading: boolean };
+
+function shownTracks(hasSources: boolean, api: ShownTracks, local: LocalAlbumTracks): ShownTracks {
+  if (hasSources) return api;
+  const isLoading = local.hasAny && local.discoveryLoading;
+  return { tracks: local.tracks, isLoading, failure: null };
 }
 
 export function useAlbumDetailState(

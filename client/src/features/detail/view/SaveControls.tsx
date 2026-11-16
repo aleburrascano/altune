@@ -100,16 +100,20 @@ const savePillShellStyles = StyleSheet.create({
 
 const SIZE = 40;
 
-function useTrackSaveControlState(
-  owned: OwnedTrack | null,
-  title: string,
-  artist: string | null | undefined,
-  savingInBatch: boolean,
-): { effective: SaveControlState; interactive: boolean } {
-  const identity: TrackIdentity | undefined = artist != null ? { title, artist } : undefined;
-  const resolved = useResolvedOwnedTrack(owned, identity);
+type SaveControlTrack = {
+  owned: OwnedTrack | null;
+  title: string;
+  artist?: string | null | undefined;
+};
 
-  const ownState: SaveControlState = saveControlState(resolved);
+type TrackSaveLook = { effective: SaveControlState; interactive: boolean };
+
+function useOwnSaveState({ owned, title, artist }: SaveControlTrack): SaveControlState {
+  const identity: TrackIdentity | undefined = artist != null ? { title, artist } : undefined;
+  return saveControlState(useResolvedOwnedTrack(owned, identity));
+}
+
+function trackSaveLook(ownState: SaveControlState, savingInBatch: boolean): TrackSaveLook {
   const effective: SaveControlState = savingInBatch && ownState === 'add' ? 'saving' : ownState;
   const interactive = !savingInBatch && saveControlInteractive(effective);
   return { effective, interactive };
@@ -139,7 +143,8 @@ export function TrackSaveControl({
   testID?: string;
 }): ReactElement {
   const theme = useTheme();
-  const { effective, interactive } = useTrackSaveControlState(owned, title, artist, savingInBatch);
+  const ownState = useOwnSaveState({ owned, title, artist });
+  const { effective, interactive } = trackSaveLook(ownState, savingInBatch);
 
   return (
     <Tappable

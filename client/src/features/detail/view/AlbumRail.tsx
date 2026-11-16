@@ -285,17 +285,20 @@ function albumCardLabel(
   return `${props.typeLabel}: ${props.album.title}${yearPart}${trackPart}`;
 }
 
-function gridCardStyles(
-  theme: ReturnType<typeof useTheme>,
-  isGrid: boolean,
-  { hovered, focused }: PressableInteractionState,
-) {
+type CardTheme = ReturnType<typeof useTheme>;
+
+function gridHoverStyle(theme: CardTheme, hovered: boolean) {
+  return hovered ? { backgroundColor: theme.color.surface2 } : null;
+}
+
+function gridBorderStyle(theme: CardTheme, focused: boolean) {
+  return { borderColor: focused ? theme.color.accent : 'transparent' };
+}
+
+function gridCardStyles(theme: CardTheme, isGrid: boolean, state: PressableInteractionState) {
   if (!isGrid) return [null, null, null];
-  return [
-    styles.gridCard,
-    hovered ? { backgroundColor: theme.color.surface2 } : null,
-    { borderColor: focused ? theme.color.accent : 'transparent' },
-  ];
+  const { hovered, focused } = state;
+  return [styles.gridCard, gridHoverStyle(theme, hovered), gridBorderStyle(theme, focused)];
 }
 
 function albumCardStyle(theme: ReturnType<typeof useTheme>, cardWidth: number, isGrid: boolean) {

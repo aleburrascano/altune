@@ -24,20 +24,24 @@ function releasedYear(mbYear: number | undefined, extrasYear: number | null): st
   return extrasYear != null ? String(extrasYear) : null;
 }
 
-function playRequest(
-  source: PlaybackSource,
-  result: DiscoveryResult,
-  durationSeconds: number | null | undefined,
-  searchId: string | null | undefined,
-) {
+type PlayRequestInput = {
+  source: PlaybackSource;
+  track: DiscoveryResult;
+  durationSeconds: number | null | undefined;
+  searchId: string | null | undefined;
+};
+
+function trackPlayIdentity(track: DiscoveryResult) {
+  return { title: track.title, artist: track.subtitle ?? '', artworkUrl: track.image_url };
+}
+
+function playRequest({ source, track, durationSeconds, searchId }: PlayRequestInput) {
   return {
     source,
-    title: result.title,
-    artist: result.subtitle ?? '',
-    artworkUrl: result.image_url,
+    ...trackPlayIdentity(track),
     durationSeconds: durationSeconds ?? undefined,
     searchId: searchId ?? undefined,
-    resultSignature: result.result_signature ?? undefined,
+    resultSignature: track.result_signature ?? undefined,
   };
 }
 
@@ -64,7 +68,7 @@ export type TrackDetailActions = {
 };
 
 export function useTrackDetailActions({
-  result,
+  result: track,
   lateralNav,
   detailRoute,
   deezerFeatured,
@@ -80,14 +84,14 @@ export function useTrackDetailActions({
   const save = useSaveTrack();
   const searchId = useDetailHandoff()?.searchId;
   const [playlistSheetVisible, setPlaylistSheetVisible] = useState(false);
-  const wrongAlbum = useReportWrongAlbum(result);
+  const wrongAlbum = useReportWrongAlbum(track);
   const playback = usePlayback();
-  const te = trackExtras(result.extras);
-  const owned = useOwnedTrack(te, { title: result.title, artist: result.subtitle });
-  const trackSave = useTrackSave(result, owned);
+  const te = trackExtras(track.extras);
+  const owned = useOwnedTrack(te, { title: track.title, artist: track.subtitle });
+  const trackSave = useTrackSave(track, owned);
 
   const albumName = te.album;
-  const featured = resolveFeatured(result.extras, deezerFeatured, result.title, result.subtitle);
+  const featured = resolveFeatured(track.extras, deezerFeatured, track.title, track.subtitle);
 
   const source = resolvePlaySource(te, owned);
   const playing = isResultPlaying(playback, te, owned);
@@ -103,20 +107,21 @@ export function useTrackDetailActions({
     if (source === null) {
       return;
     }
-    void playback.play(playRequest(source, result, te.durationSeconds, searchId));
+    const durationSeconds = te.durationSeconds;
+    void playback.play(playRequest({ source, track, durationSeconds, searchId }));
   };
 
   const resolveTrackIds = useCallback(async (): Promise<TrackId[]> => {
     if (owned !== null && !isOptimisticTrackId(owned.trackId)) {
       return [owned.trackId];
     }
-    const saved = await save.mutateAsync(toCreateTrackRequest(result));
+    const saved = await save.mutateAsync(toCreateTrackRequest(track));
     return [saved.id];
-  }, [owned, result, save]);
+  }, [owned, track, save]);
 
   const onAlbumPress = (): void => {
-    if (result.subtitle !== null && albumName !== null) {
-      void lateralNav.navigateTo(`${albumName} ${result.subtitle}`, 'album');
+    if (track.subtitle !== null && albumName !== null) {
+      void lateralNav.navigateTo(`${albumName} ${track.subtitle}`, 'album');
     }
   };
 

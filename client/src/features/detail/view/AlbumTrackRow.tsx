@@ -18,10 +18,9 @@ type AlbumTrackRowProps = {
   savingInBatch?: boolean;
 };
 
-function rowPositionAndDuration(
-  track: DiscoveryResult,
-  index: number,
-): { position: number; duration: string | null } {
+type RowPlace = { position: number; duration: string | null };
+
+function rowPositionAndDuration(track: DiscoveryResult, index: number): RowPlace {
   const te = trackExtras(track.extras);
   const position = te.trackPosition ?? index + 1;
   const duration = te.durationSeconds != null ? formatDuration(te.durationSeconds) : null;
@@ -32,7 +31,9 @@ function rowLabel(position: number, title: string, duration: string | null): str
   return `Track ${position}: ${title}${duration ? `, ${duration}` : ''}`;
 }
 
-function RowSubtitle({ subtitle }: { subtitle: string }): ReactElement | null {
+type RowSubtitleProps = { subtitle: string };
+
+function RowSubtitle({ subtitle }: RowSubtitleProps): ReactElement | null {
   return subtitle.length > 0 ? (
     <Text variant="label" tone="secondary" numberOfLines={1}>
       {subtitle}
@@ -40,7 +41,9 @@ function RowSubtitle({ subtitle }: { subtitle: string }): ReactElement | null {
   ) : null;
 }
 
-function RowDuration({ duration }: { duration: string | null }): ReactElement | null {
+type RowDurationProps = { duration: string | null };
+
+function RowDuration({ duration }: RowDurationProps): ReactElement | null {
   return duration ? (
     <Text variant="label" tone="tertiary" style={styles.duration}>
       {duration}
