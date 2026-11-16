@@ -84,7 +84,11 @@ export { SectionError } from '@features/detail/view/Section';
 export { isAcquirable, unreleasedAsResult } from '@features/detail/domain/unreleasedTrack';
 export { unreleasedView } from '@features/detail/domain/unreleasedView';
 export { useAlbumDetailState } from '@features/detail/view/useAlbumDetailState';
-export type { MemoryDetailSeed } from '@features/detail/__tests__/memoryDetailPort';
+export type {
+  DetailWarning,
+  MemoryDetailPort,
+  MemoryDetailSeed,
+} from '@features/detail/__tests__/memoryDetailPort';
 export { useAlbumSaveAll } from '@features/detail/view/useAlbumSaveAll';
 export { useRelatedTracks } from '@features/detail/hooks/useRelatedTracks';
 export { useAlbumDiscovery, useArtistDiscovery } from '@features/detail/view/useEntityDiscovery';

@@ -3,7 +3,7 @@ import { asTrackId } from '@shared/catalog';
 import { useTrackStatusStore } from '@shared/acquisition';
 import { runSignOutCleanups } from '@shared/session';
 
-import { useRetryTrack, createMemoryDetailPort } from '@features/detail';
+import { useRetryTrack, createMemoryDetailPort, type MemoryDetailPort } from '@features/detail';
 import { createPortWrapper, createTestQueryClient, signInTestUser } from '@testing/queryHarness';
 
 const { __http } = require('@testing/doubles/fetch.js');
@@ -22,10 +22,12 @@ function postedEvents(): PostedEvent[] {
 const mockRetryAcquisition = jest.fn<Promise<void>, [unknown]>();
 
 let wrapper: ReturnType<typeof createPortWrapper>;
+let detail: MemoryDetailPort;
 
 beforeEach(() => {
+  detail = createMemoryDetailPort();
   wrapper = createPortWrapper(createTestQueryClient({ mutations: true }), {
-    detail: createMemoryDetailPort(),
+    detail,
     acquisition: { retryAcquisition: (trackId) => mockRetryAcquisition(trackId) },
   });
 });
@@ -68,7 +70,6 @@ describe('useRetryTrack', () => {
 
   it('marks the track failed again, with the new reason, when the retry itself fails', async () => {
     mockRetryAcquisition.mockRejectedValue(new Error('502 bad gateway'));
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     const { result } = renderHook(() => useRetryTrack('detail'), { wrapper });
 
     await act(async () => {
@@ -81,7 +82,9 @@ describe('useRetryTrack', () => {
       failureMessage: '502 bad gateway',
       retryable: false,
     });
-    warnSpy.mockRestore();
+    expect(detail.warnings).toEqual([
+      ['[detail] retry track failed', { trackId: TRACK_ID, error: '502 bad gateway' }],
+    ]);
   });
 
   it('writes nothing to the status store when the retry fails after a sign-out', async () => {
@@ -91,7 +94,6 @@ describe('useRetryTrack', () => {
         rejectRetry = reject;
       }),
     );
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     const { result } = renderHook(() => useRetryTrack('detail'), { wrapper });
 
     act(() => {
@@ -103,7 +105,6 @@ describe('useRetryTrack', () => {
     await waitFor(() => expect(result.current.isPending).toBe(false));
 
     expect(useTrackStatusStore.getState().statuses[TRACK_ID]).toBeUndefined();
-    warnSpy.mockRestore();
   });
 
   it('records the tap, the sent request and its success, all tagged with the entry point', async () => {
@@ -130,7 +131,6 @@ describe('useRetryTrack', () => {
 
   it('records a failed retry_request when the retry itself fails', async () => {
     mockRetryAcquisition.mockRejectedValue(new Error('network down'));
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     const { result } = renderHook(() => useRetryTrack('album_row'), { wrapper });
 
     await act(async () => {
@@ -152,6 +152,8 @@ describe('useRetryTrack', () => {
         },
       }),
     );
-    warnSpy.mockRestore();
+    expect(detail.warnings).toEqual([
+      ['[detail] retry track failed', { trackId: TRACK_ID, error: 'network down' }],
+    ]);
   });
 });

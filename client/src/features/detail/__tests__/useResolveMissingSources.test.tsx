@@ -3,7 +3,7 @@ import type { DiscoveryResult } from '@shared/catalog';
 import { applyKillSwitches } from '@shared/killSwitch';
 
 import { useResolveMissingSources, createMemoryDetailPort } from '@features/detail';
-import type { DetailPort } from '@features/detail';
+import type { DetailPort, DetailWarning, MemoryDetailPort } from '@features/detail';
 import { createPortWrapper, createTestQueryClient } from '@testing/queryHarness';
 
 function track(overrides: Partial<DiscoveryResult> = {}): DiscoveryResult {
@@ -26,12 +26,13 @@ const source = {
 
 type Search = { q: string; kinds: readonly string[] | undefined };
 type Searches = Search[];
-type CountingPort = { port: DetailPort; searches: Searches };
+type CountingPort = { port: DetailPort; searches: Searches; warnings: DetailWarning[] };
 
-function countingPort(port: DetailPort): CountingPort {
+function countingPort(port: MemoryDetailPort): CountingPort {
   const searches: Searches = [];
   return {
     searches,
+    warnings: port.warnings,
     port: {
       ...port,
       searchDiscovery: (params, signal) => {
@@ -56,16 +57,6 @@ function failing(message: string) {
 function wrapperFor(port: DetailPort) {
   return createPortWrapper(createTestQueryClient(), { detail: port });
 }
-
-let warnSpy: jest.SpyInstance;
-
-beforeEach(() => {
-  warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-});
-
-afterEach(() => {
-  warnSpy.mockRestore();
-});
 
 describe('useResolveMissingSources', () => {
   it('returns the result untouched without querying when it already has sources', () => {
@@ -137,13 +128,13 @@ describe('useResolveMissingSources', () => {
   });
 
   it('stays silent when the query succeeds with no match', async () => {
-    const { port } = seeded([]);
+    const { port, warnings } = seeded([]);
     const { result } = renderHook(() => useResolveMissingSources(track()), {
       wrapper: wrapperFor(port),
     });
 
     await waitFor(() => expect(result.current.isResolving).toBe(false));
-    expect(warnSpy).not.toHaveBeenCalled();
+    expect(warnings).toEqual([]);
   });
 
   it('stops resolving once a failed query settles', async () => {
@@ -158,18 +149,16 @@ describe('useResolveMissingSources', () => {
   });
 
   it('logs the kind, title and artist it was resolving when the query fails', async () => {
-    const { port } = failing('network down');
+    const { port, warnings } = failing('network down');
     renderHook(() => useResolveMissingSources(track()), {
       wrapper: wrapperFor(port),
     });
 
     await waitFor(() =>
-      expect(warnSpy).toHaveBeenCalledWith('[detail] source resolution fetch failed', {
-        kind: 'track',
-        title: 'Karma Police',
-        subtitle: 'Radiohead',
-        error: 'network down',
-      }),
+      expect(warnings).toContainEqual([
+        '[detail] source resolution fetch failed',
+        { kind: 'track', title: 'Karma Police', subtitle: 'Radiohead', error: 'network down' },
+      ]),
     );
   });
 

@@ -59,12 +59,14 @@ function notFoundMessage(kind: DiscoveryKind, query: string): string {
   return `${kindLabel} not found: "${query}"`;
 }
 
-function warnFetchFailed(query: string, kind: DiscoveryKind, error: unknown): void {
-  console.warn('[detail] lateral nav fetch failed', {
-    query,
-    kind,
-    error: error instanceof Error ? error.message : String(error),
-  });
+type Search = { query: string; kind: DiscoveryKind };
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function warnFetchFailed(port: DetailPort, { query, kind }: Search, error: unknown): void {
+  port.warn('[detail] lateral nav fetch failed', { query, kind, error: errorMessage(error) });
 }
 
 function fetchResolved(
@@ -76,13 +78,16 @@ function fetchResolved(
   return qc.fetchQuery({ ...resolveEntityQuery(kind, query, 1, port), retry: false });
 }
 
-async function lookup(fetch: Fetch, query: string, kind: DiscoveryKind): Promise<Outcome> {
+function outcomeOf(results: DiscoveryResult[], { query, kind }: Search): Outcome {
+  const picked = results[0];
+  return picked === undefined ? { message: notFoundMessage(kind, query) } : { picked };
+}
+
+async function lookup(port: DetailPort, fetch: Fetch, search: Search): Promise<Outcome> {
   try {
-    const results = await fetch();
-    const picked = results[0];
-    return picked === undefined ? { message: notFoundMessage(kind, query) } : { picked };
+    return outcomeOf(await fetch(), search);
   } catch (error) {
-    warnFetchFailed(query, kind, error);
+    warnFetchFailed(port, search, error);
     return { message: SEARCH_FAILED_MESSAGE };
   }
 }
@@ -118,6 +123,9 @@ export function useLateralNav(detailRoute: DetailRoute): LateralNavHandle {
   const port = useDetailPort();
   const [{ state, error }, run] = useSearchSession();
   const navigateTo = (query: string, kind: DiscoveryKind) =>
-    run(() => lookup(() => fetchResolved(queryClient, port, query, kind), query, kind), openDetail);
+    run(
+      () => lookup(port, () => fetchResolved(queryClient, port, query, kind), { query, kind }),
+      openDetail,
+    );
   return { navigateTo, state, error };
 }

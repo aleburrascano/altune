@@ -28,9 +28,12 @@ beforeEach(async () => {
 });
 
 describe('useSaveTrack', () => {
-  function createWrapper(queryClient: ReturnType<typeof createTestQueryClient>) {
+  function createWrapper(
+    queryClient: ReturnType<typeof createTestQueryClient>,
+    base: DetailPort = createMemoryDetailPort(),
+  ) {
     const detail = {
-      ...createMemoryDetailPort(),
+      ...base,
       createTrack: (body: unknown) => mockCreateTrack(body),
     };
     return createPortWrapper(queryClient, { detail: detail as DetailPort });
@@ -94,7 +97,6 @@ describe('useSaveTrack', () => {
 
       it('remembers nothing when the save fails', async () => {
         const { wrapper } = setup();
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
         mockCreateTrack.mockRejectedValue(new Error('502 bad gateway'));
 
         const { result } = renderHook(() => useSaveTrack(), { wrapper });
@@ -105,7 +107,6 @@ describe('useSaveTrack', () => {
         });
 
         expect(useDownloadStore.getState().remembered).toEqual({});
-        warnSpy.mockRestore();
       });
     });
   });
@@ -131,14 +132,24 @@ describe('useSaveTrack', () => {
       } as TrackResponse;
     }
 
+    const cachedKeys = [
+      libraryKeys.albums('', 'recent'),
+      libraryKeys.artists('', 'recent'),
+      libraryKeys.summary,
+      libraryKeys.lookup('idioteque'),
+      libraryKeys.featuring('radiohead'),
+    ];
+
     function setup() {
       const queryClient = createTestQueryClient({ mutations: true });
-      const spy = jest.spyOn(queryClient, 'invalidateQueries');
-      return { spy, wrapper: createWrapper(queryClient) };
+      for (const key of cachedKeys) queryClient.setQueryData(key, { items: [], total: 0 });
+      return { queryClient, wrapper: createWrapper(queryClient) };
     }
 
-    function invalidatedKeys(spy: jest.SpyInstance): unknown[] {
-      return spy.mock.calls.map(([filters]) => (filters as { queryKey: unknown }).queryKey);
+    function invalidatedKeys(
+      queryClient: ReturnType<typeof createTestQueryClient>,
+    ): readonly (readonly unknown[])[] {
+      return cachedKeys.filter((key) => queryClient.getQueryState(key)?.isInvalidated === true);
     }
 
     beforeEach(() => {
@@ -148,7 +159,7 @@ describe('useSaveTrack', () => {
 
     describe('useSaveTrack — derived caches', () => {
       it('invalidates every membership-derived cache once the save lands', async () => {
-        const { spy, wrapper } = setup();
+        const { queryClient, wrapper } = setup();
         mockCreateTrack.mockResolvedValue(saved());
 
         const { result } = renderHook(() => useSaveTrack(), { wrapper });
@@ -156,17 +167,16 @@ describe('useSaveTrack', () => {
           await result.current.mutateAsync({ title: 'Idioteque', artist: 'Radiohead' } as never);
         });
 
-        expect(invalidatedKeys(spy)).toEqual([
-          libraryKeys.albumsPrefix,
-          libraryKeys.artistsPrefix,
+        expect(invalidatedKeys(queryClient)).toEqual([
+          libraryKeys.albums('', 'recent'),
+          libraryKeys.artists('', 'recent'),
           libraryKeys.summary,
-          libraryKeys.lookupPrefix,
+          libraryKeys.lookup('idioteque'),
         ]);
       });
 
       it('invalidates nothing when the save fails', async () => {
-        const { spy, wrapper } = setup();
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const { queryClient, wrapper } = setup();
         mockCreateTrack.mockRejectedValue(new Error('502 bad gateway'));
 
         const { result } = renderHook(() => useSaveTrack(), { wrapper });
@@ -176,30 +186,23 @@ describe('useSaveTrack', () => {
             .catch(() => undefined);
         });
 
-        expect(spy).not.toHaveBeenCalled();
-        warnSpy.mockRestore();
+        expect(invalidatedKeys(queryClient)).toEqual([]);
       });
     });
   });
 
   describe('logging a failed save', () => {
-    let warnSpy: jest.SpyInstance;
-
     beforeEach(() => {
       jest.clearAllMocks();
-      warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    });
-
-    afterEach(() => {
-      warnSpy.mockRestore();
     });
 
     describe('useSaveTrack logs the reason a save failed', () => {
       it('logs the error message and track identity on save failure', async () => {
         mockCreateTrack.mockRejectedValue(new Error('502 bad gateway'));
+        const detail = createMemoryDetailPort();
 
         const { result } = renderHook(() => useSaveTrack(), {
-          wrapper: createWrapper(createTestQueryClient()),
+          wrapper: createWrapper(createTestQueryClient(), detail),
         });
 
         await act(async () => {
@@ -208,14 +211,14 @@ describe('useSaveTrack', () => {
             .catch(() => {});
         });
 
-        expect(warnSpy).toHaveBeenCalledWith(
+        expect(detail.warnings).toContainEqual([
           '[detail] save track failed',
           expect.objectContaining({
             title: 'Idioteque',
             artist: 'Radiohead',
             error: '502 bad gateway',
           }),
-        );
+        ]);
       });
     });
   });
@@ -382,9 +385,9 @@ describe('useSaveTrack', () => {
       [503, true],
       [404, false],
     ])('reports a %i rejection as retryable=%s', async (status, retryable) => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const memory = createMemoryDetailPort();
       const port: DetailPort = {
-        ...createMemoryDetailPort(),
+        ...memory,
         createTrack: () => Promise.reject(new ApiError(status, `${status} failed`)),
       };
       const { result } = setup(port);
@@ -395,7 +398,10 @@ describe('useSaveTrack', () => {
 
       await waitFor(() => expect(result.current.failure).not.toBeNull());
       expect(result.current.failure?.isRetryable).toBe(retryable);
-      warnSpy.mockRestore();
+      expect(memory.warnings).toContainEqual([
+        '[detail] save track failed',
+        expect.objectContaining({ retryable }),
+      ]);
     });
   });
 
@@ -763,7 +769,6 @@ describe('useTrackSave', () => {
     it('still retries when the server refuses the retry telemetry', async () => {
       mockRetryAcquisition.mockReturnValue(new Promise(() => undefined));
       __http.reply(EVENTS, { status: 500 });
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
       const owned = ownedTrack(asTrackId('server-1'), 'failed', 'network error');
       const { result } = renderHook(() => useTrackSave(track(), owned), { wrapper });
 
@@ -772,7 +777,6 @@ describe('useTrackSave', () => {
       });
 
       await waitFor(() => expect(mockRetryAcquisition).toHaveBeenCalledTimes(1));
-      warnSpy.mockRestore();
     });
   });
 

@@ -4,21 +4,30 @@ import type { DiscoveryResult } from '@shared/catalog';
 import { resolveEntityQuery } from '@features/detail/domain/resolveEntityQuery';
 import { normalizeForCompare } from '@features/detail/domain/normalizeForCompare';
 import { realPhotoUrl } from '@features/detail/domain/artistPhoto';
+import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
 import { useDetailFetchEnabled } from '@features/detail/hooks/useDetailFetchGate';
 
-function useLoggedResolveFailure(result: DiscoveryResult, error: Error | null): void {
+type ResolveTarget = Pick<DiscoveryResult, 'kind' | 'title' | 'subtitle'>;
+
+function warnResolveFailure(port: DetailPort, target: ResolveTarget, error: Error): void {
+  port.warn('[detail] source resolution fetch failed', {
+    kind: target.kind,
+    title: target.title,
+    subtitle: target.subtitle ?? null,
+    error: error.message,
+  });
+}
+
+function useLoggedResolveFailure(entity: DiscoveryResult, error: Error | null): void {
+  const port = useDetailPort();
+  const { kind, title, subtitle } = entity;
   useEffect(() => {
     if (error === null) {
       return;
     }
-    console.warn('[detail] source resolution fetch failed', {
-      kind: result.kind,
-      title: result.title,
-      subtitle: result.subtitle ?? null,
-      error: error.message,
-    });
-  }, [error, result.kind, result.title, result.subtitle]);
+    warnResolveFailure(port, { kind, title, subtitle }, error);
+  }, [port, error, kind, title, subtitle]);
 }
 
 function useResolveSearch(entity: DiscoveryResult, enabled: boolean) {

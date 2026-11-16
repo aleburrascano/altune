@@ -87,17 +87,6 @@ describe('useArtistContent sends the ids the search card knows', () => {
 });
 
 describe('logging degraded content', () => {
-  let warnSpy: jest.SpyInstance;
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    warnSpy.mockRestore();
-  });
-
   function contentResponse(overrides: { topStatus?: string; albumsStatus?: string }): unknown {
     return {
       top_tracks: {
@@ -133,19 +122,20 @@ describe('logging degraded content', () => {
 
       await waitFor(() => expect(result.current.tracksFailure).not.toBeNull(), { timeout: 5000 });
 
-      expect(warnSpy).toHaveBeenCalledWith(
+      expect(port.warnings).toContainEqual([
         '[detail] artist top_tracks fetch degraded',
         expect.objectContaining({
           status: 'timeout',
           provider: 'spotify',
           externalId: 'artist-1',
         }),
-      );
+      ]);
     });
 
     it('logs when the whole content request throws', async () => {
-      const port: DetailPort = {
-        ...createMemoryDetailPort(),
+      const port = createMemoryDetailPort();
+      const failing: DetailPort = {
+        ...port,
         getArtistContent: () => Promise.reject(new Error('network down')),
       };
 
@@ -154,19 +144,19 @@ describe('logging degraded content', () => {
           useArtistContent({
             sources: [{ provider: 'deezer', external_id: 'artist-2', url: 'https://x' }],
           }),
-        { wrapper: createPortWrapper(port) },
+        { wrapper: createPortWrapper(failing) },
       );
 
       await waitFor(() => expect(result.current.tracksFailure).not.toBeNull(), { timeout: 5000 });
 
-      expect(warnSpy).toHaveBeenCalledWith(
+      expect(port.warnings).toContainEqual([
         '[detail] artist content fetch failed',
         expect.objectContaining({
           provider: 'deezer',
           externalId: 'artist-2',
           error: 'network down',
         }),
-      );
+      ]);
     });
 
     it('does not log when both statuses are ok', async () => {
@@ -184,7 +174,7 @@ describe('logging degraded content', () => {
 
       await waitFor(() => expect(result.current.isLoading).toBe(false), { timeout: 5000 });
 
-      expect(warnSpy).not.toHaveBeenCalled();
+      expect(port.warnings).toEqual([]);
     });
   });
 });

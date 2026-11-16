@@ -153,7 +153,14 @@ function discoveryPage(
   };
 }
 
-export function createMemoryDetailPort(seed: MemoryDetailSeed = {}): DetailPort {
+export type DetailWarning = [message: string, detail: Record<string, unknown>];
+
+export interface MemoryDetailPort extends DetailPort {
+  warnings: DetailWarning[];
+}
+
+export function createMemoryDetailPort(seed: MemoryDetailSeed = {}): MemoryDetailPort {
+  const warnings: DetailWarning[] = [];
   const tracks = [...(seed.tracks ?? [])];
   const albums = [...(seed.albums ?? [])];
   const discovery = [...(seed.discovery ?? [])];
@@ -199,5 +206,9 @@ export function createMemoryDetailPort(seed: MemoryDetailSeed = {}): DetailPort 
       resolveOnLaterTick(signal, () => trackPage(tracks, limit, offset)),
     getLibraryAlbums: (query = {}, signal) =>
       resolveOnLaterTick(signal, () => ({ items: windowOf(albums, query), total: albums.length })),
+    warn: (message, detail) => {
+      warnings.push([message, detail]);
+    },
+    warnings,
   };
 }

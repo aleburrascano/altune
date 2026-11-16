@@ -25,4 +25,5 @@ export const httpDetailPort: DetailPort = {
   createTrack: (...args) => createTrack(...args),
   getTracks: (...args) => getTracks(...args),
   getLibraryAlbums: (...args) => getLibraryAlbums(...args),
+  warn: (message, detail) => console.warn(message, detail),
 };

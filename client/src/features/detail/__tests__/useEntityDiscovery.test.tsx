@@ -1,9 +1,25 @@
 import { renderHook, waitFor } from '@testing-library/react-native';
 
-import { useAlbumDiscovery, useArtistDiscovery } from '@features/detail';
-import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
+import { httpDetailPort, useAlbumDiscovery, useArtistDiscovery } from '@features/detail';
+import type { DetailPort, DetailWarning } from '@features/detail';
+import {
+  createPortWrapper,
+  createTestQueryClient,
+  createWrapper,
+  signInTestUser,
+} from '@testing/queryHarness';
 
 const { __http } = require('@testing/doubles/fetch.js');
+
+function recordingWrapper(warnings: DetailWarning[]) {
+  const detail: DetailPort = {
+    ...httpDetailPort,
+    warn: (message, context) => {
+      warnings.push([message, context]);
+    },
+  };
+  return createPortWrapper(createTestQueryClient(), { detail });
+}
 
 describe('useAlbumDiscovery', () => {
   describe('bounding the fetch', () => {
@@ -70,16 +86,11 @@ describe('useAlbumDiscovery', () => {
   });
 
   describe('logging a failed search', () => {
-    let warnSpy: jest.SpyInstance;
+    let warnings: DetailWarning[];
 
     beforeEach(async () => {
-      jest.clearAllMocks();
       await signInTestUser();
-      warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    });
-
-    afterEach(() => {
-      warnSpy.mockRestore();
+      warnings = [];
     });
 
     describe('useAlbumDiscovery logs the album its search step was looking for', () => {
@@ -89,12 +100,12 @@ describe('useAlbumDiscovery', () => {
         const { result } = renderHook(
           () =>
             useAlbumDiscovery({ albumTitle: 'Rumours', artist: 'Fleetwood Mac', enabled: true }),
-          { wrapper: createWrapper(createTestQueryClient()) },
+          { wrapper: recordingWrapper(warnings) },
         );
 
         await waitFor(() => expect(result.current.isError).toBe(true), { timeout: 5000 });
 
-        expect(warnSpy).toHaveBeenCalledWith(
+        expect(warnings).toContainEqual([
           '[detail] discovery search failed',
           expect.objectContaining({
             kind: 'album',
@@ -102,9 +113,9 @@ describe('useAlbumDiscovery', () => {
             artist: 'Fleetwood Mac',
             error: 'API /v1/discovery/search is unreachable',
           }),
-        );
+        ]);
         expect(
-          warnSpy.mock.calls.filter(([message]) => message === '[detail] discovery search failed'),
+          warnings.filter(([message]) => message === '[detail] discovery search failed'),
         ).toHaveLength(1);
       });
     });
@@ -177,16 +188,11 @@ describe('useAlbumDiscovery', () => {
 
 describe('useArtistDiscovery', () => {
   describe('logging a failed search', () => {
-    let warnSpy: jest.SpyInstance;
+    let warnings: DetailWarning[];
 
     beforeEach(async () => {
-      jest.clearAllMocks();
       await signInTestUser();
-      warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    });
-
-    afterEach(() => {
-      warnSpy.mockRestore();
+      warnings = [];
     });
 
     describe('useArtistDiscovery logs the artist its search step was looking for', () => {
@@ -195,12 +201,12 @@ describe('useArtistDiscovery', () => {
 
         const { result } = renderHook(
           () => useArtistDiscovery({ artistName: 'Boards of Canada', enabled: true }),
-          { wrapper: createWrapper(createTestQueryClient()) },
+          { wrapper: recordingWrapper(warnings) },
         );
 
         await waitFor(() => expect(result.current.isError).toBe(true), { timeout: 5000 });
 
-        expect(warnSpy).toHaveBeenCalledWith(
+        expect(warnings).toContainEqual([
           '[detail] discovery search failed',
           expect.objectContaining({
             kind: 'artist',
@@ -208,7 +214,7 @@ describe('useArtistDiscovery', () => {
             artist: null,
             error: 'API /v1/discovery/search is unreachable',
           }),
-        );
+        ]);
       });
     });
   });

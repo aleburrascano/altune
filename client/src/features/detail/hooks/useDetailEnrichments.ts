@@ -61,22 +61,25 @@ type EnrichmentRequest<T> = {
   params: EnrichmentParams;
 };
 
-function reportEnrichmentFailure(context: EnrichmentFetchContext, error: unknown): void {
-  if (isAbort(error)) return;
-  recordEnrichmentOutcome(context.provider, false);
-  console.warn('[detail] enrichment fetch failed', {
-    ...context,
-    error: error instanceof Error ? error.message : String(error),
-  });
+type EnrichmentReporter = { port: DetailPort; ctx: EnrichmentFetchContext };
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
-async function fetchReportingOutcome<T>(fetch: () => Promise<T>, ctx: EnrichmentFetchContext) {
+function reportEnrichmentFailure({ port, ctx }: EnrichmentReporter, error: unknown): void {
+  if (isAbort(error)) return;
+  recordEnrichmentOutcome(ctx.provider, false);
+  port.warn('[detail] enrichment fetch failed', { ...ctx, error: errorMessage(error) });
+}
+
+async function fetchReportingOutcome<T>(reporter: EnrichmentReporter, fetch: () => Promise<T>) {
   try {
     const enrichment = await fetch();
-    recordEnrichmentOutcome(ctx.provider, true);
+    recordEnrichmentOutcome(reporter.ctx.provider, true);
     return enrichment;
   } catch (error) {
-    reportEnrichmentFailure(ctx, error);
+    reportEnrichmentFailure(reporter, error);
     throw error;
   }
 }
@@ -104,9 +107,8 @@ function fetchContext(provider: EnrichmentProvider, params: EnrichmentParams) {
 
 function enrichmentQueryFn<T>({ config, port, params }: EnrichmentRequest<T>) {
   return ({ signal }: EnrichmentSignal) =>
-    fetchReportingOutcome(
-      () => config.fetch(port, { ...params, signal }),
-      fetchContext(config.provider, params),
+    fetchReportingOutcome({ port, ctx: fetchContext(config.provider, params) }, () =>
+      config.fetch(port, { ...params, signal }),
     );
 }
 

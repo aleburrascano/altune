@@ -133,8 +133,8 @@ function adoptSaved(queryClient: QueryClient, saved: TrackResponse, context: Sav
   invalidateLibraryDerived(queryClient);
 }
 
-function warnSaveFailed(error: Error, body: CreateTrackRequest): void {
-  console.warn('[detail] save track failed', {
+function warnSaveFailed(port: DetailPort, error: Error, body: CreateTrackRequest): void {
+  port.warn('[detail] save track failed', {
     title: body.title,
     artist: body.artist,
     error: error.message,
@@ -147,12 +147,13 @@ function markFailed(trackId: TrackId, error: Error): void {
 }
 
 function settleFailed(
+  port: DetailPort,
   queryClient: QueryClient,
   error: Error,
   body: CreateTrackRequest,
   context: SaveContext,
 ): void {
-  warnSaveFailed(error, body);
+  warnSaveFailed(port, error, body);
   removeTrackFromCaches(queryClient, context.optimisticId);
   markFailed(context.optimisticId, error);
 }
@@ -170,7 +171,7 @@ export function useSaveTrack(): SaveTrack {
         adoptSaved(queryClient, saved, context);
         recordLibraryAdd(body, handoff);
       },
-      onError: (error, body, context) => settleFailed(queryClient, error, body, context),
+      onError: (error, body, context) => settleFailed(port, queryClient, error, body, context),
     }),
     action: 'detail.save_track',
     trackIdOf: optimisticTrackId,

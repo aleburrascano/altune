@@ -7,6 +7,7 @@ import { createMemoryFileStore } from '@shared/files';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch';
 
 import {
+  httpDetailPort,
   useAlbumTracks,
   useArtistContent,
   useRelatedTracks,
@@ -16,9 +17,15 @@ import {
   useLateralNav,
   useResolveMissingSources,
 } from '@features/detail';
-import { createWrapper, signInTestUser, createTestQueryClient } from '@testing/queryHarness';
-import type { EnrichmentProvider } from '@features/detail';
+import { createPortWrapper, signInTestUser, createTestQueryClient } from '@testing/queryHarness';
+import type { DetailPort, EnrichmentProvider } from '@features/detail';
 const { __http } = require('@testing/doubles/fetch.js');
+
+const quietDetailPort: DetailPort = { ...httpDetailPort, warn: () => undefined };
+
+function createWrapper(client: QueryClient) {
+  return createPortWrapper(client, { detail: quietDetailPort });
+}
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),
@@ -101,17 +108,13 @@ describe('useContentFetchRetry', () => {
     return state;
   }
 
-  let warn: jest.SpyInstance;
-
   beforeEach(async () => {
     jest.useFakeTimers();
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
     await signInTestUser();
   });
 
   afterEach(() => {
     jest.useRealTimers();
-    warn.mockRestore();
   });
 
   describe.each(hooks)('$name fails fast on a settled content failure', ({ path, use }) => {
@@ -173,7 +176,6 @@ describe('detail fetch gate', () => {
   beforeEach(async () => {
     await signInTestUser();
     setKillSwitchFileStore(createMemoryFileStore());
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     __http.replyAll({
       status: 200,
       json: { items: [], results: [], provider: 'spotify', status: 'ok' },
@@ -182,7 +184,6 @@ describe('detail fetch gate', () => {
 
   afterEach(() => {
     setKillSwitchFileStore();
-    jest.restoreAllMocks();
   });
 
   type GatedHookCase = {
