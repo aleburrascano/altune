@@ -53,8 +53,7 @@ function parseAddedTrack(data: Record<string, unknown>): TrackResponse | null {
   return tryParseTrackResponse(payload);
 }
 
-function trackMeta(track: TrackResponse | undefined): DownloadMeta | undefined {
-  if (!track) return undefined;
+function trackMeta(track: TrackResponse): DownloadMeta {
   return { title: track.title, artist: track.artist, artworkUrl: track.artwork_url };
 }
 
@@ -62,19 +61,13 @@ function nonEmpty(text: string | null): string | null {
   return text === '' ? null : text;
 }
 
-function eventMeta(payload: JsonObject): DownloadMeta | undefined {
-  const title = nonEmpty(asString(payload.title));
-  const artist = nonEmpty(asString(payload.artist));
-  if (title === null && artist === null) return undefined;
-  return { title, artist };
+function eventMeta(payload: JsonObject): DownloadMeta {
+  return { title: nonEmpty(asString(payload.title)), artist: nonEmpty(asString(payload.artist)) };
 }
 
-function downloadMeta(
-  cache: EventCache,
-  trackId: TrackId,
-  payload: JsonObject,
-): DownloadMeta | undefined {
-  return trackMeta(getTrackFromCaches(cache, trackId)) ?? eventMeta(payload);
+function downloadMeta(cache: EventCache, trackId: TrackId, payload: JsonObject): DownloadMeta {
+  const cached = getTrackFromCaches(cache, trackId);
+  return cached ? trackMeta(cached) : eventMeta(payload);
 }
 
 const PROGRESS_PHASE: Record<ReturnType<typeof stageToPhase>, DownloadPhase | null> = {
@@ -99,8 +92,7 @@ function addTrack(cache: EventCache, track: TrackResponse): void {
   upsertTrackInCaches(cache, track);
   patchTrackStatus(track.id, toTrackStatus(acquisitionOf(track)), 'sse');
   linkTrackIdentity(trackIdentityKey(track.title, track.artist), track.id);
-  const meta = trackMeta(track);
-  if (meta) rememberDownloadMeta(track.id, meta);
+  rememberDownloadMeta(track.id, trackMeta(track));
 }
 
 function handleTrackAddedToLibrary(cache: EventCache, event: ServerEvent): void {

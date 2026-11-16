@@ -7,6 +7,15 @@ import { signInTestUser } from '@testing/signInTestUser';
 const { __http } = require('@testing/doubles/fetch.js');
 
 const HEARTBEAT_WATCHDOG_MS = 60_000;
+const PAST_FIRST_BACKOFF_MS = 2_000;
+const BOTH_REQUESTS = 2;
+const FIRST_BACKOFF_MS = 1_000;
+const TWELVE_SECONDS_MS = 12_000;
+const FIVE_MINUTES_MS = 300_000;
+const MULTIPLE_CHOICES = 300;
+const TOO_MANY_REQUESTS = 429;
+const PAST_SECOND_BACKOFF_MS = 10_000;
+const PAST_WATCHDOG_MS = 120_000;
 const MAX_RESPONSE_BYTES = 524_288;
 const EVENTS_PATH = '/v1/discovery/events';
 const CORRELATION_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
@@ -16,13 +25,19 @@ const NEAR_FULL_JITTER = 0.99;
 type SentRequest = { path: string };
 
 let jitter = MIDDLE_JITTER;
+let warnings: [string, unknown][] = [];
 
 function streamIO(openRequest: () => StreamRequest): StreamIO {
-  return { openRequest, random: () => jitter };
+  return {
+    openRequest,
+    random: () => jitter,
+    warn: (message, error) => warnings.push([message, error]),
+  };
 }
 
 beforeEach(() => {
   jitter = MIDDLE_JITTER;
+  warnings = [];
 });
 
 function reconnectEventsSent(): number {
@@ -577,6 +592,60 @@ describe('SSEClient', () => {
       expect(FakeXHR.instances.length).toBe(1);
     });
 
+    it('aborts the open request on disconnect()', async () => {
+      const { client } = makeClient();
+      await client.connect();
+
+      client.disconnect();
+
+      expect(xhrAt(0).aborted).toBe(true);
+    });
+
+    it('aborts the open request on dispose()', async () => {
+      const { client } = makeClient();
+      await client.connect();
+
+      client.dispose();
+
+      expect(xhrAt(0).aborted).toBe(true);
+    });
+
+    it('stays closed past the watchdog timeout after disconnect()', async () => {
+      const { client } = makeClient();
+      await client.connect();
+
+      client.disconnect();
+      await jest.advanceTimersByTimeAsync(PAST_WATCHDOG_MS);
+
+      expect(FakeXHR.instances.length).toBe(1);
+    });
+
+    it('detaches a replaced request, so its late end schedules nothing', async () => {
+      const { client } = makeClient();
+      await client.connect();
+      xhrAt(0).triggerError();
+      await jest.advanceTimersByTimeAsync(PAST_FIRST_BACKOFF_MS);
+
+      xhrAt(0).triggerLoadEnd();
+      await jest.advanceTimersByTimeAsync(PAST_SECOND_BACKOFF_MS);
+
+      expect(xhrAt(0).aborted).toBe(true);
+      expect(FakeXHR.instances.length).toBe(BOTH_REQUESTS);
+    });
+
+    it('aborts the silent request as soon as the watchdog fires, before the next token arrives', async () => {
+      const getToken = jest
+        .fn<Promise<string | null>, []>()
+        .mockResolvedValueOnce('token-1')
+        .mockReturnValue(new Promise<string | null>(() => undefined));
+      const { client } = makeClient(getToken);
+      await client.connect();
+
+      await jest.advanceTimersByTimeAsync(HEARTBEAT_WATCHDOG_MS);
+
+      expect(xhrAt(0).aborted).toBe(true);
+    });
+
     it('does not connect when dispose() happens while the token fetch is still in flight', async () => {
       let resolveToken!: (value: string | null) => void;
       const getToken = jest.fn<Promise<string | null>, []>(
@@ -791,6 +860,7 @@ describe('response cap reconnect', () => {
 
     responseText = '';
     status = 200;
+    aborted = false;
     onprogress: Handler | null = null;
     onerror: Handler | null = null;
     onloadend: Handler | null = null;
@@ -805,7 +875,9 @@ describe('response cap reconnect', () => {
       return null;
     }
     send(): void {}
-    abort(): void {}
+    abort(): void {
+      this.aborted = true;
+    }
 
     emit(chunk: string): void {
       this.responseText += chunk;
@@ -851,6 +923,16 @@ describe('response cap reconnect', () => {
       expect(CapXHR.instances.length).toBe(1);
       await jest.advanceTimersByTimeAsync(1_000);
       expect(CapXHR.instances.length).toBe(2);
+    });
+
+    it('closes the stalled request at the cap while it waits to reconnect', async () => {
+      const client = makeClient();
+      await client.connect();
+
+      opened(0).emit('x'.repeat(MAX_RESPONSE_BYTES));
+
+      expect(opened(0).aborted).toBe(true);
+      expect(CapXHR.instances.length).toBe(1);
     });
 
     it('grows the delay while the same oversized block keeps stalling', async () => {
@@ -1084,6 +1166,47 @@ describe('HTTP status handling', () => {
       expect(await msUntilNextOpen()).toBe(1_000);
     });
 
+    it('reconnects without reporting an error when a 200 stream ends', async () => {
+      const { client, onError } = makeClient();
+      await client.connect();
+
+      latest().stream('id: 1\ndata: {"a":1}\n\n');
+      latest().onloadend?.();
+
+      expect(onError).not.toHaveBeenCalled();
+      expect(await msUntilNextOpen()).toBe(FIRST_BACKOFF_MS);
+    });
+
+    it('treats a 300 as a refusal', async () => {
+      const { client, onError } = makeClient();
+      await client.connect();
+
+      latest().respond(MULTIPLE_CHOICES, ERROR_BODY);
+
+      expect(onError.mock.calls[0]?.[0]).toMatchObject({
+        name: 'SSEHttpError',
+        status: MULTIPLE_CHOICES,
+      });
+    });
+
+    it('reads a Retry-After padded with whitespace', async () => {
+      const { client } = makeClient();
+      await client.connect();
+
+      latest().respond(TOO_MANY_REQUESTS, ERROR_BODY, { 'Retry-After': ' 12 ' });
+
+      expect(await msUntilNextOpen()).toBe(TWELVE_SECONDS_MS);
+    });
+
+    it('reads a Retry-After date that starts and ends with digits as a date', async () => {
+      const { client } = makeClient();
+      await client.connect();
+
+      latest().respond(TOO_MANY_REQUESTS, ERROR_BODY, { 'Retry-After': '2099-01-01T00:00:00' });
+
+      expect(await msUntilNextOpen()).toBe(FIVE_MINUTES_MS);
+    });
+
     it('resets the backoff once a 200 stream delivers bytes after refusals', async () => {
       const { client, onEvent } = makeClient();
       await client.connect();
@@ -1143,5 +1266,27 @@ describe('SSEClient reconnect telemetry', () => {
     await jest.advanceTimersByTimeAsync(30_000);
 
     expect(FakeXHR.instances.length).toBe(2);
+  });
+});
+
+describe('SSEClient reconnect telemetry while signed out', () => {
+  beforeEach(() => {
+    FakeXHR.instances = [];
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('warns that the reconnect event was not recorded, and still reconnects', async () => {
+    const { client } = makeClient();
+    await client.connect();
+
+    xhrAt(0).triggerError();
+    await jest.advanceTimersByTimeAsync(PAST_FIRST_BACKOFF_MS);
+
+    expect(FakeXHR.instances.length).toBe(BOTH_REQUESTS);
+    expect(warnings).toEqual([['[sse] recording reconnect event failed', expect.any(Error)]]);
   });
 });

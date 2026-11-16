@@ -6,16 +6,19 @@ export interface RecordingCache extends EventCache {
   readonly invalidated: unknown[];
   readonly reads: unknown[];
   readonly writes: unknown[];
+  readonly bulkWrites: unknown[];
 }
 
 export function recordingCache(queryClient: QueryClient): RecordingCache {
   const invalidated: unknown[] = [];
   const reads: unknown[] = [];
   const writes: unknown[] = [];
+  const bulkWrites: unknown[] = [];
   return {
     invalidated,
     reads,
     writes,
+    bulkWrites,
     invalidateQueries(filters) {
       invalidated.push(filters.queryKey);
       return queryClient.invalidateQueries(filters);
@@ -29,7 +32,10 @@ export function recordingCache(queryClient: QueryClient): RecordingCache {
       return queryClient.setQueryData(queryKey, updater);
     },
     getQueriesData: (filters) => queryClient.getQueriesData(filters),
-    setQueriesData: (filters, updater) => queryClient.setQueriesData(filters, updater),
+    setQueriesData(filters, updater) {
+      bulkWrites.push(filters.queryKey);
+      return queryClient.setQueriesData(filters, updater);
+    },
     getQueryCache: () => queryClient.getQueryCache(),
   };
 }

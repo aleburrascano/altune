@@ -168,22 +168,16 @@ function reinsertOnPage(placement: TrackCachePlacement): MapItems {
     pageIndex === placement.pageIndex ? reinsert(items, placement) : items;
 }
 
-function canReinsert(placement: TrackCachePlacement, prev: TrackCacheValue | undefined): boolean {
-  const present = TRACK_SHAPES[placement.shape]
-    .items(prev)
-    .some((t) => t.id === placement.track.id);
-  if (present) return false;
-  return (
-    placement.shape !== 'paged' || !!(prev as TrackPages | undefined)?.pages[placement.pageIndex]
-  );
+function holdsTrack(placement: TrackCachePlacement, prev: TrackCacheValue | undefined): boolean {
+  return TRACK_SHAPES[placement.shape].items(prev).some((t) => t.id === placement.track.id);
 }
 
 function restoreOne(cache: EventCache, placement: TrackCachePlacement): void {
   const accessor = TRACK_SHAPES[placement.shape];
   cache.setQueryData<TrackCacheValue>(placement.queryKey, (prev) =>
-    canReinsert(placement, prev)
-      ? accessor.write(prev, reinsertOnPage(placement), RESIZE_POLICY)
-      : prev,
+    holdsTrack(placement, prev)
+      ? prev
+      : accessor.write(prev, reinsertOnPage(placement), RESIZE_POLICY),
   );
 }
 

@@ -25,6 +25,7 @@ async function getAccessToken(): Promise<string | null> {
 const streamIO: StreamIO = {
   openRequest: () => new XMLHttpRequest(),
   random: () => Math.random(),
+  warn,
 };
 
 function createSSEClient(

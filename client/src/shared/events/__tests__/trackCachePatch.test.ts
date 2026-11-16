@@ -13,6 +13,7 @@ import {
   restoreTrackPlacements,
   forgetTrack,
   patchTrackInCaches,
+  scheduleTrackPatch,
   makeInfinite,
   makePage,
   makePlaylistDetail,
@@ -24,6 +25,17 @@ import {
 import { patchTrackStatus, useTrackStatusStore } from '@shared/acquisition';
 
 import { recordingCache } from '@shared/events/__tests__/recordingCache';
+
+function other(): TrackResponse {
+  return makeTrack({ id: asTrackId('other'), title: 'Other' });
+}
+
+function cachedTitleOfOther(client: QueryClient): string | undefined {
+  const data = client.getQueryData<InfiniteData<ListTracksResponse>>(
+    libraryKeys.tracks('q', 'sort'),
+  );
+  return data?.pages[0]?.items.find((t) => t.id === 'other')?.title;
+}
 
 describe('getTrackFromCaches', () => {
   it('returns undefined when nothing is cached', () => {
@@ -159,6 +171,17 @@ describe('upsertTrackInCaches', () => {
     expect(merged).not.toHaveProperty('failure_message');
   });
 
+  it('keeps the failure_message an incoming track carries', () => {
+    const client = newClient();
+    seedTracksPrefix(client, [
+      makePage([makeTrack({ id: asTrackId('b'), failure_message: 'old reason' })]),
+    ]);
+
+    upsertTrackInCaches(client, makeTrack({ id: asTrackId('b'), failure_message: 'new reason' }));
+
+    expect(getTrackFromCaches(client, asTrackId('b'))?.failure_message).toBe('new reason');
+  });
+
   it('is idempotent for a new track: applying it twice yields one copy and a single increment', () => {
     const client = newClient();
     seedTracksPrefix(client, [makePage([makeTrack({ id: asTrackId('a') })], { total: 1 })]);
@@ -257,6 +280,28 @@ describe('replaceTrackInCaches', () => {
     expect(
       client.getQueryData<InfiniteData<ListTracksResponse>>(libraryKeys.tracks('q', 'sort')),
     ).toEqual(makeInfinite([page]));
+  });
+
+  it('touches only the paged library, leaving flat and playlist caches as they were', () => {
+    const client = newClient();
+    const optimistic = makeTrack({ id: asTrackId('optimistic-1') });
+    seedTracksPrefix(client, [makePage([optimistic])]);
+    const lookup = makePage([optimistic]);
+    client.setQueryData(libraryKeys.lookup('q'), lookup);
+
+    replaceTrackInCaches(client, asTrackId('optimistic-1'), makeTrack({ id: asTrackId('real-1') }));
+
+    expect(client.getQueryData(libraryKeys.lookup('q'))).toEqual(lookup);
+  });
+
+  it('applies patches still pending before it replaces', () => {
+    const client = newClient();
+    seedTracksPrefix(client, [makePage([makeTrack({ id: asTrackId('optimistic-1') }), other()])]);
+    scheduleTrackPatch(client, asTrackId('other'), { title: 'Patched' });
+
+    replaceTrackInCaches(client, asTrackId('optimistic-1'), makeTrack({ id: asTrackId('real-1') }));
+
+    expect(cachedTitleOfOther(client)).toBe('Patched');
   });
 
   it('is idempotent: replaying the same replacement leaves the cache exactly as the first application did', () => {
@@ -358,6 +403,16 @@ describe('removeTrackFromCaches', () => {
       playlistKeys.detail(asPlaylistId('p1')),
     )!;
     expect(p1.track_count).toBe(p1.tracks.length);
+  });
+
+  it('applies patches still pending before it removes', () => {
+    const client = newClient();
+    seedTracksPrefix(client, [makePage([makeTrack({ id: asTrackId('target') }), other()])]);
+    scheduleTrackPatch(client, asTrackId('other'), { title: 'Patched' });
+
+    removeTrackFromCaches(client, asTrackId('target'));
+
+    expect(cachedTitleOfOther(client)).toBe('Patched');
   });
 
   it('is idempotent: removing an already-removed track a second time makes no further change', () => {
@@ -587,6 +642,39 @@ describe('captureTrackPlacements + restoreTrackPlacements — undo an optimistic
     expect(
       client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail(asPlaylistId('p1')))!.tracks,
     ).toEqual([target]);
+  });
+
+  it('captures the track with the patches still pending for it', () => {
+    const client = newClient();
+    seedTracksPrefix(client, [makePage([makeTrack({ id: asTrackId('target'), title: 'Old' })])]);
+    scheduleTrackPatch(client, asTrackId('target'), { title: 'Patched' });
+
+    const [placement] = captureTrackPlacements(client, asTrackId('target'));
+
+    expect(placement?.track.title).toBe('Patched');
+  });
+
+  it('applies patches still pending before it restores', () => {
+    const client = newClient();
+    seedTracksPrefix(client, [makePage([makeTrack({ id: asTrackId('target') }), other()])]);
+    const placements = captureTrackPlacements(client, asTrackId('target'));
+    removeTrackFromCaches(client, asTrackId('target'));
+    scheduleTrackPatch(client, asTrackId('other'), { title: 'Patched' });
+
+    restoreTrackPlacements(client, placements);
+
+    expect(cachedTitleOfOther(client)).toBe('Patched');
+  });
+
+  it('captures nothing for a track absent from lists that hold others, fetched or not', () => {
+    const client = newClient();
+    client.setQueryData(
+      libraryKeys.lookup('q'),
+      makePage([makeTrack({ id: asTrackId('a') }), other()]),
+    );
+    registerUnfetchedQuery(client, libraryKeys.tracks('q', 'sort'));
+
+    expect(captureTrackPlacements(client, asTrackId('missing'))).toEqual([]);
   });
 
   it('captures nothing for an absent track and skips entries evicted before restore', () => {

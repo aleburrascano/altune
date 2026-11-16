@@ -87,6 +87,30 @@ describe('parseChunk', () => {
     expect(parsed.blocks).toEqual([{ id: '', type: 'message', data: { a: 1 } }]);
   });
 
+  it('names the malformed event by type, id and length', () => {
+    const [block] = parseChunk('', 'id: 9\nevent: resync\ndata: nope\n\n', '').blocks;
+    expect((block as Error).message).toBe(
+      'malformed SSE event payload (type=resync, id=9, length=4)',
+    );
+  });
+
+  it('names an id-less malformed event <none>, counting the newline between data lines', () => {
+    const [block] = parseChunk('', 'data: no\ndata: pe\n\n', '').blocks;
+    expect((block as Error).message).toBe(
+      'malformed SSE event payload (type=message, id=<none>, length=5)',
+    );
+  });
+
+  it('ignores a line with no colon', () => {
+    const parsed = parseChunk('', 'data\nid: 2\ndata: {"a":1}\n\n', '');
+    expect(parsed.blocks).toEqual([{ id: '2', type: 'message', data: { a: 1 } }]);
+  });
+
+  it('ignores a comment that looks like a field', () => {
+    const parsed = parseChunk('', ':data: {"b":2}\ndata: {"a":1}\n\n', '');
+    expect(parsed.blocks).toEqual([{ id: '', type: 'message', data: { a: 1 } }]);
+  });
+
   it('keeps the earlier lastEventId when a later event has an empty id', () => {
     const parsed = parseChunk('', 'data: {"a":1}\n\n', '5');
     expect(parsed.lastEventId).toBe('5');

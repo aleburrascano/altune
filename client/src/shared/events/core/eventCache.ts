@@ -2,7 +2,6 @@ export type CacheKey = readonly unknown[];
 
 export interface CacheFilters {
   readonly queryKey: CacheKey;
-  readonly exact?: boolean;
 }
 
 export type CacheUpdater<T> = (prev: T | undefined) => T | undefined;

@@ -18,12 +18,20 @@ import type {
 import { libraryKeys, playlistKeys } from '@shared/query';
 import { usePinnedStore, provideOfflinePort } from '@shared/offline';
 import { apiClientOfflinePort } from '@testing/apiClientPorts';
+import { flushOutbox } from '@shared/telemetry';
+import { signInTestUser } from '@testing/signInTestUser';
 
 import { applyServerEvent, settleTrackPatches } from '@shared/events';
 import type { JsonObject } from '@shared/files';
 import type { ServerEvent } from '@shared/events';
 
 import { recordingCache } from '@shared/events/__tests__/recordingCache';
+
+const { __http } = require('@testing/doubles/fetch.js');
+
+const TELEMETRY_PATH = '/v1/discovery/events';
+const ACCEPTED = 202;
+const NUMERIC_ID = 42;
 
 provideOfflinePort(apiClientOfflinePort);
 type TrackPages = InfiniteData<ListTracksResponse>;
@@ -1491,5 +1499,96 @@ describe('acquisition event bursts at scale', () => {
       expect(readLibraryRow(batched, 'row3')).toBeUndefined();
       expect(readLibraryRow(batched, 'row9000')?.audio_ref).toBeNull();
     });
+  });
+});
+
+describe('events that name no usable id', () => {
+  it('forgets nothing for a track_deleted without a track id, but still refreshes', () => {
+    const spy = recordingCache(makeClient());
+
+    applyServerEvent(spy, serverEvent('track_deleted', {}));
+
+    expect(spy.bulkWrites).toEqual([]);
+    expect(spy.invalidated).not.toEqual([]);
+  });
+
+  it.each([
+    ['track_acquisition_completed', {}],
+    ['track_replace_failed', {}],
+    ['track_acquisition_failed', { reason: 'no_candidates' }],
+    ['track_acquisition_started', { track_id: NUMERIC_ID }],
+  ])('patches no status or cache for %s with %j', async (type, data) => {
+    const spy = recordingCache(makeClient());
+
+    applyServerEvent(spy, serverEvent(type, data));
+    await settleTrackPatches();
+
+    expect(useTrackStatusStore.getState().statuses).toEqual({});
+    expect(spy.bulkWrites).toEqual([]);
+  });
+
+  it('renames nothing for a playlist id that is not a string', () => {
+    const spy = recordingCache(makeClient());
+
+    applyServerEvent(spy, serverEvent('playlist_renamed', { playlist_id: NUMERIC_ID, name: 'x' }));
+
+    expect(spy.writes).toEqual([]);
+  });
+});
+
+describe('download entry from the event fields alone', () => {
+  it('treats an empty title as unknown and keeps the artist', () => {
+    applyServerEvent(
+      makeClient(),
+      serverEvent('track_acquisition_started', { track_id: 't1', title: '', artist: 'The Artist' }),
+    );
+
+    const entry = useDownloadStore.getState().entries[asTrackId('t1')];
+    expect(entry?.title).toBeNull();
+    expect(entry?.artist).toBe('The Artist');
+  });
+
+  it('treats an empty artist as unknown and keeps the title', () => {
+    applyServerEvent(
+      makeClient(),
+      serverEvent('track_acquisition_started', { track_id: 't1', title: 'Song', artist: '' }),
+    );
+
+    const entry = useDownloadStore.getState().entries[asTrackId('t1')];
+    expect(entry?.title).toBe('Song');
+    expect(entry?.artist).toBeNull();
+  });
+});
+
+describe('status_changed telemetry', () => {
+  interface SentEvent {
+    payload: Record<string, unknown>;
+  }
+
+  async function sourcesSent(): Promise<unknown[]> {
+    await flushOutbox();
+    await new Promise((resolve) => setImmediate(resolve));
+    return (__http.requests as { path: string; body: string }[])
+      .filter((request) => request.path === TELEMETRY_PATH)
+      .map((request) => (JSON.parse(request.body) as SentEvent).payload)
+      .filter((payload) => payload.action === 'status_changed')
+      .map((payload) => payload.source);
+  }
+
+  beforeEach(async () => {
+    await signInTestUser();
+    __http.reply(`POST ${TELEMETRY_PATH}`, { status: ACCEPTED });
+  });
+
+  it.each([
+    ['track_added_to_library', { ...trackFixture() }],
+    ['track_acquisition_started', { track_id: 't1' }],
+    ['track_acquisition_completed', { track_id: 't1' }],
+    ['track_replace_failed', { track_id: 't1' }],
+    ['track_acquisition_failed', { track_id: 't1', reason: 'no_candidates' }],
+  ])('names the event stream as the source of the %s status change', async (type, data) => {
+    applyServerEvent(makeClient(), serverEvent(type, data as JsonObject));
+
+    expect(await sourcesSent()).toEqual(['sse']);
   });
 });

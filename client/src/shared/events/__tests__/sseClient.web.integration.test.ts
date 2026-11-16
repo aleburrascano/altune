@@ -33,7 +33,7 @@ async function connectedClient(request: StreamRequest, onError: (error: unknown)
     async () => 'token-1',
     () => undefined,
     onError,
-    { openRequest: () => request, random: () => 0 },
+    { openRequest: () => request, random: () => 0, warn: () => undefined },
   );
   await client.connect();
   return client;

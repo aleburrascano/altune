@@ -34,28 +34,29 @@ export interface StreamRequest {
 export interface StreamIO {
   openRequest(): StreamRequest;
   random(): number;
+  warn(message: string, error: unknown): void;
 }
 
 interface OpenedRequest {
   readonly xhr: StreamRequest;
   readonly correlationId: string | null;
   readonly sentWith: CredentialStamp;
+  readonly idAtOpen: string;
+  processedLength: number;
+  buffer: string;
 }
 
 export class SSEClient {
   private xhr: StreamRequest | null = null;
   private lastEventId = '';
-  private processedLength = 0;
-  private buffer = '';
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   private reconnectAttempt = 0;
   private episodeReported = false;
   private stalledCaps = 0;
-  private lastEventIdAtOpen = '';
-  private watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+  private watchdogTimer: ReturnType<typeof setTimeout> | undefined;
   private disposed = false;
   private connecting = false;
-  private connectionRequested = false;
+  private connectionRequested: boolean | undefined;
 
   private url: string;
   private getToken: () => Promise<string | null>;
@@ -117,9 +118,9 @@ export class SSEClient {
   }
 
   private openRequest(token: string, sentWith: CredentialStamp): void {
-    const xhr = this.freshRequest();
-    const opened = { xhr, correlationId: this.sendHeaders(xhr, token), sentWith };
-    xhr.onprogress = () => this.receive(xhr);
+    const opened = this.openedFor(this.freshRequest(), token, sentWith);
+    const { xhr } = opened;
+    xhr.onprogress = () => this.receive(opened);
     xhr.onerror = () => this.failConnection(opened.correlationId);
     xhr.onloadend = () => this.endStream(opened);
     this.armWatchdog();
@@ -128,11 +129,19 @@ export class SSEClient {
 
   private freshRequest(): StreamRequest {
     this.closeConnection();
-    this.processedLength = 0;
-    this.buffer = '';
-    this.lastEventIdAtOpen = this.lastEventId;
     this.xhr = this.io.openRequest();
     return this.xhr;
+  }
+
+  private openedFor(xhr: StreamRequest, token: string, sentWith: CredentialStamp): OpenedRequest {
+    return {
+      xhr,
+      correlationId: this.sendHeaders(xhr, token),
+      sentWith,
+      idAtOpen: this.lastEventId,
+      processedLength: 0,
+      buffer: '',
+    };
   }
 
   private sendHeaders(xhr: StreamRequest, token: string): string | null {
@@ -145,15 +154,14 @@ export class SSEClient {
     return correlationId;
   }
 
-  private receive(xhr: StreamRequest): void {
+  private receive(opened: OpenedRequest): void {
+    const { xhr } = opened;
     if (this.disposed || isRefusal(xhr.status)) return;
-    const newText = xhr.responseText.substring(this.processedLength);
-    this.processedLength = xhr.responseText.length;
+    const newText = xhr.responseText.substring(opened.processedLength);
+    opened.processedLength = xhr.responseText.length;
     if (newText.length > 0) this.markAlive();
-    this.applyChunk(newText);
-    if (xhr.responseText.length >= MAX_RESPONSE_BYTES) {
-      this.reconnectAtCap();
-    }
+    this.applyChunk(opened, newText);
+    if (xhr.responseText.length >= MAX_RESPONSE_BYTES) this.reconnectAtCap(opened);
   }
 
   private markAlive(): void {
@@ -163,13 +171,11 @@ export class SSEClient {
   }
 
   private failConnection(correlationId: string | null): void {
-    if (this.disposed) return;
     this.onError(new SSEConnectionError(correlationId));
     this.scheduleReconnect();
   }
 
   private endStream(opened: OpenedRequest): void {
-    if (this.disposed) return;
     if (isRefusal(opened.xhr.status)) this.refuse(opened);
     else this.scheduleReconnect();
   }
@@ -182,10 +188,8 @@ export class SSEClient {
 
   disconnect(): void {
     this.connectionRequested = false;
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
+    clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = undefined;
     this.closeConnection();
   }
 
@@ -206,14 +210,12 @@ export class SSEClient {
   }
 
   private forceReconnect(): void {
-    if (this.disposed) return;
     this.closeConnection();
     void this.connect();
   }
 
-  private reconnectAtCap(): void {
-    if (this.disposed) return;
-    if (this.lastEventId !== this.lastEventIdAtOpen) {
+  private reconnectAtCap(opened: OpenedRequest): void {
+    if (this.lastEventId !== opened.idAtOpen) {
       this.stalledCaps = 0;
       this.forceReconnect();
       return;
@@ -229,17 +231,11 @@ export class SSEClient {
 
   private armWatchdog(): void {
     this.clearWatchdog();
-    this.watchdogTimer = setTimeout(() => {
-      this.watchdogTimer = null;
-      this.forceReconnect();
-    }, HEARTBEAT_WATCHDOG_MS);
+    this.watchdogTimer = setTimeout(() => this.forceReconnect(), HEARTBEAT_WATCHDOG_MS);
   }
 
   private clearWatchdog(): void {
-    if (this.watchdogTimer) {
-      clearTimeout(this.watchdogTimer);
-      this.watchdogTimer = null;
-    }
+    clearTimeout(this.watchdogTimer);
   }
 
   private scheduleReconnect(minimumDelayMs = 0): void {
@@ -249,7 +245,7 @@ export class SSEClient {
     const delay = reconnectDelayMs(this.reconnectAttempt, minimumDelayMs, this.io.random());
     this.reconnectAttempt += 1;
     this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
+      this.reconnectTimer = undefined;
       void this.connect();
     }, delay);
   }
@@ -258,13 +254,13 @@ export class SSEClient {
     if (this.episodeReported) return;
     this.episodeReported = true;
     recordEvent({ type: 'sse_reconnect', payload: {} }).catch((error: unknown) => {
-      console.warn('[sse] recording reconnect event failed', error);
+      this.io.warn('[sse] recording reconnect event failed', error);
     });
   }
 
-  private applyChunk(text: string): void {
-    const parsed = parseChunk(this.buffer, text, this.lastEventId);
-    this.buffer = parsed.remainder;
+  private applyChunk(opened: OpenedRequest, text: string): void {
+    const parsed = parseChunk(opened.buffer, text, this.lastEventId);
+    opened.buffer = parsed.remainder;
     this.lastEventId = parsed.lastEventId;
 
     for (const block of parsed.blocks) {

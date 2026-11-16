@@ -4,15 +4,16 @@ import type {
   CacheChange,
   CachedQueries,
   CachedQuery,
-  CacheFilters,
   CacheKey,
   EventCache,
 } from '@shared/events/core/eventCache';
 import {
   PATCH_POLICY,
   TRACK_CACHE_FAMILY_LIST,
+  updaterFor,
   type MapItems,
   type TrackCacheFamily,
+  type TrackCacheValue,
 } from '@shared/events/core/trackCacheShapes';
 import { writeFamily } from '@shared/events/shell/writeFamily';
 
@@ -78,16 +79,13 @@ export function patchTrackInCaches(cache: EventCache, trackId: TrackId, patch: T
   flushTrackCachePatches();
 }
 
-function exactKey(query: CachedQuery): CacheFilters {
-  return { queryKey: query.queryKey, exact: true };
-}
-
 function exactWriter(
   cache: EventCache,
   family: TrackCacheFamily,
   mapItems: MapItems,
 ): (query: CachedQuery) => void {
-  return (query) => writeFamily(cache, family, exactKey(query), mapItems, PATCH_POLICY);
+  const update = updaterFor(family.shape, mapItems, PATCH_POLICY);
+  return (query) => cache.setQueryData<TrackCacheValue>(query.queryKey, update);
 }
 
 function isFreshSuccess(change: CacheChange): boolean {
