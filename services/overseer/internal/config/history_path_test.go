@@ -2,12 +2,13 @@ package config_test
 
 import (
 	"altune/overseer/internal/config"
+	"os"
 	"testing"
 )
 
 func TestHistoryPathDefaultsToTheOverseerVolume(t *testing.T) {
 	setEnv(t, validEnv())
-	cfg, err := config.Load()
+	cfg, err := config.Load(os.Getenv)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -20,7 +21,7 @@ func TestHistoryPathReadsTheEnvironment(t *testing.T) {
 	env := validEnv()
 	env["OVERSEER_HISTORY_PATH"] = "  /tmp/h.db "
 	setEnv(t, env)
-	cfg, err := config.Load()
+	cfg, err := config.Load(os.Getenv)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}

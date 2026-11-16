@@ -2,6 +2,7 @@ package config_test
 
 import (
 	"altune/overseer/internal/config"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -33,7 +34,7 @@ func TestLoadRejectsMissingOwnerUserID(t *testing.T) {
 	env := validEnv()
 	env["OVERSEER_OWNER_USER_ID"] = ""
 	setEnv(t, env)
-	if _, err := config.Load(); err == nil {
+	if _, err := config.Load(os.Getenv); err == nil {
 		t.Fatal("expected error with no owner user id, got nil")
 	}
 }
@@ -42,7 +43,7 @@ func TestLoadRejectsMissingSupabaseURL(t *testing.T) {
 	env := validEnv()
 	env["OVERSEER_SUPABASE_URL"] = ""
 	setEnv(t, env)
-	if _, err := config.Load(); err == nil {
+	if _, err := config.Load(os.Getenv); err == nil {
 		t.Fatal("expected error with no supabase url, got nil")
 	}
 }
@@ -51,14 +52,14 @@ func TestLoadRejectsMissingAnonKey(t *testing.T) {
 	env := validEnv()
 	env["OVERSEER_SUPABASE_ANON_KEY"] = ""
 	setEnv(t, env)
-	if _, err := config.Load(); err == nil {
+	if _, err := config.Load(os.Getenv); err == nil {
 		t.Fatal("expected error with no anon key, got nil")
 	}
 }
 
 func TestLoadDefaults(t *testing.T) {
 	setEnv(t, validEnv())
-	cfg, err := config.Load()
+	cfg, err := config.Load(os.Getenv)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -78,7 +79,7 @@ func TestLoadDefaults(t *testing.T) {
 
 func TestJWKSURL(t *testing.T) {
 	setEnv(t, validEnv())
-	cfg, err := config.Load()
+	cfg, err := config.Load(os.Getenv)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -89,7 +90,7 @@ func TestJWKSURL(t *testing.T) {
 	env := validEnv()
 	env["OVERSEER_SUPABASE_JWKS_URL"] = "https://override.example/jwks"
 	setEnv(t, env)
-	cfg, err = config.Load()
+	cfg, err = config.Load(os.Getenv)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -103,7 +104,7 @@ func TestIssuerURL(t *testing.T) {
 	env["OVERSEER_SUPABASE_URL"] = supaURL + "/"
 	env["OVERSEER_SUPABASE_JWKS_URL"] = "https://override.example/jwks"
 	setEnv(t, env)
-	cfg, err := config.Load()
+	cfg, err := config.Load(os.Getenv)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -116,7 +117,7 @@ func TestLoadRejectsBadPort(t *testing.T) {
 	env := validEnv()
 	env["OVERSEER_PORT"] = "70000"
 	setEnv(t, env)
-	if _, err := config.Load(); err == nil {
+	if _, err := config.Load(os.Getenv); err == nil {
 		t.Fatal("expected error for out-of-range port")
 	}
 }
@@ -125,14 +126,14 @@ func TestLoadRejectsBadTick(t *testing.T) {
 	env := validEnv()
 	env["OVERSEER_TICK_INTERVAL"] = "-1s"
 	setEnv(t, env)
-	if _, err := config.Load(); err == nil {
+	if _, err := config.Load(os.Getenv); err == nil {
 		t.Fatal("expected error for non-positive tick interval")
 	}
 }
 
 func TestBucketTimeout(t *testing.T) {
 	setEnv(t, validEnv())
-	cfg, err := config.Load()
+	cfg, err := config.Load(os.Getenv)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -143,7 +144,7 @@ func TestBucketTimeout(t *testing.T) {
 	env := validEnv()
 	env["OVERSEER_BUCKET_TIMEOUT"] = "2s"
 	setEnv(t, env)
-	cfg, err = config.Load()
+	cfg, err = config.Load(os.Getenv)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -153,14 +154,14 @@ func TestBucketTimeout(t *testing.T) {
 
 	env["OVERSEER_BUCKET_TIMEOUT"] = "0s"
 	setEnv(t, env)
-	if _, err := config.Load(); err == nil {
+	if _, err := config.Load(os.Getenv); err == nil {
 		t.Fatal("expected error for a non-positive bucket timeout")
 	}
 }
 
 func TestCostSpendInterval(t *testing.T) {
 	setEnv(t, validEnv())
-	cfg, err := config.Load()
+	cfg, err := config.Load(os.Getenv)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -171,7 +172,7 @@ func TestCostSpendInterval(t *testing.T) {
 	env := validEnv()
 	env["OVERSEER_COST_SPEND_INTERVAL"] = "30m"
 	setEnv(t, env)
-	cfg, err = config.Load()
+	cfg, err = config.Load(os.Getenv)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -181,7 +182,7 @@ func TestCostSpendInterval(t *testing.T) {
 
 	env["OVERSEER_COST_SPEND_INTERVAL"] = "-1s"
 	setEnv(t, env)
-	if _, err := config.Load(); err == nil {
+	if _, err := config.Load(os.Getenv); err == nil {
 		t.Fatal("expected error for a non-positive cost spend interval")
 	}
 }
@@ -207,7 +208,7 @@ func TestLoadNormalizesBasePath(t *testing.T) {
 			env := validEnv()
 			env["OVERSEER_BASE_PATH"] = tc.raw
 			setEnv(t, env)
-			cfg, err := config.Load()
+			cfg, err := config.Load(os.Getenv)
 			if err != nil {
 				t.Fatalf("Load: %v", err)
 			}
@@ -222,7 +223,7 @@ func TestLogValueRedactsJWTSecret(t *testing.T) {
 	env := validEnv()
 	env["OVERSEER_SUPABASE_JWT_SECRET"] = jwtSecret
 	setEnv(t, env)
-	cfg, err := config.Load()
+	cfg, err := config.Load(os.Getenv)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
