@@ -1,16 +1,13 @@
 package app
 
 import (
-	"altune/go-api/internal/catalog/adapters/persistence"
-	"altune/go-api/internal/playback/adapters/catalogbridge"
-	"altune/go-api/internal/playback/ports"
+	"altune/go-api/internal/catalog"
+	"altune/go-api/internal/playback"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"log/slog"
 
 	playbackHandler "altune/go-api/internal/playback/adapters/handler"
-	playbackMetrics "altune/go-api/internal/playback/adapters/metrics"
-	playbackPersistence "altune/go-api/internal/playback/adapters/persistence"
 	playbackErasure "altune/go-api/internal/playback/service/erasure"
 	playbackQueue "altune/go-api/internal/playback/service/queue"
 )
@@ -20,14 +17,14 @@ type playbackWiring struct {
 	forgetDeletedIdentities *playbackErasure.Sweeper
 }
 
-func (a *App) wirePlayback(ctx context.Context, trackRepo *persistence.PgxTrackRepository) playbackWiring {
-	metrics := playbackMetrics.NewExpvarPlaybackMetrics()
-	queueStateRepo := playbackPersistence.NewPgxQueueStateRepository(a.pool, playbackPersistence.WithQueueStateMetrics(metrics))
+func (a *App) wirePlayback(ctx context.Context, trackRepo *catalog.PgxTrackRepository) playbackWiring {
+	metrics := playback.NewExpvarPlaybackMetrics()
+	queueStateRepo := playback.NewPgxQueueStateRepository(a.pool, playback.WithQueueStateMetrics(metrics))
 	queueSvc := newQueueService(ctx, queueStateRepo, trackRepo, metrics, a.cfg.HasNowPlayingEnrichment())
 	return playbackWiring{
 		handler: newQueueHandler(queueSvc, metrics, queueRateLimit(a.cfg)),
 		forgetDeletedIdentities: playbackErasure.NewSweeper(
-			playbackPersistence.NewPgxDeletedIdentityRepository(a.pool), queueSvc,
+			playback.NewPgxDeletedIdentityRepository(a.pool), queueSvc,
 			playbackErasure.WithSweepRunBudget(a.cfg.PlaybackErasureScanTimeout),
 			playbackErasure.WithErasureSweepMetrics(metrics),
 			playbackErasure.WithErasedStateReaper(queueStateRepo)),
@@ -35,21 +32,21 @@ func (a *App) wirePlayback(ctx context.Context, trackRepo *persistence.PgxTrackR
 }
 
 type playbackMetricsSink interface {
-	ports.EnrichmentMetrics
-	ports.RateLimitMetrics
+	playback.EnrichmentMetrics
+	playback.RateLimitMetrics
 }
 
 func newQueueService(
 	ctx context.Context,
-	queueStateRepo ports.QueueStateRepository,
-	trackRepo *persistence.PgxTrackRepository,
+	queueStateRepo playback.QueueStateRepository,
+	trackRepo *catalog.PgxTrackRepository,
 	metrics playbackMetricsSink,
 	enrichmentEnabled bool,
 ) *playbackQueue.Service {
 	if !enrichmentEnabled {
 		slog.InfoContext(ctx, "playback: now-playing enrichment disabled via PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED")
 	}
-	nowPlayingReader := catalogbridge.NewNowPlayingReader(trackRepo, catalogbridge.WithNowPlayingMetrics(metrics))
+	nowPlayingReader := playback.NewNowPlayingReader(trackRepo, playback.WithNowPlayingMetrics(metrics))
 	return playbackQueue.New(queueStateRepo, nowPlayingReader,
 		playbackQueue.WithNowPlayingEnrichment(enrichmentEnabled))
 }

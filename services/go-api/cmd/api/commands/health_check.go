@@ -1,8 +1,7 @@
 package commands
 
 import (
-	"altune/go-api/internal/catalog/adapters/persistence"
-	"altune/go-api/internal/catalog/adapters/storage"
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared/config"
 	"context"
@@ -23,10 +22,10 @@ func runHealthCheck(cfg *config.Config, fix bool) error {
 	}
 	defer pool.Close()
 
-	return healthCheck(ctx, cfg, persistence.NewPgxTrackRepository(pool), fix)
+	return healthCheck(ctx, cfg, catalog.NewPgxTrackRepository(pool), fix)
 }
 
-func healthCheck(ctx context.Context, cfg *config.Config, repo *persistence.PgxTrackRepository, fix bool) error {
+func healthCheck(ctx context.Context, cfg *config.Config, repo *catalog.PgxTrackRepository, fix bool) error {
 	tracks, err := repo.ListReadyAudioTracks(ctx)
 	if err != nil {
 		return err
@@ -34,7 +33,7 @@ func healthCheck(ctx context.Context, cfg *config.Config, repo *persistence.PgxT
 	totalChecked := len(tracks)
 	fmt.Printf("\nChecking %d tracks with status=ready...\n\n", totalChecked)
 
-	audioStore, err := storage.FromConfig(cfg, slog.Default())
+	audioStore, err := catalog.FromConfig(cfg, slog.Default())
 	if err != nil {
 		return err
 	}

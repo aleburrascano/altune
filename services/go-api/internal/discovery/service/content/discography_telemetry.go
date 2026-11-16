@@ -2,7 +2,7 @@ package content
 
 import (
 	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/internal/core/ports"
 	"altune/go-api/internal/discovery/service/release"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/runloop"

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/discovery/adapters/providers/applemusic"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/songfacts"
@@ -221,8 +221,8 @@ func isAppleNotFound(err error) bool {
 	return errors.As(err, &statusErr) && statusErr.Status == http.StatusNotFound
 }
 
-func newAppleAdapter(httpClient *http.Client) *applemusic.AppleMusicAdapter {
-	return applemusic.NewAppleMusicAdapter(httpClient)
+func newAppleAdapter(httpClient *http.Client) *discovery.AppleMusicAdapter {
+	return discovery.NewAppleMusicAdapter(httpClient)
 }
 
 func (appleLookup) Name() source { return sourceApple }

@@ -1,8 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/catalog/adapters/persistence"
-	"altune/go-api/internal/catalog/adapters/storage"
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/database"
@@ -73,7 +72,7 @@ func run(opts options) error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	audioStore, err := storage.FromConfig(cfg, slog.Default())
+	audioStore, err := catalog.FromConfig(cfg, slog.Default())
 	if err != nil {
 		return err
 	}
@@ -97,7 +96,7 @@ func run(opts options) error {
 		return nil
 	}
 
-	repo := persistence.NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 
 	if opts.verify {
 		return verifyRefs(ctx, repo, audioStore, candidates, opts.apply)

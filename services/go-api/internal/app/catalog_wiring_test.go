@@ -1,22 +1,16 @@
 package app
 
 import (
-	"altune/go-api/internal/acquisition/adapters/catalogbridge"
-	"altune/go-api/internal/acquisition/adapters/catalogpin"
-	"altune/go-api/internal/acquisition/adapters/fixture"
-	"altune/go-api/internal/acquisition/adapters/id3"
-	"altune/go-api/internal/acquisition/adapters/tempfs"
+	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/acquisition/adapters/ytdlp"
 	"altune/go-api/internal/acquisition/adapters/ytmsearch"
 	"altune/go-api/internal/acquisition/adapters/ytmusic"
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	acqPorts "altune/go-api/internal/acquisition/ports"
 	acqService "altune/go-api/internal/acquisition/service"
+	"altune/go-api/internal/auth"
 	authdomain "altune/go-api/internal/auth/domain"
-	authports "altune/go-api/internal/auth/ports"
-	catalogMetrics "altune/go-api/internal/catalog/adapters/metrics"
-	catalogPersistence "altune/go-api/internal/catalog/adapters/persistence"
-	"altune/go-api/internal/catalog/adapters/storage"
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/domain"
 	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
 	"altune/go-api/internal/observe/service/eventtap"
@@ -199,7 +193,7 @@ func TestAcquisitionSources_FixtureNeverWiredOutsideOptedInNonProd(t *testing.T)
 	for _, c := range cases {
 		sources, _ := (&App{cfg: &c}).acquisitionSources(t.Context())
 		names := sourceNames(sources.all())
-		if containsSource(names, fixture.SourceName) || containsSource(names, fixture.UploadSourceName) || !containsSource(names, ytdlp.SourceName) {
+		if containsSource(names, acquisition.FixtureSourceName) || containsSource(names, acquisition.UploadSourceName) || !containsSource(names, ytdlp.SourceName) {
 			t.Fatalf("cfg env=%q optIn=%v: sources %v, want live sources and no fixture", c.Env, c.AcquisitionFixtureOptIn, names)
 		}
 	}
@@ -214,8 +208,8 @@ func TestAcquisitionSources_OptedInTestEnvUsesOnlyFixtures(t *testing.T) {
 func assertFixtureTiers(t *testing.T, sources sourceTiers) {
 	t.Helper()
 	first, fallback := sourceNames(sources.first), sourceNames(sources.fallback)
-	if len(first) != 1 || first[0] != fixture.SourceName || len(fallback) != 1 || fallback[0] != fixture.UploadSourceName {
-		t.Fatalf("tiers first=%v fallback=%v, want [%q] and [%q]", first, fallback, fixture.SourceName, fixture.UploadSourceName)
+	if len(first) != 1 || first[0] != acquisition.FixtureSourceName || len(fallback) != 1 || fallback[0] != acquisition.UploadSourceName {
+		t.Fatalf("tiers first=%v fallback=%v, want [%q] and [%q]", first, fallback, acquisition.FixtureSourceName, acquisition.UploadSourceName)
 	}
 }
 
@@ -227,8 +221,8 @@ func TestAcquisitionFixture_TiersMirrorProd(t *testing.T) {
 	musicDir := t.TempDir()
 	track := acquireWithFixture(t, musicDir)
 	assertReadyWithAudio(t, track, musicDir)
-	if track.AudioSourceURL == nil || *track.AudioSourceURL != fixture.ArtTrackURL {
-		t.Fatalf("stored source = %v, want the resolved art track %q", track.AudioSourceURL, fixture.ArtTrackURL)
+	if track.AudioSourceURL == nil || *track.AudioSourceURL != acquisition.ArtTrackURL {
+		t.Fatalf("stored source = %v, want the resolved art track %q", track.AudioSourceURL, acquisition.ArtTrackURL)
 	}
 }
 
@@ -257,8 +251,8 @@ func acquireWithFixture(t *testing.T, musicDir string, opts ...func(*acqService.
 		t.Fatalf("new track: %v", err)
 	}
 	repo := &fixtureTrackRepo{track: track}
-	opts = append(opts, acqService.WithAudioTagger(id3.NewTagger()), acqService.WithAcquireTempWorkspace(tempfs.New()))
-	svc := acqService.NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), acqService.NewSourceRegistry(sources.first...).WithFallback(sources.fallback...), storage.NewFilesystemAudioStore(musicDir), opts...)
+	opts = append(opts, acqService.WithAudioTagger(acquisition.NewId3Tagger()), acqService.WithAcquireTempWorkspace(acquisition.NewTempWorkspace()))
+	svc := acqService.NewAcquireTrackAudioService(acquisition.NewTrackLedger(repo), acqService.NewSourceRegistry(sources.first...).WithFallback(sources.fallback...), catalog.NewFilesystemAudioStore(musicDir), opts...)
 	if err := svc.Execute(context.Background(), userID, track.ID); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
@@ -326,9 +320,9 @@ func TestAudioSources_TheSongsSearchOutranksTheCatalogLinkForTheSameVideo(t *tes
 	a := &App{cfg: &config.Config{YtMusicEnabled: true, YtDLPEnabled: true}}
 	first := sourceNames(a.audioSourcesFor(t.Context(), ytdlp.NewYtDlpAudioSearcher("", "", "")).first)
 
-	if len(first) != 3 || first[0] != catalogpin.SourceName || first[1] != ytmsearch.SourceName || first[2] != ytmusic.SourceName {
+	if len(first) != 3 || first[0] != acquisition.CatalogPinSourceName || first[1] != ytmsearch.SourceName || first[2] != ytmusic.SourceName {
 		t.Errorf("first tier = %v, want [%s %s %s]: duplicates keep the earlier source, and only the songs search carries the video's own length",
-			first, catalogpin.SourceName, ytmsearch.SourceName, ytmusic.SourceName)
+			first, acquisition.CatalogPinSourceName, ytmsearch.SourceName, ytmusic.SourceName)
 	}
 }
 
@@ -373,7 +367,7 @@ func TestBuildAudioStoreFailsFastWhenMisconfigured(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			store, err := storage.FromConfig(tt.cfg, slog.Default())
+			store, err := catalog.FromConfig(tt.cfg, slog.Default())
 			if err == nil {
 				t.Fatalf("expected startup error for misconfigured audio store, got store=%v", store)
 			}
@@ -390,7 +384,7 @@ func TestBuildAudioStoreFailsFastWhenMisconfigured(t *testing.T) {
 }
 
 func TestBuildAudioStoreFilesystemSucceeds(t *testing.T) {
-	store, err := storage.FromConfig(&config.Config{MusicDir: t.TempDir()}, slog.Default())
+	store, err := catalog.FromConfig(&config.Config{MusicDir: t.TempDir()}, slog.Default())
 	if err != nil {
 		t.Fatalf("filesystem audio store should resolve, got error: %v", err)
 	}
@@ -401,7 +395,7 @@ func TestBuildAudioStoreFilesystemSucceeds(t *testing.T) {
 
 func TestBuildAudioStoreScopesWhenKeyPrefixSet(t *testing.T) {
 	dir := t.TempDir()
-	store, err := storage.FromConfig(&config.Config{MusicDir: dir, AudioKeyPrefix: "staging/"}, slog.Default())
+	store, err := catalog.FromConfig(&config.Config{MusicDir: dir, AudioKeyPrefix: "staging/"}, slog.Default())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -425,7 +419,7 @@ func TestBuildAudioStoreScopesWhenKeyPrefixSet(t *testing.T) {
 
 func TestBuildAudioStoreUnscopedWhenKeyPrefixEmpty(t *testing.T) {
 	dir := t.TempDir()
-	store, err := storage.FromConfig(&config.Config{MusicDir: dir}, slog.Default())
+	store, err := catalog.FromConfig(&config.Config{MusicDir: dir}, slog.Default())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -495,7 +489,7 @@ func TestCatalogDBTimeout_ReachesOperatorLiveMetrics(t *testing.T) {
 		t.Fatalf("wireCatalog: %v", err)
 	}
 	operator := shared.NewUserId(uuid.New())
-	verifier := authports.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
+	verifier := auth.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
 		if token == operatorToken {
 			return authdomain.VerifiedToken{UserID: operator, ExpiresAt: time.Now().Add(time.Hour)}, nil
 		}
@@ -506,7 +500,7 @@ func TestCatalogDBTimeout_ReachesOperatorLiveMetrics(t *testing.T) {
 		discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{}))
 	mountObserveLiveMetrics(r, verifier, operator, liveMetricsSnapshot)
 
-	before := catalogMetrics.ReadSnapshot().DBCallTimeouts
+	before := catalog.ReadSnapshot().DBCallTimeouts
 	start := time.Now()
 	code, body := callObserveAs(t, r, http.MethodGet, "/v1/library/albums", operatorToken)
 	if code < http.StatusInternalServerError {
@@ -521,7 +515,7 @@ func TestCatalogDBTimeout_ReachesOperatorLiveMetrics(t *testing.T) {
 		t.Fatalf("operator metrics read: status %d, want 200; body %s", code, body)
 	}
 	var got struct {
-		Catalog catalogMetrics.Snapshot `json:"catalog"`
+		Catalog catalog.MetricsSnapshot `json:"catalog"`
 	}
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatalf("decode %s: %v", body, err)
@@ -565,7 +559,7 @@ func TestWireCatalogScheduler_RecordsOutcomeThroughThePostgresStore(t *testing.T
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
-	if _, _, err := catalogPersistence.NewPgxTrackRepository(pool).Add(context.Background(), track); err != nil {
+	if _, _, err := catalog.NewPgxTrackRepository(pool).Add(context.Background(), track); err != nil {
 		t.Fatalf("insert track: %v", err)
 	}
 
@@ -709,7 +703,7 @@ func TestBuildAcquisitionScheduler_AcquisitionPausedStartsPausedBeforeStartupSwi
 }
 
 func TestCatalogWiring_StoredAudioReaderStreamsTheStoredFile(t *testing.T) {
-	store := storage.NewFilesystemAudioStore(t.TempDir())
+	store := catalog.NewFilesystemAudioStore(t.TempDir())
 	source := filepath.Join(t.TempDir(), "in.m4a")
 	if err := os.WriteFile(source, []byte("stored audio bytes"), 0o600); err != nil {
 		t.Fatalf("write source: %v", err)
@@ -739,7 +733,7 @@ func TestCatalogWiring_StoredAudioReaderStreamsTheStoredFile(t *testing.T) {
 }
 
 func TestCatalogWiring_StoredAudioReaderReportsAMissingStoredFile(t *testing.T) {
-	store := storage.NewFilesystemAudioStore(t.TempDir())
+	store := catalog.NewFilesystemAudioStore(t.TempDir())
 
 	if _, err := (storedAudioReader{store: store}).CopyStored(t.Context(), "audio/missing.m4a", t.TempDir()); err == nil {
 		t.Fatal("CopyStored of a ref that is not stored: want error, got nil")

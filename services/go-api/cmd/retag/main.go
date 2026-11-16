@@ -1,9 +1,8 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/adapters/ffmpegtag"
-	"altune/go-api/internal/acquisition/adapters/id3"
-	"altune/go-api/internal/catalog/adapters/storage"
+	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/config"
 	shared "altune/go-api/internal/shared/kernel"
@@ -131,7 +130,7 @@ func productionRetagger(cfg *config.Config, audioStore catalogPorts.AudioStore, 
 	ffmpeg := binpath.Resolve("ffmpeg", cfg.FFmpegLocation)
 	return retagger{
 		store:       audioStore,
-		tagger:      ffmpegtag.NewTagger(ffmpeg, id3.NewTagger()),
+		tagger:      acquisition.NewFFmpegTagger(ffmpeg, acquisition.NewId3Tagger()),
 		media:       ffmpegTools{ffprobe: binpath.Resolve("ffprobe", cfg.FFmpegLocation), ffmpeg: ffmpeg},
 		attemptID:   shared.RandomID,
 		stillServes: tracks.stillServes,
@@ -154,7 +153,7 @@ func loadRuntime(env func(string) string) (runtime, error) {
 	if err != nil {
 		return runtime{}, fmt.Errorf("load config: %w", err)
 	}
-	audioStore, err := storage.FromConfig(cfg, slog.Default())
+	audioStore, err := catalog.FromConfig(cfg, slog.Default())
 	if err != nil {
 		return runtime{}, err
 	}

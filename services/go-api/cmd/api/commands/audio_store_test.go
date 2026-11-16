@@ -1,7 +1,7 @@
 package commands
 
 import (
-	"altune/go-api/internal/catalog/adapters/storage"
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared/config"
 	"context"
@@ -30,7 +30,7 @@ func TestNewAudioStoreFromConfigKeepsCommandsInsideTheKeyPrefix(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	store, err := storage.FromConfig(&config.Config{MusicDir: musicDir, AudioKeyPrefix: "staging/"}, slog.Default())
+	store, err := catalog.FromConfig(&config.Config{MusicDir: musicDir, AudioKeyPrefix: "staging/"}, slog.Default())
 	if err != nil {
 		t.Fatalf("storage.FromConfig: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestNewAudioStoreFromConfigLeavesAnUnprefixedStoreUnscoped(t *testing.T) {
 	if err := os.WriteFile(source, []byte("new audio"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	store, err := storage.FromConfig(&config.Config{MusicDir: musicDir}, slog.Default())
+	store, err := catalog.FromConfig(&config.Config{MusicDir: musicDir}, slog.Default())
 	if err != nil {
 		t.Fatalf("storage.FromConfig: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestNewAudioStoreFromConfigForwardsAudioAgeListerForSweep(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	store, err := storage.FromConfig(&config.Config{MusicDir: musicDir, AudioKeyPrefix: "staging/"}, slog.Default())
+	store, err := catalog.FromConfig(&config.Config{MusicDir: musicDir, AudioKeyPrefix: "staging/"}, slog.Default())
 	if err != nil {
 		t.Fatalf("storage.FromConfig: %v", err)
 	}

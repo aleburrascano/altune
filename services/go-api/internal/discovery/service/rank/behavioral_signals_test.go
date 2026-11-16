@@ -1,7 +1,7 @@
 package rank
 
 import (
-	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/internal/core/ports"
 	"context"
 	"errors"
 	"sync"

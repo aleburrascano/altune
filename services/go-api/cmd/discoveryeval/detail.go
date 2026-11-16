@@ -2,6 +2,7 @@ package main
 
 import (
 	"altune/go-api/internal/app"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/service/content"
 	"altune/go-api/internal/discovery/service/providercall"
@@ -17,7 +18,6 @@ import (
 	"strings"
 	"time"
 
-	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryEval "altune/go-api/internal/discovery/service/eval"
 	goldeneval "altune/go-api/internal/discovery/service/goldeneval"
 
@@ -49,7 +49,7 @@ func runDetail(ctx context.Context, cfg *config.Config, opts options) error {
 	return runHarness("detail", once, human, opts)
 }
 
-var _ discoveryPorts.IdentityStore = (*seededIdentityStore)(nil)
+var _ discovery.IdentityStore = (*seededIdentityStore)(nil)
 
 type identityRow struct {
 	mbid string

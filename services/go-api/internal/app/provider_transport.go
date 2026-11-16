@@ -1,6 +1,7 @@
 package app
 
 import (
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/egress"
 	"altune/go-api/internal/shared/httptrace"
@@ -13,8 +14,6 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
-
-	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
 )
 
 func providerTransport(cfg *config.Config) (http.RoundTripper, error) {
@@ -85,11 +84,11 @@ const (
 )
 
 func countedProviderTransport(base http.RoundTripper) http.RoundTripper {
-	return providermetrics.NewCountingTransport(base)
+	return discovery.NewCountingTransport(base)
 }
 
 var sharedLiveTransport = sync.OnceValue(func() http.RoundTripper {
-	return countedProviderTransport(egress.NewLiveTransport(egress.WithRetryRecorder(providermetrics.RecordRetry)))
+	return countedProviderTransport(egress.NewLiveTransport(egress.WithRetryRecorder(discovery.RecordRetry)))
 })
 
 type clientFactory struct {

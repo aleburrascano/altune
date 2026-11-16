@@ -1,6 +1,8 @@
 package persistence
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/core/ports"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,9 +10,6 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"

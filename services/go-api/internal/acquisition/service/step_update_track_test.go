@@ -1,8 +1,8 @@
 package service
 
 import (
-	"altune/go-api/internal/acquisition/adapters/catalogbridge"
-	"altune/go-api/internal/acquisition/adapters/discoverybridge"
+	"altune/go-api/internal/acquisition/internal/adapters/catalogbridge"
+	"altune/go-api/internal/acquisition/internal/adapters/discoverybridge"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service/grade"
 	"altune/go-api/internal/acquisition/service/upgrade"

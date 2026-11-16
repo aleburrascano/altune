@@ -3,7 +3,7 @@ package search
 import (
 	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/internal/core/ports"
 	"altune/go-api/internal/discovery/service/content"
 	"altune/go-api/internal/discovery/service/history"
 	"altune/go-api/internal/discovery/service/providercall"

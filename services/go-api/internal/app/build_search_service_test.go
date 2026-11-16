@@ -1,17 +1,9 @@
 package app
 
 import (
+	"altune/go-api/internal/discovery"
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
-	"altune/go-api/internal/discovery/adapters/providers/amazonmusic"
-	"altune/go-api/internal/discovery/adapters/providers/applemusic"
-	"altune/go-api/internal/discovery/adapters/providers/itunes"
-	"altune/go-api/internal/discovery/adapters/providers/lastfm"
-	"altune/go-api/internal/discovery/adapters/providers/musicbrainz"
-	"altune/go-api/internal/discovery/adapters/providers/soundcloud"
-	"altune/go-api/internal/discovery/adapters/providers/spotify"
-	"altune/go-api/internal/discovery/adapters/providers/ytmusic"
 	discoveryDomain "altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service/search"
 	"altune/go-api/internal/shared/config"
 	"context"
@@ -386,7 +378,7 @@ func TestSearchProviders_EveryProviderCanBeChosenByEnvName(t *testing.T) {
 	cfg.YtMusicEnabled = true
 	cfg.AmazonMusicEnabled = true
 	cfg.LastFMAPIKey = "key"
-	mb := musicbrainz.NewMusicBrainzAdapter(http.DefaultClient, "altune-test")
+	mb := discovery.NewMusicBrainzAdapter(http.DefaultClient, "altune-test")
 
 	for _, p := range buildSearchProviderList(context.Background(), newClientFactory(nil), cfg, mb) {
 		if !slices.Contains(config.DiscoverySearchProviderNames, p.Name().String()) {
@@ -396,16 +388,16 @@ func TestSearchProviders_EveryProviderCanBeChosenByEnvName(t *testing.T) {
 }
 
 func TestAdaptersImplementSearchTimeouter(t *testing.T) {
-	adapters := []ports.SearchTimeouter{
-		(*ytmusic.YouTubeMusicAdapter)(nil),
-		(*amazonmusic.AmazonMusicAdapter)(nil),
-		(*soundcloud.SoundCloudAPIAdapter)(nil),
-		(*soundcloud.SoundCloudAdapter)(nil),
-		(*spotify.SpotifyAdapter)(nil),
-		(*itunes.ITunesAdapter)(nil),
-		(*applemusic.AppleMusicAdapter)(nil),
-		(*lastfm.LastFmAdapter)(nil),
-		(*musicbrainz.MusicBrainzAdapter)(nil),
+	adapters := []discovery.SearchTimeouter{
+		(*discovery.YouTubeMusicAdapter)(nil),
+		(*discovery.AmazonMusicAdapter)(nil),
+		(*discovery.SoundCloudAPIAdapter)(nil),
+		(*discovery.SoundCloudAdapter)(nil),
+		(*discovery.SpotifyAdapter)(nil),
+		(*discovery.ITunesAdapter)(nil),
+		(*discovery.AppleMusicAdapter)(nil),
+		(*discovery.LastFmAdapter)(nil),
+		(*discovery.MusicBrainzAdapter)(nil),
 	}
 	if len(adapters) != 9 {
 		t.Errorf("SearchTimeouter adapters = %d, want 9", len(adapters))

@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"altune/go-api/internal/auth/domain"
-	"altune/go-api/internal/auth/ports"
+	"altune/go-api/internal/auth/internal/core/ports"
 	"altune/go-api/internal/auth/service"
 	"altune/go-api/internal/shared/httputil"
 	shared "altune/go-api/internal/shared/kernel"

@@ -1,7 +1,7 @@
 package app
 
 import (
-	discoveryPorts "altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/service/rank"
 	"altune/go-api/internal/discovery/service/search"
 	"altune/go-api/internal/shared/config"
@@ -160,7 +160,7 @@ func TestWhenLeaderUnlessDisabled_DisabledMonitorsNeverStart(t *testing.T) {
 
 type countingBehavioralStore struct{ calls atomic.Int64 }
 
-func (s *countingBehavioralStore) SatisfactionSignals(context.Context, time.Time) ([]discoveryPorts.BehavioralSignal, error) {
+func (s *countingBehavioralStore) SatisfactionSignals(context.Context, time.Time) ([]discovery.BehavioralSignal, error) {
 	s.calls.Add(1)
 	return nil, nil
 }

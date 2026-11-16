@@ -1,8 +1,7 @@
 package app
 
 import (
-	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
-	discoveryPorts "altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/runloop"
 	"bytes"
@@ -29,20 +28,20 @@ var errStoreDown = errors.New("connection refused")
 func TestEraseDiscoveryRowsOfDeletedIdentities_TellsIdleApartFromFailed(t *testing.T) {
 	cases := []struct {
 		name    string
-		erasers []discoveryPorts.DeletedIdentityEraser
+		erasers []discovery.DeletedIdentityEraser
 		wantErr error
 	}{
 		{
 			name: "an unreadable identity store idles",
-			erasers: []discoveryPorts.DeletedIdentityEraser{
-				erasedRows{err: fmt.Errorf("erase: %w", discoveryPorts.ErrIdentityStoreUnavailable)},
+			erasers: []discovery.DeletedIdentityEraser{
+				erasedRows{err: fmt.Errorf("erase: %w", discovery.ErrIdentityStoreUnavailable)},
 				erasedRows{rows: 7},
 			},
 			wantErr: nil,
 		},
 		{
 			name: "any other failure is reported",
-			erasers: []discoveryPorts.DeletedIdentityEraser{
+			erasers: []discovery.DeletedIdentityEraser{
 				erasedRows{rows: 7},
 				erasedRows{err: errStoreDown},
 			},
@@ -50,7 +49,7 @@ func TestEraseDiscoveryRowsOfDeletedIdentities_TellsIdleApartFromFailed(t *testi
 		},
 		{
 			name: "a clean run reports success",
-			erasers: []discoveryPorts.DeletedIdentityEraser{
+			erasers: []discovery.DeletedIdentityEraser{
 				erasedRows{rows: 2},
 				erasedRows{rows: 0},
 			},
@@ -82,7 +81,7 @@ func (c countingEraser) EraseRowsOfDeletedIdentities(ctx context.Context) (int64
 func TestDeletedIdentitySweep_AFailingTableDoesNotSkipTheRest(t *testing.T) {
 	var calls int
 	errDiskFull := errors.New("disk full")
-	erasers := []discoveryPorts.DeletedIdentityEraser{
+	erasers := []discovery.DeletedIdentityEraser{
 		countingEraser{calls: &calls, erasedRows: erasedRows{err: errStoreDown}},
 		countingEraser{calls: &calls, erasedRows: erasedRows{rows: 3}},
 		countingEraser{calls: &calls, erasedRows: erasedRows{err: errDiskFull}},
@@ -100,9 +99,9 @@ func TestDeletedIdentitySweep_AFailingTableDoesNotSkipTheRest(t *testing.T) {
 
 func TestDeletedIdentitySweep_UnavailableStoreKeepsEarlierFailuresAndRunsTheRest(t *testing.T) {
 	var calls int
-	erasers := []discoveryPorts.DeletedIdentityEraser{
+	erasers := []discovery.DeletedIdentityEraser{
 		countingEraser{calls: &calls, erasedRows: erasedRows{err: errStoreDown}},
-		countingEraser{calls: &calls, erasedRows: erasedRows{err: discoveryPorts.ErrIdentityStoreUnavailable}},
+		countingEraser{calls: &calls, erasedRows: erasedRows{err: discovery.ErrIdentityStoreUnavailable}},
 		countingEraser{calls: &calls, erasedRows: erasedRows{rows: 4}},
 	}
 
@@ -117,14 +116,14 @@ func TestDeletedIdentitySweep_UnavailableStoreKeepsEarlierFailuresAndRunsTheRest
 }
 
 func TestDeletedIdentitySweep_EveryEraserUnavailableIsAFailure(t *testing.T) {
-	erasers := []discoveryPorts.DeletedIdentityEraser{
-		erasedRows{err: discoveryPorts.ErrIdentityStoreUnavailable},
-		erasedRows{err: discoveryPorts.ErrIdentityStoreUnavailable},
+	erasers := []discovery.DeletedIdentityEraser{
+		erasedRows{err: discovery.ErrIdentityStoreUnavailable},
+		erasedRows{err: discovery.ErrIdentityStoreUnavailable},
 	}
 
 	err := eraseDiscoveryRowsOfDeletedIdentities(context.Background(), erasers)
 
-	if !errors.Is(err, discoveryPorts.ErrIdentityStoreUnavailable) {
+	if !errors.Is(err, discovery.ErrIdentityStoreUnavailable) {
 		t.Errorf("error = %v, want a permanently idle sweep reported as a failure", err)
 	}
 }
@@ -320,11 +319,11 @@ func TestBackgroundChartCallsAreCounted(t *testing.T) {
 	if len(charts) == 0 {
 		t.Fatal("precondition: the Deezer chart provider must be wired")
 	}
-	before := providermetrics.ReadSnapshot()
+	before := discovery.ReadProviderMetricsSnapshot()
 	if _, err := charts[0].FetchCharts(context.Background(), 1); err != nil {
 		t.Fatalf("fetch charts: %v", err)
 	}
-	counted := totalProviderCounts(providermetrics.ReadSnapshot()) - totalProviderCounts(before)
+	counted := totalProviderCounts(discovery.ReadProviderMetricsSnapshot()) - totalProviderCounts(before)
 
 	if rt.roundTrips() == 0 {
 		t.Fatal("the chart fetch made no provider call, so it proves nothing about the transport")
@@ -336,7 +335,7 @@ func TestBackgroundChartCallsAreCounted(t *testing.T) {
 
 type failingLabelStore struct{ ran chan struct{} }
 
-func (f failingLabelStore) BehavioralLabels(context.Context, time.Time) ([]discoveryPorts.BehavioralLabel, error) {
+func (f failingLabelStore) BehavioralLabels(context.Context, time.Time) ([]discovery.BehavioralLabel, error) {
 	signalRan(f.ran)
 	return nil, errors.New("boom")
 }

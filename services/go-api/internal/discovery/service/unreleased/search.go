@@ -1,7 +1,7 @@
 package unreleased
 
 import (
-	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/internal/core/ports"
 	"context"
 	"strings"
 	"unicode/utf8"

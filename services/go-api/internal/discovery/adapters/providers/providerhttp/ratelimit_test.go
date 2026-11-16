@@ -1,8 +1,8 @@
 package providerhttp
 
 import (
-	"altune/go-api/internal/discovery/adapters/providers/providertest"
-	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/internal/adapters/providers/providertest"
+	"altune/go-api/internal/discovery/internal/core/ports"
 	"context"
 	"errors"
 	"slices"

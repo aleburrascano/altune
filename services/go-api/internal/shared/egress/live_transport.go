@@ -131,7 +131,7 @@ func (t *liveTransport) attempt(req *http.Request, attempt int) (*http.Response,
 		return nil, attemptResult{err: err, cause: retryCause{errorClass: transportErrorClass(err)}}, false
 	}
 	if attempt < liveMaxAttempts-1 && retryableStatus(resp.StatusCode) {
-		retryAfter, _ := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
+		retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
 		_ = resp.Body.Close()
 		failed := fmt.Errorf("upstream status %d", resp.StatusCode)
 		return nil, attemptResult{err: failed, retryAfter: retryAfter, cause: retryCause{status: resp.StatusCode}}, false
@@ -205,7 +205,7 @@ func rewindBody(req *http.Request) (io.ReadCloser, error) {
 	return req.GetBody()
 }
 
-const liveMaxRetryAfter = 30 * time.Second
+const liveMaxRetryAfterSeconds = 30
 
 func (t *liveTransport) retryDelay(attempt int, retryAfter time.Duration) time.Duration {
 	if retryAfter > 0 {
@@ -214,67 +214,33 @@ func (t *liveTransport) retryDelay(attempt int, retryAfter time.Duration) time.D
 	return t.fixedBackoff(attempt)
 }
 
-const liveBackoffBase = 250 * time.Millisecond
+const liveBackoffBaseMillis = 250
 
 const liveBackoffJitter = 0.2
 
-const liveMaxBackoff = liveMaxAttempts * liveBackoffBase
-
 func (t *liveTransport) fixedBackoff(attempt int) time.Duration {
-	base := time.Duration(attempt) * liveBackoffBase
-	if base <= 0 {
-		return 0
-	}
+	base := time.Duration(attempt*liveBackoffBaseMillis) * time.Millisecond
 	next := rand.Float64
 	if t.randFloat != nil {
 		next = t.randFloat
 	}
 	delta := (next()*2 - 1) * liveBackoffJitter * float64(base)
-	d := base + time.Duration(delta)
-	if d < 0 {
-		d = 0
-	}
-	if d > liveMaxBackoff {
-		d = liveMaxBackoff
-	}
-	return d
+	return base + time.Duration(delta)
 }
 
-func parseRetryAfter(h string, now time.Time) (time.Duration, bool) {
+func parseRetryAfter(h string, now time.Time) time.Duration {
 	h = strings.TrimSpace(h)
 	if h == "" {
-		return 0, false
+		return 0
 	}
 	if secs, err := strconv.Atoi(h); err == nil {
-		return retryAfterFromSeconds(secs)
+		return time.Duration(min(max(secs, 0), liveMaxRetryAfterSeconds)) * time.Second
 	}
 	when, err := http.ParseTime(h)
 	if err != nil {
-		return 0, false
-	}
-	return capRetryAfter(when.Sub(now)), true
-}
-
-const liveMaxRetryAfterSeconds = int(liveMaxRetryAfter / time.Second)
-
-func retryAfterFromSeconds(secs int) (time.Duration, bool) {
-	if secs < 0 {
-		return 0, false
-	}
-	if secs > liveMaxRetryAfterSeconds {
-		return liveMaxRetryAfter, true
-	}
-	return time.Duration(secs) * time.Second, true
-}
-
-func capRetryAfter(d time.Duration) time.Duration {
-	if d < 0 {
 		return 0
 	}
-	if d > liveMaxRetryAfter {
-		return liveMaxRetryAfter
-	}
-	return d
+	return min(max(when.Sub(now), 0), liveMaxRetryAfterSeconds*time.Second)
 }
 
 func (t *liveTransport) wait(ctx context.Context, d time.Duration) error {

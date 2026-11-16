@@ -2,8 +2,8 @@ package queue
 
 import (
 	"altune/go-api/internal/playback/domain"
-	"altune/go-api/internal/playback/playbacktest"
-	"altune/go-api/internal/playback/ports"
+	"altune/go-api/internal/playback/internal/adapters/playbacktest"
+	"altune/go-api/internal/playback/internal/core/ports"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"

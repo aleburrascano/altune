@@ -1,12 +1,8 @@
 package app
 
 import (
-	"altune/go-api/internal/catalog/adapters/discoverybridge"
-	"altune/go-api/internal/discovery/adapters/providers/deezer"
-	"altune/go-api/internal/discovery/adapters/providers/genius"
-	"altune/go-api/internal/discovery/adapters/providers/itunes"
-	"altune/go-api/internal/discovery/adapters/providers/musicbrainz"
-	"altune/go-api/internal/discovery/adapters/providers/trackers"
+	"altune/go-api/internal/catalog"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/service/content"
 	"altune/go-api/internal/discovery/service/favorites"
 	"altune/go-api/internal/discovery/service/history"
@@ -24,24 +20,22 @@ import (
 
 	"go.opentelemetry.io/otel"
 
-	discoveryCacheAdapters "altune/go-api/internal/discovery/adapters/cache"
 	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 
 	discoveryDomain "altune/go-api/internal/discovery/domain"
-	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryEnrich "altune/go-api/internal/discovery/service/enrich"
 )
 
 type discoveryWiring struct {
 	handler        *discoveryHandler.DiscoveryHandler
 	searchSvc      *search.Service
-	featuredBridge *discoverybridge.FeaturedResolver
-	musicBrainz    *musicbrainz.MusicBrainzAdapter
+	featuredBridge *catalog.FeaturedResolver
+	musicBrainz    *discovery.MusicBrainzAdapter
 }
 
 type discoveryContentStaging struct {
-	featuredBridge *discoverybridge.FeaturedResolver
+	featuredBridge *catalog.FeaturedResolver
 	albumSvc       *content.GetAlbumTracksService
 	artistSvc      *content.GetArtistContentService
 	relatedSvc     *related.GetRelatedTracksService
@@ -50,10 +44,10 @@ type discoveryContentStaging struct {
 
 func (a *App) wireDiscoveryContent(
 	cf clientFactory,
-	sharedMB *musicbrainz.MusicBrainzAdapter,
-	vocabStore discoveryPorts.VocabularyStore,
+	sharedMB *discovery.MusicBrainzAdapter,
+	vocabStore discovery.VocabularyStore,
 	breaker *providercall.CircuitBreaker,
-	eventStore discoveryPorts.EventStore,
+	eventStore discovery.EventStore,
 ) discoveryContentStaging {
 	albumSvc, relatedSvc := a.buildAlbumAndRelatedServices(cf, breaker)
 	return discoveryContentStaging{
@@ -65,20 +59,20 @@ func (a *App) wireDiscoveryContent(
 	}
 }
 
-func buildFeaturedBridge(cf clientFactory, sharedMB *musicbrainz.MusicBrainzAdapter) *discoverybridge.FeaturedResolver {
-	featuredDeezer := deezer.NewDeezerAdapter(cf.discovery())
+func buildFeaturedBridge(cf clientFactory, sharedMB *discovery.MusicBrainzAdapter) *catalog.FeaturedResolver {
+	featuredDeezer := discovery.NewDeezerAdapter(cf.discovery())
 	featuredResolver := content.NewFeaturedArtistResolver(nil, featuredDeezer)
 	if sharedMB != nil {
 		featuredResolver = content.NewFeaturedArtistResolver(sharedMB, featuredDeezer)
 	}
-	return discoverybridge.NewFeaturedResolver(featuredResolver)
+	return catalog.NewFeaturedResolver(featuredResolver)
 }
 
 func (a *App) buildAlbumAndRelatedServices(
 	cf clientFactory,
 	breaker *providercall.CircuitBreaker,
 ) (*content.GetAlbumTracksService, *related.GetRelatedTracksService) {
-	deezerContent := deezer.NewDeezerAdapter(cf.discovery())
+	deezerContent := discovery.NewDeezerAdapter(cf.discovery())
 	albumProviders, relatedProviders := a.buildAlbumContentProviders(cf, deezerContent)
 
 	relatedSvc := related.NewGetRelatedTracksService(relatedProviders,
@@ -94,14 +88,14 @@ func (a *App) buildAlbumAndRelatedServices(
 
 func (a *App) buildAlbumContentProviders(
 	cf clientFactory,
-	deezerContent *deezer.DeezerAdapter,
-) (map[discoveryDomain.ProviderName]discoveryPorts.AlbumContentProvider, map[string]discoveryPorts.RelatedTracksProvider) {
-	itunesContent := itunes.NewITunesAdapter(cf.discovery())
-	albumProviders := map[discoveryDomain.ProviderName]discoveryPorts.AlbumContentProvider{
+	deezerContent *discovery.DeezerAdapter,
+) (map[discoveryDomain.ProviderName]discovery.AlbumContentProvider, map[string]discovery.RelatedTracksProvider) {
+	itunesContent := discovery.NewITunesAdapter(cf.discovery())
+	albumProviders := map[discoveryDomain.ProviderName]discovery.AlbumContentProvider{
 		discoveryDomain.ProviderDeezer: deezerContent,
 		discoveryDomain.ProviderITunes: itunesContent,
 	}
-	relatedProviders := map[string]discoveryPorts.RelatedTracksProvider{}
+	relatedProviders := map[string]discovery.RelatedTracksProvider{}
 	if am := buildAppleMusicAdapter(cf, a.cfg); am != nil {
 		albumProviders[discoveryDomain.ProviderAppleMusic] = am
 	}
@@ -117,9 +111,9 @@ func (a *App) buildAlbumContentProviders(
 
 func (a *App) buildArtistContentService(
 	cf clientFactory,
-	sharedMB *musicbrainz.MusicBrainzAdapter,
+	sharedMB *discovery.MusicBrainzAdapter,
 	breaker *providercall.CircuitBreaker,
-	eventStore discoveryPorts.EventStore,
+	eventStore discovery.EventStore,
 ) *content.GetArtistContentService {
 	artistProviders := buildArtistContentProviders(cf, a.cfg)
 	artistContentOpts := a.buildArtistContentOptions(sharedMB, breaker, eventStore)
@@ -127,9 +121,9 @@ func (a *App) buildArtistContentService(
 }
 
 func (a *App) buildArtistContentOptions(
-	sharedMB *musicbrainz.MusicBrainzAdapter,
+	sharedMB *discovery.MusicBrainzAdapter,
 	breaker *providercall.CircuitBreaker,
-	eventStore discoveryPorts.EventStore,
+	eventStore discovery.EventStore,
 ) []content.ArtistContentOption {
 	artistContentOpts := []content.ArtistContentOption{
 		content.WithContentCircuitBreaker(breaker),
@@ -151,7 +145,7 @@ func (a *App) contentIdentityStoreOption() content.ArtistContentOption {
 		return nil
 	}
 	return content.WithContentIdentityStore(
-		discoveryCacheAdapters.NewRedisIdentityStore(
+		discovery.NewRedisIdentityStore(
 			discoveryPersistence.NewPgxIdentityStore(a.pool),
 			a.redisClient,
 			cacheSignalOption(),
@@ -159,11 +153,11 @@ func (a *App) contentIdentityStoreOption() content.ArtistContentOption {
 	)
 }
 
-func (a *App) wireDiscoveryEnrichment(cf clientFactory, sharedMB *musicbrainz.MusicBrainzAdapter) *discoveryEnrich.EnrichmentService {
+func (a *App) wireDiscoveryEnrichment(cf clientFactory, sharedMB *discovery.MusicBrainzAdapter) *discoveryEnrich.EnrichmentService {
 	if sharedMB == nil {
 		return nil
 	}
-	enrichmentCache := discoveryCacheAdapters.NewRedisEnrichmentCache(a.redisClient, cacheSignalOption())
+	enrichmentCache := discovery.NewRedisEnrichmentCache(a.redisClient, cacheSignalOption())
 	return discoveryEnrich.NewEnrichmentService(
 		sharedMB,
 		buildArtworkChain(cf, a.cfg),
@@ -177,7 +171,7 @@ func (a *App) startDiscoveryBackgroundJobs(
 	cf clientFactory,
 	searchSvc *search.Service,
 	eventStore *discoveryPersistence.PgxEventStore,
-	vocabStore discoveryPorts.VocabularyStore,
+	vocabStore discovery.VocabularyStore,
 ) {
 	if a.cfg.BehavioralRankingEnabled {
 		a.startEveryInstanceTicker(ctx, jobBehavioralRankingRefresh, 30*time.Minute, func(ctx context.Context) error {
@@ -221,20 +215,20 @@ func (a *App) buildUnreleasedService(ctx context.Context, cf clientFactory, arti
 	if (!a.cfg.HasGenius() && !a.cfg.HasTrackers()) || artistSvc == nil {
 		return nil
 	}
-	var cache discoveryPorts.UnreleasedCache
+	var cache discovery.UnreleasedCache
 	opts := a.unreleasedOptions(ctx, cf)
 	store := a.unreleasedStore(ctx)
 	if store != nil {
 		opts = append(opts, unreleased.WithStore(store))
 	} else {
-		cache = discoveryCacheAdapters.NewRedisUnreleasedCache(a.redisClient, cacheSignalOption())
+		cache = discovery.NewRedisUnreleasedCache(a.redisClient, cacheSignalOption())
 	}
 	svc := unreleased.NewService(a.geniusSongCatalog(cf), artistSvc, cache, a.unreleasedConfig(), opts...)
 	a.startUnreleasedRefresh(svc, store)
 	return svc
 }
 
-func (a *App) unreleasedStore(ctx context.Context) discoveryPorts.UnreleasedStore {
+func (a *App) unreleasedStore(ctx context.Context) discovery.UnreleasedStore {
 	if a.cfg.UnreleasedSource == "cache" {
 		return nil
 	}
@@ -245,18 +239,18 @@ func (a *App) unreleasedStore(ctx context.Context) discoveryPorts.UnreleasedStor
 	return discoveryPersistence.NewPgxUnreleasedStore(a.pool)
 }
 
-func (a *App) geniusSongCatalog(cf clientFactory) discoveryPorts.GeniusSongCatalog {
+func (a *App) geniusSongCatalog(cf clientFactory) discovery.GeniusSongCatalog {
 	if !a.cfg.HasGenius() {
 		return nil
 	}
-	return genius.NewSongCatalog(cf.discovery(), a.cfg.GeniusAccessToken)
+	return discovery.NewSongCatalog(cf.discovery(), a.cfg.GeniusAccessToken)
 }
 
 func (a *App) unreleasedOptions(ctx context.Context, cf clientFactory) []unreleased.Option {
 	opts := []unreleased.Option{unreleased.WithLifecycle(ctx, &a.wg)}
 	if a.cfg.HasTrackers() {
-		index := discoveryCacheAdapters.NewRedisTrackerIndexCache(a.redisClient, cacheSignalOption())
-		opts = append(opts, unreleased.WithTrackers(trackers.NewClient(cf.discovery(), a.cfg.GoogleSheetsAPIKey, a.cfg.TrackerHubSheetID, index)))
+		index := discovery.NewRedisTrackerIndexCache(a.redisClient, cacheSignalOption())
+		opts = append(opts, unreleased.WithTrackers(discovery.NewTrackersClient(cf.discovery(), a.cfg.GoogleSheetsAPIKey, a.cfg.TrackerHubSheetID, index)))
 	}
 	return opts
 }
@@ -328,14 +322,14 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 
 const cacheOpsVarName = "discovery_cache_ops"
 
-func cacheSignal() *discoveryCacheAdapters.Signal {
+func cacheSignal() *discovery.CacheSignal {
 	ops, ok := expvar.Get(cacheOpsVarName).(*expvar.Map)
 	if !ok {
 		ops = expvar.NewMap(cacheOpsVarName)
 	}
-	return discoveryCacheAdapters.NewSignal(ops, time.Now)
+	return discovery.NewCacheSignal(ops, time.Now)
 }
 
-func cacheSignalOption() discoveryCacheAdapters.Option {
-	return discoveryCacheAdapters.WithSignal(cacheSignal())
+func cacheSignalOption() discovery.CacheOption {
+	return discovery.WithCacheSignal(cacheSignal())
 }

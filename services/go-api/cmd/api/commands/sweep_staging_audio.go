@@ -1,8 +1,7 @@
 package commands
 
 import (
-	"altune/go-api/internal/catalog/adapters/persistence"
-	"altune/go-api/internal/catalog/adapters/storage"
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared/config"
 	"context"
@@ -30,11 +29,11 @@ func runSweepStagingAudio(cfg *config.Config, execute bool) error {
 	}
 	defer pool.Close()
 
-	return sweepAudioStore(ctx, cfg, persistence.NewPgxTrackRepository(pool), execute)
+	return sweepAudioStore(ctx, cfg, catalog.NewPgxTrackRepository(pool), execute)
 }
 
 func sweepAudioStore(ctx context.Context, cfg *config.Config, refs ports.AudioRefPrefixLister, execute bool) error {
-	store, err := storage.FromConfig(cfg, slog.Default())
+	store, err := catalog.FromConfig(cfg, slog.Default())
 	if err != nil {
 		return err
 	}

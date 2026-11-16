@@ -2,14 +2,10 @@ package app
 
 import (
 	authservice "altune/go-api/internal/auth/service"
+	"altune/go-api/internal/discovery"
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
-	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
-	"altune/go-api/internal/discovery/adapters/providers/artworkchain"
-	"altune/go-api/internal/discovery/adapters/providers/coverartarchive"
-	"altune/go-api/internal/discovery/adapters/providers/discogs"
 	"altune/go-api/internal/discovery/discoverytest"
 	discoveryDomain "altune/go-api/internal/discovery/domain"
-	discoveryPorts "altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service/content"
 	discoveryEnrich "altune/go-api/internal/discovery/service/enrich"
 	"altune/go-api/internal/discovery/service/rank"
@@ -57,7 +53,7 @@ func (rt *countingProviderRT) roundTrips() int {
 	return rt.calls
 }
 
-func totalProviderCounts(s providermetrics.Snapshot) int64 {
+func totalProviderCounts(s discovery.ProviderMetricsSnapshot) int64 {
 	var total int64
 	for _, o := range s {
 		total += o.OK + o.Quota + o.Error
@@ -80,11 +76,11 @@ func TestRequestPathProviderCallsAreCountedOnce(t *testing.T) {
 			rt := &countingProviderRT{}
 			a := &App{cfg: &config.Config{MusicBrainzUserAgent: "altune-test/1.0"}}
 			disc := a.wireDiscovery(context.Background(), newClientFactory(countedProviderTransport(rt)))
-			before := providermetrics.ReadSnapshot()
+			before := discovery.ReadProviderMetricsSnapshot()
 			req := httptest.NewRequest(http.MethodGet, route.target, nil)
 			req = req.WithContext(authservice.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
 			disc.handler.Routes().ServeHTTP(httptest.NewRecorder(), req)
-			counted := totalProviderCounts(providermetrics.ReadSnapshot()) - totalProviderCounts(before)
+			counted := totalProviderCounts(discovery.ReadProviderMetricsSnapshot()) - totalProviderCounts(before)
 
 			if rt.roundTrips() == 0 {
 				t.Fatalf("%s made no provider call, so it proves nothing about the transport", route.target)
@@ -168,8 +164,8 @@ func TestEnrichmentService_CallerSuppliedMBID_RealChainReachesCoverArtArchive(t 
 	}))
 	defer caaServer.Close()
 
-	caa := coverartarchive.NewCoverArtArchiveResolver(rewrittenClient(caaServer.URL))
-	chain := artworkchain.NewChainedArtworkResolver(caa, coverartarchive.NewCoverArtArchiveIdentityResolver(caa))
+	caa := discovery.NewCoverArtArchiveResolver(rewrittenClient(caaServer.URL))
+	chain := discovery.NewChainedArtworkResolver(caa, discovery.NewCoverArtArchiveIdentityResolver(caa))
 
 	enr := &enrichRealChainFakeEnricher{enrichment: enrichRealChainSampleEnrichment()}
 	svc := discoveryEnrich.NewEnrichmentService(enr, chain, newEnrichRealChainMemCache())
@@ -197,8 +193,8 @@ func TestEnrichmentService_CallerSuppliedMBID_RealChainForwardsBridgedExternalID
 	}))
 	defer discogsServer.Close()
 
-	discogsAdapter := discogs.NewDiscogsAdapter(rewrittenClient(discogsServer.URL), "test-token", "altune-test/1.0")
-	chain := artworkchain.NewChainedArtworkResolver(discogsAdapter)
+	discogsAdapter := discovery.NewDiscogsAdapter(rewrittenClient(discogsServer.URL), "test-token", "altune-test/1.0")
+	chain := discovery.NewChainedArtworkResolver(discogsAdapter)
 
 	e := discoveryDomain.EmptyEnrichment()
 	e.MBID = "mbid-artist-1"
@@ -220,7 +216,7 @@ func TestEnrichmentService_CallerSuppliedMBID_RealChainForwardsBridgedExternalID
 
 type failingBehavioralStore struct{ err error }
 
-func (s failingBehavioralStore) SatisfactionSignals(context.Context, time.Time) ([]discoveryPorts.BehavioralSignal, error) {
+func (s failingBehavioralStore) SatisfactionSignals(context.Context, time.Time) ([]discovery.BehavioralSignal, error) {
 	return nil, s.err
 }
 
@@ -357,7 +353,7 @@ type limitRecordingStore struct {
 	limits []int
 }
 
-func (l *limitRecordingStore) Due(_ context.Context, _ time.Time, limit int) ([]discoveryPorts.UnreleasedDueArtist, error) {
+func (l *limitRecordingStore) Due(_ context.Context, _ time.Time, limit int) ([]discovery.UnreleasedDueArtist, error) {
 	l.limits = append(l.limits, limit)
 	return nil, nil
 }

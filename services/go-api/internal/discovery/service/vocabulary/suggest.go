@@ -2,7 +2,7 @@ package vocabulary
 
 import (
 	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/internal/core/ports"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"log/slog"

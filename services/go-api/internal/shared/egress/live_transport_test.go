@@ -121,6 +121,57 @@ func TestLiveTransport_ExhaustsOnPersistent503(t *testing.T) {
 	}
 }
 
+func TestLiveTransport_RetriesOn500(t *testing.T) {
+	f := &fakeRT{steps: []fakeStep{{status: 500}, {status: 200}}}
+	var delays []time.Duration
+	resp, err := recordDelays(f, &delays).RoundTrip(getReq(t))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 || f.calls != 2 {
+		t.Errorf("status=%d calls=%d, want 200 and 2 (500 is retried)", resp.StatusCode, f.calls)
+	}
+}
+
+func TestLiveTransport_GivesUpAfterThreeTransportErrors(t *testing.T) {
+	refused := &net.OpError{Op: "dial", Err: errors.New("connection refused")}
+	f := &fakeRT{steps: []fakeStep{{err: refused}}}
+	var delays []time.Duration
+	resp, err := recordDelays(f, &delays).RoundTrip(getReq(t))
+	if resp != nil {
+		defer resp.Body.Close()
+	}
+	if !errors.Is(err, refused) {
+		t.Fatalf("err = %v, want the last transport error", err)
+	}
+	if f.calls != 3 || len(delays) != 2 {
+		t.Errorf("calls=%d waits=%d, want 3 attempts with 2 waits between them", f.calls, len(delays))
+	}
+}
+
+func TestLiveTransport_BackoffGrowsWithEachAttemptAndItsJitter(t *testing.T) {
+	cases := map[float64][]time.Duration{
+		0.25: {225 * time.Millisecond, 450 * time.Millisecond},
+		0.5:  {250 * time.Millisecond, 500 * time.Millisecond},
+		0.75: {275 * time.Millisecond, 550 * time.Millisecond},
+	}
+	for draw, want := range cases {
+		f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 503}, {status: 200}}}
+		var delays []time.Duration
+		lt := recordDelays(f, &delays)
+		lt.randFloat = func() float64 { return draw }
+		resp, err := lt.RoundTrip(getReq(t))
+		if err != nil {
+			t.Fatalf("draw %v: unexpected error: %v", draw, err)
+		}
+		resp.Body.Close()
+		if len(delays) != 2 || delays[0] != want[0] || delays[1] != want[1] {
+			t.Errorf("draw %v: delays = %v, want %v", draw, delays, want)
+		}
+	}
+}
+
 func TestLiveTransport_NoRetryOnContextDeadline(t *testing.T) {
 	f := &fakeRT{steps: []fakeStep{{err: context.DeadlineExceeded}}}
 	resp, err := newLiveOver(f).RoundTrip(getReq(t))
@@ -174,7 +225,7 @@ func TestLiveTransport_HonorsRetryAfterHTTPDate(t *testing.T) {
 }
 
 func TestLiveTransport_CapsRetryAfter(t *testing.T) {
-	seconds := []string{"100000", "10000000000", "18446744074"}
+	seconds := []string{"31", "100000", "10000000000", "18446744074"}
 	for _, secs := range seconds {
 		t.Run(secs, func(t *testing.T) {
 			h := http.Header{"Retry-After": []string{secs}}
@@ -185,8 +236,8 @@ func TestLiveTransport_CapsRetryAfter(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			defer resp.Body.Close()
-			if len(delays) != 1 || delays[0] != liveMaxRetryAfter {
-				t.Errorf("delays = %v, want a single wait capped at %v", delays, liveMaxRetryAfter)
+			if len(delays) != 1 || delays[0] != 30*time.Second {
+				t.Errorf("delays = %v, want a single wait capped at 30s", delays)
 			}
 		})
 	}
@@ -209,7 +260,7 @@ func TestLiveTransport_FallsBackWithoutRetryAfter(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			defer resp.Body.Close()
-			base := time.Duration(1) * liveBackoffBase
+			base := 250 * time.Millisecond
 			if len(delays) != 1 || delays[0] != base {
 				t.Errorf("delays = %v, want the fixed backoff base %v", delays, base)
 			}
@@ -222,7 +273,7 @@ func TestLiveTransport_FixedBackoffHasJitter(t *testing.T) {
 	lt.randFloat = rand.New(rand.NewPCG(1, 2)).Float64
 
 	const attempt = 1
-	base := time.Duration(attempt) * liveBackoffBase
+	base := attempt * 250 * time.Millisecond
 	spread := time.Duration(liveBackoffJitter * float64(base))
 	lo, hi := base-spread, base+spread
 
@@ -231,9 +282,6 @@ func TestLiveTransport_FixedBackoffHasJitter(t *testing.T) {
 		d := lt.fixedBackoff(attempt)
 		if d < lo || d > hi {
 			t.Fatalf("backoff %v outside bound [%v,%v]", d, lo, hi)
-		}
-		if d > liveMaxBackoff {
-			t.Fatalf("backoff %v exceeds documented max %v", d, liveMaxBackoff)
 		}
 		seen[d] = struct{}{}
 	}
@@ -335,9 +383,28 @@ var adapterURLHost = regexp.MustCompile(`"https?://([a-zA-Z0-9.-]+)`)
 
 func adapterHosts(t *testing.T) []string {
 	t.Helper()
-	root := filepath.Join("..", "..", "discovery", "adapters")
 	seen := map[string]struct{}{}
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	for _, root := range []string{
+		filepath.Join("..", "..", "discovery", "adapters"),
+		filepath.Join("..", "..", "discovery", "internal", "adapters"),
+	} {
+		if _, err := os.Stat(root); errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err := filepath.WalkDir(root, collectAdapterHosts(seen)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	hosts := make([]string, 0, len(seen))
+	for h := range seen {
+		hosts = append(hosts, h)
+	}
+	sort.Strings(hosts)
+	return hosts
+}
+
+func collectAdapterHosts(seen map[string]struct{}) fs.WalkDirFunc {
+	return func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return err
 		}
@@ -351,16 +418,7 @@ func adapterHosts(t *testing.T) []string {
 			}
 		}
 		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
 	}
-	hosts := make([]string, 0, len(seen))
-	for h := range seen {
-		hosts = append(hosts, h)
-	}
-	sort.Strings(hosts)
-	return hosts
 }
 
 func TestLiveTransport_EveryWiredProviderHostHasLimiter(t *testing.T) {

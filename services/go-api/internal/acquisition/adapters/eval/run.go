@@ -1,10 +1,10 @@
 package eval
 
 import (
-	"altune/go-api/internal/acquisition/adapters/catalogbridge"
-	"altune/go-api/internal/acquisition/adapters/discoverybridge"
-	"altune/go-api/internal/acquisition/adapters/tempfs"
 	acqdomain "altune/go-api/internal/acquisition/domain"
+	"altune/go-api/internal/acquisition/internal/adapters/catalogbridge"
+	"altune/go-api/internal/acquisition/internal/adapters/discoverybridge"
+	"altune/go-api/internal/acquisition/internal/adapters/tempfs"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service"
 	"context"

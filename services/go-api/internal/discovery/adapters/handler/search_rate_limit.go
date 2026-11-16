@@ -1,8 +1,8 @@
 package handler
 
 import (
-	"altune/go-api/internal/discovery/adapters/authbridge"
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/adapters/authbridge"
 	"altune/go-api/internal/shared/httputil"
 	"net/http"
 	"time"

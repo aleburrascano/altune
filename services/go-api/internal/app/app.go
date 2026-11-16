@@ -1,7 +1,8 @@
 package app
 
 import (
-	"altune/go-api/internal/auth/adapters/testauth"
+	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery/service/search"
 	"altune/go-api/internal/discovery/service/vocabulary"
 	"altune/go-api/internal/observe/service/evalmeter"
@@ -22,10 +23,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	acqPersistence "altune/go-api/internal/acquisition/adapters/persistence"
-
-	authports "altune/go-api/internal/auth/ports"
 
 	acqService "altune/go-api/internal/acquisition/service"
 	observeAlert "altune/go-api/internal/observe/service/alert"
@@ -180,7 +177,7 @@ func (a *App) connectDatastores(ctx context.Context) error {
 	return nil
 }
 
-func (a *App) connectInfra(ctx context.Context) (authports.TokenVerifier, *testauth.TestAuth, error) {
+func (a *App) connectInfra(ctx context.Context) (auth.TokenVerifier, *auth.TestAuth, error) {
 	if err := a.connectDatastores(ctx); err != nil {
 		return nil, nil, err
 	}
@@ -205,8 +202,8 @@ func (a *App) startCatalogJobs(ctx context.Context, cat catalogWiring, playback 
 		sourceToggles{ytMusic: a.cfg.YtMusicEnabled, ytDlp: a.cfg.YtDLPEnabled})
 	if a.pool != nil {
 		a.startAcquisitionPrune(ctx,
-			acqPersistence.NewPgxOutcomeStore(a.pool),
-			acqPersistence.NewPgxRejectionStore(a.pool))
+			acquisition.NewPgxOutcomeStore(a.pool),
+			acquisition.NewPgxRejectionStore(a.pool))
 	}
 	a.startAcquisitionUpgradeIfEnabled(ctx, cat.scheduler)
 }

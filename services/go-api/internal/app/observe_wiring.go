@@ -1,28 +1,27 @@
 package app
 
 import (
-	authports "altune/go-api/internal/auth/ports"
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/catalog"
+	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/observe"
 	"altune/go-api/internal/observe/service/evalmeter"
 	"altune/go-api/internal/observe/service/eventtap"
+	"altune/go-api/internal/playback"
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/leader"
 	"altune/go-api/internal/shared/redis"
 	"altune/go-api/internal/shared/reqmetrics"
 	"context"
 
-	authmetrics "altune/go-api/internal/auth/adapters/metrics"
-	catalogmetrics "altune/go-api/internal/catalog/adapters/metrics"
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
-	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
-	observeHandler "altune/go-api/internal/observe/adapters/handler"
-	playbackmetrics "altune/go-api/internal/playback/adapters/metrics"
 
 	"github.com/go-chi/chi/v5"
 )
 
-func (a *App) wireObserve(ctx context.Context, r *chi.Mux, verifier authports.TokenVerifier, tap *eventtap.Tap) {
+func (a *App) wireObserve(ctx context.Context, r *chi.Mux, verifier auth.TokenVerifier, tap *eventtap.Tap) {
 	a.startObserveSources(ctx, tap)
-	deps := observeHandler.Deps{
+	deps := observe.Deps{
 		Health:      a.dependencyHealth,
 		Logs:        a.logRing,
 		Events:      a.eventFeed,
@@ -32,7 +31,7 @@ func (a *App) wireObserve(ctx context.Context, r *chi.Mux, verifier authports.To
 		Discography: discoveryPersistence.NewPgxEventStore(a.pool),
 		Shutdown:    a.lifecycleDone,
 	}
-	mountObserve(r, verifier, a.cfg.OverseerPrincipalID, observeHandler.NewObserveHandler(deps))
+	mountObserve(r, verifier, a.cfg.OverseerPrincipalID, observe.NewObserveHandler(deps))
 }
 
 func (a *App) startObserveSources(ctx context.Context, tap *eventtap.Tap) {
@@ -43,28 +42,28 @@ func (a *App) startObserveSources(ctx context.Context, tap *eventtap.Tap) {
 	a.whenLeaderUnlessDisabled(jobEvalMeter, a.evalMeter.Start)
 }
 
-func mountObserve(r chi.Router, verifier authports.TokenVerifier, principalID string, h *observeHandler.Handler) {
+func mountObserve(r chi.Router, verifier auth.TokenVerifier, principalID string, h *observe.Handler) {
 	r.Route("/observe", func(or chi.Router) {
-		or.Use(observeHandler.NoStoreAndNosniff)
+		or.Use(observe.NoStoreAndNosniff)
 		or.Use(authMiddleware(verifier))
-		or.Use(observeHandler.Gate(principalID))
+		or.Use(observe.Gate(principalID))
 		h.Register(or)
 	})
 }
 
-func (a *App) observeAcquisition() observeHandler.AcquisitionReader {
+func (a *App) observeAcquisition() observe.AcquisitionReader {
 	if a.scheduler == nil {
 		return nil
 	}
 	return a.scheduler
 }
 
-func liveMetricsSnapshot() observeHandler.LiveMetrics {
-	return observeHandler.LiveMetrics{
-		"auth":      authmetrics.ReadSnapshot(),
-		"catalog":   catalogmetrics.ReadSnapshot(),
-		"playback":  playbackmetrics.ReadSnapshot(),
-		"providers": providermetrics.ReadSnapshot(),
+func liveMetricsSnapshot() observe.LiveMetrics {
+	return observe.LiveMetrics{
+		"auth":      auth.ReadSnapshot(),
+		"catalog":   catalog.ReadSnapshot(),
+		"playback":  playback.ReadSnapshot(),
+		"providers": discovery.ReadProviderMetricsSnapshot(),
 		"latency":   reqmetrics.ReadSnapshot(),
 	}
 }
@@ -80,7 +79,7 @@ type eventTapStats struct {
 	FeedDropped uint64 `json:"feed_dropped_total"`
 }
 
-func (a *App) liveMetrics() observeHandler.LiveMetrics {
+func (a *App) liveMetrics() observe.LiveMetrics {
 	m := liveMetricsSnapshot()
 	m["db_pool"] = database.ReadPoolStats(a.pool)
 	m["redis_pool"] = redis.ReadPoolStats(a.redisClient)
@@ -89,15 +88,23 @@ func (a *App) liveMetrics() observeHandler.LiveMetrics {
 		counters = e.Counters()
 	}
 	m["leader"] = counters
+	m["event_bus"] = a.busStats()
+	if a.alertMonitor != nil {
+		m["alert_monitor"] = a.alertMonitor.Status()
+	}
+	m["event_tap"] = a.tapStats()
+	return m
+}
+
+func (a *App) busStats() eventBusStats {
 	var bus eventBusStats
 	if a.eventBus != nil {
 		bus.Dropped = a.eventBus.Dropped()
 	}
-	m["event_bus"] = bus
-	if a.alertMonitor != nil {
-		m["alert_monitor"] = a.alertMonitor.Status()
-	}
+	return bus
+}
 
+func (a *App) tapStats() eventTapStats {
 	var tapStats eventTapStats
 	if a.eventTap != nil {
 		tapStats.TapDropped = a.eventTap.Dropped()
@@ -105,8 +112,7 @@ func (a *App) liveMetrics() observeHandler.LiveMetrics {
 	if a.eventFeed != nil {
 		tapStats.FeedDropped = a.eventFeed.Dropped()
 	}
-	m["event_tap"] = tapStats
-	return m
+	return tapStats
 }
 
 func (a *App) evalMeterRunner(ctx context.Context) evalmeter.Runner {

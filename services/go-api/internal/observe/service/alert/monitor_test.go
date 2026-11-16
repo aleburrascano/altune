@@ -1,9 +1,9 @@
 package alert
 
 import (
-	"altune/go-api/internal/observe/adapters/notifier"
 	"altune/go-api/internal/observe/domain"
-	"altune/go-api/internal/observe/ports"
+	"altune/go-api/internal/observe/internal/adapters/notifier"
+	"altune/go-api/internal/observe/internal/core/ports"
 	"bytes"
 	"context"
 	"errors"

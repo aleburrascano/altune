@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"testing"
+	"time"
 )
 
 func TestBaseTransportKeepsItsConnectionCapAndRefusesNonPublicAddresses(t *testing.T) {
@@ -21,5 +22,15 @@ func TestBaseTransportKeepsItsConnectionCapAndRefusesNonPublicAddresses(t *testi
 	}
 	if err := RefuseNonPublicDial("tcp", "93.184.216.34:443", nil); err != nil {
 		t.Errorf("public address refused: %v", err)
+	}
+}
+
+func TestProviderDialerGivesUpConnectingAfter30sAndKeepsConnectionsAlive(t *testing.T) {
+	d := providerDialer()
+	if d.Timeout != 30*time.Second || d.KeepAlive != 30*time.Second {
+		t.Errorf("Timeout=%v KeepAlive=%v, want 30s each", d.Timeout, d.KeepAlive)
+	}
+	if d.Control == nil {
+		t.Error("dialer has no Control: it would dial non-public addresses")
 	}
 }

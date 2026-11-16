@@ -53,10 +53,14 @@ func baseTransport() http.RoundTripper {
 	}
 	c := t.Clone()
 	c.MaxConnsPerHost = liveMaxConnsPerHost
-	c.DialContext = (&net.Dialer{
+	c.DialContext = providerDialer().DialContext
+	return c
+}
+
+func providerDialer() *net.Dialer {
+	return &net.Dialer{
 		Timeout:   30 * time.Second,
 		KeepAlive: 30 * time.Second,
 		Control:   RefuseNonPublicDial,
-	}).DialContext
-	return c
+	}
 }
