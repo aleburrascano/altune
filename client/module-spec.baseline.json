@@ -72,7 +72,6 @@
     "C12 src/features/discovery/hooks/search/useDiscoverFetchGate.ts hooks/search/useDiscoverFetchGate.ts is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
     "C12 src/features/discovery/hooks/unreleased/useUnreleasedSearch.ts hooks/unreleased/useUnreleasedSearch.ts is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
     "C12 src/features/discovery/ui/search/DiscoverScreen.tsx ui/search/DiscoverScreen.tsx is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
-    "C12 src/features/library/domain/libraryFailure.ts domain/libraryFailure.ts is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
     "C12 src/features/library/domain/libraryRoutes.ts domain/libraryRoutes.ts is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
     "C12 src/features/library/hooks/useFeaturing.ts hooks/useFeaturing.ts is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
     "C12 src/features/library/hooks/useLibraryNavigation.ts hooks/useLibraryNavigation.ts is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
