@@ -1,0 +1,24 @@
+package catalog
+
+import ports "altune/go-api/internal/catalog/internal/core/ports"
+
+type (
+	AcquisitionScheduler  = ports.AcquisitionScheduler
+	AudioAgeLister        = ports.AudioAgeLister
+	AudioLister           = ports.AudioLister
+	AudioRefPrefixLister  = ports.AudioRefPrefixLister
+	AudioStore            = ports.AudioStore
+	AudioStream           = ports.AudioStream
+	ObjectAge             = ports.ObjectAge
+	OrphanedAudio         = ports.OrphanedAudio
+	OrphanedAudioQueue    = ports.OrphanedAudioQueue
+	OrphanedAudioRecorder = ports.OrphanedAudioRecorder
+	ReadyAudioTrack       = ports.ReadyAudioTrack
+	TrackReadWriter       = ports.TrackReadWriter
+)
+
+var (
+	ErrDBTransient          = ports.ErrDBTransient
+	ErrTrackMissing         = ports.ErrTrackMissing
+	ErrTrackVersionConflict = ports.ErrTrackVersionConflict
+)

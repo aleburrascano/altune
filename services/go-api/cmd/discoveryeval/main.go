@@ -2,9 +2,7 @@ package main
 
 import (
 	"altune/go-api/internal/app"
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/service/search"
-	"altune/go-api/internal/discovery/service/vocabulary"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/database"
 	shared "altune/go-api/internal/shared/kernel"
@@ -20,10 +18,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
-
-	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
-
-	discoveryEval "altune/go-api/internal/discovery/service/eval"
 
 	sharedRedis "altune/go-api/internal/shared/redis"
 
@@ -90,7 +84,7 @@ func main() {
 	}
 }
 
-const aggregateRetentionDays = int(discoveryPersistence.AggregateEventRetention / (24 * time.Hour))
+const aggregateRetentionDays = int(discovery.AggregateEventRetention / (24 * time.Hour))
 
 func clampSinceDays(notice io.Writer, sinceDays int) int {
 	if sinceDays <= aggregateRetentionDays {
@@ -194,7 +188,7 @@ func runHealth(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redi
 
 	fmt.Fprintf(os.Stderr, "health pass over %d entities (concurrency=%d)...\n", len(entities), opts.concurrency)
 	searcher, drain := buildEvalSearcher(ctx, cfg, pool, redisClient)
-	report := discoveryEval.RunHealthEval(ctx, entities, searcher, opts.concurrency, progress)
+	report := discovery.RunHealthEval(ctx, entities, searcher, opts.concurrency, progress)
 	drain()
 
 	if err := maybeWriteJSON(opts.jsonPath, report); err != nil {
@@ -208,9 +202,9 @@ func runHealth(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redi
 			return err
 		}
 		if existing == nil {
-			existing = discoveryEval.Baselines{}
+			existing = discovery.Baselines{}
 		}
-		for k, v := range discoveryEval.BuildBaselines(report.HealthMetrics(), nil) {
+		for k, v := range discovery.BuildBaselines(report.HealthMetrics(), nil) {
 			v.Note = "health gauge — report-only, never gated"
 			existing[k] = v
 		}
@@ -236,7 +230,7 @@ func runDiversity(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	}
 
 	corpusEnts, mode := corpusEntities(entities, opts.corpus)
-	once := func() (discoveryEval.HarnessReport, error) {
+	once := func() (discovery.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "diversity differential over %d entities (corpus=%s, concurrency=%d, top-%d)...\n", len(corpusEnts), opts.corpus, opts.concurrency, opts.topK)
 		svc := app.BuildSearchService(ctx, cfg, pool, redisClient, nil)
 		report, err := measureDiversity(ctx, corpusEnts, variantSearchAdapter{svc: svc}, opts.concurrency, opts.topK, mode, progress)
@@ -246,21 +240,21 @@ func runDiversity(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		}
 		return report, nil
 	}
-	human := func(r discoveryEval.HarnessReport) string { return renderDiversity(r.(discoveryEval.DiversityReport)) }
+	human := func(r discovery.HarnessReport) string { return renderDiversity(r.(discovery.DiversityReport)) }
 	return runHarness("diversity", once, human, opts)
 }
 
-func measureMerge(ctx context.Context, entities []discoveryEval.LibraryEntity, searcher discoveryEval.Searcher, concurrency int, progress func(done, total int)) (discoveryEval.MergeReport, error) {
-	report := discoveryEval.RunMergeEval(ctx, entities, searcher, concurrency, progress)
+func measureMerge(ctx context.Context, entities []discovery.LibraryEntity, searcher discovery.Searcher, concurrency int, progress func(done, total int)) (discovery.MergeReport, error) {
+	report := discovery.RunMergeEval(ctx, entities, searcher, concurrency, progress)
 	return report, requireMeasured("merge", report.Evaluated, report.Errored)
 }
 
 type unansweredCounter struct {
-	inner      discoveryEval.VariantSearcher
+	inner      discovery.VariantSearcher
 	unanswered atomic.Int64
 }
 
-func (c *unansweredCounter) SearchVariants(ctx context.Context, query string) ([]domain.SearchResult, []domain.SearchResult) {
+func (c *unansweredCounter) SearchVariants(ctx context.Context, query string) ([]discovery.SearchResult, []discovery.SearchResult) {
 	with, without := c.inner.SearchVariants(ctx, query)
 	if len(with) == 0 && len(without) == 0 {
 		c.unanswered.Add(1)
@@ -268,30 +262,30 @@ func (c *unansweredCounter) SearchVariants(ctx context.Context, query string) ([
 	return with, without
 }
 
-func measureDiversity(ctx context.Context, entities []discoveryEval.LibraryEntity, inner discoveryEval.VariantSearcher, concurrency, k int, mode discoveryEval.QueryMode, progress func(done, total int)) (discoveryEval.DiversityReport, error) {
+func measureDiversity(ctx context.Context, entities []discovery.LibraryEntity, inner discovery.VariantSearcher, concurrency, k int, mode discovery.QueryMode, progress func(done, total int)) (discovery.DiversityReport, error) {
 	counter := &unansweredCounter{inner: inner}
-	report := discoveryEval.RunDiversityEvalMode(ctx, entities, counter, concurrency, k, mode, progress)
+	report := discovery.RunDiversityEvalMode(ctx, entities, counter, concurrency, k, mode, progress)
 	return report, requireMeasured("diversity", report.Evaluated, int(counter.unanswered.Load()))
 }
 
-func corpusEntities(entities []discoveryEval.LibraryEntity, corpus string) ([]discoveryEval.LibraryEntity, discoveryEval.QueryMode) {
+func corpusEntities(entities []discovery.LibraryEntity, corpus string) ([]discovery.LibraryEntity, discovery.QueryMode) {
 	if corpus != "hard" {
-		return entities, discoveryEval.QueryExact
+		return entities, discovery.QueryExact
 	}
-	out := []discoveryEval.LibraryEntity{}
+	out := []discovery.LibraryEntity{}
 	for _, e := range entities {
-		if discoveryEval.TokenCount(e.Title) == 1 {
+		if discovery.TokenCount(e.Title) == 1 {
 			out = append(out, e)
 		}
 	}
-	return out, discoveryEval.QueryTitleOnly
+	return out, discovery.QueryTitleOnly
 }
 
 type variantSearchAdapter struct {
-	svc *search.Service
+	svc *discovery.SearchService
 }
 
-func (a variantSearchAdapter) SearchVariants(ctx context.Context, query string) ([]domain.SearchResult, []domain.SearchResult) {
+func (a variantSearchAdapter) SearchVariants(ctx context.Context, query string) ([]discovery.SearchResult, []discovery.SearchResult) {
 	q, err := evalQuery(query)
 	if err != nil {
 		return nil, nil
@@ -304,7 +298,7 @@ func runCorrection(ctx context.Context, pool *pgxpool.Pool, redisClient *goredis
 	if vocab == nil {
 		return fmt.Errorf("correction mode needs a vocabulary store (set REDIS_URL)")
 	}
-	corrector := vocabulary.NewCorrectionService(vocab)
+	corrector := discovery.NewCorrectionService(vocab)
 
 	terms, err := resolveTerms(ctx, pool, opts)
 	if err != nil {
@@ -316,19 +310,19 @@ func runCorrection(ctx context.Context, pool *pgxpool.Pool, redisClient *goredis
 		return fmt.Errorf("no library terms are in the vocabulary store — run some searches first to seed it")
 	}
 
-	once := func() (discoveryEval.HarnessReport, error) {
-		return discoveryEval.RunCorrectionEval(ctx, recognized, corrector, opts.typos), nil
+	once := func() (discovery.HarnessReport, error) {
+		return discovery.RunCorrectionEval(ctx, recognized, corrector, opts.typos), nil
 	}
-	human := func(r discoveryEval.HarnessReport) string {
-		return renderCorrection(r.(discoveryEval.CorrectionReport))
+	human := func(r discovery.HarnessReport) string {
+		return renderCorrection(r.(discovery.CorrectionReport))
 	}
 	return runHarness("correction", once, human, opts)
 }
 
-func filterRecognized(ctx context.Context, vocab discoveryEval.VocabularyLookup, terms []string) []string {
+func filterRecognized(ctx context.Context, vocab discovery.VocabularyLookup, terms []string) []string {
 	out := []string{}
 	for _, term := range terms {
-		if discoveryEval.IsRecognizedTerm(ctx, vocab, term) {
+		if discovery.IsRecognizedTerm(ctx, vocab, term) {
 			out = append(out, term)
 		}
 	}
@@ -348,7 +342,7 @@ func runMerge(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redis
 		}
 	}
 
-	once := func() (discoveryEval.HarnessReport, error) {
+	once := func() (discovery.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "merge-eval over %d unique entities (concurrency=%d)...\n", len(entities), opts.concurrency)
 		searcher, drain := buildEvalSearcher(ctx, cfg, pool, redisClient)
 		report, err := measureMerge(ctx, entities, searcher, opts.concurrency, progress)
@@ -358,7 +352,7 @@ func runMerge(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redis
 		}
 		return report, nil
 	}
-	human := func(r discoveryEval.HarnessReport) string { return renderMerge(r.(discoveryEval.MergeReport)) }
+	human := func(r discovery.HarnessReport) string { return renderMerge(r.(discovery.MergeReport)) }
 	return runHarness("merge", once, human, opts)
 }
 
@@ -381,14 +375,14 @@ func runEval(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisC
 		return runEvalFixtures(ctx, cfg, pool, corpusEnts, mode, progress, opts)
 	}
 
-	once := func() (discoveryEval.HarnessReport, error) {
+	once := func() (discovery.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "evaluating %d entities (corpus=%s, concurrency=%d, top-%d)...\n", len(corpusEnts), opts.corpus, opts.concurrency, opts.topK)
 		searcher, drain := buildEvalSearcher(ctx, cfg, pool, redisClient)
-		report := discoveryEval.RunLibraryEvalMode(ctx, corpusEnts, searcher, opts.concurrency, opts.topK, mode, progress)
+		report := discovery.RunLibraryEvalMode(ctx, corpusEnts, searcher, opts.concurrency, opts.topK, mode, progress)
 		drain()
 		return report, nil
 	}
-	human := func(r discoveryEval.HarnessReport) string { return renderEval(r.(discoveryEval.EvalReport)) }
+	human := func(r discovery.HarnessReport) string { return renderEval(r.(discovery.EvalReport)) }
 	return runHarness("eval", once, human, opts)
 }
 
@@ -396,12 +390,12 @@ func runEvalFixtures(
 	ctx context.Context,
 	cfg *config.Config,
 	pool *pgxpool.Pool,
-	corpusEnts []discoveryEval.LibraryEntity,
-	mode discoveryEval.QueryMode,
+	corpusEnts []discovery.LibraryEntity,
+	mode discovery.QueryMode,
 	progress func(done, total int),
 	opts options,
 ) error {
-	human := func(r discoveryEval.HarnessReport) string { return renderEval(r.(discoveryEval.EvalReport)) }
+	human := func(r discovery.HarnessReport) string { return renderEval(r.(discovery.EvalReport)) }
 
 	if opts.record {
 		if err := os.MkdirAll(opts.fixtures, 0o755); err != nil {
@@ -412,26 +406,26 @@ func runEvalFixtures(
 				fmt.Fprintf(os.Stderr, "recorded %d/%d\n", done, total)
 			}
 		}
-		once := func() (discoveryEval.HarnessReport, error) {
+		once := func() (discovery.HarnessReport, error) {
 			fmt.Fprintf(os.Stderr, "RECORDING %d entities to %s (corpus=%s, concurrency=%d, top-%d)...\n", len(corpusEnts), opts.fixtures, opts.corpus, opts.concurrency, opts.topK)
 			return recordCorpus(ctx, cfg, pool, opts.fixtures, corpusEnts, mode, opts.concurrency, opts.topK, recProgress)
 		}
 		return runHarness("eval", once, human, opts)
 	}
 
-	once := func() (discoveryEval.HarnessReport, error) {
+	once := func() (discovery.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "REPLAYING %d entities from %s (corpus=%s, concurrency=%d, top-%d)...\n", len(corpusEnts), opts.fixtures, opts.corpus, opts.concurrency, opts.topK)
 		searcher, err := buildReplaySearcher(ctx, cfg, pool, opts.fixtures)
 		if err != nil {
-			return discoveryEval.EvalReport{}, err
+			return discovery.EvalReport{}, err
 		}
-		report := discoveryEval.RunLibraryEvalMode(ctx, corpusEnts, searcher, opts.concurrency, opts.topK, mode, progress)
+		report := discovery.RunLibraryEvalMode(ctx, corpusEnts, searcher, opts.concurrency, opts.topK, mode, progress)
 		return report, nil
 	}
 	return runHarness("eval", once, human, opts)
 }
 
-func buildEvalSearcher(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client) (discoveryEval.Searcher, func()) {
+func buildEvalSearcher(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client) (discovery.Searcher, func()) {
 	svc := app.BuildSearchService(ctx, cfg, pool, redisClient, nil)
 	return searchAdapter{svc: svc}, svc.WaitForBackground
 }
@@ -460,20 +454,20 @@ func runQuery(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redis
 	return nil
 }
 
-func evalQuery(query string) (*domain.SearchQuery, error) {
-	kinds := map[domain.ResultKind]bool{
-		domain.ResultKindArtist: true,
-		domain.ResultKindAlbum:  true,
-		domain.ResultKindTrack:  true,
+func evalQuery(query string) (*discovery.SearchQuery, error) {
+	kinds := map[discovery.ResultKind]bool{
+		discovery.ResultKindArtist: true,
+		discovery.ResultKindAlbum:  true,
+		discovery.ResultKindTrack:  true,
 	}
-	return domain.NewSearchQuery(query, kinds, 20)
+	return discovery.NewSearchQuery(query, kinds, 20)
 }
 
 type searchAdapter struct {
-	svc *search.Service
+	svc *discovery.SearchService
 }
 
-func (a searchAdapter) Search(ctx context.Context, query string) ([]domain.SearchResult, error) {
+func (a searchAdapter) Search(ctx context.Context, query string) ([]discovery.SearchResult, error) {
 	q, err := evalQuery(query)
 	if err != nil {
 		return nil, err
@@ -493,7 +487,7 @@ func runArtistIntent(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool
 	if opts.corpus == "hard" {
 		single := artists[:0:0]
 		for _, a := range artists {
-			if discoveryEval.TokenCount(a) == 1 {
+			if discovery.TokenCount(a) == 1 {
 				single = append(single, a)
 			}
 		}
@@ -513,8 +507,8 @@ func runArtistIntent(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool
 	if opts.corpus == "hard" {
 		corpusLabel = "hard"
 	}
-	human := func(r discoveryEval.HarnessReport) string {
-		return renderArtistIntent(r.(discoveryEval.ArtistIntentReport))
+	human := func(r discovery.HarnessReport) string {
+		return renderArtistIntent(r.(discovery.ArtistIntentReport))
 	}
 
 	if opts.fixtures != "" {
@@ -527,28 +521,28 @@ func runArtistIntent(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool
 					fmt.Fprintf(os.Stderr, "recorded %d/%d\n", done, total)
 				}
 			}
-			once := func() (discoveryEval.HarnessReport, error) {
+			once := func() (discovery.HarnessReport, error) {
 				fmt.Fprintf(os.Stderr, "RECORDING %d artists to %s (corpus=%s, concurrency=%d, top-%d)...\n", len(artists), opts.fixtures, opts.corpus, opts.concurrency, opts.topK)
 				return recordArtistCorpus(ctx, cfg, pool, opts.fixtures, artists, corpusLabel, opts.concurrency, opts.topK, recProgress)
 			}
 			return runHarness("artist-intent", once, human, opts)
 		}
-		once := func() (discoveryEval.HarnessReport, error) {
+		once := func() (discovery.HarnessReport, error) {
 			fmt.Fprintf(os.Stderr, "REPLAYING %d artists from %s (corpus=%s, prominence=%v, concurrency=%d, top-%d)...\n", len(artists), opts.fixtures, opts.corpus, cfg.CrossKindProminenceEnabled, opts.concurrency, opts.topK)
 			searcher, err := buildReplaySearcher(ctx, cfg, pool, opts.fixtures)
 			if err != nil {
-				return discoveryEval.ArtistIntentReport{}, err
+				return discovery.ArtistIntentReport{}, err
 			}
-			report := discoveryEval.RunArtistIntentEval(ctx, artists, searcher, opts.concurrency, opts.topK, corpusLabel, progress)
+			report := discovery.RunArtistIntentEval(ctx, artists, searcher, opts.concurrency, opts.topK, corpusLabel, progress)
 			return report, nil
 		}
 		return runHarness("artist-intent", once, human, opts)
 	}
 
-	once := func() (discoveryEval.HarnessReport, error) {
+	once := func() (discovery.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "artist-intent over %d distinct artists (corpus=%s, concurrency=%d, top-%d)...\n", len(artists), opts.corpus, opts.concurrency, opts.topK)
 		searcher, drain := buildEvalSearcher(ctx, cfg, pool, redisClient)
-		report := discoveryEval.RunArtistIntentEval(ctx, artists, searcher, opts.concurrency, opts.topK, corpusLabel, progress)
+		report := discovery.RunArtistIntentEval(ctx, artists, searcher, opts.concurrency, opts.topK, corpusLabel, progress)
 		drain()
 		return report, nil
 	}
@@ -556,8 +550,8 @@ func runArtistIntent(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool
 }
 
 func runCorpusBuild(ctx context.Context, pool *pgxpool.Pool, opts options) error {
-	eventStore := discoveryPersistence.NewPgxEventStore(pool)
-	builder := discoveryEval.NewCorpusBuilder(eventStore)
+	eventStore := discovery.NewPgxEventStore(pool)
+	builder := discovery.NewCorpusBuilder(eventStore)
 
 	since := time.Now().UTC().AddDate(0, 0, -opts.sinceDays)
 	corpus, err := builder.Build(ctx, since, since.Format("2006-01-02"))
@@ -587,7 +581,7 @@ func runCorpusBuild(ctx context.Context, pool *pgxpool.Pool, opts options) error
 	}
 
 	if opts.jsonPath != "" {
-		if err := discoveryEval.NewCorpusBuilder(eventStore).Materialize(ctx, since, since.Format("2006-01-02"), opts.jsonPath); err != nil {
+		if err := discovery.NewCorpusBuilder(eventStore).Materialize(ctx, since, since.Format("2006-01-02"), opts.jsonPath); err != nil {
 			return err
 		}
 		fmt.Fprintf(os.Stderr, "wrote behavioral corpus to %s\n", opts.jsonPath)
@@ -596,16 +590,16 @@ func runCorpusBuild(ctx context.Context, pool *pgxpool.Pool, opts options) error
 }
 
 func runSignalA(ctx context.Context, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
-	eventStore := discoveryPersistence.NewPgxEventStore(pool)
+	eventStore := discovery.NewPgxEventStore(pool)
 
-	var svc *discoveryEval.CoverageSignalAService
+	var svc *discovery.CoverageSignalAService
 	if vocab := app.BuildVocabularyStore(redisClient); vocab != nil {
-		svc = discoveryEval.NewCoverageSignalAService(eventStore, vocabulary.NewCorrectionService(vocab))
+		svc = discovery.NewCoverageSignalAService(eventStore, discovery.NewCorrectionService(vocab))
 	} else {
-		svc = discoveryEval.NewCoverageSignalAService(eventStore, nil)
+		svc = discovery.NewCoverageSignalAService(eventStore, nil)
 	}
 
-	once := func() (discoveryEval.HarnessReport, error) {
+	once := func() (discovery.HarnessReport, error) {
 		since := time.Now().UTC().AddDate(0, 0, -opts.sinceDays)
 		report, err := svc.Execute(ctx, since, math.MaxInt32)
 		if err != nil {
@@ -613,8 +607,8 @@ func runSignalA(ctx context.Context, pool *pgxpool.Pool, redisClient *goredis.Cl
 		}
 		return report, requireSignalASamples(report)
 	}
-	human := func(r discoveryEval.HarnessReport) string {
-		return renderSignalA(r.(*discoveryEval.CoverageReportA), opts.sinceDays, opts.top)
+	human := func(r discovery.HarnessReport) string {
+		return renderSignalA(r.(*discovery.CoverageReportA), opts.sinceDays, opts.top)
 	}
 	return runHarness("signal-a", once, human, opts)
 }
@@ -624,9 +618,9 @@ func runSignalB(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, opt
 	if err != nil {
 		return fmt.Errorf("load artists: %w", err)
 	}
-	svc := discoveryEval.NewCoverageSignalBService(app.BuildConsensusProviders(cfg, nil))
+	svc := discovery.NewCoverageSignalBService(app.BuildConsensusProviders(cfg, nil))
 
-	once := func() (discoveryEval.HarnessReport, error) {
+	once := func() (discovery.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "scanning %d distinct artists across providers (concurrency=%d)...\n", len(artists), opts.concurrency)
 		report, err := svc.Execute(ctx, artists, opts.concurrency)
 		if err != nil {
@@ -634,8 +628,8 @@ func runSignalB(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, opt
 		}
 		return report, requireMeasured("signal-b", report.ArtistsScanned, 0)
 	}
-	human := func(r discoveryEval.HarnessReport) string {
-		return renderSignalB(r.(*discoveryEval.CoverageReportB))
+	human := func(r discovery.HarnessReport) string {
+		return renderSignalB(r.(*discovery.CoverageReportB))
 	}
 	return runHarness("signal-b", once, human, opts)
 }

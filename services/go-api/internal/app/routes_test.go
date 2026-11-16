@@ -2,12 +2,10 @@ package app
 
 import (
 	"altune/go-api/internal/auth"
-	authdomain "altune/go-api/internal/auth/domain"
-	authservice "altune/go-api/internal/auth/service"
-	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/eventstream"
-	"altune/go-api/internal/observe/service/eventtap"
-	playbackHandler "altune/go-api/internal/playback/adapters/handler"
+	"altune/go-api/internal/observe"
+	"altune/go-api/internal/playback"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/httputil/httputiltest"
@@ -82,7 +80,7 @@ func newDeadlineRouter(uid shared.UserId, sse *eventstream.EventStreamHandler, b
 		bulkErrs <- nil
 	})
 	r.Handle("/v1/events", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		sse.ServeHTTP(w, req.WithContext(authservice.ContextWithUserID(req.Context(), uid)))
+		sse.ServeHTTP(w, req.WithContext(auth.ContextWithUserID(req.Context(), uid)))
 	}))
 	return r
 }
@@ -171,14 +169,14 @@ func productionRouter(t *testing.T) *chi.Mux {
 	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
 	}
-	verifier := auth.VerifierFunc(func(context.Context, string) (authdomain.VerifiedToken, error) {
-		return authdomain.VerifiedToken{}, &authdomain.InvalidTokenError{Reason: authdomain.ReasonSignatureInvalid}
+	verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
+		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
 	})
-	r := a.mountRoutes(verifier, cat, playbackHandler.NewQueueHandler(nil),
-		discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{}))
+	r := a.mountRoutes(verifier, cat, playback.NewQueueHandler(nil),
+		discovery.NewDiscoveryHandler(discovery.DiscoveryServices{}))
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	a.wireObserve(ctx, r, verifier, eventtap.New(events.NewInProcessBus()))
+	a.wireObserve(ctx, r, verifier, observe.NewEventTap(events.NewInProcessBus()))
 	return r
 }
 

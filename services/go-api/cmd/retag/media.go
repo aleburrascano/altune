@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/shared/execcmd"
 	"context"
 	"fmt"
@@ -9,7 +9,7 @@ import (
 )
 
 type mediaTools interface {
-	ReadTags(ctx context.Context, path string) (ports.TrackTags, error)
+	ReadTags(ctx context.Context, path string) (acquisition.TrackTags, error)
 	AudioDigest(ctx context.Context, path string) (string, error)
 }
 
@@ -18,11 +18,11 @@ type ffmpegTools struct {
 	ffmpeg  string
 }
 
-func (t ffmpegTools) ReadTags(ctx context.Context, path string) (ports.TrackTags, error) {
+func (t ffmpegTools) ReadTags(ctx context.Context, path string) (acquisition.TrackTags, error) {
 	stdout, stderr, err := execcmd.Run(ctx, t.ffprobe,
 		"-v", "error", "-print_format", "json", "-show_entries", "format_tags", "-i", path)
 	if err != nil {
-		return ports.TrackTags{}, fmt.Errorf("ffprobe: %w (stderr: %s)", err, strings.TrimSpace(stderr))
+		return acquisition.TrackTags{}, fmt.Errorf("ffprobe: %w (stderr: %s)", err, strings.TrimSpace(stderr))
 	}
 	return parseProbeTags([]byte(stdout))
 }

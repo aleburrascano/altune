@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/adapters/ytmsearch"
+	"altune/go-api/internal/acquisition"
 	"context"
 	"errors"
 	"fmt"
@@ -17,8 +17,8 @@ const oembedBodyCap = 1 << 20
 var errNoOEmbedResponse = errors.New("soundcloud oembed: no response")
 
 type youtubeClient interface {
-	Watch(ctx context.Context, videoID string) (ytmsearch.Watch, error)
-	OEmbed(ctx context.Context, videoID string) (ytmsearch.OEmbed, error)
+	Watch(ctx context.Context, videoID string) (acquisition.YtmWatch, error)
+	OEmbed(ctx context.Context, videoID string) (acquisition.YtmOEmbed, error)
 }
 
 type sourceLookup struct {
@@ -35,7 +35,7 @@ func newSourceLookup(youtube youtubeClient, minInterval time.Duration) *sourceLo
 	}
 }
 
-func (l *sourceLookup) Watch(ctx context.Context, videoID string) (ytmsearch.Watch, error) {
+func (l *sourceLookup) Watch(ctx context.Context, videoID string) (acquisition.YtmWatch, error) {
 	return l.youtube.Watch(ctx, videoID)
 }
 
@@ -52,7 +52,7 @@ func (l *sourceLookup) SoundCloudAuthor(ctx context.Context, trackURL string) (s
 	if err != nil {
 		return "", err
 	}
-	oembed, err := ytmsearch.ParseOEmbed(raw)
+	oembed, err := acquisition.ParseYtmOEmbed(raw)
 	return oembed.Author, err
 }
 

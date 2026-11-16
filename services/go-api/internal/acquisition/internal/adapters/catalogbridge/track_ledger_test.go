@@ -2,9 +2,9 @@ package catalogbridge
 
 import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
-	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/internal/core/ports"
+	catalogdoor "altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/domain"
-	catalogports "altune/go-api/internal/catalog/ports"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"encoding/json"
@@ -53,14 +53,14 @@ func (s *fakeStore) Update(_ context.Context, track *domain.Track, expectedVersi
 	s.updates = append(s.updates, expectedVersion)
 	if s.conflicts > 0 {
 		s.conflicts--
-		return catalogports.ErrTrackVersionConflict
+		return catalogdoor.ErrTrackVersionConflict
 	}
 	cur, ok := s.tracks[track.ID]
 	if !ok || cur == nil {
-		return catalogports.ErrTrackMissing
+		return catalogdoor.ErrTrackMissing
 	}
 	if cur.Version != expectedVersion {
-		return catalogports.ErrTrackVersionConflict
+		return catalogdoor.ErrTrackVersionConflict
 	}
 	cp := *track
 	cp.Version = expectedVersion + 1
@@ -206,7 +206,7 @@ func TestRevertAtUpdateConflictIsNotRetried(t *testing.T) {
 	ledger := NewTrackLedger(store)
 
 	err := ledger.RevertAt(context.Background(), ports.TrackSnapshot{ID: track.ID, UserId: userId, Version: 5})
-	if !errors.Is(err, catalogports.ErrTrackVersionConflict) {
+	if !errors.Is(err, catalogdoor.ErrTrackVersionConflict) {
 		t.Fatalf("want conflict, got %v", err)
 	}
 	if len(store.updates) != 1 || store.gets != 1 {
@@ -261,7 +261,7 @@ func TestVersionConflictExhaustsAttempts(t *testing.T) {
 	ledger := NewTrackLedger(store)
 
 	err := ledger.Fail(context.Background(), track.ID, userId, 0, "boom")
-	if !errors.Is(err, catalogports.ErrTrackVersionConflict) {
+	if !errors.Is(err, catalogdoor.ErrTrackVersionConflict) {
 		t.Fatalf("want conflict, got %v", err)
 	}
 	if len(store.updates) != maxAttempts {
@@ -278,7 +278,7 @@ func TestRevertAtStaleVersionReturnsConflictWithoutRetry(t *testing.T) {
 	ledger := NewTrackLedger(store)
 
 	err := ledger.RevertAt(context.Background(), ports.TrackSnapshot{ID: track.ID, UserId: userId, Version: 4})
-	if !errors.Is(err, catalogports.ErrTrackVersionConflict) {
+	if !errors.Is(err, catalogdoor.ErrTrackVersionConflict) {
 		t.Fatalf("want conflict, got %v", err)
 	}
 	if len(store.updates) != 0 {
@@ -648,7 +648,7 @@ func (s *reclaimingStore) Update(ctx context.Context, track *domain.Track, expec
 		s.reclaimed = true
 		stored, ok := s.tracks[track.ID]
 		if !ok || stored == nil {
-			return catalogports.ErrTrackMissing
+			return catalogdoor.ErrTrackMissing
 		}
 		current := *stored
 		current.AcquisitionFence++

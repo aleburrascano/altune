@@ -5,7 +5,7 @@ import (
 	"altune/go-api/internal/auth/adapters/middleware"
 	authdomain "altune/go-api/internal/auth/domain"
 	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/catalog/internal/core/ports"
 	audioservice "altune/go-api/internal/catalog/service/audio"
 	featuredservice "altune/go-api/internal/catalog/service/featured"
 	playlistservice "altune/go-api/internal/catalog/service/playlist"

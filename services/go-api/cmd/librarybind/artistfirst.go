@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/shared/songfacts"
 	"context"
 	"errors"
@@ -92,7 +92,7 @@ func stopsTheRun(ctx context.Context, err error) bool {
 }
 
 func (a *artistFirst) refine(ctx context.Context, t libraryTrack, found identity) (identity, error) {
-	keys := domain.CleanSearchKeys(t.Title, t.Artist, "")
+	keys := catalog.CleanSearchKeys(t.Title, t.Artist, "")
 	if !wantsArtistFirst(found) || keys.Artist == "" || keys.Title == "" {
 		return found, nil
 	}
@@ -108,7 +108,7 @@ func (a *artistFirst) refine(ctx context.Context, t libraryTrack, found identity
 	return found.boundByArtistFirst(t, agreement), nil
 }
 
-func (a *artistFirst) searchSources(ctx context.Context, t libraryTrack, keys domain.SearchKeys) ([]sourceOutcome, error) {
+func (a *artistFirst) searchSources(ctx context.Context, t libraryTrack, keys catalog.SearchKeys) ([]sourceOutcome, error) {
 	outcomes := make([]sourceOutcome, 0, len(a.sources))
 	for _, s := range a.sources {
 		found, err := a.songsFrom(ctx, s, t, keys)
@@ -120,7 +120,7 @@ func (a *artistFirst) searchSources(ctx context.Context, t libraryTrack, keys do
 	return outcomes, nil
 }
 
-func (a *artistFirst) songsFrom(ctx context.Context, s artistSource, t libraryTrack, keys domain.SearchKeys) ([]candidate, error) {
+func (a *artistFirst) songsFrom(ctx context.Context, s artistSource, t libraryTrack, keys catalog.SearchKeys) ([]candidate, error) {
 	picked, err := a.artistFor(ctx, s, t, keys)
 	if err != nil || !picked.found {
 		return nil, err
@@ -128,7 +128,7 @@ func (a *artistFirst) songsFrom(ctx context.Context, s artistSource, t libraryTr
 	return s.Songs(ctx, picked.option.providerArtist, picked.option.view, t, keys)
 }
 
-func (a *artistFirst) artistFor(ctx context.Context, s artistSource, t libraryTrack, keys domain.SearchKeys) (chosenArtist, error) {
+func (a *artistFirst) artistFor(ctx context.Context, s artistSource, t libraryTrack, keys catalog.SearchKeys) (chosenArtist, error) {
 	cacheKey := string(s.Name()) + "\x1f" + heldKey(t.UserID, t.Artist)
 	if cached, ok := a.chosen[cacheKey]; ok {
 		return cached, nil

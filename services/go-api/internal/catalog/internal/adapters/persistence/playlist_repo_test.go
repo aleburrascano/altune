@@ -2,7 +2,7 @@ package persistence
 
 import (
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/catalog/internal/core/ports"
 	playlistservice "altune/go-api/internal/catalog/service/playlist"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"

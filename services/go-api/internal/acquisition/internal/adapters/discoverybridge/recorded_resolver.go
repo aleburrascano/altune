@@ -6,7 +6,7 @@ import (
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 
-	acqports "altune/go-api/internal/acquisition/ports"
+	acqports "altune/go-api/internal/acquisition/internal/core/ports"
 
 	discoverydomain "altune/go-api/internal/discovery/domain"
 )

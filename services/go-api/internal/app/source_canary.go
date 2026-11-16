@@ -1,8 +1,7 @@
 package app
 
 import (
-	"altune/go-api/internal/acquisition/adapters/ytdlp"
-	"altune/go-api/internal/acquisition/adapters/ytmsearch"
+	"altune/go-api/internal/acquisition"
 	"context"
 	"fmt"
 	"log/slog"
@@ -17,7 +16,7 @@ type namedCanary struct {
 	run  func(context.Context) error
 }
 
-func (a *App) startSourceCanary(ctx context.Context, searcher *ytdlp.YtDlpAudioSearcher, ytDlpAvailable bool, ytm *ytmsearch.Client, enabled sourceToggles) {
+func (a *App) startSourceCanary(ctx context.Context, searcher *acquisition.YtDlpAudioSearcher, ytDlpAvailable bool, ytm *acquisition.YtmSearchClient, enabled sourceToggles) {
 	canaries := sourceCanaries(searcher, ytDlpAvailable, ytm, enabled)
 	if len(canaries) == 0 {
 		return
@@ -32,24 +31,24 @@ type sourceToggles struct {
 	ytDlp   bool
 }
 
-func sourceCanaries(searcher *ytdlp.YtDlpAudioSearcher, ytDlpAvailable bool, ytm *ytmsearch.Client, enabled sourceToggles) []namedCanary {
+func sourceCanaries(searcher *acquisition.YtDlpAudioSearcher, ytDlpAvailable bool, ytm *acquisition.YtmSearchClient, enabled sourceToggles) []namedCanary {
 	var canaries []namedCanary
 	if searcher != nil && ytDlpAvailable {
-		probe := func(source ytdlp.CanarySource) namedCanary {
+		probe := func(source acquisition.CanarySource) namedCanary {
 			return namedCanary{name: source.Name, run: func(ctx context.Context) error { return searcher.Canary(ctx, source) }}
 		}
 		if enabled.ytDlp {
-			canaries = append(canaries, probe(ytdlp.YouTubeCanary))
+			canaries = append(canaries, probe(acquisition.YouTubeCanary))
 		}
 		if enabled.ytMusic {
-			canaries = append(canaries, probe(ytdlp.YTMusicCanary))
+			canaries = append(canaries, probe(acquisition.YTMusicCanary))
 		}
 		if enabled.ytDlp {
-			canaries = append(canaries, probe(ytdlp.SoundCloudCanary))
+			canaries = append(canaries, probe(acquisition.SoundCloudCanary))
 		}
 	}
 	if enabled.ytMusic && ytm != nil {
-		canaries = append(canaries, namedCanary{name: string(ytmsearch.SourceName), run: ytm.Canary})
+		canaries = append(canaries, namedCanary{name: string(acquisition.YtmSearchSourceName), run: ytm.Canary})
 	}
 	return canaries
 }

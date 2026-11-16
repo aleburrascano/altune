@@ -8,27 +8,22 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
-
-	observeDomain "altune/go-api/internal/observe/domain"
-	observeAlert "altune/go-api/internal/observe/service/alert"
-
-	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 )
 
 func (a *App) startAlertMonitor(ctx context.Context) {
 	notifier := a.alertNotifier(ctx)
 
-	conditions := []observeDomain.Condition{buildDependencyCondition(a.dependencyHealth)}
+	conditions := []observe.Condition{buildDependencyCondition(a.dependencyHealth)}
 
 	if a.cfg.AlertZeroResultThreshold > 0 {
-		eventQuery := discoveryPersistence.NewPgxEventStore(a.pool)
+		eventQuery := discovery.NewPgxEventStore(a.pool)
 		gap, queryFailing := buildCoverageConditions(eventQuery, a.cfg.AlertZeroResultThreshold)
 		conditions = append(conditions, gap, queryFailing)
 	}
 
 	conditions = append(conditions, a.jobConditions(alertableJobs)...)
 
-	a.alertMonitor = observeAlert.NewMonitor(notifier, 30*time.Second, conditions...).
+	a.alertMonitor = observe.NewAlertMonitor(notifier, 30*time.Second, conditions...).
 		WithLeadership(a.leaderContext)
 	a.whenLeaderUnlessDisabled(jobAlertMonitor, a.alertMonitor.Start)
 }
@@ -41,18 +36,18 @@ func (a *App) alertNotifier(ctx context.Context) observe.AlertNotifier {
 	return observe.NewWebhookNotifier(a.cfg.AlertWebhookURL)
 }
 
-func buildDependencyCondition(health func(context.Context) observe.DependencyHealth) observeDomain.Condition {
-	return observeDomain.Condition{
+func buildDependencyCondition(health func(context.Context) observe.DependencyHealth) observe.Condition {
+	return observe.Condition{
 		Key: "dependency_down",
-		Eval: func(ctx context.Context) *observeDomain.Alert {
+		Eval: func(ctx context.Context) *observe.Alert {
 			h := health(ctx)
 			if h.Healthy() {
 				return nil
 			}
-			return &observeDomain.Alert{
+			return &observe.Alert{
 				Title:    "altune dependency down",
 				Message:  dependencyDownMessage(h),
-				Severity: observeDomain.SeveritySignal,
+				Severity: observe.SeveritySignal,
 			}
 		},
 	}
@@ -90,19 +85,19 @@ type coverageCheck struct {
 	events    coverageEvents
 	threshold int
 	failures  int
-	last      *observeDomain.Alert
+	last      *observe.Alert
 }
 
 const coverageWindow = 24 * time.Hour
 
-func buildCoverageConditions(eventQuery coverageEvents, threshold int) (gap, queryFailing observeDomain.Condition) {
+func buildCoverageConditions(eventQuery coverageEvents, threshold int) (gap, queryFailing observe.Condition) {
 	c := &coverageCheck{events: eventQuery, threshold: threshold}
-	gap = observeDomain.Condition{Key: "coverage_zero_result", Eval: c.evalGap}
-	queryFailing = observeDomain.Condition{Key: "coverage_query_failing", Eval: c.evalQueryFailing}
+	gap = observe.Condition{Key: "coverage_zero_result", Eval: c.evalGap}
+	queryFailing = observe.Condition{Key: "coverage_query_failing", Eval: c.evalQueryFailing}
 	return gap, queryFailing
 }
 
-func (c *coverageCheck) evalGap(ctx context.Context) *observeDomain.Alert {
+func (c *coverageCheck) evalGap(ctx context.Context) *observe.Alert {
 	since := time.Now().UTC().Add(-coverageWindow)
 	total, err := c.events.ZeroResultTotal(ctx, since)
 	if err != nil {
@@ -115,7 +110,7 @@ func (c *coverageCheck) evalGap(ctx context.Context) *observeDomain.Alert {
 	return c.last
 }
 
-func (c *coverageCheck) gapVerdict(ctx context.Context, since time.Time, total int) *observeDomain.Alert {
+func (c *coverageCheck) gapVerdict(ctx context.Context, since time.Time, total int) *observe.Alert {
 	if total < c.threshold {
 		return nil
 	}
@@ -123,46 +118,46 @@ func (c *coverageCheck) gapVerdict(ctx context.Context, since time.Time, total i
 	if rows, err := c.events.ZeroResultQueries(ctx, since, 1000); err == nil && len(rows) > 0 {
 		msg += fmt.Sprintf("; top query hit %d times", rows[0].Count)
 	}
-	return &observeDomain.Alert{
+	return &observe.Alert{
 		Title:    "altune discovery coverage gap",
 		Message:  msg,
-		Severity: observeDomain.SeveritySignal,
+		Severity: observe.SeveritySignal,
 	}
 }
 
-func (c *coverageCheck) evalQueryFailing(context.Context) *observeDomain.Alert {
+func (c *coverageCheck) evalQueryFailing(context.Context) *observe.Alert {
 	if c.failures < coverageQueryFailureEscalation {
 		return nil
 	}
-	return &observeDomain.Alert{
+	return &observe.Alert{
 		Title:    "altune coverage alert check failing",
 		Message:  fmt.Sprintf("coverage-gap query failed %d consecutive times; gap status unknown", c.failures),
-		Severity: observeDomain.SeveritySignal,
+		Severity: observe.SeveritySignal,
 	}
 }
 
 const jobFailureEscalation = 3
 
-func (a *App) jobConditions(names []jobName) []observeDomain.Condition {
-	conditions := make([]observeDomain.Condition, 0, len(names))
+func (a *App) jobConditions(names []jobName) []observe.Condition {
+	conditions := make([]observe.Condition, 0, len(names))
 	for _, name := range names {
 		conditions = append(conditions, buildJobCondition(name, a.job(name)))
 	}
 	return conditions
 }
 
-func buildJobCondition(name jobName, jc *runloop.JobControl) observeDomain.Condition {
-	return observeDomain.Condition{
+func buildJobCondition(name jobName, jc *runloop.JobControl) observe.Condition {
+	return observe.Condition{
 		Key: "job_failing:" + string(name),
-		Eval: func(context.Context) *observeDomain.Alert {
+		Eval: func(context.Context) *observe.Alert {
 			streak := jc.ConsecutiveFailures()
 			if jc.Disabled() || streak < jobFailureEscalation {
 				return nil
 			}
-			return &observeDomain.Alert{
+			return &observe.Alert{
 				Title:    "altune background job failing",
 				Message:  fmt.Sprintf("job %q failed %d consecutive runs", name, streak),
-				Severity: observeDomain.SeveritySignal,
+				Severity: observe.SeveritySignal,
 			}
 		},
 	}

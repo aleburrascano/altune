@@ -1,40 +1,39 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/catalog/catalogtest"
+	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/catalog"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
-
-	catalogPorts "altune/go-api/internal/catalog/ports"
 )
 
 const ref = "user/Slayr/Album/Song.m4a"
 
-func fakeFile(tags ports.TrackTags, audio string) []byte {
+func fakeFile(tags acquisition.TrackTags, audio string) []byte {
 	raw, _ := json.Marshal(tags)
 	return append(append(raw, '\n'), audio...)
 }
 
-func splitFakeFile(content []byte) (ports.TrackTags, string) {
+func splitFakeFile(content []byte) (acquisition.TrackTags, string) {
 	head, audio, _ := bytes.Cut(content, []byte("\n"))
-	var tags ports.TrackTags
+	var tags acquisition.TrackTags
 	_ = json.Unmarshal(head, &tags)
 	return tags, string(audio)
 }
 
 type fakeMedia struct{}
 
-func (fakeMedia) ReadTags(_ context.Context, path string) (ports.TrackTags, error) {
+func (fakeMedia) ReadTags(_ context.Context, path string) (acquisition.TrackTags, error) {
 	content, err := os.ReadFile(path)
 	tags, _ := splitFakeFile(content)
 	return tags, err
@@ -52,7 +51,7 @@ type fakeTagger struct {
 	err         error
 }
 
-func (f fakeTagger) Tag(_ context.Context, path string, tags ports.TrackTags) error {
+func (f fakeTagger) Tag(_ context.Context, path string, tags acquisition.TrackTags) error {
 	if f.err != nil {
 		return f.err
 	}
@@ -71,38 +70,75 @@ func (f fakeTagger) Tag(_ context.Context, path string, tags ports.TrackTags) er
 }
 
 type recordingStore struct {
-	*catalogtest.AudioStore
-	mu      sync.Mutex
-	ops     []string
-	onStore func(ref string)
+	mu          sync.Mutex
+	files       map[string][]byte
+	errOnStore  error
+	errOnDelete error
+	ops         []string
+	onStore     func(ref string)
 }
 
-func (s *recordingStore) Store(ctx context.Context, source, target string) error {
+func newRecordingStore() *recordingStore {
+	return &recordingStore{files: map[string][]byte{}}
+}
+
+func (s *recordingStore) Seed(target string, data []byte) {
+	s.files[target] = data
+}
+
+func (s *recordingStore) Exists(_ context.Context, target string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.files[target]
+	return ok, nil
+}
+
+func (s *recordingStore) Store(_ context.Context, source, target string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.onStore != nil {
 		s.onStore(target)
 	}
 	s.ops = append(s.ops, "store "+target)
-	return s.AudioStore.Store(ctx, source, target)
+	if s.errOnStore != nil {
+		return s.errOnStore
+	}
+	content, err := os.ReadFile(source)
+	if err != nil {
+		return err
+	}
+	s.files[target] = content
+	return nil
 }
 
-func (s *recordingStore) Stream(ctx context.Context, target string) (catalogPorts.AudioStream, int64, error) {
+func (s *recordingStore) Stream(_ context.Context, target string) (catalog.AudioStream, int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.AudioStore.Stream(ctx, target)
+	data, ok := s.files[target]
+	if !ok {
+		return nil, 0, &fs.PathError{Op: "open", Path: target, Err: fs.ErrNotExist}
+	}
+	return audioStream{bytes.NewReader(data)}, int64(len(data)), nil
 }
 
-func (s *recordingStore) Delete(ctx context.Context, target string) error {
+type audioStream struct{ *bytes.Reader }
+
+func (audioStream) Close() error { return nil }
+
+func (s *recordingStore) Delete(_ context.Context, target string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.ops = append(s.ops, "delete "+target)
-	return s.AudioStore.Delete(ctx, target)
+	if s.errOnDelete != nil {
+		return s.errOnDelete
+	}
+	delete(s.files, target)
+	return nil
 }
 
-var _ catalogPorts.AudioStore = (*recordingStore)(nil)
+var _ catalog.AudioStore = (*recordingStore)(nil)
 
-var staleTags = with(fullTags, func(x *ports.TrackTags) { x.Title = "Old Title"; x.Year = 0 })
+var staleTags = with(fullTags, func(x *acquisition.TrackTags) { x.Title = "Old Title"; x.Year = 0 })
 
 func newRetagger(store *recordingStore, tagger fakeTagger) retagger {
 	return retagger{
@@ -115,8 +151,8 @@ func newRetagger(store *recordingStore, tagger fakeTagger) retagger {
 	}
 }
 
-func seeded(tags ports.TrackTags) *recordingStore {
-	store := &recordingStore{AudioStore: catalogtest.NewAudioStore()}
+func seeded(tags acquisition.TrackTags) *recordingStore {
+	store := newRecordingStore()
 	store.Seed(ref, fakeFile(tags, "AUDIO"))
 	return store
 }
@@ -135,14 +171,14 @@ func TestProcess_SkipsATrackWhoseTagsAlreadyMatch(t *testing.T) {
 
 func TestProcess_DryRunReportsTheDiffAndWritesNothing(t *testing.T) {
 	store := seeded(staleTags)
-	before := string(store.Files[ref])
+	before := string(store.files[ref])
 
 	got := newRetagger(store, fakeTagger{}).process(context.Background(), track, false)
 
 	if got.Verdict != verdictWouldRetag || len(got.Diffs) != 2 {
 		t.Fatalf("verdict %s, diffs %+v", got.Verdict, got.Diffs)
 	}
-	if len(store.ops) != 0 || string(store.Files[ref]) != before {
+	if len(store.ops) != 0 || string(store.files[ref]) != before {
 		t.Fatalf("dry run wrote: ops %v", store.ops)
 	}
 }
@@ -152,7 +188,7 @@ func TestProcess_StagesThenReplacesThenDeletesTheStagedObject(t *testing.T) {
 	var presentWhenReplacing []string
 	store.onStore = func(target string) {
 		if target == ref {
-			for key := range store.Files {
+			for key := range store.files {
 				presentWhenReplacing = append(presentWhenReplacing, key)
 			}
 		}
@@ -167,12 +203,12 @@ func TestProcess_StagesThenReplacesThenDeletesTheStagedObject(t *testing.T) {
 	if !slices.Contains(presentWhenReplacing, ref) || !slices.Contains(presentWhenReplacing, "user/Slayr/Album/Song.retag-attempt.m4a") {
 		t.Errorf("objects present when replacing = %v, want the original and the staged copy", presentWhenReplacing)
 	}
-	tags, audio := splitFakeFile(store.Files[ref])
+	tags, audio := splitFakeFile(store.files[ref])
 	if tags != fullTags || audio != "AUDIO" {
 		t.Errorf("stored file = %+v / %q, want database tags and the original audio", tags, audio)
 	}
-	if len(store.Files) != 1 {
-		t.Errorf("objects left = %d, want only the canonical key", len(store.Files))
+	if len(store.files) != 1 {
+		t.Errorf("objects left = %d, want only the canonical key", len(store.files))
 	}
 }
 
@@ -190,14 +226,14 @@ func TestProcess_RunningTwiceSecondRunFindsNothingToDo(t *testing.T) {
 
 func TestProcess_RefusesToUploadWhenTheAudioStreamChanged(t *testing.T) {
 	store := seeded(staleTags)
-	before := string(store.Files[ref])
+	before := string(store.files[ref])
 
 	got := newRetagger(store, fakeTagger{mangleAudio: true}).process(context.Background(), track, true)
 
 	if got.Verdict != verdictFailed || !errors.Is(got.Err, errAudioChanged) {
 		t.Fatalf("verdict %s err %v, want failed with errAudioChanged", got.Verdict, got.Err)
 	}
-	if len(store.ops) != 0 || string(store.Files[ref]) != before {
+	if len(store.ops) != 0 || string(store.files[ref]) != before {
 		t.Fatalf("upload happened: ops %v", store.ops)
 	}
 }
@@ -224,32 +260,32 @@ func TestProcess_TaggerFailureLeavesTheObjectAlone(t *testing.T) {
 
 func TestProcess_FailedStagingLeavesTheCanonicalObjectUntouched(t *testing.T) {
 	store := seeded(staleTags)
-	before := string(store.Files[ref])
-	store.ErrOnStore = errors.New("bucket unavailable")
+	before := string(store.files[ref])
+	store.errOnStore = errors.New("bucket unavailable")
 
 	got := newRetagger(store, fakeTagger{}).process(context.Background(), track, true)
 
-	if got.Verdict != verdictFailed || string(store.Files[ref]) != before || len(store.Files) != 1 {
-		t.Fatalf("verdict %s, objects %d", got.Verdict, len(store.Files))
+	if got.Verdict != verdictFailed || string(store.files[ref]) != before || len(store.files) != 1 {
+		t.Fatalf("verdict %s, objects %d", got.Verdict, len(store.files))
 	}
 }
 
 func TestProcess_DoesNotReplaceATrackThatNoLongerServesTheKey(t *testing.T) {
 	store := seeded(staleTags)
-	before := string(store.Files[ref])
+	before := string(store.files[ref])
 	r := newRetagger(store, fakeTagger{})
 	r.stillServes = func(context.Context, trackRow) (bool, error) { return false, nil }
 
 	got := r.process(context.Background(), track, true)
 
-	if got.Verdict != verdictMoved || string(store.Files[ref]) != before || len(store.Files) != 1 {
-		t.Fatalf("verdict %s, objects %d", got.Verdict, len(store.Files))
+	if got.Verdict != verdictMoved || string(store.files[ref]) != before || len(store.files) != 1 {
+		t.Fatalf("verdict %s, objects %d", got.Verdict, len(store.files))
 	}
 }
 
 func TestProcess_ReportsAStagedObjectItCouldNotDelete(t *testing.T) {
 	store := seeded(staleTags)
-	store.ErrOnDelete = errors.New("delete denied")
+	store.errOnDelete = errors.New("delete denied")
 
 	got := newRetagger(store, fakeTagger{}).process(context.Background(), track, true)
 
@@ -259,7 +295,7 @@ func TestProcess_ReportsAStagedObjectItCouldNotDelete(t *testing.T) {
 }
 
 func TestProcess_MissingObjectFails(t *testing.T) {
-	store := &recordingStore{AudioStore: catalogtest.NewAudioStore()}
+	store := newRecordingStore()
 
 	got := newRetagger(store, fakeTagger{}).process(context.Background(), track, true)
 
@@ -292,7 +328,7 @@ type fixedTracks []trackRow
 func (f fixedTracks) readyTracks(context.Context, selection) ([]trackRow, error) { return f, nil }
 
 func TestRunRetag_ReportsTallyAndSkipsSharedKeys(t *testing.T) {
-	store := &recordingStore{AudioStore: catalogtest.NewAudioStore()}
+	store := newRecordingStore()
 	var tracks fixedTracks
 	for i := range 6 {
 		key := fmt.Sprintf("user/A/B/%d.m4a", i)
@@ -321,7 +357,7 @@ func TestRunRetag_ReportsTallyAndSkipsSharedKeys(t *testing.T) {
 }
 
 func TestRunRetag_ErrorsWhenATrackFails(t *testing.T) {
-	store := &recordingStore{AudioStore: catalogtest.NewAudioStore()}
+	store := newRecordingStore()
 	var out strings.Builder
 
 	err := runRetag(context.Background(), fixedTracks{track}, newRetagger(store, fakeTagger{}), selection{}, false, 1, &out)

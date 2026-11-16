@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/shared/releasepick"
 	"altune/go-api/internal/shared/songfacts"
 	"altune/go-api/internal/shared/versiontag"
@@ -62,7 +62,7 @@ func leadArtist(artist string) string {
 	return strings.TrimSpace(versiontag.FeaturedCredit.ReplaceAllString(artist, ""))
 }
 
-func matchingTrack(t libraryTrack, keys domain.SearchKeys) libraryTrack {
+func matchingTrack(t libraryTrack, keys catalog.SearchKeys) libraryTrack {
 	t.Artist = keys.Artist
 	if len(keys.VariantQualifiers()) == 0 {
 		t.Title = keys.Title
@@ -85,7 +85,7 @@ func searchOutcome(t libraryTrack, from source, found []candidate, searchErr err
 }
 
 func (b searchBinder) refine(ctx context.Context, t libraryTrack, found identity) (identity, error) {
-	keys := domain.CleanSearchKeys(t.Title, t.Artist, "")
+	keys := catalog.CleanSearchKeys(t.Title, t.Artist, "")
 	artist := leadArtist(keys.Artist)
 	if !wantsSearch(found) || artist == "" || keys.Title == "" {
 		return found, nil
@@ -118,7 +118,7 @@ func (b searchBinder) refineDifferingCut(ctx context.Context, t libraryTrack, fo
 	if !wantsSearch(found) || len(found.Evidence.Search) == 0 || found.hasUnlistedRecordingAtFileLength(found.Evidence.Search[0].Candidates) {
 		return found, nil
 	}
-	match := matchingTrack(t, domain.CleanSearchKeys(t.Title, t.Artist, ""))
+	match := matchingTrack(t, catalog.CleanSearchKeys(t.Title, t.Artist, ""))
 	for _, proposal := range rankedDifferingCuts(match.FileSeconds, found.Evidence.Search[0]) {
 		if !b.cuts.allows(lengthGap(match.FileSeconds, proposal)) {
 			found.refuseCut(match.FileSeconds, proposal.LengthSeconds)

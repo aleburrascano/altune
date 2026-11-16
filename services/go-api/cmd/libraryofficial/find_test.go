@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/adapters/ytmsearch"
+	"altune/go-api/internal/acquisition"
 	"context"
 	"errors"
 	"reflect"
@@ -10,20 +10,20 @@ import (
 )
 
 type scriptedSearch struct {
-	answers map[string][]ytmsearch.Song
+	answers map[string][]acquisition.YtmSong
 	err     error
 	mu      sync.Mutex
 	asked   []string
 }
 
-func (s *scriptedSearch) SearchSongs(_ context.Context, query string) ([]ytmsearch.Song, error) {
+func (s *scriptedSearch) SearchSongs(_ context.Context, query string) ([]acquisition.YtmSong, error) {
 	s.mu.Lock()
 	s.asked = append(s.asked, query)
 	s.mu.Unlock()
 	return s.answers[query], s.err
 }
 
-func otherArtTrack(videoID string) ytmsearch.Song {
+func otherArtTrack(videoID string) acquisition.YtmSong {
 	song := artTrack()
 	song.VideoID = videoID
 	return song
@@ -33,7 +33,7 @@ const textQuery = "Cutting Crew (I Just) Died in Your Arms"
 
 func TestFind_IsrcFirst(t *testing.T) {
 	track := theTrack()
-	search := &scriptedSearch{answers: map[string][]ytmsearch.Song{track.ISRC: {artTrack()}}}
+	search := &scriptedSearch{answers: map[string][]acquisition.YtmSong{track.ISRC: {artTrack()}}}
 	got := find(t.Context(), search, track)
 	if got.Kind != outcomeFound || got.VideoID != "AbCdEfGhIj1" {
 		t.Fatalf("got %+v", got)
@@ -45,7 +45,7 @@ func TestFind_IsrcFirst(t *testing.T) {
 
 func TestFind_FallsBackToArtistAndTitle(t *testing.T) {
 	track := theTrack()
-	search := &scriptedSearch{answers: map[string][]ytmsearch.Song{textQuery: {artTrack()}}}
+	search := &scriptedSearch{answers: map[string][]acquisition.YtmSong{textQuery: {artTrack()}}}
 	got := find(t.Context(), search, track)
 	if got.Kind != outcomeFound {
 		t.Fatalf("got %+v", got)
@@ -67,7 +67,7 @@ func TestFind_WithoutIsrcAsksText(t *testing.T) {
 
 func TestFind_TwoDifferentArtTracksAreAmbiguous(t *testing.T) {
 	track := theTrack()
-	search := &scriptedSearch{answers: map[string][]ytmsearch.Song{track.ISRC: {artTrack(), otherArtTrack("ZzCdEfGhIj2"), artTrack()}}}
+	search := &scriptedSearch{answers: map[string][]acquisition.YtmSong{track.ISRC: {artTrack(), otherArtTrack("ZzCdEfGhIj2"), artTrack()}}}
 	got := find(t.Context(), search, track)
 	if got.Kind != outcomeAmbiguous || got.VideoID != "" || len(got.VideoIDs) != 2 {
 		t.Fatalf("got %+v", got)
@@ -77,10 +77,10 @@ func TestFind_TwoDifferentArtTracksAreAmbiguous(t *testing.T) {
 func TestFind_OnlyRejectedCandidatesIsNoneWithReasons(t *testing.T) {
 	track := theTrack()
 	upload := artTrack()
-	upload.Type = ytmsearch.VideoTypeUGC
+	upload.Type = acquisition.VideoTypeUGC
 	tooLong := artTrack()
 	tooLong.DurationSeconds = 400
-	search := &scriptedSearch{answers: map[string][]ytmsearch.Song{track.ISRC: {upload}, textQuery: {tooLong}}}
+	search := &scriptedSearch{answers: map[string][]acquisition.YtmSong{track.ISRC: {upload}, textQuery: {tooLong}}}
 	got := find(t.Context(), search, track)
 	if got.Kind != outcomeNone || !reflect.DeepEqual(got.Reasons, []rejection{rejectNotArtTrack, rejectLength}) {
 		t.Fatalf("got %+v", got)
@@ -90,9 +90,9 @@ func TestFind_OnlyRejectedCandidatesIsNoneWithReasons(t *testing.T) {
 func TestFind_OnlyTheTopResultsAreConsidered(t *testing.T) {
 	track := theTrack()
 	filler := artTrack()
-	filler.Type = ytmsearch.VideoTypeUGC
-	songs := []ytmsearch.Song{filler, filler, filler, filler, filler, artTrack()}
-	search := &scriptedSearch{answers: map[string][]ytmsearch.Song{track.ISRC: songs}}
+	filler.Type = acquisition.VideoTypeUGC
+	songs := []acquisition.YtmSong{filler, filler, filler, filler, filler, artTrack()}
+	search := &scriptedSearch{answers: map[string][]acquisition.YtmSong{track.ISRC: songs}}
 	if got := find(t.Context(), search, track); got.Kind != outcomeNone {
 		t.Fatalf("got %+v", got)
 	}

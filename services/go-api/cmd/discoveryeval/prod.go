@@ -1,8 +1,7 @@
 package main
 
 import (
-	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"encoding/json"
@@ -45,7 +44,7 @@ func runProd(ctx context.Context, pool *pgxpool.Pool, opts options) error {
 	if err != nil {
 		return err
 	}
-	abandoned, err := discoveryPersistence.NewPgxEventStore(pool).AbandonedSearches(ctx, since, abandonedScanLimit)
+	abandoned, err := discovery.NewPgxEventStore(pool).AbandonedSearches(ctx, since, abandonedScanLimit)
 	if err != nil {
 		return fmt.Errorf("abandoned searches: %w", err)
 	}
@@ -59,7 +58,7 @@ func runProd(ctx context.Context, pool *pgxpool.Pool, opts options) error {
 
 func loadSearchEvents(ctx context.Context, pool *pgxpool.Pool, since time.Time) ([]searchEvent, error) {
 	rows, err := pool.Query(ctx, `SELECT COALESCE(query_norm, ''), payload FROM discovery_events
-		WHERE event_type = $1 AND occurred_at >= $2`, domain.EventTypeSearchPerformed.String(), since)
+		WHERE event_type = $1 AND occurred_at >= $2`, discovery.EventTypeSearchPerformed.String(), since)
 	if err != nil {
 		return nil, fmt.Errorf("load search events: %w", err)
 	}

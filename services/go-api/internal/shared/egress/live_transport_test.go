@@ -383,28 +383,9 @@ var adapterURLHost = regexp.MustCompile(`"https?://([a-zA-Z0-9.-]+)`)
 
 func adapterHosts(t *testing.T) []string {
 	t.Helper()
+	root := filepath.Join("..", "..", "discovery", "internal", "adapters")
 	seen := map[string]struct{}{}
-	for _, root := range []string{
-		filepath.Join("..", "..", "discovery", "adapters"),
-		filepath.Join("..", "..", "discovery", "internal", "adapters"),
-	} {
-		if _, err := os.Stat(root); errors.Is(err, fs.ErrNotExist) {
-			continue
-		}
-		if err := filepath.WalkDir(root, collectAdapterHosts(seen)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	hosts := make([]string, 0, len(seen))
-	for h := range seen {
-		hosts = append(hosts, h)
-	}
-	sort.Strings(hosts)
-	return hosts
-}
-
-func collectAdapterHosts(seen map[string]struct{}) fs.WalkDirFunc {
-	return func(path string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return err
 		}
@@ -418,7 +399,16 @@ func collectAdapterHosts(seen map[string]struct{}) fs.WalkDirFunc {
 			}
 		}
 		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
+	hosts := make([]string, 0, len(seen))
+	for h := range seen {
+		hosts = append(hosts, h)
+	}
+	sort.Strings(hosts)
+	return hosts
 }
 
 func TestLiveTransport_EveryWiredProviderHostHasLimiter(t *testing.T) {

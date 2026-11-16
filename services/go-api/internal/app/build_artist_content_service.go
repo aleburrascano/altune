@@ -2,31 +2,28 @@ package app
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/service/content"
 	"altune/go-api/internal/shared/config"
 	"net/http"
-
-	discoveryDomain "altune/go-api/internal/discovery/domain"
 )
 
 func buildArtistContentProviders(
 	cf clientFactory,
 	cfg *config.Config,
-) map[discoveryDomain.ProviderName]discovery.ArtistContentProvider {
-	artistProviders := map[discoveryDomain.ProviderName]discovery.ArtistContentProvider{
-		discoveryDomain.ProviderDeezer: discovery.NewDeezerAdapter(cf.discovery()),
+) map[discovery.ProviderName]discovery.ArtistContentProvider {
+	artistProviders := map[discovery.ProviderName]discovery.ArtistContentProvider{
+		discovery.ProviderDeezer: discovery.NewDeezerAdapter(cf.discovery()),
 	}
 	if am := buildAppleMusicAdapter(cf, cfg); am != nil {
-		artistProviders[discoveryDomain.ProviderAppleMusic] = am
+		artistProviders[discovery.ProviderAppleMusic] = am
 	}
 	if sp := buildSpotifyAdapter(cf, cfg); sp != nil {
-		artistProviders[discoveryDomain.ProviderSpotify] = sp
+		artistProviders[discovery.ProviderSpotify] = sp
 	}
 	if sc := buildSoundCloudAdapter(cf, cfg); sc != nil {
-		artistProviders[discoveryDomain.ProviderSoundCloud] = sc
+		artistProviders[discovery.ProviderSoundCloud] = sc
 	}
 	if lfm := buildLastFMAdapter(cfg, cf.discovery()); lfm != nil {
-		artistProviders[discoveryDomain.ProviderLastFM] = lfm
+		artistProviders[discovery.ProviderLastFM] = lfm
 	}
 	return artistProviders
 }
@@ -35,16 +32,16 @@ func BuildArtistContentService(
 	cfg *config.Config,
 	transport http.RoundTripper,
 	store discovery.IdentityStore,
-) *content.GetArtistContentService {
+) *discovery.GetArtistContentService {
 	cf := newClientFactory(transport)
 
 	artistProviders := buildArtistContentProviders(cf, cfg)
 
-	opts := []content.ArtistContentOption{
-		content.WithContentIdentityStore(store),
+	opts := []discovery.ArtistContentOption{
+		discovery.WithContentIdentityStore(store),
 	}
 	if mb := buildMusicBrainzAdapter(cf, cfg); mb != nil {
-		opts = append(opts, content.WithMBAnchor(mb))
+		opts = append(opts, discovery.WithMBAnchor(mb))
 	}
-	return content.NewGetArtistContentService(artistProviders, opts...)
+	return discovery.NewGetArtistContentService(artistProviders, opts...)
 }

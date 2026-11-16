@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/shared/songfacts"
 	"context"
 	"errors"
@@ -63,7 +63,7 @@ func (f *fakeArtistSource) Catalog(_ context.Context, artist providerArtist) (ca
 	return f.views[artist.ID], nil
 }
 
-func (f *fakeArtistSource) Songs(context.Context, providerArtist, catalogView, libraryTrack, domain.SearchKeys) ([]candidate, error) {
+func (f *fakeArtistSource) Songs(context.Context, providerArtist, catalogView, libraryTrack, catalog.SearchKeys) ([]candidate, error) {
 	f.songCalls++
 	return f.songs, f.songErr
 }

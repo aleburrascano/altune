@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/adapters/deezerpreview"
+	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"fmt"
@@ -16,7 +16,7 @@ const differentPairsPerTrack = 2
 type printedTrack struct {
 	track libraryTrack
 	file  []uint32
-	clip  deezerpreview.Clip
+	clip  acquisition.PreviewClip
 }
 
 type pairScore struct {
@@ -68,7 +68,7 @@ func quantile(sorted []float64, q float64) float64 {
 
 func scorePairs(printed []printedTrack) (same, different []pairScore) {
 	for i, own := range printed {
-		if aligned, err := deezerpreview.BestAlignment(own.file, own.clip.Print); err == nil {
+		if aligned, err := acquisition.BestAlignment(own.file, own.clip.Print); err == nil {
 			same = append(same, pairScore{
 				TrackID: own.track.ID, OtherTrackID: own.track.ID, Artist: own.track.Artist,
 				Title: own.track.Title, OtherTitle: own.track.Title, BitErrorRate: aligned.BitErrorRate,
@@ -89,7 +89,7 @@ func differentSongScores(printed []printedTrack, index int) []pairScore {
 		if j == index || !isDifferentSongBySameArtist(own.track, other.track) {
 			continue
 		}
-		if aligned, err := deezerpreview.BestAlignment(own.file, other.clip.Print); err == nil {
+		if aligned, err := acquisition.BestAlignment(own.file, other.clip.Print); err == nil {
 			scores = append(scores, pairScore{
 				TrackID: own.track.ID, OtherTrackID: other.track.ID, Artist: own.track.Artist,
 				Title: own.track.Title, OtherTitle: other.track.Title, BitErrorRate: aligned.BitErrorRate,

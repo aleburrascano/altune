@@ -1,7 +1,7 @@
 package tempfs
 
 import (
-	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/internal/core/ports"
 	"bytes"
 	"encoding/json"
 	"log/slog"

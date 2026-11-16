@@ -118,13 +118,13 @@ The eval runs the real identity resolution, and the *Drinking in L.A.* golden go
    - Example: unknown fingerprint, Topic channel, duration within 2s → stored as `best_effort` with confidence ≥ 0.5. Unknown fingerprint, non-Topic channel, 20s off → fails as `no_confident_match`.
 5. A candidate whose title carries a veto-family qualifier the track didn't ask for is never stored, even when its fingerprint verdict is `hard`. [repo-test: services/go-api/internal/acquisition/service/eval/goldens/realworld.json]
    - Example: track "Rollacoasta" by prettifun, candidate "prettifun - Rollacoasta (Instrumental) [100% Accurate]" fingerprinting to the vocal recording b29ac684 at 0.908 → rejected as `qualifier`. "Lucy Bedroque - SPEED DEMON (Instrumental)" → rejected. "ImDontai Reacts To Drake 8AM In Charlotte" → rejected.
-6. A preview fingerprint is looked up with the candidate's full duration, not the preview's length. [repo-test: services/go-api/internal/acquisition/adapters/chromaprint/identifier_test.go]
+6. A preview fingerprint is looked up with the candidate's full duration, not the preview's length. [repo-test: services/go-api/internal/acquisition/internal/adapters/chromaprint/identifier_test.go]
    - Example: a 130s preview of a 236s candidate → the AcoustID request carries `duration=236`.
 7. No more than `ACQUISITION_DOWNLOAD_CONCURRENCY` downloads run at once across all tracks, and the stored candidate is the best-ranked one that was accepted. [repo-test: services/go-api/internal/acquisition/service/step_download_test.go]
    - Example: limit 6, three tracks with 2 candidates in flight each, a 7th waits. Candidates ranked 1 and 2 both accepted, with rank 2 finishing first → rank 1 is stored.
-8. SoundCloud DRM and preview candidates are rejected before any download. [repo-test: services/go-api/internal/acquisition/adapters/ytdlp/source_test.go]
+8. SoundCloud DRM and preview candidates are rejected before any download. [repo-test: services/go-api/internal/acquisition/internal/adapters/ytdlp/source_test.go]
    - Example: a metadata probe of soundcloud.com/bran-van-3000/drinking-in-l-a-3 showing only encrypted formats → rejected as `drm`, and the downloader is not called.
-9. The ISRC query never stops the title/artist queries from running. [repo-test: services/go-api/internal/acquisition/adapters/ytdlp/source_test.go]
+9. The ISRC query never stops the title/artist queries from running. [repo-test: services/go-api/internal/acquisition/internal/adapters/ytdlp/source_test.go]
    - Example: the ISRC query returns 10 hits → the "title artist" and "title artist audio" queries still run, and their candidates are merged.
 10. Soft agreement is stored as `verified` only when the core title matches with no extra qualifiers, the artists overlap, and the length is within tolerance. [repo-test: services/go-api/internal/acquisition/service/audio_verdict_test.go]
     - Example: Cutting Crew "(I Just) Died in Your Arms" audio linking a sibling recording of the same title and length, not the ISRC's recording → `soft`, stored as `verified` with confidence below `hard`'s.

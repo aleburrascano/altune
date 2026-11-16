@@ -1,7 +1,7 @@
 package handler
 
 import (
-	acqPorts "altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/observe/service/evalmeter"
 	"altune/go-api/internal/shared/reqmetrics"
@@ -44,7 +44,7 @@ func TestContract_EvalMatchesFixture(t *testing.T) {
 }
 
 func TestContract_AcquisitionMatchesFixture(t *testing.T) {
-	reader := fakeAcquisitionReader{status: acqPorts.AcquisitionStatus{
+	reader := fakeAcquisitionReader{status: acquisition.AcquisitionStatus{
 		InFlight: 1, Succeeded: 2, Failed: 3, Rejected: 4, QueueDepth: 5, Workers: 6,
 	}}
 	rec := serveRead(t, Deps{Acquisition: reader}, "/acquisition")

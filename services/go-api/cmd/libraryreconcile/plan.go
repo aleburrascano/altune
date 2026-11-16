@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/shared/songfacts"
 	"altune/go-api/internal/shared/textnorm"
 	"encoding/json"
@@ -342,7 +342,7 @@ func checkIdentityText(f field, value *string) error {
 	if canonical := strings.Join(strings.Fields(textnorm.NFKC(*value)), " "); canonical != *value {
 		return fmt.Errorf("%s fix new_value %q is not canonical, want %q", f, *value, canonical)
 	}
-	return domain.ValidateOptionalTrackText(value, string(f))
+	return catalog.ValidateOptionalTrackText(value, string(f))
 }
 
 func checkTrackNumber(value *string) error {

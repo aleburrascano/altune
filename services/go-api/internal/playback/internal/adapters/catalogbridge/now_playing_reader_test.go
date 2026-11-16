@@ -1,7 +1,7 @@
 package catalogbridge
 
 import (
-	catalogPorts "altune/go-api/internal/catalog/ports"
+	catalogdoor "altune/go-api/internal/catalog"
 	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
 	"context"
@@ -45,7 +45,7 @@ func testUser() shared.UserId {
 type failingTrackReader struct{}
 
 func (failingTrackReader) GetByID(_ context.Context, _ catalogDomain.TrackId, _ shared.UserId) (*catalogDomain.Track, error) {
-	return nil, fmt.Errorf("catalog unavailable: %w", catalogPorts.ErrDBTransient)
+	return nil, fmt.Errorf("catalog unavailable: %w", catalogdoor.ErrDBTransient)
 }
 
 type recordingMetrics struct {
@@ -374,7 +374,7 @@ func (r *staleSuccessReader) GetByID(_ context.Context, _ catalogDomain.TrackId,
 		<-r.releaseFirstCall
 		return nil, nil
 	}
-	return nil, catalogPorts.ErrDBTransient
+	return nil, catalogdoor.ErrDBTransient
 }
 
 func TestLookup_StaleSuccessDoesNotCloseAnOpenBreaker(t *testing.T) {

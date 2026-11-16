@@ -2,17 +2,15 @@ package app
 
 import (
 	"altune/go-api/internal/auth"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/eventstream"
+	"altune/go-api/internal/playback"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/reqmetrics"
 	"altune/go-api/internal/shared/telemetry"
 	"net/http"
 	"strings"
 	"time"
-
-	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
-
-	playbackHandler "altune/go-api/internal/playback/adapters/handler"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
@@ -66,8 +64,8 @@ func v1ResponseHeaders(next http.Handler) http.Handler {
 func (a *App) mountRoutes(
 	verifier auth.TokenVerifier,
 	cat catalogWiring,
-	queueHandler *playbackHandler.QueueHandler,
-	discoveryH *discoveryHandler.DiscoveryHandler,
+	queueHandler *playback.QueueHandler,
+	discoveryH *discovery.DiscoveryHandler,
 ) *chi.Mux {
 	r := a.newRouter(apiWriteTimeout)
 
@@ -75,7 +73,7 @@ func (a *App) mountRoutes(
 
 	r.Route("/v1", func(r chi.Router) {
 		r.Use(v1ResponseHeaders)
-		discoveryH.PublicRoutes(r, discoveryHandler.DefaultAuthFailureLimit)
+		discoveryH.PublicRoutes(r, discovery.DefaultAuthFailureLimit)
 
 		r.Group(func(r chi.Router) {
 			r.Use(authMiddleware(verifier))

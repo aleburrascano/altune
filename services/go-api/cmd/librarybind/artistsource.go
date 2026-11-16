@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog"
 	"context"
 	"slices"
 )
@@ -25,7 +25,7 @@ type artistSource interface {
 	Name() source
 	FindArtists(ctx context.Context, name string) ([]providerArtist, error)
 	Catalog(ctx context.Context, artist providerArtist) (catalogView, error)
-	Songs(ctx context.Context, artist providerArtist, view catalogView, t libraryTrack, keys domain.SearchKeys) ([]candidate, error)
+	Songs(ctx context.Context, artist providerArtist, view catalogView, t libraryTrack, keys catalog.SearchKeys) ([]candidate, error)
 }
 
 type artistOption struct {

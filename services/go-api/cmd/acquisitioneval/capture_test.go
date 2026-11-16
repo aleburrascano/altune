@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/adapters/eval"
+	"altune/go-api/internal/acquisition"
 	"bytes"
 	"encoding/json"
 	"os"
@@ -40,7 +40,7 @@ func TestRunCapture_PrintsCaseThatValidateCasesAccepts(t *testing.T) {
 		t.Fatalf("runCapture exit code = %d, stderr not captured; want 0", code)
 	}
 
-	var kase eval.Case
+	var kase acquisition.EvalCase
 	if err := json.Unmarshal(out.Bytes(), &kase); err != nil {
 		t.Fatalf("output is not a single json object: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestRunCapture_PrintsCaseThatValidateCasesAccepts(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	suite := map[string]any{"cases": []eval.Case{kase}}
+	suite := map[string]any{"cases": []acquisition.EvalCase{kase}}
 	raw, err := json.Marshal(suite)
 	if err != nil {
 		t.Fatalf("marshal suite: %v", err)
@@ -72,7 +72,7 @@ func TestRunCapture_PrintsCaseThatValidateCasesAccepts(t *testing.T) {
 		t.Fatalf("write golden: %v", err)
 	}
 
-	if _, err := eval.LoadDir(dir); err != nil {
+	if _, err := acquisition.LoadEvalDir(dir); err != nil {
 		t.Fatalf("validateCases (via LoadDir) rejected the captured case: %v", err)
 	}
 }
@@ -110,27 +110,27 @@ func probeCapture(t *testing.T, args []string, dump string) (int, string) {
 	return code, out.String()
 }
 
-func probeDecodeAndValidate(t *testing.T, out string) eval.Case {
+func probeDecodeAndValidate(t *testing.T, out string) acquisition.EvalCase {
 	t.Helper()
-	var kase eval.Case
+	var kase acquisition.EvalCase
 	if err := json.Unmarshal([]byte(out), &kase); err != nil {
 		t.Fatalf("output %q is not one json case: %v", out, err)
 	}
 	dir := t.TempDir()
-	raw, err := json.Marshal(map[string]any{"cases": []eval.Case{kase}})
+	raw, err := json.Marshal(map[string]any{"cases": []acquisition.EvalCase{kase}})
 	if err != nil {
 		t.Fatalf("marshal suite: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "captured.json"), raw, 0o600); err != nil {
 		t.Fatalf("write golden: %v", err)
 	}
-	if _, err := eval.LoadDir(dir); err != nil {
+	if _, err := acquisition.LoadEvalDir(dir); err != nil {
 		t.Fatalf("validateCases rejected the captured case: %v\ncase: %s", err, out)
 	}
 	return kase
 }
 
-func probeCandidateCount(kase eval.Case) int {
+func probeCandidateCount(kase acquisition.EvalCase) int {
 	n := len(kase.Candidates)
 	for _, src := range kase.Sources {
 		n += len(src.Candidates)

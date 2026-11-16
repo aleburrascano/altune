@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/adapters/chromaprint"
+	"altune/go-api/internal/acquisition"
 	"errors"
 	"io"
 	"os"
@@ -19,7 +19,7 @@ func TestSettingsFromEnv_DefaultsRespectTheProvidersLimits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("settingsFromEnv: %v", err)
 	}
-	want := settings{concurrency: 3, acoustIDRate: 3, musicBrainzRate: 1, minScore: chromaprint.MinScore}
+	want := settings{concurrency: 3, acoustIDRate: 3, musicBrainzRate: 1, minScore: acquisition.ChromaprintMinScore}
 	if got != want {
 		t.Errorf("settings = %+v, want %+v", got, want)
 	}

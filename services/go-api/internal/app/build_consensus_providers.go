@@ -2,37 +2,31 @@ package app
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/service/providercall"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/phonetics"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"net/http"
 
-	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
-
-	discoveryDomain "altune/go-api/internal/discovery/domain"
-	discoveryEnrich "altune/go-api/internal/discovery/service/enrich"
-
 	goredis "github.com/redis/go-redis/v9"
 )
 
-func (a *App) buildDetailEnrichers(cf clientFactory) discoveryHandler.DetailEnrichers {
-	var enrichers discoveryHandler.DetailEnrichers
+func (a *App) buildDetailEnrichers(cf clientFactory) discovery.DetailEnrichers {
+	var enrichers discovery.DetailEnrichers
 
 	if lfmEnricher := buildLastFMAdapter(a.cfg, cf.discovery()); lfmEnricher != nil {
-		enrichers.LastFm = discoveryEnrich.NewLastFmEnrichmentService(
+		enrichers.LastFm = discovery.NewLastFmEnrichmentService(
 			lfmEnricher,
 			discovery.NewRedisLastFmEnrichmentCache(a.redisClient, cacheSignalOption()),
 		)
 	}
 
-	enrichers.Deezer = discoveryEnrich.NewDeezerEnrichmentService(
+	enrichers.Deezer = discovery.NewDeezerEnrichmentService(
 		discovery.NewDeezerAdapter(cf.discovery()),
 		discovery.NewRedisDeezerEnrichmentCache(a.redisClient, cacheSignalOption()),
 	)
 
-	enrichers.Lyrics = discoveryEnrich.NewLyricsService(
+	enrichers.Lyrics = discovery.NewLyricsService(
 		discovery.NewDeezerLyricsAdapter(cf.discovery()),
 		discovery.NewRedisDeezerLyricsCache(a.redisClient, cacheSignalOption()),
 	)
@@ -40,13 +34,13 @@ func (a *App) buildDetailEnrichers(cf clientFactory) discoveryHandler.DetailEnri
 	return enrichers
 }
 
-type consensusAdder func(key discoveryDomain.ProviderKey, provider discoveryDomain.ProviderName, fetcher func(context.Context, string) ([]discoveryDomain.SearchResult, error))
+type consensusAdder func(key discovery.ProviderKey, provider discovery.ProviderName, fetcher func(context.Context, string) ([]discovery.SearchResult, error))
 
-func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []providercall.ConsensusProvider {
+func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []discovery.ConsensusProvider {
 	cf := newClientFactory(transport)
-	var consensusProviders []providercall.ConsensusProvider
-	add := func(key discoveryDomain.ProviderKey, provider discoveryDomain.ProviderName, fetcher func(context.Context, string) ([]discoveryDomain.SearchResult, error)) {
-		consensusProviders = append(consensusProviders, providercall.ConsensusProvider{Name: string(key), Provider: provider, Fetcher: fetcher})
+	var consensusProviders []discovery.ConsensusProvider
+	add := func(key discovery.ProviderKey, provider discovery.ProviderName, fetcher func(context.Context, string) ([]discovery.SearchResult, error)) {
+		consensusProviders = append(consensusProviders, discovery.ConsensusProvider{Name: string(key), Provider: provider, Fetcher: fetcher})
 	}
 	addCatalogConsensusProviders(cf, cfg, add)
 	addStreamingConsensusProviders(cf, cfg, add)
@@ -56,45 +50,45 @@ func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []
 func addCatalogConsensusProviders(cf clientFactory, cfg *config.Config, add consensusAdder) {
 	if cfg.HasLastFM() {
 		lfm := discovery.NewLastFmAdapter(cf.discovery(), cfg.LastFMAPIKey)
-		add(discoveryDomain.ProviderKeyLastFM, discoveryDomain.ProviderLastFM, func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
-			return lfm.GetArtistAlbums(ctx, discoveryDomain.ProviderLastFM, artistName)
+		add(discovery.ProviderKeyLastFM, discovery.ProviderLastFM, func(ctx context.Context, artistName string) ([]discovery.SearchResult, error) {
+			return lfm.GetArtistAlbums(ctx, discovery.ProviderLastFM, artistName)
 		})
 	}
 	if mb := buildMusicBrainzAdapter(cf, cfg); mb != nil {
-		add(discoveryDomain.ProviderKeyMusicBrainz, discoveryDomain.ProviderMusicBrainz, func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
+		add(discovery.ProviderKeyMusicBrainz, discovery.ProviderMusicBrainz, func(ctx context.Context, artistName string) ([]discovery.SearchResult, error) {
 			return mb.ListArtistDiscography(ctx, artistName)
 		})
 	}
 	if cfg.HasDiscogs() {
 		discogsAdapter := discovery.NewDiscogsAdapter(cf.discovery(), cfg.DiscogsToken, cfg.MusicBrainzUserAgent)
-		add(discoveryDomain.ProviderKeyDiscogs, discoveryDomain.ProviderDiscogs, discogsConsensusFetcher(discogsAdapter))
+		add(discovery.ProviderKeyDiscogs, discovery.ProviderDiscogs, discogsConsensusFetcher(discogsAdapter))
 	}
 }
 
 func addStreamingConsensusProviders(cf clientFactory, cfg *config.Config, add consensusAdder) {
-	add(discoveryDomain.ProviderKeyITunes, discoveryDomain.ProviderITunes, albumSearchFetcher(discovery.NewITunesAdapter(cf.discovery())))
+	add(discovery.ProviderKeyITunes, discovery.ProviderITunes, albumSearchFetcher(discovery.NewITunesAdapter(cf.discovery())))
 	if cfg.HasYouTubeMusic() {
 		ytmusicAdapter := discovery.NewYouTubeMusicAdapter(cf.roundTripper())
-		add(discoveryDomain.ProviderKeyYTMusic, discoveryDomain.ProviderYouTube, func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
-			return ytmusicAdapter.GetArtistAlbums(ctx, discoveryDomain.ProviderYouTube, artistName)
+		add(discovery.ProviderKeyYTMusic, discovery.ProviderYouTube, func(ctx context.Context, artistName string) ([]discovery.SearchResult, error) {
+			return ytmusicAdapter.GetArtistAlbums(ctx, discovery.ProviderYouTube, artistName)
 		})
 	}
 	if sc := buildSoundCloudAdapter(cf, cfg); sc != nil {
-		add(discoveryDomain.ProviderKeySoundCloud, discoveryDomain.ProviderSoundCloud, albumSearchFetcher(sc))
+		add(discovery.ProviderKeySoundCloud, discovery.ProviderSoundCloud, albumSearchFetcher(sc))
 	}
 }
 
 func albumSearchFetcher(p interface {
-	Search(ctx context.Context, query string, kinds map[discoveryDomain.ResultKind]bool) ([]discoveryDomain.SearchResult, error)
+	Search(ctx context.Context, query string, kinds map[discovery.ResultKind]bool) ([]discovery.SearchResult, error)
 },
-) func(context.Context, string) ([]discoveryDomain.SearchResult, error) {
-	return func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
-		return p.Search(ctx, artistName, map[discoveryDomain.ResultKind]bool{discoveryDomain.ResultKindAlbum: true})
+) func(context.Context, string) ([]discovery.SearchResult, error) {
+	return func(ctx context.Context, artistName string) ([]discovery.SearchResult, error) {
+		return p.Search(ctx, artistName, map[discovery.ResultKind]bool{discovery.ResultKindAlbum: true})
 	}
 }
 
-func discogsConsensusFetcher(adapter *discovery.DiscogsAdapter) func(context.Context, string) ([]discoveryDomain.SearchResult, error) {
-	return func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
+func discogsConsensusFetcher(adapter *discovery.DiscogsAdapter) func(context.Context, string) ([]discovery.SearchResult, error) {
+	return func(ctx context.Context, artistName string) ([]discovery.SearchResult, error) {
 		info, err := adapter.ResolveDiscogsArtist(ctx, artistName, nil)
 		if err != nil || info == nil {
 			return nil, err

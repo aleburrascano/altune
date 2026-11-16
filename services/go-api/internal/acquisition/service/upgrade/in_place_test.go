@@ -1,7 +1,7 @@
 package upgrade_test
 
 import (
-	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/service/grade"
 	"altune/go-api/internal/acquisition/service/upgrade"
 	shared "altune/go-api/internal/shared/kernel"

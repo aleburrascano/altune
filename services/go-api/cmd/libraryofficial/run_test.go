@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/adapters/ytmsearch"
+	"altune/go-api/internal/acquisition"
 	"bytes"
 	"context"
 	"errors"
@@ -34,7 +34,7 @@ func trackNamed(id, title string) target {
 	return track
 }
 
-func songTitled(title, videoID string) ytmsearch.Song {
+func songTitled(title, videoID string) acquisition.YtmSong {
 	song := artTrack()
 	song.Title, song.VideoID = title, videoID
 	return song
@@ -42,7 +42,7 @@ func songTitled(title, videoID string) ytmsearch.Song {
 
 func libraryOfThree() ([]target, *scriptedSearch) {
 	targets := []target{trackNamed("t1", "Alpha"), trackNamed("t2", "Beta"), trackNamed("t3", "Gamma")}
-	return targets, &scriptedSearch{answers: map[string][]ytmsearch.Song{
+	return targets, &scriptedSearch{answers: map[string][]acquisition.YtmSong{
 		"ISRC-t1": {songTitled("Alpha", "AAAAAAAAAA1")},
 		"ISRC-t2": {songTitled("Beta", "BBBBBBBBBB1"), songTitled("Beta", "BBBBBBBBBB2")},
 	}}

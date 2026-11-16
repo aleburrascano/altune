@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"fmt"
@@ -36,7 +36,7 @@ type heldKeys struct {
 type holdings []heldKeys
 
 func catalogKey(name string) string {
-	return textnorm.NormalizeForMatch(domain.CleanSearchKeys(name, "", "").Title)
+	return textnorm.NormalizeForMatch(catalog.CleanSearchKeys(name, "", "").Title)
 }
 
 func (h heldIndex) holdingsFor(t libraryTrack) holdings {

@@ -2,9 +2,6 @@ package app
 
 import (
 	"altune/go-api/internal/observe"
-	observeDomain "altune/go-api/internal/observe/domain"
-	observeAlert "altune/go-api/internal/observe/service/alert"
-	"altune/go-api/internal/observe/service/evalmeter"
 	"altune/go-api/internal/shared/leader"
 	"altune/go-api/internal/shared/runloop"
 	"bytes"
@@ -120,9 +117,9 @@ func TestAlertMonitor_LeadershipHandoff_EvaluatesOnlyDuringItsTerm(t *testing.T)
 	defer cancel()
 
 	var evaluations atomic.Int32
-	monitor := observeAlert.NewMonitor(observe.NopNotifier{}, leaderLoopTick, observeDomain.Condition{
+	monitor := observe.NewAlertMonitor(observe.NopNotifier{}, leaderLoopTick, observe.Condition{
 		Key: "dependency_down",
-		Eval: func(context.Context) *observeDomain.Alert {
+		Eval: func(context.Context) *observe.Alert {
 			evaluations.Add(1)
 			return nil
 		},
@@ -141,9 +138,9 @@ func TestEvalMeter_LeadershipHandoff_RunsOnlyDuringItsTerm(t *testing.T) {
 	defer cancel()
 
 	var runs atomic.Int32
-	meter := evalmeter.New(true, leaderLoopTick, func(context.Context) (evalmeter.Result, error) {
+	meter := observe.NewEvalMeter(true, leaderLoopTick, func(context.Context) (observe.EvalMeterResult, error) {
 		runs.Add(1)
-		return evalmeter.Result{}, nil
+		return observe.EvalMeterResult{}, nil
 	}).WithLeadership(a.leaderContext)
 	meter.Start(ctx)
 
@@ -160,11 +157,11 @@ func TestEvalMeter_LeadershipLostMidRun_RunIsCutOff(t *testing.T) {
 
 	started := make(chan struct{})
 	stoppedBecause := make(chan error, 1)
-	meter := evalmeter.New(true, time.Hour, func(runCtx context.Context) (evalmeter.Result, error) {
+	meter := observe.NewEvalMeter(true, time.Hour, func(runCtx context.Context) (observe.EvalMeterResult, error) {
 		close(started)
 		<-runCtx.Done()
 		stoppedBecause <- context.Cause(runCtx)
-		return evalmeter.Result{}, runCtx.Err()
+		return observe.EvalMeterResult{}, runCtx.Err()
 	}).WithLeadership(a.leaderContext)
 	meter.Start(ctx)
 	<-started

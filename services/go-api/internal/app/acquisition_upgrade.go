@@ -2,15 +2,10 @@ package app
 
 import (
 	"altune/go-api/internal/acquisition"
-	"altune/go-api/internal/acquisition/adapters/deezerpreview"
-	"altune/go-api/internal/acquisition/service/upgrade"
 	"altune/go-api/internal/shared/binpath"
 	"context"
 	"net/http"
 	"time"
-
-	acqPorts "altune/go-api/internal/acquisition/ports"
-	acqService "altune/go-api/internal/acquisition/service"
 )
 
 const (
@@ -18,36 +13,36 @@ const (
 	deezerPreviewRate    = 1.0
 )
 
-func (a *App) upgradeLane(ledger acqPorts.TrackLedger, svc *acqService.AcquireTrackAudioService) func(*acqService.BackgroundAcquisitionScheduler) {
+func (a *App) upgradeLane(ledger acquisition.TrackLedgerPort, svc *acquisition.AcquireTrackAudioService) func(*acquisition.BackgroundAcquisitionScheduler) {
 	store := acquisition.NewPgxUpgradeStore(a.pool)
-	runner := upgrade.NewRunner(ledger, svc, store,
-		upgrade.Config{
+	runner := acquisition.NewUpgradeRunner(ledger, svc, store,
+		acquisition.UpgradeConfig{
 			DryRun: a.cfg.AcquisitionUpgradeDryRun, MaxTries: a.cfg.AcquisitionUpgradeMaxTries,
 			LowBitrateFloorKbps: a.cfg.AcquisitionLowBitrateFloorKbps,
 		}).
 		WithInPlaceCheck(svc, store, a.cfg.AcquisitionUpgradeVerifyPerHour)
-	return acqService.WithUpgradeLane(runner, a.cfg.AcquisitionUpgradeConcurrency)
+	return acquisition.WithUpgradeLane(runner, a.cfg.AcquisitionUpgradeConcurrency)
 }
 
-func (a *App) upgradePreviewMatcher() acqPorts.PreviewMatcher {
-	printer := deezerpreview.NewFpcalcPrinter(binpath.Resolve("fpcalc", a.cfg.FFmpegLocation))
-	previews := deezerpreview.New(&http.Client{Timeout: deezerPreviewTimeout}, deezerpreview.BaseURL, deezerPreviewRate, printer)
-	return deezerpreview.NewMatcher(previews, printer, deezerpreview.DefaultMatchMaxBitErrorRate)
+func (a *App) upgradePreviewMatcher() acquisition.PreviewMatcher {
+	printer := acquisition.NewFpcalcPrinter(binpath.Resolve("fpcalc", a.cfg.FFmpegLocation))
+	previews := acquisition.NewDeezerPreview(&http.Client{Timeout: deezerPreviewTimeout}, acquisition.DeezerPreviewBaseURL, deezerPreviewRate, printer)
+	return acquisition.NewPreviewMatcher(previews, printer, acquisition.DefaultMatchMaxBitErrorRate)
 }
 
 func (a *App) upgradeEnabled() bool { return a.pool != nil && a.cfg.AcquisitionUpgradeEnabled }
 
-func (a *App) startAcquisitionUpgradeIfEnabled(ctx context.Context, scheduler *acqService.BackgroundAcquisitionScheduler) {
+func (a *App) startAcquisitionUpgradeIfEnabled(ctx context.Context, scheduler *acquisition.BackgroundAcquisitionScheduler) {
 	if !a.upgradeEnabled() || scheduler == nil {
 		return
 	}
 	a.startAcquisitionUpgrade(ctx, scheduler)
 }
 
-func (a *App) startAcquisitionUpgrade(ctx context.Context, scheduler upgrade.Scheduler) {
-	planner := upgrade.NewPlanner(acquisition.NewPgxUpgradeStore(a.pool), scheduler, a.cfg.AcquisitionUpgradeConcurrency, a.cfg.AcquisitionUpgradeRetryAfter).CheckingUploads().
+func (a *App) startAcquisitionUpgrade(ctx context.Context, scheduler acquisition.UpgradeScheduler) {
+	planner := acquisition.NewUpgradePlanner(acquisition.NewPgxUpgradeStore(a.pool), scheduler, a.cfg.AcquisitionUpgradeConcurrency, a.cfg.AcquisitionUpgradeRetryAfter).CheckingUploads().
 		RescuingLowBitrate(a.cfg.AcquisitionLowBitrateFloorKbps)
-	interval := upgrade.Interval(a.cfg.AcquisitionUpgradePerHour)
+	interval := acquisition.UpgradeInterval(a.cfg.AcquisitionUpgradePerHour)
 	a.startLoggedJob(ctx, jobAcquisitionUpgrade, interval, planner.PlanNext,
 		"interval", interval.String(), "dry_run", a.cfg.AcquisitionUpgradeDryRun)
 }

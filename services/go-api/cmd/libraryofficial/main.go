@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/adapters/ytmsearch"
+	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/shared/ytminnertube"
 	"context"
 	"errors"
@@ -161,7 +161,7 @@ func run(opts options, env func(string) string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	search := ytmsearch.New(ytmsearch.Config{HTTP: budgeted, MinInterval: paced.minInterval, Timeout: searchTimeout})
+	search := acquisition.NewYtmSearch(acquisition.YtmSearchConfig{HTTP: budgeted, MinInterval: paced.minInterval, Timeout: searchTimeout})
 	return runFind(ctx, s, search, paced.concurrency, opts, out)
 }
 

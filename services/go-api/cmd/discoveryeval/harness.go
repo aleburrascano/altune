@@ -1,17 +1,16 @@
 package main
 
 import (
+	"altune/go-api/internal/discovery"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-
-	discoveryEval "altune/go-api/internal/discovery/service/eval"
 )
 
 var errRegressed = errors.New("eval regression")
 
-func requireSignalASamples(report *discoveryEval.CoverageReportA) error {
+func requireSignalASamples(report *discovery.CoverageReportA) error {
 	return requireMeasured("signal-a", len(report.Strong)+len(report.Weak)+len(report.Abandoned)+report.FilteredAsTypos, 0)
 }
 
@@ -27,8 +26,8 @@ func requireMeasured(mode string, measured, errored int) error {
 
 func runHarness(
 	name string,
-	once func() (discoveryEval.HarnessReport, error),
-	human func(discoveryEval.HarnessReport) string,
+	once func() (discovery.HarnessReport, error),
+	human func(discovery.HarnessReport) string,
 	opts options,
 ) error {
 	if opts.updateBaselines {
@@ -55,7 +54,7 @@ func runHarness(
 	fmt.Print(renderGateBlock(gates))
 	fmt.Print(renderSlices(report.Failures()))
 
-	if discoveryEval.AnyFailed(gates) {
+	if discovery.AnyFailed(gates) {
 		return errRegressed
 	}
 	return nil
@@ -63,7 +62,7 @@ func runHarness(
 
 func updateBaselines(
 	name string,
-	once func() (discoveryEval.HarnessReport, error),
+	once func() (discovery.HarnessReport, error),
 	opts options,
 ) error {
 	runs := opts.noiseRuns
@@ -89,24 +88,24 @@ func updateBaselines(
 		}
 	}
 
-	metrics := make([]discoveryEval.NamedMetric, 0, len(order))
+	metrics := make([]discovery.NamedMetric, 0, len(order))
 	margins := map[string]float64{}
 	for _, mName := range order {
-		metrics = append(metrics, discoveryEval.NamedMetric{
+		metrics = append(metrics, discovery.NamedMetric{
 			Name:           mName,
-			Value:          discoveryEval.Mean(samples[mName]),
+			Value:          discovery.EvalMean(samples[mName]),
 			HigherIsBetter: directions[mName],
 		})
-		margins[mName] = discoveryEval.MeasureNoise(samples[mName])
+		margins[mName] = discovery.MeasureNoise(samples[mName])
 	}
-	fresh := discoveryEval.BuildBaselines(metrics, margins)
+	fresh := discovery.BuildBaselines(metrics, margins)
 
 	existing, err := loadBaselines(opts.baselinesPath)
 	if err != nil {
 		return err
 	}
 	if existing == nil {
-		existing = discoveryEval.Baselines{}
+		existing = discovery.Baselines{}
 	}
 	for k, v := range fresh {
 		if runs < 2 {
@@ -124,22 +123,22 @@ func updateBaselines(
 	return nil
 }
 
-func loadBaselines(path string) (discoveryEval.Baselines, error) {
+func loadBaselines(path string) (discovery.Baselines, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return discoveryEval.Baselines{}, nil
+		return discovery.Baselines{}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read baselines %s: %w", path, err)
 	}
-	var b discoveryEval.Baselines
+	var b discovery.Baselines
 	if err := json.Unmarshal(data, &b); err != nil {
 		return nil, fmt.Errorf("parse baselines %s: %w", path, err)
 	}
 	return b, nil
 }
 
-func writeBaselines(path string, b discoveryEval.Baselines) error {
+func writeBaselines(path string, b discovery.Baselines) error {
 	data, err := json.MarshalIndent(b, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal baselines: %w", err)
@@ -150,40 +149,40 @@ func writeBaselines(path string, b discoveryEval.Baselines) error {
 	return nil
 }
 
-func renderGateBlock(gates []discoveryEval.GateResult) string {
+func renderGateBlock(gates []discovery.GateResult) string {
 	out := "\n## Gate\n\n"
-	for _, g := range discoveryEval.SortedGates(gates) {
+	for _, g := range discovery.SortedGates(gates) {
 		out += "  " + g.String() + "\n"
 	}
-	if discoveryEval.AnyFailed(gates) {
+	if discovery.AnyFailed(gates) {
 		out += "\n  ⚠ REGRESSION — a metric fell past its noise margin or has no baseline.\n"
 	}
 	return out
 }
 
-func renderSlices(failures []discoveryEval.FailureRecord) string {
+func renderSlices(failures []discovery.FailureRecord) string {
 	out := fmt.Sprintf("\n## Failure slices — %d total\n\n", len(failures))
 	if len(failures) == 0 {
 		return out + "_none_\n"
 	}
 	axes := []struct{ label, key string }{
-		{"by token count", discoveryEval.TokenCountAttr},
-		{"by script", discoveryEval.ScriptAttr},
-		{"by pop band", discoveryEval.PopBandAttr},
-		{"by has-id", discoveryEval.HasIDAttr},
+		{"by token count", discovery.TokenCountAttr},
+		{"by script", discovery.ScriptAttr},
+		{"by pop band", discovery.PopBandAttr},
+		{"by has-id", discovery.HasIDAttr},
 	}
 	for _, a := range axes {
-		buckets := discoveryEval.SliceFailures(failures, a.key)
+		buckets := discovery.SliceFailures(failures, a.key)
 		if len(buckets) == 1 {
 			if _, only := buckets["(unset)"]; only {
 				continue
 			}
 		}
-		out += fmt.Sprintf("- %-16s %v\n", a.label+":", discoveryEval.TopBuckets(buckets, 8))
+		out += fmt.Sprintf("- %-16s %v\n", a.label+":", discovery.TopBuckets(buckets, 8))
 	}
-	joint := discoveryEval.SliceFailuresByPair(failures, discoveryEval.TokenCountAttr, discoveryEval.PopBandAttr)
+	joint := discovery.SliceFailuresByPair(failures, discovery.TokenCountAttr, discovery.PopBandAttr)
 	if len(joint) > 1 || func() bool { _, only := joint["(unset)|(unset)"]; return !only }() {
-		out += fmt.Sprintf("- %-16s %v\n", "token×pop:", discoveryEval.TopBuckets(joint, 8))
+		out += fmt.Sprintf("- %-16s %v\n", "token×pop:", discovery.TopBuckets(joint, 8))
 	}
 	return out
 }

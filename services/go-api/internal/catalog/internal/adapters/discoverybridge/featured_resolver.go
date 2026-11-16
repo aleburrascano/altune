@@ -6,7 +6,7 @@ import (
 	"log/slog"
 
 	catalogdomain "altune/go-api/internal/catalog/domain"
-	catalogports "altune/go-api/internal/catalog/ports"
+	catalogports "altune/go-api/internal/catalog/internal/core/ports"
 	discoverydomain "altune/go-api/internal/discovery/domain"
 )
 

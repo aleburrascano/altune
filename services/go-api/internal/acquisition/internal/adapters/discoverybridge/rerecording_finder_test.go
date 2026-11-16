@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	acqports "altune/go-api/internal/acquisition/ports"
+	acqports "altune/go-api/internal/acquisition/internal/core/ports"
 )
 
 const (

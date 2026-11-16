@@ -1,8 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"context"
 	"errors"
 	"net/http"
@@ -118,20 +117,20 @@ func TestMusicBrainzLookup_AbortsOnForbidden(t *testing.T) {
 }
 
 type fakeAppleSongs struct {
-	songs []domain.SearchResult
+	songs []discovery.SearchResult
 	err   error
 }
 
-func (f fakeAppleSongs) SongsByISRC(context.Context, string) ([]domain.SearchResult, error) {
+func (f fakeAppleSongs) SongsByISRC(context.Context, string) ([]discovery.SearchResult, error) {
 	return f.songs, f.err
 }
 
 func TestAppleLookup_ByISRCMapsSongs(t *testing.T) {
-	song := domain.SearchResult{
+	song := discovery.SearchResult{
 		Title: "Celebration", Subtitle: "Kool & The Gang", Album: "Celebrate!", Duration: 298, ISRC: "USPR18000001",
-		Sources: []domain.SourceRef{{Provider: domain.ProviderAppleMusic, ExternalID: "a1"}},
+		Sources: []discovery.SourceRef{{Provider: discovery.ProviderAppleMusic, ExternalID: "a1"}},
 	}
-	got, err := newAppleLookup(fakeAppleSongs{songs: []domain.SearchResult{song}}, 1000).ByISRC(t.Context(), "USPR18000001")
+	got, err := newAppleLookup(fakeAppleSongs{songs: []discovery.SearchResult{song}}, 1000).ByISRC(t.Context(), "USPR18000001")
 	if err != nil || len(got) != 1 {
 		t.Fatalf("got %+v, %v", got, err)
 	}
@@ -142,7 +141,7 @@ func TestAppleLookup_ByISRCMapsSongs(t *testing.T) {
 
 func TestAppleLookup_AbortsWhenBlocked(t *testing.T) {
 	for _, status := range []int{http.StatusForbidden, http.StatusTooManyRequests} {
-		lookup := newAppleLookup(fakeAppleSongs{err: providerhttp.StatusError{Status: status}}, 1000)
+		lookup := newAppleLookup(fakeAppleSongs{err: discovery.StatusError{Status: status}}, 1000)
 		if _, err := lookup.ByISRC(t.Context(), "USPR18000001"); !errors.Is(err, errCatalogBlocked) {
 			t.Errorf("status %d: err = %v, want blocked", status, err)
 		}
@@ -150,7 +149,7 @@ func TestAppleLookup_AbortsWhenBlocked(t *testing.T) {
 }
 
 func TestAppleLookup_OtherErrorsStayPerTrack(t *testing.T) {
-	lookup := newAppleLookup(fakeAppleSongs{err: providerhttp.StatusError{Status: http.StatusInternalServerError}}, 1000)
+	lookup := newAppleLookup(fakeAppleSongs{err: discovery.StatusError{Status: http.StatusInternalServerError}}, 1000)
 	_, err := lookup.ByISRC(t.Context(), "USPR18000001")
 	if err == nil || errors.Is(err, errCatalogBlocked) {
 		t.Fatalf("err = %v", err)

@@ -2,8 +2,6 @@ package app
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/service/rank"
-	"altune/go-api/internal/discovery/service/search"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/runloop"
 	"context"
@@ -117,8 +115,8 @@ func TestShutdown_InFlightRequestContextSurvivesLifecycleCancel(t *testing.T) {
 
 func TestApplyDisabledJobs_DisabledRankingRefreshNeverRefreshes(t *testing.T) {
 	store := &countingBehavioralStore{}
-	consumer := rank.NewSatisfactionConsumer(store)
-	searchSvc := search.NewService(nil, nil, search.WithBehavioralRanking(consumer))
+	consumer := discovery.NewSatisfactionConsumer(store)
+	searchSvc := discovery.NewSearchService(nil, nil, discovery.WithBehavioralRanking(consumer))
 	a := &App{cfg: &config.Config{
 		BehavioralRankingEnabled: true,
 		DisabledJobs:             []string{"behavioral ranking refresh"},

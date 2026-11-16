@@ -2,7 +2,7 @@ package audio
 
 import (
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/catalog/internal/core/ports"
 	"altune/go-api/internal/catalog/service/track"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"

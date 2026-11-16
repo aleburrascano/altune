@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/service/grade"
+	"altune/go-api/internal/acquisition"
 	"context"
 	"errors"
 	"fmt"
@@ -12,22 +12,22 @@ import (
 
 var errNothingToUndo = errors.New("nothing to undo")
 
-var gradeOrder = []grade.Grade{grade.F, grade.D, grade.C, grade.B, grade.A}
+var gradeOrder = []acquisition.Grade{acquisition.GradeF, acquisition.GradeD, acquisition.GradeC, acquisition.GradeB, acquisition.GradeA}
 
-var kindOrder = []grade.SourceKind{
-	grade.ArtTrack, grade.OfficialVideo, grade.LabelUpload, grade.FanUpload, grade.UserUpload,
+var kindOrder = []acquisition.SourceKind{
+	acquisition.ArtTrack, acquisition.OfficialVideo, acquisition.LabelUpload, acquisition.FanUpload, acquisition.UserUpload,
 }
 
 type tally struct {
-	grades     map[grade.Grade]int
-	kinds      map[grade.SourceKind]int
+	grades     map[acquisition.Grade]int
+	kinds      map[acquisition.SourceKind]int
 	unresolved int
 	stale      int
 	failed     int
 }
 
 func newTally() *tally {
-	return &tally{grades: map[grade.Grade]int{}, kinds: map[grade.SourceKind]int{}}
+	return &tally{grades: map[acquisition.Grade]int{}, kinds: map[acquisition.SourceKind]int{}}
 }
 
 func runBackfill(ctx context.Context, s store, lookup authorLookup, opts options, runID uuid.UUID, out io.Writer) error {

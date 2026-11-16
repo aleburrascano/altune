@@ -14,8 +14,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	observeDomain "altune/go-api/internal/observe/domain"
 )
 
 type fakeCoverageEvents struct {
@@ -114,8 +112,8 @@ func TestBuildCoverageCondition_MessageExcludesQueryText(t *testing.T) {
 	}
 }
 
-func evalTick(ctx context.Context, conds ...observeDomain.Condition) map[string]*observeDomain.Alert {
-	fired := make(map[string]*observeDomain.Alert)
+func evalTick(ctx context.Context, conds ...observe.Condition) map[string]*observe.Alert {
+	fired := make(map[string]*observe.Alert)
 	for _, c := range conds {
 		if a := c.Eval(ctx); a != nil {
 			fired[c.Key] = a
@@ -143,7 +141,7 @@ func TestBuildCoverageConditions_QueryFailureIsNotHealthy(t *testing.T) {
 		if queryFailing.Key == gap.Key {
 			t.Errorf("failure signal shares key %q with the gap alert", gap.Key)
 		}
-		if alert.Severity != observeDomain.SeveritySignal {
+		if alert.Severity != observe.SeveritySignal {
 			t.Errorf("severity = %v, want SeveritySignal", alert.Severity)
 		}
 		if strings.Contains(alert.Message, "relation") || strings.Contains(alert.Message, "zero_result") {

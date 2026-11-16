@@ -2,7 +2,6 @@ package app
 
 import (
 	"altune/go-api/internal/auth"
-	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"log/slog"
@@ -23,7 +22,7 @@ func newAuthVerifier(ctx context.Context, cfg *config.Config) (*auth.SupabaseJWT
 }
 
 func authMiddleware(verifier auth.TokenVerifier) func(http.Handler) http.Handler {
-	return middleware.Middleware(verifier, middleware.WithMetrics(auth.NewExpvarAuthMetrics()))
+	return auth.Middleware(verifier, auth.WithMetrics(auth.NewExpvarAuthMetrics()))
 }
 
 func buildTestAuthVerifier(cfg testAuthConfig, supa auth.TokenVerifier) (*auth.TestAuth, auth.TokenVerifier, error) {

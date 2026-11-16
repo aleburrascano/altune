@@ -1,6 +1,7 @@
 package catalogbridge
 
 import (
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/playback/internal/core/ports"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
@@ -10,7 +11,6 @@ import (
 	"time"
 
 	catalogDomain "altune/go-api/internal/catalog/domain"
-	catalogPorts "altune/go-api/internal/catalog/ports"
 )
 
 const defaultNowPlayingLookupTimeout = 3 * time.Second
@@ -54,7 +54,7 @@ func withNowPlayingLookupTimeout(d time.Duration) func(*NowPlayingReader) {
 }
 
 func isDependencyFailure(err error) bool {
-	return errors.Is(err, catalogPorts.ErrDBTransient) || errors.Is(err, context.DeadlineExceeded)
+	return errors.Is(err, catalog.ErrDBTransient) || errors.Is(err, context.DeadlineExceeded)
 }
 
 func trackAbsent() (*ports.NowPlayingTrack, error) {

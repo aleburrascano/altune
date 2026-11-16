@@ -1,0 +1,16 @@
+package playback
+
+import handler "altune/go-api/internal/playback/adapters/handler"
+
+type (
+	QueueHandler        = handler.QueueHandler
+	QueueStateRateLimit = handler.QueueStateRateLimit
+)
+
+var (
+	NewQueueHandler                = handler.NewQueueHandler
+	WithQueueStateRateLimit        = handler.WithQueueStateRateLimit
+	WithQueueStateRateLimitMetrics = handler.WithQueueStateRateLimitMetrics
+)
+
+var DefaultQueueStateRateLimit = handler.DefaultQueueStateRateLimit

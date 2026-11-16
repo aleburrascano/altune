@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/adapters/eval"
+	"altune/go-api/internal/acquisition"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -26,10 +26,10 @@ type captureTrackDump struct {
 	ISRC            string  `json:"isrc"`
 	AudioSourceURL  string  `json:"audio_source_url"`
 
-	CatalogDurationSeconds *float64             `json:"catalog_duration_seconds"`
-	CatalogMBID            string               `json:"catalog_mbid"`
-	CatalogExplicit        *bool                `json:"catalog_explicit"`
-	CatalogSources         []eval.CatalogSource `json:"catalog_sources"`
+	CatalogDurationSeconds *float64                        `json:"catalog_duration_seconds"`
+	CatalogMBID            string                          `json:"catalog_mbid"`
+	CatalogExplicit        *bool                           `json:"catalog_explicit"`
+	CatalogSources         []acquisition.EvalCatalogSource `json:"catalog_sources"`
 }
 
 type captureDump struct {
@@ -90,46 +90,56 @@ func runCapture(args []string, stdin io.Reader, stdout io.Writer, now time.Time)
 	return 0
 }
 
-func captureCase(raw []byte, tier string, now time.Time) (eval.Case, error) {
-	var d captureDump
-	if err := json.Unmarshal(raw, &d); err != nil {
-		return eval.Case{}, fmt.Errorf("parse dump: %w", err)
+func captureCase(raw []byte, tier string, now time.Time) (acquisition.EvalCase, error) {
+	d, err := parseCaptureDump(raw)
+	if err != nil {
+		return acquisition.EvalCase{}, err
 	}
-	if strings.TrimSpace(d.Track.Title) == "" || strings.TrimSpace(d.Track.Artist) == "" {
-		return eval.Case{}, fmt.Errorf("dump has no track title/artist")
-	}
-
 	sources, rejectionSummary, err := captureSources(d.Logs)
 	if err != nil {
-		return eval.Case{}, err
+		return acquisition.EvalCase{}, err
 	}
 	if len(sources) == 0 {
-		return eval.Case{}, fmt.Errorf("no candidate_evaluated log lines in dump")
+		return acquisition.EvalCase{}, fmt.Errorf("no candidate_evaluated log lines in dump")
 	}
-
-	return eval.Case{
-		ID:    captureID(d.Track),
-		Class: "RW",
-		Note:  captureNote(rejectionSummary, tier, now),
-		Track: eval.Track{
-			Title:  d.Track.Title,
-			Artist: d.Track.Artist,
-			Album:  d.Track.Album,
-			ISRC:   d.Track.ISRC,
-
-			AudioSourceURL: d.Track.AudioSourceURL,
-
-			CatalogDuration: deref(d.Track.CatalogDurationSeconds),
-			CatalogMBID:     d.Track.CatalogMBID,
-			CatalogSources:  d.Track.CatalogSources,
-			CatalogExplicit: d.Track.CatalogExplicit,
-		},
+	return acquisition.EvalCase{
+		ID:      captureID(d.Track),
+		Class:   "RW",
+		Note:    captureNote(rejectionSummary, tier, now),
+		Track:   captureTrack(d.Track),
 		Sources: sources,
 	}, nil
 }
 
-func captureSources(logs []json.RawMessage) ([]eval.Source, string, error) {
-	var sources []eval.Source
+func parseCaptureDump(raw []byte) (captureDump, error) {
+	var d captureDump
+	if err := json.Unmarshal(raw, &d); err != nil {
+		return captureDump{}, fmt.Errorf("parse dump: %w", err)
+	}
+	if strings.TrimSpace(d.Track.Title) == "" || strings.TrimSpace(d.Track.Artist) == "" {
+		return captureDump{}, fmt.Errorf("dump has no track title/artist")
+	}
+	return d, nil
+}
+
+func captureTrack(t captureTrackDump) acquisition.EvalTrack {
+	return acquisition.EvalTrack{
+		Title:  t.Title,
+		Artist: t.Artist,
+		Album:  t.Album,
+		ISRC:   t.ISRC,
+
+		AudioSourceURL: t.AudioSourceURL,
+
+		CatalogDuration: deref(t.CatalogDurationSeconds),
+		CatalogMBID:     t.CatalogMBID,
+		CatalogSources:  t.CatalogSources,
+		CatalogExplicit: t.CatalogExplicit,
+	}
+}
+
+func captureSources(logs []json.RawMessage) ([]acquisition.EvalSource, string, error) {
+	var sources []acquisition.EvalSource
 	index := map[string]int{}
 	counter := map[string]int{}
 	var rejectionSummary string
@@ -151,19 +161,19 @@ func captureSources(logs []json.RawMessage) ([]eval.Source, string, error) {
 	return sources, rejectionSummary, nil
 }
 
-func addCapturedCandidate(sources *[]eval.Source, index, counter map[string]int, line captureLogLine) {
+func addCapturedCandidate(sources *[]acquisition.EvalSource, index, counter map[string]int, line captureLogLine) {
 	name := string(line.Source)
 	if name == "" {
 		name = "unknown"
 	}
 	i, ok := index[name]
 	if !ok {
-		*sources = append(*sources, eval.Source{Name: name})
+		*sources = append(*sources, acquisition.EvalSource{Name: name})
 		i = len(*sources) - 1
 		index[name] = i
 	}
 	counter[name]++
-	(*sources)[i].Candidates = append((*sources)[i].Candidates, eval.Candidate{
+	(*sources)[i].Candidates = append((*sources)[i].Candidates, acquisition.EvalCandidate{
 		Title:     line.CandidateTitle,
 		URL:       fmt.Sprintf("captured:%s:%d", name, counter[name]),
 		Channel:   line.CandidateChannel,

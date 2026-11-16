@@ -1,25 +1,25 @@
 package main
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"context"
 	"strings"
 	"testing"
 )
 
-func sourced(providers ...domain.ProviderName) domain.SearchResult {
-	r := domain.SearchResult{Kind: domain.ResultKindAlbum}
+func sourced(providers ...discovery.ProviderName) discovery.SearchResult {
+	r := discovery.SearchResult{Kind: discovery.ResultKindAlbum}
 	for _, p := range providers {
-		r.Sources = append(r.Sources, domain.SourceRef{Provider: p, ExternalID: "x"})
+		r.Sources = append(r.Sources, discovery.SourceRef{Provider: p, ExternalID: "x"})
 	}
 	return r
 }
 
 func TestScoreDetailLive(t *testing.T) {
-	row := scoreDetailLive("Nirvana", []domain.SearchResult{
-		sourced(domain.ProviderDeezer, domain.ProviderSpotify),
-		sourced(domain.ProviderDeezer, domain.ProviderSoundCloud),
-		sourced(domain.ProviderSoundCloud),
+	row := scoreDetailLive("Nirvana", []discovery.SearchResult{
+		sourced(discovery.ProviderDeezer, discovery.ProviderSpotify),
+		sourced(discovery.ProviderDeezer, discovery.ProviderSoundCloud),
+		sourced(discovery.ProviderSoundCloud),
 	})
 
 	if row.Items != 3 || row.Confirmed != 1 || row.SoundCloudOnly != 1 {
@@ -40,14 +40,14 @@ func TestSummarizeDetailLive(t *testing.T) {
 }
 
 func TestArtistCardNamed(t *testing.T) {
-	results := []domain.SearchResult{
-		{Kind: domain.ResultKindTrack, Title: "Nirvana", Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer}}},
-		{Kind: domain.ResultKindArtist, Title: "NIRVANA", Sources: []domain.SourceRef{{Provider: domain.ProviderSpotify}}},
+	results := []discovery.SearchResult{
+		{Kind: discovery.ResultKindTrack, Title: "Nirvana", Sources: []discovery.SourceRef{{Provider: discovery.ProviderDeezer}}},
+		{Kind: discovery.ResultKindArtist, Title: "NIRVANA", Sources: []discovery.SourceRef{{Provider: discovery.ProviderSpotify}}},
 	}
 
 	card, ok := artistCardNamed(results, "nirvana")
 
-	if !ok || card.Kind != domain.ResultKindArtist {
+	if !ok || card.Kind != discovery.ResultKindArtist {
 		t.Fatalf("card = %+v, ok = %v, want the artist card", card, ok)
 	}
 }
@@ -58,9 +58,9 @@ const (
 )
 
 func TestArtistCardWithMBID_PicksTheCardOfThatArtistNotTheFirstSameNameCard(t *testing.T) {
-	results := []domain.SearchResult{
-		{Kind: domain.ResultKindArtist, Title: "Nirvana", ArtistMBID: ukNirvana, Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "uk"}}},
-		{Kind: domain.ResultKindArtist, Title: "Nirvana", ArtistMBID: usNirvana, Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "us"}}},
+	results := []discovery.SearchResult{
+		{Kind: discovery.ResultKindArtist, Title: "Nirvana", ArtistMBID: ukNirvana, Sources: []discovery.SourceRef{{Provider: discovery.ProviderDeezer, ExternalID: "uk"}}},
+		{Kind: discovery.ResultKindArtist, Title: "Nirvana", ArtistMBID: usNirvana, Sources: []discovery.SourceRef{{Provider: discovery.ProviderDeezer, ExternalID: "us"}}},
 	}
 
 	card, ok := artistCardWithMBID(results, usNirvana)

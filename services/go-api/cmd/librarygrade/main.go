@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/adapters/ytmsearch"
+	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/shared/ytminnertube"
 	"context"
 	"errors"
@@ -146,6 +146,6 @@ func run(opts options, env func(string) string, out io.Writer) error {
 		return err
 	}
 	_, _ = fmt.Fprintln(out, budget.Describe())
-	youtube := ytmsearch.New(ytmsearch.Config{HTTP: budgeted, MinInterval: interval, Timeout: lookupTimeout})
+	youtube := acquisition.NewYtmSearch(acquisition.YtmSearchConfig{HTTP: budgeted, MinInterval: interval, Timeout: lookupTimeout})
 	return runBackfill(ctx, store{pool: pool, access: access}, newSourceLookup(youtube, interval), opts, uuid.New(), out)
 }

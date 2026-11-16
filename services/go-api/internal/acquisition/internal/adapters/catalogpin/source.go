@@ -2,7 +2,7 @@ package catalogpin
 
 import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
-	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/shared/filehost"
 	"context"
 	"log/slog"

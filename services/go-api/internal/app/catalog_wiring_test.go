@@ -2,19 +2,11 @@ package app
 
 import (
 	"altune/go-api/internal/acquisition"
-	"altune/go-api/internal/acquisition/adapters/ytdlp"
-	"altune/go-api/internal/acquisition/adapters/ytmsearch"
-	"altune/go-api/internal/acquisition/adapters/ytmusic"
-	acqdomain "altune/go-api/internal/acquisition/domain"
-	acqPorts "altune/go-api/internal/acquisition/ports"
-	acqService "altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/auth"
-	authdomain "altune/go-api/internal/auth/domain"
 	"altune/go-api/internal/catalog"
-	"altune/go-api/internal/catalog/domain"
-	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
-	"altune/go-api/internal/observe/service/eventtap"
-	playbackHandler "altune/go-api/internal/playback/adapters/handler"
+	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/observe"
+	"altune/go-api/internal/playback"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/events"
 	shared "altune/go-api/internal/shared/kernel"
@@ -111,7 +103,7 @@ func TestWireCatalogPrincipalDefault_AdmitsOneUserUpToGlobalDepth(t *testing.T) 
 	userA := shared.NewUserId(uuid.New())
 	const pastOldGlobalDepth = concurrency*4 + 5
 	for i := 0; i < pastOldGlobalDepth; i++ {
-		if err := wired.scheduler.Schedule(context.Background(), userA, domain.NewTrackId(), ""); err != nil {
+		if err := wired.scheduler.Schedule(context.Background(), userA, catalog.NewTrackId(), ""); err != nil {
 			t.Fatalf("schedule %d of %d for one user: err = %v, want nil (the queue has no depth limit)", i+1, pastOldGlobalDepth, err)
 		}
 	}
@@ -143,12 +135,12 @@ func TestWireCatalogDoesNotCapPerPrincipalQueue(t *testing.T) {
 
 	userA := shared.NewUserId(uuid.New())
 	for i := 0; i < principalCap+2; i++ {
-		if err := wired.scheduler.Schedule(context.Background(), userA, domain.NewTrackId(), ""); err != nil {
+		if err := wired.scheduler.Schedule(context.Background(), userA, catalog.NewTrackId(), ""); err != nil {
 			t.Fatalf("schedule %d past userA's old share: err = %v, want nil (the cap no longer refuses)", i+1, err)
 		}
 	}
 
-	if err := wired.scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
+	if err := wired.scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), catalog.NewTrackId(), ""); err != nil {
 		t.Fatalf("schedule for second principal: err = %v, want nil", err)
 	}
 }
@@ -167,19 +159,19 @@ func assertCatalogHandlersBuilt(t *testing.T, w catalogWiring) {
 }
 
 type fixtureTrackRepo struct {
-	track *domain.Track
+	track *catalog.Track
 }
 
-func (r *fixtureTrackRepo) GetByID(_ context.Context, _ domain.TrackId, _ shared.UserId) (*domain.Track, error) {
+func (r *fixtureTrackRepo) GetByID(_ context.Context, _ catalog.TrackId, _ shared.UserId) (*catalog.Track, error) {
 	return r.track, nil
 }
 
-func (r *fixtureTrackRepo) Update(_ context.Context, track *domain.Track, _ int) error {
+func (r *fixtureTrackRepo) Update(_ context.Context, track *catalog.Track, _ int) error {
 	r.track = track
 	return nil
 }
 
-func (r *fixtureTrackRepo) AudioRefInUse(_ context.Context, _ string, _ domain.TrackId) (bool, error) {
+func (r *fixtureTrackRepo) AudioRefInUse(_ context.Context, _ string, _ catalog.TrackId) (bool, error) {
 	return false, nil
 }
 
@@ -193,7 +185,7 @@ func TestAcquisitionSources_FixtureNeverWiredOutsideOptedInNonProd(t *testing.T)
 	for _, c := range cases {
 		sources, _ := (&App{cfg: &c}).acquisitionSources(t.Context())
 		names := sourceNames(sources.all())
-		if containsSource(names, acquisition.FixtureSourceName) || containsSource(names, acquisition.UploadSourceName) || !containsSource(names, ytdlp.SourceName) {
+		if containsSource(names, acquisition.FixtureSourceName) || containsSource(names, acquisition.UploadSourceName) || !containsSource(names, acquisition.YtDlpSourceName) {
 			t.Fatalf("cfg env=%q optIn=%v: sources %v, want live sources and no fixture", c.Env, c.AcquisitionFixtureOptIn, names)
 		}
 	}
@@ -233,35 +225,35 @@ func TestAcquisitionFixture_SavedTrackReachesReadyWithFileInMusicDir(t *testing.
 }
 
 func TestAcquisitionFixture_FetchedAudioPassesProbeAndDecodeGates(t *testing.T) {
-	prober := ytdlp.NewFfprobeProber(os.Getenv("FFMPEG_LOCATION"))
+	prober := acquisition.NewFfprobeProber(os.Getenv("FFMPEG_LOCATION"))
 	if ffprobe, ffmpeg := prober.Available(); !ffprobe || !ffmpeg {
 		t.Skip("ffprobe/ffmpeg not installed")
 	}
 	musicDir := t.TempDir()
-	track := acquireWithFixture(t, musicDir, acqService.WithAudioProber(prober))
+	track := acquireWithFixture(t, musicDir, acquisition.WithAudioProber(prober))
 	assertReadyWithAudio(t, track, musicDir)
 }
 
-func acquireWithFixture(t *testing.T, musicDir string, opts ...func(*acqService.AcquireTrackAudioService)) *domain.Track {
+func acquireWithFixture(t *testing.T, musicDir string, opts ...func(*acquisition.AcquireTrackAudioService)) *catalog.Track {
 	t.Helper()
 	sources, _ := (&App{cfg: &config.Config{Env: "test", AcquisitionFixtureOptIn: true}}).acquisitionSources(t.Context())
 	userID := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userID, "Fixture Song", "Fixture Artist", "")
+	track, err := catalog.NewTrack(userID, "Fixture Song", "Fixture Artist", "")
 	if err != nil || track.SetDuration(212) != nil {
 		t.Fatalf("new track: %v", err)
 	}
 	repo := &fixtureTrackRepo{track: track}
-	opts = append(opts, acqService.WithAudioTagger(acquisition.NewId3Tagger()), acqService.WithAcquireTempWorkspace(acquisition.NewTempWorkspace()))
-	svc := acqService.NewAcquireTrackAudioService(acquisition.NewTrackLedger(repo), acqService.NewSourceRegistry(sources.first...).WithFallback(sources.fallback...), catalog.NewFilesystemAudioStore(musicDir), opts...)
+	opts = append(opts, acquisition.WithAudioTagger(acquisition.NewId3Tagger()), acquisition.WithAcquireTempWorkspace(acquisition.NewTempWorkspace()))
+	svc := acquisition.NewAcquireTrackAudioService(acquisition.NewTrackLedger(repo), acquisition.NewSourceRegistry(sources.first...).WithFallback(sources.fallback...), catalog.NewFilesystemAudioStore(musicDir), opts...)
 	if err := svc.Execute(context.Background(), userID, track.ID); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
 	return repo.track
 }
 
-func assertReadyWithAudio(t *testing.T, track *domain.Track, musicDir string) {
+func assertReadyWithAudio(t *testing.T, track *catalog.Track, musicDir string) {
 	t.Helper()
-	if track.AcquisitionStatus != domain.AcquisitionReady || track.AudioRef == nil {
+	if track.AcquisitionStatus != catalog.AcquisitionReady || track.AudioRef == nil {
 		t.Fatalf("status = %v audioRef = %v, want ready with a ref", track.AcquisitionStatus, track.AudioRef)
 	}
 	stored, err := os.Stat(filepath.Join(musicDir, *track.AudioRef))
@@ -271,7 +263,7 @@ func assertReadyWithAudio(t *testing.T, track *domain.Track, musicDir string) {
 }
 
 func TestAudioSourcesToggle(t *testing.T) {
-	searcher := ytdlp.NewYtDlpAudioSearcher("", "", "")
+	searcher := acquisition.NewYtDlpAudioSearcher("", "", "")
 
 	tests := []struct {
 		name        string
@@ -293,10 +285,10 @@ func TestAudioSourcesToggle(t *testing.T) {
 			sources := a.audioSourcesFor(t.Context(), searcher)
 			names := sourceNames(sources.all())
 
-			if got := containsSource(names, ytmusic.SourceName); got != tt.wantYtMusic {
+			if got := containsSource(names, acquisition.YtMusicSourceName); got != tt.wantYtMusic {
 				t.Errorf("ytmusic present = %v, want %v (sources=%v)", got, tt.wantYtMusic, names)
 			}
-			if got := containsSource(names, ytdlp.SourceName); got != tt.wantYtDlp {
+			if got := containsSource(names, acquisition.YtDlpSourceName); got != tt.wantYtDlp {
 				t.Errorf("ytdlp present = %v, want %v (sources=%v)", got, tt.wantYtDlp, names)
 			}
 		})
@@ -305,36 +297,36 @@ func TestAudioSourcesToggle(t *testing.T) {
 
 func TestAudioSources_YouTubeMusicSearchRunsFirstAndYtDlpIsTheFallback(t *testing.T) {
 	a := &App{cfg: &config.Config{YtMusicEnabled: true, YtDLPEnabled: true}}
-	tiers := a.audioSourcesFor(t.Context(), ytdlp.NewYtDlpAudioSearcher("", "", ""))
+	tiers := a.audioSourcesFor(t.Context(), acquisition.NewYtDlpAudioSearcher("", "", ""))
 
 	first, fallback := sourceNames(tiers.first), sourceNames(tiers.fallback)
-	if !containsSource(first, ytmusic.SourceName) || !containsSource(first, ytmsearch.SourceName) {
+	if !containsSource(first, acquisition.YtMusicSourceName) || !containsSource(first, acquisition.YtmSearchSourceName) {
 		t.Errorf("first tier = %v, want the catalog id and the songs search", first)
 	}
-	if len(fallback) != 1 || fallback[0] != ytdlp.SourceName {
+	if len(fallback) != 1 || fallback[0] != acquisition.YtDlpSourceName {
 		t.Errorf("fallback = %v, want only ytdlp", fallback)
 	}
 }
 
 func TestAudioSources_TheSongsSearchOutranksTheCatalogLinkForTheSameVideo(t *testing.T) {
 	a := &App{cfg: &config.Config{YtMusicEnabled: true, YtDLPEnabled: true}}
-	first := sourceNames(a.audioSourcesFor(t.Context(), ytdlp.NewYtDlpAudioSearcher("", "", "")).first)
+	first := sourceNames(a.audioSourcesFor(t.Context(), acquisition.NewYtDlpAudioSearcher("", "", "")).first)
 
-	if len(first) != 3 || first[0] != acquisition.CatalogPinSourceName || first[1] != ytmsearch.SourceName || first[2] != ytmusic.SourceName {
+	if len(first) != 3 || first[0] != acquisition.CatalogPinSourceName || first[1] != acquisition.YtmSearchSourceName || first[2] != acquisition.YtMusicSourceName {
 		t.Errorf("first tier = %v, want [%s %s %s]: duplicates keep the earlier source, and only the songs search carries the video's own length",
-			first, acquisition.CatalogPinSourceName, ytmsearch.SourceName, ytmusic.SourceName)
+			first, acquisition.CatalogPinSourceName, acquisition.YtmSearchSourceName, acquisition.YtMusicSourceName)
 	}
 }
 
-func sourceNames(sources []acqPorts.AudioSource) []acqdomain.SourceName {
-	names := make([]acqdomain.SourceName, 0, len(sources))
+func sourceNames(sources []acquisition.AudioSource) []acquisition.SourceName {
+	names := make([]acquisition.SourceName, 0, len(sources))
 	for _, s := range sources {
 		names = append(names, s.Name())
 	}
 	return names
 }
 
-func containsSource(list []acqdomain.SourceName, want acqdomain.SourceName) bool {
+func containsSource(list []acquisition.SourceName, want acquisition.SourceName) bool {
 	for _, s := range list {
 		if s == want {
 			return true
@@ -489,15 +481,15 @@ func TestCatalogDBTimeout_ReachesOperatorLiveMetrics(t *testing.T) {
 		t.Fatalf("wireCatalog: %v", err)
 	}
 	operator := shared.NewUserId(uuid.New())
-	verifier := auth.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
+	verifier := auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
 		if token == operatorToken {
-			return authdomain.VerifiedToken{UserID: operator, ExpiresAt: time.Now().Add(time.Hour)}, nil
+			return auth.VerifiedToken{UserID: operator, ExpiresAt: time.Now().Add(time.Hour)}, nil
 		}
-		return authdomain.VerifiedToken{}, errors.New("bad token")
+		return auth.VerifiedToken{}, errors.New("bad token")
 	})
 	r := a.mountRoutes(verifier, cat,
-		playbackHandler.NewQueueHandler(nil),
-		discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{}))
+		playback.NewQueueHandler(nil),
+		discovery.NewDiscoveryHandler(discovery.DiscoveryServices{}))
 	mountObserveLiveMetrics(r, verifier, operator, liveMetricsSnapshot)
 
 	before := catalog.ReadSnapshot().DBCallTimeouts
@@ -555,7 +547,7 @@ func TestWireCatalogScheduler_RecordsOutcomeThroughThePostgresStore(t *testing.T
 	pool := newAppTestPool(t)
 
 	userID := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userID, "Song", "Artist", "Album")
+	track, err := catalog.NewTrack(userID, "Song", "Artist", "Album")
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
@@ -568,7 +560,7 @@ func TestWireCatalogScheduler_RecordsOutcomeThroughThePostgresStore(t *testing.T
 		sem:  make(chan struct{}, 1),
 		pool: pool,
 	}
-	tap := eventtap.New(events.NewInProcessBus())
+	tap := observe.NewEventTap(events.NewInProcessBus())
 	wired, err := a.wireCatalog(t.Context(), tap, discoveryWiring{})
 	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
@@ -595,12 +587,12 @@ func TestWireCatalogScheduler_RecordsOutcomeThroughThePostgresStore(t *testing.T
 }
 
 type scriptedIdentifier struct {
-	acqPorts.AudioIdentifier
+	acquisition.AudioIdentifier
 	err error
 }
 
-func (s scriptedIdentifier) Identify(context.Context, string, float64) (acqPorts.RecordingMatch, error) {
-	return acqPorts.RecordingMatch{}, s.err
+func (s scriptedIdentifier) Identify(context.Context, string, float64) (acquisition.RecordingMatch, error) {
+	return acquisition.RecordingMatch{}, s.err
 }
 
 func TestWireCatalogFingerprintVerifiedStaysFalseUntilALookupSucceeds(t *testing.T) {
@@ -619,19 +611,19 @@ func TestWireCatalogFingerprintVerifiedStaysFalseUntilALookupSucceeds(t *testing
 }
 
 type sequencedIdentifier struct {
-	acqPorts.AudioIdentifier
+	acquisition.AudioIdentifier
 	errs []error
 	next int
 }
 
-func (s *sequencedIdentifier) Identify(context.Context, string, float64) (acqPorts.RecordingMatch, error) {
+func (s *sequencedIdentifier) Identify(context.Context, string, float64) (acquisition.RecordingMatch, error) {
 	err := s.errs[s.next]
 	s.next++
-	return acqPorts.RecordingMatch{}, err
+	return acquisition.RecordingMatch{}, err
 }
 
 func TestWireCatalogFingerprintVerifiedFollowsTheLatestLookup(t *testing.T) {
-	throttled := fmt.Errorf("acoustid lookup: %w", acqdomain.ErrIdentifyThrottled)
+	throttled := fmt.Errorf("acoustid lookup: %w", acquisition.ErrIdentifyThrottled)
 	tracker := &lookupTracker{AudioIdentifier: &sequencedIdentifier{errs: []error{
 		nil, throttled, errors.New("invalid api key"), throttled, nil,
 	}}}

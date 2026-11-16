@@ -1,8 +1,8 @@
 package main
 
 import (
-	acquisition "altune/go-api/internal/acquisition/domain"
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/catalog"
 	"context"
 	"net/url"
 	"slices"
@@ -42,7 +42,7 @@ func isUserUploadPlatform(rawURL string) bool {
 }
 
 func markUncatalogued(_ context.Context, t libraryTrack, found identity) (identity, error) {
-	title := matchingTrack(t, domain.CleanSearchKeys(t.Title, t.Artist, "")).Title
+	title := matchingTrack(t, catalog.CleanSearchKeys(t.Title, t.Artist, "")).Title
 	if !isUnidentified(found) || !found.hasAnsweredCleanly() || found.listsTitle(title) {
 		return found, nil
 	}

@@ -1,24 +1,22 @@
 package main
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"context"
 	"fmt"
 	"strings"
 	"testing"
-
-	discoveryEval "altune/go-api/internal/discovery/service/eval"
 )
 
 func TestRenderArtistIntent_ListsFailingQueries(t *testing.T) {
-	report := discoveryEval.ArtistIntentReport{
+	report := discovery.ArtistIntentReport{
 		K: 3, Total: 2, Evaluated: 2,
-		Results: []discoveryEval.ArtistIntentResult{
-			{Artist: "Drake", Outcome: discoveryEval.ArtistIntentPass, Pass: true, ArtistPos: 0},
+		Results: []discovery.ArtistIntentResult{
+			{Artist: "Drake", Outcome: discovery.ArtistIntentPass, Pass: true, ArtistPos: 0},
 			{
-				Artist: "Burial", Outcome: discoveryEval.ArtistIntentBelowK, ArtistPos: 5, FirstTrackPos: -1,
+				Artist: "Burial", Outcome: discovery.ArtistIntentBelowK, ArtistPos: 5, FirstTrackPos: -1,
 				Expected: `artist card "Burial" in top 3`,
-				Ranked:   []discoveryEval.ResultSummary{{Kind: "album", Title: "Burial"}},
+				Ranked:   []discovery.ResultSummary{{Kind: "album", Title: "Burial"}},
 			},
 		},
 	}
@@ -36,27 +34,27 @@ func TestRenderArtistIntent_ListsFailingQueries(t *testing.T) {
 	}
 }
 
-type queryMapSearcher map[string][]domain.SearchResult
+type queryMapSearcher map[string][]discovery.SearchResult
 
-func (m queryMapSearcher) Search(_ context.Context, q string) ([]domain.SearchResult, error) {
+func (m queryMapSearcher) Search(_ context.Context, q string) ([]discovery.SearchResult, error) {
 	if r, ok := m[q]; ok {
 		return r, nil
 	}
-	return []domain.SearchResult{}, nil
+	return []discovery.SearchResult{}, nil
 }
 
 func TestRenderArtistIntent_NamesWhatRankedForARealRun(t *testing.T) {
 	searcher := queryMapSearcher{
 		"Air": {
-			{Kind: domain.ResultKindTrack, Title: "Air"},
-			{Kind: domain.ResultKindAlbum, Title: "Air"},
-			{Kind: domain.ResultKindTrack, Title: "Air Supply"},
-			{Kind: domain.ResultKindArtist, Title: "Air"},
+			{Kind: discovery.ResultKindTrack, Title: "Air"},
+			{Kind: discovery.ResultKindAlbum, Title: "Air"},
+			{Kind: discovery.ResultKindTrack, Title: "Air Supply"},
+			{Kind: discovery.ResultKindArtist, Title: "Air"},
 		},
-		"Drake": {{Kind: domain.ResultKindArtist, Title: "Drake"}},
+		"Drake": {{Kind: discovery.ResultKindArtist, Title: "Drake"}},
 	}
 
-	report := discoveryEval.RunArtistIntentEval(context.Background(), []string{"Air", "Drake", "Nobody"}, searcher, 1, 3, "", nil)
+	report := discovery.RunArtistIntentEval(context.Background(), []string{"Air", "Drake", "Nobody"}, searcher, 1, 3, "", nil)
 	out := renderArtistIntent(report)
 
 	if !report.Results[1].Pass || report.Results[0].Pass || len(report.Results) != 3 {
@@ -77,11 +75,11 @@ func TestRenderArtistIntent_NamesWhatRankedForARealRun(t *testing.T) {
 }
 
 func TestRenderSignalA_CountsTheFullSetAndListsOnlyTop(t *testing.T) {
-	gaps := make([]discoveryEval.CoverageGap, 60)
+	gaps := make([]discovery.CoverageGap, 60)
 	for i := range gaps {
-		gaps[i] = discoveryEval.CoverageGap{QueryNorm: fmt.Sprintf("q%02d", i), Count: 1}
+		gaps[i] = discovery.CoverageGap{QueryNorm: fmt.Sprintf("q%02d", i), Count: 1}
 	}
-	report := &discoveryEval.CoverageReportA{Abandoned: gaps}
+	report := &discovery.CoverageReportA{Abandoned: gaps}
 
 	out := renderSignalA(report, 30, 50)
 

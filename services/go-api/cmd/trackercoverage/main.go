@@ -2,7 +2,6 @@ package main
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/domain"
 	"context"
 	"flag"
 	"fmt"
@@ -24,7 +23,7 @@ type artistCoverage struct {
 
 type songLister interface {
 	Artists(ctx context.Context) ([]string, error)
-	ArtistSongs(ctx context.Context, artistName string) ([]domain.UnreleasedSong, error)
+	ArtistSongs(ctx context.Context, artistName string) ([]discovery.UnreleasedSong, error)
 }
 
 func main() {

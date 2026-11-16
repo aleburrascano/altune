@@ -1,14 +1,14 @@
 package app
 
 import (
-	"altune/go-api/internal/discovery/service/smokeeval"
+	"altune/go-api/internal/discovery"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 )
 
-type EvalQueryResult = smokeeval.QueryResult
+type EvalQueryResult = discovery.SmokeQueryResult
 
-type EvalResult = smokeeval.Result
+type EvalResult = discovery.SmokeResult
 
 type EvalRunner func(ctx context.Context) (EvalResult, error)
 
@@ -19,7 +19,7 @@ func (a *App) buildEvalRunner(ctx context.Context) EvalRunner {
 	evalSvc := BuildRankingOnlySearchService(ctx, a.cfg, a.pool, a.redisClient, nil)
 
 	return func(ctx context.Context) (EvalResult, error) {
-		return smokeeval.Run(ctx, evalSvc, evalUserId())
+		return discovery.RunSmokeEval(ctx, evalSvc, evalUserId())
 	}
 }
 

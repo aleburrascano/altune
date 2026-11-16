@@ -1,12 +1,11 @@
 package main
 
 import (
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"fmt"
 	"os"
-
-	discoveryEval "altune/go-api/internal/discovery/service/eval"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
@@ -19,7 +18,7 @@ func runReplay(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redi
 	if opts.topK <= 0 {
 		return fmt.Errorf("replay needs -top-k > 0, got %d", opts.topK)
 	}
-	corpus, err := discoveryEval.LoadBehavioralCorpus(opts.corpusFile)
+	corpus, err := discovery.LoadBehavioralCorpus(opts.corpusFile)
 	if err != nil {
 		return err
 	}
@@ -30,10 +29,10 @@ func runReplay(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redi
 		len(corpus.Entries), len(corpus.Positives()), len(corpus.Negatives()), corpus.GeneratedFrom)
 
 	searcher, drain := buildEvalSearcher(ctx, cfg, pool, redisClient)
-	ranking, failed := discoveryEval.BuildRankingCountingFailures(ctx, corpus, searcher)
+	ranking, failed := discovery.BuildRankingCountingFailures(ctx, corpus, searcher)
 	drain()
 
-	score := discoveryEval.ReplayCorpus(corpus, ranking, opts.topK)
+	score := discovery.ReplayCorpus(corpus, ranking, opts.topK)
 	score.FailedQueries = failed
 	if failed > 0 {
 		fmt.Fprintf(os.Stderr, "WARNING: %d queries failed to search; their entries are scored as not found / not leaked\n", failed)

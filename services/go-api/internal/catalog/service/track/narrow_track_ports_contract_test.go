@@ -3,7 +3,7 @@ package track_test
 import (
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/catalog/internal/core/ports"
 	audioservice "altune/go-api/internal/catalog/service/audio"
 	featuredservice "altune/go-api/internal/catalog/service/featured"
 	libraryservice "altune/go-api/internal/catalog/service/library"

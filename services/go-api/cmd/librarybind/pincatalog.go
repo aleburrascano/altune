@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog"
 	"context"
 	"fmt"
 	"io"
@@ -39,7 +39,7 @@ func (c catalogPinCandidate) verdict() catalogPinVerdict {
 }
 
 func isPinnableRecording(recordingID string) bool {
-	_, err := domain.NormalizeCatalogMBID(recordingID)
+	_, err := catalog.NormalizeCatalogMBID(recordingID)
 	return err == nil
 }
 

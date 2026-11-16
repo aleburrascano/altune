@@ -1,8 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/adapters/ytmsearch"
-	acqdomain "altune/go-api/internal/acquisition/domain"
+	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/shared/textnorm"
 	"strings"
 )
@@ -33,19 +32,19 @@ const (
 
 const unreleasedAlbum = "unreleased"
 
-func (t target) judge(song ytmsearch.Song) rejection {
+func (t target) judge(song acquisition.YtmSong) rejection {
 	switch {
-	case song.Type != ytmsearch.VideoTypeATV:
+	case song.Type != acquisition.VideoTypeATV:
 		return rejectNotArtTrack
-	case !acqdomain.IsYouTubeVideoID(song.VideoID):
+	case !acquisition.IsYouTubeVideoID(song.VideoID):
 		return rejectVideoID
-	case !ytmsearch.CreditsArtist(song.Artists, t.Artist):
+	case !acquisition.CreditsArtist(song.Artists, t.Artist):
 		return rejectArtist
-	case !ytmsearch.SameTitle(song.Title, t.Title):
+	case !acquisition.SameTitle(song.Title, t.Title):
 		return rejectTitle
 	case t.CatalogSeconds <= 0:
 		return rejectNoCatalogLen
-	case !acqdomain.LengthAuthoritative.Agrees(t.CatalogSeconds, float64(song.DurationSeconds)):
+	case !acquisition.LengthAuthoritative.Agrees(t.CatalogSeconds, float64(song.DurationSeconds)):
 		return rejectLength
 	case t.knowsAlbum() && !t.isOnAlbum(song):
 		return rejectAlbum
@@ -58,6 +57,6 @@ func (t target) knowsAlbum() bool {
 	return album != "" && album != unreleasedAlbum
 }
 
-func (t target) isOnAlbum(song ytmsearch.Song) bool {
+func (t target) isOnAlbum(song acquisition.YtmSong) bool {
 	return textnorm.NormalizeForMatch(song.Album) == textnorm.NormalizeForMatch(t.Album)
 }

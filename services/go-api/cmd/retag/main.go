@@ -16,8 +16,6 @@ import (
 	"strconv"
 	"time"
 
-	catalogPorts "altune/go-api/internal/catalog/ports"
-
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -126,7 +124,7 @@ func main() {
 	}
 }
 
-func productionRetagger(cfg *config.Config, audioStore catalogPorts.AudioStore, tracks trackStore, limit int) retagger {
+func productionRetagger(cfg *config.Config, audioStore catalog.AudioStore, tracks trackStore, limit int) retagger {
 	ffmpeg := binpath.Resolve("ffmpeg", cfg.FFmpegLocation)
 	return retagger{
 		store:       audioStore,
@@ -140,7 +138,7 @@ func productionRetagger(cfg *config.Config, audioStore catalogPorts.AudioStore, 
 
 type runtime struct {
 	cfg         *config.Config
-	audioStore  catalogPorts.AudioStore
+	audioStore  catalog.AudioStore
 	concurrency int
 }
 

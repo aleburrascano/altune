@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/shared/songfacts"
 	"altune/go-api/internal/shared/textnorm"
 	"math"
@@ -69,7 +69,7 @@ type titleParts struct {
 }
 
 func splitTitle(title string) titleParts {
-	keys := domain.CleanSearchKeys(songfacts.BracketEditionSuffix(title), "", "")
+	keys := catalog.CleanSearchKeys(songfacts.BracketEditionSuffix(title), "", "")
 	cleaned := keys.Title
 	parts := titleParts{variants: keys.VariantQualifiers()}
 	for _, group := range bracketGroupRe.FindAllStringSubmatch(cleaned, -1) {

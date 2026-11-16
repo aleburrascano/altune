@@ -3,9 +3,6 @@ package main
 import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/service/content"
-	"altune/go-api/internal/discovery/service/providercall"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
@@ -18,9 +15,6 @@ import (
 	"strings"
 	"time"
 
-	discoveryEval "altune/go-api/internal/discovery/service/eval"
-	goldeneval "altune/go-api/internal/discovery/service/goldeneval"
-
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
 )
@@ -29,7 +23,7 @@ import (
 var detailGoldensJSON []byte
 
 func runDetail(ctx context.Context, cfg *config.Config, opts options) error {
-	var goldens []discoveryEval.DetailGolden
+	var goldens []discovery.DetailGolden
 	if err := json.Unmarshal(detailGoldensJSON, &goldens); err != nil {
 		return fmt.Errorf("parse detail goldens: %w", err)
 	}
@@ -37,15 +31,15 @@ func runDetail(ctx context.Context, cfg *config.Config, opts options) error {
 	svc := app.BuildArtistContentService(cfg, nil, seedStore(goldens))
 	adapter := &detailServiceAdapter{svc: svc}
 
-	once := func() (discoveryEval.HarnessReport, error) {
+	once := func() (discovery.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "detail-eval over %d golden artists (live providers)...\n", len(goldens))
-		report := discoveryEval.RunDetailEval(ctx, goldens, adapter)
+		report := discovery.RunDetailEval(ctx, goldens, adapter)
 		if err := adapter.fetchFailure(); err != nil {
 			return nil, err
 		}
 		return report, nil
 	}
-	human := func(r discoveryEval.HarnessReport) string { return renderDetail(r.(discoveryEval.DetailReport)) }
+	human := func(r discovery.HarnessReport) string { return renderDetail(r.(discovery.DetailReport)) }
 	return runHarness("detail", once, human, opts)
 }
 
@@ -53,14 +47,14 @@ var _ discovery.IdentityStore = (*seededIdentityStore)(nil)
 
 type identityRow struct {
 	mbid string
-	xref map[domain.ProviderKey]string
+	xref map[discovery.ProviderKey]string
 }
 
 type seededIdentityStore struct {
 	entries map[string]identityRow
 }
 
-func seedStore(goldens []discoveryEval.DetailGolden) *seededIdentityStore {
+func seedStore(goldens []discovery.DetailGolden) *seededIdentityStore {
 	s := &seededIdentityStore{entries: make(map[string]identityRow, len(goldens))}
 	for _, g := range goldens {
 		s.entries[g.SeedProvider+"|"+g.SeedID] = identityRow{mbid: g.MBID, xref: g.Identity}
@@ -68,16 +62,16 @@ func seedStore(goldens []discoveryEval.DetailGolden) *seededIdentityStore {
 	return s
 }
 
-func (s *seededIdentityStore) PersistBridges(context.Context, domain.ResultKind, string, map[domain.ProviderKey]string) error {
+func (s *seededIdentityStore) PersistBridges(context.Context, discovery.ResultKind, string, map[discovery.ProviderKey]string) error {
 	return nil
 }
 
-func (s *seededIdentityStore) Invalidate(context.Context, domain.ResultKind, domain.ProviderKey, string) error {
+func (s *seededIdentityStore) Invalidate(context.Context, discovery.ResultKind, discovery.ProviderKey, string) error {
 	return nil
 }
 
-func (s *seededIdentityStore) LookupByProviderID(_ context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) (string, map[domain.ProviderKey]string, bool) {
-	if kind != domain.ResultKindArtist {
+func (s *seededIdentityStore) LookupByProviderID(_ context.Context, kind discovery.ResultKind, provider discovery.ProviderKey, externalID string) (string, map[discovery.ProviderKey]string, bool) {
+	if kind != discovery.ResultKindArtist {
 		return "", nil, false
 	}
 	row, ok := s.entries[provider.String()+"|"+externalID]
@@ -88,7 +82,7 @@ func (s *seededIdentityStore) LookupByProviderID(_ context.Context, kind domain.
 }
 
 type detailServiceAdapter struct {
-	svc      *content.GetArtistContentService
+	svc      *discovery.GetArtistContentService
 	failures []error
 }
 
@@ -99,21 +93,21 @@ func (a *detailServiceAdapter) fetchFailure() error {
 	return fmt.Errorf("detail-eval: %d fetch(es) failed, so the recall numbers would be wrong: %w", len(a.failures), errors.Join(a.failures...))
 }
 
-func (a *detailServiceAdapter) Albums(ctx context.Context, seedProvider, seedID, name string) []discoveryEval.DetailItem {
+func (a *detailServiceAdapter) Albums(ctx context.Context, seedProvider, seedID, name string) []discovery.DetailItem {
 	return a.fetch(ctx, seedProvider, seedID, name, true)
 }
 
-func (a *detailServiceAdapter) TopTracks(ctx context.Context, seedProvider, seedID, name string) []discoveryEval.DetailItem {
+func (a *detailServiceAdapter) TopTracks(ctx context.Context, seedProvider, seedID, name string) []discovery.DetailItem {
 	return a.fetch(ctx, seedProvider, seedID, name, false)
 }
 
-func (a *detailServiceAdapter) fetch(ctx context.Context, seedProvider, seedID, name string, albums bool) []discoveryEval.DetailItem {
-	pn, err := domain.ParseProviderName(seedProvider)
+func (a *detailServiceAdapter) fetch(ctx context.Context, seedProvider, seedID, name string, albums bool) []discovery.DetailItem {
+	pn, err := discovery.ParseProviderName(seedProvider)
 	if err != nil {
 		a.failures = append(a.failures, fmt.Errorf("%q: seed provider: %w", name, err))
 		return nil
 	}
-	var resp *providercall.ContentFetchResponse
+	var resp *discovery.ContentFetchResponse
 	var fetchErr error
 	if albums {
 		resp, fetchErr = a.svc.GetAlbums(ctx, pn, seedID, nil, 100)
@@ -126,13 +120,13 @@ func (a *detailServiceAdapter) fetch(ctx context.Context, seedProvider, seedID, 
 	if resp == nil {
 		return nil
 	}
-	out := make([]discoveryEval.DetailItem, 0, len(resp.Items))
+	out := make([]discovery.DetailItem, 0, len(resp.Items))
 	for _, it := range resp.Items {
 		srcs := make([]string, 0, len(it.Sources))
 		for _, s := range it.Sources {
 			srcs = append(srcs, s.Provider.String())
 		}
-		out = append(out, discoveryEval.DetailItem{
+		out = append(out, discovery.DetailItem{
 			Title:      it.Title,
 			Sources:    srcs,
 			HasArtwork: it.ImageURL != "",
@@ -142,7 +136,7 @@ func (a *detailServiceAdapter) fetch(ctx context.Context, seedProvider, seedID, 
 	return out
 }
 
-func renderDetail(r discoveryEval.DetailReport) string {
+func renderDetail(r discovery.DetailReport) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "\n# detail-eval — %d golden artists\n\n", r.Goldens)
 	fmt.Fprintf(&b, "  contamination:     %d  (want 0)\n", r.ContaminationCount)
@@ -168,7 +162,7 @@ func parseLiveArtists(text string) ([]liveArtist, error) {
 	out := []liveArtist{}
 	for _, line := range strings.Split(strings.TrimSpace(text), "\n") {
 		mbid, name, ok := strings.Cut(strings.TrimSpace(line), " ")
-		if !ok || strings.TrimSpace(name) == "" || !goldeneval.IsMBID(mbid) {
+		if !ok || strings.TrimSpace(name) == "" || !discovery.IsMBID(mbid) {
 			return nil, fmt.Errorf("detail-live artist line %q must be \"<artist mbid> <name>\"", line)
 		}
 		out = append(out, liveArtist{mbid: mbid, name: strings.TrimSpace(name)})
@@ -243,36 +237,36 @@ func runDetailLive(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, 
 	return nil
 }
 
-func artistCardWithMBID(results []domain.SearchResult, mbid string) (domain.SearchResult, bool) {
+func artistCardWithMBID(results []discovery.SearchResult, mbid string) (discovery.SearchResult, bool) {
 	for _, r := range results {
-		if r.Kind == domain.ResultKindArtist && len(r.Sources) > 0 && strings.EqualFold(r.ArtistMBID, mbid) {
+		if r.Kind == discovery.ResultKindArtist && len(r.Sources) > 0 && strings.EqualFold(r.ArtistMBID, mbid) {
 			return r, true
 		}
 	}
-	return domain.SearchResult{}, false
+	return discovery.SearchResult{}, false
 }
 
-func artistCardNamed(results []domain.SearchResult, name string) (domain.SearchResult, bool) {
+func artistCardNamed(results []discovery.SearchResult, name string) (discovery.SearchResult, bool) {
 	want := textnorm.NormalizeForMatch(name)
 	for _, r := range results {
-		if r.Kind == domain.ResultKindArtist && len(r.Sources) > 0 && textnorm.NormalizeForMatch(r.Title) == want {
+		if r.Kind == discovery.ResultKindArtist && len(r.Sources) > 0 && textnorm.NormalizeForMatch(r.Title) == want {
 			return r, true
 		}
 	}
-	return domain.SearchResult{}, false
+	return discovery.SearchResult{}, false
 }
 
-func cardKnownIDs(card domain.SearchResult) map[domain.ProviderName]string {
-	known := make(map[domain.ProviderName]string, len(card.Sources))
+func cardKnownIDs(card discovery.SearchResult) map[discovery.ProviderName]string {
+	known := make(map[discovery.ProviderName]string, len(card.Sources))
 	for _, s := range card.Sources {
 		known[s.Provider] = s.ExternalID
 	}
 	return known
 }
 
-var detailCatalogs = []domain.ProviderName{domain.ProviderDeezer, domain.ProviderAppleMusic, domain.ProviderITunes, domain.ProviderSpotify}
+var detailCatalogs = []discovery.ProviderName{discovery.ProviderDeezer, discovery.ProviderAppleMusic, discovery.ProviderITunes, discovery.ProviderSpotify}
 
-func scoreDetailLive(artist string, items []domain.SearchResult) detailLiveRow {
+func scoreDetailLive(artist string, items []discovery.SearchResult) detailLiveRow {
 	row := detailLiveRow{Artist: artist, Items: len(items)}
 	for _, it := range items {
 		catalogs := 0

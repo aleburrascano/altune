@@ -1,7 +1,7 @@
 package handler
 
 import (
-	acqPorts "altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/observe/service/evalmeter"
 	"context"
@@ -16,10 +16,10 @@ import (
 )
 
 type fakeAcquisitionReader struct {
-	status acqPorts.AcquisitionStatus
+	status acquisition.AcquisitionStatus
 }
 
-func (f fakeAcquisitionReader) Status() acqPorts.AcquisitionStatus { return f.status }
+func (f fakeAcquisitionReader) Status() acquisition.AcquisitionStatus { return f.status }
 
 type fakeDiscographyReader struct {
 	gotSince    time.Time
@@ -111,15 +111,15 @@ func TestReadsEval_NilMeterAnswersDisabled(t *testing.T) {
 
 func TestReadsAcquisition_ServesTheReaderStatus(t *testing.T) {
 	scheduledAt := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
-	reader := fakeAcquisitionReader{status: acqPorts.AcquisitionStatus{
+	reader := fakeAcquisitionReader{status: acquisition.AcquisitionStatus{
 		InFlight:     2,
 		Succeeded:    10,
 		Failed:       3,
 		Rejected:     7,
 		QueueDepth:   5,
 		Workers:      16,
-		Verification: acqPorts.AcquisitionVerification{Ffprobe: true, YtDlp: true},
-		ActiveJobs: []acqPorts.JobRecord{{
+		Verification: acquisition.AcquisitionVerification{Ffprobe: true, YtDlp: true},
+		ActiveJobs: []acquisition.JobRecord{{
 			TrackID:     "trk-1",
 			Title:       "Title One",
 			State:       "running",
@@ -145,7 +145,7 @@ func TestReadsAcquisition_ServesTheReaderStatus(t *testing.T) {
 }
 
 func TestReadsAcquisition_ServesOldestPendingAgeAndDepthKnown(t *testing.T) {
-	reader := fakeAcquisitionReader{status: acqPorts.AcquisitionStatus{
+	reader := fakeAcquisitionReader{status: acquisition.AcquisitionStatus{
 		QueueDepth:       5,
 		OldestPendingAge: 90 * time.Second,
 		QueueDepthKnown:  true,
@@ -330,11 +330,11 @@ func TestReadsRoutes_NoPostRoute(t *testing.T) {
 
 func TestReadsAcquisition_StripsCredentialsAndQueryFromSourceURL(t *testing.T) {
 	scheduledAt := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
-	job := acqPorts.JobRecord{TrackID: "trk-1", State: "running", ScheduledAt: scheduledAt, SourceURL: "https://u:p@host.example/a/b?token=abc#f"}
-	malformed := acqPorts.JobRecord{TrackID: "trk-2", State: "failed", ScheduledAt: scheduledAt, SourceURL: "http://[::1"}
-	reader := fakeAcquisitionReader{status: acqPorts.AcquisitionStatus{
-		ActiveJobs: []acqPorts.JobRecord{job},
-		Recent:     []acqPorts.JobRecord{job, malformed},
+	job := acquisition.JobRecord{TrackID: "trk-1", State: "running", ScheduledAt: scheduledAt, SourceURL: "https://u:p@host.example/a/b?token=abc#f"}
+	malformed := acquisition.JobRecord{TrackID: "trk-2", State: "failed", ScheduledAt: scheduledAt, SourceURL: "http://[::1"}
+	reader := fakeAcquisitionReader{status: acquisition.AcquisitionStatus{
+		ActiveJobs: []acquisition.JobRecord{job},
+		Recent:     []acquisition.JobRecord{job, malformed},
 	}}
 
 	rec := serveRead(t, Deps{Acquisition: reader}, "/acquisition")

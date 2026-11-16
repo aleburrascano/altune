@@ -152,11 +152,11 @@ the cap-4 bridge + cap-5 `MBIDIndex`).
 
 Built and on `main` (search + identity/consensus), thin projection only:
 
-- `services/go-api/internal/discovery/adapters/providers/musicbrainz/musicbrainz.go` — `Search`,
+- `services/go-api/internal/discovery/internal/adapters/providers/musicbrainz/musicbrainz.go` — `Search`,
   `SearchStructured`, `searchKind` (artist/recording/release-group, `inc=isrcs` on track),
   `ResolveArtistIdentity`, `fetchReleaseGroups`, `ListArtistDiscography`. Maps
   `mbid` into `extras` on every result — the seed the artwork chain already depends on.
-- `services/go-api/internal/discovery/adapters/providers/coverartarchive/coverartarchive.go` — `ArtworkResolver`,
+- `services/go-api/internal/discovery/internal/adapters/providers/coverartarchive/coverartarchive.go` — `ArtworkResolver`,
   wired **first** in `buildArtworkChain` (`internal/app/build_consensus_providers.go`). Already consumes release-group MBIDs.
 - Wired in `internal/app/build_search_service.go`: `sharedMB` as a `SearchProvider` and in the content options;
   `BuildConsensusProviders` in `internal/app/build_consensus_providers.go` (for `discoveryeval -mode signal-b`) uses `ListArtistDiscography`. Config-gated by `cfg.HasMusicBrainz()`

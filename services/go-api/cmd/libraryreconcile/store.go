@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/shared/songfacts"
 	"context"
 	"errors"
@@ -199,7 +199,7 @@ func recomputedKey(row trackRow, decisions []decision) string {
 			values[d.Change.Field] = *d.Change.NewValue
 		}
 	}
-	return domain.TrackDedupKey(values[fieldTitle], values[fieldArtist], values[fieldAlbum])
+	return catalog.TrackDedupKey(values[fieldTitle], values[fieldArtist], values[fieldAlbum])
 }
 
 func skipIdentityGroup(decisions []decision, other string) []decision {

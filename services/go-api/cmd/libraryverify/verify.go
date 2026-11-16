@@ -1,10 +1,8 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/adapters/deezerpreview"
-	acqdomain "altune/go-api/internal/acquisition/domain"
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/acquisition/service/audiojudge"
+	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/catalog"
 	"context"
 	"errors"
 	"fmt"
@@ -15,8 +13,6 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
-
-	catalogPorts "altune/go-api/internal/catalog/ports"
 )
 
 const (
@@ -53,15 +49,15 @@ type trackResult struct {
 }
 
 type audioIdentifier interface {
-	Identify(ctx context.Context, filePath string, fullLengthForPreview float64) (ports.RecordingMatch, error)
+	Identify(ctx context.Context, filePath string, fullLengthForPreview float64) (acquisition.RecordingMatch, error)
 }
 
 type previewSource interface {
-	Clip(ctx context.Context, target deezerpreview.Target) (deezerpreview.Clip, error)
+	Clip(ctx context.Context, target acquisition.DeezerPreviewTarget) (acquisition.PreviewClip, error)
 }
 
 type verifier struct {
-	store     catalogPorts.AudioStore
+	store     catalog.AudioStore
 	identify  audioIdentifier
 	lookups   recordingLookups
 	minScore  float64
@@ -69,7 +65,7 @@ type verifier struct {
 	completed atomic.Int64
 
 	previews   previewSource
-	printer    deezerpreview.RawPrinter
+	printer    acquisition.RawPrinter
 	cut        previewCut
 	provenMax  float64
 	checkpoint func(finished []trackResult)
@@ -118,8 +114,8 @@ func (v *verifier) assess(ctx context.Context, track libraryTrack) (assessment, 
 
 func (v *verifier) assessFile(ctx context.Context, track libraryTrack, file string) (assessment, error) {
 	match, err := v.identify.Identify(ctx, file, 0)
-	if errors.Is(err, acqdomain.ErrEmptyFingerprint) {
-		match, err = ports.RecordingMatch{}, nil
+	if errors.Is(err, acquisition.ErrEmptyFingerprint) {
+		match, err = acquisition.RecordingMatch{}, nil
 	}
 	if err != nil {
 		return assessment{}, fmt.Errorf("fingerprint: %w", err)
@@ -136,15 +132,15 @@ func (v *verifier) assessFile(ctx context.Context, track libraryTrack, file stri
 	return withPreview(j, judged, evidence), nil
 }
 
-func (v *verifier) cuts() audiojudge.Cuts {
-	cuts := audiojudge.CutsWithProvenMax(v.provenMax)
+func (v *verifier) cuts() acquisition.JudgeCuts {
+	cuts := acquisition.JudgeCutsWithProvenMax(v.provenMax)
 	cuts.LikelyMax = max(v.cut.matchMax, v.provenMax)
 	cuts.AbsentMin = v.cut.absentMin
 	return cuts
 }
 
-func confidentResults(results []ports.AcoustIDResult, minScore float64) []ports.AcoustIDResult {
-	return slices.DeleteFunc(slices.Clone(results), func(result ports.AcoustIDResult) bool { return result.Score < minScore })
+func confidentResults(results []acquisition.AcoustIDResult, minScore float64) []acquisition.AcoustIDResult {
+	return slices.DeleteFunc(slices.Clone(results), func(result acquisition.AcoustIDResult) bool { return result.Score < minScore })
 }
 
 func (v *verifier) measurePreview(ctx context.Context, identity boundIdentity, file string) (previewEvidence, error) {
@@ -164,17 +160,17 @@ func (v *verifier) measurePreview(ctx context.Context, identity boundIdentity, f
 }
 
 func withAlignment(evidence previewEvidence, filePrint, previewPrint []uint32) (previewEvidence, error) {
-	if reason := deezerpreview.Incomparable(filePrint, previewPrint); reason != "" {
+	if reason := acquisition.Incomparable(filePrint, previewPrint); reason != "" {
 		evidence.Unavailable = reason
 		return evidence, nil
 	}
-	aligned, err := deezerpreview.BestAlignment(filePrint, previewPrint)
+	aligned, err := acquisition.BestAlignment(filePrint, previewPrint)
 	if err != nil {
 		return previewEvidence{}, err
 	}
 	evidence.Alignment = &alignmentEvidence{
 		BitErrorRate: aligned.BitErrorRate, OffsetSeconds: aligned.OffsetSeconds(),
-		OverlapSeconds: deezerpreview.OverlapSeconds(len(previewPrint)),
+		OverlapSeconds: acquisition.PreviewOverlapSeconds(len(previewPrint)),
 	}
 	return evidence, nil
 }

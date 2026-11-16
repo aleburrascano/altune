@@ -2,7 +2,6 @@ package commands
 
 import (
 	"altune/go-api/internal/catalog"
-	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"errors"
@@ -62,7 +61,7 @@ func reportHealthCheck(totalChecked, orphanedDB, fixed int, fix bool) {
 
 const missingAudioReason = "Audio file missing from storage (health-check)"
 
-func checkReadyTracks(ctx context.Context, tracks []ports.ReadyAudioTrack, store ports.AudioStore, repo ports.TrackReadWriter, fix bool) (orphaned, fixed int) {
+func checkReadyTracks(ctx context.Context, tracks []catalog.ReadyAudioTrack, store catalog.AudioStore, repo catalog.TrackReadWriter, fix bool) (orphaned, fixed int) {
 	for _, t := range tracks {
 		exists, err := store.Exists(ctx, t.AudioRef)
 		if err == nil && exists {
@@ -80,7 +79,7 @@ func checkReadyTracks(ctx context.Context, tracks []ports.ReadyAudioTrack, store
 	return orphaned, fixed
 }
 
-func markTrackFailed(ctx context.Context, repo ports.TrackReadWriter, t ports.ReadyAudioTrack) error {
+func markTrackFailed(ctx context.Context, repo catalog.TrackReadWriter, t catalog.ReadyAudioTrack) error {
 	track, err := repo.GetByID(ctx, t.Id, t.UserId)
 	if err != nil {
 		return err

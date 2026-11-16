@@ -3,21 +3,12 @@ package app
 import (
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/service/eval"
-	"altune/go-api/internal/discovery/service/unreleased"
-	"altune/go-api/internal/discovery/service/vocabulary"
+	"altune/go-api/internal/playback"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"time"
-
-	catalogPorts "altune/go-api/internal/catalog/ports"
-	audioservice "altune/go-api/internal/catalog/service/audio"
-
-	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
-
-	playbackErasure "altune/go-api/internal/playback/service/erasure"
 )
 
 func (a *App) startSimpleJob(
@@ -48,13 +39,13 @@ func (a *App) startLoggedJob(
 
 const orphanedAudioReconcileInterval = 10 * time.Minute
 
-func (a *App) startOrphanedAudioReconcile(ctx context.Context, queue catalogPorts.OrphanedAudioQueue, audioStore catalogPorts.AudioStore) {
+func (a *App) startOrphanedAudioReconcile(ctx context.Context, queue catalog.OrphanedAudioQueue, audioStore catalog.AudioStore) {
 	if audioStore == nil {
 		return
 	}
-	svc := audioservice.NewReconcileOrphanedAudioService(queue, audioStore,
-		audioservice.WithReconcileSwitch(a.jobSwitch(jobOrphanedAudioReconcile)),
-		audioservice.WithReconcileMetrics(catalog.NewExpvarAudioStoreMetrics()),
+	svc := catalog.NewReconcileOrphanedAudioService(queue, audioStore,
+		catalog.WithReconcileSwitch(a.jobSwitch(jobOrphanedAudioReconcile)),
+		catalog.WithReconcileMetrics(catalog.NewExpvarAudioStoreMetrics()),
 	)
 	a.startSimpleJob(jobOrphanedAudioReconcile, orphanedAudioReconcileInterval, func(ctx context.Context) error {
 		_, err := svc.Execute(ctx)
@@ -64,7 +55,7 @@ func (a *App) startOrphanedAudioReconcile(ctx context.Context, queue catalogPort
 
 const deletedIdentityErasureInterval = time.Hour
 
-func (a *App) startDeletedIdentityErasure(ctx context.Context, svc *playbackErasure.Sweeper) {
+func (a *App) startDeletedIdentityErasure(ctx context.Context, svc *playback.ErasureSweeper) {
 	discoveryErasers := a.discoveryDeletedIdentityErasers()
 	a.startSimpleJob(jobDeletedIdentityErasure, deletedIdentityErasureInterval, func(ctx context.Context) error {
 		_, queueErr := svc.Execute(ctx)
@@ -74,9 +65,9 @@ func (a *App) startDeletedIdentityErasure(ctx context.Context, svc *playbackEras
 
 func (a *App) discoveryDeletedIdentityErasers() []discovery.DeletedIdentityEraser {
 	return []discovery.DeletedIdentityEraser{
-		discoveryPersistence.NewPgxSearchHistoryRepository(a.pool),
-		discoveryPersistence.NewPgxFavoritesRepository(a.pool),
-		discoveryPersistence.NewPgxEventStore(a.pool),
+		discovery.NewPgxSearchHistoryRepository(a.pool),
+		discovery.NewPgxFavoritesRepository(a.pool),
+		discovery.NewPgxEventStore(a.pool),
 	}
 }
 
@@ -114,7 +105,7 @@ func (a *App) startCorpusRefresh(ctx context.Context, store discovery.Behavioral
 	if a.cfg.BehavioralCorpusPath == "" {
 		return
 	}
-	builder := eval.NewCorpusBuilder(store)
+	builder := discovery.NewCorpusBuilder(store)
 	const lookback = 30 * 24 * time.Hour
 	a.startLoggedJob(ctx, jobBehavioralCorpusRefresh, 24*time.Hour, func(ctx context.Context) error {
 		since := time.Now().UTC().Add(-lookback)
@@ -191,7 +182,7 @@ func (a *App) startVocabularyRefresh(ctx context.Context, cf clientFactory, voca
 		return
 	}
 	const vocabRefreshInterval = 6 * time.Hour
-	a.vocabRefresh = vocabulary.NewVocabularyRefreshService(
+	a.vocabRefresh = discovery.NewVocabularyRefreshService(
 		charts, vocabStore, 50,
 	)
 	a.startSimpleJob(jobVocabularyRefresh, vocabRefreshInterval, func(ctx context.Context) error {
@@ -204,14 +195,14 @@ const (
 	unreleasedRefreshPerRun   = 2
 )
 
-func (a *App) startUnreleasedRefresh(svc *unreleased.Service, store discovery.UnreleasedStore) {
+func (a *App) startUnreleasedRefresh(svc *discovery.UnreleasedService, store discovery.UnreleasedStore) {
 	if store == nil {
 		return
 	}
 	a.startSimpleJob(jobUnreleasedRefresh, unreleasedRefreshInterval, unreleasedRefreshRun(svc), "interval", unreleasedRefreshInterval.String())
 }
 
-func unreleasedRefreshRun(svc *unreleased.Service) func(context.Context) error {
+func unreleasedRefreshRun(svc *discovery.UnreleasedService) func(context.Context) error {
 	return func(ctx context.Context) error {
 		return svc.RefreshDue(ctx, time.Now().UTC(), unreleasedRefreshPerRun)
 	}

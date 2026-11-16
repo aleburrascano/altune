@@ -1,15 +1,14 @@
 package main
 
 import (
+	"altune/go-api/internal/discovery"
 	"context"
 	"fmt"
-
-	discoveryEval "altune/go-api/internal/discovery/service/eval"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func loadLibraryEntities(ctx context.Context, pool *pgxpool.Pool, limit int, random bool) ([]discoveryEval.LibraryEntity, error) {
+func loadLibraryEntities(ctx context.Context, pool *pgxpool.Pool, limit int, random bool) ([]discovery.LibraryEntity, error) {
 	order := "ORDER BY artist, title"
 	query := `SELECT DISTINCT title, artist FROM tracks WHERE artist <> '' ` + order
 	if random {
@@ -25,13 +24,13 @@ func loadLibraryEntities(ctx context.Context, pool *pgxpool.Pool, limit int, ran
 	}
 	defer rows.Close()
 
-	entities := []discoveryEval.LibraryEntity{}
+	entities := []discovery.LibraryEntity{}
 	for rows.Next() {
 		var title, artist string
 		if err := rows.Scan(&title, &artist); err != nil {
 			return nil, fmt.Errorf("scan track: %w", err)
 		}
-		entities = append(entities, discoveryEval.LibraryEntity{Title: title, Artist: artist})
+		entities = append(entities, discovery.LibraryEntity{Title: title, Artist: artist})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate tracks: %w", err)

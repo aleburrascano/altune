@@ -2,9 +2,9 @@ package catalogbridge
 
 import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
-	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/domain"
-	catalogports "altune/go-api/internal/catalog/ports"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/redact"
 	"context"
@@ -211,7 +211,7 @@ func (l *TrackLedger) RevertAt(ctx context.Context, snapshot ports.TrackSnapshot
 		return ports.ErrTrackNotFound
 	}
 	if track.Version != snapshot.Version {
-		return fmt.Errorf("revert to pending: %w", catalogports.ErrTrackVersionConflict)
+		return fmt.Errorf("revert to pending: %w", catalog.ErrTrackVersionConflict)
 	}
 	if err := track.RevertToPending(); err != nil {
 		return fmt.Errorf("revert to pending: %w", translate(err))
@@ -226,7 +226,7 @@ func (l *TrackLedger) loadAndUpdate(ctx context.Context, id shared.TrackId, user
 	var lastErr error
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		lastErr = l.attempt(ctx, id, userId, fence, mutate)
-		if !errors.Is(lastErr, catalogports.ErrTrackVersionConflict) {
+		if !errors.Is(lastErr, catalog.ErrTrackVersionConflict) {
 			return lastErr
 		}
 	}
@@ -253,7 +253,7 @@ func (l *TrackLedger) attempt(ctx context.Context, id shared.TrackId, userId sha
 
 func (l *TrackLedger) write(ctx context.Context, track *domain.Track, expectedVersion int) error {
 	if err := l.store.Update(ctx, track, expectedVersion); err != nil {
-		if errors.Is(err, catalogports.ErrTrackVersionConflict) {
+		if errors.Is(err, catalog.ErrTrackVersionConflict) {
 			return err
 		}
 		return fmt.Errorf("update track: %w", err)

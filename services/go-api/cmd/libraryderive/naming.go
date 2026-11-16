@@ -1,15 +1,15 @@
 package main
 
 import (
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/shared/releasepick"
 	"altune/go-api/internal/shared/songfacts"
 	"slices"
 	"strings"
 )
 
-func titleKeys(title string) domain.SearchKeys {
-	return domain.CleanSearchKeys(title, "", "")
+func titleKeys(title string) catalog.SearchKeys {
+	return catalog.CleanSearchKeys(title, "", "")
 }
 
 func sameSongTitle(a, b string) bool {

@@ -2,7 +2,7 @@ package upgrade_test
 
 import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
-	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/service/grade"
 	"altune/go-api/internal/acquisition/service/upgrade"
 	"altune/go-api/internal/catalog/domain"
