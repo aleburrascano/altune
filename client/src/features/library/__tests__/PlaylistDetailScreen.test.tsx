@@ -262,24 +262,29 @@ describe('PlaylistDetailScreen — offline download controls on native', () => {
   }, 60000);
 
   describe('when a selected download fails', () => {
+    const SLOW_RENDER_TIMEOUT_MS = 60000;
     const realPinMany = usePinnedStore.getState().pinMany;
 
     afterEach(() => {
       usePinnedStore.setState({ pinMany: realPinMany });
     });
 
-    it('shows the app failure alert for the batch', async () => {
-      acceptTelemetry();
-      usePinnedStore.setState({
-        pinMany: jest.fn().mockResolvedValue({ requested: 1, failed: 1, refused: null }),
-      });
-      const screen = await renderLoaded();
+    it(
+      'shows the app failure alert for the batch',
+      async () => {
+        acceptTelemetry();
+        usePinnedStore.setState({
+          pinMany: jest.fn().mockResolvedValue({ requested: 1, failed: 1, refused: null }),
+        });
+        const screen = await renderLoaded();
 
-      fireEvent(screen.getByTestId('library-row-t1'), 'longPress');
-      fireEvent.press(screen.getByText('Download'));
+        fireEvent(screen.getByTestId('library-row-t1'), 'longPress');
+        fireEvent.press(screen.getByText('Download'));
 
-      await waitFor(() => expect(shownFailureSurfaces()).toEqual(['library.pin_batch']));
-    }, 60000);
+        await waitFor(() => expect(shownFailureSurfaces()).toEqual(['library.pin_batch']));
+      },
+      SLOW_RENDER_TIMEOUT_MS,
+    );
   });
 });
 
