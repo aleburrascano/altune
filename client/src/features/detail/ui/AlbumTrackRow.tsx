@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Tappable, Text, spacing, formatDuration } from '@shared/ui';
-import type { DiscoveryResult } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
 import { trackExtras } from '@features/detail/domain/trackExtras';
 import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
 import { sharedStyles } from '@features/detail/ui/detailStyles';

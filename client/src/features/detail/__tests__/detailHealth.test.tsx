@@ -1,7 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
-
-import type { DiscoveryResult, DiscoverySource } from '@shared/apiClient';
+import type { DiscoveryResult, DiscoverySource } from '@shared/catalog';
 import { HEALTH_BATCH } from '@shared/telemetry';
 
 import {

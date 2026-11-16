@@ -1,7 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-
-import { featuredArtistsFromExtras } from '@shared/apiClient';
+import { featuredArtistsFromExtras } from '@shared/catalog';
 
 function findRepoRoot(): string | null {
   let dir = __dirname;
@@ -107,7 +106,9 @@ describe('cross-surface contract: FeaturedArtist (TS write side) <-> FeaturedArt
     const goDtoKeys = deriveGoFeaturedArtistDTOKeys(goDtoSource);
     expect(goDtoKeys.size).toBeGreaterThan(0);
 
-    const tsTypeSource = readTsSource(path.join('src', 'shared', 'apiClient', 'trackResponse.ts'));
+    const tsTypeSource = readTsSource(
+      path.join('src', 'shared', 'catalog', 'core', 'trackResponse.ts'),
+    );
     const tsTypeKeys = deriveTsFeaturedArtistTypeKeys(tsTypeSource);
     expect(tsTypeKeys.size).toBeGreaterThan(0);
 

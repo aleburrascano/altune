@@ -15,8 +15,7 @@ import {
   halved,
 } from '@shared/ui';
 import { FavoriteButton } from '@features/discovery/ui/favorites/FavoriteButton';
-
-import type { DiscoveryResult } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
 import type { ResultTapHandler } from '@features/discovery/hooks/results/useResultTap';
 
 import { resultSecondaryLine } from '@features/discovery/domain/resultDisplay';

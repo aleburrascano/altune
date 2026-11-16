@@ -7,8 +7,7 @@ import { CorrectionBanner } from '@features/discovery/ui/results/CorrectionBanne
 import { DiscoverRow } from '@features/discovery/ui/results/DiscoverRow';
 import { ResultsList, type ResultsCommonProps } from '@features/discovery/ui/results/ResultsList';
 import { kindLabel, resultKey } from '@features/discovery/domain/resultDisplay';
-
-import type { DiscoveryKind, DiscoveryResult } from '@shared/apiClient';
+import type { DiscoveryKind, DiscoveryResult } from '@shared/catalog';
 
 export function FilteredResults({
   kind,

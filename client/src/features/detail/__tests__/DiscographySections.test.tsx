@@ -1,7 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
-
-import type { DiscoveryResult } from '@shared/apiClient';
-
+import type { DiscoveryResult } from '@shared/catalog';
 import { DiscographySections } from '@features/detail';
 
 import { StyleSheet } from 'react-native';

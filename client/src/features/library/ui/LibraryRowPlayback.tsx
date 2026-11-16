@@ -8,7 +8,7 @@ import {
   LibraryRowPinnedIcon,
 } from '@features/library/ui/LibraryRowAccessories';
 import { rowSurfaceStyle } from '@features/library/ui/libraryRowStyle';
-import type { TrackResponse } from '@shared/apiClient';
+import type { TrackResponse } from '@shared/catalog';
 
 export function LibraryRowPlayback({
   track,

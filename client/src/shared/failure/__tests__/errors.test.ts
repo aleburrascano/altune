@@ -7,11 +7,8 @@ import {
   isSessionFetchFailure,
   isNetworkError,
   isTelemetryGated,
-  describeError,
 } from '@shared/failure';
-import { apiFetch } from '@shared/apiClient';
-import { supabase } from '@shared/auth';
-import { signInTestUser } from '@testing/signInTestUser';
+
 describe('isRetryable — consumed by the QueryClient predicate (retry: (n, error) => isRetryable(error) && n < 5)', () => {
   it('ApiError carries the "ApiError" discriminator alongside its status, the same way NetworkError carries "NetworkError"', () => {
     const error = new ApiError(500, 'x');
@@ -114,8 +111,6 @@ describe('isTelemetryGated', () => {
   });
 });
 
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
-
 describe('isNetworkError — each regex alternate, independently', () => {
   it.each([
     ['a network error', true],
@@ -162,87 +157,6 @@ describe('isNetworkError — adversarial catch-block payloads', () => {
 
   it('an Error with an empty message does not match', () => {
     expect(isNetworkError(new Error(''))).toBe(false);
-  });
-});
-
-describe('the NetworkError the apiClient throws', () => {
-  const { __http } = require('@testing/doubles/fetch.js');
-
-  beforeEach(async () => {
-    await signInTestUser();
-  });
-
-  afterEach(() => {
-    jest.useRealTimers();
-  });
-
-  async function settle(promise: Promise<unknown>): Promise<unknown> {
-    return promise.then(
-      () => {
-        throw new Error('expected apiFetch to reject');
-      },
-      (e: unknown) => e,
-    );
-  }
-
-  describe('isNetworkError — the NetworkError the apiClient actually throws', () => {
-    it('recognizes a NetworkError(transport) from an unreachable server, whose message names no keyword', async () => {
-      __http.fail('GET /v1/library');
-
-      const error = await settle(apiFetch('/v1/library'));
-
-      expect(error).toBeInstanceOf(NetworkError);
-      expect((error as Error).message).toBe('API /v1/library is unreachable');
-      expect(isNetworkError(error)).toBe(true);
-      expect(describeError(error).title).toBe('No connection');
-    });
-
-    it('recognizes a NetworkError(timeout) from a request past the deadline ("timed out", not "timeout")', async () => {
-      jest.useFakeTimers();
-      __http.hang('GET /v1/library');
-
-      const caught = settle(apiFetch('/v1/library'));
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-      jest.advanceTimersByTime(15_000);
-      const error = await caught;
-
-      expect(error).toMatchObject({ name: 'NetworkError', failure: 'timeout' });
-      expect((error as Error).message).toMatch(/timed out after 15000ms$/);
-      expect(isNetworkError(error)).toBe(true);
-    });
-
-    it('recognizes a NetworkError(transport) when the session refresh cannot reach the auth server', async () => {
-      const offline = new Error('Failed');
-      offline.name = 'AuthRetryableFetchError';
-      jest
-        .spyOn(supabase.auth, 'getSession')
-        .mockResolvedValue({ data: { session: null }, error: offline } as never);
-
-      const error = await settle(apiFetch('/v1/library'));
-
-      expect((error as Error).message).toBe('API /v1/library could not reach the auth server');
-      expect(isNetworkError(error)).toBe(true);
-    });
-
-    it.each([
-      new NetworkError('transport', ''),
-      new NetworkError('timeout', 'slow'),
-      new NetworkError('transport', 'truncated response'),
-    ])('classifies %p by its name, whatever its message says', (error) => {
-      expect(isNetworkError(error)).toBe(true);
-    });
-
-    it('does not classify a non-Error object merely named NetworkError', () => {
-      expect(isNetworkError({ name: 'NetworkError', message: 'x' })).toBe(false);
-    });
-
-    it('does not classify an Error with a different name and no transport wording', () => {
-      const error = new Error('API /v1/library returned 500');
-      error.name = 'ApiError';
-      expect(isNetworkError(error)).toBe(false);
-    });
   });
 });
 

@@ -112,7 +112,7 @@ jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
   default: () => ({ width: mockWideGridWindowWidth, height: 800, scale: 2, fontScale: 1 }),
 }));
 
-const { asPlaylistId: probeAsPlaylistId } = require('@shared/apiClient/ids');
+const { asPlaylistId: probeAsPlaylistId } = require('@shared/catalog');
 
 const probeAlbumList: AlbumGroup[] = Array.from({ length: 12 }, (_, i) => ({
   key: `al-${i}`,

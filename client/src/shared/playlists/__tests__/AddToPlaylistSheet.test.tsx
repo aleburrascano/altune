@@ -5,7 +5,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 
 import { AddToPlaylistSheet, PlaylistsPortProvider } from '@shared/playlists';
 import { playlistKeys } from '@shared/query';
-import { type PlaylistResponse, asPlaylistId, asTrackId, type TrackId } from '@shared/apiClient';
+import { type PlaylistResponse, asPlaylistId, asTrackId, type TrackId } from '@shared/catalog';
 import { signInTestUser } from '@testing/signInTestUser';
 import { apiClientPlaylistsPort } from '@testing/apiClientPorts';
 

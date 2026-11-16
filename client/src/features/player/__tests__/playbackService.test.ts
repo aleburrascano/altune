@@ -2,7 +2,7 @@ import * as FileSystem from 'expo-file-system';
 import TrackPlayer, { Event, type RemoteDuckEvent } from 'react-native-track-player';
 
 import { _resetAudioCacheInvalidatorsForTest, invalidateAudioCaches } from '@shared/acquisition';
-import { asTrackId, type TrackId } from '@shared/apiClient';
+import { asTrackId, type TrackId } from '@shared/catalog';
 import { useQueueStore, trackKey, type PlaybackTrack } from '@shared/playback';
 import { notifyIdentityChange } from '@shared/session';
 

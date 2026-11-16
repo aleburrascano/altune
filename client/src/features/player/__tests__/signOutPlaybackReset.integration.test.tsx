@@ -4,8 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import * as FileSystem from 'expo-file-system';
 import TrackPlayer, { Event } from 'react-native-track-player';
-
-import { asTrackId } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 import { useSession, supabase } from '@shared/auth';
 import { useQueueStore, usePlayback } from '@shared/playback';
 import {

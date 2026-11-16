@@ -1,4 +1,4 @@
-import type { FeaturedArtist } from '@shared/apiClient';
+import type { FeaturedArtist } from '@shared/catalog';
 import type { PlaybackTrack, QueueSource } from '@shared/playback';
 import type { ActionSheetOption } from '@shared/ui';
 

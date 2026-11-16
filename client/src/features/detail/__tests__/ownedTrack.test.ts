@@ -1,5 +1,5 @@
-import { asTrackId } from '@shared/apiClient';
-import type { AcquisitionStatus, DiscoveryResult } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
+import type { AcquisitionStatus, DiscoveryResult } from '@shared/catalog';
 import { canPlay } from '@shared/playback';
 
 import { playButtonState, splitOwned, toPlaybackQueue } from '@features/detail';

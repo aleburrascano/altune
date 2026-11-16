@@ -1,14 +1,13 @@
 import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 import { QueryClient, type InfiniteData } from '@tanstack/react-query';
 import fc from 'fast-check';
-
-import { asPlaylistId, asTrackId } from '@shared/apiClient';
+import { asPlaylistId, asTrackId } from '@shared/catalog';
 import type {
   ListPlaylistsResponse,
   PlaylistDetailResponse,
   PlaylistResponse,
   TrackResponse,
-} from '@shared/apiClient';
+} from '@shared/catalog';
 import { playlistKeys } from '@shared/query';
 
 import {

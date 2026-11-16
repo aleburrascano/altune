@@ -3,8 +3,7 @@ import type {
   DiscoverySearchHistoryResponse,
   DiscoverySearchResponse,
   DiscoverySuggestResponse,
-} from '@shared/apiClient';
-
+} from '@shared/catalog';
 import type { DiscoverPort } from '@features/discovery';
 
 const SUGGESTION_KIND = 'query';

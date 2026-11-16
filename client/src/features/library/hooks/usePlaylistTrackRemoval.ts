@@ -1,4 +1,4 @@
-import type { PlaylistId, TrackId, TrackResponse } from '@shared/apiClient';
+import type { PlaylistId, TrackId, TrackResponse } from '@shared/catalog';
 import { countLabel, confirmDestructive } from '@shared/ui';
 import type { useQueuePlayback } from '@shared/playback';
 import { useRemoveTracksFromPlaylist } from '@shared/playlists';

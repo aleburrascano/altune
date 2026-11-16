@@ -1,6 +1,7 @@
 import TrackPlayer from 'react-native-track-player';
 
-import { audioStreamUrl, asTrackId } from '@shared/apiClient';
+import { audioStreamUrl } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 import { useQueueStore, type TrackKey, trackKey, type PlaybackTrack } from '@shared/playback';
 import {
   createNativePlaybackActions,

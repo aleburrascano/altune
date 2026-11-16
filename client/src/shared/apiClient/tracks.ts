@@ -3,9 +3,10 @@ import { randomUuid } from '@shared/id';
 import { ContractError } from '@shared/failure';
 import { apiFetch, apiSend, signalInit, withQuery } from '@shared/apiClient/adapters/http';
 import { LONG_REQUEST_TIMEOUT_MS } from '@shared/apiConfig';
-import { asTrackId, idPathSegment, type TrackId } from '@shared/apiClient/ids';
-import type { LibrarySort } from '@shared/apiClient/library';
 import {
+  asTrackId,
+  idPathSegment,
+  type TrackId,
   ACQUISITION_STATUSES,
   type AcquisitionStatus,
   type CreateTrackRequest,
@@ -13,7 +14,8 @@ import {
   type ListTracksResponse,
   type TrackAcquisition,
   type TrackResponse,
-} from '@shared/apiClient/trackResponse';
+} from '@shared/catalog';
+import type { LibrarySort } from '@shared/apiClient/library';
 import {
   asCount,
   parseArray,

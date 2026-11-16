@@ -1,8 +1,6 @@
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-
-import type { DiscoveryResult } from '@shared/apiClient';
-
+import type { DiscoveryResult } from '@shared/catalog';
 import { resolveEntityQuery } from '@features/detail/domain/resolveEntityQuery';
 import { normalizeForCompare } from '@features/detail/domain/normalizeForCompare';
 import { realPhotoUrl } from '@features/detail/domain/artistPhoto';

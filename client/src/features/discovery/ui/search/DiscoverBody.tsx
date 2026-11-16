@@ -22,12 +22,8 @@ import {
   asyncViewForDiscoverView,
 } from '@features/discovery/domain/discoverView';
 import type { ResultsCommonProps } from '@features/discovery/ui/results/ResultsList';
-import type {
-  DiscoveryKind,
-  DiscoveryResult,
-  ResultSection,
-  UnreleasedSearchHit,
-} from '@shared/apiClient';
+import type { UnreleasedSearchHit } from '@shared/apiClient';
+import type { DiscoveryKind, DiscoveryResult, ResultSection } from '@shared/catalog';
 import type {
   HistorySlice,
   PaginationSlice,

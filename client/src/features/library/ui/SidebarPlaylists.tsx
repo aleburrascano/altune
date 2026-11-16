@@ -1,7 +1,6 @@
 import { useRouter } from 'expo-router';
 import { View } from 'react-native';
-
-import type { PlaylistResponse } from '@shared/apiClient';
+import type { PlaylistResponse } from '@shared/catalog';
 import {
   asyncView,
   Text,

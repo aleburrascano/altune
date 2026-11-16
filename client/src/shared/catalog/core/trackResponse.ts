@@ -1,4 +1,4 @@
-import type { TrackId } from '@shared/apiClient/ids';
+import type { TrackId } from '@shared/catalog/core/ids';
 
 export const ACQUISITION_STATUSES = ['pending', 'ready', 'failed'] as const;
 export type AcquisitionStatus = (typeof ACQUISITION_STATUSES)[number];

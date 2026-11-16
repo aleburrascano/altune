@@ -1,4 +1,4 @@
-import type { DiscoveryResult } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
 
 const HTTPS_URL = /^https:\/\/[^\s\u0000-\u001f\u007f]+$/i;
 

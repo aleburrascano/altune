@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import type { TrackId, TrackResponse } from '@shared/apiClient';
+import type { TrackId, TrackResponse } from '@shared/catalog';
 import { type useQueuePlayback, toPlaybackTrack, type PlaybackTrack } from '@shared/playback';
 import type { ContextMenuItem, MenuAnchor } from '@shared/ui';
 import {

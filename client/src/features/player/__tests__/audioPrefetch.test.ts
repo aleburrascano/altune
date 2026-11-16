@@ -3,7 +3,8 @@ import { posix } from 'path';
 import { act, waitFor } from '@testing-library/react-native';
 import TrackPlayer from 'react-native-track-player';
 
-import { fetchAudioUrls, asTrackId, parseTrackId, type TrackId } from '@shared/apiClient';
+import { fetchAudioUrls } from '@shared/apiClient';
+import { asTrackId, parseTrackId, type TrackId } from '@shared/catalog';
 import { useQueueStore, trackKey, type PlaybackTrack } from '@shared/playback';
 import {
   type PlaybackPort,

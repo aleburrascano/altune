@@ -1,5 +1,5 @@
 import { asyncView, type AsyncView, countLabel } from '@shared/ui';
-import type { DiscoverySearchResponse } from '@shared/apiClient';
+import type { DiscoverySearchResponse } from '@shared/catalog';
 
 export type DiscoverView =
   'loading' | 'empty-no-query' | 'results' | 'zero-results' | 'full-error' | 'unavailable';

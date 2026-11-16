@@ -1,4 +1,4 @@
-import type { PlaylistId, PlaylistDetailResponse } from '@shared/apiClient';
+import type { PlaylistId, PlaylistDetailResponse } from '@shared/catalog';
 import { buildPlayableQueue } from '@shared/playback';
 import type { QueueSource, useQueuePlayback } from '@shared/playback';
 type QueueControls = Pick<ReturnType<typeof useQueuePlayback>, 'playFromList' | 'shuffleFromList'>;

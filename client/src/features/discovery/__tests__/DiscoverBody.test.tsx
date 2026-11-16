@@ -4,7 +4,7 @@ import { fireEvent, render as renderBare, screen } from '@testing-library/react-
 
 import { DiscoverBody, resultFixture } from '@features/discovery';
 import type { DiscoverView } from '@features/discovery';
-import type { ResultSection } from '@shared/apiClient';
+import type { ResultSection } from '@shared/catalog';
 import { PlaybackContext } from '@shared/playback';
 import { idlePlayback } from '@testing/queryHarness';
 import { setPlatformOS } from '@testing/setPlatformOS';

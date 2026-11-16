@@ -10,8 +10,7 @@ import {
   RotateCcw,
   SkipForward,
 } from 'lucide-react-native';
-
-import { withFeaturing } from '@shared/apiClient';
+import { withFeaturing } from '@shared/catalog';
 import { shouldRestartOnPrevious } from '@features/player/domain/restartOnPrevious';
 import type { PlaybackTrack } from '@shared/playback';
 import { Artwork, Text, IconButton, Tappable, useTheme, radius, spacing } from '@shared/ui';

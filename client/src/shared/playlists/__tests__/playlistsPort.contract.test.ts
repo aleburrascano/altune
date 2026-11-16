@@ -1,5 +1,5 @@
-import { asTrackId } from '@shared/apiClient';
-import type { PlaylistResponse } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
+import type { PlaylistResponse } from '@shared/catalog';
 import { apiClientPlaylistsPort } from '@testing/apiClientPorts';
 import { signInTestUser } from '@testing/signInTestUser';
 import { ApiError } from '@shared/failure';

@@ -1,4 +1,4 @@
-import type { ListTracksResponse, TrackResponse, PlaylistDetailResponse } from '@shared/apiClient';
+import type { ListTracksResponse, TrackResponse, PlaylistDetailResponse } from '@shared/catalog';
 import { libraryKeys, playlistKeys } from '@shared/query';
 
 export interface TrackPages {

@@ -1,5 +1,5 @@
 import { ContractError } from '@shared/failure';
-import { asPlaylistId } from '@shared/apiClient';
+import { asPlaylistId } from '@shared/catalog';
 import { canPlay } from '@shared/playback';
 
 import { asRepeatMode, fromWireSource, parseQueueState, toWireSource } from '@features/player';

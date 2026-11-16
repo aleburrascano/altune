@@ -1,8 +1,8 @@
 import React from 'react';
 import { act, render, waitFor } from '@testing-library/react-native';
-import { asTrackId } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 import { _resetAcquisitionTelemetryForTest } from '@shared/acquisition';
-import type { FailedAcquisition, TrackFields } from '@shared/apiClient';
+import type { FailedAcquisition, TrackFields } from '@shared/catalog';
 import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';
 import { LibraryRowFailure } from '@features/library';

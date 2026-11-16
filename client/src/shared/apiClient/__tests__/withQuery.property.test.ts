@@ -6,9 +6,8 @@ import {
   searchDiscovery,
   suggestDiscovery,
   listSearchHistory,
-  type DiscoveryKind,
-  type DiscoverySearchResponse,
 } from '@shared/apiClient';
+import type { DiscoveryKind, DiscoverySearchResponse } from '@shared/catalog';
 import { supabase } from '@shared/auth';
 
 const { __http } = require('@testing/doubles/fetch.js');

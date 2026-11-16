@@ -19,7 +19,7 @@ import {
   radius,
   spacing,
 } from '@shared/ui';
-import { withFeaturing } from '@shared/apiClient';
+import { withFeaturing } from '@shared/catalog';
 import { useQueueStore, useQueuePlayback } from '@shared/playback';
 import type { Theme } from '@shared/ui';
 import {

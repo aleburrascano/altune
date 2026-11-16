@@ -1,8 +1,6 @@
 import { renderHook } from '@testing-library/react-native';
-
-import { asPlaylistId } from '@shared/apiClient';
-import type { PlaylistResponse } from '@shared/apiClient';
-
+import { asPlaylistId } from '@shared/catalog';
+import type { PlaylistResponse } from '@shared/catalog';
 import { useLibraryNavigation } from '@features/library';
 
 function makeRouter() {

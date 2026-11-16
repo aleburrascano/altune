@@ -1,6 +1,6 @@
 import { showFailureAlert } from '@shared/ui';
 import { useRef, useState } from 'react';
-import type { TrackResponse } from '@shared/apiClient';
+import type { TrackResponse } from '@shared/catalog';
 import { isCurrentlyPlaying, buildPlayableQueue } from '@shared/playback';
 import type { usePlayback, useQueuePlayback } from '@shared/playback';
 import type { MenuAnchor } from '@shared/ui';

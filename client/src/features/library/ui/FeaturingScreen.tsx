@@ -2,9 +2,9 @@ import { useLocalSearchParams, useRouter, useSegments } from 'expo-router';
 import { useMemo, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { ChevronLeft } from 'lucide-react-native';
-import type { FeaturedArtist, TrackResponse } from '@shared/apiClient';
+import type { FeaturedArtist, TrackResponse } from '@shared/catalog';
 import { detailHref } from '@shared/navigation';
-import { trackToDiscoveryResult } from '@shared/apiClient';
+import { trackToDiscoveryResult } from '@shared/catalog';
 import {
   asyncView,
   Button,

@@ -3,8 +3,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { createElement, type ReactElement, type ReactNode } from 'react';
 
 import { DetailHandoffProvider, useReportWrongAlbum } from '@features/detail';
-import type { DiscoveryResult } from '@shared/apiClient';
-
+import type { DiscoveryResult } from '@shared/catalog';
 import { signInTestUser } from '@testing/queryHarness';
 
 const { __http } = require('@testing/doubles/fetch.js');

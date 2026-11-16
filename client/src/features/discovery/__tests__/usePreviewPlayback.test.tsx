@@ -2,9 +2,8 @@ import type { ReactNode } from 'react';
 
 import { act, renderHook } from '@testing-library/react-native';
 import * as Haptics from 'expo-haptics';
-
-import { asTrackId } from '@shared/apiClient';
-import type { DiscoveryResult } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
+import type { DiscoveryResult } from '@shared/catalog';
 import { PlaybackContext } from '@shared/playback';
 import type { PlaybackContextValue } from '@shared/playback';
 import { makeIdlePlayback } from '@testing/factories';

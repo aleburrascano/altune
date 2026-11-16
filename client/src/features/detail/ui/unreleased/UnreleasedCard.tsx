@@ -4,7 +4,8 @@ import { StyleSheet, View } from 'react-native';
 import { Artwork, Tappable, Text, radius, spacing } from '@shared/ui';
 import { realPhotoUrl } from '@features/detail/domain/artistPhoto';
 import { hasManyVersions } from '@features/detail/domain/unreleasedTrack';
-import type { DiscoveryResult, UnreleasedTrack } from '@shared/apiClient';
+import type { UnreleasedTrack } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
 import type {
   UnreleasedCard as UnreleasedCardModel,
   UnreleasedCardState,

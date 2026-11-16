@@ -6,7 +6,8 @@ import {
   type InfiniteData,
 } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import type { LibrarySort, ListTracksResponse, TrackResponse } from '@shared/apiClient';
+import type { LibrarySort } from '@shared/apiClient';
+import type { ListTracksResponse, TrackResponse } from '@shared/catalog';
 import { libraryKeys } from '@shared/query';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';

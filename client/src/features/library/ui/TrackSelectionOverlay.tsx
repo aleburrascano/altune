@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import type { TrackResponse } from '@shared/apiClient';
+import type { TrackResponse } from '@shared/catalog';
 import {
   countLabel,
   ContextMenu,

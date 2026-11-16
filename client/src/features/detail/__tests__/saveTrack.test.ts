@@ -1,6 +1,5 @@
-import type { CreateTrackRequest, AcquisitionStatus, DiscoveryResult } from '@shared/apiClient';
-import { asTrackId } from '@shared/apiClient';
-
+import type { CreateTrackRequest, AcquisitionStatus, DiscoveryResult } from '@shared/catalog';
+import { asTrackId } from '@shared/catalog';
 import {
   optimisticTrack,
   saveIdempotencyKey,

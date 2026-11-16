@@ -1,5 +1,4 @@
-import type { TrackResponse } from '@shared/apiClient';
-
+import type { TrackResponse } from '@shared/catalog';
 import {
   pagedAccessor,
   PATCH_POLICY,

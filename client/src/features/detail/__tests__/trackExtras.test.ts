@@ -1,5 +1,4 @@
-import type { FeaturedArtist } from '@shared/apiClient';
-
+import type { FeaturedArtist } from '@shared/catalog';
 import {
   albumExtras,
   trackExtras,

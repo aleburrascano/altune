@@ -1,7 +1,5 @@
 import { renderHook, waitFor, act } from '@testing-library/react-native';
-
-import type { DiscoveryResult } from '@shared/apiClient';
-
+import type { DiscoveryResult } from '@shared/catalog';
 import { applyKillSwitches } from '@shared/killSwitch';
 
 import { useResolveMissingSources, createMemoryDetailPort } from '@features/detail';

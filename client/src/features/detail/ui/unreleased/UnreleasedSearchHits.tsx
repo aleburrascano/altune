@@ -2,7 +2,8 @@ import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Text, spacing } from '@shared/ui';
-import type { DiscoveryResult, UnreleasedSearchHit } from '@shared/apiClient';
+import type { UnreleasedSearchHit } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
 import { UnreleasedRow } from '@features/detail/ui/unreleased/ArtistUnreleased';
 
 interface UnreleasedSearchHitsProps {

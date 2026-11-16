@@ -1,8 +1,8 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react-native';
 
-import type { DiscoveryResult, LastFmEnrichmentResponse } from '@shared/apiClient';
-
+import type { LastFmEnrichmentResponse } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
 import { ArtistDetailBody } from '@features/detail';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 import { readDetailHandoff } from '@shared/navigation';

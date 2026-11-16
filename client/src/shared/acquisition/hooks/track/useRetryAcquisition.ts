@@ -1,7 +1,7 @@
 import type { MutationKey, UseMutationResult } from '@tanstack/react-query';
 
 import { useAppMutation } from '@shared/query';
-import type { TrackId } from '@shared/apiClient';
+import type { TrackId } from '@shared/catalog';
 import {
   recordRetryRequest,
   retryFailureOutcome,

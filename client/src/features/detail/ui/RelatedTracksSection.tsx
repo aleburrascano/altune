@@ -2,8 +2,7 @@ import type { ComponentProps, ReactElement } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { Artwork, HorizontalRail, Tappable, Text, radius, spacing } from '@shared/ui';
-import type { DiscoveryResult } from '@shared/apiClient';
-
+import type { DiscoveryResult } from '@shared/catalog';
 import { useRelatedTracks } from '@features/detail/hooks/useRelatedTracks';
 import { type DetailRoute } from '@features/detail/domain/detailNavigation';
 import { useOpenDetail } from '@features/detail/hooks/useDetailNavigation';

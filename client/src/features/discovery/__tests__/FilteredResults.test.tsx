@@ -2,7 +2,7 @@ import React from 'react';
 import { render as renderBare, screen } from '@testing-library/react-native';
 
 import { FilteredResults, resultFixture } from '@features/discovery';
-import type { DiscoveryResult } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
 import type { SearchCorrection, ResultsCommonProps } from '@features/discovery';
 import { PlaybackContext } from '@shared/playback';
 import { idlePlayback } from '@testing/queryHarness';

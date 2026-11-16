@@ -7,7 +7,7 @@ import {
   type PlaylistDetailResponse,
   asTrackId,
   type TrackId,
-} from '@shared/apiClient';
+} from '@shared/catalog';
 import { useTrackStatusStore } from '@shared/acquisition';
 import { usePinnedStore } from '@shared/offline';
 import { TRACK_CACHE_FAMILIES } from '@shared/events';

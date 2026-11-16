@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { FeaturedArtist, DiscoveryResult } from '@shared/apiClient';
+import type { FeaturedArtist, DiscoveryResult } from '@shared/catalog';
 import { libraryKeys } from '@shared/query';
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 import {

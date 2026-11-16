@@ -1,4 +1,4 @@
-import { asFavoriteKey } from '@shared/apiClient';
+import { asFavoriteKey } from '@shared/catalog';
 import type { Favorite, FavoriteRef } from '@shared/apiClient';
 
 import type { FavoritesPort } from '@features/discovery';

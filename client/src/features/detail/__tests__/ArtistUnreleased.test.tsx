@@ -1,8 +1,6 @@
 import { AccessibilityInfo, Linking } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-
-import type { DiscoveryResult } from '@shared/apiClient';
-
+import type { DiscoveryResult } from '@shared/catalog';
 import { readDetailHandoff } from '@shared/navigation';
 
 import { httpDetailPort, DetailPortProvider, ArtistUnreleased } from '@features/detail';

@@ -2,7 +2,8 @@ import { useQueryClient, type QueryClient, type UseMutationOptions } from '@tans
 
 import { useAppMutation, discoveryKeys } from '@shared/query';
 
-import { clearSearchHistory, type DiscoverySearchHistoryResponse } from '@shared/apiClient';
+import { clearSearchHistory } from '@shared/apiClient';
+import type { DiscoverySearchHistoryResponse } from '@shared/catalog';
 import { guardedMutationOptions } from '@shared/session';
 type ClearSearchHistoryOptions = {
   action: string;

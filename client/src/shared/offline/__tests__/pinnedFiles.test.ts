@@ -1,6 +1,5 @@
 import * as FileSystem from 'expo-file-system';
-
-import { asTrackId, type TrackId } from '@shared/apiClient';
+import { asTrackId, type TrackId } from '@shared/catalog';
 import * as pinnedFilesModule from '@shared/offline/state/pinnedFiles';
 
 import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';

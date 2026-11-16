@@ -1,8 +1,7 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
-
-import type { DiscoverySearchResponse } from '@shared/apiClient';
+import type { DiscoverySearchResponse } from '@shared/catalog';
 import { createMemoryFileStore } from '@shared/files';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch';
 import { discoveryKeys } from '@shared/query';

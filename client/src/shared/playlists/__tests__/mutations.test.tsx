@@ -25,7 +25,7 @@ import {
   asTrackId,
   type TrackId,
   type PlaylistId,
-} from '@shared/apiClient';
+} from '@shared/catalog';
 import { playlistKeys } from '@shared/query';
 import { signInTestUser } from '@testing/signInTestUser';
 import { apiClientPlaylistsPort } from '@testing/apiClientPorts';

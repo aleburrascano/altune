@@ -30,12 +30,12 @@ import {
   resultsIncompleteForState,
   viewForState,
 } from '@features/discovery/domain/discoverView';
+import type { UnreleasedSearchHit } from '@shared/apiClient';
 import type {
   DiscoverySearchResponse,
   DiscoverySuggestion,
   SearchHistoryItem,
-  UnreleasedSearchHit,
-} from '@shared/apiClient';
+} from '@shared/catalog';
 import type { DiscoverView, SearchCorrection } from '@features/discovery/domain/discoverView';
 import type { ResultsFilter } from '@features/discovery/hooks/results/useResultsFilter';
 

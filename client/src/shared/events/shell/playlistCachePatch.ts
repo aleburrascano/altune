@@ -5,7 +5,7 @@ import type {
   PlaylistDetailResponse,
   PlaylistResponse,
   TrackResponse,
-} from '@shared/apiClient';
+} from '@shared/catalog';
 import { playlistKeys } from '@shared/query';
 
 import type { EventCache } from '@shared/events/core/eventCache';

@@ -1,8 +1,7 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
-
-import type { DiscoverySearchHistoryResponse } from '@shared/apiClient';
+import type { DiscoverySearchHistoryResponse } from '@shared/catalog';
 import { ApiError, NetworkError } from '@shared/failure';
 import { discoveryKeys } from '@shared/query';
 import { runSignOutCleanups } from '@shared/session';

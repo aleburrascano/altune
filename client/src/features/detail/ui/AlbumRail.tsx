@@ -17,8 +17,7 @@ import {
   useTheme,
   borderWidth,
 } from '@shared/ui';
-import type { DiscoveryResult } from '@shared/apiClient';
-
+import type { DiscoveryResult } from '@shared/catalog';
 import { albumExtras } from '@features/detail/domain/trackExtras';
 import { SECTION_CAP } from '@features/detail/hooks/useDiscographyFilter';
 import { albumYear } from '@features/detail/ui/formatters';

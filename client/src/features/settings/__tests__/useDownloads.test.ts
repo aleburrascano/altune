@@ -9,7 +9,7 @@ import {
   buildDangerZoneActions,
   type ClearHistoryState,
 } from '@features/settings';
-import { asTrackId } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 
 const { __fs } = FileSystem as unknown as {
   __fs: {

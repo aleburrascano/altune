@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
-
-import type { FeaturedArtist } from '@shared/apiClient';
-import { withFeaturing } from '@shared/apiClient';
+import type { FeaturedArtist } from '@shared/catalog';
+import { withFeaturing } from '@shared/catalog';
 import { Text, Tappable } from '@shared/ui';
 import type { LateralNavHandle } from '@features/detail/hooks/useDetailNavigation';
 

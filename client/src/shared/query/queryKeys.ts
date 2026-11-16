@@ -1,4 +1,4 @@
-import type { PlaylistId } from '@shared/apiClient';
+import type { PlaylistId } from '@shared/catalog';
 
 export const libraryKeys = {
   summary: ['library', 'summary'] as const,

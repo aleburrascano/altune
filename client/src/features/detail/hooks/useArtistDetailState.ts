@@ -1,8 +1,6 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
-
-import type { DiscoveryResult } from '@shared/apiClient';
-import { trackToDiscoveryResult } from '@shared/apiClient';
-
+import type { DiscoveryResult } from '@shared/catalog';
+import { trackToDiscoveryResult } from '@shared/catalog';
 import { type ContentFailure } from '@features/detail/domain/contentStatus';
 import { type DetailRoute } from '@features/detail/domain/detailNavigation';
 import { useOpenDetail } from '@features/detail/hooks/useDetailNavigation';

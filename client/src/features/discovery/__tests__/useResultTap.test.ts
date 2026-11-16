@@ -7,8 +7,7 @@ import { readDetailHandoff } from '@shared/navigation';
 import { runSignOutCleanups } from '@shared/session';
 import { makeWrapper } from '@testing/makeWrapper';
 import { signInTestUser } from '@testing/signInTestUser';
-
-import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/apiClient';
+import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/catalog';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

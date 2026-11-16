@@ -2,7 +2,7 @@ import fc from 'fast-check';
 
 import { usePinnedStore, provideOfflinePort } from '@shared/offline';
 import { apiClientOfflinePort } from '@testing/apiClientPorts';
-import { asTrackId } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 import { signInTestUser } from '@testing/signInTestUser';
 
 provideOfflinePort(apiClientOfflinePort);

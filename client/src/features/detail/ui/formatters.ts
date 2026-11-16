@@ -1,5 +1,4 @@
-import type { DiscoveryResult } from '@shared/apiClient';
-
+import type { DiscoveryResult } from '@shared/catalog';
 import {
   albumExtras,
   extractFeaturedFromText,

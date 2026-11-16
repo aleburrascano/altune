@@ -20,7 +20,7 @@ import {
   toPending,
   toReady,
   toTrackStatus,
-} from '@shared/apiClient';
+} from '@shared/catalog';
 import { runSignOutCleanups } from '@shared/session';
 import { flushOutbox } from '@shared/telemetry';
 import { signInTestUser } from '@testing/signInTestUser';

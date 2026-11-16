@@ -4,7 +4,8 @@ import { FlatList, StyleSheet, View } from 'react-native';
 
 import { SortControl, type SortOption, Text, spacing } from '@shared/ui';
 import { recordUserAction } from '@shared/telemetry';
-import type { DiscoveryResult, UnreleasedTrack } from '@shared/apiClient';
+import type { UnreleasedTrack } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
 import { readDetailHandoff } from '@shared/navigation';
 
 import {

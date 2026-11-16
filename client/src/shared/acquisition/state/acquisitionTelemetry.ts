@@ -1,5 +1,5 @@
 import { ApiError, correlationIdOf } from '@shared/failure';
-import type { TrackId } from '@shared/apiClient';
+import type { TrackId } from '@shared/catalog';
 import { enqueueCritical } from '@shared/telemetry';
 import type { EventPayload } from '@shared/telemetry';
 

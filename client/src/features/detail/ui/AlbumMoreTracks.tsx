@@ -2,8 +2,7 @@ import { type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button, Text, spacing } from '@shared/ui';
-import type { DiscoveryResult } from '@shared/apiClient';
-
+import type { DiscoveryResult } from '@shared/catalog';
 import { type ContentFailure } from '@features/detail/domain/contentStatus';
 import { type LastBatch } from '@features/detail/hooks/useAlbumSaveAll';
 import { type AlbumDetailState } from '@features/detail/hooks/useAlbumDetailState';

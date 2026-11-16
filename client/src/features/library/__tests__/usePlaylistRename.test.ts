@@ -1,9 +1,8 @@
 import { createElement, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
-
-import { asPlaylistId } from '@shared/apiClient';
-import type { PlaylistResponse } from '@shared/apiClient';
+import { asPlaylistId } from '@shared/catalog';
+import type { PlaylistResponse } from '@shared/catalog';
 import { playlistKeys } from '@shared/query';
 import { signInTestUser } from '@testing/signInTestUser';
 

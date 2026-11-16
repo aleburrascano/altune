@@ -19,7 +19,8 @@ import { TopResultCard } from '@features/discovery/ui/results/TopResultCard';
 import { kindLabel, resultKey } from '@features/discovery/domain/resultDisplay';
 
 import type { ResultTapHandler } from '@features/discovery/hooks/results/useResultTap';
-import type { DiscoveryKind, DiscoveryResult, ResultSection } from '@shared/apiClient';
+import type { DiscoveryKind, DiscoveryResult, ResultSection } from '@shared/catalog';
+
 type SeeAllLinkProps = {
   kind: DiscoveryKind;
   title: string;

@@ -1,8 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
-
-import type { DiscoveryResult } from '@shared/apiClient';
-
+import type { DiscoveryResult } from '@shared/catalog';
 import { AlbumDetailBody } from '@features/detail';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 import {

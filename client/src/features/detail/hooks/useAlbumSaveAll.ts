@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
-
-import type { DiscoveryResult } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
 import { currentSessionEpoch, isSameSession } from '@shared/session';
 import { trackIdentityKey } from '@shared/acquisition';
 

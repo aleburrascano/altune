@@ -1,7 +1,7 @@
 import { act, render, screen, fireEvent } from '@testing-library/react-native';
 
 import { DownloadsSheet, useDownloadStore, type DownloadEntry } from '@shared/acquisition';
-import { asTrackId } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 
 function entry(overrides: Partial<DownloadEntry>): DownloadEntry {
   return {

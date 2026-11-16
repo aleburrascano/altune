@@ -1,6 +1,5 @@
-import { asTrackId } from '@shared/apiClient';
-import type { CreateTrackRequest, ListTracksResponse, TrackResponse } from '@shared/apiClient';
-
+import { asTrackId } from '@shared/catalog';
+import type { CreateTrackRequest, ListTracksResponse, TrackResponse } from '@shared/catalog';
 import { httpDetailPort, createMemoryDetailPort } from '@features/detail';
 import type { DetailPort } from '@features/detail';
 import { signInTestUser } from '@testing/queryHarness';

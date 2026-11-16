@@ -1,6 +1,5 @@
 import { QueryClient } from '@tanstack/react-query';
-
-import { asTrackId } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 import { applyServerEvent } from '@shared/events';
 import { usePinnedStore } from '@shared/offline';
 

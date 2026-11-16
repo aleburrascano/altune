@@ -1,4 +1,4 @@
-import type { PlaylistId, TrackResponse } from '@shared/apiClient';
+import type { PlaylistId, TrackResponse } from '@shared/catalog';
 import type { Navigator } from '@shared/navigation';
 import { useDeletePlaylist } from '@shared/playlists';
 import { confirmDestructive } from '@shared/ui';

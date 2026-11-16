@@ -4,7 +4,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { NetworkError, CORRELATION_HEADER } from '@shared/apiClient';
 import { transientRetryOptions } from '@shared/query';
-import type { DiscoverySearchResponse } from '@shared/apiClient';
+import type { DiscoverySearchResponse } from '@shared/catalog';
 import {
   MAX_SEARCH_OFFSET,
   MAX_SEARCH_PAGES,

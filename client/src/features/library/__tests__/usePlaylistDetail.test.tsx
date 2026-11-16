@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
-import { asPlaylistId, NO_PLAYLIST_ID } from '@shared/apiClient';
-import type { PlaylistDetailResponse } from '@shared/apiClient';
+import { asPlaylistId, NO_PLAYLIST_ID } from '@shared/catalog';
+import type { PlaylistDetailResponse } from '@shared/catalog';
 import { playlistKeys } from '@shared/query';
 import { createMemoryLibraryPort, LibraryPortProvider, usePlaylistDetail } from '@features/library';
 import type { LibraryPort } from '@features/library';

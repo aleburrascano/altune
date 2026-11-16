@@ -1,8 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
-
-import { asPlaylistId } from '@shared/apiClient';
+import { asPlaylistId } from '@shared/catalog';
 import type { PlaybackContextValue } from '@shared/playback';
 import { makeIdlePlayback } from '@testing/factories';
 import { PlaybackContext } from '@shared/playback';

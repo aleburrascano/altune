@@ -1,7 +1,7 @@
 import { memo, useCallback, useMemo, type ReactElement } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, type ListRenderItem } from 'react-native';
 import { Shuffle } from 'lucide-react-native';
-import type { TrackId, TrackResponse } from '@shared/apiClient';
+import type { TrackId, TrackResponse } from '@shared/catalog';
 import {
   Tappable,
   Text,

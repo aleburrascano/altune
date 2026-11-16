@@ -1,5 +1,5 @@
-import type { PlaylistId, TrackId } from '@shared/apiClient/ids';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
+import type { PlaylistId, TrackId } from '@shared/catalog/core/ids';
+import type { TrackResponse } from '@shared/catalog/core/trackResponse';
 
 export type PlaylistResponse = {
   id: PlaylistId;

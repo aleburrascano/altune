@@ -1,7 +1,7 @@
 import { waitFor } from '@testing-library/react-native';
-
-import { asTrackId } from '@shared/apiClient';
-import type { QueueStateResponse, AcquisitionStatus, TrackResponse } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
+import type { QueueStateResponse } from '@shared/apiClient';
+import type { AcquisitionStatus, TrackResponse } from '@shared/catalog';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback';
 
 import { signInTestUser } from '@testing/signInTestUser';

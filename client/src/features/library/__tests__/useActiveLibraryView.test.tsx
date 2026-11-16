@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';
-import { asPlaylistId, asTrackId } from '@shared/apiClient';
-import type { AlbumGroup, ArtistGroup, PlaylistResponse, TrackResponse } from '@shared/apiClient';
+import { asPlaylistId, asTrackId } from '@shared/catalog';
+import type { AlbumGroup, ArtistGroup } from '@shared/apiClient';
+import type { PlaylistResponse, TrackResponse } from '@shared/catalog';
 import {
   type LibraryPort,
   useActiveLibraryView,

@@ -1,16 +1,18 @@
 import { apiFetch, apiSend, signalInit, withQuery } from '@shared/apiClient/adapters/http';
-import { asPlaylistId, idPathSegment, type PlaylistId } from '@shared/apiClient/ids';
+import {
+  asPlaylistId,
+  idPathSegment,
+  type AddTracksToPlaylistRequest,
+  type AddTracksToPlaylistResponse,
+  type CreatePlaylistRequest,
+  type ListPlaylistsResponse,
+  type PlaylistDetailResponse,
+  type PlaylistId,
+  type PlaylistResponse,
+  type RemoveTracksFromPlaylistRequest,
+  type RemoveTracksFromPlaylistResponse,
+} from '@shared/catalog';
 import { parseTrackResponse } from '@shared/apiClient/tracks';
-import type {
-  AddTracksToPlaylistRequest,
-  AddTracksToPlaylistResponse,
-  CreatePlaylistRequest,
-  ListPlaylistsResponse,
-  PlaylistDetailResponse,
-  PlaylistResponse,
-  RemoveTracksFromPlaylistRequest,
-  RemoveTracksFromPlaylistResponse,
-} from '@shared/apiClient/playlistResponse';
 import {
   asCount,
   asNumber,

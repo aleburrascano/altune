@@ -1,8 +1,5 @@
 import * as Crypto from 'expo-crypto';
 import {
-  type CreateTrackRequest,
-  type FeaturedArtist,
-  type TrackResponse,
   backfillFeaturedArtists,
   createTrack,
   deleteTrack,
@@ -13,9 +10,14 @@ import {
   retryAcquisition,
   parseTrackResponse,
   tryParseTrackResponse,
+} from '@shared/apiClient';
+import {
+  type CreateTrackRequest,
+  type FeaturedArtist,
+  type TrackResponse,
   asTrackId,
   type TrackId,
-} from '@shared/apiClient';
+} from '@shared/catalog';
 import { ContractError, NetworkError, isAbort } from '@shared/failure';
 import { supabase } from '@shared/auth';
 

@@ -1,4 +1,4 @@
-import type { DiscoveryResult } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
 import { usePlayback, getPreviewUrl } from '@shared/playback';
 import type { PlaybackState } from '@shared/playback';
 import { tapFeedback } from '@shared/ui';

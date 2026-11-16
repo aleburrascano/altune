@@ -1,4 +1,5 @@
-import type { ResolvedAudioUrl, TrackId } from '@shared/apiClient';
+import type { ResolvedAudioUrl } from '@shared/apiClient';
+import type { TrackId } from '@shared/catalog';
 import { equalJitterMs } from '@shared/timing';
 import { isRetryable } from '@shared/failure';
 import { isLoopEnabled } from '@shared/killSwitch';

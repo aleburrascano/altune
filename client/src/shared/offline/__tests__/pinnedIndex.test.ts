@@ -9,8 +9,7 @@ import {
   type PinnedEntry,
 } from '@shared/offline';
 import { type StoredDirectory, createMemoryFileStore, type MemoryFileStore } from '@shared/files';
-import { asTrackId, type TrackId } from '@shared/apiClient';
-
+import { asTrackId, type TrackId } from '@shared/catalog';
 import { expectType, type IsExactlyAssignable, type Not } from '@testing/typeAssertions';
 
 const INDEX_SCHEMA_VERSION = 1;

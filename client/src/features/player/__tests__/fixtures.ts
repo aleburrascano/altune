@@ -1,4 +1,4 @@
-import { asTrackId } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 import type { ResolvedAudioUrl } from '@shared/apiClient';
 import type { PlaybackTrack } from '@shared/playback';
 

@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-
-import type { TrackId, WireTrackStatus } from '@shared/apiClient';
+import type { TrackId, WireTrackStatus } from '@shared/catalog';
 import { isRetryable } from '@shared/failure';
 import { onSignOut } from '@shared/session';
 import {

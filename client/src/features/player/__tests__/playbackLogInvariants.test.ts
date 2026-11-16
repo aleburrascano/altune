@@ -3,9 +3,7 @@ import { join } from 'path';
 import { inspect } from 'util';
 
 import { Event } from 'react-native-track-player';
-
-import { asTrackId } from '@shared/apiClient';
-
+import { asTrackId } from '@shared/catalog';
 import {
   ignoringNativeRejection,
   playbackService,

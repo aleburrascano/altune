@@ -2,9 +2,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { StyleSheet } from 'react-native';
-
-import { asPlaylistId } from '@shared/apiClient';
-import type { PlaylistDetailResponse } from '@shared/apiClient';
+import { asPlaylistId } from '@shared/catalog';
+import type { PlaylistDetailResponse } from '@shared/catalog';
 import { Sidebar, darkTheme } from '@shared/ui';
 import { createMemoryLibraryPort, LibraryPortProvider, SidebarPlaylists } from '@features/library';
 import type { LibraryPort } from '@features/library';

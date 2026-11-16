@@ -1,6 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-
-import type { DiscoveryResult } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
 import * as userTelemetry from '@shared/telemetry/userTelemetry';
 import { detailHref } from '@shared/navigation';
 

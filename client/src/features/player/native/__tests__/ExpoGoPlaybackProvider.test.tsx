@@ -1,7 +1,6 @@
 import React from 'react';
 import { act, renderHook } from '@testing-library/react-native';
-
-import { asTrackId } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 import { usePlayback } from '@shared/playback';
 import type { PlaybackContextValue, PlaybackTrack } from '@shared/playback';
 import { ExpoGoPlaybackProvider } from '@features/player';

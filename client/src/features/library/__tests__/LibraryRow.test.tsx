@@ -1,8 +1,7 @@
 import { Platform } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
-
-import { asTrackId } from '@shared/apiClient';
-import type { TrackResponse } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
+import type { TrackResponse } from '@shared/catalog';
 import { usePinnedStore, type PinnedEntry } from '@shared/offline';
 import { trackResponseFactory } from '@testing/factories';
 

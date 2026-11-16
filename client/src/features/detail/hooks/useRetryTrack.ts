@@ -1,6 +1,5 @@
 import { type UseMutationResult } from '@tanstack/react-query';
-
-import type { TrackId } from '@shared/apiClient';
+import type { TrackId } from '@shared/catalog';
 import {
   recordRetryTapped,
   type RetryEntryPoint,

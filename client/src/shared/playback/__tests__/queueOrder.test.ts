@@ -1,4 +1,4 @@
-import { asTrackId } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 import {
   currentAfterMove,
   currentAfterRemoval,

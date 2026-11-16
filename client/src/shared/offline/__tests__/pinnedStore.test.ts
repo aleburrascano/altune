@@ -1,6 +1,7 @@
 import { act } from '@testing-library/react-native';
 import * as FileSystem from 'expo-file-system';
-import { type ResolvedAudioUrl, asTrackId, type TrackId } from '@shared/apiClient';
+import { type ResolvedAudioUrl } from '@shared/apiClient';
+import { asTrackId, type TrackId } from '@shared/catalog';
 import { ApiError } from '@shared/failure';
 import { signInTestUser } from '@testing/signInTestUser';
 import {

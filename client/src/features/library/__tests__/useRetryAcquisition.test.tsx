@@ -5,7 +5,7 @@ import {
   type PlaylistDetailResponse,
   asTrackId,
   type TrackId,
-} from '@shared/apiClient';
+} from '@shared/catalog';
 import { trackResponseFactory } from '@testing/factories';
 import {
   useReacquireTrack,

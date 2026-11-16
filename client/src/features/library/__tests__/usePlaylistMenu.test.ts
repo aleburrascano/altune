@@ -1,12 +1,12 @@
 import { createElement, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, act, waitFor } from '@testing-library/react-native';
-import { asPlaylistId, asTrackId } from '@shared/apiClient';
+import { asPlaylistId, asTrackId } from '@shared/catalog';
 import type { Navigator } from '@shared/navigation';
 import { createMemoryNavigator } from '@shared/navigation';
 import { usePlaylistDelete, usePlaylistOfflineAction } from '@features/library';
 import { Alert, type AlertButton } from 'react-native';
-import type { TrackResponse } from '@shared/apiClient';
+import type { TrackResponse } from '@shared/catalog';
 import { usePinnedStore } from '@shared/offline';
 import { playlistKeys } from '@shared/query';
 import { trackResponseFactory } from '@testing/factories';

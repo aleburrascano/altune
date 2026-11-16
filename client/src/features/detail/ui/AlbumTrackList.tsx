@@ -1,7 +1,6 @@
 import { type ReactElement, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
-
-import type { DiscoveryResult } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
 import { asyncView, AsyncSection, Text, spacing } from '@shared/ui';
 import type { AlbumDetailState } from '@features/detail/hooks/useAlbumDetailState';
 

@@ -1,7 +1,7 @@
 import { markSessionExpired, stampCredentials } from '@shared/auth';
 import { CORRELATION_HEADER, newCorrelationId } from '@shared/apiClient/correlationId';
 import { ApiError, ContractError, HTTP_UNAUTHORIZED } from '@shared/failure';
-import { idPathSegment, parseTrackId, type TrackId } from '@shared/apiClient/ids';
+import { idPathSegment, parseTrackId, type TrackId } from '@shared/catalog';
 import { apiFetch, apiSend, authorization, logFailure } from '@shared/apiClient/adapters/http';
 import { apiBase } from '@shared/apiConfig';
 import {

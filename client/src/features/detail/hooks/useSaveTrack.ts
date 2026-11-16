@@ -12,7 +12,7 @@ import {
   toReady,
   toTrackStatus,
   type WireTrackStatus,
-} from '@shared/apiClient';
+} from '@shared/catalog';
 import {
   rememberDownloadMeta,
   adoptResponseStatus,

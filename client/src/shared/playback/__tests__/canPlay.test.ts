@@ -1,5 +1,4 @@
-import type { AcquisitionStatus } from '@shared/apiClient';
-
+import type { AcquisitionStatus } from '@shared/catalog';
 import { canPlay } from '@shared/playback';
 
 describe('canPlay', () => {

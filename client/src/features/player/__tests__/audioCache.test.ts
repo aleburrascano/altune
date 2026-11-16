@@ -1,7 +1,5 @@
 import * as FileSystem from 'expo-file-system';
-
-import { asTrackId } from '@shared/apiClient';
-
+import { asTrackId } from '@shared/catalog';
 import {
   buildCacheFileName,
   cacheDir,

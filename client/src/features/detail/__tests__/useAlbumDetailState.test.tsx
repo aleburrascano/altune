@@ -1,8 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { QueryClient } from '@tanstack/react-query';
-
-import type { DiscoveryResult, CreateTrackRequest, TrackResponse } from '@shared/apiClient';
-import { asTrackId } from '@shared/apiClient';
+import type { DiscoveryResult, CreateTrackRequest, TrackResponse } from '@shared/catalog';
+import { asTrackId } from '@shared/catalog';
 import { useTrackStatusStore } from '@shared/acquisition';
 import { PlaybackContext } from '@shared/playback';
 import { libraryKeys } from '@shared/query';

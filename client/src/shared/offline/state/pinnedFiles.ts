@@ -8,7 +8,8 @@ import {
 } from '@shared/files';
 import { NetworkError } from '@shared/failure';
 import { startDeadline } from '@shared/timing';
-import { isSafeId, type TrackId } from '@shared/apiClient';
+import { isSafeId, type TrackId } from '@shared/catalog';
+
 const PINNED_SUBDIR = 'offline-audio';
 
 const PIN_DOWNLOAD_TIMEOUT_MS = 120_000;

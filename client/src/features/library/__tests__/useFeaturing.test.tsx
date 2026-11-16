@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
-import type { FeaturedArtist } from '@shared/apiClient';
+import type { FeaturedArtist } from '@shared/catalog';
 import {
   createMemoryLibraryPort,
   LibraryPortProvider,

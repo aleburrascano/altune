@@ -1,8 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
-
-import type { DiscoverySource } from '@shared/apiClient';
-
+import type { DiscoverySource } from '@shared/catalog';
 import { _resetDetailHealthForTest, useRelatedTracks } from '@features/detail';
 import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
 

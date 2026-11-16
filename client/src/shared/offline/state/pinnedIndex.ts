@@ -8,7 +8,8 @@ import {
   type StoredDirectory,
   type StoredFile,
 } from '@shared/files';
-import { isSafeId, parseTrackId, type TrackId } from '@shared/apiClient';
+import { isSafeId, parseTrackId, type TrackId } from '@shared/catalog';
+
 export type PinnedEntry =
   | { trackId: TrackId; status: 'ready'; uri: string; version?: string }
   | { trackId: TrackId; status: 'failed' }

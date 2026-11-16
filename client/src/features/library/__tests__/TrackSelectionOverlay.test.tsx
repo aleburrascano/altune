@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useEffect, type ReactElement } from 'react';
-import { asPlaylistId, asTrackId } from '@shared/apiClient';
-import type { TrackResponse } from '@shared/apiClient';
+import { asPlaylistId, asTrackId } from '@shared/catalog';
+import type { TrackResponse } from '@shared/catalog';
 import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';
 import {

@@ -1,6 +1,5 @@
 import type { useRouter } from 'expo-router';
-
-import type { PlaylistId, PlaylistDetailResponse } from '@shared/apiClient';
+import type { PlaylistId, PlaylistDetailResponse } from '@shared/catalog';
 import type { usePlaylistRename } from '@features/library/hooks/usePlaylistRename';
 
 type Router = ReturnType<typeof useRouter>;

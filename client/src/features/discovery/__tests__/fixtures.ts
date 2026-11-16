@@ -1,4 +1,4 @@
-import type { DiscoveryResult } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
 
 export function resultFixture(overrides: Partial<DiscoveryResult> = {}): DiscoveryResult {
   return {

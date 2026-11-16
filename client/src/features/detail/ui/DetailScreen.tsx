@@ -2,7 +2,7 @@ import { Redirect, useLocalSearchParams, useRouter, useSegments } from 'expo-rou
 import type { ReactElement } from 'react';
 
 import { readDetailHandoff, type DetailHandoff, tabRootFromSegments } from '@shared/navigation';
-import { featuredArtistsFromExtras } from '@shared/apiClient';
+import { featuredArtistsFromExtras } from '@shared/catalog';
 import { useArtistDiscovery } from '@features/detail/hooks/useEntityDiscovery';
 import { realPhotoUrl } from '@features/detail/domain/artistPhoto';
 import { useDetailEnrichments } from '@features/detail/hooks/useDetailEnrichments';
