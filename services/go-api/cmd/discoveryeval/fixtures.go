@@ -2,6 +2,7 @@ package main
 
 import (
 	"altune/go-api/internal/app"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/egress"
 	"altune/go-api/internal/shared/httptrace"
@@ -11,8 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	discoveryEval "altune/go-api/internal/discovery/service/eval"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -76,16 +75,16 @@ func recordCorpus(
 	cfg *config.Config,
 	pool *pgxpool.Pool,
 	dir string,
-	ents []discoveryEval.LibraryEntity,
-	mode discoveryEval.QueryMode,
+	ents []discovery.LibraryEntity,
+	mode discovery.QueryMode,
 	concurrency, topK int,
 	progress func(done, total int),
-) (discoveryEval.HarnessReport, error) {
+) (discovery.HarnessReport, error) {
 	rec := httptrace.NewRecorder(egress.NewLiveTransport())
 	svc := app.BuildRankingOnlySearchService(ctx, cfg, pool, nil, rec)
 	searcher := searchAdapter{svc: svc}
 
-	report := discoveryEval.RunLibraryEvalMode(ctx, ents, searcher, concurrency, topK, mode, progress)
+	report := discovery.RunLibraryEvalMode(ctx, ents, searcher, concurrency, topK, mode, progress)
 	svc.WaitForBackground()
 
 	exchanges := dedupExchanges(rec.Exchanges())
@@ -104,12 +103,12 @@ func recordArtistCorpus(
 	corpus string,
 	concurrency, topK int,
 	progress func(done, total int),
-) (discoveryEval.HarnessReport, error) {
+) (discovery.HarnessReport, error) {
 	rec := httptrace.NewRecorder(egress.NewLiveTransport())
 	svc := app.BuildRankingOnlySearchService(ctx, cfg, pool, nil, rec)
 	searcher := searchAdapter{svc: svc}
 
-	report := discoveryEval.RunArtistIntentEval(ctx, artists, searcher, concurrency, topK, corpus, progress)
+	report := discovery.RunArtistIntentEval(ctx, artists, searcher, concurrency, topK, corpus, progress)
 	svc.WaitForBackground()
 
 	exchanges := dedupExchanges(rec.Exchanges())

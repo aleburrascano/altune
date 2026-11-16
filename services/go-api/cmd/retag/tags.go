@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -21,7 +21,7 @@ func yearText(year int) string {
 	return strconv.Itoa(year)
 }
 
-func tagTexts(tags ports.TrackTags) [][2]string {
+func tagTexts(tags acquisition.TrackTags) [][2]string {
 	return [][2]string{
 		{"title", tags.Title},
 		{"artist", tags.Artist},
@@ -33,7 +33,7 @@ func tagTexts(tags ports.TrackTags) [][2]string {
 	}
 }
 
-func diffTags(want, got ports.TrackTags) []tagDiff {
+func diffTags(want, got acquisition.TrackTags) []tagDiff {
 	wantTexts, gotTexts := tagTexts(want), tagTexts(got)
 	var diffs []tagDiff
 	for i := range wantTexts {
@@ -50,16 +50,16 @@ type probeOutput struct {
 	} `json:"format"`
 }
 
-func parseProbeTags(raw []byte) (ports.TrackTags, error) {
+func parseProbeTags(raw []byte) (acquisition.TrackTags, error) {
 	var out probeOutput
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return ports.TrackTags{}, fmt.Errorf("parse ffprobe output: %w", err)
+		return acquisition.TrackTags{}, fmt.Errorf("parse ffprobe output: %w", err)
 	}
 	tags := make(map[string]string, len(out.Format.Tags))
 	for key, value := range out.Format.Tags {
 		tags[strings.ToLower(key)] = value
 	}
-	return ports.TrackTags{
+	return acquisition.TrackTags{
 		Title:       tags["title"],
 		Artist:      tags["artist"],
 		Album:       tags["album"],

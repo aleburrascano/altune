@@ -1,10 +1,8 @@
 package commands
 
 import (
-	"altune/go-api/internal/acquisition/adapters/ytdlp"
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/service/search"
+	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/discovery"
 	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
 	"context"
@@ -23,17 +21,17 @@ type fakeJourneySearcher struct {
 	gotSaved bool
 }
 
-func (f *fakeJourneySearcher) Execute(_ context.Context, userId shared.UserId, _ *domain.SearchQuery, saveHistory bool) (*search.SearchOutput, error) {
+func (f *fakeJourneySearcher) Execute(_ context.Context, userId shared.UserId, _ *discovery.SearchQuery, saveHistory bool) (*discovery.SearchOutput, error) {
 	f.gotUser, f.gotSaved = userId, saveHistory
 	if f.err != nil {
 		return nil, f.err
 	}
-	return &search.SearchOutput{Results: make([]domain.SearchResult, f.results)}, nil
+	return &discovery.SearchOutput{Results: make([]discovery.SearchResult, f.results)}, nil
 }
 
 type nilOutputJourneySearcher struct{}
 
-func (nilOutputJourneySearcher) Execute(_ context.Context, _ shared.UserId, _ *domain.SearchQuery, _ bool) (*search.SearchOutput, error) {
+func (nilOutputJourneySearcher) Execute(_ context.Context, _ shared.UserId, _ *discovery.SearchQuery, _ bool) (*discovery.SearchOutput, error) {
 	return nil, nil
 }
 
@@ -45,16 +43,16 @@ type fakeJourneyDownloader struct {
 	gotOutDir string
 }
 
-func (f *fakeJourneyDownloader) Download(_ context.Context, url string, outDir string) (ports.FetchedAudio, error) {
+func (f *fakeJourneyDownloader) Download(_ context.Context, url string, outDir string) (acquisition.FetchedAudio, error) {
 	f.called, f.gotURL, f.gotOutDir = true, url, outDir
 	if f.err != nil {
-		return ports.FetchedAudio{}, f.err
+		return acquisition.FetchedAudio{}, f.err
 	}
 	path := filepath.Join(outDir, "canary.mp3")
 	if err := os.WriteFile(path, f.payload, 0o600); err != nil {
-		return ports.FetchedAudio{}, err
+		return acquisition.FetchedAudio{}, err
 	}
-	return ports.FetchedAudio{Path: path}, nil
+	return acquisition.FetchedAudio{Path: path}, nil
 }
 
 func TestRunJourneyCheck(t *testing.T) {
@@ -134,7 +132,7 @@ type deadlineRecordingSearcher struct {
 	hasDeadline bool
 }
 
-func (d *deadlineRecordingSearcher) Execute(ctx context.Context, userId shared.UserId, query *domain.SearchQuery, saveHistory bool) (*search.SearchOutput, error) {
+func (d *deadlineRecordingSearcher) Execute(ctx context.Context, userId shared.UserId, query *discovery.SearchQuery, saveHistory bool) (*discovery.SearchOutput, error) {
 	deadline, ok := ctx.Deadline()
 	d.hasDeadline, d.remaining = ok, time.Until(deadline)
 	return d.fakeJourneySearcher.Execute(ctx, userId, query, saveHistory)
@@ -180,8 +178,8 @@ func TestRunJourneyCheckDownloadsTheYouTubeCanaryIntoARemovedTempDir(t *testing.
 	} {
 		_ = runJourneyCheck(context.Background(), &fakeJourneySearcher{results: 1}, downloader, &bytes.Buffer{})
 
-		if downloader.gotURL != ytdlp.YouTubeCanary.URL {
-			t.Errorf("Download url = %q, want %q", downloader.gotURL, ytdlp.YouTubeCanary.URL)
+		if downloader.gotURL != acquisition.YouTubeCanary.URL {
+			t.Errorf("Download url = %q, want %q", downloader.gotURL, acquisition.YouTubeCanary.URL)
 		}
 		if _, err := os.Stat(downloader.gotOutDir); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("temp dir %q still present after run (download err=%v): stat err = %v", downloader.gotOutDir, downloader.err, err)
@@ -250,8 +248,8 @@ func TestRunJourneyCheckRedactsSecretsInASearchFailure(t *testing.T) {
 
 type missingFileDownloader struct{}
 
-func (missingFileDownloader) Download(_ context.Context, _ string, outDir string) (ports.FetchedAudio, error) {
-	return ports.FetchedAudio{Path: filepath.Join(outDir, "never-written.mp3")}, nil
+func (missingFileDownloader) Download(_ context.Context, _ string, outDir string) (acquisition.FetchedAudio, error) {
+	return acquisition.FetchedAudio{Path: filepath.Join(outDir, "never-written.mp3")}, nil
 }
 
 func TestRunJourneyCheckFailsWhenTheDownloadReportsAFileThatIsNotThere(t *testing.T) {

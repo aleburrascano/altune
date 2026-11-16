@@ -1,18 +1,17 @@
 package main
 
 import (
+	"altune/go-api/internal/discovery"
 	"context"
 	"path/filepath"
 	"slices"
 	"testing"
-
-	discoveryEval "altune/go-api/internal/discovery/service/eval"
 )
 
 func writeTestCorpus(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "corpus-library.json")
-	corpus := discoveryEval.NewLibraryCorpus("2026-07-25", []discoveryEval.LibraryEntity{
+	corpus := discovery.NewLibraryCorpus("2026-07-25", []discovery.LibraryEntity{
 		{Artist: "Kendrick Lamar", Title: "Alright"},
 		{Artist: "Adele", Title: "Hello"},
 		{Artist: "Kendrick Lamar", Title: "DNA."},

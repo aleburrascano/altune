@@ -1,6 +1,6 @@
 package catalogtest
 
-import "altune/go-api/internal/catalog/ports"
+import "altune/go-api/internal/catalog/internal/core/ports"
 
 type Metrics struct {
 	PresignFailures                int

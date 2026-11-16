@@ -3,10 +3,8 @@ package app
 import (
 	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/auth"
-	"altune/go-api/internal/discovery/service/search"
-	"altune/go-api/internal/discovery/service/vocabulary"
-	"altune/go-api/internal/observe/service/evalmeter"
-	"altune/go-api/internal/observe/service/eventtap"
+	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/observe"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/events"
@@ -23,9 +21,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	acqService "altune/go-api/internal/acquisition/service"
-	observeAlert "altune/go-api/internal/observe/service/alert"
 
 	sharedRedis "altune/go-api/internal/shared/redis"
 
@@ -45,15 +40,15 @@ type App struct {
 	server          *http.Server
 	wg              sync.WaitGroup
 	sem             chan struct{}
-	scheduler       *acqService.BackgroundAcquisitionScheduler
-	vocabRefresh    *vocabulary.VocabularyRefreshService
-	searchSvc       *search.Service
+	scheduler       *acquisition.BackgroundAcquisitionScheduler
+	vocabRefresh    *discovery.VocabularyRefreshService
+	searchSvc       *discovery.SearchService
 	eventBus        *events.InProcessBus
-	eventTap        *eventtap.Tap
-	alertMonitor    *observeAlert.Monitor
+	eventTap        *observe.EventTap
+	alertMonitor    *observe.AlertMonitor
 	logRing         *logging.RingBuffer
-	eventFeed       *eventtap.Feed
-	evalMeter       *evalmeter.Meter
+	eventFeed       *observe.EventFeed
+	evalMeter       *observe.EvalMeter
 	lifecycleDone   <-chan struct{}
 
 	election         electionController
@@ -123,7 +118,7 @@ func (a *App) setup(ctx context.Context) error {
 	}
 
 	a.eventBus = events.NewInProcessBus()
-	tap := eventtap.New(a.eventBus)
+	tap := observe.NewEventTap(a.eventBus)
 	a.eventTap = tap
 
 	clientTransport, err := providerTransport(a.cfg)

@@ -2,7 +2,6 @@ package app
 
 import (
 	"altune/go-api/internal/auth"
-	authdomain "altune/go-api/internal/auth/domain"
 	"altune/go-api/internal/shared/config"
 	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
@@ -23,22 +22,20 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
-
-	authservice "altune/go-api/internal/auth/service"
 )
 
 const operatorToken = "operator-token"
 
 func TestMountObserve_AuthRejectionsAndOutagesReachLiveMetrics(t *testing.T) {
 	operator := shared.NewUserId(uuid.New())
-	verifier := auth.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
+	verifier := auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
 		switch token {
 		case operatorToken:
-			return authdomain.VerifiedToken{UserID: operator, ExpiresAt: time.Now().Add(time.Hour)}, nil
+			return auth.VerifiedToken{UserID: operator, ExpiresAt: time.Now().Add(time.Hour)}, nil
 		case "jwks-down":
-			return authdomain.VerifiedToken{}, errors.New("fetch JWKS: connection refused")
+			return auth.VerifiedToken{}, errors.New("fetch JWKS: connection refused")
 		}
-		return authdomain.VerifiedToken{}, &authdomain.InvalidTokenError{Reason: authdomain.ReasonSignatureInvalid}
+		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
 	})
 	r := chi.NewRouter()
 	mountObserveLiveMetrics(r, verifier, operator, liveMetricsSnapshot)
@@ -64,7 +61,7 @@ func TestMountObserve_AuthRejectionsAndOutagesReachLiveMetrics(t *testing.T) {
 	if got.Auth.TokenRejections != before.TokenRejections+1 {
 		t.Errorf("auth.token_rejections_total %d, want %d", got.Auth.TokenRejections, before.TokenRejections+1)
 	}
-	reason := string(authdomain.ReasonSignatureInvalid)
+	reason := string(auth.ReasonSignatureInvalid)
 	if want := before.TokenRejectionsByReason[reason] + 1; got.Auth.TokenRejectionsByReason[reason] != want {
 		t.Errorf("auth.token_rejections_by_reason_total[%s] %d, want %d", reason, got.Auth.TokenRejectionsByReason[reason], want)
 	}
@@ -135,11 +132,11 @@ var (
 )
 
 func stubSupabaseVerifier() auth.TokenVerifier {
-	return auth.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
+	return auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
 		if token == realTokenStr {
-			return authdomain.VerifiedToken{UserID: realUser, ExpiresAt: time.Now().Add(time.Hour)}, nil
+			return auth.VerifiedToken{UserID: realUser, ExpiresAt: time.Now().Add(time.Hour)}, nil
 		}
-		return authdomain.VerifiedToken{}, &authdomain.InvalidTokenError{Reason: authdomain.ReasonSignatureInvalid, Detail: errNotSupabse.Error()}
+		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid, Detail: errNotSupabse.Error()}
 	})
 }
 
@@ -156,7 +153,7 @@ func buildRouter(t *testing.T, cfg testAuthConfig) chi.Router {
 	r.Group(func(gr chi.Router) {
 		gr.Use(authMiddleware(verifier))
 		gr.Get("/whoami", func(w http.ResponseWriter, req *http.Request) {
-			uid, _ := authservice.UserIDFromContext(req.Context())
+			uid, _ := auth.UserIDFromContext(req.Context())
 			_, _ = w.Write([]byte(uid.String()))
 		})
 	})

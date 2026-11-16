@@ -1,10 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/adapters/deezerpreview"
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/acquisition/service/audiojudge"
-	"altune/go-api/internal/acquisition/service/grade"
+	"altune/go-api/internal/acquisition"
 	"context"
 	"fmt"
 	"slices"
@@ -50,8 +47,8 @@ type boundIdentity struct {
 	Reason        string         `json:"reason,omitempty"`
 }
 
-func (i boundIdentity) previewTarget() deezerpreview.Target {
-	return deezerpreview.Target{ISRC: i.ISRC, DeezerTrackID: i.DeezerTrackID}
+func (i boundIdentity) previewTarget() acquisition.DeezerPreviewTarget {
+	return acquisition.DeezerPreviewTarget{ISRC: i.ISRC, DeezerTrackID: i.DeezerTrackID}
 }
 
 type candidate struct {
@@ -70,7 +67,7 @@ type assessment struct {
 	Preview    *previewEvidence
 }
 
-func confidentCandidates(results []ports.AcoustIDResult, minScore float64) []candidate {
+func confidentCandidates(results []acquisition.AcoustIDResult, minScore float64) []candidate {
 	var candidates []candidate
 	for _, result := range results {
 		if result.Score < minScore {
@@ -107,18 +104,18 @@ func sharesRecording(candidates []candidate, ids []string) bool {
 
 type judgement struct {
 	track   libraryTrack
-	results []ports.AcoustIDResult
-	cuts    audiojudge.Cuts
+	results []acquisition.AcoustIDResult
+	cuts    acquisition.JudgeCuts
 }
 
-func (j judgement) of(mergedMBIDs []string, preview *audiojudge.Preview) audiojudge.Verdict {
-	return audiojudge.Judge(audiojudge.Input{
-		Identity: audiojudge.Identity{
+func (j judgement) of(mergedMBIDs []string, preview *acquisition.JudgePreview) acquisition.JudgeVerdict {
+	return acquisition.Judge(acquisition.JudgeInput{
+		Identity: acquisition.JudgeIdentity{
 			ISRC: j.track.Identity.ISRC, MBID: j.track.Identity.MBRecordingID, MergedMBIDs: mergedMBIDs,
 			Title: j.track.Title, Artist: j.track.Artist,
 		},
-		Audio:  audiojudge.Audio{AcoustID: j.results, Preview: preview, RequireVersionFacts: true},
-		Source: audiojudge.Source{Kind: grade.UserUpload},
+		Audio:  acquisition.JudgeAudio{AcoustID: j.results, Preview: preview, RequireVersionFacts: true},
+		Source: acquisition.JudgeSource{Kind: acquisition.UserUpload},
 	}, j.cuts)
 }
 
@@ -140,7 +137,7 @@ func judgeBound(ctx context.Context, j judgement, candidates []candidate, lookup
 		return assessment{Verdict: verdictUnverifiable, Candidates: candidates}, nil
 	case len(candidates) == 0:
 		return assessment{Verdict: verdictUnknown}, nil
-	case j.of(nil, nil).Kind == audiojudge.Proven:
+	case j.of(nil, nil).Kind == acquisition.JudgeProven:
 		return assessment{Verdict: verdictConfirmed, Basis: basisRecordingID, Candidates: candidates}, nil
 	}
 	basis, err := confirmThroughMusicBrainz(ctx, j, lookups)
@@ -164,7 +161,7 @@ func confirmThroughMusicBrainz(ctx context.Context, j judgement, lookups recordi
 	if err != nil {
 		return "", fmt.Errorf("recordings for bound ISRC: %w", err)
 	}
-	if j.of(recordings, nil).Kind == audiojudge.Proven {
+	if j.of(recordings, nil).Kind == acquisition.JudgeProven {
 		return basisISRC, nil
 	}
 	return "", nil
@@ -178,7 +175,7 @@ func confirmByMergedID(ctx context.Context, j judgement, lookups recordingLookup
 	if err != nil {
 		return "", fmt.Errorf("resolve bound recording: %w", err)
 	}
-	if j.of([]string{canonical}, nil).Kind == audiojudge.Proven {
+	if j.of([]string{canonical}, nil).Kind == acquisition.JudgeProven {
 		return basisMergedID, nil
 	}
 	return "", nil
@@ -214,10 +211,10 @@ func withPreview(j judgement, judged assessment, evidence previewEvidence) asses
 	if evidence.Alignment == nil {
 		return judged
 	}
-	switch j.of(nil, &audiojudge.Preview{BitErrorRate: evidence.Alignment.BitErrorRate, OverlapSeconds: evidence.Alignment.OverlapSeconds}).Kind {
-	case audiojudge.Proven, audiojudge.Likely:
+	switch j.of(nil, &acquisition.JudgePreview{BitErrorRate: evidence.Alignment.BitErrorRate, OverlapSeconds: evidence.Alignment.OverlapSeconds}).Kind {
+	case acquisition.JudgeProven, acquisition.JudgeLikely:
 		judged.Verdict, judged.Basis = verdictConfirmedPreview, basisPreview
-	case audiojudge.Contradicted:
+	case acquisition.JudgeContradicted:
 		judged.Verdict = verdictWrongAudio
 	}
 	return judged

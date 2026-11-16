@@ -2,7 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/internal/adapters/discoverybridge"
-	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/service/grade"
 	"altune/go-api/internal/catalog/domain"
 	"context"

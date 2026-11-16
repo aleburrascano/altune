@@ -1,7 +1,7 @@
 package applemusic
 
 import (
-	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
+	"altune/go-api/internal/discovery/internal/adapters/providers/providerhttp"
 	"context"
 	"encoding/base64"
 	"encoding/json"

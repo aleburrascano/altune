@@ -10,7 +10,7 @@ import (
 )
 
 import (
-	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/catalog/internal/core/ports"
 	"time"
 )
 

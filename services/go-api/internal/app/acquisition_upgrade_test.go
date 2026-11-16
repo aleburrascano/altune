@@ -1,12 +1,11 @@
 package app
 
 import (
+	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"sync"
 	"testing"
-
-	acqService "altune/go-api/internal/acquisition/service"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -21,10 +20,10 @@ func lazyPool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-func idleScheduler(t *testing.T) *acqService.BackgroundAcquisitionScheduler {
+func idleScheduler(t *testing.T) *acquisition.BackgroundAcquisitionScheduler {
 	t.Helper()
 	var wg sync.WaitGroup
-	scheduler := acqService.NewBackgroundAcquisitionScheduler(nil, &wg, make(chan struct{}, 1))
+	scheduler := acquisition.NewBackgroundAcquisitionScheduler(nil, &wg, make(chan struct{}, 1))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 	return scheduler
 }
@@ -53,7 +52,7 @@ func TestStartAcquisitionUpgradeIfEnabled_StartsNothingUnlessEveryConditionHolds
 			if tc.pool {
 				a.pool = lazyPool(t)
 			}
-			var scheduler *acqService.BackgroundAcquisitionScheduler
+			var scheduler *acquisition.BackgroundAcquisitionScheduler
 			if tc.scheduler {
 				scheduler = idleScheduler(t)
 			}

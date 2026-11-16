@@ -1,6 +1,8 @@
 package persistence
 
 import (
+	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"
@@ -14,8 +16,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	acqdomain "altune/go-api/internal/acquisition/domain"
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/acquisition/service"
 )
 
 func newPool(t *testing.T) *pgxpool.Pool {

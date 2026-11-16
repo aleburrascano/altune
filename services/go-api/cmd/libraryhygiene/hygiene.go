@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/shared/songfacts"
 	"altune/go-api/internal/shared/textnorm"
 	"altune/go-api/internal/shared/versiontag"
@@ -63,7 +63,7 @@ func isSourceTag(group string) bool {
 		return false
 	}
 	words := strings.Fields(group)
-	residue := strings.Fields(domain.CleanQuery("x " + group))[1:]
+	residue := strings.Fields(discovery.CleanQuery("x " + group))[1:]
 	return len(words) <= maxSourceTagWords && len(residue) == 0
 }
 

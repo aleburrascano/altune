@@ -2,12 +2,10 @@ package main
 
 import (
 	"altune/go-api/internal/app"
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"context"
 	"fmt"
 	"os"
-
-	discoveryEval "altune/go-api/internal/discovery/service/eval"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
@@ -38,11 +36,11 @@ func runCorrectionSeed(ctx context.Context, pool *pgxpool.Pool, redisClient *gor
 	return nil
 }
 
-func seedEntries(entities []discoveryEval.LibraryEntity) []domain.VocabularyEntry {
+func seedEntries(entities []discovery.LibraryEntity) []discovery.VocabularyEntry {
 	seen := map[string]struct{}{}
-	entries := []domain.VocabularyEntry{}
+	entries := []discovery.VocabularyEntry{}
 
-	add := func(term string, kind domain.VocabularyKind) {
+	add := func(term string, kind discovery.VocabularyKind) {
 		if term == "" {
 			return
 		}
@@ -51,12 +49,12 @@ func seedEntries(entities []discoveryEval.LibraryEntity) []domain.VocabularyEntr
 			return
 		}
 		seen[key] = struct{}{}
-		entries = append(entries, domain.VocabularyEntry{Term: term, Kind: kind, Popularity: 1})
+		entries = append(entries, discovery.VocabularyEntry{Term: term, Kind: kind, Popularity: 1})
 	}
 
 	for _, e := range entities {
-		add(e.Artist, domain.VocabKindArtist)
-		add(e.Title, domain.VocabKindTrack)
+		add(e.Artist, discovery.VocabKindArtist)
+		add(e.Title, discovery.VocabKindTrack)
 	}
 	return entries
 }

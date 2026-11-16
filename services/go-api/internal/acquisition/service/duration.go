@@ -2,7 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/domain"
-	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/internal/core/ports"
 )
 
 func durationWithinTolerance(expected, actual float64) bool {

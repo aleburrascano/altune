@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/discovery"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -8,17 +9,15 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	discoveryEval "altune/go-api/internal/discovery/service/eval"
 )
 
 type metricsFile struct {
-	Mode        string                      `json:"mode"`
-	GeneratedAt string                      `json:"generated_at"`
-	Metrics     []discoveryEval.NamedMetric `json:"metrics"`
+	Mode        string                  `json:"mode"`
+	GeneratedAt string                  `json:"generated_at"`
+	Metrics     []discovery.NamedMetric `json:"metrics"`
 }
 
-func maybeWriteMetrics(path, mode string, metrics []discoveryEval.NamedMetric) error {
+func maybeWriteMetrics(path, mode string, metrics []discovery.NamedMetric) error {
 	if path == "" {
 		return nil
 	}
@@ -75,9 +74,9 @@ func runReport(opts options) error {
 		return err
 	}
 
-	gatesByMode := map[string][]discoveryEval.GateResult{}
+	gatesByMode := map[string][]discovery.GateResult{}
 	modes := make([]string, 0, len(files))
-	regressed := []discoveryEval.GateResult{}
+	regressed := []discovery.GateResult{}
 
 	for _, f := range files {
 		modes = append(modes, f.Mode)
@@ -102,7 +101,7 @@ func runReport(opts options) error {
 	return nil
 }
 
-func renderReport(modes []string, gatesByMode map[string][]discoveryEval.GateResult, regressed []discoveryEval.GateResult) string {
+func renderReport(modes []string, gatesByMode map[string][]discovery.GateResult, regressed []discovery.GateResult) string {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "# Discovery eval nightly — %s\n\n", time.Now().UTC().Format("2006-01-02"))
@@ -123,7 +122,7 @@ func renderReport(modes []string, gatesByMode map[string][]discoveryEval.GateRes
 	b.WriteString("| Mode | Metric | Current | Baseline | Margin | Delta | Status |\n")
 	b.WriteString("|---|---|---:|---:|---:|---:|---|\n")
 	for _, mode := range modes {
-		for _, g := range discoveryEval.SortedGates(gatesByMode[mode]) {
+		for _, g := range discovery.SortedGates(gatesByMode[mode]) {
 			if g.Missing {
 				fmt.Fprintf(&b, "| %s | `%s` | %.4f | — | — | — | new |\n", mode, g.Metric, g.Current)
 				continue
@@ -140,7 +139,7 @@ func renderReport(modes []string, gatesByMode map[string][]discoveryEval.GateRes
 	return b.String()
 }
 
-func regressionDigest(gates []discoveryEval.GateResult) string {
+func regressionDigest(gates []discovery.GateResult) string {
 	names := make([]string, 0, len(gates))
 	for _, g := range gates {
 		if g.Missing {

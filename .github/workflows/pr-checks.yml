@@ -106,7 +106,7 @@ jobs:
         env:
           INTEGRATION: "1"
         run: |
-          go test -count=1 -v -run 'TestPgxSearchHistoryRepo' ./internal/discovery/adapters/persistence/ | grep -E '^--- PASS: TestPgxSearchHistoryRepo'
+          go test -count=1 -v -run 'TestPgxSearchHistoryRepo' ./internal/discovery/internal/adapters/persistence/ | grep -E '^--- PASS: TestPgxSearchHistoryRepo'
 
   mobile-tests:
     needs: changes

@@ -1,8 +1,8 @@
 package main
 
 import (
-	"altune/go-api/internal/catalog/domain"
-	discovery "altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/catalog"
+	"altune/go-api/internal/discovery"
 	"context"
 
 	"golang.org/x/time/rate"
@@ -80,7 +80,7 @@ func appleTitles(results []discovery.SearchResult) []string {
 	return titles
 }
 
-func (a appleArtistSource) Songs(ctx context.Context, _ providerArtist, view catalogView, _ libraryTrack, keys domain.SearchKeys) ([]candidate, error) {
+func (a appleArtistSource) Songs(ctx context.Context, _ providerArtist, view catalogView, _ libraryTrack, keys catalog.SearchKeys) ([]candidate, error) {
 	results, err := a.search(ctx, keys.Artist+" "+keys.Title, discovery.ResultKindTrack)
 	if err != nil {
 		return nil, err

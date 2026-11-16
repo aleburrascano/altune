@@ -1,13 +1,13 @@
 package acquisitionbridge
 
 import (
-	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition"
 	"net/url"
 	"time"
 )
 
 type AcquisitionReader interface {
-	Status() ports.AcquisitionStatus
+	Status() acquisition.AcquisitionStatus
 }
 
 type AcquisitionVerificationDTO struct {
@@ -47,7 +47,7 @@ type AcquisitionStatusDTO struct {
 	Recent             []JobRecordDTO             `json:"recent"`
 }
 
-func newAcquisitionStatusDTO(s ports.AcquisitionStatus) AcquisitionStatusDTO {
+func newAcquisitionStatusDTO(s acquisition.AcquisitionStatus) AcquisitionStatusDTO {
 	return AcquisitionStatusDTO{
 		InFlight:           s.InFlight,
 		Succeeded:          s.Succeeded,
@@ -69,7 +69,7 @@ func newAcquisitionStatusDTO(s ports.AcquisitionStatus) AcquisitionStatusDTO {
 	}
 }
 
-func newJobRecordDTOs(jobs []ports.JobRecord) []JobRecordDTO {
+func newJobRecordDTOs(jobs []acquisition.JobRecord) []JobRecordDTO {
 	out := make([]JobRecordDTO, len(jobs))
 	for i, j := range jobs {
 		out[i] = JobRecordDTO{
@@ -100,9 +100,9 @@ func redactSourceURL(raw string) string {
 
 func ReadAcquisitionStatus(reader AcquisitionReader) AcquisitionStatusDTO {
 	if reader == nil {
-		return newAcquisitionStatusDTO(ports.AcquisitionStatus{
-			ActiveJobs: []ports.JobRecord{},
-			Recent:     []ports.JobRecord{},
+		return newAcquisitionStatusDTO(acquisition.AcquisitionStatus{
+			ActiveJobs: []acquisition.JobRecord{},
+			Recent:     []acquisition.JobRecord{},
 		})
 	}
 	return newAcquisitionStatusDTO(reader.Status())

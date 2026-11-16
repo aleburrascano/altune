@@ -2,12 +2,8 @@ package app
 
 import (
 	"altune/go-api/internal/auth"
-	authdomain "altune/go-api/internal/auth/domain"
-	authservice "altune/go-api/internal/auth/service"
-	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/playback"
-	playbackHandler "altune/go-api/internal/playback/adapters/handler"
-	"altune/go-api/internal/playback/domain"
 	"altune/go-api/internal/shared/config"
 	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
@@ -28,23 +24,23 @@ import (
 
 type storedQueue struct {
 	mu    sync.Mutex
-	state *domain.QueueState
+	state *playback.QueueState
 }
 
-func (s *storedQueue) Upsert(_ context.Context, state *domain.QueueState) error {
+func (s *storedQueue) Upsert(_ context.Context, state *playback.QueueState) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.state = state
 	return nil
 }
 
-func (s *storedQueue) GetForUser(context.Context, shared.UserId) (*domain.QueueState, error) {
+func (s *storedQueue) GetForUser(context.Context, shared.UserId) (*playback.QueueState, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.state, nil
 }
 
-func (s *storedQueue) UpdatePosition(context.Context, *domain.QueuePosition) error { return nil }
+func (s *storedQueue) UpdatePosition(context.Context, *playback.QueuePosition) error { return nil }
 
 func (s *storedQueue) DeleteForUser(context.Context, shared.UserId) error { return nil }
 
@@ -67,23 +63,23 @@ func TestPlaybackEnrichmentFailure_ReachesOperatorLiveMetrics(t *testing.T) {
 	}
 	operator := shared.NewUserId(uuid.New())
 	nowPlayingId := uuid.NewString()
-	state, err := domain.NewQueueState(domain.QueueStateInput{
-		UserId: operator, TrackIds: []string{uuid.NewString(), nowPlayingId}, CurrentIdx: 1, RepeatMode: domain.RepeatOff,
+	state, err := playback.NewQueueState(playback.QueueStateInput{
+		UserId: operator, TrackIds: []string{uuid.NewString(), nowPlayingId}, CurrentIdx: 1, RepeatMode: playback.RepeatOff,
 	})
 	if err != nil {
 		t.Fatalf("NewQueueState: %v", err)
 	}
 	metrics := playback.NewExpvarPlaybackMetrics()
-	queue := newQueueHandler(newQueueService(t.Context(), &storedQueue{state: state}, cat.trackRepo, metrics, true), metrics, playbackHandler.DefaultQueueStateRateLimit)
+	queue := newQueueHandler(newQueueService(t.Context(), &storedQueue{state: state}, cat.trackRepo, metrics, true), metrics, playback.DefaultQueueStateRateLimit)
 
-	verifier := auth.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
+	verifier := auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
 		if token == operatorToken {
-			return authdomain.VerifiedToken{UserID: operator, ExpiresAt: time.Now().Add(time.Hour)}, nil
+			return auth.VerifiedToken{UserID: operator, ExpiresAt: time.Now().Add(time.Hour)}, nil
 		}
-		return authdomain.VerifiedToken{}, errors.New("bad token")
+		return auth.VerifiedToken{}, errors.New("bad token")
 	})
 	r := a.mountRoutes(verifier, cat, queue,
-		discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{}))
+		discovery.NewDiscoveryHandler(discovery.DiscoveryServices{}))
 	mountObserveLiveMetrics(r, verifier, operator, liveMetricsSnapshot)
 
 	var logs bytes.Buffer
@@ -142,8 +138,8 @@ func TestPlaybackEnrichmentKillSwitch_ShedsCatalogLookupOnResume(t *testing.T) {
 		t.Fatalf("wireCatalog: %v", err)
 	}
 	user := shared.NewUserId(uuid.New())
-	state, err := domain.NewQueueState(domain.QueueStateInput{
-		UserId: user, TrackIds: []string{uuid.NewString(), uuid.NewString()}, CurrentIdx: 1, RepeatMode: domain.RepeatOff,
+	state, err := playback.NewQueueState(playback.QueueStateInput{
+		UserId: user, TrackIds: []string{uuid.NewString(), uuid.NewString()}, CurrentIdx: 1, RepeatMode: playback.RepeatOff,
 	})
 	if err != nil {
 		t.Fatalf("NewQueueState: %v", err)
@@ -151,16 +147,16 @@ func TestPlaybackEnrichmentKillSwitch_ShedsCatalogLookupOnResume(t *testing.T) {
 	metrics := playback.NewExpvarPlaybackMetrics()
 	queue := newQueueHandler(
 		newQueueService(t.Context(), &storedQueue{state: state}, cat.trackRepo, metrics, a.cfg.HasNowPlayingEnrichment()),
-		metrics, playbackHandler.DefaultQueueStateRateLimit)
+		metrics, playback.DefaultQueueStateRateLimit)
 
-	verifier := auth.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
+	verifier := auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
 		if token == operatorToken {
-			return authdomain.VerifiedToken{UserID: user, ExpiresAt: time.Now().Add(time.Hour)}, nil
+			return auth.VerifiedToken{UserID: user, ExpiresAt: time.Now().Add(time.Hour)}, nil
 		}
-		return authdomain.VerifiedToken{}, errors.New("bad token")
+		return auth.VerifiedToken{}, errors.New("bad token")
 	})
 	r := a.mountRoutes(verifier, cat, queue,
-		discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{}))
+		discovery.NewDiscoveryHandler(discovery.DiscoveryServices{}))
 
 	before := playback.ReadSnapshot()
 	start := time.Now()
@@ -219,7 +215,7 @@ func TestQueueRateLimit_EnvThrottlesQueueStateAtConfiguredBurst(t *testing.T) {
 	for range 3 {
 		req := httptest.NewRequest(http.MethodPut, "/queue-state",
 			strings.NewReader(`{"track_ids":[],"repeat_mode":"off","source_id":"library"}`))
-		req = req.WithContext(authservice.ContextWithUserID(req.Context(), user))
+		req = req.WithContext(auth.ContextWithUserID(req.Context(), user))
 		rec := httptest.NewRecorder()
 		routes.ServeHTTP(rec, req)
 		codes = append(codes, rec.Code)
@@ -236,7 +232,7 @@ func TestQueueRateLimit_DefaultsMatchCompileTimeLimit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load: %v", err)
 	}
-	if got := queueRateLimit(cfg); got != playbackHandler.DefaultQueueStateRateLimit {
-		t.Errorf("limit = %+v, want %+v", got, playbackHandler.DefaultQueueStateRateLimit)
+	if got := queueRateLimit(cfg); got != playback.DefaultQueueStateRateLimit {
+		t.Errorf("limit = %+v, want %+v", got, playback.DefaultQueueStateRateLimit)
 	}
 }

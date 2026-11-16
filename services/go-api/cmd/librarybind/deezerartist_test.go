@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -57,7 +57,7 @@ func TestDeezerArtistSource_FindsTheArtistThenTheSongInsideTheirDiscography(t *t
 	if err != nil || len(view.Albums) != 2 || view.Titles[0] != "Limelight" {
 		t.Fatalf("view = %+v, %v", view, err)
 	}
-	songs, err := source.Songs(t.Context(), artists[0], view, rushTomSawyer(), domain.CleanSearchKeys("Tom Sawyer", "Rush", ""))
+	songs, err := source.Songs(t.Context(), artists[0], view, rushTomSawyer(), catalog.CleanSearchKeys("Tom Sawyer", "Rush", ""))
 	if err != nil || len(songs) != 1 || songs[0].ID != "11" || songs[0].ISRC != "CAR198100001" {
 		t.Fatalf("songs = %+v, %v (only the artist's own fitting recording is expanded)", songs, err)
 	}
@@ -75,7 +75,7 @@ func TestDeezerArtistSource_SixPlausibleRecordingsAreTooManyToTellApart(t *testi
 		_, _ = w.Write([]byte(`{"data":[` + strings.Join(hits, ",") + `]}`))
 	}))
 	defer srv.Close()
-	_, err := fastDeezerArtists(srv).Songs(t.Context(), providerArtist{ID: "6", Name: "Rush"}, catalogView{}, rushTomSawyer(), domain.CleanSearchKeys("Tom Sawyer", "Rush", ""))
+	_, err := fastDeezerArtists(srv).Songs(t.Context(), providerArtist{ID: "6", Name: "Rush"}, catalogView{}, rushTomSawyer(), catalog.CleanSearchKeys("Tom Sawyer", "Rush", ""))
 	if !errors.Is(err, errTooManyMatches) {
 		t.Fatalf("err = %v", err)
 	}
@@ -88,7 +88,7 @@ func TestDeezerArtistSource_SearchesSongsWithAPlainQueryNotFieldSyntax(t *testin
 		_, _ = w.Write([]byte(`{"data":[]}`))
 	}))
 	defer srv.Close()
-	keys := domain.CleanSearchKeys("Slow Down", "LUCKI", "")
+	keys := catalog.CleanSearchKeys("Slow Down", "LUCKI", "")
 	if _, err := fastDeezerArtists(srv).Songs(t.Context(), providerArtist{ID: "1", Name: "LUCKI"}, catalogView{}, rushTomSawyer(), keys); err != nil {
 		t.Fatal(err)
 	}

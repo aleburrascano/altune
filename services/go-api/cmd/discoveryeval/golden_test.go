@@ -1,14 +1,12 @@
 package main
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"context"
 	"errors"
 	"slices"
 	"strings"
 	"testing"
-
-	goldeneval "altune/go-api/internal/discovery/service/goldeneval"
 )
 
 func TestCommittedGoldens_AreASixtyCaseMixOfEveryKindAndTheNamedTraps(t *testing.T) {
@@ -47,17 +45,17 @@ func TestCommittedGoldens_EveryKnownFailingMarkerNamesATicket(t *testing.T) {
 }
 
 type rankerFromGoldens struct {
-	byQuery map[string][]domain.SearchResult
+	byQuery map[string][]discovery.SearchResult
 	err     error
 }
 
-func (r rankerFromGoldens) Search(_ context.Context, query string) ([]domain.SearchResult, error) {
+func (r rankerFromGoldens) Search(_ context.Context, query string) ([]discovery.SearchResult, error) {
 	return r.byQuery[query], r.err
 }
 
-func hitFor(c goldeneval.Case) domain.SearchResult {
-	kind, _ := domain.ParseResultKind(c.Kind)
-	r := domain.SearchResult{Kind: kind, Title: c.Title, Subtitle: c.Artist}
+func hitFor(c discovery.GoldenCase) discovery.SearchResult {
+	kind, _ := discovery.ParseResultKind(c.Kind)
+	r := discovery.SearchResult{Kind: kind, Title: c.Title, Subtitle: c.Artist}
 	if len(c.ISRCs) > 0 {
 		r.ISRC = c.ISRCs[0]
 	}
@@ -65,18 +63,18 @@ func hitFor(c goldeneval.Case) domain.SearchResult {
 	return r
 }
 
-func setMBID(r *domain.SearchResult, id string) {
+func setMBID(r *discovery.SearchResult, id string) {
 	switch r.Kind {
-	case domain.ResultKindArtist:
+	case discovery.ResultKindArtist:
 		r.ArtistMBID = id
-	case domain.ResultKindAlbum:
+	case discovery.ResultKindAlbum:
 		r.ReleaseGroupMBID = id
 	default:
 		r.RecordingMBID = id
 	}
 }
 
-func decoyFor(c goldeneval.Case) domain.SearchResult {
+func decoyFor(c discovery.GoldenCase) discovery.SearchResult {
 	r := hitFor(c)
 	r.Title += " (Live)"
 	r.ISRC = "ZZZZZ0000000"
@@ -84,8 +82,8 @@ func decoyFor(c goldeneval.Case) domain.SearchResult {
 	return r
 }
 
-func rankerFor(cases []goldeneval.Case, rank func(goldeneval.Case) []domain.SearchResult) rankerFromGoldens {
-	byQuery := map[string][]domain.SearchResult{}
+func rankerFor(cases []discovery.GoldenCase, rank func(discovery.GoldenCase) []discovery.SearchResult) rankerFromGoldens {
+	byQuery := map[string][]discovery.SearchResult{}
 	for _, c := range cases {
 		byQuery[c.Query] = rank(c)
 	}
@@ -101,11 +99,11 @@ func TestRunGoldenWith_AGoodRankerPassesAgainstTheCommittedBaselines(t *testing.
 	if err != nil {
 		t.Fatalf("loadGoldens: %v", err)
 	}
-	good := rankerFor(cases, func(c goldeneval.Case) []domain.SearchResult {
+	good := rankerFor(cases, func(c discovery.GoldenCase) []discovery.SearchResult {
 		if c.KnownFailing != "" {
-			return []domain.SearchResult{decoyFor(c)}
+			return []discovery.SearchResult{decoyFor(c)}
 		}
-		return []domain.SearchResult{hitFor(c)}
+		return []discovery.SearchResult{hitFor(c)}
 	})
 
 	err = runGoldenWith(context.Background(), cases, good, func() {}, goldenRunOptions())
@@ -120,11 +118,11 @@ func TestRunGoldenWith_ADeliberatelyBrokenRankerFailsTheRun(t *testing.T) {
 		t.Fatalf("loadGoldens: %v", err)
 	}
 	brokenRankers := map[string]rankerFromGoldens{
-		"buries every right answer": rankerFor(cases, func(c goldeneval.Case) []domain.SearchResult {
-			return []domain.SearchResult{decoyFor(c), decoyFor(c), decoyFor(c), decoyFor(c), hitFor(c)}
+		"buries every right answer": rankerFor(cases, func(c discovery.GoldenCase) []discovery.SearchResult {
+			return []discovery.SearchResult{decoyFor(c), decoyFor(c), decoyFor(c), decoyFor(c), hitFor(c)}
 		}),
-		"returns nothing":       rankerFor(cases, func(goldeneval.Case) []domain.SearchResult { return nil }),
-		"errors on every query": {byQuery: map[string][]domain.SearchResult{}, err: errors.New("provider down")},
+		"returns nothing":       rankerFor(cases, func(discovery.GoldenCase) []discovery.SearchResult { return nil }),
+		"errors on every query": {byQuery: map[string][]discovery.SearchResult{}, err: errors.New("provider down")},
 	}
 
 	for name, broken := range brokenRankers {
@@ -143,10 +141,10 @@ func TestRunGoldenWith_AFixedKnownFailingCaseFailsUntilItsMarkerIsRemoved(t *tes
 	if err != nil {
 		t.Fatalf("loadGoldens: %v", err)
 	}
-	if !slices.ContainsFunc(cases, func(c goldeneval.Case) bool { return c.KnownFailing != "" }) {
+	if !slices.ContainsFunc(cases, func(c discovery.GoldenCase) bool { return c.KnownFailing != "" }) {
 		t.Fatal("the committed goldens carry no known-failing case, so the open bugs are invisible to the eval")
 	}
-	perfect := rankerFor(cases, func(c goldeneval.Case) []domain.SearchResult { return []domain.SearchResult{hitFor(c)} })
+	perfect := rankerFor(cases, func(c discovery.GoldenCase) []discovery.SearchResult { return []discovery.SearchResult{hitFor(c)} })
 
 	err = runGoldenWith(context.Background(), cases, perfect, func() {}, goldenRunOptions())
 

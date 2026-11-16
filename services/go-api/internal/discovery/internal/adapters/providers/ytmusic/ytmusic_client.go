@@ -1,7 +1,7 @@
 package ytmusic
 
 import (
-	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
+	"altune/go-api/internal/discovery/internal/adapters/providers/providerhttp"
 	"altune/go-api/internal/shared/ytminnertube"
 	"bytes"
 	"context"

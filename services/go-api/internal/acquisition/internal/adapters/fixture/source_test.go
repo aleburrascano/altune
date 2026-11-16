@@ -1,9 +1,9 @@
 package fixture
 
 import (
-	"altune/go-api/internal/acquisition/adapters/ytdlp"
-	"altune/go-api/internal/acquisition/adapters/ytmsearch"
-	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/internal/adapters/ytdlp"
+	"altune/go-api/internal/acquisition/internal/adapters/ytmsearch"
+	"altune/go-api/internal/acquisition/internal/core/ports"
 	"context"
 	"math"
 	"os"

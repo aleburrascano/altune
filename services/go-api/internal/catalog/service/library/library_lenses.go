@@ -2,7 +2,7 @@ package library
 
 import (
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/catalog/internal/core/ports"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 )

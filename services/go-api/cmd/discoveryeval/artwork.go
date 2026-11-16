@@ -1,14 +1,12 @@
 package main
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"fmt"
 	"sort"
 	"sync"
-
-	discoveryEval "altune/go-api/internal/discovery/service/eval"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
@@ -54,13 +52,13 @@ func runArtworkEval(
 	return nil
 }
 
-func resolveArtistArtworkPath(ctx context.Context, searcher discoveryEval.Searcher, artist string) string {
+func resolveArtistArtworkPath(ctx context.Context, searcher discovery.Searcher, artist string) string {
 	results, err := searcher.Search(ctx, artist)
 	if err != nil {
 		return "blank"
 	}
 	for i := range results {
-		if results[i].Kind != domain.ResultKindArtist {
+		if results[i].Kind != discovery.ResultKindArtist {
 			continue
 		}
 		if results[i].ImageURL == "" {

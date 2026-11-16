@@ -2,7 +2,7 @@ package persistence
 
 import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
-	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/internal/core/ports"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
@@ -21,9 +21,11 @@ type PgxJobQueue struct {
 	pool *pgxpool.Pool
 }
 
-var _ ports.JobQueue = (*PgxJobQueue)(nil)
-var _ ports.QueueDepthReader = (*PgxJobQueue)(nil)
-var _ ports.UpgradeJobQueue = (*PgxJobQueue)(nil)
+var (
+	_ ports.JobQueue         = (*PgxJobQueue)(nil)
+	_ ports.QueueDepthReader = (*PgxJobQueue)(nil)
+	_ ports.UpgradeJobQueue  = (*PgxJobQueue)(nil)
+)
 
 func NewPgxJobQueue(pool *pgxpool.Pool) *PgxJobQueue {
 	return &PgxJobQueue{pool: pool}

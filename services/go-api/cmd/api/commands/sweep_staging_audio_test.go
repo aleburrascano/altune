@@ -2,7 +2,6 @@ package commands
 
 import (
 	"altune/go-api/internal/catalog"
-	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"log/slog"
@@ -62,7 +61,7 @@ func runSweepFixture(t *testing.T, cfg *config.Config, refs *fakeRefLister, exec
 	if err != nil {
 		t.Fatalf("storage.FromConfig: %v", err)
 	}
-	lister, ok := store.(ports.AudioAgeLister)
+	lister, ok := store.(catalog.AudioAgeLister)
 	if !ok {
 		t.Fatal("store is not an AudioAgeLister")
 	}

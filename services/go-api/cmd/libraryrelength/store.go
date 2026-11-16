@@ -1,7 +1,7 @@
 package main
 
 import (
-	acqports "altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
@@ -16,7 +16,7 @@ import (
 const restoreTimeout = 30 * time.Second
 
 type jobEnqueuer interface {
-	Enqueue(ctx context.Context, trackID shared.TrackId, kind acqports.JobKind, delay time.Duration) error
+	Enqueue(ctx context.Context, trackID shared.TrackId, kind acquisition.JobKind, delay time.Duration) error
 }
 
 type store struct {
@@ -122,7 +122,7 @@ func updateTrack(ctx context.Context, tx pgx.Tx, c change) error {
 func (s store) enqueueReplace(ctx context.Context, runID uuid.UUID, c change) (verdict, error) {
 	trackID, err := uuid.Parse(c.TrackID)
 	if err == nil {
-		err = s.queue.Enqueue(ctx, shared.TrackIdFromUUID(trackID), acqports.JobKindUpgrade, 0)
+		err = s.queue.Enqueue(ctx, shared.TrackIdFromUUID(trackID), acquisition.JobKindUpgrade, 0)
 	}
 	if err == nil {
 		return verdictApplied, nil

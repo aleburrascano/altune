@@ -2,7 +2,7 @@ package ffmpegtag
 
 import (
 	"altune/go-api/internal/acquisition/internal/adapters/id3"
-	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/internal/core/ports"
 	"bytes"
 	"context"
 	"encoding/json"

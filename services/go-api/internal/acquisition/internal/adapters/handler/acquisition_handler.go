@@ -2,7 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/acquisition/internal/adapters/authbridge"
-	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/shared/httputil"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"

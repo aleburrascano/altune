@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition"
 	"context"
 	"errors"
 	"fmt"
@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const provider = string(ports.ProviderYouTube)
+const provider = string(acquisition.ProviderYouTube)
 
 type store struct {
 	pool   *pgxpool.Pool

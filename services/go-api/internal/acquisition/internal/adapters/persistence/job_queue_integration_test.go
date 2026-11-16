@@ -3,11 +3,10 @@ package persistence
 import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
-	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/domain"
-	catalogports "altune/go-api/internal/catalog/ports"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
@@ -970,7 +969,7 @@ func TestPgxJobQueue_EnqueueMakesAStaleCatalogWriteConflict(t *testing.T) {
 	}
 
 	err = repo.Update(ctx, loaded, loaded.Version)
-	if !errors.Is(err, catalogports.ErrTrackVersionConflict) {
+	if !errors.Is(err, catalog.ErrTrackVersionConflict) {
 		t.Fatalf("stale Update = %v, want ErrTrackVersionConflict", err)
 	}
 	if got := acquisitionStatus(t, pool, snap.ID); got != "pending" {
@@ -996,7 +995,7 @@ func TestPgxJobQueue_ClaimMakesAStaleCatalogWriteConflict(t *testing.T) {
 	}
 
 	err = repo.Update(ctx, loaded, loaded.Version)
-	if !errors.Is(err, catalogports.ErrTrackVersionConflict) {
+	if !errors.Is(err, catalog.ErrTrackVersionConflict) {
 		t.Fatalf("stale Update = %v, want ErrTrackVersionConflict", err)
 	}
 }
@@ -1022,7 +1021,7 @@ func TestPgxJobQueue_RetryBetweenAudioMissingLoadAndWriteLeavesTheTrackPendingAn
 		t.Fatalf("Enqueue = %v, want nil", err)
 	}
 
-	if err := repo.Update(ctx, loaded, loaded.Version); !errors.Is(err, catalogports.ErrTrackVersionConflict) {
+	if err := repo.Update(ctx, loaded, loaded.Version); !errors.Is(err, catalog.ErrTrackVersionConflict) {
 		t.Fatalf("stale audio-missing Update = %v, want ErrTrackVersionConflict", err)
 	}
 	if got := acquisitionStatus(t, pool, track.ID); got != "pending" {
@@ -1057,7 +1056,7 @@ func TestPgxJobQueue_ReplaceEnqueueMakesAStaleCatalogWriteConflict(t *testing.T)
 		t.Fatalf("Enqueue replace = %v, want nil", err)
 	}
 
-	if err := repo.Update(ctx, loaded, loaded.Version); !errors.Is(err, catalogports.ErrTrackVersionConflict) {
+	if err := repo.Update(ctx, loaded, loaded.Version); !errors.Is(err, catalog.ErrTrackVersionConflict) {
 		t.Fatalf("stale Update after a replace enqueue = %v, want ErrTrackVersionConflict", err)
 	}
 	if got := acquisitionStatus(t, pool, track.ID); got != "ready" {
@@ -1084,7 +1083,7 @@ func TestPgxJobQueue_SecondEnqueueMakesAWriterLoadedBetweenTheTwoConflict(t *tes
 		t.Fatalf("second Enqueue = %v", err)
 	}
 
-	if err := repo.Update(ctx, loaded, loaded.Version); !errors.Is(err, catalogports.ErrTrackVersionConflict) {
+	if err := repo.Update(ctx, loaded, loaded.Version); !errors.Is(err, catalog.ErrTrackVersionConflict) {
 		t.Fatalf("Update loaded between two enqueues = %v, want ErrTrackVersionConflict", err)
 	}
 }
@@ -1110,7 +1109,7 @@ func TestPgxJobQueue_ReclaimOfALapsedLeaseMakesAStaleCatalogWriteConflict(t *tes
 		t.Fatalf("reclaim = %v, want the lapsed job", err)
 	}
 
-	if err := repo.Update(ctx, loaded, loaded.Version); !errors.Is(err, catalogports.ErrTrackVersionConflict) {
+	if err := repo.Update(ctx, loaded, loaded.Version); !errors.Is(err, catalog.ErrTrackVersionConflict) {
 		t.Fatalf("Update loaded before the reclaim = %v, want ErrTrackVersionConflict", err)
 	}
 }
@@ -1135,7 +1134,7 @@ func TestPgxJobQueue_ClaimOfAReplaceJobMakesAStaleCatalogWriteConflict(t *testin
 		t.Fatalf("Claim = %v, want the replace job", err)
 	}
 
-	if err := repo.Update(ctx, loaded, loaded.Version); !errors.Is(err, catalogports.ErrTrackVersionConflict) {
+	if err := repo.Update(ctx, loaded, loaded.Version); !errors.Is(err, catalog.ErrTrackVersionConflict) {
 		t.Fatalf("Update loaded before the replace claim = %v, want ErrTrackVersionConflict", err)
 	}
 }
@@ -1158,7 +1157,7 @@ func TestPgxJobQueue_CatalogWriteThatRereadsAfterEnqueueAndClaimLands(t *testing
 	if _, err := queue.Claim(ctx, time.Minute); err != nil {
 		t.Fatalf("Claim = %v", err)
 	}
-	if err := repo.Update(ctx, stale, stale.Version); !errors.Is(err, catalogports.ErrTrackVersionConflict) {
+	if err := repo.Update(ctx, stale, stale.Version); !errors.Is(err, catalog.ErrTrackVersionConflict) {
 		t.Fatalf("stale Update = %v, want ErrTrackVersionConflict", err)
 	}
 
@@ -1207,7 +1206,7 @@ func TestPgxJobQueue_EnqueueRacingAStaleCatalogWriteAlwaysEndsPending(t *testing
 		if enqueueErr != nil {
 			t.Fatalf("round %d: Enqueue = %v, want nil", i, enqueueErr)
 		}
-		if updateErr != nil && !errors.Is(updateErr, catalogports.ErrTrackVersionConflict) {
+		if updateErr != nil && !errors.Is(updateErr, catalog.ErrTrackVersionConflict) {
 			t.Fatalf("round %d: Update = %v, want nil or ErrTrackVersionConflict", i, updateErr)
 		}
 		if got := acquisitionStatus(t, pool, track.ID); got != "pending" {
@@ -1246,7 +1245,7 @@ func TestPgxJobQueue_ClaimRacingAStaleCatalogWriteKeepsTheStartTime(t *testing.T
 		if claimErr != nil {
 			t.Fatalf("round %d: Claim = %v, want a job or ErrNoJobAvailable", i, claimErr)
 		}
-		if updateErr != nil && !errors.Is(updateErr, catalogports.ErrTrackVersionConflict) {
+		if updateErr != nil && !errors.Is(updateErr, catalog.ErrTrackVersionConflict) {
 			t.Fatalf("round %d: Update = %v, want nil or ErrTrackVersionConflict", i, updateErr)
 		}
 		reread, err := repo.GetByID(ctx, track.ID, track.UserId)

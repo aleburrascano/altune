@@ -153,7 +153,7 @@ Capabilities 1–4 are **built and committed** on branch `refactor/discovery-pip
 | 3. Artwork resolver | `4762c91` |
 | 4. Artist discography | `6751b84` |
 
-- `services/go-api/internal/discovery/adapters/providers/` holds the direct api-v2 client,
+- `services/go-api/internal/discovery/internal/adapters/providers/` holds the direct api-v2 client,
   `SoundCloudAPIAdapter`: `soundcloud.go` (the adapter), `soundcloud_auth.go` (self-healing
   `client_id` resolver), `soundcloud_search.go` (paginated track search, album/artist search, and the
   500px `ArtworkResolver`), `soundcloud_content.go` (`ArtistContentProvider`) and `soundcloud_types.go`.

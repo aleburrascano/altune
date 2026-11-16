@@ -1,7 +1,7 @@
 package catalogpin
 
 import (
-	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/internal/core/ports"
 	"bytes"
 	"context"
 	"errors"

@@ -1,26 +1,24 @@
 package main
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	discoveryEval "altune/go-api/internal/discovery/service/eval"
 )
 
 func TestMetrics_WriteLoadRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 
-	err := maybeWriteMetrics(filepath.Join(dir, "metrics-eval.json"), "eval", []discoveryEval.NamedMetric{
+	err := maybeWriteMetrics(filepath.Join(dir, "metrics-eval.json"), "eval", []discovery.NamedMetric{
 		{Name: "eval.top1_rate", Value: 0.98, HigherIsBetter: true},
 	})
 	if err != nil {
 		t.Fatalf("maybeWriteMetrics: %v", err)
 	}
-	err = maybeWriteMetrics(filepath.Join(dir, "metrics-merge.json"), "merge", []discoveryEval.NamedMetric{
+	err = maybeWriteMetrics(filepath.Join(dir, "metrics-merge.json"), "merge", []discovery.NamedMetric{
 		{Name: "merge.over_merge_rate", Value: 0.001, HigherIsBetter: false},
 	})
 	if err != nil {
@@ -52,11 +50,11 @@ func TestLoadMetricsFiles_EmptyDirErrors(t *testing.T) {
 }
 
 func TestRenderReport_FlagsRegressionAndDelta(t *testing.T) {
-	gates := []discoveryEval.GateResult{
+	gates := []discovery.GateResult{
 		{Metric: "eval.top1_rate", Current: 0.97, Baseline: 0.985, Margin: 0.002, Regressed: true},
 		{Metric: "eval.topk_rate", Current: 0.996, Baseline: 0.995, Margin: 0.002},
 	}
-	out := renderReport([]string{"eval"}, map[string][]discoveryEval.GateResult{"eval": gates}, gates[:1])
+	out := renderReport([]string{"eval"}, map[string][]discovery.GateResult{"eval": gates}, gates[:1])
 
 	if !strings.Contains(out, "**1 metric(s) regressed**") {
 		t.Errorf("missing regression headline:\n%s", out)
@@ -73,8 +71,8 @@ func TestRenderReport_FlagsRegressionAndDelta(t *testing.T) {
 }
 
 func TestRenderReport_CleanRunSaysSo(t *testing.T) {
-	gates := []discoveryEval.GateResult{{Metric: "detail.contamination", Current: 0, Baseline: 0}}
-	out := renderReport([]string{"detail"}, map[string][]discoveryEval.GateResult{"detail": gates}, nil)
+	gates := []discovery.GateResult{{Metric: "detail.contamination", Current: 0, Baseline: 0}}
+	out := renderReport([]string{"detail"}, map[string][]discovery.GateResult{"detail": gates}, nil)
 
 	if !strings.Contains(out, "**No regressions** across 1 mode(s).") {
 		t.Errorf("missing clean-run headline:\n%s", out)
@@ -82,8 +80,8 @@ func TestRenderReport_CleanRunSaysSo(t *testing.T) {
 }
 
 func TestRenderReport_MissingBaselineRendersAsNew(t *testing.T) {
-	gates := []discoveryEval.GateResult{{Metric: "eval.new_metric", Current: 0.5, Missing: true}}
-	out := renderReport([]string{"eval"}, map[string][]discoveryEval.GateResult{"eval": gates}, nil)
+	gates := []discovery.GateResult{{Metric: "eval.new_metric", Current: 0.5, Missing: true}}
+	out := renderReport([]string{"eval"}, map[string][]discovery.GateResult{"eval": gates}, nil)
 
 	if !strings.Contains(out, "| new |") {
 		t.Errorf("a metric with no baseline should render as new:\n%s", out)
@@ -91,7 +89,7 @@ func TestRenderReport_MissingBaselineRendersAsNew(t *testing.T) {
 }
 
 func TestRegressionDigest_NamesEachMetricWithItsDelta(t *testing.T) {
-	digest := regressionDigest([]discoveryEval.GateResult{
+	digest := regressionDigest([]discovery.GateResult{
 		{Metric: "eval.top1_rate", Current: 0.97, Baseline: 0.985},
 		{Metric: "merge.collapse_rate", Current: 0.04, Baseline: 0.053},
 	})
@@ -102,7 +100,7 @@ func TestRegressionDigest_NamesEachMetricWithItsDelta(t *testing.T) {
 }
 
 func TestSeedEntries_KindsTermsAndDedupes(t *testing.T) {
-	entries := seedEntries([]discoveryEval.LibraryEntity{
+	entries := seedEntries([]discovery.LibraryEntity{
 		{Artist: "Kendrick Lamar", Title: "Alright"},
 		{Artist: "Kendrick Lamar", Title: "DNA."},
 		{Artist: "", Title: "Orphan"},
@@ -114,9 +112,9 @@ func TestSeedEntries_KindsTermsAndDedupes(t *testing.T) {
 	artists, tracks := 0, 0
 	for _, e := range entries {
 		switch e.Kind {
-		case domain.VocabKindArtist:
+		case discovery.VocabKindArtist:
 			artists++
-		case domain.VocabKindTrack:
+		case discovery.VocabKindTrack:
 			tracks++
 		}
 		if e.Term == "" {
@@ -130,13 +128,13 @@ func TestSeedEntries_KindsTermsAndDedupes(t *testing.T) {
 
 func TestRunReport_AMetricWithNoBaselineFailsTheAggregate(t *testing.T) {
 	dir := t.TempDir()
-	if err := maybeWriteMetrics(filepath.Join(dir, "metrics-merge.json"), "merge", []discoveryEval.NamedMetric{
+	if err := maybeWriteMetrics(filepath.Join(dir, "metrics-merge.json"), "merge", []discovery.NamedMetric{
 		{Name: "merge.under_merge_rate", Value: 0.01},
 	}); err != nil {
 		t.Fatalf("maybeWriteMetrics: %v", err)
 	}
 	baselines := filepath.Join(dir, "baselines.json")
-	if err := writeBaselines(baselines, discoveryEval.Baselines{}); err != nil {
+	if err := writeBaselines(baselines, discovery.Baselines{}); err != nil {
 		t.Fatalf("writeBaselines: %v", err)
 	}
 

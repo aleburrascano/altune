@@ -33,4 +33,4 @@ else
   done
 fi
 MIN=65 bash ../../scripts/ci/test-backend-coverage.sh
-go test -count=1 -v -run 'TestPgxSearchHistoryRepo' ./internal/discovery/adapters/persistence/ | grep -E '^--- PASS: TestPgxSearchHistoryRepo'
+go test -count=1 -v -run 'TestPgxSearchHistoryRepo' ./internal/discovery/internal/adapters/persistence/ | grep -E '^--- PASS: TestPgxSearchHistoryRepo'

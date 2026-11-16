@@ -2,7 +2,7 @@ package service
 
 import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
-	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/service/judge"
 	"altune/go-api/internal/acquisition/service/judgeshadow"
 	"altune/go-api/internal/acquisition/service/upgrade"

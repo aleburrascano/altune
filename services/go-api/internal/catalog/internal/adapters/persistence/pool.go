@@ -1,7 +1,7 @@
 package persistence
 
 import (
-	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/catalog/internal/core/ports"
 	"altune/go-api/internal/shared/database"
 	"context"
 	"errors"

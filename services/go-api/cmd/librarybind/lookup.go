@@ -2,8 +2,6 @@ package main
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
-	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/songfacts"
 	"context"
 	"encoding/json"
@@ -196,7 +194,7 @@ func musicBrainzCandidate(rec musicBrainzRecording, wanted string) candidate {
 }
 
 type appleSongs interface {
-	SongsByISRC(ctx context.Context, isrc string) ([]domain.SearchResult, error)
+	SongsByISRC(ctx context.Context, isrc string) ([]discovery.SearchResult, error)
 }
 
 type appleLookup struct {
@@ -209,7 +207,7 @@ func newAppleLookup(songs appleSongs, requestsPerSecond float64) appleLookup {
 }
 
 func appleFailure(err error) error {
-	var statusErr providerhttp.StatusError
+	var statusErr discovery.StatusError
 	if errors.As(err, &statusErr) && (statusErr.Status == http.StatusForbidden || statusErr.Status == http.StatusTooManyRequests) {
 		return blocked("apple music HTTP %d", statusErr.Status)
 	}
@@ -217,7 +215,7 @@ func appleFailure(err error) error {
 }
 
 func isAppleNotFound(err error) bool {
-	var statusErr providerhttp.StatusError
+	var statusErr discovery.StatusError
 	return errors.As(err, &statusErr) && statusErr.Status == http.StatusNotFound
 }
 

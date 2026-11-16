@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/service/grade"
+	"altune/go-api/internal/acquisition"
 	"bytes"
 	"strings"
 	"testing"
@@ -11,10 +11,10 @@ import (
 
 func TestWriteTally_DryRunPrintsACountPerGradeAndKind(t *testing.T) {
 	counts := newTally()
-	counts.grades[grade.A] = 7
-	counts.grades[grade.F] = 2
-	counts.kinds[grade.ArtTrack] = 5
-	counts.kinds[grade.FanUpload] = 4
+	counts.grades[acquisition.GradeA] = 7
+	counts.grades[acquisition.GradeF] = 2
+	counts.kinds[acquisition.ArtTrack] = 5
+	counts.kinds[acquisition.FanUpload] = 4
 	counts.unresolved = 1
 	var out bytes.Buffer
 

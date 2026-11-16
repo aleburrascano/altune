@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"context"
 	"errors"
 	"strings"
@@ -16,11 +16,11 @@ func (f fakeLister) Artists(context.Context) ([]string, error) {
 	return []string{"b", "a", "c", "broken"}, nil
 }
 
-func (f fakeLister) ArtistSongs(_ context.Context, name string) ([]domain.UnreleasedSong, error) {
+func (f fakeLister) ArtistSongs(_ context.Context, name string) ([]discovery.UnreleasedSong, error) {
 	if name == "broken" {
 		return nil, errors.New("tracker sheet: http status 429")
 	}
-	return make([]domain.UnreleasedSong, f.songs[name]), nil
+	return make([]discovery.UnreleasedSong, f.songs[name]), nil
 }
 
 func TestRun_SummarisesTheHubAndListsArtistsByCountThenName(t *testing.T) {

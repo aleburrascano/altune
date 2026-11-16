@@ -1,8 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/catalog"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
@@ -24,20 +23,20 @@ func (f *fakeStore) Exists(_ context.Context, ref string) (bool, error) {
 
 func (f *fakeStore) Store(context.Context, string, string) error { return nil }
 func (f *fakeStore) Delete(context.Context, string) error        { return nil }
-func (f *fakeStore) Stream(context.Context, string) (ports.AudioStream, int64, error) {
+func (f *fakeStore) Stream(context.Context, string) (catalog.AudioStream, int64, error) {
 	return nil, 0, errors.New("not used")
 }
 
 type fakeRepo struct {
-	track   *domain.Track
-	updated *domain.Track
+	track   *catalog.Track
+	updated *catalog.Track
 }
 
-func (r *fakeRepo) GetByID(context.Context, domain.TrackId, shared.UserId) (*domain.Track, error) {
+func (r *fakeRepo) GetByID(context.Context, catalog.TrackId, shared.UserId) (*catalog.Track, error) {
 	return r.track, nil
 }
 
-func (r *fakeRepo) Update(_ context.Context, track *domain.Track, _ int) error {
+func (r *fakeRepo) Update(_ context.Context, track *catalog.Track, _ int) error {
 	r.updated = track
 	return nil
 }
@@ -49,7 +48,7 @@ func testCandidate(t *testing.T) candidate {
 		t.Fatalf("parse user id: %v", err)
 	}
 	return candidate{
-		trackID: domain.NewTrackId(),
+		trackID: catalog.NewTrackId(),
 		userID:  userID,
 		title:   "Night Drive",
 		artist:  "Ken Carson",
@@ -90,7 +89,7 @@ func TestCandidateRefs_AlsoTriesTheUnprefixedLibraryLayout(t *testing.T) {
 func TestReconcile_MarksReadyWhenTheObjectExists(t *testing.T) {
 	c := testCandidate(t)
 	ref := candidateRefs(c)[0]
-	track, err := domain.NewTrack(c.userID, c.title, c.artist, c.album)
+	track, err := catalog.NewTrack(c.userID, c.title, c.artist, c.album)
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
@@ -123,7 +122,7 @@ func TestReconcile_FindsANonMp3Container(t *testing.T) {
 
 func TestReconcile_LeavesTheTrackAloneWhenNothingIsInStorage(t *testing.T) {
 	c := testCandidate(t)
-	repo := &fakeRepo{track: &domain.Track{}}
+	repo := &fakeRepo{track: &catalog.Track{}}
 
 	got := reconcile(context.Background(), repo, &fakeStore{present: map[string]bool{}}, c, true)
 
@@ -141,7 +140,7 @@ func TestReconcile_LeavesTheTrackAloneWhenNothingIsInStorage(t *testing.T) {
 func TestReconcile_DryRunNeverWrites(t *testing.T) {
 	c := testCandidate(t)
 	ref := candidateRefs(c)[0]
-	repo := &fakeRepo{track: &domain.Track{}}
+	repo := &fakeRepo{track: &catalog.Track{}}
 
 	got := reconcile(context.Background(), repo, &fakeStore{present: map[string]bool{ref: true}}, c, false)
 
@@ -155,7 +154,7 @@ func TestReconcile_DryRunNeverWrites(t *testing.T) {
 
 func TestReconcile_SurfacesAStorageError(t *testing.T) {
 	c := testCandidate(t)
-	repo := &fakeRepo{track: &domain.Track{}}
+	repo := &fakeRepo{track: &catalog.Track{}}
 
 	got := reconcile(context.Background(), repo, &fakeStore{err: errors.New("bucket unreachable")}, c, true)
 
@@ -170,7 +169,7 @@ func TestReconcile_SurfacesAStorageError(t *testing.T) {
 func TestVerifyRefs_DryRunReportsWithoutWriting(t *testing.T) {
 	c := testCandidate(t)
 	c.storedRef = "Ken Carson/UNRELEASED/Night Drive.mp3"
-	repo := &fakeRepo{track: &domain.Track{}}
+	repo := &fakeRepo{track: &catalog.Track{}}
 
 	err := verifyRefs(context.Background(), repo, &fakeStore{present: map[string]bool{}}, []candidate{c}, false)
 	if err != nil {
@@ -184,7 +183,7 @@ func TestVerifyRefs_DryRunReportsWithoutWriting(t *testing.T) {
 func TestVerifyRefs_MarksADanglingRefFailedOnApply(t *testing.T) {
 	c := testCandidate(t)
 	c.storedRef = "Ken Carson/UNRELEASED/Night Drive.mp3"
-	track, err := domain.NewTrack(c.userID, c.title, c.artist, c.album)
+	track, err := catalog.NewTrack(c.userID, c.title, c.artist, c.album)
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
@@ -200,7 +199,7 @@ func TestVerifyRefs_MarksADanglingRefFailedOnApply(t *testing.T) {
 	if repo.updated == nil {
 		t.Fatal("track was not persisted")
 	}
-	if repo.updated.AcquisitionStatus != domain.AcquisitionFailed {
+	if repo.updated.AcquisitionStatus != catalog.AcquisitionFailed {
 		t.Errorf("status = %v, want failed", repo.updated.AcquisitionStatus)
 	}
 	if repo.updated.AudioRef != nil {
@@ -211,7 +210,7 @@ func TestVerifyRefs_MarksADanglingRefFailedOnApply(t *testing.T) {
 func TestVerifyRefs_LeavesAResolvableRefAlone(t *testing.T) {
 	c := testCandidate(t)
 	c.storedRef = "Ken Carson/UNRELEASED/Night Drive.mp3"
-	repo := &fakeRepo{track: &domain.Track{}}
+	repo := &fakeRepo{track: &catalog.Track{}}
 	store := &fakeStore{present: map[string]bool{c.storedRef: true}}
 
 	if err := verifyRefs(context.Background(), repo, store, []candidate{c}, true); err != nil {
@@ -246,7 +245,7 @@ func TestReconcile_LocatesAPreCapLegacyFile(t *testing.T) {
 	c.artist = strings.Repeat("a", 200)
 	preCapRef := "11111111-1111-1111-1111-111111111111/" + c.artist + "/UNRELEASED/Night Drive.mp3"
 
-	track, err := domain.NewTrack(c.userID, c.title, c.artist, c.album)
+	track, err := catalog.NewTrack(c.userID, c.title, c.artist, c.album)
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}

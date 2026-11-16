@@ -1,9 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/adapters/ytmsearch"
-	"altune/go-api/internal/acquisition/service"
-	"altune/go-api/internal/acquisition/service/grade"
+	"altune/go-api/internal/acquisition"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"encoding/json"
@@ -11,8 +9,6 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-
-	acqdomain "altune/go-api/internal/acquisition/domain"
 )
 
 const (
@@ -24,7 +20,7 @@ const (
 var errUnsupportedSource = errors.New("source is neither YouTube nor SoundCloud")
 
 type authorLookup interface {
-	Watch(ctx context.Context, videoID string) (ytmsearch.Watch, error)
+	Watch(ctx context.Context, videoID string) (acquisition.YtmWatch, error)
 	YouTubeAuthor(ctx context.Context, videoID string) (string, error)
 	SoundCloudAuthor(ctx context.Context, trackURL string) (string, error)
 }
@@ -40,10 +36,10 @@ type trackRow struct {
 }
 
 type patch struct {
-	SourceKind         grade.SourceKind `json:"source_kind"`
-	PipelineGeneration int              `json:"pipeline_generation"`
-	Grade              grade.Grade      `json:"grade"`
-	BackfillRun        string           `json:"backfill_run"`
+	SourceKind         acquisition.SourceKind `json:"source_kind"`
+	PipelineGeneration int                    `json:"pipeline_generation"`
+	Grade              acquisition.Grade      `json:"grade"`
+	BackfillRun        string                 `json:"backfill_run"`
 }
 
 func (p patch) json() ([]byte, error) { return json.Marshal(p) }
@@ -56,14 +52,14 @@ func planTrack(ctx context.Context, lookup authorLookup, row trackRow, runID str
 	return patch{
 		SourceKind:         kind,
 		PipelineGeneration: backfillGeneration,
-		Grade:              grade.Of(service.FingerprintOf(service.VerdictKind(row.Verdict)), shared.AcquisitionProvenance(row.Provenance), kind),
+		Grade:              acquisition.GradeOf(acquisition.FingerprintOf(acquisition.VerdictKind(row.Verdict)), shared.AcquisitionProvenance(row.Provenance), kind),
 		BackfillRun:        runID,
 	}, nil
 }
 
-func classifySource(ctx context.Context, lookup authorLookup, artist, sourceURL string) (grade.SourceKind, error) {
+func classifySource(ctx context.Context, lookup authorLookup, artist, sourceURL string) (acquisition.SourceKind, error) {
 	if sourceURL == "" {
-		return grade.UserUpload, nil
+		return acquisition.UserUpload, nil
 	}
 	if videoID, isYouTube := youtubeVideoID(sourceURL); isYouTube {
 		return classifyYouTube(ctx, lookup, artist, videoID)
@@ -75,29 +71,29 @@ func classifySource(ctx context.Context, lookup authorLookup, artist, sourceURL 
 	return "", errUnsupportedSource
 }
 
-func classifyYouTube(ctx context.Context, lookup authorLookup, artist, videoID string) (grade.SourceKind, error) {
+func classifyYouTube(ctx context.Context, lookup authorLookup, artist, videoID string) (acquisition.SourceKind, error) {
 	watch, err := lookup.Watch(ctx, videoID)
 	switch {
-	case err == nil && watch.Type == ytmsearch.VideoTypeATV:
-		return grade.ArtTrack, nil
-	case err == nil && watch.Type == ytmsearch.VideoTypeOMV:
-		return grade.OfficialVideo, nil
-	case err != nil && !errors.Is(err, ytmsearch.ErrNoWatchTrack):
+	case err == nil && watch.Type == acquisition.VideoTypeATV:
+		return acquisition.ArtTrack, nil
+	case err == nil && watch.Type == acquisition.VideoTypeOMV:
+		return acquisition.OfficialVideo, nil
+	case err != nil && !errors.Is(err, acquisition.ErrNoWatchTrack):
 		return "", fmt.Errorf("youtube watch: %w", err)
 	}
 	author, err := lookup.YouTubeAuthor(ctx, videoID)
 	return uploaderKind(artist, author, err)
 }
 
-func uploaderKind(artist, author string, lookupErr error) (grade.SourceKind, error) {
+func uploaderKind(artist, author string, lookupErr error) (acquisition.SourceKind, error) {
 	if lookupErr != nil {
 		return "", lookupErr
 	}
-	return service.UploaderSourceKind(artist, author), nil
+	return acquisition.UploaderSourceKind(artist, author), nil
 }
 
 func youtubeVideoID(sourceURL string) (string, bool) {
-	return strings.CutPrefix(acqdomain.SourceKey(sourceURL), youtubeKeyPrefix)
+	return strings.CutPrefix(acquisition.SourceKey(sourceURL), youtubeKeyPrefix)
 }
 
 func isSoundCloud(sourceURL string) bool {

@@ -1,16 +1,9 @@
 package app
 
 import (
-	authservice "altune/go-api/internal/auth/service"
+	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery"
-	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 	"altune/go-api/internal/discovery/discoverytest"
-	discoveryDomain "altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/service/content"
-	discoveryEnrich "altune/go-api/internal/discovery/service/enrich"
-	"altune/go-api/internal/discovery/service/rank"
-	"altune/go-api/internal/discovery/service/search"
-	"altune/go-api/internal/discovery/service/unreleased"
 	"altune/go-api/internal/shared/config"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/runloop"
@@ -78,7 +71,7 @@ func TestRequestPathProviderCallsAreCountedOnce(t *testing.T) {
 			disc := a.wireDiscovery(context.Background(), newClientFactory(countedProviderTransport(rt)))
 			before := discovery.ReadProviderMetricsSnapshot()
 			req := httptest.NewRequest(http.MethodGet, route.target, nil)
-			req = req.WithContext(authservice.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
+			req = req.WithContext(auth.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
 			disc.handler.Routes().ServeHTTP(httptest.NewRecorder(), req)
 			counted := totalProviderCounts(discovery.ReadProviderMetricsSnapshot()) - totalProviderCounts(before)
 
@@ -93,47 +86,47 @@ func TestRequestPathProviderCallsAreCountedOnce(t *testing.T) {
 }
 
 type enrichRealChainFakeEnricher struct {
-	enrichment discoveryDomain.MBEnrichment
+	enrichment discovery.MBEnrichment
 }
 
-func (f *enrichRealChainFakeEnricher) ResolveMBID(_ context.Context, _ discoveryDomain.ResultKind, _, _ string) (string, error) {
+func (f *enrichRealChainFakeEnricher) ResolveMBID(_ context.Context, _ discovery.ResultKind, _, _ string) (string, error) {
 	return "", nil
 }
 
-func (f *enrichRealChainFakeEnricher) Lookup(_ context.Context, _ discoveryDomain.ResultKind, _ string) (discoveryDomain.MBEnrichment, error) {
+func (f *enrichRealChainFakeEnricher) Lookup(_ context.Context, _ discovery.ResultKind, _ string) (discovery.MBEnrichment, error) {
 	return f.enrichment, nil
 }
 
 type enrichRealChainMemCache struct {
-	pos map[string]discoveryDomain.MBEnrichment
+	pos map[string]discovery.MBEnrichment
 	neg map[string]bool
 }
 
 func newEnrichRealChainMemCache() *enrichRealChainMemCache {
-	return &enrichRealChainMemCache{pos: map[string]discoveryDomain.MBEnrichment{}, neg: map[string]bool{}}
+	return &enrichRealChainMemCache{pos: map[string]discovery.MBEnrichment{}, neg: map[string]bool{}}
 }
 
-func (c *enrichRealChainMemCache) Get(_ context.Context, kind discoveryDomain.ResultKind, mbid string) (discoveryDomain.MBEnrichment, bool, error) {
+func (c *enrichRealChainMemCache) Get(_ context.Context, kind discovery.ResultKind, mbid string) (discovery.MBEnrichment, bool, error) {
 	e, ok := c.pos[kind.String()+"|"+mbid]
 	return e, ok, nil
 }
 
-func (c *enrichRealChainMemCache) Set(_ context.Context, kind discoveryDomain.ResultKind, mbid string, e discoveryDomain.MBEnrichment) error {
+func (c *enrichRealChainMemCache) Set(_ context.Context, kind discovery.ResultKind, mbid string, e discovery.MBEnrichment) error {
 	c.pos[kind.String()+"|"+mbid] = e
 	return nil
 }
 
-func (c *enrichRealChainMemCache) GetNegative(_ context.Context, kind discoveryDomain.ResultKind, nameKey string) (bool, error) {
+func (c *enrichRealChainMemCache) GetNegative(_ context.Context, kind discovery.ResultKind, nameKey string) (bool, error) {
 	return c.neg[kind.String()+"|"+nameKey], nil
 }
 
-func (c *enrichRealChainMemCache) SetNegative(_ context.Context, kind discoveryDomain.ResultKind, nameKey string) error {
+func (c *enrichRealChainMemCache) SetNegative(_ context.Context, kind discovery.ResultKind, nameKey string) error {
 	c.neg[kind.String()+"|"+nameKey] = true
 	return nil
 }
 
-func enrichRealChainSampleEnrichment() discoveryDomain.MBEnrichment {
-	e := discoveryDomain.EmptyEnrichment()
+func enrichRealChainSampleEnrichment() discovery.MBEnrichment {
+	e := discovery.EmptyEnrichment()
 	e.MBID = "mbid-1"
 	e.Genres = []string{"hip hop"}
 	e.Year = 2017
@@ -168,9 +161,9 @@ func TestEnrichmentService_CallerSuppliedMBID_RealChainReachesCoverArtArchive(t 
 	chain := discovery.NewChainedArtworkResolver(caa, discovery.NewCoverArtArchiveIdentityResolver(caa))
 
 	enr := &enrichRealChainFakeEnricher{enrichment: enrichRealChainSampleEnrichment()}
-	svc := discoveryEnrich.NewEnrichmentService(enr, chain, newEnrichRealChainMemCache())
+	svc := discovery.NewEnrichmentService(enr, chain, newEnrichRealChainMemCache())
 
-	got, err := svc.Execute(context.Background(), discoveryDomain.ResultKindAlbum,
+	got, err := svc.Execute(context.Background(), discovery.ResultKindAlbum,
 		"Some Other Album", "Other Artist", "mbid-1")
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -196,13 +189,13 @@ func TestEnrichmentService_CallerSuppliedMBID_RealChainForwardsBridgedExternalID
 	discogsAdapter := discovery.NewDiscogsAdapter(rewrittenClient(discogsServer.URL), "test-token", "altune-test/1.0")
 	chain := discovery.NewChainedArtworkResolver(discogsAdapter)
 
-	e := discoveryDomain.EmptyEnrichment()
+	e := discovery.EmptyEnrichment()
 	e.MBID = "mbid-artist-1"
-	e.ExternalIDs = map[discoveryDomain.ProviderKey]string{"discogs": "38"}
+	e.ExternalIDs = map[discovery.ProviderKey]string{"discogs": "38"}
 	enr := &enrichRealChainFakeEnricher{enrichment: e}
-	svc := discoveryEnrich.NewEnrichmentService(enr, chain, newEnrichRealChainMemCache())
+	svc := discovery.NewEnrichmentService(enr, chain, newEnrichRealChainMemCache())
 
-	got, err := svc.Execute(context.Background(), discoveryDomain.ResultKindArtist,
+	got, err := svc.Execute(context.Background(), discovery.ResultKindArtist,
 		"Some Other Artist Name", "", "mbid-artist-1")
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -227,8 +220,8 @@ func TestBehavioralRankingRefresh_LogsOnFailure(t *testing.T) {
 	defer slog.SetDefault(restore)
 
 	boom := errors.New("boom")
-	consumer := rank.NewSatisfactionConsumer(failingBehavioralStore{err: boom})
-	searchSvc := search.NewService(nil, nil, search.WithBehavioralRanking(consumer))
+	consumer := discovery.NewSatisfactionConsumer(failingBehavioralStore{err: boom})
+	searchSvc := discovery.NewSearchService(nil, nil, discovery.WithBehavioralRanking(consumer))
 
 	a := &App{cfg: &config.Config{BehavioralRankingEnabled: true}}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -261,14 +254,14 @@ func unreleasedWiringApp(cfg *config.Config) (*App, clientFactory) {
 
 func TestBuildUnreleasedService_BuiltFromTheSheetsKeyAloneWithoutAGeniusToken(t *testing.T) {
 	a, cf := unreleasedWiringApp(&config.Config{GoogleSheetsAPIKey: "k", TrackerHubSheetID: "hub"})
-	if svc := a.buildUnreleasedService(context.Background(), cf, &content.GetArtistContentService{}); svc == nil {
+	if svc := a.buildUnreleasedService(context.Background(), cf, &discovery.GetArtistContentService{}); svc == nil {
 		t.Fatal("service not built with only the Sheets key set")
 	}
 }
 
 func TestBuildUnreleasedService_NotBuiltWithNeitherSource(t *testing.T) {
 	a, cf := unreleasedWiringApp(&config.Config{})
-	if svc := a.buildUnreleasedService(context.Background(), cf, &content.GetArtistContentService{}); svc != nil {
+	if svc := a.buildUnreleasedService(context.Background(), cf, &discovery.GetArtistContentService{}); svc != nil {
 		t.Error("service built with no Genius token and no Sheets key")
 	}
 }
@@ -289,7 +282,7 @@ func TestGeniusSongCatalog_PresentWithAToken(t *testing.T) {
 
 func TestUnreleasedStore_StoreSourceWithAPoolIsThePgxStore(t *testing.T) {
 	a := &App{cfg: &config.Config{UnreleasedSource: "store"}, pool: lazyPool(t)}
-	if _, ok := a.unreleasedStore(context.Background()).(*discoveryPersistence.PgxUnreleasedStore); !ok {
+	if _, ok := a.unreleasedStore(context.Background()).(*discovery.PgxUnreleasedStore); !ok {
 		t.Error("store source with a pool did not yield the pgx store")
 	}
 }
@@ -308,7 +301,7 @@ func TestUnreleasedStore_StoreSourceWithoutAPoolFallsBackToCacheAndWarnsOnce(t *
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	a, cf := unreleasedWiringApp(&config.Config{GoogleSheetsAPIKey: "k", TrackerHubSheetID: "hub", UnreleasedSource: "store"})
 
-	if svc := a.buildUnreleasedService(context.Background(), cf, &content.GetArtistContentService{}); svc == nil {
+	if svc := a.buildUnreleasedService(context.Background(), cf, &discovery.GetArtistContentService{}); svc == nil {
 		t.Fatal("service not built")
 	}
 	if got := strings.Count(buf.String(), "unreleased.store_unavailable_using_cache"); got != 1 {
@@ -319,7 +312,7 @@ func TestUnreleasedStore_StoreSourceWithoutAPoolFallsBackToCacheAndWarnsOnce(t *
 func TestUnreleasedRefresh_StoreSourceRegistersTheLeaderOnlyJob(t *testing.T) {
 	a := &App{cfg: &config.Config{GoogleSheetsAPIKey: "k", TrackerHubSheetID: "hub", UnreleasedSource: "store"}, pool: lazyPool(t)}
 	cf := newClientFactory(noCallTransport{})
-	if svc := a.buildUnreleasedService(context.Background(), cf, &content.GetArtistContentService{}); svc == nil {
+	if svc := a.buildUnreleasedService(context.Background(), cf, &discovery.GetArtistContentService{}); svc == nil {
 		t.Fatal("service not built")
 	}
 	if got := startedJobNames(a); !slices.Equal(got, []jobName{jobUnreleasedRefresh}) {
@@ -330,7 +323,7 @@ func TestUnreleasedRefresh_StoreSourceRegistersTheLeaderOnlyJob(t *testing.T) {
 func TestUnreleasedRefresh_CacheSourceDoesNotStartTheJob(t *testing.T) {
 	a := &App{cfg: &config.Config{GoogleSheetsAPIKey: "k", TrackerHubSheetID: "hub", UnreleasedSource: "cache"}, pool: lazyPool(t)}
 	cf := newClientFactory(noCallTransport{})
-	if svc := a.buildUnreleasedService(context.Background(), cf, &content.GetArtistContentService{}); svc == nil {
+	if svc := a.buildUnreleasedService(context.Background(), cf, &discovery.GetArtistContentService{}); svc == nil {
 		t.Fatal("service not built")
 	}
 	if got := startedJobNames(a); len(got) != 0 {
@@ -360,7 +353,7 @@ func (l *limitRecordingStore) Due(_ context.Context, _ time.Time, limit int) ([]
 
 func TestUnreleasedRefresh_EachRunAsksTheStoreForAtMostTwoArtists(t *testing.T) {
 	store := &limitRecordingStore{}
-	svc := unreleased.NewService(nil, nil, nil, unreleased.Config{}, unreleased.WithStore(store))
+	svc := discovery.NewUnreleasedService(nil, nil, nil, discovery.UnreleasedConfig{}, discovery.WithUnreleasedStore(store))
 	if err := unreleasedRefreshRun(svc)(context.Background()); err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -375,7 +368,7 @@ func TestUnreleasedRefresh_RegistrationLogsAThirtyMinuteInterval(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	a := &App{cfg: &config.Config{}}
-	a.startUnreleasedRefresh(&unreleased.Service{}, &limitRecordingStore{})
+	a.startUnreleasedRefresh(&discovery.UnreleasedService{}, &limitRecordingStore{})
 	if !strings.Contains(buf.String(), "interval=30m0s") {
 		t.Errorf("registration log lacks interval=30m0s: %s", buf.String())
 	}

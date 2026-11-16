@@ -1,7 +1,8 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/catalog"
 	"context"
 	"errors"
 	"fmt"
@@ -10,8 +11,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-
-	catalogPorts "altune/go-api/internal/catalog/ports"
 )
 
 var (
@@ -35,7 +34,7 @@ type trackRow struct {
 	ID     string
 	UserID string
 	Ref    string
-	Tags   ports.TrackTags
+	Tags   acquisition.TrackTags
 }
 
 type outcome struct {
@@ -47,8 +46,8 @@ type outcome struct {
 }
 
 type retagger struct {
-	store       catalogPorts.AudioStore
-	tagger      ports.AudioTagger
+	store       catalog.AudioStore
+	tagger      acquisition.AudioTagger
 	media       mediaTools
 	attemptID   func() string
 	stillServes func(ctx context.Context, track trackRow) (bool, error)
@@ -156,7 +155,7 @@ func (r retagger) promote(ctx context.Context, track trackRow, dir, staged, dige
 	return outcome{Track: track, Verdict: verdictRetagged}
 }
 
-func (r retagger) verifyFile(ctx context.Context, file string, want ports.TrackTags, wantDigest string) error {
+func (r retagger) verifyFile(ctx context.Context, file string, want acquisition.TrackTags, wantDigest string) error {
 	digest, err := r.media.AudioDigest(ctx, file)
 	if err != nil {
 		return err

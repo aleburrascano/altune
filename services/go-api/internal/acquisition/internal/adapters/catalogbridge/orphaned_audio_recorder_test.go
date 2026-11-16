@@ -1,8 +1,8 @@
 package catalogbridge
 
 import (
-	"altune/go-api/internal/acquisition/ports"
-	catalogports "altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/catalog"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
@@ -12,11 +12,11 @@ import (
 )
 
 type stubQueue struct {
-	got catalogports.OrphanedAudio
+	got catalog.OrphanedAudio
 	err error
 }
 
-func (q *stubQueue) RecordOrphanedAudio(_ context.Context, o catalogports.OrphanedAudio) error {
+func (q *stubQueue) RecordOrphanedAudio(_ context.Context, o catalog.OrphanedAudio) error {
 	q.got = o
 	return q.err
 }
@@ -29,7 +29,7 @@ func TestOrphanedAudioRecorderPassesFieldsThrough(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := catalogports.OrphanedAudio{AudioRef: orphan.AudioRef, UserId: orphan.UserId, TrackId: orphan.TrackId}
+	want := catalog.OrphanedAudio{AudioRef: orphan.AudioRef, UserId: orphan.UserId, TrackId: orphan.TrackId}
 	if q.got != want {
 		t.Errorf("got %+v, want %+v", q.got, want)
 	}

@@ -2,9 +2,6 @@ package app
 
 import (
 	"altune/go-api/internal/discovery"
-	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
-	discoveryDomain "altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/service/search"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"fmt"
@@ -32,12 +29,12 @@ func TestSearchServiceOptionSets(t *testing.T) {
 	pool := &pgxpool.Pool{}
 	redisClient := goredis.NewClient(&goredis.Options{Addr: "127.0.0.1:1"})
 	t.Cleanup(func() { _ = redisClient.Close() })
-	eventStore := discoveryPersistence.NewPgxEventStore(pool)
+	eventStore := discovery.NewPgxEventStore(pool)
 	w := newSearchWiring(t.Context(), cfg, nil)
 
 	tests := []struct {
 		name string
-		opts []search.Option
+		opts []discovery.SearchOption
 		want []string
 	}{
 		{
@@ -86,7 +83,7 @@ func TestSearchServiceOptionSets(t *testing.T) {
 	}
 }
 
-func optionNames(opts []search.Option) []string {
+func optionNames(opts []discovery.SearchOption) []string {
 	names := make([]string, 0, len(opts))
 	for _, opt := range opts {
 		full := runtime.FuncForPC(reflect.ValueOf(opt).Pointer()).Name()
@@ -246,7 +243,7 @@ func TestLastFMIsAnArtistContentProviderAndInTheByNameConsensus(t *testing.T) {
 	cfg := allScrapedProvidersEnabled()
 	cfg.LastFMAPIKey = "key"
 
-	if _, ok := buildArtistContentProviders(newClientFactory(nil), &cfg)[discoveryDomain.ProviderLastFM]; !ok {
+	if _, ok := buildArtistContentProviders(newClientFactory(nil), &cfg)[discovery.ProviderLastFM]; !ok {
 		t.Error("Last.fm is not an artist content provider; artist top tracks lose the by-MBID Last.fm leg")
 	}
 	if !hasConsensusProvider(&cfg, "lastfm") {
@@ -258,15 +255,15 @@ func TestScrapedProviderKillSwitch(t *testing.T) {
 	tests := []struct {
 		name          string
 		disable       func(*config.Config)
-		provider      discoveryDomain.ProviderName
+		provider      discovery.ProviderName
 		consensusName string
 		inArtistMap   bool
 	}{
-		{"spotify", func(c *config.Config) { c.SpotifyEnabled = false }, discoveryDomain.ProviderSpotify, "", true},
-		{"soundcloud", func(c *config.Config) { c.SoundCloudEnabled = false }, discoveryDomain.ProviderSoundCloud, "soundcloud", true},
-		{"applemusic", func(c *config.Config) { c.AppleMusicEnabled = false }, discoveryDomain.ProviderAppleMusic, "", true},
-		{"amazonmusic", func(c *config.Config) { c.AmazonMusicEnabled = false }, discoveryDomain.ProviderAmazonMusic, "", false},
-		{"ytmusic", func(c *config.Config) { c.YtMusicEnabled = false }, discoveryDomain.ProviderYouTube, "ytmusic", false},
+		{"spotify", func(c *config.Config) { c.SpotifyEnabled = false }, discovery.ProviderSpotify, "", true},
+		{"soundcloud", func(c *config.Config) { c.SoundCloudEnabled = false }, discovery.ProviderSoundCloud, "soundcloud", true},
+		{"applemusic", func(c *config.Config) { c.AppleMusicEnabled = false }, discovery.ProviderAppleMusic, "", true},
+		{"amazonmusic", func(c *config.Config) { c.AmazonMusicEnabled = false }, discovery.ProviderAmazonMusic, "", false},
+		{"ytmusic", func(c *config.Config) { c.YtMusicEnabled = false }, discovery.ProviderYouTube, "ytmusic", false},
 	}
 
 	for _, tt := range tests {
@@ -302,7 +299,7 @@ func TestScrapedProviderKillSwitch(t *testing.T) {
 	}
 }
 
-func hasSearchProvider(cfg *config.Config, want discoveryDomain.ProviderName) bool {
+func hasSearchProvider(cfg *config.Config, want discovery.ProviderName) bool {
 	for _, p := range buildSearchProviderList(context.Background(), newClientFactory(nil), cfg, nil) {
 		if p.Name() == want {
 			return true
@@ -368,7 +365,7 @@ func TestSearchProviders_EmptyEnvListKeepsEveryConfiguredProvider(t *testing.T) 
 	cfg := scrapedProvidersConfig(true)
 	cfg.YtMusicEnabled = true
 
-	if !hasSearchProvider(cfg, discoveryDomain.ProviderSoundCloud) || !hasSearchProvider(cfg, discoveryDomain.ProviderDeezer) {
+	if !hasSearchProvider(cfg, discovery.ProviderSoundCloud) || !hasSearchProvider(cfg, discovery.ProviderDeezer) {
 		t.Fatal("with no DISCOVERY_SEARCH_PROVIDERS, every configured provider must search")
 	}
 }

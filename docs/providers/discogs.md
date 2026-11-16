@@ -133,7 +133,7 @@ Anything here that feeds *order* must clear `discoveryeval --top-k 3`.
 
 ## 7. Current implementation state
 
-- `services/go-api/internal/discovery/adapters/providers/discogs/discogs.go`: `DiscogsAdapter`:
+- `services/go-api/internal/discovery/internal/adapters/providers/discogs/discogs.go`: `DiscogsAdapter`:
   `Resolve` / `ResolveByIdentity` (`ArtworkResolver`, artist images), `ResolveDiscogsArtist`
   (identity consensus via album-overlap), `FetchArtistReleases` (thin discography),
   `searchArtists` / `fetchArtistDetail` / `fetchArtistReleases`. A local limiter allows ~1 req/sec

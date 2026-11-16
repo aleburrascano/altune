@@ -3,7 +3,7 @@ package handler
 import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/internal/adapters/authbridge"
-	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/catalog/internal/core/ports"
 	audioservice "altune/go-api/internal/catalog/service/audio"
 	"altune/go-api/internal/shared/httputil"
 	"context"

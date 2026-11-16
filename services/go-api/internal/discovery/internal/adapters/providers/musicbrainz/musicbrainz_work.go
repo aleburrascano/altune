@@ -1,7 +1,7 @@
 package musicbrainz
 
 import (
-	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
+	"altune/go-api/internal/discovery/internal/adapters/providers/providerhttp"
 	"altune/go-api/internal/discovery/internal/core/ports"
 	"context"
 	"encoding/json"

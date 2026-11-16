@@ -1,9 +1,7 @@
 package app
 
 import (
-	discoveryDomain "altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/service/providercall"
-	"altune/go-api/internal/discovery/service/search"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/shared/config"
 	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
@@ -26,7 +24,7 @@ type gatedStore struct {
 	once    sync.Once
 }
 
-func (s *gatedStore) Append(ctx context.Context, _ discoveryDomain.InteractionEvent) error {
+func (s *gatedStore) Append(ctx context.Context, _ discovery.InteractionEvent) error {
 	s.once.Do(func() { close(s.entered) })
 	select {
 	case <-s.release:
@@ -37,10 +35,10 @@ func (s *gatedStore) Append(ctx context.Context, _ discoveryDomain.InteractionEv
 
 func TestDrainSearchBackground_WaitsForInFlightWork(t *testing.T) {
 	store := &gatedStore{entered: make(chan struct{}), release: make(chan struct{})}
-	svc := search.NewService(nil, providercall.NewCircuitBreaker(),
-		search.WithEventStore(store))
+	svc := discovery.NewSearchService(nil, discovery.NewCircuitBreaker(),
+		discovery.WithEventStore(store))
 
-	query, err := discoveryDomain.NewSearchQuery("humble", discoveryDomain.AllKinds(), 10)
+	query, err := discovery.NewSearchQuery("humble", discovery.AllKinds(), 10)
 	if err != nil {
 		t.Fatal(err)
 	}

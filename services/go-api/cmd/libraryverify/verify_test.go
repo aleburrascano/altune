@@ -1,12 +1,8 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/adapters/chromaprint"
-	"altune/go-api/internal/acquisition/adapters/deezerpreview"
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/acquisition/service"
-	"altune/go-api/internal/acquisition/service/grade"
-	"altune/go-api/internal/acquisition/service/upgrade"
+	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/catalog"
 	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
 	"context"
@@ -20,8 +16,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	catalogPorts "altune/go-api/internal/catalog/ports"
 
 	"github.com/google/uuid"
 )
@@ -75,11 +69,11 @@ type memoryStream struct{ *bytes.Reader }
 func (memoryStream) Close() error { return nil }
 
 type memoryStore struct {
-	catalogPorts.AudioStore
+	catalog.AudioStore
 	files map[string][]byte
 }
 
-func (s memoryStore) Stream(_ context.Context, ref string) (catalogPorts.AudioStream, int64, error) {
+func (s memoryStore) Stream(_ context.Context, ref string) (catalog.AudioStream, int64, error) {
 	data, ok := s.files[ref]
 	if !ok {
 		return nil, 0, errors.New("no such object")
@@ -114,12 +108,12 @@ func newVerifier(t *testing.T, payloadFile string, lookups recordingLookups) *ve
 		_, _ = w.Write(payload)
 	}))
 	t.Cleanup(server.Close)
-	identifier := chromaprint.NewIdentifier(writeFakeFpcalc(t, fpcalcPrintsFingerprint), "key").WithEndpoint(server.URL).WithRequestsPerSecond(1000)
+	identifier := acquisition.NewChromaprintIdentifier(writeFakeFpcalc(t, fpcalcPrintsFingerprint), "key").WithEndpoint(server.URL).WithRequestsPerSecond(1000)
 	return &verifier{
 		store:    memoryStore{files: map[string][]byte{"u/song.mp3": []byte("audio")}},
 		identify: identifier,
 		lookups:  lookups,
-		minScore: chromaprint.MinScore,
+		minScore: acquisition.ChromaprintMinScore,
 		progress: io.Discard,
 	}
 }
@@ -229,7 +223,7 @@ func TestVerify_MissingAudioFailsTheTrackNotTheRun(t *testing.T) {
 
 func TestVerify_FingerprintFailureFailsTheTrack(t *testing.T) {
 	v := newVerifier(t, "acoustid_bound_recording.json", &fakeLookups{})
-	v.identify = chromaprint.NewIdentifier(writeFakeFpcalc(t, fpcalcFails), "key")
+	v.identify = acquisition.NewChromaprintIdentifier(writeFakeFpcalc(t, fpcalcFails), "key")
 
 	got := v.verify(context.Background(), trackWith(boundIdentity{Status: statusBound, MBRecordingID: "rec-bound"}))
 
@@ -240,7 +234,7 @@ func TestVerify_FingerprintFailureFailsTheTrack(t *testing.T) {
 
 func TestVerify_EmptyFingerprintIsAnUnidentifiedTrackNotAFailure(t *testing.T) {
 	v := newVerifier(t, "acoustid_bound_recording.json", &fakeLookups{})
-	v.identify = chromaprint.NewIdentifier(writeFakeFpcalc(t, fpcalcPrintsNothing), "key")
+	v.identify = acquisition.NewChromaprintIdentifier(writeFakeFpcalc(t, fpcalcPrintsNothing), "key")
 
 	got := v.verify(context.Background(), trackWith(boundIdentity{Status: statusBound, MBRecordingID: "rec-bound"}))
 
@@ -250,12 +244,12 @@ func TestVerify_EmptyFingerprintIsAnUnidentifiedTrackNotAFailure(t *testing.T) {
 }
 
 type fakePreviews struct {
-	clip  deezerpreview.Clip
+	clip  acquisition.PreviewClip
 	err   error
 	calls int
 }
 
-func (f *fakePreviews) Clip(context.Context, deezerpreview.Target) (deezerpreview.Clip, error) {
+func (f *fakePreviews) Clip(context.Context, acquisition.DeezerPreviewTarget) (acquisition.PreviewClip, error) {
 	f.calls++
 	return f.clip, f.err
 }
@@ -269,7 +263,7 @@ func withPreviewCheck(v *verifier, previews *fakePreviews, filePrint []uint32) *
 
 func TestVerify_PreviewInsideTheFileConfirmsWhatAcoustIDCalledAMismatch(t *testing.T) {
 	file := randomPrint(10, 1400)
-	previews := &fakePreviews{clip: deezerpreview.Clip{DeezerTrackID: "132201194", DeezerTitle: "Song", Print: file[400:640]}}
+	previews := &fakePreviews{clip: acquisition.PreviewClip{DeezerTrackID: "132201194", DeezerTitle: "Song", Print: file[400:640]}}
 	v := withPreviewCheck(newVerifier(t, "acoustid_other_recording.json", &fakeLookups{}), previews, file)
 
 	got := v.verify(context.Background(), trackWith(boundIdentity{Status: statusBound, MBRecordingID: "rec-bound", ISRC: "USAAA0000001"}))
@@ -286,7 +280,7 @@ func TestVerify_PreviewInsideTheFileConfirmsWhatAcoustIDCalledAMismatch(t *testi
 }
 
 func TestVerify_PreviewAbsentAndAcoustIDNamingAnotherTitleIsWrongAudio(t *testing.T) {
-	previews := &fakePreviews{clip: deezerpreview.Clip{DeezerTrackID: "1", DeezerTitle: "Song", Print: randomPrint(11, 240)}}
+	previews := &fakePreviews{clip: acquisition.PreviewClip{DeezerTrackID: "1", DeezerTitle: "Song", Print: randomPrint(11, 240)}}
 	v := withPreviewCheck(newVerifier(t, "acoustid_other_recording.json", &fakeLookups{}), previews, randomPrint(12, 1400))
 
 	got := v.verify(context.Background(), trackWith(boundIdentity{Status: statusBound, MBRecordingID: "rec-bound", ISRC: "USAAA0000001"}))
@@ -300,7 +294,7 @@ func TestVerify_PreviewAbsentAndAcoustIDNamingAnotherTitleIsWrongAudio(t *testin
 }
 
 func TestVerify_PreviewAbsentButAcoustIDNamingTheSameTitleStaysAMismatch(t *testing.T) {
-	previews := &fakePreviews{clip: deezerpreview.Clip{DeezerTrackID: "1", DeezerTitle: "Song", Print: randomPrint(13, 240)}}
+	previews := &fakePreviews{clip: acquisition.PreviewClip{DeezerTrackID: "1", DeezerTitle: "Song", Print: randomPrint(13, 240)}}
 	v := withPreviewCheck(newVerifier(t, "acoustid_same_title_duplicate.json", &fakeLookups{}), previews, randomPrint(14, 1400))
 
 	got := v.verify(context.Background(), trackWith(boundIdentity{Status: statusBound, MBRecordingID: "rec-bound", ISRC: "USAAA0000001"}))
@@ -311,7 +305,7 @@ func TestVerify_PreviewAbsentButAcoustIDNamingTheSameTitleStaysAMismatch(t *test
 }
 
 func TestVerify_PreviewAbsentWithNoAcoustIDEvidenceStaysUnknown(t *testing.T) {
-	previews := &fakePreviews{clip: deezerpreview.Clip{DeezerTrackID: "1", DeezerTitle: "Song", Print: randomPrint(15, 240)}}
+	previews := &fakePreviews{clip: acquisition.PreviewClip{DeezerTrackID: "1", DeezerTitle: "Song", Print: randomPrint(15, 240)}}
 	v := withPreviewCheck(newVerifier(t, "acoustid_no_results.json", &fakeLookups{}), previews, randomPrint(16, 1400))
 
 	got := v.verify(context.Background(), trackWith(boundIdentity{Status: statusBound, ISRC: "USAAA0000001"}))
@@ -322,7 +316,7 @@ func TestVerify_PreviewAbsentWithNoAcoustIDEvidenceStaysUnknown(t *testing.T) {
 }
 
 func TestVerify_PreviewAbsentWithOnlyABlankTitledCandidateIsNotWrongAudio(t *testing.T) {
-	previews := &fakePreviews{clip: deezerpreview.Clip{DeezerTrackID: "1", DeezerTitle: "Song", Print: randomPrint(24, 240)}}
+	previews := &fakePreviews{clip: acquisition.PreviewClip{DeezerTrackID: "1", DeezerTitle: "Song", Print: randomPrint(24, 240)}}
 	v := withPreviewCheck(newVerifier(t, "acoustid_untitled_recording.json", &fakeLookups{}), previews, randomPrint(25, 1400))
 
 	got := v.verify(context.Background(), trackWith(boundIdentity{Status: statusBound, ISRC: "USAAA0000001"}))
@@ -338,12 +332,12 @@ func TestVerify_APreviewTooShortOrAFileAtTheFingerprintCapIsNotCompared(t *testi
 		file, clip []uint32
 		wantReason string
 	}{
-		{"preview under the floor", randomPrint(26, 1400), randomPrint(27, deezerpreview.MinPreviewItems-1), deezerpreview.ErrPreviewTooShort.Error()},
-		{"file as long as fpcalc fingerprints", randomPrint(28, deezerpreview.FingerprintedItemCap), randomPrint(29, 240), deezerpreview.ErrFileReachesCap.Error()},
+		{"preview under the floor", randomPrint(26, 1400), randomPrint(27, acquisition.MinPreviewItems-1), acquisition.ErrPreviewTooShort.Error()},
+		{"file as long as fpcalc fingerprints", randomPrint(28, acquisition.FingerprintedItemCap), randomPrint(29, 240), acquisition.ErrFileReachesCap.Error()},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			previews := &fakePreviews{clip: deezerpreview.Clip{DeezerTitle: "Song", Print: tt.clip}}
+			previews := &fakePreviews{clip: acquisition.PreviewClip{DeezerTitle: "Song", Print: tt.clip}}
 			v := withPreviewCheck(newVerifier(t, "acoustid_other_recording.json", &fakeLookups{}), previews, tt.file)
 
 			got := v.verify(context.Background(), trackWith(boundIdentity{Status: statusBound, MBRecordingID: "rec-bound"}))
@@ -358,7 +352,7 @@ func TestVerify_APreviewTooShortOrAFileAtTheFingerprintCapIsNotCompared(t *testi
 func TestVerify_PreviewBetweenTheCutsChangesNothing(t *testing.T) {
 	file := randomPrint(17, 1400)
 	halfWrong := withFlippedBits(file[400:640], 1)
-	previews := &fakePreviews{clip: deezerpreview.Clip{DeezerTitle: "Song", Print: halfWrong}}
+	previews := &fakePreviews{clip: acquisition.PreviewClip{DeezerTitle: "Song", Print: halfWrong}}
 	v := withPreviewCheck(newVerifier(t, "acoustid_other_recording.json", &fakeLookups{}), previews, file)
 	v.cut = previewCut{matchMax: 0.02, absentMin: 0.2}
 
@@ -370,7 +364,7 @@ func TestVerify_PreviewBetweenTheCutsChangesNothing(t *testing.T) {
 }
 
 func TestVerify_NoPreviewKeepsTheVerdictAndSaysWhy(t *testing.T) {
-	previews := &fakePreviews{clip: deezerpreview.Clip{Unavailable: noPreviewText}}
+	previews := &fakePreviews{clip: acquisition.PreviewClip{Unavailable: noPreviewText}}
 	v := withPreviewCheck(newVerifier(t, "acoustid_no_results.json", &fakeLookups{}), previews, randomPrint(18, 1400))
 
 	got := v.verify(context.Background(), trackWith(boundIdentity{Status: statusBound, ISRC: "USAAA0000001"}))
@@ -381,29 +375,29 @@ func TestVerify_NoPreviewKeepsTheVerdictAndSaysWhy(t *testing.T) {
 }
 
 func TestVerify_AFileShorterThanItsPreviewKeepsTheVerdictAndSaysWhy(t *testing.T) {
-	previews := &fakePreviews{clip: deezerpreview.Clip{DeezerTitle: "Song", Print: randomPrint(19, 240)}}
+	previews := &fakePreviews{clip: acquisition.PreviewClip{DeezerTitle: "Song", Print: randomPrint(19, 240)}}
 	v := withPreviewCheck(newVerifier(t, "acoustid_no_results.json", &fakeLookups{}), previews, randomPrint(20, 100))
 
 	got := v.verify(context.Background(), trackWith(boundIdentity{Status: statusBound, ISRC: "USAAA0000001"}))
 
-	if got.Verdict != verdictUnknown || got.Preview == nil || got.Preview.Unavailable != deezerpreview.ErrPrintLongerThanRef.Error() {
+	if got.Verdict != verdictUnknown || got.Preview == nil || got.Preview.Unavailable != acquisition.ErrPrintLongerThanRef.Error() {
 		t.Errorf("verdict = %q preview = %+v, want unknown because the file is shorter than the preview", got.Verdict, got.Preview)
 	}
 }
 
 func TestVerify_ADeezerFailureFailsTheTrackNotTheVerdict(t *testing.T) {
-	previews := &fakePreviews{err: deezerpreview.ErrDeezerThrottled}
+	previews := &fakePreviews{err: acquisition.ErrDeezerThrottled}
 	v := withPreviewCheck(newVerifier(t, "acoustid_no_results.json", &fakeLookups{}), previews, randomPrint(21, 1400))
 
 	got := v.verify(context.Background(), trackWith(boundIdentity{Status: statusBound, ISRC: "USAAA0000001"}))
 
-	if got.Verdict != verdictFailed || !strings.Contains(got.Error, deezerpreview.ErrDeezerThrottled.Error()) {
+	if got.Verdict != verdictFailed || !strings.Contains(got.Error, acquisition.ErrDeezerThrottled.Error()) {
 		t.Errorf("verdict = %q error = %q, want failed with the throttle error", got.Verdict, got.Error)
 	}
 }
 
 func TestVerify_AcoustIDConfirmedTracksNeverTouchDeezer(t *testing.T) {
-	previews := &fakePreviews{err: deezerpreview.ErrDeezerThrottled}
+	previews := &fakePreviews{err: acquisition.ErrDeezerThrottled}
 	v := withPreviewCheck(newVerifier(t, "acoustid_bound_recording.json", &fakeLookups{}), previews, randomPrint(22, 1400))
 
 	got := v.verify(context.Background(), trackWith(boundIdentity{Status: statusBound, MBRecordingID: "rec-bound"}))
@@ -414,7 +408,7 @@ func TestVerify_AcoustIDConfirmedTracksNeverTouchDeezer(t *testing.T) {
 }
 
 func TestVerify_UnofficialAndUnboundTracksAreNotCheckedAgainstAPreview(t *testing.T) {
-	previews := &fakePreviews{err: deezerpreview.ErrDeezerThrottled}
+	previews := &fakePreviews{err: acquisition.ErrDeezerThrottled}
 	v := withPreviewCheck(newVerifier(t, "acoustid_no_results.json", &fakeLookups{}), previews, randomPrint(23, 1400))
 
 	for _, status := range []identityStatus{statusUnofficial, statusUnbound, statusNone} {
@@ -455,15 +449,15 @@ func (osWorkspace) Remove(path string) error              { return os.RemoveAll(
 func (osWorkspace) Size(string) (int64, error)            { return 0, nil }
 func (osWorkspace) SweepAbandoned(time.Time) int          { return 0 }
 
-type fixedResolver struct{ identity ports.RecordingIdentity }
+type fixedResolver struct{ identity acquisition.RecordingIdentity }
 
-func (r fixedResolver) Resolve(context.Context, ports.RecordingQuery) (ports.RecordingIdentity, error) {
+func (r fixedResolver) Resolve(context.Context, acquisition.RecordingQuery) (acquisition.RecordingIdentity, error) {
 	return r.identity, nil
 }
 
-type fixedPreviewMatcher struct{ comparison ports.PreviewComparison }
+type fixedPreviewMatcher struct{ comparison acquisition.PreviewComparison }
 
-func (m fixedPreviewMatcher) MatchesPreview(context.Context, string, ports.PreviewTarget) (ports.PreviewComparison, error) {
+func (m fixedPreviewMatcher) MatchesPreview(context.Context, string, acquisition.PreviewTarget) (acquisition.PreviewComparison, error) {
 	return m.comparison, nil
 }
 
@@ -485,11 +479,11 @@ func classOfVerdict(got verdict) judgedClass {
 	return classUnknown
 }
 
-func classOfFinding(finding upgrade.Finding) judgedClass {
+func classOfFinding(finding acquisition.UpgradeFinding) judgedClass {
 	switch finding.Fingerprint {
-	case grade.Matches, grade.Approximates:
+	case acquisition.Matches, acquisition.Approximates:
 		return classConfirmed
-	case grade.Contradicts:
+	case acquisition.Contradicts:
 		return classWrong
 	}
 	return classUnknown
@@ -501,11 +495,11 @@ func TestVerify_LibraryverifyAndTheUpgradeLaneJudgeTheSameFileTheSameWay(t *test
 	payloads := []string{"acoustid_bound_recording.json", "acoustid_other_recording.json", "acoustid_same_title_duplicate.json", "acoustid_no_results.json"}
 	previews := map[string]struct {
 		clip       []uint32
-		comparison *ports.PreviewComparison
+		comparison *acquisition.PreviewComparison
 	}{
 		"no preview":   {nil, nil},
-		"matching":     {file[400:640], &ports.PreviewComparison{BitErrorRate: matchRate, OverlapSeconds: 29.7, Matched: true}},
-		"another song": {randomPrint(32, 240), &ports.PreviewComparison{BitErrorRate: absentRate, OverlapSeconds: 29.7}},
+		"matching":     {file[400:640], &acquisition.PreviewComparison{BitErrorRate: matchRate, OverlapSeconds: 29.7, Matched: true}},
+		"another song": {randomPrint(32, 240), &acquisition.PreviewComparison{BitErrorRate: absentRate, OverlapSeconds: 29.7}},
 	}
 	identity := boundIdentity{Status: statusBound, MBRecordingID: "rec-bound", ISRC: "USAAA0000001"}
 	for _, payload := range payloads {
@@ -513,24 +507,24 @@ func TestVerify_LibraryverifyAndTheUpgradeLaneJudgeTheSameFileTheSameWay(t *test
 			t.Run(payload+" with "+name, func(t *testing.T) {
 				v := newVerifier(t, payload, &fakeLookups{})
 				v.cut, v.provenMax = previewCut{matchMax: 0.18, absentMin: 0.35}, 0.10
-				acquisitionOpts := []func(*service.AcquireTrackAudioService){
-					service.WithRecordingResolver(fixedResolver{identity: ports.RecordingIdentity{MBID: "rec-bound", MBIDs: []string{"rec-bound"}}}),
-					service.WithAudioIdentifier(v.identify.(ports.AudioIdentifier)),
-					service.WithStoredAudioReader(storedFileReader{}),
-					service.WithAcquireTempWorkspace(osWorkspace{}),
+				acquisitionOpts := []func(*acquisition.AcquireTrackAudioService){
+					acquisition.WithRecordingResolver(fixedResolver{identity: acquisition.RecordingIdentity{MBID: "rec-bound", MBIDs: []string{"rec-bound"}}}),
+					acquisition.WithAudioIdentifier(v.identify.(acquisition.AudioIdentifier)),
+					acquisition.WithStoredAudioReader(storedFileReader{}),
+					acquisition.WithAcquireTempWorkspace(osWorkspace{}),
 				}
 				if preview.comparison != nil {
-					v = withPreviewCheck(v, &fakePreviews{clip: deezerpreview.Clip{DeezerTrackID: "1", DeezerTitle: "Song", Print: preview.clip}}, file)
+					v = withPreviewCheck(v, &fakePreviews{clip: acquisition.PreviewClip{DeezerTrackID: "1", DeezerTitle: "Song", Print: preview.clip}}, file)
 					v.cut, v.provenMax = previewCut{matchMax: 0.18, absentMin: 0.35}, 0.10
-					acquisitionOpts = append(acquisitionOpts, service.WithPreviewMatcher(fixedPreviewMatcher{comparison: *preview.comparison}, 0.10))
+					acquisitionOpts = append(acquisitionOpts, acquisition.WithPreviewMatcher(fixedPreviewMatcher{comparison: *preview.comparison}, 0.10))
 				}
 				ref, isrc := "u/song.mp3", "USAAA0000001"
-				track := &ports.TrackSnapshot{
+				track := &acquisition.TrackSnapshot{
 					ID: shared.TrackIdFromUUID(uuid.New()), Title: "Song", Artist: "Artist", AudioRef: &ref, ISRC: &isrc,
-					CatalogSources: []ports.CatalogSource{{Provider: "deezer", ExternalID: "1"}},
+					CatalogSources: []acquisition.CatalogSource{{Provider: "deezer", ExternalID: "1"}},
 				}
 
-				finding, err := service.NewAcquireTrackAudioService(nil, nil, nil, acquisitionOpts...).CheckInPlace(context.Background(), track)
+				finding, err := acquisition.NewAcquireTrackAudioService(nil, nil, nil, acquisitionOpts...).CheckInPlace(context.Background(), track)
 				if err != nil {
 					t.Fatalf("CheckInPlace: %v", err)
 				}

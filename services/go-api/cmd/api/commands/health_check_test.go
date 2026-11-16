@@ -2,8 +2,6 @@ package commands
 
 import (
 	"altune/go-api/internal/catalog"
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/ports"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"os"
@@ -14,30 +12,30 @@ import (
 )
 
 type fakeTrackRepo struct {
-	tracks  map[domain.TrackId]*domain.Track
+	tracks  map[catalog.TrackId]*catalog.Track
 	getN    int
-	updates []*domain.Track
+	updates []*catalog.Track
 }
 
-func (f *fakeTrackRepo) GetByID(_ context.Context, id domain.TrackId, _ shared.UserId) (*domain.Track, error) {
+func (f *fakeTrackRepo) GetByID(_ context.Context, id catalog.TrackId, _ shared.UserId) (*catalog.Track, error) {
 	f.getN++
 	return f.tracks[id], nil
 }
 
-func (f *fakeTrackRepo) Update(_ context.Context, track *domain.Track, _ int) error {
+func (f *fakeTrackRepo) Update(_ context.Context, track *catalog.Track, _ int) error {
 	f.updates = append(f.updates, track)
 	return nil
 }
 
-var _ ports.TrackReadWriter = (*fakeTrackRepo)(nil)
+var _ catalog.TrackReadWriter = (*fakeTrackRepo)(nil)
 
-func readyFixture(t *testing.T, ref string) (ports.ReadyAudioTrack, *fakeTrackRepo) {
+func readyFixture(t *testing.T, ref string) (catalog.ReadyAudioTrack, *fakeTrackRepo) {
 	t.Helper()
-	id := domain.NewTrackId()
+	id := catalog.NewTrackId()
 	userId := shared.NewUserId(uuid.New())
-	track := &domain.Track{ID: id, UserId: userId, AcquisitionStatus: domain.AcquisitionReady, AudioRef: &ref}
-	repo := &fakeTrackRepo{tracks: map[domain.TrackId]*domain.Track{id: track}}
-	return ports.ReadyAudioTrack{Id: id, UserId: userId, Title: "T", Artist: "A", AudioRef: ref}, repo
+	track := &catalog.Track{ID: id, UserId: userId, AcquisitionStatus: catalog.AcquisitionReady, AudioRef: &ref}
+	repo := &fakeTrackRepo{tracks: map[catalog.TrackId]*catalog.Track{id: track}}
+	return catalog.ReadyAudioTrack{Id: id, UserId: userId, Title: "T", Artist: "A", AudioRef: ref}, repo
 }
 
 func writeAudio(t *testing.T, dir, ref string) {
@@ -68,7 +66,7 @@ func TestCheckReadyTracksCountsNothingWhenTheFileExists(t *testing.T) {
 	writeAudio(t, dir, ref)
 	track, repo := readyFixture(t, ref)
 
-	orphaned, fixed := checkReadyTracks(context.Background(), []ports.ReadyAudioTrack{track}, catalog.NewFilesystemAudioStore(dir), repo, true)
+	orphaned, fixed := checkReadyTracks(context.Background(), []catalog.ReadyAudioTrack{track}, catalog.NewFilesystemAudioStore(dir), repo, true)
 
 	if orphaned != 0 || fixed != 0 || len(repo.updates) != 0 {
 		t.Fatalf("got (%d, %d), updates=%d; want (0, 0) and no update", orphaned, fixed, len(repo.updates))
@@ -78,7 +76,7 @@ func TestCheckReadyTracksCountsNothingWhenTheFileExists(t *testing.T) {
 func TestCheckReadyTracksReportsMissingFileWithoutFixing(t *testing.T) {
 	track, repo := readyFixture(t, uuid.NewString()+"/song.mp3")
 
-	orphaned, fixed := checkReadyTracks(context.Background(), []ports.ReadyAudioTrack{track}, catalog.NewFilesystemAudioStore(t.TempDir()), repo, false)
+	orphaned, fixed := checkReadyTracks(context.Background(), []catalog.ReadyAudioTrack{track}, catalog.NewFilesystemAudioStore(t.TempDir()), repo, false)
 
 	if orphaned != 1 || fixed != 0 || len(repo.updates) != 0 {
 		t.Fatalf("got (%d, %d), updates=%d; want (1, 0) and no update", orphaned, fixed, len(repo.updates))
@@ -88,13 +86,13 @@ func TestCheckReadyTracksReportsMissingFileWithoutFixing(t *testing.T) {
 func TestCheckReadyTracksMarksMissingFileFailedWhenFixing(t *testing.T) {
 	track, repo := readyFixture(t, uuid.NewString()+"/song.mp3")
 
-	orphaned, fixed := checkReadyTracks(context.Background(), []ports.ReadyAudioTrack{track}, catalog.NewFilesystemAudioStore(t.TempDir()), repo, true)
+	orphaned, fixed := checkReadyTracks(context.Background(), []catalog.ReadyAudioTrack{track}, catalog.NewFilesystemAudioStore(t.TempDir()), repo, true)
 
 	if orphaned != 1 || fixed != 1 || len(repo.updates) != 1 {
 		t.Fatalf("got (%d, %d), updates=%d; want (1, 1) and one update", orphaned, fixed, len(repo.updates))
 	}
 	got := repo.updates[0]
-	if got.AcquisitionStatus != domain.AcquisitionFailed {
+	if got.AcquisitionStatus != catalog.AcquisitionFailed {
 		t.Errorf("status = %v, want failed", got.AcquisitionStatus)
 	}
 	if got.FailureReason == nil || *got.FailureReason != "Audio file missing from storage (health-check)" {
@@ -108,7 +106,7 @@ func TestCheckReadyTracksTreatsASiblingUsersFileAsMissing(t *testing.T) {
 	writeAudio(t, dir, uuid.NewString()+"/song.mp3")
 	track, repo := readyFixture(t, ref)
 
-	orphaned, fixed := checkReadyTracks(context.Background(), []ports.ReadyAudioTrack{track}, catalog.NewFilesystemAudioStore(dir), repo, true)
+	orphaned, fixed := checkReadyTracks(context.Background(), []catalog.ReadyAudioTrack{track}, catalog.NewFilesystemAudioStore(dir), repo, true)
 
 	if orphaned != 1 || fixed != 1 {
 		t.Fatalf("got (%d, %d), want (1, 1)", orphaned, fixed)

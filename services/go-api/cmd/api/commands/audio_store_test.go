@@ -2,7 +2,6 @@ package commands
 
 import (
 	"altune/go-api/internal/catalog"
-	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"go/ast"
@@ -81,7 +80,7 @@ func TestNewAudioStoreFromConfigForwardsAudioAgeListerForSweep(t *testing.T) {
 		t.Fatalf("storage.FromConfig: %v", err)
 	}
 
-	lister, ok := store.(ports.AudioAgeLister)
+	lister, ok := store.(catalog.AudioAgeLister)
 	if !ok {
 		t.Fatal("expected the staging-scoped store built with AudioKeyPrefix=staging/ to satisfy ports.AudioAgeLister")
 	}

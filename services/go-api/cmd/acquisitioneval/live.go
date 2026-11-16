@@ -1,8 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/adapters/ytmsearch"
-	acqdomain "altune/go-api/internal/acquisition/domain"
+	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/shared/ytminnertube"
 	"bufio"
 	"context"
@@ -82,16 +81,16 @@ func (t liveTrack) evidenceSourceTitle() string {
 	return t.Evidence.SourceTitle
 }
 
-func liveConfigFromEnv(getenv func(string) string) (ytmsearch.Config, error) {
+func liveConfigFromEnv(getenv func(string) string) (acquisition.YtmSearchConfig, error) {
 	interval, err := durationFromEnv(getenv, liveIntervalEnv, defaultLiveInterval)
 	if err != nil {
-		return ytmsearch.Config{}, err
+		return acquisition.YtmSearchConfig{}, err
 	}
 	timeout, err := durationFromEnv(getenv, liveTimeoutEnv, defaultLiveTimeout)
 	if err != nil {
-		return ytmsearch.Config{}, err
+		return acquisition.YtmSearchConfig{}, err
 	}
-	return ytmsearch.Config{MinInterval: interval, Timeout: timeout}, nil
+	return acquisition.YtmSearchConfig{MinInterval: interval, Timeout: timeout}, nil
 }
 
 func durationFromEnv(getenv func(string) string, name string, fallback time.Duration) (time.Duration, error) {
@@ -118,7 +117,7 @@ func runLiveCommand(args []string, stdout io.Writer, getenv func(string) string)
 		return liveUsageExitCode
 	}
 	cfg.HTTP = budgeted
-	return runLive(args, stdout, ytmsearch.New(cfg))
+	return runLive(args, stdout, acquisition.NewYtmSearch(cfg))
 }
 
 func budgetedClient(ctx context.Context, getenv func(string) string, out io.Writer) (*http.Client, error) {
@@ -130,7 +129,7 @@ func budgetedClient(ctx context.Context, getenv func(string) string, out io.Writ
 	return budgeted, nil
 }
 
-func runLive(args []string, stdout io.Writer, client *ytmsearch.Client) int {
+func runLive(args []string, stdout io.Writer, client *acquisition.YtmSearchClient) int {
 	if err := executeLive(args, stdout, client); err != nil {
 		fmt.Fprintf(os.Stderr, "acquisitioneval: live: %v\n", err)
 		return liveUsageExitCode
@@ -138,7 +137,7 @@ func runLive(args []string, stdout io.Writer, client *ytmsearch.Client) int {
 	return 0
 }
 
-func executeLive(args []string, stdout io.Writer, client *ytmsearch.Client) error {
+func executeLive(args []string, stdout io.Writer, client *acquisition.YtmSearchClient) error {
 	tracksPath, outPath, err := parseLiveArgs(args)
 	if err != nil {
 		return err
@@ -199,7 +198,7 @@ func decodeLiveTracks(r io.Reader) ([]liveTrack, error) {
 	return tracks, nil
 }
 
-func judgeToFile(ctx context.Context, client *ytmsearch.Client, tracks []liveTrack, outPath string) ([]judgedRow, error) {
+func judgeToFile(ctx context.Context, client *acquisition.YtmSearchClient, tracks []liveTrack, outPath string) ([]judgedRow, error) {
 	out, err := os.Create(outPath)
 	if err != nil {
 		return nil, fmt.Errorf("create out: %w", err)
@@ -221,7 +220,7 @@ func judgeToFile(ctx context.Context, client *ytmsearch.Client, tracks []liveTra
 	return rows, nil
 }
 
-func judgeTrack(ctx context.Context, client *ytmsearch.Client, track liveTrack) judgedRow {
+func judgeTrack(ctx context.Context, client *acquisition.YtmSearchClient, track liveTrack) judgedRow {
 	row := judgedRow{ID: track.ID, Title: track.Title, Artist: track.Artist, URL: track.AudioSourceURL, Flags: []string{}}
 	host := sourceHost(track.AudioSourceURL)
 	if !youtubeHosts[host] {
@@ -247,7 +246,7 @@ func sourceHost(rawURL string) string {
 	return strings.ToLower(parsed.Hostname())
 }
 
-func lookUpYouTube(ctx context.Context, client *ytmsearch.Client, track liveTrack, videoID string) (youtubeSource, []string) {
+func lookUpYouTube(ctx context.Context, client *acquisition.YtmSearchClient, track liveTrack, videoID string) (youtubeSource, []string) {
 	var failed []string
 	watch, err := client.Watch(ctx, videoID)
 	if err != nil {
@@ -283,7 +282,7 @@ func youtubeVideoID(rawURL string) (string, bool) {
 	if strings.EqualFold(parsed.Hostname(), "youtu.be") {
 		candidate = strings.TrimPrefix(parsed.Path, "/")
 	}
-	if !acqdomain.IsYouTubeVideoID(candidate) {
+	if !acquisition.IsYouTubeVideoID(candidate) {
 		return "", false
 	}
 	return candidate, true

@@ -2,7 +2,6 @@ package main
 
 import (
 	"altune/go-api/internal/acquisition"
-	"altune/go-api/internal/acquisition/ports"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
@@ -241,7 +240,7 @@ func TestStore_UndoRefusesAReplacedTrack(t *testing.T) {
 
 type failingQueue struct{}
 
-func (failingQueue) Enqueue(context.Context, shared.TrackId, ports.JobKind, time.Duration) error {
+func (failingQueue) Enqueue(context.Context, shared.TrackId, acquisition.JobKind, time.Duration) error {
 	return errors.New("queue down")
 }
 
@@ -258,15 +257,15 @@ func TestStore_ReacquireThatCannotEnqueueRestoresTheTrack(t *testing.T) {
 	}
 }
 
-type kindRecordingQueue struct{ kinds *[]ports.JobKind }
+type kindRecordingQueue struct{ kinds *[]acquisition.JobKind }
 
-func (q kindRecordingQueue) Enqueue(_ context.Context, _ shared.TrackId, kind ports.JobKind, _ time.Duration) error {
+func (q kindRecordingQueue) Enqueue(_ context.Context, _ shared.TrackId, kind acquisition.JobKind, _ time.Duration) error {
 	*q.kinds = append(*q.kinds, kind)
 	return nil
 }
 
 func TestStore_ReacquireGoesThroughTheSilentRatchetedUpgradeLane(t *testing.T) {
-	var kinds []ports.JobKind
+	var kinds []acquisition.JobKind
 	s := store{queue: kindRecordingQueue{kinds: &kinds}}
 
 	got, err := s.enqueueReplace(context.Background(), uuid.New(), change{TrackID: uuid.NewString()})
@@ -274,14 +273,14 @@ func TestStore_ReacquireGoesThroughTheSilentRatchetedUpgradeLane(t *testing.T) {
 	if got != verdictApplied || err != nil {
 		t.Fatalf("got %s, %v", got, err)
 	}
-	if !reflect.DeepEqual(kinds, []ports.JobKind{ports.JobKindUpgrade}) {
+	if !reflect.DeepEqual(kinds, []acquisition.JobKind{acquisition.JobKindUpgrade}) {
 		t.Fatalf("enqueued kinds = %v, want only the upgrade kind", kinds)
 	}
 }
 
 type cancellingQueue struct{ cancel context.CancelFunc }
 
-func (q cancellingQueue) Enqueue(context.Context, shared.TrackId, ports.JobKind, time.Duration) error {
+func (q cancellingQueue) Enqueue(context.Context, shared.TrackId, acquisition.JobKind, time.Duration) error {
 	q.cancel()
 	return errors.New("queue down")
 }

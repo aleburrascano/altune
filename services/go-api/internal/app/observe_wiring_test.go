@@ -1,15 +1,11 @@
 package app
 
 import (
-	acqService "altune/go-api/internal/acquisition/service"
+	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/auth"
-	authdomain "altune/go-api/internal/auth/domain"
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/observe"
-	observeAlert "altune/go-api/internal/observe/service/alert"
-	"altune/go-api/internal/observe/service/evalmeter"
-	"altune/go-api/internal/observe/service/eventtap"
 	"altune/go-api/internal/playback"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/events"
@@ -60,12 +56,12 @@ func (s observeSubjects) verifier() auth.TokenVerifier {
 		observeStrangerToken:  s.stranger,
 		observeReadOnlyToken:  s.readOnly,
 	}
-	return auth.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
+	return auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
 		subject, known := byToken[token]
 		if !known {
-			return authdomain.VerifiedToken{}, &authdomain.InvalidTokenError{Reason: authdomain.ReasonSignatureInvalid}
+			return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
 		}
-		return authdomain.VerifiedToken{UserID: subject, ExpiresAt: time.Now().Add(time.Hour)}, nil
+		return auth.VerifiedToken{UserID: subject, ExpiresAt: time.Now().Add(time.Hour)}, nil
 	})
 }
 
@@ -77,8 +73,8 @@ func observeTestDeps() observe.Deps {
 			return observe.DependencyHealth{DB: observe.DepUp, Redis: observe.DepUp, Auth: observe.DepUp}
 		},
 		Logs:        logging.NewRingBuffer(8),
-		Events:      eventtap.NewFeed(),
-		Eval:        evalmeter.New(false, 0, nil),
+		Events:      observe.NewEventFeed(),
+		Eval:        observe.NewEvalMeter(false, 0, nil),
 		LiveMetrics: func() observe.LiveMetrics { return observe.LiveMetrics{} },
 		Shutdown:    shutdown,
 	}
@@ -199,7 +195,7 @@ func TestObserveAcquisition_AbsentSchedulerIsANilReader(t *testing.T) {
 }
 
 func TestObserveAcquisition_WiredSchedulerIsTheReader(t *testing.T) {
-	scheduler := &acqService.BackgroundAcquisitionScheduler{}
+	scheduler := &acquisition.BackgroundAcquisitionScheduler{}
 	if reader := (&App{scheduler: scheduler}).observeAcquisition(); reader != scheduler {
 		t.Errorf("reader = %#v, want the app's scheduler", reader)
 	}
@@ -356,7 +352,7 @@ func TestObserveLiveMetrics_ReportsEventBusDrops(t *testing.T) {
 }
 
 func TestObserveLiveMetrics_CarriesAlertMonitorHealthWhenBuilt(t *testing.T) {
-	a := &App{alertMonitor: observeAlert.NewMonitor(observe.NopNotifier{}, time.Second)}
+	a := &App{alertMonitor: observe.NewAlertMonitor(observe.NopNotifier{}, time.Second)}
 	var out map[string]json.RawMessage
 	if err := json.Unmarshal(readObservedLiveMetrics(t, a.liveMetrics), &out); err != nil {
 		t.Fatal(err)
@@ -489,7 +485,7 @@ func TestWrapEvalRunner_ErrPassesThroughWithAZeroResult(t *testing.T) {
 	if !errors.Is(err, wantErr) {
 		t.Errorf("err = %v, want %v", err, wantErr)
 	}
-	if !reflect.DeepEqual(res, evalmeter.Result{}) {
+	if !reflect.DeepEqual(res, observe.EvalMeterResult{}) {
 		t.Errorf("result = %+v, want the zero Result", res)
 	}
 }
@@ -501,7 +497,7 @@ func TestWireObserve_BuildsTheFeedAndMeterItServes(t *testing.T) {
 	t.Cleanup(cancel)
 	r := chi.NewRouter()
 
-	a.wireObserve(ctx, r, subjects.verifier(), eventtap.New(events.NewInProcessBus()))
+	a.wireObserve(ctx, r, subjects.verifier(), observe.NewEventTap(events.NewInProcessBus()))
 
 	if a.eventFeed == nil || a.evalMeter == nil {
 		t.Fatalf("feed %v, meter %v: wireObserve must build both", a.eventFeed, a.evalMeter)
@@ -530,12 +526,12 @@ func TestMeterResult_CarriesEveryScorecardField(t *testing.T) {
 
 	got := meterResult(res)
 
-	want := evalmeter.Result{
+	want := observe.EvalMeterResult{
 		Score:     0.75,
 		Baseline:  0.9,
 		Regressed: true,
 		Errored:   2,
-		Queries: []evalmeter.QueryResult{
+		Queries: []observe.EvalMeterQueryResult{
 			{Query: "radiohead", Expect: "Radiohead", Passed: true, Position: 1},
 			{Query: "bjork", Expect: "Björk", Passed: false, Position: 7},
 		},
@@ -546,8 +542,8 @@ func TestMeterResult_CarriesEveryScorecardField(t *testing.T) {
 }
 
 func TestObserveLiveMetrics_ReportsEventTapAndFeedDrops(t *testing.T) {
-	tap := eventtap.New(events.NewInProcessBus())
-	feed := eventtap.NewFeed()
+	tap := observe.NewEventTap(events.NewInProcessBus())
+	feed := observe.NewEventFeed()
 	ctx, stop := context.WithCancel(context.Background())
 	feed.Start(ctx, tap)
 	t.Cleanup(func() {

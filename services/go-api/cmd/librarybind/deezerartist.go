@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog"
 	"context"
 	"encoding/json"
 	"errors"
@@ -98,7 +98,7 @@ func titlesOf(hits []deezerTitleHit) []string {
 	return titles
 }
 
-func (d deezerArtistSource) Songs(ctx context.Context, artist providerArtist, _ catalogView, t libraryTrack, keys domain.SearchKeys) ([]candidate, error) {
+func (d deezerArtistSource) Songs(ctx context.Context, artist providerArtist, _ catalogView, t libraryTrack, keys catalog.SearchKeys) ([]candidate, error) {
 	query := keys.Artist + " " + keys.Title
 	hits, err := deezerList[deezerSongHit](ctx, d.client, "/2.0/search/track?q="+url.QueryEscape(query)+"&limit="+strconv.Itoa(deezerSongSearchLimit))
 	if err != nil {

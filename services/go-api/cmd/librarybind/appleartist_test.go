@@ -1,9 +1,8 @@
 package main
 
 import (
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
-	discovery "altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/catalog"
+	"altune/go-api/internal/discovery"
 	"context"
 	"errors"
 	"net/http"
@@ -62,14 +61,14 @@ func TestAppleArtistSource_KeepsOnlySongsFromTheArtistsAlbums(t *testing.T) {
 	if err != nil || len(view.Albums) != 1 || len(view.Titles) != 1 {
 		t.Fatalf("view = %+v, %v", view, err)
 	}
-	songs, err := source.Songs(t.Context(), artists[0], view, rushTomSawyer(), domain.CleanSearchKeys("Tom Sawyer", "Rush", ""))
+	songs, err := source.Songs(t.Context(), artists[0], view, rushTomSawyer(), catalog.CleanSearchKeys("Tom Sawyer", "Rush", ""))
 	if err != nil || len(songs) != 1 || songs[0].ID != "a1" || songs[0].LengthSeconds != 274 {
 		t.Fatalf("songs = %+v, %v", songs, err)
 	}
 }
 
 func TestAppleArtistSource_AnArtistAppleHasNoCatalogForIsAnEmptyAnswer(t *testing.T) {
-	api := fakeAppleArtists{err: providerhttp.StatusError{Status: http.StatusNotFound}}
+	api := fakeAppleArtists{err: discovery.StatusError{Status: http.StatusNotFound}}
 	source := appleArtistSource{api: api, limiter: rate.NewLimiter(rate.Inf, 1)}
 	artists, err := source.FindArtists(t.Context(), "Luciano Pavarotti")
 	if err != nil || len(artists) != 0 {
@@ -82,7 +81,7 @@ func TestAppleArtistSource_AnArtistAppleHasNoCatalogForIsAnEmptyAnswer(t *testin
 }
 
 func TestAppleArtistSource_AbortsOnForbidden(t *testing.T) {
-	api := fakeAppleArtists{err: providerhttp.StatusError{Status: http.StatusForbidden}}
+	api := fakeAppleArtists{err: discovery.StatusError{Status: http.StatusForbidden}}
 	source := appleArtistSource{api: api, limiter: rate.NewLimiter(rate.Inf, 1)}
 	if _, err := source.FindArtists(t.Context(), "Rush"); !errors.Is(err, errCatalogBlocked) {
 		t.Fatalf("err = %v, want blocked", err)

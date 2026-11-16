@@ -2,21 +2,12 @@ package app
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/service/identity"
-	"altune/go-api/internal/discovery/service/providercall"
-	"altune/go-api/internal/discovery/service/rank"
-	"altune/go-api/internal/discovery/service/related"
-	"altune/go-api/internal/discovery/service/search"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"log/slog"
 	"net/http"
 	"slices"
 	"time"
-
-	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
-
-	domain "altune/go-api/internal/discovery/domain"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
@@ -28,7 +19,7 @@ func BuildSearchService(
 	pool *pgxpool.Pool,
 	redisClient *goredis.Client,
 	eventStore discovery.EventStore,
-) *search.Service {
+) *discovery.SearchService {
 	return BuildSearchServiceWithTransport(ctx, cfg, pool, redisClient, eventStore, nil, nil)
 }
 
@@ -40,8 +31,8 @@ func BuildSearchServiceWithTransport(
 	eventStore discovery.EventStore,
 	transport http.RoundTripper,
 	vocabStore discovery.VocabularyStore,
-	extra ...search.Option,
-) *search.Service {
+	extra ...discovery.SearchOption,
+) *discovery.SearchService {
 	w := newSearchWiring(ctx, cfg, transport)
 	opts := contentServiceOptions(w, cfg, pool, redisClient, eventStore, vocabStore)
 	return w.service(append(opts, extra...))
@@ -53,7 +44,7 @@ func BuildRankingOnlySearchService(
 	pool *pgxpool.Pool,
 	redisClient *goredis.Client,
 	transport http.RoundTripper,
-) *search.Service {
+) *discovery.SearchService {
 	w := newSearchWiring(ctx, cfg, transport)
 	return w.service(rankingOnlyServiceOptions(w, cfg, pool, redisClient))
 }
@@ -62,7 +53,7 @@ type searchWiring struct {
 	cf        clientFactory
 	sharedMB  *discovery.MusicBrainzAdapter
 	providers []discovery.SearchProvider
-	breaker   *providercall.CircuitBreaker
+	breaker   *discovery.CircuitBreaker
 }
 
 func newSearchWiring(ctx context.Context, cfg *config.Config, transport http.RoundTripper) searchWiring {
@@ -72,12 +63,12 @@ func newSearchWiring(ctx context.Context, cfg *config.Config, transport http.Rou
 		cf:        cf,
 		sharedMB:  sharedMB,
 		providers: buildSearchProviderList(ctx, cf, cfg, sharedMB),
-		breaker:   providercall.NewCircuitBreaker(),
+		breaker:   discovery.NewCircuitBreaker(),
 	}
 }
 
-func (w searchWiring) service(opts []search.Option) *search.Service {
-	return search.NewService(w.providers, w.breaker, opts...)
+func (w searchWiring) service(opts []discovery.SearchOption) *discovery.SearchService {
+	return discovery.NewSearchService(w.providers, w.breaker, opts...)
 }
 
 func contentServiceOptions(
@@ -87,10 +78,10 @@ func contentServiceOptions(
 	redisClient *goredis.Client,
 	eventStore discovery.EventStore,
 	vocabStore discovery.VocabularyStore,
-) []search.Option {
+) []discovery.SearchOption {
 	opts := baseSearchOptions(cfg, pool)
 	opts = append(opts, explorationSearchOptions(cfg)...)
-	opts = append(opts, search.WithSearchDeadline(cfg.DiscoverySearchDeadline))
+	opts = append(opts, discovery.WithSearchDeadline(cfg.DiscoverySearchDeadline))
 	opts = append(opts, contentSearchOptions(w.cf, cfg, pool, redisClient, w.sharedMB, w.breaker)...)
 	opts = append(opts, resultCacheSearchOptions(cfg, redisClient)...)
 	return append(opts, sharedSearchOptions(w, cfg, redisClient, eventStore, vocabStore)...)
@@ -101,7 +92,7 @@ func rankingOnlyServiceOptions(
 	cfg *config.Config,
 	pool *pgxpool.Pool,
 	redisClient *goredis.Client,
-) []search.Option {
+) []discovery.SearchOption {
 	opts := baseSearchOptions(cfg, pool)
 	return append(opts, sharedSearchOptions(w, cfg, redisClient, nil, nil)...)
 }
@@ -112,31 +103,31 @@ func sharedSearchOptions(
 	redisClient *goredis.Client,
 	eventStore discovery.EventStore,
 	vocabStore discovery.VocabularyStore,
-) []search.Option {
+) []discovery.SearchOption {
 	opts := cacheSearchOptions(redisClient)
 	opts = append(opts, vocabularySearchOptions(redisClient, vocabStore)...)
 	opts = append(opts, eventSearchOptions(cfg, eventStore)...)
 	return opts
 }
 
-func baseSearchOptions(cfg *config.Config, pool *pgxpool.Pool) []search.Option {
-	opts := []search.Option{
-		search.WithHistoryRepository(discoveryPersistence.NewPgxSearchHistoryRepository(pool)),
+func baseSearchOptions(cfg *config.Config, pool *pgxpool.Pool) []discovery.SearchOption {
+	opts := []discovery.SearchOption{
+		discovery.WithHistoryRepository(discovery.NewPgxSearchHistoryRepository(pool)),
 	}
 	if cfg.TailDemotionEnabled {
-		opts = append(opts, search.WithTailDemotion())
+		opts = append(opts, discovery.WithTailDemotion())
 	}
 	if cfg.CrossKindProminenceEnabled {
-		opts = append(opts, search.WithCrossKindProminence())
+		opts = append(opts, discovery.WithCrossKindProminence())
 	}
 	return opts
 }
 
-func explorationSearchOptions(cfg *config.Config) []search.Option {
+func explorationSearchOptions(cfg *config.Config) []discovery.SearchOption {
 	if !cfg.ExplorationEnabled {
 		return nil
 	}
-	return []search.Option{search.WithExploration(cfg.ExplorationRate)}
+	return []discovery.SearchOption{discovery.WithExploration(cfg.ExplorationRate)}
 }
 
 func contentSearchOptions(
@@ -145,52 +136,52 @@ func contentSearchOptions(
 	pool *pgxpool.Pool,
 	redisClient *goredis.Client,
 	sharedMB *discovery.MusicBrainzAdapter,
-	breaker *providercall.CircuitBreaker,
-) []search.Option {
+	breaker *discovery.CircuitBreaker,
+) []discovery.SearchOption {
 	deezerContent := discovery.NewDeezerAdapter(cf.discovery())
-	relationshipQuerier := discoveryPersistence.NewPgxRelationshipQuerier(pool)
-	findRelatedSvc := related.NewFindRelatedService(
+	relationshipQuerier := discovery.NewPgxRelationshipQuerier(pool)
+	findRelatedSvc := discovery.NewFindRelatedService(
 		relationshipQuerier, deezerContent, deezerContent,
-		related.WithFindRelatedCircuitBreaker(breaker),
+		discovery.WithFindRelatedCircuitBreaker(breaker),
 	)
-	opts := []search.Option{
-		search.WithArtworkResolver(buildArtworkChain(cf, cfg)),
-		search.WithFindRelatedService(findRelatedSvc),
+	opts := []discovery.SearchOption{
+		discovery.WithArtworkResolver(buildArtworkChain(cf, cfg)),
+		discovery.WithFindRelatedService(findRelatedSvc),
 	}
 	if pool != nil {
-		opts = append(opts, search.WithFavorites(
-			discoveryPersistence.NewPgxFavoritesRepository(pool),
+		opts = append(opts, discovery.WithFavorites(
+			discovery.NewPgxFavoritesRepository(pool),
 		))
 		identityStore := discovery.NewRedisIdentityStore(
-			discoveryPersistence.NewPgxIdentityStore(pool),
+			discovery.NewPgxIdentityStore(pool),
 			redisClient,
 			cacheSignalOption(),
 		)
-		opts = append(opts, search.WithIdentityStore(identityStore))
+		opts = append(opts, discovery.WithIdentityStore(identityStore))
 	}
 	if cfg.IdentityVerifyOnPersist && sharedMB != nil {
 		verifyProviders := buildArtistContentProviders(cf, cfg)
-		delete(verifyProviders, domain.ProviderSoundCloud)
-		delete(verifyProviders, domain.ProviderLastFM)
-		opts = append(opts, search.WithIdentityVerifier(
-			identity.NewIdentityVerifier(sharedMB, verifyProviders),
+		delete(verifyProviders, discovery.ProviderSoundCloud)
+		delete(verifyProviders, discovery.ProviderLastFM)
+		opts = append(opts, discovery.WithIdentityVerifier(
+			discovery.NewIdentityVerifier(sharedMB, verifyProviders),
 		))
 	}
 	return opts
 }
 
-func resultCacheSearchOptions(cfg *config.Config, redisClient *goredis.Client) []search.Option {
+func resultCacheSearchOptions(cfg *config.Config, redisClient *goredis.Client) []discovery.SearchOption {
 	if redisClient == nil {
 		return nil
 	}
-	return []search.Option{
-		search.WithResultCache(
+	return []discovery.SearchOption{
+		discovery.WithResultCache(
 			discovery.NewRedisResultCache(redisClient, cacheSignalOption()),
 		),
-		search.WithProviderResultCache(
+		discovery.WithProviderResultCache(
 			discovery.NewRedisProviderResultCache(redisClient, providerCacheTTLs(cfg), cacheSignalOption()),
 		),
-		search.WithHeldSlateCache(
+		discovery.WithHeldSlateCache(
 			discovery.NewRedisHeldSlateCache(redisClient, cacheSignalOption()),
 		),
 	}
@@ -199,23 +190,23 @@ func resultCacheSearchOptions(cfg *config.Config, redisClient *goredis.Client) [
 func providerCacheTTLs(cfg *config.Config) discovery.ProviderCacheTTLs {
 	return discovery.ProviderCacheTTLs{
 		Default:  cfg.DiscoveryProviderCacheTTL,
-		Provider: map[domain.ProviderName]time.Duration{domain.ProviderMusicBrainz: cfg.DiscoveryMusicBrainzCacheTTL},
+		Provider: map[discovery.ProviderName]time.Duration{discovery.ProviderMusicBrainz: cfg.DiscoveryMusicBrainzCacheTTL},
 	}
 }
 
-func cacheSearchOptions(redisClient *goredis.Client) []search.Option {
+func cacheSearchOptions(redisClient *goredis.Client) []discovery.SearchOption {
 	if redisClient == nil {
 		return nil
 	}
 	enrichmentCache := discovery.NewRedisEnrichmentCache(redisClient, cacheSignalOption())
-	return []search.Option{
-		search.WithArtworkCache(discovery.NewRedisArtworkCache(redisClient, cacheSignalOption())),
-		search.WithIdentityBridge(enrichmentCache),
-		search.WithMBIDIndex(enrichmentCache),
+	return []discovery.SearchOption{
+		discovery.WithArtworkCache(discovery.NewRedisArtworkCache(redisClient, cacheSignalOption())),
+		discovery.WithIdentityBridge(enrichmentCache),
+		discovery.WithMBIDIndex(enrichmentCache),
 	}
 }
 
-func vocabularySearchOptions(redisClient *goredis.Client, vocabStore discovery.VocabularyStore) []search.Option {
+func vocabularySearchOptions(redisClient *goredis.Client, vocabStore discovery.VocabularyStore) []discovery.SearchOption {
 	vs := vocabStore
 	if vs == nil {
 		vs = BuildVocabularyStore(redisClient)
@@ -223,18 +214,18 @@ func vocabularySearchOptions(redisClient *goredis.Client, vocabStore discovery.V
 	if vs == nil {
 		return nil
 	}
-	return []search.Option{search.WithVocabularyStore(vs)}
+	return []discovery.SearchOption{discovery.WithVocabularyStore(vs)}
 }
 
-func eventSearchOptions(cfg *config.Config, eventStore discovery.EventStore) []search.Option {
+func eventSearchOptions(cfg *config.Config, eventStore discovery.EventStore) []discovery.SearchOption {
 	if eventStore == nil {
 		return nil
 	}
-	opts := []search.Option{search.WithEventStore(eventStore)}
+	opts := []discovery.SearchOption{discovery.WithEventStore(eventStore)}
 	if cfg.BehavioralRankingEnabled {
 		if store, ok := eventStore.(discovery.BehavioralSignalStore); ok {
-			opts = append(opts, search.WithBehavioralRanking(
-				rank.NewSatisfactionConsumer(store),
+			opts = append(opts, discovery.WithBehavioralRanking(
+				discovery.NewSatisfactionConsumer(store),
 			))
 		}
 	}
@@ -328,7 +319,7 @@ func buildSoundCloudSearchAdapter(cf clientFactory, cfg *config.Config) *discove
 }
 
 type soundCloudSearchFallback interface {
-	Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error)
+	Search(ctx context.Context, query string, kinds map[discovery.ResultKind]bool) ([]discovery.SearchResult, error)
 }
 
 func newSoundCloudAdapter(cf clientFactory, cfg *config.Config, fallback soundCloudSearchFallback) *discovery.SoundCloudAPIAdapter {

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/adapters/ytmsearch"
+	"altune/go-api/internal/acquisition"
 	"context"
 	"fmt"
 	"slices"
@@ -10,7 +10,7 @@ import (
 const topResults = 5
 
 type songSearch interface {
-	SearchSongs(ctx context.Context, query string) ([]ytmsearch.Song, error)
+	SearchSongs(ctx context.Context, query string) ([]acquisition.YtmSong, error)
 }
 
 type outcomeKind string
@@ -55,7 +55,7 @@ func find(ctx context.Context, search songSearch, t target) outcome {
 	return result
 }
 
-func (t target) screen(songs []ytmsearch.Song) ([]string, []rejection) {
+func (t target) screen(songs []acquisition.YtmSong) ([]string, []rejection) {
 	var videoIDs []string
 	var reasons []rejection
 	for _, song := range songs {

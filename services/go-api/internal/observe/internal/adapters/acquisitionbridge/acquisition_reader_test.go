@@ -1,7 +1,7 @@
 package acquisitionbridge
 
 import (
-	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -9,10 +9,10 @@ import (
 
 type stubAcquisitionReader struct {
 	calls  int
-	status func(call int) ports.AcquisitionStatus
+	status func(call int) acquisition.AcquisitionStatus
 }
 
-func (s *stubAcquisitionReader) Status() ports.AcquisitionStatus {
+func (s *stubAcquisitionReader) Status() acquisition.AcquisitionStatus {
 	s.calls++
 	return s.status(s.calls)
 }
@@ -31,8 +31,8 @@ func TestReadAcquisitionStatusNilReaderGivesEmptyLists(t *testing.T) {
 }
 
 func TestReadAcquisitionStatusOneJobGivesOneDTO(t *testing.T) {
-	r := &stubAcquisitionReader{status: func(int) ports.AcquisitionStatus {
-		return ports.AcquisitionStatus{ActiveJobs: []ports.JobRecord{{TrackID: "t1", State: "running"}}}
+	r := &stubAcquisitionReader{status: func(int) acquisition.AcquisitionStatus {
+		return acquisition.AcquisitionStatus{ActiveJobs: []acquisition.JobRecord{{TrackID: "t1", State: "running"}}}
 	}}
 	got := ReadAcquisitionStatus(r)
 	if len(got.ActiveJobs) != 1 || got.ActiveJobs[0].TrackID != "t1" || got.ActiveJobs[0].State != "running" {
@@ -56,8 +56,8 @@ func TestRedactSourceURL(t *testing.T) {
 }
 
 func TestReadAcquisitionStatusDoesNotCache(t *testing.T) {
-	r := &stubAcquisitionReader{status: func(call int) ports.AcquisitionStatus {
-		return ports.AcquisitionStatus{InFlight: call}
+	r := &stubAcquisitionReader{status: func(call int) acquisition.AcquisitionStatus {
+		return acquisition.AcquisitionStatus{InFlight: call}
 	}}
 	if got := ReadAcquisitionStatus(r).InFlight; got != 1 {
 		t.Fatalf("first InFlight = %d", got)
@@ -68,8 +68,8 @@ func TestReadAcquisitionStatusDoesNotCache(t *testing.T) {
 }
 
 func TestReadAcquisitionStatusVerificationNamesOnlyLiveTools(t *testing.T) {
-	r := &stubAcquisitionReader{status: func(int) ports.AcquisitionStatus {
-		return ports.AcquisitionStatus{Verification: ports.AcquisitionVerification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true}}
+	r := &stubAcquisitionReader{status: func(int) acquisition.AcquisitionStatus {
+		return acquisition.AcquisitionStatus{Verification: acquisition.AcquisitionVerification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true}}
 	}}
 	raw, err := json.Marshal(ReadAcquisitionStatus(r).Verification)
 	if err != nil {

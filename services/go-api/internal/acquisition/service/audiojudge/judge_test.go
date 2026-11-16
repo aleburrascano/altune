@@ -1,7 +1,7 @@
 package audiojudge
 
 import (
-	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/service/grade"
 	"testing"
 )

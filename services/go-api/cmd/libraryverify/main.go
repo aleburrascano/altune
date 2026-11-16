@@ -1,8 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/adapters/chromaprint"
-	"altune/go-api/internal/acquisition/adapters/deezerpreview"
+	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/config"
@@ -36,7 +35,7 @@ const (
 	maxConcurrency     = 16
 	maxAcoustIDRate    = 3.0
 	maxMusicBrainzRate = 1.0
-	defaultMinScore    = chromaprint.MinScore
+	defaultMinScore    = acquisition.ChromaprintMinScore
 	maxMinScore        = 1.0
 
 	defaultDeezerRate  = 1.0
@@ -55,7 +54,7 @@ var (
 	errBadMusicBrainzRate = fmt.Errorf("%s must be a number above 0 and at most %g (MusicBrainz's limit)", musicBrainzRateVarName, maxMusicBrainzRate)
 	errBadDeezerRate      = fmt.Errorf("%s must be a number above 0 and at most %g (Deezer's limit)", deezerRateVarName, maxDeezerRate)
 	errBadPreviewCut      = fmt.Errorf("%s and %s must be bit error rates between 0 and 1, the match cut below the absent cut", matchMaxVarName, absentMinVarName)
-	errBadMinScore        = fmt.Errorf("%s must be a number from %g (the score the app binds at) to %g", minScoreVarName, chromaprint.MinScore, maxMinScore)
+	errBadMinScore        = fmt.Errorf("%s must be a number from %g (the score the app binds at) to %g", minScoreVarName, acquisition.ChromaprintMinScore, maxMinScore)
 )
 
 type options struct {
@@ -154,7 +153,9 @@ func isRateUpTo(ceiling float64) func(float64) bool {
 	return func(value float64) bool { return value > 0 && value <= ceiling }
 }
 
-func isScore(value float64) bool { return value >= chromaprint.MinScore && value <= maxMinScore }
+func isScore(value float64) bool {
+	return value >= acquisition.ChromaprintMinScore && value <= maxMinScore
+}
 
 func main() {
 	opts, err := parseOptions(os.Args[1:], os.Stderr)
@@ -236,16 +237,16 @@ func verifierFromConfig(cfg *config.Config, tuning settings, previewTuning previ
 	if err != nil {
 		return nil, err
 	}
-	identifier := chromaprint.NewIdentifier(cfg.FFmpegLocation, cfg.AcoustIDAPIKey).WithRequestsPerSecond(tuning.acoustIDRate)
+	identifier := acquisition.NewChromaprintIdentifier(cfg.FFmpegLocation, cfg.AcoustIDAPIKey).WithRequestsPerSecond(tuning.acoustIDRate)
 	if !identifier.Available() {
 		return nil, errFpcalcMissing
 	}
 	client := &http.Client{Timeout: httpTimeout}
-	printer := deezerpreview.NewFpcalcPrinter(binpath.Resolve("fpcalc", cfg.FFmpegLocation))
+	printer := acquisition.NewFpcalcPrinter(binpath.Resolve("fpcalc", cfg.FFmpegLocation))
 	return &verifier{
 		store: audioStore, identify: identifier, minScore: tuning.minScore, progress: os.Stderr,
 		lookups:  newMusicBrainz(client, musicBrainzBaseURL, tuning.musicBrainzRate),
-		previews: deezerpreview.New(client, deezerpreview.BaseURL, previewTuning.deezerRate, printer),
+		previews: acquisition.NewDeezerPreview(client, acquisition.DeezerPreviewBaseURL, previewTuning.deezerRate, printer),
 		printer:  printer, cut: previewTuning.cut, provenMax: cfg.AcquisitionUpgradePreviewAMaxBER,
 	}, nil
 }

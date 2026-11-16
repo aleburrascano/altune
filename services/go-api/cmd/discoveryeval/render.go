@@ -1,13 +1,12 @@
 package main
 
 import (
+	"altune/go-api/internal/discovery"
 	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
 	"time"
-
-	discoveryEval "altune/go-api/internal/discovery/service/eval"
 )
 
 func maybeWriteJSON(path string, report any) error {
@@ -25,7 +24,7 @@ func maybeWriteJSON(path string, report any) error {
 	return nil
 }
 
-func renderEval(report discoveryEval.EvalReport) string {
+func renderEval(report discovery.EvalReport) string {
 	out := fmt.Sprintf("# Discovery library eval — %s\n\n", time.Now().UTC().Format(time.RFC3339))
 	out += fmt.Sprintf("- Total: %d (evaluated %d, skipped %d)\n", report.Total, report.Evaluated, report.Skipped)
 	out += fmt.Sprintf("- Top-1: %d (%.1f%%)\n", report.Top1Passed, report.Top1Rate()*100)
@@ -42,18 +41,18 @@ func renderEval(report discoveryEval.EvalReport) string {
 	out += "\n## Failures\n\n"
 	failures := 0
 	for _, r := range report.Results {
-		if r.Outcome == discoveryEval.EvalPass || r.Outcome == discoveryEval.EvalSkipped {
+		if r.Outcome == discovery.EvalPass || r.Outcome == discovery.EvalSkipped {
 			continue
 		}
 		failures++
 		switch r.Outcome {
-		case discoveryEval.EvalFailNoResults:
+		case discovery.EvalFailNoResults:
 			reason := "no results"
 			if r.Error != "" {
 				reason = "error: " + r.Error
 			}
 			out += fmt.Sprintf("- %q → %s\n", r.Query, reason)
-		case discoveryEval.EvalFailWrongTop:
+		case discovery.EvalFailWrongTop:
 			out += fmt.Sprintf("- %q → #1 was [%s] %q — %s\n", r.Query, r.Top.Kind, r.Top.Title, r.Top.Subtitle)
 		}
 	}
@@ -63,7 +62,7 @@ func renderEval(report discoveryEval.EvalReport) string {
 	return out
 }
 
-func renderArtistIntent(report discoveryEval.ArtistIntentReport) string {
+func renderArtistIntent(report discovery.ArtistIntentReport) string {
 	out := fmt.Sprintf("# Discovery artist-intent eval — %s\n\n", time.Now().UTC().Format(time.RFC3339))
 	out += fmt.Sprintf("- Total: %d (evaluated %d, skipped %d)\n", report.Total, report.Evaluated, report.Skipped)
 	out += fmt.Sprintf("- Top-1: %d (%.1f%%)\n", report.Top1Passed, report.Top1Rate()*100)
@@ -84,7 +83,7 @@ func renderArtistIntent(report discoveryEval.ArtistIntentReport) string {
 	out += "\n## Buried — artist out-ranked by a same-name track (ranker-fixable)\n\n"
 	buried, absent := 0, 0
 	for _, r := range report.Results {
-		if r.Outcome != discoveryEval.ArtistIntentBuried {
+		if r.Outcome != discovery.ArtistIntentBuried {
 			continue
 		}
 		buried++
@@ -97,7 +96,7 @@ func renderArtistIntent(report discoveryEval.ArtistIntentReport) string {
 
 	out += "\n## Absent — artist card never surfaced (recall/identity gap)\n\n"
 	for _, r := range report.Results {
-		if r.Outcome != discoveryEval.ArtistIntentAbsent {
+		if r.Outcome != discovery.ArtistIntentAbsent {
 			continue
 		}
 		absent++
@@ -109,7 +108,7 @@ func renderArtistIntent(report discoveryEval.ArtistIntentReport) string {
 	return out
 }
 
-func renderMerge(report discoveryEval.MergeReport) string {
+func renderMerge(report discovery.MergeReport) string {
 	out := fmt.Sprintf("# Discovery merge eval — %s\n\n", time.Now().UTC().Format(time.RFC3339))
 	out += fmt.Sprintf("- Total: %d (evaluated %d, no-match %d, skipped %d)\n", report.Total, report.Evaluated, report.NoMatch, report.Skipped)
 	out += fmt.Sprintf("- Under-merge rate: %.2f%% (%d provable dups unmerged of %d rows; %.1f%% queries clean)\n",
@@ -133,7 +132,7 @@ func renderMerge(report discoveryEval.MergeReport) string {
 	return out
 }
 
-func renderHealth(report discoveryEval.HealthReport) string {
+func renderHealth(report discovery.HealthReport) string {
 	out := fmt.Sprintf("# Discovery health gauges (report-only) — %s\n\n", time.Now().UTC().Format(time.RFC3339))
 	out += fmt.Sprintf("- Searches: %d, result rows: %d\n", report.Searches, report.Results)
 	out += fmt.Sprintf("- Artwork fill-rate: %.1f%% (%d of %d)\n", report.FillRate*100, report.WithArtwork, report.Results)
@@ -143,7 +142,7 @@ func renderHealth(report discoveryEval.HealthReport) string {
 	return out
 }
 
-func renderDiversity(report discoveryEval.DiversityReport) string {
+func renderDiversity(report discovery.DiversityReport) string {
 	out := fmt.Sprintf("# Discovery diversity differential — %s\n\n", time.Now().UTC().Format(time.RFC3339))
 	out += fmt.Sprintf("- Evaluated: %d of %d\n", report.Evaluated, report.Total)
 	out += fmt.Sprintf("- COST (gated): %.2f%% lost to reshape (%d demoted out of top-%d), %d gained\n",
@@ -161,7 +160,7 @@ func renderDiversity(report discoveryEval.DiversityReport) string {
 	return out
 }
 
-func renderCorrection(report discoveryEval.CorrectionReport) string {
+func renderCorrection(report discovery.CorrectionReport) string {
 	out := fmt.Sprintf("# Discovery correction eval — %s\n\n", time.Now().UTC().Format(time.RFC3339))
 	out += fmt.Sprintf("- Terms (known-good): %d\n", report.Terms)
 	out += fmt.Sprintf("- Recall: %.1f%% (%d of %d typos recovered)\n", report.RecallRate()*100, report.Recovered, report.TyposTested)
@@ -176,7 +175,7 @@ func renderCorrection(report discoveryEval.CorrectionReport) string {
 	return out
 }
 
-func renderSignalA(report *discoveryEval.CoverageReportA, sinceDays, top int) string {
+func renderSignalA(report *discovery.CoverageReportA, sinceDays, top int) string {
 	out := fmt.Sprintf("# Discovery coverage signal A — %s\n\n", time.Now().UTC().Format(time.RFC3339))
 	out += fmt.Sprintf("Window: last %d days. Strong = zero-result (not a typo); weak = results shown but no click.\n\n", sinceDays)
 
@@ -191,7 +190,7 @@ func renderSignalA(report *discoveryEval.CoverageReportA, sinceDays, top int) st
 	return out
 }
 
-func renderSignalB(report *discoveryEval.CoverageReportB) string {
+func renderSignalB(report *discovery.CoverageReportB) string {
 	out := fmt.Sprintf("# Discovery coverage signal B — %s\n\n", time.Now().UTC().Format(time.RFC3339))
 	out += fmt.Sprintf("Artists scanned: %d. Total entities (union): %d.\n\n", report.ArtistsScanned, report.TotalEntities)
 
@@ -212,7 +211,7 @@ func renderSignalB(report *discoveryEval.CoverageReportB) string {
 	return out
 }
 
-func renderReplay(score discoveryEval.ReplayScore) string {
+func renderReplay(score discovery.ReplayScore) string {
 	out := fmt.Sprintf("# Discovery behavioral corpus replay — %s\n\n", time.Now().UTC().Format(time.RFC3339))
 	out += fmt.Sprintf("- Positives: %d, found in ranking: %d (%.1f%%)\n", score.Positives, score.Found, foundRate(score)*100)
 	out += fmt.Sprintf("- MRR: %.3f\n", score.MRR)
@@ -224,21 +223,21 @@ func renderReplay(score discoveryEval.ReplayScore) string {
 	return out
 }
 
-func foundRate(score discoveryEval.ReplayScore) float64 {
+func foundRate(score discovery.ReplayScore) float64 {
 	if score.Positives == 0 {
 		return 0
 	}
 	return float64(score.Found) / float64(score.Positives)
 }
 
-func negativeLeakRate(score discoveryEval.ReplayScore) float64 {
+func negativeLeakRate(score discovery.ReplayScore) float64 {
 	if score.Negatives == 0 {
 		return 0
 	}
 	return float64(score.NegativeLeakK) / float64(score.Negatives)
 }
 
-func renderFailedArtistIntent(r discoveryEval.ArtistIntentResult) string {
+func renderFailedArtistIntent(r discovery.ArtistIntentResult) string {
 	ranked := strings.Join(r.RankedLabels(), " | ")
 	if ranked == "" {
 		ranked = "(nothing ranked)"
@@ -253,7 +252,7 @@ func renderFailedArtistIntent(r discoveryEval.ArtistIntentResult) string {
 	return line
 }
 
-func renderGaps(gaps []discoveryEval.CoverageGap, top int) string {
+func renderGaps(gaps []discovery.CoverageGap, top int) string {
 	if len(gaps) == 0 {
 		return "_none_\n"
 	}

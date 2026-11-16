@@ -3,10 +3,10 @@ package service
 import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/internal/adapters/catalogbridge"
-	acqports "altune/go-api/internal/acquisition/ports"
+	acqports "altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/service/upgrade"
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared/events"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/logging"
@@ -184,7 +184,7 @@ func (s *fakeAudioStore) Store(_ context.Context, _ string, audioRef string) err
 	return nil
 }
 
-func (s *fakeAudioStore) Stream(_ context.Context, _ string) (ports.AudioStream, int64, error) {
+func (s *fakeAudioStore) Stream(_ context.Context, _ string) (catalog.AudioStream, int64, error) {
 	return nil, 0, nil
 }
 

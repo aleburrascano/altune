@@ -1,7 +1,7 @@
 package app
 
 import (
-	"altune/go-api/internal/acquisition/adapters/ytdlp"
+	"altune/go-api/internal/acquisition"
 	"bytes"
 	"context"
 	"errors"
@@ -79,7 +79,7 @@ func TestRunSourceCanaries_NamesEveryDarkSource(t *testing.T) {
 }
 
 func TestSourceCanaries_OnlyProbesEnabledSources(t *testing.T) {
-	searcher := ytdlp.NewYtDlpAudioSearcher("", "", "")
+	searcher := acquisition.NewYtDlpAudioSearcher("", "", "")
 	ytm := newYTMSearchClient()
 	tests := []struct {
 		enabled sourceToggles
@@ -102,7 +102,7 @@ func TestSourceCanaries_ProbesInnerTubeWithoutYtDlp(t *testing.T) {
 	ytm := newYTMSearchClient()
 	enabled := sourceToggles{ytMusic: true, ytDlp: true}
 
-	for _, searcher := range []*ytdlp.YtDlpAudioSearcher{nil, ytdlp.NewYtDlpAudioSearcher("", "", "")} {
+	for _, searcher := range []*acquisition.YtDlpAudioSearcher{nil, acquisition.NewYtDlpAudioSearcher("", "", "")} {
 		got := canaryNames(sourceCanaries(searcher, false, ytm, enabled))
 		if strings.Join(got, ",") != "ytmsearch" {
 			t.Errorf("sourceCanaries(searcher=%v, unavailable) = %v, want only ytmsearch", searcher != nil, got)
@@ -118,7 +118,7 @@ func TestSourceCanaries_ProbesInnerTubeWithoutYtDlp(t *testing.T) {
 
 func TestStartSourceCanary_DoesNotRegisterTheJobWhenEverySourceIsDisabled(t *testing.T) {
 	a := &App{}
-	a.startSourceCanary(context.Background(), ytdlp.NewYtDlpAudioSearcher("", "", ""), true, newYTMSearchClient(), sourceToggles{})
+	a.startSourceCanary(context.Background(), acquisition.NewYtDlpAudioSearcher("", "", ""), true, newYTMSearchClient(), sourceToggles{})
 
 	if _, ok := a.SetJobEnabled(jobAcquisitionSourceCanary, false); ok {
 		t.Fatal("job was registered despite every canaried source being disabled")
@@ -127,7 +127,7 @@ func TestStartSourceCanary_DoesNotRegisterTheJobWhenEverySourceIsDisabled(t *tes
 
 func TestStartSourceCanary_DoesNotRegisterTheJobWhenNoProbeIsAvailable(t *testing.T) {
 	a := &App{}
-	a.startSourceCanary(context.Background(), ytdlp.NewYtDlpAudioSearcher("", "", ""), false, nil, sourceToggles{ytMusic: true, ytDlp: true})
+	a.startSourceCanary(context.Background(), acquisition.NewYtDlpAudioSearcher("", "", ""), false, nil, sourceToggles{ytMusic: true, ytDlp: true})
 
 	if _, ok := a.SetJobEnabled(jobAcquisitionSourceCanary, false); ok {
 		t.Fatal("job was registered despite yt-dlp being unavailable and no InnerTube client")
@@ -139,7 +139,7 @@ func TestStartSourceCanary_RegistersTheJobWhenYtDlpIsAvailable(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	a.startSourceCanary(ctx, ytdlp.NewYtDlpAudioSearcher("", "", ""), true, nil, sourceToggles{ytMusic: true, ytDlp: true})
+	a.startSourceCanary(ctx, acquisition.NewYtDlpAudioSearcher("", "", ""), true, nil, sourceToggles{ytMusic: true, ytDlp: true})
 
 	if _, ok := a.SetJobEnabled(jobAcquisitionSourceCanary, true); !ok {
 		t.Fatal("job was not registered despite yt-dlp being reported available")

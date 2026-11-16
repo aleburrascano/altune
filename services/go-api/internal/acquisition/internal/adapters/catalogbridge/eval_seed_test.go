@@ -1,7 +1,7 @@
 package catalogbridge
 
 import (
-	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/internal/core/ports"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"encoding/json"

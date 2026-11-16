@@ -1,22 +1,21 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/adapters/ytmsearch"
-	"altune/go-api/internal/acquisition/service/grade"
+	"altune/go-api/internal/acquisition"
 	"context"
 	"errors"
 	"testing"
 )
 
 type fakeLookup struct {
-	watch       ytmsearch.Watch
+	watch       acquisition.YtmWatch
 	watchErr    error
 	author      string
 	authorErr   error
 	authorCalls int
 }
 
-func (f *fakeLookup) Watch(context.Context, string) (ytmsearch.Watch, error) {
+func (f *fakeLookup) Watch(context.Context, string) (acquisition.YtmWatch, error) {
 	return f.watch, f.watchErr
 }
 
@@ -41,22 +40,22 @@ func TestClassifySource(t *testing.T) {
 		name       string
 		url        string
 		lookup     fakeLookup
-		want       grade.SourceKind
+		want       acquisition.SourceKind
 		wantErr    error
 		wantAuthor bool
 	}{
-		{"no source url is the user's own upload", "", fakeLookup{}, grade.UserUpload, nil, false},
-		{"youtube music album audio", youtubeURL, fakeLookup{watch: ytmsearch.Watch{Type: ytmsearch.VideoTypeATV}}, grade.ArtTrack, nil, false},
-		{"youtube official video", youtubeURL, fakeLookup{watch: ytmsearch.Watch{Type: ytmsearch.VideoTypeOMV}}, grade.OfficialVideo, nil, false},
-		{"youtube video of an unlisted type goes by its author", youtubeURL, fakeLookup{watch: ytmsearch.Watch{Type: "MUSIC_VIDEO_TYPE_OTHER"}, author: "lyrics hub"}, grade.FanUpload, nil, true},
-		{"youtube watch with no type goes by its author", youtubeURL, fakeLookup{author: "lyrics hub"}, grade.FanUpload, nil, true},
-		{"youtube upload by the artist", youtubeURL, fakeLookup{watch: ytmsearch.Watch{Type: ytmsearch.VideoTypeUGC}, author: "Daft Punk"}, grade.LabelUpload, nil, true},
-		{"youtube upload by a fan", youtubeURL, fakeLookup{watch: ytmsearch.Watch{Type: ytmsearch.VideoTypeUGC}, author: "lyrics hub"}, grade.FanUpload, nil, true},
-		{"youtube video outside the music catalog", youtubeURL, fakeLookup{watchErr: ytmsearch.ErrNoWatchTrack, author: "Daft Punk"}, grade.LabelUpload, nil, true},
+		{"no source url is the user's own upload", "", fakeLookup{}, acquisition.UserUpload, nil, false},
+		{"youtube music album audio", youtubeURL, fakeLookup{watch: acquisition.YtmWatch{Type: acquisition.VideoTypeATV}}, acquisition.ArtTrack, nil, false},
+		{"youtube official video", youtubeURL, fakeLookup{watch: acquisition.YtmWatch{Type: acquisition.VideoTypeOMV}}, acquisition.OfficialVideo, nil, false},
+		{"youtube video of an unlisted type goes by its author", youtubeURL, fakeLookup{watch: acquisition.YtmWatch{Type: "MUSIC_VIDEO_TYPE_OTHER"}, author: "lyrics hub"}, acquisition.FanUpload, nil, true},
+		{"youtube watch with no type goes by its author", youtubeURL, fakeLookup{author: "lyrics hub"}, acquisition.FanUpload, nil, true},
+		{"youtube upload by the artist", youtubeURL, fakeLookup{watch: acquisition.YtmWatch{Type: acquisition.VideoTypeUGC}, author: "Daft Punk"}, acquisition.LabelUpload, nil, true},
+		{"youtube upload by a fan", youtubeURL, fakeLookup{watch: acquisition.YtmWatch{Type: acquisition.VideoTypeUGC}, author: "lyrics hub"}, acquisition.FanUpload, nil, true},
+		{"youtube video outside the music catalog", youtubeURL, fakeLookup{watchErr: acquisition.ErrNoWatchTrack, author: "Daft Punk"}, acquisition.LabelUpload, nil, true},
 		{"youtube watch lookup failing is unresolved", youtubeURL, fakeLookup{watchErr: boom}, "", boom, false},
-		{"youtube author lookup failing is unresolved", youtubeURL, fakeLookup{watch: ytmsearch.Watch{Type: ytmsearch.VideoTypeUGC}, authorErr: boom}, "", boom, true},
-		{"soundcloud upload by the artist", soundCloudURL, fakeLookup{author: "Daft Punk"}, grade.LabelUpload, nil, true},
-		{"soundcloud upload by someone else", soundCloudURL, fakeLookup{author: "bootlegs"}, grade.FanUpload, nil, true},
+		{"youtube author lookup failing is unresolved", youtubeURL, fakeLookup{watch: acquisition.YtmWatch{Type: acquisition.VideoTypeUGC}, authorErr: boom}, "", boom, true},
+		{"soundcloud upload by the artist", soundCloudURL, fakeLookup{author: "Daft Punk"}, acquisition.LabelUpload, nil, true},
+		{"soundcloud upload by someone else", soundCloudURL, fakeLookup{author: "bootlegs"}, acquisition.FanUpload, nil, true},
 		{"another host is unresolved", "https://example.com/song.mp3", fakeLookup{}, "", errUnsupportedSource, false},
 	}
 	for _, tc := range cases {
@@ -74,18 +73,18 @@ func TestPlanTrack_GradesFromTheStoredVerdictAndProvenance(t *testing.T) {
 	cases := []struct {
 		name string
 		row  trackRow
-		want grade.Grade
+		want acquisition.Grade
 	}{
-		{"fingerprint proven art track", trackRow{SourceURL: youtubeURL, Verdict: "hard", Provenance: "verified"}, grade.A},
-		{"length only", trackRow{SourceURL: youtubeURL, Verdict: "unknown", Provenance: "corroborated"}, grade.C},
-		{"no evidence stored", trackRow{SourceURL: youtubeURL, Provenance: "best_effort"}, grade.D},
-		{"fingerprint says another version", trackRow{SourceURL: youtubeURL, Verdict: "other_version", Provenance: "verified"}, grade.F},
+		{"fingerprint proven art track", trackRow{SourceURL: youtubeURL, Verdict: "hard", Provenance: "verified"}, acquisition.GradeA},
+		{"length only", trackRow{SourceURL: youtubeURL, Verdict: "unknown", Provenance: "corroborated"}, acquisition.GradeC},
+		{"no evidence stored", trackRow{SourceURL: youtubeURL, Provenance: "best_effort"}, acquisition.GradeD},
+		{"fingerprint says another version", trackRow{SourceURL: youtubeURL, Verdict: "other_version", Provenance: "verified"}, acquisition.GradeF},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			lookup := &fakeLookup{watch: ytmsearch.Watch{Type: ytmsearch.VideoTypeATV}}
+			lookup := &fakeLookup{watch: acquisition.YtmWatch{Type: acquisition.VideoTypeATV}}
 			got, err := planTrack(context.Background(), lookup, tc.row, "run-1")
-			if err != nil || got.Grade != tc.want || got.SourceKind != grade.ArtTrack || got.PipelineGeneration != 0 || got.BackfillRun != "run-1" {
+			if err != nil || got.Grade != tc.want || got.SourceKind != acquisition.ArtTrack || got.PipelineGeneration != 0 || got.BackfillRun != "run-1" {
 				t.Fatalf("got %+v, %v", got, err)
 			}
 		})

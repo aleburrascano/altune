@@ -1,8 +1,8 @@
 package main
 
 import (
+	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/catalog"
-	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/database"
 	shared "altune/go-api/internal/shared/kernel"
@@ -14,10 +14,6 @@ import (
 	"os"
 	"strings"
 	"time"
-
-	acquisitionService "altune/go-api/internal/acquisition/service"
-
-	catalogPorts "altune/go-api/internal/catalog/ports"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -33,7 +29,7 @@ type options struct {
 }
 
 type candidate struct {
-	trackID   domain.TrackId
+	trackID   catalog.TrackId
 	userID    shared.UserId
 	title     string
 	artist    string
@@ -115,7 +111,7 @@ const missingAudioReason = "audio file missing from storage"
 func verifyRefs(
 	ctx context.Context,
 	repo trackWriter,
-	store catalogPorts.AudioStore,
+	store catalog.AudioStore,
 	candidates []candidate,
 	apply bool,
 ) error {
@@ -159,8 +155,8 @@ func markFailed(ctx context.Context, repo trackWriter, c candidate) error {
 	return repo.Update(ctx, track, track.Version)
 }
 
-func listStorage(ctx context.Context, store catalogPorts.AudioStore) error {
-	lister, ok := store.(catalogPorts.AudioLister)
+func listStorage(ctx context.Context, store catalog.AudioStore) error {
+	lister, ok := store.(catalog.AudioLister)
 	if !ok {
 		return errors.New("the configured audio store cannot list objects")
 	}
@@ -199,7 +195,7 @@ func loadCandidates(ctx context.Context, pool *pgxpool.Pool, opts options) ([]ca
 		if err := rows.Scan(&id, &userID, &c.title, &c.artist, &c.album, &c.storedRef); err != nil {
 			return nil, fmt.Errorf("scan candidate: %w", err)
 		}
-		if c.trackID, err = domain.ParseTrackId(id); err != nil {
+		if c.trackID, err = catalog.ParseTrackId(id); err != nil {
 			return nil, fmt.Errorf("parse track id %q: %w", id, err)
 		}
 		if c.userID, err = shared.ParseUserId(userID); err != nil {
@@ -211,7 +207,7 @@ func loadCandidates(ctx context.Context, pool *pgxpool.Pool, opts options) ([]ca
 }
 
 func candidateRefs(c candidate) []string {
-	owned := acquisitionService.TrackRef{
+	owned := acquisition.TrackRef{
 		UserID: c.userID.String(),
 		Title:  c.title,
 		Artist: c.artist,
@@ -222,16 +218,16 @@ func candidateRefs(c candidate) []string {
 
 	refs := make([]string, 0, 2*len(extensions))
 	for _, ext := range extensions {
-		capped := acquisitionService.BuildLegacyAudioRef(owned, "audio"+ext)
+		capped := acquisition.BuildLegacyAudioRef(owned, "audio"+ext)
 		refs = append(refs, capped)
-		if uncapped := acquisitionService.BuildLegacyAudioRefUncapped(owned, "audio"+ext); uncapped != capped {
+		if uncapped := acquisition.BuildLegacyAudioRefUncapped(owned, "audio"+ext); uncapped != capped {
 			refs = append(refs, uncapped)
 		}
 	}
 	for _, ext := range extensions {
-		capped := strings.TrimPrefix(acquisitionService.BuildLegacyAudioRef(flat, "audio"+ext), "/")
+		capped := strings.TrimPrefix(acquisition.BuildLegacyAudioRef(flat, "audio"+ext), "/")
 		refs = append(refs, capped)
-		uncapped := strings.TrimPrefix(acquisitionService.BuildLegacyAudioRefUncapped(flat, "audio"+ext), "/")
+		uncapped := strings.TrimPrefix(acquisition.BuildLegacyAudioRefUncapped(flat, "audio"+ext), "/")
 		if uncapped != capped {
 			refs = append(refs, uncapped)
 		}
@@ -239,7 +235,7 @@ func candidateRefs(c candidate) []string {
 	return refs
 }
 
-func locate(ctx context.Context, store catalogPorts.AudioStore, refs []string) (string, error) {
+func locate(ctx context.Context, store catalog.AudioStore, refs []string) (string, error) {
 	for _, ref := range refs {
 		exists, err := store.Exists(ctx, ref)
 		if err != nil {
@@ -253,11 +249,11 @@ func locate(ctx context.Context, store catalogPorts.AudioStore, refs []string) (
 }
 
 type trackWriter interface {
-	GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error)
-	Update(ctx context.Context, track *domain.Track, expectedVersion int) error
+	GetByID(ctx context.Context, id catalog.TrackId, userId shared.UserId) (*catalog.Track, error)
+	Update(ctx context.Context, track *catalog.Track, expectedVersion int) error
 }
 
-func reconcile(ctx context.Context, repo trackWriter, store catalogPorts.AudioStore, c candidate, apply bool) outcome {
+func reconcile(ctx context.Context, repo trackWriter, store catalog.AudioStore, c candidate, apply bool) outcome {
 	refs := candidateRefs(c)
 	ref, err := locate(ctx, store, refs)
 	if err != nil || ref == "" {

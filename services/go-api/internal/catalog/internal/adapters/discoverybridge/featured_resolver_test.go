@@ -3,7 +3,7 @@ package discoverybridge
 import (
 	"altune/go-api/internal/catalog/catalogtest"
 	catalogdomain "altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/catalog/internal/core/ports"
 	discoverydomain "altune/go-api/internal/discovery/domain"
 	"context"
 	"strings"

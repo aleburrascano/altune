@@ -5,8 +5,6 @@ import (
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/observe"
-	"altune/go-api/internal/observe/service/evalmeter"
-	"altune/go-api/internal/observe/service/eventtap"
 	"altune/go-api/internal/playback"
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/leader"
@@ -14,12 +12,10 @@ import (
 	"altune/go-api/internal/shared/reqmetrics"
 	"context"
 
-	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
-
 	"github.com/go-chi/chi/v5"
 )
 
-func (a *App) wireObserve(ctx context.Context, r *chi.Mux, verifier auth.TokenVerifier, tap *eventtap.Tap) {
+func (a *App) wireObserve(ctx context.Context, r *chi.Mux, verifier auth.TokenVerifier, tap *observe.EventTap) {
 	a.startObserveSources(ctx, tap)
 	deps := observe.Deps{
 		Health:      a.dependencyHealth,
@@ -28,16 +24,16 @@ func (a *App) wireObserve(ctx context.Context, r *chi.Mux, verifier auth.TokenVe
 		Eval:        a.evalMeter,
 		Acquisition: a.observeAcquisition(),
 		LiveMetrics: a.liveMetrics,
-		Discography: discoveryPersistence.NewPgxEventStore(a.pool),
+		Discography: discovery.NewPgxEventStore(a.pool),
 		Shutdown:    a.lifecycleDone,
 	}
 	mountObserve(r, verifier, a.cfg.OverseerPrincipalID, observe.NewObserveHandler(deps))
 }
 
-func (a *App) startObserveSources(ctx context.Context, tap *eventtap.Tap) {
-	a.eventFeed = eventtap.NewFeed()
+func (a *App) startObserveSources(ctx context.Context, tap *observe.EventTap) {
+	a.eventFeed = observe.NewEventFeed()
 	a.eventFeed.Start(ctx, tap)
-	a.evalMeter = evalmeter.New(a.cfg.EvalMeterEnabled, 0, a.evalMeterRunner(ctx)).
+	a.evalMeter = observe.NewEvalMeter(a.cfg.EvalMeterEnabled, 0, a.evalMeterRunner(ctx)).
 		WithLeadership(a.leaderContext)
 	a.whenLeaderUnlessDisabled(jobEvalMeter, a.evalMeter.Start)
 }
@@ -115,34 +111,34 @@ func (a *App) tapStats() eventTapStats {
 	return tapStats
 }
 
-func (a *App) evalMeterRunner(ctx context.Context) evalmeter.Runner {
+func (a *App) evalMeterRunner(ctx context.Context) observe.EvalMeterRunner {
 	return wrapEvalRunner(a.buildEvalRunner(ctx))
 }
 
-func wrapEvalRunner(run EvalRunner) evalmeter.Runner {
+func wrapEvalRunner(run EvalRunner) observe.EvalMeterRunner {
 	if run == nil {
 		return nil
 	}
-	return func(ctx context.Context) (evalmeter.Result, error) {
+	return func(ctx context.Context) (observe.EvalMeterResult, error) {
 		res, err := run(ctx)
 		if err != nil {
-			return evalmeter.Result{}, err
+			return observe.EvalMeterResult{}, err
 		}
 		return meterResult(res), nil
 	}
 }
 
-func meterResult(res EvalResult) evalmeter.Result {
-	queries := make([]evalmeter.QueryResult, len(res.Queries))
+func meterResult(res EvalResult) observe.EvalMeterResult {
+	queries := make([]observe.EvalMeterQueryResult, len(res.Queries))
 	for i, q := range res.Queries {
-		queries[i] = evalmeter.QueryResult{
+		queries[i] = observe.EvalMeterQueryResult{
 			Query:    q.Query,
 			Expect:   q.Expect,
 			Passed:   q.Passed,
 			Position: q.Position,
 		}
 	}
-	return evalmeter.Result{
+	return observe.EvalMeterResult{
 		Score:     res.Score,
 		Baseline:  res.Baseline,
 		Regressed: res.Regressed,

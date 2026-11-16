@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/adapters/ytmsearch"
+	"altune/go-api/internal/acquisition"
 	"bytes"
 	"context"
 	"errors"
@@ -63,7 +63,7 @@ func backfill(t *testing.T, s store, userID string, write bool) (uuid.UUID, stri
 	t.Helper()
 	runID := uuid.New()
 	var out bytes.Buffer
-	lookup := &fakeLookup{watch: ytmsearch.Watch{Type: ytmsearch.VideoTypeATV}}
+	lookup := &fakeLookup{watch: acquisition.YtmWatch{Type: acquisition.VideoTypeATV}}
 	err := runBackfill(context.Background(), s, lookup, options{apply: write, userID: userID}, runID, &out)
 	return runID, out.String(), err
 }
