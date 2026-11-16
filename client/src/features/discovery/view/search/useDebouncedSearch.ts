@@ -2,14 +2,14 @@ import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 
 import { onSignOut } from '@shared/session';
 
-import { getSearchState, setSearchState } from '@features/discovery/domain/searchState';
+import { getSearchState, setSearchState } from '@features/discovery/core/searchState';
 import {
   MAX_QUERY_LENGTH,
   clampQueryWords,
   isSearchableQuery,
   normalizeQuery,
   sliceCodePoints,
-} from '@features/discovery/domain/searchPaging';
+} from '@features/discovery/core/searchPaging';
 
 type UseDebouncedSearchOptions = {
   debounceMs: number;

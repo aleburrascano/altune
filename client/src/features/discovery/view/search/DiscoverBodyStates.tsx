@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { Button, Skeleton, Text, radius, spacing } from '@shared/ui';
 
 import { describeError } from '@shared/failure';
-import { SEARCH_UNAVAILABLE_TITLE } from '@features/discovery/domain/discoverView';
+import { SEARCH_UNAVAILABLE_TITLE } from '@features/discovery/core/discoverView';
 import { ART_SIZE } from '@features/discovery/view/results/DiscoverRow';
 import { FilterChips } from '@features/discovery/view/results/FilterChips';
 import { IncompleteResultsBanner } from '@features/discovery/view/results/ResultNotices';

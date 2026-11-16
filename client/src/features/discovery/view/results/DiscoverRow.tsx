@@ -27,7 +27,7 @@ import {
 import type { DiscoveryResult, FavoriteKey } from '@shared/catalog';
 import type { ResultTapHandler } from '@features/discovery/hooks/results/useResultTap';
 
-import { resultSecondaryLine } from '@features/discovery/domain/resultDisplay';
+import { resultSecondaryLine } from '@features/discovery/core/resultDisplay';
 import {
   usePreviewPlayback,
   type PreviewPlayback,

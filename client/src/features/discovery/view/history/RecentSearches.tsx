@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { Search } from 'lucide-react-native';
 
 import { Button, Chip, Text, pressedStyle, spacing, useTheme, Tappable } from '@shared/ui';
-import { sliceCodePoints } from '@features/discovery/domain/searchPaging';
+import { sliceCodePoints } from '@features/discovery/core/searchPaging';
 import { SectionLabel } from '@features/discovery/view/results/SectionLabel';
 import type { SearchHistoryItem } from '@shared/catalog';
 

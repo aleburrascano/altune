@@ -19,7 +19,7 @@ import {
   normalizeQuery,
   type SearchPageParam,
   type SearchPages,
-} from '@features/discovery/domain/searchPaging';
+} from '@features/discovery/core/searchPaging';
 import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
 import { useDiscoverPort } from '@features/discovery/view/DiscoverPortProvider';
 

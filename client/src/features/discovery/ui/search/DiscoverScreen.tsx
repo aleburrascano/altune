@@ -14,7 +14,7 @@ import {
 import { DiscoverBody } from '@features/discovery/view/search/DiscoverBody';
 import { SuggestionsList } from '@features/discovery/view/history/SuggestionsList';
 import { useDiscoverLogic } from '@features/discovery/view/search/useDiscoverLogic';
-import { MAX_QUERY_LENGTH } from '@features/discovery/domain/searchPaging';
+import { MAX_QUERY_LENGTH } from '@features/discovery/core/searchPaging';
 
 export function DiscoverScreen(): ReactElement {
   const theme = useTheme();

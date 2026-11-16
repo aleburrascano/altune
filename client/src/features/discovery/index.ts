@@ -16,13 +16,13 @@ export type { FavoritesPort } from '@features/discovery/ports/favoritesPort';
 export { BlendedSection } from '@features/discovery/view/results/BlendedSection';
 export { resultFixture } from '@features/discovery/__tests__/fixtures';
 export type { ResultsCommonProps } from '@features/discovery/view/results/ResultsList';
-export { buildImpressionRows } from '@features/discovery/domain/buildImpressionRows';
+export { buildImpressionRows } from '@features/discovery/core/buildImpressionRows';
 export { DiscoverBody } from '@features/discovery/view/search/DiscoverBody';
 export type {
   DiscoverHookState,
   DiscoverView,
   SearchCorrection,
-} from '@features/discovery/domain/discoverView';
+} from '@features/discovery/core/discoverView';
 export { createMemoryDiscoverPort } from '@features/discovery/__tests__/memoryDiscoverPort';
 export {
   useAutocompleteSuggestions,
@@ -41,15 +41,11 @@ export {
   resultsIncompleteForState,
   searchAnnouncement,
   viewForState,
-} from '@features/discovery/domain/discoverView';
+} from '@features/discovery/core/discoverView';
 export { createMemoryFavoritesPort } from '@features/discovery/__tests__/memoryFavoritesPort';
 export { FilterChips } from '@features/discovery/view/results/FilterChips';
 export { FilteredResults } from '@features/discovery/view/results/FilteredResults';
-export {
-  kindLabel,
-  resultKey,
-  resultSecondaryLine,
-} from '@features/discovery/domain/resultDisplay';
+export { kindLabel, resultKey, resultSecondaryLine } from '@features/discovery/core/resultDisplay';
 export { ResultsList } from '@features/discovery/view/results/ResultsList';
 export {
   MAX_QUERY_LENGTH,
@@ -60,12 +56,12 @@ export {
   isSearchableQuery,
   normalizeQuery,
   sliceCodePoints,
-} from '@features/discovery/domain/searchPaging';
+} from '@features/discovery/core/searchPaging';
 export {
   getSearchState,
   resetSearchState,
   setSearchState,
-} from '@features/discovery/domain/searchState';
+} from '@features/discovery/core/searchState';
 export { SectionGrid } from '@features/discovery/view/results/SectionGrid';
 export { TopResultCard } from '@features/discovery/view/results/TopResultCard';
 export { stashHandoffForDetail } from '@features/discovery/domain/stashHandoffForDetail';
