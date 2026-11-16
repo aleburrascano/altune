@@ -1,6 +1,9 @@
-package filehost
+package filehost_test
 
-import "testing"
+import (
+	"altune/go-api/internal/shared/filehost"
+	"testing"
+)
 
 func TestParse_ReadsEachHostsFileLink(t *testing.T) {
 	cases := []struct{ link, provider, id, page string }{
@@ -12,8 +15,8 @@ func TestParse_ReadsEachHostsFileLink(t *testing.T) {
 		{"https://krakenfiles.com/view/061QAmEM4q/file.html", "krakenfiles", "061QAmEM4q", "https://krakenfiles.com/view/061QAmEM4q/file.html"},
 	}
 	for _, c := range cases {
-		got, ok := Parse(c.link)
-		if !ok || got != (File{Provider: c.provider, ID: c.id, PageURL: c.page}) {
+		got, ok := filehost.Parse(c.link)
+		if !ok || got != (filehost.File{Provider: c.provider, ID: c.id, PageURL: c.page}) {
 			t.Errorf("Parse(%q) = %+v, %v", c.link, got, ok)
 		}
 	}
@@ -29,7 +32,7 @@ func TestParse_RejectsLinksThatAreNotAFile(t *testing.T) {
 		"ftp://imgur.gg/f/0Q3ydhk",
 		"https://soundcloud.com/a/b",
 	} {
-		if got, ok := Parse(link); ok {
+		if got, ok := filehost.Parse(link); ok {
 			t.Errorf("Parse(%q) = %+v, want rejected", link, got)
 		}
 	}
@@ -41,19 +44,32 @@ func TestDownloadURL_IsBuiltFromAValidIDOnly(t *testing.T) {
 		{"pillows", "4d201f3332e7128f9f148d765244ce98"}: "https://api.pillows.su/api/download/4d201f3332e7128f9f148d765244ce98",
 	}
 	for in, want := range cases {
-		if got, ok := DownloadURL(in[0], in[1]); !ok || got != want {
+		if got, ok := filehost.DownloadURL(in[0], in[1]); !ok || got != want {
 			t.Errorf("DownloadURL(%q, %q) = %q, %v, want %q", in[0], in[1], got, ok, want)
 		}
 	}
 	for _, in := range [][2]string{{"pixeldrain", "../../x"}, {"pillows", "a?b=c"}, {"soundcloud", "x"}} {
-		if got, ok := DownloadURL(in[0], in[1]); ok {
+		if got, ok := filehost.DownloadURL(in[0], in[1]); ok {
 			t.Errorf("DownloadURL(%q, %q) = %q, want rejected", in[0], in[1], got)
 		}
 	}
 }
 
+func TestValidID_AcceptsOnlyAKnownHostsIDShape(t *testing.T) {
+	for _, in := range [][2]string{{"pixeldrain", "ozSpSjn7"}, {"pillows", "4d201f3332e7128f9f148d765244ce98"}, {"imgurgg", "0Q3ydhk"}, {"krakenfiles", "061QAmEM4q"}} {
+		if !filehost.ValidID(in[0], in[1]) {
+			t.Errorf("ValidID(%q, %q) = false, want true", in[0], in[1])
+		}
+	}
+	for _, in := range [][2]string{{"pixeldrain", "../../x"}, {"pillows", "short"}, {"imgurgg", "abc"}, {"krakenfiles", "061QAmEM4"}, {"soundcloud", "ozSpSjn7"}} {
+		if filehost.ValidID(in[0], in[1]) {
+			t.Errorf("ValidID(%q, %q) = true, want false", in[0], in[1])
+		}
+	}
+}
+
 func TestFileOnPage_AcceptsOnlyThisIDsFileOnTheImgurggCDN(t *testing.T) {
-	page, ok := FileOnPage("imgurgg", "0Q3ydhk")
+	page, ok := filehost.FileOnPage("imgurgg", "0Q3ydhk")
 	if !ok || page.PageURL != "https://imgur.gg/f/0Q3ydhk" {
 		t.Fatalf("FileOnPage = %+v, %v", page, ok)
 	}
@@ -61,16 +77,16 @@ func TestFileOnPage_AcceptsOnlyThisIDsFileOnTheImgurggCDN(t *testing.T) {
 	if got := page.File.FindString(body); got != "https://b.imgur.gg/0Q3ydhk-Got_A_New_One.mp3" {
 		t.Errorf("file = %q, want only this id's b.imgur.gg file", got)
 	}
-	if _, ok := DownloadURL("imgurgg", "0Q3ydhk"); ok {
+	if _, ok := filehost.DownloadURL("imgurgg", "0Q3ydhk"); ok {
 		t.Error("an imgur.gg page must never be handed to the downloader")
 	}
-	if _, ok := FileOnPage("pixeldrain", "ozSpSjn7"); ok {
+	if _, ok := filehost.FileOnPage("pixeldrain", "ozSpSjn7"); ok {
 		t.Error("pixeldrain has a direct download and no page step")
 	}
 }
 
 func TestFileOnPage_AcceptsOnlyThisIDsAudioOnTheKrakenfilesStorage(t *testing.T) {
-	page, ok := FileOnPage("krakenfiles", "061QAmEM4q")
+	page, ok := filehost.FileOnPage("krakenfiles", "061QAmEM4q")
 	if !ok || page.PageURL != "https://krakenfiles.com/view/061QAmEM4q/file.html" {
 		t.Fatalf("FileOnPage = %+v, %v", page, ok)
 	}
@@ -81,7 +97,7 @@ func TestFileOnPage_AcceptsOnlyThisIDsAudioOnTheKrakenfilesStorage(t *testing.T)
 	if got := page.File.FindString(body); got != "https://hs1.krakenfiles.com/uploads/23-02-2024/061QAmEM4q/music.m4a" {
 		t.Errorf("file = %q, want only this id's audio on krakenfiles storage", got)
 	}
-	if _, ok := DownloadURL("krakenfiles", "061QAmEM4q"); ok {
+	if _, ok := filehost.DownloadURL("krakenfiles", "061QAmEM4q"); ok {
 		t.Error("a krakenfiles page must never be handed to the downloader")
 	}
 }

@@ -1,6 +1,7 @@
-package redact
+package redact_test
 
 import (
+	"altune/go-api/internal/shared/redact"
 	"os"
 	"path/filepath"
 	"strings"
@@ -87,7 +88,7 @@ func TestLogText(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := LogText(tt.in)
+			got := redact.LogText(tt.in)
 			for _, gone := range tt.wantGone {
 				if strings.Contains(got, gone) {
 					t.Errorf("LogText(%q) = %q, still contains %q", tt.in, got, gone)
@@ -103,7 +104,7 @@ func TestLogText(t *testing.T) {
 }
 
 func TestLogError_Nil(t *testing.T) {
-	if got := LogError(nil); got != "" {
+	if got := redact.LogError(nil); got != "" {
 		t.Fatalf("LogError(nil) = %q, want empty", got)
 	}
 }

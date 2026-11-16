@@ -1,6 +1,7 @@
-package redact
+package redact_test
 
 import (
+	"altune/go-api/internal/shared/redact"
 	"strings"
 	"testing"
 )
@@ -10,7 +11,7 @@ const lastfmKey = "0123456789abcdef0123456789abcdef"
 func TestSecrets_masksScrapedProviderAuthParams(t *testing.T) {
 	in := `Get "https://open.spotify.com/api/token?reason=init&totp=161874&totpServer=419531&totpVer=59": dial tcp: refused` +
 		` https://api-v2.soundcloud.com/search/tracks?q=x&client_id=scrapedClientID123&limit=5`
-	got := Secrets(in)
+	got := redact.Secrets(in)
 	for _, leaked := range []string{"161874", "419531", "scrapedClientID123"} {
 		if strings.Contains(got, leaked) {
 			t.Errorf("value %q leaked: %q", leaked, got)
@@ -25,7 +26,7 @@ func TestSecrets_masksScrapedProviderAuthParams(t *testing.T) {
 
 func TestSecrets_masksValuesKeepsShape(t *testing.T) {
 	in := "https://ws.audioscrobbler.com/2.0/?method=track.search&api_key=" + lastfmKey + "&format=json"
-	got := Secrets(in)
+	got := redact.Secrets(in)
 	if strings.Contains(got, lastfmKey) {
 		t.Fatalf("raw key leaked: %q", got)
 	}
@@ -38,11 +39,11 @@ func TestSecrets_masksValuesKeepsShape(t *testing.T) {
 }
 
 func TestSecrets_masksLeadingFormParamAndBearerToken(t *testing.T) {
-	got := Secrets("auth=abc&q=1")
+	got := redact.Secrets("auth=abc&q=1")
 	if strings.Contains(got, "abc") || !strings.Contains(got, "q=1") {
 		t.Errorf("leading form param not masked cleanly: %q", got)
 	}
-	got = Secrets("upstream sent Authorization: Bearer eyJhbGciOi.payload.sig rejected")
+	got = redact.Secrets("upstream sent Authorization: Bearer eyJhbGciOi.payload.sig rejected")
 	if strings.Contains(got, "eyJhbGciOi") || !strings.Contains(got, "rejected") {
 		t.Errorf("bearer token leaked or text lost: %q", got)
 	}
@@ -51,7 +52,7 @@ func TestSecrets_masksLeadingFormParamAndBearerToken(t *testing.T) {
 func TestSecrets_masksSoundCloudClientID(t *testing.T) {
 	const clientID = "ScrapedClientIdValue0123456789AB"
 	in := `soundcloud api-v2: Get "https://api-v2.soundcloud.com/users/1/toptracks?client_id=` + clientID + `&limit=50": dial tcp: refused`
-	got := Secrets(in)
+	got := redact.Secrets(in)
 	if strings.Contains(got, clientID) {
 		t.Fatalf("client_id leaked: %q", got)
 	}
@@ -65,7 +66,7 @@ func TestSecrets_masksSoundCloudClientID(t *testing.T) {
 func TestSecrets_masksUserinfoPasswordKeepsUserAndHost(t *testing.T) {
 	in := `Get "https://altune:s3cr3tVALUEfedcba9876543210@musicbrainz.org/ws/2/release-group": refused` +
 		` mail me@example.com https://host/path/@x https://user@host/p https://h/a?x=1@2`
-	got := Secrets(in)
+	got := redact.Secrets(in)
 	if strings.Contains(got, "s3cr3tVALUEfedcba9876543210") {
 		t.Fatalf("password leaked: %q", got)
 	}
