@@ -24,22 +24,38 @@ type LibraryGridLayout = {
   onLayout: (event: LayoutChangeEvent) => void;
 };
 
-export function useLibraryGridLayout(kind: LibraryGridKind): LibraryGridLayout {
-  const { width: windowWidth } = useWindowDimensions();
+function useMeasuredWidth() {
   const [measuredWidth, setMeasuredWidth] = useState<number | null>(null);
-  const isWideWeb = useWideWebLayout();
-
   const onLayout = useCallback((event: LayoutChangeEvent) => {
     const measured = event.nativeEvent.layout.width;
     if (measured === 0) return;
     setMeasuredWidth(measured);
   }, []);
+  return { measuredWidth, onLayout };
+}
 
-  const wideFallbackWidth = Math.min(windowWidth, CONTENT_MAX_WIDTH);
-  const width = isWideWeb ? (measuredWidth ?? wideFallbackWidth) : windowWidth;
-  const horizontalPadding = isWideWeb && measuredWidth != null ? 0 : SCREEN_HORIZONTAL_PADDING;
-  const coverColumnsFor = isWideWeb ? wideCoverColumns : coverColumns;
-  const columns = kind === 'cover' ? coverColumnsFor(width) : avatarColumns(width);
+function gridSpan(isWideWeb: boolean, windowWidth: number, measuredWidth: number | null) {
+  if (!isWideWeb) return { width: windowWidth, horizontalPadding: SCREEN_HORIZONTAL_PADDING };
+  if (measuredWidth == null) {
+    return {
+      width: Math.min(windowWidth, CONTENT_MAX_WIDTH),
+      horizontalPadding: SCREEN_HORIZONTAL_PADDING,
+    };
+  }
+  return { width: measuredWidth, horizontalPadding: 0 };
+}
+
+function gridColumns(kind: LibraryGridKind, isWideWeb: boolean, width: number): number {
+  if (kind !== 'cover') return avatarColumns(width);
+  return isWideWeb ? wideCoverColumns(width) : coverColumns(width);
+}
+
+export function useLibraryGridLayout(kind: LibraryGridKind): LibraryGridLayout {
+  const { width: windowWidth } = useWindowDimensions();
+  const { measuredWidth, onLayout } = useMeasuredWidth();
+  const isWideWeb = useWideWebLayout();
+  const { width, horizontalPadding } = gridSpan(isWideWeb, windowWidth, measuredWidth);
+  const columns = gridColumns(kind, isWideWeb, width);
 
   return {
     columns,

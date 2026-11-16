@@ -443,3 +443,74 @@ describe('LibraryRow — wide web row keeps the compact row behaviours (#2842)',
     );
   });
 });
+
+describe('LibraryRow — redraws when what it shows changes', () => {
+  const base = { onPress: () => undefined, onMore: () => undefined };
+
+  it('shows a renamed track', () => {
+    const view = render(<LibraryRow track={readyTrack} {...base} />);
+
+    view.rerender(<LibraryRow track={{ ...readyTrack, title: 'One More Time' }} {...base} />);
+
+    expect(rowLabel()).toBe('One More Time by Daft Punk · Discovery');
+  });
+
+  it('shows a new duration', () => {
+    const view = render(<LibraryRow track={readyTrack} {...base} />);
+
+    view.rerender(<LibraryRow track={{ ...readyTrack, duration_seconds: 320 }} {...base} />);
+
+    expect(screen.getByText('5:20')).toBeTruthy();
+  });
+
+  it('announces a track that finished acquiring', () => {
+    const view = render(<LibraryRow track={pendingTrack} {...base} />);
+
+    view.rerender(<LibraryRow track={readyTrack} {...base} />);
+
+    expect(rowLabel()).toBe('Aerodynamic by Daft Punk · Discovery');
+  });
+
+  it('shows a new failure message', () => {
+    const view = render(<LibraryRow track={failedTrack} {...base} />);
+
+    view.rerender(
+      <LibraryRow track={{ ...failedTrack, failure_message: 'Source blocked' }} {...base} />,
+    );
+
+    expect(screen.getByTestId(`library-row-failed-${ID}`).props.children).toBe('Source blocked');
+  });
+
+  it('offers a retry once the caller supplies one, and a spinner once it runs', () => {
+    const view = render(<LibraryRow track={failedTrack} {...base} />);
+
+    view.rerender(<LibraryRow track={failedTrack} {...base} onRetry={jest.fn()} />);
+    expect(screen.getByTestId(`library-row-retry-${ID}`)).toBeTruthy();
+
+    view.rerender(<LibraryRow track={failedTrack} {...base} onRetry={jest.fn()} retrying />);
+    expect(screen.getByTestId(`library-row-retrying-${ID}`)).toBeTruthy();
+  });
+
+  it('turns into a checkbox on entering selection, and checks it when selected', () => {
+    const view = render(<LibraryRow track={readyTrack} {...base} />);
+
+    view.rerender(
+      <LibraryRow
+        track={readyTrack}
+        {...base}
+        selectable={{ selected: false, onToggle: jest.fn() }}
+      />,
+    );
+    expect(rowRole()).toBe('checkbox');
+    expect(rowChecked()).toBe(false);
+
+    view.rerender(
+      <LibraryRow
+        track={readyTrack}
+        {...base}
+        selectable={{ selected: true, onToggle: jest.fn() }}
+      />,
+    );
+    expect(rowChecked()).toBe(true);
+  });
+});

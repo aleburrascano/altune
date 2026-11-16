@@ -14,10 +14,7 @@ import {
 } from '@shared/ui';
 import type { MenuAnchor } from '@shared/ui';
 import type { Selection } from '@features/library/view/useSelection';
-import {
-  LibraryEmptyMessage,
-  ListLoadingMoreFooter,
-} from '@features/library/view/LibraryListParts';
+import { LibraryEmptyMessage, ListPagingFooter } from '@features/library/view/LibraryListParts';
 import { listContent } from '@features/library/view/listContentStyles';
 import { LibraryRow } from '@features/library/ui/LibraryRow';
 import { WideTrackHeader } from '@features/library/view/WideTrackHeader';
@@ -209,13 +206,7 @@ export function TracksList({
           shuffleBusy={shuffleBusy}
         />
       }
-      ListFooterComponent={
-        <ListLoadingMoreFooter
-          loading={paging?.isFetchingNextPage === true}
-          failed={paging?.nextPageFailed === true}
-          onRetry={paging?.onRetryNextPage}
-        />
-      }
+      ListFooterComponent={<ListPagingFooter paging={paging} />}
       contentContainerStyle={tracks.length === 0 ? listContent.empty : listContent.padded}
       ListEmptyComponent={<LibraryEmptyMessage label={emptyLabel} />}
       renderItem={renderItem}
