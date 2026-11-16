@@ -10,7 +10,7 @@ import {
 import { useWideWebLayout, doubled } from '@shared/ui';
 import { LibraryEmptyMessage, ListPagingFooter } from '@features/library/view/LibraryListParts';
 import { listContent } from '@features/library/view/listContentStyles';
-import { GRID_GAP } from '@features/library/hooks/useLibraryGridLayout';
+import { GRID_GAP } from '@features/library/view/useLibraryGridLayout';
 import type { ListPaging, ListRefresh } from '@features/library/view/libraryView';
 type LibraryGridProps<TItem> = {
   testID: string;

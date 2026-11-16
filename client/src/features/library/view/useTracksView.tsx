@@ -5,7 +5,7 @@ import { isCurrentlyPlaying, buildPlayableQueue } from '@shared/playback';
 import type { usePlayback, useQueuePlayback } from '@shared/playback';
 import type { MenuAnchor } from '@shared/ui';
 import { libraryFailureAlert } from '@features/library/domain/libraryFailure';
-import { useLibraryTracks } from '@features/library/hooks/useLibraryTracks';
+import { useLibraryTracks } from '@features/library/view/useLibraryTracks';
 import type { useRetryAcquisition } from '@features/library/view/useRetryAcquisition';
 import type { Selection } from '@features/library/view/useSelection';
 import {
@@ -15,7 +15,7 @@ import {
   TRACK_SORT_OPTIONS,
   type SortKey,
 } from '@features/library/view/libraryView';
-import { TracksList } from '@features/library/ui/TracksList';
+import { TracksList } from '@features/library/view/TracksList';
 
 type TracksViewDeps = {
   query: string;

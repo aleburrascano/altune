@@ -16,7 +16,7 @@ import type { MenuAnchor } from '@shared/ui';
 import type { Selection } from '@features/library/view/useSelection';
 import { LibraryEmptyMessage, ListPagingFooter } from '@features/library/view/LibraryListParts';
 import { listContent } from '@features/library/view/listContentStyles';
-import { LibraryRow } from '@features/library/ui/LibraryRow';
+import { LibraryRow } from '@features/library/view/LibraryRow';
 import { WideTrackHeader } from '@features/library/view/WideTrackHeader';
 import type { ListPaging, ListRefresh } from '@features/library/view/libraryView';
 type TracksListHeaderProps = {
