@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { Tappable, Row, useTheme, Artwork, halved } from '@shared/ui';
 import { Check } from 'lucide-react-native';
 import { rowSurfaceStyle } from '@features/library/ui/libraryRowStyle';
-import type { TrackResponse } from '@shared/apiClient';
+import type { TrackResponse } from '@shared/catalog';
 
 export function LibraryRowSelection({
   track,

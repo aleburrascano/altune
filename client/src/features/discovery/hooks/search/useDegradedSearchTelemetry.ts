@@ -1,12 +1,11 @@
 import { useEffect, useRef } from 'react';
 
 import { useRecordEvent } from '@shared/telemetry';
-
 import type {
   DiscoveryProviderInfo,
   DiscoveryProviderStatus,
   DiscoverySearchResponse,
-} from '@shared/apiClient';
+} from '@shared/catalog';
 
 export function useDegradedSearchTelemetry(
   searchData: DiscoverySearchResponse | undefined,

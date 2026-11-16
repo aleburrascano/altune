@@ -1,7 +1,6 @@
 import { renderHook } from '@testing-library/react-native';
 import { createElement, type ReactElement, type ReactNode } from 'react';
-
-import { asTrackId } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 import { PlaybackContext } from '@shared/playback';
 import type { PlaybackContextValue } from '@shared/playback';
 import { makeIdlePlayback } from '@testing/factories';

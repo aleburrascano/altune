@@ -5,9 +5,7 @@ import { View } from 'react-native';
 import { Play } from 'lucide-react-native';
 
 import { Text } from '@shared/ui';
-
-import type { DiscoveryResult } from '@shared/apiClient';
-
+import type { DiscoveryResult } from '@shared/catalog';
 import {
   useAlbumDetailState,
   type AlbumDetailState,

@@ -1,7 +1,5 @@
 import fc from 'fast-check';
-
-import { asTrackId, asPlaylistId } from '@shared/apiClient';
-
+import { asTrackId, asPlaylistId } from '@shared/catalog';
 import {
   type QueueSource,
   type RepeatMode,

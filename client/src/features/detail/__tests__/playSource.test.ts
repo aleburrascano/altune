@@ -1,4 +1,4 @@
-import { asTrackId } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 import type { PlaybackContextValue, PlaybackStatus, PlaybackSource } from '@shared/playback';
 import { trackExtras, isResultPlaying, resolvePlaySource } from '@features/detail';
 import type { OwnedTrack } from '@features/detail';

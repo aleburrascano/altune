@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { setPlatformOS } from '@testing/setPlatformOS';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
-import { asTrackId } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 import { PlaybackContext } from '@shared/playback';
 import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';

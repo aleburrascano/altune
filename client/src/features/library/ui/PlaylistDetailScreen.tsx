@@ -6,7 +6,7 @@ import {
   NO_PLAYLIST_ID,
   parsePlaylistId,
   type PlaylistId,
-} from '@shared/apiClient';
+} from '@shared/catalog';
 import { Screen, Skeleton, spacing, Button, Text } from '@shared/ui';
 import { goBackOrToLibrary } from '@features/library/domain/libraryRoutes';
 import {

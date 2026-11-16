@@ -1,4 +1,4 @@
-import type { DiscoveryResult } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
 import { formatDuration } from '@shared/ui';
 
 import { trackExtras } from '@features/detail/domain/trackExtras';

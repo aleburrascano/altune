@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react';
-
-import type { PlaylistId } from '@shared/apiClient';
+import type { PlaylistId } from '@shared/catalog';
 import { useRenamePlaylist } from '@shared/playlists';
 
 type PlaylistRenameState = {

@@ -1,6 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native';
-
-import type { DiscoveryResult } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
 import { readDetailHandoff } from '@shared/navigation';
 
 import { useLateralNav, createMemoryDetailPort } from '@features/detail';

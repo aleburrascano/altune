@@ -6,7 +6,7 @@ import { createMemoryFileStore, type MemoryFileStore } from '@shared/files';
 import { createMemoryOfflinePort, runDownloadQueue, setPinnedFileStore } from '@shared/offline';
 import type { OfflinePort, PinnedEntry } from '@shared/offline';
 import { signInTestUser } from '@testing/signInTestUser';
-import { asTrackId, type TrackId } from '@shared/apiClient';
+import { asTrackId, type TrackId } from '@shared/catalog';
 
 const DOWNLOAD_RETRY_BASE_MS = 2_000;
 const PIN_DOWNLOAD_TIMEOUT_MS = 120_000;

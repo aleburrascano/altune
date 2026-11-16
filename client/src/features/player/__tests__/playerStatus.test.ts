@@ -1,5 +1,5 @@
 import type { PlaybackTrack } from '@shared/playback';
-import type { TrackId } from '@shared/apiClient';
+import type { TrackId } from '@shared/catalog';
 import { canRetryPlaybackError, endedLabel, libraryTrackId, statusFlagsOf } from '@features/player';
 
 describe('playerStatus', () => {

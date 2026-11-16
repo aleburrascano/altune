@@ -1,4 +1,4 @@
-import { parsePlaylistId, parseTrackId, type PlaylistId, type TrackId } from '@shared/apiClient';
+import { parsePlaylistId, parseTrackId, type PlaylistId, type TrackId } from '@shared/catalog';
 
 export function asTrackIdOrNull(value: unknown): TrackId | null {
   if (typeof value !== 'string') return null;

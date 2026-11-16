@@ -1,4 +1,4 @@
-import type { TrackId, TrackResponse } from '@shared/apiClient';
+import type { TrackId, TrackResponse } from '@shared/catalog';
 import { removeTrackStatus } from '@shared/acquisition';
 import { libraryKeys } from '@shared/query';
 

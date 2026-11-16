@@ -1,6 +1,5 @@
 import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
-import { asTrackId } from '@shared/apiClient';
-
+import { asTrackId } from '@shared/catalog';
 import {
   registerAudioCacheInvalidator,
   invalidateAudioCaches,

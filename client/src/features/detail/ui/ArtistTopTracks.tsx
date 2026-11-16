@@ -2,7 +2,7 @@ import { useState, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Artwork, Tappable, Text, radius, spacing, formatDuration } from '@shared/ui';
-import type { DiscoveryResult } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
 import { trackExtras } from '@features/detail/domain/trackExtras';
 import type { ArtistDetailState } from '@features/detail/hooks/useArtistDetailState';
 import type { OwnedTrack } from '@features/detail/domain/ownedTrack';

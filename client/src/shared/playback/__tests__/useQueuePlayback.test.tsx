@@ -1,9 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { act, renderHook } from '@testing-library/react-native';
-
-import { asTrackId } from '@shared/apiClient';
-
+import { asTrackId } from '@shared/catalog';
 import { useQueuePlayback, useQueueStore, PlaybackContext } from '@shared/playback';
 import type { PlaybackContextValue, PlaybackTrack } from '@shared/playback';
 import { makeIdlePlayback } from '@testing/factories';

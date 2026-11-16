@@ -7,8 +7,7 @@ import {
   View,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
-
-import type { PlaylistId, TrackId, PlaylistResponse } from '@shared/apiClient';
+import type { PlaylistId, TrackId, PlaylistResponse } from '@shared/catalog';
 import {
   countLabel,
   Text,

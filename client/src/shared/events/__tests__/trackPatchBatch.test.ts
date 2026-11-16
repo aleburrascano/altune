@@ -6,9 +6,8 @@ import {
 } from '@tanstack/react-query';
 import { waitFor } from '@testing-library/react-native';
 import fc from 'fast-check';
-
-import { asPlaylistId, asTrackId, toFailed, toPending, toReady } from '@shared/apiClient';
-import type { PlaylistDetailResponse, ListTracksResponse } from '@shared/apiClient';
+import { asPlaylistId, asTrackId, toFailed, toPending, toReady } from '@shared/catalog';
+import type { PlaylistDetailResponse, ListTracksResponse } from '@shared/catalog';
 import { libraryKeys, playlistKeys } from '@shared/query';
 
 import {

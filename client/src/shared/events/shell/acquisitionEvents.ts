@@ -15,15 +15,9 @@ import {
   stageToPhase,
 } from '@shared/acquisition';
 import { offlineDownloadsSupported, repinIfPinned } from '@shared/offline';
-import {
-  tryParseTrackResponse,
-  acquisitionOf,
-  toFailed,
-  toPending,
-  toReady,
-  toTrackStatus,
-} from '@shared/apiClient';
-import type { TrackId, TrackResponse } from '@shared/apiClient';
+import { tryParseTrackResponse } from '@shared/apiClient';
+import { acquisitionOf, toFailed, toPending, toReady, toTrackStatus } from '@shared/catalog';
+import type { TrackId, TrackResponse } from '@shared/catalog';
 import type { JsonObject } from '@shared/files';
 import { libraryKeys, playlistKeys } from '@shared/query';
 

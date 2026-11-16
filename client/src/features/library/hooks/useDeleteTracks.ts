@@ -3,7 +3,7 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useAppMutation, libraryKeys } from '@shared/query';
 import { showFailureAlert } from '@shared/ui';
 import { runBounded } from '@shared/concurrency';
-import type { TrackId } from '@shared/apiClient';
+import type { TrackId } from '@shared/catalog';
 import {
   forgetTrack,
   invalidateLibraryDerived,

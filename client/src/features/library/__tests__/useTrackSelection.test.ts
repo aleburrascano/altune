@@ -1,9 +1,8 @@
 import { Alert } from 'react-native';
 
 import { Download, XCircle } from 'lucide-react-native';
-
-import { asTrackId } from '@shared/apiClient';
-import type { TrackResponse } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
+import type { TrackResponse } from '@shared/catalog';
 import type { PinnedEntry, UnpinBatchResult } from '@shared/offline';
 import type { PlaybackTrack } from '@shared/playback';
 import { trackResponseFactory } from '@testing/factories';

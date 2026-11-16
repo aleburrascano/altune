@@ -1,9 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
-
-import { asTrackId } from '@shared/apiClient';
-import type { ListTracksResponse, TrackResponse } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
+import type { ListTracksResponse, TrackResponse } from '@shared/catalog';
 import { ApiError } from '@shared/failure';
 import { libraryKeys } from '@shared/query';
 import {

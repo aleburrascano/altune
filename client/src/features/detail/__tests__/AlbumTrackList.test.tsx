@@ -1,9 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
-
-import type { DiscoveryResult } from '@shared/apiClient';
-import { asTrackId } from '@shared/apiClient';
-
+import type { DiscoveryResult } from '@shared/catalog';
+import { asTrackId } from '@shared/catalog';
 import type { AlbumDetailState } from '@features/detail';
 import { ownedTrack, AlbumTrackList } from '@features/detail';
 

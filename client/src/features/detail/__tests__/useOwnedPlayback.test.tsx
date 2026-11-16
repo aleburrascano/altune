@@ -1,7 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
-
-import type { DiscoveryResult } from '@shared/apiClient';
-import { asTrackId } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
+import { asTrackId } from '@shared/catalog';
 import { PlaybackContext } from '@shared/playback';
 import { trackIdentityKey, useTrackStatusStore } from '@shared/acquisition';
 

@@ -1,7 +1,7 @@
 import type { UseQueryOptions } from '@tanstack/react-query';
 
-import type { DiscoveryKind, DiscoveryResult, searchDiscovery } from '@shared/apiClient';
-
+import type { searchDiscovery } from '@shared/apiClient';
+import type { DiscoveryKind, DiscoveryResult } from '@shared/catalog';
 import { detailKeys } from '@shared/query';
 
 const RESOLVE_STALE_TIME = 30 * 60 * 1000;

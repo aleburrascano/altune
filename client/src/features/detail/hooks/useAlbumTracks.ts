@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-
-import type { DiscoveryResult, DiscoverySource } from '@shared/apiClient';
-import { sourceIdList } from '@shared/apiClient';
+import type { DiscoveryResult, DiscoverySource } from '@shared/catalog';
+import { sourceIdList } from '@shared/catalog';
 import { detailKeys } from '@shared/query';
 
 import {

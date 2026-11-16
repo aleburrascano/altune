@@ -7,14 +7,14 @@ import {
   trackIdentityKey,
   useTrackStatusStore,
 } from '@shared/acquisition';
-import { asPlaylistId, asTrackId } from '@shared/apiClient';
+import { asPlaylistId, asTrackId } from '@shared/catalog';
 import type {
   ListPlaylistsResponse,
   PlaylistDetailResponse,
   PlaylistResponse,
   ListTracksResponse,
   TrackResponse,
-} from '@shared/apiClient';
+} from '@shared/catalog';
 import { libraryKeys, playlistKeys } from '@shared/query';
 import { usePinnedStore, provideOfflinePort } from '@shared/offline';
 import { apiClientOfflinePort } from '@testing/apiClientPorts';

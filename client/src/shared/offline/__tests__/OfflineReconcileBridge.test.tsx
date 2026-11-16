@@ -8,7 +8,7 @@ import {
   provideOfflinePort,
 } from '@shared/offline';
 import { apiClientOfflinePort } from '@testing/apiClientPorts';
-import { asTrackId, type TrackId } from '@shared/apiClient';
+import { asTrackId, type TrackId } from '@shared/catalog';
 import { signInTestUser } from '@testing/signInTestUser';
 
 provideOfflinePort(apiClientOfflinePort);

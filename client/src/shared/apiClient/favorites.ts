@@ -1,10 +1,7 @@
-import { DISCOVERY_KINDS } from '@shared/apiClient/discovery';
+import { DISCOVERY_KINDS, asFavoriteKey } from '@shared/catalog';
 import { apiFetch, apiSend } from '@shared/apiClient/adapters/http';
-import { asFavoriteKey } from '@shared/apiClient/ids';
 import { asRecord, asString, member, parseListEnvelope } from '@shared/apiClient/wireDecoders';
-import type { DiscoveryKind } from '@shared/apiClient/discovery';
-import type { FavoriteKey } from '@shared/apiClient/ids';
-
+import type { DiscoveryKind, FavoriteKey } from '@shared/catalog';
 export type Favorite = {
   kind: DiscoveryKind;
   key: FavoriteKey;

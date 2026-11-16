@@ -14,7 +14,7 @@ import {
   toPending,
   acquisitionOf,
   type AcquisitionTransition,
-} from '@shared/apiClient';
+} from '@shared/catalog';
 import { useAppMutation } from '@shared/query';
 import { forgetTrack, getTrackFromCaches, patchTrackInCaches } from '@shared/events';
 import { showFailureAlert } from '@shared/ui';

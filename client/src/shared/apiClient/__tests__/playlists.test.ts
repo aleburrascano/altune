@@ -1,8 +1,4 @@
 import {
-  type PlaylistId,
-  type PlaylistDetailResponse,
-  type PlaylistResponse,
-  type TrackResponse,
   addTracksToPlaylist,
   createPlaylist,
   deletePlaylist,
@@ -11,10 +7,16 @@ import {
   removeTracksFromPlaylist,
   renamePlaylist,
   type PlaylistPage,
+} from '@shared/apiClient';
+import {
+  type PlaylistId,
+  type PlaylistDetailResponse,
+  type PlaylistResponse,
+  type TrackResponse,
   asPlaylistId,
   asTrackId,
   parsePlaylistId,
-} from '@shared/apiClient';
+} from '@shared/catalog';
 import { apiBase } from '@shared/apiConfig';
 import { ApiError, ContractError, NetworkError } from '@shared/failure';
 import { supabase } from '@shared/auth';

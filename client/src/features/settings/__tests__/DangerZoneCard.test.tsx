@@ -3,7 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react-native';
 import { signInTestUser } from '@testing/signInTestUser';
 
-import { ApiError, asTrackId } from '@shared/apiClient';
+import { ApiError } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 import { useSignOut, type SignOutResult } from '@shared/auth';
 import { usePinnedStore, provideOfflinePort } from '@shared/offline';
 import { apiClientOfflinePort } from '@testing/apiClientPorts';

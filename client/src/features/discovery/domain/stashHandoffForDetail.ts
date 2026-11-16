@@ -1,6 +1,5 @@
 import { detailHref, type DetailHref } from '@shared/navigation';
-
-import type { DiscoveryResult } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
 
 export function stashHandoffForDetail(
   result: DiscoveryResult,

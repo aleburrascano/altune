@@ -1,7 +1,5 @@
 import { useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
-
-import type { DiscoverySearchHistoryResponse } from '@shared/apiClient';
-
+import type { DiscoverySearchHistoryResponse } from '@shared/catalog';
 import { isRetryable } from '@shared/failure';
 import { discoveryKeys, useAppMutation } from '@shared/query';
 import { useClearSearchHistory as useSharedClearSearchHistory } from '@shared/searchHistory';

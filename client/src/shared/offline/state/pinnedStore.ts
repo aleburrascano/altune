@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-
-import { parseTrackId, type TrackId } from '@shared/apiClient';
+import { parseTrackId, type TrackId } from '@shared/catalog';
 import { onIdentityChange, onSignOut } from '@shared/session';
 import { onKillSwitchChange } from '@shared/killSwitch';
 

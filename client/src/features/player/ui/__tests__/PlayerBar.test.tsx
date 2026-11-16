@@ -1,8 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
-
-import { asTrackId } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 import { PlaybackContext, useQueueStore } from '@shared/playback';
 import type { PlaybackContextValue } from '@shared/playback';
 import { makeIdlePlayback } from '@testing/factories';

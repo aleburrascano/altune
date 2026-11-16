@@ -1,8 +1,6 @@
 import fc from 'fast-check';
-
-import { featuredArtistsFromExtras, withFeaturing } from '@shared/apiClient';
-
-import type { FeaturedArtist } from '@shared/apiClient';
+import { featuredArtistsFromExtras, withFeaturing } from '@shared/catalog';
+import type { FeaturedArtist } from '@shared/catalog';
 
 describe('featuredArtistsFromExtras — Array.isArray guard', () => {
   it.each<unknown>(['not-an-array', 42, true, {}, null, undefined])(
@@ -123,6 +121,13 @@ describe('featuredArtistsFromExtras — adversarial: malformed, tampered and thi
   it('skips a function entry', () => {
     const raw: unknown[] = [() => 'SZA'];
     expect(featuredArtistsFromExtras(raw)).toEqual([]);
+  });
+
+  it('skips a named function, though its name property is a non-empty string', () => {
+    function Guest(): string {
+      return 'Guest';
+    }
+    expect(featuredArtistsFromExtras([Guest])).toEqual([]);
   });
 
   it('rejects a NaN deezer_id rather than letting typeof "number" admit it', () => {

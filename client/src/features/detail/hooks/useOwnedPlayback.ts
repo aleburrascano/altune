@@ -1,4 +1,4 @@
-import type { DiscoveryResult } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
 import type { RetryEntryPoint } from '@shared/acquisition';
 import { useQueuePlayback } from '@shared/playback';
 

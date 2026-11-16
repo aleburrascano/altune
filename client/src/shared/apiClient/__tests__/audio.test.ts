@@ -7,10 +7,10 @@ import {
   fetchAudioUrls,
   isAudioPrefetchEnabled,
   CORRELATION_HEADER,
-  asTrackId,
-  type TrackId,
+  ApiError,
+  NetworkError,
 } from '@shared/apiClient';
-import { ApiError, NetworkError } from '@shared/apiClient';
+import { asTrackId, type TrackId } from '@shared/catalog';
 import { apiBase } from '@shared/apiConfig';
 import { ContractError } from '@shared/failure';
 import { supabase, clearSessionExpired, getSessionExpired } from '@shared/auth';

@@ -9,7 +9,7 @@ import {
   createMemoryFavoritesPort,
 } from '@features/discovery';
 import type { FavoritesResponse, FavoriteTarget } from '@shared/apiClient';
-import { asFavoriteKey } from '@shared/apiClient';
+import { asFavoriteKey } from '@shared/catalog';
 import type { FavoritesPort } from '@features/discovery';
 import { discoveryKeys } from '@shared/query';
 import { runSignOutCleanups } from '@shared/session';

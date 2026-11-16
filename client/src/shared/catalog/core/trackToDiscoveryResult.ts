@@ -1,5 +1,5 @@
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import type { TrackResponse } from '@shared/apiClient/trackResponse';
+import type { DiscoveryResult } from '@shared/catalog/core/discoveryResult';
+import type { TrackResponse } from '@shared/catalog/core/trackResponse';
 
 export function trackToDiscoveryResult(track: TrackResponse): DiscoveryResult {
   return {

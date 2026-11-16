@@ -1,8 +1,7 @@
 import * as React from 'react';
 import { QueryClient } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react-native';
-
-import { asTrackId } from '@shared/apiClient/ids';
+import { asTrackId } from '@shared/catalog';
 
 const INDEX_URI = 'file:///document/offline/pinned.json';
 

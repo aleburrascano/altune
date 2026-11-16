@@ -1,6 +1,5 @@
 import fc from 'fast-check';
-
-import { asTrackId } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 import { createMemoryFileStore } from '@shared/files';
 import { deleteAllPinned, downloadPinned, formatBytes, setPinnedFileStore } from '@shared/offline';
 

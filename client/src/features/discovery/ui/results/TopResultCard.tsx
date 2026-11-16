@@ -16,7 +16,7 @@ import {
 } from '@shared/ui';
 import { SectionLabel } from '@features/discovery/ui/results/SectionLabel';
 import { kindLabel } from '@features/discovery/domain/resultDisplay';
-import type { DiscoveryResult } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
 import type { ResultTapHandler } from '@features/discovery/hooks/results/useResultTap';
 
 function pressedStyle({ pressed }: PressableInteractionState) {

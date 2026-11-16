@@ -11,7 +11,7 @@ import {
   ACQUISITION_PHASES,
 } from '@shared/acquisition';
 import * as announceModule from '@shared/ui/a11y/announce';
-import { asTrackId } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 
 const FINISHING_DWELL_MS = 500;
 const FAILED_HOLD_MS = 4_000;

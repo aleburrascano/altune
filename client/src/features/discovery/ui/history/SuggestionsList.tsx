@@ -12,7 +12,7 @@ import {
   touchTarget,
   zLayer,
 } from '@shared/ui';
-import type { DiscoverySuggestion } from '@shared/apiClient';
+import type { DiscoverySuggestion } from '@shared/catalog';
 
 interface SuggestionsListProps {
   suggestions: DiscoverySuggestion[];

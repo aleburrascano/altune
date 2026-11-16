@@ -1,7 +1,6 @@
 import { renderHook } from '@testing-library/react-native';
 import type { ImperativeRouter } from 'expo-router';
-
-import type { DiscoveryResult } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
 import { readDetailHandoff } from '@shared/navigation';
 import { runSignOutCleanups } from '@shared/session';
 

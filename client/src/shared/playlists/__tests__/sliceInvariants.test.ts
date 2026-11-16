@@ -229,9 +229,7 @@ describe('rule 4 — components never call playlist write functions directly; on
       importsApiClientPlaylists("import { getPlaylists } from '@shared/apiClient/playlists';"),
     ).toBe(true);
     expect(
-      importsApiClientPlaylists(
-        "import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';",
-      ),
+      importsApiClientPlaylists("import type { PlaylistResponse } from '@shared/catalog';"),
     ).toBe(false);
   });
 

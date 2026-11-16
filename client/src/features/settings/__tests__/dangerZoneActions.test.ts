@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system';
 
-import { NetworkError, asTrackId } from '@shared/apiClient';
+import { NetworkError } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 import type { SignOutResult } from '@shared/auth';
 import { usePinnedStore } from '@shared/offline';
 

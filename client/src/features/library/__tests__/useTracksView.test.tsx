@@ -8,8 +8,8 @@ import {
 } from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';
 import { Alert, View } from 'react-native';
-import { asTrackId } from '@shared/apiClient';
-import type { TrackResponse } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
+import type { TrackResponse } from '@shared/catalog';
 import type { ActiveView, LibraryPort } from '@features/library';
 import {
   createMemoryLibraryPort,

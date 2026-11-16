@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { create } from 'zustand';
 
 import type { AcquisitionPhase } from '@shared/acquisition/state/stagePhase';
-import type { TrackId } from '@shared/apiClient';
+import type { TrackId } from '@shared/catalog';
 import { onSignOut } from '@shared/session';
 
 export type DownloadPhase = Exclude<AcquisitionPhase, 'working'>;

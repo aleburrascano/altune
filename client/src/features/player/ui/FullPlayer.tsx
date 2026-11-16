@@ -2,8 +2,7 @@ import { useMemo, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ListMusic, Mic2, MoreHorizontal, Pause, Play, RotateCcw } from 'lucide-react-native';
-
-import { withFeaturing } from '@shared/apiClient';
+import { withFeaturing } from '@shared/catalog';
 import { shouldRestartOnPrevious } from '@features/player/domain/restartOnPrevious';
 import { useQueueStore } from '@shared/playback';
 import type { PlaybackErrorKind, PlaybackStatus } from '@shared/playback';

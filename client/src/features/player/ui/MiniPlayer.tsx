@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Pause, Play, RotateCcw, SkipForward } from 'lucide-react-native';
-
-import { withFeaturing } from '@shared/apiClient';
+import { withFeaturing } from '@shared/catalog';
 import { useQueueStore, useQueuePlayback, usePlayback } from '@shared/playback';
 import {
   useWideWebLayout,

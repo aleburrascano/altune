@@ -1,5 +1,4 @@
-import type { TrackId, AcquisitionTransition, TrackFields, TrackResponse } from '@shared/apiClient';
-
+import type { TrackId, AcquisitionTransition, TrackFields, TrackResponse } from '@shared/catalog';
 import type {
   CacheChange,
   CachedQueries,

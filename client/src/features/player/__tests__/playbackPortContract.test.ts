@@ -1,4 +1,4 @@
-import { asTrackId } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 import type { QueueStateResponse } from '@shared/apiClient';
 import { ContractError } from '@shared/failure';
 

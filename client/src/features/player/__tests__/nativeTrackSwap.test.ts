@@ -2,7 +2,7 @@ import { waitFor } from '@testing-library/react-native';
 import TrackPlayer from 'react-native-track-player';
 
 import type { ResolvedAudioUrl } from '@shared/apiClient';
-import { asTrackId } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 import { orderedQueueTracks, useQueueStore, trackKey, type PlaybackTrack } from '@shared/playback';
 import {
   type PlaybackPort,

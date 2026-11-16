@@ -1,7 +1,7 @@
 import TrackPlayer, { Event, State } from 'react-native-track-player';
 
 import { startWidgetSnapshotPublisher } from '@features/player';
-import { asTrackId } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 import type { PlaybackTrack } from '@shared/playback';
 import { useQueueStore } from '@shared/playback';
 import { notifyIdentityChange, runSignOutCleanups } from '@shared/session';

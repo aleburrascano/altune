@@ -14,7 +14,7 @@ import {
   type PlaybackTrack,
 } from '@shared/playback';
 import { registerAudioCacheInvalidator } from '@shared/acquisition';
-import { parseTrackId } from '@shared/apiClient';
+import { parseTrackId } from '@shared/catalog';
 import { playbackPort } from '@features/player/ports/activePlaybackPort';
 import { primeSignedInUser } from '@shared/auth';
 import { hasSignedInUser, onSignOut } from '@shared/session';

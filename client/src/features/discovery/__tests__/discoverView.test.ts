@@ -8,7 +8,7 @@ import {
   type DiscoverView,
   resultFixture,
 } from '@features/discovery';
-import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/apiClient';
+import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/catalog';
 import type { AsyncView } from '@shared/ui';
 
 function responseFixture(results: DiscoveryResult[], partial = false): DiscoverySearchResponse {

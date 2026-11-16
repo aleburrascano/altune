@@ -1,5 +1,5 @@
 import { kindLabel, resultKey, resultSecondaryLine, resultFixture } from '@features/discovery';
-import type { DiscoveryKind, DiscoveryResult } from '@shared/apiClient';
+import type { DiscoveryKind, DiscoveryResult } from '@shared/catalog';
 
 describe('kindLabel renders the user-facing kind label', () => {
   const cases: [DiscoveryKind, string, string][] = [

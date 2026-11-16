@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { PlaylistId } from '@shared/apiClient';
+import type { PlaylistId } from '@shared/catalog';
 import { playlistKeys } from '@shared/query';
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 import { useEffect } from 'react';

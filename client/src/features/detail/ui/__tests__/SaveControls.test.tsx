@@ -2,7 +2,7 @@ import React from 'react';
 import { Text, StyleSheet } from 'react-native';
 
 import { fireEvent, render, screen, waitFor, act, within } from '@testing-library/react-native';
-import type { CreateTrackRequest, TrackId, DiscoveryResult } from '@shared/apiClient';
+import type { CreateTrackRequest, TrackId, DiscoveryResult } from '@shared/catalog';
 import {
   linkTrackIdentity,
   patchTrackStatus,

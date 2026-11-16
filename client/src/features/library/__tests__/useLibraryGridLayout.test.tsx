@@ -1,8 +1,9 @@
 import { fireEvent, render, screen, within } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 import { Platform } from 'react-native';
-import { asPlaylistId } from '@shared/apiClient';
-import type { AlbumGroup, ArtistGroup, PlaylistResponse } from '@shared/apiClient';
+import { asPlaylistId } from '@shared/catalog';
+import type { AlbumGroup, ArtistGroup } from '@shared/apiClient';
+import type { PlaylistResponse } from '@shared/catalog';
 import type { ListRefresh } from '@features/library';
 import { AlbumsGrid, ArtistsGrid, PlaylistsGrid } from '@features/library';
 import { setPlatformOS } from '@testing/setPlatformOS';

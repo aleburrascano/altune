@@ -1,7 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native';
-
-import type { DiscoveryResult } from '@shared/apiClient';
-
+import type { DiscoveryResult } from '@shared/catalog';
 import { runSignOutCleanups } from '@shared/session';
 
 import { useAlbumSaveAll, SAVE_ALL_CONCURRENCY } from '@features/detail';

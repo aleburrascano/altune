@@ -47,7 +47,7 @@ describe('library list shells — pull to refresh', () => {
 });
 
 const { Platform } = require('react-native');
-const { asTrackId } = require('@shared/apiClient/ids');
+const { asTrackId } = require('@shared/catalog');
 
 let mockWideWindowWidth = 390;
 

@@ -1,6 +1,5 @@
 import TrackPlayer, { Event } from 'react-native-track-player';
-
-import { asTrackId } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 import { ApiError } from '@shared/failure';
 import { usePinnedStore, provideOfflinePort } from '@shared/offline';
 import { apiClientOfflinePort } from '@testing/apiClientPorts';

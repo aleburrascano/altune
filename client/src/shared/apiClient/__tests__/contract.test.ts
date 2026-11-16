@@ -16,6 +16,7 @@ function findGoApiRoot(): string | null {
 
 const GO_API_ROOT = findGoApiRoot();
 const API_CLIENT_DIR = path.join(__dirname, '..');
+const CATALOG_CORE_DIR = path.join(__dirname, '..', '..', 'catalog', 'core');
 
 function goPath(...segments: string[]): string {
   return path.join(GO_API_ROOT!, ...segments);
@@ -445,7 +446,7 @@ describe('TrackResponse (trackResponse.ts) <-> service.TrackDTO (aliased TrackRe
     'utf8',
   );
   const goFields = deriveGoFields(trackDtoSource, extractGoStruct(trackDtoSource, 'TrackDTO'));
-  const typesSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'trackResponse.ts'), 'utf8');
+  const typesSource = fs.readFileSync(path.join(CATALOG_CORE_DIR, 'trackResponse.ts'), 'utf8');
   const tsLines = extractTsTypeLines(typesSource, 'TrackResponse');
 
   const hiddenGoFields = [
@@ -487,7 +488,7 @@ describe('ListTracksResponse (trackResponse.ts) <-> ListTracksResponse (track_ha
       trackHandlerSource,
       extractGoStruct(trackHandlerSource, 'ListTracksResponse'),
     );
-    const typesSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'trackResponse.ts'), 'utf8');
+    const typesSource = fs.readFileSync(path.join(CATALOG_CORE_DIR, 'trackResponse.ts'), 'utf8');
     const tsLines = extractTsTypeLines(typesSource, 'ListTracksResponse');
 
     expect(goFields.size).toBeGreaterThan(0);
@@ -506,7 +507,7 @@ describe('CreateTrackRequest (trackResponse.ts) <-> CreateTrackRequest (track_ha
       trackHandlerSource,
       extractGoStruct(trackHandlerSource, 'CreateTrackRequest'),
     );
-    const typesSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'trackResponse.ts'), 'utf8');
+    const typesSource = fs.readFileSync(path.join(CATALOG_CORE_DIR, 'trackResponse.ts'), 'utf8');
     const tsLines = extractTsTypeLines(typesSource, 'CreateTrackRequest');
 
     expect(goFields.size).toBeGreaterThan(0);
@@ -524,7 +525,7 @@ describe('CreateTrackRequest (trackResponse.ts) <-> CreateTrackRequest (track_ha
       trackHandlerSource,
       extractGoStruct(trackHandlerSource, 'CreateTrackRequest'),
     );
-    const typesSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'trackResponse.ts'), 'utf8');
+    const typesSource = fs.readFileSync(path.join(CATALOG_CORE_DIR, 'trackResponse.ts'), 'utf8');
     const tsLines = extractTsTypeLines(typesSource, 'CreateTrackRequest');
 
     const omitemptyFields = [...goFields.entries()].filter(([, f]) => f.omitempty).map(([k]) => k);
@@ -540,7 +541,7 @@ describe('Playlist DTOs (playlist_handler.go) <-> playlistResponse.ts', () => {
     goPath('internal', 'catalog', 'adapters', 'handler', 'playlist_handler.go'),
     'utf8',
   );
-  const typesSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'playlistResponse.ts'), 'utf8');
+  const typesSource = fs.readFileSync(path.join(CATALOG_CORE_DIR, 'playlistResponse.ts'), 'utf8');
 
   it.each([
     'PlaylistResponse',

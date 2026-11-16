@@ -1,4 +1,4 @@
-import type { TrackResponse, PlaylistResponse } from '@shared/apiClient';
+import type { TrackResponse, PlaylistResponse } from '@shared/catalog';
 import type { usePlayback, useQueuePlayback } from '@shared/playback';
 import type { MenuAnchor } from '@shared/ui';
 import { useAlbumsView, useArtistsView } from '@features/library/hooks/useGroupViews';

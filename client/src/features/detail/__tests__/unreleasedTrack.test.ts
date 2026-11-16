@@ -1,4 +1,5 @@
-import type { DiscoveryResult, UnreleasedTrack } from '@shared/apiClient';
+import type { UnreleasedTrack } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
 import { isAcquirable, unreleasedAsResult } from '@features/detail';
 
 const ARTIST: DiscoveryResult = {

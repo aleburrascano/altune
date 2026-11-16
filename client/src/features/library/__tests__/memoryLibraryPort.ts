@@ -1,14 +1,13 @@
+import type { AlbumGroup, ArtistGroup } from '@shared/apiClient';
 import type {
   DiscoveryResult,
   DiscoverySearchResponse,
-  AlbumGroup,
-  ArtistGroup,
   FeaturedArtist,
   ListTracksResponse,
   TrackResponse,
   PlaylistDetailResponse,
   PlaylistResponse,
-} from '@shared/apiClient';
+} from '@shared/catalog';
 import { ApiError } from '@shared/failure';
 
 import type { LibraryPort } from '@features/library';

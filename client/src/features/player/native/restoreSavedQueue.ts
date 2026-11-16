@@ -1,4 +1,5 @@
-import type { QueueStateResponse, TrackResponse } from '@shared/apiClient';
+import type { QueueStateResponse } from '@shared/apiClient';
+import type { TrackResponse } from '@shared/catalog';
 import { canPlay, orderedQueueTracks, useQueueStore } from '@shared/playback';
 import { loadNativeQueue } from '@features/player/native/loadNativeTrack';
 import { playbackPort } from '@features/player/ports/activePlaybackPort';

@@ -24,7 +24,7 @@ import {
 import { startDownload, useDownloadStore } from '@shared/acquisition/state/downloadStore';
 import { getSearchState, setSearchState } from '@features/discovery/domain/searchState';
 import { registerSearchStateSignOutReset } from '@features/discovery/adapters/registerSearchStateSignOutReset';
-import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import type { DiscoveryResult } from '@shared/catalog';
 import { detailHref, readDetailHandoff } from '@shared/navigation/detailHandoff';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import type * as PinnedStoreModule from '@shared/offline/state/pinnedStore';
@@ -34,7 +34,7 @@ import { useSignOut } from '@shared/auth/useSignOut';
 import { supabase } from '@shared/auth/supabaseClient';
 import type * as SupabaseClientModule from '@shared/auth/supabaseClient';
 import type * as UseSessionModule from '@shared/auth/useSession';
-import { asTrackId } from '@shared/apiClient/ids';
+import { asTrackId } from '@shared/catalog';
 
 jest.mock('react-native/Libraries/AppState/AppState', () => ({
   default: {

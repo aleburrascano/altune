@@ -4,7 +4,7 @@ import { useNavigator, useScreenFocusEffect } from '@shared/navigation';
 import { dismissKeyboard } from '@shared/ui';
 import { useRecordEvent } from '@shared/telemetry';
 import { stashHandoffForDetail } from '@features/discovery/domain/stashHandoffForDetail';
-import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/apiClient';
+import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/catalog';
 
 export type ResultTapHandler = (tapped: DiscoveryResult, position: number) => void;
 

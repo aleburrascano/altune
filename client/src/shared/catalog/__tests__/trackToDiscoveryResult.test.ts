@@ -1,5 +1,5 @@
-import { trackToDiscoveryResult, asTrackId } from '@shared/apiClient';
-import type { FeaturedArtist, TrackResponse } from '@shared/apiClient';
+import { trackToDiscoveryResult, asTrackId } from '@shared/catalog';
+import type { FeaturedArtist, TrackResponse } from '@shared/catalog';
 
 function makeTrack(overrides: Partial<TrackResponse> = {}): TrackResponse {
   return {

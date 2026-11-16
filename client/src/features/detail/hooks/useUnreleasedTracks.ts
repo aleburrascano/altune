@@ -6,8 +6,9 @@ import {
   type QueryFunctionContext,
 } from '@tanstack/react-query';
 
-import type { DiscoveryResult, UnreleasedTrack, UnreleasedTracksResponse } from '@shared/apiClient';
-import { sourceIdList } from '@shared/apiClient';
+import type { UnreleasedTrack, UnreleasedTracksResponse } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
+import { sourceIdList } from '@shared/catalog';
 import { useQueuePlayback } from '@shared/playback';
 import { detailKeys } from '@shared/query';
 

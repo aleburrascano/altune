@@ -1,4 +1,4 @@
-import { asPlaylistId } from '@shared/apiClient';
+import { asPlaylistId } from '@shared/catalog';
 import type { QueueSource } from '@shared/playback';
 
 import {

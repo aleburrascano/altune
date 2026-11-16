@@ -15,8 +15,7 @@ import {
 } from '@features/discovery';
 import { signInTestUser } from '@testing/signInTestUser';
 import type { DiscoverPort } from '@features/discovery';
-
-import type { DiscoverySearchResponse } from '@shared/apiClient';
+import type { DiscoverySearchResponse } from '@shared/catalog';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),

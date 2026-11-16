@@ -6,7 +6,7 @@ import { makeWrapper } from '@testing/makeWrapper';
 import { signInTestUser } from '@testing/signInTestUser';
 
 import type { ViewToken } from 'react-native';
-import type { DiscoverySearchResponse } from '@shared/apiClient';
+import type { DiscoverySearchResponse } from '@shared/catalog';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

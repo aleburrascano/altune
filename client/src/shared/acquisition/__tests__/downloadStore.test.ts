@@ -9,7 +9,7 @@ import {
   type DownloadEntry,
   type DownloadPhase,
 } from '@shared/acquisition';
-import { asTrackId } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 import { runSignOutCleanups } from '@shared/session';
 
 const FINISHING_DWELL_MS = 500;

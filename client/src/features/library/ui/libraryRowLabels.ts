@@ -3,8 +3,7 @@ import { phaseLabel } from '@shared/acquisition';
 import type { PinnedStatus } from '@shared/offline';
 
 import { pinnedStatusDisplay } from '@features/library/domain/pinnedStatusDisplay';
-
-import type { AcquisitionStatus, TrackResponse } from '@shared/apiClient';
+import type { AcquisitionStatus, TrackResponse } from '@shared/catalog';
 
 export function albumSuffix(album: string | null): string {
   return album != null ? ` · ${album}` : '';

@@ -1,11 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
-
-import { asPlaylistId, asTrackId } from '@shared/apiClient';
-import type {
-  ListPlaylistsResponse,
-  PlaylistDetailResponse,
-  TrackResponse,
-} from '@shared/apiClient';
+import { asPlaylistId, asTrackId } from '@shared/catalog';
+import type { ListPlaylistsResponse, PlaylistDetailResponse, TrackResponse } from '@shared/catalog';
 import { playlistKeys } from '@shared/query';
 import { PLAYLIST_HANDLERS } from '@shared/events';
 import type { JsonObject } from '@shared/files';

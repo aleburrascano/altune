@@ -1,6 +1,6 @@
 import { ContractError } from '@shared/failure';
-import { PROVIDER_STATUSES, parseDiscoveryResult } from '@shared/apiClient/discovery';
-import { discoveryEntityPath, sourceIdList } from '@shared/apiClient/ids';
+import { parseDiscoveryResult } from '@shared/apiClient/discovery';
+import { PROVIDER_STATUSES, sourceIdList } from '@shared/catalog';
 import { apiFetch, signalInit, withQuery } from '@shared/apiClient/adapters/http';
 import { LONG_REQUEST_TIMEOUT_MS } from '@shared/apiConfig';
 import {
@@ -16,13 +16,21 @@ import {
   nullableNumber,
   nullableString,
 } from '@shared/apiClient/wireDecoders';
-
 import type {
   DiscoveryKind,
   DiscoveryProviderStatus,
   DiscoveryResult,
   DiscoverySource,
-} from '@shared/apiClient/discovery';
+} from '@shared/catalog';
+
+function discoveryEntityPath(
+  kind: 'albums' | 'artists' | 'tracks',
+  provider: string,
+  externalId: string,
+  tail: string,
+): string {
+  return `/v1/discovery/${kind}/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}/${tail}`;
+}
 
 export type ContentFetchResponse = {
   items: DiscoveryResult[];

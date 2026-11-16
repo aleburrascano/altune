@@ -1,7 +1,8 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
-import type { DiscoverySource, ArtistContentResponse } from '@shared/apiClient';
+import type { ArtistContentResponse } from '@shared/apiClient';
+import type { DiscoverySource } from '@shared/catalog';
 import {
   useArtistContent,
   _resetDetailHealthForTest,

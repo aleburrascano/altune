@@ -6,7 +6,7 @@ import type {
   TrackId,
   PlaylistDetailResponse,
   PlaylistResponse,
-} from '@shared/apiClient';
+} from '@shared/catalog';
 import { countLabel, showFailureAlert } from '@shared/ui';
 import { playlistKeys, useAppMutation, useOptimisticMutation } from '@shared/query';
 import { currentSessionEpoch, isSameSession, guardedMutationOptions } from '@shared/session';

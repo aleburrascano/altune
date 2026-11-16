@@ -1,10 +1,6 @@
 import { ApiError } from '@shared/failure';
-import type {
-  ResolvedAudioUrl,
-  LyricsResponse,
-  QueueStateResponse,
-  TrackResponse,
-} from '@shared/apiClient';
+import type { ResolvedAudioUrl, LyricsResponse, QueueStateResponse } from '@shared/apiClient';
+import type { TrackResponse } from '@shared/catalog';
 import type { PlaybackPort } from '@features/player';
 
 const MAX_ALL_TRACKS = 10_000;

@@ -1,4 +1,4 @@
-import { asTrackId } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 import type { PlaybackTrack } from '@shared/playback';
 import { useQueueStore } from '@shared/playback';
 

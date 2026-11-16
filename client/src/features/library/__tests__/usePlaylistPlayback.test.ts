@@ -1,7 +1,6 @@
 import { renderHook } from '@testing-library/react-native';
-
-import { asPlaylistId, asTrackId } from '@shared/apiClient';
-import type { PlaylistDetailResponse, TrackResponse } from '@shared/apiClient';
+import { asPlaylistId, asTrackId } from '@shared/catalog';
+import type { PlaylistDetailResponse, TrackResponse } from '@shared/catalog';
 import type { PlaybackTrack } from '@shared/playback';
 import { trackResponseFactory } from '@testing/factories';
 

@@ -5,7 +5,7 @@ import {
   installPlaybackPort,
   startWidgetCommands,
 } from '@features/player';
-import { asTrackId } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 import { trackKey, type PlaybackTrack, orderedQueueTracks, useQueueStore } from '@shared/playback';
 import { notifyIdentityChange } from '@shared/session';
 import {

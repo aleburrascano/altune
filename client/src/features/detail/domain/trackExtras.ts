@@ -5,7 +5,8 @@ import {
   parseTrackId,
   type TrackId,
   featuredArtistsFromExtras,
-} from '@shared/apiClient';
+} from '@shared/catalog';
+
 export type TrackExtras = {
   durationSeconds: number | null;
   album: string | null;

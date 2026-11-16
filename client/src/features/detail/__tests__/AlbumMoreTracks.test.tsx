@@ -1,9 +1,7 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
 import { render, screen, fireEvent } from '@testing-library/react-native';
-
-import type { DiscoveryResult } from '@shared/apiClient';
-
+import type { DiscoveryResult } from '@shared/catalog';
 import { AlbumMoreTracks } from '@features/detail';
 
 function track(title: string): DiscoveryResult {

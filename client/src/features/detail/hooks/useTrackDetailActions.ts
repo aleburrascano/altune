@@ -1,6 +1,5 @@
 import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
-
-import type { DiscoveryResult, TrackId, FeaturedArtist } from '@shared/apiClient';
+import type { DiscoveryResult, TrackId, FeaturedArtist } from '@shared/catalog';
 import type { PlaybackSource } from '@shared/playback';
 
 import { usePlayback } from '@shared/playback';

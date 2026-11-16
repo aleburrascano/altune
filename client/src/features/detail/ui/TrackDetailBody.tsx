@@ -3,8 +3,7 @@ import { View } from 'react-native';
 import { ListPlus, Pause, Play } from 'lucide-react-native';
 
 import { AddToPlaylistSheet } from '@shared/playlists';
-
-import type { DiscoveryResult, FeaturedArtist } from '@shared/apiClient';
+import type { DiscoveryResult, FeaturedArtist } from '@shared/catalog';
 import {
   useTrackDetailActions,
   type TrackDetailActions,

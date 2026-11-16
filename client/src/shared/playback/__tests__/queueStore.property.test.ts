@@ -1,7 +1,5 @@
 import fc from 'fast-check';
-
-import { asTrackId } from '@shared/apiClient';
-
+import { asTrackId } from '@shared/catalog';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback';
 import type { PlaybackTrack } from '@shared/playback';
 

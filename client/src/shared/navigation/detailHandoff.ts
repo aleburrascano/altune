@@ -1,4 +1,4 @@
-import type { DiscoveryResult } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
 import { onSignOut } from '@shared/session';
 
 export type DetailHandoff = {

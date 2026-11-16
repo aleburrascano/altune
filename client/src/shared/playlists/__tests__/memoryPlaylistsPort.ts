@@ -4,8 +4,8 @@ import type {
   PlaylistDetailResponse,
   PlaylistResponse,
   TrackResponse,
-} from '@shared/apiClient';
-import { asPlaylistId } from '@shared/apiClient';
+} from '@shared/catalog';
+import { asPlaylistId } from '@shared/catalog';
 import { ApiError } from '@shared/failure';
 
 import type { PlaylistsPort } from '@shared/playlists';

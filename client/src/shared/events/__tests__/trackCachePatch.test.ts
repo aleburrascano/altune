@@ -1,7 +1,7 @@
 import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 import { QueryClient, type InfiniteData } from '@tanstack/react-query';
-import { asPlaylistId, asTrackId, toReady, toTrackStatus } from '@shared/apiClient';
-import type { PlaylistDetailResponse, ListTracksResponse, TrackResponse } from '@shared/apiClient';
+import { asPlaylistId, asTrackId, toReady, toTrackStatus } from '@shared/catalog';
+import type { PlaylistDetailResponse, ListTracksResponse, TrackResponse } from '@shared/catalog';
 import { libraryKeys, playlistKeys } from '@shared/query';
 import {
   getTrackFromCaches,

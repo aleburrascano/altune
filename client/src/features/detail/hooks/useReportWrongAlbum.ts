@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react';
-
-import type { DiscoveryResult } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
 import { enqueueCritical } from '@shared/telemetry';
 
 import { trackExtras } from '@features/detail/domain/trackExtras';

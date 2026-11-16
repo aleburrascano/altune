@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native';
-import { asTrackId, type TrackId } from '@shared/apiClient';
+import { asTrackId, type TrackId } from '@shared/catalog';
 import { useSelection } from '@features/library';
 
 describe('useSelection', () => {

@@ -6,7 +6,7 @@ import {
   recordSearchHistory,
   ApiError,
 } from '@shared/apiClient';
-import type { DiscoveryKind, DiscoveryResult, DiscoverySearchResponse } from '@shared/apiClient';
+import type { DiscoveryKind, DiscoveryResult, DiscoverySearchResponse } from '@shared/catalog';
 import { apiBase } from '@shared/apiConfig';
 import { ContractError } from '@shared/failure';
 import { supabase } from '@shared/auth';

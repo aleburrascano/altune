@@ -3,15 +3,13 @@ import { AppState, type AppStateStatus } from 'react-native';
 import TrackPlayer from 'react-native-track-player';
 
 import { signInTestUser } from '@testing/signInTestUser';
-
-import { asTrackId } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 import type {
   ResolvedAudioUrl,
   QueueStateResponse,
   SaveQueueStateRequest,
-  AcquisitionStatus,
-  TrackResponse,
 } from '@shared/apiClient';
+import type { AcquisitionStatus, TrackResponse } from '@shared/catalog';
 import { orderedQueueTracks, useQueueStore, trackKey, type PlaybackTrack } from '@shared/playback';
 import { runSignOutCleanups } from '@shared/session';
 import { ApiError, NetworkError } from '@shared/failure';

@@ -1,6 +1,5 @@
-import { asTrackId } from '@shared/apiClient';
-import type { ListTracksResponse, TrackResponse } from '@shared/apiClient';
-
+import { asTrackId } from '@shared/catalog';
+import type { ListTracksResponse, TrackResponse } from '@shared/catalog';
 import { httpLibraryPort, createMemoryLibraryPort, track } from '@features/library';
 import type { LibraryPort } from '@features/library';
 import { signInTestUser } from '@testing/signInTestUser';

@@ -2,9 +2,8 @@ import type { ReactNode } from 'react';
 
 import { act, renderHook } from '@testing-library/react-native';
 import fc from 'fast-check';
-
-import { asPlaylistId, asTrackId } from '@shared/apiClient';
-import type { PlaylistDetailResponse, TrackResponse } from '@shared/apiClient';
+import { asPlaylistId, asTrackId } from '@shared/catalog';
+import type { PlaylistDetailResponse, TrackResponse } from '@shared/catalog';
 import { canPlay, useQueueStore, PlaybackContext, useQueuePlayback } from '@shared/playback';
 import type { PlaybackTrack } from '@shared/playback';
 import { makeIdlePlayback, trackResponseFactory } from '@testing/factories';

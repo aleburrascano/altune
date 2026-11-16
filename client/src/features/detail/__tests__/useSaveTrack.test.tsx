@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { ApiError } from '@shared/failure';
-import { asTrackId } from '@shared/apiClient';
-import type { TrackResponse, DiscoveryResult } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
+import type { TrackResponse, DiscoveryResult } from '@shared/catalog';
 import { useDownloadStore, useTrackStatusStore } from '@shared/acquisition';
 import { libraryKeys } from '@shared/query';
 import { runSignOutCleanups } from '@shared/session';

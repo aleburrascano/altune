@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
 import * as discoveryApi from '@shared/apiClient/discovery';
-import type { DiscoveryResult } from '@shared/apiClient';
+import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/catalog';
 import { ApiError } from '@shared/failure';
 
 import { signInTestUser } from '@testing/signInTestUser';
@@ -343,7 +343,18 @@ describe('httpDiscoverPort', () => {
   });
 
   it('reaches spies installed on the apiClient after the port was imported', async () => {
-    const search = { results: [] } as unknown as discoveryApi.DiscoverySearchResponse;
+    const search: DiscoverySearchResponse = {
+      query: 'q',
+      query_norm: 'q',
+      results: [],
+      sections: [],
+      providers: [],
+      partial: false,
+      cache: { hit: false, fetched_at: null },
+      total: 0,
+      offset: 0,
+      has_more: false,
+    };
     const suggest = { suggestions: [] };
     const history = { items: [], total: 0 };
     jest.spyOn(discoveryApi, 'searchDiscovery').mockResolvedValue(search);

@@ -1,7 +1,6 @@
 import { useCallback, useRef, useState, type MutableRefObject } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
-
-import type { DiscoveryResult, DiscoveryKind, FeaturedArtist } from '@shared/apiClient';
+import type { DiscoveryResult, DiscoveryKind, FeaturedArtist } from '@shared/catalog';
 import { useNavigator } from '@shared/navigation';
 import {
   openDetail,

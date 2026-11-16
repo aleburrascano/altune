@@ -8,8 +8,7 @@ import {
   type PressableProps,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-
-import { withFeaturing } from '@shared/apiClient';
+import { withFeaturing } from '@shared/catalog';
 import { usePlayback } from '@shared/playback';
 import { Text, Tappable, Skeleton, useReduceMotion, spacing, doubled } from '@shared/ui';
 import { useLyrics } from '@features/player/hooks/useLyrics';

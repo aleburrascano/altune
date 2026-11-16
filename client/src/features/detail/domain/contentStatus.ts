@@ -1,7 +1,7 @@
 import type { DefaultOptions } from '@tanstack/react-query';
 
 import { ApiError } from '@shared/failure';
-import type { DiscoveryProviderStatus } from '@shared/apiClient';
+import type { DiscoveryProviderStatus } from '@shared/catalog';
 
 export const DETAIL_LIST_CAP = 100;
 

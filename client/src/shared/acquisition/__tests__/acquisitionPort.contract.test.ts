@@ -1,4 +1,4 @@
-import { asTrackId, type TrackId } from '@shared/apiClient';
+import { asTrackId, type TrackId } from '@shared/catalog';
 import { apiClientAcquisitionPort } from '@testing/apiClientPorts';
 import { signInTestUser } from '@testing/signInTestUser';
 import { ApiError, ContractError } from '@shared/failure';

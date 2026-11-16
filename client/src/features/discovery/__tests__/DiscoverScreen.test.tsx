@@ -2,8 +2,7 @@ import { act, fireEvent, render, renderHook, screen } from '@testing-library/rea
 import { createElement, type ReactElement, type ReactNode } from 'react';
 import { Keyboard, Platform, TextInput } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-
-import { asTrackId } from '@shared/apiClient';
+import { asTrackId } from '@shared/catalog';
 import { PlaybackContext } from '@shared/playback';
 import type { PlaybackContextValue } from '@shared/playback';
 import { makeIdlePlayback } from '@testing/factories';

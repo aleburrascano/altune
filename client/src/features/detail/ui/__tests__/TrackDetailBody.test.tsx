@@ -1,8 +1,7 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
-
-import type { DiscoveryResult } from '@shared/apiClient';
-import { asTrackId } from '@shared/apiClient';
+import type { DiscoveryResult } from '@shared/catalog';
+import { asTrackId } from '@shared/catalog';
 import {
   linkTrackIdentity,
   patchTrackStatus,

@@ -1,6 +1,5 @@
 import { useCallback } from 'react';
-
-import type { TrackId, TrackResponse } from '@shared/apiClient';
+import type { TrackId, TrackResponse } from '@shared/catalog';
 import {
   offlineDownloadsSupported,
   usePinnedStore,

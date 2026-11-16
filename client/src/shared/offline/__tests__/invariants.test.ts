@@ -1,9 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-
-import { asTrackId } from '@shared/apiClient';
-
+import { asTrackId } from '@shared/catalog';
 import { downloadPinned } from '@shared/offline';
 
 const OFFLINE_DIR = path.resolve(__dirname, '..');

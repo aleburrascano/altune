@@ -1,17 +1,19 @@
 import type {
-  DiscoveryResult,
-  DiscoverySearchResponse,
   ArtistContentResponse,
   ContentFetchResponse,
   DeezerEnrichmentResponse,
   EnrichmentResponse,
   LastFmEnrichmentResponse,
   AlbumGroup,
+} from '@shared/apiClient';
+import type {
+  DiscoveryResult,
+  DiscoverySearchResponse,
   CreateTrackRequest,
   ListTracksResponse,
   TrackResponse,
-} from '@shared/apiClient';
-import { asTrackId } from '@shared/apiClient';
+} from '@shared/catalog';
+import { asTrackId } from '@shared/catalog';
 import type { DetailPort } from '@features/detail';
 
 export interface MemoryDetailSeed {

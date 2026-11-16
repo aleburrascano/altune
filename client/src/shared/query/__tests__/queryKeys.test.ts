@@ -1,8 +1,6 @@
 import fc from 'fast-check';
 import { QueryClient } from '@tanstack/react-query';
-
-import { asPlaylistId } from '@shared/apiClient';
-
+import { asPlaylistId } from '@shared/catalog';
 import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 
 import {
