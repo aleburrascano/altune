@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import type { PlaylistResponse } from '@shared/catalog';
-import type { PlaylistActionsState } from '@features/library/hooks/usePlaylistActions';
+import type { PlaylistActionsState } from '@features/library/view/usePlaylistActions';
 import {
   type ActiveView,
   type ListPaging,

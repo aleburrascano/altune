@@ -27,7 +27,7 @@ export { createMemoryDiscoverPort } from '@features/discovery/__tests__/memoryDi
 export {
   useAutocompleteSuggestions,
   useSuggestionVisibility,
-} from '@features/discovery/hooks/history/useSuggestions';
+} from '@features/discovery/view/history/useSuggestions';
 export { useDiscoverSearch } from '@features/discovery/hooks/search/useDiscoverSearch';
 export {
   useDiscoverClearSearchHistory,

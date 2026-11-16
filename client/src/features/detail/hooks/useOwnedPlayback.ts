@@ -19,7 +19,7 @@ import {
 } from '@features/detail/domain/saveTrack';
 import { resolveOwnedTrackAtActionTime } from '@features/detail/hooks/useOwnedTrack';
 import { useRetryTrack } from '@features/detail/hooks/useRetryTrack';
-import type { SaveTrack } from '@features/detail/hooks/useSaveTrack';
+import type { SaveTrack } from '@features/detail/view/useSaveTrack';
 
 export type OwnedPlaybackContext = {
   title: string | null;

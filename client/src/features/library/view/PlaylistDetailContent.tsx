@@ -6,8 +6,8 @@ import type {
   DetailActions,
   DetailProps,
 } from '@features/library/view/playlistDetailTypes';
-import { PlaylistTopBar } from '@features/library/ui/PlaylistTopBar';
-import { PlaylistTrackList as PlaylistTracks } from '@features/library/ui/PlaylistTrackList';
+import { PlaylistTopBar } from '@features/library/view/PlaylistTopBar';
+import { PlaylistTrackList as PlaylistTracks } from '@features/library/view/PlaylistTrackList';
 import { useAddTracksToPlaylist } from '@shared/playlists';
 import { AddTracksToPlaylistModal } from '@features/library/view/AddTracksToPlaylistModal';
 

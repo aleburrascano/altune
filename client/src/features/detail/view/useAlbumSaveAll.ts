@@ -9,7 +9,7 @@ import { runBounded, type BatchOutcome } from '@shared/concurrency';
 import { toCreateTrackRequest, SAVE_ALL_CONCURRENCY } from '@features/detail/domain/saveTrack';
 import { trackExtras } from '@features/detail/domain/trackExtras';
 import { ownedFromTrackInfo } from '@features/detail/domain/ownedTrack';
-import type { useSaveTrack } from '@features/detail/hooks/useSaveTrack';
+import type { useSaveTrack } from '@features/detail/view/useSaveTrack';
 
 function _albumExtras(track: DiscoveryResult, album: DiscoveryResult): DiscoveryResult['extras'] {
   const ownExtras = trackExtras(track.extras);

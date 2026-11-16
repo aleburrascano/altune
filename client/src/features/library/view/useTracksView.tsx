@@ -6,7 +6,7 @@ import type { usePlayback, useQueuePlayback } from '@shared/playback';
 import type { MenuAnchor } from '@shared/ui';
 import { libraryFailureAlert } from '@features/library/domain/libraryFailure';
 import { useLibraryTracks } from '@features/library/hooks/useLibraryTracks';
-import type { useRetryAcquisition } from '@features/library/hooks/useRetryAcquisition';
+import type { useRetryAcquisition } from '@features/library/view/useRetryAcquisition';
 import type { Selection } from '@features/library/view/useSelection';
 import {
   type ActiveView,

@@ -11,7 +11,7 @@ import {
   useLibraryAlbumsForArtist,
   useLibraryTracksForArtist,
 } from '@features/detail/hooks/useLibraryMatches';
-import { useSaveTrack } from '@features/detail/hooks/useSaveTrack';
+import { useSaveTrack } from '@features/detail/view/useSaveTrack';
 import { useOwnedPlayback } from '@features/detail/hooks/useOwnedPlayback';
 
 export type ArtistDetailState = {

@@ -4,7 +4,7 @@ export { ForgotPasswordScreen } from '@features/signIn/view/ForgotPasswordScreen
 export { SetNewPasswordScreen } from '@features/signIn/ui/SetNewPasswordScreen';
 export { SignInScreen } from '@features/signIn/ui/SignInScreen';
 export { SignUpScreen } from '@features/signIn/view/SignUpScreen';
-export { TestAuthBridge } from '@features/signIn/ui/TestAuthBridge';
+export { TestAuthBridge } from '@features/signIn/view/TestAuthBridge';
 export { useAuthDeepLink } from '@features/signIn/hooks/useAuthDeepLink';
 export { AuthPortProvider, useAuthPort } from '@features/signIn/view/AuthPortProvider';
 export { httpAuthPort } from '@features/signIn/adapters/http/httpAuthPort';

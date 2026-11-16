@@ -8,7 +8,7 @@ import {
   type LibraryOffline,
 } from '@features/library/view/useLibraryOffline';
 import { pinnedStatusDisplay } from '@features/library/domain/pinnedStatusDisplay';
-import { useReacquireTrack } from '@features/library/hooks/useRetryAcquisition';
+import { useReacquireTrack } from '@features/library/view/useRetryAcquisition';
 
 type TrackAction = { track: TrackResponse; anchor: MenuAnchor };
 

@@ -25,7 +25,7 @@ import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
 import { useDetailFetchEnabled } from '@features/detail/hooks/useDetailFetchGate';
 import { useResolvedOwnedTrack } from '@features/detail/hooks/useOwnedTrack';
-import { useTrackSave } from '@features/detail/hooks/useSaveTrack';
+import { useTrackSave } from '@features/detail/view/useSaveTrack';
 
 const NO_TRACKS: UnreleasedTrack[] = [];
 const REFRESH_ON_EVERY_POLL: NotifyOnChangeProps = ['data', 'dataUpdatedAt', 'isLoading', 'error'];

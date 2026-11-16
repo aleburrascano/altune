@@ -10,7 +10,7 @@ import {
   Tappable,
   usePressableInteraction,
 } from '@shared/ui';
-import { usePlaylistActions } from '@features/library/hooks/usePlaylistActions';
+import { usePlaylistActions } from '@features/library/view/usePlaylistActions';
 
 function sidebarPlaylistRowProps(playlist: PlaylistResponse, onPress: () => void) {
   return {

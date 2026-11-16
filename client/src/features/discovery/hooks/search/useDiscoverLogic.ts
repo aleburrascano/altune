@@ -9,7 +9,7 @@ import {
   useAutocompleteSuggestions,
   useSuggestionVisibility,
   visibleSuggestions,
-} from '@features/discovery/hooks/history/useSuggestions';
+} from '@features/discovery/view/history/useSuggestions';
 import {
   useImpressionLogger,
   type ImpressionHandlers,
