@@ -1,15 +1,16 @@
-package metrics
+package metrics_test
 
 import (
+	"altune/go-api/internal/auth/internal/adapters/metrics"
 	"encoding/json"
 	"expvar"
 	"testing"
 )
 
 func TestExpvarAuthMetrics_PublishesAndIncrements(t *testing.T) {
-	m := NewExpvarAuthMetrics()
+	m := metrics.NewExpvarAuthMetrics()
 
-	before := ReadSnapshot()
+	before := metrics.ReadSnapshot()
 	m.TokenRejected("expired")
 	m.TokenRejected("expired")
 	m.TokenRejected("signature_invalid")
@@ -17,7 +18,7 @@ func TestExpvarAuthMetrics_PublishesAndIncrements(t *testing.T) {
 	m.RequestThrottled()
 	m.VerifierUnavailable()
 	m.JWKSFetchFailed()
-	after := ReadSnapshot()
+	after := metrics.ReadSnapshot()
 
 	if after.TokenRejections != before.TokenRejections+3 {
 		t.Errorf("TokenRejections = %d, want %d", after.TokenRejections, before.TokenRejections+3)
@@ -37,7 +38,7 @@ func TestExpvarAuthMetrics_PublishesAndIncrements(t *testing.T) {
 		t.Errorf("JWKSFetchFailures = %d, want %d", after.JWKSFetchFailures, before.JWKSFetchFailures+1)
 	}
 
-	for _, name := range []string{TokenRejectionsVar, TokenRejectionsByReasonVar, RequestsThrottledVar, VerifierUnavailableVar, JWKSFetchFailuresVar} {
+	for _, name := range []string{metrics.TokenRejectionsVar, metrics.TokenRejectionsByReasonVar, metrics.RequestsThrottledVar, metrics.VerifierUnavailableVar, metrics.JWKSFetchFailuresVar} {
 		v := expvar.Get(name)
 		if v == nil {
 			t.Fatalf("expvar %q was never published", name)

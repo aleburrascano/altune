@@ -1,6 +1,9 @@
-package ytdlp
+package ytdlp_test
 
-import "testing"
+import (
+	"altune/go-api/internal/shared/ytdlp"
+	"testing"
+)
 
 func TestOutputShowsSourceUnavailable(t *testing.T) {
 	cases := map[string]bool{
@@ -14,7 +17,7 @@ func TestOutputShowsSourceUnavailable(t *testing.T) {
 		"": false,
 	}
 	for output, want := range cases {
-		if got := OutputShowsSourceUnavailable(output); got != want {
+		if got := ytdlp.OutputShowsSourceUnavailable(output); got != want {
 			t.Errorf("OutputShowsSourceUnavailable(%q) = %v, want %v", output, got, want)
 		}
 	}

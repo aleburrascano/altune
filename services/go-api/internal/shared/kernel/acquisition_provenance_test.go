@@ -1,16 +1,19 @@
-package kernel
+package kernel_test
 
-import "testing"
+import (
+	"altune/go-api/internal/shared/kernel"
+	"testing"
+)
 
 func TestAcquisitionProvenanceValid(t *testing.T) {
 	cases := []struct {
-		value AcquisitionProvenance
+		value kernel.AcquisitionProvenance
 		want  bool
 	}{
-		{ProvenanceVerified, true},
-		{ProvenanceCorroborated, true},
-		{ProvenanceBestEffort, true},
-		{AcquisitionProvenance("unknown"), false},
+		{kernel.ProvenanceVerified, true},
+		{kernel.ProvenanceCorroborated, true},
+		{kernel.ProvenanceBestEffort, true},
+		{kernel.AcquisitionProvenance("unknown"), false},
 	}
 	for _, c := range cases {
 		if got := c.value.Valid(); got != c.want {
@@ -20,7 +23,7 @@ func TestAcquisitionProvenanceValid(t *testing.T) {
 }
 
 func TestAcquisitionProvenanceWireValues(t *testing.T) {
-	if ProvenanceVerified != "verified" || ProvenanceCorroborated != "corroborated" || ProvenanceBestEffort != "best_effort" {
+	if kernel.ProvenanceVerified != "verified" || kernel.ProvenanceCorroborated != "corroborated" || kernel.ProvenanceBestEffort != "best_effort" {
 		t.Fatal("provenance wire values changed")
 	}
 }
