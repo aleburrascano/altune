@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { render, screen } from '@testing-library/react-native';
 import type { DiscoveryResult } from '@shared/catalog';
 import { detailHref } from '@shared/navigation';
 import { runSignOutCleanups } from '@shared/session';
@@ -183,7 +183,6 @@ describe('DetailScreen after the resolver backfills a library result its sources
 
   it('shows the resolved artist top tracks instead of the library-only ones', async () => {
     renderDetail(libraryResult('artist'));
-    fireEvent.press(await screen.findByTestId('detail-explore-discography'));
 
     expect(await screen.findByText('Dayvan Cowboy')).toBeTruthy();
     expect(screen.getByText('POPULAR TRACKS')).toBeTruthy();
