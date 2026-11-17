@@ -9,7 +9,7 @@ import { ApiError, NetworkError } from '@shared/failure';
 
 import { createMemoryLibraryPort, LibraryPortProvider, FeaturingScreen } from '@features/library';
 import type { LibraryPort } from '@features/library';
-import * as detailHandoff from '@shared/navigation/core/detailHandoff';
+import { readDetailHandoff } from '@shared/navigation';
 import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';
 import { PlaybackContext } from '@shared/playback';
@@ -201,6 +201,12 @@ describe('a failed featuring load', () => {
   });
 });
 
+type PushOnlyRouter = { push: jest.Mock };
+
+type PushingRouter = { useRouter: () => PushOnlyRouter };
+
+type PushedHref = { pathname: string; params: { handoff: string } };
+
 describe('the detail route under the library tab', () => {
   const pendingTrack = trackResponseFactory.build({
     id: asTrackId('t1'),
@@ -220,33 +226,45 @@ describe('the detail route under the library tab', () => {
     failure_reason: null,
   });
 
+  const router = jest.requireMock('expo-router') as PushingRouter;
+  const original = { ...router };
+  let push: jest.Mock;
+
+  beforeEach(() => {
+    push = jest.fn();
+    router.useRouter = () => ({ push });
+  });
+
   afterEach(() => {
-    jest.restoreAllMocks();
+    Object.assign(router, original);
   });
 
   it('opens a track at the library detail path, not the discover one', async () => {
-    const detailHrefSpy = jest.spyOn(detailHandoff, 'detailHref');
     mockListTracksFeaturing.mockResolvedValue({ items: [pendingTrack] });
     render(<FeaturingScreen />, { wrapper });
 
     const row = await screen.findByTestId(`library-row-${pendingTrack.id}`);
     fireEvent.press(row);
 
-    expect(detailHrefSpy).toHaveBeenCalledWith('/library/detail', expect.anything());
-    detailHrefSpy.mockRestore();
+    expect(push).toHaveBeenCalledTimes(1);
+    const href = push.mock.calls[0][0] as PushedHref;
+    expect(href.pathname).toBe('/library/detail');
+    expect(readDetailHandoff(href.params.handoff)?.result).toMatchObject({ title: 'Aerodynamic' });
   });
 
   it('sends the explore search to the library detail path, not the discover one', async () => {
-    const detailHrefSpy = jest.spyOn(detailHandoff, 'detailHref');
     mockSearchDiscovery.mockResolvedValue({ results: [{ kind: 'artist', title: 'Guest Star' }] });
     render(<FeaturingScreen />, { wrapper });
 
     await tapExplore();
 
-    await waitFor(() =>
-      expect(detailHrefSpy).toHaveBeenCalledWith('/library/detail', expect.anything()),
-    );
-    detailHrefSpy.mockRestore();
+    await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    const href = push.mock.calls[0][0] as PushedHref;
+    expect(href.pathname).toBe('/library/detail');
+    expect(readDetailHandoff(href.params.handoff)?.result).toMatchObject({
+      kind: 'artist',
+      title: 'Guest Star',
+    });
   });
 });
 
@@ -304,7 +322,7 @@ describe('the featuring screen opened from the discover tab', () => {
     fireEvent.press(await screen.findByTestId(`library-row-${oddTrack.id}`));
 
     const href = push.mock.calls[0][0] as { params: { handoff: string } };
-    expect(detailHandoff.readDetailHandoff(href.params.handoff)?.result).toMatchObject({
+    expect(readDetailHandoff(href.params.handoff)?.result).toMatchObject({
       title: 'Around the World / Harder, Better? #1 & "more"',
     });
   });
@@ -328,9 +346,9 @@ describe('the featuring screen opened from the discover tab', () => {
     await tapExplore();
 
     await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
-    const href = push.mock.calls[0][0] as { pathname: string; params: { handoff: string } };
+    const href = push.mock.calls[0][0] as PushedHref;
     expect(href.pathname).toBe('/discover/detail');
-    expect(detailHandoff.readDetailHandoff(href.params.handoff)?.result).toMatchObject({
+    expect(readDetailHandoff(href.params.handoff)?.result).toMatchObject({
       kind: 'artist',
       title: 'AC/DC & Friends? #1',
     });

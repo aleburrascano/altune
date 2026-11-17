@@ -4,17 +4,6 @@ import { act, renderRouter } from 'expo-router/testing-library';
 import { useNavigator, type Navigator } from '@shared/navigation/index';
 import { createMemoryNavigator } from '@shared/navigation';
 
-jest.mock('decode-uri-component', () => ({
-  __esModule: true,
-  default: (s: string) => {
-    try {
-      return decodeURIComponent(s);
-    } catch {
-      return s;
-    }
-  },
-}));
-
 function expoRouterNavigator(): Navigator {
   let captured: Navigator | undefined;
   function Probe() {
