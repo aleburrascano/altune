@@ -5,10 +5,7 @@ import { StyleSheet, View } from 'react-native';
 import { Button, showFailureAlert, Text, spacing, AuthHeroLayout } from '@shared/ui';
 import { useUpdatePassword } from '@features/signIn/hooks/useUpdatePassword';
 import { clearRecoveryUnlock } from '@features/signIn/domain/passwordRecovery';
-import {
-  PASSWORD_REQUIREMENTS_HINT,
-  newPasswordFormState,
-} from '@features/signIn/domain/validation';
+import { PASSWORD_REQUIREMENTS_HINT, newPasswordFormState } from '@features/signIn/core/validation';
 import { AuthErrorBanner } from '@features/signIn/view/AuthErrorBanner';
 import { FieldError, NewPasswordField } from '@features/signIn/view/AuthFields';
 

@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { Banner, Button, Text, TextField, spacing, AuthHeroLayout } from '@shared/ui';
 import { useResetPassword } from '@features/signIn/hooks/useResetPassword';
-import { isValidEmail } from '@features/signIn/domain/validation';
+import { isValidEmail } from '@features/signIn/core/validation';
 import { AuthErrorBanner } from '@features/signIn/view/AuthErrorBanner';
 import { BackToSignInLink } from '@features/signIn/ui/BackToSignInLink';
 import { FieldError } from '@features/signIn/view/AuthFields';

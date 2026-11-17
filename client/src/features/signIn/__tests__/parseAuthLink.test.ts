@@ -1,36 +1,26 @@
-import { Platform } from 'react-native';
-
 import appJson from '@/../app.json';
-import { completeAuthIntent, authRedirectUrl, parseAuthLink } from '@features/signIn';
-import * as nativeWebOrigin from '@shared/device/core/webOrigin';
-import type * as NativeWebOriginModule from '@shared/device/core/webOrigin';
-import * as browserWebOrigin from '@shared/device/core/webOrigin.web';
-import type * as AuthRedirectModule from '@features/signIn/domain/authRedirect';
-import type * as ParseAuthLinkModule from '@features/signIn/domain/parseAuthLink';
-beforeEach(() => {
-  jest
-    .spyOn(nativeWebOrigin, 'webOrigin')
-    .mockImplementation(() => (Platform.OS === 'web' ? browserWebOrigin.webOrigin() : null));
-});
+import { completeAuthIntent, authRedirectUrl, parseAuthLink, schemePrefix } from '@features/signIn';
+import type { AuthLinkHost } from '@features/signIn';
 
-type LoadedModules = typeof ParseAuthLinkModule & typeof AuthRedirectModule;
+const ORIGIN = 'https://app.altune.example';
+const WEB: AuthLinkHost = { scheme: 'altune://', origin: ORIGIN };
+const OVER_URL_CAP = 5000;
+const URL_CAP = 4096;
+const PAIR_CAP = 64;
+const QUERY_PAIRS = 32;
+const FRAGMENT_PAIRS_TO_CAP = PAIR_CAP - QUERY_PAIRS;
 
-function loadWithExpoScheme(scheme: unknown): LoadedModules {
-  jest.resetModules();
-  jest.doMock('expo-constants', () => ({
-    __esModule: true,
-    default: { expoConfig: scheme === undefined ? {} : { scheme } },
-  }));
-  return {
-    ...(require('@features/signIn/domain/authRedirect') as typeof AuthRedirectModule),
-    ...(require('@features/signIn/domain/parseAuthLink') as typeof ParseAuthLinkModule),
-  };
+function nativeHost(declared: string | string[]): AuthLinkHost {
+  return { scheme: schemePrefix(declared), origin: null };
 }
 
-afterEach(() => {
-  jest.dontMock('expo-constants');
-  jest.resetModules();
-});
+function numberedPairs(from: number, count: number): string {
+  return Array.from({ length: count }, (_, i) => `k${from + i}=v`).join('&');
+}
+
+function numberedParams(count: number): Record<string, string> {
+  return Object.fromEntries(Array.from({ length: count }, (_, i) => [`k${i}`, 'v']));
+}
 
 describe('parseAuthLink — the scheme comes from the expo config', () => {
   it("accepts app.json's configured scheme and builds its redirects from it", () => {
@@ -45,32 +35,32 @@ describe('parseAuthLink — the scheme comes from the expo config', () => {
   });
 
   it('follows a rebranded scheme instead of the previous one', () => {
-    const rebranded = loadWithExpoScheme('whitelabel');
+    const rebranded = nativeHost('whitelabel');
 
-    expect(rebranded.parseAuthLink('whitelabel://auth/recovery?type=recovery')).toEqual({
+    expect(parseAuthLink('whitelabel://auth/recovery?type=recovery', rebranded)).toEqual({
       kind: 'recovery',
       params: { type: 'recovery' },
     });
-    expect(rebranded.parseAuthLink('altune://auth/recovery?type=recovery')).toEqual({
+    expect(parseAuthLink('altune://auth/recovery?type=recovery', rebranded)).toEqual({
       kind: 'ignored',
     });
-    expect(rebranded.authRedirectUrl('callback')).toBe('whitelabel://auth/callback');
+    expect(authRedirectUrl('callback', rebranded)).toBe('whitelabel://auth/callback');
   });
 
   it('uses the first scheme when the config declares a list', () => {
-    const multiScheme = loadWithExpoScheme(['whitelabel', 'legacy']);
+    const multiScheme = nativeHost(['whitelabel', 'legacy']);
 
-    expect(multiScheme.authRedirectUrl('callback')).toBe('whitelabel://auth/callback');
-    expect(multiScheme.parseAuthLink('whitelabel://auth/callback?code=xyz')).toEqual({
+    expect(authRedirectUrl('callback', multiScheme)).toBe('whitelabel://auth/callback');
+    expect(parseAuthLink('whitelabel://auth/callback?code=xyz', multiScheme)).toEqual({
       kind: 'oauth',
       params: { code: 'xyz' },
     });
   });
 
   it('matches a config scheme that is not lower-case', () => {
-    const upperCased = loadWithExpoScheme('WhiteLabel');
+    const upperCased = nativeHost('WhiteLabel');
 
-    expect(upperCased.parseAuthLink('whitelabel://auth/callback?code=xyz')).toEqual({
+    expect(parseAuthLink('whitelabel://auth/callback?code=xyz', upperCased)).toEqual({
       kind: 'oauth',
       params: { code: 'xyz' },
     });
@@ -80,8 +70,8 @@ describe('parseAuthLink — the scheme comes from the expo config', () => {
     ['absent', undefined],
     ['an empty string', ''],
     ['an empty list', []],
-  ])('throws at import naming `scheme` when the config declares %s', (_case, scheme) => {
-    expect(() => loadWithExpoScheme(scheme)).toThrow('scheme');
+  ])('throws naming `scheme` when the config declares %s', (_case, scheme) => {
+    expect(() => schemePrefix(scheme)).toThrow('scheme');
   });
 });
 
@@ -101,16 +91,82 @@ describe('parseAuthLink', () => {
     expect(parseAuthLink('altune://hasOwnProperty?code=x')).toEqual({ kind: 'ignored' });
   });
 
-  it('rejects a link whose param pairs exceed the cap', () => {
-    const pairs = Array.from({ length: 500 }, (_, i) => `k${i}=v${i}`).join('&');
-
-    expect(parseAuthLink(`altune://auth/callback?${pairs}`)).toEqual({ kind: 'ignored' });
+  it('accepts 64 param pairs and rejects 65, well under the url length cap', () => {
+    expect(parseAuthLink(`altune://auth/callback?${numberedPairs(0, PAIR_CAP)}`)).toEqual({
+      kind: 'oauth',
+      params: numberedParams(PAIR_CAP),
+    });
+    expect(parseAuthLink(`altune://auth/callback?${numberedPairs(0, PAIR_CAP + 1)}`)).toEqual({
+      kind: 'ignored',
+    });
   });
 
-  it('rejects a link longer than the max url length', () => {
-    const huge = 'a'.repeat(5000);
+  it('counts the pair cap across the query and the fragment together', () => {
+    const link = `altune://auth/callback?${numberedPairs(0, QUERY_PAIRS)}#`;
 
-    expect(parseAuthLink(`altune://auth/callback?code=${huge}`)).toEqual({ kind: 'ignored' });
+    expect(parseAuthLink(link + numberedPairs(QUERY_PAIRS, FRAGMENT_PAIRS_TO_CAP))).toEqual({
+      kind: 'oauth',
+      params: numberedParams(PAIR_CAP),
+    });
+    expect(parseAuthLink(link + numberedPairs(QUERY_PAIRS, FRAGMENT_PAIRS_TO_CAP + 1))).toEqual({
+      kind: 'ignored',
+    });
+  });
+
+  it('accepts a link of exactly the max url length and rejects one character more', () => {
+    const prefix = 'altune://auth/callback?code=';
+    const atCap = 'a'.repeat(URL_CAP - prefix.length);
+
+    expect(parseAuthLink(prefix + atCap)).toEqual({ kind: 'oauth', params: { code: atCap } });
+    expect(parseAuthLink(`${prefix}${atCap}a`)).toEqual({ kind: 'ignored' });
+  });
+
+  it('skips empty pairs without counting them as params', () => {
+    expect(parseAuthLink('altune://auth/callback?&code=xyz&&#&state=s&')).toEqual({
+      kind: 'oauth',
+      params: { code: 'xyz', state: 's' },
+    });
+  });
+
+  it('reads a key with no = as empty, an = in first place as an empty key, and splits on the first =', () => {
+    expect(parseAuthLink('altune://auth/callback?flag&=x&code=a=b')).toEqual({
+      kind: 'oauth',
+      params: { flag: '', '': 'x', code: 'a=b' },
+    });
+  });
+
+  it('strips any number of slashes around the auth path', () => {
+    expect(parseAuthLink('altune:////auth/recovery//?type=recovery')).toEqual({
+      kind: 'recovery',
+      params: { type: 'recovery' },
+    });
+  });
+
+  it('reads params from the fragment alone when there is no query', () => {
+    expect(parseAuthLink('altune://auth/callback#code=xyz')).toEqual({
+      kind: 'oauth',
+      params: { code: 'xyz' },
+    });
+  });
+
+  it('ends the query at a fragment that follows it', () => {
+    expect(parseAuthLink('altune://auth/callback?code=a#state=b')).toEqual({
+      kind: 'oauth',
+      params: { code: 'a', state: 'b' },
+    });
+  });
+
+  it('reads the query to the end when a fragment comes before it', () => {
+    expect(parseAuthLink('altune://auth/callback#state=b?code=a')).toEqual({
+      kind: 'oauth',
+      params: { code: 'a', state: 'b?code=a' },
+    });
+  });
+
+  it('rejects a malformed query even when the fragment after it is well formed', () => {
+    expect(parseAuthLink('altune://auth/callback?code=%zz#state=ok')).toEqual({
+      kind: 'ignored',
+    });
   });
 
   it('parses a differently-cased scheme (schemes are case-insensitive)', () => {
@@ -164,120 +220,88 @@ describe('parseAuthLink', () => {
   });
 });
 
-describe('authRedirectUrl and parseAuthLink on web (#2837)', () => {
-  afterEach(() => {
-    Platform.OS = 'ios';
-    Reflect.deleteProperty(globalThis, 'window');
-  });
-
+describe('authRedirectUrl and parseAuthLink with a web origin (#2837)', () => {
   it('builds every redirect from this origin instead of the altune scheme', () => {
-    Platform.OS = 'web';
-    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
-
-    expect(authRedirectUrl('callback')).toBe('https://app.altune.example/auth/callback');
-    expect(authRedirectUrl('confirm')).toBe('https://app.altune.example/auth/confirm');
-    expect(authRedirectUrl('recovery')).toBe('https://app.altune.example/auth/recovery');
+    expect(authRedirectUrl('callback', WEB)).toBe(`${ORIGIN}/auth/callback`);
+    expect(authRedirectUrl('confirm', WEB)).toBe(`${ORIGIN}/auth/confirm`);
+    expect(authRedirectUrl('recovery', WEB)).toBe(`${ORIGIN}/auth/recovery`);
   });
 
   it('keeps the altune scheme on native even with a global window present', () => {
-    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
-
-    expect(authRedirectUrl('recovery')).toBe('altune://auth/recovery');
+    Object.assign(globalThis, { window: { location: { origin: ORIGIN } } });
+    try {
+      expect(authRedirectUrl('recovery')).toBe('altune://auth/recovery');
+      expect(parseAuthLink(`${ORIGIN}/auth/recovery?type=recovery`)).toEqual({ kind: 'ignored' });
+    } finally {
+      Reflect.deleteProperty(globalThis, 'window');
+    }
   });
 
   it('accepts this same origin for a known auth path', () => {
-    Platform.OS = 'web';
-    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
+    expect(parseAuthLink(`${ORIGIN}/auth/recovery?token_hash=abc&type=recovery`, WEB)).toEqual({
+      kind: 'recovery',
+      params: { token_hash: 'abc', type: 'recovery' },
+    });
+  });
 
-    expect(
-      parseAuthLink('https://app.altune.example/auth/recovery?token_hash=abc&type=recovery'),
-    ).toEqual({ kind: 'recovery', params: { token_hash: 'abc', type: 'recovery' } });
+  it('still accepts the altune scheme alongside the web origin', () => {
+    expect(parseAuthLink('altune://auth/callback?code=xyz', WEB)).toEqual({
+      kind: 'oauth',
+      params: { code: 'xyz' },
+    });
   });
 
   it('still ignores a foreign origin on web', () => {
-    Platform.OS = 'web';
-    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
-
-    expect(parseAuthLink('https://evil.example/auth/recovery?type=recovery')).toEqual({
+    expect(parseAuthLink('https://evil.example/auth/recovery?type=recovery', WEB)).toEqual({
       kind: 'ignored',
     });
   });
 
   it('still ignores an unknown path at this same origin', () => {
-    Platform.OS = 'web';
-    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
-
-    expect(parseAuthLink('https://app.altune.example/somewhere-else?code=x')).toEqual({
-      kind: 'ignored',
-    });
+    expect(parseAuthLink(`${ORIGIN}/somewhere-else?code=x`, WEB)).toEqual({ kind: 'ignored' });
   });
 
-  it('falls back to the altune scheme on web with no window to ask for an origin', () => {
-    Platform.OS = 'web';
-
-    expect(authRedirectUrl('confirm')).toBe('altune://auth/confirm');
+  it('falls back to the altune scheme when there is no origin to ask', () => {
+    expect(authRedirectUrl('confirm', { scheme: 'altune://', origin: null })).toBe(
+      'altune://auth/confirm',
+    );
   });
 
   it('ignores a foreign string merely because it is at least as long as this origin', () => {
-    Platform.OS = 'web';
-    Object.assign(globalThis, { window: { location: { origin: 'https://x.test' } } });
+    const short: AuthLinkHost = { scheme: 'altune://', origin: 'https://x.test' };
     const originPrefixLength = 'https://x.test/'.length;
     const foreign = 'a'.repeat(originPrefixLength) + 'auth/recovery?type=recovery';
 
-    expect(parseAuthLink(foreign)).toEqual({ kind: 'ignored' });
+    expect(parseAuthLink(foreign, short)).toEqual({ kind: 'ignored' });
   });
 
   it('ignores a bare path carrying neither the altune scheme nor a web origin', () => {
     expect(parseAuthLink('auth/recovery?type=recovery')).toEqual({ kind: 'ignored' });
+    expect(parseAuthLink('auth/recovery?type=recovery', WEB)).toEqual({ kind: 'ignored' });
   });
 
-  it('ignores the same-origin https form on native', () => {
-    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
+  it('builds and matches against whichever origin it is handed', () => {
+    const staging: AuthLinkHost = { scheme: 'altune://', origin: 'https://staging.altune.example' };
 
-    expect(parseAuthLink('https://app.altune.example/auth/recovery?type=recovery')).toEqual({
-      kind: 'ignored',
-    });
-  });
-});
-
-describe('authRedirectUrl on web when window has no location to ask (#2837)', () => {
-  afterEach(() => {
-    Platform.OS = 'ios';
-    Reflect.deleteProperty(globalThis, 'window');
-  });
-
-  it('falls back to the altune scheme', () => {
-    Platform.OS = 'web';
-    Object.assign(globalThis, { window: {} });
-
-    expect(authRedirectUrl('callback')).toBe('altune://auth/callback');
+    expect(authRedirectUrl('callback', WEB)).toBe(`${ORIGIN}/auth/callback`);
+    expect(authRedirectUrl('callback', staging)).toBe(
+      'https://staging.altune.example/auth/callback',
+    );
+    expect(parseAuthLink(`${ORIGIN}/auth/callback?code=x`, staging)).toEqual({ kind: 'ignored' });
   });
 });
 
-describe('parseAuthLink on web: only this exact origin and the three auth paths (#2837)', () => {
-  const ORIGIN = 'https://app.altune.example';
-
-  beforeEach(() => {
-    Platform.OS = 'web';
-    Object.assign(globalThis, { window: { location: { origin: ORIGIN } } });
-  });
-
-  afterEach(() => {
-    Platform.OS = 'ios';
-    Reflect.deleteProperty(globalThis, 'window');
-  });
-
+describe('parseAuthLink with a web origin: only this exact origin and the three auth paths (#2837)', () => {
   it('accepts a same-origin oauth callback and a same-origin confirmation', () => {
-    expect(parseAuthLink(`${ORIGIN}/auth/callback?code=xyz`)).toEqual({
+    expect(parseAuthLink(`${ORIGIN}/auth/callback?code=xyz`, WEB)).toEqual({
       kind: 'oauth',
       params: { code: 'xyz' },
     });
-    expect(parseAuthLink(`${ORIGIN}/auth/confirm?token_hash=abc&type=signup`)).toEqual({
+    expect(parseAuthLink(`${ORIGIN}/auth/confirm?token_hash=abc&type=signup`, WEB)).toEqual({
       kind: 'confirm',
       params: { token_hash: 'abc', type: 'signup' },
     });
   });
-
   it.each([
     [
       'a lookalike host that extends this origin',
@@ -304,7 +328,7 @@ describe('parseAuthLink on web: only this exact origin and the three auth paths 
       'data:text/html,https://app.altune.example/auth/callback?code=x',
     ],
   ])('ignores %s', (_case, url) => {
-    expect(parseAuthLink(url)).toEqual({ kind: 'ignored' });
+    expect(parseAuthLink(url, WEB)).toEqual({ kind: 'ignored' });
   });
 
   it.each([
@@ -315,27 +339,17 @@ describe('parseAuthLink on web: only this exact origin and the three auth paths 
     ['the site root', `${ORIGIN}/?code=x`],
     ['a prototype-property path', `${ORIGIN}/__proto__?code=x`],
   ])('ignores %s at this origin', (_case, url) => {
-    expect(parseAuthLink(url)).toEqual({ kind: 'ignored' });
+    expect(parseAuthLink(url, WEB)).toEqual({ kind: 'ignored' });
   });
 
   it('still applies the url length cap to a same-origin link', () => {
-    expect(parseAuthLink(`${ORIGIN}/auth/callback?code=${'a'.repeat(5000)}`)).toEqual({
+    expect(parseAuthLink(`${ORIGIN}/auth/callback?code=${'a'.repeat(OVER_URL_CAP)}`, WEB)).toEqual({
       kind: 'ignored',
     });
   });
 
   it('still rejects a same-origin link carrying a malformed percent-escape', () => {
-    expect(parseAuthLink(`${ORIGIN}/auth/callback?code=%zz`)).toEqual({ kind: 'ignored' });
-  });
-
-  it('follows the origin the page is on now, not the one it was first asked about', () => {
-    expect(authRedirectUrl('callback')).toBe(`${ORIGIN}/auth/callback`);
-    Object.assign(globalThis, {
-      window: { location: { origin: 'https://staging.altune.example' } },
-    });
-
-    expect(authRedirectUrl('callback')).toBe('https://staging.altune.example/auth/callback');
-    expect(parseAuthLink(`${ORIGIN}/auth/callback?code=x`)).toEqual({ kind: 'ignored' });
+    expect(parseAuthLink(`${ORIGIN}/auth/callback?code=%zz`, WEB)).toEqual({ kind: 'ignored' });
   });
 });
 
@@ -347,54 +361,24 @@ describe('authRedirectUrl on native (#2837)', () => {
   });
 });
 
-describe.each(['ios', 'web'] as const)(
-  'implicit-grant tokens never become a session on %s',
-  (os) => {
-    afterEach(() => {
-      Platform.OS = 'ios';
-      Reflect.deleteProperty(globalThis, 'window');
-    });
-
-    it('refuses altune://auth/callback#access_token=x&refresh_token=y', async () => {
-      Platform.OS = os;
-      const auth = {
-        exchangeCodeForSession: jest.fn(),
-        setSession: jest.fn(),
-        verifyOtp: jest.fn(),
-        getSession: jest.fn(),
-      };
-      const result = await completeAuthIntent(
-        parseAuthLink('altune://auth/callback#access_token=x&refresh_token=y'),
-        { replace: jest.fn() },
-        auth,
-      );
-
-      expect(result).toMatchObject({ kind: 'failure', cause: 'no_spendable_credential' });
-      expect(auth.setSession).not.toHaveBeenCalled();
-    });
-  },
-);
-
-describe('parseAuthLink reads its scheme and web origin through the device port', () => {
-  it('builds redirects from the port scheme and origin', () => {
-    jest.resetModules();
-    jest.doMock('expo-constants', () => ({
-      __esModule: true,
-      default: { expoConfig: { scheme: 'portscheme' } },
-    }));
-    jest
-      .spyOn(require('@shared/device/core/webOrigin') as typeof NativeWebOriginModule, 'webOrigin')
-      .mockReturnValue('https://port.example');
-    const loaded = {
-      ...(require('@features/signIn/domain/authRedirect') as typeof AuthRedirectModule),
-      ...(require('@features/signIn/domain/parseAuthLink') as typeof ParseAuthLinkModule),
+describe.each([
+  ['native', { scheme: 'altune://', origin: null }],
+  ['web', WEB],
+] as const)('implicit-grant tokens never become a session on %s', (_platform, host) => {
+  it('refuses altune://auth/callback#access_token=x&refresh_token=y', async () => {
+    const auth = {
+      exchangeCodeForSession: jest.fn(),
+      setSession: jest.fn(),
+      verifyOtp: jest.fn(),
+      getSession: jest.fn(),
     };
+    const result = await completeAuthIntent(
+      parseAuthLink('altune://auth/callback#access_token=x&refresh_token=y', host),
+      { replace: jest.fn() },
+      auth,
+    );
 
-    expect(loaded.authRedirectUrl('callback')).toBe('https://port.example/auth/callback');
-    expect(loaded.authRedirectUrl('confirm')).toBe('https://port.example/auth/confirm');
-    expect(loaded.parseAuthLink('https://port.example/auth/confirm?type=signup')).toEqual({
-      kind: 'confirm',
-      params: { type: 'signup' },
-    });
+    expect(result).toMatchObject({ kind: 'failure', cause: 'no_spendable_credential' });
+    expect(auth.setSession).not.toHaveBeenCalled();
   });
 });

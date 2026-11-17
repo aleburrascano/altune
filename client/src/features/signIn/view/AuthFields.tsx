@@ -1,7 +1,7 @@
 import type { ReactElement, ReactNode } from 'react';
 
 import { Text, TextField } from '@shared/ui';
-import { PASSWORD_REQUIREMENTS_HINT } from '@features/signIn/domain/validation';
+import { PASSWORD_REQUIREMENTS_HINT } from '@features/signIn/core/validation';
 
 type FieldErrorProps = {
   testID: string;

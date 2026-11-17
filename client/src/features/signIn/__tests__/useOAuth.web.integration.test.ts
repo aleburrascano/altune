@@ -1,12 +1,12 @@
 import { renderHook, act } from '@testing-library/react-native';
 import * as WebBrowser from 'expo-web-browser';
-import { Platform } from 'react-native';
 
-import { useOAuth } from '@features/signIn/hooks/useOAuth.web';
-import * as nativeWebOrigin from '@shared/device/core/webOrigin';
-import * as browserWebOrigin from '@shared/device/core/webOrigin.web';
-
-import { authPortWrapper, createAuthPortMock, createSupabaseAuthMock } from '@features/signIn';
+import {
+  authPortWrapper,
+  createAuthPortMock,
+  createSupabaseAuthMock,
+  useOAuth,
+} from '@features/signIn';
 
 const AUTH_ACTION_TIMEOUT_MS = 20_000;
 
@@ -54,19 +54,7 @@ async function signIn(): Promise<{ kind: string }> {
 }
 
 describe('useOAuth: a full-page redirect on web, not a popup (#2837)', () => {
-  beforeEach(() => {
-    jest.spyOn(nativeWebOrigin, 'webOrigin').mockImplementation(browserWebOrigin.webOrigin);
-  });
-
-  afterEach(() => {
-    jest.mocked(nativeWebOrigin.webOrigin).mockRestore();
-    Platform.OS = 'ios';
-    Reflect.deleteProperty(globalThis, 'window');
-  });
-
   it('sends signInWithOAuth a same-origin redirectTo and never opens the in-app browser', async () => {
-    Platform.OS = 'web';
-    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
     signInWithOAuth.mockResolvedValue({
       data: { url: 'https://accounts.google.com/o' },
       error: null,
@@ -76,14 +64,12 @@ describe('useOAuth: a full-page redirect on web, not a popup (#2837)', () => {
 
     expect(signInWithOAuth).toHaveBeenCalledWith({
       provider: 'google',
-      options: { redirectTo: 'https://app.altune.example/auth/callback' },
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
     expect(openAuthSessionAsync).not.toHaveBeenCalled();
   });
 
   it('reports the failure when the redirect request itself is refused', async () => {
-    Platform.OS = 'web';
-    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
     signInWithOAuth.mockResolvedValue({ data: null, error: { message: 'nope' } });
 
     expect(await signIn()).toEqual({ kind: 'error', reason: 'unknown' });
@@ -92,14 +78,7 @@ describe('useOAuth: a full-page redirect on web, not a popup (#2837)', () => {
 });
 
 describe('useOAuth: pending survives a successful redirect, since the tab is on its way out (#2837)', () => {
-  afterEach(() => {
-    Platform.OS = 'ios';
-    Reflect.deleteProperty(globalThis, 'window');
-  });
-
   it('leaves state at pending on a successful redirect request', async () => {
-    Platform.OS = 'web';
-    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
     signInWithOAuth.mockResolvedValue({
       data: { url: 'https://accounts.google.com/o' },
       error: null,
@@ -114,8 +93,6 @@ describe('useOAuth: pending survives a successful redirect, since the tab is on 
   });
 
   it('sets no state for a refused redirect once the screen that started it has unmounted', async () => {
-    Platform.OS = 'web';
-    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
     mockStateUpdates.length = 0;
     let resolveSignIn!: (value: { data: null; error: { message: string } }) => void;
     signInWithOAuth.mockReturnValue(
@@ -143,13 +120,10 @@ describe('useOAuth: pending survives a successful redirect, since the tab is on 
 
 describe('useOAuth: a rejected web redirect request settles into error, not pending forever (#2837)', () => {
   afterEach(() => {
-    Platform.OS = 'ios';
-    Reflect.deleteProperty(globalThis, 'window');
+    jest.useRealTimers();
   });
 
   it('reports a network error when signInWithOAuth rejects on web', async () => {
-    Platform.OS = 'web';
-    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
     signInWithOAuth.mockRejectedValue(new Error('failed to fetch'));
 
     expect(await signIn()).toEqual({ kind: 'error', reason: 'network' });
@@ -157,8 +131,6 @@ describe('useOAuth: a rejected web redirect request settles into error, not pend
   });
 
   it('reports an unknown error when signInWithOAuth rejects on web with something other than a network failure', async () => {
-    Platform.OS = 'web';
-    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
     signInWithOAuth.mockRejectedValue(new Error('boom'));
 
     expect(await signIn()).toEqual({ kind: 'error', reason: 'unknown' });
@@ -166,8 +138,6 @@ describe('useOAuth: a rejected web redirect request settles into error, not pend
 
   it('reports a network error when the web redirect request stalls past the auth deadline', async () => {
     jest.useFakeTimers();
-    Platform.OS = 'web';
-    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
     signInWithOAuth.mockReturnValue(neverSettles());
     const { result } = renderHook(() => useOAuth(), { wrapper: authPortWrapper(authPort) });
 
@@ -183,7 +153,6 @@ describe('useOAuth: a rejected web redirect request settles into error, not pend
     });
 
     expect(result.current.state).toEqual({ kind: 'error', reason: 'network' });
-    jest.useRealTimers();
   });
 });
 
@@ -191,14 +160,7 @@ const reportedReasons = (): string[] =>
   authPort.reportSignInFailure.mock.calls.map(([reason]) => reason);
 
 describe('useOAuth (web): reporting a failed redirect to the anonymous ingest', () => {
-  afterEach(() => {
-    Platform.OS = 'ios';
-    Reflect.deleteProperty(globalThis, 'window');
-  });
-
   it('reports the error reason once, and nothing when the redirect starts', async () => {
-    Platform.OS = 'web';
-    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
     signInWithOAuth.mockResolvedValue({ data: null, error: { message: 'nope' } });
     await signIn();
     expect(reportedReasons()).toEqual(['unknown']);

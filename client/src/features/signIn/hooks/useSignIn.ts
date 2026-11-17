@@ -1,13 +1,13 @@
 import { signInWithPassword } from '@shared/auth';
 
-import { lockoutOnRepeatedFailure } from '@features/signIn/domain/attemptLockout';
+import { lockoutOnRepeatedFailure } from '@features/signIn/shell/attemptLockout';
 import {
   classifyAuthError,
   isInvalidCredentialsError,
   isUnconfirmedEmailError,
   type SignInFailureReason,
   type SupabaseAuthErrorLike,
-} from '@features/signIn/domain/authError';
+} from '@features/signIn/core/authError';
 import { useAuthPort } from '@features/signIn/view/AuthPortProvider';
 
 import { useAsyncAuthAction } from '@features/signIn/hooks/useAsyncAuthAction';

@@ -112,7 +112,7 @@ const libraryChipsRailIsTheFixedChipsConstant = {
 };
 
 const passwordHintIsFormTextNotACredential = {
-  files: ['src/features/signIn/domain/validation.ts'],
+  files: ['src/features/signIn/core/validation.ts'],
   rules: ['react-doctor/no-secrets-in-client-code'],
 };
 

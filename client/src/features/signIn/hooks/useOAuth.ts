@@ -1,7 +1,7 @@
 import { NetworkError } from '@shared/failure';
 import { authIntentClient, startOAuth, withAuthDeadline } from '@shared/auth';
 import { useNavigator } from '@shared/navigation';
-import { authRedirectUrl } from '@features/signIn/domain/authRedirect';
+import { authRedirectUrl } from '@features/signIn/core/authRedirect';
 import { completeAuthIntent, type AuthRouter } from '@features/signIn/adapters/completeAuthIntent';
 import { dismissAuthSession, openAuthSession } from '@features/signIn/adapters/native/authBrowser';
 import {
@@ -11,8 +11,8 @@ import {
   type OAuthFailure,
   type OAuthOutcome,
   type OAuthProvider,
-} from '@features/signIn/domain/oauthResult';
-import { parseAuthLink } from '@features/signIn/domain/parseAuthLink';
+} from '@features/signIn/core/oauthResult';
+import { parseAuthLink } from '@features/signIn/core/parseAuthLink';
 import { useAuthPort } from '@features/signIn/view/AuthPortProvider';
 import type { AuthPort } from '@features/signIn/ports/authPort';
 

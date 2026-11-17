@@ -4,7 +4,7 @@ import {
   classifyAuthError,
   type SupabaseAuthErrorLike,
   type TransientAuthReason,
-} from '@features/signIn/domain/authError';
+} from '@features/signIn/core/authError';
 
 export type OAuthProvider = 'google';
 
