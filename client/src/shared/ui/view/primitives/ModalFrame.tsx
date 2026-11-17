@@ -3,7 +3,7 @@ import { KeyboardAvoidingView, Modal, ScrollView, StyleSheet, View } from 'react
 
 import { keyboardAvoidingBehavior } from '@shared/ui/view/keyboard/keyboard';
 import { Tappable } from '@shared/ui/view/primitives/Tappable';
-import { radius, spacing } from '@shared/ui/theme/tokens';
+import { radius, spacing } from '@shared/ui/core/theme/tokens';
 import { useTheme } from '@shared/ui/view/theme/useTheme';
 
 type ModalVariant = 'center' | 'sheet' | 'popover';

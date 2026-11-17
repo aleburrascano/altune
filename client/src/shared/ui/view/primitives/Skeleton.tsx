@@ -3,7 +3,7 @@ import { Animated } from 'react-native';
 import type { DimensionValue, StyleProp, ViewStyle } from 'react-native';
 
 import { useReduceMotion } from '@shared/ui/view/motion/useMotion';
-import { radius as radiusTokens } from '@shared/ui/theme/tokens';
+import { radius as radiusTokens } from '@shared/ui/core/theme/tokens';
 import { useTheme } from '@shared/ui/view/theme/useTheme';
 
 export type SkeletonProps = {

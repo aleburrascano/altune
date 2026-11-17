@@ -4,9 +4,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ModalFrame } from '@shared/ui/view/primitives/ModalFrame';
 import { Text } from '@shared/ui/primitives/Text';
-import { resolveMenuPlacement, type MenuAnchor } from '@shared/ui/primitives/menuPlacement';
+import { resolveMenuPlacement, type MenuAnchor } from '@shared/ui/core/primitives/menuPlacement';
 import { useTheme } from '@shared/ui/view/theme/useTheme';
-import { radius, spacing } from '@shared/ui/theme/tokens';
+import { radius, spacing } from '@shared/ui/core/theme/tokens';
 
 export type ContextMenuItem = {
   label: string;

@@ -240,7 +240,12 @@ const topLevelFunctionDeclarations = {
 
 const noRawStyleNumbers = {
   files: ['src/**/*.{ts,tsx}'],
-  ignores: [...TEST_FILES, 'src/shared/ui/theme/**', 'src/shared/ui/view/theme/**'],
+  ignores: [
+    ...TEST_FILES,
+    'src/shared/ui/theme/**',
+    'src/shared/ui/core/theme/**',
+    'src/shared/ui/view/theme/**',
+  ],
   plugins: { local: localPlugin },
   rules: { 'local/no-raw-style-numbers': 'error' },
 };

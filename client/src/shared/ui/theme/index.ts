@@ -1,6 +1,6 @@
 export { ThemeProvider } from '@shared/ui/view/theme/ThemeProvider';
 export { useTheme } from '@shared/ui/view/theme/useTheme';
-export { themes } from '@shared/ui/theme/theme';
+export { themes } from '@shared/ui/core/theme/theme';
 export {
   spacing,
   radius,
@@ -13,7 +13,7 @@ export {
   sheetGrabber,
   sheetTopRadius,
   pillPaddingVertical,
-} from '@shared/ui/theme/tokens';
-export { withAlpha } from '@shared/ui/theme/color';
-export type { TypographyVariant } from '@shared/ui/theme/tokens';
-export type { Theme, ColorScheme } from '@shared/ui/theme/theme';
+} from '@shared/ui/core/theme/tokens';
+export { withAlpha } from '@shared/ui/core/theme/color';
+export type { TypographyVariant } from '@shared/ui/core/theme/tokens';
+export type { Theme, ColorScheme } from '@shared/ui/core/theme/theme';

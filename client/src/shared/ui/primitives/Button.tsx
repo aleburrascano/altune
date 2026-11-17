@@ -3,8 +3,8 @@ import type { StyleProp, ViewStyle } from 'react-native';
 
 import { tapFeedback } from '@shared/ui/haptics';
 import { usePressScale } from '@shared/ui/view/motion/useMotion';
-import type { Theme } from '@shared/ui/theme/theme';
-import { minInteractiveHeight, radius, spacing } from '@shared/ui/theme/tokens';
+import type { Theme } from '@shared/ui/core/theme/theme';
+import { minInteractiveHeight, radius, spacing } from '@shared/ui/core/theme/tokens';
 import { useTheme } from '@shared/ui/view/theme/useTheme';
 import { recordTap } from '@shared/ui/primitives/recordTap';
 import { Text } from '@shared/ui/primitives/Text';

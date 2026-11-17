@@ -9,7 +9,7 @@ import {
   spacing,
   typography,
   touchTarget,
-} from '@shared/ui/theme/tokens';
+} from '@shared/ui/core/theme/tokens';
 import { useTheme } from '@shared/ui/view/theme/useTheme';
 
 export interface TextFieldProps extends Omit<

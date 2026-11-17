@@ -1,7 +1,7 @@
 import { useWindowDimensions } from 'react-native';
 
 import { isWebPlatform } from '@shared/device';
-import { WIDE_LAYOUT_MIN_WIDTH } from '@shared/ui/layout/breakpoints';
+import { WIDE_LAYOUT_MIN_WIDTH } from '@shared/ui/core/layout/breakpoints';
 
 export type LayoutMode = 'compact' | 'wide';
 

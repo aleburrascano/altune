@@ -1,6 +1,6 @@
 import { Text as RNText, View } from 'react-native';
 
-import { fontFamily } from '@shared/ui/theme/tokens';
+import { fontFamily } from '@shared/ui/core/theme/tokens';
 import { useTheme } from '@shared/ui/view/theme/useTheme';
 
 export type WordmarkProps = {

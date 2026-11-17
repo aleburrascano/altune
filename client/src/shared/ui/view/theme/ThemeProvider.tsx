@@ -1,7 +1,7 @@
 import { createContext } from 'react';
 import type { ReactNode } from 'react';
 
-import { darkTheme, themes, type ColorScheme, type Theme } from '@shared/ui/theme/theme';
+import { darkTheme, themes, type ColorScheme, type Theme } from '@shared/ui/core/theme/theme';
 import { useThemePreference } from '@shared/ui/theme/themePreference';
 
 export const ThemeContext = createContext<Theme>(darkTheme);

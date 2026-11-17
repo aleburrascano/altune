@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 
-import { radius as radiusTokens } from '@shared/ui/theme/tokens';
+import { radius as radiusTokens } from '@shared/ui/core/theme/tokens';
 import { useTheme } from '@shared/ui/view/theme/useTheme';
 
 const ARTWORK_PLACEHOLDER = require('@assets/artwork-placeholder.png');

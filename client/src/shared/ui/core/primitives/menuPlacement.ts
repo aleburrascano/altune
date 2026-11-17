@@ -1,4 +1,4 @@
-import { spacing } from '@shared/ui/theme/tokens';
+import { spacing } from '@shared/ui/core/theme/tokens';
 
 const ESTIMATED_ITEM_HEIGHT = 48;
 
