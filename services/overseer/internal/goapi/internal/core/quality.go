@@ -1,11 +1,6 @@
-package goapi
+package core
 
-import (
-	"context"
-	"time"
-)
-
-const observeDiscographyQualityPath = "/observe/quality/discography"
+import "time"
 
 type DiscographyQuality struct {
 	WindowDays   int               `json:"window_days"`
@@ -23,12 +18,4 @@ type DiscographyCase struct {
 	SingleProviderNoID int            `json:"single_provider_no_id"`
 	ProviderCounts     map[string]int `json:"provider_counts"`
 	LastSeen           time.Time      `json:"last_seen"`
-}
-
-func (c *Client) AdminDiscographyQuality(ctx context.Context) (DiscographyQuality, error) {
-	var out DiscographyQuality
-	if err := c.get(ctx, observeDiscographyQualityPath, &out); err != nil {
-		return DiscographyQuality{}, err
-	}
-	return out, nil
 }

@@ -1,12 +1,16 @@
-package goapi
+package core
 
-import (
-	"context"
-	"net/http"
-	"time"
-)
+import "time"
 
-const observeHealthPath = "/observe/health"
+type Health struct {
+	Status string `json:"status"`
+}
+
+const healthStatusDegraded = "degraded"
+
+func (h Health) OK() bool { return h.Status == "ok" }
+
+func (h Health) Degraded() bool { return h.Status == healthStatusDegraded }
 
 const statusDown = "down"
 
@@ -31,12 +35,4 @@ type HealthDetail struct {
 
 func (h OperatorHealth) Healthy() bool {
 	return h.DB != statusDown && h.Redis != statusDown && h.Auth != statusDown
-}
-
-func (c *Client) AdminHealth(ctx context.Context) (OperatorHealth, error) {
-	var out OperatorHealth
-	if err := c.get(ctx, observeHealthPath, &out, http.StatusServiceUnavailable); err != nil {
-		return OperatorHealth{}, err
-	}
-	return out, nil
 }

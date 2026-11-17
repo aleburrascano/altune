@@ -1,6 +1,7 @@
-package goapi
+package goapihttp
 
 import (
+	"altune/overseer/internal/goapi/internal/core"
 	"bufio"
 	"context"
 	"encoding/json"
@@ -10,17 +11,9 @@ import (
 	"net/url"
 	"strings"
 	"sync/atomic"
-	"time"
 )
 
 const observeLogStreamPath = "/observe/logs/stream"
-
-type LogRecord struct {
-	Time    time.Time         `json:"time"`
-	Level   string            `json:"level"`
-	Message string            `json:"msg"`
-	Fields  map[string]string `json:"attrs,omitempty"`
-}
 
 type logSSEDecoder struct {
 	sc   *bufio.Scanner
@@ -33,12 +26,12 @@ func newLogSSEDecoder(r io.Reader) *logSSEDecoder {
 	return &logSSEDecoder{sc: sc}
 }
 
-func (d *logSSEDecoder) next() (LogRecord, error) {
+func (d *logSSEDecoder) next() (core.LogRecord, error) {
 	for d.sc.Scan() {
 		line := d.sc.Text()
 		if line != "" {
 			if err := d.accumulate(line); err != nil {
-				return LogRecord{}, err
+				return core.LogRecord{}, err
 			}
 			continue
 		}
@@ -47,9 +40,9 @@ func (d *logSSEDecoder) next() (LogRecord, error) {
 		}
 	}
 	if err := d.sc.Err(); err != nil {
-		return LogRecord{}, err
+		return core.LogRecord{}, err
 	}
-	return LogRecord{}, io.EOF
+	return core.LogRecord{}, io.EOF
 }
 
 func (d *logSSEDecoder) accumulate(line string) error {
@@ -62,7 +55,7 @@ func (d *logSSEDecoder) accumulate(line string) error {
 		extra++
 	}
 	if d.data.Len()+extra > maxEventBytes {
-		return errFrameTooLarge
+		return ErrFrameTooLarge
 	}
 	if d.data.Len() > 0 {
 		d.data.WriteByte('\n')
@@ -71,15 +64,15 @@ func (d *logSSEDecoder) accumulate(line string) error {
 	return nil
 }
 
-func (d *logSSEDecoder) flush() (LogRecord, bool) {
+func (d *logSSEDecoder) flush() (core.LogRecord, bool) {
 	raw := d.data.String()
 	d.data.Reset()
 	if raw == "" {
-		return LogRecord{}, false
+		return core.LogRecord{}, false
 	}
-	var rec LogRecord
+	var rec core.LogRecord
 	if err := json.Unmarshal([]byte(raw), &rec); err != nil {
-		return LogRecord{}, false
+		return core.LogRecord{}, false
 	}
 	return rec, true
 }
@@ -87,11 +80,11 @@ func (d *logSSEDecoder) flush() (LogRecord, bool) {
 type LogsConsumer struct {
 	base    *url.URL
 	path    string
-	tokens  TokenSource
+	tokens  core.TokenSource
 	http    *http.Client
 	backoff Backoff
 	bufSize int
-	records dropOldestQueue[LogRecord]
+	records *DropOldestQueue[core.LogRecord]
 
 	started atomic.Bool
 	health  healthCell
@@ -132,7 +125,7 @@ func WithLogsStreamPath(p string) LogsConsumerOption {
 	}
 }
 
-func NewLogsConsumer(baseURL string, tokens TokenSource, opts ...LogsConsumerOption) (*LogsConsumer, error) {
+func NewLogsConsumer(baseURL string, tokens core.TokenSource, opts ...LogsConsumerOption) (*LogsConsumer, error) {
 	if tokens == nil {
 		return nil, errors.New("goapi: nil TokenSource")
 	}
@@ -145,25 +138,25 @@ func NewLogsConsumer(baseURL string, tokens TokenSource, opts ...LogsConsumerOpt
 		path:    observeLogStreamPath,
 		tokens:  tokens,
 		http:    defaultSSEClient(),
-		backoff: NewExpBackoff(defaultBackoffBase, defaultBackoffMax),
+		backoff: newExpBackoff(defaultBackoffBase, defaultBackoffMax),
 		bufSize: defaultEventBuffer,
 	}
 	for _, opt := range opts {
 		opt(c)
 	}
-	c.records.pending = make(chan LogRecord, c.bufSize)
+	c.records = NewDropOldestQueue[core.LogRecord](c.bufSize)
 	return c, nil
 }
 
-func (c *LogsConsumer) Records() <-chan LogRecord { return c.records.pending }
+func (c *LogsConsumer) Records() <-chan core.LogRecord { return c.records.pending }
 
-func (c *LogsConsumer) Status() Status { return c.health.load().status }
+func (c *LogsConsumer) Status() core.Status { return c.health.load().status }
 
 func (c *LogsConsumer) LastError() error {
 	return c.health.load().err
 }
 
-func (c *LogsConsumer) Health() (Status, error) {
+func (c *LogsConsumer) Health() (core.Status, error) {
 	current := c.health.load()
 	return current.status, current.err
 }
@@ -208,7 +201,7 @@ func (c *LogsConsumer) pump(ctx context.Context, body io.ReadCloser) {
 		rec, err := dec.next()
 		if err != nil {
 			if ctx.Err() == nil {
-				c.markDropped(&SourceDownError{Op: c.op(), Err: watchdog.cause(err)})
+				c.markDropped(&core.SourceDownError{Op: c.op(), Err: watchdog.cause(err)})
 			}
 			return
 		}
@@ -218,16 +211,16 @@ func (c *LogsConsumer) pump(ctx context.Context, body io.ReadCloser) {
 	}
 }
 
-func (c *LogsConsumer) emit(ctx context.Context, rec LogRecord) bool {
-	c.records.push(rec)
+func (c *LogsConsumer) emit(ctx context.Context, rec core.LogRecord) bool {
+	c.records.Push(rec)
 	return ctx.Err() == nil
 }
 
-func (c *LogsConsumer) Dropped() int { return c.records.dropped() }
+func (c *LogsConsumer) Dropped() int { return c.records.Dropped() }
 
-func (c *LogsConsumer) drainPending() []LogRecord { return c.records.drain() }
+func (c *LogsConsumer) drainPending() []core.LogRecord { return c.records.Drain() }
 
-var _ pendingDrainer[LogRecord] = (*LogsConsumer)(nil)
+var _ pendingDrainer[core.LogRecord] = (*LogsConsumer)(nil)
 
 func (c *LogsConsumer) connect(ctx context.Context) (*http.Response, error) {
 	reqURL := c.base.JoinPath(c.path).String()
@@ -237,10 +230,10 @@ func (c *LogsConsumer) connect(ctx context.Context) (*http.Response, error) {
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, &SourceDownError{Op: c.op(), Err: err}
+		return nil, &core.SourceDownError{Op: c.op(), Err: err}
 	}
 	if resp == nil {
-		return nil, &SourceDownError{Op: c.op(), Err: errors.New("nil response")}
+		return nil, &core.SourceDownError{Op: c.op(), Err: errors.New("nil response")}
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.rejectStatus(resp, presentedToken(req))
@@ -252,7 +245,7 @@ func (c *LogsConsumer) rejectStatus(resp *http.Response, presented string) error
 	defer func() { _ = resp.Body.Close() }()
 	invalidateOn401(c.tokens, resp.StatusCode, presented)
 	snippet, _ := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
-	return &APIError{Op: c.op(), StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(snippet))}
+	return &core.APIError{Op: c.op(), StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(snippet))}
 }
 
 func (c *LogsConsumer) wait(ctx context.Context, attempt int) error {
@@ -271,5 +264,5 @@ func (c *LogsConsumer) markDropped(err error) {
 
 func (c *LogsConsumer) markUp() {
 	c.outage.connected()
-	c.health.publish(StatusUp, nil)
+	c.health.publish(core.StatusUp, nil)
 }

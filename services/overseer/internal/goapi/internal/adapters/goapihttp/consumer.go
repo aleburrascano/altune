@@ -1,6 +1,7 @@
-package goapi
+package goapihttp
 
 import (
+	"altune/overseer/internal/goapi/internal/core"
 	"context"
 	"errors"
 	"io"
@@ -18,61 +19,14 @@ const defaultEventBuffer = 256
 
 const connectTimeout = 10 * time.Second
 
-type Status int32
-
-const (
-	StatusConnecting Status = iota
-	StatusUp
-	StatusDown
-)
-
-func (s Status) String() string {
-	switch s {
-	case StatusUp:
-		return "up"
-	case StatusDown:
-		return "down"
-	case StatusConnecting:
-		return "connecting"
-	default:
-		return "unknown"
-	}
-}
-
-func (s Status) PanelState() string {
-	switch s {
-	case StatusUp:
-		return "live"
-	case StatusDown:
-		return "source_down"
-	case StatusConnecting:
-		return "stale"
-	default:
-		return "stale"
-	}
-}
-
-const ReasonConnecting = "connecting"
-
-func (s Status) PanelReason(failureReason string) string {
-	switch s {
-	case StatusUp:
-		return ""
-	case StatusConnecting:
-		return ReasonConnecting
-	default:
-		return failureReason
-	}
-}
-
 type Consumer struct {
 	base    *url.URL
 	path    string
-	tokens  TokenSource
+	tokens  core.TokenSource
 	http    *http.Client
 	backoff Backoff
 	bufSize int
-	events  dropOldestQueue[Event]
+	events  *DropOldestQueue[core.Event]
 
 	started atomic.Bool
 	health  healthCell
@@ -113,7 +67,7 @@ func WithStreamPath(p string) ConsumerOption {
 	}
 }
 
-func NewConsumer(baseURL string, tokens TokenSource, opts ...ConsumerOption) (*Consumer, error) {
+func NewConsumer(baseURL string, tokens core.TokenSource, opts ...ConsumerOption) (*Consumer, error) {
 	if tokens == nil {
 		return nil, errors.New("goapi: nil TokenSource")
 	}
@@ -126,13 +80,13 @@ func NewConsumer(baseURL string, tokens TokenSource, opts ...ConsumerOption) (*C
 		path:    observeEventStreamPath,
 		tokens:  tokens,
 		http:    defaultSSEClient(),
-		backoff: NewExpBackoff(defaultBackoffBase, defaultBackoffMax),
+		backoff: newExpBackoff(defaultBackoffBase, defaultBackoffMax),
 		bufSize: defaultEventBuffer,
 	}
 	for _, opt := range opts {
 		opt(c)
 	}
-	c.events.pending = make(chan Event, c.bufSize)
+	c.events = NewDropOldestQueue[core.Event](c.bufSize)
 	return c, nil
 }
 
@@ -149,15 +103,15 @@ func defaultSSEClient() *http.Client {
 	}
 }
 
-func (c *Consumer) Events() <-chan Event { return c.events.pending }
+func (c *Consumer) Events() <-chan core.Event { return c.events.pending }
 
-func (c *Consumer) Status() Status { return c.health.load().status }
+func (c *Consumer) Status() core.Status { return c.health.load().status }
 
 func (c *Consumer) LastError() error {
 	return c.health.load().err
 }
 
-func (c *Consumer) Health() (Status, error) {
+func (c *Consumer) Health() (core.Status, error) {
 	current := c.health.load()
 	return current.status, current.err
 }
@@ -202,7 +156,7 @@ func (c *Consumer) pump(ctx context.Context, body io.ReadCloser) {
 		ev, err := dec.next()
 		if err != nil {
 			if ctx.Err() == nil {
-				c.markDropped(&SourceDownError{Op: c.op(), Err: watchdog.cause(err)})
+				c.markDropped(&core.SourceDownError{Op: c.op(), Err: watchdog.cause(err)})
 			}
 			return
 		}
@@ -212,16 +166,16 @@ func (c *Consumer) pump(ctx context.Context, body io.ReadCloser) {
 	}
 }
 
-func (c *Consumer) emit(ctx context.Context, ev Event) bool {
-	c.events.push(ev)
+func (c *Consumer) emit(ctx context.Context, ev core.Event) bool {
+	c.events.Push(ev)
 	return ctx.Err() == nil
 }
 
-func (c *Consumer) Dropped() int { return c.events.dropped() }
+func (c *Consumer) Dropped() int { return c.events.Dropped() }
 
-func (c *Consumer) drainPending() []Event { return c.events.drain() }
+func (c *Consumer) drainPending() []core.Event { return c.events.Drain() }
 
-var _ pendingDrainer[Event] = (*Consumer)(nil)
+var _ pendingDrainer[core.Event] = (*Consumer)(nil)
 
 func (c *Consumer) connect(ctx context.Context) (*http.Response, error) {
 	reqURL := c.base.JoinPath(c.path).String()
@@ -231,10 +185,10 @@ func (c *Consumer) connect(ctx context.Context) (*http.Response, error) {
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, &SourceDownError{Op: c.op(), Err: err}
+		return nil, &core.SourceDownError{Op: c.op(), Err: err}
 	}
 	if resp == nil {
-		return nil, &SourceDownError{Op: c.op(), Err: errors.New("nil response")}
+		return nil, &core.SourceDownError{Op: c.op(), Err: errors.New("nil response")}
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.rejectStatus(resp, presentedToken(req))
@@ -246,7 +200,7 @@ func (c *Consumer) rejectStatus(resp *http.Response, presented string) error {
 	defer func() { _ = resp.Body.Close() }()
 	invalidateOn401(c.tokens, resp.StatusCode, presented)
 	snippet, _ := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
-	return &APIError{Op: c.op(), StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(snippet))}
+	return &core.APIError{Op: c.op(), StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(snippet))}
 }
 
 func (c *Consumer) wait(ctx context.Context, attempt int) error {
@@ -265,5 +219,5 @@ func (c *Consumer) markDropped(err error) {
 
 func (c *Consumer) markUp() {
 	c.outage.connected()
-	c.health.publish(StatusUp, nil)
+	c.health.publish(core.StatusUp, nil)
 }

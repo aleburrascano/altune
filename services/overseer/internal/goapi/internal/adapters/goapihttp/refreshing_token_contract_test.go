@@ -1,6 +1,8 @@
-package goapi
+package goapihttp_test
 
 import (
+	"altune/overseer/internal/goapi"
+	goapihttp "altune/overseer/internal/goapi/internal/adapters/goapihttp"
 	"bytes"
 	"context"
 	"encoding/base64"
@@ -24,6 +26,34 @@ const (
 	rtsSeedRefresh = "seed-refresh-token-SECRET-000"
 	rtsAccessMark  = "ACCESS-TOKEN-SECRET"
 )
+
+const (
+	rtsBackoffBase = time.Second
+	rtsBackoffMax  = 5 * time.Minute
+)
+
+type rtsRefreshGrant struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+type pgSignInGrant struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+func bearerOf(r *http.Request) string {
+	return strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+}
+
+func rtsHTTPClient(srv *httptest.Server) *http.Client {
+	client := srv.Client()
+	client.Timeout = 5 * time.Second
+	return client
+}
+
+func rtsOptions(srv *httptest.Server, clock *rtsFakeClock, opts ...goapihttp.RefreshingOption) []goapihttp.RefreshingOption {
+	return append([]goapihttp.RefreshingOption{goapihttp.WithClock(clock.now), goapihttp.WithRefreshHTTPClient(rtsHTTPClient(srv))}, opts...)
+}
 
 type rtsFakeClock struct {
 	mu sync.Mutex
@@ -55,7 +85,7 @@ type rtsStub struct {
 	release   chan struct{}
 	mu        sync.Mutex
 	gotAPIKey []string
-	gotBody   []refreshGrantBody
+	gotBody   []rtsRefreshGrant
 	status    int
 	rawBody   string
 	rotate    bool
@@ -67,7 +97,7 @@ func (s *rtsStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	n := s.calls.Add(1)
 
-	var body refreshGrantBody
+	var body rtsRefreshGrant
 	_ = json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body)
 	s.mu.Lock()
 	s.gotAPIKey = append(s.gotAPIKey, r.Header.Get("apikey"))
@@ -97,16 +127,14 @@ func (s *rtsStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-func rtsNewSource(t *testing.T, stub *rtsStub) (*RefreshingTokenSource, *httptest.Server) {
+func rtsNewSource(t *testing.T, stub *rtsStub) (*goapihttp.RefreshingTokenSource, *httptest.Server) {
 	t.Helper()
 	srv := httptest.NewServer(stub)
 	t.Cleanup(srv.Close)
-	src, err := NewRefreshingTokenSource(srv.URL, "anon-key-SECRET", rtsSeedRefresh, withClock(stub.clock.now))
+	src, err := goapihttp.NewRefreshingTokenSource(srv.URL, "anon-key-SECRET", rtsSeedRefresh, rtsOptions(srv, stub.clock)...)
 	if err != nil {
 		t.Fatalf("NewRefreshingTokenSource: %v", err)
 	}
-	src.http = srv.Client()
-	src.http.Timeout = 5 * time.Second
 	return src, srv
 }
 
@@ -218,13 +246,38 @@ func TestRefreshingSingleFlightUnderConcurrency(t *testing.T) {
 	}
 }
 
+func rejectToken(t *testing.T, src goapi.TokenSource, rejected string) {
+	t.Helper()
+	var rejections atomic.Int64
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if bearerOf(r) == rejected {
+			rejections.Add(1)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"db":"ok","redis":"ok","auth":"ok"}`)
+	}))
+	defer api.Close()
+	client, err := goapihttp.New(api.URL, src)
+	if err != nil {
+		t.Fatalf("New client: %v", err)
+	}
+	if _, err := client.AdminHealth(context.Background()); err != nil {
+		t.Fatalf("AdminHealth after go-api rejected the token: %v", err)
+	}
+	if rejections.Load() != 1 {
+		t.Fatalf("go-api rejected %d requests, want the one that presented the token", rejections.Load())
+	}
+}
+
 func TestRefreshingRefreshOnInvalidate(t *testing.T) {
 	clock := rtsClock()
 	stub := &rtsStub{clock: clock, lifetime: time.Hour}
 	src, _ := rtsNewSource(t, stub)
 
 	first, _ := src.Token(context.Background())
-	src.invalidateRejected(first)
+	rejectToken(t, src, first)
 	second, err := src.Token(context.Background())
 	if err != nil {
 		t.Fatalf("Token after invalidate: %v", err)
@@ -254,7 +307,7 @@ func TestRefreshingRefreshOn401ViaClient(t *testing.T) {
 	t.Cleanup(api.Close)
 	_ = tokenSrv
 
-	client, err := New(api.URL, src)
+	client, err := goapihttp.New(api.URL, src)
 	if err != nil {
 		t.Fatalf("New client: %v", err)
 	}
@@ -282,9 +335,9 @@ func TestRefreshingStatusFailureTypedError(t *testing.T) {
 	if err == nil {
 		t.Fatal("want a refresh error on a 500 from the token endpoint")
 	}
-	var tre *TokenRefreshError
+	var tre *goapihttp.TokenRefreshError
 	if !errors.As(err, &tre) {
-		t.Fatalf("error %v is not a *TokenRefreshError", err)
+		t.Fatalf("error %v is not a *goapihttp.TokenRefreshError", err)
 	}
 	if tre.Status != http.StatusInternalServerError {
 		t.Fatalf("Status = %d, want 500", tre.Status)
@@ -307,9 +360,9 @@ func TestRefreshingRejectsExpiredAndBadExp(t *testing.T) {
 			if _, err := src.Token(context.Background()); err == nil {
 				t.Fatalf("want a typed error for %s response", name)
 			} else {
-				var tre *TokenRefreshError
+				var tre *goapihttp.TokenRefreshError
 				if !errors.As(err, &tre) {
-					t.Fatalf("error %v is not a *TokenRefreshError", err)
+					t.Fatalf("error %v is not a *goapihttp.TokenRefreshError", err)
 				}
 			}
 		})
@@ -348,11 +401,16 @@ func TestRefreshingHugeExpDoesNotOverflow(t *testing.T) {
 	if _, err := src.Token(context.Background()); err != nil {
 		t.Fatalf("huge exp should be accepted with a capped window, got %v", err)
 	}
-	src.mu.Lock()
-	window := src.refreshAt.Sub(clock.now())
-	src.mu.Unlock()
-	if window > maxAcceptedLifetime {
-		t.Fatalf("refresh window %s exceeds the cap %s", window, maxAcceptedLifetime)
+	clock.advance(19 * time.Hour)
+	if _, err := src.Token(context.Background()); err != nil || stub.calls.Load() != 1 {
+		t.Fatalf("19h in: err %v exchanges %d, want the cached token inside 4/5 of the 24h cap", err, stub.calls.Load())
+	}
+	clock.advance(time.Hour)
+	if _, err := src.Token(context.Background()); err != nil {
+		t.Fatalf("Token past the capped window: %v", err)
+	}
+	if got := stub.calls.Load(); got != 2 {
+		t.Fatalf("exchanges = %d 20h in, want 2: the refresh window must be capped at the 24h lifetime", got)
 	}
 }
 
@@ -459,7 +517,7 @@ func TestRefreshingDoesNotFollowRedirectLeakingSecrets(t *testing.T) {
 	}))
 	t.Cleanup(token.Close)
 
-	src, err := NewRefreshingTokenSource(token.URL, "anon-key-SECRET", rtsSeedRefresh, withClock(rtsClock().now))
+	src, err := goapihttp.NewRefreshingTokenSource(token.URL, "anon-key-SECRET", rtsSeedRefresh, goapihttp.WithClock(rtsClock().now))
 	if err != nil {
 		t.Fatalf("NewRefreshingTokenSource: %v", err)
 	}
@@ -476,150 +534,12 @@ func TestRefreshingDoesNotFollowRedirectLeakingSecrets(t *testing.T) {
 		defer amu.Unlock()
 		t.Fatalf("redirect was followed: attacker got %d requests; apikeys=%v bodies=%v", got, gotAPIKey, gotBodies)
 	}
-	var tre *TokenRefreshError
+	var tre *goapihttp.TokenRefreshError
 	if !errors.As(err, &tre) {
-		t.Fatalf("error %v is not a *TokenRefreshError", err)
+		t.Fatalf("error %v is not a *goapihttp.TokenRefreshError", err)
 	}
-	src.mu.Lock()
-	cached := src.accessToken
-	src.mu.Unlock()
-	if cached != "" {
-		t.Fatalf("a refused redirect must leave no cached token, got %q", cached)
-	}
-}
-
-func TestClientDoesNotFollowRedirectLeakingBearer(t *testing.T) {
-	var (
-		attackerHits atomic.Int64
-		amu          sync.Mutex
-		gotAuth      []string
-	)
-	attacker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		attackerHits.Add(1)
-		amu.Lock()
-		gotAuth = append(gotAuth, r.Header.Get("Authorization"))
-		amu.Unlock()
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"status":"ok"}`)
-	}))
-	t.Cleanup(attacker.Close)
-
-	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, attacker.URL, http.StatusFound)
-	}))
-	t.Cleanup(api.Close)
-
-	client, err := New(api.URL, StaticTokenSource("operator-bearer-SECRET"))
-	if err != nil {
-		t.Fatalf("New client: %v", err)
-	}
-	if _, err := client.Health(context.Background()); err == nil {
-		t.Fatal("a redirect from go-api must not be followed into a success")
-	}
-	if got := attackerHits.Load(); got != 0 {
-		amu.Lock()
-		defer amu.Unlock()
-		t.Fatalf("client followed the redirect: attacker got %d requests; auth=%v", got, gotAuth)
-	}
-}
-
-func TestSelectTokenSource(t *testing.T) {
-	persistPath := filepath.Join(t.TempDir(), "refresh_token")
-	refreshEnv := func(k string) string {
-		switch k {
-		case envSupabaseURL:
-			return "https://ref.supabase.co"
-		case envSupabaseAnon:
-			return "anon"
-		case envReadOnlyRefreshToken:
-			return "refresh"
-		case envReadOnlyRefreshFile:
-			return persistPath
-		default:
-			return ""
-		}
-	}
-	if _, ok := selectTokenSource(refreshEnv).(*RefreshingTokenSource); !ok {
-		t.Fatal("all refresh vars set should select RefreshingTokenSource")
-	}
-
-	staticEnv := func(k string) string {
-		if k == envReadOnlyToken {
-			return "static-readonly-token"
-		}
-		return ""
-	}
-	if got, ok := selectTokenSource(staticEnv).(StaticTokenSource); !ok || string(got) != "static-readonly-token" {
-		t.Fatalf("only static token set should select StaticTokenSource, got %T", selectTokenSource(staticEnv))
-	}
-
-	if _, ok := selectTokenSource(func(string) string { return "" }).(nullTokenSource); !ok {
-		t.Fatal("no vars set should select nullTokenSource")
-	}
-
-	badURLEnv := func(k string) string {
-		switch k {
-		case envSupabaseURL:
-			return "://bad url"
-		case envSupabaseAnon:
-			return "anon"
-		case envReadOnlyRefreshToken:
-			return "refresh"
-		default:
-			return ""
-		}
-	}
-	if _, ok := selectTokenSource(badURLEnv).(nullTokenSource); !ok {
-		t.Fatal("refresh vars set but malformed URL should fail closed to nullTokenSource")
-	}
-}
-
-func TestSelectTokenSource_NoOperatorFallback(t *testing.T) {
-	operatorEnv := func(k string) string {
-		switch k {
-		case envSupabaseURL:
-			return "https://ref.supabase.co"
-		case envSupabaseAnon:
-			return "anon"
-		case envLegacyOperatorRefreshToken:
-			return "operator-refresh"
-		case envLegacyOperatorToken:
-			return "operator-bearer"
-		default:
-			return ""
-		}
-	}
-	if src := selectTokenSource(operatorEnv); !isNullSource(src) {
-		t.Fatalf("operator credentials must not be adopted, got %T", src)
-	}
-}
-
-func isNullSource(src TokenSource) bool {
-	_, ok := src.(nullTokenSource)
-	return ok
-}
-
-func TestRefreshTokenPathIsPrincipalScoped(t *testing.T) {
-	const operatorPath = "/var/lib/overseer/refresh_token"
-
-	if got := refreshTokenPath(func(string) string { return "" }); got == operatorPath {
-		t.Fatalf("default persistence path = %q, the operator's own file", got)
-	}
-	override := func(k string) string {
-		if k == envReadOnlyRefreshFile {
-			return "/tmp/overseer-readonly-token"
-		}
-		return ""
-	}
-	if got := refreshTokenPath(override); got != "/tmp/overseer-readonly-token" {
-		t.Errorf("path override ignored: got %q", got)
-	}
-}
-
-func TestNullTokenSourceFailsClosed(t *testing.T) {
-	_, err := nullTokenSource{}.Token(context.Background())
-	if !errors.Is(err, ErrNoToken) {
-		t.Fatalf("nullTokenSource error = %v, want ErrNoToken", err)
+	if cached, err := src.Token(context.Background()); err == nil || cached != "" {
+		t.Fatalf("a refused redirect must leave no cached token, got %q (err %v)", cached, err)
 	}
 }
 
@@ -645,16 +565,14 @@ func (s *rtsSwitchStub) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-func rtsNewSwitchSource(t *testing.T, stub *rtsSwitchStub) *RefreshingTokenSource {
+func rtsNewSwitchSource(t *testing.T, stub *rtsSwitchStub, opts ...goapihttp.RefreshingOption) *goapihttp.RefreshingTokenSource {
 	t.Helper()
 	srv := httptest.NewServer(stub)
 	t.Cleanup(srv.Close)
-	src, err := NewRefreshingTokenSource(srv.URL, "anon-key-SECRET", rtsSeedRefresh, withClock(stub.clock.now))
+	src, err := goapihttp.NewRefreshingTokenSource(srv.URL, "anon-key-SECRET", rtsSeedRefresh, rtsOptions(srv, stub.clock, opts...)...)
 	if err != nil {
 		t.Fatalf("NewRefreshingTokenSource: %v", err)
 	}
-	src.http = srv.Client()
-	src.http.Timeout = 5 * time.Second
 	return src
 }
 
@@ -668,9 +586,9 @@ func TestRefreshingTerminalFailureBacksOffNotStorms(t *testing.T) {
 	if err == nil {
 		t.Fatal("want a refresh error on a 400 from the token endpoint")
 	}
-	var tre *TokenRefreshError
+	var tre *goapihttp.TokenRefreshError
 	if !errors.As(err, &tre) {
-		t.Fatalf("error %v is not a *TokenRefreshError", err)
+		t.Fatalf("error %v is not a *goapihttp.TokenRefreshError", err)
 	}
 
 	for i := 0; i < 20; i++ {
@@ -682,7 +600,7 @@ func TestRefreshingTerminalFailureBacksOffNotStorms(t *testing.T) {
 		t.Fatalf("exchanges = %d, want 1 (backoff must suppress the retry storm)", got)
 	}
 
-	clock.advance(refreshBackoffBase + time.Second)
+	clock.advance(rtsBackoffBase + time.Second)
 	if _, err := src.Token(context.Background()); err == nil {
 		t.Fatal("still 400: want an error")
 	}
@@ -702,7 +620,7 @@ func TestRefreshingRecoversPromptlyAfterReseed(t *testing.T) {
 	}
 
 	stub.failWith.Store(0)
-	clock.advance(refreshBackoffBase + time.Second)
+	clock.advance(rtsBackoffBase + time.Second)
 	tok, err := src.Token(context.Background())
 	if err != nil {
 		t.Fatalf("Token after recovery: %v", err)
@@ -711,11 +629,8 @@ func TestRefreshingRecoversPromptlyAfterReseed(t *testing.T) {
 		t.Fatalf("token %q does not look like the minted access token", tok)
 	}
 
-	src.mu.Lock()
-	failCount, retryAt := src.failCount, src.retryAt
-	src.mu.Unlock()
-	if failCount != 0 || !retryAt.IsZero() {
-		t.Fatalf("backoff not reset after recovery: failCount=%d retryAt=%v", failCount, retryAt)
+	if health := src.Health(); health.ConsecutiveFailures != 0 || health.LastError != "" {
+		t.Fatalf("backoff not reset after recovery: %+v", health)
 	}
 }
 
@@ -730,7 +645,7 @@ func TestRefreshingTransientFailureRecoversNotWedged(t *testing.T) {
 	}
 
 	stub.failWith.Store(0)
-	clock.advance(refreshBackoffBase + time.Second)
+	clock.advance(rtsBackoffBase + time.Second)
 	if _, err := src.Token(context.Background()); err != nil {
 		t.Fatalf("a transient 5xx must recover on retry, not wedge: %v", err)
 	}
@@ -765,23 +680,21 @@ func TestRefreshingBackoffHoldsUnderConcurrency(t *testing.T) {
 	}
 }
 
-func rtsSourceWithStore(t *testing.T, store refreshTokenStore) (*RefreshingTokenSource, *rtsStub) {
+func rtsSourceWithStore(t *testing.T, store goapihttp.RefreshTokenStore) (*goapihttp.RefreshingTokenSource, *rtsStub) {
 	t.Helper()
 	clock := rtsClock()
 	stub := &rtsStub{clock: clock, lifetime: time.Hour, rotate: true}
 	srv := httptest.NewServer(stub)
 	t.Cleanup(srv.Close)
-	src, err := NewRefreshingTokenSource(srv.URL, "anon-key-SECRET", rtsSeedRefresh, withClock(clock.now), WithRefreshTokenStore(store))
+	src, err := goapihttp.NewRefreshingTokenSource(srv.URL, "anon-key-SECRET", rtsSeedRefresh, rtsOptions(srv, clock, goapihttp.WithRefreshTokenStore(store))...)
 	if err != nil {
 		t.Fatalf("NewRefreshingTokenSource: %v", err)
 	}
-	src.http = srv.Client()
-	src.http.Timeout = 5 * time.Second
 	return src, stub
 }
 
 func TestRefreshTokenPersistsAcrossRestart(t *testing.T) {
-	store := fileRefreshTokenStore{path: filepath.Join(t.TempDir(), "refresh_token")}
+	store := goapihttp.FileRefreshTokenStore{Path: filepath.Join(t.TempDir(), "refresh_token")}
 
 	first, firstStub := rtsSourceWithStore(t, store)
 	if _, err := first.Token(context.Background()); err != nil {
@@ -793,14 +706,14 @@ func TestRefreshTokenPersistsAcrossRestart(t *testing.T) {
 	}
 	firstStub.mu.Unlock()
 
-	persisted, err := os.ReadFile(store.path)
+	persisted, err := os.ReadFile(store.Path)
 	if err != nil {
 		t.Fatalf("read persisted token: %v", err)
 	}
 	if string(persisted) != "rotated-refresh-1" {
 		t.Fatalf("persisted %q, want the rotated token", string(persisted))
 	}
-	info, err := os.Stat(store.path)
+	info, err := os.Stat(store.Path)
 	if err != nil {
 		t.Fatalf("stat persisted token: %v", err)
 	}
@@ -820,17 +733,17 @@ func TestRefreshTokenPersistsAcrossRestart(t *testing.T) {
 }
 
 func TestRefreshTokenFirstBootSeedsFromEnv(t *testing.T) {
-	store := fileRefreshTokenStore{path: filepath.Join(t.TempDir(), "refresh_token")}
+	store := goapihttp.FileRefreshTokenStore{Path: filepath.Join(t.TempDir(), "refresh_token")}
 
 	clock := rtsClock()
 	stub := &rtsStub{clock: clock, lifetime: time.Hour}
 	srv := httptest.NewServer(stub)
 	t.Cleanup(srv.Close)
-	src, err := NewRefreshingTokenSource(srv.URL, "anon-key-SECRET", rtsSeedRefresh, withClock(clock.now), WithRefreshTokenStore(store))
+	src, err := goapihttp.NewRefreshingTokenSource(srv.URL, "anon-key-SECRET", rtsSeedRefresh,
+		goapihttp.WithClock(clock.now), goapihttp.WithRefreshHTTPClient(srv.Client()), goapihttp.WithRefreshTokenStore(store))
 	if err != nil {
 		t.Fatalf("NewRefreshingTokenSource: %v", err)
 	}
-	src.http = srv.Client()
 
 	if _, err := src.Token(context.Background()); err != nil {
 		t.Fatalf("Token: %v", err)
@@ -843,21 +756,30 @@ func TestRefreshTokenFirstBootSeedsFromEnv(t *testing.T) {
 }
 
 func TestFileRefreshTokenStoreLoadErrorContinuesFromSeed(t *testing.T) {
-	store := fileRefreshTokenStore{path: t.TempDir()}
-	src, err := NewRefreshingTokenSource("https://ref.supabase.co", "anon", rtsSeedRefresh, WithRefreshTokenStore(store))
+	clock := rtsClock()
+	stub := &rtsStub{clock: clock, lifetime: time.Hour}
+	srv := httptest.NewServer(stub)
+	t.Cleanup(srv.Close)
+	store := goapihttp.FileRefreshTokenStore{Path: t.TempDir()}
+	src, err := goapihttp.NewRefreshingTokenSource(srv.URL, "anon", rtsSeedRefresh, rtsOptions(srv, clock, goapihttp.WithRefreshTokenStore(store))...)
 	if err != nil {
 		t.Fatalf("an unreadable persistence path must not fail construction, got %v", err)
 	}
-	if !src.persistFailed {
-		t.Fatal("persistFailed must be set when the persisted token cannot be read")
+	if !src.Health().PersistFailed {
+		t.Fatal("PersistFailed must be set when the persisted token cannot be read")
 	}
-	if src.refreshTok != rtsSeedRefresh {
-		t.Fatalf("refreshTok = %q, want the env seed kept in place", src.refreshTok)
+	if _, err := src.Token(context.Background()); err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	if stub.gotBody[0].RefreshToken != rtsSeedRefresh {
+		t.Fatalf("presented %q, want the env seed kept in place", stub.gotBody[0].RefreshToken)
 	}
 }
 
 func TestFileRefreshTokenStoreNeverLeaksToken(t *testing.T) {
-	store := fileRefreshTokenStore{path: filepath.Join(t.TempDir(), "refresh_token")}
+	store := goapihttp.FileRefreshTokenStore{Path: filepath.Join(t.TempDir(), "refresh_token")}
 	src, _ := rtsSourceWithStore(t, store)
 	if _, err := src.Token(context.Background()); err != nil {
 		t.Fatalf("Token: %v", err)
@@ -907,7 +829,7 @@ func newStaleTokenBurstAPI(stale string, burst int64) *staleTokenBurstAPI {
 
 func (a *staleTokenBurstAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	a.calls.Add(1)
-	if presentedToken(r) != a.stale {
+	if bearerOf(r) != a.stale {
 		a.freshOnce.Do(func() { close(a.freshSeen) })
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"db":"ok","redis":"ok","auth":"ok"}`)
@@ -939,7 +861,7 @@ func TestConcurrent401sOnOneTokenShareOneRefreshExchange(t *testing.T) {
 	api := newStaleTokenBurstAPI(stale, burst)
 	apiSrv := httptest.NewServer(api)
 	t.Cleanup(apiSrv.Close)
-	client, err := New(apiSrv.URL, src)
+	client, err := goapihttp.New(apiSrv.URL, src)
 	if err != nil {
 		t.Fatalf("New client: %v", err)
 	}
@@ -975,15 +897,15 @@ func TestThrottled429TakesNoRetryAndClassifiesThrottled(t *testing.T) {
 		w.WriteHeader(http.StatusTooManyRequests)
 	}))
 	t.Cleanup(apiSrv.Close)
-	client, err := New(apiSrv.URL, src)
+	client, err := goapihttp.New(apiSrv.URL, src)
 	if err != nil {
 		t.Fatalf("New client: %v", err)
 	}
 
 	_, err = client.AdminHealth(context.Background())
 
-	if reason := Classify(err); reason != ReasonThrottled {
-		t.Fatalf("Classify(%v) = %q, want %q", err, reason, ReasonThrottled)
+	if reason := goapi.Classify(err); reason != goapi.ReasonThrottled {
+		t.Fatalf("goapi.Classify(%v) = %q, want %q", err, reason, goapi.ReasonThrottled)
 	}
 	if got := apiCalls.Load(); got != 1 {
 		t.Fatalf("go-api calls = %d, want 1 (a 429 is never retried)", got)
@@ -997,10 +919,48 @@ func TestLate401OnSupersededTokenKeepsTheFreshToken(t *testing.T) {
 	stub := &rtsStub{clock: rtsClock(), lifetime: time.Hour}
 	src, _ := rtsNewSource(t, stub)
 	stale, _ := src.Token(context.Background())
-	invalidateOn401(src, http.StatusUnauthorized, stale)
-	fresh, _ := src.Token(context.Background())
+	lateArrived := make(chan struct{})
+	releaseLate := make(chan struct{})
+	var staleCalls atomic.Int64
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if bearerOf(r) != stale {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"db":"ok","redis":"ok","auth":"ok"}`)
+			return
+		}
+		if staleCalls.Add(1) == 1 {
+			close(lateArrived)
+			if !awaitClosed(r, releaseLate) {
+				w.WriteHeader(http.StatusGatewayTimeout)
+				return
+			}
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(api.Close)
+	client, err := goapihttp.New(api.URL, src)
+	if err != nil {
+		t.Fatalf("New client: %v", err)
+	}
+	lateErr := make(chan error, 1)
+	go func() {
+		_, err := client.AdminHealth(context.Background())
+		lateErr <- err
+	}()
+	select {
+	case <-lateArrived:
+	case <-time.After(burstWaitLimit):
+		t.Fatal("the late request never reached go-api")
+	}
 
-	invalidateOn401(src, http.StatusUnauthorized, stale)
+	if _, err := client.AdminHealth(context.Background()); err != nil {
+		t.Fatalf("request rejected on the stale token: %v", err)
+	}
+	fresh, _ := src.Token(context.Background())
+	close(releaseLate)
+	if err := <-lateErr; err != nil {
+		t.Fatalf("late request after its 401: %v", err)
+	}
 	after, err := src.Token(context.Background())
 	if err != nil {
 		t.Fatalf("Token after late 401: %v", err)
@@ -1014,17 +974,17 @@ func TestLate401OnSupersededTokenKeepsTheFreshToken(t *testing.T) {
 	}
 }
 
-type sseConnector interface {
-	connect(ctx context.Context) (*http.Response, error)
-}
-
 func TestStreamConnect401DiscardsThePresentedToken(t *testing.T) {
 	always401 := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 	})
-	consumers := map[string]func(base string, tokens TokenSource) (sseConnector, error){
-		"events": func(base string, tokens TokenSource) (sseConnector, error) { return NewConsumer(base, tokens) },
-		"logs":   func(base string, tokens TokenSource) (sseConnector, error) { return NewLogsConsumer(base, tokens) },
+	consumers := map[string]func(base string, tokens goapi.TokenSource) (streamConsumer, error){
+		"events": func(base string, tokens goapi.TokenSource) (streamConsumer, error) {
+			return goapihttp.NewConsumer(base, tokens, goapihttp.WithBackoff(fixedBackoff(time.Hour)))
+		},
+		"logs": func(base string, tokens goapi.TokenSource) (streamConsumer, error) {
+			return goapihttp.NewLogsConsumer(base, tokens, goapihttp.WithLogsBackoff(fixedBackoff(time.Hour)))
+		},
 	}
 	for name, build := range consumers {
 		t.Run(name, func(t *testing.T) {
@@ -1038,12 +998,11 @@ func TestStreamConnect401DiscardsThePresentedToken(t *testing.T) {
 				t.Fatalf("build consumer: %v", err)
 			}
 
-			resp, err := consumer.connect(context.Background())
-			if resp != nil {
-				_ = resp.Body.Close()
-			}
+			stop := startConsumer(consumer)
+			waitUntil(t, func() bool { return consumer.LastError() != nil }, "the first connect to fail")
+			stop()
 
-			if Classify(err) != ReasonAuth {
+			if err := consumer.LastError(); goapi.Classify(err) != goapi.ReasonAuth {
 				t.Fatalf("connect err = %v, want an auth rejection", err)
 			}
 			next, _ := src.Token(context.Background())
@@ -1089,7 +1048,7 @@ type rtsRotatingStub struct {
 }
 
 func (s *rtsRotatingStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var body refreshGrantBody
+	var body rtsRefreshGrant
 	_ = json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body)
 	s.mu.Lock()
 	s.presented = append(s.presented, body.RefreshToken)
@@ -1115,20 +1074,18 @@ func (s *rtsRotatingStub) presentedTokens() []string {
 	return append([]string(nil), s.presented...)
 }
 
-func rtsSourceOnFile(t *testing.T, srv *httptest.Server, clock *rtsFakeClock, store refreshTokenStore) *RefreshingTokenSource {
+func rtsSourceOnFile(t *testing.T, srv *httptest.Server, clock *rtsFakeClock, store goapihttp.RefreshTokenStore) *goapihttp.RefreshingTokenSource {
 	t.Helper()
-	src, err := NewRefreshingTokenSource(srv.URL, "anon-key-SECRET", rtsSeedRefresh, withClock(clock.now), WithRefreshTokenStore(store))
+	src, err := goapihttp.NewRefreshingTokenSource(srv.URL, "anon-key-SECRET", rtsSeedRefresh, rtsOptions(srv, clock, goapihttp.WithRefreshTokenStore(store))...)
 	if err != nil {
 		t.Fatalf("NewRefreshingTokenSource: %v", err)
 	}
-	src.http = srv.Client()
-	src.http.Timeout = 5 * time.Second
 	return src
 }
 
-func rtsTokenFile(t *testing.T) fileRefreshTokenStore {
+func rtsTokenFile(t *testing.T) goapihttp.FileRefreshTokenStore {
 	t.Helper()
-	return fileRefreshTokenStore{path: filepath.Join(t.TempDir(), "readonly_refresh_token")}
+	return goapihttp.FileRefreshTokenStore{Path: filepath.Join(t.TempDir(), "readonly_refresh_token")}
 }
 
 func TestSpentRefreshTokenAdoptsTheNewerPersistedTokenWithoutBackoff(t *testing.T) {
@@ -1138,7 +1095,7 @@ func TestSpentRefreshTokenAdoptsTheNewerPersistedTokenWithoutBackoff(t *testing.
 	stub := &rtsRotatingStub{clock: clock}
 	stub.respond = func(presented string, n int) (int, string) {
 		if presented != newer {
-			if err := os.WriteFile(store.path, []byte(newer), 0o600); err != nil {
+			if err := os.WriteFile(store.Path, []byte(newer), 0o600); err != nil {
 				t.Errorf("write newer token: %v", err)
 			}
 			return http.StatusBadRequest, ""
@@ -1159,11 +1116,8 @@ func TestSpentRefreshTokenAdoptsTheNewerPersistedTokenWithoutBackoff(t *testing.
 	if got := stub.presentedTokens(); len(got) != 2 || got[0] != rtsSeedRefresh || got[1] != newer {
 		t.Fatalf("presented %q, want the spent memory token then the newer persisted one", got)
 	}
-	src.mu.Lock()
-	failCount, backingOff := src.failCount, src.inBackoffLocked()
-	src.mu.Unlock()
-	if failCount != 0 || backingOff {
-		t.Fatalf("failCount=%d backingOff=%v, want no backoff after adopting the newer token", failCount, backingOff)
+	if health := src.Health(); health.ConsecutiveFailures != 0 || health.LastError != "" {
+		t.Fatalf("health = %+v, want no backoff after adopting the newer token", health)
 	}
 }
 
@@ -1177,17 +1131,15 @@ func TestSpentRefreshTokenWithNothingNewerPersistedBacksOffAfterOneExchange(t *t
 
 	_, err := src.Token(context.Background())
 
-	if !isSpentRefreshToken(err) {
+	var refreshErr *goapihttp.TokenRefreshError
+	if !errors.As(err, &refreshErr) || refreshErr.Status != http.StatusBadRequest {
 		t.Fatalf("err = %v, want the 400 surfaced", err)
 	}
 	if got := stub.presentedTokens(); len(got) != 1 {
 		t.Fatalf("presented %q, want exactly one exchange when the file holds nothing newer", got)
 	}
-	src.mu.Lock()
-	backingOff := src.inBackoffLocked()
-	src.mu.Unlock()
-	if !backingOff {
-		t.Fatal("want backoff after a 400 with no newer persisted token")
+	if _, err := src.Token(context.Background()); err == nil || len(stub.presentedTokens()) != 1 {
+		t.Fatalf("Token = %v after %d exchanges, want backoff after a 400 with no newer persisted token", err, len(stub.presentedTokens()))
 	}
 }
 
@@ -1201,7 +1153,7 @@ func TestTwoSourcesOnOneFileNeverExchangeTheSameRefreshToken(t *testing.T) {
 	}
 	srv := httptest.NewServer(stub)
 	t.Cleanup(srv.Close)
-	sources := []*RefreshingTokenSource{
+	sources := []*goapihttp.RefreshingTokenSource{
 		rtsSourceOnFile(t, srv, clock, store),
 		rtsSourceOnFile(t, srv, clock, store),
 	}
@@ -1236,10 +1188,22 @@ func TestTwoSourcesOnOneFileNeverExchangeTheSameRefreshToken(t *testing.T) {
 }
 
 type rtsSaveFailingStore struct {
-	fileRefreshTokenStore
+	goapihttp.FileRefreshTokenStore
 }
 
-func (rtsSaveFailingStore) save(string) error { return errors.New("disk full") }
+func (rtsSaveFailingStore) Save(string) error { return errors.New("disk full") }
+
+type rtsFirstLoadFailingStore struct {
+	goapihttp.FileRefreshTokenStore
+	loads *atomic.Int64
+}
+
+func (s rtsFirstLoadFailingStore) Load() (string, error) {
+	if s.loads.Add(1) == 1 {
+		return "", errors.New("transient read error")
+	}
+	return s.FileRefreshTokenStore.Load()
+}
 
 func TestFailedSaveSetsPersistFailed(t *testing.T) {
 	src, _ := rtsSourceWithStore(t, rtsSaveFailingStore{rtsTokenFile(t)})
@@ -1248,17 +1212,14 @@ func TestFailedSaveSetsPersistFailed(t *testing.T) {
 		t.Fatalf("Token: %v, a failed save must not fail the exchange", err)
 	}
 
-	src.mu.Lock()
-	persistFailed := src.persistFailed
-	src.mu.Unlock()
-	if !persistFailed {
-		t.Fatal("persistFailed = false after the rotated token could not be saved")
+	if !src.Health().PersistFailed {
+		t.Fatal("PersistFailed = false after the rotated token could not be saved")
 	}
 }
 
 func TestFailedSaveKeepsPresentingTheInMemoryRotation(t *testing.T) {
 	store := rtsTokenFile(t)
-	if err := os.WriteFile(store.path, []byte("persisted-before-the-disk-filled"), 0o600); err != nil {
+	if err := os.WriteFile(store.Path, []byte("persisted-before-the-disk-filled"), 0o600); err != nil {
 		t.Fatalf("seed token file: %v", err)
 	}
 	src, stub := rtsSourceWithStore(t, rtsSaveFailingStore{store})
@@ -1267,10 +1228,7 @@ func TestFailedSaveKeepsPresentingTheInMemoryRotation(t *testing.T) {
 		t.Fatalf("first Token: %v", err)
 	}
 
-	src.invalidateRejected(first)
-	if _, err := src.Token(context.Background()); err != nil {
-		t.Fatalf("second Token: %v", err)
-	}
+	rejectToken(t, src, first)
 
 	stub.mu.Lock()
 	defer stub.mu.Unlock()
@@ -1280,18 +1238,17 @@ func TestFailedSaveKeepsPresentingTheInMemoryRotation(t *testing.T) {
 }
 
 func TestSuccessfulSaveClearsPersistFailed(t *testing.T) {
-	src, _ := rtsSourceWithStore(t, rtsTokenFile(t))
-	src.persistFailed = true
+	src, _ := rtsSourceWithStore(t, rtsFirstLoadFailingStore{rtsTokenFile(t), new(atomic.Int64)})
+	if !src.Health().PersistFailed {
+		t.Fatal("PersistFailed = false although the seed-time read failed")
+	}
 
 	if _, err := src.Token(context.Background()); err != nil {
 		t.Fatalf("Token: %v", err)
 	}
 
-	src.mu.Lock()
-	persistFailed := src.persistFailed
-	src.mu.Unlock()
-	if persistFailed {
-		t.Fatal("persistFailed still set after a successful save")
+	if src.Health().PersistFailed {
+		t.Fatal("PersistFailed still set after a successful save")
 	}
 }
 
@@ -1303,7 +1260,7 @@ func TestLockFileSitsBesideTheTokenAtOwnerOnlyMode(t *testing.T) {
 		t.Fatalf("Token: %v", err)
 	}
 
-	info, err := os.Stat(store.path + ".lock")
+	info, err := os.Stat(store.Path + ".lock")
 	if err != nil {
 		t.Fatalf("stat lock file: %v", err)
 	}
@@ -1318,7 +1275,7 @@ func TestUncreatableTokenDirAtStartupStillServesFromTheEnvSeed(t *testing.T) {
 	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
 		t.Fatalf("create blocking file: %v", err)
 	}
-	store := fileRefreshTokenStore{path: filepath.Join(blocker, "overseer", "readonly_refresh_token")}
+	store := goapihttp.FileRefreshTokenStore{Path: filepath.Join(blocker, "overseer", "readonly_refresh_token")}
 	stub := &rtsRotatingStub{clock: clock}
 	stub.respond = func(_ string, n int) (int, string) { return http.StatusOK, fmt.Sprintf("rotated-refresh-%d", n) }
 	srv := httptest.NewServer(stub)
@@ -1333,11 +1290,8 @@ func TestUncreatableTokenDirAtStartupStillServesFromTheEnvSeed(t *testing.T) {
 	if got := stub.presentedTokens(); len(got) != 1 || got[0] != rtsSeedRefresh {
 		t.Fatalf("presented %q, want exactly the env seed", got)
 	}
-	src.mu.Lock()
-	persistFailed := src.persistFailed
-	src.mu.Unlock()
-	if !persistFailed {
-		t.Fatal("persistFailed = false although the token directory cannot be created")
+	if !src.Health().PersistFailed {
+		t.Fatal("PersistFailed = false although the token directory cannot be created")
 	}
 }
 
@@ -1355,7 +1309,7 @@ type pgStub struct {
 	passwordCalls  atomic.Int64
 	mu             sync.Mutex
 	presented      []string
-	signIns        []passwordGrantBody
+	signIns        []pgSignInGrant
 	apiKeys        []string
 }
 
@@ -1383,7 +1337,7 @@ func (s *pgStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *pgStub) serveRefresh(w http.ResponseWriter, raw []byte) {
 	n := s.refreshCalls.Add(1)
-	var body refreshGrantBody
+	var body rtsRefreshGrant
 	_ = json.Unmarshal(raw, &body)
 	s.mu.Lock()
 	s.presented = append(s.presented, body.RefreshToken)
@@ -1398,7 +1352,7 @@ func (s *pgStub) serveRefresh(w http.ResponseWriter, raw []byte) {
 
 func (s *pgStub) servePassword(w http.ResponseWriter, raw []byte) {
 	n := s.passwordCalls.Add(1)
-	var body passwordGrantBody
+	var body pgSignInGrant
 	_ = json.Unmarshal(raw, &body)
 	s.mu.Lock()
 	s.signIns = append(s.signIns, body)
@@ -1425,23 +1379,20 @@ func (s *pgStub) presentedTokens() []string {
 	return append([]string(nil), s.presented...)
 }
 
-func (s *pgStub) signInBodies() []passwordGrantBody {
+func (s *pgStub) signInBodies() []pgSignInGrant {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([]passwordGrantBody(nil), s.signIns...)
+	return append([]pgSignInGrant(nil), s.signIns...)
 }
 
-func pgSource(t *testing.T, stub *pgStub, seed string, opts ...RefreshingOption) *RefreshingTokenSource {
+func pgSource(t *testing.T, stub *pgStub, seed string, opts ...goapihttp.RefreshingOption) *goapihttp.RefreshingTokenSource {
 	t.Helper()
 	srv := httptest.NewServer(stub)
 	t.Cleanup(srv.Close)
-	opts = append(opts, withClock(stub.clock.now))
-	src, err := NewRefreshingTokenSource(srv.URL, "anon-key-SECRET", seed, opts...)
+	src, err := goapihttp.NewRefreshingTokenSource(srv.URL, "anon-key-SECRET", seed, rtsOptions(srv, stub.clock, opts...)...)
 	if err != nil {
 		t.Fatalf("NewRefreshingTokenSource: %v", err)
 	}
-	src.http = srv.Client()
-	src.http.Timeout = 5 * time.Second
 	return src
 }
 
@@ -1458,7 +1409,7 @@ func TestSpentRefreshTokenSignsInAgainAndPersistsTheNewChain(t *testing.T) {
 	clock := rtsClock()
 	stub := newPGStub(clock)
 	store := rtsTokenFile(t)
-	src := pgSource(t, stub, rtsSeedRefresh, WithRefreshTokenStore(store), WithPasswordGrant(pgEmail, pgPassword))
+	src := pgSource(t, stub, rtsSeedRefresh, goapihttp.WithRefreshTokenStore(store), goapihttp.WithPasswordGrant(pgEmail, pgPassword))
 
 	tok, err := src.Token(context.Background())
 	if err != nil {
@@ -1471,7 +1422,7 @@ func TestSpentRefreshTokenSignsInAgainAndPersistsTheNewChain(t *testing.T) {
 	if len(signIns) != 1 || signIns[0].Email != pgEmail || signIns[0].Password != pgPassword {
 		t.Fatalf("password grants = %+v, want exactly one carrying the read-only credentials", signIns)
 	}
-	persisted, err := os.ReadFile(store.path)
+	persisted, err := os.ReadFile(store.Path)
 	if err != nil {
 		t.Fatalf("read persisted token: %v", err)
 	}
@@ -1500,9 +1451,9 @@ func TestSpentRefreshTokenSignsInAgainAndPersistsTheNewChain(t *testing.T) {
 func TestSpentRefreshTokenWithoutCredentialsBacksOffWithoutSigningIn(t *testing.T) {
 	clock := rtsClock()
 	stub := newPGStub(clock)
-	src := pgSource(t, stub, rtsSeedRefresh, WithPasswordGrant("", ""))
+	src := pgSource(t, stub, rtsSeedRefresh, goapihttp.WithPasswordGrant("", ""))
 
-	var refreshErr *TokenRefreshError
+	var refreshErr *goapihttp.TokenRefreshError
 	if _, err := src.Token(context.Background()); !errors.As(err, &refreshErr) || refreshErr.Status != http.StatusBadRequest {
 		t.Fatalf("Token = %v, want the refresh 400", err)
 	}
@@ -1524,10 +1475,10 @@ func TestFailingPasswordGrantBacksOffAndNeverLogsThePassword(t *testing.T) {
 			clock := rtsClock()
 			stub := newPGStub(clock)
 			stub.passwordStatus.Store(int64(status))
-			src := pgSource(t, stub, rtsSeedRefresh, WithRefreshTokenStore(rtsTokenFile(t)), WithPasswordGrant(pgEmail, pgPassword))
+			src := pgSource(t, stub, rtsSeedRefresh, goapihttp.WithRefreshTokenStore(rtsTokenFile(t)), goapihttp.WithPasswordGrant(pgEmail, pgPassword))
 
 			_, err := src.Token(context.Background())
-			var refreshErr *TokenRefreshError
+			var refreshErr *goapihttp.TokenRefreshError
 			if !errors.As(err, &refreshErr) || refreshErr.Stage != "password_grant" || refreshErr.Status != status {
 				t.Fatalf("Token = %v, want a password_grant failure with status %d", err, status)
 			}
@@ -1540,7 +1491,7 @@ func TestFailingPasswordGrantBacksOffAndNeverLogsThePassword(t *testing.T) {
 				t.Fatalf("password grants = %d, want 1 per backoff window", got)
 			}
 
-			clock.advance(refreshBackoffMax)
+			clock.advance(rtsBackoffMax)
 			_, _ = src.Token(context.Background())
 			if got := stub.passwordCalls.Load(); got != 2 {
 				t.Fatalf("password grants = %d, want one more once the window elapsed", got)
@@ -1563,7 +1514,7 @@ func TestFailingPasswordGrantBacksOffAndNeverLogsThePassword(t *testing.T) {
 func TestSignInRunsOnceForAConcurrentFleet(t *testing.T) {
 	clock := rtsClock()
 	stub := newPGStub(clock)
-	src := pgSource(t, stub, rtsSeedRefresh, WithRefreshTokenStore(rtsTokenFile(t)), WithPasswordGrant(pgEmail, pgPassword))
+	src := pgSource(t, stub, rtsSeedRefresh, goapihttp.WithRefreshTokenStore(rtsTokenFile(t)), goapihttp.WithPasswordGrant(pgEmail, pgPassword))
 
 	const fleet = 64
 	var wg sync.WaitGroup
@@ -1588,7 +1539,7 @@ func TestPasswordGrantAloneStartsTheChainWithoutASeed(t *testing.T) {
 	clock := rtsClock()
 	stub := newPGStub(clock)
 	store := rtsTokenFile(t)
-	src := pgSource(t, stub, "", WithRefreshTokenStore(store), WithPasswordGrant(pgEmail, pgPassword))
+	src := pgSource(t, stub, "", goapihttp.WithRefreshTokenStore(store), goapihttp.WithPasswordGrant(pgEmail, pgPassword))
 
 	if _, err := src.Token(context.Background()); err != nil {
 		t.Fatalf("Token with credentials and no seed: %v", err)
@@ -1596,73 +1547,33 @@ func TestPasswordGrantAloneStartsTheChainWithoutASeed(t *testing.T) {
 	if got := stub.refreshCalls.Load(); got != 0 {
 		t.Fatalf("refresh exchanges = %d, want 0 when no refresh token is held", got)
 	}
-	persisted, _ := os.ReadFile(store.path)
+	persisted, _ := os.ReadFile(store.Path)
 	if string(persisted) != pgSignedIn {
 		t.Fatalf("persisted %q, want the signed-in refresh token", persisted)
 	}
 }
 
 func TestNoSeedAndNoCredentialsStillFailsConstruction(t *testing.T) {
-	if _, err := NewRefreshingTokenSource("https://ref.supabase.co", "anon", "", WithPasswordGrant(pgEmail, "")); err == nil {
+	if _, err := goapihttp.NewRefreshingTokenSource("https://ref.supabase.co", "anon", "", goapihttp.WithPasswordGrant(pgEmail, "")); err == nil {
 		t.Fatal("a source with neither a refresh token nor a full credential pair must fail construction")
-	}
-}
-
-func TestSelectTokenSourceRefreshesWithCredentialsAndNoSeed(t *testing.T) {
-	persistPath := rtsTokenFile(t).path
-	credentialsEnv := func(k string) string {
-		switch k {
-		case envSupabaseURL:
-			return "https://ref.supabase.co"
-		case envSupabaseAnon:
-			return "anon"
-		case envReadOnlyEmail:
-			return pgEmail
-		case envReadOnlyPassword:
-			return pgPassword
-		case envReadOnlyRefreshFile:
-			return persistPath
-		default:
-			return ""
-		}
-	}
-	src, ok := selectTokenSource(credentialsEnv).(*RefreshingTokenSource)
-	if !ok {
-		t.Fatalf("credentials without a seed should select RefreshingTokenSource, got %T", selectTokenSource(credentialsEnv))
-	}
-	if src.signIn == nil {
-		t.Fatal("selectTokenSource did not pass the password grant to the source")
-	}
-
-	halfEnv := func(k string) string {
-		if k == envReadOnlyPassword {
-			return ""
-		}
-		return credentialsEnv(k)
-	}
-	if !isNullSource(selectTokenSource(halfEnv)) {
-		t.Fatal("an email without a password and no seed must stay source-down")
 	}
 }
 
 func TestUnreadableTokenFileAtStartupStillServesFromTheEnvSeed(t *testing.T) {
 	clock := rtsClock()
 	store := rtsTokenFile(t)
-	if err := os.WriteFile(store.path, []byte("cannot-read-me"), 0o000); err != nil {
+	if err := os.WriteFile(store.Path, []byte("cannot-read-me"), 0o000); err != nil {
 		t.Fatalf("seed unreadable token file: %v", err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(store.path, 0o600) })
+	t.Cleanup(func() { _ = os.Chmod(store.Path, 0o600) })
 	stub := &rtsRotatingStub{clock: clock}
 	stub.respond = func(_ string, n int) (int, string) { return http.StatusOK, fmt.Sprintf("rotated-refresh-%d", n) }
 	srv := httptest.NewServer(stub)
 	t.Cleanup(srv.Close)
 	src := rtsSourceOnFile(t, srv, clock, store)
 
-	src.mu.Lock()
-	persistFailedAtConstruction := src.persistFailed
-	src.mu.Unlock()
-	if !persistFailedAtConstruction {
-		t.Fatal("persistFailed = false right after construction although the persisted token file could not be read")
+	if !src.Health().PersistFailed {
+		t.Fatal("PersistFailed = false right after construction although the persisted token file could not be read")
 	}
 
 	token, err := src.Token(context.Background())

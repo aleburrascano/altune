@@ -1,4 +1,4 @@
-package goapi
+package goapihttp
 
 import "time"
 
@@ -11,22 +11,22 @@ type Backoff interface {
 	Backoff(attempt int) time.Duration
 }
 
-type ExpBackoff struct {
+type expBackoff struct {
 	base time.Duration
 	max  time.Duration
 }
 
-func NewExpBackoff(base, maximum time.Duration) ExpBackoff {
+func newExpBackoff(base, maximum time.Duration) expBackoff {
 	if base <= 0 {
 		base = defaultBackoffBase
 	}
 	if maximum < base {
 		maximum = base
 	}
-	return ExpBackoff{base: base, max: maximum}
+	return expBackoff{base: base, max: maximum}
 }
 
-func (b ExpBackoff) Backoff(attempt int) time.Duration {
+func (b expBackoff) Backoff(attempt int) time.Duration {
 	if attempt < 1 {
 		attempt = 1
 	}

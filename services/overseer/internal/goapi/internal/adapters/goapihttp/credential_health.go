@@ -1,30 +1,17 @@
-package goapi
+package goapihttp
 
 import (
+	"altune/overseer/internal/goapi/internal/core"
 	"errors"
 	"fmt"
-	"time"
 )
 
 const unclassifiedRefreshFailure = "unclassified"
 
-type CredentialHealth struct {
-	LastRefresh         time.Time
-	ConsecutiveFailures int
-	PersistFailed       bool
-	PasswordGrant       bool
-	LastError           string
-}
-
-func (h CredentialHealth) OK() bool {
-	hasRefreshed := !h.LastRefresh.IsZero()
-	return hasRefreshed && h.ConsecutiveFailures == 0
-}
-
-func (s *RefreshingTokenSource) Health() CredentialHealth {
+func (s *RefreshingTokenSource) Health() core.CredentialHealth {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return CredentialHealth{
+	return core.CredentialHealth{
 		LastRefresh:         s.refreshedAt,
 		ConsecutiveFailures: s.failCount,
 		PersistFailed:       s.persistFailed,

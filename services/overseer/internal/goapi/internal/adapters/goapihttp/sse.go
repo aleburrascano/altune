@@ -1,6 +1,7 @@
-package goapi
+package goapihttp
 
 import (
+	"altune/overseer/internal/goapi/internal/core"
 	"bufio"
 	"context"
 	"encoding/json"
@@ -13,15 +14,7 @@ import (
 
 const maxEventBytes = 1 << 20
 
-var errFrameTooLarge = errors.New("goapi: sse event frame exceeds max size")
-
-type Event struct {
-	Type      string    `json:"type"`
-	Timestamp time.Time `json:"timestamp"`
-	User      string    `json:"user,omitempty"`
-	Subject   string    `json:"subject,omitempty"`
-	CorrID    string    `json:"corr_id,omitempty"`
-}
+var ErrFrameTooLarge = errors.New("goapi: sse event frame exceeds max size")
 
 type sseDecoder struct {
 	sc   *bufio.Scanner
@@ -34,12 +27,12 @@ func newSSEDecoder(r io.Reader) *sseDecoder {
 	return &sseDecoder{sc: sc}
 }
 
-func (d *sseDecoder) next() (Event, error) {
+func (d *sseDecoder) next() (core.Event, error) {
 	for d.sc.Scan() {
 		line := d.sc.Text()
 		if line != "" {
 			if err := d.accumulate(line); err != nil {
-				return Event{}, err
+				return core.Event{}, err
 			}
 			continue
 		}
@@ -48,9 +41,9 @@ func (d *sseDecoder) next() (Event, error) {
 		}
 	}
 	if err := d.sc.Err(); err != nil {
-		return Event{}, err
+		return core.Event{}, err
 	}
-	return Event{}, io.EOF
+	return core.Event{}, io.EOF
 }
 
 func (d *sseDecoder) accumulate(line string) error {
@@ -63,7 +56,7 @@ func (d *sseDecoder) accumulate(line string) error {
 		extra++
 	}
 	if d.data.Len()+extra > maxEventBytes {
-		return errFrameTooLarge
+		return ErrFrameTooLarge
 	}
 	if d.data.Len() > 0 {
 		d.data.WriteByte('\n')
@@ -72,15 +65,15 @@ func (d *sseDecoder) accumulate(line string) error {
 	return nil
 }
 
-func (d *sseDecoder) flush() (Event, bool) {
+func (d *sseDecoder) flush() (core.Event, bool) {
 	raw := d.data.String()
 	d.data.Reset()
 	if raw == "" {
-		return Event{}, false
+		return core.Event{}, false
 	}
-	var ev Event
+	var ev core.Event
 	if err := json.Unmarshal([]byte(raw), &ev); err != nil {
-		return Event{}, false
+		return core.Event{}, false
 	}
 	ev.CorrID = sanitizeCorrID(ev.CorrID)
 	return ev, true
@@ -99,7 +92,7 @@ const (
 	reconnectGrace    = 10 * time.Second
 )
 
-var errStreamIdle = errors.New("goapi: sse stream silent past idle timeout")
+var ErrStreamIdle = errors.New("goapi: sse stream silent past idle timeout")
 
 type outage struct {
 	since       time.Time
@@ -108,18 +101,18 @@ type outage struct {
 
 func (o *outage) connected() { o.connectedAt = time.Now() }
 
-func (o *outage) dropped() Status {
+func (o *outage) dropped() core.Status {
 	if o.since.IsZero() || time.Since(o.connectedAt) > reconnectGrace {
 		o.since = time.Now()
 	}
 	return o.status()
 }
 
-func (o *outage) status() Status {
+func (o *outage) status() core.Status {
 	if o.since.IsZero() || time.Since(o.since) >= reconnectGrace {
-		return StatusDown
+		return core.StatusDown
 	}
-	return StatusConnecting
+	return core.StatusConnecting
 }
 
 type idleWatchdog struct {
@@ -170,13 +163,13 @@ func (w *idleWatchdog) stop() { close(w.done) }
 
 func (w *idleWatchdog) cause(readErr error) error {
 	if w.silent.Load() {
-		return errStreamIdle
+		return ErrStreamIdle
 	}
 	return readErr
 }
 
 type streamHealth struct {
-	status Status
+	status core.Status
 	err    error
 }
 
@@ -188,10 +181,10 @@ func (h *healthCell) load() streamHealth {
 	if current := h.current.Load(); current != nil {
 		return *current
 	}
-	return streamHealth{status: StatusConnecting}
+	return streamHealth{status: core.StatusConnecting}
 }
 
-func (h *healthCell) publish(status Status, err error) {
+func (h *healthCell) publish(status core.Status, err error) {
 	h.current.Store(&streamHealth{status: status, err: err})
 }
 

@@ -1,4 +1,4 @@
-package goapi
+package core
 
 import "context"
 

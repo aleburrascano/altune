@@ -1,13 +1,6 @@
-package goapi
+package core
 
-import (
-	"context"
-	"time"
-)
-
-const observeEvalPath = "/observe/eval"
-
-const observeAcquisitionPath = "/observe/acquisition"
+import "time"
 
 type EvalStatus struct {
 	Enabled  bool        `json:"enabled"`
@@ -65,20 +58,4 @@ func completedRate(succeeded, failed float64) (float64, bool) {
 		return 0, false
 	}
 	return succeeded / completed, true
-}
-
-func (c *Client) AdminEval(ctx context.Context) (EvalStatus, error) {
-	var out EvalStatus
-	if err := c.get(ctx, observeEvalPath, &out); err != nil {
-		return EvalStatus{}, err
-	}
-	return out, nil
-}
-
-func (c *Client) AdminAcquisition(ctx context.Context) (AcquisitionStatus, error) {
-	var out AcquisitionStatus
-	if err := c.get(ctx, observeAcquisitionPath, &out); err != nil {
-		return AcquisitionStatus{}, err
-	}
-	return out, nil
 }

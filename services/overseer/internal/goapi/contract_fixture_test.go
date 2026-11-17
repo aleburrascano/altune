@@ -1,8 +1,13 @@
-package goapi
+package goapi_test
 
 import (
+	"altune/overseer/internal/goapi"
 	"bytes"
+	"context"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -196,7 +201,7 @@ func TestUncoveredKeys(t *testing.T) {
 }
 
 func TestContract_HealthFixtureDecodesIntoOperatorHealth(t *testing.T) {
-	var got OperatorHealth
+	var got goapi.OperatorHealth
 	assertFixtureDecodes(t, "observe_health.json", &got)
 	if got.DB != "down" {
 		t.Errorf("DB = %q, want down", got.DB)
@@ -230,20 +235,56 @@ func decodeFixtureStrict(t *testing.T, name string, out any, exempt ...string) {
 }
 
 func TestContract_MetricsLiveFixtureDecodes(t *testing.T) {
-	var live LiveMetrics
+	var live goapi.LiveMetrics
 	decodeFixtureStrict(t, "observe_metrics_live.json", &live)
 	if got := live.Latency.Routes["/v1/tracks/{trackId}"].Count; got < 1 {
 		t.Errorf("track route count = %d, want >= 1", got)
 	}
-	var usage providerUsageEnvelope
+	var usage struct {
+		Providers goapi.ProviderUsage `json:"providers"`
+	}
 	decodeFixtureStrict(t, "observe_metrics_live.json", &usage)
 	if len(usage.Providers) == 0 {
 		t.Error("Providers is empty")
 	}
+	viaClient, err := fixtureClient(t, "observe_metrics_live.json").AdminProviderUsage(context.Background())
+	if err != nil {
+		t.Fatalf("AdminProviderUsage: %v", err)
+	}
+	if len(viaClient) != len(usage.Providers) {
+		t.Errorf("AdminProviderUsage decoded %d providers, want %d", len(viaClient), len(usage.Providers))
+	}
+}
+
+func fixtureClient(t *testing.T, name string) *goapi.Client {
+	t.Helper()
+	body := loadContractFixture(t, name)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+	c, err := goapi.New(srv.URL, goapi.StaticTokenSource(testToken))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	return c
+}
+
+func frameServer(t *testing.T, frame string) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, frame)
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
 }
 
 func TestContract_EvalFixtureDecodes(t *testing.T) {
-	var got EvalStatus
+	var got goapi.EvalStatus
 	decodeFixtureStrict(t, "observe_eval.json", &got, "error")
 	if !got.Scored() {
 		t.Error("Scored() = false, want true")
@@ -265,7 +306,7 @@ func TestContract_EvalFixtureLookAlikeIsRefused(t *testing.T) {
 	if lookAlike == string(data) {
 		t.Fatal("fixture has no queries key to rename")
 	}
-	got := uncoveredKeysStrict(json.RawMessage(lookAlike), reflect.TypeOf(EvalStatus{}))
+	got := uncoveredKeysStrict(json.RawMessage(lookAlike), reflect.TypeOf(goapi.EvalStatus{}))
 	want := []string{"error", "queries"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("uncoveredKeysStrict = %q, want %q", got, want)
@@ -273,7 +314,7 @@ func TestContract_EvalFixtureLookAlikeIsRefused(t *testing.T) {
 }
 
 func TestContract_AcquisitionFixtureDecodes(t *testing.T) {
-	var got AcquisitionStatus
+	var got goapi.AcquisitionStatus
 	decodeFixtureStrict(t, "observe_acquisition.json", &got)
 	if got.InFlight == 0 || got.Succeeded == 0 || got.Failed == 0 || got.Rejected == 0 ||
 		got.QueueDepth == 0 || got.QueueCapacity == 0 {
@@ -282,7 +323,7 @@ func TestContract_AcquisitionFixtureDecodes(t *testing.T) {
 }
 
 func TestContract_QualityFixtureDecodes(t *testing.T) {
-	var got DiscographyQuality
+	var got goapi.DiscographyQuality
 	decodeFixtureStrict(t, "observe_quality_discography.json", &got)
 	if len(got.Cases) != 1 {
 		t.Fatalf("len(Cases) = %d, want 1", len(got.Cases))
@@ -302,18 +343,19 @@ func sseFrame(t *testing.T, name string) string {
 }
 
 func TestContract_EventFrameFixtureDecodes(t *testing.T) {
-	var got Event
+	var got goapi.Event
 	assertFixtureDecodes(t, "observe_events_frame.json", &got)
 	assertFixtureStrictlyCovered(t, "observe_events_frame.json", reflect.TypeOf(got))
 	assertEventFields(t, got)
 
-	viaSSE, err := newSSEDecoder(strings.NewReader(sseFrame(t, "observe_events_frame.json"))).next()
-	if err != nil {
-		t.Fatalf("sseDecoder.next: %v", err)
-	}
+	c, _ := newConsumer(t, frameServer(t, sseFrame(t, "observe_events_frame.json")))
+	ctx, cancel := context.WithCancel(context.Background())
+	done := runConsumer(t, c, ctx)
+	defer func() { cancel(); <-done }()
+	viaSSE := recv(t, c.Events())
 	assertEventFields(t, viaSSE)
 	if !viaSSE.Timestamp.Equal(got.Timestamp) || viaSSE != got {
-		t.Errorf("sseDecoder event = %+v, want %+v", viaSSE, got)
+		t.Errorf("streamed event = %+v, want %+v", viaSSE, got)
 	}
 }
 
@@ -324,7 +366,7 @@ func assertFixtureStrictlyCovered(t *testing.T, name string, typ reflect.Type) {
 	}
 }
 
-func assertEventFields(t *testing.T, ev Event) {
+func assertEventFields(t *testing.T, ev goapi.Event) {
 	t.Helper()
 	if ev.Type == "" {
 		t.Error("Type is empty")
@@ -337,7 +379,7 @@ func assertEventFields(t *testing.T, ev Event) {
 	}
 }
 
-func assertLogFields(t *testing.T, rec LogRecord) {
+func assertLogFields(t *testing.T, rec goapi.LogRecord) {
 	t.Helper()
 	if rec.Level != "INFO" {
 		t.Errorf("Level = %q, want INFO", rec.Level)
@@ -351,17 +393,23 @@ func assertLogFields(t *testing.T, rec LogRecord) {
 }
 
 func TestContract_LogFrameFixtureDecodes(t *testing.T) {
-	var got LogRecord
+	var got goapi.LogRecord
 	assertFixtureDecodes(t, "observe_logs_frame.json", &got)
 	assertLogFields(t, got)
 
-	viaSSE, err := newLogSSEDecoder(strings.NewReader(sseFrame(t, "observe_logs_frame.json"))).next()
-	if err != nil {
-		t.Fatalf("logSSEDecoder.next: %v", err)
+	c, _ := newLogsConsumer(t, frameServer(t, sseFrame(t, "observe_logs_frame.json")))
+	ctx, cancel := context.WithCancel(context.Background())
+	done := runLogsConsumer(t, c, ctx)
+	defer func() { cancel(); <-done }()
+	var viaSSE goapi.LogRecord
+	select {
+	case viaSSE = <-c.Records():
+	case <-time.After(2 * time.Second):
+		t.Fatal("no log record streamed from the fixture frame")
 	}
 	assertLogFields(t, viaSSE)
 	if !viaSSE.Time.Equal(got.Time) || viaSSE.Message != got.Message {
-		t.Errorf("logSSEDecoder record = %+v, want %+v", viaSSE, got)
+		t.Errorf("streamed record = %+v, want %+v", viaSSE, got)
 	}
 }
 
@@ -371,7 +419,7 @@ func TestContract_LogFrameLookAlikeIsRefused(t *testing.T) {
 	if lookAlike == string(data) {
 		t.Fatal("fixture has no msg key to rename")
 	}
-	got := uncoveredKeys(json.RawMessage(lookAlike), reflect.TypeOf(LogRecord{}))
+	got := uncoveredKeys(json.RawMessage(lookAlike), reflect.TypeOf(goapi.LogRecord{}))
 	if !reflect.DeepEqual(got, []string{"msg"}) {
 		t.Errorf("uncoveredKeys = %q, want [msg]", got)
 	}
