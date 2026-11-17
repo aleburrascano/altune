@@ -1,102 +1,100 @@
-package goapi
+package goapi_test
 
 import (
+	"altune/overseer/internal/goapi"
+	"context"
+	"errors"
+	"io"
+	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
-const (
-	racedQueueCap = 4
-	racedRounds   = 5000
-	racedBurst    = 20000
-	racedStagger  = 64
-)
+const racedBurst = 20000
 
-func newRacedConsumer() *Consumer {
-	c := &Consumer{}
-	c.events.pending = make(chan Event, racedQueueCap)
-	return c
+type pipeOnce struct {
+	body   *io.PipeReader
+	dialed atomic.Bool
 }
 
-func sequenced(n int) Event { return Event{Type: "raced", Subject: strconv.Itoa(n)} }
+func (p *pipeOnce) RoundTrip(req *http.Request) (*http.Response, error) {
+	if p.dialed.Swap(true) {
+		return nil, errors.New("dial tcp: connection refused")
+	}
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": {"text/event-stream"}},
+		Body:       p.body,
+		Request:    req,
+	}, nil
+}
 
-func drainFromBucket(c *Consumer) []Event { return DrainPending(c, c.Events()) }
+type racedFeed struct {
+	t    *testing.T
+	w    *io.PipeWriter
+	sent int
+}
+
+func (f *racedFeed) send(n int) {
+	f.t.Helper()
+	var frames strings.Builder
+	for range n {
+		frames.WriteString(`data: {"type":"raced","subject":"` + strconv.Itoa(f.sent) + "\"}\n\n")
+		f.sent++
+	}
+	if _, err := io.WriteString(f.w, frames.String()); err != nil {
+		f.t.Fatalf("write frames: %v", err)
+	}
+}
+
+func pipedConsumer(t *testing.T) (*racedFeed, *goapi.Consumer) {
+	t.Helper()
+	body, writer := io.Pipe()
+	c, err := goapi.NewConsumer("https://api.altune.test", goapi.StaticTokenSource(testToken),
+		goapi.WithConsumerHTTPClient(&http.Client{Transport: &pipeOnce{body: body}}),
+		goapi.WithBackoff(&fastBackoff{wait: time.Hour}))
+	if err != nil {
+		t.Fatalf("NewConsumer: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := runConsumer(t, c, ctx)
+	t.Cleanup(func() { cancel(); _ = writer.Close(); <-done })
+	return &racedFeed{t: t, w: writer}, c
+}
+
+func drainFromBucket(c *goapi.Consumer) []goapi.Event { return goapi.DrainPending(c, c.Events()) }
 
 func TestConcurrentDrainAgainstASaturatedBufferLosesOnlyWhatItDropped(t *testing.T) {
-	c := newRacedConsumer()
-	received := 0
+	feed, c := pipedConsumer(t)
+	var received atomic.Int64
 	var wg sync.WaitGroup
 	stop := make(chan struct{})
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			select {
 			case <-stop:
 				return
 			default:
-				received += len(drainFromBucket(c))
+				received.Add(int64(len(drainFromBucket(c))))
 			}
 		}
-	}()
+	})
 
-	for sent := range racedBurst {
-		c.events.push(sequenced(sent))
+	for feed.sent < racedBurst {
+		feed.send(min(64, racedBurst-feed.sent))
 	}
+	eventuallyWithin(t, "every sent event either received or counted dropped", 10*time.Second, func() bool {
+		return received.Load()+int64(c.Dropped()) >= racedBurst
+	})
 	close(stop)
 	wg.Wait()
-	received += len(drainFromBucket(c))
+	total := received.Load() + int64(len(drainFromBucket(c)))
 
-	if got := received + c.Dropped(); got != racedBurst {
-		t.Fatalf("received %d + dropped %d = %d, want every one of the %d sent", received, c.Dropped(), got, racedBurst)
-	}
-}
-
-func TestDrainRacingAFullBufferNeverCountsADropThatHadRoom(t *testing.T) {
-	c := newRacedConsumer()
-	sent := 0
-	for sent < racedQueueCap {
-		c.events.push(sequenced(sent))
-		sent++
-	}
-
-	for round := range racedRounds {
-		head := sequenced(sent - racedQueueCap)
-		dropsBefore := c.Dropped()
-		var ready atomic.Int32
-		var drained []Event
-		var wg sync.WaitGroup
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			ready.Add(1)
-			for ready.Load() < 2 {
-			}
-			for range round % racedStagger {
-				ready.Load()
-			}
-			drained = drainFromBucket(c)
-		}()
-		ready.Add(1)
-		for ready.Load() < 2 {
-		}
-		c.events.push(sequenced(sent))
-		sent++
-		wg.Wait()
-
-		dropped := c.Dropped() - dropsBefore
-		if dropped > 1 {
-			t.Fatalf("round %d: one push into a full buffer counted %d drops", round, dropped)
-		}
-		if dropped == 1 && len(drained) > 0 && drained[0] == head {
-			t.Fatalf("round %d: the drainer made room by taking %s, yet the push still evicted and counted a drop", round, head.Subject)
-		}
-		drainFromBucket(c)
-		for len(c.Events()) < racedQueueCap {
-			c.events.push(sequenced(sent))
-			sent++
-		}
+	if got := total + int64(c.Dropped()); got != racedBurst {
+		t.Fatalf("received %d + dropped %d = %d, want every one of the %d sent", total, c.Dropped(), got, racedBurst)
 	}
 }

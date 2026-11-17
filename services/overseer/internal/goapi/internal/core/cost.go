@@ -1,21 +1,6 @@
-package goapi
+package core
 
-import (
-	"context"
-	"math"
-)
-
-func (c *Client) AdminProviderUsage(ctx context.Context) (ProviderUsage, error) {
-	var out providerUsageEnvelope
-	if err := c.get(ctx, observeMetricsLivePath, &out); err != nil {
-		return nil, err
-	}
-	return out.Providers, nil
-}
-
-type providerUsageEnvelope struct {
-	Providers ProviderUsage `json:"providers"`
-}
+import "math"
 
 type ProviderUsage map[string]ProviderOutcomes
 

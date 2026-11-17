@@ -1,8 +1,4 @@
-package goapi
-
-import "context"
-
-const observeMetricsLivePath = "/observe/metrics/live"
+package core
 
 type LiveMetrics struct {
 	Latency LatencyMetrics `json:"latency"`
@@ -28,12 +24,4 @@ type StatusClasses struct {
 type LatencyBucket struct {
 	LeMs  string `json:"le_ms"`
 	Count uint64 `json:"count"`
-}
-
-func (c *Client) AdminMetricsLive(ctx context.Context) (LiveMetrics, error) {
-	var out LiveMetrics
-	if err := c.get(ctx, observeMetricsLivePath, &out); err != nil {
-		return LiveMetrics{}, err
-	}
-	return out, nil
 }

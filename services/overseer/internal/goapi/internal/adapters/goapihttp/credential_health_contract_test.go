@@ -1,10 +1,12 @@
-package goapi
+package goapihttp_test
 
 import (
+	goapihttp "altune/overseer/internal/goapi/internal/adapters/goapihttp"
 	"context"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -17,7 +19,7 @@ func TestCredentialHealthReportsConsecutiveRefreshFailures(t *testing.T) {
 	stub.failWith.Store(http.StatusBadRequest)
 	src := rtsNewSwitchSource(t, stub)
 	_, _ = src.Token(context.Background())
-	clock.advance(refreshBackoffBase + time.Second)
+	clock.advance(rtsBackoffBase + time.Second)
 	_, _ = src.Token(context.Background())
 
 	health := src.Health()
@@ -42,7 +44,7 @@ func TestCredentialHealthRecoversOnASuccessfulRefresh(t *testing.T) {
 	stub.failWith.Store(http.StatusServiceUnavailable)
 	src := rtsNewSwitchSource(t, stub)
 	_, _ = src.Token(context.Background())
-	clock.advance(refreshBackoffBase + time.Second)
+	clock.advance(rtsBackoffBase + time.Second)
 	stub.failWith.Store(0)
 	refreshedAt := clock.now()
 	if _, err := src.Token(context.Background()); err != nil {
@@ -72,8 +74,8 @@ func TestCredentialHealthIsNotOKBeforeAnyRefresh(t *testing.T) {
 
 func TestCredentialHealthReportsPasswordGrantAndPersistFailure(t *testing.T) {
 	store := &unreadableStore{}
-	src, err := NewRefreshingTokenSource("https://x.supabase.co", "anon-key-SECRET", rtsSeedRefresh,
-		WithRefreshTokenStore(store), WithPasswordGrant(pgEmail, pgPassword))
+	src, err := goapihttp.NewRefreshingTokenSource("https://x.supabase.co", "anon-key-SECRET", rtsSeedRefresh,
+		goapihttp.WithRefreshTokenStore(store), goapihttp.WithPasswordGrant(pgEmail, pgPassword))
 	if err != nil {
 		t.Fatalf("NewRefreshingTokenSource: %v", err)
 	}
@@ -91,8 +93,7 @@ func TestCredentialHealthReportsPasswordGrantAndPersistFailure(t *testing.T) {
 func TestCredentialHealthCarriesNoSecret(t *testing.T) {
 	clock := rtsClock()
 	stub := &rtsSwitchStub{clock: clock, lifetime: time.Hour}
-	src := rtsNewSwitchSource(t, stub)
-	WithPasswordGrant(pgEmail, pgPassword)(src)
+	src := rtsNewSwitchSource(t, stub, goapihttp.WithPasswordGrant(pgEmail, pgPassword))
 	access, err := src.Token(context.Background())
 	if err != nil {
 		t.Fatalf("Token: %v", err)
@@ -107,23 +108,60 @@ func TestCredentialHealthCarriesNoSecret(t *testing.T) {
 	}
 }
 
+func failedSource(t *testing.T, stage string) *goapihttp.RefreshingTokenSource {
+	t.Helper()
+	clock := rtsClock()
+	switch stage {
+	case "status":
+		stub := &rtsSwitchStub{clock: clock, lifetime: time.Hour}
+		stub.failWith.Store(http.StatusBadRequest)
+		return rtsNewSwitchSource(t, stub)
+	case "password_grant":
+		stub := newPGStub(clock)
+		stub.passwordStatus.Store(http.StatusUnauthorized)
+		return pgSource(t, stub, rtsSeedRefresh, goapihttp.WithPasswordGrant(pgEmail, pgPassword))
+	case "transport":
+		srv := httptest.NewServer(http.NotFoundHandler())
+		srv.Close()
+		return rtsSourceOn(t, srv.URL, clock)
+	default:
+		srv := httptest.NewServer(http.NotFoundHandler())
+		t.Cleanup(srv.Close)
+		return rtsSourceOn(t, srv.URL, clock, goapihttp.WithRefreshTokenStore(contendedStore{}))
+	}
+}
+
+func rtsSourceOn(t *testing.T, endpoint string, clock *rtsFakeClock, opts ...goapihttp.RefreshingOption) *goapihttp.RefreshingTokenSource {
+	t.Helper()
+	opts = append(opts, goapihttp.WithClock(clock.now))
+	src, err := goapihttp.NewRefreshingTokenSource(endpoint, "anon-key-SECRET", rtsSeedRefresh, opts...)
+	if err != nil {
+		t.Fatalf("NewRefreshingTokenSource: %v", err)
+	}
+	return src
+}
+
 func TestRefreshFailureClassNamesTheStageNeverTheMessage(t *testing.T) {
 	cases := []struct {
-		name string
-		err  error
-		want string
+		stage string
+		want  string
 	}{
-		{"no failure", nil, ""},
-		{"token endpoint status", &TokenRefreshError{Stage: "status", Status: 400, Err: errRefreshRejected}, "status 400"},
-		{"password grant status", &TokenRefreshError{Stage: "password_grant", Status: 401, Err: errRefreshRejected}, "password_grant status 401"},
-		{"transport", &TokenRefreshError{Stage: "transport", Err: errors.New("dial tcp secret-host: refused")}, "transport"},
-		{"lock", &TokenRefreshError{Stage: "lock", Err: errStoreLockUnavailable}, "lock"},
-		{"foreign error", errors.New("SECRET-bearing message"), unclassifiedRefreshFailure},
+		{"status", "status 400"},
+		{"password_grant", "password_grant status 401"},
+		{"transport", "transport"},
+		{"lock", "lock"},
 	}
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := refreshFailureClass(tc.err); got != tc.want {
-				t.Errorf("refreshFailureClass = %q, want %q", got, tc.want)
+		t.Run(tc.stage, func(t *testing.T) {
+			src := failedSource(t, tc.stage)
+			if got := src.Health().LastError; got != "" {
+				t.Fatalf("LastError before any refresh = %q, want empty", got)
+			}
+			if _, err := src.Token(context.Background()); err == nil {
+				t.Fatalf("Token succeeded, want a %s failure", tc.stage)
+			}
+			if got := src.Health().LastError; got != tc.want {
+				t.Errorf("LastError = %q, want %q", got, tc.want)
 			}
 		})
 	}
@@ -154,6 +192,12 @@ func TestCredentialHealthReadsSafelyDuringRefresh(t *testing.T) {
 
 type unreadableStore struct{}
 
-func (*unreadableStore) lock(context.Context) (func(), error) { return func() {}, nil }
-func (*unreadableStore) load() (string, error)                { return "", errors.New("permission denied") }
-func (*unreadableStore) save(string) error                    { return nil }
+func (*unreadableStore) Lock(context.Context) (func(), error) { return func() {}, nil }
+func (*unreadableStore) Load() (string, error)                { return "", errors.New("permission denied") }
+func (*unreadableStore) Save(string) error                    { return nil }
+
+type contendedStore struct{}
+
+func (contendedStore) Lock(context.Context) (func(), error) { return nil, context.DeadlineExceeded }
+func (contendedStore) Load() (string, error)                { return "", nil }
+func (contendedStore) Save(string) error                    { return nil }

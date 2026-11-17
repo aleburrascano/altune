@@ -1,6 +1,7 @@
-package goapi
+package goapihttp
 
 import (
+	"altune/overseer/internal/goapi/internal/core"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -49,7 +50,7 @@ func isWellFormedCorrID(id string) bool {
 
 type Client struct {
 	base   *url.URL
-	tokens TokenSource
+	tokens core.TokenSource
 	http   *http.Client
 }
 
@@ -71,7 +72,7 @@ func WithTimeout(d time.Duration) Option {
 	}
 }
 
-func New(baseURL string, tokens TokenSource, opts ...Option) (*Client, error) {
+func New(baseURL string, tokens core.TokenSource, opts ...Option) (*Client, error) {
 	if tokens == nil {
 		return nil, errors.New("goapi: nil TokenSource")
 	}
@@ -111,20 +112,10 @@ func parseBaseURL(baseURL string) (*url.URL, error) {
 	return u, nil
 }
 
-type Health struct {
-	Status string `json:"status"`
-}
-
-const healthStatusDegraded = "degraded"
-
-func (h Health) OK() bool { return h.Status == "ok" }
-
-func (h Health) Degraded() bool { return h.Status == healthStatusDegraded }
-
-func (c *Client) Health(ctx context.Context) (Health, error) {
-	var out Health
+func (c *Client) Health(ctx context.Context) (core.Health, error) {
+	var out core.Health
 	if err := c.getPublicOnce(ctx, "/health", &out, http.StatusServiceUnavailable); err != nil {
-		return Health{}, err
+		return core.Health{}, err
 	}
 	return out, nil
 }
@@ -144,7 +135,7 @@ func (c *Client) get(ctx context.Context, path string, out any, readableStatus .
 }
 
 func (c *Client) shouldRefreshRetry(err error) bool {
-	var apiErr *APIError
+	var apiErr *core.APIError
 	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusUnauthorized {
 		return false
 	}
@@ -173,10 +164,10 @@ func (c *Client) doRead(op string, req *http.Request, out any, readableStatus []
 	sent := req.Header.Get(correlationHeader)
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return &SourceDownError{Op: op, Err: err, CorrID: sent}
+		return &core.SourceDownError{Op: op, Err: err, CorrID: sent}
 	}
 	if resp == nil {
-		return &SourceDownError{Op: op, Err: errors.New("nil response"), CorrID: sent}
+		return &core.SourceDownError{Op: op, Err: errors.New("nil response"), CorrID: sent}
 	}
 	defer func() { _, _ = io.CopyN(io.Discard, resp.Body, maxBodyBytes); _ = resp.Body.Close() }()
 
@@ -220,10 +211,10 @@ func (c *Client) newPublicRequest(ctx context.Context, path string) (*http.Reque
 	return req, nil
 }
 
-func bearerRequest(ctx context.Context, tokens TokenSource, reqURL, accept string) (*http.Request, error) {
+func bearerRequest(ctx context.Context, tokens core.TokenSource, reqURL, accept string) (*http.Request, error) {
 	token, err := tokens.Token(ctx)
 	if err != nil {
-		return nil, &TokenError{Op: "acquire read-only token", Err: err}
+		return nil, &core.TokenError{Op: "acquire read-only token", Err: err}
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, http.NoBody)
 	if err != nil {
@@ -256,5 +247,5 @@ func echoedCorrID(sent string, resp *http.Response) string {
 
 func apiError(op string, status int, corrID string, body io.Reader) error {
 	snippet, _ := io.ReadAll(body)
-	return &APIError{Op: op, StatusCode: status, CorrID: corrID, Body: strings.TrimSpace(string(snippet))}
+	return &core.APIError{Op: op, StatusCode: status, CorrID: corrID, Body: strings.TrimSpace(string(snippet))}
 }
