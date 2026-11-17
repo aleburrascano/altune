@@ -12,7 +12,7 @@ import {
   usePressableInteraction,
   borderWidth,
 } from '@shared/ui';
-import { kindLabel, resultKey } from '@features/discovery/domain/resultDisplay';
+import { kindLabel, resultKey } from '@features/discovery/core/resultDisplay';
 import type { DiscoveryResult } from '@shared/catalog';
 import type { ResultTapHandler } from '@features/discovery/hooks/results/useResultTap';
 

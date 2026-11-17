@@ -11,7 +11,7 @@ import { Text, spacing, useTheme, useWideWebLayout, Tappable } from '@shared/ui'
 import { CorrectionBanner } from '@features/discovery/view/results/CorrectionBanner';
 import type { ResultTapHandler } from '@features/discovery/hooks/results/useResultTap';
 import type { ImpressionHandlers } from '@features/discovery/view/results/useImpressionLogger';
-import type { SearchCorrection } from '@features/discovery/domain/discoverView';
+import type { SearchCorrection } from '@features/discovery/core/discoverView';
 
 export type ResultsCommonProps = {
   onResultTap: ResultTapHandler;

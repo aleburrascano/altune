@@ -7,7 +7,7 @@ import { useReportQueryFailure } from '@features/discovery/view/search/useReport
 import {
   useDiscoverFetchEnabled,
   useGatedDiscoverCall,
-} from '@features/discovery/hooks/search/useDiscoverFetchGate';
+} from '@features/discovery/view/search/useDiscoverFetchGate';
 import {
   useRefreshFromFirstPage,
   useRestartOnExpiredSlate,
@@ -19,7 +19,7 @@ import {
   normalizeQuery,
   type SearchPageParam,
   type SearchPages,
-} from '@features/discovery/domain/searchPaging';
+} from '@features/discovery/core/searchPaging';
 import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
 import { useDiscoverPort } from '@features/discovery/view/DiscoverPortProvider';
 

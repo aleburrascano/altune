@@ -3,8 +3,8 @@ import { useQuery, type QueryFunctionContext } from '@tanstack/react-query';
 import type { UnreleasedSearchHit } from '@shared/apiClient';
 import { discoveryKeys } from '@shared/query';
 
-import { isSearchableQuery, normalizeQuery } from '@features/discovery/domain/searchPaging';
-import { useDiscoverFetchEnabled } from '@features/discovery/hooks/search/useDiscoverFetchGate';
+import { isSearchableQuery, normalizeQuery } from '@features/discovery/core/searchPaging';
+import { useDiscoverFetchEnabled } from '@features/discovery/view/search/useDiscoverFetchGate';
 import { useReportQueryFailure } from '@features/discovery/view/search/useReportQueryFailure';
 import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
 import { useDiscoverPort } from '@features/discovery/view/DiscoverPortProvider';

@@ -2,8 +2,8 @@ import { type Dispatch, type SetStateAction } from 'react';
 
 import { useDebouncedSearch } from '@features/discovery/view/search/useDebouncedSearch';
 import { useDiscoverSearch } from '@features/discovery/view/search/useDiscoverSearch';
-import { useUnreleasedSearch } from '@features/discovery/hooks/unreleased/useUnreleasedSearch';
-import { isSearchableQuery, normalizeQuery } from '@features/discovery/domain/searchPaging';
+import { useUnreleasedSearch } from '@features/discovery/view/unreleased/useUnreleasedSearch';
+import { isSearchableQuery, normalizeQuery } from '@features/discovery/core/searchPaging';
 import {
   SEARCH_DEBOUNCE_MS,
   useAutocompleteSuggestions,
@@ -18,7 +18,7 @@ import {
   useDiscoverClearSearchHistory,
   useRecordSearchHistory,
   useSearchHistory,
-} from '@features/discovery/hooks/history/useSearchHistory';
+} from '@features/discovery/view/history/useSearchHistory';
 import { useResultsFilter } from '@features/discovery/view/results/useResultsFilter';
 import {
   useResultTap,
@@ -29,14 +29,14 @@ import {
   correctionForResponse,
   resultsIncompleteForState,
   viewForState,
-} from '@features/discovery/domain/discoverView';
+} from '@features/discovery/core/discoverView';
 import type { UnreleasedSearchHit } from '@shared/apiClient';
 import type {
   DiscoverySearchResponse,
   DiscoverySuggestion,
   SearchHistoryItem,
 } from '@shared/catalog';
-import type { DiscoverView, SearchCorrection } from '@features/discovery/domain/discoverView';
+import type { DiscoverView, SearchCorrection } from '@features/discovery/core/discoverView';
 import type { ResultsFilter } from '@features/discovery/view/results/useResultsFilter';
 
 export type ResultsSlice = {

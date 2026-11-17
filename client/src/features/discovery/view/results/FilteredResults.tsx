@@ -6,7 +6,7 @@ import { Text, spacing } from '@shared/ui';
 import { CorrectionBanner } from '@features/discovery/view/results/CorrectionBanner';
 import { DiscoverRow } from '@features/discovery/view/results/DiscoverRow';
 import { ResultsList, type ResultsCommonProps } from '@features/discovery/view/results/ResultsList';
-import { kindLabel, resultKey } from '@features/discovery/domain/resultDisplay';
+import { kindLabel, resultKey } from '@features/discovery/core/resultDisplay';
 import type { DiscoveryKind, DiscoveryResult } from '@shared/catalog';
 
 export function FilteredResults({

@@ -16,7 +16,7 @@ import { ResultsList, type ResultsCommonProps } from '@features/discovery/view/r
 import { SectionLabel } from '@features/discovery/view/results/SectionLabel';
 import { SectionGrid, useGridColumns } from '@features/discovery/view/results/SectionGrid';
 import { TopResultCard } from '@features/discovery/view/results/TopResultCard';
-import { kindLabel, resultKey } from '@features/discovery/domain/resultDisplay';
+import { kindLabel, resultKey } from '@features/discovery/core/resultDisplay';
 
 import type { ResultTapHandler } from '@features/discovery/hooks/results/useResultTap';
 import type { DiscoveryKind, DiscoveryResult, ResultSection } from '@shared/catalog';

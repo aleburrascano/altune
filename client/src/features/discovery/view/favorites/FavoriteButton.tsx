@@ -3,7 +3,7 @@ import { Heart } from 'lucide-react-native';
 
 import type { FavoriteTarget } from '@shared/apiClient';
 import { tapFeedback, IconButton, useTheme } from '@shared/ui';
-import { useFavorites } from '@features/discovery/hooks/favorites/useFavorites';
+import { useFavorites } from '@features/discovery/view/favorites/useFavorites';
 
 export type FavoriteButtonProps = {
   target: FavoriteTarget;

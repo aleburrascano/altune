@@ -20,7 +20,7 @@ import { RecentSearches } from '@features/discovery/view/history/RecentSearches'
 import {
   searchAnnouncement,
   asyncViewForDiscoverView,
-} from '@features/discovery/domain/discoverView';
+} from '@features/discovery/core/discoverView';
 import type { ResultsCommonProps } from '@features/discovery/view/results/ResultsList';
 import type { UnreleasedSearchHit } from '@shared/apiClient';
 import type { DiscoveryKind, DiscoveryResult, ResultSection } from '@shared/catalog';
