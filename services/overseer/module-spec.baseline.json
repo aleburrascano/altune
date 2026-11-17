@@ -26,10 +26,6 @@
     "B3 internal/history/disk.go imports modernc.org/sqlite, which module-spec.json does not list under pure",
     "B3 internal/history/prune.go imports database/sql",
     "B3 internal/history/signals.go imports database/sql",
-    "B3 internal/oci/client.go imports github.com/oracle/oci-go-sdk/v65/common, which module-spec.json does not list under pure",
-    "B3 internal/oci/client.go imports github.com/oracle/oci-go-sdk/v65/common/auth, which module-spec.json does not list under pure",
-    "B3 internal/oci/client.go imports github.com/oracle/oci-go-sdk/v65/usageapi, which module-spec.json does not list under pure",
-    "B3 internal/oci/client.go imports net/http",
     "C4 internal/buckets/backendperf/backendperf.go exports Bucket, which nothing outside backendperf imports and no test of its own imports through the door",
     "C4 internal/buckets/backendperf/backendperf.go exports Data, which nothing outside backendperf imports and no test of its own imports through the door",
     "C4 internal/buckets/backendperf/backendperf.go exports New, which nothing outside backendperf imports and no test of its own imports through the door",
@@ -78,8 +74,6 @@
     "C4 internal/history/history.go exports DefaultRetention, which nothing outside history imports and no test of its own imports through the door",
     "C4 internal/history/history.go exports RawRetention, which nothing outside history imports and no test of its own imports through the door",
     "C4 internal/history/signals.go exports Database, which nothing outside history imports and no test of its own imports through the door",
-    "C4 internal/oci/client.go exports Client, which nothing outside oci imports and no test of its own imports through the door",
-    "C4 internal/oci/oci.go exports UsageClient, which nothing outside oci imports and no test of its own imports through the door",
     "C8 internal/buckets/cost/cost.go reads os.Getenv",
     "C8 internal/buckets/logs/logs.go reads os.Getenv",
     "C8 internal/buckets/reliability/reliability.go reads os.Getenv",
@@ -145,8 +139,7 @@
     "T1 internal/history/prune_batch_test.go is in package history, so it sees inside the module: use package history_test and import the door",
     "T1 internal/history/rollup_test.go is in package history, so it sees inside the module: use package history_test and import the door",
     "T1 internal/history/signals_test.go is in package history, so it sees inside the module: use package history_test and import the door",
-    "T1 internal/history/tail_test.go is in package history, so it sees inside the module: use package history_test and import the door",
-    "T1 internal/oci/oci_test.go is in package oci, so it sees inside the module: use package oci_test and import the door"
+    "T1 internal/history/tail_test.go is in package history, so it sees inside the module: use package history_test and import the door"
   ],
   "clones": 12
 }

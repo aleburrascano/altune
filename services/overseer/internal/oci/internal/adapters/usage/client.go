@@ -1,6 +1,7 @@
-package oci
+package usage
 
 import (
+	"altune/overseer/internal/oci/internal/core"
 	"context"
 	"errors"
 	"fmt"
@@ -14,12 +15,12 @@ import (
 	"github.com/oracle/oci-go-sdk/v65/usageapi"
 )
 
-type usageAPI interface {
+type API interface {
 	RequestSummarizedUsages(ctx context.Context, request usageapi.RequestSummarizedUsagesRequest) (usageapi.RequestSummarizedUsagesResponse, error)
 }
 
 type Client struct {
-	api     usageAPI
+	api     API
 	tenancy string
 	now     func() time.Time
 }
@@ -37,10 +38,14 @@ func NewFromInstancePrincipal() (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("oci: tenancy unavailable: %w", err)
 	}
-	return &Client{api: api, tenancy: tenancy, now: time.Now}, nil
+	return New(api, tenancy, time.Now), nil
 }
 
-func (c *Client) CurrentPeriodSpend(ctx context.Context) (Spend, error) {
+func New(api API, tenancy string, now func() time.Time) *Client {
+	return &Client{api: api, tenancy: tenancy, now: now}
+}
+
+func (c *Client) CurrentPeriodSpend(ctx context.Context) (core.Spend, error) {
 	start, end := monthToDate(c.now().UTC())
 	req := usageapi.RequestSummarizedUsagesRequest{
 		RequestSummarizedUsagesDetails: usageapi.RequestSummarizedUsagesDetails{
@@ -55,7 +60,7 @@ func (c *Client) CurrentPeriodSpend(ctx context.Context) (Spend, error) {
 	}
 	resp, err := c.api.RequestSummarizedUsages(ctx, req)
 	if err != nil {
-		return Spend{}, &SourceDownError{Err: sanitize(err)}
+		return core.Spend{}, &core.SourceDownError{Err: sanitize(err)}
 	}
 	return summarize(resp.UsageAggregation, start, end), nil
 }
@@ -104,7 +109,7 @@ func monthToDate(now time.Time) (start, end time.Time) {
 	return start, end
 }
 
-func summarize(agg usageapi.UsageAggregation, start, end time.Time) Spend {
+func summarize(agg usageapi.UsageAggregation, start, end time.Time) core.Spend {
 	perService := map[string]float64{}
 	var total float64
 	var currency string
@@ -116,9 +121,9 @@ func summarize(agg usageapi.UsageAggregation, start, end time.Time) Spend {
 			currency = deref(it.Currency)
 		}
 	}
-	lines := make([]SpendLine, 0, len(perService))
+	lines := make([]core.SpendLine, 0, len(perService))
 	for svc, amt := range perService {
-		lines = append(lines, SpendLine{Service: svc, Amount: amt})
+		lines = append(lines, core.SpendLine{Service: svc, Amount: amt})
 	}
 	sort.Slice(lines, func(i, j int) bool {
 		if lines[i].Amount != lines[j].Amount {
@@ -126,7 +131,7 @@ func summarize(agg usageapi.UsageAggregation, start, end time.Time) Spend {
 		}
 		return lines[i].Service < lines[j].Service
 	})
-	return Spend{Amount: total, Currency: currency, PeriodStart: start, PeriodEnd: end, Lines: lines}
+	return core.Spend{Amount: total, Currency: currency, PeriodStart: start, PeriodEnd: end, Lines: lines}
 }
 
 func serviceName(s *string) string {
