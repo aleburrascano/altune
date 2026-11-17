@@ -25,7 +25,6 @@ import {
   createMemoryLibraryPort,
   LibraryPortProvider,
 } from '@features/library';
-import { Alert } from 'react-native';
 import { ApiError, NetworkError, RETRY_TAIL } from '@shared/failure';
 import { useTrackStatusStore } from '@shared/acquisition';
 import { usePinnedStore } from '@shared/offline';
@@ -211,20 +210,13 @@ describe('useReacquireTrack', () => {
     acquisition: { retryAcquisition: mockRetryAcquisition },
   };
 
-  let alertSpy: jest.SpyInstance;
-
   beforeEach(() => {
     mockDeleteTrack.mockReset();
     mockRetryAcquisition.mockReset();
     mockReacquireTrack.mockReset();
     useTrackStatusStore.getState().reset();
     usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
-    alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     warn.mockReset();
-  });
-
-  afterEach(() => {
-    alertSpy.mockRestore();
   });
 
   describe('useReacquireTrack — a started re-acquisition is a whole pending state', () => {
@@ -258,7 +250,7 @@ describe('useReacquireTrack', () => {
 
   describe('useReacquireTrack — failure diagnostics and copy', () => {
     it('logs the failure with the track id and endpoint, and alerts with the shared tail', async () => {
-      const { queryClient, wrapper } = setup(ports);
+      const { queryClient, wrapper, dialogs } = setup(ports);
       queryClient.setQueryData(PLAYLIST_KEY, playlist([track('t1')]));
       const error = new ApiError(409, 'conflict');
       mockReacquireTrack.mockRejectedValue(error);
@@ -273,10 +265,12 @@ describe('useReacquireTrack', () => {
         status: 409,
         failure: 'unknown',
       });
-      expect(alertSpy).toHaveBeenCalledWith(
-        'Re-acquire failed',
-        `Could not start a re-acquisition. Your current audio is unchanged. ${RETRY_TAIL}`,
-      );
+      expect(dialogs.shown()).toEqual([
+        [
+          'Re-acquire failed',
+          `Could not start a re-acquisition. Your current audio is unchanged. ${RETRY_TAIL}`,
+        ],
+      ]);
       expect(
         queryClient.getQueryData<PlaylistDetailResponse>(PLAYLIST_KEY)!.tracks[0]!
           .acquisition_status,
@@ -288,7 +282,7 @@ describe('useReacquireTrack', () => {
     const vanished = ['Track not found', 'This track is no longer in your library.'] as const;
 
     it('a re-acquire refused for auth asks to sign in; one answered 410 drops the track', async () => {
-      const { queryClient, wrapper } = setup(ports);
+      const { queryClient, wrapper, dialogs } = setup(ports);
       queryClient.setQueryData(PLAYLIST_KEY, playlist([track('t1'), track('t2')]));
       mockReacquireTrack.mockRejectedValueOnce(new ApiError(403, 'forbidden'));
       mockReacquireTrack.mockRejectedValueOnce(new ApiError(410, 'gone'));
@@ -297,14 +291,14 @@ describe('useReacquireTrack', () => {
       for (let attempt = 1; attempt <= 2; attempt++) {
         act(() => result.current.mutate(asTrackId('t1')));
         await waitFor(() => {
-          expect(alertSpy).toHaveBeenCalledTimes(attempt);
+          expect(dialogs.alerts).toHaveLength(attempt);
           expect(result.current.isInFlight(asTrackId('t1'))).toBe(false);
         });
       }
 
       const detail = queryClient.getQueryData<PlaylistDetailResponse>(PLAYLIST_KEY)!;
       expect(detail.tracks.map((t) => t.id)).toEqual(['t2']);
-      expect(alertSpy.mock.calls).toEqual([
+      expect(dialogs.shown()).toEqual([
         [
           'Re-acquire failed',
           'Could not start a re-acquisition. Your current audio is unchanged. Sign in again, then retry.',
@@ -331,7 +325,7 @@ describe('useReacquireTrack', () => {
     });
 
     it("useReacquireTrack: a not-found answer after sign-out drops nothing from user B's library and does not alert", async () => {
-      const { queryClient, wrapper } = setup(ports);
+      const { queryClient, wrapper, dialogs } = setup(ports);
       const request = deferred();
       mockReacquireTrack.mockReturnValue(request.promise);
       const { result } = renderHook(() => useReacquireTrack(), { wrapper });
@@ -343,13 +337,13 @@ describe('useReacquireTrack', () => {
       await waitFor(() => expect(result.current.isError).toBe(true));
 
       expect(userBLibrary(queryClient)).toEqual(libraryOf([track('a1'), track('b1')]));
-      expect(alertSpy).not.toHaveBeenCalled();
+      expect(dialogs.alerts).toEqual([]);
     });
   });
 
   describe('useReacquireTrack — a re-acquire that never reaches the API (#3027)', () => {
     it('asks to try again, not to sign in, and leaves the track as it was', async () => {
-      const { queryClient, wrapper } = setup(ports);
+      const { queryClient, wrapper, dialogs } = setup(ports);
       queryClient.setQueryData(PLAYLIST_KEY, playlist([track('t1')]));
       mockReacquireTrack.mockRejectedValue(new NetworkError('transport', 'offline'));
 
@@ -357,7 +351,7 @@ describe('useReacquireTrack', () => {
       act(() => result.current.mutate(asTrackId('t1')));
       await waitFor(() => expect(result.current.isError).toBe(true));
 
-      expect(alertSpy.mock.calls).toEqual([
+      expect(dialogs.shown()).toEqual([
         [
           'Re-acquire failed',
           'Could not start a re-acquisition. Your current audio is unchanged. Please try again.',
@@ -412,9 +406,9 @@ describe('useReacquireTrack', () => {
     });
 
     it('alerts and leaves the track as it was when the port refuses the re-acquire', async () => {
-      const { queryClient } = setup(ports);
+      const { queryClient, dialogs } = setup(ports);
       const port: LibraryPort = {
-        ...createMemoryLibraryPort({ tracks: [track('t1')] }),
+        ...createMemoryLibraryPort({ tracks: [track('t1')], showFailure: dialogs.showFailure }),
         reacquireTrack: () => Promise.reject(new ApiError(409, 'conflict')),
       };
       queryClient.setQueryData(PLAYLIST_KEY, playlist([track('t1')]));
@@ -425,10 +419,12 @@ describe('useReacquireTrack', () => {
       act(() => result.current.mutate(asTrackId('t1')));
       await waitFor(() => expect(result.current.isError).toBe(true));
 
-      expect(alertSpy).toHaveBeenCalledWith(
-        'Re-acquire failed',
-        `Could not start a re-acquisition. Your current audio is unchanged. ${RETRY_TAIL}`,
-      );
+      expect(dialogs.shown()).toEqual([
+        [
+          'Re-acquire failed',
+          `Could not start a re-acquisition. Your current audio is unchanged. ${RETRY_TAIL}`,
+        ],
+      ]);
       expect(
         queryClient.getQueryData<PlaylistDetailResponse>(PLAYLIST_KEY)!.tracks[0]!
           .acquisition_status,
@@ -467,20 +463,13 @@ describe('useRetryAcquisition', () => {
       .filter((payload) => payload['action'] === action);
   }
 
-  let alertSpy: jest.SpyInstance;
-
   beforeEach(() => {
     mockDeleteTrack.mockReset();
     mockRetryAcquisition.mockReset();
     mockReacquireTrack.mockReset();
     useTrackStatusStore.getState().reset();
     usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
-    alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     warn.mockReset();
-  });
-
-  afterEach(() => {
-    alertSpy.mockRestore();
   });
 
   describe('useRetryAcquisition — a failed retry does not strand the track in fake pending', () => {
@@ -568,7 +557,7 @@ describe('useRetryAcquisition', () => {
     });
 
     it('logs the failure with the track id and endpoint, and alerts with the shared tail', async () => {
-      const { wrapper } = setup(ports);
+      const { wrapper, dialogs } = setup(ports);
       const error = new ApiError(500, 'internal');
       mockRetryAcquisition.mockRejectedValue(error);
 
@@ -582,10 +571,9 @@ describe('useRetryAcquisition', () => {
         status: 500,
         failure: 'server',
       });
-      expect(alertSpy).toHaveBeenCalledWith(
-        'Retry failed',
-        `Could not restart acquisition. ${RETRY_TAIL}`,
-      );
+      expect(dialogs.shown()).toEqual([
+        ['Retry failed', `Could not restart acquisition. ${RETRY_TAIL}`],
+      ]);
     });
   });
 
@@ -593,7 +581,7 @@ describe('useRetryAcquisition', () => {
     const vanished = ['Track not found', 'This track is no longer in your library.'] as const;
 
     it('a retry answered 404 drops the vanished track instead of restoring it as failed', async () => {
-      const { queryClient, wrapper } = setup(ports);
+      const { queryClient, wrapper, dialogs } = setup(ports);
       queryClient.setQueryData(TRACKS_KEY, {
         pages: [page([track('t1', { acquisition_status: 'failed' }), track('t2')])],
         pageParams: [0],
@@ -609,27 +597,26 @@ describe('useRetryAcquisition', () => {
 
       expect(pagedIds(queryClient)).toEqual(['t2']);
       expect(useTrackStatusStore.getState().statuses['t1']).toBeUndefined();
-      expect(alertSpy).toHaveBeenCalledWith(...vanished);
+      expect(dialogs.shown()).toEqual([vanished]);
     });
 
     it('a retry refused for auth asks to sign in instead of a plain retry', async () => {
-      const { wrapper } = setup(ports);
+      const { wrapper, dialogs } = setup(ports);
       mockRetryAcquisition.mockRejectedValue(new ApiError(401, 'unauthorized'));
 
       const { result } = renderHook(() => useRetryAcquisition(), { wrapper });
       act(() => result.current.mutate(asTrackId('t1')));
       await waitFor(() => expect(result.current.isError).toBe(true));
 
-      expect(alertSpy).toHaveBeenCalledWith(
-        'Retry failed',
-        'Could not restart acquisition. Sign in again, then retry.',
-      );
+      expect(dialogs.shown()).toEqual([
+        ['Retry failed', 'Could not restart acquisition. Sign in again, then retry.'],
+      ]);
     });
   });
 
   describe('track mutations that settle after sign-out leave the next user untouched (#2729)', () => {
     it("useRetryAcquisition: a retry failing after sign-out rolls nothing back into user B's cache and does not alert", async () => {
-      const { queryClient, wrapper } = setup(ports);
+      const { queryClient, wrapper, dialogs } = setup(ports);
       queryClient.setQueryData(
         TRACKS_KEY,
         libraryOf([track('a1', { acquisition_status: 'failed' })]),
@@ -646,7 +633,7 @@ describe('useRetryAcquisition', () => {
       await waitFor(() => expect(result.current.isError).toBe(true));
 
       expect(userBLibrary(queryClient)).toEqual(libraryOf(userBTracks));
-      expect(alertSpy).not.toHaveBeenCalled();
+      expect(dialogs.alerts).toEqual([]);
     });
   });
 

@@ -10,10 +10,13 @@ import type {
   reacquireTrack,
   searchDiscovery,
 } from '@shared/apiClient';
-import type { LibraryWarn } from '@features/library/core/libraryFailure';
+import type { confirmDestructive } from '@shared/ui';
+import type { LibraryWarn, ShowFailure } from '@features/library/core/libraryFailure';
 
 export interface LibraryPort {
   warn: LibraryWarn;
+  showFailure: ShowFailure;
+  confirmDestructive: typeof confirmDestructive;
   getTracks: typeof getTracks;
   getAllTracks: typeof getAllTracks;
   listTracksFeaturing: typeof listTracksFeaturing;

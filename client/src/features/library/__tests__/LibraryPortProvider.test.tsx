@@ -1,14 +1,8 @@
 import { renderHook } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import * as tracksApi from '@shared/apiClient/tracks';
+import { createMemoryLibraryPort, LibraryPortProvider, useLibraryPort } from '@features/library';
 
-import {
-  httpLibraryPort,
-  createMemoryLibraryPort,
-  LibraryPortProvider,
-  useLibraryPort,
-} from '@features/library';
 describe('useLibraryPort', () => {
   it('throws when no provider is mounted', () => {
     jest.spyOn(console, 'error').mockImplementation(() => {});
@@ -41,16 +35,5 @@ describe('useLibraryPort', () => {
     const { result } = renderHook(() => useLibraryPort(), { wrapper });
 
     expect(result.current).toBe(inner);
-  });
-});
-
-describe('httpLibraryPort delegation', () => {
-  afterEach(() => jest.restoreAllMocks());
-
-  it('reaches a spy installed on the apiClient after the port was imported', async () => {
-    const page = { items: [], total: 0, limit: 1, offset: 0, has_more: false };
-    jest.spyOn(tracksApi, 'getTracks').mockResolvedValue(page);
-
-    await expect(httpLibraryPort.getTracks({ limit: 1, offset: 0 })).resolves.toBe(page);
   });
 });

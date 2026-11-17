@@ -7,9 +7,8 @@ import {
   failureLogFields,
   libraryFailureAlert,
   classifyLibraryError,
-  type LibraryWarn,
 } from '@features/library/core/libraryFailure';
-import { showFailureAlert, type FailureAlert } from '@shared/ui';
+import type { FailureAlert } from '@shared/ui';
 import { detailHref, useNavigator, type Navigator } from '@shared/navigation';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 import type { FeaturingDetailRoute } from '@features/library/domain/libraryRoutes';
@@ -76,11 +75,11 @@ function exploreFailureAlert(artist: string, error: unknown): FailureAlert {
   );
 }
 
-function reportExploreFailure(warn: LibraryWarn, artist: string, error: unknown): void {
-  warn('[library] featuring explore search failed', {
+function reportExploreFailure(port: LibraryPort, artist: string, error: unknown): void {
+  port.warn('[library] featuring explore search failed', {
     ...failureLogFields(error),
   });
-  showFailureAlert(exploreFailureAlert(artist, error));
+  port.showFailure(exploreFailureAlert(artist, error));
 }
 
 function topMatchQuery(artist: string) {
@@ -112,7 +111,7 @@ async function openTopMatch({ port, artist, detailPath, navigator }: OpenTopMatc
     const topMatch = await searchTopMatch(port, artist);
     if (topMatch !== undefined) navigator.push(detailHref(detailPath, topMatch));
   } catch (error) {
-    reportExploreFailure(port.warn, artist, error);
+    reportExploreFailure(port, artist, error);
   }
 }
 

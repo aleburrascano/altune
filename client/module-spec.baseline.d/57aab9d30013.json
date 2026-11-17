@@ -1,0 +1,10 @@
+{
+  "removed": [
+    "C3 src/features/library/__tests__/LibraryPortProvider.test.tsx imports src/shared/apiClient/tracks.ts, behind apiClient's door",
+    "T2 src/features/library/__tests__/useDeleteTracks.test.tsx patches with jest.spyOn",
+    "T2 src/features/library/__tests__/usePlaylistMenu.test.ts patches with jest.spyOn",
+    "T2 src/features/library/__tests__/useRetryAcquisition.test.tsx patches with jest.spyOn"
+  ],
+  "added": [],
+  "clones": 0
+}

@@ -1,7 +1,6 @@
 import type { PlaylistId, TrackResponse } from '@shared/catalog';
 import type { Navigator } from '@shared/navigation';
 import { useDeletePlaylist } from '@shared/playlists';
-import { confirmDestructive, showFailureAlert } from '@shared/ui';
 import { goBackOrToLibrary } from '@features/library/domain/libraryRoutes';
 import type { ContextMenuItem } from '@shared/ui';
 import {
@@ -10,6 +9,7 @@ import {
   reportUnpinBatch,
   useLibraryOffline,
 } from '@features/library/view/useLibraryOffline';
+import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
 
 const DELETE_PROMPT = {
   title: 'Delete Playlist',
@@ -19,6 +19,7 @@ const DELETE_PROMPT = {
 
 export function usePlaylistDelete(playlistId: PlaylistId, navigator: Navigator): () => void {
   const deleteMut = useDeletePlaylist(playlistId);
+  const { confirmDestructive } = useLibraryPort();
   const onSuccess = () => goBackOrToLibrary(navigator);
   const onConfirm = () => deleteMut.mutate(undefined, { onSuccess });
   return () => confirmDestructive({ ...DELETE_PROMPT, onConfirm });
@@ -26,6 +27,7 @@ export function usePlaylistDelete(playlistId: PlaylistId, navigator: Navigator):
 
 export function usePlaylistOfflineAction(tracks: readonly TrackResponse[]): ContextMenuItem {
   const offline = useLibraryOffline();
+  const { showFailure } = useLibraryPort();
   const { downloadableIds, pinnedCount } = offlineEligibility(tracks, offline.statusOf);
 
   if (downloadableIds.length === 0) {
@@ -37,7 +39,7 @@ export function usePlaylistOfflineAction(tracks: readonly TrackResponse[]): Cont
       onPress: () => {
         void offline
           .unpinMany(downloadableIds)
-          .then((batch) => reportUnpinBatch(showFailureAlert, batch));
+          .then((batch) => reportUnpinBatch(showFailure, batch));
       },
     };
   }
@@ -45,9 +47,7 @@ export function usePlaylistOfflineAction(tracks: readonly TrackResponse[]): Cont
   return {
     label: pinnedCount > 0 ? `Download rest (${remaining})` : `Download all (${remaining})`,
     onPress: () => {
-      void offline
-        .pinMany(downloadableIds)
-        .then((batch) => reportPinBatch(showFailureAlert, batch));
+      void offline.pinMany(downloadableIds).then((batch) => reportPinBatch(showFailure, batch));
     },
   };
 }

@@ -34,7 +34,6 @@ export {
   READY,
   TRACKS_KEY,
   deferred,
-  invalidatedKeys,
   libraryOf,
   page,
   pagedIds,
@@ -88,6 +87,8 @@ export { TracksList } from '@features/library/view/TracksList';
 export { useActiveLibraryView } from '@features/library/view/useActiveLibraryView';
 export { useSelection } from '@features/library/view/useSelection';
 export type { MemoryLibrarySeed } from '@features/library/__tests__/memoryLibraryPort';
+export { recordingDialogs } from '@features/library/__tests__/recordingDialogs';
+export type { RecordingDialogs } from '@features/library/__tests__/recordingDialogs';
 export { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
 export { useDeleteTrack, useDeleteTracks } from '@features/library/view/useDeleteTracks';
 export {

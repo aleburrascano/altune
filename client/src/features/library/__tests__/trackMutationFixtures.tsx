@@ -1,5 +1,12 @@
 import React from 'react';
-import { QueryClient, QueryClientProvider, type InfiniteData } from '@tanstack/react-query';
+import {
+  QueryClient,
+  QueryClientProvider,
+  type InfiniteData,
+  type InvalidateOptions,
+  type InvalidateQueryFilters,
+  type QueryKey,
+} from '@tanstack/react-query';
 import { asPlaylistId, asTrackId } from '@shared/catalog';
 import type { ListTracksResponse, TrackResponse, PlaylistDetailResponse } from '@shared/catalog';
 import {
@@ -10,7 +17,7 @@ import {
 import type { TrackStatus, AcquisitionPort } from '@shared/acquisition';
 import { libraryKeys, playlistKeys } from '@shared/query';
 import { runSignOutCleanups } from '@shared/session';
-import { LibraryPortProvider, createMemoryLibraryPort } from '@features/library';
+import { LibraryPortProvider, createMemoryLibraryPort, recordingDialogs } from '@features/library';
 import type { LibraryPort } from '@features/library';
 import { trackResponseFactory } from '@testing/factories';
 
@@ -60,8 +67,16 @@ export const LIBRARY_DERIVED = [
   libraryKeys.lookupPrefix,
 ];
 
-export function invalidatedKeys(spy: jest.SpyInstance): unknown[] {
-  return spy.mock.calls.map(([filters]) => (filters as { queryKey: unknown }).queryKey);
+class RecordingQueryClient extends QueryClient {
+  readonly invalidated: (QueryKey | undefined)[] = [];
+
+  override invalidateQueries<TTaggedQueryKey extends QueryKey = QueryKey>(
+    filters?: InvalidateQueryFilters<TTaggedQueryKey>,
+    options?: InvalidateOptions,
+  ): Promise<void> {
+    this.invalidated.push(filters?.queryKey);
+    return super.invalidateQueries(filters, options);
+  }
 }
 export const PLAYLIST_KEY = playlistKeys.detail(asPlaylistId('pl1'));
 
@@ -71,10 +86,17 @@ export interface PortOverrides {
 }
 
 export function setup({ library, acquisition }: PortOverrides = {}) {
-  const queryClient = new QueryClient({
+  const queryClient = new RecordingQueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  const libraryPort: LibraryPort = { ...createMemoryLibraryPort(), ...library };
+  const dialogs = recordingDialogs();
+  const libraryPort: LibraryPort = {
+    ...createMemoryLibraryPort({
+      showFailure: dialogs.showFailure,
+      confirmDestructive: dialogs.confirmDestructive,
+    }),
+    ...library,
+  };
   const acquisitionPort: AcquisitionPort = {
     ...createMemoryAcquisitionPort().port,
     ...acquisition,
@@ -88,7 +110,7 @@ export function setup({ library, acquisition }: PortOverrides = {}) {
       </QueryClientProvider>
     );
   }
-  return { queryClient, wrapper: Wrapper };
+  return { queryClient, wrapper: Wrapper, dialogs };
 }
 
 export function pagedIds(queryClient: QueryClient): string[] {

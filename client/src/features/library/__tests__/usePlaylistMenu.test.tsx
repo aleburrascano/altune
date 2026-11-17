@@ -1,11 +1,17 @@
-import { createElement, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, act, waitFor } from '@testing-library/react-native';
 import { asPlaylistId, asTrackId } from '@shared/catalog';
 import type { Navigator } from '@shared/navigation';
 import { createMemoryNavigator } from '@shared/navigation';
-import { usePlaylistDelete, usePlaylistOfflineAction } from '@features/library';
-import { Alert, type AlertButton } from 'react-native';
+import {
+  createMemoryLibraryPort,
+  LibraryPortProvider,
+  recordingDialogs,
+  type RecordingDialogs,
+  usePlaylistDelete,
+  usePlaylistOfflineAction,
+} from '@features/library';
 import type { TrackResponse } from '@shared/catalog';
 import { usePinnedStore } from '@shared/offline';
 import { playlistKeys } from '@shared/query';
@@ -20,12 +26,19 @@ const DELETE_ROUTE = 'DELETE /v1/playlists/pl1';
 const TELEMETRY_ROUTE = 'POST /v1/discovery/events';
 const HTTP_NO_CONTENT = 204;
 const HTTP_ACCEPTED = 202;
-const TITLE_AND_MESSAGE = 2;
 
 type MemoryNavigator = ReturnType<typeof createMemoryNavigator>;
 
 interface WrapperProps {
   children: ReactNode;
+}
+
+function libraryPortAround(dialogs: RecordingDialogs, children: ReactNode) {
+  const port = createMemoryLibraryPort({
+    showFailure: dialogs.showFailure,
+    confirmDestructive: dialogs.confirmDestructive,
+  });
+  return <LibraryPortProvider port={port}>{children}</LibraryPortProvider>;
 }
 
 beforeEach(async () => {
@@ -36,14 +49,15 @@ beforeEach(async () => {
 describe('usePlaylistDelete', () => {
   const PLAYLIST_ID = asPlaylistId('pl1');
   let queryClient: QueryClient;
-  let alertSpy: jest.SpyInstance;
+  let dialogs: RecordingDialogs;
 
   function wrapper({ children }: WrapperProps) {
-    const portProps = { port: apiClientPlaylistsPort, children };
-    return createElement(
-      QueryClientProvider,
-      { client: queryClient },
-      createElement(PlaylistsPortProvider, portProps),
+    return (
+      <QueryClientProvider client={queryClient}>
+        <PlaylistsPortProvider port={apiClientPlaylistsPort}>
+          {libraryPortAround(dialogs, children)}
+        </PlaylistsPortProvider>
+      </QueryClientProvider>
     );
   }
 
@@ -52,51 +66,37 @@ describe('usePlaylistDelete', () => {
     act(() => result.current());
   }
 
-  function promptButtons(): AlertButton[] {
-    const buttons = alertSpy.mock.calls[0]?.[2];
-    if (buttons === undefined) throw new Error('no delete prompt was shown');
-    return buttons;
-  }
-
-  function pressButton(style: AlertButton['style']): void {
-    act(() =>
-      promptButtons()
-        .find((button) => button.style === style)
-        ?.onPress?.(),
-    );
+  function confirmPrompt(): void {
+    const prompt = dialogs.prompts[0];
+    if (prompt === undefined) throw new Error('no delete prompt was shown');
+    act(() => prompt.onConfirm());
   }
 
   beforeEach(() => {
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     });
+    dialogs = recordingDialogs();
     __http.reply(DELETE_ROUTE, { status: HTTP_NO_CONTENT });
-    alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   });
 
   afterEach(() => {
-    alertSpy.mockRestore();
     queryClient.clear();
   });
 
   describe('the delete prompt', () => {
-    it('asks before deleting and sends nothing until the user confirms', () => {
-      openDeletePrompt(createMemoryNavigator('/library/playlist/pl1'));
-
-      expect(alertSpy.mock.calls[0]?.slice(0, TITLE_AND_MESSAGE)).toEqual([
-        'Delete Playlist',
-        'This cannot be undone.',
-      ]);
-      expect(promptButtons().map((button) => button.text)).toEqual(['Cancel', 'Delete']);
-      expect(__http.countFor(DELETE_ROUTE)).toBe(0);
-    });
-
-    it('sends nothing and stays put when the user cancels', () => {
+    it('asks before deleting, then sends nothing and stays put until the user confirms', () => {
       const navigator = createMemoryNavigator('/library/playlist/pl1');
       openDeletePrompt(navigator);
 
-      pressButton('cancel');
-
+      expect(dialogs.prompts).toEqual([
+        {
+          title: 'Delete Playlist',
+          message: 'This cannot be undone.',
+          confirmLabel: 'Delete',
+          onConfirm: expect.any(Function),
+        },
+      ]);
       expect(__http.countFor(DELETE_ROUTE)).toBe(0);
       expect(navigator.current()).toBe('/library/playlist/pl1');
     });
@@ -105,7 +105,7 @@ describe('usePlaylistDelete', () => {
   describe('confirming the delete', () => {
     async function deleteThrough(navigator: MemoryNavigator): Promise<void> {
       openDeletePrompt(navigator);
-      pressButton('destructive');
+      confirmPrompt();
       await waitFor(() => expect(navigator.current()).toBe('/library'));
     }
 
@@ -163,8 +163,15 @@ describe('usePlaylistOfflineAction', () => {
     });
   }
 
+  let dialogs: RecordingDialogs;
+
+  function wrapper({ children }: WrapperProps) {
+    return libraryPortAround(dialogs, children);
+  }
+
   beforeEach(() => {
     jest.clearAllMocks();
+    dialogs = recordingDialogs();
   });
 
   describe('usePlaylistOfflineAction', () => {
@@ -183,7 +190,7 @@ describe('usePlaylistOfflineAction', () => {
         ]),
       );
       usePinnedStore.setState({ entries, pinMany, unpinMany });
-      return renderHook(() => usePlaylistOfflineAction(tracks)).result.current;
+      return renderHook(() => usePlaylistOfflineAction(tracks), { wrapper }).result.current;
     }
 
     it('has nothing to download when no track is ready', () => {
@@ -213,29 +220,25 @@ describe('usePlaylistOfflineAction', () => {
     });
 
     it('summarizes a partial removal as "N of M downloads could not be removed"', async () => {
-      const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
       unpinMany.mockResolvedValueOnce({ requested: 2, failed: 1 });
       const item = menuFor([track('a'), track('b')], ['a', 'b']);
       item.onPress();
       await act(async () => {
         await new Promise<void>((resolve) => setImmediate(resolve));
       });
-      expect(alert).toHaveBeenCalledTimes(1);
-      expect(alert.mock.calls[0]?.[1]).toContain('1 of 2 downloads could not be removed');
-      alert.mockRestore();
+      expect(dialogs.alerts).toHaveLength(1);
+      expect(dialogs.alerts[0]?.message).toContain('1 of 2 downloads could not be removed');
     });
 
     it('summarizes a mixed batch as "N of M downloads failed" once it settles', async () => {
-      const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
       pinMany.mockResolvedValueOnce({ requested: 2, failed: 1 });
       const item = menuFor([track('a'), track('b')], []);
       item.onPress();
       await act(async () => {
         await new Promise<void>((resolve) => setImmediate(resolve));
       });
-      expect(alert).toHaveBeenCalledTimes(1);
-      expect(alert.mock.calls[0]?.[1]).toContain('1 of 2 downloads failed');
-      alert.mockRestore();
+      expect(dialogs.alerts).toHaveLength(1);
+      expect(dialogs.alerts[0]?.message).toContain('1 of 2 downloads failed');
     });
   });
 });
