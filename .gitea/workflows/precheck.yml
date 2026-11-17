@@ -25,15 +25,11 @@ jobs:
         run: |
           set -euo pipefail
           repo=${ALTUNE_REPO:?the runner sets ALTUNE_REPO to its checkout}
-          git -C "$repo" fetch -q gitea "+refs/heads/$BASE:refs/remotes/gitea/$BASE" "+refs/pull/$PR/head:refs/remotes/gitea/pr/$PR" || { sleep 5; git -C "$repo" fetch -q gitea "+refs/heads/$BASE:refs/remotes/gitea/$BASE" "+refs/pull/$PR/head:refs/remotes/gitea/pr/$PR"; } || { sleep 5; git -C "$repo" fetch -q gitea "+refs/heads/$BASE:refs/remotes/gitea/$BASE" "+refs/pull/$PR/head:refs/remotes/gitea/pr/$PR"; }
-          if [ "${ALTUNE_CI_OWNED:-}" = 1 ]; then
-            bash "$repo/../refresh-deps.sh" "gitea/$BASE"
-          fi
-          wt=$(mktemp -d "${TMPDIR:-/tmp}/ci-wf.XXXXXX")
-          trap 'git -C "$repo" worktree remove --force "$wt" 2>/dev/null || rm -rf "$wt"' EXIT
-          git -C "$repo" worktree add -q --detach "$wt" "gitea/pr/$PR"
-          cd "$wt"
+          fetch() { git -C "$repo" fetch -q gitea "+refs/heads/$BASE:refs/remotes/gitea/$BASE" "+refs/pull/$PR/head:refs/remotes/gitea/pr/$PR"; }
+          fetch || { sleep 5; fetch; } || { sleep 5; fetch; }
+          setup=$(git -C "$repo" show "gitea/pr/$PR:scripts/ci/step-worktree.sh")
+          . /dev/stdin "gitea/$BASE" "gitea/pr/$PR" . client services/overseer/web <<<"$setup"
           GITEA_URL="$SERVER_URL" GITEA_TOKEN="$PR_SHAPE_TOKEN" bash scripts/ci/pr-shape.sh "$PR"
-          eval "$(bash scripts/worktree-deps.sh . client services/overseer/web)"
           bash scripts/module-spec.sh check --since "gitea/$BASE"
+          bash scripts/ci/kit-self-tests.sh "gitea/$BASE"
           bash scripts/module-spec.sh mutate --since "gitea/$BASE"
