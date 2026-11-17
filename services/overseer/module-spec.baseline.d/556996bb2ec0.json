@@ -1,0 +1,12 @@
+{
+  "removed": [
+    "T1 internal/app/collect_test.go is in package app, so it sees inside the module: use package app_test and import the door",
+    "T1 internal/app/credential_health_test.go is in package app, so it sees inside the module: use package app_test and import the door",
+    "T1 internal/app/history_test.go is in package app, so it sees inside the module: use package app_test and import the door",
+    "T1 internal/app/join_test.go is in package app, so it sees inside the module: use package app_test and import the door",
+    "T1 internal/app/rings_test.go is in package app, so it sees inside the module: use package app_test and import the door",
+    "T1 internal/app/shutdown_test.go is in package app, so it sees inside the module: use package app_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}

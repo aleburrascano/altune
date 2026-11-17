@@ -1,4 +1,4 @@
-package app
+package app_test
 
 import (
 	"altune/overseer/internal/core"
@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 )
@@ -15,41 +14,32 @@ import (
 const eventsRing = "events"
 
 type ringBucket struct {
-	id        string
+	*fakeBucket
 	ring      *core.RingStore
-	emit      []core.Signal
 	firstSeen chan []core.Signal
-	once      sync.Once
 }
 
 func newRingBucket(capacity int, emit ...core.Signal) *ringBucket {
-	return &ringBucket{id: "ringed", ring: core.NewRingStore(capacity), emit: emit, firstSeen: make(chan []core.Signal, 1)}
-}
-
-func (b *ringBucket) Meta() core.Meta { return core.Meta{ID: b.id} }
-
-func (b *ringBucket) Collect(context.Context) ([]core.Signal, error) {
-	var emitted []core.Signal
-	b.once.Do(func() {
+	b := &ringBucket{ring: core.NewRingStore(capacity), firstSeen: make(chan []core.Signal, 1)}
+	b.fakeBucket = &fakeBucket{id: "ringed", collect: func(_ context.Context, call int32) ([]core.Signal, error) {
+		if call > 1 {
+			return nil, nil
+		}
 		b.firstSeen <- b.ring.Snapshot()
-		emitted = b.emit
-	})
-	return emitted, nil
+		return emit, nil
+	}, store: func(signals []core.Signal) {
+		for _, s := range signals {
+			b.ring.Add(s)
+		}
+	}}
+	return b
 }
-
-func (b *ringBucket) Store(signals []core.Signal) {
-	for _, s := range signals {
-		b.ring.Add(s)
-	}
-}
-
-func (b *ringBucket) Snapshot() core.Snapshot { return core.Snapshot{} }
 
 func (b *ringBucket) Rings() map[string]*core.RingStore {
 	return map[string]*core.RingStore{eventsRing: b.ring}
 }
 
-type panickingRingsBucket struct{ stubBucket }
+type panickingRingsBucket struct{ *fakeBucket }
 
 func (panickingRingsBucket) Rings() map[string]*core.RingStore { panic("Rings blew up") }
 
@@ -59,30 +49,22 @@ func event(i int, text string) core.Signal {
 	return core.Signal{At: restartBase.Add(time.Duration(i) * time.Second), Kind: "event", Text: text, CorrID: "corr-" + text}
 }
 
-func bootAndStop(t *testing.T, path string, b *ringBucket) []core.Signal {
+func firstSeen(t *testing.T, b *ringBucket) []core.Signal {
 	t.Helper()
-	reg := core.NewRegistry()
-	reg.Register(b)
-	a := newApp(historyConfig(path), reg)
-	ctx, cancel := context.WithCancel(context.Background())
-	stopped := make(chan error, 1)
-	go func() { stopped <- a.Run(ctx) }()
+	select {
+	case seen := <-b.firstSeen:
+		return seen
+	default:
+		t.Fatal("the app served before it ran its first collect")
+		return nil
+	}
+}
 
-	var seen []core.Signal
-	select {
-	case seen = <-b.firstSeen:
-	case <-time.After(5 * time.Second):
-		t.Fatal("the app never ran its first collect")
-	}
-	cancel()
-	select {
-	case err := <-stopped:
-		if err != nil {
-			t.Fatalf("Run: %v", err)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("Run did not return after cancel")
-	}
+func bootAndStop(t *testing.T, path string, b *ringBucket, others ...core.Bucket) []core.Signal {
+	t.Helper()
+	r := boot(t, testConfig(path), append(others, b)...)
+	seen := firstSeen(t, b)
+	r.halt(t)
 	return seen
 }
 
@@ -110,10 +92,15 @@ func sameEvents(t *testing.T, label string, got, want []core.Signal) {
 	}
 }
 
+func historyPath(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(t.TempDir(), "history.db")
+}
+
 func TestARestartOnTheSameHistoryFileRestoresTheRingOldestFirstBeforeTheFirstCollect(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "history.db")
+	path := historyPath(t)
 	written := []core.Signal{event(0, "a"), event(1, "b"), event(2, "c")}
-	captureSlog(t)
+	captureLog(t)
 	bootAndStop(t, path, newRingBucket(10, written...))
 
 	seen := bootAndStop(t, path, newRingBucket(10))
@@ -122,8 +109,8 @@ func TestARestartOnTheSameHistoryFileRestoresTheRingOldestFirstBeforeTheFirstCol
 }
 
 func TestARestartKeepsOnlyTheNewestCapacitySignals(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "history.db")
-	captureSlog(t)
+	path := historyPath(t)
+	captureLog(t)
 	bootAndStop(t, path, newRingBucket(3, event(0, "a"), event(1, "b"), event(2, "c"), event(3, "d"), event(4, "e")))
 
 	seen := bootAndStop(t, path, newRingBucket(3))
@@ -132,10 +119,9 @@ func TestARestartKeepsOnlyTheNewestCapacitySignals(t *testing.T) {
 }
 
 func TestRestoredSignalsAreNotWrittenBackAsNewRows(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "history.db")
-	written := []core.Signal{event(0, "a"), event(1, "b")}
-	captureSlog(t)
-	bootAndStop(t, path, newRingBucket(10, written...))
+	path := historyPath(t)
+	captureLog(t)
+	bootAndStop(t, path, newRingBucket(10, event(0, "a"), event(1, "b")))
 
 	bootAndStop(t, path, newRingBucket(10, event(5, "z")))
 
@@ -143,11 +129,11 @@ func TestRestoredSignalsAreNotWrittenBackAsNewRows(t *testing.T) {
 }
 
 func TestACorruptSignalsTableBootsWithAnEmptyRingAndSaysSo(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "history.db")
-	captureSlog(t)
+	path := historyPath(t)
+	captureLog(t)
 	bootAndStop(t, path, newRingBucket(10, event(0, "a")))
 	corruptSignalTimes(t, path)
-	logs := captureSlog(t)
+	logs := captureLog(t)
 
 	seen := bootAndStop(t, path, newRingBucket(10))
 
@@ -161,7 +147,7 @@ func TestACorruptSignalsTableBootsWithAnEmptyRingAndSaysSo(t *testing.T) {
 
 func TestAnUnreadableHistoryFileBootsWithAnEmptyRing(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "missing-dir", "history.db")
-	captureSlog(t)
+	captureLog(t)
 
 	seen := bootAndStop(t, path, newRingBucket(10))
 
@@ -170,69 +156,84 @@ func TestAnUnreadableHistoryFileBootsWithAnEmptyRing(t *testing.T) {
 	}
 }
 
+func openSQLite(t *testing.T, path string) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=busy_timeout(5000)")
+	if err != nil {
+		t.Fatalf("open %s: %v", path, err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return db
+}
+
 func corruptSignalTimes(t *testing.T, path string) {
 	t.Helper()
-	db, err := sql.Open("sqlite", "file:"+path)
-	if err != nil {
-		t.Fatalf("open for corruption: %v", err)
-	}
-	defer func() { _ = db.Close() }()
-	if _, err := db.Exec("UPDATE signals SET at = 'not a time'"); err != nil {
+	if _, err := openSQLite(t, path).Exec("UPDATE signals SET at = 'not a time'"); err != nil {
 		t.Fatalf("corrupt signals: %v", err)
 	}
 }
 
-func TestStoredRowsPerRingNeverExceedItsCapacityAcrossPersists(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "history.db")
-	store := history.Open(path, history.WithSchemaTimeout(time.Minute))
-	t.Cleanup(func() { _ = store.Close() })
-	b := newRingBucket(4)
-	reg := core.NewRegistry()
-	reg.Register(b)
-	journal := &ringJournal{log: store}
-	journal.restore(context.Background(), reg)
+func signalRows(t *testing.T, db *sql.DB) (rows, appended int) {
+	t.Helper()
+	err := db.QueryRow("SELECT COUNT(*), COALESCE(MAX(seq), 0) FROM signals WHERE bucket = 'ringed'").Scan(&rows, &appended)
+	if err != nil {
+		t.Fatalf("read signals rows: %v", err)
+	}
+	return rows, appended
+}
 
-	for i := range 25 {
-		b.Store([]core.Signal{event(i, "e")})
-		journal.persist()
+func TestStoredRowsPerRingNeverExceedItsCapacityAcrossCycles(t *testing.T) {
+	path := historyPath(t)
+	captureLog(t)
+	cfg := testConfig(path)
+	cfg.TickInterval = 5 * time.Millisecond
+	b := newRingBucket(4)
+	b.collect = func(_ context.Context, call int32) ([]core.Signal, error) {
+		return []core.Signal{event(int(call), "e")}, nil
 	}
 
-	stored, err := store.LoadSignals(context.Background(), "ringed", eventsRing, 1_000_000)
-	if err != nil || len(stored) != 4 {
-		t.Fatalf("stored rows = %d, %v; want the ring capacity 4", len(stored), err)
+	r := boot(t, cfg, b)
+	db := openSQLite(t, path)
+	eventually(t, func() bool {
+		rows, appended := signalRows(t, db)
+		if rows > 4 {
+			t.Fatalf("%d rows stored for a ring of capacity 4 while the app ran", rows)
+		}
+		return appended >= 3*4
+	}, "the app did not persist the ring on each of 12 cycles, three times its capacity, while it ran")
+	r.halt(t)
+
+	if stored := storedEvents(t, path); len(stored) != 4 {
+		t.Fatalf("stored rows = %d; want the ring capacity 4", len(stored))
 	}
 }
 
 func TestAPanickingRingsHookDoesNotStopTheOtherBucketsRestoring(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "history.db")
-	store := history.Open(path, history.WithSchemaTimeout(time.Minute))
-	t.Cleanup(func() { _ = store.Close() })
-	store.AppendSignals("ringed", eventsRing, 10, []core.Signal{event(0, "a")})
-	b := newRingBucket(10)
-	reg := core.NewRegistry()
-	reg.Register(panickingRingsBucket{stubBucket{id: "a-boom"}})
-	reg.Register(b)
-	captureSlog(t)
+	path := historyPath(t)
+	seed := history.Open(path, history.WithSchemaTimeout(time.Minute))
+	seed.AppendSignals("ringed", eventsRing, 10, []core.Signal{event(0, "a")})
+	if err := seed.Close(); err != nil {
+		t.Fatalf("close seeded history: %v", err)
+	}
+	logs := captureLog(t)
 
-	(&ringJournal{log: store}).restore(context.Background(), reg)
+	seen := bootAndStop(t, path, newRingBucket(10), panickingRingsBucket{plain("a-boom")})
 
-	sameEvents(t, "ring beside a panicking bucket", b.ring.Snapshot(), []core.Signal{event(0, "a")})
+	sameEvents(t, "ring beside a panicking bucket", seen, []core.Signal{event(0, "a")})
+	if panics := logs.named("overseer.start.bucket_panic"); len(panics) != 1 || panics[0]["stage"] != "Rings" {
+		t.Errorf("start bucket_panic lines = %v; want one at stage Rings", panics)
+	}
 }
 
 func TestShutdownFlushesSignalsAddedSinceTheLastCycle(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "history.db")
-	store := history.Open(path, history.WithSchemaTimeout(time.Minute))
+	path := historyPath(t)
+	captureLog(t)
 	b := newRingBucket(10)
-	reg := core.NewRegistry()
-	reg.Register(b)
-	a := newTestApp(reg, time.Second, time.Second)
-	a.history = store
-	a.rings = ringJournal{log: store}
-	ctx, cancel := context.WithCancel(context.Background())
-	a.rings.restore(ctx, reg)
-	b.Store([]core.Signal{event(0, "late")})
+	r := boot(t, testConfig(path), b)
+	firstSeen(t, b)
 
-	a.releaseHistory(cancel, a.startPruner(ctx))
+	b.ring.Add(event(0, "late"))
+	r.halt(t)
 
 	sameEvents(t, "stored after shutdown", storedEvents(t, path), []core.Signal{event(0, "late")})
 }
