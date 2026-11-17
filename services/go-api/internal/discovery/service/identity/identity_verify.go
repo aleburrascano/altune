@@ -3,7 +3,7 @@ package identity
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/internal/core/ports"
-	"altune/go-api/internal/discovery/service/release"
+	"altune/go-api/internal/discovery/internal/core/release"
 	"context"
 	"log/slog"
 	"maps"

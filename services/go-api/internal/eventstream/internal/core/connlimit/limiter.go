@@ -1,7 +1,7 @@
 package connlimit
 
 import (
-	"altune/go-api/internal/eventstream/domain"
+	"altune/go-api/internal/eventstream/internal/core/domain"
 	"sync"
 )
 

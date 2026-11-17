@@ -1,6 +1,6 @@
 package discovery
 
-import smokeeval "altune/go-api/internal/discovery/service/smokeeval"
+import smokeeval "altune/go-api/internal/discovery/internal/shell/smokeeval"
 
 type (
 	SmokeQueryResult = smokeeval.QueryResult

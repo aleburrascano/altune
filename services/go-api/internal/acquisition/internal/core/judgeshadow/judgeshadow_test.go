@@ -1,8 +1,8 @@
 package judgeshadow
 
 import (
+	"altune/go-api/internal/acquisition/internal/core/judge"
 	"altune/go-api/internal/acquisition/internal/core/ports"
-	"altune/go-api/internal/acquisition/service/judge"
 	"bytes"
 	"context"
 	"log/slog"

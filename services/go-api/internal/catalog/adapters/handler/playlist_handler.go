@@ -3,7 +3,7 @@ package handler
 import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/internal/adapters/authbridge"
-	playlistservice "altune/go-api/internal/catalog/service/playlist"
+	playlistservice "altune/go-api/internal/catalog/internal/core/playlist"
 	"altune/go-api/internal/shared/httputil"
 	"net/http"
 	"time"

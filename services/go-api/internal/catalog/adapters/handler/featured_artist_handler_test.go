@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
-	featuredservice "altune/go-api/internal/catalog/service/featured"
+	featuredservice "altune/go-api/internal/catalog/internal/core/featured"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/logging"
 	"context"

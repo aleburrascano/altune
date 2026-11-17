@@ -2,7 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/service/enrich"
+	"altune/go-api/internal/discovery/internal/core/enrich"
 	"altune/go-api/internal/shared/httputil"
 	"context"
 	"errors"

@@ -1,6 +1,6 @@
 package acquisition
 
-import grade "altune/go-api/internal/acquisition/service/grade"
+import grade "altune/go-api/internal/acquisition/internal/core/grade"
 
 type (
 	Grade      = grade.Grade

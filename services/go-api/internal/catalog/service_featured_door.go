@@ -1,6 +1,6 @@
 package catalog
 
-import featured "altune/go-api/internal/catalog/service/featured"
+import featured "altune/go-api/internal/catalog/internal/core/featured"
 
 type (
 	BackfillFeaturedService = featured.BackfillFeaturedService

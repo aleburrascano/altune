@@ -1,6 +1,6 @@
 package catalog
 
-import audio "altune/go-api/internal/catalog/service/audio"
+import audio "altune/go-api/internal/catalog/internal/core/audio"
 
 type (
 	AudioURLService    = audio.AudioURLService

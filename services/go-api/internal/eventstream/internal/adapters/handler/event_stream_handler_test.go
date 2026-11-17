@@ -5,7 +5,7 @@ import (
 	"altune/go-api/internal/auth/adapters/middleware"
 	authdomain "altune/go-api/internal/auth/domain"
 	authservice "altune/go-api/internal/auth/service"
-	"altune/go-api/internal/eventstream/service/connlimit"
+	"altune/go-api/internal/eventstream/internal/core/connlimit"
 	"altune/go-api/internal/shared/events"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/logging"

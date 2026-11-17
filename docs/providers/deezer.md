@@ -222,7 +222,7 @@ Detail-open enrichment (caps 7–8), mirroring the Last.fm enricher. Paths are u
   from the live probe.
 - `adapters/cache/name_keyed_cache.go`: `NewRedisDeezerEnrichmentCache`, read-through, name-keyed
   (positive 30d, negative 24h).
-- `service/enrich/deezer_enrichment.go`: `DeezerEnrichmentService` (cache → resolve → lookup;
+- `internal/core/enrich/deezer_enrichment.go`: `DeezerEnrichmentService` (cache → resolve → lookup;
   track/album only; best-effort).
 - `adapters/handler/enrichment_endpoints.go`: `GET /discovery/enrichment/deezer?kind=&title=&subtitle=`
   + DTO, set through `WithDetailEnrichers`.
@@ -242,7 +242,7 @@ Lyrics (cap 6), distinct from the public-API enrichment (the `pipe` GraphQL path
   `lyrics` / GraphQL error is a definitive miss (empty + nil); auth/network is a transient error.
 - `adapters/cache/name_keyed_cache.go`: `NewRedisDeezerLyricsCache`, read-through, name-keyed
   (positive 90d, negative 24h).
-- `service/enrich/lyrics.go`: `LyricsService` (cache → resolve → lookup; track-only; best-effort).
+- `internal/core/enrich/lyrics.go`: `LyricsService` (cache → resolve → lookup; track-only; best-effort).
 - `adapters/handler/enrichment_endpoints.go`: `GET /discovery/lyrics?title=&subtitle=` +
   `LyricsResponseDTO`.
 - `internal/app/build_consensus_providers.go`: `buildDetailEnrichers` wires it unconditionally.

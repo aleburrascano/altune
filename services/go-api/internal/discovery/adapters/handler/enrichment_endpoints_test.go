@@ -3,7 +3,7 @@ package handler
 import (
 	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/discovery/discoverytest"
-	"altune/go-api/internal/discovery/service/enrich"
+	"altune/go-api/internal/discovery/internal/core/enrich"
 	shareddomain "altune/go-api/internal/shared/domain"
 	"altune/go-api/internal/shared/httputil"
 	"context"

@@ -3,7 +3,7 @@ package handler
 import (
 	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/catalog/catalogtest"
-	audioservice "altune/go-api/internal/catalog/service/audio"
+	audioservice "altune/go-api/internal/catalog/internal/core/audio"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/logging"
 	"context"

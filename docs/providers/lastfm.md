@@ -193,7 +193,7 @@ Detail-open enrichment (cap 3 + cap-4 similar artists). Paths are under
   trailing `Read more on Last.fm` anchor + remaining HTML, unescapes entities). Shapes from the live probe.
 - `adapters/cache/name_keyed_cache.go`: `NewRedisLastFmEnrichmentCache`, read-through, name-keyed
   (positive 30d, negative 24h).
-- `service/enrich/lastfm_enrichment.go`: `LastFmEnrichmentService` (translates the wire `(kind, title,
+- `internal/core/enrich/lastfm_enrichment.go`: `LastFmEnrichmentService` (translates the wire `(kind, title,
   subtitle)` to Last.fm's `(artist, entityTitle)`; cache → lookup → cache; best-effort).
 - `adapters/handler/enrichment_endpoints.go`: `GET /discovery/enrichment/lastfm?kind=&title=&subtitle=`
   + DTO, set through `WithDetailEnrichers`.

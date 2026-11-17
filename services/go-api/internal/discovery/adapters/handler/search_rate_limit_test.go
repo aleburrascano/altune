@@ -3,8 +3,8 @@ package handler
 import (
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/auth/adapters/middleware"
-	"altune/go-api/internal/discovery/service/favorites"
-	"altune/go-api/internal/discovery/service/history"
+	"altune/go-api/internal/discovery/internal/core/favorites"
+	"altune/go-api/internal/discovery/internal/core/history"
 	"altune/go-api/internal/discovery/service/providercall"
 	"altune/go-api/internal/discovery/service/search"
 	"altune/go-api/internal/discovery/service/vocabulary"

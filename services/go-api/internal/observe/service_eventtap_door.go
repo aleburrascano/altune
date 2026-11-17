@@ -1,6 +1,6 @@
 package observe
 
-import eventtap "altune/go-api/internal/observe/service/eventtap"
+import eventtap "altune/go-api/internal/observe/internal/shell/eventtap"
 
 type (
 	EventFeed = eventtap.Feed

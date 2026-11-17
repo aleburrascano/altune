@@ -95,7 +95,7 @@ rule per row:
    (`RecordingResolver`), so the pipeline knows *what* it wants.
 2. **Compare the bytes by what AcoustID says they are.** `AudioIdentifier` (fpcalc →
    AcoustID) returns the recordings the audio's AcoustID links to. The audio judge
-   (`service/audiojudge`) marks a track `verified` when a linked recording is the expected one, and
+   (`internal/core/audiojudge`) marks a track `verified` when a linked recording is the expected one, and
    **rejects** only when two independent sources say the file is another version or song. The earlier
    version compared MBID *equality* and was unsound — a recording carries many MBIDs
    (album, single, compilation, remaster), so the sets legitimately need not
@@ -359,7 +359,7 @@ outcome equals the serial walk. Per candidate:
 3. The full download, then the duration and decode gates.
 4. `audiojudge.Judge` judges the fingerprint (skipped when the preview already produced the verdict).
 
-The judge (`service/audiojudge`) drops each linked recording whose length disagrees with
+The judge (`internal/core/audiojudge`) drops each linked recording whose length disagrees with
 the audio (authoritative tolerance, max(5s, 3%)) and each link that names no MBID, then
 returns `proven | likely | unknown | contradicted`, a grade and the reasons. `proven`
 (legacy name `hard`) when a surviving link is the bound recording (any of the reference
@@ -706,7 +706,7 @@ the Postgres cooldown store across two pools and under concurrent reservations.
 
 ### 7.13 The shadow judge has no end date
 
-`service/judge` and `service/judgeshadow` run beside the pipeline and select nothing.
+`internal/core/judge` and `internal/core/judgeshadow` run beside the pipeline and select nothing.
 `RunPipeline` logs one `acquisition.judge_shadow` line per job, after the final
 search/select/download (fallback tier included), comparing the judge's pick with the
 candidate acquisition kept; `verdict` is `agree`, `disagree`, `judge_abstained` or

@@ -2,8 +2,8 @@ package persistence
 
 import (
 	"altune/go-api/internal/catalog/domain"
+	playlistservice "altune/go-api/internal/catalog/internal/core/playlist"
 	"altune/go-api/internal/catalog/internal/core/ports"
-	playlistservice "altune/go-api/internal/catalog/service/playlist"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"

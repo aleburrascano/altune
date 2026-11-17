@@ -3,7 +3,7 @@ package handler
 import (
 	"altune/go-api/internal/observe/domain"
 	"altune/go-api/internal/observe/internal/adapters/authbridge"
-	"altune/go-api/internal/observe/service/eventtap"
+	"altune/go-api/internal/observe/internal/shell/eventtap"
 	"altune/go-api/internal/shared/httputil"
 	"context"
 	"encoding/json"

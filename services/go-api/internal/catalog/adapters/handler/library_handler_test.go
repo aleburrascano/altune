@@ -3,7 +3,7 @@ package handler
 import (
 	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/catalog/catalogtest"
-	libraryservice "altune/go-api/internal/catalog/service/library"
+	libraryservice "altune/go-api/internal/catalog/internal/core/library"
 	"net/http"
 	"net/url"
 	"strings"

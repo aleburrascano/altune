@@ -1,10 +1,10 @@
 package handler
 
 import (
-	"altune/go-api/internal/eventstream/domain"
 	"altune/go-api/internal/eventstream/internal/adapters/authbridge"
+	"altune/go-api/internal/eventstream/internal/core/connlimit"
+	"altune/go-api/internal/eventstream/internal/core/domain"
 	"altune/go-api/internal/eventstream/internal/core/ports"
-	"altune/go-api/internal/eventstream/service/connlimit"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/httputil"
 	shared "altune/go-api/internal/shared/kernel"
