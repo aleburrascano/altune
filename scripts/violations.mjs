@@ -1,37 +1,39 @@
-import { readdirSync, readFileSync } from 'node:fs'
-import { dirname, join, relative, resolve } from 'node:path'
+import { spawnSync } from 'node:child_process'
+import { existsSync, statSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const BASELINE = 'module-spec.baseline.json'
-const root = resolve(process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), '..'))
+const scripts = dirname(fileURLToPath(import.meta.url))
+const kit = join(scripts, '..', 'node_modules', '.bin', 'module-spec')
+const BUFFER = 64 * 1024 * 1024
 
-function baselines(dir) {
-  const found = []
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.isDirectory() && entry.name !== 'node_modules' && !entry.name.startsWith('.')) found.push(...baselines(join(dir, entry.name)))
-    else if (entry.isFile() && entry.name === BASELINE) found.push(join(dir, entry.name))
-  }
-  return found
+function fail(message, code = 1) {
+  console.error(`violations: ${message}`)
+  process.exit(code)
 }
 
+function run(command, args, what, cwd) {
+  const result = spawnSync(command, args, { cwd, encoding: 'utf8', maxBuffer: BUFFER })
+  if (result.error) fail(`${what} could not run: ${result.error.message}`)
+  if (result.status !== 0) fail(`${what} exited ${result.status}: ${result.stderr.trim()}`)
+  return result.stdout
+}
+
+const given = resolve(process.argv[2] ?? join(scripts, '..'))
+if (!existsSync(given) || !statSync(given).isDirectory()) fail(`${given} is not a folder`, 2)
+const root = run('git', ['rev-parse', '--show-toplevel'], `git rev-parse in ${given}`, given).trim()
+if (!existsSync(kit)) fail('the module-spec kit is not installed. Run pnpm install at the repo root (it fetches the private kit from gitea, so it needs a gitea login).', 3)
+
+const roots = run('bash', [join(scripts, 'module-spec.sh'), 'roots'], 'scripts/module-spec.sh roots', root).split('\n').filter(Boolean)
 const out = []
-for (const file of baselines(root).sort()) {
-  const path = relative(root, file)
-  const prefix = dirname(path) === '.' ? '' : `${dirname(path)}/`
-  let saved
-  try {
-    saved = JSON.parse(readFileSync(file, 'utf8'))
-  } catch (error) {
-    console.error(`violations: ${path} is not JSON: ${error.message}`)
-    process.exit(1)
-  }
-  for (const entry of saved.violations ?? []) {
+for (const dir of roots) {
+  const prefix = dir === '.' ? '' : `${dir}/`
+  const baseline = `${prefix}module-spec.baseline.json`
+  const keys = run(kit, ['baseline', '--list', '--root', dir], `module-spec baseline --list --root ${dir}`, root).split('\n').filter(Boolean)
+  for (const entry of keys) {
     const m = /^(\S+) (\S+)/.exec(entry)
-    if (!m) {
-      console.error(`violations: ${path} has an entry that names no rule and file: ${entry}`)
-      process.exit(1)
-    }
-    out.push(JSON.stringify({ rule: m[1], file: prefix + m[2], baseline: path, entry }))
+    if (!m) fail(`the ${dir} baseline has an entry that names no rule and file: ${entry}`)
+    out.push(JSON.stringify({ rule: m[1], file: prefix + m[2], baseline, entry }))
   }
 }
 process.stdout.on('error', (error) => {
