@@ -3,7 +3,14 @@ cd "$(dirname "$0")/.." || exit 1
 script=$PWD/violations.sh
 fail=0
 
-[ -x ../node_modules/.bin/module-spec ] || { echo "violations.test.sh: the module-spec kit is not installed, run pnpm install at the repo root"; exit 1; }
+if [ ! -x ../node_modules/.bin/module-spec ]; then
+  if [ "${MODULE_SPEC_RUNS_ELSEWHERE:-}" = 1 ]; then
+    echo "violations.test.sh: SKIP, the private module-spec kit is not reachable here, and these cases read the baseline through it"
+    exit 0
+  fi
+  echo "violations.test.sh: the module-spec kit is not installed, run pnpm install at the repo root"
+  exit 1
+fi
 
 scratch=$(mktemp -d); trap 'rm -rf "$scratch"' EXIT
 root=$scratch/root
