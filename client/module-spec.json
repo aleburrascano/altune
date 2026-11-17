@@ -1,5 +1,6 @@
 {
   "roots": ["src"],
+  "baseline": "fragments",
   "pure": {
     "typescript": ["@tanstack/react-query", "zustand"]
   },

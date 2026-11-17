@@ -2,6 +2,7 @@
   "roots": [
     "."
   ],
+  "baseline": "fragments",
   "maxComplexity": 5,
   "pure": {
     "typescript": [],
