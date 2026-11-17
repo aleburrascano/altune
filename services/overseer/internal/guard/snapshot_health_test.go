@@ -2,10 +2,13 @@ package guard_test
 
 import (
 	"altune/overseer/internal/app"
+	"altune/overseer/internal/config"
 	"altune/overseer/internal/core"
 	"strings"
 	"testing"
 )
+
+func noEnv(string) string { return "" }
 
 func TestEveryBucketGradesItsOwnSnapshot(t *testing.T) {
 	graded := map[core.Severity]bool{
@@ -13,7 +16,7 @@ func TestEveryBucketGradesItsOwnSnapshot(t *testing.T) {
 		core.SeverityWarn:     true,
 		core.SeverityCritical: true,
 	}
-	for _, b := range app.Buckets() {
+	for _, b := range app.Buckets(&config.Config{}, noEnv) {
 		id := b.Meta().ID
 		snap := b.Snapshot()
 		if !graded[snap.Severity] {
@@ -26,10 +29,21 @@ func TestEveryBucketGradesItsOwnSnapshot(t *testing.T) {
 }
 
 func TestEveryBucketPackageIsRepresentedInTheRegistry(t *testing.T) {
-	packages := bucketPackages(t)
-	registered := app.Buckets()
+	packages := bucketRoots(t)
+	registered := app.Buckets(&config.Config{}, noEnv)
 	if len(registered) != len(packages) {
 		t.Errorf("app.Buckets builds %d buckets but %d bucket packages exist (%v); build the missing bucket in app.Buckets",
 			len(registered), len(packages), packages)
 	}
+}
+
+func bucketRoots(t *testing.T) []string {
+	t.Helper()
+	var roots []string
+	for _, pkg := range bucketPackages(t) {
+		if !strings.Contains(strings.TrimPrefix(pkg, "altune/overseer/internal/buckets/"), "/") {
+			roots = append(roots, pkg)
+		}
+	}
+	return roots
 }

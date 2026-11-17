@@ -1,16 +1,17 @@
-package reliability
+package reliability_test
 
 import (
+	"altune/overseer/internal/buckets/reliability"
 	"altune/overseer/internal/core"
 	"context"
 	"testing"
 	"time"
 )
 
-var _ core.Waiter = (*Bucket)(nil)
+var _ core.Waiter = (*reliability.Bucket)(nil)
 
 func TestWaitReturnsOnceThePollerHasStopped(t *testing.T) {
-	b := newBucket(&fakeReader{}, &fakeChecker{}, time.Hour)
+	b := reliability.New(reliability.Deps{Interval: time.Hour})
 	ctx, cancel := context.WithCancel(context.Background())
 	b.Start(ctx)
 	cancel()

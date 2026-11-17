@@ -1,10 +1,9 @@
-package reliability
+package reliability_test
 
 import "testing"
 
 func TestKeySeriesIsLatencyMS(t *testing.T) {
-	b := newBucket(&fakeReader{}, &fakeChecker{}, defaultPollInterval)
-	if got := b.KeySeries(); got != seriesLatencyMS {
-		t.Errorf("KeySeries() = %q, want %q", got, seriesLatencyMS)
+	if got := newBucket(&fakeReader{}).KeySeries(); got != "latency_ms" {
+		t.Errorf("KeySeries() = %q, want latency_ms", got)
 	}
 }

@@ -1,6 +1,7 @@
-package liveactivity
+package liveactivity_test
 
 import (
+	"altune/overseer/internal/buckets/liveactivity"
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
 	"context"
@@ -28,7 +29,9 @@ func (f *fakeSource) Status() goapi.Status          { return goapi.Status(f.stat
 func (f *fakeSource) setStatus(s goapi.Status)      { f.status.Store(int32(s)) }
 func (f *fakeSource) push(ev goapi.Event)           { f.events <- ev }
 
-func collectStore(t *testing.T, b *Bucket) {
+const eventCapacity = 200
+
+func collectStore(t *testing.T, b *liveactivity.Bucket) {
 	t.Helper()
 	signals, err := b.Collect(context.Background())
 	if err != nil {
@@ -37,9 +40,9 @@ func collectStore(t *testing.T, b *Bucket) {
 	b.Store(signals)
 }
 
-func snapData(t *testing.T, snap core.Snapshot) Data {
+func snapData(t *testing.T, snap core.Snapshot) liveactivity.Data {
 	t.Helper()
-	var d Data
+	var d liveactivity.Data
 	if err := json.Unmarshal(snap.Data, &d); err != nil {
 		t.Fatalf("unmarshal data: %v (%s)", err, snap.Data)
 	}
@@ -48,7 +51,7 @@ func snapData(t *testing.T, snap core.Snapshot) Data {
 
 func TestCollectStoreSnapshotLiveFeed(t *testing.T) {
 	src := newFakeSource(8)
-	b := newBucket(src)
+	b := liveactivity.New(liveactivity.Deps{Source: src})
 
 	empty := b.Snapshot()
 	if empty.State != core.StateLive {
@@ -84,7 +87,7 @@ func TestCollectStoreSnapshotLiveFeed(t *testing.T) {
 
 func TestEventCorrelationIDPropagatesToSignal(t *testing.T) {
 	src := newFakeSource(4)
-	b := newBucket(src)
+	b := liveactivity.New(liveactivity.Deps{Source: src})
 
 	src.push(goapi.Event{Type: "track.played", Subject: "song a", CorrID: "a1b2c3d4"})
 	collectStore(t, b)
@@ -100,7 +103,7 @@ func TestEventCorrelationIDPropagatesToSignal(t *testing.T) {
 
 func TestDegradesToSourceDownWhenSourceDown(t *testing.T) {
 	src := newFakeSource(8)
-	b := newBucket(src)
+	b := liveactivity.New(liveactivity.Deps{Source: src})
 	src.push(goapi.Event{Type: "track.played", Subject: "last known song"})
 	collectStore(t, b)
 
@@ -122,7 +125,7 @@ func TestDegradesToSourceDownWhenSourceDown(t *testing.T) {
 
 func TestHeadlineSurvivesTheSourceGoingDown(t *testing.T) {
 	src := newFakeSource(8)
-	b := newBucket(src)
+	b := liveactivity.New(liveactivity.Deps{Source: src})
 	src.push(goapi.Event{Type: "track.played", Subject: "last known song"})
 	collectStore(t, b)
 	if got := b.Snapshot().Headline; got != "1 events" {
@@ -146,7 +149,7 @@ func TestHeadlineSurvivesTheSourceGoingDown(t *testing.T) {
 func TestConnectingIsStale(t *testing.T) {
 	src := newFakeSource(1)
 	src.setStatus(goapi.StatusConnecting)
-	b := newBucket(src)
+	b := liveactivity.New(liveactivity.Deps{Source: src})
 	if snap := b.Snapshot(); snap.State != core.StateStale {
 		t.Errorf("connecting state = %q, want stale", snap.State)
 	}
@@ -154,7 +157,7 @@ func TestConnectingIsStale(t *testing.T) {
 
 func TestCollectReportsSourceDownWithNoFreshEvents(t *testing.T) {
 	src := newFakeSource(1)
-	b := newBucket(src)
+	b := liveactivity.New(liveactivity.Deps{Source: src})
 
 	src.setStatus(goapi.StatusDown)
 	if _, err := b.Collect(context.Background()); err == nil {
@@ -169,18 +172,15 @@ func TestCollectReportsSourceDownWithNoFreshEvents(t *testing.T) {
 
 func TestStaysBoundedUnderLoad(t *testing.T) {
 	src := newFakeSource(4 * eventCapacity)
-	b := newBucket(src)
+	b := liveactivity.New(liveactivity.Deps{Source: src})
 	for i := 0; i < 4*eventCapacity; i++ {
 		src.push(goapi.Event{Type: "flood", Subject: "e"})
 	}
-	for b.events.Len() < eventCapacity {
+	for len(snapData(t, b.Snapshot()).Events) < eventCapacity {
 		collectStore(t, b)
 	}
 	collectStore(t, b)
 
-	if got := b.events.Len(); got != eventCapacity {
-		t.Errorf("retained %d signals, want capped at %d", got, eventCapacity)
-	}
 	if got := len(snapData(t, b.Snapshot()).Events); got != eventCapacity {
 		t.Errorf("snapshot feed = %d, want capped at %d", got, eventCapacity)
 	}
@@ -189,7 +189,7 @@ func TestStaysBoundedUnderLoad(t *testing.T) {
 func TestSnapshotSurfacesDroppedCount(t *testing.T) {
 	const overflow = 30
 	src := newFakeSource(eventCapacity + overflow)
-	b := newBucket(src)
+	b := liveactivity.New(liveactivity.Deps{Source: src})
 	for i := 0; i < eventCapacity+overflow; i++ {
 		src.push(goapi.Event{Type: "flood", Subject: "e"})
 	}
@@ -202,7 +202,7 @@ func TestSnapshotSurfacesDroppedCount(t *testing.T) {
 
 func TestConcurrentCollectAndSnapshot(t *testing.T) {
 	src := newFakeSource(256)
-	b := newBucket(src)
+	b := liveactivity.New(liveactivity.Deps{Source: src})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -259,7 +259,7 @@ func (p *pumpSource) Status() goapi.Status       { return goapi.StatusUp }
 
 func TestStartKeepsPumpFeedingPastFirstTick(t *testing.T) {
 	src := newPumpSource()
-	b := newBucket(src)
+	b := liveactivity.New(liveactivity.Deps{Source: src})
 	appCtx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
@@ -292,11 +292,9 @@ func TestStartKeepsPumpFeedingPastFirstTick(t *testing.T) {
 }
 
 func TestUnconfiguredDegradesNotCrashes(t *testing.T) {
-	t.Setenv("OVERSEER_GOAPI_URL", "")
-	t.Setenv("OVERSEER_GOAPI_TOKEN", "")
-	b := New()
-	if _, ok := b.src.(*nullSource); !ok {
-		t.Fatalf("unconfigured source = %T, want *nullSource", b.src)
+	b := liveactivity.New(liveactivity.Deps{})
+	if _, err := b.Collect(context.Background()); err == nil {
+		t.Error("unconfigured Collect = nil, want the source-down error")
 	}
 	if snap := b.Snapshot(); snap.State != core.StateSourceDown {
 		t.Errorf("unconfigured state = %q, want source_down", snap.State)

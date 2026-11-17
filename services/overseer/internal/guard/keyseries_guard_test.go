@@ -2,6 +2,7 @@ package guard_test
 
 import (
 	"altune/overseer/internal/app"
+	"altune/overseer/internal/config"
 	"altune/overseer/internal/core"
 	"context"
 	"sync"
@@ -71,7 +72,7 @@ var offlineProofByBucket = map[string]string{
 }
 
 func TestRealBucketsWriteUnderTheirDeclaredKeySeries(t *testing.T) {
-	for _, b := range app.Buckets() {
+	for _, b := range app.Buckets(&config.Config{}, noEnv) {
 		b := b
 		id := b.Meta().ID
 		keyed, ok := b.(core.KeySeries)

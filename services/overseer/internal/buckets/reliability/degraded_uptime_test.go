@@ -1,20 +1,15 @@
-package reliability
+package reliability_test
 
 import (
 	"altune/overseer/internal/core"
-	"altune/overseer/internal/goapi"
-	"context"
 	"testing"
 )
 
 func TestDegradedProbeCountsAsReachableForUptime(t *testing.T) {
-	checker := &fakeChecker{}
-	b := newBucket(&fakeReader{}, checker, defaultPollInterval)
+	b, probe := probedBucket(t, &fakeReader{})
 
-	checker.set(goapi.Health{Status: "degraded"}, nil)
-	b.poller.pollOnce(context.Background())
-	checker.set(goapi.Health{Status: "ok"}, nil)
-	b.poller.pollOnce(context.Background())
+	probe.answer(degraded())
+	probe.answer(up())
 
 	snap := b.Snapshot()
 
@@ -27,12 +22,10 @@ func TestDegradedProbeCountsAsReachableForUptime(t *testing.T) {
 }
 
 func TestDegradedWindowReportsFullUptime(t *testing.T) {
-	checker := &fakeChecker{}
-	checker.set(goapi.Health{Status: "degraded"}, nil)
-	b := newBucket(&fakeReader{}, checker, defaultPollInterval)
+	b, probe := probedBucket(t, &fakeReader{})
 
-	b.poller.pollOnce(context.Background())
-	b.poller.pollOnce(context.Background())
+	probe.answer(degraded())
+	probe.answer(degraded())
 
 	if got := b.Snapshot().Headline; got != "go-api degraded · uptime 100.0%" {
 		t.Errorf("headline = %q, want go-api degraded at uptime 100.0%%", got)

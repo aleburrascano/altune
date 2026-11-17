@@ -56,7 +56,7 @@ func (o reachOutcome) String() string {
 	return o.status().String()
 }
 
-func newReachPoller(checker reachChecker, interval time.Duration) *reachPoller {
+func newReachPoller(checker reachChecker, interval time.Duration, now func() time.Time) *reachPoller {
 	if interval <= 0 {
 		interval = defaultPollInterval
 	}
@@ -65,7 +65,7 @@ func newReachPoller(checker reachChecker, interval time.Duration) *reachPoller {
 		interval: interval,
 		samples:  core.NewRingStore(pollCapacity),
 		series:   discardSeries{},
-		now:      time.Now,
+		now:      now,
 	}
 	p.outcome.Store(int32(outcomeConnecting))
 	return p
@@ -115,10 +115,6 @@ func (p *reachPoller) currentOutcome() reachOutcome {
 	return reachOutcome(p.outcome.Load())
 }
 
-func (p *reachPoller) degradedReason() string {
-	return p.currentOutcome().reason()
-}
-
 func (p *reachPoller) recordProbe(status goapi.Status, answered bool, at time.Time, latency time.Duration) {
 	up := 0.0
 	if status == goapi.StatusUp {
@@ -136,8 +132,4 @@ func (discardSeries) Record(string, string, core.Point) {}
 
 func (discardSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
 	return nil, nil
-}
-
-func (p *reachPoller) currentStatus() goapi.Status {
-	return p.currentOutcome().status()
 }

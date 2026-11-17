@@ -1,11 +1,12 @@
-package logs
+package logs_test
 
 import (
+	"altune/overseer/internal/buckets/logs"
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
 	"context"
 	"encoding/json"
-	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -23,7 +24,11 @@ func (f *fakeSource) Run(ctx context.Context) error   { <-ctx.Done(); return ctx
 func (f *fakeSource) Records() <-chan goapi.LogRecord { return f.ch }
 func (f *fakeSource) Status() goapi.Status            { return f.status }
 
-func drive(t *testing.T, b *Bucket) {
+const logCapacity = 200
+
+const redacted = "[REDACTED]"
+
+func drive(t *testing.T, b *logs.Bucket) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -31,9 +36,9 @@ func drive(t *testing.T, b *Bucket) {
 	b.Store(signals)
 }
 
-func snapData(t *testing.T, snap core.Snapshot) Data {
+func snapData(t *testing.T, snap core.Snapshot) logs.Data {
 	t.Helper()
-	var d Data
+	var d logs.Data
 	if err := json.Unmarshal(snap.Data, &d); err != nil {
 		t.Fatalf("unmarshal data: %v (%s)", err, snap.Data)
 	}
@@ -71,7 +76,7 @@ func (p *pumpSource) Status() goapi.Status            { return goapi.StatusUp }
 
 func TestStartKeepsPumpFeedingPastFirstTick(t *testing.T) {
 	src := newPumpSource()
-	b := newBucket(src, "")
+	b := logs.New(logs.Deps{Source: src})
 	appCtx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
@@ -103,23 +108,11 @@ func TestStartKeepsPumpFeedingPastFirstTick(t *testing.T) {
 	}
 }
 
-func TestBucketRegisters(t *testing.T) {
-	found := false
-	for _, bk := range core.Default.Buckets() {
-		if bk.Meta().ID == "logs" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatal("logs bucket did not self-register into the default registry")
-	}
-}
-
 func TestCollectStoreSnapshotRoundTrip(t *testing.T) {
 	src := newFakeSource(goapi.StatusUp, 8)
 	src.ch <- goapi.LogRecord{Time: time.Now().UTC(), Level: "INFO", Message: "queue resumed", Fields: map[string]string{"queue": "q1"}}
 	src.ch <- goapi.LogRecord{Time: time.Now().UTC(), Level: "ERROR", Message: "boom", Fields: map[string]string{"err": "x"}}
-	b := newBucket(src, "")
+	b := logs.New(logs.Deps{Source: src})
 
 	drive(t, b)
 
@@ -139,46 +132,66 @@ func TestCollectStoreSnapshotRoundTrip(t *testing.T) {
 	}
 }
 
+func feed(src *fakeSource, records ...goapi.LogRecord) {
+	for _, rec := range records {
+		src.ch <- rec
+	}
+}
+
+func lines(n int) []goapi.LogRecord {
+	records := make([]goapi.LogRecord, 0, n)
+	for i := 0; i < n; i++ {
+		records = append(records, goapi.LogRecord{Level: "INFO", Message: "x"})
+	}
+	return records
+}
+
 func TestRingStaysCapped(t *testing.T) {
-	src := newFakeSource(goapi.StatusUp, 0)
-	b := newBucket(src, "")
 	over := logCapacity + 50
-	signals := make([]core.Signal, 0, over)
-	for i := 0; i < over; i++ {
-		signals = append(signals, toSignal(goapi.LogRecord{Level: "INFO", Message: "x"}))
-	}
-	b.Store(signals)
-	if got := b.records.Len(); got != logCapacity {
+	src := newFakeSource(goapi.StatusUp, over)
+	b := logs.New(logs.Deps{Source: src})
+	feed(src, lines(over)...)
+
+	drive(t, b)
+
+	if got := len(snapData(t, b.Snapshot()).Records); got != logCapacity {
 		t.Fatalf("ring retained %d records, want cap %d", got, logCapacity)
-	}
-	if got := b.records.Cap(); got != logCapacity {
-		t.Fatalf("ring cap = %d, want %d", got, logCapacity)
 	}
 }
 
 func TestSnapshotSurfacesDroppedCount(t *testing.T) {
-	src := newFakeSource(goapi.StatusUp, 0)
-	b := newBucket(src, "")
 	const overflow = 25
-	signals := make([]core.Signal, 0, logCapacity+overflow)
-	for i := 0; i < logCapacity+overflow; i++ {
-		signals = append(signals, toSignal(goapi.LogRecord{Level: "INFO", Message: "x"}))
-	}
-	b.Store(signals)
+	src := newFakeSource(goapi.StatusUp, logCapacity+overflow)
+	b := logs.New(logs.Deps{Source: src})
+	feed(src, lines(logCapacity+overflow)...)
+
+	drive(t, b)
 
 	if got := snapData(t, b.Snapshot()).Dropped; got != overflow {
 		t.Fatalf("snapshot dropped = %d, want %d (records beyond cap)", got, overflow)
 	}
 }
 
-func TestLevelFilter(t *testing.T) {
-	records := []core.Signal{
-		{Kind: "DEBUG", Text: `{"msg":"d"}`},
-		{Kind: "INFO", Text: `{"msg":"i"}`},
-		{Kind: "WARN", Text: `{"msg":"w"}`},
-		{Kind: "ERROR", Text: `{"msg":"e"}`},
+func everyLevel() []goapi.LogRecord {
+	return []goapi.LogRecord{
+		{Level: "DEBUG", Message: "d"},
+		{Level: "INFO", Message: "i"},
+		{Level: "WARN", Message: "w"},
+		{Level: "ERROR", Message: "e"},
 	}
-	got := filteredRecords(records, "WARN")
+}
+
+func tailAt(t *testing.T, minLevel string) []goapi.LogRecord {
+	t.Helper()
+	src := newFakeSource(goapi.StatusUp, 4)
+	feed(src, everyLevel()...)
+	b := logs.New(logs.Deps{Source: src, MinLevel: minLevel})
+	drive(t, b)
+	return snapData(t, b.Snapshot()).Records
+}
+
+func TestLevelFilter(t *testing.T) {
+	got := tailAt(t, "WARN")
 	if len(got) != 2 {
 		t.Fatalf("≥WARN kept %d records, want 2: %+v", len(got), got)
 	}
@@ -187,8 +200,11 @@ func TestLevelFilter(t *testing.T) {
 			t.Fatalf("≥WARN leaked a %s line", r.Level)
 		}
 	}
-	if all := filteredRecords(records, ""); len(all) != 4 {
+	if all := tailAt(t, ""); len(all) != 4 {
 		t.Fatalf("empty min kept %d records, want all 4", len(all))
+	}
+	if trimmed := tailAt(t, " WARN "); len(trimmed) != 2 {
+		t.Fatalf("a padded \" WARN \" min kept %d records, want 2", len(trimmed))
 	}
 }
 
@@ -196,7 +212,7 @@ func TestSnapshotFiltersByConfiguredLevel(t *testing.T) {
 	src := newFakeSource(goapi.StatusUp, 4)
 	src.ch <- goapi.LogRecord{Level: "INFO", Message: "info-line"}
 	src.ch <- goapi.LogRecord{Level: "ERROR", Message: "error-line"}
-	b := newBucket(src, "ERROR")
+	b := logs.New(logs.Deps{Source: src, MinLevel: "ERROR"})
 
 	drive(t, b)
 
@@ -210,15 +226,16 @@ func TestSnapshotFiltersByConfiguredLevel(t *testing.T) {
 }
 
 func TestDegradeToSourceDown(t *testing.T) {
-	src := newFakeSource(goapi.StatusDown, 0)
-	b := newBucket(src, "")
-
-	b.Store([]core.Signal{toSignal(goapi.LogRecord{Level: "INFO", Message: "last known"})})
+	src := newFakeSource(goapi.StatusUp, 1)
+	b := logs.New(logs.Deps{Source: src})
+	feed(src, goapi.LogRecord{Level: "INFO", Message: "last known"})
+	drive(t, b)
+	src.status = goapi.StatusDown
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	if _, err := b.Collect(ctx); !errors.Is(err, errSourceDown) {
-		t.Fatalf("Collect with down source returned %v, want errSourceDown", err)
+	if _, err := b.Collect(ctx); err == nil || !strings.Contains(err.Error(), "log source unreachable") {
+		t.Fatalf("Collect with down source returned %v, want the log-source-unreachable error", err)
 	}
 	snap := b.Snapshot()
 	if snap.State != core.StateSourceDown {
@@ -234,7 +251,7 @@ func TestSeverityCriticalWhenTheTailHoldsAnError(t *testing.T) {
 	src := newFakeSource(goapi.StatusUp, 4)
 	src.ch <- goapi.LogRecord{Time: time.Now().UTC(), Level: "INFO", Message: "started"}
 	src.ch <- goapi.LogRecord{Time: time.Now().UTC(), Level: "ERROR", Message: "boom"}
-	b := newBucket(src, "")
+	b := logs.New(logs.Deps{Source: src})
 	drive(t, b)
 
 	snap := b.Snapshot()
@@ -253,7 +270,7 @@ func TestSeverityCriticalWhenTheTailHoldsAnError(t *testing.T) {
 func TestSeverityWarnsWhenTheTailHoldsOnlyWarnings(t *testing.T) {
 	src := newFakeSource(goapi.StatusUp, 4)
 	src.ch <- goapi.LogRecord{Time: time.Now().UTC(), Level: "WARN", Message: "retrying"}
-	b := newBucket(src, "")
+	b := logs.New(logs.Deps{Source: src})
 	drive(t, b)
 
 	if got := b.Snapshot().Severity; got != core.SeverityWarn {
@@ -264,7 +281,7 @@ func TestSeverityWarnsWhenTheTailHoldsOnlyWarnings(t *testing.T) {
 func TestSeverityOKWhenTheTailIsClean(t *testing.T) {
 	src := newFakeSource(goapi.StatusUp, 4)
 	src.ch <- goapi.LogRecord{Time: time.Now().UTC(), Level: "INFO", Message: "started"}
-	b := newBucket(src, "")
+	b := logs.New(logs.Deps{Source: src})
 	drive(t, b)
 
 	snap := b.Snapshot()
@@ -277,15 +294,28 @@ func TestSeverityOKWhenTheTailIsClean(t *testing.T) {
 	}
 }
 
+func stored(t *testing.T, rec goapi.LogRecord) goapi.LogRecord {
+	t.Helper()
+	src := newFakeSource(goapi.StatusUp, 1)
+	feed(src, rec)
+	b := logs.New(logs.Deps{Source: src})
+	drive(t, b)
+	records := snapData(t, b.Snapshot()).Records
+	if len(records) != 1 {
+		t.Fatalf("records = %d, want the 1 fed", len(records))
+	}
+	return records[0]
+}
+
 func TestToSignalRedactsDenylistedKeys(t *testing.T) {
 	for _, key := range []string{"token", "authorization", "email", "password", "secret"} {
-		rec := decodeRecord(toSignal(goapi.LogRecord{
+		rec := stored(t, goapi.LogRecord{
 			Level:   "INFO",
 			Message: "auth attempt",
 			Fields:  map[string]string{key: "s3cr3t-value", "queue": "q1"},
-		}))
-		if rec.Fields[key] != redactedValue {
-			t.Errorf("key %q stored as %q, want %q", key, rec.Fields[key], redactedValue)
+		})
+		if rec.Fields[key] != redacted {
+			t.Errorf("key %q stored as %q, want %q", key, rec.Fields[key], redacted)
 		}
 		if rec.Fields["queue"] != "q1" {
 			t.Errorf("key %q redaction disturbed a benign attr: %q", key, rec.Fields["queue"])
@@ -298,11 +328,11 @@ func TestToSignalRedactsDenylistedKeys(t *testing.T) {
 
 func TestToSignalRedactsKeyVariants(t *testing.T) {
 	for _, key := range []string{"Authorization", "ACCESS TOKEN", "user.email", "api-key", "X-Auth-Token", "Api_Key", "Set-Cookie"} {
-		rec := decodeRecord(toSignal(goapi.LogRecord{
+		rec := stored(t, goapi.LogRecord{
 			Level:  "INFO",
 			Fields: map[string]string{key: "leak"},
-		}))
-		if rec.Fields[key] != redactedValue {
+		})
+		if rec.Fields[key] != redacted {
 			t.Errorf("variant %q stored as %q, want redacted", key, rec.Fields[key])
 		}
 	}
@@ -315,7 +345,7 @@ func TestSnapshotCarriesRawFields(t *testing.T) {
 		Message: `<script>alert('msg')</script>`,
 		Fields:  map[string]string{`<k>`: `<v>"&`},
 	}
-	b := newBucket(src, "")
+	b := logs.New(logs.Deps{Source: src})
 
 	drive(t, b)
 

@@ -1,6 +1,7 @@
-package cost
+package cost_test
 
 import (
+	"altune/overseer/internal/buckets/cost"
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/oci"
 	"context"
@@ -35,15 +36,15 @@ func (r *recordingSeries) named(series string) []core.Point {
 	defer r.mu.Unlock()
 	var out []core.Point
 	for _, p := range r.points {
-		if p.bucket == bucketID && p.series == series {
+		if p.bucket == "cost" && p.series == series {
 			out = append(out, p.point)
 		}
 	}
 	return out
 }
 
-func bucketWithSeries(spend spendReader, usage usageReader, interval time.Duration) (*Bucket, *recordingSeries) {
-	b := newBucket(spend, usage, interval)
+func bucketWithSeries(spend *fakeReader, usage usageReader) (*cost.Bucket, *recordingSeries) {
+	b := newBucket(spend, usage)
 	series := &recordingSeries{}
 	b.UseSeries(series)
 	return b, series
@@ -52,18 +53,18 @@ func bucketWithSeries(spend spendReader, usage usageReader, interval time.Durati
 func TestRefreshSpendRecordsOnePointOnANewReading(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(sampleSpend(), nil)
-	b, series := bucketWithSeries(reader, &fakeUsageReader{}, time.Hour)
+	b, series := bucketWithSeries(reader, &fakeUsageReader{})
 
-	refreshSpend(t, b)
+	refreshSpend(t, b, reader)
 
-	monthToDate := series.named(seriesSpendMonthToDate)
+	monthToDate := series.named("spend_month_to_date")
 	if len(monthToDate) != 1 {
 		t.Fatalf("spend_month_to_date recorded %d points, want 1: %+v", len(monthToDate), monthToDate)
 	}
 	if got := monthToDate[0].Value; got != sampleSpend().Amount {
 		t.Errorf("spend_month_to_date = %v, want %v", got, sampleSpend().Amount)
 	}
-	if got := series.named(seriesSpendDaily); len(got) != 1 {
+	if got := series.named("spend_daily"); len(got) != 1 {
 		t.Fatalf("spend_daily recorded %d points, want 1: %+v", len(got), got)
 	}
 }
@@ -71,16 +72,16 @@ func TestRefreshSpendRecordsOnePointOnANewReading(t *testing.T) {
 func TestRefreshSpendRecordsNothingOnARepeatedIdenticalPoll(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(sampleSpend(), nil)
-	b, series := bucketWithSeries(reader, &fakeUsageReader{}, time.Hour)
+	b, series := bucketWithSeries(reader, &fakeUsageReader{})
 
-	refreshSpend(t, b)
-	refreshSpend(t, b)
-	refreshSpend(t, b)
+	refreshSpend(t, b, reader)
+	refreshSpend(t, b, reader)
+	refreshSpend(t, b, reader)
 
-	if got := series.named(seriesSpendMonthToDate); len(got) != 1 {
+	if got := series.named("spend_month_to_date"); len(got) != 1 {
 		t.Errorf("spend_month_to_date recorded %d points across 3 identical polls, want 1: %+v", len(got), got)
 	}
-	if got := series.named(seriesSpendDaily); len(got) != 1 {
+	if got := series.named("spend_daily"); len(got) != 1 {
 		t.Errorf("spend_daily recorded %d points across 3 identical polls, want 1: %+v", len(got), got)
 	}
 }
@@ -88,22 +89,22 @@ func TestRefreshSpendRecordsNothingOnARepeatedIdenticalPoll(t *testing.T) {
 func TestRefreshSpendRecordsAgainWhenTheReadingChanges(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(sampleSpend(), nil)
-	b, series := bucketWithSeries(reader, &fakeUsageReader{}, time.Hour)
-	refreshSpend(t, b)
+	b, series := bucketWithSeries(reader, &fakeUsageReader{})
+	refreshSpend(t, b, reader)
 
 	changed := sampleSpend()
 	changed.Amount += 10
 	reader.set(changed, nil)
-	refreshSpend(t, b)
+	refreshSpend(t, b, reader)
 
-	monthToDate := series.named(seriesSpendMonthToDate)
+	monthToDate := series.named("spend_month_to_date")
 	if len(monthToDate) != 2 {
 		t.Fatalf("spend_month_to_date recorded %d points across a changed reading, want 2: %+v", len(monthToDate), monthToDate)
 	}
 	if got := monthToDate[1].Value; got != changed.Amount {
 		t.Errorf("spend_month_to_date second point = %v, want %v", got, changed.Amount)
 	}
-	daily := series.named(seriesSpendDaily)
+	daily := series.named("spend_daily")
 	if len(daily) != 2 {
 		t.Fatalf("spend_daily recorded %d points across a changed reading, want 2: %+v", len(daily), daily)
 	}
@@ -115,29 +116,29 @@ func TestRefreshSpendRecordsAgainWhenTheReadingChanges(t *testing.T) {
 func TestCollectRecordsProviderCallsPerProvider(t *testing.T) {
 	usage := &fakeUsageReader{}
 	usage.set(sampleUsage(), nil)
-	b, series := bucketWithSeries(&fakeReader{}, usage, time.Hour)
+	b, series := bucketWithSeries(&fakeReader{}, usage)
 
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
 
-	if got := series.named(providerCallsSeriesStem + "deezer"); len(got) != 1 || got[0].Value != 126 {
+	if got := series.named("provider_calls:" + "deezer"); len(got) != 1 || got[0].Value != 126 {
 		t.Errorf("provider_calls:deezer = %+v, want one point of 126", got)
 	}
-	if got := series.named(providerCallsSeriesStem + "spotify"); len(got) != 1 || got[0].Value != 31 {
+	if got := series.named("provider_calls:" + "spotify"); len(got) != 1 || got[0].Value != 31 {
 		t.Errorf("provider_calls:spotify = %+v, want one point of 31", got)
 	}
 }
 
 func TestKeySeriesIsSpendMonthToDate(t *testing.T) {
-	b := newBucket(&fakeReader{}, &fakeUsageReader{}, time.Hour)
-	if got := b.KeySeries(); got != seriesSpendMonthToDate {
-		t.Errorf("KeySeries() = %q, want %q", got, seriesSpendMonthToDate)
+	b := newBucket(&fakeReader{}, &fakeUsageReader{})
+	if got := b.KeySeries(); got != "spend_month_to_date" {
+		t.Errorf("KeySeries() = %q, want %q", got, "spend_month_to_date")
 	}
 }
 
 func TestBucketIsASeriesWriter(t *testing.T) {
-	var bucket core.Bucket = newBucket(&fakeReader{}, &fakeUsageReader{}, time.Hour)
+	var bucket core.Bucket = newBucket(&fakeReader{}, &fakeUsageReader{})
 	if _, ok := bucket.(core.SeriesWriter); !ok {
 		t.Fatal("cost does not implement core.SeriesWriter, so the composition root never hands it the history store")
 	}
@@ -148,9 +149,9 @@ func TestCollectAndRefreshSpendWithoutSeriesStillWork(t *testing.T) {
 	spend.set(sampleSpend(), nil)
 	usage := &fakeUsageReader{}
 	usage.set(sampleUsage(), nil)
-	b := newBucket(spend, usage, time.Hour)
+	b := newBucket(spend, usage)
 
-	b.refreshSpend(context.Background())
+	refreshSpend(t, b, spend)
 	if _, err := b.Collect(context.Background()); err != nil {
 		t.Fatalf("Collect with no series wired: %v", err)
 	}
@@ -160,8 +161,8 @@ func TestSpendDailyResetsAcrossANewBillingPeriod(t *testing.T) {
 	reader := &fakeReader{}
 	first := sampleSpend()
 	reader.set(first, nil)
-	b, series := bucketWithSeries(reader, &fakeUsageReader{}, time.Hour)
-	refreshSpend(t, b)
+	b, series := bucketWithSeries(reader, &fakeUsageReader{})
+	refreshSpend(t, b, reader)
 
 	next := oci.Spend{
 		Amount:      5,
@@ -170,9 +171,9 @@ func TestSpendDailyResetsAcrossANewBillingPeriod(t *testing.T) {
 		PeriodEnd:   first.PeriodEnd.AddDate(0, 1, 0),
 	}
 	reader.set(next, nil)
-	refreshSpend(t, b)
+	refreshSpend(t, b, reader)
 
-	daily := series.named(seriesSpendDaily)
+	daily := series.named("spend_daily")
 	if len(daily) != 2 {
 		t.Fatalf("spend_daily recorded %d points across a period rollover, want 2: %+v", len(daily), daily)
 	}

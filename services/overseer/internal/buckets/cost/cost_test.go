@@ -1,6 +1,7 @@
-package cost
+package cost_test
 
 import (
+	"altune/overseer/internal/buckets/cost"
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
 	"altune/overseer/internal/oci"
@@ -81,17 +82,39 @@ func sampleUsage() goapi.ProviderUsage {
 	}
 }
 
-func liveBucket() (*Bucket, *fakeReader, *fakeUsageReader) {
+func liveBucket() (*cost.Bucket, *fakeReader, *fakeUsageReader) {
 	spend := &fakeReader{}
 	spend.set(sampleSpend(), nil)
 	usage := &fakeUsageReader{}
 	usage.set(sampleUsage(), nil)
-	return newBucket(spend, usage, time.Hour), spend, usage
+	return newBucket(spend, usage), spend, usage
 }
 
-func refreshSpend(t *testing.T, b *Bucket) {
+type usageReader interface {
+	AdminProviderUsage(ctx context.Context) (goapi.ProviderUsage, error)
+}
+
+func connected(reader cost.SpendReader) func() (cost.SpendReader, error) {
+	return func() (cost.SpendReader, error) { return reader, nil }
+}
+
+func newBucket(spend *fakeReader, usage usageReader) *cost.Bucket {
+	return cost.New(cost.Deps{ConnectSpend: connected(spend), Usage: usage, SpendInterval: time.Millisecond})
+}
+
+func refreshSpend(t *testing.T, b *cost.Bucket, spend *fakeReader) {
 	t.Helper()
-	b.refreshSpend(context.Background())
+	b.Start(t.Context())
+	from := spend.calls.Load()
+	waitFor(t, func() bool { return spend.calls.Load() >= from+2 }, 2*time.Second, "the spend scheduler stopped reading spend")
+}
+
+func unconfigured(t *testing.T) *cost.Bucket {
+	t.Helper()
+	b := cost.New(cost.Deps{SpendInterval: time.Millisecond})
+	b.Start(t.Context())
+	waitFor(t, func() bool { return snapData(t, b.Snapshot()).SpendStale }, 2*time.Second, "spend never marked stale with no OCI connection")
+	return b
 }
 
 func waitFor(t *testing.T, cond func() bool, within time.Duration, msg string) {
@@ -106,16 +129,16 @@ func waitFor(t *testing.T, cond func() bool, within time.Duration, msg string) {
 	t.Fatal(msg)
 }
 
-func collectStore(t *testing.T, b *Bucket) error {
+func collectStore(t *testing.T, b *cost.Bucket) error {
 	t.Helper()
 	signals, err := b.Collect(context.Background())
 	b.Store(signals)
 	return err
 }
 
-func snapData(t *testing.T, snap core.Snapshot) Data {
+func snapData(t *testing.T, snap core.Snapshot) cost.Data {
 	t.Helper()
-	var d Data
+	var d cost.Data
 	if err := json.Unmarshal(snap.Data, &d); err != nil {
 		t.Fatalf("unmarshal data: %v (%s)", err, snap.Data)
 	}
@@ -123,7 +146,7 @@ func snapData(t *testing.T, snap core.Snapshot) Data {
 }
 
 func TestCollectStoreSnapshot(t *testing.T) {
-	b, _, _ := liveBucket()
+	b, spend, _ := liveBucket()
 
 	empty := b.Snapshot()
 	if empty.State != core.StateStale {
@@ -134,7 +157,7 @@ func TestCollectStoreSnapshot(t *testing.T) {
 		t.Errorf("empty snapshot carried data: spend=%+v usage=%+v", ed.Spend, ed.Usage)
 	}
 
-	refreshSpend(t, b)
+	refreshSpend(t, b, spend)
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect while both live = %v, want nil", err)
 	}
@@ -154,7 +177,7 @@ func TestCollectStoreSnapshot(t *testing.T) {
 func TestStartPollsSpendAcrossTicks(t *testing.T) {
 	spend := &fakeReader{}
 	spend.set(sampleSpend(), nil)
-	b := newBucket(spend, &fakeUsageReader{}, time.Millisecond)
+	b := newBucket(spend, &fakeUsageReader{})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -171,7 +194,7 @@ func TestStartPollsSpendAcrossTicks(t *testing.T) {
 func TestStartLaunchesSchedulerOnce(t *testing.T) {
 	spend := &fakeReader{}
 	spend.set(sampleSpend(), nil)
-	b := newBucket(spend, &fakeUsageReader{}, time.Millisecond)
+	b := newBucket(spend, &fakeUsageReader{})
 
 	dead, cancelDead := context.WithCancel(context.Background())
 	cancelDead()
@@ -194,7 +217,7 @@ func TestSpendNotFetchedOnEveryCollect(t *testing.T) {
 	spend.set(sampleSpend(), nil)
 	usage := &fakeUsageReader{}
 	usage.set(sampleUsage(), nil)
-	b := newBucket(spend, usage, time.Hour)
+	b := newBucket(spend, usage)
 
 	const collects = 50
 	for i := 0; i < collects; i++ {
@@ -209,10 +232,10 @@ func TestSpendNotFetchedOnEveryCollect(t *testing.T) {
 }
 
 func TestSpendServedWithItsAge(t *testing.T) {
-	b, _, _ := liveBucket()
+	b, spend, _ := liveBucket()
 
 	before := time.Now().UTC()
-	refreshSpend(t, b)
+	refreshSpend(t, b, spend)
 
 	d := snapData(t, b.Snapshot())
 	if d.SpendUpdatedAt.IsZero() {
@@ -225,13 +248,13 @@ func TestSpendServedWithItsAge(t *testing.T) {
 
 func TestSpendDegradesIndependently(t *testing.T) {
 	b, spend, _ := liveBucket()
-	refreshSpend(t, b)
+	refreshSpend(t, b, spend)
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("initial Collect: %v", err)
 	}
 
 	spend.set(oci.Spend{}, srcDown())
-	refreshSpend(t, b)
+	refreshSpend(t, b, spend)
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect with only OCI down = %v, want nil (independent degrade)", err)
 	}
@@ -248,8 +271,8 @@ func TestSpendDegradesIndependently(t *testing.T) {
 }
 
 func TestUsageDegradesIndependently(t *testing.T) {
-	b, _, usage := liveBucket()
-	refreshSpend(t, b)
+	b, spend, usage := liveBucket()
+	refreshSpend(t, b, spend)
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("initial Collect: %v", err)
 	}
@@ -272,20 +295,20 @@ func TestUsageDegradesIndependently(t *testing.T) {
 
 func TestBothDownReturnsError(t *testing.T) {
 	b, spend, usage := liveBucket()
-	refreshSpend(t, b)
+	refreshSpend(t, b, spend)
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("initial Collect: %v", err)
 	}
 
 	spend.set(oci.Spend{}, srcDown())
-	refreshSpend(t, b)
+	refreshSpend(t, b, spend)
 	usage.set(nil, usageSrcDown())
 	err := collectStore(t, b)
 	if err == nil {
 		t.Fatal("Collect with both sources down returned nil error")
 	}
-	if !errors.Is(err, errBothDown) {
-		t.Errorf("both-down error = %v, want errBothDown", err)
+	if !errors.Is(err, cost.ErrBothDown) {
+		t.Errorf("both-down error = %v, want cost.ErrBothDown", err)
 	}
 	snap := b.Snapshot()
 	if snap.State != core.StateSourceDown {
@@ -307,9 +330,9 @@ func TestSnapshotCarriesRawServiceName(t *testing.T) {
 		Currency: "USD",
 		Lines:    []oci.SpendLine{{Service: `<script>alert(1)</script>`, Amount: 1}},
 	}, nil)
-	b := newBucket(spend, &fakeUsageReader{}, time.Hour)
+	b := newBucket(spend, &fakeUsageReader{})
 
-	refreshSpend(t, b)
+	refreshSpend(t, b, spend)
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
@@ -320,8 +343,8 @@ func TestSnapshotCarriesRawServiceName(t *testing.T) {
 }
 
 func TestNoOCIIdentifierInSnapshot(t *testing.T) {
-	b, _, _ := liveBucket()
-	refreshSpend(t, b)
+	b, spend, _ := liveBucket()
+	refreshSpend(t, b, spend)
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
@@ -332,24 +355,19 @@ func TestNoOCIIdentifierInSnapshot(t *testing.T) {
 
 func TestConcurrentCollectAndSnapshot(t *testing.T) {
 	b, _, _ := liveBucket()
+	b.Start(t.Context())
 
 	var wg sync.WaitGroup
-	wg.Add(3)
+	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		for i := 0; i < 500; i++ {
+		for range 500 {
 			_ = collectStore(t, b)
 		}
 	}()
 	go func() {
 		defer wg.Done()
-		for i := 0; i < 500; i++ {
-			b.refreshSpend(context.Background())
-		}
-	}()
-	go func() {
-		defer wg.Done()
-		for i := 0; i < 500; i++ {
+		for range 500 {
 			_ = b.Snapshot()
 		}
 	}()
@@ -357,11 +375,10 @@ func TestConcurrentCollectAndSnapshot(t *testing.T) {
 }
 
 func TestUnconfiguredDegradesNotCrashes(t *testing.T) {
-	b := newBucket(nullSpendReader{}, nullUsageReader{}, time.Hour)
+	b := unconfigured(t)
 
-	refreshSpend(t, b)
-	if _, err := b.Collect(context.Background()); !errors.Is(err, errBothDown) {
-		t.Fatalf("unconfigured Collect error = %v, want errBothDown", err)
+	if _, err := b.Collect(context.Background()); !errors.Is(err, cost.ErrBothDown) {
+		t.Fatalf("unconfigured Collect error = %v, want ErrBothDown", err)
 	}
 	snap := b.Snapshot()
 	if snap.State != core.StateSourceDown {
@@ -373,126 +390,103 @@ func TestUnconfiguredDegradesNotCrashes(t *testing.T) {
 	}
 }
 
-func TestSourceErrorsClassifyTyped(t *testing.T) {
-	b := newBucket(nullSpendReader{}, nullUsageReader{}, time.Hour)
-	refreshSpend(t, b)
+func TestBothDownKeepsTheUsageCause(t *testing.T) {
+	b := unconfigured(t)
+
 	_, err := b.Collect(context.Background())
 	if err == nil {
 		t.Fatal("Collect returned nil on full outage")
 	}
-	if !errors.Is(err, errUsageUnconfigured) {
+	if !strings.Contains(err.Error(), "cost: go-api not configured") {
 		t.Errorf("both-down error dropped the usage cause: %v", err)
 	}
-	if _, spendErr := (nullSpendReader{}).CurrentPeriodSpend(context.Background()); !oci.IsSourceDown(spendErr) {
-		t.Errorf("spend half degrade not classified source-down: %v", spendErr)
+	if !goapi.IsSourceDown(err) {
+		t.Errorf("both-down error = %v, want the usage half classified source-down", err)
 	}
 }
 
-func TestLazyReaderDegradesOnBuildFailure(t *testing.T) {
-	calls := 0
-	l := &lazyReader{build: func() (spendReader, error) {
-		calls++
-		return nil, errors.New("instance principal unavailable")
-	}}
-	for i := 0; i < 2; i++ {
-		_, err := l.CurrentPeriodSpend(context.Background())
-		if !oci.IsSourceDown(err) {
-			t.Fatalf("lazy read #%d error = %v, want source-down", i, err)
-		}
-	}
-	if calls != 2 {
-		t.Errorf("build called %d times, want 2 (retried after failure)", calls)
+func TestSpendConnectionIsRetriedAfterAFailure(t *testing.T) {
+	var connects atomic.Int64
+	b := cost.New(cost.Deps{
+		ConnectSpend: func() (cost.SpendReader, error) {
+			connects.Add(1)
+			return nil, errors.New("instance principal unavailable")
+		},
+		Usage:         &fakeUsageReader{},
+		SpendInterval: time.Millisecond,
+	})
+	b.Start(t.Context())
+
+	waitFor(t, func() bool { return connects.Load() >= 2 }, 2*time.Second, "a failed spend connection was not retried")
+	if d := snapData(t, b.Snapshot()); !d.SpendStale || d.Spend != nil {
+		t.Errorf("spend with no connection = stale %v, %+v; want stale and no figure", d.SpendStale, d.Spend)
 	}
 }
 
-func TestLazyReaderBuildsOnceOnSuccess(t *testing.T) {
+func TestSpendConnectsOnceOnSuccess(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(sampleSpend(), nil)
-	calls := 0
-	l := &lazyReader{build: func() (spendReader, error) {
-		calls++
-		return reader, nil
-	}}
-	for i := 0; i < 3; i++ {
-		if _, err := l.CurrentPeriodSpend(context.Background()); err != nil {
-			t.Fatalf("lazy read #%d: %v", i, err)
-		}
-	}
-	if calls != 1 {
-		t.Errorf("build called %d times, want 1 (cached after success)", calls)
-	}
-}
+	var connects atomic.Int64
+	b := cost.New(cost.Deps{
+		ConnectSpend: func() (cost.SpendReader, error) {
+			connects.Add(1)
+			return reader, nil
+		},
+		Usage:         &fakeUsageReader{},
+		SpendInterval: time.Millisecond,
+	})
+	b.Start(t.Context())
 
-func TestOCIEnabledParsing(t *testing.T) {
-	for _, tc := range []struct {
-		val  string
-		want bool
-	}{{"1", true}, {"true", true}, {"TRUE", true}, {"yes", true}, {"on", true}, {"", false}, {"0", false}, {"no", false}} {
-		t.Setenv("OVERSEER_OCI_ENABLED", tc.val)
-		if got := ociEnabled(); got != tc.want {
-			t.Errorf("ociEnabled(%q) = %v, want %v", tc.val, got, tc.want)
-		}
+	waitFor(t, func() bool { return reader.calls.Load() >= 3 }, 2*time.Second, "spend was not read three times")
+	if got := connects.Load(); got != 1 {
+		t.Errorf("connected %d times, want 1 (kept after success)", got)
 	}
 }
 
-func TestSpendIntervalFromEnv(t *testing.T) {
-	t.Setenv("OVERSEER_COST_SPEND_INTERVAL", "")
-	if got := spendIntervalFromEnv(); got != defaultSpendInterval {
-		t.Errorf("unset interval = %v, want default %v", got, defaultSpendInterval)
-	}
-
-	t.Setenv("OVERSEER_COST_SPEND_INTERVAL", "30m")
-	if got := spendIntervalFromEnv(); got != 30*time.Minute {
-		t.Errorf("override interval = %v, want 30m", got)
-	}
-
-	t.Setenv("OVERSEER_COST_SPEND_INTERVAL", "not-a-duration")
-	if got := spendIntervalFromEnv(); got != defaultSpendInterval {
-		t.Errorf("malformed interval = %v, want fallback to default %v", got, defaultSpendInterval)
-	}
-}
-
-func TestSpendSchedulerExitsOnCancel(t *testing.T) {
-	var runs atomic.Int32
-	s := newSpendScheduler(time.Millisecond, func(context.Context) { runs.Add(1) })
-
+func TestSpendReadsStopWhenTheContextEnds(t *testing.T) {
+	reader := &fakeReader{}
+	reader.set(sampleSpend(), nil)
+	b := newBucket(reader, &fakeUsageReader{})
 	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() { s.run(ctx); close(done) }()
+	b.Start(ctx)
+	waitFor(t, func() bool { return reader.calls.Load() > 0 }, 2*time.Second, "the scheduler never ran the immediate refresh")
 
 	cancel()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("spendScheduler.run did not return within 2s of ctx cancel — goroutine leak")
-	}
-	if runs.Load() == 0 {
-		t.Error("scheduler never ran the immediate refresh")
-	}
-}
-
-func TestSpendSchedulerContainsPanic(t *testing.T) {
-	panicking := func(context.Context) { panic("spend read blew up") }
-
-	newSpendScheduler(time.Hour, panicking).safeRefreshOnce(context.Background())
-
-	s := newSpendScheduler(time.Millisecond, panicking)
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() { s.run(ctx); close(done) }()
 	time.Sleep(20 * time.Millisecond)
-	cancel()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("spendScheduler.run did not return after panicking refreshes — panic escaped containment")
+	settled := reader.calls.Load()
+	time.Sleep(20 * time.Millisecond)
+	if got := reader.calls.Load(); got != settled {
+		t.Errorf("spend read %d more times after the context ended, want 0", got-settled)
 	}
 }
 
-func TestSpendSchedulerClampsInterval(t *testing.T) {
-	s := newSpendScheduler(0, func(context.Context) {})
-	if s.interval != defaultSpendInterval {
-		t.Errorf("interval = %v, want clamped to %v", s.interval, defaultSpendInterval)
+type panickingReader struct{ calls atomic.Int64 }
+
+func (p *panickingReader) CurrentPeriodSpend(context.Context) (oci.Spend, error) {
+	p.calls.Add(1)
+	panic("spend read blew up")
+}
+
+func TestSpendRefreshSurvivesAPanickingRead(t *testing.T) {
+	reader := &panickingReader{}
+	b := cost.New(cost.Deps{ConnectSpend: connected(reader), Usage: &fakeUsageReader{}, SpendInterval: time.Millisecond})
+	b.Start(t.Context())
+
+	waitFor(t, func() bool { return reader.calls.Load() >= 3 }, 2*time.Second, "the scheduler stopped after a panicking read")
+}
+
+func TestANonPositiveSpendIntervalFallsBackToHourly(t *testing.T) {
+	for _, interval := range []time.Duration{0, -time.Second} {
+		reader := &fakeReader{}
+		reader.set(sampleSpend(), nil)
+		b := cost.New(cost.Deps{ConnectSpend: connected(reader), Usage: &fakeUsageReader{}, SpendInterval: interval})
+		b.Start(t.Context())
+
+		waitFor(t, func() bool { return reader.calls.Load() == 1 }, 2*time.Second, "the scheduler never ran the immediate refresh")
+		time.Sleep(20 * time.Millisecond)
+		if got := reader.calls.Load(); got != 1 {
+			t.Errorf("interval %v: spend read %d times in 20ms, want only the immediate read", interval, got)
+		}
 	}
 }
 
@@ -504,8 +498,8 @@ func TestSeverityCriticalWhenAProviderNeverSucceeds(t *testing.T) {
 		"deezer":  {OK: 0, Quota: 40, Error: 12},
 		"spotify": {OK: 30, Quota: 0, Error: 1},
 	}, nil)
-	b := newBucket(spend, usage, time.Hour)
-	refreshSpend(t, b)
+	b := newBucket(spend, usage)
+	refreshSpend(t, b, spend)
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
@@ -528,8 +522,8 @@ func TestSeverityWarnsWhenAProviderMostlyFails(t *testing.T) {
 	spend.set(sampleSpend(), nil)
 	usage := &fakeUsageReader{}
 	usage.set(goapi.ProviderUsage{"deezer": {OK: 10, Quota: 20, Error: 5}}, nil)
-	b := newBucket(spend, usage, time.Hour)
-	refreshSpend(t, b)
+	b := newBucket(spend, usage)
+	refreshSpend(t, b, spend)
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
@@ -540,8 +534,8 @@ func TestSeverityWarnsWhenAProviderMostlyFails(t *testing.T) {
 }
 
 func TestSeverityOKWhenProvidersMostlySucceed(t *testing.T) {
-	b, _, _ := liveBucket()
-	refreshSpend(t, b)
+	b, spend, _ := liveBucket()
+	refreshSpend(t, b, spend)
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
@@ -553,13 +547,5 @@ func TestSeverityOKWhenProvidersMostlySucceed(t *testing.T) {
 	}
 	if snap.Headline != "41.50 USD month-to-date · 157 provider calls" {
 		t.Errorf("headline = %q, want both halves' money figures", snap.Headline)
-	}
-}
-
-func TestUsageReaderFromEnvDegradesWhenUnconfigured(t *testing.T) {
-	t.Setenv("OVERSEER_GOAPI_URL", "")
-	t.Setenv("OVERSEER_GOAPI_TOKEN", "")
-	if _, ok := usageReaderFromEnv().(nullUsageReader); !ok {
-		t.Errorf("unconfigured usageReaderFromEnv = %T, want nullUsageReader", usageReaderFromEnv())
 	}
 }

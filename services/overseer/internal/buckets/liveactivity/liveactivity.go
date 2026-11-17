@@ -28,9 +28,15 @@ type Bucket struct {
 	start  sync.Once
 }
 
-func New() *Bucket { return newBucket(sourceFromEnv()) }
+type Deps struct {
+	Source source
+}
 
-func newBucket(src source) *Bucket {
+func New(deps Deps) *Bucket {
+	src := deps.Source
+	if src == nil {
+		src = newNullSource()
+	}
 	return &Bucket{events: core.NewRingStore(eventCapacity), src: src}
 }
 
@@ -121,21 +127,6 @@ func eventText(ev goapi.Event) string {
 	return strings.Join(parts, " ")
 }
 
-func sourceFromEnv() source {
-	base, ok := goapi.BaseURLFromEnv()
-	if !ok {
-		return newNullSource()
-	}
-	c, err := goapi.NewConsumer(base, goapi.SharedTokenSource())
-	if err != nil {
-		slog.Warn("liveactivity: invalid OVERSEER_GOAPI_URL, degrading to source-down", "error", err)
-		return newNullSource()
-	}
-	return c
-}
-
 type nullSource = goapi.NullEventSource
 
 func newNullSource() *nullSource { return goapi.NewNullEventSource(errSourceDown) }
-
-func init() { core.Register(New()) }

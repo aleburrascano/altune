@@ -4,9 +4,8 @@ import (
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
 	"context"
-	"log/slog"
-	"os"
-	"strings"
+	"errors"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -33,11 +32,27 @@ type Bucket struct {
 	start sync.Once
 }
 
-func New() *Bucket { return newBucket(clientFromEnv(), defaultSuite(), intervalFromEnv()) }
+type prober interface {
+	Probe(ctx context.Context, path, rawQuery string) (int, error)
+}
 
-func newBucket(client prober, checks []check, interval time.Duration) *Bucket {
+type Deps struct {
+	Prober   prober
+	Interval time.Duration
+	Now      func() time.Time
+}
+
+func New(deps Deps) *Bucket {
+	probe := deps.Prober
+	if probe == nil {
+		probe = nullProber{}
+	}
+	now := deps.Now
+	if now == nil {
+		now = time.Now
+	}
 	b := &Bucket{history: core.NewRingStore(historyCapacity), series: discardSeries{}}
-	b.scheduler = newScheduler(client, checks, interval, b.record)
+	b.scheduler = newScheduler(probe, defaultSuite(), deps.Interval, now, b.record)
 	return b
 }
 
@@ -116,39 +131,12 @@ func (b *Bucket) markStale() {
 	b.reason = goapi.ReasonDown
 }
 
-func clientFromEnv() prober {
-	base, ok := goapi.BaseURLFromEnv()
-	if !ok {
-		return nullProber{}
-	}
-	c, err := newFencedClient(base, allowlistFromEnv(base))
-	if err != nil {
-		slog.Warn("security: cannot build fenced client, degrading to source-down", "error", err)
-		return nullProber{}
-	}
-	return c
-}
+var errUnconfigured = errors.New("security: go-api not configured")
 
-func allowlistFromEnv(base string) []string {
-	raw := strings.TrimSpace(os.Getenv("OVERSEER_SECURITY_ALLOWLIST"))
-	if raw == "" {
-		return []string{base}
-	}
-	return strings.Split(raw, ",")
-}
+type nullProber struct{}
 
-func intervalFromEnv() time.Duration {
-	raw := strings.TrimSpace(os.Getenv("OVERSEER_SECURITY_INTERVAL"))
-	if raw == "" {
-		return defaultInterval
-	}
-	d, err := time.ParseDuration(raw)
-	if err != nil || d <= 0 {
-		slog.Warn("security: invalid OVERSEER_SECURITY_INTERVAL, using default",
-			"value", raw, "default", defaultInterval)
-		return defaultInterval
-	}
-	return d
+func (nullProber) Probe(context.Context, string, string) (int, error) {
+	return 0, fmt.Errorf("security: go-api unreachable: %w", errUnconfigured)
 }
 
 type discardSeries struct{}
@@ -158,5 +146,3 @@ func (discardSeries) Record(string, string, core.Point) {}
 func (discardSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
 	return nil, nil
 }
-
-func init() { core.Register(New()) }

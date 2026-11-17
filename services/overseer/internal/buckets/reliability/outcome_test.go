@@ -1,10 +1,10 @@
-package reliability
+package reliability_test
 
 import (
+	"altune/overseer/internal/buckets/reliability"
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
 	"context"
-	"sync"
 	"sync/atomic"
 	"testing"
 )
@@ -15,60 +15,61 @@ func (a *alternatingChecker) Health(context.Context) (goapi.Health, error) {
 	if a.calls.Add(1)%2 == 0 {
 		return goapi.Health{}, srcDown("GET /health")
 	}
-	return goapi.Health{Status: "degraded"}, nil
+	return degraded()
 }
 
 func TestSnapshotNeverPairsDownWithDegraded(t *testing.T) {
-	b := newBucket(&fakeReader{}, &alternatingChecker{}, defaultPollInterval)
 	const polls = 20000
-	var wg sync.WaitGroup
-	done := make(chan struct{})
-	wg.Go(func() {
-		defer close(done)
-		for range polls {
-			b.poller.pollOnce(context.Background())
-		}
+	checker := &alternatingChecker{}
+	b := reliability.New(reliability.Deps{Reader: &fakeReader{}, Checker: checker, Interval: fastInterval})
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() {
+		cancel()
+		b.Wait()
 	})
+	b.Start(ctx)
+
 	torn := 0
-	for {
-		select {
-		case <-done:
-			wg.Wait()
-			if torn > 0 {
-				t.Fatalf("%d snapshots paired a down probe with a degraded reason", torn)
-			}
-			return
-		default:
-		}
+	for checker.calls.Load() < polls {
 		snap := b.Snapshot()
 		if snap.State == core.StateSourceDown && (snap.Reason == goapi.ReasonDegraded || snapData(t, snap).Reachability == goapi.ReasonDegraded) {
 			torn++
 		}
 	}
+	if torn > 0 {
+		t.Fatalf("%d snapshots paired a down probe with a degraded reason", torn)
+	}
 }
 
 func TestReachOutcomeIsOneConsistentPair(t *testing.T) {
 	cases := []struct {
-		outcome    reachOutcome
-		wantStatus goapi.Status
+		name       string
+		probe      []reply
+		wantState  core.State
 		wantReason string
-		wantText   string
+		wantReach  string
 	}{
-		{outcomeConnecting, goapi.StatusConnecting, "", goapi.StatusConnecting.String()},
-		{outcomeUp, goapi.StatusUp, "", goapi.StatusUp.String()},
-		{outcomeDegraded, goapi.StatusUp, goapi.ReasonDegraded, goapi.ReasonDegraded},
-		{outcomeDown, goapi.StatusDown, "", goapi.StatusDown.String()},
+		{"connecting", nil, core.StateStale, "", goapi.StatusConnecting.String()},
+		{"up", []reply{{health: goapi.Health{Status: "ok"}}}, core.StateLive, "", goapi.StatusUp.String()},
+		{"degraded", []reply{{health: goapi.Health{Status: "degraded"}}}, core.StateLive, goapi.ReasonDegraded, goapi.ReasonDegraded},
+		{"down", []reply{{err: srcDown("GET /health")}}, core.StateSourceDown, "", goapi.StatusDown.String()},
 	}
 	for _, tc := range cases {
-		t.Run(tc.wantText, func(t *testing.T) {
-			if got := tc.outcome.status(); got != tc.wantStatus {
-				t.Errorf("status = %v, want %v", got, tc.wantStatus)
+		t.Run(tc.name, func(t *testing.T) {
+			b, probe := probedBucket(t, &fakeReader{})
+			for _, r := range tc.probe {
+				probe.answer(r.health, r.err)
 			}
-			if got := tc.outcome.reason(); got != tc.wantReason {
-				t.Errorf("reason = %q, want %q", got, tc.wantReason)
+
+			snap := b.Snapshot()
+			if snap.State != tc.wantState {
+				t.Errorf("state = %q, want %q", snap.State, tc.wantState)
 			}
-			if got := tc.outcome.String(); got != tc.wantText {
-				t.Errorf("String = %q, want %q", got, tc.wantText)
+			if snap.Reason != tc.wantReason {
+				t.Errorf("reason = %q, want %q", snap.Reason, tc.wantReason)
+			}
+			if got := snapData(t, snap).Reachability; got != tc.wantReach {
+				t.Errorf("reachability = %q, want %q", got, tc.wantReach)
 			}
 		})
 	}

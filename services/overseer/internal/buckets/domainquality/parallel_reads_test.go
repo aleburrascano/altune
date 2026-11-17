@@ -1,4 +1,4 @@
-package domainquality
+package domainquality_test
 
 import (
 	"altune/overseer/internal/goapi"

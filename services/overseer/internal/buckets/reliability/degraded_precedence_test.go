@@ -1,9 +1,8 @@
-package reliability
+package reliability_test
 
 import (
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
-	"context"
 	"net/http"
 	"testing"
 )
@@ -22,12 +21,10 @@ func TestAdminReasonOutranksPollDegraded(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			reader := &fakeReader{}
-			checker := &fakeChecker{}
 			reader.set(goapi.OperatorHealth{}, tc.adminErr)
-			checker.set(goapi.Health{Status: "degraded"}, nil)
-			b := newBucket(reader, checker, defaultPollInterval)
+			b, probe := probedBucket(t, reader)
 			_ = collectStore(t, b)
-			b.poller.pollOnce(context.Background())
+			probe.answer(degraded())
 
 			if got := b.Snapshot().Reason; got != tc.want {
 				t.Errorf("Reason = %q, want %q", got, tc.want)
@@ -38,16 +35,14 @@ func TestAdminReasonOutranksPollDegraded(t *testing.T) {
 
 func TestDependencyDownOutranksPollDegraded(t *testing.T) {
 	reader := &fakeReader{}
-	checker := &fakeChecker{}
 	down := healthyHealth()
 	down.DB = "down"
 	reader.set(down, nil)
-	checker.set(goapi.Health{Status: "degraded"}, nil)
-	b := newBucket(reader, checker, defaultPollInterval)
+	b, probe := probedBucket(t, reader)
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect = %v, want nil", err)
 	}
-	b.poller.pollOnce(context.Background())
+	probe.answer(degraded())
 
 	snap := b.Snapshot()
 

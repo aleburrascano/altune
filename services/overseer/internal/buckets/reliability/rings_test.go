@@ -18,7 +18,7 @@ func ringNamed(t *testing.T, b core.Restorable, name string) *core.RingStore {
 }
 
 func TestRestoredHistoryAndPollRingsShowInTheSnapshot(t *testing.T) {
-	b := reliability.New()
+	b := reliability.New(reliability.Deps{})
 	at := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
 	history := []core.Signal{{At: at, Kind: "health", Text: "db=up redis=up auth=up (healthy)"}}
 	poll := []core.Signal{{At: at, Kind: "poll", Text: "up"}, {At: at.Add(time.Minute), Kind: "poll", Text: "down"}}

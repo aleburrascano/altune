@@ -1,6 +1,7 @@
-package usage
+package usage_test
 
 import (
+	"altune/overseer/internal/buckets/usage"
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
 	"context"
@@ -29,7 +30,17 @@ func (f *fakeSource) Status() goapi.Status          { return goapi.Status(f.stat
 func (f *fakeSource) setStatus(s goapi.Status)      { f.status.Store(int32(s)) }
 func (f *fakeSource) push(ev goapi.Event)           { f.events <- ev }
 
-func collectStore(t *testing.T, b *Bucket) {
+type eventSource interface {
+	Run(ctx context.Context) error
+	Events() <-chan goapi.Event
+	Status() goapi.Status
+}
+
+func newBucket(src eventSource) *usage.Bucket {
+	return usage.New(usage.Deps{Source: src})
+}
+
+func collectStore(t *testing.T, b *usage.Bucket) {
 	t.Helper()
 	signals, err := b.Collect(context.Background())
 	if err != nil {
@@ -38,16 +49,16 @@ func collectStore(t *testing.T, b *Bucket) {
 	b.Store(signals)
 }
 
-func snapData(t *testing.T, snap core.Snapshot) Data {
+func snapData(t *testing.T, snap core.Snapshot) usage.Data {
 	t.Helper()
-	var d Data
+	var d usage.Data
 	if err := json.Unmarshal(snap.Data, &d); err != nil {
 		t.Fatalf("unmarshal data: %v (%s)", err, snap.Data)
 	}
 	return d
 }
 
-func find(list []Count, label string) int {
+func find(list []usage.Count, label string) int {
 	for _, c := range list {
 		if c.Label == label {
 			return c.Count
@@ -265,32 +276,33 @@ func TestStartKeepsPumpFeedingPastFirstTick(t *testing.T) {
 }
 
 func TestUnconfiguredDegradesNotCrashes(t *testing.T) {
-	t.Setenv("OVERSEER_GOAPI_URL", "")
-	t.Setenv("OVERSEER_GOAPI_TOKEN", "")
-	b := New()
-	if _, ok := b.src.(*nullSource); !ok {
-		t.Fatalf("unconfigured source = %T, want *nullSource", b.src)
-	}
+	b := usage.New(usage.Deps{})
+
 	if snap := b.Snapshot(); snap.State != core.StateSourceDown {
 		t.Errorf("unconfigured state = %q, want source_down", snap.State)
+	}
+	if _, err := b.Collect(context.Background()); err == nil {
+		t.Error("unconfigured Collect returned nil, want the source-down error")
 	}
 }
 
 func TestFutureTimestampDoesNotFreezeTimeline(t *testing.T) {
 	src := newFakeSource(8)
 	b := newBucket(src)
+	before := time.Now()
 
-	src.push(goapi.Event{Type: "play", Timestamp: time.Now().Add(1000 * time.Hour)})
+	src.push(goapi.Event{Type: "play", Timestamp: before.Add(1000 * time.Hour)})
 	collectStore(t, b)
-
-	if cur := b.roll.line.curStart; cur.After(time.Now().Add(2 * time.Minute)) {
-		t.Errorf("timeline window ratcheted to %v (far future); future timestamp not clamped to now", cur)
-	}
-
 	src.push(goapi.Event{Type: "play"})
 	collectStore(t, b)
+	after := time.Now()
+
+	now := map[string]bool{before.Format("15:04"): true, after.Format("15:04"): true}
 	total := 0
-	for _, w := range b.roll.snapshot().timeline {
+	for _, w := range snapData(t, b.Snapshot()).Timeline {
+		if !now[w.Label] {
+			t.Errorf("timeline window %q is not the current minute; a future timestamp was not clamped to now", w.Label)
+		}
 		total += w.Count
 	}
 	if total != 2 {

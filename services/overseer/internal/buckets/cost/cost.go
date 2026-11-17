@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -19,11 +18,10 @@ var errUnconfigured = errors.New("cost: OCI usage-api not enabled")
 
 var errUsageUnconfigured = errors.New("cost: go-api not configured")
 
-var errBothDown = errors.New("cost: oci spend and provider usage both unreachable")
+var ErrBothDown = errors.New("cost: oci spend and provider usage both unreachable")
 
 const (
 	defaultSpendInterval = time.Hour
-	spendIntervalEnvKey  = "OVERSEER_COST_SPEND_INTERVAL"
 
 	bucketID                = "cost"
 	seriesSpendDaily        = "spend_daily"
@@ -31,7 +29,7 @@ const (
 	providerCallsSeriesStem = "provider_calls:"
 )
 
-type spendReader interface {
+type SpendReader interface {
 	CurrentPeriodSpend(ctx context.Context) (oci.Spend, error)
 }
 
@@ -40,7 +38,7 @@ type usageReader interface {
 }
 
 type Bucket struct {
-	spend      spendReader
+	spend      SpendReader
 	usage      usageReader
 	spendSched *spendScheduler
 	start      sync.Once
@@ -58,13 +56,21 @@ type Bucket struct {
 	usageReason       string
 }
 
-func New() *Bucket {
-	return newBucket(spendReaderFromEnv(), usageReaderFromEnv(), spendIntervalFromEnv())
+type Deps struct {
+	ConnectSpend  func() (SpendReader, error)
+	Usage         usageReader
+	SpendInterval time.Duration
 }
 
-func newBucket(spend spendReader, usage usageReader, spendInterval time.Duration) *Bucket {
-	b := &Bucket{spend: spend, usage: usage, series: discardSeries{}}
-	b.spendSched = newSpendScheduler(spendInterval, b.refreshSpend)
+func New(deps Deps) *Bucket {
+	b := &Bucket{spend: nullSpendReader{}, usage: deps.Usage, series: discardSeries{}}
+	if deps.ConnectSpend != nil {
+		b.spend = &lazyReader{build: deps.ConnectSpend}
+	}
+	if b.usage == nil {
+		b.usage = nullUsageReader{}
+	}
+	b.spendSched = newSpendScheduler(deps.SpendInterval, b.refreshSpend)
 	return b
 }
 
@@ -94,7 +100,7 @@ func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 	}
 
 	if usageErr != nil && b.spendUnreachable() {
-		return nil, fmt.Errorf("%w: providers=%w (spend half also unreachable)", errBothDown, usageErr)
+		return nil, fmt.Errorf("%w: providers=%w (spend half also unreachable)", ErrBothDown, usageErr)
 	}
 	return nil, nil
 }
@@ -306,49 +312,6 @@ func (b *Bucket) markUsageStale(err error) {
 	b.usageReason = goapi.Classify(err)
 }
 
-func spendReaderFromEnv() spendReader {
-	if !ociEnabled() {
-		return nullSpendReader{}
-	}
-	return &lazyReader{build: func() (spendReader, error) { return oci.NewFromInstancePrincipal() }}
-}
-
-func usageReaderFromEnv() usageReader {
-	base, ok := goapi.BaseURLFromEnv()
-	if !ok {
-		return nullUsageReader{}
-	}
-	c, err := goapi.New(base, goapi.SharedTokenSource())
-	if err != nil {
-		slog.Warn("cost: invalid OVERSEER_GOAPI_URL, degrading provider-usage to source-down", "error", err)
-		return nullUsageReader{}
-	}
-	return c
-}
-
-func ociEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("OVERSEER_OCI_ENABLED"))) {
-	case "1", "true", "yes", "on":
-		return true
-	default:
-		return false
-	}
-}
-
-func spendIntervalFromEnv() time.Duration {
-	raw := strings.TrimSpace(os.Getenv(spendIntervalEnvKey))
-	if raw == "" {
-		return defaultSpendInterval
-	}
-	d, err := time.ParseDuration(raw)
-	if err != nil || d <= 0 {
-		slog.Warn("cost: invalid "+spendIntervalEnvKey+", using default",
-			"value", raw, "default", defaultSpendInterval)
-		return defaultSpendInterval
-	}
-	return d
-}
-
 type spendScheduler struct {
 	interval time.Duration
 	refresh  func(context.Context)
@@ -385,10 +348,10 @@ func (s *spendScheduler) safeRefreshOnce(ctx context.Context) {
 }
 
 type lazyReader struct {
-	build func() (spendReader, error)
+	build func() (SpendReader, error)
 
 	mu     sync.Mutex
-	client spendReader
+	client SpendReader
 }
 
 func (l *lazyReader) CurrentPeriodSpend(ctx context.Context) (oci.Spend, error) {
@@ -399,7 +362,7 @@ func (l *lazyReader) CurrentPeriodSpend(ctx context.Context) (oci.Spend, error) 
 	return client.CurrentPeriodSpend(ctx)
 }
 
-func (l *lazyReader) ensure() (spendReader, error) {
+func (l *lazyReader) ensure() (SpendReader, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.client != nil {
@@ -432,5 +395,3 @@ func (discardSeries) Record(string, string, core.Point) {}
 func (discardSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
 	return nil, nil
 }
-
-func init() { core.Register(New()) }

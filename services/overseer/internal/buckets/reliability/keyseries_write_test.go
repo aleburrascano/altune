@@ -1,17 +1,14 @@
-package reliability
+package reliability_test
 
 import (
 	"altune/overseer/internal/goapi"
-	"context"
 	"testing"
 )
 
 func TestAnsweredProbeWritesUnderTheDeclaredKeySeries(t *testing.T) {
-	checker := &fakeChecker{}
-	checker.set(goapi.Health{Status: "ok"}, nil)
-	b, series := bucketWithSeries(checker)
+	b, probe, series := bucketWithSeries(t, nil)
 
-	b.poller.pollOnce(context.Background())
+	probe.answer(up())
 
 	name := b.KeySeries()
 	if got := series.named(name); len(got) != 1 {
@@ -20,11 +17,9 @@ func TestAnsweredProbeWritesUnderTheDeclaredKeySeries(t *testing.T) {
 }
 
 func TestUnansweredProbeWritesNothingUnderTheDeclaredKeySeries(t *testing.T) {
-	checker := &fakeChecker{}
-	checker.set(goapi.Health{}, srcDown("GET /health"))
-	b, series := bucketWithSeries(checker)
+	b, probe, series := bucketWithSeries(t, nil)
 
-	b.poller.pollOnce(context.Background())
+	probe.answer(goapi.Health{}, srcDown("GET /health"))
 
 	name := b.KeySeries()
 	if got := series.named(name); len(got) != 0 {

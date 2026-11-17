@@ -1,6 +1,7 @@
-package domainquality
+package domainquality_test
 
 import (
+	"altune/overseer/internal/buckets/domainquality"
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
 	"context"
@@ -37,7 +38,7 @@ func (s *blockingSeries) Query(string, string, time.Time, time.Time) ([]core.Poi
 	return nil, nil
 }
 
-func assertSnapshotUnblocked(t *testing.T, b *Bucket, series *blockingSeries, collect func() error) {
+func assertSnapshotUnblocked(t *testing.T, b *domainquality.Bucket, series *blockingSeries, collect func() error) {
 	t.Helper()
 	done := make(chan error, 1)
 	go func() { done <- collect() }()
@@ -68,7 +69,7 @@ func assertSnapshotUnblocked(t *testing.T, b *Bucket, series *blockingSeries, co
 
 func TestSnapshotDoesNotBlockOnInFlightEvalSeriesRecord(t *testing.T) {
 	b := newBucket(fakeReader{eval: scoredEval(), acq: healthyAcq()})
-	series := newBlockingSeries(seriesEvalScore)
+	series := newBlockingSeries("eval_score")
 	b.UseSeries(series)
 
 	assertSnapshotUnblocked(t, b, series, func() error {
@@ -86,7 +87,7 @@ func TestSnapshotDoesNotBlockOnInFlightAcquisitionSeriesRecord(t *testing.T) {
 		},
 	}
 	b := newBucket(reader)
-	series := newBlockingSeries(seriesAcquisitionRate)
+	series := newBlockingSeries("acquisition_rate")
 	b.UseSeries(series)
 
 	if _, err := b.Collect(context.Background()); err != nil {

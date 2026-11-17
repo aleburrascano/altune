@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"sort"
 	"sync"
 	"time"
@@ -60,9 +59,15 @@ type Bucket struct {
 	havePrev bool
 }
 
-func New() *Bucket { return newBucket(readerFromEnv()) }
+type Deps struct {
+	Reader metricsReader
+}
 
-func newBucket(reader metricsReader) *Bucket {
+func New(deps Deps) *Bucket {
+	reader := deps.Reader
+	if reader == nil {
+		reader = nullReader{}
+	}
 	return &Bucket{
 		reader:  reader,
 		history: core.NewRingStore(historyCapacity),
@@ -335,19 +340,6 @@ func throughputSignal(w window) core.Signal {
 	}
 }
 
-func readerFromEnv() metricsReader {
-	base, ok := goapi.BaseURLFromEnv()
-	if !ok {
-		return nullReader{}
-	}
-	c, err := goapi.New(base, goapi.SharedTokenSource())
-	if err != nil {
-		slog.Warn("backendperf: invalid OVERSEER_GOAPI_URL, degrading to source-down", "error", err)
-		return nullReader{}
-	}
-	return c
-}
-
 type nullReader struct{}
 
 func (nullReader) AdminMetricsLive(context.Context) (goapi.LiveMetrics, error) {
@@ -361,5 +353,3 @@ func (discardSeries) Record(string, string, core.Point) {}
 func (discardSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
 	return nil, nil
 }
-
-func init() { core.Register(New()) }

@@ -6,9 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
-	"os"
-	"strings"
 	"sync"
 	"time"
 )
@@ -43,15 +40,29 @@ type Bucket struct {
 	running sync.WaitGroup
 }
 
-func New() *Bucket {
-	reader, checker := clientFromEnv()
-	return newBucket(reader, checker, pollIntervalFromEnv())
+type Deps struct {
+	Reader   healthReader
+	Checker  reachChecker
+	Interval time.Duration
+	Now      func() time.Time
 }
 
-func newBucket(reader healthReader, checker reachChecker, interval time.Duration) *Bucket {
+func New(deps Deps) *Bucket {
+	var reader healthReader = nullClient{}
+	if deps.Reader != nil {
+		reader = deps.Reader
+	}
+	var checker reachChecker = nullClient{}
+	if deps.Checker != nil {
+		checker = deps.Checker
+	}
+	now := deps.Now
+	if now == nil {
+		now = time.Now
+	}
 	return &Bucket{
 		reader:  reader,
-		poller:  newReachPoller(checker, interval),
+		poller:  newReachPoller(checker, deps.Interval, now),
 		history: core.NewRingStore(historyCapacity),
 	}
 }
@@ -232,35 +243,6 @@ func healthSignal(h goapi.OperatorHealth) core.Signal {
 	}
 }
 
-func clientFromEnv() (healthReader, reachChecker) {
-	base, ok := goapi.BaseURLFromEnv()
-	if !ok {
-		n := nullClient{}
-		return n, n
-	}
-	c, err := goapi.New(base, goapi.SharedTokenSource())
-	if err != nil {
-		slog.Warn("reliability: invalid OVERSEER_GOAPI_URL, degrading to source-down", "error", err)
-		n := nullClient{}
-		return n, n
-	}
-	return c, c
-}
-
-func pollIntervalFromEnv() time.Duration {
-	raw := strings.TrimSpace(os.Getenv("OVERSEER_RELIABILITY_POLL_INTERVAL"))
-	if raw == "" {
-		return defaultPollInterval
-	}
-	d, err := time.ParseDuration(raw)
-	if err != nil || d <= 0 {
-		slog.Warn("reliability: invalid OVERSEER_RELIABILITY_POLL_INTERVAL, using default",
-			"value", raw, "default", defaultPollInterval)
-		return defaultPollInterval
-	}
-	return d
-}
-
 type nullClient struct{}
 
 func (nullClient) AdminHealth(context.Context) (goapi.OperatorHealth, error) {
@@ -270,5 +252,3 @@ func (nullClient) AdminHealth(context.Context) (goapi.OperatorHealth, error) {
 func (nullClient) Health(context.Context) (goapi.Health, error) {
 	return goapi.Health{}, &goapi.SourceDownError{Op: "GET /health", Err: errUnconfigured}
 }
-
-func init() { core.Register(New()) }

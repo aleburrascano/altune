@@ -1,6 +1,7 @@
-package domainquality
+package domainquality_test
 
 import (
+	"altune/overseer/internal/buckets/domainquality"
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
 	"context"
@@ -35,14 +36,14 @@ func (r *recordingSeries) named(series string) []core.Point {
 	defer r.mu.Unlock()
 	var out []core.Point
 	for _, p := range r.points {
-		if p.bucket == bucketID && p.series == series {
+		if p.bucket == "domainquality" && p.series == series {
 			out = append(out, p.point)
 		}
 	}
 	return out
 }
 
-func bucketWithSeries(r reader) (*Bucket, *recordingSeries) {
+func bucketWithSeries(r reader) (*domainquality.Bucket, *recordingSeries) {
 	b := newBucket(r)
 	series := &recordingSeries{}
 	b.UseSeries(series)
@@ -55,7 +56,7 @@ func TestCollectRecordsEvalScoreSeries(t *testing.T) {
 		t.Fatalf("Collect: %v", err)
 	}
 
-	got := series.named(seriesEvalScore)
+	got := series.named("eval_score")
 	if len(got) != 1 {
 		t.Fatalf("eval_score recorded %d points, want 1: %+v", len(got), got)
 	}
@@ -74,7 +75,7 @@ func TestCollectRecordsDiscoSuccessRateSeries(t *testing.T) {
 		t.Fatalf("Collect: %v", err)
 	}
 
-	got := series.named(seriesDiscoSuccessRate)
+	got := series.named("disco_success_rate")
 	if len(got) != 1 {
 		t.Fatalf("disco_success_rate recorded %d points, want 1: %+v", len(got), got)
 	}
@@ -94,7 +95,7 @@ func TestCollectRecordsAcquisitionRateOnceWindowed(t *testing.T) {
 	b, series := bucketWithSeries(reader)
 	collectN(t, b, 2)
 
-	got := series.named(seriesAcquisitionRate)
+	got := series.named("acquisition_rate")
 	if len(got) != 1 {
 		t.Fatalf("acquisition_rate recorded %d points, want 1: %+v", len(got), got)
 	}
@@ -109,15 +110,15 @@ func TestCollectRecordsNoAcquisitionRateOnFirstCollect(t *testing.T) {
 		t.Fatalf("Collect: %v", err)
 	}
 
-	if got := series.named(seriesAcquisitionRate); len(got) != 0 {
+	if got := series.named("acquisition_rate"); len(got) != 0 {
 		t.Fatalf("acquisition_rate recorded %d points on the first collect, want 0 (no window yet): %+v", len(got), got)
 	}
 }
 
 func TestKeySeriesIsDiscoSuccessRate(t *testing.T) {
 	b := newBucket(fakeReader{})
-	if got := b.KeySeries(); got != seriesDiscoSuccessRate {
-		t.Errorf("KeySeries() = %q, want %q", got, seriesDiscoSuccessRate)
+	if got := b.KeySeries(); got != "disco_success_rate" {
+		t.Errorf("KeySeries() = %q, want %q", got, "disco_success_rate")
 	}
 }
 

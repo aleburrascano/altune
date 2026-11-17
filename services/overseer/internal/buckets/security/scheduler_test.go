@@ -1,61 +1,60 @@
-package security
+package security_test
 
 import (
+	"altune/overseer/internal/buckets/security"
 	"context"
-	"net/url"
-	"sync/atomic"
 	"testing"
 	"time"
 )
 
-type panicProber struct{}
-
-func (panicProber) target(string, string) *url.URL { return &url.URL{Host: "x"} }
-func (panicProber) do(context.Context, *url.URL) probeResult {
-	panic("self-test probe blew up")
-}
+const settle = 50 * time.Millisecond
 
 func TestSchedulerContainsProbePanic(t *testing.T) {
-	s := newScheduler(panicProber{}, defaultSuite(), time.Hour, func(suiteResult) {})
+	b := runScripted(t, panics(), status(401))
 
-	s.safeRunOnce(context.Background())
-
-	s = newScheduler(panicProber{}, defaultSuite(), time.Millisecond, func(suiteResult) {})
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() { s.run(ctx); close(done) }()
-	time.Sleep(20 * time.Millisecond)
-	cancel()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("scheduler.run did not return after panicking probes — panic escaped containment")
+	if d := snapData(t, b.Snapshot()); !d.HasRun || d.Passed != suiteSize {
+		t.Fatalf("data = %+v after a panicking run, want the next run recorded", d)
 	}
 }
 
 func TestSchedulerExitsOnCancel(t *testing.T) {
-	var runs atomic.Int32
-	s := newScheduler(nullProber{}, defaultSuite(), time.Millisecond,
-		func(suiteResult) { runs.Add(1) })
-
+	s := newScript(status(401))
+	b := security.New(security.Deps{Prober: s, Interval: time.Millisecond, Now: s.now})
 	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() { s.run(ctx); close(done) }()
+	b.Start(ctx)
+	waitFor(t, func() bool { return s.started() >= 2 }, "the scheduler to tick")
 
 	cancel()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("scheduler.run did not return within 2s of ctx cancel — goroutine leak")
-	}
-	if runs.Load() == 0 {
-		t.Error("scheduler never ran the immediate pass")
+	time.Sleep(settle)
+	stopped := s.started()
+	time.Sleep(settle)
+
+	if got := s.started(); got != stopped {
+		t.Fatalf("scheduler ran %d more time(s) after ctx cancel — goroutine leak", got-stopped)
 	}
 }
 
-func TestSchedulerClampsInterval(t *testing.T) {
-	s := newScheduler(nullProber{}, defaultSuite(), 0, func(suiteResult) {})
-	if s.interval != defaultInterval {
-		t.Errorf("interval = %v, want clamped to %v", s.interval, defaultInterval)
+func TestANonPositiveIntervalFallsBackToTheDefault(t *testing.T) {
+	for _, interval := range []time.Duration{0, -time.Second} {
+		s := newScript(status(401))
+		startBucket(t, s, interval)
+		waitFor(t, func() bool { return s.started() >= 1 }, "the immediate run")
+
+		time.Sleep(settle)
+		if got := s.started(); got != 1 {
+			t.Errorf("interval %v ran %d times within %v, want the hourly default", interval, got, settle)
+		}
+	}
+}
+
+func TestStartingTwiceRunsOneScheduler(t *testing.T) {
+	s := newScript(status(401))
+	b, _ := startBucket(t, s, time.Hour)
+	b.Start(context.Background())
+	waitFor(t, func() bool { return s.started() >= 1 }, "the immediate run")
+
+	time.Sleep(settle)
+	if got := s.started(); got != 1 {
+		t.Errorf("two Starts ran the suite %d times, want once", got)
 	}
 }

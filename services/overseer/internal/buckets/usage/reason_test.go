@@ -1,4 +1,4 @@
-package usage
+package usage_test
 
 import (
 	"altune/overseer/internal/core"

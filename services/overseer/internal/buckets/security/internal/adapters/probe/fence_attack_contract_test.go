@@ -1,32 +1,39 @@
-package security
+package probe_test
 
 import (
+	"altune/overseer/internal/buckets/security/internal/adapters/probe"
 	"context"
 	"errors"
 	"net/http"
 	"net/url"
+	"sync"
 	"sync/atomic"
 	"testing"
 )
 
 type recordingTransport struct {
 	calls atomic.Int32
+	mu    sync.Mutex
 	hosts []string
 }
 
 func (t *recordingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	t.calls.Add(1)
+	t.mu.Lock()
 	t.hosts = append(t.hosts, req.URL.Hostname())
+	t.mu.Unlock()
 	return &http.Response{StatusCode: 401, Body: http.NoBody, Header: make(http.Header)}, nil
 }
 
+func (t *recordingTransport) seen() []string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return append([]string(nil), t.hosts...)
+}
+
 func TestFenceHostConfusionRefused(t *testing.T) {
-	c, err := newFencedClient("https://allowed.test", []string{"allowed.test"})
-	if err != nil {
-		t.Fatalf("newFencedClient: %v", err)
-	}
 	rt := &recordingTransport{}
-	c.http.Transport = rt
+	c := newTestClient(t, rt)
 
 	offAllowlist := []struct {
 		name string
@@ -44,30 +51,26 @@ func TestFenceHostConfusionRefused(t *testing.T) {
 		{"empty-host", &url.URL{Scheme: "https", Host: "", Path: "/v1/library"}},
 	}
 	for _, tc := range offAllowlist {
-		res := c.do(context.Background(), tc.u)
-		if !errors.Is(res.err, errOffAllowlist) {
-			t.Errorf("%s: do(%q) err = %v, want errOffAllowlist", tc.name, tc.u.Host, res.err)
+		_, err := c.Do(context.Background(), tc.u)
+		if !errors.Is(err, probe.ErrOffAllowlist) {
+			t.Errorf("%s: Do(%q) err = %v, want ErrOffAllowlist", tc.name, tc.u.Host, err)
 		}
 	}
 	if got := rt.calls.Load(); got != 0 {
-		t.Fatalf("fence let %d off-allowlist request(s) reach the transport, hosts=%v", got, rt.hosts)
+		t.Fatalf("fence let %d off-allowlist request(s) reach the transport, hosts=%v", got, rt.seen())
 	}
 }
 
 func TestFenceCaseFoldedHostAllowed(t *testing.T) {
-	c, err := newFencedClient("https://allowed.test", []string{"allowed.test"})
-	if err != nil {
-		t.Fatalf("newFencedClient: %v", err)
-	}
 	rt := &recordingTransport{}
-	c.http.Transport = rt
+	c := newTestClient(t, rt)
 
-	res := c.do(context.Background(), &url.URL{Scheme: "https", Host: "ALLOWED.TEST", Path: "/v1/library"})
-	if res.err != nil {
-		t.Fatalf("case-folded owned host refused: %v", res.err)
+	_, err := c.Do(context.Background(), &url.URL{Scheme: "https", Host: "ALLOWED.TEST", Path: "/v1/library"})
+	if err != nil {
+		t.Fatalf("case-folded owned host refused: %v", err)
 	}
-	if rt.calls.Load() != 1 || rt.hosts[0] != "ALLOWED.TEST" {
-		t.Errorf("case-folded owned host did not reach transport as expected: calls=%d hosts=%v", rt.calls.Load(), rt.hosts)
+	if hosts := rt.seen(); len(hosts) != 1 || hosts[0] != "ALLOWED.TEST" {
+		t.Errorf("case-folded owned host did not reach transport as expected: hosts=%v", hosts)
 	}
 }
 
@@ -82,29 +85,25 @@ func TestHostilePathCannotMoveHost(t *testing.T) {
 		{"/v1/library", "q=%zz%00#@evil.example"},
 	}
 	for _, hp := range hostilePaths {
-		c, err := newFencedClient("https://allowed.test", []string{"allowed.test"})
-		if err != nil {
-			t.Fatalf("newFencedClient: %v", err)
-		}
 		rt := &recordingTransport{}
-		c.http.Transport = rt
+		c := newTestClient(t, rt)
 
-		res := c.do(context.Background(), c.target(hp.path, hp.query))
-		if res.err != nil {
-			t.Fatalf("path=%q query=%q errored (expected a clean reach to base): %v", hp.path, hp.query, res.err)
+		if _, err := c.Probe(context.Background(), hp.path, hp.query); err != nil {
+			t.Fatalf("path=%q query=%q errored (expected a clean reach to base): %v", hp.path, hp.query, err)
 		}
-		if len(rt.hosts) != 1 {
-			t.Fatalf("path=%q query=%q: recorded %d connect host(s), want exactly 1", hp.path, hp.query, len(rt.hosts))
+		hosts := rt.seen()
+		if len(hosts) != 1 {
+			t.Fatalf("path=%q query=%q: recorded %d connect host(s), want exactly 1", hp.path, hp.query, len(hosts))
 		}
-		if rt.hosts[0] != "allowed.test" {
-			t.Errorf("path=%q query=%q connected to %q, want allowed.test — host smuggled", hp.path, hp.query, rt.hosts[0])
+		if hosts[0] != "allowed.test" {
+			t.Errorf("path=%q query=%q connected to %q, want allowed.test — host smuggled", hp.path, hp.query, hosts[0])
 		}
 	}
 }
 
 func TestExplicitOffAllowlistConfigFailsClosed(t *testing.T) {
-	if _, err := newFencedClient("https://allowed.test", []string{"other.test", "allowed.test.evil"}); err == nil {
-		t.Fatal("newFencedClient accepted an allowlist omitting the base host, want fail-closed")
+	if _, err := probe.New("https://allowed.test", []string{"other.test", "allowed.test.evil"}); err == nil {
+		t.Fatal("New accepted an allowlist omitting the base host, want fail-closed")
 	}
 }
 
