@@ -85,8 +85,6 @@ func (c *countMap) top(n int) []entry {
 	return out
 }
 
-func (c *countMap) len() int { return len(c.counts) }
-
 type timeline struct {
 	store    *core.RingStore
 	window   time.Duration
@@ -130,8 +128,6 @@ func (t *timeline) windows() []entry {
 	}
 	return out
 }
-
-func (t *timeline) storedWindows() int { return t.store.Len() }
 
 type windowTotals struct {
 	at       time.Time

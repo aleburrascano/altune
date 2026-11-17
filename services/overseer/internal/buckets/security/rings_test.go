@@ -9,7 +9,7 @@ import (
 )
 
 func TestARestoredHistoryRingShowsInTheSnapshot(t *testing.T) {
-	b := security.New()
+	b := security.New(security.Deps{})
 	restored := []core.Signal{{At: time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC), Kind: "suite", Text: "4/4 passed"}}
 
 	ring := b.Rings()["history"]

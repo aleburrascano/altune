@@ -2,8 +2,16 @@ package security
 
 import (
 	"context"
-	"net/http"
 	"time"
+)
+
+const (
+	statusBadRequest          = 400
+	statusUnauthorized        = 401
+	statusForbidden           = 403
+	statusNotFound            = 404
+	statusUnprocessableEntity = 422
+	statusTooManyRequests     = 429
 )
 
 type check struct {
@@ -55,17 +63,17 @@ func defaultSuite() []check {
 }
 
 func rejectAuth() []int {
-	return []int{http.StatusUnauthorized, http.StatusForbidden}
+	return []int{statusUnauthorized, statusForbidden}
 }
 
 func rejectBurst() []int {
-	return []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusTooManyRequests}
+	return []int{statusUnauthorized, statusForbidden, statusTooManyRequests}
 }
 
 func rejectInput() []int {
 	return []int{
-		http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden,
-		http.StatusNotFound, http.StatusUnprocessableEntity,
+		statusBadRequest, statusUnauthorized, statusForbidden,
+		statusNotFound, statusUnprocessableEntity,
 	}
 }
 
@@ -80,16 +88,15 @@ type checkResult struct {
 func (r checkResult) reached() bool { return r.err == nil }
 
 func runCheck(ctx context.Context, p prober, c check) checkResult {
-	tgt := p.target(c.path, c.rawQuery)
 	res := checkResult{name: c.name, desc: c.desc}
 	for i := 0; i < c.reps(); i++ {
-		out := p.do(ctx, tgt)
-		if out.err != nil {
-			res.err = out.err
+		status, err := p.Probe(ctx, c.path, c.rawQuery)
+		if err != nil {
+			res.err = err
 			return res
 		}
-		res.status = out.status
-		if !c.accepts(out.status) {
+		res.status = status
+		if !c.accepts(status) {
 			res.passed = false
 			return res
 		}

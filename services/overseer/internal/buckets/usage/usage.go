@@ -33,9 +33,15 @@ type Bucket struct {
 	window *activityWindow
 }
 
-func New() *Bucket { return newBucket(sourceFromEnv()) }
+type Deps struct {
+	Source source
+}
 
-func newBucket(src source) *Bucket {
+func New(deps Deps) *Bucket {
+	src := deps.Source
+	if src == nil {
+		src = newNullSource()
+	}
 	return &Bucket{
 		roll:   newAggregator(),
 		src:    src,
@@ -170,19 +176,6 @@ func toSignal(ev goapi.Event) core.Signal {
 	return core.Signal{At: at, Kind: ev.Type, Text: ev.Subject}
 }
 
-func sourceFromEnv() source {
-	base, ok := goapi.BaseURLFromEnv()
-	if !ok {
-		return newNullSource()
-	}
-	c, err := goapi.NewConsumer(base, goapi.SharedTokenSource())
-	if err != nil {
-		slog.Warn("usage: invalid OVERSEER_GOAPI_URL, degrading to source-down", "error", err)
-		return newNullSource()
-	}
-	return c
-}
-
 type nullSource = goapi.NullEventSource
 
 func newNullSource() *nullSource { return goapi.NewNullEventSource(errSourceDown) }
@@ -194,5 +187,3 @@ func (discardSeries) Record(string, string, core.Point) {}
 func (discardSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
 	return nil, nil
 }
-
-func init() { core.Register(New()) }

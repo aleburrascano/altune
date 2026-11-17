@@ -10,15 +10,15 @@ import (
 	"testing"
 )
 
-func bucketDirs(t *testing.T) []string {
+func tokenUserDirs(t *testing.T) []string {
 	t.Helper()
-	out, err := exec.Command("go", "list", "-f", "{{.Dir}}", "altune/overseer/internal/buckets/...").Output()
+	out, err := exec.Command("go", "list", "-f", "{{.Dir}}", "altune/overseer/internal/app", "altune/overseer/internal/buckets/...").Output()
 	if err != nil {
-		t.Fatalf("go list buckets: %v", err)
+		t.Fatalf("go list app and buckets: %v", err)
 	}
 	dirs := strings.Fields(string(out))
 	if len(dirs) == 0 {
-		t.Fatal("go list returned no bucket packages")
+		t.Fatal("go list returned no app or bucket packages")
 	}
 	return dirs
 }
@@ -31,7 +31,7 @@ func TestBucketsDoNotConstructStaticTokenSource(t *testing.T) {
 		fset       = token.NewFileSet()
 	)
 
-	for _, dir := range bucketDirs(t) {
+	for _, dir := range tokenUserDirs(t) {
 		files, err := filepath.Glob(filepath.Join(dir, "*.go"))
 		if err != nil {
 			t.Fatalf("glob %s: %v", dir, err)
@@ -66,12 +66,12 @@ func TestBucketsDoNotConstructStaticTokenSource(t *testing.T) {
 	}
 
 	if scanned == 0 {
-		t.Fatal("scanned no bucket source files; guard would pass vacuously")
+		t.Fatal("scanned no app or bucket source files; guard would pass vacuously")
 	}
 	for _, at := range usesStatic {
-		t.Errorf("bucket constructs goapi.StaticTokenSource directly at %s; use goapi.SharedTokenSource so the whole fleet shares one refreshing token source", at)
+		t.Errorf("goapi.StaticTokenSource is constructed directly at %s; use goapi.SharedTokenSource so the whole fleet shares one refreshing token source", at)
 	}
 	if !usesShared {
-		t.Error("no bucket references goapi.SharedTokenSource; the shared-token-source adoption is not wired, so the guard cannot be trusted")
+		t.Error("neither app nor any bucket references goapi.SharedTokenSource; the shared-token-source adoption is not wired, so the guard cannot be trusted")
 	}
 }

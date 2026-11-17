@@ -1,6 +1,7 @@
-package reliability
+package reliability_test
 
 import (
+	"altune/overseer/internal/buckets/reliability"
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
 	"context"
@@ -10,6 +11,13 @@ import (
 	"sync"
 	"testing"
 	"time"
+)
+
+const (
+	historyCapacity = 120
+	pollCapacity    = 120
+	waitLimit       = 5 * time.Second
+	fastInterval    = time.Nanosecond
 )
 
 type fakeReader struct {
@@ -34,11 +42,13 @@ type fakeChecker struct {
 	mu     sync.Mutex
 	health goapi.Health
 	err    error
+	calls  int
 }
 
 func (f *fakeChecker) Health(context.Context) (goapi.Health, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.calls++
 	return f.health, f.err
 }
 
@@ -47,6 +57,98 @@ func (f *fakeChecker) set(h goapi.Health, err error) {
 	defer f.mu.Unlock()
 	f.health, f.err = h, err
 }
+
+func (f *fakeChecker) probes() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
+}
+
+type reply struct {
+	health goapi.Health
+	err    error
+}
+
+type probes struct {
+	t       *testing.T
+	waiting chan struct{}
+	replies chan reply
+}
+
+func newProbes(t *testing.T) *probes {
+	return &probes{t: t, waiting: make(chan struct{}), replies: make(chan reply)}
+}
+
+func (p *probes) Health(ctx context.Context) (goapi.Health, error) {
+	select {
+	case p.waiting <- struct{}{}:
+	case <-ctx.Done():
+		return goapi.Health{}, ctx.Err()
+	}
+	select {
+	case r := <-p.replies:
+		return r.health, r.err
+	case <-ctx.Done():
+		return goapi.Health{}, ctx.Err()
+	}
+}
+
+func (p *probes) start(b *reliability.Bucket) {
+	p.t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	p.t.Cleanup(func() {
+		cancel()
+		b.Wait()
+	})
+	b.Start(ctx)
+	p.await()
+}
+
+func (p *probes) await() {
+	p.t.Helper()
+	select {
+	case <-p.waiting:
+	case <-time.After(waitLimit):
+		p.t.Fatal("the poller never reached its next go-api probe")
+	}
+}
+
+func (p *probes) answer(h goapi.Health, err error) {
+	p.t.Helper()
+	select {
+	case p.replies <- reply{health: h, err: err}:
+	case <-time.After(waitLimit):
+		p.t.Fatal("the poller never took the probe answer")
+	}
+	p.await()
+}
+
+func probedBucket(t *testing.T, reader *fakeReader) (*reliability.Bucket, *probes) {
+	t.Helper()
+	p := newProbes(t)
+	b := reliability.New(reliability.Deps{Reader: reader, Checker: p, Interval: fastInterval})
+	p.start(b)
+	return b, p
+}
+
+func newBucket(reader *fakeReader) *reliability.Bucket {
+	return reliability.New(reliability.Deps{Reader: reader})
+}
+
+func eventually(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(waitLimit)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", what)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func up() (goapi.Health, error) { return goapi.Health{Status: "ok"}, nil }
+
+func degraded() (goapi.Health, error) { return goapi.Health{Status: "degraded"}, nil }
 
 func healthyHealth() goapi.OperatorHealth {
 	return goapi.OperatorHealth{
@@ -63,16 +165,16 @@ func srcDown(op string) error {
 	return &goapi.SourceDownError{Op: op, Err: errors.New("dial refused")}
 }
 
-func collectStore(t *testing.T, b *Bucket) error {
+func collectStore(t *testing.T, b *reliability.Bucket) error {
 	t.Helper()
 	signals, err := b.Collect(context.Background())
 	b.Store(signals)
 	return err
 }
 
-func snapData(t *testing.T, snap core.Snapshot) Data {
+func snapData(t *testing.T, snap core.Snapshot) reliability.Data {
 	t.Helper()
-	var d Data
+	var d reliability.Data
 	if err := json.Unmarshal(snap.Data, &d); err != nil {
 		t.Fatalf("unmarshal data: %v (%s)", err, snap.Data)
 	}
@@ -81,11 +183,9 @@ func snapData(t *testing.T, snap core.Snapshot) Data {
 
 func TestMirrorCollectStoreSnapshot(t *testing.T) {
 	reader := &fakeReader{}
-	checker := &fakeChecker{}
 	reader.set(healthyHealth(), nil)
-	checker.set(goapi.Health{Status: "ok"}, nil)
 
-	b := newBucket(reader, checker, defaultPollInterval)
+	b, probe := probedBucket(t, reader)
 
 	if d := snapData(t, b.Snapshot()); d.Health != nil {
 		t.Errorf("empty snapshot health = %+v, want nil", d.Health)
@@ -94,7 +194,7 @@ func TestMirrorCollectStoreSnapshot(t *testing.T) {
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect while healthy = %v, want nil", err)
 	}
-	b.poller.pollOnce(context.Background())
+	probe.answer(up())
 
 	snap := b.Snapshot()
 	if snap.State != core.StateLive {
@@ -110,6 +210,9 @@ func TestMirrorCollectStoreSnapshot(t *testing.T) {
 	if len(d.History) != 1 {
 		t.Errorf("history = %d, want 1 sample", len(d.History))
 	}
+	if !snap.UpdatedAt.Equal(healthyHealth().Detail.CheckedAt) {
+		t.Errorf("UpdatedAt = %v, want the health check time %v", snap.UpdatedAt, healthyHealth().Detail.CheckedAt)
+	}
 	if b.Meta().ID != "reliability" {
 		t.Errorf("Meta.ID = %q, want reliability", b.Meta().ID)
 	}
@@ -117,15 +220,13 @@ func TestMirrorCollectStoreSnapshot(t *testing.T) {
 
 func TestDegradesToStaleOnAdminDown(t *testing.T) {
 	reader := &fakeReader{}
-	checker := &fakeChecker{}
 	reader.set(healthyHealth(), nil)
-	checker.set(goapi.Health{Status: "ok"}, nil)
 
-	b := newBucket(reader, checker, defaultPollInterval)
+	b, probe := probedBucket(t, reader)
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("first collect = %v, want nil", err)
 	}
-	b.poller.pollOnce(context.Background())
+	probe.answer(up())
 
 	if snap := b.Snapshot(); snap.State != core.StateLive {
 		t.Fatalf("pre-degrade state = %q, want live", snap.State)
@@ -135,7 +236,7 @@ func TestDegradesToStaleOnAdminDown(t *testing.T) {
 	if err := collectStore(t, b); err == nil {
 		t.Fatal("Collect with admin read down returned nil, want an error so the shell keeps last-known")
 	}
-	b.poller.pollOnce(context.Background())
+	probe.answer(up())
 
 	snap := b.Snapshot()
 	if snap.State != core.StateStale {
@@ -155,15 +256,13 @@ func TestDegradesToStaleOnAdminDown(t *testing.T) {
 
 func TestSnapshotCarriesRawText(t *testing.T) {
 	reader := &fakeReader{}
-	checker := &fakeChecker{}
 	evil := "<script>alert('pwn')</script>"
 	h := healthyHealth()
 	h.DB = "down"
 	h.Detail.DBError = evil
 	reader.set(h, nil)
-	checker.set(goapi.Health{Status: "ok"}, nil)
 
-	b := newBucket(reader, checker, defaultPollInterval)
+	b := newBucket(reader)
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect = %v, want nil", err)
 	}
@@ -176,16 +275,15 @@ func TestSnapshotCarriesRawText(t *testing.T) {
 
 func TestStaysBoundedUnderLoad(t *testing.T) {
 	reader := &fakeReader{}
-	checker := &fakeChecker{}
 	reader.set(healthyHealth(), nil)
-	b := newBucket(reader, checker, defaultPollInterval)
+	b := newBucket(reader)
 
 	for i := 0; i < 4*historyCapacity; i++ {
 		if err := collectStore(t, b); err != nil {
 			t.Fatalf("collect %d = %v", i, err)
 		}
 	}
-	if got := b.history.Len(); got != historyCapacity {
+	if got := len(snapData(t, b.Snapshot()).History); got != historyCapacity {
 		t.Errorf("retained %d history samples, want capped at %d", got, historyCapacity)
 	}
 }
@@ -194,12 +292,15 @@ func TestConcurrentCollectAndSnapshot(t *testing.T) {
 	reader := &fakeReader{}
 	checker := &fakeChecker{}
 	reader.set(healthyHealth(), nil)
-	checker.set(goapi.Health{Status: "ok"}, nil)
-	b := newBucket(reader, checker, time.Millisecond)
+	checker.set(up())
+	b := reliability.New(reliability.Deps{Reader: reader, Checker: checker, Interval: time.Millisecond})
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go b.poller.run(ctx)
+	t.Cleanup(func() {
+		cancel()
+		b.Wait()
+	})
+	b.Start(ctx)
 
 	var wg sync.WaitGroup
 	wg.Add(3)
@@ -230,37 +331,39 @@ func TestConcurrentCollectAndSnapshot(t *testing.T) {
 }
 
 func TestUnconfiguredDegradesNotCrashes(t *testing.T) {
-	t.Setenv("OVERSEER_GOAPI_URL", "")
-	t.Setenv("OVERSEER_GOAPI_TOKEN", "")
-	b := New()
-	if _, ok := b.reader.(nullClient); !ok {
-		t.Fatalf("unconfigured reader = %T, want nullClient", b.reader)
+	b := reliability.New(reliability.Deps{})
+
+	err := collectStore(t, b)
+	var down *goapi.SourceDownError
+	if !errors.As(err, &down) || !strings.Contains(err.Error(), "not configured") {
+		t.Fatalf("Collect with no go-api = %v, want the not-configured source-down error", err)
 	}
-	if err := collectStore(t, b); err == nil {
-		t.Error("Collect with unconfigured go-api returned nil, want source-down error")
-	}
-	b.poller.pollOnce(context.Background())
-	snap := b.Snapshot()
-	if snap.State != core.StateSourceDown {
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() {
+		cancel()
+		b.Wait()
+	})
+	b.Start(ctx)
+	eventually(t, "the unconfigured probe to read down", func() bool {
+		return snapData(t, b.Snapshot()).Reachability == "down"
+	})
+
+	if snap := b.Snapshot(); snap.State != core.StateSourceDown {
 		t.Errorf("unconfigured state = %q, want source_down", snap.State)
-	}
-	if d := snapData(t, snap); d.Reachability != "down" {
-		t.Errorf("reachability = %q, want down", d.Reachability)
 	}
 }
 
 func TestSeverityCriticalWhenDependencyDown(t *testing.T) {
 	reader := &fakeReader{}
-	checker := &fakeChecker{}
-	degraded := healthyHealth()
-	degraded.DB = "down"
-	reader.set(degraded, nil)
-	checker.set(goapi.Health{Status: "ok"}, nil)
-	b := newBucket(reader, checker, defaultPollInterval)
+	down := healthyHealth()
+	down.DB = "down"
+	reader.set(down, nil)
+	b, probe := probedBucket(t, reader)
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect = %v, want nil", err)
 	}
-	b.poller.pollOnce(context.Background())
+	probe.answer(up())
 
 	snap := b.Snapshot()
 
@@ -270,21 +373,19 @@ func TestSeverityCriticalWhenDependencyDown(t *testing.T) {
 	if snap.State != core.StateLive {
 		t.Errorf("state = %q, want live — a down dependency is not a stale source", snap.State)
 	}
-	if !strings.Contains(snap.Headline, "uptime") {
-		t.Errorf("headline = %q, want the uptime figure", snap.Headline)
+	if snap.Headline != "dependency down · uptime 100.0%" {
+		t.Errorf("headline = %q, want dependency down with the uptime figure", snap.Headline)
 	}
 }
 
 func TestSeverityOKWhenEveryDependencyHealthy(t *testing.T) {
 	reader := &fakeReader{}
-	checker := &fakeChecker{}
 	reader.set(healthyHealth(), nil)
-	checker.set(goapi.Health{Status: "ok"}, nil)
-	b := newBucket(reader, checker, defaultPollInterval)
+	b, probe := probedBucket(t, reader)
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect = %v, want nil", err)
 	}
-	b.poller.pollOnce(context.Background())
+	probe.answer(up())
 
 	snap := b.Snapshot()
 
@@ -297,14 +398,10 @@ func TestSeverityOKWhenEveryDependencyHealthy(t *testing.T) {
 }
 
 func TestSeverityWarnsAfterAFlap(t *testing.T) {
-	reader := &fakeReader{}
-	checker := &fakeChecker{}
-	b := newBucket(reader, checker, defaultPollInterval)
+	b, probe := probedBucket(t, &fakeReader{})
 
-	checker.set(goapi.Health{}, srcDown("GET /health"))
-	b.poller.pollOnce(context.Background())
-	checker.set(goapi.Health{Status: "ok"}, nil)
-	b.poller.pollOnce(context.Background())
+	probe.answer(goapi.Health{}, srcDown("GET /health"))
+	probe.answer(up())
 
 	snap := b.Snapshot()
 
@@ -316,29 +413,39 @@ func TestSeverityWarnsAfterAFlap(t *testing.T) {
 	}
 }
 
-type countingChecker struct {
-	mu    sync.Mutex
-	count int
+func TestSeverityCriticalWhileGoAPIIsUnreachable(t *testing.T) {
+	b, probe := probedBucket(t, &fakeReader{})
+
+	probe.answer(up())
+	probe.answer(goapi.Health{}, srcDown("GET /health"))
+
+	snap := b.Snapshot()
+
+	if snap.Severity != core.SeverityCritical {
+		t.Errorf("severity = %q, want critical", snap.Severity)
+	}
+	if snap.Headline != "go-api unreachable · uptime 50.0%" {
+		t.Errorf("headline = %q, want go-api unreachable with its uptime", snap.Headline)
+	}
 }
 
-func (c *countingChecker) Health(context.Context) (goapi.Health, error) {
-	c.mu.Lock()
-	c.count++
-	c.mu.Unlock()
-	return goapi.Health{Status: "ok"}, nil
-}
+func TestNoProbesYetIsSaidInTheHeadline(t *testing.T) {
+	snap := newBucket(&fakeReader{}).Snapshot()
 
-func (c *countingChecker) probes() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.count
+	if snap.Headline != "no reachability probes yet" {
+		t.Errorf("headline = %q, want no reachability probes yet", snap.Headline)
+	}
+	if snap.Severity != core.SeverityOK {
+		t.Errorf("severity = %q, want ok", snap.Severity)
+	}
 }
 
 func TestStartKeepsPollerRunningPastFirstTick(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(healthyHealth(), nil)
-	checker := &countingChecker{}
-	b := newBucket(reader, checker, time.Millisecond)
+	checker := &fakeChecker{}
+	checker.set(up())
+	b := reliability.New(reliability.Deps{Reader: reader, Checker: checker, Interval: time.Millisecond})
 
 	appCtx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -359,24 +466,33 @@ func TestStartKeepsPollerRunningPastFirstTick(t *testing.T) {
 	}
 
 	cancel()
+	b.Wait()
 	settled := checker.probes()
 	time.Sleep(50 * time.Millisecond)
-	if got := checker.probes(); got > settled+1 {
+	if got := checker.probes(); got != settled {
 		t.Fatalf("poller kept probing after app ctx cancel: %d -> %d — leaked past shutdown", settled, got)
 	}
 }
 
-func TestPollIntervalFromEnv(t *testing.T) {
-	t.Setenv("OVERSEER_RELIABILITY_POLL_INTERVAL", "")
-	if got := pollIntervalFromEnv(); got != defaultPollInterval {
-		t.Errorf("empty env = %v, want default %v", got, defaultPollInterval)
-	}
-	t.Setenv("OVERSEER_RELIABILITY_POLL_INTERVAL", "5s")
-	if got := pollIntervalFromEnv(); got != 5*time.Second {
-		t.Errorf("valid env = %v, want 5s", got)
-	}
-	t.Setenv("OVERSEER_RELIABILITY_POLL_INTERVAL", "garbage")
-	if got := pollIntervalFromEnv(); got != defaultPollInterval {
-		t.Errorf("invalid env = %v, want default %v", got, defaultPollInterval)
+func TestANonPositiveIntervalPollsAtTheDefaultCadence(t *testing.T) {
+	for _, interval := range []time.Duration{0, -time.Second} {
+		t.Run(interval.String(), func(t *testing.T) {
+			checker := &fakeChecker{}
+			checker.set(up())
+			b := reliability.New(reliability.Deps{Checker: checker, Interval: interval})
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(func() {
+				cancel()
+				b.Wait()
+			})
+
+			b.Start(ctx)
+			eventually(t, "the first probe", func() bool { return checker.probes() == 1 })
+			time.Sleep(50 * time.Millisecond)
+
+			if got := checker.probes(); got != 1 {
+				t.Fatalf("interval %v probed %d times in 50ms, want 1: the default cadence is seconds apart", interval, got)
+			}
+		})
 	}
 }

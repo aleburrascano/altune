@@ -1,12 +1,18 @@
-package security
+package security_test
 
 import (
+	"altune/overseer/internal/buckets/security"
 	"altune/overseer/internal/core"
-	"context"
 	"errors"
 	"sync"
 	"testing"
 	"time"
+)
+
+const (
+	bucketID            = "security"
+	seriesFindingsOpen  = "findings_open"
+	seriesProbeFailures = "probe_failures"
 )
 
 type recordedPoint struct {
@@ -43,39 +49,30 @@ func (r *recordingSeries) named(series string) []core.Point {
 }
 
 func TestRecordWritesEachSeriesOncePerRun(t *testing.T) {
-	b := newBucket(staticProber{status: 401}, defaultSuite(), time.Hour)
-	series := &recordingSeries{}
-	b.UseSeries(series)
-
-	b.record(runSuite(context.Background(), staticProber{status: 200}, defaultSuite(), time.Now))
+	_, _, series := runOnce(t, status(200))
 
 	findings := series.named(seriesFindingsOpen)
 	if len(findings) != 1 {
 		t.Fatalf("findings_open recorded %d points, want 1: %+v", len(findings), findings)
 	}
-	if findings[0].Value != float64(len(defaultSuite())) {
-		t.Errorf("findings_open = %v, want %d (every check served, none rejected)", findings[0].Value, len(defaultSuite()))
+	if findings[0].Value != suiteSize || !findings[0].At.Equal(runAt(1)) {
+		t.Errorf("findings_open = %+v, want %d at the run's start (every check served, none rejected)", findings[0], suiteSize)
 	}
 	failures := series.named(seriesProbeFailures)
 	if len(failures) != 1 {
 		t.Fatalf("probe_failures recorded %d points, want 1: %+v", len(failures), failures)
 	}
-	if failures[0].Value != 0 {
-		t.Errorf("probe_failures = %v, want 0 (every check reached go-api)", failures[0].Value)
+	if failures[0].Value != 0 || !failures[0].At.Equal(runAt(1)) {
+		t.Errorf("probe_failures = %+v, want 0 at the run's start (every check reached go-api)", failures[0])
 	}
 }
 
 func TestRecordCountsUnreachedRunAsProbeFailures(t *testing.T) {
-	b := newBucket(staticProber{status: 401}, defaultSuite(), time.Hour)
-	series := &recordingSeries{}
-	b.UseSeries(series)
-
-	down := runSuite(context.Background(), staticProber{downErr: errors.New("dial tcp: refused")}, defaultSuite(), time.Now)
-	b.record(down)
+	_, _, series := runOnce(t, down(errors.New("dial tcp: refused")))
 
 	failures := series.named(seriesProbeFailures)
-	if len(failures) != 1 || failures[0].Value != float64(len(defaultSuite())) {
-		t.Errorf("probe_failures = %+v, want one point of %d", failures, len(defaultSuite()))
+	if len(failures) != 1 || failures[0].Value != suiteSize {
+		t.Errorf("probe_failures = %+v, want one point of %d", failures, suiteSize)
 	}
 	findings := series.named(seriesFindingsOpen)
 	if len(findings) != 1 || findings[0].Value != 0 {
@@ -84,14 +81,13 @@ func TestRecordCountsUnreachedRunAsProbeFailures(t *testing.T) {
 }
 
 func TestKeySeriesIsFindingsOpen(t *testing.T) {
-	b := newBucket(staticProber{status: 401}, defaultSuite(), time.Hour)
-	if got := b.KeySeries(); got != seriesFindingsOpen {
+	if got := security.New(security.Deps{}).KeySeries(); got != seriesFindingsOpen {
 		t.Errorf("KeySeries() = %q, want %q", got, seriesFindingsOpen)
 	}
 }
 
 func TestSecurityBucketIsASeriesWriter(t *testing.T) {
-	var bucket core.Bucket = newBucket(staticProber{status: 401}, defaultSuite(), time.Hour)
+	var bucket core.Bucket = security.New(security.Deps{})
 	if _, ok := bucket.(core.SeriesWriter); !ok {
 		t.Fatal("security does not implement core.SeriesWriter, so the composition root never hands it the history store")
 	}

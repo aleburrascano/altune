@@ -1,6 +1,7 @@
-package logs
+package logs_test
 
 import (
+	"altune/overseer/internal/buckets/logs"
 	"altune/overseer/internal/goapi"
 	"testing"
 )
@@ -15,7 +16,7 @@ func (d droppingSource) Dropped() int { return d.streamDrops }
 func TestSnapshotDroppedCountsStreamDropsWithRingEvictions(t *testing.T) {
 	const ringOverflow, streamDrops = 5, 7
 	src := droppingSource{fakeSource: newFakeSource(goapi.StatusUp, logCapacity+ringOverflow), streamDrops: streamDrops}
-	b := newBucket(src, "")
+	b := logs.New(logs.Deps{Source: src})
 	for range logCapacity + ringOverflow {
 		src.ch <- goapi.LogRecord{Level: "INFO", Message: "x"}
 	}

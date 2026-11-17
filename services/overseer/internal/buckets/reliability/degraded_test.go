@@ -1,38 +1,37 @@
-package reliability
+package reliability_test
 
 import (
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
-	"context"
 	"testing"
 )
 
 func TestPollerReportsDegradedNotDown(t *testing.T) {
-	checker := &fakeChecker{}
-	checker.set(goapi.Health{Status: "degraded"}, nil)
-	p := newReachPoller(checker, defaultPollInterval)
+	b, probe := probedBucket(t, &fakeReader{})
 
-	p.pollOnce(context.Background())
+	probe.answer(degraded())
 
-	if got := p.currentStatus(); got != goapi.StatusUp {
-		t.Errorf("status = %v, want up (reachable, just degraded)", got)
+	snap := b.Snapshot()
+	if snap.State == core.StateSourceDown {
+		t.Errorf("state = %q, want reachable: go-api answered, just degraded", snap.State)
 	}
-	if got := p.degradedReason(); got != goapi.ReasonDegraded {
-		t.Errorf("degradedReason = %q, want %q", got, goapi.ReasonDegraded)
+	if snap.Reason != goapi.ReasonDegraded {
+		t.Errorf("Reason = %q, want %q", snap.Reason, goapi.ReasonDegraded)
+	}
+	if got := snapData(t, snap).Reachability; got != goapi.ReasonDegraded {
+		t.Errorf("reachability = %q, want %q", got, goapi.ReasonDegraded)
 	}
 }
 
 func TestSnapshotReasonIsDegradedOn503WithBody(t *testing.T) {
 	reader := &fakeReader{}
-	checker := &fakeChecker{}
 	reader.set(healthyHealth(), nil)
-	checker.set(goapi.Health{Status: "degraded"}, nil)
 
-	b := newBucket(reader, checker, defaultPollInterval)
+	b, probe := probedBucket(t, reader)
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect = %v, want nil", err)
 	}
-	b.poller.pollOnce(context.Background())
+	probe.answer(degraded())
 
 	snap := b.Snapshot()
 	if snap.Reason != goapi.ReasonDegraded {

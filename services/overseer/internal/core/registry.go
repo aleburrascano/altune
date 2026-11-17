@@ -50,9 +50,3 @@ func (r *Registry) Get(id string) (Bucket, bool) {
 	}
 	return b, true
 }
-
-var Default = NewRegistry()
-
-func Register(b Bucket) {
-	Default.Register(b)
-}

@@ -41,7 +41,7 @@ const (
 
 var errUnconfigured = errors.New("domainquality: go-api not configured")
 
-var errBothDown = errors.New("domainquality: eval and acquisition both unreachable")
+var ErrBothDown = errors.New("domainquality: eval and acquisition both unreachable")
 
 type reader interface {
 	AdminEval(ctx context.Context) (goapi.EvalStatus, error)
@@ -70,15 +70,25 @@ type Bucket struct {
 	updated     time.Time
 }
 
-func New() *Bucket { return newBucket(readerFromEnv()) }
+type Deps struct {
+	Reader reader
+	Now    func() time.Time
+}
 
-func newBucket(r reader) *Bucket {
-	return &Bucket{
-		reader:     r,
+func New(deps Deps) *Bucket {
+	b := &Bucket{
+		reader:     deps.Reader,
 		discoTrend: core.NewRingStore(discoTrendCapacity),
 		series:     discardSeries{},
-		now:        func() time.Time { return time.Now().UTC() },
+		now:        deps.Now,
 	}
+	if b.reader == nil {
+		b.reader = nullReader{}
+	}
+	if b.now == nil {
+		b.now = func() time.Time { return time.Now().UTC() }
+	}
+	return b
 }
 
 type acqSample struct {
@@ -134,7 +144,7 @@ func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 	wg.Wait()
 
 	if evalErr != nil && acqErr != nil {
-		return nil, fmt.Errorf("%w: eval=%s acquisition=%s", errBothDown, evalErr.Error(), acqErr.Error())
+		return nil, fmt.Errorf("%w: eval=%s acquisition=%s", ErrBothDown, evalErr.Error(), acqErr.Error())
 	}
 	return nil, nil
 }
@@ -482,19 +492,6 @@ func discoTrendSignal(d goapi.DiscographyQuality) (core.Signal, bool) {
 	return core.Signal{At: at, Kind: "discography", Text: text}, true
 }
 
-func readerFromEnv() reader {
-	base, ok := goapi.BaseURLFromEnv()
-	if !ok {
-		return nullReader{}
-	}
-	c, err := goapi.New(base, goapi.SharedTokenSource())
-	if err != nil {
-		slog.Warn("domainquality: invalid OVERSEER_GOAPI_URL, degrading to source-down", "error", err)
-		return nullReader{}
-	}
-	return c
-}
-
 type nullReader struct{}
 
 func (nullReader) AdminEval(context.Context) (goapi.EvalStatus, error) {
@@ -516,5 +513,3 @@ func (discardSeries) Record(string, string, core.Point) {}
 func (discardSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
 	return nil, nil
 }
-
-func init() { core.Register(New()) }

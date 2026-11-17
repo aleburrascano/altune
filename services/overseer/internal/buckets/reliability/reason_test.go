@@ -1,4 +1,4 @@
-package reliability
+package reliability_test
 
 import (
 	"altune/overseer/internal/goapi"
@@ -7,11 +7,9 @@ import (
 
 func TestTokenFailureReasonIsAuthNeverDown(t *testing.T) {
 	reader := &fakeReader{}
-	checker := &fakeChecker{}
 	reader.set(goapi.OperatorHealth{}, &goapi.TokenError{Op: "acquire read-only token", Err: goapi.ErrNoToken})
-	checker.set(goapi.Health{Status: "ok"}, nil)
 
-	b := newBucket(reader, checker, defaultPollInterval)
+	b := newBucket(reader)
 	if err := collectStore(t, b); err == nil {
 		t.Fatal("Collect with a failing token source returned nil error")
 	}
@@ -27,11 +25,9 @@ func TestTokenFailureReasonIsAuthNeverDown(t *testing.T) {
 
 func TestReasonClearsOnRecovery(t *testing.T) {
 	reader := &fakeReader{}
-	checker := &fakeChecker{}
 	reader.set(goapi.OperatorHealth{}, &goapi.TokenError{Op: "acquire read-only token", Err: goapi.ErrNoToken})
-	checker.set(goapi.Health{Status: "ok"}, nil)
 
-	b := newBucket(reader, checker, defaultPollInterval)
+	b := newBucket(reader)
 	_ = collectStore(t, b)
 	if b.Snapshot().Reason != "auth" {
 		t.Fatalf("Reason after failure = %q, want auth", b.Snapshot().Reason)

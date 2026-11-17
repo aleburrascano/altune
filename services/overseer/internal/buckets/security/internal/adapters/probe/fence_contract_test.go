@@ -1,14 +1,15 @@
-package security
+package probe_test
 
 import (
+	"altune/overseer/internal/buckets/security/internal/adapters/probe"
 	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 )
 
 type countingTransport struct {
@@ -24,19 +25,18 @@ func (t *countingTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	return nil, errors.New("no inner transport")
 }
 
-func newTestClient(t *testing.T) (*fencedClient, *countingTransport) {
+func newTestClient(t *testing.T, transport http.RoundTripper) *probe.Client {
 	t.Helper()
-	c, err := newFencedClient("https://allowed.test", []string{"allowed.test"})
+	c, err := probe.NewWithTransport("https://allowed.test", []string{"allowed.test"}, transport)
 	if err != nil {
-		t.Fatalf("newFencedClient: %v", err)
+		t.Fatalf("NewWithTransport: %v", err)
 	}
-	ct := &countingTransport{}
-	c.http.Transport = ct
-	return c, ct
+	return c
 }
 
 func TestFenceRefusesOffAllowlistNoRequestSent(t *testing.T) {
-	c, ct := newTestClient(t)
+	ct := &countingTransport{}
+	c := newTestClient(t, ct)
 
 	offTargets := []*url.URL{
 		{Scheme: "https", Host: "evil.example", Path: "/v1/library"},
@@ -45,9 +45,9 @@ func TestFenceRefusesOffAllowlistNoRequestSent(t *testing.T) {
 		{Scheme: "https", Host: "localhost", Path: "/"},
 	}
 	for _, tgt := range offTargets {
-		res := c.do(context.Background(), tgt)
-		if !errors.Is(res.err, errOffAllowlist) {
-			t.Errorf("do(%s) err = %v, want errOffAllowlist", tgt.Host, res.err)
+		_, err := c.Do(context.Background(), tgt)
+		if !errors.Is(err, probe.ErrOffAllowlist) {
+			t.Errorf("Do(%s) err = %v, want ErrOffAllowlist", tgt.Host, err)
 		}
 	}
 	if got := ct.calls.Load(); got != 0 {
@@ -55,26 +55,69 @@ func TestFenceRefusesOffAllowlistNoRequestSent(t *testing.T) {
 	}
 }
 
-func TestFenceAllowsAllowlistedHost(t *testing.T) {
-	c, _ := newTestClient(t)
-	ct := &countingTransport{inner: roundTripStatus(401)}
-	c.http.Transport = ct
+func TestFenceRefusesANilTarget(t *testing.T) {
+	ct := &countingTransport{}
+	c := newTestClient(t, ct)
 
-	res := c.do(context.Background(), c.target("/v1/library", ""))
-	if res.err != nil {
-		t.Fatalf("allowlisted probe errored: %v", res.err)
+	if _, err := c.Do(context.Background(), nil); err == nil {
+		t.Fatal("Do(nil) returned no error, want a refusal")
 	}
-	if res.status != 401 {
-		t.Errorf("status = %d, want 401", res.status)
+	if got := ct.calls.Load(); got != 0 {
+		t.Fatalf("a nil target reached the transport %d time(s)", got)
+	}
+}
+
+func TestFenceAllowsAllowlistedHost(t *testing.T) {
+	ct := &countingTransport{inner: roundTripStatus(401)}
+	c := newTestClient(t, ct)
+
+	status, err := c.Probe(context.Background(), "/v1/library", "")
+	if err != nil {
+		t.Fatalf("allowlisted probe errored: %v", err)
+	}
+	if status != 401 {
+		t.Errorf("status = %d, want 401", status)
 	}
 	if ct.calls.Load() != 1 {
 		t.Errorf("allowlisted probe reached transport %d times, want 1", ct.calls.Load())
 	}
 }
 
+func TestAnUnreachableGoAPIIsReportedAsSourceDown(t *testing.T) {
+	c := newTestClient(t, &countingTransport{})
+
+	_, err := c.Probe(context.Background(), "/v1/library", "")
+	if err == nil || !strings.HasPrefix(err.Error(), "security: go-api unreachable: ") {
+		t.Fatalf("transport failure err = %v, want the go-api unreachable error", err)
+	}
+	if errors.Is(err, probe.ErrOffAllowlist) {
+		t.Fatalf("transport failure reported as an allowlist refusal: %v", err)
+	}
+}
+
 func TestNewFencedClientFailsClosed(t *testing.T) {
-	if _, err := newFencedClient("https://api.test", []string{"other.test"}); err == nil {
-		t.Fatal("newFencedClient accepted a base host off its own allowlist, want fail-closed")
+	if _, err := probe.New("https://api.test", []string{"other.test"}); err == nil {
+		t.Fatal("New accepted a base host off its own allowlist, want fail-closed")
+	}
+}
+
+func TestNewRefusesABaseURLItCannotProbe(t *testing.T) {
+	for _, base := range []string{"://not a url", "ftp://api.test", "https://", ""} {
+		if _, err := probe.New(base, []string{"api.test"}); err == nil {
+			t.Errorf("New(%q) accepted a base it cannot probe", base)
+		}
+	}
+}
+
+func TestNewAcceptsAnAllowlistOfURLsAndPorts(t *testing.T) {
+	for _, allow := range [][]string{
+		{"https://API.test:8443/"},
+		{" api.test:8443 "},
+		{"", "api.test"},
+	} {
+		if _, err := probe.New(" https://api.test:8443/ ", allow); err != nil {
+			t.Errorf("New with allowlist %q refused the base: %v", allow, err)
+		}
 	}
 }
 
@@ -91,12 +134,14 @@ func TestProbeIssuesGetOnly(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	host := mustHost(t, srv.URL)
-	c, err := newFencedClient(srv.URL, []string{host})
+	c, err := probe.New(srv.URL, []string{mustHost(t, srv.URL)})
 	if err != nil {
-		t.Fatalf("newFencedClient: %v", err)
+		t.Fatalf("New: %v", err)
 	}
-	_ = runSuite(context.Background(), c, defaultSuite(), func() time.Time { return time.Unix(0, 0) })
+	status, err := c.Probe(context.Background(), "/v1/discovery/search", "q=overseer-selftest")
+	if err != nil || status != http.StatusUnauthorized {
+		t.Fatalf("probe = %d, %v, want 401", status, err)
+	}
 
 	if m := gotMethod.Load().(string); m != http.MethodGet {
 		t.Errorf("probe used method %q, want GET only (no-mutation)", m)
@@ -117,17 +162,16 @@ func TestFenceBlocksRedirectOffAllowlist(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	host := mustHost(t, srv.URL)
-	c, err := newFencedClient(srv.URL, []string{host})
+	c, err := probe.New(srv.URL, []string{mustHost(t, srv.URL)})
 	if err != nil {
-		t.Fatalf("newFencedClient: %v", err)
+		t.Fatalf("New: %v", err)
 	}
-	res := c.do(context.Background(), c.target("/v1/library", ""))
-	if res.err != nil {
-		t.Fatalf("probe errored: %v", res.err)
+	status, err := c.Probe(context.Background(), "/v1/library", "")
+	if err != nil {
+		t.Fatalf("probe errored: %v", err)
 	}
-	if res.status != http.StatusFound {
-		t.Errorf("status = %d, want 302 (redirect returned, not followed)", res.status)
+	if status != http.StatusFound {
+		t.Errorf("status = %d, want 302 (redirect returned, not followed)", status)
 	}
 	if followed.Load() {
 		t.Fatal("client FOLLOWED a redirect to an off-allowlist host — fence bypassed")

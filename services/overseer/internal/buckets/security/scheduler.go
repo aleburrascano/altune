@@ -14,11 +14,11 @@ type scheduler struct {
 	sink     func(suiteResult)
 }
 
-func newScheduler(client prober, checks []check, interval time.Duration, sink func(suiteResult)) *scheduler {
+func newScheduler(client prober, checks []check, interval time.Duration, now func() time.Time, sink func(suiteResult)) *scheduler {
 	if interval <= 0 {
 		interval = defaultInterval
 	}
-	return &scheduler{client: client, checks: checks, interval: interval, now: time.Now, sink: sink}
+	return &scheduler{client: client, checks: checks, interval: interval, now: now, sink: sink}
 }
 
 func (s *scheduler) run(ctx context.Context) {

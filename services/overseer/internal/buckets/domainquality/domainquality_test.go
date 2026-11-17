@@ -1,6 +1,7 @@
-package domainquality
+package domainquality_test
 
 import (
+	"altune/overseer/internal/buckets/domainquality"
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
 	"bytes"
@@ -12,6 +13,22 @@ import (
 	"testing"
 	"time"
 )
+
+type reader interface {
+	AdminEval(ctx context.Context) (goapi.EvalStatus, error)
+	AdminAcquisition(ctx context.Context) (goapi.AcquisitionStatus, error)
+	AdminDiscographyQuality(ctx context.Context) (goapi.DiscographyQuality, error)
+}
+
+func newBucket(r reader) *domainquality.Bucket {
+	return domainquality.New(domainquality.Deps{Reader: r})
+}
+
+func bucketAt(r reader, now time.Time) *domainquality.Bucket {
+	return domainquality.New(domainquality.Deps{Reader: r, Now: func() time.Time { return now }})
+}
+
+const discoTrendCapacity = 120
 
 type fakeReader struct {
 	eval     goapi.EvalStatus
@@ -47,9 +64,9 @@ func healthyAcq() goapi.AcquisitionStatus {
 	return goapi.AcquisitionStatus{Succeeded: 19, Failed: 1, InFlight: 2, QueueDepth: 4, QueueCapacity: 64}
 }
 
-func snapData(t *testing.T, snap core.Snapshot) Data {
+func snapData(t *testing.T, snap core.Snapshot) domainquality.Data {
 	t.Helper()
-	var d Data
+	var d domainquality.Data
 	if err := json.Unmarshal(snap.Data, &d); err != nil {
 		t.Fatalf("unmarshal data: %v (%s)", err, snap.Data)
 	}
@@ -84,8 +101,8 @@ func TestDegradeToSourceDownPreservesLastKnown(t *testing.T) {
 	}
 
 	reader.down = true
-	if _, err := b.Collect(context.Background()); !errors.Is(err, errBothDown) {
-		t.Fatalf("second Collect err = %v, want errBothDown", err)
+	if _, err := b.Collect(context.Background()); !errors.Is(err, domainquality.ErrBothDown) {
+		t.Fatalf("second Collect err = %v, want domainquality.ErrBothDown", err)
 	}
 
 	snap := b.Snapshot()
@@ -171,16 +188,16 @@ func TestSnapshotCarriesRawText(t *testing.T) {
 }
 
 func TestMetaIsStable(t *testing.T) {
-	m := newBucket(nullReader{}).Meta()
+	m := domainquality.New(domainquality.Deps{}).Meta()
 	if m.ID != "domainquality" || m.Title != "Domain quality" {
 		t.Fatalf("Meta = %+v, want id=domainquality title=Domain quality", m)
 	}
 }
 
 func TestUnconfiguredDegradesNotCrash(t *testing.T) {
-	b := New()
-	if _, err := b.Collect(context.Background()); !errors.Is(err, errBothDown) {
-		t.Fatalf("unconfigured Collect err = %v, want errBothDown", err)
+	b := domainquality.New(domainquality.Deps{})
+	if _, err := b.Collect(context.Background()); !errors.Is(err, domainquality.ErrBothDown) {
+		t.Fatalf("unconfigured Collect err = %v, want domainquality.ErrBothDown", err)
 	}
 	snap := b.Snapshot()
 	if snap.Title != "Domain quality" || snap.State != core.StateSourceDown {
@@ -248,10 +265,15 @@ func TestDiscoTrendSignalIDAnchoredAndEvidenced(t *testing.T) {
 			{Artist: "NoId", ArtistRef: "b", Releases: 10, SingleProvider: 3, SingleProviderNoID: 3},
 		},
 	}
-	sig, ok := discoTrendSignal(d)
-	if !ok {
-		t.Fatal("discoTrendSignal reported no rateable case, want the no-id suspect")
+	b := newBucket(fakeReader{eval: scoredEval(), acq: healthyAcq(), disco: d})
+	if _, err := b.Collect(context.Background()); err != nil {
+		t.Fatalf("Collect: %v", err)
 	}
+	trend := snapData(t, b.Snapshot()).DiscoTrend
+	if len(trend) != 1 {
+		t.Fatalf("trend = %+v, want one sample for the no-id suspect", trend)
+	}
+	sig := trend[0]
 	if !strings.Contains(sig.Text, "NoId") {
 		t.Fatalf("trend picked %q, want the no-id artist (id anchor, not headcount)", sig.Text)
 	}
@@ -291,7 +313,7 @@ func TestDiscographyTrendBounded(t *testing.T) {
 			t.Fatalf("Collect #%d: %v", i, err)
 		}
 	}
-	if got := b.discoTrend.Len(); got != discoTrendCapacity {
+	if got := len(snapData(t, b.Snapshot()).DiscoTrend); got != discoTrendCapacity {
 		t.Fatalf("trend Len = %d, want capped at %d", got, discoTrendCapacity)
 	}
 }
@@ -397,7 +419,7 @@ func TestAcquisitionRateReflectsRecentWindow(t *testing.T) {
 	if d.AcqWindow == nil {
 		t.Fatal("AcqWindow absent though two samples spanned 100 recent completions")
 	}
-	if d.AcqWindow.Rate != 0 || d.AcqWindow.Completed != 100 {
+	if *d.AcqWindow != (domainquality.AcqWindow{Rate: 0, Completed: 100}) {
 		t.Fatalf("AcqWindow = %+v, want rate 0 over 100 recent completions", d.AcqWindow)
 	}
 }
@@ -419,8 +441,7 @@ func TestEvalScoreFlaggedStaleByAge(t *testing.T) {
 	stale := scoredEval()
 	stale.LastRun = &ranLongAgo
 
-	b := newBucket(fakeReader{eval: stale, acq: healthyAcq()})
-	b.now = func() time.Time { return now }
+	b := bucketAt(fakeReader{eval: stale, acq: healthyAcq()}, now)
 	if _, err := b.Collect(context.Background()); err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
@@ -440,8 +461,7 @@ func TestFreshEvalScoreNotFlaggedStaleByAge(t *testing.T) {
 	fresh := scoredEval()
 	fresh.LastRun = &ranJustNow
 
-	b := newBucket(fakeReader{eval: fresh, acq: healthyAcq()})
-	b.now = func() time.Time { return now }
+	b := bucketAt(fakeReader{eval: fresh, acq: healthyAcq()}, now)
 	if _, err := b.Collect(context.Background()); err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
@@ -535,7 +555,7 @@ func (r *steppingAcqReader) AdminAcquisition(context.Context) (goapi.Acquisition
 	return a, nil
 }
 
-func collectN(t *testing.T, b *Bucket, n int) {
+func collectN(t *testing.T, b *domainquality.Bucket, n int) {
 	t.Helper()
 	for i := 0; i < n; i++ {
 		if _, err := b.Collect(context.Background()); err != nil {

@@ -231,3 +231,21 @@ func TestLogValueRedactsJWTSecret(t *testing.T) {
 		t.Errorf("LogValue leaked the JWT secret: %s", got)
 	}
 }
+
+func TestOCIEnabledParsing(t *testing.T) {
+	for _, tc := range []struct {
+		val  string
+		want bool
+	}{{"1", true}, {"true", true}, {"TRUE", true}, {" yes ", true}, {"on", true}, {"", false}, {"0", false}, {"no", false}, {"enabled", false}} {
+		env := validEnv()
+		env["OVERSEER_OCI_ENABLED"] = tc.val
+		setEnv(t, env)
+		cfg, err := config.Load(os.Getenv)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.OCIEnabled != tc.want {
+			t.Errorf("OVERSEER_OCI_ENABLED=%q gives OCIEnabled %v, want %v", tc.val, cfg.OCIEnabled, tc.want)
+		}
+	}
+}

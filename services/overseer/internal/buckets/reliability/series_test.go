@@ -1,9 +1,9 @@
-package reliability
+package reliability_test
 
 import (
+	"altune/overseer/internal/buckets/reliability"
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
-	"context"
 	"sync"
 	"testing"
 	"time"
@@ -53,21 +53,21 @@ func (c *steppingClock) now() time.Time {
 	return current
 }
 
-func bucketWithSeries(checker reachChecker) (*Bucket, *recordingSeries) {
-	b := newBucket(&fakeReader{}, checker, defaultPollInterval)
+func bucketWithSeries(t *testing.T, now func() time.Time) (*reliability.Bucket, *probes, *recordingSeries) {
+	t.Helper()
+	probe := newProbes(t)
+	b := reliability.New(reliability.Deps{Reader: &fakeReader{}, Checker: probe, Interval: fastInterval, Now: now})
 	series := &recordingSeries{}
 	b.UseSeries(series)
-	return b, series
+	probe.start(b)
+	return b, probe, series
 }
 
 func TestReachableProbeRecordsUpAndItsLatency(t *testing.T) {
-	checker := &fakeChecker{}
-	checker.set(goapi.Health{Status: "ok"}, nil)
-	b, series := bucketWithSeries(checker)
 	clock := &steppingClock{at: time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC), step: 42 * time.Millisecond}
-	b.poller.now = clock.now
+	_, probe, series := bucketWithSeries(t, clock.now)
 
-	b.poller.pollOnce(context.Background())
+	probe.answer(up())
 
 	up := series.named("up")
 	if len(up) != 1 || up[0].Value != 1 {
@@ -80,14 +80,15 @@ func TestReachableProbeRecordsUpAndItsLatency(t *testing.T) {
 	if !latency[0].At.Equal(up[0].At) {
 		t.Fatalf("latency at %v and up at %v differ; one probe is one instant", latency[0].At, up[0].At)
 	}
+	if want := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC).Add(42 * time.Millisecond); !up[0].At.Equal(want) {
+		t.Fatalf("probe recorded at %v, want its finish time %v", up[0].At, want)
+	}
 }
 
 func TestUnreachableProbeRecordsDownWithoutALatency(t *testing.T) {
-	checker := &fakeChecker{}
-	checker.set(goapi.Health{}, srcDown("GET /health"))
-	b, series := bucketWithSeries(checker)
+	_, probe, series := bucketWithSeries(t, nil)
 
-	b.poller.pollOnce(context.Background())
+	probe.answer(goapi.Health{}, srcDown("GET /health"))
 
 	if up := series.named("up"); len(up) != 1 || up[0].Value != 0 {
 		t.Fatalf("up series = %+v, want one point of 0", up)
@@ -98,11 +99,9 @@ func TestUnreachableProbeRecordsDownWithoutALatency(t *testing.T) {
 }
 
 func TestAnsweredDegradedProbeRecordsUpAndItsLatency(t *testing.T) {
-	checker := &fakeChecker{}
-	checker.set(goapi.Health{Status: "degraded"}, nil)
-	b, series := bucketWithSeries(checker)
+	_, probe, series := bucketWithSeries(t, nil)
 
-	b.poller.pollOnce(context.Background())
+	probe.answer(degraded())
 
 	if up := series.named("up"); len(up) != 1 || up[0].Value != 1 {
 		t.Fatalf("up series = %+v, want one point of 1 (degraded is reachable)", up)
@@ -113,20 +112,18 @@ func TestAnsweredDegradedProbeRecordsUpAndItsLatency(t *testing.T) {
 }
 
 func TestBucketIsASeriesWriter(t *testing.T) {
-	var bucket core.Bucket = newBucket(&fakeReader{}, &fakeChecker{}, defaultPollInterval)
+	var bucket core.Bucket = newBucket(&fakeReader{})
 	if _, ok := bucket.(core.SeriesWriter); !ok {
 		t.Fatal("reliability does not implement core.SeriesWriter, so the composition root never hands it the history store")
 	}
 }
 
 func TestProbeWithoutSeriesStillPolls(t *testing.T) {
-	checker := &fakeChecker{}
-	checker.set(goapi.Health{Status: "ok"}, nil)
-	b := newBucket(&fakeReader{}, checker, defaultPollInterval)
+	b, probe := probedBucket(t, &fakeReader{})
 
-	b.poller.pollOnce(context.Background())
+	probe.answer(up())
 
-	if got := b.poller.currentStatus(); got != goapi.StatusUp {
-		t.Fatalf("status = %v, want up with no history store wired", got)
+	if got := snapData(t, b.Snapshot()).Reachability; got != "up" {
+		t.Fatalf("reachability = %q, want up with no history store wired", got)
 	}
 }

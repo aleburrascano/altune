@@ -32,6 +32,8 @@ type Config struct {
 
 	CostSpendInterval time.Duration
 
+	OCIEnabled bool
+
 	HistoryPath string
 
 	HistorySchemaTimeout time.Duration
@@ -52,6 +54,7 @@ func Load(getenv func(string) string) (*Config, error) {
 		SupabaseJWKSURL:   strings.TrimSpace(env("OVERSEER_SUPABASE_JWKS_URL")),
 		BasePath:          normalizeBasePath(env("OVERSEER_BASE_PATH")),
 		HistoryPath:       env.or("OVERSEER_HISTORY_PATH", "/var/lib/overseer/history.db"),
+		OCIEnabled:        enabled(env("OVERSEER_OCI_ENABLED")),
 	}
 	if err := c.applyPort(env); err != nil {
 		return nil, err
@@ -161,6 +164,15 @@ func normalizeBasePath(raw string) string {
 	p = "/" + strings.TrimLeft(p, "/")
 	p = strings.TrimRight(p, "/")
 	return p
+}
+
+func enabled(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 func (env environment) or(key, fallback string) string {

@@ -1,6 +1,7 @@
-package backendperf
+package backendperf_test
 
 import (
+	"altune/overseer/internal/buckets/backendperf"
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
 	"context"
@@ -16,6 +17,20 @@ type fakeReader struct {
 	live goapi.LiveMetrics
 	err  error
 }
+
+type metricsReader interface {
+	AdminMetricsLive(ctx context.Context) (goapi.LiveMetrics, error)
+}
+
+func newBucket(reader metricsReader) *backendperf.Bucket {
+	return backendperf.New(backendperf.Deps{Reader: reader})
+}
+
+const (
+	historyCapacity = 120
+	minErrorSamples = 10
+	warnP99Ms       = 100.0
+)
 
 func (f *fakeReader) AdminMetricsLive(context.Context) (goapi.LiveMetrics, error) {
 	f.mu.Lock()
@@ -37,16 +52,16 @@ func liveWith(routes map[string]goapi.RouteLatency) goapi.LiveMetrics {
 	return goapi.LiveMetrics{Latency: goapi.LatencyMetrics{Routes: routes}}
 }
 
-func collectStore(t *testing.T, b *Bucket) error {
+func collectStore(t *testing.T, b *backendperf.Bucket) error {
 	t.Helper()
 	signals, err := b.Collect(context.Background())
 	b.Store(signals)
 	return err
 }
 
-func snapData(t *testing.T, snap core.Snapshot) Data {
+func snapData(t *testing.T, snap core.Snapshot) backendperf.Data {
 	t.Helper()
-	var d Data
+	var d backendperf.Data
 	if err := json.Unmarshal(snap.Data, &d); err != nil {
 		t.Fatalf("unmarshal data: %v (%s)", err, snap.Data)
 	}
@@ -163,11 +178,8 @@ func TestStaysBoundedUnderLoad(t *testing.T) {
 			t.Fatalf("Collect #%d: %v", i, err)
 		}
 	}
-	if got := b.history.Len(); got > historyCapacity {
-		t.Errorf("history Len = %d, exceeds cap %d", got, historyCapacity)
-	}
-	if b.history.Cap() != historyCapacity {
-		t.Errorf("history Cap = %d, want %d", b.history.Cap(), historyCapacity)
+	if got := len(snapData(t, b.Snapshot()).Throughput); got != historyCapacity {
+		t.Errorf("throughput history holds %d windows, want capped at %d", got, historyCapacity)
 	}
 }
 
@@ -421,7 +433,7 @@ func TestWindowsErrorRateAcrossSuccessiveReads(t *testing.T) {
 }
 
 func TestUnconfiguredDegradesNotCrashes(t *testing.T) {
-	b := newBucket(nullReader{})
+	b := backendperf.New(backendperf.Deps{})
 
 	if _, err := b.Collect(context.Background()); !goapi.IsSourceDown(err) {
 		t.Fatalf("unconfigured Collect error = %v, want source-down", err)

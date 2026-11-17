@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -30,15 +29,20 @@ type Bucket struct {
 	start    sync.Once
 }
 
-func New() *Bucket {
-	return newBucket(sourceFromEnv(), minLevelFromEnv())
+type Deps struct {
+	Source   source
+	MinLevel string
 }
 
-func newBucket(src source, minLevel string) *Bucket {
+func New(deps Deps) *Bucket {
+	src := deps.Source
+	if src == nil {
+		src = newNullSource()
+	}
 	return &Bucket{
 		records:  core.NewRingStore(logCapacity),
 		src:      src,
-		minLevel: minLevel,
+		minLevel: strings.TrimSpace(deps.MinLevel),
 	}
 }
 
@@ -179,23 +183,6 @@ func decodeRecord(s core.Signal) goapi.LogRecord {
 	return rec
 }
 
-func sourceFromEnv() source {
-	base, ok := goapi.BaseURLFromEnv()
-	if !ok {
-		return newNullSource()
-	}
-	c, err := goapi.NewLogsConsumer(base, goapi.SharedTokenSource())
-	if err != nil {
-		slog.Warn("logs: invalid OVERSEER_GOAPI_URL, degrading to source-down", "error", err)
-		return newNullSource()
-	}
-	return c
-}
-
-func minLevelFromEnv() string {
-	return strings.TrimSpace(os.Getenv("OVERSEER_LOGS_MIN_LEVEL"))
-}
-
 type nullSource struct{ records chan goapi.LogRecord }
 
 func newNullSource() *nullSource { return &nullSource{records: make(chan goapi.LogRecord)} }
@@ -207,5 +194,3 @@ func (n *nullSource) Status() goapi.Status            { return goapi.StatusDown 
 func (n *nullSource) LastError() error {
 	return &goapi.SourceDownError{Op: "stream", Err: errSourceDown}
 }
-
-func init() { core.Register(New()) }

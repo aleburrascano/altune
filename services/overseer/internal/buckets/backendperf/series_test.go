@@ -1,6 +1,7 @@
-package backendperf
+package backendperf_test
 
 import (
+	"altune/overseer/internal/buckets/backendperf"
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
 	"context"
@@ -36,7 +37,7 @@ func (r *recordingSeries) named(series string) []core.Point {
 	defer r.mu.Unlock()
 	var out []core.Point
 	for _, p := range r.points {
-		if p.bucket == bucketID && p.series == series {
+		if p.bucket == "backendperf" && p.series == series {
 			out = append(out, p.point)
 		}
 	}
@@ -53,7 +54,7 @@ func (r *recordingSeries) count() map[string]int {
 	return out
 }
 
-func bucketWithSeries(reader metricsReader) (*Bucket, *recordingSeries) {
+func bucketWithSeries(reader metricsReader) (*backendperf.Bucket, *recordingSeries) {
 	b := newBucket(reader)
 	series := &recordingSeries{}
 	b.UseSeries(series)
@@ -75,17 +76,17 @@ func TestCollectRecordsEachOverallSeriesOnce(t *testing.T) {
 		t.Fatalf("Collect: %v", err)
 	}
 
-	for _, name := range []string{seriesThroughput, seriesErrorRate, seriesP50MS, seriesP95MS, seriesP99MS} {
+	for _, name := range []string{"throughput_rps", "error_rate", "p50_ms", "p95_ms", "p99_ms"} {
 		got := series.named(name)
 		if len(got) != 1 {
 			t.Fatalf("series %q recorded %d points, want 1: %+v", name, len(got), got)
 		}
 	}
-	errorRatePoints := series.named(seriesErrorRate)
+	errorRatePoints := series.named("error_rate")
 	if len(errorRatePoints) == 1 && errorRatePoints[0].Value != 0.05 {
 		t.Errorf("error_rate = %v, want 0.05", errorRatePoints[0].Value)
 	}
-	p99Points := series.named(seriesP99MS)
+	p99Points := series.named("p99_ms")
 	if len(p99Points) == 1 && p99Points[0].Value <= 0 {
 		t.Errorf("p99_ms = %v, want a positive estimate", p99Points[0].Value)
 	}
@@ -103,17 +104,17 @@ func TestCollectRecordsOnePerRouteSeriesPerRoute(t *testing.T) {
 		t.Fatalf("Collect: %v", err)
 	}
 
-	if got := series.named(perRouteSeriesStem + "/a"); len(got) != 1 {
+	if got := series.named("p95_ms:" + "/a"); len(got) != 1 {
 		t.Errorf("p95_ms:/a recorded %d points, want 1: %+v", len(got), got)
 	}
-	if got := series.named(perRouteSeriesStem + "/b"); len(got) != 1 {
+	if got := series.named("p95_ms:" + "/b"); len(got) != 1 {
 		t.Errorf("p95_ms:/b recorded %d points, want 1: %+v", len(got), got)
 	}
 }
 
 func TestCollectNeverRecordsMoreThanMaxPerRouteSeries(t *testing.T) {
-	routes := make(map[string]goapi.RouteLatency, maxPerRouteSeries+15)
-	for i := 0; i < maxPerRouteSeries+15; i++ {
+	routes := make(map[string]goapi.RouteLatency, 20+15)
+	for i := 0; i < 20+15; i++ {
 		routes[fmt.Sprintf("/route-%02d", i)] = goapi.RouteLatency{
 			Count:   uint64(i + 1),
 			Buckets: hist(map[string]uint64{"10": uint64(i + 1)}),
@@ -129,7 +130,7 @@ func TestCollectNeverRecordsMoreThanMaxPerRouteSeries(t *testing.T) {
 
 	perRoute := 0
 	for name, n := range series.count() {
-		if len(name) > len(perRouteSeriesStem) && name[:len(perRouteSeriesStem)] == perRouteSeriesStem {
+		if len(name) > len("p95_ms:") && name[:len("p95_ms:")] == "p95_ms:" {
 			perRoute += n
 		}
 	}
@@ -157,18 +158,18 @@ func TestCollectKeepsTheBusiestRoutesWhenCapped(t *testing.T) {
 		t.Fatalf("Collect: %v", err)
 	}
 
-	if got := series.named(perRouteSeriesStem + "/busy"); len(got) != 1 {
+	if got := series.named("p95_ms:" + "/busy"); len(got) != 1 {
 		t.Errorf("busiest route dropped from per-route series: %+v", got)
 	}
-	if got := series.named(perRouteSeriesStem + "/idle"); len(got) != 0 {
+	if got := series.named("p95_ms:" + "/idle"); len(got) != 0 {
 		t.Errorf("idle route recorded a per-route series despite the cap: %+v", got)
 	}
 }
 
 func TestKeySeriesIsP95MS(t *testing.T) {
 	b := newBucket(&fakeReader{})
-	if got := b.KeySeries(); got != seriesP95MS {
-		t.Errorf("KeySeries() = %q, want %q", got, seriesP95MS)
+	if got := b.KeySeries(); got != "p95_ms" {
+		t.Errorf("KeySeries() = %q, want %q", got, "p95_ms")
 	}
 }
 

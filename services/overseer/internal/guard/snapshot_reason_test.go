@@ -2,6 +2,7 @@ package guard_test
 
 import (
 	"altune/overseer/internal/app"
+	"altune/overseer/internal/config"
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
 	"testing"
@@ -14,7 +15,7 @@ func TestSourceDownSnapshotsCarryAClassifiedReason(t *testing.T) {
 		goapi.ReasonDegraded:  true,
 		goapi.ReasonDown:      true,
 	}
-	for _, b := range app.Buckets() {
+	for _, b := range app.Buckets(&config.Config{}, noEnv) {
 		snap := b.Snapshot()
 		if snap.State != core.StateSourceDown {
 			continue

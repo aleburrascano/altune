@@ -1,6 +1,7 @@
-package liveactivity
+package liveactivity_test
 
 import (
+	"altune/overseer/internal/buckets/liveactivity"
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
 	"testing"
@@ -20,7 +21,7 @@ func TestReconnectingSourceReportsConnectingReason(t *testing.T) {
 			src := newFakeSource(1)
 			src.setStatus(tc.status)
 
-			snap := newBucket(src).Snapshot()
+			snap := liveactivity.New(liveactivity.Deps{Source: src}).Snapshot()
 
 			if snap.State != tc.wantState || snap.Reason != tc.wantReason {
 				t.Errorf("snapshot state %q reason %q, want %q/%q", snap.State, snap.Reason, tc.wantState, tc.wantReason)

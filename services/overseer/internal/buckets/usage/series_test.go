@@ -1,12 +1,18 @@
-package usage
+package usage_test
 
 import (
+	"altune/overseer/internal/buckets/usage"
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
 	"context"
 	"sync"
 	"testing"
 	"time"
+)
+
+const (
+	requestsPerMin = "requests_per_min"
+	activeUsers    = "active_users"
 )
 
 type recordedPoint struct {
@@ -35,14 +41,14 @@ func (r *recordingSeries) named(series string) []core.Point {
 	defer r.mu.Unlock()
 	var out []core.Point
 	for _, p := range r.points {
-		if p.bucket == bucketID && p.series == series {
+		if p.bucket == "usage" && p.series == series {
 			out = append(out, p.point)
 		}
 	}
 	return out
 }
 
-func bucketWithSeries(src source) (*Bucket, *recordingSeries) {
+func bucketWithSeries(src eventSource) (*usage.Bucket, *recordingSeries) {
 	b := newBucket(src)
 	series := &recordingSeries{}
 	b.UseSeries(series)
@@ -59,21 +65,21 @@ func TestCollectRecordsRequestsAndUsersOncePerCompletedWindow(t *testing.T) {
 	src.push(goapi.Event{Type: "play", Timestamp: base.Add(20 * time.Second), User: "alice"})
 	collectStore(t, b)
 
-	if got := series.named(seriesRequestsPerMin); len(got) != 0 {
+	if got := series.named(requestsPerMin); len(got) != 0 {
 		t.Fatalf("requests_per_min recorded %d points before the window completed, want 0: %+v", len(got), got)
 	}
 
 	src.push(goapi.Event{Type: "play", Timestamp: base.Add(90 * time.Second), User: "carol"})
 	collectStore(t, b)
 
-	reqPoints := series.named(seriesRequestsPerMin)
+	reqPoints := series.named(requestsPerMin)
 	if len(reqPoints) != 1 {
 		t.Fatalf("requests_per_min recorded %d points, want 1: %+v", len(reqPoints), reqPoints)
 	}
 	if reqPoints[0].Value != 3 {
 		t.Errorf("requests_per_min = %v, want 3", reqPoints[0].Value)
 	}
-	userPoints := series.named(seriesActiveUsers)
+	userPoints := series.named(activeUsers)
 	if len(userPoints) != 1 {
 		t.Fatalf("active_users recorded %d points, want 1: %+v", len(userPoints), userPoints)
 	}
@@ -84,8 +90,8 @@ func TestCollectRecordsRequestsAndUsersOncePerCompletedWindow(t *testing.T) {
 
 func TestKeySeriesIsRequestsPerMin(t *testing.T) {
 	b := newBucket(newFakeSource(1))
-	if got := b.KeySeries(); got != seriesRequestsPerMin {
-		t.Errorf("KeySeries() = %q, want %q", got, seriesRequestsPerMin)
+	if got := b.KeySeries(); got != requestsPerMin {
+		t.Errorf("KeySeries() = %q, want %q", got, requestsPerMin)
 	}
 }
 
