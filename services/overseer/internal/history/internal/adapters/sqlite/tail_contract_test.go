@@ -1,4 +1,4 @@
-package history
+package sqlite_test
 
 import (
 	"altune/overseer/internal/core"

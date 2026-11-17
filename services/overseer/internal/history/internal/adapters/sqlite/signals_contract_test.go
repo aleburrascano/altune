@@ -1,4 +1,4 @@
-package history
+package sqlite_test
 
 import (
 	"altune/overseer/internal/core"
@@ -23,7 +23,7 @@ func ticks(from, to int) []core.Signal {
 	return signals
 }
 
-func loadAll(t *testing.T, d *disk, bucket, ring string) []core.Signal {
+func loadAll(t *testing.T, d *store, bucket, ring string) []core.Signal {
 	t.Helper()
 	signals, err := d.LoadSignals(context.Background(), bucket, ring, 1_000_000)
 	if err != nil {
@@ -32,10 +32,10 @@ func loadAll(t *testing.T, d *disk, bucket, ring string) []core.Signal {
 	return signals
 }
 
-func countSignalRows(t *testing.T, d *disk, bucket, ring string) int {
+func countSignalRows(t *testing.T, d *store, bucket, ring string) int {
 	t.Helper()
 	var n int
-	if err := d.db.QueryRow("SELECT COUNT(*) FROM signals WHERE bucket = ? AND ring = ?", bucket, ring).Scan(&n); err != nil {
+	if err := d.raw.QueryRow("SELECT COUNT(*) FROM signals WHERE bucket = ? AND ring = ?", bucket, ring).Scan(&n); err != nil {
 		t.Fatalf("count signal rows: %v", err)
 	}
 	return n
@@ -126,7 +126,7 @@ func TestANegativeLimitLoadsNothingRatherThanEverything(t *testing.T) {
 func TestARowWithAnUnreadableTimeFailsTheLoadOfItsRing(t *testing.T) {
 	d, _ := openTemp(t)
 	d.AppendSignals("heartbeat", "ticks", 10, ticks(0, 2))
-	if _, err := d.db.Exec("UPDATE signals SET at = 'yesterday-ish' WHERE bucket = 'heartbeat'"); err != nil {
+	if _, err := d.raw.Exec("UPDATE signals SET at = 'yesterday-ish' WHERE bucket = 'heartbeat'"); err != nil {
 		t.Fatalf("corrupt row: %v", err)
 	}
 
@@ -137,24 +137,37 @@ func TestARowWithAnUnreadableTimeFailsTheLoadOfItsRing(t *testing.T) {
 	}
 }
 
+const pointsAndRollupsSchema = `
+CREATE TABLE points (bucket TEXT NOT NULL, series TEXT NOT NULL, at INTEGER NOT NULL, value REAL NOT NULL);
+CREATE INDEX points_bucket_series_at ON points (bucket, series, at);
+CREATE INDEX points_at ON points (at);
+CREATE TABLE rollups (
+	bucket TEXT NOT NULL,
+	series TEXT NOT NULL,
+	minute INTEGER NOT NULL,
+	lowest REAL NOT NULL,
+	highest REAL NOT NULL,
+	total REAL NOT NULL,
+	samples INTEGER NOT NULL CHECK (samples > 0)
+);
+CREATE UNIQUE INDEX rollups_bucket_series_minute ON rollups (bucket, series, minute);
+CREATE INDEX rollups_minute ON rollups (minute);
+`
+
 func TestAHistoryFileFromBeforeSignalsGainsTheTableOnOpen(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "history.db")
 	old, err := sql.Open("sqlite", "file:"+path)
 	if err != nil {
 		t.Fatalf("open old file: %v", err)
 	}
-	if _, err := old.Exec(schema); err != nil {
+	if _, err := old.Exec(pointsAndRollupsSchema); err != nil {
 		t.Fatalf("write old schema: %v", err)
 	}
 	if err := old.Close(); err != nil {
 		t.Fatalf("close old file: %v", err)
 	}
 
-	d, err := openDisk(path)
-	if err != nil {
-		t.Fatalf("openDisk over a pre-signals file: %v", err)
-	}
-	t.Cleanup(func() { _ = d.Close() })
+	d := openStore(t, path)
 	d.AppendSignals("heartbeat", "ticks", 10, ticks(0, 2))
 
 	sameSignals(t, "loaded", loadAll(t, d, "heartbeat", "ticks"), ticks(0, 2))
@@ -163,7 +176,7 @@ func TestAHistoryFileFromBeforeSignalsGainsTheTableOnOpen(t *testing.T) {
 func TestAFailedSignalWriteIsLoggedOnce(t *testing.T) {
 	d, _ := openTemp(t)
 	logs := captureLog(t)
-	if _, err := d.db.Exec("DROP TABLE signals"); err != nil {
+	if _, err := d.raw.Exec("DROP TABLE signals"); err != nil {
 		t.Fatalf("drop signals: %v", err)
 	}
 
@@ -172,16 +185,5 @@ func TestAFailedSignalWriteIsLoggedOnce(t *testing.T) {
 
 	if got := strings.Count(logs.String(), "history.write_failed"); got != 1 {
 		t.Fatalf("write_failed logged %d times, want once: %s", got, logs.String())
-	}
-}
-
-func TestAnUnavailableHistoryRestoresNothingAndAcceptsWrites(t *testing.T) {
-	var store Database = unavailable{}
-
-	store.AppendSignals("heartbeat", "ticks", 10, ticks(0, 2))
-	loaded, err := store.LoadSignals(context.Background(), "heartbeat", "ticks", 10)
-
-	if err != nil || len(loaded) != 0 {
-		t.Fatalf("unavailable LoadSignals = %+v, %v; want nothing", loaded, err)
 	}
 }

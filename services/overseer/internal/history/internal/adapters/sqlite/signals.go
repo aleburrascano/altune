@@ -1,4 +1,4 @@
-package history
+package sqlite
 
 import (
 	"altune/overseer/internal/core"
@@ -39,17 +39,7 @@ DELETE FROM signals WHERE seq IN (
 	LIMIT -1 OFFSET ?
 )`
 
-type Signals interface {
-	LoadSignals(ctx context.Context, bucket, ring string, limit int) ([]core.Signal, error)
-	AppendSignals(bucket, ring string, capacity int, fresh []core.Signal)
-}
-
-type Database interface {
-	Store
-	Signals
-}
-
-func (d *disk) LoadSignals(ctx context.Context, bucket, ring string, limit int) ([]core.Signal, error) {
+func (d *Disk) LoadSignals(ctx context.Context, bucket, ring string, limit int) ([]core.Signal, error) {
 	rows, err := d.db.QueryContext(ctx, loadSignalsSQL, bucket, ring, max(limit, 0))
 	if err != nil {
 		return nil, err
@@ -71,14 +61,14 @@ func scanSignal(rows *sql.Rows) (core.Signal, error) {
 	return s, nil
 }
 
-func (d *disk) AppendSignals(bucket, ring string, capacity int, fresh []core.Signal) {
+func (d *Disk) AppendSignals(bucket, ring string, capacity int, fresh []core.Signal) {
 	if len(fresh) == 0 {
 		return
 	}
 	d.noteWrite(bucket, ring, d.appendSignals(bucket, ring, capacity, fresh))
 }
 
-func (d *disk) appendSignals(bucket, ring string, capacity int, fresh []core.Signal) error {
+func (d *Disk) appendSignals(bucket, ring string, capacity int, fresh []core.Signal) error {
 	ctx, cancel := context.WithTimeout(context.Background(), opTimeout)
 	defer cancel()
 	tx, err := d.db.BeginTx(ctx, nil)
@@ -100,9 +90,3 @@ func (d *disk) appendSignals(bucket, ring string, capacity int, fresh []core.Sig
 func newest(fresh []core.Signal, capacity int) []core.Signal {
 	return fresh[len(fresh)-min(len(fresh), max(capacity, 0)):]
 }
-
-func (unavailable) LoadSignals(context.Context, string, string, int) ([]core.Signal, error) {
-	return nil, nil
-}
-
-func (unavailable) AppendSignals(string, string, int, []core.Signal) {}

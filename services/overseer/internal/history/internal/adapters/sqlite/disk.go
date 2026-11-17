@@ -1,4 +1,4 @@
-package history
+package sqlite
 
 import (
 	"altune/overseer/internal/core"
@@ -12,6 +12,12 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite"
+)
+
+const (
+	DefaultCap       = 20000
+	DefaultRetention = 7 * 24 * time.Hour
+	RawRetention     = 24 * time.Hour
 )
 
 const (
@@ -95,10 +101,10 @@ DELETE FROM points WHERE rowid IN (
 
 var errNonFinite = errors.New("history: point value is not a finite number")
 
-type Option func(*disk)
+type Option func(*Disk)
 
 func WithCap(rows int) Option {
-	return func(d *disk) {
+	return func(d *Disk) {
 		if rows > 0 {
 			d.rowCap = rows
 		}
@@ -106,7 +112,7 @@ func WithCap(rows int) Option {
 }
 
 func WithRetention(age time.Duration) Option {
-	return func(d *disk) {
+	return func(d *Disk) {
 		if age > 0 {
 			d.retention = age
 		}
@@ -114,18 +120,22 @@ func WithRetention(age time.Duration) Option {
 }
 
 func WithSchemaTimeout(timeout time.Duration) Option {
-	return func(d *disk) {
+	return func(d *Disk) {
 		if timeout > 0 {
 			d.schemaTimeout = timeout
 		}
 	}
 }
 
-func WithClock(now func() time.Time) Option {
-	return func(d *disk) { d.now = now }
+func WithCheckTimeout(timeout time.Duration) Option {
+	return func(d *Disk) { d.checkTimeout = timeout }
 }
 
-type disk struct {
+func WithClock(now func() time.Time) Option {
+	return func(d *Disk) { d.now = now }
+}
+
+type Disk struct {
 	db            *sql.DB
 	checkTimeout  time.Duration
 	schemaTimeout time.Duration
@@ -135,13 +145,13 @@ type disk struct {
 	writeFailing  atomic.Bool
 }
 
-func openDisk(path string, opts ...Option) (*disk, error) {
+func Open(path string, opts ...Option) (*Disk, error) {
 	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)")
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", path, err)
 	}
 	db.SetMaxOpenConns(1)
-	d := &disk{db: db, checkTimeout: checkTimeout, schemaTimeout: schemaTimeout, rowCap: DefaultCap, retention: DefaultRetention, now: time.Now}
+	d := &Disk{db: db, checkTimeout: checkTimeout, schemaTimeout: schemaTimeout, rowCap: DefaultCap, retention: DefaultRetention, now: time.Now}
 	for _, opt := range opts {
 		opt(d)
 	}
@@ -151,7 +161,7 @@ func openDisk(path string, opts ...Option) (*disk, error) {
 	return d, nil
 }
 
-func (d *disk) prepare() error {
+func (d *Disk) prepare() error {
 	if err := d.checkIntegrity(); err != nil {
 		return err
 	}
@@ -163,7 +173,7 @@ func (d *disk) prepare() error {
 	return nil
 }
 
-func (d *disk) checkIntegrity() error {
+func (d *Disk) checkIntegrity() error {
 	ctx, cancel := context.WithTimeout(context.Background(), d.checkTimeout)
 	defer cancel()
 	var verdict string
@@ -180,11 +190,11 @@ func (d *disk) checkIntegrity() error {
 	return nil
 }
 
-func (d *disk) Record(bucket, series string, p core.Point) {
+func (d *Disk) Record(bucket, series string, p core.Point) {
 	d.noteWrite(bucket, series, d.insert(bucket, series, p))
 }
 
-func (d *disk) insert(bucket, series string, p core.Point) error {
+func (d *Disk) insert(bucket, series string, p core.Point) error {
 	if math.IsNaN(p.Value) || math.IsInf(p.Value, 0) {
 		return errNonFinite
 	}
@@ -204,7 +214,7 @@ func (d *disk) insert(bucket, series string, p core.Point) error {
 	return tx.Commit()
 }
 
-func (d *disk) noteWrite(bucket, series string, err error) {
+func (d *Disk) noteWrite(bucket, series string, err error) {
 	if err == nil {
 		if d.writeFailing.CompareAndSwap(true, false) {
 			slog.Info("history.write_recovered", "bucket", bucket, "series", series)
@@ -216,7 +226,7 @@ func (d *disk) noteWrite(bucket, series string, err error) {
 	}
 }
 
-func (d *disk) Query(bucket, series string, from, to time.Time) ([]core.Point, error) {
+func (d *Disk) Query(bucket, series string, from, to time.Time) ([]core.Point, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), opTimeout)
 	defer cancel()
 	rows, err := d.db.QueryContext(ctx, querySQL, bucket, series, from.UnixMilli(), to.UnixMilli())
@@ -231,7 +241,7 @@ func (d *disk) Query(bucket, series string, from, to time.Time) ([]core.Point, e
 	})
 }
 
-func (d *disk) Tail(bucket, series string, from, to time.Time, limit int) ([]core.Point, error) {
+func (d *Disk) Tail(bucket, series string, from, to time.Time, limit int) ([]core.Point, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), opTimeout)
 	defer cancel()
 	rows, err := d.db.QueryContext(ctx, tailSQL, bucket, series, from.UnixMilli(), to.UnixMilli(), limit)
@@ -258,7 +268,7 @@ func reverse(points []core.Point) []core.Point {
 	return reversed
 }
 
-func (d *disk) Minutes(bucket, series string, from, to time.Time) ([]core.Minute, error) {
+func (d *Disk) Minutes(bucket, series string, from, to time.Time) ([]core.Minute, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), opTimeout)
 	defer cancel()
 	rows, err := d.db.QueryContext(ctx, minutesSQL, bucket, series, from.Truncate(time.Minute).UnixMilli(), to.UnixMilli())
@@ -274,7 +284,7 @@ func (d *disk) Minutes(bucket, series string, from, to time.Time) ([]core.Minute
 	})
 }
 
-func (d *disk) Names(bucket string) ([]string, error) {
+func (d *Disk) Names(bucket string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), opTimeout)
 	defer cancel()
 	rows, err := d.db.QueryContext(ctx, namesSQL, bucket)
@@ -300,6 +310,6 @@ func scanAll[T any](rows *sql.Rows, scanOne func(*sql.Rows) (T, error)) (scanned
 	return scanned, rows.Err()
 }
 
-func (d *disk) Close() error {
+func (d *Disk) Close() error {
 	return d.db.Close()
 }

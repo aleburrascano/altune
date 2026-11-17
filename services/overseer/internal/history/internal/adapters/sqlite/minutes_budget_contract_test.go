@@ -1,7 +1,8 @@
-package history
+package sqlite_test
 
 import (
 	"altune/overseer/internal/core"
+	"altune/overseer/internal/history/internal/adapters/sqlite"
 	"testing"
 	"time"
 )
@@ -10,30 +11,26 @@ const sevenDayBudget = 200 * time.Millisecond
 
 var fullStoreSeries = []string{"up", "latency_ms", "rps", "p99_ms"}
 
-func openFullStore(t testing.TB) *disk {
+func openFullStore(t testing.TB) *store {
 	t.Helper()
 	path := t.TempDir() + "/history.db"
-	d, err := openDisk(path, fixedClock(rollupNow))
-	if err != nil {
-		t.Fatalf("openDisk: %v", err)
-	}
-	t.Cleanup(func() { _ = d.Close() })
-	rawStep := RawRetention / DefaultCap
-	rollupMinutes := int((DefaultRetention - RawRetention) / time.Minute)
+	d := openStore(t, path, fixedClock(rollupNow))
+	rawStep := sqlite.RawRetention / sqlite.DefaultCap
+	rollupMinutes := int((sqlite.DefaultRetention - sqlite.RawRetention) / time.Minute)
 	for _, series := range fullStoreSeries {
-		raw := make([]core.Point, 0, DefaultCap)
-		for i := range DefaultCap {
-			raw = append(raw, core.Point{At: rollupNow.Add(-RawRetention + time.Duration(i)*rawStep), Value: float64(i % 97)})
+		raw := make([]core.Point, 0, sqlite.DefaultCap)
+		for i := range sqlite.DefaultCap {
+			raw = append(raw, core.Point{At: rollupNow.Add(-sqlite.RawRetention + time.Duration(i)*rawStep), Value: float64(i % 97)})
 		}
 		seedPoints(t, d, series, raw)
-		seedRollups(t, d, series, rollupNow.Add(-DefaultRetention), rollupMinutes)
+		seedRollups(t, d, series, rollupNow.Add(-sqlite.DefaultRetention), rollupMinutes)
 	}
 	return d
 }
 
-func seedRollups(t testing.TB, d *disk, series string, from time.Time, minutes int) {
+func seedRollups(t testing.TB, d *store, series string, from time.Time, minutes int) {
 	t.Helper()
-	tx, err := d.db.Begin()
+	tx, err := d.raw.Begin()
 	if err != nil {
 		t.Fatalf("begin seed: %v", err)
 	}
@@ -48,9 +45,9 @@ func seedRollups(t testing.TB, d *disk, series string, from time.Time, minutes i
 	}
 }
 
-func sevenDayMinutes(t testing.TB, d *disk) []core.Minute {
+func sevenDayMinutes(t testing.TB, d *store) []core.Minute {
 	t.Helper()
-	minutes, err := d.Minutes("reliability", "latency_ms", rollupNow.Add(-DefaultRetention), rollupNow)
+	minutes, err := d.Minutes("reliability", "latency_ms", rollupNow.Add(-sqlite.DefaultRetention), rollupNow)
 	if err != nil {
 		t.Fatalf("Minutes: %v", err)
 	}
@@ -63,7 +60,7 @@ func BenchmarkSevenDayMinutesOnAFullStoreStayUnderBudget(b *testing.B) {
 	for b.Loop() {
 		minutes = sevenDayMinutes(b, d)
 	}
-	if want := int(DefaultRetention / time.Minute); len(minutes) != want {
+	if want := int(sqlite.DefaultRetention / time.Minute); len(minutes) != want {
 		b.Fatalf("7d minutes = %d, want one per minute (%d)", len(minutes), want)
 	}
 	if perRead := b.Elapsed() / time.Duration(b.N); perRead > sevenDayBudget {
