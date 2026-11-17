@@ -1,126 +1,223 @@
-package app
+package app_test
 
 import (
-	"altune/overseer/internal/config"
 	"altune/overseer/internal/core"
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"log/slog"
+	"net/http"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
-func newTestApp(reg *core.Registry, tickInterval, bucketTimeout time.Duration) *App {
-	return &App{
-		cfg:      &config.Config{TickInterval: tickInterval, BucketTimeout: bucketTimeout},
-		registry: reg,
-		down:     map[string]bool{},
-	}
-}
-
-type panicBucket struct{ where string }
-
-func (panicBucket) Meta() core.Meta { return core.Meta{ID: "boom", Title: "Boom"} }
-func (p panicBucket) Collect(context.Context) ([]core.Signal, error) {
-	if p.where == "collect" {
-		panic("collect blew up")
-	}
-	return []core.Signal{{Text: "ok"}}, nil
-}
-
-func (p panicBucket) Store([]core.Signal) {
-	if p.where == "store" {
-		panic("store blew up")
-	}
-}
-func (panicBucket) Snapshot() core.Snapshot { return core.Snapshot{} }
-
-type stubBucket struct {
-	id         string
-	collectErr error
-}
-
-func (s stubBucket) Meta() core.Meta { return core.Meta{ID: s.id} }
-
-func (s stubBucket) Collect(context.Context) ([]core.Signal, error) {
-	if s.collectErr != nil {
-		return nil, s.collectErr
-	}
-	return []core.Signal{{Text: "ok"}}, nil
-}
-
-func (stubBucket) Store([]core.Signal)     {}
-func (stubBucket) Snapshot() core.Snapshot { return core.Snapshot{} }
-
-type toggleBucket struct {
-	id   string
-	down *bool
-}
-
-func (b *toggleBucket) Meta() core.Meta { return core.Meta{ID: b.id} }
-
-func (b *toggleBucket) Collect(context.Context) ([]core.Signal, error) {
-	if *b.down {
+func failing(id string) *fakeBucket {
+	return &fakeBucket{id: id, collect: func(context.Context, int32) ([]core.Signal, error) {
 		return nil, errors.New("source down")
+	}}
+}
+
+func panicking(id, where string) *fakeBucket {
+	b := &fakeBucket{id: id}
+	if where == "collect" {
+		b.collect = func(context.Context, int32) ([]core.Signal, error) { panic("collect blew up") }
+	} else {
+		b.store = func([]core.Signal) { panic("store blew up") }
 	}
-	return []core.Signal{{Text: "ok"}}, nil
+	return b
 }
 
-func (*toggleBucket) Store([]core.Signal)     {}
-func (*toggleBucket) Snapshot() core.Snapshot { return core.Snapshot{} }
-
-type stalledBucket struct {
-	id        string
-	cancelled chan struct{}
+func wantCounts(t *testing.T, r *running, ok, failed int) {
+	t.Helper()
+	code, h := r.health(t)
+	if code != http.StatusOK || h.Status != "ok" {
+		t.Errorf("GET /health = %d %q; want 200 ok", code, h.Status)
+	}
+	if h.BucketsOK != ok || h.BucketsFailed != failed {
+		t.Errorf("GET /health counts = ok:%d failed:%d; want ok:%d failed:%d", h.BucketsOK, h.BucketsFailed, ok, failed)
+	}
 }
 
-func newStalledBucket(id string) *stalledBucket {
-	return &stalledBucket{id: id, cancelled: make(chan struct{})}
+func wantCycleLine(t *testing.T, logs *logBuffer, ok, failed int) {
+	t.Helper()
+	cycles := logs.named("overseer.collect.cycle")
+	if len(cycles) == 0 {
+		t.Fatal("the app logged no overseer.collect.cycle heartbeat")
+	}
+	if cycles[0]["ok"] != float64(ok) || cycles[0]["failed"] != float64(failed) {
+		t.Errorf("heartbeat = ok:%v failed:%v; want ok:%d failed:%d", cycles[0]["ok"], cycles[0]["failed"], ok, failed)
+	}
 }
 
-func (s *stalledBucket) Meta() core.Meta { return core.Meta{ID: s.id} }
+func TestACycleCountsItsHealthyAndFailedBuckets(t *testing.T) {
+	logs := captureLog(t)
 
-func (s *stalledBucket) Collect(ctx context.Context) ([]core.Signal, error) {
-	<-ctx.Done()
-	close(s.cancelled)
-	return nil, ctx.Err()
+	r := boot(t, newConfig(t), plain("healthy"), failing("down"))
+
+	wantCounts(t, r, 1, 1)
+	r.halt(t)
+	wantCycleLine(t, logs, 1, 1)
 }
 
-func (*stalledBucket) Store([]core.Signal)     {}
-func (*stalledBucket) Snapshot() core.Snapshot { return core.Snapshot{} }
+func TestHealthIsOkWithItsCountsRightAfterTheFirstCycle(t *testing.T) {
+	captureLog(t)
 
-type storingBucket struct {
-	id     string
-	stored chan struct{}
+	r := boot(t, newConfig(t), plain("healthy"))
+
+	wantCounts(t, r, 1, 0)
+	if _, h := r.health(t); h.LastCycle == "" {
+		t.Error("GET /health reports no last cycle after one completed")
+	}
 }
 
-func newStoringBucket(id string) *storingBucket {
-	return &storingBucket{id: id, stored: make(chan struct{})}
+func TestAStorePanicCountsAsAFailedBucketAndSparesItsSibling(t *testing.T) {
+	logs := captureLog(t)
+
+	r := boot(t, newConfig(t), panicking("boom", "store"), plain("healthy"))
+
+	wantCounts(t, r, 1, 1)
+	r.halt(t)
+	wantCycleLine(t, logs, 1, 1)
 }
 
-func (s *storingBucket) Meta() core.Meta { return core.Meta{ID: s.id} }
+func TestACollectPanicIsContainedAndLoggedOnceAtError(t *testing.T) {
+	logs := captureLog(t)
+	cfg := newConfig(t)
+	cfg.TickInterval = 5 * time.Millisecond
+	boom := panicking("boom", "collect")
 
-func (*storingBucket) Collect(context.Context) ([]core.Signal, error) {
-	return []core.Signal{{Text: "ok"}}, nil
+	r := boot(t, cfg, boom)
+	eventually(t, boom.collectedAtLeast(4), "the panicking bucket was not collected on later ticks; the loop died with it")
+	wantCounts(t, r, 0, 1)
+	r.halt(t)
+
+	panics := logs.named("overseer.collect.bucket_panic")
+	if len(panics) != 1 {
+		t.Fatalf("a panicking bucket logged bucket_panic %d times over 3 cycles; want 1", len(panics))
+	}
+	if panics[0]["level"] != "ERROR" || panics[0]["stage"] != "Collect" {
+		t.Errorf("bucket_panic = level %v stage %v; want ERROR Collect", panics[0]["level"], panics[0]["stage"])
+	}
+	if got := len(logs.named("overseer.collect.source_down")); got != 0 {
+		t.Errorf("a panic was re-logged as source_down %d times; a crash must not be downgraded to WARN", got)
+	}
+	if got := boom.stores.Load(); got != 0 {
+		t.Errorf("the panicking bucket was handed signals to Store %d times; a contained panic yields none", got)
+	}
 }
 
-func (s *storingBucket) Store([]core.Signal)   { close(s.stored) }
-func (*storingBucket) Snapshot() core.Snapshot { return core.Snapshot{} }
+func TestASustainedOutageLogsOneTransitionNotAFloodPerTick(t *testing.T) {
+	logs := captureLog(t)
+	cfg := newConfig(t)
+	cfg.TickInterval = 5 * time.Millisecond
+	var down atomic.Bool
+	down.Store(true)
+	goapi := &fakeBucket{id: "goapi", collect: func(context.Context, int32) ([]core.Signal, error) {
+		if down.Load() {
+			return nil, errors.New("source down")
+		}
+		return []core.Signal{{Text: "ok"}}, nil
+	}}
 
-type schedulerBucket struct {
-	refreshes *atomic.Int32
+	r := boot(t, cfg, goapi)
+	eventually(t, goapi.collectedAtLeast(6), "the outage did not last 5 cycles")
+	down.Store(false)
+	eventually(t, goapi.collectedAtLeast(goapi.collects.Load()+2), "no cycle completed after the source recovered")
+	r.halt(t)
+
+	if got := len(logs.named("overseer.collect.source_down")); got != 1 {
+		t.Errorf("a multi-cycle outage logged source_down %d times; want 1 transition, not a per-tick flood", got)
+	}
+	if got := len(logs.named("overseer.collect.source_up")); got != 1 {
+		t.Errorf("recovery logged source_up %d times; want exactly 1", got)
+	}
+}
+
+func TestAStalledBucketIsCutOffAtItsDeadlineAndItsSiblingStillStores(t *testing.T) {
+	logs := captureLog(t)
+	cfg := newConfig(t)
+	cfg.BucketTimeout = 50 * time.Millisecond
+	cancelled := make(chan struct{})
+	stalled := &fakeBucket{id: "a-stalled", collect: func(ctx context.Context, _ int32) ([]core.Signal, error) {
+		<-ctx.Done()
+		close(cancelled)
+		return nil, ctx.Err()
+	}}
+	healthy := plain("z-healthy")
+
+	r := boot(t, cfg, stalled, healthy)
+
+	if !isClosed(cancelled) {
+		t.Error("the stalled bucket's Collect was not cancelled; the per-bucket deadline did not fire")
+	}
+	if healthy.stores.Load() != 1 {
+		t.Error("the bucket queued behind the stalled one never stored; the cycle was starved")
+	}
+	wantCounts(t, r, 1, 1)
+	r.halt(t)
+	wantCycleLine(t, logs, 1, 1)
+}
+
+func TestHealthGoesStalledWhenTheCollectLoopWedges(t *testing.T) {
+	captureLog(t)
+	cfg := newConfig(t)
+	cfg.TickInterval = 10 * time.Millisecond
+	cfg.BucketTimeout = 10 * time.Millisecond
+	release := make(chan struct{})
+	releaseOnce := sync.OnceFunc(func() { close(release) })
+	wedged := &fakeBucket{id: "wedged", collect: func(_ context.Context, call int32) ([]core.Signal, error) {
+		if call > 1 {
+			<-release
+		}
+		return []core.Signal{{Text: "ok"}}, nil
+	}}
+
+	r := boot(t, cfg, wedged)
+	t.Cleanup(releaseOnce)
+	eventually(t, func() bool {
+		code, h := r.health(t)
+		return code == http.StatusServiceUnavailable && h.Status == "collect_stalled"
+	}, "GET /health stayed green on a wedged collect loop well past its staleness budget")
+
+	releaseOnce()
+	r.halt(t)
+}
+
+func TestStartedBackgroundWorkKeepsRunningUntilRunStops(t *testing.T) {
+	captureLog(t)
+	scheduler := &startedBucket{fakeBucket: plain("scheduler"), stopped: make(chan struct{})}
+
+	r := boot(t, newConfig(t), scheduler)
+	eventually(t, func() bool { return scheduler.refreshes.Load() >= 2 },
+		"background work fired fewer than 2 refreshes through the Start hook; it froze after one, the #1812 regression")
+	r.halt(t)
+
+	select {
+	case <-scheduler.stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("background work did not drain within 2s of Run returning; the goroutine leaked past shutdown")
+	}
+}
+
+func TestABucketWithoutAStartHookStillCollectsEveryTick(t *testing.T) {
+	captureLog(t)
+	cfg := newConfig(t)
+	cfg.TickInterval = 5 * time.Millisecond
+	b := plain("plain")
+
+	r := boot(t, cfg, b)
+
+	eventually(t, b.collectedAtLeast(3), "a bucket with no Start hook stopped being collected after start-up")
+	wantCounts(t, r, 1, 0)
+}
+
+type startedBucket struct {
+	*fakeBucket
+	refreshes atomic.Int32
 	stopped   chan struct{}
 }
 
-func (schedulerBucket) Meta() core.Meta                                { return core.Meta{ID: "scheduler"} }
-func (schedulerBucket) Collect(context.Context) ([]core.Signal, error) { return nil, nil }
-func (schedulerBucket) Store([]core.Signal)                            {}
-func (schedulerBucket) Snapshot() core.Snapshot                        { return core.Snapshot{} }
-
-func (s schedulerBucket) Start(ctx context.Context) {
+func (s *startedBucket) Start(ctx context.Context) {
 	go func() {
 		defer close(s.stopped)
 		ticker := time.NewTicker(time.Millisecond)
@@ -134,247 +231,4 @@ func (s schedulerBucket) Start(ctx context.Context) {
 			}
 		}
 	}()
-}
-
-func eventually(t *testing.T, within time.Duration, cond func() bool, msg string) {
-	t.Helper()
-	deadline := time.After(within)
-	for {
-		if cond() {
-			return
-		}
-		select {
-		case <-deadline:
-			t.Fatal(msg)
-		case <-time.After(time.Millisecond):
-		}
-	}
-}
-
-func isClosed(ch chan struct{}) bool {
-	select {
-	case <-ch:
-		return true
-	default:
-		return false
-	}
-}
-
-func captureSlog(t *testing.T) *bytes.Buffer {
-	t.Helper()
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
-}
-
-func linesFor(t *testing.T, buf *bytes.Buffer, msg string) []map[string]any {
-	t.Helper()
-	var matched []map[string]any
-	for _, line := range bytes.Split(bytes.TrimSpace(buf.Bytes()), []byte("\n")) {
-		var rec map[string]any
-		if err := json.Unmarshal(line, &rec); err != nil {
-			continue
-		}
-		if rec["msg"] == msg {
-			matched = append(matched, rec)
-		}
-	}
-	return matched
-}
-
-func findCycle(t *testing.T, buf *bytes.Buffer) map[string]any {
-	t.Helper()
-	lines := linesFor(t, buf, "overseer.collect.cycle")
-	if len(lines) == 0 {
-		t.Fatal("collectAll emitted no overseer.collect.cycle heartbeat")
-	}
-	return lines[0]
-}
-
-func TestCollectAllHeartbeatCounts(t *testing.T) {
-	reg := core.NewRegistry()
-	reg.Register(stubBucket{id: "healthy"})
-	reg.Register(stubBucket{id: "down", collectErr: errors.New("source down")})
-
-	buf := captureSlog(t)
-
-	newTestApp(reg, time.Second, time.Second).collectAll(context.Background())
-
-	rec := findCycle(t, buf)
-	if rec["ok"] != float64(1) || rec["failed"] != float64(1) {
-		t.Errorf("heartbeat = ok:%v failed:%v; want ok:1 failed:1", rec["ok"], rec["failed"])
-	}
-}
-
-func TestCollectAllCountsStorePanicAsFailed(t *testing.T) {
-	reg := core.NewRegistry()
-	reg.Register(stubBucket{id: "healthy"})
-	reg.Register(panicBucket{where: "store"})
-
-	buf := captureSlog(t)
-
-	newTestApp(reg, time.Second, time.Second).collectAll(context.Background())
-
-	rec := findCycle(t, buf)
-	if rec["ok"] != float64(1) || rec["failed"] != float64(1) {
-		t.Errorf("heartbeat = ok:%v failed:%v; want ok:1 failed:1 (the store-panicking bucket counted as failed)", rec["ok"], rec["failed"])
-	}
-}
-
-func TestStartBucketsDrivesBackgroundWorkPastFirstRefreshThenStops(t *testing.T) {
-	var refreshes atomic.Int32
-	bucket := schedulerBucket{refreshes: &refreshes, stopped: make(chan struct{})}
-	reg := core.NewRegistry()
-	reg.Register(bucket)
-	a := newTestApp(reg, time.Second, time.Millisecond)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	a.startBuckets(ctx)
-
-	eventually(t, 2*time.Second, func() bool { return refreshes.Load() >= 2 },
-		"background loop fired fewer than 2 refreshes through the Start hook — it froze after one, the #1812 regression")
-
-	cancel()
-	select {
-	case <-bucket.stopped:
-	case <-time.After(2 * time.Second):
-		t.Fatal("background loop did not drain within 2s of ctx cancel — goroutine leaked past shutdown")
-	}
-}
-
-func TestStartBucketsSkipsBucketsWithoutTheHook(t *testing.T) {
-	reg := core.NewRegistry()
-	reg.Register(stubBucket{id: "plain"})
-	a := newTestApp(reg, time.Second, time.Second)
-
-	a.startBuckets(context.Background())
-
-	captureSlog(t)
-	a.collectAll(context.Background())
-	if status := a.collectStatus(); status.OK != 1 {
-		t.Errorf("plain bucket did not collect after startBuckets skipped it: ok=%d, want 1", status.OK)
-	}
-}
-
-func TestSafeCollectContainsPanic(t *testing.T) {
-	signals, err := safeCollect(context.Background(), panicBucket{where: "collect"})
-	if err == nil {
-		t.Fatal("safeCollect returned nil error for a panicking bucket; the panic was not contained")
-	}
-	if signals != nil {
-		t.Errorf("safeCollect returned signals %v after a panic; want nil", signals)
-	}
-}
-
-func TestCollectAllDeadlineFreesTheCycleFromAStalledBucket(t *testing.T) {
-	stalled := newStalledBucket("a-stalled")
-	healthy := newStoringBucket("z-healthy")
-	reg := core.NewRegistry()
-	reg.Register(stalled)
-	reg.Register(healthy)
-	buf := captureSlog(t)
-
-	newTestApp(reg, time.Second, 20*time.Millisecond).collectAll(context.Background())
-
-	if !isClosed(stalled.cancelled) {
-		t.Error("the stalled bucket's Collect was not cancelled; the per-bucket deadline did not fire")
-	}
-	if !isClosed(healthy.stored) {
-		t.Error("the bucket queued behind the stalled one never stored; the cycle was starved")
-	}
-	rec := findCycle(t, buf)
-	if rec["ok"] != float64(1) || rec["failed"] != float64(1) {
-		t.Errorf("heartbeat = ok:%v failed:%v; want ok:1 failed:1 (the stalled bucket failed, its sibling did not)", rec["ok"], rec["failed"])
-	}
-}
-
-func TestCollectStatusIsUnhealthyUntilACycleCompletes(t *testing.T) {
-	reg := core.NewRegistry()
-	reg.Register(stubBucket{id: "healthy"})
-	a := newTestApp(reg, time.Second, time.Second)
-
-	if status := a.collectStatus(); status.Healthy {
-		t.Error("collectStatus is healthy before any cycle ran; a dead loop would report green")
-	}
-
-	captureSlog(t)
-	a.collectAll(context.Background())
-
-	status := a.collectStatus()
-	if !status.Healthy {
-		t.Error("collectStatus is unhealthy right after a completed cycle")
-	}
-	if status.OK != 1 || status.Failed != 0 {
-		t.Errorf("collectStatus counts = ok:%d failed:%d; want ok:1 failed:0", status.OK, status.Failed)
-	}
-	if status.LastCycle.IsZero() {
-		t.Error("collectStatus reports no last cycle after one completed")
-	}
-}
-
-func TestCollectStatusGoesUnhealthyOnAStalledLoop(t *testing.T) {
-	reg := core.NewRegistry()
-	reg.Register(stubBucket{id: "healthy"})
-	a := newTestApp(reg, time.Millisecond, time.Millisecond)
-	captureSlog(t)
-	a.collectAll(context.Background())
-
-	time.Sleep(40 * time.Millisecond)
-
-	if status := a.collectStatus(); status.Healthy {
-		t.Errorf("collectStatus is healthy %v after the last cycle, with a %v budget; a wedged loop reports green", time.Since(status.LastCycle), a.stalenessBudget(status.OK+status.Failed))
-	}
-}
-
-func TestSafeStoreContainsPanic(t *testing.T) {
-	err := safeStore(panicBucket{where: "store"}, []core.Signal{{Text: "x"}})
-	if err == nil {
-		t.Fatal("safeStore returned nil for a panicking Store; the panic was not contained")
-	}
-}
-
-func TestSustainedOutageLogsOneTransitionNotAFloodPerTick(t *testing.T) {
-	sourceDown := true
-	reg := core.NewRegistry()
-	reg.Register(&toggleBucket{id: "goapi", down: &sourceDown})
-	a := newTestApp(reg, time.Second, time.Second)
-	buf := captureSlog(t)
-
-	const ticks = 5
-	for range ticks {
-		a.collectAll(context.Background())
-	}
-	sourceDown = false
-	a.collectAll(context.Background())
-
-	if got := len(linesFor(t, buf, "overseer.collect.source_down")); got != 1 {
-		t.Errorf("a %d-tick outage logged source_down %d times; want 1 transition, not a per-tick flood", ticks, got)
-	}
-	if got := len(linesFor(t, buf, "overseer.collect.source_up")); got != 1 {
-		t.Errorf("recovery logged source_up %d times; want exactly 1", got)
-	}
-}
-
-func TestBucketPanicLogsOnceAtErrorNotWarn(t *testing.T) {
-	reg := core.NewRegistry()
-	reg.Register(panicBucket{where: "collect"})
-	a := newTestApp(reg, time.Second, time.Second)
-	buf := captureSlog(t)
-
-	for range 3 {
-		a.collectAll(context.Background())
-	}
-
-	panics := linesFor(t, buf, "overseer.collect.bucket_panic")
-	if len(panics) != 1 {
-		t.Fatalf("a panicking bucket logged bucket_panic %d times over 3 ticks; want 1", len(panics))
-	}
-	if panics[0]["level"] != "ERROR" {
-		t.Errorf("bucket_panic logged at level %v; want ERROR", panics[0]["level"])
-	}
-	if got := len(linesFor(t, buf, "overseer.collect.source_down")); got != 0 {
-		t.Errorf("a panic was re-logged as source_down %d times; a crash must not be downgraded to WARN", got)
-	}
 }

@@ -20,9 +20,10 @@ import (
 	"time"
 )
 
-var shutdownBudget = 15 * time.Second
-
-const missedTicks = 3
+const (
+	defaultShutdownBudget = 15 * time.Second
+	missedTicks           = 3
+)
 
 type App struct {
 	cfg      *config.Config
@@ -143,18 +144,26 @@ func (a *App) Run(ctx context.Context) error {
 		slog.Info("overseer shutting down")
 	}
 
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownBudget)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), a.shutdownBudget())
 	defer shutdownCancel()
 	err := a.server.Shutdown(shutdownCtx)
 	<-served
 	return err
 }
 
+func (a *App) shutdownBudget() time.Duration {
+	if a.cfg.ShutdownBudget > 0 {
+		return a.cfg.ShutdownBudget
+	}
+	return defaultShutdownBudget
+}
+
 func (a *App) awaitTickLoop(ticked <-chan struct{}) {
+	budget := a.shutdownBudget()
 	select {
 	case <-ticked:
-	case <-time.After(shutdownBudget):
-		slog.Warn("overseer.shutdown.tick_loop_did_not_stop", "budget", shutdownBudget)
+	case <-time.After(budget):
+		slog.Warn("overseer.shutdown.tick_loop_did_not_stop", "budget", budget)
 	}
 }
 

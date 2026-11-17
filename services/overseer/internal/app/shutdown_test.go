@@ -1,74 +1,84 @@
-package app
+package app_test
 
 import (
 	"altune/overseer/internal/core"
 	"context"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 )
 
-type wedgeAfterFirstBucket struct {
-	id      string
-	entered chan struct{}
-	mu      sync.Mutex
-	calls   int
-}
+const shutdownBudget = 50 * time.Millisecond
 
-func newWedgeAfterFirstBucket(id string) *wedgeAfterFirstBucket {
-	return &wedgeAfterFirstBucket{id: id, entered: make(chan struct{})}
-}
-
-func (b *wedgeAfterFirstBucket) Meta() core.Meta { return core.Meta{ID: b.id} }
-
-func (b *wedgeAfterFirstBucket) Collect(context.Context) ([]core.Signal, error) {
-	b.mu.Lock()
-	b.calls++
-	first := b.calls == 1
-	b.mu.Unlock()
-	if first {
-		return []core.Signal{{Text: "ok"}}, nil
-	}
-	close(b.entered)
-	select {}
-}
-
-func (*wedgeAfterFirstBucket) Store([]core.Signal)     {}
-func (*wedgeAfterFirstBucket) Snapshot() core.Snapshot { return core.Snapshot{} }
-
-func TestRunReturnsWithinBudgetWhenTheTickLoopIgnoresCtxAndBlocks(t *testing.T) {
-	prevBudget := shutdownBudget
-	shutdownBudget = 50 * time.Millisecond
-	t.Cleanup(func() { shutdownBudget = prevBudget })
-
-	bucket := newWedgeAfterFirstBucket("wedged")
-	reg := core.NewRegistry()
-	reg.Register(bucket)
-	cfg := historyConfig(filepath.Join(t.TempDir(), "history.db"))
-	cfg.TickInterval = time.Millisecond
+func TestRunReturnsWithinTheShutdownBudgetWhenTheTickLoopIgnoresCtxAndBlocks(t *testing.T) {
+	logs := captureLog(t)
+	cfg := newConfig(t)
+	cfg.TickInterval = 5 * time.Millisecond
 	cfg.BucketTimeout = time.Hour
-	a := newApp(cfg, reg)
-	captureSlog(t)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	stopped := make(chan error, 1)
-	go func() { stopped <- a.Run(ctx) }()
-
+	cfg.ShutdownBudget = shutdownBudget
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	wedged := &fakeBucket{id: "wedged", collect: func(_ context.Context, call int32) ([]core.Signal, error) {
+		if call == 2 {
+			close(entered)
+			<-release
+		}
+		return []core.Signal{{Text: "ok"}}, nil
+	}}
+	r := boot(t, cfg, wedged)
 	select {
-	case <-bucket.entered:
-	case <-time.After(5 * time.Second):
+	case <-entered:
+	case <-time.After(settleWait):
 		t.Fatal("the wedged bucket never entered its second, ctx-ignoring Collect call")
 	}
 
-	cancel()
+	if err := r.stop(shutdownBudget + 5*time.Second); err != nil {
+		t.Fatalf("Run with a wedged tick loop: %v", err)
+	}
 
-	select {
-	case err := <-stopped:
-		if err != nil {
-			t.Fatalf("Run: %v", err)
+	warnings := logs.named("overseer.shutdown.tick_loop_did_not_stop")
+	if len(warnings) != 1 {
+		t.Fatalf("Run gave up on the wedged tick loop with %d tick_loop_did_not_stop warnings; want 1", len(warnings))
+	}
+	if got := warnings[0]["budget"]; got != float64(shutdownBudget) {
+		t.Errorf("tick_loop_did_not_stop budget = %v, want the configured %d", got, shutdownBudget)
+	}
+}
+
+func TestAnUnsetBudgetWaitsForAWedgedTickLoopInsteadOfGivingUpAtOnce(t *testing.T) {
+	logs := captureLog(t)
+	cfg := newConfig(t)
+	cfg.TickInterval = 5 * time.Millisecond
+	cfg.BucketTimeout = time.Hour
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	releaseOnce := sync.OnceFunc(func() { close(release) })
+	wedged := &fakeBucket{id: "wedged", collect: func(_ context.Context, call int32) ([]core.Signal, error) {
+		if call == 2 {
+			close(entered)
+			<-release
 		}
-	case <-time.After(shutdownBudget + 5*time.Second):
-		t.Fatal("Run did not return within the shutdown budget of a wedged tick loop")
+		return []core.Signal{{Text: "ok"}}, nil
+	}}
+	r := boot(t, cfg, wedged)
+	t.Cleanup(releaseOnce)
+	select {
+	case <-entered:
+	case <-time.After(settleWait):
+		t.Fatal("the wedged bucket never entered its second Collect call")
+	}
+
+	r.cancel()
+	select {
+	case <-r.done:
+		t.Fatalf("Run returned (%v) at once while its tick loop was wedged; an unset ShutdownBudget must keep the 15s default, not mean zero", r.err)
+	case <-time.After(200 * time.Millisecond):
+	}
+	releaseOnce()
+	r.halt(t)
+
+	if got := len(logs.named("overseer.shutdown.tick_loop_did_not_stop")); got != 0 {
+		t.Errorf("a tick loop released within the default budget logged %d tick_loop_did_not_stop warnings; want none", got)
 	}
 }

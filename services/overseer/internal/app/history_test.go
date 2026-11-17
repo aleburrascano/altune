@@ -1,121 +1,78 @@
-package app
+package app_test
 
 import (
-	"altune/overseer/internal/config"
 	"altune/overseer/internal/core"
-	"context"
+	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
 
 type seriesBucket struct {
-	stubBucket
-	received chan core.Series
+	*fakeBucket
+	panics bool
 }
 
-func (s seriesBucket) UseSeries(series core.Series) { s.received <- series }
-
-type panickingSeriesBucket struct{ stubBucket }
-
-func (panickingSeriesBucket) UseSeries(core.Series) { panic("UseSeries blew up") }
-
-type nopSeries struct{}
-
-func (nopSeries) Record(string, string, core.Point) {}
-
-func (nopSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
-	return nil, nil
+func (s seriesBucket) UseSeries(series core.Series) {
+	if s.panics {
+		panic("UseSeries blew up")
+	}
+	series.Record(s.id, "up", core.Point{At: time.Now(), Value: 1})
 }
 
-func historyConfig(path string) *config.Config {
-	return &config.Config{
-		Host:                 "127.0.0.1",
-		Port:                 0,
-		SupabaseURL:          "https://x.supabase.co",
-		TickInterval:         time.Second,
-		BucketTimeout:        time.Second,
-		HistoryPath:          path,
-		HistorySchemaTimeout: time.Minute,
+func wantOnePoint(t *testing.T, r *running, bucket string) {
+	t.Helper()
+	if got := r.series(t, bucket)["up"]; len(got) != 1 || got[0].V != 1 {
+		t.Fatalf("history series %s/up = %+v; want the one point the bucket recorded through the series it was handed", bucket, got)
 	}
 }
 
-func TestNewBootsOnACorruptHistoryFileAndSaysSo(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "history.db")
-	if err := os.WriteFile(path, []byte(strings.Repeat("garbage, not sqlite ", 300)), 0o600); err != nil {
+func TestACorruptHistoryFileStillBootsAndSaysSo(t *testing.T) {
+	cfg := newConfig(t)
+	if err := os.WriteFile(cfg.HistoryPath, []byte(strings.Repeat("garbage, not sqlite ", 300)), 0o600); err != nil {
 		t.Fatalf("write corrupt file: %v", err)
 	}
-	logs := captureSlog(t)
+	logs := captureLog(t)
 
-	a := New(historyConfig(path), nil)
+	r := boot(t, cfg, plain("reliability"))
 
-	if a.server == nil {
-		t.Fatal("New returned no server over a corrupt history file")
+	if code, _ := r.health(t); code != http.StatusOK {
+		t.Errorf("GET /health over a corrupt history file = %d; want 200", code)
 	}
 	if !strings.Contains(logs.String(), "history: unavailable") {
-		t.Fatalf("log does not say history is unavailable: %s", logs.String())
+		t.Errorf("log does not say history is unavailable: %s", logs.String())
 	}
-	names, err := a.history.Names("reliability")
-	if err != nil || len(names) != 0 {
-		t.Fatalf("history over a corrupt file lists %v, %v; want empty", names, err)
-	}
-}
-
-func TestWireSeriesHandsTheStoreToEverySeriesWriter(t *testing.T) {
-	received := make(chan core.Series, 1)
-	reg := core.NewRegistry()
-	reg.Register(seriesBucket{stubBucket: stubBucket{id: "writer"}, received: received})
-	reg.Register(stubBucket{id: "plain"})
-
-	wireSeries(reg, nopSeries{})
-
-	select {
-	case got := <-received:
-		if _, isStore := got.(nopSeries); !isStore {
-			t.Fatalf("writer received %T, want the history store", got)
-		}
-	default:
-		t.Fatal("series writer was never handed the store")
+	if got := r.series(t, "reliability"); len(got) != 0 {
+		t.Errorf("history over a corrupt file lists %v; want empty", got)
 	}
 }
 
-func TestWireSeriesContainsAPanickingWriter(t *testing.T) {
-	received := make(chan core.Series, 1)
-	reg := core.NewRegistry()
-	reg.Register(panickingSeriesBucket{stubBucket{id: "a-boom"}})
-	reg.Register(seriesBucket{stubBucket: stubBucket{id: "b-writer"}, received: received})
-	captureSlog(t)
+func TestEverySeriesWriterIsHandedTheHistoryStore(t *testing.T) {
+	captureLog(t)
 
-	wireSeries(reg, nopSeries{})
+	r := boot(t, newConfig(t), seriesBucket{fakeBucket: plain("writer")}, plain("plain"))
 
-	if len(received) != 1 {
-		t.Fatal("a panicking UseSeries stopped the next bucket from receiving the store")
+	wantOnePoint(t, r, "writer")
+}
+
+func TestAPanickingSeriesWriterDoesNotStopTheNextOneGettingTheStore(t *testing.T) {
+	logs := captureLog(t)
+
+	r := boot(t, newConfig(t), seriesBucket{fakeBucket: plain("a-boom"), panics: true}, seriesBucket{fakeBucket: plain("b-writer")})
+
+	wantOnePoint(t, r, "b-writer")
+	panics := logs.named("overseer.start.bucket_panic")
+	if len(panics) != 1 || panics[0]["stage"] != "UseSeries" || panics[0]["bucket"] != "a-boom" {
+		t.Errorf("start bucket_panic lines = %v; want one for a-boom at stage UseSeries", panics)
 	}
 }
 
-func TestReleaseHistoryWaitsForThePrunerThenCloses(t *testing.T) {
-	a := &App{history: nopHistory{}}
-	ctx, cancel := context.WithCancel(context.Background())
-	pruned := a.startPruner(ctx)
+func TestRunReturnsNilSoonAfterItsContextIsCancelled(t *testing.T) {
+	captureLog(t)
+	r := boot(t, newConfig(t), plain("plain"))
 
-	finished := make(chan struct{})
-	go func() {
-		a.releaseHistory(cancel, pruned)
-		close(finished)
-	}()
-	select {
-	case <-finished:
-	case <-time.After(2 * time.Second):
-		t.Fatal("releaseHistory did not return: the pruner outlived shutdown")
+	if err := r.stop(2 * time.Second); err != nil {
+		t.Fatalf("Run after cancel: %v; the history pruner or store outlived shutdown", err)
 	}
 }
-
-type nopHistory struct{ nopSeries }
-
-func (nopHistory) Names(string) ([]string, error) { return nil, nil }
-
-func (nopHistory) RunPruner(ctx context.Context) { <-ctx.Done() }
-
-func (nopHistory) Close() error { return nil }

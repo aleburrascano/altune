@@ -37,6 +37,8 @@ type Config struct {
 	HistoryPath string
 
 	HistorySchemaTimeout time.Duration
+
+	ShutdownBudget time.Duration
 }
 
 type environment func(string) string
