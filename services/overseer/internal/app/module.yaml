@@ -1,3 +1,3 @@
 role: app
 owns: "how the overseer server is wired from its modules and run"
-depends_on: [authn, config, core, goapi, history, shell, webui]
+depends_on: [authn, backendperf, config, core, cost, domainquality, goapi, heartbeat, history, liveactivity, logs, reliability, security, shell, usage, webui]

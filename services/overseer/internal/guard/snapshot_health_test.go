@@ -1,19 +1,10 @@
 package guard_test
 
 import (
+	"altune/overseer/internal/app"
 	"altune/overseer/internal/core"
 	"strings"
 	"testing"
-
-	_ "altune/overseer/internal/buckets/backendperf"
-	_ "altune/overseer/internal/buckets/cost"
-	_ "altune/overseer/internal/buckets/domainquality"
-	_ "altune/overseer/internal/buckets/heartbeat"
-	_ "altune/overseer/internal/buckets/liveactivity"
-	_ "altune/overseer/internal/buckets/logs"
-	_ "altune/overseer/internal/buckets/reliability"
-	_ "altune/overseer/internal/buckets/security"
-	_ "altune/overseer/internal/buckets/usage"
 )
 
 func TestEveryBucketGradesItsOwnSnapshot(t *testing.T) {
@@ -22,7 +13,7 @@ func TestEveryBucketGradesItsOwnSnapshot(t *testing.T) {
 		core.SeverityWarn:     true,
 		core.SeverityCritical: true,
 	}
-	for _, b := range core.Default.Buckets() {
+	for _, b := range app.Buckets() {
 		id := b.Meta().ID
 		snap := b.Snapshot()
 		if !graded[snap.Severity] {
@@ -36,9 +27,9 @@ func TestEveryBucketGradesItsOwnSnapshot(t *testing.T) {
 
 func TestEveryBucketPackageIsRepresentedInTheRegistry(t *testing.T) {
 	packages := bucketPackages(t)
-	registered := core.Default.Buckets()
+	registered := app.Buckets()
 	if len(registered) != len(packages) {
-		t.Errorf("registry holds %d buckets but %d bucket packages exist (%v); add the missing blank import to this file",
+		t.Errorf("app.Buckets builds %d buckets but %d bucket packages exist (%v); build the missing bucket in app.Buckets",
 			len(registered), len(packages), packages)
 	}
 }

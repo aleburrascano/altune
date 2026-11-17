@@ -49,7 +49,7 @@ func TestNewBootsOnACorruptHistoryFileAndSaysSo(t *testing.T) {
 	}
 	logs := captureSlog(t)
 
-	a := New(historyConfig(path))
+	a := New(historyConfig(path), nil)
 
 	if a.server == nil {
 		t.Fatal("New returned no server over a corrupt history file")

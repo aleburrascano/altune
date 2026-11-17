@@ -54,8 +54,12 @@ func (c *cycleRecord) read() (completed time.Time, ok, failed int) {
 	return c.completed, c.ok, c.failed
 }
 
-func New(cfg *config.Config) *App {
-	return newApp(cfg, core.Default)
+func New(cfg *config.Config, buckets []core.Bucket) *App {
+	registry := core.NewRegistry()
+	for _, b := range buckets {
+		registry.Register(b)
+	}
+	return newApp(cfg, registry)
 }
 
 func newApp(cfg *config.Config, registry *core.Registry) *App {

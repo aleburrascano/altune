@@ -1,6 +1,7 @@
-package heartbeat
+package heartbeat_test
 
 import (
+	"altune/overseer/internal/buckets/heartbeat"
 	"altune/overseer/internal/core"
 	"context"
 	"sync"
@@ -34,7 +35,7 @@ func (r *recordingSeries) named(series string) []core.Point {
 	defer r.mu.Unlock()
 	var out []core.Point
 	for _, p := range r.points {
-		if p.bucket == bucketID && p.series == series {
+		if p.bucket == "heartbeat" && p.series == series {
 			out = append(out, p.point)
 		}
 	}
@@ -54,8 +55,7 @@ func fixedClock(ticks []time.Time) func() time.Time {
 
 func TestCollectRecordsTickGapOncePerTickAfterTheFirst(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	b := New()
-	b.now = fixedClock([]time.Time{base, base.Add(5 * time.Second), base.Add(9 * time.Second)})
+	b := heartbeat.New(heartbeat.Deps{Now: fixedClock([]time.Time{base, base.Add(5 * time.Second), base.Add(9 * time.Second)})})
 	series := &recordingSeries{}
 	b.UseSeries(series)
 
@@ -67,7 +67,7 @@ func TestCollectRecordsTickGapOncePerTickAfterTheFirst(t *testing.T) {
 		b.Store(signals)
 	}
 
-	got := series.named(seriesTickGap)
+	got := series.named("tick_gap_ms")
 	if len(got) != 2 {
 		t.Fatalf("tick_gap_ms recorded %d points, want 2 (skip the first tick): %+v", len(got), got)
 	}
@@ -80,21 +80,21 @@ func TestCollectRecordsTickGapOncePerTickAfterTheFirst(t *testing.T) {
 }
 
 func TestKeySeriesIsTickGapMS(t *testing.T) {
-	b := New()
-	if got := b.KeySeries(); got != seriesTickGap {
-		t.Errorf("KeySeries() = %q, want %q", got, seriesTickGap)
+	b := newHeartbeat()
+	if got := b.KeySeries(); got != "tick_gap_ms" {
+		t.Errorf("KeySeries() = %q, want tick_gap_ms", got)
 	}
 }
 
 func TestHeartbeatBucketIsASeriesWriter(t *testing.T) {
-	var bucket core.Bucket = New()
+	var bucket core.Bucket = newHeartbeat()
 	if _, ok := bucket.(core.SeriesWriter); !ok {
 		t.Fatal("heartbeat does not implement core.SeriesWriter, so the composition root never hands it the history store")
 	}
 }
 
 func TestCollectWithoutSeriesStillCollects(t *testing.T) {
-	b := New()
+	b := newHeartbeat()
 	if _, err := b.Collect(context.Background()); err != nil {
 		t.Fatalf("Collect with no series wired: %v", err)
 	}

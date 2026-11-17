@@ -22,8 +22,16 @@ type Bucket struct {
 	haveLast bool
 }
 
-func New() *Bucket {
-	return &Bucket{store: core.NewRingStore(capacity), now: time.Now, series: discardSeries{}}
+type Deps struct {
+	Now func() time.Time
+}
+
+func New(deps Deps) *Bucket {
+	now := deps.Now
+	if now == nil {
+		now = time.Now
+	}
+	return &Bucket{store: core.NewRingStore(capacity), now: now, series: discardSeries{}}
 }
 
 func (b *Bucket) Meta() core.Meta {
@@ -102,5 +110,3 @@ func (discardSeries) Record(string, string, core.Point) {}
 func (discardSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
 	return nil, nil
 }
-
-func init() { core.Register(New()) }
