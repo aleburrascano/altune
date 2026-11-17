@@ -3,7 +3,7 @@ import { useRef, useState, type ReactElement } from 'react';
 import { ActionSheet, type ActionSheetOption } from '@shared/ui';
 
 import { useSleepOptions } from '@features/player/view/useSleepTimer';
-import { useSpeedOptions } from '@features/player/hooks/usePlaybackRate';
+import { useSpeedOptions } from '@features/player/view/usePlaybackRate';
 
 type OpenSheet = 'root' | 'speed' | 'sleep' | null;
 

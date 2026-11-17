@@ -9,7 +9,7 @@ import {
   type TrackKey,
   isPlayablePreviewUrl,
 } from '@shared/playback';
-import { playbackPort } from '@features/player/ports/activePlaybackPort';
+import { playbackPort } from '@features/player/shell/activePlaybackPort';
 import { classifyPlaybackFailure, warnPlayback } from '@features/player/domain/playbackError';
 import { recordPresignOutcome } from '@features/player/domain/playbackHealth';
 import { libraryTrackId } from '@features/player/domain/playerStatus';

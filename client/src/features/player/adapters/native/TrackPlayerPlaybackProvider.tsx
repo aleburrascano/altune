@@ -18,9 +18,9 @@ import {
 import { derivePlaybackState, type PlayerPhase } from '@features/player/domain/derivePlaybackState';
 import { ensurePlayerSetup } from '@features/player/adapters/native/initPlayer';
 import { usePlaybackErrorFor } from '@features/player/view/usePlaybackErrorStore';
-import { usePlaybackPosition } from '@features/player/hooks/usePlaybackPosition';
-import { usePlaybackSignals } from '@features/player/hooks/usePlaybackSignals';
-import { useQueueResume } from '@features/player/hooks/useQueueResume';
+import { usePlaybackPosition } from '@features/player/adapters/native/usePlaybackPosition';
+import { usePlaybackSignals } from '@features/player/adapters/native/usePlaybackSignals';
+import { useQueueResume } from '@features/player/adapters/native/useQueueResume';
 
 const NATIVE_REPEAT: Record<QueueRepeatMode, RepeatMode> = {
   off: RepeatMode.Off,

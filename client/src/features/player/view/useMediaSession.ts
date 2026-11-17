@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 
 import type { PlaybackContextValue, PlaybackTrack } from '@shared/playback';
-import { usePlaybackRateStore } from '@features/player/hooks/usePlaybackRate';
+import { usePlaybackRateStore } from '@features/player/view/usePlaybackRate';
 import { msToSeconds, progressSecondsToMs } from '@features/player/domain/time';
 
 const SEEK_STEP_SECONDS = 10;

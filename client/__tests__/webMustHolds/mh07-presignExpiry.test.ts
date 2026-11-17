@@ -10,7 +10,7 @@ import { usePlayback } from '@shared/playback/view/usePlayback';
 import { libraryTrack } from '@features/player/__tests__/fixtures';
 import { WebPlaybackProvider } from '@features/player/view/web/WebPlaybackProvider';
 import { httpPlaybackPort } from '@features/player/adapters/http/httpPlaybackPort';
-import { installPlaybackPort } from '@features/player/ports/activePlaybackPort';
+import { installPlaybackPort } from '@features/player';
 
 beforeAll(() => {
   installPlaybackPort(httpPlaybackPort);

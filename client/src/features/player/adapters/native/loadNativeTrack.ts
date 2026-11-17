@@ -9,7 +9,10 @@ import {
   withNativeQueue,
   type Fence,
 } from '@features/player/native/nativeQueueLock';
-import { activeNativeTrackId, nativeTrackBuilder } from '@features/player/native/nativeTrack';
+import {
+  activeNativeTrackId,
+  nativeTrackBuilder,
+} from '@features/player/adapters/native/nativeTrack';
 import {
   rebuildNativeTail,
   reorderUpcomingPresigned,

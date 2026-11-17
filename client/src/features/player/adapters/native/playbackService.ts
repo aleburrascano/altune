@@ -15,7 +15,7 @@ import {
 } from '@shared/playback';
 import { registerAudioCacheInvalidator } from '@shared/acquisition';
 import { parseTrackId } from '@shared/catalog';
-import { playbackPort } from '@features/player/ports/activePlaybackPort';
+import { playbackPort } from '@features/player/shell/activePlaybackPort';
 import { primeSignedInUser } from '@shared/auth';
 import { hasSignedInUser, onSignOut } from '@shared/session';
 import {
@@ -35,7 +35,7 @@ import { startWidgetCommands } from '@features/player/adapters/native/widgetComm
 import { startWidgetSnapshotPublisher } from '@features/player/adapters/native/widgetSnapshot';
 import { withNativeQueue } from '@features/player/native/nativeQueueLock';
 import { shouldApplyActiveIndex } from '@features/player/native/nativeSyncGuard';
-import { activeNativeTrackId } from '@features/player/native/nativeTrack';
+import { activeNativeTrackId } from '@features/player/adapters/native/nativeTrack';
 import {
   forgetAllSwaps,
   repairActiveToStreaming,
@@ -58,7 +58,7 @@ import { progressSecondsToMs } from '@features/player/domain/time';
 import {
   reportingQueueFailure,
   reportQueueFailure,
-} from '@features/player/native/queueFailureReport';
+} from '@features/player/adapters/native/queueFailureReport';
 
 export async function resetPlaybackForSignOut(): Promise<void> {
   claimSessionReset();

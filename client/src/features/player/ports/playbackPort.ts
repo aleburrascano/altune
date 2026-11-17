@@ -1,16 +1,23 @@
-import type * as audio from '@shared/apiClient/audio';
-import type * as lyrics from '@shared/apiClient/lyrics';
-import type * as playback from '@shared/apiClient/playback';
-import type * as tracks from '@shared/apiClient/tracks';
+import type {
+  audioRequestHeaders,
+  audioStreamUrl,
+  fetchAudioUrls,
+  getAllTracks,
+  getLyrics,
+  getQueueState,
+  isAudioPrefetchEnabled,
+  recoverAudio,
+  saveQueueState,
+} from '@shared/apiClient';
 
 export interface PlaybackPort {
-  audioStreamUrl: typeof audio.audioStreamUrl;
-  audioRequestHeaders: typeof audio.audioRequestHeaders;
-  recoverAudio: typeof audio.recoverAudio;
-  isAudioPrefetchEnabled: typeof audio.isAudioPrefetchEnabled;
-  fetchAudioUrls: typeof audio.fetchAudioUrls;
-  getQueueState: typeof playback.getQueueState;
-  saveQueueState: typeof playback.saveQueueState;
-  getLyrics: typeof lyrics.getLyrics;
-  getAllTracks: typeof tracks.getAllTracks;
+  audioStreamUrl: typeof audioStreamUrl;
+  audioRequestHeaders: typeof audioRequestHeaders;
+  recoverAudio: typeof recoverAudio;
+  isAudioPrefetchEnabled: typeof isAudioPrefetchEnabled;
+  fetchAudioUrls: typeof fetchAudioUrls;
+  getQueueState: typeof getQueueState;
+  saveQueueState: typeof saveQueueState;
+  getLyrics: typeof getLyrics;
+  getAllTracks: typeof getAllTracks;
 }

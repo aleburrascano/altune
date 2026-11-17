@@ -2,7 +2,7 @@ import TrackPlayer, { type AddTrack, type Track } from 'react-native-track-playe
 
 import { trackKey, type PlaybackTrack } from '@shared/playback';
 
-import { playbackPort } from '@features/player/ports/activePlaybackPort';
+import { playbackPort } from '@features/player/shell/activePlaybackPort';
 import type { TrackId } from '@shared/catalog';
 import { currentLoadToken, isStale } from '@features/player/domain/loadToken';
 import {
@@ -10,7 +10,7 @@ import {
   withNativeQueue,
   type Fence,
 } from '@features/player/native/nativeQueueLock';
-import { activeNativeTrackId, toNativeTrack } from '@features/player/native/nativeTrack';
+import { activeNativeTrackId, toNativeTrack } from '@features/player/adapters/native/nativeTrack';
 import { reportLoadFailure } from '@features/player/view/usePlaybackErrorStore';
 import { recordPresignOutcome } from '@features/player/domain/playbackHealth';
 import { warnPlayback } from '@features/player/domain/playbackError';

@@ -5,12 +5,12 @@ import {
   installPlaybackPort,
   playbackPort,
 } from '@features/player';
-import type * as ActivePlaybackPortModule from '@features/player/ports/activePlaybackPort';
+import type * as PlayerDoor from '@features/player';
 
 describe('activePlaybackPort', () => {
   it('has no port until the composition root installs one', () => {
     jest.isolateModules(() => {
-      const fresh: typeof ActivePlaybackPortModule = require('@features/player/ports/activePlaybackPort');
+      const fresh: typeof PlayerDoor = require('@features/player');
 
       expect(() => fresh.playbackPort()).toThrow('no playback port installed');
     });

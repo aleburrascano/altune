@@ -22,7 +22,7 @@ const downloadAwaitedBeforeCancelCheck = {
 };
 
 const queueResumeCoalescesSequentially = {
-  files: ['src/features/player/hooks/useQueueResume.ts'],
+  files: ['src/features/player/adapters/native/useQueueResume.ts'],
   rules: ['react-doctor/async-await-in-loop'],
 };
 
@@ -42,7 +42,7 @@ const moduleDoorsWaitForCallersToMoveOffInternals = {
 };
 
 const imageOnlyResolvesAssetSource = {
-  files: ['src/features/player/native/nativeTrack.ts'],
+  files: ['src/features/player/adapters/native/nativeTrack.ts'],
   rules: ['react-doctor/rn-prefer-expo-image'],
 };
 
@@ -72,7 +72,7 @@ const mediaSessionEffectsSyncTheBrowserMediaSession = {
 };
 
 const rememberTrackSyncsNativeTrackPlayer = {
-  files: ['src/features/player/native/TrackPlayerPlaybackProvider.tsx'],
+  files: ['src/features/player/adapters/native/TrackPlayerPlaybackProvider.tsx'],
   rules: ['react-doctor/no-event-handler'],
 };
 
