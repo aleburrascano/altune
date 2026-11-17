@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"log/slog"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -38,23 +37,26 @@ type Config struct {
 	HistorySchemaTimeout time.Duration
 }
 
-func Load() (*Config, error) {
+type environment func(string) string
+
+func Load(getenv func(string) string) (*Config, error) {
+	env := environment(getenv)
 	c := &Config{
-		Env:               getenv("OVERSEER_ENV", "development"),
-		LogLevel:          getenv("OVERSEER_LOG_LEVEL", "INFO"),
-		Host:              getenv("OVERSEER_HOST", "0.0.0.0"),
-		OwnerUserID:       strings.TrimSpace(os.Getenv("OVERSEER_OWNER_USER_ID")),
-		SupabaseURL:       strings.TrimSpace(os.Getenv("OVERSEER_SUPABASE_URL")),
-		SupabaseAnonKey:   strings.TrimSpace(os.Getenv("OVERSEER_SUPABASE_ANON_KEY")),
-		SupabaseJWTSecret: strings.TrimSpace(os.Getenv("OVERSEER_SUPABASE_JWT_SECRET")),
-		SupabaseJWKSURL:   strings.TrimSpace(os.Getenv("OVERSEER_SUPABASE_JWKS_URL")),
-		BasePath:          normalizeBasePath(os.Getenv("OVERSEER_BASE_PATH")),
-		HistoryPath:       getenv("OVERSEER_HISTORY_PATH", "/var/lib/overseer/history.db"),
+		Env:               env.or("OVERSEER_ENV", "development"),
+		LogLevel:          env.or("OVERSEER_LOG_LEVEL", "INFO"),
+		Host:              env.or("OVERSEER_HOST", "0.0.0.0"),
+		OwnerUserID:       strings.TrimSpace(env("OVERSEER_OWNER_USER_ID")),
+		SupabaseURL:       strings.TrimSpace(env("OVERSEER_SUPABASE_URL")),
+		SupabaseAnonKey:   strings.TrimSpace(env("OVERSEER_SUPABASE_ANON_KEY")),
+		SupabaseJWTSecret: strings.TrimSpace(env("OVERSEER_SUPABASE_JWT_SECRET")),
+		SupabaseJWKSURL:   strings.TrimSpace(env("OVERSEER_SUPABASE_JWKS_URL")),
+		BasePath:          normalizeBasePath(env("OVERSEER_BASE_PATH")),
+		HistoryPath:       env.or("OVERSEER_HISTORY_PATH", "/var/lib/overseer/history.db"),
 	}
-	if err := c.applyPort(); err != nil {
+	if err := c.applyPort(env); err != nil {
 		return nil, err
 	}
-	if err := c.applyDurations(); err != nil {
+	if err := c.applyDurations(env); err != nil {
 		return nil, err
 	}
 	if err := c.validate(); err != nil {
@@ -63,8 +65,8 @@ func Load() (*Config, error) {
 	return c, nil
 }
 
-func (c *Config) applyPort() error {
-	raw := getenv("OVERSEER_PORT", "8090")
+func (c *Config) applyPort(env environment) error {
+	raw := env.or("OVERSEER_PORT", "8090")
 	port, err := strconv.Atoi(raw)
 	if err != nil || port < 1 || port > 65535 {
 		return fmt.Errorf("OVERSEER_PORT must be a valid TCP port, got %q", raw)
@@ -73,16 +75,16 @@ func (c *Config) applyPort() error {
 	return nil
 }
 
-func (c *Config) applyDurations() error {
-	tick, err := positiveDuration("OVERSEER_TICK_INTERVAL", 5*time.Second)
+func (c *Config) applyDurations(env environment) error {
+	tick, err := env.positiveDuration("OVERSEER_TICK_INTERVAL", 5*time.Second)
 	if err != nil {
 		return err
 	}
-	bucketTimeout, err := positiveDuration("OVERSEER_BUCKET_TIMEOUT", 8*time.Second)
+	bucketTimeout, err := env.positiveDuration("OVERSEER_BUCKET_TIMEOUT", 8*time.Second)
 	if err != nil {
 		return err
 	}
-	costSpend, err := positiveDuration("OVERSEER_COST_SPEND_INTERVAL", time.Hour)
+	costSpend, err := env.positiveDuration("OVERSEER_COST_SPEND_INTERVAL", time.Hour)
 	if err != nil {
 		return err
 	}
@@ -90,8 +92,8 @@ func (c *Config) applyDurations() error {
 	return nil
 }
 
-func positiveDuration(key string, fallback time.Duration) (time.Duration, error) {
-	raw := os.Getenv(key)
+func (env environment) positiveDuration(key string, fallback time.Duration) (time.Duration, error) {
+	raw := env(key)
 	if raw == "" {
 		return fallback, nil
 	}
@@ -161,8 +163,8 @@ func normalizeBasePath(raw string) string {
 	return p
 }
 
-func getenv(key, fallback string) string {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+func (env environment) or(key, fallback string) string {
+	if v := strings.TrimSpace(env(key)); v != "" {
 		return v
 	}
 	return fallback
