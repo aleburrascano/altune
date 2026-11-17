@@ -52,7 +52,7 @@ Queue-state requests are limited per user: one token every 2s, burst 20
 
 ## 4. Erasure sweep
 
-`service/erasure/sweeper.go` lists owners whose identity no longer
+`internal/core/erasure/sweeper.go` lists owners whose identity no longer
 exists and deletes their queue state, so a deleted account leaves no snapshot behind.
 An unavailable identity store ends the sweep idle and is counted, not treated as
 "nobody to erase".
