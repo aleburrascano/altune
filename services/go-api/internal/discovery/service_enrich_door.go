@@ -1,6 +1,6 @@
 package discovery
 
-import enrich "altune/go-api/internal/discovery/service/enrich"
+import enrich "altune/go-api/internal/discovery/internal/core/enrich"
 
 type EnrichmentService = enrich.EnrichmentService
 

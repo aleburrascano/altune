@@ -1,6 +1,6 @@
 package playback
 
-import erasure "altune/go-api/internal/playback/service/erasure"
+import erasure "altune/go-api/internal/playback/internal/core/erasure"
 
 type ErasureSweeper = erasure.Sweeper
 

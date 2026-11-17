@@ -2,8 +2,8 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/domain"
+	"altune/go-api/internal/acquisition/internal/core/grade"
 	"altune/go-api/internal/acquisition/internal/core/ports"
-	"altune/go-api/internal/acquisition/service/grade"
 	"context"
 	"log/slog"
 	"math"

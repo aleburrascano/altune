@@ -3,7 +3,7 @@ package handler
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/internal/adapters/authbridge"
-	"altune/go-api/internal/discovery/service/history"
+	"altune/go-api/internal/discovery/internal/core/history"
 	"altune/go-api/internal/discovery/service/interaction"
 	"altune/go-api/internal/discovery/service/unreleased"
 	"altune/go-api/internal/shared/httputil"

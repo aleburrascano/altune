@@ -3,7 +3,7 @@ package handler
 import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/internal/adapters/authbridge"
-	libraryservice "altune/go-api/internal/catalog/service/library"
+	libraryservice "altune/go-api/internal/catalog/internal/core/library"
 	"altune/go-api/internal/shared/httputil"
 	"net/http"
 	"strconv"

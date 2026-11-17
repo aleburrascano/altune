@@ -2,7 +2,7 @@ package eval
 
 import (
 	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/service/release"
+	"altune/go-api/internal/discovery/internal/core/release"
 	"altune/go-api/internal/shared/songfacts"
 	"altune/go-api/internal/shared/textnorm"
 	"altune/go-api/internal/shared/versiontag"

@@ -2,8 +2,8 @@ package audiojudge
 
 import (
 	"altune/go-api/internal/acquisition/domain"
+	"altune/go-api/internal/acquisition/internal/core/grade"
 	"altune/go-api/internal/acquisition/internal/core/ports"
-	"altune/go-api/internal/acquisition/service/grade"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/songfacts"
 	"altune/go-api/internal/shared/textnorm"

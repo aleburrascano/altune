@@ -2,7 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/auth/adapters/middleware"
-	"altune/go-api/internal/discovery/service/favorites"
+	"altune/go-api/internal/discovery/internal/core/favorites"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"

@@ -2,7 +2,7 @@ package handler
 
 import (
 	authservice "altune/go-api/internal/auth/service"
-	"altune/go-api/internal/observe/service/eventtap"
+	"altune/go-api/internal/observe/internal/shell/eventtap"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/httputil/httputiltest"

@@ -2,7 +2,7 @@ package persistence
 
 import (
 	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/service/history"
+	"altune/go-api/internal/discovery/internal/core/history"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"

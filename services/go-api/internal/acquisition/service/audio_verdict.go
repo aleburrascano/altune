@@ -2,8 +2,8 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/domain"
+	"altune/go-api/internal/acquisition/internal/core/audiojudge"
 	"altune/go-api/internal/acquisition/internal/core/ports"
-	"altune/go-api/internal/acquisition/service/audiojudge"
 	"math"
 )
 

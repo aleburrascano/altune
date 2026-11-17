@@ -2,10 +2,10 @@ package handler
 
 import (
 	"altune/go-api/internal/discovery/internal/adapters/authbridge"
+	"altune/go-api/internal/discovery/internal/core/enrich"
+	"altune/go-api/internal/discovery/internal/core/favorites"
+	"altune/go-api/internal/discovery/internal/core/history"
 	"altune/go-api/internal/discovery/service/content"
-	"altune/go-api/internal/discovery/service/enrich"
-	"altune/go-api/internal/discovery/service/favorites"
-	"altune/go-api/internal/discovery/service/history"
 	"altune/go-api/internal/discovery/service/interaction"
 	"altune/go-api/internal/discovery/service/ownership"
 	"altune/go-api/internal/discovery/service/related"

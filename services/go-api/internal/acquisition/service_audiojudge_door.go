@@ -1,6 +1,6 @@
 package acquisition
 
-import audiojudge "altune/go-api/internal/acquisition/service/audiojudge"
+import audiojudge "altune/go-api/internal/acquisition/internal/core/audiojudge"
 
 type (
 	JudgeAudio    = audiojudge.Audio

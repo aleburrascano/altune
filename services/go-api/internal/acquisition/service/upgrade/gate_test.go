@@ -1,8 +1,8 @@
 package upgrade
 
 import (
+	"altune/go-api/internal/acquisition/internal/core/grade"
 	"altune/go-api/internal/acquisition/internal/core/ports"
-	"altune/go-api/internal/acquisition/service/grade"
 	"errors"
 	"testing"
 )
