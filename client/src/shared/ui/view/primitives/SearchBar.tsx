@@ -11,7 +11,7 @@ import {
   opacity,
   touchTarget,
   zLayer,
-} from '@shared/ui/theme/tokens';
+} from '@shared/ui/core/theme/tokens';
 
 interface SearchBarTheme {
   color: {

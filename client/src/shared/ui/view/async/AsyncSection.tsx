@@ -1,6 +1,6 @@
 import { type ReactElement, type ReactNode } from 'react';
 
-import type { AsyncView } from '@shared/ui/async/asyncView';
+import type { AsyncView } from '@shared/ui/core/async/asyncView';
 
 export interface AsyncSectionProps {
   view: AsyncView;

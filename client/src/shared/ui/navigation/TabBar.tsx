@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@shared/ui/primitives/Text';
-import { spacing, opacity } from '@shared/ui/theme/tokens';
+import { spacing, opacity } from '@shared/ui/core/theme/tokens';
 import { useTheme } from '@shared/ui/view/theme/useTheme';
 import {
   TAB_ROUTE_INFO_BY_ROUTE,

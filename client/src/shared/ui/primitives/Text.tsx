@@ -1,9 +1,9 @@
 import { Text as RNText } from 'react-native';
 import type { TextProps as RNTextProps } from 'react-native';
 
-import type { Theme } from '@shared/ui/theme/theme';
-import { typography } from '@shared/ui/theme/tokens';
-import type { TypographyVariant } from '@shared/ui/theme/tokens';
+import type { Theme } from '@shared/ui/core/theme/theme';
+import { typography } from '@shared/ui/core/theme/tokens';
+import type { TypographyVariant } from '@shared/ui/core/theme/tokens';
 import { useTheme } from '@shared/ui/view/theme/useTheme';
 
 export type TextTone =

@@ -1,7 +1,7 @@
 import { useState, type ComponentProps, type ReactElement } from 'react';
 import { StyleSheet, View, type PressableStateCallbackType } from 'react-native';
 import { ChevronDown } from 'lucide-react-native';
-import { spacing } from '@shared/ui/theme/tokens';
+import { spacing } from '@shared/ui/core/theme/tokens';
 import { useTheme } from '@shared/ui/view/theme/useTheme';
 import { pressedStyle } from '@shared/ui/view/primitives/pressedStyle';
 import { Text } from '@shared/ui/primitives/Text';

@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 
-import { spacing } from '@shared/ui/theme/tokens';
+import { spacing } from '@shared/ui/core/theme/tokens';
 
 export type RowProps = {
   children: ReactNode;

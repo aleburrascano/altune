@@ -4,8 +4,8 @@ import { View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 
 import { recordFailureShown } from '@shared/telemetry';
-import type { Theme } from '@shared/ui/theme/theme';
-import { radius, spacing } from '@shared/ui/theme/tokens';
+import type { Theme } from '@shared/ui/core/theme/theme';
+import { radius, spacing } from '@shared/ui/core/theme/tokens';
 import { useTheme } from '@shared/ui/view/theme/useTheme';
 import { Text } from '@shared/ui/primitives/Text';
 

@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { tapFeedback } from '@shared/ui/haptics';
-import { radius, spacing } from '@shared/ui/theme/tokens';
+import { radius, spacing } from '@shared/ui/core/theme/tokens';
 import { useTheme } from '@shared/ui/view/theme/useTheme';
 import { pressedStyle } from '@shared/ui/view/primitives/pressedStyle';
 import { Text } from '@shared/ui/primitives/Text';
