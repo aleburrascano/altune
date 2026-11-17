@@ -22,7 +22,7 @@ import {
 } from '@features/detail/domain/saveTrack';
 import { sharedStyles } from '@features/detail/view/detailStyles';
 import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
-import { useResolvedOwnedTrack, type TrackIdentity } from '@features/detail/hooks/useOwnedTrack';
+import { useResolvedOwnedTrack, type TrackIdentity } from '@features/detail/core/useOwnedTrack';
 
 type SaveGlyphProps = {
   state: SaveControlState;

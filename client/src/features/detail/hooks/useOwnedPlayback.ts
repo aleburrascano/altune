@@ -17,7 +17,7 @@ import {
   saveControlState,
   toCreateTrackRequest,
 } from '@features/detail/domain/saveTrack';
-import { resolveOwnedTrackAtActionTime } from '@features/detail/hooks/useOwnedTrack';
+import { resolveOwnedTrackAtActionTime } from '@features/detail/core/useOwnedTrack';
 import { useRetryTrack } from '@features/detail/hooks/useRetryTrack';
 import type { SaveTrack } from '@features/detail/view/useSaveTrack';
 

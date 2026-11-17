@@ -24,6 +24,12 @@ export function useOwnedTrack(te: TrackExtras, identity?: TrackIdentity): OwnedT
   return useResolvedOwnedTrack(ownedFromTrackInfo(te), identity);
 }
 
+type LiveStatusFields = {
+  acquisitionStatus: TrackStatus['acquisitionStatus'];
+  failureMessage: TrackStatus['failureMessage'];
+  retryable?: boolean;
+};
+
 function ownedFromLiveStatus(
   stamped: OwnedTrack | null,
   trackId: TrackId | null,
@@ -31,16 +37,20 @@ function ownedFromLiveStatus(
 ): OwnedTrack | null {
   if (trackId === null) return null;
   if (!live) return stamped;
-  const retryable = live.acquisitionStatus === 'failed' ? live.retryable : undefined;
-  return ownedTrack(trackId, live.acquisitionStatus, live.failureMessage, retryable);
+  const { acquisitionStatus, failureMessage, retryable }: LiveStatusFields = live;
+  return ownedTrack(trackId, acquisitionStatus, failureMessage, retryable);
+}
+
+function identityKeyOf(identity: TrackIdentity | undefined): string | null {
+  if (identity?.artist == null) return null;
+  return trackIdentityKey(identity.title, identity.artist);
 }
 
 export function useResolvedOwnedTrack(
   stamped: OwnedTrack | null,
   identity?: TrackIdentity,
 ): OwnedTrack | null {
-  const key = identity != null ? trackIdentityKey(identity.title, identity.artist ?? '') : null;
-  const linkedId = useTrackIdForIdentity(stamped === null ? key : null);
+  const linkedId = useTrackIdForIdentity(identityKeyOf(identity));
   const trackId = stamped?.trackId ?? linkedId ?? null;
   const live = useTrackStatus(trackId);
   return ownedFromLiveStatus(stamped, trackId, live);
@@ -50,8 +60,7 @@ export function resolveOwnedTrackAtActionTime(
   stamped: OwnedTrack | null,
   identity?: TrackIdentity,
 ): OwnedTrack | null {
-  const key = identity != null ? trackIdentityKey(identity.title, identity.artist ?? '') : null;
-  const linkedId = trackIdForIdentityAtCallTime(stamped === null ? key : null);
+  const linkedId = trackIdForIdentityAtCallTime(identityKeyOf(identity));
   const trackId = stamped?.trackId ?? linkedId ?? null;
   const live = trackStatusAtCallTime(trackId);
   return ownedFromLiveStatus(stamped, trackId, live);

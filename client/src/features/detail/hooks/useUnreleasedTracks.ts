@@ -24,7 +24,7 @@ import { isAcquirable, unreleasedAsResult } from '@features/detail/domain/unrele
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
 import { useDetailFetchEnabled } from '@features/detail/hooks/useDetailFetchGate';
-import { useResolvedOwnedTrack } from '@features/detail/hooks/useOwnedTrack';
+import { useResolvedOwnedTrack } from '@features/detail/core/useOwnedTrack';
 import { useTrackSave } from '@features/detail/view/useSaveTrack';
 
 const NO_TRACKS: UnreleasedTrack[] = [];

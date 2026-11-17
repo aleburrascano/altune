@@ -5,7 +5,7 @@ import { type ContentFailure } from '@features/detail/domain/contentStatus';
 import { type DetailRoute } from '@features/detail/domain/detailNavigation';
 import { useOpenDetail } from '@features/detail/hooks/useDetailNavigation';
 import { type OwnedTrack, type OwnedSplit } from '@features/detail/domain/ownedTrack';
-import { useArtistContent } from '@features/detail/hooks/useArtistContent';
+import { useArtistContent } from '@features/detail/core/useArtistContent';
 import { useArtistDiscovery } from '@features/detail/view/useEntityDiscovery';
 import {
   useLibraryAlbumsForArtist,
