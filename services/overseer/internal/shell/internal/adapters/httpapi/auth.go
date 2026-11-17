@@ -1,4 +1,4 @@
-package shell
+package httpapi
 
 import (
 	"altune/overseer/internal/authn"

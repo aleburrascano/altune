@@ -30,14 +30,6 @@
     "B3 internal/oci/client.go imports github.com/oracle/oci-go-sdk/v65/common/auth, which module-spec.json does not list under pure",
     "B3 internal/oci/client.go imports github.com/oracle/oci-go-sdk/v65/usageapi, which module-spec.json does not list under pure",
     "B3 internal/oci/client.go imports net/http",
-    "B3 internal/shell/api.go imports net/http",
-    "B3 internal/shell/auth.go imports net/http",
-    "B3 internal/shell/owner_health.go imports net/http",
-    "B3 internal/shell/series.go imports github.com/go-chi/chi/v5, which module-spec.json does not list under pure",
-    "B3 internal/shell/series.go imports net/http",
-    "B3 internal/shell/series.go imports net/url",
-    "B3 internal/shell/shell.go imports github.com/go-chi/chi/v5, which module-spec.json does not list under pure",
-    "B3 internal/shell/shell.go imports net/http",
     "C4 internal/buckets/backendperf/backendperf.go exports Bucket, which nothing outside backendperf imports and no test of its own imports through the door",
     "C4 internal/buckets/backendperf/backendperf.go exports Data, which nothing outside backendperf imports and no test of its own imports through the door",
     "C4 internal/buckets/backendperf/backendperf.go exports New, which nothing outside backendperf imports and no test of its own imports through the door",
@@ -89,12 +81,6 @@
     "C4 internal/history/signals.go exports Database, which nothing outside history imports and no test of its own imports through the door",
     "C4 internal/oci/client.go exports Client, which nothing outside oci imports and no test of its own imports through the door",
     "C4 internal/oci/oci.go exports UsageClient, which nothing outside oci imports and no test of its own imports through the door",
-    "C4 internal/shell/auth.go exports OwnerOnly, which nothing outside shell imports and no test of its own imports through the door",
-    "C4 internal/shell/auth.go exports Verifier, which nothing outside shell imports and no test of its own imports through the door",
-    "C4 internal/shell/series.go exports MinuteReader, which nothing outside shell imports and no test of its own imports through the door",
-    "C4 internal/shell/series.go exports SeriesReader, which nothing outside shell imports and no test of its own imports through the door",
-    "C4 internal/shell/shell.go exports Handler, which nothing outside shell imports and no test of its own imports through the door",
-    "C4 internal/shell/spark.go exports TailReader, which nothing outside shell imports and no test of its own imports through the door",
     "C8 internal/buckets/cost/cost.go reads os.Getenv",
     "C8 internal/buckets/logs/logs.go reads os.Getenv",
     "C8 internal/buckets/reliability/reliability.go reads os.Getenv",
@@ -162,8 +148,7 @@
     "T1 internal/history/rollup_test.go is in package history, so it sees inside the module: use package history_test and import the door",
     "T1 internal/history/signals_test.go is in package history, so it sees inside the module: use package history_test and import the door",
     "T1 internal/history/tail_test.go is in package history, so it sees inside the module: use package history_test and import the door",
-    "T1 internal/oci/oci_test.go is in package oci, so it sees inside the module: use package oci_test and import the door",
-    "T1 internal/shell/spark_cache_test.go is in package shell, so it sees inside the module: use package shell_test and import the door"
+    "T1 internal/oci/oci_test.go is in package oci, so it sees inside the module: use package oci_test and import the door"
   ],
   "clones": 12
 }
