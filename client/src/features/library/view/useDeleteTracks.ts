@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useAppMutation, libraryKeys } from '@shared/query';
-import { showFailureAlert, type FailureAlert } from '@shared/ui';
+import type { FailureAlert } from '@shared/ui';
 import { runBounded } from '@shared/concurrency';
 import type { TrackId } from '@shared/catalog';
 import {
@@ -189,12 +189,12 @@ function bulkFailureAlert({ requested, deleted, failures }: DeleteTracksResult):
   };
 }
 
-function reportBulkOutcome(queryClient: QueryClient, warn: LibraryWarn, run: DeleteTracksResult) {
+function reportBulkOutcome(queryClient: QueryClient, port: LibraryPort, run: DeleteTracksResult) {
   const { deleted, requested, failures, cancelled } = run;
   if (deleted > 0) invalidateLibraryDerived(queryClient);
-  failures.forEach(logBulkFailure(warn));
+  failures.forEach(logBulkFailure(port.warn));
   if (cancelled || deleted === requested) return;
-  showFailureAlert(bulkFailureAlert(run));
+  port.showFailure(bulkFailureAlert(run));
 }
 
 const LOGGED_TRACK_IDS = 20;
@@ -206,12 +206,12 @@ function logBulkRunFailure(warn: LibraryWarn, error: unknown, trackIds: TrackId[
   });
 }
 
-function recoverFailedBulkRun(queryClient: QueryClient, warn: LibraryWarn) {
+function recoverFailedBulkRun(queryClient: QueryClient, port: LibraryPort) {
   return (error: Error, trackIds: TrackId[]): void => {
     invalidateLibraryDerived(queryClient);
     void queryClient.invalidateQueries({ queryKey: libraryKeys.tracksPrefix });
-    logBulkRunFailure(warn, error, trackIds);
-    showFailureAlert(deleteFailedAlert('library.delete_tracks', BULK_RUN_FAILED, error));
+    logBulkRunFailure(port.warn, error, trackIds);
+    port.showFailure(deleteFailedAlert('library.delete_tracks', BULK_RUN_FAILED, error));
   };
 }
 
@@ -229,9 +229,8 @@ export function useDeleteTracks() {
   return useAppMutation({
     ...guardedMutationOptions({
       mutationFn: (trackIds: TrackId[]) => runBulkDelete(queryClient, startRun(), trackIds, port),
-      onSuccess: (summary: DeleteTracksResult) =>
-        reportBulkOutcome(queryClient, port.warn, summary),
-      onError: recoverFailedBulkRun(queryClient, port.warn),
+      onSuccess: (summary: DeleteTracksResult) => reportBulkOutcome(queryClient, port, summary),
+      onError: recoverFailedBulkRun(queryClient, port),
     }),
     action: 'library.delete_tracks',
   });
@@ -264,13 +263,13 @@ function putTrackBack(queryClient: QueryClient, trackId: TrackId, removed: Remov
   if (removed.status) patchTrackStatus(trackId, removed.status);
 }
 
-function undoFailedRemoval(queryClient: QueryClient, warn: LibraryWarn) {
+function undoFailedRemoval(queryClient: QueryClient, port: LibraryPort) {
   return (error: Error, trackId: TrackId, removed: RemovedTrack): void => {
     const failure = classifyLibraryError(error);
     if (failure === 'not-found') return unpin(trackId);
-    logTrackMutationFailure(warn, 'delete track', deleteEndpoint, trackId, error);
+    logTrackMutationFailure(port.warn, 'delete track', deleteEndpoint, trackId, error);
     putTrackBack(queryClient, trackId, removed);
-    showFailureAlert(deleteFailedAlert('library.delete_track', TRACK_DELETE_FAILED, error));
+    port.showFailure(deleteFailedAlert('library.delete_track', TRACK_DELETE_FAILED, error));
   };
 }
 
@@ -279,7 +278,7 @@ function deleteTrackOptions(queryClient: QueryClient, port: LibraryPort) {
     mutationFn: (trackId: TrackId) => deleteOne(port, trackId),
     onMutate: removeOptimistically(queryClient),
     onSuccess: confirmRemoval(queryClient),
-    onError: undoFailedRemoval(queryClient, port.warn),
+    onError: undoFailedRemoval(queryClient, port),
   });
 }
 

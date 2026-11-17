@@ -22,9 +22,15 @@ export interface MemoryLibrarySeed {
   playlists?: PlaylistDetailResponse[];
   discovery?: DiscoveryResult[];
   warn?: LibraryPort['warn'];
+  showFailure?: LibraryPort['showFailure'];
+  confirmDestructive?: LibraryPort['confirmDestructive'];
 }
 
 function ignoreWarning(): void {}
+
+function ignoreFailure(): void {}
+
+function neverConfirm(): void {}
 
 interface PageWindow {
   limit?: number | undefined;
@@ -123,6 +129,8 @@ export function createMemoryLibraryPort(seed: MemoryLibrarySeed = {}): LibraryPo
 
   return {
     warn: seed.warn ?? ignoreWarning,
+    showFailure: seed.showFailure ?? ignoreFailure,
+    confirmDestructive: seed.confirmDestructive ?? neverConfirm,
     getTracks: ({ limit, offset }, signal) =>
       resolveOnLaterTick(signal, () => trackPage(tracks, { limit, offset })),
     getAllTracks: ({ signal }) =>

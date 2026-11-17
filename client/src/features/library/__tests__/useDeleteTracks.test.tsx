@@ -1,4 +1,3 @@
-import { Alert } from 'react-native';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClientProvider, type InfiniteData } from '@tanstack/react-query';
 import { ApiError, RETRY_TAIL } from '@shared/failure';
@@ -21,7 +20,6 @@ import {
   page,
   TRACKS_KEY,
   LIBRARY_DERIVED,
-  invalidatedKeys,
   setup,
   pagedIds,
   deferred,
@@ -32,7 +30,7 @@ import {
   PLAYLIST_KEY,
   READY,
 } from '@features/library';
-import type { LibraryPort } from '@features/library';
+import type { LibraryPort, RecordingDialogs } from '@features/library';
 import { libraryKeys } from '@shared/query';
 import { signInTestUser } from '@testing/signInTestUser';
 
@@ -85,8 +83,6 @@ describe('useDeleteTracks', () => {
     acquisition: { retryAcquisition: mockRetryAcquisition },
   };
 
-  let alertSpy: jest.SpyInstance;
-
   beforeEach(async () => {
     await signInTestUser();
     __http.reply(EVENTS, { status: 204 });
@@ -95,18 +91,12 @@ describe('useDeleteTracks', () => {
     mockReacquireTrack.mockReset();
     useTrackStatusStore.getState().reset();
     usePinnedStore.setState({ entries: {}, queue: [], isWorking: false, unpin: realUnpin });
-    alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     warn.mockReset();
-  });
-
-  afterEach(() => {
-    alertSpy.mockRestore();
   });
 
   describe('useDeleteTracks — derived caches', () => {
     it('invalidates the membership-derived caches once when any track was deleted (#938)', async () => {
       const { queryClient, wrapper } = setup(ports);
-      const spy = jest.spyOn(queryClient, 'invalidateQueries');
       mockDeleteTrack.mockImplementation((id) =>
         id === 'a' ? Promise.reject(new ApiError(500, 'boom')) : Promise.resolve(),
       );
@@ -115,25 +105,24 @@ describe('useDeleteTracks', () => {
       act(() => result.current.mutate([asTrackId('a'), asTrackId('b'), asTrackId('c')]));
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(invalidatedKeys(spy)).toEqual(LIBRARY_DERIVED);
+      expect(queryClient.invalidated).toEqual(LIBRARY_DERIVED);
     });
 
     it('invalidates nothing when no track was deleted', async () => {
       const { queryClient, wrapper } = setup(ports);
-      const spy = jest.spyOn(queryClient, 'invalidateQueries');
       mockDeleteTrack.mockRejectedValue(new ApiError(500, 'boom'));
 
       const { result } = renderHook(() => useDeleteTracks(), { wrapper });
       act(() => result.current.mutate([asTrackId('a')]));
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(spy).not.toHaveBeenCalled();
+      expect(queryClient.invalidated).toEqual([]);
     });
   });
 
   describe('useDeleteTracks — each failed item keeps its cause', () => {
     it('reports every failure with its own error and removes only the successes', async () => {
-      const { queryClient, wrapper } = setup(ports);
+      const { queryClient, wrapper, dialogs } = setup(ports);
       queryClient.setQueryData(TRACKS_KEY, {
         pages: [page([track('a'), track('b'), track('c')])],
         pageParams: [0],
@@ -173,10 +162,9 @@ describe('useDeleteTracks', () => {
         status: 401,
         failure: 'auth',
       });
-      expect(alertSpy).toHaveBeenCalledWith(
-        'Delete failed',
-        '2 of 3 tracks could not be removed. Sign in again, then retry.',
-      );
+      expect(dialogs.shown()).toEqual([
+        ['Delete failed', '2 of 3 tracks could not be removed. Sign in again, then retry.'],
+      ]);
     });
   });
 
@@ -199,7 +187,7 @@ describe('useDeleteTracks', () => {
     it('stops sending once the aggregate deadline passes and reports the rest as not removed', async () => {
       jest.useFakeTimers();
       try {
-        const { wrapper } = setup(ports);
+        const { wrapper, dialogs } = setup(ports);
         mockDeleteTrack.mockImplementation(
           () =>
             new Promise((_, reject) =>
@@ -221,17 +209,16 @@ describe('useDeleteTracks', () => {
         expect(outcome.deleted).toBe(0);
         expect(outcome.failures.length + outcome.skipped).toBe(100);
         expect(outcome.skipped).toBeGreaterThan(0);
-        expect(alertSpy).toHaveBeenCalledWith(
-          'Delete failed',
-          `100 of 100 tracks could not be removed. ${RETRY_TAIL}`,
-        );
+        expect(dialogs.shown()).toEqual([
+          ['Delete failed', `100 of 100 tracks could not be removed. ${RETRY_TAIL}`],
+        ]);
       } finally {
         jest.useRealTimers();
       }
     });
 
     it('sends nothing more and shows no alert once the owning screen unmounts', async () => {
-      const { queryClient, wrapper } = setup(ports);
+      const { queryClient, wrapper, dialogs } = setup(ports);
       queryClient.setQueryData(TRACKS_KEY, {
         pages: [page([track('t0'), track('t1'), track('t9')])],
         pageParams: [0],
@@ -256,7 +243,7 @@ describe('useDeleteTracks', () => {
       expect(outcome.deleted).toBe(BULK_DELETE_CONCURRENCY);
       expect(outcome.skipped).toBe(10 - BULK_DELETE_CONCURRENCY);
       expect(pagedIds(queryClient)).toEqual(['t9']);
-      expect(alertSpy).not.toHaveBeenCalled();
+      expect(dialogs.alerts).toEqual([]);
     });
 
     it('cancels no delete already in flight at unmount, and waits for each to settle', async () => {
@@ -289,7 +276,7 @@ describe('useDeleteTracks', () => {
 
   describe('track mutation hooks — respond to the failure class, not one generic path', () => {
     it('a bulk delete counts tracks already gone (404) as deleted, not as failures', async () => {
-      const { queryClient, wrapper } = setup(ports);
+      const { queryClient, wrapper, dialogs } = setup(ports);
       queryClient.setQueryData(TRACKS_KEY, {
         pages: [page([track('a'), track('b'), track('c')])],
         pageParams: [0],
@@ -304,7 +291,7 @@ describe('useDeleteTracks', () => {
 
       expect(result.current.data).toMatchObject({ deleted: 2, requested: 2, failures: [] });
       expect(pagedIds(queryClient)).toEqual(['c']);
-      expect(alertSpy).not.toHaveBeenCalled();
+      expect(dialogs.alerts).toEqual([]);
     });
   });
 
@@ -335,7 +322,7 @@ describe('useDeleteTracks', () => {
 
   describe('track mutations that settle after sign-out leave the next user untouched (#2729)', () => {
     it('useDeleteTracks: a bulk delete stops sending once its user signs out and reports nothing to the next', async () => {
-      const { queryClient, wrapper } = setup(ports);
+      const { queryClient, wrapper, dialogs } = setup(ports);
       const ids = ['a1', 'a2', 'a3', 'a4', 'a5', 'a6'].map(asTrackId);
       const requests = ids.map(() => deferred());
       mockDeleteTrack.mockImplementation((id) => requests[ids.indexOf(id)]!.promise);
@@ -354,14 +341,13 @@ describe('useDeleteTracks', () => {
 
       expect(mockDeleteTrack).toHaveBeenCalledTimes(BULK_DELETE_CONCURRENCY);
       expect(userBLibrary(queryClient)).toEqual(libraryOf([track('a1'), track('b1')]));
-      expect(alertSpy).not.toHaveBeenCalled();
+      expect(dialogs.alerts).toEqual([]);
     });
   });
 
   describe('useDeleteTracks — a cleanup throw is not silent (#2763)', () => {
     it('logs the cleanup failure and re-syncs instead of rejecting when onDeleted throws', async () => {
-      const { queryClient, wrapper } = setup(ports);
-      const spy = jest.spyOn(queryClient, 'invalidateQueries');
+      const { queryClient, wrapper, dialogs } = setup(ports);
       mockDeleteTrack.mockResolvedValue(undefined);
       failCleanupFor(failCleanupOfB);
 
@@ -370,7 +356,7 @@ describe('useDeleteTracks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(result.current.data).toMatchObject({ deleted: 2, requested: 2, failures: [] });
-      expect(invalidatedKeys(spy)).toEqual(
+      expect(queryClient.invalidated).toEqual(
         expect.arrayContaining([
           ...LIBRARY_DERIVED,
           ...Object.values(TRACK_CACHE_FAMILIES).map((f) => f.prefix),
@@ -381,7 +367,7 @@ describe('useDeleteTracks', () => {
         expect.objectContaining({ trackId: 'b' }),
       );
       expect(warn).not.toHaveBeenCalledWith('[library] bulk delete failed', expect.anything());
-      expect(alertSpy).not.toHaveBeenCalled();
+      expect(dialogs.alerts).toEqual([]);
     });
   });
 
@@ -395,13 +381,12 @@ describe('useDeleteTracks', () => {
       }));
 
     it('succeeds, cleans the other tracks, and re-syncs every track cache family', async () => {
-      const { queryClient, wrapper } = setup(ports);
+      const { queryClient, wrapper, dialogs } = setup(ports);
       queryClient.setQueryData(TRACKS_KEY, {
         pages: [page([track('a'), track('b'), track('c')])],
         pageParams: [0],
       });
       ['a', 'c'].forEach(seedPinned);
-      const spy = jest.spyOn(queryClient, 'invalidateQueries');
       mockDeleteTrack.mockResolvedValue(undefined);
       failCleanupFor(failCleanupOfB);
 
@@ -410,10 +395,10 @@ describe('useDeleteTracks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(result.current.data).toMatchObject({ deleted: 3, failures: [] });
-      expect(alertSpy).not.toHaveBeenCalled();
+      expect(dialogs.alerts).toEqual([]);
       expect(pagedIds(queryClient)).toEqual([]);
       expect(Object.keys(usePinnedStore.getState().entries)).toEqual([]);
-      expect(invalidatedKeys(spy)).toEqual(
+      expect(queryClient.invalidated).toEqual(
         expect.arrayContaining(Object.values(TRACK_CACHE_FAMILIES).map((f) => f.prefix)),
       );
       expect(warn).toHaveBeenCalledWith(
@@ -424,19 +409,17 @@ describe('useDeleteTracks', () => {
 
     it('invalidates only the derived keys when no cleanup threw', async () => {
       const { queryClient, wrapper } = setup(ports);
-      const spy = jest.spyOn(queryClient, 'invalidateQueries');
       mockDeleteTrack.mockResolvedValue(undefined);
 
       const { result } = renderHook(() => useDeleteTracks(), { wrapper });
       act(() => result.current.mutate(['a', 'b'].map(asTrackId)));
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(invalidatedKeys(spy)).toEqual(LIBRARY_DERIVED);
+      expect(queryClient.invalidated).toEqual(LIBRARY_DERIVED);
     });
 
     it('skips cleanup and re-sync for a run whose user signed out before the delete returned', async () => {
       const { queryClient, wrapper } = setup(ports);
-      const spy = jest.spyOn(queryClient, 'invalidateQueries');
       const request = deferred();
       mockDeleteTrack.mockImplementation(() => request.promise);
       failCleanupFor(failEveryCleanup);
@@ -445,12 +428,12 @@ describe('useDeleteTracks', () => {
       await waitFor(() => expect(mockDeleteTrack).toHaveBeenCalledTimes(1));
 
       signOutThenLoadUserB(queryClient, [track('a1'), track('b1')]);
-      spy.mockClear();
+      const invalidatedBefore = queryClient.invalidated.length;
       await act(async () => request.resolve());
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(warn).not.toHaveBeenCalledWith('[library] delete cleanup failed', expect.anything());
-      expect(invalidatedKeys(spy)).toEqual([]);
+      expect(queryClient.invalidated.slice(invalidatedBefore)).toEqual([]);
       expect(userBLibrary(queryClient)).toEqual(libraryOf([track('a1'), track('b1')]));
     });
   });
@@ -458,7 +441,6 @@ describe('useDeleteTracks', () => {
   describe('useDeleteTracks — re-sync gate after a live cleanup throw then sign-out', () => {
     it('does not re-sync track caches when a cleanup threw and the user then signed out', async () => {
       const { queryClient, wrapper } = setup(ports);
-      const spy = jest.spyOn(queryClient, 'invalidateQueries');
       const held = deferred();
       mockDeleteTrack.mockImplementation((id) => (id === 'a1' ? Promise.resolve() : held.promise));
       failCleanupFor(failEveryCleanup);
@@ -472,18 +454,22 @@ describe('useDeleteTracks', () => {
       );
 
       signOutThenLoadUserB(queryClient, [track('a1'), track('b1')]);
-      spy.mockClear();
+      const invalidatedBefore = queryClient.invalidated.length;
       await act(async () => held.resolve());
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(invalidatedKeys(spy)).toEqual([]);
+      expect(queryClient.invalidated.slice(invalidatedBefore)).toEqual([]);
       expect(userBLibrary(queryClient)).toEqual(libraryOf([track('a1'), track('b1')]));
     });
   });
 
   describe('useDeleteTracks — partial failure alert uses the classified tail', () => {
+    let dialogs: RecordingDialogs;
+
     const runWithFailures = async (errors: Record<string, ApiError>) => {
-      const { wrapper } = setup(ports);
+      const run = setup(ports);
+      dialogs = run.dialogs;
+      const { wrapper } = run;
       mockDeleteTrack.mockImplementation((id) =>
         errors[id] ? Promise.reject(errors[id]) : Promise.resolve(),
       );
@@ -497,29 +483,24 @@ describe('useDeleteTracks', () => {
       ['auth first', [401, 409]],
     ])('ends with the sign-in tail when a failure is auth (%s)', async (_name, [first, second]) => {
       await runWithFailures({ a: new ApiError(first!, 'x'), c: new ApiError(second!, 'y') });
-      expect(alertSpy).toHaveBeenCalledWith(
-        'Delete failed',
-        '2 of 3 tracks could not be removed. Sign in again, then retry.',
-      );
+      expect(dialogs.shown()).toEqual([
+        ['Delete failed', '2 of 3 tracks could not be removed. Sign in again, then retry.'],
+      ]);
     });
 
     it('ends with the retry tail when no failure is auth', async () => {
       await runWithFailures({ a: new ApiError(409, 'x'), c: new ApiError(500, 'y') });
-      expect(alertSpy).toHaveBeenCalledWith(
-        'Delete failed',
-        `2 of 3 tracks could not be removed. ${RETRY_TAIL}`,
-      );
+      expect(dialogs.shown()).toEqual([
+        ['Delete failed', `2 of 3 tracks could not be removed. ${RETRY_TAIL}`],
+      ]);
     });
   });
 
   describe('useDeleteTracks — a failed run names the affected tracks', () => {
     it('logs the first 20 ids of 25 and invalidates the tracks list', async () => {
-      const { queryClient, wrapper } = setup(ports);
-      const spy = jest.spyOn(queryClient, 'invalidateQueries');
+      const { queryClient, wrapper, dialogs } = setup(ports);
       mockDeleteTrack.mockResolvedValue(undefined);
-      alertSpy.mockImplementationOnce(() => {
-        throw new Error('alert failed');
-      });
+      dialogs.failNextAlert(new Error('alert failed'));
       mockDeleteTrack.mockImplementation((id) =>
         id === 't0' ? Promise.reject(new ApiError(500, 'boom')) : Promise.resolve(),
       );
@@ -533,7 +514,7 @@ describe('useDeleteTracks', () => {
         '[library] bulk delete failed',
         expect.objectContaining({ requested: 25, trackIds: ids.slice(0, 20) }),
       );
-      expect(invalidatedKeys(spy)).toContainEqual(['library', 'tracks']);
+      expect(queryClient.invalidated).toContainEqual(['library', 'tracks']);
     });
 
     it('deleteOne sends one delete request for the track', async () => {
@@ -583,8 +564,11 @@ describe('useDeleteTracks', () => {
     });
 
     it('counts a track the port no longer has (404) as deleted, not as a failure', async () => {
-      const { queryClient } = setup(ports);
-      const port = createMemoryLibraryPort({ tracks: [track('a'), track('b')] });
+      const { queryClient, dialogs } = setup(ports);
+      const port = createMemoryLibraryPort({
+        tracks: [track('a'), track('b')],
+        showFailure: dialogs.showFailure,
+      });
       queryClient.setQueryData(TRACKS_KEY, libraryOf([track('a'), track('b'), track('ghost')]));
 
       const { result } = renderHook(() => useDeleteTracks(), {
@@ -596,7 +580,7 @@ describe('useDeleteTracks', () => {
       expect(result.current.data).toMatchObject({ deleted: 2, requested: 2, failures: [] });
       expect(await idsLeftIn(port)).toEqual(['b']);
       expect(pagedIds(queryClient)).toEqual(['b']);
-      expect(alertSpy).not.toHaveBeenCalled();
+      expect(dialogs.alerts).toEqual([]);
     });
 
     it('reports a delete the port refuses as a failure with its own error and keeps that track', async () => {
@@ -677,8 +661,6 @@ describe('useDeleteTrack', () => {
     acquisition: { retryAcquisition: mockRetryAcquisition },
   };
 
-  let alertSpy: jest.SpyInstance;
-
   beforeEach(async () => {
     await signInTestUser();
     __http.reply(EVENTS, { status: 204 });
@@ -687,12 +669,7 @@ describe('useDeleteTrack', () => {
     mockReacquireTrack.mockReset();
     useTrackStatusStore.getState().reset();
     usePinnedStore.setState({ entries: {}, queue: [], isWorking: false, unpin: realUnpin });
-    alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     warn.mockReset();
-  });
-
-  afterEach(() => {
-    alertSpy.mockRestore();
   });
 
   describe('useDeleteTrack — a failed delete puts the track back', () => {
@@ -735,7 +712,7 @@ describe('useDeleteTrack', () => {
     });
 
     it('logs the failure with the track id and endpoint', async () => {
-      const { wrapper } = setup(ports);
+      const { wrapper, dialogs } = setup(ports);
       const error = new Error('Network request failed');
       mockDeleteTrack.mockRejectedValue(error);
 
@@ -748,10 +725,9 @@ describe('useDeleteTrack', () => {
         endpoint: 'DELETE /v1/tracks/t2',
         failure: 'unknown',
       });
-      expect(alertSpy).toHaveBeenCalledWith(
-        'Delete failed',
-        `Could not remove the track. ${RETRY_TAIL}`,
-      );
+      expect(dialogs.shown()).toEqual([
+        ['Delete failed', `Could not remove the track. ${RETRY_TAIL}`],
+      ]);
     });
 
     it('leaves the track removed when the delete succeeds', async () => {
@@ -791,32 +767,30 @@ describe('useDeleteTrack', () => {
 
     it('marks the membership-derived caches stale once the delete lands (#938)', async () => {
       const { queryClient, wrapper } = setup(ports);
-      const spy = jest.spyOn(queryClient, 'invalidateQueries');
       mockDeleteTrack.mockResolvedValue(undefined);
 
       const { result } = renderHook(() => useDeleteTrack(), { wrapper });
       act(() => result.current.mutate(asTrackId('t1')));
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(invalidatedKeys(spy)).toEqual(LIBRARY_DERIVED);
+      expect(queryClient.invalidated).toEqual(LIBRARY_DERIVED);
     });
 
     it('invalidates nothing when the delete fails and the track is restored', async () => {
       const { queryClient, wrapper } = setup(ports);
-      const spy = jest.spyOn(queryClient, 'invalidateQueries');
       mockDeleteTrack.mockRejectedValue(new ApiError(500, 'boom'));
 
       const { result } = renderHook(() => useDeleteTrack(), { wrapper });
       act(() => result.current.mutate(asTrackId('t1')));
       await waitFor(() => expect(result.current.isError).toBe(true));
 
-      expect(spy).not.toHaveBeenCalled();
+      expect(queryClient.invalidated).toEqual([]);
     });
   });
 
   describe('track mutation hooks — respond to the failure class, not one generic path', () => {
     it('a delete answered 404 keeps the track removed and shows no failure', async () => {
-      const { queryClient, wrapper } = setup(ports);
+      const { queryClient, wrapper, dialogs } = setup(ports);
       queryClient.setQueryData(TRACKS_KEY, {
         pages: [page([track('t1'), track('t2')])],
         pageParams: [0],
@@ -828,12 +802,12 @@ describe('useDeleteTrack', () => {
       await waitFor(() => expect(result.current.isError).toBe(true));
 
       expect(pagedIds(queryClient)).toEqual(['t1']);
-      expect(alertSpy).not.toHaveBeenCalled();
+      expect(dialogs.alerts).toEqual([]);
       expect(warn).not.toHaveBeenCalled();
     });
 
     it('a delete refused for auth rolls back and asks to sign in, unlike a server error', async () => {
-      const { queryClient, wrapper } = setup(ports);
+      const { queryClient, wrapper, dialogs } = setup(ports);
       queryClient.setQueryData(TRACKS_KEY, {
         pages: [page([track('t1'), track('t2')])],
         pageParams: [0],
@@ -849,7 +823,7 @@ describe('useDeleteTrack', () => {
       }
 
       expect(pagedIds(queryClient)).toEqual(['t1', 't2']);
-      expect(alertSpy.mock.calls).toEqual([
+      expect(dialogs.shown()).toEqual([
         ['Delete failed', 'Could not remove the track. Sign in again, then retry.'],
         ['Delete failed', `Could not remove the track. ${RETRY_TAIL}`],
       ]);
@@ -895,7 +869,7 @@ describe('useDeleteTrack', () => {
 
   describe('track mutations that settle after sign-out leave the next user untouched (#2729)', () => {
     it("useDeleteTrack: a delete failing after sign-out restores nothing into user B's library, status store or alerts", async () => {
-      const { queryClient, wrapper } = setup(ports);
+      const { queryClient, wrapper, dialogs } = setup(ports);
       queryClient.setQueryData(TRACKS_KEY, libraryOf([track('a1'), track('a2')]));
       useTrackStatusStore.getState().patch(asTrackId('a1'), READY);
       const request = deferred();
@@ -910,7 +884,7 @@ describe('useDeleteTrack', () => {
 
       expect(userBLibrary(queryClient)).toEqual(libraryOf([track('b1')]));
       expect(useTrackStatusStore.getState().statuses).toEqual({ b1: READY });
-      expect(alertSpy).not.toHaveBeenCalled();
+      expect(dialogs.alerts).toEqual([]);
     });
   });
 
@@ -947,8 +921,12 @@ describe('useDeleteTrack', () => {
     });
 
     it('keeps a track the port no longer has (404) removed and shows no failure', async () => {
-      const { queryClient } = setup(ports);
-      const port = createMemoryLibraryPort({ tracks: [track('t1')], warn });
+      const { queryClient, dialogs } = setup(ports);
+      const port = createMemoryLibraryPort({
+        tracks: [track('t1')],
+        warn,
+        showFailure: dialogs.showFailure,
+      });
       queryClient.setQueryData(TRACKS_KEY, libraryOf([track('t1'), track('t2')]));
 
       const { result } = renderHook(() => useDeleteTrack(), {
@@ -958,13 +936,16 @@ describe('useDeleteTrack', () => {
       await waitFor(() => expect(result.current.isError).toBe(true));
 
       expect(pagedIds(queryClient)).toEqual(['t1']);
-      expect(alertSpy).not.toHaveBeenCalled();
+      expect(dialogs.alerts).toEqual([]);
       expect(warn).not.toHaveBeenCalled();
     });
 
     it('puts the track back and alerts when the port refuses the delete', async () => {
-      const { queryClient } = setup(ports);
-      const memory = createMemoryLibraryPort({ tracks: [track('t1'), track('t2')] });
+      const { queryClient, dialogs } = setup(ports);
+      const memory = createMemoryLibraryPort({
+        tracks: [track('t1'), track('t2')],
+        showFailure: dialogs.showFailure,
+      });
       const port: LibraryPort = {
         ...memory,
         deleteTrack: () => Promise.reject(new ApiError(500, 'internal')),
@@ -979,10 +960,9 @@ describe('useDeleteTrack', () => {
 
       expect(pagedIds(queryClient)).toEqual(['t1', 't2']);
       expect(await idsLeftIn(port)).toEqual(['t1', 't2']);
-      expect(alertSpy).toHaveBeenCalledWith(
-        'Delete failed',
-        `Could not remove the track. ${RETRY_TAIL}`,
-      );
+      expect(dialogs.shown()).toEqual([
+        ['Delete failed', `Could not remove the track. ${RETRY_TAIL}`],
+      ]);
       expect(mockDeleteTrack).not.toHaveBeenCalled();
     });
   });
@@ -992,7 +972,7 @@ describe('useDeleteTrack', () => {
     const TWICE = 2;
     const THRICE = 3;
     it('resolves an empty batch without calling the port or alerting', async () => {
-      const { wrapper } = setup(ports);
+      const { wrapper, dialogs } = setup(ports);
       const { result } = renderHook(() => useDeleteTracks(), { wrapper });
 
       await expect(result.current.mutateAsync([])).resolves.toEqual({
@@ -1004,7 +984,7 @@ describe('useDeleteTrack', () => {
       });
 
       expect(mockDeleteTrack).not.toHaveBeenCalled();
-      expect(alertSpy).not.toHaveBeenCalled();
+      expect(dialogs.alerts).toEqual([]);
     });
 
     it('lists failures in input order even when a later track fails first', async () => {

@@ -1,13 +1,18 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { Alert } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import { AcquisitionPortProvider } from '@shared/acquisition';
 import { asTrackId } from '@shared/catalog';
 import { ApiError, NetworkError } from '@shared/failure';
 
-import { createMemoryLibraryPort, LibraryPortProvider, FeaturingScreen } from '@features/library';
+import {
+  createMemoryLibraryPort,
+  LibraryPortProvider,
+  FeaturingScreen,
+  recordingDialogs,
+  type RecordingDialogs,
+} from '@features/library';
 import type { LibraryPort } from '@features/library';
 import { readDetailHandoff } from '@shared/navigation';
 import { trackResponseFactory } from '@testing/factories';
@@ -24,11 +29,13 @@ const mockSearchDiscovery = jest.fn();
 const mockListTracksFeaturing = jest.fn();
 const warn = jest.fn<void, [string, Record<string, unknown>]>();
 
-const port: LibraryPort = {
-  ...createMemoryLibraryPort({ warn }),
-  searchDiscovery: (params) => mockSearchDiscovery(params),
-  listTracksFeaturing: (featured) => mockListTracksFeaturing(featured),
-};
+function portRecordingInto(dialogs: RecordingDialogs): LibraryPort {
+  return {
+    ...createMemoryLibraryPort({ warn, showFailure: dialogs.showFailure }),
+    searchDiscovery: (params) => mockSearchDiscovery(params),
+    listTracksFeaturing: (featured) => mockListTracksFeaturing(featured),
+  };
+}
 
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ name: 'Guest Star' }),
@@ -40,7 +47,8 @@ const SECRET = 'guest star unreleased bootleg';
 
 let client: QueryClient;
 let warnSpy: jest.SpyInstance;
-let alertSpy: jest.SpyInstance;
+let dialogs: RecordingDialogs;
+let port: LibraryPort;
 
 function wrapper({ children }: { children: ReactNode }) {
   return (
@@ -64,7 +72,8 @@ beforeEach(async () => {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   warn.mockReset();
-  alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  dialogs = recordingDialogs();
+  port = portRecordingInto(dialogs);
   await signInTestUser();
   __http.reply(EVENTS, { status: 204 });
   mockSearchDiscovery.mockReset();
@@ -74,7 +83,6 @@ beforeEach(async () => {
 
 afterEach(() => {
   warnSpy.mockRestore();
-  alertSpy.mockRestore();
   client.clear();
 });
 
@@ -109,10 +117,9 @@ describe('a failed "Explore artist" search', () => {
     await tapExplore();
 
     await waitFor(() =>
-      expect(alertSpy).toHaveBeenCalledWith(
-        'Search failed',
-        'Could not search for Guest Star. Please try again.',
-      ),
+      expect(dialogs.shown()).toEqual([
+        ['Search failed', 'Could not search for Guest Star. Please try again.'],
+      ]),
     );
     expect(loggedText()).not.toContain(SECRET);
   });
@@ -124,10 +131,9 @@ describe('a failed "Explore artist" search', () => {
     await tapExplore();
 
     await waitFor(() =>
-      expect(alertSpy).toHaveBeenCalledWith(
-        'Search failed',
-        'Could not search for Guest Star. Sign in again, then retry.',
-      ),
+      expect(dialogs.shown()).toEqual([
+        ['Search failed', 'Could not search for Guest Star. Sign in again, then retry.'],
+      ]),
     );
   });
 
@@ -156,7 +162,7 @@ describe('a failed "Explore artist" search', () => {
     );
     expect(warnSpy).not.toHaveBeenCalled();
     expect(warn).not.toHaveBeenCalled();
-    expect(alertSpy).not.toHaveBeenCalled();
+    expect(dialogs.alerts).toEqual([]);
   });
 });
 
