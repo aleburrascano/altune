@@ -14,6 +14,7 @@ import {
   reloadWidget,
 } from '@modules/altune-widget';
 import { fakeAuthClient } from '@testing/fakeAuthClient';
+import { recordLogs } from '@shared/log';
 
 type LooseAuth = { getSession: () => Promise<unknown> };
 
@@ -397,7 +398,7 @@ describe('startWidgetCommands probe', () => {
   it('keeps handling later commands after the previous action rejects, without an unhandled rejection', async () => {
     const unhandled = collectUnhandledRejections();
     const failingPrevious = jest.fn(() => Promise.reject(new Error('previous failed')));
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recordLogs();
     try {
       startWidgetCommands({ playPrevious: failingPrevious });
 
@@ -411,13 +412,12 @@ describe('startWidgetCommands probe', () => {
       expect(unhandled.reasons).toEqual([]);
     } finally {
       unhandled.stop();
-      warn.mockRestore();
     }
   });
 
   it('keeps handling later commands after the player rejects a skip', async () => {
     const unhandled = collectUnhandledRejections();
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recordLogs();
     try {
       startWidgetCommands({ playPrevious });
       player.failNext('skipToNext');
@@ -431,7 +431,6 @@ describe('startWidgetCommands probe', () => {
       expect(unhandled.reasons).toEqual([]);
     } finally {
       unhandled.stop();
-      warn.mockRestore();
     }
   });
 
@@ -475,16 +474,12 @@ describe('startWidgetCommands probe', () => {
   });
 
   it('drops a command when auth cannot be resolved because the session lookup fails', async () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    try {
-      const boot = bootHeadless(() => Promise.reject(new Error('offline')), ['next']);
-      await settleMany();
+    recordLogs();
+    const boot = bootHeadless(() => Promise.reject(new Error('offline')), ['next']);
+    await settleMany();
 
-      expect(boot.calls('skipToNext')).toHaveLength(0);
-      expect(boot.reload).not.toHaveBeenCalled();
-    } finally {
-      warn.mockRestore();
-    }
+    expect(boot.calls('skipToNext')).toHaveLength(0);
+    expect(boot.reload).not.toHaveBeenCalled();
   });
 
   it('drops a waiting command when sign-out lands while auth is still resolving', async () => {

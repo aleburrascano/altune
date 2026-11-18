@@ -1,0 +1,16 @@
+{
+  "removed": [
+    "T2 src/features/player/__tests__/createNativePlaybackActions.test.ts patches with jest.spyOn",
+    "T2 src/features/player/__tests__/loadNativeTrack.test.ts patches with jest.spyOn",
+    "T2 src/features/player/__tests__/nativeTrackSwap.test.ts patches with jest.spyOn",
+    "T2 src/features/player/__tests__/playbackHealth.test.ts patches with jest.spyOn",
+    "T2 src/features/player/__tests__/playbackLogInvariants.test.ts patches with jest.spyOn",
+    "T2 src/features/player/__tests__/queueStateWire.test.ts patches with jest.spyOn",
+    "T2 src/features/player/__tests__/usePlaybackErrorStore.test.ts patches with jest.spyOn",
+    "T2 src/features/player/adapters/native/__tests__/widgetSnapshot.test.ts patches with jest.spyOn",
+    "T2 src/features/player/view/native/__tests__/ExpoGoPlaybackProvider.test.tsx patches with jest.spyOn",
+    "T2 src/features/player/view/web/__tests__/WebPlaybackProvider.test.tsx patches with jest.spyOn"
+  ],
+  "added": [],
+  "clones": 0
+}

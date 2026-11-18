@@ -1,5 +1,6 @@
 import { ApiError, NetworkError } from '@shared/failure';
 import type { PlaybackErrorKind } from '@shared/playback';
+import { warn } from '@shared/log';
 
 function httpStatusKind(status: number): PlaybackErrorKind {
   if (status === 401 || status === 403) return 'auth';
@@ -89,5 +90,5 @@ type PlaybackLogValue = string | number | boolean | null | undefined | readonly 
 type PlaybackLogContext = Readonly<Record<string, PlaybackLogValue>>;
 
 export function warnPlayback(message: string, context: PlaybackLogContext, err: unknown): void {
-  console.warn(`[playback] ${message}`, { ...context, error: redactedPlaybackFailure(err) });
+  warn(`[playback] ${message}`, { ...context, error: redactedPlaybackFailure(err) });
 }

@@ -26,6 +26,7 @@ import {
   createMemoryPlaybackPort,
   type MemoryPlaybackSeed,
 } from '@features/player';
+import { recordLogs } from '@shared/log';
 type AppStateChangeHandler = (state: string) => void;
 
 jest.mock('react-native/Libraries/AppState/AppState', () => {
@@ -102,7 +103,7 @@ beforeEach(async () => {
   __http.reply(HEALTH_ROUTE, { status: HTTP_ACCEPTED });
   installMemoryPort({ audioUrls: cdnAudioUrls(['t0', 't1', 't2', 't3']) });
   player.getQueue.mockResolvedValue([]);
-  jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  recordLogs();
 });
 
 afterEach(() => {

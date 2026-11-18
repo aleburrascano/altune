@@ -20,6 +20,7 @@ import {
   type QueueRestoreStage,
 } from '@features/player/domain/playbackHealth';
 import { warnPlayback } from '@features/player/domain/playbackError';
+import { warn } from '@shared/log';
 
 function userTookOver(owned: number): boolean {
   return useQueueStore.getState().generation !== owned;
@@ -40,7 +41,7 @@ function warnOnSavedTracksMissingFromLibrary(
   const savedIds = new Set([...saved.natural_order, ...saved.track_ids]);
   const missing = [...savedIds].filter((id) => !trackMap.has(id));
   if (!missing.length) return;
-  console.warn('[playback] saved queue tracks missing from the library read; restoring without', {
+  warn('[playback] saved queue tracks missing from the library read; restoring without', {
     missing: missing.length,
     saved: savedIds.size,
   });
@@ -80,7 +81,7 @@ function clearUnbackedPlaceholder(
   if (placeholderGeneration == null) return;
   if (useQueueStore.getState().generation !== placeholderGeneration) return;
   useQueueStore.getState().clearQueue();
-  console.warn('[playback] cleared the unbacked resume placeholder', { stage });
+  warn('[playback] cleared the unbacked resume placeholder', { stage });
 }
 
 function reportUnbackedRebuild(rebuiltGeneration: number | null, err: unknown): void {
@@ -108,7 +109,7 @@ function startRun(): RestoreRun {
 async function readSavedQueue(owned: number): Promise<QueueStateResponse | null> {
   const parsed = parseQueueState(await playbackPort().getQueueState());
   if (!parsed.ok) {
-    console.warn(`[playback] rejected a malformed saved queue state: ${parsed.error.message}`);
+    warn(`[playback] rejected a malformed saved queue state: ${parsed.error.message}`);
     recordQueueStateRejected();
     return null;
   }
@@ -127,7 +128,7 @@ function showPlaceholder(saved: QueueStateResponse, run: RestoreRun, mark: MarkP
 
 function capLosesSavedTracks(saved: QueueStateResponse, home: Home, truncated: boolean): boolean {
   if (!truncated || !savedTracksMissingFrom(saved, home)) return false;
-  console.warn('[playback] library read hit its cap and lacks saved tracks; not restoring');
+  warn('[playback] library read hit its cap and lacks saved tracks; not restoring');
   return true;
 }
 

@@ -16,6 +16,7 @@ import type {
 } from '@shared/apiClient';
 import type { AcquisitionStatus } from '@shared/catalog';
 import type { QueueSource, RepeatMode } from '@shared/playback';
+import { warn } from '@shared/log';
 
 const SOURCE_KINDS = ['library', 'playlist', 'search'] as const;
 
@@ -40,7 +41,7 @@ export function fromWireSource(source: QueueSourceWire | null | undefined): Queu
   }
   if (source.kind === 'search') return { kind: 'search', query: source.query ?? '' };
   if (source.kind === 'library') return { kind: 'library' };
-  console.warn('[playback] ignored a queue source with an unrecognized kind');
+  warn('[playback] ignored a queue source with an unrecognized kind');
   return null;
 }
 
@@ -79,7 +80,7 @@ function parseSource(value: unknown, at: string): QueueSourceWire | null {
   const r = asRecord(value, at);
   const kind = asSourceKind(r.kind);
   if (!kind) {
-    console.warn(`[playback] dropped ${at}: an unrecognized kind`);
+    warn(`[playback] dropped ${at}: an unrecognized kind`);
     return null;
   }
   const playlistId = optionalString(r.playlist_id, `${at}.playlist_id`);

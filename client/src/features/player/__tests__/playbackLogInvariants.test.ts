@@ -17,6 +17,7 @@ import {
   createMemoryPlaybackPort,
 } from '@features/player';
 import { signInTestUser } from '@testing/signInTestUser';
+import { recordLogs, type RecordedLogs } from '@shared/log';
 const { __http } = require('@testing/doubles/fetch.js');
 const HEALTH_ROUTE = 'POST /v1/discovery/events';
 const HTTP_ACCEPTED = 202;
@@ -25,7 +26,7 @@ const leaky = () =>
   new Error(
     'GET https://cdn.example/a.mp3?X-Amz-Signature=deadbeef failed, Authorization: Bearer abc.def.ghi',
   );
-let warn: jest.SpyInstance;
+let logs: RecordedLogs;
 let restorePort: (() => void) | null = null;
 
 function useFailingPresign(error: Error): void {
@@ -38,9 +39,11 @@ function useFailingPresign(error: Error): void {
 
 const REDACTION_MARKER_PATTERN = /\[redacted/;
 const LEAKED_SECRET_PATTERN = /deadbeef|X-Amz|abc\.def|cdn\.example/;
+const SIGNATURE_OR_TOKEN_PATTERN = /deadbeef|abc\.def/;
+const WARNING_CALL_PATTERN = /\bwarn\(([\s\S]*?)\);/g;
 
 function expectLoggedClean(): void {
-  const logged = inspect(warn.mock.calls, { depth: 6 });
+  const logged = inspect(logs.warnings, { depth: 6 });
   expect(logged).toMatch(REDACTION_MARKER_PATTERN);
   expect(logged).not.toMatch(LEAKED_SECRET_PATTERN);
 }
@@ -48,12 +51,11 @@ function expectLoggedClean(): void {
 beforeEach(async () => {
   await signInTestUser();
   __http.reply(HEALTH_ROUTE, { status: HTTP_ACCEPTED });
-  warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  logs = recordLogs();
   _resetPlaybackHealthForTest();
 });
 
 afterEach(() => {
-  warn.mockRestore();
   restorePort?.();
   restorePort = null;
 });
@@ -85,10 +87,16 @@ describe('playback logs redact rejections', () => {
 describe('warnPlayback', () => {
   it('prefixes the message and puts the redacted failure under error beside the context', () => {
     warnPlayback('demo failed', { stage: 'x' }, leaky());
-    expect(warn).toHaveBeenCalledWith('[playback] demo failed', {
-      stage: 'x',
-      error: { kind: expect.any(String), message: expect.not.stringMatching(/deadbeef|abc\.def/) },
-    });
+    expect(logs.warnings).toContainEqual([
+      '[playback] demo failed',
+      {
+        stage: 'x',
+        error: {
+          kind: expect.any(String),
+          message: expect.not.stringMatching(SIGNATURE_OR_TOKEN_PATTERN),
+        },
+      },
+    ]);
     expectLoggedClean();
   });
 });
@@ -101,11 +109,11 @@ describe('source guard', () => {
       .map((f) => join(dir, f)),
   );
 
-  it('never passes a raw caught error to console.warn', () => {
+  it('never passes a raw caught error to a warning', () => {
     const offenders: string[] = [];
     for (const file of files) {
       const src = readFileSync(file, 'utf8');
-      for (const m of src.matchAll(/console\.warn\(([\s\S]*?)\);/g)) {
+      for (const m of src.matchAll(WARNING_CALL_PATTERN)) {
         if (/error:\s*(err|e|error)\b|,\s*(err|e|error)\s*,?\s*$/.test(m[1]!))
           offenders.push(`${file}: ${m[0].slice(0, 80)}`);
       }

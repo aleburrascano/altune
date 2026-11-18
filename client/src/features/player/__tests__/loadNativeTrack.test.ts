@@ -33,6 +33,7 @@ import {
   httpPlaybackPort,
 } from '@features/player';
 import { signInTestUser } from '@testing/signInTestUser';
+import { recordLogs, type RecordedLogs } from '@shared/log';
 
 provideOfflinePort(apiClientOfflinePort);
 const NATIVE_QUEUE_OP_TIMEOUT_MS = 15_000;
@@ -255,7 +256,7 @@ describe('presign failure and pinned audio', () => {
   }
 
   beforeEach(() => {
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recordLogs();
     usePinnedStore.setState({
       entries: {
         t1: { trackId: asTrackId('t1'), status: 'ready', uri: PINNED_URI, version: 'v1' },
@@ -605,14 +606,14 @@ describe('the presign window', () => {
 describe('presign failure trace', () => {
   const player = TrackPlayer as unknown as { getQueue: jest.Mock; add: jest.Mock; load: jest.Mock };
 
-  let warn: jest.SpyInstance;
+  let logged: RecordedLogs;
 
   beforeEach(() => {
     forgetAllSwaps();
     useQueueStore.getState().clearQueue();
     installMemoryPort({ audioUrls: cdnAudioUrls(['t0', 't1']) });
     player.getQueue.mockResolvedValue([]);
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    logged = recordLogs();
   });
 
   afterEach(() => {
@@ -624,7 +625,7 @@ describe('presign failure trace', () => {
       'https://audio.altune.example/tracks/t1.m4a?X-Amz-Signature=deadbeefcafe&token=s3cr3t-token';
 
     function everythingLogged(): string {
-      return JSON.stringify(warn.mock.calls);
+      return logged.text();
     }
 
     it('redacts a signed URL a presign rejection carries, keeping its classification', async () => {
@@ -637,10 +638,13 @@ describe('presign failure trace', () => {
 
       await loadNativeQueue(tracks, 0, { autoplay: false });
 
-      expect(warn).toHaveBeenCalledWith('[playback] presign failed', {
-        trackIds: ['t0', 't1'],
-        error: { kind: 'auth', message: 'GET [redacted url] denied' },
-      });
+      expect(logged.warnings).toContainEqual([
+        '[playback] presign failed',
+        {
+          trackIds: ['t0', 't1'],
+          error: { kind: 'auth', message: 'GET [redacted url] denied' },
+        },
+      ]);
       expect(everythingLogged()).not.toContain('s3cr3t-token');
     });
   });
@@ -654,10 +658,13 @@ describe('presign failure trace', () => {
 
       await loadNativeQueue(tracks, 0, { autoplay: false });
 
-      expect(warn).toHaveBeenCalledWith('[playback] presign failed', {
-        trackIds: ['t0', 't1'],
-        error: { kind: 'unknown', message: 'presign 503' },
-      });
+      expect(logged.warnings).toContainEqual([
+        '[playback] presign failed',
+        {
+          trackIds: ['t0', 't1'],
+          error: { kind: 'unknown', message: 'presign 503' },
+        },
+      ]);
       expect(player.add).toHaveBeenCalledTimes(1);
       expect(player.add).toHaveBeenCalledWith([
         expect.objectContaining({ id: trackKey(tracks[0]!) }),
@@ -1296,7 +1303,7 @@ describe('a failed presign leaves the presign window unmarked', () => {
   }
 
   beforeEach(() => {
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recordLogs();
     useQueueStore.getState().loadQueue(tracks, 0, null);
   });
 

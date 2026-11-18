@@ -27,6 +27,7 @@ import {
 } from '@features/player';
 import * as audioCache from '@features/player/adapters/native/audioCache';
 import { signInTestUser } from '@testing/signInTestUser';
+import { recordLogs, type RecordedLogs } from '@shared/log';
 
 const PREFETCH_STALL_TIMEOUT_MS = 15_000;
 
@@ -463,7 +464,7 @@ describe('cache file construction', () => {
       forgetAllSwaps();
       useQueueStore.getState().clearQueue();
       installMemoryPort();
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const logged = recordLogs();
       jest.spyOn(audioCache, 'findCached').mockReturnValue(null);
       jest.spyOn(audioCache, 'cacheDir').mockImplementation(() => {
         throw new Error('no cache dir');
@@ -474,10 +475,10 @@ describe('cache file construction', () => {
 
       await prefetchNext(0);
 
-      expect(warn).toHaveBeenCalledWith(
+      expect(logged.warnings).toContainEqual([
         '[playback] prefetch failed',
         expect.objectContaining({ stage: 'download', trackId: 't1' }),
-      );
+      ]);
       jest.restoreAllMocks();
     });
   });
@@ -496,14 +497,14 @@ describe('failure trace', () => {
     __player: { failNext: (method: string, error: Error) => void };
   };
 
-  let warn: jest.SpyInstance;
+  let logged: RecordedLogs;
 
   beforeEach(() => {
     forgetAllSwaps();
     useQueueStore.getState().clearQueue();
     installMemoryPort();
     player.getQueue.mockResolvedValue([]);
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    logged = recordLogs();
   });
 
   afterEach(() => {
@@ -520,11 +521,14 @@ describe('failure trace', () => {
 
       await expect(prefetchNext(0)).resolves.toBeUndefined();
 
-      expect(warn).toHaveBeenCalledWith('[playback] prefetch failed', {
-        stage: 'resolve',
-        trackId: 't1',
-        error: { kind: 'unknown', message: 'network down' },
-      });
+      expect(logged.warnings).toContainEqual([
+        '[playback] prefetch failed',
+        {
+          stage: 'resolve',
+          trackId: 't1',
+          error: { kind: 'unknown', message: 'network down' },
+        },
+      ]);
     });
 
     it('logs a download that fails on its own (e.g. disk full)', async () => {
@@ -536,11 +540,14 @@ describe('failure trace', () => {
 
       await prefetchNext(0);
 
-      expect(warn).toHaveBeenCalledWith('[playback] prefetch failed', {
-        stage: 'download',
-        trackId: 't1',
-        error: { kind: 'unknown', message: 'ENOSPC' },
-      });
+      expect(logged.warnings).toContainEqual([
+        '[playback] prefetch failed',
+        {
+          stage: 'download',
+          trackId: 't1',
+          error: { kind: 'unknown', message: 'ENOSPC' },
+        },
+      ]);
     });
 
     it('logs a download abandoned for growing past the byte cap, with the cause', async () => {
@@ -554,11 +561,14 @@ describe('failure trace', () => {
 
       await prefetchNext(0);
 
-      expect(warn).toHaveBeenCalledWith('[playback] prefetch failed', {
-        stage: 'download',
-        trackId: 't1',
-        error: { kind: 'unknown', message: 'prefetch download aborted: oversized' },
-      });
+      expect(logged.warnings).toContainEqual([
+        '[playback] prefetch failed',
+        {
+          stage: 'download',
+          trackId: 't1',
+          error: { kind: 'unknown', message: 'prefetch download aborted: oversized' },
+        },
+      ]);
     });
 
     it('logs the swap stage when installing the downloaded file throws', async () => {
@@ -572,11 +582,14 @@ describe('failure trace', () => {
 
       await prefetchNext(0);
 
-      expect(warn).toHaveBeenCalledWith('[playback] prefetch failed', {
-        stage: 'swap',
-        trackId: 't1',
-        error: { kind: 'unknown', message: 'cache dir not readable' },
-      });
+      expect(logged.warnings).toContainEqual([
+        '[playback] prefetch failed',
+        {
+          stage: 'swap',
+          trackId: 't1',
+          error: { kind: 'unknown', message: 'cache dir not readable' },
+        },
+      ]);
     });
 
     it('logs the swap stage when removing the upcoming native slot fails', async () => {
@@ -588,11 +601,14 @@ describe('failure trace', () => {
 
       await prefetchNext(0);
 
-      expect(warn).toHaveBeenCalledWith('[playback] prefetch failed', {
-        stage: 'swap',
-        trackId: 't1',
-        error: { kind: 'unknown', message: 'native remove failed' },
-      });
+      expect(logged.warnings).toContainEqual([
+        '[playback] prefetch failed',
+        {
+          stage: 'swap',
+          trackId: 't1',
+          error: { kind: 'unknown', message: 'native remove failed' },
+        },
+      ]);
     });
 
     it('stays quiet when a download is superseded by a skip', async () => {
@@ -607,7 +623,7 @@ describe('failure trace', () => {
       await prefetchNext(1);
       await first;
 
-      expect(warn).not.toHaveBeenCalledWith('[playback] prefetch failed', expect.anything());
+      expect(logged.warnings).not.toContainEqual(['[playback] prefetch failed', expect.anything()]);
     });
 
     it('stays quiet on a successful prefetch', async () => {
@@ -617,7 +633,7 @@ describe('failure trace', () => {
 
       await prefetchNext(0);
 
-      expect(warn).not.toHaveBeenCalled();
+      expect(logged.warnings).toEqual([]);
     });
   });
 
@@ -626,7 +642,7 @@ describe('failure trace', () => {
       'https://audio.altune.example/tracks/t1.m4a?X-Amz-Signature=deadbeefcafe&token=s3cr3t-token';
 
     function everythingLogged(): string {
-      return JSON.stringify(warn.mock.calls);
+      return logged.text();
     }
 
     it('redacts the signed URL a failed download names', async () => {
@@ -639,11 +655,14 @@ describe('failure trace', () => {
 
       await prefetchNext(0);
 
-      expect(warn).toHaveBeenCalledWith('[playback] prefetch failed', {
-        stage: 'download',
-        trackId: 't1',
-        error: { kind: 'unknown', message: 'Unable to open [redacted url] (403)' },
-      });
+      expect(logged.warnings).toContainEqual([
+        '[playback] prefetch failed',
+        {
+          stage: 'download',
+          trackId: 't1',
+          error: { kind: 'unknown', message: 'Unable to open [redacted url] (403)' },
+        },
+      ]);
       expect(everythingLogged()).not.toContain('deadbeefcafe');
     });
 
@@ -657,11 +676,14 @@ describe('failure trace', () => {
 
       await prefetchNext(0);
 
-      expect(warn).toHaveBeenCalledWith('[playback] prefetch failed', {
-        stage: 'download',
-        trackId: 't1',
-        error: { kind: 'unknown', message: 'download of [redacted url] failed' },
-      });
+      expect(logged.warnings).toContainEqual([
+        '[playback] prefetch failed',
+        {
+          stage: 'download',
+          trackId: 't1',
+          error: { kind: 'unknown', message: 'download of [redacted url] failed' },
+        },
+      ]);
       expect(everythingLogged()).not.toContain('deadbeefcafe');
     });
 
@@ -673,11 +695,14 @@ describe('failure trace', () => {
 
       await prefetchNext(0);
 
-      expect(warn).toHaveBeenCalledWith('[playback] prefetch failed', {
-        stage: 'download',
-        trackId: 't1',
-        error: { kind: 'unknown', message: 'non-Error rejection: object' },
-      });
+      expect(logged.warnings).toContainEqual([
+        '[playback] prefetch failed',
+        {
+          stage: 'download',
+          trackId: 't1',
+          error: { kind: 'unknown', message: 'non-Error rejection: object' },
+        },
+      ]);
       expect(everythingLogged()).not.toContain('deadbeefcafe');
     });
   });
@@ -904,13 +929,11 @@ describe('a download left unfinished by a killed app', () => {
     for (let i = 0; i < 20; i++) await Promise.resolve();
   }
 
-  let warn: jest.SpyInstance;
-
   beforeEach(() => {
     forgetAllSwaps();
     useQueueStore.getState().clearQueue();
     installMemoryPort();
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recordLogs();
   });
 
   afterEach(async () => {
@@ -919,7 +942,6 @@ describe('a download left unfinished by a killed app', () => {
     await flushMicrotasks();
     jest.restoreAllMocks();
     for (const name of ['getQueue', 'remove', 'add'] as const) restorePlayerDefault(name);
-    warn.mockRestore();
   });
 
   describe('prefetchNext — download under a temporary name', () => {
@@ -988,7 +1010,7 @@ describe('prefetch health tally', () => {
     useQueueStore.getState().clearQueue();
     __http.reply(HEALTH_ROUTE, { status: HTTP_ACCEPTED });
     installMemoryPort();
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recordLogs();
   });
 
   afterEach(() => {

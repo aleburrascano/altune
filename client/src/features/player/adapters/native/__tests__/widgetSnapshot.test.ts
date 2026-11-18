@@ -6,6 +6,7 @@ import type { PlaybackTrack } from '@shared/playback';
 import { useQueueStore } from '@shared/playback';
 import { notifyIdentityChange, runSignOutCleanups } from '@shared/session';
 import { reloadWidget, writeCoverFromUrl, writeSnapshot } from '@modules/altune-widget';
+import { recordLogs } from '@shared/log';
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 jest.mock('@modules/altune-widget', () => ({
@@ -124,7 +125,7 @@ describe('startWidgetSnapshotPublisher', () => {
   });
 
   it('keeps publishing with a null cover when the cover write is rejected', async () => {
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recordLogs();
     jest.mocked(writeCoverFromUrl).mockRejectedValueOnce(new Error('encode failed'));
 
     useQueueStore.getState().loadQueue([track('1', 'https://art/1.jpg')], 0, { kind: 'library' });
@@ -335,7 +336,7 @@ describe('startWidgetSnapshotPublisher, from a caller', () => {
   });
 
   it('publishes the next track’s cover after a rejected cover write', async () => {
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recordLogs();
     jest.mocked(writeCoverFromUrl).mockRejectedValueOnce(new Error('encode failed'));
 
     useQueueStore.getState().loadQueue([track('1', ART_1), track('2', ART_2)], 0, null);

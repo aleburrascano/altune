@@ -27,6 +27,7 @@ import {
   installPlaybackPort,
   httpPlaybackPort,
 } from '@features/player';
+import { recordLogs, type RecordedLogs } from '@shared/log';
 beforeAll(() => {
   installPlaybackPort(httpPlaybackPort);
 });
@@ -158,7 +159,7 @@ describe('restoring the saved queue', () => {
     await settleRestore();
   }
 
-  let warn: jest.SpyInstance;
+  let logged: RecordedLogs;
 
   beforeEach(() => {
     useQueueStore.getState().clearQueue();
@@ -168,7 +169,7 @@ describe('restoring the saved queue', () => {
       items: ['x', 'y'].map((id) => trackResponse(id)),
       truncated: false,
     });
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    logged = recordLogs();
   });
 
   afterEach(() => {
@@ -176,7 +177,7 @@ describe('restoring the saved queue', () => {
   });
 
   function warnedMalformed(): boolean {
-    return warn.mock.calls.some(([message]) =>
+    return logged.warnings.some(([message]) =>
       String(message).includes('rejected a malformed saved queue state'),
     );
   }
@@ -189,7 +190,7 @@ describe('restoring the saved queue', () => {
       expect(s.tracks).toHaveLength(2);
       expect(s.currentIndex).toBe(1);
       expect(s.source).toEqual({ kind: 'playlist', playlistId: 'p1', name: 'Chill' });
-      expect(warn).not.toHaveBeenCalled();
+      expect(logged.warnings).toEqual([]);
     });
 
     it('restores the saved queue with no source when source.kind is unrecognized', async () => {
@@ -229,13 +230,13 @@ describe('restoring the saved queue', () => {
       const s = useQueueStore.getState();
       expect(s.tracks).toHaveLength(2);
       expect(s.currentIndex).toBe(1);
-      expect(warn).not.toHaveBeenCalled();
+      expect(logged.warnings).toEqual([]);
     });
   });
 
   describe('useQueueResume restore — a failure names its stage and carries the error', () => {
     function restoreFailureFields(): unknown {
-      const call = warn.mock.calls.find(
+      const call = logged.warnings.find(
         ([message]) => message === '[playback] failed to restore the saved queue',
       );
       return call?.[1];
@@ -294,7 +295,7 @@ describe('restoring the saved queue', () => {
     }
 
     function clearedPlaceholderFields(): unknown {
-      const call = warn.mock.calls.find(
+      const call = logged.warnings.find(
         ([message]) => message === '[playback] cleared the unbacked resume placeholder',
       );
       return call?.[1];
@@ -364,7 +365,7 @@ describe('restoring the saved queue', () => {
     }
 
     function missingFromLibraryFields(): unknown {
-      const call = warn.mock.calls.find(
+      const call = logged.warnings.find(
         ([message]) =>
           message ===
           '[playback] saved queue tracks missing from the library read; restoring without',
@@ -382,7 +383,7 @@ describe('restoring the saved queue', () => {
       const s = useQueueStore.getState();
       expect(s.tracks).toHaveLength(LIBRARY_SIZE);
       expect(s.currentTrack()?.title).toBe(`Title t${LIBRARY_SIZE - 1}`);
-      expect(warn).not.toHaveBeenCalled();
+      expect(logged.warnings).toEqual([]);
     });
 
     it('warns with the count of saved tracks the library read did not return', async () => {
@@ -453,7 +454,7 @@ describe('a restore whose native load fails', () => {
     (getAllTracks as jest.Mock)
       .mockReset()
       .mockResolvedValue({ items: ['x', 'y'].map(trackResponse), truncated: false });
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recordLogs();
   });
 
   afterEach(() => {
@@ -848,21 +849,24 @@ describe('saving the queue state', () => {
     it('logs the rejection the save PUT threw', async () => {
       renderHook(() => useQueueResume());
       await flush();
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const logged = recordLogs();
       const networkDown = new Error('network down');
       mockedSave.mockRejectedValueOnce(networkDown);
 
       await backgroundApp();
 
-      expect(warn).toHaveBeenCalledWith('[playback] failed to save queue state', {
-        error: { kind: 'unknown', message: 'network down' },
-      });
+      expect(logged.warnings).toContainEqual([
+        '[playback] failed to save queue state',
+        {
+          error: { kind: 'unknown', message: 'network down' },
+        },
+      ]);
     });
 
     it('saves again after a failed save instead of wedging the guard', async () => {
       renderHook(() => useQueueResume());
       await flush();
-      jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      recordLogs();
       mockedSave.mockRejectedValueOnce(new Error('network down'));
 
       await backgroundApp();
@@ -1101,6 +1105,7 @@ describe('restoring a saved queue when the library read hit its cap', () => {
     source: { kind: 'playlist', playlist_id: 'p1', name: 'Chill' },
     natural_order: ['x', 'past-cap'],
   };
+  let capLogs: RecordedLogs;
 
   beforeEach(() => {
     useQueueStore.getState().clearQueue();
@@ -1108,7 +1113,7 @@ describe('restoring a saved queue when the library read hit its cap', () => {
     (getAllTracks as jest.Mock)
       .mockReset()
       .mockResolvedValue({ items: [{ id: 'x' }] as TrackResponse[], truncated: true });
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    capLogs = recordLogs();
   });
 
   afterEach(() => {
@@ -1122,7 +1127,7 @@ describe('restoring a saved queue when the library read hit its cap', () => {
     });
 
     expect(useQueueStore.getState().tracks).toHaveLength(0);
-    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('hit its cap'));
+    expect(capLogs.warnings).toContainEqual([expect.stringContaining('hit its cap')]);
   });
 });
 
@@ -1164,7 +1169,7 @@ describe('queue save and restore failures move playback_health counters', () => 
     (getAllTracks as jest.Mock)
       .mockReset()
       .mockResolvedValue({ items: ['x', 'y'].map(readyTrack), truncated: false });
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recordLogs();
   });
 
   afterEach(() => {
@@ -1275,7 +1280,7 @@ describe('a queue save the server rejects as a client fault', () => {
       appStateListeners.push(listener as (state: AppStateStatus) => void);
       return { remove: jest.fn() };
     });
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recordLogs();
     (getQueueState as jest.Mock).mockReset().mockResolvedValue({
       track_ids: [],
       current_index: 0,
@@ -1412,7 +1417,7 @@ describe('resuming through a memory playback port', () => {
 
   beforeEach(() => {
     useQueueStore.getState().clearQueue();
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recordLogs();
     restoredIds = () => orderedQueueTracks(useQueueStore.getState()).map((t) => trackKey(t));
   });
 

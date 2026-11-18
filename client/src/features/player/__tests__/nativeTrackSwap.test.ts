@@ -26,6 +26,7 @@ import {
 } from '@features/player';
 import '@features/player/adapters/native/loadNativeTrack';
 import { signInTestUser } from '@testing/signInTestUser';
+import { recordLogs, type RecordedLogs } from '@shared/log';
 
 const NATIVE_QUEUE_OP_TIMEOUT_MS = 15_000;
 
@@ -152,17 +153,16 @@ describe('swapping an upcoming slot to a cached file', () => {
     return queue;
   }
 
-  let warn: jest.SpyInstance;
+  let logged: RecordedLogs;
 
   beforeEach(() => {
     forgetAllSwaps();
     usePlaybackErrorStore.getState().clear();
     useQueueStore.getState().clearQueue();
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    logged = recordLogs();
   });
 
   afterEach(() => {
-    warn.mockRestore();
     for (const name of ['getQueue', 'remove', 'add'] as const) restorePlayerDefault(name);
   });
 
@@ -247,10 +247,10 @@ describe('swapping an upcoming slot to a cached file', () => {
 
       await expect(swapUpcomingToLocal(track, 'file:///cache/p.mp3')).resolves.toBe('streaming');
 
-      expect(warn).toHaveBeenCalledWith(
+      expect(logged.warnings).toContainEqual([
         '[playback] swap local add failed',
         expect.objectContaining({ trackId: trackKey(track) }),
-      );
+      ]);
     });
 
     it('reports failed when the streaming add fails too', async () => {
@@ -291,10 +291,10 @@ describe('swapping an upcoming slot to a cached file', () => {
       await swapUpcomingToLocal(track, 'file:///cache/p.mp3');
 
       expect(nativeQueue.map((entry) => entry.id)).toEqual([trackKey(libraryTrack())]);
-      expect(warn).toHaveBeenCalledWith(
+      expect(logged.warnings).toContainEqual([
         '[playback] swap slot restore failed',
         expect.objectContaining({ trackId: trackKey(track) }),
-      );
+      ]);
     });
   });
 });
@@ -302,14 +302,14 @@ describe('swapping an upcoming slot to a cached file', () => {
 describe('presign failure trace', () => {
   const player = TrackPlayer as unknown as { getQueue: jest.Mock; add: jest.Mock; load: jest.Mock };
 
-  let warn: jest.SpyInstance;
+  let logged: RecordedLogs;
 
   beforeEach(() => {
     forgetAllSwaps();
     useQueueStore.getState().clearQueue();
     installMemoryPort({ audioUrls: cdnAudioUrls(['t1']) });
     player.getQueue.mockResolvedValue([]);
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    logged = recordLogs();
   });
 
   afterEach(() => {
@@ -329,10 +329,13 @@ describe('presign failure trace', () => {
 
       await repairActiveToStreaming(libraryTrackWithId('t1'));
 
-      expect(warn).toHaveBeenCalledWith('[playback] presign failed', {
-        trackIds: ['t1'],
-        error: { kind: 'unknown', message: 'presign 503' },
-      });
+      expect(logged.warnings).toContainEqual([
+        '[playback] presign failed',
+        {
+          trackIds: ['t1'],
+          error: { kind: 'unknown', message: 'presign 503' },
+        },
+      ]);
       expect(player.load.mock.calls[0][0]).toMatchObject({
         headers: { Authorization: 'Bearer tok' },
       });
@@ -376,16 +379,10 @@ describe('sign-out racing a streaming repair', () => {
 });
 
 describe('swap-path presign health tally', () => {
-  let warn: jest.SpyInstance;
-
   beforeEach(() => {
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recordLogs();
     _resetPlaybackHealthForTest();
     __http.reply(HEALTH_ROUTE, { status: HTTP_ACCEPTED });
-  });
-
-  afterEach(() => {
-    warn.mockRestore();
   });
 
   it('counts a swap-path presign failure', async () => {

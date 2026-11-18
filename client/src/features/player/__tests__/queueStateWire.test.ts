@@ -3,6 +3,7 @@ import { asPlaylistId } from '@shared/catalog';
 import { canPlay } from '@shared/playback';
 
 import { asRepeatMode, fromWireSource, parseQueueState, toWireSource } from '@features/player';
+import { recordLogs } from '@shared/log';
 
 describe('toWireSource — store source to snake_case wire shape', () => {
   it('maps null to null', () => {
@@ -64,12 +65,11 @@ describe('asRepeatMode — narrowing an untrusted repeat mode', () => {
 
 describe('fromWireSource — unrecognized kind', () => {
   it('logs and drops an unrecognized kind instead of reporting the library', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const logged = recordLogs();
     const wire = { kind: 'album' } as unknown as Parameters<typeof fromWireSource>[0];
 
     expect(fromWireSource(wire)).toBeNull();
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('unrecognized kind'));
-    warn.mockRestore();
+    expect(logged.warnings).toContainEqual([expect.stringContaining('unrecognized kind')]);
   });
 });
 
@@ -124,13 +124,12 @@ describe('parseQueueState — the queue-state parse boundary', () => {
     ['a non-string kind', { kind: 5 }],
     ['a source carrying no kind', { playlist_id: 'p1' }],
   ])('keeps the saved queue and drops just the source for %s', (_label, source) => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const logged = recordLogs();
 
     const result = parseQueueState({ ...wire(), source });
 
     expect(result).toEqual({ ok: true, state: { ...wire(), source: null } });
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('unrecognized kind'));
-    warn.mockRestore();
+    expect(logged.warnings).toContainEqual([expect.stringContaining('unrecognized kind')]);
   });
 
   it.each<[string, unknown, string]>([
