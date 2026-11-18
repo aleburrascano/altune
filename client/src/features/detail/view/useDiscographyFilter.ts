@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { DiscoveryResult } from '@shared/catalog';
-import { albumExtras } from '@features/detail/domain/trackExtras';
+import { albumExtras } from '@features/detail/core/trackExtras';
 
 const SECTION_CAP = 10;
 

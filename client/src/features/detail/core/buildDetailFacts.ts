@@ -1,9 +1,9 @@
 import type { DiscoveryResult } from '@shared/catalog';
 import { formatDuration } from '@shared/ui';
 
-import { trackExtras } from '@features/detail/domain/trackExtras';
+import { trackExtras } from '@features/detail/core/trackExtras';
 import type { DetailFact } from '@features/detail/view/DetailFacts';
-import { formatRuntime } from '@features/detail/ui/formatters';
+import { formatRuntime } from '@features/detail/core/formatters';
 import type { TrackDetailActions } from '@features/detail/view/useTrackDetailActions';
 
 export type ArtistFactsInput = {

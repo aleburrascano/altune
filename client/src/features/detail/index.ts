@@ -13,7 +13,7 @@ export {
   playButtonState,
   splitOwned,
   toPlaybackQueue,
-} from '@features/detail/domain/ownedTrack';
+} from '@features/detail/core/ownedTrack';
 export { AlbumTrackList } from '@features/detail/view/AlbumTrackList';
 export { ArtistDetailBody } from '@features/detail/view/ArtistDetailBody';
 export { ArtistUnreleased } from '@features/detail/view/unreleased/ArtistUnreleased';
@@ -21,14 +21,14 @@ export { CollapsibleSectionHeader } from '@features/detail/view/CollapsibleSecti
 export {
   contentFailure,
   failFastOnSettledContentFailure,
-} from '@features/detail/domain/contentStatus';
-export { buildAlbumFacts } from '@features/detail/ui/buildDetailFacts';
+} from '@features/detail/core/contentStatus';
+export { buildAlbumFacts } from '@features/detail/core/buildDetailFacts';
 export {
   _resetDetailHealthForTest,
   fetchTallyingOutcome,
   flushDetailHealth,
   recordContentFetchOutcome,
-} from '@features/detail/domain/detailHealth';
+} from '@features/detail/core/detailHealth';
 export { useAlbumTracks } from '@features/detail/core/useAlbumTracks';
 export { useDetailEnrichments } from '@features/detail/hooks/useDetailEnrichments';
 export { useArtistContent } from '@features/detail/core/useArtistContent';
@@ -46,7 +46,7 @@ export {
   compactCount,
   formatRuntime,
   trackSubtitleWithFeaturing,
-} from '@features/detail/ui/formatters';
+} from '@features/detail/core/formatters';
 export { LastFmEnrichmentSection } from '@features/detail/view/LastFmEnrichmentSection';
 export {
   detailRouteFor,
@@ -58,16 +58,16 @@ export {
   useOpenDetail,
   useOpenFeaturing,
 } from '@features/detail/hooks/useDetailNavigation';
-export { normalizeForCompare } from '@features/detail/domain/normalizeForCompare';
+export { normalizeForCompare } from '@features/detail/core/normalizeForCompare';
 export {
   albumExtras,
   extractFeaturedFromText,
   resolveFeatured,
   trackExtras,
-} from '@features/detail/domain/trackExtras';
-export type { OwnedTrack } from '@features/detail/domain/ownedTrack';
-export { isResultPlaying, resolvePlaySource } from '@features/detail/domain/playSource';
-export { resolveEntityQuery } from '@features/detail/domain/resolveEntityQuery';
+} from '@features/detail/core/trackExtras';
+export type { OwnedTrack } from '@features/detail/core/ownedTrack';
+export { isResultPlaying, resolvePlaySource } from '@features/detail/core/playSource';
+export { resolveEntityQuery } from '@features/detail/core/resolveEntityQuery';
 export {
   SAVE_ALL_CONCURRENCY,
   isOptimisticTrackId,
@@ -81,11 +81,11 @@ export {
   saveDisplayState,
   saveIdempotencyKey,
   toCreateTrackRequest,
-} from '@features/detail/domain/saveTrack';
-export type { SaveControlState, SaveState } from '@features/detail/domain/saveTrack';
+} from '@features/detail/core/saveTrack';
+export type { SaveControlState, SaveState } from '@features/detail/core/saveTrack';
 export { SectionError } from '@features/detail/view/Section';
-export { isAcquirable, unreleasedAsResult } from '@features/detail/domain/unreleasedTrack';
-export { unreleasedView } from '@features/detail/domain/unreleasedView';
+export { isAcquirable, unreleasedAsResult } from '@features/detail/core/unreleasedTrack';
+export { unreleasedView } from '@features/detail/core/unreleasedView';
 export { useAlbumDetailState } from '@features/detail/view/useAlbumDetailState';
 export type {
   DetailWarning,
@@ -93,23 +93,23 @@ export type {
   MemoryDetailSeed,
 } from '@features/detail/__tests__/memoryDetailPort';
 export { useAlbumSaveAll } from '@features/detail/view/useAlbumSaveAll';
-export { useRelatedTracks } from '@features/detail/hooks/useRelatedTracks';
+export { useRelatedTracks } from '@features/detail/core/useRelatedTracks';
 export { useAlbumDiscovery, useArtistDiscovery } from '@features/detail/view/useEntityDiscovery';
-export type { EnrichmentProvider } from '@features/detail/domain/detailHealth';
+export type { EnrichmentProvider } from '@features/detail/core/detailHealth';
 export { useResolveMissingSources } from '@features/detail/view/useResolveMissingSources';
 export { useDiscographyFilter } from '@features/detail/view/useDiscographyFilter';
 export {
   useLibraryAlbumsForArtist,
   useLibraryTracksForAlbum,
   useLibraryTracksForArtist,
-} from '@features/detail/hooks/useLibraryMatches';
-export { useOwnedPlayback } from '@features/detail/hooks/useOwnedPlayback';
-export type { OwnedPlaybackContext } from '@features/detail/hooks/useOwnedPlayback';
+} from '@features/detail/core/useLibraryMatches';
+export { useOwnedPlayback } from '@features/detail/core/useOwnedPlayback';
+export type { OwnedPlaybackContext } from '@features/detail/core/useOwnedPlayback';
 export { useSaveTrack, useTrackSave } from '@features/detail/view/useSaveTrack';
 export type { SaveTrack } from '@features/detail/view/useSaveTrack';
 export { DetailHandoffProvider } from '@features/detail/view/useDetailHandoff';
 export { useReportWrongAlbum } from '@features/detail/view/useReportWrongAlbum';
-export { useRetryTrack } from '@features/detail/hooks/useRetryTrack';
+export { useRetryTrack } from '@features/detail/core/useRetryTrack';
 export { SaveAllPill, TrackSaveControl, TrackSavePill } from '@features/detail/view/SaveControls';
 export { useResolvedOwnedTrack } from '@features/detail/core/useOwnedTrack';
 export type { TrackIdentity } from '@features/detail/core/useOwnedTrack';

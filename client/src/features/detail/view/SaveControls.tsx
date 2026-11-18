@@ -19,9 +19,9 @@ import {
   saveControlState,
   saveControlText,
   saveDisplayState,
-} from '@features/detail/domain/saveTrack';
+} from '@features/detail/core/saveTrack';
 import { sharedStyles } from '@features/detail/view/detailStyles';
-import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
+import type { OwnedTrack } from '@features/detail/core/ownedTrack';
 import { useResolvedOwnedTrack, type TrackIdentity } from '@features/detail/core/useOwnedTrack';
 
 type SaveGlyphProps = {

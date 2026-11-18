@@ -2,14 +2,14 @@ import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Artwork, Tappable, Text, radius, spacing } from '@shared/ui';
-import { realPhotoUrl } from '@features/detail/domain/artistPhoto';
-import { hasManyVersions } from '@features/detail/domain/unreleasedTrack';
+import { realPhotoUrl } from '@features/detail/core/artistPhoto';
+import { hasManyVersions } from '@features/detail/core/unreleasedTrack';
 import type { UnreleasedTrack } from '@shared/apiClient';
 import type { DiscoveryResult } from '@shared/catalog';
 import type {
   UnreleasedCard as UnreleasedCardModel,
   UnreleasedCardState,
-} from '@features/detail/hooks/useUnreleasedTracks';
+} from '@features/detail/core/useUnreleasedTracks';
 import { RELATED_CARD_WIDTH, sharedStyles } from '@features/detail/view/detailStyles';
 
 type UnreleasedRowProps = { track: UnreleasedTrack };

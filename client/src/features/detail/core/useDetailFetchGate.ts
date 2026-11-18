@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { useLoopEnabled, useGatedCallback } from '@shared/killSwitch';
 
-import { failFastOnSettledContentFailure } from '@features/detail/domain/contentStatus';
+import { failFastOnSettledContentFailure } from '@features/detail/core/contentStatus';
 
 export function useDetailFetchEnabled(): boolean {
   return useLoopEnabled('detailEnrichment');

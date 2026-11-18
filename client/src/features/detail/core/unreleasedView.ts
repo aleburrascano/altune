@@ -1,6 +1,6 @@
 import type { UnreleasedTrack } from '@shared/apiClient';
 
-import { isAcquirable } from '@features/detail/domain/unreleasedTrack';
+import { isAcquirable } from '@features/detail/core/unreleasedTrack';
 
 export type UnreleasedSort = 'popular' | 'best_quality' | 'most_versions' | 'newest';
 export type UnreleasedWhere = 'all' | 'released' | 'unreleased';

@@ -1,23 +1,23 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import type { DiscoveryResult } from '@shared/catalog';
 import { trackToDiscoveryResult } from '@shared/catalog';
-import type { OwnedSplit, OwnedTrack } from '@features/detail/domain/ownedTrack';
-import { type ContentFailure } from '@features/detail/domain/contentStatus';
+import type { OwnedSplit, OwnedTrack } from '@features/detail/core/ownedTrack';
+import { type ContentFailure } from '@features/detail/core/contentStatus';
 
 import { type DetailRoute } from '@features/detail/domain/detailNavigation';
 import { useOpenDetail } from '@features/detail/hooks/useDetailNavigation';
 import { useAlbumDiscovery } from '@features/detail/view/useEntityDiscovery';
 import { useAlbumTracks } from '@features/detail/core/useAlbumTracks';
-import { useLibraryTracksForAlbum } from '@features/detail/hooks/useLibraryMatches';
+import { useLibraryTracksForAlbum } from '@features/detail/core/useLibraryMatches';
 import { useSaveTrack } from '@features/detail/view/useSaveTrack';
 import {
   enrichAlbumTrack,
   useAlbumSaveAll,
   type LastBatch,
 } from '@features/detail/view/useAlbumSaveAll';
-import { useOwnedPlayback } from '@features/detail/hooks/useOwnedPlayback';
-import { trackExtras } from '@features/detail/domain/trackExtras';
-import { normalizeForCompare } from '@features/detail/domain/normalizeForCompare';
+import { useOwnedPlayback } from '@features/detail/core/useOwnedPlayback';
+import { trackExtras } from '@features/detail/core/trackExtras';
+import { normalizeForCompare } from '@features/detail/core/normalizeForCompare';
 
 function _isTrackOwned(title: string, ownedTitles: Set<string>): boolean {
   return ownedTitles.has(normalizeForCompare(title));

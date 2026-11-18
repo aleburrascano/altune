@@ -1,7 +1,7 @@
 import { isAbort } from '@shared/failure';
 import { createHealthTally } from '@shared/telemetry';
 import type { DiscoveryProviderStatus } from '@shared/catalog';
-import { hasDegradedStatus } from '@features/detail/domain/contentStatus';
+import { hasDegradedStatus } from '@features/detail/core/contentStatus';
 
 export type EnrichmentProvider = 'musicbrainz' | 'deezer' | 'lastfm';
 

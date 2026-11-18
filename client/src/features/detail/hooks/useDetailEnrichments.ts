@@ -11,11 +11,11 @@ import { isAbort } from '@shared/failure';
 import {
   recordEnrichmentOutcome,
   type EnrichmentProvider,
-} from '@features/detail/domain/detailHealth';
+} from '@features/detail/core/detailHealth';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
-import { useDetailFetchEnabled } from '@features/detail/hooks/useDetailFetchGate';
-import { trackExtras } from '@features/detail/domain/trackExtras';
+import { useDetailFetchEnabled } from '@features/detail/core/useDetailFetchGate';
+import { trackExtras } from '@features/detail/core/trackExtras';
 
 const ONE_DAY_MS = 86_400_000;
 const ENRICHMENT_STALE_TIME = ONE_DAY_MS;

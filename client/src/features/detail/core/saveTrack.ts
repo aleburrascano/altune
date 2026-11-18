@@ -7,8 +7,8 @@ import {
   asTrackId,
   type TrackId,
 } from '@shared/catalog';
-import { trackExtras, type TrackExtras } from '@features/detail/domain/trackExtras';
-import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
+import { trackExtras, type TrackExtras } from '@features/detail/core/trackExtras';
+import type { OwnedTrack } from '@features/detail/core/ownedTrack';
 
 const MAX_CATALOG_SOURCES = 16;
 

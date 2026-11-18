@@ -4,7 +4,7 @@ import type { ReactElement } from 'react';
 import { readDetailHandoff, type DetailHandoff, tabRootFromSegments } from '@shared/navigation';
 import { featuredArtistsFromExtras } from '@shared/catalog';
 import { useArtistDiscovery } from '@features/detail/view/useEntityDiscovery';
-import { realPhotoUrl } from '@features/detail/domain/artistPhoto';
+import { realPhotoUrl } from '@features/detail/core/artistPhoto';
 import { useDetailEnrichments } from '@features/detail/hooks/useDetailEnrichments';
 import { useResolveMissingSources } from '@features/detail/view/useResolveMissingSources';
 import { useLateralNav } from '@features/detail/hooks/useDetailNavigation';

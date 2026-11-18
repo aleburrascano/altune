@@ -13,12 +13,12 @@ import {
   type UnreleasedSort,
   type UnreleasedWhat,
   type UnreleasedWhere,
-} from '@features/detail/domain/unreleasedView';
+} from '@features/detail/core/unreleasedView';
 import { DetailHandoffProvider } from '@features/detail/view/useDetailHandoff';
 import {
   useUnreleasedTracks,
   type UnreleasedTracksState,
-} from '@features/detail/hooks/useUnreleasedTracks';
+} from '@features/detail/core/useUnreleasedTracks';
 import { DETAIL_GUTTER } from '@features/detail/view/detailStyles';
 import { FilterChips, type ChipGroup } from '@features/detail/view/DiscographySections';
 import { AlbumCardsSkeleton } from '@features/detail/view/DetailSkeleton';

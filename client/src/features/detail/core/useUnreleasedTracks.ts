@@ -12,18 +12,18 @@ import { sourceIdList } from '@shared/catalog';
 import { useQueuePlayback } from '@shared/playback';
 import { detailKeys } from '@shared/query';
 
-import { DETAIL_CONTENT_STALE_MS } from '@features/detail/domain/contentStatus';
+import { DETAIL_CONTENT_STALE_MS } from '@features/detail/core/contentStatus';
 import {
   ownedFromTrackInfo,
   toPlaybackQueue,
   type OwnedTrack,
-} from '@features/detail/domain/ownedTrack';
-import type { SaveState } from '@features/detail/domain/saveTrack';
-import { trackExtras } from '@features/detail/domain/trackExtras';
-import { isAcquirable, unreleasedAsResult } from '@features/detail/domain/unreleasedTrack';
+} from '@features/detail/core/ownedTrack';
+import type { SaveState } from '@features/detail/core/saveTrack';
+import { trackExtras } from '@features/detail/core/trackExtras';
+import { isAcquirable, unreleasedAsResult } from '@features/detail/core/unreleasedTrack';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
-import { useDetailFetchEnabled } from '@features/detail/hooks/useDetailFetchGate';
+import { useDetailFetchEnabled } from '@features/detail/core/useDetailFetchGate';
 import { useResolvedOwnedTrack } from '@features/detail/core/useOwnedTrack';
 import { useTrackSave } from '@features/detail/view/useSaveTrack';
 

@@ -1,12 +1,12 @@
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { DiscoveryResult } from '@shared/catalog';
-import { resolveEntityQuery } from '@features/detail/domain/resolveEntityQuery';
-import { normalizeForCompare } from '@features/detail/domain/normalizeForCompare';
-import { realPhotoUrl } from '@features/detail/domain/artistPhoto';
+import { resolveEntityQuery } from '@features/detail/core/resolveEntityQuery';
+import { normalizeForCompare } from '@features/detail/core/normalizeForCompare';
+import { realPhotoUrl } from '@features/detail/core/artistPhoto';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
-import { useDetailFetchEnabled } from '@features/detail/hooks/useDetailFetchGate';
+import { useDetailFetchEnabled } from '@features/detail/core/useDetailFetchGate';
 
 type ResolveTarget = Pick<DiscoveryResult, 'kind' | 'title' | 'subtitle'>;
 

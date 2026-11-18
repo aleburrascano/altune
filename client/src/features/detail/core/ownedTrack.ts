@@ -1,7 +1,7 @@
 import type { TrackId, AcquisitionStatus, DiscoveryResult } from '@shared/catalog';
 import type { PlaybackTrack } from '@shared/playback';
 
-import { trackExtras, type TrackExtras } from '@features/detail/domain/trackExtras';
+import { trackExtras, type TrackExtras } from '@features/detail/core/trackExtras';
 
 export type OwnedTrack = { trackId: TrackId } & (
   | { acquisitionStatus: 'failed'; failureMessage: string | null; retryable: boolean }

@@ -8,12 +8,8 @@ import {
   type TrackStatus,
 } from '@shared/acquisition';
 
-import {
-  ownedFromTrackInfo,
-  ownedTrack,
-  type OwnedTrack,
-} from '@features/detail/domain/ownedTrack';
-import type { TrackExtras } from '@features/detail/domain/trackExtras';
+import { ownedFromTrackInfo, ownedTrack, type OwnedTrack } from '@features/detail/core/ownedTrack';
+import type { TrackExtras } from '@features/detail/core/trackExtras';
 
 export type TrackIdentity = {
   title: string;

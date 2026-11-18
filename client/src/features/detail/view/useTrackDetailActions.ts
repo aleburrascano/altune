@@ -4,7 +4,7 @@ import type { PlaybackSource } from '@shared/playback';
 
 import { usePlayback } from '@shared/playback';
 
-import { resolveFeatured, trackExtras } from '@features/detail/domain/trackExtras';
+import { resolveFeatured, trackExtras } from '@features/detail/core/trackExtras';
 import { useDetailHandoff } from '@features/detail/view/useDetailHandoff';
 import {
   type LateralNavHandle,
@@ -14,8 +14,8 @@ import { useOwnedTrack } from '@features/detail/core/useOwnedTrack';
 import { useReportWrongAlbum } from '@features/detail/view/useReportWrongAlbum';
 import { useSaveTrack, useTrackSave, type TrackSave } from '@features/detail/view/useSaveTrack';
 import { type DetailRoute } from '@features/detail/domain/detailNavigation';
-import { isResultPlaying, resolvePlaySource } from '@features/detail/domain/playSource';
-import { isOptimisticTrackId, toCreateTrackRequest } from '@features/detail/domain/saveTrack';
+import { isResultPlaying, resolvePlaySource } from '@features/detail/core/playSource';
+import { isOptimisticTrackId, toCreateTrackRequest } from '@features/detail/core/saveTrack';
 
 export type { LateralNavHandle };
 
