@@ -6,9 +6,9 @@ import {
   backfillActionLabel,
   backfillActionTone,
   backfillDetail,
-} from '@features/settings/domain/backfillStatus';
-import { useBackfillFeatured } from '@features/settings/hooks/useBackfillFeatured';
-import { SettingsCard, SettingsRow } from '@features/settings/ui/SettingsCard';
+} from '@features/settings/core/backfillStatus';
+import { useBackfillFeatured } from '@features/settings/view/useBackfillFeatured';
+import { SettingsCard, SettingsRow } from '@features/settings/view/SettingsCard';
 
 type Backfill = ReturnType<typeof useBackfillFeatured>;
 

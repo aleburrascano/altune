@@ -1,5 +1,5 @@
 import type { TextTone } from '@shared/ui';
-import { failureCopyForAction } from '@features/settings/domain/failureCopyForAction';
+import { failureCopyForAction } from '@features/settings/core/failureCopyForAction';
 
 type BackfillStatus = 'idle' | 'pending' | 'error' | 'success';
 

@@ -7,8 +7,8 @@ import { ConfirmModal } from '@features/settings/view/ConfirmModal';
 import {
   buildDangerZoneActions,
   type DangerZoneActionKey,
-} from '@features/settings/domain/dangerZoneActions';
-import { SettingsCard, SettingsRow } from '@features/settings/ui/SettingsCard';
+} from '@features/settings/core/dangerZoneActions';
+import { SettingsCard, SettingsRow } from '@features/settings/view/SettingsCard';
 
 type TaggedIconProps = LucideProps & { ref?: Ref<SVGSVGElement> };
 
