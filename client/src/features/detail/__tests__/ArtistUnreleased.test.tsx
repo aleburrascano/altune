@@ -4,7 +4,16 @@ import type { DiscoveryResult } from '@shared/catalog';
 import { recordLogs } from '@shared/log';
 import { readDetailHandoff } from '@shared/navigation';
 
-import { httpDetailPort, DetailPortProvider, ArtistUnreleased } from '@features/detail';
+import {
+  httpDetailPort,
+  DetailNavigatorProvider,
+  DetailPortProvider,
+  ArtistUnreleased,
+} from '@features/detail';
+import {
+  recordingNavigator,
+  type RecordingNavigator,
+} from '@features/detail/__tests__/recordingNavigator';
 import {
   createPlaybackWrapper,
   createTestQueryClient,
@@ -12,11 +21,7 @@ import {
   signInTestUser,
 } from '@testing/queryHarness';
 
-const mockPush = jest.fn();
-
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, replace: jest.fn() }),
-}));
+let navigator: RecordingNavigator;
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -68,14 +73,16 @@ function renderSectionFor(artist: DiscoveryResult) {
   return render(
     <Base>
       <DetailPortProvider port={httpDetailPort}>
-        <ArtistUnreleased artist={artist} detailRoute="/discover/detail" />
+        <DetailNavigatorProvider navigator={navigator}>
+          <ArtistUnreleased artist={artist} detailRoute="/discover/detail" />
+        </DetailNavigatorProvider>
       </DetailPortProvider>
     </Base>,
   );
 }
 
 beforeEach(() => {
-  mockPush.mockClear();
+  navigator = recordingNavigator();
   (AccessibilityInfo.isReduceMotionEnabled as jest.Mock).mockResolvedValue(true);
   (Linking.openURL as jest.Mock).mockReset();
   startQueue.mockClear();
@@ -277,7 +284,7 @@ describe('ArtistUnreleased', () => {
 
     fireEvent.press(await screen.findByText('See all (25)'));
     expect(screen.getByTestId('detail-unreleased-rail').props.data).toHaveLength(RAIL_CAP);
-    const [href] = mockPush.mock.calls[0];
+    const [href] = navigator.push.mock.calls[0];
     expect(href.pathname).toBe('/discover/unreleased');
     expect(href.params.where).toBe('unreleased');
     expect(readDetailHandoff(href.params.handoff)?.result).toBe(ARTIST);
