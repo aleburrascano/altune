@@ -12,8 +12,8 @@ import {
   dedupeById,
   withEnvelope,
   type OutboxEntry,
-} from '@shared/telemetry/outboxEntries';
-import { recordEvent, type DiscoveryEvent } from '@shared/telemetry/recordEvent';
+} from '@shared/telemetry/shell/outboxEntries';
+import { recordEvent, type DiscoveryEvent } from '@shared/telemetry/shell/recordEvent';
 import { warn } from '@shared/log';
 
 const MAX_ENTRIES = 50;

@@ -8,8 +8,8 @@ import {
   type FileStore,
   type StoredDirectory,
 } from '@shared/files';
-import type { OutboxEntry } from '@shared/telemetry/outboxEntries';
-import type { DiscoveryEventType } from '@shared/telemetry/recordEvent';
+import type { OutboxEntry } from '@shared/telemetry/shell/outboxEntries';
+import type { DiscoveryEventType } from '@shared/telemetry/shell/recordEvent';
 import { warn } from '@shared/log';
 
 const OUTBOX_DIR = 'telemetry';

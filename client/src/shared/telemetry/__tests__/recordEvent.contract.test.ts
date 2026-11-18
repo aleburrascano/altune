@@ -57,8 +57,8 @@ function listMobileSourceFiles(root: string): string[] {
 }
 
 const EVENTS_GO = 'internal/discovery/domain/events.go';
-const RECORD_EVENT_TS = path.join(TELEMETRY_SRC, 'recordEvent.ts');
-const OUTBOX_TS = path.join(TELEMETRY_SRC, 'outboxEntries.ts');
+const RECORD_EVENT_TS = path.join(TELEMETRY_SRC, 'shell', 'recordEvent.ts');
+const OUTBOX_TS = path.join(TELEMETRY_SRC, 'shell', 'outboxEntries.ts');
 const SESSION_TS = path.join(TELEMETRY_SRC, 'eventSession.ts');
 
 function deriveGoEventTypeNames(eventsSource: string): Map<string, string> {

@@ -1,4 +1,4 @@
-import { recordEvent } from '@shared/telemetry/recordEvent';
+import { recordEvent } from '@shared/telemetry/shell/recordEvent';
 import { warn } from '@shared/log';
 
 const MAX_TRIMMED_LENGTH = 300;
