@@ -1,47 +1,85 @@
-package handler
+package handler_test
 
 import (
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/service/rank"
+	"altune/go-api/internal/discovery"
+	"bytes"
 	"encoding/json"
+	"net/http"
 	"testing"
 )
+
+func servedItems(t *testing.T, results ...discovery.SearchResult) []json.RawMessage {
+	t.Helper()
+	router := buildRelatedRouter(&fakeRelatedTracksProvider{results: results})
+	rec := discServe(t, router, http.MethodGet, "/discovery/tracks/soundcloud/id-1/related", nil)
+	discAssertStatus(t, rec, http.StatusOK)
+	var body struct {
+		Items []json.RawMessage `json:"items"`
+	}
+	discDecodeJSON(t, rec, &body)
+	if len(body.Items) != len(results) {
+		t.Fatalf("served %d items, want %d", len(body.Items), len(results))
+	}
+	return body.Items
+}
+
+func servedItem(t *testing.T, result discovery.SearchResult) discovery.SearchResultDTO {
+	t.Helper()
+	var dto discovery.SearchResultDTO
+	if err := json.Unmarshal(servedItems(t, result)[0], &dto); err != nil {
+		t.Fatal(err)
+	}
+	return dto
+}
+
+func sameJSON(t *testing.T, got, want any) bool {
+	t.Helper()
+	g, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := json.Marshal(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return bytes.Equal(g, w)
+}
 
 const searchDTOTypedExtrasGolden = `[{"kind":"album","title":"Blue","subtitle":"Band","confidence":"high","result_signature":"album|blue|band","favorite_key":"band|blue","sources":[{"provider":"deezer","external_id":"1","url":""},{"provider":"applemusic","external_id":"2","url":""}],"extras":{"genre_id":1,"record_type":"ep","resolution_tier":"upc","track_count":5,"upc":"123"}},{"kind":"album","title":"Red","subtitle":"Band","confidence":"low","result_signature":"album|red|band","favorite_key":"band|red","sources":[{"provider":"deezer","external_id":"3","url":""}],"extras":{"record_type":"compile"}},{"kind":"artist","title":"Band","confidence":"low","result_signature":"artist|band|","favorite_key":"band","sources":[{"provider":"deezer","external_id":"4","url":""}],"extras":{"collapsed_artists":[{"title":"Band","subtitle":"","sources":[{"Provider":11,"ExternalID":"5","URL":""}],"extras":{"mbid":"m1","resolution_tier":"isrc"}}]}}]`
 
 func TestSearchResultToDTO_typedRecordTypeAndTierKeepWireBytes(t *testing.T) {
-	dz := domain.SearchResult{
-		Kind: domain.ResultKindAlbum, Title: "Blue", Subtitle: "Band", UPC: "123", RecordType: "ep",
-		Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "1"}},
+	dz := discovery.SearchResult{
+		Kind: discovery.ResultKindAlbum, Title: "Blue", Subtitle: "Band", UPC: "123", RecordType: "ep",
+		Sources: []discovery.SourceRef{{Provider: discovery.ProviderDeezer, ExternalID: "1"}},
 		Extras:  map[string]any{"genre_id": 1},
 	}
-	am := domain.SearchResult{
-		Kind: domain.ResultKindAlbum, Title: "Blue", Subtitle: "Band", UPC: "123", TrackCount: 5, RecordType: "album",
-		Sources: []domain.SourceRef{{Provider: domain.ProviderAppleMusic, ExternalID: "2"}},
+	am := discovery.SearchResult{
+		Kind: discovery.ResultKindAlbum, Title: "Blue", Subtitle: "Band", UPC: "123", TrackCount: 5, RecordType: "album",
+		Sources: []discovery.SourceRef{{Provider: discovery.ProviderAppleMusic, ExternalID: "2"}},
 		Extras:  map[string]any{"upc": "123"},
 	}
-	solo := domain.SearchResult{
-		Kind: domain.ResultKindAlbum, Title: "Red", Subtitle: "Band", RecordType: "compile",
-		Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "3"}},
+	solo := discovery.SearchResult{
+		Kind: discovery.ResultKindAlbum, Title: "Red", Subtitle: "Band", RecordType: "compile",
+		Sources: []discovery.SourceRef{{Provider: discovery.ProviderDeezer, ExternalID: "3"}},
 	}
-	primary := domain.SearchResult{
-		Kind: domain.ResultKindArtist, Title: "Band", Popularity: 9,
-		Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "4"}},
+	primary := discovery.SearchResult{
+		Kind: discovery.ResultKindArtist, Title: "Band", Popularity: 9,
+		Sources: []discovery.SourceRef{{Provider: discovery.ProviderDeezer, ExternalID: "4"}},
 		Extras:  map[string]any{},
 	}
-	dup := domain.SearchResult{
-		Kind: domain.ResultKindArtist, Title: "Band", Popularity: 1, ArtistMBID: "m1",
-		ResolutionTier: domain.StampResolutionTier(domain.EntityResolutionISRC),
-		Sources:        []domain.SourceRef{{Provider: domain.ProviderSpotify, ExternalID: "5"}},
+	dup := discovery.SearchResult{
+		Kind: discovery.ResultKindArtist, Title: "Band", Popularity: 1, ArtistMBID: "m1",
+		ResolutionTier: discovery.StampResolutionTier(discovery.EntityResolutionISRC),
+		Sources:        []discovery.SourceRef{{Provider: discovery.ProviderSpotify, ExternalID: "5"}},
 	}
 
-	results := make([]domain.SearchResult, 0, 3)
-	for _, e := range rank.Merge([][]domain.SearchResult{{dz, solo}, {am}}) {
+	results := make([]discovery.SearchResult, 0, 3)
+	for _, e := range discovery.RankMerge([][]discovery.SearchResult{{dz, solo}, {am}}) {
 		results = append(results, e.Result)
 	}
-	results = append(results, rank.CollapseArtistDuplicates([]domain.SearchResult{primary, dup})...)
+	results = append(results, discovery.RankCollapseArtistDuplicates([]discovery.SearchResult{primary, dup})...)
 
-	got, err := json.Marshal(searchResultsToDTOs(results))
+	got, err := json.Marshal(servedItems(t, results...))
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
@@ -53,16 +91,16 @@ func TestSearchResultToDTO_typedRecordTypeAndTierKeepWireBytes(t *testing.T) {
 func TestSearchResultToDTO_FillsExtrasDurationFromTheResult(t *testing.T) {
 	tests := []struct {
 		name   string
-		result domain.SearchResult
+		result discovery.SearchResult
 		want   any
 	}{
-		{"result duration fills a missing extra", domain.SearchResult{Kind: domain.ResultKindTrack, Title: "T", Duration: 226}, 226},
-		{"no duration leaves the extra absent", domain.SearchResult{Kind: domain.ResultKindTrack, Title: "T"}, nil},
+		{"result duration fills a missing extra", discovery.SearchResult{Kind: discovery.ResultKindTrack, Title: "T", Duration: 226}, 226},
+		{"no duration leaves the extra absent", discovery.SearchResult{Kind: discovery.ResultKindTrack, Title: "T"}, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := searchResultToDTO(tt.result).Extras["duration"]
-			if got != tt.want {
+			got := servedItem(t, tt.result).Extras["duration"]
+			if !sameJSON(t, got, tt.want) {
 				t.Errorf("extras.duration = %v, want %v", got, tt.want)
 			}
 		})
@@ -70,14 +108,14 @@ func TestSearchResultToDTO_FillsExtrasDurationFromTheResult(t *testing.T) {
 }
 
 func TestSearchResultToDTO_mbidKeyIsProjectedFromTheKindsTypedField(t *testing.T) {
-	typed := domain.SearchResult{RecordingMBID: "rec", ReleaseMBID: "rel", ReleaseGroupMBID: "rg", ArtistMBID: "art"}
+	typed := discovery.SearchResult{RecordingMBID: "rec", ReleaseMBID: "rel", ReleaseGroupMBID: "rg", ArtistMBID: "art"}
 	cases := []struct {
-		kind domain.ResultKind
+		kind discovery.ResultKind
 		want string
 	}{
-		{domain.ResultKindTrack, "rec"},
-		{domain.ResultKindAlbum, "rg"},
-		{domain.ResultKindArtist, "art"},
+		{discovery.ResultKindTrack, "rec"},
+		{discovery.ResultKindAlbum, "rg"},
+		{discovery.ResultKindArtist, "art"},
 	}
 	for _, c := range cases {
 		t.Run(c.kind.String(), func(t *testing.T) {
@@ -85,9 +123,9 @@ func TestSearchResultToDTO_mbidKeyIsProjectedFromTheKindsTypedField(t *testing.T
 			r.Kind = c.kind
 			r.Title = "T"
 
-			dtos := searchResultsToDTOs([]domain.SearchResult{r})
+			dto := servedItem(t, r)
 
-			if got := dtos[0].Extras["mbid"]; got != c.want {
+			if got := dto.Extras["mbid"]; got != c.want {
 				t.Errorf("extras.mbid = %v, want %q", got, c.want)
 			}
 		})
@@ -95,24 +133,21 @@ func TestSearchResultToDTO_mbidKeyIsProjectedFromTheKindsTypedField(t *testing.T
 }
 
 func TestSearchResultToDTO_AMergedCleanEditSendsExplicitFalseOnTheWire(t *testing.T) {
-	clean := domain.SearchResult{
-		Kind: domain.ResultKindTrack, Title: "Been Waiting!", Subtitle: "Autumn!", ISRC: "QM42K1903228", Duration: 123,
-		Sources:  []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "642332252"}},
-		Explicit: domain.BoolPtr(false),
+	clean := discovery.SearchResult{
+		Kind: discovery.ResultKindTrack, Title: "Been Waiting!", Subtitle: "Autumn!", ISRC: "QM42K1903228", Duration: 123,
+		Sources:  []discovery.SourceRef{{Provider: discovery.ProviderDeezer, ExternalID: "642332252"}},
+		Explicit: discovery.BoolPtr(false),
 	}
-	unknown := domain.SearchResult{
-		Kind: domain.ResultKindTrack, Title: "Been Waiting!", Subtitle: "Autumn!", ISRC: "QM42K1903228", Duration: 123,
-		Sources: []domain.SourceRef{{Provider: domain.ProviderSpotify, ExternalID: "s1"}},
+	unknown := discovery.SearchResult{
+		Kind: discovery.ResultKindTrack, Title: "Been Waiting!", Subtitle: "Autumn!", ISRC: "QM42K1903228", Duration: 123,
+		Sources: []discovery.SourceRef{{Provider: discovery.ProviderSpotify, ExternalID: "s1"}},
 	}
-	for i, groups := range [][][]domain.SearchResult{{{clean}, {unknown}}, {{unknown}, {clean}}} {
-		entities := rank.Merge(groups)
+	for i, groups := range [][][]discovery.SearchResult{{{clean}, {unknown}}, {{unknown}, {clean}}} {
+		entities := discovery.RankMerge(groups)
 		if len(entities) != 1 {
 			t.Fatalf("order %d: got %d entities, want one merged track", i, len(entities))
 		}
-		raw, err := json.Marshal(searchResultToDTO(entities[0].Result))
-		if err != nil {
-			t.Fatal(err)
-		}
+		raw := servedItems(t, entities[0].Result)[0]
 		var wire struct {
 			Extras map[string]json.RawMessage `json:"extras"`
 		}
@@ -126,10 +161,7 @@ func TestSearchResultToDTO_AMergedCleanEditSendsExplicitFalseOnTheWire(t *testin
 }
 
 func TestSearchResultToDTO_AnUnknownExplicitLeavesTheWireKeyAbsent(t *testing.T) {
-	raw, err := json.Marshal(searchResultToDTO(domain.SearchResult{Kind: domain.ResultKindTrack, Title: "T"}))
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := servedItems(t, discovery.SearchResult{Kind: discovery.ResultKindTrack, Title: "T"})[0]
 	var wire struct {
 		Extras map[string]json.RawMessage `json:"extras"`
 	}

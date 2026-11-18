@@ -1,6 +1,7 @@
-package deezer
+package deezer_test
 
 import (
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/internal/adapters/providers/providertest"
 	"context"
 	"net/http"
@@ -40,7 +41,7 @@ func TestDeezerLyricsAdapter_ResolveAndLookup(t *testing.T) {
 	var jwtHits, pipeHits int32
 	server := deezerLyricsServer(&jwtHits, &pipeHits)
 	defer server.Close()
-	adapter := NewDeezerLyricsAdapter(providertest.NewClient(server.URL))
+	adapter := discovery.NewDeezerLyricsAdapter(providertest.NewClient(server.URL))
 
 	id, err := adapter.ResolveTrackID(context.Background(), "Adele", "Hello")
 	if err != nil {
@@ -76,7 +77,7 @@ func TestDeezerLyricsAdapter_JWTCachedAcrossLookups(t *testing.T) {
 	var jwtHits, pipeHits int32
 	server := deezerLyricsServer(&jwtHits, &pipeHits)
 	defer server.Close()
-	adapter := NewDeezerLyricsAdapter(providertest.NewClient(server.URL))
+	adapter := discovery.NewDeezerLyricsAdapter(providertest.NewClient(server.URL))
 
 	for range 3 {
 		if _, err := adapter.Lookup(context.Background(), "3135556"); err != nil {
@@ -113,7 +114,7 @@ func TestDeezerLyricsAdapter_SelfHealsOn401(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	adapter := NewDeezerLyricsAdapter(providertest.NewClient(server.URL))
+	adapter := discovery.NewDeezerLyricsAdapter(providertest.NewClient(server.URL))
 
 	lyrics, err := adapter.Lookup(context.Background(), "1")
 	if err != nil {
@@ -140,7 +141,7 @@ func TestDeezerLyricsAdapter_NoLyricsIsEmptyNotError(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	adapter := NewDeezerLyricsAdapter(providertest.NewClient(server.URL))
+	adapter := discovery.NewDeezerLyricsAdapter(providertest.NewClient(server.URL))
 
 	lyrics, err := adapter.Lookup(context.Background(), "1")
 	if err != nil {
@@ -151,44 +152,38 @@ func TestDeezerLyricsAdapter_NoLyricsIsEmptyNotError(t *testing.T) {
 	}
 }
 
-func TestDeezerJWTResolver_oversizedBodyIsRejected(t *testing.T) {
-	oversized := `{"jwt":"` + strings.Repeat("x", deezerLyricsMaxBody+1024) + `"}`
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+func TestDeezerLyricsAdapter_OversizedJWTBodyIsRejected(t *testing.T) {
+	const bodyCap = 1 << 20
+	oversized := `{"jwt":"` + strings.Repeat("x", bodyCap+1024) + `"}`
+	var pipeHits int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(oversized))
+		switch r.URL.Path {
+		case "/login/anonymous":
+			w.Write([]byte(oversized))
+		case "/api":
+			atomic.AddInt32(&pipeHits, 1)
+			w.Write([]byte(`{"data":{"track":{"id":"1","lyrics":{"text":"ok","writers":"","synchronizedLines":[]}}}}`))
+		default:
+			http.NotFound(w, r)
+		}
 	}))
 	defer server.Close()
 
-	resolver := newDeezerJWTResolver(server.Client())
-	resolver.authURL = server.URL
-
-	jwt, _, err := resolver.resolve(context.Background())
+	_, err := discovery.NewDeezerLyricsAdapter(providertest.NewClient(server.URL)).Lookup(context.Background(), "1")
 	if err == nil {
-		t.Fatalf("resolve took a %d-byte jwt off a %d-byte body; want the body capped at %d and the decode rejected",
-			len(jwt), len(oversized), deezerLyricsMaxBody)
+		t.Fatalf("Lookup took a jwt off a %d-byte body; want the body capped at %d and the decode rejected",
+			len(oversized), bodyCap)
 	}
-	if len(jwt) > deezerLyricsMaxBody {
-		t.Errorf("len(jwt) = %d, want nothing beyond the %d-byte cap buffered", len(jwt), deezerLyricsMaxBody)
+	if got := atomic.LoadInt32(&pipeHits); got != 0 {
+		t.Errorf("pipe called %d times, want none with a jwt read past the cap", got)
 	}
 }
 
 func TestDeezerLyricsAdapter_EmptyTrackIDReturnsEmpty(t *testing.T) {
-	adapter := NewDeezerLyricsAdapter(providertest.NewClient("http://unused"))
+	adapter := discovery.NewDeezerLyricsAdapter(providertest.NewClient("http://unused"))
 	lyrics, err := adapter.Lookup(context.Background(), "")
 	if err != nil || !lyrics.IsZero() {
 		t.Errorf("empty track id should return empty + nil, got %+v err=%v", lyrics, err)
-	}
-}
-
-func TestDeezerJWTResolver_staleInvalidateNoops(t *testing.T) {
-	r := newDeezerJWTResolver(nil)
-	r.Cached = "fresh"
-	r.Invalidate("stale")
-	if r.Cached != "fresh" {
-		t.Fatal("stale invalidate wiped the fresh jwt")
-	}
-	r.Invalidate("fresh")
-	if r.Cached != "" {
-		t.Fatal("invalidate with the failed jwt did not clear the cache")
 	}
 }

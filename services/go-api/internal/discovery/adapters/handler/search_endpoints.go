@@ -2,12 +2,12 @@ package handler
 
 import (
 	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/internal/adapters/authbridge"
 	"altune/go-api/internal/discovery/internal/core/history"
 	"altune/go-api/internal/discovery/service/interaction"
 	"altune/go-api/internal/discovery/service/unreleased"
 	"altune/go-api/internal/shared/httputil"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/requestuser"
 	"altune/go-api/internal/shared/telemetry"
 	"fmt"
 	"log/slog"
@@ -27,7 +27,7 @@ const (
 )
 
 func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request) {
-	_, ok := authbridge.RequireUserID(w, r)
+	_, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -65,7 +65,7 @@ func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
-	userId, ok := authbridge.RequireUserID(w, r)
+	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -167,7 +167,7 @@ func (h *DiscoveryHandler) warmUnreleased(results []domain.SearchResult) {
 }
 
 func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Request) {
-	userId, ok := authbridge.RequireUserID(w, r)
+	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -200,7 +200,7 @@ type RecordSearchHistoryRequest struct {
 }
 
 func (h *DiscoveryHandler) handleRecordSearchHistory(w http.ResponseWriter, r *http.Request) {
-	userId, ok := authbridge.RequireUserID(w, r)
+	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -218,7 +218,7 @@ func (h *DiscoveryHandler) handleRecordSearchHistory(w http.ResponseWriter, r *h
 }
 
 func (h *DiscoveryHandler) handleClearSearchHistory(w http.ResponseWriter, r *http.Request) {
-	userId, ok := authbridge.RequireUserID(w, r)
+	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -236,7 +236,7 @@ func (h *DiscoveryHandler) handleClearSearchHistory(w http.ResponseWriter, r *ht
 }
 
 func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Request) {
-	userId, ok := authbridge.RequireUserID(w, r)
+	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}

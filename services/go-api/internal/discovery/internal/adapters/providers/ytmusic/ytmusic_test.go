@@ -1,9 +1,8 @@
-package ytmusic
+package ytmusic_test
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/internal/adapters/providers/providertest"
-	"altune/go-api/internal/discovery/internal/core/ports"
 	"context"
 	"errors"
 	"io"
@@ -23,6 +22,8 @@ func (r *recordingRoundTripper) RoundTrip(*http.Request) (*http.Response, error)
 	return nil, errors.New("network call should not happen")
 }
 
+type statusCoder interface{ HTTPStatus() int }
+
 type cannedRoundTripper struct {
 	status int
 	body   string
@@ -38,13 +39,12 @@ func (rt *cannedRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
 	}, nil
 }
 
-func TestYTMSearchRetry_RespectsCancelledContext(t *testing.T) {
+func TestYouTubeMusicAdapter_Search_RespectsCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
 	rt := &recordingRoundTripper{}
-	client := &http.Client{Transport: rt}
-	_, err := ytmSearchRetry(ctx, client, "anything", ytmNoFilter)
+	_, err := discovery.NewYouTubeMusicAdapter(rt).Search(ctx, "anything", providertest.AllKinds())
 
 	if err == nil {
 		t.Fatal("want a context error, got nil")
@@ -54,16 +54,15 @@ func TestYTMSearchRetry_RespectsCancelledContext(t *testing.T) {
 	}
 }
 
-func TestYTMSearch_ThrottledResponseSurfacesStatusErrorForTheBreaker(t *testing.T) {
+func TestYouTubeMusicAdapter_Search_ThrottledResponseSurfacesStatusErrorForTheBreaker(t *testing.T) {
 	rt := &cannedRoundTripper{status: http.StatusTooManyRequests, body: `{"error":{"code":429,"message":"rate limited"}}`}
-	client := &http.Client{Transport: rt}
 
-	_, err := ytmSearch(context.Background(), client, "anything", ytmNoFilter)
+	_, err := discovery.NewYouTubeMusicAdapter(rt).Search(context.Background(), "anything", providertest.AllKinds())
 
 	if err == nil {
 		t.Fatal("a 429 whose body parses returned nil; the breaker would record a healthy empty answer")
 	}
-	var status httpStatusCoder
+	var status statusCoder
 	if !errors.As(err, &status) {
 		t.Fatalf("err = %v, want an error carrying HTTPStatus() the breaker classifies as a failure", err)
 	}
@@ -72,11 +71,10 @@ func TestYTMSearch_ThrottledResponseSurfacesStatusErrorForTheBreaker(t *testing.
 	}
 }
 
-func TestYTMSearchRetry_DoesNotRetryPermanent4xx(t *testing.T) {
+func TestYouTubeMusicAdapter_Search_DoesNotRetryPermanent4xx(t *testing.T) {
 	rt := &cannedRoundTripper{status: http.StatusNotFound, body: `{}`}
-	client := &http.Client{Transport: rt}
 
-	_, err := ytmSearchRetry(context.Background(), client, "anything", ytmNoFilter)
+	_, err := discovery.NewYouTubeMusicAdapter(rt).Search(context.Background(), "anything", providertest.AllKinds())
 
 	if err == nil {
 		t.Fatal("want a status-bearing error on a 404")
@@ -86,11 +84,10 @@ func TestYTMSearchRetry_DoesNotRetryPermanent4xx(t *testing.T) {
 	}
 }
 
-func TestYTMSearchRetry_RetriesTransient5xx(t *testing.T) {
+func TestYouTubeMusicAdapter_Search_RetriesTransient5xx(t *testing.T) {
 	rt := &cannedRoundTripper{status: http.StatusServiceUnavailable, body: `{}`}
-	client := &http.Client{Transport: rt}
 
-	_, err := ytmSearchRetry(context.Background(), client, "anything", ytmNoFilter)
+	_, err := discovery.NewYouTubeMusicAdapter(rt).Search(context.Background(), "anything", providertest.AllKinds())
 
 	if err == nil {
 		t.Fatal("want a status-bearing error on a 503")
@@ -100,52 +97,66 @@ func TestYTMSearchRetry_RetriesTransient5xx(t *testing.T) {
 	}
 }
 
-func TestResizeYTThumbnail(t *testing.T) {
+func searchTracks(t *testing.T, items ...any) []discovery.SearchResult {
+	t.Helper()
+	srv := servePage(t, ytmShelfPage(t, items...))
+	results, err := discovery.NewYouTubeMusicAdapter(&providertest.RedirectTransport{TargetURL: srv.URL}).
+		Search(context.Background(), "q", providertest.TrackKinds())
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	return results
+}
+
+func resolveArtistArtwork(t *testing.T, name string, artists ...any) string {
+	t.Helper()
+	srv := servePage(t, ytmShelfPage(t, artists...))
+	url, err := discovery.NewYouTubeMusicArtworkResolver(&providertest.RedirectTransport{TargetURL: srv.URL}).
+		Resolve(context.Background(), discovery.ResultKindArtist, name, "", "")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	return url
+}
+
+func TestYouTubeMusicArtworkResolver_Resolve_ResizesTheThumbnailToTheHeroSize(t *testing.T) {
 	tests := []struct {
 		name string
 		url  string
-		size int
 		want string
 	}{
 		{
 			name: "album thumbnail without crop flag",
 			url:  "https://yt3.googleusercontent.com/abc=w544-h544-l90-rj",
-			size: 1000,
 			want: "https://yt3.googleusercontent.com/abc=w1000-h1000-l90-rj",
 		},
 		{
 			name: "artist thumbnail preserves the -p- smart-crop flag",
 			url:  "https://lh3.googleusercontent.com/xyz=w120-h120-p-l90-rj",
-			size: 1000,
 			want: "https://lh3.googleusercontent.com/xyz=w1000-h1000-p-l90-rj",
 		},
 		{
 			name: "unrecognized size segment returns the url unchanged",
 			url:  "https://img/no-size-here",
-			size: 1000,
 			want: "https://img/no-size-here",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := resizeYTThumbnail(tt.url, tt.size); got != tt.want {
-				t.Errorf("resizeYTThumbnail() = %q, want %q", got, tt.want)
+			if got := resolveArtistArtwork(t, "Nas", ytmArtist("Nas", "UCnas", tt.url)); got != tt.want {
+				t.Errorf("Resolve = %q, want %q", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestPickArtistArtwork(t *testing.T) {
-	thumb := func(url string) []ytmThumbnail {
-		return []ytmThumbnail{{URL: "https://img/small=w60-h60-rj"}, {URL: url}}
-	}
+func TestYouTubeMusicArtworkResolver_Resolve_PicksTheArtist(t *testing.T) {
+	const small = "https://img/small=w60-h60-rj"
 
 	t.Run("prefers an exact case-insensitive name match over the top result", func(t *testing.T) {
-		artists := []*ytmArtistItem{
-			{Artist: "Kendrick Lamar Type Beat", Thumbnails: thumb("https://img/wrong=w120-h120-rj")},
-			{Artist: "kendrick lamar", Thumbnails: thumb("https://img/right=w120-h120-p-rj")},
-		}
-		got := pickArtistArtwork(artists, "Kendrick Lamar", 1000)
+		got := resolveArtistArtwork(t, "Kendrick Lamar",
+			ytmArtist("Kendrick Lamar Type Beat", "UCwrong", small, "https://img/wrong=w120-h120-rj"),
+			ytmArtist("kendrick lamar", "UCright", small, "https://img/right=w120-h120-p-rj"))
 		want := "https://img/right=w1000-h1000-p-rj"
 		if got != want {
 			t.Errorf("got %q, want the exact-match artist resized to 1000: %q", got, want)
@@ -153,10 +164,8 @@ func TestPickArtistArtwork(t *testing.T) {
 	})
 
 	t.Run("falls back to the top result when no exact match", func(t *testing.T) {
-		artists := []*ytmArtistItem{
-			{Artist: "Some Other Artist", Thumbnails: thumb("https://img/top=w120-h120-rj")},
-		}
-		got := pickArtistArtwork(artists, "Nonexistent", 1000)
+		got := resolveArtistArtwork(t, "Nonexistent",
+			ytmArtist("Some Other Artist", "UCtop", small, "https://img/top=w120-h120-rj"))
 		want := "https://img/top=w1000-h1000-rj"
 		if got != want {
 			t.Errorf("got %q, want the top result resized: %q", got, want)
@@ -164,22 +173,21 @@ func TestPickArtistArtwork(t *testing.T) {
 	})
 
 	t.Run("returns empty when no artist carries a thumbnail", func(t *testing.T) {
-		artists := []*ytmArtistItem{{Artist: "No Image", Thumbnails: nil}}
-		if got := pickArtistArtwork(artists, "No Image", 1000); got != "" {
+		if got := resolveArtistArtwork(t, "No Image", ytmArtist("No Image", "UCnone")); got != "" {
 			t.Errorf("got %q, want empty", got)
 		}
 	})
 
 	t.Run("returns empty for no artists", func(t *testing.T) {
-		if got := pickArtistArtwork(nil, "Anyone", 1000); got != "" {
+		if got := resolveArtistArtwork(t, "Anyone"); got != "" {
 			t.Errorf("got %q, want empty", got)
 		}
 	})
 }
 
 func TestYouTubeMusicArtworkResolver_NonArtistKindIsNoop(t *testing.T) {
-	r := NewYouTubeMusicArtworkResolver(nil)
-	for _, kind := range []domain.ResultKind{domain.ResultKindTrack, domain.ResultKindAlbum} {
+	r := discovery.NewYouTubeMusicArtworkResolver(nil)
+	for _, kind := range []discovery.ResultKind{discovery.ResultKindTrack, discovery.ResultKindAlbum} {
 		got, err := r.Resolve(context.Background(), kind, "Some Title", "Some Subtitle", "")
 		if err != nil {
 			t.Errorf("kind %v: unexpected error %v", kind, err)
@@ -187,47 +195,6 @@ func TestYouTubeMusicArtworkResolver_NonArtistKindIsNoop(t *testing.T) {
 		if got != "" {
 			t.Errorf("kind %v: got %q, want empty (artist-only resolver)", kind, got)
 		}
-	}
-}
-
-func TestMapYTMusicVideo(t *testing.T) {
-	v := &ytmVideo{
-		VideoID:  "abc123",
-		Title:    "Obscure Track",
-		Artists:  []ytmArtistRef{{Name: "Underground Artist"}},
-		Duration: 200,
-		Thumbnails: []ytmThumbnail{
-			{URL: "https://img/small"},
-			{URL: "https://img/large"},
-		},
-	}
-
-	got := mapYTMusicVideo(v)
-
-	if got.Kind != domain.ResultKindTrack {
-		t.Errorf("Kind = %v, want track", got.Kind)
-	}
-	if got.Title != "Obscure Track" {
-		t.Errorf("Title = %q, want %q", got.Title, "Obscure Track")
-	}
-	if got.Subtitle != "Underground Artist" {
-		t.Errorf("Subtitle = %q, want %q", got.Subtitle, "Underground Artist")
-	}
-	if got.ImageURL != "https://img/large" {
-		t.Errorf("ImageURL = %q, want the largest thumbnail", got.ImageURL)
-	}
-	if len(got.Sources) != 1 {
-		t.Fatalf("Sources = %d, want 1", len(got.Sources))
-	}
-	src := got.Sources[0]
-	if src.Provider != domain.ProviderYouTube || src.ExternalID != "abc123" {
-		t.Errorf("source = %+v, want youtube/abc123", src)
-	}
-	if src.URL != "https://music.youtube.com/watch?v=abc123" {
-		t.Errorf("source URL = %q", src.URL)
-	}
-	if got.Duration != 200 {
-		t.Errorf("Duration = %d, want 200", got.Duration)
 	}
 }
 
@@ -247,31 +214,44 @@ func TestYouTubeMusicAdapter_Search_mapsAllKinds(t *testing.T) {
 	srv := serveYTMFixture(t, "ytmusic_search_sombr.json")
 	defer srv.Close()
 
-	adapter := NewYouTubeMusicAdapter(&providertest.RedirectTransport{TargetURL: srv.URL})
+	adapter := discovery.NewYouTubeMusicAdapter(&providertest.RedirectTransport{TargetURL: srv.URL})
 	results, err := adapter.Search(context.Background(), "sombr", providertest.AllKinds())
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}
 
 	var tracks, albums, artists int
+	sawSombr := false
 	for _, r := range results {
 		switch r.Kind {
-		case domain.ResultKindTrack:
+		case discovery.ResultKindTrack:
 			tracks++
-			if len(r.Sources) != 1 || r.Sources[0].Provider != domain.ProviderYouTube {
+			if len(r.Sources) != 1 || r.Sources[0].Provider != discovery.ProviderYouTube {
 				t.Errorf("track source = %+v", r.Sources)
 			}
 			if r.Sources[0].ExternalID == "" {
 				t.Error("track missing videoId external id")
 			}
-		case domain.ResultKindAlbum:
+		case discovery.ResultKindAlbum:
 			albums++
 			if r.Sources[0].URL == "" || r.Sources[0].ExternalID == "" {
 				t.Errorf("album missing browse ref: %+v", r.Sources[0])
 			}
-		case domain.ResultKindArtist:
+		case discovery.ResultKindArtist:
 			artists++
+			if r.Title == "sombr" {
+				sawSombr = true
+				if r.Sources[0].ExternalID == "" || r.ImageURL == "" {
+					t.Errorf("artist sombr missing browseId or thumbnail: %+v", r)
+				}
+			}
 		}
+	}
+	if !sawSombr {
+		t.Errorf("expected artist %q in results", "sombr")
+	}
+	if top := results[0]; top.Kind == discovery.ResultKindTrack && (top.Title == "" || top.Sources[0].ExternalID == "") {
+		t.Errorf("top track missing title or videoId: %+v", top)
 	}
 	if tracks == 0 || albums == 0 || artists == 0 {
 		t.Errorf("kinds mapped: tracks=%d albums=%d artists=%d, want all non-zero", tracks, albums, artists)
@@ -285,7 +265,7 @@ func TestYouTubeMusicAdapter_Search_wrongShapeBodyIsEmptyNotError(t *testing.T) 
 	}))
 	defer srv.Close()
 
-	adapter := NewYouTubeMusicAdapter(&providertest.RedirectTransport{TargetURL: srv.URL})
+	adapter := discovery.NewYouTubeMusicAdapter(&providertest.RedirectTransport{TargetURL: srv.URL})
 	results, err := adapter.Search(context.Background(), "q", providertest.AllKinds())
 	if err != nil {
 		t.Fatalf("Search = (%v, %v), want (nil, nil): a well-formed body of the wrong shape must not fail provider search", results, err)
@@ -308,7 +288,7 @@ func TestYouTubeMusicAdapter_Search_retriesOn403HTML(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	adapter := NewYouTubeMusicAdapter(&providertest.RedirectTransport{TargetURL: srv.URL})
+	adapter := discovery.NewYouTubeMusicAdapter(&providertest.RedirectTransport{TargetURL: srv.URL})
 	if _, err := adapter.Search(context.Background(), "q", providertest.TrackKinds()); err != nil {
 		t.Fatalf("Search must succeed on the retry after a transient 403: %v", err)
 	}
@@ -326,7 +306,7 @@ func TestYouTubeMusicAdapter_Search_persistent403IsError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	adapter := NewYouTubeMusicAdapter(&providertest.RedirectTransport{TargetURL: srv.URL})
+	adapter := discovery.NewYouTubeMusicAdapter(&providertest.RedirectTransport{TargetURL: srv.URL})
 	_, err := adapter.Search(context.Background(), "q", providertest.TrackKinds())
 	if err == nil {
 		t.Fatal("expected an error when both attempts 403")
@@ -336,19 +316,19 @@ func TestYouTubeMusicAdapter_Search_persistent403IsError(t *testing.T) {
 	}
 }
 
-func TestYTMSearch_jsonBodyOn500SurfacesStatusErrorForTheBreaker(t *testing.T) {
+func TestYouTubeMusicAdapter_Search_jsonBodyOn500SurfacesStatusErrorForTheBreaker(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte(`{}`))
 	}))
 	defer srv.Close()
 
-	adapter := NewYouTubeMusicAdapter(&providertest.RedirectTransport{TargetURL: srv.URL})
+	adapter := discovery.NewYouTubeMusicAdapter(&providertest.RedirectTransport{TargetURL: srv.URL})
 	_, err := adapter.Search(context.Background(), "q", providertest.TrackKinds())
 	if err == nil {
 		t.Fatal("a JSON-bodied 500 returned success; the breaker would record a healthy empty answer for a down provider")
 	}
-	var status httpStatusCoder
+	var status statusCoder
 	if !errors.As(err, &status) {
 		t.Fatalf("err = %v, want an error carrying HTTPStatus() the breaker classifies as a failure", err)
 	}
@@ -399,8 +379,8 @@ func TestYouTubeMusicAdapter_GetArtistAlbums_filtersToExactArtistName(t *testing
 	}))
 	defer srv.Close()
 
-	adapter := NewYouTubeMusicAdapter(&providertest.RedirectTransport{TargetURL: srv.URL})
-	albums, err := adapter.GetArtistAlbums(context.Background(), domain.ProviderYouTube, "SOMBR")
+	adapter := discovery.NewYouTubeMusicAdapter(&providertest.RedirectTransport{TargetURL: srv.URL})
+	albums, err := adapter.GetArtistAlbums(context.Background(), discovery.ProviderYouTube, "SOMBR")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums: %v", err)
 	}
@@ -429,8 +409,8 @@ func TestYouTubeMusicAdapter_GetArtistAlbums_wrongShapeBodyIsEmptyNotError(t *te
 	}))
 	defer srv.Close()
 
-	adapter := NewYouTubeMusicAdapter(&providertest.RedirectTransport{TargetURL: srv.URL})
-	albums, err := adapter.GetArtistAlbums(context.Background(), domain.ProviderYouTube, "sombr")
+	adapter := discovery.NewYouTubeMusicAdapter(&providertest.RedirectTransport{TargetURL: srv.URL})
+	albums, err := adapter.GetArtistAlbums(context.Background(), discovery.ProviderYouTube, "sombr")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums = (%v, %v), want (nil, nil)", albums, err)
 	}
@@ -439,48 +419,19 @@ func TestYouTubeMusicAdapter_GetArtistAlbums_wrongShapeBodyIsEmptyNotError(t *te
 	}
 }
 
-func TestFallbackByline(t *testing.T) {
-	runs := []any{
-		map[string]any{"text": "Song"},
-		map[string]any{"text": " • "},
-		map[string]any{"text": "Plain Artist"},
-	}
-	got := fallbackByline(runs)
-	if len(got) != 1 || got[0].Name != "Plain Artist" {
-		t.Errorf("fallbackByline = %+v, want the plain third-run artist", got)
-	}
-	if fallbackByline(runs[:2]) != nil {
-		t.Error("short runs must yield nil")
-	}
-	divider := []any{
-		map[string]any{"text": "Song"},
-		map[string]any{"text": " • "},
-		map[string]any{"text": " • "},
-	}
-	if fallbackByline(divider) != nil {
-		t.Error("a bare divider third run must yield nil")
-	}
-}
-
-func TestParseYTMTrailingDuration_emptyRuns(t *testing.T) {
-	if got := parseYTMTrailingDuration(nil); got != 0 {
-		t.Errorf("empty runs = %d, want 0", got)
-	}
-}
-
 func TestYouTubeMusicAdapter_meta(t *testing.T) {
-	adapter := NewYouTubeMusicAdapter(nil)
-	if adapter.Name() != domain.ProviderYouTube {
+	adapter := discovery.NewYouTubeMusicAdapter(nil)
+	if adapter.Name() != discovery.ProviderYouTube {
 		t.Errorf("Name = %v", adapter.Name())
 	}
 	kinds := adapter.SupportedKinds()
-	if !kinds[domain.ResultKindTrack] || !kinds[domain.ResultKindAlbum] || !kinds[domain.ResultKindArtist] {
+	if !kinds[discovery.ResultKindTrack] || !kinds[discovery.ResultKindAlbum] || !kinds[discovery.ResultKindArtist] {
 		t.Errorf("SupportedKinds = %v, want all three", kinds)
 	}
 	if adapter.SearchTimeout() <= 0 {
 		t.Error("SearchTimeout must be positive")
 	}
-	if (&YouTubeMusicArtworkResolver{}).ArtworkSource() != "ytmusic" {
+	if discovery.NewYouTubeMusicArtworkResolver(nil).ArtworkSource() != "ytmusic" {
 		t.Error("ArtworkSource mismatch")
 	}
 }
@@ -490,8 +441,8 @@ func TestYouTubeMusicArtworkResolver_Resolve(t *testing.T) {
 		srv := serveYTMFixture(t, "ytmusic_artist_filter_sombr.json")
 		defer srv.Close()
 
-		r := NewYouTubeMusicArtworkResolver(&providertest.RedirectTransport{TargetURL: srv.URL})
-		url, err := r.Resolve(context.Background(), domain.ResultKindArtist, "sombr", "", "")
+		r := discovery.NewYouTubeMusicArtworkResolver(&providertest.RedirectTransport{TargetURL: srv.URL})
+		url, err := r.Resolve(context.Background(), discovery.ResultKindArtist, "sombr", "", "")
 		if err != nil {
 			t.Fatalf("Resolve: %v", err)
 		}
@@ -510,9 +461,9 @@ func TestYouTubeMusicArtworkResolver_Resolve(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		r := NewYouTubeMusicArtworkResolver(&providertest.RedirectTransport{TargetURL: srv.URL})
-		url, err := r.Resolve(context.Background(), domain.ResultKindArtist, "sombr", "", "")
-		if !errors.Is(err, ports.ErrArtworkUnavailable) {
+		r := discovery.NewYouTubeMusicArtworkResolver(&providertest.RedirectTransport{TargetURL: srv.URL})
+		url, err := r.Resolve(context.Background(), discovery.ResultKindArtist, "sombr", "", "")
+		if !errors.Is(err, discovery.ErrArtworkUnavailable) {
 			t.Fatalf("Resolve = (%q, %v), want ports.ErrArtworkUnavailable", url, err)
 		}
 		if url != "" {
@@ -527,8 +478,8 @@ func TestYouTubeMusicArtworkResolver_Resolve(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		r := NewYouTubeMusicArtworkResolver(&providertest.RedirectTransport{TargetURL: srv.URL})
-		url, err := r.Resolve(context.Background(), domain.ResultKindArtist, "", "", "")
+		r := discovery.NewYouTubeMusicArtworkResolver(&providertest.RedirectTransport{TargetURL: srv.URL})
+		url, err := r.Resolve(context.Background(), discovery.ResultKindArtist, "", "", "")
 		if err != nil || url != "" {
 			t.Errorf("Resolve = (%q, %v), want (\"\", nil)", url, err)
 		}
@@ -541,9 +492,9 @@ func TestYouTubeMusicArtworkResolver_Resolve_ProviderFailureIsUnavailable(t *tes
 			srv := httptest.NewServer(handler)
 			defer srv.Close()
 
-			r := NewYouTubeMusicArtworkResolver(&providertest.RedirectTransport{TargetURL: srv.URL})
-			url, err := r.Resolve(context.Background(), domain.ResultKindArtist, "sombr", "", "")
-			if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+			r := discovery.NewYouTubeMusicArtworkResolver(&providertest.RedirectTransport{TargetURL: srv.URL})
+			url, err := r.Resolve(context.Background(), discovery.ResultKindArtist, "sombr", "", "")
+			if url != "" || !errors.Is(err, discovery.ErrArtworkUnavailable) {
 				t.Fatalf("Resolve on %s = (%q, %v), want (\"\", ErrArtworkUnavailable)", name, url, err)
 			}
 			if !strings.Contains(err.Error(), "ytmusic") {
@@ -564,8 +515,8 @@ func TestYouTubeMusicArtworkResolver_Resolve_VerifiedMissIsEmptyWithoutError(t *
 			srv := httptest.NewServer(handler)
 			defer srv.Close()
 
-			r := NewYouTubeMusicArtworkResolver(&providertest.RedirectTransport{TargetURL: srv.URL})
-			url, err := r.Resolve(context.Background(), domain.ResultKindArtist, "sombr", "", "")
+			r := discovery.NewYouTubeMusicArtworkResolver(&providertest.RedirectTransport{TargetURL: srv.URL})
+			url, err := r.Resolve(context.Background(), discovery.ResultKindArtist, "sombr", "", "")
 			if url != "" || err != nil {
 				t.Errorf("Resolve on %s = (%q, %v), want (\"\", nil)", name, url, err)
 			}
@@ -576,19 +527,19 @@ func TestYouTubeMusicArtworkResolver_Resolve_VerifiedMissIsEmptyWithoutError(t *
 func TestYouTubeMusicArtworkResolver_Resolve_CancelledMidRequestIsUnavailable(t *testing.T) {
 	srv, ctx := providertest.CancelMidRequestServer(t)
 
-	r := NewYouTubeMusicArtworkResolver(&providertest.RedirectTransport{TargetURL: srv.URL})
-	url, err := r.Resolve(ctx, domain.ResultKindArtist, "sombr", "", "")
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
+	r := discovery.NewYouTubeMusicArtworkResolver(&providertest.RedirectTransport{TargetURL: srv.URL})
+	url, err := r.Resolve(ctx, discovery.ResultKindArtist, "sombr", "", "")
+	if url != "" || !errors.Is(err, discovery.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
 		t.Errorf("Resolve cancelled mid-request = (%q, %v), want ErrArtworkUnavailable wrapping context.Canceled", url, err)
 	}
 }
 
 func TestArtworkSourceTags(t *testing.T) {
 	tests := []struct {
-		got  domain.ProviderKey
+		got  discovery.ProviderKey
 		want string
 	}{
-		{(&YouTubeMusicArtworkResolver{}).ArtworkSource(), "ytmusic"},
+		{discovery.NewYouTubeMusicArtworkResolver(nil).ArtworkSource(), "ytmusic"},
 	}
 	for _, tt := range tests {
 		if tt.got.String() != tt.want {

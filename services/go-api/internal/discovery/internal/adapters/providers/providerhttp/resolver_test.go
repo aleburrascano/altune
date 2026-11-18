@@ -100,3 +100,16 @@ func TestWithAuthRetry_nonAuthFailureOnRetryIsNotPersistentAuth(t *testing.T) {
 		t.Fatalf("err = %v, want no persistent auth marker", err)
 	}
 }
+
+func TestCachedResolver_staleInvalidateKeepsTheFreshValue(t *testing.T) {
+	r := newRetryTestResolver()
+	r.Cached = "fresh"
+	r.Invalidate("stale")
+	if r.Cached != "fresh" {
+		t.Fatal("stale invalidate wiped the fresh value")
+	}
+	r.Invalidate("fresh")
+	if r.Cached != "" {
+		t.Fatal("invalidate with the failed value did not clear the cache")
+	}
+}

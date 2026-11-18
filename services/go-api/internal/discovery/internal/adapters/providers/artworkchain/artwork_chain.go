@@ -18,7 +18,11 @@ type ChainedArtworkResolver struct {
 }
 
 func NewChainedArtworkResolver(resolvers ...ports.ArtworkResolver) *ChainedArtworkResolver {
-	return &ChainedArtworkResolver{resolvers: resolvers, timeout: defaultArtworkChainTimeout}
+	return NewChainedArtworkResolverWithin(defaultArtworkChainTimeout, resolvers...)
+}
+
+func NewChainedArtworkResolverWithin(timeout time.Duration, resolvers ...ports.ArtworkResolver) *ChainedArtworkResolver {
+	return &ChainedArtworkResolver{resolvers: resolvers, timeout: timeout}
 }
 
 func (c *ChainedArtworkResolver) ResolveTagged(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, domain.ProviderKey, error) {

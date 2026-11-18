@@ -2,8 +2,8 @@ package handler
 
 import (
 	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/internal/adapters/authbridge"
 	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/requestuser"
 	"net/http"
 	"time"
 )
@@ -37,10 +37,10 @@ func (l RequestLimit) rateLimit() httputil.RateLimit {
 
 func newUserRateLimiter(limit RequestLimit, now func() time.Time) func(http.Handler) http.Handler {
 	return httputil.NewUserRateLimiter(limit.rateLimit(), now).
-		Middleware(httputil.UserKey(authbridge.UserIDFromContext), domain.ErrRateLimited, nil)
+		Middleware(httputil.UserKey(requestuser.UserIDFromContext), domain.ErrRateLimited, nil)
 }
 
 func newClientRateLimiter(limit RequestLimit, now func() time.Time) func(http.Handler) http.Handler {
 	return httputil.NewUserRateLimiter(limit.rateLimit(), now).
-		Middleware(func(r *http.Request) (string, bool) { return authbridge.ClientKey(r), true }, domain.ErrRateLimited, nil)
+		Middleware(func(r *http.Request) (string, bool) { return requestuser.ClientKey(r), true }, domain.ErrRateLimited, nil)
 }

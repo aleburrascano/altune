@@ -1,11 +1,8 @@
-package handler
+package handler_test
 
 import (
-	"altune/go-api/internal/auth/adapters/middleware"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/discoverytest"
-	"altune/go-api/internal/discovery/internal/core/ports"
-	"altune/go-api/internal/discovery/service/content"
-	"altune/go-api/internal/discovery/service/related"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,24 +12,22 @@ import (
 	"sync"
 	"testing"
 
-	discdomain "altune/go-api/internal/discovery/domain"
-
 	"github.com/go-chi/chi/v5"
 )
 
-func contentTrack(title string) discdomain.SearchResult {
-	return discdomain.SearchResult{
-		Kind:       discdomain.ResultKindTrack,
+func contentTrack(title string) discovery.SearchResult {
+	return discovery.SearchResult{
+		Kind:       discovery.ResultKindTrack,
 		Title:      title,
-		Confidence: discdomain.ConfidenceLow,
-		Sources: []discdomain.SourceRef{
-			{Provider: discdomain.ProviderDeezer, ExternalID: title, URL: "https://deezer.com/" + title},
+		Confidence: discovery.ConfidenceLow,
+		Sources: []discovery.SourceRef{
+			{Provider: discovery.ProviderDeezer, ExternalID: title, URL: "https://deezer.com/" + title},
 		},
 	}
 }
 
-func seedTracks(n int) []discdomain.SearchResult {
-	out := make([]discdomain.SearchResult, n)
+func seedTracks(n int) []discovery.SearchResult {
+	out := make([]discovery.SearchResult, n)
 	for i := range out {
 		out[i] = contentTrack(string(rune('a' + i)))
 	}
@@ -51,15 +46,15 @@ func TestHandleAlbumTracks_LimitClamping(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			albumProviders := map[discdomain.ProviderName]ports.AlbumContentProvider{
-				discdomain.ProviderDeezer: &discoverytest.AlbumContentProvider{Results: seedTracks(3)},
+			albumProviders := map[discovery.ProviderName]discovery.AlbumContentProvider{
+				discovery.ProviderDeezer: &discoverytest.AlbumContentProvider{Results: seedTracks(3)},
 			}
 			router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, albumProviders, nil)
 
 			rec := discServe(t, router, http.MethodGet, "/discovery/albums/deezer/1/tracks"+c.query, nil)
 			discAssertStatus(t, rec, http.StatusOK)
 
-			var resp ContentFetchResponseDTO
+			var resp discovery.ContentFetchResponseDTO
 			discDecodeJSON(t, rec, &resp)
 			if len(resp.Items) != c.wantItems {
 				t.Errorf("len(Items) = %d, want %d", len(resp.Items), c.wantItems)
@@ -80,15 +75,15 @@ func TestHandleArtistTopTracks_LimitClamping(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			artistProviders := map[discdomain.ProviderName]ports.ArtistContentProvider{
-				discdomain.ProviderDeezer: &discoverytest.ArtistContentProvider{TopTracks: seedTracks(7)},
+			artistProviders := map[discovery.ProviderName]discovery.ArtistContentProvider{
+				discovery.ProviderDeezer: &discoverytest.ArtistContentProvider{TopTracks: seedTracks(7)},
 			}
 			router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
 
 			rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/1/top-tracks"+c.query, nil)
 			discAssertStatus(t, rec, http.StatusOK)
 
-			var resp ContentFetchResponseDTO
+			var resp discovery.ContentFetchResponseDTO
 			discDecodeJSON(t, rec, &resp)
 			if len(resp.Items) != c.wantItems {
 				t.Errorf("len(Items) = %d, want %d", len(resp.Items), c.wantItems)
@@ -98,8 +93,8 @@ func TestHandleArtistTopTracks_LimitClamping(t *testing.T) {
 }
 
 func TestContentEndpoints_ExternalIDTooLongReturns400(t *testing.T) {
-	albumProviders := map[discdomain.ProviderName]ports.AlbumContentProvider{
-		discdomain.ProviderDeezer: &discoverytest.AlbumContentProvider{},
+	albumProviders := map[discovery.ProviderName]discovery.AlbumContentProvider{
+		discovery.ProviderDeezer: &discoverytest.AlbumContentProvider{},
 	}
 	router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, albumProviders, nil)
 
@@ -129,10 +124,10 @@ func TestContentEndpoints_NilServiceDegradedEnvelope(t *testing.T) {
 			discAssertStatus(t, rec, http.StatusNotFound)
 			discAssertJSON(t, rec)
 
-			var resp ContentFetchResponseDTO
+			var resp discovery.ContentFetchResponseDTO
 			discDecodeJSON(t, rec, &resp)
-			if resp.Status != "error" || resp.Code != contentCodeUnserved {
-				t.Errorf("status = %q, code = %q, want error / %s (service not wired)", resp.Status, resp.Code, contentCodeUnserved)
+			if resp.Status != "error" || resp.Code != "discovery.content_unserved" {
+				t.Errorf("status = %q, code = %q, want error / %s (service not wired)", resp.Status, resp.Code, "discovery.content_unserved")
 			}
 			if resp.Items == nil {
 				t.Error("items must be [] in the degraded envelope, got null")
@@ -146,18 +141,18 @@ func TestContentEndpoints_NilServiceDegradedEnvelope(t *testing.T) {
 
 func TestHandleRelatedTracks_LimitClamping(t *testing.T) {
 	provider := &fakeRelatedTracksProvider{results: seedTracks(5)}
-	svc := related.NewGetRelatedTracksService(map[string]ports.RelatedTracksProvider{
+	svc := discovery.NewGetRelatedTracksService(map[string]discovery.RelatedTracksProvider{
 		"soundcloud": provider,
 	})
-	h := NewDiscoveryHandler(DiscoveryServices{Related: svc})
+	h := discovery.NewDiscoveryHandler(discovery.DiscoveryServices{Related: svc})
 	router := chi.NewRouter()
-	router.Use(middleware.Middleware(discVerifyAsTestUser))
+	router.Use(discAsTestUser)
 	router.Mount("/discovery", h.Routes())
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/tracks/soundcloud/1/related?limit=2", nil)
 	discAssertStatus(t, rec, http.StatusOK)
 
-	var resp ContentFetchResponseDTO
+	var resp discovery.ContentFetchResponseDTO
 	discDecodeJSON(t, rec, &resp)
 	if len(resp.Items) != 2 {
 		t.Errorf("len(Items) = %d, want 2 (limit applied)", len(resp.Items))
@@ -165,75 +160,75 @@ func TestHandleRelatedTracks_LimitClamping(t *testing.T) {
 }
 
 type stubIdentityStore struct {
-	xref map[discdomain.ProviderKey]string
+	xref map[discovery.ProviderKey]string
 }
 
-func (s stubIdentityStore) PersistBridges(context.Context, discdomain.ResultKind, string, map[discdomain.ProviderKey]string) error {
+func (s stubIdentityStore) PersistBridges(context.Context, discovery.ResultKind, string, map[discovery.ProviderKey]string) error {
 	return nil
 }
 
-func (s stubIdentityStore) LookupByProviderID(context.Context, discdomain.ResultKind, discdomain.ProviderKey, string) (string, map[discdomain.ProviderKey]string, bool) {
+func (s stubIdentityStore) LookupByProviderID(context.Context, discovery.ResultKind, discovery.ProviderKey, string) (string, map[discovery.ProviderKey]string, bool) {
 	return "mbid-artist", s.xref, true
 }
 
-func (s stubIdentityStore) Invalidate(context.Context, discdomain.ResultKind, discdomain.ProviderKey, string) error {
+func (s stubIdentityStore) Invalidate(context.Context, discovery.ResultKind, discovery.ProviderKey, string) error {
 	return nil
 }
 
 type partialContentProvider struct {
-	provider discdomain.ProviderName
+	provider discovery.ProviderName
 	down     bool
 }
 
-func (p partialContentProvider) result(kind discdomain.ResultKind, id string) ([]discdomain.SearchResult, error) {
+func (p partialContentProvider) result(kind discovery.ResultKind, id string) ([]discovery.SearchResult, error) {
 	if p.down {
 		return nil, errors.New("upstream unavailable")
 	}
-	return []discdomain.SearchResult{{
+	return []discovery.SearchResult{{
 		Kind:     kind,
 		Title:    "Real Song",
 		Subtitle: "Artist",
-		Sources:  []discdomain.SourceRef{{Provider: p.provider, ExternalID: id}},
+		Sources:  []discovery.SourceRef{{Provider: p.provider, ExternalID: id}},
 		Extras:   map[string]any{},
 	}}, nil
 }
 
-func (p partialContentProvider) GetArtistTopTracks(_ context.Context, _ discdomain.ProviderName, id string) ([]discdomain.SearchResult, error) {
-	return p.result(discdomain.ResultKindTrack, id)
+func (p partialContentProvider) GetArtistTopTracks(_ context.Context, _ discovery.ProviderName, id string) ([]discovery.SearchResult, error) {
+	return p.result(discovery.ResultKindTrack, id)
 }
 
-func (p partialContentProvider) GetArtistAlbums(_ context.Context, _ discdomain.ProviderName, id string) ([]discdomain.SearchResult, error) {
-	return p.result(discdomain.ResultKindAlbum, id)
+func (p partialContentProvider) GetArtistAlbums(_ context.Context, _ discovery.ProviderName, id string) ([]discovery.SearchResult, error) {
+	return p.result(discovery.ResultKindAlbum, id)
 }
 
-func identityContentRouter(down map[discdomain.ProviderName]bool) chi.Router {
-	all := []discdomain.ProviderName{
-		discdomain.ProviderDeezer, discdomain.ProviderMusicBrainz, discdomain.ProviderSoundCloud,
-		discdomain.ProviderLastFM, discdomain.ProviderITunes, discdomain.ProviderTheAudioDB,
-		discdomain.ProviderDiscogs, discdomain.ProviderYouTube, discdomain.ProviderAmazonMusic,
-		discdomain.ProviderAppleMusic, discdomain.ProviderSpotify,
+func identityContentRouter(down map[discovery.ProviderName]bool) chi.Router {
+	all := []discovery.ProviderName{
+		discovery.ProviderDeezer, discovery.ProviderMusicBrainz, discovery.ProviderSoundCloud,
+		discovery.ProviderLastFM, discovery.ProviderITunes, discovery.ProviderTheAudioDB,
+		discovery.ProviderDiscogs, discovery.ProviderYouTube, discovery.ProviderAmazonMusic,
+		discovery.ProviderAppleMusic, discovery.ProviderSpotify,
 	}
-	providers := make(map[discdomain.ProviderName]ports.ArtistContentProvider, len(all))
-	xref := make(map[discdomain.ProviderKey]string, len(all))
+	providers := make(map[discovery.ProviderName]discovery.ArtistContentProvider, len(all))
+	xref := make(map[discovery.ProviderKey]string, len(all))
 	for _, pn := range all {
 		providers[pn] = partialContentProvider{provider: pn, down: down[pn]}
 		xref[pn.Key()] = "id-" + pn.String()
 	}
-	svc := content.NewGetArtistContentService(providers,
-		content.WithContentIdentityStore(stubIdentityStore{xref: xref}))
-	h := NewDiscoveryHandler(DiscoveryServices{Artist: svc})
+	svc := discovery.NewGetArtistContentService(providers,
+		discovery.WithContentIdentityStore(stubIdentityStore{xref: xref}))
+	h := discovery.NewDiscoveryHandler(discovery.DiscoveryServices{Artist: svc})
 	router := chi.NewRouter()
-	router.Use(middleware.Middleware(discVerifyAsTestUser))
+	router.Use(discAsTestUser)
 	router.Mount("/discovery", h.Routes())
 	return router
 }
 
-func allButDeezerDown() map[discdomain.ProviderName]bool {
-	return map[discdomain.ProviderName]bool{
-		discdomain.ProviderMusicBrainz: true, discdomain.ProviderSoundCloud: true,
-		discdomain.ProviderLastFM: true, discdomain.ProviderITunes: true, discdomain.ProviderTheAudioDB: true,
-		discdomain.ProviderDiscogs: true, discdomain.ProviderYouTube: true, discdomain.ProviderAmazonMusic: true,
-		discdomain.ProviderAppleMusic: true, discdomain.ProviderSpotify: true,
+func allButDeezerDown() map[discovery.ProviderName]bool {
+	return map[discovery.ProviderName]bool{
+		discovery.ProviderMusicBrainz: true, discovery.ProviderSoundCloud: true,
+		discovery.ProviderLastFM: true, discovery.ProviderITunes: true, discovery.ProviderTheAudioDB: true,
+		discovery.ProviderDiscogs: true, discovery.ProviderYouTube: true, discovery.ProviderAmazonMusic: true,
+		discovery.ProviderAppleMusic: true, discovery.ProviderSpotify: true,
 	}
 }
 
@@ -253,7 +248,7 @@ func decodeContentWire(t *testing.T, raw json.RawMessage) (status string, items 
 func TestArtistContentEndpoints_IdentityFanOutReportsPartial(t *testing.T) {
 	cases := []struct {
 		name        string
-		down        map[discdomain.ProviderName]bool
+		down        map[discovery.ProviderName]bool
 		wantPartial bool
 	}{
 		{name: "10 of 11 providers failed", down: allButDeezerDown(), wantPartial: true},
@@ -292,17 +287,17 @@ func TestArtistContentEndpoints_IdentityFanOutReportsPartial(t *testing.T) {
 
 type panickingArtistContentProvider struct{}
 
-func (panickingArtistContentProvider) GetArtistTopTracks(context.Context, discdomain.ProviderName, string) ([]discdomain.SearchResult, error) {
+func (panickingArtistContentProvider) GetArtistTopTracks(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
 	panic("top tracks exploded")
 }
 
-func (panickingArtistContentProvider) GetArtistAlbums(context.Context, discdomain.ProviderName, string) ([]discdomain.SearchResult, error) {
+func (panickingArtistContentProvider) GetArtistAlbums(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
 	panic("albums exploded")
 }
 
 func TestHandleArtistContent_PanickingProviderReturns500(t *testing.T) {
-	artistProviders := map[discdomain.ProviderName]ports.ArtistContentProvider{
-		discdomain.ProviderDeezer: panickingArtistContentProvider{},
+	artistProviders := map[discovery.ProviderName]discovery.ArtistContentProvider{
+		discovery.ProviderDeezer: panickingArtistContentProvider{},
 	}
 	router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
 
@@ -315,17 +310,17 @@ type countingArtistContentProvider struct {
 	calls int
 }
 
-func (p *countingArtistContentProvider) GetArtistTopTracks(ctx context.Context, name discdomain.ProviderName, id string) ([]discdomain.SearchResult, error) {
+func (p *countingArtistContentProvider) GetArtistTopTracks(ctx context.Context, name discovery.ProviderName, id string) ([]discovery.SearchResult, error) {
 	p.calls++
 	return p.ArtistContentProvider.GetArtistTopTracks(ctx, name, id)
 }
 
-func (p *countingArtistContentProvider) GetArtistAlbums(ctx context.Context, name discdomain.ProviderName, id string) ([]discdomain.SearchResult, error) {
+func (p *countingArtistContentProvider) GetArtistAlbums(ctx context.Context, name discovery.ProviderName, id string) ([]discovery.SearchResult, error) {
 	p.calls++
 	return p.ArtistContentProvider.GetArtistAlbums(ctx, name, id)
 }
 
-func unauthenticatedDiscoveryRouter(h *DiscoveryHandler) chi.Router {
+func unauthenticatedDiscoveryRouter(h *discovery.DiscoveryHandler) chi.Router {
 	r := chi.NewRouter()
 	r.Mount("/discovery", h.Routes())
 	return r
@@ -333,9 +328,9 @@ func unauthenticatedDiscoveryRouter(h *DiscoveryHandler) chi.Router {
 
 func TestHandleArtistContent_NoIdentityIs401AndSkipsService(t *testing.T) {
 	provider := &countingArtistContentProvider{}
-	h := NewDiscoveryHandler(DiscoveryServices{
-		Artist: content.NewGetArtistContentService(map[discdomain.ProviderName]ports.ArtistContentProvider{
-			discdomain.ProviderDeezer: provider,
+	h := discovery.NewDiscoveryHandler(discovery.DiscoveryServices{
+		Artist: discovery.NewGetArtistContentService(map[discovery.ProviderName]discovery.ArtistContentProvider{
+			discovery.ProviderDeezer: provider,
 		}),
 	})
 
@@ -354,7 +349,7 @@ func TestContentRoutes_NoIdentityIs401(t *testing.T) {
 		"/discovery/artists/deezer/1/albums",
 		"/discovery/tracks/deezer/1/related",
 	}
-	router := unauthenticatedDiscoveryRouter(NewDiscoveryHandler(DiscoveryServices{}))
+	router := unauthenticatedDiscoveryRouter(discovery.NewDiscoveryHandler(discovery.DiscoveryServices{}))
 	for _, path := range paths {
 		t.Run(path, func(t *testing.T) {
 			discAssertStatus(t, discServeNoAuth(t, router, http.MethodGet, path), http.StatusUnauthorized)
@@ -365,8 +360,8 @@ func TestContentRoutes_NoIdentityIs401(t *testing.T) {
 func TestArtistContentEndpoints_AskTheProvidersTheSearchCardKnows(t *testing.T) {
 	var mu sync.Mutex
 	asked := map[string]bool{}
-	recording := func(pn discdomain.ProviderName) *discoverytest.ArtistContentProvider {
-		record := func(_ context.Context, _ discdomain.ProviderName, id string) ([]discdomain.SearchResult, error) {
+	recording := func(pn discovery.ProviderName) *discoverytest.ArtistContentProvider {
+		record := func(_ context.Context, _ discovery.ProviderName, id string) ([]discovery.SearchResult, error) {
 			mu.Lock()
 			asked[pn.String()+":"+id] = true
 			mu.Unlock()
@@ -374,13 +369,13 @@ func TestArtistContentEndpoints_AskTheProvidersTheSearchCardKnows(t *testing.T) 
 		}
 		return &discoverytest.ArtistContentProvider{GetAlbumsFn: record, GetTopTracksFn: record}
 	}
-	svc := content.NewGetArtistContentService(map[discdomain.ProviderName]ports.ArtistContentProvider{
-		discdomain.ProviderDeezer:  recording(discdomain.ProviderDeezer),
-		discdomain.ProviderSpotify: recording(discdomain.ProviderSpotify),
+	svc := discovery.NewGetArtistContentService(map[discovery.ProviderName]discovery.ArtistContentProvider{
+		discovery.ProviderDeezer:  recording(discovery.ProviderDeezer),
+		discovery.ProviderSpotify: recording(discovery.ProviderSpotify),
 	})
 	router := chi.NewRouter()
-	router.Use(middleware.Middleware(discVerifyAsTestUser))
-	router.Mount("/discovery", NewDiscoveryHandler(DiscoveryServices{Artist: svc}).Routes())
+	router.Use(discAsTestUser)
+	router.Mount("/discovery", discovery.NewDiscoveryHandler(discovery.DiscoveryServices{Artist: svc}).Routes())
 
 	for _, path := range []string{"content", "albums", "top-tracks"} {
 		asked = map[string]bool{}
@@ -394,12 +389,12 @@ func TestArtistContentEndpoints_AskTheProvidersTheSearchCardKnows(t *testing.T) 
 }
 
 func TestArtistContentEndpoints_IgnoreTheArtistName(t *testing.T) {
-	svc := content.NewGetArtistContentService(map[discdomain.ProviderName]ports.ArtistContentProvider{
-		discdomain.ProviderDeezer: &discoverytest.ArtistContentProvider{Albums: seedTracks(1), TopTracks: seedTracks(1)},
+	svc := discovery.NewGetArtistContentService(map[discovery.ProviderName]discovery.ArtistContentProvider{
+		discovery.ProviderDeezer: &discoverytest.ArtistContentProvider{Albums: seedTracks(1), TopTracks: seedTracks(1)},
 	})
 	router := chi.NewRouter()
-	router.Use(middleware.Middleware(discVerifyAsTestUser))
-	router.Mount("/discovery", NewDiscoveryHandler(DiscoveryServices{Artist: svc}).Routes())
+	router.Use(discAsTestUser)
+	router.Mount("/discovery", discovery.NewDiscoveryHandler(discovery.DiscoveryServices{Artist: svc}).Routes())
 
 	for _, path := range []string{"content", "albums", "top-tracks"} {
 		rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/d1/"+path+"?name="+strings.Repeat("a", 5000), nil)
@@ -411,17 +406,17 @@ func TestArtistContentEndpoints_IgnoreTheArtistName(t *testing.T) {
 func TestAlbumTracks_ServesLongAlbumsWholeAndPassesTheCardIDs(t *testing.T) {
 	var gotSpotifyID string
 	deezer := &discoverytest.AlbumContentProvider{Results: seedTracks(120)}
-	spotify := &discoverytest.AlbumContentProvider{GetAlbumTracksFn: func(_ context.Context, _ discdomain.ProviderName, id string) ([]discdomain.SearchResult, error) {
+	spotify := &discoverytest.AlbumContentProvider{GetAlbumTracksFn: func(_ context.Context, _ discovery.ProviderName, id string) ([]discovery.SearchResult, error) {
 		gotSpotifyID = id
 		return nil, nil
 	}}
-	svc := content.NewGetAlbumTracksService(map[discdomain.ProviderName]ports.AlbumContentProvider{
-		discdomain.ProviderDeezer:  deezer,
-		discdomain.ProviderSpotify: spotify,
+	svc := discovery.NewGetAlbumTracksService(map[discovery.ProviderName]discovery.AlbumContentProvider{
+		discovery.ProviderDeezer:  deezer,
+		discovery.ProviderSpotify: spotify,
 	})
 	router := chi.NewRouter()
-	router.Use(middleware.Middleware(discVerifyAsTestUser))
-	router.Mount("/discovery", NewDiscoveryHandler(DiscoveryServices{Album: svc}).Routes())
+	router.Use(discAsTestUser)
+	router.Mount("/discovery", discovery.NewDiscoveryHandler(discovery.DiscoveryServices{Album: svc}).Routes())
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/albums/deezer/d1/tracks?ids=spotify:sp1", nil)
 
@@ -434,12 +429,12 @@ func TestAlbumTracks_ServesLongAlbumsWholeAndPassesTheCardIDs(t *testing.T) {
 	}
 }
 
-func numberedAlbums(n int) []discdomain.SearchResult {
-	out := make([]discdomain.SearchResult, n)
+func numberedAlbums(n int) []discovery.SearchResult {
+	out := make([]discovery.SearchResult, n)
 	for i := range out {
 		id := strconv.Itoa(i)
-		out[i] = discdomain.NewProviderResult(discdomain.ResultKindAlbum, "Album "+id, "Artist", "",
-			discdomain.SourceRef{Provider: discdomain.ProviderDeezer, ExternalID: id}, nil)
+		out[i] = discovery.NewProviderResult(discovery.ResultKindAlbum, "Album "+id, "Artist", "",
+			discovery.SourceRef{Provider: discovery.ProviderDeezer, ExternalID: id}, nil)
 	}
 	return out
 }
@@ -455,12 +450,12 @@ func TestHandleArtistAlbums_LimitClamping(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			svc := content.NewGetArtistContentService(map[discdomain.ProviderName]ports.ArtistContentProvider{
-				discdomain.ProviderDeezer: &discoverytest.ArtistContentProvider{Albums: numberedAlbums(120)},
+			svc := discovery.NewGetArtistContentService(map[discovery.ProviderName]discovery.ArtistContentProvider{
+				discovery.ProviderDeezer: &discoverytest.ArtistContentProvider{Albums: numberedAlbums(120)},
 			})
 			router := chi.NewRouter()
-			router.Use(middleware.Middleware(discVerifyAsTestUser))
-			router.Mount("/discovery", NewDiscoveryHandler(DiscoveryServices{Artist: svc}).Routes())
+			router.Use(discAsTestUser)
+			router.Mount("/discovery", discovery.NewDiscoveryHandler(discovery.DiscoveryServices{Artist: svc}).Routes())
 
 			rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/1/albums"+c.query, nil)
 

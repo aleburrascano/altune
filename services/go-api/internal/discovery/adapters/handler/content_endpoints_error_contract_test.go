@@ -1,11 +1,7 @@
-package handler
+package handler_test
 
 import (
-	"altune/go-api/internal/auth/adapters/middleware"
-	"altune/go-api/internal/discovery/internal/core/ports"
-	"altune/go-api/internal/discovery/service/content"
-	"altune/go-api/internal/discovery/service/providercall"
-	"altune/go-api/internal/discovery/service/related"
+	"altune/go-api/internal/discovery"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,57 +11,55 @@ import (
 	"strings"
 	"testing"
 
-	discdomain "altune/go-api/internal/discovery/domain"
-
 	"github.com/go-chi/chi/v5"
 )
 
 type timingOutContentProvider struct{}
 
-func (timingOutContentProvider) fail() ([]discdomain.SearchResult, error) {
+func (timingOutContentProvider) fail() ([]discovery.SearchResult, error) {
 	return nil, &url.Error{Op: "Get", URL: "https://upstream.example/x", Err: context.DeadlineExceeded}
 }
 
-func (p timingOutContentProvider) GetAlbumTracks(context.Context, discdomain.ProviderName, string) ([]discdomain.SearchResult, error) {
+func (p timingOutContentProvider) GetAlbumTracks(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
 	return p.fail()
 }
 
-func (p timingOutContentProvider) GetArtistTopTracks(context.Context, discdomain.ProviderName, string) ([]discdomain.SearchResult, error) {
+func (p timingOutContentProvider) GetArtistTopTracks(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
 	return p.fail()
 }
 
-func (p timingOutContentProvider) GetArtistAlbums(context.Context, discdomain.ProviderName, string) ([]discdomain.SearchResult, error) {
+func (p timingOutContentProvider) GetArtistAlbums(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
 	return p.fail()
 }
 
-func (p timingOutContentProvider) GetRelatedTracks(context.Context, discdomain.ProviderName, string) ([]discdomain.SearchResult, error) {
+func (p timingOutContentProvider) GetRelatedTracks(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
 	return p.fail()
 }
 
 func errorContractRouter(t *testing.T) chi.Router {
 	t.Helper()
-	breaker := providercall.NewCircuitBreaker()
-	for i := 0; breaker.AllowRequest(context.Background(), discdomain.ProviderSoundCloud); i++ {
+	breaker := discovery.NewCircuitBreaker()
+	for i := 0; breaker.AllowRequest(context.Background(), discovery.ProviderSoundCloud); i++ {
 		if i > 100 {
 			t.Fatal("circuit breaker never opened for soundcloud")
 		}
-		breaker.RecordFailure(context.Background(), discdomain.ProviderSoundCloud)
+		breaker.RecordFailure(context.Background(), discovery.ProviderSoundCloud)
 	}
 	timingOut := timingOutContentProvider{}
-	healthy := stubContentProvider{provider: discdomain.ProviderSoundCloud}
-	h := NewDiscoveryHandler(DiscoveryServices{
-		Album: content.NewGetAlbumTracksService(map[discdomain.ProviderName]ports.AlbumContentProvider{
-			discdomain.ProviderITunes: timingOut, discdomain.ProviderSoundCloud: healthy,
-		}, content.WithAlbumCircuitBreaker(breaker)),
-		Artist: content.NewGetArtistContentService(map[discdomain.ProviderName]ports.ArtistContentProvider{
-			discdomain.ProviderITunes: timingOut, discdomain.ProviderSoundCloud: healthy,
-		}, content.WithContentCircuitBreaker(breaker)),
-		Related: related.NewGetRelatedTracksService(map[string]ports.RelatedTracksProvider{
-			discdomain.ProviderITunes.String(): timingOut, discdomain.ProviderSoundCloud.String(): healthy,
-		}, related.WithRelatedCircuitBreaker(breaker)),
+	healthy := stubContentProvider{provider: discovery.ProviderSoundCloud}
+	h := discovery.NewDiscoveryHandler(discovery.DiscoveryServices{
+		Album: discovery.NewGetAlbumTracksService(map[discovery.ProviderName]discovery.AlbumContentProvider{
+			discovery.ProviderITunes: timingOut, discovery.ProviderSoundCloud: healthy,
+		}, discovery.WithAlbumCircuitBreaker(breaker)),
+		Artist: discovery.NewGetArtistContentService(map[discovery.ProviderName]discovery.ArtistContentProvider{
+			discovery.ProviderITunes: timingOut, discovery.ProviderSoundCloud: healthy,
+		}, discovery.WithContentCircuitBreaker(breaker)),
+		Related: discovery.NewGetRelatedTracksService(map[string]discovery.RelatedTracksProvider{
+			discovery.ProviderITunes.String(): timingOut, discovery.ProviderSoundCloud.String(): healthy,
+		}, discovery.WithRelatedCircuitBreaker(breaker)),
 	})
 	router := chi.NewRouter()
-	router.Use(middleware.Middleware(discVerifyAsTestUser))
+	router.Use(discAsTestUser)
 	router.Mount("/discovery", h.Routes())
 	return router
 }
@@ -127,32 +121,82 @@ func decodeContentFailure(t *testing.T, httpCode int, raw json.RawMessage) conte
 	return contentFailure{HTTP: httpCode, Status: body.Status, Code: body.Code}
 }
 
-func TestArtistContentOutcome(t *testing.T) {
-	ok := &providercall.ContentFetchResponse{Status: discdomain.ProviderStatusOK}
-	partial := &providercall.ContentFetchResponse{Status: discdomain.ProviderStatusOK, Partial: true}
-	timeout := &providercall.ContentFetchResponse{Status: discdomain.ProviderStatusTimeout}
-	broken := &providercall.ContentFetchResponse{Status: discdomain.ProviderStatusError}
-	throttled := &providercall.ContentFetchResponse{Status: discdomain.ProviderStatusRateLimited}
-	unserved := &providercall.ContentFetchResponse{Status: discdomain.ProviderStatusError, Unserved: true}
+type throttledError struct{}
+
+func (throttledError) Error() string { return "upstream said 429" }
+
+func (throttledError) HTTPStatus() int { return http.StatusTooManyRequests }
+
+type scriptedArtistProvider struct {
+	tracksErr, albumsErr error
+}
+
+func (p scriptedArtistProvider) answer(kind discovery.ResultKind, id string, err error) ([]discovery.SearchResult, error) {
+	var partial *discovery.PartialResultError
+	if err != nil && !errors.As(err, &partial) {
+		return nil, err
+	}
+	return []discovery.SearchResult{{
+		Kind:    kind,
+		Title:   "Real Song",
+		Sources: []discovery.SourceRef{{Provider: discovery.ProviderDeezer, ExternalID: id}},
+		Extras:  map[string]any{},
+	}}, err
+}
+
+func (p scriptedArtistProvider) GetArtistTopTracks(_ context.Context, _ discovery.ProviderName, id string) ([]discovery.SearchResult, error) {
+	return p.answer(discovery.ResultKindTrack, id, p.tracksErr)
+}
+
+func (p scriptedArtistProvider) GetArtistAlbums(_ context.Context, _ discovery.ProviderName, id string) ([]discovery.SearchResult, error) {
+	return p.answer(discovery.ResultKindAlbum, id, p.albumsErr)
+}
+
+func TestArtistContent_OutcomeFollowsBothHalves(t *testing.T) {
+	partial := &discovery.PartialResultError{Page: 2, Err: errors.New("page 2 failed")}
+	timeout := &url.Error{Op: "Get", URL: "https://upstream.example/x", Err: context.DeadlineExceeded}
+	broken := errors.New("upstream broke")
 	cases := []struct {
-		name           string
-		tracks, albums *providercall.ContentFetchResponse
-		wantHTTP       int
-		wantCode       string
+		name                 string
+		tracksErr, albumsErr error
+		provider             string
+		wantHTTP             int
+		wantCode             string
 	}{
-		{name: "both ok", tracks: ok, albums: ok, wantHTTP: http.StatusOK},
-		{name: "partial halves", tracks: partial, albums: partial, wantHTTP: http.StatusOK},
-		{name: "only tracks failed", tracks: timeout, albums: ok, wantHTTP: http.StatusOK},
-		{name: "only albums failed", tracks: ok, albums: broken, wantHTTP: http.StatusOK},
-		{name: "both failed, tracks decide", tracks: throttled, albums: broken, wantHTTP: http.StatusServiceUnavailable, wantCode: contentCodeRateLimited},
-		{name: "called failure outranks unserved", tracks: unserved, albums: broken, wantHTTP: http.StatusBadGateway, wantCode: contentCodeProviderError},
-		{name: "both unserved", tracks: unserved, albums: unserved, wantHTTP: http.StatusNotFound, wantCode: contentCodeUnserved},
+		{name: "both ok", provider: "deezer", wantHTTP: http.StatusOK},
+		{name: "partial halves", tracksErr: partial, albumsErr: partial, provider: "deezer", wantHTTP: http.StatusOK},
+		{name: "only tracks failed", tracksErr: timeout, provider: "deezer", wantHTTP: http.StatusOK},
+		{name: "only albums failed", albumsErr: broken, provider: "deezer", wantHTTP: http.StatusOK},
+		{
+			name: "both failed, tracks decide", tracksErr: throttledError{}, albumsErr: broken, provider: "deezer",
+			wantHTTP: http.StatusServiceUnavailable, wantCode: "discovery.provider_rate_limited",
+		},
+		{
+			name: "both failed, albums cause ignored", tracksErr: broken, albumsErr: throttledError{}, provider: "deezer",
+			wantHTTP: http.StatusBadGateway, wantCode: "discovery.provider_error",
+		},
+		{name: "both unserved", provider: "spotify", wantHTTP: http.StatusNotFound, wantCode: "discovery.content_unserved"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			gotHTTP, gotCode := artistContentOutcome(tc.tracks, tc.albums)
-			if gotHTTP != tc.wantHTTP || gotCode != tc.wantCode {
-				t.Errorf("outcome = %d %q, want %d %q", gotHTTP, gotCode, tc.wantHTTP, tc.wantCode)
+			h := discovery.NewDiscoveryHandler(discovery.DiscoveryServices{
+				Artist: discovery.NewGetArtistContentService(map[discovery.ProviderName]discovery.ArtistContentProvider{
+					discovery.ProviderDeezer: scriptedArtistProvider{tracksErr: tc.tracksErr, albumsErr: tc.albumsErr},
+				}),
+			})
+			router := chi.NewRouter()
+			router.Use(discAsTestUser)
+			router.Mount("/discovery", h.Routes())
+
+			rec := discServe(t, router, http.MethodGet, "/discovery/artists/"+tc.provider+"/id-1/content", nil)
+			var body struct {
+				Code string `json:"code"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode %s: %v", rec.Body.String(), err)
+			}
+			if rec.Code != tc.wantHTTP || body.Code != tc.wantCode {
+				t.Errorf("outcome = %d %q, want %d %q (body %s)", rec.Code, body.Code, tc.wantHTTP, tc.wantCode, rec.Body.String())
 			}
 		})
 	}
@@ -197,38 +241,4 @@ func TestContentFetchEndpoints_DistinguishFailureCauses(t *testing.T) {
 			}
 		})
 	}
-}
-
-type stubContentProvider struct {
-	provider discdomain.ProviderName
-	down     bool
-}
-
-func (p stubContentProvider) answer(kind discdomain.ResultKind, id string) ([]discdomain.SearchResult, error) {
-	if p.down {
-		return nil, errors.New("upstream unavailable")
-	}
-	return []discdomain.SearchResult{{
-		Kind:     kind,
-		Title:    "Real Song",
-		Subtitle: "Artist",
-		Sources:  []discdomain.SourceRef{{Provider: p.provider, ExternalID: id}},
-		Extras:   map[string]any{},
-	}}, nil
-}
-
-func (p stubContentProvider) GetAlbumTracks(_ context.Context, _ discdomain.ProviderName, id string) ([]discdomain.SearchResult, error) {
-	return p.answer(discdomain.ResultKindTrack, id)
-}
-
-func (p stubContentProvider) GetArtistTopTracks(_ context.Context, _ discdomain.ProviderName, id string) ([]discdomain.SearchResult, error) {
-	return p.answer(discdomain.ResultKindTrack, id)
-}
-
-func (p stubContentProvider) GetArtistAlbums(_ context.Context, _ discdomain.ProviderName, id string) ([]discdomain.SearchResult, error) {
-	return p.answer(discdomain.ResultKindAlbum, id)
-}
-
-func (p stubContentProvider) GetRelatedTracks(_ context.Context, _ discdomain.ProviderName, id string) ([]discdomain.SearchResult, error) {
-	return p.answer(discdomain.ResultKindTrack, id)
 }
