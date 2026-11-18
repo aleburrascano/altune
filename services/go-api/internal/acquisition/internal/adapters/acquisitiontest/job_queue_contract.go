@@ -1,7 +1,7 @@
 package acquisitiontest
 
 import (
-	acqdomain "altune/go-api/internal/acquisition/domain"
+	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"

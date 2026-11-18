@@ -1,12 +1,15 @@
 package acquisition
 
-import domain "altune/go-api/internal/acquisition/domain"
+import (
+	domain "altune/go-api/internal/acquisition/internal/core/domain"
+	"altune/go-api/internal/acquisition/sourcekey"
+)
 
 type SourceName = domain.SourceName
 
 var (
-	IsYouTubeVideoID = domain.IsYouTubeVideoID
-	SourceKey        = domain.SourceKey
+	IsYouTubeVideoID = sourcekey.IsYouTubeVideoID
+	SourceKey        = sourcekey.SourceKey
 )
 
 var (

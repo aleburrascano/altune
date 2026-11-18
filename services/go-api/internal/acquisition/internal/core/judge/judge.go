@@ -1,7 +1,7 @@
 package judge
 
 import (
-	"altune/go-api/internal/acquisition/domain"
+	"altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/shared/textnorm"
 	"altune/go-api/internal/shared/versiontag"
 	"math"

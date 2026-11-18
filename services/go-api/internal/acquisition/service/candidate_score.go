@@ -1,7 +1,7 @@
 package service
 
 import (
-	"altune/go-api/internal/acquisition/domain"
+	"altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/shared/textnorm"
 	"math"

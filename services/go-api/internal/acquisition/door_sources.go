@@ -1,8 +1,8 @@
 package acquisition
 
 import (
-	domain "altune/go-api/internal/acquisition/domain"
 	catalogpin "altune/go-api/internal/acquisition/internal/adapters/catalogpin"
+	domain "altune/go-api/internal/acquisition/internal/core/domain"
 	ports "altune/go-api/internal/acquisition/internal/core/ports"
 )
 

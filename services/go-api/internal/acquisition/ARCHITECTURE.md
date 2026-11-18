@@ -21,7 +21,9 @@ below exists to keep those apart. Where the module is weakest is where it curren
 
 Acquisition is a **customer of catalog**, not an aggregate owner. It consumes
 `catalog/domain.Track` and its `MarkReady` / `MarkFailed` / `RevertToPending`
-invariants; `domain/` holds only the admission errors (`domain/admission_error.go`); the context is
+invariants; `internal/core/domain/` holds its pure rules (the admission, lease, job and search
+sentinels, the source name and the length and credit comparisons) and `sourcekey/` the audio URL
+dedupe key; the context is
 orchestration-heavy rather than aggregate-heavy, so it owns no aggregate. The candidate type
 (`ports.AudioCandidate`) lives in `ports/` and doubles as the pipeline's working
 type — a service-side twin would duplicate its fields inside one bounded context.
@@ -203,7 +205,7 @@ service/                 the orchestration: pipeline shape, the pure decisions, 
   upgrade_planner.go     UpgradePlanner: one picked track per tick, enqueued as an upgrade job
   job_log.go             jobLog: the recent ring, counters (records are ports.JobRecord)
   job_telemetry.go       the jobReporter context seam and its schedulerJobReporter
-  domain/admission_error.go admissionError and the admission sentinels (package domain)
+  internal/core/domain/admission_error.go admissionError and the admission sentinels (package domain)
   audio_ref.go           BuildAudioRef (+ legacy variants), path-component helpers
   retry_admission.go     RetryAdmission, ReacquireAdmission, cooldownGate
 adapters/

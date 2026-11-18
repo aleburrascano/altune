@@ -1,7 +1,7 @@
 package discoverybridge
 
 import (
-	"altune/go-api/internal/acquisition/domain"
+	"altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/service/search"
 	shared "altune/go-api/internal/shared/kernel"

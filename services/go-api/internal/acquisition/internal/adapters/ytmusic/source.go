@@ -1,9 +1,10 @@
 package ytmusic
 
 import (
-	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/internal/adapters/ytmsearch"
+	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/sourcekey"
 	"context"
 	"log/slog"
 )
@@ -39,7 +40,7 @@ func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.Audio
 	if videoID == "" {
 		return nil, nil
 	}
-	if !acqdomain.IsYouTubeVideoID(videoID) {
+	if !sourcekey.IsYouTubeVideoID(videoID) {
 		slog.WarnContext(ctx, "acquisition.ytmusic_video_id_rejected",
 			"video_id", videoID, "title", req.Title)
 		return nil, nil
@@ -75,7 +76,7 @@ func CandidateForWatch(videoID string, observed ytmsearch.Watch, pinned bool) po
 		Title:       observed.Title,
 		Artists:     observed.Artists,
 		Explicit:    observed.Explicit,
-		URL:         acqdomain.YouTubeMusicWatchURL(videoID),
+		URL:         sourcekey.YouTubeMusicWatchURL(videoID),
 		Categories:  []string{"Music"},
 		Kind:        kind,
 		ObservedOMV: observed.Type == ytmsearch.VideoTypeOMV,

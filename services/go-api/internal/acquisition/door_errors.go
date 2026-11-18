@@ -1,7 +1,7 @@
 package acquisition
 
 import (
-	domain "altune/go-api/internal/acquisition/domain"
+	domain "altune/go-api/internal/acquisition/internal/core/domain"
 	upgrade "altune/go-api/internal/acquisition/service/upgrade"
 )
 

@@ -1,9 +1,9 @@
 package fixture
 
 import (
-	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/internal/adapters/ytdlp"
 	"altune/go-api/internal/acquisition/internal/adapters/ytmsearch"
+	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"bytes"
 	"context"

@@ -1,7 +1,7 @@
 package upgrade
 
 import (
-	acqdomain "altune/go-api/internal/acquisition/domain"
+	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/grade"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"errors"

@@ -1,9 +1,9 @@
 package service
 
 import (
-	"altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/internal/adapters/ytmsearch"
 	"altune/go-api/internal/acquisition/internal/adapters/ytmusic"
+	"altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/grade"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"context"
