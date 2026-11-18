@@ -1,4 +1,4 @@
 role: feature
 owns: "the queue snapshot a user resumes playback from"
-depends_on: [auth, catalog, database, domain, httputil, kernel, sharedtest]
+depends_on: [catalog, database, domain, httputil, kernel, requestuser, sharedtest]
 owns_tables: [playback_queue_state]
