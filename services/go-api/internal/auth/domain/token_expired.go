@@ -1,5 +1,5 @@
 package domain
 
-import "errors"
+import "altune/go-api/internal/shared/requestuser"
 
-var ErrTokenExpired = errors.New("auth: token expired")
+var ErrTokenExpired = requestuser.ErrTokenExpired

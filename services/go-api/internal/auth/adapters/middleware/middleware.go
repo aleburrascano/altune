@@ -3,9 +3,8 @@ package middleware
 import (
 	"altune/go-api/internal/auth/domain"
 	"altune/go-api/internal/auth/internal/core/ports"
-	"altune/go-api/internal/auth/service"
 	"altune/go-api/internal/shared/httputil"
-	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/requestuser"
 	"context"
 	"errors"
 	"log/slog"
@@ -80,7 +79,7 @@ func (a authenticator) bearer(w http.ResponseWriter, r *http.Request) (string, b
 }
 
 func (a authenticator) verify(w http.ResponseWriter, r *http.Request, token string) (domain.VerifiedToken, bool) {
-	attempt, retryAfter, admitted := a.throttle.admit(clientKey(r))
+	attempt, retryAfter, admitted := a.throttle.admit(requestuser.ClientKey(r))
 	if !admitted {
 		a.rej.rejectThrottled(w, r, retryAfter)
 		return domain.VerifiedToken{}, false
@@ -99,7 +98,7 @@ func (a authenticator) verify(w http.ResponseWriter, r *http.Request, token stri
 }
 
 func contextFor(ctx context.Context, t domain.VerifiedToken) context.Context {
-	return service.ContextWithTokenExpiry(service.ContextWithUserID(ctx, t.UserID), t.ExpiresAt)
+	return requestuser.ContextWithTokenExpiry(requestuser.ContextWithUserID(ctx, t.UserID), t.ExpiresAt)
 }
 
 const maxBearerTokenBytes = 8 << 10
@@ -150,7 +149,7 @@ func (rej rejecter) rejectClientCancelled(w http.ResponseWriter, r *http.Request
 func (rej rejecter) rejectThrottled(w http.ResponseWriter, r *http.Request, retryAfter time.Duration) {
 	rej.metrics.RequestThrottled()
 	slog.WarnContext(r.Context(), "auth.throttled",
-		"client", clientKey(r),
+		"client", requestuser.ClientKey(r),
 		"path", r.URL.Path,
 	)
 	w.Header().Set("Retry-After", httputil.RetryAfterSeconds(retryAfter))
@@ -185,7 +184,7 @@ func writeUnauthorized(w http.ResponseWriter, r *http.Request, reason domain.Tok
 	attrs := []any{
 		"reason", string(reason),
 		"detail", detail,
-		"client", clientKey(r),
+		"client", requestuser.ClientKey(r),
 		"path", r.URL.Path,
 	}
 	if err != nil {
@@ -200,11 +199,7 @@ func writeUnauthorized(w http.ResponseWriter, r *http.Request, reason domain.Tok
 	})
 }
 
-func RequireUserID(w http.ResponseWriter, r *http.Request) (shared.UserId, bool) {
-	id, ok := service.UserIDFromContext(r.Context())
-	if !ok {
-		writeUnauthorized(w, r, domain.ReasonMissing, "authentication required", nil)
-		return shared.UserId{}, false
-	}
-	return id, true
-}
+var (
+	RequireUserID = requestuser.RequireUserID
+	ClientKey     = requestuser.ClientKey
+)

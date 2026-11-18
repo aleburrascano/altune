@@ -1,4 +1,4 @@
-package middleware
+package httpuser
 
 import (
 	"net"
@@ -7,9 +7,7 @@ import (
 	"strings"
 )
 
-func ClientKey(r *http.Request) string { return clientKey(r) }
-
-func clientKey(r *http.Request) string {
+func ClientKey(r *http.Request) string {
 	peer := parseIP(hostOnly(r.RemoteAddr))
 	if forwarded, ok := forwardedClient(r, peer); ok {
 		return prefixKey(forwarded)
