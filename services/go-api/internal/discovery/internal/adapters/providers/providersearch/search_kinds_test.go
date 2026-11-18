@@ -13,9 +13,9 @@ import (
 
 func TestSearchAcrossKinds_DoesNotLogQueryText(t *testing.T) {
 	buf := providertest.CaptureDefaultLog(t)
-	all := discovery.ProviderSearchAllSearchKinds()
+	all := discovery.ProviderSearchAllKinds()
 
-	_, _ = discovery.ProviderSearchSearchAcrossKinds(context.Background(), "deezer", providertest.SensitiveQuery, all, all,
+	_, _ = discovery.ProviderSearchAcrossKinds(context.Background(), "deezer", providertest.SensitiveQuery, all, all,
 		func(_ context.Context, _ discovery.ResultKind) ([]discovery.SearchResult, error) {
 			return nil, fmt.Errorf("get \"https://api.example/search?q=%s\": timeout", url.QueryEscape(providertest.SensitiveQuery))
 		})
@@ -28,9 +28,9 @@ func TestSearchAcrossKinds_DoesNotLogQueryText(t *testing.T) {
 }
 
 func TestSearchAcrossKinds_OneFailedKindKeepsTheRestAndSaysWhichFailed(t *testing.T) {
-	all := discovery.ProviderSearchAllSearchKinds()
+	all := discovery.ProviderSearchAllKinds()
 
-	got, err := discovery.ProviderSearchSearchAcrossKinds(context.Background(), "deezer", "humble", all, all,
+	got, err := discovery.ProviderSearchAcrossKinds(context.Background(), "deezer", "humble", all, all,
 		func(_ context.Context, kind discovery.ResultKind) ([]discovery.SearchResult, error) {
 			if kind == discovery.ResultKindAlbum {
 				return nil, context.DeadlineExceeded
@@ -54,9 +54,9 @@ func TestSearchAcrossKinds_OneFailedKindKeepsTheRestAndSaysWhichFailed(t *testin
 }
 
 func TestSearchAcrossKinds_AllKindsFailedIsAPlainError(t *testing.T) {
-	all := discovery.ProviderSearchAllSearchKinds()
+	all := discovery.ProviderSearchAllKinds()
 
-	_, err := discovery.ProviderSearchSearchAcrossKinds(context.Background(), "deezer", "humble", all, all,
+	_, err := discovery.ProviderSearchAcrossKinds(context.Background(), "deezer", "humble", all, all,
 		func(context.Context, discovery.ResultKind) ([]discovery.SearchResult, error) {
 			return nil, errors.New("down")
 		})

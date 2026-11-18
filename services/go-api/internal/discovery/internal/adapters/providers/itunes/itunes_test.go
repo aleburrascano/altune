@@ -416,7 +416,7 @@ func limitedLookup(t *testing.T) func(context.Context) error {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"results":[]}`))
+		_, _ = w.Write([]byte(`{"results":[]}`))
 	}))
 	t.Cleanup(server.Close)
 	adapter := discovery.NewITunesAdapter(providertest.NewClient(server.URL))
@@ -468,9 +468,9 @@ func TestProviderLimiterBurstShedsBeyondQueueDepth(t *testing.T) {
 			if admitted != tc.burst {
 				t.Errorf("admitted at once = %d, want the burst of %d", admitted, tc.burst)
 			}
-			if want := callers - tc.burst - discovery.ProviderHTTPProviderQueueDepth; shed != want {
+			if want := callers - tc.burst - discovery.ProviderHTTPQueueDepth; shed != want {
 				t.Errorf("shed within 300ms = %d, want %d (callers %d - burst %d - queue depth %d)",
-					shed, want, callers, tc.burst, discovery.ProviderHTTPProviderQueueDepth)
+					shed, want, callers, tc.burst, discovery.ProviderHTTPQueueDepth)
 			}
 		})
 	}

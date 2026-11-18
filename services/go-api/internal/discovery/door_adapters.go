@@ -24,16 +24,16 @@ type (
 )
 
 const (
-	ContributorFeatured            = domain.ContributorFeatured
-	ContributorMain                = domain.ContributorMain
-	ProviderHTTPBodyCap            = providerhttp.BodyCap
-	ProviderHTTPProviderQueueDepth = providerhttp.ProviderQueueDepth
-	ProviderKeyCoverArtArchive     = domain.ProviderKeyCoverArtArchive
-	RecordTypeAlbum                = domain.RecordTypeAlbum
-	RecordTypeCompilation          = domain.RecordTypeCompilation
-	RecordTypeEP                   = domain.RecordTypeEP
-	RecordTypeSingle               = domain.RecordTypeSingle
-	RecordTypeUnknown              = domain.RecordTypeUnknown
+	ContributorFeatured        = domain.ContributorFeatured
+	ContributorMain            = domain.ContributorMain
+	ProviderHTTPBodyCap        = providerhttp.BodyCap
+	ProviderHTTPQueueDepth     = providerhttp.ProviderQueueDepth
+	ProviderKeyCoverArtArchive = domain.ProviderKeyCoverArtArchive
+	RecordTypeAlbum            = domain.RecordTypeAlbum
+	RecordTypeCompilation      = domain.RecordTypeCompilation
+	RecordTypeEP               = domain.RecordTypeEP
+	RecordTypeSingle           = domain.RecordTypeSingle
+	RecordTypeUnknown          = domain.RecordTypeUnknown
 )
 
 var (
@@ -58,10 +58,10 @@ var (
 	ProviderHTTPPostBytesCapped       = providerhttp.PostBytesCapped
 	ProviderHTTPPostBytesCappedOK     = providerhttp.PostBytesCappedOK
 	ProviderHTTPPostJSON              = providerhttp.PostJSON
-	ProviderSearchAllSearchKinds      = providersearch.AllSearchKinds
+	ProviderSearchAllKinds            = providersearch.AllSearchKinds
 	ProviderSearchDslQuote            = providersearch.DslQuote
 	ProviderSearchMbLuceneEscape      = providersearch.MbLuceneEscape
 	ProviderSearchParseListeners      = providersearch.ParseListeners
-	ProviderSearchSearchAcrossKinds   = providersearch.SearchAcrossKinds
+	ProviderSearchAcrossKinds         = providersearch.SearchAcrossKinds
 	WithProviderHTTPHeader            = providerhttp.WithHeader
 )

@@ -128,6 +128,11 @@ func TestRateLimiterAdmittedCallersStaySpaced(t *testing.T) {
 		t.Fatalf("limiter reserved %d slots, want 4", len(admits))
 	}
 	slices.SortFunc(admits, func(a, b time.Time) int { return a.Compare(b) })
+	const stampSlack = 5 * time.Millisecond
+	want := time.Duration(len(admits)-1) * interval
+	if span := admits[len(admits)-1].Sub(admits[0]); span < want-stampSlack {
+		t.Errorf("first to last admit took %v, want at least %v for %d callers spaced %v apart", span, want, len(admits), interval)
+	}
 	for i := 1; i < len(admits); i++ {
 		if gap := admits[i].Sub(admits[i-1]); gap < interval/2 {
 			t.Errorf("admits %d and %d only %v apart, want about %v", i-1, i, gap, interval)
