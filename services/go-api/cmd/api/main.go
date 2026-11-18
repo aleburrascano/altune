@@ -46,7 +46,7 @@ func main() {
 }
 
 func runServer(cfg *config.Config, logRing *logging.RingBuffer) {
-	shutdown, err := telemetry.Setup(context.Background(), telemetry.Service{Name: "altune-api", Version: app.BuildCommit(), Environment: cfg.Env})
+	shutdown, err := telemetry.Setup(context.Background(), telemetry.Service{Name: "altune-api", Version: app.BuildCommit(), Environment: cfg.Env}, os.Getenv)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "telemetry setup: %v\n", err)
 		os.Exit(1)
