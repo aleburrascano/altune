@@ -1,0 +1,17 @@
+{
+  "removed": [
+    "T1 internal/discovery/service/vocabulary/correction_test.go imports discoverytest/correction_helpers.go, behind discovery's door",
+    "T1 internal/discovery/service/vocabulary/correction_test.go imports discoverytest/search_correction_helpers.go, behind discovery's door",
+    "T1 internal/discovery/service/vocabulary/correction_test.go imports discoverytest/vocabulary_refresh_helpers.go, behind discovery's door",
+    "T1 internal/discovery/service/vocabulary/correction_test.go imports domain/vocabulary.go, behind discovery's door",
+    "T1 internal/discovery/service/vocabulary/correction_test.go is in package vocabulary, so it sees inside the module: use package vocabulary_test and import the door",
+    "T1 internal/discovery/service/vocabulary/vocab_test.go imports discoverytest/merge_helpers.go, behind discovery's door",
+    "T1 internal/discovery/service/vocabulary/vocab_test.go imports discoverytest/rank_helpers.go, behind discovery's door",
+    "T1 internal/discovery/service/vocabulary/vocab_test.go imports domain/enums.go, behind discovery's door",
+    "T1 internal/discovery/service/vocabulary/vocab_test.go imports domain/search_result.go, behind discovery's door",
+    "T1 internal/discovery/service/vocabulary/vocab_test.go imports domain/vocabulary.go, behind discovery's door",
+    "T1 internal/discovery/service/vocabulary/vocab_test.go is in package vocabulary, so it sees inside the module: use package vocabulary_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}

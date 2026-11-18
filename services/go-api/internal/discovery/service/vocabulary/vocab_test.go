@@ -1,103 +1,160 @@
-package vocabulary
+package vocabulary_test
 
 import (
-	"altune/go-api/internal/discovery/discoverytest"
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
+	"context"
+	"slices"
+	"sync"
 	"testing"
 )
 
-func TestResultKindToVocabKind(t *testing.T) {
-	cases := []struct {
-		in   domain.ResultKind
-		want domain.VocabularyKind
-	}{
-		{domain.ResultKindArtist, domain.VocabKindArtist},
-		{domain.ResultKindTrack, domain.VocabKindTrack},
-		{domain.ResultKindAlbum, domain.VocabKindAlbum},
-		{domain.ResultKindUnknown, domain.VocabKindQuery},
-		{domain.ResultKindPlaylist, domain.VocabKindQuery},
+const (
+	vocabIngestTop       = 5
+	everyResultOnOnePage = 50
+)
+
+type ingestedSearch struct {
+	shown   []discovery.SearchResult
+	entries []discovery.VocabularyEntry
+}
+
+func searchAndIngest(t *testing.T, query string, kinds map[discovery.ResultKind]bool, results ...discovery.SearchResult) ingestedSearch {
+	t.Helper()
+	var mu sync.Mutex
+	var entries []discovery.VocabularyEntry
+	store := &discovery.FakeVocabularyStore{AddFn: func(e discovery.VocabularyEntry) error {
+		mu.Lock()
+		defer mu.Unlock()
+		entries = append(entries, e)
+		return nil
+	}}
+	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: results}
+	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithVocabularyStore(store))
+	q, err := discovery.NewSearchQuery(query, kinds, everyResultOnOnePage)
+	if err != nil {
+		t.Fatalf("NewSearchQuery: %v", err)
 	}
-	for _, c := range cases {
-		if got := resultKindToVocabKind(c.in); got != c.want {
-			t.Errorf("resultKindToVocabKind(%v) = %q, want %q", c.in, got, c.want)
-		}
+	out, err := svc.Execute(context.Background(), discovery.NewUser(), q, false)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	svc.WaitForBackground()
+	mu.Lock()
+	defer mu.Unlock()
+	return ingestedSearch{shown: out.Results, entries: entries}
+}
+
+func deezerResult(kind discovery.ResultKind, title, subtitle string, popularity float64) discovery.SearchResult {
+	return discovery.SearchResult{
+		Kind:       kind,
+		Title:      title,
+		Subtitle:   subtitle,
+		Popularity: popularity,
+		Sources:    []discovery.SourceRef{{Provider: discovery.ProviderDeezer, ExternalID: title, URL: "https://x/" + title}},
 	}
 }
 
-func TestBuildVocabEntries_MapsResultsToEntries(t *testing.T) {
-	results := []domain.SearchResult{
-		discoverytest.WithPop(discoverytest.Res(domain.ResultKindArtist, "Drake", "", domain.ProviderDeezer, nil), 90),
-		discoverytest.WithPop(discoverytest.Track("HUMBLE.", "Kendrick Lamar", domain.ProviderDeezer, nil), 80),
-		discoverytest.WithPop(discoverytest.Res(domain.ResultKindAlbum, "Scorpion", "Drake", domain.ProviderDeezer, nil), 70),
+func allKinds() map[discovery.ResultKind]bool {
+	return map[discovery.ResultKind]bool{
+		discovery.ResultKindArtist: true,
+		discovery.ResultKindTrack:  true,
+		discovery.ResultKindAlbum:  true,
 	}
+}
 
-	entries := buildVocabEntries(results)
-
-	if len(entries) != 4 {
-		t.Fatalf("want 4 entries, got %d: %+v", len(entries), entries)
-	}
-
+func entryFor(t *testing.T, entries []discovery.VocabularyEntry, term string) discovery.VocabularyEntry {
+	t.Helper()
 	for _, e := range entries {
-		if e.Kind == domain.VocabKindQuery || e.Term == "Drake!" {
-			t.Errorf("raw query must not be ingested, got %+v", e)
+		if e.Term == term {
+			return e
 		}
 	}
+	t.Fatalf("no vocabulary entry for %q in %+v", term, entries)
+	return discovery.VocabularyEntry{}
+}
 
-	artist := entries[0]
-	if artist.Kind != domain.VocabKindArtist || artist.Term != "Drake" || artist.TermNorm != "drake" || artist.Popularity != 90 {
-		t.Errorf("artist entry: got %+v", artist)
+func TestSearchIngest_MapsEachShownResultToVocabularyEntries(t *testing.T) {
+	got := searchAndIngest(t, "drake", allKinds(),
+		deezerResult(discovery.ResultKindArtist, "Drake", "", 90),
+		discovery.DeezerTrack("Hotline Bling", "Drake", 80),
+		discovery.DeezerAlbum("Scorpion", "Drake", 70),
+	)
+
+	if len(got.entries) != 4 {
+		t.Fatalf("want 4 entries, got %d: %+v", len(got.entries), got.entries)
 	}
-
-	tr := entries[1]
-	if tr.Kind != domain.VocabKindTrack || tr.Term != "HUMBLE. - Kendrick Lamar" || tr.TermNorm != "humble kendrick lamar" || tr.Popularity != 80 {
-		t.Errorf("track entry: got %+v", tr)
+	want := []discovery.VocabularyEntry{
+		{Term: "Drake", TermNorm: "drake", Kind: discovery.VocabKindArtist, Popularity: 90},
+		{Term: "Hotline Bling - Drake", TermNorm: "hotline bling drake", Kind: discovery.VocabKindTrack, Popularity: 80},
+		{Term: "Drake", TermNorm: "drake", Kind: discovery.VocabKindArtist, Popularity: 80},
+		{Term: "Scorpion - Drake", TermNorm: "scorpion drake", Kind: discovery.VocabKindAlbum, Popularity: 70},
 	}
-
-	trArtist := entries[2]
-	if trArtist.Kind != domain.VocabKindArtist || trArtist.Term != "Kendrick Lamar" || trArtist.Popularity != 80 {
-		t.Errorf("track-subtitle artist entry: got %+v", trArtist)
+	for _, w := range want {
+		if !slices.Contains(got.entries, w) {
+			t.Errorf("missing entry %+v in %+v", w, got.entries)
+		}
 	}
-
-	al := entries[3]
-	if al.Kind != domain.VocabKindAlbum || al.Term != "Scorpion - Drake" {
-		t.Errorf("album entry: got %+v", al)
+	for _, e := range got.entries {
+		if e.Kind == discovery.VocabKindQuery || e.Term == "drake" {
+			t.Errorf("the raw query must not be ingested, got %+v", e)
+		}
 	}
 }
 
-func TestBuildVocabEntries_IngestsOnlyTopFive(t *testing.T) {
-	var results []domain.SearchResult
-	for _, name := range []string{"A", "B", "C", "D", "E", "F", "G"} {
-		results = append(results, discoverytest.Res(domain.ResultKindArtist, name, "", domain.ProviderDeezer, nil))
-	}
+func TestSearchIngest_AResultOfAnotherKindIsIngestedAsAQuery(t *testing.T) {
+	got := searchAndIngest(t, "chill mix", map[discovery.ResultKind]bool{discovery.ResultKindPlaylist: true},
+		deezerResult(discovery.ResultKindPlaylist, "Chill Mix", "", 0),
+	)
 
-	entries := buildVocabEntries(results)
-
-	if len(entries) != vocabIngestTop {
-		t.Fatalf("want %d entries, got %d", vocabIngestTop, len(entries))
-	}
-	last := entries[len(entries)-1]
-	if last.Term != "E" {
-		t.Errorf("want the 5th result last, got %q", last.Term)
+	if e := entryFor(t, got.entries, "Chill Mix"); e.Kind != discovery.VocabKindQuery {
+		t.Errorf("playlist entry kind = %q, want %q", e.Kind, discovery.VocabKindQuery)
 	}
 }
 
-func TestBuildVocabEntries_FewerResultsThanTop(t *testing.T) {
-	entries := buildVocabEntries([]domain.SearchResult{
-		discoverytest.Res(domain.ResultKindArtist, "Drake", "", domain.ProviderDeezer, nil),
-	})
-	if len(entries) != 1 {
-		t.Fatalf("want 1 result entry, got %d", len(entries))
+func TestSearchIngest_IngestsOnlyTheTopShownResults(t *testing.T) {
+	var results []discovery.SearchResult
+	for _, name := range []string{"Drake A", "Drake B", "Drake C", "Drake D", "Drake E", "Drake F", "Drake G"} {
+		results = append(results, deezerResult(discovery.ResultKindArtist, name, "", 0))
+	}
+
+	got := searchAndIngest(t, "drake", allKinds(), results...)
+
+	if len(got.shown) <= vocabIngestTop {
+		t.Fatalf("precondition: want more than %d shown results, got %d", vocabIngestTop, len(got.shown))
+	}
+	if len(got.entries) != vocabIngestTop {
+		t.Fatalf("want %d entries, got %d: %+v", vocabIngestTop, len(got.entries), got.entries)
+	}
+	for i, e := range got.entries {
+		if e.Term != got.shown[i].Title {
+			t.Errorf("entry %d = %q, want the shown result %q", i, e.Term, got.shown[i].Title)
+		}
 	}
 }
 
-func TestBuildVocabEntries_EmptyTitleIsNotFiltered(t *testing.T) {
-	entries := buildVocabEntries([]domain.SearchResult{
-		discoverytest.Res(domain.ResultKindTrack, "", "", domain.ProviderDeezer, nil),
-	})
-	if len(entries) != 1 {
-		t.Fatalf("want empty-title entry (current unfiltered behavior), got %d: %+v", len(entries), entries)
+func TestSearchIngest_AnEmptyTitleIsIngestedAsAnEmptyTerm(t *testing.T) {
+	untitled := discovery.SearchResult{
+		Kind:    discovery.ResultKindTrack,
+		Sources: []discovery.SourceRef{{Provider: discovery.ProviderDeezer, ExternalID: "untitled", URL: "https://x/untitled"}},
 	}
-	if entries[0].Term != "" || entries[0].TermNorm != "" {
-		t.Errorf("want the empty term ingested as-is, got %+v", entries[1])
+	queryWithNoRankableWord := "a"
+
+	got := searchAndIngest(t, queryWithNoRankableWord, allKinds(), untitled)
+
+	if len(got.entries) != 1 {
+		t.Fatalf("want 1 entry, got %d: %+v", len(got.entries), got.entries)
+	}
+	if got.entries[0].Term != "" || got.entries[0].TermNorm != "" {
+		t.Errorf("want the empty term ingested as-is, got %+v", got.entries[0])
+	}
+}
+
+func TestSearchIngest_FewerResultsThanTheTopAreAllIngested(t *testing.T) {
+	got := searchAndIngest(t, "drake", allKinds(),
+		deezerResult(discovery.ResultKindArtist, "Drake", "", 0),
+	)
+
+	if len(got.entries) != 1 {
+		t.Fatalf("want 1 entry, got %d: %+v", len(got.entries), got.entries)
 	}
 }
