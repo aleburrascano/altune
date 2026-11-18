@@ -1,27 +1,32 @@
-package ytdlp
+package ytdlp_test
 
 import (
 	"altune/go-api/internal/shared/execcmd"
+	"altune/go-api/internal/shared/ytdlp"
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
 
-func withBinary(t *testing.T, name string) {
+func withShellAsYtDlp(t *testing.T) {
 	t.Helper()
-	prev := binaryName
-	binaryName = name
-	t.Cleanup(func() { binaryName = prev })
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "yt-dlp"), []byte("#!/bin/sh\nexec sh \"$@\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
 func TestDumpJSON_KeepsLinesWhenOnlyStderrOverflows(t *testing.T) {
-	withBinary(t, "sh")
+	withShellAsYtDlp(t)
 	over := execcmd.MaxCaptureBytes + 4096
 
-	lines, _, err := DumpJSON(context.Background(), []string{"-c", fmt.Sprintf(`printf '{"a":1}\n{"b":2}\n'; head -c %d /dev/zero 1>&2`, over)})
+	lines, _, err := ytdlp.DumpJSON(context.Background(), []string{"-c", fmt.Sprintf(`printf '{"a":1}\n{"b":2}\n'; head -c %d /dev/zero 1>&2`, over)})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -31,10 +36,10 @@ func TestDumpJSON_KeepsLinesWhenOnlyStderrOverflows(t *testing.T) {
 }
 
 func TestDumpJSON_ReportsTruncatedOutputAndReturnsNoLines(t *testing.T) {
-	withBinary(t, "sh")
+	withShellAsYtDlp(t)
 	over := execcmd.MaxCaptureBytes + 4096
 
-	lines, _, err := DumpJSON(context.Background(), []string{"-c", fmt.Sprintf("head -c %d /dev/zero | tr '\\0' 'a'", over)})
+	lines, _, err := ytdlp.DumpJSON(context.Background(), []string{"-c", fmt.Sprintf("head -c %d /dev/zero | tr '\\0' 'a'", over)})
 	if !errors.Is(err, execcmd.ErrOutputTruncated) {
 		t.Fatalf("err = %v, want ErrOutputTruncated", err)
 	}
@@ -44,9 +49,9 @@ func TestDumpJSON_ReportsTruncatedOutputAndReturnsNoLines(t *testing.T) {
 }
 
 func TestDumpJSON_ReturnsOneMessagePerNonBlankLine(t *testing.T) {
-	withBinary(t, "sh")
+	withShellAsYtDlp(t)
 
-	lines, stderr, err := DumpJSON(context.Background(), []string{"-c", `printf '{"a":1}\n\n  \n{"b":2}\n'`})
+	lines, stderr, err := ytdlp.DumpJSON(context.Background(), []string{"-c", `printf '{"a":1}\n\n  \n{"b":2}\n'`})
 	if err != nil {
 		t.Fatalf("unexpected error: %v (stderr %q)", err, stderr)
 	}
@@ -60,9 +65,9 @@ func TestDumpJSON_ReturnsOneMessagePerNonBlankLine(t *testing.T) {
 }
 
 func TestDumpJSON_FailureCarriesStderrAndTheRawError(t *testing.T) {
-	withBinary(t, "sh")
+	withShellAsYtDlp(t)
 
-	lines, stderr, err := DumpJSON(context.Background(), []string{"-c", `echo out; echo boom 1>&2; exit 3`})
+	lines, stderr, err := ytdlp.DumpJSON(context.Background(), []string{"-c", `echo out; echo boom 1>&2; exit 3`})
 	if err == nil {
 		t.Fatal("expected an error for a non-zero exit, got nil")
 	}
@@ -75,13 +80,13 @@ func TestDumpJSON_FailureCarriesStderrAndTheRawError(t *testing.T) {
 }
 
 func TestDumpJSON_CancelledContextEndsTheRun(t *testing.T) {
-	withBinary(t, "sh")
+	withShellAsYtDlp(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
 	done := make(chan error, 1)
 	go func() {
-		_, _, err := DumpJSON(ctx, []string{"-c", "sleep 30"})
+		_, _, err := ytdlp.DumpJSON(ctx, []string{"-c", "sleep 30"})
 		done <- err
 	}()
 
