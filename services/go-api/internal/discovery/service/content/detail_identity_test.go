@@ -1,79 +1,112 @@
-package content
+package content_test
 
 import (
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/discoverytest"
-	"altune/go-api/internal/discovery/domain"
+	"context"
+	"slices"
+	"sync"
 	"testing"
 )
 
-func TestResolveArtistIdentity_bridged_fansOutIdsPlusSeed(t *testing.T) {
+type artistContentFuncs struct {
+	topTracks func(ctx context.Context, provider discovery.ProviderName, id string) ([]discovery.SearchResult, error)
+	albums    func(ctx context.Context, provider discovery.ProviderName, id string) ([]discovery.SearchResult, error)
+}
+
+func (p artistContentFuncs) GetArtistTopTracks(ctx context.Context, provider discovery.ProviderName, id string) ([]discovery.SearchResult, error) {
+	if p.topTracks == nil {
+		return nil, nil
+	}
+	return p.topTracks(ctx, provider, id)
+}
+
+func (p artistContentFuncs) GetArtistAlbums(ctx context.Context, provider discovery.ProviderName, id string) ([]discovery.SearchResult, error) {
+	if p.albums == nil {
+		return nil, nil
+	}
+	return p.albums(ctx, provider, id)
+}
+
+func topTrackLookups(t *testing.T, store discovery.IdentityStore, known map[discovery.ProviderName]string) map[discovery.ProviderName][]string {
+	t.Helper()
+	var mu sync.Mutex
+	asked := map[discovery.ProviderName][]string{}
+	providers := map[discovery.ProviderName]discovery.ArtistContentProvider{}
+	for _, name := range []discovery.ProviderName{discovery.ProviderDeezer, discovery.ProviderSpotify, discovery.ProviderAppleMusic, discovery.ProviderLastFM} {
+		providers[name] = artistContentFuncs{topTracks: func(_ context.Context, provider discovery.ProviderName, id string) ([]discovery.SearchResult, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			asked[provider] = append(asked[provider], id)
+			return nil, nil
+		}}
+	}
+	var opts []discovery.ArtistContentOption
+	if store != nil {
+		opts = append(opts, discovery.WithContentIdentityStore(store))
+	}
+	svc := discovery.NewGetArtistContentService(providers, opts...)
+	if _, err := svc.GetTopTracks(t.Context(), discovery.ProviderDeezer, "deezer-che", known, 10); err != nil {
+		t.Fatalf("GetTopTracks: %v", err)
+	}
+	return asked
+}
+
+func assertAsked(t *testing.T, asked map[discovery.ProviderName][]string, want map[discovery.ProviderName]string) {
+	t.Helper()
+	for provider, ids := range asked {
+		if want[provider] == "" {
+			t.Errorf("%s asked for %v, want it not asked", provider, ids)
+		}
+	}
+	for provider, id := range want {
+		if !slices.Equal(asked[provider], []string{id}) {
+			t.Errorf("%s asked for %v, want once for %q", provider, asked[provider], id)
+		}
+	}
+}
+
+func TestGetTopTracks_BridgedArtistFansOutToEveryBridgedIdPlusTheSeed(t *testing.T) {
 	store := &discoverytest.FakeIdentityStore{
 		Mbid: "mbid-che",
-		Xref: map[domain.ProviderKey]string{
+		Xref: map[discovery.ProviderKey]string{
 			"spotify":    "spot-che",
 			"applemusic": "apple-che",
 		},
 	}
 
-	id, ok := resolveArtistIdentity(t.Context(), store, domain.ProviderDeezer, "deezer-che")
-	if !ok {
-		t.Fatal("ok = false, want true when the store has a bridge")
-	}
-	if id.MBID != "mbid-che" {
-		t.Errorf("MBID = %q, want mbid-che", id.MBID)
-	}
-	if id.ProviderIDs[domain.ProviderDeezer] != "deezer-che" {
-		t.Errorf("seed deezer id = %q, want deezer-che", id.ProviderIDs[domain.ProviderDeezer])
-	}
-	if id.ProviderIDs[domain.ProviderSpotify] != "spot-che" {
-		t.Errorf("spotify id = %q, want spot-che", id.ProviderIDs[domain.ProviderSpotify])
-	}
-	if id.ProviderIDs[domain.ProviderAppleMusic] != "apple-che" {
-		t.Errorf("applemusic id = %q, want apple-che", id.ProviderIDs[domain.ProviderAppleMusic])
-	}
+	assertAsked(t, topTrackLookups(t, store, nil), map[discovery.ProviderName]string{
+		discovery.ProviderDeezer:     "deezer-che",
+		discovery.ProviderSpotify:    "spot-che",
+		discovery.ProviderAppleMusic: "apple-che",
+		discovery.ProviderLastFM:     "mbid-che",
+	})
 }
 
-func TestResolveArtistIdentity_miss_seedOnly(t *testing.T) {
-	id, ok := resolveArtistIdentity(t.Context(), &discoverytest.FakeIdentityStore{}, domain.ProviderDeezer, "deezer-che")
-	if ok {
-		t.Fatal("ok = true, want false on a store miss")
-	}
-	if len(id.ProviderIDs) != 1 || id.ProviderIDs[domain.ProviderDeezer] != "deezer-che" {
-		t.Errorf("ProviderIDs = %v, want only the seed", id.ProviderIDs)
-	}
-	if id.MBID != "" {
-		t.Errorf("MBID = %q, want empty on a miss", id.MBID)
-	}
+func TestGetTopTracks_StoreMissAsksOnlyTheSeedProvider(t *testing.T) {
+	assertAsked(t, topTrackLookups(t, &discoverytest.FakeIdentityStore{}, nil), map[discovery.ProviderName]string{
+		discovery.ProviderDeezer: "deezer-che",
+	})
 }
 
-func TestProviderContentID_aliases(t *testing.T) {
-	id := ResolvedArtistIdentity{
-		MBID: "mbid-x",
-		ProviderIDs: map[domain.ProviderName]string{
-			domain.ProviderDeezer: "d1",
-			domain.ProviderITunes: "it1",
-		},
+func TestGetTopTracks_AppleMusicSharesTheITunesIdAndLastFMUsesTheMBID(t *testing.T) {
+	store := &discoverytest.FakeIdentityStore{
+		Mbid: "mbid-x",
+		Xref: map[discovery.ProviderKey]string{"itunes": "it1"},
 	}
-	if got := providerContentID(id, domain.ProviderDeezer); got != "d1" {
-		t.Errorf("deezer id = %q, want d1", got)
-	}
-	if got := providerContentID(id, domain.ProviderAppleMusic); got != "it1" {
-		t.Errorf("apple music id = %q, want the shared iTunes id it1", got)
-	}
-	if got := providerContentID(id, domain.ProviderLastFM); got != "mbid-x" {
-		t.Errorf("lastfm id = %q, want mbid-x (Last.fm top tracks are looked up by MBID)", got)
-	}
-	if got := providerContentID(id, domain.ProviderSpotify); got != "" {
-		t.Errorf("spotify id = %q, want empty (not bridged)", got)
-	}
+
+	assertAsked(t, topTrackLookups(t, store, nil), map[discovery.ProviderName]string{
+		discovery.ProviderDeezer:     "deezer-che",
+		discovery.ProviderAppleMusic: "it1",
+		discovery.ProviderLastFM:     "mbid-x",
+	})
 }
 
-func TestResolveArtistIdentity_nilStore_seedOnly(t *testing.T) {
-	id, ok := resolveArtistIdentity(t.Context(), nil, domain.ProviderDeezer, "deezer-che")
-	if ok {
-		t.Fatal("ok = true, want false with a nil store")
-	}
-	if id.ProviderIDs[domain.ProviderDeezer] != "deezer-che" {
-		t.Errorf("seed missing: %v", id.ProviderIDs)
-	}
+func TestGetTopTracks_NoIdentityStoreAsksTheSeedAndTheCallersKnownIds(t *testing.T) {
+	known := map[discovery.ProviderName]string{discovery.ProviderDeezer: "deezer-che", discovery.ProviderSpotify: "spot-known"}
+
+	assertAsked(t, topTrackLookups(t, nil, known), map[discovery.ProviderName]string{
+		discovery.ProviderDeezer:  "deezer-che",
+		discovery.ProviderSpotify: "spot-known",
+	})
 }

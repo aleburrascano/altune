@@ -1,63 +1,84 @@
-package content
+package content_test
 
 import (
-	"altune/go-api/internal/discovery/discoverytest"
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/internal/core/release"
+	"altune/go-api/internal/discovery"
 	"context"
-	"sync"
 	"testing"
+	"time"
 )
 
-type recordingEventStore struct {
-	mu     sync.Mutex
-	events []domain.InteractionEvent
+func catalogAlbum(provider discovery.ProviderName, id, title string) discovery.SearchResult {
+	return discovery.SearchResult{
+		Kind:     discovery.ResultKindAlbum,
+		Title:    title,
+		Subtitle: "Che",
+		Sources:  []discovery.SourceRef{{Provider: provider, ExternalID: id}},
+		Extras:   map[string]any{},
+	}
 }
 
-func (s *recordingEventStore) Append(_ context.Context, e domain.InteractionEvent) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.events = append(s.events, e)
+type recordingEventStore struct {
+	events chan discovery.InteractionEvent
+}
+
+func newRecordingEventStore() *recordingEventStore {
+	return &recordingEventStore{events: make(chan discovery.InteractionEvent, 8)}
+}
+
+func (s *recordingEventStore) Append(_ context.Context, e discovery.InteractionEvent) error {
+	s.events <- e
 	return nil
 }
 
-func (s *recordingEventStore) only(t *testing.T) domain.InteractionEvent {
+func (s *recordingEventStore) next(t *testing.T) discovery.InteractionEvent {
 	t.Helper()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if len(s.events) != 1 {
-		t.Fatalf("recorded %d events, want exactly 1", len(s.events))
+	select {
+	case e := <-s.events:
+		return e
+	case <-time.After(5 * time.Second):
+		t.Fatal("no event recorded within 5s")
+		return discovery.InteractionEvent{}
 	}
-	return s.events[0]
 }
 
-func mergedRelease(providers ...domain.ProviderName) release.MergedRelease {
-	set := make(map[domain.ProviderName]bool, len(providers))
-	for _, p := range providers {
-		set[p] = true
+func albumsFrom(albums map[discovery.ProviderName][]discovery.SearchResult) map[discovery.ProviderName]discovery.ArtistContentProvider {
+	providers := make(map[discovery.ProviderName]discovery.ArtistContentProvider, len(albums))
+	for name, served := range albums {
+		providers[name] = artistContentFuncs{
+			albums: func(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
+				return served, nil
+			},
+		}
 	}
-	return release.MergedRelease{Providers: set}
+	return providers
 }
 
-func idBackedRelease(provider domain.ProviderName) release.MergedRelease {
-	m := mergedRelease(provider)
-	m.HasStrongID = true
-	return m
+func observeDiscography(t *testing.T, albums map[discovery.ProviderName][]discovery.SearchResult) discovery.InteractionEvent {
+	t.Helper()
+	known := map[discovery.ProviderName]string{}
+	for name := range albums {
+		known[name] = name.String() + "-che"
+	}
+	store := newRecordingEventStore()
+	svc := discovery.NewGetArtistContentService(albumsFrom(albums), discovery.WithContentEventStore(store))
+	if _, err := svc.GetAlbums(context.Background(), discovery.ProviderSpotify, "abc123", known, 50); err != nil {
+		t.Fatalf("GetAlbums: %v", err)
+	}
+	return store.next(t)
 }
 
 func TestDiscographyEmit_PayloadShapeAndNoUserID(t *testing.T) {
-	store := &recordingEventStore{}
-	tel := newDiscographyTelemetry(store)
+	ev := observeDiscography(t, map[discovery.ProviderName][]discovery.SearchResult{
+		discovery.ProviderSpotify: {
+			catalogAlbum(discovery.ProviderSpotify, "sp-a", "Fully Loaded"),
+			catalogAlbum(discovery.ProviderSpotify, "sp-b", "Sundown"),
+		},
+		discovery.ProviderMusicBrainz: {
+			catalogAlbum(discovery.ProviderMusicBrainz, "mb-a", "Fully Loaded"),
+		},
+	})
 
-	merged := []release.MergedRelease{
-		mergedRelease(domain.ProviderSpotify, domain.ProviderMusicBrainz),
-		mergedRelease(domain.ProviderSpotify),
-	}
-	tel.emit(context.Background(), "spotify:abc123", merged)
-	tel.bg.Wait()
-
-	ev := store.only(t)
-	if ev.Type != domain.EventTypeDiscographyObserved {
+	if ev.Type != discovery.EventTypeDiscographyObserved {
 		t.Fatalf("event type = %v, want discography_observed", ev.Type)
 	}
 	if !ev.UserId.IsSystem() {
@@ -66,7 +87,7 @@ func TestDiscographyEmit_PayloadShapeAndNoUserID(t *testing.T) {
 
 	assertPayloadInt(t, ev.Payload, "releases", 2)
 	assertPayloadInt(t, ev.Payload, "single_provider", 1)
-	assertPayloadInt(t, ev.Payload, "single_provider_no_id", 1)
+	assertPayloadInt(t, ev.Payload, "single_provider_no_id", 0)
 	if ref, _ := ev.Payload["artist_ref"].(string); ref != "spotify:abc123" {
 		t.Errorf("artist_ref = %q, want spotify:abc123", ref)
 	}
@@ -94,43 +115,53 @@ func TestDiscographyEmit_PayloadShapeAndNoUserID(t *testing.T) {
 	}
 }
 
-func TestDiscographyEmit_IDBackedSingleProviderIsNotASuspect(t *testing.T) {
-	store := &recordingEventStore{}
-	tel := newDiscographyTelemetry(store)
+func TestDiscographyEmit_ReleasesFromTheIdentityFanOutAreNeverSuspects(t *testing.T) {
+	ev := observeDiscography(t, map[discovery.ProviderName][]discovery.SearchResult{
+		discovery.ProviderSpotify: {
+			catalogAlbum(discovery.ProviderSpotify, "sp-a", "Fully Loaded"),
+			catalogAlbum(discovery.ProviderSpotify, "sp-c", "Sundown"),
+		},
+		discovery.ProviderDeezer: {
+			catalogAlbum(discovery.ProviderDeezer, "dz-b", "Closer to God"),
+		},
+		discovery.ProviderMusicBrainz: {
+			catalogAlbum(discovery.ProviderMusicBrainz, "mb-c", "Sundown"),
+		},
+	})
 
-	merged := []release.MergedRelease{
-		idBackedRelease(domain.ProviderSpotify),
-		mergedRelease(domain.ProviderDeezer),
-		mergedRelease(domain.ProviderSpotify, domain.ProviderMusicBrainz),
-	}
-	tel.emit(context.Background(), "spotify:mixed", merged)
-	tel.bg.Wait()
-
-	ev := store.only(t)
 	assertPayloadInt(t, ev.Payload, "releases", 3)
 	assertPayloadInt(t, ev.Payload, "single_provider", 2)
-	assertPayloadInt(t, ev.Payload, "single_provider_no_id", 1)
+	assertPayloadInt(t, ev.Payload, "single_provider_no_id", 0)
+}
+
+type panickingEventStore struct{ asked chan struct{} }
+
+func (s panickingEventStore) Append(context.Context, discovery.InteractionEvent) error {
+	close(s.asked)
+	panic("event store exploded")
 }
 
 func TestDiscographyEmit_BestEffortContainsPanic(t *testing.T) {
-	svc := identityFanOut(func(domain.ProviderName) bool { return false }, WithContentEventStore(&discoverytest.PanickingEventStore{}))
+	store := panickingEventStore{asked: make(chan struct{})}
+	svc := identityFanOut(func(discovery.ProviderName) bool { return false }, discovery.WithContentEventStore(store))
 
-	resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "id-deezer", nil, 50)
+	resp, err := svc.GetAlbums(context.Background(), discovery.ProviderDeezer, "id-deezer", nil, 50)
 	if err != nil {
 		t.Fatalf("GetAlbums error = %v, want nil (emit must never fail the response)", err)
 	}
-	if resp.Status != domain.ProviderStatusOK || len(resp.Items) == 0 {
+	if resp.Status != discovery.ProviderStatusOK || len(resp.Items) == 0 {
 		t.Fatalf("status = %s, items = %d, want ok with the merged discography intact", resp.Status, len(resp.Items))
 	}
-	svc.discographyTelemetry.bg.Wait()
+	select {
+	case <-store.asked:
+	case <-time.After(5 * time.Second):
+		t.Fatal("event store never asked to append")
+	}
 }
 
-func TestDiscographyEmit_NilTelemetryIsNoOp(t *testing.T) {
-	svc := identityFanOut(func(domain.ProviderName) bool { return false })
-	if svc.discographyTelemetry != nil {
-		t.Fatal("discographyTelemetry should be nil when no event store is wired")
-	}
-	if _, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "id-deezer", nil, 50); err != nil {
+func TestDiscographyEmit_NoEventStoreStillServesAlbums(t *testing.T) {
+	svc := identityFanOut(func(discovery.ProviderName) bool { return false })
+	if _, err := svc.GetAlbums(context.Background(), discovery.ProviderDeezer, "id-deezer", nil, 50); err != nil {
 		t.Fatalf("GetAlbums error = %v, want nil", err)
 	}
 }
