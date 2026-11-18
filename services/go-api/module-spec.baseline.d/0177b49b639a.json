@@ -1,0 +1,17 @@
+{
+  "removed": [
+    "C4 internal/shared/ytminnertube/budget.go exports Budget, which nothing outside ytminnertube imports and no test of its own imports through the door",
+    "C4 internal/shared/ytminnertube/budget.go exports DefaultCooldown, which nothing outside ytminnertube imports and no test of its own imports through the door",
+    "C4 internal/shared/ytminnertube/budget.go exports DefaultMinInterval, which nothing outside ytminnertube imports and no test of its own imports through the door",
+    "C4 internal/shared/ytminnertube/budget.go exports ErrNoRedisForTool, which nothing outside ytminnertube imports and no test of its own imports through the door",
+    "C4 internal/shared/ytminnertube/budget.go exports SettingsFromEnv, which nothing outside ytminnertube imports and no test of its own imports through the door",
+    "C4 internal/shared/ytminnertube/client.go exports APIKey, which nothing outside ytminnertube imports and no test of its own imports through the door",
+    "C4 internal/shared/ytminnertube/client.go exports ClientName, which nothing outside ytminnertube imports and no test of its own imports through the door",
+    "C4 internal/shared/ytminnertube/client.go exports ClientVersion, which nothing outside ytminnertube imports and no test of its own imports through the door",
+    "T1 internal/shared/ytminnertube/badge_test.go is in package ytminnertube, so it sees inside the module: use package ytminnertube_test and import the door",
+    "T1 internal/shared/ytminnertube/budget_test.go is in package ytminnertube, so it sees inside the module: use package ytminnertube_test and import the door",
+    "T1 internal/shared/ytminnertube/client_test.go is in package ytminnertube, so it sees inside the module: use package ytminnertube_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}

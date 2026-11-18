@@ -1,6 +1,7 @@
-package ytminnertube
+package ytminnertube_test
 
 import (
+	"altune/go-api/internal/shared/ytminnertube"
 	"context"
 	"errors"
 	"net/http"
@@ -13,11 +14,18 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-func budgetOn(t *testing.T, server *miniredis.Miniredis, settings Settings) *Budget {
+const (
+	budgetRedisKey = "ytminnertube:budget"
+	minIntervalVar = "YTM_INNERTUBE_MIN_INTERVAL"
+	cooldownVar    = "YTM_INNERTUBE_COOLDOWN"
+	redisURLVar    = "REDIS_URL"
+)
+
+func budgetOn(t *testing.T, server *miniredis.Miniredis, settings ytminnertube.Settings) *ytminnertube.Budget {
 	t.Helper()
 	client := goredis.NewClient(&goredis.Options{Addr: server.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
-	budget, err := NewBudget(client, settings)
+	budget, err := ytminnertube.NewBudget(client, settings)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,11 +35,11 @@ func budgetOn(t *testing.T, server *miniredis.Miniredis, settings Settings) *Bud
 func TestBudget_TwoCallersShareOneBucket(t *testing.T) {
 	server := miniredis.RunT(t)
 	interval := 300 * time.Millisecond
-	app := budgetOn(t, server, Settings{MinInterval: interval})
-	tool := budgetOn(t, server, Settings{MinInterval: interval})
+	app := budgetOn(t, server, ytminnertube.Settings{MinInterval: interval})
+	tool := budgetOn(t, server, ytminnertube.Settings{MinInterval: interval})
 
 	start := time.Now()
-	for _, caller := range []*Budget{app, tool, app, tool} {
+	for _, caller := range []*ytminnertube.Budget{app, tool, app, tool} {
 		if err := caller.Wait(context.Background()); err != nil {
 			t.Fatal(err)
 		}
@@ -51,7 +59,7 @@ func TestBudgetTransport_A403MakesTheNextCallWaitForTheCooldown(t *testing.T) {
 	}))
 	t.Cleanup(upstream.Close)
 	cooldown := 400 * time.Millisecond
-	budget := budgetOn(t, miniredis.RunT(t), Settings{Cooldown: cooldown})
+	budget := budgetOn(t, miniredis.RunT(t), ytminnertube.Settings{Cooldown: cooldown})
 	client := &http.Client{Transport: budget.Transport(nil)}
 
 	get := func() int {
@@ -73,20 +81,20 @@ func TestBudgetTransport_A403MakesTheNextCallWaitForTheCooldown(t *testing.T) {
 }
 
 func TestBudget_RefusesACallThatCannotBeServedBeforeItsDeadline(t *testing.T) {
-	budget := budgetOn(t, miniredis.RunT(t), Settings{MinInterval: time.Minute})
+	budget := budgetOn(t, miniredis.RunT(t), ytminnertube.Settings{MinInterval: time.Minute})
 	if err := budget.Wait(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	if err := budget.Wait(ctx); !errors.Is(err, ErrBudgetRefused) {
+	if err := budget.Wait(ctx); !errors.Is(err, ytminnertube.ErrBudgetRefused) {
 		t.Fatalf("got %v, want ErrBudgetRefused", err)
 	}
 }
 
 func TestBudgetTransport_FailsClosedWhenRedisIsDown(t *testing.T) {
 	server := miniredis.RunT(t)
-	budget := budgetOn(t, server, Settings{})
+	budget := budgetOn(t, server, ytminnertube.Settings{})
 	server.Close()
 	upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Error("the upstream was called without a budget")
@@ -103,17 +111,17 @@ func TestSettingsFromEnv(t *testing.T) {
 	cases := []struct {
 		name    string
 		env     map[string]string
-		want    Settings
+		want    ytminnertube.Settings
 		wantErr bool
 	}{
-		{"defaults", nil, Settings{MinInterval: DefaultMinInterval, Cooldown: DefaultCooldown}, false},
-		{"both set", map[string]string{minIntervalVarName: "5s", cooldownVarName: "1m"}, Settings{MinInterval: 5 * time.Second, Cooldown: time.Minute}, false},
-		{"bad interval", map[string]string{minIntervalVarName: "fast"}, Settings{}, true},
-		{"negative cooldown", map[string]string{cooldownVarName: "-1s"}, Settings{}, true},
+		{"defaults", nil, ytminnertube.Settings{MinInterval: ytminnertube.DefaultMinInterval, Cooldown: ytminnertube.DefaultCooldown}, false},
+		{"both set", map[string]string{minIntervalVar: "5s", cooldownVar: "1m"}, ytminnertube.Settings{MinInterval: 5 * time.Second, Cooldown: time.Minute}, false},
+		{"bad interval", map[string]string{minIntervalVar: "fast"}, ytminnertube.Settings{}, true},
+		{"negative cooldown", map[string]string{cooldownVar: "-1s"}, ytminnertube.Settings{}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := SettingsFromEnv(func(k string) string { return tc.env[k] })
+			got, err := ytminnertube.SettingsFromEnv(func(k string) string { return tc.env[k] })
 			if (err != nil) != tc.wantErr || got != tc.want {
 				t.Fatalf("got %+v, %v", got, err)
 			}
@@ -122,8 +130,8 @@ func TestSettingsFromEnv(t *testing.T) {
 }
 
 func TestToolClient_RefusesToRunWithoutRedis(t *testing.T) {
-	_, _, err := ToolClient(context.Background(), func(string) string { return "" })
-	if !errors.Is(err, ErrNoRedisForTool) {
+	_, _, err := ytminnertube.ToolClient(context.Background(), func(string) string { return "" })
+	if !errors.Is(err, ytminnertube.ErrNoRedisForTool) {
 		t.Fatalf("got %v, want ErrNoRedisForTool", err)
 	}
 }
@@ -131,9 +139,9 @@ func TestToolClient_RefusesToRunWithoutRedis(t *testing.T) {
 func TestToolClient_PacesThroughTheSharedBucket(t *testing.T) {
 	server := miniredis.RunT(t)
 	env := func(key string) string {
-		return map[string]string{redisURLVarName: "redis://" + server.Addr(), minIntervalVarName: "300ms"}[key]
+		return map[string]string{redisURLVar: "redis://" + server.Addr(), minIntervalVar: "300ms"}[key]
 	}
-	client, settings, err := ToolClient(context.Background(), env)
+	client, settings, err := ytminnertube.ToolClient(context.Background(), env)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,13 +166,13 @@ func TestToolClient_PacesThroughTheSharedBucket(t *testing.T) {
 }
 
 func TestNewBudget_NeedsARedisClient(t *testing.T) {
-	if _, err := NewBudget(nil, Settings{}); err == nil {
+	if _, err := ytminnertube.NewBudget(nil, ytminnertube.Settings{}); err == nil {
 		t.Fatal("expected an error for a nil client")
 	}
 }
 
 func TestSettings_DescribeNamesTheSharedPaceAndCooldown(t *testing.T) {
-	got := Settings{MinInterval: 2 * time.Second, Cooldown: 10 * time.Minute}.Describe()
+	got := ytminnertube.Settings{MinInterval: 2 * time.Second, Cooldown: 10 * time.Minute}.Describe()
 	want := "shared InnerTube budget: one call per 2s across the app and the tools, 10m0s cooldown after a 403"
 	if got != want {
 		t.Fatalf("Describe() = %q, want %q", got, want)
@@ -173,21 +181,21 @@ func TestSettings_DescribeNamesTheSharedPaceAndCooldown(t *testing.T) {
 
 func TestBudget_RefusesASlotThatLeavesNoTimeForTheRequestWithoutReservingIt(t *testing.T) {
 	server := miniredis.RunT(t)
-	budget := budgetOn(t, server, Settings{MinInterval: 9900 * time.Millisecond})
+	budget := budgetOn(t, server, ytminnertube.Settings{MinInterval: 9900 * time.Millisecond})
 	if err := budget.Wait(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	slotBefore, err := server.Get(budgetKey)
+	slotBefore, err := server.Get(budgetRedisKey)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := budget.Wait(ctx); !errors.Is(err, ErrBudgetRefused) {
+	if err := budget.Wait(ctx); !errors.Is(err, ytminnertube.ErrBudgetRefused) {
 		t.Fatalf("slot 9.9s out under a 10s deadline: got %v, want ErrBudgetRefused", err)
 	}
-	if slotAfter, _ := server.Get(budgetKey); slotAfter != slotBefore {
+	if slotAfter, _ := server.Get(budgetRedisKey); slotAfter != slotBefore {
 		t.Fatalf("refused call moved the next slot from %s to %s, want it left alone", slotBefore, slotAfter)
 	}
 }
@@ -204,7 +212,7 @@ func TestBudgetTransport_TakesOneSlotWhenTheCallerReservedFirst(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			server := miniredis.RunT(t)
-			budget := budgetOn(t, server, Settings{MinInterval: interval})
+			budget := budgetOn(t, server, ytminnertube.Settings{MinInterval: interval})
 			upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 			t.Cleanup(upstream.Close)
 			client := &http.Client{Transport: budget.Transport(nil)}
@@ -215,7 +223,7 @@ func TestBudgetTransport_TakesOneSlotWhenTheCallerReservedFirst(t *testing.T) {
 
 			ctx := context.Background()
 			if tc.reserve {
-				reserved, err := ReserveSlot(ctx, client)
+				reserved, err := ytminnertube.ReserveSlot(ctx, client)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -240,7 +248,7 @@ func TestBudgetTransport_TakesOneSlotWhenTheCallerReservedFirst(t *testing.T) {
 
 func slotMillis(t *testing.T, server *miniredis.Miniredis) int64 {
 	t.Helper()
-	raw, err := server.Get(budgetKey)
+	raw, err := server.Get(budgetRedisKey)
 	if err != nil {
 		t.Fatal(err)
 	}
