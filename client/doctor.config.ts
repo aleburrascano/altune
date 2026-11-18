@@ -9,7 +9,7 @@ const pagingLoopsAwaitInOrder = {
 
 const sequentialByDesignAwaitInLoop = {
   files: [
-    'src/shared/offline/state/pinnedDownloadWorker.ts',
+    'src/shared/offline/shell/pinnedDownloadWorker.ts',
     'src/shared/offline/state/pinnedStore.ts',
     'src/shared/telemetry/outbox.ts',
   ],
@@ -17,7 +17,7 @@ const sequentialByDesignAwaitInLoop = {
 };
 
 const downloadAwaitedBeforeCancelCheck = {
-  files: ['src/shared/offline/state/pinnedDownloadWorker.ts'],
+  files: ['src/shared/offline/shell/pinnedDownloadWorker.ts'],
   rules: ['react-doctor/async-defer-await'],
 };
 
