@@ -13,8 +13,8 @@ invariants a change must preserve.
 
 Playback owns one aggregate, `domain.QueueState` (tracks, current index, shuffle,
 repeat mode, source) and its `QueuePosition` update. It is a **customer of catalog**
-for now-playing enrichment and of **auth** for the request user, and reaches both
-only through bridges.
+for now-playing enrichment, reached through `adapters/catalogbridge`, and reads the
+request user from the shared `internal/shared/requestuser` module.
 
 ## 1. Layer map
 
@@ -24,15 +24,13 @@ only through bridges.
 | domain | `queue_validation_error.go` | `QueueValidationError`, `newValidationError`, the `playback.*` validation codes |
 | domain | `stale_write_error.go` | `StaleWriteError`, `ErrStaleQueueWrite`, `ErrQueuePositionMismatch` (409) |
 | domain | `unavailable_error.go` | `UnavailableError`, `ErrQueueStateUnavailable` (503, `Retry-After: 1`) |
-| domain | `queue_rate_limited_error.go` | `QueueRateLimitedError` (429, `playback.rate_limited`) |
 | ports | `queue_state.go` | `QueueStateRepository`, `ErrCorruptStoredState`, and the `QueueStateMetrics` and `RateLimitMetrics` interfaces with their noops |
 | ports | `now_playing.go` | `NowPlayingReader`, `NowPlayingTrack`, and the `EnrichmentMetrics` interface with its noop |
 | ports | `erasure.go` | `DeletedIdentityLister`, `OwnerScanPage`, `ErrIdentityStoreUnavailable`, `ErasedStateReaper`, and the `ErasureSweepMetrics` interface with its noop |
 | service | `queue/service.go` | Save, update position, get, enrich the current track |
 | service | `erasure/sweeper.go` | Erasure sweep |
-| adapters/handler | `queue_handler.go` | HTTP routes for the queue snapshot |
-| adapters/handler | `queue_state_rate_limit.go` | Per-user queue-state rate limiter middleware |
-| adapters/authbridge | `require_user_id.go` | Request user from `internal/auth` |
+| adapters/handler | `queue_handler.go` | HTTP routes for the queue snapshot; the request user comes from `internal/shared/requestuser` |
+| adapters/handler | `queue_state_rate_limit.go` | Per-user queue-state rate limiter middleware and its 429 `playback.rate_limited` error |
 | adapters/catalogbridge | `now_playing_reader.go`, `enrichment_breaker.go` | Catalog lookup behind a circuit breaker |
 | adapters/metrics | `expvar_playback_metrics.go` | expvar implementation of the metrics ports |
 | adapters/persistence | `pgx_queue_state_repository.go`, `pgx_deleted_identity_repository.go`, `op_faults.go` | Postgres storage and error classification |

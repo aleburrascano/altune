@@ -1,11 +1,11 @@
 package handler
 
 import (
-	authservice "altune/go-api/internal/auth/service"
 	"altune/go-api/internal/playback/domain"
 	"altune/go-api/internal/playback/internal/core/ports"
 	"altune/go-api/internal/playback/internal/core/queue"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/requestuser"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -72,7 +72,7 @@ func (m *countingRateLimitMetrics) count() int {
 
 func requestAs(method string, user shared.UserId, body string) *http.Request {
 	req := httptest.NewRequest(method, "/queue-state", strings.NewReader(body))
-	return req.WithContext(authservice.ContextWithUserID(req.Context(), user))
+	return req.WithContext(requestuser.ContextWithUserID(req.Context(), user))
 }
 
 func serve(h *QueueHandler, req *http.Request) *httptest.ResponseRecorder {

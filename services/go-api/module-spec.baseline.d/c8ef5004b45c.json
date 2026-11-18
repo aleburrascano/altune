@@ -1,0 +1,20 @@
+{
+  "removed": [
+    "B3 internal/playback/domain/queue_rate_limited_error.go imports net/http",
+    "C12 internal/playback/domain/queue_rate_limited_error.go domain/queue_rate_limited_error.go is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
+    "C3 internal/playback/adapters/handler/queue_handler_test.go imports internal/auth/service/request_identity.go, behind auth's door",
+    "C3 internal/playback/adapters/handler/queue_state_rate_limit_test.go imports internal/auth/service/request_identity.go, behind auth's door",
+    "C3 internal/playback/internal/adapters/authbridge/require_user_id.go imports internal/auth/adapters/middleware/middleware.go, behind auth's door",
+    "C3 internal/playback/internal/adapters/authbridge/require_user_id.go imports internal/auth/service/request_identity.go, behind auth's door",
+    "C3 internal/playback/internal/adapters/authbridge/require_user_id_test.go imports internal/auth/adapters/middleware/middleware.go, behind auth's door",
+    "C3 internal/playback/internal/adapters/authbridge/require_user_id_test.go imports internal/auth/service/request_identity.go, behind auth's door",
+    "R1 internal/playback/adapters/handler/queue_handler_test.go imports auth, a feature module",
+    "R1 internal/playback/adapters/handler/queue_state_rate_limit_test.go imports auth, a feature module",
+    "R1 internal/playback/internal/adapters/authbridge/require_user_id.go imports auth, a feature module",
+    "R1 internal/playback/internal/adapters/authbridge/require_user_id_test.go imports auth, a feature module",
+    "R1 internal/playback/module.yaml declares auth, a feature module",
+    "T1 internal/playback/internal/adapters/authbridge/require_user_id_test.go is in package authbridge, so it sees inside the module: use package authbridge_test and import the door"
+  ],
+  "added": [],
+  "clones": -1
+}
