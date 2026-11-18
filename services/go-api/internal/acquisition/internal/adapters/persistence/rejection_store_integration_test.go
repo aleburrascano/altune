@@ -1,7 +1,7 @@
-package persistence
+package persistence_test
 
 import (
-	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"
@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func activeKeys(store *PgxRejectionStore, ctx context.Context, trackID string, since time.Time) ([]string, error) {
+func activeKeys(store *acquisition.PgxRejectionStore, ctx context.Context, trackID string, since time.Time) ([]string, error) {
 	prior, err := store.Active(ctx, trackID, since)
 	keys := make([]string, len(prior))
 	for i, p := range prior {
@@ -23,17 +23,17 @@ func activeKeys(store *PgxRejectionStore, ctx context.Context, trackID string, s
 func TestPgxRejectionStore_ActiveReturnsTheRecordedBasis(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
-	basis := ports.RejectionBasis{ExpectedSeconds: 322.5, ReferenceMBID: "mbid-1"}
+	basis := acquisition.RejectionBasis{ExpectedSeconds: 322.5, ReferenceMBID: "mbid-1"}
 
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO acquisition_rejections (track_id, source_key, reason, rejected_at) VALUES ($1, 'legacy', 'duration', now())`,
 		trackID); err != nil {
 		t.Fatalf("seed legacy rejection: %v", err)
 	}
-	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
+	if err := store.Record(ctx, []acquisition.CandidateRejectionRecord{
 		{TrackID: trackID, SourceKey: "with-basis", Reason: "duration", Basis: basis},
 	}); err != nil {
 		t.Fatalf("Record(...) = %v, want nil", err)
@@ -57,11 +57,11 @@ func TestPgxRejectionStore_ActiveReturnsTheRecordedBasis(t *testing.T) {
 func TestPgxRejectionStore_RecordThenActiveKeysReturnsRecordedKeys(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
-	err := store.Record(ctx, []ports.CandidateRejectionRecord{
+	err := store.Record(ctx, []acquisition.CandidateRejectionRecord{
 		{TrackID: trackID, SourceKey: "source-a", Reason: "no_match", Detail: "bad hash"},
 		{TrackID: trackID, SourceKey: "source-b", Reason: "checksum_mismatch"},
 	})
@@ -81,16 +81,16 @@ func TestPgxRejectionStore_RecordThenActiveKeysReturnsRecordedKeys(t *testing.T)
 func TestPgxRejectionStore_RecordUpsertsOnTrackAndSourceKey(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
-	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
+	if err := store.Record(ctx, []acquisition.CandidateRejectionRecord{
 		{TrackID: trackID, SourceKey: "source-a", Reason: "no_match", Detail: "first"},
 	}); err != nil {
 		t.Fatalf("first Record(...) = %v, want nil", err)
 	}
-	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
+	if err := store.Record(ctx, []acquisition.CandidateRejectionRecord{
 		{TrackID: trackID, SourceKey: "source-a", Reason: "checksum_mismatch", Detail: "second"},
 	}); err != nil {
 		t.Fatalf("second Record(...) = %v, want nil", err)
@@ -124,7 +124,7 @@ func TestPgxRejectionStore_RecordUpsertsOnTrackAndSourceKey(t *testing.T) {
 func TestPgxRejectionStore_ActiveKeysExcludesKeysRejectedBeforeSince(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
@@ -133,7 +133,7 @@ func TestPgxRejectionStore_ActiveKeysExcludesKeysRejectedBeforeSince(t *testing.
 		trackID, "stale-source", "no_match"); err != nil {
 		t.Fatalf("seed stale rejection: %v", err)
 	}
-	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
+	if err := store.Record(ctx, []acquisition.CandidateRejectionRecord{
 		{TrackID: trackID, SourceKey: "fresh-source", Reason: "no_match"},
 	}); err != nil {
 		t.Fatalf("Record(...) = %v, want nil", err)
@@ -151,10 +151,10 @@ func TestPgxRejectionStore_ActiveKeysExcludesKeysRejectedBeforeSince(t *testing.
 func TestPgxRejectionStore_RecordRejectsEmptyTrackID(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	ctx := context.Background()
 
-	err := store.Record(ctx, []ports.CandidateRejectionRecord{
+	err := store.Record(ctx, []acquisition.CandidateRejectionRecord{
 		{TrackID: "", SourceKey: "source-a", Reason: "no_match"},
 	})
 	if err == nil {
@@ -165,10 +165,10 @@ func TestPgxRejectionStore_RecordRejectsEmptyTrackID(t *testing.T) {
 func TestPgxRejectionStore_RecordRejectsEmptySourceKey(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	ctx := context.Background()
 
-	err := store.Record(ctx, []ports.CandidateRejectionRecord{
+	err := store.Record(ctx, []acquisition.CandidateRejectionRecord{
 		{TrackID: uuid.NewString(), SourceKey: "", Reason: "no_match"},
 	})
 	if err == nil {
@@ -179,11 +179,11 @@ func TestPgxRejectionStore_RecordRejectsEmptySourceKey(t *testing.T) {
 func TestPgxRejectionStore_RecordWithCancelledContextReturnsError(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	err := store.Record(ctx, []ports.CandidateRejectionRecord{
+	err := store.Record(ctx, []acquisition.CandidateRejectionRecord{
 		{TrackID: uuid.NewString(), SourceKey: "source-a", Reason: "no_match"},
 	})
 	if !errors.Is(err, context.Canceled) {
@@ -194,10 +194,10 @@ func TestPgxRejectionStore_RecordWithCancelledContextReturnsError(t *testing.T) 
 func TestPgxRejectionStore_RecordOnClosedPoolReturnsError(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	pool.Close()
 
-	err := store.Record(context.Background(), []ports.CandidateRejectionRecord{
+	err := store.Record(context.Background(), []acquisition.CandidateRejectionRecord{
 		{TrackID: uuid.NewString(), SourceKey: "source-a", Reason: "no_match"},
 	})
 	if err == nil {
@@ -208,7 +208,7 @@ func TestPgxRejectionStore_RecordOnClosedPoolReturnsError(t *testing.T) {
 func TestPgxRejectionStore_ReRecordingAStaleKeyMakesItActiveAgain(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
@@ -217,7 +217,7 @@ func TestPgxRejectionStore_ReRecordingAStaleKeyMakesItActiveAgain(t *testing.T) 
 		trackID, "soundcloud.com/bran-van-3000/drinking-in-l-a-3", "no_match"); err != nil {
 		t.Fatalf("seed stale rejection: %v", err)
 	}
-	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
+	if err := store.Record(ctx, []acquisition.CandidateRejectionRecord{
 		{TrackID: trackID, SourceKey: "soundcloud.com/bran-van-3000/drinking-in-l-a-3", Reason: "drm"},
 	}); err != nil {
 		t.Fatalf("Record(...) = %v, want nil", err)
@@ -235,12 +235,12 @@ func TestPgxRejectionStore_ReRecordingAStaleKeyMakesItActiveAgain(t *testing.T) 
 func TestPgxRejectionStore_ActiveKeysOnlyReturnsTheRequestedTracksKeys(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	ctx := context.Background()
 	trackA := uuid.NewString()
 	trackB := uuid.NewString()
 
-	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
+	if err := store.Record(ctx, []acquisition.CandidateRejectionRecord{
 		{TrackID: trackA, SourceKey: "shared-source", Reason: "drm"},
 		{TrackID: trackB, SourceKey: "shared-source", Reason: "no_match"},
 		{TrackID: trackB, SourceKey: "only-b-source", Reason: "no_match"},
@@ -260,7 +260,7 @@ func TestPgxRejectionStore_ActiveKeysOnlyReturnsTheRequestedTracksKeys(t *testin
 func TestPgxRejectionStore_ActiveKeysForATrackWithNoRejectionsIsEmpty(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 
 	keys, err := activeKeys(store, context.Background(), uuid.NewString(), time.Now().Add(-30*24*time.Hour))
 	if err != nil {
@@ -274,12 +274,12 @@ func TestPgxRejectionStore_ActiveKeysForATrackWithNoRejectionsIsEmpty(t *testing
 func TestPgxRejectionStore_SourceKeyWithQuotesAndUnicodeRoundTripsVerbatim(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 	hostile := `https://example.com/watch?v=x'); DROP TABLE acquisition_rejections;-- "Beyoncé" ☃`
 
-	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
+	if err := store.Record(ctx, []acquisition.CandidateRejectionRecord{
 		{TrackID: trackID, SourceKey: hostile, Reason: "qualifier", Detail: `it's "live"`},
 	}); err != nil {
 		t.Fatalf("Record(...) = %v, want nil", err)
@@ -297,7 +297,7 @@ func TestPgxRejectionStore_SourceKeyWithQuotesAndUnicodeRoundTripsVerbatim(t *te
 func TestPgxRejectionStore_ActiveKeysWithCancelledContextReturnsError(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -310,7 +310,7 @@ func TestPgxRejectionStore_ActiveKeysWithCancelledContextReturnsError(t *testing
 func TestPgxRejectionStore_RecordWithNoRecordsSucceeds(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 
 	if err := store.Record(context.Background(), nil); err != nil {
 		t.Errorf("Record(nil) = %v, want nil", err)
@@ -320,11 +320,11 @@ func TestPgxRejectionStore_RecordWithNoRecordsSucceeds(t *testing.T) {
 func TestPgxRejectionStore_RecordBatchWithOneInvalidRecordStoresNothing(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
-	err := store.Record(ctx, []ports.CandidateRejectionRecord{
+	err := store.Record(ctx, []acquisition.CandidateRejectionRecord{
 		{TrackID: trackID, SourceKey: "valid-source", Reason: "no_match"},
 		{TrackID: trackID, SourceKey: "", Reason: "no_match"},
 	})
@@ -343,11 +343,11 @@ func TestPgxRejectionStore_RecordBatchWithOneInvalidRecordStoresNothing(t *testi
 func TestPgxRejectionStore_RecordWithDuplicateKeyInBatchKeepsLastAndStoresOthers(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
-	err := store.Record(ctx, []ports.CandidateRejectionRecord{
+	err := store.Record(ctx, []acquisition.CandidateRejectionRecord{
 		{TrackID: trackID, SourceKey: "source-a", Reason: "no_match", Detail: "first pass"},
 		{TrackID: trackID, SourceKey: "source-b", Reason: "drm"},
 		{TrackID: trackID, SourceKey: "source-a", Reason: "checksum_mismatch", Detail: "second pass"},
@@ -392,14 +392,14 @@ func TestPgxRejectionStore_RecordWithDuplicateKeyInBatchKeepsLastAndStoresOthers
 func TestPgxRejectionStore_ConcurrentRecordsOfTheSameKeysAllSucceed(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
 	errs := make(chan error, 8)
 	for i := 0; i < 8; i++ {
 		go func() {
-			errs <- store.Record(ctx, []ports.CandidateRejectionRecord{
+			errs <- store.Record(ctx, []acquisition.CandidateRejectionRecord{
 				{TrackID: trackID, SourceKey: "source-a", Reason: "no_match"},
 				{TrackID: trackID, SourceKey: "source-b", Reason: "drm"},
 			})
@@ -422,7 +422,7 @@ func TestPgxRejectionStore_ConcurrentRecordsOfTheSameKeysAllSucceed(t *testing.T
 func TestPgxRejectionStore_PruneDeletesRowsOlderThanRetentionAndKeepsNewer(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	ctx := context.Background()
 	trackID := insertFailedTrack(t, pool).ID.UUID().String()
 
@@ -450,13 +450,15 @@ func TestPgxRejectionStore_PruneDeletesRowsOlderThanRetentionAndKeepsNewer(t *te
 	}
 }
 
+const storePruneBatch = 1000
+
 func TestPgxRejectionStore_PruneRemovesMoreRowsThanOneBatch(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
-	total := pruneBatchSize + 5
+	total := storePruneBatch + 5
 
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO acquisition_rejections (track_id, source_key, reason, rejected_at)
@@ -481,12 +483,12 @@ func TestPgxRejectionStore_PruneRemovesMoreRowsThanOneBatch(t *testing.T) {
 func TestPgxRejectionStore_ARejectionJudgedWithNoLengthOrMBIDKeepsAnEmptyBasisNotNone(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
-	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
-		{TrackID: trackID, SourceKey: "unknown-length", Reason: "identity", Basis: ports.RejectionBasis{}},
+	if err := store.Record(ctx, []acquisition.CandidateRejectionRecord{
+		{TrackID: trackID, SourceKey: "unknown-length", Reason: "identity", Basis: acquisition.RejectionBasis{}},
 	}); err != nil {
 		t.Fatalf("Record(...) = %v, want nil", err)
 	}
@@ -498,7 +500,7 @@ func TestPgxRejectionStore_ARejectionJudgedWithNoLengthOrMBIDKeepsAnEmptyBasisNo
 	if len(prior) != 1 {
 		t.Fatalf("Active(...) = %+v, want one rejection", prior)
 	}
-	if prior[0].Basis == nil || *prior[0].Basis != (ports.RejectionBasis{}) {
+	if prior[0].Basis == nil || *prior[0].Basis != (acquisition.RejectionBasis{}) {
 		t.Errorf("basis = %v, want a recorded basis of 0s and no MBID, not the nil of a legacy row", prior[0].Basis)
 	}
 }
@@ -506,17 +508,17 @@ func TestPgxRejectionStore_ARejectionJudgedWithNoLengthOrMBIDKeepsAnEmptyBasisNo
 func TestPgxRejectionStore_ReRecordingALegacyRowWritesItsBasis(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
-	basis := ports.RejectionBasis{ExpectedSeconds: 201, ReferenceMBID: "mbid-now"}
+	basis := acquisition.RejectionBasis{ExpectedSeconds: 201, ReferenceMBID: "mbid-now"}
 
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO acquisition_rejections (track_id, source_key, reason, rejected_at) VALUES ($1, 'legacy', 'duration', now() - interval '2 days')`,
 		trackID); err != nil {
 		t.Fatalf("seed legacy rejection: %v", err)
 	}
-	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
+	if err := store.Record(ctx, []acquisition.CandidateRejectionRecord{
 		{TrackID: trackID, SourceKey: "legacy", Reason: "duration", Basis: basis},
 	}); err != nil {
 		t.Fatalf("Record(...) = %v, want nil", err)
@@ -534,17 +536,17 @@ func TestPgxRejectionStore_ReRecordingALegacyRowWritesItsBasis(t *testing.T) {
 func TestPgxRejectionStore_ReRecordingOnANewBasisReplacesTheOldOne(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
-	newer := ports.RejectionBasis{ExpectedSeconds: 0, ReferenceMBID: ""}
+	newer := acquisition.RejectionBasis{ExpectedSeconds: 0, ReferenceMBID: ""}
 
-	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
-		{TrackID: trackID, SourceKey: "source-a", Reason: "duration", Basis: ports.RejectionBasis{ExpectedSeconds: 150, ReferenceMBID: "mbid-old"}},
+	if err := store.Record(ctx, []acquisition.CandidateRejectionRecord{
+		{TrackID: trackID, SourceKey: "source-a", Reason: "duration", Basis: acquisition.RejectionBasis{ExpectedSeconds: 150, ReferenceMBID: "mbid-old"}},
 	}); err != nil {
 		t.Fatalf("first Record(...) = %v, want nil", err)
 	}
-	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
+	if err := store.Record(ctx, []acquisition.CandidateRejectionRecord{
 		{TrackID: trackID, SourceKey: "source-a", Reason: "fingerprint", Basis: newer},
 	}); err != nil {
 		t.Fatalf("second Record(...) = %v, want nil", err)
@@ -562,12 +564,12 @@ func TestPgxRejectionStore_ReRecordingOnANewBasisReplacesTheOldOne(t *testing.T)
 func TestPgxRejectionStore_PruneRemovesRowsOfADeletedTrack(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	ctx := context.Background()
 	kept := insertFailedTrack(t, pool).ID.UUID().String()
 	deleted := insertFailedTrack(t, pool).ID.UUID().String()
 	for _, trackID := range []string{kept, deleted} {
-		if err := store.Record(ctx, []ports.CandidateRejectionRecord{{TrackID: trackID, SourceKey: "source-a", Reason: "no_match"}}); err != nil {
+		if err := store.Record(ctx, []acquisition.CandidateRejectionRecord{{TrackID: trackID, SourceKey: "source-a", Reason: "no_match"}}); err != nil {
 			t.Fatalf("Record(...) = %v, want nil", err)
 		}
 	}
@@ -592,7 +594,7 @@ func TestPgxRejectionStore_PruneRemovesRowsOfADeletedTrack(t *testing.T) {
 	}
 }
 
-func countRejectionsOf(t *testing.T, store *PgxRejectionStore, trackID string) int {
+func countRejectionsOf(t *testing.T, store *acquisition.PgxRejectionStore, trackID string) int {
 	t.Helper()
 	keys, err := activeKeys(store, context.Background(), trackID, time.Now().Add(-10*365*24*time.Hour))
 	if err != nil {
@@ -604,7 +606,7 @@ func countRejectionsOf(t *testing.T, store *PgxRejectionStore, trackID string) i
 func TestPgxRejectionStore_PruneKeepsARejectionStoredUnderTheUppercaseIDOfALiveTrack(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	ctx := context.Background()
 	live := insertFailedTrack(t, pool).ID.UUID().String()
 	var upper string
@@ -626,7 +628,7 @@ func TestPgxRejectionStore_PruneKeepsARejectionStoredUnderTheUppercaseIDOfALiveT
 func TestPgxRejectionStore_PruneSucceedsWhenATrackIDIsNotAUUID(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	ctx := context.Background()
 	live := insertFailedTrack(t, pool).ID.UUID().String()
 	notUUID := "not-a-uuid-" + uuid.NewString()
@@ -650,11 +652,11 @@ func TestPgxRejectionStore_PruneSucceedsWhenATrackIDIsNotAUUID(t *testing.T) {
 func TestPgxRejectionStore_PruneKeepsRowsOfATrackDeletedAndRecreatedWithTheSameID(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	ctx := context.Background()
 	track := insertFailedTrack(t, pool)
 	trackID := track.ID.UUID().String()
-	if err := store.Record(ctx, []ports.CandidateRejectionRecord{{TrackID: trackID, SourceKey: "source-a", Reason: "no_match"}}); err != nil {
+	if err := store.Record(ctx, []acquisition.CandidateRejectionRecord{{TrackID: trackID, SourceKey: "source-a", Reason: "no_match"}}); err != nil {
 		t.Fatalf("Record(...) = %v, want nil", err)
 	}
 	if _, err := pool.Exec(ctx, `DELETE FROM tracks WHERE id = $1`, track.ID.UUID()); err != nil {
@@ -678,7 +680,7 @@ func TestPgxRejectionStore_PruneKeepsRowsOfATrackDeletedAndRecreatedWithTheSameI
 func TestPgxRejectionStore_PruneRemovesOrphansFillingExactlyTwoBatchesAndKeepsLiveRows(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	ctx := context.Background()
 	live := insertFailedTrack(t, pool).ID.UUID().String()
 	deleted := insertFailedTrack(t, pool)
@@ -687,7 +689,7 @@ func TestPgxRejectionStore_PruneRemovesOrphansFillingExactlyTwoBatchesAndKeepsLi
 		if _, err := pool.Exec(ctx,
 			`INSERT INTO acquisition_rejections (track_id, source_key, reason, rejected_at)
 			 SELECT $1, 'k' || g, 'no_match', now() FROM generate_series(1, $2) g`,
-			trackID, 2*pruneBatchSize); err != nil {
+			trackID, 2*storePruneBatch); err != nil {
 			t.Fatalf("seed rejections: %v", err)
 		}
 	}
@@ -702,15 +704,15 @@ func TestPgxRejectionStore_PruneRemovesOrphansFillingExactlyTwoBatchesAndKeepsLi
 	if got := countRejectionsOf(t, store, deletedID); got != 0 {
 		t.Errorf("rejections of the deleted track after Prune = %d, want 0", got)
 	}
-	if got := countRejectionsOf(t, store, live); got != 2*pruneBatchSize {
-		t.Errorf("rejections of the live track after Prune = %d, want %d", got, 2*pruneBatchSize)
+	if got := countRejectionsOf(t, store, live); got != 2*storePruneBatch {
+		t.Errorf("rejections of the live track after Prune = %d, want %d", got, 2*storePruneBatch)
 	}
 }
 
 func TestPgxRejectionStore_PruneCountsAnOrphanOlderThanRetentionOnce(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxRejectionStore(pool)
+	store := acquisition.NewPgxRejectionStore(pool)
 	ctx := context.Background()
 	if _, err := store.Prune(ctx, time.Now()); err != nil {
 		t.Fatalf("draining Prune(...) = %v, want nil", err)

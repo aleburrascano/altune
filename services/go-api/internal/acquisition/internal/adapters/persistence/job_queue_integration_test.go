@@ -1,10 +1,7 @@
-package persistence
+package persistence_test
 
 import (
-	acqdomain "altune/go-api/internal/acquisition/domain"
-	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
-	"altune/go-api/internal/acquisition/internal/core/ports"
-	"altune/go-api/internal/acquisition/service"
+	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/domain"
 	shared "altune/go-api/internal/shared/kernel"
@@ -18,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -38,6 +36,24 @@ func insertPendingTrackForUser(t *testing.T, pool *pgxpool.Pool, userID shared.U
 		_, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID.UUID())
 	})
 	return track
+}
+
+func insertFailedTrackForUser(t *testing.T, pool *pgxpool.Pool, userID shared.UserId) shared.TrackId {
+	t.Helper()
+	track, err := domain.NewTrack(userID, "Blinding Lights", "The Weeknd", "After Hours")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	_, err = pool.Exec(context.Background(),
+		`INSERT INTO tracks (id, user_id, title, artist, album, dedup_key, acquisition_status) VALUES ($1, $2, $3, $4, $5, $6, 'failed')`,
+		track.ID.UUID(), track.UserId.UUID(), track.Title, track.Artist, track.Album, uuid.NewString())
+	if err != nil {
+		t.Fatalf("insert track: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID.UUID())
+	})
+	return track.ID
 }
 
 func insertPendingTrack(t *testing.T, pool *pgxpool.Pool, availableAt time.Time) *domain.Track {
@@ -66,7 +82,7 @@ func leaseUntil(t *testing.T, pool *pgxpool.Pool, trackID domain.TrackId) time.T
 func TestPgxJobQueue_ClaimSkipsUnavailableAndLeasedRows(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	ctx := context.Background()
 
 	future := insertPendingTrack(t, pool, time.Now().Add(time.Hour))
@@ -83,7 +99,7 @@ func TestPgxJobQueue_ClaimSkipsUnavailableAndLeasedRows(t *testing.T) {
 		t.Errorf("Fence = %d, want 1", job.Fence)
 	}
 
-	if _, err := queue.Claim(ctx, 2*time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
+	if _, err := queue.Claim(ctx, 2*time.Minute); !errors.Is(err, acquisition.ErrNoJobAvailable) {
 		t.Errorf("second Claim = %v, want ErrNoJobAvailable (track is leased, future one is not yet due)", err)
 	}
 }
@@ -91,7 +107,7 @@ func TestPgxJobQueue_ClaimSkipsUnavailableAndLeasedRows(t *testing.T) {
 func TestPgxJobQueue_ClaimReportsHowLongTheJobWaited(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 
 	insertPendingTrack(t, pool, time.Now().Add(-90*time.Second))
 
@@ -123,9 +139,9 @@ func TestPgxJobQueue_ConcurrentClaimersNeverDoubleClaim(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			queue := NewPgxJobQueue(pool)
+			queue := acquisition.NewPgxJobQueue(pool)
 			job, err := queue.Claim(ctx, 2*time.Minute)
-			if errors.Is(err, acqdomain.ErrNoJobAvailable) {
+			if errors.Is(err, acquisition.ErrNoJobAvailable) {
 				return
 			}
 			if err != nil {
@@ -154,7 +170,7 @@ func TestPgxJobQueue_ConcurrentClaimersNeverDoubleClaim(t *testing.T) {
 func TestPgxJobQueue_LapsedLeaseIsReclaimed(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	ctx := context.Background()
 
 	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
@@ -167,7 +183,7 @@ func TestPgxJobQueue_LapsedLeaseIsReclaimed(t *testing.T) {
 		t.Fatalf("first Claim returned %s, want %s", first.TrackID, track.ID)
 	}
 
-	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
+	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, acquisition.ErrNoJobAvailable) {
 		t.Errorf("Claim while leased = %v, want ErrNoJobAvailable", err)
 	}
 
@@ -188,7 +204,7 @@ func TestPgxJobQueue_LapsedLeaseIsReclaimed(t *testing.T) {
 func TestPgxJobQueue_HeartbeatExtendsLeaseAndFailsOnceLapsed(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	ctx := context.Background()
 
 	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
@@ -203,7 +219,7 @@ func TestPgxJobQueue_HeartbeatExtendsLeaseAndFailsOnceLapsed(t *testing.T) {
 	if until := leaseUntil(t, pool, track.ID); time.Until(until) < 30*time.Minute {
 		t.Errorf("lease after an hour-long heartbeat ends in %s, want about an hour", time.Until(until))
 	}
-	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
+	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, acquisition.ErrNoJobAvailable) {
 		t.Errorf("Claim after heartbeat extended the lease = %v, want ErrNoJobAvailable", err)
 	}
 
@@ -218,7 +234,7 @@ func TestPgxJobQueue_HeartbeatExtendsLeaseAndFailsOnceLapsed(t *testing.T) {
 func TestPgxJobQueue_ReleaseSchedulesRetryAtAvailableAt(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	ctx := context.Background()
 
 	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
@@ -231,7 +247,7 @@ func TestPgxJobQueue_ReleaseSchedulesRetryAtAvailableAt(t *testing.T) {
 		t.Fatalf("Release = %v, want nil", err)
 	}
 
-	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
+	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, acquisition.ErrNoJobAvailable) {
 		t.Errorf("Claim before the backoff elapses = %v, want ErrNoJobAvailable", err)
 	}
 
@@ -246,12 +262,12 @@ func TestPgxJobQueue_ReleaseSchedulesRetryAtAvailableAt(t *testing.T) {
 func TestPgxJobQueue_EnqueueMarksPendingAndClaimable(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	ctx := context.Background()
 
 	track := insertFailedTrack(t, pool)
 
-	if err := queue.Enqueue(ctx, track.ID, ports.JobKindReplace, 0); err != nil {
+	if err := queue.Enqueue(ctx, track.ID, acquisition.JobKindReplace, 0); err != nil {
 		t.Fatalf("Enqueue = %v, want nil", err)
 	}
 
@@ -262,15 +278,15 @@ func TestPgxJobQueue_EnqueueMarksPendingAndClaimable(t *testing.T) {
 	if job.TrackID != track.ID {
 		t.Fatalf("Claim returned %s, want the enqueued track %s", job.TrackID, track.ID)
 	}
-	if job.Kind != ports.JobKindReplace {
-		t.Errorf("Kind = %q, want %q", job.Kind, ports.JobKindReplace)
+	if job.Kind != acquisition.JobKindReplace {
+		t.Errorf("Kind = %q, want %q", job.Kind, acquisition.JobKindReplace)
 	}
 }
 
 func TestPgxJobQueue_FairAcrossUsersFavoursTheUserWithNoInFlightJob(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	ctx := context.Background()
 
 	busyUser := shared.NewUserId(uuid.New())
@@ -301,7 +317,7 @@ func TestPgxJobQueue_FairAcrossUsersFavoursTheUserWithNoInFlightJob(t *testing.T
 func TestPgxJobQueue_ZombieHeartbeatFailsAfterReclaimAndLeavesNewOwnerAlone(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	ctx := context.Background()
 
 	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
@@ -323,13 +339,13 @@ func TestPgxJobQueue_ZombieHeartbeatFailsAfterReclaimAndLeavesNewOwnerAlone(t *t
 		t.Fatalf("reclaim did not advance the fence: zombie.Fence=%d newOwner.Fence=%d", zombie.Fence, newOwner.Fence)
 	}
 
-	if err := queue.Heartbeat(ctx, track.ID, zombie.Fence, time.Minute); !errors.Is(err, acqdomain.ErrLeaseLost) {
+	if err := queue.Heartbeat(ctx, track.ID, zombie.Fence, time.Minute); !errors.Is(err, acquisition.ErrLeaseLost) {
 		t.Errorf("zombie Heartbeat = %v, want ErrLeaseLost", err)
 	}
-	if err := queue.Release(ctx, track.ID, zombie.Fence, 0); !errors.Is(err, acqdomain.ErrLeaseLost) {
+	if err := queue.Release(ctx, track.ID, zombie.Fence, 0); !errors.Is(err, acquisition.ErrLeaseLost) {
 		t.Errorf("zombie Release = %v, want ErrLeaseLost", err)
 	}
-	if err := queue.Settle(ctx, track.ID, zombie.Fence); !errors.Is(err, acqdomain.ErrLeaseLost) {
+	if err := queue.Settle(ctx, track.ID, zombie.Fence); !errors.Is(err, acquisition.ErrLeaseLost) {
 		t.Errorf("zombie Settle = %v, want ErrLeaseLost", err)
 	}
 
@@ -344,7 +360,7 @@ func TestPgxJobQueue_ZombieHeartbeatFailsAfterReclaimAndLeavesNewOwnerAlone(t *t
 func TestPgxJobQueue_SettleAfterAReEnqueueLeavesThePendingJobClaimable(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	ctx := context.Background()
 
 	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
@@ -352,7 +368,7 @@ func TestPgxJobQueue_SettleAfterAReEnqueueLeavesThePendingJobClaimable(t *testin
 	if err != nil {
 		t.Fatalf("Claim = %v, want a job", err)
 	}
-	if err := queue.Enqueue(ctx, track.ID, ports.JobKindAcquire, 0); err != nil {
+	if err := queue.Enqueue(ctx, track.ID, acquisition.JobKindAcquire, 0); err != nil {
 		t.Fatalf("Enqueue while leased = %v, want nil", err)
 	}
 	if err := queue.Settle(ctx, track.ID, owner.Fence); err != nil {
@@ -371,7 +387,7 @@ func TestPgxJobQueue_SettleAfterAReEnqueueLeavesThePendingJobClaimable(t *testin
 func TestPgxJobQueue_SettleOfAFinishedJobClearsItsSchedule(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	ctx := context.Background()
 
 	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
@@ -399,7 +415,7 @@ func TestPgxJobQueue_SettleOfAFinishedJobClearsItsSchedule(t *testing.T) {
 func TestPgxJobQueue_EnqueueKeepsALiveLeaseSoNoSecondWorkerClaims(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	ctx := context.Background()
 
 	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
@@ -408,10 +424,10 @@ func TestPgxJobQueue_EnqueueKeepsALiveLeaseSoNoSecondWorkerClaims(t *testing.T) 
 		t.Fatalf("Claim = %v, want a job", err)
 	}
 
-	if err := queue.Enqueue(ctx, track.ID, ports.JobKindAcquire, 0); err != nil {
+	if err := queue.Enqueue(ctx, track.ID, acquisition.JobKindAcquire, 0); err != nil {
 		t.Fatalf("Enqueue while leased = %v, want nil", err)
 	}
-	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
+	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, acquisition.ErrNoJobAvailable) {
 		t.Fatalf("Claim while the owner's lease is live = %v, want ErrNoJobAvailable", err)
 	}
 	if err := queue.Heartbeat(ctx, track.ID, owner.Fence, time.Minute); err != nil {
@@ -422,7 +438,7 @@ func TestPgxJobQueue_EnqueueKeepsALiveLeaseSoNoSecondWorkerClaims(t *testing.T) 
 func TestPgxJobQueue_EnqueueOnLiveLeaseOfDifferentKindConflicts(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	ctx := context.Background()
 
 	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
@@ -430,7 +446,7 @@ func TestPgxJobQueue_EnqueueOnLiveLeaseOfDifferentKindConflicts(t *testing.T) {
 		t.Fatalf("Claim = %v", err)
 	}
 
-	if err := queue.Enqueue(ctx, track.ID, ports.JobKindReplace, 0); !errors.Is(err, acqdomain.ErrJobKindConflict) {
+	if err := queue.Enqueue(ctx, track.ID, acquisition.JobKindReplace, 0); !errors.Is(err, acquisition.ErrJobKindConflict) {
 		t.Errorf("Enqueue replace over a running acquire = %v, want ErrJobKindConflict", err)
 	}
 }
@@ -475,12 +491,12 @@ func acquisitionStatus(t *testing.T, pool *pgxpool.Pool, trackID domain.TrackId)
 func TestPgxJobQueue_ReplaceOfAReadyTrackKeepsItReadyThroughClaimAndSettle(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	ctx := context.Background()
 
 	track := insertReadyTrack(t, pool)
 
-	if err := queue.Enqueue(ctx, track.ID, ports.JobKindReplace, 0); err != nil {
+	if err := queue.Enqueue(ctx, track.ID, acquisition.JobKindReplace, 0); err != nil {
 		t.Fatalf("Enqueue = %v, want nil", err)
 	}
 	if got := acquisitionStatus(t, pool, track.ID); got != "ready" {
@@ -491,7 +507,7 @@ func TestPgxJobQueue_ReplaceOfAReadyTrackKeepsItReadyThroughClaimAndSettle(t *te
 	if err != nil {
 		t.Fatalf("Claim = %v, want the replace job", err)
 	}
-	if job.TrackID != track.ID || job.Kind != ports.JobKindReplace {
+	if job.TrackID != track.ID || job.Kind != acquisition.JobKindReplace {
 		t.Fatalf("Claim = %+v, want a replace job for %s", job, track.ID)
 	}
 	if got := acquisitionStatus(t, pool, track.ID); got != "ready" {
@@ -507,7 +523,7 @@ func TestPgxJobQueue_ReplaceOfAReadyTrackKeepsItReadyThroughClaimAndSettle(t *te
 	if got := acquisitionStatus(t, pool, track.ID); got != "ready" {
 		t.Errorf("status after a failed replace settles = %q, want ready", got)
 	}
-	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
+	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, acquisition.ErrNoJobAvailable) {
 		t.Errorf("Claim after Settle = %v, want ErrNoJobAvailable", err)
 	}
 }
@@ -515,17 +531,17 @@ func TestPgxJobQueue_ReplaceOfAReadyTrackKeepsItReadyThroughClaimAndSettle(t *te
 func TestPgxJobQueue_EnqueueOfAcquireOnAReadyTrackLeavesItReady(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 
 	track := insertReadyTrack(t, pool)
 
-	if err := queue.Enqueue(context.Background(), track.ID, ports.JobKindAcquire, 0); err != nil {
+	if err := queue.Enqueue(context.Background(), track.ID, acquisition.JobKindAcquire, 0); err != nil {
 		t.Fatalf("Enqueue = %v, want nil", err)
 	}
 	if got := acquisitionStatus(t, pool, track.ID); got != "ready" {
 		t.Errorf("status = %q, want ready", got)
 	}
-	if _, err := queue.Claim(context.Background(), time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
+	if _, err := queue.Claim(context.Background(), time.Minute); !errors.Is(err, acquisition.ErrNoJobAvailable) {
 		t.Errorf("Claim = %v, want ErrNoJobAvailable", err)
 	}
 }
@@ -533,19 +549,19 @@ func TestPgxJobQueue_EnqueueOfAcquireOnAReadyTrackLeavesItReady(t *testing.T) {
 func TestPgxJobQueue_SecondReplaceEnqueueWhileLeasedIsANoop(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	ctx := context.Background()
 
 	track := insertReadyTrack(t, pool)
 	markRowFailed(t, pool, track.ID)
-	if err := queue.Enqueue(ctx, track.ID, ports.JobKindReplace, 0); err != nil {
+	if err := queue.Enqueue(ctx, track.ID, acquisition.JobKindReplace, 0); err != nil {
 		t.Fatalf("Enqueue = %v", err)
 	}
 	if _, err := queue.Claim(ctx, time.Minute); err != nil {
 		t.Fatalf("Claim = %v", err)
 	}
 
-	if err := queue.Enqueue(ctx, track.ID, ports.JobKindAcquire, 0); !errors.Is(err, acqdomain.ErrJobKindConflict) {
+	if err := queue.Enqueue(ctx, track.ID, acquisition.JobKindAcquire, 0); !errors.Is(err, acquisition.ErrJobKindConflict) {
 		t.Errorf("Enqueue of another kind while a replace is leased = %v, want ErrJobKindConflict", err)
 	}
 }
@@ -566,12 +582,12 @@ func (a *panickingAcquirer) RefuseQueued(context.Context, shared.UserId, domain.
 func TestPgxJobQueue_PanickedJobRowIsNotClaimableAgainImmediately(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
 	acq := &panickingAcquirer{}
 	var wg sync.WaitGroup
-	scheduler := service.NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
-		service.WithJobQueue(queue), service.WithPollInterval(5*time.Millisecond))
+	scheduler := acquisition.NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
+		acquisition.WithJobQueue(queue), acquisition.WithPollInterval(5*time.Millisecond))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -590,11 +606,46 @@ func TestPgxJobQueue_PanickedJobRowIsNotClaimableAgainImmediately(t *testing.T) 
 	}
 }
 
+type recordedQueries struct {
+	mu   sync.Mutex
+	sql  []string
+	args [][]any
+}
+
+func (r *recordedQueries) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.sql = append(r.sql, data.SQL)
+	r.args = append(r.args, data.Args)
+	return ctx
+}
+
+func (*recordedQueries) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
+
+func tracedPool(t *testing.T, pool *pgxpool.Pool, tracer pgx.QueryTracer) *pgxpool.Pool {
+	t.Helper()
+	cfg := pool.Config()
+	cfg.ConnConfig.Tracer = tracer
+	traced, err := pgxpool.NewWithConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("traced pool: %v", err)
+	}
+	t.Cleanup(traced.Close)
+	return traced
+}
+
 func TestPgxJobQueue_ClaimPlanUsesScheduledAvailableAtIndex(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
 	ctx := context.Background()
 	insertPendingTrack(t, pool, time.Now().Add(-time.Minute))
+	recorded := &recordedQueries{}
+	if _, err := acquisition.NewPgxJobQueue(tracedPool(t, pool, recorded)).Claim(ctx, 30*time.Second); err != nil && !errors.Is(err, acquisition.ErrNoJobAvailable) {
+		t.Fatalf("Claim = %v", err)
+	}
+	if len(recorded.sql) != 1 {
+		t.Fatalf("Claim ran %d queries, want the one claim query", len(recorded.sql))
+	}
 
 	tx, err := pool.Begin(ctx)
 	if err != nil {
@@ -604,7 +655,7 @@ func TestPgxJobQueue_ClaimPlanUsesScheduledAvailableAtIndex(t *testing.T) {
 	if _, err := tx.Exec(ctx, `SET LOCAL enable_seqscan = off`); err != nil {
 		t.Fatalf("disable seqscan: %v", err)
 	}
-	rows, err := tx.Query(ctx, "EXPLAIN "+claimJobSQL, 30.0)
+	rows, err := tx.Query(ctx, "EXPLAIN "+recorded.sql[0], recorded.args[0]...)
 	if err != nil {
 		t.Fatalf("explain claim: %v", err)
 	}
@@ -625,7 +676,7 @@ func TestPgxJobQueue_ClaimPlanUsesScheduledAvailableAtIndex(t *testing.T) {
 func TestPgxJobQueue_PendingDepthCountsUnleasedJobsAndReportsOldestAge(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	ctx := context.Background()
 
 	baselinePending, _, err := queue.PendingDepth(ctx)
@@ -656,11 +707,11 @@ func TestPgxJobQueue_PendingDepthCountsUnleasedJobsAndReportsOldestAge(t *testin
 func TestPgxJobQueue_ReEnqueueAfterPriorClaimsStartsANewRunAndAdvancesTheFence(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	ctx := context.Background()
 
 	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
-	var stale ports.Job
+	var stale acquisition.Job
 	for i := 0; i < 3; i++ {
 		job, err := queue.Claim(ctx, time.Minute)
 		if err != nil {
@@ -670,7 +721,7 @@ func TestPgxJobQueue_ReEnqueueAfterPriorClaimsStartsANewRunAndAdvancesTheFence(t
 		expireLease(t, pool, track.ID)
 	}
 
-	if err := queue.Enqueue(ctx, track.ID, ports.JobKindAcquire, 0); err != nil {
+	if err := queue.Enqueue(ctx, track.ID, acquisition.JobKindAcquire, 0); err != nil {
 		t.Fatalf("re-Enqueue = %v", err)
 	}
 	job, err := queue.Claim(ctx, time.Minute)
@@ -681,7 +732,7 @@ func TestPgxJobQueue_ReEnqueueAfterPriorClaimsStartsANewRunAndAdvancesTheFence(t
 	if job.Run != 1 || job.Fence != 5 {
 		t.Errorf("Run/Fence = %d/%d, want 1/5", job.Run, job.Fence)
 	}
-	if err := queue.Settle(ctx, track.ID, stale.Fence); !errors.Is(err, acqdomain.ErrLeaseLost) {
+	if err := queue.Settle(ctx, track.ID, stale.Fence); !errors.Is(err, acquisition.ErrLeaseLost) {
 		t.Errorf("stale Settle = %v, want ErrLeaseLost", err)
 	}
 }
@@ -708,7 +759,7 @@ func availableAt(t *testing.T, pool *pgxpool.Pool, trackID domain.TrackId) time.
 func TestPgxJobQueue_ReleaseDelayIsMeasuredOnTheDatabaseClock(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	ctx := context.Background()
 
 	track := insertPendingTrack(t, pool, time.Now())
@@ -731,7 +782,7 @@ func TestPgxJobQueue_ReleaseDelayIsMeasuredOnTheDatabaseClock(t *testing.T) {
 	if got.Before(before.Add(time.Hour)) || got.After(after.Add(time.Hour)) {
 		t.Errorf("available_at = %v, want within [%v, %v] (database now() plus one hour)", got, before.Add(time.Hour), after.Add(time.Hour))
 	}
-	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
+	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, acquisition.ErrNoJobAvailable) {
 		t.Errorf("Claim inside the delay = %v, want ErrNoJobAvailable", err)
 	}
 
@@ -751,11 +802,7 @@ func TestPgxJobQueue_ReleaseDelayIsMeasuredOnTheDatabaseClock(t *testing.T) {
 func TestPgxJobQueue_FencedUpdatesWrapErrorsWithTheirOperation(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
-
-	if dbCallTimeout != 5*time.Second {
-		t.Errorf("dbCallTimeout = %s, want 5s", dbCallTimeout)
-	}
+	queue := acquisition.NewPgxJobQueue(pool)
 
 	missing := domain.TrackIdFromUUID(uuid.New())
 	cancelled, cancel := context.WithCancel(context.Background())
@@ -772,16 +819,16 @@ func TestPgxJobQueue_FencedUpdatesWrapErrorsWithTheirOperation(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.op, func(t *testing.T) {
 			err := tc.run(context.Background())
-			if !errors.Is(err, acqdomain.ErrLeaseLost) {
+			if !errors.Is(err, acquisition.ErrLeaseLost) {
 				t.Fatalf("zero rows = %v, want ErrLeaseLost", err)
 			}
-			want := tc.op + " acquisition job for track " + missing.String() + ": " + acqdomain.ErrLeaseLost.Error()
+			want := tc.op + " acquisition job for track " + missing.String() + ": " + acquisition.ErrLeaseLost.Error()
 			if err.Error() != want {
 				t.Errorf("zero-rows error = %q, want %q", err.Error(), want)
 			}
 
 			err = tc.run(cancelled)
-			if err == nil || errors.Is(err, acqdomain.ErrLeaseLost) {
+			if err == nil || errors.Is(err, acquisition.ErrLeaseLost) {
 				t.Fatalf("cancelled context = %v, want a database error", err)
 			}
 			if prefix := tc.op + " acquisition job: "; !strings.HasPrefix(err.Error(), prefix) {
@@ -794,13 +841,47 @@ func TestPgxJobQueue_FencedUpdatesWrapErrorsWithTheirOperation(t *testing.T) {
 	}
 }
 
+func TestPgxJobQueue_AFencedUpdateBlockedOnTheRowGivesUpAfterFiveSeconds(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	queue := acquisition.NewPgxJobQueue(pool)
+	ctx := context.Background()
+	track := insertPendingTrack(t, pool, time.Now().Add(-time.Minute))
+	job, err := queue.Claim(ctx, time.Minute)
+	if err != nil {
+		t.Fatalf("Claim = %v", err)
+	}
+	if job.TrackID != track.ID {
+		t.Fatalf("claimed track %s, want the inserted %s", job.TrackID, track.ID)
+	}
+	holder, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = holder.Rollback(ctx) }()
+	if _, err := holder.Exec(ctx, `SELECT 1 FROM tracks WHERE id = $1 FOR UPDATE`, job.TrackID.UUID()); err != nil {
+		t.Fatalf("lock the track row: %v", err)
+	}
+
+	start := time.Now()
+	err = queue.Heartbeat(ctx, job.TrackID, job.Fence, time.Minute)
+	elapsed := time.Since(start)
+
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Heartbeat on a locked row = %v, want it to give up with a deadline", err)
+	}
+	if elapsed < 4500*time.Millisecond || elapsed > 10*time.Second {
+		t.Errorf("Heartbeat gave up after %s, want about 5s", elapsed)
+	}
+}
+
 func TestPgxJobQueue_AnUpgradeKeepsTheTrackReadyWhileItIsQueued(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("keep")})
 
-	if err := queue.Enqueue(context.Background(), id, ports.JobKindUpgrade, 0); err != nil {
+	if err := queue.Enqueue(context.Background(), id, acquisition.JobKindUpgrade, 0); err != nil {
 		t.Fatalf("Enqueue upgrade = %v, want nil", err)
 	}
 
@@ -816,10 +897,10 @@ func TestPgxJobQueue_AnUpgradeKeepsTheTrackReadyWhileItIsQueued(t *testing.T) {
 func TestPgxJobQueue_AnUpgradeIsNeverQueuedForATrackWithoutAPlayableFile(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	track := insertPendingTrack(t, pool, time.Now().Add(time.Hour))
 
-	err := queue.Enqueue(context.Background(), track.ID, ports.JobKindUpgrade, 0)
+	err := queue.Enqueue(context.Background(), track.ID, acquisition.JobKindUpgrade, 0)
 
 	if err == nil {
 		t.Fatal("Enqueue upgrade on a pending track = nil, want it refused")
@@ -828,7 +909,7 @@ func TestPgxJobQueue_AnUpgradeIsNeverQueuedForATrackWithoutAPlayableFile(t *test
 	if err := pool.QueryRow(context.Background(), `SELECT acquisition_job_kind FROM tracks WHERE id = $1`, track.ID.UUID()).Scan(&kind); err != nil {
 		t.Fatalf("read kind: %v", err)
 	}
-	if kind == string(ports.JobKindUpgrade) {
+	if kind == string(acquisition.JobKindUpgrade) {
 		t.Error("the refused enqueue still marked the track as an upgrade job")
 	}
 }
@@ -836,25 +917,25 @@ func TestPgxJobQueue_AnUpgradeIsNeverQueuedForATrackWithoutAPlayableFile(t *test
 func TestPgxJobQueue_UserAddsKeepPriorityOverUpgrades(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	ctx := context.Background()
 	upgrading := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("F"), sourceURL: sourceURL("up")})
-	if err := queue.Enqueue(ctx, upgrading, ports.JobKindUpgrade, 0); err != nil {
+	if err := queue.Enqueue(ctx, upgrading, acquisition.JobKindUpgrade, 0); err != nil {
 		t.Fatalf("Enqueue upgrade = %v", err)
 	}
 	added := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
 
-	if _, err := queue.ClaimUpgrade(ctx, time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
+	if _, err := queue.ClaimUpgrade(ctx, time.Minute); !errors.Is(err, acquisition.ErrNoJobAvailable) {
 		t.Fatalf("ClaimUpgrade while a user add waits = %v, want ErrNoJobAvailable", err)
 	}
 	userJob, err := queue.Claim(ctx, time.Minute)
 	if err != nil {
 		t.Fatalf("Claim = %v, want the user's add (never the upgrade)", err)
 	}
-	if userJob.TrackID != added.ID || userJob.Kind != ports.JobKindAcquire {
+	if userJob.TrackID != added.ID || userJob.Kind != acquisition.JobKindAcquire {
 		t.Errorf("Claim returned %+v, want the user add %s", userJob, added.ID)
 	}
-	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
+	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, acquisition.ErrNoJobAvailable) {
 		t.Fatalf("second Claim = %v, want ErrNoJobAvailable: the upgrade is not a user job", err)
 	}
 	if _, err := pool.Exec(ctx, `UPDATE tracks SET acquisition_status = 'ready' WHERE id = $1`, added.ID.UUID()); err != nil {
@@ -868,7 +949,7 @@ func TestPgxJobQueue_UserAddsKeepPriorityOverUpgrades(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ClaimUpgrade once no user add waits = %v, want the upgrade", err)
 	}
-	if upgrade.TrackID != upgrading || upgrade.Kind != ports.JobKindUpgrade {
+	if upgrade.TrackID != upgrading || upgrade.Kind != acquisition.JobKindUpgrade {
 		t.Errorf("ClaimUpgrade returned %+v, want the upgrade of %s", upgrade, upgrading)
 	}
 }
@@ -876,16 +957,16 @@ func TestPgxJobQueue_UserAddsKeepPriorityOverUpgrades(t *testing.T) {
 func TestPgxJobQueue_AnUpgradeNeverOverwritesAQueuedUserReplace(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	ctx := context.Background()
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("replaced")})
-	if err := queue.Enqueue(ctx, id, ports.JobKindReplace, time.Hour); err != nil {
+	if err := queue.Enqueue(ctx, id, acquisition.JobKindReplace, time.Hour); err != nil {
 		t.Fatalf("Enqueue replace = %v", err)
 	}
 
-	err := queue.Enqueue(ctx, id, ports.JobKindUpgrade, 0)
+	err := queue.Enqueue(ctx, id, acquisition.JobKindUpgrade, 0)
 
-	if !errors.Is(err, acqdomain.ErrJobKindConflict) {
+	if !errors.Is(err, acquisition.ErrJobKindConflict) {
 		t.Fatalf("Enqueue upgrade over a queued replace = %v, want ErrJobKindConflict", err)
 	}
 	var kind string
@@ -893,7 +974,7 @@ func TestPgxJobQueue_AnUpgradeNeverOverwritesAQueuedUserReplace(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT acquisition_job_kind, acquisition_available_at > now() + interval '30 minutes' FROM tracks WHERE id = $1`, id.UUID()).Scan(&kind, &queued); err != nil {
 		t.Fatalf("read job: %v", err)
 	}
-	if kind != string(ports.JobKindReplace) || !queued {
+	if kind != string(acquisition.JobKindReplace) || !queued {
 		t.Errorf("kind = %q, queued for later = %v, want the user's replace untouched", kind, queued)
 	}
 }
@@ -901,10 +982,10 @@ func TestPgxJobQueue_AnUpgradeNeverOverwritesAQueuedUserReplace(t *testing.T) {
 func TestPgxJobQueue_AUserReplaceTakesOverARunningUpgrade(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	ctx := context.Background()
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("running")})
-	if err := queue.Enqueue(ctx, id, ports.JobKindUpgrade, 0); err != nil {
+	if err := queue.Enqueue(ctx, id, acquisition.JobKindUpgrade, 0); err != nil {
 		t.Fatalf("Enqueue upgrade = %v", err)
 	}
 	upgrade, err := queue.ClaimUpgrade(ctx, time.Minute)
@@ -912,15 +993,15 @@ func TestPgxJobQueue_AUserReplaceTakesOverARunningUpgrade(t *testing.T) {
 		t.Fatalf("ClaimUpgrade = %+v, %v, want the upgrade of the track", upgrade, err)
 	}
 
-	if err := queue.Enqueue(ctx, id, ports.JobKindReplace, 0); err != nil {
+	if err := queue.Enqueue(ctx, id, acquisition.JobKindReplace, 0); err != nil {
 		t.Fatalf("Enqueue replace over a running upgrade = %v, want the user's job to win", err)
 	}
 
-	if err := queue.Heartbeat(ctx, id, upgrade.Fence, time.Minute); !errors.Is(err, acqdomain.ErrLeaseLost) {
+	if err := queue.Heartbeat(ctx, id, upgrade.Fence, time.Minute); !errors.Is(err, acquisition.ErrLeaseLost) {
 		t.Errorf("upgrade Heartbeat = %v, want ErrLeaseLost so the upgrade stops", err)
 	}
 	replace, err := queue.Claim(ctx, time.Minute)
-	if err != nil || replace.TrackID != id || replace.Kind != ports.JobKindReplace {
+	if err != nil || replace.TrackID != id || replace.Kind != acquisition.JobKindReplace {
 		t.Errorf("Claim = %+v, %v, want the user's replace right after", replace, err)
 	}
 }
@@ -928,10 +1009,10 @@ func TestPgxJobQueue_AUserReplaceTakesOverARunningUpgrade(t *testing.T) {
 func TestPgxJobQueue_AnUpgradeLosesItsLeaseTheMomentAReplaceTakesOver(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	ctx := context.Background()
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("running")})
-	if err := queue.Enqueue(ctx, id, ports.JobKindUpgrade, 0); err != nil {
+	if err := queue.Enqueue(ctx, id, acquisition.JobKindUpgrade, 0); err != nil {
 		t.Fatalf("Enqueue upgrade = %v", err)
 	}
 	upgrade, err := queue.ClaimUpgrade(ctx, time.Minute)
@@ -942,11 +1023,11 @@ func TestPgxJobQueue_AnUpgradeLosesItsLeaseTheMomentAReplaceTakesOver(t *testing
 		t.Fatalf("VerifyLease while the upgrade holds the lease = %v, want nil", err)
 	}
 
-	if err := queue.Enqueue(ctx, id, ports.JobKindReplace, 0); err != nil {
+	if err := queue.Enqueue(ctx, id, acquisition.JobKindReplace, 0); err != nil {
 		t.Fatalf("Enqueue replace = %v", err)
 	}
 
-	if err := queue.VerifyLease(ctx, id, upgrade.Fence); !errors.Is(err, acqdomain.ErrLeaseLost) {
+	if err := queue.VerifyLease(ctx, id, upgrade.Fence); !errors.Is(err, acquisition.ErrLeaseLost) {
 		t.Errorf("VerifyLease after the takeover = %v, want ErrLeaseLost", err)
 	}
 }
@@ -954,7 +1035,7 @@ func TestPgxJobQueue_AnUpgradeLosesItsLeaseTheMomentAReplaceTakesOver(t *testing
 func TestPgxJobQueue_EnqueueMakesAStaleCatalogWriteConflict(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 
@@ -964,7 +1045,7 @@ func TestPgxJobQueue_EnqueueMakesAStaleCatalogWriteConflict(t *testing.T) {
 		t.Fatalf("GetByID = %v", err)
 	}
 
-	if err := queue.Enqueue(ctx, snap.ID, ports.JobKindAcquire, 0); err != nil {
+	if err := queue.Enqueue(ctx, snap.ID, acquisition.JobKindAcquire, 0); err != nil {
 		t.Fatalf("Enqueue = %v, want nil", err)
 	}
 
@@ -980,7 +1061,7 @@ func TestPgxJobQueue_EnqueueMakesAStaleCatalogWriteConflict(t *testing.T) {
 func TestPgxJobQueue_ClaimMakesAStaleCatalogWriteConflict(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 
@@ -1003,7 +1084,7 @@ func TestPgxJobQueue_ClaimMakesAStaleCatalogWriteConflict(t *testing.T) {
 func TestPgxJobQueue_RetryBetweenAudioMissingLoadAndWriteLeavesTheTrackPendingAndClaimable(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 
@@ -1017,7 +1098,7 @@ func TestPgxJobQueue_RetryBetweenAudioMissingLoadAndWriteLeavesTheTrackPendingAn
 	}
 
 	markRowFailed(t, pool, track.ID)
-	if err := queue.Enqueue(ctx, track.ID, ports.JobKindAcquire, 0); err != nil {
+	if err := queue.Enqueue(ctx, track.ID, acquisition.JobKindAcquire, 0); err != nil {
 		t.Fatalf("Enqueue = %v, want nil", err)
 	}
 
@@ -1039,7 +1120,7 @@ func TestPgxJobQueue_RetryBetweenAudioMissingLoadAndWriteLeavesTheTrackPendingAn
 func TestPgxJobQueue_ReplaceEnqueueMakesAStaleCatalogWriteConflict(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 
@@ -1052,7 +1133,7 @@ func TestPgxJobQueue_ReplaceEnqueueMakesAStaleCatalogWriteConflict(t *testing.T)
 		t.Fatalf("MarkFailed = %v", err)
 	}
 
-	if err := queue.Enqueue(ctx, track.ID, ports.JobKindReplace, 0); err != nil {
+	if err := queue.Enqueue(ctx, track.ID, acquisition.JobKindReplace, 0); err != nil {
 		t.Fatalf("Enqueue replace = %v, want nil", err)
 	}
 
@@ -1067,19 +1148,19 @@ func TestPgxJobQueue_ReplaceEnqueueMakesAStaleCatalogWriteConflict(t *testing.T)
 func TestPgxJobQueue_SecondEnqueueMakesAWriterLoadedBetweenTheTwoConflict(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 
 	snap := insertFailedTrack(t, pool)
-	if err := queue.Enqueue(ctx, snap.ID, ports.JobKindAcquire, time.Hour); err != nil {
+	if err := queue.Enqueue(ctx, snap.ID, acquisition.JobKindAcquire, time.Hour); err != nil {
 		t.Fatalf("first Enqueue = %v", err)
 	}
 	loaded, err := repo.GetByID(ctx, snap.ID, snap.UserId)
 	if err != nil {
 		t.Fatalf("GetByID = %v", err)
 	}
-	if err := queue.Enqueue(ctx, snap.ID, ports.JobKindAcquire, 0); err != nil {
+	if err := queue.Enqueue(ctx, snap.ID, acquisition.JobKindAcquire, 0); err != nil {
 		t.Fatalf("second Enqueue = %v", err)
 	}
 
@@ -1091,7 +1172,7 @@ func TestPgxJobQueue_SecondEnqueueMakesAWriterLoadedBetweenTheTwoConflict(t *tes
 func TestPgxJobQueue_ReclaimOfALapsedLeaseMakesAStaleCatalogWriteConflict(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 
@@ -1117,12 +1198,12 @@ func TestPgxJobQueue_ReclaimOfALapsedLeaseMakesAStaleCatalogWriteConflict(t *tes
 func TestPgxJobQueue_ClaimOfAReplaceJobMakesAStaleCatalogWriteConflict(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 
 	track := insertReadyTrack(t, pool)
-	if err := queue.Enqueue(ctx, track.ID, ports.JobKindReplace, 0); err != nil {
+	if err := queue.Enqueue(ctx, track.ID, acquisition.JobKindReplace, 0); err != nil {
 		t.Fatalf("Enqueue replace = %v", err)
 	}
 	loaded, err := repo.GetByID(ctx, track.ID, track.UserId)
@@ -1142,7 +1223,7 @@ func TestPgxJobQueue_ClaimOfAReplaceJobMakesAStaleCatalogWriteConflict(t *testin
 func TestPgxJobQueue_CatalogWriteThatRereadsAfterEnqueueAndClaimLands(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 
@@ -1151,7 +1232,7 @@ func TestPgxJobQueue_CatalogWriteThatRereadsAfterEnqueueAndClaimLands(t *testing
 	if err != nil {
 		t.Fatalf("GetByID = %v", err)
 	}
-	if err := queue.Enqueue(ctx, snap.ID, ports.JobKindAcquire, 0); err != nil {
+	if err := queue.Enqueue(ctx, snap.ID, acquisition.JobKindAcquire, 0); err != nil {
 		t.Fatalf("Enqueue = %v", err)
 	}
 	if _, err := queue.Claim(ctx, time.Minute); err != nil {
@@ -1179,7 +1260,7 @@ func TestPgxJobQueue_CatalogWriteThatRereadsAfterEnqueueAndClaimLands(t *testing
 func TestPgxJobQueue_EnqueueRacingAStaleCatalogWriteAlwaysEndsPending(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 
@@ -1198,7 +1279,11 @@ func TestPgxJobQueue_EnqueueRacingAStaleCatalogWriteAlwaysEndsPending(t *testing
 		var enqueueErr, updateErr error
 		start := make(chan struct{})
 		wg.Add(2)
-		go func() { defer wg.Done(); <-start; enqueueErr = queue.Enqueue(ctx, track.ID, ports.JobKindAcquire, 0) }()
+		go func() {
+			defer wg.Done()
+			<-start
+			enqueueErr = queue.Enqueue(ctx, track.ID, acquisition.JobKindAcquire, 0)
+		}()
 		go func() { defer wg.Done(); <-start; updateErr = repo.Update(ctx, loaded, loaded.Version) }()
 		close(start)
 		wg.Wait()
@@ -1218,7 +1303,7 @@ func TestPgxJobQueue_EnqueueRacingAStaleCatalogWriteAlwaysEndsPending(t *testing
 func TestPgxJobQueue_ClaimRacingAStaleCatalogWriteKeepsTheStartTime(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 
@@ -1238,7 +1323,7 @@ func TestPgxJobQueue_ClaimRacingAStaleCatalogWriteKeepsTheStartTime(t *testing.T
 		close(start)
 		wg.Wait()
 
-		if errors.Is(claimErr, acqdomain.ErrNoJobAvailable) {
+		if errors.Is(claimErr, acquisition.ErrNoJobAvailable) {
 			_, _ = pool.Exec(ctx, `DELETE FROM tracks WHERE id = $1`, track.ID.UUID())
 			continue
 		}
@@ -1262,17 +1347,17 @@ func TestPgxJobQueue_ClaimRacingAStaleCatalogWriteKeepsTheStartTime(t *testing.T
 func TestPgxJobQueue_HeartbeatReleaseAndSettleLeaveACatalogWriteLoadedDuringTheRunValid(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 
 	cases := []struct {
 		op  string
-		run func(trackID domain.TrackId, fence ports.Fence) error
+		run func(trackID domain.TrackId, fence acquisition.Fence) error
 	}{
-		{"heartbeat", func(id domain.TrackId, f ports.Fence) error { return queue.Heartbeat(ctx, id, f, time.Minute) }},
-		{"release", func(id domain.TrackId, f ports.Fence) error { return queue.Release(ctx, id, f, time.Hour) }},
-		{"settle", func(id domain.TrackId, f ports.Fence) error { return queue.Settle(ctx, id, f) }},
+		{"heartbeat", func(id domain.TrackId, f acquisition.Fence) error { return queue.Heartbeat(ctx, id, f, time.Minute) }},
+		{"release", func(id domain.TrackId, f acquisition.Fence) error { return queue.Release(ctx, id, f, time.Hour) }},
+		{"settle", func(id domain.TrackId, f acquisition.Fence) error { return queue.Settle(ctx, id, f) }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.op, func(t *testing.T) {
@@ -1308,10 +1393,10 @@ func scheduledAvailableAt(t *testing.T, pool *pgxpool.Pool, trackID domain.Track
 func TestPgxJobQueue_APanickingReplaceAtTheRunCapIsNotClaimedAgain(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	ctx := context.Background()
 	track := insertReadyTrack(t, pool)
-	if err := queue.Enqueue(ctx, track.ID, ports.JobKindReplace, 0); err != nil {
+	if err := queue.Enqueue(ctx, track.ID, acquisition.JobKindReplace, 0); err != nil {
 		t.Fatalf("Enqueue = %v", err)
 	}
 	if _, err := pool.Exec(ctx, `UPDATE tracks SET acquisition_run_attempts = 2 WHERE id = $1`, track.ID.UUID()); err != nil {
@@ -1319,8 +1404,8 @@ func TestPgxJobQueue_APanickingReplaceAtTheRunCapIsNotClaimedAgain(t *testing.T)
 	}
 	acq := &panickingAcquirer{}
 	var wg sync.WaitGroup
-	scheduler := service.NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
-		service.WithJobQueue(queue), service.WithPollInterval(5*time.Millisecond))
+	scheduler := acquisition.NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
+		acquisition.WithJobQueue(queue), acquisition.WithPollInterval(5*time.Millisecond))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -1333,7 +1418,7 @@ func TestPgxJobQueue_APanickingReplaceAtTheRunCapIsNotClaimedAgain(t *testing.T)
 	if at := scheduledAvailableAt(t, pool, track.ID); at != nil {
 		t.Errorf("available_at = %v after the panic at the run cap, want NULL: the job must leave the queue", at)
 	}
-	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
+	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, acquisition.ErrNoJobAvailable) {
 		t.Errorf("Claim after the capped panic = %v, want ErrNoJobAvailable", err)
 	}
 	if got := acq.runs.Load(); got != 1 {
@@ -1344,16 +1429,16 @@ func TestPgxJobQueue_APanickingReplaceAtTheRunCapIsNotClaimedAgain(t *testing.T)
 func TestPgxJobQueue_APanickingReplaceBelowTheRunCapIsRetriedAfterItsBackoff(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	ctx := context.Background()
 	track := insertReadyTrack(t, pool)
-	if err := queue.Enqueue(ctx, track.ID, ports.JobKindReplace, 0); err != nil {
+	if err := queue.Enqueue(ctx, track.ID, acquisition.JobKindReplace, 0); err != nil {
 		t.Fatalf("Enqueue = %v", err)
 	}
 	acq := &panickingAcquirer{}
 	var wg sync.WaitGroup
-	scheduler := service.NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
-		service.WithJobQueue(queue), service.WithPollInterval(5*time.Millisecond))
+	scheduler := acquisition.NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
+		acquisition.WithJobQueue(queue), acquisition.WithPollInterval(5*time.Millisecond))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -1380,48 +1465,13 @@ func TestPgxJobQueue_APanickingReplaceBelowTheRunCapIsRetriedAfterItsBackoff(t *
 	}
 }
 
-type contractPgxJobQueue struct {
-	*PgxJobQueue
-	pool *pgxpool.Pool
-}
-
-func (q contractPgxJobQueue) AddTrack(t *testing.T, userID shared.UserId) shared.TrackId {
-	t.Helper()
-	track, err := domain.NewTrack(userID, "Blinding Lights", "The Weeknd", "After Hours")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	_, err = q.pool.Exec(context.Background(),
-		`INSERT INTO tracks (id, user_id, title, artist, album, dedup_key, acquisition_status) VALUES ($1, $2, $3, $4, $5, $6, 'failed')`,
-		track.ID.UUID(), track.UserId.UUID(), track.Title, track.Artist, track.Album, uuid.NewString())
-	if err != nil {
-		t.Fatalf("insert track: %v", err)
-	}
-	t.Cleanup(func() {
-		_, _ = q.pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID.UUID())
-	})
-	return track.ID
-}
-
-func (q contractPgxJobQueue) ExpireLease(t *testing.T, trackID shared.TrackId) {
-	expireLease(t, q.pool, trackID)
-}
-
-func TestPgxJobQueue_Contract(t *testing.T) {
-	sharedtest.RequireIntegration(t)
-	pool := newPool(t)
-	acquisitiontest.JobQueueContract(t, func(*testing.T) acquisitiontest.JobQueueUnderTest {
-		return contractPgxJobQueue{PgxJobQueue: NewPgxJobQueue(pool), pool: pool}
-	})
-}
-
 func TestPgxJobQueue_AReplaceReEnqueuedOverALapsedLeaseSurvivesTheStaleSettle(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	ctx := context.Background()
 	track := insertReadyTrack(t, pool)
-	if err := queue.Enqueue(ctx, track.ID, ports.JobKindReplace, 0); err != nil {
+	if err := queue.Enqueue(ctx, track.ID, acquisition.JobKindReplace, 0); err != nil {
 		t.Fatalf("Enqueue = %v", err)
 	}
 	stale, err := queue.Claim(ctx, time.Minute)
@@ -1429,11 +1479,11 @@ func TestPgxJobQueue_AReplaceReEnqueuedOverALapsedLeaseSurvivesTheStaleSettle(t 
 		t.Fatalf("Claim = %v", err)
 	}
 	expireLease(t, pool, track.ID)
-	if err := queue.Enqueue(ctx, track.ID, ports.JobKindReplace, 0); err != nil {
+	if err := queue.Enqueue(ctx, track.ID, acquisition.JobKindReplace, 0); err != nil {
 		t.Fatalf("re-Enqueue over the lapsed lease = %v", err)
 	}
 
-	if err := queue.Settle(ctx, track.ID, stale.Fence); !errors.Is(err, acqdomain.ErrLeaseLost) {
+	if err := queue.Settle(ctx, track.ID, stale.Fence); !errors.Is(err, acquisition.ErrLeaseLost) {
 		t.Errorf("stale Settle = %v, want ErrLeaseLost", err)
 	}
 
@@ -1448,10 +1498,10 @@ func TestPgxJobQueue_AReplaceReEnqueuedOverALapsedLeaseSurvivesTheStaleSettle(t 
 func TestPgxJobQueue_SettledReplaceLeavesNoJobKindBehind(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := NewPgxJobQueue(pool)
+	queue := acquisition.NewPgxJobQueue(pool)
 	ctx := context.Background()
 	track := insertReadyTrack(t, pool)
-	if err := queue.Enqueue(ctx, track.ID, ports.JobKindReplace, 0); err != nil {
+	if err := queue.Enqueue(ctx, track.ID, acquisition.JobKindReplace, 0); err != nil {
 		t.Fatalf("Enqueue = %v", err)
 	}
 	job, err := queue.Claim(ctx, time.Minute)
@@ -1467,7 +1517,7 @@ func TestPgxJobQueue_SettledReplaceLeavesNoJobKindBehind(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT acquisition_job_kind FROM tracks WHERE id = $1`, track.ID.UUID()).Scan(&kind); err != nil {
 		t.Fatalf("read kind: %v", err)
 	}
-	if kind != string(ports.JobKindAcquire) {
-		t.Errorf("job kind after a settled replace = %q, want %q", kind, ports.JobKindAcquire)
+	if kind != string(acquisition.JobKindAcquire) {
+		t.Errorf("job kind after a settled replace = %q, want %q", kind, acquisition.JobKindAcquire)
 	}
 }

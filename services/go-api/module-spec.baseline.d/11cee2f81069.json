@@ -1,0 +1,31 @@
+{
+  "removed": [
+    "T1 internal/acquisition/internal/adapters/persistence/cooldown_store_integration_test.go imports domain/admission_error.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/adapters/persistence/cooldown_store_integration_test.go imports internal/core/ports/cooldown.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/adapters/persistence/cooldown_store_integration_test.go imports internal/core/ports/track_ledger.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/adapters/persistence/cooldown_store_integration_test.go imports service/retry_admission.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/adapters/persistence/cooldown_store_integration_test.go is in package persistence, so it sees inside the module: use package persistence_test and import the door",
+    "T1 internal/acquisition/internal/adapters/persistence/cooldown_store_test.go imports internal/core/ports/track_ledger.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/adapters/persistence/cooldown_store_test.go is in package persistence, so it sees inside the module: use package persistence_test and import the door",
+    "T1 internal/acquisition/internal/adapters/persistence/job_queue_integration_test.go imports domain/job_kind_conflict.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/adapters/persistence/job_queue_integration_test.go imports domain/lease_lost.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/adapters/persistence/job_queue_integration_test.go imports domain/no_job_available.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/adapters/persistence/job_queue_integration_test.go imports internal/adapters/acquisitiontest/job_queue_contract.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/adapters/persistence/job_queue_integration_test.go imports internal/core/ports/queue.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/adapters/persistence/job_queue_integration_test.go imports service/scheduler.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/adapters/persistence/job_queue_integration_test.go imports service/scheduler_options.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/adapters/persistence/job_queue_integration_test.go is in package persistence, so it sees inside the module: use package persistence_test and import the door",
+    "T1 internal/acquisition/internal/adapters/persistence/outcome_store_integration_test.go imports internal/core/ports/queue.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/adapters/persistence/outcome_store_integration_test.go imports internal/core/ports/source.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/adapters/persistence/outcome_store_integration_test.go imports internal/core/ports/status.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/adapters/persistence/outcome_store_integration_test.go is in package persistence, so it sees inside the module: use package persistence_test and import the door",
+    "T1 internal/acquisition/internal/adapters/persistence/rejection_store_integration_test.go imports internal/core/ports/rejection.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/adapters/persistence/rejection_store_integration_test.go is in package persistence, so it sees inside the module: use package persistence_test and import the door",
+    "T1 internal/acquisition/internal/adapters/persistence/upgrade_store_integration_test.go imports internal/core/grade/grade.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/adapters/persistence/upgrade_store_integration_test.go imports internal/core/ports/queue.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/adapters/persistence/upgrade_store_integration_test.go imports internal/core/ports/upgrade.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/adapters/persistence/upgrade_store_integration_test.go is in package persistence, so it sees inside the module: use package persistence_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}
