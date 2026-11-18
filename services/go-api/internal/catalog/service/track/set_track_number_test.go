@@ -2,7 +2,6 @@ package track_test
 
 import (
 	"altune/go-api/internal/catalog"
-	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"
@@ -11,17 +10,17 @@ import (
 )
 
 func TestSetTrackNumberService(t *testing.T) {
-	userId := catalogtest.UserId()
+	userId := catalog.FixtureUserId()
 
 	t.Run("rejects a non-positive number", func(t *testing.T) {
-		svc := catalog.NewSetTrackNumberService(catalogtest.NewTrackRepo())
+		svc := catalog.NewSetTrackNumberService(catalog.NewInMemoryTrackRepo())
 		if _, err := svc.Execute(context.Background(), userId, catalog.NewTrackId(), 0); err == nil {
 			t.Fatal("expected an error for a zero track number")
 		}
 	})
 
 	t.Run("rejects an out-of-range number", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
+		repo := catalog.NewInMemoryTrackRepo()
 		svc := catalog.NewSetTrackNumberService(repo)
 		_, err := svc.Execute(context.Background(), userId, catalog.NewTrackId(), 3000000000)
 		if err == nil {
@@ -34,9 +33,9 @@ func TestSetTrackNumberService(t *testing.T) {
 	})
 
 	t.Run("missing or foreign track is not found", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
+		repo := catalog.NewInMemoryTrackRepo()
 		svc := catalog.NewSetTrackNumberService(repo)
-		foreign := catalogtest.SeedTrack(t, repo, catalogtest.OtherUserId(), "Theirs", "Artist", "Album")
+		foreign := catalog.SeedTrack(t, repo, catalog.FixtureOtherUserId(), "Theirs", "Artist", "Album")
 
 		for _, id := range []catalog.TrackId{catalog.NewTrackId(), foreign.ID} {
 			updated, err := svc.Execute(context.Background(), userId, id, 4)
@@ -50,7 +49,7 @@ func TestSetTrackNumberService(t *testing.T) {
 	})
 
 	t.Run("lookup failure after a no-op write is returned", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
+		repo := catalog.NewInMemoryTrackRepo()
 		svc := catalog.NewSetTrackNumberService(repo)
 		errLookup := errors.New("db down")
 		repo.ErrOnGetBy = errLookup
@@ -61,9 +60,9 @@ func TestSetTrackNumberService(t *testing.T) {
 	})
 
 	t.Run("fills an unset position and refuses to overwrite it", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
+		repo := catalog.NewInMemoryTrackRepo()
 		svc := catalog.NewSetTrackNumberService(repo)
-		track := catalogtest.SeedTrack(t, repo, userId, "Sicko Mode", "Travis Scott", "ASTROWORLD")
+		track := catalog.SeedTrack(t, repo, userId, "Sicko Mode", "Travis Scott", "ASTROWORLD")
 
 		updated, err := svc.Execute(context.Background(), userId, track.ID, 3)
 		if err != nil {

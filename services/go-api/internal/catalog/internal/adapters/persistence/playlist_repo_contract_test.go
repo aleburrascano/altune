@@ -1,8 +1,8 @@
 package persistence
 
 import (
-	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/internal/adapters/contract"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"testing"
@@ -27,7 +27,7 @@ func (r *cleaningPlaylistRepo) SeedTrack(t *testing.T, userId shared.UserId) dom
 
 func TestPgxPlaylistRepo_Contract(t *testing.T) {
 	pool := testPool(t)
-	catalogtest.PlaylistRepositoryContract(t, func(t *testing.T) catalogtest.PlaylistRepositoryUnderTest {
+	contract.PlaylistRepositoryContract(t, func(t *testing.T) contract.PlaylistRepositoryUnderTest {
 		return &cleaningPlaylistRepo{PgxPlaylistRepository: NewPgxPlaylistRepository(pool), t: t, pool: pool}
 	})
 }

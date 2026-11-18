@@ -2,7 +2,6 @@ package track_test
 
 import (
 	"altune/go-api/internal/catalog"
-	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/shared/httputil"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
@@ -68,8 +67,8 @@ func (stubAudioRefLookup) AudioRefInUse(context.Context, string, catalog.TrackId
 
 func TestServicesDependOnNarrowTrackPorts(t *testing.T) {
 	ctx := context.Background()
-	userId := catalogtest.UserId()
-	store := catalogtest.NewAudioStore()
+	userId := catalog.FixtureUserId()
+	store := catalog.NewInMemoryAudioStore()
 	want := &catalog.Track{Title: "Narrow"}
 
 	got, err := catalog.NewGetTrackStatusService(stubGetter{track: want}).Execute(ctx, userId, catalog.NewTrackId())
@@ -100,7 +99,7 @@ func TestServicesDependOnNarrowTrackPorts(t *testing.T) {
 		stubGetter
 		stubUpdater
 	}{}, store)
-	_ = catalog.NewPlaylistMembershipService(catalogtest.NewPlaylistRepo(), struct {
+	_ = catalog.NewPlaylistMembershipService(catalog.NewInMemoryPlaylistRepo(), struct {
 		stubGetter
 		stubBatchGetter
 	}{})
@@ -116,30 +115,30 @@ func (f featuringErrLister) ListTracksFeaturing(_ context.Context, _ shared.User
 }
 
 func TestHotPaths_ClassifyTransientDBFailures(t *testing.T) {
-	userId := catalogtest.UserId()
+	userId := catalog.FixtureUserId()
 	cause := context.DeadlineExceeded
 	transient := fmt.Errorf("%w: %w", catalog.ErrDBTransient, cause)
 	permanent := errors.New("relation \"tracks\" does not exist")
 
 	paths := []struct {
 		name string
-		call func(repo *catalogtest.TrackRepo) error
+		call func(repo *catalog.InMemoryTrackRepo) error
 	}{
-		{"stream", func(repo *catalogtest.TrackRepo) error {
-			_, err := catalog.NewStreamTrackService(repo, catalogtest.NewAudioStore()).Execute(context.Background(), userId, catalog.NewTrackId())
+		{"stream", func(repo *catalog.InMemoryTrackRepo) error {
+			_, err := catalog.NewStreamTrackService(repo, catalog.NewInMemoryAudioStore()).Execute(context.Background(), userId, catalog.NewTrackId())
 			return err
 		}},
-		{"recover", func(repo *catalogtest.TrackRepo) error {
-			return catalog.NewStreamTrackService(repo, catalogtest.NewAudioStore()).RecoverIfMissing(context.Background(), userId, catalog.NewTrackId())
+		{"recover", func(repo *catalog.InMemoryTrackRepo) error {
+			return catalog.NewStreamTrackService(repo, catalog.NewInMemoryAudioStore()).RecoverIfMissing(context.Background(), userId, catalog.NewTrackId())
 		}},
-		{"status", func(repo *catalogtest.TrackRepo) error {
+		{"status", func(repo *catalog.InMemoryTrackRepo) error {
 			_, err := catalog.NewGetTrackStatusService(repo).Execute(context.Background(), userId, catalog.NewTrackId())
 			return err
 		}},
 	}
 	for _, p := range paths {
 		t.Run(p.name+"/transient is a retryable 503", func(t *testing.T) {
-			repo := catalogtest.NewTrackRepo()
+			repo := catalog.NewInMemoryTrackRepo()
 			repo.ErrOnGetBy = transient
 			err := p.call(repo)
 			if !errors.Is(err, catalog.ErrCatalogTemporarilyUnavailable) {
@@ -151,7 +150,7 @@ func TestHotPaths_ClassifyTransientDBFailures(t *testing.T) {
 			assertServiceErrorResponse(t, err, http.StatusServiceUnavailable, "catalog.temporarily_unavailable")
 		})
 		t.Run(p.name+"/permanent stays a 500", func(t *testing.T) {
-			repo := catalogtest.NewTrackRepo()
+			repo := catalog.NewInMemoryTrackRepo()
 			repo.ErrOnGetBy = permanent
 			err := p.call(repo)
 			if errors.Is(err, catalog.ErrCatalogTemporarilyUnavailable) {
@@ -177,7 +176,7 @@ func (l lensErrRepo) ListArtistsForUser(context.Context, shared.UserId, catalog.
 
 func TestPlaylistAndLibraryPaths_ClassifyTransientDBFailures(t *testing.T) {
 	ctx := context.Background()
-	userId := catalogtest.UserId()
+	userId := catalog.FixtureUserId()
 	playlistId := catalog.NewPlaylistId()
 	cause := context.DeadlineExceeded
 	transient := fmt.Errorf("%w: %w", catalog.ErrDBTransient, cause)
@@ -189,36 +188,36 @@ func TestPlaylistAndLibraryPaths_ClassifyTransientDBFailures(t *testing.T) {
 		call func(injected error) error
 	}{
 		{"playlist list", func(e error) error {
-			repo := catalogtest.NewPlaylistRepo()
+			repo := catalog.NewInMemoryPlaylistRepo()
 			repo.ErrOnList = e
 			_, err := catalog.NewPlaylistLifecycleService(repo).List(ctx, userId, 10, 0)
 			return err
 		}},
 		{"playlist get", func(e error) error {
-			repo := catalogtest.NewPlaylistRepo()
+			repo := catalog.NewInMemoryPlaylistRepo()
 			repo.ErrOnGetWithTracks = e
 			_, _, err := catalog.NewPlaylistLifecycleService(repo).Get(ctx, userId, playlistId)
 			return err
 		}},
 		{"playlist rename write", func(e error) error {
-			repo := catalogtest.NewPlaylistRepo()
-			p := catalogtest.SeedPlaylist(t, repo, userId, "before")
+			repo := catalog.NewInMemoryPlaylistRepo()
+			p := catalog.SeedPlaylist(t, repo, userId, "before")
 			repo.ErrOnUpdate = e
 			_, _, err := catalog.NewPlaylistLifecycleService(repo).Rename(ctx, userId, p.ID, "after")
 			return err
 		}},
 		{"membership add track", func(e error) error {
-			plRepo := catalogtest.NewPlaylistRepo()
-			p := catalogtest.SeedPlaylist(t, plRepo, userId, "mine")
-			trRepo := catalogtest.NewTrackRepo()
-			track := catalogtest.SeedTrack(t, trRepo, userId, "T", "A", "B")
+			plRepo := catalog.NewInMemoryPlaylistRepo()
+			p := catalog.SeedPlaylist(t, plRepo, userId, "mine")
+			trRepo := catalog.NewInMemoryTrackRepo()
+			track := catalog.SeedTrack(t, trRepo, userId, "T", "A", "B")
 			plRepo.ErrOnAddTrack = e
 			return catalog.NewPlaylistMembershipService(plRepo, trRepo).AddTrack(ctx, userId, p.ID, track.ID)
 		}},
 		{"membership reorder", func(e error) error {
-			plRepo := catalogtest.NewPlaylistRepo()
+			plRepo := catalog.NewInMemoryPlaylistRepo()
 			plRepo.ErrOnGetTrackOrder = e
-			return catalog.NewPlaylistMembershipService(plRepo, catalogtest.NewTrackRepo()).Reorder(ctx, userId, playlistId, nil)
+			return catalog.NewPlaylistMembershipService(plRepo, catalog.NewInMemoryTrackRepo()).Reorder(ctx, userId, playlistId, nil)
 		}},
 		{"library albums", func(e error) error {
 			_, err := catalog.NewLibraryLensService(lensErrRepo{err: e}).Albums(ctx, userId, catalog.LibraryQuery{})

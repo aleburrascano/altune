@@ -1,8 +1,8 @@
-package catalogtest_test
+package memory_test
 
 import (
 	"altune/go-api/internal/catalog"
-	"altune/go-api/internal/catalog/catalogtest"
+	"altune/go-api/internal/catalog/internal/adapters/contract"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"testing"
@@ -11,8 +11,8 @@ import (
 )
 
 type playlistRepoWithTracks struct {
-	*catalogtest.PlaylistRepo
-	tracks *catalogtest.TrackRepo
+	*catalog.InMemoryPlaylistRepo
+	tracks *catalog.InMemoryTrackRepo
 }
 
 func (r *playlistRepoWithTracks) SeedTrack(t *testing.T, userId shared.UserId) catalog.TrackId {
@@ -28,10 +28,10 @@ func (r *playlistRepoWithTracks) SeedTrack(t *testing.T, userId shared.UserId) c
 }
 
 func TestPlaylistRepoFake_Contract(t *testing.T) {
-	catalogtest.PlaylistRepositoryContract(t, func(*testing.T) catalogtest.PlaylistRepositoryUnderTest {
-		tracks := catalogtest.NewTrackRepo()
-		repo := catalogtest.NewPlaylistRepo()
+	contract.PlaylistRepositoryContract(t, func(*testing.T) contract.PlaylistRepositoryUnderTest {
+		tracks := catalog.NewInMemoryTrackRepo()
+		repo := catalog.NewInMemoryPlaylistRepo()
 		repo.Tracks = tracks
-		return &playlistRepoWithTracks{PlaylistRepo: repo, tracks: tracks}
+		return &playlistRepoWithTracks{InMemoryPlaylistRepo: repo, tracks: tracks}
 	})
 }

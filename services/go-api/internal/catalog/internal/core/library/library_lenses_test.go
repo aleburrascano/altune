@@ -2,7 +2,6 @@ package library_test
 
 import (
 	"altune/go-api/internal/catalog"
-	"altune/go-api/internal/catalog/catalogtest"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
@@ -11,7 +10,7 @@ import (
 )
 
 func TestLibraryLensService_RejectsNegativeOffset(t *testing.T) {
-	svc := catalog.NewLibraryLensService(catalogtest.NewTrackRepo())
+	svc := catalog.NewLibraryLensService(catalog.NewInMemoryTrackRepo())
 	query := catalog.LibraryQuery{Offset: -1}
 
 	cases := []struct {
@@ -19,11 +18,11 @@ func TestLibraryLensService_RejectsNegativeOffset(t *testing.T) {
 		call func() error
 	}{
 		{"albums", func() error {
-			_, err := svc.Albums(context.Background(), catalogtest.UserId(), query)
+			_, err := svc.Albums(context.Background(), catalog.FixtureUserId(), query)
 			return err
 		}},
 		{"artists", func() error {
-			_, err := svc.Artists(context.Background(), catalogtest.UserId(), query)
+			_, err := svc.Artists(context.Background(), catalog.FixtureUserId(), query)
 			return err
 		}},
 	}
@@ -44,9 +43,9 @@ func TestLibraryLensService_RejectsNegativeOffset(t *testing.T) {
 }
 
 func TestLibraryLensService_ArtistsRejectYearSort(t *testing.T) {
-	svc := catalog.NewLibraryLensService(catalogtest.NewTrackRepo())
+	svc := catalog.NewLibraryLensService(catalog.NewInMemoryTrackRepo())
 
-	_, err := svc.Artists(context.Background(), catalogtest.UserId(), catalog.LibraryQuery{Sort: catalog.SortYear})
+	_, err := svc.Artists(context.Background(), catalog.FixtureUserId(), catalog.LibraryQuery{Sort: catalog.SortYear})
 
 	if err == nil {
 		t.Fatal("expected a validation error for sort=year on artists")
@@ -58,9 +57,9 @@ func TestLibraryLensService_ArtistsRejectYearSort(t *testing.T) {
 }
 
 func TestLibraryLensService_ArtistsReportYearSortBeforeOffset(t *testing.T) {
-	svc := catalog.NewLibraryLensService(catalogtest.NewTrackRepo())
+	svc := catalog.NewLibraryLensService(catalog.NewInMemoryTrackRepo())
 
-	_, err := svc.Artists(context.Background(), catalogtest.UserId(), catalog.LibraryQuery{Sort: catalog.SortYear, Offset: -1})
+	_, err := svc.Artists(context.Background(), catalog.FixtureUserId(), catalog.LibraryQuery{Sort: catalog.SortYear, Offset: -1})
 
 	if err == nil {
 		t.Fatal("expected a validation error")
@@ -72,10 +71,10 @@ func TestLibraryLensService_ArtistsReportYearSortBeforeOffset(t *testing.T) {
 
 func TestLibraryLensService_GroupsOwnedTracks(t *testing.T) {
 	ctx := context.Background()
-	userId := catalogtest.UserId()
-	repo := catalogtest.NewTrackRepo()
-	catalogtest.SeedTrack(t, repo, userId, "One", "Metallica", "And Justice for All")
-	catalogtest.SeedTrack(t, repo, userId, "Blackened", "Metallica", "And Justice for All")
+	userId := catalog.FixtureUserId()
+	repo := catalog.NewInMemoryTrackRepo()
+	catalog.SeedTrack(t, repo, userId, "One", "Metallica", "And Justice for All")
+	catalog.SeedTrack(t, repo, userId, "Blackened", "Metallica", "And Justice for All")
 
 	albums, err := svcAlbums(ctx, repo, userId)
 	if err != nil {
@@ -99,7 +98,7 @@ func TestLibraryLensService_GroupsOwnedTracks(t *testing.T) {
 
 func TestLibraryLensService_ClampsLimit(t *testing.T) {
 	ctx := context.Background()
-	userId := catalogtest.UserId()
+	userId := catalog.FixtureUserId()
 
 	cases := []struct {
 		name string
@@ -113,7 +112,7 @@ func TestLibraryLensService_ClampsLimit(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			repo := catalogtest.NewTrackRepo()
+			repo := catalog.NewInMemoryTrackRepo()
 			svc := catalog.NewLibraryLensService(repo)
 
 			if _, err := svc.Albums(ctx, userId, catalog.LibraryQuery{Limit: c.in}); err != nil {
@@ -133,6 +132,6 @@ func TestLibraryLensService_ClampsLimit(t *testing.T) {
 	}
 }
 
-func svcAlbums(ctx context.Context, repo *catalogtest.TrackRepo, userId shared.UserId) ([]catalog.AlbumGroup, error) {
+func svcAlbums(ctx context.Context, repo *catalog.InMemoryTrackRepo, userId shared.UserId) ([]catalog.AlbumGroup, error) {
 	return catalog.NewLibraryLensService(repo).Albums(ctx, userId, catalog.LibraryQuery{})
 }

@@ -1,8 +1,8 @@
 package persistence
 
 import (
-	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/internal/adapters/contract"
 	"altune/go-api/internal/catalog/internal/core/ports"
 	"context"
 	"testing"
@@ -23,7 +23,7 @@ func (q *cleaningOrphanQueue) RecordOrphanedAudio(ctx context.Context, orphan po
 
 func TestPgxOrphanedAudioRepo_Contract(t *testing.T) {
 	pool := testPool(t)
-	catalogtest.OrphanedAudioQueueContract(t, func(t *testing.T) (ports.OrphanedAudioQueue, func(*domain.Track)) {
+	contract.OrphanedAudioQueueContract(t, func(t *testing.T) (ports.OrphanedAudioQueue, func(*domain.Track)) {
 		seed := func(track *domain.Track) {
 			t.Helper()
 			cleanupTrack(t, pool, track.ID, track.UserId)
