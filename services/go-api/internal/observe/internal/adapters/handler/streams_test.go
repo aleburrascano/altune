@@ -1,13 +1,13 @@
 package handler
 
 import (
-	authservice "altune/go-api/internal/auth/service"
 	"altune/go-api/internal/observe/internal/shell/eventtap"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/httputil/httputiltest"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/requestuser"
 	"bufio"
 	"bytes"
 	"context"
@@ -275,6 +275,9 @@ func TestStreamLogs_AbsentRingIsUnavailable(t *testing.T) {
 	rec := serveOnce(Deps{}, "/logs/stream")
 
 	assertCode(t, rec, http.StatusServiceUnavailable, "observe.stream_unavailable")
+	if !strings.Contains(rec.Body.String(), `"detail":"logs stream unavailable"`) {
+		t.Errorf("body = %s, want the logs stream named in detail", rec.Body.String())
+	}
 }
 
 func TestStreams_SendEventStreamNoCacheAndNosniffHeaders(t *testing.T) {
@@ -307,7 +310,7 @@ func TestStreams_OpenWritesOneObserveReadAuditLine(t *testing.T) {
 			var logs bytes.Buffer
 			slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
 			principal := shared.NewUserId(uuid.New())
-			ctx, cancel := context.WithCancel(authservice.ContextWithUserID(withCorrelation("audit-corr-1"), principal))
+			ctx, cancel := context.WithCancel(requestuser.ContextWithUserID(withCorrelation("audit-corr-1"), principal))
 			cancel()
 
 			streamRouter(fx.deps).ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(ctx, http.MethodGet, path, nil))
@@ -421,7 +424,7 @@ func TestStreams_EndAtTokenExpiry(t *testing.T) {
 	for _, path := range observeStreamPaths {
 		t.Run(path, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, path, nil)
-			req = req.WithContext(authservice.ContextWithTokenExpiry(req.Context(), time.Now().Add(50*time.Millisecond)))
+			req = req.WithContext(requestuser.ContextWithTokenExpiry(req.Context(), time.Now().Add(50*time.Millisecond)))
 
 			returned := serveStream(t, fx.deps, req)
 

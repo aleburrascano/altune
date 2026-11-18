@@ -1,11 +1,11 @@
 package handler
 
 import (
-	"altune/go-api/internal/observe/domain"
-	"altune/go-api/internal/observe/internal/adapters/authbridge"
+	"altune/go-api/internal/observe/internal/adapters/codederr"
 	"altune/go-api/internal/observe/internal/shell/eventtap"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/requestuser"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -34,7 +34,7 @@ func auditStreamOpen(next http.Handler) http.Handler {
 }
 
 func streamActor(ctx context.Context) string {
-	if id, known := authbridge.UserIDFromContext(ctx); known {
+	if id, known := requestuser.UserIDFromContext(ctx); known {
 		return id.String()
 	}
 	return "unknown"
@@ -42,7 +42,7 @@ func streamActor(ctx context.Context) string {
 
 func (h *Handler) streamEvents(w http.ResponseWriter, r *http.Request) {
 	if !h.hasLiveEventFeed() {
-		httputil.HandleServiceError(w, r, domain.ErrEventFeedUnavailable)
+		httputil.HandleServiceError(w, r, codederr.ErrEventFeedUnavailable)
 		return
 	}
 	ch, cancel, err := h.deps.Events.Subscribe()
@@ -62,7 +62,7 @@ func (h *Handler) hasLiveEventFeed() bool {
 
 func (h *Handler) streamLogs(w http.ResponseWriter, r *http.Request) {
 	if h.deps.Logs == nil {
-		httputil.HandleServiceError(w, r, domain.StreamUnavailable("logs"))
+		httputil.HandleServiceError(w, r, codederr.StreamUnavailable("logs"))
 		return
 	}
 	ch, cancel, err := h.deps.Logs.Subscribe()

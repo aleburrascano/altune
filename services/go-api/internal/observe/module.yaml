@@ -1,3 +1,3 @@
 role: feature
 owns: "what operators see about the backend's health, metrics and alerts"
-depends_on: [acquisition, auth, discovery, events, httputil, kernel, logging, reqmetrics, runloop]
+depends_on: [acquisition, discovery, events, httputil, kernel, logging, reqmetrics, requestuser, runloop]

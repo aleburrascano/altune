@@ -2,7 +2,7 @@ package discoverybridge
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/observe/domain"
+	"altune/go-api/internal/observe/internal/adapters/codederr"
 	"context"
 	"errors"
 	"time"
@@ -40,7 +40,7 @@ func QueryDiscographyQuality(ctx context.Context, reader DiscographyQualityReade
 
 func mapQueryError(err error) error {
 	if errors.Is(err, context.DeadlineExceeded) {
-		return domain.ErrDiscographyQualityTimeout
+		return codederr.ErrDiscographyQualityTimeout
 	}
 	return err
 }
