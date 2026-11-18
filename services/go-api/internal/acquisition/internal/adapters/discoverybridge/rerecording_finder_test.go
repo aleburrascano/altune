@@ -1,14 +1,13 @@
-package discoverybridge
+package discoverybridge_test
 
 import (
+	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/discovery"
 	"context"
 	"errors"
 	"fmt"
 	"strings"
 	"testing"
-
-	acqports "altune/go-api/internal/acquisition/internal/core/ports"
 )
 
 const (
@@ -76,10 +75,10 @@ func itsOnlyLoveWork() *stubRerecordingAuthority {
 	return &stubRerecordingAuthority{work: work, details: details}
 }
 
-func findRerecording(t *testing.T, authority *stubRerecordingAuthority) (acqports.RecordingLabel, bool) {
+func findRerecording(t *testing.T, authority *stubRerecordingAuthority) (acquisition.RecordingLabel, bool) {
 	t.Helper()
-	resolver := NewRecordingResolver(nil, WithRerecordingAuthority(authority))
-	label, found, err := resolver.FindRerecording(context.Background(), acqports.RerecordingQuery{OriginalMBID: itsOnlyLove})
+	resolver := acquisition.NewRecordingResolver(nil, acquisition.WithRerecordingAuthority(authority))
+	label, found, err := resolver.FindRerecording(context.Background(), acquisition.RerecordingQuery{OriginalMBID: itsOnlyLove})
 	if err != nil {
 		t.Fatalf("FindRerecording: %v", err)
 	}
@@ -91,7 +90,7 @@ func TestFindRerecording_BryanAdamsItsOnlyLoveTakesTheClassicVersionWithAnISRC(t
 
 	label, found := findRerecording(t, itsOnlyLoveWork())
 
-	want := acqports.RecordingLabel{
+	want := acquisition.RecordingLabel{
 		MBID: itsOnlyLoveClassi, Title: "It’s Only Love (classic version)", Album: "It’s Only Love",
 		Year: 2025, ISRC: "IETLH2500023", DurationSeconds: 194,
 	}
@@ -162,11 +161,11 @@ func TestFindRerecording_NoneWhenNoOtherRecordingIsALabelledLaterStudioRerecordi
 }
 
 func TestFindRerecording_NoneWithoutARerecordingAuthority(t *testing.T) {
-	resolver := NewRecordingResolver(nil)
+	resolver := acquisition.NewRecordingResolver(nil)
 
-	label, found, err := resolver.FindRerecording(context.Background(), acqports.RerecordingQuery{OriginalMBID: itsOnlyLove})
+	label, found, err := resolver.FindRerecording(context.Background(), acquisition.RerecordingQuery{OriginalMBID: itsOnlyLove})
 
-	if err != nil || found || label != (acqports.RecordingLabel{}) {
+	if err != nil || found || label != (acquisition.RecordingLabel{}) {
 		t.Fatalf("FindRerecording = %+v, %v, %v; want zero, false, nil", label, found, err)
 	}
 }
@@ -227,6 +226,8 @@ func TestFindRerecording_LabelTakesTheEarliestOfficialRelease(t *testing.T) {
 	}
 }
 
+const rerecordingLookupCap = 5
+
 func TestFindRerecording_LooksUpAtMostFiveCandidatesBesideTheOriginal(t *testing.T) {
 	authority := &stubRerecordingAuthority{details: map[string]discovery.MBRecordingDetail{itsOnlyLove: itsOnlyLoveOriginal()}}
 	for i := range 40 {
@@ -238,8 +239,8 @@ func TestFindRerecording_LooksUpAtMostFiveCandidatesBesideTheOriginal(t *testing
 
 	findRerecording(t, authority)
 
-	if authority.detailCalls != 1+maxRerecordingLookups || maxRerecordingLookups != 5 {
-		t.Fatalf("RecordingDetail calls = %d with cap %d; want 1 + 5", authority.detailCalls, maxRerecordingLookups)
+	if authority.detailCalls != 1+rerecordingLookupCap {
+		t.Fatalf("RecordingDetail calls = %d; want the original plus %d candidates", authority.detailCalls, rerecordingLookupCap)
 	}
 }
 
@@ -256,8 +257,8 @@ func TestFindRerecording_MusicBrainzErrorsAreReturned(t *testing.T) {
 		"original detail": originalFails, "work recordings": workFails, "candidate detail": candidateFails,
 	} {
 		t.Run(name, func(t *testing.T) {
-			resolver := NewRecordingResolver(nil, WithRerecordingAuthority(authority))
-			_, found, err := resolver.FindRerecording(context.Background(), acqports.RerecordingQuery{OriginalMBID: itsOnlyLove})
+			resolver := acquisition.NewRecordingResolver(nil, acquisition.WithRerecordingAuthority(authority))
+			_, found, err := resolver.FindRerecording(context.Background(), acquisition.RerecordingQuery{OriginalMBID: itsOnlyLove})
 			if !errors.Is(err, boom) || found {
 				t.Fatalf("FindRerecording = found %v, err %v; want the MusicBrainz error", found, err)
 			}
@@ -303,7 +304,7 @@ func TestFindRerecording_TakesATaylorsVersionWrittenWithAStraightApostropheInCap
 
 	label, found := findRerecording(t, onlyRecording(rec, detail))
 
-	want := acqports.RecordingLabel{
+	want := acquisition.RecordingLabel{
 		MBID: "tv", Title: "IT'S ONLY LOVE (TAYLOR'S VERSION)", Album: "Only Love (Taylor's Version)",
 		Year: 2025, ISRC: "IETLH2500099",
 	}

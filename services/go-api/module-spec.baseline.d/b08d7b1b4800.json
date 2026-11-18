@@ -1,0 +1,11 @@
+{
+  "removed": [
+    "T1 internal/acquisition/internal/adapters/discoverybridge/recording_resolver_test.go imports internal/core/ports/recording.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/adapters/discoverybridge/recording_resolver_test.go is in package discoverybridge, so it sees inside the module: use package discoverybridge_test and import the door",
+    "T1 internal/acquisition/internal/adapters/discoverybridge/rerecording_finder_test.go imports internal/core/ports/recording.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/adapters/discoverybridge/rerecording_finder_test.go imports internal/core/ports/track_ledger.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/adapters/discoverybridge/rerecording_finder_test.go is in package discoverybridge, so it sees inside the module: use package discoverybridge_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}
