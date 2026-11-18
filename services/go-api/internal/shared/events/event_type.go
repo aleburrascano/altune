@@ -46,11 +46,3 @@ func NoopPublisher() Publisher { return noopPublisher{} }
 type noopPublisher struct{}
 
 func (noopPublisher) Publish(context.Context, shared.UserId, EventType, map[string]any) {}
-
-type Subscriber interface {
-	Subscribe(userId shared.UserId) (ch <-chan Event, cancel func())
-	Replay(userId shared.UserId, afterID uint64) []Event
-	ResumeGapped(userId shared.UserId, afterID uint64) bool
-	HighestIssuedID() uint64
-	LatestID(userId shared.UserId) uint64
-}

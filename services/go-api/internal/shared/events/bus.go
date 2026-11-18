@@ -53,10 +53,7 @@ func (b *InProcessBus) Dropped() uint64 { return b.dropped.Load() }
 
 func (b *InProcessBus) HighestIssuedID() uint64 { return b.highestIssuedID.Load() }
 
-var (
-	_ Publisher  = (*InProcessBus)(nil)
-	_ Subscriber = (*InProcessBus)(nil)
-)
+var _ Publisher = (*InProcessBus)(nil)
 
 func NewInProcessBus() *InProcessBus {
 	return newBus(time.Now, defaultIDFloorPath())
