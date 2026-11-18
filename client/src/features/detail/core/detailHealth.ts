@@ -1,4 +1,5 @@
 import { isAbort } from '@shared/failure';
+import { warn } from '@shared/log';
 import { createHealthTally } from '@shared/telemetry';
 import type { DiscoveryProviderStatus } from '@shared/catalog';
 import { hasDegradedStatus } from '@features/detail/core/contentStatus';
@@ -28,7 +29,7 @@ const health = createHealthTally<HealthKey>({
   eventType: 'detail_health',
   keys: HEALTH_KEYS,
   onFlushFailure: (error: unknown) => {
-    console.warn('[detail] health flush failed', { error });
+    warn('[detail] health flush failed', { error });
   },
 });
 
