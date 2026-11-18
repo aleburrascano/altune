@@ -2,17 +2,14 @@ import { render, screen } from '@testing-library/react-native';
 
 import { WIDE_LAYOUT_MIN_WIDTH } from '@shared/ui';
 
+import { setWindowWidth } from '@testing/setWindowWidth';
+
 import { VolumeSlider } from '@features/player';
-
-let mockWindowWidth = WIDE_LAYOUT_MIN_WIDTH;
-
-jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
-  __esModule: true,
-  default: () => ({ width: mockWindowWidth, height: 800, scale: 2, fontScale: 1 }),
-}));
 
 describe('VolumeSlider on a wide native window', () => {
   it('renders nothing, because native volume belongs to the device', () => {
+    setWindowWidth(WIDE_LAYOUT_MIN_WIDTH);
+
     render(<VolumeSlider />);
 
     expect(screen.queryByLabelText('Volume')).toBeNull();
