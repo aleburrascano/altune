@@ -5,7 +5,7 @@ import (
 	audioservice "altune/go-api/internal/catalog/internal/core/audio"
 	"altune/go-api/internal/catalog/internal/core/ports"
 	"altune/go-api/internal/shared/httputil"
-	"altune/go-api/internal/shared/httputil/httputiltest"
+	"altune/go-api/internal/shared/httputiltest"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/logging"
 	"bytes"

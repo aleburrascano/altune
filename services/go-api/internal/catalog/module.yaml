@@ -1,4 +1,4 @@
 role: feature
 owns: "what a user's library holds: tracks, playlists, featured artists and their audio"
-depends_on: [config, database, discovery, domain, events, filehost, httputil, kernel, logging, requestuser, sharedtest, songfacts, textnorm]
+depends_on: [config, database, discovery, domain, events, filehost, httputil, httputiltest, kernel, logging, requestuser, sharedtest, songfacts, textnorm]
 owns_tables: [featured_artists, orphaned_audio, playlist_tracks, playlists, track_featured_artists, tracks]

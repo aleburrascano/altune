@@ -1,0 +1,22 @@
+{
+  "removed": [
+    "B3 internal/shared/httputil/httputiltest/slow_client.go imports net",
+    "B3 internal/shared/httputil/httputiltest/slow_client.go imports net/http",
+    "B3 internal/shared/httputil/httputiltest/slow_client.go imports net/http/httptest",
+    "C12 internal/shared/httputil/httputiltest/slow_client.go httputiltest/slow_client.go is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a shared module",
+    "C3 internal/app/routes_test.go imports internal/shared/httputil/httputiltest/slow_client.go, behind httputil's door",
+    "C3 internal/catalog/adapters/handler/stream_handler_test.go imports internal/shared/httputil/httputiltest/slow_client.go, behind httputil's door",
+    "C3 internal/observe/internal/adapters/handler/streams_test.go imports internal/shared/httputil/httputiltest/slow_client.go, behind httputil's door",
+    "C4 internal/shared/httputil/errors.go exports ErrorCoder, which nothing outside httputil imports and no test of its own imports through the door",
+    "T1 internal/shared/httputil/correlation_id_test.go is in package httputil, so it sees inside the module: use package httputil_test and import the door",
+    "T1 internal/shared/httputil/errors_test.go is in package httputil, so it sees inside the module: use package httputil_test and import the door",
+    "T1 internal/shared/httputil/recoverer_test.go is in package httputil, so it sees inside the module: use package httputil_test and import the door",
+    "T1 internal/shared/httputil/request_limits_test.go is in package httputil, so it sees inside the module: use package httputil_test and import the door",
+    "T1 internal/shared/httputil/request_logger_test.go is in package httputil, so it sees inside the module: use package httputil_test and import the door",
+    "T1 internal/shared/httputil/request_test.go is in package httputil, so it sees inside the module: use package httputil_test and import the door",
+    "T1 internal/shared/httputil/write_deadline_test.go imports httputiltest/slow_client.go, behind httputil's door",
+    "T1 internal/shared/httputil/write_deadline_test.go is in package httputil, so it sees inside the module: use package httputil_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}

@@ -1,6 +1,7 @@
-package httputil
+package httputil_test
 
 import (
+	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/logging"
 	"encoding/json"
 	"errors"
@@ -22,7 +23,7 @@ func TestRetryAfterSeconds_RoundsUpToAtLeastOne(t *testing.T) {
 		1200 * time.Millisecond: "2",
 		30 * time.Second:        "30",
 	} {
-		if got := RetryAfterSeconds(wait); got != want {
+		if got := httputil.RetryAfterSeconds(wait); got != want {
 			t.Errorf("RetryAfterSeconds(%v) = %q, want %q", wait, got, want)
 		}
 	}
@@ -37,6 +38,8 @@ type codedTestError struct {
 func (e *codedTestError) Error() string     { return e.msg }
 func (e *codedTestError) HTTPStatus() int   { return e.status }
 func (e *codedTestError) ErrorCode() string { return e.code }
+
+var _ httputil.ErrorCoder = (*codedTestError)(nil)
 
 type statusOnlyTestError struct {
 	msg    string
@@ -66,7 +69,7 @@ func TestHandleServiceError_GoldenBodies(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
-			HandleServiceError(rec, httptest.NewRequest(http.MethodGet, "/x", nil), tt.err)
+			httputil.HandleServiceError(rec, httptest.NewRequest(http.MethodGet, "/x", nil), tt.err)
 
 			if rec.Code != tt.wantStatus {
 				t.Errorf("status: got %d, want %d", rec.Code, tt.wantStatus)
@@ -92,7 +95,7 @@ func TestHandleServiceError_DetailStaysByteIdentical(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
-			HandleServiceError(rec, httptest.NewRequest(http.MethodGet, "/x", nil), tt.err)
+			httputil.HandleServiceError(rec, httptest.NewRequest(http.MethodGet, "/x", nil), tt.err)
 
 			var legacy struct {
 				Detail string `json:"detail"`
@@ -109,10 +112,10 @@ func TestHandleServiceError_DetailStaysByteIdentical(t *testing.T) {
 
 func TestHandleServiceError_CodeIsBranchable(t *testing.T) {
 	rec := httptest.NewRecorder()
-	HandleServiceError(rec, httptest.NewRequest(http.MethodGet, "/x", nil),
+	httputil.HandleServiceError(rec, httptest.NewRequest(http.MethodGet, "/x", nil),
 		&codedTestError{"track not found", 404, "catalog.track_not_found"})
 
-	var body ErrorResponse
+	var body httputil.ErrorResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -143,8 +146,8 @@ func TestHandleServiceError_CodeNeverEmpty(t *testing.T) {
 	}
 	for _, e := range errs {
 		rec := httptest.NewRecorder()
-		HandleServiceError(rec, httptest.NewRequest(http.MethodGet, "/x", nil), e)
-		var body ErrorResponse
+		httputil.HandleServiceError(rec, httptest.NewRequest(http.MethodGet, "/x", nil), e)
+		var body httputil.ErrorResponse
 		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
@@ -156,7 +159,7 @@ func TestHandleServiceError_CodeNeverEmpty(t *testing.T) {
 
 func TestDirectHelpersOmitCode(t *testing.T) {
 	rec := httptest.NewRecorder()
-	WriteError(rec, http.StatusServiceUnavailable, "authentication unavailable")
+	httputil.WriteError(rec, http.StatusServiceUnavailable, "authentication unavailable")
 
 	got := strings.TrimSpace(rec.Body.String())
 	if got != `{"detail":"authentication unavailable"}` {
@@ -173,7 +176,7 @@ func TestWriteJSON(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	WriteJSON(rec, http.StatusCreated, payload{Name: "altune"})
+	httputil.WriteJSON(rec, http.StatusCreated, payload{Name: "altune"})
 
 	if rec.Code != http.StatusCreated {
 		t.Errorf("status: got %d, want %d", rec.Code, http.StatusCreated)
@@ -195,13 +198,13 @@ func TestWriteJSON(t *testing.T) {
 
 func TestWriteError(t *testing.T) {
 	rec := httptest.NewRecorder()
-	WriteError(rec, http.StatusTeapot, "I'm a teapot")
+	httputil.WriteError(rec, http.StatusTeapot, "I'm a teapot")
 
 	if rec.Code != http.StatusTeapot {
 		t.Errorf("status: got %d, want %d", rec.Code, http.StatusTeapot)
 	}
 
-	var body ErrorResponse
+	var body httputil.ErrorResponse
 	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
@@ -231,13 +234,13 @@ func TestNotFound(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
-			NotFound(rec, tt.message)
+			httputil.NotFound(rec, tt.message)
 
 			if rec.Code != http.StatusNotFound {
 				t.Errorf("status: got %d, want %d", rec.Code, http.StatusNotFound)
 			}
 
-			var body ErrorResponse
+			var body httputil.ErrorResponse
 			if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
 				t.Fatalf("decode body: %v", err)
 			}
@@ -250,13 +253,13 @@ func TestNotFound(t *testing.T) {
 
 func TestBadRequest(t *testing.T) {
 	rec := httptest.NewRecorder()
-	BadRequest(rec, "invalid input")
+	httputil.BadRequest(rec, "invalid input")
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status: got %d, want %d", rec.Code, http.StatusBadRequest)
 	}
 
-	var body ErrorResponse
+	var body httputil.ErrorResponse
 	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
@@ -267,7 +270,7 @@ func TestBadRequest(t *testing.T) {
 
 func TestBadRequestCode(t *testing.T) {
 	rec := httptest.NewRecorder()
-	BadRequestCode(rec, "discovery.invalid_param", "offset must be an integer")
+	httputil.BadRequestCode(rec, "discovery.invalid_param", "offset must be an integer")
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status: got %d, want %d", rec.Code, http.StatusBadRequest)
@@ -280,13 +283,13 @@ func TestBadRequestCode(t *testing.T) {
 
 func TestInternalError(t *testing.T) {
 	rec := httptest.NewRecorder()
-	InternalError(rec)
+	httputil.InternalError(rec)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("status: got %d, want %d", rec.Code, http.StatusInternalServerError)
 	}
 
-	var body ErrorResponse
+	var body httputil.ErrorResponse
 	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
@@ -339,7 +342,7 @@ func TestHandleServiceError_5xxStatusErrorLogsWrappedCause(t *testing.T) {
 	err := fmt.Errorf("create issue: %w", &wrappingStatusTestError{http.StatusBadGateway, "tracker_unreachable", cause})
 	rec := httptest.NewRecorder()
 
-	HandleServiceError(rec, httptest.NewRequest(http.MethodPost, "/v1/feedback", nil), err)
+	httputil.HandleServiceError(rec, httptest.NewRequest(http.MethodPost, "/v1/feedback", nil), err)
 
 	logged := onlyRecord(t, ring, "service.upstream_error")
 	if logged.Level != "ERROR" {
@@ -363,7 +366,7 @@ func TestHandleServiceError_4xxStatusErrorLogsNoUpstreamError(t *testing.T) {
 	ring := captureLogs(t)
 	err := &wrappingStatusTestError{http.StatusNotFound, "catalog.track_not_found", errors.New("no such track")}
 
-	HandleServiceError(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/x", nil), err)
+	httputil.HandleServiceError(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/x", nil), err)
 
 	if got := recordsNamed(ring, "service.upstream_error"); len(got) != 0 {
 		t.Errorf("service.upstream_error records = %d, want 0 for a client error", len(got))
@@ -372,7 +375,7 @@ func TestHandleServiceError_4xxStatusErrorLogsNoUpstreamError(t *testing.T) {
 
 func TestWritePlainError_MatchesHttpErrorOutput(t *testing.T) {
 	rec := httptest.NewRecorder()
-	WritePlainError(rec, http.StatusTooManyRequests, "too many event streams")
+	httputil.WritePlainError(rec, http.StatusTooManyRequests, "too many event streams")
 
 	if rec.Code != http.StatusTooManyRequests {
 		t.Fatalf("status = %d, want 429", rec.Code)

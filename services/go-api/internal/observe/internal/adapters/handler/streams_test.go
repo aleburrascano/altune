@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/observe/internal/shell/eventtap"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/httputil"
-	"altune/go-api/internal/shared/httputil/httputiltest"
+	"altune/go-api/internal/shared/httputiltest"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"

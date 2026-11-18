@@ -1,6 +1,7 @@
-package httputil
+package httputil_test
 
 import (
+	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/logging"
 	"log/slog"
 	"net/http"
@@ -9,7 +10,7 @@ import (
 )
 
 func TestCorrelationID_SetsHeader(t *testing.T) {
-	handler := CorrelationID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := httputil.CorrelationID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -28,7 +29,7 @@ func TestCorrelationID_SetsHeader(t *testing.T) {
 
 func TestCorrelationID_PropagatesInContext(t *testing.T) {
 	var capturedID string
-	handler := CorrelationID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := httputil.CorrelationID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedID = logging.CorrelationIDFromContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -47,7 +48,7 @@ func TestCorrelationID_PropagatesInContext(t *testing.T) {
 }
 
 func TestCorrelationID_UniqueBetweenRequests(t *testing.T) {
-	handler := CorrelationID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := httputil.CorrelationID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -81,7 +82,7 @@ func TestCorrelationID_AdoptsInboundHeader(t *testing.T) {
 
 	const inbound = "trace-abc12345"
 	var capturedID string
-	handler := CorrelationID(RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := httputil.CorrelationID(httputil.RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedID = logging.CorrelationIDFromContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	})))
@@ -112,7 +113,7 @@ func TestCorrelationID_AdoptsInboundHeader(t *testing.T) {
 }
 
 func TestCorrelationID_MintsWhenHeaderAbsent(t *testing.T) {
-	handler := CorrelationID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := httputil.CorrelationID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -127,7 +128,7 @@ func TestCorrelationID_MintsWhenHeaderAbsent(t *testing.T) {
 }
 
 func TestCorrelationID_MintsWhenHeaderMalformed(t *testing.T) {
-	handler := CorrelationID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := httputil.CorrelationID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)

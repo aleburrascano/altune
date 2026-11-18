@@ -1,7 +1,10 @@
-package httputil
+package httputil_test
 
 import (
+	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/logging"
+	"bytes"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -10,7 +13,7 @@ import (
 )
 
 func TestRequestLogger_DoesNotPanic(t *testing.T) {
-	handler := RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := httputil.RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
 	}))
@@ -25,7 +28,7 @@ func TestRequestLogger_DoesNotPanic(t *testing.T) {
 }
 
 func TestRequestLogger_TracksStatusCode(t *testing.T) {
-	handler := RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := httputil.RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	req := httptest.NewRequest(http.MethodGet, "/missing", nil)
@@ -44,7 +47,7 @@ func TestRequestLogger_RawQueryAbsentFromRing(t *testing.T) {
 	ring := logging.Setup("error", false)
 
 	const secret = "queenssecretobsessionquery"
-	handler := RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := httputil.RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	req := httptest.NewRequest(http.MethodGet, "/v1/discovery/search?q="+secret+"&limit=5", nil)
@@ -70,37 +73,56 @@ func TestRequestLogger_RawQueryAbsentFromRing(t *testing.T) {
 	}
 }
 
-func TestStatusWriter_DefaultStatus200(t *testing.T) {
-	rec := httptest.NewRecorder()
-	sw := &statusWriter{ResponseWriter: rec, status: 200}
+func completedRequest(t *testing.T, h http.HandlerFunc) map[string]any {
+	t.Helper()
+	var out bytes.Buffer
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&out, &slog.HandlerOptions{Level: slog.LevelDebug})))
 
-	n, err := sw.Write([]byte("hello"))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	httputil.RequestLogger(h).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/probe", nil))
+
+	dec := json.NewDecoder(&out)
+	for dec.More() {
+		var rec map[string]any
+		if err := dec.Decode(&rec); err != nil {
+			t.Fatalf("decode log line: %v", err)
+		}
+		if rec["msg"] == "request.complete" {
+			return rec
+		}
 	}
-	if n != 5 {
-		t.Errorf("bytes written = %d, want 5", n)
-	}
-	if sw.bytes != 5 {
-		t.Errorf("sw.bytes = %d, want 5", sw.bytes)
-	}
-	if sw.status != 200 {
-		t.Errorf("sw.status = %d, want 200 (default)", sw.status)
+	t.Fatal("no request.complete line was logged")
+	return nil
+}
+
+func TestRequestLogger_LogsStatus200AndBytesWhenTheHandlerOnlyWrites(t *testing.T) {
+	rec := completedRequest(t, func(w http.ResponseWriter, _ *http.Request) {
+		if n, err := w.Write([]byte("hello")); n != 5 || err != nil {
+			t.Errorf("Write = %d, %v; want 5, nil", n, err)
+		}
+	})
+	if rec["status"] != float64(http.StatusOK) || rec["bytes"] != float64(5) || rec["level"] != "INFO" {
+		t.Errorf("status, bytes, level = %v, %v, %v; want 200, 5, INFO", rec["status"], rec["bytes"], rec["level"])
 	}
 }
 
-func TestStatusWriter_TracksWriteHeaderAndBytes(t *testing.T) {
-	rec := httptest.NewRecorder()
-	sw := &statusWriter{ResponseWriter: rec, status: 200}
-
-	sw.WriteHeader(http.StatusCreated)
-	sw.Write([]byte("abc"))
-	sw.Write([]byte("de"))
-
-	if sw.status != http.StatusCreated {
-		t.Errorf("sw.status = %d, want %d", sw.status, http.StatusCreated)
+func TestRequestLogger_LogsTheWrittenStatusAndEveryByte(t *testing.T) {
+	rec := completedRequest(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte("abc"))
+		_, _ = w.Write([]byte("de"))
+	})
+	if rec["status"] != float64(http.StatusCreated) || rec["bytes"] != float64(5) {
+		t.Errorf("status, bytes = %v, %v; want 201, 5 (3+2)", rec["status"], rec["bytes"])
 	}
-	if sw.bytes != 5 {
-		t.Errorf("sw.bytes = %d, want 5 (3+2)", sw.bytes)
+}
+
+func TestRequestLogger_LevelFollowsTheStatusClass(t *testing.T) {
+	for status, want := range map[int]string{http.StatusNoContent: "INFO", http.StatusNotFound: "WARN", http.StatusBadGateway: "ERROR"} {
+		rec := completedRequest(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(status) })
+		if rec["level"] != want {
+			t.Errorf("status %d logged at %v, want %s", status, rec["level"], want)
+		}
 	}
 }
