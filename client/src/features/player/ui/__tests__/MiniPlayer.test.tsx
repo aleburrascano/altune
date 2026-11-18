@@ -7,6 +7,7 @@ import type { PlaybackContextValue, PlaybackErrorKind } from '@shared/playback';
 
 import { libraryTrack, MiniPlayer } from '@features/player';
 import { setPlatformOS } from '@testing/setPlatformOS';
+import { WINDOW_WIDTH, setWindowWidth } from '@testing/setWindowWidth';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), back: jest.fn(), replace: jest.fn() }),
@@ -74,12 +75,9 @@ describe.each(PLAYERS)('$name — the action offered for a failed track', ({ Pla
   });
 });
 
-let mockWindowWidth = 1440;
-
-jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
-  __esModule: true,
-  default: () => ({ width: mockWindowWidth, height: 900, scale: 2, fontScale: 1 }),
-}));
+beforeEach(() => {
+  setWindowWidth(WINDOW_WIDTH.desktop);
+});
 
 describe('MiniPlayer — hidden behind the persistent bar in wide web layout', () => {
   const RN = require('react-native');
@@ -87,7 +85,6 @@ describe('MiniPlayer — hidden behind the persistent bar in wide web layout', (
 
   afterEach(() => {
     setPlatformOS(NATIVE_OS);
-    mockWindowWidth = 1440;
   });
 
   it('renders nothing on a wide web window even with a track playing', () => {
@@ -105,7 +102,7 @@ describe('MiniPlayer — hidden behind the persistent bar in wide web layout', (
 
   it('still renders on a narrow web window', () => {
     setPlatformOS('web');
-    mockWindowWidth = 390;
+    setWindowWidth(WINDOW_WIDTH.phone);
     const value = { status: 'playing', track: FAILED_TRACK } as unknown as PlaybackContextValue;
 
     render(
@@ -145,7 +142,6 @@ describe('MiniPlayer — at the wide breakpoint on web', () => {
 
   afterEach(() => {
     setPlatformOS(NATIVE_OS);
-    mockWindowWidth = 1440;
   });
 
   function renderPlaying() {
@@ -159,7 +155,7 @@ describe('MiniPlayer — at the wide breakpoint on web', () => {
 
   it('renders nothing at exactly 1000px on web', () => {
     setPlatformOS('web');
-    mockWindowWidth = 1000;
+    setWindowWidth(WINDOW_WIDTH.wideWeb);
 
     renderPlaying();
 
@@ -168,7 +164,7 @@ describe('MiniPlayer — at the wide breakpoint on web', () => {
 
   it('still renders at 999px on web', () => {
     setPlatformOS('web');
-    mockWindowWidth = 999;
+    setWindowWidth(WINDOW_WIDTH.justUnderWideWeb);
 
     renderPlaying();
 
@@ -177,7 +173,7 @@ describe('MiniPlayer — at the wide breakpoint on web', () => {
 
   it('still renders on a 390px phone', () => {
     setPlatformOS(NATIVE_OS);
-    mockWindowWidth = 390;
+    setWindowWidth(WINDOW_WIDTH.phone);
 
     renderPlaying();
 
