@@ -62,7 +62,7 @@ const bannerChildrenOnlyPicksTelemetryMessage = {
 };
 
 const recordEventIsFireAndForgetAndReadsNoQueryCache = {
-  files: ['src/shared/telemetry/useRecordEvent.ts'],
+  files: ['src/shared/telemetry/shell/useRecordEvent.ts'],
   rules: ['react-doctor/query-mutation-missing-invalidation'],
 };
 

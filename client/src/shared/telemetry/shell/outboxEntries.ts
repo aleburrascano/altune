@@ -1,4 +1,4 @@
-import type { DiscoveryEvent } from '@shared/telemetry/recordEvent';
+import type { DiscoveryEvent } from '@shared/telemetry/shell/recordEvent';
 
 export type OutboxEntry = DiscoveryEvent & {
   event_id: string;

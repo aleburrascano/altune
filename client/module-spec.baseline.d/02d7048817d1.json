@@ -1,0 +1,11 @@
+{
+  "removed": [
+    "C12 src/shared/telemetry/clientErrorReporting.ts clientErrorReporting.ts is in no part: it is not the door, and sits at the root of a shared module",
+    "C12 src/shared/telemetry/healthTally.ts healthTally.ts is in no part: it is not the door, and sits at the root of a shared module",
+    "C12 src/shared/telemetry/outboxEntries.ts outboxEntries.ts is in no part: it is not the door, and sits at the root of a shared module",
+    "C12 src/shared/telemetry/recordEvent.ts recordEvent.ts is in no part: it is not the door, and sits at the root of a shared module",
+    "C12 src/shared/telemetry/useRecordEvent.ts useRecordEvent.ts is in no part: it is not the door, and sits at the root of a shared module"
+  ],
+  "added": [],
+  "clones": 0
+}
