@@ -1,10 +1,7 @@
-package handler
+package handler_test
 
 import (
-	acqdomain "altune/go-api/internal/acquisition/domain"
-	"altune/go-api/internal/acquisition/internal/adapters/catalogbridge"
-	"altune/go-api/internal/acquisition/internal/core/ports"
-	"altune/go-api/internal/acquisition/service"
+	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/auth/adapters/middleware"
 	authdomain "altune/go-api/internal/auth/domain"
@@ -34,7 +31,7 @@ func TestHandleRetryAcquisition_CooldownSendsRetryAfter(t *testing.T) {
 
 	retryAssertStatus(t, retryServe(t, router, http.MethodPost, path), http.StatusAccepted)
 
-	assertCooldownRefusal(t, retryServe(t, router, http.MethodPost, path), service.RetryCooldown)
+	assertCooldownRefusal(t, retryServe(t, router, http.MethodPost, path), cooldownWindow)
 }
 
 func TestHandleReacquire_CooldownSendsRetryAfter(t *testing.T) {
@@ -47,7 +44,7 @@ func TestHandleReacquire_CooldownSendsRetryAfter(t *testing.T) {
 
 	retryAssertStatus(t, retryServe(t, router, http.MethodPost, path), http.StatusAccepted)
 
-	assertCooldownRefusal(t, retryServe(t, router, http.MethodPost, path), service.ReacquireCooldown)
+	assertCooldownRefusal(t, retryServe(t, router, http.MethodPost, path), cooldownWindow)
 }
 
 func TestHandleRetryAcquisition_CooldownRetryAfterIsTimeLeft(t *testing.T) {
@@ -58,7 +55,7 @@ func TestHandleRetryAcquisition_CooldownRetryAfterIsTimeLeft(t *testing.T) {
 	store := newMemCooldownStore()
 	clock := time.Now()
 	store.now = func() time.Time { return clock }
-	h := NewRetryHandler(catalogbridge.NewTrackLedger(repo), &retryFakeScheduler{}, service.NewRetryAdmission(store))
+	h := acquisition.NewRetryHandler(acquisition.NewTrackLedger(repo), &retryFakeScheduler{}, acquisition.NewRetryAdmission(store))
 	router := chi.NewRouter()
 	router.Use(middleware.Middleware(retryVerifyAsTestUser))
 	router.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
@@ -73,6 +70,8 @@ func TestHandleRetryAcquisition_CooldownRetryAfterIsTimeLeft(t *testing.T) {
 		t.Errorf("Retry-After = %d, want 15 (time left, rounded up)", got)
 	}
 }
+
+const cooldownWindow = time.Minute
 
 func assertCooldownRefusal(t *testing.T, rec *httptest.ResponseRecorder, window time.Duration) {
 	t.Helper()
@@ -119,7 +118,7 @@ func newTrackOrFatal(t *testing.T, userId shared.UserId) *catdomain.Track {
 
 func TestHandleRetryAcquisition_ShuttingDownSurfaces503AndKeepsCooldown(t *testing.T) {
 	repo := newRetryFakeTrackRepo()
-	scheduler := &retryFakeScheduler{err: acqdomain.ErrSchedulerShutdown}
+	scheduler := &retryFakeScheduler{err: acquisition.ErrSchedulerShutdown}
 	track := newTrackOrFatal(t, retryTestUserId)
 	_ = track.MarkFailed("download error")
 	repo.seed(track)
@@ -138,7 +137,7 @@ func TestHandleRetryAcquisition_ShuttingDownSurfaces503AndKeepsCooldown(t *testi
 
 func TestHandleReacquire_ShuttingDownSurfaces503AndKeepsCooldown(t *testing.T) {
 	repo := newRetryFakeTrackRepo()
-	scheduler := &reacquireFakeScheduler{err: acqdomain.ErrSchedulerShutdown}
+	scheduler := &reacquireFakeScheduler{err: acquisition.ErrSchedulerShutdown}
 	track := newTrackOrFatal(t, reacquireTestUserId)
 	_ = track.MarkReady("audio/ready.opus")
 	repo.seed(track)
@@ -173,7 +172,7 @@ func assertShuttingDown(t *testing.T, status int, body []byte) {
 
 type admitAlways struct{}
 
-func (admitAlways) Admit(_ context.Context, _ *ports.TrackSnapshot, schedule func() error) error {
+func (admitAlways) Admit(_ context.Context, _ *acquisition.TrackSnapshot, schedule func() error) error {
 	return schedule()
 }
 
@@ -182,7 +181,7 @@ func TestHandleRetryAcquisition_UsesTheInjectedAdmission(t *testing.T) {
 	track := newTrackOrFatal(t, retryTestUserId)
 	repo.seed(track)
 	scheduler := &retryFakeScheduler{}
-	h := NewRetryHandler(catalogbridge.NewTrackLedger(repo), scheduler, admitAlways{})
+	h := acquisition.NewRetryHandler(acquisition.NewTrackLedger(repo), scheduler, admitAlways{})
 	router := chi.NewRouter()
 	router.Use(middleware.Middleware(retryVerifyAsTestUser))
 	router.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
@@ -200,7 +199,7 @@ func TestHandleReacquire_UsesTheInjectedAdmission(t *testing.T) {
 	track := newTrackOrFatal(t, reacquireTestUserId)
 	repo.seed(track)
 	scheduler := &reacquireFakeScheduler{}
-	h := NewReacquireHandler(catalogbridge.NewTrackLedger(repo), scheduler, admitAlways{})
+	h := acquisition.NewReacquireHandler(acquisition.NewTrackLedger(repo), scheduler, admitAlways{})
 	router := chi.NewRouter()
 	router.Use(middleware.Middleware(reacquireVerifyAsTestUser))
 	router.Post("/tracks/{trackId}/reacquire", h.HandleReacquire)
@@ -223,7 +222,7 @@ func newMemCooldownStore() *memCooldownStore {
 	return &memCooldownStore{now: time.Now, lastAt: make(map[string]time.Time)}
 }
 
-func (s *memCooldownStore) Reserve(_ context.Context, trackID catdomain.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, time.Duration, error) {
+func (s *memCooldownStore) Reserve(_ context.Context, trackID catdomain.TrackId, kind acquisition.CooldownKind, cooldown time.Duration) (time.Time, bool, time.Duration, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now, key := s.now(), string(kind)+"/"+trackID.String()
@@ -234,7 +233,7 @@ func (s *memCooldownStore) Reserve(_ context.Context, trackID catdomain.TrackId,
 	return now, true, 0, nil
 }
 
-func (s *memCooldownStore) Release(_ context.Context, trackID catdomain.TrackId, kind ports.CooldownKind, at time.Time) error {
+func (s *memCooldownStore) Release(_ context.Context, trackID catdomain.TrackId, kind acquisition.CooldownKind, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key := string(kind) + "/" + trackID.String()
@@ -281,7 +280,7 @@ func makeStreamableReacquireTrack(userId shared.UserId, title, artist, album, au
 }
 
 func buildReacquireRouter(trackRepo *retryFakeTrackRepo, scheduler *reacquireFakeScheduler) chi.Router {
-	h := NewReacquireHandler(catalogbridge.NewTrackLedger(trackRepo), scheduler, service.NewReacquireAdmission(newMemCooldownStore()))
+	h := acquisition.NewReacquireHandler(acquisition.NewTrackLedger(trackRepo), scheduler, acquisition.NewReacquireAdmission(newMemCooldownStore()))
 	r := chi.NewRouter()
 	r.Use(middleware.Middleware(reacquireVerifyAsTestUser))
 	r.Post("/tracks/{trackId}/reacquire", h.HandleReacquire)
@@ -542,7 +541,7 @@ func makeReadyRetryTrack(userId shared.UserId, title, artist, album, audioRef st
 }
 
 func buildRetryRouter(trackRepo *retryFakeTrackRepo, scheduler *retryFakeScheduler) chi.Router {
-	h := NewRetryHandler(catalogbridge.NewTrackLedger(trackRepo), scheduler, service.NewRetryAdmission(newMemCooldownStore()))
+	h := acquisition.NewRetryHandler(acquisition.NewTrackLedger(trackRepo), scheduler, acquisition.NewRetryAdmission(newMemCooldownStore()))
 	r := chi.NewRouter()
 	r.Use(middleware.Middleware(retryVerifyAsTestUser))
 	r.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
