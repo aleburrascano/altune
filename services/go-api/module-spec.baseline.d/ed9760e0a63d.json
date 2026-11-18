@@ -1,0 +1,7 @@
+{
+  "removed": [
+    "C4 internal/shared/filehost/filehost.go exports PageFile, which nothing outside filehost imports and no test of its own imports through the door"
+  ],
+  "added": [],
+  "clones": 0
+}

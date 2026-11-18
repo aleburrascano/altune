@@ -80,8 +80,8 @@ func TestFileOnPage_AcceptsOnlyThisIDsFileOnTheImgurggCDN(t *testing.T) {
 	if _, ok := filehost.DownloadURL("imgurgg", "0Q3ydhk"); ok {
 		t.Error("an imgur.gg page must never be handed to the downloader")
 	}
-	if _, ok := filehost.FileOnPage("pixeldrain", "ozSpSjn7"); ok {
-		t.Error("pixeldrain has a direct download and no page step")
+	if page, ok := filehost.FileOnPage("pixeldrain", "ozSpSjn7"); ok || page != (filehost.PageFile{}) {
+		t.Errorf("FileOnPage(pixeldrain) = %+v, %v; pixeldrain has a direct download and no page step", page, ok)
 	}
 }
 
