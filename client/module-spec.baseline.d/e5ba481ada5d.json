@@ -1,0 +1,10 @@
+{
+  "removed": [
+    "T2 src/features/settings/__tests__/DangerZoneCard.test.tsx patches with jest.spyOn",
+    "T2 src/features/settings/__tests__/dangerZoneActions.test.ts patches with jest.spyOn",
+    "T2 src/features/settings/__tests__/settingsPortContract.test.ts patches with jest.spyOn",
+    "T2 src/features/settings/__tests__/useDownloads.test.ts patches with jest.spyOn"
+  ],
+  "added": [],
+  "clones": 0
+}

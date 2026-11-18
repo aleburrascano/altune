@@ -11,6 +11,7 @@ import { apiClientOfflinePort } from '@testing/apiClientPorts';
 
 import { useRemoveDownloads, downloadStats, DangerZoneCard } from '@features/settings';
 import type { ClearHistoryState } from '@features/settings';
+import { recordLogs, type RecordedLogs } from '@shared/log';
 
 provideOfflinePort(apiClientOfflinePort);
 const { __http } = require('@testing/doubles/fetch.js');
@@ -254,15 +255,11 @@ describe('DangerZoneCard sign-out failure', () => {
     fireEvent.press(screen.getByTestId('settings-confirm-sign-out-confirm'));
   }
 
-  let warn: jest.SpyInstance;
+  let logs: RecordedLogs;
 
   beforeEach(async () => {
     mockSignOut.mockReset();
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  });
-
-  afterEach(() => {
-    warn.mockRestore();
+    logs = recordLogs();
   });
 
   it.each([
@@ -301,7 +298,7 @@ describe('DangerZoneCard sign-out failure', () => {
 
       expect(await screen.findByText('Failed')).toBeTruthy();
       expect(screen.getByText(expectedDetail)).toBeTruthy();
-      expect(warn).toHaveBeenCalledWith('[auth] sign out failed', expectedLogFields);
+      expect(logs.warnings).toContainEqual(['[auth] sign out failed', expectedLogFields]);
     },
   );
 
@@ -312,8 +309,8 @@ describe('DangerZoneCard sign-out failure', () => {
     confirmSignOut();
 
     expect(await screen.findByText('Failed')).toBeTruthy();
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(warn.mock.calls)).not.toContain('invalid_grant');
+    expect(logs.warnings).toHaveLength(1);
+    expect(JSON.stringify(logs.warnings)).not.toContain('invalid_grant');
   });
 
   it('leaves the row usable so the user can retry after a failure', async () => {
@@ -336,7 +333,7 @@ describe('DangerZoneCard sign-out failure', () => {
     await waitFor(() => expect(mockSignOut).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByTestId('settings-sign-out')).toBeTruthy());
     expect(screen.queryByText('Failed')).toBeNull();
-    expect(warn).not.toHaveBeenCalled();
+    expect(logs.warnings).toEqual([]);
   });
 });
 
