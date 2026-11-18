@@ -1,6 +1,7 @@
-package middleware
+package requestuser_test
 
 import (
+	"altune/go-api/internal/shared/requestuser"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -30,8 +31,8 @@ func TestClientKey(t *testing.T) {
 			for _, v := range tt.forwarded {
 				req.Header.Add("X-Forwarded-For", v)
 			}
-			if got := clientKey(req); got != tt.want {
-				t.Errorf("clientKey: got %q, want %q", got, tt.want)
+			if got := requestuser.ClientKey(req); got != tt.want {
+				t.Errorf("ClientKey: got %q, want %q", got, tt.want)
 			}
 		})
 	}

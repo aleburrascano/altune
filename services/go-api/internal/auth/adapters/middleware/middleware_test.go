@@ -695,6 +695,44 @@ func TestMiddleware_MissingHeaderBodyIsPinned(t *testing.T) {
 	}
 }
 
+func decodeBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]string {
+	t.Helper()
+	var body map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("body %q is not a JSON object of strings: %v", rec.Body.String(), err)
+	}
+	return body
+}
+
+func TestRequireUserID_UnauthorizedMatchesTheMissingTokenRejection(t *testing.T) {
+	next, _ := noopHandler()
+	viaMiddleware := httptest.NewRecorder()
+	Middleware(stubVerifier(shared.UserId{}, nil))(next).ServeHTTP(viaMiddleware, httptest.NewRequest(http.MethodGet, "/", nil))
+	viaRequire := httptest.NewRecorder()
+	RequireUserID(viaRequire, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if viaRequire.Code != viaMiddleware.Code {
+		t.Errorf("status: RequireUserID %d, middleware %d", viaRequire.Code, viaMiddleware.Code)
+	}
+	for _, header := range []string{"WWW-Authenticate", "Content-Type"} {
+		if got, want := viaRequire.Header().Get(header), viaMiddleware.Header().Get(header); got != want {
+			t.Errorf("%s: RequireUserID %q, middleware %q", header, got, want)
+		}
+	}
+	requireBody, middlewareBody := decodeBody(t, viaRequire), decodeBody(t, viaMiddleware)
+	if len(requireBody) != len(middlewareBody) {
+		t.Errorf("body keys: RequireUserID %v, middleware %v", requireBody, middlewareBody)
+	}
+	for key := range middlewareBody {
+		if _, ok := requireBody[key]; !ok {
+			t.Errorf("RequireUserID body has no %q: %v", key, requireBody)
+		}
+	}
+	if got, want := requireBody["reason"], string(domain.ReasonMissing); got != want {
+		t.Errorf("reason: RequireUserID %q, want %q", got, want)
+	}
+}
+
 func TestMiddleware_LookAlikeSchemesArePinnedAsMalformed(t *testing.T) {
 	for _, header := range []string{"Basic abc", "Bearer", "Bearerabc"} {
 		t.Run(header, func(t *testing.T) {
@@ -771,88 +809,6 @@ func TestMiddleware_ThrottledBodyIsPinned(t *testing.T) {
 	requireExactResponse(t, rec, http.StatusTooManyRequests, "", `{"detail":"too many failed authentication attempts","code":"auth.throttled"}`+"\n")
 	if got := rec.Header().Get("Retry-After"); got != "60" {
 		t.Errorf("Retry-After: got %q, want %q", got, "60")
-	}
-}
-
-func TestRequireUserID(t *testing.T) {
-	t.Run("present", func(t *testing.T) {
-		uid := shared.NewUserId(uuid.New())
-		ctx := service.ContextWithUserID(context.Background(), uid)
-		req := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
-		rec := httptest.NewRecorder()
-
-		got, ok := RequireUserID(rec, req)
-		if !ok {
-			t.Fatal("expected ok=true, got false")
-		}
-		if got.UUID() != uid.UUID() {
-			t.Errorf("userId: got %v, want %v", got.UUID(), uid.UUID())
-		}
-		if rec.Code != http.StatusOK {
-			t.Errorf("status: got %d, want %d (no error written)", rec.Code, http.StatusOK)
-		}
-	})
-
-	t.Run("absent writes 401", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		rec := httptest.NewRecorder()
-
-		got, ok := RequireUserID(rec, req)
-		if ok {
-			t.Fatal("expected ok=false, got true")
-		}
-		if !got.IsZero() {
-			t.Errorf("expected zero UserId, got %v", got)
-		}
-		if rec.Code != http.StatusUnauthorized {
-			t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
-		}
-	})
-}
-
-func TestRequireUserID_AbsentBodyIsPinned(t *testing.T) {
-	rec := httptest.NewRecorder()
-
-	_, ok := RequireUserID(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-
-	if ok {
-		t.Fatal("expected ok=false, got true")
-	}
-	requireExactResponse(t, rec, http.StatusUnauthorized, "Bearer", `{"detail":"authentication required","reason":"missing"}`+"\n")
-}
-
-func TestRequireUserID_PresentWritesNothing(t *testing.T) {
-	uid := shared.NewUserId(uuid.New())
-	req := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(service.ContextWithUserID(context.Background(), uid))
-	rec := httptest.NewRecorder()
-
-	got, ok := RequireUserID(rec, req)
-
-	if !ok || got.UUID() != uid.UUID() {
-		t.Fatalf("got %v, %v; want %v, true", got.UUID(), ok, uid.UUID())
-	}
-	if rec.Body.Len() != 0 || len(rec.Header()) != 0 {
-		t.Errorf("wrote body %q headers %v, want nothing", rec.Body.String(), rec.Header())
-	}
-}
-
-func TestRequireUserID_ChangesBetweenTicks(t *testing.T) {
-	base := httptest.NewRequest(http.MethodGet, "/", nil)
-
-	first := httptest.NewRecorder()
-	if _, ok := RequireUserID(first, base); ok {
-		t.Fatal("first tick: expected ok=false without a user")
-	}
-	requireExactResponse(t, first, http.StatusUnauthorized, "Bearer", `{"detail":"authentication required","reason":"missing"}`+"\n")
-
-	uid := shared.NewUserId(uuid.New())
-	second := httptest.NewRecorder()
-	got, ok := RequireUserID(second, base.WithContext(service.ContextWithUserID(base.Context(), uid)))
-	if !ok || got.UUID() != uid.UUID() {
-		t.Fatalf("second tick: got %v, %v; want %v, true", got.UUID(), ok, uid.UUID())
-	}
-	if second.Body.Len() != 0 {
-		t.Errorf("second tick wrote body %q, want none", second.Body.String())
 	}
 }
 

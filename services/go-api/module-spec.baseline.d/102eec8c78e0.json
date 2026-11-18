@@ -1,0 +1,15 @@
+{
+  "removed": [
+    "B3 internal/auth/adapters/middleware/client_key.go imports net",
+    "B3 internal/auth/adapters/middleware/client_key.go imports net/http",
+    "B3 internal/auth/adapters/middleware/client_key.go imports net/netip",
+    "C12 internal/auth/adapters/middleware/client_key.go adapters/middleware/client_key.go is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
+    "C3 internal/discovery/internal/adapters/authbridge/require_user_id.go imports internal/auth/adapters/middleware/client_key.go, behind auth's door",
+    "C3 internal/discovery/internal/adapters/authbridge/require_user_id_test.go imports internal/auth/adapters/middleware/client_key.go, behind auth's door",
+    "T1 internal/auth/adapters/middleware/client_key_test.go is in package middleware, so it sees inside the module: use package middleware_test and import the door",
+    "T1 internal/auth/service/request_identity_test.go imports domain/token_expired.go, behind auth's door",
+    "T1 internal/auth/service/request_identity_test.go is in package service, so it sees inside the module: use package service_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}
