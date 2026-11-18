@@ -14,6 +14,7 @@ import {
   type ClearHistoryState,
   type DangerZoneActionKey,
 } from '@features/settings';
+import { recordLogs } from '@shared/log';
 type Opts = Parameters<typeof buildDangerZoneActions>[0];
 
 function usageOf(count: number, bytes: number) {
@@ -177,15 +178,9 @@ describe('the danger-zone action key union', () => {
 });
 
 describe('the remove-downloads row after a remove-all pass (#1754)', () => {
-  let warn: jest.SpyInstance;
-
   beforeEach(() => {
     usePinnedStore.setState({ entries: {}, queue: [], isWorking: false, lastUnpinAll: undefined });
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  });
-
-  afterEach(() => {
-    warn.mockRestore();
+    recordLogs();
   });
 
   it('reads as failed when a file survives its delete', () => {

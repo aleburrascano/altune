@@ -205,8 +205,6 @@ describe('useSettingsPort', () => {
   }
 
   it('throws when no provider is mounted', () => {
-    jest.spyOn(console, 'error').mockImplementation(() => {});
-
     expect(() => renderHook(() => useSettingsPort())).toThrow('no settings port provided');
   });
 

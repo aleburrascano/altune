@@ -10,6 +10,7 @@ import {
   type ClearHistoryState,
 } from '@features/settings';
 import { asTrackId } from '@shared/catalog';
+import { recordLogs, type RecordedLogs } from '@shared/log';
 
 const { __fs } = FileSystem as unknown as {
   __fs: {
@@ -53,15 +54,11 @@ function removeDownloadsRowHidden(): boolean | undefined {
   return downloads?.row.hidden;
 }
 
-let warn: jest.SpyInstance;
+let logs: RecordedLogs;
 
 beforeEach(() => {
   usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
-  warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-});
-
-afterEach(() => {
-  warn.mockRestore();
+  logs = recordLogs();
 });
 
 describe('download count and size stay in agreement when a file delete fails', () => {
@@ -76,7 +73,7 @@ describe('download count and size stay in agreement when a file delete fails', (
     expect(stats.downloadCount).toBe(1);
     expect(stats.usageLabel).toBe('1 track');
     expect(removeDownloadsRowHidden()).toBe(false);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('failed to delete'));
+    expect(logs.warnings).toContainEqual([expect.stringContaining('failed to delete')]);
   });
 
   it('a retried unpinAll removes the survivor once the delete succeeds', () => {
@@ -117,17 +114,27 @@ describe('download count and size stay in agreement when a file delete fails', (
 });
 
 describe('useDownloadStats measures the pinned directory only when entries change', () => {
-  it('a re-render with the same entries does not re-list the directory', () => {
+  it('a re-render with the same entries keeps the size it measured on mount', () => {
     seedReady('t1');
-    const listing = jest.spyOn(FileSystem.Directory.prototype, 'list');
-    const { rerender } = renderHook(() => useDownloadStats());
-    const afterMount = listing.mock.calls.length;
+    const { result, rerender } = renderHook(() => useDownloadStats());
+    const measuredOnMount = result.current;
+    __fs.seedFile(audioUri('written-later'), 'bytes the mount never saw');
 
     rerender({});
     rerender({});
 
-    expect(listing).toHaveBeenCalledTimes(afterMount);
-    listing.mockRestore();
+    expect(currentStats()).not.toEqual(measuredOnMount);
+    expect(result.current).toEqual(measuredOnMount);
+  });
+
+  it('measures again once the entries change', () => {
+    seedReady('t1');
+    const { result } = renderHook(() => useDownloadStats());
+    __fs.seedFile(audioUri('written-later'), 'bytes the mount never saw');
+
+    act(() => usePinnedStore.setState({ entries: { ...usePinnedStore.getState().entries } }));
+
+    expect(result.current).toEqual(currentStats());
   });
 });
 
@@ -205,16 +212,6 @@ describe('useRemoveDownloads probe: outcomes a caller sees', () => {
       failNext(kind: 'delete', error?: Error): void;
     };
   };
-
-  let warn: jest.SpyInstance;
-
-  beforeEach(() => {
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  });
-
-  afterEach(() => {
-    warn.mockRestore();
-  });
 
   it('reports a partial outcome when a file survives removal through the hook', () => {
     const uri = 'file:///document/offline-audio/t1.mp3';
