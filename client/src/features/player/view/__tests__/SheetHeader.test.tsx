@@ -1,26 +1,30 @@
 import React from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { SheetHeader, SheetHeaderCenter, SheetHeaderTrailing, SheetScreen } from '@features/player';
 
-jest.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ top: 37, bottom: 0, left: 0, right: 0 }),
-}));
+const NOTCHED_PHONE = {
+  frame: { x: 0, y: 0, width: 390, height: 844 },
+  insets: { top: 37, bottom: 0, left: 0, right: 0 },
+};
 
 function renderSheet(onClose = jest.fn()) {
   render(
-    <SheetScreen testID="sheet">
-      <SheetHeader onClose={onClose} closeLabel="Close queue">
-        <SheetHeaderCenter>
-          <Text>Up Next</Text>
-        </SheetHeaderCenter>
-        <SheetHeaderTrailing>
-          <Text>Clear</Text>
-        </SheetHeaderTrailing>
-      </SheetHeader>
-      <Text>body</Text>
-    </SheetScreen>,
+    <SafeAreaProvider initialMetrics={NOTCHED_PHONE}>
+      <SheetScreen testID="sheet">
+        <SheetHeader onClose={onClose} closeLabel="Close queue">
+          <SheetHeaderCenter>
+            <Text>Up Next</Text>
+          </SheetHeaderCenter>
+          <SheetHeaderTrailing>
+            <Text>Clear</Text>
+          </SheetHeaderTrailing>
+        </SheetHeader>
+        <Text>body</Text>
+      </SheetScreen>
+    </SafeAreaProvider>,
   );
   return onClose;
 }

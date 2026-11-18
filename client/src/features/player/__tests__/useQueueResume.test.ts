@@ -1,5 +1,4 @@
 import { act, renderHook } from '@testing-library/react-native';
-import { AppState, type AppStateStatus } from 'react-native';
 import TrackPlayer from 'react-native-track-player';
 
 import { signInTestUser } from '@testing/signInTestUser';
@@ -28,6 +27,7 @@ import {
   httpPlaybackPort,
 } from '@features/player';
 import { recordLogs, type RecordedLogs } from '@shared/log';
+import { driveAppState, type AppStateDriver } from '@shared/lifecycle';
 beforeAll(() => {
   installPlaybackPort(httpPlaybackPort);
 });
@@ -568,7 +568,7 @@ describe('saving the queue state', () => {
     }));
   }
 
-  let appStateListeners: ((state: AppStateStatus) => void)[];
+  let app: AppStateDriver;
 
   function tracks(prefix: string, count: number): PlaybackTrack[] {
     return Array.from({ length: count }, (_, i) =>
@@ -584,7 +584,7 @@ describe('saving the queue state', () => {
 
   async function backgroundApp(): Promise<void> {
     await act(async () => {
-      for (const l of [...appStateListeners]) l('background');
+      app.change('background');
     });
     await flush();
   }
@@ -599,11 +599,7 @@ describe('saving the queue state', () => {
 
   beforeEach(async () => {
     modelNativePlayer();
-    appStateListeners = [];
-    jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
-      appStateListeners.push(listener as (state: AppStateStatus) => void);
-      return { remove: jest.fn() };
-    });
+    app = driveAppState();
     (getQueueState as jest.Mock).mockResolvedValue({
       track_ids: [],
       current_index: 0,
@@ -1059,11 +1055,7 @@ describe('a save issued while another drains', () => {
       'saves the latest position when the second trigger lands %i ticks after the first',
       async (offset) => {
         let position = 1;
-        const listeners: ((state: AppStateStatus) => void)[] = [];
-        jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
-          listeners.push(listener as (state: AppStateStatus) => void);
-          return { remove: jest.fn() };
-        });
+        const app = driveAppState();
         player.getActiveTrack!.mockImplementation(async () => ({ id: 'library:a0' }));
         player.getProgress!.mockImplementation(async () => ({
           position,
@@ -1081,10 +1073,10 @@ describe('a save issued while another drains', () => {
         });
 
         await act(async () => {
-          for (const l of [...listeners]) l('background');
+          app.change('background');
           for (let tick = 0; tick < offset; tick++) await Promise.resolve();
           position = 99;
-          for (const l of [...listeners]) l('background');
+          app.change('background');
           for (let i = 0; i < 60; i++) await Promise.resolve();
         });
 
@@ -1177,11 +1169,7 @@ describe('queue save and restore failures move playback_health counters', () => 
   });
 
   it('counts a rejected save', async () => {
-    const appStateListeners: ((state: AppStateStatus) => void)[] = [];
-    jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
-      appStateListeners.push(listener as (state: AppStateStatus) => void);
-      return { remove: jest.fn() };
-    });
+    const app = driveAppState();
     const queue = [libraryTrack(), libraryTrack()];
     useQueueStore.getState().loadQueue(queue, 0, null);
     nativePlayer.getActiveTrack!.mockResolvedValue({ id: trackKey(queue[0]!) });
@@ -1191,7 +1179,7 @@ describe('queue save and restore failures move playback_health counters', () => 
     renderHook(() => useQueueResume());
     await settle();
     await act(async () => {
-      for (const l of [...appStateListeners]) l('background');
+      app.change('background');
     });
     await settle();
 
@@ -1245,7 +1233,7 @@ describe('a queue save the server rejects as a client fault', () => {
   const SERVICE_UNAVAILABLE = 503;
   const SETTLE_TICKS = 40;
   const SAVE_ATTEMPTS = 3;
-  let appStateListeners: ((state: AppStateStatus) => void)[];
+  let app: AppStateDriver;
 
   async function settle(): Promise<void> {
     await act(async () => {
@@ -1255,7 +1243,7 @@ describe('a queue save the server rejects as a client fault', () => {
 
   async function backgroundApp(): Promise<void> {
     await act(async () => {
-      for (const l of [...appStateListeners]) l('background');
+      app.change('background');
     });
     await settle();
   }
@@ -1275,11 +1263,7 @@ describe('a queue save the server rejects as a client fault', () => {
 
   beforeEach(() => {
     _resetGlobalErrorReportingForTest();
-    appStateListeners = [];
-    jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
-      appStateListeners.push(listener as (state: AppStateStatus) => void);
-      return { remove: jest.fn() };
-    });
+    app = driveAppState();
     recordLogs();
     (getQueueState as jest.Mock).mockReset().mockResolvedValue({
       track_ids: [],
