@@ -27,11 +27,6 @@ function createWrapper(client: QueryClient) {
   return createPortWrapper(client, { detail: quietDetailPort });
 }
 
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn() }),
-  useSegments: () => ['(tabs)', 'discover'],
-}));
-
 function enrichmentTarget(
   kind: 'album' | 'artist',
   title: string,

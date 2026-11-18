@@ -6,11 +6,17 @@ import { useLateralNav, createMemoryDetailPort } from '@features/detail';
 import type { DetailPort, DetailWarning, RecordingDetailPort } from '@features/detail';
 import { createPortWrapper, createTestQueryClient } from '@testing/queryHarness';
 
-const mockPush = jest.fn();
+import {
+  navigatorWrapper,
+  recordingNavigator,
+  type RecordingNavigator,
+} from '@features/detail/__tests__/recordingNavigator';
 
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, replace: jest.fn() }),
-}));
+let navigator: RecordingNavigator;
+
+beforeEach(() => {
+  navigator = recordingNavigator();
+});
 
 function artist(title: string): DiscoveryResult {
   return {
@@ -56,12 +62,15 @@ function failing(message: string) {
 
 function renderLateralNav(port: DetailPort) {
   return renderHook(() => useLateralNav('/discover/detail'), {
-    wrapper: createPortWrapper(createTestQueryClient(), { detail: port }),
+    wrapper: navigatorWrapper(
+      navigator,
+      createPortWrapper(createTestQueryClient(), { detail: port }),
+    ),
   });
 }
 
 function pushedResults(): (DiscoveryResult | undefined)[] {
-  return mockPush.mock.calls.map(([href]) => readDetailHandoff(href.params.handoff)?.result);
+  return navigator.push.mock.calls.map(([href]) => readDetailHandoff(href.params.handoff)?.result);
 }
 
 describe('useLateralNav', () => {
@@ -88,7 +97,7 @@ describe('useLateralNav', () => {
           }),
         ]);
         expect(result.current.state).toBe('idle');
-        expect(mockPush).not.toHaveBeenCalled();
+        expect(navigator.push).not.toHaveBeenCalled();
       });
 
       it('does not log the ordinary "not found" result', async () => {
@@ -101,7 +110,7 @@ describe('useLateralNav', () => {
 
         expect(warnings).toEqual([]);
         expect(result.current.error).toBe('Artist not found: "Nobody"');
-        expect(mockPush).not.toHaveBeenCalled();
+        expect(navigator.push).not.toHaveBeenCalled();
       });
     });
   });
@@ -121,8 +130,8 @@ describe('useLateralNav', () => {
       });
 
       expect(searches).toEqual([{ q: 'Boom', kinds: ['artist'], limit: 1 }]);
-      expect(mockPush).toHaveBeenCalledTimes(1);
-      expect(mockPush.mock.calls[0][0].pathname).toBe('/discover/detail');
+      expect(navigator.push).toHaveBeenCalledTimes(1);
+      expect(navigator.push.mock.calls[0][0].pathname).toBe('/discover/detail');
       expect(pushedResults()).toEqual([first]);
     });
   });

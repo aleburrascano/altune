@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState, type MutableRefObject } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { DiscoveryResult, DiscoveryKind, FeaturedArtist } from '@shared/catalog';
-import { useNavigator } from '@shared/navigation';
+import { useNavigator, type Navigator } from '@shared/navigation';
 import {
   openDetail,
   type DetailRoute,
@@ -12,22 +12,28 @@ import type { UnreleasedWhere } from '@features/detail/core/unreleasedView';
 import { resolveEntityQuery } from '@features/detail/core/resolveEntityQuery';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
+import { useProvidedNavigator } from '@features/detail/view/DetailNavigatorProvider';
 import { useDetailFetchEnabled } from '@features/detail/core/useDetailFetchGate';
 
+function useDetailNavigator(): Navigator {
+  const appNavigator = useNavigator();
+  return useProvidedNavigator() ?? appNavigator;
+}
+
 export function useOpenDetail(detailRoute: DetailRoute): (picked: DiscoveryResult) => void {
-  const navigator = useNavigator();
+  const navigator = useDetailNavigator();
   return (picked) => openDetail(navigator, detailRoute, picked);
 }
 
 export function useOpenFeaturing(detailRoute: DetailRoute): (artist: FeaturedArtist) => void {
-  const navigator = useNavigator();
+  const navigator = useDetailNavigator();
   return (artist) => navigator.push(featuringHref(detailRoute, artist));
 }
 
 export function useOpenUnreleased(
   detailRoute: DetailRoute,
 ): (artist: DiscoveryResult, where: UnreleasedWhere) => void {
-  const navigator = useNavigator();
+  const navigator = useDetailNavigator();
   return (artist, where) => navigator.push(unreleasedHref(detailRoute, artist, where));
 }
 

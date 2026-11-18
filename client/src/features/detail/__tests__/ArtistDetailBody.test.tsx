@@ -16,13 +16,16 @@ import {
 } from '@testing/queryHarness';
 import { setPlatformOS } from '@testing/setPlatformOS';
 import { WINDOW_WIDTH, setWindowWidth } from '@testing/setWindowWidth';
+import {
+  navigatorWrapper,
+  recordingNavigator,
+  type RecordingNavigator,
+} from '@features/detail/__tests__/recordingNavigator';
 export type ArtistDetailBodyLastfmFixture = LastFmEnrichmentResponse;
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn() }),
-}));
+let navigator: RecordingNavigator;
 
 const SEARCH = 'GET /v1/discovery/search';
 
@@ -39,7 +42,10 @@ function libraryArtist(): DiscoveryResult {
 }
 
 function bodyWrapper(ports: RecordingFeaturePorts = createRecordingPorts()) {
-  return createPlaybackWrapper(createTestQueryClient({ mutations: true }), idlePlayback, ports);
+  return navigatorWrapper(
+    navigator,
+    createPlaybackWrapper(createTestQueryClient({ mutations: true }), idlePlayback, ports),
+  );
 }
 
 function renderBody(ports?: RecordingFeaturePorts) {
@@ -54,6 +60,9 @@ function renderBody(ports?: RecordingFeaturePorts) {
 }
 
 beforeEach(signInTestUser);
+beforeEach(() => {
+  navigator = recordingNavigator();
+});
 beforeEach(() => setWindowWidth(WINDOW_WIDTH.phone));
 
 warmUpFirstRender(async () => {
@@ -485,10 +494,7 @@ describe('ArtistDetailBody: top track and album taps pin the exact router push',
   });
 
   it('pushes the exact top track tapped', async () => {
-    const push = jest.fn();
-    jest
-      .spyOn(require('expo-router'), 'useRouter')
-      .mockReturnValue({ push, replace: jest.fn(), back: jest.fn() });
+    const { push } = navigator;
     renderLibraryArtistBody();
 
     fireEvent.press(await screen.findByTestId('detail-top-track-0'));
@@ -500,10 +506,7 @@ describe('ArtistDetailBody: top track and album taps pin the exact router push',
   });
 
   it('pushes the exact album tapped', async () => {
-    const push = jest.fn();
-    jest
-      .spyOn(require('expo-router'), 'useRouter')
-      .mockReturnValue({ push, replace: jest.fn(), back: jest.fn() });
+    const { push } = navigator;
     renderLibraryArtistBody();
 
     fireEvent.press(await screen.findByTestId('detail-album-0'));
