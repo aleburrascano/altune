@@ -1,4 +1,4 @@
-package httptrace
+package transport
 
 import (
 	"altune/go-api/internal/shared/redact"
