@@ -1,0 +1,10 @@
+{
+  "removed": [
+    "C12 src/shared/files/defaultFileStore.ts defaultFileStore.ts is in no part: it is not the door, and sits at the root of a shared module",
+    "C12 src/shared/files/fileStore.ts fileStore.ts is in no part: it is not the door, and sits at the root of a shared module",
+    "C12 src/shared/files/json.ts json.ts is in no part: it is not the door, and sits at the root of a shared module",
+    "C12 src/shared/files/urlExtension.ts urlExtension.ts is in no part: it is not the door, and sits at the root of a shared module"
+  ],
+  "added": [],
+  "clones": 0
+}

@@ -1,4 +1,4 @@
-import type { StoredDirectory, StoredFile } from '@shared/files/fileStore';
+import type { StoredDirectory, StoredFile } from '@shared/files/shell/fileStore';
 import { warn } from '@shared/log';
 
 type DocumentValue =
