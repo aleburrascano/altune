@@ -1,7 +1,7 @@
-package tempfs
+package tempfs_test
 
 import (
-	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition"
 	"bytes"
 	"encoding/json"
 	"log/slog"
@@ -14,7 +14,9 @@ import (
 
 const testMaxAge = time.Hour
 
-func newWorkspace() ports.TempWorkspace { return New() }
+const tempDirPrefix = "altune-acquire-"
+
+func newWorkspace() acquisition.TempWorkspace { return acquisition.NewTempWorkspace() }
 
 func TestCreateNamesDirUnderTempRoot(t *testing.T) {
 	useTempRoot(t)
@@ -82,8 +84,8 @@ func TestSweepAbandonedEmptyRootReturnsZero(t *testing.T) {
 
 func TestSweepAbandonedRemovesAgedKeepsFresh(t *testing.T) {
 	root := useTempRoot(t)
-	aged := agedDir(t, root, ports.TempDirPrefix+"abandoned", testMaxAge+time.Hour)
-	fresh := agedDir(t, root, ports.TempDirPrefix+"live", testMaxAge-time.Minute)
+	aged := agedDir(t, root, tempDirPrefix+"abandoned", testMaxAge+time.Hour)
+	fresh := agedDir(t, root, tempDirPrefix+"live", testMaxAge-time.Minute)
 
 	if got := newWorkspace().SweepAbandoned(time.Now().Add(-testMaxAge)); got != 1 {
 		t.Errorf("SweepAbandoned = %d, want 1", got)
@@ -99,7 +101,7 @@ func TestSweepAbandonedRemovesAgedKeepsFresh(t *testing.T) {
 func TestSweepAbandonedRefusesLookAlikes(t *testing.T) {
 	root := useTempRoot(t)
 	foreignDir := agedDir(t, root, "unrelated-service-cache", testMaxAge+time.Hour)
-	namedFile := agedFile(t, root, ports.TempDirPrefix+"notadir", testMaxAge+time.Hour)
+	namedFile := agedFile(t, root, tempDirPrefix+"notadir", testMaxAge+time.Hour)
 
 	if got := newWorkspace().SweepAbandoned(time.Now().Add(-testMaxAge)); got != 0 {
 		t.Errorf("SweepAbandoned = %d, want 0", got)
@@ -114,8 +116,8 @@ func TestSweepAbandonedRefusesLookAlikes(t *testing.T) {
 func TestSweepAbandonedBetweenTicks(t *testing.T) {
 	root := useTempRoot(t)
 	ws := newWorkspace()
-	dir := agedDir(t, root, ports.TempDirPrefix+"job", time.Minute)
-	agedDir(t, root, ports.TempDirPrefix+"old", testMaxAge+time.Hour)
+	dir := agedDir(t, root, tempDirPrefix+"job", time.Minute)
+	agedDir(t, root, tempDirPrefix+"old", testMaxAge+time.Hour)
 
 	if got := ws.SweepAbandoned(time.Now().Add(-testMaxAge)); got != 1 {
 		t.Fatalf("first sweep = %d, want 1", got)
@@ -143,7 +145,7 @@ func captureJSONLogs(t *testing.T) *bytes.Buffer {
 
 func TestSweepAbandonedLogsNothingWithoutStaleDirs(t *testing.T) {
 	root := useTempRoot(t)
-	agedDir(t, root, ports.TempDirPrefix+"live", testMaxAge-time.Minute)
+	agedDir(t, root, tempDirPrefix+"live", testMaxAge-time.Minute)
 	logs := captureJSONLogs(t)
 
 	newWorkspace().SweepAbandoned(time.Now().Add(-testMaxAge))
@@ -155,7 +157,7 @@ func TestSweepAbandonedLogsNothingWithoutStaleDirs(t *testing.T) {
 
 func TestSweepAbandonedLogsTheSweptCount(t *testing.T) {
 	root := useTempRoot(t)
-	agedDir(t, root, ports.TempDirPrefix+"old", testMaxAge+time.Hour)
+	agedDir(t, root, tempDirPrefix+"old", testMaxAge+time.Hour)
 	logs := captureJSONLogs(t)
 
 	newWorkspace().SweepAbandoned(time.Now().Add(-testMaxAge))

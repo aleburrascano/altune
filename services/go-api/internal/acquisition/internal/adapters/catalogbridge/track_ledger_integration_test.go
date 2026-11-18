@@ -1,8 +1,7 @@
-package catalogbridge
+package catalogbridge_test
 
 import (
-	acqdomain "altune/go-api/internal/acquisition/domain"
-	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/domain"
 	shared "altune/go-api/internal/shared/kernel"
@@ -50,7 +49,7 @@ func insertUnqueuedTrack(t *testing.T, pool *pgxpool.Pool) *domain.Track {
 	return track
 }
 
-func reclaimTrack(t *testing.T, pool *pgxpool.Pool, trackID domain.TrackId) ports.Fence {
+func reclaimTrack(t *testing.T, pool *pgxpool.Pool, trackID domain.TrackId) acquisition.Fence {
 	t.Helper()
 	var attempts int
 	if err := pool.QueryRow(context.Background(),
@@ -58,7 +57,7 @@ func reclaimTrack(t *testing.T, pool *pgxpool.Pool, trackID domain.TrackId) port
 		trackID.UUID()).Scan(&attempts); err != nil {
 		t.Fatalf("reclaim: %v", err)
 	}
-	return ports.Fence(attempts)
+	return acquisition.Fence(attempts)
 }
 
 func rowState(t *testing.T, pool *pgxpool.Pool, trackID domain.TrackId) (string, *string, *string) {
@@ -74,17 +73,17 @@ func rowState(t *testing.T, pool *pgxpool.Pool, trackID domain.TrackId) (string,
 
 func TestTrackLedger_OnPostgresAReclaimedTrackRefusesTheOldOwnerAndAcceptsTheNew(t *testing.T) {
 	pool := newLedgerPool(t)
-	ledger := NewTrackLedger(catalog.NewPgxTrackRepository(pool))
+	ledger := acquisition.NewTrackLedger(catalog.NewPgxTrackRepository(pool))
 	ctx := context.Background()
 	track := insertUnqueuedTrack(t, pool)
 
 	old := reclaimTrack(t, pool, track.ID)
 	current := reclaimTrack(t, pool, track.ID)
 
-	if err := ledger.Complete(ctx, track.ID, track.UserId, old, ports.Completion{AudioRef: "old-owner-ref"}); !errors.Is(err, acqdomain.ErrLeaseLost) {
+	if err := ledger.Complete(ctx, track.ID, track.UserId, old, acquisition.Completion{AudioRef: "old-owner-ref"}); !errors.Is(err, acquisition.ErrLeaseLost) {
 		t.Fatalf("old owner Complete = %v, want ErrLeaseLost", err)
 	}
-	if err := ledger.Fail(ctx, track.ID, track.UserId, old, "boom"); !errors.Is(err, acqdomain.ErrLeaseLost) {
+	if err := ledger.Fail(ctx, track.ID, track.UserId, old, "boom"); !errors.Is(err, acquisition.ErrLeaseLost) {
 		t.Fatalf("old owner Fail = %v, want ErrLeaseLost", err)
 	}
 	status, audioRef, reason := rowState(t, pool, track.ID)
@@ -92,7 +91,7 @@ func TestTrackLedger_OnPostgresAReclaimedTrackRefusesTheOldOwnerAndAcceptsTheNew
 		t.Fatalf("row = %s %v %v, want pending with no audio_ref and no failure_reason", status, audioRef, reason)
 	}
 
-	if err := ledger.Complete(ctx, track.ID, track.UserId, current, ports.Completion{AudioRef: "new-owner-ref"}); err != nil {
+	if err := ledger.Complete(ctx, track.ID, track.UserId, current, acquisition.Completion{AudioRef: "new-owner-ref"}); err != nil {
 		t.Fatalf("current owner Complete = %v, want nil", err)
 	}
 	status, audioRef, _ = rowState(t, pool, track.ID)
@@ -122,9 +121,9 @@ func TestTrackLedger_OnPostgresAClaimBetweenReadAndUpdateFencesOutTheWriter(t *t
 	held := reclaimTrack(t, pool, track.ID)
 	store := &claimDuringUpdateStore{PgxTrackRepository: catalog.NewPgxTrackRepository(pool), pool: pool, t: t}
 
-	err := NewTrackLedger(store).Complete(context.Background(), track.ID, track.UserId, held, ports.Completion{AudioRef: "old-owner-ref"})
+	err := acquisition.NewTrackLedger(store).Complete(context.Background(), track.ID, track.UserId, held, acquisition.Completion{AudioRef: "old-owner-ref"})
 
-	if !errors.Is(err, acqdomain.ErrLeaseLost) {
+	if !errors.Is(err, acquisition.ErrLeaseLost) {
 		t.Fatalf("err = %v, want ErrLeaseLost once the version conflict re-reads the new owner's attempts", err)
 	}
 	status, audioRef, _ := rowState(t, pool, track.ID)
