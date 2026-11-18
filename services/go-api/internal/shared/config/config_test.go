@@ -1,6 +1,7 @@
-package config
+package config_test
 
 import (
+	"altune/go-api/internal/shared/config"
 	"os"
 	"slices"
 	"strings"
@@ -11,7 +12,7 @@ import (
 func TestLoad_MinimalValid(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
 
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -29,7 +30,7 @@ func TestLoad_MinimalValid(t *testing.T) {
 func TestLoad_IgnoresRemovedPrincipalQueueDepthEnv(t *testing.T) {
 	setEnv(t, validConfigEnv(map[string]string{"ACQUISITION_PRINCIPAL_QUEUE_DEPTH": "8"}))
 
-	if _, err := Load(); err != nil {
+	if _, err := config.Load(); err != nil {
 		t.Fatalf("Load with a stale ACQUISITION_PRINCIPAL_QUEUE_DEPTH = %v, want nil", err)
 	}
 }
@@ -37,7 +38,7 @@ func TestLoad_IgnoresRemovedPrincipalQueueDepthEnv(t *testing.T) {
 func TestLoad_MissingJWKSURL(t *testing.T) {
 	setEnv(t, map[string]string{})
 
-	_, err := Load()
+	_, err := config.Load()
 	if err == nil {
 		t.Fatal("expected error for missing JWKS URL")
 	}
@@ -58,7 +59,7 @@ func TestLoad_SupabaseJWKSURLMalformed(t *testing.T) {
 				"SUPABASE_JWT_JWKS_URL": tt.jwksURL,
 			}))
 
-			_, err := Load()
+			_, err := config.Load()
 			if err == nil {
 				t.Fatal("expected error for malformed SUPABASE_JWT_JWKS_URL")
 			}
@@ -84,7 +85,7 @@ func TestLoad_SupabaseProjectURLMissingOrMalformed(t *testing.T) {
 				"SUPABASE_PROJECT_URL": tt.projectURL,
 			}))
 
-			_, err := Load()
+			_, err := config.Load()
 			if err == nil {
 				t.Fatal("expected error for missing/malformed SUPABASE_PROJECT_URL")
 			}
@@ -101,7 +102,7 @@ func TestLoad_SupabaseJWTAudEmptyUsesDefault(t *testing.T) {
 
 	setEnv(t, env)
 
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -124,7 +125,7 @@ func TestLoad_SupabaseJWTAudBlank(t *testing.T) {
 				"SUPABASE_JWT_AUD": tt.aud,
 			}))
 
-			_, err := Load()
+			_, err := config.Load()
 			if err == nil {
 				t.Fatal("expected error for blank SUPABASE_JWT_AUD")
 			}
@@ -140,7 +141,7 @@ func TestLoad_SupabaseJWTAudTrimmed(t *testing.T) {
 		"SUPABASE_JWT_AUD": "  authenticated\t\n",
 	}))
 
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -154,7 +155,7 @@ func TestLoad_CORSOriginsTrimmed(t *testing.T) {
 		"CORS_ORIGINS": "http://a, http://b ",
 	}))
 
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -187,7 +188,7 @@ func TestLoad_CORSOriginsMalformed(t *testing.T) {
 				"CORS_ORIGINS": tt.origins,
 			}))
 
-			_, err := Load()
+			_, err := config.Load()
 			if err == nil {
 				t.Fatal("expected error for malformed CORS_ORIGINS")
 			}
@@ -214,7 +215,7 @@ func TestLoad_CORSOriginsAccepted(t *testing.T) {
 				"CORS_ORIGINS": tt.origins,
 			}))
 
-			_, err := Load()
+			_, err := config.Load()
 			if err != nil {
 				t.Fatalf("unexpected error for CORS_ORIGINS=%q: %v", tt.origins, err)
 			}
@@ -239,7 +240,7 @@ func TestLoad_ExplorationRateOutOfRange(t *testing.T) {
 				"EXPLORATION_RATE": tt.rate,
 			}))
 
-			_, err := Load()
+			_, err := config.Load()
 			if err == nil {
 				t.Fatalf("expected error for EXPLORATION_RATE=%s", tt.rate)
 			}
@@ -266,7 +267,7 @@ func TestLoad_ExplorationRateInRange(t *testing.T) {
 				"EXPLORATION_RATE": tt.rate,
 			}))
 
-			cfg, err := Load()
+			cfg, err := config.Load()
 			if err != nil {
 				t.Fatalf("unexpected error for EXPLORATION_RATE=%s: %v", tt.rate, err)
 			}
@@ -280,7 +281,7 @@ func TestLoad_ExplorationRateInRange(t *testing.T) {
 func TestLoad_ExplorationRateDefault(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
 
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("unexpected error with default EXPLORATION_RATE: %v", err)
 	}
@@ -294,7 +295,7 @@ func TestLoad_MusicBrainzUAWithoutContact(t *testing.T) {
 		"MUSICBRAINZ_USER_AGENT": "altune/0.1",
 	}))
 
-	_, err := Load()
+	_, err := config.Load()
 	if err == nil {
 		t.Fatal("expected error for MB user agent without contact info")
 	}
@@ -305,7 +306,7 @@ func TestLoad_MusicBrainzUAWithEmail(t *testing.T) {
 		"MUSICBRAINZ_USER_AGENT": "altune/0.1 ( mailto:dev@altune.test )",
 	}))
 
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -317,7 +318,7 @@ func TestLoad_MusicBrainzUAWithEmail(t *testing.T) {
 func TestLoad_NoOperatorVarsRequired(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
 
-	if _, err := Load(); err != nil {
+	if _, err := config.Load(); err != nil {
 		t.Fatalf("unexpected error with no OPERATOR_* set: %v", err)
 	}
 }
@@ -336,7 +337,7 @@ func TestLoad_AcquisitionConcurrencyNotPositive(t *testing.T) {
 				"ACQUISITION_CONCURRENCY": tt.value,
 			}))
 
-			_, err := Load()
+			_, err := config.Load()
 			if err == nil {
 				t.Fatal("expected error for non-positive ACQUISITION_CONCURRENCY")
 			}
@@ -352,7 +353,7 @@ func TestLoad_RejectsNonPositiveDrainBudget(t *testing.T) {
 		t.Run(value, func(t *testing.T) {
 			setEnv(t, validConfigEnv(map[string]string{"ACQUISITION_DRAIN_BUDGET_SECONDS": value}))
 
-			_, err := Load()
+			_, err := config.Load()
 			if err == nil || !searchString(err.Error(), "ACQUISITION_DRAIN_BUDGET_SECONDS") {
 				t.Fatalf("Load error = %v, want it to name ACQUISITION_DRAIN_BUDGET_SECONDS", err)
 			}
@@ -378,7 +379,7 @@ func TestLoad_YtDLPCookieFile(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			setEnv(t, validConfigEnv(map[string]string{"YTDLP_COOKIE_FILE": tt.path}))
 
-			_, err := Load()
+			_, err := config.Load()
 			if !tt.wantErr {
 				if err != nil {
 					t.Fatalf("Load: unexpected error %v", err)
@@ -412,7 +413,7 @@ func TestLoad_BehavioralCorpusPath(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			setEnv(t, validConfigEnv(map[string]string{"BEHAVIORAL_CORPUS_PATH": tt.path}))
 
-			_, err := Load()
+			_, err := config.Load()
 			if !tt.wantErr {
 				if err != nil {
 					t.Fatalf("Load: unexpected error %v", err)
@@ -428,7 +429,7 @@ func TestLoad_BehavioralCorpusPath(t *testing.T) {
 
 func TestLoad_AcquisitionDownloadConcurrency(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("unexpected error with default ACQUISITION_DOWNLOAD_CONCURRENCY: %v", err)
 	}
@@ -437,7 +438,7 @@ func TestLoad_AcquisitionDownloadConcurrency(t *testing.T) {
 	}
 
 	setEnv(t, validConfigEnv(map[string]string{"ACQUISITION_DOWNLOAD_CONCURRENCY": "0"}))
-	_, err = Load()
+	_, err = config.Load()
 	if err == nil || !searchString(err.Error(), "ACQUISITION_DOWNLOAD_CONCURRENCY") {
 		t.Fatalf("expected error naming ACQUISITION_DOWNLOAD_CONCURRENCY for 0, got %v", err)
 	}
@@ -446,7 +447,7 @@ func TestLoad_AcquisitionDownloadConcurrency(t *testing.T) {
 func TestLoad_AcquisitionConcurrencyDefaultValid(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
 
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("unexpected error with default ACQUISITION_CONCURRENCY: %v", err)
 	}
@@ -456,7 +457,7 @@ func TestLoad_AcquisitionConcurrencyDefaultValid(t *testing.T) {
 }
 
 func TestConfig_LogValue_RedactsSecrets(t *testing.T) {
-	cfg := &Config{
+	cfg := &config.Config{
 		Env:            "production",
 		Host:           "0.0.0.0",
 		Port:           8000,
@@ -474,7 +475,7 @@ func TestConfig_LogValue_RedactsSecrets(t *testing.T) {
 }
 
 func TestConfig_HasOCIS3(t *testing.T) {
-	cfg := &Config{
+	cfg := &config.Config{
 		OCIS3Endpoint:  "https://endpoint",
 		OCIS3AccessKey: "key",
 		OCIS3SecretKey: "secret",
@@ -561,7 +562,7 @@ func TestConfig_HasRedis(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := &Config{RedisURL: tt.redisURL}
+			cfg := &config.Config{RedisURL: tt.redisURL}
 			if got := cfg.HasRedis(); got != tt.want {
 				t.Errorf("HasRedis() = %v, want %v", got, tt.want)
 			}
@@ -580,7 +581,7 @@ func TestConfig_HasLastFM(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := &Config{LastFMAPIKey: tt.key}
+			cfg := &config.Config{LastFMAPIKey: tt.key}
 			if got := cfg.HasLastFM(); got != tt.want {
 				t.Errorf("HasLastFM() = %v, want %v", got, tt.want)
 			}
@@ -599,7 +600,7 @@ func TestConfig_HasFanartTV(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := &Config{FanartTVAPIKey: tt.key}
+			cfg := &config.Config{FanartTVAPIKey: tt.key}
 			if got := cfg.HasFanartTV(); got != tt.want {
 				t.Errorf("HasFanartTV() = %v, want %v", got, tt.want)
 			}
@@ -618,7 +619,7 @@ func TestConfig_HasGenius(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := &Config{GeniusAccessToken: tt.token}
+			cfg := &config.Config{GeniusAccessToken: tt.token}
 			if got := cfg.HasGenius(); got != tt.want {
 				t.Errorf("HasGenius() = %v, want %v", got, tt.want)
 			}
@@ -637,7 +638,7 @@ func TestConfig_HasMusicBrainz(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := &Config{MusicBrainzUserAgent: tt.ua}
+			cfg := &config.Config{MusicBrainzUserAgent: tt.ua}
 			if got := cfg.HasMusicBrainz(); got != tt.want {
 				t.Errorf("HasMusicBrainz() = %v, want %v", got, tt.want)
 			}
@@ -658,7 +659,7 @@ func TestConfig_IsDevelopment(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := &Config{Env: tt.env}
+			cfg := &config.Config{Env: tt.env}
 			if got := cfg.IsDevelopment(); got != tt.want {
 				t.Errorf("IsDevelopment() = %v, want %v", got, tt.want)
 			}
@@ -684,7 +685,7 @@ func TestConfig_HasOCIS3_AllCombinations(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := &Config{
+			cfg := &config.Config{
 				OCIS3Endpoint:  tt.endpoint,
 				OCIS3AccessKey: tt.access,
 				OCIS3SecretKey: tt.secret,
@@ -720,7 +721,7 @@ func TestLoad_PoolSizes(t *testing.T) {
 			}
 			setEnv(t, env)
 
-			cfg, err := Load()
+			cfg, err := config.Load()
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -751,7 +752,7 @@ func TestLoad_RedisURL(t *testing.T) {
 			env["REDIS_URL"] = tc.url
 			setEnv(t, env)
 
-			_, err := Load()
+			_, err := config.Load()
 			if !tc.wantErr {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
@@ -770,7 +771,7 @@ func TestLoad_RedisURLErrorRedactsCredentials(t *testing.T) {
 	env["REDIS_URL"] = "redis://user:s3cret@host:99999999/x"
 	setEnv(t, env)
 
-	_, err := Load()
+	_, err := config.Load()
 	if err == nil {
 		t.Fatal("want error")
 	}
@@ -800,7 +801,7 @@ func TestLoad_SSEMaxConns(t *testing.T) {
 			}
 			setEnv(t, env)
 
-			cfg, err := Load()
+			cfg, err := config.Load()
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -829,7 +830,7 @@ func TestLoad_SupabaseURLsRejectPlaintext(t *testing.T) {
 			t.Run(field+"/"+tt.name, func(t *testing.T) {
 				setEnv(t, validConfigEnv(map[string]string{field: tt.url}))
 
-				_, err := Load()
+				_, err := config.Load()
 				if err == nil {
 					t.Fatalf("expected %s=%q to be rejected as non-https", field, tt.url)
 				}
@@ -854,7 +855,7 @@ func TestLoad_SupabaseURLsAllowLoopbackHTTP(t *testing.T) {
 				"SUPABASE_JWT_JWKS_URL": base + "/auth/v1/.well-known/jwks.json",
 			}))
 
-			if _, err := Load(); err != nil {
+			if _, err := config.Load(); err != nil {
 				t.Fatalf("loopback http should be accepted, got: %v", err)
 			}
 		})
@@ -888,7 +889,7 @@ func TestTestAuthEnabled_RequiresOptInAndNonProdEnv(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := &Config{Env: tt.env, TestAuthOptIn: tt.optIn}
+			cfg := &config.Config{Env: tt.env, TestAuthOptIn: tt.optIn}
 			if got := cfg.TestAuthEnabled(); got != tt.want {
 				t.Errorf("TestAuthEnabled() with Env=%q optIn=%v = %v, want %v",
 					tt.env, tt.optIn, got, tt.want)
@@ -911,7 +912,7 @@ func TestNonProdHooks_NormalizeEnv(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.env, func(t *testing.T) {
-			cfg := &Config{
+			cfg := &config.Config{
 				Env:                     tt.env,
 				ProviderReplayOptIn:     true,
 				ProviderReplayDir:       "/tmp/replay",
@@ -928,18 +929,18 @@ func TestNonProdHooks_NormalizeEnv(t *testing.T) {
 }
 
 func TestTestAuthEnabled_ZeroValueFailsClosed(t *testing.T) {
-	if (&Config{}).TestAuthEnabled() {
+	if (&config.Config{}).TestAuthEnabled() {
 		t.Fatal("zero-value Config enabled test auth; must fail closed to DISABLED")
 	}
 }
 
 const hexOverseerID = "cccccccc-dddd-4eee-8fff-000000000000"
 
-func loadWithOverseerPrincipal(t *testing.T, raw string) (*Config, error) {
+func loadWithOverseerPrincipal(t *testing.T, raw string) (*config.Config, error) {
 	t.Helper()
 	setEnv(t, validConfigEnv(nil))
 	t.Setenv("OVERSEER_PRINCIPAL_ID", raw)
-	return Load()
+	return config.Load()
 }
 
 func TestLoad_OverseerPrincipalIsCanonical(t *testing.T) {
@@ -974,7 +975,7 @@ func TestLoad_OverseerPrincipalMustBeAUUID(t *testing.T) {
 func TestLoad_YtProviderTogglesDefaultEnabled(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
 
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -993,7 +994,7 @@ func TestLoad_YtProviderTogglesRespectEnv(t *testing.T) {
 		"ACQUISITION_PAUSED": "true",
 	}))
 
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1009,13 +1010,13 @@ func TestLoad_ScrapedProviderKillSwitches(t *testing.T) {
 	base := validConfigEnv(nil)
 	switches := []struct {
 		env string
-		has func(*Config) bool
+		has func(*config.Config) bool
 	}{
-		{"SPOTIFY_ENABLED", (*Config).HasSpotify},
-		{"SOUNDCLOUD_ENABLED", (*Config).HasSoundCloud},
-		{"APPLEMUSIC_ENABLED", (*Config).HasAppleMusic},
-		{"AMAZONMUSIC_ENABLED", (*Config).HasAmazonMusic},
-		{"YTMUSIC_ENABLED", (*Config).HasYouTubeMusic},
+		{"SPOTIFY_ENABLED", (*config.Config).HasSpotify},
+		{"SOUNDCLOUD_ENABLED", (*config.Config).HasSoundCloud},
+		{"APPLEMUSIC_ENABLED", (*config.Config).HasAppleMusic},
+		{"AMAZONMUSIC_ENABLED", (*config.Config).HasAmazonMusic},
+		{"YTMUSIC_ENABLED", (*config.Config).HasYouTubeMusic},
 	}
 
 	for _, sw := range switches {
@@ -1025,7 +1026,7 @@ func TestLoad_ScrapedProviderKillSwitches(t *testing.T) {
 				os.Unsetenv(other.env)
 			}
 			setEnv(t, base)
-			cfg, err := Load()
+			cfg, err := config.Load()
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -1034,7 +1035,7 @@ func TestLoad_ScrapedProviderKillSwitches(t *testing.T) {
 			}
 
 			t.Setenv(sw.env, "false")
-			cfg, err = Load()
+			cfg, err = config.Load()
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -1049,7 +1050,7 @@ func TestLoad_AudioPrefetchKillSwitch(t *testing.T) {
 	t.Setenv("AUDIO_PREFETCH_ENABLED", "")
 	os.Unsetenv("AUDIO_PREFETCH_ENABLED")
 	setEnv(t, validConfigEnv(nil))
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1058,7 +1059,7 @@ func TestLoad_AudioPrefetchKillSwitch(t *testing.T) {
 	}
 
 	t.Setenv("AUDIO_PREFETCH_ENABLED", "false")
-	cfg, err = Load()
+	cfg, err = config.Load()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1071,7 +1072,7 @@ func TestLoad_NowPlayingEnrichmentKillSwitch(t *testing.T) {
 	t.Setenv("PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED", "")
 	os.Unsetenv("PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED")
 	setEnv(t, validConfigEnv(nil))
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1080,7 +1081,7 @@ func TestLoad_NowPlayingEnrichmentKillSwitch(t *testing.T) {
 	}
 
 	t.Setenv("PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED", "false")
-	cfg, err = Load()
+	cfg, err = config.Load()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1105,7 +1106,7 @@ func TestLoad_AcquisitionPaused(t *testing.T) {
 				t.Setenv("ACQUISITION_PAUSED", tc.env)
 			}
 
-			cfg, err := Load()
+			cfg, err := config.Load()
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -1134,7 +1135,7 @@ func TestLoad_DisabledJobs(t *testing.T) {
 				t.Setenv("DISABLED_JOBS", tc.env)
 			}
 
-			cfg, err := Load()
+			cfg, err := config.Load()
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -1153,7 +1154,7 @@ func TestLoad_DisabledJobs(t *testing.T) {
 func TestLoad_AudioKeyPrefixUnsetByDefault(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
 
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1179,7 +1180,7 @@ func TestLoad_AudioKeyPrefixMalformed(t *testing.T) {
 				"AUDIO_KEY_PREFIX": tt.prefix,
 			}))
 
-			_, err := Load()
+			_, err := config.Load()
 			if err == nil {
 				t.Fatalf("expected error for AUDIO_KEY_PREFIX=%q", tt.prefix)
 			}
@@ -1195,7 +1196,7 @@ func TestLoad_AudioKeyPrefixAccepted(t *testing.T) {
 		"AUDIO_KEY_PREFIX": "staging/",
 	}))
 
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1211,7 +1212,7 @@ func TestLoad_AudioKeyPrefixRefusedInProduction(t *testing.T) {
 		"MUSICBRAINZ_USER_AGENT": "altune/1.0 (ops@altune.app)",
 	}))
 
-	_, err := Load()
+	_, err := config.Load()
 	if err == nil {
 		t.Fatal("expected error for AUDIO_KEY_PREFIX set with ENV=production")
 	}
@@ -1226,7 +1227,7 @@ func TestLoad_AudioKeyPrefixAllowedOutsideProduction(t *testing.T) {
 		"AUDIO_KEY_PREFIX": "staging/",
 	}))
 
-	if _, err := Load(); err != nil {
+	if _, err := config.Load(); err != nil {
 		t.Fatalf("unexpected error for AUDIO_KEY_PREFIX outside production: %v", err)
 	}
 }
@@ -1241,6 +1242,7 @@ func TestValidate_AudioKeyPrefixRequiresKnownNonProdEnv(t *testing.T) {
 		{env: "live", wantErr: true},
 		{env: "Production", wantErr: true},
 		{env: "production", wantErr: true},
+		{env: " production ", wantErr: true},
 		{env: "   ", wantErr: true},
 		{env: "development", wantErr: false},
 		{env: "Test", wantErr: false},
@@ -1253,7 +1255,7 @@ func TestValidate_AudioKeyPrefixRequiresKnownNonProdEnv(t *testing.T) {
 				"AUDIO_KEY_PREFIX":       "staging/",
 				"MUSICBRAINZ_USER_AGENT": "altune/1.0 (ops@altune.app)",
 			}))
-			_, err := Load()
+			_, err := config.Load()
 			if err != nil && !tt.wantErr {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -1269,23 +1271,9 @@ func TestValidate_AudioKeyPrefixRequiresKnownNonProdEnv(t *testing.T) {
 	}
 }
 
-func TestValidate_AudioKeyPrefixRefusedWhenEnvEmpty(t *testing.T) {
-	setEnv(t, validConfigEnv(nil))
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	cfg.Env = ""
-	cfg.MusicBrainzUserAgent = "altune/1 (a@example.com)"
-	cfg.AudioKeyPrefix = "staging/"
-	if err := cfg.validate(); err == nil || !searchString(err.Error(), "AUDIO_KEY_PREFIX") {
-		t.Fatalf("expected AUDIO_KEY_PREFIX error for empty ENV, got: %v", err)
-	}
-}
-
 func TestConfig_IsDevelopmentNormalizesEnv(t *testing.T) {
 	for _, env := range []string{"Development", " development "} {
-		cfg := &Config{Env: env}
+		cfg := &config.Config{Env: env}
 		if !cfg.IsDevelopment() {
 			t.Errorf("IsDevelopment() = false for ENV=%q", env)
 		}
@@ -1294,7 +1282,7 @@ func TestConfig_IsDevelopmentNormalizesEnv(t *testing.T) {
 
 func TestLoad_AlertWebhookURLOptionalAndTrimmed(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load without ALERT_WEBHOOK_URL = %v, want nil", err)
 	}
@@ -1303,7 +1291,7 @@ func TestLoad_AlertWebhookURLOptionalAndTrimmed(t *testing.T) {
 	}
 
 	setEnv(t, validConfigEnv(map[string]string{"ALERT_WEBHOOK_URL": "  https://hooks.example/alerts \n"}))
-	cfg, err = Load()
+	cfg, err = config.Load()
 	if err != nil {
 		t.Fatalf("Load = %v", err)
 	}
@@ -1312,17 +1300,10 @@ func TestLoad_AlertWebhookURLOptionalAndTrimmed(t *testing.T) {
 	}
 }
 
-func TestValidateAudioKeyPrefix_RefusesProductionWithSurroundingWhitespace(t *testing.T) {
-	cfg := &Config{Env: " production ", AudioKeyPrefix: "staging/"}
-	if err := cfg.validateAudioKeyPrefix(); err == nil {
-		t.Fatal("expected an error for AUDIO_KEY_PREFIX with ENV=\" production \"")
-	}
-}
-
 func TestLoad_MusicBrainzUserAgentRequiredInProduction(t *testing.T) {
 	setEnv(t, validConfigEnv(map[string]string{"ENV": "production"}))
 
-	_, err := Load()
+	_, err := config.Load()
 	if err == nil || !strings.Contains(err.Error(), "MUSICBRAINZ_USER_AGENT") {
 		t.Fatalf("expected error naming MUSICBRAINZ_USER_AGENT, got %v", err)
 	}
@@ -1331,7 +1312,7 @@ func TestLoad_MusicBrainzUserAgentRequiredInProduction(t *testing.T) {
 func TestLoad_MusicBrainzUserAgentOptionalInDevelopment(t *testing.T) {
 	setEnv(t, validConfigEnv(map[string]string{"ENV": "development"}))
 
-	if _, err := Load(); err != nil {
+	if _, err := config.Load(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -1358,7 +1339,7 @@ func TestLoad_AcquisitionConfidenceFloor(t *testing.T) {
 			setEnv(t, validConfigEnv(overrides))
 			t.Cleanup(func() { os.Unsetenv("ACQUISITION_CONFIDENCE_FLOOR") })
 
-			cfg, err := Load()
+			cfg, err := config.Load()
 			if tt.wantErr {
 				if err == nil || !searchString(err.Error(), "ACQUISITION_CONFIDENCE_FLOOR") {
 					t.Fatalf("expected error naming ACQUISITION_CONFIDENCE_FLOOR, got: %v", err)
@@ -1395,7 +1376,7 @@ func TestLoad_ProductionDatabaseURLRequiresTLS(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			setEnv(t, validConfigEnv(map[string]string{"ENV": tt.env, "DATABASE_URL": tt.url, "MUSICBRAINZ_USER_AGENT": "altune/1 (a@example.com)"}))
 
-			_, err := Load()
+			_, err := config.Load()
 			if !tt.wantErr {
 				if err != nil {
 					t.Fatalf("expected load to succeed, got: %v", err)
@@ -1431,7 +1412,7 @@ func TestLoad_ProductionOCIEndpointRejectsPlaintext(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			setEnv(t, validConfigEnv(map[string]string{"ENV": "production", "OCI_S3_ENDPOINT": tt.endpoint, "MUSICBRAINZ_USER_AGENT": "altune/1 (a@example.com)"}))
 
-			_, err := Load()
+			_, err := config.Load()
 			if !tt.wantErr {
 				if err != nil {
 					t.Fatalf("expected load to succeed, got: %v", err)
@@ -1469,7 +1450,7 @@ func TestLoad_SilentDefaultSettingsRejected(t *testing.T) {
 			setEnv(t, env)
 			t.Setenv("PROVIDER_REPLAY_DIR", tc.env["PROVIDER_REPLAY_DIR"])
 
-			_, err := Load()
+			_, err := config.Load()
 			if err == nil || !strings.Contains(err.Error(), tc.wantVar) {
 				t.Fatalf("Load() error = %v, want it to name %s", err, tc.wantVar)
 			}
@@ -1483,7 +1464,7 @@ func TestLoad_SilentDefaultSettingsAccepted(t *testing.T) {
 			env := feedbackBaseEnv()
 			env["LOG_LEVEL"] = level
 			setEnv(t, env)
-			if _, err := Load(); err != nil {
+			if _, err := config.Load(); err != nil {
 				t.Fatalf("Load() with LOG_LEVEL=%s: %v", level, err)
 			}
 		})
@@ -1493,7 +1474,7 @@ func TestLoad_SilentDefaultSettingsAccepted(t *testing.T) {
 		env["PROVIDER_REPLAY_ENABLED"] = "true"
 		env["PROVIDER_REPLAY_DIR"] = "/tmp/replay"
 		setEnv(t, env)
-		if _, err := Load(); err != nil {
+		if _, err := config.Load(); err != nil {
 			t.Fatalf("Load(): %v", err)
 		}
 	})
@@ -1512,7 +1493,7 @@ func TestLoad_TestAuthClosedWhenEnvNotSetExplicitly(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			setEnv(t, validConfigEnv(tc.env))
-			cfg, err := Load()
+			cfg, err := config.Load()
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -1538,7 +1519,7 @@ func TestLoad_AlertingSettingsRejected(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			setEnv(t, validConfigEnv(map[string]string{tt.key: tt.value}))
 
-			_, err := Load()
+			_, err := config.Load()
 			if err == nil {
 				t.Fatalf("expected error for %s=%q", tt.key, tt.value)
 			}
@@ -1562,7 +1543,7 @@ func TestLoad_AlertingSettingsAccepted(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			setEnv(t, validConfigEnv(tt.env))
 
-			if _, err := Load(); err != nil {
+			if _, err := config.Load(); err != nil {
 				t.Fatalf("expected load to succeed, got: %v", err)
 			}
 		})
@@ -1586,7 +1567,7 @@ func TestValidate_NoAudioSources(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			setEnv(t, validConfigEnv(tc.env))
-			_, err := Load()
+			_, err := config.Load()
 			if !tc.wantErr {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
@@ -1608,14 +1589,14 @@ func TestValidate_NoAudioSources(t *testing.T) {
 func TestAcquisitionFixtureEnabled_ProviderReplayImpliesFixture(t *testing.T) {
 	tests := []struct {
 		name string
-		cfg  Config
+		cfg  config.Config
 		want bool
 	}{
-		{"replay in test", Config{Env: "test", ProviderReplayOptIn: true, ProviderReplayDir: "/tmp/replay"}, true},
-		{"replay without dir", Config{Env: "test", ProviderReplayOptIn: true}, false},
-		{"replay in production", Config{Env: "production", ProviderReplayOptIn: true, ProviderReplayDir: "/tmp/replay"}, false},
-		{"neither", Config{Env: "test"}, false},
-		{"fixture opt-in alone", Config{Env: "test", AcquisitionFixtureOptIn: true}, true},
+		{"replay in test", config.Config{Env: "test", ProviderReplayOptIn: true, ProviderReplayDir: "/tmp/replay"}, true},
+		{"replay without dir", config.Config{Env: "test", ProviderReplayOptIn: true}, false},
+		{"replay in production", config.Config{Env: "production", ProviderReplayOptIn: true, ProviderReplayDir: "/tmp/replay"}, false},
+		{"neither", config.Config{Env: "test"}, false},
+		{"fixture opt-in alone", config.Config{Env: "test", AcquisitionFixtureOptIn: true}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1631,14 +1612,14 @@ func TestLoad_YtDLPJSRuntime(t *testing.T) {
 		env := validConfigEnv(nil)
 		env["YTDLP_JS_RUNTIME"] = ok
 		setEnv(t, env)
-		if _, err := Load(); err != nil {
+		if _, err := config.Load(); err != nil {
 			t.Errorf("YTDLP_JS_RUNTIME=%q: unexpected error %v", ok, err)
 		}
 	}
 	env := validConfigEnv(nil)
 	env["YTDLP_JS_RUNTIME"] = "node --evil"
 	setEnv(t, env)
-	_, err := Load()
+	_, err := config.Load()
 	if err == nil || !searchString(err.Error(), "YTDLP_JS_RUNTIME") {
 		t.Fatalf("want error naming YTDLP_JS_RUNTIME, got %v", err)
 	}
@@ -1647,21 +1628,21 @@ func TestLoad_YtDLPJSRuntime(t *testing.T) {
 func TestLoad_YtDLPRemoteComponents(t *testing.T) {
 	env := validConfigEnv(nil)
 	setEnv(t, env)
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil || cfg.YtDLPRemoteComponents != "ejs:github" {
 		t.Fatalf("unset: got %q, %v; want ejs:github", cfg.YtDLPRemoteComponents, err)
 	}
 
 	env["YTDLP_REMOTE_COMPONENTS"] = ""
 	setEnv(t, env)
-	cfg, err = Load()
+	cfg, err = config.Load()
 	if err != nil || cfg.YtDLPRemoteComponents != "" {
 		t.Fatalf("empty: got %q, %v; want empty (fetch off)", cfg.YtDLPRemoteComponents, err)
 	}
 
 	env["YTDLP_REMOTE_COMPONENTS"] = "ejs:github --exec"
 	setEnv(t, env)
-	if _, err = Load(); err == nil || !searchString(err.Error(), "YTDLP_REMOTE_COMPONENTS") {
+	if _, err = config.Load(); err == nil || !searchString(err.Error(), "YTDLP_REMOTE_COMPONENTS") {
 		t.Fatalf("want error naming YTDLP_REMOTE_COMPONENTS, got %v", err)
 	}
 }
@@ -1669,14 +1650,14 @@ func TestLoad_YtDLPRemoteComponents(t *testing.T) {
 func TestLoad_YtDLPPOTokenURL(t *testing.T) {
 	env := validConfigEnv(nil)
 	setEnv(t, env)
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil || cfg.YtDLPPOTokenURL != "" {
 		t.Fatalf("unset: got %q, %v; want empty", cfg.YtDLPPOTokenURL, err)
 	}
 
 	env["YTDLP_POT_URL"] = "http://altune-pot:4416"
 	setEnv(t, env)
-	cfg, err = Load()
+	cfg, err = config.Load()
 	if err != nil || cfg.YtDLPPOTokenURL != "http://altune-pot:4416" {
 		t.Fatalf("set: got %q, %v; want http://altune-pot:4416", cfg.YtDLPPOTokenURL, err)
 	}
@@ -1684,7 +1665,7 @@ func TestLoad_YtDLPPOTokenURL(t *testing.T) {
 	for _, bad := range []string{"altune-pot:4416", "ftp://altune-pot", "http://", "http://pot:4416 --exec"} {
 		env["YTDLP_POT_URL"] = bad
 		setEnv(t, env)
-		if _, err = Load(); err == nil || !searchString(err.Error(), "YTDLP_POT_URL") {
+		if _, err = config.Load(); err == nil || !searchString(err.Error(), "YTDLP_POT_URL") {
 			t.Fatalf("%q: want error naming YTDLP_POT_URL, got %v", bad, err)
 		}
 	}
@@ -1693,7 +1674,7 @@ func TestLoad_YtDLPPOTokenURL(t *testing.T) {
 func TestLoad_PlaybackQueueRateDefaults(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
 
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1707,7 +1688,7 @@ func TestLoad_PlaybackQueueRateOverride(t *testing.T) {
 		"PLAYBACK_QUEUE_RATE_EVERY": "500ms", "PLAYBACK_QUEUE_RATE_BURST": "5",
 	}))
 
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1725,7 +1706,7 @@ func TestLoad_PlaybackQueueRateRejectsBadValues(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			setEnv(t, validConfigEnv(env))
-			if _, err := Load(); err == nil {
+			if _, err := config.Load(); err == nil {
 				t.Fatal("expected Load to fail")
 			}
 		})
@@ -1734,7 +1715,7 @@ func TestLoad_PlaybackQueueRateRejectsBadValues(t *testing.T) {
 
 func TestLoad_PlaybackErasureScanTimeout(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1743,7 +1724,7 @@ func TestLoad_PlaybackErasureScanTimeout(t *testing.T) {
 	}
 
 	setEnv(t, validConfigEnv(map[string]string{"PLAYBACK_ERASURE_SCAN_TIMEOUT": "2m"}))
-	if cfg, err = Load(); err != nil {
+	if cfg, err = config.Load(); err != nil {
 		t.Fatalf("override: %v", err)
 	}
 	if cfg.PlaybackErasureScanTimeout != 2*time.Minute {
@@ -1752,7 +1733,7 @@ func TestLoad_PlaybackErasureScanTimeout(t *testing.T) {
 
 	for _, bad := range []string{"0s", "-1s", "slow"} {
 		setEnv(t, validConfigEnv(map[string]string{"PLAYBACK_ERASURE_SCAN_TIMEOUT": bad}))
-		if _, err := Load(); err == nil {
+		if _, err := config.Load(); err == nil {
 			t.Errorf("PLAYBACK_ERASURE_SCAN_TIMEOUT=%q loaded, want an error", bad)
 		}
 	}
@@ -1767,7 +1748,7 @@ func TestLoad_ProductionAliasEnvRequiresDatabaseTLS(t *testing.T) {
 				"MUSICBRAINZ_USER_AGENT": "altune/1 (a@example.com)",
 			}))
 
-			_, err := Load()
+			_, err := config.Load()
 			if err == nil || !strings.Contains(err.Error(), "DATABASE_URL") {
 				t.Fatalf("ENV=%q with plaintext DATABASE_URL: want DATABASE_URL error, got %v", env, err)
 			}
@@ -1782,7 +1763,7 @@ func TestLoad_ProductionAliasEnvRejectsPlaintextObjectStorage(t *testing.T) {
 		"MUSICBRAINZ_USER_AGENT": "altune/1 (a@example.com)",
 	}))
 
-	_, err := Load()
+	_, err := config.Load()
 	if err == nil || !strings.Contains(err.Error(), "OCI_S3_ENDPOINT") {
 		t.Fatalf("ENV=prod with http OCI_S3_ENDPOINT: want OCI_S3_ENDPOINT error, got %v", err)
 	}
@@ -1793,7 +1774,7 @@ func TestLoad_ProductionAliasEnvRequiresMusicBrainzUserAgent(t *testing.T) {
 		t.Run(env, func(t *testing.T) {
 			setEnv(t, validConfigEnv(map[string]string{"ENV": env}))
 
-			_, err := Load()
+			_, err := config.Load()
 			if err == nil || !strings.Contains(err.Error(), "MUSICBRAINZ_USER_AGENT") {
 				t.Fatalf("ENV=%q without MUSICBRAINZ_USER_AGENT: want error naming it, got %v", env, err)
 			}
@@ -1809,7 +1790,7 @@ func TestLoad_KnownNonProductionEnvSkipsProductionChecks(t *testing.T) {
 				"DATABASE_URL": "postgres://u:sekret@db.example.com/x?sslmode=disable",
 			}))
 
-			if _, err := Load(); err != nil {
+			if _, err := config.Load(); err != nil {
 				t.Fatalf("ENV=%q: unexpected error %v", env, err)
 			}
 		})
@@ -1827,7 +1808,7 @@ func TestLoad_BehavioralCorpusPathReadOnlyDirRejected(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
 	setEnv(t, validConfigEnv(map[string]string{"BEHAVIORAL_CORPUS_PATH": dir + "/corpus.json"}))
 
-	_, err := Load()
+	_, err := config.Load()
 	if err == nil {
 		t.Fatal("Load accepted BEHAVIORAL_CORPUS_PATH in a read-only directory")
 	}
@@ -1840,7 +1821,7 @@ func TestLoad_BehavioralCorpusPathProbeLeavesNoFile(t *testing.T) {
 	dir := t.TempDir()
 	setEnv(t, validConfigEnv(map[string]string{"BEHAVIORAL_CORPUS_PATH": dir + "/corpus.json"}))
 
-	if _, err := Load(); err != nil {
+	if _, err := config.Load(); err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	entries, err := os.ReadDir(dir)
@@ -1872,7 +1853,7 @@ func TestLoad_DiscoverySearchProviders(t *testing.T) {
 				t.Setenv("DISCOVERY_SEARCH_PROVIDERS", tc.env)
 			}
 
-			cfg, err := Load()
+			cfg, err := config.Load()
 			if tc.wantErr {
 				if err == nil || !strings.Contains(err.Error(), "spotfy") {
 					t.Fatalf("err = %v, want an error naming the unknown provider", err)
@@ -1896,7 +1877,7 @@ func TestLoad_DiscoveryDurationsMustBePositive(t *testing.T) {
 				setEnv(t, validConfigEnv(nil))
 				t.Setenv(key, value)
 
-				if _, err := Load(); err == nil || !strings.Contains(err.Error(), key) {
+				if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), key) {
 					t.Fatalf("err = %v, want an error naming %s", err, key)
 				}
 			})
@@ -1908,14 +1889,14 @@ func TestLoad_DiscoverySearchDeadlineRejectsNegative(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
 	t.Setenv("DISCOVERY_SEARCH_DEADLINE", "-1s")
 
-	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "DISCOVERY_SEARCH_DEADLINE") {
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "DISCOVERY_SEARCH_DEADLINE") {
 		t.Fatalf("err = %v, want an error naming DISCOVERY_SEARCH_DEADLINE", err)
 	}
 }
 
 func TestConfig_TheAudioDBAPIKeyFromEnv(t *testing.T) {
 	setEnv(t, validConfigEnv(map[string]string{"THEAUDIODB_API_KEY": "audiodb-key"}))
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1925,7 +1906,7 @@ func TestConfig_TheAudioDBAPIKeyFromEnv(t *testing.T) {
 }
 
 func TestConfig_HasTheAudioDB(t *testing.T) {
-	if (&Config{}).HasTheAudioDB() {
+	if (&config.Config{}).HasTheAudioDB() {
 		t.Error("HasTheAudioDB() = true with no key, want false")
 	}
 }
@@ -1933,7 +1914,7 @@ func TestConfig_HasTheAudioDB(t *testing.T) {
 func TestLoad_TheUpgradeLaneIsOffByDefaultWithBoundedKnobs(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
 
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -1952,7 +1933,7 @@ func TestLoad_TheUpgradeLaneIsOffByDefaultWithBoundedKnobs(t *testing.T) {
 
 func TestLoad_TheInPlaceCheckHasItsOwnBoundedRate(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -1966,7 +1947,7 @@ func TestLoad_TheInPlaceCheckHasItsOwnBoundedRate(t *testing.T) {
 	for _, value := range []string{"0", "1"} {
 		setEnv(t, validConfigEnv(map[string]string{"ACQUISITION_UPGRADE_PREVIEW_A_MAX_BER": value}))
 
-		if _, err := Load(); err == nil || !searchString(err.Error(), "ACQUISITION_UPGRADE_PREVIEW_A_MAX_BER") {
+		if _, err := config.Load(); err == nil || !searchString(err.Error(), "ACQUISITION_UPGRADE_PREVIEW_A_MAX_BER") {
 			t.Errorf("Load with %s: error = %v, want it to name ACQUISITION_UPGRADE_PREVIEW_A_MAX_BER", value, err)
 		}
 	}
@@ -1974,7 +1955,7 @@ func TestLoad_TheInPlaceCheckHasItsOwnBoundedRate(t *testing.T) {
 	for _, value := range []string{"0", "3601"} {
 		setEnv(t, validConfigEnv(map[string]string{"ACQUISITION_UPGRADE_VERIFY_PER_HOUR": value}))
 
-		if _, err := Load(); err == nil || !searchString(err.Error(), "ACQUISITION_UPGRADE_VERIFY_PER_HOUR") {
+		if _, err := config.Load(); err == nil || !searchString(err.Error(), "ACQUISITION_UPGRADE_VERIFY_PER_HOUR") {
 			t.Errorf("Load with %s: error = %v, want it to name ACQUISITION_UPGRADE_VERIFY_PER_HOUR", value, err)
 		}
 	}
@@ -1982,7 +1963,7 @@ func TestLoad_TheInPlaceCheckHasItsOwnBoundedRate(t *testing.T) {
 
 func TestLoad_SupersededAudioGraceDefaultsToSevenDaysAndRejectsNegative(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -1991,7 +1972,7 @@ func TestLoad_SupersededAudioGraceDefaultsToSevenDaysAndRejectsNegative(t *testi
 	}
 
 	setEnv(t, validConfigEnv(map[string]string{"ACQUISITION_SUPERSEDED_AUDIO_GRACE": "-1h"}))
-	if _, err := Load(); err == nil || !searchString(err.Error(), "ACQUISITION_SUPERSEDED_AUDIO_GRACE") {
+	if _, err := config.Load(); err == nil || !searchString(err.Error(), "ACQUISITION_SUPERSEDED_AUDIO_GRACE") {
 		t.Fatalf("Load error = %v, want it to name ACQUISITION_SUPERSEDED_AUDIO_GRACE", err)
 	}
 }
@@ -2007,7 +1988,7 @@ func TestLoad_RejectsAnOutOfRangeUpgradeKnob(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			setEnv(t, validConfigEnv(map[string]string{name: value}))
 
-			_, err := Load()
+			_, err := config.Load()
 			if err == nil || !searchString(err.Error(), name) {
 				t.Fatalf("Load error = %v, want it to name %s", err, name)
 			}
@@ -2016,17 +1997,17 @@ func TestLoad_RejectsAnOutOfRangeUpgradeKnob(t *testing.T) {
 	t.Run("per hour above one a second", func(t *testing.T) {
 		setEnv(t, validConfigEnv(map[string]string{"ACQUISITION_UPGRADE_PER_HOUR": "3601"}))
 
-		if _, err := Load(); err == nil || !searchString(err.Error(), "ACQUISITION_UPGRADE_PER_HOUR") {
+		if _, err := config.Load(); err == nil || !searchString(err.Error(), "ACQUISITION_UPGRADE_PER_HOUR") {
 			t.Fatalf("Load error = %v, want it to name ACQUISITION_UPGRADE_PER_HOUR", err)
 		}
 	})
 }
 
 func TestConfig_HasTrackers(t *testing.T) {
-	if (&Config{}).HasTrackers() {
+	if (&config.Config{}).HasTrackers() {
 		t.Error("HasTrackers() = true with no key")
 	}
-	if !(&Config{GoogleSheetsAPIKey: "k"}).HasTrackers() {
+	if !(&config.Config{GoogleSheetsAPIKey: "k"}).HasTrackers() {
 		t.Error("HasTrackers() = false with a key")
 	}
 }
@@ -2044,7 +2025,7 @@ func TestValidate_TrackerHubNeededOnlyWithAKey(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			setEnv(t, validConfigEnv(tc.env))
-			_, err := Load()
+			_, err := config.Load()
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("Load err = %v, wantErr %v", err, tc.wantErr)
 			}
@@ -2056,7 +2037,7 @@ func TestValidate_UnreleasedSourceIsStoreOrCache(t *testing.T) {
 	for source, wantErr := range map[string]bool{"store": false, "cache": false, "Cache": true, "redis": true} {
 		t.Run(source, func(t *testing.T) {
 			setEnv(t, validConfigEnv(map[string]string{"UNRELEASED_SOURCE": source}))
-			_, err := Load()
+			_, err := config.Load()
 			if (err != nil) != wantErr || (err != nil && !strings.Contains(err.Error(), source)) {
 				t.Fatalf("Load err = %v, wantErr %v (an error must name %q)", err, wantErr, source)
 			}
@@ -2066,7 +2047,7 @@ func TestValidate_UnreleasedSourceIsStoreOrCache(t *testing.T) {
 
 func TestLoad_UnreleasedSourceDefaultsToStore(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
