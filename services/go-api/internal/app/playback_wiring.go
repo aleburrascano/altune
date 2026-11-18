@@ -59,7 +59,8 @@ func newQueueService(
 func newQueueHandler(queueSvc *playback.QueueService, metrics playbackMetricsSink, limit playback.QueueStateRateLimit) *playback.QueueHandler {
 	return playback.NewQueueHandler(queueSvc,
 		playback.WithQueueStateRateLimit(limit),
-		playback.WithQueueStateRateLimitMetrics(metrics))
+		playback.WithQueueStateRateLimitMetrics(metrics),
+		playback.WithQueueStateClock(time.Now))
 }
 
 func queueRateLimit(cfg *config.Config) playback.QueueStateRateLimit {

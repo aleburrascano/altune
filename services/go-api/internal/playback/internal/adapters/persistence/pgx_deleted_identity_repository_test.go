@@ -55,17 +55,16 @@ func TestListOwnersWithoutIdentity_QueryFailureStaysAFailure(t *testing.T) {
 	}
 }
 
-type blockingRowsQuerier struct{}
+type timingOutRowsQuerier struct{}
 
-func (blockingRowsQuerier) Query(ctx context.Context, _ string, _ ...any) (pgx.Rows, error) {
-	<-ctx.Done()
-	return &blockedRows{}, ctx.Err()
+func (timingOutRowsQuerier) Query(ctx context.Context, _ string, _ ...any) (pgx.Rows, error) {
+	return &blockedRows{}, timedOut(ctx, defaultOwnerScanPageTimeout)
 }
 
 type blockedRows struct{ pgx.Rows }
 
 func TestListOwnersWithoutIdentity_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
-	repo := playback.NewPgxDeletedIdentityRepository(blockingRowsQuerier{}, playback.WithOwnerScanPageTimeout(shortOpTimeout))
+	repo := playback.NewPgxDeletedIdentityRepository(timingOutRowsQuerier{})
 
 	err := runWithGuard(t, func() error {
 		_, err := repo.ListOwnersWithoutIdentity(context.Background(), shared.UserId{}, 10)
@@ -104,21 +103,5 @@ func TestNewPgxDeletedIdentityRepository_OwnerScanPageOutlastsTheRequestTimeout(
 
 	if got > defaultOwnerScanPageTimeout || got < defaultOwnerScanPageTimeout-time.Second || got <= request {
 		t.Fatalf("owner scan page deadline %s away, want %s, longer than the %s request deadline", got, defaultOwnerScanPageTimeout, request)
-	}
-}
-
-func TestNewPgxDeletedIdentityRepository_OwnerScanPageTimeoutIsConfigurable(t *testing.T) {
-	got := ownerScanDeadline(playback.WithOwnerScanPageTimeout(45 * time.Second))
-
-	if got > 45*time.Second || got < 44*time.Second {
-		t.Fatalf("owner scan page deadline %s away, want the configured 45s", got)
-	}
-}
-
-func TestNewPgxDeletedIdentityRepository_ZeroTimeoutKeepsTheDefault(t *testing.T) {
-	got := ownerScanDeadline(playback.WithOwnerScanPageTimeout(0))
-
-	if got > defaultOwnerScanPageTimeout || got < defaultOwnerScanPageTimeout-time.Second {
-		t.Fatalf("owner scan page deadline %s away, want the %s default", got, defaultOwnerScanPageTimeout)
 	}
 }

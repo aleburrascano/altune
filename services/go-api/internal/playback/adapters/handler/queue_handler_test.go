@@ -1,9 +1,7 @@
-package handler
+package handler_test
 
 import (
-	"altune/go-api/internal/playback/domain"
-	"altune/go-api/internal/playback/internal/core/ports"
-	"altune/go-api/internal/playback/internal/core/queue"
+	"altune/go-api/internal/playback"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/requestuser"
 	"context"
@@ -23,24 +21,24 @@ import (
 )
 
 type recordingRepo struct {
-	saved       *domain.QueueState
+	saved       *playback.QueueState
 	upserts     int
-	position    *domain.QueuePosition
+	position    *playback.QueuePosition
 	positionErr error
 }
 
-func (r *recordingRepo) Upsert(_ context.Context, state *domain.QueueState) error {
+func (r *recordingRepo) Upsert(_ context.Context, state *playback.QueueState) error {
 	r.saved = state
 	r.upserts++
 	return nil
 }
 
-func (r *recordingRepo) UpdatePosition(_ context.Context, position *domain.QueuePosition) error {
+func (r *recordingRepo) UpdatePosition(_ context.Context, position *playback.QueuePosition) error {
 	r.position = position
 	return r.positionErr
 }
 
-func (r *recordingRepo) GetForUser(_ context.Context, _ shared.UserId) (*domain.QueueState, error) {
+func (r *recordingRepo) GetForUser(_ context.Context, _ shared.UserId) (*playback.QueueState, error) {
 	return r.saved, nil
 }
 
@@ -51,12 +49,23 @@ func (r *recordingRepo) DeleteForUser(_ context.Context, _ shared.UserId) error 
 
 type nilNowPlaying struct{}
 
-func (nilNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string) (*ports.NowPlayingTrack, error) {
+func (nilNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string) (*playback.NowPlayingTrack, error) {
 	return nil, nil
 }
 
-func newHandler(repo ports.QueueStateRepository) *QueueHandler {
-	return NewQueueHandler(queue.New(repo, nilNowPlaying{}))
+type nowPlayingReader interface {
+	Lookup(ctx context.Context, userId shared.UserId, trackId string) (*playback.NowPlayingTrack, error)
+}
+
+type sourceDTO struct {
+	Kind       string `json:"kind"`
+	PlaylistId string `json:"playlist_id,omitempty"`
+	Name       string `json:"name,omitempty"`
+	Query      string `json:"query,omitempty"`
+}
+
+func newHandler(repo playback.QueueStateRepository) *playback.QueueHandler {
+	return playback.NewQueueHandler(playback.NewQueueService(repo, nilNowPlaying{}))
 }
 
 func savePut(body string) *http.Request {
@@ -72,7 +81,7 @@ func deleteReq() *http.Request {
 }
 
 func TestHandleForget_DeleteRouteErasesPersistedState(t *testing.T) {
-	repo := &recordingRepo{saved: &domain.QueueState{}}
+	repo := &recordingRepo{saved: &playback.QueueState{}}
 	h := newHandler(repo)
 	rec := httptest.NewRecorder()
 
@@ -114,8 +123,8 @@ func TestHandleSave_KnownSourcePersists(t *testing.T) {
 	if repo.saved == nil {
 		t.Fatal("expected state to be persisted")
 	}
-	if got := domain.ParseQueueSource(repo.saved.SourceId); got.PlaylistId != "a:b" || got.Name != "x" {
-		t.Errorf("stored source_id lost data: %q -> %+v", repo.saved.SourceId, got)
+	if got := repo.saved.SourceId; got != "playlist:a%3Ab:x" {
+		t.Errorf("stored source_id = %q, want the playlist id and name kept, escaped: %q", got, "playlist:a%3Ab:x")
 	}
 }
 
@@ -123,8 +132,8 @@ type staleRepo struct {
 	recordingRepo
 }
 
-func (r *staleRepo) Upsert(_ context.Context, _ *domain.QueueState) error {
-	return fmt.Errorf("upsert: %w", domain.ErrStaleQueueWrite)
+func (r *staleRepo) Upsert(_ context.Context, _ *playback.QueueState) error {
+	return fmt.Errorf("upsert: %w", playback.ErrStaleQueueWrite)
 }
 
 func TestHandleSave_RejectedStaleWriteIsConflictNot204(t *testing.T) {
@@ -182,18 +191,18 @@ func clientPlaylistId(storedId string) string {
 
 func resavedSource(t *testing.T, resumed json.RawMessage) string {
 	t.Helper()
-	var source *queueSourceDTO
+	var source *sourceDTO
 	if err := json.Unmarshal(resumed, &source); err != nil {
 		t.Fatalf("decode source %s: %v", resumed, err)
 	}
-	if source == nil || source.Kind != domain.SourceKindPlaylist {
+	if source == nil || source.Kind != "playlist" {
 		return string(resumed)
 	}
 	return fmt.Sprintf(`{"kind":"playlist","playlist_id":%q,"name":%q}`,
 		clientPlaylistId(source.PlaylistId), source.Name)
 }
 
-func resumedSource(t *testing.T, h *QueueHandler) json.RawMessage {
+func resumedSource(t *testing.T, h *playback.QueueHandler) json.RawMessage {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/queue-state", nil)
 	req = req.WithContext(requestuser.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
@@ -215,7 +224,7 @@ func TestQueueState_ResumedPlaylistWithoutAClientIdKeepsSaving(t *testing.T) {
 		"id-less token with a name": "playlist::Road+trip",
 	} {
 		t.Run(name, func(t *testing.T) {
-			h := newHandler(&recordingRepo{saved: &domain.QueueState{
+			h := newHandler(&recordingRepo{saved: &playback.QueueState{
 				TrackIds: []string{"00000000-0000-4000-8000-000000000001"}, NaturalOrder: []string{"00000000-0000-4000-8000-000000000001"}, SourceId: storedSourceId,
 			}})
 			rec := httptest.NewRecorder()
@@ -236,7 +245,7 @@ func TestQueueState_ResumedPlaylistWithoutAClientIdKeepsSaving(t *testing.T) {
 }
 
 func TestHandleGet_IdlessPlaylistRowResumesWithNoSource(t *testing.T) {
-	h := newHandler(&recordingRepo{saved: &domain.QueueState{SourceId: "playlist::"}})
+	h := newHandler(&recordingRepo{saved: &playback.QueueState{SourceId: "playlist::"}})
 
 	got := string(resumedSource(t, h))
 
@@ -277,18 +286,18 @@ func TestHandleSave_IdlessPlaylistLegacySourceIdIsStoredAsNoSource(t *testing.T)
 
 type failingNowPlaying struct{}
 
-func (failingNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string) (*ports.NowPlayingTrack, error) {
+func (failingNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string) (*playback.NowPlayingTrack, error) {
 	return nil, errors.New("lookup now-playing track: context deadline exceeded")
 }
 
-func getResume(t *testing.T, nowPlaying ports.NowPlayingReader, opts ...queue.Option) (int, map[string]json.RawMessage) {
+func getResume(t *testing.T, nowPlaying nowPlayingReader, opts ...playback.QueueServiceOption) (int, map[string]json.RawMessage) {
 	t.Helper()
-	repo := &recordingRepo{saved: &domain.QueueState{
+	repo := &recordingRepo{saved: &playback.QueueState{
 		TrackIds:     []string{"00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"},
 		CurrentIdx:   1,
 		NaturalOrder: []string{"00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"},
 	}}
-	h := NewQueueHandler(queue.New(repo, nowPlaying, opts...))
+	h := playback.NewQueueHandler(playback.NewQueueService(repo, nowPlaying, opts...))
 	req := httptest.NewRequest(http.MethodGet, "/queue-state", nil)
 	req = req.WithContext(requestuser.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
 	rec := httptest.NewRecorder()
@@ -325,13 +334,13 @@ func TestHandleGet_FailedNowPlayingLookupIsDistinguishableFromAbsentTrack(t *tes
 
 type panickingNowPlaying struct{ t *testing.T }
 
-func (p panickingNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string) (*ports.NowPlayingTrack, error) {
+func (p panickingNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string) (*playback.NowPlayingTrack, error) {
 	p.t.Error("nowPlaying.Lookup called with PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED=false")
 	return nil, errors.New("lookup must not run while disabled")
 }
 
 func TestHandleGet_DisabledNowPlayingEnrichmentSkipsLookupAndStillResumes(t *testing.T) {
-	code, body := getResume(t, panickingNowPlaying{t: t}, queue.WithNowPlayingEnrichment(false))
+	code, body := getResume(t, panickingNowPlaying{t: t}, playback.WithNowPlayingEnrichment(false))
 
 	if code != http.StatusOK {
 		t.Fatalf("resume must still succeed with 200 when enrichment is disabled, got %d", code)
@@ -396,8 +405,8 @@ func TestHandleSavePosition_InvalidBodyIsBadRequest(t *testing.T) {
 
 func TestHandleSavePosition_UnappliedSaveIsConflictWithItsCode(t *testing.T) {
 	for code, err := range map[string]error{
-		"playback.stale_queue_write":       fmt.Errorf("update: %w", domain.ErrStaleQueueWrite),
-		"playback.queue_position_mismatch": fmt.Errorf("update: %w", domain.ErrQueuePositionMismatch),
+		"playback.stale_queue_write":       fmt.Errorf("update: %w", playback.ErrStaleQueueWrite),
+		"playback.queue_position_mismatch": fmt.Errorf("update: %w", playback.ErrQueuePositionMismatch),
 	} {
 		t.Run(code, func(t *testing.T) {
 			rec := httptest.NewRecorder()
@@ -415,8 +424,8 @@ func TestHandleSavePosition_UnappliedSaveIsConflictWithItsCode(t *testing.T) {
 }
 
 func TestHandleSavePosition_SharesTheQueueStateRateLimit(t *testing.T) {
-	h := NewQueueHandler(queue.New(&recordingRepo{}, nilNowPlaying{}),
-		WithQueueStateRateLimit(QueueStateRateLimit{Every: time.Hour, Burst: 1}))
+	h := playback.NewQueueHandler(playback.NewQueueService(&recordingRepo{}, nilNowPlaying{}),
+		playback.WithQueueStateRateLimit(playback.QueueStateRateLimit{Every: time.Hour, Burst: 1}))
 	user := shared.NewUserId(uuid.New())
 	as := func(req *http.Request) *http.Request {
 		return req.WithContext(requestuser.ContextWithUserID(req.Context(), user))
@@ -433,7 +442,7 @@ func TestHandleSavePosition_SharesTheQueueStateRateLimit(t *testing.T) {
 }
 
 func TestHandleGet_ResponseIsUncachedAndNotSniffable(t *testing.T) {
-	h := NewQueueHandler(queue.New(&recordingRepo{saved: &domain.QueueState{
+	h := playback.NewQueueHandler(playback.NewQueueService(&recordingRepo{saved: &playback.QueueState{
 		TrackIds:     []string{"00000000-0000-4000-8000-000000000001"},
 		NaturalOrder: []string{"00000000-0000-4000-8000-000000000001"},
 	}}, nilNowPlaying{}))
@@ -455,8 +464,8 @@ type unavailableRepo struct {
 	recordingRepo
 }
 
-func (unavailableRepo) Upsert(_ context.Context, _ *domain.QueueState) error {
-	return fmt.Errorf("upsert: %w", domain.ErrQueueStateUnavailable)
+func (unavailableRepo) Upsert(_ context.Context, _ *playback.QueueState) error {
+	return fmt.Errorf("upsert: %w", playback.ErrQueueStateUnavailable)
 }
 
 func TestHandleSave_TransientFailureIsRetryable503(t *testing.T) {
@@ -496,7 +505,7 @@ type lookAlikeRepo struct {
 	recordingRepo
 }
 
-func (lookAlikeRepo) Upsert(_ context.Context, _ *domain.QueueState) error {
+func (lookAlikeRepo) Upsert(_ context.Context, _ *playback.QueueState) error {
 	return errors.New("queue state temporarily unavailable")
 }
 
@@ -518,7 +527,7 @@ type cancelingPositionRepo struct {
 	cancel context.CancelFunc
 }
 
-func (r *cancelingPositionRepo) UpdatePosition(ctx context.Context, _ *domain.QueuePosition) error {
+func (r *cancelingPositionRepo) UpdatePosition(ctx context.Context, _ *playback.QueuePosition) error {
 	r.cancel()
 	<-ctx.Done()
 	return ctx.Err()
@@ -597,8 +606,8 @@ func TestHandleSavePosition_LiveContextErrorsKeepTheirStatus(t *testing.T) {
 		code   string
 	}{
 		"internal":    {errors.New("boom"), http.StatusInternalServerError, "internal"},
-		"unavailable": {fmt.Errorf("update: %w", domain.ErrQueueStateUnavailable), http.StatusServiceUnavailable, "playback.unavailable"},
-		"conflict":    {fmt.Errorf("update: %w", domain.ErrStaleQueueWrite), http.StatusConflict, "playback.stale_queue_write"},
+		"unavailable": {fmt.Errorf("update: %w", playback.ErrQueueStateUnavailable), http.StatusServiceUnavailable, "playback.unavailable"},
+		"conflict":    {fmt.Errorf("update: %w", playback.ErrStaleQueueWrite), http.StatusConflict, "playback.stale_queue_write"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
@@ -616,10 +625,10 @@ type exactPositionRepo struct {
 	recordingRepo
 }
 
-func (r *exactPositionRepo) UpdatePosition(_ context.Context, position *domain.QueuePosition) error {
+func (r *exactPositionRepo) UpdatePosition(_ context.Context, position *playback.QueuePosition) error {
 	stored := r.saved
 	if stored == nil || position.CurrentIdx >= len(stored.TrackIds) || stored.TrackIds[position.CurrentIdx] != position.CurrentTrackId {
-		return domain.ErrQueuePositionMismatch
+		return playback.ErrQueuePositionMismatch
 	}
 	r.position = position
 	return nil

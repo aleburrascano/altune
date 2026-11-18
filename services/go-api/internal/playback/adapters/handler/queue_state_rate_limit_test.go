@@ -1,9 +1,7 @@
-package handler
+package handler_test
 
 import (
-	"altune/go-api/internal/playback/domain"
-	"altune/go-api/internal/playback/internal/core/ports"
-	"altune/go-api/internal/playback/internal/core/queue"
+	"altune/go-api/internal/playback"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/requestuser"
 	"context"
@@ -44,7 +42,7 @@ type countingRepo struct {
 	upserts int
 }
 
-func (r *countingRepo) Upsert(ctx context.Context, state *domain.QueueState) error {
+func (r *countingRepo) Upsert(ctx context.Context, state *playback.QueueState) error {
 	r.mu.Lock()
 	r.upserts++
 	r.mu.Unlock()
@@ -56,7 +54,7 @@ type countingRateLimitMetrics struct {
 	refusals int
 }
 
-var _ ports.RateLimitMetrics = (*countingRateLimitMetrics)(nil)
+var _ playback.RateLimitMetrics = (*countingRateLimitMetrics)(nil)
 
 func (m *countingRateLimitMetrics) QueueStateRateLimited() {
 	m.mu.Lock()
@@ -75,7 +73,7 @@ func requestAs(method string, user shared.UserId, body string) *http.Request {
 	return req.WithContext(requestuser.ContextWithUserID(req.Context(), user))
 }
 
-func serve(h *QueueHandler, req *http.Request) *httptest.ResponseRecorder {
+func serve(h *playback.QueueHandler, req *http.Request) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(rec, req)
 	return rec
@@ -84,8 +82,8 @@ func serve(h *QueueHandler, req *http.Request) *httptest.ResponseRecorder {
 func TestQueueStateRateLimit_RapidPutsFromOnePrincipalAreThrottled(t *testing.T) {
 	clock := newFakeClock()
 	repo := &countingRepo{}
-	limit := QueueStateRateLimit{Every: 2 * time.Second, Burst: 5}
-	h := NewQueueHandler(queue.New(repo, nilNowPlaying{}), WithQueueStateRateLimit(limit), withClock(clock.now))
+	limit := playback.QueueStateRateLimit{Every: 2 * time.Second, Burst: 5}
+	h := playback.NewQueueHandler(playback.NewQueueService(repo, nilNowPlaying{}), playback.WithQueueStateRateLimit(limit), playback.WithQueueStateClock(clock.now))
 	user := shared.NewUserId(uuid.New())
 
 	for i := range limit.Burst {
@@ -120,9 +118,9 @@ func TestQueueStateRateLimit_RapidPutsFromOnePrincipalAreThrottled(t *testing.T)
 func TestQueueStateRateLimit_CountsEveryRefusal(t *testing.T) {
 	clock := newFakeClock()
 	metrics := &countingRateLimitMetrics{}
-	limit := QueueStateRateLimit{Every: 2 * time.Second, Burst: 3}
-	h := NewQueueHandler(queue.New(&recordingRepo{}, nilNowPlaying{}),
-		WithQueueStateRateLimit(limit), withClock(clock.now), WithQueueStateRateLimitMetrics(metrics))
+	limit := playback.QueueStateRateLimit{Every: 2 * time.Second, Burst: 3}
+	h := playback.NewQueueHandler(playback.NewQueueService(&recordingRepo{}, nilNowPlaying{}),
+		playback.WithQueueStateRateLimit(limit), playback.WithQueueStateClock(clock.now), playback.WithQueueStateRateLimitMetrics(metrics))
 	user := shared.NewUserId(uuid.New())
 
 	for range limit.Burst {
@@ -146,8 +144,8 @@ func TestQueueStateRateLimit_CountsEveryRefusal(t *testing.T) {
 
 func TestQueueStateRateLimit_IsPerPrincipal(t *testing.T) {
 	clock := newFakeClock()
-	h := NewQueueHandler(queue.New(&recordingRepo{}, nilNowPlaying{}),
-		WithQueueStateRateLimit(QueueStateRateLimit{Every: time.Minute, Burst: 1}), withClock(clock.now))
+	h := playback.NewQueueHandler(playback.NewQueueService(&recordingRepo{}, nilNowPlaying{}),
+		playback.WithQueueStateRateLimit(playback.QueueStateRateLimit{Every: time.Minute, Burst: 1}), playback.WithQueueStateClock(clock.now))
 	noisy, quiet := shared.NewUserId(uuid.New()), shared.NewUserId(uuid.New())
 
 	serve(h, requestAs(http.MethodPut, noisy, validSaveBody))
@@ -161,7 +159,7 @@ func TestQueueStateRateLimit_IsPerPrincipal(t *testing.T) {
 
 func TestQueueStateRateLimit_DefaultAdmitsAutosaveCadence(t *testing.T) {
 	clock := newFakeClock()
-	h := NewQueueHandler(queue.New(&recordingRepo{}, nilNowPlaying{}), withClock(clock.now))
+	h := playback.NewQueueHandler(playback.NewQueueService(&recordingRepo{}, nilNowPlaying{}), playback.WithQueueStateClock(clock.now))
 	user := shared.NewUserId(uuid.New())
 
 	for range 3 {
@@ -185,8 +183,8 @@ func TestQueueStateRateLimit_DefaultAdmitsAutosaveCadence(t *testing.T) {
 
 func TestQueueStateRateLimit_ForgetIsNeverThrottled(t *testing.T) {
 	clock := newFakeClock()
-	h := NewQueueHandler(queue.New(&recordingRepo{}, nilNowPlaying{}),
-		WithQueueStateRateLimit(QueueStateRateLimit{Every: time.Hour, Burst: 1}), withClock(clock.now))
+	h := playback.NewQueueHandler(playback.NewQueueService(&recordingRepo{}, nilNowPlaying{}),
+		playback.WithQueueStateRateLimit(playback.QueueStateRateLimit{Every: time.Hour, Burst: 1}), playback.WithQueueStateClock(clock.now))
 	user := shared.NewUserId(uuid.New())
 
 	serve(h, requestAs(http.MethodPut, user, validSaveBody))
@@ -199,7 +197,7 @@ func TestQueueStateRateLimit_ForgetIsNeverThrottled(t *testing.T) {
 }
 
 func TestQueueStateRateLimit_UnauthenticatedStillGets401(t *testing.T) {
-	h := NewQueueHandler(queue.New(&recordingRepo{}, nilNowPlaying{}))
+	h := playback.NewQueueHandler(playback.NewQueueService(&recordingRepo{}, nilNowPlaying{}))
 	req := httptest.NewRequest(http.MethodPut, "/queue-state", strings.NewReader(validSaveBody))
 
 	if rec := serve(h, req); rec.Code != http.StatusUnauthorized {
@@ -209,9 +207,9 @@ func TestQueueStateRateLimit_UnauthenticatedStillGets401(t *testing.T) {
 
 func TestQueueStateRateLimit_RefusalWireFormat(t *testing.T) {
 	clock := newFakeClock()
-	limit := QueueStateRateLimit{Every: 2 * time.Second, Burst: 1}
-	h := NewQueueHandler(queue.New(&recordingRepo{}, nilNowPlaying{}),
-		WithQueueStateRateLimit(limit), withClock(clock.now))
+	limit := playback.QueueStateRateLimit{Every: 2 * time.Second, Burst: 1}
+	h := playback.NewQueueHandler(playback.NewQueueService(&recordingRepo{}, nilNowPlaying{}),
+		playback.WithQueueStateRateLimit(limit), playback.WithQueueStateClock(clock.now))
 	user := shared.NewUserId(uuid.New())
 
 	if rec := serve(h, requestAs(http.MethodPut, user, validSaveBody)); rec.Code != http.StatusNoContent {

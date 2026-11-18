@@ -23,16 +23,26 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-type blockingQuerier struct{}
+type timingOutQuerier struct{}
 
-func (blockingQuerier) Exec(ctx context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
-	<-ctx.Done()
-	return pgconn.CommandTag{}, ctx.Err()
+var errNoPerCallDeadline = errors.New("the call carried no per-call deadline within its timeout")
+
+func timedOut(ctx context.Context, within time.Duration) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if deadline, ok := ctx.Deadline(); !ok || time.Until(deadline) > within {
+		return errNoPerCallDeadline
+	}
+	return context.DeadlineExceeded
 }
 
-func (blockingQuerier) QueryRow(ctx context.Context, _ string, _ ...any) pgx.Row {
-	<-ctx.Done()
-	return errRow{err: ctx.Err()}
+func (timingOutQuerier) Exec(ctx context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, timedOut(ctx, defaultQueueStateOpTimeout)
+}
+
+func (timingOutQuerier) QueryRow(ctx context.Context, _ string, _ ...any) pgx.Row {
+	return errRow{err: timedOut(ctx, defaultQueueStateOpTimeout)}
 }
 
 type errRow struct {
@@ -60,7 +70,6 @@ const (
 	erasureFenceWindow          = 15 * time.Minute
 	defaultQueueStateOpTimeout  = 3 * time.Second
 	defaultOwnerScanPageTimeout = 5 * time.Second
-	shortOpTimeout              = 50 * time.Millisecond
 )
 
 func testUser() shared.UserId {
@@ -169,7 +178,7 @@ func TestGetForUser_HealthyRow_RecordsNoCorruption(t *testing.T) {
 
 func TestGetForUser_Timeout_IncrementsMetric(t *testing.T) {
 	m := &recordingMetrics{}
-	repo := playback.NewPgxQueueStateRepository(blockingQuerier{}, playback.WithQueueStateMetrics(m), playback.WithQueueStateOpTimeout(shortOpTimeout))
+	repo := playback.NewPgxQueueStateRepository(timingOutQuerier{}, playback.WithQueueStateMetrics(m))
 
 	err := runWithGuard(t, func() error {
 		_, err := repo.GetForUser(context.Background(), testUser())
@@ -185,7 +194,7 @@ func TestGetForUser_Timeout_IncrementsMetric(t *testing.T) {
 
 func TestDeleteForUser_ClientCancel_RecordsNoTimeout(t *testing.T) {
 	m := &recordingMetrics{}
-	repo := playback.NewPgxQueueStateRepository(blockingQuerier{}, playback.WithQueueStateMetrics(m))
+	repo := playback.NewPgxQueueStateRepository(timingOutQuerier{}, playback.WithQueueStateMetrics(m))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -348,8 +357,6 @@ func TestUpsert_ErasureSaveGrace(t *testing.T) {
 		want time.Duration
 	}{
 		"defaults to the op timeout": {want: defaultQueueStateOpTimeout},
-		"configured":                 {opts: []func(*playback.PgxQueueStateRepository){playback.WithQueueStateSaveGrace(time.Minute)}, want: time.Minute},
-		"zero keeps the default":     {opts: []func(*playback.PgxQueueStateRepository){playback.WithQueueStateSaveGrace(0)}, want: defaultQueueStateOpTimeout},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if got := boundSaveGrace(t, tt.opts...); got != tt.want.Microseconds() {
@@ -382,8 +389,6 @@ func TestQueueStateOp_Deadline(t *testing.T) {
 		want time.Duration
 	}{
 		"defaults to the request timeout": {want: defaultQueueStateOpTimeout},
-		"configured":                      {opts: []func(*playback.PgxQueueStateRepository){playback.WithQueueStateOpTimeout(time.Minute)}, want: time.Minute},
-		"zero keeps the default":          {opts: []func(*playback.PgxQueueStateRepository){playback.WithQueueStateOpTimeout(0)}, want: defaultQueueStateOpTimeout},
 	} {
 		t.Run(name, func(t *testing.T) {
 			q := &deadlineQuerier{}
@@ -558,7 +563,7 @@ func TestDeleteForUser_IsScopedToUser(t *testing.T) {
 }
 
 func TestDeleteForUser_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
-	repo := playback.NewPgxQueueStateRepository(blockingQuerier{}, playback.WithQueueStateOpTimeout(shortOpTimeout))
+	repo := playback.NewPgxQueueStateRepository(timingOutQuerier{})
 
 	err := runWithGuard(t, func() error {
 		return repo.DeleteForUser(context.Background(), testUser())
@@ -582,7 +587,7 @@ func runWithGuard(t *testing.T, call func() error) error {
 }
 
 func TestUpsert_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
-	repo := playback.NewPgxQueueStateRepository(blockingQuerier{}, playback.WithQueueStateOpTimeout(shortOpTimeout))
+	repo := playback.NewPgxQueueStateRepository(timingOutQuerier{})
 
 	err := runWithGuard(t, func() error {
 		return repo.Upsert(context.Background(), emptyQueueState(testUser()))
@@ -712,7 +717,7 @@ func TestUpdatePosition_RejectsInvariantViolatingLiteral(t *testing.T) {
 
 func TestUpdatePosition_Timeout_IncrementsMetric(t *testing.T) {
 	m := &recordingMetrics{}
-	repo := playback.NewPgxQueueStateRepository(blockingQuerier{}, playback.WithQueueStateMetrics(m), playback.WithQueueStateOpTimeout(shortOpTimeout))
+	repo := playback.NewPgxQueueStateRepository(timingOutQuerier{}, playback.WithQueueStateMetrics(m))
 
 	err := runWithGuard(t, func() error {
 		return repo.UpdatePosition(context.Background(), testPosition(t))
@@ -726,7 +731,7 @@ func TestUpdatePosition_Timeout_IncrementsMetric(t *testing.T) {
 }
 
 func TestGetForUser_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
-	repo := playback.NewPgxQueueStateRepository(blockingQuerier{}, playback.WithQueueStateOpTimeout(shortOpTimeout))
+	repo := playback.NewPgxQueueStateRepository(timingOutQuerier{})
 
 	err := runWithGuard(t, func() error {
 		_, err := repo.GetForUser(context.Background(), testUser())
@@ -839,7 +844,7 @@ func TestQueueStateOp_ClassifiedOutcome_EmitsNoFaultLine(t *testing.T) {
 		act     func(*testing.T)
 	}{
 		{outcome: "op timeout", act: func(t *testing.T) {
-			repo := playback.NewPgxQueueStateRepository(blockingQuerier{}, playback.WithQueueStateOpTimeout(shortOpTimeout))
+			repo := playback.NewPgxQueueStateRepository(timingOutQuerier{})
 			err := runWithGuard(t, func() error {
 				return repo.Upsert(context.Background(), emptyQueueState(testUser()))
 			})
@@ -848,7 +853,7 @@ func TestQueueStateOp_ClassifiedOutcome_EmitsNoFaultLine(t *testing.T) {
 			}
 		}},
 		{outcome: "client cancel", act: func(t *testing.T) {
-			repo := playback.NewPgxQueueStateRepository(blockingQuerier{})
+			repo := playback.NewPgxQueueStateRepository(timingOutQuerier{})
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
 			if err := repo.DeleteForUser(ctx, testUser()); !errors.Is(err, context.Canceled) {

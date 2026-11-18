@@ -1,0 +1,19 @@
+{
+  "removed": [
+    "T1 internal/playback/adapters/handler/queue_handler_test.go imports domain/queue_position.go, behind playback's door",
+    "T1 internal/playback/adapters/handler/queue_handler_test.go imports domain/queue_source.go, behind playback's door",
+    "T1 internal/playback/adapters/handler/queue_handler_test.go imports domain/queue_state.go, behind playback's door",
+    "T1 internal/playback/adapters/handler/queue_handler_test.go imports domain/stale_write_error.go, behind playback's door",
+    "T1 internal/playback/adapters/handler/queue_handler_test.go imports domain/unavailable_error.go, behind playback's door",
+    "T1 internal/playback/adapters/handler/queue_handler_test.go imports internal/core/ports/now_playing.go, behind playback's door",
+    "T1 internal/playback/adapters/handler/queue_handler_test.go imports internal/core/ports/queue_state.go, behind playback's door",
+    "T1 internal/playback/adapters/handler/queue_handler_test.go imports internal/core/queue/service.go, behind playback's door",
+    "T1 internal/playback/adapters/handler/queue_handler_test.go is in package handler, so it sees inside the module: use package handler_test and import the door",
+    "T1 internal/playback/adapters/handler/queue_state_rate_limit_test.go imports domain/queue_state.go, behind playback's door",
+    "T1 internal/playback/adapters/handler/queue_state_rate_limit_test.go imports internal/core/ports/queue_state.go, behind playback's door",
+    "T1 internal/playback/adapters/handler/queue_state_rate_limit_test.go imports internal/core/queue/service.go, behind playback's door",
+    "T1 internal/playback/adapters/handler/queue_state_rate_limit_test.go is in package handler, so it sees inside the module: use package handler_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}

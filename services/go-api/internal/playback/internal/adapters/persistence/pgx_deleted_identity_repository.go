@@ -21,29 +21,15 @@ type DeletedIdentityDB interface {
 }
 
 type PgxDeletedIdentityRepository struct {
-	pool    DeletedIdentityDB
-	timeout time.Duration
+	pool DeletedIdentityDB
 }
 
 func NewPgxDeletedIdentityRepository(pool DeletedIdentityDB, opts ...func(*PgxDeletedIdentityRepository)) *PgxDeletedIdentityRepository {
-	r := &PgxDeletedIdentityRepository{pool: pool, timeout: DefaultOwnerScanPageTimeout}
+	r := &PgxDeletedIdentityRepository{pool: pool}
 	for _, opt := range opts {
 		opt(r)
 	}
 	return r
-}
-
-func WithOwnerScanPageTimeout(d time.Duration) func(*PgxDeletedIdentityRepository) {
-	return func(r *PgxDeletedIdentityRepository) {
-		r.timeout = d
-	}
-}
-
-func (r *PgxDeletedIdentityRepository) opTimeout() time.Duration {
-	if r.timeout > 0 {
-		return r.timeout
-	}
-	return DefaultOwnerScanPageTimeout
 }
 
 const listOwnersWithoutIdentityOp = "list owners without identity"
@@ -64,7 +50,7 @@ const ownersWithoutIdentitySQL = `
 	ORDER BY p.user_id`
 
 func (r *PgxDeletedIdentityRepository) ListOwnersWithoutIdentity(ctx context.Context, after shared.UserId, window int) (ports.OwnerScanPage, error) {
-	ctx, cancel := context.WithTimeout(ctx, r.opTimeout())
+	ctx, cancel := context.WithTimeout(ctx, DefaultOwnerScanPageTimeout)
 	defer cancel()
 
 	rows, err := r.pool.Query(ctx, ownersWithoutIdentitySQL, after.UUID(), window)
