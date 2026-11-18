@@ -48,6 +48,7 @@ export {
   trackSubtitleWithFeaturing,
 } from '@features/detail/core/formatters';
 export { LastFmEnrichmentSection } from '@features/detail/view/LastFmEnrichmentSection';
+export { DetailNavigatorProvider } from '@features/detail/view/DetailNavigatorProvider';
 export {
   detailRouteFor,
   featuringHref,

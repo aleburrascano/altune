@@ -13,8 +13,6 @@ import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/q
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
-
 function relatedTrack(title: string): DiscoveryResult {
   return {
     kind: 'track',

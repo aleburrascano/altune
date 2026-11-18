@@ -11,7 +11,10 @@ import {
   useOpenDetail,
   useOpenFeaturing,
 } from '@features/detail';
-jest.mock('expo-router', () => ({ useRouter: jest.fn() }));
+import {
+  navigatorWrapper,
+  recordingNavigator,
+} from '@features/detail/__tests__/recordingNavigator';
 
 function track(title: string): DiscoveryResult {
   return {
@@ -67,11 +70,13 @@ describe('openDetail', () => {
 
 describe('useOpenDetail', () => {
   it('pushes the same href openDetail does', () => {
-    const push = jest.fn();
-    jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ push });
+    const navigator = recordingNavigator();
+    const { push } = navigator;
     const result = track('Midnight City');
 
-    const { result: hook } = renderHook(() => useOpenDetail('/library/detail'));
+    const { result: hook } = renderHook(() => useOpenDetail('/library/detail'), {
+      wrapper: navigatorWrapper(navigator),
+    });
     hook.current(result);
 
     expect(push).toHaveBeenCalledTimes(1);
@@ -101,11 +106,13 @@ describe('featuringHref', () => {
 
 describe('useOpenFeaturing', () => {
   it('pushes the same href featuringHref builds', () => {
-    const push = jest.fn();
-    jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ push });
+    const navigator = recordingNavigator();
+    const { push } = navigator;
     const artist = { name: 'Kid', mbid: 'mb-1', deezer_id: 42 };
 
-    const { result: hook } = renderHook(() => useOpenFeaturing('/library/detail'));
+    const { result: hook } = renderHook(() => useOpenFeaturing('/library/detail'), {
+      wrapper: navigatorWrapper(navigator),
+    });
     hook.current(artist);
 
     expect(push).toHaveBeenCalledWith(featuringHref('/library/detail', artist));

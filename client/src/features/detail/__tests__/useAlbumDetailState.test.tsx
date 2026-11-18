@@ -8,6 +8,7 @@ import { libraryKeys } from '@shared/query';
 import { readDetailHandoff } from '@shared/navigation';
 
 import {
+  DetailNavigatorProvider,
   type DetailPort,
   useAlbumDetailState,
   SAVE_ALL_CONCURRENCY,
@@ -16,9 +17,16 @@ import {
 } from '@features/detail';
 import { createPortWrapper, createTestQueryClient, idlePlayback } from '@testing/queryHarness';
 
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
-}));
+import {
+  recordingNavigator,
+  type RecordingNavigator,
+} from '@features/detail/__tests__/recordingNavigator';
+
+let navigator: RecordingNavigator;
+
+beforeEach(() => {
+  navigator = recordingNavigator();
+});
 
 const albumResult: DiscoveryResult = {
   kind: 'album',
@@ -128,7 +136,9 @@ async function renderAlbum(port: DetailPort, album: DiscoveryResult = albumResul
   const hook = renderHook(() => useAlbumDetailState(album, '/discover/detail'), {
     wrapper: ({ children }) => (
       <PlaybackContext.Provider value={idlePlayback}>
-        <Ports>{children}</Ports>
+        <Ports>
+          <DetailNavigatorProvider navigator={navigator}>{children}</DetailNavigatorProvider>
+        </Ports>
       </PlaybackContext.Provider>
     ),
   });
@@ -320,8 +330,7 @@ describe('saving all with a partial library lookup', () => {
 
 describe('useAlbumDetailState — onTrackPress', () => {
   it('pushes the given detail route carrying the tapped track', async () => {
-    const push = jest.fn();
-    jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ push, replace: jest.fn() });
+    const { push } = navigator;
 
     const track = unownedTrack(0);
     const { result } = await renderAlbum(savingPort(albumSeed([])).port);

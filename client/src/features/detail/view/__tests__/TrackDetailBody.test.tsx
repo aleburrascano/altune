@@ -25,6 +25,10 @@ import {
   signInTestUser,
   type RecordingFeaturePorts,
 } from '@testing/queryHarness';
+import {
+  navigatorWrapper,
+  recordingNavigator,
+} from '@features/detail/__tests__/recordingNavigator';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -33,8 +37,6 @@ jest.setTimeout(20000);
 function resultCarriedBy(handoffId: string | string[] | undefined): string | null {
   return readDetailHandoff(handoffId)?.result.title ?? null;
 }
-
-jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
 
 interface RecordedRequest {
   path: string;
@@ -306,8 +308,8 @@ describe('TrackDetailBody retry after a failed save', () => {
 
 describe('TrackDetailBody pins its router calls', () => {
   it('pushes the featuring route naming the tapped featured artist', async () => {
-    const push = jest.fn();
-    jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ push });
+    const navigator = recordingNavigator();
+    const { push } = navigator;
 
     render(
       <TrackDetailBody
@@ -320,10 +322,9 @@ describe('TrackDetailBody pins its router calls', () => {
         detailRoute="/discover/detail"
       />,
       {
-        wrapper: createPlaybackWrapper(
-          createTestQueryClient(),
-          idlePlayback,
-          createRecordingPorts(),
+        wrapper: navigatorWrapper(
+          navigator,
+          createPlaybackWrapper(createTestQueryClient(), idlePlayback, createRecordingPorts()),
         ),
       },
     );
@@ -337,8 +338,8 @@ describe('TrackDetailBody pins its router calls', () => {
   });
 
   it('pushes the exact related track that was tapped', async () => {
-    const push = jest.fn();
-    jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ push });
+    const navigator = recordingNavigator();
+    const { push } = navigator;
 
     __http.reply('GET /v1/discovery/tracks/soundcloud/sc-1/related', {
       status: 200,
@@ -365,7 +366,10 @@ describe('TrackDetailBody pins its router calls', () => {
     };
 
     render(<RelatedTracksSection result={result} detailRoute="/discover/detail" />, {
-      wrapper: createPlaybackWrapper(createTestQueryClient(), idlePlayback, createRecordingPorts()),
+      wrapper: navigatorWrapper(
+        navigator,
+        createPlaybackWrapper(createTestQueryClient(), idlePlayback, createRecordingPorts()),
+      ),
     });
 
     fireEvent.press(await screen.findByTestId('detail-related-0'));

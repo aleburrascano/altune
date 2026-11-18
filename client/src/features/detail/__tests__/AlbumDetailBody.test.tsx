@@ -14,10 +14,6 @@ import {
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn() }),
-}));
-
 const UNOWNED_TRACK_COUNT = 3;
 const LIBRARY_TRACKS = 'GET /v1/tracks';
 
