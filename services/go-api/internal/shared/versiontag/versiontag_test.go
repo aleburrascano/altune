@@ -1,6 +1,7 @@
-package versiontag
+package versiontag_test
 
 import (
+	"altune/go-api/internal/shared/versiontag"
 	"slices"
 	"strings"
 	"testing"
@@ -19,7 +20,7 @@ func TestLabels_RealLibraryTitles(t *testing.T) {
 		"Never Let Me Down (2019 Mix)":          nil,
 	}
 	for title, want := range cases {
-		if got := Labels(title); !slices.Equal(got, want) {
+		if got := versiontag.Labels(title); !slices.Equal(got, want) {
 			t.Errorf("Labels(%q) = %v, want %v", title, got, want)
 		}
 	}
@@ -37,7 +38,7 @@ func TestWithoutVersionPhrases_KeepsTitleWords(t *testing.T) {
 		"Pt. 2 (Live in the Booth)": "pt 2",
 	}
 	for title, want := range cases {
-		if got := strings.Join(WithoutVersionPhrases(Tokens(title)), " "); got != want {
+		if got := strings.Join(versiontag.WithoutVersionPhrases(versiontag.Tokens(title)), " "); got != want {
 			t.Errorf("WithoutVersionPhrases(%q) = %q, want %q", title, got, want)
 		}
 	}
@@ -58,7 +59,7 @@ func TestWithoutRerecordingPhrases(t *testing.T) {
 		{"Cold Heart (PNAU Remix)", "cold heart pnau remix", false},
 	}
 	for _, c := range cases {
-		kept, found := WithoutRerecordingPhrases(Tokens(c.title))
+		kept, found := versiontag.WithoutRerecordingPhrases(versiontag.Tokens(c.title))
 		if got := strings.Join(kept, " "); got != c.want || found != c.found {
 			t.Errorf("WithoutRerecordingPhrases(%q) = %q, %v; want %q, %v", c.title, got, found, c.want, c.found)
 		}
@@ -74,7 +75,7 @@ func TestRecordingLabels_NameADifferentRecording(t *testing.T) {
 		"Novacane (Explicit Version)":                                "",
 		"Everybody Wants To Rule The World (Live From Franklin, TN)": "live",
 	} {
-		if got := strings.Join(RecordingLabels(title), " "); got != want {
+		if got := strings.Join(versiontag.RecordingLabels(title), " "); got != want {
 			t.Errorf("RecordingLabels(%q) = %q, want %q", title, got, want)
 		}
 	}
@@ -94,7 +95,7 @@ func TestMatches_ReleaseVariantsCarryTheirVeto(t *testing.T) {
 	}
 	for title, want := range cases {
 		var found bool
-		for _, entry := range Matches(Tokens(title)) {
+		for _, entry := range versiontag.Matches(versiontag.Tokens(title)) {
 			if entry.Label == want.label {
 				found = true
 				if entry.Veto != want.veto {
@@ -109,10 +110,10 @@ func TestMatches_ReleaseVariantsCarryTheirVeto(t *testing.T) {
 }
 
 func TestLabels_RecordingLabelsKeepReleaseVariants(t *testing.T) {
-	if got := Labels("Song (Acoustic) (Demo) (Remastered)"); !slices.Equal(got, []string{"acoustic", "demo", "remaster"}) {
+	if got := versiontag.Labels("Song (Acoustic) (Demo) (Remastered)"); !slices.Equal(got, []string{"acoustic", "demo", "remaster"}) {
 		t.Errorf("Labels = %v", got)
 	}
-	if got := RecordingLabels("Song (Acoustic) (Demo) (Remastered)"); !slices.Equal(got, []string{"acoustic", "demo"}) {
+	if got := versiontag.RecordingLabels("Song (Acoustic) (Demo) (Remastered)"); !slices.Equal(got, []string{"acoustic", "demo"}) {
 		t.Errorf("RecordingLabels = %v", got)
 	}
 }
@@ -134,7 +135,7 @@ func TestParseTags_PartAndSequelNumbersAreData(t *testing.T) {
 		"Malcolm X":              1,
 	}
 	for title, want := range cases {
-		if got := ParseTags(title).Part; got != want {
+		if got := versiontag.ParseTags(title).Part; got != want {
 			t.Errorf("ParseTags(%q).Part = %d, want %d", title, got, want)
 		}
 	}
@@ -153,9 +154,9 @@ func TestParseTags_VersionNumberIsALabelNotAPart(t *testing.T) {
 		{"Song Part 2 (Version 2)", 2, "v2"},
 	}
 	for _, tc := range cases {
-		got := ParseTags(tc.title)
-		if got.Part != tc.wantPart || !slices.Equal(got.Labels, []string{tc.wantLabel}) {
-			t.Errorf("ParseTags(%q) = %+v, want part %d and label %q", tc.title, got, tc.wantPart, tc.wantLabel)
+		want := versiontag.Tags{Part: tc.wantPart, Labels: []string{tc.wantLabel}}
+		if got := versiontag.ParseTags(tc.title); !got.Equal(want) {
+			t.Errorf("ParseTags(%q) = %+v, want %+v", tc.title, got, want)
 		}
 	}
 }
@@ -171,7 +172,7 @@ func TestTags_EqualReadsTwoVersion2TitlesAsTheSameVersion(t *testing.T) {
 		{"Song 2", "Song (Version 2)", false},
 	}
 	for _, tc := range cases {
-		if got := ParseTags(tc.a).Equal(ParseTags(tc.b)); got != tc.want {
+		if got := versiontag.ParseTags(tc.a).Equal(versiontag.ParseTags(tc.b)); got != tc.want {
 			t.Errorf("ParseTags(%q).Equal(ParseTags(%q)) = %v, want %v", tc.a, tc.b, got, tc.want)
 		}
 	}
@@ -191,7 +192,7 @@ func TestTags_EqualComparesPartAndLabels(t *testing.T) {
 		{"Song 2 (Live)", "Song 2", false},
 	}
 	for _, tc := range cases {
-		if got := ParseTags(tc.a).Equal(ParseTags(tc.b)); got != tc.want {
+		if got := versiontag.ParseTags(tc.a).Equal(versiontag.ParseTags(tc.b)); got != tc.want {
 			t.Errorf("ParseTags(%q).Equal(ParseTags(%q)) = %v, want %v", tc.a, tc.b, got, tc.want)
 		}
 	}
@@ -212,7 +213,7 @@ func TestWithoutRerecordingPhrases_LoneWordsAndEmptyInputAreNotAPhrase(t *testin
 		{"Song (Album Version)", "song album version"},
 	}
 	for _, c := range cases {
-		kept, found := WithoutRerecordingPhrases(Tokens(c.title))
+		kept, found := versiontag.WithoutRerecordingPhrases(versiontag.Tokens(c.title))
 		if got := strings.Join(kept, " "); got != c.want || found {
 			t.Errorf("WithoutRerecordingPhrases(%q) = %q, %v; want %q, false", c.title, got, found, c.want)
 		}
@@ -240,7 +241,7 @@ func TestBaseTitle_SplitsTheVersionTagFromTheTitle(t *testing.T) {
 		{"Song (Sped Up)", "Song (Sped Up)", ""},
 		{"Song [Lossless]", "Song [Lossless]", ""},
 	} {
-		base, label := BaseTitle(c.title)
+		base, label := versiontag.BaseTitle(c.title)
 		if base != c.base || label != c.label {
 			t.Errorf("BaseTitle(%q) = %q, %q; want %q, %q", c.title, base, label, c.base, c.label)
 		}
@@ -254,7 +255,7 @@ func TestBaseTitle_FoldsADecimalVersionTag(t *testing.T) {
 		{"Song (V3.6) [V4]", "Song", "V3.6 V4"},
 		{"Song [3.6]", "Song [3.6]", ""},
 	} {
-		base, label := BaseTitle(c.title)
+		base, label := versiontag.BaseTitle(c.title)
 		if base != c.base || label != c.label {
 			t.Errorf("BaseTitle(%q) = %q, %q; want %q, %q", c.title, base, label, c.base, c.label)
 		}
@@ -269,7 +270,7 @@ func TestWithoutRerecordingPhrases_FoldsCaseAndCurlyApostrophe(t *testing.T) {
 		"Song (Classic Version) [Live]": "song live",
 		"Song - Re-Recorded Version":    "song version",
 	} {
-		kept, found := WithoutRerecordingPhrases(Tokens(title))
+		kept, found := versiontag.WithoutRerecordingPhrases(versiontag.Tokens(title))
 		if got := strings.Join(kept, " "); got != want || !found {
 			t.Errorf("WithoutRerecordingPhrases(%q) = %q, %v; want %q, true", title, got, found, want)
 		}
