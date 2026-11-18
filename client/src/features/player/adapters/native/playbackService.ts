@@ -59,6 +59,7 @@ import {
   reportingQueueFailure,
   reportQueueFailure,
 } from '@features/player/adapters/native/queueFailureReport';
+import { warn } from '@shared/log';
 
 export async function resetPlaybackForSignOut(): Promise<void> {
   claimSessionReset();
@@ -151,7 +152,7 @@ function warnUnmappedPlaybackError(
   { code, message }: PlaybackErrorEvent,
   failedKey: TrackKey | null,
 ): void {
-  console.warn('[playback] unmapped native error', {
+  warn('[playback] unmapped native error', {
     code: redactPlaybackErrorMessage(code ?? ''),
     trackKey: failedKey && redactPlaybackErrorMessage(failedKey),
     error: redactPlaybackErrorMessage(message ?? ''),
@@ -159,7 +160,7 @@ function warnUnmappedPlaybackError(
 }
 
 function warnAudioRecoveryFailed(err: unknown): void {
-  console.warn('[playback] audio recovery failed', { error: redactedPlaybackFailure(err) });
+  warn('[playback] audio recovery failed', { error: redactedPlaybackFailure(err) });
   recordAudioRecoveryFailure();
 }
 

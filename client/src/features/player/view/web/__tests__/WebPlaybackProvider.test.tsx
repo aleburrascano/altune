@@ -22,6 +22,7 @@ import {
   toVolume,
   usePlaybackVolumeStore,
 } from '@features/player';
+import { recordLogs } from '@shared/log';
 const { __http } = require('@testing/doubles/fetch.js');
 
 const HEALTH_ROUTE = 'POST /v1/discovery/events';
@@ -1404,7 +1405,7 @@ describe('WebPlaybackProvider failure health', () => {
   });
 
   it('logs a redacted warning when play() is rejected and still syncs the phase', async () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const recorded = recordLogs();
     const view = renderWebPlayback();
     view.audio.playRejection = new Error(
       'blocked https://cdn.example/a.mp3?X-Amz-Signature=deadbeef',
@@ -1412,8 +1413,7 @@ describe('WebPlaybackProvider failure health', () => {
 
     await act(() => view.playback().play(libraryTrack()));
 
-    const logged = JSON.stringify(warn.mock.calls);
-    warn.mockRestore();
+    const logged = recorded.text();
     expect(logged).toContain('play() rejected');
     expect(logged).not.toMatch(/deadbeef|X-Amz|cdn\.example/);
     expect(view.playback().status).toBe('paused');

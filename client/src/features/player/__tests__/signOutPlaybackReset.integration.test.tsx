@@ -16,6 +16,7 @@ import {
   libraryTrack,
   createMemoryPlaybackPort,
 } from '@features/player';
+import { recordLogs, type RecordedLogs } from '@shared/log';
 const { __player } = jest.requireMock('react-native-track-player');
 
 type AuthCallback = (event: string, session: Session | null) => void;
@@ -165,14 +166,10 @@ describe('sign-out resets the previous user playback (#827)', () => {
 });
 
 describe('a native reset that fails during sign-out (#1728)', () => {
-  let warn: jest.SpyInstance;
+  let logs: RecordedLogs;
 
   beforeEach(() => {
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  });
-
-  afterEach(() => {
-    warn.mockRestore();
+    logs = recordLogs();
   });
 
   function nativeError(code: string, message: string): Error {
@@ -196,10 +193,10 @@ describe('a native reset that fails during sign-out (#1728)', () => {
     const session = await signOutOfA();
 
     expect(__player.calls('reset')).toHaveLength(2);
-    expect(warn).toHaveBeenCalledWith(
+    expect(logs.warnings).toContainEqual([
       '[playback] native queue mutation failed',
       expect.objectContaining({ op: 'signOutReset', kind: 'transient' }),
-    );
+    ]);
 
     session.unmount();
   });
@@ -211,14 +208,14 @@ describe('a native reset that fails during sign-out (#1728)', () => {
 
     const session = await signOutOfA();
 
-    expect(warn).toHaveBeenCalledWith(
+    expect(logs.warnings).toContainEqual([
       '[playback] native queue mutation failed',
       expect.objectContaining({
         op: 'signOutResetRetry',
         kind: 'permanent',
         code: 'player_not_initialized',
       }),
-    );
+    ]);
     expect(__player.calls('reset')).toHaveLength(2);
 
     session.unmount();

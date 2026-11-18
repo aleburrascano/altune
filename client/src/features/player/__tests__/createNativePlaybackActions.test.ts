@@ -22,6 +22,7 @@ import {
   createMemoryPlaybackPort,
 } from '@features/player';
 import { signInTestUser } from '@testing/signInTestUser';
+import { recordLogs, type RecordedLogs } from '@shared/log';
 const QUEUE_OUT_OF_SYNC_MESSAGE = 'The queue fell out of sync. Tap retry to reload it.';
 const QUEUE_UPDATE_FAILED_MESSAGE = "Couldn't update the queue. Tap retry to resync.";
 const QUEUE_OP_TIMEOUT_MS = 15_000;
@@ -118,14 +119,10 @@ describe('createNativePlaybackActions', () => {
   });
 
   describe('queue mutation failures', () => {
-    let warn: jest.SpyInstance;
+    let logged: RecordedLogs;
 
     beforeEach(() => {
-      warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    });
-
-    afterEach(() => {
-      warn.mockRestore();
+      logged = recordLogs();
     });
 
     it('skip commands never reject to the UI handler', async () => {
@@ -136,9 +133,10 @@ describe('createNativePlaybackActions', () => {
     });
 
     function classifiedAs(err: unknown): unknown {
-      warn.mockClear();
+      logged = recordLogs();
       reportQueueFailure(null, 'probe', err);
-      return warn.mock.calls[0]?.[1]?.kind;
+      const detail = logged.warnings[0]?.[1] as { kind?: unknown } | undefined;
+      return detail?.kind;
     }
 
     function nativeError(code: string, message: string): Error {
@@ -159,10 +157,10 @@ describe('createNativePlaybackActions', () => {
         kind: 'queue_update_failed',
         message: QUEUE_UPDATE_FAILED_MESSAGE,
       });
-      expect(warn).toHaveBeenCalledWith(
+      expect(logged.warnings).toContainEqual([
         '[playback] native queue mutation failed',
         expect.objectContaining({ op: 'skipNext', kind: 'transient' }),
-      );
+      ]);
     });
 
     it('skipPrevious classifies a stale-index rejection as permanent queue drift', async () => {
@@ -180,14 +178,14 @@ describe('createNativePlaybackActions', () => {
         kind: 'queue_out_of_sync',
         message: QUEUE_OUT_OF_SYNC_MESSAGE,
       });
-      expect(warn).toHaveBeenCalledWith(
+      expect(logged.warnings).toContainEqual([
         '[playback] native queue mutation failed',
         expect.objectContaining({
           op: 'skipPrevious',
           kind: 'permanent',
           code: 'index_out_of_bounds',
         }),
-      );
+      ]);
     });
 
     it('removeQueueIndex reports nothing when the position is past the native window', async () => {
@@ -262,7 +260,7 @@ describe('createNativePlaybackActions', () => {
       await pending;
 
       expect(usePlaybackErrorStore.getState().key).toBeNull();
-      expect(warn).toHaveBeenCalledTimes(1);
+      expect(logged.warnings).toHaveLength(1);
     });
 
     it('logs but reports nothing when no track is displayed', async () => {
@@ -272,19 +270,15 @@ describe('createNativePlaybackActions', () => {
       await controls.skipNext();
 
       expect(usePlaybackErrorStore.getState().key).toBeNull();
-      expect(warn).toHaveBeenCalledTimes(1);
+      expect(logged.warnings).toHaveLength(1);
     });
   });
 
   describe('transport commands', () => {
-    let warn: jest.SpyInstance;
+    let logged: RecordedLogs;
 
     beforeEach(() => {
-      warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    });
-
-    afterEach(() => {
-      warn.mockRestore();
+      logged = recordLogs();
     });
 
     it('logs a rejected pause rather than leaving the rejection unhandled', async () => {
@@ -294,10 +288,10 @@ describe('createNativePlaybackActions', () => {
       controls.pause();
       await new Promise(setImmediate);
 
-      expect(warn).toHaveBeenCalledWith(
+      expect(logged.warnings).toContainEqual([
         '[playback] native command failed',
         expect.objectContaining({ message: 'no current item' }),
-      );
+      ]);
     });
 
     it('logs a rejected resume rather than leaving the rejection unhandled', async () => {
@@ -307,10 +301,10 @@ describe('createNativePlaybackActions', () => {
       controls.resume();
       await new Promise(setImmediate);
 
-      expect(warn).toHaveBeenCalledWith(
+      expect(logged.warnings).toContainEqual([
         '[playback] native command failed',
         expect.objectContaining({ message: 'player not ready' }),
-      );
+      ]);
     });
 
     it('reports a rejected seek against the current queue track', async () => {
@@ -329,10 +323,10 @@ describe('createNativePlaybackActions', () => {
         kind: 'queue_out_of_sync',
         message: QUEUE_OUT_OF_SYNC_MESSAGE,
       });
-      expect(warn).toHaveBeenCalledWith(
+      expect(logged.warnings).toContainEqual([
         '[playback] native queue mutation failed',
         expect.objectContaining({ op: 'seekTo', kind: 'permanent' }),
-      );
+      ]);
     });
 
     it('leaves the player paused when a pause lands during a seek in flight', async () => {
@@ -465,14 +459,8 @@ describe('createNativePlaybackActions', () => {
 });
 
 describe('reportingQueueFailure — the still-current policy lives once', () => {
-  let warn: jest.SpyInstance;
-
   beforeEach(() => {
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  });
-
-  afterEach(() => {
-    warn.mockRestore();
+    recordLogs();
   });
 
   it('reports the rejection against the key its getter returns at rejection time', async () => {

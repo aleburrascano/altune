@@ -4,6 +4,7 @@ import { asTrackId } from '@shared/catalog';
 import { usePlayback } from '@shared/playback';
 import type { PlaybackContextValue, PlaybackTrack } from '@shared/playback';
 import { ExpoGoPlaybackProvider } from '@features/player';
+import { recordLogs, type RecordedLogs } from '@shared/log';
 
 const devFlag = globalThis as unknown as { __DEV__: boolean };
 
@@ -42,14 +43,10 @@ const CONTROLS_EXPO_GO_CANNOT_HONOUR: readonly ControlCase[] = [
 ];
 
 describe('ExpoGoPlaybackProvider', () => {
-  let warnSpy: jest.SpyInstance<void, Parameters<typeof console.warn>>;
+  let logs: RecordedLogs;
 
   beforeEach(() => {
-    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  });
-
-  afterEach(() => {
-    warnSpy.mockRestore();
+    logs = recordLogs();
   });
 
   it.each(CONTROLS_EXPO_GO_CANNOT_HONOUR)(
@@ -61,11 +58,11 @@ describe('ExpoGoPlaybackProvider', () => {
         await invoke(controls);
       });
 
-      expect(warnSpy).toHaveBeenCalledTimes(1);
-      expect(warnSpy).toHaveBeenCalledWith(
+      expect(logs.warnings).toHaveLength(1);
+      expect(logs.warnings).toContainEqual([
         expect.stringContaining(`${control}() skipped: audio is disabled in Expo Go`),
-      );
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('expo-dev-client'));
+      ]);
+      expect(logs.warnings).toContainEqual([expect.stringContaining('expo-dev-client')]);
     },
   );
 
@@ -76,7 +73,7 @@ describe('ExpoGoPlaybackProvider', () => {
       await controls.skipNext();
     });
 
-    expect(warnSpy).not.toHaveBeenCalled();
+    expect(logs.warnings).toEqual([]);
   });
 
   it('stays silent for skipPrevious, which really moves the queue', async () => {
@@ -86,7 +83,7 @@ describe('ExpoGoPlaybackProvider', () => {
       await controls.skipPrevious();
     });
 
-    expect(warnSpy).not.toHaveBeenCalled();
+    expect(logs.warnings).toEqual([]);
   });
 
   it('stays silent in a production build, where __DEV__ is false', async () => {
@@ -99,7 +96,7 @@ describe('ExpoGoPlaybackProvider', () => {
         await controls.startQueue([buildTrack()], 0);
       });
 
-      expect(warnSpy).not.toHaveBeenCalled();
+      expect(logs.warnings).toEqual([]);
     } finally {
       devFlag.__DEV__ = wasDev;
     }

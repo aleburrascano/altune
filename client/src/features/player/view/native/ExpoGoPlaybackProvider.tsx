@@ -2,10 +2,11 @@ import { useMemo, type ReactNode } from 'react';
 
 import { PlaybackContext, useQueueStore } from '@shared/playback';
 import type { PlaybackContextValue } from '@shared/playback';
+import { warn } from '@shared/log';
 
 function warnControlSkipped(control: string): void {
   if (!__DEV__) return;
-  console.warn(
+  warn(
     `[playback] ${control}() skipped: audio is disabled in Expo Go — use a dev build (expo-dev-client) to test playback`,
   );
 }

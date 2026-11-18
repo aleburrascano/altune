@@ -4,6 +4,7 @@ import { reloadWidget, writeCoverFromUrl, writeSnapshot } from '@modules/altune-
 import type { PlaybackTrack, QueueSource } from '@shared/playback';
 import { useQueueStore } from '@shared/playback';
 import { hasSignedInUser, onIdentityChange, onSignOut } from '@shared/session';
+import { warn } from '@shared/log';
 
 const COVER_FILE_NAME = 'cover.jpg';
 
@@ -196,5 +197,5 @@ function playerStatusOf(state: State, { position, duration }: Progress): PlayerS
 
 function warnPublishFailed(error: unknown): void {
   const name = error instanceof Error ? error.name : 'non-Error';
-  console.warn(`[widget] snapshot publish failed: ${name}`);
+  warn(`[widget] snapshot publish failed: ${name}`);
 }

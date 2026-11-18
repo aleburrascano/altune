@@ -27,6 +27,7 @@ import {
 } from '@features/player/adapters/native/queueFailureReport';
 import { redactedPlaybackFailure, warnPlayback } from '@features/player/domain/playbackError';
 import { markPlayRequested } from '@features/player/adapters/native/playStartTiming';
+import { warn } from '@shared/log';
 
 export interface NativePlaybackActions {
   controls: PlaybackControls;
@@ -45,7 +46,7 @@ export async function ignoringNativeRejection(op: () => Promise<unknown>): Promi
   try {
     await op();
   } catch (err) {
-    console.warn('[playback] native command failed', redactedPlaybackFailure(err));
+    warn('[playback] native command failed', redactedPlaybackFailure(err));
   }
 }
 

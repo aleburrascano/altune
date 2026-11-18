@@ -17,6 +17,7 @@ import {
   flushPlaybackHealth,
   libraryTrack,
 } from '@features/player';
+import { recordLogs, type RecordedLogs } from '@shared/log';
 const { __http } = require('@testing/doubles/fetch.js');
 const HEALTH_ROUTE = 'POST /v1/discovery/events';
 const HTTP_ACCEPTED = 202;
@@ -164,26 +165,25 @@ describe('playback error key branding', () => {
 });
 
 describe('reportLoadFailure — one log line and one health count per load failure', () => {
-  let warn: jest.SpyInstance;
+  let logged: RecordedLogs;
 
   beforeEach(() => {
     _resetPlaybackHealthForTest();
     __http.reply(HEALTH_ROUTE, { status: HTTP_ACCEPTED });
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  });
-
-  afterEach(() => {
-    warn.mockRestore();
+    logged = recordLogs();
   });
 
   it('logs one redacted [playback] warn and still sets the store', () => {
     reportLoadFailure(libraryTrack(), new Error('boom https://x.test/a?token=abc.def'), 'Custom');
 
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledWith('[playback] track load failed', {
-      kind: 'unknown',
-      error: { kind: 'unknown', message: expect.not.stringMatching(/abc\.def/) },
-    });
+    expect(logged.warnings).toHaveLength(1);
+    expect(logged.warnings).toContainEqual([
+      '[playback] track load failed',
+      {
+        kind: 'unknown',
+        error: { kind: 'unknown', message: expect.not.stringMatching(/abc\.def/) },
+      },
+    ]);
     expect(usePlaybackErrorStore.getState().key).toBe(FAILED_KEY);
     expect(usePlaybackErrorStore.getState().kind).toBe('unknown');
     expect(usePlaybackErrorStore.getState().message).toBe('Custom');

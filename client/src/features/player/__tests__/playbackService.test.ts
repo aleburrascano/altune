@@ -18,11 +18,13 @@ import {
 } from '@features/player';
 import * as nativeTrackSwap from '@features/player/adapters/native/nativeTrackSwap';
 import { signInTestUser } from '@testing/signInTestUser';
+import { recordLogs, type RecordedLogs } from '@shared/log';
 const RESTART_THRESHOLD_MS = 3_000;
 const QUEUE_OUT_OF_SYNC_MESSAGE = 'The queue fell out of sync. Tap retry to reload it.';
 const QUEUE_UPDATE_FAILED_MESSAGE = "Couldn't update the queue. Tap retry to resync.";
 const MAX_TRACKED_RECOVERIES = 64;
 const RECOVERY_ATTEMPTS_PER_TRACK = 2;
+const SIGNED_URL_PATTERN = /deadbeef|X-Amz-Signature/;
 const RECOVERY_COOLDOWN_BASE_MS = 30_000;
 
 beforeAll(() => {
@@ -148,14 +150,10 @@ describe('native PlaybackError handling', () => {
   });
 
   describe('playbackService — an unmapped native PlaybackError code is logged', () => {
-    let warn: jest.SpyInstance;
+    let recorded: RecordedLogs;
 
     beforeEach(() => {
-      warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    });
-
-    afterEach(() => {
-      warn.mockRestore();
+      recorded = recordLogs();
     });
 
     async function fire(code: string, message: string): Promise<PlaybackTrack> {
@@ -170,11 +168,13 @@ describe('native PlaybackError handling', () => {
     it('warns once with the code and track key, and keeps the unknown kind', async () => {
       const track = await fire('android-audio-track-init-failed', 'AudioTrack init failed');
 
-      const ours = warn.mock.calls.filter(
-        ([, detail]) => detail?.trackKey === redactPlaybackErrorMessage(trackKey(track)),
+      const ours = recorded.warnings.filter(
+        ([, detail]) =>
+          (detail as { trackKey?: string } | undefined)?.trackKey ===
+          redactPlaybackErrorMessage(trackKey(track)),
       );
       expect(ours).toHaveLength(1);
-      expect(ours[0][1]).toEqual({
+      expect(ours[0]?.[1]).toEqual({
         code: 'android-audio-track-init-failed',
         trackKey: redactPlaybackErrorMessage(trackKey(track)),
         error: 'AudioTrack init failed',
@@ -186,7 +186,9 @@ describe('native PlaybackError handling', () => {
       await fire('android-audio-track-init-failed', 'AudioTrack init failed');
       await fire('android-io-network-connection-failed', 'Source error');
 
-      const warnedCodes = warn.mock.calls.map(([, detail]) => detail?.code);
+      const warnedCodes = recorded.warnings.map(
+        ([, detail]) => (detail as { code?: string } | undefined)?.code,
+      );
       expect(warnedCodes).toContain('android-audio-track-init-failed');
       expect(warnedCodes).not.toContain('android-io-network-connection-failed');
       expect(usePlaybackErrorStore.getState().kind).toBe('network');
@@ -403,12 +405,12 @@ describe('remote skip commands', () => {
     return new Promise((resolve) => setImmediate(resolve));
   }
 
-  let warn: jest.SpyInstance;
+  let recorded: RecordedLogs;
 
   beforeEach(() => {
     notifyIdentityChange('user-1');
     player.getProgress.mockResolvedValue({ position: 0, duration: 200, buffered: 0 });
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recorded = recordLogs();
   });
 
   afterEach(() => {
@@ -433,10 +435,10 @@ describe('remote skip commands', () => {
         kind: 'queue_update_failed',
         message: QUEUE_UPDATE_FAILED_MESSAGE,
       });
-      expect(warn).toHaveBeenCalledWith(
+      expect(recorded.warnings).toContainEqual([
         '[playback] native queue mutation failed',
         expect.objectContaining({ op: 'remoteSkipNext', kind: 'transient' }),
-      );
+      ]);
     });
 
     it('classifies a stale-index rejection from a hardware previous as permanent drift', async () => {
@@ -455,14 +457,14 @@ describe('remote skip commands', () => {
         kind: 'queue_out_of_sync',
         message: QUEUE_OUT_OF_SYNC_MESSAGE,
       });
-      expect(warn).toHaveBeenCalledWith(
+      expect(recorded.warnings).toContainEqual([
         '[playback] native queue mutation failed',
         expect.objectContaining({
           op: 'remoteSkipPrevious',
           kind: 'permanent',
           code: 'index_out_of_bounds',
         }),
-      );
+      ]);
     });
 
     it('reports a restart seek the player rejects past the threshold', async () => {
@@ -479,10 +481,10 @@ describe('remote skip commands', () => {
       await settled();
 
       expect(usePlaybackErrorStore.getState().key).toBe('preview:https://cdn.example/1.mp3');
-      expect(warn).toHaveBeenCalledWith(
+      expect(recorded.warnings).toContainEqual([
         '[playback] native queue mutation failed',
         expect.objectContaining({ op: 'remoteSkipPrevious', kind: 'transient' }),
-      );
+      ]);
     });
 
     it('still restarts the current track rather than stepping back past the threshold', async () => {
@@ -498,7 +500,7 @@ describe('remote skip commands', () => {
 
       expect(__player.calls('seekTo')).toEqual([[0]]);
       expect(__player.calls('skipToPrevious')).toHaveLength(0);
-      expect(warn).not.toHaveBeenCalled();
+      expect(recorded.warnings).toEqual([]);
     });
   });
 });
@@ -509,7 +511,7 @@ describe('playbackService — handler rejections are reported, not left unhandle
   const onUnhandled = (reason: unknown): void => {
     unhandled.push(reason);
   };
-  let warn: jest.SpyInstance;
+  let recorded: RecordedLogs;
 
   async function handlerFor(event: unknown): Promise<(data?: unknown) => void> {
     await playbackService();
@@ -529,7 +531,7 @@ describe('playbackService — handler rejections are reported, not left unhandle
     notifyIdentityChange('user-1');
     unhandled.length = 0;
     process.on('unhandledRejection', onUnhandled);
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recorded = recordLogs();
     useQueueStore.getState().loadQueue([libraryTrackWithId('trk-1')], 0, null);
   });
 
@@ -551,10 +553,10 @@ describe('playbackService — handler rejections are reported, not left unhandle
     await settle();
 
     expect(unhandled).toEqual([]);
-    expect(warn).toHaveBeenCalledWith(
+    expect(recorded.warnings).toContainEqual([
       '[playback] native queue mutation failed',
       expect.objectContaining({ op: 'handlePlaybackError' }),
-    );
+    ]);
   });
 
   it.each([
@@ -569,10 +571,10 @@ describe('playbackService — handler rejections are reported, not left unhandle
     await settle();
 
     expect(unhandled).toEqual([]);
-    expect(warn).toHaveBeenCalledWith(
+    expect(recorded.warnings).toContainEqual([
       '[playback] native queue mutation failed',
       expect.objectContaining({ op }),
-    );
+    ]);
   });
 
   it('reports a rejected pause from a RemoteDuck interruption', async () => {
@@ -583,10 +585,10 @@ describe('playbackService — handler rejections are reported, not left unhandle
     await settle();
 
     expect(unhandled).toEqual([]);
-    expect(warn).toHaveBeenCalledWith(
+    expect(recorded.warnings).toContainEqual([
       '[playback] native queue mutation failed',
       expect.objectContaining({ op: 'remoteDuckPause' }),
-    );
+    ]);
   });
 
   it('logs a redacted warning and counts a failed audio recovery', async () => {
@@ -597,8 +599,11 @@ describe('playbackService — handler rejections are reported, not left unhandle
     await settle();
 
     expect(__http.countFor(RECOVER_TRACK_1)).toBe(1);
-    expect(warn).toHaveBeenCalledWith('[playback] audio recovery failed', expect.any(Object));
-    expect(JSON.stringify(warn.mock.calls)).not.toMatch(/deadbeef|X-Amz-Signature/);
+    expect(recorded.warnings).toContainEqual([
+      '[playback] audio recovery failed',
+      expect.any(Object),
+    ]);
+    expect(recorded.text()).not.toMatch(SIGNED_URL_PATTERN);
   });
 });
 
