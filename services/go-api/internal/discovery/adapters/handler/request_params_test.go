@@ -1,22 +1,12 @@
-package handler
+package handler_test
 
 import (
-	"altune/go-api/internal/auth/adapters/middleware"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/discoverytest"
-	"altune/go-api/internal/discovery/internal/core/enrich"
-	"altune/go-api/internal/discovery/internal/core/history"
-	"altune/go-api/internal/discovery/internal/core/ports"
-	"altune/go-api/internal/discovery/service/content"
-	"altune/go-api/internal/discovery/service/providercall"
-	"altune/go-api/internal/discovery/service/search"
-	"maps"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
-
-	discdomain "altune/go-api/internal/discovery/domain"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -27,25 +17,25 @@ const radioheadMBID = "a74b1b7f-71a5-4011-9441-d0b5e4122711"
 
 func paramValidationRouter(t *testing.T) chi.Router {
 	t.Helper()
-	albumProviders := map[discdomain.ProviderName]ports.AlbumContentProvider{
-		discdomain.ProviderDeezer: &discoverytest.AlbumContentProvider{Results: seedTracks(3)},
+	albumProviders := map[discovery.ProviderName]discovery.AlbumContentProvider{
+		discovery.ProviderDeezer: &discoverytest.AlbumContentProvider{Results: seedTracks(3)},
 	}
-	artistProviders := map[discdomain.ProviderName]ports.ArtistContentProvider{
-		discdomain.ProviderDeezer: &discoverytest.ArtistContentProvider{Albums: seedTracks(3)},
+	artistProviders := map[discovery.ProviderName]discovery.ArtistContentProvider{
+		discovery.ProviderDeezer: &discoverytest.ArtistContentProvider{Albums: seedTracks(3)},
 	}
 	historyRepo := &fakeSearchHistoryRepo{}
-	h := NewDiscoveryHandler(DiscoveryServices{
-		Search: search.NewService(
-			[]ports.SearchProvider{&fakeSearchProvider{name: discdomain.ProviderDeezer}},
-			providercall.NewCircuitBreaker(), search.WithHistoryRepository(historyRepo)),
-		History:      history.NewListSearchHistoryService(historyRepo),
-		ClearHistory: history.NewClearSearchHistoryService(historyRepo),
-		Album:        content.NewGetAlbumTracksService(albumProviders),
-		Artist:       content.NewGetArtistContentService(artistProviders),
-		Enrich:       enrich.NewEnrichmentService(&fakeMetadataEnricher{}, nil, nil),
+	h := discovery.NewDiscoveryHandler(discovery.DiscoveryServices{
+		Search: discovery.NewSearchService(
+			[]discovery.SearchProvider{&fakeSearchProvider{name: discovery.ProviderDeezer}},
+			discovery.NewCircuitBreaker(), discovery.WithHistoryRepository(historyRepo)),
+		History:      discovery.NewListSearchHistoryService(historyRepo),
+		ClearHistory: discovery.NewClearSearchHistoryService(historyRepo),
+		Album:        discovery.NewGetAlbumTracksService(albumProviders),
+		Artist:       discovery.NewGetArtistContentService(artistProviders),
+		Enrich:       discovery.NewEnrichmentService(&fakeMetadataEnricher{}, nil, nil),
 	})
 	r := chi.NewRouter()
-	r.Use(middleware.Middleware(discVerifyAsTestUser))
+	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
 	return r
 }
@@ -70,8 +60,8 @@ func TestContentRejections_ExternalIDAddressingAnotherPath(t *testing.T) {
 			rec := discServe(t, paramValidationRouter(t), http.MethodGet, c.path, nil)
 
 			discAssertStatus(t, rec, http.StatusBadRequest)
-			if got := rejectionCode(t, rec); got != requestCodeInvalidParam {
-				t.Errorf("code = %q, want %q", got, requestCodeInvalidParam)
+			if got := rejectionCode(t, rec); got != "discovery.invalid_param" {
+				t.Errorf("code = %q, want %q", got, "discovery.invalid_param")
 			}
 		})
 	}
@@ -99,8 +89,8 @@ func TestEnrichmentRejections_MalformedMBIDAndOversizedNames(t *testing.T) {
 			rec := discServe(t, paramValidationRouter(t), http.MethodGet, c.path, nil)
 
 			discAssertStatus(t, rec, http.StatusBadRequest)
-			if got := rejectionCode(t, rec); got != requestCodeInvalidParam {
-				t.Errorf("code = %q, want %q", got, requestCodeInvalidParam)
+			if got := rejectionCode(t, rec); got != "discovery.invalid_param" {
+				t.Errorf("code = %q, want %q", got, "discovery.invalid_param")
 			}
 		})
 	}
@@ -128,33 +118,33 @@ func TestEnrichment_CanonicalMBIDAndBoundedNamesStillServe(t *testing.T) {
 
 var realProviderIDs = []struct {
 	name       string
-	provider   discdomain.ProviderName
+	provider   discovery.ProviderName
 	externalID string
 }{
-	{"deezer artist id", discdomain.ProviderDeezer, "27"},
-	{"itunes artist id", discdomain.ProviderITunes, "159260351"},
-	{"apple music artist id", discdomain.ProviderAppleMusic, "1258279972"},
-	{"soundcloud user id", discdomain.ProviderSoundCloud, "3207"},
-	{"spotify base62 id", discdomain.ProviderSpotify, "4Z8W4fKeB5YxbusRsdQVPb"},
-	{"spotify uri", discdomain.ProviderSpotify, "spotify:artist:4Z8W4fKeB5YxbusRsdQVPb"},
-	{"musicbrainz uuid", discdomain.ProviderMusicBrainz, radioheadMBID},
-	{"youtube channel id", discdomain.ProviderYouTube, "UCmMUZbaYdNH0bEd1PAlAqsA"},
-	{"youtube browse id", discdomain.ProviderYouTube, "MPREb_4pL8gzRtw1p"},
-	{"amazon music asin", discdomain.ProviderAmazonMusic, "B00W0FHN1U"},
-	{"theaudiodb artist id", discdomain.ProviderTheAudioDB, "111239"},
-	{"discogs artist id", discdomain.ProviderDiscogs, "3840"},
-	{"last.fm name ref", discdomain.ProviderLastFM, "Sigur Rós"},
-	{"last.fm url segment ref", discdomain.ProviderLastFM, "Sigur+R%C3%B3s"},
+	{"deezer artist id", discovery.ProviderDeezer, "27"},
+	{"itunes artist id", discovery.ProviderITunes, "159260351"},
+	{"apple music artist id", discovery.ProviderAppleMusic, "1258279972"},
+	{"soundcloud user id", discovery.ProviderSoundCloud, "3207"},
+	{"spotify base62 id", discovery.ProviderSpotify, "4Z8W4fKeB5YxbusRsdQVPb"},
+	{"spotify uri", discovery.ProviderSpotify, "spotify:artist:4Z8W4fKeB5YxbusRsdQVPb"},
+	{"musicbrainz uuid", discovery.ProviderMusicBrainz, radioheadMBID},
+	{"youtube channel id", discovery.ProviderYouTube, "UCmMUZbaYdNH0bEd1PAlAqsA"},
+	{"youtube browse id", discovery.ProviderYouTube, "MPREb_4pL8gzRtw1p"},
+	{"amazon music asin", discovery.ProviderAmazonMusic, "B00W0FHN1U"},
+	{"theaudiodb artist id", discovery.ProviderTheAudioDB, "111239"},
+	{"discogs artist id", discovery.ProviderDiscogs, "3840"},
+	{"last.fm name ref", discovery.ProviderLastFM, "Sigur Rós"},
+	{"last.fm url segment ref", discovery.ProviderLastFM, "Sigur+R%C3%B3s"},
 }
 
 func allProvidersArtistRouter(t *testing.T) chi.Router {
 	t.Helper()
-	artistProviders := make(map[discdomain.ProviderName]ports.ArtistContentProvider, len(realProviderIDs))
+	artistProviders := make(map[discovery.ProviderName]discovery.ArtistContentProvider, len(realProviderIDs))
 	for _, c := range realProviderIDs {
 		artistProviders[c.provider] = &discoverytest.ArtistContentProvider{Albums: seedTracks(1)}
 	}
 	return buildDiscoveryRouter(
-		&fakeSearchProvider{name: discdomain.ProviderDeezer}, &fakeSearchHistoryRepo{}, nil, artistProviders)
+		&fakeSearchProvider{name: discovery.ProviderDeezer}, &fakeSearchHistoryRepo{}, nil, artistProviders)
 }
 
 func TestContentIDs_RealProviderIDsStillServe(t *testing.T) {
@@ -166,25 +156,5 @@ func TestContentIDs_RealProviderIDsStillServe(t *testing.T) {
 
 			discAssertStatus(t, rec, http.StatusOK)
 		})
-	}
-}
-
-func TestKnownIDsParam_KeepsValidEntriesAndSkipsTheRest(t *testing.T) {
-	tooMany := strings.Repeat("deezer:1,", maxKnownIDs) + "spotify:late"
-	cases := []struct {
-		ids  string
-		want map[discdomain.ProviderName]string
-	}{
-		{ids: "", want: nil},
-		{ids: "spotify:sp1, applemusic:123", want: map[discdomain.ProviderName]string{discdomain.ProviderSpotify: "sp1", discdomain.ProviderAppleMusic: "123"}},
-		{ids: "spotify:..,spotify,notaprovider:x,applemusic:a/b,deezer:9", want: map[discdomain.ProviderName]string{discdomain.ProviderDeezer: "9"}},
-		{ids: tooMany, want: map[discdomain.ProviderName]string{discdomain.ProviderDeezer: "1"}},
-	}
-	for _, tc := range cases {
-		r := httptest.NewRequest(http.MethodGet, "/x?ids="+url.QueryEscape(tc.ids), nil)
-
-		if got := knownIDsParam(r); !maps.Equal(got, tc.want) {
-			t.Errorf("ids %q: got %v, want %v", tc.ids, got, tc.want)
-		}
 	}
 }

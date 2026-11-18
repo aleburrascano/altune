@@ -1,7 +1,7 @@
-package handler
+package handler_test
 
 import (
-	"altune/go-api/internal/discovery/service/interaction"
+	"altune/go-api/internal/discovery"
 	shared "altune/go-api/internal/shared/kernel"
 	"net/http"
 	"net/http/httptest"
@@ -10,15 +10,13 @@ import (
 	"testing"
 	"time"
 
-	discdomain "altune/go-api/internal/discovery/domain"
-
 	"github.com/go-chi/chi/v5"
 )
 
 const validAuthFailureBody = `{"reason":"invalid_credentials","app_version":"1.2.3"}`
 
-func buildAuthFailureRouter(store *recordingEventStore, limit RequestLimit) chi.Router {
-	h := NewDiscoveryHandler(DiscoveryServices{Event: interaction.NewRecordEventService(store)})
+func buildAuthFailureRouter(store *recordingEventStore, limit discovery.RequestLimit) chi.Router {
+	h := discovery.NewDiscoveryHandler(discovery.DiscoveryServices{Event: discovery.NewRecordEventService(store)})
 	r := chi.NewRouter()
 	h.PublicRoutes(r, limit)
 	return r
@@ -34,7 +32,7 @@ func postAuthFailure(r chi.Router, body, remoteAddr string) *httptest.ResponseRe
 
 func TestAuthFailureEndpoint_RecordsAnonymousEvent(t *testing.T) {
 	store := &recordingEventStore{}
-	r := buildAuthFailureRouter(store, DefaultAuthFailureLimit)
+	r := buildAuthFailureRouter(store, discovery.DefaultAuthFailureLimit)
 
 	rec := postAuthFailure(r, validAuthFailureBody, "203.0.113.5:1000")
 
@@ -43,7 +41,7 @@ func TestAuthFailureEndpoint_RecordsAnonymousEvent(t *testing.T) {
 		t.Fatalf("appended %d events, want 1", len(store.events))
 	}
 	got := store.events[0]
-	if got.Type != discdomain.EventTypeAuthFailed || got.UserId != shared.AnonymousUserId() {
+	if got.Type != discovery.EventTypeAuthFailed || got.UserId != shared.AnonymousUserId() {
 		t.Errorf("event = %v for %v, want auth_failed for the anonymous user", got.Type, got.UserId)
 	}
 	want := map[string]any{"reason": "invalid_credentials", "app_version": "1.2.3"}
@@ -54,7 +52,7 @@ func TestAuthFailureEndpoint_RecordsAnonymousEvent(t *testing.T) {
 
 func TestAuthFailureEndpoint_RateLimitsPerClientIP(t *testing.T) {
 	store := &recordingEventStore{}
-	r := buildAuthFailureRouter(store, RequestLimit{Max: 2, Window: time.Minute})
+	r := buildAuthFailureRouter(store, discovery.RequestLimit{Max: 2, Window: time.Minute})
 
 	for range 2 {
 		discAssertStatus(t, postAuthFailure(r, validAuthFailureBody, "203.0.113.5:1000"), http.StatusNoContent)
@@ -86,13 +84,13 @@ func TestAuthFailureEndpoint_RejectsInvalidBodies(t *testing.T) {
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
 			store := &recordingEventStore{}
-			r := buildAuthFailureRouter(store, DefaultAuthFailureLimit)
+			r := buildAuthFailureRouter(store, discovery.DefaultAuthFailureLimit)
 
 			rec := postAuthFailure(r, body, "203.0.113.5:1000")
 
 			discAssertStatus(t, rec, http.StatusBadRequest)
-			if !strings.Contains(rec.Body.String(), requestCodeAuthFailureInvalidBody) {
-				t.Errorf("body = %s, want code %s", rec.Body.String(), requestCodeAuthFailureInvalidBody)
+			if !strings.Contains(rec.Body.String(), "auth_failure.invalid_body") {
+				t.Errorf("body = %s, want code %s", rec.Body.String(), "auth_failure.invalid_body")
 			}
 			if len(store.events) != 0 {
 				t.Errorf("appended %d events, want 0", len(store.events))

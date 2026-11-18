@@ -2,11 +2,11 @@ package handler
 
 import (
 	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/internal/adapters/authbridge"
 	"altune/go-api/internal/discovery/internal/core/ports"
 	"altune/go-api/internal/discovery/service/ownership"
 	"altune/go-api/internal/discovery/service/unreleased"
 	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/requestuser"
 	"log/slog"
 	"net/http"
 )
@@ -53,7 +53,7 @@ func (h *DiscoveryHandler) handleUnreleasedSearch(w http.ResponseWriter, r *http
 		hits = found
 	}
 	dto := unreleasedSearchToDTO(hits)
-	if userId, ok := authbridge.UserIDFromContext(r.Context()); ok {
+	if userId, ok := requestuser.UserIDFromContext(r.Context()); ok {
 		h.ownership.StampOwnership(r.Context(), userId, searchOwnableItems(dto.Items))
 	}
 	httputil.WriteJSON(w, http.StatusOK, dto)
@@ -172,7 +172,7 @@ func ownableSongItems(artistName string, item *UnreleasedSongDTO) []ownership.Ow
 
 func (h *DiscoveryHandler) writeUnreleased(w http.ResponseWriter, r *http.Request, artistName string, found unreleased.Lookup) {
 	dto := unreleasedToDTO(found)
-	if userId, ok := authbridge.UserIDFromContext(r.Context()); ok {
+	if userId, ok := requestuser.UserIDFromContext(r.Context()); ok {
 		h.ownership.StampOwnership(r.Context(), userId, unreleasedOwnableItems(artistName, dto.Items))
 	}
 	httputil.WriteJSON(w, http.StatusOK, dto)

@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"altune/go-api/internal/discovery/internal/adapters/authbridge"
 	"altune/go-api/internal/discovery/internal/core/enrich"
 	"altune/go-api/internal/discovery/internal/core/favorites"
 	"altune/go-api/internal/discovery/internal/core/history"
@@ -13,6 +12,7 @@ import (
 	"altune/go-api/internal/discovery/service/unreleased"
 	"altune/go-api/internal/discovery/service/vocabulary"
 	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/requestuser"
 	"altune/go-api/internal/shared/telemetry"
 	"net/http"
 	"time"
@@ -73,12 +73,16 @@ type DiscoveryServices struct {
 }
 
 func (h *DiscoveryHandler) WithRateLimits(limits DiscoveryRateLimits) *DiscoveryHandler {
-	h.searchLimiter = newUserRateLimiter(limits.Search, time.Now)
-	h.suggestLimiter = newUserRateLimiter(limits.Suggest, time.Now)
-	h.eventLimiter = newUserRateLimiter(limits.Events, time.Now)
-	h.contentLimiter = newUserRateLimiter(limits.Content, time.Now)
-	h.favoritesLimiter = newUserRateLimiter(limits.Favorites, time.Now)
-	h.historyLimiter = newUserRateLimiter(limits.History, time.Now)
+	return h.WithRateLimitsAt(limits, time.Now)
+}
+
+func (h *DiscoveryHandler) WithRateLimitsAt(limits DiscoveryRateLimits, now func() time.Time) *DiscoveryHandler {
+	h.searchLimiter = newUserRateLimiter(limits.Search, now)
+	h.suggestLimiter = newUserRateLimiter(limits.Suggest, now)
+	h.eventLimiter = newUserRateLimiter(limits.Events, now)
+	h.contentLimiter = newUserRateLimiter(limits.Content, now)
+	h.favoritesLimiter = newUserRateLimiter(limits.Favorites, now)
+	h.historyLimiter = newUserRateLimiter(limits.History, now)
 	return h
 }
 
@@ -150,7 +154,7 @@ func noStorePerUser(next http.Handler) http.Handler {
 
 func requireUser(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := authbridge.RequireUserID(w, r); !ok {
+		if _, ok := requestuser.RequireUserID(w, r); !ok {
 			return
 		}
 		next.ServeHTTP(w, r)
