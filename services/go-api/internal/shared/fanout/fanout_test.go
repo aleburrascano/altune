@@ -55,3 +55,24 @@ func TestGroupRunsAllWithinLimit(t *testing.T) {
 		t.Fatalf("peak concurrency %d, want %d", peak, limit)
 	}
 }
+
+func sumOnGroup(g *fanout.Group, values []int64) int64 {
+	var total atomic.Int64
+	for _, v := range values {
+		g.Go(func() { total.Add(v) })
+	}
+	g.Wait()
+	return total.Load()
+}
+
+func TestGroupWaitReturnsAfterEveryTaskHasRun(t *testing.T) {
+	values := make([]int64, 200)
+	var want int64
+	for i := range values {
+		values[i] = int64(i + 1)
+		want += values[i]
+	}
+	if got := sumOnGroup(fanout.New(4), values); got != want {
+		t.Fatalf("sum after Wait = %d, want %d", got, want)
+	}
+}
