@@ -84,24 +84,18 @@ export function SettingsRow({
     <View
       style={[
         rowStyles.row,
-        first
-          ? null
-          : { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.color.border },
-        disabled ? rowStyles.disabled : null,
+        rowSeparatorStyle(first, theme.color.border),
+        rowDisabledStyle(disabled),
       ]}
     >
       <IconBadge size={32} radius={radius.sm} background={theme.color.surface2}>
         <Icon size={18} color={color} />
       </IconBadge>
       <View style={rowStyles.text}>
-        <Text tone={tone === 'danger' ? 'danger' : 'primary'} numberOfLines={1}>
+        <Text tone={rowLabelTone(tone)} numberOfLines={1}>
           {label}
         </Text>
-        {detail != null ? (
-          <Text variant="caption" tone="tertiary" style={rowStyles.detail} numberOfLines={2}>
-            {detail}
-          </Text>
-        ) : null}
+        <SettingsRowDetail detail={detail} />
       </View>
       {right}
     </View>
@@ -131,6 +125,27 @@ export function SettingsRow({
   );
 }
 
+function rowSeparatorStyle(first: boolean, border: string) {
+  return first ? null : { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: border };
+}
+
+function rowDisabledStyle(disabled: boolean) {
+  return disabled ? rowStyles.disabled : null;
+}
+
+function rowLabelTone(tone: SettingsRowTone): 'danger' | 'primary' {
+  return tone === 'danger' ? 'danger' : 'primary';
+}
+
+function SettingsRowDetail({ detail }: Pick<SettingsRowProps, 'detail'>): ReactElement | null {
+  if (detail == null) return null;
+  return (
+    <Text variant="caption" tone="tertiary" style={rowStyles.detail} numberOfLines={2}>
+      {detail}
+    </Text>
+  );
+}
+
 function accessibilityLabel(label: string, detail?: string): string {
   return detail == null ? label : `${label}, ${detail}`;
 }
@@ -143,19 +158,16 @@ type RowColors = {
   warning: string;
 };
 
+const TONE_COLOR: Record<SettingsRowTone, keyof RowColors> = {
+  neutral: 'textSecondary',
+  accent: 'accentText',
+  danger: 'danger',
+  success: 'success',
+  warning: 'warning',
+};
+
 function toneColor(color: RowColors, tone: SettingsRowTone): string {
-  switch (tone) {
-    case 'accent':
-      return color.accentText;
-    case 'danger':
-      return color.danger;
-    case 'success':
-      return color.success;
-    case 'warning':
-      return color.warning;
-    case 'neutral':
-      return color.textSecondary;
-  }
+  return color[TONE_COLOR[tone]];
 }
 
 const rowStyles = StyleSheet.create({
