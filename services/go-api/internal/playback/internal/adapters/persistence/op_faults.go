@@ -10,11 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-const (
-	undefinedTableCode   = "42P01"
-	insufficientPrivCode = "42501"
-)
-
 func isTransientFault(err error) bool {
 	if err == nil || errors.Is(err, context.Canceled) {
 		return false

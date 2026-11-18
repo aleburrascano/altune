@@ -13,7 +13,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var _ ports.QueueStateRepository = (*PgxQueueStateRepository)(nil)
@@ -32,19 +31,19 @@ func (e *corruptStoredStateError) Is(target error) bool {
 	return target == ports.ErrCorruptStoredState
 }
 
-type querier interface {
+type QueueStateDB interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
 type PgxQueueStateRepository struct {
-	pool      querier
+	pool      QueueStateDB
 	metrics   ports.QueueStateMetrics
 	timeout   time.Duration
 	saveGrace time.Duration
 }
 
-func NewPgxQueueStateRepository(pool *pgxpool.Pool, opts ...func(*PgxQueueStateRepository)) *PgxQueueStateRepository {
+func NewPgxQueueStateRepository(pool QueueStateDB, opts ...func(*PgxQueueStateRepository)) *PgxQueueStateRepository {
 	r := &PgxQueueStateRepository{pool: pool, metrics: ports.NoopQueueStateMetrics(), timeout: defaultQueueStateOpTimeout, saveGrace: defaultQueueStateOpTimeout}
 	for _, opt := range opts {
 		opt(r)
@@ -60,13 +59,13 @@ func WithQueueStateMetrics(m ports.QueueStateMetrics) func(*PgxQueueStateReposit
 	}
 }
 
-func withQueueStateOpTimeout(d time.Duration) func(*PgxQueueStateRepository) {
+func WithQueueStateOpTimeout(d time.Duration) func(*PgxQueueStateRepository) {
 	return func(r *PgxQueueStateRepository) {
 		r.timeout = d
 	}
 }
 
-func withQueueStateSaveGrace(d time.Duration) func(*PgxQueueStateRepository) {
+func WithQueueStateSaveGrace(d time.Duration) func(*PgxQueueStateRepository) {
 	return func(r *PgxQueueStateRepository) {
 		r.saveGrace = d
 	}

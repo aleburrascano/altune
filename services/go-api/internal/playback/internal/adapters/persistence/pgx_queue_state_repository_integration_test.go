@@ -1,8 +1,7 @@
-package persistence
+package persistence_test
 
 import (
-	"altune/go-api/internal/playback/domain"
-	"altune/go-api/internal/playback/internal/core/ports"
+	"altune/go-api/internal/playback"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
@@ -53,13 +52,13 @@ func dropQueueStateOnCleanup(t *testing.T, pool *pgxpool.Pool, userId shared.Use
 	})
 }
 
-func stateAt(userId shared.UserId, positionMs int64, at time.Time) *domain.QueueState {
-	return &domain.QueueState{
+func stateAt(userId shared.UserId, positionMs int64, at time.Time) *playback.QueueState {
+	return &playback.QueueState{
 		UserId:       userId,
 		TrackIds:     []string{},
 		NaturalOrder: []string{},
 		PositionMs:   positionMs,
-		RepeatMode:   domain.RepeatOff,
+		RepeatMode:   playback.RepeatOff,
 		UpdatedAt:    at,
 	}
 }
@@ -67,7 +66,7 @@ func stateAt(userId shared.UserId, positionMs int64, at time.Time) *domain.Queue
 func TestDeleteForUser_ErasesPersistedRow(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	repo := NewPgxQueueStateRepository(pool)
+	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -96,7 +95,7 @@ func TestDeleteForUser_ErasesPersistedRow(t *testing.T) {
 func TestDeleteForUser_MissingRowIsNotAnError(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	repo := NewPgxQueueStateRepository(pool)
+	repo := playback.NewPgxQueueStateRepository(pool)
 
 	if err := repo.DeleteForUser(context.Background(), shared.NewUserId(uuid.New())); err != nil {
 		t.Fatalf("deleting a user with no stored state must be a no-op, got: %v", err)
@@ -106,7 +105,7 @@ func TestDeleteForUser_MissingRowIsNotAnError(t *testing.T) {
 func TestUpsert_OlderSnapshotDoesNotClobberNewer(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	repo := NewPgxQueueStateRepository(pool)
+	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -119,7 +118,7 @@ func TestUpsert_OlderSnapshotDoesNotClobberNewer(t *testing.T) {
 	if err := repo.Upsert(ctx, newer); err != nil {
 		t.Fatalf("Upsert(newer): %v", err)
 	}
-	if err := repo.Upsert(ctx, older); !errors.Is(err, domain.ErrStaleQueueWrite) {
+	if err := repo.Upsert(ctx, older); !errors.Is(err, playback.ErrStaleQueueWrite) {
 		t.Fatalf("Upsert(older) = %v, want ErrStaleQueueWrite; a rejected write must not report success", err)
 	}
 
@@ -138,7 +137,7 @@ func TestUpsert_OlderSnapshotDoesNotClobberNewer(t *testing.T) {
 func TestUpsert_NewerSnapshotStillApplies(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	repo := NewPgxQueueStateRepository(pool)
+	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -167,7 +166,7 @@ func TestUpsert_NewerSnapshotStillApplies(t *testing.T) {
 func TestUpsert_FastInstanceClockDoesNotRejectLaterSave(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	repo := NewPgxQueueStateRepository(pool)
+	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -207,19 +206,19 @@ func TestUpsert_SaveDelayedInPoolIsStillStale(t *testing.T) {
 
 	older := stateAt(userId, 60000, time.Now())
 	done := make(chan error, 1)
-	go func() { done <- NewPgxQueueStateRepository(narrow).Upsert(ctx, older) }()
+	go func() { done <- playback.NewPgxQueueStateRepository(narrow).Upsert(ctx, older) }()
 
 	time.Sleep(300 * time.Millisecond)
-	newerErr := NewPgxQueueStateRepository(wide).Upsert(ctx, stateAt(userId, 65000, time.Now()))
+	newerErr := playback.NewPgxQueueStateRepository(wide).Upsert(ctx, stateAt(userId, 65000, time.Now()))
 	held.Release()
 	if newerErr != nil {
 		t.Fatalf("Upsert(newer): %v", newerErr)
 	}
 
-	if err := <-done; !errors.Is(err, domain.ErrStaleQueueWrite) {
+	if err := <-done; !errors.Is(err, playback.ErrStaleQueueWrite) {
 		t.Fatalf("Upsert(older, delayed in pool) = %v, want ErrStaleQueueWrite", err)
 	}
-	got, err := NewPgxQueueStateRepository(wide).GetForUser(ctx, userId)
+	got, err := playback.NewPgxQueueStateRepository(wide).GetForUser(ctx, userId)
 	if err != nil {
 		t.Fatalf("GetForUser: %v", err)
 	}
@@ -237,7 +236,7 @@ func TestUpsert_SaveDelayedPastAnErasureDoesNotResurrectIt(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	dropQueueStateOnCleanup(t, wide, userId)
 
-	if err := NewPgxQueueStateRepository(wide).Upsert(ctx, stateAt(userId, 60000, time.Now())); err != nil {
+	if err := playback.NewPgxQueueStateRepository(wide).Upsert(ctx, stateAt(userId, 60000, time.Now())); err != nil {
 		t.Fatalf("Upsert(the queue the user then erases): %v", err)
 	}
 	held, err := narrow.Acquire(ctx)
@@ -247,19 +246,19 @@ func TestUpsert_SaveDelayedPastAnErasureDoesNotResurrectIt(t *testing.T) {
 
 	inFlight := stateAt(userId, 65000, time.Now())
 	done := make(chan error, 1)
-	go func() { done <- NewPgxQueueStateRepository(narrow).Upsert(ctx, inFlight) }()
+	go func() { done <- playback.NewPgxQueueStateRepository(narrow).Upsert(ctx, inFlight) }()
 
 	time.Sleep(300 * time.Millisecond)
-	forgetErr := NewPgxQueueStateRepository(wide).DeleteForUser(ctx, userId)
+	forgetErr := playback.NewPgxQueueStateRepository(wide).DeleteForUser(ctx, userId)
 	held.Release()
 	if forgetErr != nil {
 		t.Fatalf("DeleteForUser: %v", forgetErr)
 	}
 
-	if err := <-done; !errors.Is(err, domain.ErrStaleQueueWrite) {
+	if err := <-done; !errors.Is(err, playback.ErrStaleQueueWrite) {
 		t.Fatalf("Upsert(handled before the erasure, executed after it) = %v, want ErrStaleQueueWrite", err)
 	}
-	got, err := NewPgxQueueStateRepository(wide).GetForUser(ctx, userId)
+	got, err := playback.NewPgxQueueStateRepository(wide).GetForUser(ctx, userId)
 	if err != nil {
 		t.Fatalf("GetForUser: %v", err)
 	}
@@ -275,7 +274,7 @@ func TestUpsert_SaveBlockedOnTheErasureLockDoesNotResurrectIt(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	dropQueueStateOnCleanup(t, pool, userId)
 
-	if err := NewPgxQueueStateRepository(pool).Upsert(ctx, stateAt(userId, 60000, time.Now())); err != nil {
+	if err := playback.NewPgxQueueStateRepository(pool).Upsert(ctx, stateAt(userId, 60000, time.Now())); err != nil {
 		t.Fatalf("Upsert(the queue the user then erases): %v", err)
 	}
 	inFlight := stateAt(userId, 65000, time.Now())
@@ -284,23 +283,23 @@ func TestUpsert_SaveBlockedOnTheErasureLockDoesNotResurrectIt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}
-	erasingRepo := &PgxQueueStateRepository{pool: erasure, metrics: ports.NoopQueueStateMetrics()}
+	erasingRepo := playback.NewPgxQueueStateRepository(erasure)
 	if err := erasingRepo.DeleteForUser(ctx, userId); err != nil {
 		t.Fatalf("DeleteForUser(holding the row): %v", err)
 	}
 
 	done := make(chan error, 1)
-	go func() { done <- NewPgxQueueStateRepository(pool).Upsert(ctx, inFlight) }()
+	go func() { done <- playback.NewPgxQueueStateRepository(pool).Upsert(ctx, inFlight) }()
 	awaitBlockedQueueWriter(t, ctx, pool)
 
 	if err := erasure.Commit(ctx); err != nil {
 		t.Fatalf("commit the erasure: %v", err)
 	}
 
-	if err := <-done; !errors.Is(err, domain.ErrStaleQueueWrite) {
+	if err := <-done; !errors.Is(err, playback.ErrStaleQueueWrite) {
 		t.Fatalf("Upsert(blocked on the erasure's lock) = %v, want ErrStaleQueueWrite", err)
 	}
-	got, err := NewPgxQueueStateRepository(pool).GetForUser(ctx, userId)
+	got, err := playback.NewPgxQueueStateRepository(pool).GetForUser(ctx, userId)
 	if err != nil {
 		t.Fatalf("GetForUser: %v", err)
 	}
@@ -325,7 +324,7 @@ func TestDeleteForUser_ReapsRowsErasedPastTheFenceWindow(t *testing.T) {
 		t.Fatalf("seed a long-erased row: %v", err)
 	}
 
-	if err := NewPgxQueueStateRepository(pool).DeleteForUser(ctx, erasingNow); err != nil {
+	if err := playback.NewPgxQueueStateRepository(pool).DeleteForUser(ctx, erasingNow); err != nil {
 		t.Fatalf("DeleteForUser: %v", err)
 	}
 
@@ -344,7 +343,7 @@ func TestUpsert_SaveHandledAfterAnErasureStillApplies(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
 	saveGrace := 50 * time.Millisecond
-	repo := NewPgxQueueStateRepository(pool, withQueueStateSaveGrace(saveGrace))
+	repo := playback.NewPgxQueueStateRepository(pool, playback.WithQueueStateSaveGrace(saveGrace))
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -383,10 +382,10 @@ func TestUpdatePosition_DelayedPastAnErasureDoesNotRecreateTheRow(t *testing.T) 
 	seeded := stateAt(userId, 60000, time.Now())
 	seeded.TrackIds = []string{trk("track-a")}
 	seeded.NaturalOrder = []string{trk("track-a")}
-	if err := NewPgxQueueStateRepository(wide).Upsert(ctx, seeded); err != nil {
+	if err := playback.NewPgxQueueStateRepository(wide).Upsert(ctx, seeded); err != nil {
 		t.Fatalf("Upsert(the queue the user then erases): %v", err)
 	}
-	position, err := domain.NewQueuePosition(domain.QueuePositionInput{
+	position, err := newQueuePosition(playback.QueuePosition{
 		UserId: userId, CurrentIdx: 0, CurrentTrackId: trk("track-a"), PositionMs: 65000,
 	})
 	if err != nil {
@@ -398,19 +397,19 @@ func TestUpdatePosition_DelayedPastAnErasureDoesNotRecreateTheRow(t *testing.T) 
 	}
 
 	done := make(chan error, 1)
-	go func() { done <- NewPgxQueueStateRepository(narrow).UpdatePosition(ctx, position) }()
+	go func() { done <- playback.NewPgxQueueStateRepository(narrow).UpdatePosition(ctx, position) }()
 
 	time.Sleep(300 * time.Millisecond)
-	forgetErr := NewPgxQueueStateRepository(wide).DeleteForUser(ctx, userId)
+	forgetErr := playback.NewPgxQueueStateRepository(wide).DeleteForUser(ctx, userId)
 	held.Release()
 	if forgetErr != nil {
 		t.Fatalf("DeleteForUser: %v", forgetErr)
 	}
 
-	if err := <-done; !errors.Is(err, domain.ErrQueuePositionMismatch) {
+	if err := <-done; !errors.Is(err, playback.ErrQueuePositionMismatch) {
 		t.Fatalf("UpdatePosition(executed after the erasure) = %v, want ErrQueuePositionMismatch", err)
 	}
-	got, err := NewPgxQueueStateRepository(wide).GetForUser(ctx, userId)
+	got, err := playback.NewPgxQueueStateRepository(wide).GetForUser(ctx, userId)
 	if err != nil {
 		t.Fatalf("GetForUser: %v", err)
 	}
@@ -422,18 +421,18 @@ func TestUpdatePosition_DelayedPastAnErasureDoesNotRecreateTheRow(t *testing.T) 
 func TestDeleteForUser_ErasedRowEqualsEmptyQueueState(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	repo := NewPgxQueueStateRepository(pool)
+	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	dropQueueStateOnCleanup(t, pool, userId)
 
-	populated := &domain.QueueState{
+	populated := &playback.QueueState{
 		UserId:       userId,
 		TrackIds:     []string{"a", "b", "c"},
 		CurrentIdx:   1,
 		PositionMs:   42000,
 		Shuffled:     true,
-		RepeatMode:   domain.RepeatAll,
+		RepeatMode:   playback.RepeatAll,
 		SourceId:     "playlist-1",
 		NaturalOrder: []string{"c", "a", "b"},
 		UpdatedAt:    time.Now().UTC(),
@@ -445,7 +444,7 @@ func TestDeleteForUser_ErasedRowEqualsEmptyQueueState(t *testing.T) {
 		t.Fatalf("DeleteForUser: %v", err)
 	}
 
-	var got domain.QueueState
+	var got playback.QueueState
 	var repeatMode string
 	err := pool.QueryRow(ctx,
 		`SELECT track_ids, current_idx, position_ms, shuffled, repeat_mode, source_id, natural_order
@@ -456,7 +455,7 @@ func TestDeleteForUser_ErasedRowEqualsEmptyQueueState(t *testing.T) {
 		t.Fatalf("read erased row: %v", err)
 	}
 
-	want := *domain.EmptyQueueState(userId)
+	want := *emptyQueueState(userId)
 	if repeatMode != want.RepeatMode.String() {
 		t.Errorf("repeat_mode = %q, want %q", repeatMode, want.RepeatMode.String())
 	}
@@ -468,7 +467,7 @@ func TestDeleteForUser_ErasedRowEqualsEmptyQueueState(t *testing.T) {
 
 const maxUnchangedListWALBytes = 16 << 10
 
-func walInsertLSN(t *testing.T, ctx context.Context, q querier) string {
+func walInsertLSN(t *testing.T, ctx context.Context, q playback.QueueStateDB) string {
 	t.Helper()
 	var lsn string
 	if err := q.QueryRow(ctx, `SELECT pg_current_wal_insert_lsn()::text`).Scan(&lsn); err != nil {
@@ -477,7 +476,7 @@ func walInsertLSN(t *testing.T, ctx context.Context, q querier) string {
 	return lsn
 }
 
-func walBytesSince(t *testing.T, ctx context.Context, q querier, lsn string) int64 {
+func walBytesSince(t *testing.T, ctx context.Context, q playback.QueueStateDB, lsn string) int64 {
 	t.Helper()
 	var n int64
 	if err := q.QueryRow(ctx,
@@ -488,15 +487,15 @@ func walBytesSince(t *testing.T, ctx context.Context, q querier, lsn string) int
 	return n
 }
 
-func maxLengthQueue(t *testing.T, userId shared.UserId, trackIds []string, positionMs int64) *domain.QueueState {
+func maxLengthQueue(t *testing.T, userId shared.UserId, trackIds []string, positionMs int64) *playback.QueueState {
 	t.Helper()
-	state, err := domain.NewQueueState(domain.QueueStateInput{
+	state, err := playback.NewQueueState(playback.QueueStateInput{
 		UserId:       userId,
 		TrackIds:     trackIds,
 		NaturalOrder: trackIds,
 		CurrentIdx:   5,
 		PositionMs:   positionMs,
-		RepeatMode:   domain.RepeatOff,
+		RepeatMode:   playback.RepeatOff,
 		SourceId:     "library",
 	})
 	if err != nil {
@@ -517,7 +516,7 @@ func uuidTrackIds(n int) []string {
 	return ids
 }
 
-func cleanupUser(t *testing.T, q querier, userId shared.UserId) {
+func cleanupUser(t *testing.T, q playback.QueueStateDB, userId shared.UserId) {
 	t.Cleanup(func() {
 		_, _ = q.Exec(context.Background(),
 			`DELETE FROM playback_queue_state WHERE user_id = $1`, userId.UUID())
@@ -527,11 +526,11 @@ func cleanupUser(t *testing.T, q querier, userId shared.UserId) {
 func TestUpsert_UnchangedTrackListsAreNotRewritten(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	repo := NewPgxQueueStateRepository(pool)
+	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	cleanupUser(t, pool, userId)
-	trackIds := uuidTrackIds(domain.MaxQueueLength)
+	trackIds := uuidTrackIds(maxQueueLength)
 
 	if err := repo.Upsert(ctx, maxLengthQueue(t, userId, trackIds, 1000)); err != nil {
 		t.Fatalf("Upsert(initial): %v", err)
@@ -542,7 +541,7 @@ func TestUpsert_UnchangedTrackListsAreNotRewritten(t *testing.T) {
 		t.Fatalf("Upsert(position moved): %v", err)
 	}
 	wal := walBytesSince(t, ctx, pool, lsn)
-	t.Logf("full-state save, unchanged %d-track lists: %d WAL bytes", domain.MaxQueueLength, wal)
+	t.Logf("full-state save, unchanged %d-track lists: %d WAL bytes", maxQueueLength, wal)
 	if wal > maxUnchangedListWALBytes {
 		t.Fatalf("a save whose track lists did not change wrote %d WAL bytes, want <= %d; the unchanged arrays were rewritten", wal, maxUnchangedListWALBytes)
 	}
@@ -551,8 +550,8 @@ func TestUpsert_UnchangedTrackListsAreNotRewritten(t *testing.T) {
 	if err != nil || got == nil {
 		t.Fatalf("GetForUser: state=%v err=%v", got, err)
 	}
-	if got.PositionMs != 16000 || len(got.TrackIds) != domain.MaxQueueLength || got.TrackIds[5] != trackIds[5] ||
-		len(got.NaturalOrder) != domain.MaxQueueLength || got.NaturalOrder[9999] != trackIds[9999] {
+	if got.PositionMs != 16000 || len(got.TrackIds) != maxQueueLength || got.TrackIds[5] != trackIds[5] ||
+		len(got.NaturalOrder) != maxQueueLength || got.NaturalOrder[9999] != trackIds[9999] {
 		t.Fatalf("stored state after position save is wrong: position=%d tracks=%d natural=%d", got.PositionMs, len(got.TrackIds), len(got.NaturalOrder))
 	}
 }
@@ -560,12 +559,12 @@ func TestUpsert_UnchangedTrackListsAreNotRewritten(t *testing.T) {
 func TestUpsert_ChangedTrackListIsStillWritten(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	repo := NewPgxQueueStateRepository(pool)
+	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	cleanupUser(t, pool, userId)
 
-	if err := repo.Upsert(ctx, maxLengthQueue(t, userId, uuidTrackIds(domain.MaxQueueLength), 1000)); err != nil {
+	if err := repo.Upsert(ctx, maxLengthQueue(t, userId, uuidTrackIds(maxQueueLength), 1000)); err != nil {
 		t.Fatalf("Upsert(initial): %v", err)
 	}
 	replacement := uuidTrackIds(6)
@@ -582,9 +581,9 @@ func TestUpsert_ChangedTrackListIsStillWritten(t *testing.T) {
 	}
 }
 
-func positionAt(t *testing.T, userId shared.UserId, idx int, trackId string, positionMs int64, handledAgo time.Duration) *domain.QueuePosition {
+func positionAt(t *testing.T, userId shared.UserId, idx int, trackId string, positionMs int64, handledAgo time.Duration) *playback.QueuePosition {
 	t.Helper()
-	p, err := domain.NewQueuePosition(domain.QueuePositionInput{
+	p, err := newQueuePosition(playback.QueuePosition{
 		UserId: userId, CurrentIdx: idx, CurrentTrackId: trackId, PositionMs: positionMs,
 	})
 	if err != nil {
@@ -597,11 +596,11 @@ func positionAt(t *testing.T, userId shared.UserId, idx int, trackId string, pos
 func TestUpdatePosition_WritesOnlyThePosition(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	repo := NewPgxQueueStateRepository(pool)
+	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	cleanupUser(t, pool, userId)
-	trackIds := uuidTrackIds(domain.MaxQueueLength)
+	trackIds := uuidTrackIds(maxQueueLength)
 
 	if err := repo.Upsert(ctx, maxLengthQueue(t, userId, trackIds, 1000)); err != nil {
 		t.Fatalf("Upsert(initial): %v", err)
@@ -612,7 +611,7 @@ func TestUpdatePosition_WritesOnlyThePosition(t *testing.T) {
 		t.Fatalf("UpdatePosition: %v", err)
 	}
 	wal := walBytesSince(t, ctx, pool, lsn)
-	t.Logf("position-only save, %d-track queue: %d WAL bytes", domain.MaxQueueLength, wal)
+	t.Logf("position-only save, %d-track queue: %d WAL bytes", maxQueueLength, wal)
 	if wal > maxUnchangedListWALBytes {
 		t.Fatalf("a position-only save wrote %d WAL bytes, want <= %d", wal, maxUnchangedListWALBytes)
 	}
@@ -624,8 +623,8 @@ func TestUpdatePosition_WritesOnlyThePosition(t *testing.T) {
 	if got.CurrentIdx != 9999 || got.PositionMs != 16000 {
 		t.Fatalf("position not stored: idx=%d position=%d", got.CurrentIdx, got.PositionMs)
 	}
-	if len(got.TrackIds) != domain.MaxQueueLength || got.TrackIds[0] != trackIds[0] ||
-		len(got.NaturalOrder) != domain.MaxQueueLength || got.SourceId != "library" {
+	if len(got.TrackIds) != maxQueueLength || got.TrackIds[0] != trackIds[0] ||
+		len(got.NaturalOrder) != maxQueueLength || got.SourceId != "library" {
 		t.Fatalf("a position-only save disturbed the queue: tracks=%d natural=%d source=%q", len(got.TrackIds), len(got.NaturalOrder), got.SourceId)
 	}
 }
@@ -633,7 +632,7 @@ func TestUpdatePosition_WritesOnlyThePosition(t *testing.T) {
 func TestUpdatePosition_NeverOverwritesANewerFullQueue(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	repo := NewPgxQueueStateRepository(pool)
+	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	cleanupUser(t, pool, userId)
@@ -643,7 +642,7 @@ func TestUpdatePosition_NeverOverwritesANewerFullQueue(t *testing.T) {
 		t.Fatalf("Upsert(newer full save): %v", err)
 	}
 	err := repo.UpdatePosition(ctx, positionAt(t, userId, 1, trk("b"), 1, 5*time.Second))
-	if !errors.Is(err, domain.ErrStaleQueueWrite) {
+	if !errors.Is(err, playback.ErrStaleQueueWrite) {
 		t.Fatalf("UpdatePosition(handled before the stored save) = %v, want ErrStaleQueueWrite", err)
 	}
 
@@ -659,7 +658,7 @@ func TestUpdatePosition_NeverOverwritesANewerFullQueue(t *testing.T) {
 func TestUpdatePosition_OrdersAgainstFullSavesBothWays(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	repo := NewPgxQueueStateRepository(pool)
+	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	cleanupUser(t, pool, userId)
@@ -676,7 +675,7 @@ func TestUpdatePosition_OrdersAgainstFullSavesBothWays(t *testing.T) {
 	if err := repo.UpdatePosition(ctx, positionAt(t, userId, 5, trk("f"), 30000, 0)); err != nil {
 		t.Fatalf("UpdatePosition: %v", err)
 	}
-	if err := repo.Upsert(ctx, delayedFull); !errors.Is(err, domain.ErrStaleQueueWrite) {
+	if err := repo.Upsert(ctx, delayedFull); !errors.Is(err, playback.ErrStaleQueueWrite) {
 		t.Fatalf("Upsert(handled before the position save) = %v, want ErrStaleQueueWrite", err)
 	}
 
@@ -689,12 +688,12 @@ func TestUpdatePosition_OrdersAgainstFullSavesBothWays(t *testing.T) {
 func TestUpdatePosition_DoesNotLandOnADifferentQueue(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	repo := NewPgxQueueStateRepository(pool)
+	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	cleanupUser(t, pool, userId)
 
-	if err := repo.UpdatePosition(ctx, positionAt(t, userId, 0, trk("a"), 1, 0)); !errors.Is(err, domain.ErrQueuePositionMismatch) {
+	if err := repo.UpdatePosition(ctx, positionAt(t, userId, 0, trk("a"), 1, 0)); !errors.Is(err, playback.ErrQueuePositionMismatch) {
 		t.Fatalf("UpdatePosition with nothing stored = %v, want ErrQueuePositionMismatch", err)
 	}
 	if got, err := repo.GetForUser(ctx, userId); err != nil || got != nil {
@@ -704,11 +703,11 @@ func TestUpdatePosition_DoesNotLandOnADifferentQueue(t *testing.T) {
 	if err := repo.Upsert(ctx, maxLengthQueue(t, userId, []string{trk("x"), trk("y"), trk("z"), trk("w"), trk("v"), trk("u")}, 4000)); err != nil {
 		t.Fatalf("Upsert(replacement queue): %v", err)
 	}
-	for name, p := range map[string]*domain.QueuePosition{
+	for name, p := range map[string]*playback.QueuePosition{
 		"different track at the index": positionAt(t, userId, 1, trk("b"), 99000, 0),
 		"index past the stored queue":  positionAt(t, userId, 6, trk("u"), 99000, 0),
 	} {
-		if err := repo.UpdatePosition(ctx, p); !errors.Is(err, domain.ErrQueuePositionMismatch) {
+		if err := repo.UpdatePosition(ctx, p); !errors.Is(err, playback.ErrQueuePositionMismatch) {
 			t.Fatalf("%s: UpdatePosition = %v, want ErrQueuePositionMismatch", name, err)
 		}
 	}
@@ -719,14 +718,14 @@ func TestUpdatePosition_DoesNotLandOnADifferentQueue(t *testing.T) {
 	}
 }
 
-func uncommittedFullSave(t *testing.T, ctx context.Context, pool *pgxpool.Pool, state *domain.QueueState) (commit func()) {
+func uncommittedFullSave(t *testing.T, ctx context.Context, pool *pgxpool.Pool, state *playback.QueueState) (commit func()) {
 	t.Helper()
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}
 	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
-	if err := (&PgxQueueStateRepository{pool: tx, metrics: ports.NoopQueueStateMetrics()}).Upsert(ctx, state); err != nil {
+	if err := playback.NewPgxQueueStateRepository(tx).Upsert(ctx, state); err != nil {
 		t.Fatalf("Upsert(concurrent full save): %v", err)
 	}
 	return func() {
@@ -736,7 +735,7 @@ func uncommittedFullSave(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 	}
 }
 
-func awaitBlockedQueueWriter(t *testing.T, ctx context.Context, q querier) {
+func awaitBlockedQueueWriter(t *testing.T, ctx context.Context, q playback.QueueStateDB) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
@@ -761,7 +760,7 @@ func awaitBlockedQueueWriter(t *testing.T, ctx context.Context, q querier) {
 func TestUpdatePosition_QueueReplacedDuringItsLockWaitTellsTheClientToResync(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	repo := NewPgxQueueStateRepository(pool)
+	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	cleanupUser(t, pool, userId)
@@ -777,7 +776,7 @@ func TestUpdatePosition_QueueReplacedDuringItsLockWaitTellsTheClientToResync(t *
 	awaitBlockedQueueWriter(t, ctx, pool)
 	commitReplacement()
 
-	if err := <-raced; !errors.Is(err, domain.ErrQueuePositionMismatch) {
+	if err := <-raced; !errors.Is(err, playback.ErrQueuePositionMismatch) {
 		t.Fatalf("UpdatePosition that lost its track while waiting on the lock = %v, want ErrQueuePositionMismatch", err)
 	}
 	got, err := repo.GetForUser(ctx, userId)
@@ -789,7 +788,7 @@ func TestUpdatePosition_QueueReplacedDuringItsLockWaitTellsTheClientToResync(t *
 func TestUpdatePosition_AppliesOverAFullSaveItWaitedOut(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	repo := NewPgxQueueStateRepository(pool)
+	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	cleanupUser(t, pool, userId)
@@ -822,7 +821,7 @@ func TestUpdatePosition_HandledBeforeTheFullSaveItWaitedOutStaysStale(t *testing
 		lockHeldWhileItWaits     = time.Second
 	)
 	pool := testPool(t)
-	repo := NewPgxQueueStateRepository(pool)
+	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	cleanupUser(t, pool, userId)
@@ -840,7 +839,7 @@ func TestUpdatePosition_HandledBeforeTheFullSaveItWaitedOutStaysStale(t *testing
 	time.Sleep(lockHeldWhileItWaits)
 	commitNewerFull()
 
-	if err := <-raced; !errors.Is(err, domain.ErrStaleQueueWrite) {
+	if err := <-raced; !errors.Is(err, playback.ErrStaleQueueWrite) {
 		t.Fatalf("UpdatePosition(handled before the full save it waited out) = %v, want ErrStaleQueueWrite", err)
 	}
 	got, err := repo.GetForUser(ctx, userId)
@@ -852,7 +851,7 @@ func TestUpdatePosition_HandledBeforeTheFullSaveItWaitedOutStaysStale(t *testing
 func TestUpsert_SaveStampedWithinTheGraceAfterAnErasureIsRefused(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	repo := NewPgxQueueStateRepository(pool)
+	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	dropQueueStateOnCleanup(t, pool, userId)
@@ -865,7 +864,7 @@ func TestUpsert_SaveStampedWithinTheGraceAfterAnErasureIsRefused(t *testing.T) {
 		t.Fatalf("DeleteForUser: %v", err)
 	}
 
-	if err := repo.Upsert(ctx, handledBeforeErasure); !errors.Is(err, domain.ErrStaleQueueWrite) {
+	if err := repo.Upsert(ctx, handledBeforeErasure); !errors.Is(err, playback.ErrStaleQueueWrite) {
 		t.Fatalf("Upsert(stamped within the grace of the erasure) = %v, want ErrStaleQueueWrite", err)
 	}
 	got, err := repo.GetForUser(ctx, userId)
@@ -894,7 +893,7 @@ func TestReapErasedStates_DropsOnlyTombstonesPastTheFenceWindow(t *testing.T) {
 		}
 	}
 
-	if _, err := NewPgxQueueStateRepository(pool).ReapErasedStates(ctx); err != nil {
+	if _, err := playback.NewPgxQueueStateRepository(pool).ReapErasedStates(ctx); err != nil {
 		t.Fatalf("ReapErasedStates: %v", err)
 	}
 
@@ -916,7 +915,7 @@ func TestReapErasedStates_DropsOnlyTombstonesPastTheFenceWindow(t *testing.T) {
 func TestUpdatePosition_MatchesALegacyNonCanonicalStoredId(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	repo := NewPgxQueueStateRepository(pool)
+	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	cleanupUser(t, pool, userId)
@@ -940,7 +939,7 @@ func TestUpdatePosition_MatchesALegacyNonCanonicalStoredId(t *testing.T) {
 		}
 	}
 	other := "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
-	if err := repo.UpdatePosition(ctx, positionAt(t, userId, 4, other, 1, 0)); !errors.Is(err, domain.ErrQueuePositionMismatch) {
+	if err := repo.UpdatePosition(ctx, positionAt(t, userId, 4, other, 1, 0)); !errors.Is(err, playback.ErrQueuePositionMismatch) {
 		t.Fatalf("UpdatePosition over a garbage stored id = %v, want ErrQueuePositionMismatch", err)
 	}
 

@@ -1,7 +1,7 @@
-package persistence
+package persistence_test
 
 import (
-	"altune/go-api/internal/playback/internal/core/ports"
+	"altune/go-api/internal/playback"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
@@ -22,17 +22,17 @@ func (q failingQuerier) Query(context.Context, string, ...any) (pgx.Rows, error)
 
 func TestListOwnersWithoutIdentity_UnreadableIdentityStoreIsNotDeletedAccounts(t *testing.T) {
 	unreadable := map[string]string{
-		"no identity store here (a plain Postgres, no auth schema)": undefinedTableCode,
-		"role denied the identity store":                            insufficientPrivCode,
+		"no identity store here (a plain Postgres, no auth schema)": "42P01",
+		"role denied the identity store":                            "42501",
 	}
 	for name, sqlState := range unreadable {
 		t.Run(name, func(t *testing.T) {
-			repo := &PgxDeletedIdentityRepository{pool: failingQuerier{err: &pgconn.PgError{Code: sqlState}}}
+			repo := playback.NewPgxDeletedIdentityRepository(failingQuerier{err: &pgconn.PgError{Code: sqlState}})
 
 			page, err := repo.ListOwnersWithoutIdentity(context.Background(), shared.UserId{}, 10)
 
-			if !errors.Is(err, ports.ErrIdentityStoreUnavailable) {
-				t.Fatalf("SQLSTATE %s = %v, want ports.ErrIdentityStoreUnavailable so the sweep idles", sqlState, err)
+			if !errors.Is(err, playback.ErrIdentityStoreUnavailable) {
+				t.Fatalf("SQLSTATE %s = %v, want playback.ErrIdentityStoreUnavailable so the sweep idles", sqlState, err)
 			}
 			if page.Orphaned != nil {
 				t.Errorf("reported %d owners as deleted from an identity store it could not read", len(page.Orphaned))
@@ -43,14 +43,14 @@ func TestListOwnersWithoutIdentity_UnreadableIdentityStoreIsNotDeletedAccounts(t
 
 func TestListOwnersWithoutIdentity_QueryFailureStaysAFailure(t *testing.T) {
 	connectionRefused := errors.New("connection refused")
-	repo := &PgxDeletedIdentityRepository{pool: failingQuerier{err: connectionRefused}}
+	repo := playback.NewPgxDeletedIdentityRepository(failingQuerier{err: connectionRefused})
 
 	_, err := repo.ListOwnersWithoutIdentity(context.Background(), shared.UserId{}, 10)
 
 	if !errors.Is(err, connectionRefused) {
 		t.Fatalf("err = %v, want the underlying failure propagated", err)
 	}
-	if errors.Is(err, ports.ErrIdentityStoreUnavailable) {
+	if errors.Is(err, playback.ErrIdentityStoreUnavailable) {
 		t.Error("a failed connection was classified as an absent identity store, so the sweep would idle through an outage")
 	}
 }
@@ -65,8 +65,7 @@ func (blockingRowsQuerier) Query(ctx context.Context, _ string, _ ...any) (pgx.R
 type blockedRows struct{ pgx.Rows }
 
 func TestListOwnersWithoutIdentity_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
-	repo := &PgxDeletedIdentityRepository{pool: blockingRowsQuerier{}}
-	WithOwnerScanPageTimeout(50 * time.Millisecond)(repo)
+	repo := playback.NewPgxDeletedIdentityRepository(blockingRowsQuerier{}, playback.WithOwnerScanPageTimeout(shortOpTimeout))
 
 	err := runWithGuard(t, func() error {
 		_, err := repo.ListOwnersWithoutIdentity(context.Background(), shared.UserId{}, 10)
@@ -77,18 +76,49 @@ func TestListOwnersWithoutIdentity_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
 	}
 }
 
-func TestNewPgxDeletedIdentityRepository_OwnerScanPageOutlastsTheRequestTimeout(t *testing.T) {
-	repo := NewPgxDeletedIdentityRepository(nil)
+type deadlineRowsQuerier struct {
+	left time.Duration
+}
 
-	if got := repo.opTimeout(); got != DefaultOwnerScanPageTimeout || got <= defaultQueueStateOpTimeout {
-		t.Fatalf("owner scan page timeout = %s, want %s, longer than the %s request timeout", got, DefaultOwnerScanPageTimeout, defaultQueueStateOpTimeout)
+func (q *deadlineRowsQuerier) Query(ctx context.Context, _ string, _ ...any) (pgx.Rows, error) {
+	if deadline, ok := ctx.Deadline(); ok {
+		q.left = time.Until(deadline)
+	}
+	return nil, errors.New("no rows here")
+}
+
+func ownerScanDeadline(opts ...func(*playback.PgxDeletedIdentityRepository)) time.Duration {
+	q := &deadlineRowsQuerier{}
+	_, _ = playback.NewPgxDeletedIdentityRepository(q, opts...).ListOwnersWithoutIdentity(context.Background(), shared.UserId{}, 10)
+	return q.left
+}
+
+func requestDeadline() time.Duration {
+	q := &deadlineQuerier{}
+	_ = playback.NewPgxQueueStateRepository(q).DeleteForUser(context.Background(), testUser())
+	return q.left
+}
+
+func TestNewPgxDeletedIdentityRepository_OwnerScanPageOutlastsTheRequestTimeout(t *testing.T) {
+	got, request := ownerScanDeadline(), requestDeadline()
+
+	if got > defaultOwnerScanPageTimeout || got < defaultOwnerScanPageTimeout-time.Second || got <= request {
+		t.Fatalf("owner scan page deadline %s away, want %s, longer than the %s request deadline", got, defaultOwnerScanPageTimeout, request)
 	}
 }
 
 func TestNewPgxDeletedIdentityRepository_OwnerScanPageTimeoutIsConfigurable(t *testing.T) {
-	repo := NewPgxDeletedIdentityRepository(nil, WithOwnerScanPageTimeout(45*time.Second))
+	got := ownerScanDeadline(playback.WithOwnerScanPageTimeout(45 * time.Second))
 
-	if got := repo.opTimeout(); got != 45*time.Second {
-		t.Fatalf("owner scan page timeout = %s, want the configured 45s", got)
+	if got > 45*time.Second || got < 44*time.Second {
+		t.Fatalf("owner scan page deadline %s away, want the configured 45s", got)
+	}
+}
+
+func TestNewPgxDeletedIdentityRepository_ZeroTimeoutKeepsTheDefault(t *testing.T) {
+	got := ownerScanDeadline(playback.WithOwnerScanPageTimeout(0))
+
+	if got > defaultOwnerScanPageTimeout || got < defaultOwnerScanPageTimeout-time.Second {
+		t.Fatalf("owner scan page deadline %s away, want the %s default", got, defaultOwnerScanPageTimeout)
 	}
 }
