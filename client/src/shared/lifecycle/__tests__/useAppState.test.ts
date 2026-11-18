@@ -1,50 +1,35 @@
-import { renderHook } from '@testing-library/react-native';
-import { AppState, type AppStateStatus } from 'react-native';
+import { act, renderHook } from '@testing-library/react-native';
 
-import { useAppStateChange } from '@shared/lifecycle';
+import {
+  driveAppState,
+  useAppStateChange,
+  useIsForeground,
+  type AppLifecycleState,
+  type AppStateDriver,
+} from '@shared/lifecycle';
 
-type Listener = (state: AppStateStatus) => void;
+type Listener = (state: AppLifecycleState) => void;
 
-let listeners: Listener[];
-let removes: jest.Mock[];
+let app: AppStateDriver;
 
 beforeEach(() => {
-  listeners = [];
-  removes = [];
-  jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
-    listeners.push(listener as Listener);
-    const remove = jest.fn(() => {
-      listeners = listeners.filter((l) => l !== listener);
-    });
-    removes.push(remove);
-    return { remove };
-  });
+  app = driveAppState();
 });
-
-afterEach(() => {
-  jest.restoreAllMocks();
-});
-
-function emit(state: AppStateStatus): void {
-  for (const l of [...listeners]) l(state);
-}
 
 describe('useAppStateChange', () => {
-  it('forwards change events to the callback and removes the listener on unmount', () => {
+  it('forwards change events to the callback and stops once unmounted', () => {
     const onChange = jest.fn();
     const { unmount } = renderHook(() => useAppStateChange(onChange));
 
-    expect(AppState.addEventListener).toHaveBeenCalledWith('change', expect.any(Function));
-    emit('background');
+    app.change('background');
     expect(onChange).toHaveBeenCalledWith('background');
 
     unmount();
-    expect(removes[0]).toHaveBeenCalledTimes(1);
-    emit('active');
+    app.change('active');
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps one subscription and runs the latest callback after a rerender', () => {
+  it('runs only the latest callback, once per change, after a rerender', () => {
     const first = jest.fn();
     const second = jest.fn();
     const { rerender } = renderHook(({ cb }: { cb: Listener }) => useAppStateChange(cb), {
@@ -52,11 +37,28 @@ describe('useAppStateChange', () => {
     });
 
     rerender({ cb: second });
-    expect(removes).toHaveLength(1);
-    expect(removes[0]).not.toHaveBeenCalled();
-    emit('active');
+    app.change('active');
+
     expect(first).not.toHaveBeenCalled();
-    expect(second).toHaveBeenCalledWith('active');
-    expect(listeners).toHaveLength(1);
+    expect(second.mock.calls).toEqual([['active']]);
+  });
+});
+
+describe('useIsForeground', () => {
+  it('starts from whether the app is active', () => {
+    driveAppState('background');
+    const { result } = renderHook(() => useIsForeground());
+    expect(result.current).toBe(false);
+  });
+
+  it('follows the app into the background and back', () => {
+    const { result } = renderHook(() => useIsForeground());
+    expect(result.current).toBe(true);
+
+    act(() => app.change('background'));
+    expect(result.current).toBe(false);
+
+    act(() => app.change('active'));
+    expect(result.current).toBe(true);
   });
 });
