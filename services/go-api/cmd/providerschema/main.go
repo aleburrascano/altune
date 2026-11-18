@@ -1,0 +1,158 @@
+package main
+
+import (
+	"altune/go-api/internal/shared/providerschema"
+	"cmp"
+	"context"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"slices"
+	"time"
+)
+
+type source interface {
+	Reference(ctx context.Context, entity string) (providerschema.Observed, error)
+	Resource(ctx context.Context, entity, id string) (json.RawMessage, error)
+}
+
+func main() {
+	provider := flag.String("provider", "", "provider whose schema to refresh, e.g. applemusic")
+	schema := flag.String("schema", "", "schema file to refresh (default docs/providers/schema/<provider>.yaml)")
+	envFile := flag.String("env", "", "KEY=VALUE file to read provider keys from, e.g. .env.development")
+	flag.Parse()
+	p, src, root, err := setup(*provider, *envFile)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "providerschema:", err)
+		os.Exit(2)
+	}
+	path := cmp.Or(*schema, schemaPath(root, *provider))
+	audit := func(s providerschema.Schema) (map[string]providerschema.Reads, error) { return p.reads(root, s) }
+	if err := refresh(context.Background(), src, path, audit, os.Stdout); err != nil {
+		fmt.Fprintln(os.Stderr, "providerschema:", err)
+		os.Exit(1)
+	}
+}
+
+func setup(name, envFile string) (provider, source, string, error) {
+	if envFile != "" {
+		if err := loadEnvFile(envFile); err != nil {
+			return provider{}, nil, "", err
+		}
+	}
+	p, ok := providers[name]
+	if !ok {
+		return provider{}, nil, "", fmt.Errorf("unknown -provider %q (known: %v)", name, sortedNames(providers))
+	}
+	root, err := repoRoot()
+	if err != nil {
+		return provider{}, nil, "", err
+	}
+	src, err := p.source(&http.Client{Timeout: 30 * time.Second})
+	return p, src, root, err
+}
+
+type auditor func(s providerschema.Schema) (map[string]providerschema.Reads, error)
+
+func refresh(ctx context.Context, src source, path string, audit auditor, out io.Writer) error {
+	s, err := providerschema.Load(path)
+	if err != nil {
+		return err
+	}
+	if err := fetchAndMerge(ctx, src, s, audit); err != nil {
+		return err
+	}
+	if err := providerschema.Save(path, s); err != nil {
+		return err
+	}
+	for _, name := range sortedNames(s.Entities) {
+		report(out, name, s.Entities[name])
+	}
+	return nil
+}
+
+func fetchAndMerge(ctx context.Context, src source, s providerschema.Schema, audit auditor) error {
+	reads, err := audit(s)
+	if err != nil {
+		return err
+	}
+	for _, name := range sortedNames(s.Entities) {
+		if err := refreshEntity(ctx, src, name, s.Entities[name], reads[name]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func refreshEntity(ctx context.Context, src source, name string, entity *providerschema.Entity, reads providerschema.Reads) error {
+	reference, err := src.Reference(ctx, name)
+	if err != nil {
+		return fmt.Errorf("%s reference: %w", name, err)
+	}
+	live := providerschema.Observed{}
+	for _, fixture := range entity.Fixtures {
+		raw, err := src.Resource(ctx, name, fixture.ID)
+		if err != nil {
+			return fmt.Errorf("%s fixture %s: %w", name, fixture.ID, err)
+		}
+		if err := providerschema.Observe(raw, live); err != nil {
+			return fmt.Errorf("%s fixture %s: %w", name, fixture.ID, err)
+		}
+	}
+	entity.Merge(reference.Collapse(reads.Maps), live.Collapse(reads.Maps))
+	entity.Account(reads)
+	return nil
+}
+
+func report(out io.Writer, name string, entity *providerschema.Entity) {
+	var c fieldCounts
+	for _, f := range entity.Fields {
+		c.add(f)
+	}
+	_, _ = fmt.Fprintf(out, "%s: %d fields, %d only in the reference, %d only live, %d decoded but never sent, %d read only by key match, %d with no read flag or reason\n",
+		name, len(entity.Fields), c.referenceOnly, c.liveOnly, c.neverSent, c.byKey, c.open)
+}
+
+type fieldCounts struct {
+	referenceOnly, liveOnly, neverSent, byKey, open int
+}
+
+func (c *fieldCounts) add(f providerschema.Field) {
+	c.addSeen(f.Seen)
+	if f.ByKey {
+		c.byKey++
+	}
+	if lacksReason(f) {
+		c.open++
+	}
+}
+
+func (c *fieldCounts) addSeen(seen []string) {
+	switch {
+	case len(seen) == 0:
+		c.neverSent++
+	case !slices.Contains(seen, providerschema.SeenLive):
+		c.referenceOnly++
+	case !slices.Contains(seen, providerschema.SeenReference):
+		c.liveOnly++
+	}
+}
+
+func lacksReason(f providerschema.Field) bool {
+	if len(f.Seen) == 0 {
+		return f.Absent == ""
+	}
+	return !f.Read && f.Unused == ""
+}
+
+func sortedNames[V any](entries map[string]V) []string {
+	names := make([]string, 0, len(entries))
+	for name := range entries {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names
+}

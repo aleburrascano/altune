@@ -1,0 +1,1928 @@
+provider: applemusic
+reference: https://developer.apple.com/documentation/applemusicapi
+entities:
+  album:
+    fixtures:
+      - id: "1780411829"
+        why: DJ-mix album, isCompilation true, explicit
+    fields:
+      - path: attributes
+        type: object
+        seen: [reference, live]
+        read: true
+      - path: attributes.artistName
+        type: string
+        seen: [reference, live]
+        read: true
+      - path: attributes.artistUrl
+        type: string
+        seen: [reference]
+        read: false
+        unused: 'GAP: Apple''s artist page, carrying the artist id; artist identity is taken from artistName text instead'
+      - path: attributes.artwork
+        type: object
+        seen: [reference, live]
+        read: true
+      - path: attributes.artwork.bgColor
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.artwork.height
+        type: number
+        seen: [reference, live]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.artwork.textColor1
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.artwork.textColor2
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.artwork.textColor3
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.artwork.textColor4
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.artwork.url
+        type: string
+        seen: [reference, live]
+        read: true
+      - path: attributes.artwork.width
+        type: number
+        seen: [reference, live]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.audioVariants
+        type: array
+        seen: [reference]
+        read: false
+        unused: the audio formats Apple streams (lossless, atmos); we never stream from Apple
+      - path: attributes.audioVariants[]
+        type: string
+        seen: [reference]
+        read: false
+        unused: the audio formats Apple streams (lossless, atmos); we never stream from Apple
+      - path: attributes.contentRating
+        type: string
+        seen: [reference, live]
+        read: true
+      - path: attributes.copyright
+        type: string
+        seen: [reference]
+        read: true
+      - path: attributes.editorialNotes
+        type: object
+        seen: [reference, live]
+        read: false
+        unused: Apple's editorial copy; not shown in the app
+      - path: attributes.editorialNotes.name
+        type: string
+        seen: [reference]
+        read: false
+        unused: Apple's editorial copy; not shown in the app
+      - path: attributes.editorialNotes.short
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: Apple's editorial copy; not shown in the app
+      - path: attributes.editorialNotes.standard
+        type: string
+        seen: [reference]
+        read: false
+        unused: Apple's editorial copy; not shown in the app
+      - path: attributes.editorialNotes.tagline
+        type: string
+        seen: [reference]
+        read: false
+        unused: Apple's editorial copy; not shown in the app
+      - path: attributes.genreNames
+        type: array
+        seen: [reference, live]
+        read: true
+      - path: attributes.genreNames[]
+        type: string
+        seen: [reference, live]
+        read: true
+      - path: attributes.inFavorites
+        type: boolean
+        seen: [reference]
+        read: false
+        unused: a per-user flag; the anonymous token never sets it
+      - path: attributes.isCompilation
+        type: boolean
+        seen: [reference, live]
+        read: false
+        unused: 'GAP: marks compilations, DJ mixes among them; needed to treat a DJ mix differently'
+      - path: attributes.isComplete
+        type: boolean
+        seen: [reference, live]
+        read: false
+        unused: whether the whole album is sold in this storefront; not used
+      - path: attributes.isMasteredForItunes
+        type: boolean
+        seen: [reference, live]
+        read: false
+        unused: a mastering badge; not used
+      - path: attributes.isSingle
+        type: boolean
+        seen: [reference, live]
+        read: true
+      - path: attributes.name
+        type: string
+        seen: [reference, live]
+        read: true
+      - path: attributes.playParams
+        type: object
+        seen: [reference, live]
+        read: false
+        unused: MusicKit playback parameters; playParams.id repeats the resource id
+      - path: attributes.playParams.id
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: MusicKit playback parameters; playParams.id repeats the resource id
+      - path: attributes.playParams.kind
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: MusicKit playback parameters; playParams.id repeats the resource id
+      - path: attributes.recordLabel
+        type: string
+        seen: [reference]
+        read: true
+      - path: attributes.releaseDate
+        type: string
+        seen: [reference, live]
+        read: true
+      - path: attributes.trackCount
+        type: number
+        seen: [reference, live]
+        read: true
+      - path: attributes.upc
+        type: string
+        seen: [reference, live]
+        read: true
+      - path: attributes.url
+        type: string
+        seen: [reference, live]
+        read: true
+      - path: href
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: the API path of this resource; id is read instead
+      - path: id
+        type: string
+        seen: [reference, live]
+        read: true
+      - path: relationships
+        type: object
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.artists
+        type: object
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.artists.data
+        type: array
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.artists.data[].attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.artists.data[].href
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.artists.data[].id
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: 'GAP: Apple''s artist id; artist identity is taken from the artistName text instead'
+      - path: relationships.artists.data[].relationships
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.artists.data[].type
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.artists.data[].views
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.artists.href
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.artists.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.genres
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.genres.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.genres.data[].attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.genres.data[].href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.genres.data[].id
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.genres.data[].type
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.genres.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.genres.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.library
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.library.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.library.data[].attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.library.data[].href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.library.data[].id
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.library.data[].relationships
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.library.data[].type
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.library.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.library.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.record-labels
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.record-labels.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.record-labels.data[].attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.record-labels.data[].href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.record-labels.data[].id
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.record-labels.data[].type
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.record-labels.data[].views
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.record-labels.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.record-labels.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.tracks
+        type: object
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.tracks.data
+        type: array
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.tracks.data[]
+        type: unknown:*
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.tracks.data[].attributes
+        type: object
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.albumName
+        type: string
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.artistName
+        type: string
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.artwork
+        type: object
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.artwork.bgColor
+        type: string
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.artwork.height
+        type: number
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.artwork.textColor1
+        type: string
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.artwork.textColor2
+        type: string
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.artwork.textColor3
+        type: string
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.artwork.textColor4
+        type: string
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.artwork.url
+        type: string
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.artwork.width
+        type: number
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.contentRating
+        type: string
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.discNumber
+        type: number
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.durationInMillis
+        type: number
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.genreNames
+        type: array
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.genreNames[]
+        type: string
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.hasLyrics
+        type: boolean
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.isAppleDigitalMaster
+        type: boolean
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.isrc
+        type: string
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.name
+        type: string
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.playParams
+        type: object
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.playParams.id
+        type: string
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.playParams.kind
+        type: string
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.previews
+        type: array
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.previews[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.releaseDate
+        type: string
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.trackNumber
+        type: number
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].attributes.url
+        type: string
+        seen: [live]
+        read: false
+        unused: the album's embedded track list; the adapter fetches tracks from albums/{id}/tracks and reads them as song
+      - path: relationships.tracks.data[].href
+        type: string
+        seen: [live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.tracks.data[].id
+        type: string
+        seen: [live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.tracks.data[].type
+        type: string
+        seen: [live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.tracks.href
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.tracks.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: type
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: the resource type, fixed by the endpoint called
+      - path: views
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.appears-on
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.appears-on.attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.appears-on.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.appears-on.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.appears-on.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.other-versions
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.other-versions.attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.other-versions.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.other-versions.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.other-versions.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.related-albums
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.related-albums.attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.related-albums.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.related-albums.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.related-albums.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.related-videos
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.related-videos.attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.related-videos.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.related-videos.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.related-videos.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+  artist:
+    fixtures:
+      - id: "1515978311"
+        why: Nia Archives
+    fields:
+      - path: attributes
+        type: object
+        seen: [reference, live]
+        read: true
+      - path: attributes.artwork
+        type: object
+        seen: [reference, live]
+        read: true
+      - path: attributes.artwork.bgColor
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.artwork.height
+        type: number
+        seen: [reference, live]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.artwork.textColor1
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.artwork.textColor2
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.artwork.textColor3
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.artwork.textColor4
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.artwork.url
+        type: string
+        seen: [reference, live]
+        read: true
+      - path: attributes.artwork.width
+        type: number
+        seen: [reference, live]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.editorialNotes
+        type: object
+        seen: [reference]
+        read: true
+      - path: attributes.editorialNotes.name
+        type: string
+        seen: [reference]
+        read: false
+        unused: Apple's editorial copy; not shown in the app
+      - path: attributes.editorialNotes.short
+        type: string
+        seen: [reference]
+        read: true
+      - path: attributes.editorialNotes.standard
+        type: string
+        seen: [reference]
+        read: false
+        unused: Apple's editorial copy; not shown in the app
+      - path: attributes.editorialNotes.tagline
+        type: string
+        seen: [reference]
+        read: false
+        unused: Apple's editorial copy; not shown in the app
+      - path: attributes.genreNames
+        type: array
+        seen: [reference, live]
+        read: true
+      - path: attributes.genreNames[]
+        type: string
+        seen: [reference, live]
+        read: true
+      - path: attributes.inFavorites
+        type: boolean
+        seen: [reference]
+        read: false
+        unused: a per-user flag; the anonymous token never sets it
+      - path: attributes.name
+        type: string
+        seen: [reference, live]
+        read: true
+      - path: attributes.url
+        type: string
+        seen: [reference, live]
+        read: true
+      - path: href
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: the API path of this resource; id is read instead
+      - path: id
+        type: string
+        seen: [reference, live]
+        read: true
+      - path: relationships
+        type: object
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.albums
+        type: object
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.albums.data
+        type: array
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.albums.data[].attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.albums.data[].href
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.albums.data[].id
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: 'GAP: Apple''s album id for this song; the album is matched by albumName text instead'
+      - path: relationships.albums.data[].relationships
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.albums.data[].type
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.albums.data[].views
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.albums.href
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.albums.next
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.genres
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.genres.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.genres.data[].attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.genres.data[].href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.genres.data[].id
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.genres.data[].type
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.genres.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.genres.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.music-videos
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.music-videos.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.music-videos.data[].attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.music-videos.data[].href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.music-videos.data[].id
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.music-videos.data[].relationships
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.music-videos.data[].type
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.music-videos.data[].views
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.music-videos.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.music-videos.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.playlists
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.playlists.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.playlists.data[].attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.playlists.data[].href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.playlists.data[].id
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.playlists.data[].relationships
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.playlists.data[].type
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.playlists.data[].views
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.playlists.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.playlists.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.station
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.station.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.station.data[].attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.station.data[].href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.station.data[].id
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.station.data[].relationships
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.station.data[].type
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.station.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.station.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: type
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: the resource type, fixed by the endpoint called
+      - path: views
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.appears-on-albums
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.appears-on-albums.attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.appears-on-albums.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.appears-on-albums.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.appears-on-albums.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.compilation-albums
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.compilation-albums.attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.compilation-albums.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.compilation-albums.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.compilation-albums.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.featured-albums
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.featured-albums.attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.featured-albums.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.featured-albums.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.featured-albums.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.featured-music-videos
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.featured-music-videos.attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.featured-music-videos.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.featured-music-videos.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.featured-music-videos.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.featured-playlists
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.featured-playlists.attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.featured-playlists.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.featured-playlists.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.featured-playlists.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.full-albums
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.full-albums.attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.full-albums.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.full-albums.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.full-albums.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.latest-release
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.latest-release.attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.latest-release.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.latest-release.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.latest-release.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.live-albums
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.live-albums.attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.live-albums.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.live-albums.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.live-albums.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.similar-artists
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.similar-artists.attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.similar-artists.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.similar-artists.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.similar-artists.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.singles
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.singles.attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.singles.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.singles.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.singles.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.top-music-videos
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.top-music-videos.attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.top-music-videos.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.top-music-videos.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.top-music-videos.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.top-songs
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.top-songs.attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.top-songs.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.top-songs.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+      - path: views.top-songs.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a curated view of related resources; not requested
+  song:
+    fixtures:
+      - id: "1780412096"
+        why: DJ-mix track with artist "ID" and no contentRating
+      - id: "1780412118"
+        why: DJ-mix slice of a released song
+    fields:
+      - path: attributes
+        type: object
+        seen: [reference, live]
+        read: true
+      - path: attributes.albumName
+        type: string
+        seen: [reference, live]
+        read: true
+      - path: attributes.artistName
+        type: string
+        seen: [reference, live]
+        read: true
+      - path: attributes.artistUrl
+        type: string
+        seen: [reference]
+        read: false
+        unused: 'GAP: Apple''s artist page, carrying the artist id; artist identity is taken from artistName text instead'
+      - path: attributes.artwork
+        type: object
+        seen: [reference, live]
+        read: true
+      - path: attributes.artwork.bgColor
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.artwork.height
+        type: number
+        seen: [reference, live]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.artwork.textColor1
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.artwork.textColor2
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.artwork.textColor3
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.artwork.textColor4
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.artwork.url
+        type: string
+        seen: [reference, live]
+        read: true
+      - path: attributes.artwork.width
+        type: number
+        seen: [reference, live]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.attribution
+        type: string
+        seen: [reference]
+        read: false
+        unused: classical-music attribution text; not used
+      - path: attributes.audioVariants
+        type: array
+        seen: [reference]
+        read: false
+        unused: the audio formats Apple streams (lossless, atmos); we never stream from Apple
+      - path: attributes.audioVariants[]
+        type: string
+        seen: [reference]
+        read: false
+        unused: the audio formats Apple streams (lossless, atmos); we never stream from Apple
+      - path: attributes.composerName
+        type: string
+        seen: [reference]
+        read: true
+      - path: attributes.contentRating
+        type: string
+        seen: [reference, live]
+        read: true
+      - path: attributes.discNumber
+        type: number
+        seen: [reference, live]
+        read: true
+      - path: attributes.durationInMillis
+        type: number
+        seen: [reference, live]
+        read: true
+      - path: attributes.editorialNotes
+        type: object
+        seen: [reference]
+        read: false
+        unused: Apple's editorial copy; not shown in the app
+      - path: attributes.editorialNotes.name
+        type: string
+        seen: [reference]
+        read: false
+        unused: Apple's editorial copy; not shown in the app
+      - path: attributes.editorialNotes.short
+        type: string
+        seen: [reference]
+        read: false
+        unused: Apple's editorial copy; not shown in the app
+      - path: attributes.editorialNotes.standard
+        type: string
+        seen: [reference]
+        read: false
+        unused: Apple's editorial copy; not shown in the app
+      - path: attributes.editorialNotes.tagline
+        type: string
+        seen: [reference]
+        read: false
+        unused: Apple's editorial copy; not shown in the app
+      - path: attributes.genreNames
+        type: array
+        seen: [reference, live]
+        read: true
+      - path: attributes.genreNames[]
+        type: string
+        seen: [reference, live]
+        read: true
+      - path: attributes.hasLyrics
+        type: boolean
+        seen: [reference, live]
+        read: true
+      - path: attributes.inFavorites
+        type: boolean
+        seen: [reference]
+        read: false
+        unused: a per-user flag; the anonymous token never sets it
+      - path: attributes.isAppleDigitalMaster
+        type: boolean
+        seen: [reference, live]
+        read: true
+      - path: attributes.isrc
+        type: string
+        seen: [reference, live]
+        read: true
+      - path: attributes.movementCount
+        type: number
+        seen: [reference]
+        read: false
+        unused: classical work and movement; not used
+      - path: attributes.movementName
+        type: string
+        seen: [reference]
+        read: false
+        unused: classical work and movement; not used
+      - path: attributes.movementNumber
+        type: number
+        seen: [reference]
+        read: false
+        unused: classical work and movement; not used
+      - path: attributes.name
+        type: string
+        seen: [reference, live]
+        read: true
+      - path: attributes.playParams
+        type: object
+        seen: [reference, live]
+        read: false
+        unused: MusicKit playback parameters; playParams.id repeats the resource id
+      - path: attributes.playParams.id
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: MusicKit playback parameters; playParams.id repeats the resource id
+      - path: attributes.playParams.kind
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: MusicKit playback parameters; playParams.id repeats the resource id
+      - path: attributes.previews
+        type: array
+        seen: [reference, live]
+        read: true
+      - path: attributes.previews[].artwork
+        type: object
+        seen: [reference]
+        read: false
+        unused: a preview's video frame, set for music videos only
+      - path: attributes.previews[].artwork.bgColor
+        type: string
+        seen: [reference]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.previews[].artwork.height
+        type: number
+        seen: [reference]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.previews[].artwork.textColor1
+        type: string
+        seen: [reference]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.previews[].artwork.textColor2
+        type: string
+        seen: [reference]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.previews[].artwork.textColor3
+        type: string
+        seen: [reference]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.previews[].artwork.textColor4
+        type: string
+        seen: [reference]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.previews[].artwork.url
+        type: string
+        seen: [reference]
+        read: false
+        unused: a preview's video frame, set for music videos only
+      - path: attributes.previews[].artwork.width
+        type: number
+        seen: [reference]
+        read: false
+        unused: artwork colours and size; the client builds artwork from url alone
+      - path: attributes.previews[].hlsUrl
+        type: string
+        seen: [reference]
+        read: false
+        unused: an HLS stream of the same preview; previews[].url is read instead
+      - path: attributes.previews[].url
+        type: string
+        seen: [reference, live]
+        read: true
+      - path: attributes.releaseDate
+        type: string
+        seen: [reference, live]
+        read: true
+      - path: attributes.trackNumber
+        type: number
+        seen: [reference, live]
+        read: true
+      - path: attributes.url
+        type: string
+        seen: [reference, live]
+        read: true
+      - path: attributes.workName
+        type: string
+        seen: [reference]
+        read: false
+        unused: classical work and movement; not used
+      - path: href
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: the API path of this resource; id is read instead
+      - path: id
+        type: string
+        seen: [reference, live]
+        read: true
+      - path: relationships
+        type: object
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.albums
+        type: object
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.albums.data
+        type: array
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.albums.data[].attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.albums.data[].href
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.albums.data[].id
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: 'GAP: Apple''s album id for this song; the album is matched by albumName text instead'
+      - path: relationships.albums.data[].relationships
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.albums.data[].type
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.albums.data[].views
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.albums.href
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.albums.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.artists
+        type: object
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.artists.data
+        type: array
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.artists.data[].attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.artists.data[].href
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.artists.data[].id
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: 'GAP: Apple''s artist id; artist identity is taken from the artistName text instead'
+      - path: relationships.artists.data[].relationships
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.artists.data[].type
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.artists.data[].views
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.artists.href
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.artists.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.composers
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.composers.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.composers.data[].attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.composers.data[].href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.composers.data[].id
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.composers.data[].relationships
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.composers.data[].type
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.composers.data[].views
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.composers.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.composers.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.genres
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.genres.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.genres.data[].attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.genres.data[].href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.genres.data[].id
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.genres.data[].type
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.genres.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.genres.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.library
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.library.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.library.data[].attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.library.data[].href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.library.data[].id
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.library.data[].relationships
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.library.data[].type
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.library.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.library.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.music-videos
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.music-videos.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.music-videos.data[].attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.music-videos.data[].href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.music-videos.data[].id
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.music-videos.data[].relationships
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.music-videos.data[].type
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.music-videos.data[].views
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.music-videos.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.music-videos.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.station
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.station.data
+        type: array
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.station.data[].attributes
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.station.data[].href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.station.data[].id
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.station.data[].relationships
+        type: object
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.station.data[].type
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.station.href
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: relationships.station.next
+        type: string
+        seen: [reference]
+        read: false
+        unused: a related resource link; the adapter reads no relationships
+      - path: type
+        type: string
+        seen: [reference, live]
+        read: false
+        unused: the resource type, fixed by the endpoint called

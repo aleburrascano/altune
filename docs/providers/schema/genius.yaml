@@ -1,0 +1,3033 @@
+provider: genius
+reference: 'none: Genius documents its API as prose pages with JSON samples (docs.genius.com), with no machine-readable schema or field types'
+entities:
+  artist_songs:
+    fixtures:
+      - id: 2696344|1
+        why: Nia Archives, first page by popularity
+      - id: 621678|1
+        why: Cardi B, explicit catalogue with a next page
+      - id: 2696344|2
+        why: Nia Archives, a later page
+    fields:
+      - path: meta
+        type: object
+        seen: [live]
+        read: false
+        unused: echo of the HTTP status (200); the HTTP status itself already says it
+      - path: meta.status
+        type: number
+        seen: [live]
+        read: false
+        unused: echo of the HTTP status (200); the HTTP status itself already says it
+      - path: response
+        type: object
+        seen: [live]
+        read: true
+      - path: response.next_page
+        type: number
+        seen: [live]
+        read: true
+      - path: response.songs
+        type: array
+        seen: [live]
+        read: true
+      - path: response.songs[].annotation_count
+        type: number
+        seen: [live]
+        read: false
+        unused: Genius community activity on the lyrics page (annotations, pyongs, pending edits, lyrics owner, lyrics state); not about the music
+      - path: response.songs[].api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius API path built from the id; nothing follows it
+      - path: response.songs[].artist_names
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist credit as joined display text; the artist objects carry the same names
+      - path: response.songs[].featured_artists
+        type: array
+        seen: [live]
+        read: false
+        unused: 'GAP: the song''s featured artists; an unreleased song is listed and searched for without them'
+      - path: response.songs[].featured_artists[].api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the song''s featured artists; an unreleased song is listed and searched for without them'
+      - path: response.songs[].featured_artists[].header_image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the song''s featured artists; an unreleased song is listed and searched for without them'
+      - path: response.songs[].featured_artists[].id
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: the song''s featured artists; an unreleased song is listed and searched for without them'
+      - path: response.songs[].featured_artists[].image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the song''s featured artists; an unreleased song is listed and searched for without them'
+      - path: response.songs[].featured_artists[].iq
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: the song''s featured artists; an unreleased song is listed and searched for without them'
+      - path: response.songs[].featured_artists[].is_meme_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: 'GAP: the song''s featured artists; an unreleased song is listed and searched for without them'
+      - path: response.songs[].featured_artists[].is_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: 'GAP: the song''s featured artists; an unreleased song is listed and searched for without them'
+      - path: response.songs[].featured_artists[].name
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the song''s featured artists; an unreleased song is listed and searched for without them'
+      - path: response.songs[].featured_artists[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the song''s featured artists; an unreleased song is listed and searched for without them'
+      - path: response.songs[].full_title
+        type: string
+        seen: [live]
+        read: false
+        unused: '"title by artist" display text; title and primary artist are listed separately'
+      - path: response.songs[].header_image_thumbnail_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 300px thumbnail of an image whose full-size URL is listed beside it
+      - path: response.songs[].header_image_url
+        type: string
+        seen: [live]
+        read: true
+      - path: response.songs[].id
+        type: number
+        seen: [live]
+        read: true
+      - path: response.songs[].lyrics_owner_id
+        type: number
+        seen: [live]
+        read: false
+        unused: Genius community activity on the lyrics page (annotations, pyongs, pending edits, lyrics owner, lyrics state); not about the music
+      - path: response.songs[].lyrics_state
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius community activity on the lyrics page (annotations, pyongs, pending edits, lyrics owner, lyrics state); not about the music
+      - path: response.songs[].path
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius web page link or path for lyrics and annotations; altune links nothing to Genius pages
+      - path: response.songs[].pending_lyrics_edits_count
+        type: number
+        seen: [live]
+        read: false
+        unused: Genius community activity on the lyrics page (annotations, pyongs, pending edits, lyrics owner, lyrics state); not about the music
+      - path: response.songs[].primary_artist
+        type: object
+        seen: [live]
+        read: true
+      - path: response.songs[].primary_artist.api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius API path built from the id; nothing follows it
+      - path: response.songs[].primary_artist.header_image_url
+        type: string
+        seen: [live]
+        read: true
+      - path: response.songs[].primary_artist.id
+        type: number
+        seen: [live]
+        read: true
+      - path: response.songs[].primary_artist.image_url
+        type: string
+        seen: [live]
+        read: true
+      - path: response.songs[].primary_artist.iq
+        type: number
+        seen: [live]
+        read: false
+        unused: Genius community IQ and verification flags of the artist account; not about the music
+      - path: response.songs[].primary_artist.is_meme_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: Genius community IQ and verification flags of the artist account; not about the music
+      - path: response.songs[].primary_artist.is_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: Genius community IQ and verification flags of the artist account; not about the music
+      - path: response.songs[].primary_artist.name
+        type: string
+        seen: [live]
+        read: true
+      - path: response.songs[].primary_artist.url
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius web page link or path for lyrics and annotations; altune links nothing to Genius pages
+      - path: response.songs[].primary_artist_names
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist credit as joined display text; the artist objects carry the same names
+      - path: response.songs[].primary_artists
+        type: array
+        seen: [live]
+        read: false
+        unused: 'GAP: every primary artist of a duet ("PinkPantheress & Nia Archives"); the listing keeps a song only when primary_artist.id matches, so a duet led by the other artist is dropped'
+      - path: response.songs[].primary_artists[].api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: every primary artist of a duet ("PinkPantheress & Nia Archives"); the listing keeps a song only when primary_artist.id matches, so a duet led by the other artist is dropped'
+      - path: response.songs[].primary_artists[].header_image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: every primary artist of a duet ("PinkPantheress & Nia Archives"); the listing keeps a song only when primary_artist.id matches, so a duet led by the other artist is dropped'
+      - path: response.songs[].primary_artists[].id
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: every primary artist of a duet ("PinkPantheress & Nia Archives"); the listing keeps a song only when primary_artist.id matches, so a duet led by the other artist is dropped'
+      - path: response.songs[].primary_artists[].image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: every primary artist of a duet ("PinkPantheress & Nia Archives"); the listing keeps a song only when primary_artist.id matches, so a duet led by the other artist is dropped'
+      - path: response.songs[].primary_artists[].iq
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: every primary artist of a duet ("PinkPantheress & Nia Archives"); the listing keeps a song only when primary_artist.id matches, so a duet led by the other artist is dropped'
+      - path: response.songs[].primary_artists[].is_meme_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: 'GAP: every primary artist of a duet ("PinkPantheress & Nia Archives"); the listing keeps a song only when primary_artist.id matches, so a duet led by the other artist is dropped'
+      - path: response.songs[].primary_artists[].is_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: 'GAP: every primary artist of a duet ("PinkPantheress & Nia Archives"); the listing keeps a song only when primary_artist.id matches, so a duet led by the other artist is dropped'
+      - path: response.songs[].primary_artists[].name
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: every primary artist of a duet ("PinkPantheress & Nia Archives"); the listing keeps a song only when primary_artist.id matches, so a duet led by the other artist is dropped'
+      - path: response.songs[].primary_artists[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: every primary artist of a duet ("PinkPantheress & Nia Archives"); the listing keeps a song only when primary_artist.id matches, so a duet led by the other artist is dropped'
+      - path: response.songs[].pyongs_count
+        type: null|number
+        seen: [live]
+        read: false
+        unused: Genius community activity on the lyrics page (annotations, pyongs, pending edits, lyrics owner, lyrics state); not about the music
+      - path: response.songs[].relationships_index_url
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius page listing samples, remixes and covers of the song; not followed
+      - path: response.songs[].release_date
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: geniusSong carries release_date, which only the /songs/{id} detail sends; this listing sends release_date_components instead, so toUnreleasedSong never gets a date'
+      - path: response.songs[].release_date_components
+        type: null|object
+        seen: [live]
+        read: false
+        unused: 'GAP: the only structured release date the listing sends; the adapter reads release_date, which this endpoint never sends, so unreleased songs get no date'
+      - path: response.songs[].release_date_components.day
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: the only structured release date the listing sends; the adapter reads release_date, which this endpoint never sends, so unreleased songs get no date'
+      - path: response.songs[].release_date_components.month
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: the only structured release date the listing sends; the adapter reads release_date, which this endpoint never sends, so unreleased songs get no date'
+      - path: response.songs[].release_date_components.year
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: the only structured release date the listing sends; the adapter reads release_date, which this endpoint never sends, so unreleased songs get no date'
+      - path: response.songs[].release_date_for_display
+        type: null|string
+        seen: [live]
+        read: false
+        unused: the release date as display text ("August 7, 2020", "Aug. 7, 2020")
+      - path: response.songs[].release_date_with_abbreviated_month_for_display
+        type: null|string
+        seen: [live]
+        read: false
+        unused: the release date as display text ("August 7, 2020", "Aug. 7, 2020")
+      - path: response.songs[].song_art_image_thumbnail_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 300px thumbnail of an image whose full-size URL is listed beside it
+      - path: response.songs[].song_art_image_url
+        type: string
+        seen: [live]
+        read: true
+      - path: response.songs[].stats
+        type: object
+        seen: [live]
+        read: false
+        unused: page views, concurrent readers, hot flag and unreviewed annotation count; not about the music
+      - path: response.songs[].stats.concurrents
+        type: number
+        seen: [live]
+        read: false
+        unused: page views, concurrent readers, hot flag and unreviewed annotation count; not about the music
+      - path: response.songs[].stats.hot
+        type: boolean
+        seen: [live]
+        read: false
+        unused: page views, concurrent readers, hot flag and unreviewed annotation count; not about the music
+      - path: response.songs[].stats.pageviews
+        type: number
+        seen: [live]
+        read: false
+        unused: page views, concurrent readers, hot flag and unreviewed annotation count; not about the music
+      - path: response.songs[].stats.unreviewed_annotations
+        type: number
+        seen: [live]
+        read: false
+        unused: page views, concurrent readers, hot flag and unreviewed annotation count; not about the music
+      - path: response.songs[].title
+        type: string
+        seen: [live]
+        read: true
+      - path: response.songs[].title_with_featured
+        type: string
+        seen: [live]
+        read: false
+        unused: the title with "(Ft. ...)" appended; title and featured artists are listed separately
+      - path: response.songs[].url
+        type: string
+        seen: [live]
+        read: true
+  search:
+    fixtures:
+      - id: Nia Archives
+        why: Nia Archives artist query, the resolver's first try, includes a feature and a duet
+      - id: Nia Archives songs
+        why: the resolver's second artist query
+      - id: Cardi B WAP
+        why: explicit hit with clean, demo and translation pages
+      - id: Subnation Gunshot
+        why: Luvleh Mix DJ-mix track Genius lacks, so only loose matches
+      - id: qxzvbnmwplk
+        why: 'sparse: a query with no hits'
+    fields:
+      - path: meta
+        type: object
+        seen: [live]
+        read: false
+        unused: echo of the HTTP status (200); the HTTP status itself already says it
+      - path: meta.status
+        type: number
+        seen: [live]
+        read: false
+        unused: echo of the HTTP status (200); the HTTP status itself already says it
+      - path: response
+        type: object
+        seen: [live]
+        read: true
+      - path: response.hits
+        type: array
+        seen: [live]
+        read: true
+      - path: response.hits[].highlights
+        type: array
+        seen: [live]
+        read: false
+        unused: Genius search ranking internals (index, highlights, matched and exact words, typos); the hit order is enough
+      - path: response.hits[].index
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius search ranking internals (index, highlights, matched and exact words, typos); the hit order is enough
+      - path: response.hits[].matched_words
+        type: number
+        seen: [live]
+        read: false
+        unused: Genius search ranking internals (index, highlights, matched and exact words, typos); the hit order is enough
+      - path: response.hits[].nb_exact_words
+        type: number
+        seen: [live]
+        read: false
+        unused: Genius search ranking internals (index, highlights, matched and exact words, typos); the hit order is enough
+      - path: response.hits[].nb_typos
+        type: number
+        seen: [live]
+        read: false
+        unused: Genius search ranking internals (index, highlights, matched and exact words, typos); the hit order is enough
+      - path: response.hits[].result
+        type: object
+        seen: [live]
+        read: true
+      - path: response.hits[].result.annotation_count
+        type: number
+        seen: [live]
+        read: false
+        unused: Genius community activity on the lyrics page (annotations, pyongs, pending edits, lyrics owner, lyrics state); not about the music
+      - path: response.hits[].result.api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius API path built from the id; nothing follows it
+      - path: response.hits[].result.artist_names
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist credit as joined display text; the artist objects carry the same names
+      - path: response.hits[].result.featured_artists
+        type: array
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.featured_artists[].api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.featured_artists[].header_image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.featured_artists[].id
+        type: number
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.featured_artists[].image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.featured_artists[].iq
+        type: number
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.featured_artists[].is_meme_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.featured_artists[].is_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.featured_artists[].name
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.featured_artists[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.full_title
+        type: string
+        seen: [live]
+        read: false
+        unused: '"title by artist" display text; title and primary artist are listed separately'
+      - path: response.hits[].result.header_image_thumbnail_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 300px thumbnail of an image whose full-size URL is listed beside it
+      - path: response.hits[].result.header_image_url
+        type: string
+        seen: [live]
+        read: true
+      - path: response.hits[].result.id
+        type: number
+        seen: [live]
+        read: false
+        unused: the song's Genius id; the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.lyrics_owner_id
+        type: number
+        seen: [live]
+        read: false
+        unused: Genius community activity on the lyrics page (annotations, pyongs, pending edits, lyrics owner, lyrics state); not about the music
+      - path: response.hits[].result.lyrics_state
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius community activity on the lyrics page (annotations, pyongs, pending edits, lyrics owner, lyrics state); not about the music
+      - path: response.hits[].result.path
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius web page link or path for lyrics and annotations; altune links nothing to Genius pages
+      - path: response.hits[].result.pending_lyrics_edits_count
+        type: number
+        seen: [live]
+        read: false
+        unused: Genius community activity on the lyrics page (annotations, pyongs, pending edits, lyrics owner, lyrics state); not about the music
+      - path: response.hits[].result.primary_artist
+        type: object
+        seen: [live]
+        read: true
+      - path: response.hits[].result.primary_artist.api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius API path built from the id; nothing follows it
+      - path: response.hits[].result.primary_artist.header_image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist's banner image; the artwork resolver uses a hit only for its images and primary artist name and artist photo
+      - path: response.hits[].result.primary_artist.id
+        type: number
+        seen: [live]
+        read: false
+        unused: the artist's Genius id; the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.primary_artist.image_url
+        type: string
+        seen: [live]
+        read: true
+      - path: response.hits[].result.primary_artist.iq
+        type: number
+        seen: [live]
+        read: false
+        unused: Genius community IQ and verification flags of the artist account; not about the music
+      - path: response.hits[].result.primary_artist.is_meme_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: Genius community IQ and verification flags of the artist account; not about the music
+      - path: response.hits[].result.primary_artist.is_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: Genius community IQ and verification flags of the artist account; not about the music
+      - path: response.hits[].result.primary_artist.name
+        type: string
+        seen: [live]
+        read: true
+      - path: response.hits[].result.primary_artist.url
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius web page link or path for lyrics and annotations; altune links nothing to Genius pages
+      - path: response.hits[].result.primary_artist_names
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist credit as joined display text; the artist objects carry the same names
+      - path: response.hits[].result.primary_artists
+        type: array
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.primary_artists[].api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.primary_artists[].header_image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.primary_artists[].id
+        type: number
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.primary_artists[].image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.primary_artists[].iq
+        type: number
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.primary_artists[].is_meme_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.primary_artists[].is_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.primary_artists[].name
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.primary_artists[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.pyongs_count
+        type: null|number
+        seen: [live]
+        read: false
+        unused: Genius community activity on the lyrics page (annotations, pyongs, pending edits, lyrics owner, lyrics state); not about the music
+      - path: response.hits[].result.relationships_index_url
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius page listing samples, remixes and covers of the song; not followed
+      - path: response.hits[].result.release_date_components
+        type: null|object
+        seen: [live]
+        read: false
+        unused: the release date split into year, month, day (day null when unknown); the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.release_date_components.day
+        type: null|number
+        seen: [live]
+        read: false
+        unused: the release date split into year, month, day (day null when unknown); the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.release_date_components.month
+        type: number
+        seen: [live]
+        read: false
+        unused: the release date split into year, month, day (day null when unknown); the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.release_date_components.year
+        type: number
+        seen: [live]
+        read: false
+        unused: the release date split into year, month, day (day null when unknown); the artwork resolver uses a hit only for its images and primary artist name
+      - path: response.hits[].result.release_date_for_display
+        type: null|string
+        seen: [live]
+        read: false
+        unused: the release date as display text ("August 7, 2020", "Aug. 7, 2020")
+      - path: response.hits[].result.release_date_with_abbreviated_month_for_display
+        type: null|string
+        seen: [live]
+        read: false
+        unused: the release date as display text ("August 7, 2020", "Aug. 7, 2020")
+      - path: response.hits[].result.song_art_image_thumbnail_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 300px thumbnail of an image whose full-size URL is listed beside it
+      - path: response.hits[].result.song_art_image_url
+        type: string
+        seen: [live]
+        read: true
+      - path: response.hits[].result.stats
+        type: object
+        seen: [live]
+        read: false
+        unused: page views, concurrent readers, hot flag and unreviewed annotation count; not about the music
+      - path: response.hits[].result.stats.concurrents
+        type: number
+        seen: [live]
+        read: false
+        unused: page views, concurrent readers, hot flag and unreviewed annotation count; not about the music
+      - path: response.hits[].result.stats.hot
+        type: boolean
+        seen: [live]
+        read: false
+        unused: page views, concurrent readers, hot flag and unreviewed annotation count; not about the music
+      - path: response.hits[].result.stats.pageviews
+        type: number
+        seen: [live]
+        read: false
+        unused: page views, concurrent readers, hot flag and unreviewed annotation count; not about the music
+      - path: response.hits[].result.stats.unreviewed_annotations
+        type: number
+        seen: [live]
+        read: false
+        unused: page views, concurrent readers, hot flag and unreviewed annotation count; not about the music
+      - path: response.hits[].result.title
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the hit''s song title; the resolver takes the first hit''s art without checking the title, so a loose hit ("Subnation Gunshot" returns Finnegans Wake) gives the wrong cover'
+      - path: response.hits[].result.title_with_featured
+        type: string
+        seen: [live]
+        read: false
+        unused: the title with "(Ft. ...)" appended; title and featured artists are listed separately
+      - path: response.hits[].result.url
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius web page link or path for lyrics and annotations; altune links nothing to Genius pages
+      - path: response.hits[].type
+        type: string
+        seen: [live]
+        read: false
+        unused: the hit kind, "song" in every fixture
+  search_songs:
+    fixtures:
+      - id: Nia Archives
+        why: Nia Archives artist query, the catalog's first try
+      - id: Nia Archives Baianá
+        why: artist plus known title, the catalog's hint query
+      - id: Cardi B WAP
+        why: explicit hit with clean, demo and translation pages
+      - id: Subnation Gunshot
+        why: Luvleh Mix DJ-mix track Genius lacks, so only loose matches
+      - id: qxzvbnmwplk
+        why: 'sparse: a query with no hits'
+    fields:
+      - path: meta
+        type: object
+        seen: [live]
+        read: false
+        unused: echo of the HTTP status (200); the HTTP status itself already says it
+      - path: meta.status
+        type: number
+        seen: [live]
+        read: false
+        unused: echo of the HTTP status (200); the HTTP status itself already says it
+      - path: response
+        type: object
+        seen: [live]
+        read: true
+      - path: response.hits
+        type: array
+        seen: [live]
+        read: true
+      - path: response.hits[].highlights
+        type: array
+        seen: [live]
+        read: false
+        unused: Genius search ranking internals (index, highlights, matched and exact words, typos); the hit order is enough
+      - path: response.hits[].index
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius search ranking internals (index, highlights, matched and exact words, typos); the hit order is enough
+      - path: response.hits[].matched_words
+        type: number
+        seen: [live]
+        read: false
+        unused: Genius search ranking internals (index, highlights, matched and exact words, typos); the hit order is enough
+      - path: response.hits[].nb_exact_words
+        type: number
+        seen: [live]
+        read: false
+        unused: Genius search ranking internals (index, highlights, matched and exact words, typos); the hit order is enough
+      - path: response.hits[].nb_typos
+        type: number
+        seen: [live]
+        read: false
+        unused: Genius search ranking internals (index, highlights, matched and exact words, typos); the hit order is enough
+      - path: response.hits[].result
+        type: object
+        seen: [live]
+        read: true
+      - path: response.hits[].result.annotation_count
+        type: number
+        seen: [live]
+        read: false
+        unused: Genius community activity on the lyrics page (annotations, pyongs, pending edits, lyrics owner, lyrics state); not about the music
+      - path: response.hits[].result.api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius API path built from the id; nothing follows it
+      - path: response.hits[].result.artist_names
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist credit as joined display text; the artist objects carry the same names
+      - path: response.hits[].result.featured_artists
+        type: array
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); FindArtistID uses a hit only to find the primary artist's id by name
+      - path: response.hits[].result.featured_artists[].api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); FindArtistID uses a hit only to find the primary artist's id by name
+      - path: response.hits[].result.featured_artists[].header_image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); FindArtistID uses a hit only to find the primary artist's id by name
+      - path: response.hits[].result.featured_artists[].id
+        type: number
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); FindArtistID uses a hit only to find the primary artist's id by name
+      - path: response.hits[].result.featured_artists[].image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); FindArtistID uses a hit only to find the primary artist's id by name
+      - path: response.hits[].result.featured_artists[].iq
+        type: number
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); FindArtistID uses a hit only to find the primary artist's id by name
+      - path: response.hits[].result.featured_artists[].is_meme_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); FindArtistID uses a hit only to find the primary artist's id by name
+      - path: response.hits[].result.featured_artists[].is_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); FindArtistID uses a hit only to find the primary artist's id by name
+      - path: response.hits[].result.featured_artists[].name
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); FindArtistID uses a hit only to find the primary artist's id by name
+      - path: response.hits[].result.featured_artists[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); FindArtistID uses a hit only to find the primary artist's id by name
+      - path: response.hits[].result.full_title
+        type: string
+        seen: [live]
+        read: false
+        unused: '"title by artist" display text; title and primary artist are listed separately'
+      - path: response.hits[].result.header_image_thumbnail_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 300px thumbnail of an image whose full-size URL is listed beside it
+      - path: response.hits[].result.header_image_url
+        type: string
+        seen: [live]
+        read: true
+      - path: response.hits[].result.id
+        type: number
+        seen: [live]
+        read: true
+      - path: response.hits[].result.lyrics_owner_id
+        type: number
+        seen: [live]
+        read: false
+        unused: Genius community activity on the lyrics page (annotations, pyongs, pending edits, lyrics owner, lyrics state); not about the music
+      - path: response.hits[].result.lyrics_state
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius community activity on the lyrics page (annotations, pyongs, pending edits, lyrics owner, lyrics state); not about the music
+      - path: response.hits[].result.path
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius web page link or path for lyrics and annotations; altune links nothing to Genius pages
+      - path: response.hits[].result.pending_lyrics_edits_count
+        type: number
+        seen: [live]
+        read: false
+        unused: Genius community activity on the lyrics page (annotations, pyongs, pending edits, lyrics owner, lyrics state); not about the music
+      - path: response.hits[].result.primary_artist
+        type: object
+        seen: [live]
+        read: true
+      - path: response.hits[].result.primary_artist.api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius API path built from the id; nothing follows it
+      - path: response.hits[].result.primary_artist.header_image_url
+        type: string
+        seen: [live]
+        read: true
+      - path: response.hits[].result.primary_artist.id
+        type: number
+        seen: [live]
+        read: true
+      - path: response.hits[].result.primary_artist.image_url
+        type: string
+        seen: [live]
+        read: true
+      - path: response.hits[].result.primary_artist.iq
+        type: number
+        seen: [live]
+        read: false
+        unused: Genius community IQ and verification flags of the artist account; not about the music
+      - path: response.hits[].result.primary_artist.is_meme_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: Genius community IQ and verification flags of the artist account; not about the music
+      - path: response.hits[].result.primary_artist.is_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: Genius community IQ and verification flags of the artist account; not about the music
+      - path: response.hits[].result.primary_artist.name
+        type: string
+        seen: [live]
+        read: true
+      - path: response.hits[].result.primary_artist.url
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius web page link or path for lyrics and annotations; altune links nothing to Genius pages
+      - path: response.hits[].result.primary_artist_names
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist credit as joined display text; the artist objects carry the same names
+      - path: response.hits[].result.primary_artists
+        type: array
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); FindArtistID uses a hit only to find the primary artist's id by name
+      - path: response.hits[].result.primary_artists[].api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); FindArtistID uses a hit only to find the primary artist's id by name
+      - path: response.hits[].result.primary_artists[].header_image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); FindArtistID uses a hit only to find the primary artist's id by name
+      - path: response.hits[].result.primary_artists[].id
+        type: number
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); FindArtistID uses a hit only to find the primary artist's id by name
+      - path: response.hits[].result.primary_artists[].image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); FindArtistID uses a hit only to find the primary artist's id by name
+      - path: response.hits[].result.primary_artists[].iq
+        type: number
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); FindArtistID uses a hit only to find the primary artist's id by name
+      - path: response.hits[].result.primary_artists[].is_meme_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); FindArtistID uses a hit only to find the primary artist's id by name
+      - path: response.hits[].result.primary_artists[].is_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); FindArtistID uses a hit only to find the primary artist's id by name
+      - path: response.hits[].result.primary_artists[].name
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); FindArtistID uses a hit only to find the primary artist's id by name
+      - path: response.hits[].result.primary_artists[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); FindArtistID uses a hit only to find the primary artist's id by name
+      - path: response.hits[].result.pyongs_count
+        type: null|number
+        seen: [live]
+        read: false
+        unused: Genius community activity on the lyrics page (annotations, pyongs, pending edits, lyrics owner, lyrics state); not about the music
+      - path: response.hits[].result.relationships_index_url
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius page listing samples, remixes and covers of the song; not followed
+      - path: response.hits[].result.release_date
+        type: unseen
+        seen: []
+        read: true
+        absent: geniusSong is shared with the artist_songs listing; search hits never send release_date (only /songs/{id} does) and FindArtistID uses only the primary artist
+      - path: response.hits[].result.release_date_components
+        type: null|object
+        seen: [live]
+        read: false
+        unused: the release date split into year, month, day (day null when unknown); FindArtistID uses a hit only to find the primary artist's id by name
+      - path: response.hits[].result.release_date_components.day
+        type: null|number
+        seen: [live]
+        read: false
+        unused: the release date split into year, month, day (day null when unknown); FindArtistID uses a hit only to find the primary artist's id by name
+      - path: response.hits[].result.release_date_components.month
+        type: number
+        seen: [live]
+        read: false
+        unused: the release date split into year, month, day (day null when unknown); FindArtistID uses a hit only to find the primary artist's id by name
+      - path: response.hits[].result.release_date_components.year
+        type: number
+        seen: [live]
+        read: false
+        unused: the release date split into year, month, day (day null when unknown); FindArtistID uses a hit only to find the primary artist's id by name
+      - path: response.hits[].result.release_date_for_display
+        type: null|string
+        seen: [live]
+        read: false
+        unused: the release date as display text ("August 7, 2020", "Aug. 7, 2020")
+      - path: response.hits[].result.release_date_with_abbreviated_month_for_display
+        type: null|string
+        seen: [live]
+        read: false
+        unused: the release date as display text ("August 7, 2020", "Aug. 7, 2020")
+      - path: response.hits[].result.song_art_image_thumbnail_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 300px thumbnail of an image whose full-size URL is listed beside it
+      - path: response.hits[].result.song_art_image_url
+        type: string
+        seen: [live]
+        read: true
+      - path: response.hits[].result.stats
+        type: object
+        seen: [live]
+        read: false
+        unused: page views, concurrent readers, hot flag and unreviewed annotation count; not about the music
+      - path: response.hits[].result.stats.concurrents
+        type: number
+        seen: [live]
+        read: false
+        unused: page views, concurrent readers, hot flag and unreviewed annotation count; not about the music
+      - path: response.hits[].result.stats.hot
+        type: boolean
+        seen: [live]
+        read: false
+        unused: page views, concurrent readers, hot flag and unreviewed annotation count; not about the music
+      - path: response.hits[].result.stats.pageviews
+        type: number
+        seen: [live]
+        read: false
+        unused: page views, concurrent readers, hot flag and unreviewed annotation count; not about the music
+      - path: response.hits[].result.stats.unreviewed_annotations
+        type: number
+        seen: [live]
+        read: false
+        unused: page views, concurrent readers, hot flag and unreviewed annotation count; not about the music
+      - path: response.hits[].result.title
+        type: string
+        seen: [live]
+        read: true
+      - path: response.hits[].result.title_with_featured
+        type: string
+        seen: [live]
+        read: false
+        unused: the title with "(Ft. ...)" appended; title and featured artists are listed separately
+      - path: response.hits[].result.url
+        type: string
+        seen: [live]
+        read: true
+      - path: response.hits[].type
+        type: string
+        seen: [live]
+        read: false
+        unused: the hit kind, "song" in every fixture
+  song:
+    fixtures:
+      - id: "8427586"
+        why: Nia Archives single Baianá
+      - id: "5832126"
+        why: explicit hit WAP with a featured artist
+      - id: "5848346"
+        why: WAP (Clean), a version of another song
+      - id: "12063135"
+        why: Illegal + Nia Archives, a duet credited to two artists
+      - id: "4897095"
+        why: 'sparse: WAP (Demo), an unreleased song'
+    fields:
+      - path: meta
+        type: object
+        seen: [live]
+        read: false
+        unused: echo of the HTTP status (200); the HTTP status itself already says it
+      - path: meta.status
+        type: number
+        seen: [live]
+        read: false
+        unused: echo of the HTTP status (200); the HTTP status itself already says it
+      - path: response
+        type: object
+        seen: [live]
+        read: true
+      - path: response.song
+        type: object
+        seen: [live]
+        read: true
+      - path: response.song.album
+        type: null|object
+        seen: [live]
+        read: true
+      - path: response.song.album.api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius API path built from the id; nothing follows it
+      - path: response.song.album.artist
+        type: object
+        seen: [live]
+        read: false
+        unused: 'GAP: the album''s artist (id, name, images); it would tell the artist''s own release from a compilation or another artist''s record the song sits on'
+      - path: response.song.album.artist.api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the album''s artist (id, name, images); it would tell the artist''s own release from a compilation or another artist''s record the song sits on'
+      - path: response.song.album.artist.header_image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the album''s artist (id, name, images); it would tell the artist''s own release from a compilation or another artist''s record the song sits on'
+      - path: response.song.album.artist.id
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: the album''s artist (id, name, images); it would tell the artist''s own release from a compilation or another artist''s record the song sits on'
+      - path: response.song.album.artist.image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the album''s artist (id, name, images); it would tell the artist''s own release from a compilation or another artist''s record the song sits on'
+      - path: response.song.album.artist.iq
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: the album''s artist (id, name, images); it would tell the artist''s own release from a compilation or another artist''s record the song sits on'
+      - path: response.song.album.artist.is_meme_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: 'GAP: the album''s artist (id, name, images); it would tell the artist''s own release from a compilation or another artist''s record the song sits on'
+      - path: response.song.album.artist.is_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: 'GAP: the album''s artist (id, name, images); it would tell the artist''s own release from a compilation or another artist''s record the song sits on'
+      - path: response.song.album.artist.name
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the album''s artist (id, name, images); it would tell the artist''s own release from a compilation or another artist''s record the song sits on'
+      - path: response.song.album.artist.url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the album''s artist (id, name, images); it would tell the artist''s own release from a compilation or another artist''s record the song sits on'
+      - path: response.song.album.cover_art_url
+        type: string
+        seen: [live]
+        read: true
+      - path: response.song.album.current_user_metadata
+        type: object
+        seen: [live]
+        read: false
+        unused: what the token's account may do on the album page; not about the music
+      - path: response.song.album.current_user_metadata.excluded_permissions
+        type: array
+        seen: [live]
+        read: false
+        unused: what the token's account may do on the album page; not about the music
+      - path: response.song.album.current_user_metadata.excluded_permissions[]
+        type: string
+        seen: [live]
+        read: false
+        unused: what the token's account may do on the album page; not about the music
+      - path: response.song.album.current_user_metadata.permissions
+        type: array
+        seen: [live]
+        read: false
+        unused: what the token's account may do on the album page; not about the music
+      - path: response.song.album.full_title
+        type: string
+        seen: [live]
+        read: false
+        unused: '"album by artist" display text; the album name is read'
+      - path: response.song.album.id
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: Genius album id of the release the song is on; altune keeps only the album name'
+      - path: response.song.album.name
+        type: string
+        seen: [live]
+        read: true
+      - path: response.song.album.primary_artist_names
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist credit as joined display text; the artist objects carry the same names
+      - path: response.song.album.primary_artists
+        type: array
+        seen: [live]
+        read: false
+        unused: the album artists as a list; the same artists as album.artist
+      - path: response.song.album.primary_artists[].api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: the album artists as a list; the same artists as album.artist
+      - path: response.song.album.primary_artists[].header_image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: the album artists as a list; the same artists as album.artist
+      - path: response.song.album.primary_artists[].id
+        type: number
+        seen: [live]
+        read: false
+        unused: the album artists as a list; the same artists as album.artist
+      - path: response.song.album.primary_artists[].image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: the album artists as a list; the same artists as album.artist
+      - path: response.song.album.primary_artists[].iq
+        type: number
+        seen: [live]
+        read: false
+        unused: the album artists as a list; the same artists as album.artist
+      - path: response.song.album.primary_artists[].is_meme_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: the album artists as a list; the same artists as album.artist
+      - path: response.song.album.primary_artists[].is_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: the album artists as a list; the same artists as album.artist
+      - path: response.song.album.primary_artists[].name
+        type: string
+        seen: [live]
+        read: false
+        unused: the album artists as a list; the same artists as album.artist
+      - path: response.song.album.primary_artists[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: the album artists as a list; the same artists as album.artist
+      - path: response.song.album.pusher_channel
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius realtime channel name for the album page; not about the music
+      - path: response.song.album.release_date_for_display
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the album''s release date as text ("March 10, 2023"); it would date the release and tell a single from a later album'
+      - path: response.song.album.url
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius web page link or path for lyrics and annotations; altune links nothing to Genius pages
+      - path: response.song.annotation_count
+        type: number
+        seen: [live]
+        read: false
+        unused: Genius community activity on the lyrics page (annotations, pyongs, pending edits, lyrics owner, lyrics state); not about the music
+      - path: response.song.api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius API path built from the id; nothing follows it
+      - path: response.song.apple_music_id
+        type: null|string
+        seen: [live]
+        read: true
+      - path: response.song.apple_music_player_url
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius' embedded Apple Music player page; altune only needs to know an Apple Music id exists
+      - path: response.song.artist_names
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist credit as joined display text; the artist objects carry the same names
+      - path: response.song.current_user_metadata
+        type: object
+        seen: [live]
+        read: false
+        unused: what the token's account may do and has done on the page; not about the music
+      - path: response.song.current_user_metadata.excluded_permissions
+        type: array
+        seen: [live]
+        read: false
+        unused: what the token's account may do and has done on the page; not about the music
+      - path: response.song.current_user_metadata.excluded_permissions[]
+        type: string
+        seen: [live]
+        read: false
+        unused: what the token's account may do and has done on the page; not about the music
+      - path: response.song.current_user_metadata.interactions
+        type: object
+        seen: [live]
+        read: false
+        unused: what the token's account may do and has done on the page; not about the music
+      - path: response.song.current_user_metadata.interactions.following
+        type: boolean
+        seen: [live]
+        read: false
+        unused: what the token's account may do and has done on the page; not about the music
+      - path: response.song.current_user_metadata.interactions.pyong
+        type: boolean
+        seen: [live]
+        read: false
+        unused: what the token's account may do and has done on the page; not about the music
+      - path: response.song.current_user_metadata.iq_by_action
+        type: object
+        seen: [live]
+        read: false
+        unused: what the token's account may do and has done on the page; not about the music
+      - path: response.song.current_user_metadata.permissions
+        type: array
+        seen: [live]
+        read: false
+        unused: what the token's account may do and has done on the page; not about the music
+      - path: response.song.current_user_metadata.permissions[]
+        type: string
+        seen: [live]
+        read: false
+        unused: what the token's account may do and has done on the page; not about the music
+      - path: response.song.current_user_metadata.relationships
+        type: object
+        seen: [live]
+        read: false
+        unused: what the token's account may do and has done on the page; not about the music
+      - path: response.song.custom_performances
+        type: array
+        seen: [live]
+        read: false
+        unused: extra credits by role (Programmer, Mixing Engineer, Video Commissioner); altune shows no credits
+      - path: response.song.custom_performances[].artists
+        type: array
+        seen: [live]
+        read: false
+        unused: extra credits by role (Programmer, Mixing Engineer, Video Commissioner); altune shows no credits
+      - path: response.song.custom_performances[].artists[].api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: extra credits by role (Programmer, Mixing Engineer, Video Commissioner); altune shows no credits
+      - path: response.song.custom_performances[].artists[].header_image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: extra credits by role (Programmer, Mixing Engineer, Video Commissioner); altune shows no credits
+      - path: response.song.custom_performances[].artists[].id
+        type: number
+        seen: [live]
+        read: false
+        unused: extra credits by role (Programmer, Mixing Engineer, Video Commissioner); altune shows no credits
+      - path: response.song.custom_performances[].artists[].image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: extra credits by role (Programmer, Mixing Engineer, Video Commissioner); altune shows no credits
+      - path: response.song.custom_performances[].artists[].iq
+        type: number
+        seen: [live]
+        read: false
+        unused: extra credits by role (Programmer, Mixing Engineer, Video Commissioner); altune shows no credits
+      - path: response.song.custom_performances[].artists[].is_meme_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: extra credits by role (Programmer, Mixing Engineer, Video Commissioner); altune shows no credits
+      - path: response.song.custom_performances[].artists[].is_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: extra credits by role (Programmer, Mixing Engineer, Video Commissioner); altune shows no credits
+      - path: response.song.custom_performances[].artists[].name
+        type: string
+        seen: [live]
+        read: false
+        unused: extra credits by role (Programmer, Mixing Engineer, Video Commissioner); altune shows no credits
+      - path: response.song.custom_performances[].artists[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: extra credits by role (Programmer, Mixing Engineer, Video Commissioner); altune shows no credits
+      - path: response.song.custom_performances[].label
+        type: string
+        seen: [live]
+        read: false
+        unused: extra credits by role (Programmer, Mixing Engineer, Video Commissioner); altune shows no credits
+      - path: response.song.description
+        type: object
+        seen: [live]
+        read: false
+        unused: the song description as a Genius DOM tree; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description.dom
+        type: object
+        seen: [live]
+        read: false
+        unused: the song description as a Genius DOM tree; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description.dom.children
+        type: array
+        seen: [live]
+        read: false
+        unused: the song description as a Genius DOM tree; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description.dom.children[]
+        type: string
+        seen: [live]
+        read: false
+        unused: the song description as a Genius DOM tree; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description.dom.children[].children
+        type: array
+        seen: [live]
+        read: false
+        unused: the song description as a Genius DOM tree; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description.dom.children[].children[]
+        type: string
+        seen: [live]
+        read: false
+        unused: the song description as a Genius DOM tree; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description.dom.children[].children[].attributes
+        type: object
+        seen: [live]
+        read: false
+        unused: the song description as a Genius DOM tree; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description.dom.children[].children[].attributes.href
+        type: string
+        seen: [live]
+        read: false
+        unused: the song description as a Genius DOM tree; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description.dom.children[].children[].attributes.rel
+        type: string
+        seen: [live]
+        read: false
+        unused: the song description as a Genius DOM tree; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description.dom.children[].children[].children
+        type: array
+        seen: [live]
+        read: false
+        unused: the song description as a Genius DOM tree; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description.dom.children[].children[].children[]
+        type: string
+        seen: [live]
+        read: false
+        unused: the song description as a Genius DOM tree; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description.dom.children[].children[].data
+        type: object
+        seen: [live]
+        read: false
+        unused: the song description as a Genius DOM tree; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description.dom.children[].children[].data.api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: the song description as a Genius DOM tree; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description.dom.children[].children[].tag
+        type: string
+        seen: [live]
+        read: false
+        unused: the song description as a Genius DOM tree; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description.dom.children[].tag
+        type: string
+        seen: [live]
+        read: false
+        unused: the song description as a Genius DOM tree; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description.dom.tag
+        type: string
+        seen: [live]
+        read: false
+        unused: the song description as a Genius DOM tree; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation._type
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotatable
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotatable.api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotatable.client_timestamps
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotatable.client_timestamps.lyrics_updated_at
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotatable.client_timestamps.updated_by_human_at
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotatable.context
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotatable.id
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotatable.image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotatable.link_title
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotatable.title
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotatable.type
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotatable.url
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations
+        type: array
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors
+        type: array
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].attribution
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].pinned_role
+        type: "null"
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.avatar
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.avatar.medium
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.avatar.medium.bounding_box
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.avatar.medium.bounding_box.height
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.avatar.medium.bounding_box.width
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.avatar.medium.url
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.avatar.small
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.avatar.small.bounding_box
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.avatar.small.bounding_box.height
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.avatar.small.bounding_box.width
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.avatar.small.url
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.avatar.thumb
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.avatar.thumb.bounding_box
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.avatar.thumb.bounding_box.height
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.avatar.thumb.bounding_box.width
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.avatar.thumb.url
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.avatar.tiny
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.avatar.tiny.bounding_box
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.avatar.tiny.bounding_box.height
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.avatar.tiny.bounding_box.width
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.avatar.tiny.url
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.current_user_metadata
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.current_user_metadata.excluded_permissions
+        type: array
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.current_user_metadata.excluded_permissions[]
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.current_user_metadata.interactions
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.current_user_metadata.interactions.following
+        type: boolean
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.current_user_metadata.permissions
+        type: array
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.header_image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.human_readable_role_for_display
+        type: null|string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.id
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.iq
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.login
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.name
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.role_for_display
+        type: null|string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].authors[].user.url
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].body
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].body.dom
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].body.dom.children
+        type: array
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].body.dom.children[]
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].body.dom.children[].children
+        type: array
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].body.dom.children[].children[]
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].body.dom.children[].children[].attributes
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].body.dom.children[].children[].attributes.href
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].body.dom.children[].children[].attributes.rel
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].body.dom.children[].children[].children
+        type: array
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].body.dom.children[].children[].children[]
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].body.dom.children[].children[].data
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].body.dom.children[].children[].data.api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].body.dom.children[].children[].tag
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].body.dom.children[].tag
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].body.dom.tag
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].comment_count
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].community
+        type: boolean
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].cosigned_by
+        type: array
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].current_user_metadata
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].current_user_metadata.excluded_permissions
+        type: array
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].current_user_metadata.excluded_permissions[]
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].current_user_metadata.interactions
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].current_user_metadata.interactions.cosign
+        type: boolean
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].current_user_metadata.interactions.pyong
+        type: boolean
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].current_user_metadata.interactions.vote
+        type: "null"
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].current_user_metadata.iq_by_action
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].current_user_metadata.permissions
+        type: array
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].custom_preview
+        type: "null"
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].has_voters
+        type: boolean
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].id
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].pinned
+        type: boolean
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].rejection_comment
+        type: "null"
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].share_url
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].source
+        type: "null"
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].state
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].verified_by
+        type: "null"
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotations[].votes_total
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotator_id
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.annotator_login
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.classification
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.fragment
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.id
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.is_description
+        type: boolean
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.path
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.range
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.range.content
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.song_id
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.url
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.description_annotation.verified_annotator_ids
+        type: array
+        seen: [live]
+        read: false
+        unused: the Genius annotation behind the description, with annotator and votes; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.embed_content
+        type: string
+        seen: [live]
+        read: false
+        unused: HTML snippet for embedding the lyrics; altune shows no lyrics
+      - path: response.song.featured_artists
+        type: array
+        seen: [live]
+        read: false
+        unused: 'GAP: the song''s featured artists (Megan Thee Stallion on WAP); they would complete the credit when matching the recording'
+      - path: response.song.featured_artists[].api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the song''s featured artists (Megan Thee Stallion on WAP); they would complete the credit when matching the recording'
+      - path: response.song.featured_artists[].header_image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the song''s featured artists (Megan Thee Stallion on WAP); they would complete the credit when matching the recording'
+      - path: response.song.featured_artists[].id
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: the song''s featured artists (Megan Thee Stallion on WAP); they would complete the credit when matching the recording'
+      - path: response.song.featured_artists[].image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the song''s featured artists (Megan Thee Stallion on WAP); they would complete the credit when matching the recording'
+      - path: response.song.featured_artists[].iq
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: the song''s featured artists (Megan Thee Stallion on WAP); they would complete the credit when matching the recording'
+      - path: response.song.featured_artists[].is_meme_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: 'GAP: the song''s featured artists (Megan Thee Stallion on WAP); they would complete the credit when matching the recording'
+      - path: response.song.featured_artists[].is_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: 'GAP: the song''s featured artists (Megan Thee Stallion on WAP); they would complete the credit when matching the recording'
+      - path: response.song.featured_artists[].name
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the song''s featured artists (Megan Thee Stallion on WAP); they would complete the credit when matching the recording'
+      - path: response.song.featured_artists[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the song''s featured artists (Megan Thee Stallion on WAP); they would complete the credit when matching the recording'
+      - path: response.song.full_title
+        type: string
+        seen: [live]
+        read: false
+        unused: '"title by artist" display text; already read from the artist_songs listing the song id came from'
+      - path: response.song.header_image_thumbnail_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 300px thumbnail of an image whose full-size URL is listed beside it
+      - path: response.song.header_image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: the song page's header image; song detail feeds only the album, Apple Music id and media links of an unreleased song
+      - path: response.song.id
+        type: number
+        seen: [live]
+        read: false
+        unused: the song's Genius id, the one requested
+      - path: response.song.language
+        type: string
+        seen: [live]
+        read: false
+        unused: language code of the lyrics, e.g. "en"; altune shows no lyrics
+      - path: response.song.lyrics_marked_complete_by
+        type: "null"
+        seen: [live]
+        read: false
+        unused: Genius community activity on the lyrics page (annotations, pyongs, pending edits, lyrics owner, lyrics state); not about the music
+      - path: response.song.lyrics_marked_staff_approved_by
+        type: null|object
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.avatar
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.avatar.medium
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.avatar.medium.bounding_box
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.avatar.medium.bounding_box.height
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.avatar.medium.bounding_box.width
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.avatar.medium.url
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.avatar.small
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.avatar.small.bounding_box
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.avatar.small.bounding_box.height
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.avatar.small.bounding_box.width
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.avatar.small.url
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.avatar.thumb
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.avatar.thumb.bounding_box
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.avatar.thumb.bounding_box.height
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.avatar.thumb.bounding_box.width
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.avatar.thumb.url
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.avatar.tiny
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.avatar.tiny.bounding_box
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.avatar.tiny.bounding_box.height
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.avatar.tiny.bounding_box.width
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.avatar.tiny.url
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.current_user_metadata
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.current_user_metadata.excluded_permissions
+        type: array
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.current_user_metadata.excluded_permissions[]
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.current_user_metadata.interactions
+        type: object
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.current_user_metadata.interactions.following
+        type: boolean
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.current_user_metadata.permissions
+        type: array
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.header_image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.human_readable_role_for_display
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.id
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.iq
+        type: number
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.login
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.name
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.role_for_display
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_marked_staff_approved_by.url
+        type: string
+        seen: [live]
+        read: false
+        unused: the Genius user who approved the lyrics; not about the music
+      - path: response.song.lyrics_owner_id
+        type: number
+        seen: [live]
+        read: false
+        unused: Genius community activity on the lyrics page (annotations, pyongs, pending edits, lyrics owner, lyrics state); not about the music
+      - path: response.song.lyrics_state
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius community activity on the lyrics page (annotations, pyongs, pending edits, lyrics owner, lyrics state); not about the music
+      - path: response.song.media
+        type: array
+        seen: [live]
+        read: true
+      - path: response.song.media[].attribution
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the account that uploaded the linked media ("iamcardib"); it would show whether the YouTube or SoundCloud upload is the artist''s own'
+      - path: response.song.media[].provider
+        type: string
+        seen: [live]
+        read: true
+      - path: response.song.media[].start
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: second where the song starts inside the linked media (13 on WAP (Clean)); acquisition takes the whole upload'
+      - path: response.song.media[].type
+        type: string
+        seen: [live]
+        read: false
+        unused: '"video" or "audio"; the provider field already says YouTube or SoundCloud'
+      - path: response.song.media[].url
+        type: string
+        seen: [live]
+        read: true
+      - path: response.song.path
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius web page link or path for lyrics and annotations; altune links nothing to Genius pages
+      - path: response.song.pending_lyrics_edits_count
+        type: number
+        seen: [live]
+        read: false
+        unused: Genius community activity on the lyrics page (annotations, pyongs, pending edits, lyrics owner, lyrics state); not about the music
+      - path: response.song.primary_artist
+        type: object
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); already read from the artist_songs listing the song id came from
+      - path: response.song.primary_artist.api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); already read from the artist_songs listing the song id came from
+      - path: response.song.primary_artist.header_image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); already read from the artist_songs listing the song id came from
+      - path: response.song.primary_artist.id
+        type: number
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); already read from the artist_songs listing the song id came from
+      - path: response.song.primary_artist.image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); already read from the artist_songs listing the song id came from
+      - path: response.song.primary_artist.iq
+        type: number
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); already read from the artist_songs listing the song id came from
+      - path: response.song.primary_artist.is_meme_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); already read from the artist_songs listing the song id came from
+      - path: response.song.primary_artist.is_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); already read from the artist_songs listing the song id came from
+      - path: response.song.primary_artist.name
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); already read from the artist_songs listing the song id came from
+      - path: response.song.primary_artist.url
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); already read from the artist_songs listing the song id came from
+      - path: response.song.primary_artist_names
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist credit as joined display text; the artist objects carry the same names
+      - path: response.song.primary_artists
+        type: array
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); already read from the artist_songs listing the song id came from
+      - path: response.song.primary_artists[].api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); already read from the artist_songs listing the song id came from
+      - path: response.song.primary_artists[].header_image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); already read from the artist_songs listing the song id came from
+      - path: response.song.primary_artists[].id
+        type: number
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); already read from the artist_songs listing the song id came from
+      - path: response.song.primary_artists[].image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); already read from the artist_songs listing the song id came from
+      - path: response.song.primary_artists[].iq
+        type: number
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); already read from the artist_songs listing the song id came from
+      - path: response.song.primary_artists[].is_meme_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); already read from the artist_songs listing the song id came from
+      - path: response.song.primary_artists[].is_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); already read from the artist_songs listing the song id came from
+      - path: response.song.primary_artists[].name
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); already read from the artist_songs listing the song id came from
+      - path: response.song.primary_artists[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: a Genius artist object (id, name, images, page links); already read from the artist_songs listing the song id came from
+      - path: response.song.producer_artists
+        type: array
+        seen: [live]
+        read: false
+        unused: producer credits; altune shows no credits
+      - path: response.song.producer_artists[].api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: producer credits; altune shows no credits
+      - path: response.song.producer_artists[].header_image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: producer credits; altune shows no credits
+      - path: response.song.producer_artists[].id
+        type: number
+        seen: [live]
+        read: false
+        unused: producer credits; altune shows no credits
+      - path: response.song.producer_artists[].image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: producer credits; altune shows no credits
+      - path: response.song.producer_artists[].iq
+        type: number
+        seen: [live]
+        read: false
+        unused: producer credits; altune shows no credits
+      - path: response.song.producer_artists[].is_meme_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: producer credits; altune shows no credits
+      - path: response.song.producer_artists[].is_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: producer credits; altune shows no credits
+      - path: response.song.producer_artists[].name
+        type: string
+        seen: [live]
+        read: false
+        unused: producer credits; altune shows no credits
+      - path: response.song.producer_artists[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: producer credits; altune shows no credits
+      - path: response.song.pyongs_count
+        type: null|number
+        seen: [live]
+        read: false
+        unused: Genius community activity on the lyrics page (annotations, pyongs, pending edits, lyrics owner, lyrics state); not about the music
+      - path: response.song.recording_location
+        type: null|string
+        seen: [live]
+        read: false
+        unused: free-text studio name, e.g. "PP Headquarters"; not shown
+      - path: response.song.relationships_index_url
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius page listing samples, remixes and covers; not followed
+      - path: response.song.release_date
+        type: null|string
+        seen: [live]
+        read: false
+        unused: the release date as YYYY-MM-DD; this endpoint sends it but the listing endpoint the adapter reads dates from does not
+      - path: response.song.release_date_for_display
+        type: null|string
+        seen: [live]
+        read: false
+        unused: the release date as display text ("August 7, 2020", "Aug. 7, 2020")
+      - path: response.song.release_date_with_abbreviated_month_for_display
+        type: null|string
+        seen: [live]
+        read: false
+        unused: the release date as display text ("August 7, 2020", "Aug. 7, 2020")
+      - path: response.song.song_art_image_thumbnail_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 300px thumbnail of an image whose full-size URL is listed beside it
+      - path: response.song.song_art_image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: the song art; already read from the artist_songs listing the song id came from
+      - path: response.song.song_art_primary_color
+        type: string
+        seen: [live]
+        read: false
+        unused: colours sampled from the song art; not used
+      - path: response.song.song_art_secondary_color
+        type: string
+        seen: [live]
+        read: false
+        unused: colours sampled from the song art; not used
+      - path: response.song.song_art_source_album
+        type: "null"
+        seen: [live]
+        read: false
+        unused: the album the song art came from, null in every fixture; not used
+      - path: response.song.song_art_text_color
+        type: string
+        seen: [live]
+        read: false
+        unused: colours sampled from the song art; not used
+      - path: response.song.song_relationships
+        type: array
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].relationship_type
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs
+        type: array
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].annotation_count
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].artist_names
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].featured_artists
+        type: array
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].featured_artists[].api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].featured_artists[].header_image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].featured_artists[].id
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].featured_artists[].image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].featured_artists[].iq
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].featured_artists[].is_meme_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].featured_artists[].is_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].featured_artists[].name
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].featured_artists[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].full_title
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].header_image_thumbnail_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].header_image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].id
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].lyrics_owner_id
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].lyrics_state
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].path
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].pending_lyrics_edits_count
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].primary_artist
+        type: object
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].primary_artist.api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].primary_artist.header_image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].primary_artist.id
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].primary_artist.image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].primary_artist.iq
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].primary_artist.is_meme_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].primary_artist.is_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].primary_artist.name
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].primary_artist.url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].primary_artist_names
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].primary_artists
+        type: array
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].primary_artists[].api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].primary_artists[].header_image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].primary_artists[].id
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].primary_artists[].image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].primary_artists[].iq
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].primary_artists[].is_meme_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].primary_artists[].is_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].primary_artists[].name
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].primary_artists[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].pyongs_count
+        type: null|number
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].relationships_index_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].release_date_components
+        type: null|object
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].release_date_components.day
+        type: null|number
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].release_date_components.month
+        type: null|number
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].release_date_components.year
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].release_date_for_display
+        type: null|string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].release_date_with_abbreviated_month_for_display
+        type: null|string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].song_art_image_thumbnail_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].song_art_image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].stats
+        type: object
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].stats.concurrents
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].stats.hot
+        type: boolean
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].stats.pageviews
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].stats.unreviewed_annotations
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].title
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].title_with_featured
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].songs[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].type
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.song_relationships[].url
+        type: null|string
+        seen: [live]
+        read: false
+        unused: 'GAP: how the song relates to others (samples, interpolates, cover_of, remix_of, live_version_of, translation_of and their reverses) with the related songs; it would tell a remix, cover or live take from the original'
+      - path: response.song.stats
+        type: object
+        seen: [live]
+        read: false
+        unused: page views, contributors, transcribers, annotation counts; not about the music
+      - path: response.song.stats.accepted_annotations
+        type: number
+        seen: [live]
+        read: false
+        unused: page views, contributors, transcribers, annotation counts; not about the music
+      - path: response.song.stats.concurrents
+        type: number
+        seen: [live]
+        read: false
+        unused: page views, contributors, transcribers, annotation counts; not about the music
+      - path: response.song.stats.contributors
+        type: number
+        seen: [live]
+        read: false
+        unused: page views, contributors, transcribers, annotation counts; not about the music
+      - path: response.song.stats.hot
+        type: boolean
+        seen: [live]
+        read: false
+        unused: page views, contributors, transcribers, annotation counts; not about the music
+      - path: response.song.stats.iq_earners
+        type: number
+        seen: [live]
+        read: false
+        unused: page views, contributors, transcribers, annotation counts; not about the music
+      - path: response.song.stats.pageviews
+        type: number
+        seen: [live]
+        read: false
+        unused: page views, contributors, transcribers, annotation counts; not about the music
+      - path: response.song.stats.transcribers
+        type: number
+        seen: [live]
+        read: false
+        unused: page views, contributors, transcribers, annotation counts; not about the music
+      - path: response.song.stats.unreviewed_annotations
+        type: number
+        seen: [live]
+        read: false
+        unused: page views, contributors, transcribers, annotation counts; not about the music
+      - path: response.song.stats.verified_annotations
+        type: number
+        seen: [live]
+        read: false
+        unused: page views, contributors, transcribers, annotation counts; not about the music
+      - path: response.song.title
+        type: string
+        seen: [live]
+        read: false
+        unused: the song title; already read from the artist_songs listing the song id came from
+      - path: response.song.title_with_featured
+        type: string
+        seen: [live]
+        read: false
+        unused: the title with "(Ft. ...)" appended; already read from the artist_songs listing the song id came from
+      - path: response.song.translation_songs
+        type: array
+        seen: [live]
+        read: false
+        unused: Genius translation pages of the lyrics (language, title, id); altune shows no lyrics
+      - path: response.song.translation_songs[].api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius translation pages of the lyrics (language, title, id); altune shows no lyrics
+      - path: response.song.translation_songs[].id
+        type: number
+        seen: [live]
+        read: false
+        unused: Genius translation pages of the lyrics (language, title, id); altune shows no lyrics
+      - path: response.song.translation_songs[].language
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius translation pages of the lyrics (language, title, id); altune shows no lyrics
+      - path: response.song.translation_songs[].lyrics_state
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius translation pages of the lyrics (language, title, id); altune shows no lyrics
+      - path: response.song.translation_songs[].path
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius translation pages of the lyrics (language, title, id); altune shows no lyrics
+      - path: response.song.translation_songs[].title
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius translation pages of the lyrics (language, title, id); altune shows no lyrics
+      - path: response.song.translation_songs[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius translation pages of the lyrics (language, title, id); altune shows no lyrics
+      - path: response.song.url
+        type: string
+        seen: [live]
+        read: false
+        unused: Genius web page link or path for lyrics and annotations; altune links nothing to Genius pages
+      - path: response.song.verified_annotations_by
+        type: array
+        seen: [live]
+        read: false
+        unused: verified Genius users who annotated, empty in every fixture; not about the music
+      - path: response.song.verified_contributors
+        type: array
+        seen: [live]
+        read: false
+        unused: verified Genius contributors, empty in every fixture; not about the music
+      - path: response.song.verified_lyrics_by
+        type: array
+        seen: [live]
+        read: false
+        unused: verified Genius users who transcribed, empty in every fixture; not about the music
+      - path: response.song.writer_artists
+        type: array
+        seen: [live]
+        read: false
+        unused: songwriter credits; altune shows no credits
+      - path: response.song.writer_artists[].api_path
+        type: string
+        seen: [live]
+        read: false
+        unused: songwriter credits; altune shows no credits
+      - path: response.song.writer_artists[].header_image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: songwriter credits; altune shows no credits
+      - path: response.song.writer_artists[].id
+        type: number
+        seen: [live]
+        read: false
+        unused: songwriter credits; altune shows no credits
+      - path: response.song.writer_artists[].image_url
+        type: string
+        seen: [live]
+        read: false
+        unused: songwriter credits; altune shows no credits
+      - path: response.song.writer_artists[].iq
+        type: number
+        seen: [live]
+        read: false
+        unused: songwriter credits; altune shows no credits
+      - path: response.song.writer_artists[].is_meme_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: songwriter credits; altune shows no credits
+      - path: response.song.writer_artists[].is_verified
+        type: boolean
+        seen: [live]
+        read: false
+        unused: songwriter credits; altune shows no credits
+      - path: response.song.writer_artists[].name
+        type: string
+        seen: [live]
+        read: false
+        unused: songwriter credits; altune shows no credits
+      - path: response.song.writer_artists[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: songwriter credits; altune shows no credits

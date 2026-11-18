@@ -1,0 +1,436 @@
+provider: discogs
+reference: 'none: Discogs documents its API as prose pages with JSON samples (discogs.com/developers), with no machine-readable schema or field types'
+entities:
+  artist:
+    fixtures:
+      - id: "9824716"
+        why: Nia Archives
+      - id: "33981"
+        why: Subnation, an artist on the Luvleh Mix DJ mix
+      - id: "5153025"
+        why: Cardi B, explicit catalogue with aliases and name variations
+      - id: "319278"
+        why: 'sparse: Babylon Cru, little-known artist'
+    fields:
+      - path: aliases
+        type: array
+        seen: [live]
+        read: false
+        unused: 'GAP: other Discogs artists the same person records as (Cardi B: Belcalis Almanzar; Subnation: Warrior Bass), with their ids; it would match tracks credited under an alias'
+      - path: aliases[].id
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: other Discogs artists the same person records as (Cardi B: Belcalis Almanzar; Subnation: Warrior Bass), with their ids; it would match tracks credited under an alias'
+      - path: aliases[].name
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: other Discogs artists the same person records as (Cardi B: Belcalis Almanzar; Subnation: Warrior Bass), with their ids; it would match tracks credited under an alias'
+      - path: aliases[].resource_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: other Discogs artists the same person records as (Cardi B: Belcalis Almanzar; Subnation: Warrior Bass), with their ids; it would match tracks credited under an alias'
+      - path: aliases[].thumbnail_url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: other Discogs artists the same person records as (Cardi B: Belcalis Almanzar; Subnation: Warrior Bass), with their ids; it would match tracks credited under an alias'
+      - path: data_quality
+        type: string
+        seen: [live]
+        read: false
+        unused: Discogs editorial status of the entry, e.g. "Needs Vote"; not about the music
+      - path: id
+        type: number
+        seen: [live]
+        read: true
+      - path: images
+        type: array
+        seen: [live]
+        read: true
+      - path: images[].height
+        type: number
+        seen: [live]
+        read: false
+        unused: image height in pixels; the adapter takes the primary image URL as is
+      - path: images[].resource_url
+        type: string
+        seen: [live]
+        read: false
+        unused: the same full-size image URL as uri; the adapter reads uri
+      - path: images[].type
+        type: string
+        seen: [live]
+        read: true
+      - path: images[].uri
+        type: string
+        seen: [live]
+        read: true
+      - path: images[].uri150
+        type: string
+        seen: [live]
+        read: false
+        unused: 150px thumbnail of the same image; altune wants the full-size uri
+      - path: images[].width
+        type: number
+        seen: [live]
+        read: false
+        unused: image width in pixels; the adapter takes the primary image URL as is
+      - path: members
+        type: array
+        seen: [live]
+        read: false
+        unused: members of a group (name, id, active); altune has no group membership view
+      - path: members[].active
+        type: boolean
+        seen: [live]
+        read: false
+        unused: members of a group (name, id, active); altune has no group membership view
+      - path: members[].id
+        type: number
+        seen: [live]
+        read: false
+        unused: members of a group (name, id, active); altune has no group membership view
+      - path: members[].name
+        type: string
+        seen: [live]
+        read: false
+        unused: members of a group (name, id, active); altune has no group membership view
+      - path: members[].resource_url
+        type: string
+        seen: [live]
+        read: false
+        unused: members of a group (name, id, active); altune has no group membership view
+      - path: members[].thumbnail_url
+        type: string
+        seen: [live]
+        read: false
+        unused: members of a group (name, id, active); altune has no group membership view
+      - path: name
+        type: string
+        seen: [live]
+        read: true
+      - path: namevariations
+        type: array
+        seen: [live]
+        read: false
+        unused: 'GAP: spellings the artist is credited under ("Sub Nation", "Babylon Crew"); they would match credits that differ from the canonical name'
+      - path: namevariations[]
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: spellings the artist is credited under ("Sub Nation", "Babylon Crew"); they would match credits that differ from the canonical name'
+      - path: profile
+        type: string
+        seen: [live]
+        read: true
+      - path: realname
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist's legal name; altune shows the artist name only
+      - path: releases_url
+        type: string
+        seen: [live]
+        read: false
+        unused: Discogs API URL for this record; the adapter builds URLs from the numeric id it already reads
+      - path: resource_url
+        type: string
+        seen: [live]
+        read: false
+        unused: Discogs API URL for this record; the adapter builds URLs from the numeric id it already reads
+      - path: uri
+        type: string
+        seen: [live]
+        read: false
+        unused: Discogs web page path; altune links nothing to Discogs pages
+      - path: urls
+        type: array
+        seen: [live]
+        read: false
+        unused: the artist's official site, Wikipedia and social links; altune shows none of them
+      - path: urls[]
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist's official site, Wikipedia and social links; altune shows none of them
+  artist_releases:
+    fixtures:
+      - id: 9824716|100
+        why: Nia Archives releases and DJ-mix appearances, the FetchArtistReleases page size
+      - id: 33981|50
+        why: Subnation, the ResolveDiscogsArtist page size
+      - id: 5153025|100
+        why: Cardi B, explicit releases and many appearances
+      - id: 319278|50
+        why: 'sparse: Babylon Cru'
+    fields:
+      - path: pagination
+        type: object
+        seen: [live]
+        read: false
+        unused: 'GAP: page count and item total; the adapter reads page 1 only, so an artist with more releases than per_page (Cardi B: 484 items over 5 pages) silently loses the rest'
+      - path: pagination.items
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: page count and item total; the adapter reads page 1 only, so an artist with more releases than per_page (Cardi B: 484 items over 5 pages) silently loses the rest'
+      - path: pagination.page
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: page count and item total; the adapter reads page 1 only, so an artist with more releases than per_page (Cardi B: 484 items over 5 pages) silently loses the rest'
+      - path: pagination.pages
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: page count and item total; the adapter reads page 1 only, so an artist with more releases than per_page (Cardi B: 484 items over 5 pages) silently loses the rest'
+      - path: pagination.per_page
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: page count and item total; the adapter reads page 1 only, so an artist with more releases than per_page (Cardi B: 484 items over 5 pages) silently loses the rest'
+      - path: pagination.urls
+        type: object
+        seen: [live]
+        read: false
+        unused: 'GAP: page count and item total; the adapter reads page 1 only, so an artist with more releases than per_page (Cardi B: 484 items over 5 pages) silently loses the rest'
+      - path: pagination.urls.last
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: page count and item total; the adapter reads page 1 only, so an artist with more releases than per_page (Cardi B: 484 items over 5 pages) silently loses the rest'
+      - path: pagination.urls.next
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: page count and item total; the adapter reads page 1 only, so an artist with more releases than per_page (Cardi B: 484 items over 5 pages) silently loses the rest'
+      - path: releases
+        type: array
+        seen: [live]
+        read: true
+      - path: releases[].artist
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the release''s credited artist, e.g. "Cheetah (23) & Nia Archives" on a collaboration; it would tell the artist''s own releases from shared credits'
+      - path: releases[].format
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: format and release type of a release row, e.g. ''12"'', "File, FLAC, Single", "5xFile, MP3, EP"; it would tell singles and EPs from albums'
+      - path: releases[].id
+        type: number
+        seen: [live]
+        read: true
+      - path: releases[].label
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the releasing label, e.g. "Hijinxx, Island Records"; it would confirm the exact release'
+      - path: releases[].main_release
+        type: number
+        seen: [live]
+        read: false
+        unused: for a master row, the id of its main release; altune keeps the row's own id
+      - path: releases[].resource_url
+        type: string
+        seen: [live]
+        read: false
+        unused: Discogs API URL for this record; the adapter builds URLs from the numeric id it already reads
+      - path: releases[].role
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the artist''s role on the release (Main, Remix, Producer, Appearance, TrackAppearance); it would keep remixes and compilation or DJ-mix appearances out of the artist''s own albums'
+      - path: releases[].stats
+        type: object
+        seen: [live]
+        read: false
+        unused: how many Discogs users own or want the release, plus the token account's own flags; not about the music
+      - path: releases[].stats.community
+        type: object
+        seen: [live]
+        read: false
+        unused: how many Discogs users own or want the release, plus the token account's own flags; not about the music
+      - path: releases[].stats.community.in_collection
+        type: number
+        seen: [live]
+        read: false
+        unused: how many Discogs users own or want the release, plus the token account's own flags; not about the music
+      - path: releases[].stats.community.in_wantlist
+        type: number
+        seen: [live]
+        read: false
+        unused: how many Discogs users own or want the release, plus the token account's own flags; not about the music
+      - path: releases[].stats.user
+        type: object
+        seen: [live]
+        read: false
+        unused: how many Discogs users own or want the release, plus the token account's own flags; not about the music
+      - path: releases[].stats.user.in_collection
+        type: number
+        seen: [live]
+        read: false
+        unused: how many Discogs users own or want the release, plus the token account's own flags; not about the music
+      - path: releases[].stats.user.in_wantlist
+        type: number
+        seen: [live]
+        read: false
+        unused: how many Discogs users own or want the release, plus the token account's own flags; not about the music
+      - path: releases[].status
+        type: string
+        seen: [live]
+        read: false
+        unused: Discogs moderation status, "Accepted" in every row seen; not about the music
+      - path: releases[].thumb
+        type: string
+        seen: [live]
+        read: false
+        unused: 150px cover thumbnail; Discogs release rows only feed the album consensus with title, year and type
+      - path: releases[].title
+        type: string
+        seen: [live]
+        read: true
+      - path: releases[].trackinfo
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: on appearance rows, the truncated title of the artist''s track on that release, e.g. "Little Things (Nia Arc..."; it would show which track a remix or appearance is'
+      - path: releases[].type
+        type: string
+        seen: [live]
+        read: true
+      - path: releases[].year
+        type: number
+        seen: [live]
+        read: true
+  search_artist:
+    fixtures:
+      - id: Nia Archives
+        why: Nia Archives, a single exact match
+      - id: Subnation
+        why: DJ-mix artist with a namesake, Subnation (2)
+      - id: Cardi B
+        why: explicit catalogue artist with loose name matches
+      - id: Babylon Cru
+        why: 'sparse: little-known artist'
+    fields:
+      - path: pagination
+        type: object
+        seen: [live]
+        read: false
+        unused: paging metadata (page, pages, per_page, items, next/last URLs); the adapter takes the first 5 matches and never pages
+      - path: pagination.items
+        type: number
+        seen: [live]
+        read: false
+        unused: paging metadata (page, pages, per_page, items, next/last URLs); the adapter takes the first 5 matches and never pages
+      - path: pagination.page
+        type: number
+        seen: [live]
+        read: false
+        unused: paging metadata (page, pages, per_page, items, next/last URLs); the adapter takes the first 5 matches and never pages
+      - path: pagination.pages
+        type: number
+        seen: [live]
+        read: false
+        unused: paging metadata (page, pages, per_page, items, next/last URLs); the adapter takes the first 5 matches and never pages
+      - path: pagination.per_page
+        type: number
+        seen: [live]
+        read: false
+        unused: paging metadata (page, pages, per_page, items, next/last URLs); the adapter takes the first 5 matches and never pages
+      - path: pagination.urls
+        type: object
+        seen: [live]
+        read: false
+        unused: paging metadata (page, pages, per_page, items, next/last URLs); the adapter takes the first 5 matches and never pages
+      - path: pagination.urls.last
+        type: string
+        seen: [live]
+        read: false
+        unused: paging metadata (page, pages, per_page, items, next/last URLs); the adapter takes the first 5 matches and never pages
+      - path: pagination.urls.next
+        type: string
+        seen: [live]
+        read: false
+        unused: paging metadata (page, pages, per_page, items, next/last URLs); the adapter takes the first 5 matches and never pages
+      - path: results
+        type: array
+        seen: [live]
+        read: true
+      - path: results[].country
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: discogsSearchResult carries country for release and master search results, but a type=artist search never sends it, so ResolveDiscogsArtist always returns an empty Country'
+      - path: results[].cover_image
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist's primary photo, or Discogs' spacer.gif when it has none; artwork is resolved from the artist detail images instead
+      - path: results[].genre
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: discogsSearchResult carries genre for release and master search results, but a type=artist search never sends it, so ResolveDiscogsArtist always returns an empty Genre'
+      - path: results[].genre[]
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: discogsSearchResult carries genre for release and master search results, but a type=artist search never sends it, so ResolveDiscogsArtist always returns an empty Genre'
+      - path: results[].id
+        type: number
+        seen: [live]
+        read: true
+      - path: results[].master_id
+        type: "null"
+        seen: [live]
+        read: false
+        unused: always null for artist results; masters exist only for releases
+      - path: results[].master_url
+        type: "null"
+        seen: [live]
+        read: false
+        unused: always null for artist results; masters exist only for releases
+      - path: results[].resource_url
+        type: string
+        seen: [live]
+        read: false
+        unused: Discogs API URL for this record; the adapter builds URLs from the numeric id it already reads
+      - path: results[].thumb
+        type: string
+        seen: [live]
+        read: false
+        unused: 150px thumbnail of the artist photo, empty when there is none; artwork is resolved from the artist detail images instead
+      - path: results[].title
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].type
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].uri
+        type: string
+        seen: [live]
+        read: false
+        unused: Discogs web page path; altune links nothing to Discogs pages
+      - path: results[].user_data
+        type: object
+        seen: [live]
+        read: false
+        unused: whether the token's own Discogs account has the artist in its collection or wantlist; not about the music
+      - path: results[].user_data.in_collection
+        type: boolean
+        seen: [live]
+        read: false
+        unused: whether the token's own Discogs account has the artist in its collection or wantlist; not about the music
+      - path: results[].user_data.in_wantlist
+        type: boolean
+        seen: [live]
+        read: false
+        unused: whether the token's own Discogs account has the artist in its collection or wantlist; not about the music

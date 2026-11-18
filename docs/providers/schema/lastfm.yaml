@@ -1,0 +1,1206 @@
+provider: lastfm
+reference: 'none: Last.fm documents its 2.0 API only as prose pages per method (last.fm/api/show/...), with an XML sample and no JSON schema or field types'
+entities:
+  album_info:
+    fixtures:
+      - id: Nia Archives|Luvleh Mix (DJ Mix)
+        why: Nia Archives DJ mix with many artists
+      - id: Nia Archives|Silence Is Loud
+        why: Nia Archives studio album
+      - id: Cardi B|Invasion of Privacy
+        why: explicit album
+      - id: Subnation|Gunshot
+        why: 'sparse: a single release'
+    fields:
+      - path: album
+        type: object
+        seen: [live]
+        read: true
+      - path: album.artist
+        type: string
+        seen: [live]
+        read: false
+        unused: the album artist after autocorrect; altune keeps the artist it looked up
+      - path: album.image
+        type: array
+        seen: [live]
+        read: false
+        unused: Last.fm album cover in four sizes; enrichment adds text facts only and covers come from the artwork chain
+      - path: album.image[].#text
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm album cover in four sizes; enrichment adds text facts only and covers come from the artwork chain
+      - path: album.image[].size
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm album cover in four sizes; enrichment adds text facts only and covers come from the artwork chain
+      - path: album.listeners
+        type: string
+        seen: [live]
+        read: true
+      - path: album.mbid
+        type: string
+        seen: [live]
+        read: true
+      - path: album.name
+        type: string
+        seen: [live]
+        read: false
+        unused: the album title after autocorrect; altune keeps the title it looked up
+      - path: album.playcount
+        type: string
+        seen: [live]
+        read: true
+      - path: album.tags
+        type: object|string
+        seen: [live]
+        read: true
+      - path: album.tags.tag
+        type: array
+        seen: [live]
+        read: true
+      - path: album.tags.tag[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: album.tags.tag[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm tag page link; altune keeps only the tag name
+      - path: album.tracks
+        type: object
+        seen: [live]
+        read: false
+        unused: 'GAP: the album''s tracklist, each with its position (@attr.rank), title, duration in seconds and artist with MBID; it would confirm a track is on this release and give its track number and length'
+      - path: album.tracks.track
+        type: array
+        seen: [live]
+        read: false
+        unused: 'GAP: the album''s tracklist, each with its position (@attr.rank), title, duration in seconds and artist with MBID; it would confirm a track is on this release and give its track number and length'
+      - path: album.tracks.track[].@attr
+        type: object
+        seen: [live]
+        read: false
+        unused: 'GAP: the album''s tracklist, each with its position (@attr.rank), title, duration in seconds and artist with MBID; it would confirm a track is on this release and give its track number and length'
+      - path: album.tracks.track[].@attr.rank
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: the album''s tracklist, each with its position (@attr.rank), title, duration in seconds and artist with MBID; it would confirm a track is on this release and give its track number and length'
+      - path: album.tracks.track[].artist
+        type: object
+        seen: [live]
+        read: false
+        unused: 'GAP: the album''s tracklist, each with its position (@attr.rank), title, duration in seconds and artist with MBID; it would confirm a track is on this release and give its track number and length'
+      - path: album.tracks.track[].artist.mbid
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the album''s tracklist, each with its position (@attr.rank), title, duration in seconds and artist with MBID; it would confirm a track is on this release and give its track number and length'
+      - path: album.tracks.track[].artist.name
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the album''s tracklist, each with its position (@attr.rank), title, duration in seconds and artist with MBID; it would confirm a track is on this release and give its track number and length'
+      - path: album.tracks.track[].artist.url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the album''s tracklist, each with its position (@attr.rank), title, duration in seconds and artist with MBID; it would confirm a track is on this release and give its track number and length'
+      - path: album.tracks.track[].duration
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: the album''s tracklist, each with its position (@attr.rank), title, duration in seconds and artist with MBID; it would confirm a track is on this release and give its track number and length'
+      - path: album.tracks.track[].name
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the album''s tracklist, each with its position (@attr.rank), title, duration in seconds and artist with MBID; it would confirm a track is on this release and give its track number and length'
+      - path: album.tracks.track[].streamable
+        type: object
+        seen: [live]
+        read: false
+        unused: 'GAP: the album''s tracklist, each with its position (@attr.rank), title, duration in seconds and artist with MBID; it would confirm a track is on this release and give its track number and length'
+      - path: album.tracks.track[].streamable.#text
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the album''s tracklist, each with its position (@attr.rank), title, duration in seconds and artist with MBID; it would confirm a track is on this release and give its track number and length'
+      - path: album.tracks.track[].streamable.fulltrack
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the album''s tracklist, each with its position (@attr.rank), title, duration in seconds and artist with MBID; it would confirm a track is on this release and give its track number and length'
+      - path: album.tracks.track[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the album''s tracklist, each with its position (@attr.rank), title, duration in seconds and artist with MBID; it would confirm a track is on this release and give its track number and length'
+      - path: album.url
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm web page link; altune keys on the MBID and its own identity, not Last.fm pages
+      - path: album.wiki
+        type: object
+        seen: [live]
+        read: true
+      - path: album.wiki.content
+        type: string
+        seen: [live]
+        read: false
+        unused: the full wiki text; altune shows the shorter summary
+      - path: album.wiki.published
+        type: string
+        seen: [live]
+        read: false
+        unused: date the wiki text was last edited; not shown
+      - path: album.wiki.summary
+        type: string
+        seen: [live]
+        read: true
+  artist_info:
+    fixtures:
+      - id: Nia Archives
+        why: Nia Archives with bio, tags and similar artists
+      - id: Subnation
+        why: small artist from the DJ mix
+      - id: Cardi B
+        why: large artist with an explicit catalogue
+      - id: Babylon Cru
+        why: 'sparse: little-known artist'
+    fields:
+      - path: artist
+        type: object
+        seen: [live]
+        read: true
+      - path: artist.bio
+        type: object
+        seen: [live]
+        read: true
+      - path: artist.bio.content
+        type: string
+        seen: [live]
+        read: false
+        unused: the full biography; altune shows the shorter summary
+      - path: artist.bio.links
+        type: object
+        seen: [live]
+        read: false
+        unused: link to the artist's Last.fm wiki page; altune shows the summary text only
+      - path: artist.bio.links.link
+        type: object
+        seen: [live]
+        read: false
+        unused: link to the artist's Last.fm wiki page; altune shows the summary text only
+      - path: artist.bio.links.link.#text
+        type: string
+        seen: [live]
+        read: false
+        unused: link to the artist's Last.fm wiki page; altune shows the summary text only
+      - path: artist.bio.links.link.href
+        type: string
+        seen: [live]
+        read: false
+        unused: link to the artist's Last.fm wiki page; altune shows the summary text only
+      - path: artist.bio.links.link.rel
+        type: string
+        seen: [live]
+        read: false
+        unused: link to the artist's Last.fm wiki page; altune shows the summary text only
+      - path: artist.bio.published
+        type: string
+        seen: [live]
+        read: false
+        unused: date the wiki text was last edited (01 Jan 1970 when there is none); not shown
+      - path: artist.bio.summary
+        type: string
+        seen: [live]
+        read: true
+      - path: artist.image
+        type: array
+        seen: [live]
+        read: false
+        unused: Last.fm's generic star placeholder in four sizes (the same image hash for every artist); Last.fm no longer serves artist photos, so artwork comes from the artwork chain
+      - path: artist.image[].#text
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm's generic star placeholder in four sizes (the same image hash for every artist); Last.fm no longer serves artist photos, so artwork comes from the artwork chain
+      - path: artist.image[].size
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm's generic star placeholder in four sizes (the same image hash for every artist); Last.fm no longer serves artist photos, so artwork comes from the artwork chain
+      - path: artist.mbid
+        type: string
+        seen: [live]
+        read: true
+      - path: artist.name
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist name after autocorrect; altune keeps the name it looked up
+      - path: artist.ontour
+        type: string
+        seen: [live]
+        read: false
+        unused: '"1" or "0" for whether Last.fm lists the artist as touring; altune has no tour feature'
+      - path: artist.similar
+        type: object
+        seen: [live]
+        read: true
+      - path: artist.similar.artist
+        type: array
+        seen: [live]
+        read: true
+      - path: artist.similar.artist[].image
+        type: array
+        seen: [live]
+        read: false
+        unused: Last.fm's generic star placeholder in four sizes (the same image hash for every artist); Last.fm no longer serves artist photos, so artwork comes from the artwork chain
+      - path: artist.similar.artist[].image[].#text
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm's generic star placeholder in four sizes (the same image hash for every artist); Last.fm no longer serves artist photos, so artwork comes from the artwork chain
+      - path: artist.similar.artist[].image[].size
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm's generic star placeholder in four sizes (the same image hash for every artist); Last.fm no longer serves artist photos, so artwork comes from the artwork chain
+      - path: artist.similar.artist[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: artist.similar.artist[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm web page link; altune keys on the MBID and its own identity, not Last.fm pages
+      - path: artist.stats
+        type: object
+        seen: [live]
+        read: true
+      - path: artist.stats.listeners
+        type: string
+        seen: [live]
+        read: true
+      - path: artist.stats.playcount
+        type: string
+        seen: [live]
+        read: true
+      - path: artist.streamable
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm streamable flag, always "0" since Last.fm stopped hosting audio; altune gets audio from YouTube or SoundCloud
+      - path: artist.tags
+        type: object
+        seen: [live]
+        read: true
+      - path: artist.tags.tag
+        type: array
+        seen: [live]
+        read: true
+      - path: artist.tags.tag[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: artist.tags.tag[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm tag page link; altune keeps only the tag name
+      - path: artist.url
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm web page link; altune keys on the MBID and its own identity, not Last.fm pages
+  artist_top_albums:
+    fixtures:
+      - id: Nia Archives
+        why: Nia Archives, includes the Luvleh Mix DJ mix
+      - id: Subnation
+        why: small artist, sparse album rows
+      - id: Cardi B
+        why: explicit catalogue
+    fields:
+      - path: topalbums
+        type: object
+        seen: [live]
+        read: true
+      - path: topalbums.@attr
+        type: object
+        seen: [live]
+        read: false
+        unused: paging metadata for this one page (page, perPage, total, totalPages); the adapter reads a single page and never pages
+      - path: topalbums.@attr.artist
+        type: string
+        seen: [live]
+        read: false
+        unused: paging metadata for this one page (page, perPage, total, totalPages); the adapter reads a single page and never pages
+      - path: topalbums.@attr.page
+        type: string
+        seen: [live]
+        read: false
+        unused: paging metadata for this one page (page, perPage, total, totalPages); the adapter reads a single page and never pages
+      - path: topalbums.@attr.perPage
+        type: string
+        seen: [live]
+        read: false
+        unused: paging metadata for this one page (page, perPage, total, totalPages); the adapter reads a single page and never pages
+      - path: topalbums.@attr.total
+        type: string
+        seen: [live]
+        read: false
+        unused: paging metadata for this one page (page, perPage, total, totalPages); the adapter reads a single page and never pages
+      - path: topalbums.@attr.totalPages
+        type: string
+        seen: [live]
+        read: false
+        unused: paging metadata for this one page (page, perPage, total, totalPages); the adapter reads a single page and never pages
+      - path: topalbums.album
+        type: array
+        seen: [live]
+        read: true
+      - path: topalbums.album[].@attr
+        type: object
+        seen: [live]
+        read: false
+        unused: 1-based rank by play count, the same as the array order
+      - path: topalbums.album[].@attr.rank
+        type: string
+        seen: [live]
+        read: false
+        unused: 1-based rank by play count, the same as the array order
+      - path: topalbums.album[].artist
+        type: object
+        seen: [live]
+        read: true
+      - path: topalbums.album[].artist.mbid
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the album artist''s MusicBrainz ID, which would pin the artist instead of matching on the name text'
+      - path: topalbums.album[].artist.name
+        type: string
+        seen: [live]
+        read: true
+      - path: topalbums.album[].artist.url
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm web page link; altune keys on the MBID and its own identity, not Last.fm pages
+      - path: topalbums.album[].image
+        type: array
+        seen: [live]
+        read: true
+      - path: topalbums.album[].image[].#text
+        type: string
+        seen: [live]
+        read: true
+      - path: topalbums.album[].image[].size
+        type: string
+        seen: [live]
+        read: true
+      - path: topalbums.album[].mbid
+        type: string
+        seen: [live]
+        read: true
+      - path: topalbums.album[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: topalbums.album[].playcount
+        type: number
+        seen: [live]
+        read: true
+      - path: topalbums.album[].url
+        type: string
+        seen: [live]
+        read: true
+  artist_top_tracks:
+    fixtures:
+      - id: Nia Archives
+        why: by name, the artist= branch
+      - id: 09d6b57e-9cd9-4a74-b7cb-842b8443a1cd
+        why: Nia Archives by MBID, the mbid= branch
+      - id: Subnation
+        why: small artist from the DJ mix
+      - id: Cardi B
+        why: explicit catalogue
+    fields:
+      - path: toptracks
+        type: object
+        seen: [live]
+        read: true
+      - path: toptracks.@attr
+        type: object
+        seen: [live]
+        read: false
+        unused: paging metadata for this one page (page, perPage, total, totalPages); the adapter reads a single page and never pages
+      - path: toptracks.@attr.artist
+        type: string
+        seen: [live]
+        read: false
+        unused: paging metadata for this one page (page, perPage, total, totalPages); the adapter reads a single page and never pages
+      - path: toptracks.@attr.page
+        type: string
+        seen: [live]
+        read: false
+        unused: paging metadata for this one page (page, perPage, total, totalPages); the adapter reads a single page and never pages
+      - path: toptracks.@attr.perPage
+        type: string
+        seen: [live]
+        read: false
+        unused: paging metadata for this one page (page, perPage, total, totalPages); the adapter reads a single page and never pages
+      - path: toptracks.@attr.total
+        type: string
+        seen: [live]
+        read: false
+        unused: paging metadata for this one page (page, perPage, total, totalPages); the adapter reads a single page and never pages
+      - path: toptracks.@attr.totalPages
+        type: string
+        seen: [live]
+        read: false
+        unused: paging metadata for this one page (page, perPage, total, totalPages); the adapter reads a single page and never pages
+      - path: toptracks.track
+        type: array
+        seen: [live]
+        read: true
+      - path: toptracks.track[].@attr
+        type: object
+        seen: [live]
+        read: false
+        unused: 1-based rank by play count, the same as the array order
+      - path: toptracks.track[].@attr.rank
+        type: string
+        seen: [live]
+        read: false
+        unused: 1-based rank by play count, the same as the array order
+      - path: toptracks.track[].artist
+        type: object
+        seen: [live]
+        read: true
+      - path: toptracks.track[].artist.mbid
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the track artist''s MusicBrainz ID, which would pin the artist instead of matching on the name text'
+      - path: toptracks.track[].artist.name
+        type: string
+        seen: [live]
+        read: true
+      - path: toptracks.track[].artist.url
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm web page link; altune keys on the MBID and its own identity, not Last.fm pages
+      - path: toptracks.track[].image
+        type: array
+        seen: [live]
+        read: true
+      - path: toptracks.track[].image[].#text
+        type: string
+        seen: [live]
+        read: true
+      - path: toptracks.track[].image[].size
+        type: string
+        seen: [live]
+        read: true
+      - path: toptracks.track[].listeners
+        type: string
+        seen: [live]
+        read: true
+      - path: toptracks.track[].mbid
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the recording MBID of each top track (empty for some); search results set RecordingMBID but top tracks drop it'
+      - path: toptracks.track[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: toptracks.track[].playcount
+        type: string
+        seen: [live]
+        read: true
+      - path: toptracks.track[].streamable
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm streamable flag, always "0" since Last.fm stopped hosting audio; altune gets audio from YouTube or SoundCloud
+      - path: toptracks.track[].url
+        type: string
+        seen: [live]
+        read: true
+  chart_top_artists:
+    fixtures:
+      - id: "50"
+        why: the limit vocabulary refresh asks for
+    fields:
+      - path: artists
+        type: object
+        seen: [live]
+        read: true
+      - path: artists.@attr
+        type: object
+        seen: [live]
+        read: false
+        unused: paging metadata for this one page (page, perPage, total, totalPages); the adapter reads a single page and never pages
+      - path: artists.@attr.page
+        type: string
+        seen: [live]
+        read: false
+        unused: paging metadata for this one page (page, perPage, total, totalPages); the adapter reads a single page and never pages
+      - path: artists.@attr.perPage
+        type: string
+        seen: [live]
+        read: false
+        unused: paging metadata for this one page (page, perPage, total, totalPages); the adapter reads a single page and never pages
+      - path: artists.@attr.total
+        type: string
+        seen: [live]
+        read: false
+        unused: paging metadata for this one page (page, perPage, total, totalPages); the adapter reads a single page and never pages
+      - path: artists.@attr.totalPages
+        type: string
+        seen: [live]
+        read: false
+        unused: paging metadata for this one page (page, perPage, total, totalPages); the adapter reads a single page and never pages
+      - path: artists.artist
+        type: array
+        seen: [live]
+        read: true
+      - path: artists.artist[].image
+        type: array
+        seen: [live]
+        read: false
+        unused: Last.fm's generic star placeholder in four sizes (the same image hash for every artist); Last.fm no longer serves artist photos, so artwork comes from the artwork chain
+      - path: artists.artist[].image[].#text
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm's generic star placeholder in four sizes (the same image hash for every artist); Last.fm no longer serves artist photos, so artwork comes from the artwork chain
+      - path: artists.artist[].image[].size
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm's generic star placeholder in four sizes (the same image hash for every artist); Last.fm no longer serves artist photos, so artwork comes from the artwork chain
+      - path: artists.artist[].listeners
+        type: string
+        seen: [live]
+        read: true
+      - path: artists.artist[].mbid
+        type: string
+        seen: [live]
+        read: false
+        unused: artist MBID; a chart row only becomes a plain autocomplete term, so no identity is kept
+      - path: artists.artist[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: artists.artist[].playcount
+        type: string
+        seen: [live]
+        read: false
+        unused: total scrobble count; vocabulary popularity is ranked by listeners
+      - path: artists.artist[].streamable
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm streamable flag, always "0" since Last.fm stopped hosting audio; altune gets audio from YouTube or SoundCloud
+      - path: artists.artist[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm web page link; altune keys on the MBID and its own identity, not Last.fm pages
+  chart_top_tracks:
+    fixtures:
+      - id: "50"
+        why: the limit vocabulary refresh asks for
+    fields:
+      - path: tracks
+        type: object
+        seen: [live]
+        read: true
+      - path: tracks.@attr
+        type: object
+        seen: [live]
+        read: false
+        unused: paging metadata for this one page (page, perPage, total, totalPages); the adapter reads a single page and never pages
+      - path: tracks.@attr.page
+        type: string
+        seen: [live]
+        read: false
+        unused: paging metadata for this one page (page, perPage, total, totalPages); the adapter reads a single page and never pages
+      - path: tracks.@attr.perPage
+        type: string
+        seen: [live]
+        read: false
+        unused: paging metadata for this one page (page, perPage, total, totalPages); the adapter reads a single page and never pages
+      - path: tracks.@attr.total
+        type: string
+        seen: [live]
+        read: false
+        unused: paging metadata for this one page (page, perPage, total, totalPages); the adapter reads a single page and never pages
+      - path: tracks.@attr.totalPages
+        type: string
+        seen: [live]
+        read: false
+        unused: paging metadata for this one page (page, perPage, total, totalPages); the adapter reads a single page and never pages
+      - path: tracks.track
+        type: array
+        seen: [live]
+        read: true
+      - path: tracks.track[].artist
+        type: object
+        seen: [live]
+        read: false
+        unused: the track's artist (name, MBID, page); a chart row only becomes a plain autocomplete term from the track name
+      - path: tracks.track[].artist.mbid
+        type: string
+        seen: [live]
+        read: false
+        unused: the track's artist (name, MBID, page); a chart row only becomes a plain autocomplete term from the track name
+      - path: tracks.track[].artist.name
+        type: string
+        seen: [live]
+        read: false
+        unused: the track's artist (name, MBID, page); a chart row only becomes a plain autocomplete term from the track name
+      - path: tracks.track[].artist.url
+        type: string
+        seen: [live]
+        read: false
+        unused: the track's artist (name, MBID, page); a chart row only becomes a plain autocomplete term from the track name
+      - path: tracks.track[].duration
+        type: string
+        seen: [live]
+        read: false
+        unused: track length in seconds as a string; a chart row only becomes a plain autocomplete term
+      - path: tracks.track[].image
+        type: array
+        seen: [live]
+        read: false
+        unused: Last.fm's generic star placeholder in four sizes (the same image hash for every artist); Last.fm no longer serves artist photos, so artwork comes from the artwork chain
+      - path: tracks.track[].image[].#text
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm's generic star placeholder in four sizes (the same image hash for every artist); Last.fm no longer serves artist photos, so artwork comes from the artwork chain
+      - path: tracks.track[].image[].size
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm's generic star placeholder in four sizes (the same image hash for every artist); Last.fm no longer serves artist photos, so artwork comes from the artwork chain
+      - path: tracks.track[].listeners
+        type: string
+        seen: [live]
+        read: true
+      - path: tracks.track[].mbid
+        type: string
+        seen: [live]
+        read: false
+        unused: recording MBID; a chart row only becomes a plain autocomplete term, so no identity is kept
+      - path: tracks.track[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: tracks.track[].playcount
+        type: string
+        seen: [live]
+        read: false
+        unused: total scrobble count; vocabulary popularity is ranked by listeners
+      - path: tracks.track[].streamable
+        type: object
+        seen: [live]
+        read: false
+        unused: Last.fm streamable flag, always "0" since Last.fm stopped hosting audio; altune gets audio from YouTube or SoundCloud
+      - path: tracks.track[].streamable.#text
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm streamable flag, always "0" since Last.fm stopped hosting audio; altune gets audio from YouTube or SoundCloud
+      - path: tracks.track[].streamable.fulltrack
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm streamable flag, always "0" since Last.fm stopped hosting audio; altune gets audio from YouTube or SoundCloud
+      - path: tracks.track[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm web page link; altune keys on the MBID and its own identity, not Last.fm pages
+  search_album:
+    fixtures:
+      - id: Luvleh Mix (DJ Mix)
+        why: Nia Archives DJ mix, many artists credited, no MBID
+      - id: Silence Is Loud
+        why: Nia Archives studio album with an MBID
+      - id: Invasion of Privacy
+        why: explicit album
+      - id: qxzvbnmwplk
+        why: 'sparse: a query with no matches'
+    fields:
+      - path: results
+        type: object
+        seen: [live]
+        read: true
+      - path: results.@attr
+        type: object
+        seen: [live]
+        read: false
+        unused: echo of the query text altune sent; it already has it
+      - path: results.@attr.for
+        type: string
+        seen: [live]
+        read: false
+        unused: echo of the query text altune sent; it already has it
+      - path: results.albummatches
+        type: object
+        seen: [live]
+        read: true
+      - path: results.albummatches.album
+        type: array
+        seen: [live]
+        read: true
+      - path: results.albummatches.album[].artist
+        type: string
+        seen: [live]
+        read: true
+      - path: results.albummatches.album[].image
+        type: array
+        seen: [live]
+        read: true
+      - path: results.albummatches.album[].image[].#text
+        type: string
+        seen: [live]
+        read: true
+      - path: results.albummatches.album[].image[].size
+        type: string
+        seen: [live]
+        read: true
+      - path: results.albummatches.album[].mbid
+        type: string
+        seen: [live]
+        read: true
+      - path: results.albummatches.album[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: results.albummatches.album[].streamable
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm streamable flag, always "0" since Last.fm stopped hosting audio; altune gets audio from YouTube or SoundCloud
+      - path: results.albummatches.album[].url
+        type: string
+        seen: [live]
+        read: true
+      - path: results.opensearch:Query
+        type: object
+        seen: [live]
+        read: false
+        unused: OpenSearch paging metadata (query echo, start index, items per page, total match count); the adapter reads one page of matches
+      - path: results.opensearch:Query.#text
+        type: string
+        seen: [live]
+        read: false
+        unused: OpenSearch paging metadata (query echo, start index, items per page, total match count); the adapter reads one page of matches
+      - path: results.opensearch:Query.role
+        type: string
+        seen: [live]
+        read: false
+        unused: OpenSearch paging metadata (query echo, start index, items per page, total match count); the adapter reads one page of matches
+      - path: results.opensearch:Query.searchTerms
+        type: string
+        seen: [live]
+        read: false
+        unused: OpenSearch paging metadata (query echo, start index, items per page, total match count); the adapter reads one page of matches
+      - path: results.opensearch:Query.startPage
+        type: string
+        seen: [live]
+        read: false
+        unused: OpenSearch paging metadata (query echo, start index, items per page, total match count); the adapter reads one page of matches
+      - path: results.opensearch:itemsPerPage
+        type: string
+        seen: [live]
+        read: false
+        unused: OpenSearch paging metadata (query echo, start index, items per page, total match count); the adapter reads one page of matches
+      - path: results.opensearch:startIndex
+        type: string
+        seen: [live]
+        read: false
+        unused: OpenSearch paging metadata (query echo, start index, items per page, total match count); the adapter reads one page of matches
+      - path: results.opensearch:totalResults
+        type: string
+        seen: [live]
+        read: false
+        unused: OpenSearch paging metadata (query echo, start index, items per page, total match count); the adapter reads one page of matches
+  search_artist:
+    fixtures:
+      - id: Nia Archives
+        why: Nia Archives plus collaboration rows without an MBID
+      - id: Subnation
+        why: small artist from the DJ mix
+      - id: Cardi B
+        why: large artist with an explicit catalogue
+      - id: qxzvbnmwplk
+        why: 'sparse: a query with no matches'
+    fields:
+      - path: results
+        type: object
+        seen: [live]
+        read: true
+      - path: results.@attr
+        type: object
+        seen: [live]
+        read: false
+        unused: echo of the query text altune sent; it already has it
+      - path: results.@attr.for
+        type: string
+        seen: [live]
+        read: false
+        unused: echo of the query text altune sent; it already has it
+      - path: results.artistmatches
+        type: object
+        seen: [live]
+        read: true
+      - path: results.artistmatches.artist
+        type: array
+        seen: [live]
+        read: true
+      - path: results.artistmatches.artist[].image
+        type: array
+        seen: [live]
+        read: true
+      - path: results.artistmatches.artist[].image[].#text
+        type: string
+        seen: [live]
+        read: true
+      - path: results.artistmatches.artist[].image[].size
+        type: string
+        seen: [live]
+        read: true
+      - path: results.artistmatches.artist[].listeners
+        type: string
+        seen: [live]
+        read: true
+      - path: results.artistmatches.artist[].mbid
+        type: string
+        seen: [live]
+        read: true
+      - path: results.artistmatches.artist[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: results.artistmatches.artist[].streamable
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm streamable flag, always "0" since Last.fm stopped hosting audio; altune gets audio from YouTube or SoundCloud
+      - path: results.artistmatches.artist[].url
+        type: string
+        seen: [live]
+        read: true
+      - path: results.opensearch:Query
+        type: object
+        seen: [live]
+        read: false
+        unused: OpenSearch paging metadata (query echo, start index, items per page, total match count); the adapter reads one page of matches
+      - path: results.opensearch:Query.#text
+        type: string
+        seen: [live]
+        read: false
+        unused: OpenSearch paging metadata (query echo, start index, items per page, total match count); the adapter reads one page of matches
+      - path: results.opensearch:Query.role
+        type: string
+        seen: [live]
+        read: false
+        unused: OpenSearch paging metadata (query echo, start index, items per page, total match count); the adapter reads one page of matches
+      - path: results.opensearch:Query.searchTerms
+        type: string
+        seen: [live]
+        read: false
+        unused: OpenSearch paging metadata (query echo, start index, items per page, total match count); the adapter reads one page of matches
+      - path: results.opensearch:Query.startPage
+        type: string
+        seen: [live]
+        read: false
+        unused: OpenSearch paging metadata (query echo, start index, items per page, total match count); the adapter reads one page of matches
+      - path: results.opensearch:itemsPerPage
+        type: string
+        seen: [live]
+        read: false
+        unused: OpenSearch paging metadata (query echo, start index, items per page, total match count); the adapter reads one page of matches
+      - path: results.opensearch:startIndex
+        type: string
+        seen: [live]
+        read: false
+        unused: OpenSearch paging metadata (query echo, start index, items per page, total match count); the adapter reads one page of matches
+      - path: results.opensearch:totalResults
+        type: string
+        seen: [live]
+        read: false
+        unused: OpenSearch paging metadata (query echo, start index, items per page, total match count); the adapter reads one page of matches
+  search_track:
+    fixtures:
+      - id: Nia Archives Baianá
+        why: Nia Archives single, matches carry an MBID
+      - id: Gunshot (Mixed) Subnation
+        why: track from the Luvleh Mix DJ mix, no MBID
+      - id: WAP Cardi B
+        why: explicit hit single
+      - id: Blinding Lights
+        why: normal single, title-only query with many matches
+      - id: qxzvbnmwplk
+        why: 'sparse: a query with no matches'
+    fields:
+      - path: results
+        type: object
+        seen: [live]
+        read: true
+      - path: results.@attr
+        type: object
+        seen: [live]
+        read: false
+        unused: echo of the query text altune sent; it already has it
+      - path: results.@attr.for
+        type: string
+        seen: [live]
+        read: false
+        unused: echo of the query text altune sent; it already has it
+      - path: results.opensearch:Query
+        type: object
+        seen: [live]
+        read: false
+        unused: OpenSearch paging metadata (query echo, start index, items per page, total match count); the adapter reads one page of matches
+      - path: results.opensearch:Query.#text
+        type: string
+        seen: [live]
+        read: false
+        unused: OpenSearch paging metadata (query echo, start index, items per page, total match count); the adapter reads one page of matches
+      - path: results.opensearch:Query.role
+        type: string
+        seen: [live]
+        read: false
+        unused: OpenSearch paging metadata (query echo, start index, items per page, total match count); the adapter reads one page of matches
+      - path: results.opensearch:Query.searchTerms
+        type: string
+        seen: [live]
+        read: false
+        unused: OpenSearch paging metadata (query echo, start index, items per page, total match count); the adapter reads one page of matches
+      - path: results.opensearch:Query.startPage
+        type: string
+        seen: [live]
+        read: false
+        unused: OpenSearch paging metadata (query echo, start index, items per page, total match count); the adapter reads one page of matches
+      - path: results.opensearch:itemsPerPage
+        type: string
+        seen: [live]
+        read: false
+        unused: OpenSearch paging metadata (query echo, start index, items per page, total match count); the adapter reads one page of matches
+      - path: results.opensearch:startIndex
+        type: string
+        seen: [live]
+        read: false
+        unused: OpenSearch paging metadata (query echo, start index, items per page, total match count); the adapter reads one page of matches
+      - path: results.opensearch:totalResults
+        type: string
+        seen: [live]
+        read: false
+        unused: OpenSearch paging metadata (query echo, start index, items per page, total match count); the adapter reads one page of matches
+      - path: results.trackmatches
+        type: object
+        seen: [live]
+        read: true
+      - path: results.trackmatches.track
+        type: array
+        seen: [live]
+        read: true
+      - path: results.trackmatches.track[].artist
+        type: string
+        seen: [live]
+        read: true
+      - path: results.trackmatches.track[].image
+        type: array
+        seen: [live]
+        read: true
+      - path: results.trackmatches.track[].image[].#text
+        type: string
+        seen: [live]
+        read: true
+      - path: results.trackmatches.track[].image[].size
+        type: string
+        seen: [live]
+        read: true
+      - path: results.trackmatches.track[].listeners
+        type: string
+        seen: [live]
+        read: true
+      - path: results.trackmatches.track[].mbid
+        type: string
+        seen: [live]
+        read: true
+      - path: results.trackmatches.track[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: results.trackmatches.track[].streamable
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm streamable flag, always "0" since Last.fm stopped hosting audio; altune gets audio from YouTube or SoundCloud
+      - path: results.trackmatches.track[].url
+        type: string
+        seen: [live]
+        read: true
+  track_info:
+    fixtures:
+      - id: Nia Archives|Baianá
+        why: Nia Archives single with an MBID and album
+      - id: Subnation|Gunshot (Mixed)
+        why: track on the Luvleh Mix DJ mix, no MBID
+      - id: Cardi B|WAP
+        why: explicit hit single with a wiki
+      - id: The Weeknd|Blinding Lights
+        why: normal single
+    fields:
+      - path: track
+        type: object
+        seen: [live]
+        read: true
+      - path: track.album
+        type: object
+        seen: [live]
+        read: true
+      - path: track.album.artist
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the album artist of the release Last.fm files the track under, "Various Artists" or "Various" for compilations; it would tell a compilation from the artist''s own release'
+      - path: track.album.image
+        type: array
+        seen: [live]
+        read: false
+        unused: Last.fm album cover in four sizes; enrichment adds text facts only and covers come from the artwork chain
+      - path: track.album.image[].#text
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm album cover in four sizes; enrichment adds text facts only and covers come from the artwork chain
+      - path: track.album.image[].size
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm album cover in four sizes; enrichment adds text facts only and covers come from the artwork chain
+      - path: track.album.title
+        type: string
+        seen: [live]
+        read: true
+      - path: track.album.url
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm web page link; altune keys on the MBID and its own identity, not Last.fm pages
+      - path: track.artist
+        type: object
+        seen: [live]
+        read: false
+        unused: container for the track artist's name, MBID and page link, each reasoned below
+      - path: track.artist.mbid
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the track artist''s MusicBrainz ID, which would pin the artist instead of matching on the name text'
+      - path: track.artist.name
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist name after autocorrect; altune keeps the artist it looked up
+      - path: track.artist.url
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm web page link; altune keys on the MBID and its own identity, not Last.fm pages
+      - path: track.duration
+        type: string
+        seen: [live]
+        read: true
+      - path: track.listeners
+        type: string
+        seen: [live]
+        read: true
+      - path: track.mbid
+        type: string
+        seen: [live]
+        read: true
+      - path: track.name
+        type: string
+        seen: [live]
+        read: false
+        unused: the track title after autocorrect; altune keeps the title it looked up
+      - path: track.playcount
+        type: string
+        seen: [live]
+        read: true
+      - path: track.streamable
+        type: object
+        seen: [live]
+        read: false
+        unused: Last.fm streamable flag, always "0" since Last.fm stopped hosting audio; altune gets audio from YouTube or SoundCloud
+      - path: track.streamable.#text
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm streamable flag, always "0" since Last.fm stopped hosting audio; altune gets audio from YouTube or SoundCloud
+      - path: track.streamable.fulltrack
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm streamable flag, always "0" since Last.fm stopped hosting audio; altune gets audio from YouTube or SoundCloud
+      - path: track.toptags
+        type: object
+        seen: [live]
+        read: true
+      - path: track.toptags.tag
+        type: array
+        seen: [live]
+        read: true
+      - path: track.toptags.tag[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: track.toptags.tag[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm tag page link; altune keeps only the tag name
+      - path: track.url
+        type: string
+        seen: [live]
+        read: false
+        unused: Last.fm web page link; altune keys on the MBID and its own identity, not Last.fm pages
+      - path: track.wiki
+        type: object
+        seen: [live]
+        read: true
+      - path: track.wiki.content
+        type: string
+        seen: [live]
+        read: false
+        unused: the full wiki text; altune shows the shorter summary
+      - path: track.wiki.published
+        type: string
+        seen: [live]
+        read: false
+        unused: date the wiki text was last edited; not shown
+      - path: track.wiki.summary
+        type: string
+        seen: [live]
+        read: true

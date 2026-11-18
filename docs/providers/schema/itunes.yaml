@@ -1,0 +1,815 @@
+provider: itunes
+reference: 'none: Apple''s iTunes Search API is documented only as prose web pages (the archived ''iTunes Search API'' guide), with no machine-readable schema of the search and lookup result objects'
+entities:
+  lookup_album:
+    fixtures:
+      - id: "1515978311"
+        why: 'Nia Archives artist id: her artist wrapper plus her albums, singles and EPs'
+      - id: "1489738823"
+        why: 'Subnation artist id: a small catalogue, the artist behind Gunshot'
+      - id: "1780411829"
+        why: 'a DJ-mix album id (Up Ya Archives with Nia Archives, Ep. 1): the collection itself, no artist wrapper'
+    fields:
+      - path: resultCount
+        type: number
+        seen: [live]
+        read: false
+        unused: count of items in results; the adapter ranges over results itself and never pages, so the count adds nothing
+      - path: results
+        type: array
+        seen: [live]
+        read: true
+      - path: results[].artistId
+        type: number
+        seen: [live]
+        read: true
+      - path: results[].artistLinkUrl
+        type: string
+        seen: [live]
+        read: false
+        unused: the music.apple.com page of the looked-up artist; it is only on the artist wrapper result, which the lookup drops because it keeps only track or collection results
+      - path: results[].artistName
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].artistType
+        type: string
+        seen: [live]
+        read: false
+        unused: Apple's artist category ('Artist'); it is only on the artist wrapper result, which the lookup drops
+      - path: results[].artistViewUrl
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].artworkUrl100
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].artworkUrl60
+        type: string
+        seen: [live]
+        read: false
+        unused: the same cover as artworkUrl100 at 60px; the adapter upscales artworkUrl100 by rewriting its size segment
+      - path: results[].collectionCensoredName
+        type: string
+        seen: [live]
+        read: false
+        unused: the album name as Apple prints it with profanity masked; the adapter shows collectionName, the real title
+      - path: results[].collectionExplicitness
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: whether the album edition is ''explicit'', ''cleaned'' or ''notExplicit''; albums get no explicit flag, so explicit and clean editions of one album look alike'
+      - path: results[].collectionId
+        type: number
+        seen: [live]
+        read: true
+      - path: results[].collectionName
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].collectionPrice
+        type: number
+        seen: [live]
+        read: false
+        unused: iTunes Store purchase price of the album in currency; altune doesn't sell or price music
+      - path: results[].collectionType
+        type: string
+        seen: [live]
+        read: false
+        unused: always 'Album' in every result seen, singles and EPs included, so it can't tell release types apart; the adapter derives the record type from the ' - Single' or ' - EP' name suffix
+      - path: results[].collectionViewUrl
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].contentAdvisoryRating
+        type: string
+        seen: [live]
+        read: false
+        unused: Apple's 'Explicit' or 'Clean' advisory, present only on some items; collectionExplicitness and trackExplicitness carry the same flag on every item
+      - path: results[].copyright
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].country
+        type: string
+        seen: [live]
+        read: false
+        unused: storefront of the result, always USA because the request pins country=US
+      - path: results[].currency
+        type: string
+        seen: [live]
+        read: false
+        unused: currency of the store prices, always USD because the request pins country=US
+      - path: results[].discNumber
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with song results (search_track, lookup_song), which send it; the album and artist mappings never read a disc number
+      - path: results[].previewUrl
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with song results (search_track, lookup_song), which send it; only the track mapping reads a preview
+      - path: results[].primaryGenreId
+        type: number
+        seen: [live]
+        read: false
+        unused: Apple's numeric genre id; the adapter reads primaryGenreName, the same genre as text
+      - path: results[].primaryGenreName
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].releaseDate
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].trackCount
+        type: number
+        seen: [live]
+        read: true
+      - path: results[].trackExplicitness
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with song results (search_track, lookup_song), which send it; collection results carry no track fields and the album mapping never reads them
+      - path: results[].trackId
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with song results (search_track, lookup_song), which send it; collection results carry no track fields and the album mapping never reads them
+      - path: results[].trackName
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with song results (search_track, lookup_song), which send it; collection results carry no track fields and the album mapping never reads them
+      - path: results[].trackNumber
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with song results (search_track, lookup_song), which send it; collection results carry no track fields and the album mapping never reads them
+      - path: results[].trackTimeMillis
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with song results (search_track, lookup_song), which send it; collection results carry no track fields and the album mapping never reads them
+      - path: results[].trackViewUrl
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with song results (search_track, lookup_song), which send it; collection results carry no track fields and the album mapping never reads them
+      - path: results[].wrapperType
+        type: string
+        seen: [live]
+        read: true
+  lookup_song:
+    fixtures:
+      - id: "1729389430"
+        why: 'Nia Archives album Silence Is Loud: the collection wrapper plus its tracks, clean edition'
+      - id: "1515978311"
+        why: 'Nia Archives artist id: her artist wrapper plus her top songs'
+      - id: "1497533144"
+        why: 'Subnation single Wickedest One / Gunshot: a two-track single'
+      - id: "1780411829"
+        why: 'DJ-mix album (Up Ya Archives with Nia Archives, Ep. 1): explicit compilation with sparse track data'
+    fields:
+      - path: resultCount
+        type: number
+        seen: [live]
+        read: false
+        unused: count of items in results; the adapter ranges over results itself and never pages, so the count adds nothing
+      - path: results
+        type: array
+        seen: [live]
+        read: true
+      - path: results[].artistId
+        type: number
+        seen: [live]
+        read: true
+      - path: results[].artistLinkUrl
+        type: string
+        seen: [live]
+        read: false
+        unused: the music.apple.com page of the looked-up artist; it is only on the artist wrapper result, which the lookup drops because it keeps only track or collection results
+      - path: results[].artistName
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].artistType
+        type: string
+        seen: [live]
+        read: false
+        unused: Apple's artist category ('Artist'); it is only on the artist wrapper result, which the lookup drops
+      - path: results[].artistViewUrl
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].artworkUrl100
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].artworkUrl30
+        type: string
+        seen: [live]
+        read: false
+        unused: the same cover as artworkUrl100 at 30px; the adapter upscales artworkUrl100 by rewriting its size segment
+      - path: results[].artworkUrl60
+        type: string
+        seen: [live]
+        read: false
+        unused: the same cover as artworkUrl100 at 60px; the adapter upscales artworkUrl100 by rewriting its size segment
+      - path: results[].collectionCensoredName
+        type: string
+        seen: [live]
+        read: false
+        unused: the album name as Apple prints it with profanity masked; the adapter shows collectionName, the real title
+      - path: results[].collectionExplicitness
+        type: string
+        seen: [live]
+        read: false
+        unused: whether the track's album edition is explicit, cleaned or notExplicit; the adapter reads trackExplicitness, which says the same for the track itself
+      - path: results[].collectionId
+        type: number
+        seen: [live]
+        read: true
+      - path: results[].collectionName
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].collectionPrice
+        type: number
+        seen: [live]
+        read: false
+        unused: iTunes Store purchase price of the album in currency; altune doesn't sell or price music
+      - path: results[].collectionType
+        type: string
+        seen: [live]
+        read: false
+        unused: always 'Album' in every result seen, singles and EPs included, so it can't tell release types apart; the adapter derives the record type from the ' - Single' or ' - EP' name suffix
+      - path: results[].collectionViewUrl
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].contentAdvisoryRating
+        type: string
+        seen: [live]
+        read: false
+        unused: Apple's 'Explicit' or 'Clean' advisory, present only on some items; collectionExplicitness and trackExplicitness carry the same flag on every item
+      - path: results[].copyright
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].country
+        type: string
+        seen: [live]
+        read: false
+        unused: storefront of the result, always USA because the request pins country=US
+      - path: results[].currency
+        type: string
+        seen: [live]
+        read: false
+        unused: currency of the store prices, always USD because the request pins country=US
+      - path: results[].discCount
+        type: number
+        seen: [live]
+        read: false
+        unused: number of discs on the track's album; the adapter reads discNumber for the track's own position
+      - path: results[].discNumber
+        type: number
+        seen: [live]
+        read: true
+      - path: results[].isStreamable
+        type: boolean
+        seen: [live]
+        read: false
+        unused: whether Apple Music can stream the track; altune never plays audio from Apple
+      - path: results[].kind
+        type: string
+        seen: [live]
+        read: false
+        unused: Apple's media kind, always 'song' because the request pins entity=song; the lookup filters on wrapperType instead
+      - path: results[].previewUrl
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].primaryGenreId
+        type: number
+        seen: [live]
+        read: false
+        unused: Apple's numeric genre id; the adapter reads primaryGenreName, the same genre as text
+      - path: results[].primaryGenreName
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].releaseDate
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].trackCensoredName
+        type: string
+        seen: [live]
+        read: false
+        unused: the track name as Apple prints it with profanity masked or recased ('Humble' for 'HUMBLE.'); the adapter shows trackName, the real title
+      - path: results[].trackCount
+        type: number
+        seen: [live]
+        read: true
+      - path: results[].trackExplicitness
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].trackId
+        type: number
+        seen: [live]
+        read: true
+      - path: results[].trackName
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].trackNumber
+        type: number
+        seen: [live]
+        read: true
+      - path: results[].trackPrice
+        type: number
+        seen: [live]
+        read: false
+        unused: iTunes Store purchase price of the track in currency (-1 when not sold alone); altune doesn't sell or price music
+      - path: results[].trackTimeMillis
+        type: number
+        seen: [live]
+        read: true
+      - path: results[].trackViewUrl
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].wrapperType
+        type: string
+        seen: [live]
+        read: true
+  search_album:
+    fixtures:
+      - id: Nia Archives Silence Is Loud
+        why: Nia Archives studio album and her singles
+      - id: Up Ya Archives with Nia Archives
+        why: DJ-mix album, explicit
+      - id: Now That's What I Call Music 100
+        why: multi-artist compilation credited to Various Artists
+    fields:
+      - path: resultCount
+        type: number
+        seen: [live]
+        read: false
+        unused: count of items in results; the adapter ranges over results itself and never pages, so the count adds nothing
+      - path: results
+        type: array
+        seen: [live]
+        read: true
+      - path: results[].amgArtistId
+        type: number
+        seen: [live]
+        read: false
+        unused: AllMusic (AMG) numeric artist id; altune has no AllMusic integration and identifies Apple artists by artistId
+      - path: results[].artistId
+        type: number
+        seen: [live]
+        read: true
+      - path: results[].artistName
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].artistViewUrl
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].artworkUrl100
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].artworkUrl60
+        type: string
+        seen: [live]
+        read: false
+        unused: the same cover as artworkUrl100 at 60px; the adapter upscales artworkUrl100 by rewriting its size segment
+      - path: results[].collectionCensoredName
+        type: string
+        seen: [live]
+        read: false
+        unused: the album name as Apple prints it with profanity masked; the adapter shows collectionName, the real title
+      - path: results[].collectionExplicitness
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: whether the album edition is ''explicit'', ''cleaned'' or ''notExplicit''; albums get no explicit flag, so explicit and clean editions of one album look alike'
+      - path: results[].collectionId
+        type: number
+        seen: [live]
+        read: true
+      - path: results[].collectionName
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].collectionPrice
+        type: number
+        seen: [live]
+        read: false
+        unused: iTunes Store purchase price of the album in currency; altune doesn't sell or price music
+      - path: results[].collectionType
+        type: string
+        seen: [live]
+        read: false
+        unused: always 'Album' in every result seen, singles and EPs included, so it can't tell release types apart; the adapter derives the record type from the ' - Single' or ' - EP' name suffix
+      - path: results[].collectionViewUrl
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].contentAdvisoryRating
+        type: string
+        seen: [live]
+        read: false
+        unused: Apple's 'Explicit' or 'Clean' advisory, present only on some items; collectionExplicitness and trackExplicitness carry the same flag on every item
+      - path: results[].copyright
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].country
+        type: string
+        seen: [live]
+        read: false
+        unused: storefront of the result, always USA because the request pins country=US
+      - path: results[].currency
+        type: string
+        seen: [live]
+        read: false
+        unused: currency of the store prices, always USD because the request pins country=US
+      - path: results[].discNumber
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with song results (search_track, lookup_song), which send it; the album and artist mappings never read a disc number
+      - path: results[].previewUrl
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with song results (search_track, lookup_song), which send it; only the track mapping reads a preview
+      - path: results[].primaryGenreName
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].releaseDate
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].trackCount
+        type: number
+        seen: [live]
+        read: true
+      - path: results[].trackExplicitness
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with song results (search_track, lookup_song), which send it; collection results carry no track fields and the album mapping never reads them
+      - path: results[].trackId
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with song results (search_track, lookup_song), which send it; collection results carry no track fields and the album mapping never reads them
+      - path: results[].trackName
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with song results (search_track, lookup_song), which send it; collection results carry no track fields and the album mapping never reads them
+      - path: results[].trackNumber
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with song results (search_track, lookup_song), which send it; collection results carry no track fields and the album mapping never reads them
+      - path: results[].trackTimeMillis
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with song results (search_track, lookup_song), which send it; collection results carry no track fields and the album mapping never reads them
+      - path: results[].trackViewUrl
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with song results (search_track, lookup_song), which send it; collection results carry no track fields and the album mapping never reads them
+      - path: results[].wrapperType
+        type: string
+        seen: [live]
+        read: true
+  search_artist:
+    fixtures:
+      - id: Nia Archives
+        why: a single solo artist match
+      - id: Subnation
+        why: a small producer catalogue
+      - id: Various Artists
+        why: the compilation pseudo-artist and fuzzy matches
+    fields:
+      - path: resultCount
+        type: number
+        seen: [live]
+        read: false
+        unused: count of items in results; the adapter ranges over results itself and never pages, so the count adds nothing
+      - path: results
+        type: array
+        seen: [live]
+        read: true
+      - path: results[].amgArtistId
+        type: number
+        seen: [live]
+        read: false
+        unused: AllMusic (AMG) numeric artist id; altune has no AllMusic integration and identifies Apple artists by artistId
+      - path: results[].artistId
+        type: number
+        seen: [live]
+        read: true
+      - path: results[].artistLinkUrl
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the artist''s music.apple.com page; artist results carry the link here, not in artistViewUrl, which is the field the adapter reads, so iTunes artist results get no source URL'
+      - path: results[].artistName
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].artistType
+        type: string
+        seen: [live]
+        read: false
+        unused: Apple's artist category ('Artist', and rarely 'Movie Artist' or 'Author'); the search already asks for entity=musicArtist and altune treats every hit as a music artist
+      - path: results[].artistViewUrl
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: itunesSourceRef takes an artist result''s source URL from artistViewUrl, but musicArtist results send the page as artistLinkUrl, so every iTunes artist result has an empty URL'
+      - path: results[].artworkUrl100
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapITunesResult builds every result''s artwork from artworkUrl100, artists included, but musicArtist results carry no artwork at all, so iTunes artists always come back imageless; track and album results send it'
+      - path: results[].collectionId
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with track and album results, which send it; the artist mapping never uses collection fields
+      - path: results[].collectionName
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with track and album results, which send it; the artist mapping never uses collection fields
+      - path: results[].collectionViewUrl
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with track and album results, which send it; the artist mapping never uses collection fields
+      - path: results[].copyright
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with album results, which send it; only the album mapping reads copyright
+      - path: results[].discNumber
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with song results (search_track, lookup_song), which send it; the album and artist mappings never read a disc number
+      - path: results[].previewUrl
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with song results (search_track, lookup_song), which send it; only the track mapping reads a preview
+      - path: results[].primaryGenreId
+        type: number
+        seen: [live]
+        read: false
+        unused: Apple's numeric genre id; the adapter reads primaryGenreName, the same genre as text
+      - path: results[].primaryGenreName
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].releaseDate
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with track and album results, which send it; the artist mapping never reads a release date
+      - path: results[].trackCount
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with track and album results, which send it; the artist mapping never uses track fields
+      - path: results[].trackExplicitness
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with track and album results, which send it; the artist mapping never uses track fields
+      - path: results[].trackId
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with track and album results, which send it; the artist mapping never uses track fields
+      - path: results[].trackName
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with track and album results, which send it; the artist mapping never uses track fields
+      - path: results[].trackNumber
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with track and album results, which send it; the artist mapping never uses track fields
+      - path: results[].trackTimeMillis
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with track and album results, which send it; the artist mapping never uses track fields
+      - path: results[].trackViewUrl
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with track and album results, which send it; the artist mapping never uses track fields
+      - path: results[].wrapperType
+        type: string
+        seen: [live]
+        read: true
+  search_track:
+    fixtures:
+      - id: Nia Archives Baianá
+        why: Nia Archives single, its remixes and a non-ASCII title
+      - id: Subnation Gunshot
+        why: a normal single track
+      - id: Kendrick Lamar HUMBLE.
+        why: explicit track and its clean edition
+      - id: Up Ya Archives with Nia Archives
+        why: tracks from a DJ-mix album
+    fields:
+      - path: resultCount
+        type: number
+        seen: [live]
+        read: false
+        unused: count of items in results; the adapter ranges over results itself and never pages, so the count adds nothing
+      - path: results
+        type: array
+        seen: [live]
+        read: true
+      - path: results[].artistId
+        type: number
+        seen: [live]
+        read: true
+      - path: results[].artistName
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].artistViewUrl
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].artworkUrl100
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].artworkUrl30
+        type: string
+        seen: [live]
+        read: false
+        unused: the same cover as artworkUrl100 at 30px; the adapter upscales artworkUrl100 by rewriting its size segment
+      - path: results[].artworkUrl60
+        type: string
+        seen: [live]
+        read: false
+        unused: the same cover as artworkUrl100 at 60px; the adapter upscales artworkUrl100 by rewriting its size segment
+      - path: results[].collectionArtistId
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: Apple id of the album artist when it differs from the track artist (Various Artists'' id on compilation tracks); it would mark a track as coming from a compilation'
+      - path: results[].collectionArtistName
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the album artist when it differs from the track artist (''Various Artists'' on compilation tracks); it would mark a track as coming from a compilation'
+      - path: results[].collectionArtistViewUrl
+        type: string
+        seen: [live]
+        read: false
+        unused: music.apple.com page of the album artist; collectionArtistId already identifies it
+      - path: results[].collectionCensoredName
+        type: string
+        seen: [live]
+        read: false
+        unused: the album name as Apple prints it with profanity masked; the adapter shows collectionName, the real title
+      - path: results[].collectionExplicitness
+        type: string
+        seen: [live]
+        read: false
+        unused: whether the track's album edition is explicit, cleaned or notExplicit; the adapter reads trackExplicitness, which says the same for the track itself
+      - path: results[].collectionId
+        type: number
+        seen: [live]
+        read: true
+      - path: results[].collectionName
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].collectionPrice
+        type: number
+        seen: [live]
+        read: false
+        unused: iTunes Store purchase price of the album in currency; altune doesn't sell or price music
+      - path: results[].collectionViewUrl
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].contentAdvisoryRating
+        type: string
+        seen: [live]
+        read: false
+        unused: Apple's 'Explicit' or 'Clean' advisory, present only on some items; collectionExplicitness and trackExplicitness carry the same flag on every item
+      - path: results[].copyright
+        type: unseen
+        seen: []
+        read: true
+        absent: itunesItem is shared with album results, which send it; only the album mapping reads copyright
+      - path: results[].country
+        type: string
+        seen: [live]
+        read: false
+        unused: storefront of the result, always USA because the request pins country=US
+      - path: results[].currency
+        type: string
+        seen: [live]
+        read: false
+        unused: currency of the store prices, always USD because the request pins country=US
+      - path: results[].discCount
+        type: number
+        seen: [live]
+        read: false
+        unused: number of discs on the track's album; the adapter reads discNumber for the track's own position
+      - path: results[].discNumber
+        type: number
+        seen: [live]
+        read: true
+      - path: results[].isStreamable
+        type: boolean
+        seen: [live]
+        read: false
+        unused: whether Apple Music can stream the track; altune never plays audio from Apple
+      - path: results[].kind
+        type: string
+        seen: [live]
+        read: false
+        unused: Apple's media kind, always 'song' because the request pins entity=song; the lookup filters on wrapperType instead
+      - path: results[].previewUrl
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].primaryGenreName
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].releaseDate
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].trackCensoredName
+        type: string
+        seen: [live]
+        read: false
+        unused: the track name as Apple prints it with profanity masked or recased ('Humble' for 'HUMBLE.'); the adapter shows trackName, the real title
+      - path: results[].trackCount
+        type: number
+        seen: [live]
+        read: true
+      - path: results[].trackExplicitness
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].trackId
+        type: number
+        seen: [live]
+        read: true
+      - path: results[].trackName
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].trackNumber
+        type: number
+        seen: [live]
+        read: true
+      - path: results[].trackPrice
+        type: number
+        seen: [live]
+        read: false
+        unused: iTunes Store purchase price of the track in currency (-1 when not sold alone); altune doesn't sell or price music
+      - path: results[].trackTimeMillis
+        type: number
+        seen: [live]
+        read: true
+      - path: results[].trackViewUrl
+        type: string
+        seen: [live]
+        read: true
+      - path: results[].wrapperType
+        type: string
+        seen: [live]
+        read: true
