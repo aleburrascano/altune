@@ -1,22 +1,5 @@
 package catalogtest
 
-import (
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/internal/core/ports"
-	shared "altune/go-api/internal/shared/kernel"
-	"context"
-)
+import memory "altune/go-api/internal/catalog/internal/adapters/memory"
 
-type Scheduler struct {
-	TrackIds   []domain.TrackId
-	SourceURLs []string
-	Err        error
-}
-
-var _ ports.AcquisitionScheduler = (*Scheduler)(nil)
-
-func (s *Scheduler) Schedule(_ context.Context, _ shared.UserId, trackId domain.TrackId, sourceURL string) error {
-	s.TrackIds = append(s.TrackIds, trackId)
-	s.SourceURLs = append(s.SourceURLs, sourceURL)
-	return s.Err
-}
+type Scheduler = memory.Scheduler

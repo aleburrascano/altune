@@ -1,8 +1,8 @@
 package persistence
 
 import (
-	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/internal/adapters/contract"
 	"context"
 	"testing"
 
@@ -22,7 +22,7 @@ func (r *cleaningTrackRepo) Add(ctx context.Context, track *domain.Track) (*doma
 
 func TestPgxTrackRepo_Contract(t *testing.T) {
 	pool := testPool(t)
-	catalogtest.TrackRepositoryContract(t, func(t *testing.T) catalogtest.TrackRepositoryUnderTest {
+	contract.TrackRepositoryContract(t, func(t *testing.T) contract.TrackRepositoryUnderTest {
 		return &cleaningTrackRepo{PgxTrackRepository: NewPgxTrackRepository(pool), t: t, pool: pool}
 	})
 }

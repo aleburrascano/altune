@@ -1,4 +1,4 @@
-package catalogtest
+package memory
 
 import (
 	"altune/go-api/internal/catalog/domain"
