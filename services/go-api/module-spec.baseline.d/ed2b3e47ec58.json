@@ -1,0 +1,11 @@
+{
+  "removed": [
+    "T1 internal/acquisition/internal/core/audiojudge/judge_test.go imports internal/core/grade/grade.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/core/audiojudge/judge_test.go imports internal/core/grade/source_kind.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/core/audiojudge/judge_test.go imports internal/core/ports/identify.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/core/audiojudge/judge_test.go imports internal/core/ports/recording.go, behind acquisition's door",
+    "T1 internal/acquisition/internal/core/audiojudge/judge_test.go is in package audiojudge, so it sees inside the module: use package audiojudge_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}
