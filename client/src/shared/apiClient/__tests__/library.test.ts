@@ -6,19 +6,12 @@ import type {
   ListArtistsResponse,
 } from '@shared/apiClient';
 import { apiBase } from '@shared/apiConfig';
-import { supabase } from '@shared/auth';
+import { signedInWith } from '@shared/apiClient/__tests__/sessionLookup';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
-
-type LooseSession = { getSession: () => Promise<unknown> };
-
 beforeEach(() => {
-  jest.spyOn(supabase.auth as LooseSession, 'getSession').mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+  signedInWith();
 });
 
 function albumsPayload(): ListAlbumsResponse {

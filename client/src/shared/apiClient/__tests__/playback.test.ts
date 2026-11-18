@@ -1,14 +1,13 @@
 import { getQueueState, saveQueueState, ApiError, NetworkError } from '@shared/apiClient';
 import type { QueueStateResponse, SaveQueueStateRequest } from '@shared/apiClient';
-import { supabase } from '@shared/auth';
+import {
+  installSessionLookup,
+  type SessionLookup,
+} from '@shared/apiClient/__tests__/sessionLookup';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
-
-type LooseSession = { getSession: () => Promise<unknown> };
-
-let getSession: jest.SpyInstance<Promise<unknown>, []>;
+let getSession: SessionLookup;
 
 function withSession(accessToken = 'tok') {
   getSession.mockResolvedValue({
@@ -18,8 +17,7 @@ function withSession(accessToken = 'tok') {
 }
 
 beforeEach(() => {
-  getSession = jest.spyOn(supabase.auth as LooseSession, 'getSession');
-  getSession.mockReset();
+  getSession = installSessionLookup();
   withSession();
 });
 

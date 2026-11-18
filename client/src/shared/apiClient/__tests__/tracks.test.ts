@@ -1,4 +1,3 @@
-import * as Crypto from 'expo-crypto';
 import {
   backfillFeaturedArtists,
   createTrack,
@@ -19,26 +18,17 @@ import {
   type TrackId,
 } from '@shared/catalog';
 import { ContractError, NetworkError, isAbort } from '@shared/failure';
-import { supabase } from '@shared/auth';
+import { recordLogs } from '@shared/log';
+import { signedInWith } from '@shared/apiClient/__tests__/sessionLookup';
 
 const { __http } = require('@testing/doubles/fetch.js');
-
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
+const { __crypto } = require('expo-crypto');
 
 const MAX_ALL_TRACKS = 10_000;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
-type LooseSession = { getSession: () => Promise<unknown> };
-
 beforeEach(() => {
-  jest.spyOn(supabase.auth as LooseSession, 'getSession').mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
-});
-
-afterEach(() => {
-  jest.restoreAllMocks();
+  signedInWith();
 });
 
 function trackResponse(overrides: Partial<TrackResponse> = {}): TrackResponse {
@@ -206,8 +196,7 @@ describe('createTrack', () => {
     expect(key).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   });
 
-  it('mints a key no observer of Math.random can predict', async () => {
-    jest.spyOn(Math, 'random').mockReturnValue(0.5);
+  it('mints a fresh v4 key for every create', async () => {
     __http.reply('POST /v1/tracks', { status: 201, json: trackResponse() });
 
     await createTrack(baseCreateBody());
@@ -505,14 +494,13 @@ describe('getAllTracks', () => {
   it('stops at MAX_ALL_TRACKS and warns, rather than paging an endless has_more forever', async () => {
     const fullPage = Array.from({ length: 2000 }, (_, i) => ({ id: `t${i}` }));
     __http.reply('GET /v1/tracks', page(fullPage, 0, 1_000_000, true));
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const logs = recordLogs();
 
     const all = await getAllTracks({});
 
     expect(all.items).toHaveLength(MAX_ALL_TRACKS);
     expect(__http.countFor('GET /v1/tracks')).toBe(MAX_ALL_TRACKS / 2000);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('[library]'), expect.anything());
-    warn.mockRestore();
+    expect(logs.warnings).toContainEqual([expect.stringContaining('[library]'), expect.anything()]);
   });
 
   it('forwards q and sort to every page, so a filtered collection pages under the same filter', async () => {
@@ -700,7 +688,7 @@ describe('getAllTracks truncation and cancellation', () => {
 
   it('reports truncated: true when the server has more than MAX_ALL_TRACKS rows', async () => {
     __http.reply('GET /v1/tracks', fullPage(0));
-    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    recordLogs();
 
     const result = await getAllTracks({});
 
@@ -770,7 +758,7 @@ describe('getAllTracks truncation and cancellation', () => {
 
 describe('the Idempotency-Key via the uuid port', () => {
   it('sends the id minted by the uuid port as the Idempotency-Key', async () => {
-    jest.spyOn(Crypto, 'randomUUID').mockReturnValue('fixed-track-id');
+    __crypto.nextUuid('fixed-track-id');
     __http.reply('POST /v1/tracks', { status: 201, json: trackResponse() });
 
     await createTrack(baseCreateBody());

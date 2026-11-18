@@ -1,23 +1,19 @@
 import { Platform } from 'react-native';
 import { apiFetch, ApiError, NetworkError } from '@shared/apiClient';
+import { recordLogs, type RecordedLogs } from '@shared/log';
 import { apiBase } from '@shared/apiConfig';
+import { clearSessionExpired, getSessionExpired, renewSessionCredentials } from '@shared/auth';
 import {
-  supabase,
-  clearSessionExpired,
-  getSessionExpired,
-  renewSessionCredentials,
-} from '@shared/auth';
+  installSessionLookup,
+  type SessionLookup,
+} from '@shared/apiClient/__tests__/sessionLookup';
 import { ContractError, describeError, isNetworkError } from '@shared/failure';
 import { runSignOutCleanups } from '@shared/session';
 import { useAnalyticsPreference } from '@shared/device';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
-
-type LooseSession = { getSession: () => Promise<unknown> };
-
-let getSession: jest.SpyInstance<Promise<unknown>, []>;
+let getSession: SessionLookup;
 
 function withSession(accessToken: string | null | undefined = 'tok') {
   getSession.mockResolvedValue({
@@ -30,8 +26,7 @@ const originalOS = Platform.OS;
 
 beforeEach(() => {
   clearSessionExpired();
-  getSession = jest.spyOn(supabase.auth as LooseSession, 'getSession');
-  getSession.mockReset();
+  getSession = installSessionLookup();
 });
 
 afterEach(() => {
@@ -413,17 +408,16 @@ describe('apiBase', () => {
 });
 
 describe('token lookup deadline', () => {
-  let warn: jest.SpyInstance;
+  let logs: RecordedLogs;
 
   beforeEach(() => {
     jest.useFakeTimers();
     getSession.mockReset();
     getSession.mockReturnValue(new Promise(() => undefined));
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    logs = recordLogs();
   });
 
   afterEach(() => {
-    warn.mockRestore();
     jest.useRealTimers();
   });
 
@@ -458,10 +452,10 @@ describe('token lookup deadline', () => {
       jest.advanceTimersByTime(15_000);
       await caught;
 
-      expect(warn).toHaveBeenCalledWith(
+      expect(logs.warnings).toContainEqual([
         '[api] request failed',
         expect.objectContaining({ path: '/v1/library/tracks', failure: 'timeout' }),
-      );
+      ]);
     });
   });
 });
@@ -469,16 +463,15 @@ describe('token lookup deadline', () => {
 describe('correlation id', () => {
   const SERVER_ACCEPTED_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
-  let warn: jest.SpyInstance;
+  let logs: RecordedLogs;
 
   beforeEach(() => {
     getSession.mockReset();
     getSession.mockResolvedValue({ data: { session: { access_token: 'tok' } }, error: null });
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    logs = recordLogs();
   });
 
   afterEach(() => {
-    warn.mockRestore();
     Platform.OS = originalOS;
   });
 
@@ -507,10 +500,10 @@ describe('correlation id', () => {
 
       const sent = sentCorrelationId();
       expect(sent).toMatch(SERVER_ACCEPTED_ID);
-      expect(warn).toHaveBeenCalledWith(
+      expect(logs.warnings).toContainEqual([
         '[api] request failed',
         expect.objectContaining({ correlationId: sent }),
-      );
+      ]);
     });
 
     it('pairs a transport failure with the id it sent', async () => {
@@ -518,10 +511,10 @@ describe('correlation id', () => {
 
       await expect(apiFetch('/v1/playlists')).rejects.toMatchObject({ name: 'NetworkError' });
 
-      expect(warn).toHaveBeenCalledWith(
+      expect(logs.warnings).toContainEqual([
         '[api] request failed',
         expect.objectContaining({ correlationId: sentCorrelationId() }),
-      );
+      ]);
     });
   });
 
@@ -566,7 +559,7 @@ describe('correlation id', () => {
 describe('failure logging', () => {
   const SECRET_TOKEN = 'secret-access-token';
 
-  let warn: jest.SpyInstance;
+  let logs: RecordedLogs;
 
   beforeEach(() => {
     getSession.mockReset();
@@ -574,15 +567,10 @@ describe('failure logging', () => {
       data: { session: { access_token: SECRET_TOKEN } },
       error: null,
     });
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    logs = recordLogs();
   });
-
-  afterEach(() => {
-    warn.mockRestore();
-  });
-
   function loggedText(): string {
-    return JSON.stringify(warn.mock.calls);
+    return logs.text();
   }
 
   describe('apiFetch logs every failure at the point it throws', () => {
@@ -599,14 +587,17 @@ describe('failure logging', () => {
         }),
       ).rejects.toMatchObject({ status: 409 });
 
-      expect(warn).toHaveBeenCalledTimes(1);
-      expect(warn).toHaveBeenCalledWith('[api] request failed', {
-        method: 'POST',
-        path: '/v1/playlists/p1/tracks',
-        correlationId: expect.any(String),
-        status: 409,
-        code: 'playlist_full',
-      });
+      expect(logs.warnings).toHaveLength(1);
+      expect(logs.warnings).toContainEqual([
+        '[api] request failed',
+        {
+          method: 'POST',
+          path: '/v1/playlists/p1/tracks',
+          correlationId: expect.any(String),
+          status: 409,
+          code: 'playlist_full',
+        },
+      ]);
     });
 
     it('logs the failure kind for a transport error', async () => {
@@ -614,12 +605,15 @@ describe('failure logging', () => {
 
       await expect(apiFetch('/v1/playlists')).rejects.toMatchObject({ name: 'NetworkError' });
 
-      expect(warn).toHaveBeenCalledWith('[api] request failed', {
-        method: 'GET',
-        path: '/v1/playlists',
-        correlationId: expect.any(String),
-        failure: 'transport',
-      });
+      expect(logs.warnings).toContainEqual([
+        '[api] request failed',
+        {
+          method: 'GET',
+          path: '/v1/playlists',
+          correlationId: expect.any(String),
+          failure: 'transport',
+        },
+      ]);
     });
 
     it('logs a truncated success body as a transport failure', async () => {
@@ -627,12 +621,15 @@ describe('failure logging', () => {
 
       await expect(apiFetch('/v1/playlists')).rejects.toMatchObject({ name: 'NetworkError' });
 
-      expect(warn).toHaveBeenCalledWith('[api] request failed', {
-        method: 'GET',
-        path: '/v1/playlists',
-        correlationId: expect.any(String),
-        failure: 'transport',
-      });
+      expect(logs.warnings).toContainEqual([
+        '[api] request failed',
+        {
+          method: 'GET',
+          path: '/v1/playlists',
+          correlationId: expect.any(String),
+          failure: 'transport',
+        },
+      ]);
     });
 
     it('logs a missing session as a 401 without calling the network', async () => {
@@ -640,12 +637,15 @@ describe('failure logging', () => {
 
       await expect(apiFetch('/v1/playlists')).rejects.toMatchObject({ status: 401 });
 
-      expect(warn).toHaveBeenCalledWith('[api] request failed', {
-        method: 'GET',
-        path: '/v1/playlists',
-        correlationId: expect.any(String),
-        status: 401,
-      });
+      expect(logs.warnings).toContainEqual([
+        '[api] request failed',
+        {
+          method: 'GET',
+          path: '/v1/playlists',
+          correlationId: expect.any(String),
+          status: 401,
+        },
+      ]);
     });
 
     it('never logs the query string, the request body, the server detail or the auth token', async () => {
@@ -678,7 +678,7 @@ describe('failure logging', () => {
         name: 'AbortError',
       });
 
-      expect(warn).not.toHaveBeenCalled();
+      expect(logs.warnings).toEqual([]);
     });
 
     it('does not log a successful request', async () => {
@@ -686,7 +686,7 @@ describe('failure logging', () => {
 
       await apiFetch('/v1/playlists');
 
-      expect(warn).not.toHaveBeenCalled();
+      expect(logs.warnings).toEqual([]);
     });
   });
 
@@ -696,13 +696,16 @@ describe('failure logging', () => {
 
       await expect(apiFetch('/v1/playlists')).rejects.toMatchObject({ name: 'ContractError' });
 
-      expect(warn).toHaveBeenCalledWith('[api] request failed', {
-        method: 'GET',
-        path: '/v1/playlists',
-        correlationId: expect.any(String),
-        error: 'ContractError',
-        at: 'Session.access_token',
-      });
+      expect(logs.warnings).toContainEqual([
+        '[api] request failed',
+        {
+          method: 'GET',
+          path: '/v1/playlists',
+          correlationId: expect.any(String),
+          error: 'ContractError',
+          at: 'Session.access_token',
+        },
+      ]);
     });
 
     it('logs the class but never the message of any other Error', async () => {
@@ -712,12 +715,15 @@ describe('failure logging', () => {
         name: 'TypeError',
       });
 
-      expect(warn).toHaveBeenCalledWith('[api] request failed', {
-        method: 'GET',
-        path: '/v1/discovery/search',
-        correlationId: expect.any(String),
-        error: 'TypeError',
-      });
+      expect(logs.warnings).toContainEqual([
+        '[api] request failed',
+        {
+          method: 'GET',
+          path: '/v1/discovery/search',
+          correlationId: expect.any(String),
+          error: 'TypeError',
+        },
+      ]);
       expect(loggedText()).not.toContain('private');
     });
 
@@ -726,12 +732,15 @@ describe('failure logging', () => {
 
       await expect(apiFetch('/v1/playlists')).rejects.toBe('the session store is unavailable');
 
-      expect(warn).toHaveBeenCalledWith('[api] request failed', {
-        method: 'GET',
-        path: '/v1/playlists',
-        correlationId: expect.any(String),
-        error: 'string',
-      });
+      expect(logs.warnings).toContainEqual([
+        '[api] request failed',
+        {
+          method: 'GET',
+          path: '/v1/playlists',
+          correlationId: expect.any(String),
+          error: 'string',
+        },
+      ]);
     });
   });
 });
@@ -758,18 +767,15 @@ describe('stale session', () => {
     runSignOutCleanups();
   }
 
-  let warn: jest.SpyInstance;
-
   beforeEach(() => {
     clearSessionExpired();
     getSession.mockReset();
     __http.reset();
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    recordLogs();
   });
 
   afterEach(() => {
     global.fetch = fakeFetch;
-    warn.mockRestore();
   });
 
   describe('a 401 only expires the session whose credentials it was sent with', () => {
@@ -995,15 +1001,12 @@ describe('transport failures', () => {
 });
 
 describe('NetworkError messages never carry the query string', () => {
-  let warn: jest.SpyInstance;
-
   beforeEach(() => {
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recordLogs();
     withSession();
   });
 
   afterEach(() => {
-    warn.mockRestore();
     jest.useRealTimers();
   });
 

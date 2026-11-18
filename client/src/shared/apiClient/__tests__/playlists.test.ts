@@ -19,18 +19,11 @@ import {
 } from '@shared/catalog';
 import { apiBase } from '@shared/apiConfig';
 import { ApiError, ContractError, NetworkError } from '@shared/failure';
-import { supabase } from '@shared/auth';
+import { signedInWith } from '@shared/apiClient/__tests__/sessionLookup';
 const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
-
-type LooseSession = { getSession: () => Promise<unknown> };
-
 beforeEach(() => {
-  jest.spyOn(supabase.auth as LooseSession, 'getSession').mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+  signedInWith();
 });
 
 function playlist(overrides: Partial<PlaylistResponse> = {}): PlaylistResponse {

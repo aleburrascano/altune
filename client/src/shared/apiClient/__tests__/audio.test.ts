@@ -10,19 +10,20 @@ import {
   ApiError,
   NetworkError,
 } from '@shared/apiClient';
+import { recordLogs, type RecordedLogs } from '@shared/log';
 import { asTrackId, type TrackId } from '@shared/catalog';
 import { apiBase } from '@shared/apiConfig';
 import { ContractError } from '@shared/failure';
-import { supabase, clearSessionExpired, getSessionExpired } from '@shared/auth';
+import { clearSessionExpired, getSessionExpired } from '@shared/auth';
+import {
+  installSessionLookup,
+  type SessionLookup,
+} from '@shared/apiClient/__tests__/sessionLookup';
 import { runSignOutCleanups } from '@shared/session';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
-
-type LooseSession = { getSession: () => Promise<unknown> };
-
-let getSession: jest.SpyInstance<Promise<unknown>, []>;
+let getSession: SessionLookup;
 const SERVER_ACCEPTED_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 function withSession(accessToken: string | null | undefined = 'tok') {
@@ -33,8 +34,7 @@ function withSession(accessToken: string | null | undefined = 'tok') {
 }
 
 beforeEach(() => {
-  getSession = jest.spyOn(supabase.auth as LooseSession, 'getSession');
-  getSession.mockReset();
+  getSession = installSessionLookup();
   clearSessionExpired();
 });
 
@@ -58,14 +58,13 @@ describe('audioStreamUrl', () => {
 
 describe('audioRequestHeaders', () => {
   const originalOS = Platform.OS;
-  let warn: jest.SpyInstance;
+  let logs: RecordedLogs;
 
   beforeEach(() => {
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    logs = recordLogs();
   });
 
   afterEach(() => {
-    warn.mockRestore();
     Platform.OS = originalOS;
   });
 
@@ -124,7 +123,7 @@ describe('audioRequestHeaders', () => {
 
     const headers = await audioRequestHeaders();
 
-    expect(warn).toHaveBeenCalledWith(
+    expect(logs.warnings).toContainEqual([
       '[api] request failed',
       expect.objectContaining({
         method: 'GET',
@@ -132,7 +131,7 @@ describe('audioRequestHeaders', () => {
         correlationId: headers[CORRELATION_HEADER],
         status: 401,
       }),
-    );
+    ]);
   });
 
   it('keeps the access token off audioStreamUrl even when both are used for the same track', async () => {
@@ -191,7 +190,7 @@ describe('recoverAudio', () => {
 describe('fetchAudioUrls', () => {
   it('starts with the prefetch switch on before any server reply', () => {
     jest.isolateModules(() => {
-      expect(require('@shared/apiClient/audio').isAudioPrefetchEnabled()).toBe(true);
+      expect(require('@shared/apiClient').isAudioPrefetchEnabled()).toBe(true);
     });
   });
 
@@ -501,17 +500,14 @@ describe('response decoding', () => {
 });
 
 describe('token lookup deadline', () => {
-  let warn: jest.SpyInstance;
-
   beforeEach(() => {
     jest.useFakeTimers();
     getSession.mockReset();
     getSession.mockReturnValue(new Promise(() => undefined));
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recordLogs();
   });
 
   afterEach(() => {
-    warn.mockRestore();
     jest.useRealTimers();
   });
 
@@ -534,18 +530,15 @@ describe('stale session', () => {
     runSignOutCleanups();
   }
 
-  let warn: jest.SpyInstance;
-
   beforeEach(() => {
     clearSessionExpired();
     getSession.mockReset();
     __http.reset();
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    recordLogs();
   });
 
   afterEach(() => {
     global.fetch = fakeFetch;
-    warn.mockRestore();
   });
 
   describe('the audio stream header path fences its session refusal the same way', () => {
