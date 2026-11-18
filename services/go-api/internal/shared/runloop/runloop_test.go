@@ -1,6 +1,7 @@
-package runloop
+package runloop_test
 
 import (
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"sync"
 	"sync/atomic"
@@ -21,7 +22,7 @@ func countingLoop(starts *atomic.Int64, exited chan<- struct{}) func(context.Con
 }
 
 func TestBackground_PauseResumeGate(t *testing.T) {
-	var b Background
+	var b runloop.Background
 
 	if b.Paused() {
 		t.Fatal("a fresh Background must not be paused")
@@ -39,7 +40,7 @@ func TestBackground_PauseResumeGate(t *testing.T) {
 }
 
 func TestBackground_SecondSpawnStartsNoSecondLoop(t *testing.T) {
-	var b Background
+	var b runloop.Background
 	var starts atomic.Int64
 	exited := make(chan struct{}, 2)
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownBudget)
@@ -60,7 +61,7 @@ func TestBackground_SecondSpawnStartsNoSecondLoop(t *testing.T) {
 }
 
 func TestBackground_ShutdownBeforeSpawnKeepsTheLoopFromRunning(t *testing.T) {
-	var b Background
+	var b runloop.Background
 	var starts atomic.Int64
 	exited := make(chan struct{}, 1)
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownBudget)
@@ -76,7 +77,7 @@ func TestBackground_ShutdownBeforeSpawnKeepsTheLoopFromRunning(t *testing.T) {
 }
 
 func TestBackground_ConcurrentSpawnAndShutdownLeavesNoLoopRunning(t *testing.T) {
-	var b Background
+	var b runloop.Background
 	var running atomic.Int64
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownBudget)
 	defer cancel()

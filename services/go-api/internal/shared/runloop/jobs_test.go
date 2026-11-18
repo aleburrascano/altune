@@ -1,12 +1,13 @@
-package runloop
+package runloop_test
 
 import (
+	"altune/go-api/internal/shared/runloop"
 	"errors"
 	"testing"
 )
 
 func TestJobRegistry_EmptyHasNoHealthAndRejectsUnknownName(t *testing.T) {
-	var r JobRegistry
+	var r runloop.JobRegistry
 	if got := r.Health(); len(got) != 0 {
 		t.Fatalf("health rows = %d, want 0", len(got))
 	}
@@ -16,7 +17,7 @@ func TestJobRegistry_EmptyHasNoHealthAndRejectsUnknownName(t *testing.T) {
 }
 
 func TestJobControl_RecordTracksConsecutiveFailures(t *testing.T) {
-	var r JobRegistry
+	var r runloop.JobRegistry
 	jc := r.Control("job")
 	jc.Record(errors.New("boom"))
 	if got := jc.ConsecutiveFailures(); got != 1 {
@@ -33,7 +34,7 @@ func TestJobControl_RecordTracksConsecutiveFailures(t *testing.T) {
 }
 
 func TestJobControl_DisabledAdmitSkips(t *testing.T) {
-	var r JobRegistry
+	var r runloop.JobRegistry
 	jc := r.Control("job")
 	if !jc.Admit() {
 		t.Fatal("enabled job refused")
@@ -51,7 +52,7 @@ func TestJobControl_DisabledAdmitSkips(t *testing.T) {
 }
 
 func TestJobControl_DisableIfEnabledFlipsOnce(t *testing.T) {
-	var r JobRegistry
+	var r runloop.JobRegistry
 	jc := r.Control("job")
 	if !jc.DisableIfEnabled() {
 		t.Fatal("first call = false")
