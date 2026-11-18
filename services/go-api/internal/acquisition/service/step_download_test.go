@@ -2195,6 +2195,40 @@ func TestDownloadStep_SerialPath_VersionLookupsAreCappedAndCachedPerJob(t *testi
 	}
 }
 
+func versionLookupsFor(t *testing.T, match ports.RecordingMatch, otherTitled ...int) []string {
+	t.Helper()
+	for _, i := range otherTitled {
+		match.Results[0].Recordings[i].Title = "Take On Me"
+		match.Results[0].Recordings[i].Artists = []string{"a-ha"}
+	}
+	lookup := &stubVersionLookup{facts: map[string]ports.RecordingFacts{}}
+	step := newTestDownloadStep(&fileWritingSearcher{writeFile: true},
+		WithDownloadIdentifier(&stubIdentifier{match: match}), WithRecordingLookup(lookup), WithVerifyWidth(1))
+	ac := downloadContext("mb-master")
+	ac.Identity.MBIDs = []string{"mb-merged"}
+	ac.Ranked = ac.Ranked[:1]
+	t.Cleanup(func() { _ = os.RemoveAll(filepath.Dir(ac.TempPath)) })
+
+	_, _ = step.Execute(context.Background(), ac, afterSelect{})
+	return lookup.calls
+}
+
+func TestDownloadStep_VersionLookupsSkipTheBoundRecordingsAndStartWithTheSameTitle(t *testing.T) {
+	calls := versionLookupsFor(t, plainTitledLinks("mb-other", "mb-master", "mb-merged", "mb-dup"), 0)
+
+	if want := []string{"mb-dup", "mb-other"}; !equalStrings(calls, want) {
+		t.Errorf("lookups = %v, want %v: the same-title link first, then the other, never the bound or merged recording", calls, want)
+	}
+}
+
+func TestDownloadStep_AVersionLookupSpendsOneOfTheCandidatesLookupsPerRecording(t *testing.T) {
+	calls := versionLookupsFor(t, plainTitledLinks("mb-dup", "mb-o1", "mb-o2", "mb-o3"), 1, 2, 3)
+
+	if want := []string{"mb-dup", "mb-o1", "mb-o2"}; !equalStrings(calls, want) {
+		t.Errorf("lookups = %v, want %v: a same-title link is one lookup, not two, so three distinct recordings fit the cap", calls, want)
+	}
+}
+
 func equalStrings(a, b []string) bool {
 	return len(a) == len(b) && strings.Join(a, "\x00") == strings.Join(b, "\x00")
 }
