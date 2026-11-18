@@ -1,13 +1,13 @@
-package chromaprint
+package chromaprint_test
 
 import (
-	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
-	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -19,20 +19,20 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"golang.org/x/time/rate"
 )
 
-func matchFromBody(t *testing.T, body string) ports.RecordingMatch {
+func matchFromBody(t *testing.T, body string) acquisition.RecordingMatch {
 	t.Helper()
-	var parsed lookupResponse
-	if err := json.Unmarshal([]byte(body), &parsed); err != nil {
-		t.Fatalf("unmarshal: %v", err)
+	srv := lookupServerServing(body)
+	t.Cleanup(srv.Close)
+	match, err := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL).Identify(context.Background(), "/tmp/full.mp3", 0)
+	if err != nil {
+		t.Fatalf("Identify: %v", err)
 	}
-	return matchOf(acoustIDResults(parsed))
+	return match
 }
 
-func TestMatchOf_PicksHighestScoreAboveThreshold(t *testing.T) {
+func TestIdentify_PicksHighestScoreAboveThreshold(t *testing.T) {
 	got := matchFromBody(t, `{"status":"ok","results":[
 		{"id":"weak","score":0.9,"recordings":[{"id":"mbid-a"}]},
 		{"id":"strong","score":0.98,"recordings":[{"id":"mbid-b"}]}]}`)
@@ -45,14 +45,14 @@ func TestMatchOf_PicksHighestScoreAboveThreshold(t *testing.T) {
 	}
 }
 
-func TestMatchOf_IgnoresLowScores(t *testing.T) {
+func TestIdentify_IgnoresLowScores(t *testing.T) {
 	got := matchFromBody(t, `{"status":"ok","results":[{"id":"weak","score":0.3,"recordings":[{"id":"mbid-a"}]}]}`)
 	if got.Known() {
 		t.Errorf("a below-threshold result must not count as known, got %+v", got)
 	}
 }
 
-func TestMatchOf_KeepsResultsWithOnlyAnAcoustID(t *testing.T) {
+func TestIdentify_KeepsResultsWithOnlyAnAcoustID(t *testing.T) {
 	got := matchFromBody(t, `{"status":"ok","results":[{"id":"acoustid-only","score":0.99}]}`)
 	if !got.Known() {
 		t.Fatalf("an AcoustID with no MusicBrainz links still identifies the audio, got %+v", got)
@@ -62,13 +62,30 @@ func TestMatchOf_KeepsResultsWithOnlyAnAcoustID(t *testing.T) {
 	}
 }
 
+type recordingTransport struct{ urls []string }
+
+func (r *recordingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	r.urls = append(r.urls, req.URL.String())
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(`{"status":"ok","results":[]}`)),
+		Request:    req,
+	}, nil
+}
+
 func TestNewIdentifier_DefaultsToAcoustIDEndpoint(t *testing.T) {
-	id := NewIdentifier("", "key")
-	if id.endpoint != defaultEndpoint {
-		t.Errorf("endpoint = %q, want %q", id.endpoint, defaultEndpoint)
+	transport := &recordingTransport{}
+	prev := http.DefaultTransport
+	http.DefaultTransport = transport
+	t.Cleanup(func() { http.DefaultTransport = prev })
+
+	if _, err := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "key").Identify(context.Background(), "/tmp/full.mp3", 0); err != nil {
+		t.Fatalf("Identify: %v", err)
 	}
-	if id.client == nil {
-		t.Error("expected an http client")
+
+	if want := []string{"https://api.acoustid.org/v2/lookup"}; !slices.Equal(transport.urls, want) {
+		t.Errorf("requests = %v, want %v", transport.urls, want)
 	}
 }
 
@@ -104,7 +121,7 @@ func captureWarnings(t *testing.T) *warnCapture {
 func TestNewIdentifier_EmptyKeyWarnsAtStartup(t *testing.T) {
 	logs := captureWarnings(t)
 
-	NewIdentifier("", "")
+	acquisition.NewChromaprintIdentifier("", "")
 
 	if !logs.warned {
 		t.Fatal("an empty AcoustID API key must warn at startup, got no warning")
@@ -114,7 +131,7 @@ func TestNewIdentifier_EmptyKeyWarnsAtStartup(t *testing.T) {
 func TestNewIdentifier_WhitespaceOnlyKeyWarnsAndDisables(t *testing.T) {
 	logs := captureWarnings(t)
 
-	id := NewIdentifier("", "   \t\n ")
+	id := acquisition.NewChromaprintIdentifier("", "   \t\n ")
 
 	if !logs.warned {
 		t.Fatal("a whitespace-only AcoustID API key must warn at startup, got no warning")
@@ -127,7 +144,7 @@ func TestNewIdentifier_WhitespaceOnlyKeyWarnsAndDisables(t *testing.T) {
 func TestNewIdentifier_ValidKeyDoesNotWarn(t *testing.T) {
 	logs := captureWarnings(t)
 
-	NewIdentifier("", "real-key")
+	acquisition.NewChromaprintIdentifier("", "real-key")
 
 	if logs.warned {
 		t.Errorf("a valid API key must not warn, got %v", logs.msgs)
@@ -146,7 +163,7 @@ func captureJSONLogs(t *testing.T) *bytes.Buffer {
 func TestNewIdentifier_BlankKeyLogsExactlyOneWarn(t *testing.T) {
 	logs := captureJSONLogs(t)
 
-	NewIdentifier(t.TempDir(), "   ")
+	acquisition.NewChromaprintIdentifier(t.TempDir(), "   ")
 
 	lines := strings.Split(strings.TrimSpace(logs.String()), "\n")
 	if len(lines) != 1 {
@@ -170,7 +187,7 @@ func TestNewIdentifier_BlankKeyLogsExactlyOneWarn(t *testing.T) {
 func TestNewIdentifier_NonBlankKeyLogsNothing(t *testing.T) {
 	logs := captureJSONLogs(t)
 
-	NewIdentifier(t.TempDir(), "key")
+	acquisition.NewChromaprintIdentifier(t.TempDir(), "key")
 
 	if logs.Len() != 0 {
 		t.Errorf("a non-blank key logged:\n%s", logs.String())
@@ -178,39 +195,81 @@ func TestNewIdentifier_NonBlankKeyLogsNothing(t *testing.T) {
 }
 
 func TestLookup_EmptyKeyReturnsError(t *testing.T) {
-	id := NewIdentifier("", "")
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits++ }))
+	defer srv.Close()
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "").WithEndpoint(srv.URL)
 
-	_, err := id.lookup(context.Background(), fingerprint{Duration: 100, Fingerprint: "abc"})
+	_, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 
-	if !errors.Is(err, ErrMissingAPIKey) {
-		t.Fatalf("lookup with empty key err = %v, want ErrMissingAPIKey", err)
+	if !errors.Is(err, acquisition.ErrChromaprintMissingAPIKey) {
+		t.Fatalf("Identify with empty key err = %v, want ErrChromaprintMissingAPIKey", err)
+	}
+	if hits != 0 {
+		t.Errorf("hits = %d, want 0 without a key", hits)
 	}
 }
 
 func TestLookup_OversizedResponseBodyIsRejected(t *testing.T) {
-	oversized := `{"status":"ok","results":[{"id":"` + strings.Repeat("x", lookupBodyCap+1024) + `"}]}`
+	oversized := `{"status":"ok","results":[{"id":"` + strings.Repeat("x", acoustIDBodyCap+1024) + `"}]}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(oversized))
 	}))
 	defer srv.Close()
 
-	id := NewIdentifier("", "real-key").WithEndpoint(srv.URL)
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
 
-	_, err := id.lookup(context.Background(), fingerprint{Duration: 100, Fingerprint: "abc"})
+	_, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 
 	if err == nil {
 		t.Fatal("lookup against an oversized response body must error, got nil")
 	}
 }
 
+const emptyFingerprint = "empty"
+
+var fakeFpcalcDirs = map[string]string{}
+
+func TestMain(m *testing.M) {
+	root, err := os.MkdirTemp("", "chromaprint-fpcalc-")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "create fake fpcalc root: %v\n", err)
+		os.Exit(1)
+	}
+	code := 1
+	if err := writeFakeFpcalcs(root); err != nil {
+		fmt.Fprintf(os.Stderr, "write fake fpcalc: %v\n", err)
+	} else {
+		code = m.Run()
+	}
+	_ = os.RemoveAll(root)
+	os.Exit(code)
+}
+
+func writeFakeFpcalcs(root string) error {
+	outputs := map[string]string{emptyFingerprint: `{"duration": 0, "fingerprint": ""}`}
+	for _, seconds := range []float64{100, 130, 200, 236} {
+		outputs[fmt.Sprintf("%g", seconds)] = fmt.Sprintf(`{"duration": %g, "fingerprint": "AQAAdkmVJUqSpNce"}`, seconds)
+	}
+	for name, output := range outputs {
+		dir := filepath.Join(root, name)
+		if err := os.Mkdir(dir, 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(dir, "fpcalc"), []byte("#!/bin/sh\nprintf '"+output+"'\n"), 0o755); err != nil {
+			return err
+		}
+		fakeFpcalcDirs[name] = dir
+	}
+	return nil
+}
+
 func fakeFpcalcDir(t *testing.T, duration float64) string {
 	t.Helper()
-	dir := t.TempDir()
-	script := fmt.Sprintf("#!/bin/sh\nprintf '{\"duration\": %g, \"fingerprint\": \"AQAAdkmVJUqSpNce\"}'\n", duration)
-	path := filepath.Join(dir, "fpcalc")
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatalf("write fake fpcalc: %v", err)
+	dir, ok := fakeFpcalcDirs[fmt.Sprintf("%g", duration)]
+	if !ok {
+		t.Fatalf("no fake fpcalc reports %gs; add it to writeFakeFpcalcs", duration)
 	}
 	return dir
 }
@@ -227,7 +286,7 @@ func TestIdentify_SendsCandidateDurationNotFpcalcsMeasuredLength(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id := NewIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
 
 	if _, err := id.Identify(context.Background(), "/tmp/preview.mp3", 236); err != nil {
 		t.Fatalf("Identify: %v", err)
@@ -252,7 +311,7 @@ func TestIdentify_ReturnsEveryResultAboveTheScoreFloorWithLinkedRecordings(t *te
 	}))
 	defer srv.Close()
 
-	id := NewIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
 
 	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 	if err != nil {
@@ -269,7 +328,7 @@ func TestIdentify_ReturnsEveryResultAboveTheScoreFloorWithLinkedRecordings(t *te
 		t.Errorf("Results order = [%s %s], want [ac-top ac-second]", match.Results[0].ID, match.Results[1].ID)
 	}
 	got := match.Results[0].Recordings[0]
-	want := ports.LinkedRecording{MBID: "mb-top", Title: "Song One", Artists: []string{"Artist A"}, Duration: 236}
+	want := acquisition.LinkedRecording{MBID: "mb-top", Title: "Song One", Artists: []string{"Artist A"}, Duration: 236}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("linked recording = %+v, want %+v", got, want)
 	}
@@ -285,14 +344,14 @@ func TestIdentify_CarriesReleaseGroupsOnLinkedRecordings(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id := NewIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
 	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 	if err != nil {
 		t.Fatalf("Identify: %v", err)
 	}
 
 	recs := match.Results[0].Recordings
-	want := []ports.ReleaseGroup{
+	want := []acquisition.ReleaseGroup{
 		{MBID: "rg-1", Title: "Song Live", Type: "Album", SecondaryTypes: []string{"Live", "Compilation"}},
 		{MBID: "rg-2", Title: "Song", Type: "Single"},
 	}
@@ -312,7 +371,7 @@ func TestIdentify_TheMatchIsTheTopResult(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id := NewIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
 	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 	if err != nil {
 		t.Fatalf("Identify: %v", err)
@@ -325,10 +384,28 @@ func TestIdentify_TheMatchIsTheTopResult(t *testing.T) {
 	}
 }
 
+func identifyEach(t *testing.T, id *acquisition.ChromaprintIdentifier, n int, within time.Duration) time.Duration {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), within)
+	defer cancel()
+	start := time.Now()
+	for i := range n {
+		if _, err := id.Identify(ctx, "/tmp/full.mp3", 0); err != nil {
+			t.Fatalf("Identify %d of %d: %v", i+1, n, err)
+		}
+	}
+	return time.Since(start)
+}
+
 func TestIdentifier_DefaultsToThreeRequestsPerSecond(t *testing.T) {
-	id := NewIdentifier("", "key")
-	if id.limiter.Limit() != rate.Limit(3) {
-		t.Errorf("limiter limit = %v, want %v", id.limiter.Limit(), rate.Limit(3))
+	srv := lookupServerServing(`{"status":"ok","results":[]}`)
+	defer srv.Close()
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
+
+	took := identifyEach(t, id, 7, 1750*time.Millisecond)
+
+	if took < 1250*time.Millisecond {
+		t.Errorf("7 lookups took %v, want at least 4/3s: a burst of 3 then 3 per second", took)
 	}
 }
 
@@ -341,15 +418,16 @@ func TestLookup_ContextDeadlineAbortsTheRateLimitWaitBeforeAnyRequest(t *testing
 	}))
 	defer srv.Close()
 
-	limiter := rate.NewLimiter(rate.Every(time.Hour), 1)
-	limiter.Allow()
-	id := NewIdentifier("", "real-key").WithEndpoint(srv.URL)
-	id.limiter = limiter
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL).WithRequestsPerSecond(1.0 / 3600)
+	if _, err := id.Identify(context.Background(), "/tmp/full.mp3", 0); err != nil {
+		t.Fatalf("first Identify: %v", err)
+	}
+	hits = 0
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	_, err := id.lookup(ctx, fingerprint{Duration: 100, Fingerprint: "abc"})
+	_, err := id.Identify(ctx, "/tmp/full.mp3", 0)
 
 	if err == nil {
 		t.Fatal("lookup blocked on an exhausted limiter must fail, got nil error")
@@ -371,7 +449,7 @@ func TestIdentify_ZeroFullLengthForPreviewKeepsFpcalcsMeasuredDuration(t *testin
 	}))
 	defer srv.Close()
 
-	id := NewIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
 
 	if _, err := id.Identify(context.Background(), "/tmp/preview.mp3", 0); err != nil {
 		t.Fatalf("Identify: %v", err)
@@ -391,7 +469,7 @@ func TestIdentify_KeepsResultAtExactlyTheScoreFloor(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id := NewIdentifier(fakeFpcalcDir(t, 200), "real-key").WithEndpoint(srv.URL)
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 200), "real-key").WithEndpoint(srv.URL)
 
 	match, err := id.Identify(context.Background(), "/tmp/floor.mp3", 0)
 	if err != nil {
@@ -413,7 +491,7 @@ func TestIdentify_TiedScoresKeepStableInputOrder(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id := NewIdentifier(fakeFpcalcDir(t, 200), "real-key").WithEndpoint(srv.URL)
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 200), "real-key").WithEndpoint(srv.URL)
 
 	match, err := id.Identify(context.Background(), "/tmp/tied.mp3", 0)
 	if err != nil {
@@ -424,6 +502,8 @@ func TestIdentify_TiedScoresKeepStableInputOrder(t *testing.T) {
 		t.Fatalf("Results = %+v, want tied scores to keep the committed input order [ac-first ac-second]", match.Results)
 	}
 }
+
+const acoustIDBodyCap = 2 << 20
 
 func lookupServerServing(body string) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -442,12 +522,12 @@ func lookupBodyOfSize(t *testing.T, size int) string {
 }
 
 func TestLookup_BodyJustUnderTheCapStillReturnsItsMatch(t *testing.T) {
-	srv := lookupServerServing(lookupBodyOfSize(t, lookupBodyCap-1))
+	srv := lookupServerServing(lookupBodyOfSize(t, acoustIDBodyCap-1))
 	defer srv.Close()
 
-	id := NewIdentifier("", "real-key").WithEndpoint(srv.URL)
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
 
-	match, err := id.lookup(context.Background(), fingerprint{Duration: 100, Fingerprint: "abc"})
+	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 	if err != nil {
 		t.Fatalf("a body under the cap must parse, got %v", err)
 	}
@@ -457,20 +537,20 @@ func TestLookup_BodyJustUnderTheCapStillReturnsItsMatch(t *testing.T) {
 }
 
 func TestLookup_OversizedBodyWhoseCappedPrefixIsValidJSONIsRejected(t *testing.T) {
-	srv := lookupServerServing(lookupBodyOfSize(t, lookupBodyCap+1024))
+	srv := lookupServerServing(lookupBodyOfSize(t, acoustIDBodyCap+1024))
 	defer srv.Close()
-	id := NewIdentifier("", "real-key").WithEndpoint(srv.URL)
-	match, err := id.lookup(context.Background(), fingerprint{Duration: 100, Fingerprint: "abc"})
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
+	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 	if err == nil {
 		t.Fatalf("oversized body must error, not parse the truncated prefix; got match %+v", match)
 	}
 }
 
 func TestLookup_BodyExactlyAtTheCapIsRejected(t *testing.T) {
-	srv := lookupServerServing(lookupBodyOfSize(t, lookupBodyCap))
+	srv := lookupServerServing(lookupBodyOfSize(t, acoustIDBodyCap))
 	defer srv.Close()
-	id := NewIdentifier("", "real-key").WithEndpoint(srv.URL)
-	match, err := id.lookup(context.Background(), fingerprint{Duration: 100, Fingerprint: "abc"})
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
+	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 	if err == nil {
 		t.Fatalf("a body at the cap must error; got match %+v", match)
 	}
@@ -486,9 +566,9 @@ func matchingLookupBodyPaddedTo(t *testing.T, size int) string {
 }
 
 func TestIdentify_OversizedBodyWhoseCappedPrefixHoldsAMatchIsRejected(t *testing.T) {
-	srv := lookupServerServing(matchingLookupBodyPaddedTo(t, lookupBodyCap+1024))
+	srv := lookupServerServing(matchingLookupBodyPaddedTo(t, acoustIDBodyCap+1024))
 	defer srv.Close()
-	id := NewIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
 
 	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 
@@ -501,9 +581,9 @@ func TestIdentify_OversizedBodyWhoseCappedPrefixHoldsAMatchIsRejected(t *testing
 }
 
 func TestIdentify_BodyExactlyAtTheCapHoldingAMatchIsRejected(t *testing.T) {
-	srv := lookupServerServing(matchingLookupBodyPaddedTo(t, lookupBodyCap))
+	srv := lookupServerServing(matchingLookupBodyPaddedTo(t, acoustIDBodyCap))
 	defer srv.Close()
-	id := NewIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
 
 	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 
@@ -513,9 +593,9 @@ func TestIdentify_BodyExactlyAtTheCapHoldingAMatchIsRejected(t *testing.T) {
 }
 
 func TestIdentify_BodyJustUnderTheCapStillReturnsItsMatch(t *testing.T) {
-	srv := lookupServerServing(matchingLookupBodyPaddedTo(t, lookupBodyCap-1))
+	srv := lookupServerServing(matchingLookupBodyPaddedTo(t, acoustIDBodyCap-1))
 	defer srv.Close()
-	id := NewIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
 
 	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 	if err != nil {
@@ -527,11 +607,11 @@ func TestIdentify_BodyJustUnderTheCapStillReturnsItsMatch(t *testing.T) {
 }
 
 func TestLookup_OversizedBodyErrorNamesTheLookupResponse(t *testing.T) {
-	srv := lookupServerServing(lookupBodyOfSize(t, lookupBodyCap+1024))
+	srv := lookupServerServing(lookupBodyOfSize(t, acoustIDBodyCap+1024))
 	defer srv.Close()
-	id := NewIdentifier("", "real-key").WithEndpoint(srv.URL)
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
 
-	_, err := id.lookup(context.Background(), fingerprint{Duration: 100, Fingerprint: "abc"})
+	_, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 
 	if err == nil {
 		t.Fatal("oversized body must error, got nil")
@@ -561,13 +641,13 @@ func TestLookup_EndlessStreamingBodyReturnsAnErrorPromptly(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id := NewIdentifier("", "real-key").WithEndpoint(srv.URL)
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	done := make(chan error, 1)
 	go func() {
-		_, err := id.lookup(ctx, fingerprint{Duration: 100, Fingerprint: "abc"})
+		_, err := id.Identify(ctx, "/tmp/full.mp3", 0)
 		done <- err
 	}()
 
@@ -605,11 +685,11 @@ const throttleMatchBody = `{"status":"ok","results":[{"id":"ac-1","score":0.97,"
 
 func TestIdentify_TwoThrottledAnswersSurfaceErrIdentifyThrottled(t *testing.T) {
 	srv, hits := throttlingServer(t, 2, throttleMatchBody)
-	id := NewIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
 
 	_, err := id.Identify(context.Background(), "/tmp/a.mp3", 0)
 
-	if !errors.Is(err, acqdomain.ErrIdentifyThrottled) {
+	if !errors.Is(err, acquisition.ErrIdentifyThrottled) {
 		t.Fatalf("err = %v, want ErrIdentifyThrottled", err)
 	}
 	if *hits != 2 {
@@ -619,7 +699,7 @@ func TestIdentify_TwoThrottledAnswersSurfaceErrIdentifyThrottled(t *testing.T) {
 
 func TestIdentify_ThrottledOnceThenOKReturnsTheMatch(t *testing.T) {
 	srv, _ := throttlingServer(t, 1, throttleMatchBody)
-	id := NewIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
 
 	match, err := id.Identify(context.Background(), "/tmp/a.mp3", 0)
 	if err != nil {
@@ -632,7 +712,7 @@ func TestIdentify_ThrottledOnceThenOKReturnsTheMatch(t *testing.T) {
 
 func TestIdentify_NoMatchIsZeroMatchAndServerErrorIsNotThrottled(t *testing.T) {
 	srv, _ := throttlingServer(t, 0, `{"status":"ok","results":[]}`)
-	id := NewIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
 	match, err := id.Identify(context.Background(), "/tmp/a.mp3", 0)
 	if err != nil || match.Known() {
 		t.Fatalf("no-match = %+v, %v; want zero match and nil error", match, err)
@@ -642,50 +722,94 @@ func TestIdentify_NoMatchIsZeroMatchAndServerErrorIsNotThrottled(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer failing.Close()
-	id = NewIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(failing.URL)
+	id = acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(failing.URL)
 	_, err = id.Identify(context.Background(), "/tmp/a.mp3", 0)
-	if err == nil || errors.Is(err, acqdomain.ErrIdentifyThrottled) {
+	if err == nil || errors.Is(err, acquisition.ErrIdentifyThrottled) {
 		t.Errorf("500 err = %v, want a non-throttled error", err)
 	}
 }
 
 func TestLookup_ContextCancelAbortsTheRetryAfterWait(t *testing.T) {
+	var hits int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits++
 		w.Header().Set("Retry-After", "5")
 		w.WriteHeader(http.StatusTooManyRequests)
 	}))
 	defer srv.Close()
-	id := NewIdentifier("", "real-key").WithEndpoint(srv.URL)
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	start := time.Now()
-	_, err := id.lookup(ctx, fingerprint{Duration: 100, Fingerprint: "abc"})
+	_, err := id.Identify(ctx, "/tmp/full.mp3", 0)
 
-	if err == nil || errors.Is(err, acqdomain.ErrIdentifyThrottled) {
+	if !errors.Is(err, context.DeadlineExceeded) || errors.Is(err, acquisition.ErrIdentifyThrottled) {
 		t.Errorf("err = %v, want the context error", err)
 	}
-	if time.Since(start) > time.Second {
+	if hits != 1 {
+		t.Errorf("hits = %d, want 1: the throttled request and no retry", hits)
+	}
+	if time.Since(start) > 4*time.Second {
 		t.Errorf("took %v, want the wait aborted by ctx", time.Since(start))
 	}
 }
 
 func TestRetryAfter_ParsesSecondsCapsAtFiveAndDefaultsToOne(t *testing.T) {
-	for header, want := range map[string]time.Duration{
+	type outcome struct {
+		header string
+		gap    time.Duration
+		err    error
+	}
+	cases := map[string]time.Duration{
 		"2": 2 * time.Second, "60": 5 * time.Second, "": time.Second, "soon": time.Second, "0": 0,
 		"10000000000": 5 * time.Second, "18446744073": 5 * time.Second,
-	} {
-		if got := retryAfter(header); got != want {
-			t.Errorf("retryAfter(%q) = %v, want %v", header, got, want)
+	}
+	results := make(chan outcome, len(cases))
+	for header := range cases {
+		var throttledAt time.Time
+		var gap time.Duration
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			if throttledAt.IsZero() {
+				throttledAt = time.Now()
+				w.Header().Set("Retry-After", header)
+				w.WriteHeader(http.StatusTooManyRequests)
+				return
+			}
+			gap = time.Since(throttledAt)
+			_, _ = w.Write([]byte(throttleMatchBody))
+		}))
+		t.Cleanup(srv.Close)
+		id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+			defer cancel()
+			_, err := id.Identify(ctx, "/tmp/a.mp3", 0)
+			results <- outcome{header: header, gap: gap, err: err}
+		}()
+	}
+	for range cases {
+		got := <-results
+		want := cases[got.header]
+		if got.err != nil {
+			t.Errorf("Retry-After %q: %v, want a retry after %v", got.header, got.err, want)
+			continue
+		}
+		if got.gap < want || got.gap > want+500*time.Millisecond {
+			t.Errorf("Retry-After %q: retried after %v, want %v", got.header, got.gap, want)
 		}
 	}
 }
 
 func TestWithRequestsPerSecond_LowersTheLookupRate(t *testing.T) {
-	id := NewIdentifier("", "key").WithRequestsPerSecond(1.5)
+	srv := lookupServerServing(`{"status":"ok","results":[]}`)
+	defer srv.Close()
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL).WithRequestsPerSecond(1.5)
 
-	if id.limiter.Limit() != rate.Limit(1.5) {
-		t.Errorf("limiter limit = %v, want 1.5", id.limiter.Limit())
+	took := identifyEach(t, id, 3, 1750*time.Millisecond)
+
+	if took < 1250*time.Millisecond {
+		t.Errorf("3 lookups took %v, want at least 4/3s: one then 1.5 per second", took)
 	}
 }
 
@@ -706,7 +830,7 @@ func TestLookup_SendsAPIKeyInPostFormNotURL(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id := NewIdentifier(fakeFpcalcDir(t, 100), apiKey).WithEndpoint(srv.URL)
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), apiKey).WithEndpoint(srv.URL)
 	if _, err := id.Identify(context.Background(), "/tmp/full.mp3", 0); err != nil {
 		t.Fatalf("Identify: %v", err)
 	}
@@ -724,28 +848,23 @@ func TestLookup_SendsAPIKeyInPostFormNotURL(t *testing.T) {
 
 type identifyOnly struct{}
 
-func (identifyOnly) Identify(context.Context, string, float64) (ports.RecordingMatch, error) {
-	return ports.RecordingMatch{}, nil
+func (identifyOnly) Identify(context.Context, string, float64) (acquisition.RecordingMatch, error) {
+	return acquisition.RecordingMatch{}, nil
 }
 
 func TestAudioIdentifier_IsIdentifyOnly(t *testing.T) {
-	var _ ports.AudioIdentifier = identifyOnly{}
+	var _ acquisition.AudioIdentifier = identifyOnly{}
 }
 
 func TestIdentify_EmptyFingerprintIsAnError(t *testing.T) {
 	var hits int
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits++ }))
 	defer srv.Close()
-	dir := t.TempDir()
-	script := "#!/bin/sh\nprintf '{\"duration\": 0, \"fingerprint\": \"\"}'\n"
-	if err := os.WriteFile(filepath.Join(dir, "fpcalc"), []byte(script), 0o755); err != nil {
-		t.Fatalf("write fake fpcalc: %v", err)
-	}
-	id := NewIdentifier(dir, "real-key").WithEndpoint(srv.URL)
+	id := acquisition.NewChromaprintIdentifier(fakeFpcalcDirs[emptyFingerprint], "real-key").WithEndpoint(srv.URL)
 
 	_, err := id.Identify(context.Background(), "/tmp/broken.mp3", 0)
 
-	if !errors.Is(err, acqdomain.ErrEmptyFingerprint) {
+	if !errors.Is(err, acquisition.ErrEmptyFingerprint) {
 		t.Fatalf("err = %v, want ErrEmptyFingerprint", err)
 	}
 	if hits != 0 {
