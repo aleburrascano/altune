@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import { defaultFileStore } from '@shared/files';
 import type { FileStore, StoredFile } from '@shared/files';
+import { warn } from '@shared/log';
 
 const PREF_DIR = 'preferences';
 const PREF_FILE = 'analytics.json';
@@ -29,7 +30,7 @@ function saveShareAnalytics(on: boolean): void {
   try {
     prefFile().write(JSON.stringify(on));
   } catch (error) {
-    console.warn(
+    warn(
       `[analytics] could not persist the share-analytics choice (${on}); it will not survive a restart`,
       error,
     );

@@ -28,6 +28,7 @@ import {
   nullableNumber,
   nullableString,
 } from '@shared/apiClient/wireDecoders';
+import { warn } from '@shared/log';
 
 function parseFeaturedArtist(value: unknown, at: string): FeaturedArtist {
   const r = asRecord(value, at);
@@ -161,7 +162,7 @@ export async function getAllTracks(params: {
     items.push(...page.items);
     if (!page.has_more || page.items.length === 0) return { items, truncated: false };
   }
-  console.warn('[library] whole-library fetch hit its cap; truncating', { cap: MAX_ALL_TRACKS });
+  warn('[library] whole-library fetch hit its cap; truncating', { cap: MAX_ALL_TRACKS });
   return { items: items.slice(0, MAX_ALL_TRACKS), truncated: true };
 }
 

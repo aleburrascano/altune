@@ -9,6 +9,7 @@ import { notifyIdentityChange } from '@shared/session';
 import { renewSessionCredentials } from '@shared/auth/view/sessionExpired';
 import { supabase } from '@shared/auth/adapters/authActions';
 import { isTestAuthEnabled, testAuthBootSettled } from '@shared/auth/core/testAuthBoot';
+import { warn } from '@shared/log';
 
 export type SessionState =
   { status: 'loading' } | { status: 'signed-in'; session: Session } | { status: 'signed-out' };
@@ -58,7 +59,7 @@ export function useSession(): SessionState {
         apply(data.session);
       })
       .catch((error: unknown) => {
-        console.warn('[auth] getSession failed at boot', error);
+        warn('[auth] getSession failed at boot', error);
         if (isSessionFetchFailure(error)) return;
         if (!seededRef.current) apply(null);
       });

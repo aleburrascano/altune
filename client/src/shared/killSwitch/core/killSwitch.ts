@@ -7,6 +7,7 @@ import {
   type FileStore,
   type StoredDirectory,
 } from '@shared/files';
+import { warn } from '@shared/log';
 
 export type KillSwitchLoop =
   'serverEvents' | 'telemetryFlush' | 'offlineDownloads' | 'detailEnrichment' | 'discovery';
@@ -82,7 +83,7 @@ function persist(next: LoopFlags): void {
       JSON.stringify(toDocument(next)),
     );
   } catch {
-    console.warn(`${TAG} failed to persist switches; keeping them in memory only`);
+    warn(`${TAG} failed to persist switches; keeping them in memory only`);
   }
 }
 
@@ -106,7 +107,7 @@ function adoptSwitches(next: LoopFlags): void {
   flags = next;
   persist(next);
   for (const loop of flipped) {
-    console.warn(`${TAG} ${loop} ${next[loop] ? 'enabled' : 'disabled'} remotely`);
+    warn(`${TAG} ${loop} ${next[loop] ? 'enabled' : 'disabled'} remotely`);
     for (const listener of [...listeners]) listener(loop, next[loop]);
   }
 }
@@ -115,7 +116,7 @@ export function applyKillSwitches(document: JsonValue): void {
   ensureRestored();
   const next = parseSwitches(document);
   if (next === null) {
-    console.warn(`${TAG} ignored a switch document that is not an object`);
+    warn(`${TAG} ignored a switch document that is not an object`);
     return;
   }
   adoptSwitches(next);

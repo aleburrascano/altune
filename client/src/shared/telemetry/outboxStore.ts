@@ -10,6 +10,7 @@ import {
 } from '@shared/files';
 import type { OutboxEntry } from '@shared/telemetry/outboxEntries';
 import type { DiscoveryEventType } from '@shared/telemetry/recordEvent';
+import { warn } from '@shared/log';
 
 const OUTBOX_DIR = 'telemetry';
 const OUTBOX_FILE = 'critical-outbox.json';
@@ -72,7 +73,7 @@ const OUTBOX_SCHEMA: SchemaSpec = {
 function parsePersistedEntries(entries: readonly unknown[]): OutboxEntry[] {
   const kept = entries.filter(isPersistedEntry);
   const dropped = entries.length - kept.length;
-  if (dropped > 0) console.warn(`[telemetry] dropped ${dropped} malformed outbox entries at load`);
+  if (dropped > 0) warn(`[telemetry] dropped ${dropped} malformed outbox entries at load`);
   return kept;
 }
 
@@ -80,7 +81,7 @@ export function loadPersistedOutbox(): OutboxEntry[] {
   const read = readVersionedEntries('[telemetry]', OUTBOX_FILE, outboxDir, OUTBOX_SCHEMA);
   if (read.status !== 'read') return [];
   if (!Array.isArray(read.entries)) {
-    console.warn(`[telemetry] ${OUTBOX_FILE} is not an outbox; treating it as empty`);
+    warn(`[telemetry] ${OUTBOX_FILE} is not an outbox; treating it as empty`);
     return [];
   }
   return parsePersistedEntries(read.entries);
@@ -96,7 +97,7 @@ export function persistOutbox(entries: readonly OutboxEntry[]): void {
     const document = { schemaVersion: OUTBOX_SCHEMA_VERSION, entries };
     writeDocumentAtomically(dir, OUTBOX_FILE, JSON.stringify(document));
   } catch (error) {
-    console.warn(
+    warn(
       `[telemetry] failed to persist outbox (${entries.length} entries) to ${OUTBOX_FILE}; keeping in-memory only`,
       error,
     );

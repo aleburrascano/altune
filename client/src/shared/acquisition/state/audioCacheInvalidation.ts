@@ -1,4 +1,5 @@
 import type { TrackId } from '@shared/catalog';
+import { warn } from '@shared/log';
 
 type Invalidator = (trackId: TrackId) => void;
 
@@ -16,7 +17,7 @@ export function invalidateAudioCaches(trackId: TrackId): void {
     try {
       invalidate(trackId);
     } catch (error) {
-      console.warn(`[acquisition] an audio-cache invalidator failed for track ${trackId}`, error);
+      warn(`[acquisition] an audio-cache invalidator failed for track ${trackId}`, error);
     }
   }
 }

@@ -10,6 +10,7 @@ import { idlePlayback } from '@testing/queryHarness';
 import { PlaylistDetailScreen } from '@features/library';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 import { usePinnedStore } from '@shared/offline';
+import { recordLogs, type RecordedLogs } from '@shared/log';
 import { HttpLibraryPorts } from '@features/library/__tests__/HttpLibraryPorts';
 import { acceptTelemetry, shownFailureSurfaces } from '@features/library/__tests__/failureShown';
 const { __http } = require('@testing/doubles/fetch.js');
@@ -108,16 +109,10 @@ const playlistBody = {
   tracks: [],
 };
 
-let warnSpy: jest.SpyInstance;
-
-function loggedText(): string {
-  return JSON.stringify(warnSpy.mock.calls, (_key, value: unknown) =>
-    value instanceof Error ? `${value.name}: ${value.message} ${value.stack ?? ''}` : value,
-  );
-}
+let logs: RecordedLogs;
 
 function detailFailureLogs(): unknown[][] {
-  return warnSpy.mock.calls.filter((call) => call[0] === LOG_LINE);
+  return logs.warnings.filter(([message]) => message === LOG_LINE);
 }
 
 describe('PlaylistDetailScreen — a failed load', () => {
@@ -126,12 +121,8 @@ describe('PlaylistDetailScreen — a failed load', () => {
   });
 
   beforeEach(async () => {
-    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    logs = recordLogs();
     await signInTestUser();
-  });
-
-  afterEach(() => {
-    warnSpy.mockRestore();
   });
 
   it('offers a retry instead of claiming the playlist is gone when the API fails', async () => {
@@ -177,7 +168,7 @@ describe('PlaylistDetailScreen — a failed load', () => {
         }),
       ],
     ]);
-    expect(loggedText()).not.toContain(SERVER_MESSAGE);
+    expect(logs.text()).not.toContain(SERVER_MESSAGE);
   });
 
   it('shows the playlist once the retry succeeds', async () => {

@@ -1,4 +1,5 @@
 import type { StoredDirectory, StoredFile } from '@shared/files/fileStore';
+import { warn } from '@shared/log';
 
 type DocumentValue =
   string | number | boolean | null | DocumentValue[] | { [key: string]: DocumentValue };
@@ -43,7 +44,7 @@ function candidates(tag: string, name: string, openDir: OpenDir): StoredFile[] |
     const dir = openDir();
     return [dir.openFile(name), dir.openFile(tempName(name))].filter((file) => file.exists);
   } catch (error) {
-    console.warn(`${tag} could not read ${name} (${errorName(error)}); treating it as empty`);
+    warn(`${tag} could not read ${name} (${errorName(error)}); treating it as empty`);
     return null;
   }
 }
@@ -55,7 +56,7 @@ function parseFile(tag: string, file: StoredFile, next: string): ReadDocumentRes
     failure = 'is corrupt';
     return { status: 'read', document: JSON.parse(text) as DocumentValue };
   } catch (error) {
-    console.warn(`${tag} ${fileName(file)} ${failure} (${errorName(error)}); ${next}`);
+    warn(`${tag} ${fileName(file)} ${failure} (${errorName(error)}); ${next}`);
     return UNREADABLE;
   }
 }
@@ -122,7 +123,7 @@ export function readVersionedEntries(
   if (read.status !== 'read') return read;
   const migrated = migrateDocument(read.document, spec);
   if (migrated.status === 'newer') {
-    console.warn(
+    warn(
       `${tag} ${name} has schema version ${migrated.version}, newer than ${spec.current}; reading what this version understands`,
     );
   }

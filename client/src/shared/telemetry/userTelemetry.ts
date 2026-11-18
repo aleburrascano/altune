@@ -1,4 +1,5 @@
 import { recordEvent } from '@shared/telemetry/recordEvent';
+import { warn } from '@shared/log';
 
 const MAX_TRIMMED_LENGTH = 300;
 
@@ -27,7 +28,7 @@ export function recordUserAction(payload: UserActionPayload): void {
     type: 'user_action',
     payload: { ...rest, ...(error === undefined ? {} : { error: trimmed(error) }) },
   }).catch((error: unknown) => {
-    console.warn('[telemetry] recording event failed', error);
+    warn('[telemetry] recording event failed', error);
   });
 }
 
@@ -42,6 +43,6 @@ export function recordFailureShown(payload: FailureShownPayload): void {
     type: 'failure_shown',
     payload: { ...payload, message: trimmed(payload.message) },
   }).catch((error: unknown) => {
-    console.warn('[telemetry] recording event failed', error);
+    warn('[telemetry] recording event failed', error);
   });
 }

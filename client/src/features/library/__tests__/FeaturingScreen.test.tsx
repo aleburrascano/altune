@@ -5,6 +5,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import { AcquisitionPortProvider } from '@shared/acquisition';
 import { asTrackId } from '@shared/catalog';
 import { ApiError, NetworkError } from '@shared/failure';
+import { recordLogs, warn, type RecordedLogs } from '@shared/log';
 
 import {
   createMemoryLibraryPort,
@@ -27,7 +28,6 @@ const EVENTS = 'POST /v1/discovery/events';
 
 const mockSearchDiscovery = jest.fn();
 const mockListTracksFeaturing = jest.fn();
-const warn = jest.fn<void, [string, Record<string, unknown>]>();
 
 function portRecordingInto(dialogs: RecordingDialogs): LibraryPort {
   return {
@@ -46,7 +46,7 @@ jest.mock('expo-router', () => ({
 const SECRET = 'guest star unreleased bootleg';
 
 let client: QueryClient;
-let warnSpy: jest.SpyInstance;
+let logs: RecordedLogs;
 let dialogs: RecordingDialogs;
 let port: LibraryPort;
 
@@ -62,16 +62,9 @@ function wrapper({ children }: { children: ReactNode }) {
   );
 }
 
-function loggedText(): string {
-  return JSON.stringify([...warnSpy.mock.calls, ...warn.mock.calls], (_key, value: unknown) =>
-    value instanceof Error ? `${value.name}: ${value.message} ${value.stack ?? ''}` : value,
-  );
-}
-
 beforeEach(async () => {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  warn.mockReset();
+  logs = recordLogs();
   dialogs = recordingDialogs();
   port = portRecordingInto(dialogs);
   await signInTestUser();
@@ -82,7 +75,6 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
-  warnSpy.mockRestore();
   client.clear();
 });
 
@@ -101,12 +93,10 @@ describe('a failed "Explore artist" search', () => {
     await tapExplore();
 
     await waitFor(() =>
-      expect(warn).toHaveBeenCalledWith('[library] featuring explore search failed', {
-        status: 503,
-        code: 'discovery_down',
-        failure: 'server',
-        correlationId: 'corr-7',
-      }),
+      expect(logs.warnings).toContainEqual([
+        '[library] featuring explore search failed',
+        { status: 503, code: 'discovery_down', failure: 'server', correlationId: 'corr-7' },
+      ]),
     );
   });
 
@@ -121,7 +111,7 @@ describe('a failed "Explore artist" search', () => {
         ['Search failed', 'Could not search for Guest Star. Please try again.'],
       ]),
     );
-    expect(loggedText()).not.toContain(SECRET);
+    expect(logs.text()).not.toContain(SECRET);
   });
 
   it('asks the user to sign in again when the search is refused for auth', async () => {
@@ -160,8 +150,7 @@ describe('a failed "Explore artist" search', () => {
         saveHistory: false,
       }),
     );
-    expect(warnSpy).not.toHaveBeenCalled();
-    expect(warn).not.toHaveBeenCalled();
+    expect(logs.warnings).toEqual([]);
     expect(dialogs.alerts).toEqual([]);
   });
 });
@@ -173,13 +162,11 @@ describe('a failed featuring load', () => {
 
     await waitFor(() => expect(screen.getByText("Couldn't load tracks.")).toBeTruthy());
 
-    expect(warn).toHaveBeenCalledWith('[library] featuring query failed', {
-      key: 'name',
-      status: 500,
-      failure: 'server',
-      correlationId: 'corr-9',
-    });
-    expect(loggedText()).not.toContain(SECRET);
+    expect(logs.warnings).toContainEqual([
+      '[library] featuring query failed',
+      { key: 'name', status: 500, failure: 'server', correlationId: 'corr-9' },
+    ]);
+    expect(logs.text()).not.toContain(SECRET);
   });
 
   it('classifies an unreachable API as a network failure', async () => {
@@ -187,10 +174,10 @@ describe('a failed featuring load', () => {
     render(<FeaturingScreen />, { wrapper });
 
     await waitFor(() =>
-      expect(warn).toHaveBeenCalledWith('[library] featuring query failed', {
-        key: 'name',
-        failure: 'network',
-      }),
+      expect(logs.warnings).toContainEqual([
+        '[library] featuring query failed',
+        { key: 'name', failure: 'network' },
+      ]),
     );
   });
 
@@ -202,8 +189,7 @@ describe('a failed featuring load', () => {
         expect.objectContaining({ name: 'Guest Star' }),
       ),
     );
-    expect(warnSpy).not.toHaveBeenCalled();
-    expect(warn).not.toHaveBeenCalled();
+    expect(logs.warnings).toEqual([]);
   });
 });
 

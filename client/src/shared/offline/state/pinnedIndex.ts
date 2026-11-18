@@ -9,6 +9,7 @@ import {
   type StoredFile,
 } from '@shared/files';
 import { isSafeId, parseTrackId, type TrackId } from '@shared/catalog';
+import { warn } from '@shared/log';
 
 export type PinnedEntry =
   | { trackId: TrackId; status: 'ready'; uri: string; version?: string }
@@ -126,7 +127,7 @@ function narrowIndex(parsed: Record<string, unknown>): Record<string, PinnedEntr
     if (entry === null) dropped += 1;
     else entries[trackId] = entry;
   }
-  if (dropped > 0) console.warn(`[offline] dropped ${dropped} malformed pinned entries at load`);
+  if (dropped > 0) warn(`[offline] dropped ${dropped} malformed pinned entries at load`);
   return entries;
 }
 
@@ -134,7 +135,7 @@ export function loadIndex(): Record<string, PinnedEntry> {
   const read = readVersionedEntries('[offline]', INDEX_FILE, offlineDir, INDEX_SCHEMA);
   if (read.status !== 'read') return {};
   if (!isPlainObject(read.entries)) {
-    console.warn(`[offline] ${INDEX_FILE} is not a pinned index; treating it as empty`);
+    warn(`[offline] ${INDEX_FILE} is not a pinned index; treating it as empty`);
     return {};
   }
   return narrowIndex(read.entries);
@@ -166,7 +167,7 @@ export function saveIndex(entries: Record<string, PinnedEntry>): void {
     const document = { schemaVersion: INDEX_SCHEMA_VERSION, entries };
     writeDocumentAtomically(offlineDir(), INDEX_FILE, JSON.stringify(document));
   } catch (error) {
-    console.warn('[offline] failed to persist pinned index; keeping in-memory only', {
+    warn('[offline] failed to persist pinned index; keeping in-memory only', {
       file: INDEX_FILE,
       entryCount: Object.keys(entries).length,
       error,
@@ -187,13 +188,10 @@ export function writeOwner(userId: string): void {
   try {
     offlineFile(OWNER_FILE).write(userId);
   } catch (error) {
-    console.warn(
-      '[offline] failed to persist pinned owner; downloads will be cleared next launch',
-      {
-        file: OWNER_FILE,
-        userId,
-        error,
-      },
-    );
+    warn('[offline] failed to persist pinned owner; downloads will be cleared next launch', {
+      file: OWNER_FILE,
+      userId,
+      error,
+    });
   }
 }
