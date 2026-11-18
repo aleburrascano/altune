@@ -1,19 +1,16 @@
-import type * as discovery from '@shared/apiClient/discovery';
-import type * as enrichment from '@shared/apiClient/enrichment';
-import type * as library from '@shared/apiClient/library';
-import type * as tracks from '@shared/apiClient/tracks';
+import type * as apiClient from '@shared/apiClient';
 
 export interface DetailPort {
-  searchDiscovery: typeof discovery.searchDiscovery;
-  getEnrichment: typeof enrichment.getEnrichment;
-  getLastFmEnrichment: typeof enrichment.getLastFmEnrichment;
-  getDeezerEnrichment: typeof enrichment.getDeezerEnrichment;
-  getAlbumTracks: typeof enrichment.getAlbumTracks;
-  getRelatedTracks: typeof enrichment.getRelatedTracks;
-  getArtistContent: typeof enrichment.getArtistContent;
-  getUnreleasedTracks: typeof enrichment.getUnreleasedTracks;
-  createTrack: typeof tracks.createTrack;
-  getTracks: typeof tracks.getTracks;
-  getLibraryAlbums: typeof library.getLibraryAlbums;
+  searchDiscovery: typeof apiClient.searchDiscovery;
+  getEnrichment: typeof apiClient.getEnrichment;
+  getLastFmEnrichment: typeof apiClient.getLastFmEnrichment;
+  getDeezerEnrichment: typeof apiClient.getDeezerEnrichment;
+  getAlbumTracks: typeof apiClient.getAlbumTracks;
+  getRelatedTracks: typeof apiClient.getRelatedTracks;
+  getArtistContent: typeof apiClient.getArtistContent;
+  getUnreleasedTracks: typeof apiClient.getUnreleasedTracks;
+  createTrack: typeof apiClient.createTrack;
+  getTracks: typeof apiClient.getTracks;
+  getLibraryAlbums: typeof apiClient.getLibraryAlbums;
   warn(message: string, detail: Record<string, unknown>): void;
 }

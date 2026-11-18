@@ -1,7 +1,8 @@
 import { asTrackId } from '@shared/catalog';
 import type { CreateTrackRequest, ListTracksResponse, TrackResponse } from '@shared/catalog';
-import { httpDetailPort, createMemoryDetailPort } from '@features/detail';
-import type { DetailPort } from '@features/detail';
+import { createMemoryDetailPort } from '@features/detail';
+import { httpDetailPort } from '@features/detail/adapters/http/httpDetailPort';
+import type { DetailPort } from '@features/detail/ports/detailPort';
 import { signInTestUser } from '@testing/queryHarness';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
