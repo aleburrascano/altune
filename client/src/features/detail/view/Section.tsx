@@ -12,7 +12,7 @@ import {
   AsyncSection,
 } from '@shared/ui';
 import { sharedStyles } from '@features/detail/view/detailStyles';
-import type { ContentFailure } from '@features/detail/domain/contentStatus';
+import type { ContentFailure } from '@features/detail/core/contentStatus';
 
 export function Section({
   label,

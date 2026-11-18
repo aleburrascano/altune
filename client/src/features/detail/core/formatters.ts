@@ -3,7 +3,7 @@ import {
   albumExtras,
   extractFeaturedFromText,
   trackExtras,
-} from '@features/detail/domain/trackExtras';
+} from '@features/detail/core/trackExtras';
 
 export function trackSubtitleWithFeaturing(track: DiscoveryResult): string {
   const base = track.subtitle ?? '';

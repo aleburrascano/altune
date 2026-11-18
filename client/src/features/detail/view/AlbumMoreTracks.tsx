@@ -3,11 +3,11 @@ import { StyleSheet, View } from 'react-native';
 
 import { Button, Text, spacing } from '@shared/ui';
 import type { DiscoveryResult } from '@shared/catalog';
-import { type ContentFailure } from '@features/detail/domain/contentStatus';
+import { type ContentFailure } from '@features/detail/core/contentStatus';
 import { type LastBatch } from '@features/detail/view/useAlbumSaveAll';
 import { type AlbumDetailState } from '@features/detail/view/useAlbumDetailState';
 
-import { trackSubtitleWithFeaturing } from '@features/detail/ui/formatters';
+import { trackSubtitleWithFeaturing } from '@features/detail/core/formatters';
 import { AlbumTrackRow } from '@features/detail/view/AlbumTrackRow';
 import { CollapsibleSectionHeader } from '@features/detail/view/CollapsibleSectionHeader';
 import { SectionError } from '@features/detail/view/Section';

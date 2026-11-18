@@ -8,11 +8,11 @@ import {
   featuringHref,
   unreleasedHref,
 } from '@features/detail/domain/detailNavigation';
-import type { UnreleasedWhere } from '@features/detail/domain/unreleasedView';
-import { resolveEntityQuery } from '@features/detail/domain/resolveEntityQuery';
+import type { UnreleasedWhere } from '@features/detail/core/unreleasedView';
+import { resolveEntityQuery } from '@features/detail/core/resolveEntityQuery';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
-import { useDetailFetchEnabled } from '@features/detail/hooks/useDetailFetchGate';
+import { useDetailFetchEnabled } from '@features/detail/core/useDetailFetchGate';
 
 export function useOpenDetail(detailRoute: DetailRoute): (picked: DiscoveryResult) => void {
   const navigator = useNavigator();

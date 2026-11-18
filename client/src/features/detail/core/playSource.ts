@@ -5,8 +5,8 @@ import {
   type PlaybackContextValue,
 } from '@shared/playback';
 
-import type { TrackExtras } from '@features/detail/domain/trackExtras';
-import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
+import type { TrackExtras } from '@features/detail/core/trackExtras';
+import type { OwnedTrack } from '@features/detail/core/ownedTrack';
 
 export function resolvePlaySource(
   te: TrackExtras,

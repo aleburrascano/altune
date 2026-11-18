@@ -12,9 +12,9 @@ import {
 } from '@features/detail/view/useAlbumDetailState';
 import type { DetailRoute } from '@features/detail/domain/detailNavigation';
 
-import { albumYear } from '@features/detail/ui/formatters';
+import { albumYear } from '@features/detail/core/formatters';
 import { DetailFacts } from '@features/detail/view/DetailFacts';
-import { buildAlbumFacts } from '@features/detail/ui/buildDetailFacts';
+import { buildAlbumFacts } from '@features/detail/core/buildDetailFacts';
 import { AlbumTrackList } from '@features/detail/view/AlbumTrackList';
 import { DetailActions } from '@features/detail/view/DetailActions';
 import { DetailScaffold, type DetailChrome } from '@features/detail/view/DetailScaffold';

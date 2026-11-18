@@ -18,9 +18,9 @@ import {
   borderWidth,
 } from '@shared/ui';
 import type { DiscoveryResult } from '@shared/catalog';
-import { albumExtras } from '@features/detail/domain/trackExtras';
+import { albumExtras } from '@features/detail/core/trackExtras';
 import { SECTION_CAP } from '@features/detail/view/useDiscographyFilter';
-import { albumYear } from '@features/detail/ui/formatters';
+import { albumYear } from '@features/detail/core/formatters';
 import {
   DETAIL_GUTTER,
   DISCOGRAPHY_CARD_SIZE,

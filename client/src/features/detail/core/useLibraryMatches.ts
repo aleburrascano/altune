@@ -5,8 +5,8 @@ import type { TrackResponse, DiscoveryResult } from '@shared/catalog';
 import { libraryKeys } from '@shared/query';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
-import { normalizeForCompare } from '@features/detail/domain/normalizeForCompare';
-import { DETAIL_LIST_CAP } from '@features/detail/domain/contentStatus';
+import { normalizeForCompare } from '@features/detail/core/normalizeForCompare';
+import { DETAIL_LIST_CAP } from '@features/detail/core/contentStatus';
 
 const LOOKUP_LIMIT = 200;
 const LOOKUP_MAX_PAGES = 5;

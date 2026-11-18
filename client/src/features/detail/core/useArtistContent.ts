@@ -12,15 +12,15 @@ import {
   DETAIL_LIST_CAP,
   hasDegradedStatus,
   type ContentFailure,
-} from '@features/detail/domain/contentStatus';
-import { recordContentFetchOutcome } from '@features/detail/domain/detailHealth';
+} from '@features/detail/core/contentStatus';
+import { recordContentFetchOutcome } from '@features/detail/core/detailHealth';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
 import {
   useDetailFetchEnabled,
   useGatedRefetch,
   useContentFetchRetry,
-} from '@features/detail/hooks/useDetailFetchGate';
+} from '@features/detail/core/useDetailFetchGate';
 
 type ContentFetchContext = {
   provider: string;

@@ -13,9 +13,9 @@ import {
 } from '@features/detail/view/useArtistDetailState';
 import type { DetailRoute } from '@features/detail/domain/detailNavigation';
 
-import { compactCount } from '@features/detail/ui/formatters';
+import { compactCount } from '@features/detail/core/formatters';
 import { DetailFacts } from '@features/detail/view/DetailFacts';
-import { buildArtistFacts } from '@features/detail/ui/buildDetailFacts';
+import { buildArtistFacts } from '@features/detail/core/buildDetailFacts';
 import { AsyncListSection, Section } from '@features/detail/view/Section';
 import { AlbumCardsSkeleton } from '@features/detail/view/DetailSkeleton';
 import { ArtistExploreDiscography } from '@features/detail/view/ArtistExploreDiscography';

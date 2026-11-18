@@ -1,18 +1,18 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import type { DiscoveryResult } from '@shared/catalog';
 import { trackToDiscoveryResult } from '@shared/catalog';
-import { type ContentFailure } from '@features/detail/domain/contentStatus';
+import { type ContentFailure } from '@features/detail/core/contentStatus';
 import { type DetailRoute } from '@features/detail/domain/detailNavigation';
 import { useOpenDetail } from '@features/detail/hooks/useDetailNavigation';
-import { type OwnedTrack, type OwnedSplit } from '@features/detail/domain/ownedTrack';
+import { type OwnedTrack, type OwnedSplit } from '@features/detail/core/ownedTrack';
 import { useArtistContent } from '@features/detail/core/useArtistContent';
 import { useArtistDiscovery } from '@features/detail/view/useEntityDiscovery';
 import {
   useLibraryAlbumsForArtist,
   useLibraryTracksForArtist,
-} from '@features/detail/hooks/useLibraryMatches';
+} from '@features/detail/core/useLibraryMatches';
 import { useSaveTrack } from '@features/detail/view/useSaveTrack';
-import { useOwnedPlayback } from '@features/detail/hooks/useOwnedPlayback';
+import { useOwnedPlayback } from '@features/detail/core/useOwnedPlayback';
 
 export type ArtistDetailState = {
   hasSources: boolean;

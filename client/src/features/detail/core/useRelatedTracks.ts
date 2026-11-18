@@ -6,14 +6,14 @@ import {
   contentFailure,
   DETAIL_CONTENT_STALE_MS,
   type ContentFailure,
-} from '@features/detail/domain/contentStatus';
-import { fetchTallyingOutcome } from '@features/detail/domain/detailHealth';
+} from '@features/detail/core/contentStatus';
+import { fetchTallyingOutcome } from '@features/detail/core/detailHealth';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
 import {
   useDetailFetchEnabled,
   useContentFetchRetry,
-} from '@features/detail/hooks/useDetailFetchGate';
+} from '@features/detail/core/useDetailFetchGate';
 
 type UseRelatedTracksParams = {
   sources: DiscoverySource[];

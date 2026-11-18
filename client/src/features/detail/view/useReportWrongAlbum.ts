@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import type { DiscoveryResult } from '@shared/catalog';
 import { enqueueCritical } from '@shared/telemetry';
 
-import { trackExtras } from '@features/detail/domain/trackExtras';
+import { trackExtras } from '@features/detail/core/trackExtras';
 import { useDetailHandoff } from '@features/detail/view/useDetailHandoff';
 
 function wrongAlbumPayload(track: DiscoveryResult) {

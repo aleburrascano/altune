@@ -6,9 +6,9 @@ import { trackIdentityKey } from '@shared/acquisition';
 
 import { runBounded, type BatchOutcome } from '@shared/concurrency';
 
-import { toCreateTrackRequest, SAVE_ALL_CONCURRENCY } from '@features/detail/domain/saveTrack';
-import { trackExtras } from '@features/detail/domain/trackExtras';
-import { ownedFromTrackInfo } from '@features/detail/domain/ownedTrack';
+import { toCreateTrackRequest, SAVE_ALL_CONCURRENCY } from '@features/detail/core/saveTrack';
+import { trackExtras } from '@features/detail/core/trackExtras';
+import { ownedFromTrackInfo } from '@features/detail/core/ownedTrack';
 import type { useSaveTrack } from '@features/detail/view/useSaveTrack';
 
 function _albumExtras(track: DiscoveryResult, album: DiscoveryResult): DiscoveryResult['extras'] {

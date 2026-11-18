@@ -4,7 +4,7 @@ import type { DiscoveryResult } from '@shared/catalog';
 import { asyncView, AsyncSection, Text, spacing } from '@shared/ui';
 import type { AlbumDetailState } from '@features/detail/view/useAlbumDetailState';
 
-import { trackSubtitleWithFeaturing } from '@features/detail/ui/formatters';
+import { trackSubtitleWithFeaturing } from '@features/detail/core/formatters';
 import { AlbumMoreTracks } from '@features/detail/view/AlbumMoreTracks';
 import { AlbumTrackRow } from '@features/detail/view/AlbumTrackRow';
 import { TrackRowsSkeleton } from '@features/detail/view/DetailSkeleton';

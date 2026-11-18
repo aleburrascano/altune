@@ -3,9 +3,9 @@ import { StyleSheet, View } from 'react-native';
 
 import { Artwork, Tappable, Text, radius, spacing, formatDuration } from '@shared/ui';
 import type { DiscoveryResult } from '@shared/catalog';
-import { trackExtras } from '@features/detail/domain/trackExtras';
+import { trackExtras } from '@features/detail/core/trackExtras';
 import type { ArtistDetailState } from '@features/detail/view/useArtistDetailState';
-import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
+import type { OwnedTrack } from '@features/detail/core/ownedTrack';
 
 import { sharedStyles } from '@features/detail/view/detailStyles';
 import { AsyncListSection, Section } from '@features/detail/view/Section';

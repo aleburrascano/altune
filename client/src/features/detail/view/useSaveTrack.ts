@@ -41,12 +41,12 @@ import {
   saveControlState,
   type SaveState,
   toCreateTrackRequest,
-} from '@features/detail/domain/saveTrack';
+} from '@features/detail/core/saveTrack';
 import { useDetailHandoff } from '@features/detail/view/useDetailHandoff';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
-import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
-import { useRetryTrack, type RetryTrack } from '@features/detail/hooks/useRetryTrack';
+import type { OwnedTrack } from '@features/detail/core/ownedTrack';
+import { useRetryTrack, type RetryTrack } from '@features/detail/core/useRetryTrack';
 
 type SaveContext = { optimisticId: TrackId; identity: string | null };
 

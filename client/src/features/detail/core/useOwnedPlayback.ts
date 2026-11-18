@@ -2,7 +2,7 @@ import type { DiscoveryResult } from '@shared/catalog';
 import type { RetryEntryPoint } from '@shared/acquisition';
 import { useQueuePlayback } from '@shared/playback';
 
-import { trackExtras } from '@features/detail/domain/trackExtras';
+import { trackExtras } from '@features/detail/core/trackExtras';
 import {
   playButtonState,
   splitOwned,
@@ -10,15 +10,15 @@ import {
   type OwnedSplit,
   ownedFromTrackInfo,
   type OwnedTrack,
-} from '@features/detail/domain/ownedTrack';
+} from '@features/detail/core/ownedTrack';
 import {
   ownedRetryTrackId,
   saveControlInteractive,
   saveControlState,
   toCreateTrackRequest,
-} from '@features/detail/domain/saveTrack';
+} from '@features/detail/core/saveTrack';
 import { resolveOwnedTrackAtActionTime } from '@features/detail/core/useOwnedTrack';
-import { useRetryTrack } from '@features/detail/hooks/useRetryTrack';
+import { useRetryTrack } from '@features/detail/core/useRetryTrack';
 import type { SaveTrack } from '@features/detail/view/useSaveTrack';
 
 export type OwnedPlaybackContext = {
