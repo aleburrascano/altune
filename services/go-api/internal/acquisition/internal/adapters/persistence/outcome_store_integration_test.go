@@ -1,7 +1,7 @@
-package persistence
+package persistence_test
 
 import (
-	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"
@@ -48,10 +48,10 @@ func queryOutcomeRows(t *testing.T, pool *pgxpool.Pool, trackID string) []outcom
 func TestPgxOutcomeStore_RecordsFieldsAndServerTimestamp(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxOutcomeStore(pool)
+	store := acquisition.NewPgxOutcomeStore(pool)
 	ctx := context.Background()
 
-	cases := []ports.AcquisitionOutcome{
+	cases := []acquisition.AcquisitionOutcome{
 		{TrackID: uuid.NewString(), Outcome: "succeeded", Reason: "", ElapsedMs: 1200},
 		{TrackID: uuid.NewString(), Outcome: "failed", Reason: "no_match_found", ElapsedMs: 340},
 		{TrackID: uuid.NewString(), Outcome: "cancelled", Reason: "user-cancelled", ElapsedMs: 15},
@@ -83,12 +83,12 @@ func TestPgxOutcomeStore_RecordsFieldsAndServerTimestamp(t *testing.T) {
 func TestPgxOutcomeStore_RecordInsertsOneRowPerCall(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxOutcomeStore(pool)
+	store := acquisition.NewPgxOutcomeStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
 	for i := 0; i < 3; i++ {
-		if err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "succeeded", ElapsedMs: int64(i)}); err != nil {
+		if err := store.Record(ctx, acquisition.AcquisitionOutcome{TrackID: trackID, Outcome: "succeeded", ElapsedMs: int64(i)}); err != nil {
 			t.Fatalf("Record #%d = %v, want nil", i, err)
 		}
 	}
@@ -102,11 +102,11 @@ func TestPgxOutcomeStore_RecordInsertsOneRowPerCall(t *testing.T) {
 func TestPgxOutcomeStore_RejectsOutcomeOutsideTheThreeStates(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxOutcomeStore(pool)
+	store := acquisition.NewPgxOutcomeStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
-	err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "queued", ElapsedMs: 5})
+	err := store.Record(ctx, acquisition.AcquisitionOutcome{TrackID: trackID, Outcome: "queued", ElapsedMs: 5})
 	if err == nil {
 		t.Fatal("Record with an unrecognised outcome = nil, want an error from the CHECK constraint")
 	}
@@ -120,12 +120,12 @@ func TestPgxOutcomeStore_RejectsOutcomeOutsideTheThreeStates(t *testing.T) {
 func TestPgxOutcomeStore_RejectsNearMissOutcomeSpellings(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxOutcomeStore(pool)
+	store := acquisition.NewPgxOutcomeStore(pool)
 	ctx := context.Background()
 
 	for _, outcome := range []string{"", "Succeeded", "FAILED", "canceled", " succeeded", "succeeded "} {
 		trackID := uuid.NewString()
-		if err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: ports.JobState(outcome), ElapsedMs: 1}); err == nil {
+		if err := store.Record(ctx, acquisition.AcquisitionOutcome{TrackID: trackID, Outcome: acquisition.JobState(outcome), ElapsedMs: 1}); err == nil {
 			t.Errorf("Record(outcome=%q) = nil, want an error", outcome)
 		}
 		if rows := queryOutcomeRows(t, pool, trackID); len(rows) != 0 {
@@ -137,14 +137,14 @@ func TestPgxOutcomeStore_RejectsNearMissOutcomeSpellings(t *testing.T) {
 func TestPgxOutcomeStore_StoresLongAndHostileReasonVerbatim(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxOutcomeStore(pool)
+	store := acquisition.NewPgxOutcomeStore(pool)
 	ctx := context.Background()
 
 	long := strings.Repeat("no_match_found; ", 8192)
 	hostile := "it's \"quoted\"'); DROP TABLE acquisition_outcomes; -- 曲 🎵 \\n\t"
 	for _, reason := range []string{long, hostile} {
 		trackID := uuid.NewString()
-		if err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "failed", Reason: reason, ElapsedMs: 7}); err != nil {
+		if err := store.Record(ctx, acquisition.AcquisitionOutcome{TrackID: trackID, Outcome: "failed", Reason: reason, ElapsedMs: 7}); err != nil {
 			t.Fatalf("Record(reason of %d bytes) = %v, want nil", len(reason), err)
 		}
 		rows := queryOutcomeRows(t, pool, trackID)
@@ -160,12 +160,12 @@ func TestPgxOutcomeStore_StoresLongAndHostileReasonVerbatim(t *testing.T) {
 func TestPgxOutcomeStore_StoresElapsedAtZeroAndInt64Max(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxOutcomeStore(pool)
+	store := acquisition.NewPgxOutcomeStore(pool)
 	ctx := context.Background()
 
 	for _, elapsed := range []int64{0, 9223372036854775807} {
 		trackID := uuid.NewString()
-		if err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "succeeded", ElapsedMs: elapsed}); err != nil {
+		if err := store.Record(ctx, acquisition.AcquisitionOutcome{TrackID: trackID, Outcome: "succeeded", ElapsedMs: elapsed}); err != nil {
 			t.Fatalf("Record(elapsedMs=%d) = %v, want nil", elapsed, err)
 		}
 		rows := queryOutcomeRows(t, pool, trackID)
@@ -178,12 +178,12 @@ func TestPgxOutcomeStore_StoresElapsedAtZeroAndInt64Max(t *testing.T) {
 func TestPgxOutcomeStore_CancelledContextReturnsErrorAndWritesNothing(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxOutcomeStore(pool)
+	store := acquisition.NewPgxOutcomeStore(pool)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	trackID := uuid.NewString()
 
-	err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "succeeded", ElapsedMs: 3})
+	err := store.Record(ctx, acquisition.AcquisitionOutcome{TrackID: trackID, Outcome: "succeeded", ElapsedMs: 3})
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("Record with a cancelled context = %v, want an error wrapping context.Canceled", err)
 	}
@@ -195,10 +195,10 @@ func TestPgxOutcomeStore_CancelledContextReturnsErrorAndWritesNothing(t *testing
 func TestPgxOutcomeStore_ClosedPoolReturnsError(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxOutcomeStore(pool)
+	store := acquisition.NewPgxOutcomeStore(pool)
 	pool.Close()
 
-	err := store.Record(context.Background(), ports.AcquisitionOutcome{TrackID: uuid.NewString(), Outcome: "failed", ElapsedMs: 1})
+	err := store.Record(context.Background(), acquisition.AcquisitionOutcome{TrackID: uuid.NewString(), Outcome: "failed", ElapsedMs: 1})
 	if err == nil {
 		t.Error("Record on a closed pool = nil, want an error")
 	}
@@ -207,11 +207,11 @@ func TestPgxOutcomeStore_ClosedPoolReturnsError(t *testing.T) {
 func TestPgxOutcomeStore_RejectsNegativeElapsedMs(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxOutcomeStore(pool)
+	store := acquisition.NewPgxOutcomeStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
-	err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "succeeded", ElapsedMs: -1})
+	err := store.Record(ctx, acquisition.AcquisitionOutcome{TrackID: trackID, Outcome: "succeeded", ElapsedMs: -1})
 	if err == nil {
 		t.Fatal("Record with elapsedMs=-1 = nil, want an error from the CHECK constraint")
 	}
@@ -225,10 +225,10 @@ func TestPgxOutcomeStore_RejectsNegativeElapsedMs(t *testing.T) {
 func TestPgxOutcomeStore_RejectsEmptyTrackID(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxOutcomeStore(pool)
+	store := acquisition.NewPgxOutcomeStore(pool)
 	ctx := context.Background()
 
-	err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: "", Outcome: "succeeded", ElapsedMs: 1})
+	err := store.Record(ctx, acquisition.AcquisitionOutcome{TrackID: "", Outcome: "succeeded", ElapsedMs: 1})
 	if err == nil {
 		t.Fatal("Record with an empty TrackID = nil, want an error from the CHECK constraint")
 	}
@@ -242,7 +242,7 @@ func TestPgxOutcomeStore_RejectsEmptyTrackID(t *testing.T) {
 func TestPgxOutcomeStore_ConcurrentRecordsEachLandOneRow(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxOutcomeStore(pool)
+	store := acquisition.NewPgxOutcomeStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
@@ -252,7 +252,7 @@ func TestPgxOutcomeStore_ConcurrentRecordsEachLandOneRow(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			errs <- store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "succeeded", ElapsedMs: int64(i)})
+			errs <- store.Record(ctx, acquisition.AcquisitionOutcome{TrackID: trackID, Outcome: "succeeded", ElapsedMs: int64(i)})
 		}(i)
 	}
 	wg.Wait()
@@ -271,7 +271,7 @@ func TestPgxOutcomeStore_ConcurrentRecordsEachLandOneRow(t *testing.T) {
 func TestPgxOutcomeStore_PruneDeletesOutcomesOlderThanRetentionAndKeepsNewer(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxOutcomeStore(pool)
+	store := acquisition.NewPgxOutcomeStore(pool)
 	ctx := context.Background()
 	oldTrack := insertFailedTrack(t, pool).ID.UUID().String()
 	newTrack := insertFailedTrack(t, pool).ID.UUID().String()
@@ -302,15 +302,15 @@ func TestPgxOutcomeStore_PruneDeletesOutcomesOlderThanRetentionAndKeepsNewer(t *
 func TestPgxOutcomeStore_RecordsStageTimesAndFileFacts(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxOutcomeStore(pool)
+	store := acquisition.NewPgxOutcomeStore(pool)
 	trackID := uuid.NewString()
 
-	err := store.Record(context.Background(), ports.AcquisitionOutcome{
+	err := store.Record(context.Background(), acquisition.AcquisitionOutcome{
 		TrackID: trackID, Outcome: "succeeded", ElapsedMs: 9000,
 		StageMs:    map[string]int64{"search": 800, "download.preview": 4100},
 		SourceHost: "music.youtube.com",
-		Source:     ports.SourceFormat{ID: "18", Codec: "mp4a.40.2"},
-		Stored:     ports.StoredFile{Bytes: 7_340_032, Codec: "mp3"},
+		Source:     acquisition.SourceFormat{ID: "18", Codec: "mp4a.40.2"},
+		Stored:     acquisition.StoredFile{Bytes: 7_340_032, Codec: "mp3"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -341,19 +341,19 @@ func TestPgxOutcomeStore_RecordsStageTimesAndFileFacts(t *testing.T) {
 func TestPgxOutcomeStore_RecordsJobKindRunProvenanceAndLengths(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxOutcomeStore(pool)
+	store := acquisition.NewPgxOutcomeStore(pool)
 	ctx := context.Background()
 	full := uuid.NewString()
 	bare := uuid.NewString()
 
-	err := store.Record(ctx, ports.AcquisitionOutcome{
-		TrackID: full, Outcome: "succeeded", Kind: ports.JobKindReplace, Run: 2, Provenance: "corroborated",
+	err := store.Record(ctx, acquisition.AcquisitionOutcome{
+		TrackID: full, Outcome: "succeeded", Kind: acquisition.JobKindReplace, Run: 2, Provenance: "corroborated",
 		Confidence: 0.87, SourceKey: "yt:abc", TargetSeconds: 215.5, MeasuredSeconds: 214.9,
 	})
 	if err != nil {
 		t.Fatalf("Record full = %v, want nil", err)
 	}
-	if err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: bare, Outcome: "failed"}); err != nil {
+	if err := store.Record(ctx, acquisition.AcquisitionOutcome{TrackID: bare, Outcome: "failed"}); err != nil {
 		t.Fatalf("Record bare = %v, want nil", err)
 	}
 
@@ -382,12 +382,12 @@ func TestPgxOutcomeStore_RecordsJobKindRunProvenanceAndLengths(t *testing.T) {
 func TestPgxOutcomeStore_PruneRemovesRowsOfADeletedTrack(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxOutcomeStore(pool)
+	store := acquisition.NewPgxOutcomeStore(pool)
 	ctx := context.Background()
 	kept := insertFailedTrack(t, pool).ID.UUID().String()
 	deleted := insertFailedTrack(t, pool).ID.UUID().String()
 	for _, trackID := range []string{kept, deleted} {
-		if err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "failed", ElapsedMs: 10}); err != nil {
+		if err := store.Record(ctx, acquisition.AcquisitionOutcome{TrackID: trackID, Outcome: "failed", ElapsedMs: 10}); err != nil {
 			t.Fatalf("Record(...) = %v, want nil", err)
 		}
 	}
@@ -414,7 +414,7 @@ func TestPgxOutcomeStore_PruneRemovesRowsOfADeletedTrack(t *testing.T) {
 func TestPgxOutcomeStore_PruneKeepsAnOutcomeStoredUnderTheUppercaseIDOfALiveTrack(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxOutcomeStore(pool)
+	store := acquisition.NewPgxOutcomeStore(pool)
 	ctx := context.Background()
 	live := insertFailedTrack(t, pool).ID.UUID().String()
 	upper := strings.ToUpper(live)
@@ -436,11 +436,11 @@ func TestPgxOutcomeStore_PruneKeepsAnOutcomeStoredUnderTheUppercaseIDOfALiveTrac
 func TestPgxOutcomeStore_PruneSucceedsWhenATrackIDIsNotAUUID(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxOutcomeStore(pool)
+	store := acquisition.NewPgxOutcomeStore(pool)
 	ctx := context.Background()
 	live := insertFailedTrack(t, pool).ID.UUID().String()
 	for _, trackID := range []string{"not-a-uuid-" + uuid.NewString(), live} {
-		if err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "failed", ElapsedMs: 10}); err != nil {
+		if err := store.Record(ctx, acquisition.AcquisitionOutcome{TrackID: trackID, Outcome: "failed", ElapsedMs: 10}); err != nil {
 			t.Fatalf("Record(...) = %v, want nil", err)
 		}
 	}
@@ -457,11 +457,11 @@ func TestPgxOutcomeStore_PruneSucceedsWhenATrackIDIsNotAUUID(t *testing.T) {
 func TestPgxOutcomeStore_PruneKeepsRowsOfATrackDeletedAndRecreatedWithTheSameID(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxOutcomeStore(pool)
+	store := acquisition.NewPgxOutcomeStore(pool)
 	ctx := context.Background()
 	track := insertFailedTrack(t, pool)
 	trackID := track.ID.UUID().String()
-	if err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "failed", ElapsedMs: 10}); err != nil {
+	if err := store.Record(ctx, acquisition.AcquisitionOutcome{TrackID: trackID, Outcome: "failed", ElapsedMs: 10}); err != nil {
 		t.Fatalf("Record(...) = %v, want nil", err)
 	}
 	if _, err := pool.Exec(ctx, `DELETE FROM tracks WHERE id = $1`, track.ID.UUID()); err != nil {
@@ -485,7 +485,7 @@ func TestPgxOutcomeStore_PruneKeepsRowsOfATrackDeletedAndRecreatedWithTheSameID(
 func TestPgxOutcomeStore_PruneRemovesOrphansFillingExactlyTwoBatchesAndKeepsLiveRows(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxOutcomeStore(pool)
+	store := acquisition.NewPgxOutcomeStore(pool)
 	ctx := context.Background()
 	live := insertFailedTrack(t, pool).ID.UUID().String()
 	deleted := insertFailedTrack(t, pool)
@@ -494,7 +494,7 @@ func TestPgxOutcomeStore_PruneRemovesOrphansFillingExactlyTwoBatchesAndKeepsLive
 		if _, err := pool.Exec(ctx,
 			`INSERT INTO acquisition_outcomes (track_id, outcome, reason, elapsed_ms, completed_at)
 			 SELECT $1, 'failed', 'no_match', 10, now() FROM generate_series(1, $2) g`,
-			trackID, 2*pruneBatchSize); err != nil {
+			trackID, 2*storePruneBatch); err != nil {
 			t.Fatalf("seed outcomes: %v", err)
 		}
 	}
@@ -509,15 +509,15 @@ func TestPgxOutcomeStore_PruneRemovesOrphansFillingExactlyTwoBatchesAndKeepsLive
 	if got := queryOutcomeRows(t, pool, deletedID); len(got) != 0 {
 		t.Errorf("outcomes of the deleted track after Prune = %d, want 0", len(got))
 	}
-	if got := queryOutcomeRows(t, pool, live); len(got) != 2*pruneBatchSize {
-		t.Errorf("outcomes of the live track after Prune = %d, want %d", len(got), 2*pruneBatchSize)
+	if got := queryOutcomeRows(t, pool, live); len(got) != 2*storePruneBatch {
+		t.Errorf("outcomes of the live track after Prune = %d, want %d", len(got), 2*storePruneBatch)
 	}
 }
 
 func TestPgxOutcomeStore_PruneCountsAnOrphanOlderThanRetentionOnce(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
-	store := NewPgxOutcomeStore(pool)
+	store := acquisition.NewPgxOutcomeStore(pool)
 	ctx := context.Background()
 	if _, err := store.Prune(ctx, time.Now()); err != nil {
 		t.Fatalf("draining Prune(...) = %v, want nil", err)
