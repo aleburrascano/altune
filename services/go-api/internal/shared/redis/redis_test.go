@@ -1,6 +1,7 @@
-package redis
+package redis_test
 
 import (
+	"altune/go-api/internal/shared/redis"
 	"bytes"
 	"context"
 	"log/slog"
@@ -22,7 +23,7 @@ func TestNewClient_InvalidURLDoesNotLogCredentials(t *testing.T) {
 			slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
 			defer slog.SetDefault(prev)
 
-			if client := NewClient(context.Background(), rawURL, 0); client != nil {
+			if client := redis.NewClient(context.Background(), rawURL, 0); client != nil {
 				t.Fatalf("expected nil client for unparseable URL")
 			}
 
@@ -46,18 +47,18 @@ func TestNewClient_PinsPoolSizeFromConfiguration(t *testing.T) {
 		want     int
 	}{
 		{name: "configured", poolSize: 33, want: 33},
-		{name: "zero falls back", poolSize: 0, want: defaultPoolSize},
-		{name: "negative falls back", poolSize: -1, want: defaultPoolSize},
+		{name: "zero falls back", poolSize: 0, want: 50},
+		{name: "negative falls back", poolSize: -1, want: 50},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			client := NewClient(context.Background(), "redis://127.0.0.1:1/0", tc.poolSize)
+			client := redis.NewClient(context.Background(), "redis://127.0.0.1:1/0", tc.poolSize)
 			if client == nil {
 				t.Fatal("expected a client for a parseable URL")
 			}
 			t.Cleanup(func() { _ = client.Close() })
 
-			if got := ReadPoolStats(client).PoolSize; got != tc.want {
+			if got := redis.ReadPoolStats(client).PoolSize; got != tc.want {
 				t.Fatalf("PoolSize = %d, want %d", got, tc.want)
 			}
 		})
@@ -65,7 +66,7 @@ func TestNewClient_PinsPoolSizeFromConfiguration(t *testing.T) {
 }
 
 func TestReadPoolStats_NilClientReadsAsZero(t *testing.T) {
-	if stats := ReadPoolStats(nil); stats != (PoolStats{}) {
+	if stats := redis.ReadPoolStats(nil); stats != (redis.PoolStats{}) {
 		t.Fatalf("ReadPoolStats(nil) = %+v, want zero value", stats)
 	}
 }
