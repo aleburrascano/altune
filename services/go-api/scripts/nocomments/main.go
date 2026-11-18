@@ -426,7 +426,74 @@ func collectTargets(root string) ([]target, error) {
 	if walkErr != nil {
 		return nil, walkErr
 	}
-	return targets, nil
+	return withoutIgnored(root, targets)
+}
+
+func withoutIgnored(root string, targets []target) ([]target, error) {
+	ignored, err := gitIgnored(root, targets)
+	if err != nil {
+		return nil, err
+	}
+	kept := targets[:0]
+	for _, t := range targets {
+		if !ignored[t.read] {
+			kept = append(kept, t)
+		}
+	}
+	return kept, nil
+}
+
+func gitIgnored(root string, targets []target) (map[string]bool, error) {
+	absolute, paths, err := absolutePaths(targets)
+	if err != nil {
+		return nil, err
+	}
+	listed, err := checkIgnore(root, paths)
+	if err != nil {
+		return nil, err
+	}
+	ignored := map[string]bool{}
+	for _, abs := range strings.Split(listed, "\x00") {
+		if abs != "" {
+			ignored[absolute[abs]] = true
+		}
+	}
+	return ignored, nil
+}
+
+func absolutePaths(targets []target) (map[string]string, io.Reader, error) {
+	absolute := map[string]string{}
+	var paths bytes.Buffer
+	for _, t := range targets {
+		abs, err := filepath.Abs(t.read)
+		if err != nil {
+			return nil, nil, err
+		}
+		absolute[abs] = t.read
+		paths.WriteString(abs + "\x00")
+	}
+	return absolute, &paths, nil
+}
+
+func checkIgnore(root string, paths io.Reader) (string, error) {
+	cmd := exec.Command("git", "check-ignore", "--stdin", "-z")
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	cmd.Stdin = paths
+	var out, errOut bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &errOut
+	err := cmd.Run()
+	var exit *exec.ExitError
+	switch {
+	case err == nil:
+		return out.String(), nil
+	case errors.As(err, &exit) && exit.ExitCode() == 1:
+		return "", nil
+	case strings.Contains(errOut.String(), "not a git repository"):
+		return "", nil
+	}
+	return "", fmt.Errorf("git check-ignore: %w: %s", err, errOut.String())
 }
 
 func collectFileTarget(root string) ([]target, error) {
