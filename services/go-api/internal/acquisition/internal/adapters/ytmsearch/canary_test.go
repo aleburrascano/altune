@@ -1,4 +1,4 @@
-package ytmsearch
+package ytmsearch_test
 
 import (
 	"context"

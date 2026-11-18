@@ -1,73 +1,87 @@
-package ports
+package ports_test
 
 import (
-	acqdomain "altune/go-api/internal/acquisition/domain"
+	"altune/go-api/internal/acquisition"
+	"context"
 	"errors"
 	"fmt"
 	"testing"
 )
 
-func collectBesideFailure(failure error) ([]AudioCandidate, error) {
-	run := func(i int) ([]AudioCandidate, error) {
-		if i == 0 {
-			return nil, failure
-		}
-		return nil, nil
-	}
-	return CollectCandidates(2, run,
-		func(int, []AudioCandidate) {},
-		func(int, error) {},
-		func(e error) error { return e })
+type stubSource struct {
+	name       acquisition.SourceName
+	candidates []acquisition.AudioCandidate
+	err        error
 }
 
-func TestCollectCandidates_EmptyMergeBesideUnavailableFailureIsUnavailable(t *testing.T) {
-	got, err := collectBesideFailure(&acqdomain.SourceUnavailableError{Source: "yt", Err: errors.New("429")})
+func (s stubSource) Name() acquisition.SourceName { return s.name }
 
-	if !acqdomain.IsSourceUnavailable(err) || len(got) != 0 {
+func (s stubSource) Find(context.Context, acquisition.FindRequest) ([]acquisition.AudioCandidate, error) {
+	return s.candidates, s.err
+}
+
+func (s stubSource) Fetch(context.Context, acquisition.AudioCandidate, string) (acquisition.FetchedAudio, error) {
+	return acquisition.FetchedAudio{}, errors.New("stubSource does not fetch")
+}
+
+func unavailable() error {
+	return &acquisition.SourceUnavailableError{Source: "yt", Err: errors.New("429")}
+}
+
+func isSourceUnavailable(err error) bool {
+	var u *acquisition.SourceUnavailableError
+	return errors.As(err, &u)
+}
+
+func findBesideFailure(failure error) ([]acquisition.AudioCandidate, error) {
+	return acquisition.NewSourceRegistry(stubSource{name: "a", err: failure}, stubSource{name: "b"}).
+		Find(context.Background(), acquisition.FindRequest{Title: "t", Artist: "a"})
+}
+
+func TestFind_EmptyMergeBesideUnavailableFailureIsUnavailable(t *testing.T) {
+	got, err := findBesideFailure(unavailable())
+
+	if !isSourceUnavailable(err) || len(got) != 0 {
 		t.Fatalf("got %v, %v; want empty and a source-unavailable error", got, err)
 	}
 }
 
-func TestCollectCandidates_EmptyMergeBesidePlainFailureIsDegraded(t *testing.T) {
+func TestFind_EmptyMergeBesidePlainFailureIsDegraded(t *testing.T) {
 	parseErr := errors.New("parse")
 
-	_, err := collectBesideFailure(parseErr)
+	_, err := findBesideFailure(parseErr)
 
-	if !errors.Is(err, acqdomain.ErrSearchDegraded) || !errors.Is(err, parseErr) {
+	if !errors.Is(err, acquisition.ErrSearchDegraded) || !errors.Is(err, parseErr) {
 		t.Fatalf("err = %v, want ErrSearchDegraded wrapping the parse failure", err)
 	}
 }
 
-func TestCollectCandidatesReportingOutage_KeepsCandidatesBesideAnUnavailableFailure(t *testing.T) {
-	want := AudioCandidate{URL: "https://example.com/a"}
-	run := func(i int) ([]AudioCandidate, error) {
-		if i == 0 {
-			return nil, &acqdomain.SourceUnavailableError{Source: "yt", Err: errors.New("429")}
-		}
-		return []AudioCandidate{want}, nil
-	}
+func TestFindReportingOutage_KeepsCandidatesBesideAnUnavailableFailure(t *testing.T) {
+	want := acquisition.AudioCandidate{URL: "https://example.com/a"}
+	registry := acquisition.NewSourceRegistry(
+		stubSource{name: "a", err: unavailable()},
+		stubSource{name: "b", candidates: []acquisition.AudioCandidate{want}})
 
-	got, outage, err := CollectCandidatesReportingOutage(2, run,
-		func(int, []AudioCandidate) {}, func(int, error) {}, func(e error) error { return e })
+	got, err := registry.FindReportingOutage(context.Background(), acquisition.FindRequest{Title: "t", Artist: "a"})
 
-	if err != nil || len(got) != 1 || got[0].URL != want.URL || !acqdomain.IsSourceUnavailable(outage) {
-		t.Fatalf("got %v, outage %v, err %v; want the candidate and the outage", got, outage, err)
+	if err != nil || len(got.Candidates) != 1 || got.Candidates[0].URL != want.URL || !isSourceUnavailable(got.Outage) {
+		t.Fatalf("got %+v, err %v; want the candidate and the outage", got, err)
 	}
 }
 
-func TestCollectCandidatesReportingOutage_MergesEverySource(t *testing.T) {
-	run := func(i int) ([]AudioCandidate, error) {
-		out := make([]AudioCandidate, 0, 5)
+func TestFindReportingOutage_MergesEverySource(t *testing.T) {
+	sources := make([]acquisition.AudioSource, 0, 3)
+	for i := range 3 {
+		out := make([]acquisition.AudioCandidate, 0, 5)
 		for j := range 5 {
-			out = append(out, AudioCandidate{URL: fmt.Sprintf("https://example.com/%d/%d", i, j)})
+			out = append(out, acquisition.AudioCandidate{URL: fmt.Sprintf("https://example.com/%d/%d", i, j)})
 		}
-		return out, nil
+		sources = append(sources, stubSource{name: acquisition.SourceName(fmt.Sprint(i)), candidates: out})
 	}
 
-	got, outage, err := CollectCandidatesReportingOutage(3, run,
-		func(int, []AudioCandidate) {}, func(int, error) {}, func(e error) error { return e })
+	got, err := acquisition.NewSourceRegistry(sources...).FindReportingOutage(context.Background(), acquisition.FindRequest{Title: "t", Artist: "a"})
 
-	if err != nil || outage != nil || len(got) != 15 {
-		t.Fatalf("got %d candidates, outage %v, err %v; want all 15 from 3 sources", len(got), outage, err)
+	if err != nil || got.Outage != nil || len(got.Candidates) != 15 {
+		t.Fatalf("got %d candidates, outage %v, err %v; want all 15 from 3 sources", len(got.Candidates), got.Outage, err)
 	}
 }

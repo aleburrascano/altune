@@ -1,20 +1,60 @@
-package ytdlp
+package ytdlp_test
 
 import (
-	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition"
+	"context"
+	"os"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strings"
 	"testing"
 )
 
-func TestSearchQueries(t *testing.T) {
+var searchSpec = regexp.MustCompile(`^\w+search\d*:(.+)$`)
+
+func fakeYtDlpLoggingArgs(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	log := filepath.Join(dir, "args.log")
+	script := "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\" >> '" + log + "'; done\n"
+	if err := os.WriteFile(filepath.Join(dir, "yt-dlp"), []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake yt-dlp: %v", err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return log
+}
+
+func searchedQueries(t *testing.T, req acquisition.FindRequest) []string {
+	t.Helper()
+	log := fakeYtDlpLoggingArgs(t)
+	source := acquisition.NewYtDlpSource(acquisition.NewYtDlpAudioSearcher("", "", ""))
+	if _, err := source.Find(context.Background(), req); err != nil {
+		t.Fatalf("Find: %v", err)
+	}
+	raw, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatalf("read yt-dlp args: %v", err)
+	}
+	var queries []string
+	for _, arg := range strings.Split(string(raw), "\n") {
+		if m := searchSpec.FindStringSubmatch(arg); m != nil && !slices.Contains(queries, m[1]) {
+			queries = append(queries, m[1])
+		}
+	}
+	return queries
+}
+
+func TestFind_SearchesYtDlpWithTheTracksQueries(t *testing.T) {
 	tests := []struct {
 		name        string
-		req         ports.FindRequest
+		req         acquisition.FindRequest
 		wantQueries []string
 		wantMin     int
 	}{
 		{
 			name: "basic track produces title+artist queries",
-			req:  ports.FindRequest{Title: "Blinding Lights", Artist: "The Weeknd"},
+			req:  acquisition.FindRequest{Title: "Blinding Lights", Artist: "The Weeknd"},
 			wantQueries: []string{
 				"Blinding Lights The Weeknd",
 				"Blinding Lights The Weeknd audio",
@@ -23,7 +63,7 @@ func TestSearchQueries(t *testing.T) {
 		},
 		{
 			name: "track with album adds album query",
-			req:  ports.FindRequest{Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding"},
+			req:  acquisition.FindRequest{Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding"},
 			wantQueries: []string{
 				"Circles Post Malone",
 				"Circles Post Malone Hollywood's Bleeding",
@@ -33,7 +73,7 @@ func TestSearchQueries(t *testing.T) {
 		},
 		{
 			name: "track with ISRC includes ISRC as first query",
-			req:  ports.FindRequest{Title: "HUMBLE.", Artist: "Kendrick Lamar", ISRC: "USUM71700626"},
+			req:  acquisition.FindRequest{Title: "HUMBLE.", Artist: "Kendrick Lamar", ISRC: "USUM71700626"},
 			wantQueries: []string{
 				"USUM71700626",
 				"HUMBLE. Kendrick Lamar",
@@ -42,30 +82,22 @@ func TestSearchQueries(t *testing.T) {
 		},
 		{
 			name:    "empty album skips album query",
-			req:     ports.FindRequest{Title: "Song", Artist: "Artist", Album: ""},
+			req:     acquisition.FindRequest{Title: "Song", Artist: "Artist", Album: ""},
 			wantMin: 2,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			queries := searchQueries(tt.req)
+			queries := searchedQueries(t, tt.req)
 			if len(queries) < tt.wantMin {
 				t.Errorf("expected at least %d queries, got %d: %v", tt.wantMin, len(queries), queries)
 			}
 			for _, want := range tt.wantQueries {
-				found := false
-				for _, got := range queries {
-					if got == want {
-						found = true
-						break
-					}
-				}
-				if !found {
+				if !slices.Contains(queries, want) {
 					t.Errorf("expected query %q in %v", want, queries)
 				}
 			}
-			t.Logf("queries: %v", queries)
 		})
 	}
 }

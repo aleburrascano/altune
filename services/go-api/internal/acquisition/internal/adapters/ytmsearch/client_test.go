@@ -1,6 +1,7 @@
-package ytmsearch
+package ytmsearch_test
 
 import (
+	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/shared/ytminnertube"
 	"context"
 	"encoding/json"
@@ -13,11 +14,16 @@ import (
 	"testing"
 	"time"
 
-	acqdomain "altune/go-api/internal/acquisition/domain"
-
 	"github.com/alicebob/miniredis/v2"
 	goredis "github.com/redis/go-redis/v9"
 )
+
+const songsFilter = "EgWKAQIIAWoMEA4QChADEAQQCRAF"
+
+func isSourceUnavailable(err error) bool {
+	var unavailable *acquisition.SourceUnavailableError
+	return errors.As(err, &unavailable)
+}
 
 type recordedRequest struct {
 	path string
@@ -47,8 +53,8 @@ func fixtureServer(t *testing.T, requests *[]recordedRequest) *httptest.Server {
 	return srv
 }
 
-func clientFor(srv *httptest.Server, interval, timeout time.Duration) *Client {
-	return New(Config{MusicURL: srv.URL, OEmbedURL: srv.URL + "/oembed", MinInterval: interval, Timeout: timeout})
+func clientFor(srv *httptest.Server, interval, timeout time.Duration) *acquisition.YtmSearchClient {
+	return acquisition.NewYtmSearch(acquisition.YtmSearchConfig{MusicURL: srv.URL, OEmbedURL: srv.URL + "/oembed", MinInterval: interval, Timeout: timeout})
 }
 
 func TestClientWatch_PostsTheWebRemixNextRequestAndParsesIt(t *testing.T) {
@@ -60,7 +66,7 @@ func TestClientWatch_PostsTheWebRemixNextRequestAndParsesIt(t *testing.T) {
 		t.Fatalf("Watch: %v", err)
 	}
 
-	if got.Type != VideoTypeOMV {
+	if got.Type != acquisition.VideoTypeOMV {
 		t.Errorf("Type = %q, want OMV", got.Type)
 	}
 	if len(requests) != 1 || requests[0].path != "/youtubei/v1/next" {
@@ -88,7 +94,7 @@ func TestClientSearchSongs_PostsTheQueryWithTheSongsFilter(t *testing.T) {
 		t.Fatalf("songs = %+v, want the clean master first", songs)
 	}
 	body := requests[0].body
-	if body["query"] != "2021 Vibes LUCKI" || body["params"] != songsFilterParams {
+	if body["query"] != "2021 Vibes LUCKI" || body["params"] != songsFilter {
 		t.Errorf("body = %+v, want the query and the songs filter", body)
 	}
 }
@@ -218,7 +224,7 @@ func TestClient_AnOutageIsSourceUnavailable(t *testing.T) {
 			_, watchErr := client.Watch(context.Background(), "XDC3uH1FSgw")
 
 			for name, err := range map[string]error{"SearchSongs": searchErr, "Watch": watchErr} {
-				if !acqdomain.IsSourceUnavailable(err) {
+				if !isSourceUnavailable(err) {
 					t.Errorf("%s err = %v, want source unavailable", name, err)
 				}
 				if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
@@ -242,7 +248,7 @@ func TestClient_ACancelledCallerIsNotAnOutage(t *testing.T) {
 	_, watchErr := client.Watch(ctx, "XDC3uH1FSgw")
 
 	for name, err := range map[string]error{"SearchSongs": searchErr, "Watch": watchErr} {
-		if !errors.Is(err, context.Canceled) || acqdomain.IsSourceUnavailable(err) {
+		if !errors.Is(err, context.Canceled) || isSourceUnavailable(err) {
 			t.Errorf("%s err = %v, want the caller's cancellation, not an outage", name, err)
 		}
 	}
@@ -258,8 +264,8 @@ func TestClient_AnOutageNamesYtmsearchAsTheUnavailableSource(t *testing.T) {
 		_, watchErr := client.Watch(context.Background(), "XDC3uH1FSgw")
 
 		for name, err := range map[string]error{"SearchSongs": searchErr, "Watch": watchErr} {
-			var unavailable *acqdomain.SourceUnavailableError
-			if !errors.As(err, &unavailable) || unavailable.Source != acqdomain.SourceName("ytmsearch") {
+			var unavailable *acquisition.SourceUnavailableError
+			if !errors.As(err, &unavailable) || unavailable.Source != acquisition.SourceName("ytmsearch") {
 				t.Errorf("status %d: %s err = %v, want SourceUnavailableError{Source: ytmsearch}", status, name, err)
 			}
 		}
@@ -280,7 +286,7 @@ func TestClient_ACallerDeadlineIsNotAnOutage(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 		err := call(ctx)
 		cancel()
-		if !errors.Is(err, context.DeadlineExceeded) || acqdomain.IsSourceUnavailable(err) {
+		if !errors.Is(err, context.DeadlineExceeded) || isSourceUnavailable(err) {
 			t.Errorf("%s err = %v, want the caller's deadline, not an outage", name, err)
 		}
 	}
@@ -298,7 +304,7 @@ func TestClient_ACallerCancelledWhileWaitingForItsTurnIsNotAnOutage(t *testing.T
 	_, searchErr := client.SearchSongs(ctx, "q")
 
 	for name, err := range map[string]error{"SearchSongs": searchErr, "Watch": watchErr} {
-		if !errors.Is(err, context.Canceled) || acqdomain.IsSourceUnavailable(err) {
+		if !errors.Is(err, context.Canceled) || isSourceUnavailable(err) {
 			t.Errorf("%s err = %v, want the caller's cancellation, not an outage", name, err)
 		}
 	}
@@ -315,7 +321,7 @@ func TestClient_AnAlreadyCancelledCallerIsNotAnOutageEvenWhenTheServerIsDown(t *
 	_, watchErr := client.Watch(ctx, "XDC3uH1FSgw")
 
 	for name, err := range map[string]error{"SearchSongs": searchErr, "Watch": watchErr} {
-		if !errors.Is(err, context.Canceled) || acqdomain.IsSourceUnavailable(err) {
+		if !errors.Is(err, context.Canceled) || isSourceUnavailable(err) {
 			t.Errorf("%s err = %v, want the caller's cancellation, not an outage", name, err)
 		}
 	}
@@ -339,7 +345,7 @@ func TestClient_AConnectionDroppedMidResponseIsSourceUnavailable(t *testing.T) {
 	_, watchErr := client.Watch(context.Background(), "XDC3uH1FSgw")
 
 	for name, err := range map[string]error{"SearchSongs": searchErr, "Watch": watchErr} {
-		if !acqdomain.IsSourceUnavailable(err) || errors.Is(err, context.Canceled) {
+		if !isSourceUnavailable(err) || errors.Is(err, context.Canceled) {
 			t.Errorf("%s err = %v, want source unavailable", name, err)
 		}
 	}
@@ -393,7 +399,7 @@ func TestClient_WaitsForASharedBudgetSlotBeyondTheTimeout(t *testing.T) {
 
 	var requests []recordedRequest
 	srv := fixtureServer(t, &requests)
-	client := New(Config{
+	client := acquisition.NewYtmSearch(acquisition.YtmSearchConfig{
 		HTTP:        &http.Client{Transport: budget.Transport(nil)},
 		MusicURL:    srv.URL,
 		OEmbedURL:   srv.URL + "/oembed",
