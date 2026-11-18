@@ -4,8 +4,6 @@ import type { ReactNode } from 'react';
 import { createMemoryDetailPort, DetailPortProvider, useDetailPort } from '@features/detail';
 describe('useDetailPort', () => {
   it('throws when no provider is mounted', () => {
-    jest.spyOn(console, 'error').mockImplementation(() => {});
-
     expect(() => renderHook(() => useDetailPort())).toThrow('no detail port provided');
   });
 

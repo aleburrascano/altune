@@ -1,0 +1,14 @@
+{
+  "removed": [
+    "T2 src/features/detail/__tests__/AlbumRail.test.tsx patches with jest.mock",
+    "T2 src/features/detail/__tests__/DetailPortProvider.test.tsx patches with jest.spyOn",
+    "T2 src/features/detail/__tests__/DetailScaffold.test.tsx patches with jest.mock",
+    "T2 src/features/detail/__tests__/DiscographySections.test.tsx patches with jest.mock",
+    "T2 src/features/detail/__tests__/useAlbumTracks.test.tsx patches with jest.spyOn",
+    "T2 src/features/detail/__tests__/useArtistContent.test.tsx patches with jest.spyOn",
+    "T2 src/features/detail/__tests__/useEntityDiscovery.test.tsx patches with jest.spyOn",
+    "T2 src/features/detail/__tests__/useRelatedTracks.test.tsx patches with jest.spyOn"
+  ],
+  "added": [],
+  "clones": 0
+}

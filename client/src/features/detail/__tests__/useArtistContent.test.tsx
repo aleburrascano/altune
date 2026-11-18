@@ -13,6 +13,9 @@ import {
 } from '@features/detail';
 import type { DetailPort } from '@features/detail';
 import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
+import { freezeDate } from '@testing/freezeDate';
+
+const CLOCK_START = 1_700_000_000_000;
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -37,6 +40,10 @@ const emptyContentFetch = {
   status: 'ok',
   latency_ms: 3,
 };
+
+afterEach(() => {
+  jest.useRealTimers();
+});
 
 beforeEach(async () => {
   await signInTestUser();
@@ -230,8 +237,7 @@ describe('useArtistContent reopened against the 30-minute content cache window',
     ['serves the cached artist page without a request 1 ms before 30 minutes', 1_799_999, 1],
     ['asks the server again 1 ms after 30 minutes', 1_800_001, 2],
   ])('%s', async (_behaviour, elapsedMs, expectedRequests) => {
-    let now = 1_700_000_000_000;
-    jest.spyOn(Date, 'now').mockImplementation(() => now);
+    const clock = freezeDate(CLOCK_START);
     __http.reply(CACHED_ARTIST_PATH, {
       status: 200,
       json: { top_tracks: okList, albums: okList },
@@ -247,7 +253,7 @@ describe('useArtistContent reopened against the 30-minute content cache window',
     expect(first.result.current.tracksFailure).toBeNull();
     expect(first.result.current.albumsFailure).toBeNull();
     first.unmount();
-    now += elapsedMs;
+    clock.advance(elapsedMs);
     renderHook(useHook, { wrapper });
     await act(async () => {
       await new Promise((resolve) => setImmediate(resolve));

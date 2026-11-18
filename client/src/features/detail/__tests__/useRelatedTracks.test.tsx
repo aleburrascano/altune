@@ -3,8 +3,15 @@ import { renderHook, waitFor } from '@testing-library/react-native';
 import type { DiscoverySource } from '@shared/catalog';
 import { _resetDetailHealthForTest, useRelatedTracks } from '@features/detail';
 import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
+import { freezeDate } from '@testing/freezeDate';
+
+const CLOCK_START = 1_700_000_000_000;
 
 const { __http } = require('@testing/doubles/fetch.js');
+
+afterEach(() => {
+  jest.useRealTimers();
+});
 
 describe('aborting on unmount', () => {
   let client: QueryClient;
@@ -60,8 +67,7 @@ describe('reopening related tracks against the 30-minute content cache window', 
     ['serves the cached list without a request 1 ms before 30 minutes', 1_799_999, 1],
     ['asks the server again 1 ms after 30 minutes', 1_800_001, 2],
   ])('%s', async (_behaviour, elapsedMs, expectedRequests) => {
-    let now = 1_700_000_000_000;
-    jest.spyOn(Date, 'now').mockImplementation(() => now);
+    const clock = freezeDate(CLOCK_START);
     __http.reply(RELATED_PATH, {
       status: 200,
       json: { items: [], provider_name: 'soundcloud', status: 'ok' },
@@ -73,7 +79,7 @@ describe('reopening related tracks against the 30-minute content cache window', 
     await waitFor(() => expect(first.result.current.isLoading).toBe(false));
     expect(first.result.current.isError).toBe(false);
     first.unmount();
-    now += elapsedMs;
+    clock.advance(elapsedMs);
     renderHook(() => useRelatedTracks({ sources }), { wrapper });
     await act(async () => {
       await new Promise((resolve) => setImmediate(resolve));

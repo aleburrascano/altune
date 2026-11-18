@@ -8,6 +8,9 @@ import {
   createWrapper,
   signInTestUser,
 } from '@testing/queryHarness';
+import { freezeDate } from '@testing/freezeDate';
+
+const CLOCK_START = 1_700_000_000_000;
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -20,6 +23,10 @@ function recordingWrapper(warnings: DetailWarning[]) {
   };
   return createPortWrapper(createTestQueryClient(), { detail });
 }
+
+afterEach(() => {
+  jest.useRealTimers();
+});
 
 describe('useAlbumDiscovery', () => {
   describe('bounding the fetch', () => {
@@ -133,8 +140,7 @@ describe('useAlbumDiscovery', () => {
       ['serves the cached tracklist without a request 1 ms before 30 minutes', 1_799_999, 1],
       ['asks the server again for the tracklist 1 ms after 30 minutes', 1_800_001, 2],
     ])('%s', async (_behaviour, elapsedMs, expectedRequests) => {
-      let now = 1_700_000_000_000;
-      jest.spyOn(Date, 'now').mockImplementation(() => now);
+      const clock = freezeDate(CLOCK_START);
       __http.reply('GET /v1/discovery/search', {
         status: 200,
         json: {
@@ -175,7 +181,7 @@ describe('useAlbumDiscovery', () => {
       await waitFor(() => expect(first.result.current.isLoading).toBe(false));
       expect(first.result.current.isError).toBe(false);
       first.unmount();
-      now += elapsedMs;
+      clock.advance(elapsedMs);
       renderHook(useHook, { wrapper });
       await act(async () => {
         await new Promise((resolve) => setImmediate(resolve));
