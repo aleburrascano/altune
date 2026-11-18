@@ -20,6 +20,7 @@ import {
   createMemoryFileStore,
   type MemoryFileStore,
 } from '@shared/files';
+import { recordLogs } from '@shared/log';
 
 type FsFailureKind = 'write' | 'read' | 'delete' | 'download' | 'createDirectory' | 'list';
 
@@ -225,13 +226,12 @@ describe('deletePinned', () => {
   });
 
   it('reports a delete failure instead of throwing, e.g. an OS-locked file currently playing', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const logs = recordLogs();
     __fs.seedFile(pinnedUri('t1.mp3'), 'audio-bytes');
     __fs.failNext('delete', new Error('file is locked'));
 
     expect(deletePinned(asTrackId('t1'))).toBe(false);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('t1.mp3'));
-    warn.mockRestore();
+    expect(logs.warnings).toContainEqual([expect.stringContaining('t1.mp3')]);
     expect(__fs.readFile(pinnedUri('t1.mp3'))).toBe('audio-bytes');
   });
 });
@@ -250,10 +250,9 @@ describe('deleteAllPinned', () => {
     __fs.seedFile(pinnedUri('t1.mp3'), 'a');
     __fs.seedFile(pinnedUri('t2.mp3'), 'b');
     __fs.failNext('delete', new Error('t1 is locked'));
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recordLogs();
 
     expect(deleteAllPinned()).toBe(false);
-    warn.mockRestore();
 
     expect(__fs.allFiles()).toEqual({ [pinnedUri('t1.mp3')]: 'a' });
   });
@@ -411,16 +410,13 @@ function unsized(file: StoredFile): StoredFile {
 describe('the byte total a pass keeps instead of re-listing the directory', () => {
   const T1_MEMORY_URI = 'memory://document/offline-audio/t1.mp3';
   let store: MemoryFileStore;
-  let warn: jest.SpyInstance;
-
   beforeEach(() => {
     store = createMemoryFileStore();
     setPinnedFileStore(store);
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recordLogs();
   });
 
   afterEach(() => {
-    warn.mockRestore();
     setPinnedFileStore();
   });
 
@@ -513,17 +509,14 @@ function withFailingRename(target: MemoryFileStore): void {
 
 describe('a pinned download in progress', () => {
   let store: MemoryFileStore;
-  let warn: jest.SpyInstance;
-
   beforeEach(() => {
     store = createMemoryFileStore();
     setPinnedFileStore(store);
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recordLogs();
   });
 
   afterEach(() => {
     jest.useRealTimers();
-    warn.mockRestore();
     setPinnedFileStore();
   });
 

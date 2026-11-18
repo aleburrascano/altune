@@ -11,6 +11,7 @@ import {
 import { type StoredDirectory, createMemoryFileStore, type MemoryFileStore } from '@shared/files';
 import { asTrackId, type TrackId } from '@shared/catalog';
 import { expectType, type IsExactlyAssignable, type Not } from '@testing/typeAssertions';
+import { recordLogs, type RecordedLogs } from '@shared/log';
 
 const INDEX_SCHEMA_VERSION = 1;
 
@@ -21,21 +22,20 @@ const t1: PinnedEntry = { trackId: asTrackId('t1'), status: 'ready', uri: 'file:
 const t2: PinnedEntry = { trackId: asTrackId('t2'), status: 'queued' };
 
 let store: MemoryFileStore;
-let warn: jest.SpyInstance;
+let logged: RecordedLogs;
 
 beforeEach(() => {
   store = createMemoryFileStore();
   setPinnedIndexFileStore(store);
-  warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  logged = recordLogs();
 });
 
 afterEach(() => {
-  warn.mockRestore();
   setPinnedIndexFileStore();
 });
 
 function warnings(): string[] {
-  return warn.mock.calls.map((call) => String(call[0]));
+  return logged.warnings.map((call) => String(call[0]));
 }
 
 describe('a corrupt or unreadable index is reported, not silently emptied', () => {
@@ -78,7 +78,7 @@ describe('a corrupt or unreadable index is reported, not silently emptied', () =
 
   it('a missing index is a legitimate empty library and logs nothing', () => {
     expect(loadIndex()).toEqual({});
-    expect(warn).not.toHaveBeenCalled();
+    expect(logged.warnings).toEqual([]);
   });
 });
 
@@ -96,7 +96,7 @@ describe('the index carries a schema version and older versions are migrated', (
     store.files.set(INDEX_URI, JSON.stringify({ t1, t2 }));
 
     expect(loadIndex()).toEqual({ t1, t2 });
-    expect(warn).not.toHaveBeenCalled();
+    expect(logged.warnings).toEqual([]);
   });
 
   it('an index from a newer build is read best-effort with a warning, not dropped', () => {
@@ -121,7 +121,7 @@ describe('index writes go through a temp file and a rename', () => {
     store.files.set(TEMP_URI, '{"schemaVersion":1,"entries":{"t1":');
 
     expect(loadIndex()).toEqual({ t1, t2 });
-    expect(warn).not.toHaveBeenCalled();
+    expect(logged.warnings).toEqual([]);
   });
 
   it('a write whose rename fails keeps the previous index on disk', () => {
