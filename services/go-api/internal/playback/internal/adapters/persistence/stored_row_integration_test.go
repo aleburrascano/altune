@@ -15,7 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type storedRow struct {
+type storedQueueRow struct {
 	trackIds     []string
 	currentIdx   int
 	shuffled     bool
@@ -23,7 +23,7 @@ type storedRow struct {
 	updatedAt    time.Time
 }
 
-func readStoredRow(t *testing.T, row storedRow) (*playback.QueueState, error) {
+func readStoredRow(t *testing.T, row storedQueueRow) (*playback.QueueState, error) {
 	t.Helper()
 	sharedtest.RequireIntegration(t)
 	dbURL := os.Getenv("DATABASE_URL")
@@ -52,7 +52,7 @@ func readStoredRow(t *testing.T, row storedRow) (*playback.QueueState, error) {
 }
 
 func TestGetForUser_StoredRowWithCurrentIdxPastEndIsCorrupt(t *testing.T) {
-	_, err := readStoredRow(t, storedRow{trackIds: []string{"a", "b"}, currentIdx: 9, updatedAt: time.Now()})
+	_, err := readStoredRow(t, storedQueueRow{trackIds: []string{"a", "b"}, currentIdx: 9, updatedAt: time.Now()})
 
 	if !errors.Is(err, playback.ErrCorruptStoredState) {
 		t.Fatalf("GetForUser = %v, want an out-of-range current_idx read as corrupt stored state", err)
@@ -62,7 +62,7 @@ func TestGetForUser_StoredRowWithCurrentIdxPastEndIsCorrupt(t *testing.T) {
 func TestGetForUser_KeepsTheStoredUpdatedAt(t *testing.T) {
 	stored := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
 
-	state, err := readStoredRow(t, storedRow{trackIds: []string{"a"}, updatedAt: stored})
+	state, err := readStoredRow(t, storedQueueRow{trackIds: []string{"a"}, updatedAt: stored})
 	if err != nil {
 		t.Fatalf("GetForUser: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestGetForUser_KeepsTheStoredUpdatedAt(t *testing.T) {
 }
 
 func TestGetForUser_KeepsAStoredRowWithEmptyCurrentTrackId(t *testing.T) {
-	state, err := readStoredRow(t, storedRow{trackIds: []string{"a", ""}, currentIdx: 1, updatedAt: time.Now()})
+	state, err := readStoredRow(t, storedQueueRow{trackIds: []string{"a", ""}, currentIdx: 1, updatedAt: time.Now()})
 	if err != nil {
 		t.Fatalf("stored row must still load: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestGetForUser_KeepsAStoredRowWithEmptyCurrentTrackId(t *testing.T) {
 func TestGetForUser_LoadsALegacyNonCanonicalRowUnchanged(t *testing.T) {
 	legacy := []string{"3F2504E0-4F89-11D3-9A0C-0305E82C3301", "not-a-uuid", ""}
 
-	state, err := readStoredRow(t, storedRow{trackIds: legacy, naturalOrder: []string{"x"}, shuffled: true, updatedAt: time.Now()})
+	state, err := readStoredRow(t, storedQueueRow{trackIds: legacy, naturalOrder: []string{"x"}, shuffled: true, updatedAt: time.Now()})
 	if err != nil {
 		t.Fatalf("a legacy stored row must still load: %v", err)
 	}
