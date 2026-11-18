@@ -1,6 +1,7 @@
-package deezerpreview
+package deezerpreview_test
 
 import (
+	"altune/go-api/internal/acquisition"
 	"errors"
 	"math"
 	"os"
@@ -53,7 +54,7 @@ func TestBestAlignment_FindsWhereThePreviewSitsInTheFile(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := BestAlignment(file, tt.preview)
+			got, err := acquisition.BestAlignment(file, tt.preview)
 			if err != nil {
 				t.Fatalf("bestAlignment: %v", err)
 			}
@@ -65,7 +66,7 @@ func TestBestAlignment_FindsWhereThePreviewSitsInTheFile(t *testing.T) {
 }
 
 func TestBestAlignment_UnrelatedAudioScoresNearHalf(t *testing.T) {
-	got, err := BestAlignment(randomItems(2, 1400), randomItems(3, 240))
+	got, err := acquisition.BestAlignment(randomItems(2, 1400), randomItems(3, 240))
 
 	if err != nil || math.Abs(got.BitErrorRate-0.5) > 0.06 {
 		t.Errorf("alignment = %+v, %v; want a bit error rate within 0.06 of 0.5", got, err)
@@ -78,13 +79,13 @@ func TestBestAlignment_RefusesPrintsItCannotCompare(t *testing.T) {
 		file, preview []uint32
 		want          error
 	}{
-		{"empty file", nil, randomItems(1, 10), ErrEmptyPrint},
-		{"empty preview", randomItems(1, 10), nil, ErrEmptyPrint},
-		{"preview longer than the file", randomItems(1, 10), randomItems(2, 11), ErrPrintLongerThanRef},
+		{"empty file", nil, randomItems(1, 10), acquisition.ErrEmptyPrint},
+		{"empty preview", randomItems(1, 10), nil, acquisition.ErrEmptyPrint},
+		{"preview longer than the file", randomItems(1, 10), randomItems(2, 11), acquisition.ErrPrintLongerThanRef},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, err := BestAlignment(tt.file, tt.preview); !errors.Is(err, tt.want) {
+			if _, err := acquisition.BestAlignment(tt.file, tt.preview); !errors.Is(err, tt.want) {
 				t.Errorf("err = %v, want %v", err, tt.want)
 			}
 		})
@@ -94,11 +95,11 @@ func TestBestAlignment_RefusesPrintsItCannotCompare(t *testing.T) {
 func TestBestAlignment_RecordedPairSeparatesTheSameSongFromAnotherByTheArtist(t *testing.T) {
 	file := recordedPrint(t, "rich_flex_file_window.raw")
 
-	same, err := BestAlignment(file, recordedPrint(t, "rich_flex_preview.raw"))
+	same, err := acquisition.BestAlignment(file, recordedPrint(t, "rich_flex_preview.raw"))
 	if err != nil {
 		t.Fatalf("same song: %v", err)
 	}
-	other, err := BestAlignment(file, recordedPrint(t, "chamber_of_reflection_preview.raw"))
+	other, err := acquisition.BestAlignment(file, recordedPrint(t, "chamber_of_reflection_preview.raw"))
 	if err != nil {
 		t.Fatalf("other song: %v", err)
 	}
