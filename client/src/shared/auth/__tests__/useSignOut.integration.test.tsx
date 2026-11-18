@@ -4,6 +4,7 @@ import { renderHook, act } from '@testing-library/react-native';
 import * as SecureStore from 'expo-secure-store';
 
 import { supabase, useSignOut } from '@shared/auth';
+import { recordLogs } from '@shared/log';
 const { __http } = require('@testing/doubles/fetch.js');
 
 function makeWrapper(queryClient: QueryClient) {
@@ -29,8 +30,7 @@ describe('sign-out with the real auth client when the remote /logout cannot be r
 
   beforeEach(() => {
     __http.reset();
-    jest.restoreAllMocks();
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recordLogs();
   });
 
   it('emits SIGNED_OUT, leaves no session behind, and calls /logout exactly once', async () => {

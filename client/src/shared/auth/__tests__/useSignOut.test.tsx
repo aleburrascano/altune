@@ -6,6 +6,7 @@ import { ApiError, NetworkError } from '@shared/failure';
 
 import { useSignOut } from '@shared/auth';
 import { onSignOut } from '@shared/session';
+import { recordLogs, type RecordedLogs } from '@shared/log';
 
 const mockSignOut = jest.fn();
 
@@ -47,16 +48,10 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-let warn: jest.SpyInstance;
-
 beforeEach(() => {
   mockSignOut.mockReset();
   secureStore.seed(SESSION_KEY, STORED_SESSION);
-  warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-});
-
-afterEach(() => {
-  warn.mockRestore();
+  recordLogs();
 });
 
 describe('useSignOut(): the error ? … : … branch on the settled signOut() result', () => {
@@ -321,18 +316,17 @@ describe('useSignOut(): a failed remote sign-out still ends the local session', 
 });
 
 describe('auth deadline', () => {
-  let warn: jest.SpyInstance;
+  let logs: RecordedLogs;
 
   beforeEach(() => {
     jest.useFakeTimers();
     mockSignOut.mockReset();
     mockSignOut.mockReturnValue(new Promise(() => undefined));
     secureStore.seed(SESSION_KEY, STORED_SESSION);
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    logs = recordLogs();
   });
 
   afterEach(() => {
-    warn.mockRestore();
     jest.useRealTimers();
   });
 
@@ -370,7 +364,7 @@ describe('auth deadline', () => {
       expect(queryClient.getQueryData(['library', 'tracks'])).toBeUndefined();
       expect(cleanup).toHaveBeenCalledTimes(1);
       expect(secureStore.read(SESSION_KEY)).toBeUndefined();
-      expect(warn).toHaveBeenCalledWith('[auth] sign out failed', { failure: 'timeout' });
+      expect(logs.warnings).toContainEqual(['[auth] sign out failed', { failure: 'timeout' }]);
       unregister();
     });
   });

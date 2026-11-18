@@ -1,0 +1,8 @@
+{
+  "removed": [
+    "T2 src/shared/auth/__tests__/useSignOut.integration.test.tsx patches with jest.spyOn",
+    "T2 src/shared/auth/__tests__/useSignOut.test.tsx patches with jest.spyOn"
+  ],
+  "added": [],
+  "clones": 0
+}
