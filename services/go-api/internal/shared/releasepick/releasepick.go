@@ -56,7 +56,7 @@ func CompareDates(a, b string) int {
 	return 0
 }
 
-func Earliest[T any](items []T, groupOf func(T) Group, want Kind) (T, bool) {
+func earliest[T any](items []T, groupOf func(T) Group, want Kind) (T, bool) {
 	var best T
 	found := false
 	for _, item := range items {
@@ -70,7 +70,7 @@ func Earliest[T any](items []T, groupOf func(T) Group, want Kind) (T, bool) {
 
 func Best[T any](items []T, groupOf func(T) Group) (T, Kind, bool) {
 	for _, kind := range []Kind{KindStudioAlbum, KindMixtape, KindSingleOrEP} {
-		if best, ok := Earliest(items, groupOf, kind); ok {
+		if best, ok := earliest(items, groupOf, kind); ok {
 			return best, kind, true
 		}
 	}
