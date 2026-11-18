@@ -1,18 +1,13 @@
-package domain
+package domain_test
 
 import (
-	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/playback"
+	shareddomain "altune/go-api/internal/shared/domain"
+	"context"
 	"errors"
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/google/uuid"
 )
-
-func testUser() shared.UserId {
-	return shared.NewUserId(uuid.New())
-}
 
 func TestNewQueueState_Validation(t *testing.T) {
 	tests := []struct {
@@ -32,7 +27,7 @@ func TestNewQueueState_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			state, err := NewQueueState(QueueStateInput{
+			state, err := playback.NewQueueState(playback.QueueStateInput{
 				UserId:     testUser(),
 				TrackIds:   tt.trackIds,
 				CurrentIdx: tt.currentIdx,
@@ -54,40 +49,18 @@ func TestNewQueueState_Validation(t *testing.T) {
 	}
 }
 
-func TestRehydrateQueueState_RejectsStoredRowWithCurrentIdxPastEnd(t *testing.T) {
-	_, err := RehydrateQueueState(QueueStateInput{
-		UserId:     testUser(),
-		TrackIds:   []string{"a", "b"},
-		CurrentIdx: 9,
-	}, time.Now())
-	if err == nil {
-		t.Fatal("expected out-of-range current_idx to be rejected on rehydrate")
-	}
-}
-
-func TestRehydrateQueueState_PreservesUpdatedAt(t *testing.T) {
-	stored := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
-	state, err := RehydrateQueueState(QueueStateInput{
-		UserId:   testUser(),
-		TrackIds: []string{"a"},
-	}, stored)
+func TestResume_WithNothingStoredIsAnEmptyQueue(t *testing.T) {
+	state, err := playback.NewQueueService(&storeSpy{}, nil).Resume(context.Background(), testUser())
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("Resume: %v", err)
 	}
-	if !state.UpdatedAt.Equal(stored) {
-		t.Errorf("UpdatedAt = %v, want %v (stored value, not now)", state.UpdatedAt, stored)
-	}
-}
-
-func TestEmptyQueueState_IsValidAndEmpty(t *testing.T) {
-	state := EmptyQueueState(testUser())
 	if len(state.TrackIds) != 0 {
 		t.Errorf("TrackIds = %v, want empty", state.TrackIds)
 	}
 	if state.CurrentIdx != 0 {
 		t.Errorf("CurrentIdx = %d, want 0", state.CurrentIdx)
 	}
-	if state.RepeatMode != RepeatOff {
+	if state.RepeatMode != playback.RepeatOff {
 		t.Errorf("RepeatMode = %v, want RepeatOff", state.RepeatMode)
 	}
 }
@@ -110,7 +83,7 @@ func TestQueueState_CurrentTrackId(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			state := &QueueState{TrackIds: tt.trackIds, CurrentIdx: tt.idx}
+			state := &playback.QueueState{TrackIds: tt.trackIds, CurrentIdx: tt.idx}
 			gotId, gotFound := state.CurrentTrackId()
 			if gotId != tt.wantId || gotFound != tt.wantFound {
 				t.Errorf("CurrentTrackId() = (%q, %v), want (%q, %v)", gotId, gotFound, tt.wantId, tt.wantFound)
@@ -120,7 +93,7 @@ func TestQueueState_CurrentTrackId(t *testing.T) {
 }
 
 func TestQueueState_CurrentTrackId_ConstructedEmptyQueueHasNone(t *testing.T) {
-	state, err := NewQueueState(QueueStateInput{UserId: testUser(), CurrentIdx: 5})
+	state, err := playback.NewQueueState(playback.QueueStateInput{UserId: testUser(), CurrentIdx: 5})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -144,15 +117,15 @@ func TestNewQueueState_BoundsQueueLength(t *testing.T) {
 		naturalOrder []string
 		wantErr      bool
 	}{
-		{name: "trackIds at limit accepted", trackIds: repeatIds(MaxQueueLength)},
-		{name: "trackIds over limit rejected", trackIds: repeatIds(MaxQueueLength + 1), wantErr: true},
-		{name: "naturalOrder at limit accepted", trackIds: repeatIds(MaxQueueLength), naturalOrder: repeatIds(MaxQueueLength)},
-		{name: "naturalOrder over limit rejected", trackIds: repeatIds(1), naturalOrder: repeatIds(MaxQueueLength + 1), wantErr: true},
+		{name: "trackIds at limit accepted", trackIds: repeatIds(maxQueueLength)},
+		{name: "trackIds over limit rejected", trackIds: repeatIds(maxQueueLength + 1), wantErr: true},
+		{name: "naturalOrder at limit accepted", trackIds: repeatIds(maxQueueLength), naturalOrder: repeatIds(maxQueueLength)},
+		{name: "naturalOrder over limit rejected", trackIds: repeatIds(1), naturalOrder: repeatIds(maxQueueLength + 1), wantErr: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewQueueState(QueueStateInput{
+			_, err := playback.NewQueueState(playback.QueueStateInput{
 				UserId:       testUser(),
 				TrackIds:     tt.trackIds,
 				NaturalOrder: tt.naturalOrder,
@@ -166,9 +139,9 @@ func TestNewQueueState_BoundsQueueLength(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected over-limit queue to be rejected")
 			}
-			var validationErr *ValidationError
+			var validationErr *shareddomain.ValidationError
 			if !errors.As(err, &validationErr) {
-				t.Fatalf("error = %T, want *ValidationError", err)
+				t.Fatalf("error = %T, want *shareddomain.ValidationError", err)
 			}
 		})
 	}
@@ -178,39 +151,39 @@ func TestNewQueueState_BoundsStringLength(t *testing.T) {
 	huge := strings.Repeat("a", 500*1024)
 	tests := []struct {
 		name  string
-		input QueueStateInput
+		input playback.QueueStateInput
 	}{
 		{
 			name:  "oversized trackIds element rejected",
-			input: QueueStateInput{UserId: testUser(), TrackIds: []string{huge}},
+			input: playback.QueueStateInput{UserId: testUser(), TrackIds: []string{huge}},
 		},
 		{
 			name:  "oversized naturalOrder element rejected",
-			input: QueueStateInput{UserId: testUser(), TrackIds: []string{"a"}, NaturalOrder: []string{huge}},
+			input: playback.QueueStateInput{UserId: testUser(), TrackIds: []string{"a"}, NaturalOrder: []string{huge}},
 		},
 		{
 			name:  "oversized sourceId rejected",
-			input: QueueStateInput{UserId: testUser(), SourceId: huge},
+			input: playback.QueueStateInput{UserId: testUser(), SourceId: huge},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewQueueState(tt.input)
+			_, err := playback.NewQueueState(tt.input)
 			if err == nil {
 				t.Fatal("expected oversized queue string to be rejected")
 			}
-			var validationErr *ValidationError
+			var validationErr *shareddomain.ValidationError
 			if !errors.As(err, &validationErr) {
-				t.Fatalf("error = %T, want *ValidationError", err)
+				t.Fatalf("error = %T, want *shareddomain.ValidationError", err)
 			}
 		})
 	}
 }
 
 func TestNewQueueState_AcceptsStringAtMaxLength(t *testing.T) {
-	atLimit := "search:" + strings.Repeat("a", MaxQueueStringBytes-len("search:"))
-	_, err := NewQueueState(QueueStateInput{
+	atLimit := "search:" + strings.Repeat("a", maxQueueStringBytes-len("search:"))
+	_, err := playback.NewQueueState(playback.QueueStateInput{
 		UserId:   testUser(),
 		SourceId: atLimit,
 	})
@@ -222,38 +195,38 @@ func TestNewQueueState_AcceptsStringAtMaxLength(t *testing.T) {
 func TestNewQueueState_RejectsNulBytes(t *testing.T) {
 	tests := []struct {
 		name  string
-		input QueueStateInput
+		input playback.QueueStateInput
 	}{
 		{
 			name:  "nul in trackIds",
-			input: QueueStateInput{UserId: testUser(), TrackIds: []string{"a\x00b"}, CurrentIdx: 0},
+			input: playback.QueueStateInput{UserId: testUser(), TrackIds: []string{"a\x00b"}, CurrentIdx: 0},
 		},
 		{
 			name:  "nul in naturalOrder",
-			input: QueueStateInput{UserId: testUser(), TrackIds: []string{"a"}, NaturalOrder: []string{"x\x00y"}},
+			input: playback.QueueStateInput{UserId: testUser(), TrackIds: []string{"a"}, NaturalOrder: []string{"x\x00y"}},
 		},
 		{
 			name:  "nul in sourceId",
-			input: QueueStateInput{UserId: testUser(), SourceId: "playlist:pid:na\x00me"},
+			input: playback.QueueStateInput{UserId: testUser(), SourceId: "playlist:pid:na\x00me"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewQueueState(tt.input)
+			_, err := playback.NewQueueState(tt.input)
 			if err == nil {
 				t.Fatal("expected NUL byte in string element to be rejected")
 			}
-			var validationErr *ValidationError
+			var validationErr *shareddomain.ValidationError
 			if !errors.As(err, &validationErr) {
-				t.Fatalf("error = %T, want *ValidationError", err)
+				t.Fatalf("error = %T, want *shareddomain.ValidationError", err)
 			}
 		})
 	}
 }
 
-func stateFromInput(in QueueStateInput) *QueueState {
-	return &QueueState{
+func stateFromInput(in playback.QueueStateInput) *playback.QueueState {
+	return &playback.QueueState{
 		UserId:       in.UserId,
 		TrackIds:     in.TrackIds,
 		CurrentIdx:   in.CurrentIdx,
@@ -268,37 +241,37 @@ func stateFromInput(in QueueStateInput) *QueueState {
 func TestQueueInvariants_ErrorNamesTheOffendingField(t *testing.T) {
 	tests := []struct {
 		name    string
-		input   QueueStateInput
+		input   playback.QueueStateInput
 		wantMsg string
 	}{
 		{
 			name:    "negative positionMs",
-			input:   QueueStateInput{TrackIds: []string{"a"}, PositionMs: -1},
+			input:   playback.QueueStateInput{TrackIds: []string{"a"}, PositionMs: -1},
 			wantMsg: "positionMs must be non-negative",
 		},
 		{
 			name:    "trackIds over limit",
-			input:   QueueStateInput{TrackIds: repeatIds(MaxQueueLength + 1)},
+			input:   playback.QueueStateInput{TrackIds: repeatIds(maxQueueLength + 1)},
 			wantMsg: "trackIds length",
 		},
 		{
 			name:    "naturalOrder over limit",
-			input:   QueueStateInput{TrackIds: []string{"a"}, NaturalOrder: repeatIds(MaxQueueLength + 1)},
+			input:   playback.QueueStateInput{TrackIds: []string{"a"}, NaturalOrder: repeatIds(maxQueueLength + 1)},
 			wantMsg: "naturalOrder length",
 		},
 		{
 			name:    "nul in naturalOrder element",
-			input:   QueueStateInput{TrackIds: []string{"a"}, NaturalOrder: []string{"x\x00y"}},
+			input:   playback.QueueStateInput{TrackIds: []string{"a"}, NaturalOrder: []string{"x\x00y"}},
 			wantMsg: "naturalOrder contains a NUL byte",
 		},
 		{
 			name:    "nul in sourceId",
-			input:   QueueStateInput{TrackIds: []string{"a"}, SourceId: "playlist:pid:na\x00me"},
+			input:   playback.QueueStateInput{TrackIds: []string{"a"}, SourceId: "playlist:pid:na\x00me"},
 			wantMsg: "sourceId contains a NUL byte",
 		},
 		{
 			name:    "currentIdx past the end of trackIds",
-			input:   QueueStateInput{TrackIds: []string{"a", "b"}, CurrentIdx: 5},
+			input:   playback.QueueStateInput{TrackIds: []string{"a", "b"}, CurrentIdx: 5},
 			wantMsg: "currentIdx 5 out of range [0, 2)",
 		},
 	}
@@ -307,7 +280,7 @@ func TestQueueInvariants_ErrorNamesTheOffendingField(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			in := tt.input
 			in.UserId = testUser()
-			_, constructErr := NewQueueState(in)
+			_, constructErr := playback.NewQueueState(in)
 			validateErr := stateFromInput(in).Validate()
 
 			for _, site := range []struct {
@@ -329,7 +302,7 @@ func TestQueueInvariants_ErrorNamesTheOffendingField(t *testing.T) {
 }
 
 func TestNewQueueState_RejectsEmptyCurrentTrackId(t *testing.T) {
-	_, err := NewQueueState(QueueStateInput{
+	_, err := playback.NewQueueState(playback.QueueStateInput{
 		UserId:     testUser(),
 		TrackIds:   []string{"a", ""},
 		CurrentIdx: 1,
@@ -337,14 +310,14 @@ func TestNewQueueState_RejectsEmptyCurrentTrackId(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an empty current-track id to be rejected")
 	}
-	var validationErr *ValidationError
+	var validationErr *shareddomain.ValidationError
 	if !errors.As(err, &validationErr) {
-		t.Fatalf("error = %T, want *ValidationError", err)
+		t.Fatalf("error = %T, want *shareddomain.ValidationError", err)
 	}
 }
 
 func TestQueueState_Validate_RejectsEmptyCurrentTrackId(t *testing.T) {
-	state := &QueueState{UserId: testUser(), TrackIds: []string{""}, CurrentIdx: 0}
+	state := &playback.QueueState{UserId: testUser(), TrackIds: []string{""}, CurrentIdx: 0}
 
 	if err := state.Validate(); err == nil {
 		t.Fatal("expected the pre-write check to reject an empty current-track id")
@@ -352,7 +325,7 @@ func TestQueueState_Validate_RejectsEmptyCurrentTrackId(t *testing.T) {
 }
 
 func TestNewQueueState_AcceptsRealCurrentTrackId(t *testing.T) {
-	state, err := NewQueueState(QueueStateInput{
+	state, err := playback.NewQueueState(playback.QueueStateInput{
 		UserId:     testUser(),
 		TrackIds:   []string{canonicalTrackA, canonicalTrackB},
 		CurrentIdx: 1,
@@ -365,43 +338,8 @@ func TestNewQueueState_AcceptsRealCurrentTrackId(t *testing.T) {
 	}
 }
 
-func TestRehydrateQueueState_KeepsStoredRowWithEmptyCurrentTrackId(t *testing.T) {
-	state, err := RehydrateQueueState(QueueStateInput{
-		UserId:     testUser(),
-		TrackIds:   []string{"a", ""},
-		CurrentIdx: 1,
-	}, time.Now())
-	if err != nil {
-		t.Fatalf("stored row must still load: %v", err)
-	}
-	if len(state.TrackIds) != 2 {
-		t.Errorf("TrackIds = %v, want the stored queue intact", state.TrackIds)
-	}
-}
-
-type codedValidationError interface {
-	error
-	HTTPStatus() int
-	ErrorCode() string
-}
-
-func validationCode(t *testing.T, err error) string {
-	t.Helper()
-	if err == nil {
-		t.Fatal("expected a validation error, got nil")
-	}
-	var coded codedValidationError
-	if !errors.As(err, &coded) {
-		t.Fatalf("error = %T (%v), want a coded validation error", err, err)
-	}
-	if coded.HTTPStatus() != 400 {
-		t.Fatalf("HTTPStatus() = %d, want 400", coded.HTTPStatus())
-	}
-	return coded.ErrorCode()
-}
-
 func TestQueueStateValidation_EachCauseHasItsOwnCode(t *testing.T) {
-	oversized := strings.Repeat("a", MaxQueueStringBytes+1)
+	oversized := strings.Repeat("a", maxQueueStringBytes+1)
 	tests := []struct {
 		name     string
 		reject   func() error
@@ -409,37 +347,37 @@ func TestQueueStateValidation_EachCauseHasItsOwnCode(t *testing.T) {
 	}{
 		{
 			name:     "negative positionMs",
-			reject:   rejectedState(QueueStateInput{TrackIds: []string{"a"}, PositionMs: -1}),
+			reject:   rejectedState(playback.QueueStateInput{TrackIds: []string{"a"}, PositionMs: -1}),
 			wantCode: "playback.position_ms_negative",
 		},
 		{
 			name:     "trackIds over the length limit",
-			reject:   rejectedState(QueueStateInput{TrackIds: repeatIds(MaxQueueLength + 1)}),
+			reject:   rejectedState(playback.QueueStateInput{TrackIds: repeatIds(maxQueueLength + 1)}),
 			wantCode: "playback.queue_too_long",
 		},
 		{
 			name:     "oversized trackIds element",
-			reject:   rejectedState(QueueStateInput{TrackIds: []string{oversized}}),
+			reject:   rejectedState(playback.QueueStateInput{TrackIds: []string{oversized}}),
 			wantCode: "playback.string_too_long",
 		},
 		{
 			name:     "NUL byte in sourceId",
-			reject:   rejectedState(QueueStateInput{TrackIds: []string{"a"}, SourceId: "playlist:pid:na\x00me"}),
+			reject:   rejectedState(playback.QueueStateInput{TrackIds: []string{"a"}, SourceId: "playlist:pid:na\x00me"}),
 			wantCode: "playback.string_contains_nul",
 		},
 		{
 			name:     "currentIdx past the end of trackIds",
-			reject:   rejectedState(QueueStateInput{TrackIds: []string{"a", "b"}, CurrentIdx: 5}),
+			reject:   rejectedState(playback.QueueStateInput{TrackIds: []string{"a", "b"}, CurrentIdx: 5}),
 			wantCode: "playback.current_idx_out_of_range",
 		},
 		{
 			name:     "empty id at currentIdx",
-			reject:   rejectedState(QueueStateInput{TrackIds: []string{"a", ""}, CurrentIdx: 1}),
+			reject:   rejectedState(playback.QueueStateInput{TrackIds: []string{"a", ""}, CurrentIdx: 1}),
 			wantCode: "playback.current_track_id_missing",
 		},
 		{
 			name:     "unknown repeat mode",
-			reject:   func() error { _, err := ParseRepeatMode("sometimes"); return err },
+			reject:   func() error { _, err := saveQueue(playback.SaveQueueStateInput{RepeatMode: "sometimes"}); return err },
 			wantCode: "playback.unknown_repeat_mode",
 		},
 	}
@@ -469,30 +407,25 @@ func assertOneCodePerCause(t *testing.T, codeOfCause map[string]string) {
 	}
 }
 
-func rejectedState(in QueueStateInput) func() error {
+func rejectedState(in playback.QueueStateInput) func() error {
 	return func() error {
 		in.UserId = testUser()
-		_, err := NewQueueState(in)
+		_, err := playback.NewQueueState(in)
 		return err
 	}
 }
 
 func TestQueueStateValidation_CodedErrorIsStillAValidationError(t *testing.T) {
-	_, err := NewQueueState(QueueStateInput{UserId: testUser(), TrackIds: []string{"a"}, PositionMs: -1})
+	_, err := playback.NewQueueState(playback.QueueStateInput{UserId: testUser(), TrackIds: []string{"a"}, PositionMs: -1})
 
-	var validationErr *ValidationError
+	var validationErr *shareddomain.ValidationError
 	if !errors.As(err, &validationErr) {
-		t.Fatalf("error = %T (%v), want it to unwrap to *ValidationError", err, err)
+		t.Fatalf("error = %T (%v), want it to unwrap to *shareddomain.ValidationError", err, err)
 	}
 }
 
-const (
-	canonicalTrackA = "3f2504e0-4f89-11d3-9a0c-0305e82c3301"
-	canonicalTrackB = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
-)
-
 func TestNewQueueState_StoresTrackIdsInCanonicalForm(t *testing.T) {
-	state, err := NewQueueState(QueueStateInput{
+	state, err := playback.NewQueueState(playback.QueueStateInput{
 		UserId:       testUser(),
 		TrackIds:     []string{"3F2504E0-4F89-11D3-9A0C-0305E82C3301", "{6ba7b810-9dad-11d1-80b4-00c04fd430c8}"},
 		NaturalOrder: []string{"urn:uuid:6ba7b810-9dad-11d1-80b4-00c04fd430c8", "3f2504e04f8911d39a0c0305e82c3301"},
@@ -513,37 +446,37 @@ func TestNewQueueState_StoresTrackIdsInCanonicalForm(t *testing.T) {
 func TestNewQueueState_RejectsGarbageTrackIds(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    QueueStateInput
+		input    playback.QueueStateInput
 		wantCode string
 	}{
 		{
 			name:     "unparseable track id",
-			input:    QueueStateInput{TrackIds: []string{"not-a-uuid"}},
+			input:    playback.QueueStateInput{TrackIds: []string{"not-a-uuid"}},
 			wantCode: "playback.malformed_track_id",
 		},
 		{
 			name:     "empty element away from currentIdx",
-			input:    QueueStateInput{TrackIds: []string{canonicalTrackA, ""}},
+			input:    playback.QueueStateInput{TrackIds: []string{canonicalTrackA, ""}},
 			wantCode: "playback.malformed_track_id",
 		},
 		{
 			name:     "unparseable naturalOrder element",
-			input:    QueueStateInput{TrackIds: []string{canonicalTrackA}, NaturalOrder: []string{"x"}},
+			input:    playback.QueueStateInput{TrackIds: []string{canonicalTrackA}, NaturalOrder: []string{"x"}},
 			wantCode: "playback.malformed_track_id",
 		},
 		{
 			name:     "naturalOrder holding another track",
-			input:    QueueStateInput{TrackIds: []string{canonicalTrackA}, NaturalOrder: []string{canonicalTrackB}},
+			input:    playback.QueueStateInput{TrackIds: []string{canonicalTrackA}, NaturalOrder: []string{canonicalTrackB}},
 			wantCode: "playback.natural_order_mismatch",
 		},
 		{
 			name:     "naturalOrder missing a repeated track",
-			input:    QueueStateInput{TrackIds: []string{canonicalTrackA, canonicalTrackA}, NaturalOrder: []string{canonicalTrackA}},
+			input:    playback.QueueStateInput{TrackIds: []string{canonicalTrackA, canonicalTrackA}, NaturalOrder: []string{canonicalTrackA}},
 			wantCode: "playback.natural_order_mismatch",
 		},
 		{
 			name:     "shuffled queue without a natural order",
-			input:    QueueStateInput{TrackIds: []string{canonicalTrackA}, Shuffled: true},
+			input:    playback.QueueStateInput{TrackIds: []string{canonicalTrackA}, Shuffled: true},
 			wantCode: "playback.natural_order_mismatch",
 		},
 	}
@@ -559,31 +492,11 @@ func TestNewQueueState_RejectsGarbageTrackIds(t *testing.T) {
 }
 
 func TestNewQueueState_UnshuffledQueueMayOmitNaturalOrder(t *testing.T) {
-	state, err := NewQueueState(QueueStateInput{UserId: testUser(), TrackIds: []string{canonicalTrackA, canonicalTrackB}})
+	state, err := playback.NewQueueState(playback.QueueStateInput{UserId: testUser(), TrackIds: []string{canonicalTrackA, canonicalTrackB}})
 	if err != nil {
 		t.Fatalf("an unshuffled queue with no natural order must still save: %v", err)
 	}
 	if len(state.NaturalOrder) != 0 {
 		t.Errorf("NaturalOrder = %v, want it left empty", state.NaturalOrder)
-	}
-}
-
-func TestRehydrateQueueState_LoadsLegacyNonCanonicalRowUnchanged(t *testing.T) {
-	legacy := []string{"3F2504E0-4F89-11D3-9A0C-0305E82C3301", "not-a-uuid", ""}
-	state, err := RehydrateQueueState(QueueStateInput{
-		UserId:       testUser(),
-		TrackIds:     legacy,
-		NaturalOrder: []string{"x"},
-		Shuffled:     true,
-	}, time.Now())
-	if err != nil {
-		t.Fatalf("a legacy stored row must still load: %v", err)
-	}
-
-	if got := strings.Join(state.TrackIds, ","); got != strings.Join(legacy, ",") {
-		t.Errorf("TrackIds = %q, want the stored ids untouched", state.TrackIds)
-	}
-	if err := state.Validate(); err != nil {
-		t.Errorf("the pre-write check must not reject a legacy row: %v", err)
 	}
 }

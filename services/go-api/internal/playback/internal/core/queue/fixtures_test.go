@@ -1,8 +1,7 @@
-package playbacktest
+package queue_test
 
 import (
-	"altune/go-api/internal/playback/domain"
-	"altune/go-api/internal/playback/internal/core/ports"
+	"altune/go-api/internal/playback"
 	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
 	"context"
@@ -14,7 +13,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func CaptureLogs(t *testing.T) *bytes.Buffer {
+func captureLogs(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	var buf bytes.Buffer
 	prev := slog.Default()
@@ -23,23 +22,23 @@ func CaptureLogs(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-type InMemoryQueueRepo struct {
-	States map[uuid.UUID]*domain.QueueState
+type inMemoryQueueRepo struct {
+	States map[uuid.UUID]*playback.QueueState
 }
 
-func NewInMemoryQueueRepo() *InMemoryQueueRepo {
-	return &InMemoryQueueRepo{States: map[uuid.UUID]*domain.QueueState{}}
+func newInMemoryQueueRepo() *inMemoryQueueRepo {
+	return &inMemoryQueueRepo{States: map[uuid.UUID]*playback.QueueState{}}
 }
 
-func (r *InMemoryQueueRepo) Upsert(_ context.Context, state *domain.QueueState) error {
+func (r *inMemoryQueueRepo) Upsert(_ context.Context, state *playback.QueueState) error {
 	r.States[state.UserId.UUID()] = state
 	return nil
 }
 
-func (r *InMemoryQueueRepo) UpdatePosition(_ context.Context, position *domain.QueuePosition) error {
+func (r *inMemoryQueueRepo) UpdatePosition(_ context.Context, position *playback.QueuePosition) error {
 	stored := r.States[position.UserId.UUID()]
 	if stored == nil || position.CurrentIdx >= len(stored.TrackIds) || stored.TrackIds[position.CurrentIdx] != position.CurrentTrackId {
-		return domain.ErrQueuePositionMismatch
+		return playback.ErrQueuePositionMismatch
 	}
 	next := *stored
 	next.CurrentIdx = position.CurrentIdx
@@ -49,32 +48,32 @@ func (r *InMemoryQueueRepo) UpdatePosition(_ context.Context, position *domain.Q
 	return nil
 }
 
-func (r *InMemoryQueueRepo) GetForUser(_ context.Context, userId shared.UserId) (*domain.QueueState, error) {
+func (r *inMemoryQueueRepo) GetForUser(_ context.Context, userId shared.UserId) (*playback.QueueState, error) {
 	return r.States[userId.UUID()], nil
 }
 
-func (r *InMemoryQueueRepo) DeleteForUser(_ context.Context, userId shared.UserId) error {
+func (r *inMemoryQueueRepo) DeleteForUser(_ context.Context, userId shared.UserId) error {
 	delete(r.States, userId.UUID())
 	return nil
 }
 
-func Trk(name string) string {
+func trk(name string) string {
 	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(name)).String()
 }
 
-func TestUser() shared.UserId {
+func testUser() shared.UserId {
 	return shared.NewUserId(uuid.New())
 }
 
-type FakeNowPlaying struct {
-	Tracks map[string]*ports.NowPlayingTrack
+type fakeNowPlaying struct {
+	Tracks map[string]*playback.NowPlayingTrack
 }
 
-func (f *FakeNowPlaying) Lookup(_ context.Context, _ shared.UserId, trackId string) (*ports.NowPlayingTrack, error) {
+func (f *fakeNowPlaying) Lookup(_ context.Context, _ shared.UserId, trackId string) (*playback.NowPlayingTrack, error) {
 	return f.Tracks[trackId], nil
 }
 
-func AuditRecord(t *testing.T, logs *bytes.Buffer, msg string) map[string]any {
+func auditRecord(t *testing.T, logs *bytes.Buffer, msg string) map[string]any {
 	t.Helper()
 	var found map[string]any
 	for _, line := range strings.Split(strings.TrimSpace(logs.String()), "\n") {
@@ -93,11 +92,11 @@ func AuditRecord(t *testing.T, logs *bytes.Buffer, msg string) map[string]any {
 	return found
 }
 
-type UndeletableQueueRepo struct {
-	InMemoryQueueRepo
+type undeletableQueueRepo struct {
+	inMemoryQueueRepo
 	Err error
 }
 
-func (r *UndeletableQueueRepo) DeleteForUser(_ context.Context, _ shared.UserId) error {
+func (r *undeletableQueueRepo) DeleteForUser(_ context.Context, _ shared.UserId) error {
 	return r.Err
 }
