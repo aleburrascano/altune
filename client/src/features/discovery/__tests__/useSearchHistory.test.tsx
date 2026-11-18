@@ -27,8 +27,6 @@ const BAD_GATEWAY = 502;
 let queryClient: QueryClient;
 let port: DiscoverPort;
 
-function noAnswerYet(): void {}
-
 interface WrapperProps {
   children: React.ReactNode;
 }
@@ -49,14 +47,15 @@ function clearRequests(): number {
   return __http.countFor(CLEAR_HISTORY);
 }
 
-function holdClearRequestsUntil(gate: Promise<void>): void {
-  const realFetch = globalThis.fetch;
-  async function heldFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    const response = realFetch(input, init);
-    if (init?.method === 'DELETE') await gate;
-    return response;
-  }
-  jest.spyOn(globalThis, 'fetch').mockImplementation(heldFetch);
+function countHistoryInvalidations(client: QueryClient): () => number {
+  const cache = client.getQueryCache();
+  let invalidations = 0;
+  cache.subscribe((event) => {
+    const history = cache.find({ queryKey: discoveryKeys.history, exact: true });
+    if (event.type === 'updated' && event.action.type === 'invalidate' && event.query === history)
+      invalidations += 1;
+  });
+  return () => invalidations;
 }
 
 function failureEvents() {
@@ -79,7 +78,6 @@ beforeEach(async () => {
 
 afterEach(() => {
   queryClient.clear();
-  jest.restoreAllMocks();
 });
 
 describe('discover query failures emit a search_failed telemetry event tagged with its source', () => {
@@ -162,17 +160,17 @@ describe('useClearSearchHistory empties the cache at once and rolls it back on f
       },
     });
     queryClient.setQueryData(discoveryKeys.history, { items: [{ query: 'old' }] });
-    const invalidate = jest.spyOn(queryClient, 'invalidateQueries');
+    const historyInvalidations = countHistoryInvalidations(queryClient);
     const wrapper = ({ children }: { children: React.ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
     const { result } = renderHook(() => useDiscoverClearSearchHistory(), { wrapper });
-    return { queryClient, invalidate, result, clear: result.current.clear };
+    return { queryClient, historyInvalidations, result, clear: result.current.clear };
   }
 
   it('writes an empty history before the server call and does not refetch on success', async () => {
     __http.reply(CLEAR_HISTORY, { status: NO_CONTENT });
-    const { queryClient, invalidate, clear } = setup();
+    const { queryClient, historyInvalidations, clear } = setup();
 
     act(() => clear());
 
@@ -180,12 +178,12 @@ describe('useClearSearchHistory empties the cache at once and rolls it back on f
     await waitFor(() => expect(clearRequests()).toBe(1));
     await waitFor(() => expect(queryClient.isMutating()).toBe(0));
     expect(clearRequests()).toBe(1);
-    expect(invalidate).not.toHaveBeenCalled();
+    expect(historyInvalidations()).toBe(0);
   });
 
   it('rolls the history back, surfaces the error and invalidates when the server call fails', async () => {
     __http.reply(CLEAR_HISTORY, { status: BAD_REQUEST });
-    const { queryClient, invalidate, result, clear } = setup();
+    const { queryClient, historyInvalidations, result, clear } = setup();
 
     act(() => clear());
 
@@ -193,7 +191,7 @@ describe('useClearSearchHistory empties the cache at once and rolls it back on f
     await waitFor(() => expect(result.current.error).toBeInstanceOf(ApiError));
     expect(result.current.error).toMatchObject({ status: BAD_REQUEST });
     expect(queryClient.getQueryData(discoveryKeys.history)).toEqual({ items: [{ query: 'old' }] });
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: discoveryKeys.history });
+    expect(historyInvalidations()).toBe(1);
   });
 
   it('leaves the error null on success and clears a previous failure on retry', async () => {
@@ -212,14 +210,8 @@ describe('useClearSearchHistory empties the cache at once and rolls it back on f
   });
 
   it('does not restore or refetch history when the failure settles after sign-out', async () => {
-    let answer = noAnswerYet;
-    holdClearRequestsUntil(
-      new Promise<void>((resolve) => {
-        answer = resolve;
-      }),
-    );
-    __http.reply(CLEAR_HISTORY, { status: BAD_REQUEST });
-    const { queryClient, invalidate, clear } = setup();
+    const answer = __http.hold(CLEAR_HISTORY, { status: BAD_REQUEST }) as () => void;
+    const { queryClient, historyInvalidations, clear } = setup();
 
     act(() => clear());
     await waitFor(() => expect(clearRequests()).toBe(1));
@@ -234,17 +226,11 @@ describe('useClearSearchHistory empties the cache at once and rolls it back on f
     expect(queryClient.getQueryData(discoveryKeys.history)).toEqual({
       items: [{ query: 'next-user' }],
     });
-    expect(invalidate).not.toHaveBeenCalled();
+    expect(historyInvalidations()).toBe(0);
   });
 
   it('does not empty the history when the success settles after sign-out', async () => {
-    let answer = noAnswerYet;
-    holdClearRequestsUntil(
-      new Promise<void>((resolve) => {
-        answer = resolve;
-      }),
-    );
-    __http.reply(CLEAR_HISTORY, { status: NO_CONTENT });
+    const answer = __http.hold(CLEAR_HISTORY, { status: NO_CONTENT }) as () => void;
     const { queryClient, clear } = setup();
 
     act(() => clear());
@@ -279,16 +265,10 @@ describe('discover clear-history racing an unrelated history invalidation', () =
   }
 
   function serverHoldingHistory(refetchAnswers: Promise<DiscoverySearchHistoryResponse>[] = []) {
-    const commit = deferred<void>();
     let history = PRE_CLEAR_HISTORY;
     let reads = 0;
     const answers = [...refetchAnswers];
-    holdClearRequestsUntil(
-      commit.promise.then(() => {
-        history = CLEARED_HISTORY;
-      }),
-    );
-    __http.reply(CLEAR_HISTORY, { status: NO_CONTENT });
+    const answerClear = __http.hold(CLEAR_HISTORY, { status: NO_CONTENT }) as () => void;
     function readHistory(): Promise<DiscoverySearchHistoryResponse> {
       reads += 1;
       if (reads > 1 && answers.length > 0) return answers.shift()!;
@@ -296,7 +276,10 @@ describe('discover clear-history racing an unrelated history invalidation', () =
     }
     port = portListing(readHistory);
     return {
-      commitClear: commit.resolve,
+      commitClear: () => {
+        history = CLEARED_HISTORY;
+        answerClear();
+      },
       historyReads: (): number => reads,
     };
   }

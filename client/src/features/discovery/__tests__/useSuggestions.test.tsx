@@ -7,6 +7,7 @@ import { transientRetryOptions } from '@shared/query';
 import { useAutocompleteSuggestions, useSuggestionVisibility } from '@features/discovery';
 import { signInTestUser } from '@testing/signInTestUser';
 import { FeaturePorts, httpFeaturePorts } from '@/mobile';
+import { recordLogs } from '@shared/log';
 const { __http } = require('@testing/doubles/fetch.js');
 
 const SUGGEST = 'GET /v1/discovery/suggest';
@@ -77,7 +78,7 @@ beforeEach(async () => {
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  recordLogs();
   await signInTestUser();
   __http.reply(EVENTS, { status: 204 });
   serveSuggestions(['radiohead']);

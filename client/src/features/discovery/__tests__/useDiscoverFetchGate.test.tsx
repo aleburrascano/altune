@@ -16,6 +16,7 @@ import {
 } from '@features/discovery';
 import { signInTestUser } from '@testing/signInTestUser';
 import { FeaturePorts, httpFeaturePorts } from '@/mobile';
+import { recordLogs } from '@shared/log';
 const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('expo-router', () => ({
@@ -80,7 +81,7 @@ beforeEach(async () => {
     defaultOptions: { queries: { retry: false }, mutations: { retry: false, retryDelay: 0 } },
   });
   setKillSwitchFileStore(createMemoryFileStore());
-  jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  recordLogs();
   await signInTestUser();
   __http.reply(SEARCH, { json: searchResponseFixture() });
   __http.reply(SUGGEST, { json: { suggestions: [] } });

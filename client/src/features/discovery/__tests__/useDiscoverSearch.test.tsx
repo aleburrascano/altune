@@ -16,6 +16,7 @@ import {
 } from '@features/discovery';
 import { signInTestUser } from '@testing/signInTestUser';
 import { FeaturePorts, httpFeaturePorts } from '@/mobile';
+import { recordLogs } from '@shared/log';
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
 const SEARCH = 'GET /v1/discovery/search';
@@ -119,7 +120,7 @@ beforeEach(async () => {
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  recordLogs();
   await signInTestUser();
   __http.reply(EVENTS, { status: 204 });
   serveEndlessPages(MAX_SEARCH_PAGES + 1);
