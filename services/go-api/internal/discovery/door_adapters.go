@@ -3,6 +3,7 @@ package discovery
 import (
 	domain "altune/go-api/internal/discovery/domain"
 	authbridge "altune/go-api/internal/discovery/internal/adapters/authbridge"
+	providermetrics "altune/go-api/internal/discovery/internal/adapters/providermetrics"
 	itunes "altune/go-api/internal/discovery/internal/adapters/providers/itunes"
 	providerhttp "altune/go-api/internal/discovery/internal/adapters/providers/providerhttp"
 	providersearch "altune/go-api/internal/discovery/internal/adapters/providers/providersearch"
@@ -11,13 +12,28 @@ import (
 )
 
 type (
-	PartialKindsError = domain.PartialKindsError
+	Contributor                      = domain.Contributor
+	FeaturedArtist                   = domain.FeaturedArtist
+	LastFmEnrichment                 = domain.LastFmEnrichment
+	PartialKindsError                = domain.PartialKindsError
+	PartialResultError               = domain.PartialResultError
+	ProviderMetricsCountingTransport = providermetrics.CountingTransport
+	ProviderMetricsOutcomes          = providermetrics.Outcomes
+	RecordType                       = domain.RecordType
+	TrackPosition                    = domain.TrackPosition
 )
 
 const (
+	ContributorFeatured            = domain.ContributorFeatured
+	ContributorMain                = domain.ContributorMain
 	ProviderHTTPBodyCap            = providerhttp.BodyCap
 	ProviderHTTPProviderQueueDepth = providerhttp.ProviderQueueDepth
 	ProviderKeyCoverArtArchive     = domain.ProviderKeyCoverArtArchive
+	RecordTypeAlbum                = domain.RecordTypeAlbum
+	RecordTypeCompilation          = domain.RecordTypeCompilation
+	RecordTypeEP                   = domain.RecordTypeEP
+	RecordTypeSingle               = domain.RecordTypeSingle
+	RecordTypeUnknown              = domain.RecordTypeUnknown
 )
 
 var (

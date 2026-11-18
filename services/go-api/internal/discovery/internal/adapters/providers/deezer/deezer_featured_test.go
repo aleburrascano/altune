@@ -1,15 +1,14 @@
-package deezer
+package deezer_test
 
 import "testing"
 
-func TestExtractDeezerFeatured(t *testing.T) {
-	cs := []deezerContributor{
-		{ID: 1, Name: "Main Artist", Role: "Main"},
-		{ID: 2, Name: "Guest One", Role: "Featured"},
-		{ID: 3, Name: "  ", Role: "Featured"},
-		{ID: 4, Name: "Guest Two", Role: "featured"},
-	}
-	got := extractDeezerFeatured(cs)
+func TestLookupTrackFeatured(t *testing.T) {
+	got := featuredFrom(t, `[
+		{"id": 1, "name": "Main Artist", "role": "Main"},
+		{"id": 2, "name": "Guest One", "role": "Featured"},
+		{"id": 3, "name": "  ", "role": "Featured"},
+		{"id": 4, "name": "Guest Two", "role": "featured"}
+	]`)
 	if len(got) != 2 {
 		t.Fatalf("got %d featured, want 2 (%+v)", len(got), got)
 	}
@@ -21,32 +20,30 @@ func TestExtractDeezerFeatured(t *testing.T) {
 	}
 }
 
-func TestExtractDeezerFeatured_NoneWhenAllMain(t *testing.T) {
-	got := extractDeezerFeatured([]deezerContributor{{ID: 1, Name: "Solo", Role: "Main"}})
+func TestLookupTrackFeatured_NoneWhenAllMain(t *testing.T) {
+	got := featuredFrom(t, `[{"id": 1, "name": "Solo", "role": "Main"}]`)
 	if len(got) != 0 {
 		t.Errorf("expected no featured, got %+v", got)
 	}
 }
 
-func TestExtractDeezerFeatured_CoPrimaryMain(t *testing.T) {
-	cs := []deezerContributor{
-		{ID: 1, Name: "Ken Carson", Role: "Main"},
-		{ID: 2, Name: "Playboi Carti", Role: "Main"},
-	}
-	got := extractDeezerFeatured(cs)
+func TestLookupTrackFeatured_CoPrimaryMain(t *testing.T) {
+	got := featuredFrom(t, `[
+		{"id": 1, "name": "Ken Carson", "role": "Main"},
+		{"id": 2, "name": "Playboi Carti", "role": "Main"}
+	]`)
 	if len(got) != 1 || got[0].Name != "Playboi Carti" || got[0].DeezerID != 2 {
 		t.Fatalf("expected [Playboi Carti/2], got %+v", got)
 	}
 }
 
-func TestExtractDeezerFeatured_DedupesAndKeepsFeaturedAfterCoMain(t *testing.T) {
-	cs := []deezerContributor{
-		{ID: 1, Name: "Ken Carson", Role: "Main"},
-		{ID: 2, Name: "Destroy Lonely", Role: "Main"},
-		{ID: 3, Name: "Lil Uzi Vert", Role: "Featured"},
-		{ID: 4, Name: "destroy lonely", Role: "Featured"},
-	}
-	got := extractDeezerFeatured(cs)
+func TestLookupTrackFeatured_DedupesAndKeepsFeaturedAfterCoMain(t *testing.T) {
+	got := featuredFrom(t, `[
+		{"id": 1, "name": "Ken Carson", "role": "Main"},
+		{"id": 2, "name": "Destroy Lonely", "role": "Main"},
+		{"id": 3, "name": "Lil Uzi Vert", "role": "Featured"},
+		{"id": 4, "name": "destroy lonely", "role": "Featured"}
+	]`)
 	if len(got) != 2 {
 		t.Fatalf("expected 2 (dedup), got %+v", got)
 	}

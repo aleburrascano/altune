@@ -1,7 +1,7 @@
-package deezer
+package deezer_test
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/internal/adapters/providers/providertest"
 	"context"
 	"errors"
@@ -38,9 +38,9 @@ func TestDeezerAdapter_Search_Tracks(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewDeezerAdapter(providertest.NewClient(server.URL))
-	results, err := adapter.Search(context.Background(), "bohemian rhapsody", map[domain.ResultKind]bool{
-		domain.ResultKindTrack: true,
+	adapter := discovery.NewDeezerAdapter(providertest.NewClient(server.URL))
+	results, err := adapter.Search(context.Background(), "bohemian rhapsody", map[discovery.ResultKind]bool{
+		discovery.ResultKindTrack: true,
 	})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -50,8 +50,8 @@ func TestDeezerAdapter_Search_Tracks(t *testing.T) {
 	}
 
 	r := results[0]
-	if r.Kind != domain.ResultKindTrack {
-		t.Errorf("kind: got %v, want %v", r.Kind, domain.ResultKindTrack)
+	if r.Kind != discovery.ResultKindTrack {
+		t.Errorf("kind: got %v, want %v", r.Kind, discovery.ResultKindTrack)
 	}
 	if r.Title != "Bohemian Rhapsody" {
 		t.Errorf("title: got %q, want %q", r.Title, "Bohemian Rhapsody")
@@ -62,14 +62,14 @@ func TestDeezerAdapter_Search_Tracks(t *testing.T) {
 	if r.ImageURL != "https://cdn.deezer.com/cover.jpg" {
 		t.Errorf("imageURL: got %q, want album cover_big", r.ImageURL)
 	}
-	if r.Confidence != domain.ConfidenceLow {
-		t.Errorf("confidence: got %v, want %v", r.Confidence, domain.ConfidenceLow)
+	if r.Confidence != discovery.ConfidenceLow {
+		t.Errorf("confidence: got %v, want %v", r.Confidence, discovery.ConfidenceLow)
 	}
 	if len(r.Sources) != 1 {
 		t.Fatalf("expected 1 source, got %d", len(r.Sources))
 	}
-	if r.Sources[0].Provider != domain.ProviderDeezer {
-		t.Errorf("source provider: got %v, want %v", r.Sources[0].Provider, domain.ProviderDeezer)
+	if r.Sources[0].Provider != discovery.ProviderDeezer {
+		t.Errorf("source provider: got %v, want %v", r.Sources[0].Provider, discovery.ProviderDeezer)
 	}
 	if r.Sources[0].ExternalID != "123456" {
 		t.Errorf("source externalID: got %q, want %q", r.Sources[0].ExternalID, "123456")
@@ -107,9 +107,9 @@ func TestDeezerAdapter_Search_Artists(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewDeezerAdapter(providertest.NewClient(server.URL))
-	results, err := adapter.Search(context.Background(), "radiohead", map[domain.ResultKind]bool{
-		domain.ResultKindArtist: true,
+	adapter := discovery.NewDeezerAdapter(providertest.NewClient(server.URL))
+	results, err := adapter.Search(context.Background(), "radiohead", map[discovery.ResultKind]bool{
+		discovery.ResultKindArtist: true,
 	})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -119,8 +119,8 @@ func TestDeezerAdapter_Search_Artists(t *testing.T) {
 	}
 
 	r := results[0]
-	if r.Kind != domain.ResultKindArtist {
-		t.Errorf("kind: got %v, want %v", r.Kind, domain.ResultKindArtist)
+	if r.Kind != discovery.ResultKindArtist {
+		t.Errorf("kind: got %v, want %v", r.Kind, discovery.ResultKindArtist)
 	}
 	if r.Title != "Radiohead" {
 		t.Errorf("title: got %q, want %q", r.Title, "Radiohead")
@@ -157,9 +157,9 @@ func TestDeezerAdapter_Search_Albums(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewDeezerAdapter(providertest.NewClient(server.URL))
-	results, err := adapter.Search(context.Background(), "ok computer", map[domain.ResultKind]bool{
-		domain.ResultKindAlbum: true,
+	adapter := discovery.NewDeezerAdapter(providertest.NewClient(server.URL))
+	results, err := adapter.Search(context.Background(), "ok computer", map[discovery.ResultKind]bool{
+		discovery.ResultKindAlbum: true,
 	})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -169,8 +169,8 @@ func TestDeezerAdapter_Search_Albums(t *testing.T) {
 	}
 
 	r := results[0]
-	if r.Kind != domain.ResultKindAlbum {
-		t.Errorf("kind: got %v, want %v", r.Kind, domain.ResultKindAlbum)
+	if r.Kind != discovery.ResultKindAlbum {
+		t.Errorf("kind: got %v, want %v", r.Kind, discovery.ResultKindAlbum)
 	}
 	if r.Title != "OK Computer" {
 		t.Errorf("title: got %q, want %q", r.Title, "OK Computer")
@@ -204,9 +204,9 @@ func TestDeezerAdapter_Search_HTTPError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewDeezerAdapter(providertest.NewClient(server.URL))
-	results, err := adapter.Search(context.Background(), "anything", map[domain.ResultKind]bool{
-		domain.ResultKindTrack: true,
+	adapter := discovery.NewDeezerAdapter(providertest.NewClient(server.URL))
+	results, err := adapter.Search(context.Background(), "anything", map[discovery.ResultKind]bool{
+		discovery.ResultKindTrack: true,
 	})
 	if err == nil {
 		t.Fatal("expected an error when all attempted kinds fail on HTTP 500, got nil")
@@ -231,9 +231,9 @@ func TestDeezerAdapter_Search_Track_MissingPopularity(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewDeezerAdapter(providertest.NewClient(server.URL))
-	results, err := adapter.Search(context.Background(), "unknown", map[domain.ResultKind]bool{
-		domain.ResultKindTrack: true,
+	adapter := discovery.NewDeezerAdapter(providertest.NewClient(server.URL))
+	results, err := adapter.Search(context.Background(), "unknown", map[discovery.ResultKind]bool{
+		discovery.ResultKindTrack: true,
 	})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -279,8 +279,8 @@ func TestDeezerAdapter_GetAlbumTracks(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewDeezerAdapter(providertest.NewClient(server.URL))
-	results, err := adapter.GetAlbumTracks(context.Background(), domain.ProviderDeezer, "99")
+	adapter := discovery.NewDeezerAdapter(providertest.NewClient(server.URL))
+	results, err := adapter.GetAlbumTracks(context.Background(), discovery.ProviderDeezer, "99")
 	if err != nil {
 		t.Fatalf("GetAlbumTracks: %v", err)
 	}
@@ -290,8 +290,8 @@ func TestDeezerAdapter_GetAlbumTracks(t *testing.T) {
 	if results[0].Title != "Airbag" {
 		t.Errorf("first track title: got %q, want %q", results[0].Title, "Airbag")
 	}
-	if results[0].Kind != domain.ResultKindTrack {
-		t.Errorf("first track kind: got %v, want %v", results[0].Kind, domain.ResultKindTrack)
+	if results[0].Kind != discovery.ResultKindTrack {
+		t.Errorf("first track kind: got %v, want %v", results[0].Kind, discovery.ResultKindTrack)
 	}
 	if results[1].Title != "Paranoid Android" {
 		t.Errorf("second track title: got %q, want %q", results[1].Title, "Paranoid Android")
@@ -317,8 +317,8 @@ func TestDeezerAdapter_GetArtistTopTracks(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewDeezerAdapter(providertest.NewClient(server.URL))
-	results, err := adapter.GetArtistTopTracks(context.Background(), domain.ProviderDeezer, "42")
+	adapter := discovery.NewDeezerAdapter(providertest.NewClient(server.URL))
+	results, err := adapter.GetArtistTopTracks(context.Background(), discovery.ProviderDeezer, "42")
 	if err != nil {
 		t.Fatalf("GetArtistTopTracks: %v", err)
 	}
@@ -328,8 +328,8 @@ func TestDeezerAdapter_GetArtistTopTracks(t *testing.T) {
 	if results[0].Title != "Creep" {
 		t.Errorf("track title: got %q, want %q", results[0].Title, "Creep")
 	}
-	if results[0].Kind != domain.ResultKindTrack {
-		t.Errorf("track kind: got %v, want %v", results[0].Kind, domain.ResultKindTrack)
+	if results[0].Kind != discovery.ResultKindTrack {
+		t.Errorf("track kind: got %v, want %v", results[0].Kind, discovery.ResultKindTrack)
 	}
 	if results[0].Sources[0].ExternalID != "301" {
 		t.Errorf("source externalID: got %q, want %q", results[0].Sources[0].ExternalID, "301")
@@ -363,8 +363,8 @@ func TestDeezerAdapter_GetArtistAlbums_paginates(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewDeezerAdapter(providertest.NewClient(server.URL))
-	results, err := adapter.GetArtistAlbums(context.Background(), domain.ProviderDeezer, "42")
+	adapter := discovery.NewDeezerAdapter(providertest.NewClient(server.URL))
+	results, err := adapter.GetArtistAlbums(context.Background(), discovery.ProviderDeezer, "42")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums: %v", err)
 	}
@@ -390,9 +390,9 @@ func TestDeezerAdapter_Search_QuotaErrorBodySurfaces(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewDeezerAdapter(providertest.NewClient(server.URL))
-	results, err := adapter.Search(context.Background(), "anything", map[domain.ResultKind]bool{
-		domain.ResultKindTrack: true,
+	adapter := discovery.NewDeezerAdapter(providertest.NewClient(server.URL))
+	results, err := adapter.Search(context.Background(), "anything", map[discovery.ResultKind]bool{
+		discovery.ResultKindTrack: true,
 	})
 	if err == nil {
 		t.Fatal("expected an error on a 200 quota-error body, got nil (silent empty success)")
@@ -412,8 +412,8 @@ func TestDeezerAdapter_GetArtistAlbums_QuotaErrorBodySurfaces(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewDeezerAdapter(providertest.NewClient(server.URL))
-	albums, err := adapter.GetArtistAlbums(context.Background(), domain.ProviderDeezer, "42")
+	adapter := discovery.NewDeezerAdapter(providertest.NewClient(server.URL))
+	albums, err := adapter.GetArtistAlbums(context.Background(), discovery.ProviderDeezer, "42")
 	if err == nil {
 		t.Fatal("expected an error on a 200 quota-error body, got nil (empty discography as truth)")
 	}
@@ -443,9 +443,9 @@ func TestDeezerAdapter_GetArtistAlbums_laterPageErrorKeepsEarlierPages(t *testin
 	}))
 	defer server.Close()
 
-	adapter := NewDeezerAdapter(providertest.NewClient(server.URL))
-	results, err := adapter.GetArtistAlbums(context.Background(), domain.ProviderDeezer, "42")
-	var partial *domain.PartialResultError
+	adapter := discovery.NewDeezerAdapter(providertest.NewClient(server.URL))
+	results, err := adapter.GetArtistAlbums(context.Background(), discovery.ProviderDeezer, "42")
+	var partial *discovery.PartialResultError
 	if !errors.As(err, &partial) || partial.Page != 1 {
 		t.Fatalf("expected a PartialResultError for page 1 alongside the earlier pages, got: %v", err)
 	}
@@ -454,11 +454,19 @@ func TestDeezerAdapter_GetArtistAlbums_laterPageErrorKeepsEarlierPages(t *testin
 	}
 }
 
-func TestDeezerStructuredQuery_stripsEmbeddedQuotes(t *testing.T) {
-	got := deezerStructuredQuery(`The "Best" Band`, `Hello`, domain.ResultKindTrack)
+func TestDeezerAdapter_SearchStructured_stripsEmbeddedQuotes(t *testing.T) {
+	var gotQuery string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query().Get("q")
+		_, _ = w.Write([]byte(`{"data": [], "total": 0}`))
+	}))
+	defer server.Close()
+
+	_, err := discovery.NewDeezerAdapter(providertest.NewClient(server.URL)).SearchStructured(t.Context(), `The "Best" Band`, `Hello`,
+		map[discovery.ResultKind]bool{discovery.ResultKindTrack: true})
 	want := `artist:"The Best Band" track:"Hello"`
-	if got != want {
-		t.Errorf("query = %q, want %q (embedded quotes stripped)", got, want)
+	if err != nil || gotQuery != want {
+		t.Errorf("query = %q (err %v), want %q (embedded quotes stripped)", gotQuery, err, want)
 	}
 }
 
@@ -481,7 +489,7 @@ func TestDeezerAdapter_FetchCharts(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewDeezerAdapter(providertest.NewClient(server.URL))
+	adapter := discovery.NewDeezerAdapter(providertest.NewClient(server.URL))
 	entries, err := adapter.FetchCharts(context.Background(), 10)
 	if err != nil {
 		t.Fatalf("FetchCharts: %v", err)
@@ -489,7 +497,7 @@ func TestDeezerAdapter_FetchCharts(t *testing.T) {
 	if len(entries) != 4 {
 		t.Fatalf("entries = %d, want 4 (blank terms dropped)", len(entries))
 	}
-	byTerm := map[string]domain.VocabularyEntry{}
+	byTerm := map[string]discovery.VocabularyEntry{}
 	for _, e := range entries {
 		byTerm[e.Term] = e
 	}
@@ -518,7 +526,7 @@ func TestDeezerAdapter_FetchCharts_failedKindSkipped(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewDeezerAdapter(providertest.NewClient(server.URL))
+	adapter := discovery.NewDeezerAdapter(providertest.NewClient(server.URL))
 	entries, err := adapter.FetchCharts(context.Background(), 10)
 	if err != nil {
 		t.Fatalf("FetchCharts must not fail when one chart kind fails: %v", err)
@@ -542,9 +550,9 @@ func TestDeezerAdapter_SearchStructured_sendsAdvancedQuery(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewDeezerAdapter(providertest.NewClient(server.URL))
-	results, err := adapter.SearchStructured(context.Background(), "Adele", "Hello", map[domain.ResultKind]bool{
-		domain.ResultKindTrack: true,
+	adapter := discovery.NewDeezerAdapter(providertest.NewClient(server.URL))
+	results, err := adapter.SearchStructured(context.Background(), "Adele", "Hello", map[discovery.ResultKind]bool{
+		discovery.ResultKindTrack: true,
 	})
 	if err != nil {
 		t.Fatalf("SearchStructured: %v", err)
@@ -568,10 +576,10 @@ func TestDeezerAdapter_SearchStructured_failedKindSkipped(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewDeezerAdapter(providertest.NewClient(server.URL))
-	results, err := adapter.SearchStructured(context.Background(), "Adele", "Hello", map[domain.ResultKind]bool{
-		domain.ResultKindTrack: true,
-		domain.ResultKindAlbum: true,
+	adapter := discovery.NewDeezerAdapter(providertest.NewClient(server.URL))
+	results, err := adapter.SearchStructured(context.Background(), "Adele", "Hello", map[discovery.ResultKind]bool{
+		discovery.ResultKindTrack: true,
+		discovery.ResultKindAlbum: true,
 	})
 	if err != nil {
 		t.Fatalf("SearchStructured must skip a failed kind, got error: %v", err)
@@ -591,7 +599,7 @@ func TestDeezerAdapter_LookupTrackFeatured(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewDeezerAdapter(providertest.NewClient(server.URL))
+	adapter := discovery.NewDeezerAdapter(providertest.NewClient(server.URL))
 	feats, err := adapter.LookupTrackFeatured(context.Background(), "123")
 	if err != nil {
 		t.Fatalf("LookupTrackFeatured: %v", err)
@@ -608,7 +616,7 @@ func TestDeezerAdapter_LookupTrackFeatured_quotaErrorSurfaces(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewDeezerAdapter(providertest.NewClient(server.URL))
+	adapter := discovery.NewDeezerAdapter(providertest.NewClient(server.URL))
 	if _, err := adapter.LookupTrackFeatured(context.Background(), "123"); err == nil {
 		t.Fatal("expected the in-band quota error to surface (200 envelope must not decode as empty success)")
 	}
@@ -630,8 +638,8 @@ func TestDeezerAdapter_GetArtistAlbums_nextDrivenPagination(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewDeezerAdapter(providertest.NewClient(server.URL))
-	results, err := adapter.GetArtistAlbums(context.Background(), domain.ProviderDeezer, "42")
+	adapter := discovery.NewDeezerAdapter(providertest.NewClient(server.URL))
+	results, err := adapter.GetArtistAlbums(context.Background(), discovery.ProviderDeezer, "42")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums: %v", err)
 	}
@@ -644,6 +652,7 @@ func TestDeezerAdapter_GetArtistAlbums_nextDrivenPagination(t *testing.T) {
 }
 
 func TestDeezerAdapter_GetArtistAlbums_capsAtMaxPages(t *testing.T) {
+	const maxPages = 5
 	var pages int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		pages++
@@ -655,28 +664,21 @@ func TestDeezerAdapter_GetArtistAlbums_capsAtMaxPages(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewDeezerAdapter(providertest.NewClient(server.URL))
-	results, err := adapter.GetArtistAlbums(context.Background(), domain.ProviderDeezer, "42")
+	adapter := discovery.NewDeezerAdapter(providertest.NewClient(server.URL))
+	results, err := adapter.GetArtistAlbums(context.Background(), discovery.ProviderDeezer, "42")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums: %v", err)
 	}
-	if pages != deezerMaxDiscographyPages {
-		t.Errorf("pages fetched = %d, want the %d-page cap", pages, deezerMaxDiscographyPages)
+	if pages != maxPages {
+		t.Errorf("pages fetched = %d, want the %d-page cap", pages, maxPages)
 	}
-	if len(results) != deezerMaxDiscographyPages {
+	if len(results) != maxPages {
 		t.Errorf("results = %d, want one per capped page", len(results))
 	}
 }
 
-func TestMapDeezerResult_unicodeSurvives(t *testing.T) {
-	item := deezerItem{
-		ID:    1,
-		Title: "İstanbul 東京 🎵 «quotes»",
-		Artist: &deezerRef{
-			ID: 2, Name: `The "Best" Band`,
-		},
-	}
-	r := mapDeezerResult(item, domain.ResultKindTrack)
+func TestDeezerAdapter_Search_unicodeSurvives(t *testing.T) {
+	r := searchItem(t, discovery.ResultKindTrack, `{"id": 1, "title": "İstanbul 東京 🎵 «quotes»", "artist": {"id": 2, "name": "The \"Best\" Band"}}`)
 	if r.Title != "İstanbul 東京 🎵 «quotes»" {
 		t.Errorf("title = %q, want unicode preserved verbatim", r.Title)
 	}
@@ -685,8 +687,8 @@ func TestMapDeezerResult_unicodeSurvives(t *testing.T) {
 	}
 }
 
-func TestMapDeezerResult_missingOptionalFields(t *testing.T) {
-	r := mapDeezerResult(deezerItem{ID: 9, Title: "Orphan"}, domain.ResultKindTrack)
+func TestDeezerAdapter_Search_missingOptionalFields(t *testing.T) {
+	r := searchItem(t, discovery.ResultKindTrack, `{"id": 9, "title": "Orphan"}`)
 	if r.Subtitle != "" || r.Album != "" || r.DeezerAlbumID != "" || r.ImageURL != "" {
 		t.Errorf("result = %+v, want zero optional fields for a bare item", r)
 	}
@@ -713,7 +715,7 @@ func TestDeezerAdapter_GetAlbumTracks_readsEveryPage(t *testing.T) {
 	}))
 	defer server.Close()
 
-	results, err := NewDeezerAdapter(providertest.NewClient(server.URL)).GetAlbumTracks(t.Context(), domain.ProviderDeezer, "99")
+	results, err := discovery.NewDeezerAdapter(providertest.NewClient(server.URL)).GetAlbumTracks(t.Context(), discovery.ProviderDeezer, "99")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -723,43 +725,48 @@ func TestDeezerAdapter_GetAlbumTracks_readsEveryPage(t *testing.T) {
 	}
 }
 
-func TestMapDeezerResult_CarriesTheProvidersTrackPositionAndDiskNumber(t *testing.T) {
-	r := mapDeezerResult(deezerItem{ID: 7, Title: "Bonus One", TrackPosition: 1, DiskNumber: 2}, domain.ResultKindTrack)
-	if r.TrackPosition != (domain.TrackPosition{Disc: 2, Track: 1}) {
+func TestDeezerAdapter_Search_CarriesTheProvidersTrackPositionAndDiskNumber(t *testing.T) {
+	r := searchItem(t, discovery.ResultKindTrack, `{"id": 7, "title": "Bonus One", "track_position": 1, "disk_number": 2}`)
+	if r.TrackPosition != (discovery.TrackPosition{Disc: 2, Track: 1}) {
 		t.Errorf("track position = %+v, want track 1 disc 2", r.TrackPosition)
 	}
 }
 
-func searchRecordedPayload(t *testing.T, kind domain.ResultKind, fixture string) domain.SearchResult {
+func searchRecordedPayload(t *testing.T, kind discovery.ResultKind, fixture string) discovery.SearchResult {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join("testdata", fixture))
 	if err != nil {
 		t.Fatal(err)
 	}
+	return searchItem(t, kind, string(raw))
+}
+
+func searchItem(t *testing.T, kind discovery.ResultKind, item string) discovery.SearchResult {
+	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		fmt.Fprintf(w, `{"data": [%s], "total": 1}`, raw)
+		fmt.Fprintf(w, `{"data": [%s], "total": 1}`, item)
 	}))
 	defer server.Close()
-	results, err := NewDeezerAdapter(providertest.NewClient(server.URL)).Search(t.Context(), "recorded", map[domain.ResultKind]bool{kind: true})
+	results, err := discovery.NewDeezerAdapter(providertest.NewClient(server.URL)).Search(t.Context(), "recorded", map[discovery.ResultKind]bool{kind: true})
 	if err != nil || len(results) != 1 {
-		t.Fatalf("Search = %d results, err %v, want exactly the recorded one", len(results), err)
+		t.Fatalf("Search = %d results, err %v, want exactly the one item", len(results), err)
 	}
 	return results[0]
 }
 
 func TestSearch_RecordedTrackPayloadFillsTheTypedContract(t *testing.T) {
-	r := searchRecordedPayload(t, domain.ResultKindTrack, "recorded_track_with_featured_contributor.json")
+	r := searchRecordedPayload(t, discovery.ResultKindTrack, "recorded_track_with_featured_contributor.json")
 
-	wantContributors := []domain.Contributor{
-		{ProviderID: "12178", Name: "Calvin Harris", Role: domain.ContributorMain},
-		{ProviderID: "564", Name: "Rihanna", Role: domain.ContributorFeatured},
+	wantContributors := []discovery.Contributor{
+		{ProviderID: "12178", Name: "Calvin Harris", Role: discovery.ContributorMain},
+		{ProviderID: "564", Name: "Rihanna", Role: discovery.ContributorFeatured},
 	}
 	checks := []struct {
 		field     string
 		got, want any
 	}{
 		{"ISRC", r.ISRC, "GBARL1600460"},
-		{"TrackPosition", r.TrackPosition, domain.TrackPosition{Disc: 1, Track: 1}},
+		{"TrackPosition", r.TrackPosition, discovery.TrackPosition{Disc: 1, Track: 1}},
 		{"Duration", r.Duration, 222},
 		{"Contributors", r.Contributors, wantContributors},
 		{"Explicit", r.Explicit != nil && !*r.Explicit, true},
@@ -776,32 +783,32 @@ func TestSearch_RecordedTrackPayloadFillsTheTypedContract(t *testing.T) {
 }
 
 func TestSearch_RecordedTrackWithSeveralMainContributorsKeepsEachOnce(t *testing.T) {
-	r := searchRecordedPayload(t, domain.ResultKindTrack, "recorded_track_with_several_main_contributors.json")
+	r := searchRecordedPayload(t, discovery.ResultKindTrack, "recorded_track_with_several_main_contributors.json")
 
-	want := []domain.Contributor{
-		{ProviderID: "27", Name: "Daft Punk", Role: domain.ContributorMain},
-		{ProviderID: "103", Name: "Pharrell Williams", Role: domain.ContributorMain},
-		{ProviderID: "7207", Name: "Nile Rodgers", Role: domain.ContributorMain},
+	want := []discovery.Contributor{
+		{ProviderID: "27", Name: "Daft Punk", Role: discovery.ContributorMain},
+		{ProviderID: "103", Name: "Pharrell Williams", Role: discovery.ContributorMain},
+		{ProviderID: "7207", Name: "Nile Rodgers", Role: discovery.ContributorMain},
 	}
 	if !reflect.DeepEqual(r.Contributors, want) {
 		t.Errorf("Contributors = %#v, want %#v", r.Contributors, want)
 	}
-	if r.TrackPosition != (domain.TrackPosition{Disc: 1, Track: 8}) {
+	if r.TrackPosition != (discovery.TrackPosition{Disc: 1, Track: 8}) {
 		t.Errorf("TrackPosition = %+v, want disc 1 track 8", r.TrackPosition)
 	}
 }
 
 func TestSearch_RecordedAlbumPayloadFillsTheTypedContract(t *testing.T) {
-	r := searchRecordedPayload(t, domain.ResultKindAlbum, "recorded_album_detail.json")
+	r := searchRecordedPayload(t, discovery.ResultKindAlbum, "recorded_album_detail.json")
 
 	checks := []struct {
 		field     string
 		got, want any
 	}{
 		{"UPC", r.UPC, "724384960650"},
-		{"RecordType", r.RecordType, domain.RecordTypeAlbum},
+		{"RecordType", r.RecordType, discovery.RecordTypeAlbum},
 		{"TrackCount", r.TrackCount, 14},
-		{"Contributors", r.Contributors, []domain.Contributor{{ProviderID: "27", Name: "Daft Punk", Role: domain.ContributorMain}}},
+		{"Contributors", r.Contributors, []discovery.Contributor{{ProviderID: "27", Name: "Daft Punk", Role: discovery.ContributorMain}}},
 		{"Explicit", r.Explicit != nil && !*r.Explicit, true},
 		{"ISRC", r.ISRC, ""},
 	}
@@ -812,32 +819,48 @@ func TestSearch_RecordedAlbumPayloadFillsTheTypedContract(t *testing.T) {
 	}
 }
 
-func TestMapDeezerResult_RecordTypeIsParsedCaseInsensitivelyAgainstDeezersVocabulary(t *testing.T) {
+func TestDeezerAdapter_Search_RecordTypeIsParsedCaseInsensitivelyAgainstDeezersVocabulary(t *testing.T) {
 	tests := []struct {
 		raw  string
-		want domain.RecordType
+		want discovery.RecordType
 	}{
-		{"album", domain.RecordTypeAlbum},
-		{"EP", domain.RecordTypeEP},
-		{" Single ", domain.RecordTypeSingle},
-		{"compilation", domain.RecordTypeCompilation},
-		{"mixtape", domain.RecordTypeUnknown},
+		{"album", discovery.RecordTypeAlbum},
+		{"EP", discovery.RecordTypeEP},
+		{" Single ", discovery.RecordTypeSingle},
+		{"compilation", discovery.RecordTypeCompilation},
+		{"mixtape", discovery.RecordTypeUnknown},
 	}
 	for _, tt := range tests {
-		if got := mapDeezerResult(deezerItem{ID: 1, Title: "A", RecordType: tt.raw}, domain.ResultKindAlbum).RecordType; got != tt.want {
+		item := fmt.Sprintf(`{"id": 1, "title": "A", "record_type": %q}`, tt.raw)
+		if got := searchItem(t, discovery.ResultKindAlbum, item).RecordType; got != tt.want {
 			t.Errorf("record_type %q = %q, want %q", tt.raw, got, tt.want)
 		}
 	}
 }
 
-func TestMapDeezerResult_ISRCIsCanonicalOrEmpty(t *testing.T) {
+func TestDeezerAdapter_Search_ISRCIsCanonicalOrEmpty(t *testing.T) {
 	tests := []struct{ raw, want string }{
 		{"gb-arl-16-00460", "GBARL1600460"},
 		{"not-an-isrc", ""},
 	}
 	for _, tt := range tests {
-		if got := mapDeezerResult(deezerItem{ID: 1, Title: "T", ISRC: tt.raw}, domain.ResultKindTrack).ISRC; got != tt.want {
+		item := fmt.Sprintf(`{"id": 1, "title": "T", "isrc": %q}`, tt.raw)
+		if got := searchItem(t, discovery.ResultKindTrack, item).ISRC; got != tt.want {
 			t.Errorf("isrc %q = %q, want %q", tt.raw, got, tt.want)
 		}
 	}
+}
+
+func featuredFrom(t *testing.T, contributors string) []discovery.FeaturedArtist {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"contributors":` + contributors + `}`))
+	}))
+	defer server.Close()
+	got, err := discovery.NewDeezerAdapter(providertest.NewClient(server.URL)).LookupTrackFeatured(context.Background(), "1")
+	if err != nil {
+		t.Fatalf("LookupTrackFeatured: %v", err)
+	}
+	return got
 }

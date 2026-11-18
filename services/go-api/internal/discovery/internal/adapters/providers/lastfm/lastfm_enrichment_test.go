@@ -1,9 +1,10 @@
-package lastfm
+package lastfm_test
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/internal/adapters/providers/providertest"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -77,9 +78,9 @@ func lastfmEnrichmentServer(t *testing.T) *httptest.Server {
 func TestLastFmAdapter_Lookup_Artist(t *testing.T) {
 	server := lastfmEnrichmentServer(t)
 	defer server.Close()
-	adapter := NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
+	adapter := discovery.NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
 
-	e, err := adapter.Lookup(context.Background(), domain.ResultKindArtist, "Kendrick Lamar", "")
+	e, err := adapter.Lookup(context.Background(), discovery.ResultKindArtist, "Kendrick Lamar", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -103,9 +104,9 @@ func TestLastFmAdapter_Lookup_Artist(t *testing.T) {
 func TestLastFmAdapter_Lookup_Track(t *testing.T) {
 	server := lastfmEnrichmentServer(t)
 	defer server.Close()
-	adapter := NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
+	adapter := discovery.NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
 
-	e, err := adapter.Lookup(context.Background(), domain.ResultKindTrack, "Kendrick Lamar", "HUMBLE.")
+	e, err := adapter.Lookup(context.Background(), discovery.ResultKindTrack, "Kendrick Lamar", "HUMBLE.")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -129,9 +130,9 @@ func TestLastFmAdapter_Lookup_Track(t *testing.T) {
 func TestLastFmAdapter_Lookup_Album(t *testing.T) {
 	server := lastfmEnrichmentServer(t)
 	defer server.Close()
-	adapter := NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
+	adapter := discovery.NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
 
-	e, err := adapter.Lookup(context.Background(), domain.ResultKindAlbum, "Kendrick Lamar", "DAMN.")
+	e, err := adapter.Lookup(context.Background(), discovery.ResultKindAlbum, "Kendrick Lamar", "DAMN.")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -151,9 +152,9 @@ func TestLastFmAdapter_Lookup_HTTPErrorDegrades(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer server.Close()
-	adapter := NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
+	adapter := discovery.NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
 
-	_, err := adapter.Lookup(context.Background(), domain.ResultKindArtist, "Kendrick Lamar", "")
+	_, err := adapter.Lookup(context.Background(), discovery.ResultKindArtist, "Kendrick Lamar", "")
 	if err == nil {
 		t.Fatal("expected an error on HTTP 500 so the service can degrade to empty")
 	}
@@ -165,9 +166,9 @@ func TestLastFmAdapter_Lookup_InBandError6IsCleanMiss(t *testing.T) {
 		_, _ = w.Write([]byte(`{"error":6,"message":"Artist not found"}`))
 	}))
 	defer server.Close()
-	adapter := NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
+	adapter := discovery.NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
 
-	e, err := adapter.Lookup(context.Background(), domain.ResultKindArtist, "No Such Artist", "")
+	e, err := adapter.Lookup(context.Background(), discovery.ResultKindArtist, "No Such Artist", "")
 	if err != nil {
 		t.Fatalf("error 6 must be a clean miss (nil error), got %v", err)
 	}
@@ -183,9 +184,9 @@ func TestLastFmAdapter_Lookup_InBandError6On4xxIsCleanMiss(t *testing.T) {
 		_, _ = w.Write([]byte(`{"error":6,"message":"Track not found"}`))
 	}))
 	defer server.Close()
-	adapter := NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
+	adapter := discovery.NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
 
-	e, err := adapter.Lookup(context.Background(), domain.ResultKindTrack, "Nobody", "Nothing")
+	e, err := adapter.Lookup(context.Background(), discovery.ResultKindTrack, "Nobody", "Nothing")
 	if err != nil {
 		t.Fatalf("4xx-delivered error 6 must be a clean miss (nil error), got %v", err)
 	}
@@ -200,15 +201,26 @@ func TestLastFmAdapter_Lookup_InBandErrorOtherIsTransient(t *testing.T) {
 		_, _ = w.Write([]byte(`{"error":8,"message":"Operation failed - Something went wrong"}`))
 	}))
 	defer server.Close()
-	adapter := NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
+	adapter := discovery.NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
 
-	_, err := adapter.Lookup(context.Background(), domain.ResultKindArtist, "Kendrick Lamar", "")
+	_, err := adapter.Lookup(context.Background(), discovery.ResultKindArtist, "Kendrick Lamar", "")
 	if err == nil {
 		t.Fatal("error 8 must surface as a transient error, not a zero-struct miss")
 	}
 }
 
-func TestCleanLastFmBio(t *testing.T) {
+func lookupArtistFrom(t *testing.T, body string) (discovery.LastFmEnrichment, error) {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+	adapter := discovery.NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
+	return adapter.Lookup(context.Background(), discovery.ResultKindArtist, "Kendrick Lamar", "")
+}
+
+func TestLastFmAdapter_Lookup_CleansTheBio(t *testing.T) {
 	tests := []struct {
 		name string
 		in   string
@@ -221,25 +233,36 @@ func TestCleanLastFmBio(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := cleanLastFmBio(tt.in); got != tt.want {
-				t.Errorf("cleanLastFmBio(%q) = %q, want %q", tt.in, got, tt.want)
+			summary, err := json.Marshal(tt.in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			e, err := lookupArtistFrom(t, `{"artist":{"bio":{"summary":`+string(summary)+`}}}`)
+			if err != nil {
+				t.Fatalf("Lookup: %v", err)
+			}
+			if e.Bio != tt.want {
+				t.Errorf("bio from %q = %q, want %q", tt.in, e.Bio, tt.want)
 			}
 		})
 	}
 }
 
-func TestParseLastFmTags_TolerantOfEmpty(t *testing.T) {
-	if got := parseLastFmTags([]byte(`""`)); len(got) != 0 {
-		t.Errorf("expected no tags from empty-string collection, got %v", got)
-	}
-	if got := parseLastFmTags(nil); len(got) != 0 {
-		t.Errorf("expected no tags from nil, got %v", got)
+func TestLastFmAdapter_Lookup_TolerantOfEmptyTags(t *testing.T) {
+	for _, body := range []string{`{"artist":{"tags":""}}`, `{"artist":{}}`} {
+		e, err := lookupArtistFrom(t, body)
+		if err != nil {
+			t.Fatalf("Lookup(%s): %v", body, err)
+		}
+		if len(e.Tags) != 0 {
+			t.Errorf("tags from %s = %v, want none", body, e.Tags)
+		}
 	}
 }
 
-func TestLastFmAPIError_Error(t *testing.T) {
-	err := &lastfmAPIError{Code: 29, Message: "Rate limit exceeded"}
-	if !strings.Contains(err.Error(), "29") || !strings.Contains(err.Error(), "Rate limit exceeded") {
-		t.Errorf("Error() = %q, want code and message surfaced", err.Error())
+func TestLastFmAdapter_Lookup_InBandErrorNamesCodeAndMessage(t *testing.T) {
+	_, err := lookupArtistFrom(t, `{"error":29,"message":"Rate limit exceeded"}`)
+	if err == nil || !strings.Contains(err.Error(), "29") || !strings.Contains(err.Error(), "Rate limit exceeded") {
+		t.Errorf("Lookup error = %v, want code and message surfaced", err)
 	}
 }

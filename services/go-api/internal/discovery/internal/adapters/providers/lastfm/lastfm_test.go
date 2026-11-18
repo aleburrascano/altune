@@ -1,9 +1,10 @@
-package lastfm
+package lastfm_test
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/internal/adapters/providers/providertest"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -33,9 +34,9 @@ func TestLastFmAdapter_Search_Tracks(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
-	results, err := adapter.Search(context.Background(), "small talk", map[domain.ResultKind]bool{
-		domain.ResultKindTrack: true,
+	adapter := discovery.NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
+	results, err := adapter.Search(context.Background(), "small talk", map[discovery.ResultKind]bool{
+		discovery.ResultKindTrack: true,
 	})
 	if err != nil {
 		t.Fatalf("Search returned error: %v", err)
@@ -45,8 +46,8 @@ func TestLastFmAdapter_Search_Tracks(t *testing.T) {
 	}
 
 	r := results[0]
-	if r.Kind != domain.ResultKindTrack {
-		t.Errorf("kind: got %v, want %v", r.Kind, domain.ResultKindTrack)
+	if r.Kind != discovery.ResultKindTrack {
+		t.Errorf("kind: got %v, want %v", r.Kind, discovery.ResultKindTrack)
 	}
 	if r.Title != "Small Talk" {
 		t.Errorf("title: got %q, want %q", r.Title, "Small Talk")
@@ -57,14 +58,14 @@ func TestLastFmAdapter_Search_Tracks(t *testing.T) {
 	if r.ImageURL != "https://lastfm.freetls.fastly.net/extralarge.png" {
 		t.Errorf("imageURL: got %q, want extralarge image URL", r.ImageURL)
 	}
-	if r.Confidence != domain.ConfidenceLow {
-		t.Errorf("confidence: got %v, want %v", r.Confidence, domain.ConfidenceLow)
+	if r.Confidence != discovery.ConfidenceLow {
+		t.Errorf("confidence: got %v, want %v", r.Confidence, discovery.ConfidenceLow)
 	}
 	if len(r.Sources) != 1 {
 		t.Fatalf("expected 1 source, got %d", len(r.Sources))
 	}
-	if r.Sources[0].Provider != domain.ProviderLastFM {
-		t.Errorf("source provider: got %v, want %v", r.Sources[0].Provider, domain.ProviderLastFM)
+	if r.Sources[0].Provider != discovery.ProviderLastFM {
+		t.Errorf("source provider: got %v, want %v", r.Sources[0].Provider, discovery.ProviderLastFM)
 	}
 	if r.Sources[0].ExternalID != "Katy+Perry/_/Small+Talk" {
 		t.Errorf("source externalID: got %q, want %q", r.Sources[0].ExternalID, "Katy+Perry/_/Small+Talk")
@@ -102,9 +103,9 @@ func TestLastFmAdapter_Search_Artists(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
-	results, err := adapter.Search(context.Background(), "the weeknd", map[domain.ResultKind]bool{
-		domain.ResultKindArtist: true,
+	adapter := discovery.NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
+	results, err := adapter.Search(context.Background(), "the weeknd", map[discovery.ResultKind]bool{
+		discovery.ResultKindArtist: true,
 	})
 	if err != nil {
 		t.Fatalf("Search returned error: %v", err)
@@ -114,8 +115,8 @@ func TestLastFmAdapter_Search_Artists(t *testing.T) {
 	}
 
 	r := results[0]
-	if r.Kind != domain.ResultKindArtist {
-		t.Errorf("kind: got %v, want %v", r.Kind, domain.ResultKindArtist)
+	if r.Kind != discovery.ResultKindArtist {
+		t.Errorf("kind: got %v, want %v", r.Kind, discovery.ResultKindArtist)
 	}
 	if r.Title != "The Weeknd" {
 		t.Errorf("title: got %q, want %q", r.Title, "The Weeknd")
@@ -156,9 +157,9 @@ func TestLastFmAdapter_Search_Albums_DoesNotStampReleaseMBID(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
-	results, err := adapter.Search(context.Background(), "ok computer", map[domain.ResultKind]bool{
-		domain.ResultKindAlbum: true,
+	adapter := discovery.NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
+	results, err := adapter.Search(context.Background(), "ok computer", map[discovery.ResultKind]bool{
+		discovery.ResultKindAlbum: true,
 	})
 	if err != nil {
 		t.Fatalf("Search returned error: %v", err)
@@ -168,8 +169,8 @@ func TestLastFmAdapter_Search_Albums_DoesNotStampReleaseMBID(t *testing.T) {
 	}
 
 	r := results[0]
-	if r.Kind != domain.ResultKindAlbum {
-		t.Errorf("kind: got %v, want %v", r.Kind, domain.ResultKindAlbum)
+	if r.Kind != discovery.ResultKindAlbum {
+		t.Errorf("kind: got %v, want %v", r.Kind, discovery.ResultKindAlbum)
 	}
 	if r.Title != "OK Computer" {
 		t.Errorf("title: got %q, want %q", r.Title, "OK Computer")
@@ -200,9 +201,9 @@ func TestLastFmAdapter_Search_Track_MissingListeners(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
-	results, err := adapter.Search(context.Background(), "obscure", map[domain.ResultKind]bool{
-		domain.ResultKindTrack: true,
+	adapter := discovery.NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
+	results, err := adapter.Search(context.Background(), "obscure", map[discovery.ResultKind]bool{
+		discovery.ResultKindTrack: true,
 	})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -222,9 +223,9 @@ func TestLastFmAdapter_Search_HTTPError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
-	results, err := adapter.Search(context.Background(), "anything", map[domain.ResultKind]bool{
-		domain.ResultKindTrack: true,
+	adapter := discovery.NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
+	results, err := adapter.Search(context.Background(), "anything", map[discovery.ResultKind]bool{
+		discovery.ResultKindTrack: true,
 	})
 	if err == nil {
 		t.Fatal("expected an error when all attempted kinds fail on HTTP 500, got nil")
@@ -254,8 +255,8 @@ func TestLastFmAdapter_GetArtistAlbums(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewLastFmAdapter(providertest.NewClient(server.URL), "test-key")
-	results, err := adapter.GetArtistAlbums(context.Background(), domain.ProviderLastFM, "The Weeknd")
+	adapter := discovery.NewLastFmAdapter(providertest.NewClient(server.URL), "test-key")
+	results, err := adapter.GetArtistAlbums(context.Background(), discovery.ProviderLastFM, "The Weeknd")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums: %v", err)
 	}
@@ -263,7 +264,7 @@ func TestLastFmAdapter_GetArtistAlbums(t *testing.T) {
 		t.Fatalf("results = %d, want 1 ((null)/empty names dropped)", len(results))
 	}
 	r := results[0]
-	if r.Kind != domain.ResultKindAlbum || r.Title != "After Hours" || r.Subtitle != "The Weeknd" {
+	if r.Kind != discovery.ResultKindAlbum || r.Title != "After Hours" || r.Subtitle != "The Weeknd" {
 		t.Errorf("result = %+v", r)
 	}
 	if r.ReleaseMBID != lastfmTestMBID {
@@ -280,8 +281,8 @@ func TestLastFmAdapter_GetArtistAlbums_httpErrorPropagates(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewLastFmAdapter(providertest.NewClient(server.URL), "test-key")
-	if _, err := adapter.GetArtistAlbums(context.Background(), domain.ProviderLastFM, "X"); err == nil {
+	adapter := discovery.NewLastFmAdapter(providertest.NewClient(server.URL), "test-key")
+	if _, err := adapter.GetArtistAlbums(context.Background(), discovery.ProviderLastFM, "X"); err == nil {
 		t.Fatal("expected an error on HTTP 500")
 	}
 }
@@ -300,7 +301,7 @@ func TestLastFmAdapter_FetchCharts(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewLastFmAdapter(providertest.NewClient(server.URL), "test-key")
+	adapter := discovery.NewLastFmAdapter(providertest.NewClient(server.URL), "test-key")
 	entries, err := adapter.FetchCharts(context.Background(), 10)
 	if err != nil {
 		t.Fatalf("FetchCharts: %v", err)
@@ -327,7 +328,7 @@ func TestLastFmAdapter_FetchCharts_failedMethodSkipped(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewLastFmAdapter(providertest.NewClient(server.URL), "test-key")
+	adapter := discovery.NewLastFmAdapter(providertest.NewClient(server.URL), "test-key")
 	entries, err := adapter.FetchCharts(context.Background(), 10)
 	if err != nil {
 		t.Fatalf("FetchCharts must not fail when one chart method fails: %v", err)
@@ -337,7 +338,7 @@ func TestLastFmAdapter_FetchCharts_failedMethodSkipped(t *testing.T) {
 	}
 }
 
-func TestLastfmExternalID(t *testing.T) {
+func TestLastFmAdapter_Search_ExternalIDIsTheMusicPath(t *testing.T) {
 	tests := []struct {
 		name string
 		in   string
@@ -352,14 +353,31 @@ func TestLastfmExternalID(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := lastfmExternalID(tt.in); got != tt.want {
-				t.Errorf("lastfmExternalID(%q) = %q, want %q", tt.in, got, tt.want)
+			body, err := json.Marshal(map[string]any{"results": map[string]any{"artistmatches": map[string]any{
+				"artist": []map[string]string{{"name": "Someone", "url": tt.in}},
+			}}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write(body)
+			}))
+			defer server.Close()
+			adapter := discovery.NewLastFmAdapter(providertest.NewClient(server.URL), "test-api-key")
+
+			results, err := adapter.Search(context.Background(), "someone", map[discovery.ResultKind]bool{discovery.ResultKindArtist: true})
+			if err != nil || len(results) != 1 {
+				t.Fatalf("Search = (%d results, %v), want one", len(results), err)
+			}
+			if got := results[0].Sources[0].ExternalID; got != tt.want {
+				t.Errorf("ExternalID for %q = %q, want %q", tt.in, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestLooksLikeMBID(t *testing.T) {
+func TestLastFmAdapter_GetArtistTopTracks_AsksByMBIDOnlyForAnMBIDShapedRef(t *testing.T) {
 	tests := []struct {
 		in   string
 		want bool
@@ -371,9 +389,22 @@ func TestLooksLikeMBID(t *testing.T) {
 		{"a74b1b7f_71a5_4011_9441_d0b5e4122711", false},
 		{"g74b1b7f-71a5-4011-9441-d0b5e4122711", false},
 	}
+	var gotQuery string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"toptracks":{"track":[]}}`))
+	}))
+	defer server.Close()
+	adapter := discovery.NewLastFmAdapter(providertest.NewClient(server.URL), "test-key")
+
 	for _, tt := range tests {
-		if got := looksLikeMBID(tt.in); got != tt.want {
-			t.Errorf("looksLikeMBID(%q) = %v, want %v", tt.in, got, tt.want)
+		if _, err := adapter.GetArtistTopTracks(context.Background(), discovery.ProviderLastFM, tt.in); err != nil {
+			t.Fatalf("GetArtistTopTracks(%q): %v", tt.in, err)
+		}
+		byMBID := strings.Contains(gotQuery, "mbid=") && !strings.Contains(gotQuery, "artist=")
+		if byMBID != tt.want {
+			t.Errorf("ref %q asked with query %q, want by mbid = %v", tt.in, gotQuery, tt.want)
 		}
 	}
 }
@@ -397,10 +428,10 @@ func TestLastFmAdapter_GetArtistTopTracks(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewLastFmAdapter(providertest.NewClient(server.URL), "test-key")
+	adapter := discovery.NewLastFmAdapter(providertest.NewClient(server.URL), "test-key")
 
 	t.Run("by name uses artist param", func(t *testing.T) {
-		results, err := adapter.GetArtistTopTracks(context.Background(), domain.ProviderLastFM, "The Weeknd")
+		results, err := adapter.GetArtistTopTracks(context.Background(), discovery.ProviderLastFM, "The Weeknd")
 		if err != nil {
 			t.Fatalf("GetArtistTopTracks: %v", err)
 		}
@@ -429,7 +460,7 @@ func TestLastFmAdapter_GetArtistTopTracks(t *testing.T) {
 	})
 
 	t.Run("mbid ref uses mbid param", func(t *testing.T) {
-		if _, err := adapter.GetArtistTopTracks(context.Background(), domain.ProviderLastFM, lastfmTestMBID); err != nil {
+		if _, err := adapter.GetArtistTopTracks(context.Background(), discovery.ProviderLastFM, lastfmTestMBID); err != nil {
 			t.Fatalf("GetArtistTopTracks: %v", err)
 		}
 		if !strings.Contains(gotQuery, "mbid="+lastfmTestMBID) || strings.Contains(gotQuery, "artist=") {
@@ -446,8 +477,8 @@ func TestLastFmAdapter_GetArtistAlbums_mbidRefMakesNoRequest(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewLastFmAdapter(providertest.NewClient(server.URL), "test-key")
-	results, err := adapter.GetArtistAlbums(context.Background(), domain.ProviderLastFM, lastfmTestMBID)
+	adapter := discovery.NewLastFmAdapter(providertest.NewClient(server.URL), "test-key")
+	results, err := adapter.GetArtistAlbums(context.Background(), discovery.ProviderLastFM, lastfmTestMBID)
 	if err != nil {
 		t.Fatalf("GetArtistAlbums: %v", err)
 	}
