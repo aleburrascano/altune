@@ -16,12 +16,4 @@ type (
 	OwnerScanPage          = ports.OwnerScanPage
 )
 
-const (
-	RepeatAll = domain.RepeatAll
-	RepeatOne = domain.RepeatOne
-)
-
-var (
-	ErrQueuePositionMismatch = domain.ErrQueuePositionMismatch
-	ErrCorruptStoredState    = ports.ErrCorruptStoredState
-)
+const RepeatOne = domain.RepeatOne

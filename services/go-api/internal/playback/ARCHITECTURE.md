@@ -13,8 +13,9 @@ invariants a change must preserve.
 
 Playback owns one aggregate, `domain.QueueState` (tracks, current index, shuffle,
 repeat mode, source) and its `QueuePosition` update. It is a **customer of catalog**
-for now-playing enrichment, reached through `adapters/catalogbridge`, and reads the
-request user from the shared `internal/shared/requestuser` module.
+for now-playing enrichment but imports none of it: it asks for the track through its
+own `TrackSource` port, which the app fills with catalog's door. It reads the request
+user from the shared `internal/shared/requestuser` module.
 
 ## 1. Layer map
 
@@ -25,20 +26,22 @@ request user from the shared `internal/shared/requestuser` module.
 | domain | `stale_write_error.go` | `StaleWriteError`, `ErrStaleQueueWrite`, `ErrQueuePositionMismatch` (409) |
 | domain | `unavailable_error.go` | `UnavailableError`, `ErrQueueStateUnavailable` (503, `Retry-After: 1`) |
 | ports | `queue_state.go` | `QueueStateRepository`, `ErrCorruptStoredState`, and the `QueueStateMetrics` and `RateLimitMetrics` interfaces with their noops |
-| ports | `now_playing.go` | `NowPlayingReader`, `NowPlayingTrack`, and the `EnrichmentMetrics` interface with its noop |
+| ports | `now_playing.go` | `NowPlayingReader`, `NowPlayingTrack`, the `TrackSource` it reads from with `ErrTrackSourceUnavailable`, and the `EnrichmentMetrics` interface with its noop |
 | ports | `erasure.go` | `DeletedIdentityLister`, `OwnerScanPage`, `ErrIdentityStoreUnavailable`, `ErasedStateReaper`, and the `ErasureSweepMetrics` interface with its noop |
 | service | `queue/service.go` | Save, update position, get, enrich the current track |
 | service | `erasure/sweeper.go` | Erasure sweep |
 | adapters/handler | `queue_handler.go` | HTTP routes for the queue snapshot; the request user comes from `internal/shared/requestuser` |
 | adapters/handler | `queue_state_rate_limit.go` | Per-user queue-state rate limiter middleware and its 429 `playback.rate_limited` error |
-| adapters/catalogbridge | `now_playing_reader.go`, `enrichment_breaker.go` | Catalog lookup behind a circuit breaker |
+| adapters/nowplaying | `now_playing_reader.go`, `enrichment_breaker.go` | Track lookup behind a deadline and a circuit breaker |
 | adapters/metrics | `expvar_playback_metrics.go` | expvar implementation of the metrics ports |
 | adapters/persistence | `pgx_queue_state_repository.go`, `pgx_deleted_identity_repository.go`, `op_faults.go` | Postgres storage and error classification |
 
 ## 2. Now-playing enrichment
 
-`adapters/catalogbridge` reads the current track from catalog. A breaker opens after
-5 consecutive dependency failures and stays open for 30s, then admits one probe
+`adapters/nowplaying` reads the current track from a `TrackSource` with a 3s deadline.
+The app's source reads catalog and wraps catalog's transient database errors in
+`ErrTrackSourceUnavailable`. A breaker opens after 5 consecutive dependency failures
+(that error or the deadline) and stays open for 30s, then admits one probe
 (half-open). Open means the lookup returns an enrichment-unavailable error; the
 snapshot itself still loads. Opening and half-open log at WARN, closing at INFO.
 

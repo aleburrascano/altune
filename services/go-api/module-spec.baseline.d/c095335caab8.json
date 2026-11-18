@@ -1,0 +1,13 @@
+{
+  "removed": [
+    "C3 internal/playback/internal/adapters/catalogbridge/now_playing_reader.go imports internal/catalog/domain/track.go, behind catalog's door",
+    "C3 internal/playback/internal/adapters/catalogbridge/now_playing_reader_test.go imports internal/catalog/domain/track.go, behind catalog's door",
+    "R1 internal/playback/internal/adapters/catalogbridge/now_playing_reader.go imports catalog, a feature module",
+    "R1 internal/playback/internal/adapters/catalogbridge/now_playing_reader_test.go imports catalog, a feature module",
+    "R1 internal/playback/module.yaml declares catalog, a feature module",
+    "T1 internal/playback/internal/adapters/catalogbridge/enrichment_breaker_test.go is in package catalogbridge, so it sees inside the module: use package catalogbridge_test and import the door",
+    "T1 internal/playback/internal/adapters/catalogbridge/now_playing_reader_test.go is in package catalogbridge, so it sees inside the module: use package catalogbridge_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}

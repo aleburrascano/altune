@@ -1,0 +1,17 @@
+package playback
+
+import (
+	nowplaying "altune/go-api/internal/playback/internal/adapters/nowplaying"
+	ports "altune/go-api/internal/playback/internal/core/ports"
+)
+
+type TrackSource = ports.TrackSource
+
+var ErrTrackSourceUnavailable = ports.ErrTrackSourceUnavailable
+
+var (
+	NewNowPlayingReader         = nowplaying.NewNowPlayingReader
+	WithNowPlayingMetrics       = nowplaying.WithNowPlayingMetrics
+	WithNowPlayingLookupTimeout = nowplaying.WithNowPlayingLookupTimeout
+	WithNowPlayingClock         = nowplaying.WithNowPlayingClock
+)
