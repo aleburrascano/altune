@@ -1,7 +1,7 @@
 package ytdlp
 
 import (
-	acqdomain "altune/go-api/internal/acquisition/domain"
+	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"context"
 	"errors"

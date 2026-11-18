@@ -1,8 +1,9 @@
 package ytmsearch
 
 import (
-	acqdomain "altune/go-api/internal/acquisition/domain"
+	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/sourcekey"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"fmt"
@@ -57,7 +58,7 @@ func CandidateFor(hit Song) ports.AudioCandidate {
 	return ports.AudioCandidate{
 		Title:    hit.Title,
 		Duration: float64(hit.DurationSeconds),
-		URL:      acqdomain.YouTubeMusicWatchURL(hit.VideoID),
+		URL:      sourcekey.YouTubeMusicWatchURL(hit.VideoID),
 		Explicit: hit.Explicit,
 		Artists:  hit.Artists,
 		Album:    hit.Album,

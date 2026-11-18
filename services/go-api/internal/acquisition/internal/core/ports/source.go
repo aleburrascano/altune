@@ -1,7 +1,7 @@
 package ports
 
 import (
-	acqdomain "altune/go-api/internal/acquisition/domain"
+	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"context"
 	"errors"
 )

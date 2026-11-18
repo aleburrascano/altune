@@ -1,7 +1,8 @@
 package ports
 
 import (
-	acqdomain "altune/go-api/internal/acquisition/domain"
+	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
+	"altune/go-api/internal/acquisition/sourcekey"
 	"fmt"
 )
 
@@ -50,7 +51,7 @@ func DedupeCandidatesBySourceKey(merged, results []AudioCandidate, positionByKey
 }
 
 func mergeCandidate(merged []AudioCandidate, c AudioCandidate, positionByKey map[string]int) []AudioCandidate {
-	key := acqdomain.SourceKey(c.URL)
+	key := sourcekey.SourceKey(c.URL)
 	position, isDuplicate := positionByKey[key]
 	if !isDuplicate {
 		positionByKey[key] = len(merged)

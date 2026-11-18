@@ -1,4 +1,4 @@
-package domain
+package sourcekey
 
 import (
 	"net/url"

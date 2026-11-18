@@ -1,12 +1,12 @@
 package eval
 
 import (
-	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/internal/adapters/catalogbridge"
 	"altune/go-api/internal/acquisition/internal/adapters/discoverybridge"
 	"altune/go-api/internal/acquisition/internal/adapters/tempfs"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/service"
+	"altune/go-api/internal/acquisition/sourcekey"
 	"context"
 	"encoding/json"
 	"errors"
@@ -105,7 +105,7 @@ func seedFor(kase Case) catalogbridge.SeededTrack {
 		AudioSourceURL:  t.AudioSourceURL,
 	}
 	for _, rawURL := range kase.ExcludeURLs {
-		seed.RejectedSourceKeys = append(seed.RejectedSourceKeys, acqdomain.SourceKey(rawURL))
+		seed.RejectedSourceKeys = append(seed.RejectedSourceKeys, sourcekey.SourceKey(rawURL))
 	}
 	if kase.Stored != nil {
 		seed.Stored = &catalogbridge.SeededFile{Duration: kase.Stored.Duration}

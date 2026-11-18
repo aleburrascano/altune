@@ -1,4 +1,4 @@
-package domain_test
+package sourcekey_test
 
 import (
 	"altune/go-api/internal/acquisition"
