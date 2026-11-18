@@ -10,23 +10,22 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var _ ports.DeletedIdentityLister = (*PgxDeletedIdentityRepository)(nil)
 
 const DefaultOwnerScanPageTimeout = 5 * time.Second
 
-type rowsQuerier interface {
+type DeletedIdentityDB interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
 type PgxDeletedIdentityRepository struct {
-	pool    rowsQuerier
+	pool    DeletedIdentityDB
 	timeout time.Duration
 }
 
-func NewPgxDeletedIdentityRepository(pool *pgxpool.Pool, opts ...func(*PgxDeletedIdentityRepository)) *PgxDeletedIdentityRepository {
+func NewPgxDeletedIdentityRepository(pool DeletedIdentityDB, opts ...func(*PgxDeletedIdentityRepository)) *PgxDeletedIdentityRepository {
 	r := &PgxDeletedIdentityRepository{pool: pool, timeout: DefaultOwnerScanPageTimeout}
 	for _, opt := range opts {
 		opt(r)

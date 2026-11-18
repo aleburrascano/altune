@@ -1,6 +1,7 @@
-package persistence
+package persistence_test
 
 import (
+	"altune/go-api/internal/playback"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
@@ -49,7 +50,7 @@ func registerIdentity(t *testing.T, tx pgx.Tx, owner shared.UserId) {
 	}
 }
 
-func orphanedOwners(t *testing.T, repo *PgxDeletedIdentityRepository) []shared.UserId {
+func orphanedOwners(t *testing.T, repo *playback.PgxDeletedIdentityRepository) []shared.UserId {
 	t.Helper()
 	var owners []shared.UserId
 	var after shared.UserId
@@ -78,7 +79,7 @@ func contains(owners []shared.UserId, owner shared.UserId) bool {
 func TestListOwnersWithoutIdentity_FindsOnlyOwnersWhoseAccountIsGone(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	tx := identityStoreTx(t)
-	repo := &PgxDeletedIdentityRepository{pool: tx}
+	repo := playback.NewPgxDeletedIdentityRepository(tx)
 	deleted := shared.NewUserId(uuid.New())
 	stillRegistered := shared.NewUserId(uuid.New())
 	storeQueueOf(t, tx, deleted)
@@ -98,7 +99,7 @@ func TestListOwnersWithoutIdentity_FindsOnlyOwnersWhoseAccountIsGone(t *testing.
 func TestListOwnersWithoutIdentity_EmptyIdentityStoreOffersNoOne(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	tx := identityStoreTx(t)
-	repo := &PgxDeletedIdentityRepository{pool: tx}
+	repo := playback.NewPgxDeletedIdentityRepository(tx)
 	storeQueueOf(t, tx, shared.NewUserId(uuid.New()))
 
 	owners := orphanedOwners(t, repo)
@@ -111,7 +112,7 @@ func TestListOwnersWithoutIdentity_EmptyIdentityStoreOffersNoOne(t *testing.T) {
 func TestListOwnersWithoutIdentity_PagesThroughOwnersInKeyOrder(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	tx := identityStoreTx(t)
-	repo := &PgxDeletedIdentityRepository{pool: tx}
+	repo := playback.NewPgxDeletedIdentityRepository(tx)
 	if _, err := tx.Exec(context.Background(), `DELETE FROM playback_queue_state`); err != nil {
 		t.Fatalf("clear queue states: %v", err)
 	}

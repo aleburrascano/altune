@@ -1,12 +1,13 @@
-package persistence
+package persistence_test
 
 import (
-	"altune/go-api/internal/playback/domain"
-	"altune/go-api/internal/playback/internal/core/ports"
+	"altune/go-api/internal/playback"
+	shareddomain "altune/go-api/internal/shared/domain"
 	"altune/go-api/internal/shared/httputil"
 	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
 	"context"
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -54,8 +55,32 @@ func (c *capturingQuerier) QueryRow(_ context.Context, sql string, _ ...any) pgx
 	return errRow{err: nil}
 }
 
+const (
+	maxQueueLength              = 10000
+	erasureFenceWindow          = 15 * time.Minute
+	defaultQueueStateOpTimeout  = 3 * time.Second
+	defaultOwnerScanPageTimeout = 5 * time.Second
+	shortOpTimeout              = 50 * time.Millisecond
+)
+
 func testUser() shared.UserId {
 	return shared.NewUserId(uuid.New())
+}
+
+func emptyQueueState(user shared.UserId) *playback.QueueState {
+	state, err := playback.NewQueueState(playback.QueueStateInput{UserId: user})
+	if err != nil {
+		panic("an empty queue must always be valid: " + err.Error())
+	}
+	return state
+}
+
+func newQueuePosition(in playback.QueuePosition) (*playback.QueuePosition, error) {
+	in.UpdatedAt = time.Now()
+	if err := in.Validate(); err != nil {
+		return nil, err
+	}
+	return &in, nil
 }
 
 type corruptRow struct {
@@ -86,8 +111,8 @@ func assertServerFault(t *testing.T, err error) {
 	if err == nil {
 		t.Fatal("expected an error for a corrupt stored row, got nil")
 	}
-	if !errors.Is(err, ports.ErrCorruptStoredState) {
-		t.Fatalf("corrupt stored row must satisfy ports.ErrCorruptStoredState so the service can degrade, got %v", err)
+	if !errors.Is(err, playback.ErrCorruptStoredState) {
+		t.Fatalf("corrupt stored row must satisfy playback.ErrCorruptStoredState so the service can degrade, got %v", err)
 	}
 	var se httputil.StatusError
 	if errors.As(err, &se) {
@@ -116,7 +141,7 @@ func (m *recordingMetrics) QueueStateStaleWrite()        { m.staleWrites++ }
 
 func TestGetForUser_CorruptRow_IncrementsMetric(t *testing.T) {
 	m := &recordingMetrics{}
-	repo := &PgxQueueStateRepository{pool: rowQuerier{row: corruptRow{repeatMode: "sideways"}}, metrics: m}
+	repo := playback.NewPgxQueueStateRepository(rowQuerier{row: corruptRow{repeatMode: "sideways"}}, playback.WithQueueStateMetrics(m))
 
 	if _, err := repo.GetForUser(context.Background(), testUser()); err == nil {
 		t.Fatal("precondition: a corrupt stored row must still return an error")
@@ -128,10 +153,10 @@ func TestGetForUser_CorruptRow_IncrementsMetric(t *testing.T) {
 
 func TestGetForUser_HealthyRow_RecordsNoCorruption(t *testing.T) {
 	m := &recordingMetrics{}
-	repo := &PgxQueueStateRepository{pool: newFakeStore(), metrics: m}
+	repo := playback.NewPgxQueueStateRepository(newFakeStore(), playback.WithQueueStateMetrics(m))
 	user := testUser()
 
-	if err := repo.Upsert(context.Background(), domain.EmptyQueueState(user)); err != nil {
+	if err := repo.Upsert(context.Background(), emptyQueueState(user)); err != nil {
 		t.Fatalf("Upsert: %v", err)
 	}
 	if _, err := repo.GetForUser(context.Background(), user); err != nil {
@@ -144,8 +169,7 @@ func TestGetForUser_HealthyRow_RecordsNoCorruption(t *testing.T) {
 
 func TestGetForUser_Timeout_IncrementsMetric(t *testing.T) {
 	m := &recordingMetrics{}
-	repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: m}
-	withShortTimeout(repo)
+	repo := playback.NewPgxQueueStateRepository(blockingQuerier{}, playback.WithQueueStateMetrics(m), playback.WithQueueStateOpTimeout(shortOpTimeout))
 
 	err := runWithGuard(t, func() error {
 		_, err := repo.GetForUser(context.Background(), testUser())
@@ -161,7 +185,7 @@ func TestGetForUser_Timeout_IncrementsMetric(t *testing.T) {
 
 func TestDeleteForUser_ClientCancel_RecordsNoTimeout(t *testing.T) {
 	m := &recordingMetrics{}
-	repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: m}
+	repo := playback.NewPgxQueueStateRepository(blockingQuerier{}, playback.WithQueueStateMetrics(m))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -175,22 +199,22 @@ func TestDeleteForUser_ClientCancel_RecordsNoTimeout(t *testing.T) {
 }
 
 func TestGetForUser_CorruptStoredRepeatMode_MapsToServerFault(t *testing.T) {
-	repo := &PgxQueueStateRepository{pool: rowQuerier{row: corruptRow{repeatMode: "sideways"}}, metrics: ports.NoopQueueStateMetrics()}
+	repo := playback.NewPgxQueueStateRepository(rowQuerier{row: corruptRow{repeatMode: "sideways"}})
 
 	_, err := repo.GetForUser(context.Background(), testUser())
 	assertServerFault(t, err)
 }
 
 func TestGetForUser_StoredQueueExceedsMax_MapsToServerFault(t *testing.T) {
-	oversized := make([]string, domain.MaxQueueLength+1)
-	repo := &PgxQueueStateRepository{pool: rowQuerier{row: corruptRow{repeatMode: "off", trackIds: oversized}}, metrics: ports.NoopQueueStateMetrics()}
+	oversized := make([]string, maxQueueLength+1)
+	repo := playback.NewPgxQueueStateRepository(rowQuerier{row: corruptRow{repeatMode: "off", trackIds: oversized}})
 
 	_, err := repo.GetForUser(context.Background(), testUser())
 	assertServerFault(t, err)
 }
 
 func TestSavePathValidationStaysClientFault(t *testing.T) {
-	_, err := domain.NewQueueState(domain.QueueStateInput{PositionMs: -1})
+	_, err := playback.NewQueueState(playback.QueueStateInput{PositionMs: -1})
 
 	var se httputil.StatusError
 	if !errors.As(err, &se) || se.HTTPStatus() != http.StatusBadRequest {
@@ -200,14 +224,14 @@ func TestSavePathValidationStaysClientFault(t *testing.T) {
 
 func TestUpsert_RejectsInvariantViolatingLiteral(t *testing.T) {
 	q := &capturingQuerier{}
-	repo := &PgxQueueStateRepository{pool: q}
+	repo := playback.NewPgxQueueStateRepository(q)
 
-	invalid := &domain.QueueState{
+	invalid := &playback.QueueState{
 		UserId:       testUser(),
 		TrackIds:     []string{"only-track"},
 		NaturalOrder: []string{"only-track"},
 		CurrentIdx:   7,
-		RepeatMode:   domain.RepeatOff,
+		RepeatMode:   playback.RepeatOff,
 		UpdatedAt:    time.Now().UTC(),
 	}
 
@@ -222,9 +246,9 @@ func TestUpsert_RejectsInvariantViolatingLiteral(t *testing.T) {
 
 func TestUpsert_GuardsAgainstStaleClobber(t *testing.T) {
 	q := &capturingQuerier{}
-	repo := &PgxQueueStateRepository{pool: q}
+	repo := playback.NewPgxQueueStateRepository(q)
 
-	if err := repo.Upsert(context.Background(), domain.EmptyQueueState(testUser())); err != nil {
+	if err := repo.Upsert(context.Background(), emptyQueueState(testUser())); err != nil {
 		t.Fatalf("Upsert: %v", err)
 	}
 
@@ -251,8 +275,8 @@ func (*argsQuerier) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row {
 
 func TestUpsert_OrdersSavesOnDatabaseClock(t *testing.T) {
 	q := &argsQuerier{}
-	repo := &PgxQueueStateRepository{pool: q}
-	fastClock := domain.EmptyQueueState(testUser())
+	repo := playback.NewPgxQueueStateRepository(q)
+	fastClock := emptyQueueState(testUser())
 	fastClock.UpdatedAt = time.Now().UTC().Add(time.Hour)
 
 	if err := repo.Upsert(context.Background(), fastClock); err != nil {
@@ -270,8 +294,21 @@ func TestUpsert_OrdersSavesOnDatabaseClock(t *testing.T) {
 	}
 }
 
+func boundHandlingAge(t *testing.T, state *playback.QueueState) driver.Valuer {
+	t.Helper()
+	q := &argsQuerier{}
+	if err := playback.NewPgxQueueStateRepository(q).Upsert(context.Background(), state); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	age, ok := q.args[8].(driver.Valuer)
+	if !ok {
+		t.Fatalf("Upsert binds $9 as %T, want a value encoded when the statement is sent", q.args[8])
+	}
+	return age
+}
+
 func TestHandlingAge_MeasuredWhenEncodedNotWhenBound(t *testing.T) {
-	age := handlingAge{stampedAt: time.Now()}
+	age := boundHandlingAge(t, emptyQueueState(testUser()))
 	time.Sleep(20 * time.Millisecond)
 
 	v, err := age.Value()
@@ -284,12 +321,79 @@ func TestHandlingAge_MeasuredWhenEncodedNotWhenBound(t *testing.T) {
 }
 
 func TestHandlingAge_FutureStampClampsToZero(t *testing.T) {
-	v, err := handlingAge{stampedAt: time.Now().UTC().Add(time.Hour)}.Value()
+	fastClock := emptyQueueState(testUser())
+	fastClock.UpdatedAt = time.Now().UTC().Add(time.Hour)
+
+	v, err := boundHandlingAge(t, fastClock).Value()
 	if err != nil {
 		t.Fatalf("Value: %v", err)
 	}
 	if got := v.(int64); got != 0 {
 		t.Fatalf("age = %dµs, want 0; a fast clock must not push the row ahead of the database clock", got)
+	}
+}
+
+func boundSaveGrace(t *testing.T, opts ...func(*playback.PgxQueueStateRepository)) any {
+	t.Helper()
+	q := &argsQuerier{}
+	if err := playback.NewPgxQueueStateRepository(q, opts...).Upsert(context.Background(), emptyQueueState(testUser())); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	return q.args[9]
+}
+
+func TestUpsert_ErasureSaveGrace(t *testing.T) {
+	for name, tt := range map[string]struct {
+		opts []func(*playback.PgxQueueStateRepository)
+		want time.Duration
+	}{
+		"defaults to the op timeout": {want: defaultQueueStateOpTimeout},
+		"configured":                 {opts: []func(*playback.PgxQueueStateRepository){playback.WithQueueStateSaveGrace(time.Minute)}, want: time.Minute},
+		"zero keeps the default":     {opts: []func(*playback.PgxQueueStateRepository){playback.WithQueueStateSaveGrace(0)}, want: defaultQueueStateOpTimeout},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := boundSaveGrace(t, tt.opts...); got != tt.want.Microseconds() {
+				t.Errorf("Upsert binds a save grace of %vµs as $10, want %dµs", got, tt.want.Microseconds())
+			}
+		})
+	}
+}
+
+type deadlineQuerier struct {
+	left time.Duration
+}
+
+func (q *deadlineQuerier) Exec(ctx context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
+	deadline, ok := ctx.Deadline()
+	if ok {
+		q.left = time.Until(deadline)
+	}
+	return pgconn.NewCommandTag("DELETE 1"), nil
+}
+
+func (q *deadlineQuerier) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	_, _ = q.Exec(ctx, sql, args...)
+	return errRow{err: pgx.ErrNoRows}
+}
+
+func TestQueueStateOp_Deadline(t *testing.T) {
+	for name, tt := range map[string]struct {
+		opts []func(*playback.PgxQueueStateRepository)
+		want time.Duration
+	}{
+		"defaults to the request timeout": {want: defaultQueueStateOpTimeout},
+		"configured":                      {opts: []func(*playback.PgxQueueStateRepository){playback.WithQueueStateOpTimeout(time.Minute)}, want: time.Minute},
+		"zero keeps the default":          {opts: []func(*playback.PgxQueueStateRepository){playback.WithQueueStateOpTimeout(0)}, want: defaultQueueStateOpTimeout},
+	} {
+		t.Run(name, func(t *testing.T) {
+			q := &deadlineQuerier{}
+			if err := playback.NewPgxQueueStateRepository(q, tt.opts...).DeleteForUser(context.Background(), testUser()); err != nil {
+				t.Fatalf("DeleteForUser: %v", err)
+			}
+			if q.left > tt.want || q.left < tt.want-time.Second {
+				t.Errorf("the database call had %s left, want its deadline %s away", q.left, tt.want)
+			}
+		})
 	}
 }
 
@@ -306,11 +410,11 @@ func (tagQuerier) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row {
 }
 
 func TestUpsert_GuardRejectedWriteIsReportedNotSilent(t *testing.T) {
-	repo := &PgxQueueStateRepository{pool: tagQuerier{tag: "INSERT 0 0"}, metrics: ports.NoopQueueStateMetrics()}
+	repo := playback.NewPgxQueueStateRepository(tagQuerier{tag: "INSERT 0 0"})
 
-	err := repo.Upsert(context.Background(), domain.EmptyQueueState(testUser()))
+	err := repo.Upsert(context.Background(), emptyQueueState(testUser()))
 
-	if !errors.Is(err, domain.ErrStaleQueueWrite) {
+	if !errors.Is(err, playback.ErrStaleQueueWrite) {
 		t.Fatalf("a write the stale guard rejected (0 rows) must return ErrStaleQueueWrite, got %v", err)
 	}
 	var se httputil.StatusError
@@ -320,9 +424,9 @@ func TestUpsert_GuardRejectedWriteIsReportedNotSilent(t *testing.T) {
 }
 
 func TestUpsert_AppliedWriteReportsSuccess(t *testing.T) {
-	repo := &PgxQueueStateRepository{pool: tagQuerier{tag: "INSERT 0 1"}}
+	repo := playback.NewPgxQueueStateRepository(tagQuerier{tag: "INSERT 0 1"})
 
-	if err := repo.Upsert(context.Background(), domain.EmptyQueueState(testUser())); err != nil {
+	if err := repo.Upsert(context.Background(), emptyQueueState(testUser())); err != nil {
 		t.Fatalf("a write that affected one row must succeed, got %v", err)
 	}
 }
@@ -395,15 +499,15 @@ func (r storeRow) Scan(dest ...any) error {
 }
 
 func TestDeleteForUser_ErasesStoredState(t *testing.T) {
-	repo := &PgxQueueStateRepository{pool: newFakeStore()}
+	repo := playback.NewPgxQueueStateRepository(newFakeStore())
 	ctx := context.Background()
 	user := testUser()
 
-	state, err := domain.NewQueueState(domain.QueueStateInput{
+	state, err := playback.NewQueueState(playback.QueueStateInput{
 		UserId:     user,
 		TrackIds:   []string{trk("a"), trk("b")},
 		CurrentIdx: 1,
-		RepeatMode: domain.RepeatOff,
+		RepeatMode: playback.RepeatOff,
 		SourceId:   "search:mac demarco",
 	})
 	if err != nil {
@@ -431,13 +535,13 @@ func TestDeleteForUser_ErasesStoredState(t *testing.T) {
 
 func TestDeleteForUser_IsScopedToUser(t *testing.T) {
 	store := newFakeStore()
-	repo := &PgxQueueStateRepository{pool: store}
+	repo := playback.NewPgxQueueStateRepository(store)
 	ctx := context.Background()
 	target, other := testUser(), testUser()
 
 	for _, u := range []shared.UserId{target, other} {
-		state, _ := domain.NewQueueState(domain.QueueStateInput{
-			UserId: u, RepeatMode: domain.RepeatOff,
+		state, _ := playback.NewQueueState(playback.QueueStateInput{
+			UserId: u, RepeatMode: playback.RepeatOff,
 		})
 		if err := repo.Upsert(ctx, state); err != nil {
 			t.Fatalf("Upsert(%v): %v", u.UUID(), err)
@@ -454,8 +558,7 @@ func TestDeleteForUser_IsScopedToUser(t *testing.T) {
 }
 
 func TestDeleteForUser_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
-	repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: ports.NoopQueueStateMetrics()}
-	withShortTimeout(repo)
+	repo := playback.NewPgxQueueStateRepository(blockingQuerier{}, playback.WithQueueStateOpTimeout(shortOpTimeout))
 
 	err := runWithGuard(t, func() error {
 		return repo.DeleteForUser(context.Background(), testUser())
@@ -463,10 +566,6 @@ func TestDeleteForUser_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v, want context.DeadlineExceeded", err)
 	}
-}
-
-func withShortTimeout(repo *PgxQueueStateRepository) {
-	withQueueStateOpTimeout(50 * time.Millisecond)(repo)
 }
 
 func runWithGuard(t *testing.T, call func() error) error {
@@ -483,11 +582,10 @@ func runWithGuard(t *testing.T, call func() error) error {
 }
 
 func TestUpsert_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
-	repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: ports.NoopQueueStateMetrics()}
-	withShortTimeout(repo)
+	repo := playback.NewPgxQueueStateRepository(blockingQuerier{}, playback.WithQueueStateOpTimeout(shortOpTimeout))
 
 	err := runWithGuard(t, func() error {
-		return repo.Upsert(context.Background(), domain.EmptyQueueState(testUser()))
+		return repo.Upsert(context.Background(), emptyQueueState(testUser()))
 	})
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v, want context.DeadlineExceeded", err)
@@ -522,9 +620,9 @@ func (r boolsRow) Scan(dest ...any) error {
 	return nil
 }
 
-func testPosition(t *testing.T) *domain.QueuePosition {
+func testPosition(t *testing.T) *playback.QueuePosition {
 	t.Helper()
-	p, err := domain.NewQueuePosition(domain.QueuePositionInput{
+	p, err := newQueuePosition(playback.QueuePosition{
 		UserId: testUser(), CurrentIdx: 3, CurrentTrackId: trk("t4"), PositionMs: 61000,
 	})
 	if err != nil {
@@ -535,7 +633,7 @@ func testPosition(t *testing.T) *domain.QueuePosition {
 
 func TestUpdatePosition_BindsNoTrackList(t *testing.T) {
 	q := &positionQuerier{applied: true, matched: true}
-	repo := &PgxQueueStateRepository{pool: q, metrics: ports.NoopQueueStateMetrics()}
+	repo := playback.NewPgxQueueStateRepository(q)
 
 	if err := repo.UpdatePosition(context.Background(), testPosition(t)); err != nil {
 		t.Fatalf("UpdatePosition: %v", err)
@@ -571,12 +669,12 @@ func TestUpdatePosition_ClassifiesUnappliedSaves(t *testing.T) {
 		want             error
 	}{
 		{name: "applied", applied: true, matched: true, want: nil},
-		{name: "guard rejected a stale save", matched: true, want: domain.ErrStaleQueueWrite},
-		{name: "no stored queue holds the track at the index", want: domain.ErrQueuePositionMismatch},
+		{name: "guard rejected a stale save", matched: true, want: playback.ErrStaleQueueWrite},
+		{name: "no stored queue holds the track at the index", want: playback.ErrQueuePositionMismatch},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := &PgxQueueStateRepository{pool: &positionQuerier{applied: tt.applied, matched: tt.matched}, metrics: ports.NoopQueueStateMetrics()}
+			repo := playback.NewPgxQueueStateRepository(&positionQuerier{applied: tt.applied, matched: tt.matched})
 
 			err := repo.UpdatePosition(context.Background(), testPosition(t))
 
@@ -599,11 +697,11 @@ func TestUpdatePosition_ClassifiesUnappliedSaves(t *testing.T) {
 
 func TestUpdatePosition_RejectsInvariantViolatingLiteral(t *testing.T) {
 	q := &positionQuerier{applied: true, matched: true}
-	repo := &PgxQueueStateRepository{pool: q, metrics: ports.NoopQueueStateMetrics()}
+	repo := playback.NewPgxQueueStateRepository(q)
 
-	err := repo.UpdatePosition(context.Background(), &domain.QueuePosition{UserId: testUser(), CurrentIdx: -1, CurrentTrackId: "t1"})
+	err := repo.UpdatePosition(context.Background(), &playback.QueuePosition{UserId: testUser(), CurrentIdx: -1, CurrentTrackId: "t1"})
 
-	var ve *domain.ValidationError
+	var ve *shareddomain.ValidationError
 	if !errors.As(err, &ve) {
 		t.Fatalf("UpdatePosition accepted a negative CurrentIdx literal, got %v", err)
 	}
@@ -614,8 +712,7 @@ func TestUpdatePosition_RejectsInvariantViolatingLiteral(t *testing.T) {
 
 func TestUpdatePosition_Timeout_IncrementsMetric(t *testing.T) {
 	m := &recordingMetrics{}
-	repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: m}
-	withShortTimeout(repo)
+	repo := playback.NewPgxQueueStateRepository(blockingQuerier{}, playback.WithQueueStateMetrics(m), playback.WithQueueStateOpTimeout(shortOpTimeout))
 
 	err := runWithGuard(t, func() error {
 		return repo.UpdatePosition(context.Background(), testPosition(t))
@@ -629,8 +726,7 @@ func TestUpdatePosition_Timeout_IncrementsMetric(t *testing.T) {
 }
 
 func TestGetForUser_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
-	repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: ports.NoopQueueStateMetrics()}
-	withShortTimeout(repo)
+	repo := playback.NewPgxQueueStateRepository(blockingQuerier{}, playback.WithQueueStateOpTimeout(shortOpTimeout))
 
 	err := runWithGuard(t, func() error {
 		_, err := repo.GetForUser(context.Background(), testUser())
@@ -681,9 +777,9 @@ func (q faultingQuerier) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row
 	return errRow{err: q.cause}
 }
 
-func userPosition(t *testing.T, userId shared.UserId) *domain.QueuePosition {
+func userPosition(t *testing.T, userId shared.UserId) *playback.QueuePosition {
 	t.Helper()
-	p, err := domain.NewQueuePosition(domain.QueuePositionInput{
+	p, err := newQueuePosition(playback.QueuePosition{
 		UserId: userId, CurrentIdx: 3, CurrentTrackId: trk("t4"), PositionMs: 61000,
 	})
 	if err != nil {
@@ -694,19 +790,19 @@ func userPosition(t *testing.T, userId shared.UserId) *domain.QueuePosition {
 
 var queueStateOps = []struct {
 	op   string
-	call func(*testing.T, *PgxQueueStateRepository, shared.UserId) error
+	call func(*testing.T, playback.QueueStateRepository, shared.UserId) error
 }{
-	{op: "upsert", call: func(_ *testing.T, repo *PgxQueueStateRepository, user shared.UserId) error {
-		return repo.Upsert(context.Background(), domain.EmptyQueueState(user))
+	{op: "upsert", call: func(_ *testing.T, repo playback.QueueStateRepository, user shared.UserId) error {
+		return repo.Upsert(context.Background(), emptyQueueState(user))
 	}},
-	{op: "update_position", call: func(t *testing.T, repo *PgxQueueStateRepository, user shared.UserId) error {
+	{op: "update_position", call: func(t *testing.T, repo playback.QueueStateRepository, user shared.UserId) error {
 		return repo.UpdatePosition(context.Background(), userPosition(t, user))
 	}},
-	{op: "get_for_user", call: func(_ *testing.T, repo *PgxQueueStateRepository, user shared.UserId) error {
+	{op: "get_for_user", call: func(_ *testing.T, repo playback.QueueStateRepository, user shared.UserId) error {
 		_, err := repo.GetForUser(context.Background(), user)
 		return err
 	}},
-	{op: "delete_for_user", call: func(_ *testing.T, repo *PgxQueueStateRepository, user shared.UserId) error {
+	{op: "delete_for_user", call: func(_ *testing.T, repo playback.QueueStateRepository, user shared.UserId) error {
 		return repo.DeleteForUser(context.Background(), user)
 	}},
 }
@@ -716,7 +812,7 @@ func TestQueueStateOp_UnclassifiedFailure_NamesTheAffectedUser(t *testing.T) {
 		t.Run(tt.op, func(t *testing.T) {
 			logs := captureLogs(t)
 			dbDown := errors.New("connection refused")
-			repo := &PgxQueueStateRepository{pool: faultingQuerier{cause: dbDown}, metrics: ports.NoopQueueStateMetrics()}
+			repo := playback.NewPgxQueueStateRepository(faultingQuerier{cause: dbDown})
 			user := testUser()
 
 			if err := tt.call(t, repo, user); !errors.Is(err, dbDown) {
@@ -743,17 +839,16 @@ func TestQueueStateOp_ClassifiedOutcome_EmitsNoFaultLine(t *testing.T) {
 		act     func(*testing.T)
 	}{
 		{outcome: "op timeout", act: func(t *testing.T) {
-			repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: ports.NoopQueueStateMetrics()}
-			withShortTimeout(repo)
+			repo := playback.NewPgxQueueStateRepository(blockingQuerier{}, playback.WithQueueStateOpTimeout(shortOpTimeout))
 			err := runWithGuard(t, func() error {
-				return repo.Upsert(context.Background(), domain.EmptyQueueState(testUser()))
+				return repo.Upsert(context.Background(), emptyQueueState(testUser()))
 			})
 			if !errors.Is(err, context.DeadlineExceeded) {
 				t.Fatalf("precondition: err = %v, want context.DeadlineExceeded", err)
 			}
 		}},
 		{outcome: "client cancel", act: func(t *testing.T) {
-			repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: ports.NoopQueueStateMetrics()}
+			repo := playback.NewPgxQueueStateRepository(blockingQuerier{})
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
 			if err := repo.DeleteForUser(ctx, testUser()); !errors.Is(err, context.Canceled) {
@@ -761,7 +856,7 @@ func TestQueueStateOp_ClassifiedOutcome_EmitsNoFaultLine(t *testing.T) {
 			}
 		}},
 		{outcome: "no stored queue", act: func(t *testing.T) {
-			repo := &PgxQueueStateRepository{pool: newFakeStore(), metrics: ports.NoopQueueStateMetrics()}
+			repo := playback.NewPgxQueueStateRepository(newFakeStore())
 			state, err := repo.GetForUser(context.Background(), testUser())
 			if state != nil || err != nil {
 				t.Fatalf("precondition: an absent queue reads as (nil, nil), got (%v, %v)", state, err)
@@ -783,14 +878,14 @@ func TestQueueStateOp_ClassifiedOutcome_EmitsNoFaultLine(t *testing.T) {
 
 func TestUpsert_FailureLogNamesTheUserNotTheQueue(t *testing.T) {
 	logs := captureLogs(t)
-	repo := &PgxQueueStateRepository{pool: faultingQuerier{cause: errors.New("connection refused")}, metrics: ports.NoopQueueStateMetrics()}
+	repo := playback.NewPgxQueueStateRepository(faultingQuerier{cause: errors.New("connection refused")})
 	const privateSourceId = "search:mac demarco"
 	const privateTrackId = "3b9c77e4-5d1a-4f0e-9c2b-7a6e1f4d8c30"
-	state, err := domain.NewQueueState(domain.QueueStateInput{
+	state, err := playback.NewQueueState(playback.QueueStateInput{
 		UserId:     testUser(),
 		TrackIds:   []string{trk("a"), privateTrackId},
 		CurrentIdx: 1,
-		RepeatMode: domain.RepeatOff,
+		RepeatMode: playback.RepeatOff,
 		SourceId:   privateSourceId,
 	})
 	if err != nil {
@@ -821,14 +916,14 @@ func (f erroringQuerier) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row
 	return errRow(f)
 }
 
-func failingRepo(err error) *PgxQueueStateRepository {
-	return &PgxQueueStateRepository{pool: erroringQuerier{err: err}, metrics: ports.NoopQueueStateMetrics()}
+func failingRepo(err error) playback.QueueStateRepository {
+	return playback.NewPgxQueueStateRepository(erroringQuerier{err: err})
 }
 
 func TestDeleteForUser_DeadlineExceeded_IsRetryable503(t *testing.T) {
 	err := failingRepo(context.DeadlineExceeded).DeleteForUser(context.Background(), testUser())
 
-	if !errors.Is(err, domain.ErrQueueStateUnavailable) {
+	if !errors.Is(err, playback.ErrQueueStateUnavailable) {
 		t.Fatalf("err = %v, want ErrQueueStateUnavailable", err)
 	}
 	if !errors.Is(err, context.DeadlineExceeded) {
@@ -862,7 +957,7 @@ func TestQueueStateOp_TransientClassification(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := failingRepo(tc.err).DeleteForUser(context.Background(), testUser())
-			if got := errors.Is(err, domain.ErrQueueStateUnavailable); got != tc.want {
+			if got := errors.Is(err, playback.ErrQueueStateUnavailable); got != tc.want {
 				t.Fatalf("unavailable = %v, want %v (err %v)", got, tc.want, err)
 			}
 		})
@@ -872,20 +967,8 @@ func TestQueueStateOp_TransientClassification(t *testing.T) {
 func TestGetForUser_TransientFailureIsNotCorruptState(t *testing.T) {
 	_, err := failingRepo(context.DeadlineExceeded).GetForUser(context.Background(), testUser())
 
-	if errors.Is(err, ports.ErrCorruptStoredState) || !errors.Is(err, domain.ErrQueueStateUnavailable) {
+	if errors.Is(err, playback.ErrCorruptStoredState) || !errors.Is(err, playback.ErrQueueStateUnavailable) {
 		t.Fatalf("err = %v, want unavailable and not corrupt", err)
-	}
-}
-
-func TestSQLStateConstants_NamedOnce(t *testing.T) {
-	named := map[string]string{
-		undefinedTableCode:   "42P01",
-		insufficientPrivCode: "42501",
-	}
-	for got, want := range named {
-		if got != want {
-			t.Fatalf("constant = %q, want %q", got, want)
-		}
 	}
 }
 
@@ -899,12 +982,12 @@ func (f failingStore) QueryRow(context.Context, string, ...any) pgx.Row { return
 
 func TestRunOp_TransientFault_CountsTransientNotTimeout(t *testing.T) {
 	m := &recordingMetrics{}
-	repo := &PgxQueueStateRepository{pool: failingStore{err: &pgconn.PgError{Code: "57P01"}}, metrics: m}
+	repo := playback.NewPgxQueueStateRepository(failingStore{err: &pgconn.PgError{Code: "57P01"}}, playback.WithQueueStateMetrics(m))
 
-	if err := repo.Upsert(context.Background(), domain.EmptyQueueState(testUser())); !errors.Is(err, domain.ErrQueueStateUnavailable) {
+	if err := repo.Upsert(context.Background(), emptyQueueState(testUser())); !errors.Is(err, playback.ErrQueueStateUnavailable) {
 		t.Fatalf("Upsert = %v, want ErrQueueStateUnavailable", err)
 	}
-	if _, err := repo.GetForUser(context.Background(), testUser()); !errors.Is(err, domain.ErrQueueStateUnavailable) {
+	if _, err := repo.GetForUser(context.Background(), testUser()); !errors.Is(err, playback.ErrQueueStateUnavailable) {
 		t.Fatalf("GetForUser = %v, want ErrQueueStateUnavailable", err)
 	}
 	if m.transientFailures != 2 || m.queueStateOpTimedOut != 0 {
@@ -916,7 +999,7 @@ func TestRunOp_ClientCancelAndNoRows_MoveNoFailureCounter(t *testing.T) {
 	for name, cause := range map[string]error{"client cancel": context.Canceled, "no rows": pgx.ErrNoRows} {
 		t.Run(name, func(t *testing.T) {
 			m := &recordingMetrics{}
-			repo := &PgxQueueStateRepository{pool: failingStore{err: cause}, metrics: m}
+			repo := playback.NewPgxQueueStateRepository(failingStore{err: cause}, playback.WithQueueStateMetrics(m))
 
 			_, _ = repo.GetForUser(context.Background(), testUser())
 
@@ -929,12 +1012,12 @@ func TestRunOp_ClientCancelAndNoRows_MoveNoFailureCounter(t *testing.T) {
 
 func TestStaleAndMismatchedSaves_CountStaleWrites(t *testing.T) {
 	m := &recordingMetrics{}
-	stale := &PgxQueueStateRepository{pool: tagQuerier{tag: "INSERT 0 0"}, metrics: m}
-	if err := stale.Upsert(context.Background(), domain.EmptyQueueState(testUser())); !errors.Is(err, domain.ErrStaleQueueWrite) {
+	stale := playback.NewPgxQueueStateRepository(tagQuerier{tag: "INSERT 0 0"}, playback.WithQueueStateMetrics(m))
+	if err := stale.Upsert(context.Background(), emptyQueueState(testUser())); !errors.Is(err, playback.ErrStaleQueueWrite) {
 		t.Fatalf("Upsert = %v, want ErrStaleQueueWrite", err)
 	}
-	mismatch := &PgxQueueStateRepository{pool: &positionQuerier{}, metrics: m}
-	if err := mismatch.UpdatePosition(context.Background(), testPosition(t)); !errors.Is(err, domain.ErrQueuePositionMismatch) {
+	mismatch := playback.NewPgxQueueStateRepository(&positionQuerier{}, playback.WithQueueStateMetrics(m))
+	if err := mismatch.UpdatePosition(context.Background(), testPosition(t)); !errors.Is(err, playback.ErrQueuePositionMismatch) {
 		t.Fatalf("UpdatePosition = %v, want ErrQueuePositionMismatch", err)
 	}
 	if m.staleWrites != 2 {
