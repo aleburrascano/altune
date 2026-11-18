@@ -39,6 +39,7 @@ beforeEach(() => {
   resetLogger();
   require('expo-file-system').__fs.reset();
   require('expo-secure-store').__secureStore.reset();
+  require('expo-crypto').__crypto.reset();
   require('react-native-track-player').__player.reset();
   __http.reset();
   resetOutbox();

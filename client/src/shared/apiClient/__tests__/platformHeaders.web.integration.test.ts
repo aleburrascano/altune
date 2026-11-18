@@ -1,13 +1,12 @@
 import { audioRequestHeaders, apiFetch } from '@shared/apiClient';
-import { supabase, clearSessionExpired } from '@shared/auth';
+import { clearSessionExpired } from '@shared/auth';
+import { recordLogs } from '@shared/log';
+import { signedInWith } from '@shared/apiClient/__tests__/sessionLookup';
 const { __http } = require('@testing/doubles/fetch.js');
 
 beforeEach(() => {
   clearSessionExpired();
-  jest.spyOn(supabase.auth, 'getSession').mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  } as never);
+  signedInWith();
 });
 
 describe('request headers on web', () => {
@@ -23,15 +22,15 @@ describe('request headers on web', () => {
   });
 
   it('logs a failed request without a correlation id, since none was sent', async () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const logs = recordLogs();
     __http.reply('GET /v1/playlists', { status: 500, json: {} });
 
     await expect(apiFetch('/v1/playlists')).rejects.toMatchObject({ status: 500 });
 
-    expect(warn).toHaveBeenCalledWith(
+    expect(logs.warnings).toContainEqual([
       '[api] request failed',
       expect.not.objectContaining({ correlationId: expect.anything() }),
-    );
+    ]);
   });
 
   it('hands the caller an error with no correlation id', async () => {

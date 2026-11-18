@@ -2,14 +2,14 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { apiFetch } from '@shared/apiClient';
-import { supabase, clearSessionExpired, getSessionExpired } from '@shared/auth';
+import { clearSessionExpired, getSessionExpired } from '@shared/auth';
+import {
+  installSessionLookup,
+  type SessionLookup,
+} from '@shared/apiClient/__tests__/sessionLookup';
 const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
-
-type LooseSession = { getSession: () => Promise<unknown> };
-
-let getSession: jest.SpyInstance<Promise<unknown>, []>;
+let getSession: SessionLookup;
 
 function withSession(accessToken = 'contract-fixture-token') {
   getSession.mockResolvedValue({
@@ -20,8 +20,7 @@ function withSession(accessToken = 'contract-fixture-token') {
 
 beforeEach(() => {
   clearSessionExpired();
-  getSession = jest.spyOn(supabase.auth as LooseSession, 'getSession');
-  getSession.mockReset();
+  getSession = installSessionLookup();
   __http.reset();
 });
 

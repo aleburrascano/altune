@@ -9,19 +9,12 @@ import {
 import type { DiscoveryKind, DiscoveryResult, DiscoverySearchResponse } from '@shared/catalog';
 import { apiBase } from '@shared/apiConfig';
 import { ContractError } from '@shared/failure';
-import { supabase } from '@shared/auth';
+import { signedInWith } from '@shared/apiClient/__tests__/sessionLookup';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
-
-type LooseSession = { getSession: () => Promise<unknown> };
-
 beforeEach(() => {
-  (jest.spyOn(supabase.auth as LooseSession, 'getSession') as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+  signedInWith();
 });
 
 function discoveryResult(overrides: Partial<DiscoveryResult> = {}): DiscoveryResult {
@@ -797,10 +790,7 @@ describe('Adversarial: malformed suggest/search-history payloads fail as a typed
 
 describe('search_id', () => {
   beforeEach(() => {
-    (jest.spyOn(supabase.auth as LooseSession, 'getSession') as jest.Mock).mockResolvedValue({
-      data: { session: { access_token: 'tok' } },
-      error: null,
-    });
+    signedInWith();
   });
 
   function fullSearchResponse() {
