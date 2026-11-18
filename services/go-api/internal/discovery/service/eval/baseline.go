@@ -22,6 +22,8 @@ type Baseline struct {
 
 type Baselines map[string]Baseline
 
+const floatRoundingTolerance = 1e-9
+
 type GateResult struct {
 	Metric    string  `json:"metric"`
 	Current   float64 `json:"current"`
@@ -46,10 +48,10 @@ func (b Baselines) Gate(metric string, current float64) GateResult {
 	}
 	if base.HigherIsBetter {
 		res.Threshold = base.Value - base.Margin
-		res.Regressed = current < res.Threshold
+		res.Regressed = current < res.Threshold-floatRoundingTolerance
 	} else {
 		res.Threshold = base.Value + base.Margin
-		res.Regressed = current > res.Threshold
+		res.Regressed = current > res.Threshold+floatRoundingTolerance
 	}
 	return res
 }
@@ -80,15 +82,6 @@ func (g GateResult) Failed() bool { return g.Regressed || g.Missing }
 func AnyFailed(gates []GateResult) bool {
 	for _, g := range gates {
 		if g.Failed() {
-			return true
-		}
-	}
-	return false
-}
-
-func AnyRegressed(gates []GateResult) bool {
-	for _, g := range gates {
-		if g.Regressed {
 			return true
 		}
 	}
