@@ -6,7 +6,7 @@ import {
   asString,
   nullableNumber,
   nullableString,
-} from '@shared/apiClient/wireDecoders';
+} from '@shared/apiClient/core/wireDecoders';
 
 export type LibrarySort = 'recent' | 'az' | 'year';
 

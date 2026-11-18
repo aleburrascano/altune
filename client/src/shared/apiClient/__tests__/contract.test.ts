@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
+import { apiClientSourceFiles } from '@shared/apiClient/__tests__/apiClientSources';
 
 function findGoApiRoot(): string | null {
   let dir = __dirname;
@@ -15,7 +16,7 @@ function findGoApiRoot(): string | null {
 }
 
 const GO_API_ROOT = findGoApiRoot();
-const API_CLIENT_DIR = path.join(__dirname, '..');
+const API_CLIENT_ADAPTERS_DIR = path.join(__dirname, '..', 'adapters');
 const CATALOG_CORE_DIR = path.join(__dirname, '..', '..', 'catalog', 'core');
 
 function goPath(...segments: string[]): string {
@@ -357,16 +358,9 @@ function extractReturnTemplate(
   return result;
 }
 
-function listApiClientSourceFiles(): string[] {
-  return fs
-    .readdirSync(API_CLIENT_DIR)
-    .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))
-    .map((f) => path.join(API_CLIENT_DIR, f));
-}
-
 function deriveClientCalls(): RouteEntry[] {
   const calls: RouteEntry[] = [];
-  for (const filePath of listApiClientSourceFiles()) {
+  for (const filePath of apiClientSourceFiles()) {
     const source = fs.readFileSync(filePath, 'utf8');
     const sourceFile = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true);
     for (const call of findApiFetchCalls(sourceFile)) {
@@ -576,7 +570,7 @@ describe('Library lens DTOs (library_handler.go) <-> library.ts', () => {
     goPath('internal', 'catalog', 'adapters', 'handler', 'library_handler.go'),
     'utf8',
   );
-  const librarySource = fs.readFileSync(path.join(API_CLIENT_DIR, 'library.ts'), 'utf8');
+  const librarySource = fs.readFileSync(path.join(API_CLIENT_ADAPTERS_DIR, 'library.ts'), 'utf8');
 
   it.each([
     ['AlbumGroupDTO', 'AlbumGroup'],
@@ -611,7 +605,7 @@ describe('audioURLDTO (audio_url_handler.go) <-> ResolvedAudioUrl (audio.ts) —
       audioUrlHandlerSource,
       extractGoStruct(audioUrlHandlerSource, 'audioURLDTO'),
     );
-    const audioSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'audio.ts'), 'utf8');
+    const audioSource = fs.readFileSync(path.join(API_CLIENT_ADAPTERS_DIR, 'audio.ts'), 'utf8');
     const tsLines = extractTsInterfaceLines(audioSource, 'ResolvedAudioUrl');
 
     expect(goFields.size).toBeGreaterThan(0);
@@ -631,7 +625,7 @@ describe('queue-state pair (queue_handler.go) <-> QueueStateResponse / SaveQueue
     goPath('internal', 'playback', 'adapters', 'handler', 'queue_handler.go'),
     'utf8',
   );
-  const playbackSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'playback.ts'), 'utf8');
+  const playbackSource = fs.readFileSync(path.join(API_CLIENT_ADAPTERS_DIR, 'playback.ts'), 'utf8');
 
   it('QueueStateResponse (TS) fields are a subset of queueStateResponse (Go), dropping only the documented source_id carryover field', () => {
     const goFields = deriveGoFields(

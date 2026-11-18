@@ -2,7 +2,7 @@ const pagingLoopsAwaitInOrder = {
   files: [
     'src/features/detail/core/useLibraryMatches.ts',
     'src/features/library/view/useLibraryTracks.ts',
-    'src/shared/apiClient/tracks.ts',
+    'src/shared/apiClient/adapters/tracks.ts',
   ],
   rules: ['react-doctor/async-await-in-loop'],
 };

@@ -1,6 +1,6 @@
 import { DISCOVERY_KINDS, asFavoriteKey } from '@shared/catalog';
 import { apiFetch, apiSend } from '@shared/apiClient/adapters/http';
-import { asRecord, asString, member, parseListEnvelope } from '@shared/apiClient/wireDecoders';
+import { asRecord, asString, member, parseListEnvelope } from '@shared/apiClient/core/wireDecoders';
 import type { DiscoveryKind, FavoriteKey } from '@shared/catalog';
 export type Favorite = {
   kind: DiscoveryKind;

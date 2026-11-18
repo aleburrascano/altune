@@ -15,7 +15,7 @@ import {
   type TrackAcquisition,
   type TrackResponse,
 } from '@shared/catalog';
-import type { LibrarySort } from '@shared/apiClient/library';
+import type { LibrarySort } from '@shared/apiClient/adapters/library';
 import {
   asCount,
   parseArray,
@@ -27,7 +27,7 @@ import {
   member,
   nullableNumber,
   nullableString,
-} from '@shared/apiClient/wireDecoders';
+} from '@shared/apiClient/core/wireDecoders';
 import { warn } from '@shared/log';
 
 function parseFeaturedArtist(value: unknown, at: string): FeaturedArtist {
