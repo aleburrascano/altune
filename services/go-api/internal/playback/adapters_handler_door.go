@@ -9,6 +9,7 @@ type (
 
 var (
 	NewQueueHandler                = handler.NewQueueHandler
+	WithQueueStateClock            = handler.WithQueueStateClock
 	WithQueueStateRateLimit        = handler.WithQueueStateRateLimit
 	WithQueueStateRateLimitMetrics = handler.WithQueueStateRateLimitMetrics
 )

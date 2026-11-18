@@ -32,7 +32,7 @@ func WithQueueStateRateLimit(limit QueueStateRateLimit) QueueHandlerOption {
 	return func(c *queueHandlerConfig) { c.rateLimit = limit }
 }
 
-func withClock(now func() time.Time) QueueHandlerOption {
+func WithQueueStateClock(now func() time.Time) QueueHandlerOption {
 	return func(c *queueHandlerConfig) { c.now = now }
 }
 

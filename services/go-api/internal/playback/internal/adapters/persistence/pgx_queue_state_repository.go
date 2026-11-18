@@ -37,14 +37,12 @@ type QueueStateDB interface {
 }
 
 type PgxQueueStateRepository struct {
-	pool      QueueStateDB
-	metrics   ports.QueueStateMetrics
-	timeout   time.Duration
-	saveGrace time.Duration
+	pool    QueueStateDB
+	metrics ports.QueueStateMetrics
 }
 
 func NewPgxQueueStateRepository(pool QueueStateDB, opts ...func(*PgxQueueStateRepository)) *PgxQueueStateRepository {
-	r := &PgxQueueStateRepository{pool: pool, metrics: ports.NoopQueueStateMetrics(), timeout: defaultQueueStateOpTimeout, saveGrace: defaultQueueStateOpTimeout}
+	r := &PgxQueueStateRepository{pool: pool, metrics: ports.NoopQueueStateMetrics()}
 	for _, opt := range opts {
 		opt(r)
 	}
@@ -59,32 +57,6 @@ func WithQueueStateMetrics(m ports.QueueStateMetrics) func(*PgxQueueStateReposit
 	}
 }
 
-func WithQueueStateOpTimeout(d time.Duration) func(*PgxQueueStateRepository) {
-	return func(r *PgxQueueStateRepository) {
-		r.timeout = d
-	}
-}
-
-func WithQueueStateSaveGrace(d time.Duration) func(*PgxQueueStateRepository) {
-	return func(r *PgxQueueStateRepository) {
-		r.saveGrace = d
-	}
-}
-
-func (r *PgxQueueStateRepository) erasureSaveGrace() time.Duration {
-	if r.saveGrace > 0 {
-		return r.saveGrace
-	}
-	return defaultQueueStateOpTimeout
-}
-
-func (r *PgxQueueStateRepository) opTimeout() time.Duration {
-	if r.timeout > 0 {
-		return r.timeout
-	}
-	return defaultQueueStateOpTimeout
-}
-
 func (r *PgxQueueStateRepository) recordTimeout(parent context.Context, err error) {
 	if errors.Is(err, context.DeadlineExceeded) && parent.Err() == nil {
 		r.metrics.QueueStateOpTimedOut()
@@ -97,7 +69,7 @@ func (r *PgxQueueStateRepository) runOp(
 	userId shared.UserId,
 	run func(opCtx context.Context) error,
 ) error {
-	opCtx, cancel := context.WithTimeout(ctx, r.opTimeout())
+	opCtx, cancel := context.WithTimeout(ctx, defaultQueueStateOpTimeout)
 	defer cancel()
 
 	err := run(opCtx)
@@ -150,7 +122,7 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 			state.SourceId,
 			state.NaturalOrder,
 			handlingAge{stampedAt: state.UpdatedAt},
-			r.erasureSaveGrace().Microseconds(),
+			defaultQueueStateOpTimeout.Microseconds(),
 		)
 		return err
 	})

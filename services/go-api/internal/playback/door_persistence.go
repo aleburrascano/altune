@@ -15,12 +15,6 @@ type (
 const RepeatAll = domain.RepeatAll
 
 var (
-	WithQueueStateOpTimeout  = persistence.WithQueueStateOpTimeout
-	WithQueueStateSaveGrace  = persistence.WithQueueStateSaveGrace
-	WithOwnerScanPageTimeout = persistence.WithOwnerScanPageTimeout
-)
-
-var (
 	ErrStaleQueueWrite       = domain.ErrStaleQueueWrite
 	ErrQueueStateUnavailable = domain.ErrQueueStateUnavailable
 	ErrQueuePositionMismatch = domain.ErrQueuePositionMismatch
