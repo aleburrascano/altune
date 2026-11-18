@@ -14,25 +14,29 @@ export type TextProps = RNTextProps & {
   tone?: TextTone;
 };
 
+type ToneColorKey =
+  | 'textPrimary'
+  | 'textSecondary'
+  | 'textTertiary'
+  | 'accentText'
+  | 'onAccent'
+  | 'danger'
+  | 'success'
+  | 'warning';
+
+const TONE_COLOR: Record<TextTone, ToneColorKey> = {
+  primary: 'textPrimary',
+  secondary: 'textSecondary',
+  tertiary: 'textTertiary',
+  accent: 'accentText',
+  onAccent: 'onAccent',
+  danger: 'danger',
+  success: 'success',
+  warning: 'warning',
+};
+
 function toneColor(theme: Theme, tone: TextTone): string {
-  switch (tone) {
-    case 'primary':
-      return theme.color.textPrimary;
-    case 'secondary':
-      return theme.color.textSecondary;
-    case 'tertiary':
-      return theme.color.textTertiary;
-    case 'accent':
-      return theme.color.accentText;
-    case 'onAccent':
-      return theme.color.onAccent;
-    case 'danger':
-      return theme.color.danger;
-    case 'success':
-      return theme.color.success;
-    case 'warning':
-      return theme.color.warning;
-  }
+  return theme.color[TONE_COLOR[tone]];
 }
 
 export function Text({ variant = 'body', tone = 'primary', style, ...rest }: TextProps) {

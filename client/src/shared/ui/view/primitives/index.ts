@@ -1,4 +1,4 @@
-export { Text } from '@shared/ui/primitives/Text';
+export { Text } from '@shared/ui/view/primitives/Text';
 export { Screen, SCREEN_HORIZONTAL_PADDING } from '@shared/ui/view/primitives/Screen';
 export { Card } from '@shared/ui/view/primitives/Card';
 export { Row } from '@shared/ui/view/primitives/Row';

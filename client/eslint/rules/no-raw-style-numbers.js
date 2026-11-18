@@ -31,7 +31,7 @@ module.exports = {
     type: 'suggestion',
     messages: {
       nameIt:
-        'Name this number: a spacing or size token from @shared/ui/theme, or a named constant. Only 0, 1 and flex may be raw in StyleSheet.create.',
+        'Name this number: a spacing or size token from @shared/ui, or a named constant. Only 0, 1 and flex may be raw in StyleSheet.create.',
     },
     schema: [],
   },

@@ -5,8 +5,8 @@ import { tapFeedback } from '@shared/ui/haptics';
 import { radius, spacing } from '@shared/ui/core/theme/tokens';
 import { useTheme } from '@shared/ui/view/theme/useTheme';
 import { pressedStyle } from '@shared/ui/view/primitives/pressedStyle';
-import { Text } from '@shared/ui/primitives/Text';
-import type { TextTone } from '@shared/ui/primitives/Text';
+import { Text } from '@shared/ui/view/primitives/Text';
+import type { TextTone } from '@shared/ui/view/primitives/Text';
 import { recordTap } from '@shared/ui/primitives/recordTap';
 
 type ChipBase = {

@@ -3,9 +3,9 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { adjustsKeyboardInsets } from '@shared/ui/view/keyboard/keyboard';
-import { Text } from '@shared/ui/primitives/Text';
+import { Text } from '@shared/ui/view/primitives/Text';
 import { Wordmark } from '@shared/ui/view/primitives/Wordmark';
-import { spacing, useTheme } from '@shared/ui/theme';
+import { spacing, useTheme } from '@shared/ui/view/theme';
 
 import { ArtworkBackground } from '@shared/ui/view/hero/ArtworkBackground';
 

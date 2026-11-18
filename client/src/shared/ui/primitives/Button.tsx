@@ -7,8 +7,8 @@ import type { Theme } from '@shared/ui/core/theme/theme';
 import { minInteractiveHeight, radius, spacing } from '@shared/ui/core/theme/tokens';
 import { useTheme } from '@shared/ui/view/theme/useTheme';
 import { recordTap } from '@shared/ui/primitives/recordTap';
-import { Text } from '@shared/ui/primitives/Text';
-import type { TextTone } from '@shared/ui/primitives/Text';
+import { Text } from '@shared/ui/view/primitives/Text';
+import type { TextTone } from '@shared/ui/view/primitives/Text';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost';
 
