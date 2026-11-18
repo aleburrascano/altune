@@ -1,15 +1,6 @@
 package goapi
 
-import (
-	"context"
-	"os"
-	"strings"
-)
-
-func BaseURLFromEnv() (string, bool) {
-	base := strings.TrimSpace(os.Getenv("OVERSEER_GOAPI_URL"))
-	return base, base != ""
-}
+import "context"
 
 type NullEventSource struct {
 	events chan Event

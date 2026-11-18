@@ -1,0 +1,10 @@
+{
+  "removed": [
+    "B3 internal/goapi/env.go imports os",
+    "B3 internal/goapi/refreshing_token.go imports os",
+    "C8 internal/goapi/env.go reads os.Getenv",
+    "C8 internal/goapi/refreshing_token.go reads os.Getenv"
+  ],
+  "added": [],
+  "clones": 0
+}

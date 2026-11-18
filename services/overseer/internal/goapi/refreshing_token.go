@@ -2,7 +2,6 @@ package goapi
 
 import (
 	goapihttp "altune/overseer/internal/goapi/internal/adapters/goapihttp"
-	"os"
 	"sync"
 )
 
@@ -11,7 +10,7 @@ var (
 	sharedSource TokenSource
 )
 
-func SharedTokenSource() TokenSource {
-	sharedOnce.Do(func() { sharedSource = goapihttp.SelectTokenSource(os.Getenv) })
+func SharedTokenSource(getenv func(string) string) TokenSource {
+	sharedOnce.Do(func() { sharedSource = goapihttp.SelectTokenSource(getenv) })
 	return sharedSource
 }
