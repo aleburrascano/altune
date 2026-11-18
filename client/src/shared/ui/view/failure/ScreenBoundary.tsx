@@ -4,7 +4,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { reportClientError } from '@shared/telemetry';
 
 import { Button } from '@shared/ui/primitives/Button';
-import { Text } from '@shared/ui/primitives/Text';
+import { Text } from '@shared/ui/view/primitives/Text';
 import { spacing } from '@shared/ui/core/theme/tokens';
 import { useTheme } from '@shared/ui/view/theme/useTheme';
 

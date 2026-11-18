@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { Text } from '@shared/ui/primitives/Text';
+import { Text } from '@shared/ui/view/primitives/Text';
 import { spacing } from '@shared/ui/core/theme/tokens';
 import type { Theme } from '@shared/ui/core/theme/theme';
 import { useTheme } from '@shared/ui/view/theme/useTheme';

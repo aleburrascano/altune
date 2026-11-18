@@ -4,7 +4,7 @@ import { ChevronDown } from 'lucide-react-native';
 import { spacing } from '@shared/ui/core/theme/tokens';
 import { useTheme } from '@shared/ui/view/theme/useTheme';
 import { pressedStyle } from '@shared/ui/view/primitives/pressedStyle';
-import { Text } from '@shared/ui/primitives/Text';
+import { Text } from '@shared/ui/view/primitives/Text';
 import { Tappable } from '@shared/ui/view/primitives/Tappable';
 import { ActionSheet, type ActionSheetOption } from '@shared/ui/view/primitives/ActionSheet';
 

@@ -1,5 +1,5 @@
 import { recordFailureShown } from '@shared/telemetry';
-import { showAlert } from '@shared/ui/dialog/dialog';
+import { showAlert } from '@shared/ui/view/dialog/dialog';
 
 const MAX_MESSAGE_LENGTH = 200;
 

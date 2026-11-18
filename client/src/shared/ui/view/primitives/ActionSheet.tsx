@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ModalFrame } from '@shared/ui/view/primitives/ModalFrame';
 import { pressedStyle } from '@shared/ui/view/primitives/pressedStyle';
-import { Text } from '@shared/ui/primitives/Text';
+import { Text } from '@shared/ui/view/primitives/Text';
 import { useTheme } from '@shared/ui/view/theme/useTheme';
 import { radius, spacing, sheetGrabber, sheetTopRadius } from '@shared/ui/core/theme/tokens';
 

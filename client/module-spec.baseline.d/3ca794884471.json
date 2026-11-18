@@ -1,0 +1,30 @@
+{
+  "removed": [
+    "C12 src/shared/ui/a11y/announce.android.ts a11y/announce.android.ts is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a shared module",
+    "C12 src/shared/ui/a11y/announce.ts a11y/announce.ts is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a shared module",
+    "C12 src/shared/ui/dialog/dialog.ts dialog/dialog.ts is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a shared module",
+    "C12 src/shared/ui/dialog/dialog.web.ts dialog/dialog.web.ts is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a shared module",
+    "C12 src/shared/ui/layout/index.ts layout/index.ts is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a shared module",
+    "C12 src/shared/ui/primitives/Artwork.tsx primitives/Artwork.tsx is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a shared module",
+    "C12 src/shared/ui/primitives/Text.tsx primitives/Text.tsx is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a shared module",
+    "C12 src/shared/ui/primitives/index.ts primitives/index.ts is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a shared module",
+    "C12 src/shared/ui/theme/index.ts theme/index.ts is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a shared module",
+    "C3 src/shared/acquisition/view/__tests__/DownloadsBar.test.tsx imports src/shared/ui/a11y/announce.ts, behind ui's door",
+    "C5 src/shared/ui/primitives/Artwork.tsx imports assets/artwork-placeholder.png, which belongs to no module",
+    "F1 src/shared/ui/a11y/announce.ts imports react-native",
+    "F1 src/shared/ui/dialog/dialog.ts imports react-native",
+    "F1 src/shared/ui/primitives/Artwork.tsx draws JSX outside view/",
+    "F1 src/shared/ui/primitives/Artwork.tsx imports expo-image",
+    "F1 src/shared/ui/primitives/Text.tsx draws JSX outside view/",
+    "F1 src/shared/ui/primitives/Text.tsx imports react-native",
+    "T1 src/shared/ui/a11y/__tests__/announce.test.ts imports a11y/announce.android.ts, behind ui's door",
+    "T1 src/shared/ui/dialog/__tests__/dialog.test.ts imports dialog/dialog.web.ts, behind ui's door"
+  ],
+  "added": [
+    "C3 src/shared/acquisition/view/__tests__/DownloadsBar.test.tsx imports src/shared/ui/view/a11y/announce.ts, behind ui's door",
+    "C5 src/shared/ui/view/primitives/Artwork.tsx imports assets/artwork-placeholder.png, which belongs to no module",
+    "T1 src/shared/ui/a11y/__tests__/announce.test.ts imports view/a11y/announce.android.ts, behind ui's door",
+    "T1 src/shared/ui/dialog/__tests__/dialog.test.ts imports view/dialog/dialog.web.ts, behind ui's door"
+  ],
+  "clones": 0
+}

@@ -59,7 +59,7 @@
       "exports": ["*"]
     },
     {
-      "file": "src/shared/ui/dialog/dialog.ts",
+      "file": "src/shared/ui/view/dialog/dialog.ts",
       "exports": ["*"]
     },
     {

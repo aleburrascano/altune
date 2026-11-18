@@ -2,7 +2,7 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
-import { radius, useTheme, withAlpha } from '@shared/ui/theme';
+import { radius, useTheme, withAlpha } from '@shared/ui/view/theme';
 
 const ARTWORK_ZOOM = 1.06;
 
