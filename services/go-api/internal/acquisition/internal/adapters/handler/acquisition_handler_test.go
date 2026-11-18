@@ -2,11 +2,9 @@ package handler_test
 
 import (
 	"altune/go-api/internal/acquisition"
-	"altune/go-api/internal/auth"
-	"altune/go-api/internal/auth/adapters/middleware"
-	authdomain "altune/go-api/internal/auth/domain"
 	catdomain "altune/go-api/internal/catalog/domain"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/requestuser"
 	"context"
 	"encoding/json"
 	"io"
@@ -57,7 +55,7 @@ func TestHandleRetryAcquisition_CooldownRetryAfterIsTimeLeft(t *testing.T) {
 	store.now = func() time.Time { return clock }
 	h := acquisition.NewRetryHandler(acquisition.NewTrackLedger(repo), &retryFakeScheduler{}, acquisition.NewRetryAdmission(store))
 	router := chi.NewRouter()
-	router.Use(middleware.Middleware(retryVerifyAsTestUser))
+	router.Use(signedInAs(retryTestUserId))
 	router.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
 	path := "/tracks/" + track.ID.UUID().String() + "/retry"
 
@@ -183,7 +181,7 @@ func TestHandleRetryAcquisition_UsesTheInjectedAdmission(t *testing.T) {
 	scheduler := &retryFakeScheduler{}
 	h := acquisition.NewRetryHandler(acquisition.NewTrackLedger(repo), scheduler, admitAlways{})
 	router := chi.NewRouter()
-	router.Use(middleware.Middleware(retryVerifyAsTestUser))
+	router.Use(signedInAs(retryTestUserId))
 	router.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
 
 	rec := retryServe(t, router, http.MethodPost, "/tracks/"+track.ID.UUID().String()+"/retry")
@@ -201,7 +199,7 @@ func TestHandleReacquire_UsesTheInjectedAdmission(t *testing.T) {
 	scheduler := &reacquireFakeScheduler{}
 	h := acquisition.NewReacquireHandler(acquisition.NewTrackLedger(repo), scheduler, admitAlways{})
 	router := chi.NewRouter()
-	router.Use(middleware.Middleware(reacquireVerifyAsTestUser))
+	router.Use(signedInAs(reacquireTestUserId))
 	router.Post("/tracks/{trackId}/reacquire", h.HandleReacquire)
 
 	rec := retryServe(t, router, http.MethodPost, "/tracks/"+track.ID.UUID().String()+"/reacquire")
@@ -248,10 +246,6 @@ var (
 	reacquireTestUserId   = shared.NewUserId(reacquireTestUserUUID)
 )
 
-var reacquireVerifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (authdomain.VerifiedToken, error) {
-	return authdomain.VerifiedToken{UserID: reacquireTestUserId, ExpiresAt: time.Now().Add(time.Hour)}, nil
-})
-
 type reacquireFakeScheduler struct {
 	replaced []catdomain.TrackId
 	err      error
@@ -282,7 +276,7 @@ func makeStreamableReacquireTrack(userId shared.UserId, title, artist, album, au
 func buildReacquireRouter(trackRepo *retryFakeTrackRepo, scheduler *reacquireFakeScheduler) chi.Router {
 	h := acquisition.NewReacquireHandler(acquisition.NewTrackLedger(trackRepo), scheduler, acquisition.NewReacquireAdmission(newMemCooldownStore()))
 	r := chi.NewRouter()
-	r.Use(middleware.Middleware(reacquireVerifyAsTestUser))
+	r.Use(signedInAs(reacquireTestUserId))
 	r.Post("/tracks/{trackId}/reacquire", h.HandleReacquire)
 	return r
 }
@@ -424,9 +418,16 @@ var (
 	retryTestUserId   = shared.NewUserId(retryTestUserUUID)
 )
 
-var retryVerifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (authdomain.VerifiedToken, error) {
-	return authdomain.VerifiedToken{UserID: retryTestUserId, ExpiresAt: time.Now().Add(time.Hour)}, nil
-})
+func signedInAs(userID shared.UserId) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Authorization") != "" {
+				r = r.WithContext(requestuser.ContextWithUserID(r.Context(), userID))
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
 
 type retryFakeTrackRepo struct {
 	tracks map[string]*catdomain.Track
@@ -543,7 +544,7 @@ func makeReadyRetryTrack(userId shared.UserId, title, artist, album, audioRef st
 func buildRetryRouter(trackRepo *retryFakeTrackRepo, scheduler *retryFakeScheduler) chi.Router {
 	h := acquisition.NewRetryHandler(acquisition.NewTrackLedger(trackRepo), scheduler, acquisition.NewRetryAdmission(newMemCooldownStore()))
 	r := chi.NewRouter()
-	r.Use(middleware.Middleware(retryVerifyAsTestUser))
+	r.Use(signedInAs(retryTestUserId))
 	r.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
 	return r
 }
