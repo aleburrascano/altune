@@ -202,7 +202,7 @@ func Tokens(s string) []string {
 	return strings.Fields(textnorm.NormalizeForIdentity(separatorRe.ReplaceAllString(s, " ")))
 }
 
-func ContainsPhrase(tokens, phrase []string) bool {
+func containsPhrase(tokens, phrase []string) bool {
 	for i := 0; i+len(phrase) <= len(tokens); i++ {
 		if slices.Equal(tokens[i:i+len(phrase)], phrase) {
 			return true
@@ -212,7 +212,7 @@ func ContainsPhrase(tokens, phrase []string) bool {
 }
 
 func (e Entry) In(tokens []string) bool {
-	return ContainsPhrase(tokens, e.tokens)
+	return containsPhrase(tokens, e.tokens)
 }
 
 func entryAt(tokens []string, pos int) (Entry, bool) {

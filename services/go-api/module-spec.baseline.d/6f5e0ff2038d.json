@@ -1,0 +1,9 @@
+{
+  "removed": [
+    "C4 internal/shared/versiontag/versiontag.go exports ContainsPhrase, which nothing outside versiontag imports and no test of its own imports through the door",
+    "C4 internal/shared/versiontag/versiontag.go exports Tags, which nothing outside versiontag imports and no test of its own imports through the door",
+    "T1 internal/shared/versiontag/versiontag_test.go is in package versiontag, so it sees inside the module: use package versiontag_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}
