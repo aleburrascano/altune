@@ -188,3 +188,21 @@ func TestAllKinds_HasEveryKind(t *testing.T) {
 		t.Errorf("Key() = %q", got)
 	}
 }
+
+func TestNewPagedSearchQueryRejectsOutOfRangeOffset(t *testing.T) {
+	kinds := map[ResultKind]bool{ResultKindTrack: true}
+
+	if _, err := NewPagedSearchQuery("hello", kinds, 20, -1); err == nil {
+		t.Fatal("negative offset accepted")
+	}
+	if _, err := NewPagedSearchQuery("hello", kinds, 20, MaxSearchOffset+1); err == nil {
+		t.Fatal("offset past the cap accepted")
+	}
+	q, err := NewPagedSearchQuery("hello", kinds, 20, MaxSearchOffset)
+	if err != nil {
+		t.Fatalf("offset at the cap rejected: %v", err)
+	}
+	if q.Offset != MaxSearchOffset {
+		t.Fatalf("offset = %d, want %d", q.Offset, MaxSearchOffset)
+	}
+}

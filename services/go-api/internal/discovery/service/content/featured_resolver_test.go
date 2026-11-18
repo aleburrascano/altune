@@ -1,56 +1,72 @@
-package content
+package content_test
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"context"
 	"errors"
 	"testing"
 )
 
 type fakeMBFeat struct {
-	results []domain.SearchResult
+	results []discovery.SearchResult
 	err     error
 }
 
-func (f fakeMBFeat) SearchStructured(_ context.Context, _, _ string, _ map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
+func (f fakeMBFeat) SearchStructured(_ context.Context, _, _ string, _ map[discovery.ResultKind]bool) ([]discovery.SearchResult, error) {
 	return f.results, f.err
 }
 
 type fakeDeezerFeat struct {
 	id        string
-	feats     []domain.FeaturedArtist
+	feats     []discovery.FeaturedArtist
 	err       error
 	lookupErr error
 }
 
-func (f fakeDeezerFeat) ResolveID(_ context.Context, _ domain.ResultKind, _, _ string) (string, error) {
+func (f fakeDeezerFeat) ResolveID(_ context.Context, _ discovery.ResultKind, _, _ string) (string, error) {
 	return f.id, f.err
 }
 
-func (f fakeDeezerFeat) LookupTrackFeatured(_ context.Context, _ string) ([]domain.FeaturedArtist, error) {
+func (f fakeDeezerFeat) LookupTrackFeatured(_ context.Context, _ string) ([]discovery.FeaturedArtist, error) {
 	return f.feats, f.lookupErr
 }
 
-func mbResultWithFeatured(feats ...domain.FeaturedArtist) domain.SearchResult {
-	return domain.SearchResult{
-		Kind:   domain.ResultKindTrack,
-		Title:  "Song",
-		Extras: map[string]any{"featured_artists": domain.FeaturedArtistsToExtras(feats)},
+func mbResultWithFeatured(feats ...discovery.FeaturedArtist) discovery.SearchResult {
+	extras := make([]map[string]any, 0, len(feats))
+	for _, f := range feats {
+		extras = append(extras, f.ToExtrasMap())
 	}
+	return discovery.SearchResult{
+		Kind:   discovery.ResultKindTrack,
+		Title:  "Song",
+		Extras: map[string]any{"featured_artists": extras},
+	}
+}
+
+func resolveFeatured(t *testing.T, mb, dz []discovery.FeaturedArtist) []discovery.FeaturedArtist {
+	t.Helper()
+	got, err := discovery.NewFeaturedArtistResolver(
+		fakeMBFeat{results: []discovery.SearchResult{mbResultWithFeatured(mb...)}},
+		fakeDeezerFeat{id: "42", feats: dz},
+	).Resolve(context.Background(), "Artist", "Song")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	return got
 }
 
 func TestFeaturedArtistResolver_Resolve(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("merges mb + deezer, mb-primary", func(t *testing.T) {
-		mb := fakeMBFeat{results: []domain.SearchResult{mbResultWithFeatured(
-			domain.FeaturedArtist{Name: "SZA", MBID: "m1", Role: domain.RoleFeatured},
+		mb := fakeMBFeat{results: []discovery.SearchResult{mbResultWithFeatured(
+			discovery.FeaturedArtist{Name: "SZA", MBID: "m1", Role: "featured"},
 		)}}
-		dz := fakeDeezerFeat{id: "42", feats: []domain.FeaturedArtist{
-			{Name: "SZA", DeezerID: 7, Role: domain.RoleFeatured},
-			{Name: "Doja", DeezerID: 8, Role: domain.RoleFeatured},
+		dz := fakeDeezerFeat{id: "42", feats: []discovery.FeaturedArtist{
+			{Name: "SZA", DeezerID: 7, Role: "featured"},
+			{Name: "Doja", DeezerID: 8, Role: "featured"},
 		}}
-		got, _ := NewFeaturedArtistResolver(mb, dz).Resolve(ctx, "Artist", "Song")
+		got, _ := discovery.NewFeaturedArtistResolver(mb, dz).Resolve(ctx, "Artist", "Song")
 		if len(got) != 2 {
 			t.Fatalf("expected 2, got %d (%+v)", len(got), got)
 		}
@@ -64,26 +80,26 @@ func TestFeaturedArtistResolver_Resolve(t *testing.T) {
 
 	t.Run("mb error degrades to deezer only", func(t *testing.T) {
 		mb := fakeMBFeat{err: errors.New("mb down")}
-		dz := fakeDeezerFeat{id: "1", feats: []domain.FeaturedArtist{{Name: "Guest", DeezerID: 9}}}
-		got, _ := NewFeaturedArtistResolver(mb, dz).Resolve(ctx, "A", "B")
+		dz := fakeDeezerFeat{id: "1", feats: []discovery.FeaturedArtist{{Name: "Guest", DeezerID: 9}}}
+		got, _ := discovery.NewFeaturedArtistResolver(mb, dz).Resolve(ctx, "A", "B")
 		if len(got) != 1 || got[0].Name != "Guest" {
 			t.Fatalf("got %+v", got)
 		}
 	})
 
 	t.Run("deezer unresolved degrades to mb only", func(t *testing.T) {
-		mb := fakeMBFeat{results: []domain.SearchResult{mbResultWithFeatured(
-			domain.FeaturedArtist{Name: "Only MB", MBID: "m"},
+		mb := fakeMBFeat{results: []discovery.SearchResult{mbResultWithFeatured(
+			discovery.FeaturedArtist{Name: "Only MB", MBID: "m"},
 		)}}
 		dz := fakeDeezerFeat{id: ""}
-		got, _ := NewFeaturedArtistResolver(mb, dz).Resolve(ctx, "A", "B")
+		got, _ := discovery.NewFeaturedArtistResolver(mb, dz).Resolve(ctx, "A", "B")
 		if len(got) != 1 || got[0].Name != "Only MB" {
 			t.Fatalf("got %+v", got)
 		}
 	})
 
 	t.Run("neither yields empty", func(t *testing.T) {
-		got, _ := NewFeaturedArtistResolver(fakeMBFeat{}, fakeDeezerFeat{}).Resolve(ctx, "A", "B")
+		got, _ := discovery.NewFeaturedArtistResolver(fakeMBFeat{}, fakeDeezerFeat{}).Resolve(ctx, "A", "B")
 		if len(got) != 0 {
 			t.Fatalf("got %+v", got)
 		}
@@ -92,7 +108,7 @@ func TestFeaturedArtistResolver_Resolve(t *testing.T) {
 	t.Run("both sources erroring returns an error", func(t *testing.T) {
 		mb := fakeMBFeat{err: errors.New("mb down")}
 		dz := fakeDeezerFeat{err: errors.New("dz down")}
-		got, err := NewFeaturedArtistResolver(mb, dz).Resolve(ctx, "A", "B")
+		got, err := discovery.NewFeaturedArtistResolver(mb, dz).Resolve(ctx, "A", "B")
 		if err == nil || len(got) != 0 {
 			t.Fatalf("got %+v, err %v; want error", got, err)
 		}
@@ -101,14 +117,14 @@ func TestFeaturedArtistResolver_Resolve(t *testing.T) {
 	t.Run("deezer lookup error counts as failure", func(t *testing.T) {
 		mb := fakeMBFeat{err: errors.New("mb down")}
 		dz := fakeDeezerFeat{id: "1", lookupErr: errors.New("lookup down")}
-		if _, err := NewFeaturedArtistResolver(mb, dz).Resolve(ctx, "A", "B"); err == nil {
+		if _, err := discovery.NewFeaturedArtistResolver(mb, dz).Resolve(ctx, "A", "B"); err == nil {
 			t.Fatal("want error")
 		}
 	})
 
 	t.Run("one errors and other has none is a genuine none", func(t *testing.T) {
 		mb := fakeMBFeat{err: errors.New("mb down")}
-		got, err := NewFeaturedArtistResolver(mb, fakeDeezerFeat{}).Resolve(ctx, "A", "B")
+		got, err := discovery.NewFeaturedArtistResolver(mb, fakeDeezerFeat{}).Resolve(ctx, "A", "B")
 		if err != nil || got != nil {
 			t.Fatalf("got %+v, err %v; want nil, nil", got, err)
 		}
@@ -117,34 +133,34 @@ func TestFeaturedArtistResolver_Resolve(t *testing.T) {
 	t.Run("cancelled ctx is a failure not none", func(t *testing.T) {
 		cctx, cancel := context.WithCancel(ctx)
 		cancel()
-		_, err := NewFeaturedArtistResolver(fakeMBFeat{}, fakeDeezerFeat{}).Resolve(cctx, "A", "B")
+		_, err := discovery.NewFeaturedArtistResolver(fakeMBFeat{}, fakeDeezerFeat{}).Resolve(cctx, "A", "B")
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("err = %v, want context.Canceled", err)
 		}
 	})
 }
 
-func TestMergeFeaturedArtists(t *testing.T) {
+func TestFeaturedArtistResolver_MergesMusicBrainzAndDeezerCredits(t *testing.T) {
 	t.Run("mb only", func(t *testing.T) {
-		mb := []domain.FeaturedArtist{{Name: "SZA", MBID: "m1"}}
-		got := MergeFeaturedArtists(mb, nil)
+		mb := []discovery.FeaturedArtist{{Name: "SZA", MBID: "m1"}}
+		got := resolveFeatured(t, mb, nil)
 		if len(got) != 1 || got[0].MBID != "m1" {
 			t.Fatalf("got %+v", got)
 		}
 	})
 
 	t.Run("deezer only", func(t *testing.T) {
-		dz := []domain.FeaturedArtist{{Name: "SZA", DeezerID: 7}}
-		got := MergeFeaturedArtists(nil, dz)
+		dz := []discovery.FeaturedArtist{{Name: "SZA", DeezerID: 7}}
+		got := resolveFeatured(t, nil, dz)
 		if len(got) != 1 || got[0].DeezerID != 7 {
 			t.Fatalf("got %+v", got)
 		}
 	})
 
 	t.Run("both agree — same name merges ids, MB order kept", func(t *testing.T) {
-		mb := []domain.FeaturedArtist{{Name: "SZA", MBID: "m1"}}
-		dz := []domain.FeaturedArtist{{Name: "sza", DeezerID: 7}}
-		got := MergeFeaturedArtists(mb, dz)
+		mb := []discovery.FeaturedArtist{{Name: "SZA", MBID: "m1"}}
+		dz := []discovery.FeaturedArtist{{Name: "sza", DeezerID: 7}}
+		got := resolveFeatured(t, mb, dz)
 		if len(got) != 1 {
 			t.Fatalf("expected 1 merged, got %d (%+v)", len(got), got)
 		}
@@ -154,9 +170,9 @@ func TestMergeFeaturedArtists(t *testing.T) {
 	})
 
 	t.Run("deezer fills gap MB missed", func(t *testing.T) {
-		mb := []domain.FeaturedArtist{{Name: "SZA", MBID: "m1"}}
-		dz := []domain.FeaturedArtist{{Name: "SZA", DeezerID: 7}, {Name: "Doja", DeezerID: 8}}
-		got := MergeFeaturedArtists(mb, dz)
+		mb := []discovery.FeaturedArtist{{Name: "SZA", MBID: "m1"}}
+		dz := []discovery.FeaturedArtist{{Name: "SZA", DeezerID: 7}, {Name: "Doja", DeezerID: 8}}
+		got := resolveFeatured(t, mb, dz)
 		if len(got) != 2 {
 			t.Fatalf("expected 2, got %d (%+v)", len(got), got)
 		}
@@ -166,7 +182,7 @@ func TestMergeFeaturedArtists(t *testing.T) {
 	})
 
 	t.Run("neither", func(t *testing.T) {
-		if got := MergeFeaturedArtists(nil, nil); len(got) != 0 {
+		if got := resolveFeatured(t, nil, nil); len(got) != 0 {
 			t.Errorf("expected empty, got %+v", got)
 		}
 	})

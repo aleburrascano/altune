@@ -1,10 +1,8 @@
-package search
+package search_test
 
 import (
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/discoverytest"
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/internal/core/ports"
-	"altune/go-api/internal/discovery/service/providercall"
 	"context"
 	"errors"
 	"strings"
@@ -14,8 +12,8 @@ import (
 
 func TestService_EmitsSearchTelemetryV2(t *testing.T) {
 	store := &discoverytest.FakeEventStore{}
-	p := &discoverytest.FakeProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := NewService([]ports.SearchProvider{p}, providercall.NewCircuitBreaker(), WithEventStore(store))
+	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithEventStore(store))
 
 	runSearch(t, svc, "humble")
 	svc.WaitForBackground()
@@ -25,7 +23,7 @@ func TestService_EmitsSearchTelemetryV2(t *testing.T) {
 		t.Fatalf("got %d events, want 1", len(events))
 	}
 	e := events[0]
-	if e.Type != domain.EventTypeSearchPerformed {
+	if e.Type != discovery.EventTypeSearchPerformed {
 		t.Errorf("type = %v, want search_performed", e.Type)
 	}
 	if e.Payload["pipeline_version"] != "v2" {
@@ -47,8 +45,8 @@ func TestService_EmitsSearchTelemetryV2(t *testing.T) {
 
 func TestService_SearchTelemetryCarriesStageTimes(t *testing.T) {
 	store := &discoverytest.FakeEventStore{}
-	p := &discoverytest.FakeProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}, Delay: 30 * time.Millisecond}
-	svc := NewService([]ports.SearchProvider{p}, providercall.NewCircuitBreaker(), WithEventStore(store))
+	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}, Delay: 30 * time.Millisecond}
+	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithEventStore(store))
 
 	runSearch(t, svc, "humble")
 	svc.WaitForBackground()
@@ -72,8 +70,8 @@ func TestService_SearchTelemetryCarriesStageTimes(t *testing.T) {
 
 func TestService_TelemetryFailureDoesNotSurface(t *testing.T) {
 	store := &discoverytest.FakeEventStore{Err: errors.New("db down")}
-	p := &discoverytest.FakeProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := NewService([]ports.SearchProvider{p}, providercall.NewCircuitBreaker(), WithEventStore(store))
+	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithEventStore(store))
 
 	out, err := svc.Execute(context.Background(), discoverytest.NewUser(), discoverytest.NewQuery(t, "humble"), false)
 	svc.WaitForBackground()
@@ -87,21 +85,21 @@ func TestService_TelemetryFailureDoesNotSurface(t *testing.T) {
 }
 
 func TestService_NoEventStoreNoEmit(t *testing.T) {
-	p := &discoverytest.FakeProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := NewService([]ports.SearchProvider{p}, providercall.NewCircuitBreaker())
+	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker())
 	runSearch(t, svc, "humble")
 	svc.WaitForBackground()
 }
 
 func TestService_SearchTelemetryRecordsShownSignatures(t *testing.T) {
 	store := &discoverytest.FakeEventStore{}
-	p := &discoverytest.FakeProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{
+	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{
 		discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80),
 		discoverytest.DeezerTrack("Humble Pie", "Other Artist", 60),
 		discoverytest.DeezerTrack("Humble Beginnings", "Third Artist", 40),
 	}}
-	svc := NewService([]ports.SearchProvider{p}, providercall.NewCircuitBreaker(), WithEventStore(store))
-	q, err := domain.NewSearchQuery("humble", map[domain.ResultKind]bool{domain.ResultKindTrack: true}, 1)
+	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithEventStore(store))
+	q, err := discovery.NewSearchQuery("humble", map[discovery.ResultKind]bool{discovery.ResultKindTrack: true}, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,25 +125,25 @@ func TestService_SearchTelemetryRecordsShownSignatures(t *testing.T) {
 	for _, s := range shown {
 		set[s] = true
 	}
-	surfaced := append([]domain.SearchResult(nil), out.Results...)
+	surfaced := append([]discovery.SearchResult(nil), out.Results...)
 	for _, sec := range out.Slate.Sections {
 		surfaced = append(surfaced, sec.Items...)
 	}
 	for _, r := range surfaced {
-		sig := r.Signature
-		if sig == "" {
-			sig = domain.ResultSignature(r)
+		if r.Signature == "" {
+			t.Errorf("surfaced result %q carries no signature", r.Title)
+			continue
 		}
-		if !set[sig] {
-			t.Errorf("surfaced result %q signature %q missing from shown_signatures %v", r.Title, sig, shown)
+		if !set[r.Signature] {
+			t.Errorf("surfaced result %q signature %q missing from shown_signatures %v", r.Title, r.Signature, shown)
 		}
 	}
 }
 
 func TestSearchTelemetry_DroppedEventLogsSearchAndUser(t *testing.T) {
 	store := &discoverytest.FakeEventStore{Err: errors.New("db down")}
-	p := &discoverytest.FakeProvider{Provider: domain.ProviderDeezer, Results: []domain.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := NewService([]ports.SearchProvider{p}, providercall.NewCircuitBreaker(), WithEventStore(store))
+	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithEventStore(store))
 	user := discoverytest.NewUser()
 	ring := discoverytest.CaptureDetachedLogs(t)
 
