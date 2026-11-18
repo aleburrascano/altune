@@ -8,7 +8,7 @@ import {
   SettingsRow,
   SettingsSegment,
   type SettingsSegmentOption,
-} from '@features/settings/ui/SettingsCard';
+} from '@features/settings/view/SettingsCard';
 
 export function AppearanceCard(): ReactElement {
   const scheme = useThemePreference((s) => s.scheme);

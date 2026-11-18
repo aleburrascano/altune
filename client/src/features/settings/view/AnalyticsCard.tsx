@@ -7,7 +7,7 @@ import {
   SettingsRow,
   SettingsSegment,
   type SettingsSegmentOption,
-} from '@features/settings/ui/SettingsCard';
+} from '@features/settings/view/SettingsCard';
 
 export function AnalyticsCard(): ReactElement {
   const shareAnalytics = useAnalyticsPreference((s) => s.shareAnalytics);

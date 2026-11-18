@@ -6,15 +6,15 @@ import { appVersionLabel } from '@shared/device';
 import { Screen, Text, spacing, useTheme } from '@shared/ui';
 import { useSignOut } from '@shared/auth';
 import { offlineDownloadsSupported } from '@shared/offline';
-import { useAccountEmail } from '@features/settings/hooks/useAccountEmail';
-import { useSettingsClearSearchHistory } from '@features/settings/hooks/useSettingsClearSearchHistory';
+import { useAccountEmail } from '@features/settings/shell/useAccountEmail';
+import { useSettingsClearSearchHistory } from '@features/settings/view/useSettingsClearSearchHistory';
 import { useDownloadStats, useRemoveDownloads } from '@features/settings/view/useDownloads';
 import { AnalyticsCard } from '@features/settings/view/AnalyticsCard';
 import { AppearanceCard } from '@features/settings/view/AppearanceCard';
 import { DangerZoneCard } from '@features/settings/view/DangerZoneCard';
 import { LibraryCard } from '@features/settings/view/LibraryCard';
 import { OfflineDownloadsCard } from '@features/settings/view/OfflineDownloadsCard';
-import { SettingsCard, SettingsRow } from '@features/settings/ui/SettingsCard';
+import { SettingsCard, SettingsRow } from '@features/settings/view/SettingsCard';
 
 export function SettingsScreen(): ReactElement {
   const theme = useTheme();

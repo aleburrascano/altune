@@ -6,7 +6,7 @@ import {
   type PinnedEntry,
   type UnpinAllOutcome,
 } from '@shared/offline';
-import { downloadStats, type DownloadStats } from '@features/settings/domain/downloadStatsModel';
+import { downloadStats, type DownloadStats } from '@features/settings/core/downloadStatsModel';
 
 function measureAfter(_entries: Record<string, PinnedEntry>): number {
   return pinnedByteTotal();

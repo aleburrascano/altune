@@ -1,7 +1,7 @@
 import type { SignOutResult } from '@shared/auth';
 import type { TextTone } from '@shared/ui';
-import { tracksLabel, LEFTOVER_FILES_LABEL } from '@features/settings/domain/downloadStatsModel';
-import { failureCopyForAction } from '@features/settings/domain/failureCopyForAction';
+import { tracksLabel, LEFTOVER_FILES_LABEL } from '@features/settings/core/downloadStatsModel';
+import { failureCopyForAction } from '@features/settings/core/failureCopyForAction';
 import type { RemoveDownloads } from '@features/settings/view/useDownloads';
 
 export type DangerZoneActionKey = 'downloads' | 'history' | 'sign-out';
