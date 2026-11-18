@@ -228,7 +228,7 @@ Detail-open enrichment (caps 7–8), mirroring the Last.fm enricher. Paths are u
   + DTO, set through `WithDetailEnrichers`.
 - `internal/app/build_consensus_providers.go`: `buildDetailEnrichers` wires it unconditionally (the
   public API needs no key).
-- Mobile: `client/src/shared/apiClient/enrichment.ts` (`getDeezerEnrichment` + `DeezerEnrichmentResponse`)
+- Mobile: `client/src/shared/apiClient/adapters/enrichment.ts` (`getDeezerEnrichment` + `DeezerEnrichmentResponse`)
   and `useDeezerEnrichment` in `client/src/features/detail/core/useDetailEnrichments.ts`
   (track/album-gated). The detail screen reads only its `featured_artists` today.
 
@@ -246,7 +246,7 @@ Lyrics (cap 6), distinct from the public-API enrichment (the `pipe` GraphQL path
 - `adapters/handler/enrichment_endpoints.go`: `GET /discovery/lyrics?title=&subtitle=` +
   `LyricsResponseDTO`.
 - `internal/app/build_consensus_providers.go`: `buildDetailEnrichers` wires it unconditionally.
-- Mobile: `client/src/shared/apiClient/lyrics.ts` (`getLyrics` + `LyricsResponse`),
+- Mobile: `client/src/shared/apiClient/adapters/lyrics.ts` (`getLyrics` + `LyricsResponse`),
   `client/src/features/player/hooks/useLyrics.ts`, and
   `client/src/features/player/ui/LyricsSheet.tsx`, the player's lyrics sheet.
 

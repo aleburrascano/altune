@@ -50,7 +50,7 @@ const rulesWrittenForTheWebAndWrongForReactNative = {
 };
 
 const HERMES_ABORT_MESSAGE =
-  'Hermes uses the abort-controller polyfill, which lacks this. Check signal.aborted and throw an AbortError instead (see shared/apiClient/tracks.ts).';
+  'Hermes uses the abort-controller polyfill, which lacks this. Check signal.aborted and throw an AbortError instead (see shared/apiClient/adapters/tracks.ts).';
 
 const abortApisTheHermesPolyfillLacks = [
   { selector: "MemberExpression[property.name='throwIfAborted']", message: HERMES_ABORT_MESSAGE },

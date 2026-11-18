@@ -12,7 +12,7 @@ import {
   type RemoveTracksFromPlaylistRequest,
   type RemoveTracksFromPlaylistResponse,
 } from '@shared/catalog';
-import { parseTrackResponse } from '@shared/apiClient/tracks';
+import { parseTrackResponse } from '@shared/apiClient/adapters/tracks';
 import {
   asCount,
   asNumber,
@@ -20,7 +20,7 @@ import {
   asString,
   parseArray,
   parseListEnvelope,
-} from '@shared/apiClient/wireDecoders';
+} from '@shared/apiClient/core/wireDecoders';
 
 function buildPlaylistResponse(r: Record<string, unknown>, at: string): PlaylistResponse {
   return {

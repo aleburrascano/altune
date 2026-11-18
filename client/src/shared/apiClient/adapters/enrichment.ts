@@ -15,7 +15,7 @@ import {
   nullableBoolean,
   nullableNumber,
   nullableString,
-} from '@shared/apiClient/wireDecoders';
+} from '@shared/apiClient/core/wireDecoders';
 import type {
   DiscoveryKind,
   DiscoveryProviderStatus,

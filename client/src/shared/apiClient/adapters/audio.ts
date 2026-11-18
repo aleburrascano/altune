@@ -1,5 +1,5 @@
 import { markSessionExpired, stampCredentials } from '@shared/auth';
-import { CORRELATION_HEADER, newCorrelationId } from '@shared/apiClient/correlationId';
+import { CORRELATION_HEADER, newCorrelationId } from '@shared/apiClient/adapters/correlationId';
 import { ApiError, ContractError, HTTP_UNAUTHORIZED } from '@shared/failure';
 import { idPathSegment, parseTrackId, type TrackId } from '@shared/catalog';
 import { apiFetch, apiSend, authorization, logFailure } from '@shared/apiClient/adapters/http';
@@ -10,7 +10,7 @@ import {
   asRecord,
   asString,
   nullableString,
-} from '@shared/apiClient/wireDecoders';
+} from '@shared/apiClient/core/wireDecoders';
 import { startDeadline } from '@shared/timing';
 
 const AUDIO_STREAM_ROUTE = '/v1/tracks/{id}/audio';

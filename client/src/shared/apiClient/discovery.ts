@@ -25,7 +25,7 @@ import {
   asString,
   member,
   nullableString,
-} from '@shared/apiClient/wireDecoders';
+} from '@shared/apiClient/core/wireDecoders';
 
 function parseDiscoverySource(value: unknown, at: string): DiscoverySource {
   const r = asRecord(value, at);

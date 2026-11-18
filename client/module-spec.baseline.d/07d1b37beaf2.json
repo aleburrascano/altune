@@ -1,0 +1,15 @@
+{
+  "removed": [
+    "C12 src/shared/apiClient/audio.ts audio.ts is in no part: it is not the door, and sits at the root of a shared module",
+    "C12 src/shared/apiClient/correlationId.ts correlationId.ts is in no part: it is not the door, and sits at the root of a shared module",
+    "C12 src/shared/apiClient/enrichment.ts enrichment.ts is in no part: it is not the door, and sits at the root of a shared module",
+    "C12 src/shared/apiClient/favorites.ts favorites.ts is in no part: it is not the door, and sits at the root of a shared module",
+    "C12 src/shared/apiClient/library.ts library.ts is in no part: it is not the door, and sits at the root of a shared module",
+    "C12 src/shared/apiClient/lyrics.ts lyrics.ts is in no part: it is not the door, and sits at the root of a shared module",
+    "C12 src/shared/apiClient/playback.ts playback.ts is in no part: it is not the door, and sits at the root of a shared module",
+    "C12 src/shared/apiClient/tracks.ts tracks.ts is in no part: it is not the door, and sits at the root of a shared module",
+    "C12 src/shared/apiClient/wireDecoders.ts wireDecoders.ts is in no part: it is not the door, and sits at the root of a shared module"
+  ],
+  "added": [],
+  "clones": 0
+}

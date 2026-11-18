@@ -6,7 +6,7 @@ import {
   stampCredentials,
   type CredentialStamp,
 } from '@shared/auth';
-import { CORRELATION_HEADER, newCorrelationId } from '@shared/apiClient/correlationId';
+import { CORRELATION_HEADER, newCorrelationId } from '@shared/apiClient/adapters/correlationId';
 import { warn } from '@shared/log';
 import { startDeadline } from '@shared/timing';
 import type { Deadline } from '@shared/timing';
@@ -18,7 +18,7 @@ import {
   isAbort,
   isSessionFetchFailure,
 } from '@shared/failure';
-import { parseErrorBody } from '@shared/apiClient/wireDecoders';
+import { parseErrorBody } from '@shared/apiClient/core/wireDecoders';
 import { apiBase, REQUEST_TIMEOUT_MS } from '@shared/apiConfig';
 
 type CorrelationId = string | undefined;

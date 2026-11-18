@@ -12,14 +12,14 @@ export {
   reacquireTrack,
   retryAcquisition,
   tryParseTrackResponse,
-} from '@shared/apiClient/tracks';
-export { CORRELATION_HEADER, newCorrelationId } from '@shared/apiClient/correlationId';
+} from '@shared/apiClient/adapters/tracks';
+export { CORRELATION_HEADER, newCorrelationId } from '@shared/apiClient/adapters/correlationId';
 export type {
   QueueSourceWire,
   QueueStateCurrentTrack,
   QueueStateResponse,
   SaveQueueStateRequest,
-} from '@shared/apiClient/playback';
+} from '@shared/apiClient/adapters/playback';
 export {
   clearSearchHistory,
   listSearchHistory,
@@ -39,7 +39,7 @@ export type {
   UnreleasedTrack,
   UnreleasedTracksResponse,
   UnreleasedVersion,
-} from '@shared/apiClient/enrichment';
+} from '@shared/apiClient/adapters/enrichment';
 export type {
   AlbumGroup,
   ArtistGroup,
@@ -47,22 +47,22 @@ export type {
   LibrarySort,
   ListAlbumsResponse,
   ListArtistsResponse,
-} from '@shared/apiClient/library';
+} from '@shared/apiClient/adapters/library';
 export type {
   Favorite,
   FavoriteRef,
   FavoriteTarget,
   FavoritesResponse,
-} from '@shared/apiClient/favorites';
+} from '@shared/apiClient/adapters/favorites';
 export {
   audioRequestHeaders,
   audioStreamUrl,
   fetchAudioUrls,
   isAudioPrefetchEnabled,
   recoverAudio,
-} from '@shared/apiClient/audio';
-export type { ResolvedAudioUrl } from '@shared/apiClient/audio';
-export type { LyricsResponse, SyncedLine } from '@shared/apiClient/lyrics';
+} from '@shared/apiClient/adapters/audio';
+export type { ResolvedAudioUrl } from '@shared/apiClient/adapters/audio';
+export type { LyricsResponse, SyncedLine } from '@shared/apiClient/adapters/lyrics';
 export {
   asArray,
   asBoolean,
@@ -74,8 +74,8 @@ export {
   nullableNumber,
   nullableString,
   parseErrorBody,
-} from '@shared/apiClient/wireDecoders';
-export type { BackfillFeaturedResult } from '@shared/apiClient/tracks';
+} from '@shared/apiClient/core/wireDecoders';
+export type { BackfillFeaturedResult } from '@shared/apiClient/adapters/tracks';
 export {
   getAlbumTracks,
   getArtistContent,
@@ -85,11 +85,11 @@ export {
   getRelatedTracks,
   getUnreleasedTracks,
   searchUnreleasedTracks,
-} from '@shared/apiClient/enrichment';
-export { addFavorite, listFavorites, removeFavorite } from '@shared/apiClient/favorites';
-export { getLibraryAlbums, getLibraryArtists } from '@shared/apiClient/library';
-export { getLyrics } from '@shared/apiClient/lyrics';
-export { getQueueState, saveQueueState } from '@shared/apiClient/playback';
+} from '@shared/apiClient/adapters/enrichment';
+export { addFavorite, listFavorites, removeFavorite } from '@shared/apiClient/adapters/favorites';
+export { getLibraryAlbums, getLibraryArtists } from '@shared/apiClient/adapters/library';
+export { getLyrics } from '@shared/apiClient/adapters/lyrics';
+export { getQueueState, saveQueueState } from '@shared/apiClient/adapters/playback';
 export {
   addTracksToPlaylist,
   createPlaylist,
