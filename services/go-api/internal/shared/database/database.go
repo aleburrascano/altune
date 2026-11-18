@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var ErrUnreachable = errors.New("database unreachable")
+var errUnreachable = errors.New("database unreachable")
 
 var connectTimeout = 10 * time.Second
 
@@ -37,7 +37,7 @@ func NewPool(ctx context.Context, databaseURL string, maxConns int) (*pgxpool.Po
 	if err := pool.Ping(connectCtx); err != nil {
 		pool.Close()
 		if errors.Is(connectCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
-			return nil, fmt.Errorf("%w within %s: %w", ErrUnreachable, timeout, err)
+			return nil, fmt.Errorf("%w within %s: %w", errUnreachable, timeout, err)
 		}
 		return nil, fmt.Errorf("ping database: %w", err)
 	}

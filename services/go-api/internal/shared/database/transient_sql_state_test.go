@@ -1,6 +1,9 @@
-package database
+package database_test
 
-import "testing"
+import (
+	"altune/go-api/internal/shared/database"
+	"testing"
+)
 
 func TestIsTransientSQLState(t *testing.T) {
 	cases := map[string]bool{
@@ -19,7 +22,7 @@ func TestIsTransientSQLState(t *testing.T) {
 	}
 	for code, want := range cases {
 		t.Run(code, func(t *testing.T) {
-			if got := IsTransientSQLState(code); got != want {
+			if got := database.IsTransientSQLState(code); got != want {
 				t.Fatalf("IsTransientSQLState(%q) = %v, want %v", code, got, want)
 			}
 		})
