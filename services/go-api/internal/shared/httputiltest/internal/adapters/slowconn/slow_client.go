@@ -1,4 +1,4 @@
-package httputiltest
+package slowconn
 
 import (
 	"bufio"

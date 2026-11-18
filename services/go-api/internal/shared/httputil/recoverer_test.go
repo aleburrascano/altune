@@ -1,6 +1,7 @@
-package httputil
+package httputil_test
 
 import (
+	"altune/go-api/internal/shared/httputil"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -9,7 +10,7 @@ import (
 )
 
 func TestRecoverer_CatchesPanic_Returns500(t *testing.T) {
-	handler := Recoverer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := httputil.Recoverer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		panic("something went very wrong")
 	}))
 	req := httptest.NewRequest(http.MethodGet, "/boom", nil)
@@ -21,7 +22,7 @@ func TestRecoverer_CatchesPanic_Returns500(t *testing.T) {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
 	}
 
-	var body ErrorResponse
+	var body httputil.ErrorResponse
 	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
 		t.Fatalf("failed to decode body: %v", err)
 	}
@@ -31,7 +32,7 @@ func TestRecoverer_CatchesPanic_Returns500(t *testing.T) {
 }
 
 func TestRecoverer_NoPanic_PassesThrough(t *testing.T) {
-	handler := Recoverer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := httputil.Recoverer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("fine"))
 	}))
@@ -59,7 +60,7 @@ func (w *headerCountingRecorder) WriteHeader(code int) {
 }
 
 func TestRecoverer_RepanicsErrAbortHandler(t *testing.T) {
-	handler := Recoverer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	handler := httputil.Recoverer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic(http.ErrAbortHandler)
 	}))
 	rec := httptest.NewRecorder()
@@ -86,7 +87,7 @@ func TestRecoverer_PanicAfterHeadersSentKeepsTheSentResponse(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := Recoverer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			handler := httputil.Recoverer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				tt.start(w)
 				panic("mid-stream failure")
 			}))
@@ -109,7 +110,7 @@ func TestRecoverer_PanicAfterHeadersSentKeepsTheSentResponse(t *testing.T) {
 
 func TestRequestLogger_OutsideRecovererLogsPanicAs500Error(t *testing.T) {
 	ring := captureLogs(t)
-	handler := RequestLogger(Recoverer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	handler := httputil.RequestLogger(httputil.Recoverer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic("boom")
 	})))
 
@@ -122,7 +123,7 @@ func TestRequestLogger_OutsideRecovererLogsPanicAs500Error(t *testing.T) {
 }
 
 func TestRecoverer_PanicAfterFlushKeepsTheImplicit200(t *testing.T) {
-	handler := Recoverer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	handler := httputil.Recoverer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.(http.Flusher).Flush()
 		panic("mid-stream failure")
 	}))

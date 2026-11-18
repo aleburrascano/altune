@@ -1,7 +1,8 @@
-package httputil
+package httputil_test
 
 import (
-	"altune/go-api/internal/shared/httputil/httputiltest"
+	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/httputiltest"
 	"bytes"
 	"io"
 	"net/http"
@@ -27,7 +28,7 @@ func writeUntilError(w io.Writer, giveUp time.Duration) error {
 }
 
 func deadlineStack(h http.HandlerFunc) http.Handler {
-	return WriteDeadline(testWriteDeadline)(RequestLogger(h))
+	return httputil.WriteDeadline(testWriteDeadline)(httputil.RequestLogger(h))
 }
 
 func awaitWriteError(t *testing.T, errs <-chan error) {
@@ -61,7 +62,7 @@ func TestWriteDeadline_CutsOffClientThatStopsReading(t *testing.T) {
 
 func TestClearWriteDeadline_StreamOutlivesRouteDeadline(t *testing.T) {
 	srv := httputiltest.NewServer(t, deadlineStack(func(w http.ResponseWriter, _ *http.Request) {
-		ClearWriteDeadline(w)
+		httputil.ClearWriteDeadline(w)
 		w.WriteHeader(http.StatusOK)
 		rc := http.NewResponseController(w)
 		_ = rc.Flush()
@@ -82,7 +83,7 @@ func TestClearWriteDeadline_StreamOutlivesRouteDeadline(t *testing.T) {
 func TestExtendWriteDeadlineOnWrite_SlowButSteadyClientGetsWholeBody(t *testing.T) {
 	const size = 2 << 20
 	srv := httputiltest.NewServer(t, deadlineStack(func(w http.ResponseWriter, _ *http.Request) {
-		ew := ExtendWriteDeadlineOnWrite(w, time.Second)
+		ew := httputil.ExtendWriteDeadlineOnWrite(w, time.Second)
 		_, _ = io.Copy(ew, io.LimitReader(zeroReader{}, size))
 	}))
 
@@ -111,7 +112,7 @@ func TestExtendWriteDeadlineOnWrite_SlowButSteadyClientGetsWholeBody(t *testing.
 func TestExtendWriteDeadlineOnWrite_CutsOffStalledClient(t *testing.T) {
 	errs := make(chan error, 1)
 	srv := httputiltest.NewServer(t, deadlineStack(func(w http.ResponseWriter, _ *http.Request) {
-		errs <- writeUntilError(ExtendWriteDeadlineOnWrite(w, testWriteDeadline), 2*cutoffWait)
+		errs <- writeUntilError(httputil.ExtendWriteDeadlineOnWrite(w, testWriteDeadline), 2*cutoffWait)
 	}))
 
 	httputiltest.Get(t, srv, "/", nil)

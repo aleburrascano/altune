@@ -1,6 +1,7 @@
-package httputil
+package httputil_test
 
 import (
+	"altune/go-api/internal/shared/httputil"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -19,7 +20,7 @@ func TestDecodeJSON(t *testing.T) {
 		var body struct {
 			Name string `json:"name"`
 		}
-		if ok := DecodeJSON(rec, req, &body); !ok {
+		if ok := httputil.DecodeJSON(rec, req, &body); !ok {
 			t.Fatal("DecodeJSON: got false, want true")
 		}
 		if body.Name != "hi" {
@@ -35,7 +36,7 @@ func TestDecodeJSON(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/x", strings.NewReader(`{bad`))
 
 		var body struct{ Name string }
-		if ok := DecodeJSON(rec, req, &body); ok {
+		if ok := httputil.DecodeJSON(rec, req, &body); ok {
 			t.Fatal("DecodeJSON: got true, want false")
 		}
 		if rec.Code != http.StatusBadRequest {
@@ -59,7 +60,7 @@ func TestPathID(t *testing.T) {
 		rec := httptest.NewRecorder()
 		req := newRequestWithURLParam("id", "42")
 
-		id, ok := PathID(rec, req, "id", strconv.Atoi, "invalid id")
+		id, ok := httputil.PathID(rec, req, "id", strconv.Atoi, "invalid id")
 		if !ok {
 			t.Fatal("PathID: got false, want true")
 		}
@@ -75,7 +76,7 @@ func TestPathID(t *testing.T) {
 		rec := httptest.NewRecorder()
 		req := newRequestWithURLParam("id", "not-a-number")
 
-		id, ok := PathID(rec, req, "id", strconv.Atoi, "invalid track ID")
+		id, ok := httputil.PathID(rec, req, "id", strconv.Atoi, "invalid track ID")
 		if ok {
 			t.Fatal("PathID: got true, want false")
 		}
@@ -94,8 +95,8 @@ func TestPathID(t *testing.T) {
 func decodeThroughCap(body string, limit int64) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
 	var dst map[string]any
-	h := MaxBodySize(limit)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		DecodeJSON(w, r, &dst)
+	h := httputil.MaxBodySize(limit)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httputil.DecodeJSON(w, r, &dst)
 	}))
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/x", strings.NewReader(body)))
 	return rec
@@ -128,7 +129,7 @@ func TestDecodeJSONRejectsStrayClosingByte(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
 		rec := httptest.NewRecorder()
 		var dst struct{ A int }
-		if DecodeJSON(rec, req, &dst) || rec.Code != http.StatusBadRequest {
+		if httputil.DecodeJSON(rec, req, &dst) || rec.Code != http.StatusBadRequest {
 			t.Errorf("body %q: want rejected with 400, got code %d", body, rec.Code)
 		}
 	}

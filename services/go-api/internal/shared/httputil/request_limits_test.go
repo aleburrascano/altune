@@ -1,6 +1,7 @@
-package httputil
+package httputil_test
 
 import (
+	"altune/go-api/internal/shared/httputil"
 	"context"
 	"errors"
 	"net/http"
@@ -12,7 +13,7 @@ import (
 func TestRequestTimeout_CancelsRequestContextAfterBudget(t *testing.T) {
 	const budget = 50 * time.Millisecond
 	var cause error
-	h := RequestTimeout(budget)(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+	h := httputil.RequestTimeout(budget)(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		select {
 		case <-r.Context().Done():
 			cause = r.Context().Err()

@@ -8,7 +8,7 @@ import (
 	"altune/go-api/internal/playback"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/events"
-	"altune/go-api/internal/shared/httputil/httputiltest"
+	"altune/go-api/internal/shared/httputiltest"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/logging"
 	"bufio"
