@@ -2,7 +2,6 @@ package content_test
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/discoverytest"
 	"context"
 	"slices"
 	"sync"
@@ -67,7 +66,7 @@ func assertAsked(t *testing.T, asked map[discovery.ProviderName][]string, want m
 }
 
 func TestGetTopTracks_BridgedArtistFansOutToEveryBridgedIdPlusTheSeed(t *testing.T) {
-	store := &discoverytest.FakeIdentityStore{
+	store := &discovery.FakeIdentityStore{
 		Mbid: "mbid-che",
 		Xref: map[discovery.ProviderKey]string{
 			"spotify":    "spot-che",
@@ -84,13 +83,13 @@ func TestGetTopTracks_BridgedArtistFansOutToEveryBridgedIdPlusTheSeed(t *testing
 }
 
 func TestGetTopTracks_StoreMissAsksOnlyTheSeedProvider(t *testing.T) {
-	assertAsked(t, topTrackLookups(t, &discoverytest.FakeIdentityStore{}, nil), map[discovery.ProviderName]string{
+	assertAsked(t, topTrackLookups(t, &discovery.FakeIdentityStore{}, nil), map[discovery.ProviderName]string{
 		discovery.ProviderDeezer: "deezer-che",
 	})
 }
 
 func TestGetTopTracks_AppleMusicSharesTheITunesIdAndLastFMUsesTheMBID(t *testing.T) {
-	store := &discoverytest.FakeIdentityStore{
+	store := &discovery.FakeIdentityStore{
 		Mbid: "mbid-x",
 		Xref: map[discovery.ProviderKey]string{"itunes": "it1"},
 	}

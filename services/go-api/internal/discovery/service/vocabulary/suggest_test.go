@@ -2,7 +2,6 @@ package vocabulary_test
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/discoverytest"
 	"context"
 	"errors"
 	"testing"
@@ -21,7 +20,7 @@ func suggestTerms(entries []discovery.VocabularyEntry) []string {
 }
 
 func TestSuggest_PrefixFirstThenFuzzyTopUp(t *testing.T) {
-	store := &discoverytest.FakeVocabularyStore{
+	store := &discovery.FakeVocabularyStore{
 		SuggestByPrefixFn: func(_ string, _ int) ([]discovery.VocabularyEntry, error) {
 			return []discovery.VocabularyEntry{vocabEntry("drake"), vocabEntry("drakeo")}, nil
 		},
@@ -47,7 +46,7 @@ func TestSuggest_PrefixFirstThenFuzzyTopUp(t *testing.T) {
 }
 
 func TestSuggest_FuzzyDuplicatesDeduped(t *testing.T) {
-	store := &discoverytest.FakeVocabularyStore{
+	store := &discovery.FakeVocabularyStore{
 		SuggestByPrefixFn: func(_ string, _ int) ([]discovery.VocabularyEntry, error) {
 			return []discovery.VocabularyEntry{vocabEntry("drake")}, nil
 		},
@@ -68,7 +67,7 @@ func TestSuggest_FuzzyDuplicatesDeduped(t *testing.T) {
 }
 
 func TestSuggest_PrefixFillsLimitSkipsFuzzy(t *testing.T) {
-	store := &discoverytest.FakeVocabularyStore{
+	store := &discovery.FakeVocabularyStore{
 		SuggestByPrefixFn: func(_ string, _ int) ([]discovery.VocabularyEntry, error) {
 			return []discovery.VocabularyEntry{vocabEntry("drake"), vocabEntry("drakeo")}, nil
 		},
@@ -88,7 +87,7 @@ func TestSuggest_PrefixFillsLimitSkipsFuzzy(t *testing.T) {
 }
 
 func TestSuggest_LimitCapsCombined(t *testing.T) {
-	store := &discoverytest.FakeVocabularyStore{
+	store := &discovery.FakeVocabularyStore{
 		SuggestByPrefixFn: func(_ string, _ int) ([]discovery.VocabularyEntry, error) {
 			return []discovery.VocabularyEntry{vocabEntry("drake")}, nil
 		},
@@ -108,7 +107,7 @@ func TestSuggest_LimitCapsCombined(t *testing.T) {
 }
 
 func TestSuggest_EmptyQueryReturnsEmptyWithoutStoreCalls(t *testing.T) {
-	store := &discoverytest.FakeVocabularyStore{}
+	store := &discovery.FakeVocabularyStore{}
 	svc := discovery.NewSuggestService(store)
 
 	got, err := svc.Execute(context.Background(), "  !!  ", 5)
@@ -125,7 +124,7 @@ func TestSuggest_EmptyQueryReturnsEmptyWithoutStoreCalls(t *testing.T) {
 }
 
 func TestSuggest_PrefixErrorPropagates(t *testing.T) {
-	store := &discoverytest.FakeVocabularyStore{
+	store := &discovery.FakeVocabularyStore{
 		SuggestByPrefixFn: func(_ string, _ int) ([]discovery.VocabularyEntry, error) {
 			return nil, errors.New("redis down")
 		},
@@ -138,7 +137,7 @@ func TestSuggest_PrefixErrorPropagates(t *testing.T) {
 }
 
 func TestSuggest_FuzzyErrorDegradesToPrefixOnly(t *testing.T) {
-	store := &discoverytest.FakeVocabularyStore{
+	store := &discovery.FakeVocabularyStore{
 		SuggestByPrefixFn: func(_ string, _ int) ([]discovery.VocabularyEntry, error) {
 			return []discovery.VocabularyEntry{vocabEntry("drake")}, nil
 		},

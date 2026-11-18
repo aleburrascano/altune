@@ -1,20 +1,5 @@
 package discoverytest
 
-import "sync"
+import "altune/go-api/internal/discovery/internal/adapters/memory"
 
-type RecordingActivityFeed struct {
-	Mu     sync.Mutex
-	Events []string
-}
-
-func (r *RecordingActivityFeed) EmitActivity(eventType string) {
-	r.Mu.Lock()
-	defer r.Mu.Unlock()
-	r.Events = append(r.Events, eventType)
-}
-
-func (r *RecordingActivityFeed) Recorded() []string {
-	r.Mu.Lock()
-	defer r.Mu.Unlock()
-	return append([]string(nil), r.Events...)
-}
+type RecordingActivityFeed = memory.RecordingActivityFeed

@@ -2,7 +2,6 @@ package search_test
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/discoverytest"
 	"context"
 	"errors"
 	"slices"
@@ -11,8 +10,8 @@ import (
 )
 
 func TestService_ResultCache_HitSkipsProvidersAndIsCrossUser(t *testing.T) {
-	p := &discoverytest.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	cache := discoverytest.NewFakeResultCache()
+	p := &discovery.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	cache := discovery.NewFakeResultCache()
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithResultCache(cache))
 
 	out1 := runSearch(t, svc, "humble")
@@ -28,7 +27,7 @@ func TestService_ResultCache_HitSkipsProvidersAndIsCrossUser(t *testing.T) {
 		t.Fatalf("second search: provider calls = %d, want still 1 (cache hit)", p.Calls)
 	}
 	if len(out2.Results) != len(out1.Results) || out2.Results[0].Title != out1.Results[0].Title {
-		t.Fatalf("cache hit returned different results: %v vs %v", discoverytest.Titles(out1.Results), discoverytest.Titles(out2.Results))
+		t.Fatalf("cache hit returned different results: %v vs %v", discovery.Titles(out1.Results), discovery.Titles(out2.Results))
 	}
 	if out2.Partial {
 		t.Error("cache hit must not be marked partial")
@@ -36,14 +35,14 @@ func TestService_ResultCache_HitSkipsProvidersAndIsCrossUser(t *testing.T) {
 }
 
 func TestService_ResultCache_SymbolOnlyQueriesBypassCache(t *testing.T) {
-	p := &discoverytest.QueryFakeProvider{
+	p := &discovery.QueryFakeProvider{
 		Provider: discovery.ProviderDeezer,
 		ResultsByQuery: map[string][]discovery.SearchResult{
-			"!!!": {discoverytest.DeezerTrack("Me and Giuliani Down by the School Yard", "!!!", 80)},
-			"†††": {discoverytest.DeezerTrack("The Epilogue", "†††", 70)},
+			"!!!": {discovery.DeezerTrack("Me and Giuliani Down by the School Yard", "!!!", 80)},
+			"†††": {discovery.DeezerTrack("The Epilogue", "†††", 70)},
 		},
 	}
-	cache := discoverytest.NewFakeResultCache()
+	cache := discovery.NewFakeResultCache()
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithResultCache(cache))
 
 	out1 := runSearch(t, svc, "!!!")
@@ -53,17 +52,17 @@ func TestService_ResultCache_SymbolOnlyQueriesBypassCache(t *testing.T) {
 		t.Errorf("symbol-only queries must bypass the cache, gets=%d sets=%d", cache.Gets, cache.Sets)
 	}
 	if len(out1.Results) != 1 || out1.Results[0].Subtitle != "!!!" {
-		t.Fatalf("first symbol query got wrong results: %v", discoverytest.Titles(out1.Results))
+		t.Fatalf("first symbol query got wrong results: %v", discovery.Titles(out1.Results))
 	}
 	if len(out2.Results) != 1 || out2.Results[0].Subtitle != "†††" {
-		t.Fatalf("second symbol query served the first query's results: %v", discoverytest.Titles(out2.Results))
+		t.Fatalf("second symbol query served the first query's results: %v", discovery.Titles(out2.Results))
 	}
 }
 
 func TestService_ResultCache_PartialNotCached(t *testing.T) {
-	good := &discoverytest.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	bad := &discoverytest.CountingProvider{Provider: discovery.ProviderITunes, Err: errors.New("boom")}
-	cache := discoverytest.NewFakeResultCache()
+	good := &discovery.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	bad := &discovery.CountingProvider{Provider: discovery.ProviderITunes, Err: errors.New("boom")}
+	cache := discovery.NewFakeResultCache()
 	svc := discovery.NewSearchService([]discovery.SearchProvider{good, bad}, discovery.NewCircuitBreaker(), discovery.WithResultCache(cache))
 
 	out := runSearch(t, svc, "humble")
@@ -100,7 +99,7 @@ func (c *fakeProviderCache) Set(_ context.Context, provider discovery.ProviderNa
 }
 
 func TestService_ProviderCache_ReusesEachProvidersAnswer(t *testing.T) {
-	p := &discoverytest.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	p := &discovery.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithProviderResultCache(newFakeProviderCache()))
 
 	runSearch(t, svc, "humble")
@@ -110,7 +109,7 @@ func TestService_ProviderCache_ReusesEachProvidersAnswer(t *testing.T) {
 		t.Fatalf("provider calls = %d, want 1 (second search served from the provider cache)", p.Calls)
 	}
 	if len(out.Results) != 1 || out.Results[0].Title != "Humble" {
-		t.Fatalf("cached answer lost: %v", discoverytest.Titles(out.Results))
+		t.Fatalf("cached answer lost: %v", discovery.Titles(out.Results))
 	}
 	if out.Partial {
 		t.Error("an answer from the provider cache must not be partial")
@@ -118,8 +117,8 @@ func TestService_ProviderCache_ReusesEachProvidersAnswer(t *testing.T) {
 }
 
 func TestService_ProviderCache_OnlyTheFailedProviderIsAskedAgain(t *testing.T) {
-	good := &discoverytest.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	bad := &discoverytest.CountingProvider{Provider: discovery.ProviderITunes, Err: errors.New("boom")}
+	good := &discovery.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	bad := &discovery.CountingProvider{Provider: discovery.ProviderITunes, Err: errors.New("boom")}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{good, bad}, discovery.NewCircuitBreaker(), discovery.WithProviderResultCache(newFakeProviderCache()))
 
 	runSearch(t, svc, "humble")
@@ -134,7 +133,7 @@ func TestService_ProviderCache_OnlyTheFailedProviderIsAskedAgain(t *testing.T) {
 }
 
 func TestService_ProviderCache_EmptyAnswerIsCached(t *testing.T) {
-	p := &discoverytest.CountingProvider{Provider: discovery.ProviderDeezer}
+	p := &discovery.CountingProvider{Provider: discovery.ProviderDeezer}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithProviderResultCache(newFakeProviderCache()))
 
 	runSearch(t, svc, "qwzxv")
@@ -146,7 +145,7 @@ func TestService_ProviderCache_EmptyAnswerIsCached(t *testing.T) {
 }
 
 func TestService_ProviderCache_ServesWhileBreakerIsOpen(t *testing.T) {
-	p := &discoverytest.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	p := &discovery.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	breaker := discovery.NewCircuitBreaker()
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, breaker, discovery.WithProviderResultCache(newFakeProviderCache()))
 
@@ -156,12 +155,12 @@ func TestService_ProviderCache_ServesWhileBreakerIsOpen(t *testing.T) {
 
 	if len(out.Results) != 1 || out.Partial {
 		t.Fatalf("cached answer must be served while the breaker is open: results=%v partial=%v",
-			discoverytest.Titles(out.Results), out.Partial)
+			discovery.Titles(out.Results), out.Partial)
 	}
 }
 
 func TestService_ProviderCache_KeyedByQueryAndKinds(t *testing.T) {
-	p := &discoverytest.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	p := &discovery.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithProviderResultCache(newFakeProviderCache()))
 
 	runSearch(t, svc, "humble")
@@ -171,7 +170,7 @@ func TestService_ProviderCache_KeyedByQueryAndKinds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.Execute(context.Background(), discoverytest.NewUser(), tracksOnly, false); err != nil {
+	if _, err := svc.Execute(context.Background(), discovery.NewUser(), tracksOnly, false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -181,7 +180,7 @@ func TestService_ProviderCache_KeyedByQueryAndKinds(t *testing.T) {
 }
 
 func TestService_ProviderCache_SymbolOnlyQueriesBypassIt(t *testing.T) {
-	p := &discoverytest.CountingProvider{Provider: discovery.ProviderDeezer}
+	p := &discovery.CountingProvider{Provider: discovery.ProviderDeezer}
 	cache := newFakeProviderCache()
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithProviderResultCache(cache))
 
@@ -194,7 +193,7 @@ func TestService_ProviderCache_SymbolOnlyQueriesBypassIt(t *testing.T) {
 }
 
 func TestInspectSearch_BypassesProviderCache(t *testing.T) {
-	p := &discoverytest.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	p := &discovery.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithProviderResultCache(newFakeProviderCache()))
 
 	runSearch(t, svc, "humble")
