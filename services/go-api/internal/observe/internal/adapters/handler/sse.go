@@ -1,10 +1,10 @@
 package handler
 
 import (
-	"altune/go-api/internal/observe/domain"
-	"altune/go-api/internal/observe/internal/adapters/authbridge"
+	"altune/go-api/internal/observe/internal/adapters/codederr"
 	"altune/go-api/internal/observe/internal/shell/eventtap"
 	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/requestuser"
 	"context"
 	"encoding/json"
 	"errors"
@@ -24,16 +24,16 @@ const keepaliveFrame = ": keepalive\n\n"
 
 func rejectSubscription(w http.ResponseWriter, r *http.Request, stream string, err, limitErr error) {
 	if !errors.Is(err, limitErr) {
-		httputil.HandleServiceError(w, r, domain.StreamUnavailable(stream))
+		httputil.HandleServiceError(w, r, codederr.StreamUnavailable(stream))
 		return
 	}
 	slog.WarnContext(r.Context(), "observe.stream_subscriber_limit", slog.String("stream", stream))
-	httputil.HandleServiceError(w, r, domain.ErrStreamSubscriberLimit)
+	httputil.HandleServiceError(w, r, codederr.ErrStreamSubscriberLimit)
 }
 
 func streamSSE[T any](w http.ResponseWriter, r *http.Request, ch <-chan T) {
 	if _, canFlush := w.(http.Flusher); !canFlush {
-		httputil.HandleServiceError(w, r, domain.ErrStreamingUnsupported)
+		httputil.HandleServiceError(w, r, codederr.ErrStreamingUnsupported)
 		return
 	}
 	w = httputil.ExtendWriteDeadlineOnWrite(w, streamWriteIdle)
@@ -45,7 +45,7 @@ func streamSSE[T any](w http.ResponseWriter, r *http.Request, ch <-chan T) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), streamMaxLifetime)
 	defer cancel()
-	ctx, untilExpiry := authbridge.UntilTokenExpiry(ctx)
+	ctx, untilExpiry := requestuser.UntilTokenExpiry(ctx)
 	defer untilExpiry()
 	streamFrames(r.WithContext(ctx), w, rc, ch)
 }

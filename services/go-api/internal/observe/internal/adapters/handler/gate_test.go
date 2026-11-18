@@ -1,9 +1,9 @@
 package handler_test
 
 import (
-	authservice "altune/go-api/internal/auth/service"
 	"altune/go-api/internal/observe"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/requestuser"
 	"bytes"
 	"encoding/json"
 	"log/slog"
@@ -20,7 +20,7 @@ func gatedAs(principalID string, caller *shared.UserId) (*httptest.ResponseRecor
 	next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) { reached = true })
 	req := httptest.NewRequest(http.MethodGet, "/observe/health", nil)
 	if caller != nil {
-		req = req.WithContext(authservice.ContextWithUserID(req.Context(), *caller))
+		req = req.WithContext(requestuser.ContextWithUserID(req.Context(), *caller))
 	}
 	rec := httptest.NewRecorder()
 	observe.Gate(principalID)(next).ServeHTTP(rec, req)

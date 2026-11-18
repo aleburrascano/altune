@@ -2,9 +2,9 @@ package discoverybridge
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/observe/domain"
 	"context"
 	"errors"
+	"net/http"
 	"testing"
 	"time"
 )
@@ -28,12 +28,28 @@ func query(r stubQualityReader) ([]DiscographyCaseDTO, error) {
 	return cases, err
 }
 
+func errorCode(err error) string {
+	var coded interface{ ErrorCode() string }
+	if !errors.As(err, &coded) {
+		return ""
+	}
+	return coded.ErrorCode()
+}
+
+func errorStatus(err error) int {
+	var coded interface{ HTTPStatus() int }
+	if !errors.As(err, &coded) {
+		return 0
+	}
+	return coded.HTTPStatus()
+}
+
 func TestQueryDeadlineExceededMapsToTimeout(t *testing.T) {
 	for name, r := range map[string]stubQualityReader{
 		"cases":   {casesErr: context.DeadlineExceeded},
 		"suspect": {suspectErr: context.DeadlineExceeded},
 	} {
-		if _, err := query(r); !errors.Is(err, domain.ErrDiscographyQualityTimeout) {
+		if _, err := query(r); errorCode(err) != "observe.discography_quality_timeout" || errorStatus(err) != http.StatusGatewayTimeout {
 			t.Errorf("%s: err = %v", name, err)
 		}
 	}
@@ -41,7 +57,7 @@ func TestQueryDeadlineExceededMapsToTimeout(t *testing.T) {
 
 func TestQueryOtherErrorsPassThrough(t *testing.T) {
 	_, err := query(stubQualityReader{casesErr: context.Canceled})
-	if !errors.Is(err, context.Canceled) || errors.Is(err, domain.ErrDiscographyQualityTimeout) {
+	if !errors.Is(err, context.Canceled) || errorCode(err) != "" {
 		t.Fatalf("err = %v", err)
 	}
 }
