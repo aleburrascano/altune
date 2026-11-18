@@ -1,5 +1,5 @@
-import type * as audio from '@shared/apiClient/audio';
+import type * as apiClient from '@shared/apiClient';
 
 export interface OfflinePort {
-  fetchAudioUrls: typeof audio.fetchAudioUrls;
+  fetchAudioUrls: typeof apiClient.fetchAudioUrls;
 }

@@ -1,0 +1,13 @@
+{
+  "removed": [
+    "C3 src/features/discovery/ports/discoverPort.ts imports src/shared/apiClient/discovery.ts, behind apiClient's door",
+    "C3 src/features/discovery/ports/discoverPort.ts imports src/shared/apiClient/enrichment.ts, behind apiClient's door",
+    "C3 src/features/discovery/ports/favoritesPort.ts imports src/shared/apiClient/favorites.ts, behind apiClient's door",
+    "C3 src/features/settings/ports/settingsPort.ts imports src/shared/apiClient/tracks.ts, behind apiClient's door",
+    "C3 src/shared/acquisition/ports/acquisitionPort.ts imports src/shared/apiClient/tracks.ts, behind apiClient's door",
+    "C3 src/shared/offline/ports/offlinePort.ts imports src/shared/apiClient/audio.ts, behind apiClient's door",
+    "C3 src/shared/playlists/ports/playlistsPort.ts imports src/shared/apiClient/playlists.ts, behind apiClient's door"
+  ],
+  "added": [],
+  "clones": 0
+}

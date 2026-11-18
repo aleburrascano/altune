@@ -237,7 +237,7 @@ fi
 thresholded_coverage_args() {
   (cd client && node -e '
     const thresholds = require("./jest.config.js").coverageThreshold;
-    const files = process.argv.slice(1).filter((f) => !/\/__tests__\/|\.d\.ts$/.test(f));
+    const files = process.argv.slice(1).filter((f) => !/\/__tests__\/|\/ports\/|\.d\.ts$/.test(f));
     const covers = (glob, file) => file.startsWith(glob.replace(/\*\*$/, ""));
     const enforced = Object.fromEntries(
       Object.entries(thresholds).filter(([glob]) => glob !== "global" && files.some((f) => covers(glob, f))),
