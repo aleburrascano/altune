@@ -10,7 +10,7 @@ import {
 } from '@features/signIn/core/authError';
 import { useAuthPort } from '@features/signIn/view/AuthPortProvider';
 
-import { useAsyncAuthAction } from '@features/signIn/hooks/useAsyncAuthAction';
+import { useAsyncAuthAction } from '@features/signIn/shell/useAsyncAuthAction';
 
 type SignInResult =
   | { kind: 'idle' }

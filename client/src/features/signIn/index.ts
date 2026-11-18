@@ -5,7 +5,7 @@ export { SetNewPasswordScreen } from '@features/signIn/ui/SetNewPasswordScreen';
 export { SignInScreen } from '@features/signIn/ui/SignInScreen';
 export { SignUpScreen } from '@features/signIn/view/SignUpScreen';
 export { TestAuthBridge } from '@features/signIn/view/TestAuthBridge';
-export { useAuthDeepLink } from '@features/signIn/hooks/useAuthDeepLink';
+export { useAuthDeepLink } from '@features/signIn/shell/useAuthDeepLink';
 export { AuthPortProvider, useAuthPort } from '@features/signIn/view/AuthPortProvider';
 export { httpAuthPort } from '@features/signIn/adapters/http/httpAuthPort';
 export {
@@ -61,11 +61,11 @@ export {
   isTestAuthEnabled,
 } from '@features/signIn/adapters/http/testAuth';
 export type { TestLoginResponse } from '@features/signIn/adapters/http/testAuth';
-export { useAsyncAuthAction } from '@features/signIn/hooks/useAsyncAuthAction';
+export { useAsyncAuthAction } from '@features/signIn/shell/useAsyncAuthAction';
 export { OAUTH_BROWSER_TIMEOUT_MS } from '@features/signIn/core/oauthResult';
 export { useOAuth } from '@features/signIn/hooks/useOAuth';
 export { useResetPassword } from '@features/signIn/hooks/useResetPassword';
-export { useSignIn } from '@features/signIn/hooks/useSignIn';
+export { useSignIn } from '@features/signIn/shell/useSignIn';
 export { useSignUp } from '@features/signIn/hooks/useSignUp';
-export { useUpdatePassword } from '@features/signIn/hooks/useUpdatePassword';
+export { useUpdatePassword } from '@features/signIn/shell/useUpdatePassword';
 export { reportSignInFailure } from '@features/signIn/adapters/http/reportSignInFailure';

@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { Text, spacing } from '@shared/ui';
 import { useEmailPasswordFields } from '@features/signIn/view/useEmailPasswordFields';
-import { useSignIn } from '@features/signIn/hooks/useSignIn';
+import { useSignIn } from '@features/signIn/shell/useSignIn';
 import { AuthForm } from '@features/signIn/ui/AuthForm';
 import { EmailPasswordFields } from '@features/signIn/view/AuthFields';
 

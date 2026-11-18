@@ -135,7 +135,7 @@ export default {
         files: [
           'src/mobile/frame/platformExtras.tsx',
           'src/mobile/deviceFileStore.ts',
-          'src/features/signIn/hooks/useAuthDeepLink.ts',
+          'src/features/signIn/shell/useAuthDeepLink.ts',
           'src/features/signIn/hooks/useOAuth.ts',
           'src/features/signIn/ui/AuthCallbackScreen.tsx',
           'src/features/player/adapters/PlaybackProvider.tsx',
