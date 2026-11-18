@@ -1,9 +1,7 @@
-package erasure
+package erasure_test
 
 import (
-	"altune/go-api/internal/playback/internal/adapters/playbacktest"
-	"altune/go-api/internal/playback/internal/core/ports"
-	"altune/go-api/internal/playback/internal/core/queue"
+	"altune/go-api/internal/playback"
 	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
 	"context"
@@ -17,8 +15,15 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	ownerScanWindow = 500
+	maxRetryOwners  = 1000
+
+	stallingRunBudget = time.Second
+)
+
 type identityStore struct {
-	queue *playbacktest.InMemoryQueueRepo
+	queue *inMemoryQueueRepo
 	live  map[uuid.UUID]bool
 	err   error
 	scans []shared.UserId
@@ -26,7 +31,7 @@ type identityStore struct {
 	stallOnScan int
 }
 
-func newIdentityStore(queue *playbacktest.InMemoryQueueRepo) *identityStore {
+func newIdentityStore(queue *inMemoryQueueRepo) *identityStore {
 	return &identityStore{queue: queue, live: map[uuid.UUID]bool{}}
 }
 
@@ -34,17 +39,17 @@ func (s *identityStore) deleteAccount(userId shared.UserId) {
 	delete(s.live, userId.UUID())
 }
 
-func (s *identityStore) ListOwnersWithoutIdentity(ctx context.Context, after shared.UserId, window int) (ports.OwnerScanPage, error) {
+func (s *identityStore) ListOwnersWithoutIdentity(ctx context.Context, after shared.UserId, window int) (playback.OwnerScanPage, error) {
 	s.scans = append(s.scans, after)
 	if s.stallOnScan > 0 && len(s.scans) == s.stallOnScan {
 		<-ctx.Done()
-		return ports.OwnerScanPage{}, fmt.Errorf("list owners without identity: %w", ctx.Err())
+		return playback.OwnerScanPage{}, fmt.Errorf("list owners without identity: %w", ctx.Err())
 	}
 	if s.err != nil {
-		return ports.OwnerScanPage{}, s.err
+		return playback.OwnerScanPage{}, s.err
 	}
 	if window <= 0 {
-		return ports.OwnerScanPage{}, fmt.Errorf("window must be positive, got %d", window)
+		return playback.OwnerScanPage{}, fmt.Errorf("window must be positive, got %d", window)
 	}
 	var keys []uuid.UUID
 	for id := range s.queue.States {
@@ -53,7 +58,7 @@ func (s *identityStore) ListOwnersWithoutIdentity(ctx context.Context, after sha
 		}
 	}
 	slices.SortFunc(keys, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
-	page := ports.OwnerScanPage{Next: after, Done: len(keys) < window}
+	page := playback.OwnerScanPage{Next: after, Done: len(keys) < window}
 	for _, id := range keys[:min(window, len(keys))] {
 		page.Next = shared.NewUserId(id)
 		if !s.live[id] {
@@ -68,11 +73,11 @@ func afterKey(after shared.UserId) []byte {
 	return key[:]
 }
 
-func saveQueueOf(t *testing.T, svc *queue.Service, identities *identityStore, sourceId string) shared.UserId {
+func saveQueueOf(t *testing.T, svc *playback.QueueService, identities *identityStore, sourceId string) shared.UserId {
 	t.Helper()
-	user := playbacktest.TestUser()
-	if err := svc.Save(context.Background(), user, queue.SaveQueueStateInput{
-		TrackIds:       []string{playbacktest.Trk("a"), playbacktest.Trk("b")},
+	user := testUser()
+	if err := svc.Save(context.Background(), user, playback.SaveQueueStateInput{
+		TrackIds:       []string{trk("a"), trk("b")},
 		CurrentIdx:     1,
 		RepeatMode:     "off",
 		LegacySourceId: sourceId,
@@ -83,14 +88,14 @@ func saveQueueOf(t *testing.T, svc *queue.Service, identities *identityStore, so
 	return user
 }
 
-func newSweep(repo *playbacktest.InMemoryQueueRepo, identities *identityStore) *Sweeper {
-	return NewSweeper(identities, queue.New(repo, &playbacktest.FakeNowPlaying{}))
+func newSweep(repo *inMemoryQueueRepo, identities *identityStore) *playback.ErasureSweeper {
+	return playback.NewErasureSweeper(identities, playback.NewQueueService(repo, &fakeNowPlaying{}))
 }
 
 func TestForgetDeletedIdentities_ErasesTheQueueStateOfADeletedAccount(t *testing.T) {
-	repo := playbacktest.NewInMemoryQueueRepo()
+	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)
-	svc := queue.New(repo, &playbacktest.FakeNowPlaying{})
+	svc := playback.NewQueueService(repo, &fakeNowPlaying{})
 	deleted := saveQueueOf(t, svc, identities, "search:mac demarco")
 	stillRegistered := saveQueueOf(t, svc, identities, "search:pino daniele")
 	identities.deleteAccount(deleted)
@@ -112,18 +117,18 @@ func TestForgetDeletedIdentities_ErasesTheQueueStateOfADeletedAccount(t *testing
 }
 
 func TestForgetDeletedIdentities_LeavesTheSelfServiceAuditRecord(t *testing.T) {
-	logs := playbacktest.CaptureLogs(t)
-	repo := playbacktest.NewInMemoryQueueRepo()
+	logs := captureLogs(t)
+	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)
 	const privateSourceId = "search:mac demarco"
-	deleted := saveQueueOf(t, queue.New(repo, &playbacktest.FakeNowPlaying{}), identities, privateSourceId)
+	deleted := saveQueueOf(t, playback.NewQueueService(repo, &fakeNowPlaying{}), identities, privateSourceId)
 	identities.deleteAccount(deleted)
 
 	if _, err := newSweep(repo, identities).Execute(context.Background()); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	rec := playbacktest.AuditRecord(t, logs, "playback.queue_state_forgotten")
+	rec := auditRecord(t, logs, "playback.queue_state_forgotten")
 	if rec["action"] != "queue_state.forget" {
 		t.Errorf("action = %v, want queue_state.forget", rec["action"])
 	}
@@ -139,13 +144,13 @@ func TestForgetDeletedIdentities_LeavesTheSelfServiceAuditRecord(t *testing.T) {
 }
 
 func TestForgetDeletedIdentities_UnreadableIdentityStoreErasesNothing(t *testing.T) {
-	repo := playbacktest.NewInMemoryQueueRepo()
+	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)
-	user := saveQueueOf(t, queue.New(repo, &playbacktest.FakeNowPlaying{}), identities, "search:pino daniele")
-	identities.err = fmt.Errorf("query: %w", ports.ErrIdentityStoreUnavailable)
+	user := saveQueueOf(t, playback.NewQueueService(repo, &fakeNowPlaying{}), identities, "search:pino daniele")
+	identities.err = fmt.Errorf("query: %w", playback.ErrIdentityStoreUnavailable)
 
 	forgotten, err := newSweep(repo, identities).Execute(context.Background())
-	if !errors.Is(err, ports.ErrIdentityStoreUnavailable) {
+	if !errors.Is(err, playback.ErrIdentityStoreUnavailable) {
 		t.Fatalf("Execute = %v, want ErrIdentityStoreUnavailable", err)
 	}
 
@@ -158,7 +163,7 @@ func TestForgetDeletedIdentities_UnreadableIdentityStoreErasesNothing(t *testing
 }
 
 func TestForgetDeletedIdentities_ListingFailureIsReported(t *testing.T) {
-	repo := playbacktest.NewInMemoryQueueRepo()
+	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)
 	dbDown := errors.New("connection refused")
 	identities.err = dbDown
@@ -174,14 +179,14 @@ func TestForgetDeletedIdentities_ListingFailureIsReported(t *testing.T) {
 }
 
 func TestForgetDeletedIdentities_FailedErasureStopsTheRun(t *testing.T) {
-	logs := playbacktest.CaptureLogs(t)
-	repo := playbacktest.NewInMemoryQueueRepo()
+	logs := captureLogs(t)
+	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)
-	deleted := saveQueueOf(t, queue.New(repo, &playbacktest.FakeNowPlaying{}), identities, "search:mac demarco")
+	deleted := saveQueueOf(t, playback.NewQueueService(repo, &fakeNowPlaying{}), identities, "search:mac demarco")
 	identities.deleteAccount(deleted)
 	dbDown := errors.New("connection refused")
-	svc := NewSweeper(identities,
-		queue.New(&playbacktest.UndeletableQueueRepo{Err: dbDown}, &playbacktest.FakeNowPlaying{}))
+	svc := playback.NewErasureSweeper(identities,
+		playback.NewQueueService(&undeletableQueueRepo{Err: dbDown}, &fakeNowPlaying{}))
 
 	forgotten, err := svc.Execute(context.Background())
 
@@ -197,9 +202,9 @@ func TestForgetDeletedIdentities_FailedErasureStopsTheRun(t *testing.T) {
 }
 
 func TestForgetDeletedIdentities_ErasesABacklogAcrossBatchesInOneRun(t *testing.T) {
-	repo := playbacktest.NewInMemoryQueueRepo()
+	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)
-	svc := queue.New(repo, &playbacktest.FakeNowPlaying{})
+	svc := playback.NewQueueService(repo, &fakeNowPlaying{})
 	const overflow = 3
 	for range ownerScanWindow + overflow {
 		identities.deleteAccount(saveQueueOf(t, svc, identities, "search:pino daniele"))
@@ -219,7 +224,7 @@ func TestForgetDeletedIdentities_ErasesABacklogAcrossBatchesInOneRun(t *testing.
 }
 
 type failingOwnersQueueRepo struct {
-	playbacktest.InMemoryQueueRepo
+	inMemoryQueueRepo
 	failing  map[shared.UserId]error
 	attempts map[shared.UserId]int
 }
@@ -231,7 +236,7 @@ func (r *failingOwnersQueueRepo) DeleteForUser(ctx context.Context, userId share
 	if err := r.failing[userId]; err != nil {
 		return err
 	}
-	return r.InMemoryQueueRepo.DeleteForUser(ctx, userId)
+	return r.inMemoryQueueRepo.DeleteForUser(ctx, userId)
 }
 
 type endlessListing struct {
@@ -239,15 +244,15 @@ type endlessListing struct {
 	calls int
 }
 
-func (l *endlessListing) ListOwnersWithoutIdentity(_ context.Context, _ shared.UserId, _ int) (ports.OwnerScanPage, error) {
+func (l *endlessListing) ListOwnersWithoutIdentity(_ context.Context, _ shared.UserId, _ int) (playback.OwnerScanPage, error) {
 	l.calls++
-	return ports.OwnerScanPage{Orphaned: []shared.UserId{l.owner}, Next: l.owner}, nil
+	return playback.OwnerScanPage{Orphaned: []shared.UserId{l.owner}, Next: l.owner}, nil
 }
 
 func TestForgetDeletedIdentities_OneFailingOwnerDoesNotBlockTheRest(t *testing.T) {
-	repo := &failingOwnersQueueRepo{InMemoryQueueRepo: *playbacktest.NewInMemoryQueueRepo(), failing: map[shared.UserId]error{}}
-	identities := newIdentityStore(&repo.InMemoryQueueRepo)
-	svc := queue.New(repo, &playbacktest.FakeNowPlaying{})
+	repo := &failingOwnersQueueRepo{inMemoryQueueRepo: *newInMemoryQueueRepo(), failing: map[shared.UserId]error{}}
+	identities := newIdentityStore(&repo.inMemoryQueueRepo)
+	svc := playback.NewQueueService(repo, &fakeNowPlaying{})
 	first := saveQueueOf(t, svc, identities, "search:a")
 	failing := saveQueueOf(t, svc, identities, "search:b")
 	last := saveQueueOf(t, svc, identities, "search:c")
@@ -256,7 +261,7 @@ func TestForgetDeletedIdentities_OneFailingOwnerDoesNotBlockTheRest(t *testing.T
 	}
 	dbDown := errors.New("connection refused")
 	repo.failing[failing] = dbDown
-	sweep := NewSweeper(identities, svc)
+	sweep := playback.NewErasureSweeper(identities, svc)
 
 	forgotten, err := sweep.Execute(context.Background())
 
@@ -278,8 +283,8 @@ func TestForgetDeletedIdentities_OneFailingOwnerDoesNotBlockTheRest(t *testing.T
 
 func TestForgetDeletedIdentities_EndlessScanStopsAtTheRunBudget(t *testing.T) {
 	listing := &endlessListing{owner: shared.NewUserId(uuid.New())}
-	sweep := NewSweeper(listing, queue.New(playbacktest.NewInMemoryQueueRepo(), &playbacktest.FakeNowPlaying{}),
-		WithSweepRunBudget(20*time.Millisecond))
+	sweep := playback.NewErasureSweeper(listing, playback.NewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{}),
+		playback.WithSweepRunBudget(20*time.Millisecond))
 
 	started := time.Now()
 	_, err := sweep.Execute(context.Background())
@@ -294,7 +299,7 @@ func TestForgetDeletedIdentities_EndlessScanStopsAtTheRunBudget(t *testing.T) {
 	}
 }
 
-func deletedOwnersInKeyOrder(t *testing.T, svc *queue.Service, identities *identityStore, n int) []shared.UserId {
+func deletedOwnersInKeyOrder(t *testing.T, svc *playback.QueueService, identities *identityStore, n int) []shared.UserId {
 	t.Helper()
 	var owners []shared.UserId
 	for range n {
@@ -309,27 +314,26 @@ func deletedOwnersInKeyOrder(t *testing.T, svc *queue.Service, identities *ident
 	return owners
 }
 
-func runScans(sweep *Sweeper, identities *identityStore) (int, []shared.UserId, error) {
+func runScans(sweep *playback.ErasureSweeper, identities *identityStore) (int, []shared.UserId, error) {
 	identities.scans = nil
 	forgotten, err := sweep.Execute(context.Background())
 	return forgotten, identities.scans, err
 }
 
 func TestForgetDeletedIdentities_OneRunFinishesAMultiPageTable(t *testing.T) {
-	repo := playbacktest.NewInMemoryQueueRepo()
+	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)
-	owners := deletedOwnersInKeyOrder(t, queue.New(repo, &playbacktest.FakeNowPlaying{}), identities, 5)
+	owners := deletedOwnersInKeyOrder(t, playback.NewQueueService(repo, &fakeNowPlaying{}), identities, 2*ownerScanWindow+1)
 	sweep := newSweep(repo, identities)
-	sweep.scanWindow = 2
 
 	forgotten, scans, err := runScans(sweep, identities)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if forgotten != 5 || len(repo.States) != 0 {
-		t.Fatalf("one run forgot %d accounts and left %d, want all 5 erased in a single pass", forgotten, len(repo.States))
+	if forgotten != len(owners) || len(repo.States) != 0 {
+		t.Fatalf("one run forgot %d accounts and left %d, want all %d erased in a single pass", forgotten, len(repo.States), len(owners))
 	}
-	if want := []shared.UserId{{}, owners[1], owners[3]}; !slices.Equal(scans, want) {
+	if want := []shared.UserId{{}, owners[ownerScanWindow-1], owners[2*ownerScanWindow-1]}; !slices.Equal(scans, want) {
 		t.Errorf("run scanned after %v, want every page of the table %v", scans, want)
 	}
 	if _, scans, _ := runScans(sweep, identities); len(scans) == 0 || !scans[0].IsZero() {
@@ -338,20 +342,19 @@ func TestForgetDeletedIdentities_OneRunFinishesAMultiPageTable(t *testing.T) {
 }
 
 func TestForgetDeletedIdentities_RunStopsAtItsDeadlineAndResumes(t *testing.T) {
-	repo := playbacktest.NewInMemoryQueueRepo()
+	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)
-	owners := deletedOwnersInKeyOrder(t, queue.New(repo, &playbacktest.FakeNowPlaying{}), identities, 5)
-	sweep := NewSweeper(identities, queue.New(repo, &playbacktest.FakeNowPlaying{}),
-		WithSweepRunBudget(50*time.Millisecond))
-	sweep.scanWindow = 2
+	owners := deletedOwnersInKeyOrder(t, playback.NewQueueService(repo, &fakeNowPlaying{}), identities, 2*ownerScanWindow+1)
+	sweep := playback.NewErasureSweeper(identities, playback.NewQueueService(repo, &fakeNowPlaying{}),
+		playback.WithSweepRunBudget(stallingRunBudget))
 	identities.stallOnScan = 3
 
 	forgotten, _, err := runScans(sweep, identities)
 	if err != nil {
 		t.Fatalf("Execute(first run) = %v, want a spent budget to end the run quietly", err)
 	}
-	if forgotten != 4 {
-		t.Fatalf("first run forgot %d accounts before its deadline, want the 4 on the two pages it finished", forgotten)
+	if forgotten != 2*ownerScanWindow {
+		t.Fatalf("first run forgot %d accounts before its deadline, want the %d on the two pages it finished", forgotten, 2*ownerScanWindow)
 	}
 
 	identities.stallOnScan = 0
@@ -359,30 +362,29 @@ func TestForgetDeletedIdentities_RunStopsAtItsDeadlineAndResumes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute(second run): %v", err)
 	}
-	if !slices.Equal(scans, []shared.UserId{owners[3]}) || forgotten != 1 {
-		t.Fatalf("second run scanned after %v and forgot %d, want it to resume after the fourth owner and erase the last one", scans, forgotten)
+	if !slices.Equal(scans, []shared.UserId{owners[2*ownerScanWindow-1]}) || forgotten != 1 {
+		t.Fatalf("second run scanned after %v and forgot %d, want it to resume after the second page and erase the last owner", scans, forgotten)
 	}
 }
 
 func newFailingOwnersRepo() *failingOwnersQueueRepo {
-	return &failingOwnersQueueRepo{InMemoryQueueRepo: *playbacktest.NewInMemoryQueueRepo(), failing: map[shared.UserId]error{}, attempts: map[shared.UserId]int{}}
+	return &failingOwnersQueueRepo{inMemoryQueueRepo: *newInMemoryQueueRepo(), failing: map[shared.UserId]error{}, attempts: map[shared.UserId]int{}}
 }
 
 func TestForgetDeletedIdentities_PermanentlyFailingOwnerDoesNotBlockTheTable(t *testing.T) {
 	repo := newFailingOwnersRepo()
-	identities := newIdentityStore(&repo.InMemoryQueueRepo)
-	owners := deletedOwnersInKeyOrder(t, queue.New(repo, &playbacktest.FakeNowPlaying{}), identities, 5)
-	sweep := NewSweeper(identities, queue.New(repo, &playbacktest.FakeNowPlaying{}),
-		WithSweepRunBudget(50*time.Millisecond))
-	sweep.scanWindow = 2
+	identities := newIdentityStore(&repo.inMemoryQueueRepo)
+	owners := deletedOwnersInKeyOrder(t, playback.NewQueueService(repo, &fakeNowPlaying{}), identities, 2*ownerScanWindow+1)
+	sweep := playback.NewErasureSweeper(identities, playback.NewQueueService(repo, &fakeNowPlaying{}),
+		playback.WithSweepRunBudget(stallingRunBudget))
 	dbDown := errors.New("connection refused")
 	repo.failing[owners[0]] = dbDown
 	identities.stallOnScan = 2
 
 	forgotten, _, err := runScans(sweep, identities)
-	if !errors.Is(err, dbDown) || forgotten != 1 || repo.attempts[owners[0]] != 1 {
-		t.Fatalf("first run = (%d, %v) with %d attempts on the failing owner, want 1 erased, the failure reported and 1 attempt",
-			forgotten, err, repo.attempts[owners[0]])
+	if !errors.Is(err, dbDown) || forgotten != ownerScanWindow-1 || repo.attempts[owners[0]] != 1 {
+		t.Fatalf("first run = (%d, %v) with %d attempts on the failing owner, want %d erased, the failure reported and 1 attempt",
+			forgotten, err, repo.attempts[owners[0]], ownerScanWindow-1)
 	}
 
 	identities.stallOnScan = 0
@@ -393,22 +395,24 @@ func TestForgetDeletedIdentities_PermanentlyFailingOwnerDoesNotBlockTheTable(t *
 	if repo.attempts[owners[0]] != 2 {
 		t.Errorf("failing owner attempted %d times after two runs, want it retried every run", repo.attempts[owners[0]])
 	}
-	if len(scans) == 0 || scans[0] != owners[1] {
-		t.Fatalf("second run scanned after %v, want the cursor past the finished page, after owner 2", scans)
+	if len(scans) == 0 || scans[0] != owners[ownerScanWindow-1] {
+		t.Fatalf("second run scanned after %v, want the cursor past the finished first page", scans)
 	}
-	if forgotten != 3 || len(repo.States) != 1 {
-		t.Fatalf("second run forgot %d and left %d, want the 3 owners after the failing one erased", forgotten, len(repo.States))
+	if forgotten != ownerScanWindow+1 || len(repo.States) != 1 {
+		t.Fatalf("second run forgot %d and left %d, want the %d owners after the first page erased", forgotten, len(repo.States), ownerScanWindow+1)
 	}
-	if !slices.Equal(sweep.retryOwners, []shared.UserId{owners[0]}) {
-		t.Errorf("retry set = %v, want only the failing owner", sweep.retryOwners)
+
+	delete(repo.failing, owners[0])
+	if forgotten, _, err := runScans(sweep, identities); err != nil || forgotten != 1 || len(repo.States) != 0 {
+		t.Errorf("third run = (%d, %v) leaving %d, want only the failing owner retried and erased", forgotten, err, len(repo.States))
 	}
 }
 
 func TestForgetDeletedIdentities_RetriedOwnerLeavesTheRetrySetOnceErased(t *testing.T) {
 	repo := newFailingOwnersRepo()
-	identities := newIdentityStore(&repo.InMemoryQueueRepo)
-	owners := deletedOwnersInKeyOrder(t, queue.New(repo, &playbacktest.FakeNowPlaying{}), identities, 3)
-	sweep := NewSweeper(identities, queue.New(repo, &playbacktest.FakeNowPlaying{}))
+	identities := newIdentityStore(&repo.inMemoryQueueRepo)
+	owners := deletedOwnersInKeyOrder(t, playback.NewQueueService(repo, &fakeNowPlaying{}), identities, 3)
+	sweep := playback.NewErasureSweeper(identities, playback.NewQueueService(repo, &fakeNowPlaying{}))
 	dbDown := errors.New("connection refused")
 	repo.failing[owners[1]] = dbDown
 
@@ -421,18 +425,18 @@ func TestForgetDeletedIdentities_RetriedOwnerLeavesTheRetrySetOnceErased(t *test
 	if err != nil || forgotten != 1 || len(repo.States) != 0 {
 		t.Fatalf("second run = (%d, %v) leaving %d, want the failed owner erased on retry", forgotten, err, len(repo.States))
 	}
-	if len(sweep.retryOwners) != 0 {
-		t.Errorf("retry set = %v after a successful retry, want it empty", sweep.retryOwners)
+	if forgotten, _, err := runScans(sweep, identities); err != nil || forgotten != 0 || repo.attempts[owners[1]] != 2 {
+		t.Errorf("third run = (%d, %v) with %d attempts on the erased owner, want it out of the retry set: 0 erased, 2 attempts",
+			forgotten, err, repo.attempts[owners[1]])
 	}
 }
 
 func TestForgetDeletedIdentities_FullRetrySetDropsAndCountsTheOverflow(t *testing.T) {
 	repo := newFailingOwnersRepo()
-	identities := newIdentityStore(&repo.InMemoryQueueRepo)
-	owners := deletedOwnersInKeyOrder(t, queue.New(repo, &playbacktest.FakeNowPlaying{}), identities, 3)
+	identities := newIdentityStore(&repo.inMemoryQueueRepo)
+	owners := deletedOwnersInKeyOrder(t, playback.NewQueueService(repo, &fakeNowPlaying{}), identities, maxRetryOwners+1)
 	spy := &sweepMetricsSpy{}
-	sweep := NewSweeper(identities, queue.New(repo, &playbacktest.FakeNowPlaying{}), WithErasureSweepMetrics(spy))
-	sweep.retryCap = 2
+	sweep := playback.NewErasureSweeper(identities, playback.NewQueueService(repo, &fakeNowPlaying{}), playback.WithErasureSweepMetrics(spy))
 	for _, owner := range owners {
 		repo.failing[owner] = errors.New("connection refused")
 	}
@@ -440,9 +444,14 @@ func TestForgetDeletedIdentities_FullRetrySetDropsAndCountsTheOverflow(t *testin
 	if _, _, err := runScans(sweep, identities); err == nil {
 		t.Fatal("Execute must report the failed erases")
 	}
+	if spy.retryDropped != 1 {
+		t.Errorf("%d drops counted, want the 1 owner past the cap of %d", spy.retryDropped, maxRetryOwners)
+	}
 
-	if len(sweep.retryOwners) != 2 || spy.retryDropped != 1 {
-		t.Errorf("retry set holds %d with %d drops counted, want it capped at 2 and 1 drop counted", len(sweep.retryOwners), spy.retryDropped)
+	clear(repo.failing)
+	identities.err = fmt.Errorf("query: %w", playback.ErrIdentityStoreUnavailable)
+	if forgotten, _, _ := runScans(sweep, identities); forgotten != maxRetryOwners {
+		t.Errorf("the retry pass alone erased %d owners, want the retry set capped at %d", forgotten, maxRetryOwners)
 	}
 }
 
@@ -459,13 +468,13 @@ func (m *sweepMetricsSpy) OwnerScanTimedOut()     { m.scanTimeouts++ }
 func (m *sweepMetricsSpy) RetryOwnerDropped()     { m.retryDropped++ }
 
 func TestForgetDeletedIdentities_IdleSweepIsCounted(t *testing.T) {
-	repo := playbacktest.NewInMemoryQueueRepo()
+	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)
-	identities.err = fmt.Errorf("query: %w", ports.ErrIdentityStoreUnavailable)
+	identities.err = fmt.Errorf("query: %w", playback.ErrIdentityStoreUnavailable)
 	spy := &sweepMetricsSpy{}
-	svc := NewSweeper(identities, queue.New(repo, &playbacktest.FakeNowPlaying{}), WithErasureSweepMetrics(spy))
+	svc := playback.NewErasureSweeper(identities, playback.NewQueueService(repo, &fakeNowPlaying{}), playback.WithErasureSweepMetrics(spy))
 
-	if _, err := svc.Execute(context.Background()); !errors.Is(err, ports.ErrIdentityStoreUnavailable) {
+	if _, err := svc.Execute(context.Background()); !errors.Is(err, playback.ErrIdentityStoreUnavailable) {
 		t.Fatalf("Execute = %v, want ErrIdentityStoreUnavailable", err)
 	}
 
@@ -475,12 +484,12 @@ func TestForgetDeletedIdentities_IdleSweepIsCounted(t *testing.T) {
 }
 
 func TestForgetDeletedIdentities_ErasedAccountsAreCounted(t *testing.T) {
-	repo := playbacktest.NewInMemoryQueueRepo()
+	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)
-	user := saveQueueOf(t, queue.New(repo, &playbacktest.FakeNowPlaying{}), identities, "search:x")
+	user := saveQueueOf(t, playback.NewQueueService(repo, &fakeNowPlaying{}), identities, "search:x")
 	identities.deleteAccount(user)
 	spy := &sweepMetricsSpy{}
-	svc := NewSweeper(identities, queue.New(repo, &playbacktest.FakeNowPlaying{}), WithErasureSweepMetrics(spy))
+	svc := playback.NewErasureSweeper(identities, playback.NewQueueService(repo, &fakeNowPlaying{}), playback.WithErasureSweepMetrics(spy))
 
 	if _, err := svc.Execute(context.Background()); err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -492,15 +501,15 @@ func TestForgetDeletedIdentities_ErasedAccountsAreCounted(t *testing.T) {
 }
 
 func TestForgetDeletedIdentities_UnreadableIdentityStoreFailsTheRun(t *testing.T) {
-	repo := playbacktest.NewInMemoryQueueRepo()
+	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)
-	identities.err = fmt.Errorf("query: %w", ports.ErrIdentityStoreUnavailable)
+	identities.err = fmt.Errorf("query: %w", playback.ErrIdentityStoreUnavailable)
 	spy := &sweepMetricsSpy{}
-	svc := NewSweeper(identities, queue.New(repo, &playbacktest.FakeNowPlaying{}), WithErasureSweepMetrics(spy))
+	svc := playback.NewErasureSweeper(identities, playback.NewQueueService(repo, &fakeNowPlaying{}), playback.WithErasureSweepMetrics(spy))
 
 	forgotten, err := svc.Execute(context.Background())
 
-	if !errors.Is(err, ports.ErrIdentityStoreUnavailable) {
+	if !errors.Is(err, playback.ErrIdentityStoreUnavailable) {
 		t.Fatalf("Execute = %v, want ErrIdentityStoreUnavailable", err)
 	}
 	if forgotten != 0 || spy.idle != 1 {
@@ -519,10 +528,10 @@ func (r *reaperSpy) ReapErasedStates(_ context.Context) (int64, error) {
 }
 
 func TestForgetDeletedIdentities_ReapsWhenNoOwnerIsOrphaned(t *testing.T) {
-	repo := playbacktest.NewInMemoryQueueRepo()
+	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)
 	reaper := &reaperSpy{}
-	svc := NewSweeper(identities, queue.New(repo, &playbacktest.FakeNowPlaying{}), WithErasedStateReaper(reaper))
+	svc := playback.NewErasureSweeper(identities, playback.NewQueueService(repo, &fakeNowPlaying{}), playback.WithErasedStateReaper(reaper))
 
 	if _, err := svc.Execute(context.Background()); err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -534,13 +543,13 @@ func TestForgetDeletedIdentities_ReapsWhenNoOwnerIsOrphaned(t *testing.T) {
 }
 
 func TestForgetDeletedIdentities_ReapsWhenIdentityStoreIsUnavailable(t *testing.T) {
-	repo := playbacktest.NewInMemoryQueueRepo()
+	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)
-	identities.err = fmt.Errorf("query: %w", ports.ErrIdentityStoreUnavailable)
+	identities.err = fmt.Errorf("query: %w", playback.ErrIdentityStoreUnavailable)
 	reaper := &reaperSpy{}
-	svc := NewSweeper(identities, queue.New(repo, &playbacktest.FakeNowPlaying{}), WithErasedStateReaper(reaper))
+	svc := playback.NewErasureSweeper(identities, playback.NewQueueService(repo, &fakeNowPlaying{}), playback.WithErasedStateReaper(reaper))
 
-	if _, err := svc.Execute(context.Background()); !errors.Is(err, ports.ErrIdentityStoreUnavailable) {
+	if _, err := svc.Execute(context.Background()); !errors.Is(err, playback.ErrIdentityStoreUnavailable) {
 		t.Fatalf("Execute = %v, want ErrIdentityStoreUnavailable", err)
 	}
 
@@ -550,13 +559,13 @@ func TestForgetDeletedIdentities_ReapsWhenIdentityStoreIsUnavailable(t *testing.
 }
 
 func TestForgetDeletedIdentities_ReapFailureDoesNotStopTheErasure(t *testing.T) {
-	repo := playbacktest.NewInMemoryQueueRepo()
+	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)
-	deleted := saveQueueOf(t, queue.New(repo, &playbacktest.FakeNowPlaying{}), identities, "search:x")
+	deleted := saveQueueOf(t, playback.NewQueueService(repo, &fakeNowPlaying{}), identities, "search:x")
 	identities.deleteAccount(deleted)
 	dbDown := errors.New("connection refused")
-	svc := NewSweeper(identities, queue.New(repo, &playbacktest.FakeNowPlaying{}),
-		WithErasedStateReaper(&reaperSpy{err: dbDown}))
+	svc := playback.NewErasureSweeper(identities, playback.NewQueueService(repo, &fakeNowPlaying{}),
+		playback.WithErasedStateReaper(&reaperSpy{err: dbDown}))
 
 	forgotten, err := svc.Execute(context.Background())
 
@@ -569,11 +578,11 @@ func TestForgetDeletedIdentities_ReapFailureDoesNotStopTheErasure(t *testing.T) 
 }
 
 func TestForgetDeletedIdentities_OwnerScanDeadlineIsCounted(t *testing.T) {
-	repo := playbacktest.NewInMemoryQueueRepo()
+	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)
 	identities.err = fmt.Errorf("list owners without identity: %w", context.DeadlineExceeded)
 	spy := &sweepMetricsSpy{}
-	svc := NewSweeper(identities, queue.New(repo, &playbacktest.FakeNowPlaying{}), WithErasureSweepMetrics(spy))
+	svc := playback.NewErasureSweeper(identities, playback.NewQueueService(repo, &fakeNowPlaying{}), playback.WithErasureSweepMetrics(spy))
 
 	_, err := svc.Execute(context.Background())
 
@@ -586,11 +595,11 @@ func TestForgetDeletedIdentities_OwnerScanDeadlineIsCounted(t *testing.T) {
 }
 
 func TestForgetDeletedIdentities_CancelledRunIsNotAScanTimeout(t *testing.T) {
-	repo := playbacktest.NewInMemoryQueueRepo()
+	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)
 	identities.err = context.DeadlineExceeded
 	spy := &sweepMetricsSpy{}
-	svc := NewSweeper(identities, queue.New(repo, &playbacktest.FakeNowPlaying{}), WithErasureSweepMetrics(spy))
+	svc := playback.NewErasureSweeper(identities, playback.NewQueueService(repo, &fakeNowPlaying{}), playback.WithErasureSweepMetrics(spy))
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -603,18 +612,18 @@ func TestForgetDeletedIdentities_CancelledRunIsNotAScanTimeout(t *testing.T) {
 }
 
 func TestForgetDeletedIdentities_AuditRecordNamesTheSweepTrigger(t *testing.T) {
-	logs := playbacktest.CaptureLogs(t)
-	repo := playbacktest.NewInMemoryQueueRepo()
+	logs := captureLogs(t)
+	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)
 	const privateSourceId = "search:mac demarco"
-	deleted := saveQueueOf(t, queue.New(repo, &playbacktest.FakeNowPlaying{}), identities, privateSourceId)
+	deleted := saveQueueOf(t, playback.NewQueueService(repo, &fakeNowPlaying{}), identities, privateSourceId)
 	identities.deleteAccount(deleted)
 
 	if _, err := newSweep(repo, identities).Execute(context.Background()); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	rec := playbacktest.AuditRecord(t, logs, "playback.queue_state_forgotten")
+	rec := auditRecord(t, logs, "playback.queue_state_forgotten")
 	if rec["trigger"] != "sweep" {
 		t.Errorf("trigger = %v, want sweep", rec["trigger"])
 	}
