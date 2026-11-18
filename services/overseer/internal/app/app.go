@@ -55,15 +55,15 @@ func (c *cycleRecord) read() (completed time.Time, ok, failed int) {
 	return c.completed, c.ok, c.failed
 }
 
-func New(cfg *config.Config, buckets []core.Bucket) *App {
+func New(cfg *config.Config, buckets []core.Bucket, getenv func(string) string) *App {
 	registry := core.NewRegistry()
 	for _, b := range buckets {
 		registry.Register(b)
 	}
-	return newApp(cfg, registry)
+	return newApp(cfg, registry, goapi.SharedTokenSource(getenv))
 }
 
-func newApp(cfg *config.Config, registry *core.Registry) *App {
+func newApp(cfg *config.Config, registry *core.Registry, tokens goapi.TokenSource) *App {
 	verifier := authn.New(cfg.JWKSURL(), cfg.IssuerURL(), cfg.SupabaseJWTSecret, nil)
 
 	staticFS, err := webui.FS()
@@ -84,7 +84,7 @@ func newApp(cfg *config.Config, registry *core.Registry) *App {
 			SupabaseAnonKey: cfg.SupabaseAnonKey,
 		}),
 		shell.WithCollectStatus(a.collectStatus),
-		shell.WithCredentialHealth(credentialHealth(goapi.SharedTokenSource())),
+		shell.WithCredentialHealth(credentialHealth(tokens)),
 		shell.WithSeries(store),
 	)
 	a.server = &http.Server{

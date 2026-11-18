@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
@@ -73,7 +74,7 @@ func launch(cfg *config.Config, buckets []core.Bucket) (*running, error) {
 		return nil, err
 	}
 	cfg.Host, cfg.Port = "127.0.0.1", port
-	a := app.New(cfg, buckets)
+	a := app.New(cfg, buckets, os.Getenv)
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &running{cfg: cfg, base: fmt.Sprintf("http://127.0.0.1:%d", port), cancel: cancel, done: make(chan struct{})}
 	go func() {

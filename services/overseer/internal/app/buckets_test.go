@@ -112,6 +112,7 @@ func TestTheGoAPIURLReachesTheClients(t *testing.T) {
 
 			for name, getenv := range map[string]func(string) string{
 				"unset":   noEnv,
+				"blank":   envWith(map[string]string{"OVERSEER_GOAPI_URL": "  \t"}),
 				"invalid": envWith(map[string]string{"OVERSEER_GOAPI_URL": "://not a url"}),
 			} {
 				err := collectErr(t, built(t, getenv, id))

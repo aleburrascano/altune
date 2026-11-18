@@ -21,7 +21,7 @@ import (
 )
 
 func Buckets(cfg *config.Config, getenv func(string) string) []core.Bucket {
-	api := goAPI{base: strings.TrimSpace(getenv("OVERSEER_GOAPI_URL"))}
+	api := goAPI{base: strings.TrimSpace(getenv("OVERSEER_GOAPI_URL")), tokens: goapi.SharedTokenSource(getenv)}
 	return []core.Bucket{
 		heartbeat.New(heartbeat.Deps{Now: time.Now}),
 		liveactivity.New(liveactivity.Deps{Source: api.eventStream("liveactivity")}),
@@ -36,7 +36,8 @@ func Buckets(cfg *config.Config, getenv func(string) string) []core.Bucket {
 }
 
 type goAPI struct {
-	base string
+	base   string
+	tokens goapi.TokenSource
 }
 
 type eventStream interface {
@@ -49,7 +50,7 @@ func (a goAPI) eventStream(bucket string) eventStream {
 	if a.base == "" {
 		return nil
 	}
-	c, err := goapi.NewConsumer(a.base, goapi.SharedTokenSource())
+	c, err := goapi.NewConsumer(a.base, a.tokens)
 	if err != nil {
 		slog.Warn(bucket+": invalid OVERSEER_GOAPI_URL, degrading to source-down", "error", err)
 		return nil
@@ -67,7 +68,7 @@ func (a goAPI) logStream() logStream {
 	if a.base == "" {
 		return nil
 	}
-	c, err := goapi.NewLogsConsumer(a.base, goapi.SharedTokenSource())
+	c, err := goapi.NewLogsConsumer(a.base, a.tokens)
 	if err != nil {
 		slog.Warn("logs: invalid OVERSEER_GOAPI_URL, degrading to source-down", "error", err)
 		return nil
@@ -79,7 +80,7 @@ func (a goAPI) client(warning string) *goapi.Client {
 	if a.base == "" {
 		return nil
 	}
-	c, err := goapi.New(a.base, goapi.SharedTokenSource())
+	c, err := goapi.New(a.base, a.tokens)
 	if err != nil {
 		slog.Warn(warning, "error", err)
 		return nil
