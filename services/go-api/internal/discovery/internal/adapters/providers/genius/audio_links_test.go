@@ -1,11 +1,13 @@
-package genius
+package genius_test
 
 import (
+	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 )
 
-func TestNormalizeAudioLink(t *testing.T) {
+func TestSongDetail_NormalisesEachAudioLink(t *testing.T) {
 	long := "https://soundcloud.com/a/" + strings.Repeat("x", 200)
 	tests := []struct {
 		name, provider, in, want string
@@ -29,12 +31,29 @@ func TestNormalizeAudioLink(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, ok := normalizeAudioLink(tc.provider, tc.in)
-			if ok != (tc.want != "") || got.URL != tc.want {
-				t.Errorf("normalizeAudioLink(%q, %q) = %q, %v; want %q", tc.provider, tc.in, got.URL, ok, tc.want)
+			media, err := json.Marshal([]map[string]string{{"provider": tc.provider, "url": tc.in}})
+			if err != nil {
+				t.Fatal(err)
 			}
-			if ok && string(got.Provider) != tc.provider {
-				t.Errorf("provider = %q, want %q", got.Provider, tc.provider)
+			catalog := songCatalog(t, map[string]string{
+				"/songs/1": `{"response":{"song":{"media":` + string(media) + `}}}`,
+			})
+
+			detail, err := catalog.SongDetail(context.Background(), 1)
+			if err != nil {
+				t.Fatalf("SongDetail: %v", err)
+			}
+			if tc.want == "" {
+				if len(detail.AudioLinks) != 0 {
+					t.Errorf("AudioLinks = %+v, want none for %q", detail.AudioLinks, tc.in)
+				}
+				return
+			}
+			if len(detail.AudioLinks) != 1 || detail.AudioLinks[0].URL != tc.want {
+				t.Fatalf("AudioLinks = %+v, want one link %q", detail.AudioLinks, tc.want)
+			}
+			if got := string(detail.AudioLinks[0].Provider); got != tc.provider {
+				t.Errorf("provider = %q, want %q", got, tc.provider)
 			}
 		})
 	}

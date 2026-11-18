@@ -1,8 +1,9 @@
-package authbridge
+package authbridge_test
 
 import (
 	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/auth/service"
+	"altune/go-api/internal/discovery"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"net/http"
@@ -22,7 +23,7 @@ func TestRequireUserID_NoUserMatchesRootResponse(t *testing.T) {
 		t.Fatal("root RequireUserID accepted a request without a user")
 	}
 	gotRec := httptest.NewRecorder()
-	if _, ok := RequireUserID(gotRec, req); ok {
+	if _, ok := discovery.AuthBridgeRequireUserID(gotRec, req); ok {
 		t.Fatal("bridge RequireUserID accepted a request without a user")
 	}
 
@@ -40,7 +41,7 @@ func TestRequireUserID_UserInContext(t *testing.T) {
 	req = req.WithContext(service.ContextWithUserID(req.Context(), id))
 
 	rec := httptest.NewRecorder()
-	got, ok := RequireUserID(rec, req)
+	got, ok := discovery.AuthBridgeRequireUserID(rec, req)
 	if !ok || got != id {
 		t.Fatalf("got (%v, %v), want (%v, true)", got, ok, id)
 	}
@@ -53,7 +54,7 @@ type foreignKey struct{}
 
 func TestUserIDFromContext_RefusesForeignKey(t *testing.T) {
 	ctx := context.WithValue(context.Background(), foreignKey{}, newUserID())
-	if _, ok := UserIDFromContext(ctx); ok {
+	if _, ok := discovery.AuthBridgeUserIDFromContext(ctx); ok {
 		t.Fatal("user id stored under a foreign key was accepted")
 	}
 }
@@ -62,7 +63,7 @@ func TestUserIDFromContext_SequentialRequestsKeepOwnUser(t *testing.T) {
 	first, second := newUserID(), newUserID()
 	for _, want := range []shared.UserId{first, second} {
 		ctx := service.ContextWithUserID(context.Background(), want)
-		got, ok := UserIDFromContext(ctx)
+		got, ok := discovery.AuthBridgeUserIDFromContext(ctx)
 		if !ok || got != want {
 			t.Fatalf("got (%v, %v), want (%v, true)", got, ok, want)
 		}
@@ -73,7 +74,7 @@ func TestClientKey_MatchesRoot(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/x", nil)
 	req.RemoteAddr = "10.0.0.5:4242"
 	req.Header.Set("X-Forwarded-For", "203.0.113.9")
-	if got, want := ClientKey(req), middleware.ClientKey(req); got != want {
+	if got, want := discovery.AuthBridgeClientKey(req), middleware.ClientKey(req); got != want {
 		t.Fatalf("ClientKey = %q, want %q", got, want)
 	}
 }

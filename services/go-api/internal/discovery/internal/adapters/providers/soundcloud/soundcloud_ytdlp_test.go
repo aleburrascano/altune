@@ -1,7 +1,7 @@
-package soundcloud
+package soundcloud_test
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"context"
 	"errors"
 	"os/exec"
@@ -11,38 +11,38 @@ import (
 )
 
 func TestSoundCloudAdapter_Name(t *testing.T) {
-	adapter := NewSoundCloudAdapter()
-	if got := adapter.Name(); got != domain.ProviderSoundCloud {
-		t.Errorf("Name() = %v, want %v", got, domain.ProviderSoundCloud)
+	adapter := discovery.NewSoundCloudAdapter()
+	if got := adapter.Name(); got != discovery.ProviderSoundCloud {
+		t.Errorf("Name() = %v, want %v", got, discovery.ProviderSoundCloud)
 	}
 }
 
 func TestSoundCloudAdapter_SupportedKinds(t *testing.T) {
-	adapter := NewSoundCloudAdapter()
+	adapter := discovery.NewSoundCloudAdapter()
 	kinds := adapter.SupportedKinds()
 
-	if !kinds[domain.ResultKindTrack] {
+	if !kinds[discovery.ResultKindTrack] {
 		t.Error("expected track to be supported")
 	}
-	if kinds[domain.ResultKindAlbum] {
+	if kinds[discovery.ResultKindAlbum] {
 		t.Error("expected album to NOT be supported")
 	}
-	if kinds[domain.ResultKindArtist] {
+	if kinds[discovery.ResultKindArtist] {
 		t.Error("expected artist to NOT be supported")
 	}
 }
 
 func TestSoundCloudAdapter_SearchTimeout(t *testing.T) {
-	adapter := NewSoundCloudAdapter()
+	adapter := discovery.NewSoundCloudAdapter()
 	if got := adapter.SearchTimeout(); got != 5*time.Second {
 		t.Errorf("SearchTimeout() = %v, want %v", got, 5*time.Second)
 	}
 }
 
 func TestSoundCloudAdapter_Search_UnsupportedKinds(t *testing.T) {
-	adapter := NewSoundCloudAdapter()
-	results, err := adapter.Search(context.Background(), "test query", map[domain.ResultKind]bool{
-		domain.ResultKindAlbum: true,
+	adapter := discovery.NewSoundCloudAdapter()
+	results, err := adapter.Search(context.Background(), "test query", map[discovery.ResultKind]bool{
+		discovery.ResultKindAlbum: true,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -60,9 +60,9 @@ func TestSoundCloudAdapter_Search_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	adapter := NewSoundCloudAdapter()
-	_, err := adapter.Search(ctx, "test", map[domain.ResultKind]bool{
-		domain.ResultKindTrack: true,
+	adapter := discovery.NewSoundCloudAdapter()
+	_, err := adapter.Search(ctx, "test", map[discovery.ResultKind]bool{
+		discovery.ResultKindTrack: true,
 	})
 	if err == nil {
 		t.Fatal("expected error for cancelled context")
@@ -72,8 +72,7 @@ func TestSoundCloudAdapter_Search_ContextCancelled(t *testing.T) {
 func TestSoundCloudAdapter_Search_CapsConcurrentYtdlp(t *testing.T) {
 	release := make(chan struct{})
 	var running, peak atomic.Int32
-	adapter := NewSoundCloudAdapter()
-	adapter.dumpJSON = func(ctx context.Context, args []string) ([][]byte, string, error) {
+	adapter := discovery.NewSoundCloudAdapterWithRunner(func(ctx context.Context, args []string) ([][]byte, string, error) {
 		n := running.Add(1)
 		for {
 			p := peak.Load()
@@ -84,10 +83,11 @@ func TestSoundCloudAdapter_Search_CapsConcurrentYtdlp(t *testing.T) {
 		<-release
 		running.Add(-1)
 		return nil, "", nil
-	}
-	kinds := map[domain.ResultKind]bool{domain.ResultKindTrack: true}
+	})
+	kinds := map[discovery.ResultKind]bool{discovery.ResultKindTrack: true}
 
 	const calls = 10
+	const slots = 3
 	errs := make(chan error, calls)
 	for i := 0; i < calls; i++ {
 		go func() {
@@ -98,23 +98,23 @@ func TestSoundCloudAdapter_Search_CapsConcurrentYtdlp(t *testing.T) {
 
 	shed := 0
 	deadline := time.After(2 * time.Second)
-	for shed < calls-maxConcurrentYtdlp {
+	for shed < calls-slots {
 		select {
 		case err := <-errs:
-			if !errors.Is(err, ErrYtdlpBusy) {
+			if !errors.Is(err, discovery.ErrSoundCloudYtdlpBusy) {
 				t.Fatalf("unexpected early result: %v", err)
 			}
 			shed++
 		case <-deadline:
-			t.Fatalf("only %d calls shed promptly, want %d", shed, calls-maxConcurrentYtdlp)
+			t.Fatalf("only %d calls shed promptly, want %d", shed, calls-slots)
 		}
 	}
-	if got := peak.Load(); got > maxConcurrentYtdlp {
-		t.Errorf("peak concurrency %d exceeds cap %d", got, maxConcurrentYtdlp)
+	if got := peak.Load(); got > slots {
+		t.Errorf("peak concurrency %d exceeds cap %d", got, slots)
 	}
 
 	close(release)
-	for i := 0; i < maxConcurrentYtdlp; i++ {
+	for i := 0; i < slots; i++ {
 		if err := <-errs; err != nil {
 			t.Errorf("admitted call failed: %v", err)
 		}
@@ -126,12 +126,11 @@ func TestSoundCloudAdapter_Search_CapsConcurrentYtdlp(t *testing.T) {
 }
 
 func TestSoundCloudAdapter_Search_YtdlpEntryFillsTheTypedDuration(t *testing.T) {
-	adapter := NewSoundCloudAdapter()
-	adapter.dumpJSON = func(context.Context, []string) ([][]byte, string, error) {
+	adapter := discovery.NewSoundCloudAdapterWithRunner(func(context.Context, []string) ([][]byte, string, error) {
 		return [][]byte{[]byte(`{"title":"Song","uploader":"Artist","duration":226.5,"webpage_url":"https://soundcloud.com/a/s","id":"1","playback_count":9}`)}, "", nil
-	}
+	})
 
-	results, err := adapter.Search(context.Background(), "q", map[domain.ResultKind]bool{domain.ResultKindTrack: true})
+	results, err := adapter.Search(context.Background(), "q", map[discovery.ResultKind]bool{discovery.ResultKindTrack: true})
 	if err != nil || len(results) != 1 {
 		t.Fatalf("Search = %d results, err %v, want one", len(results), err)
 	}

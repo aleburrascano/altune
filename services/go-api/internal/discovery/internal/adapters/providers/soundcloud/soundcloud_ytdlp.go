@@ -17,13 +17,19 @@ var ErrYtdlpBusy = errors.New("yt-dlp soundcloud search: all slots busy")
 
 type SoundCloudAdapter struct {
 	slots    chan struct{}
-	dumpJSON func(ctx context.Context, args []string) ([][]byte, string, error)
+	dumpJSON YtdlpRunner
 }
 
+type YtdlpRunner func(ctx context.Context, args []string) ([][]byte, string, error)
+
 func NewSoundCloudAdapter() *SoundCloudAdapter {
+	return NewSoundCloudAdapterWithRunner(ytdlp.DumpJSON)
+}
+
+func NewSoundCloudAdapterWithRunner(run YtdlpRunner) *SoundCloudAdapter {
 	return &SoundCloudAdapter{
 		slots:    make(chan struct{}, maxConcurrentYtdlp),
-		dumpJSON: ytdlp.DumpJSON,
+		dumpJSON: run,
 	}
 }
 
