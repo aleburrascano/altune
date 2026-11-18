@@ -1,8 +1,8 @@
-package track
+package track_test
 
 import (
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/catalog/domain"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
@@ -20,13 +20,13 @@ func TestGetTrackStatusService_Execute(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		setup     func(*catalogtest.TrackRepo) domain.TrackId
+		setup     func(*catalogtest.TrackRepo) catalog.TrackId
 		wantTitle string
 		wantErr   error
 	}{
 		{
 			name: "existing track is returned",
-			setup: func(repo *catalogtest.TrackRepo) domain.TrackId {
+			setup: func(repo *catalogtest.TrackRepo) catalog.TrackId {
 				track := catalogtest.SeedTrack(t, repo, userId, "Track", "Artist", "Album")
 				return track.ID
 			},
@@ -34,25 +34,25 @@ func TestGetTrackStatusService_Execute(t *testing.T) {
 		},
 		{
 			name: "non-existent track returns ErrTrackNotFound",
-			setup: func(repo *catalogtest.TrackRepo) domain.TrackId {
-				return domain.NewTrackId()
+			setup: func(repo *catalogtest.TrackRepo) catalog.TrackId {
+				return catalog.NewTrackId()
 			},
-			wantErr: domain.ErrTrackNotFound,
+			wantErr: catalog.ErrTrackNotFound,
 		},
 		{
 			name: "track owned by another user returns ErrTrackNotFound",
-			setup: func(repo *catalogtest.TrackRepo) domain.TrackId {
+			setup: func(repo *catalogtest.TrackRepo) catalog.TrackId {
 				other := shared.NewUserId(uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
 				track := catalogtest.SeedTrack(t, repo, other, "Track", "Artist", "Album")
 				return track.ID
 			},
-			wantErr: domain.ErrTrackNotFound,
+			wantErr: catalog.ErrTrackNotFound,
 		},
 		{
 			name: "repo error propagates",
-			setup: func(repo *catalogtest.TrackRepo) domain.TrackId {
+			setup: func(repo *catalogtest.TrackRepo) catalog.TrackId {
 				repo.ErrOnGetBy = errRepo
-				return domain.NewTrackId()
+				return catalog.NewTrackId()
 			},
 			wantErr: errRepo,
 		},
@@ -62,7 +62,7 @@ func TestGetTrackStatusService_Execute(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := catalogtest.NewTrackRepo()
 			trackId := tt.setup(repo)
-			svc := NewGetTrackStatusService(repo)
+			svc := catalog.NewGetTrackStatusService(repo)
 
 			track, err := svc.Execute(ctx, userId, trackId)
 
@@ -92,9 +92,9 @@ func TestGetTrackStatusService_Execute(t *testing.T) {
 }
 
 func TestListTracksService_RejectsNegativeOffset(t *testing.T) {
-	svc := NewListTracksService(catalogtest.NewTrackRepo())
+	svc := catalog.NewListTracksService(catalogtest.NewTrackRepo())
 
-	out, err := svc.Execute(context.Background(), catalogtest.UserId(), domain.LibraryQuery{Offset: -1})
+	out, err := svc.Execute(context.Background(), catalogtest.UserId(), catalog.LibraryQuery{Offset: -1})
 
 	if err == nil {
 		t.Fatalf("expected a validation error for a negative offset, got nil (out=%+v)", out)
@@ -187,9 +187,9 @@ func TestListTracksService_Execute(t *testing.T) {
 			for i := 0; i < tt.seedCount; i++ {
 				catalogtest.SeedTrack(t, repo, userId, "Track "+string(rune('A'+i)), "Artist", "Album")
 			}
-			svc := NewListTracksService(repo)
+			svc := catalog.NewListTracksService(repo)
 
-			out, err := svc.Execute(ctx, userId, domain.LibraryQuery{Limit: tt.limit, Offset: tt.offset})
+			out, err := svc.Execute(ctx, userId, catalog.LibraryQuery{Limit: tt.limit, Offset: tt.offset})
 
 			if tt.wantErr != "" {
 				if err == nil {

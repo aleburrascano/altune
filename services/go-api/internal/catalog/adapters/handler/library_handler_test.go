@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/catalog/catalogtest"
 	libraryservice "altune/go-api/internal/catalog/internal/core/library"
 	"net/http"
@@ -17,7 +16,7 @@ import (
 func buildLibraryHandler(repo *catalogtest.TrackRepo) chi.Router {
 	h := NewLibraryHandler(libraryservice.NewLibraryLensService(repo))
 	r := chi.NewRouter()
-	r.Use(middleware.Middleware(verifyAsTestUser))
+	r.Use(bearerUser(asTestUser))
 	r.Mount("/library", h.Routes())
 	return r
 }

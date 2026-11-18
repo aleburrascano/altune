@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/catalog/catalogtest"
 	audioservice "altune/go-api/internal/catalog/internal/core/audio"
 	"altune/go-api/internal/shared/httputil"
@@ -27,7 +26,7 @@ func resolvePrefetchFlag(t *testing.T, opts ...func(*AudioURLHandler)) any {
 	svc := audioservice.NewAudioURLService(repo, catalogtest.NewAudioStore())
 
 	router := chi.NewRouter()
-	router.Use(middleware.Middleware(verifyAsTestUser))
+	router.Use(bearerUser(asTestUser))
 	router.Post("/audio-urls", NewAudioURLHandler(svc, opts...).HandleResolve)
 
 	body := jsonBody(t, resolveAudioURLsRequest{TrackIDs: []string{track.ID.UUID().String()}})
@@ -60,7 +59,7 @@ func TestAudioURLs_ReportPrefetchKillSwitch(t *testing.T) {
 func audioURLRouter() chi.Router {
 	svc := audioservice.NewAudioURLService(catalogtest.NewTrackRepo(), catalogtest.NewAudioStore())
 	router := chi.NewRouter()
-	router.Use(middleware.Middleware(verifyAsTestUser))
+	router.Use(bearerUser(asTestUser))
 	NewAudioURLHandler(svc).Routes(router)
 	return router
 }
@@ -93,7 +92,7 @@ func TestAudioURLs_ResponseIsNeverCached(t *testing.T) {
 	svc := audioservice.NewAudioURLService(repo, catalogtest.NewAudioStore())
 
 	router := chi.NewRouter()
-	router.Use(middleware.Middleware(verifyAsTestUser))
+	router.Use(bearerUser(asTestUser))
 	NewAudioURLHandler(svc).Routes(router)
 
 	body := jsonBody(t, resolveAudioURLsRequest{TrackIDs: []string{track.ID.UUID().String()}})
@@ -124,7 +123,7 @@ func TestCorrelationID_ReachesCatalogServiceLogs(t *testing.T) {
 	router := chi.NewRouter()
 	router.Use(httputil.CorrelationID)
 	router.Use(httputil.RequestLogger)
-	router.Use(middleware.Middleware(verifyAsTestUser))
+	router.Use(bearerUser(asTestUser))
 	router.Post("/audio-urls", NewAudioURLHandler(svc).HandleResolve)
 
 	const inbound = "trace-abc12345"

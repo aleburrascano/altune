@@ -2,9 +2,9 @@ package handler
 
 import (
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/internal/adapters/authbridge"
 	playlistservice "altune/go-api/internal/catalog/internal/core/playlist"
 	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/requestuser"
 	"net/http"
 	"time"
 
@@ -131,7 +131,7 @@ func playlistToResponse(p *domain.Playlist, trackCount int, artworkURLs []string
 }
 
 func (h *PlaylistHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
-	userId, ok := authbridge.RequireUserID(w, r)
+	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -151,7 +151,7 @@ func (h *PlaylistHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PlaylistHandler) handleList(w http.ResponseWriter, r *http.Request) {
-	userId, ok := authbridge.RequireUserID(w, r)
+	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -171,7 +171,7 @@ func (h *PlaylistHandler) handleList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PlaylistHandler) handleGet(w http.ResponseWriter, r *http.Request) {
-	userId, ok := authbridge.RequireUserID(w, r)
+	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -198,7 +198,7 @@ func (h *PlaylistHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PlaylistHandler) handleRename(w http.ResponseWriter, r *http.Request) {
-	userId, ok := authbridge.RequireUserID(w, r)
+	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -222,7 +222,7 @@ func (h *PlaylistHandler) handleRename(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PlaylistHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
-	userId, ok := authbridge.RequireUserID(w, r)
+	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -240,7 +240,7 @@ func (h *PlaylistHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PlaylistHandler) handleAddTrack(w http.ResponseWriter, r *http.Request) {
-	userId, ok := authbridge.RequireUserID(w, r)
+	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -264,7 +264,7 @@ func (h *PlaylistHandler) handleAddTrack(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *PlaylistHandler) handleAddTracks(w http.ResponseWriter, r *http.Request) {
-	userId, ok := authbridge.RequireUserID(w, r)
+	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -297,7 +297,7 @@ func (h *PlaylistHandler) handleAddTracks(w http.ResponseWriter, r *http.Request
 }
 
 func (h *PlaylistHandler) handleRemoveTrack(w http.ResponseWriter, r *http.Request) {
-	userId, ok := authbridge.RequireUserID(w, r)
+	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -319,7 +319,7 @@ func (h *PlaylistHandler) handleRemoveTrack(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *PlaylistHandler) handleRemoveTracks(w http.ResponseWriter, r *http.Request) {
-	userId, ok := authbridge.RequireUserID(w, r)
+	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -349,7 +349,7 @@ func (h *PlaylistHandler) handleRemoveTracks(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *PlaylistHandler) handleReorder(w http.ResponseWriter, r *http.Request) {
-	userId, ok := authbridge.RequireUserID(w, r)
+	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}

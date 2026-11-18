@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/catalog/catalogtest"
 	audioservice "altune/go-api/internal/catalog/internal/core/audio"
 	"altune/go-api/internal/catalog/internal/core/ports"
@@ -170,7 +169,7 @@ func TestHandleRecover(t *testing.T) {
 
 	h, _ := buildStreamHandler(repo, catalogtest.NewAudioStore(), sched)
 	router := chi.NewRouter()
-	router.Use(middleware.Middleware(verifyAsTestUser))
+	router.Use(bearerUser(asTestUser))
 	h.Routes(router)
 
 	tests := []struct {
@@ -197,7 +196,7 @@ func TestHandleRecover(t *testing.T) {
 func mountStreamRoutes(store ports.AudioStore, opts ...func(*StreamHandler)) (*catalogtest.TrackRepo, chi.Router) {
 	repo := catalogtest.NewTrackRepo()
 	router := chi.NewRouter()
-	router.Use(middleware.Middleware(verifyAsTestUser))
+	router.Use(bearerUser(asTestUser))
 	NewStreamHandler(audioservice.NewStreamTrackService(repo, store), opts...).Routes(router)
 	return repo, router
 }
@@ -418,7 +417,7 @@ func serveAudioBehindRouteDeadline(t *testing.T, idle time.Duration) (get func()
 	r := chi.NewRouter()
 	r.Use(httputil.WriteDeadline(audioRouteDeadline))
 	r.Use(httputil.RequestLogger)
-	r.Use(middleware.Middleware(verifyAsTestUser))
+	r.Use(bearerUser(asTestUser))
 	h.Routes(r)
 	srv := httputiltest.NewServer(t, r)
 

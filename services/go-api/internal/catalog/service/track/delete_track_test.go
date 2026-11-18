@@ -1,8 +1,8 @@
-package track
+package track_test
 
 import (
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"errors"
@@ -19,12 +19,12 @@ func TestDeleteTrackService_Execute(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		setup   func(*catalogtest.TrackRepo) domain.TrackId
+		setup   func(*catalogtest.TrackRepo) catalog.TrackId
 		wantErr error
 	}{
 		{
 			name: "existing track is deleted",
-			setup: func(repo *catalogtest.TrackRepo) domain.TrackId {
+			setup: func(repo *catalogtest.TrackRepo) catalog.TrackId {
 				track := catalogtest.SeedTrack(t, repo, userId, "Track", "Artist", "Album")
 				return track.ID
 			},
@@ -32,14 +32,14 @@ func TestDeleteTrackService_Execute(t *testing.T) {
 		},
 		{
 			name: "non-existent track returns ErrTrackNotFound",
-			setup: func(repo *catalogtest.TrackRepo) domain.TrackId {
-				return domain.NewTrackId()
+			setup: func(repo *catalogtest.TrackRepo) catalog.TrackId {
+				return catalog.NewTrackId()
 			},
-			wantErr: domain.ErrTrackNotFound,
+			wantErr: catalog.ErrTrackNotFound,
 		},
 		{
 			name: "repo error propagates",
-			setup: func(repo *catalogtest.TrackRepo) domain.TrackId {
+			setup: func(repo *catalogtest.TrackRepo) catalog.TrackId {
 				track := catalogtest.SeedTrack(t, repo, userId, "Track", "Artist", "Album")
 				repo.ErrOnDelete = errRepo
 				return track.ID
@@ -52,7 +52,7 @@ func TestDeleteTrackService_Execute(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := catalogtest.NewTrackRepo()
 			trackId := tt.setup(repo)
-			svc := NewDeleteTrackService(repo, catalogtest.NewAudioStore())
+			svc := catalog.NewDeleteTrackService(repo, catalogtest.NewAudioStore())
 
 			err := svc.Execute(ctx, userId, trackId)
 
@@ -81,7 +81,7 @@ func TestDeleteTrack_KeepsAudioSharedWithAnotherTrack(t *testing.T) {
 	assertCollidesOnOneStorageKey(t, deleted, kept)
 	store.Seed(sharedAudioRef, []byte("audio"))
 
-	if err := NewDeleteTrackService(repo, store).Execute(context.Background(), userId, deleted.ID); err != nil {
+	if err := catalog.NewDeleteTrackService(repo, store).Execute(context.Background(), userId, deleted.ID); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 
@@ -97,7 +97,7 @@ func TestDeleteTrack_DeletesAudioOnTheLastReference(t *testing.T) {
 	only := catalogtest.SeedReadyTrack(t, repo, userId, "Come Together", "Artist", "Abbey Road", sharedAudioRef)
 	store.Seed(sharedAudioRef, []byte("audio"))
 
-	if err := NewDeleteTrackService(repo, store).Execute(context.Background(), userId, only.ID); err != nil {
+	if err := catalog.NewDeleteTrackService(repo, store).Execute(context.Background(), userId, only.ID); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 
@@ -115,10 +115,10 @@ func TestDeleteTrack_QueuesTheOrphanWhenTheUsageCheckFails(t *testing.T) {
 	store.Seed(sharedAudioRef, []byte("audio"))
 	repo.ErrOnGetBy = errors.New("db error")
 
-	err := NewDeleteTrackService(repo, store, WithDeleteTrackOrphanQueue(queue)).
+	err := catalog.NewDeleteTrackService(repo, store, catalog.WithDeleteTrackOrphanQueue(queue)).
 		Execute(context.Background(), userId, track.ID)
 
-	if !errors.Is(err, domain.ErrAudioOrphaned) {
+	if !errors.Is(err, catalog.ErrAudioOrphaned) {
 		t.Fatalf("delete err = %v, want ErrAudioOrphaned", err)
 	}
 	if _, ok := store.Files[sharedAudioRef]; !ok {
@@ -129,7 +129,7 @@ func TestDeleteTrack_QueuesTheOrphanWhenTheUsageCheckFails(t *testing.T) {
 	}
 }
 
-func assertCollidesOnOneStorageKey(t *testing.T, a, b *domain.Track) {
+func assertCollidesOnOneStorageKey(t *testing.T, a, b *catalog.Track) {
 	t.Helper()
 	if a.DedupKey == b.DedupKey {
 		t.Fatalf("both tracks dedup to %q, so only one row would exist", a.DedupKey)
@@ -155,13 +155,13 @@ func TestDeleteTrackService_OrphanedDeleteMetric(t *testing.T) {
 	store := catalogtest.NewAudioStore()
 	store.ErrOnDelete = errors.New("s3 down")
 	metrics := &catalogtest.Metrics{}
-	svc := NewDeleteTrackService(repo, store, WithDeleteTrackMetrics(metrics))
+	svc := catalog.NewDeleteTrackService(repo, store, catalog.WithDeleteTrackMetrics(metrics))
 
 	err := svc.Execute(ctx, userId, track.ID)
 	if err == nil {
 		t.Fatal("expected ErrAudioOrphaned, got nil (orphan silently swallowed as success)")
 	}
-	if !errors.Is(err, domain.ErrAudioOrphaned) {
+	if !errors.Is(err, catalog.ErrAudioOrphaned) {
 		t.Fatalf("error = %v, want ErrAudioOrphaned", err)
 	}
 	if metrics.OrphanedDeletes != 1 {
@@ -178,7 +178,7 @@ func TestDeleteTrackService_NoOrphanMetricOnCleanDelete(t *testing.T) {
 	store := catalogtest.NewAudioStore()
 	store.Seed("audio/ok.opus", []byte("data"))
 	metrics := &catalogtest.Metrics{}
-	svc := NewDeleteTrackService(repo, store, WithDeleteTrackMetrics(metrics))
+	svc := catalog.NewDeleteTrackService(repo, store, catalog.WithDeleteTrackMetrics(metrics))
 
 	if err := svc.Execute(ctx, userId, track.ID); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -194,7 +194,7 @@ func TestDeleteTrackService_LogsActorAndObject(t *testing.T) {
 	repo := catalogtest.NewTrackRepo()
 	track := catalogtest.SeedTrack(t, repo, userId, "Track", "Artist", "Album")
 
-	if err := NewDeleteTrackService(repo, catalogtest.NewAudioStore()).Execute(context.Background(), userId, track.ID); err != nil {
+	if err := catalog.NewDeleteTrackService(repo, catalogtest.NewAudioStore()).Execute(context.Background(), userId, track.ID); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -212,8 +212,8 @@ func TestDeleteTrackService_OrphanLogCarriesActor(t *testing.T) {
 	store := catalogtest.NewAudioStore()
 	store.ErrOnDelete = errors.New("s3 down")
 
-	err := NewDeleteTrackService(repo, store).Execute(context.Background(), userId, track.ID)
-	if !errors.Is(err, domain.ErrAudioOrphaned) {
+	err := catalog.NewDeleteTrackService(repo, store).Execute(context.Background(), userId, track.ID)
+	if !errors.Is(err, catalog.ErrAudioOrphaned) {
 		t.Fatalf("error = %v, want ErrAudioOrphaned", err)
 	}
 

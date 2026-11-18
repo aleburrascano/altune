@@ -2,8 +2,8 @@ package handler
 
 import (
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/internal/adapters/authbridge"
 	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/requestuser"
 	"net/http"
 	"time"
 )
@@ -54,5 +54,5 @@ func newWriteRateLimiter(limit AudioRateLimit, now func() time.Time) rateLimitMi
 }
 
 func newUserRateLimiter(limit AudioRateLimit, now func() time.Time, refused error) rateLimitMiddleware {
-	return httputil.NewUserRateLimiter(limit, now).Middleware(httputil.UserKey(authbridge.UserIDFromContext), refused, nil)
+	return httputil.NewUserRateLimiter(limit, now).Middleware(httputil.UserKey(requestuser.UserIDFromContext), refused, nil)
 }
