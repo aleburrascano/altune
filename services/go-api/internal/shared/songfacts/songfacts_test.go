@@ -1,6 +1,7 @@
-package songfacts
+package songfacts_test
 
 import (
+	"altune/go-api/internal/shared/songfacts"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -23,7 +24,7 @@ func TestCanonicalISRC(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := CanonicalISRC(tt.input); got != tt.want {
+			if got := songfacts.CanonicalISRC(tt.input); got != tt.want {
 				t.Fatalf("CanonicalISRC(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
@@ -46,7 +47,7 @@ func TestIsCanonicalISRC(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := IsCanonicalISRC(tt.input); got != tt.want {
+			if got := songfacts.IsCanonicalISRC(tt.input); got != tt.want {
 				t.Fatalf("IsCanonicalISRC(%q) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
@@ -68,12 +69,12 @@ func TestNameKey(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := NameKey(tt.input); got != tt.want {
+			if got := songfacts.NameKey(tt.input); got != tt.want {
 				t.Fatalf("NameKey(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
 	}
-	if NameKey("Simon & Garfunkel") != NameKey("Simon and Garfunkel") {
+	if songfacts.NameKey("Simon & Garfunkel") != songfacts.NameKey("Simon and Garfunkel") {
 		t.Fatal("ampersand and 'and' must give one name key")
 	}
 }
@@ -96,7 +97,7 @@ func TestSplitCredit(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := SplitCredit(tt.input); !slices.Equal(got, tt.want) {
+			if got := songfacts.SplitCredit(tt.input); !slices.Equal(got, tt.want) {
 				t.Fatalf("SplitCredit(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
@@ -117,7 +118,7 @@ func TestBracketEditionSuffix(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := BracketEditionSuffix(tt.input); got != tt.want {
+			if got := songfacts.BracketEditionSuffix(tt.input); got != tt.want {
 				t.Fatalf("BracketEditionSuffix(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
@@ -140,7 +141,7 @@ func TestIsEditionLabel(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			if got := IsEditionLabel(tt.input); got != tt.want {
+			if got := songfacts.IsEditionLabel(tt.input); got != tt.want {
 				t.Fatalf("IsEditionLabel(%q) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
@@ -166,7 +167,7 @@ func TestIsReleaseMarker(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			if got := IsReleaseMarker(tt.input); got != tt.want {
+			if got := songfacts.IsReleaseMarker(tt.input); got != tt.want {
 				t.Fatalf("IsReleaseMarker(%q) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
