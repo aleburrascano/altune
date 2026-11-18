@@ -24,6 +24,9 @@ func TestFanartTVSendsTheAdapterRequests(t *testing.T) {
 		if _, err := src.Resource(context.Background(), c.entity, "09d6b57e-9cd9-4a74-b7cb-842b8443a1cd"); err != nil {
 			t.Fatalf("%s: %v", c.entity, err)
 		}
+		if got == nil {
+			t.Fatalf("%s: no request reached the server", c.entity)
+		}
 		if got.Method != http.MethodGet || got.URL.RequestURI() != c.uri {
 			t.Errorf("%s: got %s %s, want %s", c.entity, got.Method, got.URL.RequestURI(), c.uri)
 		}

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -68,8 +69,8 @@ func refresh(ctx context.Context, src source, path string, audit auditor, out io
 	if err := providerschema.Save(path, s); err != nil {
 		return err
 	}
-	for _, name := range sortedNames(s.Entities) {
-		report(out, name, s.Entities[name])
+	for _, named := range inOrder(s.Entities) {
+		report(out, named.name, named.entity)
 	}
 	return nil
 }
@@ -79,8 +80,8 @@ func fetchAndMerge(ctx context.Context, src source, s providerschema.Schema, aud
 	if err != nil {
 		return err
 	}
-	for _, name := range sortedNames(s.Entities) {
-		if err := refreshEntity(ctx, src, name, s.Entities[name], reads[name]); err != nil {
+	for _, named := range inOrder(s.Entities) {
+		if err := refreshEntity(ctx, src, named.name, named.entity, reads[named.name]); err != nil {
 			return err
 		}
 	}
@@ -146,6 +147,20 @@ func lacksReason(f providerschema.Field) bool {
 		return f.Absent == ""
 	}
 	return !f.Read && f.Unused == ""
+}
+
+type namedEntity struct {
+	name   string
+	entity *providerschema.Entity
+}
+
+func inOrder(entities map[string]*providerschema.Entity) []namedEntity {
+	ordered := make([]namedEntity, 0, len(entities))
+	for name, entity := range entities {
+		ordered = append(ordered, namedEntity{name: name, entity: entity})
+	}
+	slices.SortFunc(ordered, func(a, b namedEntity) int { return strings.Compare(a.name, b.name) })
+	return ordered
 }
 
 func sortedNames[V any](entries map[string]V) []string {

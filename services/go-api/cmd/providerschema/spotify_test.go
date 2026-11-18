@@ -26,19 +26,29 @@ func (c *spotifyCalls) record(r *http.Request) {
 	c.bodies = append(c.bodies, string(body))
 }
 
-func (c *spotifyCalls) find(path string) (*http.Request, string, int) {
+func (c *spotifyCalls) last(t *testing.T, path string) (*http.Request, string) {
+	t.Helper()
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	var found *http.Request
-	var body string
-	count := 0
-	for i, r := range c.requests {
-		if r.URL.Path == path {
-			found, body = r, c.bodies[i]
-			count++
+	for i := len(c.requests) - 1; i >= 0; i-- {
+		if c.requests[i].URL.Path == path {
+			return c.requests[i], c.bodies[i]
 		}
 	}
-	return found, body, count
+	t.Fatalf("no request to %s", path)
+	return &http.Request{}, ""
+}
+
+func (c *spotifyCalls) count(path string) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	n := 0
+	for _, r := range c.requests {
+		if r.URL.Path == path {
+			n++
+		}
+	}
+	return n
 }
 
 func spotifyServer(t *testing.T, routes map[string]string, failing map[string]int) (liveSource, *spotifyCalls) {
@@ -71,7 +81,7 @@ func TestSpotifyPathfinderSendsThePersistedQueryWithTheSessionHeaders(t *testing
 	if err != nil || string(raw) != spotifyRoutes["/pathfinder/v2/query"] {
 		t.Fatalf("got %s, %v", raw, err)
 	}
-	req, body, _ := calls.find("/pathfinder/v2/query")
+	req, body := calls.last(t, "/pathfinder/v2/query")
 	headers := map[string]string{"Authorization": "Bearer access-1", "client-token": "client-1", "app-platform": "WebPlayer", "Content-Type": "application/json;charset=UTF-8", "User-Agent": spotifyUserAgent}
 	for name, want := range headers {
 		if got := req.Header.Get(name); got != want {
@@ -89,7 +99,7 @@ func TestSpotifySearchSendsTheAdaptersVariables(t *testing.T) {
 	if _, err := src["search"](context.Background(), "Nia Archives"); err != nil {
 		t.Fatal(err)
 	}
-	_, body, _ := calls.find("/pathfinder/v2/query")
+	_, body := calls.last(t, "/pathfinder/v2/query")
 	var sent spotifyQuery
 	if err := json.Unmarshal([]byte(body), &sent); err != nil {
 		t.Fatal(err)
@@ -107,8 +117,10 @@ func TestSpotifySessionIsResolvedOnceWithTheTOTPFlow(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	token, _, tokenCalls := calls.find("/api/token")
-	_, clientBody, clientCalls := calls.find("/v1/clienttoken")
+	token, _ := calls.last(t, "/api/token")
+	tokenCalls := calls.count("/api/token")
+	_, clientBody := calls.last(t, "/v1/clienttoken")
+	clientCalls := calls.count("/v1/clienttoken")
 	q := token.URL.Query()
 	sixDigits := regexp.MustCompile(`^\d{6}$`)
 	if tokenCalls != 1 || clientCalls != 1 || q.Get("totpVer") != "61" || q.Get("reason") != "init" || q.Get("productType") != "web-player" {
@@ -127,7 +139,8 @@ func TestSpotifyAccessTokenFallsBackToTheNextTOTPVersion(t *testing.T) {
 	if _, err := src["album_tracks"](context.Background(), "abc"); err != nil {
 		t.Fatal(err)
 	}
-	token, _, count := calls.find("/api/token")
+	token, _ := calls.last(t, "/api/token")
+	count := calls.count("/api/token")
 	if count != 2 || token.URL.Query().Get("totpVer") != "60" {
 		t.Fatalf("token calls %d, last version %s", count, token.URL.Query().Get("totpVer"))
 	}
@@ -139,7 +152,7 @@ func TestSpotifyFailsWhenEveryTOTPVersionIsRefused(t *testing.T) {
 	if _, err := src["search"](context.Background(), "x"); err == nil || !strings.Contains(err.Error(), "status 400") {
 		t.Fatalf("got %v", err)
 	}
-	if _, _, count := calls.find("/pathfinder/v2/query"); count != 0 {
+	if count := calls.count("/pathfinder/v2/query"); count != 0 {
 		t.Fatal("queried pathfinder without a session")
 	}
 }
@@ -168,11 +181,11 @@ func TestSpotifyOEmbedAsksForTheOpenSpotifyURL(t *testing.T) {
 	if _, err := src["oembed"](context.Background(), "track/7B0gxo0jQCy5Lk93RIODAC"); err != nil {
 		t.Fatal(err)
 	}
-	req, _, _ := calls.find("/oembed")
+	req, _ := calls.last(t, "/oembed")
 	if req.URL.Query().Get("url") != "https://open.spotify.com/track/7B0gxo0jQCy5Lk93RIODAC" || req.Header.Get("User-Agent") != spotifyOEmbedUserAgent {
 		t.Fatalf("got %s with %q", req.URL, req.Header.Get("User-Agent"))
 	}
-	if _, _, count := calls.find("/api/token"); count != 0 {
+	if count := calls.count("/api/token"); count != 0 {
 		t.Fatal("oEmbed needs no session")
 	}
 }
@@ -195,7 +208,7 @@ func TestSpotifyContentErrorRunsTheNamedOperation(t *testing.T) {
 	if _, err := src["content_error"](context.Background(), "artist_overview|notarealid"); err != nil {
 		t.Fatal(err)
 	}
-	_, body, _ := calls.find("/pathfinder/v2/query")
+	_, body := calls.last(t, "/pathfinder/v2/query")
 	if !strings.Contains(body, `"operationName":"queryArtistOverview"`) || !strings.Contains(body, `"uri":"spotify:artist:notarealid"`) {
 		t.Fatalf("sent %s", body)
 	}

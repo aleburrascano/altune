@@ -64,10 +64,10 @@ func fixtureNumbers(id string, names ...string) ([]int, error) {
 		return nil, err
 	}
 	numbers := make([]int, len(parts))
-	for i, part := range parts {
-		n, err := strconv.Atoi(part)
+	for i, name := range names {
+		n, err := strconv.Atoi(parts[i])
 		if err != nil || n <= 0 {
-			return nil, fmt.Errorf("fixture %q: %s is not a positive number", id, names[i])
+			return nil, fmt.Errorf("fixture %q: %s is not a positive number", id, name)
 		}
 		numbers[i] = n
 	}
@@ -93,6 +93,9 @@ func fetch(ctx context.Context, client *http.Client, r request) ([]byte, error) 
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", r.label(req.URL), withoutURL(err))
+	}
+	if resp == nil {
+		return nil, fmt.Errorf("%s: no response", r.label(req.URL))
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {

@@ -20,6 +20,11 @@ func Load(path string) (schema.Schema, error) {
 	if err := decoder.Decode(&s); err != nil {
 		return schema.Schema{}, fmt.Errorf("parse schema %s: %w", path, err)
 	}
+	for name, entity := range s.Entities {
+		if entity == nil {
+			return schema.Schema{}, fmt.Errorf("parse schema %s: entity %s is empty", path, name)
+		}
+	}
 	return s, nil
 }
 

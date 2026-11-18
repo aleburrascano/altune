@@ -56,8 +56,12 @@ func TestRefreshMergesTheReferenceWithEveryFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	song := s.Entities["song"]
+	if song == nil {
+		t.Fatal("the refreshed schema lost its song entity")
+	}
 	var got []string
-	for _, f := range s.Entities["song"].Fields {
+	for _, f := range song.Fields {
 		got = append(got, f.Path+"="+strings.Join(f.Seen, "+"))
 	}
 	want := "attributes=live attributes.audioLocale=live attributes.isrc=reference+live id=reference+live"

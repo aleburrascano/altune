@@ -299,7 +299,11 @@ func TestSaveWritesSortedFieldsThatLoadReadsBack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := out.Entities["song"].Fields; got[0].Path != "a" || got[1].Path != "b" || !reflect.DeepEqual(out, in) {
+	song := out.Entities["song"]
+	if song == nil {
+		t.Fatal("the round trip lost the song entity")
+	}
+	if got := song.Fields; got[0].Path != "a" || got[1].Path != "b" || !reflect.DeepEqual(out, in) {
 		t.Fatalf("round trip changed it: %+v", out)
 	}
 }
@@ -311,6 +315,16 @@ func TestLoadRejectsAKeyTheSchemaDoesNotDefine(t *testing.T) {
 	}
 	if _, err := providerschema.Load(path); err == nil || !strings.Contains(err.Error(), "typo") {
 		t.Fatalf("want an error naming the key, got %v", err)
+	}
+}
+
+func TestLoadRejectsAnEmptyEntity(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "p.yaml")
+	if err := os.WriteFile(path, []byte("provider: p\nentities:\n  track:\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := providerschema.Load(path); err == nil || !strings.Contains(err.Error(), "entity track is empty") {
+		t.Fatalf("want an error naming the empty entity, got %v", err)
 	}
 }
 
