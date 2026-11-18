@@ -1,6 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { DiscoveryResult } from '@shared/catalog';
-import * as userTelemetry from '@shared/telemetry/userTelemetry';
 import { detailHref } from '@shared/navigation';
 
 import { httpDetailPort, DetailPortProvider, UnreleasedAllScreen } from '@features/detail';
@@ -24,6 +23,7 @@ jest.mock('expo-router', () => {
 });
 
 const UNRELEASED = 'GET /v1/discovery/artists/spotify/artist-1/unreleased';
+const EVENTS = 'POST /v1/discovery/events';
 const TRACK_COUNT = 25;
 const GENIUS_ID_BASE = 9000;
 const OFF_STREAMING_ID = 9101;
@@ -73,6 +73,14 @@ function ranked(index: number, rank: number, isPlayable: boolean) {
 
 function shownTitles(): string[] {
   return screen.getAllByText(ENTRY_TITLE).map((node) => node.props.children as string);
+}
+
+function recordedActions(): unknown[] {
+  return (__http.requests as { path: string; body: string }[])
+    .filter((request) => request.path === '/v1/discovery/events')
+    .map((request) => JSON.parse(request.body))
+    .filter((event) => event.type === 'user_action')
+    .map((event) => event.payload.action);
 }
 
 function pick(testID: string): void {
@@ -140,10 +148,8 @@ describe('UnreleasedAllScreen', () => {
   });
 
   describe('sort and filters', () => {
-    let record: jest.SpyInstance;
-
     beforeEach(() => {
-      record = jest.spyOn(userTelemetry, 'recordUserAction').mockImplementation(() => undefined);
+      __http.reply(EVENTS, { status: 204 });
     });
 
     it('reorders by Best quality, narrows to Playable, and logs both picks', async () => {
@@ -163,9 +169,14 @@ describe('UnreleasedAllScreen', () => {
 
       const titles = [`Full list entry ${HIGH_ID}`, `Full list entry ${LOW_ID}`];
       expect(shownTitles()).toEqual(titles);
-      const actions = record.mock.calls.map(([payload]) => payload.action);
-      expect(actions).toContain('detail.unreleased.sort.best_quality');
-      expect(actions).toContain('detail.unreleased.filter.playable');
+      await waitFor(() =>
+        expect(recordedActions()).toEqual(
+          expect.arrayContaining([
+            'detail.unreleased.sort.best_quality',
+            'detail.unreleased.filter.playable',
+          ]),
+        ),
+      );
     });
 
     it('says no playable tracks when Playable leaves nothing', async () => {

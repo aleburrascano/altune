@@ -1,0 +1,13 @@
+{
+  "removed": [
+    "C3 src/features/detail/__tests__/ArtistUnreleasedAll.test.tsx imports src/shared/telemetry/userTelemetry.ts, behind telemetry's door",
+    "C3 src/features/detail/ports/detailPort.ts imports src/shared/apiClient/discovery.ts, behind apiClient's door",
+    "C3 src/features/detail/ports/detailPort.ts imports src/shared/apiClient/enrichment.ts, behind apiClient's door",
+    "C3 src/features/detail/ports/detailPort.ts imports src/shared/apiClient/library.ts, behind apiClient's door",
+    "C3 src/features/detail/ports/detailPort.ts imports src/shared/apiClient/tracks.ts, behind apiClient's door",
+    "T2 src/features/detail/__tests__/ArtistUnreleasedAll.test.tsx patches with jest.spyOn",
+    "T3 src/features/detail/ports/detailPort.ts port detailPort.ts has no contract test detailPort.contract.test.ts"
+  ],
+  "added": [],
+  "clones": 0
+}
