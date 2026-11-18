@@ -8,6 +8,7 @@ import type { UnreleasedWhere } from '@features/detail/core/unreleasedView';
 import { hasManyVersions } from '@features/detail/core/unreleasedTrack';
 import type { UnreleasedTrack } from '@shared/apiClient';
 import type { DiscoveryResult } from '@shared/catalog';
+import { warn } from '@shared/log';
 import { useUnreleasedCard, useUnreleasedTracks } from '@features/detail/core/useUnreleasedTracks';
 import { FilterChips, type ChipGroup } from '@features/detail/view/DiscographySections';
 import { DETAIL_GUTTER } from '@features/detail/view/detailStyles';
@@ -25,7 +26,7 @@ type RetryProps = { onRetry: () => void };
 function openGenius(track: UnreleasedTrack): void {
   if (track.genius_url === null) return;
   Linking.openURL(track.genius_url).catch((error: unknown) => {
-    console.warn('[detail] could not open the Genius page', {
+    warn('[detail] could not open the Genius page', {
       geniusId: track.genius_id,
       error: error instanceof Error ? error.message : String(error),
     });
@@ -35,7 +36,7 @@ function openGenius(track: UnreleasedTrack): void {
 function openLink(track: UnreleasedTrack): void {
   if (track.open_url === null) return;
   Linking.openURL(track.open_url).catch((error: unknown) => {
-    console.warn('[detail] could not open the track link', {
+    warn('[detail] could not open the track link', {
       key: track.key,
       error: error instanceof Error ? error.message : String(error),
     });

@@ -1,6 +1,8 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { DiscoveryResult, DiscoverySource } from '@shared/catalog';
+import { driveAppState, type AppStateDriver } from '@shared/lifecycle';
+import { recordLogs, type RecordedLogs } from '@shared/log';
 import { HEALTH_BATCH } from '@shared/telemetry';
 
 import {
@@ -16,34 +18,12 @@ import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/q
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-type AppStateChangeHandler = (state: string) => void;
-
-jest.mock('react-native/Libraries/AppState/AppState', () => {
-  const listeners: AppStateChangeHandler[] = [];
-  return {
-    default: {
-      currentState: 'active',
-      isAvailable: true,
-      addEventListener: jest.fn((type: string, handler: AppStateChangeHandler) => {
-        if (type === 'change') listeners.push(handler);
-        return { remove: jest.fn() };
-      }),
-    },
-    __listeners: listeners,
-  };
-});
-
 const EVENTS = 'POST /v1/discovery/events';
 
-const ALBUM_TRACKS_PATH = 'GET /v1/discovery/albums/spotify/album-1/tracks';
+let logs: RecordedLogs;
+let appState: AppStateDriver;
 
-function appStateListeners(): AppStateChangeHandler[] {
-  return (
-    jest.requireMock('react-native/Libraries/AppState/AppState') as {
-      __listeners: AppStateChangeHandler[];
-    }
-  ).__listeners;
-}
+const ALBUM_TRACKS_PATH = 'GET /v1/discovery/albums/spotify/album-1/tracks';
 
 function albumResult(): DiscoveryResult {
   return {
@@ -121,11 +101,8 @@ beforeEach(async () => {
   _resetDetailHealthForTest();
   __http.reply(EVENTS, { status: 204 });
   await signInTestUser();
-  jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-});
-
-afterEach(() => {
-  jest.restoreAllMocks();
+  logs = recordLogs();
+  appState = driveAppState();
 });
 
 describe('detail health metric', () => {
@@ -211,7 +188,7 @@ describe('detail health metric', () => {
     await settle();
     expect(sentPayloads()).toEqual([]);
 
-    for (const listener of appStateListeners()) listener('background');
+    appState.change('background');
 
     await waitFor(() =>
       expect(sentPayloads()).toEqual([
@@ -234,9 +211,10 @@ describe('detail health metric', () => {
 
     await waitFor(() => expect(sentPayloads()).toHaveLength(1));
     await waitFor(() =>
-      expect(console.warn).toHaveBeenCalledWith('[detail] health flush failed', {
-        error: expect.any(Error),
-      }),
+      expect(logs.warnings).toContainEqual([
+        '[detail] health flush failed',
+        { error: expect.any(Error) },
+      ]),
     );
     await settle();
     expect(sentPayloads()).toHaveLength(1);

@@ -11,6 +11,7 @@ import {
   createTrack,
   getTracks,
 } from '@shared/apiClient';
+import { warn } from '@shared/log';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 
 export const httpDetailPort: DetailPort = {
@@ -25,5 +26,5 @@ export const httpDetailPort: DetailPort = {
   createTrack: (...args) => createTrack(...args),
   getTracks: (...args) => getTracks(...args),
   getLibraryAlbums: (...args) => getLibraryAlbums(...args),
-  warn: (message, detail) => console.warn(message, detail),
+  warn: (message, detail) => warn(message, detail),
 };

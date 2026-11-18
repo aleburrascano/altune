@@ -1,6 +1,7 @@
 import { AccessibilityInfo, Linking } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { DiscoveryResult } from '@shared/catalog';
+import { recordLogs } from '@shared/log';
 import { readDetailHandoff } from '@shared/navigation';
 
 import { httpDetailPort, DetailPortProvider, ArtistUnreleased } from '@features/detail';
@@ -75,7 +76,8 @@ function renderSectionFor(artist: DiscoveryResult) {
 
 beforeEach(() => {
   mockPush.mockClear();
-  jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
+  (AccessibilityInfo.isReduceMotionEnabled as jest.Mock).mockResolvedValue(true);
+  (Linking.openURL as jest.Mock).mockReset();
   startQueue.mockClear();
   signInTestUser();
 });
@@ -128,7 +130,7 @@ describe('ArtistUnreleased', () => {
   });
 
   it('lists a row per track, flags the ones without audio, and opens Genius on tap', async () => {
-    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    const openURL = (Linking.openURL as jest.Mock).mockResolvedValue(true);
     __http.reply(UNRELEASED, { status: 200, json: { items: [CANCUN, SILENT] } });
     renderSection();
 
@@ -139,7 +141,6 @@ describe('ArtistUnreleased', () => {
 
     fireEvent.press(screen.getByTestId('detail-unreleased-123'));
     expect(openURL).toHaveBeenCalledWith(CANCUN.genius_url);
-    openURL.mockRestore();
   });
 
   it('offers a retry instead of rows when the request fails', async () => {
@@ -175,13 +176,18 @@ describe('ArtistUnreleased', () => {
   });
 
   it('survives a rejected openURL', async () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    jest.spyOn(Linking, 'openURL').mockRejectedValue(new Error('no handler'));
+    const logs = recordLogs();
+    (Linking.openURL as jest.Mock).mockRejectedValue(new Error('no handler'));
     __http.reply(UNRELEASED, { status: 200, json: { items: [CANCUN] } });
     renderSection();
 
     fireEvent.press(await screen.findByTestId('detail-unreleased-123'));
-    await waitFor(() => expect(warn).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(logs.warnings).toContainEqual([
+        '[detail] could not open the Genius page',
+        { geniusId: CANCUN.genius_id, error: 'no handler' },
+      ]),
+    );
   });
 
   it('shows the header and card skeletons while the first fetch is in flight', async () => {
@@ -444,7 +450,7 @@ describe('ArtistUnreleased', () => {
   });
 
   it('shows Open on <host> for a link-out track with no audio links and opens that URL on tap', async () => {
-    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    const openURL = (Linking.openURL as jest.Mock).mockResolvedValue(true);
     const linkOut = {
       ...CANCUN,
       genius_id: null,
@@ -460,7 +466,6 @@ describe('ArtistUnreleased', () => {
     expect(await screen.findByText('Open on mega.nz')).toBeTruthy();
     fireEvent.press(screen.getByTestId('detail-unreleased-ken:dream-v2'));
     expect(openURL).toHaveBeenCalledWith('https://mega.nz/file/abc');
-    openURL.mockRestore();
   });
 
   it('falls back to the artist real photo for a track with no cover, and to the placeholder without one', async () => {
