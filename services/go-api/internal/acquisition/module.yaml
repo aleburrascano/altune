@@ -1,4 +1,4 @@
 role: feature
 owns: "how a saved track gets its playable audio file"
-depends_on: [auth, binpath, catalog, discovery, events, execcmd, filehost, httputil, kernel, logging, redact, sharedtest, songfacts, textnorm, versiontag, ytdlp, ytminnertube]
+depends_on: [binpath, catalog, discovery, events, execcmd, filehost, httputil, kernel, logging, redact, requestuser, sharedtest, songfacts, textnorm, versiontag, ytdlp, ytminnertube]
 owns_tables: [acquisition_cooldowns, acquisition_outcomes, acquisition_rejections]

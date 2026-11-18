@@ -1,10 +1,10 @@
 package handler
 
 import (
-	"altune/go-api/internal/acquisition/internal/adapters/authbridge"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/shared/httputil"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/requestuser"
 	"context"
 	"log/slog"
 	"net/http"
@@ -24,7 +24,7 @@ type acquisitionCommand struct {
 }
 
 func (c acquisitionCommand) serve(w http.ResponseWriter, r *http.Request) {
-	userId, ok := authbridge.RequireUserID(w, r)
+	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}
