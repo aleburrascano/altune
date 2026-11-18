@@ -1,6 +1,7 @@
-package execcmd
+package execcmd_test
 
 import (
+	"altune/go-api/internal/shared/execcmd"
 	"context"
 	"errors"
 	"fmt"
@@ -62,7 +63,7 @@ func assertGone(t *testing.T, pid int) {
 func runAsync(timeout time.Duration, script string) <-chan error {
 	done := make(chan error, 1)
 	go func() {
-		_, _, err := RunWithTimeout(context.Background(), timeout, "sh", "-c", script)
+		_, _, err := execcmd.RunWithTimeout(context.Background(), timeout, "sh", "-c", script)
 		done <- err
 	}()
 	return done
