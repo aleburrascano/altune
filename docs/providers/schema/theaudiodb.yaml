@@ -1,0 +1,884 @@
+provider: theaudiodb
+reference: 'none: TheAudioDB documents its v1 JSON API as a prose list of endpoints (theaudiodb.com/free_music_api), with no machine-readable schema; fetched with THEAUDIODB_API_KEY when set, else the documented free public test key 123'
+entities:
+  artist_mb:
+    fixtures:
+      - id: 09d6b57e-9cd9-4a74-b7cb-842b8443a1cd
+        why: Nia Archives by MBID
+      - id: 2f3c4d70-0462-40da-bba3-0aec5772c556
+        why: Cardi B by MBID
+      - id: 25f595b6-874f-420b-af03-0315cadea009
+        why: 'sparse: Subnation by MBID'
+    fields:
+      - path: artists
+        type: array|null
+        seen: [live]
+        read: true
+      - path: artists[].idArtist
+        type: string
+        seen: [live]
+        read: false
+        unused: TheAudioDB artist id; the MBID lookup wants only the photo
+      - path: artists[].idLabel
+        type: null|string
+        seen: [live]
+        read: false
+        unused: TheAudioDB label id, null for unsigned artists; altune shows no labels for artists
+      - path: artists[].intBornYear
+        type: null|string
+        seen: [live]
+        read: false
+        unused: birth year as a string; altune shows no artist dates
+      - path: artists[].intCharted
+        type: string
+        seen: [live]
+        read: false
+        unused: TheAudioDB popularity counters; altune ranks by its own signals
+      - path: artists[].intChecked
+        type: string
+        seen: [live]
+        read: false
+        unused: TheAudioDB editorial state (lock and check flags); not about the music
+      - path: artists[].intDiedYear
+        type: "null"
+        seen: [live]
+        read: false
+        unused: death year, null in every fixture; altune shows no artist dates
+      - path: artists[].intFollowers
+        type: string
+        seen: [live]
+        read: false
+        unused: TheAudioDB popularity counters; altune ranks by its own signals
+      - path: artists[].intFormedYear
+        type: string
+        seen: [live]
+        read: false
+        unused: year the act formed; altune shows no artist dates
+      - path: artists[].intMembers
+        type: string
+        seen: [live]
+        read: false
+        unused: member count; altune has no group membership view
+      - path: artists[].intPopularity
+        type: string
+        seen: [live]
+        read: false
+        unused: TheAudioDB popularity counters; altune ranks by its own signals
+      - path: artists[].strArtist
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist name; the MBID lookup wants only the photo
+      - path: artists[].strArtistAlternate
+        type: string
+        seen: [live]
+        read: false
+        unused: 'alternate or legal name (Cardi B: Belcalis Marlenis Almánzar), often empty; altune shows the artist name'
+      - path: artists[].strArtistBanner
+        type: null|string
+        seen: [live]
+        read: false
+        unused: another artwork variant (banner, clearart, cutout, fanart, logo or wide thumb); altune uses the square thumb only
+      - path: artists[].strArtistClearart
+        type: null|string
+        seen: [live]
+        read: false
+        unused: another artwork variant (banner, clearart, cutout, fanart, logo or wide thumb); altune uses the square thumb only
+      - path: artists[].strArtistCutout
+        type: null|string
+        seen: [live]
+        read: false
+        unused: another artwork variant (banner, clearart, cutout, fanart, logo or wide thumb); altune uses the square thumb only
+      - path: artists[].strArtistFanart
+        type: string
+        seen: [live]
+        read: false
+        unused: another artwork variant (banner, clearart, cutout, fanart, logo or wide thumb); altune uses the square thumb only
+      - path: artists[].strArtistFanart2
+        type: null|string
+        seen: [live]
+        read: false
+        unused: another artwork variant (banner, clearart, cutout, fanart, logo or wide thumb); altune uses the square thumb only
+      - path: artists[].strArtistFanart3
+        type: null|string
+        seen: [live]
+        read: false
+        unused: another artwork variant (banner, clearart, cutout, fanart, logo or wide thumb); altune uses the square thumb only
+      - path: artists[].strArtistFanart4
+        type: null|string
+        seen: [live]
+        read: false
+        unused: another artwork variant (banner, clearart, cutout, fanart, logo or wide thumb); altune uses the square thumb only
+      - path: artists[].strArtistLogo
+        type: null|string
+        seen: [live]
+        read: false
+        unused: another artwork variant (banner, clearart, cutout, fanart, logo or wide thumb); altune uses the square thumb only
+      - path: artists[].strArtistStripped
+        type: "null"
+        seen: [live]
+        read: false
+        unused: the name without accents, null in every fixture; altune normalises names itself
+      - path: artists[].strArtistThumb
+        type: string
+        seen: [live]
+        read: true
+      - path: artists[].strArtistWideThumb
+        type: null|string
+        seen: [live]
+        read: false
+        unused: another artwork variant (banner, clearart, cutout, fanart, logo or wide thumb); altune uses the square thumb only
+      - path: artists[].strBiography
+        type: string
+        seen: [live]
+        read: false
+        unused: English biography; altune shows the Last.fm biography
+      - path: artists[].strBiographyCN
+        type: "null"
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographyDE
+        type: "null"
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographyES
+        type: "null"
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographyFR
+        type: null|string
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographyHU
+        type: "null"
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographyIL
+        type: "null"
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographyIT
+        type: null|string
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographyJP
+        type: "null"
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographyNL
+        type: "null"
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographyNO
+        type: "null"
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographyPL
+        type: "null"
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographyPT
+        type: "null"
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographyRU
+        type: "null"
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographySE
+        type: "null"
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strCountry
+        type: string
+        seen: [live]
+        read: false
+        unused: home town or region as free text ("Leeds"); altune shows no artist origin
+      - path: artists[].strCountryCode
+        type: string
+        seen: [live]
+        read: false
+        unused: two-letter country code; altune shows no artist origin
+      - path: artists[].strDisbanded
+        type: "null"
+        seen: [live]
+        read: false
+        unused: disbanded flag, null in every fixture; not shown
+      - path: artists[].strFacebook
+        type: null|string
+        seen: [live]
+        read: false
+        unused: a social or web link (null, empty or a placeholder like "1"); altune links nothing out
+      - path: artists[].strGender
+        type: string
+        seen: [live]
+        read: false
+        unused: gender, often empty; not shown
+      - path: artists[].strGenre
+        type: string
+        seen: [live]
+        read: false
+        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes tags from Last.fm
+      - path: artists[].strISNIcode
+        type: "null"
+        seen: [live]
+        read: false
+        unused: ISNI identifier, null in every fixture; altune identifies artists by MBID
+      - path: artists[].strLabel
+        type: null|string
+        seen: [live]
+        read: false
+        unused: the artist's label; altune shows no labels for artists
+      - path: artists[].strLastFMChart
+        type: "null"
+        seen: [live]
+        read: false
+        unused: a social or web link (null, empty or a placeholder like "1"); altune links nothing out
+      - path: artists[].strLocked
+        type: string
+        seen: [live]
+        read: false
+        unused: TheAudioDB editorial state (lock and check flags); not about the music
+      - path: artists[].strMood
+        type: string
+        seen: [live]
+        read: false
+        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes tags from Last.fm
+      - path: artists[].strMusicBrainzID
+        type: string
+        seen: [live]
+        read: false
+        unused: echo of the MBID altune asked for
+      - path: artists[].strStyle
+        type: string
+        seen: [live]
+        read: false
+        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes tags from Last.fm
+      - path: artists[].strTwitter
+        type: null|string
+        seen: [live]
+        read: false
+        unused: a social or web link (null, empty or a placeholder like "1"); altune links nothing out
+      - path: artists[].strWebsite
+        type: null|string
+        seen: [live]
+        read: false
+        unused: a social or web link (null, empty or a placeholder like "1"); altune links nothing out
+  search_album:
+    fixtures:
+      - id: Nia Archives|Silence Is Loud
+        why: Nia Archives studio album
+      - id: Nia Archives|Luvleh Mix
+        why: Nia Archives DJ mix
+      - id: Cardi B|Invasion of Privacy
+        why: explicit album
+    fields:
+      - path: album
+        type: array|null
+        seen: [live]
+        read: true
+      - path: album[].idAlbum
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: TheAudioDB album id; the artwork lookup keeps no album identity'
+      - path: album[].idArtist
+        type: string
+        seen: [live]
+        read: false
+        unused: TheAudioDB artist id; the artwork lookup wants only the cover
+      - path: album[].idLabel
+        type: null|string
+        seen: [live]
+        read: false
+        unused: TheAudioDB label id; strLabel carries the label
+      - path: album[].intChecked
+        type: string
+        seen: [live]
+        read: false
+        unused: TheAudioDB editorial state (lock and check flags); not about the music
+      - path: album[].intLoved
+        type: "null"
+        seen: [live]
+        read: false
+        unused: TheAudioDB popularity counters; altune ranks by its own signals
+      - path: album[].intPopularity
+        type: string
+        seen: [live]
+        read: false
+        unused: TheAudioDB popularity counters; altune ranks by its own signals
+      - path: album[].intSales
+        type: string
+        seen: [live]
+        read: false
+        unused: TheAudioDB popularity counters; altune ranks by its own signals
+      - path: album[].intScore
+        type: null|string
+        seen: [live]
+        read: false
+        unused: TheAudioDB user rating; not shown
+      - path: album[].intScoreVotes
+        type: null|string
+        seen: [live]
+        read: false
+        unused: TheAudioDB user rating vote count; not shown
+      - path: album[].intYearReleased
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: release year (2024, 2018); it would date the release and tell an original from a reissue'
+      - path: album[].strAlbum
+        type: string
+        seen: [live]
+        read: false
+        unused: the album title; the query already names it
+      - path: album[].strAlbum3DCase
+        type: null|string
+        seen: [live]
+        read: false
+        unused: another cover rendering (3D case, face, flat or thumb, back, CD art, spine), null or empty for most albums; the adapter uses strAlbumThumb
+      - path: album[].strAlbum3DFace
+        type: "null"
+        seen: [live]
+        read: false
+        unused: another cover rendering (3D case, face, flat or thumb, back, CD art, spine), null or empty for most albums; the adapter uses strAlbumThumb
+      - path: album[].strAlbum3DFlat
+        type: "null"
+        seen: [live]
+        read: false
+        unused: another cover rendering (3D case, face, flat or thumb, back, CD art, spine), null or empty for most albums; the adapter uses strAlbumThumb
+      - path: album[].strAlbum3DThumb
+        type: null|string
+        seen: [live]
+        read: false
+        unused: another cover rendering (3D case, face, flat or thumb, back, CD art, spine), null or empty for most albums; the adapter uses strAlbumThumb
+      - path: album[].strAlbumBack
+        type: "null"
+        seen: [live]
+        read: false
+        unused: another cover rendering (3D case, face, flat or thumb, back, CD art, spine), null or empty for most albums; the adapter uses strAlbumThumb
+      - path: album[].strAlbumCDart
+        type: string
+        seen: [live]
+        read: false
+        unused: another cover rendering (3D case, face, flat or thumb, back, CD art, spine), null or empty for most albums; the adapter uses strAlbumThumb
+      - path: album[].strAlbumSpine
+        type: "null"
+        seen: [live]
+        read: false
+        unused: another cover rendering (3D case, face, flat or thumb, back, CD art, spine), null or empty for most albums; the adapter uses strAlbumThumb
+      - path: album[].strAlbumStripped
+        type: string
+        seen: [live]
+        read: false
+        unused: the title without accents; altune normalises titles itself
+      - path: album[].strAlbumThumb
+        type: string
+        seen: [live]
+        read: true
+      - path: album[].strAlbumThumbHQ
+        type: "null"
+        seen: [live]
+        read: false
+        unused: high-resolution cover, null in every fixture; the adapter uses strAlbumThumb
+      - path: album[].strAllMusicID
+        type: null|string
+        seen: [live]
+        read: false
+        unused: an ID on a site altune does not use (AllMusic, Amazon, BBC, Genius, LyricWiki, MusicMoz, RateYourMusic, Wikidata, Wikipedia), often null
+      - path: album[].strAmazonID
+        type: "null"
+        seen: [live]
+        read: false
+        unused: an ID on a site altune does not use (AllMusic, Amazon, BBC, Genius, LyricWiki, MusicMoz, RateYourMusic, Wikidata, Wikipedia), often null
+      - path: album[].strArtist
+        type: string
+        seen: [live]
+        read: false
+        unused: the album artist; the query already names it
+      - path: album[].strArtistStripped
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist without accents; altune normalises names itself
+      - path: album[].strBBCReviewID
+        type: "null"
+        seen: [live]
+        read: false
+        unused: an ID on a site altune does not use (AllMusic, Amazon, BBC, Genius, LyricWiki, MusicMoz, RateYourMusic, Wikidata, Wikipedia), often null
+      - path: album[].strDescription
+        type: null|string
+        seen: [live]
+        read: false
+        unused: English album description; altune shows the Last.fm wiki summary
+      - path: album[].strDescriptionCN
+        type: "null"
+        seen: [live]
+        read: false
+        unused: album description in another language, null in every fixture; altune shows no album descriptions
+      - path: album[].strDescriptionDE
+        type: "null"
+        seen: [live]
+        read: false
+        unused: album description in another language, null in every fixture; altune shows no album descriptions
+      - path: album[].strDescriptionES
+        type: "null"
+        seen: [live]
+        read: false
+        unused: album description in another language, null in every fixture; altune shows no album descriptions
+      - path: album[].strDescriptionFR
+        type: "null"
+        seen: [live]
+        read: false
+        unused: album description in another language, null in every fixture; altune shows no album descriptions
+      - path: album[].strDescriptionHU
+        type: "null"
+        seen: [live]
+        read: false
+        unused: album description in another language, null in every fixture; altune shows no album descriptions
+      - path: album[].strDescriptionIL
+        type: "null"
+        seen: [live]
+        read: false
+        unused: album description in another language, null in every fixture; altune shows no album descriptions
+      - path: album[].strDescriptionIT
+        type: "null"
+        seen: [live]
+        read: false
+        unused: album description in another language, null in every fixture; altune shows no album descriptions
+      - path: album[].strDescriptionJP
+        type: "null"
+        seen: [live]
+        read: false
+        unused: album description in another language, null in every fixture; altune shows no album descriptions
+      - path: album[].strDescriptionNL
+        type: "null"
+        seen: [live]
+        read: false
+        unused: album description in another language, null in every fixture; altune shows no album descriptions
+      - path: album[].strDescriptionNO
+        type: "null"
+        seen: [live]
+        read: false
+        unused: album description in another language, null in every fixture; altune shows no album descriptions
+      - path: album[].strDescriptionPL
+        type: "null"
+        seen: [live]
+        read: false
+        unused: album description in another language, null in every fixture; altune shows no album descriptions
+      - path: album[].strDescriptionPT
+        type: "null"
+        seen: [live]
+        read: false
+        unused: album description in another language, null in every fixture; altune shows no album descriptions
+      - path: album[].strDescriptionRU
+        type: "null"
+        seen: [live]
+        read: false
+        unused: album description in another language, null in every fixture; altune shows no album descriptions
+      - path: album[].strDescriptionSE
+        type: "null"
+        seen: [live]
+        read: false
+        unused: album description in another language, null in every fixture; altune shows no album descriptions
+      - path: album[].strDiscogsID
+        type: null|string
+        seen: [live]
+        read: false
+        unused: 'GAP: the Discogs release id; it would link the release to Discogs'
+      - path: album[].strGeniusID
+        type: null|string
+        seen: [live]
+        read: false
+        unused: an ID on a site altune does not use (AllMusic, Amazon, BBC, Genius, LyricWiki, MusicMoz, RateYourMusic, Wikidata, Wikipedia), often null
+      - path: album[].strGenre
+        type: null|string
+        seen: [live]
+        read: false
+        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes tags from Last.fm
+      - path: album[].strItunesID
+        type: "null"
+        seen: [live]
+        read: false
+        unused: 'GAP: the iTunes album id, null in every fixture; it would link the release to Apple Music'
+      - path: album[].strLabel
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the releasing label ("Atlantic/KSR"); it would confirm the exact release'
+      - path: album[].strLocation
+        type: "null"
+        seen: [live]
+        read: false
+        unused: recording location, null in every fixture; not shown
+      - path: album[].strLocked
+        type: string
+        seen: [live]
+        read: false
+        unused: TheAudioDB editorial state (lock and check flags); not about the music
+      - path: album[].strLyricWikiID
+        type: "null"
+        seen: [live]
+        read: false
+        unused: an ID on a site altune does not use (AllMusic, Amazon, BBC, Genius, LyricWiki, MusicMoz, RateYourMusic, Wikidata, Wikipedia), often null
+      - path: album[].strMood
+        type: null|string
+        seen: [live]
+        read: false
+        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes tags from Last.fm
+      - path: album[].strMusicBrainzArtistID
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the album artist''s MusicBrainz ID; it would confirm the cover belongs to the right artist'
+      - path: album[].strMusicBrainzID
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the release-group MBID; it would confirm the cover belongs to the exact release'
+      - path: album[].strMusicMozID
+        type: "null"
+        seen: [live]
+        read: false
+        unused: an ID on a site altune does not use (AllMusic, Amazon, BBC, Genius, LyricWiki, MusicMoz, RateYourMusic, Wikidata, Wikipedia), often null
+      - path: album[].strRateYourMusicID
+        type: "null"
+        seen: [live]
+        read: false
+        unused: an ID on a site altune does not use (AllMusic, Amazon, BBC, Genius, LyricWiki, MusicMoz, RateYourMusic, Wikidata, Wikipedia), often null
+      - path: album[].strReleaseFormat
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: release type ("Album"); it would tell albums from singles, EPs and compilations'
+      - path: album[].strReview
+        type: null|string
+        seen: [live]
+        read: false
+        unused: an editorial review text; not shown
+      - path: album[].strSpeed
+        type: null|string
+        seen: [live]
+        read: false
+        unused: tempo descriptor ("Medium"); not used
+      - path: album[].strSpotifyID
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the Spotify album id; it would link the release to Spotify'
+      - path: album[].strStyle
+        type: null|string
+        seen: [live]
+        read: false
+        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes tags from Last.fm
+      - path: album[].strTheme
+        type: null|string
+        seen: [live]
+        read: false
+        unused: theme descriptor, null or empty; not used
+      - path: album[].strUPCID
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the release barcode (UPC/EAN); it pins the exact release'
+      - path: album[].strWikidataID
+        type: null|string
+        seen: [live]
+        read: false
+        unused: an ID on a site altune does not use (AllMusic, Amazon, BBC, Genius, LyricWiki, MusicMoz, RateYourMusic, Wikidata, Wikipedia), often null
+      - path: album[].strWikipediaID
+        type: "null"
+        seen: [live]
+        read: false
+        unused: an ID on a site altune does not use (AllMusic, Amazon, BBC, Genius, LyricWiki, MusicMoz, RateYourMusic, Wikidata, Wikipedia), often null
+  search_artist:
+    fixtures:
+      - id: Nia Archives
+        why: Nia Archives
+      - id: Cardi B
+        why: artist with an explicit catalogue
+      - id: Subnation
+        why: small artist from the Luvleh Mix DJ mix
+      - id: qxzvbnmwplk
+        why: 'sparse: a query with no match'
+    fields:
+      - path: artists
+        type: array|null
+        seen: [live]
+        read: true
+      - path: artists[].idArtist
+        type: string
+        seen: [live]
+        read: true
+      - path: artists[].idLabel
+        type: null|string
+        seen: [live]
+        read: false
+        unused: TheAudioDB label id, null for unsigned artists; altune shows no labels for artists
+      - path: artists[].intBornYear
+        type: null|string
+        seen: [live]
+        read: false
+        unused: birth year as a string; altune shows no artist dates
+      - path: artists[].intCharted
+        type: string
+        seen: [live]
+        read: false
+        unused: TheAudioDB popularity counters; altune ranks by its own signals
+      - path: artists[].intChecked
+        type: string
+        seen: [live]
+        read: false
+        unused: TheAudioDB editorial state (lock and check flags); not about the music
+      - path: artists[].intDiedYear
+        type: "null"
+        seen: [live]
+        read: false
+        unused: death year, null in every fixture; altune shows no artist dates
+      - path: artists[].intFollowers
+        type: string
+        seen: [live]
+        read: false
+        unused: TheAudioDB popularity counters; altune ranks by its own signals
+      - path: artists[].intFormedYear
+        type: string
+        seen: [live]
+        read: false
+        unused: year the act formed; altune shows no artist dates
+      - path: artists[].intMembers
+        type: string
+        seen: [live]
+        read: false
+        unused: member count; altune has no group membership view
+      - path: artists[].intPopularity
+        type: string
+        seen: [live]
+        read: false
+        unused: TheAudioDB popularity counters; altune ranks by its own signals
+      - path: artists[].strArtist
+        type: string
+        seen: [live]
+        read: true
+      - path: artists[].strArtistAlternate
+        type: string
+        seen: [live]
+        read: false
+        unused: 'alternate or legal name (Cardi B: Belcalis Marlenis Almánzar), often empty; altune shows the artist name'
+      - path: artists[].strArtistBanner
+        type: null|string
+        seen: [live]
+        read: false
+        unused: another artwork variant (banner, clearart, cutout, fanart, logo or wide thumb); altune uses the square thumb only
+      - path: artists[].strArtistClearart
+        type: null|string
+        seen: [live]
+        read: false
+        unused: another artwork variant (banner, clearart, cutout, fanart, logo or wide thumb); altune uses the square thumb only
+      - path: artists[].strArtistCutout
+        type: null|string
+        seen: [live]
+        read: false
+        unused: another artwork variant (banner, clearart, cutout, fanart, logo or wide thumb); altune uses the square thumb only
+      - path: artists[].strArtistFanart
+        type: string
+        seen: [live]
+        read: false
+        unused: another artwork variant (banner, clearart, cutout, fanart, logo or wide thumb); altune uses the square thumb only
+      - path: artists[].strArtistFanart2
+        type: null|string
+        seen: [live]
+        read: false
+        unused: another artwork variant (banner, clearart, cutout, fanart, logo or wide thumb); altune uses the square thumb only
+      - path: artists[].strArtistFanart3
+        type: null|string
+        seen: [live]
+        read: false
+        unused: another artwork variant (banner, clearart, cutout, fanart, logo or wide thumb); altune uses the square thumb only
+      - path: artists[].strArtistFanart4
+        type: null|string
+        seen: [live]
+        read: false
+        unused: another artwork variant (banner, clearart, cutout, fanart, logo or wide thumb); altune uses the square thumb only
+      - path: artists[].strArtistLogo
+        type: null|string
+        seen: [live]
+        read: false
+        unused: another artwork variant (banner, clearart, cutout, fanart, logo or wide thumb); altune uses the square thumb only
+      - path: artists[].strArtistStripped
+        type: "null"
+        seen: [live]
+        read: false
+        unused: the name without accents, null in every fixture; altune normalises names itself
+      - path: artists[].strArtistThumb
+        type: string
+        seen: [live]
+        read: true
+      - path: artists[].strArtistWideThumb
+        type: null|string
+        seen: [live]
+        read: false
+        unused: another artwork variant (banner, clearart, cutout, fanart, logo or wide thumb); altune uses the square thumb only
+      - path: artists[].strBiography
+        type: string
+        seen: [live]
+        read: false
+        unused: English biography; altune shows the Last.fm biography
+      - path: artists[].strBiographyCN
+        type: "null"
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographyDE
+        type: "null"
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographyES
+        type: "null"
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographyFR
+        type: null|string
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographyHU
+        type: "null"
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographyIL
+        type: "null"
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographyIT
+        type: null|string
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographyJP
+        type: "null"
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographyNL
+        type: "null"
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographyNO
+        type: "null"
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographyPL
+        type: "null"
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographyPT
+        type: "null"
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographyRU
+        type: "null"
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strBiographySE
+        type: "null"
+        seen: [live]
+        read: false
+        unused: biography in another language, null for most artists; altune shows English text only
+      - path: artists[].strCountry
+        type: string
+        seen: [live]
+        read: false
+        unused: home town or region as free text ("Leeds"); altune shows no artist origin
+      - path: artists[].strCountryCode
+        type: string
+        seen: [live]
+        read: false
+        unused: two-letter country code; altune shows no artist origin
+      - path: artists[].strDisbanded
+        type: "null"
+        seen: [live]
+        read: false
+        unused: disbanded flag, null in every fixture; not shown
+      - path: artists[].strFacebook
+        type: null|string
+        seen: [live]
+        read: false
+        unused: a social or web link (null, empty or a placeholder like "1"); altune links nothing out
+      - path: artists[].strGender
+        type: string
+        seen: [live]
+        read: false
+        unused: gender, often empty; not shown
+      - path: artists[].strGenre
+        type: string
+        seen: [live]
+        read: false
+        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes tags from Last.fm
+      - path: artists[].strISNIcode
+        type: "null"
+        seen: [live]
+        read: false
+        unused: ISNI identifier, null in every fixture; altune identifies artists by MBID
+      - path: artists[].strLabel
+        type: null|string
+        seen: [live]
+        read: false
+        unused: the artist's label; altune shows no labels for artists
+      - path: artists[].strLastFMChart
+        type: "null"
+        seen: [live]
+        read: false
+        unused: a social or web link (null, empty or a placeholder like "1"); altune links nothing out
+      - path: artists[].strLocked
+        type: string
+        seen: [live]
+        read: false
+        unused: TheAudioDB editorial state (lock and check flags); not about the music
+      - path: artists[].strMood
+        type: string
+        seen: [live]
+        read: false
+        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes tags from Last.fm
+      - path: artists[].strMusicBrainzID
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the artist''s MusicBrainz ID; search results keep only TheAudioDB''s own id, so the artist cannot be tied to MusicBrainz'
+      - path: artists[].strStyle
+        type: string
+        seen: [live]
+        read: false
+        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes tags from Last.fm
+      - path: artists[].strTwitter
+        type: null|string
+        seen: [live]
+        read: false
+        unused: a social or web link (null, empty or a placeholder like "1"); altune links nothing out
+      - path: artists[].strWebsite
+        type: null|string
+        seen: [live]
+        read: false
+        unused: a social or web link (null, empty or a placeholder like "1"); altune links nothing out

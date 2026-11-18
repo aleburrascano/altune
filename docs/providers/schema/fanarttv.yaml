@@ -1,0 +1,454 @@
+provider: fanarttv
+reference: 'none: fanart.tv documents its v3 music API as prose and request samples (fanarttv.docs.apiary.io), with no machine-readable schema or field types'
+entities:
+  album:
+    fixtures:
+      - id: 3d46f921-7b68-420e-bc3b-17c36fadb1e6
+        why: Nia Archives album Silence Is Loud
+      - id: 45c6de75-bea5-4dd9-a912-55fb9497c3fc
+        why: explicit album Invasion of Privacy
+      - id: 49deb866-e5b1-400d-8464-45ab63191ed6
+        why: normal single WAP, cover with a copyright link
+      - id: bd7c4092-3dd0-4948-8cba-8df1899f329d
+        why: 'sparse: Nia Archives DJ mix Luvleh Mix, an empty document'
+    fields:
+      - path: albumcover
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is one recursive struct for both endpoints and for each album under albums; a top-level albumcover is never sent, only albums.<release-group MBID>.albumcover, which the album lookup reads
+      - path: albumcover[].lang
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is one recursive struct for both endpoints and for each album under albums; a top-level albumcover is never sent, only albums.<release-group MBID>.albumcover, which the album lookup reads
+      - path: albumcover[].likes
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is one recursive struct for both endpoints and for each album under albums; a top-level albumcover is never sent, only albums.<release-group MBID>.albumcover, which the album lookup reads
+      - path: albumcover[].url
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is one recursive struct for both endpoints and for each album under albums; a top-level albumcover is never sent, only albums.<release-group MBID>.albumcover, which the album lookup reads
+      - path: albums
+        type: object
+        seen: [live]
+        read: true
+      - path: albums.*
+        type: object
+        seen: [live]
+        read: true
+      - path: albums.*.albumcover
+        type: array
+        seen: [live]
+        read: true
+      - path: albums.*.albumcover[].copyright
+        type: string
+        seen: [live]
+        read: false
+        unused: credit text for the image (label or photographer); altune shows no image credits
+      - path: albums.*.albumcover[].copyright_link
+        type: string
+        seen: [live]
+        read: false
+        unused: link to where the uploader found the image; altune shows no image credits
+      - path: albums.*.albumcover[].id
+        type: string
+        seen: [live]
+        read: false
+        unused: fanart.tv image id; the adapter keeps the image URL
+      - path: albums.*.albumcover[].lang
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: fanart album covers never carry lang, so fanartImageScore''s English preference counts every cover as English and ranks by likes alone'
+      - path: albums.*.albumcover[].likes
+        type: string
+        seen: [live]
+        read: true
+      - path: albums.*.albumcover[].url
+        type: string
+        seen: [live]
+        read: true
+      - path: albums.*.albumcover_count
+        type: number
+        seen: [live]
+        read: false
+        unused: number of images in the array beside it; the adapter walks the array
+      - path: albums.*.albums
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is reused for each albums.<mbid> entry; fanart's album objects hold only albumcover and cdart, never a nested albums map
+      - path: albums.*.albums.*
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is reused for each albums.<mbid> entry; fanart's album objects hold only albumcover and cdart, never a nested albums map
+      - path: albums.*.artistbackground
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is reused for each albums.<mbid> entry; fanart sends artistthumb and artistbackground only at the top level of /music/{mbid}, never inside an album entry
+      - path: albums.*.artistbackground[].lang
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is reused for each albums.<mbid> entry; fanart sends artistthumb and artistbackground only at the top level of /music/{mbid}, never inside an album entry
+      - path: albums.*.artistbackground[].likes
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is reused for each albums.<mbid> entry; fanart sends artistthumb and artistbackground only at the top level of /music/{mbid}, never inside an album entry
+      - path: albums.*.artistbackground[].url
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is reused for each albums.<mbid> entry; fanart sends artistthumb and artistbackground only at the top level of /music/{mbid}, never inside an album entry
+      - path: albums.*.artistthumb
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is reused for each albums.<mbid> entry; fanart sends artistthumb and artistbackground only at the top level of /music/{mbid}, never inside an album entry
+      - path: albums.*.artistthumb[].lang
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is reused for each albums.<mbid> entry; fanart sends artistthumb and artistbackground only at the top level of /music/{mbid}, never inside an album entry
+      - path: albums.*.artistthumb[].likes
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is reused for each albums.<mbid> entry; fanart sends artistthumb and artistbackground only at the top level of /music/{mbid}, never inside an album entry
+      - path: albums.*.artistthumb[].url
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is reused for each albums.<mbid> entry; fanart sends artistthumb and artistbackground only at the top level of /music/{mbid}, never inside an album entry
+      - path: artistbackground
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is one recursive struct for both endpoints and for each album under albums; only the artist endpoint sends artistbackground, and only the artist lookup reads it
+      - path: artistbackground[].lang
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is one recursive struct for both endpoints and for each album under albums; only the artist endpoint sends artistbackground, and only the artist lookup reads it
+      - path: artistbackground[].likes
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is one recursive struct for both endpoints and for each album under albums; only the artist endpoint sends artistbackground, and only the artist lookup reads it
+      - path: artistbackground[].url
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is one recursive struct for both endpoints and for each album under albums; only the artist endpoint sends artistbackground, and only the artist lookup reads it
+      - path: artistthumb
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is one recursive struct for both endpoints and for each album under albums; only the artist endpoint sends artistthumb, and only the artist lookup reads it
+      - path: artistthumb[].lang
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is one recursive struct for both endpoints and for each album under albums; only the artist endpoint sends artistthumb, and only the artist lookup reads it
+      - path: artistthumb[].likes
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is one recursive struct for both endpoints and for each album under albums; only the artist endpoint sends artistthumb, and only the artist lookup reads it
+      - path: artistthumb[].url
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is one recursive struct for both endpoints and for each album under albums; only the artist endpoint sends artistthumb, and only the artist lookup reads it
+      - path: mbid_id
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist's MBID; the album was looked up by its own release-group MBID
+      - path: name
+        type: string
+        seen: [live]
+        read: false
+        unused: the album artist's name; altune already has the artist
+  artist:
+    fixtures:
+      - id: 09d6b57e-9cd9-4a74-b7cb-842b8443a1cd
+        why: Nia Archives, album covers but no artist images
+      - id: 2f3c4d70-0462-40da-bba3-0aec5772c556
+        why: Cardi B, explicit catalogue with backgrounds but no thumb
+      - id: 6925db17-f35e-42f3-a4eb-84ee6bf5d4b0
+        why: Olivia Rodrigo, thumbs, 4K backgrounds and logos
+      - id: 25f595b6-874f-420b-af03-0315cadea009
+        why: 'sparse: Subnation from the Luvleh Mix, an empty document'
+    fields:
+      - path: albumcover
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is one recursive struct for both endpoints and for each album under albums; a top-level albumcover is never sent, only albums.<release-group MBID>.albumcover, which the album lookup reads
+      - path: albumcover[].lang
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is one recursive struct for both endpoints and for each album under albums; a top-level albumcover is never sent, only albums.<release-group MBID>.albumcover, which the album lookup reads
+      - path: albumcover[].likes
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is one recursive struct for both endpoints and for each album under albums; a top-level albumcover is never sent, only albums.<release-group MBID>.albumcover, which the album lookup reads
+      - path: albumcover[].url
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is one recursive struct for both endpoints and for each album under albums; a top-level albumcover is never sent, only albums.<release-group MBID>.albumcover, which the album lookup reads
+      - path: albums
+        type: object
+        seen: [live]
+        read: true
+      - path: albums.*
+        type: object
+        seen: [live]
+        read: true
+      - path: albums.*.albumcover
+        type: array
+        seen: [live]
+        read: true
+      - path: albums.*.albumcover[].copyright
+        type: string
+        seen: [live]
+        read: false
+        unused: covers of the artist's albums keyed by release-group MBID; the artist lookup reads only artistthumb and artistbackground, and album covers come from the album endpoint
+      - path: albums.*.albumcover[].copyright_link
+        type: string
+        seen: [live]
+        read: false
+        unused: covers of the artist's albums keyed by release-group MBID; the artist lookup reads only artistthumb and artistbackground, and album covers come from the album endpoint
+      - path: albums.*.albumcover[].id
+        type: string
+        seen: [live]
+        read: false
+        unused: covers of the artist's albums keyed by release-group MBID; the artist lookup reads only artistthumb and artistbackground, and album covers come from the album endpoint
+      - path: albums.*.albumcover[].lang
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: fanart album covers never carry lang, so fanartImageScore''s English preference counts every cover as English and ranks by likes alone'
+      - path: albums.*.albumcover[].likes
+        type: string
+        seen: [live]
+        read: true
+      - path: albums.*.albumcover[].url
+        type: string
+        seen: [live]
+        read: true
+      - path: albums.*.albumcover_count
+        type: number
+        seen: [live]
+        read: false
+        unused: covers of the artist's albums keyed by release-group MBID; the artist lookup reads only artistthumb and artistbackground, and album covers come from the album endpoint
+      - path: albums.*.albums
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is reused for each albums.<mbid> entry; fanart's album objects hold only albumcover and cdart, never a nested albums map
+      - path: albums.*.albums.*
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is reused for each albums.<mbid> entry; fanart's album objects hold only albumcover and cdart, never a nested albums map
+      - path: albums.*.artistbackground
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is reused for each albums.<mbid> entry; fanart sends artistthumb and artistbackground only at the top level of /music/{mbid}, never inside an album entry
+      - path: albums.*.artistbackground[].lang
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is reused for each albums.<mbid> entry; fanart sends artistthumb and artistbackground only at the top level of /music/{mbid}, never inside an album entry
+      - path: albums.*.artistbackground[].likes
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is reused for each albums.<mbid> entry; fanart sends artistthumb and artistbackground only at the top level of /music/{mbid}, never inside an album entry
+      - path: albums.*.artistbackground[].url
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is reused for each albums.<mbid> entry; fanart sends artistthumb and artistbackground only at the top level of /music/{mbid}, never inside an album entry
+      - path: albums.*.artistthumb
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is reused for each albums.<mbid> entry; fanart sends artistthumb and artistbackground only at the top level of /music/{mbid}, never inside an album entry
+      - path: albums.*.artistthumb[].lang
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is reused for each albums.<mbid> entry; fanart sends artistthumb and artistbackground only at the top level of /music/{mbid}, never inside an album entry
+      - path: albums.*.artistthumb[].likes
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is reused for each albums.<mbid> entry; fanart sends artistthumb and artistbackground only at the top level of /music/{mbid}, never inside an album entry
+      - path: albums.*.artistthumb[].url
+        type: unseen
+        seen: []
+        read: true
+        absent: fanartDoc is reused for each albums.<mbid> entry; fanart sends artistthumb and artistbackground only at the top level of /music/{mbid}, never inside an album entry
+      - path: artist4kbackground
+        type: array
+        seen: [live]
+        read: false
+        unused: 3840px backgrounds; the adapter falls back to the standard artistbackground
+      - path: artist4kbackground[].copyright
+        type: string
+        seen: [live]
+        read: false
+        unused: 3840px backgrounds; the adapter falls back to the standard artistbackground
+      - path: artist4kbackground[].copyright_link
+        type: string
+        seen: [live]
+        read: false
+        unused: 3840px backgrounds; the adapter falls back to the standard artistbackground
+      - path: artist4kbackground[].id
+        type: string
+        seen: [live]
+        read: false
+        unused: 3840px backgrounds; the adapter falls back to the standard artistbackground
+      - path: artist4kbackground[].likes
+        type: string
+        seen: [live]
+        read: false
+        unused: 3840px backgrounds; the adapter falls back to the standard artistbackground
+      - path: artist4kbackground[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: 3840px backgrounds; the adapter falls back to the standard artistbackground
+      - path: artist4kbackground_count
+        type: number
+        seen: [live]
+        read: false
+        unused: number of images in the array beside it; the adapter walks the array
+      - path: artistbackground
+        type: array
+        seen: [live]
+        read: true
+      - path: artistbackground[].copyright
+        type: string
+        seen: [live]
+        read: false
+        unused: credit text for the image (label or photographer); altune shows no image credits
+      - path: artistbackground[].copyright_link
+        type: string
+        seen: [live]
+        read: false
+        unused: link to where the uploader found the image; altune shows no image credits
+      - path: artistbackground[].id
+        type: string
+        seen: [live]
+        read: false
+        unused: fanart.tv image id; the adapter keeps the image URL
+      - path: artistbackground[].lang
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: fanartImageScore prefers lang "en" or empty, but the artist endpoint never sends lang on backgrounds, so every image gets the bonus and the English preference does nothing'
+      - path: artistbackground[].likes
+        type: string
+        seen: [live]
+        read: true
+      - path: artistbackground[].url
+        type: string
+        seen: [live]
+        read: true
+      - path: artistbackground_count
+        type: number
+        seen: [live]
+        read: false
+        unused: number of images in the array beside it; the adapter walks the array
+      - path: artistthumb
+        type: array
+        seen: [live]
+        read: true
+      - path: artistthumb[].copyright
+        type: string
+        seen: [live]
+        read: false
+        unused: credit text for the image (label or photographer); altune shows no image credits
+      - path: artistthumb[].copyright_link
+        type: string
+        seen: [live]
+        read: false
+        unused: link to where the uploader found the image; altune shows no image credits
+      - path: artistthumb[].id
+        type: string
+        seen: [live]
+        read: false
+        unused: fanart.tv image id; the adapter keeps the image URL
+      - path: artistthumb[].lang
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: fanartImageScore prefers lang "en" or empty, but the artist endpoint never sends lang on thumbs, so every image gets the bonus and the English preference does nothing'
+      - path: artistthumb[].likes
+        type: string
+        seen: [live]
+        read: true
+      - path: artistthumb[].url
+        type: string
+        seen: [live]
+        read: true
+      - path: artistthumb_count
+        type: number
+        seen: [live]
+        read: false
+        unused: number of images in the array beside it; the adapter walks the array
+      - path: hdmusiclogo
+        type: array
+        seen: [live]
+        read: false
+        unused: the artist's name as a transparent logo image; altune shows the name as text
+      - path: hdmusiclogo[].copyright
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist's name as a transparent logo image; altune shows the name as text
+      - path: hdmusiclogo[].id
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist's name as a transparent logo image; altune shows the name as text
+      - path: hdmusiclogo[].likes
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist's name as a transparent logo image; altune shows the name as text
+      - path: hdmusiclogo[].url
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist's name as a transparent logo image; altune shows the name as text
+      - path: hdmusiclogo_count
+        type: number
+        seen: [live]
+        read: false
+        unused: number of images in the array beside it; the adapter walks the array
+      - path: mbid_id
+        type: string
+        seen: [live]
+        read: false
+        unused: echo of the MBID altune asked for
+      - path: name
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist name; altune already has it

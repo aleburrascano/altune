@@ -1,0 +1,3109 @@
+provider: deezer
+reference: 'none: developers.deezer.com/api only has HTML pages per object with partial, out-of-date field tables and no machine-readable spec; pipe.deezer.com GraphQL and auth.deezer.com are undocumented private endpoints'
+entities:
+  album:
+    fixtures:
+      - id: "1025827462"
+        why: fabric presents Mount Kimbie (Mixed), DJ-mix compilation
+      - id: "1025538962"
+        why: Nia Archives Emotional Junglist, explicit album
+      - id: "211450032"
+        why: Nia Archives Sober Feels, normal single
+      - id: "214358842"
+        why: Nia Archives Headz Gone West, EP
+      - id: "130112462"
+        why: 'sparse: Subnation Wickedest One / Gunshot'
+      - id: "14984081"
+        why: Various Artists 101-track compilation with a DJ mix
+    fields:
+      - path: artist
+        type: object
+        seen: [live]
+        read: false
+        unused: album's main artist summary; the search result that found this album already gave it, and contributors (read) carries it too
+      - path: artist.id
+        type: number
+        seen: [live]
+        read: false
+        unused: album's main artist summary; the search result that found this album already gave it, and contributors (read) carries it too
+      - path: artist.name
+        type: string
+        seen: [live]
+        read: false
+        unused: album's main artist summary; the search result that found this album already gave it, and contributors (read) carries it too
+      - path: artist.picture
+        type: string
+        seen: [live]
+        read: false
+        unused: album's main artist summary; the search result that found this album already gave it, and contributors (read) carries it too
+      - path: artist.picture_big
+        type: string
+        seen: [live]
+        read: false
+        unused: album's main artist summary; the search result that found this album already gave it, and contributors (read) carries it too
+      - path: artist.picture_medium
+        type: string
+        seen: [live]
+        read: false
+        unused: album's main artist summary; the search result that found this album already gave it, and contributors (read) carries it too
+      - path: artist.picture_small
+        type: string
+        seen: [live]
+        read: false
+        unused: album's main artist summary; the search result that found this album already gave it, and contributors (read) carries it too
+      - path: artist.picture_xl
+        type: string
+        seen: [live]
+        read: false
+        unused: album's main artist summary; the search result that found this album already gave it, and contributors (read) carries it too
+      - path: artist.tracklist
+        type: string
+        seen: [live]
+        read: false
+        unused: album's main artist summary; the search result that found this album already gave it, and contributors (read) carries it too
+      - path: artist.type
+        type: string
+        seen: [live]
+        read: false
+        unused: album's main artist summary; the search result that found this album already gave it, and contributors (read) carries it too
+      - path: available
+        type: boolean
+        seen: [live]
+        read: false
+        unused: whether Deezer can stream the album; altune never plays audio from Deezer
+      - path: contributors
+        type: array
+        seen: [live]
+        read: true
+      - path: contributors[].id
+        type: number
+        seen: [live]
+        read: true
+      - path: contributors[].link
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: contributors[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: contributors[].picture
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: contributors[].picture_big
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: contributors[].picture_medium
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: contributors[].picture_small
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: contributors[].picture_xl
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: contributors[].radio
+        type: boolean
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: contributors[].role
+        type: string
+        seen: [live]
+        read: true
+      - path: contributors[].share
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: contributors[].tracklist
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: contributors[].type
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: cover
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: cover_big
+        type: string
+        seen: [live]
+        read: false
+        unused: album artwork; the search result that found this album already gave cover_xl/cover_big
+      - path: cover_medium
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: cover_small
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: cover_xl
+        type: string
+        seen: [live]
+        read: false
+        unused: album artwork; the search result that found this album already gave cover_xl/cover_big
+      - path: duration
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: total album length in seconds; would tell a 67-minute DJ mix from a short release'
+      - path: explicit_content_cover
+        type: number
+        seen: [live]
+        read: false
+        unused: advisory code for the cover art, not the audio
+      - path: explicit_content_lyrics
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: Deezer''s lyrics advisory code (0 clean, 1 explicit, 3 edited, 4 partly explicit, 6 no advice); explicit_lyrics alone can''t tell an edited clean version from a never-explicit one'
+      - path: explicit_lyrics
+        type: boolean
+        seen: [live]
+        read: false
+        unused: 'GAP: whether this edition is explicit; the album lookup drops it and only the track lookup sets explicit'
+      - path: fans
+        type: number
+        seen: [live]
+        read: false
+        unused: album follower count on Deezer; popularity is taken from rank and nb_fan
+      - path: genre_id
+        type: number
+        seen: [live]
+        read: false
+        unused: Deezer's primary genre id; genre names are read from genres.data
+      - path: genres
+        type: object
+        seen: [live]
+        read: true
+      - path: genres.data
+        type: array
+        seen: [live]
+        read: true
+      - path: genres.data[].id
+        type: number
+        seen: [live]
+        read: false
+        unused: Deezer genre id; genres are kept by name
+      - path: genres.data[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: genres.data[].picture
+        type: string
+        seen: [live]
+        read: false
+        unused: genre image URL
+      - path: genres.data[].type
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer object type ('track', 'album', 'artist'), already implied by the endpoint
+      - path: id
+        type: number
+        seen: [live]
+        read: false
+        unused: the requested album id echoed back
+      - path: label
+        type: string
+        seen: [live]
+        read: true
+      - path: link
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer album page URL; the search result already gave it
+      - path: md5_image
+        type: string
+        seen: [live]
+        read: false
+        unused: hash of the cover image file; artwork uses the cover URLs
+      - path: nb_tracks
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: number of tracks on this release; the album lookup drops it'
+      - path: record_type
+        type: string
+        seen: [live]
+        read: true
+      - path: release_date
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: release date; the album lookup drops it'
+      - path: share
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer page URL with utm tracking parameters; link is the clean form
+      - path: title
+        type: string
+        seen: [live]
+        read: false
+        unused: album title; the search result that found this album already gave it
+      - path: tracklist
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer API URL of this object's track list; altune builds those URLs itself
+      - path: tracks
+        type: object
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data
+        type: array
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].album
+        type: object
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].album.cover
+        type: string
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].album.cover_big
+        type: string
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].album.cover_medium
+        type: string
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].album.cover_small
+        type: string
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].album.cover_xl
+        type: string
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].album.id
+        type: number
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].album.md5_image
+        type: string
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].album.title
+        type: string
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].album.tracklist
+        type: string
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].album.type
+        type: string
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].artist
+        type: object
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].artist.id
+        type: number
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].artist.name
+        type: string
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].artist.tracklist
+        type: string
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].artist.type
+        type: string
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].duration
+        type: number
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].explicit_content_cover
+        type: number
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].explicit_content_lyrics
+        type: number
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].explicit_lyrics
+        type: boolean
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].id
+        type: number
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].link
+        type: string
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].md5_image
+        type: string
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].preview
+        type: string
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].rank
+        type: number
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].readable
+        type: boolean
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].title
+        type: string
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].title_short
+        type: string
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].title_version
+        type: string
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: tracks.data[].type
+        type: string
+        seen: [live]
+        read: false
+        unused: first 25 tracks of the tracklist embedded in the album; GetAlbumTracks pages the full list from /album/{id}/tracks
+      - path: type
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer object type ('track', 'album', 'artist'), already implied by the endpoint
+      - path: upc
+        type: string
+        seen: [live]
+        read: true
+  album_tracks:
+    fixtures:
+      - id: "1025827462"
+        why: 'fabric presents Mount Kimbie (Mixed): 48-track DJ mix'
+      - id: "1025538962"
+        why: Nia Archives Emotional Junglist, explicit edition
+      - id: "211450032"
+        why: Nia Archives Sober Feels, normal single
+      - id: "130112462"
+        why: 'sparse: Subnation Wickedest One / Gunshot'
+      - id: "14984081"
+        why: '101-track compilation with a DJ mix: the only page that carries next'
+    fields:
+      - path: data
+        type: array
+        seen: [live]
+        read: true
+      - path: data[].album
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult takes the album title, Deezer album id and artwork from it, so album-track results carry none of them; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}'
+      - path: data[].album.cover_big
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult takes the album title, Deezer album id and artwork from it, so album-track results carry none of them; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}'
+      - path: data[].album.cover_xl
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult takes the album title, Deezer album id and artwork from it, so album-track results carry none of them; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}'
+      - path: data[].album.id
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult takes the album title, Deezer album id and artwork from it, so album-track results carry none of them; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}'
+      - path: data[].album.title
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult takes the album title, Deezer album id and artwork from it, so album-track results carry none of them; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}'
+      - path: data[].artist
+        type: object
+        seen: [live]
+        read: true
+      - path: data[].artist.id
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].artist.name
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].artist.tracklist
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.type
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].contributors
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult reads it for every track and album result, so these results only get the main artist from the artist fallback, never featured artists; sent only by /artist/{id}/top, /track/{id}, /album/{id}'
+      - path: data[].contributors[].id
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult reads it for every track and album result, so these results only get the main artist from the artist fallback, never featured artists; sent only by /artist/{id}/top, /track/{id}, /album/{id}'
+      - path: data[].contributors[].name
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult reads it for every track and album result, so these results only get the main artist from the artist fallback, never featured artists; sent only by /artist/{id}/top, /track/{id}, /album/{id}'
+      - path: data[].contributors[].role
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult reads it for every track and album result, so these results only get the main artist from the artist fallback, never featured artists; sent only by /artist/{id}/top, /track/{id}, /album/{id}'
+      - path: data[].cover_big
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' artwork in the shared deezerItem; the adapter doesn't use it from /album/{id}/tracks; sent only by /search/album, /chart/0/albums, /artist/{id}/albums, /album/{id}
+      - path: data[].cover_xl
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' artwork in the shared deezerItem; the adapter doesn't use it from /album/{id}/tracks; sent only by /search/album, /chart/0/albums, /artist/{id}/albums, /album/{id}
+      - path: data[].disk_number
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].duration
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].explicit_content_cover
+        type: number
+        seen: [live]
+        read: false
+        unused: advisory code for the cover art, not the audio
+      - path: data[].explicit_content_lyrics
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: Deezer''s lyrics advisory code (0 clean, 1 explicit, 3 edited, 4 partly explicit, 6 no advice); explicit_lyrics alone can''t tell an edited clean version from a never-explicit one'
+      - path: data[].explicit_lyrics
+        type: boolean
+        seen: [live]
+        read: true
+      - path: data[].genre_id
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' genre id in the shared deezerItem; the adapter doesn't use it from /album/{id}/tracks; sent only by /search/album, /artist/{id}/albums, /album/{id}
+      - path: data[].id
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].isrc
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].link
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].md5_image
+        type: string
+        seen: [live]
+        read: false
+        unused: hash of the cover image file; artwork uses the cover URLs
+      - path: data[].name
+        type: unseen
+        seen: []
+        read: true
+        absent: artist results' name in the shared deezerItem; the adapter doesn't use it from /album/{id}/tracks; sent only by /search/artist, /chart/0/artists
+      - path: data[].nb_fan
+        type: unseen
+        seen: []
+        read: true
+        absent: artist and album results' fan count in the shared deezerItem; the adapter doesn't use it from /album/{id}/tracks; sent only by /search/artist
+      - path: data[].nb_tracks
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' track count in the shared deezerItem; the adapter doesn't use it from /album/{id}/tracks; sent only by /search/album, /album/{id}
+      - path: data[].picture_big
+        type: unseen
+        seen: []
+        read: true
+        absent: artist results' picture in the shared deezerItem; the adapter doesn't use it from /album/{id}/tracks; sent only by /search/artist, /chart/0/artists
+      - path: data[].picture_xl
+        type: unseen
+        seen: []
+        read: true
+        absent: artist results' picture in the shared deezerItem; the adapter doesn't use it from /album/{id}/tracks; sent only by /search/artist, /chart/0/artists
+      - path: data[].preview
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].rank
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].readable
+        type: boolean
+        seen: [live]
+        read: false
+        unused: whether Deezer can stream the track in the caller's region; altune never plays audio from Deezer
+      - path: data[].record_type
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' release type in the shared deezerItem; the adapter doesn't use it from /album/{id}/tracks; sent only by /search/album, /chart/0/albums, /artist/{id}/albums, /album/{id}
+      - path: data[].release_date
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' release date in the shared deezerItem; the adapter doesn't use it from /album/{id}/tracks; sent only by /artist/{id}/albums, /track/{id}, /album/{id}
+      - path: data[].title
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].title_short
+        type: string
+        seen: [live]
+        read: false
+        unused: title without the version suffix; title already carries both
+      - path: data[].title_version
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: version or mix name on its own (e.g. ''(Mixed)''), today only available folded into title'
+      - path: data[].track_position
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].type
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer object type ('track', 'album', 'artist'), already implied by the endpoint
+      - path: data[].upc
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' UPC in the shared deezerItem; the adapter doesn't use it from /album/{id}/tracks; sent only by /album/{id}
+      - path: next
+        type: string
+        seen: [live]
+        read: true
+      - path: total
+        type: number
+        seen: [live]
+        read: false
+        unused: total result count; paging follows the next URL instead
+  artist_albums:
+    fixtures:
+      - id: "96293712"
+        why: 'Nia Archives: singles, EPs and albums'
+      - id: "407858"
+        why: Mount Kimbie, including a fabric DJ mix
+      - id: "417915262"
+        why: 'sparse: empty duplicate Nia Archives profile'
+      - id: "10620"
+        why: 'Armin van Buuren: 400+ releases incl. DJ mixes, so the page carries next'
+    fields:
+      - path: data
+        type: array
+        seen: [live]
+        read: true
+      - path: data[].album
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' embedded album in the shared deezerItem; the adapter doesn't use it from /artist/{id}/albums; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].album.cover_big
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' embedded album in the shared deezerItem; the adapter doesn't use it from /artist/{id}/albums; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].album.cover_xl
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' embedded album in the shared deezerItem; the adapter doesn't use it from /artist/{id}/albums; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].album.id
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' embedded album in the shared deezerItem; the adapter doesn't use it from /artist/{id}/albums; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].album.title
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' embedded album in the shared deezerItem; the adapter doesn't use it from /artist/{id}/albums; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].artist
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult takes the subtitle and the contributor fallback from it, so artist-album results have no artist name and no contributors; sent only by /search/track, /search/album, /chart/0/tracks, /chart/0/albums, /album/{id}/tracks, /artist/{id}/top, /track/{id}, /album/{id}'
+      - path: data[].artist.id
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult takes the subtitle and the contributor fallback from it, so artist-album results have no artist name and no contributors; sent only by /search/track, /search/album, /chart/0/tracks, /chart/0/albums, /album/{id}/tracks, /artist/{id}/top, /track/{id}, /album/{id}'
+      - path: data[].artist.name
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult takes the subtitle and the contributor fallback from it, so artist-album results have no artist name and no contributors; sent only by /search/track, /search/album, /chart/0/tracks, /chart/0/albums, /album/{id}/tracks, /artist/{id}/top, /track/{id}, /album/{id}'
+      - path: data[].contributors
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult reads it for every track and album result, so these results only get the main artist from the artist fallback, never featured artists; sent only by /artist/{id}/top, /track/{id}, /album/{id}'
+      - path: data[].contributors[].id
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult reads it for every track and album result, so these results only get the main artist from the artist fallback, never featured artists; sent only by /artist/{id}/top, /track/{id}, /album/{id}'
+      - path: data[].contributors[].name
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult reads it for every track and album result, so these results only get the main artist from the artist fallback, never featured artists; sent only by /artist/{id}/top, /track/{id}, /album/{id}'
+      - path: data[].contributors[].role
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult reads it for every track and album result, so these results only get the main artist from the artist fallback, never featured artists; sent only by /artist/{id}/top, /track/{id}, /album/{id}'
+      - path: data[].cover
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: data[].cover_big
+        type: null|string
+        seen: [live]
+        read: true
+      - path: data[].cover_medium
+        type: null|string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: data[].cover_small
+        type: null|string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: data[].cover_xl
+        type: null|string
+        seen: [live]
+        read: true
+      - path: data[].disk_number
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' disc number in the shared deezerItem; the adapter doesn't use it from /artist/{id}/albums; sent only by /album/{id}/tracks, /track/{id}
+      - path: data[].duration
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' length in the shared deezerItem; the adapter doesn't use it from /artist/{id}/albums; sent only by /search/track, /chart/0/tracks, /album/{id}/tracks, /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].explicit_lyrics
+        type: boolean
+        seen: [live]
+        read: true
+      - path: data[].fans
+        type: number
+        seen: [live]
+        read: false
+        unused: album follower count on Deezer; popularity is taken from rank and nb_fan
+      - path: data[].genre_id
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].id
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].isrc
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' ISRC in the shared deezerItem; the adapter doesn't use it from /artist/{id}/albums; sent only by /search/track, /album/{id}/tracks, /track/{id}
+      - path: data[].link
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].md5_image
+        type: string
+        seen: [live]
+        read: false
+        unused: hash of the cover image file; artwork uses the cover URLs
+      - path: data[].name
+        type: unseen
+        seen: []
+        read: true
+        absent: artist results' name in the shared deezerItem; the adapter doesn't use it from /artist/{id}/albums; sent only by /search/artist, /chart/0/artists
+      - path: data[].nb_fan
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult sets FanCount from it, so artist-album results always get 0 (this endpoint sends the count as fans); sent only by /search/artist'
+      - path: data[].nb_tracks
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult sets TrackCount from it, so artist-album results never carry a track count; sent only by /search/album, /album/{id}'
+      - path: data[].picture_big
+        type: unseen
+        seen: []
+        read: true
+        absent: artist results' picture in the shared deezerItem; the adapter doesn't use it from /artist/{id}/albums; sent only by /search/artist, /chart/0/artists
+      - path: data[].picture_xl
+        type: unseen
+        seen: []
+        read: true
+        absent: artist results' picture in the shared deezerItem; the adapter doesn't use it from /artist/{id}/albums; sent only by /search/artist, /chart/0/artists
+      - path: data[].preview
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' preview URL in the shared deezerItem; the adapter doesn't use it from /artist/{id}/albums; sent only by /search/track, /chart/0/tracks, /album/{id}/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].rank
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' popularity in the shared deezerItem; the adapter doesn't use it from /artist/{id}/albums; sent only by /search/track, /chart/0/tracks, /album/{id}/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].record_type
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].release_date
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].title
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].track_position
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' track number in the shared deezerItem; the adapter doesn't use it from /artist/{id}/albums; sent only by /album/{id}/tracks, /track/{id}
+      - path: data[].tracklist
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer API URL of this object's track list; altune builds those URLs itself
+      - path: data[].type
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer object type ('track', 'album', 'artist'), already implied by the endpoint
+      - path: data[].upc
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult sets UPC from it, so these album results never carry a UPC; sent only by /album/{id}'
+      - path: next
+        type: string
+        seen: [live]
+        read: true
+      - path: total
+        type: number
+        seen: [live]
+        read: false
+        unused: total result count; paging follows the next URL instead
+  artist_top:
+    fixtures:
+      - id: "96293712"
+        why: Nia Archives top tracks, one explicit
+      - id: "407858"
+        why: Mount Kimbie top tracks
+      - id: "69267082"
+        why: 'sparse: Subnation'
+      - id: "417915262"
+        why: 'sparse: empty duplicate Nia Archives profile'
+    fields:
+      - path: data
+        type: array
+        seen: [live]
+        read: true
+      - path: data[].album
+        type: object
+        seen: [live]
+        read: true
+      - path: data[].album.cover
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: data[].album.cover_big
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].album.cover_medium
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: data[].album.cover_small
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: data[].album.cover_xl
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].album.id
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].album.md5_image
+        type: string
+        seen: [live]
+        read: false
+        unused: hash of the cover image file; artwork uses the cover URLs
+      - path: data[].album.title
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].album.tracklist
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer API URL of this object's track list; altune builds those URLs itself
+      - path: data[].album.type
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer object type ('track', 'album', 'artist'), already implied by the endpoint
+      - path: data[].artist
+        type: object
+        seen: [live]
+        read: true
+      - path: data[].artist.id
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].artist.name
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].artist.tracklist
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.type
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].contributors
+        type: array
+        seen: [live]
+        read: true
+      - path: data[].contributors[].id
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].contributors[].link
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: data[].contributors[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].contributors[].picture
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: data[].contributors[].picture_big
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: data[].contributors[].picture_medium
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: data[].contributors[].picture_small
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: data[].contributors[].picture_xl
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: data[].contributors[].radio
+        type: boolean
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: data[].contributors[].role
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].contributors[].share
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: data[].contributors[].tracklist
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: data[].contributors[].type
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: data[].cover_big
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' artwork in the shared deezerItem; the adapter doesn't use it from /artist/{id}/top; sent only by /search/album, /chart/0/albums, /artist/{id}/albums, /album/{id}
+      - path: data[].cover_xl
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' artwork in the shared deezerItem; the adapter doesn't use it from /artist/{id}/top; sent only by /search/album, /chart/0/albums, /artist/{id}/albums, /album/{id}
+      - path: data[].disk_number
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult sets TrackPosition from it, so these track results always get disc 0, track 0; sent only by /album/{id}/tracks, /track/{id}'
+      - path: data[].duration
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].explicit_content_cover
+        type: number
+        seen: [live]
+        read: false
+        unused: advisory code for the cover art, not the audio
+      - path: data[].explicit_content_lyrics
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: Deezer''s lyrics advisory code (0 clean, 1 explicit, 3 edited, 4 partly explicit, 6 no advice); explicit_lyrics alone can''t tell an edited clean version from a never-explicit one'
+      - path: data[].explicit_lyrics
+        type: boolean
+        seen: [live]
+        read: true
+      - path: data[].genre_id
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' genre id in the shared deezerItem; the adapter doesn't use it from /artist/{id}/top; sent only by /search/album, /artist/{id}/albums, /album/{id}
+      - path: data[].id
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].isrc
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult sets ISRC from it, so artist top tracks never carry an ISRC; sent only by /search/track, /album/{id}/tracks, /track/{id}'
+      - path: data[].link
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].md5_image
+        type: string
+        seen: [live]
+        read: false
+        unused: hash of the cover image file; artwork uses the cover URLs
+      - path: data[].name
+        type: unseen
+        seen: []
+        read: true
+        absent: artist results' name in the shared deezerItem; the adapter doesn't use it from /artist/{id}/top; sent only by /search/artist, /chart/0/artists
+      - path: data[].nb_fan
+        type: unseen
+        seen: []
+        read: true
+        absent: artist and album results' fan count in the shared deezerItem; the adapter doesn't use it from /artist/{id}/top; sent only by /search/artist
+      - path: data[].nb_tracks
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' track count in the shared deezerItem; the adapter doesn't use it from /artist/{id}/top; sent only by /search/album, /album/{id}
+      - path: data[].picture_big
+        type: unseen
+        seen: []
+        read: true
+        absent: artist results' picture in the shared deezerItem; the adapter doesn't use it from /artist/{id}/top; sent only by /search/artist, /chart/0/artists
+      - path: data[].picture_xl
+        type: unseen
+        seen: []
+        read: true
+        absent: artist results' picture in the shared deezerItem; the adapter doesn't use it from /artist/{id}/top; sent only by /search/artist, /chart/0/artists
+      - path: data[].preview
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].rank
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].readable
+        type: boolean
+        seen: [live]
+        read: false
+        unused: whether Deezer can stream the track in the caller's region; altune never plays audio from Deezer
+      - path: data[].record_type
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' release type in the shared deezerItem; the adapter doesn't use it from /artist/{id}/top; sent only by /search/album, /chart/0/albums, /artist/{id}/albums, /album/{id}
+      - path: data[].release_date
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' release date in the shared deezerItem; the adapter doesn't use it from /artist/{id}/top; sent only by /artist/{id}/albums, /track/{id}, /album/{id}
+      - path: data[].title
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].title_short
+        type: string
+        seen: [live]
+        read: false
+        unused: title without the version suffix; title already carries both
+      - path: data[].title_version
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: version or mix name on its own (e.g. ''(Mixed)''), today only available folded into title'
+      - path: data[].track_position
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult sets TrackPosition from it, so these track results always get disc 0, track 0; sent only by /album/{id}/tracks, /track/{id}'
+      - path: data[].type
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer object type ('track', 'album', 'artist'), already implied by the endpoint
+      - path: data[].upc
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' UPC in the shared deezerItem; the adapter doesn't use it from /artist/{id}/top; sent only by /album/{id}
+      - path: next
+        type: string
+        seen: [live]
+        read: true
+      - path: total
+        type: number
+        seen: [live]
+        read: false
+        unused: total result count; paging follows the next URL instead
+  auth_anonymous:
+    fixtures:
+      - id: anonymous
+        why: the anonymous login the lyrics adapter uses for its bearer token; the id is ignored
+    fields:
+      - path: jwt
+        type: string
+        seen: [live]
+        read: true
+      - path: refresh_token
+        type: string
+        seen: [live]
+        read: false
+        unused: anonymous-session refresh token; the adapter logs in again when the jwt expires
+  chart_albums:
+    fixtures:
+      - id: "100"
+        why: global album chart at the largest page; its contents change daily
+    fields:
+      - path: data
+        type: array
+        seen: [live]
+        read: true
+      - path: data[].album
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' embedded album in the shared deezerItem; the adapter doesn't use it from /chart/0/albums; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].album.cover_big
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' embedded album in the shared deezerItem; the adapter doesn't use it from /chart/0/albums; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].album.cover_xl
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' embedded album in the shared deezerItem; the adapter doesn't use it from /chart/0/albums; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].album.id
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' embedded album in the shared deezerItem; the adapter doesn't use it from /chart/0/albums; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].album.title
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' embedded album in the shared deezerItem; the adapter doesn't use it from /chart/0/albums; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].artist
+        type: object
+        seen: [live]
+        read: true
+      - path: data[].artist.id
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].artist.link
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.name
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].artist.picture
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.picture_big
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.picture_medium
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.picture_small
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.picture_xl
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.radio
+        type: boolean
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.tracklist
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.type
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].contributors
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' credited artists in the shared deezerItem; the adapter doesn't use it from /chart/0/albums; sent only by /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].contributors[].id
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' credited artists in the shared deezerItem; the adapter doesn't use it from /chart/0/albums; sent only by /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].contributors[].name
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' credited artists in the shared deezerItem; the adapter doesn't use it from /chart/0/albums; sent only by /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].contributors[].role
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' credited artists in the shared deezerItem; the adapter doesn't use it from /chart/0/albums; sent only by /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].cover
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: data[].cover_big
+        type: null|string
+        seen: [live]
+        read: true
+      - path: data[].cover_medium
+        type: null|string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: data[].cover_small
+        type: null|string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: data[].cover_xl
+        type: null|string
+        seen: [live]
+        read: true
+      - path: data[].disk_number
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' disc number in the shared deezerItem; the adapter doesn't use it from /chart/0/albums; sent only by /album/{id}/tracks, /track/{id}
+      - path: data[].duration
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' length in the shared deezerItem; the adapter doesn't use it from /chart/0/albums; sent only by /search/track, /chart/0/tracks, /album/{id}/tracks, /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].explicit_lyrics
+        type: boolean
+        seen: [live]
+        read: true
+      - path: data[].genre_id
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' genre id in the shared deezerItem; the adapter doesn't use it from /chart/0/albums; sent only by /search/album, /artist/{id}/albums, /album/{id}
+      - path: data[].id
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].isrc
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' ISRC in the shared deezerItem; the adapter doesn't use it from /chart/0/albums; sent only by /search/track, /album/{id}/tracks, /track/{id}
+      - path: data[].link
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].md5_image
+        type: string
+        seen: [live]
+        read: false
+        unused: hash of the cover image file; artwork uses the cover URLs
+      - path: data[].name
+        type: unseen
+        seen: []
+        read: true
+        absent: artist results' name in the shared deezerItem; the adapter doesn't use it from /chart/0/albums; sent only by /search/artist, /chart/0/artists
+      - path: data[].nb_fan
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: deezerChartEntry uses it as album popularity, so the album chart always falls back to 1000 minus position; sent only by /search/artist'
+      - path: data[].nb_tracks
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' track count in the shared deezerItem; the adapter doesn't use it from /chart/0/albums; sent only by /search/album, /album/{id}
+      - path: data[].picture_big
+        type: unseen
+        seen: []
+        read: true
+        absent: artist results' picture in the shared deezerItem; the adapter doesn't use it from /chart/0/albums; sent only by /search/artist, /chart/0/artists
+      - path: data[].picture_xl
+        type: unseen
+        seen: []
+        read: true
+        absent: artist results' picture in the shared deezerItem; the adapter doesn't use it from /chart/0/albums; sent only by /search/artist, /chart/0/artists
+      - path: data[].position
+        type: number
+        seen: [live]
+        read: false
+        unused: 1-based chart position; the adapter uses the array index, which is the same order
+      - path: data[].preview
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' preview URL in the shared deezerItem; the adapter doesn't use it from /chart/0/albums; sent only by /search/track, /chart/0/tracks, /album/{id}/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].rank
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' popularity in the shared deezerItem; the adapter doesn't use it from /chart/0/albums; sent only by /search/track, /chart/0/tracks, /album/{id}/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].record_type
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].release_date
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' release date in the shared deezerItem; the adapter doesn't use it from /chart/0/albums; sent only by /artist/{id}/albums, /track/{id}, /album/{id}
+      - path: data[].title
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].track_position
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' track number in the shared deezerItem; the adapter doesn't use it from /chart/0/albums; sent only by /album/{id}/tracks, /track/{id}
+      - path: data[].tracklist
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer API URL of this object's track list; altune builds those URLs itself
+      - path: data[].type
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer object type ('track', 'album', 'artist'), already implied by the endpoint
+      - path: data[].upc
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' UPC in the shared deezerItem; the adapter doesn't use it from /chart/0/albums; sent only by /album/{id}
+      - path: next
+        type: unseen
+        seen: []
+        read: true
+        absent: deezerSearchResponse's paging link, which only GetAlbumTracks and GetArtistAlbums follow; the adapter doesn't use it from /chart/0/albums; sent only by /search/track, /search/album, /search/artist, /album/{id}/tracks, /artist/{id}/albums, /artist/{id}/top
+      - path: total
+        type: number
+        seen: [live]
+        read: false
+        unused: total result count; paging follows the next URL instead
+  chart_artists:
+    fixtures:
+      - id: "100"
+        why: global artist chart at the largest page; its contents change daily
+    fields:
+      - path: data
+        type: array
+        seen: [live]
+        read: true
+      - path: data[].album
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' embedded album in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].album.cover_big
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' embedded album in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].album.cover_xl
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' embedded album in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].album.id
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' embedded album in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].album.title
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' embedded album in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].artist
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' main artist in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /search/track, /search/album, /chart/0/tracks, /chart/0/albums, /album/{id}/tracks, /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].artist.id
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' main artist in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /search/track, /search/album, /chart/0/tracks, /chart/0/albums, /album/{id}/tracks, /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].artist.name
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' main artist in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /search/track, /search/album, /chart/0/tracks, /chart/0/albums, /album/{id}/tracks, /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].contributors
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' credited artists in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].contributors[].id
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' credited artists in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].contributors[].name
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' credited artists in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].contributors[].role
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' credited artists in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].cover_big
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' artwork in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /search/album, /chart/0/albums, /artist/{id}/albums, /album/{id}
+      - path: data[].cover_xl
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' artwork in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /search/album, /chart/0/albums, /artist/{id}/albums, /album/{id}
+      - path: data[].disk_number
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' disc number in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /album/{id}/tracks, /track/{id}
+      - path: data[].duration
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' length in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /search/track, /chart/0/tracks, /album/{id}/tracks, /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].explicit_lyrics
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' explicit flag in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /search/track, /search/album, /chart/0/tracks, /chart/0/albums, /album/{id}/tracks, /artist/{id}/albums, /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].genre_id
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' genre id in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /search/album, /artist/{id}/albums, /album/{id}
+      - path: data[].id
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].isrc
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' ISRC in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /search/track, /album/{id}/tracks, /track/{id}
+      - path: data[].link
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].nb_fan
+        type: unseen
+        seen: []
+        read: true
+        absent: artist and album results' fan count in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /search/artist
+      - path: data[].nb_tracks
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' track count in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /search/album, /album/{id}
+      - path: data[].picture
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller picture sizes and the API image redirect; artwork uses picture_xl or picture_big
+      - path: data[].picture_big
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].picture_medium
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller picture sizes and the API image redirect; artwork uses picture_xl or picture_big
+      - path: data[].picture_small
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller picture sizes and the API image redirect; artwork uses picture_xl or picture_big
+      - path: data[].picture_xl
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].position
+        type: number
+        seen: [live]
+        read: false
+        unused: 1-based chart position; the adapter uses the array index, which is the same order
+      - path: data[].preview
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' preview URL in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /search/track, /chart/0/tracks, /album/{id}/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].radio
+        type: boolean
+        seen: [live]
+        read: false
+        unused: whether Deezer offers an artist radio; altune has no Deezer radio
+      - path: data[].rank
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' popularity in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /search/track, /chart/0/tracks, /album/{id}/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].record_type
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' release type in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /search/album, /chart/0/albums, /artist/{id}/albums, /album/{id}
+      - path: data[].release_date
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' release date in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /artist/{id}/albums, /track/{id}, /album/{id}
+      - path: data[].title
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' title in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /search/track, /search/album, /chart/0/tracks, /chart/0/albums, /album/{id}/tracks, /artist/{id}/albums, /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].track_position
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' track number in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /album/{id}/tracks, /track/{id}
+      - path: data[].tracklist
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer API URL of this object's track list; altune builds those URLs itself
+      - path: data[].type
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer object type ('track', 'album', 'artist'), already implied by the endpoint
+      - path: data[].upc
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' UPC in the shared deezerItem; the adapter doesn't use it from /chart/0/artists; sent only by /album/{id}
+      - path: next
+        type: unseen
+        seen: []
+        read: true
+        absent: deezerSearchResponse's paging link, which only GetAlbumTracks and GetArtistAlbums follow; the adapter doesn't use it from /chart/0/artists; sent only by /search/track, /search/album, /search/artist, /album/{id}/tracks, /artist/{id}/albums, /artist/{id}/top
+      - path: total
+        type: number
+        seen: [live]
+        read: false
+        unused: total result count; paging follows the next URL instead
+  chart_tracks:
+    fixtures:
+      - id: "100"
+        why: global track chart at the largest page; its contents change daily
+    fields:
+      - path: data
+        type: array
+        seen: [live]
+        read: true
+      - path: data[].album
+        type: object
+        seen: [live]
+        read: true
+      - path: data[].album.cover
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: data[].album.cover_big
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].album.cover_medium
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: data[].album.cover_small
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: data[].album.cover_xl
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].album.id
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].album.md5_image
+        type: string
+        seen: [live]
+        read: false
+        unused: hash of the cover image file; artwork uses the cover URLs
+      - path: data[].album.title
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].album.tracklist
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer API URL of this object's track list; altune builds those URLs itself
+      - path: data[].album.type
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer object type ('track', 'album', 'artist'), already implied by the endpoint
+      - path: data[].artist
+        type: object
+        seen: [live]
+        read: true
+      - path: data[].artist.id
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].artist.link
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.name
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].artist.picture
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.picture_big
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.picture_medium
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.picture_small
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.picture_xl
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.radio
+        type: boolean
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.tracklist
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.type
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].contributors
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' credited artists in the shared deezerItem; the adapter doesn't use it from /chart/0/tracks; sent only by /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].contributors[].id
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' credited artists in the shared deezerItem; the adapter doesn't use it from /chart/0/tracks; sent only by /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].contributors[].name
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' credited artists in the shared deezerItem; the adapter doesn't use it from /chart/0/tracks; sent only by /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].contributors[].role
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' credited artists in the shared deezerItem; the adapter doesn't use it from /chart/0/tracks; sent only by /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].cover_big
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' artwork in the shared deezerItem; the adapter doesn't use it from /chart/0/tracks; sent only by /search/album, /chart/0/albums, /artist/{id}/albums, /album/{id}
+      - path: data[].cover_xl
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' artwork in the shared deezerItem; the adapter doesn't use it from /chart/0/tracks; sent only by /search/album, /chart/0/albums, /artist/{id}/albums, /album/{id}
+      - path: data[].disk_number
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' disc number in the shared deezerItem; the adapter doesn't use it from /chart/0/tracks; sent only by /album/{id}/tracks, /track/{id}
+      - path: data[].duration
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].explicit_content_cover
+        type: number
+        seen: [live]
+        read: false
+        unused: advisory code for the cover art, not the audio
+      - path: data[].explicit_content_lyrics
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: Deezer''s lyrics advisory code (0 clean, 1 explicit, 3 edited, 4 partly explicit, 6 no advice); explicit_lyrics alone can''t tell an edited clean version from a never-explicit one'
+      - path: data[].explicit_lyrics
+        type: boolean
+        seen: [live]
+        read: true
+      - path: data[].genre_id
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' genre id in the shared deezerItem; the adapter doesn't use it from /chart/0/tracks; sent only by /search/album, /artist/{id}/albums, /album/{id}
+      - path: data[].id
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].isrc
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' ISRC in the shared deezerItem; the adapter doesn't use it from /chart/0/tracks; sent only by /search/track, /album/{id}/tracks, /track/{id}
+      - path: data[].link
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].md5_image
+        type: string
+        seen: [live]
+        read: false
+        unused: hash of the cover image file; artwork uses the cover URLs
+      - path: data[].name
+        type: unseen
+        seen: []
+        read: true
+        absent: artist results' name in the shared deezerItem; the adapter doesn't use it from /chart/0/tracks; sent only by /search/artist, /chart/0/artists
+      - path: data[].nb_fan
+        type: unseen
+        seen: []
+        read: true
+        absent: artist and album results' fan count in the shared deezerItem; the adapter doesn't use it from /chart/0/tracks; sent only by /search/artist
+      - path: data[].nb_tracks
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' track count in the shared deezerItem; the adapter doesn't use it from /chart/0/tracks; sent only by /search/album, /album/{id}
+      - path: data[].picture_big
+        type: unseen
+        seen: []
+        read: true
+        absent: artist results' picture in the shared deezerItem; the adapter doesn't use it from /chart/0/tracks; sent only by /search/artist, /chart/0/artists
+      - path: data[].picture_xl
+        type: unseen
+        seen: []
+        read: true
+        absent: artist results' picture in the shared deezerItem; the adapter doesn't use it from /chart/0/tracks; sent only by /search/artist, /chart/0/artists
+      - path: data[].position
+        type: number
+        seen: [live]
+        read: false
+        unused: 1-based chart position; the adapter uses the array index, which is the same order
+      - path: data[].preview
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].rank
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].record_type
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' release type in the shared deezerItem; the adapter doesn't use it from /chart/0/tracks; sent only by /search/album, /chart/0/albums, /artist/{id}/albums, /album/{id}
+      - path: data[].release_date
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' release date in the shared deezerItem; the adapter doesn't use it from /chart/0/tracks; sent only by /artist/{id}/albums, /track/{id}, /album/{id}
+      - path: data[].title
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].title_short
+        type: string
+        seen: [live]
+        read: false
+        unused: title without the version suffix; title already carries both
+      - path: data[].title_version
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: version or mix name on its own (e.g. ''(Mixed)''), today only available folded into title'
+      - path: data[].track_position
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' track number in the shared deezerItem; the adapter doesn't use it from /chart/0/tracks; sent only by /album/{id}/tracks, /track/{id}
+      - path: data[].type
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer object type ('track', 'album', 'artist'), already implied by the endpoint
+      - path: data[].upc
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' UPC in the shared deezerItem; the adapter doesn't use it from /chart/0/tracks; sent only by /album/{id}
+      - path: next
+        type: unseen
+        seen: []
+        read: true
+        absent: deezerSearchResponse's paging link, which only GetAlbumTracks and GetArtistAlbums follow; the adapter doesn't use it from /chart/0/tracks; sent only by /search/track, /search/album, /search/artist, /album/{id}/tracks, /artist/{id}/albums, /artist/{id}/top
+      - path: total
+        type: number
+        seen: [live]
+        read: false
+        unused: total result count; paging follows the next URL instead
+  lyrics:
+    fixtures:
+      - id: "4144817442"
+        why: Nia Archives Vertical, synced lyrics
+      - id: "1541518162"
+        why: Nia Archives 18 & Over, explicit lyrics
+      - id: "4145528712"
+        why: Mount Kimbie Monroe (Mixed), instrumental with null lyrics
+      - id: "99999999999"
+        why: 'unknown track: 200 with errors[] and null lyrics'
+    fields:
+      - path: data
+        type: object
+        seen: [live]
+        read: true
+      - path: data.track
+        type: object
+        seen: [live]
+        read: true
+      - path: data.track.id
+        type: string
+        seen: [live]
+        read: false
+        unused: the requested track id echoed back
+      - path: data.track.lyrics
+        type: null|object
+        seen: [live]
+        read: true
+      - path: data.track.lyrics.copyright
+        type: string
+        seen: [live]
+        read: true
+      - path: data.track.lyrics.id
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer's internal lyrics id
+      - path: data.track.lyrics.synchronizedLines
+        type: array
+        seen: [live]
+        read: true
+      - path: data.track.lyrics.synchronizedLines[].duration
+        type: number
+        seen: [live]
+        read: true
+      - path: data.track.lyrics.synchronizedLines[].line
+        type: string
+        seen: [live]
+        read: true
+      - path: data.track.lyrics.synchronizedLines[].lrcTimestamp
+        type: string
+        seen: [live]
+        read: true
+      - path: data.track.lyrics.synchronizedLines[].milliseconds
+        type: number
+        seen: [live]
+        read: true
+      - path: data.track.lyrics.text
+        type: string
+        seen: [live]
+        read: true
+      - path: data.track.lyrics.writers
+        type: string
+        seen: [live]
+        read: true
+      - path: errors
+        type: array
+        seen: [live]
+        read: true
+      - path: errors[].extensions
+        type: object
+        seen: [live]
+        read: false
+        unused: error class name (e.g. TrackNotFoundError); the adapter treats null lyrics as no lyrics whatever the error
+      - path: errors[].extensions.type
+        type: string
+        seen: [live]
+        read: false
+        unused: error class name (e.g. TrackNotFoundError); the adapter treats null lyrics as no lyrics whatever the error
+      - path: errors[].message
+        type: string
+        seen: [live]
+        read: true
+      - path: errors[].path
+        type: array
+        seen: [live]
+        read: false
+        unused: GraphQL path the error is attached to (e.g. track, lyrics)
+      - path: errors[].path[]
+        type: string
+        seen: [live]
+        read: false
+        unused: GraphQL path the error is attached to (e.g. track, lyrics)
+      - path: errors[].type
+        type: string
+        seen: [live]
+        read: false
+        unused: error class name (e.g. TrackNotFoundError); the adapter treats null lyrics as no lyrics whatever the error
+      - path: extensions
+        type: object
+        seen: [live]
+        read: false
+        unused: GraphQL server metadata
+      - path: extensions.queryCost
+        type: number
+        seen: [live]
+        read: false
+        unused: GraphQL server metadata
+  search_album:
+    fixtures:
+      - id: Nia Archives|Emotional Junglist
+        why: Nia Archives album with clean and explicit editions
+      - id: Mount Kimbie|fabric presents Mount Kimbie (Mixed)
+        why: DJ-mix compilation album
+      - id: Subnation|Wickedest One / Gunshot
+        why: 'sparse: obscure single'
+      - id: Nia Archives
+        why: free-text query with more than 15 hits, so the page carries next
+    fields:
+      - path: data
+        type: array
+        seen: [live]
+        read: true
+      - path: data[].album
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' embedded album in the shared deezerItem; the adapter doesn't use it from /search/album; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].album.cover_big
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' embedded album in the shared deezerItem; the adapter doesn't use it from /search/album; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].album.cover_xl
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' embedded album in the shared deezerItem; the adapter doesn't use it from /search/album; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].album.id
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' embedded album in the shared deezerItem; the adapter doesn't use it from /search/album; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].album.title
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' embedded album in the shared deezerItem; the adapter doesn't use it from /search/album; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].artist
+        type: object
+        seen: [live]
+        read: true
+      - path: data[].artist.id
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].artist.link
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.name
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].artist.picture
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.picture_big
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.picture_medium
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.picture_small
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.picture_xl
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.tracklist
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.type
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].contributors
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult reads it for every track and album result, so these results only get the main artist from the artist fallback, never featured artists; sent only by /artist/{id}/top, /track/{id}, /album/{id}'
+      - path: data[].contributors[].id
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult reads it for every track and album result, so these results only get the main artist from the artist fallback, never featured artists; sent only by /artist/{id}/top, /track/{id}, /album/{id}'
+      - path: data[].contributors[].name
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult reads it for every track and album result, so these results only get the main artist from the artist fallback, never featured artists; sent only by /artist/{id}/top, /track/{id}, /album/{id}'
+      - path: data[].contributors[].role
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult reads it for every track and album result, so these results only get the main artist from the artist fallback, never featured artists; sent only by /artist/{id}/top, /track/{id}, /album/{id}'
+      - path: data[].cover
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: data[].cover_big
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].cover_medium
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: data[].cover_small
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: data[].cover_xl
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].disk_number
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' disc number in the shared deezerItem; the adapter doesn't use it from /search/album; sent only by /album/{id}/tracks, /track/{id}
+      - path: data[].duration
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' length in the shared deezerItem; the adapter doesn't use it from /search/album; sent only by /search/track, /chart/0/tracks, /album/{id}/tracks, /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].explicit_lyrics
+        type: boolean
+        seen: [live]
+        read: true
+      - path: data[].genre_id
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].id
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].isrc
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' ISRC in the shared deezerItem; the adapter doesn't use it from /search/album; sent only by /search/track, /album/{id}/tracks, /track/{id}
+      - path: data[].link
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].md5_image
+        type: string
+        seen: [live]
+        read: false
+        unused: hash of the cover image file; artwork uses the cover URLs
+      - path: data[].name
+        type: unseen
+        seen: []
+        read: true
+        absent: artist results' name in the shared deezerItem; the adapter doesn't use it from /search/album; sent only by /search/artist, /chart/0/artists
+      - path: data[].nb_fan
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult sets FanCount from it and rank.prominenceOf scores albums by FanCount, so Deezer album search results always score 0; sent only by /search/artist'
+      - path: data[].nb_tracks
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].picture_big
+        type: unseen
+        seen: []
+        read: true
+        absent: artist results' picture in the shared deezerItem; the adapter doesn't use it from /search/album; sent only by /search/artist, /chart/0/artists
+      - path: data[].picture_xl
+        type: unseen
+        seen: []
+        read: true
+        absent: artist results' picture in the shared deezerItem; the adapter doesn't use it from /search/album; sent only by /search/artist, /chart/0/artists
+      - path: data[].preview
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' preview URL in the shared deezerItem; the adapter doesn't use it from /search/album; sent only by /search/track, /chart/0/tracks, /album/{id}/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].rank
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' popularity in the shared deezerItem; the adapter doesn't use it from /search/album; sent only by /search/track, /chart/0/tracks, /album/{id}/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].record_type
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].release_date
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult sets ReleaseDate from it, so album search results never carry a release date; sent only by /artist/{id}/albums, /track/{id}, /album/{id}'
+      - path: data[].title
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].track_position
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' track number in the shared deezerItem; the adapter doesn't use it from /search/album; sent only by /album/{id}/tracks, /track/{id}
+      - path: data[].tracklist
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer API URL of this object's track list; altune builds those URLs itself
+      - path: data[].type
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer object type ('track', 'album', 'artist'), already implied by the endpoint
+      - path: data[].upc
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult sets UPC from it, so these album results never carry a UPC; sent only by /album/{id}'
+      - path: next
+        type: string
+        seen: [live]
+        read: true
+      - path: total
+        type: number
+        seen: [live]
+        read: false
+        unused: total result count; paging follows the next URL instead
+  search_artist:
+    fixtures:
+      - id: Nia Archives
+        why: Nia Archives, including a zero-fan duplicate profile
+      - id: Mount Kimbie
+        why: DJ-mix artist
+      - id: Subnation
+        why: 'sparse: obscure artist'
+      - id: Armin
+        why: free-text query with more than 15 hits, so the page carries next
+    fields:
+      - path: data
+        type: array
+        seen: [live]
+        read: true
+      - path: data[].album
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' embedded album in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].album.cover_big
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' embedded album in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].album.cover_xl
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' embedded album in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].album.id
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' embedded album in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].album.title
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' embedded album in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /search/track, /chart/0/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].artist
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' main artist in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /search/track, /search/album, /chart/0/tracks, /chart/0/albums, /album/{id}/tracks, /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].artist.id
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' main artist in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /search/track, /search/album, /chart/0/tracks, /chart/0/albums, /album/{id}/tracks, /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].artist.name
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' main artist in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /search/track, /search/album, /chart/0/tracks, /chart/0/albums, /album/{id}/tracks, /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].contributors
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' credited artists in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].contributors[].id
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' credited artists in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].contributors[].name
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' credited artists in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].contributors[].role
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' credited artists in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].cover_big
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' artwork in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /search/album, /chart/0/albums, /artist/{id}/albums, /album/{id}
+      - path: data[].cover_xl
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' artwork in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /search/album, /chart/0/albums, /artist/{id}/albums, /album/{id}
+      - path: data[].disk_number
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' disc number in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /album/{id}/tracks, /track/{id}
+      - path: data[].duration
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' length in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /search/track, /chart/0/tracks, /album/{id}/tracks, /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].explicit_lyrics
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' explicit flag in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /search/track, /search/album, /chart/0/tracks, /chart/0/albums, /album/{id}/tracks, /artist/{id}/albums, /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].genre_id
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' genre id in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /search/album, /artist/{id}/albums, /album/{id}
+      - path: data[].id
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].isrc
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' ISRC in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /search/track, /album/{id}/tracks, /track/{id}
+      - path: data[].link
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].nb_album
+        type: number
+        seen: [live]
+        read: false
+        unused: count of the artist's releases on Deezer; the discography is paged from /artist/{id}/albums
+      - path: data[].nb_fan
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].nb_tracks
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' track count in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /search/album, /album/{id}
+      - path: data[].picture
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller picture sizes and the API image redirect; artwork uses picture_xl or picture_big
+      - path: data[].picture_big
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].picture_medium
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller picture sizes and the API image redirect; artwork uses picture_xl or picture_big
+      - path: data[].picture_small
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller picture sizes and the API image redirect; artwork uses picture_xl or picture_big
+      - path: data[].picture_xl
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].preview
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' preview URL in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /search/track, /chart/0/tracks, /album/{id}/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].radio
+        type: boolean
+        seen: [live]
+        read: false
+        unused: whether Deezer offers an artist radio; altune has no Deezer radio
+      - path: data[].rank
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' popularity in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /search/track, /chart/0/tracks, /album/{id}/tracks, /artist/{id}/top, /track/{id}
+      - path: data[].record_type
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' release type in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /search/album, /chart/0/albums, /artist/{id}/albums, /album/{id}
+      - path: data[].release_date
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' release date in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /artist/{id}/albums, /track/{id}, /album/{id}
+      - path: data[].title
+        type: unseen
+        seen: []
+        read: true
+        absent: track and album results' title in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /search/track, /search/album, /chart/0/tracks, /chart/0/albums, /album/{id}/tracks, /artist/{id}/albums, /artist/{id}/top, /track/{id}, /album/{id}
+      - path: data[].track_position
+        type: unseen
+        seen: []
+        read: true
+        absent: track results' track number in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /album/{id}/tracks, /track/{id}
+      - path: data[].tracklist
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer API URL of this object's track list; altune builds those URLs itself
+      - path: data[].type
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer object type ('track', 'album', 'artist'), already implied by the endpoint
+      - path: data[].upc
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' UPC in the shared deezerItem; the adapter doesn't use it from /search/artist; sent only by /album/{id}
+      - path: next
+        type: string
+        seen: [live]
+        read: true
+      - path: total
+        type: number
+        seen: [live]
+        read: false
+        unused: total result count; paging follows the next URL instead
+  search_track:
+    fixtures:
+      - id: Nia Archives|Sober Feels
+        why: Nia Archives normal single, structured artist/track query
+      - id: Nia Archives|18 & Over
+        why: explicit track
+      - id: Mount Kimbie|Monroe (Mixed)
+        why: DJ-mix track from a fabric mix compilation
+      - id: Subnation|Gunshot
+        why: 'sparse: obscure artist with two results'
+      - id: Emotional Junglist
+        why: free-text query as Search sends it
+    fields:
+      - path: data
+        type: array
+        seen: [live]
+        read: true
+      - path: data[].album
+        type: object
+        seen: [live]
+        read: true
+      - path: data[].album.cover
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: data[].album.cover_big
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].album.cover_medium
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: data[].album.cover_small
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: data[].album.cover_xl
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].album.id
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].album.md5_image
+        type: string
+        seen: [live]
+        read: false
+        unused: hash of the cover image file; artwork uses the cover URLs
+      - path: data[].album.title
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].album.tracklist
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer API URL of this object's track list; altune builds those URLs itself
+      - path: data[].album.type
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer object type ('track', 'album', 'artist'), already implied by the endpoint
+      - path: data[].artist
+        type: object
+        seen: [live]
+        read: true
+      - path: data[].artist.id
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].artist.link
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.name
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].artist.picture
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.picture_big
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.picture_medium
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.picture_small
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.picture_xl
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.tracklist
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].artist.type
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer artist page/share URLs, picture sizes, radio flag, top-tracks API URL and object type; artist identity comes from the artist id and name
+      - path: data[].contributors
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult reads it for every track and album result, so these results only get the main artist from the artist fallback, never featured artists; sent only by /artist/{id}/top, /track/{id}, /album/{id}'
+      - path: data[].contributors[].id
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult reads it for every track and album result, so these results only get the main artist from the artist fallback, never featured artists; sent only by /artist/{id}/top, /track/{id}, /album/{id}'
+      - path: data[].contributors[].name
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult reads it for every track and album result, so these results only get the main artist from the artist fallback, never featured artists; sent only by /artist/{id}/top, /track/{id}, /album/{id}'
+      - path: data[].contributors[].role
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult reads it for every track and album result, so these results only get the main artist from the artist fallback, never featured artists; sent only by /artist/{id}/top, /track/{id}, /album/{id}'
+      - path: data[].cover_big
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' artwork in the shared deezerItem; the adapter doesn't use it from /search/track; sent only by /search/album, /chart/0/albums, /artist/{id}/albums, /album/{id}
+      - path: data[].cover_xl
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' artwork in the shared deezerItem; the adapter doesn't use it from /search/track; sent only by /search/album, /chart/0/albums, /artist/{id}/albums, /album/{id}
+      - path: data[].disk_number
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult sets TrackPosition from it, so these track results always get disc 0, track 0; sent only by /album/{id}/tracks, /track/{id}'
+      - path: data[].duration
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].explicit_content_cover
+        type: number
+        seen: [live]
+        read: false
+        unused: advisory code for the cover art, not the audio
+      - path: data[].explicit_content_lyrics
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: Deezer''s lyrics advisory code (0 clean, 1 explicit, 3 edited, 4 partly explicit, 6 no advice); explicit_lyrics alone can''t tell an edited clean version from a never-explicit one'
+      - path: data[].explicit_lyrics
+        type: boolean
+        seen: [live]
+        read: true
+      - path: data[].genre_id
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' genre id in the shared deezerItem; the adapter doesn't use it from /search/track; sent only by /search/album, /artist/{id}/albums, /album/{id}
+      - path: data[].id
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].isrc
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].link
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].md5_image
+        type: string
+        seen: [live]
+        read: false
+        unused: hash of the cover image file; artwork uses the cover URLs
+      - path: data[].name
+        type: unseen
+        seen: []
+        read: true
+        absent: artist results' name in the shared deezerItem; the adapter doesn't use it from /search/track; sent only by /search/artist, /chart/0/artists
+      - path: data[].nb_fan
+        type: unseen
+        seen: []
+        read: true
+        absent: artist and album results' fan count in the shared deezerItem; the adapter doesn't use it from /search/track; sent only by /search/artist
+      - path: data[].nb_tracks
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' track count in the shared deezerItem; the adapter doesn't use it from /search/track; sent only by /search/album, /album/{id}
+      - path: data[].picture_big
+        type: unseen
+        seen: []
+        read: true
+        absent: artist results' picture in the shared deezerItem; the adapter doesn't use it from /search/track; sent only by /search/artist, /chart/0/artists
+      - path: data[].picture_xl
+        type: unseen
+        seen: []
+        read: true
+        absent: artist results' picture in the shared deezerItem; the adapter doesn't use it from /search/track; sent only by /search/artist, /chart/0/artists
+      - path: data[].preview
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].rank
+        type: number
+        seen: [live]
+        read: true
+      - path: data[].readable
+        type: boolean
+        seen: [live]
+        read: false
+        unused: whether Deezer can stream the track in the caller's region; altune never plays audio from Deezer
+      - path: data[].record_type
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' release type in the shared deezerItem; the adapter doesn't use it from /search/track; sent only by /search/album, /chart/0/albums, /artist/{id}/albums, /album/{id}
+      - path: data[].release_date
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' release date in the shared deezerItem; the adapter doesn't use it from /search/track; sent only by /artist/{id}/albums, /track/{id}, /album/{id}
+      - path: data[].title
+        type: string
+        seen: [live]
+        read: true
+      - path: data[].title_short
+        type: string
+        seen: [live]
+        read: false
+        unused: title without the version suffix; title already carries both
+      - path: data[].title_version
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: version or mix name on its own (e.g. ''(Mixed)''), today only available folded into title'
+      - path: data[].track_position
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: mapDeezerResult sets TrackPosition from it, so these track results always get disc 0, track 0; sent only by /album/{id}/tracks, /track/{id}'
+      - path: data[].type
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer object type ('track', 'album', 'artist'), already implied by the endpoint
+      - path: data[].upc
+        type: unseen
+        seen: []
+        read: true
+        absent: album results' UPC in the shared deezerItem; the adapter doesn't use it from /search/track; sent only by /album/{id}
+      - path: next
+        type: string
+        seen: [live]
+        read: true
+      - path: total
+        type: number
+        seen: [live]
+        read: false
+        unused: total result count; paging follows the next URL instead
+  track:
+    fixtures:
+      - id: "4144817442"
+        why: Nia Archives Vertical, album track with lyrics
+      - id: "1541518162"
+        why: Nia Archives 18 & Over, explicit single
+      - id: "4145528712"
+        why: Mount Kimbie Monroe (Mixed), DJ-mix track
+      - id: "867697822"
+        why: 'sparse: Subnation Gunshot'
+    fields:
+      - path: album
+        type: object
+        seen: [live]
+        read: false
+        unused: embedded album summary; the search result that found this track already gave its album title and id
+      - path: album.cover
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: album.cover_big
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: album.cover_medium
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: album.cover_small
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: album.cover_xl
+        type: string
+        seen: [live]
+        read: false
+        unused: smaller cover sizes, the API image redirect and the cover hash; artwork uses cover_xl or cover_big
+      - path: album.id
+        type: number
+        seen: [live]
+        read: false
+        unused: Deezer album id; the search result that found this track already gave it
+      - path: album.link
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer album page URL
+      - path: album.md5_image
+        type: string
+        seen: [live]
+        read: false
+        unused: hash of the cover image file; artwork uses the cover URLs
+      - path: album.release_date
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: release date of the track''s album; no search response carries a release date for a track'
+      - path: album.title
+        type: string
+        seen: [live]
+        read: false
+        unused: album title; the search result that found this track already gave it
+      - path: album.tracklist
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer API URL of this object's track list; altune builds those URLs itself
+      - path: album.type
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer object type ('track', 'album', 'artist'), already implied by the endpoint
+      - path: artist
+        type: object
+        seen: [live]
+        read: false
+        unused: main artist summary; the same artist is the Main entry in contributors, which is read
+      - path: artist.id
+        type: number
+        seen: [live]
+        read: false
+        unused: main artist summary; the same artist is the Main entry in contributors, which is read
+      - path: artist.link
+        type: string
+        seen: [live]
+        read: false
+        unused: main artist summary; the same artist is the Main entry in contributors, which is read
+      - path: artist.name
+        type: string
+        seen: [live]
+        read: false
+        unused: main artist summary; the same artist is the Main entry in contributors, which is read
+      - path: artist.picture
+        type: string
+        seen: [live]
+        read: false
+        unused: main artist summary; the same artist is the Main entry in contributors, which is read
+      - path: artist.picture_big
+        type: string
+        seen: [live]
+        read: false
+        unused: main artist summary; the same artist is the Main entry in contributors, which is read
+      - path: artist.picture_medium
+        type: string
+        seen: [live]
+        read: false
+        unused: main artist summary; the same artist is the Main entry in contributors, which is read
+      - path: artist.picture_small
+        type: string
+        seen: [live]
+        read: false
+        unused: main artist summary; the same artist is the Main entry in contributors, which is read
+      - path: artist.picture_xl
+        type: string
+        seen: [live]
+        read: false
+        unused: main artist summary; the same artist is the Main entry in contributors, which is read
+      - path: artist.radio
+        type: boolean
+        seen: [live]
+        read: false
+        unused: main artist summary; the same artist is the Main entry in contributors, which is read
+      - path: artist.share
+        type: string
+        seen: [live]
+        read: false
+        unused: main artist summary; the same artist is the Main entry in contributors, which is read
+      - path: artist.tracklist
+        type: string
+        seen: [live]
+        read: false
+        unused: main artist summary; the same artist is the Main entry in contributors, which is read
+      - path: artist.type
+        type: string
+        seen: [live]
+        read: false
+        unused: main artist summary; the same artist is the Main entry in contributors, which is read
+      - path: available_countries
+        type: array
+        seen: [live]
+        read: false
+        unused: ISO country codes where Deezer can stream the track; altune never plays audio from Deezer
+      - path: available_countries[]
+        type: string
+        seen: [live]
+        read: false
+        unused: ISO country codes where Deezer can stream the track; altune never plays audio from Deezer
+      - path: bpm
+        type: number
+        seen: [live]
+        read: true
+      - path: contributors
+        type: array
+        seen: [live]
+        read: true
+      - path: contributors[].id
+        type: number
+        seen: [live]
+        read: true
+      - path: contributors[].link
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: contributors[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: contributors[].picture
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: contributors[].picture_big
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: contributors[].picture_medium
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: contributors[].picture_small
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: contributors[].picture_xl
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: contributors[].radio
+        type: boolean
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: contributors[].role
+        type: string
+        seen: [live]
+        read: true
+      - path: contributors[].share
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: contributors[].tracklist
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: contributors[].type
+        type: string
+        seen: [live]
+        read: false
+        unused: contributor page/share URLs, pictures, radio flag, top-tracks URL and object type; contributors are kept by id, name and role
+      - path: disk_number
+        type: number
+        seen: [live]
+        read: false
+        unused: disc number; the search result that found this track already gave it
+      - path: duration
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: length in seconds; the enrichment lookup only adds bpm, gain, explicit and contributors to a track already found by search, so it can''t check the resolved id is the same recording'
+      - path: explicit_content_cover
+        type: number
+        seen: [live]
+        read: false
+        unused: advisory code for the cover art, not the audio
+      - path: explicit_content_lyrics
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: Deezer''s lyrics advisory code (0 clean, 1 explicit, 3 edited, 4 partly explicit, 6 no advice); explicit_lyrics alone can''t tell an edited clean version from a never-explicit one'
+      - path: explicit_lyrics
+        type: boolean
+        seen: [live]
+        read: true
+      - path: gain
+        type: number
+        seen: [live]
+        read: true
+      - path: id
+        type: number
+        seen: [live]
+        read: false
+        unused: the requested track id echoed back
+      - path: isrc
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: ISRC; the enrichment lookup only adds bpm, gain, explicit and contributors to a track already found by search, so it can''t check the resolved id is the same recording'
+      - path: link
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer track page URL; the search result already gave it
+      - path: md5_image
+        type: string
+        seen: [live]
+        read: false
+        unused: hash of the cover image file; artwork uses the cover URLs
+      - path: preview
+        type: string
+        seen: [live]
+        read: false
+        unused: signed, expiring 30-second preview MP3; the search result already gave one
+      - path: rank
+        type: number
+        seen: [live]
+        read: false
+        unused: Deezer popularity score; the search result already gave it
+      - path: readable
+        type: boolean
+        seen: [live]
+        read: false
+        unused: whether Deezer can stream the track in the caller's region; altune never plays audio from Deezer
+      - path: release_date
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the track''s release date; no search response carries a release date for a track'
+      - path: share
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer page URL with utm tracking parameters; link is the clean form
+      - path: title
+        type: string
+        seen: [live]
+        read: false
+        unused: track title; the search result that found this track already gave it
+      - path: title_short
+        type: string
+        seen: [live]
+        read: false
+        unused: title without the version suffix; title already carries both
+      - path: title_version
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: version or mix name on its own (e.g. ''(Mixed)''), today only available folded into title'
+      - path: track_position
+        type: number
+        seen: [live]
+        read: false
+        unused: track number; the search result that found this track already gave it
+      - path: track_token
+        type: string
+        seen: [live]
+        read: false
+        unused: opaque Deezer streaming token for the web player; altune never plays audio from Deezer
+      - path: type
+        type: string
+        seen: [live]
+        read: false
+        unused: Deezer object type ('track', 'album', 'artist'), already implied by the endpoint

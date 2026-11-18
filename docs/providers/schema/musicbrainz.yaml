@@ -1,0 +1,2248 @@
+provider: musicbrainz
+reference: 'none: MusicBrainz''s only official schema is the RelaxNG XML schema (musicbrainz_mmd-2.0.rng) plus the prose API wiki; the fmt=json field names and nesting don''t map onto the XML 1:1, and no official machine-readable description of the JSON form exists'
+entities:
+  artist:
+    fixtures:
+      - id: 09d6b57e-9cd9-4a74-b7cb-842b8443a1cd
+        why: 'Nia Archives: a person with genres, ratings and streaming url-rels'
+      - id: 25f595b6-874f-420b-af03-0315cadea009
+        why: 'Subnation: a small group with sparse data'
+      - id: 89ad4ac3-39f7-470e-963a-56509c546377
+        why: 'Various Artists: the special-purpose compilation artist'
+    fields:
+      - path: area
+        type: null|object
+        seen: [live]
+        read: false
+        unused: the artist's main area (e.g. London); ResolveArtistIdentity takes the area from the artist search, and Lookup only enriches genres, rating and external ids
+      - path: area.disambiguation
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist's main area (e.g. London); ResolveArtistIdentity takes the area from the artist search, and Lookup only enriches genres, rating and external ids
+      - path: area.id
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist's main area (e.g. London); ResolveArtistIdentity takes the area from the artist search, and Lookup only enriches genres, rating and external ids
+      - path: area.name
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist's main area (e.g. London); ResolveArtistIdentity takes the area from the artist search, and Lookup only enriches genres, rating and external ids
+      - path: area.sort-name
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist's main area (e.g. London); ResolveArtistIdentity takes the area from the artist search, and Lookup only enriches genres, rating and external ids
+      - path: area.type
+        type: "null"
+        seen: [live]
+        read: false
+        unused: the artist's main area (e.g. London); ResolveArtistIdentity takes the area from the artist search, and Lookup only enriches genres, rating and external ids
+      - path: area.type-id
+        type: "null"
+        seen: [live]
+        read: false
+        unused: the artist's main area (e.g. London); ResolveArtistIdentity takes the area from the artist search, and Lookup only enriches genres, rating and external ids
+      - path: begin-area
+        type: null|object
+        seen: [live]
+        read: false
+        unused: where the artist was born or formed (e.g. Bradford); Lookup only enriches genres, rating and external ids
+      - path: begin-area.disambiguation
+        type: string
+        seen: [live]
+        read: false
+        unused: where the artist was born or formed (e.g. Bradford); Lookup only enriches genres, rating and external ids
+      - path: begin-area.id
+        type: string
+        seen: [live]
+        read: false
+        unused: where the artist was born or formed (e.g. Bradford); Lookup only enriches genres, rating and external ids
+      - path: begin-area.name
+        type: string
+        seen: [live]
+        read: false
+        unused: where the artist was born or formed (e.g. Bradford); Lookup only enriches genres, rating and external ids
+      - path: begin-area.sort-name
+        type: string
+        seen: [live]
+        read: false
+        unused: where the artist was born or formed (e.g. Bradford); Lookup only enriches genres, rating and external ids
+      - path: begin-area.type
+        type: "null"
+        seen: [live]
+        read: false
+        unused: where the artist was born or formed (e.g. Bradford); Lookup only enriches genres, rating and external ids
+      - path: begin-area.type-id
+        type: "null"
+        seen: [live]
+        read: false
+        unused: where the artist was born or formed (e.g. Bradford); Lookup only enriches genres, rating and external ids
+      - path: country
+        type: null|string
+        seen: [live]
+        read: false
+        unused: ISO country code of the artist's area; Lookup only enriches genres, rating and external ids
+      - path: disambiguation
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz comment telling same-named artists apart; ResolveArtistIdentity takes it from the artist search
+      - path: end-area
+        type: "null"
+        seen: [live]
+        read: false
+        unused: where the artist died or dissolved, null for every artist seen; Lookup only enriches genres, rating and external ids
+      - path: gender
+        type: null|string
+        seen: [live]
+        read: false
+        unused: the artist's gender and its id; altune doesn't show or match on it
+      - path: gender-id
+        type: null|string
+        seen: [live]
+        read: false
+        unused: the artist's gender and its id; altune doesn't show or match on it
+      - path: genres
+        type: array
+        seen: [live]
+        read: true
+      - path: genres[].count
+        type: number
+        seen: [live]
+        read: true
+      - path: genres[].disambiguation
+        type: string
+        seen: [live]
+        read: false
+        unused: comment telling same-named genres apart, empty for every genre seen
+      - path: genres[].id
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz genre MBID; the adapter keeps genre names
+      - path: genres[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: id
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist MBID the request looked up; Lookup already has it
+      - path: ipis
+        type: array
+        seen: [live]
+        read: false
+        unused: IPI rights-society codes of the artist; altune has no rights data
+      - path: isnis
+        type: array
+        seen: [live]
+        read: false
+        unused: ISNI identifiers of the artist; altune has no ISNI integration
+      - path: life-span
+        type: object
+        seen: [live]
+        read: false
+        unused: begin and end dates of the artist; ResolveArtistIdentity takes the birth year from the artist search, and Lookup only enriches genres, rating and external ids
+      - path: life-span.begin
+        type: null|string
+        seen: [live]
+        read: false
+        unused: begin and end dates of the artist; ResolveArtistIdentity takes the birth year from the artist search, and Lookup only enriches genres, rating and external ids
+      - path: life-span.end
+        type: "null"
+        seen: [live]
+        read: false
+        unused: begin and end dates of the artist; ResolveArtistIdentity takes the birth year from the artist search, and Lookup only enriches genres, rating and external ids
+      - path: life-span.ended
+        type: boolean
+        seen: [live]
+        read: false
+        unused: begin and end dates of the artist; ResolveArtistIdentity takes the birth year from the artist search, and Lookup only enriches genres, rating and external ids
+      - path: name
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist name; Lookup is called with an MBID the search already named
+      - path: rating
+        type: object
+        seen: [live]
+        read: true
+      - path: rating.value
+        type: number
+        seen: [live]
+        read: true
+      - path: rating.votes-count
+        type: number
+        seen: [live]
+        read: true
+      - path: relations
+        type: array
+        seen: [live]
+        read: true
+      - path: relations[].attribute-ids
+        type: object
+        seen: [live]
+        read: false
+        unused: MusicBrainz ids of the relation's attributes keyed by attribute name; the attribute names in attributes carry the same
+      - path: relations[].attribute-values
+        type: object
+        seen: [live]
+        read: false
+        unused: free-text values of relation attributes, empty in every relation seen
+      - path: relations[].attributes
+        type: array
+        seen: [live]
+        read: false
+        unused: attributes of the url relation (e.g. 'video'), empty in every relation seen; the adapter picks a relation by its type and URL host
+      - path: relations[].begin
+        type: "null"
+        seen: [live]
+        read: false
+        unused: start date of the relation (the performance date on live recordings, null otherwise); the live attribute already marks live recordings
+      - path: relations[].direction
+        type: string
+        seen: [live]
+        read: false
+        unused: whether the relation reads forward or backward from this entity; the adapter only reads the type and the target
+      - path: relations[].end
+        type: "null"
+        seen: [live]
+        read: false
+        unused: end date of the relation (the performance date on live recordings, null otherwise); the live attribute already marks live recordings
+      - path: relations[].ended
+        type: boolean
+        seen: [live]
+        read: false
+        unused: whether the relation has ended; the adapter treats every listed relation as current
+      - path: relations[].source-credit
+        type: string
+        seen: [live]
+        read: false
+        unused: the name the source entity is credited as in this relation, usually empty; artists are identified by MBID
+      - path: relations[].target-credit
+        type: string
+        seen: [live]
+        read: false
+        unused: the name the target is credited as in this relation, usually empty; the adapter reads the target itself
+      - path: relations[].target-type
+        type: string
+        seen: [live]
+        read: false
+        unused: the related entity kind, always 'url' because the request asks only inc=url-rels
+      - path: relations[].type
+        type: string
+        seen: [live]
+        read: true
+      - path: relations[].type-id
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz id of the relation type; the adapter matches the type name
+      - path: relations[].url
+        type: object
+        seen: [live]
+        read: true
+      - path: relations[].url.id
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz id of the URL entity; the adapter takes the external id from the URL's path
+      - path: relations[].url.resource
+        type: string
+        seen: [live]
+        read: true
+      - path: sort-name
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist name in library sort order; altune shows the plain name
+      - path: type
+        type: string
+        seen: [live]
+        read: false
+        unused: kind of artist (Person, Group, Other) and its id; ResolveArtistIdentity takes the type from the artist search
+      - path: type-id
+        type: string
+        seen: [live]
+        read: false
+        unused: kind of artist (Person, Group, Other) and its id; ResolveArtistIdentity takes the type from the artist search
+  browse_release_groups:
+    fixtures:
+      - id: 09d6b57e-9cd9-4a74-b7cb-842b8443a1cd
+        why: 'Nia Archives discography: albums, EPs, singles, remix and DJ-mix release groups'
+      - id: 25f595b6-874f-420b-af03-0315cadea009
+        why: 'Subnation discography: a short list'
+    fields:
+      - path: release-group-count
+        type: number
+        seen: [live]
+        read: true
+      - path: release-group-offset
+        type: number
+        seen: [live]
+        read: false
+        unused: offset of this browse page; the adapter computes the next offset itself from the page number
+      - path: release-groups
+        type: array
+        seen: [live]
+        read: true
+      - path: release-groups[].artist-credit
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: the browse asks for no inc=artist-credits, so it never sends artist credits, yet mapMBReleaseGroup takes each discography result''s subtitle from artist-credit[0].name, which leaves every ListArtistDiscography result with an empty artist; the release-group search does send it'
+      - path: release-groups[].artist-credit[].artist
+        type: unseen
+        seen: []
+        read: true
+        absent: mbArtistRef is shared with recordings, whose responses send it; the release-group mapping only reads the first credit's name
+      - path: release-groups[].artist-credit[].artist.id
+        type: unseen
+        seen: []
+        read: true
+        absent: mbArtistRef is shared with recordings, whose responses send it; the release-group mapping only reads the first credit's name
+      - path: release-groups[].artist-credit[].artist.name
+        type: unseen
+        seen: []
+        read: true
+        absent: mbArtistRef is shared with recordings, whose responses send it; the release-group mapping only reads the first credit's name
+      - path: release-groups[].artist-credit[].joinphrase
+        type: unseen
+        seen: []
+        read: true
+        absent: mbArtistRef is shared with recordings, whose responses send it; the release-group mapping only reads the first credit's name
+      - path: release-groups[].artist-credit[].name
+        type: unseen
+        seen: []
+        read: true
+        absent: 'BUG: the browse sends no artist credits, yet mapMBReleaseGroup reads artist-credit[0].name as each discography result''s subtitle, so it is always empty; the release-group search does send it'
+      - path: release-groups[].disambiguation
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: MusicBrainz comment telling same-titled release groups apart (e.g. a single and an EP both called Headz Gone West); discography results lose it'
+      - path: release-groups[].first-release-date
+        type: string
+        seen: [live]
+        read: true
+      - path: release-groups[].id
+        type: string
+        seen: [live]
+        read: true
+      - path: release-groups[].primary-type
+        type: string
+        seen: [live]
+        read: true
+      - path: release-groups[].primary-type-id
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz id of the primary type; the adapter reads the primary-type name
+      - path: release-groups[].secondary-type-ids
+        type: array
+        seen: [live]
+        read: false
+        unused: MusicBrainz ids of the secondary types; the adapter reads the secondary-type names
+      - path: release-groups[].secondary-type-ids[]
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz ids of the secondary types; the adapter reads the secondary-type names
+      - path: release-groups[].secondary-types
+        type: array
+        seen: [live]
+        read: true
+      - path: release-groups[].secondary-types[]
+        type: string
+        seen: [live]
+        read: true
+      - path: release-groups[].title
+        type: string
+        seen: [live]
+        read: true
+  isrc:
+    fixtures:
+      - id: QZHN42091541
+        why: Nia Archives single Sober Feels
+      - id: US23A1935964
+        why: Subnation Gunshot as mixed on the Luvleh Mix DJ-mix
+      - id: GBUM72304207
+        why: a remix (Breakage) of a Nia Archives track
+    fields:
+      - path: isrc
+        type: string
+        seen: [live]
+        read: false
+        unused: the ISRC the request looked up, echoed back; the caller already has it
+      - path: recordings
+        type: array
+        seen: [live]
+        read: true
+      - path: recordings[].artist-credit
+        type: unseen
+        seen: []
+        read: true
+        absent: mbRecording is shared with recording searches and lookups, which send credits; the /isrc lookup returns bare recordings and parseISRCRecordings only reads id and length
+      - path: recordings[].artist-credit[].artist
+        type: unseen
+        seen: []
+        read: true
+        absent: mbRecording is shared with recording searches and lookups, which send credits; the /isrc lookup returns bare recordings and parseISRCRecordings only reads id and length
+      - path: recordings[].artist-credit[].artist.id
+        type: unseen
+        seen: []
+        read: true
+        absent: mbRecording is shared with recording searches and lookups, which send credits; the /isrc lookup returns bare recordings and parseISRCRecordings only reads id and length
+      - path: recordings[].artist-credit[].artist.name
+        type: unseen
+        seen: []
+        read: true
+        absent: mbRecording is shared with recording searches and lookups, which send credits; the /isrc lookup returns bare recordings and parseISRCRecordings only reads id and length
+      - path: recordings[].artist-credit[].joinphrase
+        type: unseen
+        seen: []
+        read: true
+        absent: mbRecording is shared with recording searches and lookups, which send credits; the /isrc lookup returns bare recordings and parseISRCRecordings only reads id and length
+      - path: recordings[].artist-credit[].name
+        type: unseen
+        seen: []
+        read: true
+        absent: mbRecording is shared with recording searches and lookups, which send credits; the /isrc lookup returns bare recordings and parseISRCRecordings only reads id and length
+      - path: recordings[].disambiguation
+        type: string
+        seen: [live]
+        read: true
+      - path: recordings[].first-release-date
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: date of the recording''s earliest release; recordings carry no release date, so an original can''t be told from a later re-release'
+      - path: recordings[].id
+        type: string
+        seen: [live]
+        read: true
+      - path: recordings[].isrcs
+        type: unseen
+        seen: []
+        read: true
+        absent: mbRecording is shared with recording searches and lookups, which send ISRCs; the /isrc lookup already is the ISRC and parseISRCRecordings only reads id and length
+      - path: recordings[].isrcs[]
+        type: unseen
+        seen: []
+        read: true
+        absent: mbRecording is shared with recording searches and lookups, which send ISRCs; the /isrc lookup already is the ISRC and parseISRCRecordings only reads id and length
+      - path: recordings[].length
+        type: number
+        seen: [live]
+        read: true
+      - path: recordings[].title
+        type: string
+        seen: [live]
+        read: true
+      - path: recordings[].video
+        type: boolean
+        seen: [live]
+        read: false
+        unused: whether the recording is a music video (false for every audio recording); altune matches audio recordings and never filters on it
+  recording:
+    fixtures:
+      - id: 5e622707-7a4e-484e-9bee-9234d2112fbc
+        why: 'Nia Archives Sober Feels: a normal single with an ISRC'
+      - id: 0197bd3a-59cc-4a6b-820b-5730e66dd1b0
+        why: 'Subnation Gunshot (Mixed): part of the Luvleh Mix DJ-mix, with a disambiguation'
+      - id: 16a5d3d3-9b5d-4f0f-b22a-172e7988e2b5
+        why: 'a Baiana bootleg: sparse, no ISRC'
+      - id: 548f2445-4cf6-4c1f-b59f-7af459414b35
+        why: a live hour-long Boiler Room DJ set credited to Nia Archives
+    fields:
+      - path: artist-credit
+        type: array
+        seen: [live]
+        read: true
+      - path: artist-credit[].artist
+        type: object
+        seen: [live]
+        read: true
+      - path: artist-credit[].artist.country
+        type: null|string
+        seen: [live]
+        read: false
+        unused: ISO country code of the credited artist; the recording lookup only needs the credit name and artist MBID
+      - path: artist-credit[].artist.disambiguation
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz comment telling same-named artists apart; the credit is already identified by its artist MBID
+      - path: artist-credit[].artist.id
+        type: string
+        seen: [live]
+        read: true
+      - path: artist-credit[].artist.name
+        type: string
+        seen: [live]
+        read: true
+      - path: artist-credit[].artist.sort-name
+        type: string
+        seen: [live]
+        read: false
+        unused: the credited artist's name in library sort order; altune shows and matches the credited name
+      - path: artist-credit[].artist.type
+        type: string
+        seen: [live]
+        read: false
+        unused: kind of the credited artist (Person, Group) and its id; the recording lookup only needs the credit name and artist MBID
+      - path: artist-credit[].artist.type-id
+        type: string
+        seen: [live]
+        read: false
+        unused: kind of the credited artist (Person, Group) and its id; the recording lookup only needs the credit name and artist MBID
+      - path: artist-credit[].joinphrase
+        type: string
+        seen: [live]
+        read: true
+      - path: artist-credit[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: disambiguation
+        type: string
+        seen: [live]
+        read: true
+      - path: first-release-date
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: date of the recording''s earliest release; RecordingByMBID returns no release date, so an original can''t be told from a later re-release'
+      - path: id
+        type: string
+        seen: [live]
+        read: true
+      - path: isrcs
+        type: array
+        seen: [live]
+        read: true
+      - path: isrcs[]
+        type: string
+        seen: [live]
+        read: true
+      - path: length
+        type: number
+        seen: [live]
+        read: true
+      - path: title
+        type: string
+        seen: [live]
+        read: true
+      - path: video
+        type: boolean
+        seen: [live]
+        read: false
+        unused: whether the recording is a music video (false for every audio recording); altune matches audio recordings and never filters on it
+  recording_detail:
+    fixtures:
+      - id: 5e622707-7a4e-484e-9bee-9234d2112fbc
+        why: 'Nia Archives Sober Feels: a normal single with an ISRC'
+      - id: 0197bd3a-59cc-4a6b-820b-5730e66dd1b0
+        why: 'Subnation Gunshot (Mixed): part of the Luvleh Mix DJ-mix, with a disambiguation'
+      - id: 16a5d3d3-9b5d-4f0f-b22a-172e7988e2b5
+        why: 'a Baiana bootleg: sparse, no ISRC'
+      - id: 548f2445-4cf6-4c1f-b59f-7af459414b35
+        why: a live hour-long Boiler Room DJ set credited to Nia Archives
+    fields:
+      - path: artist-credit
+        type: array
+        seen: [live]
+        read: true
+      - path: artist-credit[].artist
+        type: object
+        seen: [live]
+        read: true
+      - path: artist-credit[].artist.country
+        type: null|string
+        seen: [live]
+        read: false
+        unused: artist's home country; recordingDetail keeps only artist IDs, and country plays no part in matching audio
+      - path: artist-credit[].artist.disambiguation
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz's note telling same-named artists apart; the adapter matches artists by MBID, so the note adds nothing
+      - path: artist-credit[].artist.id
+        type: string
+        seen: [live]
+        read: true
+      - path: artist-credit[].artist.name
+        type: string
+        seen: [live]
+        read: true
+      - path: artist-credit[].artist.sort-name
+        type: string
+        seen: [live]
+        read: false
+        unused: sortable name form ("Archives, Nia"); altune sorts by display name
+      - path: artist-credit[].artist.type
+        type: string
+        seen: [live]
+        read: false
+        unused: Person or Group; not used to identify a recording
+      - path: artist-credit[].artist.type-id
+        type: string
+        seen: [live]
+        read: false
+        unused: MBID of the artist type; the same fact as type
+      - path: artist-credit[].joinphrase
+        type: string
+        seen: [live]
+        read: true
+      - path: artist-credit[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: disambiguation
+        type: string
+        seen: [live]
+        read: true
+      - path: first-release-date
+        type: string
+        seen: [live]
+        read: true
+      - path: id
+        type: string
+        seen: [live]
+        read: true
+      - path: isrcs
+        type: array
+        seen: [live]
+        read: true
+      - path: isrcs[]
+        type: string
+        seen: [live]
+        read: true
+      - path: length
+        type: number
+        seen: [live]
+        read: true
+      - path: releases
+        type: array
+        seen: [live]
+        read: true
+      - path: releases[].artist-credit
+        type: array
+        seen: [live]
+        read: false
+        unused: 'GAP: release artist; "Various Artists" or a DJ''s name here marks a compilation or mix, as opposed to the artist''s own release'
+      - path: releases[].artist-credit[].artist
+        type: object
+        seen: [live]
+        read: false
+        unused: parts of the release artist credit (name, MBID, join phrase, sort name, type); recordingDetail reads none of them, see releases[].artist-credit
+      - path: releases[].artist-credit[].artist.country
+        type: string
+        seen: [live]
+        read: false
+        unused: parts of the release artist credit (name, MBID, join phrase, sort name, type); recordingDetail reads none of them, see releases[].artist-credit
+      - path: releases[].artist-credit[].artist.disambiguation
+        type: string
+        seen: [live]
+        read: false
+        unused: parts of the release artist credit (name, MBID, join phrase, sort name, type); recordingDetail reads none of them, see releases[].artist-credit
+      - path: releases[].artist-credit[].artist.id
+        type: string
+        seen: [live]
+        read: false
+        unused: parts of the release artist credit (name, MBID, join phrase, sort name, type); recordingDetail reads none of them, see releases[].artist-credit
+      - path: releases[].artist-credit[].artist.name
+        type: string
+        seen: [live]
+        read: false
+        unused: parts of the release artist credit (name, MBID, join phrase, sort name, type); recordingDetail reads none of them, see releases[].artist-credit
+      - path: releases[].artist-credit[].artist.sort-name
+        type: string
+        seen: [live]
+        read: false
+        unused: parts of the release artist credit (name, MBID, join phrase, sort name, type); recordingDetail reads none of them, see releases[].artist-credit
+      - path: releases[].artist-credit[].artist.type
+        type: string
+        seen: [live]
+        read: false
+        unused: parts of the release artist credit (name, MBID, join phrase, sort name, type); recordingDetail reads none of them, see releases[].artist-credit
+      - path: releases[].artist-credit[].artist.type-id
+        type: string
+        seen: [live]
+        read: false
+        unused: parts of the release artist credit (name, MBID, join phrase, sort name, type); recordingDetail reads none of them, see releases[].artist-credit
+      - path: releases[].artist-credit[].joinphrase
+        type: string
+        seen: [live]
+        read: false
+        unused: parts of the release artist credit (name, MBID, join phrase, sort name, type); recordingDetail reads none of them, see releases[].artist-credit
+      - path: releases[].artist-credit[].name
+        type: string
+        seen: [live]
+        read: false
+        unused: parts of the release artist credit (name, MBID, join phrase, sort name, type); recordingDetail reads none of them, see releases[].artist-credit
+      - path: releases[].barcode
+        type: null|string
+        seen: [live]
+        read: false
+        unused: 'GAP: UPC/EAN of each release with this recording; it joins MusicBrainz to the Apple or Deezer album by barcode, the structural DJ-mix check'
+      - path: releases[].country
+        type: string
+        seen: [live]
+        read: false
+        unused: release country code (e.g. GB, XW for worldwide); the adapter does not pick an edition by country
+      - path: releases[].date
+        type: string
+        seen: [live]
+        read: true
+      - path: releases[].disambiguation
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: edition note such as "clean" or "DJ mix"; it would mark which release carries the version we want'
+      - path: releases[].id
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: release MBID; with it, one more lookup gives the release group''s secondary types (DJ-mix, Compilation), which is how a mixed slice can be told apart from the original track'
+      - path: releases[].packaging
+        type: string
+        seen: [live]
+        read: false
+        unused: physical packaging (Jewel Case, None); irrelevant to digital audio
+      - path: releases[].packaging-id
+        type: string
+        seen: [live]
+        read: false
+        unused: MBID of the packaging; irrelevant to digital audio
+      - path: releases[].quality
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz data-quality rating of the release entry (normal, high); not used
+      - path: releases[].release-events
+        type: array
+        seen: [live]
+        read: false
+        unused: date and area of each release event; the adapter uses releases[].date, which is the earliest event
+      - path: releases[].release-events[].area
+        type: object
+        seen: [live]
+        read: false
+        unused: per-country release event detail (area names, ISO codes, date); releases[].date already gives the earliest date
+      - path: releases[].release-events[].area.disambiguation
+        type: string
+        seen: [live]
+        read: false
+        unused: per-country release event detail (area names, ISO codes, date); releases[].date already gives the earliest date
+      - path: releases[].release-events[].area.id
+        type: string
+        seen: [live]
+        read: false
+        unused: per-country release event detail (area names, ISO codes, date); releases[].date already gives the earliest date
+      - path: releases[].release-events[].area.iso-3166-1-codes
+        type: array
+        seen: [live]
+        read: false
+        unused: per-country release event detail (area names, ISO codes, date); releases[].date already gives the earliest date
+      - path: releases[].release-events[].area.iso-3166-1-codes[]
+        type: string
+        seen: [live]
+        read: false
+        unused: per-country release event detail (area names, ISO codes, date); releases[].date already gives the earliest date
+      - path: releases[].release-events[].area.name
+        type: string
+        seen: [live]
+        read: false
+        unused: per-country release event detail (area names, ISO codes, date); releases[].date already gives the earliest date
+      - path: releases[].release-events[].area.sort-name
+        type: string
+        seen: [live]
+        read: false
+        unused: per-country release event detail (area names, ISO codes, date); releases[].date already gives the earliest date
+      - path: releases[].release-events[].area.type
+        type: "null"
+        seen: [live]
+        read: false
+        unused: per-country release event detail (area names, ISO codes, date); releases[].date already gives the earliest date
+      - path: releases[].release-events[].area.type-id
+        type: "null"
+        seen: [live]
+        read: false
+        unused: per-country release event detail (area names, ISO codes, date); releases[].date already gives the earliest date
+      - path: releases[].release-events[].date
+        type: string
+        seen: [live]
+        read: false
+        unused: per-country release event detail (area names, ISO codes, date); releases[].date already gives the earliest date
+      - path: releases[].status
+        type: string
+        seen: [live]
+        read: true
+      - path: releases[].status-id
+        type: string
+        seen: [live]
+        read: false
+        unused: MBID of the status; status itself is read
+      - path: releases[].text-representation
+        type: object
+        seen: [live]
+        read: false
+        unused: language and script of the tracklist text; not used
+      - path: releases[].text-representation.language
+        type: string
+        seen: [live]
+        read: false
+        unused: language and script of the tracklist text (e.g. eng, Latn); not used
+      - path: releases[].text-representation.script
+        type: string
+        seen: [live]
+        read: false
+        unused: language and script of the tracklist text (e.g. eng, Latn); not used
+      - path: releases[].title
+        type: string
+        seen: [live]
+        read: true
+      - path: title
+        type: string
+        seen: [live]
+        read: true
+      - path: video
+        type: boolean
+        seen: [live]
+        read: false
+        unused: true when the recording is a music video; recording detail is only fetched for audio MBIDs, but this could flag a video recording
+  recording_works:
+    fixtures:
+      - id: a85d68df-5dcc-4a08-97d9-bbcd7785123b
+        why: 'Nia Archives Cards on the Table: a performance of a work'
+      - id: 930f27f7-dd39-492d-ba08-367b92970073
+        why: a live Cards on the Table with no work relation
+      - id: a31e069b-1025-4700-971d-c6cfe937e31a
+        why: 'Massive Attack Teardrop: a studio recording of a much-covered work'
+    fields:
+      - path: artist-credit
+        type: array
+        seen: [live]
+        read: false
+        unused: the recording's artist credit, sent because the request asks inc=artist-credits; performanceWorkIDs only collects work ids, and RecordingByMBID reads the credit
+      - path: artist-credit[].artist
+        type: object
+        seen: [live]
+        read: false
+        unused: the recording's artist credit, sent because the request asks inc=artist-credits; performanceWorkIDs only collects work ids, and RecordingByMBID reads the credit
+      - path: artist-credit[].artist.country
+        type: string
+        seen: [live]
+        read: false
+        unused: ISO country code of the credited artist; the recording lookup only needs the credit name and artist MBID
+      - path: artist-credit[].artist.disambiguation
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz comment telling same-named artists apart; the credit is already identified by its artist MBID
+      - path: artist-credit[].artist.id
+        type: string
+        seen: [live]
+        read: false
+        unused: the recording's artist credit, sent because the request asks inc=artist-credits; performanceWorkIDs only collects work ids, and RecordingByMBID reads the credit
+      - path: artist-credit[].artist.name
+        type: string
+        seen: [live]
+        read: false
+        unused: the recording's artist credit, sent because the request asks inc=artist-credits; performanceWorkIDs only collects work ids, and RecordingByMBID reads the credit
+      - path: artist-credit[].artist.sort-name
+        type: string
+        seen: [live]
+        read: false
+        unused: the credited artist's name in library sort order; altune shows and matches the credited name
+      - path: artist-credit[].artist.type
+        type: string
+        seen: [live]
+        read: false
+        unused: kind of the credited artist (Person, Group) and its id; the recording lookup only needs the credit name and artist MBID
+      - path: artist-credit[].artist.type-id
+        type: string
+        seen: [live]
+        read: false
+        unused: kind of the credited artist (Person, Group) and its id; the recording lookup only needs the credit name and artist MBID
+      - path: artist-credit[].joinphrase
+        type: string
+        seen: [live]
+        read: false
+        unused: the recording's artist credit, sent because the request asks inc=artist-credits; performanceWorkIDs only collects work ids, and RecordingByMBID reads the credit
+      - path: artist-credit[].name
+        type: string
+        seen: [live]
+        read: false
+        unused: the recording's artist credit, sent because the request asks inc=artist-credits; performanceWorkIDs only collects work ids, and RecordingByMBID reads the credit
+      - path: disambiguation
+        type: string
+        seen: [live]
+        read: false
+        unused: the recording's MusicBrainz comment; performanceWorkIDs only collects work ids, and RecordingByMBID reads it
+      - path: first-release-date
+        type: string
+        seen: [live]
+        read: false
+        unused: date of the recording's earliest release; performanceWorkIDs only collects work ids, and the release date is a GAP of the recording lookups
+      - path: id
+        type: string
+        seen: [live]
+        read: false
+        unused: the recording MBID the request looked up; the caller already has it
+      - path: length
+        type: number
+        seen: [live]
+        read: false
+        unused: the recording length; performanceWorkIDs only collects work ids, and RecordingByMBID reads the length
+      - path: relations
+        type: array
+        seen: [live]
+        read: true
+      - path: relations[].attribute-ids
+        type: object
+        seen: [live]
+        read: false
+        unused: MusicBrainz ids of the relation's attributes keyed by attribute name; the attribute names in attributes carry the same
+      - path: relations[].attribute-values
+        type: object
+        seen: [live]
+        read: false
+        unused: free-text values of relation attributes, empty in every relation seen
+      - path: relations[].attributes
+        type: array
+        seen: [live]
+        read: false
+        unused: attributes of the recording-of-work link ('live', 'cover', 'partial', 'instrumental'); the source recording is the one altune already holds, so only the work id is followed
+      - path: relations[].begin
+        type: "null"
+        seen: [live]
+        read: false
+        unused: start date of the relation (the performance date on live recordings, null otherwise); the live attribute already marks live recordings
+      - path: relations[].direction
+        type: string
+        seen: [live]
+        read: false
+        unused: whether the relation reads forward or backward from this entity; the adapter only reads the type and the target
+      - path: relations[].end
+        type: "null"
+        seen: [live]
+        read: false
+        unused: end date of the relation (the performance date on live recordings, null otherwise); the live attribute already marks live recordings
+      - path: relations[].ended
+        type: boolean
+        seen: [live]
+        read: false
+        unused: whether the relation has ended; the adapter treats every listed relation as current
+      - path: relations[].source-credit
+        type: string
+        seen: [live]
+        read: false
+        unused: the name the source entity is credited as in this relation, usually empty; artists are identified by MBID
+      - path: relations[].target-credit
+        type: string
+        seen: [live]
+        read: false
+        unused: the name the target is credited as in this relation, usually empty; the adapter reads the target itself
+      - path: relations[].target-type
+        type: string
+        seen: [live]
+        read: false
+        unused: the related entity kind, always 'work' because the request asks only inc=work-rels; the adapter checks for a non-nil work instead
+      - path: relations[].type
+        type: string
+        seen: [live]
+        read: true
+      - path: relations[].type-id
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz id of the relation type; the adapter matches the type name
+      - path: relations[].work
+        type: object
+        seen: [live]
+        read: true
+      - path: relations[].work.attributes
+        type: array
+        seen: [live]
+        read: false
+        unused: the work's own title, type (Song), language, ISWCs and attributes; the adapter only follows the work id to list its other recordings
+      - path: relations[].work.disambiguation
+        type: string
+        seen: [live]
+        read: false
+        unused: the work's own title, type (Song), language, ISWCs and attributes; the adapter only follows the work id to list its other recordings
+      - path: relations[].work.id
+        type: string
+        seen: [live]
+        read: true
+      - path: relations[].work.iswcs
+        type: array
+        seen: [live]
+        read: false
+        unused: the work's own title, type (Song), language, ISWCs and attributes; the adapter only follows the work id to list its other recordings
+      - path: relations[].work.iswcs[]
+        type: string
+        seen: [live]
+        read: false
+        unused: the work's own title, type (Song), language, ISWCs and attributes; the adapter only follows the work id to list its other recordings
+      - path: relations[].work.language
+        type: string
+        seen: [live]
+        read: false
+        unused: the work's own title, type (Song), language, ISWCs and attributes; the adapter only follows the work id to list its other recordings
+      - path: relations[].work.languages
+        type: array
+        seen: [live]
+        read: false
+        unused: the work's own title, type (Song), language, ISWCs and attributes; the adapter only follows the work id to list its other recordings
+      - path: relations[].work.languages[]
+        type: string
+        seen: [live]
+        read: false
+        unused: the work's own title, type (Song), language, ISWCs and attributes; the adapter only follows the work id to list its other recordings
+      - path: relations[].work.title
+        type: string
+        seen: [live]
+        read: false
+        unused: the work's own title, type (Song), language, ISWCs and attributes; the adapter only follows the work id to list its other recordings
+      - path: relations[].work.type
+        type: string
+        seen: [live]
+        read: false
+        unused: the work's own title, type (Song), language, ISWCs and attributes; the adapter only follows the work id to list its other recordings
+      - path: relations[].work.type-id
+        type: string
+        seen: [live]
+        read: false
+        unused: the work's own title, type (Song), language, ISWCs and attributes; the adapter only follows the work id to list its other recordings
+      - path: title
+        type: string
+        seen: [live]
+        read: false
+        unused: the recording title; performanceWorkIDs only collects work ids, and RecordingByMBID reads the title
+      - path: video
+        type: boolean
+        seen: [live]
+        read: false
+        unused: whether the recording is a music video; performanceWorkIDs only collects work ids
+  release_group:
+    fixtures:
+      - id: bd7c4092-3dd0-4948-8cba-8df1899f329d
+        why: 'Nia Archives Luvleh Mix: an album with the DJ-mix secondary type'
+      - id: 3d46f921-7b68-420e-bc3b-17c36fadb1e6
+        why: 'Nia Archives Silence Is Loud: a studio album'
+      - id: a01c9789-a773-4093-94d4-4f8443c8c16b
+        why: 'Nia Archives Sober Feels: a single'
+    fields:
+      - path: disambiguation
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz comment telling same-titled release groups apart; Lookup only enriches genres, rating, year and types
+      - path: first-release-date
+        type: string
+        seen: [live]
+        read: true
+      - path: genres
+        type: array
+        seen: [live]
+        read: true
+      - path: genres[].count
+        type: number
+        seen: [live]
+        read: true
+      - path: genres[].disambiguation
+        type: string
+        seen: [live]
+        read: false
+        unused: comment telling same-named genres apart, empty for every genre seen
+      - path: genres[].id
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz genre MBID; the adapter keeps genre names
+      - path: genres[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: id
+        type: string
+        seen: [live]
+        read: false
+        unused: the release-group MBID the request looked up; Lookup already has it
+      - path: primary-type
+        type: string
+        seen: [live]
+        read: true
+      - path: primary-type-id
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz id of the primary type; the adapter reads the primary-type name
+      - path: rating
+        type: object
+        seen: [live]
+        read: true
+      - path: rating.value
+        type: "null"
+        seen: [live]
+        read: true
+      - path: rating.votes-count
+        type: number
+        seen: [live]
+        read: true
+      - path: secondary-type-ids
+        type: array
+        seen: [live]
+        read: false
+        unused: MusicBrainz ids of the secondary types; the adapter reads the secondary-type names
+      - path: secondary-type-ids[]
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz ids of the secondary types; the adapter reads the secondary-type names
+      - path: secondary-types
+        type: array
+        seen: [live]
+        read: true
+      - path: secondary-types[]
+        type: string
+        seen: [live]
+        read: true
+      - path: title
+        type: string
+        seen: [live]
+        read: false
+        unused: the release-group title; Lookup is called with an MBID the search already named
+  search_artist:
+    fixtures:
+      - id: Nia Archives
+        why: free-text artist search, as ResolveArtistIdentity sends it
+      - id: Subnation
+        why: a group name that also matches aliases of other artists
+      - id: Various Artists
+        why: the special-purpose artist and fuzzy matches
+    fields:
+      - path: artists
+        type: array
+        seen: [live]
+        read: true
+      - path: artists[].aliases
+        type: array
+        seen: [live]
+        read: false
+        unused: alias metadata (locale, sort name, type, primary flag, dates); only the alias names would help matching
+      - path: artists[].aliases[].begin-date
+        type: null|string
+        seen: [live]
+        read: false
+        unused: alias metadata (locale, sort name, type, primary flag, dates); only the alias names would help matching
+      - path: artists[].aliases[].end-date
+        type: "null"
+        seen: [live]
+        read: false
+        unused: alias metadata (locale, sort name, type, primary flag, dates); only the alias names would help matching
+      - path: artists[].aliases[].locale
+        type: null|string
+        seen: [live]
+        read: false
+        unused: alias metadata (locale, sort name, type, primary flag, dates); only the alias names would help matching
+      - path: artists[].aliases[].name
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: alternate and localised names of the artist; ResolveArtistIdentity matches only the main name, so an artist searched by an alias isn''t resolved'
+      - path: artists[].aliases[].primary
+        type: boolean|null
+        seen: [live]
+        read: false
+        unused: alias metadata (locale, sort name, type, primary flag, dates); only the alias names would help matching
+      - path: artists[].aliases[].sort-name
+        type: string
+        seen: [live]
+        read: false
+        unused: alias metadata (locale, sort name, type, primary flag, dates); only the alias names would help matching
+      - path: artists[].aliases[].type
+        type: null|string
+        seen: [live]
+        read: false
+        unused: alias metadata (locale, sort name, type, primary flag, dates); only the alias names would help matching
+      - path: artists[].aliases[].type-id
+        type: string
+        seen: [live]
+        read: false
+        unused: alias metadata (locale, sort name, type, primary flag, dates); only the alias names would help matching
+      - path: artists[].area
+        type: object
+        seen: [live]
+        read: true
+      - path: artists[].area.id
+        type: string
+        seen: [live]
+        read: false
+        unused: id, sort name, type and life-span of the artist's area; the adapter keeps only the area name
+      - path: artists[].area.life-span
+        type: object
+        seen: [live]
+        read: false
+        unused: id, sort name, type and life-span of the artist's area; the adapter keeps only the area name
+      - path: artists[].area.life-span.ended
+        type: "null"
+        seen: [live]
+        read: false
+        unused: id, sort name, type and life-span of the artist's area; the adapter keeps only the area name
+      - path: artists[].area.name
+        type: string
+        seen: [live]
+        read: true
+      - path: artists[].area.sort-name
+        type: string
+        seen: [live]
+        read: false
+        unused: id, sort name, type and life-span of the artist's area; the adapter keeps only the area name
+      - path: artists[].area.type
+        type: string
+        seen: [live]
+        read: false
+        unused: id, sort name, type and life-span of the artist's area; the adapter keeps only the area name
+      - path: artists[].area.type-id
+        type: string
+        seen: [live]
+        read: false
+        unused: id, sort name, type and life-span of the artist's area; the adapter keeps only the area name
+      - path: artists[].begin-area
+        type: object
+        seen: [live]
+        read: false
+        unused: where the artist was born or formed; ResolveArtistIdentity keeps the main area name only
+      - path: artists[].begin-area.id
+        type: string
+        seen: [live]
+        read: false
+        unused: where the artist was born or formed; ResolveArtistIdentity keeps the main area name only
+      - path: artists[].begin-area.life-span
+        type: object
+        seen: [live]
+        read: false
+        unused: where the artist was born or formed; ResolveArtistIdentity keeps the main area name only
+      - path: artists[].begin-area.life-span.ended
+        type: "null"
+        seen: [live]
+        read: false
+        unused: where the artist was born or formed; ResolveArtistIdentity keeps the main area name only
+      - path: artists[].begin-area.name
+        type: string
+        seen: [live]
+        read: false
+        unused: where the artist was born or formed; ResolveArtistIdentity keeps the main area name only
+      - path: artists[].begin-area.sort-name
+        type: string
+        seen: [live]
+        read: false
+        unused: where the artist was born or formed; ResolveArtistIdentity keeps the main area name only
+      - path: artists[].begin-area.type
+        type: string
+        seen: [live]
+        read: false
+        unused: where the artist was born or formed; ResolveArtistIdentity keeps the main area name only
+      - path: artists[].begin-area.type-id
+        type: string
+        seen: [live]
+        read: false
+        unused: where the artist was born or formed; ResolveArtistIdentity keeps the main area name only
+      - path: artists[].country
+        type: string
+        seen: [live]
+        read: false
+        unused: ISO country code of the artist's area; the adapter keeps the area name
+      - path: artists[].disambiguation
+        type: string
+        seen: [live]
+        read: true
+      - path: artists[].gender
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist's gender and its id; altune doesn't show or match on it
+      - path: artists[].gender-id
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist's gender and its id; altune doesn't show or match on it
+      - path: artists[].id
+        type: string
+        seen: [live]
+        read: true
+      - path: artists[].ipis
+        type: array
+        seen: [live]
+        read: false
+        unused: IPI rights-society codes of the artist; altune has no rights data
+      - path: artists[].ipis[]
+        type: string
+        seen: [live]
+        read: false
+        unused: IPI rights-society codes of the artist; altune has no rights data
+      - path: artists[].isnis
+        type: array
+        seen: [live]
+        read: false
+        unused: ISNI identifiers of the artist; altune has no ISNI integration
+      - path: artists[].isnis[]
+        type: string
+        seen: [live]
+        read: false
+        unused: ISNI identifiers of the artist; altune has no ISNI integration
+      - path: artists[].life-span
+        type: object
+        seen: [live]
+        read: true
+      - path: artists[].life-span.begin
+        type: string
+        seen: [live]
+        read: true
+      - path: artists[].life-span.end
+        type: string
+        seen: [live]
+        read: false
+        unused: when the artist died or dissolved; the adapter keeps only the birth year
+      - path: artists[].life-span.ended
+        type: boolean|null
+        seen: [live]
+        read: false
+        unused: when the artist died or dissolved; the adapter keeps only the birth year
+      - path: artists[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: artists[].score
+        type: number
+        seen: [live]
+        read: false
+        unused: MusicBrainz search relevance 0-100; altune matches artist hits itself by normalised name
+      - path: artists[].sort-name
+        type: string
+        seen: [live]
+        read: false
+        unused: the artist name in library sort order; altune shows and matches the plain name
+      - path: artists[].tags
+        type: array
+        seen: [live]
+        read: true
+      - path: artists[].tags[].count
+        type: number
+        seen: [live]
+        read: true
+      - path: artists[].tags[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: artists[].type
+        type: string
+        seen: [live]
+        read: true
+      - path: artists[].type-id
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz id of the artist type; the adapter reads the type name
+      - path: count
+        type: number
+        seen: [live]
+        read: false
+        unused: total number of search hits; the adapter takes one page of results and never pages a search
+      - path: created
+        type: string
+        seen: [live]
+        read: false
+        unused: timestamp of when the search index answered; says nothing about the music
+      - path: offset
+        type: number
+        seen: [live]
+        read: false
+        unused: offset of this page of search hits, always 0 because the adapter never pages a search
+  search_recording:
+    fixtures:
+      - id: artist:"Nia Archives" AND recording:"Sober Feels"
+        why: structured search for a Nia Archives single
+      - id: artist:"Subnation" AND recording:"Gunshot"
+        why: 'structured search: the single and the DJ-mix (Mixed) recording'
+      - id: artist:"Cheetah" AND recording:"Get Loose"
+        why: 'structured search for a two-artist credit (Cheetah & Nia Archives): join phrases and artist disambiguations'
+      - id: artist:"Burial" AND recording:"Ghost Hardware"
+        why: 'structured search for a heavily tagged recording: user tags'
+      - id: recording:"Baiana \(Maxxumus bootleg\)"
+        why: phrase search for a bootleg with sparse data (no ISRC), Lucene-escaped as the adapter escapes titles; a phrase keeps the hit list short and stable, where the free-text form matched every Baiana and shifted between runs
+    fields:
+      - path: count
+        type: number
+        seen: [live]
+        read: false
+        unused: total number of search hits; the adapter takes one page of results and never pages a search
+      - path: created
+        type: string
+        seen: [live]
+        read: false
+        unused: timestamp of when the search index answered; says nothing about the music
+      - path: offset
+        type: number
+        seen: [live]
+        read: false
+        unused: offset of this page of search hits, always 0 because the adapter never pages a search
+      - path: recordings
+        type: array
+        seen: [live]
+        read: true
+      - path: recordings[].artist-credit
+        type: array
+        seen: [live]
+        read: true
+      - path: recordings[].artist-credit-id
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz id of the whole artist-credit list; artists are identified one by one through artist-credit[].artist.id
+      - path: recordings[].artist-credit[].artist
+        type: object
+        seen: [live]
+        read: true
+      - path: recordings[].artist-credit[].artist.aliases
+        type: array
+        seen: [live]
+        read: false
+        unused: alternate and localised names of a credited artist; the credit is already identified by its artist MBID
+      - path: recordings[].artist-credit[].artist.aliases[].begin-date
+        type: "null"
+        seen: [live]
+        read: false
+        unused: alternate and localised names of a credited artist; the credit is already identified by its artist MBID
+      - path: recordings[].artist-credit[].artist.aliases[].end-date
+        type: "null"
+        seen: [live]
+        read: false
+        unused: alternate and localised names of a credited artist; the credit is already identified by its artist MBID
+      - path: recordings[].artist-credit[].artist.aliases[].locale
+        type: "null"
+        seen: [live]
+        read: false
+        unused: alternate and localised names of a credited artist; the credit is already identified by its artist MBID
+      - path: recordings[].artist-credit[].artist.aliases[].name
+        type: string
+        seen: [live]
+        read: false
+        unused: alternate and localised names of a credited artist; the credit is already identified by its artist MBID
+      - path: recordings[].artist-credit[].artist.aliases[].primary
+        type: "null"
+        seen: [live]
+        read: false
+        unused: alternate and localised names of a credited artist; the credit is already identified by its artist MBID
+      - path: recordings[].artist-credit[].artist.aliases[].sort-name
+        type: string
+        seen: [live]
+        read: false
+        unused: alternate and localised names of a credited artist; the credit is already identified by its artist MBID
+      - path: recordings[].artist-credit[].artist.aliases[].type
+        type: null|string
+        seen: [live]
+        read: false
+        unused: alternate and localised names of a credited artist; the credit is already identified by its artist MBID
+      - path: recordings[].artist-credit[].artist.aliases[].type-id
+        type: string
+        seen: [live]
+        read: false
+        unused: alternate and localised names of a credited artist; the credit is already identified by its artist MBID
+      - path: recordings[].artist-credit[].artist.disambiguation
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz comment telling same-named artists apart; the credit is already identified by its artist MBID
+      - path: recordings[].artist-credit[].artist.id
+        type: string
+        seen: [live]
+        read: true
+      - path: recordings[].artist-credit[].artist.name
+        type: string
+        seen: [live]
+        read: true
+      - path: recordings[].artist-credit[].artist.sort-name
+        type: string
+        seen: [live]
+        read: false
+        unused: the credited artist's name in library sort order ('Archives, Nia' style); altune shows and matches the credited name
+      - path: recordings[].artist-credit[].joinphrase
+        type: string
+        seen: [live]
+        read: true
+      - path: recordings[].artist-credit[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: recordings[].disambiguation
+        type: string
+        seen: [live]
+        read: true
+      - path: recordings[].first-release-date
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: date of the recording''s earliest release; recordings carry no release date, so an original can''t be told from a later re-release'
+      - path: recordings[].id
+        type: string
+        seen: [live]
+        read: true
+      - path: recordings[].isrcs
+        type: array
+        seen: [live]
+        read: true
+      - path: recordings[].isrcs[]
+        type: string
+        seen: [live]
+        read: true
+      - path: recordings[].length
+        type: number
+        seen: [live]
+        read: true
+      - path: recordings[].releases
+        type: array
+        seen: [live]
+        read: false
+        unused: 'GAP: the releases the recording appears on; altune drops every release fact a recording search carries, so a hit can''t be tied to its album or release type'
+      - path: recordings[].releases[].artist-credit
+        type: array
+        seen: [live]
+        read: false
+        unused: 'GAP: the release''s own artist credit, ''Various Artists'' on compilations; it would mark a track as coming from a compilation'
+      - path: recordings[].releases[].artist-credit-id
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz id of the release's whole artist-credit list; the per-artist MBIDs carry the identity
+      - path: recordings[].releases[].artist-credit[].artist
+        type: object
+        seen: [live]
+        read: false
+        unused: the release artist's record; its MBID and the credited name are GAPs of their own
+      - path: recordings[].releases[].artist-credit[].artist.disambiguation
+        type: string
+        seen: [live]
+        read: false
+        unused: join phrase, sort name, comment and canonical name of a release artist; the credited name and MBID are the parts that would mark a compilation
+      - path: recordings[].releases[].artist-credit[].artist.id
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: MBID of a release artist (the Various Artists MBID on compilations); it would mark a track as coming from a compilation'
+      - path: recordings[].releases[].artist-credit[].artist.name
+        type: string
+        seen: [live]
+        read: false
+        unused: join phrase, sort name, comment and canonical name of a release artist; the credited name and MBID are the parts that would mark a compilation
+      - path: recordings[].releases[].artist-credit[].artist.sort-name
+        type: string
+        seen: [live]
+        read: false
+        unused: join phrase, sort name, comment and canonical name of a release artist; the credited name and MBID are the parts that would mark a compilation
+      - path: recordings[].releases[].artist-credit[].joinphrase
+        type: string
+        seen: [live]
+        read: false
+        unused: join phrase, sort name, comment and canonical name of a release artist; the credited name and MBID are the parts that would mark a compilation
+      - path: recordings[].releases[].artist-credit[].name
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the name a release artist is credited as (''Various Artists'' on compilations); it would mark a track as coming from a compilation'
+      - path: recordings[].releases[].count
+        type: number
+        seen: [live]
+        read: false
+        unused: number of releases in the hit's release list; the list itself is what matters
+      - path: recordings[].releases[].country
+        type: string
+        seen: [live]
+        read: false
+        unused: ISO country code of the release's main release event (XW for worldwide); altune doesn't filter releases by country
+      - path: recordings[].releases[].date
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: release date of a release the recording appears on'
+      - path: recordings[].releases[].disambiguation
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz edition comment on a release ('Bandcamp', 'clear', '180 gram', 'bonus tracks version'), mostly about physical pressings; the release MBID is the GAP that would pin an edition
+      - path: recordings[].releases[].id
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: release MBID of a release the recording appears on; it would tie the hit to an exact release'
+      - path: recordings[].releases[].media
+        type: array
+        seen: [live]
+        read: false
+        unused: the medium the recording sits on in that release; its useful parts (disc and track number) are GAPs of their own
+      - path: recordings[].releases[].media[].format
+        type: string
+        seen: [live]
+        read: false
+        unused: medium format ('Digital Media', 'CD', '12" Vinyl'); altune doesn't choose between physical formats
+      - path: recordings[].releases[].media[].id
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz id of the medium; nothing in altune addresses media
+      - path: recordings[].releases[].media[].position
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: the disc number of the medium the recording sits on'
+      - path: recordings[].releases[].media[].track
+        type: array
+        seen: [live]
+        read: false
+        unused: the medium the recording sits on in that release; its useful parts (disc and track number) are GAPs of their own
+      - path: recordings[].releases[].media[].track-count
+        type: number
+        seen: [live]
+        read: false
+        unused: tracks on that medium; the release track-count is the GAP that covers it
+      - path: recordings[].releases[].media[].track-offset
+        type: number
+        seen: [live]
+        read: false
+        unused: zero-based index of the recording on the medium; track number covers it
+      - path: recordings[].releases[].media[].track[].id
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz track MBID, the recording's slot on one release; the recording MBID is what altune stores
+      - path: recordings[].releases[].media[].track[].length
+        type: number
+        seen: [live]
+        read: false
+        unused: length of the track on this release in ms; the recording's own length, which the adapter reads, gives the duration
+      - path: recordings[].releases[].media[].track[].number
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the recording''s track number on that medium, as printed (''3'', ''A1'')'
+      - path: recordings[].releases[].media[].track[].title
+        type: string
+        seen: [live]
+        read: false
+        unused: the title as printed on that release's track list; the recording title is what altune shows
+      - path: recordings[].releases[].release-events
+        type: array
+        seen: [live]
+        read: false
+        unused: per-country release dates and areas of the release; the release's own date covers what altune would need
+      - path: recordings[].releases[].release-events[].area
+        type: object
+        seen: [live]
+        read: false
+        unused: per-country release dates and areas of the release; the release's own date covers what altune would need
+      - path: recordings[].releases[].release-events[].area.id
+        type: string
+        seen: [live]
+        read: false
+        unused: per-country release dates and areas of the release; the release's own date covers what altune would need
+      - path: recordings[].releases[].release-events[].area.iso-3166-1-codes
+        type: array
+        seen: [live]
+        read: false
+        unused: per-country release dates and areas of the release; the release's own date covers what altune would need
+      - path: recordings[].releases[].release-events[].area.iso-3166-1-codes[]
+        type: string
+        seen: [live]
+        read: false
+        unused: per-country release dates and areas of the release; the release's own date covers what altune would need
+      - path: recordings[].releases[].release-events[].area.name
+        type: string
+        seen: [live]
+        read: false
+        unused: per-country release dates and areas of the release; the release's own date covers what altune would need
+      - path: recordings[].releases[].release-events[].area.sort-name
+        type: string
+        seen: [live]
+        read: false
+        unused: per-country release dates and areas of the release; the release's own date covers what altune would need
+      - path: recordings[].releases[].release-events[].date
+        type: string
+        seen: [live]
+        read: false
+        unused: per-country release dates and areas of the release; the release's own date covers what altune would need
+      - path: recordings[].releases[].release-group
+        type: object
+        seen: [live]
+        read: false
+        unused: the release group of a release the recording appears on; its id, primary type and secondary types are GAPs of their own
+      - path: recordings[].releases[].release-group.disambiguation
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz comment telling same-titled release groups apart (e.g. 'February 2008'); the release-group MBID is the GAP that would identify the group
+      - path: recordings[].releases[].release-group.id
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: release-group MBID of the recording''s release; it would tie the hit to the album altune shows'
+      - path: recordings[].releases[].release-group.primary-type
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: the release group''s type (Album, Single, EP); it tells which release the recording came out on'
+      - path: recordings[].releases[].release-group.primary-type-id
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz id of the primary type; the primary-type name carries the same
+      - path: recordings[].releases[].release-group.secondary-type-ids
+        type: array
+        seen: [live]
+        read: false
+        unused: MusicBrainz ids of the secondary types; the secondary-type names carry the same
+      - path: recordings[].releases[].release-group.secondary-type-ids[]
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz ids of the secondary types; the secondary-type names carry the same
+      - path: recordings[].releases[].release-group.secondary-types
+        type: array
+        seen: [live]
+        read: false
+        unused: 'GAP: secondary types such as DJ-mix, Compilation, Remix or Live; it would flag a mixed or compilation recording like Gunshot on the Luvleh Mix'
+      - path: recordings[].releases[].release-group.secondary-types[]
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: secondary types such as DJ-mix, Compilation, Remix or Live; it would flag a mixed or compilation recording like Gunshot on the Luvleh Mix'
+      - path: recordings[].releases[].release-group.title
+        type: string
+        seen: [live]
+        read: false
+        unused: title of the release group, the same as the release title in these hits; the release title is a GAP of its own
+      - path: recordings[].releases[].release-group.type-id
+        type: string
+        seen: [live]
+        read: false
+        unused: legacy id of the release group's combined type; primary-type and secondary-types carry the same
+      - path: recordings[].releases[].status
+        type: string
+        seen: [live]
+        read: false
+        unused: release status ('Official', 'Bootleg', 'Promotion') and its id; the release type is the stronger signal and is a GAP of its own
+      - path: recordings[].releases[].status-id
+        type: string
+        seen: [live]
+        read: false
+        unused: release status ('Official', 'Bootleg', 'Promotion') and its id; the release type is the stronger signal and is a GAP of its own
+      - path: recordings[].releases[].title
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: title of a release the recording appears on, i.e. its album; MusicBrainz track hits come back with no album'
+      - path: recordings[].releases[].track-count
+        type: number
+        seen: [live]
+        read: false
+        unused: 'GAP: total tracks on the release; it tells a single from an album'
+      - path: recordings[].score
+        type: number
+        seen: [live]
+        read: false
+        unused: MusicBrainz search relevance 0-100; altune ranks and matches hits itself by normalised title and credit
+      - path: recordings[].tags
+        type: array
+        seen: [live]
+        read: false
+        unused: folksonomy tags users put on the recording; altune takes genres from the artist and release-group lookups
+      - path: recordings[].tags[].count
+        type: number
+        seen: [live]
+        read: false
+        unused: folksonomy tags users put on the recording; altune takes genres from the artist and release-group lookups
+      - path: recordings[].tags[].name
+        type: string
+        seen: [live]
+        read: false
+        unused: folksonomy tags users put on the recording; altune takes genres from the artist and release-group lookups
+      - path: recordings[].title
+        type: string
+        seen: [live]
+        read: true
+      - path: recordings[].video
+        type: "null"
+        seen: [live]
+        read: false
+        unused: whether the recording is a music video (false for every audio recording); altune matches audio recordings and never filters on it
+  search_release_group:
+    fixtures:
+      - id: artist:"Nia Archives" AND release:"Luvleh Mix"
+        why: structured search for a DJ-mix album
+      - id: artist:"Subnation" AND release:"Gunshot"
+        why: structured search for a single
+      - id: Silence Is Loud
+        why: free-text search for a studio album
+    fields:
+      - path: count
+        type: number
+        seen: [live]
+        read: false
+        unused: total number of search hits; the adapter takes one page of results and never pages a search
+      - path: created
+        type: string
+        seen: [live]
+        read: false
+        unused: timestamp of when the search index answered; says nothing about the music
+      - path: offset
+        type: number
+        seen: [live]
+        read: false
+        unused: offset of this page of search hits, always 0 because the adapter never pages a search
+      - path: release-group-count
+        type: unseen
+        seen: []
+        read: true
+        absent: mbReleaseGroupResponse is shared with the release-group browse, which sends it for paging; a search sends its total as count and the adapter never pages a search
+      - path: release-groups
+        type: array
+        seen: [live]
+        read: true
+      - path: release-groups[].artist-credit
+        type: array
+        seen: [live]
+        read: true
+      - path: release-groups[].artist-credit-id
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz id of the whole artist-credit list; the release-group mapping only reads the first credit's name
+      - path: release-groups[].artist-credit[].artist
+        type: object
+        seen: [live]
+        read: true
+      - path: release-groups[].artist-credit[].artist.aliases
+        type: array
+        seen: [live]
+        read: false
+        unused: alternate and localised names of a credited artist; the release-group mapping only reads the credited name
+      - path: release-groups[].artist-credit[].artist.aliases[].begin-date
+        type: "null"
+        seen: [live]
+        read: false
+        unused: alternate and localised names of a credited artist; the release-group mapping only reads the credited name
+      - path: release-groups[].artist-credit[].artist.aliases[].end-date
+        type: "null"
+        seen: [live]
+        read: false
+        unused: alternate and localised names of a credited artist; the release-group mapping only reads the credited name
+      - path: release-groups[].artist-credit[].artist.aliases[].locale
+        type: "null"
+        seen: [live]
+        read: false
+        unused: alternate and localised names of a credited artist; the release-group mapping only reads the credited name
+      - path: release-groups[].artist-credit[].artist.aliases[].name
+        type: string
+        seen: [live]
+        read: false
+        unused: alternate and localised names of a credited artist; the release-group mapping only reads the credited name
+      - path: release-groups[].artist-credit[].artist.aliases[].primary
+        type: "null"
+        seen: [live]
+        read: false
+        unused: alternate and localised names of a credited artist; the release-group mapping only reads the credited name
+      - path: release-groups[].artist-credit[].artist.aliases[].sort-name
+        type: string
+        seen: [live]
+        read: false
+        unused: alternate and localised names of a credited artist; the release-group mapping only reads the credited name
+      - path: release-groups[].artist-credit[].artist.aliases[].type
+        type: null|string
+        seen: [live]
+        read: false
+        unused: alternate and localised names of a credited artist; the release-group mapping only reads the credited name
+      - path: release-groups[].artist-credit[].artist.aliases[].type-id
+        type: string
+        seen: [live]
+        read: false
+        unused: alternate and localised names of a credited artist; the release-group mapping only reads the credited name
+      - path: release-groups[].artist-credit[].artist.disambiguation
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz comment telling same-named artists apart; the release-group mapping only reads the credited name
+      - path: release-groups[].artist-credit[].artist.id
+        type: string
+        seen: [live]
+        read: true
+      - path: release-groups[].artist-credit[].artist.name
+        type: string
+        seen: [live]
+        read: true
+      - path: release-groups[].artist-credit[].artist.sort-name
+        type: string
+        seen: [live]
+        read: false
+        unused: the credited artist's name in library sort order; the release-group mapping only reads the credited name
+      - path: release-groups[].artist-credit[].joinphrase
+        type: unseen
+        seen: []
+        read: true
+        absent: mbArtistRef is shared with recordings, whose multi-artist credits send it; release-group credits in these searches send none and the release-group mapping never reads it
+      - path: release-groups[].artist-credit[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: release-groups[].count
+        type: number
+        seen: [live]
+        read: false
+        unused: number of releases in the group; the release list is what would matter
+      - path: release-groups[].first-release-date
+        type: string
+        seen: [live]
+        read: true
+      - path: release-groups[].id
+        type: string
+        seen: [live]
+        read: true
+      - path: release-groups[].primary-type
+        type: string
+        seen: [live]
+        read: true
+      - path: release-groups[].primary-type-id
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz id of the primary type; the adapter reads the primary-type name
+      - path: release-groups[].releases
+        type: array
+        seen: [live]
+        read: false
+        unused: the releases (editions) in the group, each with id, title and status; altune works at release-group level, and the release MBID is a GAP of its own
+      - path: release-groups[].releases[].id
+        type: string
+        seen: [live]
+        read: false
+        unused: 'GAP: release MBID of an edition in the group; it would let altune pin the exact release a track came from'
+      - path: release-groups[].releases[].status
+        type: string
+        seen: [live]
+        read: false
+        unused: title and status of an edition in the group; the group's own title and types say what altune shows
+      - path: release-groups[].releases[].status-id
+        type: string
+        seen: [live]
+        read: false
+        unused: title and status of an edition in the group; the group's own title and types say what altune shows
+      - path: release-groups[].releases[].title
+        type: string
+        seen: [live]
+        read: false
+        unused: title and status of an edition in the group; the group's own title and types say what altune shows
+      - path: release-groups[].score
+        type: number
+        seen: [live]
+        read: false
+        unused: MusicBrainz search relevance 0-100; altune matches release-group hits itself by normalised title and credit
+      - path: release-groups[].secondary-type-ids
+        type: array
+        seen: [live]
+        read: false
+        unused: MusicBrainz ids of the secondary types; the adapter reads the secondary-type names
+      - path: release-groups[].secondary-type-ids[]
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz ids of the secondary types; the adapter reads the secondary-type names
+      - path: release-groups[].secondary-types
+        type: array
+        seen: [live]
+        read: true
+      - path: release-groups[].secondary-types[]
+        type: string
+        seen: [live]
+        read: true
+      - path: release-groups[].tags
+        type: array
+        seen: [live]
+        read: false
+        unused: folksonomy tags users put on the release group; Lookup takes curated genres instead
+      - path: release-groups[].tags[].count
+        type: number
+        seen: [live]
+        read: false
+        unused: folksonomy tags users put on the release group; Lookup takes curated genres instead
+      - path: release-groups[].tags[].name
+        type: string
+        seen: [live]
+        read: false
+        unused: folksonomy tags users put on the release group; Lookup takes curated genres instead
+      - path: release-groups[].title
+        type: string
+        seen: [live]
+        read: true
+      - path: release-groups[].type-id
+        type: string
+        seen: [live]
+        read: false
+        unused: legacy id of the release group's combined type; primary-type and secondary-types carry the same
+  work:
+    fixtures:
+      - id: af9597a0-88e1-4570-a36e-cd8654ae7868
+        why: 'Nia Archives Cards on the Table: a work with one recording'
+      - id: 0e23ed77-ad7e-34e7-b57c-c3407b2ae5df
+        why: 'Teardrop: a work with live, cover, instrumental and a cappella recordings'
+    fields:
+      - path: attributes
+        type: array
+        seen: [live]
+        read: false
+        unused: rights-society ids of the work (BMI ID, SUISA ID and the like); altune has no rights data
+      - path: attributes[].type
+        type: string
+        seen: [live]
+        read: false
+        unused: rights-society ids of the work (BMI ID, SUISA ID and the like); altune has no rights data
+      - path: attributes[].type-id
+        type: string
+        seen: [live]
+        read: false
+        unused: rights-society ids of the work (BMI ID, SUISA ID and the like); altune has no rights data
+      - path: attributes[].value
+        type: string
+        seen: [live]
+        read: false
+        unused: rights-society ids of the work (BMI ID, SUISA ID and the like); altune has no rights data
+      - path: disambiguation
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz comment telling same-titled works apart; the adapter only lists the work's recordings
+      - path: id
+        type: string
+        seen: [live]
+        read: false
+        unused: the work MBID the request looked up; recordingsOfWork already has it
+      - path: iswcs
+        type: array
+        seen: [live]
+        read: false
+        unused: ISWC codes of the composition; they identify the song, not a recording, and the adapter only lists the work's recordings
+      - path: iswcs[]
+        type: string
+        seen: [live]
+        read: false
+        unused: ISWC codes of the composition; they identify the song, not a recording, and the adapter only lists the work's recordings
+      - path: language
+        type: string
+        seen: [live]
+        read: false
+        unused: lyrics language (e.g. eng); the adapter only lists the work's recordings
+      - path: languages
+        type: array
+        seen: [live]
+        read: false
+        unused: lyrics language (e.g. eng); the adapter only lists the work's recordings
+      - path: languages[]
+        type: string
+        seen: [live]
+        read: false
+        unused: lyrics language (e.g. eng); the adapter only lists the work's recordings
+      - path: relations
+        type: array
+        seen: [live]
+        read: true
+      - path: relations[].attribute-ids
+        type: object
+        seen: [live]
+        read: false
+        unused: MusicBrainz ids of the relation's attributes keyed by attribute name; the attribute names in attributes carry the same
+      - path: relations[].attribute-ids.acappella
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz ids of the relation's attributes keyed by attribute name; the attribute names in attributes carry the same
+      - path: relations[].attribute-ids.cover
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz ids of the relation's attributes keyed by attribute name; the attribute names in attributes carry the same
+      - path: relations[].attribute-ids.demo
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz ids of the relation's attributes keyed by attribute name; the attribute names in attributes carry the same
+      - path: relations[].attribute-ids.instrumental
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz ids of the relation's attributes keyed by attribute name; the attribute names in attributes carry the same
+      - path: relations[].attribute-ids.live
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz ids of the relation's attributes keyed by attribute name; the attribute names in attributes carry the same
+      - path: relations[].attribute-values
+        type: object
+        seen: [live]
+        read: false
+        unused: free-text values of relation attributes, empty in every relation seen
+      - path: relations[].attributes
+        type: array
+        seen: [live]
+        read: true
+      - path: relations[].attributes[]
+        type: string
+        seen: [live]
+        read: true
+      - path: relations[].begin
+        type: null|string
+        seen: [live]
+        read: false
+        unused: start date of the relation (the performance date on live recordings, null otherwise); the live attribute already marks live recordings
+      - path: relations[].direction
+        type: string
+        seen: [live]
+        read: false
+        unused: whether the relation reads forward or backward from this entity; the adapter only reads the type and the target
+      - path: relations[].end
+        type: null|string
+        seen: [live]
+        read: false
+        unused: end date of the relation (the performance date on live recordings, null otherwise); the live attribute already marks live recordings
+      - path: relations[].ended
+        type: boolean
+        seen: [live]
+        read: false
+        unused: whether the relation has ended; the adapter treats every listed relation as current
+      - path: relations[].recording
+        type: object
+        seen: [live]
+        read: true
+      - path: relations[].recording.artist-credit
+        type: array
+        seen: [live]
+        read: true
+      - path: relations[].recording.artist-credit[].artist
+        type: object
+        seen: [live]
+        read: true
+      - path: relations[].recording.artist-credit[].artist.country
+        type: null|string
+        seen: [live]
+        read: false
+        unused: the credited artist's country, comment, sort name and type; workRecording only collects artist MBIDs
+      - path: relations[].recording.artist-credit[].artist.disambiguation
+        type: string
+        seen: [live]
+        read: false
+        unused: the credited artist's country, comment, sort name and type; workRecording only collects artist MBIDs
+      - path: relations[].recording.artist-credit[].artist.id
+        type: string
+        seen: [live]
+        read: true
+      - path: relations[].recording.artist-credit[].artist.name
+        type: string
+        seen: [live]
+        read: true
+      - path: relations[].recording.artist-credit[].artist.sort-name
+        type: string
+        seen: [live]
+        read: false
+        unused: the credited artist's country, comment, sort name and type; workRecording only collects artist MBIDs
+      - path: relations[].recording.artist-credit[].artist.type
+        type: "null"
+        seen: [live]
+        read: false
+        unused: the credited artist's country, comment, sort name and type; workRecording only collects artist MBIDs
+      - path: relations[].recording.artist-credit[].artist.type-id
+        type: "null"
+        seen: [live]
+        read: false
+        unused: the credited artist's country, comment, sort name and type; workRecording only collects artist MBIDs
+      - path: relations[].recording.artist-credit[].joinphrase
+        type: string
+        seen: [live]
+        read: true
+      - path: relations[].recording.artist-credit[].name
+        type: string
+        seen: [live]
+        read: true
+      - path: relations[].recording.disambiguation
+        type: string
+        seen: [live]
+        read: true
+      - path: relations[].recording.id
+        type: string
+        seen: [live]
+        read: true
+      - path: relations[].recording.isrcs
+        type: unseen
+        seen: []
+        read: true
+        absent: mbRecording is shared with recording searches and lookups, which send ISRCs; work recording-rels carry none and workRecording never reads them
+      - path: relations[].recording.isrcs[]
+        type: unseen
+        seen: []
+        read: true
+        absent: mbRecording is shared with recording searches and lookups, which send ISRCs; work recording-rels carry none and workRecording never reads them
+      - path: relations[].recording.length
+        type: null|number
+        seen: [live]
+        read: true
+      - path: relations[].recording.title
+        type: string
+        seen: [live]
+        read: true
+      - path: relations[].recording.video
+        type: boolean
+        seen: [live]
+        read: false
+        unused: whether the related recording is a music video; WorkRecording carries no media kind and the matcher compares audio duration and title
+      - path: relations[].source-credit
+        type: string
+        seen: [live]
+        read: false
+        unused: the name the source entity is credited as in this relation, usually empty; artists are identified by MBID
+      - path: relations[].target-credit
+        type: string
+        seen: [live]
+        read: false
+        unused: the name the target is credited as in this relation, usually empty; the adapter reads the target itself
+      - path: relations[].target-type
+        type: string
+        seen: [live]
+        read: true
+      - path: relations[].type
+        type: string
+        seen: [live]
+        read: false
+        unused: the relation type, always 'performance' for recording-rels of a work; the adapter checks target-type instead
+      - path: relations[].type-id
+        type: string
+        seen: [live]
+        read: false
+        unused: MusicBrainz id of the relation type; the adapter matches the type name
+      - path: title
+        type: string
+        seen: [live]
+        read: false
+        unused: the work's title; the adapter compares the titles of its recordings instead
+      - path: type
+        type: string
+        seen: [live]
+        read: false
+        unused: kind of work (Song) and its id; the adapter only lists the work's recordings
+      - path: type-id
+        type: string
+        seen: [live]
+        read: false
+        unused: kind of work (Song) and its id; the adapter only lists the work's recordings
