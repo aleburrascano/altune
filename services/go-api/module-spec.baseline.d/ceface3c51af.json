@@ -1,0 +1,18 @@
+{
+  "removed": [
+    "C3 internal/eventstream/internal/adapters/authbridge/request_identity.go imports internal/auth/adapters/middleware/middleware.go, behind auth's door",
+    "C3 internal/eventstream/internal/adapters/authbridge/request_identity.go imports internal/auth/domain/token_expired.go, behind auth's door",
+    "C3 internal/eventstream/internal/adapters/authbridge/request_identity.go imports internal/auth/service/request_identity.go, behind auth's door",
+    "C3 internal/eventstream/internal/adapters/authbridge/request_identity_test.go imports internal/auth/service/request_identity.go, behind auth's door",
+    "C3 internal/eventstream/internal/adapters/handler/event_stream_handler_test.go imports internal/auth/adapters/middleware/middleware.go, behind auth's door",
+    "C3 internal/eventstream/internal/adapters/handler/event_stream_handler_test.go imports internal/auth/domain/verified_token.go, behind auth's door",
+    "C3 internal/eventstream/internal/adapters/handler/event_stream_handler_test.go imports internal/auth/service/request_identity.go, behind auth's door",
+    "R1 internal/eventstream/internal/adapters/authbridge/request_identity.go imports auth, a feature module",
+    "R1 internal/eventstream/internal/adapters/authbridge/request_identity_test.go imports auth, a feature module",
+    "R1 internal/eventstream/internal/adapters/handler/event_stream_handler_test.go imports auth, a feature module",
+    "R1 internal/eventstream/module.yaml declares auth, a feature module",
+    "T1 internal/eventstream/internal/adapters/authbridge/request_identity_test.go is in package authbridge, so it sees inside the module: use package authbridge_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}
