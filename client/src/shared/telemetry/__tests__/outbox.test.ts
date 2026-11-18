@@ -19,27 +19,12 @@ import {
 } from '@shared/telemetry';
 import { createMemoryFileStore } from '@shared/files';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch';
+import { recordLogs, type RecordedLogs } from '@shared/log';
+import { driveAppState, type AppStateDriver } from '@shared/lifecycle';
 
 const { fakeFetch, FakeResponse, __http } = require('@testing/doubles/fetch.js');
 
-type AppStateChangeHandler = (state: string) => void;
-
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
-
-jest.mock('react-native/Libraries/AppState/AppState', () => {
-  const listeners: AppStateChangeHandler[] = [];
-  return {
-    default: {
-      currentState: 'active',
-      isAvailable: true,
-      addEventListener: jest.fn((type: string, handler: AppStateChangeHandler) => {
-        if (type === 'change') listeners.push(handler);
-        return { remove: jest.fn() };
-      }),
-    },
-    __listeners: listeners,
-  };
-});
 
 type Reply = number | 'unreachable';
 type Responder = (entry: OutboxEntry) => Reply | Promise<Reply>;
@@ -110,8 +95,15 @@ const MAX_ENTRIES = 50;
 const FLUSH_BACKOFF_BASE_MS = 2_000;
 const FLUSH_BACKOFF_CAP_MS = 300_000;
 
+let logs: RecordedLogs;
+
+function recordWarnings(): RecordedLogs {
+  logs = recordLogs();
+  return logs;
+}
+
 function warnings(): string[] {
-  return (console.warn as jest.Mock).mock.calls.map((call) => String(call[0]));
+  return logs.warnings.map(([message]) => message);
 }
 
 function lastWarningMatch(pattern: RegExp): RegExpMatchArray | undefined {
@@ -145,17 +137,15 @@ function restoreFromDisk(entries: OutboxEntry[]): void {
   _resetOutboxForTest({ restored: false });
 }
 
+let appState: AppStateDriver;
+
 beforeEach(() => {
   jest.useFakeTimers();
-  (
-    jest.requireMock('react-native/Libraries/AppState/AppState') as {
-      __listeners: AppStateChangeHandler[];
-    }
-  ).__listeners.length = 0;
+  appState = driveAppState();
   setOutboxFileStore(createMemoryFileStore());
   _resetOutboxForTest();
   resetServer();
-  jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  recordWarnings();
   global.fetch = fakeServerFetch;
   void signInTestUser();
 });
@@ -168,12 +158,6 @@ afterEach(() => {
 });
 
 describe('remote kill switch', () => {
-  type AppStateChangeHandler = (state: string) => void;
-
-  const { __listeners: appStateListeners } = jest.requireMock(
-    'react-native/Libraries/AppState/AppState',
-  ) as { __listeners: AppStateChangeHandler[] };
-
   function queuedIds(): (string | undefined)[] {
     return lastPersisted().map((e) => e.search_id);
   }
@@ -187,7 +171,6 @@ describe('remote kill switch', () => {
     setKillSwitchFileStore(createMemoryFileStore());
     _resetOutboxForTest();
     resetServer();
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
 
   afterEach(() => {
@@ -203,7 +186,7 @@ describe('remote kill switch', () => {
 
       await enqueueCritical({ type: 'library_add', search_id: 'a' });
       await flushOutbox();
-      appStateListeners.forEach((handler) => handler('active'));
+      appState.change('active');
       await settle();
 
       expect(sentEntries()).toHaveLength(0);
@@ -349,7 +332,7 @@ describe('Concurrency: an entry enqueued during an in-flight flush', () => {
 describe('Backpressure: shedding a label-critical entry at the cap is recorded, never silent', () => {
   it('records the drop when enqueuing past MAX_ENTRIES sheds the oldest label-critical entry', async () => {
     serverReplies(HTTP_UNAVAILABLE);
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const logged = recordWarnings();
 
     for (let i = 0; i <= MAX_ENTRIES; i += 1) {
       await enqueueCritical(event({ search_id: `q${i}` }));
@@ -357,9 +340,7 @@ describe('Backpressure: shedding a label-critical entry at the cap is recorded, 
 
     expect(lastPersisted()).toHaveLength(MAX_ENTRIES);
     expect(droppedCriticalCount()).toBe(1);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('label-critical'));
-
-    warn.mockRestore();
+    expect(logged.warnings).toContainEqual([expect.stringContaining('label-critical')]);
   });
 
   it('does not record a drop while the queue stays within the cap', async () => {
@@ -373,7 +354,7 @@ describe('Backpressure: shedding a label-critical entry at the cap is recorded, 
   });
 
   it('records a plural drop when a restored outbox exceeds the cap by more than one', async () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const logged = recordWarnings();
     serverReplies(HTTP_UNAVAILABLE);
     restoreFromDisk(
       Array.from({ length: MAX_ENTRIES + OVERFLOW }, (_, i) => ({
@@ -386,9 +367,7 @@ describe('Backpressure: shedding a label-critical entry at the cap is recorded, 
     await flushOutbox();
 
     expect(droppedCriticalCount()).toBe(OVERFLOW);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('entries at cap'));
-
-    warn.mockRestore();
+    expect(logged.warnings).toContainEqual([expect.stringContaining('entries at cap')]);
   });
 });
 
@@ -537,7 +516,7 @@ describe('Idempotence: flushing an already-drained queue', () => {
 interface FreshApp {
   enqueueCritical: typeof enqueueCritical;
   loadPersistedOutbox: typeof loadPersistedOutbox;
-  listeners: AppStateChangeHandler[];
+  appState: AppStateDriver;
 }
 
 function bootFreshApp(): FreshApp {
@@ -545,10 +524,11 @@ function bootFreshApp(): FreshApp {
   jest.isolateModules(() => {
     const signIn = require('@testing/signInTestUser') as { signInTestUser: () => Promise<void> };
     void signIn.signInTestUser();
-    const appState = require('react-native/Libraries/AppState/AppState') as {
-      __listeners: AppStateChangeHandler[];
-    };
+    const lifecycle = require('@shared/lifecycle') as { driveAppState: typeof driveAppState };
+    const log = require('@shared/log') as { recordLogs: typeof recordLogs };
+    log.recordLogs();
     app = {
+      appState: lifecycle.driveAppState(),
       enqueueCritical: (
         require('@shared/telemetry/outbox') as { enqueueCritical: typeof enqueueCritical }
       ).enqueueCritical,
@@ -557,7 +537,6 @@ function bootFreshApp(): FreshApp {
           loadPersistedOutbox: typeof loadPersistedOutbox;
         }
       ).loadPersistedOutbox,
-      listeners: appState.__listeners,
     };
   });
   return app;
@@ -574,13 +553,13 @@ describe('Idempotence: a foreground transition arriving twice', () => {
     const realNow = Date.now();
     const clock = jest.spyOn(Date, 'now').mockReturnValue(realNow + FLUSH_BACKOFF_CAP_MS);
     serverReplies(HTTP_ACCEPTED);
-    app.listeners.forEach((handler) => handler('active'));
+    app.appState.change('active');
     await settle();
 
     expect(sentEntries()).toHaveLength(SECOND_ATTEMPT);
     expect(app.loadPersistedOutbox()).toEqual([]);
 
-    app.listeners.forEach((handler) => handler('active'));
+    app.appState.change('active');
     await settle();
 
     expect(sentEntries()).toHaveLength(SECOND_ATTEMPT);
@@ -594,8 +573,8 @@ describe('Idempotence: a foreground transition arriving twice', () => {
     await app.enqueueCritical(event({ search_id: 'q' }));
     const callsAfterEnqueue = sentEntries().length;
 
-    for (const status of ['background', 'inactive', 'extension', 'unknown']) {
-      app.listeners.forEach((handler) => handler(status));
+    for (const status of ['background', 'inactive', 'extension', 'unknown'] as const) {
+      app.appState.change(status);
       await settle();
     }
 
@@ -609,11 +588,11 @@ describe('Regression: repeated enqueueCritical calls must not accumulate AppStat
     serverReplies(HTTP_UNAVAILABLE);
 
     await app.enqueueCritical(event({ search_id: 'first' }));
-    const listenerCountAfterFirst = app.listeners.length;
+    const listenerCountAfterFirst = app.appState.listenerCount();
     await app.enqueueCritical(event({ search_id: 'second' }));
     await app.enqueueCritical(event({ search_id: 'third' }));
 
-    expect(app.listeners.length).toBe(listenerCountAfterFirst);
+    expect(app.appState.listenerCount()).toBe(listenerCountAfterFirst);
   });
 });
 
@@ -816,7 +795,6 @@ describe('Regression: a persistently failing entry never starves the entries que
   ] as const)(
     'attempts and delivers every later entry while %s keeps the head entry queued',
     async (_label, status) => {
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
       restoreFromDisk([persisted('stuck'), persisted('b'), persisted('c')]);
       failFor('stuck', status);
 
@@ -824,37 +802,36 @@ describe('Regression: a persistently failing entry never starves the entries que
 
       expect(sentEntries().map((e) => e.event_id)).toEqual(['stuck', 'b', 'c']);
       expect(lastPersisted()?.map((e) => e.event_id)).toEqual(['stuck']);
-      warn.mockRestore();
     },
   );
 
   it('logs the failing entry type, event_id and error before moving on', async () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const logged = recordWarnings();
     const error = expect.objectContaining({ status: 503 });
     restoreFromDisk([persisted('stuck', { type: 'wrong_album' }), persisted('b')]);
     failFor('stuck', HTTP_UNAVAILABLE);
 
     await flushOutbox();
 
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('wrong_album stuck'), error);
-    warn.mockRestore();
+    expect(logged.warnings).toContainEqual([expect.stringContaining('wrong_album stuck'), error]);
   });
 
   it('logs an entry dropped as permanently rejected too, so a chronic 400 is not silent', async () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const logged = recordWarnings();
     const error = expect.objectContaining({ status: 400 });
     restoreFromDisk([persisted('poisoned')]);
     failFor('poisoned', HTTP_BAD_REQUEST);
 
     await flushOutbox();
 
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('library_add poisoned'), error);
+    expect(logged.warnings).toContainEqual([
+      expect.stringContaining('library_add poisoned'),
+      error,
+    ]);
     expect(lastPersisted()).toEqual([]);
-    warn.mockRestore();
   });
 
   it('moving past a failed entry still never sends an entry owned by another user', async () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     restoreFromDisk([
       persisted('stuck'),
       persisted('user-a-entry', { owner_user_id: 'user-a' }),
@@ -866,38 +843,23 @@ describe('Regression: a persistently failing entry never starves the entries que
 
     expect(sentEntries().map((e) => e.event_id)).toEqual(['stuck', 'ok']);
     expect(lastPersisted()?.map((e) => e.event_id)).toEqual(['stuck', 'user-a-entry']);
-    warn.mockRestore();
   });
 
   it('surfaces the running droppedCriticalCount in the failed-pass log so a sustained drop rate is visible', async () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const logged = recordWarnings();
     restoreFromDisk(Array.from({ length: MAX_ENTRIES + OVERFLOW }, (_, i) => persisted(`q${i}`)));
     serverReplies('unreachable');
 
     await flushOutbox();
 
     expect(droppedCriticalCount()).toBe(2);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('2 dropped at cap'));
-    warn.mockRestore();
+    expect(logged.warnings).toContainEqual([expect.stringContaining('2 dropped at cap')]);
   });
 });
 
 describe('Backoff: the flush loop retries on its own capped, jittered schedule', () => {
-  let warn: jest.SpyInstance;
-
-  beforeEach(() => {
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  });
-
-  afterEach(() => {
-    warn.mockRestore();
-  });
-
   function foreground(): void {
-    const appState = require('react-native/Libraries/AppState/AppState') as {
-      __listeners: AppStateChangeHandler[];
-    };
-    appState.__listeners.forEach((handler) => handler('active'));
+    appState.change('active');
   }
 
   it('after a failed pass, neither a new enqueue nor a foreground transition retries before the backoff elapses', async () => {
@@ -1170,10 +1132,6 @@ describe('capOutbox keeps diagnostics from evicting label-critical entries', () 
 });
 
 describe('outbox_flush_failed telemetry', () => {
-  beforeEach(() => {
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  });
-
   function flushFailures(): DiscoveryEvent[] {
     return received.filter((e) => e.type === 'outbox_flush_failed');
   }

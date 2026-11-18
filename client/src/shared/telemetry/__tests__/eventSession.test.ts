@@ -1,34 +1,13 @@
 import fc from 'fast-check';
 
+import type * as LifecycleNamespace from '@shared/lifecycle';
 import * as SessionNamespace from '@shared/telemetry/eventSession';
-
-type AppStateChangeHandler = (state: string) => void;
-
-jest.mock('react-native/Libraries/AppState/AppState', () => {
-  const listeners: AppStateChangeHandler[] = [];
-  return {
-    default: {
-      currentState: 'active',
-      isAvailable: true,
-      addEventListener: jest.fn((type: string, handler: AppStateChangeHandler) => {
-        if (type === 'change') listeners.push(handler);
-        return { remove: jest.fn() };
-      }),
-    },
-    __listeners: listeners,
-  };
-});
 
 const SESSION_INACTIVITY_MS = 1_800_000;
 const SESSION_ID_SHAPE = /^[0-9a-z]+-[0-9a-z]{1,8}$/;
 const START = 1_000_000;
 const LONGEST_GAP = 5_400_000;
 const BASE36 = 36;
-
-type MockAppStateModule = {
-  default: { addEventListener: jest.Mock; currentState: string };
-  __listeners: AppStateChangeHandler[];
-};
 
 function fakeClock(initialNow: number) {
   let wall = initialNow;
@@ -47,24 +26,15 @@ function fakeClock(initialNow: number) {
 
 function loadFreshSession(initialNow: number) {
   jest.resetModules();
+  const lifecycle: typeof LifecycleNamespace = require('@shared/lifecycle');
+  const appState = lifecycle.driveAppState('active');
   const rawSession: typeof SessionNamespace = require('@shared/telemetry/eventSession');
   const clock = fakeClock(initialNow);
   const session = { getSessionId: () => rawSession.getSessionId(clock.now, clock.monotonic) };
 
-  const appState: MockAppStateModule = require('react-native/Libraries/AppState/AppState');
-  appState.default.currentState = 'active';
   session.getSessionId();
   return { session, appState, clock };
 }
-
-function emit(appState: MockAppStateModule, status: string): void {
-  appState.default.currentState = status;
-  [...appState.__listeners].forEach((handler) => handler(status));
-}
-
-afterEach(() => {
-  jest.restoreAllMocks();
-});
 
 describe('getSessionId — the inactivity boundary at SESSION_INACTIVITY_MS', () => {
   it.each([
@@ -128,14 +98,14 @@ describe('law: a rotated session id prefixes the base36 time of the rotation, an
 });
 
 describe('getSessionId — the AppState listener is registered exactly once', () => {
-  it('addEventListener is called once no matter how many times getSessionId() runs', () => {
+  it('subscribes once no matter how many times getSessionId() runs', () => {
     const { session, appState } = loadFreshSession(1000);
 
     session.getSessionId();
     session.getSessionId();
     session.getSessionId();
 
-    expect(appState.default.addEventListener).toHaveBeenCalledTimes(1);
+    expect(appState.listenerCount()).toBe(1);
   });
 });
 
@@ -144,9 +114,9 @@ describe('the foreground listener rotates only after the inactivity window', () 
     const { session, appState, clock } = loadFreshSession(1000);
     const before = session.getSessionId();
 
-    emit(appState, 'background');
+    appState.change('background');
     clock.set(2000);
-    emit(appState, 'active');
+    appState.change('active');
 
     const after = session.getSessionId();
     expect(after).toBe(before);
@@ -156,9 +126,9 @@ describe('the foreground listener rotates only after the inactivity window', () 
     const { session, appState, clock } = loadFreshSession(1000);
     const before = session.getSessionId();
 
-    emit(appState, 'background');
+    appState.change('background');
     clock.set(1000 + SESSION_INACTIVITY_MS);
-    emit(appState, 'active');
+    appState.change('active');
 
     expect(session.getSessionId()).toBe(before);
   });
@@ -167,9 +137,9 @@ describe('the foreground listener rotates only after the inactivity window', () 
     const { session, appState, clock } = loadFreshSession(1000);
     const before = session.getSessionId();
 
-    emit(appState, 'background');
+    appState.change('background');
     clock.set(1000 + SESSION_INACTIVITY_MS + 1);
-    emit(appState, 'active');
+    appState.change('active');
 
     expect(session.getSessionId()).not.toBe(before);
   });
@@ -178,13 +148,13 @@ describe('the foreground listener rotates only after the inactivity window', () 
     const { session, appState, clock } = loadFreshSession(1000);
     const before = session.getSessionId();
 
-    emit(appState, 'background');
+    appState.change('background');
     clock.set(1000 + SESSION_INACTIVITY_MS + 1);
-    emit(appState, 'active');
+    appState.change('active');
     const rotated = session.getSessionId();
-    emit(appState, 'background');
+    appState.change('background');
     clock.set(1000 + SESSION_INACTIVITY_MS + 2000);
-    emit(appState, 'active');
+    appState.change('active');
 
     expect(rotated).not.toBe(before);
     expect(session.getSessionId()).toBe(rotated);
@@ -194,8 +164,8 @@ describe('the foreground listener rotates only after the inactivity window', () 
     const { session, appState } = loadFreshSession(1000);
     const before = session.getSessionId();
 
-    emit(appState, 'background');
-    emit(appState, 'inactive');
+    appState.change('background');
+    appState.change('inactive');
 
     const after = session.getSessionId();
     expect(after).toBe(before);
@@ -241,9 +211,9 @@ describe('every id this module hands out is a well-formed session id, never a de
     const { session, appState, clock } = loadFreshSession(1000);
     const before = session.getSessionId();
 
-    emit(appState, 'background');
+    appState.change('background');
     clock.set(1000 + SESSION_INACTIVITY_MS + 1);
-    emit(appState, 'active');
+    appState.change('active');
     const rotated = session.getSessionId();
 
     expect(rotated).not.toBe(before);
@@ -267,9 +237,9 @@ describe('ordering — a foreground rotation is visible to the very next getSess
     const { session, appState, clock } = loadFreshSession(1000);
     const before = session.getSessionId();
 
-    emit(appState, 'background');
+    appState.change('background');
     clock.set(1000 + SESSION_INACTIVITY_MS + 1);
-    emit(appState, 'active');
+    appState.change('active');
     const rotatedOnce = session.getSessionId();
     const rotatedAgain = session.getSessionId();
 
@@ -305,9 +275,9 @@ describe('a wall-clock jump neither triggers nor suppresses a rotation', () => {
 
     clock.jumpWall(1000 + 2 * 60 * 60 * 1000);
     session.getSessionId();
-    emit(appState, 'background');
+    appState.change('background');
     clock.set(1000 + 2 * 60 * 60 * 1000 + 1000);
-    emit(appState, 'active');
+    appState.change('active');
 
     expect(session.getSessionId()).toBe(before);
   });
@@ -316,9 +286,9 @@ describe('a wall-clock jump neither triggers nor suppresses a rotation', () => {
     const { session, appState, clock } = loadFreshSession(10 * SESSION_INACTIVITY_MS);
     const before = session.getSessionId();
 
-    emit(appState, 'background');
+    appState.change('background');
     clock.jumpWall(1000);
-    emit(appState, 'active');
+    appState.change('active');
 
     expect(session.getSessionId()).toBe(before);
   });
@@ -327,7 +297,7 @@ describe('a wall-clock jump neither triggers nor suppresses a rotation', () => {
     const { session, appState, clock } = loadFreshSession(1000);
     const before = session.getSessionId();
 
-    emit(appState, 'background');
+    appState.change('background');
     session.getSessionId();
     clock.jumpWall(1000 + SESSION_INACTIVITY_MS + 1);
 

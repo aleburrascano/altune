@@ -1,25 +1,9 @@
+import type * as LifecycleNamespace from '@shared/lifecycle';
 import type * as OutboxNamespace from '@shared/telemetry/outbox';
 import type { OutboxEntry, DiscoveryEvent } from '@shared/telemetry';
 const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
-
-type AppStateChangeHandler = (state: string) => void;
-
-jest.mock('react-native/Libraries/AppState/AppState', () => {
-  const listeners: AppStateChangeHandler[] = [];
-  return {
-    default: {
-      currentState: 'active',
-      isAvailable: true,
-      addEventListener: jest.fn((_type: string, handler: AppStateChangeHandler) => {
-        listeners.push(handler);
-        return { remove: jest.fn() };
-      }),
-    },
-    __listeners: listeners,
-  };
-});
 
 type OutboxModule = typeof OutboxNamespace;
 type FailureKind = 'write' | 'read' | 'delete' | 'download' | 'createDirectory' | 'list';
@@ -50,6 +34,7 @@ const booted: OutboxModule[] = [];
 
 function bootApp(): OutboxModule {
   configureSession();
+  (require('@shared/lifecycle') as typeof LifecycleNamespace).driveAppState();
   const outbox = require('@shared/telemetry/outbox') as OutboxModule;
   booted.push(outbox);
   return outbox;

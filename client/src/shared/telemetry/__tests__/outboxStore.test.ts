@@ -3,6 +3,7 @@ import * as FileSystem from 'expo-file-system';
 import { loadPersistedOutbox, persistOutbox, setOutboxFileStore } from '@shared/telemetry';
 import { type StoredDirectory, createMemoryFileStore, type MemoryFileStore } from '@shared/files';
 import type { OutboxEntry } from '@shared/telemetry';
+import { recordLogs, type RecordedLogs } from '@shared/log';
 
 const OUTBOX_SCHEMA_VERSION = 1;
 
@@ -350,16 +351,15 @@ describe('failure injection — a disk failure degrades to in-memory-only, never
   });
 
   it('a write failure is logged with context rather than swallowed into a bare catch', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const warn = recordLogs();
     __fs.failNext('write', new Error('disk full'));
 
     persistOutbox([entry({ event_id: 'e1' })]);
 
-    expect(warn).toHaveBeenCalledWith(
+    expect(warn.warnings).toContainEqual([
       '[telemetry] failed to persist outbox (1 entries) to critical-outbox.json; keeping in-memory only',
       expect.objectContaining({ message: 'disk full' }),
-    );
-    warn.mockRestore();
+    ]);
   });
 });
 
@@ -438,21 +438,20 @@ describe('durability', () => {
   }
 
   let store: MemoryFileStore;
-  let warn: jest.SpyInstance;
+  let warn: RecordedLogs;
 
   beforeEach(() => {
     store = createMemoryFileStore();
     setOutboxFileStore(store);
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    warn = recordLogs();
   });
 
   afterEach(() => {
-    warn.mockRestore();
     setOutboxFileStore();
   });
 
   function warnings(): string[] {
-    return warn.mock.calls.map((call) => String(call[0]));
+    return warn.warnings.map((call) => String(call[0]));
   }
 
   describe('a corrupt or unreadable outbox is reported, not silently emptied', () => {
@@ -494,7 +493,7 @@ describe('durability', () => {
 
     it('a missing outbox is a legitimate empty queue and logs nothing', () => {
       expect(loadPersistedOutbox()).toEqual([]);
-      expect(warn).not.toHaveBeenCalled();
+      expect(warn.warnings).toEqual([]);
     });
   });
 
@@ -512,7 +511,7 @@ describe('durability', () => {
       store.files.set(OUTBOX_URI, JSON.stringify([entry('e1'), entry('e2')]));
 
       expect(loadPersistedOutbox()).toEqual([entry('e1'), entry('e2')]);
-      expect(warn).not.toHaveBeenCalled();
+      expect(warn.warnings).toEqual([]);
     });
 
     it('an outbox from a newer build is read best-effort with a warning, not dropped', () => {
@@ -537,7 +536,7 @@ describe('durability', () => {
       store.files.set(TEMP_URI, '{"schemaVersion":1,"entries":[{"event_');
 
       expect(loadPersistedOutbox()).toEqual([entry('e1'), entry('e2')]);
-      expect(warn).not.toHaveBeenCalled();
+      expect(warn.warnings).toEqual([]);
     });
 
     it('a kill between removing the old outbox and the rename still loads the completed write', () => {

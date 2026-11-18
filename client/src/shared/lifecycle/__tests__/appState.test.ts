@@ -43,6 +43,17 @@ describe('appState', () => {
     expect(staying).toHaveBeenCalledWith('inactive');
   });
 
+  it('lets the driver count who is listening, one fewer after an unsubscribe', () => {
+    const app = driveAppState();
+    const unsubscribe = subscribeAppState(jest.fn());
+    subscribeAppState(jest.fn());
+    const listening = app.listenerCount();
+
+    unsubscribe();
+
+    expect(app.listenerCount()).toBe(listening - 1);
+  });
+
   it('reports whether the app is active from the current state', () => {
     const app = driveAppState('active');
     expect(isAppActive()).toBe(true);

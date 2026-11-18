@@ -5,6 +5,7 @@ import {
   installGlobalErrorReporting,
   reportClientError,
 } from '@shared/telemetry';
+import { recordLogs } from '@shared/log';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -363,7 +364,7 @@ describe('installGlobalErrorReporting', () => {
 
 describe('reportClientError with a failed search request', () => {
   it('ships a payload that carries no search text', async () => {
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recordLogs();
     __http.fail('GET /v1/discovery/search');
 
     const error = await apiFetch('/v1/discovery/search?q=secret').catch((e: unknown) => e);

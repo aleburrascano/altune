@@ -15,6 +15,7 @@ import {
 } from '@shared/telemetry';
 import { createMemoryFileStore } from '@shared/files';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch';
+import { recordLogs } from '@shared/log';
 const { __http } = require('@testing/doubles/fetch.js');
 
 const TELEMETRY_GATED = {
@@ -203,7 +204,7 @@ describe('remote kill switch', () => {
     setKillSwitchFileStore(createMemoryFileStore());
     setOutboxFileStore(createMemoryFileStore());
     _resetOutboxForTest();
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recordLogs();
   });
 
   afterEach(() => {

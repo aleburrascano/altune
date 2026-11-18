@@ -1,23 +1,7 @@
 import { signInTestUser } from '@testing/signInTestUser';
 
+import { driveAppState, type AppStateDriver } from '@shared/lifecycle';
 import { HEALTH_BATCH, createHealthTally } from '@shared/telemetry';
-
-type AppStateChangeHandler = (state: string) => void;
-
-jest.mock('react-native/Libraries/AppState/AppState', () => {
-  const listeners: AppStateChangeHandler[] = [];
-  return {
-    default: {
-      currentState: 'active',
-      isAvailable: true,
-      addEventListener: jest.fn((type: string, handler: AppStateChangeHandler) => {
-        if (type === 'change') listeners.push(handler);
-        return { remove: jest.fn() };
-      }),
-    },
-    __listeners: listeners,
-  };
-});
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -29,16 +13,14 @@ const KEYS = ['a_ok', 'a_failed', 'b_ok'] as const;
 
 type Key = (typeof KEYS)[number];
 
-function appStateListeners(): AppStateChangeHandler[] {
-  return (
-    jest.requireMock('react-native/Libraries/AppState/AppState') as {
-      __listeners: AppStateChangeHandler[];
-    }
-  ).__listeners;
-}
+type Tally = ReturnType<typeof createHealthTally<Key>>;
 
-function buildTally(onFlushFailure: (error: unknown) => void = () => undefined) {
-  return createHealthTally<Key>({ eventType: 'detail_health', keys: KEYS, onFlushFailure });
+const built: Tally[] = [];
+
+function buildTally(onFlushFailure: (error: unknown) => void = () => undefined): Tally {
+  const tally = createHealthTally<Key>({ eventType: 'detail_health', keys: KEYS, onFlushFailure });
+  built.push(tally);
+  return tally;
 }
 
 async function settle(): Promise<void> {
@@ -63,10 +45,16 @@ async function sentEvents(): Promise<SentEvent[]> {
     });
 }
 
+let app: AppStateDriver;
+
 beforeEach(async () => {
-  appStateListeners().length = 0;
+  app = driveAppState();
   __http.reply(EVENTS, { status: HTTP_ACCEPTED });
   await signInTestUser();
+});
+
+afterEach(() => {
+  for (const tally of built.splice(0)) tally.reset();
 });
 
 describe('createHealthTally', () => {
@@ -129,21 +117,22 @@ describe('createHealthTally', () => {
     const tally = buildTally();
     tally.count('a_ok');
 
-    for (const listener of appStateListeners()) listener('active');
+    app.change('active');
     expect(await sentEvents()).toEqual([]);
-    for (const listener of appStateListeners()) listener('background');
+    app.change('background');
 
     expect(await sentEvents()).toHaveLength(1);
   });
 
   it('subscribes to the app state once however many outcomes are counted', () => {
     const tally = buildTally();
+    const listenersBefore = app.listenerCount();
 
     tally.count('a_ok');
     tally.count('a_failed');
     tally.count('b_ok');
 
-    expect(appStateListeners()).toHaveLength(1);
+    expect(app.listenerCount()).toBe(listenersBefore + 1);
   });
 
   it('hands a failed send to onFlushFailure', async () => {
