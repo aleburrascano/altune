@@ -1,0 +1,7 @@
+{
+  "removed": [
+    "C4 internal/shared/fanout/fanout.go exports Group, which nothing outside fanout imports and no test of its own imports through the door"
+  ],
+  "added": [],
+  "clones": 0
+}
