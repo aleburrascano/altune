@@ -28,10 +28,11 @@ import {
   useCreatePlaylistWithTracks,
 } from '@shared/playlists/hooks/playlist/mutations';
 import { useSingleFlightAction } from '@shared/playlists/view/playlist/useSingleFlightAction';
+import { warn } from '@shared/log';
 const SHEET_PLAYLIST_CAP = 2000;
 
 function reportUnresolvedTracks(error: unknown): void {
-  console.warn('[playlists] could not resolve the tracks to add; closing the sheet', error);
+  warn('[playlists] could not resolve the tracks to add; closing the sheet', error);
 }
 
 type AddToPlaylistSheetProps = {

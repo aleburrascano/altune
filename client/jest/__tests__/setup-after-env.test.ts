@@ -34,4 +34,18 @@ describe('setup-after-env', () => {
       expect(__http.countFor('POST /v1/discovery/events')).toBe(1);
     });
   });
+
+  describe('logger reset between tests', () => {
+    const { recordLogs, warn } = require('../../src/shared/log');
+    let earlier: { warnings: unknown[] };
+
+    beforeAll(() => {
+      earlier = recordLogs();
+    });
+
+    it('starts the next test on the console, not on a recorder an earlier one installed', () => {
+      warn('[setup] this warning must not reach the earlier recorder');
+      expect(earlier.warnings).toEqual([]);
+    });
+  });
 });

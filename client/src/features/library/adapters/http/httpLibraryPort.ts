@@ -10,11 +10,12 @@ import {
   listTracksFeaturing,
   reacquireTrack,
 } from '@shared/apiClient';
+import { warn } from '@shared/log';
 import { confirmDestructive, showFailureAlert } from '@shared/ui';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 
 export const httpLibraryPort: LibraryPort = {
-  warn: (message, fields) => console.warn(message, fields),
+  warn: (message, fields) => warn(message, fields),
   showFailure: (alert) => showFailureAlert(alert),
   confirmDestructive: (options) => confirmDestructive(options),
   getTracks: (...args) => getTracks(...args),

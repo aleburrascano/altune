@@ -4,6 +4,7 @@ import { defaultFileStore } from '@shared/files';
 import type { FileStore, StoredFile } from '@shared/files';
 
 import type { ColorScheme } from '@shared/ui/core/theme/theme';
+import { warn } from '@shared/log';
 
 const PREF_DIR = 'preferences';
 const PREF_FILE = 'theme.json';
@@ -31,10 +32,7 @@ function saveScheme(scheme: ColorScheme): void {
   try {
     prefFile().write(JSON.stringify(scheme));
   } catch (error) {
-    console.warn(
-      `[theme] could not persist the ${scheme} scheme; it will not survive a restart`,
-      error,
-    );
+    warn(`[theme] could not persist the ${scheme} scheme; it will not survive a restart`, error);
   }
 }
 

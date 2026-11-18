@@ -27,6 +27,7 @@ import {
   tagChangedEntries,
   writeOwner,
 } from '@shared/offline/state/pinnedIndex';
+import { warn } from '@shared/log';
 
 export { pinnedBytes as pinnedByteTotal } from '@shared/offline/state/pinnedFiles';
 
@@ -73,7 +74,7 @@ export type PinAdmission = 'accepted' | 'storage-full';
 export type PinBatchResult = { requested: number; failed: number; refused?: 'storage-full' };
 
 function refuseForStorage(count: number): void {
-  console.warn(`[offline] refused to pin ${count} track(s): pinned storage is full`);
+  warn(`[offline] refused to pin ${count} track(s): pinned storage is full`);
 }
 
 function setMembership(members: Set<string>, id: string, isMember: boolean): void {
@@ -169,14 +170,14 @@ async function removeInChunks(
 const LOGGED_TRACK_IDS = 20;
 
 function warnDeleteFailed(requested: number, deleteFailed: readonly TrackId[]): void {
-  console.warn(
+  warn(
     `[offline] ${deleteFailed.length} of ${requested} download(s) could not be removed: file delete failed`,
     { trackIds: deleteFailed.slice(0, LOGGED_TRACK_IDS) },
   );
 }
 
 function warnDeadlineStopped(requested: number, untried: number): void {
-  console.warn(
+  warn(
     `[offline] unpin stopped by the ${UNPIN_DEADLINE_MS}ms deadline; ${untried} of ${requested} download(s) not tried`,
     { untried },
   );

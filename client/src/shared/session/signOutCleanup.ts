@@ -1,3 +1,5 @@
+import { warn } from '@shared/log';
+
 let sessionEpoch = 0;
 
 export function currentSessionEpoch(): number {
@@ -58,7 +60,7 @@ const MAX_MESSAGE_LENGTH = 120;
 function warnCleanupFailed(error: unknown): void {
   const name = error instanceof Error ? error.name : 'non-Error';
   const message = error instanceof Error ? error.message.slice(0, MAX_MESSAGE_LENGTH) : '';
-  console.warn(`[session] sign-out cleanup failed: ${name} ${message}`.trimEnd());
+  warn(`[session] sign-out cleanup failed: ${name} ${message}`.trimEnd());
 }
 
 export function hasSignedInUser(): boolean {

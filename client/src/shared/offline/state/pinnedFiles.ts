@@ -9,6 +9,7 @@ import {
 import { NetworkError } from '@shared/failure';
 import { startDeadline } from '@shared/timing';
 import { isSafeId, type TrackId } from '@shared/catalog';
+import { warn } from '@shared/log';
 
 const PINNED_SUBDIR = 'offline-audio';
 
@@ -122,7 +123,7 @@ function tryDelete(file: StoredFile): boolean {
     file.delete();
     return true;
   } catch {
-    console.warn(`[offline] failed to delete pinned file ${baseName(file.uri)}`);
+    warn(`[offline] failed to delete pinned file ${baseName(file.uri)}`);
     return false;
   }
 }

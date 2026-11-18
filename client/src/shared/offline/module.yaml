@@ -1,3 +1,3 @@
 role: shared
 owns: which tracks are pinned for offline play and kept on the device
-depends_on: [apiClient, catalog, device, failure, files, killSwitch, session, telemetry, timing]
+depends_on: [apiClient, catalog, device, failure, files, killSwitch, log, session, telemetry, timing]

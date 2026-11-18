@@ -1,0 +1,9 @@
+{
+  "removed": [
+    "T2 src/features/library/__tests__/FeaturingScreen.test.tsx patches with jest.spyOn",
+    "T2 src/features/library/__tests__/LibraryPortProvider.test.tsx patches with jest.spyOn",
+    "T2 src/features/library/__tests__/PlaylistDetailScreen.test.tsx patches with jest.spyOn"
+  ],
+  "added": [],
+  "clones": 0
+}

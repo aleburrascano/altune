@@ -7,6 +7,7 @@ import {
   type CredentialStamp,
 } from '@shared/auth';
 import { CORRELATION_HEADER, newCorrelationId } from '@shared/apiClient/correlationId';
+import { warn } from '@shared/log';
 import { startDeadline } from '@shared/timing';
 import type { Deadline } from '@shared/timing';
 import {
@@ -128,7 +129,7 @@ export function logFailure(
   error: unknown,
 ): void {
   if (isAbort(error)) return;
-  console.warn('[api] request failed', {
+  warn('[api] request failed', {
     method,
     path: path.split('?')[0],
     ...(correlationId === undefined ? {} : { correlationId }),

@@ -6,6 +6,7 @@ import { ApiError, NetworkError, isSessionFetchFailure } from '@shared/failure';
 import { withinAuthDeadline } from '@shared/auth/shell/authDeadline';
 import { forgetPreviousUsersLocalData } from '@shared/auth/core/userLocalData';
 import { clearPersistedAuthSession, supabase } from '@shared/auth/adapters/authActions';
+import { warn } from '@shared/log';
 
 export type SignOutResult =
   | { status: 'idle' }
@@ -30,16 +31,16 @@ function signOutFailureFields(cause: unknown): { status: number } | { failure: s
 
 function signOutFailed(error: unknown): SignOutResult {
   const cause = asSignOutFailure(error);
-  console.warn('[auth] sign out failed', signOutFailureFields(cause));
+  warn('[auth] sign out failed', signOutFailureFields(cause));
   return { status: 'error', error: cause };
 }
 
 async function endLocalSession(): Promise<void> {
   await clearPersistedAuthSession().catch((error: unknown) =>
-    console.warn('[auth] clearing persisted session failed', signOutFailureFields(error)),
+    warn('[auth] clearing persisted session failed', signOutFailureFields(error)),
   );
   await withinAuthDeadline(supabase.auth.signOut({ scope: 'local' }), 'sign-out-local').catch(
-    (error: unknown) => console.warn('[auth] local sign out failed', signOutFailureFields(error)),
+    (error: unknown) => warn('[auth] local sign out failed', signOutFailureFields(error)),
   );
 }
 

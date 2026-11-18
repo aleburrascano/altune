@@ -26,12 +26,17 @@ function resetOutbox() {
   if (typeof outbox._resetOutboxForTest === 'function') outbox._resetOutboxForTest();
 }
 
+function resetLogger() {
+  require('../src/shared/log').setLogger();
+}
+
 const { ensureAppAuthClient } = require('./appAuthClient.js');
 
 beforeAll(ensureAppAuthClient);
 
 beforeEach(() => {
   ensureAppAuthClient();
+  resetLogger();
   require('expo-file-system').__fs.reset();
   require('expo-secure-store').__secureStore.reset();
   require('react-native-track-player').__player.reset();

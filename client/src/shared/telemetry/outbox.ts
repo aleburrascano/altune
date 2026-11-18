@@ -14,6 +14,7 @@ import {
   type OutboxEntry,
 } from '@shared/telemetry/outboxEntries';
 import { recordEvent, type DiscoveryEvent } from '@shared/telemetry/recordEvent';
+import { warn } from '@shared/log';
 
 const MAX_ENTRIES = 50;
 const MAX_DIAGNOSTIC_ENTRIES = 20;
@@ -36,7 +37,7 @@ function capCritical(entries: readonly OutboxEntry[]): OutboxEntry[] {
   const dropped = entries.length - capped.length;
   if (dropped > 0) {
     _droppedCritical += dropped;
-    console.warn(
+    warn(
       `[telemetry] dropped ${dropped} label-critical outbox ${dropped === 1 ? 'entry' : 'entries'} at cap (${_droppedCritical} since launch)`,
     );
   }
@@ -126,9 +127,9 @@ function scheduleRetry(): void {
       dropped_at_cap: _droppedCritical,
     },
   }).catch((error: unknown) => {
-    console.warn('[telemetry] recording event failed', error);
+    warn('[telemetry] recording event failed', error);
   });
-  console.warn(
+  warn(
     `[telemetry] outbox flush left ${_queue.length} queued; retry ${_failedPasses} in ${delay}ms; ${_droppedCritical} dropped at cap since launch`,
   );
 }
@@ -151,10 +152,10 @@ type SendOutcome = 'sent' | 'dropped' | 'retry' | 'offline';
 function classifyFailure(entry: OutboxEntry, error: unknown): SendOutcome {
   const label = `${entry.type} ${entry.event_id}`;
   if (isPermanentlyRejected(error)) {
-    console.warn(`[telemetry] outbox dropping ${label}, rejected by the server`, error);
+    warn(`[telemetry] outbox dropping ${label}, rejected by the server`, error);
     return 'dropped';
   }
-  console.warn(`[telemetry] outbox send failed for ${label}`, error);
+  warn(`[telemetry] outbox send failed for ${label}`, error);
   return error instanceof NetworkError ? 'offline' : 'retry';
 }
 

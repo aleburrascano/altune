@@ -5,8 +5,6 @@ import { createMemoryLibraryPort, LibraryPortProvider, useLibraryPort } from '@f
 
 describe('useLibraryPort', () => {
   it('throws when no provider is mounted', () => {
-    jest.spyOn(console, 'error').mockImplementation(() => {});
-
     expect(() => renderHook(() => useLibraryPort())).toThrow('no library port provided');
   });
 

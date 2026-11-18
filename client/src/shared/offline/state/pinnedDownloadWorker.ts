@@ -22,6 +22,7 @@ import {
   scheduleSaveIndex,
   tagChangedEntries,
 } from '@shared/offline/state/pinnedIndex';
+import { warn } from '@shared/log';
 
 type QueueState = {
   entries: Record<string, PinnedEntry>;
@@ -115,14 +116,14 @@ function recordDownloadFailed(trackId: TrackId, willRetry: boolean): void {
     type: 'download_failed',
     payload: { track_id: trackId, will_retry: willRetry },
   }).catch((error: unknown) => {
-    console.warn('[offline] recording download_failed event failed', error);
+    warn('[offline] recording download_failed event failed', error);
   });
 }
 
 function warnAttemptFailed(trackId: TrackId, attempt: FailedAttempt, retryIn: number | null): void {
   const retry = retryIn === null ? '' : `, retrying in ${retryIn}ms`;
   recordDownloadFailed(trackId, retryIn !== null);
-  console.warn(`[offline] pinned download failed for track ${trackId}${retry}`, {
+  warn(`[offline] pinned download failed for track ${trackId}${retry}`, {
     url: unsignedUrl(attempt.url),
     error: attempt.error,
   });
