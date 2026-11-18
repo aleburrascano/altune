@@ -10,7 +10,7 @@ import {
 } from '@features/signIn/core/authError';
 import { authRedirectUrl } from '@features/signIn/core/authRedirect';
 
-import { useAsyncAuthAction } from '@features/signIn/hooks/useAsyncAuthAction';
+import { useAsyncAuthAction } from '@features/signIn/shell/useAsyncAuthAction';
 
 type SignUpResult =
   | { kind: 'idle' }

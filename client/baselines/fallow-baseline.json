@@ -11,7 +11,7 @@
   "unused_exports": [
     "src/features/library/view/useRetryAcquisition.ts:useOneRunPerTrack",
     "src/features/player/adapters/PlaybackProvider.tsx:PlaybackProvider",
-    "src/features/signIn/hooks/useAuthDeepLink.ts:useAuthDeepLink",
+    "src/features/signIn/shell/useAuthDeepLink.ts:useAuthDeepLink",
     "src/features/signIn/ui/AuthCallbackScreen.tsx:AuthCallbackScreen"
   ],
   "unused_types": [],

@@ -9,7 +9,7 @@ import {
   type TransientAuthReason,
 } from '@features/signIn/core/authError';
 
-import { useAsyncAuthAction } from '@features/signIn/hooks/useAsyncAuthAction';
+import { useAsyncAuthAction } from '@features/signIn/shell/useAsyncAuthAction';
 
 type UpdatePasswordResult =
   | { kind: 'idle' }

@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button, showFailureAlert, Text, spacing, AuthHeroLayout } from '@shared/ui';
-import { useUpdatePassword } from '@features/signIn/hooks/useUpdatePassword';
+import { useUpdatePassword } from '@features/signIn/shell/useUpdatePassword';
 import { clearRecoveryUnlock } from '@features/signIn/shell/passwordRecovery';
 import { PASSWORD_REQUIREMENTS_HINT, newPasswordFormState } from '@features/signIn/core/validation';
 import { AuthErrorBanner } from '@features/signIn/view/AuthErrorBanner';

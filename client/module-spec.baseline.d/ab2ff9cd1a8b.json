@@ -1,0 +1,16 @@
+{
+  "removed": [
+    "C12 src/features/signIn/hooks/useAsyncAuthAction.ts hooks/useAsyncAuthAction.ts is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
+    "C12 src/features/signIn/hooks/useAuthDeepLink.ts hooks/useAuthDeepLink.ts is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
+    "C12 src/features/signIn/hooks/useAuthDeepLink.web.ts hooks/useAuthDeepLink.web.ts is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
+    "C12 src/features/signIn/hooks/useSignIn.ts hooks/useSignIn.ts is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
+    "C12 src/features/signIn/hooks/useUpdatePassword.ts hooks/useUpdatePassword.ts is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
+    "F1 src/features/signIn/hooks/useAsyncAuthAction.ts imports react",
+    "F1 src/features/signIn/hooks/useAuthDeepLink.ts imports react"
+  ],
+  "added": [
+    "F1 src/features/signIn/shell/useAsyncAuthAction.ts imports react",
+    "F1 src/features/signIn/shell/useAuthDeepLink.ts imports react"
+  ],
+  "clones": 0
+}

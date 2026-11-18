@@ -8,7 +8,7 @@ import { act, renderRouter, screen } from 'expo-router/testing-library';
 import { supabase } from '@shared/auth';
 
 import { AuthGate } from '@features/signIn/ui/AuthGate';
-import { useAuthDeepLink } from '@features/signIn/hooks/useAuthDeepLink';
+import { useAuthDeepLink } from '@features/signIn/shell/useAuthDeepLink';
 import { clearRecoveryUnlock } from '@features/signIn/shell/passwordRecovery';
 import IndexScreen from '@/app/index';
 import AuthCallbackRoute from '@/app/auth/callback';
