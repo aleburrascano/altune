@@ -1,6 +1,9 @@
-package domain
+package domain_test
 
-import "testing"
+import (
+	"altune/go-api/internal/acquisition"
+	"testing"
+)
 
 func TestCredits_OneKeyForEveryCreditCompare(t *testing.T) {
 	cases := []struct {
@@ -20,8 +23,8 @@ func TestCredits_OneKeyForEveryCreditCompare(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := Credits(tc.credited, tc.artist); got != tc.want {
-				t.Fatalf("Credits(%q, %q) = %v, want %v", tc.credited, tc.artist, got, tc.want)
+			if got := acquisition.CreditsArtist(tc.credited, tc.artist); got != tc.want {
+				t.Fatalf("CreditsArtist(%q, %q) = %v, want %v", tc.credited, tc.artist, got, tc.want)
 			}
 		})
 	}

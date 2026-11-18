@@ -1,14 +1,35 @@
-package domain
+package domain_test
 
-import "testing"
+import (
+	"altune/go-api/internal/acquisition"
+	"context"
+	"testing"
+)
+
+type answeringSongs []acquisition.YtmSong
+
+func (a answeringSongs) SearchSongs(context.Context, string) ([]acquisition.YtmSong, error) {
+	return a, nil
+}
+
+func ytMusicWatchURL(t *testing.T, videoID string) string {
+	t.Helper()
+	song := acquisition.YtmSong{VideoID: videoID, Type: acquisition.VideoTypeATV, Title: "Song", Artists: []string{"Artist"}}
+	found, err := acquisition.NewYtmSearchSource(answeringSongs{song}, nil).Find(context.Background(), acquisition.FindRequest{Title: "Song", Artist: "Artist"})
+	if err != nil || len(found) != 1 {
+		t.Fatalf("found %v err %v, want one candidate", found, err)
+	}
+	return found[0].URL
+}
 
 func TestYouTubeMusicWatchURL_KeysAsTheVideo(t *testing.T) {
 	const id = "dQw4w9WgXcQ"
-	if got := SourceKey(YouTubeMusicWatchURL(id)); got != "youtube:"+id {
-		t.Fatalf("SourceKey(YouTubeMusicWatchURL(%q)) = %q, want %q", id, got, "youtube:"+id)
+	url := ytMusicWatchURL(t, id)
+	if url != "https://music.youtube.com/watch?v="+id {
+		t.Fatalf("watch URL for %q = %q", id, url)
 	}
-	if got := YouTubeMusicWatchURL(id); got != "https://music.youtube.com/watch?v="+id {
-		t.Fatalf("YouTubeMusicWatchURL(%q) = %q", id, got)
+	if got := acquisition.SourceKey(url); got != "youtube:"+id {
+		t.Fatalf("SourceKey(%q) = %q, want %q", url, got, "youtube:"+id)
 	}
 }
 
@@ -26,7 +47,7 @@ func TestIsYouTubeVideoID_AcceptsExactlyElevenURLSafeCharacters(t *testing.T) {
 		{"dQw4w9WgXc\n", false},
 	}
 	for _, tc := range cases {
-		if got := IsYouTubeVideoID(tc.id); got != tc.want {
+		if got := acquisition.IsYouTubeVideoID(tc.id); got != tc.want {
 			t.Fatalf("IsYouTubeVideoID(%q) = %v, want %v", tc.id, got, tc.want)
 		}
 	}
