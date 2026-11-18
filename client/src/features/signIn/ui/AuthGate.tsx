@@ -3,7 +3,10 @@ import { Redirect, useSegments } from 'expo-router';
 import { useSessionExpired, useSession } from '@shared/auth';
 import { Text, Wordmark } from '@shared/ui';
 import { useRecoveryUnlocked } from '@features/signIn/view/useRecoveryUnlocked';
-import { RESET_PASSWORD_ROUTE_SEGMENT } from '@features/signIn/domain/passwordRecovery';
+import {
+  RESET_PASSWORD_ROUTE_SEGMENT,
+  recoveryUnlock,
+} from '@features/signIn/domain/passwordRecovery';
 
 import {
   AuthFullScreenNotice,
@@ -15,7 +18,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const session = useSession();
   const sessionExpired = useSessionExpired();
   const signedInUserId = session.status === 'signed-in' ? session.session.user.id : null;
-  const recoveryUnlocked = useRecoveryUnlocked(signedInUserId);
+  const recoveryUnlocked = useRecoveryUnlocked(recoveryUnlock, signedInUserId);
   const segments = useSegments();
   const inAuthGroup = segments[0] === '(auth)';
   const onRecoveryRoute = segments[0] === RESET_PASSWORD_ROUTE_SEGMENT;

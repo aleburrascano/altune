@@ -1,14 +1,13 @@
 import { useSyncExternalStore } from 'react';
 
-import {
-  isRecoveryUnlocked,
-  subscribeRecoveryUnlock,
-} from '@features/signIn/domain/passwordRecovery';
+import type { RecoveryUnlockSource } from '@features/signIn/core/recoveryUnlockSource';
 
-export function useRecoveryUnlocked(userId: string | null): boolean {
-  return useSyncExternalStore(
-    subscribeRecoveryUnlock,
-    () => isRecoveryUnlocked(userId),
-    () => isRecoveryUnlocked(userId),
-  );
+export function useRecoveryUnlocked(
+  recovery: RecoveryUnlockSource,
+  userId: string | null,
+): boolean {
+  function isUnlocked(): boolean {
+    return recovery.isUnlocked(userId);
+  }
+  return useSyncExternalStore(recovery.subscribe, isUnlocked, isUnlocked);
 }

@@ -40,6 +40,7 @@ export {
   clearRecoveryUnlock,
   isRecoveryUnlocked,
   markRecoveryUnlocked,
+  recoveryUnlock,
   subscribeRecoveryUnlock,
 } from '@features/signIn/domain/passwordRecovery';
 export { InvalidRecoveryLinkNotice, SessionExpiredNotice } from '@features/signIn/ui/AuthNotices';
