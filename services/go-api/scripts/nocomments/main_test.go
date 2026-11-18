@@ -382,6 +382,43 @@ func TestWalkSkipsNodeModulesVendorAndGit(t *testing.T) {
 	}
 }
 
+func TestWalkSkipsFilesGitIgnoresButChecksTrackedOnes(t *testing.T) {
+	dir := t.TempDir()
+	gitCmd(t, dir, "init")
+	writeFile(t, dir, ".gitignore", "*.local.sh\n")
+	writeFile(t, dir, "tracked.local.sh", "echo tracked # x\n")
+	gitCmd(t, dir, "add", "-f", "tracked.local.sh")
+	writeFile(t, dir, "mine.local.sh", "echo mine # x\n")
+	writeFile(t, dir, "new.sh", "echo new # x\n")
+
+	var stdout strings.Builder
+	code := run([]string{"check", dir}, &stdout)
+
+	if code != 1 || strings.Contains(stdout.String(), "mine.local.sh") {
+		t.Fatalf("exit = %d, want 1 without the ignored file; output:\n%s", code, stdout.String())
+	}
+	for _, want := range []string{"tracked.local.sh:1", "new.sh:1"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("output missing %s:\n%s", want, stdout.String())
+		}
+	}
+}
+
+func TestStripLeavesFilesGitIgnoresUntouched(t *testing.T) {
+	dir := t.TempDir()
+	gitCmd(t, dir, "init")
+	writeFile(t, dir, ".gitignore", "mine.sh\n")
+	writeFile(t, dir, "mine.sh", "echo mine # x\n")
+
+	var stdout strings.Builder
+	run([]string{"strip", dir}, &stdout)
+
+	got, err := os.ReadFile(filepath.Join(dir, "mine.sh"))
+	if err != nil || string(got) != "echo mine # x\n" {
+		t.Fatalf("mine.sh = %q, %v; output:\n%s", got, err, stdout.String())
+	}
+}
+
 func TestWalkSkipsCoverageReports(t *testing.T) {
 	dir := t.TempDir()
 	report := filepath.Join(dir, "client", "coverage", "lcov-report")
