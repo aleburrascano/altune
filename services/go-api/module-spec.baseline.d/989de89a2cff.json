@@ -1,0 +1,8 @@
+{
+  "removed": [
+    "C4 internal/shared/reqmetrics/snapshot.go exports BucketCount, which nothing outside reqmetrics imports and no test of its own imports through the door",
+    "C4 internal/shared/reqmetrics/snapshot.go exports Snapshot, which nothing outside reqmetrics imports and no test of its own imports through the door"
+  ],
+  "added": [],
+  "clones": 0
+}
