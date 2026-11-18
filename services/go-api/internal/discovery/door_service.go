@@ -66,6 +66,8 @@ const (
 	ProviderStatusTimeout        = domain.ProviderStatusTimeout
 	ProviderUnknown              = domain.ProviderUnknown
 	RelationshipLibraryMatches   = domain.RelationshipLibraryMatches
+	VocabKindAlbum               = domain.VocabKindAlbum
+	VocabKindQuery               = domain.VocabKindQuery
 )
 
 var (

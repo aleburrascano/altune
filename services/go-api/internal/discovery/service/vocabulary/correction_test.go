@@ -1,27 +1,52 @@
-package vocabulary
+package vocabulary_test
 
 import (
-	"altune/go-api/internal/discovery/discoverytest"
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"context"
 	"errors"
 	"strings"
 	"testing"
 )
 
+const (
+	maxCorrectionQueryRunes = 100
+	maxCorrectionTokens     = 8
+)
+
+func vocabOffering(candidates ...discovery.VocabularyEntry) *discovery.FakeVocabularyStore {
+	return &discovery.FakeVocabularyStore{
+		FindClosestFn: func(string, int) ([]discovery.VocabularyEntry, error) {
+			return candidates, nil
+		},
+	}
+}
+
+func trackTerm(term string, score float64) discovery.VocabularyEntry {
+	return discovery.VocabularyEntry{Term: term, TermNorm: term, Kind: discovery.VocabKindTrack, MatchScore: score}
+}
+
+func correctedTo(t *testing.T, store *discovery.FakeVocabularyStore, query string) string {
+	t.Helper()
+	result := discovery.NewCorrectionService(store).Correct(context.Background(), query)
+	if result == nil {
+		return ""
+	}
+	return result.Corrected
+}
+
 func TestCorrectTokens_PrefixLookupErrorDegrades(t *testing.T) {
-	store := &discoverytest.FakeVocabularyStore{
-		SuggestByPrefixFn: func(_ string, _ int) ([]domain.VocabularyEntry, error) {
+	store := &discovery.FakeVocabularyStore{
+		SuggestByPrefixFn: func(_ string, _ int) ([]discovery.VocabularyEntry, error) {
 			return nil, errors.New("redis down")
 		},
-		FindClosestFn: func(token string, _ int) ([]domain.VocabularyEntry, error) {
+		FindClosestFn: func(token string, _ int) ([]discovery.VocabularyEntry, error) {
 			if token == "humbel" {
-				return []domain.VocabularyEntry{{Term: "humble", TermNorm: "humble", Kind: domain.VocabKindTrack, MatchScore: 0.8}}, nil
+				return []discovery.VocabularyEntry{trackTerm("humble", 0.8)}, nil
 			}
 			return nil, nil
 		},
 	}
-	svc := NewCorrectionService(store)
+	svc := discovery.NewCorrectionService(store)
 
 	result := svc.CorrectAggressive(context.Background(), "kendrick humbel")
 	if result == nil || result.Corrected != "kendrick humble" {
@@ -29,81 +54,83 @@ func TestCorrectTokens_PrefixLookupErrorDegrades(t *testing.T) {
 	}
 }
 
-func TestPickBestCorrection(t *testing.T) {
-	t.Run("picks closest by edit distance", func(t *testing.T) {
-		candidates := []domain.VocabularyEntry{
-			{Term: "megaman", TermNorm: "megaman", Kind: "track", MatchScore: 0.72},
-			{Term: "madonna", TermNorm: "madonna", Kind: "artist", MatchScore: 0.30},
-		}
-		result := pickBestCorrection(context.Background(), "megamsn", candidates)
-		if result == nil {
-			t.Fatal("expected a correction result")
-		}
-		if result.Corrected != "megaman" {
-			t.Errorf("expected corrected='megaman', got %q", result.Corrected)
-		}
-	})
+func TestCorrect_PicksTheBestCandidate(t *testing.T) {
+	cases := []struct {
+		name       string
+		query      string
+		candidates []discovery.VocabularyEntry
+		want       string
+	}{
+		{
+			name:       "closest by edit distance",
+			query:      "megamsn",
+			candidates: []discovery.VocabularyEntry{trackTerm("megaman", 0.72), {Term: "madonna", TermNorm: "madonna", Kind: discovery.VocabKindArtist, MatchScore: 0.30}},
+			want:       "megaman",
+		},
+		{
+			name:       "nothing when every candidate is beyond the max edit distance",
+			query:      "megamsn",
+			candidates: []discovery.VocabularyEntry{trackTerm("zzzzzzz", 0.80), trackTerm("yyyyyyy", 0.90)},
+			want:       "",
+		},
+		{
+			name:       "a lone candidate",
+			query:      "megamsn",
+			candidates: []discovery.VocabularyEntry{trackTerm("megaman", 0.72)},
+			want:       "megaman",
+		},
+		{
+			name:       "same distance breaks the tie by match score",
+			query:      "weekend",
+			candidates: []discovery.VocabularyEntry{trackTerm("weekand", 0.45), {Term: "weekynd", TermNorm: "weekynd", Kind: discovery.VocabKindArtist, MatchScore: 0.66}},
+			want:       "weekynd",
+		},
+		{
+			name:       "same distance keeps the first when the later scores no higher",
+			query:      "weekend",
+			candidates: []discovery.VocabularyEntry{trackTerm("weekand", 0.66), trackTerm("weekynd", 0.66)},
+			want:       "weekand",
+		},
+		{
+			name:       "lower edit distance beats a higher score",
+			query:      "megamsn",
+			candidates: []discovery.VocabularyEntry{trackTerm("megaman", 0.50), trackTerm("megazan", 0.90)},
+			want:       "megaman",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := correctedTo(t, vocabOffering(c.candidates...), c.query); got != c.want {
+				t.Errorf("Correct(%q) = %q, want %q", c.query, got, c.want)
+			}
+		})
+	}
+}
 
-	t.Run("rejects candidates beyond max edit distance", func(t *testing.T) {
-		candidates := []domain.VocabularyEntry{
-			{Term: "zzzzzzz", TermNorm: "zzzzzzz", Kind: "track", MatchScore: 0.80},
-			{Term: "yyyyyyy", TermNorm: "yyyyyyy", Kind: "track", MatchScore: 0.90},
-		}
-		result := pickBestCorrection(context.Background(), "megamsn", candidates)
-		if result != nil {
-			t.Errorf("expected nil for high-distance candidates, got %+v", result)
-		}
-	})
-
-	t.Run("empty candidates returns nil", func(t *testing.T) {
-		result := pickBestCorrection(context.Background(), "megamsn", nil)
-		if result != nil {
-			t.Errorf("expected nil, got %+v", result)
-		}
-	})
-
-	t.Run("single candidate is returned unchanged", func(t *testing.T) {
-		candidates := []domain.VocabularyEntry{
-			{Term: "megaman", TermNorm: "megaman", Kind: "track", MatchScore: 0.72},
-		}
-		result := pickBestCorrection(context.Background(), "megamsn", candidates)
-		if result == nil || result.Corrected != "megaman" {
-			t.Fatalf("want the lone candidate megaman, got %+v", result)
-		}
-	})
-
-	t.Run("same distance breaks tie by match score", func(t *testing.T) {
-		candidates := []domain.VocabularyEntry{
-			{Term: "weekand", TermNorm: "weekand", Kind: "track", MatchScore: 0.45},
-			{Term: "weekynd", TermNorm: "weekynd", Kind: "artist", MatchScore: 0.66},
-		}
-		result := pickBestCorrection(context.Background(), "weekend", candidates)
-		if result == nil {
-			t.Fatal("expected a correction result")
-		}
-		if result.Corrected != "weekynd" {
-			t.Errorf("expected higher-scored tiebreaker 'weekynd', got %q", result.Corrected)
-		}
-	})
-
-	t.Run("prefers lower edit distance over higher score", func(t *testing.T) {
-		candidates := []domain.VocabularyEntry{
-			{Term: "megaman", TermNorm: "megaman", Kind: "track", MatchScore: 0.50},
-			{Term: "megazan", TermNorm: "megazan", Kind: "track", MatchScore: 0.90},
-		}
-		result := pickBestCorrection(context.Background(), "megamsn", candidates)
-		if result == nil {
-			t.Fatal("expected a correction result")
-		}
-		if result.Corrected != "megaman" {
-			t.Errorf("expected closer 'megaman' (dist 1) over 'megazan' (dist 2), got %q", result.Corrected)
-		}
-	})
+func TestCorrect_MaxEditDistanceGrowsWithQueryLength(t *testing.T) {
+	cases := []struct {
+		query, withinReach, outOfReach string
+	}{
+		{"abcd", "abcx", "abxx"},
+		{"abcde", "abcxx", "abxxx"},
+		{"abcdefgh", "abcdefxx", "abcdexxx"},
+		{"abcdefghi", "abcdefxxx", "abcdexxxx"},
+	}
+	for _, c := range cases {
+		t.Run(c.query, func(t *testing.T) {
+			if got := correctedTo(t, vocabOffering(trackTerm(c.withinReach, 0.5)), c.query); got != c.withinReach {
+				t.Errorf("Correct(%q) with %q = %q, want it corrected", c.query, c.withinReach, got)
+			}
+			if got := correctedTo(t, vocabOffering(trackTerm(c.outOfReach, 0.5)), c.query); got != "" {
+				t.Errorf("Correct(%q) with %q = %q, want no correction", c.query, c.outOfReach, got)
+			}
+		})
+	}
 }
 
 func TestCorrectAggressive_ManyTokenQueryIsBounded(t *testing.T) {
-	vocab := &discoverytest.CtxRecordingVocab{}
-	svc := NewCorrectionService(vocab)
+	vocab := &discovery.CtxRecordingVocab{}
+	svc := discovery.NewCorrectionService(vocab)
 
 	hostile := strings.TrimSpace(strings.Repeat("zxqv ", 5000))
 	svc.CorrectAggressive(context.Background(), hostile)
@@ -119,8 +146,8 @@ func TestCorrectAggressive_ManyTokenQueryIsBounded(t *testing.T) {
 }
 
 func TestCorrectAggressive_ShortMultiTokenQueryStillCorrectsEveryToken(t *testing.T) {
-	vocab := &discoverytest.CtxRecordingVocab{}
-	svc := NewCorrectionService(vocab)
+	vocab := &discovery.CtxRecordingVocab{}
+	svc := discovery.NewCorrectionService(vocab)
 
 	svc.CorrectAggressive(context.Background(), "kendrik lamar humbel")
 
@@ -129,24 +156,17 @@ func TestCorrectAggressive_ShortMultiTokenQueryStillCorrectsEveryToken(t *testin
 	}
 }
 
-func TestPickBestCorrection_DoesNotLogRawQueryText(t *testing.T) {
-	buf := discoverytest.CaptureLogs(t)
+func TestCorrect_DoesNotLogRawQueryText(t *testing.T) {
+	buf := discovery.CaptureLogs(t)
 
-	store := &discoverytest.FakeVocabularyStore{
-		FindClosestFn: func(_ string, _ int) ([]domain.VocabularyEntry, error) {
-			return []domain.VocabularyEntry{
-				{Term: "humble", TermNorm: "humble", Kind: domain.VocabKindTrack, MatchScore: 0.8},
-			}, nil
-		},
-	}
-	svc := NewCorrectionService(store)
+	svc := discovery.NewCorrectionService(vocabOffering(trackTerm("humble", 0.8)))
 
 	result := svc.CorrectAggressive(context.Background(), "humbel")
 	if result == nil || result.Corrected != "humble" {
 		t.Fatalf("want whole-query correction, got %+v", result)
 	}
 
-	event := discoverytest.LoggedEvent(t, buf, "correction.candidate")
+	event := discovery.LoggedEvent(t, buf, "correction.candidate")
 	if strings.Contains(event, "humbel") {
 		t.Fatalf("candidate log leaks raw query text:\n%s", event)
 	}
@@ -156,7 +176,7 @@ func TestPickBestCorrection_DoesNotLogRawQueryText(t *testing.T) {
 }
 
 func TestCorrection_NilVocabIsNil(t *testing.T) {
-	s := NewCorrectionService(nil)
+	s := discovery.NewCorrectionService(nil)
 	if s.Correct(context.Background(), "humble") != nil {
 		t.Error("Correct with no vocab must be nil")
 	}
@@ -166,14 +186,8 @@ func TestCorrection_NilVocabIsNil(t *testing.T) {
 }
 
 func TestCorrection_CorrectWholeQuery(t *testing.T) {
-	store := &discoverytest.FakeVocabularyStore{
-		FindClosestFn: func(query string, _ int) ([]domain.VocabularyEntry, error) {
-			return []domain.VocabularyEntry{
-				{Term: "Kendrick", TermNorm: "kendrick", Kind: domain.VocabKindArtist, MatchScore: 0.9},
-			}, nil
-		},
-	}
-	s := NewCorrectionService(store)
+	store := vocabOffering(discovery.VocabularyEntry{Term: "Kendrick", TermNorm: "kendrick", Kind: discovery.VocabKindArtist, MatchScore: 0.9})
+	s := discovery.NewCorrectionService(store)
 
 	got := s.Correct(context.Background(), "kendrik")
 	if got == nil || got.Corrected != "Kendrick" {
@@ -186,61 +200,43 @@ func TestCorrection_CorrectWholeQuery(t *testing.T) {
 }
 
 func TestCorrection_WholeQueryErrorOrEmptyIsNil(t *testing.T) {
-	erroring := &discoverytest.FakeVocabularyStore{
-		FindClosestFn: func(string, int) ([]domain.VocabularyEntry, error) {
+	erroring := &discovery.FakeVocabularyStore{
+		FindClosestFn: func(string, int) ([]discovery.VocabularyEntry, error) {
 			return nil, errors.New("redis down")
 		},
 	}
-	if got := NewCorrectionService(erroring).Correct(context.Background(), "kendrik"); got != nil {
+	if got := discovery.NewCorrectionService(erroring).Correct(context.Background(), "kendrik"); got != nil {
 		t.Errorf("store error must degrade to nil, got %+v", got)
 	}
-	empty := &discoverytest.FakeVocabularyStore{}
-	if got := NewCorrectionService(empty).Correct(context.Background(), "kendrik"); got != nil {
+	empty := &discovery.FakeVocabularyStore{}
+	if got := discovery.NewCorrectionService(empty).Correct(context.Background(), "kendrik"); got != nil {
 		t.Errorf("no candidates must yield nil, got %+v", got)
 	}
 }
 
-func TestMaxCorrectionDist_Boundaries(t *testing.T) {
-	tests := []struct {
-		query string
-		want  int
-	}{
-		{"abcd", 1},
-		{"abcde", 2},
-		{"abcdefgh", 2},
-		{"abcdefghi", 3},
-	}
-	for _, tt := range tests {
-		if got := maxCorrectionDist(tt.query); got != tt.want {
-			t.Errorf("maxCorrectionDist(%q) = %d, want %d", tt.query, got, tt.want)
-		}
-	}
-}
-
 func TestCorrection_TokenPathSingleTokenIsNil(t *testing.T) {
-	store := &discoverytest.FakeVocabularyStore{}
-	s := NewCorrectionService(store)
+	s := discovery.NewCorrectionService(&discovery.FakeVocabularyStore{})
 	if got := s.CorrectAggressive(context.Background(), "kendrik"); got != nil {
 		t.Errorf("single-token aggressive miss = %+v, want nil", got)
 	}
 }
 
 func TestCorrection_TokenPathPrefixErrorDegrades(t *testing.T) {
-	store := &discoverytest.FakeVocabularyStore{
-		SuggestByPrefixFn: func(string, int) ([]domain.VocabularyEntry, error) {
+	store := &discovery.FakeVocabularyStore{
+		SuggestByPrefixFn: func(string, int) ([]discovery.VocabularyEntry, error) {
 			return nil, errors.New("redis down")
 		},
-		FindClosestFn: func(query string, _ int) ([]domain.VocabularyEntry, error) {
+		FindClosestFn: func(query string, _ int) ([]discovery.VocabularyEntry, error) {
 			if query == "kendrik lamar" {
 				return nil, nil
 			}
 			if query == "kendrik" {
-				return []domain.VocabularyEntry{{Term: "Kendrick", TermNorm: "kendrick", Kind: domain.VocabKindArtist, MatchScore: 0.8}}, nil
+				return []discovery.VocabularyEntry{{Term: "Kendrick", TermNorm: "kendrick", Kind: discovery.VocabKindArtist, MatchScore: 0.8}}, nil
 			}
-			return []domain.VocabularyEntry{{Term: "Lamar", TermNorm: "lamar", Kind: domain.VocabKindArtist, MatchScore: 1}}, nil
+			return []discovery.VocabularyEntry{{Term: "Lamar", TermNorm: "lamar", Kind: discovery.VocabKindArtist, MatchScore: 1}}, nil
 		},
 	}
-	s := NewCorrectionService(store)
+	s := discovery.NewCorrectionService(store)
 	got := s.CorrectAggressive(context.Background(), "kendrik lamar")
 	if got == nil || got.Corrected != "kendrick lamar" {
 		t.Fatalf("aggressive = %+v, want token-corrected \"kendrick lamar\"", got)
