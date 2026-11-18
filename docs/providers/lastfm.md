@@ -200,7 +200,7 @@ Detail-open enrichment (cap 3 + cap-4 similar artists). Paths are under
 - `internal/app/build_consensus_providers.go`: `buildDetailEnrichers` wires it, config-gated by
   `cfg.HasLastFM()`.
 - Mobile: `client/src/shared/apiClient/enrichment.ts` (`getLastFmEnrichment` + `LastFmEnrichmentResponse`),
-  `useLastFmEnrichment` in `client/src/features/detail/hooks/useDetailEnrichments.ts` (artist-gated), and
+  `useLastFmEnrichment` in `client/src/features/detail/core/useDetailEnrichments.ts` (artist-gated), and
   `client/src/features/detail/view/LastFmEnrichmentSection.tsx` (artist bio + similar artists), rendered by
   `ArtistDetailBody`.
 

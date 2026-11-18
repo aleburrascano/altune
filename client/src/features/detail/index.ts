@@ -30,7 +30,7 @@ export {
   recordContentFetchOutcome,
 } from '@features/detail/core/detailHealth';
 export { useAlbumTracks } from '@features/detail/core/useAlbumTracks';
-export { useDetailEnrichments } from '@features/detail/hooks/useDetailEnrichments';
+export { useDetailEnrichments } from '@features/detail/core/useDetailEnrichments';
 export { useArtistContent } from '@features/detail/core/useArtistContent';
 export {
   createMemoryDetailPort,

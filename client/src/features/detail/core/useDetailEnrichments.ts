@@ -73,9 +73,9 @@ function reportEnrichmentFailure({ port, ctx }: EnrichmentReporter, error: unkno
   port.warn('[detail] enrichment fetch failed', { ...ctx, error: errorMessage(error) });
 }
 
-async function fetchReportingOutcome<T>(reporter: EnrichmentReporter, fetch: () => Promise<T>) {
+async function fetchReportingOutcome<T>(reporter: EnrichmentReporter, load: () => Promise<T>) {
   try {
-    const enrichment = await fetch();
+    const enrichment = await load();
     recordEnrichmentOutcome(reporter.ctx.provider, true);
     return enrichment;
   } catch (error) {
