@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-var binaryName = "yt-dlp"
+const binaryName = "yt-dlp"
 
 func DumpJSON(ctx context.Context, args []string) (lines [][]byte, stderr string, err error) {
 	stdout, capturedStderr, stdoutTruncated, runErr := execcmd.RunCapture(ctx, binaryName, args...)

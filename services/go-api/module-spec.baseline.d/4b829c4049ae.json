@@ -1,0 +1,7 @@
+{
+  "removed": [
+    "T1 internal/shared/ytdlp/runner_test.go is in package ytdlp, so it sees inside the module: use package ytdlp_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}
