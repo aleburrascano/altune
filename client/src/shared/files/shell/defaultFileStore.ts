@@ -1,4 +1,4 @@
-import type { FileStore } from '@shared/files/fileStore';
+import type { FileStore } from '@shared/files/shell/fileStore';
 
 let deviceFileStore: FileStore | undefined;
 
