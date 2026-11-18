@@ -1,12 +1,13 @@
-package ytminnertube
+package ytminnertube_test
 
 import (
+	"altune/go-api/internal/shared/ytminnertube"
 	"encoding/json"
 	"testing"
 )
 
 func TestBody_IsTheWebRemixContext(t *testing.T) {
-	raw, err := json.Marshal(Body(map[string]any{"query": "q", "params": "p"}))
+	raw, err := json.Marshal(ytminnertube.Body(map[string]any{"query": "q", "params": "p"}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -17,7 +18,7 @@ func TestBody_IsTheWebRemixContext(t *testing.T) {
 }
 
 func TestURL_CarriesTheEndpointAndKey(t *testing.T) {
-	got := URL("https://music.youtube.com", "search")
+	got := ytminnertube.URL("https://music.youtube.com", "search")
 	want := "https://music.youtube.com/youtubei/v1/search?key=AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30"
 	if got != want {
 		t.Fatalf("url = %s, want %s", got, want)

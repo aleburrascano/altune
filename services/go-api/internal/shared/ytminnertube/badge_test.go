@@ -1,6 +1,9 @@
-package ytminnertube
+package ytminnertube_test
 
-import "testing"
+import (
+	"altune/go-api/internal/shared/ytminnertube"
+	"testing"
+)
 
 func badge(icon string) map[string]any {
 	return map[string]any{"musicInlineBadgeRenderer": map[string]any{"icon": map[string]any{"iconType": icon}}}
@@ -22,7 +25,7 @@ func TestHasExplicitBadge_ScansEveryBadge(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := HasExplicitBadge(tc.badges); got != tc.want {
+			if got := ytminnertube.HasExplicitBadge(tc.badges); got != tc.want {
 				t.Fatalf("HasExplicitBadge = %v, want %v", got, tc.want)
 			}
 		})
