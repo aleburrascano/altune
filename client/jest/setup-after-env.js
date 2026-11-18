@@ -30,6 +30,10 @@ function resetLogger() {
   require('../src/shared/log').setLogger();
 }
 
+function resetAppStateSource() {
+  require('../src/shared/lifecycle').setAppStateSource();
+}
+
 const { ensureAppAuthClient } = require('./appAuthClient.js');
 
 beforeAll(ensureAppAuthClient);
@@ -37,6 +41,7 @@ beforeAll(ensureAppAuthClient);
 beforeEach(() => {
   ensureAppAuthClient();
   resetLogger();
+  resetAppStateSource();
   require('expo-file-system').__fs.reset();
   require('expo-secure-store').__secureStore.reset();
   require('expo-crypto').__crypto.reset();

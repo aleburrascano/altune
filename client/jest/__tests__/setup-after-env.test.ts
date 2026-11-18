@@ -48,4 +48,20 @@ describe('setup-after-env', () => {
       expect(earlier.warnings).toEqual([]);
     });
   });
+
+  describe('app state reset between tests', () => {
+    const { driveAppState, subscribeAppState } = require('../../src/shared/lifecycle');
+    const heard: string[] = [];
+    let earlier: { change(state: string): void };
+
+    beforeAll(() => {
+      earlier = driveAppState();
+      subscribeAppState((state: string) => heard.push(state));
+    });
+
+    it('starts the next test on the native app state, not on a driver an earlier one installed', () => {
+      earlier.change('background');
+      expect(heard).toEqual([]);
+    });
+  });
 });
