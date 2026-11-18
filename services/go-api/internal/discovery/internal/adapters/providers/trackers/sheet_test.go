@@ -1,197 +1,273 @@
-package trackers
+package trackers_test
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
+	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"slices"
+	"strings"
 	"testing"
 )
 
-func titlesOf(rows []trackerRow) []string {
-	out := make([]string, len(rows))
-	for i, r := range rows {
-		out[i] = r.title
-	}
-	return out
+type cell struct {
+	value, link string
+	runLinks    []string
 }
 
-func TestParseSheet_KeepsOnlyWholeSongsWithAPixeldrainLink(t *testing.T) {
-	rows, mapped, err := parseSheet(readFixture(t, "ken_carson_unreleased.json"))
-	if err != nil || !mapped {
-		t.Fatalf("parseSheet = (mapped %v, err %v)", mapped, err)
+func (c cell) MarshalJSON() ([]byte, error) {
+	out := map[string]any{"formattedValue": c.value}
+	if c.link != "" {
+		out["hyperlink"] = c.link
 	}
-	want := []string{"Dream [V2]", "Going Krazy", "Loot", "All Season [V1]"}
-	if !slices.Equal(titlesOf(rows), want) {
-		t.Errorf("titles = %v, want %v", titlesOf(rows), want)
-	}
-}
-
-func TestParseSheet_ReadsQualityAndPixeldrainID(t *testing.T) {
-	rows, _, err := parseSheet(readFixture(t, "ken_carson_unreleased.json"))
-	if err != nil || len(rows) == 0 {
-		t.Fatalf("rows = %v, err %v, want the sheet's songs", rows, err)
-	}
-	dream := rows[0]
-	want := []domain.AudioLink{{Provider: "pixeldrain", ExternalID: "ozSpSjn7", URL: "https://pixeldrain.com/u/ozSpSjn7"}}
-	if dream.quality != "High Quality" || !slices.Equal(dream.links, want) {
-		t.Errorf("dream = %+v, want High Quality / ozSpSjn7", dream)
-	}
-}
-
-func TestParseSheet_DropsSnippetsAndRowsWithoutALink(t *testing.T) {
-	rows, _, _ := parseSheet(readFixture(t, "ken_carson_unreleased.json"))
-	for _, dropped := range []string{"Maaly Raw*", "Dream [V1]", "32"} {
-		if slices.Contains(titlesOf(rows), dropped) {
-			t.Errorf("%q should be dropped", dropped)
+	if len(c.runLinks) > 0 {
+		runs := make([]any, 0, len(c.runLinks))
+		for _, uri := range c.runLinks {
+			runs = append(runs, map[string]any{"format": map[string]any{"link": map[string]any{"uri": uri}}})
 		}
+		out["textFormatRuns"] = runs
 	}
+	return json.Marshal(out)
 }
 
-func TestParseSheet_MapsASecondRealHeaderShapeByKeyword(t *testing.T) {
-	rows, mapped, err := parseSheet(readFixture(t, "ariana_unreleased.json"))
-	if err != nil || !mapped {
-		t.Fatalf("parseSheet = (mapped %v, err %v)", mapped, err)
-	}
-	if len(rows) != 0 {
-		t.Errorf("rows = %v, want none: that sheet's only link is not pixeldrain", rows)
-	}
-}
-
-func TestParseSheet_UnknownLayoutIsUnmappedNotAnError(t *testing.T) {
-	body := []byte(`{"sheets":[{"data":[{"rowData":[{"values":[{"formattedValue":"Foo"},{"formattedValue":"Bar"}]}]}]}]}`)
-	rows, mapped, err := parseSheet(body)
-	if err != nil || mapped || len(rows) != 0 {
-		t.Errorf("parseSheet = (%v, %v, %v), want no rows, unmapped, no error", rows, mapped, err)
-	}
-}
-
-func TestParseSheet_ReadsALinkHeldOnlyInATextRun(t *testing.T) {
-	body := []byte(`{"sheets":[{"data":[{"rowData":[
-{"values":[{"formattedValue":"Name"},{"formattedValue":"Portion"},{"formattedValue":"Alternate Links"}]},
-{"values":[{"formattedValue":"Loot"},{"formattedValue":"OG File"},{"formattedValue":"Exo Pixel","textFormatRuns":[{"format":{"link":{"uri":"https://exoshare.org/share/x"}}},{"format":{"link":{"uri":"https://pixeldrain.com/u/abcd1234"}}}]}]}
-]}]}]}`)
-	rows, _, err := parseSheet(body)
-	if err != nil || len(rows) != 1 || len(rows[0].links) != 1 || rows[0].links[0].ExternalID != "abcd1234" {
-		t.Errorf("rows = %+v, err %v", rows, err)
-	}
-}
-
-func TestAudioLink_ReadsEveryKnownFileHostAndSoundCloud(t *testing.T) {
-	cases := map[string]domain.AudioLink{
-		"https://pixeldrain.com/u/ozSpSjn7":                        {Provider: "pixeldrain", ExternalID: "ozSpSjn7", URL: "https://pixeldrain.com/u/ozSpSjn7"},
-		"https://pillowcase.su/f/84310b5d2c21df85e4570aec299d1ead": {Provider: "pillows", ExternalID: "84310b5d2c21df85e4570aec299d1ead", URL: "https://pillows.su/f/84310b5d2c21df85e4570aec299d1ead"},
-		"https://soundcloud.com/ken/dream?in=x":                    {Provider: "soundcloud", ExternalID: "https://soundcloud.com/ken/dream", URL: "https://soundcloud.com/ken/dream"},
-	}
-	for raw, want := range cases {
-		if got, ok := audioLink(raw); !ok || got != want {
-			t.Errorf("audioLink(%q) = %+v, %v, want %+v", raw, got, ok, want)
-		}
-	}
-	for _, raw := range []string{"https://pixeldrain.com/u/../x", "https://pixeldrain.com.evil.io/u/abcdef", "https://youtube.com/watch?v=dQw4w9WgXcQ", "https://mega.nz/file/x"} {
-		if got, ok := audioLink(raw); ok {
-			t.Errorf("audioLink(%q) = %+v, want rejected", raw, got)
-		}
-	}
-}
-
-func gridOf(header []string, rows ...[]gridCell) []gridRow {
-	head := gridRow{}
+func gridBody(t *testing.T, header []string, rows ...[]cell) []byte {
+	t.Helper()
+	head := make([]cell, 0, len(header))
 	for _, label := range header {
-		head.Values = append(head.Values, gridCell{FormattedValue: label})
+		head = append(head, cell{value: label})
 	}
-	grid := []gridRow{head}
+	rowData := []any{map[string]any{"values": head}}
 	for _, r := range rows {
-		grid = append(grid, gridRow{Values: r})
+		rowData = append(rowData, map[string]any{"values": r})
 	}
-	return grid
+	body, err := json.Marshal(map[string]any{"sheets": []any{map[string]any{"data": []any{map[string]any{"rowData": rowData}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return body
 }
 
-func songRow(era, title, portion, link string) []gridCell {
-	return []gridCell{{FormattedValue: era}, {FormattedValue: title}, {FormattedValue: portion}, {FormattedValue: "Pillowcase", Hyperlink: link}}
+func songRow(era, title, portion, link string) []cell {
+	return []cell{{value: era}, {value: title}, {value: portion}, {value: "Pillowcase", link: link}}
 }
 
 func pillowsLink(n int) string {
 	return fmt.Sprintf("https://pillowcase.su/f/%032d", n)
 }
 
-func TestInferColumns_ReadsAnUnlabelledLayoutFromItsCells(t *testing.T) {
-	var rows [][]gridCell
+func pixeldrain(id string) []discovery.AudioLink {
+	return []discovery.AudioLink{{Provider: "pixeldrain", ExternalID: id, URL: "https://pixeldrain.com/u/" + id}}
+}
+
+func trackerSongs(t *testing.T, tabs string, unreleased, released []byte) []discovery.UnreleasedSong {
+	t.Helper()
+	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), unreleased)
+	srv.tabs = tabs
+	if released != nil {
+		srv.released, srv.releasedCode = released, http.StatusOK
+	}
+	songs, err := srv.client(nil).ArtistSongs(context.Background(), "Ken Carson")
+	if err != nil {
+		t.Fatalf("ArtistSongs: %v", err)
+	}
+	return songs
+}
+
+func unreleasedSongs(t *testing.T, body []byte) []discovery.UnreleasedSong {
+	t.Helper()
+	return trackerSongs(t, tabsBody("Unreleased"), body, nil)
+}
+
+func releasedSongs(t *testing.T, body []byte) []discovery.UnreleasedSong {
+	t.Helper()
+	return trackerSongs(t, tabsBody("Released"), nil, body)
+}
+
+func versionTitles(songs []discovery.UnreleasedSong) []string {
+	var out []string
+	for _, s := range songs {
+		for _, v := range s.Versions {
+			out = append(out, v.Title)
+		}
+	}
+	return out
+}
+
+func songTitled(t *testing.T, songs []discovery.UnreleasedSong, title string) discovery.UnreleasedSong {
+	t.Helper()
+	for _, s := range songs {
+		if s.Title == title {
+			return s
+		}
+	}
+	t.Fatalf("no song %q in %+v", title, songs)
+	return discovery.UnreleasedSong{}
+}
+
+func TestSheet_KeepsOnlyWholeSongsWithAPixeldrainLink(t *testing.T) {
+	songs := unreleasedSongs(t, readFixture(t, "ken_carson_unreleased.json"))
+	want := []string{"Dream [V2]", "Going Krazy", "Loot", "All Season [V1]"}
+	if got := versionTitles(songs); !slices.Equal(got, want) {
+		t.Errorf("rows = %v, want %v", got, want)
+	}
+}
+
+func TestSheet_ReadsQualityAndPixeldrainID(t *testing.T) {
+	songs := unreleasedSongs(t, readFixture(t, "ken_carson_unreleased.json"))
+	if len(songs) == 0 || len(songs[0].Versions) == 0 {
+		t.Fatalf("songs = %+v, want the sheet's songs", songs)
+	}
+	dream := songs[0].Versions[0]
+	if dream.Quality != "High Quality" || !slices.Equal(dream.AudioLinks, pixeldrain("ozSpSjn7")) {
+		t.Errorf("dream = %+v, want High Quality / ozSpSjn7", dream)
+	}
+}
+
+func TestSheet_DropsSnippetsAndRowsWithoutALink(t *testing.T) {
+	rows := versionTitles(unreleasedSongs(t, readFixture(t, "ken_carson_unreleased.json")))
+	for _, dropped := range []string{"Maaly Raw*", "Dream [V1]", "32"} {
+		if slices.Contains(rows, dropped) {
+			t.Errorf("%q should be dropped", dropped)
+		}
+	}
+}
+
+func TestSheet_MapsASecondRealHeaderShapeByKeyword(t *testing.T) {
+	logged := captureLog(t)
+	if songs := unreleasedSongs(t, readFixture(t, "ariana_unreleased.json")); len(songs) != 0 {
+		t.Errorf("songs = %+v, want none: that sheet's only link is not pixeldrain", songs)
+	}
+	if strings.Contains(logged.String(), "trackers.unmapped_sheet") {
+		t.Errorf("log = %q, want the sheet mapped by its header keywords", logged.String())
+	}
+}
+
+func TestSheet_UnknownLayoutIsUnmappedNotAnError(t *testing.T) {
+	logged := captureLog(t)
+	body := []byte(`{"sheets":[{"data":[{"rowData":[{"values":[{"formattedValue":"Foo"},{"formattedValue":"Bar"}]}]}]}]}`)
+	if songs := unreleasedSongs(t, body); len(songs) != 0 {
+		t.Errorf("songs = %+v, want none", songs)
+	}
+	if !strings.Contains(logged.String(), "trackers.unmapped_sheet") {
+		t.Errorf("log = %q, want the sheet reported as unmapped", logged.String())
+	}
+}
+
+func TestSheet_ReadsALinkHeldOnlyInATextRun(t *testing.T) {
+	body := gridBody(t, []string{"Name", "Portion", "Alternate Links"},
+		[]cell{{value: "Loot"}, {value: "OG File"}, {value: "Exo Pixel", runLinks: []string{"https://exoshare.org/share/x", "https://pixeldrain.com/u/abcd1234"}}})
+	songs := unreleasedSongs(t, body)
+	if len(songs) != 1 || len(songs[0].AudioLinks) != 1 || songs[0].AudioLinks[0].ExternalID != "abcd1234" {
+		t.Errorf("songs = %+v", songs)
+	}
+}
+
+func oneLinkSheet(t *testing.T, raw string) []byte {
+	t.Helper()
+	return gridBody(t, []string{"Name", "Portion", "Links"}, []cell{{value: "Loot"}, {value: "OG File"}, {value: "x", link: raw}})
+}
+
+func TestSheet_ReadsEveryKnownFileHostAndSoundCloud(t *testing.T) {
+	cases := map[string]discovery.AudioLink{
+		"https://pixeldrain.com/u/ozSpSjn7":                        {Provider: "pixeldrain", ExternalID: "ozSpSjn7", URL: "https://pixeldrain.com/u/ozSpSjn7"},
+		"https://pillowcase.su/f/84310b5d2c21df85e4570aec299d1ead": {Provider: "pillows", ExternalID: "84310b5d2c21df85e4570aec299d1ead", URL: "https://pillows.su/f/84310b5d2c21df85e4570aec299d1ead"},
+		"https://soundcloud.com/ken/dream?in=x":                    {Provider: "soundcloud", ExternalID: "https://soundcloud.com/ken/dream", URL: "https://soundcloud.com/ken/dream"},
+	}
+	for raw, want := range cases {
+		songs := unreleasedSongs(t, oneLinkSheet(t, raw))
+		if len(songs) != 1 || !slices.Equal(songs[0].AudioLinks, []discovery.AudioLink{want}) {
+			t.Errorf("link %q gave songs %+v, want the one link %+v", raw, songs, want)
+		}
+	}
+	for _, raw := range []string{"https://pixeldrain.com/u/../x", "https://pixeldrain.com.evil.io/u/abcdef", "https://youtube.com/watch?v=dQw4w9WgXcQ", "https://mega.nz/file/x"} {
+		for _, s := range unreleasedSongs(t, oneLinkSheet(t, raw)) {
+			if len(s.AudioLinks) != 0 {
+				t.Errorf("link %q gave audio %+v, want it rejected", raw, s.AudioLinks)
+			}
+		}
+	}
+}
+
+func TestSheet_ReadsAnUnlabelledLayoutFromItsCells(t *testing.T) {
+	var rows [][]cell
+	var want []string
 	for i := range 8 {
 		rows = append(rows, songRow("Rodeo", fmt.Sprintf("Song %d\n(prod. X)", i), "Full - HQ", pillowsLink(i)))
+		want = append(want, fmt.Sprintf("Song %d", i))
 	}
-	cols, headerAt, ok := inferColumns(gridOf([]string{"Era", "Track", "What's There", "Sources"}, rows...))
-	if !ok || headerAt != -1 || cols.name != 1 || cols.portion != 2 || len(cols.links) != 1 || cols.links[0] != 3 {
-		t.Errorf("cols = %+v, header %d, ok %v; want title 1, portion 2, links [3]", cols, headerAt, ok)
+	songs := unreleasedSongs(t, gridBody(t, []string{"Era", "Track", "What's There", "Sources"}, rows...))
+	var got []string
+	for _, s := range songs {
+		got = append(got, s.Title)
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("titles = %q, want the Track column read as titles: %q", got, want)
+	}
+	if songs[3].Quality != "HQ" || songs[3].AudioLinks[0].Provider != "pillows" {
+		t.Errorf("song = %+v, want the portion's HQ quality and the Sources link", songs[3])
 	}
 }
 
-func TestInferColumns_PrefersAHintedTitleColumnAndSkipsNumbering(t *testing.T) {
-	var rows [][]gridCell
+func TestSheet_PrefersAHintedTitleColumnAndSkipsNumbering(t *testing.T) {
+	var rows [][]cell
 	for i := range 8 {
-		row := append([]gridCell{{FormattedValue: fmt.Sprint(i + 1)}}, songRow("Era", fmt.Sprintf("Song %d", i), "OG File", pillowsLink(i))...)
-		rows = append(rows, row)
+		rows = append(rows, append([]cell{{value: fmt.Sprint(i + 1)}}, songRow("Era", fmt.Sprintf("Song %d", i), "OG File", pillowsLink(i))...))
 	}
-	cols, _, ok := inferColumns(gridOf([]string{"#", "Era", "Title", "Portion", "Links"}, rows...))
-	if !ok || cols.name != 2 || cols.portion != 3 {
-		t.Errorf("cols = %+v, want the Title column (2) and Portion (3)", cols)
+	songs := unreleasedSongs(t, gridBody(t, []string{"#", "Era", "Title", "Portion", "Links"}, rows...))
+	if len(songs) != 8 || songs[0].Title != "Song 0" || songs[7].Title != "Song 7" {
+		t.Errorf("songs = %+v, want the Title column read as titles", songs)
 	}
 }
 
-func TestParseSheet_ReadsFullHQAsAWholeSongWithItsQuality(t *testing.T) {
-	var rows [][]gridCell
+func TestSheet_ReadsFullHQAsAWholeSongWithItsQuality(t *testing.T) {
+	var rows [][]cell
 	for i := range 6 {
 		rows = append(rows, songRow("Era", fmt.Sprintf("Song %d", i), "Snippet - LQ", pillowsLink(i)))
 	}
 	rows = append(rows, songRow("Era", "Keeper", "Full - HQ", pillowsLink(99)), songRow("Era", "Fan cut", "Full - HQ (Unofficial)", pillowsLink(98)))
-	body := gridBody(t, gridOf([]string{"Era", "Title", "What's Available?", "Links"}, rows...))
-	got, mapped, err := parseSheet(body)
-	if err != nil || !mapped || len(got) != 1 || got[0].title != "Keeper" || got[0].quality != "HQ" {
-		t.Errorf("parseSheet = %+v, mapped %v, err %v; want only Keeper at HQ", got, mapped, err)
+	songs := unreleasedSongs(t, gridBody(t, []string{"Era", "Title", "What's Available?", "Links"}, rows...))
+	if len(songs) != 1 || songs[0].Title != "Keeper" || songs[0].Quality != "HQ" {
+		t.Errorf("songs = %+v; want only Keeper at HQ", songs)
 	}
 }
 
-func TestInferColumns_SkipsADateColumnLeftOfTheTitles(t *testing.T) {
-	var rows [][]gridCell
+func TestSheet_SkipsADateColumnLeftOfTheTitles(t *testing.T) {
+	var rows [][]cell
 	for i := range 8 {
-		rows = append(rows, append([]gridCell{{FormattedValue: fmt.Sprintf("Feb %d, 2017", i+1)}}, songRow("Era", fmt.Sprintf("Song %d", i), "Full", pillowsLink(i))...))
+		rows = append(rows, append([]cell{{value: fmt.Sprintf("Feb %d, 2017", i+1)}}, songRow("Era", fmt.Sprintf("Song %d", i), "Full", pillowsLink(i))...))
 	}
-	cols, _, ok := inferColumns(gridOf([]string{"Date", "Era", "Track", "Portion", "Links"}, rows...))
-	if !ok || cols.name != 2 {
-		t.Errorf("cols = %+v, want the Track column (2), not the dates", cols)
-	}
-}
-
-func TestInferColumns_UsesHeaderWordsWhenASheetIsTooSmallToJudge(t *testing.T) {
-	grid := gridOf([]string{"Name", "Portion", "Links"}, []gridCell{{FormattedValue: "Loot"}, {FormattedValue: "OG File"}, {FormattedValue: "x", Hyperlink: "https://pixeldrain.com/u/abcd1234"}})
-	cols, headerAt, ok := inferColumns(grid)
-	if !ok || headerAt != 0 || cols.name != 0 || cols.portion != 1 || len(cols.links) != 1 || cols.links[0] != 2 {
-		t.Errorf("cols = %+v, header %d, ok %v; want the header's Name, Portion and Links", cols, headerAt, ok)
+	songs := unreleasedSongs(t, gridBody(t, []string{"Date", "Era", "Track", "Portion", "Links"}, rows...))
+	if len(songs) != 8 || songs[0].Title != "Song 0" {
+		t.Errorf("songs = %+v, want the Track column, not the dates", songs)
 	}
 }
 
-func openURLSheet(t *testing.T, extra ...[]gridCell) []byte {
+func TestSheet_UsesHeaderWordsWhenASheetIsTooSmallToJudge(t *testing.T) {
+	songs := unreleasedSongs(t, oneLinkSheet(t, "https://pixeldrain.com/u/abcd1234"))
+	if len(songs) != 1 || songs[0].Title != "Loot" || !slices.Equal(songs[0].AudioLinks, pixeldrain("abcd1234")) {
+		t.Errorf("songs = %+v, want Loot read through the header's Name, Portion and Links", songs)
+	}
+}
+
+func openURLSheet(t *testing.T, extra ...[]cell) []byte {
 	t.Helper()
-	var rows [][]gridCell
+	var rows [][]cell
 	for i := range 6 {
 		rows = append(rows, songRow("Era", fmt.Sprintf("Filler %d", i), "Full - HQ", pillowsLink(i)))
 	}
 	rows = append(rows, extra...)
-	return gridBody(t, gridOf([]string{"Era", "Title", "What's Available?", "Links"}, rows...))
+	return gridBody(t, []string{"Era", "Title", "What's Available?", "Links"}, rows...)
 }
 
-func TestParseSheet_OpenURLKeepsAWholeSongWithOnlyAnUnsupportedHttpsLink(t *testing.T) {
-	body := openURLSheet(t,
+func TestSheet_OpenURLKeepsAWholeSongWithOnlyAnUnsupportedHttpsLink(t *testing.T) {
+	songs := unreleasedSongs(t, openURLSheet(t,
 		songRow("Era", "Song X", "Full", "https://mega.nz/file/abc"),
 		songRow("Era", "Bad Scheme", "Full", "intent://x"),
 		songRow("Era", "Snip", "Snippet", "https://mega.nz/file/def"),
-	)
-	rows, mapped, err := parseSheet(body)
-	if err != nil || !mapped {
-		t.Fatalf("parseSheet = mapped %v, err %v", mapped, err)
-	}
-	var got []domain.UnreleasedSong
-	for _, s := range songsFromRows("Artist", rows) {
+	))
+	var got []discovery.UnreleasedSong
+	for _, s := range songs {
 		if s.Title == "Song X" || s.Title == "Bad Scheme" || s.Title == "Snip" {
 			got = append(got, s)
 		}
@@ -205,74 +281,62 @@ func TestParseSheet_OpenURLKeepsAWholeSongWithOnlyAnUnsupportedHttpsLink(t *test
 	}
 }
 
-func gridBody(t *testing.T, grid []gridRow) []byte {
-	t.Helper()
-	var resp gridResponse
-	resp.Sheets = make([]struct {
-		Data []struct {
-			RowData []gridRow `json:"rowData"`
-		} `json:"data"`
-	}, 1)
-	resp.Sheets[0].Data = []struct {
-		RowData []gridRow `json:"rowData"`
-	}{{RowData: grid}}
-	body, err := json.Marshal(resp)
-	if err != nil {
-		t.Fatal(err)
+func offStreamingRows(extra ...[]cell) [][]cell {
+	var rows [][]cell
+	for i := range 6 {
+		rows = append(rows, releasedRow(fmt.Sprintf("Hit %d", i), "Yes", fmt.Sprintf("https://youtu.be/hit%08d", i)))
 	}
-	return body
+	return append(rows, extra...)
 }
 
-func TestSongsFromRows_ALinkOutRowFollowedByARowWithLinksGainsMediaAndKeepsItsOpenURL(t *testing.T) {
-	link := domain.AudioLink{Provider: "pixeldrain", ExternalID: "abc", URL: "https://pixeldrain.com/u/abc"}
-	songs := songsFromRows("Artist", []trackerRow{
-		{title: "Song X", openURL: "https://mega.nz/file/abc", openHost: "mega.nz"},
-		{title: "Song X", links: []domain.AudioLink{link}, offStreaming: true},
-	})
-	if len(songs) != 1 {
-		t.Fatalf("songs = %+v, want one deduped song", songs)
-	}
-	s := songs[0]
-	if s.HasMedia == nil || !*s.HasMedia || len(s.AudioLinks) != 1 || s.OpenURL != "https://mega.nz/file/abc" || !s.OffStreaming {
+func releasedHeader() []string {
+	return []string{"Era", "Name", "Type", "Streaming", "Link(s)"}
+}
+
+func TestSongs_ALinkOutRowFollowedByAReleasedRowWithLinksGainsMediaAndKeepsItsOpenURL(t *testing.T) {
+	unreleased := openURLSheet(t, songRow("Era", "Song X", "Full", "https://mega.nz/file/abc"))
+	released := gridBody(t, releasedHeader(), offStreamingRows(releasedRow("Song X", "No", "https://pixeldrain.com/u/abcd0001"))...)
+	songs := trackerSongs(t, tabsBody("Unreleased", "Released"), unreleased, released)
+
+	s := songTitled(t, songs, "Song X")
+	if s.HasMedia == nil || !*s.HasMedia || !slices.Equal(s.AudioLinks, pixeldrain("abcd0001")) || s.OpenURL != "https://mega.nz/file/abc" || !s.OffStreaming {
 		t.Errorf("song = %+v, want has_media true, the pixeldrain link, the mega open link and off_streaming", s)
 	}
-}
-
-func TestFirstHTTPSLink_OpenHostDropsThePort(t *testing.T) {
-	body := openURLSheet(t, songRow("Era", "Ported", "Full", "https://files.example.com:8443/a"))
-	rows, _, err := parseSheet(body)
-	if err != nil {
-		t.Fatal(err)
+	if n := strings.Count(strings.Join(versionTitles(songs), "|"), "Song X"); n != 1 {
+		t.Errorf("Song X appears in %d versions, want the released row folded into the one song", n)
 	}
-	for _, r := range rows {
-		if r.title == "Ported" {
-			if r.openHost != "files.example.com" {
-				t.Errorf("openHost = %q, want files.example.com", r.openHost)
-			}
-			return
-		}
+}
+
+func TestSheet_OpenHostDropsThePort(t *testing.T) {
+	songs := unreleasedSongs(t, openURLSheet(t, songRow("Era", "Ported", "Full", "https://files.example.com:8443/a")))
+	if s := songTitled(t, songs, "Ported"); s.OpenHost != "files.example.com" {
+		t.Errorf("openHost = %q, want files.example.com", s.OpenHost)
 	}
-	t.Fatal("row Ported was not parsed")
 }
 
-func versionLink(id string) []domain.AudioLink {
-	return []domain.AudioLink{{Provider: "pixeldrain", ExternalID: id, URL: "https://pixeldrain.com/u/" + id}}
+func versionSheet(t *testing.T, rows ...[]cell) []byte {
+	t.Helper()
+	return gridBody(t, []string{"Name", "Portion", "Quality", "Links"}, rows...)
 }
 
-func TestSongsFromRows_VersionTaggedRowsBecomeOneSongWithTheBestVersionsLinks(t *testing.T) {
-	songs := songsFromRows("Tate McRae", []trackerRow{
-		{title: "Sports Car [V3]", quality: "CD Quality", links: versionLink("v3")},
-		{title: "Sports Car [V10]", quality: "Lossless", links: versionLink("v10")},
-		{title: "Sports Car [V14]", quality: "CD Quality", links: versionLink("v14")},
-	})
+func versionRow(title, quality, id string) []cell {
+	return []cell{{value: title}, {value: "Full"}, {value: quality}, {value: "x", link: "https://pixeldrain.com/u/" + id}}
+}
+
+func TestSongs_VersionTaggedRowsBecomeOneSongWithTheBestVersionsLinks(t *testing.T) {
+	songs := unreleasedSongs(t, versionSheet(t,
+		versionRow("Sports Car [V3]", "CD Quality", "carV0003"),
+		versionRow("Sports Car [V10]", "Lossless", "carV0010"),
+		versionRow("Sports Car [V14]", "CD Quality", "carV0014"),
+	))
 	if len(songs) != 1 {
 		t.Fatalf("songs = %+v, want one", songs)
 	}
 	s := songs[0]
-	if s.Title != "Sports Car" || s.TrackerKey != "tate-mcrae:sports-car" || len(s.Versions) != 3 {
+	if s.Title != "Sports Car" || s.TrackerKey != "ken-carson:sports-car" || len(s.Versions) != 3 {
 		t.Fatalf("song = %+v, want base title, base key and 3 versions", s)
 	}
-	if s.Quality != "Lossless" || !slices.Equal(s.AudioLinks, versionLink("v10")) || s.HasMedia == nil || !*s.HasMedia {
+	if s.Quality != "Lossless" || !slices.Equal(s.AudioLinks, pixeldrain("carV0010")) || s.HasMedia == nil || !*s.HasMedia {
 		t.Errorf("song = %+v, want V10's quality, links and media", s)
 	}
 	if s.Versions[0].Title != "Sports Car [V3]" || s.Versions[0].Label != "V3" {
@@ -280,41 +344,45 @@ func TestSongsFromRows_VersionTaggedRowsBecomeOneSongWithTheBestVersionsLinks(t 
 	}
 }
 
-func TestSongsFromRows_EqualQualityPrefersTheHighestVersionNumber(t *testing.T) {
-	songs := songsFromRows("A", []trackerRow{
-		{title: "Song [V9]", quality: "High Quality", links: versionLink("v9")},
-		{title: "Song [V12]", quality: "high quality", links: versionLink("v12")},
-		{title: "Song [V2]", quality: "High Quality", links: versionLink("v2")},
-	})
-	if len(songs) != 1 || !slices.Equal(songs[0].AudioLinks, versionLink("v12")) {
+func TestSongs_EqualQualityPrefersTheHighestVersionNumber(t *testing.T) {
+	songs := unreleasedSongs(t, versionSheet(t,
+		versionRow("Song [V9]", "High Quality", "songV009"),
+		versionRow("Song [V12]", "high quality", "songV012"),
+		versionRow("Song [V2]", "High Quality", "songV002"),
+	))
+	if len(songs) != 1 || !slices.Equal(songs[0].AudioLinks, pixeldrain("songV012")) {
 		t.Errorf("songs = %+v, want one song with V12's links", songs)
 	}
 }
 
-func TestSongsFromRows_DifferentBaseTitlesStayApartAndReleasedRowsAreNotVersions(t *testing.T) {
-	songs := songsFromRows("A", []trackerRow{
-		{title: "Signs [V1]", links: versionLink("a")},
-		{title: "Siren Sounds [V1]", links: versionLink("b")},
-		{title: "Signs", links: versionLink("c"), offStreaming: true},
-	})
-	if len(songs) != 2 {
-		t.Fatalf("songs = %+v, want two", songs)
-	}
-	signs := songs[0]
+func TestSongs_DifferentBaseTitlesStayApartAndReleasedRowsAreNotVersions(t *testing.T) {
+	unreleased := versionSheet(t,
+		versionRow("Signs [V1]", "", "signsAAA"),
+		versionRow("Siren Sounds [V1]", "", "sirenBBB"),
+		versionRow("Filler [V1]", "", "fillCCC1"),
+	)
+	released := gridBody(t, releasedHeader(), offStreamingRows(releasedRow("Signs", "No", "https://pixeldrain.com/u/signsCCC"))...)
+	songs := trackerSongs(t, tabsBody("Unreleased", "Released"), unreleased, released)
+	signs := songTitled(t, songs, "Signs")
 	if len(signs.Versions) != 1 || !signs.OffStreaming || len(signs.AudioLinks) != 2 {
 		t.Errorf("signs = %+v, want one version, off_streaming and both links", signs)
 	}
+	if siren := songTitled(t, songs, "Siren Sounds"); siren.OffStreaming || len(siren.Versions) != 1 {
+		t.Errorf("siren = %+v, want its own song, not off streaming", siren)
+	}
 }
 
-func TestSongsFromRows_AVariantTitleIsNotFoldedIntoTheTaggedSong(t *testing.T) {
-	songs := songsFromRows("A", []trackerRow{
-		{title: "Song [V1]", quality: "CD Quality", links: versionLink("v1")},
-		{title: "Song (Instrumental)", quality: "Lossless", links: versionLink("inst")},
-	})
-	if len(songs) != 2 {
-		t.Fatalf("songs = %+v, want two", songs)
+func TestSongs_AVariantTitleIsNotFoldedIntoTheTaggedSong(t *testing.T) {
+	songs := unreleasedSongs(t, versionSheet(t,
+		versionRow("Song [V1]", "CD Quality", "songV001"),
+		versionRow("Song (Instrumental)", "Lossless", "songInst"),
+		versionRow("Other [V1]", "CD Quality", "otherV01"),
+	))
+	s := songTitled(t, songs, "Song")
+	if !slices.Equal(s.AudioLinks, pixeldrain("songV001")) || len(s.Versions) != 1 {
+		t.Errorf("song = %+v, want Song with only V1's links", s)
 	}
-	if songs[0].Title != "Song" || !slices.Equal(songs[0].AudioLinks, versionLink("v1")) || len(songs[0].Versions) != 1 {
-		t.Errorf("song = %+v, want Song with only V1's links", songs[0])
+	if v := songTitled(t, songs, "Song (Instrumental)"); !slices.Equal(v.AudioLinks, pixeldrain("songInst")) {
+		t.Errorf("variant = %+v, want its own song", v)
 	}
 }
