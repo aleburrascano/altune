@@ -1,20 +1,27 @@
-package trackers
+package trackers_test
 
 import (
-	"altune/go-api/internal/discovery/internal/core/ports"
+	"altune/go-api/internal/discovery"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
-const testKey = "test-key-123"
+const (
+	testKey    = "test-key-123"
+	tabsFields = "sheets.properties.title"
+)
 
 type fakeIndexCache struct {
 	index map[string]string
@@ -31,16 +38,27 @@ func (f *fakeIndexCache) Set(_ context.Context, index map[string]string, _ time.
 	return nil
 }
 
+type redirectTransport struct{ target *url.URL }
+
+func (rt redirectTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	out := r.Clone(r.Context())
+	out.URL.Scheme, out.URL.Host, out.Host = rt.target.Scheme, rt.target.Host, rt.target.Host
+	return http.DefaultTransport.RoundTrip(out)
+}
+
 type sheetsServer struct {
 	*httptest.Server
 	hubCalls     atomic.Int32
 	artistCalls  atomic.Int32
 	lastQuery    atomic.Value
 	lastKey      atomic.Value
+	mu           sync.Mutex
+	gridRanges   []string
 	artistCode   int
 	tabs         string
 	released     []byte
 	releasedCode int
+	delay        time.Duration
 }
 
 func tabsBody(titles ...string) string {
@@ -51,38 +69,72 @@ func tabsBody(titles ...string) string {
 	return `{"sheets":[` + strings.Join(sheets, ",") + `]}`
 }
 
+func quotedTab(title string) string {
+	return "'" + strings.ReplaceAll(title, "'", "''") + "'"
+}
+
 func newSheetsServer(t *testing.T, hub, artist []byte) *sheetsServer {
 	t.Helper()
 	s := &sheetsServer{artistCode: http.StatusOK, tabs: tabsBody("Released", "Unreleased")}
 	s.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(s.delay)
 		s.lastKey.Store(r.Header.Get("X-Goog-Api-Key"))
-		if strings.HasSuffix(r.URL.Path, kenSheetID) && r.URL.Query().Get("fields") == tabsMask {
+		onArtistSheet := strings.HasSuffix(r.URL.Path, kenSheetID)
+		if onArtistSheet && r.URL.Query().Get("fields") == tabsFields {
 			_, _ = w.Write([]byte(s.tabs))
 			return
 		}
 		s.lastQuery.Store(r.URL.RawQuery)
-		if strings.HasSuffix(r.URL.Path, kenSheetID) && r.URL.Query().Get("ranges") == tabRange("Released") && s.released != nil {
+		if !onArtistSheet {
+			s.hubCalls.Add(1)
+			_, _ = w.Write(hub)
+			return
+		}
+		sheetRange := r.URL.Query().Get("ranges")
+		s.mu.Lock()
+		s.gridRanges = append(s.gridRanges, sheetRange)
+		s.mu.Unlock()
+		if sheetRange == quotedTab("Released") && s.released != nil {
 			w.WriteHeader(s.releasedCode)
 			_, _ = w.Write(s.released)
 			return
 		}
-		if strings.HasSuffix(r.URL.Path, kenSheetID) {
-			s.artistCalls.Add(1)
-			w.WriteHeader(s.artistCode)
-			_, _ = w.Write(artist)
-			return
-		}
-		s.hubCalls.Add(1)
-		_, _ = w.Write(hub)
+		s.artistCalls.Add(1)
+		w.WriteHeader(s.artistCode)
+		_, _ = w.Write(artist)
 	}))
 	t.Cleanup(s.Close)
 	return s
 }
 
-func (s *sheetsServer) client(cache ports.TrackerIndexCache) *Client {
-	c := NewClient(s.Client(), testKey, "HUB1234567890123456789", cache)
-	c.baseURL = s.URL + "/"
-	return c
+func (s *sheetsServer) ranges() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.gridRanges)
+}
+
+func (s *sheetsServer) httpClient() *http.Client {
+	target, _ := url.Parse(s.URL)
+	return &http.Client{Transport: redirectTransport{target: target}}
+}
+
+func (s *sheetsServer) client(cache *fakeIndexCache) interface {
+	ArtistSongs(context.Context, string) ([]discovery.UnreleasedSong, error)
+	Artists(context.Context) ([]string, error)
+} {
+	if cache == nil {
+		return discovery.NewTrackersClient(s.httpClient(), testKey, "HUB1234567890123456789", nil)
+	}
+	return discovery.NewTrackersClient(s.httpClient(), testKey, "HUB1234567890123456789", cache)
+}
+
+func captureLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	return &buf
 }
 
 func TestClient_ArtistSongsReturnsTheTrackersFullLeaks(t *testing.T) {
@@ -161,16 +213,20 @@ func TestClient_ReadsTheUnreleasedTabWhateverItIsCalled(t *testing.T) {
 		if err != nil || len(songs) != 4 {
 			t.Errorf("tab %q: songs = %d, err = %v, want the 4 full leaks", title, len(songs), err)
 		}
-		if query, _ := srv.lastQuery.Load().(string); !strings.Contains(query, "ranges="+url.QueryEscape(tabRange(title))) {
+		if query, _ := srv.lastQuery.Load().(string); !strings.Contains(query, "ranges="+url.QueryEscape(quotedTab(title))) {
 			t.Errorf("tab %q: grid query %q does not read that tab", title, query)
 		}
 	}
 }
 
-func TestPickUnreleased_PrefersTheTabNamedJustUnreleased(t *testing.T) {
-	got, found := pickUnreleased([]string{"Unreleased (Alt)", "💿 Unreleased", "Released"})
-	if !found || got != "💿 Unreleased" {
-		t.Errorf("picked %q, want the tab named just Unreleased", got)
+func TestClient_PrefersTheTabNamedJustUnreleased(t *testing.T) {
+	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), readFixture(t, "ken_carson_unreleased.json"))
+	srv.tabs = tabsBody("Unreleased (Alt)", "💿 Unreleased", "Released")
+	if _, err := srv.client(nil).ArtistSongs(context.Background(), "Ken Carson"); err != nil {
+		t.Fatal(err)
+	}
+	if got := srv.ranges(); len(got) == 0 || got[0] != quotedTab("💿 Unreleased") {
+		t.Errorf("grid reads = %q, want the tab named just Unreleased read first", got)
 	}
 }
 
@@ -196,24 +252,34 @@ func TestClient_ABrokenHubBodyIsAnError(t *testing.T) {
 	if _, err := srv.client(&fakeIndexCache{}).ArtistSongs(context.Background(), "Ken Carson"); err == nil {
 		t.Error("a malformed hub body must surface as an error")
 	}
+	if _, err := srv.client(nil).Artists(context.Background()); err == nil {
+		t.Error("a malformed hub body must fail Artists too")
+	}
 }
 
 func TestNewClient_UsesItsOwnTimeoutWithoutTouchingTheSharedClient(t *testing.T) {
-	shared := &http.Client{Timeout: 10 * time.Second}
-	c := NewClient(shared, testKey, "hub", nil)
-	if c.http.Timeout != 30*time.Second || shared.Timeout != 10*time.Second {
-		t.Errorf("timeouts = %v / %v, want 30s own and 10s shared", c.http.Timeout, shared.Timeout)
+	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), readFixture(t, "ken_carson_unreleased.json"))
+	srv.delay = 50 * time.Millisecond
+	shared := srv.httpClient()
+	shared.Timeout = 10 * time.Millisecond
+
+	songs, err := discovery.NewTrackersClient(shared, testKey, "hub", nil).ArtistSongs(context.Background(), "Ken Carson")
+	if err != nil || len(songs) != 4 {
+		t.Errorf("ArtistSongs = %d songs, err %v; want the client's own timeout, not the shared 10ms", len(songs), err)
+	}
+	if shared.Timeout != 10*time.Millisecond {
+		t.Errorf("shared timeout = %v, want it untouched", shared.Timeout)
 	}
 }
 
 func offStreamingSheet(t *testing.T) []byte {
 	t.Helper()
-	var rows [][]gridCell
+	var rows [][]cell
 	for i := range 6 {
 		rows = append(rows, releasedRow(fmt.Sprintf("Hit %d", i), "Yes", fmt.Sprintf("https://youtu.be/hit%08d", i)))
 	}
 	rows = append(rows, releasedRow("Do You Want", "No", "https://www.youtube.com/watch?v=JNprs9jO0eU"))
-	return gridBody(t, gridOf([]string{"Era", "Name", "Type", "Streaming", "Link(s)"}, rows...))
+	return gridBody(t, []string{"Era", "Name", "Type", "Streaming", "Link(s)"}, rows...)
 }
 
 func TestClient_AddsTheReleasedTabsOffStreamingSongs(t *testing.T) {
@@ -233,7 +299,7 @@ func TestClient_KeepsTheUnreleasedSongsWhenTheReleasedTabFails(t *testing.T) {
 	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), readFixture(t, "ken_carson_unreleased.json"))
 	srv.released, srv.releasedCode = []byte(`{}`), http.StatusInternalServerError
 	songs, err := srv.client(nil).ArtistSongs(context.Background(), "Ken Carson")
-	if !errors.Is(err, ports.ErrTrackerPartial) || len(songs) != 4 {
+	if !errors.Is(err, discovery.ErrTrackerPartial) || len(songs) != 4 {
 		t.Errorf("ArtistSongs = %d songs, err %v; want the 4 unreleased songs and a partial error", len(songs), err)
 	}
 }

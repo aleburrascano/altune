@@ -1,7 +1,10 @@
-package trackers
+package trackers_test
 
 import (
+	"context"
 	"os"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -16,36 +19,29 @@ func readFixture(t *testing.T, name string) []byte {
 	return body
 }
 
-func TestParseHub_MapsArtistNameToTheSheetIDInItsHyperlink(t *testing.T) {
-	index, err := parseHub(readFixture(t, "hub_artists.json"))
-	if err != nil {
-		t.Fatalf("parseHub: %v", err)
-	}
-	if got := index["ken carson"]; got != kenSheetID {
-		t.Errorf("index[ken carson] = %q, want %q", got, kenSheetID)
+func TestHub_MapsArtistNameToTheSheetIDInItsHyperlink(t *testing.T) {
+	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), readFixture(t, "ken_carson_unreleased.json"))
+	songs, err := srv.client(nil).ArtistSongs(context.Background(), "Ken Carson")
+	if err != nil || len(songs) == 0 || srv.artistCalls.Load() == 0 {
+		t.Errorf("ArtistSongs = %d songs, err %v, %d reads of sheet %s; want Ken Carson's sheet read", len(songs), err, srv.artistCalls.Load(), kenSheetID)
 	}
 }
 
-func TestParseHub_SkipsLinksThatAreNotSheets(t *testing.T) {
-	index, err := parseHub(readFixture(t, "hub_artists.json"))
+func TestHub_SkipsLinksThatAreNotSheets(t *testing.T) {
+	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), nil)
+	names, err := srv.client(nil).Artists(context.Background())
 	if err != nil {
-		t.Fatalf("parseHub: %v", err)
+		t.Fatalf("Artists: %v", err)
 	}
-	for name, id := range index {
-		if name == "" || id == "" {
-			t.Errorf("empty entry %q -> %q", name, id)
+	for _, name := range names {
+		if strings.TrimSpace(name) == "" {
+			t.Errorf("empty artist name in %q", names)
 		}
 	}
-	if id, ok := index["asap rocky"]; ok {
-		t.Errorf("a non-Sheets tracker got an entry: %q", id)
+	if slices.Contains(names, "asap rocky") {
+		t.Errorf("a non-Sheets tracker got an entry: %q", names)
 	}
-	if len(index) != 4 {
-		t.Errorf("index has %d entries, want 4 (50 Cent, Ariana Grande, Baby Keem, Ken Carson): %v", len(index), index)
-	}
-}
-
-func TestParseHub_RejectsMalformedJSON(t *testing.T) {
-	if _, err := parseHub([]byte("{")); err == nil {
-		t.Error("parseHub accepted malformed JSON")
+	if len(names) != 4 {
+		t.Errorf("hub has %d artists, want 4 (50 Cent, Ariana Grande, Baby Keem, Ken Carson): %q", len(names), names)
 	}
 }
