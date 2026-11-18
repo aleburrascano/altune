@@ -56,6 +56,41 @@ func TestReadSnapshot_TalliesStatusClassesPerRoute(t *testing.T) {
 	}
 }
 
+func TestSnapshot_SerializesTheRoutesAndBucketsOverseerReads(t *testing.T) {
+	snap := reqmetrics.Snapshot{Routes: map[string]reqmetrics.RouteLatency{
+		"/v1/tracks/{trackId}": {Count: 3, SumMs: 12, Buckets: []reqmetrics.BucketCount{{LeMs: "5", Count: 2}, {LeMs: "+Inf", Count: 1}}},
+	}}
+
+	raw, err := json.Marshal(snap)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var shape struct {
+		Routes map[string]struct {
+			Count   uint64 `json:"count"`
+			SumMs   uint64 `json:"sum_ms"`
+			Buckets []struct {
+				LeMs  string `json:"le_ms"`
+				Count uint64 `json:"count"`
+			} `json:"buckets"`
+		} `json:"routes"`
+	}
+	if err := json.Unmarshal(raw, &shape); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	route, ok := shape.Routes["/v1/tracks/{trackId}"]
+	if !ok {
+		t.Fatalf("routes carry no /v1/tracks/{trackId}: %s", raw)
+	}
+	if route.Count != 3 || route.SumMs != 12 {
+		t.Errorf("count, sum_ms = %d, %d, want 3, 12", route.Count, route.SumMs)
+	}
+	if len(route.Buckets) != 2 || route.Buckets[0].LeMs != "5" || route.Buckets[0].Count != 2 || route.Buckets[1].LeMs != "+Inf" || route.Buckets[1].Count != 1 {
+		t.Errorf("buckets = %+v, want le_ms 5 count 2, then le_ms +Inf count 1", route.Buckets)
+	}
+}
+
 func TestRouteLatency_StatusSerializesUnderStatusKey(t *testing.T) {
 	route := reqmetrics.RouteLatency{Status: reqmetrics.StatusClasses{Count2xx: 7, Count4xx: 3, Count5xx: 1}}
 
