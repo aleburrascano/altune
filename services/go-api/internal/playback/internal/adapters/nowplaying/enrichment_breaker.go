@@ -1,4 +1,4 @@
-package catalogbridge
+package nowplaying
 
 import (
 	"altune/go-api/internal/playback/internal/core/ports"
@@ -32,8 +32,8 @@ type enrichmentBreaker struct {
 	metrics      ports.EnrichmentMetrics
 }
 
-func newEnrichmentBreaker(metrics ports.EnrichmentMetrics) *enrichmentBreaker {
-	return &enrichmentBreaker{now: time.Now, metrics: metrics}
+func newEnrichmentBreaker(metrics ports.EnrichmentMetrics, now func() time.Time) *enrichmentBreaker {
+	return &enrichmentBreaker{now: now, metrics: metrics}
 }
 
 type admission struct {

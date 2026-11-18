@@ -3,7 +3,14 @@ package ports
 import (
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
+	"errors"
 )
+
+var ErrTrackSourceUnavailable = errors.New("now-playing track source unavailable")
+
+type TrackSource interface {
+	NowPlayingTrack(ctx context.Context, userId shared.UserId, id shared.TrackId) (*NowPlayingTrack, error)
+}
 
 type NowPlayingTrack struct {
 	Id                string

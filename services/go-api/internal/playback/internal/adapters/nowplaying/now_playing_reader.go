@@ -1,7 +1,6 @@
-package catalogbridge
+package nowplaying
 
 import (
-	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/playback/internal/core/ports"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
@@ -9,8 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
-
-	catalogDomain "altune/go-api/internal/catalog/domain"
 )
 
 const defaultNowPlayingLookupTimeout = 3 * time.Second
@@ -19,23 +16,20 @@ var errEnrichmentUnavailable = errors.New("now-playing enrichment temporarily un
 
 var _ ports.NowPlayingReader = (*NowPlayingReader)(nil)
 
-type trackReader interface {
-	GetByID(ctx context.Context, id catalogDomain.TrackId, userId shared.UserId) (*catalogDomain.Track, error)
-}
-
 type NowPlayingReader struct {
-	tracks  trackReader
+	tracks  ports.TrackSource
 	breaker *enrichmentBreaker
 	metrics ports.EnrichmentMetrics
 	timeout time.Duration
+	now     func() time.Time
 }
 
-func NewNowPlayingReader(tracks trackReader, opts ...func(*NowPlayingReader)) *NowPlayingReader {
-	r := &NowPlayingReader{tracks: tracks, metrics: ports.NoopEnrichmentMetrics(), timeout: defaultNowPlayingLookupTimeout}
+func NewNowPlayingReader(tracks ports.TrackSource, opts ...func(*NowPlayingReader)) *NowPlayingReader {
+	r := &NowPlayingReader{tracks: tracks, metrics: ports.NoopEnrichmentMetrics(), timeout: defaultNowPlayingLookupTimeout, now: time.Now}
 	for _, opt := range opts {
 		opt(r)
 	}
-	r.breaker = newEnrichmentBreaker(r.metrics)
+	r.breaker = newEnrichmentBreaker(r.metrics, r.now)
 	return r
 }
 
@@ -47,14 +41,24 @@ func WithNowPlayingMetrics(m ports.EnrichmentMetrics) func(*NowPlayingReader) {
 	}
 }
 
-func withNowPlayingLookupTimeout(d time.Duration) func(*NowPlayingReader) {
+func WithNowPlayingLookupTimeout(d time.Duration) func(*NowPlayingReader) {
 	return func(r *NowPlayingReader) {
-		r.timeout = d
+		if d > 0 {
+			r.timeout = d
+		}
+	}
+}
+
+func WithNowPlayingClock(now func() time.Time) func(*NowPlayingReader) {
+	return func(r *NowPlayingReader) {
+		if now != nil {
+			r.now = now
+		}
 	}
 }
 
 func isDependencyFailure(err error) bool {
-	return errors.Is(err, catalog.ErrDBTransient) || errors.Is(err, context.DeadlineExceeded)
+	return errors.Is(err, ports.ErrTrackSourceUnavailable) || errors.Is(err, context.DeadlineExceeded)
 }
 
 func trackAbsent() (*ports.NowPlayingTrack, error) {
@@ -66,7 +70,7 @@ func (r *NowPlayingReader) Lookup(
 	userId shared.UserId,
 	trackId string,
 ) (*ports.NowPlayingTrack, error) {
-	id, err := catalogDomain.ParseTrackId(trackId)
+	id, err := shared.ParseTrackId(trackId)
 	if err != nil {
 		slog.WarnContext(ctx, "now_playing.malformed_track_id",
 			"user_id", userId.String(), "raw_len", len(trackId), "error", err)
@@ -83,7 +87,7 @@ func (r *NowPlayingReader) Lookup(
 	callCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	track, err := r.tracks.GetByID(callCtx, id, userId)
+	track, err := r.tracks.NowPlayingTrack(callCtx, userId, id)
 	if err != nil {
 		if ctx.Err() == nil {
 			if isDependencyFailure(err) {
@@ -100,13 +104,5 @@ func (r *NowPlayingReader) Lookup(
 	if track == nil {
 		return trackAbsent()
 	}
-
-	return &ports.NowPlayingTrack{
-		Id:                track.ID.String(),
-		Title:             track.Title,
-		Artist:            track.Artist,
-		ArtworkURL:        track.ArtworkURL,
-		DurationSeconds:   track.DurationSeconds,
-		AcquisitionStatus: track.AcquisitionStatus.String(),
-	}, nil
+	return track, nil
 }
