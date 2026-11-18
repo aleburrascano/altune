@@ -6,7 +6,7 @@ import { useRecoveryUnlocked } from '@features/signIn/view/useRecoveryUnlocked';
 import {
   RESET_PASSWORD_ROUTE_SEGMENT,
   recoveryUnlock,
-} from '@features/signIn/domain/passwordRecovery';
+} from '@features/signIn/shell/passwordRecovery';
 
 import {
   AuthFullScreenNotice,

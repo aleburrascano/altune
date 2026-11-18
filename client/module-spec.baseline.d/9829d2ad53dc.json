@@ -1,0 +1,7 @@
+{
+  "removed": [
+    "C12 src/features/signIn/domain/passwordRecovery.ts domain/passwordRecovery.ts is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module"
+  ],
+  "added": [],
+  "clones": 0
+}
