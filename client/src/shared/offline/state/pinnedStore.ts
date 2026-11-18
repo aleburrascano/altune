@@ -3,9 +3,9 @@ import { parseTrackId, type TrackId } from '@shared/catalog';
 import { onIdentityChange, onSignOut } from '@shared/session';
 import { onKillSwitchChange } from '@shared/killSwitch';
 
-import { offlineDownloadsSupported } from '@shared/offline/domain/offlineSupport';
+import { offlineDownloadsSupported } from '@shared/offline/core/offlineSupport';
 import type { OfflinePort } from '@shared/offline/ports/offlinePort';
-import { runDownloadQueue } from '@shared/offline/state/pinnedDownloadWorker';
+import { runDownloadQueue } from '@shared/offline/shell/pinnedDownloadWorker';
 import {
   deleteAllPinned,
   deletePinned,

@@ -1,5 +1,5 @@
 export { asTrackId } from '@shared/catalog';
-export { offlineDownloadsSupported } from '@shared/offline/domain/offlineSupport';
+export { offlineDownloadsSupported } from '@shared/offline/core/offlineSupport';
 export {
   formatBytes,
   deleteAllPinned,
@@ -29,7 +29,7 @@ export { OfflineReconcileBridge } from '@shared/offline/view/OfflineReconcileBri
 export type { OfflinePort } from '@shared/offline/ports/offlinePort';
 export { createMemoryOfflinePort } from '@shared/offline/__tests__/memoryOfflinePort';
 export type { SeededAudioUrls } from '@shared/offline/__tests__/memoryOfflinePort';
-export { runDownloadQueue } from '@shared/offline/state/pinnedDownloadWorker';
+export { runDownloadQueue } from '@shared/offline/shell/pinnedDownloadWorker';
 export {
   downloadingEntry,
   failedEntry,

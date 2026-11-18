@@ -1,0 +1,9 @@
+{
+  "removed": [
+    "C12 src/shared/offline/domain/offlineSupport.ts domain/offlineSupport.ts is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a shared module",
+    "C12 src/shared/offline/state/pinnedDownloadWorker.ts state/pinnedDownloadWorker.ts is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a shared module",
+    "T1 src/shared/offline/__tests__/offlineSupport.test.ts imports domain/offlineSupport.ts, behind offline's door"
+  ],
+  "added": [],
+  "clones": 0
+}
