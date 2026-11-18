@@ -12,6 +12,10 @@ export type ArtworkProps = {
   accessibilityLabel?: string;
 };
 
+function artworkSource(uri: string | null) {
+  return uri != null ? { uri } : ARTWORK_PLACEHOLDER;
+}
+
 export function Artwork({
   uri,
   size = 56,
@@ -23,7 +27,7 @@ export function Artwork({
     <Image
       key={uri ?? 'placeholder'}
       testID="artwork"
-      source={uri != null ? { uri } : ARTWORK_PLACEHOLDER}
+      source={artworkSource(uri)}
       placeholder={ARTWORK_PLACEHOLDER}
       style={{
         width: size,
