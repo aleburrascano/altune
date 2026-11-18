@@ -7,6 +7,7 @@ import { signInTestUser } from '@testing/signInTestUser';
 
 import { applyKillSwitches } from '@shared/killSwitch';
 import type { DiscoveryEvent } from '@shared/telemetry';
+import { recordLogs, type RecordedLogs } from '@shared/log';
 
 const TRACKING_FAILED = '[discovery] event tracking failed';
 
@@ -19,20 +20,16 @@ function wrapper({ children }: { children: React.ReactNode }) {
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 }
 
-let warnSpy: jest.SpyInstance;
+let logs: RecordedLogs;
 
 function trackingWarnings(): unknown[][] {
-  return warnSpy.mock.calls.filter(([message]) => message === TRACKING_FAILED);
+  return logs.warnings.filter(([message]) => message === TRACKING_FAILED);
 }
 
 beforeEach(async () => {
   await signInTestUser();
   applyKillSwitches({ telemetry_enabled: true });
-  warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-});
-
-afterEach(() => {
-  warnSpy.mockRestore();
+  logs = recordLogs();
 });
 
 describe('useRecordEvent(): best-effort discovery event tracking', () => {

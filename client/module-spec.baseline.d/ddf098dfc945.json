@@ -1,0 +1,11 @@
+{
+  "removed": [
+    "T2 src/shared/telemetry/__tests__/eventSession.test.ts patches with jest.mock",
+    "T2 src/shared/telemetry/__tests__/healthTally.test.ts patches with jest.mock",
+    "T2 src/shared/telemetry/__tests__/outboxStore.test.ts patches with jest.spyOn",
+    "T2 src/shared/telemetry/__tests__/recordEvent.test.ts patches with jest.spyOn",
+    "T2 src/shared/telemetry/__tests__/useRecordEvent.test.tsx patches with jest.spyOn"
+  ],
+  "added": [],
+  "clones": 0
+}

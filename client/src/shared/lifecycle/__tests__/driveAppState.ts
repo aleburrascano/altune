@@ -4,6 +4,7 @@ type AppStateListener = (state: AppLifecycleState) => void;
 
 export interface AppStateDriver {
   change(next: AppLifecycleState): void;
+  listenerCount(): number;
 }
 
 export function driveAppState(initial: AppLifecycleState = 'active'): AppStateDriver {
@@ -23,5 +24,6 @@ export function driveAppState(initial: AppLifecycleState = 'active'): AppStateDr
       state = next;
       for (const listener of [...listeners]) listener(next);
     },
+    listenerCount: () => listeners.size,
   };
 }
