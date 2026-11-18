@@ -1,11 +1,11 @@
-import type * as playlists from '@shared/apiClient/playlists';
+import type * as apiClient from '@shared/apiClient';
 
 export interface PlaylistsPort {
-  getPlaylists: typeof playlists.getPlaylists;
-  getPlaylist: typeof playlists.getPlaylist;
-  createPlaylist: typeof playlists.createPlaylist;
-  renamePlaylist: typeof playlists.renamePlaylist;
-  deletePlaylist: typeof playlists.deletePlaylist;
-  addTracksToPlaylist: typeof playlists.addTracksToPlaylist;
-  removeTracksFromPlaylist: typeof playlists.removeTracksFromPlaylist;
+  getPlaylists: typeof apiClient.getPlaylists;
+  getPlaylist: typeof apiClient.getPlaylist;
+  createPlaylist: typeof apiClient.createPlaylist;
+  renamePlaylist: typeof apiClient.renamePlaylist;
+  deletePlaylist: typeof apiClient.deletePlaylist;
+  addTracksToPlaylist: typeof apiClient.addTracksToPlaylist;
+  removeTracksFromPlaylist: typeof apiClient.removeTracksFromPlaylist;
 }

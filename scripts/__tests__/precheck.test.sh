@@ -400,6 +400,21 @@ NPX_LOG="$WORK/npx.log" run_script_with_stubs
 expect_out "ok    mobile tests (related)"
 grep -qF -- "--coverage" "$WORK/npx.log" && fail "no coverage flag expected outside thresholded globs"
 
+CASE="a type-only port change in a thresholded module runs the mobile jest step without coverage"
+new_repo
+add_mobile_stubs
+add_thresholded_jest_stub
+(
+    cd "$WORK/repo" || exit 1
+    mkdir -p client/src/shared/apiClient/ports
+    printf 'export interface Port {\n  run(): void;\n}\n' >client/src/shared/apiClient/ports/port.ts
+    git add -A
+    git commit -qm "port change"
+)
+NPX_LOG="$WORK/npx.log" run_script_with_stubs
+expect_out "ok    mobile tests (related)"
+grep -qF -- "--coverage" "$WORK/npx.log" && fail "no coverage flag expected for a ports/ file, which holds only types"
+
 add_migrations() {
     (
         cd "$WORK/repo" || exit 1

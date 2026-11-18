@@ -1,7 +1,7 @@
-import type * as favorites from '@shared/apiClient/favorites';
+import type * as apiClient from '@shared/apiClient';
 
 export interface FavoritesPort {
-  listFavorites: typeof favorites.listFavorites;
-  addFavorite: typeof favorites.addFavorite;
-  removeFavorite: typeof favorites.removeFavorite;
+  listFavorites: typeof apiClient.listFavorites;
+  addFavorite: typeof apiClient.addFavorite;
+  removeFavorite: typeof apiClient.removeFavorite;
 }

@@ -1,5 +1,5 @@
-import type * as tracks from '@shared/apiClient/tracks';
+import type * as apiClient from '@shared/apiClient';
 
 export interface AcquisitionPort {
-  retryAcquisition: typeof tracks.retryAcquisition;
+  retryAcquisition: typeof apiClient.retryAcquisition;
 }

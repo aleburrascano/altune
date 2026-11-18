@@ -1,10 +1,9 @@
-import type * as discovery from '@shared/apiClient/discovery';
-import type * as enrichment from '@shared/apiClient/enrichment';
+import type * as apiClient from '@shared/apiClient';
 
 export interface DiscoverPort {
-  searchDiscovery: typeof discovery.searchDiscovery;
-  suggestDiscovery: typeof discovery.suggestDiscovery;
-  listSearchHistory: typeof discovery.listSearchHistory;
-  recordSearchHistory: typeof discovery.recordSearchHistory;
-  searchUnreleasedTracks: typeof enrichment.searchUnreleasedTracks;
+  searchDiscovery: typeof apiClient.searchDiscovery;
+  suggestDiscovery: typeof apiClient.suggestDiscovery;
+  listSearchHistory: typeof apiClient.listSearchHistory;
+  recordSearchHistory: typeof apiClient.recordSearchHistory;
+  searchUnreleasedTracks: typeof apiClient.searchUnreleasedTracks;
 }
