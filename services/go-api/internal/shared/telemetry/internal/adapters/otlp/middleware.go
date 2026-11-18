@@ -1,4 +1,4 @@
-package telemetry
+package otlp
 
 import (
 	"net/http"
@@ -50,8 +50,8 @@ func describe(span trace.Span, r *http.Request, status int) {
 		attribute.String("http.request.method", r.Method),
 		attribute.String("http.route", route),
 		attribute.Int("http.response.status_code", status),
-		attribute.String("app.version", Clip(r.Header.Get(AppVersionHeader))),
-		attribute.String("app.platform", Clip(r.Header.Get(PlatformHeader))),
+		attribute.String("app.version", clip(r.Header.Get(AppVersionHeader))),
+		attribute.String("app.platform", clip(r.Header.Get(PlatformHeader))),
 	)
 	if status >= http.StatusInternalServerError {
 		span.SetStatus(codes.Error, http.StatusText(status))
@@ -70,7 +70,7 @@ func routePattern(r *http.Request) string {
 	return rctx.RoutePattern()
 }
 
-func Clip(value string) string {
+func clip(value string) string {
 	if len(value) > maxHeaderValue {
 		return value[:maxHeaderValue]
 	}

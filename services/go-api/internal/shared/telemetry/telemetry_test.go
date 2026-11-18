@@ -1,10 +1,12 @@
-package telemetry
+package telemetry_test
 
 import (
+	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -17,15 +19,15 @@ import (
 )
 
 func TestSetupWithoutEndpointIsANoOp(t *testing.T) {
-	t.Setenv(EndpointEnv, "")
-	shutdown, err := Setup(context.Background(), Service{Name: "altune-api", Version: "abc123", Environment: "test"})
+	noEndpoint := func(string) string { return "" }
+	shutdown, err := telemetry.Setup(context.Background(), telemetry.Service{Name: "altune-api", Version: "abc123", Environment: "test"}, noEndpoint)
 	if err != nil {
 		t.Fatalf("Setup: %v", err)
 	}
 	if err := shutdown(context.Background()); err != nil {
 		t.Fatalf("shutdown: %v", err)
 	}
-	if Enabled() {
+	if telemetry.Enabled(noEndpoint) {
 		t.Fatal("Enabled() = true with no endpoint")
 	}
 }
@@ -37,15 +39,15 @@ func TestADownCollectorNeitherFailsNorSlowsARequest(t *testing.T) {
 	}
 	closedAddr := listener.Addr().String()
 	_ = listener.Close()
-	t.Setenv(EndpointEnv, "http://"+closedAddr)
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://"+closedAddr)
 	previous := otel.GetTracerProvider()
 	t.Cleanup(func() { otel.SetTracerProvider(previous) })
-	shutdown, err := Setup(context.Background(), Service{Name: "altune-api", Version: "abc123", Environment: "test"})
+	shutdown, err := telemetry.Setup(context.Background(), telemetry.Service{Name: "altune-api", Version: "abc123", Environment: "test"}, os.Getenv)
 	if err != nil {
 		t.Fatalf("Setup: %v", err)
 	}
 	router := chi.NewRouter()
-	router.Use(Middleware(never))
+	router.Use(telemetry.Middleware(never))
 	router.Get("/health", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	start := time.Now()
 	for range 50 {
@@ -81,11 +83,11 @@ func recordSpans(t *testing.T) *tracetest.SpanRecorder {
 func TestMiddlewareNamesTheSpanByRouteAndRecordsTheApp(t *testing.T) {
 	recorder := recordSpans(t)
 	router := chi.NewRouter()
-	router.Use(Middleware(never))
+	router.Use(telemetry.Middleware(never))
 	router.Get("/v1/tracks/{id}", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) })
 	req := httptest.NewRequest(http.MethodGet, "/v1/tracks/42?q=secret+search", nil)
-	req.Header.Set(AppVersionHeader, "1.4.0+"+strings.Repeat("a", 100))
-	req.Header.Set(PlatformHeader, "ios")
+	req.Header.Set(telemetry.AppVersionHeader, "1.4.0+"+strings.Repeat("a", 100))
+	req.Header.Set(telemetry.PlatformHeader, "ios")
 	router.ServeHTTP(httptest.NewRecorder(), req)
 	spans := recorder.Ended()
 	if len(spans) != 1 {
@@ -102,7 +104,7 @@ func TestMiddlewareNamesTheSpanByRouteAndRecordsTheApp(t *testing.T) {
 	if got["http.route"] != "/v1/tracks/{id}" || got["http.response.status_code"] != "404" || got["app.platform"] != "ios" {
 		t.Fatalf("attributes = %v", got)
 	}
-	if len(got["app.version"]) != maxHeaderValue {
+	if len(got["app.version"]) != 64 {
 		t.Fatalf("app.version not clipped: %q", got["app.version"])
 	}
 	for key, value := range got {
@@ -118,7 +120,7 @@ func TestMiddlewareNamesTheSpanByRouteAndRecordsTheApp(t *testing.T) {
 func TestMiddlewareMarksServerErrorsAndUnmatchedRoutes(t *testing.T) {
 	recorder := recordSpans(t)
 	router := chi.NewRouter()
-	router.Use(Middleware(never))
+	router.Use(telemetry.Middleware(never))
 	router.Get("/boom", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusBadGateway) })
 	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/boom", nil))
 	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/nowhere/123", nil))
@@ -139,7 +141,7 @@ func never(*http.Request) bool { return false }
 func TestMiddlewareSkipsTheRequestsItIsToldTo(t *testing.T) {
 	recorder := recordSpans(t)
 	router := chi.NewRouter()
-	router.Use(Middleware(func(r *http.Request) bool { return r.URL.Path == "/health" }))
+	router.Use(telemetry.Middleware(func(r *http.Request) bool { return r.URL.Path == "/health" }))
 	router.Get("/health", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
@@ -150,11 +152,11 @@ func TestMiddlewareSkipsTheRequestsItIsToldTo(t *testing.T) {
 
 func TestAnalyticsAllowedUnlessTheAppSaysOff(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/discovery/events", nil)
-	if !AnalyticsAllowed(req) {
+	if !telemetry.AnalyticsAllowed(req) {
 		t.Fatal("no header should allow analytics")
 	}
-	req.Header.Set(AnalyticsHeader, AnalyticsOff)
-	if AnalyticsAllowed(req) {
+	req.Header.Set(telemetry.AnalyticsHeader, telemetry.AnalyticsOff)
+	if telemetry.AnalyticsAllowed(req) {
 		t.Fatal("the off header should stop analytics")
 	}
 }

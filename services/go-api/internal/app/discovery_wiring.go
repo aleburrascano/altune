@@ -7,6 +7,7 @@ import (
 	"context"
 	"expvar"
 	"log/slog"
+	"os"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -190,7 +191,7 @@ func (a *App) buildDiscoveryHandler(ctx context.Context, cf clientFactory, servi
 	discoveryH := discovery.NewDiscoveryHandler(services)
 	discoveryH.WithDetailEnrichers(a.buildDetailEnrichers(cf))
 	discoveryH.WithUnreleased(a.buildUnreleasedService(ctx, cf, services.Artist))
-	if telemetry.Enabled() {
+	if telemetry.Enabled(os.Getenv) {
 		discoveryH.WithClientEvents(telemetry.NewClientEvents(a.cfg.TelemetryUserKey, otel.GetLoggerProvider().Logger(telemetry.ScopeName)))
 	}
 	return discoveryH

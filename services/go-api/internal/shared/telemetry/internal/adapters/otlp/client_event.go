@@ -1,4 +1,4 @@
-package telemetry
+package otlp
 
 import (
 	"context"
@@ -53,8 +53,8 @@ func (c *ClientEvents) Emit(ctx context.Context, e ClientEvent) {
 func (c *ClientEvents) attributes(e ClientEvent) []attribute.KeyValue {
 	attrs := []attribute.KeyValue{
 		attribute.String("event.type", e.Type),
-		attribute.String("app.version", Clip(e.AppVersion)),
-		attribute.String("app.platform", Clip(e.Platform)),
+		attribute.String("app.version", clip(e.AppVersion)),
+		attribute.String("app.platform", clip(e.Platform)),
 	}
 	if e.EventID != "" {
 		attrs = append(attrs, attribute.String("event.id", e.EventID))
@@ -83,7 +83,7 @@ func payloadAttributes(payload map[string]any) []attribute.KeyValue {
 
 func sessionAttribute(value any) (attribute.KeyValue, bool) {
 	if v, ok := value.(string); ok {
-		return attribute.String("session.id", Clip(v)), true
+		return attribute.String("session.id", clip(v)), true
 	}
 	return attribute.KeyValue{}, false
 }
@@ -100,7 +100,7 @@ func payloadAttribute(key string, value any) (attribute.KeyValue, bool) {
 		return attribute.Float64(name, v), true
 	case string:
 		if _, ok := allowedPayloadStrings[key]; ok {
-			return attribute.String(name, Clip(v)), true
+			return attribute.String(name, clip(v)), true
 		}
 	}
 	return attribute.KeyValue{}, false
