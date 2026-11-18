@@ -1,0 +1,10 @@
+{
+  "removed": [
+    "T2 src/features/player/__tests__/playbackHealth.test.ts patches with jest.mock",
+    "T2 src/features/player/__tests__/usePlaybackPosition.test.ts patches with jest.mock",
+    "T2 src/features/player/__tests__/useQueueResume.test.ts patches with jest.spyOn",
+    "T2 src/features/player/view/__tests__/SheetHeader.test.tsx patches with jest.mock"
+  ],
+  "added": [],
+  "clones": 0
+}

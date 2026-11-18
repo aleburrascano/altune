@@ -4,34 +4,14 @@ import { useQueueStore } from '@shared/playback';
 import type { PlaybackTrack } from '@shared/playback';
 
 import { usePlaybackPosition } from '@features/player';
+import { driveAppState, type AppStateDriver } from '@shared/lifecycle';
 
 const { __player } = jest.requireMock('react-native-track-player');
 
-type AppStateHandler = (state: string) => void;
-
-const mockAppState = { currentState: 'active', handlers: [] as AppStateHandler[] };
-
-jest.mock('react-native/Libraries/AppState/AppState', () => ({
-  default: {
-    get currentState() {
-      return mockAppState.currentState;
-    },
-    addEventListener: (_type: string, handler: AppStateHandler) => {
-      mockAppState.handlers.push(handler);
-      return {
-        remove: () => {
-          mockAppState.handlers = mockAppState.handlers.filter((h) => h !== handler);
-        },
-      };
-    },
-  },
-}));
+let app: AppStateDriver;
 
 function setForeground(foreground: boolean): void {
-  mockAppState.currentState = foreground ? 'active' : 'background';
-  act(() => {
-    for (const handler of [...mockAppState.handlers]) handler(mockAppState.currentState);
-  });
+  act(() => app.change(foreground ? 'active' : 'background'));
 }
 
 const track: PlaybackTrack = {
@@ -44,8 +24,7 @@ const track: PlaybackTrack = {
 
 beforeEach(() => {
   __player.reset();
-  mockAppState.handlers = [];
-  mockAppState.currentState = 'active';
+  app = driveAppState();
   useQueueStore.getState().setResumePosition(0);
 });
 

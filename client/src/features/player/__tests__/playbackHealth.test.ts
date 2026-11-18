@@ -27,22 +27,7 @@ import {
   type MemoryPlaybackSeed,
 } from '@features/player';
 import { recordLogs } from '@shared/log';
-type AppStateChangeHandler = (state: string) => void;
-
-jest.mock('react-native/Libraries/AppState/AppState', () => {
-  const listeners: AppStateChangeHandler[] = [];
-  return {
-    default: {
-      currentState: 'active',
-      isAvailable: true,
-      addEventListener: jest.fn((type: string, handler: AppStateChangeHandler) => {
-        if (type === 'change') listeners.push(handler);
-        return { remove: jest.fn() };
-      }),
-    },
-    __listeners: listeners,
-  };
-});
+import { driveAppState, type AppStateDriver } from '@shared/lifecycle';
 
 const player = TrackPlayer as unknown as { getQueue: jest.Mock };
 const { __player } = jest.requireMock('react-native-track-player') as {
@@ -67,14 +52,7 @@ afterEach(() => {
 const { __http } = require('@testing/doubles/fetch.js');
 const HEALTH_ROUTE = 'POST /v1/discovery/events';
 const HTTP_ACCEPTED = 202;
-
-function appStateListeners(): AppStateChangeHandler[] {
-  return (
-    jest.requireMock('react-native/Libraries/AppState/AppState') as {
-      __listeners: AppStateChangeHandler[];
-    }
-  ).__listeners;
-}
+let app: AppStateDriver;
 
 async function settleRequests(): Promise<void> {
   await act(async () => {
@@ -104,6 +82,7 @@ beforeEach(async () => {
   installMemoryPort({ audioUrls: cdnAudioUrls(['t0', 't1', 't2', 't3']) });
   player.getQueue.mockResolvedValue([]);
   recordLogs();
+  app = driveAppState();
 });
 
 afterEach(() => {
@@ -188,7 +167,7 @@ describe('playback health metric', () => {
     recordPresignOutcome(false);
     expect(await sentPayloads()).toEqual([]);
 
-    for (const listener of appStateListeners()) listener('background');
+    app.change('background');
 
     expect(await sentPayloads()).toEqual([expect.objectContaining({ presign_failed: 1 })]);
   });
