@@ -2,7 +2,6 @@ package content_test
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/discoverytest"
 	"context"
 	"errors"
 	"slices"
@@ -11,7 +10,7 @@ import (
 
 func TestGetArtistContentService_CatalogTitles_CoversTopTracksAndAlbums(t *testing.T) {
 	svc := discovery.NewGetArtistContentService(map[discovery.ProviderName]discovery.ArtistContentProvider{
-		discovery.ProviderDeezer: &discoverytest.ArtistContentProvider{
+		discovery.ProviderDeezer: &discovery.FakeArtistContentProvider{
 			TopTracks: []discovery.SearchResult{{Kind: discovery.ResultKindTrack, Title: "Magnolia", Sources: []discovery.SourceRef{{Provider: discovery.ProviderDeezer, ExternalID: "t1"}}}},
 			Albums:    []discovery.SearchResult{{Kind: discovery.ResultKindAlbum, Title: "Whole Lotta Red", Sources: []discovery.SourceRef{{Provider: discovery.ProviderDeezer, ExternalID: "a1"}}}},
 		},
@@ -30,7 +29,7 @@ func TestGetArtistContentService_CatalogTitles_CoversTopTracksAndAlbums(t *testi
 }
 
 type tracklistProvider struct {
-	*discoverytest.ArtistContentProvider
+	*discovery.FakeArtistContentProvider
 	tracklists map[string][]discovery.SearchResult
 	failing    map[string]bool
 }
@@ -44,7 +43,7 @@ func (p *tracklistProvider) GetAlbumTracks(_ context.Context, _ discovery.Provid
 
 func tracklistService(failing map[string]bool) *discovery.GetArtistContentService {
 	provider := &tracklistProvider{
-		ArtistContentProvider: &discoverytest.ArtistContentProvider{
+		FakeArtistContentProvider: &discovery.FakeArtistContentProvider{
 			Albums: []discovery.SearchResult{
 				{Kind: discovery.ResultKindAlbum, Title: "Heaven or Hell", Sources: []discovery.SourceRef{{Provider: discovery.ProviderDeezer, ExternalID: "a1"}}},
 				{Kind: discovery.ResultKindAlbum, Title: "Life of a Don", Sources: []discovery.SourceRef{{Provider: discovery.ProviderDeezer, ExternalID: "a2"}}},

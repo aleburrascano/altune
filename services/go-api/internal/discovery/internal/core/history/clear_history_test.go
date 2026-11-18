@@ -2,7 +2,6 @@ package history_test
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/discoverytest"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
@@ -16,14 +15,14 @@ func TestClearSearchHistoryService_Execute(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		repo       *discoverytest.FakeHistoryEraser
+		repo       *discovery.FakeHistoryEraser
 		nilRepo    bool
 		wantErr    bool
 		wantCalled bool
 	}{
 		{
 			name: "happy path deletes for user",
-			repo: &discoverytest.FakeHistoryEraser{
+			repo: &discovery.FakeHistoryEraser{
 				EraseFn: func(_ context.Context, gotUser shared.UserId) error {
 					if gotUser != userID {
 						t.Errorf("expected user %v, got %v", userID, gotUser)
@@ -41,7 +40,7 @@ func TestClearSearchHistoryService_Execute(t *testing.T) {
 		},
 		{
 			name: "repo error propagates",
-			repo: &discoverytest.FakeHistoryEraser{
+			repo: &discovery.FakeHistoryEraser{
 				EraseFn: func(_ context.Context, _ shared.UserId) error {
 					return errors.New("db unavailable")
 				},

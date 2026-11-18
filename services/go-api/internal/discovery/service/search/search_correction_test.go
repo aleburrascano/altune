@@ -2,15 +2,14 @@ package search_test
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/discoverytest"
 	"context"
 	"errors"
 	"strings"
 	"testing"
 )
 
-func humbleVocab() *discoverytest.FakeVocabularyStore {
-	return &discoverytest.FakeVocabularyStore{
+func humbleVocab() *discovery.FakeVocabularyStore {
+	return &discovery.FakeVocabularyStore{
 		FindClosestFn: func(_ string, _ int) ([]discovery.VocabularyEntry, error) {
 			return []discovery.VocabularyEntry{
 				{Term: "humble", TermNorm: "humble", Kind: discovery.VocabKindTrack, MatchScore: 0.8},
@@ -20,10 +19,10 @@ func humbleVocab() *discoverytest.FakeVocabularyStore {
 }
 
 func TestService_Execute_ZeroResultsTriggersCorrection(t *testing.T) {
-	p := &discoverytest.QueryFakeProvider{
+	p := &discovery.QueryFakeProvider{
 		Provider: discovery.ProviderDeezer,
 		ResultsByQuery: map[string][]discovery.SearchResult{
-			"humble": {discoverytest.DeezerTrack("HUMBLE.", "Kendrick Lamar", 80)},
+			"humble": {discovery.DeezerTrack("HUMBLE.", "Kendrick Lamar", 80)},
 		},
 	}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithVocabularyStore(humbleVocab()))
@@ -38,18 +37,18 @@ func TestService_Execute_ZeroResultsTriggersCorrection(t *testing.T) {
 		t.Errorf("want OriginalQuery=%q, got %q", "humbel", out.OriginalQuery)
 	}
 	if len(out.Results) != 1 || out.Results[0].Title != "HUMBLE." {
-		t.Fatalf("want the corrected search's result, got %v", discoverytest.Titles(out.Results))
+		t.Fatalf("want the corrected search's result, got %v", discovery.Titles(out.Results))
 	}
 }
 
 func TestService_Execute_CorrectedResultsNeverCached(t *testing.T) {
-	p := &discoverytest.QueryFakeProvider{
+	p := &discovery.QueryFakeProvider{
 		Provider: discovery.ProviderDeezer,
 		ResultsByQuery: map[string][]discovery.SearchResult{
-			"humble": {discoverytest.DeezerTrack("HUMBLE.", "Kendrick Lamar", 80)},
+			"humble": {discovery.DeezerTrack("HUMBLE.", "Kendrick Lamar", 80)},
 		},
 	}
-	cache := discoverytest.NewFakeResultCache()
+	cache := discovery.NewFakeResultCache()
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(),
 		discovery.WithVocabularyStore(humbleVocab()), discovery.WithResultCache(cache))
 
@@ -103,13 +102,13 @@ func TestService_Execute_CorrectionKeepsFirstPassProviderFailure(t *testing.T) {
 		name:    discovery.ProviderDeezer,
 		failFor: "humbel",
 		results: map[string][]discovery.SearchResult{
-			"humble": {discoverytest.DeezerTrack("HUMBLE.", "Kendrick Lamar", 80)},
+			"humble": {discovery.DeezerTrack("HUMBLE.", "Kendrick Lamar", 80)},
 		},
 	}
-	healthy := &discoverytest.QueryFakeProvider{
+	healthy := &discovery.QueryFakeProvider{
 		Provider: discovery.ProviderITunes,
 		ResultsByQuery: map[string][]discovery.SearchResult{
-			"humble": {discoverytest.Track("HUMBLE.", "Kendrick Lamar", discovery.ProviderITunes, nil)},
+			"humble": {discovery.Track("HUMBLE.", "Kendrick Lamar", discovery.ProviderITunes, nil)},
 		},
 	}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{failsOriginal, healthy}, discovery.NewCircuitBreaker(),
@@ -135,8 +134,8 @@ func TestService_Execute_CorrectionKeepsFirstPassProviderFailure(t *testing.T) {
 
 func TestService_Execute_TotalOutageSkipsCorrection(t *testing.T) {
 	outage := errors.New("provider down")
-	deezer := &discoverytest.CountingProvider{Provider: discovery.ProviderDeezer, Err: outage}
-	itunes := &discoverytest.CountingProvider{Provider: discovery.ProviderITunes, Err: outage}
+	deezer := &discovery.CountingProvider{Provider: discovery.ProviderDeezer, Err: outage}
+	itunes := &discovery.CountingProvider{Provider: discovery.ProviderITunes, Err: outage}
 	vocab := humbleVocab()
 	svc := discovery.NewSearchService([]discovery.SearchProvider{deezer, itunes}, discovery.NewCircuitBreaker(),
 		discovery.WithVocabularyStore(vocab))
@@ -160,10 +159,10 @@ func TestService_Execute_TotalOutageSkipsCorrection(t *testing.T) {
 }
 
 func TestService_Execute_NoCorrectionKeepsFanOutStatuses(t *testing.T) {
-	failing := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Err: errors.New("boom")}
-	empty := &discoverytest.QueryFakeProvider{Provider: discovery.ProviderITunes}
+	failing := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Err: errors.New("boom")}
+	empty := &discovery.QueryFakeProvider{Provider: discovery.ProviderITunes}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{failing, empty}, discovery.NewCircuitBreaker(),
-		discovery.WithVocabularyStore(&discoverytest.FakeVocabularyStore{}))
+		discovery.WithVocabularyStore(&discovery.FakeVocabularyStore{}))
 
 	out := runSearch(t, svc, "humbel")
 	svc.WaitForBackground()
@@ -181,10 +180,10 @@ func TestService_Execute_NoCorrectionKeepsFanOutStatuses(t *testing.T) {
 
 func TestService_Execute_ResultsDoNotTriggerCorrection(t *testing.T) {
 	store := humbleVocab()
-	p := &discoverytest.QueryFakeProvider{
+	p := &discovery.QueryFakeProvider{
 		Provider: discovery.ProviderDeezer,
 		ResultsByQuery: map[string][]discovery.SearchResult{
-			"humble": {discoverytest.DeezerTrack("HUMBLE.", "Kendrick Lamar", 80)},
+			"humble": {discovery.DeezerTrack("HUMBLE.", "Kendrick Lamar", 80)},
 		},
 	}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithVocabularyStore(store))
@@ -196,7 +195,7 @@ func TestService_Execute_ResultsDoNotTriggerCorrection(t *testing.T) {
 		t.Errorf("want no correction, got corrected=%q original=%q", out.CorrectedQuery, out.OriginalQuery)
 	}
 	if len(out.Results) != 1 {
-		t.Fatalf("want the direct result, got %v", discoverytest.Titles(out.Results))
+		t.Fatalf("want the direct result, got %v", discovery.Titles(out.Results))
 	}
 	if store.FindClosestCalls != 0 {
 		t.Errorf("correction must not run when the search has results, got %d FindClosest calls", store.FindClosestCalls)
@@ -204,15 +203,15 @@ func TestService_Execute_ResultsDoNotTriggerCorrection(t *testing.T) {
 }
 
 func TestService_Execute_NoCorrectionCandidateReturnsEmpty(t *testing.T) {
-	store := &discoverytest.FakeVocabularyStore{}
-	p := &discoverytest.QueryFakeProvider{Provider: discovery.ProviderDeezer}
+	store := &discovery.FakeVocabularyStore{}
+	p := &discovery.QueryFakeProvider{Provider: discovery.ProviderDeezer}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithVocabularyStore(store))
 
 	out := runSearch(t, svc, "humbel")
 	svc.WaitForBackground()
 
 	if len(out.Results) != 0 {
-		t.Fatalf("want zero results, got %v", discoverytest.Titles(out.Results))
+		t.Fatalf("want zero results, got %v", discovery.Titles(out.Results))
 	}
 	if out.CorrectedQuery != "" || out.OriginalQuery != "" {
 		t.Errorf("want no correction fields, got corrected=%q original=%q", out.CorrectedQuery, out.OriginalQuery)
@@ -220,14 +219,14 @@ func TestService_Execute_NoCorrectionCandidateReturnsEmpty(t *testing.T) {
 }
 
 func TestService_Execute_CorrectedSearchAlsoEmptyReturnsEmpty(t *testing.T) {
-	p := &discoverytest.QueryFakeProvider{Provider: discovery.ProviderDeezer}
+	p := &discovery.QueryFakeProvider{Provider: discovery.ProviderDeezer}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithVocabularyStore(humbleVocab()))
 
 	out := runSearch(t, svc, "humbel")
 	svc.WaitForBackground()
 
 	if len(out.Results) != 0 {
-		t.Fatalf("want zero results, got %v", discoverytest.Titles(out.Results))
+		t.Fatalf("want zero results, got %v", discovery.Titles(out.Results))
 	}
 	if out.CorrectedQuery != "" || out.OriginalQuery != "" {
 		t.Errorf("a fruitless correction must not be surfaced, got corrected=%q original=%q", out.CorrectedQuery, out.OriginalQuery)
@@ -235,7 +234,7 @@ func TestService_Execute_CorrectedSearchAlsoEmptyReturnsEmpty(t *testing.T) {
 }
 
 func TestService_Execute_ExactVocabMatchNotCorrected(t *testing.T) {
-	store := &discoverytest.FakeVocabularyStore{
+	store := &discovery.FakeVocabularyStore{
 		FindClosestFn: func(_ string, _ int) ([]discovery.VocabularyEntry, error) {
 			return []discovery.VocabularyEntry{
 				{Term: "humble", TermNorm: "humble", Kind: discovery.VocabKindTrack, MatchScore: 1.0},
@@ -243,7 +242,7 @@ func TestService_Execute_ExactVocabMatchNotCorrected(t *testing.T) {
 			}, nil
 		},
 	}
-	p := &discoverytest.QueryFakeProvider{Provider: discovery.ProviderDeezer}
+	p := &discovery.QueryFakeProvider{Provider: discovery.ProviderDeezer}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithVocabularyStore(store))
 
 	out := runSearch(t, svc, "humble")
@@ -253,25 +252,25 @@ func TestService_Execute_ExactVocabMatchNotCorrected(t *testing.T) {
 		t.Errorf("an exact vocabulary term must not be corrected, got %q", out.CorrectedQuery)
 	}
 	if len(out.Results) != 0 {
-		t.Fatalf("want zero results, got %v", discoverytest.Titles(out.Results))
+		t.Fatalf("want zero results, got %v", discovery.Titles(out.Results))
 	}
 }
 
 func TestService_Correcting_DoesNotLogRawQueryText(t *testing.T) {
-	buf := discoverytest.CaptureLogs(t)
+	buf := discovery.CaptureLogs(t)
 
 	const raw = "humbel"
-	p := &discoverytest.QueryFakeProvider{
+	p := &discovery.QueryFakeProvider{
 		Provider: discovery.ProviderDeezer,
 		ResultsByQuery: map[string][]discovery.SearchResult{
-			"humble": {discoverytest.DeezerTrack("HUMBLE.", "Kendrick Lamar", 80)},
+			"humble": {discovery.DeezerTrack("HUMBLE.", "Kendrick Lamar", 80)},
 		},
 	}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithVocabularyStore(humbleVocab()))
 	runSearch(t, svc, raw)
 	svc.WaitForBackground()
 
-	event := discoverytest.LoggedEvent(t, buf, "search.v2.correcting")
+	event := discovery.LoggedEvent(t, buf, "search.v2.correcting")
 	if strings.Contains(event, raw) {
 		t.Fatalf("correcting log leaks raw query text %q:\n%s", raw, event)
 	}
@@ -281,9 +280,9 @@ func TestService_Correcting_DoesNotLogRawQueryText(t *testing.T) {
 }
 
 func TestCorrectTokens_DoesNotLogRawTokenText(t *testing.T) {
-	buf := discoverytest.CaptureLogs(t)
+	buf := discovery.CaptureLogs(t)
 
-	store := &discoverytest.FakeVocabularyStore{
+	store := &discovery.FakeVocabularyStore{
 		FindClosestFn: func(token string, _ int) ([]discovery.VocabularyEntry, error) {
 			if token == "humbel" {
 				return []discovery.VocabularyEntry{
@@ -300,7 +299,7 @@ func TestCorrectTokens_DoesNotLogRawTokenText(t *testing.T) {
 		t.Fatalf("want token correction, got %+v", result)
 	}
 
-	event := discoverytest.LoggedEvent(t, buf, "correction.token")
+	event := discovery.LoggedEvent(t, buf, "correction.token")
 	if strings.Contains(event, "humbel") {
 		t.Fatalf("token correction log leaks raw token text:\n%s", event)
 	}
@@ -310,8 +309,8 @@ func TestCorrectTokens_DoesNotLogRawTokenText(t *testing.T) {
 }
 
 type deadlineRecordingVocab struct {
-	discoverytest.FakeVocabularyStore
-	rec *discoverytest.CtxRecordingVocab
+	discovery.FakeVocabularyStore
+	rec *discovery.CtxRecordingVocab
 }
 
 func (v *deadlineRecordingVocab) SuggestByPrefix(ctx context.Context, prefix string, limit int) ([]discovery.VocabularyEntry, error) {
@@ -323,15 +322,15 @@ func (v *deadlineRecordingVocab) FindClosest(ctx context.Context, query string, 
 }
 
 func TestService_Execute_CorrectionRunsUnderADeadline(t *testing.T) {
-	vocab := &discoverytest.CtxRecordingVocab{}
-	empty := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer}
+	vocab := &discovery.CtxRecordingVocab{}
+	empty := &discovery.FakeProvider{Provider: discovery.ProviderDeezer}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{empty}, discovery.NewCircuitBreaker(), discovery.WithVocabularyStore(&deadlineRecordingVocab{rec: vocab}))
 	query, err := discovery.NewSearchQuery("kendrik lamar", map[discovery.ResultKind]bool{discovery.ResultKindArtist: true}, 10)
 	if err != nil {
 		t.Fatalf("NewSearchQuery: %v", err)
 	}
 
-	if _, err := svc.Execute(context.Background(), discoverytest.NewUser(), query, false); err != nil {
+	if _, err := svc.Execute(context.Background(), discovery.NewUser(), query, false); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 

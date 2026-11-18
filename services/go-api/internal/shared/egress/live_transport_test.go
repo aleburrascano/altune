@@ -381,11 +381,16 @@ var notFetchedHosts = map[string]bool{"e-cdns-images.dzcdn.net": true, "www.yout
 
 var adapterURLHost = regexp.MustCompile(`"https?://([a-zA-Z0-9.-]+)`)
 
+var inMemoryFakeAdapterDirsThatNeverFetch = map[string]bool{"memory": true}
+
 func adapterHosts(t *testing.T) []string {
 	t.Helper()
 	root := filepath.Join("..", "..", "discovery", "internal", "adapters")
 	seen := map[string]struct{}{}
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err == nil && d.IsDir() && inMemoryFakeAdapterDirsThatNeverFetch[d.Name()] {
+			return fs.SkipDir
+		}
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return err
 		}

@@ -2,7 +2,6 @@ package unreleased_test
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/discoverytest"
 	"context"
 	"errors"
 	"slices"
@@ -12,7 +11,7 @@ import (
 )
 
 type dueStore struct {
-	discoverytest.UnreleasedStore
+	discovery.FakeUnreleasedStore
 	due      []discovery.UnreleasedDueArtist
 	err      error
 	gotLimit int
@@ -25,12 +24,12 @@ func (d *dueStore) Due(_ context.Context, now time.Time, limit int) ([]discovery
 }
 
 type failingForName struct {
-	discoverytest.GeniusSongCatalog
+	discovery.FakeGeniusSongCatalog
 	failName string
 }
 
 func (f *failingForName) FindArtistID(ctx context.Context, name string, known []string) (int, bool, error) {
-	id, found, err := f.GeniusSongCatalog.FindArtistID(ctx, name, known)
+	id, found, err := f.FakeGeniusSongCatalog.FindArtistID(ctx, name, known)
 	if name == f.failName {
 		return 0, false, errors.New("genius down")
 	}
@@ -43,12 +42,12 @@ func dueArtist(id, name string) discovery.UnreleasedDueArtist {
 
 func refreshService(genius discovery.GeniusSongCatalog, store *dueStore) *discovery.UnreleasedService {
 	cfg := discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 10, DetailConcurrency: 2, Wait: time.Second}
-	return discovery.NewUnreleasedService(genius, &discoverytest.ArtistCatalogTitles{}, nil, cfg, discovery.WithUnreleasedStore(store))
+	return discovery.NewUnreleasedService(genius, &discovery.ArtistCatalogTitles{}, nil, cfg, discovery.WithUnreleasedStore(store))
 }
 
 func TestService_RefreshDue_RebuildsExactlyTheArtistsDueReturns(t *testing.T) {
 	store := &dueStore{due: []discovery.UnreleasedDueArtist{dueArtist("1", "Drake"), dueArtist("2", "Future")}}
-	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
+	genius := &discovery.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
 	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	if err := refreshService(genius, store).RefreshDue(context.Background(), now, 2); err != nil {
 		t.Fatalf("RefreshDue: %v", err)
@@ -67,7 +66,7 @@ func TestService_RefreshDue_RebuildsExactlyTheArtistsDueReturns(t *testing.T) {
 func TestService_RefreshDue_AFailedRebuildDoesNotStopTheNextArtist(t *testing.T) {
 	logs := captureLogs(t)
 	store := &dueStore{due: []discovery.UnreleasedDueArtist{dueArtist("1", "Drake"), dueArtist("2", "Future")}}
-	genius := &failingForName{GeniusSongCatalog: discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}, failName: "Drake"}
+	genius := &failingForName{FakeGeniusSongCatalog: discovery.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}, failName: "Drake"}
 	if err := refreshService(genius, store).RefreshDue(context.Background(), time.Now(), 2); err != nil {
 		t.Fatalf("RefreshDue: %v", err)
 	}
@@ -82,7 +81,7 @@ func TestService_RefreshDue_AFailedRebuildDoesNotStopTheNextArtist(t *testing.T)
 
 func TestService_RefreshDue_ADueQueryFailureIsReturnedAndBuildsNothing(t *testing.T) {
 	store := &dueStore{err: errors.New("db down"), due: []discovery.UnreleasedDueArtist{dueArtist("1", "Drake")}}
-	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true}
+	genius := &discovery.FakeGeniusSongCatalog{ArtistFound: true}
 	if err := refreshService(genius, store).RefreshDue(context.Background(), time.Now(), 2); err == nil {
 		t.Fatal("RefreshDue returned nil, want the Due error")
 	}
@@ -93,7 +92,7 @@ func TestService_RefreshDue_ADueQueryFailureIsReturnedAndBuildsNothing(t *testin
 
 func TestService_RefreshDue_NeverRebuildsMoreThanTheLimitEvenIfTheStoreReturnsMore(t *testing.T) {
 	store := &dueStore{due: []discovery.UnreleasedDueArtist{dueArtist("1", "Drake"), dueArtist("2", "Future"), dueArtist("3", "Kanye")}}
-	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
+	genius := &discovery.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
 	if err := refreshService(genius, store).RefreshDue(context.Background(), time.Now(), 2); err != nil {
 		t.Fatalf("RefreshDue: %v", err)
 	}

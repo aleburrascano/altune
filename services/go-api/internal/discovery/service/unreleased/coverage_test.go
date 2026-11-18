@@ -2,7 +2,6 @@ package unreleased_test
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/discoverytest"
 	"context"
 	"strings"
 	"testing"
@@ -17,12 +16,12 @@ func TestCoverage_BuildLogsHowManySongsArePlayableLinkOutOrSilent(t *testing.T) 
 	list[2].OpenURL = "https://mega.nz/file/x"
 	list[2].OpenHost = "mega.nz"
 	link := []discovery.AudioLink{{Provider: discovery.AudioProviderYouTube, ExternalID: "v", URL: "https://youtu.be/v"}}
-	genius := &discoverytest.GeniusSongCatalog{
+	genius := &discovery.FakeGeniusSongCatalog{
 		ArtistFound: true,
 		Songs:       list,
 		DetailByID:  map[int]discovery.GeniusSongDetail{1: {AudioLinks: link}, 2: {AudioLinks: link}},
 	}
-	svc := discovery.NewUnreleasedService(genius, &discoverytest.ArtistCatalogTitles{}, nil, discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 2, DetailConcurrency: 2})
+	svc := discovery.NewUnreleasedService(genius, &discovery.ArtistCatalogTitles{}, nil, discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 2, DetailConcurrency: 2})
 	if _, err := svc.List(context.Background(), discovery.ProviderDeezer, "27", "Drake", nil); err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -39,8 +38,8 @@ func TestCoverage_BuildLogsHowManySongsArePlayableLinkOutOrSilent(t *testing.T) 
 
 func TestCoverage_StoreRebuildLogsOneEvent(t *testing.T) {
 	logs := captureLogs(t)
-	store := &discoverytest.UnreleasedStore{}
-	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
+	store := &discovery.FakeUnreleasedStore{}
+	genius := &discovery.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
 	if _, err := storeService(genius, store).Rebuild(context.Background(), drakeKey, "Drake", nil); err != nil {
 		t.Fatalf("Rebuild: %v", err)
 	}
@@ -54,8 +53,8 @@ func TestCoverage_EventCarriesTheTotalNumberOfVersions(t *testing.T) {
 	list := songs("A", "B")
 	list[0].Versions = []discovery.UnreleasedVersion{{Title: "A [V1]"}, {Title: "A [V2]"}, {Title: "A [V3]"}}
 	list[1].Versions = []discovery.UnreleasedVersion{{Title: "B [V1]"}, {Title: "B (Demo)"}}
-	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: list}
-	if _, err := storeService(genius, &discoverytest.UnreleasedStore{}).Rebuild(context.Background(), drakeKey, "Drake", nil); err != nil {
+	genius := &discovery.FakeGeniusSongCatalog{ArtistFound: true, Songs: list}
+	if _, err := storeService(genius, &discovery.FakeUnreleasedStore{}).Rebuild(context.Background(), drakeKey, "Drake", nil); err != nil {
 		t.Fatalf("Rebuild: %v", err)
 	}
 	out := logs.String()

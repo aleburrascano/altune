@@ -2,7 +2,6 @@ package vocabulary_test
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/discoverytest"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -25,7 +24,7 @@ func (f *fakeChartProvider) FetchCharts(_ context.Context, _ int) ([]discovery.V
 }
 
 func TestVocabularyRefresh_HappyPath(t *testing.T) {
-	store := &discoverytest.FakeVocabularyStore{}
+	store := &discovery.FakeVocabularyStore{}
 	charts := []fakeChartProvider{
 		{entries: []discovery.VocabularyEntry{
 			{Term: "Drake", Kind: "artist", Popularity: 1000},
@@ -48,7 +47,7 @@ func TestVocabularyRefresh_HappyPath(t *testing.T) {
 }
 
 func TestVocabularyRefresh_NormalizesTerms(t *testing.T) {
-	store := &discoverytest.FakeVocabularyStore{}
+	store := &discovery.FakeVocabularyStore{}
 	charts := []fakeChartProvider{
 		{entries: []discovery.VocabularyEntry{
 			{Term: "The Weeknd", Kind: "artist", Popularity: 900},
@@ -72,7 +71,7 @@ func TestVocabularyRefresh_NormalizesTerms(t *testing.T) {
 }
 
 func TestVocabularyRefresh_OneProviderFails(t *testing.T) {
-	store := &discoverytest.FakeVocabularyStore{}
+	store := &discovery.FakeVocabularyStore{}
 	charts := []fakeChartProvider{
 		{name: discovery.ProviderLastFM, err: errors.New("network timeout")},
 		{name: discovery.ProviderDeezer, entries: []discovery.VocabularyEntry{
@@ -92,7 +91,7 @@ func TestVocabularyRefresh_OneProviderFails(t *testing.T) {
 }
 
 func TestVocabularyRefresh_AllProvidersFail(t *testing.T) {
-	store := &discoverytest.FakeVocabularyStore{}
+	store := &discovery.FakeVocabularyStore{}
 	charts := []fakeChartProvider{
 		{name: discovery.ProviderDeezer, err: errors.New("error 1")},
 		{name: discovery.ProviderLastFM, err: errors.New("error 2")},
@@ -124,8 +123,8 @@ func TestVocabularyRefresh_ChartFailureWarnsWithTheProviderThatFailed(t *testing
 		{name: discovery.ProviderDeezer, entries: []discovery.VocabularyEntry{{Term: "Drake", Kind: "artist"}}},
 		{name: discovery.ProviderLastFM, err: leaky},
 	}
-	svc := newTestRefreshService(charts, &discoverytest.FakeVocabularyStore{})
-	buf := discoverytest.CaptureProductionLogs(t)
+	svc := newTestRefreshService(charts, &discovery.FakeVocabularyStore{})
+	buf := discovery.CaptureProductionLogs(t)
 
 	if err := svc.RunOnce(context.Background()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -165,7 +164,7 @@ func chartFetchFailureRecords(t *testing.T, buf *bytes.Buffer) []map[string]any 
 }
 
 func TestVocabularyRefresh_EmptyResults(t *testing.T) {
-	store := &discoverytest.FakeVocabularyStore{}
+	store := &discovery.FakeVocabularyStore{}
 	charts := []fakeChartProvider{
 		{entries: []discovery.VocabularyEntry{}},
 	}
@@ -181,7 +180,7 @@ func TestVocabularyRefresh_EmptyResults(t *testing.T) {
 }
 
 func TestVocabularyRefresh_StoreError(t *testing.T) {
-	store := &discoverytest.FakeVocabularyStore{Err: errors.New("redis down")}
+	store := &discovery.FakeVocabularyStore{Err: errors.New("redis down")}
 	charts := []fakeChartProvider{
 		{entries: []discovery.VocabularyEntry{
 			{Term: "Taylor Swift", Kind: "artist", Popularity: 999},
@@ -196,7 +195,7 @@ func TestVocabularyRefresh_StoreError(t *testing.T) {
 }
 
 func TestVocabularyRefresh_DuplicateTerms(t *testing.T) {
-	store := &discoverytest.FakeVocabularyStore{}
+	store := &discovery.FakeVocabularyStore{}
 	charts := []fakeChartProvider{
 		{entries: []discovery.VocabularyEntry{
 			{Term: "Drake", Kind: "artist", Popularity: 1000},
@@ -218,7 +217,7 @@ func TestVocabularyRefresh_DuplicateTerms(t *testing.T) {
 
 func newTestRefreshService(
 	charts []fakeChartProvider,
-	store *discoverytest.FakeVocabularyStore,
+	store *discovery.FakeVocabularyStore,
 ) *discovery.VocabularyRefreshService {
 	providers := make([]discovery.ChartProvider, len(charts))
 	for i := range charts {

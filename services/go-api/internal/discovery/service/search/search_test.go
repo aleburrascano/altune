@@ -2,7 +2,6 @@ package search_test
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/discoverytest"
 	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
 	"context"
@@ -30,7 +29,7 @@ const (
 
 func runSearch(t *testing.T, svc *discovery.SearchService, raw string) *discovery.SearchOutput {
 	t.Helper()
-	out, err := svc.Execute(context.Background(), discoverytest.NewUser(), discoverytest.NewQuery(t, raw), false)
+	out, err := svc.Execute(context.Background(), discovery.NewUser(), discovery.NewQuery(t, raw), false)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -38,21 +37,21 @@ func runSearch(t *testing.T, svc *discovery.SearchService, raw string) *discover
 }
 
 func TestService_EndToEnd_MergesAndRanks(t *testing.T) {
-	trackP1 := discoverytest.WithPop(discoverytest.WithISRC(discoverytest.Track("HUMBLE.", "Kendrick Lamar", discovery.ProviderDeezer, nil), "X"), 90)
-	trackP2 := discoverytest.WithPop(discoverytest.WithISRC(discoverytest.Track("Humble", "Kendrick Lamar", discovery.ProviderITunes, nil), "X"), 90)
-	album := discoverytest.DeezerAlbum("Humble", "Kendrick Lamar", 40)
+	trackP1 := discovery.WithPop(discovery.WithISRC(discovery.Track("HUMBLE.", "Kendrick Lamar", discovery.ProviderDeezer, nil), "X"), 90)
+	trackP2 := discovery.WithPop(discovery.WithISRC(discovery.Track("Humble", "Kendrick Lamar", discovery.ProviderITunes, nil), "X"), 90)
+	album := discovery.DeezerAlbum("Humble", "Kendrick Lamar", 40)
 
-	p1 := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{trackP1, album}}
-	p2 := &discoverytest.FakeProvider{Provider: discovery.ProviderITunes, Results: []discovery.SearchResult{trackP2}}
+	p1 := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{trackP1, album}}
+	p2 := &discovery.FakeProvider{Provider: discovery.ProviderITunes, Results: []discovery.SearchResult{trackP2}}
 
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p1, p2}, discovery.NewCircuitBreaker())
 	out := runSearch(t, svc, "humble")
 
 	if len(out.Results) != 2 {
-		t.Fatalf("want 2 results, got %d: %v", len(out.Results), discoverytest.Titles(out.Results))
+		t.Fatalf("want 2 results, got %d: %v", len(out.Results), discovery.Titles(out.Results))
 	}
 	if out.Results[0].Kind != discovery.ResultKindTrack {
-		t.Errorf("want track first, got %v", discoverytest.Titles(out.Results))
+		t.Errorf("want track first, got %v", discovery.Titles(out.Results))
 	}
 	if got := len(out.Results[0].Sources); got != 2 {
 		t.Errorf("want merged track with 2 sources, got %d", got)
@@ -63,8 +62,8 @@ func TestService_EndToEnd_MergesAndRanks(t *testing.T) {
 }
 
 func TestService_PartialOnProviderError(t *testing.T) {
-	good := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	bad := &discoverytest.FakeProvider{Provider: discovery.ProviderITunes, Err: errors.New("boom")}
+	good := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	bad := &discovery.FakeProvider{Provider: discovery.ProviderITunes, Err: errors.New("boom")}
 
 	svc := discovery.NewSearchService([]discovery.SearchProvider{good, bad}, discovery.NewCircuitBreaker())
 	out := runSearch(t, svc, "humble")
@@ -73,25 +72,25 @@ func TestService_PartialOnProviderError(t *testing.T) {
 		t.Error("want partial=true when a provider fails")
 	}
 	if len(out.Results) != 1 {
-		t.Fatalf("want the good provider's result to survive, got %v", discoverytest.Titles(out.Results))
+		t.Fatalf("want the good provider's result to survive, got %v", discovery.Titles(out.Results))
 	}
 }
 
 func TestService_RanksExactTitleFirst(t *testing.T) {
-	exact := discoverytest.DeezerTrack("HUMBLE.", "Kendrick Lamar", 40)
-	partial := discoverytest.DeezerTrack("Humble Beginnings", "Someone Else", 99)
-	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{partial, exact}}
+	exact := discovery.DeezerTrack("HUMBLE.", "Kendrick Lamar", 40)
+	partial := discovery.DeezerTrack("Humble Beginnings", "Someone Else", 99)
+	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{partial, exact}}
 
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker())
 	out := runSearch(t, svc, "humble")
 
 	if len(out.Results) == 0 || out.Results[0].Title != "HUMBLE." {
-		t.Fatalf("want the exact-title track first, got %v", discoverytest.Titles(out.Results))
+		t.Fatalf("want the exact-title track first, got %v", discovery.Titles(out.Results))
 	}
 }
 
 func TestFanOut_CanceledParentDoesNotRecordBreakerFailure(t *testing.T) {
-	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Delay: 50 * time.Millisecond}
+	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Delay: 50 * time.Millisecond}
 	cb := discovery.NewCircuitBreaker()
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, cb)
 
@@ -121,7 +120,7 @@ func (p *panickingProvider) SupportedKinds() map[discovery.ResultKind]bool {
 }
 
 func TestService_PanickingProviderDoesNotKillSearch(t *testing.T) {
-	good := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	good := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	bad := &panickingProvider{name: discovery.ProviderITunes}
 	cb := discovery.NewCircuitBreaker()
 	svc := discovery.NewSearchService([]discovery.SearchProvider{good, bad}, cb)
@@ -129,7 +128,7 @@ func TestService_PanickingProviderDoesNotKillSearch(t *testing.T) {
 	out := runSearch(t, svc, "humble")
 
 	if len(out.Results) != 1 || out.Results[0].Title != "Humble" {
-		t.Fatalf("want the good provider's result to survive the panic, got %v", discoverytest.Titles(out.Results))
+		t.Fatalf("want the good provider's result to survive the panic, got %v", discovery.Titles(out.Results))
 	}
 	if !out.Partial {
 		t.Error("want partial=true (the panicking slot is a provider error)")
@@ -152,9 +151,9 @@ func TestService_PanickingProviderDoesNotKillSearch(t *testing.T) {
 func TestService_LimitTruncates(t *testing.T) {
 	var results []discovery.SearchResult
 	for i := 0; i < 5; i++ {
-		results = append(results, discoverytest.DeezerTrack("Song", "Artist "+string(rune('A'+i)), float64(50-i)))
+		results = append(results, discovery.DeezerTrack("Song", "Artist "+string(rune('A'+i)), float64(50-i)))
 	}
-	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: results}
+	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: results}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker())
 
 	q, err := discovery.NewSearchQuery("song", map[discovery.ResultKind]bool{discovery.ResultKindTrack: true}, 3)
@@ -173,7 +172,7 @@ func TestService_LimitTruncates(t *testing.T) {
 func TestPersistHistory_SavesEntryAndTrimsToRing(t *testing.T) {
 	var inserted *discovery.SearchHistoryEntry
 	var trimmedTo int
-	repo := &discoverytest.FakeHistoryWriter{
+	repo := &discovery.FakeHistoryWriter{
 		InsertFn: func(_ context.Context, e *discovery.SearchHistoryEntry) error {
 			inserted = e
 			return nil
@@ -183,11 +182,11 @@ func TestPersistHistory_SavesEntryAndTrimsToRing(t *testing.T) {
 			return nil
 		},
 	}
-	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithHistoryRepository(repo))
 
-	user := discoverytest.NewUser()
-	if _, err := svc.Execute(context.Background(), user, discoverytest.NewQuery(t, "  Humble  "), true); err != nil {
+	user := discovery.NewUser()
+	if _, err := svc.Execute(context.Background(), user, discovery.NewQuery(t, "  Humble  "), true); err != nil {
 		t.Fatal(err)
 	}
 	if inserted == nil {
@@ -202,20 +201,20 @@ func TestPersistHistory_SavesEntryAndTrimsToRing(t *testing.T) {
 }
 
 func TestPersistHistory_SkippedWhenNotRequested(t *testing.T) {
-	repo := &discoverytest.FakeHistoryWriter{
+	repo := &discovery.FakeHistoryWriter{
 		InsertFn: func(context.Context, *discovery.SearchHistoryEntry) error {
 			t.Error("saveHistory=false must not insert")
 			return nil
 		},
 	}
-	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithHistoryRepository(repo))
 	runSearch(t, svc, "humble")
 }
 
 func TestPersistHistory_InsertFailureToleratedAndSkipsTrim(t *testing.T) {
 	trimCalled := false
-	repo := &discoverytest.FakeHistoryWriter{
+	repo := &discovery.FakeHistoryWriter{
 		InsertFn: func(context.Context, *discovery.SearchHistoryEntry) error {
 			return errors.New("db down")
 		},
@@ -224,10 +223,10 @@ func TestPersistHistory_InsertFailureToleratedAndSkipsTrim(t *testing.T) {
 			return nil
 		},
 	}
-	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithHistoryRepository(repo))
 
-	out, err := svc.Execute(context.Background(), discoverytest.NewUser(), discoverytest.NewQuery(t, "humble"), true)
+	out, err := svc.Execute(context.Background(), discovery.NewUser(), discovery.NewQuery(t, "humble"), true)
 	if err != nil {
 		t.Fatalf("a history-insert failure must never fail the search: %v", err)
 	}
@@ -240,22 +239,22 @@ func TestPersistHistory_InsertFailureToleratedAndSkipsTrim(t *testing.T) {
 }
 
 func TestPersistHistory_TrimFailureTolerated(t *testing.T) {
-	repo := &discoverytest.FakeHistoryWriter{
+	repo := &discovery.FakeHistoryWriter{
 		TrimToNFn: func(context.Context, shared.UserId, int) error {
 			return errors.New("trim broke")
 		},
 	}
-	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithHistoryRepository(repo))
 
-	if _, err := svc.Execute(context.Background(), discoverytest.NewUser(), discoverytest.NewQuery(t, "humble"), true); err != nil {
+	if _, err := svc.Execute(context.Background(), discovery.NewUser(), discovery.NewQuery(t, "humble"), true); err != nil {
 		t.Fatalf("a trim failure must never fail the search: %v", err)
 	}
 }
 
 func TestLaunchBackground_PanicRecovered(t *testing.T) {
-	store := &discoverytest.PanickingEventStore{}
-	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	store := &discovery.PanickingEventStore{}
+	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithEventStore(store))
 
 	out := runSearch(t, svc, "humble")
@@ -270,16 +269,16 @@ func TestLaunchBackground_PanicRecovered(t *testing.T) {
 }
 
 func TestEmitSearchEvent_PayloadShape(t *testing.T) {
-	store := &discoverytest.FakeEventStore{}
+	store := &discovery.FakeEventStore{}
 	results := make([]discovery.SearchResult, 0, 12)
 	for i := 0; i < 12; i++ {
-		results = append(results, discoverytest.DeezerTrack("Humble Take "+string(rune('A'+i)), "Artist", float64(100-i)))
+		results = append(results, discovery.DeezerTrack("Humble Take "+string(rune('A'+i)), "Artist", float64(100-i)))
 	}
-	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: results}
+	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: results}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithEventStore(store), discovery.WithExploration(1.0))
 
-	user := discoverytest.NewUser()
-	out, err := svc.Execute(context.Background(), user, discoverytest.NewQuery(t, "humble"), false)
+	user := discovery.NewUser()
+	out, err := svc.Execute(context.Background(), user, discovery.NewQuery(t, "humble"), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,8 +326,8 @@ func TestEmitSearchEvent_PayloadShape(t *testing.T) {
 }
 
 func TestEmitSearchEvent_ZeroResultPayload(t *testing.T) {
-	store := &discoverytest.FakeEventStore{}
-	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: nil}
+	store := &discovery.FakeEventStore{}
+	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: nil}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithEventStore(store))
 
 	runSearch(t, svc, "zxqv")
@@ -352,16 +351,16 @@ func TestEmitSearchEvent_ZeroResultPayload(t *testing.T) {
 
 func TestRankVariantsForEval_WithAndWithoutReshape(t *testing.T) {
 	results := []discovery.SearchResult{
-		discoverytest.DeezerTrack("Humble One", "Kendrick Lamar", 90),
-		discoverytest.DeezerTrack("Humble Two", "Kendrick Lamar", 80),
-		discoverytest.DeezerTrack("Humble Three", "Kendrick Lamar", 70),
-		discoverytest.DeezerTrack("Humble Four", "Kendrick Lamar", 60),
-		discoverytest.DeezerTrack("Humble Five", "Other Artist", 50),
+		discovery.DeezerTrack("Humble One", "Kendrick Lamar", 90),
+		discovery.DeezerTrack("Humble Two", "Kendrick Lamar", 80),
+		discovery.DeezerTrack("Humble Three", "Kendrick Lamar", 70),
+		discovery.DeezerTrack("Humble Four", "Kendrick Lamar", 60),
+		discovery.DeezerTrack("Humble Five", "Other Artist", 50),
 	}
-	p := &discoverytest.CountingProvider{Provider: discovery.ProviderDeezer, Results: results}
+	p := &discovery.CountingProvider{Provider: discovery.ProviderDeezer, Results: results}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker())
 
-	with, without := svc.RankVariantsForEval(context.Background(), discoverytest.NewQuery(t, "humble"))
+	with, without := svc.RankVariantsForEval(context.Background(), discovery.NewQuery(t, "humble"))
 
 	if p.Calls != 1 {
 		t.Fatalf("provider fan-outs = %d, want exactly 1 (shared by both variants)", p.Calls)
@@ -385,11 +384,11 @@ func TestRankVariantsForEval_WithAndWithoutReshape(t *testing.T) {
 
 func TestInspectSearch_BypassesResultCacheAndTruncates(t *testing.T) {
 	results := []discovery.SearchResult{
-		discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 90),
-		discoverytest.DeezerTrack("Humble Two", "Kendrick Lamar", 80),
+		discovery.DeezerTrack("Humble", "Kendrick Lamar", 90),
+		discovery.DeezerTrack("Humble Two", "Kendrick Lamar", 80),
 	}
-	p := &discoverytest.CountingProvider{Provider: discovery.ProviderDeezer, Results: results}
-	cache := discoverytest.NewFakeResultCache()
+	p := &discovery.CountingProvider{Provider: discovery.ProviderDeezer, Results: results}
+	cache := discovery.NewFakeResultCache()
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithResultCache(cache))
 
 	runSearch(t, svc, "humble")
@@ -432,17 +431,17 @@ func TestWithExploration_NonPositiveRateKeepsTheEarlierRate(t *testing.T) {
 
 func rankedArtists(t *testing.T, providers []discovery.SearchProvider, opts ...discovery.SearchOption) []string {
 	t.Helper()
-	return discoverytest.Subtitles(runSearch(t, discovery.NewSearchService(providers, discovery.NewCircuitBreaker(), opts...), "humble").Results)
+	return discovery.Subtitles(runSearch(t, discovery.NewSearchService(providers, discovery.NewCircuitBreaker(), opts...), "humble").Results)
 }
 
 func TestWithTailDemotion_RanksAnUnidentifiedSoundCloudTrackLast(t *testing.T) {
 	providers := func() []discovery.SearchProvider {
 		return []discovery.SearchProvider{
-			&discoverytest.FakeProvider{Provider: discovery.ProviderSoundCloud, Results: []discovery.SearchResult{
-				discoverytest.WithPop(discoverytest.Track("Humble", "Tail Artist", discovery.ProviderSoundCloud, nil), 90),
+			&discovery.FakeProvider{Provider: discovery.ProviderSoundCloud, Results: []discovery.SearchResult{
+				discovery.WithPop(discovery.Track("Humble", "Tail Artist", discovery.ProviderSoundCloud, nil), 90),
 			}},
-			&discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{
-				discoverytest.DeezerTrack("Humble", "Solid Artist", 10),
+			&discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{
+				discovery.DeezerTrack("Humble", "Solid Artist", 10),
 			}},
 		}
 	}
@@ -455,12 +454,12 @@ func TestWithTailDemotion_RanksAnUnidentifiedSoundCloudTrackLast(t *testing.T) {
 }
 
 func TestWithCrossKindProminence_RanksTheMoreProminentTrackFirst(t *testing.T) {
-	prominent := discoverytest.DeezerTrack("Humble", "Prominent Artist", 10)
+	prominent := discovery.DeezerTrack("Humble", "Prominent Artist", 10)
 	prominent.ProviderRank = 1000
-	popular := discoverytest.DeezerTrack("Humble", "Popular Artist", 90)
+	popular := discovery.DeezerTrack("Humble", "Popular Artist", 90)
 	popular.ProviderRank = 1
 	providers := func() []discovery.SearchProvider {
-		return []discovery.SearchProvider{&discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{popular, prominent}}}
+		return []discovery.SearchProvider{&discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{popular, prominent}}}
 	}
 	if got, want := rankedArtists(t, providers()), []string{"Popular Artist", "Prominent Artist"}; !slices.Equal(got, want) {
 		t.Fatalf("without the option: %v, want %v (the more popular track first)", got, want)
@@ -491,7 +490,7 @@ func (p *driftingProvider) SupportedKinds() map[discovery.ResultKind]bool {
 func artistRun(title, prefix string, n int) []discovery.SearchResult {
 	out := make([]discovery.SearchResult, n)
 	for i := range out {
-		out[i] = discoverytest.DeezerTrack(title, fmt.Sprintf("%s %02d", prefix, i), float64(90-i))
+		out[i] = discovery.DeezerTrack(title, fmt.Sprintf("%s %02d", prefix, i), float64(90-i))
 	}
 	return out
 }
@@ -499,11 +498,11 @@ func artistRun(title, prefix string, n int) []discovery.SearchResult {
 func pagingService(t *testing.T, slates ...[]discovery.SearchResult) (*discovery.SearchService, *driftingProvider) {
 	t.Helper()
 	drifting := &driftingProvider{name: discovery.ProviderDeezer, slates: slates}
-	down := &discoverytest.CountingProvider{Provider: discovery.ProviderITunes, Err: errors.New("upstream down")}
+	down := &discovery.CountingProvider{Provider: discovery.ProviderITunes, Err: errors.New("upstream down")}
 	svc := discovery.NewSearchService(
 		[]discovery.SearchProvider{drifting, down},
 		discovery.NewCircuitBreaker(),
-		discovery.WithResultCache(discoverytest.NewFakeResultCache()),
+		discovery.WithResultCache(discovery.NewFakeResultCache()),
 	)
 	return svc, drifting
 }
@@ -541,13 +540,13 @@ func searchIdOf(t *testing.T, out *discovery.SearchOutput) shared.EntityId {
 func TestService_PagesOfOneSearchComeFromOneRanking(t *testing.T) {
 	svc, _ := pagingService(t, artistRun("Humble", "Alpha", 12), artistRun("Humble", "Bravo", 12))
 	reference, _ := pagingService(t, artistRun("Humble", "Alpha", 12))
-	userId := discoverytest.NewUser()
+	userId := discovery.NewUser()
 
 	first := searchPage(t, svc, userId, "humble", 0, 5, shared.EntityId{})
 	second := searchPage(t, svc, userId, "humble", 5, 5, searchIdOf(t, first))
 
-	paged := append(discoverytest.Subtitles(first.Results), discoverytest.Subtitles(second.Results)...)
-	unpaged := discoverytest.Subtitles(searchPage(t, reference, discoverytest.NewUser(), "humble", 0, 10, shared.EntityId{}).Results)
+	paged := append(discovery.Subtitles(first.Results), discovery.Subtitles(second.Results)...)
+	unpaged := discovery.Subtitles(searchPage(t, reference, discovery.NewUser(), "humble", 0, 10, shared.EntityId{}).Results)
 	if len(paged) != len(unpaged) {
 		t.Fatalf("paged through %d results, want the %d of one ranking: %v", len(paged), len(unpaged), paged)
 	}
@@ -566,7 +565,7 @@ func TestService_PagesOfOneSearchComeFromOneRanking(t *testing.T) {
 
 func TestService_PageAskedForWithoutASearchIdRanksAfresh(t *testing.T) {
 	svc, drifting := pagingService(t, artistRun("Humble", "Alpha", 12), artistRun("Humble", "Bravo", 12))
-	userId := discoverytest.NewUser()
+	userId := discovery.NewUser()
 
 	first := searchPage(t, svc, userId, "humble", 0, 5, shared.EntityId{})
 	second := searchPage(t, svc, userId, "humble", 5, 5, shared.EntityId{})
@@ -575,7 +574,7 @@ func TestService_PageAskedForWithoutASearchIdRanksAfresh(t *testing.T) {
 		t.Errorf("provider calls = %d, want 2: a page naming no search fans out as before", drifting.calls)
 	}
 	if len(second.Results) != 5 {
-		t.Fatalf("page two served %d results, want 5: %v", len(second.Results), discoverytest.Subtitles(second.Results))
+		t.Fatalf("page two served %d results, want 5: %v", len(second.Results), discovery.Subtitles(second.Results))
 	}
 	if second.SearchId == first.SearchId {
 		t.Error("a page cut from a fresh ranking must report a new search id")
@@ -584,7 +583,7 @@ func TestService_PageAskedForWithoutASearchIdRanksAfresh(t *testing.T) {
 
 func TestService_SearchIdReplayedAgainstAnotherQueryServesThatQuery(t *testing.T) {
 	svc, _ := pagingService(t, artistRun("Humble", "Alpha", 12), artistRun("Loyalty", "Bravo", 12))
-	userId := discoverytest.NewUser()
+	userId := discovery.NewUser()
 
 	humble := searchPage(t, svc, userId, "humble", 0, 5, shared.EntityId{})
 	loyalty := searchPage(t, svc, userId, "loyalty", 0, 5, searchIdOf(t, humble))
@@ -592,10 +591,10 @@ func TestService_SearchIdReplayedAgainstAnotherQueryServesThatQuery(t *testing.T
 	if len(loyalty.Results) == 0 {
 		t.Fatal("the borrowed id served nothing, so this proves nothing about which slate it read")
 	}
-	for _, artist := range discoverytest.Subtitles(loyalty.Results) {
+	for _, artist := range discovery.Subtitles(loyalty.Results) {
 		if !strings.HasPrefix(artist, "Bravo") {
 			t.Fatalf("a search id replayed against another query served %v, want that query's own fan-out",
-				discoverytest.Subtitles(loyalty.Results))
+				discovery.Subtitles(loyalty.Results))
 		}
 	}
 	if loyalty.SearchId == humble.SearchId {
@@ -610,8 +609,8 @@ func TestService_Execute_DoesNotLogQueryText(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
 	const raw = "zqxj private diagnosis clinic"
-	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{
-		discoverytest.Track("Clinic", "Someone", discovery.ProviderDeezer, nil),
+	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{
+		discovery.Track("Clinic", "Someone", discovery.ProviderDeezer, nil),
 	}}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker())
 	runSearch(t, svc, raw)
@@ -628,14 +627,14 @@ func TestService_Execute_DoesNotLogQueryText(t *testing.T) {
 }
 
 func TestExecute_SystemIdentityDoesNotTouchFavoritesOrTelemetry(t *testing.T) {
-	favorites := []discovery.Favorite{discoverytest.FavoriteOf(discovery.ResultKindArtist, "Kendrick Lamar", "")}
+	favorites := []discovery.Favorite{discovery.FavoriteOf(discovery.ResultKindArtist, "Kendrick Lamar", "")}
 	results := []discovery.SearchResult{
-		discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80),
-		discoverytest.DeezerTrack("Humble Beginnings", "Kendrick Lamar", 70),
+		discovery.DeezerTrack("Humble", "Kendrick Lamar", 80),
+		discovery.DeezerTrack("Humble Beginnings", "Kendrick Lamar", 70),
 	}
 
 	t.Run("real identity is personalized and recorded (control)", func(t *testing.T) {
-		store, favs, history := runExecuteAs(t, discoverytest.NewUser(), favorites, results, true)
+		store, favs, history := runExecuteAs(t, discovery.NewUser(), favorites, results, true)
 		if len(store.Snapshot()) == 0 {
 			t.Error("real identity should persist an InteractionEvent")
 		}
@@ -667,18 +666,18 @@ func runExecuteAs(
 	favorites []discovery.Favorite,
 	results []discovery.SearchResult,
 	saveHistory bool,
-) (*discoverytest.FakeEventStore, *discoverytest.FakeFavoritesRepo, []*discovery.SearchHistoryEntry) {
+) (*discovery.FakeEventStore, *discovery.FakeFavoritesRepo, []*discovery.SearchHistoryEntry) {
 	t.Helper()
-	store := &discoverytest.FakeEventStore{}
-	favs := &discoverytest.FakeFavoritesRepo{Favorites: favorites}
+	store := &discovery.FakeEventStore{}
+	favs := &discovery.FakeFavoritesRepo{Favorites: favorites}
 	var recorded []*discovery.SearchHistoryEntry
-	history := &discoverytest.FakeHistoryWriter{
+	history := &discovery.FakeHistoryWriter{
 		InsertFn: func(_ context.Context, entry *discovery.SearchHistoryEntry) error {
 			recorded = append(recorded, entry)
 			return nil
 		},
 	}
-	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: results}
+	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: results}
 	svc := discovery.NewSearchService(
 		[]discovery.SearchProvider{p},
 		discovery.NewCircuitBreaker(),
@@ -686,7 +685,7 @@ func runExecuteAs(
 		discovery.WithFavorites(favs),
 		discovery.WithHistoryRepository(history),
 	)
-	if _, err := svc.Execute(context.Background(), user, discoverytest.NewQuery(t, "humble"), saveHistory); err != nil {
+	if _, err := svc.Execute(context.Background(), user, discovery.NewQuery(t, "humble"), saveHistory); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	svc.WaitForBackground()
@@ -708,14 +707,14 @@ func TestMaybeExplore_DisabledIsInert(t *testing.T) {
 func TestIngestVocabulary_UsesOrganicOrderNotExploredShuffle(t *testing.T) {
 	results := make([]discovery.SearchResult, 0, 20)
 	for i := 0; i < 20; i++ {
-		results = append(results, discoverytest.DeezerTrack("Humble Take "+string(rune('A'+i)), "Artist "+string(rune('A'+i)), float64(100-i)))
+		results = append(results, discovery.DeezerTrack("Humble Take "+string(rune('A'+i)), "Artist "+string(rune('A'+i)), float64(100-i)))
 	}
-	newSvc := func(store *discoverytest.FakeVocabularyStore, opts ...discovery.SearchOption) *discovery.SearchService {
-		p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: results}
+	newSvc := func(store *discovery.FakeVocabularyStore, opts ...discovery.SearchOption) *discovery.SearchService {
+		p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: results}
 		opts = append([]discovery.SearchOption{discovery.WithVocabularyStore(store)}, opts...)
 		return discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), opts...)
 	}
-	capture := func(store *discoverytest.FakeVocabularyStore) *[]string {
+	capture := func(store *discovery.FakeVocabularyStore) *[]string {
 		var mu sync.Mutex
 		terms := &[]string{}
 		store.AddFn = func(e discovery.VocabularyEntry) error {
@@ -728,7 +727,7 @@ func TestIngestVocabulary_UsesOrganicOrderNotExploredShuffle(t *testing.T) {
 	}
 
 	for run := 0; run < 5; run++ {
-		organicStore, exploredStore := &discoverytest.FakeVocabularyStore{}, &discoverytest.FakeVocabularyStore{}
+		organicStore, exploredStore := &discovery.FakeVocabularyStore{}, &discovery.FakeVocabularyStore{}
 		organicTerms := capture(organicStore)
 		exploredTerms := capture(exploredStore)
 
@@ -778,15 +777,15 @@ func TestMaybeExplore_AlwaysExploresClonesAndKeepsMembers(t *testing.T) {
 	}
 }
 
-func expiringSlateService(t *testing.T, slates ...[]discovery.SearchResult) (*discovery.SearchService, *driftingProvider, *discoverytest.FakeResultCache) {
+func expiringSlateService(t *testing.T, slates ...[]discovery.SearchResult) (*discovery.SearchService, *driftingProvider, *discovery.FakeResultCache) {
 	t.Helper()
 	drifting := &driftingProvider{name: discovery.ProviderDeezer, slates: slates}
-	down := &discoverytest.CountingProvider{Provider: discovery.ProviderITunes, Err: errors.New("upstream down")}
-	heldCache := discoverytest.NewFakeResultCache()
+	down := &discovery.CountingProvider{Provider: discovery.ProviderITunes, Err: errors.New("upstream down")}
+	heldCache := discovery.NewFakeResultCache()
 	svc := discovery.NewSearchService(
 		[]discovery.SearchProvider{drifting, down},
 		discovery.NewCircuitBreaker(),
-		discovery.WithResultCache(discoverytest.NewFakeResultCache()),
+		discovery.WithResultCache(discovery.NewFakeResultCache()),
 		discovery.WithHeldSlateCache(heldCache),
 	)
 	return svc, drifting, heldCache
@@ -798,7 +797,7 @@ func TestService_PagingSurvivesAHeldSlateExpiring(t *testing.T) {
 		artistRun("Humble", "Alpha", 12),
 		artistRun("Humble", "Bravo", 12),
 	)
-	userId := discoverytest.NewUser()
+	userId := discovery.NewUser()
 
 	first := searchPage(t, svc, userId, "humble", 0, 5, shared.EntityId{})
 	if drifting.calls != 1 {
@@ -825,7 +824,7 @@ func TestService_PagingSurvivesAHeldSlateExpiring(t *testing.T) {
 			"produced must be held for page three too, not re-fanned-out", drifting.calls)
 	}
 
-	all := append(discoverytest.Subtitles(second.Results), discoverytest.Subtitles(third.Results)...)
+	all := append(discovery.Subtitles(second.Results), discovery.Subtitles(third.Results)...)
 	seen := map[string]bool{}
 	for _, artist := range all {
 		if seen[artist] {
@@ -836,9 +835,9 @@ func TestService_PagingSurvivesAHeldSlateExpiring(t *testing.T) {
 }
 
 func TestService_SearchEmitsActivityWithoutQueryText(t *testing.T) {
-	store := &discoverytest.FakeEventStore{}
-	feed := &discoverytest.RecordingActivityFeed{}
-	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Alright", "Kendrick Lamar", 80)}}
+	store := &discovery.FakeEventStore{}
+	feed := &discovery.RecordingActivityFeed{}
+	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Alright", "Kendrick Lamar", 80)}}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithEventStore(store), discovery.WithSearchActivityFeed(feed))
 
 	runSearch(t, svc, "alright")
@@ -850,9 +849,9 @@ func TestService_SearchEmitsActivityWithoutQueryText(t *testing.T) {
 }
 
 func TestService_ExecutePageReportsWhetherTheSlateCameFromCache(t *testing.T) {
-	p := &discoverytest.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithResultCache(discoverytest.NewFakeResultCache()))
-	userId := discoverytest.NewUser()
+	p := &discovery.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithResultCache(discovery.NewFakeResultCache()))
+	userId := discovery.NewUser()
 
 	fresh := searchPage(t, svc, userId, "humble", 0, 5, shared.EntityId{})
 	if fresh.Cached {
@@ -866,7 +865,7 @@ func TestService_ExecutePageReportsWhetherTheSlateCameFromCache(t *testing.T) {
 
 func TestService_ExecutePageReportsCachedForAHeldSlate(t *testing.T) {
 	svc, _, _ := expiringSlateService(t, artistRun("Humble", "Alpha", 12))
-	userId := discoverytest.NewUser()
+	userId := discovery.NewUser()
 
 	first := searchPage(t, svc, userId, "humble", 0, 5, shared.EntityId{})
 	if first.Cached {
@@ -879,7 +878,7 @@ func TestService_ExecutePageReportsCachedForAHeldSlate(t *testing.T) {
 }
 
 type gatedProvider struct {
-	discoverytest.FakeProvider
+	discovery.FakeProvider
 	calls   atomic.Int32
 	release chan struct{}
 }
@@ -896,7 +895,7 @@ func (p *gatedProvider) Search(ctx context.Context, q string, k map[discovery.Re
 
 func newCollapseService(release chan struct{}) (*discovery.SearchService, *gatedProvider) {
 	p := &gatedProvider{
-		FakeProvider: discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}},
+		FakeProvider: discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}},
 		release:      release,
 	}
 	return discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker()), p
@@ -912,7 +911,7 @@ func TestService_Search_ColdStampedeSharesOneFanOut(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			out, err := svc.Execute(context.Background(), discoverytest.NewUser(), discoverytest.NewQuery(t, "humble"), false)
+			out, err := svc.Execute(context.Background(), discovery.NewUser(), discovery.NewQuery(t, "humble"), false)
 			if err != nil {
 				t.Errorf("Execute: %v", err)
 				return
@@ -940,13 +939,13 @@ func TestService_Search_CancelledCallerDoesNotFailSharedFanOut(t *testing.T) {
 	cancelCtx, cancel := context.WithCancel(context.Background())
 	done := make(chan *discovery.SearchOutput, 1)
 	go func() {
-		out, _ := svc.Execute(cancelCtx, discoverytest.NewUser(), discoverytest.NewQuery(t, "humble"), false)
+		out, _ := svc.Execute(cancelCtx, discovery.NewUser(), discovery.NewQuery(t, "humble"), false)
 		done <- out
 	}()
 	time.Sleep(50 * time.Millisecond)
 	survivor := make(chan *discovery.SearchOutput, 1)
 	go func() {
-		out, _ := svc.Execute(context.Background(), discoverytest.NewUser(), discoverytest.NewQuery(t, "humble"), false)
+		out, _ := svc.Execute(context.Background(), discovery.NewUser(), discovery.NewQuery(t, "humble"), false)
 		survivor <- out
 	}()
 	time.Sleep(50 * time.Millisecond)
@@ -967,12 +966,12 @@ func (panickingBridge) ExternalIDs(context.Context, discovery.ResultKind, string
 }
 
 func TestService_PanicBelowResolveColdDegradesToPartial(t *testing.T) {
-	p := &discoverytest.FakeProvider{
+	p := &discovery.FakeProvider{
 		Provider: discovery.ProviderDeezer,
-		Results:  []discovery.SearchResult{discoverytest.WithMBID(discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80), "mbid-1")},
+		Results:  []discovery.SearchResult{discovery.WithMBID(discovery.DeezerTrack("Humble", "Kendrick Lamar", 80), "mbid-1")},
 		Delay:    150 * time.Millisecond,
 	}
-	cache := discoverytest.NewFakeResultCache()
+	cache := discovery.NewFakeResultCache()
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(),
 		discovery.WithIdentityBridge(panickingBridge{}), discovery.WithResultCache(cache))
 
@@ -984,7 +983,7 @@ func TestService_PanicBelowResolveColdDegradesToPartial(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			outs[i], errs[i] = svc.Execute(context.Background(), discoverytest.NewUser(), discoverytest.NewQuery(t, "humble"), false)
+			outs[i], errs[i] = svc.Execute(context.Background(), discovery.NewUser(), discovery.NewQuery(t, "humble"), false)
 		}()
 	}
 	wg.Wait()
@@ -1006,21 +1005,21 @@ func TestService_PagesTileOneRankingWithoutGapsOrRepeats(t *testing.T) {
 	const total, limit = 23, 5
 	svc, _ := pagingService(t, artistRun("Humble", "Alpha", total))
 	reference, _ := pagingService(t, artistRun("Humble", "Alpha", total))
-	unpaged := discoverytest.Subtitles(searchPage(t, reference, discoverytest.NewUser(), "humble", 0, 50, shared.EntityId{}).Results)
+	unpaged := discovery.Subtitles(searchPage(t, reference, discovery.NewUser(), "humble", 0, 50, shared.EntityId{}).Results)
 	if len(unpaged) != total {
 		t.Fatalf("one ranking holds %d results, want %d", len(unpaged), total)
 	}
-	userId := discoverytest.NewUser()
+	userId := discovery.NewUser()
 	first := searchPage(t, svc, userId, "humble", 0, limit, shared.EntityId{})
 	id := searchIdOf(t, first)
 
-	paged := discoverytest.Subtitles(first.Results)
+	paged := discovery.Subtitles(first.Results)
 	for offset := limit; offset <= total+limit; offset += limit {
 		page := searchPage(t, svc, userId, "humble", offset, limit, id)
 		if want := max(0, min(limit, total-offset)); len(page.Results) != want {
 			t.Fatalf("page at offset %d served %d results, want %d: a short last page, then nothing", offset, len(page.Results), want)
 		}
-		paged = append(paged, discoverytest.Subtitles(page.Results)...)
+		paged = append(paged, discovery.Subtitles(page.Results)...)
 	}
 
 	if !slices.Equal(paged, unpaged) {
@@ -1029,14 +1028,14 @@ func TestService_PagesTileOneRankingWithoutGapsOrRepeats(t *testing.T) {
 }
 
 type stopObservingProvider struct {
-	discoverytest.FakeProvider
+	discovery.FakeProvider
 	started chan struct{}
 	stopped chan struct{}
 }
 
 func newStopObservingProvider() *stopObservingProvider {
 	return &stopObservingProvider{
-		FakeProvider: discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}},
+		FakeProvider: discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}},
 		started:      make(chan struct{}, 8),
 		stopped:      make(chan struct{}, 8),
 	}
@@ -1064,7 +1063,7 @@ func TestService_Search_LastCallerCancelStopsProviderCalls(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		_, _ = svc.Execute(ctx, discoverytest.NewUser(), discoverytest.NewQuery(t, "humble"), false)
+		_, _ = svc.Execute(ctx, discovery.NewUser(), discovery.NewQuery(t, "humble"), false)
 		close(done)
 	}()
 	waitFor(t, p.started, "the provider call to start")
@@ -1081,7 +1080,7 @@ func TestService_Search_CallerAfterAbandonedSearchGetsAFreshAnswer(t *testing.T)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		_, _ = svc.Execute(ctx, discoverytest.NewUser(), discoverytest.NewQuery(t, "humble"), false)
+		_, _ = svc.Execute(ctx, discovery.NewUser(), discovery.NewQuery(t, "humble"), false)
 		close(done)
 	}()
 	time.Sleep(50 * time.Millisecond)
@@ -1089,7 +1088,7 @@ func TestService_Search_CallerAfterAbandonedSearchGetsAFreshAnswer(t *testing.T)
 	waitFor(t, done, "the cancelled caller to return")
 
 	close(release)
-	out, err := svc.Execute(context.Background(), discoverytest.NewUser(), discoverytest.NewQuery(t, "humble"), false)
+	out, err := svc.Execute(context.Background(), discovery.NewUser(), discovery.NewQuery(t, "humble"), false)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -1102,14 +1101,14 @@ func TestService_Search_CallerAfterAbandonedSearchGetsAFreshAnswer(t *testing.T)
 }
 
 func TestService_Search_LogsHowLongEachStageTook(t *testing.T) {
-	buf := discoverytest.CaptureLogs(t)
-	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}, Delay: 30 * time.Millisecond}
+	buf := discovery.CaptureLogs(t)
+	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}, Delay: 30 * time.Millisecond}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker())
 
 	runSearch(t, svc, "humble")
 
 	var complete map[string]any
-	if err := json.Unmarshal([]byte(discoverytest.LoggedEvent(t, buf, "search.v2.complete")), &complete); err != nil {
+	if err := json.Unmarshal([]byte(discovery.LoggedEvent(t, buf, "search.v2.complete")), &complete); err != nil {
 		t.Fatal(err)
 	}
 	for _, stage := range []string{"fanout_ms", "identity_ms", "rank_ms", "artwork_ms", "favorites_ms", "related_ms", "total_ms"} {
@@ -1126,10 +1125,10 @@ func TestService_Search_LogsHowLongEachStageTook(t *testing.T) {
 }
 
 func TestService_SkipsEnrichWhenArtworkPresent(t *testing.T) {
-	resolver := &discoverytest.ArtworkResolver{URL: "https://art/new.jpg"}
-	withArt := discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)
+	resolver := &discovery.FakeArtworkResolver{URL: "https://art/new.jpg"}
+	withArt := discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)
 	withArt.ImageURL = "https://existing/art.jpg"
-	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{withArt}}
+	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{withArt}}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithArtworkResolver(resolver))
 
 	out := runSearch(t, svc, "humble")
@@ -1145,12 +1144,12 @@ func TestService_SkipsEnrichWhenArtworkPresent(t *testing.T) {
 func TestService_MBIDIndexAttachesMBIDForArtwork(t *testing.T) {
 	resolver := &capturingArtworkResolver{url: "https://caa/hd.jpg"}
 	idx := &fakeMBIDIndex{mbid: "warm-mbid"}
-	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := discovery.NewSearchService(
 		[]discovery.SearchProvider{p},
 		discovery.NewCircuitBreaker(),
 		discovery.WithArtworkResolver(resolver),
-		discovery.WithArtworkCache(&discoverytest.FakeArtworkCache{Store: map[string]string{}}),
+		discovery.WithArtworkCache(&discovery.FakeArtworkCache{Store: map[string]string{}}),
 		discovery.WithMBIDIndex(idx),
 	)
 
@@ -1171,13 +1170,13 @@ func TestService_MBIDIndexAttachesMBIDForArtwork(t *testing.T) {
 
 func TestService_IdentityStoreResolvesArtworkWhenMBAbsent(t *testing.T) {
 	resolver := &capturingArtworkResolver{url: "https://caa/right-face.jpg"}
-	store := &discoverytest.FakeIdentityStore{Mbid: "durable-mbid", Xref: map[discovery.ProviderKey]string{"discogs": "123"}}
-	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	store := &discovery.FakeIdentityStore{Mbid: "durable-mbid", Xref: map[discovery.ProviderKey]string{"discogs": "123"}}
+	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := discovery.NewSearchService(
 		[]discovery.SearchProvider{p},
 		discovery.NewCircuitBreaker(),
 		discovery.WithArtworkResolver(resolver),
-		discovery.WithArtworkCache(&discoverytest.FakeArtworkCache{Store: map[string]string{}}),
+		discovery.WithArtworkCache(&discovery.FakeArtworkCache{Store: map[string]string{}}),
 		discovery.WithIdentityStore(store),
 	)
 
@@ -1197,9 +1196,9 @@ func TestService_IdentityStoreResolvesArtworkWhenMBAbsent(t *testing.T) {
 
 func TestService_BackgroundArtworkUsesTheDurableIdentity(t *testing.T) {
 	resolver := &fakeIdentityAwareResolver{url: "https://caa/right.jpg"}
-	cache := &discoverytest.FakeArtworkCache{Store: map[string]string{}}
-	store := &discoverytest.FakeIdentityStore{Mbid: "durable-mbid", Xref: map[discovery.ProviderKey]string{"discogs": "123"}}
-	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	cache := &discovery.FakeArtworkCache{Store: map[string]string{}}
+	store := &discovery.FakeIdentityStore{Mbid: "durable-mbid", Xref: map[discovery.ProviderKey]string{"discogs": "123"}}
+	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := discovery.NewSearchService(
 		[]discovery.SearchProvider{p},
 		discovery.NewCircuitBreaker(),
@@ -1217,9 +1216,9 @@ func TestService_BackgroundArtworkUsesTheDurableIdentity(t *testing.T) {
 }
 
 func TestService_ArtworkCacheShortCircuits(t *testing.T) {
-	resolver := &discoverytest.ArtworkResolver{URL: "https://art/resolved.jpg"}
-	cache := &discoverytest.FakeArtworkCache{Store: map[string]string{"Humble": "https://art/cached.jpg"}}
-	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	resolver := &discovery.FakeArtworkResolver{URL: "https://art/resolved.jpg"}
+	cache := &discovery.FakeArtworkCache{Store: map[string]string{"Humble": "https://art/cached.jpg"}}
+	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := discovery.NewSearchService(
 		[]discovery.SearchProvider{p},
 		discovery.NewCircuitBreaker(),
@@ -1238,7 +1237,7 @@ func TestService_ArtworkCacheShortCircuits(t *testing.T) {
 }
 
 func TestFillArtwork_PanickingResolverIsContained(t *testing.T) {
-	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithArtworkResolver(&panickingArtworkResolver{}))
 
 	out := runSearch(t, svc, "humble")
@@ -1250,8 +1249,8 @@ func TestFillArtwork_PanickingResolverIsContained(t *testing.T) {
 
 func TestService_MissingArtworkIsFetchedAfterTheAnswer(t *testing.T) {
 	resolver := &gatedArtworkResolver{url: "https://caa/cover.jpg", release: make(chan struct{})}
-	cache := &discoverytest.FakeArtworkCache{Store: map[string]string{}}
-	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	cache := &discovery.FakeArtworkCache{Store: map[string]string{}}
+	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithArtworkResolver(resolver), discovery.WithArtworkCache(cache))
 
 	first := runSearch(t, svc, "humble")
@@ -1273,8 +1272,8 @@ func TestService_MissingArtworkIsFetchedAfterTheAnswer(t *testing.T) {
 }
 
 func TestService_WithoutAnArtworkCacheNoLiveLookupRuns(t *testing.T) {
-	resolver := &discoverytest.ArtworkResolver{URL: "https://art/cover.jpg"}
-	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	resolver := &discovery.FakeArtworkResolver{URL: "https://art/cover.jpg"}
+	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithArtworkResolver(resolver))
 
 	runSearch(t, svc, "humble")
@@ -1334,7 +1333,7 @@ func (r *fakeIdentityAwareResolver) ResolveWithIdentityTagged(_ context.Context,
 	return "", "", nil
 }
 
-type panickingArtworkResolver struct{ discoverytest.ArtworkResolver }
+type panickingArtworkResolver struct{ discovery.FakeArtworkResolver }
 
 func (panickingArtworkResolver) ResolveTagged(context.Context, discovery.ResultKind, string, string, string) (string, discovery.ProviderKey, error) {
 	panic("artwork resolver exploded")
@@ -1360,7 +1359,7 @@ func (r *gatedArtworkResolver) ResolveWithIdentityTagged(_ context.Context, _ di
 
 func tripViaSearch(t *testing.T, cb *discovery.CircuitBreaker, provider discovery.ProviderName) {
 	t.Helper()
-	svc := discovery.NewSearchService([]discovery.SearchProvider{&discoverytest.FakeProvider{Provider: provider, Err: discoverytest.UpstreamDown}}, cb)
+	svc := discovery.NewSearchService([]discovery.SearchProvider{&discovery.FakeProvider{Provider: provider, Err: discovery.UpstreamDown}}, cb)
 	for range breakerTripsAfter {
 		inspect(t, svc, context.Background())
 	}
@@ -1370,7 +1369,7 @@ func tripViaSearch(t *testing.T, cb *discovery.CircuitBreaker, provider discover
 }
 
 func breakerTrack(provider discovery.ProviderName, id string) discovery.SearchResult {
-	return discoverytest.TrackFrom(provider, id, "Humble", "Kendrick Lamar")
+	return discovery.TrackFrom(provider, id, "Humble", "Kendrick Lamar")
 }
 
 func TestContentBreaker_SearchTrippedProviderShortCircuitsContent(t *testing.T) {
@@ -1383,7 +1382,7 @@ func TestContentBreaker_SearchTrippedProviderShortCircuitsContent(t *testing.T) 
 			name:     "top tracks",
 			provider: discovery.ProviderDeezer,
 			run: func(cb *discovery.CircuitBreaker, calls *atomic.Int32) (*discovery.ContentFetchResponse, error) {
-				p := &discoverytest.ArtistContentProvider{GetTopTracksFn: func(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
+				p := &discovery.FakeArtistContentProvider{GetTopTracksFn: func(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
 					calls.Add(1)
 					return []discovery.SearchResult{breakerTrack(discovery.ProviderDeezer, "1")}, nil
 				}}
@@ -1396,9 +1395,9 @@ func TestContentBreaker_SearchTrippedProviderShortCircuitsContent(t *testing.T) 
 			name:     "albums",
 			provider: discovery.ProviderDeezer,
 			run: func(cb *discovery.CircuitBreaker, calls *atomic.Int32) (*discovery.ContentFetchResponse, error) {
-				p := &discoverytest.ArtistContentProvider{GetAlbumsFn: func(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
+				p := &discovery.FakeArtistContentProvider{GetAlbumsFn: func(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
 					calls.Add(1)
-					return []discovery.SearchResult{discoverytest.V2Album(discovery.ProviderDeezer, "a", "DAMN.")}, nil
+					return []discovery.SearchResult{discovery.V2Album(discovery.ProviderDeezer, "a", "DAMN.")}, nil
 				}}
 				svc := discovery.NewGetArtistContentService(map[discovery.ProviderName]discovery.ArtistContentProvider{discovery.ProviderDeezer: p},
 					discovery.WithContentCircuitBreaker(cb))
@@ -1409,12 +1408,12 @@ func TestContentBreaker_SearchTrippedProviderShortCircuitsContent(t *testing.T) 
 			name:     "identity fan-out (v2) albums",
 			provider: discovery.ProviderDeezer,
 			run: func(cb *discovery.CircuitBreaker, calls *atomic.Int32) (*discovery.ContentFetchResponse, error) {
-				p := &discoverytest.ArtistContentProvider{GetAlbumsFn: func(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
+				p := &discovery.FakeArtistContentProvider{GetAlbumsFn: func(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
 					calls.Add(1)
-					return []discovery.SearchResult{discoverytest.V2Album(discovery.ProviderDeezer, "a", "DAMN.")}, nil
+					return []discovery.SearchResult{discovery.V2Album(discovery.ProviderDeezer, "a", "DAMN.")}, nil
 				}}
 				svc := discovery.NewGetArtistContentService(map[discovery.ProviderName]discovery.ArtistContentProvider{discovery.ProviderDeezer: p},
-					discovery.WithContentIdentityStore(&discoverytest.FakeIdentityStore{}), discovery.WithContentCircuitBreaker(cb))
+					discovery.WithContentIdentityStore(&discovery.FakeIdentityStore{}), discovery.WithContentCircuitBreaker(cb))
 				return svc.GetAlbums(context.Background(), discovery.ProviderDeezer, "42", nil, 10)
 			},
 		},
@@ -1422,11 +1421,11 @@ func TestContentBreaker_SearchTrippedProviderShortCircuitsContent(t *testing.T) 
 			name:     "album tracks with deezer search fallback",
 			provider: discovery.ProviderDeezer,
 			run: func(cb *discovery.CircuitBreaker, calls *atomic.Int32) (*discovery.ContentFetchResponse, error) {
-				p := &discoverytest.AlbumContentProvider{GetAlbumTracksFn: func(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
+				p := &discovery.FakeAlbumContentProvider{GetAlbumTracksFn: func(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
 					calls.Add(1)
 					return []discovery.SearchResult{breakerTrack(discovery.ProviderDeezer, "1")}, nil
 				}}
-				searcher := &discoverytest.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discoverytest.AlbumSearchResult("Kendrick Lamar", "9")}}
+				searcher := &discovery.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.AlbumSearchResult("Kendrick Lamar", "9")}}
 				svc := discovery.NewGetAlbumTracksService(map[discovery.ProviderName]discovery.AlbumContentProvider{discovery.ProviderDeezer: p},
 					discovery.WithAlbumFallbackSearcher(searcher), discovery.WithAlbumCircuitBreaker(cb))
 				resp, err := svc.ExecuteRequest(context.Background(), discovery.AlbumTracksRequest{
@@ -1471,7 +1470,7 @@ func TestContentBreaker_SingleProviderOpenCircuitReportsCircuitOpen(t *testing.T
 	cb := discovery.NewCircuitBreaker()
 	tripViaSearch(t, cb, discovery.ProviderDeezer)
 	svc := discovery.NewGetArtistContentService(map[discovery.ProviderName]discovery.ArtistContentProvider{
-		discovery.ProviderDeezer: &discoverytest.ArtistContentProvider{},
+		discovery.ProviderDeezer: &discovery.FakeArtistContentProvider{},
 	}, discovery.WithContentCircuitBreaker(cb))
 
 	resp, err := svc.GetTopTracks(context.Background(), discovery.ProviderDeezer, "42", nil, 10)
@@ -1486,9 +1485,9 @@ func TestContentBreaker_SingleProviderOpenCircuitReportsCircuitOpen(t *testing.T
 func TestContentBreaker_ContentFailuresTripSearch(t *testing.T) {
 	cb := discovery.NewCircuitBreaker()
 	var contentCalls atomic.Int32
-	p := &discoverytest.ArtistContentProvider{GetTopTracksFn: func(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
+	p := &discovery.FakeArtistContentProvider{GetTopTracksFn: func(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
 		contentCalls.Add(1)
-		return nil, discoverytest.UpstreamDown
+		return nil, discovery.UpstreamDown
 	}}
 	content := discovery.NewGetArtistContentService(map[discovery.ProviderName]discovery.ArtistContentProvider{discovery.ProviderDeezer: p},
 		discovery.WithContentCircuitBreaker(cb))
@@ -1501,7 +1500,7 @@ func TestContentBreaker_ContentFailuresTripSearch(t *testing.T) {
 		t.Errorf("content calls = %d, want %d (calls after the circuit opened are skipped)", n, breakerTripsAfter)
 	}
 
-	searcher := &discoverytest.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{breakerTrack(discovery.ProviderDeezer, "1")}}
+	searcher := &discovery.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{breakerTrack(discovery.ProviderDeezer, "1")}}
 	_, statuses := inspect(t, discovery.NewSearchService([]discovery.SearchProvider{searcher}, cb), context.Background())
 	if searcher.Calls != 0 || statuses[0].Status != discovery.ProviderStatusCircuitOpen {
 		t.Errorf("search calls = %d status = %v, want 0 calls and circuit_open after content failures",
@@ -1515,18 +1514,18 @@ func TestContentBreaker_OnlyHealthFailuresCount(t *testing.T) {
 		err      error
 		wantOpen bool
 	}{
-		{"transport error", discoverytest.UpstreamDown, true},
+		{"transport error", discovery.UpstreamDown, true},
 		{"provider timeout", fmt.Errorf("fetch: %w", context.DeadlineExceeded), true},
-		{"5xx", fmt.Errorf("musicbrainz status 503: %w", discoverytest.StatusErr(503)), true},
-		{"429", discoverytest.StatusErr(429), true},
-		{"404 for an unknown id", discoverytest.StatusErr(404), false},
+		{"5xx", fmt.Errorf("musicbrainz status 503: %w", discovery.StatusErr(503)), true},
+		{"429", discovery.StatusErr(429), true},
+		{"404 for an unknown id", discovery.StatusErr(404), false},
 		{"provider data error for a bogus id", errors.New("deezer api error 800 (DataException): no data"), false},
 		{"canceled", context.Canceled, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cb := discovery.NewCircuitBreaker()
-			p := &discoverytest.FakeRelatedProvider{Err: tc.err}
+			p := &discovery.FakeRelatedProvider{Err: tc.err}
 			svc := discovery.NewGetRelatedTracksService(map[string]discovery.RelatedTracksProvider{"soundcloud": p},
 				discovery.WithRelatedCircuitBreaker(cb))
 			for range breakerTripsAfter * 2 {
@@ -1548,9 +1547,9 @@ func TestContentBreaker_HalfOpenProbeOutcomes(t *testing.T) {
 		wantState discovery.CircuitState
 	}{
 		{name: "success closes", wantState: discovery.CircuitClosed},
-		{name: "failure reopens", err: discoverytest.UpstreamDown, wantState: discovery.CircuitOpen},
-		{name: "caller cancel releases", cancel: true, err: discoverytest.UpstreamDown, wantState: discovery.CircuitHalfOpen},
-		{name: "request-scoped error releases", err: discoverytest.StatusErr(404), wantState: discovery.CircuitHalfOpen},
+		{name: "failure reopens", err: discovery.UpstreamDown, wantState: discovery.CircuitOpen},
+		{name: "caller cancel releases", cancel: true, err: discovery.UpstreamDown, wantState: discovery.CircuitHalfOpen},
+		{name: "request-scoped error releases", err: discovery.StatusErr(404), wantState: discovery.CircuitHalfOpen},
 		{name: "panic reopens", panics: true, wantState: discovery.CircuitOpen},
 	}
 	for _, tc := range cases {
@@ -1559,17 +1558,17 @@ func TestContentBreaker_HalfOpenProbeOutcomes(t *testing.T) {
 			tripToHalfOpenWindow(t, cb, discovery.ProviderDeezer)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			p := &discoverytest.ArtistContentProvider{GetAlbumsFn: func(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
+			p := &discovery.FakeArtistContentProvider{GetAlbumsFn: func(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
 				if tc.cancel {
 					cancel()
 				}
 				if tc.panics {
 					panic("boom")
 				}
-				return []discovery.SearchResult{discoverytest.V2Album(discovery.ProviderDeezer, "a", "DAMN.")}, tc.err
+				return []discovery.SearchResult{discovery.V2Album(discovery.ProviderDeezer, "a", "DAMN.")}, tc.err
 			}}
 			svc := discovery.NewGetArtistContentService(map[discovery.ProviderName]discovery.ArtistContentProvider{discovery.ProviderDeezer: p},
-				discovery.WithContentIdentityStore(&discoverytest.FakeIdentityStore{}), discovery.WithContentCircuitBreaker(cb))
+				discovery.WithContentIdentityStore(&discovery.FakeIdentityStore{}), discovery.WithContentCircuitBreaker(cb))
 
 			_, _ = svc.GetAlbums(ctx, discovery.ProviderDeezer, "42", nil, 10)
 
@@ -1593,7 +1592,7 @@ func (p *countingRelatedProvider) GetRelatedTracks(context.Context, discovery.Pr
 	return []discovery.SearchResult{breakerTrack(discovery.ProviderSoundCloud, "1")}, nil
 }
 
-type persistentAuthErr struct{ discoverytest.StatusErr }
+type persistentAuthErr struct{ discovery.StatusErr }
 
 func (persistentAuthErr) PersistentAuthFailure() bool { return true }
 
@@ -1609,13 +1608,13 @@ func TestContentBreaker_PersistentAuthAndBadPayloadTripBreaker(t *testing.T) {
 	}{
 		{"persistent auth failure", fmt.Errorf("top tracks: %w", persistentAuthErr{401}), true},
 		{"bad payload on a 200", badPayloadErr{errors.New("invalid character '<'")}, true},
-		{"bare 401", discoverytest.StatusErr(401), false},
-		{"bare 403", discoverytest.StatusErr(403), false},
+		{"bare 401", discovery.StatusErr(401), false},
+		{"bare 403", discovery.StatusErr(403), false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cb := discovery.NewCircuitBreaker()
-			p := &discoverytest.ArtistContentProvider{GetTopTracksFn: func(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
+			p := &discovery.FakeArtistContentProvider{GetTopTracksFn: func(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
 				return nil, tc.err
 			}}
 			content := discovery.NewGetArtistContentService(map[discovery.ProviderName]discovery.ArtistContentProvider{discovery.ProviderDeezer: p},
@@ -1645,7 +1644,7 @@ func libraryTitles(out *discovery.SearchOutput) []string {
 
 func searchAs(t *testing.T, svc *discovery.SearchService, userId shared.UserId, raw string) *discovery.SearchOutput {
 	t.Helper()
-	out, err := svc.Execute(context.Background(), userId, discoverytest.NewQuery(t, raw), false)
+	out, err := svc.Execute(context.Background(), userId, discovery.NewQuery(t, raw), false)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -1654,15 +1653,15 @@ func searchAs(t *testing.T, svc *discovery.SearchService, userId shared.UserId, 
 
 func TestService_RepeatedSearch_ServesRelatedGroupsWithoutRefetching(t *testing.T) {
 	organic, tracksByAlbum := relatedSearchFixture()
-	querier := &discoverytest.CountingRelationshipQuerier{}
-	albumProvider := &discoverytest.CountingAlbumTracksProvider{TracksByAlbum: tracksByAlbum}
+	querier := &discovery.CountingRelationshipQuerier{}
+	albumProvider := &discovery.CountingAlbumTracksProvider{TracksByAlbum: tracksByAlbum}
 	svc := discovery.NewSearchService(
-		[]discovery.SearchProvider{&discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: organic}},
+		[]discovery.SearchProvider{&discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: organic}},
 		discovery.NewCircuitBreaker(),
-		discovery.WithResultCache(discoverytest.NewFakeResultCache()),
+		discovery.WithResultCache(discovery.NewFakeResultCache()),
 		discovery.WithFindRelatedService(discovery.NewFindRelatedService(querier, albumProvider, nil)),
 	)
-	user := discoverytest.NewUser()
+	user := discovery.NewUser()
 
 	first := searchAs(t, svc, user, "humble")
 	providerCalls, libraryCalls := albumProvider.Calls.Load(), querier.Calls.Load()
@@ -1687,18 +1686,18 @@ func TestService_RepeatedSearch_ServesRelatedGroupsWithoutRefetching(t *testing.
 
 func TestService_RepeatedSearch_KeepsRelatedLibraryMatchesPerUser(t *testing.T) {
 	organic, tracksByAlbum := relatedSearchFixture()
-	owner, other := discoverytest.NewUser(), discoverytest.NewUser()
-	querier := &discoverytest.CountingRelationshipQuerier{
+	owner, other := discovery.NewUser(), discovery.NewUser()
+	querier := &discovery.CountingRelationshipQuerier{
 		MatchesByUser: map[shared.UserId][]discovery.RelatedTrackMatch{
 			owner: {{Title: "Owner Library Track", Artist: "Artist 0", Album: "Album 0"}},
 			other: {{Title: "Other Library Track", Artist: "Artist 0", Album: "Album 0"}},
 		},
 	}
 	svc := discovery.NewSearchService(
-		[]discovery.SearchProvider{&discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: organic}},
+		[]discovery.SearchProvider{&discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: organic}},
 		discovery.NewCircuitBreaker(),
-		discovery.WithResultCache(discoverytest.NewFakeResultCache()),
-		discovery.WithFindRelatedService(discovery.NewFindRelatedService(querier, &discoverytest.CountingAlbumTracksProvider{TracksByAlbum: tracksByAlbum}, nil)),
+		discovery.WithResultCache(discovery.NewFakeResultCache()),
+		discovery.WithFindRelatedService(discovery.NewFindRelatedService(querier, &discovery.CountingAlbumTracksProvider{TracksByAlbum: tracksByAlbum}, nil)),
 	)
 
 	searchAs(t, svc, owner, "humble")
@@ -1744,13 +1743,13 @@ func TestSearch_RelatedLibraryMatches_NeverLeakAnotherUsersLibrary(t *testing.T)
 		{owner: userB, match: discovery.RelatedTrackMatch{Title: "B Own Song", Artist: "Band", Album: album}},
 	}}
 
-	organic := discoverytest.DeezerTrack("Hit Single", "Band", 80)
+	organic := discovery.DeezerTrack("Hit Single", "Band", 80)
 	organic.Album = album
-	p := &discoverytest.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{organic}}
+	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{organic}}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(),
 		discovery.WithFindRelatedService(discovery.NewFindRelatedService(querier, nil, nil)))
 
-	out, err := svc.Execute(context.Background(), userB, discoverytest.NewQuery(t, "hit single"), false)
+	out, err := svc.Execute(context.Background(), userB, discovery.NewQuery(t, "hit single"), false)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -1779,13 +1778,13 @@ func relatedSearchFixture() ([]discovery.SearchResult, map[string][]discovery.Se
 	tracksByAlbum := map[string][]discovery.SearchResult{}
 	for i := range relatedSubjects {
 		albumID := fmt.Sprintf("al-%d", i)
-		track := discoverytest.TrackResult(discovery.ProviderDeezer, fmt.Sprintf("d-%d", i),
+		track := discovery.TrackResult(discovery.ProviderDeezer, fmt.Sprintf("d-%d", i),
 			fmt.Sprintf("Humble %d", i), fmt.Sprintf("Artist %d", i), nil)
 		track.Album = fmt.Sprintf("Album %d", i)
 		track.DeezerAlbumID = albumID
 		organic = append(organic, track)
 		tracksByAlbum[albumID] = []discovery.SearchResult{
-			discoverytest.TrackResult(discovery.ProviderDeezer, fmt.Sprintf("s-%d", i),
+			discovery.TrackResult(discovery.ProviderDeezer, fmt.Sprintf("s-%d", i),
 				fmt.Sprintf("Sibling %d", i), fmt.Sprintf("Artist %d", i), nil),
 		}
 	}
@@ -1796,10 +1795,10 @@ func TestSearch_RawQueryIsNeverSuggestedToAnotherUser(t *testing.T) {
 	const private = "jane doe 42 elm street"
 	vocab := &sharedVocabulary{}
 	store := vocab.store()
-	p := &discoverytest.QueryFakeProvider{
+	p := &discovery.QueryFakeProvider{
 		Provider: discovery.ProviderDeezer,
 		ResultsByQuery: map[string][]discovery.SearchResult{
-			private: {discoverytest.DeezerTrack("Elm Street", "Jane Band", 60)},
+			private: {discovery.DeezerTrack("Elm Street", "Jane Band", 60)},
 		},
 	}
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithVocabularyStore(store))
@@ -1823,8 +1822,8 @@ type sharedVocabulary struct {
 	entries []discovery.VocabularyEntry
 }
 
-func (v *sharedVocabulary) store() *discoverytest.FakeVocabularyStore {
-	return &discoverytest.FakeVocabularyStore{
+func (v *sharedVocabulary) store() *discovery.FakeVocabularyStore {
+	return &discovery.FakeVocabularyStore{
 		AddFn: func(e discovery.VocabularyEntry) error {
 			v.mu.Lock()
 			defer v.mu.Unlock()

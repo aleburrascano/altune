@@ -2,7 +2,6 @@ package unreleased_test
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/discoverytest"
 	"context"
 	"errors"
 	"slices"
@@ -47,8 +46,8 @@ func TestService_List_FiltersByExactCatalogMatch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := discovery.NewUnreleasedService(
-				&discoverytest.GeniusSongCatalog{ArtistID: 7, ArtistFound: true, Songs: songs(tt.genius...)},
-				&discoverytest.ArtistCatalogTitles{Titles: tt.catalog},
+				&discovery.FakeGeniusSongCatalog{ArtistID: 7, ArtistFound: true, Songs: songs(tt.genius...)},
+				&discovery.ArtistCatalogTitles{Titles: tt.catalog},
 				nil,
 				discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 50},
 			)
@@ -65,8 +64,8 @@ func TestService_List_FiltersByExactCatalogMatch(t *testing.T) {
 
 func TestService_List_NoGeniusMatchIsAnEmptyList(t *testing.T) {
 	svc := discovery.NewUnreleasedService(
-		&discoverytest.GeniusSongCatalog{ArtistFound: false},
-		&discoverytest.ArtistCatalogTitles{},
+		&discovery.FakeGeniusSongCatalog{ArtistFound: false},
+		&discovery.ArtistCatalogTitles{},
 		nil,
 		discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 50},
 	)
@@ -77,12 +76,12 @@ func TestService_List_NoGeniusMatchIsAnEmptyList(t *testing.T) {
 }
 
 func TestService_List_MarksMediaOnlyWithinTheDetailCap(t *testing.T) {
-	genius := &discoverytest.GeniusSongCatalog{
+	genius := &discovery.FakeGeniusSongCatalog{
 		ArtistFound: true,
 		Songs:       songs("A", "B", "C"),
 		MediaByID:   map[int]bool{1: true, 3: true},
 	}
-	svc := discovery.NewUnreleasedService(genius, &discoverytest.ArtistCatalogTitles{}, nil, discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 2})
+	svc := discovery.NewUnreleasedService(genius, &discovery.ArtistCatalogTitles{}, nil, discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 2})
 	got, err := svc.List(context.Background(), discovery.ProviderDeezer, "1", "Artist", nil)
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -103,7 +102,7 @@ func TestService_List_MarksMediaOnlyWithinTheDetailCap(t *testing.T) {
 
 func TestService_List_CatalogFailureIsAnError(t *testing.T) {
 	boom := errors.New("catalog down")
-	svc := discovery.NewUnreleasedService(&discoverytest.GeniusSongCatalog{}, &discoverytest.ArtistCatalogTitles{Err: boom}, nil, discovery.UnreleasedConfig{MaxPages: 1})
+	svc := discovery.NewUnreleasedService(&discovery.FakeGeniusSongCatalog{}, &discovery.ArtistCatalogTitles{Err: boom}, nil, discovery.UnreleasedConfig{MaxPages: 1})
 	if _, err := svc.List(context.Background(), discovery.ProviderDeezer, "1", "Artist", nil); !errors.Is(err, boom) {
 		t.Errorf("err = %v, want %v", err, boom)
 	}
@@ -137,8 +136,8 @@ const (
 var cachedConfig = discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 10, TTL: longTTL, EmptyTTL: shortTTL}
 
 func TestService_List_SecondCallIsServedFromCache(t *testing.T) {
-	genius := &discoverytest.GeniusSongCatalog{ArtistID: 7, ArtistFound: true, Songs: songs("Leak")}
-	svc := discovery.NewUnreleasedService(genius, &discoverytest.ArtistCatalogTitles{}, newMemoryCache(), cachedConfig)
+	genius := &discovery.FakeGeniusSongCatalog{ArtistID: 7, ArtistFound: true, Songs: songs("Leak")}
+	svc := discovery.NewUnreleasedService(genius, &discovery.ArtistCatalogTitles{}, newMemoryCache(), cachedConfig)
 	for range 2 {
 		if _, err := svc.List(context.Background(), discovery.ProviderDeezer, "1", "Artist", nil); err != nil {
 			t.Fatalf("List: %v", err)
@@ -150,8 +149,8 @@ func TestService_List_SecondCallIsServedFromCache(t *testing.T) {
 }
 
 func TestService_List_CacheIsKeyedOnTheNormalizedArtistName(t *testing.T) {
-	genius := &discoverytest.GeniusSongCatalog{ArtistID: 7, ArtistFound: true, Songs: songs("Leak")}
-	svc := discovery.NewUnreleasedService(genius, &discoverytest.ArtistCatalogTitles{}, newMemoryCache(), cachedConfig)
+	genius := &discovery.FakeGeniusSongCatalog{ArtistID: 7, ArtistFound: true, Songs: songs("Leak")}
+	svc := discovery.NewUnreleasedService(genius, &discovery.ArtistCatalogTitles{}, newMemoryCache(), cachedConfig)
 	for _, name := range []string{"Wrong Name", "Right Name", "  RIGHT name "} {
 		if _, err := svc.List(context.Background(), discovery.ProviderDeezer, "1", name, nil); err != nil {
 			t.Fatalf("List(%q): %v", name, err)
@@ -180,8 +179,8 @@ func TestService_List_DropsTranslationPagesButKeepsRealUnreleasedMaterial(t *tes
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := discovery.NewUnreleasedService(
-				&discoverytest.GeniusSongCatalog{ArtistID: 7, ArtistFound: true, Songs: songs(tt.genius...)},
-				&discoverytest.ArtistCatalogTitles{},
+				&discovery.FakeGeniusSongCatalog{ArtistID: 7, ArtistFound: true, Songs: songs(tt.genius...)},
+				&discovery.ArtistCatalogTitles{},
 				nil,
 				discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 50},
 			)
@@ -199,17 +198,17 @@ func TestService_List_DropsTranslationPagesButKeepsRealUnreleasedMaterial(t *tes
 func TestService_List_CacheTTLDependsOnHowTrustworthyTheAnswerIs(t *testing.T) {
 	tests := []struct {
 		name   string
-		genius *discoverytest.GeniusSongCatalog
+		genius *discovery.FakeGeniusSongCatalog
 		want   time.Duration
 	}{
-		{"complete answer gets the long ttl", &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}, longTTL},
-		{"empty answer gets the short ttl", &discoverytest.GeniusSongCatalog{ArtistFound: false}, shortTTL},
-		{"failed media lookup gets the short ttl", &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak"), MediaErr: errors.New("429")}, shortTTL},
+		{"complete answer gets the long ttl", &discovery.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}, longTTL},
+		{"empty answer gets the short ttl", &discovery.FakeGeniusSongCatalog{ArtistFound: false}, shortTTL},
+		{"failed media lookup gets the short ttl", &discovery.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Leak"), MediaErr: errors.New("429")}, shortTTL},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cache := newMemoryCache()
-			svc := discovery.NewUnreleasedService(tt.genius, &discoverytest.ArtistCatalogTitles{}, cache, cachedConfig)
+			svc := discovery.NewUnreleasedService(tt.genius, &discovery.ArtistCatalogTitles{}, cache, cachedConfig)
 			if _, err := svc.List(context.Background(), discovery.ProviderDeezer, "1", "Artist", nil); err != nil {
 				t.Fatalf("List: %v", err)
 			}
@@ -238,8 +237,8 @@ func TestService_List_HidesSongsWithReleasedEvidenceFromGenius(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs(tt.title), DetailByID: map[int]discovery.GeniusSongDetail{1: tt.detail}}
-			svc := discovery.NewUnreleasedService(genius, &discoverytest.ArtistCatalogTitles{Titles: tt.catalog}, nil, discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 10, DetailConcurrency: 2})
+			genius := &discovery.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs(tt.title), DetailByID: map[int]discovery.GeniusSongDetail{1: tt.detail}}
+			svc := discovery.NewUnreleasedService(genius, &discovery.ArtistCatalogTitles{Titles: tt.catalog}, nil, discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 10, DetailConcurrency: 2})
 			got, err := svc.List(context.Background(), discovery.ProviderDeezer, "1", "Artist", nil)
 			if err != nil {
 				t.Fatalf("List: %v", err)
@@ -252,8 +251,8 @@ func TestService_List_HidesSongsWithReleasedEvidenceFromGenius(t *testing.T) {
 }
 
 func TestService_List_LooksUpDetailsOnlyForSongsTheCatalogDidNotHide(t *testing.T) {
-	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Released", "Leak")}
-	svc := discovery.NewUnreleasedService(genius, &discoverytest.ArtistCatalogTitles{Titles: []string{"Released"}}, nil, discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 10, DetailConcurrency: 2})
+	genius := &discovery.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Released", "Leak")}
+	svc := discovery.NewUnreleasedService(genius, &discovery.ArtistCatalogTitles{Titles: []string{"Released"}}, nil, discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 10, DetailConcurrency: 2})
 	if _, err := svc.List(context.Background(), discovery.ProviderDeezer, "1", "Artist", nil); err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -264,8 +263,8 @@ func TestService_List_LooksUpDetailsOnlyForSongsTheCatalogDidNotHide(t *testing.
 
 func TestService_List_PartialCatalogGetsTheShortTTLAndStillFilters(t *testing.T) {
 	cache := newMemoryCache()
-	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Released", "Leak")}
-	catalog := &discoverytest.ArtistCatalogTitles{Titles: []string{"Released"}, Err: discovery.ErrPartialCatalog}
+	genius := &discovery.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Released", "Leak")}
+	catalog := &discovery.ArtistCatalogTitles{Titles: []string{"Released"}, Err: discovery.ErrPartialCatalog}
 	svc := discovery.NewUnreleasedService(genius, catalog, cache, cachedConfig)
 	got, err := svc.List(context.Background(), discovery.ProviderDeezer, "1", "Artist", nil)
 	if err != nil {
@@ -280,13 +279,13 @@ func TestService_List_PartialCatalogGetsTheShortTTLAndStillFilters(t *testing.T)
 }
 
 func TestService_List_HasMediaIsUnknownUntilLookedUp(t *testing.T) {
-	genius := &discoverytest.GeniusSongCatalog{
+	genius := &discovery.FakeGeniusSongCatalog{
 		ArtistFound: true,
 		Songs:       songs("A", "B", "C"),
 		MediaByID:   map[int]bool{1: true},
 		DetailByID:  map[int]discovery.GeniusSongDetail{},
 	}
-	svc := discovery.NewUnreleasedService(genius, &discoverytest.ArtistCatalogTitles{}, nil, discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 2, DetailConcurrency: 2})
+	svc := discovery.NewUnreleasedService(genius, &discovery.ArtistCatalogTitles{}, nil, discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 2, DetailConcurrency: 2})
 	got, err := svc.List(context.Background(), discovery.ProviderDeezer, "1", "Artist", nil)
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -300,8 +299,8 @@ func TestService_List_HasMediaIsUnknownUntilLookedUp(t *testing.T) {
 }
 
 func TestService_List_FailedDetailLookupLeavesHasMediaUnknown(t *testing.T) {
-	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("A"), MediaErr: errors.New("429")}
-	svc := discovery.NewUnreleasedService(genius, &discoverytest.ArtistCatalogTitles{}, nil, discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 5, DetailConcurrency: 1})
+	genius := &discovery.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("A"), MediaErr: errors.New("429")}
+	svc := discovery.NewUnreleasedService(genius, &discovery.ArtistCatalogTitles{}, nil, discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 5, DetailConcurrency: 1})
 	got, err := svc.List(context.Background(), discovery.ProviderDeezer, "1", "Artist", nil)
 	if err != nil || len(got) != 1 || got[0].HasMedia != nil {
 		t.Errorf("List = (%v, %v), want one song with unknown has_media", got, err)
@@ -312,8 +311,8 @@ func TestService_List_ReleasedRemixesNeedTheExactRemixOnACatalogRelease(t *testi
 	catalog := []string{"After Party", "After Party (CHOPNOTSLOP REMIX)", "No Idea - CHOPNOTSLOP REMIX", "Up & Down"}
 	genius := []string{"After Party (CHOPNOTSLOP REMIX)", "After Party (Crooked Colours Remix)", "No Idea (CHOPNOTSLOP REMIX)", "Up & Down (Physical Version)", "After Party (Demo)"}
 	svc := discovery.NewUnreleasedService(
-		&discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs(genius...)},
-		&discoverytest.ArtistCatalogTitles{Titles: catalog},
+		&discovery.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs(genius...)},
+		&discovery.ArtistCatalogTitles{Titles: catalog},
 		nil,
 		discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 10, DetailConcurrency: 2},
 	)
@@ -352,15 +351,15 @@ func (c *lockedCache) entries() int {
 	return len(c.inner.stored)
 }
 
-func backgroundService(ctx context.Context, genius *discoverytest.GeniusSongCatalog, cache *lockedCache, wait time.Duration) (*discovery.UnreleasedService, *sync.WaitGroup) {
+func backgroundService(ctx context.Context, genius *discovery.FakeGeniusSongCatalog, cache *lockedCache, wait time.Duration) (*discovery.UnreleasedService, *sync.WaitGroup) {
 	var jobs sync.WaitGroup
 	cfg := discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 10, DetailConcurrency: 2, TTL: longTTL, EmptyTTL: shortTTL, Wait: wait}
-	return discovery.NewUnreleasedService(genius, &discoverytest.ArtistCatalogTitles{}, cache, cfg, discovery.WithUnreleasedLifecycle(ctx, &jobs)), &jobs
+	return discovery.NewUnreleasedService(genius, &discovery.ArtistCatalogTitles{}, cache, cfg, discovery.WithUnreleasedLifecycle(ctx, &jobs)), &jobs
 }
 
 func TestService_Lookup_SlowJobIsPendingThenTheNextCallIsCached(t *testing.T) {
 	gate := make(chan struct{})
-	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak"), Gate: gate}
+	genius := &discovery.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Leak"), Gate: gate}
 	svc, jobs := backgroundService(context.Background(), genius, newLockedCache(), 20*time.Millisecond)
 
 	first, err := svc.Lookup(context.Background(), discovery.ProviderDeezer, "1", "Artist", nil)
@@ -381,7 +380,7 @@ func TestService_Lookup_SlowJobIsPendingThenTheNextCallIsCached(t *testing.T) {
 
 func TestService_Lookup_ConcurrentCallsShareOneJob(t *testing.T) {
 	gate := make(chan struct{})
-	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak"), Gate: gate}
+	genius := &discovery.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Leak"), Gate: gate}
 	svc, jobs := backgroundService(context.Background(), genius, newLockedCache(), 0)
 
 	const callers = 8
@@ -407,7 +406,7 @@ func TestService_Lookup_ConcurrentCallsShareOneJob(t *testing.T) {
 
 func TestService_Lookup_FailedJobLeavesNoCacheEntry(t *testing.T) {
 	boom := errors.New("genius down")
-	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Err: boom}
+	genius := &discovery.FakeGeniusSongCatalog{ArtistFound: true, Err: boom}
 	cache := newLockedCache()
 	svc, jobs := backgroundService(context.Background(), genius, cache, 0)
 
@@ -422,7 +421,7 @@ func TestService_Lookup_FailedJobLeavesNoCacheEntry(t *testing.T) {
 
 func TestService_Lookup_ServerShutdownStopsTheJob(t *testing.T) {
 	lifecycle, shutdown := context.WithCancel(context.Background())
-	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Gate: make(chan struct{})}
+	genius := &discovery.FakeGeniusSongCatalog{ArtistFound: true, Gate: make(chan struct{})}
 	svc, jobs := backgroundService(lifecycle, genius, newLockedCache(), 10*time.Millisecond)
 
 	if _, err := svc.Lookup(context.Background(), discovery.ProviderDeezer, "1", "Artist", nil); err != nil {
@@ -441,7 +440,7 @@ func TestService_Lookup_ServerShutdownStopsTheJob(t *testing.T) {
 func TestService_List_SongWithoutOwnArtTakesItsAlbumCover(t *testing.T) {
 	list := songs("A", "B")
 	list[1].CoverURL = "https://images.genius.com/own.jpg"
-	genius := &discoverytest.GeniusSongCatalog{
+	genius := &discovery.FakeGeniusSongCatalog{
 		ArtistFound: true,
 		Songs:       list,
 		DetailByID: map[int]discovery.GeniusSongDetail{
@@ -449,7 +448,7 @@ func TestService_List_SongWithoutOwnArtTakesItsAlbumCover(t *testing.T) {
 			2: {AlbumCoverURL: "https://images.genius.com/album.jpg"},
 		},
 	}
-	svc := discovery.NewUnreleasedService(genius, &discoverytest.ArtistCatalogTitles{}, nil, discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 2, DetailConcurrency: 2})
+	svc := discovery.NewUnreleasedService(genius, &discovery.ArtistCatalogTitles{}, nil, discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 2, DetailConcurrency: 2})
 	got, err := svc.List(context.Background(), discovery.ProviderDeezer, "1", "Artist", nil)
 	if err != nil || len(got) != 2 {
 		t.Fatalf("List = (%d songs, %v), want 2 songs", len(got), err)
@@ -461,15 +460,15 @@ func TestService_List_SongWithoutOwnArtTakesItsAlbumCover(t *testing.T) {
 
 var drakeKey = discovery.UnreleasedArtistKey{Provider: discovery.ProviderDeezer, ExternalID: "27"}
 
-func storeService(genius *discoverytest.GeniusSongCatalog, store *discoverytest.UnreleasedStore) *discovery.UnreleasedService {
+func storeService(genius *discovery.FakeGeniusSongCatalog, store *discovery.FakeUnreleasedStore) *discovery.UnreleasedService {
 	cfg := discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 10, DetailConcurrency: 2, Wait: time.Second}
-	return discovery.NewUnreleasedService(genius, &discoverytest.ArtistCatalogTitles{}, nil, cfg, discovery.WithUnreleasedStore(store))
+	return discovery.NewUnreleasedService(genius, &discovery.ArtistCatalogTitles{}, nil, cfg, discovery.WithUnreleasedStore(store))
 }
 
 func writtenBuildVersion(t *testing.T) int {
 	t.Helper()
-	store := &discoverytest.UnreleasedStore{}
-	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
+	store := &discovery.FakeUnreleasedStore{}
+	genius := &discovery.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
 	if _, err := storeService(genius, store).Rebuild(context.Background(), drakeKey, "Drake", nil); err != nil {
 		t.Fatalf("Rebuild: %v", err)
 	}
@@ -481,10 +480,10 @@ func writtenBuildVersion(t *testing.T) int {
 }
 
 func TestService_Lookup_StoreAnswersABuiltArtistWithoutCallingGenius(t *testing.T) {
-	store := &discoverytest.UnreleasedStore{Artists: map[discovery.UnreleasedArtistKey]discoverytest.StoredArtist{
+	store := &discovery.FakeUnreleasedStore{Artists: map[discovery.UnreleasedArtistKey]discovery.StoredArtist{
 		drakeKey: {Songs: songs("A", "B", "C"), Complete: true, Built: true, BuildVersion: writtenBuildVersion(t)},
 	}}
-	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Other")}
+	genius := &discovery.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Other")}
 	got, err := storeService(genius, store).Lookup(context.Background(), discovery.ProviderDeezer, "27", "Drake", nil)
 	if err != nil || got.Pending || !slices.Equal(titlesOf(got.Songs), []string{"A", "B", "C"}) {
 		t.Fatalf("Lookup = (%+v, %v), want the 3 stored songs, not pending", got, err)
@@ -495,8 +494,8 @@ func TestService_Lookup_StoreAnswersABuiltArtistWithoutCallingGenius(t *testing.
 }
 
 func TestService_Lookup_StoreRecordsTheArtistBeforeBuildingAndWritesTheFinishedBuild(t *testing.T) {
-	store := &discoverytest.UnreleasedStore{}
-	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
+	store := &discovery.FakeUnreleasedStore{}
+	genius := &discovery.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
 	before := time.Now()
 	got, err := storeService(genius, store).Lookup(context.Background(), discovery.ProviderDeezer, "27", "Drake", nil)
 	if err != nil || !slices.Equal(titlesOf(got.Songs), []string{"Leak"}) {
@@ -514,8 +513,8 @@ func TestService_Lookup_StoreRecordsTheArtistBeforeBuildingAndWritesTheFinishedB
 
 func TestService_Lookup_StoreRecordAndReadFailuresFallBackToALiveBuild(t *testing.T) {
 	logs := captureLogs(t)
-	store := &discoverytest.UnreleasedStore{RecordErr: errors.New("record down"), ReadErr: errors.New("read down")}
-	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
+	store := &discovery.FakeUnreleasedStore{RecordErr: errors.New("record down"), ReadErr: errors.New("read down")}
+	genius := &discovery.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
 	got, err := storeService(genius, store).Lookup(context.Background(), discovery.ProviderDeezer, "27", "Drake", nil)
 	if err != nil || got.Pending || !slices.Equal(titlesOf(got.Songs), []string{"Leak"}) {
 		t.Fatalf("Lookup = (%+v, %v), want the live-built song", got, err)
@@ -528,10 +527,10 @@ func TestService_Lookup_StoreRecordAndReadFailuresFallBackToALiveBuild(t *testin
 }
 
 func TestService_List_StoreAlwaysBuildsEvenWhenTheArtistIsBuilt(t *testing.T) {
-	store := &discoverytest.UnreleasedStore{Artists: map[discovery.UnreleasedArtistKey]discoverytest.StoredArtist{
+	store := &discovery.FakeUnreleasedStore{Artists: map[discovery.UnreleasedArtistKey]discovery.StoredArtist{
 		drakeKey: {Songs: songs("Old"), Complete: true, Built: true},
 	}}
-	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("New")}
+	genius := &discovery.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("New")}
 	got, err := storeService(genius, store).List(context.Background(), discovery.ProviderDeezer, "27", "Drake", nil)
 	if err != nil || !slices.Equal(titlesOf(got), []string{"New"}) {
 		t.Fatalf("List = (%v, %v), want the fresh build", titlesOf(got), err)
@@ -542,9 +541,9 @@ func TestService_List_StoreAlwaysBuildsEvenWhenTheArtistIsBuilt(t *testing.T) {
 }
 
 func TestService_Rebuild_StoreWritesIncompleteWhenTheCatalogIsPartial(t *testing.T) {
-	store := &discoverytest.UnreleasedStore{}
-	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
-	catalog := &discoverytest.ArtistCatalogTitles{Err: discovery.ErrPartialCatalog}
+	store := &discovery.FakeUnreleasedStore{}
+	genius := &discovery.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
+	catalog := &discovery.ArtistCatalogTitles{Err: discovery.ErrPartialCatalog}
 	svc := discovery.NewUnreleasedService(genius, catalog, nil, discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 10}, discovery.WithUnreleasedStore(store))
 	if _, err := svc.Rebuild(context.Background(), drakeKey, "Drake", nil); err != nil {
 		t.Fatalf("Rebuild: %v", err)
@@ -556,8 +555,8 @@ func TestService_Rebuild_StoreWritesIncompleteWhenTheCatalogIsPartial(t *testing
 
 func TestService_Rebuild_StoreWriteFailureLogsAndStillReturnsTheSongs(t *testing.T) {
 	logs := captureLogs(t)
-	store := &discoverytest.UnreleasedStore{WriteErr: errors.New("db down")}
-	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
+	store := &discovery.FakeUnreleasedStore{WriteErr: errors.New("db down")}
+	genius := &discovery.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
 	got, err := storeService(genius, store).Rebuild(context.Background(), drakeKey, "Drake", nil)
 	if err != nil || !slices.Equal(titlesOf(got), []string{"Leak"}) {
 		t.Fatalf("Rebuild = (%v, %v), want the built song and no error", titlesOf(got), err)
@@ -568,8 +567,8 @@ func TestService_Rebuild_StoreWriteFailureLogsAndStillReturnsTheSongs(t *testing
 }
 
 func TestService_Lookup_StoreWriteFailureStillAnswersTheBuiltSongs(t *testing.T) {
-	store := &discoverytest.UnreleasedStore{WriteErr: errors.New("db down")}
-	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
+	store := &discovery.FakeUnreleasedStore{WriteErr: errors.New("db down")}
+	genius := &discovery.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
 	got, err := storeService(genius, store).Lookup(context.Background(), discovery.ProviderDeezer, "27", "Drake", nil)
 	if err != nil || !slices.Equal(titlesOf(got.Songs), []string{"Leak"}) {
 		t.Errorf("Lookup = (%+v, %v), want the built song", got, err)
@@ -577,13 +576,13 @@ func TestService_Lookup_StoreWriteFailureStillAnswersTheBuiltSongs(t *testing.T)
 }
 
 func TestService_Lookup_BuildVersionOlderStoredArtistIsServedAtOnceAndRebuiltOnce(t *testing.T) {
-	store := &discoverytest.UnreleasedStore{Artists: map[discovery.UnreleasedArtistKey]discoverytest.StoredArtist{
+	store := &discovery.FakeUnreleasedStore{Artists: map[discovery.UnreleasedArtistKey]discovery.StoredArtist{
 		drakeKey: {Songs: songs("Old"), Complete: true, Built: true, BuildVersion: 0},
 	}}
-	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("New"), Gate: make(chan struct{})}
+	genius := &discovery.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("New"), Gate: make(chan struct{})}
 	var jobs sync.WaitGroup
 	cfg := discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 10, DetailConcurrency: 2, Wait: time.Second}
-	svc := discovery.NewUnreleasedService(genius, &discoverytest.ArtistCatalogTitles{}, nil, cfg, discovery.WithUnreleasedStore(store), discovery.WithUnreleasedLifecycle(context.Background(), &jobs))
+	svc := discovery.NewUnreleasedService(genius, &discovery.ArtistCatalogTitles{}, nil, cfg, discovery.WithUnreleasedStore(store), discovery.WithUnreleasedLifecycle(context.Background(), &jobs))
 	for range 2 {
 		got, err := svc.Lookup(context.Background(), discovery.ProviderDeezer, "27", "Drake", nil)
 		if err != nil || got.Pending || !slices.Equal(titlesOf(got.Songs), []string{"Old"}) {
@@ -603,13 +602,13 @@ func TestService_Lookup_BuildVersionOlderStoredArtistIsServedAtOnceAndRebuiltOnc
 }
 
 func TestService_Lookup_BuildVersionCurrentStoredArtistStartsNoRebuild(t *testing.T) {
-	store := &discoverytest.UnreleasedStore{Artists: map[discovery.UnreleasedArtistKey]discoverytest.StoredArtist{
+	store := &discovery.FakeUnreleasedStore{Artists: map[discovery.UnreleasedArtistKey]discovery.StoredArtist{
 		drakeKey: {Songs: songs("A"), Complete: true, Built: true, BuildVersion: writtenBuildVersion(t)},
 	}}
-	genius := &discoverytest.GeniusSongCatalog{ArtistFound: true, Songs: songs("Other")}
+	genius := &discovery.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Other")}
 	var jobs sync.WaitGroup
 	cfg := discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 10, DetailConcurrency: 2, Wait: time.Second}
-	svc := discovery.NewUnreleasedService(genius, &discoverytest.ArtistCatalogTitles{}, nil, cfg, discovery.WithUnreleasedStore(store), discovery.WithUnreleasedLifecycle(context.Background(), &jobs))
+	svc := discovery.NewUnreleasedService(genius, &discovery.ArtistCatalogTitles{}, nil, cfg, discovery.WithUnreleasedStore(store), discovery.WithUnreleasedLifecycle(context.Background(), &jobs))
 	got, err := svc.Lookup(context.Background(), discovery.ProviderDeezer, "27", "Drake", nil)
 	jobs.Wait()
 	if err != nil || !slices.Equal(titlesOf(got.Songs), []string{"A"}) || len(genius.SearchedFor) != 0 || len(store.Writes()) != 0 {

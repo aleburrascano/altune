@@ -2,7 +2,6 @@ package content_test
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/discoverytest"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -28,7 +27,7 @@ func (f *fakeAlbumSearcher) Search(_ context.Context, _ string, _ map[discovery.
 
 func TestGetAlbumTracks_fallbackSkipsWrongArtist(t *testing.T) {
 	var fetchedID string
-	deezer := &discoverytest.AlbumContentProvider{
+	deezer := &discovery.FakeAlbumContentProvider{
 		GetAlbumTracksFn: func(_ context.Context, _ discovery.ProviderName, id string) ([]discovery.SearchResult, error) {
 			fetchedID = id
 			return []discovery.SearchResult{{
@@ -38,8 +37,8 @@ func TestGetAlbumTracks_fallbackSkipsWrongArtist(t *testing.T) {
 		},
 	}
 	searcher := &fakeAlbumSearcher{results: []discovery.SearchResult{
-		discoverytest.AlbumSearchResult("Chase Fetti", "999"),
-		discoverytest.AlbumSearchResult("Che", "111"),
+		discovery.AlbumSearchResult("Chase Fetti", "999"),
+		discovery.AlbumSearchResult("Che", "111"),
 	}}
 	svc := discovery.NewGetAlbumTracksService(
 		map[discovery.ProviderName]discovery.AlbumContentProvider{discovery.ProviderDeezer: deezer},
@@ -59,13 +58,13 @@ func TestGetAlbumTracks_fallbackSkipsWrongArtist(t *testing.T) {
 }
 
 func TestGetAlbumTracks_fallbackNoArtistMatchReturnsEmpty(t *testing.T) {
-	deezer := &discoverytest.AlbumContentProvider{
+	deezer := &discovery.FakeAlbumContentProvider{
 		GetAlbumTracksFn: func(_ context.Context, _ discovery.ProviderName, _ string) ([]discovery.SearchResult, error) {
 			t.Fatal("must not fetch a wrong-artist album")
 			return nil, nil
 		},
 	}
-	searcher := &fakeAlbumSearcher{results: []discovery.SearchResult{discoverytest.AlbumSearchResult("Chase Fetti", "999")}}
+	searcher := &fakeAlbumSearcher{results: []discovery.SearchResult{discovery.AlbumSearchResult("Chase Fetti", "999")}}
 	svc := discovery.NewGetAlbumTracksService(
 		map[discovery.ProviderName]discovery.AlbumContentProvider{discovery.ProviderDeezer: deezer},
 		discovery.WithAlbumFallbackSearcher(searcher),
@@ -102,7 +101,7 @@ func TestGetAlbumTracksService_ExecuteRequest(t *testing.T) {
 			externalID:   "album-123",
 			limit:        0,
 			providers: map[discovery.ProviderName]discovery.AlbumContentProvider{
-				discovery.ProviderDeezer: &discoverytest.AlbumContentProvider{
+				discovery.ProviderDeezer: &discovery.FakeAlbumContentProvider{
 					GetAlbumTracksFn: func(_ context.Context, pn discovery.ProviderName, extID string) ([]discovery.SearchResult, error) {
 						if pn != discovery.ProviderDeezer {
 							t.Errorf("expected provider deezer, got %s", pn.String())
@@ -132,7 +131,7 @@ func TestGetAlbumTracksService_ExecuteRequest(t *testing.T) {
 			externalID:   "album-err",
 			limit:        0,
 			providers: map[discovery.ProviderName]discovery.AlbumContentProvider{
-				discovery.ProviderDeezer: &discoverytest.AlbumContentProvider{
+				discovery.ProviderDeezer: &discovery.FakeAlbumContentProvider{
 					GetAlbumTracksFn: func(_ context.Context, _ discovery.ProviderName, _ string) ([]discovery.SearchResult, error) {
 						return nil, errors.New("upstream timeout")
 					},
@@ -147,7 +146,7 @@ func TestGetAlbumTracksService_ExecuteRequest(t *testing.T) {
 			externalID:   "album-123",
 			limit:        2,
 			providers: map[discovery.ProviderName]discovery.AlbumContentProvider{
-				discovery.ProviderDeezer: &discoverytest.AlbumContentProvider{
+				discovery.ProviderDeezer: &discovery.FakeAlbumContentProvider{
 					GetAlbumTracksFn: func(_ context.Context, _ discovery.ProviderName, _ string) ([]discovery.SearchResult, error) {
 						return sampleTracks, nil
 					},
@@ -188,7 +187,7 @@ func albumTracksFallbackRequest() discovery.AlbumTracksRequest {
 func albumTracksWithFailingPrimary(primaryErr error, deezer discovery.AlbumContentProvider, searcher discovery.SearchProvider) *discovery.GetAlbumTracksService {
 	return discovery.NewGetAlbumTracksService(
 		map[discovery.ProviderName]discovery.AlbumContentProvider{
-			discovery.ProviderSoundCloud: &discoverytest.AlbumContentProvider{
+			discovery.ProviderSoundCloud: &discovery.FakeAlbumContentProvider{
 				GetAlbumTracksFn: func(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
 					return nil, primaryErr
 				},
@@ -199,9 +198,9 @@ func albumTracksWithFailingPrimary(primaryErr error, deezer discovery.AlbumConte
 	)
 }
 
-func unfetchableAlbumProvider(t *testing.T) *discoverytest.AlbumContentProvider {
+func unfetchableAlbumProvider(t *testing.T) *discovery.FakeAlbumContentProvider {
 	t.Helper()
-	return &discoverytest.AlbumContentProvider{
+	return &discovery.FakeAlbumContentProvider{
 		GetAlbumTracksFn: func(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
 			t.Error("no album may be fetched once the fallback search found nothing")
 			return nil, nil
@@ -230,8 +229,8 @@ func TestGetAlbumTracks_fallbacklessAnswerCarriesPrimaryStatus(t *testing.T) {
 		primaryErr error
 		want       discovery.ProviderStatus
 	}{
-		{name: "upstream 503", primaryErr: discoverytest.StatusErr(503), want: discovery.ProviderStatusError},
-		{name: "upstream 429", primaryErr: discoverytest.StatusErr(429), want: discovery.ProviderStatusRateLimited},
+		{name: "upstream 503", primaryErr: discovery.StatusErr(503), want: discovery.ProviderStatusError},
+		{name: "upstream 429", primaryErr: discovery.StatusErr(429), want: discovery.ProviderStatusRateLimited},
 		{name: "upstream timeout", primaryErr: fmt.Errorf("fetch: %w", context.DeadlineExceeded), want: discovery.ProviderStatusTimeout},
 	}
 	for _, tc := range cases {
@@ -253,7 +252,7 @@ func TestGetAlbumTracks_fallbacklessAnswerCarriesPrimaryStatus(t *testing.T) {
 }
 
 func TestGetAlbumTracks_everyEmptyFallbackCarriesPrimaryStatus(t *testing.T) {
-	emptyTracklist := &discoverytest.AlbumContentProvider{
+	emptyTracklist := &discovery.FakeAlbumContentProvider{
 		GetAlbumTracksFn: func(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
 			return nil, nil
 		},
@@ -265,12 +264,12 @@ func TestGetAlbumTracks_everyEmptyFallbackCarriesPrimaryStatus(t *testing.T) {
 	}{
 		{name: "search errored", searcher: erroringAlbumSearcher{}, deezer: unfetchableAlbumProvider(t)},
 		{name: "search matched nothing", searcher: &fakeAlbumSearcher{}, deezer: unfetchableAlbumProvider(t)},
-		{name: "search matched another artist", searcher: &fakeAlbumSearcher{results: []discovery.SearchResult{discoverytest.AlbumSearchResult("Chase Fetti", "999")}}, deezer: unfetchableAlbumProvider(t)},
-		{name: "candidate has no tracklist", searcher: &fakeAlbumSearcher{results: []discovery.SearchResult{discoverytest.AlbumSearchResult("Che", "111")}}, deezer: emptyTracklist},
+		{name: "search matched another artist", searcher: &fakeAlbumSearcher{results: []discovery.SearchResult{discovery.AlbumSearchResult("Chase Fetti", "999")}}, deezer: unfetchableAlbumProvider(t)},
+		{name: "candidate has no tracklist", searcher: &fakeAlbumSearcher{results: []discovery.SearchResult{discovery.AlbumSearchResult("Che", "111")}}, deezer: emptyTracklist},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			svc := albumTracksWithFailingPrimary(discoverytest.StatusErr(503), tc.deezer, tc.searcher)
+			svc := albumTracksWithFailingPrimary(discovery.StatusErr(503), tc.deezer, tc.searcher)
 
 			resp, err := svc.ExecuteRequest(context.Background(), albumTracksFallbackRequest())
 			if err != nil {
@@ -284,8 +283,8 @@ func TestGetAlbumTracks_everyEmptyFallbackCarriesPrimaryStatus(t *testing.T) {
 }
 
 func TestGetAlbumTracks_servedFallbackNamesTheProviderItStoodInFor(t *testing.T) {
-	logs := discoverytest.CaptureProductionLogs(t)
-	deezer := &discoverytest.AlbumContentProvider{
+	logs := discovery.CaptureProductionLogs(t)
+	deezer := &discovery.FakeAlbumContentProvider{
 		GetAlbumTracksFn: func(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
 			return []discovery.SearchResult{{
 				Kind: discovery.ResultKindTrack, Title: "Like Lil Mexico",
@@ -293,8 +292,8 @@ func TestGetAlbumTracks_servedFallbackNamesTheProviderItStoodInFor(t *testing.T)
 			}}, nil
 		},
 	}
-	searcher := &fakeAlbumSearcher{results: []discovery.SearchResult{discoverytest.AlbumSearchResult("Che", "111")}}
-	svc := albumTracksWithFailingPrimary(discoverytest.StatusErr(503), deezer, searcher)
+	searcher := &fakeAlbumSearcher{results: []discovery.SearchResult{discovery.AlbumSearchResult("Che", "111")}}
+	svc := albumTracksWithFailingPrimary(discovery.StatusErr(503), deezer, searcher)
 
 	resp, err := svc.ExecuteRequest(context.Background(), albumTracksFallbackRequest())
 	if err != nil {
@@ -314,7 +313,7 @@ func TestGetAlbumTracks_servedFallbackNamesTheProviderItStoodInFor(t *testing.T)
 }
 
 func TestGetAlbumTracks_primaryAnswerIsNotMarkedAsAFallback(t *testing.T) {
-	deezer := &discoverytest.AlbumContentProvider{
+	deezer := &discovery.FakeAlbumContentProvider{
 		GetAlbumTracksFn: func(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
 			return []discovery.SearchResult{{
 				Kind: discovery.ResultKindTrack, Title: "T",
@@ -370,7 +369,7 @@ func featuredOf(track discovery.SearchResult) []discovery.FeaturedArtist {
 }
 
 func deezerAlbum(tracks []discovery.SearchResult, opts ...discovery.AlbumTracksOption) *discovery.GetAlbumTracksService {
-	deezer := &discoverytest.AlbumContentProvider{Results: tracks}
+	deezer := &discovery.FakeAlbumContentProvider{Results: tracks}
 	return discovery.NewGetAlbumTracksService(map[discovery.ProviderName]discovery.AlbumContentProvider{discovery.ProviderDeezer: deezer}, opts...)
 }
 
@@ -446,7 +445,7 @@ func albumTracksSvc(deezer discovery.AlbumContentProvider, searcher discovery.Se
 
 func TestGetAlbumTracks_fallbackArtistGuardFoldsDiacritics(t *testing.T) {
 	var fetchedID string
-	deezer := &discoverytest.AlbumContentProvider{
+	deezer := &discovery.FakeAlbumContentProvider{
 		GetAlbumTracksFn: func(_ context.Context, _ discovery.ProviderName, id string) ([]discovery.SearchResult, error) {
 			fetchedID = id
 			return []discovery.SearchResult{{
@@ -455,7 +454,7 @@ func TestGetAlbumTracks_fallbackArtistGuardFoldsDiacritics(t *testing.T) {
 			}}, nil
 		},
 	}
-	searcher := &fakeAlbumSearcher{results: []discovery.SearchResult{discoverytest.AlbumSearchResult("Ché", "42")}}
+	searcher := &fakeAlbumSearcher{results: []discovery.SearchResult{discovery.AlbumSearchResult("Ché", "42")}}
 	svc := albumTracksSvc(deezer, searcher)
 
 	resp, err := svc.ExecuteRequest(context.Background(), discovery.AlbumTracksRequest{Provider: discovery.ProviderSoundCloud, ExternalID: "sc-1", Title: "Empty Clip", Artist: "Che"})
@@ -468,13 +467,13 @@ func TestGetAlbumTracks_fallbackArtistGuardFoldsDiacritics(t *testing.T) {
 }
 
 func TestGetAlbumTracks_fallbackArtistGuardRejectsFeatTaggedSubtitle(t *testing.T) {
-	deezer := &discoverytest.AlbumContentProvider{
+	deezer := &discovery.FakeAlbumContentProvider{
 		GetAlbumTracksFn: func(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
 			t.Error("guard unexpectedly accepted the feat-tagged subtitle (known false negative fixed?)")
 			return nil, nil
 		},
 	}
-	searcher := &fakeAlbumSearcher{results: []discovery.SearchResult{discoverytest.AlbumSearchResult("Che feat. Lil X", "42")}}
+	searcher := &fakeAlbumSearcher{results: []discovery.SearchResult{discovery.AlbumSearchResult("Che feat. Lil X", "42")}}
 	svc := albumTracksSvc(deezer, searcher)
 
 	resp, err := svc.ExecuteRequest(context.Background(), discovery.AlbumTracksRequest{Provider: discovery.ProviderSoundCloud, ExternalID: "sc-1", Title: "Empty Clip", Artist: "Che"})
@@ -488,7 +487,7 @@ func TestGetAlbumTracks_fallbackArtistGuardRejectsFeatTaggedSubtitle(t *testing.
 
 func TestGetAlbumTracks_fallbackNoArtistTakesFirstCandidate(t *testing.T) {
 	var fetchedID string
-	deezer := &discoverytest.AlbumContentProvider{
+	deezer := &discovery.FakeAlbumContentProvider{
 		GetAlbumTracksFn: func(_ context.Context, _ discovery.ProviderName, id string) ([]discovery.SearchResult, error) {
 			fetchedID = id
 			return []discovery.SearchResult{{
@@ -499,7 +498,7 @@ func TestGetAlbumTracks_fallbackNoArtistTakesFirstCandidate(t *testing.T) {
 	}
 	searcher := &fakeAlbumSearcher{results: []discovery.SearchResult{
 		{Kind: discovery.ResultKindAlbum, Title: "Empty Clip", Subtitle: "Whoever"},
-		discoverytest.AlbumSearchResult("Chase Fetti", "999"),
+		discovery.AlbumSearchResult("Chase Fetti", "999"),
 	}}
 	svc := albumTracksSvc(deezer, searcher)
 
@@ -513,7 +512,7 @@ func TestGetAlbumTracks_fallbackNoArtistTakesFirstCandidate(t *testing.T) {
 }
 
 func TestGetAlbumTracks_fallbackSearcherErrorKeepsTheRequestedProvidersFailure(t *testing.T) {
-	deezer := &discoverytest.AlbumContentProvider{
+	deezer := &discovery.FakeAlbumContentProvider{
 		GetAlbumTracksFn: func(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
 			t.Error("no album may be fetched when the fallback search errored")
 			return nil, nil
@@ -536,7 +535,7 @@ func TestGetAlbumTracks_fallbackSearcherErrorKeepsTheRequestedProvidersFailure(t
 
 func TestGetAlbumTracks_fallbackSkipsCandidateWithNoTracks(t *testing.T) {
 	fetched := []string{}
-	deezer := &discoverytest.AlbumContentProvider{
+	deezer := &discovery.FakeAlbumContentProvider{
 		GetAlbumTracksFn: func(_ context.Context, _ discovery.ProviderName, id string) ([]discovery.SearchResult, error) {
 			fetched = append(fetched, id)
 			if id == "111" {
@@ -549,8 +548,8 @@ func TestGetAlbumTracks_fallbackSkipsCandidateWithNoTracks(t *testing.T) {
 		},
 	}
 	searcher := &fakeAlbumSearcher{results: []discovery.SearchResult{
-		discoverytest.AlbumSearchResult("Che", "111"),
-		discoverytest.AlbumSearchResult("Che", "222"),
+		discovery.AlbumSearchResult("Che", "111"),
+		discovery.AlbumSearchResult("Che", "222"),
 	}}
 	svc := albumTracksSvc(deezer, searcher)
 
@@ -567,7 +566,7 @@ func TestGetAlbumTracks_fallbackSkipsCandidateWithNoTracks(t *testing.T) {
 }
 
 func TestGetAlbumTracks_primaryEmptyWithNoTitleKeepsEmptyOK(t *testing.T) {
-	deezer := &discoverytest.AlbumContentProvider{
+	deezer := &discovery.FakeAlbumContentProvider{
 		GetAlbumTracksFn: func(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
 			return nil, nil
 		},
@@ -601,13 +600,13 @@ func TestGetAlbumTracks_PanickingFeaturedLookupIsContained(t *testing.T) {
 }
 
 func albumCandidate(title, artist, deezerID string) discovery.SearchResult {
-	r := discoverytest.AlbumSearchResult(artist, deezerID)
+	r := discovery.AlbumSearchResult(artist, deezerID)
 	r.Title = title
 	return r
 }
 
-func singleTrackDeezer() *discoverytest.AlbumContentProvider {
-	return &discoverytest.AlbumContentProvider{
+func singleTrackDeezer() *discovery.FakeAlbumContentProvider {
+	return &discovery.FakeAlbumContentProvider{
 		GetAlbumTracksFn: func(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
 			return []discovery.SearchResult{{
 				Kind: discovery.ResultKindTrack, Title: "Like Lil Mexico",
@@ -621,7 +620,7 @@ func TestGetAlbumTracks_fallbackRefusesSameArtistDifferentTitle(t *testing.T) {
 	for _, artist := range []string{"Che", ""} {
 		t.Run("artist="+artist, func(t *testing.T) {
 			searcher := &fakeAlbumSearcher{results: []discovery.SearchResult{albumCandidate("Another Album", "Che", "222")}}
-			svc := albumTracksWithFailingPrimary(discoverytest.StatusErr(503), singleTrackDeezer(), searcher)
+			svc := albumTracksWithFailingPrimary(discovery.StatusErr(503), singleTrackDeezer(), searcher)
 			req := albumTracksFallbackRequest()
 			req.Artist = artist
 
@@ -640,7 +639,7 @@ func TestGetAlbumTracks_fallbackAcceptsTitleEquivalentUnderNormaliser(t *testing
 	for _, title := range []string{"EMPTY CLIP", "Empty Clip (Deluxe Edition)"} {
 		t.Run(title, func(t *testing.T) {
 			searcher := &fakeAlbumSearcher{results: []discovery.SearchResult{albumCandidate(title, "Che", "111")}}
-			svc := albumTracksWithFailingPrimary(discoverytest.StatusErr(503), singleTrackDeezer(), searcher)
+			svc := albumTracksWithFailingPrimary(discovery.StatusErr(503), singleTrackDeezer(), searcher)
 
 			resp, err := svc.ExecuteRequest(context.Background(), albumTracksFallbackRequest())
 			if err != nil {
@@ -681,8 +680,8 @@ func spotifyTrackFeat(title string, featured ...string) discovery.SearchResult {
 	return r
 }
 
-func herLossService(spotify *discoverytest.AlbumContentProvider, lookups *atomic.Int32) *discovery.GetAlbumTracksService {
-	deezer := &discoverytest.AlbumContentProvider{Results: []discovery.SearchResult{deezerTrackFeat("1", "Rich Flex"), deezerTrackFeat("2", "Solo")}}
+func herLossService(spotify *discovery.FakeAlbumContentProvider, lookups *atomic.Int32) *discovery.GetAlbumTracksService {
+	deezer := &discovery.FakeAlbumContentProvider{Results: []discovery.SearchResult{deezerTrackFeat("1", "Rich Flex"), deezerTrackFeat("2", "Solo")}}
 	return discovery.NewGetAlbumTracksService(
 		map[discovery.ProviderName]discovery.AlbumContentProvider{discovery.ProviderDeezer: deezer, discovery.ProviderSpotify: spotify},
 		discovery.WithTrackFeatured(countingTrackFeatured{
@@ -694,7 +693,7 @@ func herLossService(spotify *discoverytest.AlbumContentProvider, lookups *atomic
 
 func TestGetAlbumTracks_featuredComeFromSpotifyWhenTheCardKnowsIt(t *testing.T) {
 	var lookups atomic.Int32
-	spotify := &discoverytest.AlbumContentProvider{Results: []discovery.SearchResult{spotifyTrackFeat("Rich Flex", "21 Savage"), spotifyTrackFeat("Solo")}}
+	spotify := &discovery.FakeAlbumContentProvider{Results: []discovery.SearchResult{spotifyTrackFeat("Rich Flex", "21 Savage"), spotifyTrackFeat("Solo")}}
 	svc := herLossService(spotify, &lookups)
 
 	resp, err := svc.ExecuteRequest(t.Context(), discovery.AlbumTracksRequest{
@@ -718,7 +717,7 @@ func TestGetAlbumTracks_featuredComeFromSpotifyWhenTheCardKnowsIt(t *testing.T) 
 
 func TestGetAlbumTracks_featuredFallBackToDeezerWhenSpotifyFails(t *testing.T) {
 	var lookups atomic.Int32
-	svc := herLossService(&discoverytest.AlbumContentProvider{Err: errors.New("spotify down")}, &lookups)
+	svc := herLossService(&discovery.FakeAlbumContentProvider{Err: errors.New("spotify down")}, &lookups)
 
 	resp, err := svc.ExecuteRequest(t.Context(), discovery.AlbumTracksRequest{
 		Provider: discovery.ProviderDeezer, ExternalID: "d-her-loss",
@@ -738,10 +737,10 @@ func TestGetAlbumTracks_featuredFallBackToDeezerWhenSpotifyFails(t *testing.T) {
 
 func TestGetAlbumTracks_deezerLooksUpOnlyTheTracksSpotifyCouldNotMatch(t *testing.T) {
 	var lookups atomic.Int32
-	deezer := &discoverytest.AlbumContentProvider{Results: []discovery.SearchResult{
+	deezer := &discovery.FakeAlbumContentProvider{Results: []discovery.SearchResult{
 		deezerTrackFeat("1", "Rich Flex"), deezerTrackFeat("2", "Solo"), deezerTrackFeat("3", "Spin Bout U (Bonus)"),
 	}}
-	spotify := &discoverytest.AlbumContentProvider{Results: []discovery.SearchResult{spotifyTrackFeat("Rich Flex", "21 Savage"), spotifyTrackFeat("Solo")}}
+	spotify := &discovery.FakeAlbumContentProvider{Results: []discovery.SearchResult{spotifyTrackFeat("Rich Flex", "21 Savage"), spotifyTrackFeat("Solo")}}
 	svc := discovery.NewGetAlbumTracksService(
 		map[discovery.ProviderName]discovery.AlbumContentProvider{discovery.ProviderDeezer: deezer, discovery.ProviderSpotify: spotify},
 		discovery.WithTrackFeatured(countingTrackFeatured{
@@ -768,10 +767,10 @@ func TestGetAlbumTracks_deezerLooksUpOnlyTheTracksSpotifyCouldNotMatch(t *testin
 
 func TestGetAlbumTracks_spotifyMatchesTracksAcrossVersionSuffixStyles(t *testing.T) {
 	var lookups atomic.Int32
-	deezer := &discoverytest.AlbumContentProvider{Results: []discovery.SearchResult{
+	deezer := &discovery.FakeAlbumContentProvider{Results: []discovery.SearchResult{
 		deezerTrackFeat("1", "About A Girl (Live)"), deezerTrackFeat("2", "Mama (2007 Remaster)"),
 	}}
-	spotify := &discoverytest.AlbumContentProvider{Results: []discovery.SearchResult{spotifyTrackFeat("About A Girl - Live"), spotifyTrackFeat("Mama - 2007 Remaster")}}
+	spotify := &discovery.FakeAlbumContentProvider{Results: []discovery.SearchResult{spotifyTrackFeat("About A Girl - Live"), spotifyTrackFeat("Mama - 2007 Remaster")}}
 	svc := discovery.NewGetAlbumTracksService(
 		map[discovery.ProviderName]discovery.AlbumContentProvider{discovery.ProviderDeezer: deezer, discovery.ProviderSpotify: spotify},
 		discovery.WithTrackFeatured(countingTrackFeatured{calls: &lookups}),
@@ -790,10 +789,10 @@ func TestGetAlbumTracks_spotifyMatchesTracksAcrossVersionSuffixStyles(t *testing
 }
 
 func TestGetAlbumTracks_exactTitleWinsOverTheSuffixlessMatch(t *testing.T) {
-	deezer := &discoverytest.AlbumContentProvider{Results: []discovery.SearchResult{
+	deezer := &discovery.FakeAlbumContentProvider{Results: []discovery.SearchResult{
 		deezerTrackFeat("1", "Lithium"), deezerTrackFeat("2", "Lithium - Live"),
 	}}
-	spotify := &discoverytest.AlbumContentProvider{Results: []discovery.SearchResult{
+	spotify := &discovery.FakeAlbumContentProvider{Results: []discovery.SearchResult{
 		spotifyTrackFeat("Lithium"), spotifyTrackFeat("Lithium - Live", "Pat Smear"),
 	}}
 	svc := discovery.NewGetAlbumTracksService(map[discovery.ProviderName]discovery.AlbumContentProvider{
