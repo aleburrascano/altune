@@ -1,0 +1,7 @@
+{
+  "removed": [
+    "C3 internal/app/discovery_wiring_test.go imports internal/discovery/discoverytest/unreleased_helpers.go, behind discovery's door"
+  ],
+  "added": [],
+  "clones": 0
+}

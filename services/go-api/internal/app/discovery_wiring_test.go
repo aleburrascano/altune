@@ -3,8 +3,9 @@ package app
 import (
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/discoverytest"
+	"altune/go-api/internal/observe"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/events"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/runloop"
 	"bytes"
@@ -14,6 +15,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -68,11 +70,14 @@ func TestRequestPathProviderCallsAreCountedOnce(t *testing.T) {
 		t.Run(route.name, func(t *testing.T) {
 			rt := &countingProviderRT{}
 			a := &App{cfg: &config.Config{MusicBrainzUserAgent: "altune-test/1.0"}}
-			disc := a.wireDiscovery(context.Background(), newClientFactory(countedProviderTransport(rt)))
+			disc, err := discovery.New(a.discoveryDeps(context.Background(), newClientFactory(countedProviderTransport(rt))))
+			if err != nil {
+				t.Fatalf("wire discovery: %v", err)
+			}
 			before := discovery.ReadProviderMetricsSnapshot()
 			req := httptest.NewRequest(http.MethodGet, route.target, nil)
 			req = req.WithContext(auth.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
-			disc.handler.Routes().ServeHTTP(httptest.NewRecorder(), req)
+			disc.Handler.Routes().ServeHTTP(httptest.NewRecorder(), req)
 			counted := totalProviderCounts(discovery.ReadProviderMetricsSnapshot()) - totalProviderCounts(before)
 
 			if rt.roundTrips() == 0 {
@@ -227,7 +232,7 @@ func TestBehavioralRankingRefresh_LogsOnFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(func() { cancel(); a.wg.Wait() })
 
-	a.startDiscoveryBackgroundJobs(ctx, newClientFactory(nil), searchSvc, nil, nil)
+	a.startDiscoveryBackgroundJobs(ctx, &discovery.Discovery{Search: searchSvc})
 
 	h := waitForHealth(t, a, jobBehavioralRankingRefresh, func(h runloop.JobHealth) bool { return h.Failures >= 1 })
 
@@ -242,92 +247,19 @@ func TestBehavioralRankingRefresh_LogsOnFailure(t *testing.T) {
 	}
 }
 
-type noCallTransport struct{}
-
-func (noCallTransport) RoundTrip(*http.Request) (*http.Response, error) {
-	return nil, http.ErrNotSupported
-}
-
-func unreleasedWiringApp(cfg *config.Config) (*App, clientFactory) {
-	return &App{cfg: cfg}, newClientFactory(noCallTransport{})
-}
-
-func TestBuildUnreleasedService_BuiltFromTheSheetsKeyAloneWithoutAGeniusToken(t *testing.T) {
-	a, cf := unreleasedWiringApp(&config.Config{GoogleSheetsAPIKey: "k", TrackerHubSheetID: "hub"})
-	if svc := a.buildUnreleasedService(context.Background(), cf, &discovery.GetArtistContentService{}); svc == nil {
-		t.Fatal("service not built with only the Sheets key set")
-	}
-}
-
-func TestBuildUnreleasedService_NotBuiltWithNeitherSource(t *testing.T) {
-	a, cf := unreleasedWiringApp(&config.Config{})
-	if svc := a.buildUnreleasedService(context.Background(), cf, &discovery.GetArtistContentService{}); svc != nil {
-		t.Error("service built with no Genius token and no Sheets key")
-	}
-}
-
-func TestGeniusSongCatalog_IsAnUntypedNilWithoutAToken(t *testing.T) {
-	a, cf := unreleasedWiringApp(&config.Config{GoogleSheetsAPIKey: "k"})
-	if port := a.geniusSongCatalog(cf); port != nil {
-		t.Errorf("genius port = %#v, want a nil interface so the service's nil check works", port)
-	}
-}
-
-func TestGeniusSongCatalog_PresentWithAToken(t *testing.T) {
-	a, cf := unreleasedWiringApp(&config.Config{GeniusAccessToken: "t"})
-	if a.geniusSongCatalog(cf) == nil {
-		t.Error("genius port missing though a token is set")
-	}
-}
-
-func TestUnreleasedStore_StoreSourceWithAPoolIsThePgxStore(t *testing.T) {
-	a := &App{cfg: &config.Config{UnreleasedSource: "store"}, pool: lazyPool(t)}
-	if _, ok := a.unreleasedStore(context.Background()).(*discovery.PgxUnreleasedStore); !ok {
-		t.Error("store source with a pool did not yield the pgx store")
-	}
-}
-
-func TestUnreleasedStore_CacheSourceHasNoStore(t *testing.T) {
-	a := &App{cfg: &config.Config{UnreleasedSource: "cache"}, pool: lazyPool(t)}
-	if store := a.unreleasedStore(context.Background()); store != nil {
-		t.Errorf("UNRELEASED_SOURCE=cache yielded store %T", store)
-	}
-}
-
-func TestUnreleasedStore_StoreSourceWithoutAPoolFallsBackToCacheAndWarnsOnce(t *testing.T) {
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	a, cf := unreleasedWiringApp(&config.Config{GoogleSheetsAPIKey: "k", TrackerHubSheetID: "hub", UnreleasedSource: "store"})
-
-	if svc := a.buildUnreleasedService(context.Background(), cf, &discovery.GetArtistContentService{}); svc == nil {
-		t.Fatal("service not built")
-	}
-	if got := strings.Count(buf.String(), "unreleased.store_unavailable_using_cache"); got != 1 {
-		t.Errorf("fallback warning logged %d times, want 1: %s", got, buf.String())
-	}
-}
-
-func TestUnreleasedRefresh_StoreSourceRegistersTheLeaderOnlyJob(t *testing.T) {
-	a := &App{cfg: &config.Config{GoogleSheetsAPIKey: "k", TrackerHubSheetID: "hub", UnreleasedSource: "store"}, pool: lazyPool(t)}
-	cf := newClientFactory(noCallTransport{})
-	if svc := a.buildUnreleasedService(context.Background(), cf, &discovery.GetArtistContentService{}); svc == nil {
-		t.Fatal("service not built")
-	}
+func TestUnreleasedRefresh_AStoredUnreleasedServiceRegistersTheLeaderOnlyJob(t *testing.T) {
+	a := &App{cfg: &config.Config{}}
+	a.startUnreleasedRefresh(&discovery.UnreleasedService{})
 	if got := startedJobNames(a); !slices.Equal(got, []jobName{jobUnreleasedRefresh}) {
 		t.Errorf("leader-gated jobs = %v, want [%s]", got, jobUnreleasedRefresh)
 	}
 }
 
-func TestUnreleasedRefresh_CacheSourceDoesNotStartTheJob(t *testing.T) {
-	a := &App{cfg: &config.Config{GoogleSheetsAPIKey: "k", TrackerHubSheetID: "hub", UnreleasedSource: "cache"}, pool: lazyPool(t)}
-	cf := newClientFactory(noCallTransport{})
-	if svc := a.buildUnreleasedService(context.Background(), cf, &discovery.GetArtistContentService{}); svc == nil {
-		t.Fatal("service not built")
-	}
+func TestUnreleasedRefresh_NothingStoredStartsNoJob(t *testing.T) {
+	a := &App{cfg: &config.Config{}}
+	a.startUnreleasedRefresh(nil)
 	if got := startedJobNames(a); len(got) != 0 {
-		t.Errorf("UNRELEASED_SOURCE=cache started jobs %v", got)
+		t.Errorf("no stored unreleased service started jobs %v", got)
 	}
 }
 
@@ -342,7 +274,7 @@ func TestUnreleasedRefresh_DisabledJobsAcceptsTheJobName(t *testing.T) {
 }
 
 type limitRecordingStore struct {
-	discoverytest.UnreleasedStore
+	discovery.FakeUnreleasedStore
 	limits []int
 }
 
@@ -368,8 +300,128 @@ func TestUnreleasedRefresh_RegistrationLogsAThirtyMinuteInterval(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	a := &App{cfg: &config.Config{}}
-	a.startUnreleasedRefresh(&discovery.UnreleasedService{}, &limitRecordingStore{})
+	a.startUnreleasedRefresh(&discovery.UnreleasedService{})
 	if !strings.Contains(buf.String(), "interval=30m0s") {
 		t.Errorf("registration log lacks interval=30m0s: %s", buf.String())
 	}
+}
+
+func distinctDiscoveryConfig() *config.Config {
+	return &config.Config{
+		MusicBrainzUserAgent:              "mb-agent",
+		LastFMAPIKey:                      "lastfm-key",
+		DiscogsToken:                      "discogs-token",
+		FanartTVAPIKey:                    "fanart-key",
+		GeniusAccessToken:                 "genius-token",
+		TheAudioDBAPIKey:                  "theaudiodb-key",
+		GoogleSheetsAPIKey:                "sheets-key",
+		TrackerHubSheetID:                 "hub-sheet",
+		DiscoverySearchProviders:          []string{"deezer", "spotify"},
+		DiscoverySearchDeadline:           1 * time.Second,
+		ExplorationRate:                   0.25,
+		DiscoveryProviderCacheTTL:         2 * time.Minute,
+		DiscoveryMusicBrainzCacheTTL:      3 * time.Minute,
+		GeniusUnreleasedMaxPages:          4,
+		GeniusUnreleasedMaxDetails:        5,
+		GeniusUnreleasedDetailConcurrency: 6,
+		GeniusUnreleasedTTL:               7 * time.Hour,
+		GeniusUnreleasedEmptyTTL:          8 * time.Hour,
+		GeniusUnreleasedWait:              9 * time.Second,
+		GeniusUnreleasedJobTimeout:        10 * time.Second,
+	}
+}
+
+func TestDiscoveryDeps_CopiesEachConfigValueIntoItsOwnField(t *testing.T) {
+	a := &App{cfg: distinctDiscoveryConfig()}
+	deps := a.discoveryDeps(t.Context(), newClientFactory(http.DefaultTransport))
+
+	wantProviders := discovery.ProviderSettings{
+		MusicBrainzUserAgent: "mb-agent",
+		LastFMAPIKey:         "lastfm-key",
+		DiscogsToken:         "discogs-token",
+		FanartTVAPIKey:       "fanart-key",
+		GeniusAccessToken:    "genius-token",
+		TheAudioDBAPIKey:     "theaudiodb-key",
+		GoogleSheetsAPIKey:   "sheets-key",
+		TrackerHubSheetID:    "hub-sheet",
+		SearchAllowlist:      []string{"deezer", "spotify"},
+	}
+	if !reflect.DeepEqual(deps.Providers, wantProviders) {
+		t.Errorf("providers =\n  %+v\nwant\n  %+v", deps.Providers, wantProviders)
+	}
+	wantSearch := discovery.SearchSettings{
+		Deadline:            1 * time.Second,
+		ExplorationRate:     0.25,
+		ProviderCacheTTL:    2 * time.Minute,
+		MusicBrainzCacheTTL: 3 * time.Minute,
+	}
+	if deps.Search != wantSearch {
+		t.Errorf("search =\n  %+v\nwant\n  %+v", deps.Search, wantSearch)
+	}
+	wantUnreleased := discovery.UnreleasedSettings{Tuning: discovery.UnreleasedConfig{
+		MaxPages: 4, MaxDetails: 5, DetailConcurrency: 6,
+		TTL: 7 * time.Hour, EmptyTTL: 8 * time.Hour, Wait: 9 * time.Second, JobTimeout: 10 * time.Second,
+	}}
+	if deps.Unreleased != wantUnreleased {
+		t.Errorf("unreleased =\n  %+v\nwant\n  %+v", deps.Unreleased, wantUnreleased)
+	}
+}
+
+func TestDiscoveryDeps_EachConfigSwitchTurnsOnOnlyItsOwnSetting(t *testing.T) {
+	tests := []struct {
+		name           string
+		turnOn         func(*config.Config)
+		wantProviders  discovery.ProviderSettings
+		wantSearch     discovery.SearchSettings
+		wantUnreleased discovery.UnreleasedSettings
+	}{
+		{"AppleMusicEnabled", func(c *config.Config) { c.AppleMusicEnabled = true }, discovery.ProviderSettings{AppleMusicEnabled: true}, discovery.SearchSettings{}, discovery.UnreleasedSettings{}},
+		{"SpotifyEnabled", func(c *config.Config) { c.SpotifyEnabled = true }, discovery.ProviderSettings{SpotifyEnabled: true}, discovery.SearchSettings{}, discovery.UnreleasedSettings{}},
+		{"SoundCloudEnabled", func(c *config.Config) { c.SoundCloudEnabled = true }, discovery.ProviderSettings{SoundCloudEnabled: true}, discovery.SearchSettings{}, discovery.UnreleasedSettings{}},
+		{"AmazonMusicEnabled", func(c *config.Config) { c.AmazonMusicEnabled = true }, discovery.ProviderSettings{AmazonMusicEnabled: true}, discovery.SearchSettings{}, discovery.UnreleasedSettings{}},
+		{"YtMusicEnabled", func(c *config.Config) { c.YtMusicEnabled = true }, discovery.ProviderSettings{YouTubeMusicEnabled: true}, discovery.SearchSettings{}, discovery.UnreleasedSettings{}},
+		{"TailDemotionEnabled", func(c *config.Config) { c.TailDemotionEnabled = true }, discovery.ProviderSettings{}, discovery.SearchSettings{TailDemotion: true}, discovery.UnreleasedSettings{}},
+		{"CrossKindProminenceEnabled", func(c *config.Config) { c.CrossKindProminenceEnabled = true }, discovery.ProviderSettings{}, discovery.SearchSettings{CrossKindProminence: true}, discovery.UnreleasedSettings{}},
+		{"ExplorationEnabled", func(c *config.Config) { c.ExplorationEnabled = true }, discovery.ProviderSettings{}, discovery.SearchSettings{Exploration: true}, discovery.UnreleasedSettings{}},
+		{"IdentityVerifyOnPersist", func(c *config.Config) { c.IdentityVerifyOnPersist = true }, discovery.ProviderSettings{}, discovery.SearchSettings{IdentityVerifyOnPersist: true}, discovery.UnreleasedSettings{}},
+		{"BehavioralRankingEnabled", func(c *config.Config) { c.BehavioralRankingEnabled = true }, discovery.ProviderSettings{}, discovery.SearchSettings{BehavioralRanking: true}, discovery.UnreleasedSettings{}},
+		{"UnreleasedSource=cache", func(c *config.Config) { c.UnreleasedSource = "cache" }, discovery.ProviderSettings{}, discovery.SearchSettings{}, discovery.UnreleasedSettings{ServeFromCache: true}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &config.Config{}
+			tt.turnOn(cfg)
+			deps := (&App{cfg: cfg}).discoveryDeps(t.Context(), newClientFactory(http.DefaultTransport))
+			if !reflect.DeepEqual(deps.Providers, tt.wantProviders) || deps.Search != tt.wantSearch || deps.Unreleased != tt.wantUnreleased {
+				t.Errorf("deps =\n  %+v\n  %+v\n  %+v\nwant\n  %+v\n  %+v\n  %+v",
+					deps.Providers, deps.Search, deps.Unreleased, tt.wantProviders, tt.wantSearch, tt.wantUnreleased)
+			}
+		})
+	}
+}
+
+func TestDiscoveryDeps_PassesTheAppsOwnHandles(t *testing.T) {
+	a := &App{cfg: &config.Config{}, eventTap: observe.NewEventTap(events.NewInProcessBus())}
+	ctx := t.Context()
+	transport := &stubTransport{}
+	deps := a.discoveryDeps(ctx, newClientFactory(transport))
+
+	if deps.Lifecycle != ctx || deps.Background != &a.wg || deps.Transport != transport || deps.CacheOps != cacheOps() {
+		t.Error("deps do not carry the app's lifecycle, wait group, transport and cache counters")
+	}
+	if deps.ProviderTimeout != 10*time.Second || deps.ChartTimeout != 15*time.Second {
+		t.Errorf("timeouts = %v, %v, want 10s and 15s", deps.ProviderTimeout, deps.ChartTimeout)
+	}
+	if deps.Activity != a.eventTap {
+		t.Error("deps do not feed discovery's activity into the app's event tap")
+	}
+	if (&App{cfg: &config.Config{}}).discoveryDeps(ctx, newClientFactory(transport)).Activity != nil {
+		t.Error("an app without an event tap handed discovery a non-nil activity feed")
+	}
+}
+
+type stubTransport struct{}
+
+func (*stubTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("stub transport")
 }

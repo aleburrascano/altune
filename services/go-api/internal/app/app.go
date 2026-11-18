@@ -118,8 +118,7 @@ func (a *App) setup(ctx context.Context) error {
 	}
 
 	a.eventBus = events.NewInProcessBus()
-	tap := observe.NewEventTap(a.eventBus)
-	a.eventTap = tap
+	a.eventTap = observe.NewEventTap(a.eventBus)
 
 	clientTransport, err := providerTransport(a.cfg)
 	if err != nil {
@@ -131,9 +130,13 @@ func (a *App) setup(ctx context.Context) error {
 		return fmt.Errorf("startup switches: %w", err)
 	}
 
-	disc := a.wireDiscovery(ctx, newClientFactory(clientTransport))
-	a.searchSvc = disc.searchSvc
-	cat, err := a.wireCatalog(ctx, tap, disc)
+	disc, err := discovery.New(a.discoveryDeps(ctx, newClientFactory(clientTransport)))
+	if err != nil {
+		return fmt.Errorf("discovery: %w", err)
+	}
+	a.searchSvc = disc.Search
+	a.startDiscoveryBackgroundJobs(ctx, disc)
+	cat, err := a.wireCatalog(ctx, a.eventTap, disc)
 	if err != nil {
 		return fmt.Errorf("catalog: %w", err)
 	}
@@ -142,14 +145,14 @@ func (a *App) setup(ctx context.Context) error {
 		return fmt.Errorf("startup switches: %w", err)
 	}
 	playback := a.wirePlayback(ctx, cat.trackRepo)
-	disc.handler.WithOwnershipEnrichment(newOwnershipEnrichment(cat))
+	disc.Handler.WithOwnershipEnrichment(newOwnershipEnrichment(cat))
 
-	r := a.mountRoutes(verifier, cat, playback.handler, disc.handler)
+	r := a.mountRoutes(verifier, cat, playback.handler, disc.Handler)
 	if testAuth != nil {
 		mountTestLogin(ctx, r, testAuth)
 	}
 	a.startAlertMonitor(ctx)
-	a.wireObserve(ctx, r, verifier, tap)
+	a.wireObserve(ctx, r, verifier, a.eventTap)
 	a.startCatalogJobs(ctx, cat, playback)
 	a.startBackgroundWhenLeader(ctx)
 

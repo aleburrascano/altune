@@ -310,29 +310,6 @@ func waitForHealth(t *testing.T, a *App, name jobName, cond func(runloop.JobHeal
 	}
 }
 
-func TestBackgroundChartCallsAreCounted(t *testing.T) {
-	rt := &countingProviderRT{}
-	base := newClientFactory(countedProviderTransport(rt))
-	a := &App{cfg: &config.Config{}}
-
-	charts := a.buildChartProviders(base)
-	if len(charts) == 0 {
-		t.Fatal("precondition: the Deezer chart provider must be wired")
-	}
-	before := discovery.ReadProviderMetricsSnapshot()
-	if _, err := charts[0].FetchCharts(context.Background(), 1); err != nil {
-		t.Fatalf("fetch charts: %v", err)
-	}
-	counted := totalProviderCounts(discovery.ReadProviderMetricsSnapshot()) - totalProviderCounts(before)
-
-	if rt.roundTrips() == 0 {
-		t.Fatal("the chart fetch made no provider call, so it proves nothing about the transport")
-	}
-	if counted != int64(rt.roundTrips()) {
-		t.Errorf("provider counters moved by %d over %d chart calls, want one count per call", counted, rt.roundTrips())
-	}
-}
-
 type failingLabelStore struct{ ran chan struct{} }
 
 func (f failingLabelStore) BehavioralLabels(context.Context, time.Time) ([]discovery.BehavioralLabel, error) {

@@ -24,7 +24,7 @@ func TestApplyStartupSwitches_AcquisitionPausedPausesWiredScheduler(t *testing.T
 		sem: make(chan struct{}, 1),
 	}
 
-	wired, err := a.wireCatalog(t.Context(), nil, discoveryWiring{})
+	wired, err := a.wireCatalog(t.Context(), nil, &discovery.Discovery{})
 	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestApplyDisabledJobs_DisabledRankingRefreshNeverRefreshes(t *testing.T) {
 	if err := a.applyDisabledJobs(t.Context()); err != nil {
 		t.Fatalf("applyDisabledJobs: %v", err)
 	}
-	a.startDiscoveryBackgroundJobs(ctx, newClientFactory(nil), searchSvc, nil, nil)
+	a.startDiscoveryBackgroundJobs(ctx, &discovery.Discovery{Search: searchSvc})
 	waitForHealth(t, a, jobBehavioralRankingRefresh, func(h runloop.JobHealth) bool { return h.Skipped >= 1 })
 
 	if got := store.calls.Load(); got != 0 {

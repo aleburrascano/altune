@@ -66,7 +66,7 @@ type catalogServicesStaging struct {
 func (a *App) wireCatalog(
 	ctx context.Context,
 	tap *observe.EventTap,
-	disc discoveryWiring,
+	disc *discovery.Discovery,
 ) (catalogWiring, error) {
 	acquisition.SweepStaleTempDirs(acquisition.NewTempWorkspace())
 
@@ -74,14 +74,21 @@ func (a *App) wireCatalog(
 	if err != nil {
 		return catalogWiring{}, err
 	}
-	services := a.wireCatalogServices(tap, disc.featuredBridge, audio)
+	services := a.wireCatalogServices(tap, featuredBridge(disc), audio)
 	return a.wireCatalogHandlers(audio, services), nil
+}
+
+func featuredBridge(disc *discovery.Discovery) *catalog.FeaturedResolver {
+	if disc.FeaturedArtists == nil {
+		return nil
+	}
+	return catalog.NewFeaturedResolver(disc.FeaturedArtists)
 }
 
 func (a *App) wireAudioSources(
 	ctx context.Context,
 	tap *observe.EventTap,
-	disc discoveryWiring,
+	disc *discovery.Discovery,
 ) (audioSourcesStaging, error) {
 	audioStore, err := catalog.FromConfig(a.cfg, slog.Default())
 	if err != nil {
@@ -114,7 +121,7 @@ func (a *App) wireAudioSources(
 func (a *App) buildAcquisitionScheduler(
 	ctx context.Context,
 	tap *observe.EventTap,
-	disc discoveryWiring,
+	disc *discovery.Discovery,
 	ledger *acquisition.TrackLedger,
 	audioStore catalog.AudioStore,
 	audioSources sourceTiers,
@@ -134,17 +141,17 @@ func (a *App) buildAcquisitionScheduler(
 		acquisition.WithAcquireStoreKeyPrefix(a.cfg.AudioKeyPrefix),
 		acquisition.WithRejectionStore(acquisition.NewPgxRejectionStore(a.pool)),
 	}
-	if disc.searchSvc != nil {
+	if disc.Search != nil {
 		var resolverOpts []func(*acquisition.RecordingResolver)
-		if disc.musicBrainz != nil {
+		if disc.Recordings != nil {
 			resolverOpts = append(resolverOpts,
-				acquisition.WithISRCAuthority(disc.musicBrainz),
-				acquisition.WithRerecordingAuthority(disc.musicBrainz),
-				acquisition.WithRecordingLookup(acquisition.NewRecordingLookup(disc.musicBrainz)))
+				acquisition.WithISRCAuthority(disc.Recordings),
+				acquisition.WithRerecordingAuthority(disc.Recordings),
+				acquisition.WithRecordingLookup(acquisition.NewRecordingLookup(disc.Recordings)))
 		}
-		recordingResolver := acquisition.NewRecordingResolver(disc.searchSvc, resolverOpts...)
+		recordingResolver := acquisition.NewRecordingResolver(disc.Search, resolverOpts...)
 		acquireOpts = append(acquireOpts, acquisition.WithRecordingResolver(recordingResolver))
-		if disc.musicBrainz != nil {
+		if disc.Recordings != nil {
 			acquireOpts = append(acquireOpts,
 				acquisition.WithAcquireRecordingLookup(recordingResolver),
 				acquisition.WithRerecordingFinder(recordingResolver))

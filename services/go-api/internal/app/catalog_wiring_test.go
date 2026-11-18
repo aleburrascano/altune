@@ -46,7 +46,7 @@ func TestWireCatalogSchedulerGating(t *testing.T) {
 				sem: make(chan struct{}, 1),
 			}
 
-			got, err := a.wireCatalog(t.Context(), nil, discoveryWiring{})
+			got, err := a.wireCatalog(t.Context(), nil, &discovery.Discovery{})
 			if err != nil {
 				t.Fatalf("wireCatalog: %v", err)
 			}
@@ -68,7 +68,7 @@ func TestWireCatalogSchedulerGating(t *testing.T) {
 func TestWireCatalogFailsWithoutAudioStore(t *testing.T) {
 	a := &App{cfg: &config.Config{YtMusicEnabled: true}}
 
-	wired, err := a.wireCatalog(t.Context(), nil, discoveryWiring{})
+	wired, err := a.wireCatalog(t.Context(), nil, &discovery.Discovery{})
 	if err == nil {
 		t.Fatal("wireCatalog with no audio store config: want error, got nil")
 	}
@@ -91,7 +91,7 @@ func TestWireCatalogPrincipalDefault_AdmitsOneUserUpToGlobalDepth(t *testing.T) 
 		a.sem <- struct{}{}
 	}
 
-	wired, err := a.wireCatalog(t.Context(), nil, discoveryWiring{})
+	wired, err := a.wireCatalog(t.Context(), nil, &discovery.Discovery{})
 	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestWireCatalogDoesNotCapPerPrincipalQueue(t *testing.T) {
 		a.sem <- struct{}{}
 	}
 
-	wired, err := a.wireCatalog(t.Context(), nil, discoveryWiring{})
+	wired, err := a.wireCatalog(t.Context(), nil, &discovery.Discovery{})
 	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
 	}
@@ -476,7 +476,7 @@ func TestCatalogDBTimeout_ReachesOperatorLiveMetrics(t *testing.T) {
 		sem:  make(chan struct{}, 1),
 		pool: pool,
 	}
-	cat, err := a.wireCatalog(t.Context(), nil, discoveryWiring{})
+	cat, err := a.wireCatalog(t.Context(), nil, &discovery.Discovery{})
 	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
 	}
@@ -561,7 +561,7 @@ func TestWireCatalogScheduler_RecordsOutcomeThroughThePostgresStore(t *testing.T
 		pool: pool,
 	}
 	tap := observe.NewEventTap(events.NewInProcessBus())
-	wired, err := a.wireCatalog(t.Context(), tap, discoveryWiring{})
+	wired, err := a.wireCatalog(t.Context(), tap, &discovery.Discovery{})
 	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
 	}
@@ -654,7 +654,7 @@ func TestWireCatalogRejectsPartialOCIS3EvenWithMusicDir(t *testing.T) {
 		OCIS3Bucket:    "audio",
 	}}
 
-	wired, err := a.wireCatalog(t.Context(), nil, discoveryWiring{})
+	wired, err := a.wireCatalog(t.Context(), nil, &discovery.Discovery{})
 	if err == nil {
 		t.Fatal("wireCatalog with 2 of 4 OCI keys and MUSIC_DIR: want error, got nil")
 	}
@@ -680,7 +680,7 @@ func TestBuildAcquisitionScheduler_AcquisitionPausedStartsPausedBeforeStartupSwi
 		sem: make(chan struct{}, 1),
 	}
 
-	got, err := a.wireCatalog(t.Context(), nil, discoveryWiring{})
+	got, err := a.wireCatalog(t.Context(), nil, &discovery.Discovery{})
 	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
 	}

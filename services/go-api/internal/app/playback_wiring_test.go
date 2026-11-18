@@ -59,7 +59,7 @@ func TestPlaybackEnrichmentFailure_ReachesOperatorLiveMetrics(t *testing.T) {
 	t.Cleanup(pool.Close)
 
 	a := &App{cfg: &config.Config{MusicDir: t.TempDir()}, sem: make(chan struct{}, 1), pool: pool}
-	cat, err := a.wireCatalog(t.Context(), nil, discoveryWiring{})
+	cat, err := a.wireCatalog(t.Context(), nil, &discovery.Discovery{})
 	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestPlaybackEnrichmentKillSwitch_ShedsCatalogLookupOnResume(t *testing.T) {
 	t.Cleanup(pool.Close)
 
 	a := &App{cfg: &config.Config{MusicDir: t.TempDir(), NowPlayingEnrichmentEnabled: false}, sem: make(chan struct{}, 1), pool: pool}
-	cat, err := a.wireCatalog(t.Context(), nil, discoveryWiring{})
+	cat, err := a.wireCatalog(t.Context(), nil, &discovery.Discovery{})
 	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
 	}
