@@ -9,7 +9,7 @@ import { supabase } from '@shared/auth';
 
 import { AuthGate } from '@features/signIn/ui/AuthGate';
 import { useAuthDeepLink } from '@features/signIn/hooks/useAuthDeepLink';
-import { clearRecoveryUnlock } from '@features/signIn/domain/passwordRecovery';
+import { clearRecoveryUnlock } from '@features/signIn/shell/passwordRecovery';
 import IndexScreen from '@/app/index';
 import AuthCallbackRoute from '@/app/auth/callback';
 import AuthConfirmRoute from '@/app/auth/confirm';

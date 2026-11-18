@@ -1,5 +1,6 @@
 import { onSignOut } from '@shared/session';
 import { monotonicNow } from '@shared/timing';
+import type { RecoveryUnlockSource } from '@features/signIn/core/recoveryUnlockSource';
 
 export const RESET_PASSWORD_ROUTE_SEGMENT = 'reset-password';
 
@@ -71,5 +72,10 @@ export function subscribeRecoveryUnlock(listener: () => void): () => void {
     if (listeners.size === 0) stopWindowTimer();
   };
 }
+
+export const recoveryUnlock: RecoveryUnlockSource = {
+  subscribe: subscribeRecoveryUnlock,
+  isUnlocked: isRecoveryUnlocked,
+};
 
 onSignOut(clearRecoveryUnlock);

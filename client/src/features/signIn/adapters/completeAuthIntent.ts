@@ -12,7 +12,7 @@ import type { AuthLinkIntent, AuthLinkParams } from '@features/signIn/core/parse
 import {
   markRecoveryUnlocked,
   RESET_PASSWORD_ROUTE_SEGMENT,
-} from '@features/signIn/domain/passwordRecovery';
+} from '@features/signIn/shell/passwordRecovery';
 
 type AuthClient = Pick<
   SupabaseClient['auth'],

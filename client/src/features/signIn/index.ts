@@ -40,8 +40,9 @@ export {
   clearRecoveryUnlock,
   isRecoveryUnlocked,
   markRecoveryUnlocked,
+  recoveryUnlock,
   subscribeRecoveryUnlock,
-} from '@features/signIn/domain/passwordRecovery';
+} from '@features/signIn/shell/passwordRecovery';
 export { InvalidRecoveryLinkNotice, SessionExpiredNotice } from '@features/signIn/ui/AuthNotices';
 export type { AuthPort } from '@features/signIn/ports/authPort';
 export type { AuthLinkIntent } from '@features/signIn/core/parseAuthLink';
