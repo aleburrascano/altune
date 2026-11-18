@@ -48,7 +48,10 @@ type (
 	UnreleasedLookup            = unreleased.Lookup
 )
 
-var ErrTrackerPartial = ports.ErrTrackerPartial
+var (
+	ErrFavoritesFull  = ports.ErrFavoritesFull
+	ErrTrackerPartial = ports.ErrTrackerPartial
+)
 
 const (
 	ArtworkPathPending           = domain.ArtworkPathPending

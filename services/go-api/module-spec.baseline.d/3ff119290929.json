@@ -1,0 +1,13 @@
+{
+  "removed": [
+    "T1 internal/discovery/internal/core/favorites/favorites_test.go imports discoverytest/favorites_helpers.go, behind discovery's door",
+    "T1 internal/discovery/internal/core/favorites/favorites_test.go imports domain/coded_error.go, behind discovery's door",
+    "T1 internal/discovery/internal/core/favorites/favorites_test.go imports domain/enums.go, behind discovery's door",
+    "T1 internal/discovery/internal/core/favorites/favorites_test.go imports domain/favorite.go, behind discovery's door",
+    "T1 internal/discovery/internal/core/favorites/favorites_test.go imports domain/search_result.go, behind discovery's door",
+    "T1 internal/discovery/internal/core/favorites/favorites_test.go imports internal/core/ports/favorites.go, behind discovery's door",
+    "T1 internal/discovery/internal/core/favorites/favorites_test.go is in package favorites, so it sees inside the module: use package favorites_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}
