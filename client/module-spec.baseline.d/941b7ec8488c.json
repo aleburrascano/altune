@@ -1,0 +1,8 @@
+{
+  "removed": [
+    "C12 src/shared/failure/describeError.ts describeError.ts is in no part: it is not the door, and sits at the root of a shared module",
+    "C12 src/shared/failure/errors.ts errors.ts is in no part: it is not the door, and sits at the root of a shared module"
+  ],
+  "added": [],
+  "clones": 0
+}

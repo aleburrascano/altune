@@ -3,7 +3,7 @@ import {
   isServerFaultStatus,
   type ContractError,
   isNetworkError,
-} from '@shared/failure/errors';
+} from '@shared/failure/core/errors';
 
 export interface ErrorCopy {
   readonly title: string;

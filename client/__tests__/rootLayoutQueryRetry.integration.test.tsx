@@ -2,7 +2,7 @@ import { QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { act, render, screen } from '@testing-library/react-native';
 import { Text } from 'react-native';
 
-import { ApiError, NetworkError } from '@shared/failure/errors';
+import { ApiError, NetworkError } from '@shared/failure/core/errors';
 import { createQueryClient } from '@shared/query/shell/createQueryClient';
 
 const FIRST_TRY_PLUS_FIVE_RETRIES = 6;

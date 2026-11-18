@@ -1,4 +1,4 @@
-export { RETRY_TAIL, describeError } from '@shared/failure/describeError';
+export { RETRY_TAIL, describeError } from '@shared/failure/core/describeError';
 export {
   ApiError,
   ContractError,
@@ -11,4 +11,4 @@ export {
   isServerFaultStatus,
   isSessionFetchFailure,
   isTelemetryGated,
-} from '@shared/failure/errors';
+} from '@shared/failure/core/errors';

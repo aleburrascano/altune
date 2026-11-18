@@ -23,7 +23,7 @@ describe('mobile eslint config bans comments in every file', () => {
 
   it('reports nothing for a string that only looks like a comment', async () => {
     const errors = await noCommentsErrors(
-      'src/shared/failure/errors.ts',
+      'src/shared/failure/core/errors.ts',
       "export const u = 'https://x.dev';\n",
     );
     assert.strictEqual(errors.length, 0);
@@ -31,7 +31,7 @@ describe('mobile eslint config bans comments in every file', () => {
 
   it('still reports a comment under a whole-file eslint-disable', async () => {
     const errors = await noCommentsErrors(
-      'src/shared/failure/errors.ts',
+      'src/shared/failure/core/errors.ts',
       '/* eslint-disable */\nexport const a = 1;\n',
     );
     assert.strictEqual(errors.length, 1);
@@ -56,7 +56,7 @@ function diffScopedRuleIds(filePath, code) {
 }
 
 describe('mobile diff-scoped style rules', () => {
-  const path = 'src/shared/failure/errors.ts';
+  const path = 'src/shared/failure/core/errors.ts';
 
   it('allows a data object key and destructured name', () => {
     const rules = diffScopedRuleIds(
@@ -163,7 +163,7 @@ describe('mobile eslint config bans relative parent imports', () => {
   }
 
   for (const file of [
-    'src/shared/failure/errors.ts',
+    'src/shared/failure/core/errors.ts',
     'src/features/library/__tests__/gridColumns.test.ts',
     '__tests__/rootLayout.integration.test.tsx',
   ]) {
@@ -196,7 +196,7 @@ describe('mobile eslint config makes top-level functions declarations', () => {
 
   it('reports a top-level arrow const in src', async () => {
     const errors = await arrowConstErrors(
-      'src/shared/failure/errors.ts',
+      'src/shared/failure/core/errors.ts',
       'export const f = () => 1;\n',
     );
     assert.strictEqual(errors.length, 1);
@@ -204,7 +204,10 @@ describe('mobile eslint config makes top-level functions declarations', () => {
 
   it('allows a nested arrow const inside a declaration', async () => {
     const code = 'export function f() {\n  const g = () => 1;\n  return g();\n}\n';
-    assert.strictEqual((await arrowConstErrors('src/shared/failure/errors.ts', code)).length, 0);
+    assert.strictEqual(
+      (await arrowConstErrors('src/shared/failure/core/errors.ts', code)).length,
+      0,
+    );
   });
 
   it('ignores test files', async () => {
