@@ -2,9 +2,9 @@ package handler
 
 import (
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/internal/adapters/authbridge"
 	trackservice "altune/go-api/internal/catalog/service/track"
 	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/requestuser"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -72,7 +72,7 @@ func (h *TrackHandler) Routes() chi.Router {
 }
 
 func (h *TrackHandler) handleSetTrackNumber(w http.ResponseWriter, r *http.Request) {
-	userId, ok := authbridge.RequireUserID(w, r)
+	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -154,7 +154,7 @@ func tracksToDTO(tracks []*domain.Track) []TrackResponse {
 }
 
 func (h *TrackHandler) handleListTracks(w http.ResponseWriter, r *http.Request) {
-	userId, ok := authbridge.RequireUserID(w, r)
+	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -181,7 +181,7 @@ func (h *TrackHandler) handleListTracks(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request) {
-	userId, ok := authbridge.RequireUserID(w, r)
+	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -256,7 +256,7 @@ type TrackStatusResponse struct {
 }
 
 func (h *TrackHandler) handleGetTrackStatus(w http.ResponseWriter, r *http.Request) {
-	userId, ok := authbridge.RequireUserID(w, r)
+	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -280,7 +280,7 @@ func (h *TrackHandler) handleGetTrackStatus(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *TrackHandler) handleDeleteTrack(w http.ResponseWriter, r *http.Request) {
-	userId, ok := authbridge.RequireUserID(w, r)
+	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}

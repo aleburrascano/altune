@@ -1,9 +1,6 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth"
-	"altune/go-api/internal/auth/adapters/middleware"
-	authdomain "altune/go-api/internal/auth/domain"
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
 	audioservice "altune/go-api/internal/catalog/internal/core/audio"
@@ -63,13 +60,10 @@ func (s *countingAudioStore) PresignGet(_ context.Context, ref string, _ time.Du
 	return "https://storage.test/" + ref + "?sig=x", nil
 }
 
-var verifyBearerAsUser = auth.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
+func bearerAsUser(token string) (shared.UserId, bool) {
 	id, err := uuid.Parse(token)
-	if err != nil {
-		return authdomain.VerifiedToken{}, err
-	}
-	return authdomain.VerifiedToken{UserID: shared.NewUserId(id), ExpiresAt: time.Now().Add(time.Hour)}, nil
-})
+	return shared.NewUserId(id), err == nil
+}
 
 const audioTestBytes = 64 * 1024
 
@@ -86,7 +80,7 @@ func newAudioRig(streamOpts []func(*StreamHandler), urlOpts []func(*AudioURLHand
 	urlSvc := audioservice.NewAudioURLService(repo, store)
 
 	r := chi.NewRouter()
-	r.Use(middleware.Middleware(verifyBearerAsUser))
+	r.Use(bearerUser(bearerAsUser))
 	NewStreamHandler(streamSvc, streamOpts...).Routes(r)
 	NewAudioURLHandler(urlSvc, urlOpts...).Routes(r)
 	return &audioRig{router: r, store: store, repo: repo}

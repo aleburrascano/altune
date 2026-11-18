@@ -2,9 +2,9 @@ package handler
 
 import (
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/internal/adapters/authbridge"
 	featuredservice "altune/go-api/internal/catalog/internal/core/featured"
 	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/requestuser"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -34,7 +34,7 @@ func (h *FeaturedArtistHandler) Routes(r chi.Router) {
 }
 
 func (h *FeaturedArtistHandler) handleBackfillFeatured(w http.ResponseWriter, r *http.Request) {
-	userId, ok := authbridge.RequireUserID(w, r)
+	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -61,7 +61,7 @@ func logPartialBackfill(r *http.Request, result *featuredservice.BackfillFeature
 }
 
 func (h *FeaturedArtistHandler) handleListFeaturing(w http.ResponseWriter, r *http.Request) {
-	userId, ok := authbridge.RequireUserID(w, r)
+	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}

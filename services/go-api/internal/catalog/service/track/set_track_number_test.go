@@ -1,8 +1,8 @@
-package track
+package track_test
 
 import (
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"
@@ -14,16 +14,16 @@ func TestSetTrackNumberService(t *testing.T) {
 	userId := catalogtest.UserId()
 
 	t.Run("rejects a non-positive number", func(t *testing.T) {
-		svc := NewSetTrackNumberService(catalogtest.NewTrackRepo())
-		if _, err := svc.Execute(context.Background(), userId, domain.NewTrackId(), 0); err == nil {
+		svc := catalog.NewSetTrackNumberService(catalogtest.NewTrackRepo())
+		if _, err := svc.Execute(context.Background(), userId, catalog.NewTrackId(), 0); err == nil {
 			t.Fatal("expected an error for a zero track number")
 		}
 	})
 
 	t.Run("rejects an out-of-range number", func(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
-		svc := NewSetTrackNumberService(repo)
-		_, err := svc.Execute(context.Background(), userId, domain.NewTrackId(), 3000000000)
+		svc := catalog.NewSetTrackNumberService(repo)
+		_, err := svc.Execute(context.Background(), userId, catalog.NewTrackId(), 3000000000)
 		if err == nil {
 			t.Fatal("expected a validation error for an out-of-range track number")
 		}
@@ -35,12 +35,12 @@ func TestSetTrackNumberService(t *testing.T) {
 
 	t.Run("missing or foreign track is not found", func(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
-		svc := NewSetTrackNumberService(repo)
+		svc := catalog.NewSetTrackNumberService(repo)
 		foreign := catalogtest.SeedTrack(t, repo, catalogtest.OtherUserId(), "Theirs", "Artist", "Album")
 
-		for _, id := range []domain.TrackId{domain.NewTrackId(), foreign.ID} {
+		for _, id := range []catalog.TrackId{catalog.NewTrackId(), foreign.ID} {
 			updated, err := svc.Execute(context.Background(), userId, id, 4)
-			if !errors.Is(err, domain.ErrTrackNotFound) || updated {
+			if !errors.Is(err, catalog.ErrTrackNotFound) || updated {
 				t.Fatalf("Execute = (%v, %v), want (false, ErrTrackNotFound)", updated, err)
 			}
 		}
@@ -51,18 +51,18 @@ func TestSetTrackNumberService(t *testing.T) {
 
 	t.Run("lookup failure after a no-op write is returned", func(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
-		svc := NewSetTrackNumberService(repo)
+		svc := catalog.NewSetTrackNumberService(repo)
 		errLookup := errors.New("db down")
 		repo.ErrOnGetBy = errLookup
 
-		if _, err := svc.Execute(context.Background(), userId, domain.NewTrackId(), 4); !errors.Is(err, errLookup) {
+		if _, err := svc.Execute(context.Background(), userId, catalog.NewTrackId(), 4); !errors.Is(err, errLookup) {
 			t.Fatalf("error = %v, want wrapping %v", err, errLookup)
 		}
 	})
 
 	t.Run("fills an unset position and refuses to overwrite it", func(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
-		svc := NewSetTrackNumberService(repo)
+		svc := catalog.NewSetTrackNumberService(repo)
 		track := catalogtest.SeedTrack(t, repo, userId, "Sicko Mode", "Travis Scott", "ASTROWORLD")
 
 		updated, err := svc.Execute(context.Background(), userId, track.ID, 3)

@@ -1,10 +1,8 @@
-package audio
+package audio_test
 
 import (
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/internal/core/ports"
-	trackservice "altune/go-api/internal/catalog/service/track"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
@@ -20,11 +18,11 @@ type orphanFixture struct {
 	store   *catalogtest.AudioStore
 	queue   *catalogtest.OrphanedAudioQueue
 	metrics *catalogtest.Metrics
-	del     *trackservice.DeleteTrackService
-	sweep   *ReconcileOrphanedAudioService
+	del     *catalog.DeleteTrackService
+	sweep   *catalog.ReconcileOrphanedAudioService
 }
 
-func newOrphanFixture(opts ...func(*ReconcileOrphanedAudioService)) *orphanFixture {
+func newOrphanFixture(opts ...func(*catalog.ReconcileOrphanedAudioService)) *orphanFixture {
 	repo := catalogtest.NewTrackRepo()
 	store := catalogtest.NewAudioStore()
 	queue := catalogtest.NewOrphanedAudioQueue(repo)
@@ -34,8 +32,8 @@ func newOrphanFixture(opts ...func(*ReconcileOrphanedAudioService)) *orphanFixtu
 		store:   store,
 		queue:   queue,
 		metrics: metrics,
-		del:     trackservice.NewDeleteTrackService(repo, store, trackservice.WithDeleteTrackOrphanQueue(queue)),
-		sweep:   NewReconcileOrphanedAudioService(queue, store, append(opts, WithReconcileMetrics(metrics))...),
+		del:     catalog.NewDeleteTrackService(repo, store, catalog.WithDeleteTrackOrphanQueue(queue)),
+		sweep:   catalog.NewReconcileOrphanedAudioService(queue, store, append(opts, catalog.WithReconcileMetrics(metrics))...),
 	}
 }
 
@@ -44,13 +42,13 @@ func (f *orphanFixture) orphan(t *testing.T, ref string) {
 	track := catalogtest.SeedReadyTrack(t, f.repo, catalogtest.UserId(), "Title", "Artist", "Album", ref)
 	f.store.Seed(ref, []byte("audio"))
 	f.store.ErrOnDelete = errors.New("storage unavailable")
-	if err := f.del.Execute(context.Background(), catalogtest.UserId(), track.ID); !errors.Is(err, domain.ErrAudioOrphaned) {
+	if err := f.del.Execute(context.Background(), catalogtest.UserId(), track.ID); !errors.Is(err, catalog.ErrAudioOrphaned) {
 		t.Fatalf("delete err = %v, want ErrAudioOrphaned", err)
 	}
 	f.store.ErrOnDelete = nil
 }
 
-func (f *orphanFixture) run(t *testing.T) OrphanedAudioSweep {
+func (f *orphanFixture) run(t *testing.T) catalog.OrphanedAudioSweep {
 	t.Helper()
 	sweep, err := f.sweep.Execute(context.Background())
 	if err != nil {
@@ -64,12 +62,12 @@ func TestReconcile_SupersededAudioInsideTheGraceIsKeptAndReusedAudioIsReleasedAf
 	ctx := context.Background()
 	userId := catalogtest.UserId()
 	f.store.Seed(orphanRef, []byte("audio"))
-	held := ports.OrphanedAudio{AudioRef: orphanRef, UserId: userId, TrackId: domain.NewTrackId(), NotBefore: time.Now().Add(time.Hour)}
+	held := catalog.OrphanedAudio{AudioRef: orphanRef, UserId: userId, TrackId: catalog.NewTrackId(), NotBefore: time.Now().Add(time.Hour)}
 	if err := f.queue.RecordOrphanedAudio(ctx, held); err != nil {
 		t.Fatal(err)
 	}
 
-	if sweep := f.run(t); sweep != (OrphanedAudioSweep{}) {
+	if sweep := f.run(t); sweep != (catalog.OrphanedAudioSweep{}) {
 		t.Errorf("sweep inside the grace = %+v, want nothing touched", sweep)
 	}
 	if _, ok := f.store.Files[orphanRef]; !ok {
@@ -141,7 +139,7 @@ func TestReconcileOrphanedAudio_NeverDeletesReferencedAudio(t *testing.T) {
 	tests := []struct {
 		name    string
 		arrange func(t *testing.T, f *orphanFixture)
-		want    OrphanedAudioSweep
+		want    catalog.OrphanedAudioSweep
 		present map[string]bool
 		queued  map[string]bool
 	}{
@@ -150,7 +148,7 @@ func TestReconcileOrphanedAudio_NeverDeletesReferencedAudio(t *testing.T) {
 			arrange: func(t *testing.T, f *orphanFixture) {
 				catalogtest.SeedReadyTrack(t, f.repo, catalogtest.UserId(), "title", "ARTIST", "album", orphanRef)
 			},
-			want:    OrphanedAudioSweep{Released: 1},
+			want:    catalog.OrphanedAudioSweep{Released: 1},
 			present: map[string]bool{orphanRef: true},
 			queued:  map[string]bool{orphanRef: false},
 		},
@@ -159,7 +157,7 @@ func TestReconcileOrphanedAudio_NeverDeletesReferencedAudio(t *testing.T) {
 			arrange: func(t *testing.T, f *orphanFixture) {
 				catalogtest.SeedReadyTrack(t, f.repo, catalogtest.OtherUserId(), "Title", "Artist", "Album", orphanRef)
 			},
-			want:    OrphanedAudioSweep{Released: 1},
+			want:    catalog.OrphanedAudioSweep{Released: 1},
 			present: map[string]bool{orphanRef: true},
 			queued:  map[string]bool{orphanRef: false},
 		},
@@ -168,7 +166,7 @@ func TestReconcileOrphanedAudio_NeverDeletesReferencedAudio(t *testing.T) {
 			arrange: func(t *testing.T, f *orphanFixture) {
 				catalogtest.SeedTrack(t, f.repo, catalogtest.UserId(), "Title", "Artist", "Album")
 			},
-			want:    OrphanedAudioSweep{Deferred: 1},
+			want:    catalog.OrphanedAudioSweep{Deferred: 1},
 			present: map[string]bool{orphanRef: true},
 			queued:  map[string]bool{orphanRef: true},
 		},
@@ -178,7 +176,7 @@ func TestReconcileOrphanedAudio_NeverDeletesReferencedAudio(t *testing.T) {
 				catalogtest.SeedReadyTrack(t, f.repo, catalogtest.UserId(), "Title", "Artist", "Album", replaceRef)
 				f.store.Seed(replaceRef, []byte("replacement"))
 			},
-			want:    OrphanedAudioSweep{Deleted: 1},
+			want:    catalog.OrphanedAudioSweep{Deleted: 1},
 			present: map[string]bool{orphanRef: false, replaceRef: true},
 			queued:  map[string]bool{orphanRef: false},
 		},
@@ -189,11 +187,11 @@ func TestReconcileOrphanedAudio_NeverDeletesReferencedAudio(t *testing.T) {
 				catalogtest.SeedReadyTrack(t, f.repo, catalogtest.UserId(), "Title", "Artist", "Album", orphanRef)
 				f.store.Seed(orphanRef, []byte("audio"))
 				f.store.Seed(replaceRef, []byte("staged"))
-				if err := f.queue.RecordOrphanedAudio(context.Background(), ports.OrphanedAudio{AudioRef: replaceRef, UserId: catalogtest.UserId()}); err != nil {
+				if err := f.queue.RecordOrphanedAudio(context.Background(), catalog.OrphanedAudio{AudioRef: replaceRef, UserId: catalogtest.UserId()}); err != nil {
 					t.Fatal(err)
 				}
 			},
-			want:    OrphanedAudioSweep{Deleted: 1},
+			want:    catalog.OrphanedAudioSweep{Deleted: 1},
 			present: map[string]bool{orphanRef: true, replaceRef: false},
 			queued:  map[string]bool{replaceRef: false},
 		},
@@ -253,14 +251,14 @@ func TestReconcileOrphanedAudio_AlreadyAbsentObjectResolves(t *testing.T) {
 }
 
 func TestOrphanedAudio_DegradesWithoutMigration(t *testing.T) {
-	unavailable := fmt.Errorf("record: %w", ports.ErrOrphanedAudioQueueUnavailable)
+	unavailable := fmt.Errorf("record: %w", catalog.ErrOrphanedAudioQueueUnavailable)
 	f := newOrphanFixture()
 	f.queue.ErrOnRecord = unavailable
 	f.queue.ErrOnList = unavailable
 
 	f.orphan(t, orphanRef)
 
-	if got, err := f.sweep.Execute(context.Background()); err != nil || got != (OrphanedAudioSweep{}) {
+	if got, err := f.sweep.Execute(context.Background()); err != nil || got != (catalog.OrphanedAudioSweep{}) {
 		t.Errorf("sweep = %+v, %v; want an idle, successful run", got, err)
 	}
 	if _, ok := f.store.Files[orphanRef]; !ok {
@@ -299,11 +297,11 @@ func TestReconcileOrphanedAudio_FailedDeleteNamesTheStuckOrphan(t *testing.T) {
 }
 
 func TestReconcileOrphanedAudio_SwitchOffDeletesNothing(t *testing.T) {
-	f := newOrphanFixture(WithReconcileSwitch(func() bool { return false }))
+	f := newOrphanFixture(catalog.WithReconcileSwitch(func() bool { return false }))
 	f.orphan(t, orphanRef)
 	f.store.ErrOnDelete = errors.New("delete must not be attempted")
 
-	if got := f.run(t); got != (OrphanedAudioSweep{}) {
+	if got := f.run(t); got != (catalog.OrphanedAudioSweep{}) {
 		t.Errorf("sweep = %+v, want an idle run while the switch is off", got)
 	}
 	if _, ok := f.store.Files[orphanRef]; !ok {
@@ -319,9 +317,9 @@ type usageUnanswerableFor struct {
 	audioRef string
 }
 
-func (q usageUnanswerableFor) AudioUsage(ctx context.Context, audioRef string, owner shared.UserId) (ports.AudioUsage, error) {
+func (q usageUnanswerableFor) AudioUsage(ctx context.Context, audioRef string, owner shared.UserId) (catalog.AudioUsage, error) {
 	if audioRef == q.audioRef {
-		return ports.AudioReferenced, errors.New("db down")
+		return catalog.AudioReferenced, errors.New("db down")
 	}
 	return q.OrphanedAudioQueue.AudioUsage(ctx, audioRef, owner)
 }
@@ -332,7 +330,7 @@ func TestReconcileOrphanedAudio_AbortedRunLogsItsPartialCounts(t *testing.T) {
 	f := newOrphanFixture()
 	f.orphan(t, orphanRef)
 	f.orphan(t, unanswerableRef)
-	f.sweep = NewReconcileOrphanedAudioService(usageUnanswerableFor{f.queue, unanswerableRef}, f.store)
+	f.sweep = catalog.NewReconcileOrphanedAudioService(usageUnanswerableFor{f.queue, unanswerableRef}, f.store)
 
 	if _, err := f.sweep.Execute(context.Background()); err == nil {
 		t.Fatal("sweep err = nil, want the usage-check failure surfaced")

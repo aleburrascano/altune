@@ -1,9 +1,6 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth"
-	"altune/go-api/internal/auth/adapters/middleware"
-	authdomain "altune/go-api/internal/auth/domain"
 	"altune/go-api/internal/catalog/catalogtest"
 	audioservice "altune/go-api/internal/catalog/internal/core/audio"
 	featuredservice "altune/go-api/internal/catalog/internal/core/featured"
@@ -11,8 +8,8 @@ import (
 	"altune/go-api/internal/catalog/internal/core/ports"
 	trackservice "altune/go-api/internal/catalog/service/track"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/requestuser"
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -33,9 +30,20 @@ var (
 	testUserId   = shared.NewUserId(testUserUUID)
 )
 
-var verifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (authdomain.VerifiedToken, error) {
-	return authdomain.VerifiedToken{UserID: testUserId, ExpiresAt: time.Now().Add(time.Hour)}, nil
-})
+func asTestUser(string) (shared.UserId, bool) { return testUserId, true }
+
+func bearerUser(userFor func(token string) (shared.UserId, bool)) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
+				if id, known := userFor(token); known {
+					r = r.WithContext(requestuser.ContextWithUserID(r.Context(), id))
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
 
 func serve(t *testing.T, router chi.Router, method, path string, body io.Reader) *httptest.ResponseRecorder {
 	t.Helper()
@@ -105,7 +113,7 @@ func buildTrackHandler(trackRepo *catalogtest.TrackRepo, scheduler *catalogtest.
 	featuredH := NewFeaturedArtistHandler(backfillSvc, listFeaturingSvc)
 	h := NewTrackHandler(addSvc, listSvc, getStatusSvc, deleteSvc, setTrackNumberSvc, featuredH)
 	r := chi.NewRouter()
-	r.Use(middleware.Middleware(verifyAsTestUser))
+	r.Use(bearerUser(asTestUser))
 	r.Route("/tracks", func(r chi.Router) {
 		r.Mount("/", h.Routes())
 	})
@@ -117,7 +125,7 @@ func buildPlaylistHandler(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.
 	membershipSvc := playlistservice.NewPlaylistMembershipService(plRepo, trRepo)
 	h := NewPlaylistHandler(lifecycleSvc, membershipSvc)
 	r := chi.NewRouter()
-	r.Use(middleware.Middleware(verifyAsTestUser))
+	r.Use(bearerUser(asTestUser))
 	r.Mount("/playlists", h.Routes())
 	return h, r
 }
@@ -130,7 +138,7 @@ func buildStreamHandler(trackRepo *catalogtest.TrackRepo, audioStore *catalogtes
 	streamSvc := audioservice.NewStreamTrackService(trackRepo, audioStore, audioservice.WithStreamScheduler(sched))
 	h := NewStreamHandler(streamSvc)
 	r := chi.NewRouter()
-	r.Use(middleware.Middleware(verifyAsTestUser))
+	r.Use(bearerUser(asTestUser))
 	r.Get("/tracks/{trackId}/stream", h.HandleStreamAudio)
 	return h, r
 }
@@ -190,7 +198,7 @@ func newWriteRig(trackOpts []func(*TrackHandler), playlistOpts []func(*PlaylistH
 	)
 
 	r := chi.NewRouter()
-	r.Use(middleware.Middleware(verifyBearerAsUser))
+	r.Use(bearerUser(bearerAsUser))
 	r.Route("/tracks", func(r chi.Router) { r.Mount("/", trackH.Routes()) })
 	r.Mount("/playlists", playlistH.Routes())
 	return &writeRig{router: r, tracks: tracks, playlists: playlists}

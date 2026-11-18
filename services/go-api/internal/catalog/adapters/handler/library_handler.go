@@ -2,9 +2,9 @@ package handler
 
 import (
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/internal/adapters/authbridge"
 	libraryservice "altune/go-api/internal/catalog/internal/core/library"
 	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/requestuser"
 	"net/http"
 	"strconv"
 	"strings"
@@ -87,7 +87,7 @@ func formatAddedAt(t time.Time) string {
 }
 
 func (h *LibraryHandler) handleAlbums(w http.ResponseWriter, r *http.Request) {
-	userId, ok := authbridge.RequireUserID(w, r)
+	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -118,7 +118,7 @@ func (h *LibraryHandler) handleAlbums(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *LibraryHandler) handleArtists(w http.ResponseWriter, r *http.Request) {
-	userId, ok := authbridge.RequireUserID(w, r)
+	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
 	}

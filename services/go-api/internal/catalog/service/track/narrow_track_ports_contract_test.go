@@ -1,14 +1,8 @@
 package track_test
 
 import (
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/catalog/domain"
-	audioservice "altune/go-api/internal/catalog/internal/core/audio"
-	featuredservice "altune/go-api/internal/catalog/internal/core/featured"
-	libraryservice "altune/go-api/internal/catalog/internal/core/library"
-	playlistservice "altune/go-api/internal/catalog/internal/core/playlist"
-	"altune/go-api/internal/catalog/internal/core/ports"
-	trackservice "altune/go-api/internal/catalog/service/track"
 	"altune/go-api/internal/shared/httputil"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
@@ -22,25 +16,25 @@ import (
 
 type stubAdder struct{}
 
-func (stubAdder) Add(context.Context, *domain.Track) (*domain.Track, bool, error) {
+func (stubAdder) Add(context.Context, *catalog.Track) (*catalog.Track, bool, error) {
 	return nil, false, nil
 }
 
-type stubGetter struct{ track *domain.Track }
+type stubGetter struct{ track *catalog.Track }
 
-func (g stubGetter) GetByID(context.Context, domain.TrackId, shared.UserId) (*domain.Track, error) {
+func (g stubGetter) GetByID(context.Context, catalog.TrackId, shared.UserId) (*catalog.Track, error) {
 	return g.track, nil
 }
 
 type stubBatchGetter struct{}
 
-func (stubBatchGetter) ListByIDs(context.Context, shared.UserId, []domain.TrackId) ([]*domain.Track, error) {
+func (stubBatchGetter) ListByIDs(context.Context, shared.UserId, []catalog.TrackId) ([]*catalog.Track, error) {
 	return nil, nil
 }
 
 type stubLister struct{}
 
-func (stubLister) ListForUser(context.Context, shared.UserId, int, int) ([]*domain.Track, int, error) {
+func (stubLister) ListForUser(context.Context, shared.UserId, int, int) ([]*catalog.Track, int, error) {
 	return nil, 0, nil
 }
 
@@ -52,23 +46,23 @@ func (c stubCounter) CountForUser(context.Context, shared.UserId, int) (int, err
 
 type stubUpdater struct{}
 
-func (stubUpdater) Update(context.Context, *domain.Track, int) error { return nil }
+func (stubUpdater) Update(context.Context, *catalog.Track, int) error { return nil }
 
 type stubNumberSetter struct{}
 
-func (stubNumberSetter) SetTrackNumber(context.Context, domain.TrackId, shared.UserId, int) (bool, error) {
+func (stubNumberSetter) SetTrackNumber(context.Context, catalog.TrackId, shared.UserId, int) (bool, error) {
 	return true, nil
 }
 
 type stubDeleter struct{ deleted bool }
 
-func (d stubDeleter) Delete(context.Context, domain.TrackId, shared.UserId) (bool, *string, error) {
+func (d stubDeleter) Delete(context.Context, catalog.TrackId, shared.UserId) (bool, *string, error) {
 	return d.deleted, nil, nil
 }
 
 type stubAudioRefLookup struct{}
 
-func (stubAudioRefLookup) AudioRefInUse(context.Context, string, domain.TrackId) (bool, error) {
+func (stubAudioRefLookup) AudioRefInUse(context.Context, string, catalog.TrackId) (bool, error) {
 	return false, nil
 }
 
@@ -76,55 +70,55 @@ func TestServicesDependOnNarrowTrackPorts(t *testing.T) {
 	ctx := context.Background()
 	userId := catalogtest.UserId()
 	store := catalogtest.NewAudioStore()
-	want := &domain.Track{Title: "Narrow"}
+	want := &catalog.Track{Title: "Narrow"}
 
-	got, err := trackservice.NewGetTrackStatusService(stubGetter{track: want}).Execute(ctx, userId, domain.NewTrackId())
+	got, err := catalog.NewGetTrackStatusService(stubGetter{track: want}).Execute(ctx, userId, catalog.NewTrackId())
 	if err != nil || got != want {
 		t.Fatalf("GetTrackStatus via getter-only port = (%v, %v), want the stub's track", got, err)
 	}
-	if err := trackservice.NewDeleteTrackService(struct {
+	if err := catalog.NewDeleteTrackService(struct {
 		stubDeleter
 		stubAudioRefLookup
-	}{stubDeleter: stubDeleter{deleted: true}}, store).Execute(ctx, userId, domain.NewTrackId()); err != nil {
+	}{stubDeleter: stubDeleter{deleted: true}}, store).Execute(ctx, userId, catalog.NewTrackId()); err != nil {
 		t.Fatalf("DeleteTrack via deleter-only port: %v", err)
 	}
-	if _, err := trackservice.NewSetTrackNumberService(struct {
+	if _, err := catalog.NewSetTrackNumberService(struct {
 		stubGetter
 		stubNumberSetter
-	}{}).Execute(ctx, userId, domain.NewTrackId(), 7); err != nil {
+	}{}).Execute(ctx, userId, catalog.NewTrackId(), 7); err != nil {
 		t.Fatalf("SetTrackNumber via setter-only port: %v", err)
 	}
 
-	_ = trackservice.NewAddTrackService(struct {
+	_ = catalog.NewAddTrackService(struct {
 		stubAdder
 		stubCounter
 		stubUpdater
 	}{})
-	_ = audioservice.NewAudioURLService(stubBatchGetter{}, store)
-	_ = featuredservice.NewBackfillFeaturedService(stubLister{}, nil, nil)
-	_ = audioservice.NewStreamTrackService(struct {
+	_ = catalog.NewAudioURLService(stubBatchGetter{}, store)
+	_ = catalog.NewBackfillFeaturedService(stubLister{}, nil, nil)
+	_ = catalog.NewStreamTrackService(struct {
 		stubGetter
 		stubUpdater
 	}{}, store)
-	_ = playlistservice.NewPlaylistMembershipService(catalogtest.NewPlaylistRepo(), struct {
+	_ = catalog.NewPlaylistMembershipService(catalogtest.NewPlaylistRepo(), struct {
 		stubGetter
 		stubBatchGetter
 	}{})
 }
 
 type featuringErrLister struct {
-	ports.FeaturedArtistRepository
+	catalog.FeaturedArtistRepository
 	err error
 }
 
-func (f featuringErrLister) ListTracksFeaturing(_ context.Context, _ shared.UserId, _ domain.FeaturedArtist) ([]*domain.Track, error) {
+func (f featuringErrLister) ListTracksFeaturing(_ context.Context, _ shared.UserId, _ catalog.FeaturedArtist) ([]*catalog.Track, error) {
 	return nil, f.err
 }
 
 func TestHotPaths_ClassifyTransientDBFailures(t *testing.T) {
 	userId := catalogtest.UserId()
 	cause := context.DeadlineExceeded
-	transient := fmt.Errorf("%w: %w", ports.ErrDBTransient, cause)
+	transient := fmt.Errorf("%w: %w", catalog.ErrDBTransient, cause)
 	permanent := errors.New("relation \"tracks\" does not exist")
 
 	paths := []struct {
@@ -132,14 +126,14 @@ func TestHotPaths_ClassifyTransientDBFailures(t *testing.T) {
 		call func(repo *catalogtest.TrackRepo) error
 	}{
 		{"stream", func(repo *catalogtest.TrackRepo) error {
-			_, err := audioservice.NewStreamTrackService(repo, catalogtest.NewAudioStore()).Execute(context.Background(), userId, domain.NewTrackId())
+			_, err := catalog.NewStreamTrackService(repo, catalogtest.NewAudioStore()).Execute(context.Background(), userId, catalog.NewTrackId())
 			return err
 		}},
 		{"recover", func(repo *catalogtest.TrackRepo) error {
-			return audioservice.NewStreamTrackService(repo, catalogtest.NewAudioStore()).RecoverIfMissing(context.Background(), userId, domain.NewTrackId())
+			return catalog.NewStreamTrackService(repo, catalogtest.NewAudioStore()).RecoverIfMissing(context.Background(), userId, catalog.NewTrackId())
 		}},
 		{"status", func(repo *catalogtest.TrackRepo) error {
-			_, err := trackservice.NewGetTrackStatusService(repo).Execute(context.Background(), userId, domain.NewTrackId())
+			_, err := catalog.NewGetTrackStatusService(repo).Execute(context.Background(), userId, catalog.NewTrackId())
 			return err
 		}},
 	}
@@ -148,7 +142,7 @@ func TestHotPaths_ClassifyTransientDBFailures(t *testing.T) {
 			repo := catalogtest.NewTrackRepo()
 			repo.ErrOnGetBy = transient
 			err := p.call(repo)
-			if !errors.Is(err, domain.ErrCatalogTemporarilyUnavailable) {
+			if !errors.Is(err, catalog.ErrCatalogTemporarilyUnavailable) {
 				t.Fatalf("err = %v, want ErrCatalogTemporarilyUnavailable", err)
 			}
 			if !errors.Is(err, cause) {
@@ -160,7 +154,7 @@ func TestHotPaths_ClassifyTransientDBFailures(t *testing.T) {
 			repo := catalogtest.NewTrackRepo()
 			repo.ErrOnGetBy = permanent
 			err := p.call(repo)
-			if errors.Is(err, domain.ErrCatalogTemporarilyUnavailable) {
+			if errors.Is(err, catalog.ErrCatalogTemporarilyUnavailable) {
 				t.Fatalf("permanent failure classified transient: %v", err)
 			}
 			assertServiceErrorResponse(t, err, http.StatusInternalServerError, "internal")
@@ -169,26 +163,26 @@ func TestHotPaths_ClassifyTransientDBFailures(t *testing.T) {
 }
 
 type lensErrRepo struct {
-	ports.LibraryLensRepository
+	catalog.LibraryLensRepository
 	err error
 }
 
-func (l lensErrRepo) ListAlbumsForUser(context.Context, shared.UserId, domain.LibraryQuery) ([]domain.AlbumGroup, error) {
+func (l lensErrRepo) ListAlbumsForUser(context.Context, shared.UserId, catalog.LibraryQuery) ([]catalog.AlbumGroup, error) {
 	return nil, l.err
 }
 
-func (l lensErrRepo) ListArtistsForUser(context.Context, shared.UserId, domain.LibraryQuery) ([]domain.ArtistGroup, error) {
+func (l lensErrRepo) ListArtistsForUser(context.Context, shared.UserId, catalog.LibraryQuery) ([]catalog.ArtistGroup, error) {
 	return nil, l.err
 }
 
 func TestPlaylistAndLibraryPaths_ClassifyTransientDBFailures(t *testing.T) {
 	ctx := context.Background()
 	userId := catalogtest.UserId()
-	playlistId := domain.NewPlaylistId()
+	playlistId := catalog.NewPlaylistId()
 	cause := context.DeadlineExceeded
-	transient := fmt.Errorf("%w: %w", ports.ErrDBTransient, cause)
+	transient := fmt.Errorf("%w: %w", catalog.ErrDBTransient, cause)
 	permanent := errors.New("relation \"playlists\" does not exist")
-	fa := domain.NewFeaturedArtistIdentityOnly("SZA", "", 0)
+	fa := catalog.NewFeaturedArtistIdentityOnly("SZA", "", 0)
 
 	paths := []struct {
 		name string
@@ -197,20 +191,20 @@ func TestPlaylistAndLibraryPaths_ClassifyTransientDBFailures(t *testing.T) {
 		{"playlist list", func(e error) error {
 			repo := catalogtest.NewPlaylistRepo()
 			repo.ErrOnList = e
-			_, err := playlistservice.NewPlaylistLifecycleService(repo).List(ctx, userId, 10, 0)
+			_, err := catalog.NewPlaylistLifecycleService(repo).List(ctx, userId, 10, 0)
 			return err
 		}},
 		{"playlist get", func(e error) error {
 			repo := catalogtest.NewPlaylistRepo()
 			repo.ErrOnGetWithTracks = e
-			_, _, err := playlistservice.NewPlaylistLifecycleService(repo).Get(ctx, userId, playlistId)
+			_, _, err := catalog.NewPlaylistLifecycleService(repo).Get(ctx, userId, playlistId)
 			return err
 		}},
 		{"playlist rename write", func(e error) error {
 			repo := catalogtest.NewPlaylistRepo()
 			p := catalogtest.SeedPlaylist(t, repo, userId, "before")
 			repo.ErrOnUpdate = e
-			_, _, err := playlistservice.NewPlaylistLifecycleService(repo).Rename(ctx, userId, p.ID, "after")
+			_, _, err := catalog.NewPlaylistLifecycleService(repo).Rename(ctx, userId, p.ID, "after")
 			return err
 		}},
 		{"membership add track", func(e error) error {
@@ -219,30 +213,30 @@ func TestPlaylistAndLibraryPaths_ClassifyTransientDBFailures(t *testing.T) {
 			trRepo := catalogtest.NewTrackRepo()
 			track := catalogtest.SeedTrack(t, trRepo, userId, "T", "A", "B")
 			plRepo.ErrOnAddTrack = e
-			return playlistservice.NewPlaylistMembershipService(plRepo, trRepo).AddTrack(ctx, userId, p.ID, track.ID)
+			return catalog.NewPlaylistMembershipService(plRepo, trRepo).AddTrack(ctx, userId, p.ID, track.ID)
 		}},
 		{"membership reorder", func(e error) error {
 			plRepo := catalogtest.NewPlaylistRepo()
 			plRepo.ErrOnGetTrackOrder = e
-			return playlistservice.NewPlaylistMembershipService(plRepo, catalogtest.NewTrackRepo()).Reorder(ctx, userId, playlistId, nil)
+			return catalog.NewPlaylistMembershipService(plRepo, catalogtest.NewTrackRepo()).Reorder(ctx, userId, playlistId, nil)
 		}},
 		{"library albums", func(e error) error {
-			_, err := libraryservice.NewLibraryLensService(lensErrRepo{err: e}).Albums(ctx, userId, domain.LibraryQuery{})
+			_, err := catalog.NewLibraryLensService(lensErrRepo{err: e}).Albums(ctx, userId, catalog.LibraryQuery{})
 			return err
 		}},
 		{"library artists", func(e error) error {
-			_, err := libraryservice.NewLibraryLensService(lensErrRepo{err: e}).Artists(ctx, userId, domain.LibraryQuery{})
+			_, err := catalog.NewLibraryLensService(lensErrRepo{err: e}).Artists(ctx, userId, catalog.LibraryQuery{})
 			return err
 		}},
 		{"list featuring", func(e error) error {
-			_, err := featuredservice.NewListFeaturingService(featuringErrLister{err: e}).Execute(ctx, userId, fa)
+			_, err := catalog.NewListFeaturingService(featuringErrLister{err: e}).Execute(ctx, userId, fa)
 			return err
 		}},
 	}
 	for _, p := range paths {
 		t.Run(p.name+"/transient is a retryable 503", func(t *testing.T) {
 			err := p.call(transient)
-			if !errors.Is(err, domain.ErrCatalogTemporarilyUnavailable) {
+			if !errors.Is(err, catalog.ErrCatalogTemporarilyUnavailable) {
 				t.Fatalf("err = %v, want ErrCatalogTemporarilyUnavailable", err)
 			}
 			if !errors.Is(err, cause) {
@@ -252,7 +246,7 @@ func TestPlaylistAndLibraryPaths_ClassifyTransientDBFailures(t *testing.T) {
 		})
 		t.Run(p.name+"/permanent stays a 500", func(t *testing.T) {
 			err := p.call(permanent)
-			if errors.Is(err, domain.ErrCatalogTemporarilyUnavailable) {
+			if errors.Is(err, catalog.ErrCatalogTemporarilyUnavailable) {
 				t.Fatalf("permanent failure classified transient: %v", err)
 			}
 			if !errors.Is(err, permanent) {
