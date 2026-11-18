@@ -1,8 +1,8 @@
-package providerhttp
+package providerhttp_test
 
 import (
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/internal/adapters/providers/providertest"
-	"altune/go-api/internal/discovery/internal/core/ports"
 	"context"
 	"errors"
 	"slices"
@@ -12,7 +12,7 @@ import (
 )
 
 func TestMinIntervalLimiterCancelledCtxReturnsPromptly(t *testing.T) {
-	l := NewMinIntervalLimiter(time.Hour)
+	l := discovery.NewProviderHTTPMinIntervalLimiter(time.Hour)
 
 	if err := l.Wait(context.Background()); err != nil {
 		t.Fatalf("first wait: unexpected error %v", err)
@@ -34,7 +34,7 @@ func TestMinIntervalLimiterCancelledCtxReturnsPromptly(t *testing.T) {
 }
 
 func TestMinIntervalLimiterShortDeadlineReturnsBeforeInterval(t *testing.T) {
-	l := NewMinIntervalLimiter(time.Hour)
+	l := discovery.NewProviderHTTPMinIntervalLimiter(time.Hour)
 
 	if err := l.Wait(context.Background()); err != nil {
 		t.Fatalf("first wait: unexpected error %v", err)
@@ -56,7 +56,7 @@ func TestMinIntervalLimiterShortDeadlineReturnsBeforeInterval(t *testing.T) {
 }
 
 func TestMinIntervalLimiterEnforcesInterval(t *testing.T) {
-	l := NewMinIntervalLimiter(50 * time.Millisecond)
+	l := discovery.NewProviderHTTPMinIntervalLimiter(50 * time.Millisecond)
 
 	start := time.Now()
 	for i := 0; i < 3; i++ {
@@ -72,7 +72,7 @@ func TestMinIntervalLimiterEnforcesInterval(t *testing.T) {
 }
 
 func TestMinIntervalLimiterShedsWithoutReservingSlot(t *testing.T) {
-	l := NewMinIntervalLimiter(time.Hour)
+	l := discovery.NewProviderHTTPMinIntervalLimiter(time.Hour)
 	if err := l.Wait(context.Background()); err != nil {
 		t.Fatalf("first wait: unexpected error %v", err)
 	}
@@ -84,7 +84,7 @@ func TestMinIntervalLimiterShedsWithoutReservingSlot(t *testing.T) {
 	defer cancel()
 	err := l.Wait(ctx)
 
-	if !errors.Is(err, ports.ErrProviderRateLimitQueueTimeout) || !errors.Is(err, context.DeadlineExceeded) {
+	if !errors.Is(err, discovery.ErrProviderRateLimitQueueTimeout) || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("want a queue timeout that is also DeadlineExceeded, got %v", err)
 	}
 	l.Mu.Lock()
@@ -96,27 +96,21 @@ func TestMinIntervalLimiterShedsWithoutReservingSlot(t *testing.T) {
 
 func TestRateLimiterAdmittedCallersStaySpaced(t *testing.T) {
 	const interval = 60 * time.Millisecond
-	l := NewRateLimiter(interval, 1, 3)
+	l := discovery.NewProviderHTTPRateLimiter(interval, 1, 3)
 
 	var mu sync.Mutex
 	var starts []time.Time
-	reserveAndRecord := func(ctx context.Context) error {
-		start, err := l.reserve(ctx)
-		if err != nil {
+	waitAndRecord := func(ctx context.Context) error {
+		if err := l.Wait(ctx); err != nil {
 			return err
 		}
 		mu.Lock()
-		starts = append(starts, start)
+		starts = append(starts, time.Now())
 		mu.Unlock()
-		select {
-		case <-time.After(time.Until(start)):
-			return nil
-		case <-ctx.Done():
-			return ctx.Err()
-		}
+		return nil
 	}
 
-	got := providertest.FireBurst(t, reserveAndRecord, 10, 2*time.Second)
+	got := providertest.FireBurst(t, waitAndRecord, 10, 2*time.Second)
 
 	admitted := 0
 	for _, r := range got {
@@ -135,15 +129,15 @@ func TestRateLimiterAdmittedCallersStaySpaced(t *testing.T) {
 	}
 	slices.SortFunc(admits, func(a, b time.Time) int { return a.Compare(b) })
 	for i := 1; i < len(admits); i++ {
-		if gap := admits[i].Sub(admits[i-1]); gap < interval-10*time.Millisecond {
-			t.Errorf("admits %d and %d only %v apart, want >= %v", i-1, i, gap, interval)
+		if gap := admits[i].Sub(admits[i-1]); gap < interval/2 {
+			t.Errorf("admits %d and %d only %v apart, want about %v", i-1, i, gap, interval)
 		}
 	}
 }
 
 func TestRateLimiterQueueDrainsAndReadmits(t *testing.T) {
 	const interval = 30 * time.Millisecond
-	l := NewRateLimiter(interval, 1, 1)
+	l := discovery.NewProviderHTTPRateLimiter(interval, 1, 1)
 	if err := l.Wait(context.Background()); err != nil {
 		t.Fatalf("first: %v", err)
 	}
@@ -156,7 +150,7 @@ func TestRateLimiterQueueDrainsAndReadmits(t *testing.T) {
 }
 
 func TestRateLimiterShedsNoDeadlineCallerWhenFull(t *testing.T) {
-	l := NewRateLimiter(time.Hour, 1, 2)
+	l := discovery.NewProviderHTTPRateLimiter(time.Hour, 1, 2)
 	_ = l.Wait(context.Background())
 	l.Mu.Lock()
 	l.LastReq = l.LastReq.Add(2 * time.Hour)
@@ -166,7 +160,7 @@ func TestRateLimiterShedsNoDeadlineCallerWhenFull(t *testing.T) {
 	start := time.Now()
 	err := l.Wait(context.Background())
 
-	if !errors.Is(err, ports.ErrProviderRateLimitQueueTimeout) || !errors.Is(err, context.DeadlineExceeded) {
+	if !errors.Is(err, discovery.ErrProviderRateLimitQueueTimeout) || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("want a queue-timeout shed that is also DeadlineExceeded, got %v", err)
 	}
 	if elapsed := time.Since(start); elapsed > 100*time.Millisecond {

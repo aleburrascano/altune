@@ -1,0 +1,28 @@
+{
+  "removed": [
+    "T1 internal/discovery/internal/adapters/authbridge/require_user_id_test.go is in package authbridge, so it sees inside the module: use package authbridge_test and import the door",
+    "T1 internal/discovery/internal/adapters/catalogbridge/ownership_reader_test.go imports domain/ownership_key.go, behind discovery's door",
+    "T1 internal/discovery/internal/adapters/catalogbridge/ownership_reader_test.go is in package catalogbridge, so it sees inside the module: use package catalogbridge_test and import the door",
+    "T1 internal/discovery/internal/adapters/providers/genius/audio_links_test.go is in package genius, so it sees inside the module: use package genius_test and import the door",
+    "T1 internal/discovery/internal/adapters/providers/itunes/itunes_test.go imports domain/enums.go, behind discovery's door",
+    "T1 internal/discovery/internal/adapters/providers/itunes/itunes_test.go imports domain/provider_key.go, behind discovery's door",
+    "T1 internal/discovery/internal/adapters/providers/itunes/itunes_test.go imports internal/adapters/providers/providerhttp/ratelimit.go, behind discovery's door",
+    "T1 internal/discovery/internal/adapters/providers/itunes/itunes_test.go imports internal/core/ports/artwork.go, behind discovery's door",
+    "T1 internal/discovery/internal/adapters/providers/itunes/itunes_test.go imports internal/core/ports/search.go, behind discovery's door",
+    "T1 internal/discovery/internal/adapters/providers/itunes/itunes_test.go is in package itunes, so it sees inside the module: use package itunes_test and import the door",
+    "T1 internal/discovery/internal/adapters/providers/providerhttp/providerhttp_test.go imports domain/provider_key.go, behind discovery's door",
+    "T1 internal/discovery/internal/adapters/providers/providerhttp/providerhttp_test.go imports internal/core/ports/artwork.go, behind discovery's door",
+    "T1 internal/discovery/internal/adapters/providers/providerhttp/providerhttp_test.go is in package providerhttp, so it sees inside the module: use package providerhttp_test and import the door",
+    "T1 internal/discovery/internal/adapters/providers/providerhttp/ratelimit_test.go imports internal/core/ports/search.go, behind discovery's door",
+    "T1 internal/discovery/internal/adapters/providers/providerhttp/ratelimit_test.go is in package providerhttp, so it sees inside the module: use package providerhttp_test and import the door",
+    "T1 internal/discovery/internal/adapters/providers/providersearch/query_syntax_test.go is in package providersearch, so it sees inside the module: use package providersearch_test and import the door",
+    "T1 internal/discovery/internal/adapters/providers/providersearch/search_kinds_test.go imports domain/enums.go, behind discovery's door",
+    "T1 internal/discovery/internal/adapters/providers/providersearch/search_kinds_test.go imports domain/partial_result_error.go, behind discovery's door",
+    "T1 internal/discovery/internal/adapters/providers/providersearch/search_kinds_test.go imports domain/search_result.go, behind discovery's door",
+    "T1 internal/discovery/internal/adapters/providers/providersearch/search_kinds_test.go is in package providersearch, so it sees inside the module: use package providersearch_test and import the door",
+    "T1 internal/discovery/internal/adapters/providers/soundcloud/soundcloud_ytdlp_test.go imports domain/enums.go, behind discovery's door",
+    "T1 internal/discovery/internal/adapters/providers/soundcloud/soundcloud_ytdlp_test.go is in package soundcloud, so it sees inside the module: use package soundcloud_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}

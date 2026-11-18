@@ -248,6 +248,15 @@ func songCatalogServer(t *testing.T, routes map[string]string) *httptest.Server 
 	return server
 }
 
+type songDetailer interface {
+	SongDetail(ctx context.Context, songID int) (discovery.GeniusSongDetail, error)
+}
+
+func songCatalog(t *testing.T, routes map[string]string) songDetailer {
+	t.Helper()
+	return discovery.NewSongCatalog(providertest.NewClient(songCatalogServer(t, routes).URL), "tok")
+}
+
 func TestSongCatalog_ArtistSongs_KeepsPrimaryArtistSongsAndNeverUsesTheArtistPhotoAsCover(t *testing.T) {
 	server := songCatalogServer(t, map[string]string{"/artists/7/songs": `{"response":{"next_page":null,"songs":[
 		{"id":1,"title":"Cancun","url":"https://genius.com/c","release_date":"2022-07-24","song_art_image_url":"https://images.genius.com/cancun.jpg","header_image_url":"https://images.genius.com/cancun-h.jpg","primary_artist":{"id":7,"image_url":"` + artistPhoto + `"}},
