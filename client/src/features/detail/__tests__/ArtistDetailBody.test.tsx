@@ -15,6 +15,7 @@ import {
   type RecordingFeaturePorts,
 } from '@testing/queryHarness';
 import { setPlatformOS } from '@testing/setPlatformOS';
+import { WINDOW_WIDTH, setWindowWidth } from '@testing/setWindowWidth';
 export type ArtistDetailBodyLastfmFixture = LastFmEnrichmentResponse;
 
 const { __http } = require('@testing/doubles/fetch.js');
@@ -53,6 +54,7 @@ function renderBody(ports?: RecordingFeaturePorts) {
 }
 
 beforeEach(signInTestUser);
+beforeEach(() => setWindowWidth(WINDOW_WIDTH.phone));
 
 warmUpFirstRender(async () => {
   await signInTestUser();
@@ -239,19 +241,6 @@ describe('ArtistDetailBody: section composition, top-tracks cap, explore toggle 
     await screen.findByTestId('detail-explore-discography');
     expect(screen.queryByTestId('detail-artist-facts')).toBeNull();
   });
-});
-
-let mockProbeWindowWidth: number | null = null;
-
-jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => {
-  const actual = jest.requireActual('react-native/Libraries/Utilities/useWindowDimensions');
-  return {
-    __esModule: true,
-    default: () =>
-      mockProbeWindowWidth === null
-        ? actual.default()
-        : { width: mockProbeWindowWidth, height: 800, scale: 2, fontScale: 1 },
-  };
 });
 
 function replyLibraryTracks(count: number) {
@@ -454,12 +443,11 @@ describe('ArtistDetailBody probe: the wide web layout still composes the artist 
 
   afterEach(() => {
     setPlatformOS('ios');
-    mockProbeWindowWidth = null;
   });
 
   it('places top tracks, explore and about in the right column on a wide web window', async () => {
     setPlatformOS('web');
-    mockProbeWindowWidth = 1440;
+    setWindowWidth(WINDOW_WIDTH.desktop);
     render(
       <ArtistDetailBody
         chrome={{

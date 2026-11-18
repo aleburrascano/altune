@@ -5,21 +5,15 @@ import { darkTheme } from '@shared/ui';
 
 import { AlbumRail } from '@features/detail';
 import { setPlatformOS } from '@testing/setPlatformOS';
-
-let mockWindowWidth = 390;
-
-jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
-  __esModule: true,
-  default: () => ({ width: mockWindowWidth, height: 800, scale: 2, fontScale: 1 }),
-}));
+import { WINDOW_WIDTH, setWindowWidth } from '@testing/setWindowWidth';
 
 beforeEach(() => {
-  mockWindowWidth = 390;
+  setWindowWidth(WINDOW_WIDTH.phone);
 });
 
 afterEach(() => {
   setPlatformOS('ios');
-  mockWindowWidth = 390;
+  setWindowWidth(WINDOW_WIDTH.phone);
 });
 
 function album(title: string): DiscoveryResult {
@@ -50,7 +44,7 @@ function renderRail(items: DiscoveryResult[] = [album('A1'), album('A2')]) {
 
 describe('AlbumRail: compact (native, or web at a narrow width)', () => {
   it('renders the horizontal rail off the web platform even at a wide window width', () => {
-    mockWindowWidth = 1440;
+    setWindowWidth(WINDOW_WIDTH.desktop);
     renderRail();
 
     expect(screen.getByTestId('detail-discography-rail')).toBeTruthy();
@@ -58,7 +52,7 @@ describe('AlbumRail: compact (native, or web at a narrow width)', () => {
   });
 
   it('carries no border on a native rail card', () => {
-    mockWindowWidth = 1440;
+    setWindowWidth(WINDOW_WIDTH.desktop);
     renderRail();
 
     const flattened = StyleSheet.flatten(
@@ -70,7 +64,7 @@ describe('AlbumRail: compact (native, or web at a narrow width)', () => {
 
   it('renders the horizontal rail on the web at a narrow width', () => {
     setPlatformOS('web');
-    mockWindowWidth = 360;
+    setWindowWidth(WINDOW_WIDTH.smallPhone);
     renderRail();
 
     expect(screen.getByTestId('detail-discography-rail')).toBeTruthy();
@@ -81,7 +75,7 @@ describe('AlbumRail: compact (native, or web at a narrow width)', () => {
 describe('AlbumRail: grid on the web at a wide width', () => {
   beforeEach(() => {
     setPlatformOS('web');
-    mockWindowWidth = 1440;
+    setWindowWidth(WINDOW_WIDTH.desktop);
   });
 
   it('sizes its columns from its own measured width, not the window width', () => {
@@ -97,7 +91,7 @@ describe('AlbumRail: grid on the web at a wide width', () => {
   });
 
   it('picks up more columns when its measured width is wider than the window', () => {
-    mockWindowWidth = 1024;
+    setWindowWidth(WINDOW_WIDTH.laptop);
     renderRail();
 
     const measure = screen.getByTestId('detail-discography-grid-measure');
@@ -154,7 +148,7 @@ describe('AlbumRail: crossing the wide breakpoint on the web', () => {
   });
 
   it('is a rail at 999px and becomes a grid at 1000px', () => {
-    mockWindowWidth = 999;
+    setWindowWidth(WINDOW_WIDTH.justUnderWideWeb);
     const props = {
       items: [album('A1'), album('A2')],
       total: 2,
@@ -168,7 +162,7 @@ describe('AlbumRail: crossing the wide breakpoint on the web', () => {
     expect(screen.getByTestId('detail-discography-rail')).toBeTruthy();
     expect(screen.queryByTestId('detail-discography-grid')).toBeNull();
 
-    mockWindowWidth = 1000;
+    setWindowWidth(WINDOW_WIDTH.wideWeb);
     rerender(<AlbumRail {...props} />);
     expect(screen.queryByTestId('detail-discography-rail')).toBeNull();
     expect(screen.getByTestId('detail-discography-grid')).toBeTruthy();
@@ -178,7 +172,7 @@ describe('AlbumRail: crossing the wide breakpoint on the web', () => {
 describe('AlbumRail: grid edges on the web at a wide width', () => {
   beforeEach(() => {
     setPlatformOS('web');
-    mockWindowWidth = 1440;
+    setWindowWidth(WINDOW_WIDTH.desktop);
   });
 
   afterEach(() => {

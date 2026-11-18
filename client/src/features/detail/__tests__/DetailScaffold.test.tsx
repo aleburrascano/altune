@@ -4,17 +4,11 @@ import { fireEvent, render, screen, within } from '@testing-library/react-native
 
 import { DetailScaffold, DetailBodyLayout, DiscographySections } from '@features/detail';
 import { setPlatformOS } from '@testing/setPlatformOS';
+import { WINDOW_WIDTH, setWindowWidth } from '@testing/setWindowWidth';
 
-jest.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ top: 20, bottom: 0, left: 0, right: 0 }),
-}));
-
-let mockWideScaffoldWindowWidth = 390;
-
-jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
-  __esModule: true,
-  default: () => ({ width: mockWideScaffoldWindowWidth, height: 800, scale: 2, fontScale: 1 }),
-}));
+beforeEach(() => {
+  setWindowWidth(WINDOW_WIDTH.phone);
+});
 
 const ANY_TEXT = /.+/;
 
@@ -169,12 +163,12 @@ describe('DetailScaffold', () => {
   describe('DetailScaffold on the web at a wide width', () => {
     beforeEach(() => {
       setPlatformOS('web');
-      mockWideScaffoldWindowWidth = 1440;
+      setWindowWidth(WINDOW_WIDTH.desktop);
     });
 
     afterEach(() => {
       setPlatformOS('ios');
-      mockWideScaffoldWindowWidth = 390;
+      setWindowWidth(WINDOW_WIDTH.phone);
     });
 
     it('moves the hero banner into the left column beside the actions', () => {
@@ -194,7 +188,7 @@ describe('DetailScaffold', () => {
 
   describe('DetailScaffold stays a single column on native even at a wide width', () => {
     it('keeps the compact detail-body layout when Platform.OS is not web', () => {
-      mockWideScaffoldWindowWidth = 1440;
+      setWindowWidth(WINDOW_WIDTH.desktop);
       renderScaffold();
 
       expect(screen.getByTestId('detail-body')).toBeTruthy();
@@ -205,12 +199,12 @@ describe('DetailScaffold', () => {
   describe('DetailScaffold across the wide web breakpoint', () => {
     afterEach(() => {
       setPlatformOS('ios');
-      mockWideScaffoldWindowWidth = 390;
+      setWindowWidth(WINDOW_WIDTH.phone);
     });
 
     it('puts the banner back above a single column when the web window narrows from 1440px to 800px', () => {
       setPlatformOS('web');
-      mockWideScaffoldWindowWidth = 1440;
+      setWindowWidth(WINDOW_WIDTH.desktop);
       const props = {
         title: 'Random Access Memories',
         artworkUrl: null,
@@ -221,7 +215,7 @@ describe('DetailScaffold', () => {
       const { rerender } = render(<DetailScaffold {...props} />);
       expect(screen.getByTestId('detail-body-left')).toBeTruthy();
 
-      mockWideScaffoldWindowWidth = 800;
+      setWindowWidth(WINDOW_WIDTH.tablet);
       rerender(<DetailScaffold {...props} />);
 
       expect(screen.queryByTestId('detail-body-left')).toBeNull();
@@ -232,7 +226,7 @@ describe('DetailScaffold', () => {
 
     it('stays a single column on Android at 1440px', () => {
       setPlatformOS('android');
-      mockWideScaffoldWindowWidth = 1440;
+      setWindowWidth(WINDOW_WIDTH.desktop);
       renderScaffold();
 
       expect(screen.getByTestId('detail-body')).toBeTruthy();
@@ -243,12 +237,12 @@ describe('DetailScaffold', () => {
   describe('DetailScaffold on the web at 1440px: what lands in each column', () => {
     beforeEach(() => {
       setPlatformOS('web');
-      mockWideScaffoldWindowWidth = 1440;
+      setWindowWidth(WINDOW_WIDTH.desktop);
     });
 
     afterEach(() => {
       setPlatformOS('ios');
-      mockWideScaffoldWindowWidth = 390;
+      setWindowWidth(WINDOW_WIDTH.phone);
     });
 
     it('shows the artwork once, in the left column', () => {
@@ -309,12 +303,12 @@ describe('DetailBodyLayout', () => {
   const WIDE_BREAKPOINT = 1000;
 
   beforeEach(() => {
-    mockWideScaffoldWindowWidth = 390;
+    setWindowWidth(WINDOW_WIDTH.phone);
   });
 
   afterEach(() => {
     setPlatformOS('ios');
-    mockWideScaffoldWindowWidth = 390;
+    setWindowWidth(WINDOW_WIDTH.phone);
   });
 
   function renderLayout(hero: React.ReactNode = <Text>hero-slot</Text>) {
@@ -332,7 +326,7 @@ describe('DetailBodyLayout', () => {
   describe('DetailBodyLayout: compact', () => {
     it('renders actions, facts, then children in a single column off the web platform', () => {
       setPlatformOS('ios');
-      mockWideScaffoldWindowWidth = 1440;
+      setWindowWidth(WINDOW_WIDTH.desktop);
       renderLayout();
 
       expect(screen.getByTestId('detail-body')).toBeTruthy();
@@ -341,7 +335,7 @@ describe('DetailBodyLayout', () => {
 
     it('stays a single column on the web at a narrow width', () => {
       setPlatformOS('web');
-      mockWideScaffoldWindowWidth = NARROW_WIDTH;
+      setWindowWidth(NARROW_WIDTH);
       renderLayout();
 
       expect(screen.getByTestId('detail-body')).toBeTruthy();
@@ -350,7 +344,7 @@ describe('DetailBodyLayout', () => {
 
     it('stays a single column on the web at a wide width when there is no hero to place', () => {
       setPlatformOS('web');
-      mockWideScaffoldWindowWidth = 1440;
+      setWindowWidth(WINDOW_WIDTH.desktop);
       renderLayout(null);
 
       expect(screen.getByTestId('detail-body')).toBeTruthy();
@@ -361,7 +355,7 @@ describe('DetailBodyLayout', () => {
   describe('DetailBodyLayout: wide web', () => {
     it('splits into a left column with the hero and actions, and a right column with facts and children', () => {
       setPlatformOS('web');
-      mockWideScaffoldWindowWidth = 1440;
+      setWindowWidth(WINDOW_WIDTH.desktop);
       renderLayout();
 
       expect(screen.queryByTestId('detail-body')).toBeNull();
@@ -381,7 +375,7 @@ describe('DetailBodyLayout', () => {
     });
 
     it('stays a single column one pixel below the wide breakpoint', () => {
-      mockWideScaffoldWindowWidth = WIDE_BREAKPOINT - 1;
+      setWindowWidth(WIDE_BREAKPOINT - 1);
       renderLayout();
 
       expect(screen.getByTestId('detail-body')).toBeTruthy();
@@ -390,7 +384,7 @@ describe('DetailBodyLayout', () => {
     });
 
     it('splits into two columns exactly at the wide breakpoint', () => {
-      mockWideScaffoldWindowWidth = WIDE_BREAKPOINT;
+      setWindowWidth(WIDE_BREAKPOINT);
       renderLayout();
 
       expect(screen.queryByTestId('detail-body')).toBeNull();
@@ -399,7 +393,7 @@ describe('DetailBodyLayout', () => {
     });
 
     it('keeps the left column at a fixed 360px at 1440px', () => {
-      mockWideScaffoldWindowWidth = 1440;
+      setWindowWidth(WINDOW_WIDTH.desktop);
       renderLayout();
 
       expect(screen.getByTestId('detail-body-left')).toHaveStyle({ width: 360 });

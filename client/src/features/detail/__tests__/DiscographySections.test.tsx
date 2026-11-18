@@ -4,6 +4,11 @@ import { DiscographySections } from '@features/detail';
 
 import { StyleSheet } from 'react-native';
 import { setPlatformOS } from '@testing/setPlatformOS';
+import { WINDOW_WIDTH, setWindowWidth } from '@testing/setWindowWidth';
+
+beforeEach(() => {
+  setWindowWidth(WINDOW_WIDTH.phone);
+});
 
 function album(extras: Record<string, unknown>): DiscoveryResult {
   return {
@@ -259,13 +264,6 @@ describe('DiscographySections(): "See all" announces the true total, not the cap
   });
 });
 
-let mockDiscographyWindowWidth = 390;
-
-jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
-  __esModule: true,
-  default: () => ({ width: mockDiscographyWindowWidth, height: 800, scale: 2, fontScale: 1 }),
-}));
-
 function measureDiscographyGrid(width: number) {
   fireEvent(screen.getByTestId('detail-discography-grid-measure'), 'layout', {
     nativeEvent: { layout: { width, height: 400, x: 0, y: 0 } },
@@ -279,12 +277,12 @@ function renderedWidth(testID: string): unknown {
 describe('DiscographySections(): on native at 1440px nothing changes', () => {
   afterEach(() => {
     setPlatformOS('ios');
-    mockDiscographyWindowWidth = 390;
+    setWindowWidth(WINDOW_WIDTH.phone);
   });
 
   it('keeps the Android rail with 128px cards at a 1440px window', () => {
     setPlatformOS('android');
-    mockDiscographyWindowWidth = 1440;
+    setWindowWidth(WINDOW_WIDTH.desktop);
     render(<DiscographySections albums={releases(2, 'album', 'A')} onAlbumPress={jest.fn()} />);
 
     expect(screen.getByTestId('detail-discography-rail')).toBeTruthy();
@@ -296,12 +294,12 @@ describe('DiscographySections(): on native at 1440px nothing changes', () => {
 describe('DiscographySections(): the grid on the web at 1440px', () => {
   beforeEach(() => {
     setPlatformOS('web');
-    mockDiscographyWindowWidth = 1440;
+    setWindowWidth(WINDOW_WIDTH.desktop);
   });
 
   afterEach(() => {
     setPlatformOS('ios');
-    mockDiscographyWindowWidth = 390;
+    setWindowWidth(WINDOW_WIDTH.phone);
   });
 
   it('shows every card at a positive width before the grid has been measured', () => {
@@ -333,7 +331,7 @@ describe('DiscographySections(): the grid on the web at 1440px', () => {
     measureDiscographyGrid(800);
     const before = renderedWidth('detail-album-0');
 
-    mockDiscographyWindowWidth = 1920;
+    setWindowWidth(WINDOW_WIDTH.fullHd);
     rerender(<DiscographySections albums={albums} onAlbumPress={jest.fn()} />);
 
     expect(renderedWidth('detail-album-0')).toBe(before);
