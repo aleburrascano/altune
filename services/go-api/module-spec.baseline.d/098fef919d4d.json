@@ -1,0 +1,8 @@
+{
+  "removed": [
+    "T1 internal/shared/textnorm/fuzzy_test.go is in package textnorm, so it sees inside the module: use package textnorm_test and import the door",
+    "T1 internal/shared/textnorm/normalize_test.go is in package textnorm, so it sees inside the module: use package textnorm_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}

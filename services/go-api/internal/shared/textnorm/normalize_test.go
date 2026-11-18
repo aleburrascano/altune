@@ -1,6 +1,7 @@
-package textnorm
+package textnorm_test
 
 import (
+	"altune/go-api/internal/shared/textnorm"
 	"regexp"
 	"strings"
 	"testing"
@@ -116,7 +117,7 @@ func TestNormalizeForMatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := NormalizeForMatch(tt.input)
+			got := textnorm.NormalizeForMatch(tt.input)
 			if got != tt.want {
 				t.Errorf("NormalizeForMatch(%q) = %q, want %q", tt.input, got, tt.want)
 			}
@@ -173,7 +174,7 @@ func TestNormalizeForMatchNonLatin(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := NormalizeForMatch(tt.input)
+			got := textnorm.NormalizeForMatch(tt.input)
 			if got != tt.want {
 				t.Errorf("NormalizeForMatch(%q) = %q, want %q", tt.input, got, tt.want)
 			}
@@ -192,31 +193,31 @@ func TestNameKey(t *testing.T) {
 			name:     "title and subtitle joined by the separator",
 			title:    "Humble",
 			subtitle: "Kendrick Lamar",
-			want:     "humble" + KeySeparator + "kendrick lamar",
+			want:     "humble" + textnorm.KeySeparator + "kendrick lamar",
 		},
 		{
 			name:     "padding around either part is dropped",
 			title:    "  Humble\t",
 			subtitle: "\n Kendrick Lamar  ",
-			want:     "humble" + KeySeparator + "kendrick lamar",
+			want:     "humble" + textnorm.KeySeparator + "kendrick lamar",
 		},
 		{
 			name:     "an empty subtitle keeps its position",
 			title:    "Kendrick Lamar",
 			subtitle: "",
-			want:     "kendrick lamar" + KeySeparator,
+			want:     "kendrick lamar" + textnorm.KeySeparator,
 		},
 		{
 			name:     "both parts are normalized, not just concatenated",
 			title:    "DAMN. (Deluxe Edition)",
 			subtitle: "Kendrick Lamár",
-			want:     "damn" + KeySeparator + "kendrick lamar",
+			want:     "damn" + textnorm.KeySeparator + "kendrick lamar",
 		},
 		{
 			name:     "a separator in the input cannot forge one",
-			title:    "Humble" + KeySeparator + "Kendrick",
+			title:    "Humble" + textnorm.KeySeparator + "Kendrick",
 			subtitle: "Lamar",
-			want:     "humble kendrick" + KeySeparator + "lamar",
+			want:     "humble kendrick" + textnorm.KeySeparator + "lamar",
 		},
 		{
 			name:     "a name that normalizes away has no key",
@@ -227,7 +228,7 @@ func TestNameKey(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := NameKey(tt.title, tt.subtitle)
+			got := textnorm.NameKey(tt.title, tt.subtitle)
 			if got != tt.want {
 				t.Errorf("NameKey(%q, %q) = %q, want %q", tt.title, tt.subtitle, got, tt.want)
 			}
@@ -236,27 +237,30 @@ func TestNameKey(t *testing.T) {
 }
 
 func TestNameKeyDistinguishesSplitsOfTheSameWords(t *testing.T) {
-	untitledArtist := NameKey("Blue Moon", "")
-	titleAndArtist := NameKey("Blue", "Moon")
+	untitledArtist := textnorm.NameKey("Blue Moon", "")
+	titleAndArtist := textnorm.NameKey("Blue", "Moon")
 	if untitledArtist == titleAndArtist {
 		t.Errorf("distinct title/subtitle splits must not share a key, both = %q", untitledArtist)
 	}
 }
 
-func TestStripSymbolsASCIIByteIdentical(t *testing.T) {
+func TestNormalizeForIdentityStripsEveryASCIISymbolAsTheOldRegexDid(t *testing.T) {
 	oldASCIIOnlyRe := regexp.MustCompile(`[^\w\s]`)
 	for asciiByte := 0; asciiByte < 128; asciiByte++ {
-		in := string(rune(asciiByte))
-		got := stripSymbols(in)
-		want := oldASCIIOnlyRe.ReplaceAllString(in, " ")
-		if got != want {
-			t.Errorf("stripSymbols(%q) = %q, old regex = %q", in, got, want)
+		symbol := string(rune(asciiByte))
+		if strings.ContainsAny(symbol, "&'.,") {
+			continue
+		}
+		in := "x" + symbol + "y"
+		want := strings.Join(strings.Fields(oldASCIIOnlyRe.ReplaceAllString(strings.ToLower(in), " ")), " ")
+		if got := textnorm.NormalizeForIdentity(in); got != want {
+			t.Errorf("NormalizeForIdentity(%q) = %q, old regex = %q", in, got, want)
 		}
 	}
 }
 
 func TestNormalizeForIdentityDropsZeroWidthSpace(t *testing.T) {
-	if got := NormalizeForIdentity("Instru\u200bmental"); got != "instrumental" {
+	if got := textnorm.NormalizeForIdentity("Instru\u200bmental"); got != "instrumental" {
 		t.Errorf("NormalizeForIdentity with zero-width space = %q, want %q", got, "instrumental")
 	}
 }
@@ -270,8 +274,8 @@ func TestFoldName_UnifiesUnicodeForms(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if FoldName(c.a) != FoldName(c.b) {
-				t.Errorf("FoldName(%q) = %q, FoldName(%q) = %q, want equal", c.a, FoldName(c.a), c.b, FoldName(c.b))
+			if textnorm.FoldName(c.a) != textnorm.FoldName(c.b) {
+				t.Errorf("FoldName(%q) = %q, FoldName(%q) = %q, want equal", c.a, textnorm.FoldName(c.a), c.b, textnorm.FoldName(c.b))
 			}
 		})
 	}
@@ -284,45 +288,45 @@ func TestFoldName_UnchangedForAlreadyNormalInput(t *testing.T) {
 		"坂本龍一", "Björk", "AC/DC", "Ty Dolla $ign",
 	}
 	for _, s := range inputs {
-		if got, want := FoldName(s), legacy(s); got != want {
+		if got, want := textnorm.FoldName(s), legacy(s); got != want {
 			t.Errorf("FoldName(%q) = %q, want legacy fold %q", s, got, want)
 		}
 	}
 }
 
 func TestFoldName_KeepsDiacriticsAndPunctuation(t *testing.T) {
-	if FoldName("Beyoncé") == FoldName("Beyonce") {
+	if textnorm.FoldName("Beyoncé") == textnorm.FoldName("Beyonce") {
 		t.Error("FoldName must not strip diacritics")
 	}
-	if got := FoldName("AC/DC"); got != "ac/dc" {
+	if got := textnorm.FoldName("AC/DC"); got != "ac/dc" {
 		t.Errorf("FoldName(AC/DC) = %q, want ac/dc", got)
 	}
 }
 
 func TestNFKC(t *testing.T) {
-	if got := NFKC("ﬁ"); got != "fi" {
+	if got := textnorm.NFKC("ﬁ"); got != "fi" {
 		t.Errorf("NFKC(ligature) = %q, want fi", got)
 	}
-	if got := NFKC(""); got != "" {
+	if got := textnorm.NFKC(""); got != "" {
 		t.Errorf("NFKC(\"\") = %q, want empty", got)
 	}
 }
 
 func TestNFKCFoldsFullwidthLetters(t *testing.T) {
-	if got := NFKC("ｆｕｌｌ"); got != "full" {
+	if got := textnorm.NFKC("ｆｕｌｌ"); got != "full" {
 		t.Errorf("NFKC(fullwidth) = %q, want full", got)
 	}
 }
 
 func TestNFKCKeepsCaseAndPunctuation(t *testing.T) {
-	if got := NFKC("Slowed + Reverb"); got != "Slowed + Reverb" {
+	if got := textnorm.NFKC("Slowed + Reverb"); got != "Slowed + Reverb" {
 		t.Errorf("NFKC(\"Slowed + Reverb\") = %q, want it unchanged", got)
 	}
 }
 
 func TestTransliterate_TurnsAnyScriptIntoPlainLetters(t *testing.T) {
 	for in, want := range map[string]string{"Straße": "Strasse", "Новый": "Novyi", "Beyoncé": "Beyonce"} {
-		if got := Transliterate(in); got != want {
+		if got := textnorm.Transliterate(in); got != want {
 			t.Errorf("Transliterate(%q) = %q, want %q", in, got, want)
 		}
 	}

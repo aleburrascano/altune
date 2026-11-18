@@ -1,6 +1,7 @@
-package textnorm
+package textnorm_test
 
 import (
+	"altune/go-api/internal/shared/textnorm"
 	"math"
 	"strings"
 	"testing"
@@ -89,7 +90,7 @@ func TestTokenSortRatio(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := TokenSortRatio(tt.s1, tt.s2)
+			got := textnorm.TokenSortRatio(tt.s1, tt.s2)
 			if got < tt.wantMin || got > tt.wantMax {
 				t.Errorf("TokenSortRatio(%q, %q) = %.2f, want [%.0f, %.0f]",
 					tt.s1, tt.s2, got, tt.wantMin, tt.wantMax)
@@ -113,7 +114,7 @@ func TestLevenshteinDistance(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.a+"_"+tt.b, func(t *testing.T) {
-			got := LevenshteinDistance(tt.a, tt.b)
+			got := textnorm.LevenshteinDistance(tt.a, tt.b)
 			if got != tt.want {
 				t.Errorf("LevenshteinDistance(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
 			}
@@ -130,8 +131,8 @@ func TestTokenSortRatio_Symmetry(t *testing.T) {
 
 	for _, p := range pairs {
 		t.Run(p[0]+"_vs_"+p[1], func(t *testing.T) {
-			ab := TokenSortRatio(p[0], p[1])
-			ba := TokenSortRatio(p[1], p[0])
+			ab := textnorm.TokenSortRatio(p[0], p[1])
+			ba := textnorm.TokenSortRatio(p[1], p[0])
 			if math.Abs(ab-ba) > 0.01 {
 				t.Errorf("TokenSortRatio is not symmetric: (%q,%q)=%.2f but (%q,%q)=%.2f",
 					p[0], p[1], ab, p[1], p[0], ba)
@@ -141,16 +142,17 @@ func TestTokenSortRatio_Symmetry(t *testing.T) {
 }
 
 func TestFuzzyBoundedForHugeInput(t *testing.T) {
+	const runeCap = 512
 	huge := strings.Repeat("a", 900_000)
 	other := strings.Repeat("b", 900_000)
 	start := time.Now()
-	d := LevenshteinDistance(huge, other)
-	r := TokenSortRatio(huge, other)
+	d := textnorm.LevenshteinDistance(huge, other)
+	r := textnorm.TokenSortRatio(huge, other)
 	if el := time.Since(start); el > 2*time.Second {
 		t.Fatalf("took %v", el)
 	}
-	if d != maxFuzzyRunes {
-		t.Fatalf("distance %d", d)
+	if d != runeCap {
+		t.Fatalf("distance %d, want the %d-rune cap", d, runeCap)
 	}
 	if r != 0 {
 		t.Fatalf("ratio %v", r)
