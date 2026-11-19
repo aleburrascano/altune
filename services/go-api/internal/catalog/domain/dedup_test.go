@@ -1,6 +1,7 @@
-package domain
+package domain_test
 
 import (
+	"altune/go-api/internal/catalog"
 	"testing"
 )
 
@@ -53,9 +54,9 @@ func TestComputeDedupKey(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := computeDedupKey(tt.title, tt.artist, tt.album)
+			got := catalog.TrackDedupKey(tt.title, tt.artist, tt.album)
 			if got != tt.want {
-				t.Errorf("computeDedupKey(%q, %q, %q) = %q, want %q",
+				t.Errorf("TrackDedupKey(%q, %q, %q) = %q, want %q",
 					tt.title, tt.artist, tt.album, got, tt.want)
 			}
 		})
@@ -64,10 +65,10 @@ func TestComputeDedupKey(t *testing.T) {
 
 func TestTrackDedupKey_AnEmptyAlbumKeysAsTheTitleLikeANewTrack(t *testing.T) {
 	t.Parallel()
-	if got := TrackDedupKey("Song", "Artist", ""); got != "song|artist|song" {
+	if got := catalog.TrackDedupKey("Song", "Artist", ""); got != "song|artist|song" {
 		t.Errorf("empty album: %q", got)
 	}
-	if got := TrackDedupKey("Song", "Artist", "  LP "); got != "song|artist|lp" {
+	if got := catalog.TrackDedupKey("Song", "Artist", "  LP "); got != "song|artist|lp" {
 		t.Errorf("album LP: %q", got)
 	}
 }

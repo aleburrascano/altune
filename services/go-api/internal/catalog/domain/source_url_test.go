@@ -1,6 +1,7 @@
-package domain
+package domain_test
 
 import (
+	"altune/go-api/internal/catalog"
 	shareddomain "altune/go-api/internal/shared/domain"
 	"errors"
 	"strings"
@@ -55,13 +56,28 @@ func TestValidateSourceURL_RejectsNonPublicHosts(t *testing.T) {
 	}
 	for _, raw := range internal {
 		t.Run(raw, func(t *testing.T) {
-			err := ValidateSourceURL(raw)
+			err := catalog.ValidateSourceURL(raw)
 			var verr *shareddomain.ValidationError
 			if !errors.As(err, &verr) {
 				t.Fatalf("ValidateSourceURL(%q) = %v, want a validation error", raw, err)
 			}
 			if !strings.Contains(err.Error(), "public host") {
 				t.Fatalf("error = %q, want it to mention a public host", err.Error())
+			}
+		})
+	}
+}
+
+func TestValidateSourceURL_RejectsNonHTTPSchemes(t *testing.T) {
+	for _, raw := range []string{"ftp://example.com/a.mp3", "ws://example.com/a.mp3", "gopher://example.com/a"} {
+		t.Run(raw, func(t *testing.T) {
+			err := catalog.ValidateSourceURL(raw)
+			var verr *shareddomain.ValidationError
+			if !errors.As(err, &verr) {
+				t.Fatalf("ValidateSourceURL(%q) = %v, want a validation error", raw, err)
+			}
+			if !strings.Contains(err.Error(), "http or https") {
+				t.Fatalf("error = %q, want it to name the allowed schemes", err.Error())
 			}
 		})
 	}
@@ -75,7 +91,7 @@ func TestValidateSourceURL_RejectsSmuggledHosts(t *testing.T) {
 	} {
 		t.Run(raw, func(t *testing.T) {
 			var verr *shareddomain.ValidationError
-			if err := ValidateSourceURL(raw); !errors.As(err, &verr) {
+			if err := catalog.ValidateSourceURL(raw); !errors.As(err, &verr) {
 				t.Fatalf("ValidateSourceURL(%q) = %v, want a validation error", raw, err)
 			}
 		})
@@ -98,7 +114,7 @@ func TestValidateSourceURL_AcceptsPublicHosts(t *testing.T) {
 	}
 	for _, raw := range public {
 		t.Run(raw, func(t *testing.T) {
-			if err := ValidateSourceURL(raw); err != nil {
+			if err := catalog.ValidateSourceURL(raw); err != nil {
 				t.Fatalf("ValidateSourceURL(%q) = %v, want nil", raw, err)
 			}
 		})

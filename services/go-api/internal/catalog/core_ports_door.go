@@ -9,6 +9,7 @@ type (
 	AudioRefPrefixLister  = ports.AudioRefPrefixLister
 	AudioStore            = ports.AudioStore
 	AudioStream           = ports.AudioStream
+	AudioURLSigner        = ports.AudioURLSigner
 	ObjectAge             = ports.ObjectAge
 	OrphanedAudio         = ports.OrphanedAudio
 	OrphanedAudioQueue    = ports.OrphanedAudioQueue

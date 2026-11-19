@@ -1,6 +1,7 @@
-package domain
+package domain_test
 
 import (
+	"altune/go-api/internal/catalog"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/sharedtest"
 	"strings"
@@ -40,7 +41,7 @@ func TestParsePlaylistId(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			id, err := ParsePlaylistId(tt.input)
+			id, err := catalog.ParsePlaylistId(tt.input)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error for input %q, got nil", tt.input)
@@ -99,7 +100,7 @@ func TestNewPlaylist(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pl, err := NewPlaylist(userId, tt.plName, testPlaylistCreatedAt)
+			pl, err := catalog.NewPlaylist(userId, tt.plName, testPlaylistCreatedAt)
 			if tt.wantErr != "" {
 				if err == nil {
 					t.Fatalf("expected error %q, got nil", tt.wantErr)
@@ -204,8 +205,8 @@ func TestPlaylist_AddTrack(t *testing.T) {
 		addedAAt := testPlaylistCreatedAt.Add(time.Minute)
 		addedBAt := addedAAt.Add(time.Minute)
 
-		trackA := NewTrackId()
-		trackB := NewTrackId()
+		trackA := catalog.NewTrackId()
+		trackB := catalog.NewTrackId()
 
 		if err := pl.AddTrack(trackA, addedAAt); err != nil {
 			t.Fatalf("AddTrack(A) unexpected error: %v", err)
@@ -233,7 +234,7 @@ func TestPlaylist_AddTrack(t *testing.T) {
 
 	t.Run("duplicate track returns error", func(t *testing.T) {
 		pl := newTestPlaylist(t)
-		trackA := NewTrackId()
+		trackA := catalog.NewTrackId()
 
 		if err := pl.AddTrack(trackA, testPlaylistCreatedAt); err != nil {
 			t.Fatalf("first AddTrack unexpected error: %v", err)
@@ -253,11 +254,11 @@ func TestPlaylist_RemoveTrack(t *testing.T) {
 	t.Parallel()
 	t.Run("removes and reorders positions", func(t *testing.T) {
 		pl := newTestPlaylist(t)
-		trackA := NewTrackId()
-		trackB := NewTrackId()
-		trackC := NewTrackId()
+		trackA := catalog.NewTrackId()
+		trackB := catalog.NewTrackId()
+		trackC := catalog.NewTrackId()
 
-		for _, id := range []TrackId{trackA, trackB, trackC} {
+		for _, id := range []catalog.TrackId{trackA, trackB, trackC} {
 			if err := pl.AddTrack(id, testPlaylistCreatedAt); err != nil {
 				t.Fatalf("AddTrack setup failed: %v", err)
 			}
@@ -286,7 +287,7 @@ func TestPlaylist_RemoveTrack(t *testing.T) {
 
 	t.Run("absent track returns false", func(t *testing.T) {
 		pl := newTestPlaylist(t)
-		absent := NewTrackId()
+		absent := catalog.NewTrackId()
 
 		removed := pl.RemoveTrack(absent, testPlaylistCreatedAt)
 		if removed {
@@ -299,11 +300,11 @@ func TestPlaylist_Reorder(t *testing.T) {
 	t.Parallel()
 	t.Run("valid reorder", func(t *testing.T) {
 		pl := newTestPlaylist(t)
-		trackA := NewTrackId()
-		trackB := NewTrackId()
-		trackC := NewTrackId()
+		trackA := catalog.NewTrackId()
+		trackB := catalog.NewTrackId()
+		trackC := catalog.NewTrackId()
 
-		for _, id := range []TrackId{trackA, trackB, trackC} {
+		for _, id := range []catalog.TrackId{trackA, trackB, trackC} {
 			if err := pl.AddTrack(id, testPlaylistCreatedAt); err != nil {
 				t.Fatalf("AddTrack setup failed: %v", err)
 			}
@@ -311,7 +312,7 @@ func TestPlaylist_Reorder(t *testing.T) {
 
 		reorderedAt := testPlaylistCreatedAt.Add(time.Hour)
 
-		err := pl.Reorder([]TrackId{trackC, trackB, trackA}, reorderedAt)
+		err := pl.Reorder([]catalog.TrackId{trackC, trackB, trackA}, reorderedAt)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -319,7 +320,7 @@ func TestPlaylist_Reorder(t *testing.T) {
 		if len(pl.Tracks) != 3 {
 			t.Fatalf("expected 3 tracks, got %d", len(pl.Tracks))
 		}
-		wantOrder := []TrackId{trackC, trackB, trackA}
+		wantOrder := []catalog.TrackId{trackC, trackB, trackA}
 		for i, want := range wantOrder {
 			if pl.Tracks[i].TrackId != want {
 				t.Errorf("Tracks[%d].TrackId = %v, want %v", i, pl.Tracks[i].TrackId, want)
@@ -335,12 +336,12 @@ func TestPlaylist_Reorder(t *testing.T) {
 
 	t.Run("length mismatch returns error", func(t *testing.T) {
 		pl := newTestPlaylist(t)
-		trackA := NewTrackId()
+		trackA := catalog.NewTrackId()
 		if err := pl.AddTrack(trackA, testPlaylistCreatedAt); err != nil {
 			t.Fatalf("AddTrack setup failed: %v", err)
 		}
 
-		err := pl.Reorder([]TrackId{trackA, NewTrackId()}, testPlaylistCreatedAt)
+		err := pl.Reorder([]catalog.TrackId{trackA, catalog.NewTrackId()}, testPlaylistCreatedAt)
 		if err == nil {
 			t.Fatal("expected error for length mismatch, got nil")
 		}
@@ -351,12 +352,12 @@ func TestPlaylist_Reorder(t *testing.T) {
 
 	t.Run("unknown track returns error", func(t *testing.T) {
 		pl := newTestPlaylist(t)
-		trackA := NewTrackId()
+		trackA := catalog.NewTrackId()
 		if err := pl.AddTrack(trackA, testPlaylistCreatedAt); err != nil {
 			t.Fatalf("AddTrack setup failed: %v", err)
 		}
 
-		err := pl.Reorder([]TrackId{NewTrackId()}, testPlaylistCreatedAt)
+		err := pl.Reorder([]catalog.TrackId{catalog.NewTrackId()}, testPlaylistCreatedAt)
 		if err == nil {
 			t.Fatal("expected error for unknown track, got nil")
 		}
@@ -367,15 +368,15 @@ func TestPlaylist_Reorder(t *testing.T) {
 
 	t.Run("duplicate track returns validation error", func(t *testing.T) {
 		pl := newTestPlaylist(t)
-		trackA := NewTrackId()
-		trackB := NewTrackId()
-		for _, id := range []TrackId{trackA, trackB} {
+		trackA := catalog.NewTrackId()
+		trackB := catalog.NewTrackId()
+		for _, id := range []catalog.TrackId{trackA, trackB} {
 			if err := pl.AddTrack(id, testPlaylistCreatedAt); err != nil {
 				t.Fatalf("AddTrack setup failed: %v", err)
 			}
 		}
 
-		err := pl.Reorder([]TrackId{trackA, trackA}, testPlaylistCreatedAt)
+		err := pl.Reorder([]catalog.TrackId{trackA, trackA}, testPlaylistCreatedAt)
 		if err == nil {
 			t.Fatal("expected error for duplicate track, got nil")
 		}
@@ -390,7 +391,7 @@ func TestPlaylist_StampsInjectedTimeAsUTC(t *testing.T) {
 	t.Parallel()
 	local := time.Date(2026, time.March, 4, 5, 6, 7, 0, time.FixedZone("UTC+2", 2*60*60))
 
-	pl, err := NewPlaylist(shared.NewUserId(uuid.New()), "Zoned", local)
+	pl, err := catalog.NewPlaylist(shared.NewUserId(uuid.New()), "Zoned", local)
 	if err != nil {
 		t.Fatalf("NewPlaylist: %v", err)
 	}
@@ -407,10 +408,10 @@ func TestPlaylist_StampsInjectedTimeAsUTC(t *testing.T) {
 
 var testPlaylistCreatedAt = time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
 
-func newTestPlaylist(t *testing.T) *Playlist {
+func newTestPlaylist(t *testing.T) *catalog.Playlist {
 	t.Helper()
 	userId := shared.NewUserId(uuid.New())
-	pl, err := NewPlaylist(userId, "Test Playlist", testPlaylistCreatedAt)
+	pl, err := catalog.NewPlaylist(userId, "Test Playlist", testPlaylistCreatedAt)
 	if err != nil {
 		t.Fatalf("newTestPlaylist: unexpected error: %v", err)
 	}
@@ -418,13 +419,13 @@ func newTestPlaylist(t *testing.T) *Playlist {
 }
 
 func TestCatalogDomainErrorCodes(t *testing.T) {
-	if got := ErrTrackAlreadyInPlaylist.ErrorCode(); got != "catalog.track_already_in_playlist" {
+	if got := catalog.ErrTrackAlreadyInPlaylist.ErrorCode(); got != "catalog.track_already_in_playlist" {
 		t.Errorf("ErrTrackAlreadyInPlaylist code: got %q", got)
 	}
-	if got := NewValidationError("x").ErrorCode(); got != "catalog.validation_error" {
+	if got := catalog.NewValidationError("x").ErrorCode(); got != "catalog.validation_error" {
 		t.Errorf("ValidationError code: got %q", got)
 	}
-	if got := (&CodedError{Status: 404}).ErrorCode(); got != "" {
+	if got := (&catalog.CodedError{Status: 404}).ErrorCode(); got != "" {
 		t.Errorf("bare CodedError code: got %q, want empty (status fallback)", got)
 	}
 }

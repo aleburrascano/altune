@@ -1,6 +1,7 @@
-package domain
+package domain_test
 
 import (
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/shared/sharedtest"
 	"strings"
 	"testing"
@@ -9,19 +10,19 @@ import (
 func TestParseLibrarySort(t *testing.T) {
 	tests := []struct {
 		input   string
-		want    LibrarySort
+		want    catalog.LibrarySort
 		wantErr bool
 	}{
-		{"", SortRecent, false},
-		{"recent", SortRecent, false},
-		{"az", SortAlphabetical, false},
-		{"year", SortYear, false},
-		{"popularity", SortRecent, true},
+		{"", catalog.SortRecent, false},
+		{"recent", catalog.SortRecent, false},
+		{"az", catalog.SortAlphabetical, false},
+		{"year", catalog.SortYear, false},
+		{"popularity", catalog.SortRecent, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			got, err := ParseLibrarySort(tt.input)
+			got, err := catalog.ParseLibrarySort(tt.input)
 
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
@@ -34,8 +35,8 @@ func TestParseLibrarySort(t *testing.T) {
 }
 
 func TestLibrarySort_String(t *testing.T) {
-	if SortAlphabetical.String() != "az" {
-		t.Errorf("SortAlphabetical.String() = %q, want %q", SortAlphabetical.String(), "az")
+	if catalog.SortAlphabetical.String() != "az" {
+		t.Errorf("SortAlphabetical.String() = %q, want %q", catalog.SortAlphabetical.String(), "az")
 	}
 }
 
@@ -57,7 +58,7 @@ func TestFailureMessage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := FailureMessage(tt.reason); got != tt.want {
+			if got := catalog.FailureMessage(tt.reason); got != tt.want {
 				t.Errorf("FailureMessage() = %q, want %q", got, tt.want)
 			}
 		})
@@ -66,13 +67,13 @@ func TestFailureMessage(t *testing.T) {
 
 func TestTotalDurationSeconds(t *testing.T) {
 	seconds := func(f float64) *float64 { return &f }
-	tracks := []*Track{
+	tracks := []*catalog.Track{
 		{DurationSeconds: seconds(90)},
 		{DurationSeconds: nil},
 		{DurationSeconds: seconds(30.5)},
 	}
 
-	if got := TotalDurationSeconds(tracks); got != 120.5 {
+	if got := catalog.TotalDurationSeconds(tracks); got != 120.5 {
 		t.Errorf("TotalDurationSeconds() = %v, want 120.5", got)
 	}
 }
@@ -96,7 +97,7 @@ func TestNormalizePage(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			limit, err := NormalizePage(c.limit, c.offset)
+			limit, err := catalog.NormalizePage(c.limit, c.offset)
 
 			if c.wantErr {
 				if err == nil {

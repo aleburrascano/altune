@@ -1,0 +1,21 @@
+{
+  "removed": [
+    "T1 internal/catalog/domain/catalog_identity_test.go is in package domain, so it sees inside the module: use package domain_test and import the door",
+    "T1 internal/catalog/domain/dedup_test.go is in package domain, so it sees inside the module: use package domain_test and import the door",
+    "T1 internal/catalog/domain/failure_test.go is in package domain, so it sees inside the module: use package domain_test and import the door",
+    "T1 internal/catalog/domain/featured_artist_test.go is in package domain, so it sees inside the module: use package domain_test and import the door",
+    "T1 internal/catalog/domain/library_lens_test.go is in package domain, so it sees inside the module: use package domain_test and import the door",
+    "T1 internal/catalog/domain/playlist_test.go is in package domain, so it sees inside the module: use package domain_test and import the door",
+    "T1 internal/catalog/domain/source_url_test.go is in package domain, so it sees inside the module: use package domain_test and import the door",
+    "T1 internal/catalog/domain/track_test.go is in package domain, so it sees inside the module: use package domain_test and import the door",
+    "T1 internal/catalog/internal/adapters/storage/helpers_darwin_test.go is in package storage, so it sees inside the module: use package storage_test and import the door",
+    "T1 internal/catalog/internal/adapters/storage/helpers_linux_test.go is in package storage, so it sees inside the module: use package storage_test and import the door",
+    "T1 internal/catalog/internal/adapters/storage/helpers_windows_test.go is in package storage, so it sees inside the module: use package storage_test and import the door",
+    "T1 internal/catalog/internal/adapters/storage/object_storage_test.go imports internal/core/ports/audio_store.go, behind catalog's door",
+    "T1 internal/catalog/internal/adapters/storage/object_storage_test.go is in package storage, so it sees inside the module: use package storage_test and import the door",
+    "T1 internal/catalog/internal/adapters/storage/scoped_store_test.go imports internal/core/ports/audio_store.go, behind catalog's door",
+    "T1 internal/catalog/internal/adapters/storage/scoped_store_test.go is in package storage, so it sees inside the module: use package storage_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}
