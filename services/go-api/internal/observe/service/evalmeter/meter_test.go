@@ -64,7 +64,7 @@ func (r *runs) assertNoTickStarts(t *testing.T, why string) {
 
 func newMeter(runner observe.EvalMeterRunner) (*observe.EvalMeter, *runs) {
 	r := &runs{begin: make(chan bool), ended: make(chan struct{}, 1)}
-	return observe.NewEvalMeter(true, time.Millisecond, runner).WithLeadership(r.scope), r
+	return observe.NewEvalMeter(time.Millisecond, runner).WithLeadership(r.scope), r
 }
 
 func start(t *testing.T, m *observe.EvalMeter) {
@@ -112,8 +112,7 @@ func meterAfterOneRun(t *testing.T, res observe.EvalMeterResult, err error) *obs
 
 func TestStatus_MarshalsEachStateAsItsWireString(t *testing.T) {
 	meters := map[string]*observe.EvalMeter{
-		"disabled":   observe.NewEvalMeter(false, 0, nil),
-		"no_data":    observe.NewEvalMeter(true, 0, returning(observe.EvalMeterResult{}, nil)),
+		"no_data":    observe.NewEvalMeter(0, returning(observe.EvalMeterResult{}, nil)),
 		"ok":         meterAfterOneRun(t, observe.EvalMeterResult{Score: 0.9, Baseline: 0.8}, nil),
 		"regression": meterAfterOneRun(t, observe.EvalMeterResult{Score: 0.7, Baseline: 0.8, Regressed: true}, nil),
 		"error":      meterAfterOneRun(t, observe.EvalMeterResult{}, errors.New("provider unreachable")),
@@ -126,15 +125,19 @@ func TestStatus_MarshalsEachStateAsItsWireString(t *testing.T) {
 	}
 }
 
-func TestMeter_DisabledState(t *testing.T) {
-	m := observe.NewEvalMeter(false, 0, nil)
-	if st := m.Status(); st.State != "disabled" || st.Enabled {
-		t.Fatalf("status = %+v, want disabled/!enabled", st)
+func TestMeter_IsAlwaysEnabled(t *testing.T) {
+	for name, m := range map[string]*observe.EvalMeter{
+		"without a runner": observe.NewEvalMeter(0, nil),
+		"with a runner":    observe.NewEvalMeter(0, returning(observe.EvalMeterResult{}, nil)),
+	} {
+		if st := m.Status(); !st.Enabled || st.State == "disabled" {
+			t.Errorf("%s: status = %+v, want enabled and never disabled", name, st)
+		}
 	}
 }
 
 func TestMeter_NoDataBeforeFirstRun(t *testing.T) {
-	m := observe.NewEvalMeter(true, 0, returning(observe.EvalMeterResult{}, nil))
+	m := observe.NewEvalMeter(0, returning(observe.EvalMeterResult{}, nil))
 	if st := m.Status(); st.State != "no_data" {
 		t.Fatalf("state = %q, want no_data before any run", st.State)
 	}

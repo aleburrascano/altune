@@ -26,8 +26,6 @@ type jobSpec struct {
 }
 
 var jobTable = []jobSpec{
-	{jobEvalMeter, false},
-	{jobAlertMonitor, false},
 	{jobOrphanedAudioReconcile, true},
 	{jobBehavioralCorpusRefresh, true},
 	{jobDiscographyEventPrune, true},

@@ -1,0 +1,7 @@
+{
+  "removed": [
+    "C12 internal/observe/service/evalmeter/doc.go service/evalmeter/doc.go is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module"
+  ],
+  "added": [],
+  "clones": 0
+}

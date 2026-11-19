@@ -27,7 +27,7 @@ func TestContract_EvalMatchesFixture(t *testing.T) {
 			Queries:  []observe.EvalMeterQueryResult{{Query: "q", Expect: "e", Passed: true, Position: 1}},
 		}, nil
 	}
-	meter := observe.NewEvalMeter(true, time.Hour, runner)
+	meter := observe.NewEvalMeter(time.Hour, runner)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	meter.Start(ctx)

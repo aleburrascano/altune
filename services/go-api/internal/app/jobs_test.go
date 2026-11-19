@@ -153,8 +153,6 @@ func TestStreamRecovery_AdminKillSwitchSuppressesReschedule(t *testing.T) {
 }
 
 var allJobNameConsts = []jobName{
-	jobEvalMeter,
-	jobAlertMonitor,
 	jobOrphanedAudioReconcile,
 	jobBehavioralCorpusRefresh,
 	jobDiscographyEventPrune,

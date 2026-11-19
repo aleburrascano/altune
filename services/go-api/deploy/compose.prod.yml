@@ -11,7 +11,6 @@ x-go-api: &go-api
   env_file:
     - ../.env.production
   environment:
-    - EVAL_METER_ENABLED=true
     - YTDLP_POT_URL=http://altune-pot:4416
   volumes:
     - ../../../cookies.txt:/data/cookies.txt

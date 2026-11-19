@@ -12,20 +12,16 @@ import (
 
 func (a *App) startAlertMonitor(ctx context.Context) {
 	notifier := a.alertNotifier(ctx)
-
-	conditions := []observe.Condition{buildDependencyCondition(a.dependencyHealth)}
-
-	if a.cfg.AlertZeroResultThreshold > 0 {
-		eventQuery := discovery.NewPgxEventStore(a.pool)
-		gap, queryFailing := buildCoverageConditions(eventQuery, a.cfg.AlertZeroResultThreshold)
-		conditions = append(conditions, gap, queryFailing)
-	}
-
-	conditions = append(conditions, a.jobConditions(alertableJobs)...)
-
+	conditions := a.alertConditions(discovery.NewPgxEventStore(a.pool))
 	a.alertMonitor = observe.NewAlertMonitor(notifier, 30*time.Second, conditions...).
 		WithLeadership(a.leaderContext)
-	a.whenLeaderUnlessDisabled(jobAlertMonitor, a.alertMonitor.Start)
+	a.whenLeader(jobAlertMonitor, a.alertMonitor.Start)
+}
+
+func (a *App) alertConditions(events coverageEvents) []observe.Condition {
+	gap, queryFailing := buildCoverageConditions(events)
+	conditions := []observe.Condition{buildDependencyCondition(a.dependencyHealth), gap, queryFailing}
+	return append(conditions, a.jobConditions(alertableJobs)...)
 }
 
 func (a *App) alertNotifier(ctx context.Context) observe.AlertNotifier {
@@ -81,17 +77,18 @@ type coverageEvents interface {
 
 const coverageQueryFailureEscalation = 3
 
+const coverageZeroResultThreshold = 25
+
 type coverageCheck struct {
-	events    coverageEvents
-	threshold int
-	failures  int
-	last      *observe.Alert
+	events   coverageEvents
+	failures int
+	last     *observe.Alert
 }
 
 const coverageWindow = 24 * time.Hour
 
-func buildCoverageConditions(eventQuery coverageEvents, threshold int) (gap, queryFailing observe.Condition) {
-	c := &coverageCheck{events: eventQuery, threshold: threshold}
+func buildCoverageConditions(eventQuery coverageEvents) (gap, queryFailing observe.Condition) {
+	c := &coverageCheck{events: eventQuery}
 	gap = observe.Condition{Key: "coverage_zero_result", Eval: c.evalGap}
 	queryFailing = observe.Condition{Key: "coverage_query_failing", Eval: c.evalQueryFailing}
 	return gap, queryFailing
@@ -111,10 +108,10 @@ func (c *coverageCheck) evalGap(ctx context.Context) *observe.Alert {
 }
 
 func (c *coverageCheck) gapVerdict(ctx context.Context, since time.Time, total int) *observe.Alert {
-	if total < c.threshold {
+	if total < coverageZeroResultThreshold {
 		return nil
 	}
-	msg := fmt.Sprintf("zero-result searches in %dh: %d (threshold %d)", int(coverageWindow.Hours()), total, c.threshold)
+	msg := fmt.Sprintf("zero-result searches in %dh: %d (threshold %d)", int(coverageWindow.Hours()), total, coverageZeroResultThreshold)
 	if rows, err := c.events.ZeroResultQueries(ctx, since, 1000); err == nil && len(rows) > 0 {
 		msg += fmt.Sprintf("; top query hit %d times", rows[0].Count)
 	}

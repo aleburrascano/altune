@@ -74,7 +74,7 @@ func observeTestDeps() observe.Deps {
 		},
 		Logs:        logging.NewRingBuffer(8),
 		Events:      observe.NewEventFeed(),
-		Eval:        observe.NewEvalMeter(false, 0, nil),
+		Eval:        observe.NewEvalMeter(0, nil),
 		LiveMetrics: func() observe.LiveMetrics { return observe.LiveMetrics{} },
 		Shutdown:    shutdown,
 	}
@@ -468,9 +468,9 @@ func TestDependencyHealth_UnconfiguredIsHealthy(t *testing.T) {
 	}
 }
 
-func TestEvalMeterRunner_NilWhileTheMeterIsDisabled(t *testing.T) {
-	if run := (&App{cfg: &config.Config{EvalMeterEnabled: false}}).evalMeterRunner(); run != nil {
-		t.Error("runner is non-nil with the eval meter disabled, want nil so the meter treats it as unset")
+func TestEvalMeterRunner_NilBeforeDiscoveryIsKept(t *testing.T) {
+	if run := (&App{cfg: &config.Config{}}).evalMeterRunner(); run != nil {
+		t.Error("runner is non-nil with no ranking-only search kept, want nil so the meter treats it as unset")
 	}
 }
 
@@ -583,23 +583,10 @@ func TestKeepSearches_TheMeterRunsTheTablesRankingOnlySearch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewEvalDiscovery: %v", err)
 	}
-	a := &App{cfg: &config.Config{EvalMeterEnabled: true}}
-
-	a.keepSearches(disc)
-	if a.evalSearch == nil || a.evalMeterRunner() == nil {
-		t.Error("an enabled eval meter has no ranking-only search to run")
-	}
-}
-
-func TestKeepSearches_ADisabledMeterKeepsOnlyTheServingSearch(t *testing.T) {
-	disc, err := NewEvalDiscovery(t.Context(), &config.Config{}, EvalHandles{Transport: &stubTransport{}})
-	if err != nil {
-		t.Fatalf("NewEvalDiscovery: %v", err)
-	}
 	a := &App{cfg: &config.Config{}}
 
 	a.keepSearches(disc)
-	if a.evalSearch != nil || a.searchSvc != disc.Search {
-		t.Error("a disabled eval meter kept a search it never runs, or lost the serving search")
+	if a.evalSearch == nil || a.evalMeterRunner() == nil {
+		t.Error("the eval meter has no ranking-only search to run")
 	}
 }

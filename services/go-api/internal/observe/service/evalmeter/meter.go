@@ -35,7 +35,6 @@ type Runner func(ctx context.Context) (Result, error)
 type LeadershipScope = runloop.LeadershipScope
 
 type Meter struct {
-	enabled    bool
 	interval   time.Duration
 	runTimeout time.Duration
 	runner     Runner
@@ -49,12 +48,11 @@ type Meter struct {
 	runloop.Background
 }
 
-func New(enabled bool, interval time.Duration, runner Runner) *Meter {
+func New(interval time.Duration, runner Runner) *Meter {
 	if interval <= 0 {
 		interval = defaultInterval
 	}
 	return &Meter{
-		enabled:    enabled,
 		interval:   interval,
 		runTimeout: defaultRunTimeout,
 		runner:     runner,
@@ -71,7 +69,7 @@ func (m *Meter) WithLeadership(scope LeadershipScope) *Meter {
 }
 
 func (m *Meter) Start(ctx context.Context) {
-	if !m.enabled || m.runner == nil {
+	if m.runner == nil {
 		return
 	}
 	m.Spawn(ctx, m.loop)
@@ -163,10 +161,8 @@ func (m *Meter) Status() Status {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	st := Status{Enabled: m.enabled, Paused: m.Paused()}
+	st := Status{Enabled: true, Paused: m.Paused()}
 	switch {
-	case !m.enabled:
-		st.State = StateDisabled
 	case m.lastErr != "":
 		st.State = StateError
 		st.Error = m.lastErr
@@ -177,14 +173,18 @@ func (m *Meter) Status() Status {
 	case m.last == nil:
 		st.State = StateNoData
 	default:
-		st.State = StateOK
-		if m.last.Regressed {
-			st.State = StateRegression
-		}
-		score, base, lr := m.last.Score, m.last.Baseline, m.lastRun
-		st.Score, st.Baseline, st.LastRun = &score, &base, &lr
-		st.Errored = m.last.Errored
-		st.Queries = m.last.Queries
+		m.fillLastResult(&st)
 	}
 	return st
+}
+
+func (m *Meter) fillLastResult(st *Status) {
+	st.State = StateOK
+	if m.last.Regressed {
+		st.State = StateRegression
+	}
+	score, base, lr := m.last.Score, m.last.Baseline, m.lastRun
+	st.Score, st.Baseline, st.LastRun = &score, &base, &lr
+	st.Errored = m.last.Errored
+	st.Queries = m.last.Queries
 }

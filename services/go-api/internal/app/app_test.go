@@ -51,13 +51,13 @@ func TestApplyStartupSwitches_AcquisitionPausedNoSchedulerIsNoop(t *testing.T) {
 }
 
 func TestApplyStartupSwitches_DisabledJobsDisableEachNamedJob(t *testing.T) {
-	a := &App{cfg: &config.Config{DisabledJobs: []string{"eval meter", "stream recovery"}}}
+	a := &App{cfg: &config.Config{DisabledJobs: []string{"acquisition prune", "stream recovery"}}}
 
 	if err := a.applyStartupSwitches(t.Context()); err != nil {
 		t.Fatalf("applyStartupSwitches: %v", err)
 	}
 
-	for _, name := range []string{"eval meter", "stream recovery"} {
+	for _, name := range []string{"acquisition prune", "stream recovery"} {
 		h := findJobHealth(t, a.JobHealth(), name)
 		if h.Enabled {
 			t.Errorf("job %q enabled, want disabled via DISABLED_JOBS", name)
@@ -135,24 +135,13 @@ func TestApplyDisabledJobs_DisabledRankingRefreshNeverRefreshes(t *testing.T) {
 	}
 }
 
-func TestWhenLeaderUnlessDisabled_DisabledMonitorsNeverStart(t *testing.T) {
+func TestApplyStartupSwitches_ObserveLoopsAreNotSwitchable(t *testing.T) {
 	for _, name := range []jobName{jobAlertMonitor, jobEvalMeter} {
-		t.Run(string(name), func(t *testing.T) {
-			a := &App{cfg: &config.Config{DisabledJobs: []string{string(name)}}}
-			var started atomic.Bool
-			a.whenLeaderUnlessDisabled(name, func(context.Context) { started.Store(true) })
-			if err := a.applyDisabledJobs(t.Context()); err != nil {
-				t.Fatalf("applyDisabledJobs: %v", err)
-			}
-
-			for _, job := range a.backgroundStarts {
-				job.start(context.Background())
-			}
-
-			if started.Load() {
-				t.Fatalf("%s started despite DISABLED_JOBS", name)
-			}
-		})
+		a := &App{cfg: &config.Config{DisabledJobs: []string{string(name)}}}
+		err := a.applyStartupSwitches(t.Context())
+		if err == nil || !strings.Contains(err.Error(), "unknown job") {
+			t.Errorf("DISABLED_JOBS=%q gave %v, want the unknown-job startup error", name, err)
+		}
 	}
 }
 

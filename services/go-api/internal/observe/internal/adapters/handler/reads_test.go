@@ -119,7 +119,7 @@ func TestReadsMetricsLive_NilSourceAnswersEmptyObject(t *testing.T) {
 }
 
 func TestReadsEval_ServesTheMeterStatus(t *testing.T) {
-	rec := serveRead(t, observe.Deps{Eval: observe.NewEvalMeter(true, 0, nil)}, "/eval")
+	rec := serveRead(t, observe.Deps{Eval: observe.NewEvalMeter(0, nil)}, "/eval")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body.String())

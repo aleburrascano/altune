@@ -73,7 +73,7 @@ Done when: the query returns no rows and the release is re-run green.
 Set in the tier's env file, then release the running sha again so go-api picks it up.
 
 - `ACQUISITION_PAUSED=true` pauses acquisition.
-- `DISABLED_JOBS=eval meter,stream recovery` turns jobs off. An unknown name fails startup.
+- `DISABLED_JOBS=acquisition prune,stream recovery` turns jobs off. An unknown name fails startup.
 
 ## VM tools
 
