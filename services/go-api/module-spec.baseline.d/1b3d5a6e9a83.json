@@ -1,0 +1,17 @@
+{
+  "removed": [
+    "T1 internal/catalog/internal/adapters/persistence/orphaned_audio_contract_test.go imports domain/track.go, behind catalog's door",
+    "T1 internal/catalog/internal/adapters/persistence/orphaned_audio_contract_test.go imports internal/core/ports/orphaned_audio.go, behind catalog's door",
+    "T1 internal/catalog/internal/adapters/persistence/orphaned_audio_contract_test.go is in package persistence, so it sees inside the module: use package persistence_test and import the door",
+    "T1 internal/catalog/internal/adapters/persistence/orphaned_audio_repo_test.go imports domain/track.go, behind catalog's door",
+    "T1 internal/catalog/internal/adapters/persistence/orphaned_audio_repo_test.go imports internal/core/ports/orphaned_audio.go, behind catalog's door",
+    "T1 internal/catalog/internal/adapters/persistence/orphaned_audio_repo_test.go is in package persistence, so it sees inside the module: use package persistence_test and import the door",
+    "T1 internal/catalog/internal/adapters/persistence/pool_test.go imports domain/library_lens.go, behind catalog's door",
+    "T1 internal/catalog/internal/adapters/persistence/pool_test.go imports domain/playlist.go, behind catalog's door",
+    "T1 internal/catalog/internal/adapters/persistence/pool_test.go imports domain/track.go, behind catalog's door",
+    "T1 internal/catalog/internal/adapters/persistence/pool_test.go imports internal/core/ports/db_errors.go, behind catalog's door",
+    "T1 internal/catalog/internal/adapters/persistence/pool_test.go is in package persistence, so it sees inside the module: use package persistence_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}

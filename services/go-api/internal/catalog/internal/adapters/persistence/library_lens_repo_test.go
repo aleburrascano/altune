@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func seedLibraryTrack(t *testing.T, repo *PgxCatalogTrackRepository, userId shared.UserId, spec libraryTrackSpec) *domain.Track {
@@ -630,4 +632,22 @@ func (deadlinePool) QueryRow(context.Context, string, ...any) pgx.Row {
 
 func (deadlinePool) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
 	return pgconn.CommandTag{}, errPoolDeadline
+}
+
+type errRow struct{ err error }
+
+func (r errRow) Scan(_ ...any) error { return r.err }
+
+func testPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		t.Skip("DATABASE_URL not set, skipping integration test")
+	}
+	pool, err := pgxpool.New(context.Background(), dbURL)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	t.Cleanup(func() { pool.Close() })
+	return pool
 }

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -23,7 +22,7 @@ type pgxPool interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
 
-var dbCallTimeout = 5 * time.Second
+const dbCallTimeout = 5 * time.Second
 
 var errDBCallTimeout = errors.New("catalog db call exceeded dbCallTimeout")
 
@@ -38,15 +37,14 @@ func SetDBCallMetrics(m ports.DBCallMetrics) {
 
 func withDBTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
 	dbCtx, cancel := context.WithTimeoutCause(ctx, dbCallTimeout, errDBCallTimeout)
-	var once sync.Once
 	return dbCtx, func() {
-		once.Do(func() { recordIfDBCallTimedOut(dbCtx) })
+		recordIfDBCallTimedOut(dbCtx)
 		cancel()
 	}
 }
 
 func classifyDBError(err error) error {
-	if err == nil || errors.Is(err, ports.ErrDBTransient) || !isTransientDBError(err) {
+	if errors.Is(err, ports.ErrDBTransient) || !isTransientDBError(err) {
 		return err
 	}
 	return fmt.Errorf("%w: %w", ports.ErrDBTransient, err)
@@ -56,12 +54,6 @@ func isTransientDBError(err error) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
 		return database.IsTransientSQLState(pgErr.Code)
-	}
-	if errors.Is(err, context.Canceled) {
-		return false
-	}
-	if errors.Is(err, context.DeadlineExceeded) || pgconn.Timeout(err) || pgconn.SafeToRetry(err) {
-		return true
 	}
 	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 		return true
