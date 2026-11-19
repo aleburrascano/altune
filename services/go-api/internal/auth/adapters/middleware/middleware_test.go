@@ -1,10 +1,9 @@
-package middleware
+package middleware_test
 
 import (
-	"altune/go-api/internal/auth/domain"
-	"altune/go-api/internal/auth/internal/core/ports"
-	"altune/go-api/internal/auth/service"
+	"altune/go-api/internal/auth"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/requestuser"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -19,14 +18,20 @@ import (
 	"testing"
 	"time"
 
-	authmetrics "altune/go-api/internal/auth/internal/adapters/metrics"
-
 	"github.com/google/uuid"
 )
 
-func stubVerifier(userID shared.UserId, err error) ports.VerifierFunc {
-	return func(context.Context, string) (domain.VerifiedToken, error) {
-		return domain.VerifiedToken{UserID: userID, ExpiresAt: time.Now().Add(time.Hour)}, err
+const (
+	maxBearerBytes        = 8 << 10
+	reasonMissing         = "missing"
+	reasonMalformed       = "malformed"
+	reasonExpired         = "expired"
+	reasonClaimMissingEXP = "claim_missing_exp"
+)
+
+func stubVerifier(userID shared.UserId, err error) auth.VerifierFunc {
+	return func(context.Context, string) (auth.VerifiedToken, error) {
+		return auth.VerifiedToken{UserID: userID, ExpiresAt: time.Now().Add(time.Hour)}, err
 	}
 }
 
@@ -50,7 +55,7 @@ func decodeRejectBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]s
 
 func TestMiddleware_MissingHeader(t *testing.T) {
 	next, called := noopHandler()
-	handler := Middleware(stubVerifier(shared.UserId{}, nil))(next)
+	handler := auth.Middleware(stubVerifier(shared.UserId{}, nil))(next)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
@@ -61,8 +66,8 @@ func TestMiddleware_MissingHeader(t *testing.T) {
 		t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
 	}
 	body := decodeRejectBody(t, rec)
-	if body["reason"] != string(domain.ReasonMissing) {
-		t.Errorf("reason: got %q, want %q", body["reason"], domain.ReasonMissing)
+	if body["reason"] != reasonMissing {
+		t.Errorf("reason: got %q, want %q", body["reason"], reasonMissing)
 	}
 	if *called {
 		t.Error("next handler should not have been called")
@@ -82,7 +87,7 @@ func TestMiddleware_MalformedHeader(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			next, called := noopHandler()
-			handler := Middleware(stubVerifier(shared.UserId{}, nil))(next)
+			handler := auth.Middleware(stubVerifier(shared.UserId{}, nil))(next)
 
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
 			req.Header.Set("Authorization", tt.header)
@@ -94,8 +99,8 @@ func TestMiddleware_MalformedHeader(t *testing.T) {
 				t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
 			}
 			body := decodeRejectBody(t, rec)
-			if body["reason"] != string(domain.ReasonMalformed) {
-				t.Errorf("reason: got %q, want %q", body["reason"], domain.ReasonMalformed)
+			if body["reason"] != reasonMalformed {
+				t.Errorf("reason: got %q, want %q", body["reason"], reasonMalformed)
 			}
 			if *called {
 				t.Error("next handler should not have been called")
@@ -105,22 +110,22 @@ func TestMiddleware_MalformedHeader(t *testing.T) {
 }
 
 func TestMiddleware_OversizedBearerIsMalformedAndNeverVerified(t *testing.T) {
-	for _, size := range []int{maxBearerTokenBytes + 1, 64 << 10, 1 << 20} {
+	for _, size := range []int{maxBearerBytes + 1, 64 << 10, 1 << 20} {
 		verified := false
-		verifier := ports.VerifierFunc(func(context.Context, string) (domain.VerifiedToken, error) {
+		verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
 			verified = true
-			return domain.VerifiedToken{UserID: shared.NewUserId(uuid.New()), ExpiresAt: time.Now().Add(time.Hour)}, nil
+			return auth.VerifiedToken{UserID: shared.NewUserId(uuid.New()), ExpiresAt: time.Now().Add(time.Hour)}, nil
 		})
 		next, called := noopHandler()
-		handler := Middleware(verifier)(next)
+		handler := auth.Middleware(verifier)(next)
 
 		rec := serveBearer(handler, "203.0.113.7:1", strings.Repeat("a", size))
 
 		if rec.Code != http.StatusUnauthorized {
 			t.Fatalf("%d-byte bearer: status %d, want 401", size, rec.Code)
 		}
-		if body := decodeRejectBody(t, rec); body["reason"] != string(domain.ReasonMalformed) {
-			t.Errorf("%d-byte bearer: reason %q, want %q", size, body["reason"], domain.ReasonMalformed)
+		if body := decodeRejectBody(t, rec); body["reason"] != reasonMalformed {
+			t.Errorf("%d-byte bearer: reason %q, want %q", size, body["reason"], reasonMalformed)
 		}
 		if verified || *called {
 			t.Errorf("%d-byte bearer: verifier ran=%v next ran=%v, want neither", size, verified, *called)
@@ -130,14 +135,14 @@ func TestMiddleware_OversizedBearerIsMalformedAndNeverVerified(t *testing.T) {
 
 func TestMiddleware_BearerAtTheBoundStillReachesTheVerifier(t *testing.T) {
 	var got string
-	verifier := ports.VerifierFunc(func(_ context.Context, token string) (domain.VerifiedToken, error) {
+	verifier := auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
 		got = token
-		return domain.VerifiedToken{UserID: shared.NewUserId(uuid.New()), ExpiresAt: time.Now().Add(time.Hour)}, nil
+		return auth.VerifiedToken{UserID: shared.NewUserId(uuid.New()), ExpiresAt: time.Now().Add(time.Hour)}, nil
 	})
 	next, _ := noopHandler()
-	token := strings.Repeat("a", maxBearerTokenBytes)
+	token := strings.Repeat("a", maxBearerBytes)
 
-	rec := serveBearer(Middleware(verifier)(next), "203.0.113.7:1", token)
+	rec := serveBearer(auth.Middleware(verifier)(next), "203.0.113.7:1", token)
 
 	if rec.Code != http.StatusOK || got != token {
 		t.Fatalf("%d-byte bearer: status %d, verifier got %d bytes; want 200 and the full token", len(token), rec.Code, len(got))
@@ -147,7 +152,7 @@ func TestMiddleware_BearerAtTheBoundStillReachesTheVerifier(t *testing.T) {
 func TestMiddleware_OversizedBearerDoesNotSpendFailureBudget(t *testing.T) {
 	handler, _ := throttledMiddleware(stubVerifier(shared.NewUserId(uuid.New()), nil))
 	for range testFailureLimits.Burst * 5 {
-		serveBearer(handler, "203.0.113.7:1", strings.Repeat("a", maxBearerTokenBytes+1))
+		serveBearer(handler, "203.0.113.7:1", strings.Repeat("a", maxBearerBytes+1))
 	}
 	if rec := serveBearer(handler, "203.0.113.7:1", "valid"); rec.Code != http.StatusOK {
 		t.Fatalf("valid bearer after oversized ones: status %d, want 200", rec.Code)
@@ -161,11 +166,11 @@ func TestMiddleware_ValidToken(t *testing.T) {
 	var capturedUID shared.UserId
 	var uidFound bool
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		capturedUID, uidFound = service.UserIDFromContext(r.Context())
+		capturedUID, uidFound = auth.UserIDFromContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	})
 
-	handler := Middleware(verifier)(next)
+	handler := auth.Middleware(verifier)(next)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer valid-token")
@@ -186,9 +191,9 @@ func TestMiddleware_ValidToken(t *testing.T) {
 
 func TestMiddleware_InvalidToken(t *testing.T) {
 	verifier := stubVerifier(shared.UserId{},
-		&domain.InvalidTokenError{Reason: domain.ReasonExpired, Detail: "token expired"})
+		&auth.InvalidTokenError{Reason: reasonExpired, Detail: "token expired"})
 	next, called := noopHandler()
-	handler := Middleware(verifier)(next)
+	handler := auth.Middleware(verifier)(next)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer expired-token")
@@ -200,8 +205,8 @@ func TestMiddleware_InvalidToken(t *testing.T) {
 		t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
 	}
 	body := decodeRejectBody(t, rec)
-	if body["reason"] != string(domain.ReasonExpired) {
-		t.Errorf("reason: got %q, want %q", body["reason"], domain.ReasonExpired)
+	if body["reason"] != reasonExpired {
+		t.Errorf("reason: got %q, want %q", body["reason"], reasonExpired)
 	}
 	if *called {
 		t.Error("next handler should not have been called")
@@ -239,7 +244,7 @@ func TestMiddleware_TokenRejectedLogNamesTheCallerAndRoute(t *testing.T) {
 	const bearer = "gqxz-token-value-that-must-not-be-logged"
 	buf := captureJSONLog(t)
 	next, _ := noopHandler()
-	handler := Middleware(stubVerifier(shared.UserId{}, &domain.InvalidTokenError{Reason: domain.ReasonExpired}))(next)
+	handler := auth.Middleware(stubVerifier(shared.UserId{}, &auth.InvalidTokenError{Reason: reasonExpired}))(next)
 	req := httptest.NewRequest(http.MethodGet, "/v1/tracks", nil)
 	req.RemoteAddr = "203.0.113.42:5555"
 	req.Header.Set("Authorization", "Bearer "+bearer)
@@ -260,7 +265,7 @@ func TestMiddleware_TokenRejectedLogNamesTheCallerAndRoute(t *testing.T) {
 func TestMiddleware_UnreachableVerifierIs503NotTokenRejection(t *testing.T) {
 	verifierThatCouldNotRun := stubVerifier(shared.UserId{}, errors.New("fetch JWKS: connection refused"))
 	next, called := noopHandler()
-	handler := Middleware(verifierThatCouldNotRun)(next)
+	handler := auth.Middleware(verifierThatCouldNotRun)(next)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer some-token")
@@ -282,12 +287,12 @@ func TestMiddleware_UnreachableVerifierIs503NotTokenRejection(t *testing.T) {
 
 func TestMiddleware_RepeatedFailedVerificationsFromOneCallerAreThrottled(t *testing.T) {
 	calls := 0
-	verifier := ports.VerifierFunc(func(context.Context, string) (domain.VerifiedToken, error) {
+	verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
 		calls++
-		return domain.VerifiedToken{}, &domain.InvalidTokenError{Reason: domain.ReasonSignatureInvalid}
+		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
 	})
 	next, _ := noopHandler()
-	handler := Middleware(verifier)(next)
+	handler := auth.Middleware(verifier)(next)
 
 	throttled := 0
 	for range 200 {
@@ -307,19 +312,19 @@ type fakeClock struct{ t time.Time }
 func (c *fakeClock) now() time.Time          { return c.t }
 func (c *fakeClock) advance(d time.Duration) { c.t = c.t.Add(d) }
 
-var testFailureLimits = FailureLimits{Burst: 3, Refill: time.Minute, MaxClients: 100}
+var testFailureLimits = auth.FailureLimits{Burst: 3, Refill: time.Minute, MaxClients: 100}
 
-func throttledMiddleware(verifier ports.TokenVerifier) (http.Handler, *fakeClock) {
+func throttledMiddleware(verifier auth.TokenVerifier) (http.Handler, *fakeClock) {
 	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
 	next, _ := noopHandler()
-	return middleware(verifier, newFailureThrottle(testFailureLimits, clock.now), ports.NoopAuthMetrics())(next), clock
+	return auth.Middleware(verifier, auth.WithFailureLimits(testFailureLimits, clock.now))(next), clock
 }
 
 func TestMiddleware_ThrottleRefusesWithoutVerifyingOnceFailuresExhaustBurst(t *testing.T) {
 	calls := 0
-	verifier := ports.VerifierFunc(func(context.Context, string) (domain.VerifiedToken, error) {
+	verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
 		calls++
-		return domain.VerifiedToken{}, &domain.InvalidTokenError{Reason: domain.ReasonSignatureInvalid}
+		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
 	})
 	handler, clock := throttledMiddleware(verifier)
 
@@ -346,7 +351,7 @@ func TestMiddleware_ThrottleRefusesWithoutVerifyingOnceFailuresExhaustBurst(t *t
 }
 
 func TestMiddleware_ThrottleIsPerClient(t *testing.T) {
-	handler, _ := throttledMiddleware(stubVerifier(shared.UserId{}, &domain.InvalidTokenError{Reason: domain.ReasonExpired}))
+	handler, _ := throttledMiddleware(stubVerifier(shared.UserId{}, &auth.InvalidTokenError{Reason: reasonExpired}))
 	for range testFailureLimits.Burst + 1 {
 		serveBearer(handler, "203.0.113.7:1", "t")
 	}
@@ -357,12 +362,12 @@ func TestMiddleware_ThrottleIsPerClient(t *testing.T) {
 
 func TestMiddleware_SuccessfulVerificationsAreNeverThrottled(t *testing.T) {
 	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
-	verifier := ports.VerifierFunc(func(context.Context, string) (domain.VerifiedToken, error) {
+	verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
 		clock.advance(time.Millisecond)
-		return domain.VerifiedToken{UserID: shared.NewUserId(uuid.New()), ExpiresAt: time.Now().Add(time.Hour)}, nil
+		return auth.VerifiedToken{UserID: shared.NewUserId(uuid.New()), ExpiresAt: time.Now().Add(time.Hour)}, nil
 	})
 	next, _ := noopHandler()
-	handler := middleware(verifier, newFailureThrottle(testFailureLimits, clock.now), ports.NoopAuthMetrics())(next)
+	handler := auth.Middleware(verifier, auth.WithFailureLimits(testFailureLimits, clock.now))(next)
 
 	for i := range testFailureLimits.Burst * 10 {
 		if rec := serveBearer(handler, "203.0.113.7:1", "valid"); rec.Code != http.StatusOK {
@@ -387,7 +392,7 @@ func TestMiddleware_ClientCancelledDuringVerifyIsNotAnOutage(t *testing.T) {
 	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
 	cancelled := stubVerifier(shared.UserId{}, fmt.Errorf("fetch JWKS: %w", context.Canceled))
 	next, _ := noopHandler()
-	handler := middleware(cancelled, newFailureThrottle(testFailureLimits, clock.now), metrics)(next)
+	handler := auth.Middleware(cancelled, auth.WithFailureLimits(testFailureLimits, clock.now), auth.WithMetrics(metrics))(next)
 
 	serve := func() *httptest.ResponseRecorder {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -418,13 +423,14 @@ func TestMiddleware_ClientCancelledDuringVerifyIsNotAnOutage(t *testing.T) {
 }
 
 func TestMiddleware_ThrottledResponseRevealsNothingAboutTheToken(t *testing.T) {
-	bodies := map[domain.TokenRejectReason]string{}
-	for _, reason := range []domain.TokenRejectReason{domain.ReasonExpired, domain.ReasonSignatureInvalid, domain.ReasonMalformed} {
-		handler, _ := throttledMiddleware(stubVerifier(shared.UserId{}, &domain.InvalidTokenError{Reason: reason}))
+	bodies := map[string]string{}
+	for _, rejection := range []*auth.InvalidTokenError{{Reason: reasonExpired}, {Reason: auth.ReasonSignatureInvalid}, {Reason: reasonMalformed}} {
+		reason := string(rejection.Reason)
+		handler, _ := throttledMiddleware(stubVerifier(shared.UserId{}, rejection))
 		for range testFailureLimits.Burst {
-			serveBearer(handler, "203.0.113.7:1", string(reason))
+			serveBearer(handler, "203.0.113.7:1", reason)
 		}
-		rec := serveBearer(handler, "203.0.113.7:1", string(reason))
+		rec := serveBearer(handler, "203.0.113.7:1", reason)
 		if rec.Code != http.StatusTooManyRequests {
 			t.Fatalf("%s: status %d after burst, want 429", reason, rec.Code)
 		}
@@ -434,7 +440,7 @@ func TestMiddleware_ThrottledResponseRevealsNothingAboutTheToken(t *testing.T) {
 		}
 		bodies[reason] = body["detail"]
 	}
-	if bodies[domain.ReasonExpired] != bodies[domain.ReasonSignatureInvalid] || bodies[domain.ReasonExpired] != bodies[domain.ReasonMalformed] {
+	if bodies[reasonExpired] != bodies[string(auth.ReasonSignatureInvalid)] || bodies[reasonExpired] != bodies[reasonMalformed] {
 		t.Errorf("throttled bodies differ by token kind: %v", bodies)
 	}
 }
@@ -442,10 +448,10 @@ func TestMiddleware_ThrottledResponseRevealsNothingAboutTheToken(t *testing.T) {
 func TestMiddleware_ConcurrentFailuresCannotOvershootBurst(t *testing.T) {
 	var calls atomic.Int32
 	release := make(chan struct{})
-	verifier := ports.VerifierFunc(func(context.Context, string) (domain.VerifiedToken, error) {
+	verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
 		calls.Add(1)
 		<-release
-		return domain.VerifiedToken{}, &domain.InvalidTokenError{Reason: domain.ReasonSignatureInvalid}
+		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
 	})
 	handler, _ := throttledMiddleware(verifier)
 
@@ -470,28 +476,28 @@ func serveBearer(handler http.Handler, remoteAddr, token string) *httptest.Respo
 	return rec
 }
 
-func verifies(verified domain.VerifiedToken) ports.VerifierFunc {
-	return func(context.Context, string) (domain.VerifiedToken, error) {
+func verifies(verified auth.VerifiedToken) auth.VerifierFunc {
+	return func(context.Context, string) (auth.VerifiedToken, error) {
 		return verified, nil
 	}
 }
 
-func serveThroughMiddleware(t *testing.T, verifier ports.TokenVerifier) (time.Time, bool) {
+func serveThroughMiddleware(t *testing.T, verifier auth.TokenVerifier) (time.Time, bool) {
 	t.Helper()
 	var expiresAt time.Time
 	var known bool
 	next := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		expiresAt, known = service.TokenExpiryFromContext(r.Context())
+		expiresAt, known = requestuser.TokenExpiryFromContext(r.Context())
 	})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer token")
-	Middleware(verifier)(next).ServeHTTP(httptest.NewRecorder(), req)
+	auth.Middleware(verifier)(next).ServeHTTP(httptest.NewRecorder(), req)
 	return expiresAt, known
 }
 
 func TestMiddleware_TokenExpiryReachesHandler(t *testing.T) {
 	want := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
-	verifier := verifies(domain.VerifiedToken{UserID: shared.NewUserId(uuid.New()), ExpiresAt: want})
+	verifier := verifies(auth.VerifiedToken{UserID: shared.NewUserId(uuid.New()), ExpiresAt: want})
 
 	got, known := serveThroughMiddleware(t, verifier)
 
@@ -506,7 +512,7 @@ func TestMiddleware_RejectsVerifiedTokenWithoutExpiry(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer token")
 	rec := httptest.NewRecorder()
 
-	Middleware(verifies(domain.VerifiedToken{UserID: shared.NewUserId(uuid.New())}))(next).ServeHTTP(rec, req)
+	auth.Middleware(verifies(auth.VerifiedToken{UserID: shared.NewUserId(uuid.New())}))(next).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401 for a token with no expiry", rec.Code)
@@ -514,8 +520,8 @@ func TestMiddleware_RejectsVerifiedTokenWithoutExpiry(t *testing.T) {
 	if *called {
 		t.Fatal("handler ran for a token with no expiry")
 	}
-	if reason := decodeRejectBody(t, rec)["reason"]; reason != string(domain.ReasonClaimMissingEXP) {
-		t.Fatalf("reason = %q, want %q", reason, domain.ReasonClaimMissingEXP)
+	if reason := decodeRejectBody(t, rec)["reason"]; reason != reasonClaimMissingEXP {
+		t.Fatalf("reason = %q, want %q", reason, reasonClaimMissingEXP)
 	}
 }
 
@@ -525,8 +531,6 @@ type recordingMetrics struct {
 	throttled   int
 	unavailable int
 }
-
-var _ ports.AuthMetrics = (*recordingMetrics)(nil)
 
 func (m *recordingMetrics) TokenRejected(reason string) {
 	m.mu.Lock()
@@ -558,9 +562,9 @@ func TestMiddleware_CountsEveryRejectionAndOutage(t *testing.T) {
 		wantRejected    []string
 		wantUnavailable int
 	}{
-		{"missing header", "", nil, http.StatusUnauthorized, []string{string(domain.ReasonMissing)}, 0},
-		{"malformed header", "Basic abc", nil, http.StatusUnauthorized, []string{string(domain.ReasonMalformed)}, 0},
-		{"invalid token", "Bearer t", &domain.InvalidTokenError{Reason: domain.ReasonSignatureInvalid}, http.StatusUnauthorized, []string{string(domain.ReasonSignatureInvalid)}, 0},
+		{"missing header", "", nil, http.StatusUnauthorized, []string{reasonMissing}, 0},
+		{"malformed header", "Basic abc", nil, http.StatusUnauthorized, []string{reasonMalformed}, 0},
+		{"invalid token", "Bearer t", &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}, http.StatusUnauthorized, []string{string(auth.ReasonSignatureInvalid)}, 0},
 		{"verifier unavailable", "Bearer t", unavailableErr, http.StatusServiceUnavailable, nil, 1},
 		{"failed key refresh after signature rejection", "Bearer t", errors.Join(errors.New("refresh JWKS after signature rejection"), unavailableErr), http.StatusServiceUnavailable, nil, 1},
 		{"valid token", "Bearer t", nil, http.StatusOK, nil, 0},
@@ -570,7 +574,7 @@ func TestMiddleware_CountsEveryRejectionAndOutage(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			metrics := &recordingMetrics{}
 			next, _ := noopHandler()
-			handler := Middleware(stubVerifier(shared.NewUserId(uuid.New()), tt.verifyErr), WithMetrics(metrics))(next)
+			handler := auth.Middleware(stubVerifier(shared.NewUserId(uuid.New()), tt.verifyErr), auth.WithMetrics(metrics))(next)
 
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
 			if tt.header != "" {
@@ -596,8 +600,8 @@ func TestMiddleware_ThrottledRequestIsNotCounted(t *testing.T) {
 	metrics := &recordingMetrics{}
 	clock := &fakeClock{}
 	next, _ := noopHandler()
-	verifier := stubVerifier(shared.UserId{}, &domain.InvalidTokenError{Reason: domain.ReasonExpired})
-	handler := middleware(verifier, newFailureThrottle(testFailureLimits, clock.now), metrics)(next)
+	verifier := stubVerifier(shared.UserId{}, &auth.InvalidTokenError{Reason: reasonExpired})
+	handler := auth.Middleware(verifier, auth.WithFailureLimits(testFailureLimits, clock.now), auth.WithMetrics(metrics))(next)
 
 	for range testFailureLimits.Burst {
 		serveBearer(handler, "203.0.113.7:1", "t")
@@ -614,8 +618,8 @@ func TestMiddleware_EveryThrottledRequestIsCounted(t *testing.T) {
 	metrics := &recordingMetrics{}
 	clock := &fakeClock{}
 	next, _ := noopHandler()
-	verifier := stubVerifier(shared.UserId{}, &domain.InvalidTokenError{Reason: domain.ReasonExpired})
-	handler := middleware(verifier, newFailureThrottle(testFailureLimits, clock.now), metrics)(next)
+	verifier := stubVerifier(shared.UserId{}, &auth.InvalidTokenError{Reason: reasonExpired})
+	handler := auth.Middleware(verifier, auth.WithFailureLimits(testFailureLimits, clock.now), auth.WithMetrics(metrics))(next)
 
 	for range testFailureLimits.Burst {
 		serveBearer(handler, "203.0.113.10:1", "t")
@@ -633,21 +637,21 @@ func TestMiddleware_EveryThrottledRequestIsCounted(t *testing.T) {
 }
 
 func TestMiddleware_ExpvarCountersIncrementThroughRealMiddleware(t *testing.T) {
-	metrics := WithMetrics(authmetrics.NewExpvarAuthMetrics())
+	metrics := auth.WithMetrics(auth.NewExpvarAuthMetrics())
 	next, _ := noopHandler()
-	rejecting := Middleware(stubVerifier(shared.UserId{}, &domain.InvalidTokenError{Reason: domain.ReasonExpired}), metrics)(next)
-	unavailable := Middleware(stubVerifier(shared.UserId{}, errors.New("fetch JWKS: timeout")), metrics)(next)
+	rejecting := auth.Middleware(stubVerifier(shared.UserId{}, &auth.InvalidTokenError{Reason: reasonExpired}), metrics)(next)
+	unavailable := auth.Middleware(stubVerifier(shared.UserId{}, errors.New("fetch JWKS: timeout")), metrics)(next)
 
-	before := authmetrics.ReadSnapshot()
+	before := auth.ReadSnapshot()
 	serveBearer(rejecting, "203.0.113.8:1", "t")
 	serveBearer(unavailable, "203.0.113.9:1", "t")
-	after := authmetrics.ReadSnapshot()
+	after := auth.ReadSnapshot()
 
 	if after.TokenRejections != before.TokenRejections+1 {
 		t.Errorf("token_rejections_total %d, want %d", after.TokenRejections, before.TokenRejections+1)
 	}
-	if want := before.TokenRejectionsByReason[string(domain.ReasonExpired)] + 1; after.TokenRejectionsByReason[string(domain.ReasonExpired)] != want {
-		t.Errorf("token_rejections_by_reason_total[expired] %d, want %d", after.TokenRejectionsByReason[string(domain.ReasonExpired)], want)
+	if want := before.TokenRejectionsByReason[reasonExpired] + 1; after.TokenRejectionsByReason[reasonExpired] != want {
+		t.Errorf("token_rejections_by_reason_total[expired] %d, want %d", after.TokenRejectionsByReason[reasonExpired], want)
 	}
 	if after.VerifierUnavailable != before.VerifierUnavailable+1 {
 		t.Errorf("verifier_unavailable_total %d, want %d", after.VerifierUnavailable, before.VerifierUnavailable+1)
@@ -684,7 +688,7 @@ func requireExactResponse(t *testing.T, rec *httptest.ResponseRecorder, status i
 
 func TestMiddleware_MissingHeaderBodyIsPinned(t *testing.T) {
 	next, called := noopHandler()
-	handler := Middleware(stubVerifier(shared.UserId{}, nil))(next)
+	handler := auth.Middleware(stubVerifier(shared.UserId{}, nil))(next)
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
@@ -707,9 +711,9 @@ func decodeBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]string 
 func TestRequireUserID_UnauthorizedMatchesTheMissingTokenRejection(t *testing.T) {
 	next, _ := noopHandler()
 	viaMiddleware := httptest.NewRecorder()
-	Middleware(stubVerifier(shared.UserId{}, nil))(next).ServeHTTP(viaMiddleware, httptest.NewRequest(http.MethodGet, "/", nil))
+	auth.Middleware(stubVerifier(shared.UserId{}, nil))(next).ServeHTTP(viaMiddleware, httptest.NewRequest(http.MethodGet, "/", nil))
 	viaRequire := httptest.NewRecorder()
-	RequireUserID(viaRequire, httptest.NewRequest(http.MethodGet, "/", nil))
+	requestuser.RequireUserID(viaRequire, httptest.NewRequest(http.MethodGet, "/", nil))
 
 	if viaRequire.Code != viaMiddleware.Code {
 		t.Errorf("status: RequireUserID %d, middleware %d", viaRequire.Code, viaMiddleware.Code)
@@ -728,7 +732,7 @@ func TestRequireUserID_UnauthorizedMatchesTheMissingTokenRejection(t *testing.T)
 			t.Errorf("RequireUserID body has no %q: %v", key, requireBody)
 		}
 	}
-	if got, want := requireBody["reason"], string(domain.ReasonMissing); got != want {
+	if got, want := requireBody["reason"], reasonMissing; got != want {
 		t.Errorf("reason: RequireUserID %q, want %q", got, want)
 	}
 }
@@ -737,16 +741,16 @@ func TestMiddleware_LookAlikeSchemesArePinnedAsMalformed(t *testing.T) {
 	for _, header := range []string{"Basic abc", "Bearer", "Bearerabc"} {
 		t.Run(header, func(t *testing.T) {
 			verified := false
-			verifier := ports.VerifierFunc(func(context.Context, string) (domain.VerifiedToken, error) {
+			verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
 				verified = true
-				return domain.VerifiedToken{}, nil
+				return auth.VerifiedToken{}, nil
 			})
 			next, called := noopHandler()
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
 			req.Header.Set("Authorization", header)
 			rec := httptest.NewRecorder()
 
-			Middleware(verifier)(next).ServeHTTP(rec, req)
+			auth.Middleware(verifier)(next).ServeHTTP(rec, req)
 
 			requireExactResponse(t, rec, http.StatusUnauthorized, "Bearer", `{"detail":"malformed authorization header","reason":"malformed"}`+"\n")
 			if verified || *called {
@@ -758,16 +762,16 @@ func TestMiddleware_LookAlikeSchemesArePinnedAsMalformed(t *testing.T) {
 
 func TestMiddleware_LowerCaseSchemeReachesTheVerifier(t *testing.T) {
 	var got string
-	verifier := ports.VerifierFunc(func(_ context.Context, token string) (domain.VerifiedToken, error) {
+	verifier := auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
 		got = token
-		return domain.VerifiedToken{UserID: shared.NewUserId(uuid.New()), ExpiresAt: time.Now().Add(time.Hour)}, nil
+		return auth.VerifiedToken{UserID: shared.NewUserId(uuid.New()), ExpiresAt: time.Now().Add(time.Hour)}, nil
 	})
 	next, called := noopHandler()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "bearer abc")
 	rec := httptest.NewRecorder()
 
-	Middleware(verifier)(next).ServeHTTP(rec, req)
+	auth.Middleware(verifier)(next).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK || got != "abc" || !*called {
 		t.Fatalf("status %d, verifier token %q, next ran %v; want 200, %q, true", rec.Code, got, *called, "abc")
@@ -776,7 +780,7 @@ func TestMiddleware_LowerCaseSchemeReachesTheVerifier(t *testing.T) {
 
 func TestMiddleware_InvalidTokenBodyIsPinned(t *testing.T) {
 	next, called := noopHandler()
-	handler := Middleware(stubVerifier(shared.UserId{}, &domain.InvalidTokenError{Reason: domain.ReasonExpired}))(next)
+	handler := auth.Middleware(stubVerifier(shared.UserId{}, &auth.InvalidTokenError{Reason: reasonExpired}))(next)
 
 	rec := serveBearer(handler, "203.0.113.7:1", "expired-token")
 
@@ -788,7 +792,7 @@ func TestMiddleware_InvalidTokenBodyIsPinned(t *testing.T) {
 
 func TestMiddleware_VerifierUnavailableBodyIsPinned(t *testing.T) {
 	next, called := noopHandler()
-	handler := Middleware(stubVerifier(shared.UserId{}, errors.New("fetch JWKS: connection refused")))(next)
+	handler := auth.Middleware(stubVerifier(shared.UserId{}, errors.New("fetch JWKS: connection refused")))(next)
 
 	rec := serveBearer(handler, "203.0.113.7:1", "some-token")
 
@@ -799,7 +803,7 @@ func TestMiddleware_VerifierUnavailableBodyIsPinned(t *testing.T) {
 }
 
 func TestMiddleware_ThrottledBodyIsPinned(t *testing.T) {
-	handler, _ := throttledMiddleware(stubVerifier(shared.UserId{}, &domain.InvalidTokenError{Reason: domain.ReasonExpired}))
+	handler, _ := throttledMiddleware(stubVerifier(shared.UserId{}, &auth.InvalidTokenError{Reason: reasonExpired}))
 	for range testFailureLimits.Burst {
 		serveBearer(handler, "203.0.113.7:1", "t")
 	}
@@ -813,9 +817,17 @@ func TestMiddleware_ThrottledBodyIsPinned(t *testing.T) {
 }
 
 func TestMiddleware_ThrottledRetryAfterIsNeverZero(t *testing.T) {
-	rec := httptest.NewRecorder()
+	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
+	next, _ := noopHandler()
+	limits := auth.FailureLimits{Burst: 1, Refill: time.Millisecond, MaxClients: 10}
+	handler := auth.Middleware(stubVerifier(shared.UserId{}, &auth.InvalidTokenError{Reason: reasonExpired}), auth.WithFailureLimits(limits, clock.now))(next)
+	serveBearer(handler, "203.0.113.7:1", "t")
 
-	rejecter{metrics: ports.NoopAuthMetrics()}.rejectThrottled(rec, httptest.NewRequest(http.MethodGet, "/", nil), 0)
+	rec := serveBearer(handler, "203.0.113.7:1", "t")
+
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status %d, want 429 inside a sub-millisecond refill", rec.Code)
+	}
 
 	if got := rec.Header().Get("Retry-After"); got != "1" {
 		t.Errorf("Retry-After: got %q, want %q", got, "1")
@@ -825,15 +837,15 @@ func TestMiddleware_ThrottledRetryAfterIsNeverZero(t *testing.T) {
 func TestMiddleware_ClientCancelledBodyCarriesUnavailableCode(t *testing.T) {
 	next, _ := noopHandler()
 	ctx, cancel := context.WithCancel(context.Background())
-	verifier := ports.VerifierFunc(func(context.Context, string) (domain.VerifiedToken, error) {
+	verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
 		cancel()
-		return domain.VerifiedToken{}, context.Canceled
+		return auth.VerifiedToken{}, context.Canceled
 	})
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer t")
 	rec := httptest.NewRecorder()
 
-	Middleware(verifier)(next).ServeHTTP(rec, req)
+	auth.Middleware(verifier)(next).ServeHTTP(rec, req)
 
 	requireExactResponse(t, rec, http.StatusServiceUnavailable, "", `{"detail":"authentication unavailable","code":"auth.unavailable"}`+"\n")
 }

@@ -1,66 +1,27 @@
-package providers
+package providers_test
 
 import (
-	authdomain "altune/go-api/internal/auth/domain"
-	"crypto/rand"
-	"crypto/rsa"
+	"altune/go-api/internal/auth"
 	"testing"
-	"time"
-
-	"github.com/lestrrat-go/jwx/v2/jwa"
-	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/lestrrat-go/jwx/v2/jwt"
 )
 
 func TestClassifyJWTError_RealJWXSignatureFailures(t *testing.T) {
-	knownKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("generate known key: %v", err)
-	}
-	otherKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("generate other key: %v", err)
-	}
-
-	const knownKID = "known-kid"
-	publicJWK, err := jwk.FromRaw(&knownKey.PublicKey)
-	if err != nil {
-		t.Fatalf("build public jwk: %v", err)
-	}
-	_ = publicJWK.Set(jwk.KeyIDKey, knownKID)
-	_ = publicJWK.Set(jwk.AlgorithmKey, jwa.RS256)
-	keySet := jwk.NewSet()
-	if err := keySet.AddKey(publicJWK); err != nil {
-		t.Fatalf("add key: %v", err)
-	}
-
 	cases := []struct {
-		name       string
-		signingKey *rsa.PrivateKey
-		kid        string
+		name string
+		kid  string
 	}{
-		{"kid absent from key set", otherKey, "rotated-kid"},
-		{"wrong key under known kid", otherKey, knownKID},
+		{"kid absent from key set", "rotated-kid"},
+		{"wrong key under known kid", "test-key-1"},
 	}
-
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			signer := signingJWK(t, tc.signingKey, tc.kid)
-			builder := jwt.New()
-			_ = builder.Set("exp", time.Now().Add(time.Hour))
-			signed, err := jwt.Sign(builder, jwt.WithKey(jwa.RS256, signer))
-			if err != nil {
-				t.Fatalf("sign: %v", err)
-			}
+			f := newTestJWTFixture(t)
+			verifier := f.newVerifier(t)
+			f.privateKey, f.keyID = generateRSAKey(t), tc.kid
 
-			_, parseErr := jwt.Parse(signed, jwt.WithKeySet(keySet), jwt.WithValidate(true))
-			if parseErr == nil {
-				t.Fatal("expected jwt.Parse to fail")
-			}
+			_, err := verifier.Verify(t.Context(), f.validToken(t))
 
-			if got := classifyJWTError(parseErr); got != authdomain.ReasonSignatureInvalid {
-				t.Fatalf("classifyJWTError(%q) = %v, want %v", parseErr, got, authdomain.ReasonSignatureInvalid)
-			}
+			assertInvalidTokenReason(t, err, string(auth.ReasonSignatureInvalid))
 		})
 	}
 }

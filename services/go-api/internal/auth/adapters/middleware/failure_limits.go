@@ -21,6 +21,21 @@ var DefaultFailureLimits = FailureLimits{
 	MaxClients: 10_000,
 }
 
+func (l FailureLimits) orDefaults() FailureLimits {
+	return FailureLimits{
+		Burst:      positiveOr(l.Burst, DefaultFailureLimits.Burst),
+		Refill:     positiveOr(l.Refill, DefaultFailureLimits.Refill),
+		MaxClients: positiveOr(l.MaxClients, DefaultFailureLimits.MaxClients),
+	}
+}
+
+func positiveOr[T int | time.Duration](v, fallback T) T {
+	if v > 0 {
+		return v
+	}
+	return fallback
+}
+
 type failureThrottle struct {
 	mu      sync.Mutex
 	limits  FailureLimits
