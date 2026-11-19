@@ -91,6 +91,7 @@ func TestScoreConfidence(t *testing.T) {
 		{"other channel twenty seconds off", acquisition.ConfidenceEvidence{Verdict: "unknown", Channel: channelOther, DurationDeltaSeconds: secs(20)}, 204, 0.2},
 		{"artist channel on the spot", acquisition.ConfidenceEvidence{Verdict: "unknown", Channel: channelArtist, DurationDeltaSeconds: secs(0)}, 204, 0.7},
 		{"no fingerprint run", acquisition.ConfidenceEvidence{Channel: channelTopic, DurationDeltaSeconds: secs(-1)}, 204, 0.7},
+		{"topic twenty seconds short earns no length bonus", acquisition.ConfidenceEvidence{Channel: channelTopic, DurationDeltaSeconds: secs(-20)}, 204, 0.5},
 		{"loose duration window", acquisition.ConfidenceEvidence{Channel: channelOther, DurationDeltaSeconds: secs(10)}, 204, 0.3},
 		{"loose window grows with the track", acquisition.ConfidenceEvidence{Channel: channelOther, DurationDeltaSeconds: secs(20)}, 400, 0.3},
 		{"qualifier costs 0.2", acquisition.ConfidenceEvidence{Channel: channelTopic, DurationDeltaSeconds: secs(0), Qualifiers: []string{"radio edit"}}, 204, 0.5},
