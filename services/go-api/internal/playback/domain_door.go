@@ -1,6 +1,6 @@
 package playback
 
-import domain "altune/go-api/internal/playback/domain"
+import domain "altune/go-api/internal/playback/internal/core/domain"
 
 type (
 	QueuePosition   = domain.QueuePosition

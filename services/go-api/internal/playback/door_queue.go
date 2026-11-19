@@ -1,7 +1,7 @@
 package playback
 
 import (
-	domain "altune/go-api/internal/playback/domain"
+	domain "altune/go-api/internal/playback/internal/core/domain"
 	ports "altune/go-api/internal/playback/internal/core/ports"
 	queue "altune/go-api/internal/playback/internal/core/queue"
 )
