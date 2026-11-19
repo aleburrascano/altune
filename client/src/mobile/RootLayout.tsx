@@ -21,7 +21,6 @@ import {
   AuthGate,
   AuthPortProvider,
   httpAuthPort,
-  TestAuthBridge,
   useAuthDeepLink,
 } from '@features/signIn';
 import { registerSearchStateSignOutReset } from '@features/discovery';
@@ -110,7 +109,6 @@ export default function RootLayout() {
               <SafeAreaProvider>
                 <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
                 <SystemNavigationBar scheme={scheme} />
-                <TestAuthBridge />
                 <AuthDeepLinkBridge />
                 <StagingBanner />
                 <AuthGate>

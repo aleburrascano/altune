@@ -11,7 +11,6 @@ export {
 } from '@shared/auth/adapters/authActions';
 export type { AuthClient } from '@shared/auth/adapters/authActions';
 export { withAuthDeadline, withinAuthDeadline } from '@shared/auth/shell/authDeadline';
-export { injectTestSession } from '@shared/auth/adapters/injectTestSession';
 export { primeSignedInUser } from '@shared/auth/shell/primeSignedInUser';
 export {
   markSessionExpired,
@@ -22,7 +21,6 @@ export {
   renewSessionCredentials,
 } from '@shared/auth/view/sessionExpired';
 export type { CredentialStamp } from '@shared/auth/view/sessionExpired';
-export { isTestAuthEnabled, markTestAuthBootSettled } from '@shared/auth/core/testAuthBoot';
 export { useSession } from '@shared/auth/useSession';
 export type { SessionState } from '@shared/auth/useSession';
 export { useSignOut } from '@shared/auth/useSignOut';

@@ -6,8 +6,6 @@ import type { AuthPort } from '@features/signIn';
 
 const port: AuthPort = {
   reportSignInFailure: () => undefined,
-  isTestAuthEnabled: () => false,
-  bootstrapTestAuth: () => Promise.resolve(false),
 };
 
 interface WrapperProps {

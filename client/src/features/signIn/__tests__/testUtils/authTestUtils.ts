@@ -33,8 +33,6 @@ export type AuthPortMock = {
 export function createAuthPortMock(): AuthPortMock {
   return {
     reportSignInFailure: jest.fn(),
-    isTestAuthEnabled: jest.fn(() => false),
-    bootstrapTestAuth: jest.fn(() => Promise.resolve(true)),
   };
 }
 

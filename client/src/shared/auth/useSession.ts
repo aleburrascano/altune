@@ -8,7 +8,6 @@ import { notifyIdentityChange } from '@shared/session';
 
 import { renewSessionCredentials } from '@shared/auth/view/sessionExpired';
 import { supabase } from '@shared/auth/adapters/authActions';
-import { isTestAuthEnabled, testAuthBootSettled } from '@shared/auth/core/testAuthBoot';
 import { warn } from '@shared/log';
 
 export type SessionState =
@@ -32,12 +31,10 @@ export function useSession(): SessionState {
 
   useEffect(() => {
     let active = true;
-    let holdingSignedOut = isTestAuthEnabled();
 
     function apply(incoming: Session | null): void {
       if (!active) return;
       const session = incoming?.user != null ? incoming : null;
-      if (session === null && holdingSignedOut) return;
       const userId = session?.user.id ?? null;
       if (seededRef.current && userIdRef.current !== userId) {
         forgetPreviousUsersLocalData(queryClient);
@@ -48,13 +45,8 @@ export function useSession(): SessionState {
       setState(session ? { status: 'signed-in', session } : { status: 'signed-out' });
     }
 
-    const initialSession = holdingSignedOut
-      ? testAuthBootSettled().then(() => {
-          holdingSignedOut = false;
-          return supabase.auth.getSession();
-        })
-      : supabase.auth.getSession();
-    void initialSession
+    void supabase.auth
+      .getSession()
       .then(({ data }) => {
         apply(data.session);
       })

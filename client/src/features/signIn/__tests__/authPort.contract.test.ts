@@ -23,13 +23,6 @@ function authPortContract(make: () => Subject): void {
 
     expect(reported()).toEqual(['invalid_credentials', 'network']);
   });
-
-  it('keeps test auth off in a build that does not turn it on', async () => {
-    const { port } = make();
-
-    expect(port.isTestAuthEnabled()).toBe(false);
-    await expect(port.bootstrapTestAuth()).resolves.toBe(false);
-  });
 }
 
 describe('in-memory fake', () =>
