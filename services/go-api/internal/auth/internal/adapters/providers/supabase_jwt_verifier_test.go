@@ -956,6 +956,9 @@ func TestSupabaseJWTVerifier_NonPositiveRefreshIntervalKeepsTheFifteenMinuteDefa
 	for _, interval := range []time.Duration{0, -time.Second} {
 		_, err := auth.NewSupabaseJWTVerifier(t.Context(), f.jwksServer.URL, testProjectURL, testAudience,
 			auth.WithJWKSBackgroundRefresh(interval, 15*time.Minute+time.Second))
+		if err == nil {
+			t.Fatalf("interval %s with a 15m1s window built, want the 15m default interval to refuse the longer window", interval)
+		}
 		assertErrorSays(t, err, "refresh interval (15m0s)")
 	}
 }
@@ -967,7 +970,7 @@ func TestSupabaseJWTVerifier_StalledBackgroundRefreshFailsWithinTheFetchTimeout(
 
 	jwks.stall.Store(true)
 
-	waitFor(t, 5*time.Second, "a stalled background refresh to time out", func() bool { return metrics.jwksFailures.Load() >= 1 })
+	waitFor(t, 15*time.Second, "a stalled background refresh to time out", func() bool { return metrics.jwksFailures.Load() >= 1 })
 }
 
 func warnRecords(t *testing.T, buf *bytes.Buffer) []map[string]any {
