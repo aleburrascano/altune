@@ -1,59 +1,25 @@
-package persistence
+package persistence_test
 
 import (
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/internal/core/ports"
+	"altune/go-api/internal/catalog"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func testPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("DATABASE_URL not set, skipping integration test")
-	}
-	pool, err := pgxpool.New(context.Background(), dbURL)
-	if err != nil {
-		t.Fatalf("failed to connect: %v", err)
-	}
-	t.Cleanup(func() { pool.Close() })
-	return pool
-}
-
-func newTestTrackForDB(t *testing.T, userId shared.UserId) *domain.Track {
-	t.Helper()
-	track, err := domain.NewTrack(userId, "Title-"+uuid.New().String()[:8], "Artist-"+uuid.New().String()[:8], "Album")
-	if err != nil {
-		t.Fatalf("newTestTrackForDB: %v", err)
-	}
-	return track
-}
-
-func cleanupTrack(t *testing.T, pool *pgxpool.Pool, id domain.TrackId, userId shared.UserId) {
-	t.Helper()
-	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(),
-			`DELETE FROM tracks WHERE id = $1 AND user_id = $2`,
-			id.UUID(), userId.UUID())
-	})
-}
-
 func TestPgxTrackRepo_CountForUser_CountsOwnedRowsAndStopsAtTheBound(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	otherId := shared.NewUserId(uuid.New())
@@ -82,7 +48,7 @@ func TestPgxTrackRepo_CountForUser_CountsOwnedRowsAndStopsAtTheBound(t *testing.
 
 func TestPgxTrackRepo_AddAndGetByID(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -120,7 +86,7 @@ func TestPgxTrackRepo_AddAndGetByID(t *testing.T) {
 	if got.Album != track.Album {
 		t.Errorf("Album = %q, want %q", got.Album, track.Album)
 	}
-	if got.AcquisitionStatus != domain.AcquisitionPending {
+	if got.AcquisitionStatus != catalog.AcquisitionPending {
 		t.Errorf("AcquisitionStatus = %v, want pending", got.AcquisitionStatus)
 	}
 	if got.DedupKey != track.DedupKey {
@@ -130,7 +96,7 @@ func TestPgxTrackRepo_AddAndGetByID(t *testing.T) {
 
 func TestPgxTrackRepo_Add_DedupConflict(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -145,7 +111,7 @@ func TestPgxTrackRepo_Add_DedupConflict(t *testing.T) {
 		t.Fatal("first Add() created = false, want true")
 	}
 
-	track2, err := domain.NewTrack(userId, track1.Title, track1.Artist, track1.Album)
+	track2, err := catalog.NewTrack(userId, track1.Title, track1.Artist, track1.Album)
 	if err != nil {
 		t.Fatalf("NewTrack for dedup: %v", err)
 	}
@@ -163,11 +129,11 @@ func TestPgxTrackRepo_Add_DedupConflict(t *testing.T) {
 
 func TestPgxTrackRepo_ListForUser(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	tracks := make([]*domain.Track, 3)
+	tracks := make([]*catalog.Track, 3)
 	for i := 0; i < 3; i++ {
 		tracks[i] = newTestTrackForDB(t, userId)
 		tracks[i].AddedAt = time.Now().UTC().Add(time.Duration(i) * time.Second)
@@ -207,7 +173,7 @@ func TestPgxTrackRepo_ListForUser(t *testing.T) {
 
 func TestPgxTrackRepo_Update(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -233,7 +199,7 @@ func TestPgxTrackRepo_Update(t *testing.T) {
 	if got == nil {
 		t.Fatal("GetByID after update returned nil")
 	}
-	if got.AcquisitionStatus != domain.AcquisitionReady {
+	if got.AcquisitionStatus != catalog.AcquisitionReady {
 		t.Errorf("AcquisitionStatus = %v, want ready", got.AcquisitionStatus)
 	}
 	if got.AudioRef == nil || *got.AudioRef != audioRef {
@@ -243,7 +209,7 @@ func TestPgxTrackRepo_Update(t *testing.T) {
 
 func TestPgxTrackRepo_UpdateDoesNotClobberConcurrentMetadataEdit(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -288,7 +254,7 @@ func TestPgxTrackRepo_UpdateDoesNotClobberConcurrentMetadataEdit(t *testing.T) {
 	if got.Album != editedAlbum {
 		t.Errorf("Album = %q, want %q: the acquisition write clobbered a concurrent metadata edit (lost update)", got.Album, editedAlbum)
 	}
-	if got.AcquisitionStatus != domain.AcquisitionReady {
+	if got.AcquisitionStatus != catalog.AcquisitionReady {
 		t.Errorf("AcquisitionStatus = %v, want ready", got.AcquisitionStatus)
 	}
 	if got.AudioRef == nil || *got.AudioRef != audioRef {
@@ -298,7 +264,7 @@ func TestPgxTrackRepo_UpdateDoesNotClobberConcurrentMetadataEdit(t *testing.T) {
 
 func TestPgxTrackRepo_Update_SameColumnCASMiss(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -335,15 +301,15 @@ func TestPgxTrackRepo_Update_SameColumnCASMiss(t *testing.T) {
 		t.Fatalf("writer B MarkFailed: %v", err)
 	}
 	err = repo.Update(ctx, writerB, writerB.Version)
-	if !errors.Is(err, ports.ErrTrackVersionConflict) {
-		t.Fatalf("writer B Update() error = %v, want ports.ErrTrackVersionConflict", err)
+	if !errors.Is(err, catalog.ErrTrackVersionConflict) {
+		t.Fatalf("writer B Update() error = %v, want catalog.ErrTrackVersionConflict", err)
 	}
 
 	got, err := repo.GetByID(ctx, track.ID, userId)
 	if err != nil || got == nil {
 		t.Fatalf("GetByID after race: got=%v err=%v", got, err)
 	}
-	if got.AcquisitionStatus != domain.AcquisitionReady {
+	if got.AcquisitionStatus != catalog.AcquisitionReady {
 		t.Errorf("AcquisitionStatus = %v, want ready: writer B's stale settle clobbered the winner", got.AcquisitionStatus)
 	}
 	if got.AudioRef == nil || *got.AudioRef != refA {
@@ -353,7 +319,7 @@ func TestPgxTrackRepo_Update_SameColumnCASMiss(t *testing.T) {
 
 func TestPgxTrackRepo_Update_DeletedRowIsNotAConflict(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -379,14 +345,14 @@ func TestPgxTrackRepo_Update_DeletedRowIsNotAConflict(t *testing.T) {
 	if err == nil {
 		t.Fatal("Update() on a deleted row returned nil, want an error")
 	}
-	if errors.Is(err, ports.ErrTrackVersionConflict) {
+	if errors.Is(err, catalog.ErrTrackVersionConflict) {
 		t.Errorf("Update() on a deleted row = %v, want not-found (not a version conflict)", err)
 	}
 }
 
 func TestPgxTrackRepo_Delete(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -424,8 +390,8 @@ func TestPgxTrackRepo_Delete(t *testing.T) {
 
 func TestPgxTrackRepo_Delete_CrossTenantIDOR(t *testing.T) {
 	pool := testPool(t)
-	trackRepo := NewPgxTrackRepository(pool)
-	playlistRepo := NewPgxPlaylistRepository(pool)
+	trackRepo := catalog.NewPgxTrackRepository(pool)
+	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 
 	userB := shared.NewUserId(uuid.New())
@@ -474,7 +440,7 @@ func TestPgxTrackRepo_Delete_CrossTenantIDOR(t *testing.T) {
 	}
 }
 
-func rawPlaylistPositions(t *testing.T, pool *pgxpool.Pool, playlistId domain.PlaylistId) map[uuid.UUID]int {
+func rawPlaylistPositions(t *testing.T, pool *pgxpool.Pool, playlistId catalog.PlaylistId) map[uuid.UUID]int {
 	t.Helper()
 	rows, err := pool.Query(context.Background(),
 		`SELECT track_id, position FROM playlist_tracks WHERE playlist_id = $1`,
@@ -503,15 +469,15 @@ func rawPlaylistPositions(t *testing.T, pool *pgxpool.Pool, playlistId domain.Pl
 
 func TestPgxTrackRepo_Delete_EvictsFromAllPlaylists(t *testing.T) {
 	pool := testPool(t)
-	trackRepo := NewPgxTrackRepository(pool)
-	playlistRepo := NewPgxPlaylistRepository(pool)
+	trackRepo := catalog.NewPgxTrackRepository(pool)
+	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
 	trackA := newTestTrackForDB(t, userId)
 	trackB := newTestTrackForDB(t, userId)
 	trackC := newTestTrackForDB(t, userId)
-	for _, tr := range []*domain.Track{trackA, trackB, trackC} {
+	for _, tr := range []*catalog.Track{trackA, trackB, trackC} {
 		cleanupTrack(t, pool, tr.ID, userId)
 		if _, _, err := trackRepo.Add(ctx, tr); err != nil {
 			t.Fatalf("Add track: %v", err)
@@ -523,7 +489,7 @@ func TestPgxTrackRepo_Delete_EvictsFromAllPlaylists(t *testing.T) {
 	if err := playlistRepo.Create(ctx, p1); err != nil {
 		t.Fatalf("Create p1: %v", err)
 	}
-	for _, tr := range []*domain.Track{trackA, trackB, trackC} {
+	for _, tr := range []*catalog.Track{trackA, trackB, trackC} {
 		if err := playlistRepo.AddTrack(ctx, userId, p1.ID, tr.ID); err != nil {
 			t.Fatalf("AddTrack p1: %v", err)
 		}
@@ -534,7 +500,7 @@ func TestPgxTrackRepo_Delete_EvictsFromAllPlaylists(t *testing.T) {
 	if err := playlistRepo.Create(ctx, p2); err != nil {
 		t.Fatalf("Create p2: %v", err)
 	}
-	for _, tr := range []*domain.Track{trackB, trackC} {
+	for _, tr := range []*catalog.Track{trackB, trackC} {
 		if err := playlistRepo.AddTrack(ctx, userId, p2.ID, tr.ID); err != nil {
 			t.Fatalf("AddTrack p2: %v", err)
 		}
@@ -576,11 +542,11 @@ func TestPgxTrackRepo_Delete_EvictsFromAllPlaylists(t *testing.T) {
 
 func TestPgxTrackRepo_GetByID_NotFound(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	got, err := repo.GetByID(ctx, domain.TrackIdFromUUID(uuid.New()), userId)
+	got, err := repo.GetByID(ctx, catalog.NewTrackId(), userId)
 	if err != nil {
 		t.Fatalf("GetByID() error = %v", err)
 	}
@@ -589,155 +555,9 @@ func TestPgxTrackRepo_GetByID_NotFound(t *testing.T) {
 	}
 }
 
-func TestPgxTrackRepo_ListOwnedTrackRefs_BoundedByLimit(t *testing.T) {
-	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
-	ctx := context.Background()
-	userId := shared.NewUserId(uuid.New())
-
-	prev := maxOwnedTrackRefs
-	maxOwnedTrackRefs = 3
-	t.Cleanup(func() { maxOwnedTrackRefs = prev })
-
-	const inserted = 5
-	for i := 0; i < inserted; i++ {
-		track := newTestTrackForDB(t, userId)
-		cleanupTrack(t, pool, track.ID, userId)
-		if _, _, err := repo.Add(ctx, track); err != nil {
-			t.Fatalf("Add track %d: %v", i, err)
-		}
-	}
-
-	refs, err := repo.ListOwnedTrackRefs(ctx, userId)
-	if err != nil {
-		t.Fatalf("ListOwnedTrackRefs() error = %v", err)
-	}
-	if len(refs) != maxOwnedTrackRefs {
-		t.Fatalf("len(refs) = %d, want %d (bounded by limit, %d inserted)",
-			len(refs), maxOwnedTrackRefs, inserted)
-	}
-}
-
-func TestPgxTrackRepo_ListOwnedTrackRefs_PagesPastPageSize(t *testing.T) {
-	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
-	ctx := context.Background()
-	userId := shared.NewUserId(uuid.New())
-
-	prev := ownedTrackRefsPageSize
-	ownedTrackRefsPageSize = 2
-	t.Cleanup(func() { ownedTrackRefsPageSize = prev })
-
-	const inserted = 5
-	want := map[string]bool{}
-	for i := 0; i < inserted; i++ {
-		track := newTestTrackForDB(t, userId)
-		cleanupTrack(t, pool, track.ID, userId)
-		if _, _, err := repo.Add(ctx, track); err != nil {
-			t.Fatalf("Add track %d: %v", i, err)
-		}
-		want[track.ID.String()] = true
-	}
-
-	refs, err := repo.ListOwnedTrackRefs(ctx, userId)
-	if err != nil {
-		t.Fatalf("ListOwnedTrackRefs() error = %v", err)
-	}
-	if len(refs) != inserted {
-		t.Fatalf("len(refs) = %d, want %d (all tracks past the page size)", len(refs), inserted)
-	}
-	for _, ref := range refs {
-		if !want[ref.ID] {
-			t.Errorf("unexpected ref %s", ref.ID)
-		}
-	}
-}
-
-type countingPool struct {
-	count   int
-	err     error
-	queries []string
-}
-
-func (p *countingPool) Begin(context.Context) (pgx.Tx, error) {
-	return nil, errors.New("unexpected Begin")
-}
-
-func (p *countingPool) Query(context.Context, string, ...any) (pgx.Rows, error) {
-	return nil, errors.New("unexpected Query")
-}
-
-func (p *countingPool) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
-	return pgconn.CommandTag{}, errors.New("unexpected Exec")
-}
-
-func (p *countingPool) QueryRow(_ context.Context, sql string, _ ...any) pgx.Row {
-	p.queries = append(p.queries, sql)
-	return countRow{n: p.count, err: p.err}
-}
-
-type countRow struct {
-	n   int
-	err error
-}
-
-func (r countRow) Scan(dest ...any) error {
-	if r.err != nil {
-		return r.err
-	}
-	for _, d := range dest {
-		ptr, ok := d.(*int)
-		if !ok || ptr == nil {
-			return fmt.Errorf("dest %T, want *int", d)
-		}
-		*ptr = r.n
-	}
-	return nil
-}
-
-func TestPageTotal_SkipsCountOnlyWhenPageProvesTotal(t *testing.T) {
-	cases := []struct {
-		name          string
-		limit, offset int
-		got, dbCount  int
-		want          int
-		wantCountSQL  bool
-	}{
-		{"short first page is the whole set", 50, 0, 7, 999, 7, false},
-		{"short later page ends the set", 50, 100, 20, 999, 120, false},
-		{"empty first page means zero", 50, 0, 0, 999, 0, false},
-		{"full page needs a count", 50, 0, 50, 180, 180, true},
-		{"empty page past offset needs a count", 50, 500, 0, 180, 180, true},
-		{"count behind a concurrent add is clamped", 50, 50, 50, 90, 100, true},
-	}
-	for _, c := range cases {
-		pool := &countingPool{count: c.dbCount}
-		total, err := pageTotal(context.Background(), pool, c.limit, c.offset, c.got,
-			`SELECT count(*) FROM tracks WHERE user_id = $1`, uuid.New())
-		if err != nil {
-			t.Fatalf("%s: pageTotal error = %v", c.name, err)
-		}
-		if total != c.want {
-			t.Errorf("%s: total = %d, want %d", c.name, total, c.want)
-		}
-		if ran := len(pool.queries) == 1; ran != c.wantCountSQL {
-			t.Errorf("%s: count query ran = %v (queries %v), want %v", c.name, ran, pool.queries, c.wantCountSQL)
-		}
-	}
-}
-
-func TestPageTotal_CountErrorPropagates(t *testing.T) {
-	boom := errors.New("boom")
-	pool := &countingPool{err: boom}
-	_, err := pageTotal(context.Background(), pool, 10, 0, 10, `SELECT count(*) FROM tracks WHERE user_id = $1`, uuid.New())
-	if !errors.Is(err, boom) {
-		t.Fatalf("err = %v, want wrapping %v", err, boom)
-	}
-}
-
 func TestPgxTrackRepo_ListForUser_TotalPastTheEnd(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	t.Cleanup(func() {
@@ -759,7 +579,7 @@ func TestPgxTrackRepo_ListForUser_TotalPastTheEnd(t *testing.T) {
 	}
 }
 
-func keyed(t *testing.T, userId shared.UserId, key string) *domain.Track {
+func keyed(t *testing.T, userId shared.UserId, key string) *catalog.Track {
 	t.Helper()
 	track := newTestTrackForDB(t, userId)
 	track.IdempotencyKey = &key
@@ -768,13 +588,13 @@ func keyed(t *testing.T, userId shared.UserId, key string) *domain.Track {
 
 func TestPgxTrackRepo_ConcurrentAddSameKey(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	key := "idem-" + uuid.NewString()
 
 	const concurrent = 8
-	tracks := make([]*domain.Track, concurrent)
+	tracks := make([]*catalog.Track, concurrent)
 	for i := range tracks {
 		tr := keyed(t, userId, key)
 		cleanupTrack(t, pool, tr.ID, userId)
@@ -782,13 +602,13 @@ func TestPgxTrackRepo_ConcurrentAddSameKey(t *testing.T) {
 	}
 
 	start := make(chan struct{})
-	stored := make([]*domain.Track, concurrent)
+	stored := make([]*catalog.Track, concurrent)
 	createdFlags := make([]bool, concurrent)
 	errs := make([]error, concurrent)
 	var wg sync.WaitGroup
 	for i, tr := range tracks {
 		wg.Add(1)
-		go func(i int, tr *domain.Track) {
+		go func(i int, tr *catalog.Track) {
 			defer wg.Done()
 			<-start
 			stored[i], createdFlags[i], errs[i] = repo.Add(ctx, tr)
@@ -798,7 +618,7 @@ func TestPgxTrackRepo_ConcurrentAddSameKey(t *testing.T) {
 	wg.Wait()
 
 	createdCount := 0
-	var winnerID domain.TrackId
+	var winnerID catalog.TrackId
 	for i := range tracks {
 		if errs[i] != nil {
 			t.Fatalf("concurrent Add %d: %v", i, errs[i])
@@ -827,7 +647,7 @@ func TestPgxTrackRepo_ConcurrentAddSameKey(t *testing.T) {
 
 func TestPgxTrackRepo_AddSameKeyAfterCommit(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	key := "idem-" + uuid.NewString()
@@ -862,7 +682,7 @@ func TestPgxTrackRepo_AddSameKeyAfterCommit(t *testing.T) {
 
 func TestPgxTrackRepo_Update_RoundTripsAcquisitionConfidenceAndEvidence(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -914,7 +734,7 @@ func countTracksForUser(ctx context.Context, t *testing.T, pool *pgxpool.Pool, u
 
 func TestPgxTrackRepo_Add_PendingRowIsClaimableWithoutEnqueue(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -935,7 +755,7 @@ func TestPgxTrackRepo_Add_PendingRowIsClaimableWithoutEnqueue(t *testing.T) {
 	}
 }
 
-func seedTrackWithAudio(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId, status, audioRef string) domain.TrackId {
+func seedTrackWithAudio(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId, status, audioRef string) catalog.TrackId {
 	t.Helper()
 	id := seedTrackForDB(ctx, t, pool, userId)
 	var ref any
@@ -951,7 +771,7 @@ func seedTrackWithAudio(ctx context.Context, t *testing.T, pool *pgxpool.Pool, u
 	return id
 }
 
-func setAudioRef(ctx context.Context, t *testing.T, pool *pgxpool.Pool, id domain.TrackId, audioRef string) {
+func setAudioRef(ctx context.Context, t *testing.T, pool *pgxpool.Pool, id catalog.TrackId, audioRef string) {
 	t.Helper()
 	if _, err := pool.Exec(ctx, `UPDATE tracks SET audio_ref = $1 WHERE id = $2`, audioRef, id.UUID()); err != nil {
 		t.Fatalf("setAudioRef: %v", err)
@@ -960,7 +780,7 @@ func setAudioRef(ctx context.Context, t *testing.T, pool *pgxpool.Pool, id domai
 
 func TestPgxTrackRepo_ListReadyAudioTracks_ReturnsOnlyReadyTracksWithAudio(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -989,7 +809,7 @@ func TestPgxTrackRepo_ListReadyAudioTracks_ReturnsOnlyReadyTracksWithAudio(t *te
 	if err != nil {
 		t.Fatalf("ListReadyAudioTracks() error = %v", err)
 	}
-	var found *ports.ReadyAudioTrack
+	var found *catalog.ReadyAudioTrack
 	for i, track := range got {
 		switch track.Id {
 		case pendingId:
@@ -1008,35 +828,9 @@ func TestPgxTrackRepo_ListReadyAudioTracks_ReturnsOnlyReadyTracksWithAudio(t *te
 	}
 }
 
-func TestPgxTrackRepo_ListReadyAudioTracks_CapsAndPagesAtTheCeiling(t *testing.T) {
-	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
-	ctx := context.Background()
-	userId := shared.NewUserId(uuid.New())
-
-	prevMax, prevPage := maxReadyAudioTracks, readyAudioTracksPageSize
-	maxReadyAudioTracks, readyAudioTracksPageSize = 2, 1
-	t.Cleanup(func() { maxReadyAudioTracks, readyAudioTracksPageSize = prevMax, prevPage })
-
-	for range 3 {
-		seedTrackWithAudio(ctx, t, pool, userId, "ready", uuid.NewString()+"/a.mp3")
-	}
-
-	got, err := repo.ListReadyAudioTracks(ctx)
-	if err != nil {
-		t.Fatalf("ListReadyAudioTracks() error = %v", err)
-	}
-	if len(got) != 2 {
-		t.Fatalf("len = %d, want 2 (ceiling) from page size 1", len(got))
-	}
-	if got[0].Id == got[1].Id {
-		t.Errorf("both pages returned track %s: paging did not advance", got[0].Id)
-	}
-}
-
 func TestPgxTrackRepo_AudioRefsUnderPrefix_MatchesLiteralPrefixOnly(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	u := uuid.NewString()
@@ -1072,7 +866,7 @@ func TestPgxTrackRepo_AudioRefsUnderPrefix_MatchesLiteralPrefixOnly(t *testing.T
 
 func TestPgxTrackRepo_AudioRefsUnderPrefix_DropsRefsThatChangeAway(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	u := uuid.NewString()
@@ -1101,7 +895,7 @@ func TestPgxTrackRepo_AudioRefsUnderPrefix_DropsRefsThatChangeAway(t *testing.T)
 
 func TestPgxTrackRepo_UpdateKeepsISRCCatalogLengthAndLengthFlag(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	track := newTestTrackForDB(t, userId)
@@ -1146,7 +940,7 @@ func TestPgxTrackRepo_UpdateKeepsISRCCatalogLengthAndLengthFlag(t *testing.T) {
 
 func TestPgxTrackRepo_RoundTripsTheCatalogIdentity(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -1154,14 +948,14 @@ func TestPgxTrackRepo_RoundTripsTheCatalogIdentity(t *testing.T) {
 	cleanupTrack(t, pool, pinned.ID, userId)
 	mbid := "5b11f4ce-a62d-471e-81fc-a69a8278c7da"
 	explicit := true
-	sources := []domain.CatalogSource{{Provider: "deezer", ExternalID: "42"}, {Provider: "soundcloud", ExternalID: "abc", URL: "https://soundcloud.com/artist/track"}}
+	sources := []catalog.CatalogSource{{Provider: "deezer", ExternalID: "42"}, {Provider: "soundcloud", ExternalID: "abc", URL: "https://soundcloud.com/artist/track"}}
 	if err := pinned.SetCatalogIdentity(&mbid, &explicit, sources); err != nil {
 		t.Fatal(err)
 	}
 	bare := newTestTrackForDB(t, userId)
 	cleanupTrack(t, pool, bare.ID, userId)
 
-	for _, track := range []*domain.Track{pinned, bare} {
+	for _, track := range []*catalog.Track{pinned, bare} {
 		if _, created, err := repo.Add(ctx, track); err != nil || !created {
 			t.Fatalf("Add() created=%v err=%v", created, err)
 		}
@@ -1193,7 +987,7 @@ func TestPgxTrackRepo_RoundTripsTheCatalogIdentity(t *testing.T) {
 
 func TestPgxTrackRepo_GetByIDCarriesTheAcquisitionLeaseGeneration(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -1232,7 +1026,7 @@ func TestPgxTrackRepo_GetByIDCarriesTheAcquisitionLeaseGeneration(t *testing.T) 
 
 func TestPgxTrackRepo_UpdateOfARelabelledTrackPersistsTheSixLabelColumns(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -1281,7 +1075,7 @@ func TestPgxTrackRepo_UpdateOfARelabelledTrackPersistsTheSixLabelColumns(t *test
 	}
 }
 
-func addAndLoadForRelabel(ctx context.Context, t *testing.T, repo *PgxTrackRepository, pool *pgxpool.Pool, track *domain.Track) *domain.Track {
+func addAndLoadForRelabel(ctx context.Context, t *testing.T, repo *catalog.PgxTrackRepository, pool *pgxpool.Pool, track *catalog.Track) *catalog.Track {
 	t.Helper()
 	cleanupTrack(t, pool, track.ID, track.UserId)
 	if _, _, err := repo.Add(ctx, track); err != nil {
@@ -1296,16 +1090,16 @@ func addAndLoadForRelabel(ctx context.Context, t *testing.T, repo *PgxTrackRepos
 
 func TestPgxTrackRepo_ARelabelOntoAnotherOfTheUsersTracksFailsAndLandsNothing(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	existing, err := domain.NewTrack(userId, "It’s Only Love (classic version)", "Bryan Adams", "It’s Only Love")
+	existing, err := catalog.NewTrack(userId, "It’s Only Love (classic version)", "Bryan Adams", "It’s Only Love")
 	if err != nil {
 		t.Fatal(err)
 	}
 	addAndLoadForRelabel(ctx, t, repo, pool, existing)
-	studio, err := domain.NewTrack(userId, "It's Only Love", "Bryan Adams", "Reckless")
+	studio, err := catalog.NewTrack(userId, "It's Only Love", "Bryan Adams", "Reckless")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1328,18 +1122,18 @@ func TestPgxTrackRepo_ARelabelOntoAnotherOfTheUsersTracksFailsAndLandsNothing(t 
 	if got.Title != "It's Only Love" || got.Album != "Reckless" {
 		t.Errorf("title/album = %q / %q, want the studio labels kept", got.Title, got.Album)
 	}
-	if got.AcquisitionStatus == domain.AcquisitionReady || got.AudioRef != nil {
+	if got.AcquisitionStatus == catalog.AcquisitionReady || got.AudioRef != nil {
 		t.Errorf("audio landed without its relabel: status=%v ref=%v", got.AcquisitionStatus, got.AudioRef)
 	}
 }
 
 func TestPgxTrackRepo_AStaleRelabelWritesNoLabelColumns(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	studio, err := domain.NewTrack(userId, "It's Only Love "+uuid.New().String()[:8], "Bryan Adams", "Reckless")
+	studio, err := catalog.NewTrack(userId, "It's Only Love "+uuid.New().String()[:8], "Bryan Adams", "Reckless")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1351,7 +1145,7 @@ func TestPgxTrackRepo_AStaleRelabelWritesNoLabelColumns(t *testing.T) {
 	if err := loaded.MarkReady("s3://bucket/test-" + uuid.New().String() + ".opus"); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.Update(ctx, loaded, loaded.Version+1); !errors.Is(err, ports.ErrTrackVersionConflict) {
+	if err := repo.Update(ctx, loaded, loaded.Version+1); !errors.Is(err, catalog.ErrTrackVersionConflict) {
 		t.Fatalf("Update() at a stale version = %v, want ErrTrackVersionConflict", err)
 	}
 
@@ -1366,11 +1160,11 @@ func TestPgxTrackRepo_AStaleRelabelWritesNoLabelColumns(t *testing.T) {
 
 func TestPgxTrackRepo_ARelabelThatClearsYearISRCAndLengthStoresNulls(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	studio, err := domain.NewTrack(userId, "It's Only Love "+uuid.New().String()[:8], "Bryan Adams", "Reckless")
+	studio, err := catalog.NewTrack(userId, "It's Only Love "+uuid.New().String()[:8], "Bryan Adams", "Reckless")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1408,11 +1202,11 @@ func TestPgxTrackRepo_ARelabelThatClearsYearISRCAndLengthStoresNulls(t *testing.
 
 func TestPgxTrackRepo_AReloadedRelabelledTrackDoesNotRewriteLabelsOnItsNextWrite(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	studio, err := domain.NewTrack(userId, "It's Only Love "+uuid.New().String()[:8], "Bryan Adams", "Reckless")
+	studio, err := catalog.NewTrack(userId, "It's Only Love "+uuid.New().String()[:8], "Bryan Adams", "Reckless")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1455,30 +1249,176 @@ func TestPgxTrackRepo_AReloadedRelabelledTrackDoesNotRewriteLabelsOnItsNextWrite
 	}
 }
 
-func newTestPlaylistForDB(t *testing.T, userId shared.UserId) *domain.Playlist {
+type queryTrace struct {
+	mu        sync.Mutex
+	queries   []string
+	afterNext func()
+}
+
+func tracedPool(t *testing.T) (*pgxpool.Pool, *queryTrace) {
 	t.Helper()
-	pl, err := domain.NewPlaylist(userId, "Playlist-"+uuid.New().String()[:8], time.Now())
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		t.Skip("DATABASE_URL not set, skipping integration test")
+	}
+	cfg, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {
-		t.Fatalf("newTestPlaylistForDB: %v", err)
+		t.Fatalf("parse DATABASE_URL: %v", err)
 	}
-	return pl
+	trace := &queryTrace{}
+	cfg.ConnConfig.Tracer = trace
+	pool, err := pgxpool.NewWithConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	return pool, trace
 }
 
-func seedTrackForDB(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId) domain.TrackId {
-	t.Helper()
-	track := newTestTrackForDB(t, userId)
-	cleanupTrack(t, pool, track.ID, userId)
-	if _, _, err := NewPgxTrackRepository(pool).Add(ctx, track); err != nil {
-		t.Fatalf("seedTrackForDB: %v", err)
-	}
-	return track.ID
+func (q *queryTrace) afterNextQuery(f func()) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.afterNext = f
 }
 
-func cleanupPlaylist(t *testing.T, pool *pgxpool.Pool, id domain.PlaylistId, userId shared.UserId) {
-	t.Helper()
-	t.Cleanup(func() {
-		ctx := context.Background()
-		_, _ = pool.Exec(ctx, `DELETE FROM playlist_tracks WHERE playlist_id = $1`, id.UUID())
-		_, _ = pool.Exec(ctx, `DELETE FROM playlists WHERE id = $1 AND user_id = $2`, id.UUID(), userId.UUID())
+func (q *queryTrace) ran(fragment string) int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	n := 0
+	for _, sql := range q.queries {
+		if strings.Contains(sql, fragment) {
+			n++
+		}
+	}
+	return n
+}
+
+func (q *queryTrace) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.queries = append(q.queries, data.SQL)
+	return ctx
+}
+
+func (q *queryTrace) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {
+	q.mu.Lock()
+	f := q.afterNext
+	q.afterNext = nil
+	q.mu.Unlock()
+	if f != nil {
+		f()
+	}
+}
+
+const trackListCeiling = 50_000
+
+const libraryPageSize = 2000
+
+const ownedRefsPageSQL = "FROM tracks WHERE user_id = $1 AND id > $2"
+
+const readyAudioPageSQL = "WHERE acquisition_status = 'ready' AND audio_ref IS NOT NULL AND id > $1"
+
+func TestPgxTrackRepo_TrackListsStopAtTheirCeilingInLibraryPages(t *testing.T) {
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+	seedBulkTracks(ctx, t, testPool(t), userId, trackListCeiling+1)
+	pool, trace := tracedPool(t)
+	repo := catalog.NewPgxTrackRepository(pool)
+
+	t.Run("owned track refs", func(t *testing.T) {
+		refs, err := repo.ListOwnedTrackRefs(ctx, userId)
+		if err != nil {
+			t.Fatalf("ListOwnedTrackRefs: %v", err)
+		}
+		distinct := map[string]bool{}
+		for _, ref := range refs {
+			distinct[ref.ID] = true
+		}
+		assertCeilingInPages(t, len(refs), len(distinct), trace.ran(ownedRefsPageSQL))
 	})
+
+	t.Run("ready audio tracks", func(t *testing.T) {
+		tracks, err := repo.ListReadyAudioTracks(ctx)
+		if err != nil {
+			t.Fatalf("ListReadyAudioTracks: %v", err)
+		}
+		distinct := map[catalog.TrackId]bool{}
+		for _, track := range tracks {
+			distinct[track.Id] = true
+		}
+		assertCeilingInPages(t, len(tracks), len(distinct), trace.ran(readyAudioPageSQL))
+	})
+}
+
+func assertCeilingInPages(t *testing.T, got, distinct, pages int) {
+	t.Helper()
+	if got != trackListCeiling || distinct != trackListCeiling {
+		t.Errorf("listed %d (%d distinct) of %d seeded, want exactly the %d ceiling", got, distinct, trackListCeiling+1, trackListCeiling)
+	}
+	if want := trackListCeiling / libraryPageSize; pages != want {
+		t.Errorf("read %d pages, want %d pages of %d", pages, want, libraryPageSize)
+	}
+}
+
+const countTracksSQL = "SELECT count(*) FROM tracks WHERE user_id = $1"
+
+func deleteOneTrack(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId) {
+	t.Helper()
+	tag, err := pool.Exec(ctx, `DELETE FROM tracks WHERE id = (SELECT id FROM tracks WHERE user_id = $1 LIMIT 1)`, userId.UUID())
+	if err != nil || tag.RowsAffected() != 1 {
+		t.Fatalf("delete one track: %v (%d rows)", err, tag.RowsAffected())
+	}
+}
+
+func TestPgxTrackRepo_ListForUser_CountsOnlyWhenThePageCannotProveTheTotal(t *testing.T) {
+	ctx := context.Background()
+	plain := testPool(t)
+	cases := []struct {
+		name                  string
+		seeded, limit, offset int
+		betweenPageAndCount   func(context.Context, *testing.T, *pgxpool.Pool, shared.UserId)
+		wantTotal             int
+		wantCounted           bool
+	}{
+		{"short first page is the whole set", 7, 50, 0, nil, 7, false},
+		{"short later page ends the set", 120, 50, 100, nil, 120, false},
+		{"empty first page means zero", 0, 50, 0, nil, 0, false},
+		{"full page needs a count", 180, 50, 0, nil, 180, true},
+		{"empty page past the end needs a count", 180, 50, 500, nil, 180, true},
+		{"a count that misses a row deleted after the page is clamped", 100, 50, 50, deleteOneTrack, 100, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			userId := shared.NewUserId(uuid.New())
+			seedBulkTracks(ctx, t, plain, userId, tc.seeded)
+			pool, trace := tracedPool(t)
+			if tc.betweenPageAndCount != nil {
+				trace.afterNextQuery(func() { tc.betweenPageAndCount(ctx, t, plain, userId) })
+			}
+
+			_, total, err := catalog.NewPgxTrackRepository(pool).ListForUser(ctx, userId, tc.limit, tc.offset)
+
+			if err != nil || total != tc.wantTotal {
+				t.Fatalf("ListForUser = total %d, err %v; want %d, nil", total, err, tc.wantTotal)
+			}
+			if counted := trace.ran(countTracksSQL) == 1; counted != tc.wantCounted {
+				t.Errorf("count query ran = %v, want %v", counted, tc.wantCounted)
+			}
+		})
+	}
+}
+
+func TestPgxTrackRepo_ListForUser_ReturnsTheCountsFailure(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	userId := shared.NewUserId(uuid.New())
+	seedBulkTracks(ctx, t, testPool(t), userId, 60)
+	pool, trace := tracedPool(t)
+	trace.afterNextQuery(cancel)
+
+	_, _, err := catalog.NewPgxTrackRepository(pool).ListForUser(ctx, userId, 50, 500)
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want the count's context.Canceled", err)
+	}
 }

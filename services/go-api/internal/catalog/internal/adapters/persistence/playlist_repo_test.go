@@ -331,10 +331,6 @@ func TestPgxPlaylistRepo_GetByID_NotFound(t *testing.T) {
 
 const playlistTrackCap = 2000
 
-const bulkTracksSQL = `INSERT INTO tracks (id, user_id, title, artist, dedup_key)
-	SELECT t.id, $2, 'Bulk ' || t.ord, 'Artist', 'bulk:' || t.id
-	FROM unnest($1::uuid[]) WITH ORDINALITY AS t(id, ord)`
-
 const bulkMembershipSQL = `INSERT INTO playlist_tracks (playlist_id, track_id, position)
 	SELECT $2, t.id, t.ord - 1
 	FROM unnest($1::uuid[]) WITH ORDINALITY AS t(id, ord)`
@@ -346,19 +342,8 @@ func seedFilledPlaylist(ctx context.Context, t *testing.T, pool *pgxpool.Pool, u
 	if err := catalog.NewPgxPlaylistRepository(pool).Create(ctx, pl); err != nil {
 		t.Fatalf("Create playlist: %v", err)
 	}
-	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE user_id = $1`, userId.UUID())
-	})
-	ids := make([]catalog.TrackId, n)
-	raw := make([]uuid.UUID, n)
-	for i := range ids {
-		ids[i] = catalog.NewTrackId()
-		raw[i] = ids[i].UUID()
-	}
-	if _, err := pool.Exec(ctx, bulkTracksSQL, raw, userId.UUID()); err != nil {
-		t.Fatalf("seed %d tracks: %v", n, err)
-	}
-	if _, err := pool.Exec(ctx, bulkMembershipSQL, raw, pl.ID.UUID()); err != nil {
+	ids := seedBulkTracks(ctx, t, pool, userId, n)
+	if _, err := pool.Exec(ctx, bulkMembershipSQL, trackUUIDs(ids), pl.ID.UUID()); err != nil {
 		t.Fatalf("seed %d playlist entries: %v", n, err)
 	}
 	return pl, ids
