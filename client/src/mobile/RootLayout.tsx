@@ -17,13 +17,7 @@ import { installAuthClient } from '@shared/auth';
 import { createQueryClient } from '@shared/query';
 import { createAuthClient } from '@/mobile/authClient';
 import { StagingBanner } from '@/mobile/frame/StagingBanner';
-import {
-  AuthGate,
-  AuthPortProvider,
-  httpAuthPort,
-  TestAuthBridge,
-  useAuthDeepLink,
-} from '@features/signIn';
+import { AuthGate, AuthPortProvider, httpAuthPort, useAuthDeepLink } from '@features/signIn';
 import { registerSearchStateSignOutReset } from '@features/discovery';
 import { followSignedInUser, installGlobalErrorReporting } from '@shared/telemetry';
 import { PlaybackProvider, SleepTimerBridge, startPlaybackService } from '@features/player';
@@ -107,7 +101,6 @@ export default function RootLayout() {
               <SafeAreaProvider>
                 <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
                 <SystemNavigationBar scheme={scheme} />
-                <TestAuthBridge />
                 <AuthDeepLinkBridge />
                 <StagingBanner />
                 <AuthGate>
