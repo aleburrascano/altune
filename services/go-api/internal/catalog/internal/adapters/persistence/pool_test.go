@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -160,19 +162,19 @@ func recordDBCallTimeouts(t *testing.T) *countingDBCallMetrics {
 	return metrics
 }
 
-type unansweredCall struct {
+type repoCall struct {
 	name string
 	call func(ctx context.Context, pool *pgxpool.Pool) error
 }
 
-func unansweredCalls(t *testing.T) []unansweredCall {
+func unansweredCalls(t *testing.T) []repoCall {
 	userId := shared.NewUserId(uuid.New())
 	track := newTestTrackForDB(t, userId)
 	playlist, err := catalog.NewPlaylist(userId, "stuck", time.Now())
 	if err != nil {
 		t.Fatalf("NewPlaylist: %v", err)
 	}
-	return []unansweredCall{
+	return []repoCall{
 		{"track.Query/ListForUser", func(ctx context.Context, pool *pgxpool.Pool) error {
 			_, _, err := catalog.NewPgxTrackRepository(pool).ListForUser(ctx, userId, 10, 0)
 			return err
@@ -209,7 +211,7 @@ type callResult struct {
 	elapsed time.Duration
 }
 
-func runConcurrently(t *testing.T, calls []unansweredCall) []callResult {
+func runConcurrently(t *testing.T, calls []repoCall) []callResult {
 	t.Helper()
 	results := make([]callResult, len(calls))
 	var wg sync.WaitGroup
@@ -255,6 +257,9 @@ func assertCutAtTheDBCallTimeout(t *testing.T, err error, elapsed time.Duration)
 	t.Helper()
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v, want context.DeadlineExceeded", err)
+	}
+	if !errors.Is(err, catalog.ErrDBTransient) {
+		t.Errorf("err = %v, want it named catalog.ErrDBTransient", err)
 	}
 	if elapsed < dbCallTimeout || elapsed > dbCallTimeout+dbCallTimeoutSlack {
 		t.Errorf("call returned after %v, want the %v DB-call timeout", elapsed, dbCallTimeout)
@@ -420,4 +425,265 @@ func terminateOnFirstQuery(code string) func(net.Conn) {
 			_ = be.Flush()
 		}
 	}
+}
+
+func TestPgxRepos_EveryMethodNamesARefusedConnectionTransient(t *testing.T) {
+	pool := poolAt(t, refusedAddr(t))
+
+	for _, tc := range everyRepoMethod(t) {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.call(context.Background(), pool)
+
+			if !errors.Is(err, catalog.ErrDBTransient) {
+				t.Fatalf("err = %v, want catalog.ErrDBTransient", err)
+			}
+		})
+	}
+}
+
+func TestPgxRepos_ABackendTerminatedInsideATransactionIsTransient(t *testing.T) {
+	pool := poolAt(t, fakePGAddr(t, terminateAfterBegin))
+	id, userId := catalog.NewTrackId(), shared.NewUserId(uuid.New())
+	calls := []repoCall{
+		{"PgxTrackRepository.Delete", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf3(catalog.NewPgxTrackRepository(p).Delete(ctx, id, userId))
+		}},
+		{"PgxCatalogTrackRepository.ReplaceFeaturedArtists", func(ctx context.Context, p *pgxpool.Pool) error {
+			return catalog.NewPgxCatalogTrackRepository(p).ReplaceFeaturedArtists(ctx, id, userId, nil)
+		}},
+	}
+
+	for _, tc := range calls {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.call(context.Background(), pool)
+
+			if !errors.Is(err, catalog.ErrDBTransient) {
+				t.Fatalf("err = %v, want catalog.ErrDBTransient", err)
+			}
+		})
+	}
+}
+
+func terminateAfterBegin(conn net.Conn) {
+	be, err := completeStartup(conn)
+	if err != nil {
+		return
+	}
+	if _, err := be.Receive(); err != nil {
+		return
+	}
+	be.Send(&pgproto3.CommandComplete{CommandTag: []byte("BEGIN")})
+	be.Send(&pgproto3.ReadyForQuery{TxStatus: 'T'})
+	if err := be.Flush(); err != nil {
+		return
+	}
+	if _, err := be.Receive(); err != nil {
+		return
+	}
+	be.Send(&pgproto3.ErrorResponse{Severity: "FATAL", Code: "57P01", Message: "terminating connection due to administrator command"})
+	_ = be.Flush()
+}
+
+type repoFixture struct {
+	userId   shared.UserId
+	track    *catalog.Track
+	playlist *catalog.Playlist
+}
+
+func everyRepoMethod(t *testing.T) []repoCall {
+	t.Helper()
+	userId := shared.NewUserId(uuid.New())
+	playlist, err := catalog.NewPlaylist(userId, "refused", time.Now())
+	if err != nil {
+		t.Fatalf("NewPlaylist: %v", err)
+	}
+	f := repoFixture{userId: userId, track: newTestTrackForDB(t, userId), playlist: playlist}
+	return slices.Concat(trackRepoMethods(f), catalogTrackRepoMethods(f), playlistRepoMethods(f), orphanedAudioRepoMethods(f))
+}
+
+func trackRepoMethods(f repoFixture) []repoCall {
+	u, tr := f.userId, f.track
+	repo := catalog.NewPgxTrackRepository
+	return []repoCall{
+		{"PgxTrackRepository.Add", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf3(repo(p).Add(ctx, tr))
+		}},
+		{"PgxTrackRepository.AudioRefInUse", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf(repo(p).AudioRefInUse(ctx, "audio/ref", tr.ID))
+		}},
+		{"PgxTrackRepository.AudioRefsUnderPrefix", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf(repo(p).AudioRefsUnderPrefix(ctx, "audio/"))
+		}},
+		{"PgxTrackRepository.CountForUser", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf(repo(p).CountForUser(ctx, u, 10))
+		}},
+		{"PgxTrackRepository.Delete", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf3(repo(p).Delete(ctx, tr.ID, u))
+		}},
+		{"PgxTrackRepository.GetByDedupKey", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf(repo(p).GetByDedupKey(ctx, u, tr.DedupKey))
+		}},
+		{"PgxTrackRepository.GetByID", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf(repo(p).GetByID(ctx, tr.ID, u))
+		}},
+		{"PgxTrackRepository.GetByIdempotencyKey", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf(repo(p).GetByIdempotencyKey(ctx, u, "key"))
+		}},
+		{"PgxTrackRepository.ListByIDs", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf(repo(p).ListByIDs(ctx, u, []catalog.TrackId{tr.ID}))
+		}},
+		{"PgxTrackRepository.ListForUser", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf3(repo(p).ListForUser(ctx, u, 10, 0))
+		}},
+		{"PgxTrackRepository.ListOwnedTrackRefs", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf(repo(p).ListOwnedTrackRefs(ctx, u))
+		}},
+		{"PgxTrackRepository.ListReadyAudioTracks", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf(repo(p).ListReadyAudioTracks(ctx))
+		}},
+		{"PgxTrackRepository.SetTrackNumber", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf(repo(p).SetTrackNumber(ctx, tr.ID, u, 3))
+		}},
+		{"PgxTrackRepository.Update", func(ctx context.Context, p *pgxpool.Pool) error {
+			return repo(p).Update(ctx, tr, tr.Version)
+		}},
+	}
+}
+
+func catalogTrackRepoMethods(f repoFixture) []repoCall {
+	u, tr := f.userId, f.track
+	repo := catalog.NewPgxCatalogTrackRepository
+	query := catalog.LibraryQuery{Limit: 10}
+	return []repoCall{
+		{"PgxCatalogTrackRepository.ListTracksFeaturing", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf(repo(p).ListTracksFeaturing(ctx, u, catalog.FeaturedArtist{Name: "Guest"}))
+		}},
+		{"PgxCatalogTrackRepository.ReplaceFeaturedArtists", func(ctx context.Context, p *pgxpool.Pool) error {
+			return repo(p).ReplaceFeaturedArtists(ctx, tr.ID, u, nil)
+		}},
+		{"PgxCatalogTrackRepository.ListAlbumsForUser", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf(repo(p).ListAlbumsForUser(ctx, u, query))
+		}},
+		{"PgxCatalogTrackRepository.ListArtistsForUser", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf(repo(p).ListArtistsForUser(ctx, u, query))
+		}},
+		{"PgxCatalogTrackRepository.ListFilteredForUser", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf3(repo(p).ListFilteredForUser(ctx, u, query))
+		}},
+	}
+}
+
+func playlistRepoMethods(f repoFixture) []repoCall {
+	u, pl, tr := f.userId, f.playlist, f.track
+	ids := []catalog.TrackId{tr.ID}
+	repo := catalog.NewPgxPlaylistRepository
+	return []repoCall{
+		{"PgxPlaylistRepository.AddTrack", func(ctx context.Context, p *pgxpool.Pool) error {
+			return repo(p).AddTrack(ctx, u, pl.ID, tr.ID)
+		}},
+		{"PgxPlaylistRepository.AddTracks", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf(repo(p).AddTracks(ctx, u, pl.ID, ids))
+		}},
+		{"PgxPlaylistRepository.CountForUser", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf(repo(p).CountForUser(ctx, u, 10))
+		}},
+		{"PgxPlaylistRepository.Create", func(ctx context.Context, p *pgxpool.Pool) error {
+			return repo(p).Create(ctx, pl)
+		}},
+		{"PgxPlaylistRepository.Delete", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf(repo(p).Delete(ctx, pl.ID, u))
+		}},
+		{"PgxPlaylistRepository.Exists", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf(repo(p).Exists(ctx, pl.ID, u))
+		}},
+		{"PgxPlaylistRepository.GetByID", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf3(repo(p).GetByID(ctx, pl.ID, u))
+		}},
+		{"PgxPlaylistRepository.GetTrackOrder", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf3(repo(p).GetTrackOrder(ctx, pl.ID, u))
+		}},
+		{"PgxPlaylistRepository.GetWithTracks", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf3(repo(p).GetWithTracks(ctx, pl.ID, u))
+		}},
+		{"PgxPlaylistRepository.ListForUser", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf(repo(p).ListForUser(ctx, u, 10, 0))
+		}},
+		{"PgxPlaylistRepository.RemoveTrack", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf(repo(p).RemoveTrack(ctx, u, pl.ID, tr.ID))
+		}},
+		{"PgxPlaylistRepository.RemoveTracks", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf(repo(p).RemoveTracks(ctx, u, pl.ID, ids))
+		}},
+		{"PgxPlaylistRepository.ReorderTracks", func(ctx context.Context, p *pgxpool.Pool) error {
+			return repo(p).ReorderTracks(ctx, u, pl.ID, []catalog.PlaylistTrack{{TrackId: tr.ID}})
+		}},
+		{"PgxPlaylistRepository.Update", func(ctx context.Context, p *pgxpool.Pool) error {
+			return repo(p).Update(ctx, pl)
+		}},
+	}
+}
+
+func orphanedAudioRepoMethods(f repoFixture) []repoCall {
+	u, tr := f.userId, f.track
+	repo := catalog.NewPgxOrphanedAudioRepository
+	return []repoCall{
+		{"PgxOrphanedAudioRepository.AudioUsage", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf(repo(p).AudioUsage(ctx, "audio/ref", u))
+		}},
+		{"PgxOrphanedAudioRepository.ListOrphanedAudio", func(ctx context.Context, p *pgxpool.Pool) error {
+			return errOf(repo(p).ListOrphanedAudio(ctx, 10))
+		}},
+		{"PgxOrphanedAudioRepository.MarkOrphanedAudioAttempt", func(ctx context.Context, p *pgxpool.Pool) error {
+			return repo(p).MarkOrphanedAudioAttempt(ctx, "audio/ref", "delete failed")
+		}},
+		{"PgxOrphanedAudioRepository.RecordOrphanedAudio", func(ctx context.Context, p *pgxpool.Pool) error {
+			return repo(p).RecordOrphanedAudio(ctx, catalog.OrphanedAudio{AudioRef: "audio/ref", UserId: u, TrackId: tr.ID})
+		}},
+		{"PgxOrphanedAudioRepository.ResolveOrphanedAudio", func(ctx context.Context, p *pgxpool.Pool) error {
+			return repo(p).ResolveOrphanedAudio(ctx, "audio/ref")
+		}},
+	}
+}
+
+func errOf[T any](_ T, err error) error { return err }
+
+func errOf3[A, B any](_ A, _ B, err error) error { return err }
+
+func TestPgxRepos_TheRefusedConnectionTableCallsEveryRepositoryMethod(t *testing.T) {
+	want := slices.Concat(
+		methodNames(&catalog.PgxTrackRepository{}, struct{}{}),
+		methodNames(&catalog.PgxCatalogTrackRepository{}, &catalog.PgxTrackRepository{}),
+		methodNames(&catalog.PgxPlaylistRepository{}, struct{}{}),
+		methodNames(&catalog.PgxOrphanedAudioRepository{}, struct{}{}),
+	)
+	var got []string
+	for _, tc := range everyRepoMethod(t) {
+		got = append(got, tc.name)
+	}
+
+	if missing, extra := setDiff(want, got), setDiff(got, want); len(missing)+len(extra) > 0 {
+		t.Fatalf("the table misses %v and calls %v, which no door repository has", missing, extra)
+	}
+}
+
+func methodNames(repo, inherited any) []string {
+	typ, from := reflect.TypeOf(repo), reflect.TypeOf(inherited)
+	var names []string
+	for i := range typ.NumMethod() {
+		name := typ.Method(i).Name
+		if _, ok := from.MethodByName(name); !ok {
+			names = append(names, typ.Elem().Name()+"."+name)
+		}
+	}
+	return names
+}
+
+func setDiff(a, b []string) []string {
+	var out []string
+	for _, s := range a {
+		if !slices.Contains(b, s) {
+			out = append(out, s)
+		}
+	}
+	return out
 }
