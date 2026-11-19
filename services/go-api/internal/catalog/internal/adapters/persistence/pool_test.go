@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -346,4 +347,36 @@ func TestPersistenceAdapters_StuckCallIsBounded(t *testing.T) {
 			}
 		})
 	}
+}
+
+func testPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		t.Skip("DATABASE_URL not set, skipping integration test")
+	}
+	pool, err := pgxpool.New(context.Background(), dbURL)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	t.Cleanup(func() { pool.Close() })
+	return pool
+}
+
+func newTestTrackForDB(t *testing.T, userId shared.UserId) *domain.Track {
+	t.Helper()
+	track, err := domain.NewTrack(userId, "Title-"+uuid.New().String()[:8], "Artist-"+uuid.New().String()[:8], "Album")
+	if err != nil {
+		t.Fatalf("newTestTrackForDB: %v", err)
+	}
+	return track
+}
+
+func cleanupTrack(t *testing.T, pool *pgxpool.Pool, id domain.TrackId, userId shared.UserId) {
+	t.Helper()
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(),
+			`DELETE FROM tracks WHERE id = $1 AND user_id = $2`,
+			id.UUID(), userId.UUID())
+	})
 }

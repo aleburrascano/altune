@@ -1,7 +1,7 @@
-package persistence
+package persistence_test
 
 import (
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/internal/adapters/contract"
 	"context"
 	"testing"
@@ -10,12 +10,12 @@ import (
 )
 
 type cleaningTrackRepo struct {
-	*PgxTrackRepository
+	*catalog.PgxTrackRepository
 	t    *testing.T
 	pool *pgxpool.Pool
 }
 
-func (r *cleaningTrackRepo) Add(ctx context.Context, track *domain.Track) (*domain.Track, bool, error) {
+func (r *cleaningTrackRepo) Add(ctx context.Context, track *catalog.Track) (*catalog.Track, bool, error) {
 	cleanupTrack(r.t, r.pool, track.ID, track.UserId)
 	return r.PgxTrackRepository.Add(ctx, track)
 }
@@ -23,6 +23,6 @@ func (r *cleaningTrackRepo) Add(ctx context.Context, track *domain.Track) (*doma
 func TestPgxTrackRepo_Contract(t *testing.T) {
 	pool := testPool(t)
 	contract.TrackRepositoryContract(t, func(t *testing.T) contract.TrackRepositoryUnderTest {
-		return &cleaningTrackRepo{PgxTrackRepository: NewPgxTrackRepository(pool), t: t, pool: pool}
+		return &cleaningTrackRepo{PgxTrackRepository: catalog.NewPgxTrackRepository(pool), t: t, pool: pool}
 	})
 }

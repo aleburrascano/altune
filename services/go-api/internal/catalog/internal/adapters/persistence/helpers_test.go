@@ -116,3 +116,30 @@ func seedPlaylistWithTracks(ctx context.Context, t *testing.T, pool *pgxpool.Poo
 	}
 	return pl, ids
 }
+
+const bulkTracksSQL = `INSERT INTO tracks (id, user_id, title, artist, dedup_key, acquisition_status, audio_ref)
+	SELECT t.id, $2, 'Bulk ' || t.ord, 'Artist', 'bulk:' || t.id, 'ready', 'bulk/' || t.id || '.mp3'
+	FROM unnest($1::uuid[]) WITH ORDINALITY AS t(id, ord)`
+
+func seedBulkTracks(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId, n int) []catalog.TrackId {
+	t.Helper()
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE user_id = $1`, userId.UUID())
+	})
+	ids := make([]catalog.TrackId, n)
+	for i := range ids {
+		ids[i] = catalog.NewTrackId()
+	}
+	if _, err := pool.Exec(ctx, bulkTracksSQL, trackUUIDs(ids), userId.UUID()); err != nil {
+		t.Fatalf("seed %d tracks: %v", n, err)
+	}
+	return ids
+}
+
+func trackUUIDs(ids []catalog.TrackId) []uuid.UUID {
+	raw := make([]uuid.UUID, len(ids))
+	for i, id := range ids {
+		raw[i] = id.UUID()
+	}
+	return raw
+}

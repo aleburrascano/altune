@@ -355,9 +355,11 @@ func (r *PgxTrackRepository) getTrackByUniqueKey(ctx context.Context, userId sha
 	return track, nil
 }
 
-var maxOwnedTrackRefs = 50_000
+const maxOwnedTrackRefs = 50_000
 
-var ownedTrackRefsPageSize = domain.MaxLibraryPageSize
+const ownedTrackRefsPageSize = domain.MaxLibraryPageSize
+
+var _ = [1]struct{}{}[maxOwnedTrackRefs%ownedTrackRefsPageSize]
 
 func (r *PgxTrackRepository) ListOwnedTrackRefs(
 	ctx context.Context,
@@ -366,13 +368,12 @@ func (r *PgxTrackRepository) ListOwnedTrackRefs(
 	refs := []domain.OwnedTrackRef{}
 	after := uuid.Nil
 	for len(refs) < maxOwnedTrackRefs {
-		limit := min(ownedTrackRefsPageSize, maxOwnedTrackRefs-len(refs))
-		page, err := r.listOwnedTrackRefsPage(ctx, userId, after, limit)
+		page, err := r.listOwnedTrackRefsPage(ctx, userId, after)
 		if err != nil {
 			return nil, err
 		}
 		refs = append(refs, page...)
-		if len(page) < limit {
+		if len(page) < ownedTrackRefsPageSize {
 			return refs, nil
 		}
 		if after, err = uuid.Parse(page[len(page)-1].ID); err != nil {
@@ -387,7 +388,6 @@ func (r *PgxTrackRepository) listOwnedTrackRefsPage(
 	ctx context.Context,
 	userId shared.UserId,
 	after uuid.UUID,
-	limit int,
 ) ([]domain.OwnedTrackRef, error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
@@ -397,7 +397,7 @@ func (r *PgxTrackRepository) listOwnedTrackRefsPage(
 		FROM tracks WHERE user_id = $1 AND id > $2
 		ORDER BY id
 		LIMIT $3`,
-		userId.UUID(), after, limit,
+		userId.UUID(), after, ownedTrackRefsPageSize,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list owned track refs: %w", err)
@@ -412,21 +412,22 @@ const readyAudioTracksPageSQL = `SELECT id, user_id, title, artist, audio_ref
 	ORDER BY id
 	LIMIT $2`
 
-var maxReadyAudioTracks = 50_000
+const maxReadyAudioTracks = 50_000
 
-var readyAudioTracksPageSize = domain.MaxLibraryPageSize
+const readyAudioTracksPageSize = domain.MaxLibraryPageSize
+
+var _ = [1]struct{}{}[maxReadyAudioTracks%readyAudioTracksPageSize]
 
 func (r *PgxTrackRepository) ListReadyAudioTracks(ctx context.Context) ([]ports.ReadyAudioTrack, error) {
 	tracks := []ports.ReadyAudioTrack{}
 	after := uuid.Nil
 	for len(tracks) < maxReadyAudioTracks {
-		limit := min(readyAudioTracksPageSize, maxReadyAudioTracks-len(tracks))
-		page, err := r.listReadyAudioTracksPage(ctx, after, limit)
+		page, err := r.listReadyAudioTracksPage(ctx, after)
 		if err != nil {
 			return nil, err
 		}
 		tracks = append(tracks, page...)
-		if len(page) < limit {
+		if len(page) < readyAudioTracksPageSize {
 			return tracks, nil
 		}
 		after = page[len(page)-1].Id.UUID()
@@ -438,12 +439,11 @@ func (r *PgxTrackRepository) ListReadyAudioTracks(ctx context.Context) ([]ports.
 func (r *PgxTrackRepository) listReadyAudioTracksPage(
 	ctx context.Context,
 	after uuid.UUID,
-	limit int,
 ) ([]ports.ReadyAudioTrack, error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
-	rows, err := r.pool.Query(ctx, readyAudioTracksPageSQL, after, limit)
+	rows, err := r.pool.Query(ctx, readyAudioTracksPageSQL, after, readyAudioTracksPageSize)
 	if err != nil {
 		return nil, classifyDBError(fmt.Errorf("list ready audio tracks: %w", err))
 	}
