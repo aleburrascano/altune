@@ -1454,3 +1454,31 @@ func TestPgxTrackRepo_AReloadedRelabelledTrackDoesNotRewriteLabelsOnItsNextWrite
 		t.Errorf("Title = %q, want %q: a later non-relabel write clobbered a metadata edit", got.Title, editedTitle)
 	}
 }
+
+func newTestPlaylistForDB(t *testing.T, userId shared.UserId) *domain.Playlist {
+	t.Helper()
+	pl, err := domain.NewPlaylist(userId, "Playlist-"+uuid.New().String()[:8], time.Now())
+	if err != nil {
+		t.Fatalf("newTestPlaylistForDB: %v", err)
+	}
+	return pl
+}
+
+func seedTrackForDB(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId) domain.TrackId {
+	t.Helper()
+	track := newTestTrackForDB(t, userId)
+	cleanupTrack(t, pool, track.ID, userId)
+	if _, _, err := NewPgxTrackRepository(pool).Add(ctx, track); err != nil {
+		t.Fatalf("seedTrackForDB: %v", err)
+	}
+	return track.ID
+}
+
+func cleanupPlaylist(t *testing.T, pool *pgxpool.Pool, id domain.PlaylistId, userId shared.UserId) {
+	t.Helper()
+	t.Cleanup(func() {
+		ctx := context.Background()
+		_, _ = pool.Exec(ctx, `DELETE FROM playlist_tracks WHERE playlist_id = $1`, id.UUID())
+		_, _ = pool.Exec(ctx, `DELETE FROM playlists WHERE id = $1 AND user_id = $2`, id.UUID(), userId.UUID())
+	})
+}

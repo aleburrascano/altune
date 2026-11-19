@@ -1,15 +1,13 @@
-package persistence
+package persistence_test
 
 import (
-	"altune/go-api/internal/catalog/domain"
-	playlistservice "altune/go-api/internal/catalog/internal/core/playlist"
-	"altune/go-api/internal/catalog/internal/core/ports"
+	"altune/go-api/internal/catalog"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"reflect"
+	"slices"
 	"sort"
 	"sync"
 	"testing"
@@ -21,37 +19,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func newTestPlaylistForDB(t *testing.T, userId shared.UserId) *domain.Playlist {
-	t.Helper()
-	pl, err := domain.NewPlaylist(userId, "Playlist-"+uuid.New().String()[:8], time.Now())
-	if err != nil {
-		t.Fatalf("newTestPlaylistForDB: %v", err)
-	}
-	return pl
-}
-
-func seedTrackForDB(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId) domain.TrackId {
-	t.Helper()
-	track := newTestTrackForDB(t, userId)
-	cleanupTrack(t, pool, track.ID, userId)
-	if _, _, err := NewPgxTrackRepository(pool).Add(ctx, track); err != nil {
-		t.Fatalf("seedTrackForDB: %v", err)
-	}
-	return track.ID
-}
-
-func cleanupPlaylist(t *testing.T, pool *pgxpool.Pool, id domain.PlaylistId, userId shared.UserId) {
-	t.Helper()
-	t.Cleanup(func() {
-		ctx := context.Background()
-		_, _ = pool.Exec(ctx, `DELETE FROM playlist_tracks WHERE playlist_id = $1`, id.UUID())
-		_, _ = pool.Exec(ctx, `DELETE FROM playlists WHERE id = $1 AND user_id = $2`, id.UUID(), userId.UUID())
-	})
-}
-
 func TestPgxPlaylistRepo_CountForUser_CountsOwnedRowsAndStopsAtTheBound(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxPlaylistRepository(pool)
+	repo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	otherId := shared.NewUserId(uuid.New())
@@ -78,19 +48,9 @@ func TestPgxPlaylistRepo_CountForUser_CountsOwnedRowsAndStopsAtTheBound(t *testi
 	}
 }
 
-func seedPlaylistForDB(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId) domain.PlaylistId {
-	t.Helper()
-	pl := newTestPlaylistForDB(t, userId)
-	cleanupPlaylist(t, pool, pl.ID, userId)
-	if err := NewPgxPlaylistRepository(pool).Create(ctx, pl); err != nil {
-		t.Fatalf("seedPlaylistForDB: %v", err)
-	}
-	return pl.ID
-}
-
 func TestPgxPlaylistRepo_CreateAndGetByID(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxPlaylistRepository(pool)
+	repo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -128,7 +88,7 @@ func TestPgxPlaylistRepo_CreateAndGetByID(t *testing.T) {
 
 func TestPgxPlaylistRepo_ListForUser(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxPlaylistRepository(pool)
+	repo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -160,7 +120,7 @@ func TestPgxPlaylistRepo_ListForUser(t *testing.T) {
 
 func TestPgxPlaylistRepo_ListForUserPagesWithoutRepeatingARow(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxPlaylistRepository(pool)
+	repo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -201,7 +161,7 @@ func TestPgxPlaylistRepo_ListForUserPagesWithoutRepeatingARow(t *testing.T) {
 
 func TestPgxPlaylistRepo_Delete(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxPlaylistRepository(pool)
+	repo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -239,8 +199,8 @@ func TestPgxPlaylistRepo_Delete(t *testing.T) {
 
 func TestPgxPlaylistRepo_AddAndRemoveTrack(t *testing.T) {
 	pool := testPool(t)
-	playlistRepo := NewPgxPlaylistRepository(pool)
-	trackRepo := NewPgxTrackRepository(pool)
+	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
+	trackRepo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -302,8 +262,8 @@ func TestPgxPlaylistRepo_AddAndRemoveTrack(t *testing.T) {
 
 func TestPgxPlaylistRepo_ReorderTracks(t *testing.T) {
 	pool := testPool(t)
-	playlistRepo := NewPgxPlaylistRepository(pool)
-	trackRepo := NewPgxTrackRepository(pool)
+	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
+	trackRepo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -313,7 +273,7 @@ func TestPgxPlaylistRepo_ReorderTracks(t *testing.T) {
 		t.Fatalf("Create playlist: %v", err)
 	}
 
-	trackIDs := make([]domain.TrackId, 3)
+	trackIDs := make([]catalog.TrackId, 3)
 	for i := 0; i < 3; i++ {
 		track := newTestTrackForDB(t, userId)
 		cleanupTrack(t, pool, track.ID, userId)
@@ -326,7 +286,7 @@ func TestPgxPlaylistRepo_ReorderTracks(t *testing.T) {
 		trackIDs[i] = track.ID
 	}
 
-	reordered := []domain.PlaylistTrack{
+	reordered := []catalog.PlaylistTrack{
 		{TrackId: trackIDs[2], Position: 0},
 		{TrackId: trackIDs[1], Position: 1},
 		{TrackId: trackIDs[0], Position: 2},
@@ -356,11 +316,11 @@ func TestPgxPlaylistRepo_ReorderTracks(t *testing.T) {
 
 func TestPgxPlaylistRepo_GetByID_NotFound(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxPlaylistRepository(pool)
+	repo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	got, _, err := repo.GetByID(ctx, domain.PlaylistIdFromUUID(uuid.New()), userId)
+	got, _, err := repo.GetByID(ctx, catalog.PlaylistIdFromUUID(uuid.New()), userId)
 	if err != nil {
 		t.Fatalf("GetByID() error = %v", err)
 	}
@@ -369,65 +329,94 @@ func TestPgxPlaylistRepo_GetByID_NotFound(t *testing.T) {
 	}
 }
 
-func withPlaylistTrackCap(t *testing.T, limit int) {
+const playlistTrackCap = 2000
+
+const bulkTracksSQL = `INSERT INTO tracks (id, user_id, title, artist, dedup_key)
+	SELECT t.id, $2, 'Bulk ' || t.ord, 'Artist', 'bulk:' || t.id
+	FROM unnest($1::uuid[]) WITH ORDINALITY AS t(id, ord)`
+
+const bulkMembershipSQL = `INSERT INTO playlist_tracks (playlist_id, track_id, position)
+	SELECT $2, t.id, t.ord - 1
+	FROM unnest($1::uuid[]) WITH ORDINALITY AS t(id, ord)`
+
+func seedFilledPlaylist(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId, n int) (*catalog.Playlist, []catalog.TrackId) {
 	t.Helper()
-	prev := maxPlaylistTracks
-	maxPlaylistTracks = limit
-	t.Cleanup(func() { maxPlaylistTracks = prev })
+	pl := newTestPlaylistForDB(t, userId)
+	cleanupPlaylist(t, pool, pl.ID, userId)
+	if err := catalog.NewPgxPlaylistRepository(pool).Create(ctx, pl); err != nil {
+		t.Fatalf("Create playlist: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE user_id = $1`, userId.UUID())
+	})
+	ids := make([]catalog.TrackId, n)
+	raw := make([]uuid.UUID, n)
+	for i := range ids {
+		ids[i] = catalog.NewTrackId()
+		raw[i] = ids[i].UUID()
+	}
+	if _, err := pool.Exec(ctx, bulkTracksSQL, raw, userId.UUID()); err != nil {
+		t.Fatalf("seed %d tracks: %v", n, err)
+	}
+	if _, err := pool.Exec(ctx, bulkMembershipSQL, raw, pl.ID.UUID()); err != nil {
+		t.Fatalf("seed %d playlist entries: %v", n, err)
+	}
+	return pl, ids
 }
 
 func TestPgxPlaylistRepo_GetWithTracks_BoundedByLimit(t *testing.T) {
 	pool := testPool(t)
-	playlistRepo := NewPgxPlaylistRepository(pool)
+	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	const inserted = 5
-	pl, _ := seedPlaylistWithTracks(ctx, t, pool, userId, inserted)
-	withPlaylistTrackCap(t, 3)
+	const inserted = playlistTrackCap + 2
+	pl, _ := seedFilledPlaylist(ctx, t, pool, userId, inserted)
 
 	_, gotTracks, err := playlistRepo.GetWithTracks(ctx, pl.ID, userId)
 	if err != nil {
 		t.Fatalf("GetWithTracks() error = %v", err)
 	}
-	if len(gotTracks) != maxPlaylistTracks {
+	if len(gotTracks) != playlistTrackCap {
 		t.Fatalf("len(tracks) = %d, want %d (bounded by limit, %d inserted)",
-			len(gotTracks), maxPlaylistTracks, inserted)
+			len(gotTracks), playlistTrackCap, inserted)
 	}
 }
 
-func TestPgxPlaylistRepo_AddTrack_RefusedPastTheCap(t *testing.T) {
+func TestPgxPlaylistRepo_AddTrack_TakesTheLastSlotThenRefuses(t *testing.T) {
 	pool := testPool(t)
-	playlistRepo := NewPgxPlaylistRepository(pool)
+	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	withPlaylistTrackCap(t, 3)
-	pl, ids := seedPlaylistWithTracks(ctx, t, pool, userId, 3)
+	pl, ids := seedFilledPlaylist(ctx, t, pool, userId, playlistTrackCap-1)
+	last := seedTrackForDB(ctx, t, pool, userId)
+	if err := playlistRepo.AddTrack(ctx, userId, pl.ID, last); err != nil {
+		t.Fatalf("AddTrack into the last slot: %v", err)
+	}
 	over := seedTrackForDB(ctx, t, pool, userId)
 
 	err := playlistRepo.AddTrack(ctx, userId, pl.ID, over)
 
-	if !errors.Is(err, domain.ErrPlaylistFull) {
-		t.Fatalf("AddTrack past the cap: err = %v, want domain.ErrPlaylistFull", err)
+	if !errors.Is(err, catalog.ErrPlaylistFull) {
+		t.Fatalf("AddTrack past the cap: err = %v, want catalog.ErrPlaylistFull", err)
 	}
-	assertContiguousOrder(ctx, t, pool, pl.ID, ids)
+	assertContiguousOrder(ctx, t, pool, pl.ID, append(ids, last))
 }
 
 func TestPgxPlaylistRepo_AddTracks_RefusesTheWholeBatchPastTheCap(t *testing.T) {
 	pool := testPool(t)
-	playlistRepo := NewPgxPlaylistRepository(pool)
+	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	withPlaylistTrackCap(t, 3)
-	pl, ids := seedPlaylistWithTracks(ctx, t, pool, userId, 2)
-	batch := []domain.TrackId{seedTrackForDB(ctx, t, pool, userId), seedTrackForDB(ctx, t, pool, userId)}
+	pl, ids := seedFilledPlaylist(ctx, t, pool, userId, playlistTrackCap-1)
+	batch := []catalog.TrackId{seedTrackForDB(ctx, t, pool, userId), seedTrackForDB(ctx, t, pool, userId)}
 
 	added, err := playlistRepo.AddTracks(ctx, userId, pl.ID, batch)
 
-	if !errors.Is(err, domain.ErrPlaylistFull) {
-		t.Fatalf("AddTracks past the cap: err = %v, want domain.ErrPlaylistFull", err)
+	if !errors.Is(err, catalog.ErrPlaylistFull) {
+		t.Fatalf("AddTracks past the cap: err = %v, want catalog.ErrPlaylistFull", err)
 	}
 	if len(added) != 0 {
 		t.Errorf("added = %v, want none", added)
@@ -437,33 +426,32 @@ func TestPgxPlaylistRepo_AddTracks_RefusesTheWholeBatchPastTheCap(t *testing.T) 
 
 func TestPgxPlaylistRepo_OverCapPlaylist_StaysReadableAndStopsGrowing(t *testing.T) {
 	pool := testPool(t)
-	playlistRepo := NewPgxPlaylistRepository(pool)
+	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	pl, ids := seedPlaylistWithTracks(ctx, t, pool, userId, 5)
-	withPlaylistTrackCap(t, 3)
+	pl, ids := seedFilledPlaylist(ctx, t, pool, userId, playlistTrackCap+2)
 
 	t.Run("still reads, bounded", func(t *testing.T) {
 		order, found, err := playlistRepo.GetTrackOrder(ctx, pl.ID, userId)
 		if err != nil || !found {
 			t.Fatalf("GetTrackOrder = found %v, err %v; want true, nil", found, err)
 		}
-		if !reflect.DeepEqual(order, ids[:3]) {
-			t.Fatalf("order = %v, want the first 3 of %v", order, ids)
+		if !reflect.DeepEqual(order, ids[:playlistTrackCap]) {
+			t.Fatalf("order holds %d tracks, want the first %d of %d in order", len(order), playlistTrackCap, len(ids))
 		}
 	})
 
 	t.Run("refuses a further add", func(t *testing.T) {
 		err := playlistRepo.AddTrack(ctx, userId, pl.ID, seedTrackForDB(ctx, t, pool, userId))
-		if !errors.Is(err, domain.ErrPlaylistFull) {
-			t.Fatalf("AddTrack on an over-cap playlist: err = %v, want domain.ErrPlaylistFull", err)
+		if !errors.Is(err, catalog.ErrPlaylistFull) {
+			t.Fatalf("AddTrack on an over-cap playlist: err = %v, want catalog.ErrPlaylistFull", err)
 		}
 	})
 
 	t.Run("re-adding tracks it already holds is not refused", func(t *testing.T) {
-		if err := playlistRepo.AddTrack(ctx, userId, pl.ID, ids[1]); !errors.Is(err, domain.ErrTrackAlreadyInPlaylist) {
-			t.Errorf("AddTrack(member): err = %v, want domain.ErrTrackAlreadyInPlaylist", err)
+		if err := playlistRepo.AddTrack(ctx, userId, pl.ID, ids[1]); !errors.Is(err, catalog.ErrTrackAlreadyInPlaylist) {
+			t.Errorf("AddTrack(member): err = %v, want catalog.ErrTrackAlreadyInPlaylist", err)
 		}
 		added, err := playlistRepo.AddTracks(ctx, userId, pl.ID, ids[:2])
 		if err != nil {
@@ -484,8 +472,8 @@ func TestPgxPlaylistRepo_OverCapPlaylist_StaysReadableAndStopsGrowing(t *testing
 
 func TestPgxPlaylistRepo_MembershipWrites_RefuseForeignOwner(t *testing.T) {
 	pool := testPool(t)
-	playlistRepo := NewPgxPlaylistRepository(pool)
-	trackRepo := NewPgxTrackRepository(pool)
+	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
+	trackRepo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	victim := shared.NewUserId(uuid.New())
 	attacker := shared.NewUserId(uuid.New())
@@ -496,7 +484,7 @@ func TestPgxPlaylistRepo_MembershipWrites_RefuseForeignOwner(t *testing.T) {
 		t.Fatalf("Create playlist: %v", err)
 	}
 	const seeded = 3
-	tracks := make([]*domain.Track, 0, seeded)
+	tracks := make([]*catalog.Track, 0, seeded)
 	for i := 0; i < seeded; i++ {
 		tr := newTestTrackForDB(t, victim)
 		cleanupTrack(t, pool, tr.ID, victim)
@@ -512,7 +500,7 @@ func TestPgxPlaylistRepo_MembershipWrites_RefuseForeignOwner(t *testing.T) {
 	}
 	outsider := tracks[2]
 
-	snapshot := func(t *testing.T) []domain.PlaylistTrack {
+	snapshot := func(t *testing.T) []catalog.PlaylistTrack {
 		t.Helper()
 		got, _, err := playlistRepo.GetWithTracks(ctx, pl.ID, victim)
 		if err != nil || got == nil {
@@ -530,7 +518,7 @@ func TestPgxPlaylistRepo_MembershipWrites_RefuseForeignOwner(t *testing.T) {
 			return playlistRepo.AddTrack(ctx, attacker, pl.ID, outsider.ID)
 		}},
 		{"AddTracks", func() error {
-			_, err := playlistRepo.AddTracks(ctx, attacker, pl.ID, []domain.TrackId{outsider.ID})
+			_, err := playlistRepo.AddTracks(ctx, attacker, pl.ID, []catalog.TrackId{outsider.ID})
 			return err
 		}},
 		{"RemoveTrack", func() error {
@@ -538,11 +526,11 @@ func TestPgxPlaylistRepo_MembershipWrites_RefuseForeignOwner(t *testing.T) {
 			return err
 		}},
 		{"RemoveTracks", func() error {
-			_, err := playlistRepo.RemoveTracks(ctx, attacker, pl.ID, []domain.TrackId{tracks[0].ID, tracks[1].ID})
+			_, err := playlistRepo.RemoveTracks(ctx, attacker, pl.ID, []catalog.TrackId{tracks[0].ID, tracks[1].ID})
 			return err
 		}},
 		{"ReorderTracks", func() error {
-			return playlistRepo.ReorderTracks(ctx, attacker, pl.ID, []domain.PlaylistTrack{
+			return playlistRepo.ReorderTracks(ctx, attacker, pl.ID, []catalog.PlaylistTrack{
 				{TrackId: tracks[1].ID, Position: 0},
 				{TrackId: tracks[0].ID, Position: 1},
 			})
@@ -550,8 +538,8 @@ func TestPgxPlaylistRepo_MembershipWrites_RefuseForeignOwner(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := tc.call(); !errors.Is(err, ports.ErrPlaylistNotOwned) {
-				t.Fatalf("%s as non-owner: err = %v, want ports.ErrPlaylistNotOwned", tc.name, err)
+			if err := tc.call(); !errors.Is(err, catalog.ErrPlaylistNotOwned) {
+				t.Fatalf("%s as non-owner: err = %v, want catalog.ErrPlaylistNotOwned", tc.name, err)
 			}
 			if after := snapshot(t); !reflect.DeepEqual(after, before) {
 				t.Fatalf("%s as non-owner mutated the playlist: before %v, after %v", tc.name, before, after)
@@ -560,17 +548,17 @@ func TestPgxPlaylistRepo_MembershipWrites_RefuseForeignOwner(t *testing.T) {
 	}
 
 	t.Run("missing playlist", func(t *testing.T) {
-		err := playlistRepo.AddTrack(ctx, victim, domain.NewPlaylistId(), outsider.ID)
-		if !errors.Is(err, ports.ErrPlaylistNotOwned) {
-			t.Fatalf("AddTrack to missing playlist: err = %v, want ports.ErrPlaylistNotOwned", err)
+		err := playlistRepo.AddTrack(ctx, victim, catalog.NewPlaylistId(), outsider.ID)
+		if !errors.Is(err, catalog.ErrPlaylistNotOwned) {
+			t.Fatalf("AddTrack to missing playlist: err = %v, want catalog.ErrPlaylistNotOwned", err)
 		}
 	})
 }
 
 func TestPgxPlaylistRepo_ConcurrentAddTrack_NoDuplicatePositions(t *testing.T) {
 	pool := testPool(t)
-	playlistRepo := NewPgxPlaylistRepository(pool)
-	trackRepo := NewPgxTrackRepository(pool)
+	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
+	trackRepo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -590,7 +578,7 @@ func TestPgxPlaylistRepo_ConcurrentAddTrack_NoDuplicatePositions(t *testing.T) {
 	}
 
 	const concurrentAdds = 8
-	trackIDs := make([]domain.TrackId, concurrentAdds)
+	trackIDs := make([]catalog.TrackId, concurrentAdds)
 	for i := range trackIDs {
 		tr := newTestTrackForDB(t, userId)
 		cleanupTrack(t, pool, tr.ID, userId)
@@ -605,7 +593,7 @@ func TestPgxPlaylistRepo_ConcurrentAddTrack_NoDuplicatePositions(t *testing.T) {
 	var wg sync.WaitGroup
 	for i, id := range trackIDs {
 		wg.Add(1)
-		go func(i int, id domain.TrackId) {
+		go func(i int, id catalog.TrackId) {
 			defer wg.Done()
 			<-start
 			errs[i] = playlistRepo.AddTrack(ctx, userId, pl.ID, id)
@@ -641,16 +629,14 @@ func TestPgxPlaylistRepo_ConcurrentAddTrack_NoDuplicatePositions(t *testing.T) {
 
 func TestPgxPlaylistRepo_ConcurrentAddsRaceTheLastSlot_OneWins(t *testing.T) {
 	pool := testPool(t)
-	playlistRepo := NewPgxPlaylistRepository(pool)
+	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	const capacity = 3
-	withPlaylistTrackCap(t, capacity)
-	pl, ids := seedPlaylistWithTracks(ctx, t, pool, userId, capacity-1)
+	pl, ids := seedFilledPlaylist(ctx, t, pool, userId, playlistTrackCap-1)
 
 	const callers = 8
-	contenders := make([]domain.TrackId, callers)
+	contenders := make([]catalog.TrackId, callers)
 	for i := range contenders {
 		contenders[i] = seedTrackForDB(ctx, t, pool, userId)
 	}
@@ -659,7 +645,7 @@ func TestPgxPlaylistRepo_ConcurrentAddsRaceTheLastSlot_OneWins(t *testing.T) {
 	var wg sync.WaitGroup
 	for i, id := range contenders {
 		wg.Add(1)
-		go func(i int, id domain.TrackId) {
+		go func(i int, id catalog.TrackId) {
 			defer wg.Done()
 			<-start
 			errs[i] = playlistRepo.AddTrack(ctx, userId, pl.ID, id)
@@ -673,44 +659,19 @@ func TestPgxPlaylistRepo_ConcurrentAddsRaceTheLastSlot_OneWins(t *testing.T) {
 		switch {
 		case err == nil:
 			wins++
-		case !errors.Is(err, domain.ErrPlaylistFull):
-			t.Fatalf("caller %d: err = %v, want nil or domain.ErrPlaylistFull", i, err)
+		case !errors.Is(err, catalog.ErrPlaylistFull):
+			t.Fatalf("caller %d: err = %v, want nil or catalog.ErrPlaylistFull", i, err)
 		}
 	}
 	if wins != 1 {
 		t.Fatalf("%d callers took the last slot, want exactly 1", wins)
 	}
-	if got := fetchOrder(ctx, t, pool, pl.ID); len(got) != capacity {
-		t.Fatalf("playlist holds %d tracks, want %d (seeded %v)", len(got), capacity, ids)
+	if got := fetchOrder(ctx, t, pool, pl.ID); len(got) != playlistTrackCap {
+		t.Fatalf("playlist holds %d tracks, want %d (seeded %d)", len(got), playlistTrackCap, len(ids))
 	}
 }
 
-func seedPlaylistWithTracks(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId, n int) (*domain.Playlist, []domain.TrackId) {
-	t.Helper()
-	playlistRepo := NewPgxPlaylistRepository(pool)
-	trackRepo := NewPgxTrackRepository(pool)
-
-	pl := newTestPlaylistForDB(t, userId)
-	cleanupPlaylist(t, pool, pl.ID, userId)
-	if err := playlistRepo.Create(ctx, pl); err != nil {
-		t.Fatalf("Create playlist: %v", err)
-	}
-	ids := make([]domain.TrackId, n)
-	for i := range ids {
-		tr := newTestTrackForDB(t, userId)
-		cleanupTrack(t, pool, tr.ID, userId)
-		if _, _, err := trackRepo.Add(ctx, tr); err != nil {
-			t.Fatalf("Add track %d: %v", i, err)
-		}
-		if err := playlistRepo.AddTrack(ctx, userId, pl.ID, tr.ID); err != nil {
-			t.Fatalf("AddTrack %d: %v", i, err)
-		}
-		ids[i] = tr.ID
-	}
-	return pl, ids
-}
-
-func fetchOrder(ctx context.Context, t *testing.T, pool *pgxpool.Pool, playlistId domain.PlaylistId) []uuid.UUID {
+func fetchOrder(ctx context.Context, t *testing.T, pool *pgxpool.Pool, playlistId catalog.PlaylistId) []uuid.UUID {
 	t.Helper()
 	rows, err := pool.Query(ctx, `SELECT track_id FROM playlist_tracks WHERE playlist_id = $1 ORDER BY position`, playlistId.UUID())
 	if err != nil {
@@ -731,7 +692,7 @@ func fetchOrder(ctx context.Context, t *testing.T, pool *pgxpool.Pool, playlistI
 	return order
 }
 
-func sameOrder(a []uuid.UUID, b []domain.TrackId) bool {
+func sameOrder(a []uuid.UUID, b []catalog.TrackId) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -745,7 +706,7 @@ func sameOrder(a []uuid.UUID, b []domain.TrackId) bool {
 
 func TestPgxPlaylistRepo_ReorderTracks_WaitsForPlaylistLock(t *testing.T) {
 	pool := testPool(t)
-	playlistRepo := NewPgxPlaylistRepository(pool)
+	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -760,7 +721,7 @@ func TestPgxPlaylistRepo_ReorderTracks_WaitsForPlaylistLock(t *testing.T) {
 		t.Fatalf("take playlist lock: %v", err)
 	}
 
-	reversed := []domain.PlaylistTrack{
+	reversed := []catalog.PlaylistTrack{
 		{TrackId: ids[2], Position: 0},
 		{TrackId: ids[1], Position: 1},
 		{TrackId: ids[0], Position: 2},
@@ -786,7 +747,7 @@ func TestPgxPlaylistRepo_ReorderTracks_WaitsForPlaylistLock(t *testing.T) {
 		t.Fatal("ReorderTracks did not finish after the playlist lock was released")
 	}
 
-	want := []domain.TrackId{ids[2], ids[1], ids[0]}
+	want := []catalog.TrackId{ids[2], ids[1], ids[0]}
 	if got := fetchOrder(ctx, t, pool, pl.ID); !sameOrder(got, want) {
 		t.Fatalf("order after reorder = %v, want %v", got, want)
 	}
@@ -794,20 +755,20 @@ func TestPgxPlaylistRepo_ReorderTracks_WaitsForPlaylistLock(t *testing.T) {
 
 func TestPgxPlaylistRepo_ConcurrentReorderTracks_Serialize(t *testing.T) {
 	pool := testPool(t)
-	playlistRepo := NewPgxPlaylistRepository(pool)
+	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
 	const n = 20
 	pl, ids := seedPlaylistWithTracks(ctx, t, pool, userId, n)
 
-	forward := make([]domain.PlaylistTrack, n)
-	reverse := make([]domain.PlaylistTrack, n)
-	forwardOrder := make([]domain.TrackId, n)
-	reverseOrder := make([]domain.TrackId, n)
+	forward := make([]catalog.PlaylistTrack, n)
+	reverse := make([]catalog.PlaylistTrack, n)
+	forwardOrder := make([]catalog.TrackId, n)
+	reverseOrder := make([]catalog.TrackId, n)
 	for i := 0; i < n; i++ {
-		forward[i] = domain.PlaylistTrack{TrackId: ids[i], Position: i}
-		reverse[i] = domain.PlaylistTrack{TrackId: ids[n-1-i], Position: i}
+		forward[i] = catalog.PlaylistTrack{TrackId: ids[i], Position: i}
+		reverse[i] = catalog.PlaylistTrack{TrackId: ids[n-1-i], Position: i}
 		forwardOrder[i] = ids[i]
 		reverseOrder[i] = ids[n-1-i]
 	}
@@ -817,9 +778,9 @@ func TestPgxPlaylistRepo_ConcurrentReorderTracks_Serialize(t *testing.T) {
 		start := make(chan struct{})
 		var wg sync.WaitGroup
 		errs := make([]error, 2)
-		for k, tracks := range [][]domain.PlaylistTrack{forward, reverse} {
+		for k, tracks := range [][]catalog.PlaylistTrack{forward, reverse} {
 			wg.Add(1)
-			go func(k int, tracks []domain.PlaylistTrack) {
+			go func(k int, tracks []catalog.PlaylistTrack) {
 				defer wg.Done()
 				<-start
 				errs[k] = playlistRepo.ReorderTracks(ctx, userId, pl.ID, tracks)
@@ -840,7 +801,7 @@ func TestPgxPlaylistRepo_ConcurrentReorderTracks_Serialize(t *testing.T) {
 	}
 }
 
-func fetchPositions(ctx context.Context, t *testing.T, pool *pgxpool.Pool, playlistId domain.PlaylistId) []int {
+func fetchPositions(ctx context.Context, t *testing.T, pool *pgxpool.Pool, playlistId catalog.PlaylistId) []int {
 	t.Helper()
 	rows, err := pool.Query(ctx, `SELECT position FROM playlist_tracks WHERE playlist_id = $1`, playlistId.UUID())
 	if err != nil {
@@ -862,15 +823,15 @@ func fetchPositions(ctx context.Context, t *testing.T, pool *pgxpool.Pool, playl
 	return positions
 }
 
-func positionPlan(ids []domain.TrackId) []domain.PlaylistTrack {
-	plan := make([]domain.PlaylistTrack, len(ids))
+func positionPlan(ids []catalog.TrackId) []catalog.PlaylistTrack {
+	plan := make([]catalog.PlaylistTrack, len(ids))
 	for i, id := range ids {
-		plan[i] = domain.PlaylistTrack{TrackId: id, Position: i}
+		plan[i] = catalog.PlaylistTrack{TrackId: id, Position: i}
 	}
 	return plan
 }
 
-func assertPositionsAreContiguous(ctx context.Context, t *testing.T, pool *pgxpool.Pool, playlistId domain.PlaylistId, want int) {
+func assertPositionsAreContiguous(ctx context.Context, t *testing.T, pool *pgxpool.Pool, playlistId catalog.PlaylistId, want int) {
 	t.Helper()
 	positions := fetchPositions(ctx, t, pool, playlistId)
 	if len(positions) != want {
@@ -885,7 +846,7 @@ func assertPositionsAreContiguous(ctx context.Context, t *testing.T, pool *pgxpo
 
 func TestPgxPlaylistRepo_ReorderTracks_RefusesAPlanStaleFromARemoveAndAdd(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxPlaylistRepository(pool)
+	repo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	pl, ids := seedPlaylistWithTracks(ctx, t, pool, userId, 3)
@@ -898,15 +859,15 @@ func TestPgxPlaylistRepo_ReorderTracks_RefusesAPlanStaleFromARemoveAndAdd(t *tes
 
 	err := repo.ReorderTracks(ctx, userId, pl.ID, plan)
 
-	if !errors.Is(err, ports.ErrPlaylistChangedDuringReorder) {
-		t.Fatalf("ReorderTracks error = %v, want %v", err, ports.ErrPlaylistChangedDuringReorder)
+	if !errors.Is(err, catalog.ErrPlaylistChangedDuringReorder) {
+		t.Fatalf("ReorderTracks error = %v, want %v", err, catalog.ErrPlaylistChangedDuringReorder)
 	}
 	assertPositionsAreContiguous(ctx, t, pool, pl.ID, 3)
 }
 
 func TestPgxPlaylistRepo_ReorderTracks_RefusesAPlanStaleFromARemove(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxPlaylistRepository(pool)
+	repo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	pl, ids := seedPlaylistWithTracks(ctx, t, pool, userId, 3)
@@ -918,51 +879,53 @@ func TestPgxPlaylistRepo_ReorderTracks_RefusesAPlanStaleFromARemove(t *testing.T
 
 	err := repo.ReorderTracks(ctx, userId, pl.ID, plan)
 
-	if !errors.Is(err, ports.ErrPlaylistChangedDuringReorder) {
-		t.Fatalf("ReorderTracks error = %v, want %v", err, ports.ErrPlaylistChangedDuringReorder)
+	if !errors.Is(err, catalog.ErrPlaylistChangedDuringReorder) {
+		t.Fatalf("ReorderTracks error = %v, want %v", err, catalog.ErrPlaylistChangedDuringReorder)
 	}
 	assertPositionsAreContiguous(ctx, t, pool, pl.ID, 2)
 }
 
 func TestPgxPlaylistRepo_ReorderTracks_AcceptsAPlanForAnOverCapPlaylist(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxPlaylistRepository(pool)
+	repo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	pl, ids := seedPlaylistWithTracks(ctx, t, pool, userId, 5)
-	withPlaylistTrackCap(t, 3)
+	pl, ids := seedFilledPlaylist(ctx, t, pool, userId, playlistTrackCap+2)
 
 	capped, _, err := repo.GetTrackOrder(ctx, pl.ID, userId)
 	if err != nil {
 		t.Fatalf("GetTrackOrder: %v", err)
 	}
-	reversed := []domain.TrackId{capped[2], capped[1], capped[0]}
+	reversed := slices.Clone(capped)
+	slices.Reverse(reversed)
 
 	if err := repo.ReorderTracks(ctx, userId, pl.ID, positionPlan(reversed)); err != nil {
 		t.Fatalf("ReorderTracks: %v", err)
 	}
-	want := []domain.TrackId{ids[2], ids[1], ids[0], ids[3], ids[4]}
+	want := slices.Clone(ids[:playlistTrackCap])
+	slices.Reverse(want)
+	want = append(want, ids[playlistTrackCap:]...)
 	if got := fetchOrder(ctx, t, pool, pl.ID); !sameOrder(got, want) {
-		t.Fatalf("order after reorder = %v, want %v", got, want)
+		t.Fatalf("order after reorder does not reverse the first %d and keep the tail", playlistTrackCap)
 	}
 }
 
-func addTrackToPlaylist(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId, playlistId domain.PlaylistId) {
+func addTrackToPlaylist(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId, playlistId catalog.PlaylistId) {
 	t.Helper()
 	tr := newTestTrackForDB(t, userId)
 	cleanupTrack(t, pool, tr.ID, userId)
-	if _, _, err := NewPgxTrackRepository(pool).Add(ctx, tr); err != nil {
+	if _, _, err := catalog.NewPgxTrackRepository(pool).Add(ctx, tr); err != nil {
 		t.Fatalf("Add track: %v", err)
 	}
-	if err := NewPgxPlaylistRepository(pool).AddTrack(ctx, userId, playlistId, tr.ID); err != nil {
+	if err := catalog.NewPgxPlaylistRepository(pool).AddTrack(ctx, userId, playlistId, tr.ID); err != nil {
 		t.Fatalf("AddTrack: %v", err)
 	}
 }
 
 func TestPgxPlaylistRepo_AddsRefuseAVanishedTrack(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxPlaylistRepository(pool)
+	repo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -979,7 +942,7 @@ func TestPgxPlaylistRepo_AddsRefuseAVanishedTrack(t *testing.T) {
 	}{
 		{"AddTrack", func() error { return repo.AddTrack(ctx, userId, pl.ID, vanished) }},
 		{"AddTracks", func() error {
-			_, err := repo.AddTracks(ctx, userId, pl.ID, []domain.TrackId{vanished})
+			_, err := repo.AddTracks(ctx, userId, pl.ID, []catalog.TrackId{vanished})
 			return err
 		}},
 	}
@@ -987,17 +950,17 @@ func TestPgxPlaylistRepo_AddsRefuseAVanishedTrack(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.add()
 
-			if !errors.Is(err, ports.ErrTrackMissing) {
-				t.Fatalf("error = %v, want %v", err, ports.ErrTrackMissing)
+			if !errors.Is(err, catalog.ErrTrackMissing) {
+				t.Fatalf("error = %v, want %v", err, catalog.ErrTrackMissing)
 			}
 		})
 	}
 }
 
-func vanishedTrackId(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId) domain.TrackId {
+func vanishedTrackId(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId) catalog.TrackId {
 	t.Helper()
 	tr := newTestTrackForDB(t, userId)
-	if _, _, err := NewPgxTrackRepository(pool).Add(ctx, tr); err != nil {
+	if _, _, err := catalog.NewPgxTrackRepository(pool).Add(ctx, tr); err != nil {
 		t.Fatalf("Add track: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `DELETE FROM tracks WHERE id = $1`, tr.ID.UUID()); err != nil {
@@ -1008,7 +971,7 @@ func vanishedTrackId(ctx context.Context, t *testing.T, pool *pgxpool.Pool, user
 
 func TestPgxPlaylistRepo_Update_RefusesAVanishedPlaylist(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxPlaylistRepository(pool)
+	repo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -1025,8 +988,8 @@ func TestPgxPlaylistRepo_Update_RefusesAVanishedPlaylist(t *testing.T) {
 	renamed.Name = "Renamed"
 	err := repo.Update(ctx, &renamed)
 
-	if !errors.Is(err, ports.ErrPlaylistNotOwned) {
-		t.Fatalf("Update error = %v, want %v", err, ports.ErrPlaylistNotOwned)
+	if !errors.Is(err, catalog.ErrPlaylistNotOwned) {
+		t.Fatalf("Update error = %v, want %v", err, catalog.ErrPlaylistNotOwned)
 	}
 	got, _, err := repo.GetByID(ctx, pl.ID, userId)
 	if err != nil {
@@ -1039,7 +1002,7 @@ func TestPgxPlaylistRepo_Update_RefusesAVanishedPlaylist(t *testing.T) {
 
 func TestPgxPlaylistRepo_Update_RefusesAnotherUsersPlaylist(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxPlaylistRepository(pool)
+	repo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	owner := shared.NewUserId(uuid.New())
 	stranger := shared.NewUserId(uuid.New())
@@ -1055,8 +1018,8 @@ func TestPgxPlaylistRepo_Update_RefusesAnotherUsersPlaylist(t *testing.T) {
 	stolen.Name = "Renamed"
 	err := repo.Update(ctx, &stolen)
 
-	if !errors.Is(err, ports.ErrPlaylistNotOwned) {
-		t.Fatalf("Update error = %v, want %v", err, ports.ErrPlaylistNotOwned)
+	if !errors.Is(err, catalog.ErrPlaylistNotOwned) {
+		t.Fatalf("Update error = %v, want %v", err, catalog.ErrPlaylistNotOwned)
 	}
 	got, _, err := repo.GetByID(ctx, pl.ID, owner)
 	if err != nil {
@@ -1140,7 +1103,7 @@ func rowCountingPool(t *testing.T) (*pgxpool.Pool, *rowCounter) {
 	return pool, counter
 }
 
-func assertContiguousOrder(ctx context.Context, t *testing.T, pool *pgxpool.Pool, playlistId domain.PlaylistId, want []domain.TrackId) {
+func assertContiguousOrder(ctx context.Context, t *testing.T, pool *pgxpool.Pool, playlistId catalog.PlaylistId, want []catalog.TrackId) {
 	t.Helper()
 	if got := fetchOrder(ctx, t, pool, playlistId); !sameOrder(got, want) {
 		t.Fatalf("order = %v, want %v", got, want)
@@ -1153,12 +1116,12 @@ func assertContiguousOrder(ctx context.Context, t *testing.T, pool *pgxpool.Pool
 	}
 }
 
-func without(ids []domain.TrackId, drop ...domain.TrackId) []domain.TrackId {
-	skip := make(map[domain.TrackId]bool, len(drop))
+func without(ids []catalog.TrackId, drop ...catalog.TrackId) []catalog.TrackId {
+	skip := make(map[catalog.TrackId]bool, len(drop))
 	for _, id := range drop {
 		skip[id] = true
 	}
-	out := make([]domain.TrackId, 0, len(ids))
+	out := make([]catalog.TrackId, 0, len(ids))
 	for _, id := range ids {
 		if !skip[id] {
 			out = append(out, id)
@@ -1175,11 +1138,11 @@ func TestPlaylistMembership_SingleTrackMutationCost_IsBoundedByTheChange(t *test
 
 	const n = 40
 	pl, ids := seedPlaylistWithTracks(ctx, t, pool, userId, n)
-	svc := playlistservice.NewPlaylistMembershipService(NewPgxPlaylistRepository(countedPool), NewPgxTrackRepository(pool))
-	trackRepo := NewPgxTrackRepository(pool)
+	svc := catalog.NewPlaylistMembershipService(catalog.NewPgxPlaylistRepository(countedPool), catalog.NewPgxTrackRepository(pool))
+	trackRepo := catalog.NewPgxTrackRepository(pool)
 
 	parent := t
-	newTrack := func(t *testing.T) domain.TrackId {
+	newTrack := func(t *testing.T) catalog.TrackId {
 		t.Helper()
 		tr := newTestTrackForDB(t, userId)
 		cleanupTrack(parent, pool, tr.ID, userId)
@@ -1188,7 +1151,7 @@ func TestPlaylistMembership_SingleTrackMutationCost_IsBoundedByTheChange(t *test
 		}
 		return tr.ID
 	}
-	order := append([]domain.TrackId(nil), ids...)
+	order := append([]catalog.TrackId(nil), ids...)
 
 	t.Run("AddTrack reads no track list and writes one row", func(t *testing.T) {
 		fresh := newTrack(t)
@@ -1207,7 +1170,7 @@ func TestPlaylistMembership_SingleTrackMutationCost_IsBoundedByTheChange(t *test
 	t.Run("AddTrack of a member reads no track list and writes nothing", func(t *testing.T) {
 		counter.reset()
 		err := svc.AddTrack(ctx, userId, pl.ID, order[3])
-		if !errors.Is(err, domain.ErrTrackAlreadyInPlaylist) {
+		if !errors.Is(err, catalog.ErrTrackAlreadyInPlaylist) {
 			t.Fatalf("AddTrack(duplicate) err = %v, want ErrTrackAlreadyInPlaylist", err)
 		}
 		maxRead, written := counter.snapshot()
@@ -1233,7 +1196,7 @@ func TestPlaylistMembership_SingleTrackMutationCost_IsBoundedByTheChange(t *test
 
 	t.Run("RemoveTrack of a non-member writes nothing", func(t *testing.T) {
 		counter.reset()
-		if err := svc.RemoveTrack(ctx, userId, pl.ID, domain.NewTrackId()); err != nil {
+		if err := svc.RemoveTrack(ctx, userId, pl.ID, catalog.NewTrackId()); err != nil {
 			t.Fatalf("RemoveTrack(non-member): %v", err)
 		}
 		maxRead, written := counter.snapshot()
@@ -1247,7 +1210,7 @@ func TestPlaylistMembership_SingleTrackMutationCost_IsBoundedByTheChange(t *test
 		last := len(order) - 1
 		first, second := order[last-6], order[last-2]
 		counter.reset()
-		removed, err := svc.RemoveTracks(ctx, userId, pl.ID, []domain.TrackId{second, first, domain.NewTrackId(), second})
+		removed, err := svc.RemoveTracks(ctx, userId, pl.ID, []catalog.TrackId{second, first, catalog.NewTrackId(), second})
 		if err != nil {
 			t.Fatalf("RemoveTracks: %v", err)
 		}
@@ -1263,7 +1226,7 @@ func TestPlaylistMembership_SingleTrackMutationCost_IsBoundedByTheChange(t *test
 	})
 
 	t.Run("Reorder rewrites only the moved rows", func(t *testing.T) {
-		reordered := append([]domain.TrackId(nil), order...)
+		reordered := append([]catalog.TrackId(nil), order...)
 		reordered[5], reordered[6] = reordered[6], reordered[5]
 		counter.reset()
 		if err := svc.Reorder(ctx, userId, pl.ID, reordered); err != nil {
@@ -1280,7 +1243,7 @@ func TestPlaylistMembership_SingleTrackMutationCost_IsBoundedByTheChange(t *test
 	t.Run("AddTracks reads no track list and appends only new tracks", func(t *testing.T) {
 		a, b := newTrack(t), newTrack(t)
 		counter.reset()
-		added, err := svc.AddTracks(ctx, userId, pl.ID, []domain.TrackId{a, order[0], a, b})
+		added, err := svc.AddTracks(ctx, userId, pl.ID, []catalog.TrackId{a, order[0], a, b})
 		if err != nil {
 			t.Fatalf("AddTracks: %v", err)
 		}
@@ -1298,14 +1261,14 @@ func TestPlaylistMembership_SingleTrackMutationCost_IsBoundedByTheChange(t *test
 
 func TestPgxPlaylistRepo_ConcurrentDuplicateAddTrack_OneWins(t *testing.T) {
 	pool := testPool(t)
-	playlistRepo := NewPgxPlaylistRepository(pool)
+	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
 	pl, ids := seedPlaylistWithTracks(ctx, t, pool, userId, 1)
 	tr := newTestTrackForDB(t, userId)
 	cleanupTrack(t, pool, tr.ID, userId)
-	if _, _, err := NewPgxTrackRepository(pool).Add(ctx, tr); err != nil {
+	if _, _, err := catalog.NewPgxTrackRepository(pool).Add(ctx, tr); err != nil {
 		t.Fatalf("Add track: %v", err)
 	}
 
@@ -1329,19 +1292,19 @@ func TestPgxPlaylistRepo_ConcurrentDuplicateAddTrack_OneWins(t *testing.T) {
 		switch {
 		case err == nil:
 			wins++
-		case !errors.Is(err, domain.ErrTrackAlreadyInPlaylist):
+		case !errors.Is(err, catalog.ErrTrackAlreadyInPlaylist):
 			t.Fatalf("caller %d: err = %v, want nil or ErrTrackAlreadyInPlaylist", i, err)
 		}
 	}
 	if wins != 1 {
 		t.Fatalf("%d callers added the track, want exactly 1", wins)
 	}
-	assertContiguousOrder(ctx, t, pool, pl.ID, []domain.TrackId{ids[0], tr.ID})
+	assertContiguousOrder(ctx, t, pool, pl.ID, []catalog.TrackId{ids[0], tr.ID})
 }
 
 func TestPgxPlaylistRepo_RemoveTracks_KeepsOrderAcrossGaps(t *testing.T) {
 	pool := testPool(t)
-	playlistRepo := NewPgxPlaylistRepository(pool)
+	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -1353,14 +1316,14 @@ func TestPgxPlaylistRepo_RemoveTracks_KeepsOrderAcrossGaps(t *testing.T) {
 		t.Fatalf("punch gaps: %v", err)
 	}
 
-	removed, err := playlistRepo.RemoveTracks(ctx, userId, pl.ID, []domain.TrackId{ids[5], ids[2], ids[1], ids[5]})
+	removed, err := playlistRepo.RemoveTracks(ctx, userId, pl.ID, []catalog.TrackId{ids[5], ids[2], ids[1], ids[5]})
 	if err != nil {
 		t.Fatalf("RemoveTracks: %v", err)
 	}
-	if want := []domain.TrackId{ids[5], ids[2]}; !reflect.DeepEqual(removed, want) {
+	if want := []catalog.TrackId{ids[5], ids[2]}; !reflect.DeepEqual(removed, want) {
 		t.Fatalf("removed = %v, want %v", removed, want)
 	}
-	want := []domain.TrackId{ids[0], ids[3], ids[6], ids[7]}
+	want := []catalog.TrackId{ids[0], ids[3], ids[6], ids[7]}
 	if got := fetchOrder(ctx, t, pool, pl.ID); !sameOrder(got, want) {
 		t.Fatalf("order = %v, want %v", got, want)
 	}
@@ -1369,7 +1332,7 @@ func TestPgxPlaylistRepo_RemoveTracks_KeepsOrderAcrossGaps(t *testing.T) {
 	if err != nil || !gone {
 		t.Fatalf("RemoveTrack(member) = %v, %v; want true, nil", gone, err)
 	}
-	want = []domain.TrackId{ids[0], ids[6], ids[7]}
+	want = []catalog.TrackId{ids[0], ids[6], ids[7]}
 	if got := fetchOrder(ctx, t, pool, pl.ID); !sameOrder(got, want) {
 		t.Fatalf("order after RemoveTrack = %v, want %v", got, want)
 	}
@@ -1377,7 +1340,7 @@ func TestPgxPlaylistRepo_RemoveTracks_KeepsOrderAcrossGaps(t *testing.T) {
 
 func TestPgxPlaylistRepo_MembershipReads_AreOwnerScoped(t *testing.T) {
 	pool := testPool(t)
-	playlistRepo := NewPgxPlaylistRepository(pool)
+	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	owner := shared.NewUserId(uuid.New())
 	stranger := shared.NewUserId(uuid.New())
@@ -1391,15 +1354,15 @@ func TestPgxPlaylistRepo_MembershipReads_AreOwnerScoped(t *testing.T) {
 
 	cases := []struct {
 		name      string
-		id        domain.PlaylistId
+		id        catalog.PlaylistId
 		user      shared.UserId
 		wantFound bool
-		wantOrder []domain.TrackId
+		wantOrder []catalog.TrackId
 	}{
 		{"owned", pl.ID, owner, true, ids},
-		{"owned and empty", empty.ID, owner, true, []domain.TrackId{}},
+		{"owned and empty", empty.ID, owner, true, []catalog.TrackId{}},
 		{"foreign", pl.ID, stranger, false, nil},
-		{"missing", domain.NewPlaylistId(), owner, false, nil},
+		{"missing", catalog.NewPlaylistId(), owner, false, nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1418,29 +1381,12 @@ func TestPgxPlaylistRepo_MembershipReads_AreOwnerScoped(t *testing.T) {
 	}
 }
 
-type deadlinePool struct{}
-
-var errPoolDeadline = fmt.Errorf("pool call: %w", context.DeadlineExceeded)
-
-func (deadlinePool) Begin(context.Context) (pgx.Tx, error) { return nil, errPoolDeadline }
-
-func (deadlinePool) Query(context.Context, string, ...any) (pgx.Rows, error) {
-	return nil, errPoolDeadline
-}
-
-func (deadlinePool) QueryRow(context.Context, string, ...any) pgx.Row {
-	return errRow{err: errPoolDeadline}
-}
-
-func (deadlinePool) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
-	return pgconn.CommandTag{}, errPoolDeadline
-}
-
 func TestPgxPlaylistRepo_TransientFailuresAreClassified(t *testing.T) {
-	repo := &PgxPlaylistRepository{pool: deadlinePool{}}
+	repo := catalog.NewPgxPlaylistRepository(unreachablePool(t))
 	userId := shared.NewUserId(uuid.New())
-	playlistId := domain.NewPlaylistId()
-	ctx := context.Background()
+	playlistId := catalog.NewPlaylistId()
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	t.Cleanup(cancel)
 
 	cases := []struct {
 		name string
@@ -1448,7 +1394,7 @@ func TestPgxPlaylistRepo_TransientFailuresAreClassified(t *testing.T) {
 	}{
 		{"list", func() error { _, err := repo.ListForUser(ctx, userId, 10, 0); return err }},
 		{"get with tracks", func() error { _, _, err := repo.GetWithTracks(ctx, playlistId, userId); return err }},
-		{"add track", func() error { return repo.AddTrack(ctx, userId, playlistId, domain.NewTrackId()) }},
+		{"add track", func() error { return repo.AddTrack(ctx, userId, playlistId, catalog.NewTrackId()) }},
 		{"create", func() error { return repo.Create(ctx, newTestPlaylistForDB(t, userId)) }},
 		{"exists", func() error { _, err := repo.Exists(ctx, playlistId, userId); return err }},
 		{"track order", func() error { _, _, err := repo.GetTrackOrder(ctx, playlistId, userId); return err }},
@@ -1456,8 +1402,8 @@ func TestPgxPlaylistRepo_TransientFailuresAreClassified(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := tc.call(); !errors.Is(err, ports.ErrDBTransient) {
-				t.Fatalf("err = %v, want ports.ErrDBTransient", err)
+			if err := tc.call(); !errors.Is(err, catalog.ErrDBTransient) {
+				t.Fatalf("err = %v, want catalog.ErrDBTransient", err)
 			}
 		})
 	}

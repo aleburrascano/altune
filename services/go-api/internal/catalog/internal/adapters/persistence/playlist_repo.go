@@ -155,7 +155,7 @@ func (r *PgxPlaylistRepository) GetByID(ctx context.Context, id domain.PlaylistI
 	return playlist, domain.PlaylistSummary{TrackCount: trackCount}, nil
 }
 
-var maxPlaylistTracks = domain.MaxPlaylistTracks
+const maxPlaylistTracks = domain.MaxPlaylistTracks
 
 func (r *PgxPlaylistRepository) GetWithTracks(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, []*domain.Track, error) {
 	ctx, cancel := withDBTimeout(ctx)

@@ -5,6 +5,7 @@ import persistence "altune/go-api/internal/catalog/internal/adapters/persistence
 type (
 	PgxCatalogTrackRepository  = persistence.PgxCatalogTrackRepository
 	PgxOrphanedAudioRepository = persistence.PgxOrphanedAudioRepository
+	PgxPlaylistRepository      = persistence.PgxPlaylistRepository
 	PgxTrackRepository         = persistence.PgxTrackRepository
 )
 
