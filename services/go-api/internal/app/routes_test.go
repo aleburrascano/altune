@@ -214,14 +214,21 @@ func TestRouter_MountsNoAdminRoute(t *testing.T) {
 func TestRouter_MountsNoTestLoginInDevelopment(t *testing.T) {
 	r := productionRouterFor(t, &config.Config{Env: "development", MusicDir: t.TempDir()})
 
+	var observed int
 	err := chi.Walk(r, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
 		if strings.HasPrefix(route, "/test") {
 			t.Errorf("%s %s: the test-login backdoor is gone and no route may come back under /test", method, route)
+		}
+		if strings.HasPrefix(route, "/observe/") {
+			observed++
 		}
 		return nil
 	})
 	if err != nil {
 		t.Fatalf("walk production router: %v", err)
+	}
+	if observed == 0 {
+		t.Fatal("walked no /observe route, so the router under test is not the production one")
 	}
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/test/login", nil))

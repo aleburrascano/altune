@@ -11,6 +11,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -67,7 +68,13 @@ func TestMountObserve_AuthRejectionsAndOutagesReachLiveMetrics(t *testing.T) {
 	}
 }
 
-func TestNewAuthVerifier_NoRevokerConfiguredAcceptsValidToken(t *testing.T) {
+type jwksFixture struct {
+	key *rsa.PrivateKey
+	cfg *config.Config
+}
+
+func newJWKSFixture(t *testing.T) jwksFixture {
+	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
@@ -85,21 +92,19 @@ func TestNewAuthVerifier_NoRevokerConfiguredAcceptsValidToken(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(set)
 	}))
 	t.Cleanup(srv.Close)
-
 	cfg := &config.Config{SupabaseJWTJWKSURL: srv.URL, SupabaseProjectURL: "https://p.supabase.co", SupabaseJWTAud: "authenticated"}
-	verifier, err := newAuthVerifier(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("newAuthVerifier: %v", err)
-	}
+	return jwksFixture{key: key, cfg: cfg}
+}
 
-	userID := uuid.New()
+func (f jwksFixture) signedToken(t *testing.T, userID uuid.UUID) string {
+	t.Helper()
 	tok := jwt.New()
 	_ = tok.Set("sub", userID.String())
 	_ = tok.Set("iss", "https://p.supabase.co/auth/v1")
 	_ = tok.Set("aud", "authenticated")
 	_ = tok.Set("iat", time.Now().Add(-time.Minute))
 	_ = tok.Set("exp", time.Now().Add(30*time.Minute))
-	priv, err := jwk.FromRaw(key)
+	priv, err := jwk.FromRaw(f.key)
 	if err != nil {
 		t.Fatalf("jwk from private key: %v", err)
 	}
@@ -108,12 +113,57 @@ func TestNewAuthVerifier_NoRevokerConfiguredAcceptsValidToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
+	return string(signed)
+}
 
-	verified, err := verifier.Verify(context.Background(), string(signed))
+func assertVerifiesAs(t *testing.T, verifier auth.TokenVerifier, token string, userID uuid.UUID) {
+	t.Helper()
+	verified, err := verifier.Verify(context.Background(), token)
 	if err != nil {
 		t.Fatalf("Verify: %v", err)
 	}
 	if verified.UserID != shared.NewUserId(userID) {
 		t.Errorf("user id %v, want %v", verified.UserID, userID)
+	}
+}
+
+func TestNewAuthVerifier_NoRevokerConfiguredAcceptsValidToken(t *testing.T) {
+	f := newJWKSFixture(t)
+	verifier, err := newAuthVerifier(context.Background(), f.cfg)
+	if err != nil {
+		t.Fatalf("newAuthVerifier: %v", err)
+	}
+
+	userID := uuid.New()
+	assertVerifiesAs(t, verifier, f.signedToken(t, userID), userID)
+}
+
+func TestConnectAuth_RefusesAPlaintextJWKSURL(t *testing.T) {
+	a := &App{cfg: &config.Config{SupabaseJWTJWKSURL: "http://jwks.example.com/keys", SupabaseProjectURL: "https://p.supabase.co", SupabaseJWTAud: "authenticated"}}
+
+	verifier, err := a.connectAuth(context.Background())
+	if err == nil || !strings.HasPrefix(err.Error(), "auth: ") {
+		t.Fatalf("connectAuth error = %v, want the auth-wrapped refusal of a plaintext JWKS URL", err)
+	}
+	if verifier != nil || a.authVerifier != nil {
+		t.Fatalf("connectAuth kept verifier %v / app verifier %v after a failure, want neither", verifier, a.authVerifier)
+	}
+}
+
+func TestConnectAuth_ServesAndKeepsTheSupabaseVerifier(t *testing.T) {
+	f := newJWKSFixture(t)
+	a := &App{cfg: f.cfg}
+
+	verifier, err := a.connectAuth(context.Background())
+	if err != nil {
+		t.Fatalf("connectAuth: %v", err)
+	}
+	if verifier == nil {
+		t.Fatal("connectAuth returned a nil verifier")
+	}
+	userID := uuid.New()
+	assertVerifiesAs(t, verifier, f.signedToken(t, userID), userID)
+	if any(a.authVerifier) != any(verifier) {
+		t.Fatalf("app keeps %v for health checks, want the verifier connectAuth served", a.authVerifier)
 	}
 }

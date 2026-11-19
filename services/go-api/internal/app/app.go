@@ -173,7 +173,10 @@ func (a *App) connectInfra(ctx context.Context) (auth.TokenVerifier, error) {
 	if err := a.connectDatastores(ctx); err != nil {
 		return nil, err
 	}
+	return a.connectAuth(ctx)
+}
 
+func (a *App) connectAuth(ctx context.Context) (auth.TokenVerifier, error) {
 	supaVerifier, err := newAuthVerifier(ctx, a.cfg)
 	if err != nil {
 		return nil, fmt.Errorf("auth: %w", err)
