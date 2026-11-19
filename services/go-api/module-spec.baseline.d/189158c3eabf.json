@@ -1,0 +1,26 @@
+{
+  "removed": [
+    "T1 internal/discovery/internal/shell/smokeeval/smoke_eval_test.go imports domain/enums.go, behind discovery's door",
+    "T1 internal/discovery/internal/shell/smokeeval/smoke_eval_test.go imports domain/events.go, behind discovery's door",
+    "T1 internal/discovery/internal/shell/smokeeval/smoke_eval_test.go imports domain/search_query.go, behind discovery's door",
+    "T1 internal/discovery/internal/shell/smokeeval/smoke_eval_test.go imports domain/search_result.go, behind discovery's door",
+    "T1 internal/discovery/internal/shell/smokeeval/smoke_eval_test.go imports internal/core/ports/search.go, behind discovery's door",
+    "T1 internal/discovery/internal/shell/smokeeval/smoke_eval_test.go imports service/providercall/circuit_breaker.go, behind discovery's door",
+    "T1 internal/discovery/internal/shell/smokeeval/smoke_eval_test.go imports service/search/search.go, behind discovery's door",
+    "T1 internal/discovery/internal/shell/smokeeval/smoke_eval_test.go is in package smokeeval, so it sees inside the module: use package smokeeval_test and import the door",
+    "T1 internal/discovery/service/content/get_artist_content_v2_test.go imports discoverytest/artwork_fill_helpers.go, behind discovery's door",
+    "T1 internal/discovery/service/content/get_artist_content_v2_test.go imports discoverytest/content_providers.go, behind discovery's door",
+    "T1 internal/discovery/service/content/get_artist_content_v2_test.go imports discoverytest/get_artist_content_v2_helpers.go, behind discovery's door",
+    "T1 internal/discovery/service/content/get_artist_content_v2_test.go imports domain/enums.go, behind discovery's door",
+    "T1 internal/discovery/service/content/get_artist_content_v2_test.go imports domain/provider_key.go, behind discovery's door",
+    "T1 internal/discovery/service/content/get_artist_content_v2_test.go imports domain/search_result.go, behind discovery's door",
+    "T1 internal/discovery/service/content/get_artist_content_v2_test.go imports internal/core/ports/search.go, behind discovery's door",
+    "T1 internal/discovery/service/content/get_artist_content_v2_test.go is in package content, so it sees inside the module: use package content_test and import the door",
+    "T1 internal/discovery/service/ownership/ownership_enrichment_test.go imports domain/ownership_key.go, behind discovery's door",
+    "T1 internal/discovery/service/ownership/ownership_enrichment_test.go imports domain/provider_contract.go, behind discovery's door",
+    "T1 internal/discovery/service/ownership/ownership_enrichment_test.go imports internal/core/ports/ownership.go, behind discovery's door",
+    "T1 internal/discovery/service/ownership/ownership_enrichment_test.go is in package ownership, so it sees inside the module: use package ownership_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}

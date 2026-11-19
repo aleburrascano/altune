@@ -44,6 +44,16 @@ func TestReplayCorpus_NegativeBelowTopKDoesNotLeak(t *testing.T) {
 	}
 }
 
+func TestReplayCorpus_NegativeRankedFirstLeaks(t *testing.T) {
+	corpus := discovery.BehavioralCorpus{Entries: []discovery.BehavioralCorpusEntry{
+		{Query: "q", ResultSignature: "bad", Polarity: -1},
+	}}
+	score := discovery.ReplayCorpus(corpus, discovery.CandidateRanking{"q": {"bad", "a"}}, 3)
+	if score.NegativeLeakK != 1 {
+		t.Errorf("negative ranked first must leak into top-3, got %d", score.NegativeLeakK)
+	}
+}
+
 type failingReplaySearcher struct{}
 
 func (failingReplaySearcher) Search(context.Context, string) ([]discovery.SearchResult, error) {

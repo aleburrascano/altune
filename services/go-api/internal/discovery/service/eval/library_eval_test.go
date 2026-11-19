@@ -350,3 +350,21 @@ func TestMatchesEntity_VersionLabelsAndKnownRecording(t *testing.T) {
 		})
 	}
 }
+
+func TestRunLibraryEvalMode_OnlyAPassAtTheTopCountsAsTop1(t *testing.T) {
+	entity := discovery.LibraryEntity{Title: "Circles", Artist: "Post Malone"}
+	for _, tc := range []struct {
+		name    string
+		results []discovery.SearchResult
+		top1    int
+	}{
+		{"match at rank 0", []discovery.SearchResult{evalTrack("Circles", "Post Malone")}, 1},
+		{"match at rank 1", []discovery.SearchResult{album("Circles", "Post Malone"), evalTrack("Circles", "Post Malone")}, 0},
+	} {
+		searcher := &fakeSearcher{byQuery: map[string][]discovery.SearchResult{"Post Malone Circles": tc.results}}
+		r := discovery.RunLibraryEvalMode(context.Background(), []discovery.LibraryEntity{entity}, searcher, 1, 3, discovery.QueryExact, nil)
+		if r.TopKPassed != 1 || r.Top1Passed != tc.top1 {
+			t.Errorf("%s: topK/top1 = %d/%d, want 1/%d", tc.name, r.TopKPassed, r.Top1Passed, tc.top1)
+		}
+	}
+}

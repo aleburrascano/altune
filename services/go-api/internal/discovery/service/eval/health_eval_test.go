@@ -63,3 +63,16 @@ func TestRunHealthEval_fill(t *testing.T) {
 		t.Errorf("expected 3 health metrics, got %d", len(r.HealthMetrics()))
 	}
 }
+
+func TestRunHealthEval_SearchesThatShowNothingReportAZeroFillRate(t *testing.T) {
+	entities := []discovery.LibraryEntity{{Title: "song", Artist: "artist"}}
+
+	r := discovery.RunHealthEval(context.Background(), entities, sleepingSearcher{}, 1, nil)
+
+	if r.Searches != 1 || r.Results != 0 {
+		t.Fatalf("searches/results = %d/%d, want 1/0", r.Searches, r.Results)
+	}
+	if r.FillRate != 0 {
+		t.Errorf("FillRate = %v with no results shown, want 0", r.FillRate)
+	}
+}

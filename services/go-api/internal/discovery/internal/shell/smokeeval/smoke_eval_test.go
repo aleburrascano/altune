@@ -1,41 +1,64 @@
-package smokeeval
+package smokeeval_test
 
 import (
-	domain "altune/go-api/internal/discovery/domain"
-	discoveryPorts "altune/go-api/internal/discovery/internal/core/ports"
-	"altune/go-api/internal/discovery/service/providercall"
-	"altune/go-api/internal/discovery/service/search"
+	"altune/go-api/internal/discovery"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/google/uuid"
 )
 
-func TestMatchPosition(t *testing.T) {
-	results := []domain.SearchResult{
-		{Title: "Bohemian Rhapsody", Subtitle: "Queen"},
-		{Title: "Some Other Track", Subtitle: "Artist"},
-		{Title: "Third", Subtitle: "Third Artist"},
-		{Title: "HUMBLE.", Subtitle: "Kendrick Lamar"},
-	}
+type answering []discovery.SearchResult
 
+func (a answering) Execute(context.Context, shared.UserId, *discovery.SearchQuery, bool) (*discovery.SearchOutput, error) {
+	return &discovery.SearchOutput{Results: a}, nil
+}
+
+func listedChecks(t *testing.T) []discovery.SmokeQueryResult {
+	t.Helper()
+	res, err := discovery.RunSmokeEval(context.Background(), answering(nil), shared.SystemUserId())
+	if err != nil || len(res.Queries) == 0 {
+		t.Fatalf("listing the smoke checks: %+v, %v", res, err)
+	}
+	return res.Queries
+}
+
+func positionFor(t *testing.T, query string, results []discovery.SearchResult) int {
+	t.Helper()
+	res, err := discovery.RunSmokeEval(context.Background(), answering(results), shared.SystemUserId())
+	if err != nil {
+		t.Fatalf("RunSmokeEval: %v", err)
+	}
+	for _, q := range res.Queries {
+		if q.Query == query {
+			return q.Position
+		}
+	}
+	t.Fatalf("no result recorded for %q", query)
+	return 0
+}
+
+func TestRunSmokeEval_ReportsWhereEachCheckFoundItsExpectedResult(t *testing.T) {
+	check := listedChecks(t)[0]
+	other := discovery.SearchResult{Title: "Some Other Track", Subtitle: "Artist"}
 	tests := []struct {
-		name   string
-		expect string
-		want   int
+		name    string
+		results []discovery.SearchResult
+		want    int
 	}{
-		{"hit at position 0 (case-insensitive)", "bohemian rhapsody", 0},
-		{"hit via subtitle", "queen", 0},
-		{"later match reports its position", "humble", 3},
-		{"miss", "nonexistent track", -1},
+		{"hit at position 0 (case-insensitive)", []discovery.SearchResult{{Title: strings.ToUpper(check.Expect)}}, 0},
+		{"hit via subtitle", []discovery.SearchResult{{Title: "x", Subtitle: check.Expect}}, 0},
+		{"later match reports its position", []discovery.SearchResult{other, other, other, {Title: check.Expect}}, 3},
+		{"miss", []discovery.SearchResult{other}, -1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := matchPosition(results, tt.expect); got != tt.want {
-				t.Errorf("matchPosition(%q) = %d, want %d", tt.expect, got, tt.want)
+			if got := positionFor(t, check.Query, tt.results); got != tt.want {
+				t.Errorf("position = %d, want %d", got, tt.want)
 			}
 		})
 	}
@@ -43,10 +66,10 @@ func TestMatchPosition(t *testing.T) {
 
 type recordingEventStore struct {
 	mu     sync.Mutex
-	events []domain.InteractionEvent
+	events []discovery.InteractionEvent
 }
 
-func (r *recordingEventStore) Append(_ context.Context, e domain.InteractionEvent) error {
+func (r *recordingEventStore) Append(_ context.Context, e discovery.InteractionEvent) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.events = append(r.events, e)
@@ -61,29 +84,29 @@ func (r *recordingEventStore) count() int {
 
 type stubSearchProvider struct{}
 
-func (stubSearchProvider) Name() domain.ProviderName { return domain.ProviderDeezer }
+func (stubSearchProvider) Name() discovery.ProviderName { return discovery.ProviderDeezer }
 
-func (stubSearchProvider) Search(_ context.Context, _ string, _ map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
+func (stubSearchProvider) Search(_ context.Context, _ string, _ map[discovery.ResultKind]bool) ([]discovery.SearchResult, error) {
 	return nil, nil
 }
 
-func (stubSearchProvider) SupportedKinds() map[domain.ResultKind]bool {
-	return map[domain.ResultKind]bool{
-		domain.ResultKindTrack:  true,
-		domain.ResultKindAlbum:  true,
-		domain.ResultKindArtist: true,
+func (stubSearchProvider) SupportedKinds() map[discovery.ResultKind]bool {
+	return map[discovery.ResultKind]bool{
+		discovery.ResultKindTrack:  true,
+		discovery.ResultKindAlbum:  true,
+		discovery.ResultKindArtist: true,
 	}
 }
 
 func runSmokeEvalRecording(t *testing.T, user shared.UserId) int {
 	t.Helper()
 	store := &recordingEventStore{}
-	svc := search.NewService(
-		[]discoveryPorts.SearchProvider{stubSearchProvider{}},
-		providercall.NewCircuitBreaker(),
-		search.WithEventStore(store),
+	svc := discovery.NewSearchService(
+		[]discovery.SearchProvider{stubSearchProvider{}},
+		discovery.NewCircuitBreaker(),
+		discovery.WithEventStore(store),
 	)
-	if _, err := Run(context.Background(), svc, user); err != nil {
+	if _, err := discovery.RunSmokeEval(context.Background(), svc, user); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	svc.WaitForBackground()
@@ -114,10 +137,12 @@ func searcherFailing(queries ...string) scriptedSearcher {
 	return scriptedSearcher{failing: failing}
 }
 
-func searcherFailingEveryQuery() scriptedSearcher {
-	queries := make([]string, len(smokeChecks))
-	for i, check := range smokeChecks {
-		queries[i] = check.query
+func searcherFailingEveryQuery(t *testing.T) scriptedSearcher {
+	t.Helper()
+	checks := listedChecks(t)
+	queries := make([]string, len(checks))
+	for i, q := range checks {
+		queries[i] = q.Query
 	}
 	return searcherFailing(queries...)
 }
@@ -125,14 +150,14 @@ func searcherFailingEveryQuery() scriptedSearcher {
 func (s scriptedSearcher) Execute(
 	_ context.Context,
 	_ shared.UserId,
-	query *domain.SearchQuery,
+	query *discovery.SearchQuery,
 	_ bool,
-) (*search.SearchOutput, error) {
+) (*discovery.SearchOutput, error) {
 	if s.failing[query.Raw] {
 		return nil, errors.New("transient upstream failure")
 	}
-	return &search.SearchOutput{
-		Results: []domain.SearchResult{{Title: query.Raw}},
+	return &discovery.SearchOutput{
+		Results: []discovery.SearchResult{{Title: query.Raw}},
 	}, nil
 }
 
@@ -140,13 +165,14 @@ func TestSmokeEval_OneErroringQueryDoesNotDiscardOthers(t *testing.T) {
 	const failing = "Drake"
 	svc := searcherFailing(failing)
 
-	res, err := Run(context.Background(), svc, shared.SystemUserId())
+	res, err := discovery.RunSmokeEval(context.Background(), svc, shared.SystemUserId())
 	if err != nil {
 		t.Fatalf("one erroring query made the whole eval fatal: %v", err)
 	}
 
-	if len(res.Queries) != len(smokeChecks) {
-		t.Fatalf("recorded %d query results, want all %d", len(res.Queries), len(smokeChecks))
+	checks := len(listedChecks(t))
+	if len(res.Queries) != checks {
+		t.Fatalf("recorded %d query results, want all %d", len(res.Queries), checks)
 	}
 	if res.Errored != 1 {
 		t.Errorf("Errored = %d, want 1", res.Errored)
@@ -162,24 +188,24 @@ func TestSmokeEval_OneErroringQueryDoesNotDiscardOthers(t *testing.T) {
 		}
 	}
 
-	wantPassed := len(smokeChecks) - 1
+	wantPassed := checks - 1
 	if passed != wantPassed {
 		t.Errorf("passed = %d, want %d (every non-erroring query still scored)", passed, wantPassed)
 	}
 
-	wantScore := float64(wantPassed) / float64(len(smokeChecks))
+	wantScore := float64(wantPassed) / float64(checks)
 	if res.Score != wantScore {
 		t.Errorf("Score = %v, want partial %v (not collapsed to 0)", res.Score, wantScore)
 	}
 }
 
 func TestSmokeEval_EveryQueryErroringIsAFailedRunNotAZeroScore(t *testing.T) {
-	svc := searcherFailingEveryQuery()
+	svc := searcherFailingEveryQuery(t)
 
-	res, err := Run(context.Background(), svc, shared.SystemUserId())
+	res, err := discovery.RunSmokeEval(context.Background(), svc, shared.SystemUserId())
 
-	if !errors.Is(err, errEveryQueryErrored) {
-		t.Fatalf("err = %v, want errEveryQueryErrored so the meter reports an error state", err)
+	if err == nil {
+		t.Fatal("every query erroring returned no error; the meter would report a zero score instead of an error state")
 	}
 	if res.Regressed {
 		t.Error("a run that scored no query must not claim a ranking regression")
@@ -189,7 +215,7 @@ func TestSmokeEval_EveryQueryErroringIsAFailedRunNotAZeroScore(t *testing.T) {
 func TestSmokeEval_PartialOutageIsNotReportedAsARegression(t *testing.T) {
 	svc := searcherFailing("Drake", "Bad Bunny")
 
-	res, err := Run(context.Background(), svc, shared.SystemUserId())
+	res, err := discovery.RunSmokeEval(context.Background(), svc, shared.SystemUserId())
 	if err != nil {
 		t.Fatalf("a partial outage must still return a scorecard: %v", err)
 	}

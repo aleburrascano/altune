@@ -1,21 +1,21 @@
-package ownership
+package ownership_test
 
 import (
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/internal/core/ports"
+	"altune/go-api/internal/discovery"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
 type stubOwnershipReader struct {
-	owned map[string]ports.OwnedTrack
+	owned map[string]discovery.OwnedTrack
 	err   error
 }
 
-func (r stubOwnershipReader) OwnedByTitleArtist(context.Context, shared.UserId) (map[string]ports.OwnedTrack, error) {
+func (r stubOwnershipReader) OwnedByTitleArtist(context.Context, shared.UserId) (map[string]discovery.OwnedTrack, error) {
 	return r.owned, r.err
 }
 
@@ -45,34 +45,34 @@ func stallingFiller() stallingTrackNumberFiller {
 	return stallingTrackNumberFiller{entered: make(chan struct{}), release: make(chan struct{})}
 }
 
-func fillableItem() OwnableItem {
+func fillableItem() discovery.OwnableItem {
 	item, _ := ownable("track", "Song", "Artist", map[string]any{
 		"owned_track_id": "track-1",
 	})
-	item.Album, item.ISRC, item.TrackPosition = "Album", "USRC17607839", domain.TrackPosition{Disc: 1, Track: 3}
+	item.Album, item.ISRC, item.TrackPosition = "Album", "USRC17607839", discovery.TrackPosition{Disc: 1, Track: 3}
 	return item
 }
 
 func fillableReader() stubOwnershipReader {
-	return stubOwnershipReader{owned: map[string]ports.OwnedTrack{
-		domain.OwnershipKey("Song", "Artist"): {TrackID: "track-1", Title: "Song", Artist: "Artist", ISRC: "USRC17607839", Album: "Album"},
+	return stubOwnershipReader{owned: map[string]discovery.OwnedTrack{
+		discovery.OwnershipKey("Song", "Artist"): {TrackID: "track-1", Title: "Song", Artist: "Artist", ISRC: "USRC17607839", Album: "Album"},
 	}}
 }
 
-func ownable(kind, title, artist string, extras map[string]any) (OwnableItem, *map[string]any) {
+func ownable(kind, title, artist string, extras map[string]any) (discovery.OwnableItem, *map[string]any) {
 	holder := &extras
-	return OwnableItem{Kind: kind, Title: title, Artist: artist, Extras: holder}, holder
+	return discovery.OwnableItem{Kind: kind, Title: title, Artist: artist, Extras: holder}, holder
 }
 
 func TestStampOwnership_StampsOwnedTracksOnly(t *testing.T) {
-	svc := NewOwnershipEnrichmentService(stubOwnershipReader{owned: map[string]ports.OwnedTrack{
-		domain.OwnershipKey("Song", "Artist"): {TrackID: "t1", AcquisitionStatus: "ready"},
+	svc := discovery.NewOwnershipEnrichmentService(stubOwnershipReader{owned: map[string]discovery.OwnedTrack{
+		discovery.OwnershipKey("Song", "Artist"): {TrackID: "t1", AcquisitionStatus: "ready"},
 	}}, nil)
 	track, trackExtras := ownable("track", "Song", "Artist", nil)
 	album, albumExtras := ownable("album", "Song", "Artist", map[string]any{})
 	other, otherExtras := ownable("track", "Other", "Artist", map[string]any{})
 
-	svc.StampOwnership(context.Background(), shared.UserId{}, []OwnableItem{track, album, other})
+	svc.StampOwnership(context.Background(), shared.UserId{}, []discovery.OwnableItem{track, album, other})
 
 	if got := (*trackExtras)["owned_track_id"]; got != "t1" {
 		t.Errorf("track owned_track_id = %v, want t1", got)
@@ -86,14 +86,14 @@ func TestStampOwnership_StampsOwnedTracksOnly(t *testing.T) {
 }
 
 func TestStampOwnership_VersionedLibraryTrackDoesNotOwnTheStudioSong(t *testing.T) {
-	svc := NewOwnershipEnrichmentService(stubOwnershipReader{owned: map[string]ports.OwnedTrack{
-		domain.OwnershipKey("Song (Live)", "X"):  {TrackID: "live"},
-		domain.OwnershipKey("Song (Remix)", "X"): {TrackID: "remix"},
+	svc := discovery.NewOwnershipEnrichmentService(stubOwnershipReader{owned: map[string]discovery.OwnedTrack{
+		discovery.OwnershipKey("Song (Live)", "X"):  {TrackID: "live"},
+		discovery.OwnershipKey("Song (Remix)", "X"): {TrackID: "remix"},
 	}}, nil)
 	studio, studioExtras := ownable("track", "Song", "X", map[string]any{})
 	live, liveExtras := ownable("track", "Song (Live)", "X", map[string]any{})
 
-	svc.StampOwnership(context.Background(), shared.UserId{}, []OwnableItem{studio, live})
+	svc.StampOwnership(context.Background(), shared.UserId{}, []discovery.OwnableItem{studio, live})
 
 	if len(*studioExtras) != 0 {
 		t.Errorf("studio extras = %v, want unstamped", *studioExtras)
@@ -104,10 +104,10 @@ func TestStampOwnership_VersionedLibraryTrackDoesNotOwnTheStudioSong(t *testing.
 }
 
 func TestStampOwnership_MatchesByISRCAndRefusesAConflictingISRC(t *testing.T) {
-	svc := NewOwnershipEnrichmentService(stubOwnershipReader{owned: map[string]ports.OwnedTrack{
-		domain.OwnershipISRCKey("USRC17607839"):    {TrackID: "by-isrc", ISRC: "USRC17607839"},
-		domain.OwnershipKey("Song", "X"):           {TrackID: "other-recording", ISRC: "GBAAA0000001"},
-		domain.OwnershipKey("Respelled Song", "X"): {TrackID: "by-name"},
+	svc := discovery.NewOwnershipEnrichmentService(stubOwnershipReader{owned: map[string]discovery.OwnedTrack{
+		discovery.OwnershipISRCKey("USRC17607839"):    {TrackID: "by-isrc", ISRC: "USRC17607839"},
+		discovery.OwnershipKey("Song", "X"):           {TrackID: "other-recording", ISRC: "GBAAA0000001"},
+		discovery.OwnershipKey("Respelled Song", "X"): {TrackID: "by-name"},
 	}}, nil)
 	sameRecording, sameExtras := ownable("track", "Song Retitled", "Y", map[string]any{})
 	sameRecording.ISRC = "us-rc1-76-07839"
@@ -116,7 +116,7 @@ func TestStampOwnership_MatchesByISRCAndRefusesAConflictingISRC(t *testing.T) {
 	unlabelled, unlabelledExtras := ownable("track", "Respelled Song", "X", map[string]any{})
 	unlabelled.ISRC = "FRZZZ0000009"
 
-	svc.StampOwnership(context.Background(), shared.UserId{}, []OwnableItem{sameRecording, otherRecording, unlabelled})
+	svc.StampOwnership(context.Background(), shared.UserId{}, []discovery.OwnableItem{sameRecording, otherRecording, unlabelled})
 
 	if got := (*sameExtras)["owned_track_id"]; got != "by-isrc" {
 		t.Errorf("same recording owned_track_id = %v, want by-isrc", got)
@@ -130,10 +130,10 @@ func TestStampOwnership_MatchesByISRCAndRefusesAConflictingISRC(t *testing.T) {
 }
 
 func TestStampOwnership_LookupFailureAndNilServiceLeaveItemsUntouched(t *testing.T) {
-	failing := NewOwnershipEnrichmentService(stubOwnershipReader{err: errors.New("db down")}, nil)
-	for name, svc := range map[string]*OwnershipEnrichmentService{"lookup failure": failing, "nil service": nil} {
+	failing := discovery.NewOwnershipEnrichmentService(stubOwnershipReader{err: errors.New("db down")}, nil)
+	for name, svc := range map[string]*discovery.OwnershipEnrichmentService{"lookup failure": failing, "nil service": nil} {
 		item, extras := ownable("track", "Song", "Artist", nil)
-		svc.StampOwnership(context.Background(), shared.UserId{}, []OwnableItem{item})
+		svc.StampOwnership(context.Background(), shared.UserId{}, []discovery.OwnableItem{item})
 		if *extras != nil {
 			t.Errorf("%s: extras = %v, want untouched", name, *extras)
 		}
@@ -142,10 +142,10 @@ func TestStampOwnership_LookupFailureAndNilServiceLeaveItemsUntouched(t *testing
 
 func TestEnrichAlbumTracks_PanickingFillerIsContained(t *testing.T) {
 	filler := panickingTrackNumberFiller{called: make(chan struct{})}
-	svc := NewOwnershipEnrichmentService(fillableReader(), filler)
+	svc := discovery.NewOwnershipEnrichmentService(fillableReader(), filler)
 	item := fillableItem()
 
-	done := svc.EnrichAlbumTracks(context.Background(), shared.UserId{}, []OwnableItem{item})
+	done := svc.EnrichAlbumTracks(context.Background(), shared.UserId{}, []discovery.OwnableItem{item})
 
 	select {
 	case <-done:
@@ -159,28 +159,25 @@ func TestEnrichAlbumTracks_PanickingFillerIsContained(t *testing.T) {
 	}
 }
 
-func TestEnrichAlbumTracks_StalledFillIsAbandonedAtItsDeadline(t *testing.T) {
-	restore := trackNumberFillTimeout
-	trackNumberFillTimeout = 20 * time.Millisecond
-	t.Cleanup(func() { trackNumberFillTimeout = restore })
-	filler := stallingFiller()
-	svc := NewOwnershipEnrichmentService(fillableReader(), filler)
-	item := fillableItem()
+func TestEnrichAlbumTracks_StalledFillIsAbandonedAtItsTenSecondDeadline(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		filler := stallingFiller()
+		svc := discovery.NewOwnershipEnrichmentService(fillableReader(), filler)
+		start := time.Now()
 
-	done := svc.EnrichAlbumTracks(context.Background(), shared.UserId{}, []OwnableItem{item})
+		<-svc.EnrichAlbumTracks(context.Background(), shared.UserId{}, []discovery.OwnableItem{fillableItem()})
 
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("fill against a stalled writer never returned: the backfill has no deadline")
-	}
+		if elapsed := time.Since(start); elapsed != 10*time.Second {
+			t.Errorf("stalled fill returned after %v, want it abandoned at its 10s deadline", elapsed)
+		}
+	})
 }
 
 func TestEnrichAlbumTracks_WaitForBackgroundBlocksUntilTheFillFinishes(t *testing.T) {
 	filler := stallingFiller()
-	svc := NewOwnershipEnrichmentService(fillableReader(), filler)
+	svc := discovery.NewOwnershipEnrichmentService(fillableReader(), filler)
 	item := fillableItem()
-	svc.EnrichAlbumTracks(context.Background(), shared.UserId{}, []OwnableItem{item})
+	svc.EnrichAlbumTracks(context.Background(), shared.UserId{}, []discovery.OwnableItem{item})
 	<-filler.entered
 
 	drained := make(chan struct{})
@@ -201,12 +198,12 @@ func TestEnrichAlbumTracks_WaitForBackgroundBlocksUntilTheFillFinishes(t *testin
 
 func TestEnrichAlbumTracks_NothingToFillCompletesImmediately(t *testing.T) {
 	filler := panickingTrackNumberFiller{called: make(chan struct{})}
-	svc := NewOwnershipEnrichmentService(stubOwnershipReader{}, filler)
+	svc := discovery.NewOwnershipEnrichmentService(stubOwnershipReader{}, filler)
 	item, _ := ownable("track", "", "", map[string]any{"owned_track_id": "track-1"})
-	item.TrackPosition = domain.TrackPosition{Disc: 1, Track: 3}
+	item.TrackPosition = discovery.TrackPosition{Disc: 1, Track: 3}
 
 	select {
-	case <-svc.EnrichAlbumTracks(context.Background(), shared.UserId{}, []OwnableItem{item}):
+	case <-svc.EnrichAlbumTracks(context.Background(), shared.UserId{}, []discovery.OwnableItem{item}):
 	default:
 		t.Fatal("expected completion handle to be closed when nothing is pending")
 	}
@@ -224,11 +221,11 @@ func (f recordingTrackNumberFiller) FillTrackNumber(_ context.Context, _ shared.
 	return nil
 }
 
-func enrichAndCollectWrites(t *testing.T, owned ports.OwnedTrack, items ...OwnableItem) []fillWrite {
+func enrichAndCollectWrites(t *testing.T, owned discovery.OwnedTrack, items ...discovery.OwnableItem) []fillWrite {
 	t.Helper()
 	filler := recordingTrackNumberFiller{writes: make(chan fillWrite, 32)}
-	svc := NewOwnershipEnrichmentService(stubOwnershipReader{owned: map[string]ports.OwnedTrack{
-		domain.OwnershipKey(owned.Title, owned.Artist): owned,
+	svc := discovery.NewOwnershipEnrichmentService(stubOwnershipReader{owned: map[string]discovery.OwnedTrack{
+		discovery.OwnershipKey(owned.Title, owned.Artist): owned,
 	}}, filler)
 	select {
 	case <-svc.EnrichAlbumTracks(context.Background(), shared.UserId{}, items):
@@ -243,14 +240,14 @@ func enrichAndCollectWrites(t *testing.T, owned ports.OwnedTrack, items ...Ownab
 	return got
 }
 
-func positioned(album, title string, disc, position int, isrc string) OwnableItem {
+func positioned(album, title string, disc, position int, isrc string) discovery.OwnableItem {
 	item, _ := ownable("track", title, "Artist", map[string]any{})
-	item.Album, item.ISRC, item.TrackPosition = album, isrc, domain.TrackPosition{Disc: disc, Track: position}
+	item.Album, item.ISRC, item.TrackPosition = album, isrc, discovery.TrackPosition{Disc: disc, Track: position}
 	return item
 }
 
 func TestEnrichAlbumTracks_TwoDiscAlbumWritesTheProvidersPositionNotTheListIndex(t *testing.T) {
-	owned := ports.OwnedTrack{TrackID: "t-disc2", Title: "Bonus One", Artist: "Artist", ISRC: "USRC17607839", Album: "Deluxe"}
+	owned := discovery.OwnedTrack{TrackID: "t-disc2", Title: "Bonus One", Artist: "Artist", ISRC: "USRC17607839", Album: "Deluxe"}
 
 	got := enrichAndCollectWrites(t, owned,
 		positioned("Deluxe", "Song A", 1, 1, "USRC10000001"),
@@ -264,7 +261,7 @@ func TestEnrichAlbumTracks_TwoDiscAlbumWritesTheProvidersPositionNotTheListIndex
 }
 
 func TestEnrichAlbumTracks_CompilationPageWritesNothingOntoAStudioAlbumTrack(t *testing.T) {
-	owned := ports.OwnedTrack{TrackID: "t-studio", Title: "Hit", Artist: "Artist", ISRC: "USRC17607839", Album: "Studio Album"}
+	owned := discovery.OwnedTrack{TrackID: "t-studio", Title: "Hit", Artist: "Artist", ISRC: "USRC17607839", Album: "Studio Album"}
 
 	got := enrichAndCollectWrites(t, owned, positioned("Greatest Hits", "Hit", 1, 9, "USRC17607839"))
 
@@ -274,8 +271,8 @@ func TestEnrichAlbumTracks_CompilationPageWritesNothingOntoAStudioAlbumTrack(t *
 }
 
 func TestEnrichAlbumTracks_NoWriteWithoutAnISRCMatchOrProviderPosition(t *testing.T) {
-	owned := ports.OwnedTrack{TrackID: "t1", Title: "Song", Artist: "Artist", ISRC: "USRC17607839", Album: "Album"}
-	cases := map[string]OwnableItem{
+	owned := discovery.OwnedTrack{TrackID: "t1", Title: "Song", Artist: "Artist", ISRC: "USRC17607839", Album: "Album"}
+	cases := map[string]discovery.OwnableItem{
 		"other isrc":       positioned("Album", "Song", 1, 3, "GBAYE0000001"),
 		"no isrc":          positioned("Album", "Song", 1, 3, ""),
 		"no position":      positioned("Album", "Song", 0, 0, "USRC17607839"),
@@ -286,7 +283,7 @@ func TestEnrichAlbumTracks_NoWriteWithoutAnISRCMatchOrProviderPosition(t *testin
 			t.Errorf("%s: writes = %v, want none", name, got)
 		}
 	}
-	albumless := ports.OwnedTrack{TrackID: "t2", Title: "Song", Artist: "Artist", ISRC: "USRC17607839"}
+	albumless := discovery.OwnedTrack{TrackID: "t2", Title: "Song", Artist: "Artist", ISRC: "USRC17607839"}
 	for name, pageAlbum := range map[string]string{"owned album empty, page album empty": "", "owned album empty, page album named": "Album"} {
 		if got := enrichAndCollectWrites(t, albumless, positioned(pageAlbum, "Song", 1, 3, "USRC17607839")); len(got) != 0 {
 			t.Errorf("%s: writes = %v, want none", name, got)
@@ -294,18 +291,18 @@ func TestEnrichAlbumTracks_NoWriteWithoutAnISRCMatchOrProviderPosition(t *testin
 	}
 }
 
-func typedItem(album, title string, position domain.TrackPosition, isrc string) OwnableItem {
+func typedItem(album, title string, position discovery.TrackPosition, isrc string) discovery.OwnableItem {
 	item, _ := ownable("track", title, "Artist", map[string]any{})
 	item.Album, item.ISRC, item.TrackPosition = album, isrc, position
 	return item
 }
 
 func TestEnrichAlbumTracks_WritesTheTypedTrackPositionOfTheISRCMatch(t *testing.T) {
-	owned := ports.OwnedTrack{TrackID: "t-disc2", Title: "Bonus One", Artist: "Artist", ISRC: "USRC17607839", Album: "Deluxe"}
+	owned := discovery.OwnedTrack{TrackID: "t-disc2", Title: "Bonus One", Artist: "Artist", ISRC: "USRC17607839", Album: "Deluxe"}
 
 	got := enrichAndCollectWrites(t, owned,
-		typedItem("Deluxe", "Song A", domain.TrackPosition{Disc: 1, Track: 1}, "USRC10000001"),
-		typedItem("Deluxe", "Bonus One", domain.TrackPosition{Disc: 2, Track: 4}, "usrc-1760-7839"),
+		typedItem("Deluxe", "Song A", discovery.TrackPosition{Disc: 1, Track: 1}, "USRC10000001"),
+		typedItem("Deluxe", "Bonus One", discovery.TrackPosition{Disc: 2, Track: 4}, "usrc-1760-7839"),
 	)
 
 	if len(got) != 1 || got[0] != (fillWrite{trackId: "t-disc2", trackNumber: 4}) {
@@ -314,11 +311,11 @@ func TestEnrichAlbumTracks_WritesTheTypedTrackPositionOfTheISRCMatch(t *testing.
 }
 
 func TestEnrichAlbumTracks_NoTypedWriteWithoutAPositionOrAnISRCMatch(t *testing.T) {
-	owned := ports.OwnedTrack{TrackID: "t1", Title: "Song", Artist: "Artist", ISRC: "USRC17607839", Album: "Album"}
-	cases := map[string]OwnableItem{
-		"unknown position": typedItem("Album", "Song", domain.TrackPosition{}, "USRC17607839"),
-		"other isrc":       typedItem("Album", "Song", domain.TrackPosition{Disc: 1, Track: 3}, "GBAYE0000001"),
-		"no isrc":          typedItem("Album", "Song", domain.TrackPosition{Disc: 1, Track: 3}, ""),
+	owned := discovery.OwnedTrack{TrackID: "t1", Title: "Song", Artist: "Artist", ISRC: "USRC17607839", Album: "Album"}
+	cases := map[string]discovery.OwnableItem{
+		"unknown position": typedItem("Album", "Song", discovery.TrackPosition{}, "USRC17607839"),
+		"other isrc":       typedItem("Album", "Song", discovery.TrackPosition{Disc: 1, Track: 3}, "GBAYE0000001"),
+		"no isrc":          typedItem("Album", "Song", discovery.TrackPosition{Disc: 1, Track: 3}, ""),
 	}
 	for name, item := range cases {
 		if got := enrichAndCollectWrites(t, owned, item); len(got) != 0 {
