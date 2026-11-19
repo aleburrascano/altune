@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, type QueryFunctionContext } from '@tanstack/react-query';
 import type { DiscoveryResult, DiscoverySource } from '@shared/catalog';
 import { detailKeys } from '@shared/query';
 
@@ -33,15 +33,19 @@ function fetchRelated(
   );
 }
 
-function useRelatedTracksQuery(scSource: DiscoverySource | null) {
-  const port = useDetailPort();
-  return useQuery({
+function relatedTracksOptions(port: DetailPort, scSource: DiscoverySource | null) {
+  return {
     queryKey: detailKeys.relatedTracks(scSource?.external_id ?? ''),
-    queryFn: ({ signal }) => fetchRelated(port, scSource, signal),
+    queryFn: ({ signal }: QueryFunctionContext) => fetchRelated(port, scSource, signal),
     enabled: scSource !== null,
     staleTime: DETAIL_CONTENT_STALE_MS,
-    retry: useContentFetchRetry(),
-  });
+  };
+}
+
+function useRelatedTracksQuery(scSource: DiscoverySource | null) {
+  const port = useDetailPort();
+  const retry = useContentFetchRetry();
+  return useQuery({ ...relatedTracksOptions(port, scSource), retry });
 }
 
 type RelatedTracksQuery = ReturnType<typeof useRelatedTracksQuery>;
