@@ -7,6 +7,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -39,6 +40,16 @@ func TestApplyStartupSwitches_AcquisitionPausedPausesWiredScheduler(t *testing.T
 
 	if !wired.scheduler.Status().Paused {
 		t.Fatal("Status().Paused = false, want true after ACQUISITION_PAUSED=true")
+	}
+}
+
+func TestStartCatalogJobs_StartsTheAcquisitionUpgrade(t *testing.T) {
+	a := &App{cfg: &config.Config{AcquisitionUpgradePerHour: 30, AcquisitionUpgradeConcurrency: 1}, pool: lazyPool(t)}
+
+	a.startCatalogJobs(t.Context(), catalogWiring{scheduler: idleScheduler(t)}, playbackWiring{})
+
+	if got := startedJobNames(a); !slices.Contains(got, jobAcquisitionUpgrade) {
+		t.Errorf("started %v, want %s among them", got, jobAcquisitionUpgrade)
 	}
 }
 

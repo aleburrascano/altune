@@ -195,7 +195,7 @@ func (a *App) startCatalogJobs(ctx context.Context, cat catalogWiring, playback 
 			acquisition.NewPgxOutcomeStore(a.pool),
 			acquisition.NewPgxRejectionStore(a.pool))
 	}
-	a.startAcquisitionUpgradeIfEnabled(ctx, cat.scheduler)
+	a.startAcquisitionUpgrade(ctx, cat.scheduler)
 }
 
 func (a *App) applyDisabledJobs(ctx context.Context) error {

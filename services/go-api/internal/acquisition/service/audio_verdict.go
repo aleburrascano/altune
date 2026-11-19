@@ -25,7 +25,7 @@ type AudioVerdict struct {
 	Judged    audiojudge.Verdict
 }
 
-func audioVerdictOf(judged audiojudge.Verdict, results []ports.AcoustIDResult) AudioVerdict {
+func AudioVerdictOf(judged audiojudge.Verdict, results []ports.AcoustIDResult) AudioVerdict {
 	return AudioVerdict{Kind: verdictKindOf(judged.Kind), Score: topScore(results), Surviving: judged.Linked, Judged: judged}
 }
 

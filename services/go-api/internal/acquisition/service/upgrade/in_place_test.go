@@ -234,24 +234,6 @@ func TestRunner_AUserUploadWithNoAnswerOrOnlyASoftOneIsNeitherGradedNorFlagged(t
 	}
 }
 
-func TestRunner_ADryRunChecksButWritesNoVerdict(t *testing.T) {
-	w := seed(t, acquisition.GradeC)
-	w.storedEvidence(evidenceFor(acquisition.GradeC, acquisition.ArtTrack))
-	recorder := &recordingInPlaceStore{}
-	checker := &fixedChecker{finding: hardMatch}
-
-	if err := w.checkedRunner(acquisition.UpgradeConfig{MaxTries: 3, DryRun: true}, checker, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
-		t.Fatalf("ExecuteUpgrade: %v", err)
-	}
-
-	if checker.calls != 1 || len(recorder.records) != 0 {
-		t.Errorf("checks = %d, records = %+v, want the check run and nothing recorded", checker.calls, recorder.records)
-	}
-	if w.source.finds != 0 || *w.committed().AudioRef != originalRef {
-		t.Errorf("searches = %d, audio_ref = %v, want a dry run proven in place to stop there", w.source.finds, w.committed().AudioRef)
-	}
-}
-
 func TestRunner_ACheckThatFailsRecordsNothingAndReportsTheError(t *testing.T) {
 	w := seed(t, acquisition.GradeC)
 	w.storedEvidence(evidenceFor(acquisition.GradeC, acquisition.ArtTrack))

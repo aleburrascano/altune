@@ -18,5 +18,4 @@ var (
 var (
 	ErrNotAnUpgrade = upgrade.ErrNotAnUpgrade
 	ErrUpgradeKept  = upgrade.ErrKept
-	ErrWouldUpgrade = upgrade.ErrWouldUpgrade
 )

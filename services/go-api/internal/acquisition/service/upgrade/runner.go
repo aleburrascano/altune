@@ -17,7 +17,6 @@ var ErrKept = errors.New("upgrade kept the current file")
 const settleBudget = 10 * time.Second
 
 type Config struct {
-	DryRun              bool
 	MaxTries            int
 	LowBitrateFloorKbps int
 }
@@ -48,7 +47,6 @@ type outcome string
 
 const (
 	upgraded       outcome = "upgraded"
-	wouldUpgrade   outcome = "would_upgrade"
 	keptCurrent    outcome = "kept_current"
 	noBetterSource outcome = "no_better_source"
 	failed         outcome = "failed"
@@ -58,8 +56,6 @@ func outcomeOf(attempt Attempt, err error) outcome {
 	switch {
 	case err == nil:
 		return upgraded
-	case errors.Is(err, ErrWouldUpgrade):
-		return wouldUpgrade
 	case errors.Is(err, ErrNotAnUpgrade):
 		return keptCurrent
 	case attempt.NoSource:
@@ -99,7 +95,6 @@ func (r *Runner) ExecuteUpgrade(ctx context.Context, userId shared.UserId, track
 	}
 	gate := Gate{
 		Current:        current,
-		DryRun:         r.cfg.DryRun,
 		CatalogSeconds: secondsOf(track.CatalogDurationSeconds),
 		StoredSeconds:  secondsOf(track.StoredDurationSeconds),
 	}
@@ -117,8 +112,7 @@ func (r *Runner) settle(ctx context.Context, trackId shared.TrackId, gate Gate, 
 		"track_id", trackId.String(),
 		"outcome", string(result),
 		"from", string(gate.Current),
-		"to", string(attempt.Grade),
-		"dry_run", gate.DryRun)
+		"to", string(attempt.Grade))
 	if result == upgraded || ctx.Err() != nil {
 		return runErr
 	}
@@ -132,8 +126,8 @@ func (r *Runner) settle(ctx context.Context, trackId shared.TrackId, gate Gate, 
 }
 
 func (r *Runner) record(ctx context.Context, trackId shared.TrackId, gate Gate, attempt Attempt, result outcome) {
-	note := ports.UpgradeAttempt{CountsAsTry: result.countsAsTry() && !gate.DryRun}
-	if result == keptCurrent && !gate.DryRun {
+	note := ports.UpgradeAttempt{CountsAsTry: result.countsAsTry()}
+	if result == keptCurrent {
 		note.RejectedSourceKey = attempt.SourceKey
 	}
 	tries, err := r.store.NoteAttempt(ctx, trackId, note)

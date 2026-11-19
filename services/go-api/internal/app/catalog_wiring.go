@@ -171,10 +171,8 @@ func (a *App) buildAcquisitionScheduler(
 		acquisition.WithDownloadLimiter(acquisition.NewDownloadLimiter(a.cfg.AcquisitionDownloadConcurrency)),
 		acquisition.WithAcquireConfidenceFloor(a.cfg.AcquisitionConfidenceFloor),
 		acquisition.WithAcquireTempWorkspace(acquisition.NewTempWorkspace()),
-		acquisition.WithStoredAudioReader(storedAudioReader{store: audioStore}))
-	if a.upgradeEnabled() {
-		acquireOpts = append(acquireOpts, acquisition.WithPreviewMatcher(a.upgradePreviewMatcher(), a.cfg.AcquisitionUpgradePreviewAMaxBER))
-	}
+		acquisition.WithStoredAudioReader(storedAudioReader{store: audioStore}),
+		acquisition.WithPreviewMatcher(a.upgradePreviewMatcher(), a.cfg.AcquisitionUpgradePreviewAMaxBER))
 	acquireSvc := acquisition.NewAcquireTrackAudioService(
 		ledger,
 		acquisition.NewSourceRegistry(audioSources.first...).WithFallback(audioSources.fallback...),
@@ -189,11 +187,9 @@ func (a *App) buildAcquisitionScheduler(
 		acquisition.WithFingerprintVerified(lookups.Verified),
 		acquisition.WithDrainBudget(time.Duration(a.cfg.AcquisitionDrainBudgetSeconds) * time.Second),
 	}
-	if a.upgradeEnabled() {
-		schedulerOpts = append(schedulerOpts, a.upgradeLane(ledger, acquireSvc))
-	}
 	if a.pool != nil {
 		schedulerOpts = append(schedulerOpts,
+			a.upgradeLane(ledger, acquireSvc),
 			acquisition.WithJobQueue(acquisition.NewPgxJobQueue(a.pool)),
 			acquisition.WithJobNotifier(acquisition.NewPgxJobNotifier(a.pool)),
 			acquisition.WithOutcomeRecorder(acquisition.NewPgxOutcomeStore(a.pool)))
