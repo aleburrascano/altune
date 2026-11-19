@@ -1,6 +1,5 @@
 import { State } from 'react-native-track-player';
 
-import { isTelemetryGated } from '@shared/failure';
 import type { JsonObject } from '@shared/files';
 import { recordEvent } from '@shared/telemetry';
 
@@ -59,13 +58,13 @@ function playStartPayload(start: PendingStart, outcome: PlayStartOutcome): JsonO
   return { outcome, trigger, cold, start_ms: Date.now() - start.requestedAt };
 }
 
-function warnUnlessGated(err: unknown): void {
-  if (!isTelemetryGated(err)) warnPlayback('failed to record play start', {}, err);
+function warnRecordFailed(err: unknown): void {
+  warnPlayback('failed to record play start', {}, err);
 }
 
 function sendPlayStart(start: PendingStart, outcome: PlayStartOutcome): void {
   const payload = playStartPayload(start, outcome);
-  recordEvent({ type: 'play_start', payload }).catch(warnUnlessGated);
+  recordEvent({ type: 'play_start', payload }).catch(warnRecordFailed);
 }
 
 export function resetPlayStartTiming(): void {

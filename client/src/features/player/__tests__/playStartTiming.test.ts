@@ -1,6 +1,5 @@
 import { State } from 'react-native-track-player';
 
-import { applyKillSwitches } from '@shared/killSwitch';
 import { signInTestUser } from '@testing/signInTestUser';
 
 import { markPlayRequested, notePlaybackState, resetPlayStartTiming } from '@features/player';
@@ -36,7 +35,6 @@ async function waitMs(ms: number): Promise<void> {
 
 beforeEach(async () => {
   await signInTestUser();
-  applyKillSwitches({ telemetry_enabled: true });
   __http.reply(EVENTS, { status: 202 });
   resetPlayStartTiming();
   jest.useFakeTimers();
@@ -128,15 +126,6 @@ describe('play_start: time from a play request until the player reports playing'
     markPlayRequested('play');
     resetPlayStartTiming();
     await waitMs(GIVE_UP_MS);
-
-    expect(sentPlayStarts()).toEqual([]);
-  });
-
-  it('sends nothing while the telemetry kill switch is off', async () => {
-    applyKillSwitches({ telemetry_enabled: false });
-    markPlayRequested('play');
-    notePlaybackState(State.Playing);
-    await waitMs(0);
 
     expect(sentPlayStarts()).toEqual([]);
   });

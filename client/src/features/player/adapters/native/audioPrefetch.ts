@@ -155,7 +155,7 @@ async function resolveAudio(
   const port = playbackPort();
   const [resolved] = await inStage('resolve', port.fetchAudioUrls([trackId]));
   if (!resolved || !VERSION_FORMAT.test(resolved.version)) return null;
-  if (!port.isAudioPrefetchEnabled() || isCancelled(trackId, controller)) return null;
+  if (isCancelled(trackId, controller)) return null;
   return resolved;
 }
 
@@ -248,9 +248,7 @@ async function runPrefetch(claimed: ClaimedPrefetch): Promise<void> {
 }
 
 function wantedUpcoming(activeIndex: number) {
-  const upcoming = playbackPort().isAudioPrefetchEnabled()
-    ? upcomingLibraryTrack(activeIndex)
-    : null;
+  const upcoming = upcomingLibraryTrack(activeIndex);
   supersedeAllBut(upcoming?.trackId ?? null);
   return upcoming && !inflight.has(upcoming.trackId) ? upcoming : null;
 }

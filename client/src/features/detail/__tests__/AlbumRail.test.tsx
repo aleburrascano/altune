@@ -6,6 +6,11 @@ import { darkTheme } from '@shared/ui';
 import { AlbumRail } from '@features/detail';
 import { setPlatformOS } from '@testing/setPlatformOS';
 import { WINDOW_WIDTH, setWindowWidth } from '@testing/setWindowWidth';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+
+beforeEach(() => {
+  recordLogs();
+});
 
 beforeEach(() => {
   setWindowWidth(WINDOW_WIDTH.phone);

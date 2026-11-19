@@ -260,16 +260,17 @@ publish_export
 fetch "$STAGING" /health >/dev/null
 [ -z "$(header_of Content-Security-Policy)" ] || fail "go-api /health gained the web CSP"
 
-CASE="connect-src opens raw.githubusercontent.com only at the kill-switch file the app polls"
+CASE="connect-src never opens raw.githubusercontent.com, on prod or staging"
 publish_export
-fetch "$STAGING" / >/dev/null
-KILL_SWITCH_URL=$(sed -n "s|^ *'\(https://raw\.githubusercontent\.com/[^']*\)';$|\1|p" \
-    "$HERE/../../../client/src/mobile/killSwitchPoll.ts")
-[ -n "$KILL_SWITCH_URL" ] || fail "could not read DEFAULT_KILL_SWITCH_URL from killSwitchPoll.ts"
-CONNECT_SRC=$(header_of Content-Security-Policy | tr ';' '\n' | sed -n 's/^ *connect-src//p')
-grep -qxF "$KILL_SWITCH_URL" < <(tr ' ' '\n' <<<"$CONNECT_SRC") || fail "connect-src '$CONNECT_SRC' lacks $KILL_SWITCH_URL"
-grep -vqxF "$KILL_SWITCH_URL" < <(tr ' ' '\n' <<<"$CONNECT_SRC" | grep '^https://raw\.githubusercontent\.com') &&
-    fail "connect-src '$CONNECT_SRC' opens raw.githubusercontent.com beyond the kill-switch file"
+publish_export_prod
+for HOST in "$PROD" "$STAGING"; do
+    fetch "$HOST" / >/dev/null
+    CONNECT_SRC=$(header_of Content-Security-Policy | tr ';' '\n' | sed -n 's/^ *connect-src//p')
+    [ -n "$CONNECT_SRC" ] || fail "$HOST: no connect-src directive in the web CSP"
+    case "$CONNECT_SRC" in
+        *raw.githubusercontent.com*) fail "$HOST: connect-src '$CONNECT_SRC' opens raw.githubusercontent.com" ;;
+    esac
+done
 
 CASE="the internal :8082 listener still reaches staging go-api with the export published"
 publish_export

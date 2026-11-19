@@ -33,7 +33,6 @@ export type {
   ContentFetchResponse,
   DeezerEnrichmentResponse,
   EnrichmentResponse,
-  LastFmEnrichmentResponse,
   UnreleasedAudioLink,
   UnreleasedSearchHit,
   UnreleasedTrack,
@@ -58,7 +57,6 @@ export {
   audioRequestHeaders,
   audioStreamUrl,
   fetchAudioUrls,
-  isAudioPrefetchEnabled,
   recoverAudio,
 } from '@shared/apiClient/adapters/audio';
 export type { ResolvedAudioUrl } from '@shared/apiClient/adapters/audio';
@@ -81,7 +79,6 @@ export {
   getArtistContent,
   getDeezerEnrichment,
   getEnrichment,
-  getLastFmEnrichment,
   getRelatedTracks,
   getUnreleasedTracks,
   searchUnreleasedTracks,

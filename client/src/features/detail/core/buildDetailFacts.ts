@@ -9,7 +9,6 @@ import type { TrackDetailActions } from '@features/detail/view/useTrackDetailAct
 export type ArtistFactsInput = {
   releases: number;
   inLibrary: number;
-  listeners: string | null;
 };
 
 function releasesFact(releases: number): DetailFact | null {
@@ -20,16 +19,8 @@ function inLibraryFact(inLibrary: number): DetailFact | null {
   return inLibrary > 0 ? { label: 'In library', value: String(inLibrary) } : null;
 }
 
-function listenersFact(listeners: string | null): DetailFact | null {
-  return listeners !== null ? { label: 'Listeners', value: listeners } : null;
-}
-
 export function buildArtistFacts(input: ArtistFactsInput): (DetailFact | null)[] {
-  return [
-    releasesFact(input.releases),
-    inLibraryFact(input.inLibrary),
-    listenersFact(input.listeners),
-  ];
+  return [releasesFact(input.releases), inLibraryFact(input.inLibrary)];
 }
 
 function tracksFact(tracks: readonly DiscoveryResult[]): DetailFact | null {

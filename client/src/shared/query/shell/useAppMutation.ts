@@ -10,7 +10,7 @@ import {
   type UseMutationResult,
 } from '@tanstack/react-query';
 
-import { correlationIdOf, isTelemetryGated, ApiError } from '@shared/failure';
+import { correlationIdOf, ApiError } from '@shared/failure';
 import {
   onlyWhileTheStartingSessionLasts,
   pinStartingSession,
@@ -31,7 +31,7 @@ export type AppMutationOptions<TData, TError extends Error, TVars, TCtx> = UseMu
 };
 
 function isExpectedFailure(error: unknown): boolean {
-  return isCancelledError(error) || error instanceof SessionEndedError || isTelemetryGated(error);
+  return isCancelledError(error) || error instanceof SessionEndedError;
 }
 
 type UserActionFieldsBeforeJson = {

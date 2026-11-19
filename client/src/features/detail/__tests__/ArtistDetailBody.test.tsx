@@ -1,7 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react-native';
 
-import type { LastFmEnrichmentResponse } from '@shared/apiClient';
 import type { DiscoveryResult } from '@shared/catalog';
 import { ArtistDetailBody } from '@features/detail';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
@@ -21,7 +20,6 @@ import {
   recordingNavigator,
   type RecordingNavigator,
 } from '@features/detail/__tests__/recordingNavigator';
-export type ArtistDetailBodyLastfmFixture = LastFmEnrichmentResponse;
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -142,21 +140,12 @@ function libraryTrackRow(index: number, artist: string) {
 const TRACK_CAP = 5;
 const TRACKS = 'GET /v1/tracks';
 
-function renderLibraryArtistBody(
-  options: {
-    lastfm?: DiscoveryResult extends never
-      ? never
-      : Parameters<typeof ArtistDetailBody>[0]['lastfm'];
-    lastfmError?: boolean;
-  } = {},
-) {
+function renderLibraryArtistBody() {
   return render(
     <ArtistDetailBody
       chrome={{ title: 'Boards of Canada', artworkUrl: null, onBack: jest.fn() }}
       result={libraryArtist()}
       detailRoute="/library/detail"
-      lastfm={options.lastfm}
-      lastfmError={options.lastfmError}
     />,
     { wrapper: bodyWrapper() },
   );
@@ -172,21 +161,18 @@ describe('ArtistDetailBody: section composition, top-tracks cap, explore toggle 
     });
   });
 
-  it('orders the sections: top tracks, then explore discography, then about', async () => {
-    const { toJSON } = renderLibraryArtistBody({ lastfmError: true });
+  it('orders the sections: top tracks, then explore discography', async () => {
+    const { toJSON } = renderLibraryArtistBody();
 
     await screen.findByTestId('detail-top-track-0');
     await screen.findByTestId('detail-explore-discography');
-    await screen.findByTestId('detail-lastfm-unavailable');
 
     const ids = collectTestIds(toJSON());
     const topTracksIndex = ids.indexOf('detail-top-track-0');
     const exploreIndex = ids.indexOf('detail-explore-discography');
-    const aboutIndex = ids.indexOf('detail-lastfm-unavailable');
 
     expect(topTracksIndex).toBeGreaterThanOrEqual(0);
     expect(topTracksIndex).toBeLessThan(exploreIndex);
-    expect(exploreIndex).toBeLessThan(aboutIndex);
   });
 
   it('caps a library artist at 5 top tracks and reveals the rest via Show all', async () => {
@@ -216,25 +202,6 @@ describe('ArtistDetailBody: section composition, top-tracks cap, explore toggle 
         'Collapse discography',
       ),
     );
-  });
-
-  it('shows the Listeners fact built from the lastfm response', async () => {
-    renderLibraryArtistBody({
-      lastfm: {
-        has_content: true,
-        mbid: '',
-        listeners: 12345,
-        playcount: 0,
-        tags: [],
-        bio: '',
-        similar: [],
-        duration: 0,
-        album: '',
-      },
-    });
-
-    const facts = await screen.findByTestId('detail-artist-facts');
-    expect(within(facts).getByText('12.3K')).toBeTruthy();
   });
 
   it('hides the facts row when there is nothing to show', async () => {
@@ -272,18 +239,6 @@ function libraryAlbumGroup(index: number) {
   };
 }
 
-const LISTENERS_ONLY = {
-  has_content: true,
-  mbid: '',
-  listeners: 12345,
-  playcount: 0,
-  tags: [],
-  bio: '',
-  similar: [],
-  duration: 0,
-  album: '',
-};
-
 function flatStyle(node: { props: { style?: unknown } }) {
   const { StyleSheet } = require('react-native');
   return StyleSheet.flatten(node.props.style) ?? {};
@@ -295,21 +250,17 @@ describe('ArtistDetailBody probe: section order when a section is empty or missi
     __http.replyAll({ status: 200, json: { items: [], total: 0 } });
   });
 
-  it('keeps explore discography ahead of about when the artist has no top tracks', async () => {
+  it('still shows explore discography when the artist has no top tracks', async () => {
     replyLibraryTracks(0);
-    const { toJSON } = renderLibraryArtistBody({ lastfmError: true });
+    const { toJSON } = renderLibraryArtistBody();
 
     await screen.findByTestId('detail-explore-discography');
-    await screen.findByTestId('detail-lastfm-unavailable');
 
     const ids = collectTestIds(toJSON());
     expect(ids.some((id) => id.startsWith('detail-top-track-'))).toBe(false);
-    expect(ids.indexOf('detail-explore-discography')).toBeLessThan(
-      ids.indexOf('detail-lastfm-unavailable'),
-    );
   });
 
-  it('still shows top tracks before explore discography when there is no about section', async () => {
+  it('shows every top track before explore discography', async () => {
     replyLibraryTracks(2);
     const { toJSON } = renderLibraryArtistBody();
 
@@ -317,7 +268,6 @@ describe('ArtistDetailBody probe: section order when a section is empty or missi
     await screen.findByTestId('detail-explore-discography');
 
     const ids = collectTestIds(toJSON());
-    expect(ids).not.toContain('detail-lastfm-unavailable');
     expect(ids.indexOf('detail-top-track-1')).toBeLessThan(
       ids.indexOf('detail-explore-discography'),
     );
@@ -402,18 +352,6 @@ describe('ArtistDetailBody probe: the facts row with each fact alone', () => {
     __http.reset();
   });
 
-  it('shows only Listeners for an artist with no library tracks or releases', async () => {
-    __http.replyAll({ status: 200, json: { items: [], total: 0 } });
-    replyLibraryTracks(0);
-    renderLibraryArtistBody({ lastfm: LISTENERS_ONLY });
-
-    const facts = await screen.findByTestId('detail-artist-facts');
-    expect(within(facts).getByText(/^listeners$/i)).toBeTruthy();
-    expect(within(facts).getByText('12.3K')).toBeTruthy();
-    expect(within(facts).queryByText(/^in library$/i)).toBeNull();
-    expect(within(facts).queryByText(/^releases$/i)).toBeNull();
-  });
-
   it('shows only In library for an artist with library tracks and nothing else', async () => {
     __http.replyAll({ status: 200, json: { items: [], total: 0 } });
     replyLibraryTracks(3);
@@ -422,11 +360,10 @@ describe('ArtistDetailBody probe: the facts row with each fact alone', () => {
     const facts = await screen.findByTestId('detail-artist-facts');
     expect(within(facts).getByText(/^in library$/i)).toBeTruthy();
     expect(within(facts).getByText('3')).toBeTruthy();
-    expect(within(facts).queryByText(/^listeners$/i)).toBeNull();
     expect(within(facts).queryByText(/^releases$/i)).toBeNull();
   });
 
-  it('shows only Releases for an artist with library albums but no tracks or listeners', async () => {
+  it('shows only Releases for an artist with library albums but no tracks', async () => {
     __http.replyAll({ status: 200, json: { items: [], total: 0 } });
     replyLibraryTracks(0);
     __http.reply('GET /v1/library/albums', {
@@ -439,7 +376,6 @@ describe('ArtistDetailBody probe: the facts row with each fact alone', () => {
     expect(within(facts).getByText(/^releases$/i)).toBeTruthy();
     expect(within(facts).getByText('2')).toBeTruthy();
     expect(within(facts).queryByText(/^in library$/i)).toBeNull();
-    expect(within(facts).queryByText(/^listeners$/i)).toBeNull();
   });
 });
 
@@ -454,7 +390,7 @@ describe('ArtistDetailBody probe: the wide web layout still composes the artist 
     setPlatformOS('ios');
   });
 
-  it('places top tracks, explore and about in the right column on a wide web window', async () => {
+  it('places top tracks and explore in the right column on a wide web window', async () => {
     setPlatformOS('web');
     setWindowWidth(WINDOW_WIDTH.desktop);
     render(
@@ -466,7 +402,6 @@ describe('ArtistDetailBody probe: the wide web layout still composes the artist 
         }}
         result={libraryArtist()}
         detailRoute="/library/detail"
-        lastfmError
       />,
       { wrapper: bodyWrapper() },
     );
@@ -477,7 +412,6 @@ describe('ArtistDetailBody probe: the wide web layout still composes the artist 
     const left = screen.getByTestId('detail-body-left');
     expect(within(right).getByTestId('detail-top-track-0')).toBeTruthy();
     expect(within(right).getByTestId('detail-explore-discography')).toBeTruthy();
-    expect(within(right).getByTestId('detail-lastfm-unavailable')).toBeTruthy();
     expect(within(left).queryByTestId('detail-explore-discography')).toBeNull();
   });
 });

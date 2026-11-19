@@ -108,57 +108,8 @@ describe('useDeezerEnrichment', () => {
   });
 });
 
-describe('useLastFmEnrichment', () => {
-  describe('aborting on unmount', () => {
-    let client: QueryClient;
-
-    let wrapper: ReturnType<typeof createWrapper>;
-
-    beforeEach(async () => {
-      await signInTestUser();
-      _resetDetailHealthForTest();
-      client = createTestQueryClient();
-      wrapper = createWrapper(client);
-    });
-
-    afterEach(() => client.clear());
-
-    const artist = resultOf('artist', 'Radiohead', null);
-
-    describe.each([
-      [
-        'useLastFmEnrichment',
-        'GET /v1/discovery/enrichment/lastfm',
-        (): void => void useDetailEnrichments(artist),
-      ],
-    ] as const)('%s, left before its request resolves', (_name, spec, useHook) => {
-      it('aborts the in-flight request when the screen unmounts', async () => {
-        __http.hang(spec);
-        const { unmount } = renderHook(useHook, { wrapper });
-        await waitFor(() => expect(__http.countFor(spec)).toBeGreaterThan(0));
-        const { signal } = requestFor(spec);
-        expect(signal.aborted).toBe(false);
-
-        unmount();
-
-        await waitFor(() => expect(signal.aborted).toBe(true));
-      });
-    });
-  });
-});
-
 describe('useDetailEnrichments', () => {
-  function artistResult(): DiscoveryResult {
-    return {
-      kind: 'artist',
-      title: 'Radiohead',
-      subtitle: null,
-      image_url: null,
-      confidence: 'high',
-      sources: [],
-      extras: {},
-    };
-  }
+  const DEEZER = 'GET /v1/discovery/enrichment/deezer';
 
   const emptyEnrichment = {
     has_content: false,
@@ -173,17 +124,18 @@ describe('useDetailEnrichments', () => {
     artwork_url: '',
   };
 
-  const emptyLastFm = {
+  const emptyDeezer = {
     has_content: false,
-    mbid: '',
-    listeners: 0,
-    playcount: 0,
-    tags: [],
-    bio: '',
-    similar: [],
-    duration: 0,
-    album: '',
+    bpm: 0,
+    gain: 0,
+    explicit: false,
+    label: '',
+    genres: [],
+    upc: '',
+    record_type: '',
   };
+
+  const album = resultOf('album', 'OK Computer', 'Radiohead');
 
   let warnings: DetailWarning[];
 
@@ -204,83 +156,78 @@ describe('useDetailEnrichments', () => {
   });
 
   describe('useDetailEnrichments: asking only the providers a page shows', () => {
-    it('does not ask MusicBrainz on an artist page, which shows nothing from it', async () => {
-      __http.reply('GET /v1/discovery/enrichment/lastfm', { status: 200, json: emptyLastFm });
+    it('asks no enrichment provider on an artist page, which shows nothing from them', async () => {
       const queryClient = createTestQueryClient();
 
-      const { result } = renderHook(() => useDetailEnrichments(artistResult()), {
-        wrapper: recordingWrapper(queryClient),
-      });
+      const { result } = renderHook(
+        () => useDetailEnrichments(resultOf('artist', 'Radiohead', null)),
+        { wrapper: recordingWrapper(queryClient) },
+      );
 
-      await waitFor(() => expect(__http.countFor('GET /v1/discovery/enrichment/lastfm')).toBe(1));
-      await waitFor(() => expect(result.current.lastfm).toBeNull());
-      expect(__http.countFor('GET /v1/discovery/enrichment')).toBe(0);
+      await waitFor(() => expect(result.current.deezer).toBeNull());
+      expect(__http.requests).toHaveLength(0);
     });
   });
 
   describe('useDetailEnrichments: a failed provider fetch vs a genuinely-empty one', () => {
-    it('flags the Last.fm error while still leaving its data null, distinguishing it from no content', async () => {
-      __http.fail('GET /v1/discovery/enrichment/lastfm');
+    it('flags the Deezer error while still leaving its data null, distinguishing it from no content', async () => {
+      __http.fail(DEEZER);
       const queryClient = createTestQueryClient();
 
-      const { result } = renderHook(() => useDetailEnrichments(artistResult()), {
+      const { result } = renderHook(() => useDetailEnrichments(album), {
         wrapper: recordingWrapper(queryClient),
       });
 
-      await waitFor(() => expect(result.current.errors.lastfm).toBe(true));
-      expect(result.current.lastfm).toBeNull();
+      await waitFor(() => expect(result.current.errors.deezer).toBe(true));
+      expect(result.current.deezer).toBeNull();
     });
 
-    it('does not flag an error when Last.fm genuinely has no content for this artist', async () => {
-      __http.reply('GET /v1/discovery/enrichment/lastfm', {
-        status: 200,
-        json: emptyLastFm,
-      });
+    it('does not flag an error when Deezer genuinely has no content for this album', async () => {
+      __http.reply(DEEZER, { status: 200, json: emptyDeezer });
       const queryClient = createTestQueryClient();
 
-      const { result } = renderHook(() => useDetailEnrichments(artistResult()), {
+      const { result } = renderHook(() => useDetailEnrichments(album), {
         wrapper: recordingWrapper(queryClient),
       });
 
-      await waitFor(() => expect(result.current.lastfm).toBeNull());
-      expect(result.current.errors.lastfm).toBe(false);
+      await waitFor(() => expect(__http.countFor(DEEZER)).toBe(1));
+      await waitFor(() => expect(result.current.deezer).toBeNull());
+      expect(result.current.errors.deezer).toBe(false);
     });
   });
 
   describe('useDetailEnrichments: naming the entity and provider behind a failed fetch', () => {
-    it('logs the provider, the entity and the reason when Last.fm cannot be reached', async () => {
-      __http.fail('GET /v1/discovery/enrichment/lastfm');
+    it('logs the provider, the entity and the reason when Deezer cannot be reached', async () => {
+      __http.fail(DEEZER);
       const queryClient = createTestQueryClient();
 
-      const { result } = renderHook(() => useDetailEnrichments(artistResult()), {
+      const { result } = renderHook(() => useDetailEnrichments(album), {
         wrapper: recordingWrapper(queryClient),
       });
 
-      await waitFor(() => expect(result.current.errors.lastfm).toBe(true));
+      await waitFor(() => expect(result.current.errors.deezer).toBe(true));
 
       expect(warnings).toContainEqual([
         '[detail] enrichment fetch failed',
         expect.objectContaining({
-          provider: 'lastfm',
-          kind: 'artist',
-          title: 'Radiohead',
+          provider: 'deezer',
+          kind: 'album',
+          title: 'OK Computer',
           error: expect.stringContaining('unreachable'),
         }),
       ]);
     });
 
-    it('stays silent when Last.fm genuinely has no content for this artist', async () => {
-      __http.reply('GET /v1/discovery/enrichment/lastfm', {
-        status: 200,
-        json: emptyLastFm,
-      });
+    it('stays silent when Deezer genuinely has no content for this album', async () => {
+      __http.reply(DEEZER, { status: 200, json: emptyDeezer });
       const queryClient = createTestQueryClient();
 
-      const { result } = renderHook(() => useDetailEnrichments(artistResult()), {
+      renderHook(() => useDetailEnrichments(album), {
         wrapper: recordingWrapper(queryClient),
       });
 
-      await waitFor(() => expect(result.current.lastfm).toBeNull());
+      await waitFor(() => expect(__http.countFor(DEEZER)).toBe(1));
+      await waitFor(() => expect(__http.countFor('GET /v1/discovery/enrichment')).toBe(1));
 
       expect(warnings).not.toContainEqual(['[detail] enrichment fetch failed', expect.anything()]);
     });

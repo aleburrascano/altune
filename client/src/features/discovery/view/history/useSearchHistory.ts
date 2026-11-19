@@ -4,15 +4,10 @@ import { isRetryable } from '@shared/failure';
 import { discoveryKeys, useAppMutation } from '@shared/query';
 import { useClearSearchHistory as useSharedClearSearchHistory } from '@shared/searchHistory';
 import { useReportQueryFailure } from '@features/discovery/view/search/useReportQueryFailure';
-import {
-  useDiscoverFetchEnabled,
-  useGatedDiscoverCall,
-} from '@features/discovery/view/search/useDiscoverFetchGate';
 import { useDiscoverPort } from '@features/discovery/view/DiscoverPortProvider';
 
 export function useSearchHistory() {
   const port = useDiscoverPort();
-  const isHistoryEnabled = useDiscoverFetchEnabled();
 
   const {
     data: response,
@@ -21,23 +16,17 @@ export function useSearchHistory() {
   } = useQuery<DiscoverySearchHistoryResponse>({
     queryKey: discoveryKeys.history,
     queryFn: () => port.listSearchHistory({ limit: 10 }),
-    enabled: isHistoryEnabled,
   });
 
   useReportQueryFailure(error, 'history');
 
-  const refetch = useGatedDiscoverCall(refetchHistory);
-
-  return { data: response, error, refetch };
+  return { data: response, error, refetch: () => void refetchHistory() };
 }
 
 export function useRecordSearchHistory(): (query: string) => void {
-  const isHistoryEnabled = useDiscoverFetchEnabled();
   const { mutate, error } = useRecordHistoryMutation();
   useReportQueryFailure(error, 'record_history');
-  return (query) => {
-    if (isHistoryEnabled) mutate(query);
-  };
+  return (query) => mutate(query);
 }
 
 function useRecordHistoryMutation(): UseMutationResult<void, Error, string, undefined> {
@@ -61,8 +50,7 @@ export function useDiscoverClearSearchHistory(): ClearSearchHistory {
     retryOptions: { retry: (failureCount, error) => isRetryable(error) && failureCount < 5 },
   });
   const { mutate, error } = clearHistoryMutation;
-  const clear = useGatedDiscoverCall(() => mutate());
   useReportQueryFailure(error, 'clear_history');
 
-  return { clear, error: error ?? null };
+  return { clear: () => mutate(), error: error ?? null };
 }

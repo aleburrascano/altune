@@ -3,7 +3,6 @@ import {
   getRelatedTracks,
   getArtistContent,
   getEnrichment,
-  getLastFmEnrichment,
   getDeezerEnrichment,
   getUnreleasedTracks,
   searchUnreleasedTracks,
@@ -30,18 +29,6 @@ const emptyEnrichment = {
   secondary_types: [],
   external_ids: {},
   artwork_url: '',
-};
-
-const emptyLastFm = {
-  has_content: false,
-  mbid: '',
-  listeners: 0,
-  playcount: 0,
-  tags: [],
-  bio: '',
-  similar: [],
-  duration: 0,
-  album: '',
 };
 
 const emptyDeezer = {
@@ -350,17 +337,7 @@ describe('getEnrichment (MusicBrainz) — title optional, subtitle nullable', ()
   });
 });
 
-describe('kindTitleQs shared by getLastFmEnrichment / getDeezerEnrichment', () => {
-  it('getLastFmEnrichment omits subtitle when null, includes it when a real string', async () => {
-    __http.reply('GET /v1/discovery/enrichment/lastfm', { status: 200, json: emptyLastFm });
-
-    await getLastFmEnrichment({ kind: 'artist', title: 'Fleetwood Mac', subtitle: null });
-    expect(__http.last().query).toBe('kind=artist&title=Fleetwood+Mac');
-
-    await getLastFmEnrichment({ kind: 'track', title: 'Dreams', subtitle: 'Fleetwood Mac' });
-    expect(__http.last().query).toBe('kind=track&title=Dreams&subtitle=Fleetwood+Mac');
-  });
-
+describe('getDeezerEnrichment query string', () => {
   it('getDeezerEnrichment omits subtitle when undefined, includes it when a real string', async () => {
     __http.reply('GET /v1/discovery/enrichment/deezer', { status: 200, json: emptyDeezer });
 
@@ -455,17 +432,6 @@ describe('enrichment responses violating the null-object contract', () => {
 
     expect(withFeatured.featured_artists).toEqual([{ name: 'Travis Scott' }]);
     expect(withoutFeatured).not.toHaveProperty('featured_artists');
-  });
-
-  it('getLastFmEnrichment rejects a response whose tags collection is null', async () => {
-    __http.reply('GET /v1/discovery/enrichment/lastfm', {
-      status: 200,
-      json: { ...emptyLastFm, tags: null },
-    });
-
-    await expect(
-      getLastFmEnrichment({ kind: 'artist', title: 'Fleetwood Mac' }),
-    ).rejects.toMatchObject({ name: 'ContractError', at: 'LastFmEnrichmentResponse.tags' });
   });
 });
 

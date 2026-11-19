@@ -9,6 +9,11 @@ import { useSaveTrack, useTrackSave, ownedTrack } from '@features/detail';
 import { createMemoryDetailPort } from '@testing/fakes/detail/inMemoryDetailPort';
 import type { DetailPort } from '@features/detail';
 import { createPortWrapper, createTestQueryClient, signInTestUser } from '@testing/queryHarness';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+
+beforeEach(() => {
+  recordLogs();
+});
 const mockCreateTrack = jest.fn<Promise<TrackResponse>, [unknown]>();
 
 const mockRetryAcquisition = jest.fn<Promise<void>, [unknown]>();

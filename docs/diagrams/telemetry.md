@@ -12,7 +12,6 @@ flowchart LR
         session["session_id<br/>rotates after 30 min idle"]
         ff["recordEvent<br/>fire-and-forget, no retry"]
         outbox[["Outbox · persisted file<br/>event_id · backoff 2s–5min · max 50"]]
-        ks{"kill switch<br/>telemetry_enabled"}
     end
 
     subgraph api [go-api · discovery]
@@ -35,7 +34,6 @@ flowchart LR
     session -.-> ff & outbox
     emitters --> ff --> ingest
     critical --> outbox
-    ks -->|gates flush only| outbox
     outbox -->|in order, retry| ingest
     ingest --> events
     server_emit --> events

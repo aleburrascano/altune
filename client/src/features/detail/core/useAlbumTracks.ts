@@ -11,11 +11,7 @@ import {
 } from '@features/detail/core/contentStatus';
 import { fetchTallyingOutcome } from '@features/detail/core/detailHealth';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
-import {
-  useDetailFetchEnabled,
-  useGatedRefetch,
-  useContentFetchRetry,
-} from '@features/detail/core/useDetailFetchGate';
+import { useContentFetchRetry } from '@features/detail/core/useContentFetchRetry';
 
 type UseAlbumTracksParams = {
   provider: string;
@@ -45,7 +41,6 @@ export function useAlbumTracks({
   const mbExternalId = allSources?.find((s) => s.provider === 'musicbrainz')?.external_id;
   const port = useDetailPort();
   const retry = useContentFetchRetry();
-  const isFetchEnabled = useDetailFetchEnabled();
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: detailKeys.albumTracks(
@@ -67,19 +62,18 @@ export function useAlbumTracks({
           signal,
         }),
       ),
-    enabled: enabled && isFetchEnabled,
+    enabled,
     staleTime: DETAIL_CONTENT_STALE_MS,
     retry,
   });
 
   const failure = contentFailure(isError, error, data);
-  const retryFetch = useGatedRefetch(refetch);
 
   return {
     tracks: data?.items ?? [],
     isLoading,
     isError: failure !== null,
     failure,
-    refetch: retryFetch,
+    refetch: () => void refetch(),
   };
 }

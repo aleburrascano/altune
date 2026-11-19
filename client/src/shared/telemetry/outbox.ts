@@ -3,7 +3,6 @@ import { subscribeAppState } from '@shared/lifecycle';
 
 import { ApiError, NetworkError } from '@shared/failure';
 import { clampedExponent, equalJitterMs } from '@shared/timing';
-import { isLoopEnabled, onKillSwitchChange } from '@shared/killSwitch';
 import { onSignOut } from '@shared/session';
 
 import { loadPersistedOutbox, persistOutbox } from '@shared/telemetry/outboxStore';
@@ -172,17 +171,9 @@ function stillOurs(entry: OutboxEntry): boolean {
   return _queue.some((e) => e.event_id === entry.event_id) && ownedByCurrentUser(entry);
 }
 
-function flushEnabled(): boolean {
-  return isLoopEnabled('telemetryFlush');
-}
-
 export async function flushOutbox(): Promise<void> {
   ensureRestored();
   if (_flushing || _queue.length === 0) return;
-  if (!flushEnabled()) {
-    resetBackoff();
-    return;
-  }
   _flushing = true;
   let retryable = false;
   const attempted = new Set<string>();
@@ -192,10 +183,6 @@ export async function flushOutbox(): Promise<void> {
       const batch = _queue.filter((e) => !attempted.has(e.event_id));
       if (batch.length === 0) break;
       for (const entry of batch) {
-        if (!flushEnabled()) {
-          halted = true;
-          break;
-        }
         attempted.add(entry.event_id);
         if (!stillOurs(entry)) continue;
         const outcome = await send(entry);
@@ -216,10 +203,6 @@ export async function flushOutbox(): Promise<void> {
   if (retryable && _queue.length > 0) scheduleRetry();
   else resetBackoff();
 }
-
-onKillSwitchChange((loop, enabled) => {
-  if (loop === 'telemetryFlush' && enabled) void flushOutbox();
-});
 
 function clearOutbox(): void {
   _restored = true;

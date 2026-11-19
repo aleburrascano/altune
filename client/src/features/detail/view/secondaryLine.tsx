@@ -6,11 +6,8 @@ import type { LateralNavHandle } from '@features/detail/hooks/useDetailNavigatio
 
 import { sharedStyles } from '@features/detail/view/detailStyles';
 
-const MAX_GENRES = 2;
-
 type SecondaryLineArgs = {
   isArtist: boolean;
-  genreTags: string[] | undefined;
   artist: string | null;
   albumCollaborators: FeaturedArtist[];
   lateralNav: LateralNavHandle;
@@ -18,24 +15,11 @@ type SecondaryLineArgs = {
 
 export function secondaryLine({
   isArtist,
-  genreTags,
   artist,
   albumCollaborators,
   lateralNav,
 }: SecondaryLineArgs): ReactNode {
-  if (isArtist) {
-    const genres = (genreTags ?? []).slice(0, MAX_GENRES);
-    if (genres.length === 0) {
-      return null;
-    }
-    return (
-      <Text variant="body" tone="secondary" numberOfLines={1}>
-        {genres.join(' · ')}
-      </Text>
-    );
-  }
-
-  if (artist === null) {
+  if (isArtist || artist === null) {
     return null;
   }
 

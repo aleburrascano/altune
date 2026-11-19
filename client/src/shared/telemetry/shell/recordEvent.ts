@@ -1,6 +1,5 @@
 import { apiFetch } from '@shared/apiClient';
 import type { JsonObject } from '@shared/files';
-import { isLoopEnabled } from '@shared/killSwitch';
 
 import { getSessionId } from '@shared/telemetry/eventSession';
 
@@ -36,15 +35,7 @@ export type DiscoveryEvent = {
   payload?: EventPayload;
 };
 
-class TelemetryGatedError extends Error {
-  constructor() {
-    super('telemetry flush disabled by kill switch');
-    this.name = 'TelemetryGatedError';
-  }
-}
-
 export async function recordEvent(event: DiscoveryEvent): Promise<void> {
-  if (!isLoopEnabled('telemetryFlush')) throw new TelemetryGatedError();
   const body: DiscoveryEvent = {
     ...event,
     payload: { ...(event.payload ?? {}), session_id: getSessionId() },

@@ -5,10 +5,6 @@ import { isRetryable } from '@shared/failure';
 import { discoveryKeys, isSearchKeyFor } from '@shared/query';
 import { useReportQueryFailure } from '@features/discovery/view/search/useReportQueryFailure';
 import {
-  useDiscoverFetchEnabled,
-  useGatedDiscoverCall,
-} from '@features/discovery/view/search/useDiscoverFetchGate';
-import {
   useRefreshFromFirstPage,
   useRestartOnExpiredSlate,
 } from '@features/discovery/view/search/useSearchRefresh';
@@ -79,7 +75,6 @@ type SearchQueryArgs = {
   queryKey: QueryKey;
   queryClient: ReturnType<typeof useQueryClient>;
   trimmed: string;
-  isSearchEnabled: boolean;
 };
 
 function useSearchInfiniteQuery(args: SearchQueryArgs) {
@@ -88,7 +83,7 @@ function useSearchInfiniteQuery(args: SearchQueryArgs) {
     initialPageParam: firstPageParam,
     queryFn: searchQueryFn(args.port, args.queryClient, args.trimmed),
     getNextPageParam: nextSearchPageParam,
-    enabled: args.trimmed.length > 0 && args.isSearchEnabled,
+    enabled: args.trimmed.length > 0,
     placeholderData: (previous) => (args.trimmed.length > 0 ? previous : undefined),
     retry: retryTransientOnce,
   });
@@ -99,10 +94,9 @@ type SearchPaging = Pick<
   'fetchNextPage' | 'hasNextPage' | 'isPlaceholderData'
 >;
 
-function nextPageControls(paging: SearchPaging, isSearchEnabled: boolean) {
+function nextPageControls(paging: SearchPaging) {
   return {
-    fetchNextPage:
-      isSearchEnabled && !paging.isPlaceholderData ? paging.fetchNextPage : noPageToFetch,
+    fetchNextPage: paging.isPlaceholderData ? noPageToFetch : paging.fetchNextPage,
     hasNextPage: paging.hasNextPage && !paging.isPlaceholderData,
   };
 }
@@ -111,7 +105,6 @@ export function useDiscoverSearch(query: string) {
   const trimmed = normalizeQuery(query);
   const port = useDiscoverPort();
   const queryClient = useQueryClient();
-  const isSearchEnabled = useDiscoverFetchEnabled();
 
   const queryKey = useMemo(() => discoveryKeys.search(trimmed), [trimmed]);
   const {
@@ -130,7 +123,6 @@ export function useDiscoverSearch(query: string) {
     queryKey,
     queryClient,
     trimmed,
-    isSearchEnabled,
   });
 
   useReportQueryFailure(error, 'search');
@@ -138,16 +130,13 @@ export function useDiscoverSearch(query: string) {
   const { refresh, held, refreshFailed } = useRefreshFromFirstPage(queryKey, refetch);
   const pages = useRestartOnExpiredSlate(held ?? infiniteData, refresh);
   const data = useMemo(() => mergePages(pages), [pages]);
-  const retrySearch = useGatedDiscoverCall(refresh);
-
   return {
     data,
     isLoading,
     isRefreshing: isRefetching && !isFetchingNextPage,
     error,
-    isUnavailable: !isSearchEnabled,
-    refetch: retrySearch,
-    ...nextPageControls({ fetchNextPage, hasNextPage, isPlaceholderData }, isSearchEnabled),
+    refetch: () => void refresh(),
+    ...nextPageControls({ fetchNextPage, hasNextPage, isPlaceholderData }),
     isShowingPrevious: isPlaceholderData,
     isFetchingNextPage,
     isFetchNextPageError,

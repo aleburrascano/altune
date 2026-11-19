@@ -5,7 +5,6 @@ import {
   audioRequestHeaders,
   recoverAudio,
   fetchAudioUrls,
-  isAudioPrefetchEnabled,
   CORRELATION_HEADER,
   ApiError,
   NetworkError,
@@ -188,33 +187,6 @@ describe('recoverAudio', () => {
 });
 
 describe('fetchAudioUrls', () => {
-  it('starts with the prefetch switch on before any server reply', () => {
-    jest.isolateModules(() => {
-      expect(require('@shared/apiClient').isAudioPrefetchEnabled()).toBe(true);
-    });
-  });
-
-  it('tracks the server prefetch kill switch, ignoring a missing or non-boolean flag', async () => {
-    withSession();
-    const replyWith = (extra: Record<string, unknown>) =>
-      __http.replyOnce('POST /v1/audio-urls', { status: 200, json: { urls: [], ...extra } });
-
-    replyWith({ prefetch_enabled: true });
-    await fetchAudioUrls(['t1']);
-    expect(isAudioPrefetchEnabled()).toBe(true);
-    replyWith({ prefetch_enabled: false });
-    await fetchAudioUrls(['t1']);
-    expect(isAudioPrefetchEnabled()).toBe(false);
-    replyWith({ prefetch_enabled: 'true' });
-    await fetchAudioUrls(['t1']);
-    replyWith({});
-    await fetchAudioUrls(['t1']);
-    expect(isAudioPrefetchEnabled()).toBe(false);
-    replyWith({ prefetch_enabled: true });
-    await fetchAudioUrls(['t1']);
-    expect(isAudioPrefetchEnabled()).toBe(true);
-  });
-
   it('maps the wire shape {track_id, url, version} to {trackId, url, version}', async () => {
     withSession();
     __http.reply('POST /v1/audio-urls', {
@@ -486,15 +458,6 @@ describe('response decoding', () => {
       await expect(fetchAudioUrls(['t1'])).resolves.toEqual([
         { trackId: 't1', url: 'HTTPS://cdn.example/t1.mp3?X-Amz-Signature=abc%2F', version: 'v1' },
       ]);
-    });
-
-    it('leaves the prefetch switch untouched when the body fails to decode', async () => {
-      replyWith({ urls: [], prefetch_enabled: false });
-      await fetchAudioUrls(['t1']);
-      replyWith({ urls: null, prefetch_enabled: true });
-
-      await expect(fetchAudioUrls(['t1'])).rejects.toBeInstanceOf(ContractError);
-      expect(isAudioPrefetchEnabled()).toBe(false);
     });
   });
 });

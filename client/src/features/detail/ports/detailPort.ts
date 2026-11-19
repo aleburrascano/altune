@@ -3,7 +3,6 @@ import type * as apiClient from '@shared/apiClient';
 export interface DetailPort {
   searchDiscovery: typeof apiClient.searchDiscovery;
   getEnrichment: typeof apiClient.getEnrichment;
-  getLastFmEnrichment: typeof apiClient.getLastFmEnrichment;
   getDeezerEnrichment: typeof apiClient.getDeezerEnrichment;
   getAlbumTracks: typeof apiClient.getAlbumTracks;
   getRelatedTracks: typeof apiClient.getRelatedTracks;

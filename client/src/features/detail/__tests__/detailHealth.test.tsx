@@ -46,8 +46,6 @@ function emptyTallyPayload(): Record<string, number> {
     enrichment_musicbrainz_failed: 0,
     enrichment_deezer_ok: 0,
     enrichment_deezer_failed: 0,
-    enrichment_lastfm_ok: 0,
-    enrichment_lastfm_failed: 0,
     content_album_tracks_ok: 0,
     content_album_tracks_failed: 0,
     content_artist_content_ok: 0,

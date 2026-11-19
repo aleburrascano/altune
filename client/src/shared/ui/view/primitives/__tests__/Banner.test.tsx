@@ -1,7 +1,6 @@
 import { render } from '@testing-library/react-native';
 
 import { signInTestUser } from '@testing/signInTestUser';
-import { applyKillSwitches } from '@shared/killSwitch';
 import { Banner } from '@shared/ui';
 
 const { __http } = require('@testing/doubles/fetch.js');
@@ -27,7 +26,6 @@ function sent(): Sent[] {
 
 beforeEach(async () => {
   await signInTestUser();
-  applyKillSwitches({ telemetry_enabled: true });
   __http.reply('POST /v1/discovery/events', { status: 202 });
 });
 

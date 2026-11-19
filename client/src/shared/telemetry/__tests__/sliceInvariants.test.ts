@@ -2,7 +2,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { createMemoryFileStore } from '@testing/fakes/files/inMemoryFileStore';
-import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch';
 import {
   enqueueCritical,
   withEnvelope,
@@ -10,6 +9,7 @@ import {
   setOutboxFileStore,
 } from '@shared/telemetry';
 import type { DiscoveryEvent } from '@shared/telemetry';
+const { __http } = require('@testing/doubles/fetch.js');
 
 const EVENTS_ENQUEUED = 2;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -151,9 +151,7 @@ describe('no console.log in this slice', () => {
 describe('security: no auth material reaches this slice or the disk it writes to', () => {
   afterEach(() => {
     jest.restoreAllMocks();
-    applyKillSwitches({ telemetry_enabled: true });
     setOutboxFileStore();
-    setKillSwitchFileStore();
   });
 
   it('no file in shared/telemetry imports expo-secure-store, a Supabase client, or reads an access token', () => {
@@ -194,8 +192,7 @@ describe('security: no auth material reaches this slice or the disk it writes to
 
   it('the outbox event id is a v4 uuid, unpredictable to an observer of Math.random (#1774)', async () => {
     setOutboxFileStore(createMemoryFileStore());
-    setKillSwitchFileStore(createMemoryFileStore());
-    applyKillSwitches({ telemetry_enabled: false });
+    __http.fail('POST /v1/discovery/events');
     jest.spyOn(Math, 'random').mockReturnValue(0.5);
 
     await enqueueCritical({ type: 'library_add' });

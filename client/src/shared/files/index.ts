@@ -8,5 +8,5 @@ export {
 export type { SchemaSpec } from '@shared/files/durableDocument';
 export { createFileStoreSlot } from '@shared/files/shell/fileStore';
 export type { FileStore, StoredDirectory, StoredFile } from '@shared/files/shell/fileStore';
-export type { JsonObject, JsonValue } from '@shared/files/core/json';
+export type { JsonObject } from '@shared/files/core/json';
 export { extFromUrl } from '@shared/files/core/urlExtension';

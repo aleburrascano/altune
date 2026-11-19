@@ -1,6 +1,5 @@
 import { apiBase } from '@shared/apiConfig';
 import { appVersion } from '@shared/device';
-import { applyKillSwitches } from '@shared/killSwitch';
 import { _resetOutboxForTest, flushOutbox } from '@shared/telemetry';
 
 import { reportSignInFailure, thrownErrorDetail } from '@features/signIn';
@@ -19,7 +18,6 @@ beforeEach(() => {
 
 afterEach(() => {
   global.fetch = realFetch;
-  applyKillSwitches({ telemetry_enabled: true });
 });
 
 describe('reportSignInFailure: the anonymous pre-session report', () => {
@@ -58,14 +56,6 @@ describe('reportSignInFailure: the anonymous pre-session report', () => {
     });
 
     expect(() => reportSignInFailure('unknown')).not.toThrow();
-  });
-
-  it('posts nothing when the telemetryFlush kill switch is off', () => {
-    applyKillSwitches({ telemetry_enabled: false });
-
-    reportSignInFailure('unknown');
-
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('aborts a hanging request after 5 seconds', () => {

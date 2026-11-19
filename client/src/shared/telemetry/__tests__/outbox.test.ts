@@ -18,7 +18,6 @@ import {
   setOutboxFileStore,
 } from '@shared/telemetry';
 import { createMemoryFileStore } from '@testing/fakes/files/inMemoryFileStore';
-import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch';
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 import {
   driveAppState,
@@ -158,89 +157,6 @@ afterEach(() => {
   setOutboxFileStore();
   _resetOutboxForTest();
   jest.useRealTimers();
-});
-
-describe('remote kill switch', () => {
-  function queuedIds(): (string | undefined)[] {
-    return lastPersisted().map((e) => e.search_id);
-  }
-
-  async function settle(): Promise<void> {
-    for (let i = 0; i < 20; i += 1) await Promise.resolve();
-  }
-
-  beforeEach(() => {
-    jest.useFakeTimers();
-    setKillSwitchFileStore(createMemoryFileStore());
-    _resetOutboxForTest();
-    resetServer();
-  });
-
-  afterEach(() => {
-    _resetOutboxForTest();
-    setKillSwitchFileStore();
-    jest.useRealTimers();
-    jest.restoreAllMocks();
-  });
-
-  describe('outbox — remote kill switch', () => {
-    it('sends nothing while the switch is off and keeps the entries queued', async () => {
-      applyKillSwitches({ telemetry_enabled: false });
-
-      await enqueueCritical({ type: 'library_add', search_id: 'a' });
-      await flushOutbox();
-      appState.change('active');
-      await settle();
-
-      expect(sentEntries()).toHaveLength(0);
-      expect(queuedIds()).toEqual(['a']);
-    });
-
-    it('arms no retry timer while the switch is off', async () => {
-      serverReplies(HTTP_UNAVAILABLE);
-      await enqueueCritical({ type: 'library_add', search_id: 'a' });
-      expect(sentEntries()).toHaveLength(1);
-
-      applyKillSwitches({ telemetry_enabled: false });
-      await jest.advanceTimersByTimeAsync(10 * 60 * 1000);
-
-      expect(sentEntries()).toHaveLength(1);
-      expect(jest.getTimerCount()).toBe(0);
-    });
-
-    it('stops a running pass before its next entry when the switch is turned off', async () => {
-      const releaseFirst = holdNextRequest();
-      restoreFromDisk(
-        ['a', 'b'].map((id) => ({
-          type: 'library_add',
-          search_id: id,
-          event_id: `evt-${id}`,
-          client_occurred_at: '2026-09-15T00:00:00.000Z',
-        })),
-      );
-      const pass = flushOutbox();
-      await settle();
-      expect(received).toHaveLength(1);
-
-      applyKillSwitches({ telemetry_enabled: false });
-      releaseFirst();
-      await pass;
-
-      expect(sentEntries().map((e) => e.search_id)).toEqual(['a']);
-      expect(queuedIds()).toEqual(['b']);
-    });
-
-    it('flushes what was held back as soon as the switch is turned back on', async () => {
-      applyKillSwitches({ telemetry_enabled: false });
-      await enqueueCritical({ type: 'library_add', search_id: 'a' });
-
-      applyKillSwitches({ telemetry_enabled: true });
-      await settle();
-
-      expect(sentEntries().map((e) => e.search_id)).toEqual(['a']);
-      expect(queuedIds()).toEqual([]);
-    });
-  });
 });
 
 describe('Reducer: enqueueCritical', () => {

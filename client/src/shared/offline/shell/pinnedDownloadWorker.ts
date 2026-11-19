@@ -2,7 +2,6 @@ import type { ResolvedAudioUrl } from '@shared/apiClient';
 import type { TrackId } from '@shared/catalog';
 import { equalJitterMs } from '@shared/timing';
 import { isRetryable } from '@shared/failure';
-import { isLoopEnabled } from '@shared/killSwitch';
 import { recordEvent } from '@shared/telemetry';
 
 import {
@@ -47,7 +46,7 @@ export async function runDownloadQueue(set: Setter, get: Getter, port: OfflinePo
 async function drainQueue(set: Setter, get: Getter, port: OfflinePort): Promise<void> {
   for (;;) {
     const trackId = get().queue[0];
-    if (trackId === undefined || !isLoopEnabled('offlineDownloads')) break;
+    if (trackId === undefined) break;
     set((s) => ({ queue: s.queue.slice(1) }));
     await downloadOne(trackId, set, get, port);
   }

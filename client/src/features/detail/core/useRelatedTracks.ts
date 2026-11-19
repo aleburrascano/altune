@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, type QueryFunctionContext } from '@tanstack/react-query';
 import type { DiscoveryResult, DiscoverySource } from '@shared/catalog';
 import { detailKeys } from '@shared/query';
 
@@ -10,10 +10,7 @@ import {
 import { fetchTallyingOutcome } from '@features/detail/core/detailHealth';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
-import {
-  useDetailFetchEnabled,
-  useContentFetchRetry,
-} from '@features/detail/core/useDetailFetchGate';
+import { useContentFetchRetry } from '@features/detail/core/useContentFetchRetry';
 
 type UseRelatedTracksParams = {
   sources: DiscoverySource[];
@@ -36,16 +33,19 @@ function fetchRelated(
   );
 }
 
-function useRelatedTracksQuery(scSource: DiscoverySource | null, isFetchEnabled: boolean) {
+function relatedTracksOptions(port: DetailPort, scSource: DiscoverySource | null) {
+  return {
+    queryKey: detailKeys.relatedTracks(scSource?.external_id ?? ''),
+    queryFn: ({ signal }: QueryFunctionContext) => fetchRelated(port, scSource, signal),
+    enabled: scSource !== null,
+    staleTime: DETAIL_CONTENT_STALE_MS,
+  };
+}
+
+function useRelatedTracksQuery(scSource: DiscoverySource | null) {
   const port = useDetailPort();
   const retry = useContentFetchRetry();
-  return useQuery({
-    queryKey: detailKeys.relatedTracks(scSource?.external_id ?? ''),
-    queryFn: ({ signal }) => fetchRelated(port, scSource, signal),
-    enabled: isFetchEnabled && scSource !== null,
-    staleTime: DETAIL_CONTENT_STALE_MS,
-    retry,
-  });
+  return useQuery({ ...relatedTracksOptions(port, scSource), retry });
 }
 
 type RelatedTracksQuery = ReturnType<typeof useRelatedTracksQuery>;
@@ -66,6 +66,5 @@ function relatedTracksResult(query: RelatedTracksQuery): UseRelatedTracksReturn 
 
 export function useRelatedTracks({ sources }: UseRelatedTracksParams): UseRelatedTracksReturn {
   const scSource = sources.find((s) => s.provider === 'soundcloud') ?? null;
-  const isFetchEnabled = useDetailFetchEnabled();
-  return relatedTracksResult(useRelatedTracksQuery(scSource, isFetchEnabled));
+  return relatedTracksResult(useRelatedTracksQuery(scSource));
 }

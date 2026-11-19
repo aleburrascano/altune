@@ -14,11 +14,7 @@ import { resolveEntityQuery } from '@features/detail/core/resolveEntityQuery';
 import { realPhotoUrl } from '@features/detail/core/artistPhoto';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
-import {
-  useDetailFetchEnabled,
-  useGatedRefetch,
-  useContentFetchRetry,
-} from '@features/detail/core/useDetailFetchGate';
+import { useContentFetchRetry } from '@features/detail/core/useContentFetchRetry';
 
 type ReadQueryFields<T> = Pick<
   UseQueryResult<T>,
@@ -159,28 +155,26 @@ export function useAlbumDiscovery({
   artist: string | null;
   enabled: boolean;
 }) {
-  const isFetchEnabled = useDetailFetchEnabled();
   const port = useDetailPort();
-  const canFetch = enabled && isFetchEnabled;
 
   const { searchResult, isSearching, searchFailure, refetchSearch } = useAlbumSearch({
     albumTitle,
     artist,
-    canFetch,
+    canFetch: enabled,
     port,
   });
   const { tracks, isLoadingTracks, tracksFailure, refetchTracks } = useDiscoveredAlbumTracks({
     searchResult,
-    canFetch,
+    canFetch: enabled,
     port,
   });
 
   const failure = searchFailure ?? tracksFailure;
 
-  const refetch = useGatedRefetch(() => {
+  function refetch(): void {
     void refetchSearch();
     void refetchTracks();
-  });
+  }
 
   return {
     tracks,
@@ -205,15 +199,13 @@ export function useArtistDiscovery({
   artistName: string;
   enabled: boolean;
 }) {
-  const isFetchEnabled = useDetailFetchEnabled();
   const port = useDetailPort();
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     ...resolveEntityQuery('artist', artistName, 1, port),
-    enabled: enabled && isFetchEnabled,
+    enabled,
   });
   const searchResult = data?.[0] ?? null;
-  const retrySearch = useGatedRefetch(refetch);
 
   useLoggedSearchFailure(error, { kind: 'artist', title: artistName, artist: null });
 
@@ -221,6 +213,6 @@ export function useArtistDiscovery({
     ...artistSearchFields(searchResult),
     isLoading,
     isError,
-    refetch: retrySearch,
+    refetch: () => void refetch(),
   };
 }

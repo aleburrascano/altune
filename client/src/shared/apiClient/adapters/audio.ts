@@ -56,18 +56,7 @@ export async function recoverAudio(trackId: TrackId): Promise<void> {
   });
 }
 
-let prefetchEnabled = true;
-
-export function isAudioPrefetchEnabled(): boolean {
-  return prefetchEnabled;
-}
-
 const AUDIO_URLS_TIMEOUT_MS = 2500;
-
-interface AudioUrlsResponse {
-  urls: ResolvedAudioUrl[];
-  prefetchEnabled: boolean | undefined;
-}
 
 function decodeTrackId(value: unknown, at: string): TrackId {
   const parsed = parseTrackId(asString(value, at));
@@ -84,31 +73,22 @@ function decodeResolvedAudioUrl(value: unknown, at: string): ResolvedAudioUrl {
   };
 }
 
-function decodeAudioUrls(value: unknown, at: string): AudioUrlsResponse {
+function decodeAudioUrls(value: unknown, at: string): ResolvedAudioUrl[] {
   const r = asRecord(value, at);
-  return {
-    urls: asArray(r.urls, `${at}.urls`).map((item, i) =>
-      decodeResolvedAudioUrl(item, `${at}.urls[${i}]`),
-    ),
-    prefetchEnabled: typeof r.prefetch_enabled === 'boolean' ? r.prefetch_enabled : undefined,
-  };
+  return asArray(r.urls, `${at}.urls`).map((item, i) =>
+    decodeResolvedAudioUrl(item, `${at}.urls[${i}]`),
+  );
 }
 
 function postAudioUrls(trackIds: string[], signal: AbortSignal): Promise<unknown> {
   return apiSend('/v1/audio-urls', 'POST', { track_ids: trackIds }, { signal });
 }
 
-function acceptAudioUrls(body: unknown): ResolvedAudioUrl[] {
-  const decoded = decodeAudioUrls(body, 'audio-urls');
-  if (decoded.prefetchEnabled !== undefined) prefetchEnabled = decoded.prefetchEnabled;
-  return decoded.urls;
-}
-
 export async function fetchAudioUrls(trackIds: string[]): Promise<ResolvedAudioUrl[]> {
   if (trackIds.length === 0) return [];
   const deadline = startDeadline(undefined, AUDIO_URLS_TIMEOUT_MS);
   try {
-    return acceptAudioUrls(await postAudioUrls(trackIds, deadline.signal));
+    return decodeAudioUrls(await postAudioUrls(trackIds, deadline.signal), 'audio-urls');
   } finally {
     deadline.release();
   }

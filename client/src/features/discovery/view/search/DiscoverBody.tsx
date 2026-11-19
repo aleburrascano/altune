@@ -5,7 +5,6 @@ import { BlendedSection } from '@features/discovery/view/results/BlendedSection'
 import {
   DiscoverFullError,
   DiscoverSkeleton,
-  DiscoverUnavailable,
   DiscoverZeroResults,
 } from '@features/discovery/view/search/DiscoverBodyStates';
 import { FilterChips } from '@features/discovery/view/results/FilterChips';
@@ -172,7 +171,6 @@ export function DiscoverBody(props: DiscoverBodyProps): ReactElement {
   const { view, searchData, resultsIncomplete } = props.results;
   const count = searchData?.results.length ?? 0;
   useAnnounceChange(searchAnnouncement(view, count, resultsIncomplete));
-  if (view === 'unavailable') return <DiscoverUnavailable />;
   return (
     <AsyncSection view={asyncViewForDiscoverView(view)} {...slotsFor(props)}>
       <ReadyBody {...props} />

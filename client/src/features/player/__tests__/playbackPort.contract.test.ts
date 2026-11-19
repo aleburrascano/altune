@@ -17,10 +17,6 @@ const T1 = asTrackId('t1');
 const T1_AUDIO = { url: 'https://cdn.test/t1.mp3', version: 'v1' };
 const LYRICS = { plain: 'la la', synced_lines: [], writers: [], copyright: 'c' };
 
-interface PlaybackWorld {
-  prefetchEnabled?: boolean;
-}
-
 function queueState(trackIds: string[]): QueueStateResponse {
   return {
     track_ids: trackIds,
@@ -33,7 +29,7 @@ function queueState(trackIds: string[]): QueueStateResponse {
   };
 }
 
-function servePlaybackOverHttp({ prefetchEnabled = true }: PlaybackWorld): PlaybackPort {
+function servePlaybackOverHttp(): PlaybackPort {
   let saved: unknown;
   global.fetch = ((url: string, init?: RequestInit) => {
     const path =
@@ -43,10 +39,7 @@ function servePlaybackOverHttp({ prefetchEnabled = true }: PlaybackWorld): Playb
     const method = String(init?.method ?? 'GET').toUpperCase();
     if (method === 'POST' && path === AUDIO_URLS_PATH) {
       __http.replyOnce(`POST ${path}`, {
-        json: {
-          urls: [{ track_id: 't1', ...T1_AUDIO }],
-          prefetch_enabled: prefetchEnabled,
-        },
+        json: { urls: [{ track_id: 't1', ...T1_AUDIO }] },
       });
     } else if (method === 'PUT' && path === QUEUE_PATH) {
       saved = JSON.parse(String(init?.body));
@@ -61,36 +54,29 @@ function servePlaybackOverHttp({ prefetchEnabled = true }: PlaybackWorld): Playb
   return httpPlaybackPort;
 }
 
-async function restoreHttpPrefetchFlag(): Promise<void> {
-  servePlaybackOverHttp({ prefetchEnabled: true });
-  await httpPlaybackPort.fetchAudioUrls(['t1']);
-}
-
 beforeEach(async () => {
   __http.reset();
   await signInTestUser();
 });
 
-afterEach(async () => {
-  await restoreHttpPrefetchFlag();
+afterEach(() => {
   global.fetch = fakeFetch;
 });
 
-describe.each<[string, (world: PlaybackWorld) => PlaybackPort, boolean]>([
+describe.each<[string, () => PlaybackPort, boolean]>([
   [
     'createMemoryPlaybackPort',
-    (world) =>
+    () =>
       createMemoryPlaybackPort({
         audioUrls: { t1: T1_AUDIO },
         lyrics: { Known: LYRICS },
-        ...world,
       }),
     false,
   ],
   ['httpPlaybackPort over HTTP', servePlaybackOverHttp, true],
 ])('%s satisfies the PlaybackPort contract', (_name, portFor, overHttp) => {
   it('serves no urls and sends no request for an empty list', async () => {
-    const port = portFor({});
+    const port = portFor();
 
     await expect(port.fetchAudioUrls([])).resolves.toEqual([]);
 
@@ -98,22 +84,13 @@ describe.each<[string, (world: PlaybackWorld) => PlaybackPort, boolean]>([
   });
 
   it('serves the url and version of a requested track', async () => {
-    const port = portFor({});
+    const port = portFor();
 
     await expect(port.fetchAudioUrls(['t1'])).resolves.toEqual([{ trackId: 't1', ...T1_AUDIO }]);
   });
 
-  it('reports prefetch enabled until a fetch reports it disabled', async () => {
-    const port = portFor({ prefetchEnabled: false });
-    expect(port.isAudioPrefetchEnabled()).toBe(true);
-
-    await port.fetchAudioUrls(['t1']);
-
-    expect(port.isAudioPrefetchEnabled()).toBe(false);
-  });
-
   it('serves back the saved queue state and replaces it on a second save', async () => {
-    const port = portFor({});
+    const port = portFor();
     const a = queueState(['t1']);
     const b = queueState(['t2', 't3']);
 
@@ -125,19 +102,19 @@ describe.each<[string, (world: PlaybackWorld) => PlaybackPort, boolean]>([
   });
 
   it('rejects lyrics for an unknown title', async () => {
-    const port = portFor({});
+    const port = portFor();
 
     await expect(port.getLyrics({ title: 'Unknown' })).rejects.toBeDefined();
   });
 
   it('rejects recovery of an unknown track', async () => {
-    const port = portFor({});
+    const port = portFor();
 
     await expect(port.recoverAudio(asTrackId('unknown'))).rejects.toBeDefined();
   });
 
   it('builds the audio stream url from the track id', () => {
-    const port = portFor({});
+    const port = portFor();
 
     expect(port.audioStreamUrl(T1)).toMatch(/\/v1\/tracks\/t1\/audio$/);
   });

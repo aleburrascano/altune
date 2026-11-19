@@ -1,6 +1,5 @@
-import { renderHook, waitFor, act } from '@testing-library/react-native';
+import { renderHook, waitFor } from '@testing-library/react-native';
 import type { DiscoveryResult } from '@shared/catalog';
-import { applyKillSwitches } from '@shared/killSwitch';
 
 import { useResolveMissingSources } from '@features/detail';
 import { createMemoryDetailPort } from '@testing/fakes/detail/inMemoryDetailPort';
@@ -162,20 +161,5 @@ describe('useResolveMissingSources', () => {
         { kind: 'track', title: 'Karma Police', subtitle: 'Radiohead', error: 'network down' },
       ]),
     );
-  });
-
-  it('does not query while the detail kill switch is off, and queries once it is back on', async () => {
-    const { port, searches } = seeded([]);
-    act(() => applyKillSwitches({ detail_enrichment_enabled: false }));
-    const { result } = renderHook(() => useResolveMissingSources(track()), {
-      wrapper: wrapperFor(port),
-    });
-
-    expect(searches).toEqual([]);
-    expect(result.current.isResolving).toBe(false);
-
-    act(() => applyKillSwitches({ detail_enrichment_enabled: true }));
-
-    await waitFor(() => expect(searches).toHaveLength(1));
   });
 });
