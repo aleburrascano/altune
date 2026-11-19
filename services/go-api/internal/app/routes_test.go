@@ -159,12 +159,17 @@ func TestRouter_SSEPerFrameDeadlineReachesConnection(t *testing.T) {
 
 func productionRouter(t *testing.T) *chi.Mux {
 	t.Helper()
+	return productionRouterFor(t, &config.Config{MusicDir: t.TempDir()})
+}
+
+func productionRouterFor(t *testing.T, cfg *config.Config) *chi.Mux {
+	t.Helper()
 	pool, err := pgxpool.New(context.Background(), blackHoleDatabase(t))
 	if err != nil {
 		t.Fatalf("pgxpool.New: %v", err)
 	}
 	t.Cleanup(pool.Close)
-	a := &App{cfg: &config.Config{MusicDir: t.TempDir()}, sem: make(chan struct{}, 1), pool: pool}
+	a := &App{cfg: cfg, sem: make(chan struct{}, 1), pool: pool}
 	cat, err := a.wireCatalog(t.Context(), nil, &discovery.Discovery{})
 	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
@@ -203,6 +208,32 @@ func TestRouter_MountsNoAdminRoute(t *testing.T) {
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/health", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("GET /admin/health = %d, want 404", rec.Code)
+	}
+}
+
+func TestRouter_MountsNoTestLoginInDevelopment(t *testing.T) {
+	r := productionRouterFor(t, &config.Config{Env: "development", MusicDir: t.TempDir()})
+
+	var observed int
+	err := chi.Walk(r, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		if strings.HasPrefix(route, "/test") {
+			t.Errorf("%s %s: the test-login backdoor is gone and no route may come back under /test", method, route)
+		}
+		if strings.HasPrefix(route, "/observe/") {
+			observed++
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk production router: %v", err)
+	}
+	if observed == 0 {
+		t.Fatal("walked no /observe route, so the router under test is not the production one")
+	}
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/test/login", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("POST /test/login = %d, want 404", rec.Code)
 	}
 }
 

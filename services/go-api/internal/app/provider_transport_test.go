@@ -2,16 +2,13 @@ package app
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/egress"
 	"context"
 	"errors"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"syscall"
 	"testing"
 )
@@ -93,72 +90,5 @@ func TestDiscoveryClientRefusesARedirectToTheMetadataAddress(t *testing.T) {
 	}
 	if !errors.Is(err, egress.ErrNonPublicAddr) {
 		t.Errorf("error = %v, want the non-public address refusal", err)
-	}
-}
-
-type warnRecorder struct {
-	mu      sync.Mutex
-	records []slog.Record
-}
-
-func (h *warnRecorder) Enabled(context.Context, slog.Level) bool { return true }
-
-func (h *warnRecorder) Handle(_ context.Context, r slog.Record) error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.records = append(h.records, r.Clone())
-	return nil
-}
-
-func (h *warnRecorder) WithAttrs([]slog.Attr) slog.Handler { return h }
-
-func (h *warnRecorder) WithGroup(string) slog.Handler { return h }
-
-func (h *warnRecorder) warnsNaming(flag string) []map[string]string {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	var out []map[string]string
-	for _, r := range h.records {
-		attrs := map[string]string{}
-		r.Attrs(func(a slog.Attr) bool {
-			attrs[a.Key] = a.Value.String()
-			return true
-		})
-		if r.Level == slog.LevelWarn && attrs["flag"] == flag {
-			out = append(out, attrs)
-		}
-	}
-	return out
-}
-
-func recordWarnings(t *testing.T) *warnRecorder {
-	t.Helper()
-	rec := &warnRecorder{}
-	prev := slog.Default()
-	slog.SetDefault(slog.New(rec))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return rec
-}
-
-func TestWarnIgnoredStartupOptIns_NamesEachIgnoredHook(t *testing.T) {
-	cases := []struct {
-		name string
-		cfg  config.Config
-		flag string
-		want int
-	}{
-		{"test auth in production", config.Config{Env: "production", TestAuthOptIn: true}, "TEST_AUTH_ENABLED", 1},
-		{"test auth off", config.Config{Env: "production"}, "TEST_AUTH_ENABLED", 0},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			rec := recordWarnings(t)
-
-			warnIgnoredStartupOptIns(t.Context(), &tc.cfg)
-
-			if got := len(rec.warnsNaming(tc.flag)); got != tc.want {
-				t.Fatalf("got %d %s warnings, want %d", got, tc.flag, tc.want)
-			}
-		})
 	}
 }

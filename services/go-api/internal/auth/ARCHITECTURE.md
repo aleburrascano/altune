@@ -5,4 +5,4 @@ The auth bounded context (`services/go-api/internal/auth/`) verifies bearer toke
 - `domain/` — token vocabulary: `VerifiedToken`, `TokenRejectReason`, `InvalidTokenError`, plus `ErrTokenExpired`, an alias of `requestuser.ErrTokenExpired`.
 - `ports/` — what the module needs from outside: `TokenVerifier`, `AuthMetrics` and `TokenRevoker`.
 - `service/` — aliases of the `requestuser` context functions, kept until the last caller imports `requestuser` itself.
-- `adapters/` — `middleware/` is the HTTP gate with the throttle (`RequireUserID` and `ClientKey` there are aliases of `requestuser`); `providers/` verifies Supabase JWTs against the JWKS; `metrics/` counts outcomes in expvar; `testauth/` is the test-login verifier.
+- `adapters/` — `middleware/` is the HTTP gate with the throttle (`RequireUserID` and `ClientKey` there are aliases of `requestuser`); `providers/` verifies Supabase JWTs against the JWKS; `metrics/` counts outcomes in expvar.
