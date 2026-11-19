@@ -14,9 +14,7 @@ type EvalRunner func(ctx context.Context) (EvalResult, error)
 
 func (a *App) keepSearches(disc *discovery.Discovery) {
 	a.searchSvc = disc.Search
-	if a.cfg.EvalMeterEnabled {
-		a.evalSearch = disc.RankingOnlySearch()
-	}
+	a.evalSearch = disc.RankingOnlySearch()
 }
 
 func (a *App) buildEvalRunner() EvalRunner {

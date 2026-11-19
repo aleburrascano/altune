@@ -33,9 +33,9 @@ func (a *App) wireObserve(ctx context.Context, r *chi.Mux, verifier auth.TokenVe
 func (a *App) startObserveSources(ctx context.Context, tap *observe.EventTap) {
 	a.eventFeed = observe.NewEventFeed()
 	a.eventFeed.Start(ctx, tap)
-	a.evalMeter = observe.NewEvalMeter(a.cfg.EvalMeterEnabled, 0, a.evalMeterRunner()).
+	a.evalMeter = observe.NewEvalMeter(0, a.evalMeterRunner()).
 		WithLeadership(a.leaderContext)
-	a.whenLeaderUnlessDisabled(jobEvalMeter, a.evalMeter.Start)
+	a.whenLeader(jobEvalMeter, a.evalMeter.Start)
 }
 
 func mountObserve(r chi.Router, verifier auth.TokenVerifier, principalID string, h *observe.Handler) {

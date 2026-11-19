@@ -138,7 +138,7 @@ func TestEvalMeter_LeadershipHandoff_RunsOnlyDuringItsTerm(t *testing.T) {
 	defer cancel()
 
 	var runs atomic.Int32
-	meter := observe.NewEvalMeter(true, leaderLoopTick, func(context.Context) (observe.EvalMeterResult, error) {
+	meter := observe.NewEvalMeter(leaderLoopTick, func(context.Context) (observe.EvalMeterResult, error) {
 		runs.Add(1)
 		return observe.EvalMeterResult{}, nil
 	}).WithLeadership(a.leaderContext)
@@ -157,7 +157,7 @@ func TestEvalMeter_LeadershipLostMidRun_RunIsCutOff(t *testing.T) {
 
 	started := make(chan struct{})
 	stoppedBecause := make(chan error, 1)
-	meter := observe.NewEvalMeter(true, time.Hour, func(runCtx context.Context) (observe.EvalMeterResult, error) {
+	meter := observe.NewEvalMeter(time.Hour, func(runCtx context.Context) (observe.EvalMeterResult, error) {
 		close(started)
 		<-runCtx.Done()
 		stoppedBecause <- context.Cause(runCtx)

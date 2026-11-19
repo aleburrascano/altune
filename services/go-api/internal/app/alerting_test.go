@@ -39,49 +39,28 @@ func (f *fakeCoverageEvents) ZeroResultQueries(_ context.Context, _ time.Time, l
 func TestBuildCoverageCondition(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("breach beyond the top-1000 cap still fires (undercount regression)", func(t *testing.T) {
-		rows := make([]discovery.QueryCount, 1500)
-		for i := range rows {
-			rows[i] = discovery.QueryCount{QueryNorm: "q", Count: 1}
-		}
-		events := &fakeCoverageEvents{topN: rows, total: 1500}
-
-		cappedSum := 0
-		list, _ := events.ZeroResultQueries(ctx, time.Time{}, 1000)
-		for _, r := range list {
-			cappedSum += r.Count
-		}
-		if cappedSum >= 1200 {
-			t.Fatalf("capped sum = %d, want < 1200 so the old code would miss the breach", cappedSum)
-		}
-
-		cond, _ := buildCoverageConditions(events, 1200)
-		alert := cond.Eval(ctx)
-		if alert == nil {
-			t.Fatalf("alert did not fire: true total %d breaches threshold 1200 but capped sum %d hid it", events.total, cappedSum)
+	t.Run("fires on the true total even when the listed queries sum below the threshold", func(t *testing.T) {
+		events := &fakeCoverageEvents{topN: []discovery.QueryCount{{QueryNorm: "q", Count: 1}}, total: 25}
+		gap, _ := buildCoverageConditions(events)
+		if alert := gap.Eval(ctx); alert == nil {
+			t.Fatalf("alert did not fire: true total %d meets the threshold but the listed queries sum to 1", events.total)
 		}
 	})
 
-	t.Run("true total below threshold does not fire", func(t *testing.T) {
-		events := &fakeCoverageEvents{
-			topN:  []discovery.QueryCount{{QueryNorm: "rare", Count: 3}},
-			total: 3,
-		}
-		gap, _ := buildCoverageConditions(events, 10)
+	t.Run("24 zero-result searches do not fire", func(t *testing.T) {
+		events := &fakeCoverageEvents{topN: []discovery.QueryCount{{QueryNorm: "rare", Count: 3}}, total: 24}
+		gap, _ := buildCoverageConditions(events)
 		if alert := gap.Eval(ctx); alert != nil {
-			t.Fatalf("alert fired with total %d below threshold 10: %+v", events.total, alert)
+			t.Fatalf("alert fired with total %d below the threshold of 25: %+v", events.total, alert)
 		}
 	})
 
-	t.Run("true total at threshold fires", func(t *testing.T) {
-		events := &fakeCoverageEvents{
-			topN:  []discovery.QueryCount{{QueryNorm: "missing band", Count: 42}},
-			total: 50,
-		}
-		gap, _ := buildCoverageConditions(events, 50)
+	t.Run("25 zero-result searches fire", func(t *testing.T) {
+		events := &fakeCoverageEvents{topN: []discovery.QueryCount{{QueryNorm: "missing band", Count: 20}}, total: 25}
+		gap, _ := buildCoverageConditions(events)
 		alert := gap.Eval(ctx)
 		if alert == nil {
-			t.Fatalf("alert did not fire at total == threshold")
+			t.Fatal("alert did not fire at total == 25")
 		}
 		if alert.Title != "altune discovery coverage gap" {
 			t.Errorf("title = %q", alert.Title)
@@ -95,7 +74,7 @@ func TestBuildCoverageCondition_MessageExcludesQueryText(t *testing.T) {
 		topN:  []discovery.QueryCount{{QueryNorm: query, Count: 42}},
 		total: 50,
 	}
-	gap, _ := buildCoverageConditions(events, 10)
+	gap, _ := buildCoverageConditions(events)
 	alert := gap.Eval(context.Background())
 	if alert == nil {
 		t.Fatal("alert did not fire above threshold")
@@ -105,7 +84,7 @@ func TestBuildCoverageCondition_MessageExcludesQueryText(t *testing.T) {
 			t.Fatalf("alert leaks query text %q: title=%q message=%q", fragment, alert.Title, alert.Message)
 		}
 	}
-	for _, want := range []string{"50", "10", "42"} {
+	for _, want := range []string{"50", "25", "42"} {
 		if !strings.Contains(alert.Message, want) {
 			t.Errorf("message %q lost count %s", alert.Message, want)
 		}
@@ -127,7 +106,7 @@ func TestBuildCoverageConditions_QueryFailureIsNotHealthy(t *testing.T) {
 
 	t.Run("persistent failure escalates to its own signal", func(t *testing.T) {
 		events := &fakeCoverageEvents{totalErr: errors.New("relation zero_result does not exist")}
-		gap, queryFailing := buildCoverageConditions(events, 10)
+		gap, queryFailing := buildCoverageConditions(events)
 
 		for i := 1; i < coverageQueryFailureEscalation; i++ {
 			if fired := evalTick(ctx, gap, queryFailing); len(fired) != 0 {
@@ -151,7 +130,7 @@ func TestBuildCoverageConditions_QueryFailureIsNotHealthy(t *testing.T) {
 
 	t.Run("failure while a gap is firing does not resolve the gap", func(t *testing.T) {
 		events := &fakeCoverageEvents{total: 50}
-		gap, queryFailing := buildCoverageConditions(events, 10)
+		gap, queryFailing := buildCoverageConditions(events)
 		if evalTick(ctx, gap, queryFailing)[gap.Key] == nil {
 			t.Fatal("gap did not fire above threshold")
 		}
@@ -163,7 +142,7 @@ func TestBuildCoverageConditions_QueryFailureIsNotHealthy(t *testing.T) {
 
 	t.Run("a successful query resets the failure streak", func(t *testing.T) {
 		events := &fakeCoverageEvents{totalErr: errors.New("timeout")}
-		gap, queryFailing := buildCoverageConditions(events, 10)
+		gap, queryFailing := buildCoverageConditions(events)
 		for range coverageQueryFailureEscalation {
 			evalTick(ctx, gap, queryFailing)
 		}
@@ -254,6 +233,44 @@ func TestJobFailingCondition(t *testing.T) {
 	}
 }
 
+func TestStartAlertMonitor_RegistersToStartWhenLeader(t *testing.T) {
+	a := &App{cfg: &config.Config{}}
+	a.startAlertMonitor(context.Background())
+
+	registered := false
+	for _, job := range a.backgroundStarts {
+		registered = registered || job.name == jobAlertMonitor
+	}
+	if !registered {
+		t.Error("the alert monitor is not registered to start when leader")
+	}
+}
+
+func TestAlertConditions_AlwaysWatchCoverage(t *testing.T) {
+	a := &App{cfg: &config.Config{}}
+	conditions := a.alertConditions(&fakeCoverageEvents{total: 25})
+
+	byKey := map[string]observe.Condition{}
+	for _, c := range conditions {
+		byKey[c.Key] = c
+	}
+	want := []string{"dependency_down", "coverage_zero_result", "coverage_query_failing"}
+	for _, name := range alertableJobs {
+		want = append(want, "job_failing:"+string(name))
+	}
+	if len(conditions) != len(want) {
+		t.Fatalf("got %d conditions, want %d: %v", len(conditions), len(want), want)
+	}
+	for _, key := range want {
+		if _, ok := byKey[key]; !ok {
+			t.Errorf("condition %q missing", key)
+		}
+	}
+	if byKey["coverage_zero_result"].Eval(context.Background()) == nil {
+		t.Error("the coverage condition does not read the events it was given")
+	}
+}
+
 func TestStartAlertMonitor_NotifierFollowsWebhookConfig(t *testing.T) {
 	t.Run("webhook url set builds a real notifier", func(t *testing.T) {
 		a := &App{cfg: &config.Config{AlertWebhookURL: "http://127.0.0.1:1/alerts"}}
@@ -320,7 +337,7 @@ func TestAlertableJobs_PinnedInOrder(t *testing.T) {
 }
 
 func TestAlertableJobs_ExclusionsAreExplicit(t *testing.T) {
-	excluded := map[jobName]bool{jobEvalMeter: true, jobAlertMonitor: true, jobStreamRecovery: true}
+	excluded := map[jobName]bool{jobStreamRecovery: true}
 	alertable := map[jobName]bool{}
 	for _, name := range alertableJobs {
 		alertable[name] = true
