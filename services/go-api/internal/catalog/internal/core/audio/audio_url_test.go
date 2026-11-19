@@ -1,31 +1,27 @@
-package audio
+package audio_test
 
 import (
-	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/internal/core/ports"
+	"altune/go-api/internal/catalog"
 	"context"
 	"errors"
 	"testing"
 	"time"
 )
 
+const audioURLLifetime = time.Hour
+
 type recordingSigner struct {
-	*catalogtest.AudioStore
+	*catalog.InMemoryAudioStore
 	ttls []time.Duration
+	err  error
+}
+
+func newRecordingSigner() *recordingSigner {
+	return &recordingSigner{InMemoryAudioStore: catalog.NewInMemoryAudioStore()}
 }
 
 func (s *recordingSigner) PresignGet(_ context.Context, audioRef string, ttl time.Duration) (string, error) {
 	s.ttls = append(s.ttls, ttl)
-	return "https://signed.example/" + audioRef, nil
-}
-
-type stubSigner struct {
-	*catalogtest.AudioStore
-	err error
-}
-
-func (s stubSigner) PresignGet(_ context.Context, audioRef string, _ time.Duration) (string, error) {
 	if s.err != nil {
 		return "", s.err
 	}
@@ -34,15 +30,15 @@ func (s stubSigner) PresignGet(_ context.Context, audioRef string, _ time.Durati
 
 func TestAudioURLService_Resolve(t *testing.T) {
 	ctx := context.Background()
-	userId := catalogtest.UserId()
+	userId := catalog.FixtureUserId()
 
 	t.Run("ready tracks get signed urls, non-streamable are skipped", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
-		ready := catalogtest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
-		pending := catalogtest.SeedTrack(t, repo, userId, "Pending", "Artist", "Album")
-		svc := NewAudioURLService(repo, stubSigner{AudioStore: catalogtest.NewAudioStore()})
+		repo := catalog.NewInMemoryTrackRepo()
+		ready := catalog.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
+		pending := catalog.SeedTrack(t, repo, userId, "Pending", "Artist", "Album")
+		svc := catalog.NewAudioURLService(repo, newRecordingSigner())
 
-		out, err := svc.Resolve(ctx, userId, []domain.TrackId{ready.ID, pending.ID})
+		out, err := svc.Resolve(ctx, userId, []catalog.TrackId{ready.ID, pending.ID})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -67,11 +63,11 @@ func TestAudioURLService_Resolve(t *testing.T) {
 	})
 
 	t.Run("a re-acquired track resolves under a new version so a cached client copy stops matching", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
-		ready := catalogtest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
-		svc := NewAudioURLService(repo, stubSigner{AudioStore: catalogtest.NewAudioStore()})
+		repo := catalog.NewInMemoryTrackRepo()
+		ready := catalog.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
+		svc := catalog.NewAudioURLService(repo, newRecordingSigner())
 
-		before, err := svc.Resolve(ctx, userId, []domain.TrackId{ready.ID})
+		before, err := svc.Resolve(ctx, userId, []catalog.TrackId{ready.ID})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -83,7 +79,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 			t.Fatalf("update: %v", err)
 		}
 
-		after, err := svc.Resolve(ctx, userId, []domain.TrackId{ready.ID})
+		after, err := svc.Resolve(ctx, userId, []catalog.TrackId{ready.ID})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -96,15 +92,15 @@ func TestAudioURLService_Resolve(t *testing.T) {
 	})
 
 	t.Run("a track acquired before the column existed resolves with an empty version", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
-		ready := catalogtest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
+		repo := catalog.NewInMemoryTrackRepo()
+		ready := catalog.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
 		ready.AudioVersion = ""
 		if err := repo.Update(ctx, ready, ready.Version); err != nil {
 			t.Fatalf("update: %v", err)
 		}
-		svc := NewAudioURLService(repo, stubSigner{AudioStore: catalogtest.NewAudioStore()})
+		svc := catalog.NewAudioURLService(repo, newRecordingSigner())
 
-		out, err := svc.Resolve(ctx, userId, []domain.TrackId{ready.ID})
+		out, err := svc.Resolve(ctx, userId, []catalog.TrackId{ready.ID})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -117,11 +113,11 @@ func TestAudioURLService_Resolve(t *testing.T) {
 	})
 
 	t.Run("no signer returns nothing (client proxies)", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
-		ready := catalogtest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
-		svc := NewAudioURLService(repo, catalogtest.NewAudioStore())
+		repo := catalog.NewInMemoryTrackRepo()
+		ready := catalog.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
+		svc := catalog.NewAudioURLService(repo, catalog.NewInMemoryAudioStore())
 
-		out, err := svc.Resolve(ctx, userId, []domain.TrackId{ready.ID})
+		out, err := svc.Resolve(ctx, userId, []catalog.TrackId{ready.ID})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -131,12 +127,14 @@ func TestAudioURLService_Resolve(t *testing.T) {
 	})
 
 	t.Run("presign failure skips only that track and increments the failure metric", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
-		ready := catalogtest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
-		metrics := &catalogtest.Metrics{}
-		svc := NewAudioURLService(repo, stubSigner{AudioStore: catalogtest.NewAudioStore(), err: errors.New("boom")}, WithAudioURLMetrics(metrics))
+		repo := catalog.NewInMemoryTrackRepo()
+		ready := catalog.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
+		metrics := &catalog.InMemoryAudioStoreMetrics{}
+		signer := newRecordingSigner()
+		signer.err = errors.New("boom")
+		svc := catalog.NewAudioURLService(repo, signer, catalog.WithAudioURLMetrics(metrics))
 
-		out, err := svc.Resolve(ctx, userId, []domain.TrackId{ready.ID})
+		out, err := svc.Resolve(ctx, userId, []catalog.TrackId{ready.ID})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -148,69 +146,40 @@ func TestAudioURLService_Resolve(t *testing.T) {
 		}
 	})
 
-	t.Run("expires_at is exactly one ttl past the injected clock", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
-		ready := catalogtest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
+	t.Run("each url is signed for one hour and expires one hour past the injected clock", func(t *testing.T) {
+		repo := catalog.NewInMemoryTrackRepo()
+		ready := catalog.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
 		pinned := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
-		svc := NewAudioURLService(repo, stubSigner{AudioStore: catalogtest.NewAudioStore()},
-			WithAudioURLClock(func() time.Time { return pinned }))
+		signer := newRecordingSigner()
+		svc := catalog.NewAudioURLService(repo, signer, catalog.WithAudioURLClock(func() time.Time { return pinned }))
 
-		out, err := svc.Resolve(ctx, userId, []domain.TrackId{ready.ID})
+		out, err := svc.Resolve(ctx, userId, []catalog.TrackId{ready.ID})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		want := pinned.Add(audioURLTTL)
-		if len(out) != 1 {
-			t.Fatalf("expected 1 url, got %d", len(out))
+		if len(signer.ttls) != 1 || signer.ttls[0] != audioURLLifetime {
+			t.Fatalf("signer ttls = %v, want [%s]", signer.ttls, audioURLLifetime)
 		}
-		if !out[0].ExpiresAt.Equal(want) {
-			t.Errorf("expires_at = %v, want exactly %v", out[0].ExpiresAt, want)
-		}
-	})
-
-	t.Run("a ttl above the ceiling is clamped before signing and in the advertised expiry", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
-		ready := catalogtest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
-		signer := &recordingSigner{AudioStore: catalogtest.NewAudioStore()}
-		svc := NewAudioURLService(repo, signer)
-		svc.ttl = 30 * 24 * time.Hour
-
-		out, err := svc.Resolve(ctx, userId, []domain.TrackId{ready.ID})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(signer.ttls) != 1 || signer.ttls[0] != ports.MaxPresignTTL {
-			t.Fatalf("signer ttls = %v, want [%s]", signer.ttls, ports.MaxPresignTTL)
-		}
-		if len(out) != 1 || out[0].ExpiresAt.After(time.Now().Add(ports.MaxPresignTTL)) {
-			t.Errorf("resolved = %+v, want one url expiring no later than now+%s", out, ports.MaxPresignTTL)
+		if len(out) != 1 || !out[0].ExpiresAt.Equal(pinned.Add(audioURLLifetime)) {
+			t.Errorf("resolved = %+v, want one url expiring exactly at %v", out, pinned.Add(audioURLLifetime))
 		}
 	})
 }
 
-func TestApplyOptions_NoOptionsKeepsDefaults(t *testing.T) {
-	s := NewAudioURLService(nil, nil)
-	if s.ttl != audioURLTTL {
-		t.Fatalf("ttl = %v, want default %v", s.ttl, audioURLTTL)
-	}
-}
-
-func TestApplyOptions_ANilClockKeepsTheWallClock(t *testing.T) {
-	clocks := map[string]func() time.Time{
-		"audio url": NewAudioURLService(nil, nil, WithAudioURLClock(nil)).now,
-	}
+func TestAudioURLService_ANilClockKeepsTheWallClock(t *testing.T) {
+	repo := catalog.NewInMemoryTrackRepo()
+	userId := catalog.FixtureUserId()
+	ready := catalog.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
+	svc := catalog.NewAudioURLService(repo, newRecordingSigner(), catalog.WithAudioURLClock(nil))
 
 	before := time.Now()
-	for name, now := range clocks {
-		if got := now(); got.Before(before) {
-			t.Errorf("%s clock = %v, want the wall clock at or after %v", name, got, before)
-		}
-	}
-}
+	out, err := svc.Resolve(context.Background(), userId, []catalog.TrackId{ready.ID})
+	after := time.Now()
 
-func TestApplyOptions_ConstructorOptionOverridesDefault(t *testing.T) {
-	s := NewAudioURLService(nil, nil, func(s *AudioURLService) { s.ttl = time.Second })
-	if s.ttl != time.Second {
-		t.Fatalf("ttl = %v, want 1s", s.ttl)
+	if err != nil || len(out) != 1 {
+		t.Fatalf("Resolve = %+v, %v; want one url", out, err)
+	}
+	if got := out[0].ExpiresAt; got.Before(before.Add(audioURLLifetime)) || got.After(after.Add(audioURLLifetime)) {
+		t.Errorf("expires_at = %v, want one hour past the wall clock (%v to %v)", got, before, after)
 	}
 }

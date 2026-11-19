@@ -22,14 +22,13 @@ type ResolvedAudioURL struct {
 type AudioURLService struct {
 	trackRepo ports.TrackBatchGetter
 	signer    ports.AudioURLSigner
-	ttl       time.Duration
 	metrics   ports.AudioStoreMetrics
 	now       func() time.Time
 }
 
 func NewAudioURLService(trackRepo ports.TrackBatchGetter, store ports.AudioStore, opts ...func(*AudioURLService)) *AudioURLService {
 	signer, _ := store.(ports.AudioURLSigner)
-	s := &AudioURLService{trackRepo: trackRepo, signer: signer, ttl: audioURLTTL, metrics: ports.NoopAudioStoreMetrics(), now: time.Now}
+	s := &AudioURLService{trackRepo: trackRepo, signer: signer, metrics: ports.NoopAudioStoreMetrics(), now: time.Now}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -68,8 +67,7 @@ func (s *AudioURLService) Resolve(ctx context.Context, userId shared.UserId, tra
 		byID[t.ID] = t
 	}
 
-	ttl := ports.ClampPresignTTL(s.ttl)
-	expiresAt := s.now().Add(ttl)
+	expiresAt := s.now().Add(audioURLTTL)
 	out := make([]ResolvedAudioURL, 0, len(trackIds))
 	presignStart := time.Now()
 	for _, id := range trackIds {
@@ -78,7 +76,7 @@ func (s *AudioURLService) Resolve(ctx context.Context, userId shared.UserId, tra
 			continue
 		}
 
-		url, err := s.signer.PresignGet(ctx, *track.AudioRef, ttl)
+		url, err := s.signer.PresignGet(ctx, *track.AudioRef, audioURLTTL)
 		if err != nil {
 			s.metrics.PresignFailed()
 			slog.WarnContext(ctx, "audio_url.presign_failed", "track_id", id.String(), "error", err)
