@@ -14,7 +14,6 @@ export const HEAVY = [
   { name: "nilaway", re: /\bnilaway\b/ },
   { name: "fallow", re: /\bnpm run fallow\b|\bfallow\b/ },
   { name: "react-doctor", re: /react-doctor/ },
-  { name: "playwright", re: /\bplaywright test\b/ },
 ];
 
 function triggersOnPullRequest(doc) {

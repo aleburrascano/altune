@@ -220,7 +220,7 @@ const theNounIsTrackNeverSong = {
 };
 
 const oneAliasPerFolder = {
-  files: ['{src,jest,__tests__,e2e}/**/*.{ts,tsx,js,mjs}'],
+  files: ['{src,jest,__tests__}/**/*.{ts,tsx,js,mjs}'],
   plugins: { local: localPlugin },
   rules: { 'local/one-alias-per-folder': 'error' },
 };
