@@ -10,7 +10,7 @@ roots() {
 }
 if [ "${1:-}" = roots ]; then roots; exit; fi
 kit=node_modules/.bin/module-spec
-[ -x "$kit" ] || { echo "module-spec: not installed here. Run pnpm install at the repo root (it fetches the private kit from gitea, so it needs a gitea login)." >&2; exit 3; }
+[ -x "$kit" ] || { echo "module-spec: not installed here. Run pnpm install at the repo root (it fetches the kit from gitea)." >&2; exit 3; }
 [ $# -gt 0 ] || { echo "usage: bash scripts/module-spec.sh <roots|check|baseline|api|affected|mutate|report> [flags]. Runs it in every code root that has a module-spec.json." >&2; exit 2; }
 
 list=$(roots)
