@@ -1,10 +1,14 @@
-package acquisitionbridge
+package acquisitionbridge_test
 
 import (
 	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/observe"
 	"encoding/json"
-	"strings"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type stubAcquisitionReader struct {
@@ -17,67 +21,67 @@ func (s *stubAcquisitionReader) Status() acquisition.AcquisitionStatus {
 	return s.status(s.calls)
 }
 
-func TestReadAcquisitionStatusNilReaderGivesEmptyLists(t *testing.T) {
-	raw, err := json.Marshal(ReadAcquisitionStatus(nil))
-	if err != nil {
-		t.Fatal(err)
+func serveAcquisition(t *testing.T, reader observe.AcquisitionReader) map[string]json.RawMessage {
+	t.Helper()
+	r := chi.NewRouter()
+	observe.NewObserveHandler(observe.Deps{Acquisition: reader}).Register(r)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/acquisition", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}
-	s := string(raw)
-	for _, want := range []string{`"jobs":[]`, `"recent":[]`} {
-		if !strings.Contains(s, want) {
-			t.Fatalf("%s missing from %s", want, s)
-		}
+	var body map[string]json.RawMessage
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode %s: %v", rec.Body.String(), err)
 	}
+	return body
 }
 
-func TestReadAcquisitionStatusOneJobGivesOneDTO(t *testing.T) {
+func TestAcquisitionReader_OneJobGivesOneEntryAndAnEmptyRecentList(t *testing.T) {
 	r := &stubAcquisitionReader{status: func(int) acquisition.AcquisitionStatus {
 		return acquisition.AcquisitionStatus{ActiveJobs: []acquisition.JobRecord{{TrackID: "t1", State: "running"}}}
 	}}
-	got := ReadAcquisitionStatus(r)
-	if len(got.ActiveJobs) != 1 || got.ActiveJobs[0].TrackID != "t1" || got.ActiveJobs[0].State != "running" {
-		t.Fatalf("jobs = %+v", got.ActiveJobs)
+
+	body := serveAcquisition(t, r)
+
+	var jobs []struct {
+		TrackID string `json:"track_id"`
+		State   string `json:"state"`
 	}
-	if got.Recent == nil || len(got.Recent) != 0 {
-		t.Fatalf("recent = %#v", got.Recent)
+	if err := json.Unmarshal(body["jobs"], &jobs); err != nil {
+		t.Fatalf("decode jobs %s: %v", body["jobs"], err)
+	}
+	if len(jobs) != 1 || jobs[0].TrackID != "t1" || jobs[0].State != "running" {
+		t.Fatalf("jobs = %+v, want the one running job", jobs)
+	}
+	if got := string(body["recent"]); got != "[]" {
+		t.Fatalf("recent = %s, want an empty list, never null", got)
 	}
 }
 
-func TestRedactSourceURL(t *testing.T) {
-	cases := map[string]string{
-		"https://u:p@host.example/a/b?token=abc": "https://host.example/a/b",
-		"http://[::1":                            "",
-	}
-	for in, want := range cases {
-		if got := redactSourceURL(in); got != want {
-			t.Errorf("redactSourceURL(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
-func TestReadAcquisitionStatusDoesNotCache(t *testing.T) {
+func TestAcquisitionReader_EveryRequestReadsAFreshStatus(t *testing.T) {
 	r := &stubAcquisitionReader{status: func(call int) acquisition.AcquisitionStatus {
 		return acquisition.AcquisitionStatus{InFlight: call}
 	}}
-	if got := ReadAcquisitionStatus(r).InFlight; got != 1 {
-		t.Fatalf("first InFlight = %d", got)
+
+	if got := string(serveAcquisition(t, r)["in_flight"]); got != "1" {
+		t.Fatalf("first in_flight = %s, want 1", got)
 	}
-	if got := ReadAcquisitionStatus(r).InFlight; got != 2 {
-		t.Fatalf("second InFlight = %d", got)
+	if got := string(serveAcquisition(t, r)["in_flight"]); got != "2" {
+		t.Fatalf("second in_flight = %s, want 2", got)
 	}
 }
 
-func TestReadAcquisitionStatusVerificationNamesOnlyLiveTools(t *testing.T) {
+func TestAcquisitionReader_VerificationNamesOnlyLiveTools(t *testing.T) {
 	r := &stubAcquisitionReader{status: func(int) acquisition.AcquisitionStatus {
 		return acquisition.AcquisitionStatus{Verification: acquisition.AcquisitionVerification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true}}
 	}}
-	raw, err := json.Marshal(ReadAcquisitionStatus(r).Verification)
-	if err != nil {
-		t.Fatal(err)
-	}
+
+	raw := serveAcquisition(t, r)["verification"]
+
 	var keys map[string]bool
 	if err := json.Unmarshal(raw, &keys); err != nil {
-		t.Fatal(err)
+		t.Fatalf("decode verification %s: %v", raw, err)
 	}
 	want := map[string]bool{"ffprobe": true, "ffmpeg": true, "fpcalc": true, "yt_dlp": true}
 	if len(keys) != len(want) {

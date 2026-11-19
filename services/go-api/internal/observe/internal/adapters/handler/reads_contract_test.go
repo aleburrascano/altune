@@ -1,9 +1,9 @@
-package handler
+package handler_test
 
 import (
 	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/observe/service/evalmeter"
+	"altune/go-api/internal/observe"
 	"altune/go-api/internal/shared/reqmetrics"
 	"context"
 	"testing"
@@ -12,22 +12,22 @@ import (
 
 func TestContract_MetricsLiveMatchesFixture(t *testing.T) {
 	reqmetrics.Observe("/v1/tracks/{trackId}", 5*time.Millisecond, 200)
-	deps := Deps{LiveMetrics: func() LiveMetrics {
-		return LiveMetrics{"latency": reqmetrics.ReadSnapshot(), "providers": discovery.ReadProviderMetricsSnapshot()}
+	deps := observe.Deps{LiveMetrics: func() observe.LiveMetrics {
+		return observe.LiveMetrics{"latency": reqmetrics.ReadSnapshot(), "providers": discovery.ReadProviderMetricsSnapshot()}
 	}}
 	rec := serveRead(t, deps, "/metrics/live")
 	assertMatchesFixture(t, "observe_metrics_live.json", rec.Body.Bytes())
 }
 
 func TestContract_EvalMatchesFixture(t *testing.T) {
-	runner := func(context.Context) (evalmeter.Result, error) {
-		return evalmeter.Result{
+	runner := func(context.Context) (observe.EvalMeterResult, error) {
+		return observe.EvalMeterResult{
 			Score:    0.9,
 			Baseline: 0.8,
-			Queries:  []evalmeter.QueryResult{{Query: "q", Expect: "e", Passed: true, Position: 1}},
+			Queries:  []observe.EvalMeterQueryResult{{Query: "q", Expect: "e", Passed: true, Position: 1}},
 		}, nil
 	}
-	meter := evalmeter.New(true, time.Hour, runner)
+	meter := observe.NewEvalMeter(true, time.Hour, runner)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	meter.Start(ctx)
@@ -39,7 +39,7 @@ func TestContract_EvalMatchesFixture(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 
-	rec := serveRead(t, Deps{Eval: meter}, "/eval")
+	rec := serveRead(t, observe.Deps{Eval: meter}, "/eval")
 	assertMatchesFixture(t, "observe_eval.json", rec.Body.Bytes())
 }
 
@@ -47,7 +47,7 @@ func TestContract_AcquisitionMatchesFixture(t *testing.T) {
 	reader := fakeAcquisitionReader{status: acquisition.AcquisitionStatus{
 		InFlight: 1, Succeeded: 2, Failed: 3, Rejected: 4, QueueDepth: 5, Workers: 6,
 	}}
-	rec := serveRead(t, Deps{Acquisition: reader}, "/acquisition")
+	rec := serveRead(t, observe.Deps{Acquisition: reader}, "/acquisition")
 	assertMatchesFixture(t, "observe_acquisition.json", rec.Body.Bytes())
 }
 
@@ -63,6 +63,6 @@ func TestContract_QualityMatchesFixture(t *testing.T) {
 		}},
 		suspect: discovery.DiscographySuspectRate{Rate: 0.5, LastSample: seen},
 	}
-	rec := serveRead(t, Deps{Discography: reader}, "/quality/discography")
+	rec := serveRead(t, observe.Deps{Discography: reader}, "/quality/discography")
 	assertMatchesFixture(t, "observe_quality_discography.json", rec.Body.Bytes())
 }

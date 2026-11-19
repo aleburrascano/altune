@@ -16,8 +16,6 @@ func (h *Handler) registerReads(r chi.Router) {
 	r.Get("/quality/discography", h.serveDiscographyQuality)
 }
 
-type acquisitionStatusDTO = acquisitionbridge.AcquisitionStatusDTO
-
 func (h *Handler) serveAcquisition(w http.ResponseWriter, _ *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, acquisitionbridge.ReadAcquisitionStatus(h.deps.Acquisition))
 }

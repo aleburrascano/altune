@@ -100,10 +100,7 @@ func redactSourceURL(raw string) string {
 
 func ReadAcquisitionStatus(reader AcquisitionReader) AcquisitionStatusDTO {
 	if reader == nil {
-		return newAcquisitionStatusDTO(acquisition.AcquisitionStatus{
-			ActiveJobs: []acquisition.JobRecord{},
-			Recent:     []acquisition.JobRecord{},
-		})
+		return newAcquisitionStatusDTO(acquisition.AcquisitionStatus{})
 	}
 	return newAcquisitionStatusDTO(reader.Status())
 }

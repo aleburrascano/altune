@@ -1,4 +1,4 @@
-package handler
+package handler_test
 
 import (
 	"altune/go-api/internal/shared/events"

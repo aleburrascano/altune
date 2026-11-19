@@ -45,7 +45,6 @@ type Meter struct {
 	last    *Result
 	lastRun time.Time
 	lastErr string
-	running bool
 
 	runloop.Background
 }
@@ -105,10 +104,6 @@ func (m *Meter) tick(ctx context.Context) {
 }
 
 func (m *Meter) runOnce(ctx context.Context) {
-	if !m.claimRunSlotIfIdle() {
-		return
-	}
-	defer m.releaseRunSlot()
 	res, err := m.runContained(ctx)
 	m.recordRun(ctx, res, err)
 }
@@ -151,22 +146,6 @@ const (
 	StateRegression State = "regression"
 	StateError      State = "error"
 )
-
-func (m *Meter) claimRunSlotIfIdle() bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.running {
-		return false
-	}
-	m.running = true
-	return true
-}
-
-func (m *Meter) releaseRunSlot() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.running = false
-}
 
 type Status struct {
 	Enabled  bool          `json:"enabled"`

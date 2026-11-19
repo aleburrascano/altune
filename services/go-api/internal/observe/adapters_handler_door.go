@@ -11,12 +11,14 @@ type (
 	Handler           = handler.Handler
 	LiveMetrics       = handler.LiveMetrics
 	LiveMetricsSource = handler.LiveMetricsSource
+	StreamBounds      = handler.StreamBounds
 )
 
 var (
-	Gate              = handler.Gate
-	NewObserveHandler = handler.NewObserveHandler
-	NoStoreAndNosniff = handler.NoStoreAndNosniff
+	DefaultStreamBounds = handler.DefaultStreamBounds
+	Gate                = handler.Gate
+	NewObserveHandler   = handler.NewObserveHandler
+	NoStoreAndNosniff   = handler.NoStoreAndNosniff
 )
 
 const (

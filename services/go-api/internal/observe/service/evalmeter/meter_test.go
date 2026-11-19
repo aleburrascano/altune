@@ -1,6 +1,7 @@
-package evalmeter
+package evalmeter_test
 
 import (
+	"altune/go-api/internal/observe"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,138 +10,233 @@ import (
 	"time"
 )
 
+const runWait = 2 * time.Second
+
+type runs struct {
+	begin chan bool
+	ended chan struct{}
+}
+
+func (r *runs) scope(ctx context.Context) (context.Context, context.CancelFunc, bool) {
+	select {
+	case cancelTerm := <-r.begin:
+		termCtx, cancel := context.WithCancel(ctx)
+		if cancelTerm {
+			cancel()
+		}
+		return termCtx, func() {
+			cancel()
+			r.ended <- struct{}{}
+		}, true
+	case <-ctx.Done():
+		return ctx, func() {}, false
+	}
+}
+
+func (r *runs) start(t *testing.T, cancelTerm bool) {
+	t.Helper()
+	select {
+	case r.begin <- cancelTerm:
+	case <-time.After(runWait):
+		t.Fatalf("no eval tick started within %s", runWait)
+	}
+	select {
+	case <-r.ended:
+	case <-time.After(runWait):
+		t.Fatalf("eval tick did not finish within %s", runWait)
+	}
+}
+
+func (r *runs) step(t *testing.T) {
+	t.Helper()
+	r.start(t, false)
+}
+
+func (r *runs) assertNoTickStarts(t *testing.T, why string) {
+	t.Helper()
+	select {
+	case r.begin <- false:
+		<-r.ended
+		t.Fatal(why)
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func newMeter(runner observe.EvalMeterRunner) (*observe.EvalMeter, *runs) {
+	r := &runs{begin: make(chan bool), ended: make(chan struct{}, 1)}
+	return observe.NewEvalMeter(true, time.Millisecond, runner).WithLeadership(r.scope), r
+}
+
+func start(t *testing.T, m *observe.EvalMeter) {
+	t.Helper()
+	ctx, stop := context.WithCancel(context.Background())
+	m.Start(ctx)
+	t.Cleanup(func() {
+		stop()
+		m.Shutdown(context.Background())
+	})
+}
+
+func steppedMeter(t *testing.T, runner observe.EvalMeterRunner) (*observe.EvalMeter, *runs) {
+	t.Helper()
+	m, r := newMeter(runner)
+	start(t, m)
+	return m, r
+}
+
+func returning(res observe.EvalMeterResult, err error) observe.EvalMeterRunner {
+	return func(context.Context) (observe.EvalMeterResult, error) { return res, err }
+}
+
+func wireState(t *testing.T, m *observe.EvalMeter) string {
+	t.Helper()
+	raw, err := json.Marshal(m.Status())
+	if err != nil {
+		t.Fatalf("marshal status: %v", err)
+	}
+	var body struct {
+		State string `json:"state"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatalf("decode %s: %v", raw, err)
+	}
+	return body.State
+}
+
+func meterAfterOneRun(t *testing.T, res observe.EvalMeterResult, err error) *observe.EvalMeter {
+	t.Helper()
+	m, r := steppedMeter(t, returning(res, err))
+	r.step(t)
+	return m
+}
+
 func TestStatus_MarshalsEachStateAsItsWireString(t *testing.T) {
-	wire := map[State]string{
-		StateDisabled:   `"state":"disabled"`,
-		StateNoData:     `"state":"no_data"`,
-		StateOK:         `"state":"ok"`,
-		StateRegression: `"state":"regression"`,
-		StateError:      `"state":"error"`,
+	meters := map[string]*observe.EvalMeter{
+		"disabled":   observe.NewEvalMeter(false, 0, nil),
+		"no_data":    observe.NewEvalMeter(true, 0, returning(observe.EvalMeterResult{}, nil)),
+		"ok":         meterAfterOneRun(t, observe.EvalMeterResult{Score: 0.9, Baseline: 0.8}, nil),
+		"regression": meterAfterOneRun(t, observe.EvalMeterResult{Score: 0.7, Baseline: 0.8, Regressed: true}, nil),
+		"error":      meterAfterOneRun(t, observe.EvalMeterResult{}, errors.New("provider unreachable")),
 	}
 
-	for state, want := range wire {
-		got, err := json.Marshal(Status{State: state})
-		if err != nil {
-			t.Fatalf("marshal %v: %v", state, err)
-		}
-		if !strings.Contains(string(got), want) {
-			t.Errorf("status json = %s, want %s in it", got, want)
+	for want, m := range meters {
+		if got := wireState(t, m); got != want {
+			t.Errorf("state = %q, want %q", got, want)
 		}
 	}
 }
 
 func TestMeter_DisabledState(t *testing.T) {
-	m := New(false, 0, nil)
-	if st := m.Status(); st.State != StateDisabled || st.Enabled {
+	m := observe.NewEvalMeter(false, 0, nil)
+	if st := m.Status(); st.State != "disabled" || st.Enabled {
 		t.Fatalf("status = %+v, want disabled/!enabled", st)
 	}
 }
 
 func TestMeter_NoDataBeforeFirstRun(t *testing.T) {
-	m := New(true, 0, func(context.Context) (Result, error) {
-		return Result{}, nil
-	})
-	if st := m.Status(); st.State != StateNoData {
+	m := observe.NewEvalMeter(true, 0, returning(observe.EvalMeterResult{}, nil))
+	if st := m.Status(); st.State != "no_data" {
 		t.Fatalf("state = %q, want no_data before any run", st.State)
 	}
 }
 
 func TestMeter_OkAndRegression(t *testing.T) {
-	m := New(true, 0, func(context.Context) (Result, error) {
-		return Result{Score: 0.81, Baseline: 0.80, Regressed: false}, nil
-	})
-	m.runOnce(context.Background())
+	m := meterAfterOneRun(t, observe.EvalMeterResult{Score: 0.81, Baseline: 0.80}, nil)
 	st := m.Status()
-	if st.State != StateOK || st.Score == nil || *st.Score != 0.81 {
-		t.Fatalf("status = %+v, want ok with score 0.81", st)
+	if st.State != "ok" || st.Score == nil || *st.Score != 0.81 || st.Baseline == nil || *st.Baseline != 0.80 {
+		t.Fatalf("status = %+v, want ok with score 0.81 and baseline 0.80", st)
+	}
+	if st.LastRun == nil {
+		t.Errorf("status = %+v, want the last run time", st)
 	}
 
-	m2 := New(true, 0, func(context.Context) (Result, error) {
-		return Result{Score: 0.70, Baseline: 0.80, Regressed: true}, nil
-	})
-	m2.runOnce(context.Background())
-	if st := m2.Status(); st.State != StateRegression {
+	m2 := meterAfterOneRun(t, observe.EvalMeterResult{Score: 0.70, Baseline: 0.80, Regressed: true}, nil)
+	if st := m2.Status(); st.State != "regression" {
 		t.Fatalf("state = %q, want regression", st.State)
 	}
 }
 
+func TestMeter_StatusCarriesTheQueries(t *testing.T) {
+	queries := []observe.EvalMeterQueryResult{{Query: "q", Expect: "e", Passed: true, Position: 1}}
+	m := meterAfterOneRun(t, observe.EvalMeterResult{Score: 0.9, Baseline: 0.8, Queries: queries}, nil)
+
+	if got := m.Status().Queries; len(got) != 1 || got[0] != queries[0] {
+		t.Errorf("queries = %+v, want %+v", got, queries)
+	}
+}
+
 func TestMeter_ErrorState(t *testing.T) {
-	m := New(true, 0, func(context.Context) (Result, error) {
-		return Result{}, errors.New("provider unreachable")
-	})
-	m.runOnce(context.Background())
-	if st := m.Status(); st.State != StateError || st.Error == "" {
-		t.Fatalf("status = %+v, want error state", st)
+	m := meterAfterOneRun(t, observe.EvalMeterResult{}, errors.New("provider unreachable"))
+	if st := m.Status(); st.State != "error" || st.Error != "provider unreachable" || st.LastRun == nil {
+		t.Fatalf("status = %+v, want error state with the message and run time", st)
 	}
 }
 
 func TestMeter_StatusSurfacesErroredQueryCount(t *testing.T) {
-	m := New(true, 0, func(context.Context) (Result, error) {
-		return Result{Score: 0.60, Baseline: 0.80, Regressed: false, Errored: 2}, nil
-	})
-	m.runOnce(context.Background())
+	m := meterAfterOneRun(t, observe.EvalMeterResult{Score: 0.60, Baseline: 0.80, Errored: 2}, nil)
 
 	st := m.Status()
 	if st.Errored != 2 {
 		t.Errorf("Errored = %d, want 2", st.Errored)
 	}
-	if st.State == StateRegression {
+	if st.State == "regression" {
 		t.Error("a sub-baseline score with errored queries must not read as a regression")
 	}
 }
 
-func TestMeter_RunnerTimeoutSurfacesAsFailure(t *testing.T) {
-	m := New(true, 0, func(ctx context.Context) (Result, error) {
-		<-ctx.Done()
-		return Result{}, ctx.Err()
+func TestMeter_RunnerRunsUnderAFiveMinuteDeadline(t *testing.T) {
+	var remaining time.Duration
+	var hasDeadline bool
+	m, r := steppedMeter(t, func(ctx context.Context) (observe.EvalMeterResult, error) {
+		var deadline time.Time
+		deadline, hasDeadline = ctx.Deadline()
+		remaining = time.Until(deadline)
+		return observe.EvalMeterResult{}, context.DeadlineExceeded
 	})
-	m.runTimeout = 20 * time.Millisecond
 
-	done := make(chan struct{})
-	go func() {
-		m.runOnce(context.Background())
-		close(done)
-	}()
+	r.step(t)
 
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("runOnce hung on a blocking runner; the scheduler is stalled")
+	if !hasDeadline {
+		t.Fatal("runner ran with no deadline, so a blocking runner would stall the scheduler")
 	}
-	if st := m.Status(); st.State != StateError {
+	if remaining <= 4*time.Minute || remaining > 5*time.Minute {
+		t.Errorf("runner deadline %v away, want just under 5m", remaining)
+	}
+	if st := m.Status(); st.State != "error" {
 		t.Fatalf("state = %q, want error after a runner timeout", st.State)
 	}
 }
 
 func TestMeter_PausedTickSkipsRun(t *testing.T) {
 	calls := 0
-	m := New(true, 0, func(context.Context) (Result, error) {
+	m, r := newMeter(func(context.Context) (observe.EvalMeterResult, error) {
 		calls++
-		return Result{Score: 0.9, Baseline: 0.8}, nil
+		return observe.EvalMeterResult{Score: 0.9, Baseline: 0.8}, nil
 	})
 
 	m.Pause()
-	m.tick(context.Background())
-	if calls != 0 {
-		t.Fatalf("runner calls = %d, want 0 while paused", calls)
+	start(t, m)
+	r.assertNoTickStarts(t, "an eval tick started while the meter was paused")
+	if !m.Status().Paused || calls != 0 {
+		t.Fatalf("paused = %v, runner calls = %d, want paused with no runs", m.Status().Paused, calls)
 	}
 
 	m.Resume()
-	m.tick(context.Background())
+	r.step(t)
 	if calls != 1 {
 		t.Fatalf("runner calls = %d, want 1 after resume", calls)
 	}
 }
 
 func TestMeter_PanickingRunnerSurfacesAsError(t *testing.T) {
-	m := New(true, 0, func(context.Context) (Result, error) {
+	m, r := steppedMeter(t, func(context.Context) (observe.EvalMeterResult, error) {
 		panic("scorer dereferenced a nil provider")
 	})
 
-	m.runOnce(context.Background())
+	r.step(t)
 
 	st := m.Status()
-	if st.State != StateError {
+	if st.State != "error" {
 		t.Fatalf("state = %q, want error after a panicking runner", st.State)
 	}
 	if !strings.Contains(st.Error, "scorer dereferenced a nil provider") {
@@ -150,63 +246,40 @@ func TestMeter_PanickingRunnerSurfacesAsError(t *testing.T) {
 
 func TestMeter_RunAfterAPanicExecutes(t *testing.T) {
 	calls := 0
-	m := New(true, 0, func(context.Context) (Result, error) {
+	m, r := steppedMeter(t, func(context.Context) (observe.EvalMeterResult, error) {
 		calls++
 		if calls == 1 {
 			panic("scorer dereferenced a nil provider")
 		}
-		return Result{Score: 0.9, Baseline: 0.8}, nil
+		return observe.EvalMeterResult{Score: 0.9, Baseline: 0.8}, nil
 	})
 
-	m.runOnce(context.Background())
-	m.runOnce(context.Background())
+	r.step(t)
+	r.step(t)
 
 	if calls != 2 {
 		t.Fatalf("runner calls = %d, want 2 (the run slot was not released)", calls)
 	}
-	if st := m.Status(); st.State != StateOK {
+	if st := m.Status(); st.State != "ok" {
 		t.Fatalf("state = %q, want ok once a later run succeeds", st.State)
-	}
-}
-
-func TestMeter_SkipIfRunning(t *testing.T) {
-	started := make(chan struct{})
-	release := make(chan struct{})
-	calls := 0
-	m := New(true, 0, func(context.Context) (Result, error) {
-		calls++
-		close(started)
-		<-release
-		return Result{}, nil
-	})
-
-	go m.runOnce(context.Background())
-	<-started
-	m.runOnce(context.Background())
-	close(release)
-
-	if calls != 1 {
-		t.Fatalf("runner calls = %d, want 1 (second skipped)", calls)
 	}
 }
 
 func TestMeter_CancelledRunKeepsLastGoodResult(t *testing.T) {
 	calls := 0
-	m := New(true, 0, func(ctx context.Context) (Result, error) {
+	m, r := steppedMeter(t, func(ctx context.Context) (observe.EvalMeterResult, error) {
 		calls++
 		if calls == 1 {
-			return Result{Score: 0.81, Baseline: 0.80}, nil
+			return observe.EvalMeterResult{Score: 0.81, Baseline: 0.80}, nil
 		}
-		return Result{}, ctx.Err()
+		return observe.EvalMeterResult{}, ctx.Err()
 	})
-	m.runOnce(context.Background())
 
-	cancelled, cancel := context.WithCancel(context.Background())
-	cancel()
-	m.runOnce(cancelled)
+	r.step(t)
+	r.start(t, true)
 
 	st := m.Status()
-	if st.State != StateOK || st.Error != "" || st.Score == nil || *st.Score != 0.81 {
-		t.Fatalf("status = %+v, want ok with the last good score after a cancelled run", st)
+	if calls != 2 || st.State != "ok" || st.Error != "" || st.Score == nil || *st.Score != 0.81 {
+		t.Fatalf("calls = %d, status = %+v, want ok with the last good score after a cancelled run", calls, st)
 	}
 }
