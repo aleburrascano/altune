@@ -1,4 +1,4 @@
-package middleware_test
+package auth_test
 
 import (
 	"altune/go-api/internal/auth"
@@ -166,7 +166,7 @@ func TestMiddleware_ValidToken(t *testing.T) {
 	var capturedUID shared.UserId
 	var uidFound bool
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		capturedUID, uidFound = auth.UserIDFromContext(r.Context())
+		capturedUID, uidFound = requestuser.UserIDFromContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	})
 

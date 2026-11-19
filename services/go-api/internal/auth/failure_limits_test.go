@@ -1,9 +1,10 @@
-package middleware_test
+package auth_test
 
 import (
 	"altune/go-api/internal/auth"
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"testing"
 	"time"
@@ -135,4 +136,62 @@ func TestFailureThrottle_ExhaustedClientSurvivesEvictionChurn(t *testing.T) {
 	if admitted(handler, attacker) {
 		t.Fatal("exhausted client got a fresh burst after eviction churn")
 	}
+}
+
+func TestFailureThrottle_PruningRefilledClientsSparesAPartlySpentOneFromLaterEviction(t *testing.T) {
+	handler, clock := limitedMiddleware(auth.FailureLimits{Burst: 2, Refill: time.Hour, MaxClients: 100})
+	for i := range 15 {
+		admitted(handler, clientAddr(i))
+	}
+	clock.advance(2 * time.Hour)
+	const partlySpent = "203.0.113.9:1"
+	admitted(handler, partlySpent)
+	clock.advance(30 * time.Minute)
+	for i := range 84 {
+		admitted(handler, clientAddr(100+i))
+	}
+	for i := range 11 {
+		admitted(handler, clientAddr(200+i))
+	}
+
+	if !admitted(handler, partlySpent) || admitted(handler, partlySpent) {
+		t.Fatal("the partly spent client got a fresh burst: it was evicted while 15 refilled clients could have been pruned")
+	}
+}
+
+func TestFailureThrottle_NoClientIsForgottenBelowCapacity(t *testing.T) {
+	handler, clock := limitedMiddleware(auth.FailureLimits{Burst: 2, Refill: time.Hour, MaxClients: 100})
+	const early = "203.0.113.10:1"
+	admitted(handler, early)
+	clock.advance(30 * time.Minute)
+	for i := range 94 {
+		admitted(handler, clientAddr(i))
+	}
+
+	if !admitted(handler, early) || admitted(handler, early) {
+		t.Fatal("with 95 of 100 slots in use, the early client lost its spent token: a client was evicted below capacity")
+	}
+}
+
+func churnAddr(i int) string {
+	return fmt.Sprintf("10.%d.%d.%d:4444", i>>16&255, i>>8&255, i&255)
+}
+
+func BenchmarkFailureThrottle_BenignChurn(b *testing.B) { benchmarkChurn(b, 3*time.Second) }
+
+func BenchmarkFailureThrottle_AttackChurn(b *testing.B) { benchmarkChurn(b, 0) }
+
+func benchmarkChurn(b *testing.B, step time.Duration) {
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.DiscardHandler))
+	b.Cleanup(func() { slog.SetDefault(prev) })
+	handler, clock := limitedMiddleware(auth.FailureLimits{Burst: 20, Refill: 3 * time.Second, MaxClients: 10_000})
+	var worst time.Duration
+	for i := 0; b.Loop(); i++ {
+		clock.advance(step)
+		start := time.Now()
+		serveBearer(handler, churnAddr(i), "garbage")
+		worst = max(worst, time.Since(start))
+	}
+	b.ReportMetric(float64(worst.Microseconds()), "worst-µs")
 }

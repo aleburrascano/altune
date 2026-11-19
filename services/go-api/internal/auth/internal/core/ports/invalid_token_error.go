@@ -1,4 +1,4 @@
-package domain
+package ports
 
 type InvalidTokenError struct {
 	Reason TokenRejectReason

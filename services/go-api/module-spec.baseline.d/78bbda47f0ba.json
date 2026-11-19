@@ -1,0 +1,14 @@
+{
+  "removed": [
+    "B3 internal/auth/adapters/middleware/middleware.go imports net/http",
+    "C12 internal/auth/adapters/middleware/failure_limits.go adapters/middleware/failure_limits.go is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
+    "C12 internal/auth/adapters/middleware/middleware.go adapters/middleware/middleware.go is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
+    "C12 internal/auth/domain/invalid_token_error.go domain/invalid_token_error.go is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
+    "C12 internal/auth/domain/token_expired.go domain/token_expired.go is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
+    "C12 internal/auth/domain/token_reject_reason.go domain/token_reject_reason.go is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
+    "C12 internal/auth/domain/verified_token.go domain/verified_token.go is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
+    "C12 internal/auth/service/request_identity.go service/request_identity.go is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module"
+  ],
+  "added": [],
+  "clones": 0
+}

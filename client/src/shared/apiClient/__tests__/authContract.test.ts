@@ -55,7 +55,7 @@ function extractGoFuncBody(source: string, funcName: string): string {
   const plain = new RegExp(`\\nfunc ${funcName}\\([^)]*\\)[^{]*\\{`);
   const method = new RegExp(`\\nfunc \\([^)]*\\) ${funcName}\\([^)]*\\)[^{]*\\{`);
   const m = plain.exec(source) ?? method.exec(source);
-  if (!m) throw new Error(`func ${funcName} not found in middleware.go`);
+  if (!m) throw new Error(`func ${funcName} not found in the auth middleware source`);
   const braceIdx = m.index + m[0].length - 1;
   const closeIdx = findMatchingBrace(source, braceIdx);
   return source.slice(braceIdx + 1, closeIdx);
@@ -72,20 +72,34 @@ const GO_HTTP_STATUS_CONSTANTS: Record<string, number> = {
   'http.StatusServiceUnavailable': 503,
 };
 
+const MIDDLEWARE_MARKER = /\nfunc (\([^)]*\) )?rejectFailedVerification\(/;
+
+function goSourcesUnder(dir: string): string[] {
+  return fs
+    .readdirSync(dir, { encoding: 'utf8', recursive: true })
+    .filter((file) => file.endsWith('.go') && !file.endsWith('_test.go'))
+    .map((file) => path.join(dir, file));
+}
+
+let foundMiddlewareSource: string | undefined;
+
 function middlewareSource(): string {
-  return fs.readFileSync(
-    path.join(
-      REPO_ROOT!,
-      'services',
-      'go-api',
-      'internal',
-      'auth',
-      'adapters',
-      'middleware',
-      'middleware.go',
-    ),
-    'utf8',
-  );
+  foundMiddlewareSource ??= findMiddlewareSource();
+  return foundMiddlewareSource;
+}
+
+function findMiddlewareSource(): string {
+  const authModule = path.join(REPO_ROOT!, 'services', 'go-api', 'internal', 'auth');
+  const sources = goSourcesUnder(authModule)
+    .map((file) => fs.readFileSync(file, 'utf8'))
+    .filter((source) => MIDDLEWARE_MARKER.test(source));
+  const [source, ...others] = sources;
+  if (source === undefined || others.length > 0) {
+    throw new Error(
+      `expected one Go file under ${authModule} declaring rejectFailedVerification, found ${sources.length}`,
+    );
+  }
+  return source;
 }
 
 function apiClientSource(): string {
@@ -131,7 +145,7 @@ function deriveMobileSessionExpiredStatus(source: string): number {
   return Number(constant![1]);
 }
 
-describe('cross-surface 401 contract, derived from services/go-api/internal/auth/adapters/middleware/middleware.go at test time', () => {
+describe('cross-surface 401 contract, derived from the auth middleware under services/go-api/internal/auth at test time', () => {
   it('finds the repo root to derive the contract from', () => {
     expect(REPO_ROOT).not.toBeNull();
   });

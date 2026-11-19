@@ -1,5 +1,5 @@
 import { ContractError } from '@shared/failure';
-import { parseDiscoveryResult } from '@shared/apiClient/discovery';
+import { parseDiscoveryResult } from '@shared/apiClient/adapters/discovery';
 import { PROVIDER_STATUSES, sourceIdList } from '@shared/catalog';
 import { apiFetch, signalInit, withQuery } from '@shared/apiClient/adapters/http';
 import { LONG_REQUEST_TIMEOUT_MS } from '@shared/apiConfig';
