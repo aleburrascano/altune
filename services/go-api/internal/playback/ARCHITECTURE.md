@@ -23,9 +23,7 @@ user from the shared `internal/shared/requestuser` module.
 |---|---|---|
 | domain | `queue_state.go`, `queue_position.go`, `queue_source.go`, `repeat_mode.go` | Snapshot, position update, source and repeat value types with their validation |
 | domain | `queue_validation_error.go` | `QueueValidationError`, `newValidationError`, the `playback.*` validation codes |
-| domain | `stale_write_error.go` | `StaleWriteError`, `ErrStaleQueueWrite`, `ErrQueuePositionMismatch` (409) |
-| domain | `unavailable_error.go` | `UnavailableError`, `ErrQueueStateUnavailable` (503, `Retry-After: 1`) |
-| ports | `queue_state.go` | `QueueStateRepository`, `ErrCorruptStoredState`, and the `QueueStateMetrics` and `RateLimitMetrics` interfaces with their noops |
+| ports | `queue_state.go`, `stale_write_error.go`, `unavailable_error.go` | `QueueStateRepository`, `ErrCorruptStoredState`, and the `QueueStateMetrics` and `RateLimitMetrics` interfaces with their noops; the repository's error contract is `StaleWriteError` with `ErrStaleQueueWrite` and `ErrQueuePositionMismatch` (409) and `UnavailableError` with `ErrQueueStateUnavailable` (503, `Retry-After: 1`) |
 | ports | `now_playing.go` | `NowPlayingReader`, `NowPlayingTrack`, the `TrackSource` it reads from with `ErrTrackSourceUnavailable`, and the `EnrichmentMetrics` interface with its noop |
 | ports | `erasure.go` | `DeletedIdentityLister`, `OwnerScanPage`, `ErrIdentityStoreUnavailable`, `ErasedStateReaper`, and the `ErasureSweepMetrics` interface with its noop |
 | service | `queue/service.go` | Save, update position, get, enrich the current track |

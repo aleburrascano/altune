@@ -21,28 +21,27 @@ const (
 )
 
 type jobSpec struct {
-	name      jobName
-	alertable bool
+	name       jobName
+	alertable  bool
+	switchable bool
 }
 
 var jobTable = []jobSpec{
-	{jobOrphanedAudioReconcile, true},
-	{jobBehavioralCorpusRefresh, true},
-	{jobDiscographyEventPrune, true},
-	{jobVocabularyRefresh, true},
-	{jobBehavioralRankingRefresh, true},
-	{jobDeletedIdentityErasure, true},
-	{jobAcquisitionSourceCanary, true},
-	{jobStreamRecovery, false},
-	{jobAcquisitionPrune, true},
-	{jobAcquisitionUpgrade, true},
-	{jobUnreleasedRefresh, true},
+	{name: jobOrphanedAudioReconcile, alertable: true, switchable: true},
+	{name: jobBehavioralCorpusRefresh, alertable: true, switchable: true},
+	{name: jobDiscographyEventPrune, alertable: true, switchable: true},
+	{name: jobVocabularyRefresh, alertable: true, switchable: true},
+	{name: jobBehavioralRankingRefresh, alertable: true, switchable: true},
+	{name: jobDeletedIdentityErasure, alertable: true, switchable: false},
+	{name: jobAcquisitionSourceCanary, alertable: true, switchable: true},
+	{name: jobStreamRecovery, alertable: false, switchable: true},
+	{name: jobAcquisitionPrune, alertable: true, switchable: true},
+	{name: jobAcquisitionUpgrade, alertable: true, switchable: true},
+	{name: jobUnreleasedRefresh, alertable: true, switchable: true},
 }
 
-var alwaysOnJobs = map[jobName]bool{jobDeletedIdentityErasure: true}
-
 var (
-	switchableJobNames = jobNamesWhere(func(spec jobSpec) bool { return !alwaysOnJobs[spec.name] })
+	switchableJobNames = jobNamesWhere(func(spec jobSpec) bool { return spec.switchable })
 	alertableJobs      = jobNamesWhere(func(spec jobSpec) bool { return spec.alertable })
 )
 
