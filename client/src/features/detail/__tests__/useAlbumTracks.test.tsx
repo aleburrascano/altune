@@ -179,3 +179,20 @@ describe('useAlbumTracks reopened against the 30-minute content cache window', (
     expect(__http.countFor(CACHED_ALBUM_PATH)).toBe(expectedRequests);
   });
 });
+
+describe('useAlbumTracks refetch', () => {
+  const { act } = require('@testing-library/react-native');
+
+  it('asks the server again when the caller retries', async () => {
+    __http.reply(ALBUM_TRACKS_PATH, { status: 200, json: emptyContent });
+    const { result } = renderHook(
+      () => useAlbumTracks({ provider: 'spotify', externalId: 'album-1' }),
+      { wrapper: createWrapper(createTestQueryClient()) },
+    );
+    await waitFor(() => expect(__http.countFor(ALBUM_TRACKS_PATH)).toBe(1));
+
+    act(() => result.current.refetch());
+
+    await waitFor(() => expect(__http.countFor(ALBUM_TRACKS_PATH)).toBe(2));
+  });
+});

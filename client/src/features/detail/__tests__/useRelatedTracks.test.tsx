@@ -89,3 +89,22 @@ describe('reopening related tracks against the 30-minute content cache window', 
     client.clear();
   });
 });
+
+describe('useRelatedTracks with no SoundCloud source', () => {
+  const { act } = require('@testing-library/react-native');
+
+  it('sends nothing, shows no loading and reports no failure', async () => {
+    await signInTestUser();
+    const { result } = renderHook(
+      () => useRelatedTracks({ sources: [{ provider: 'spotify', external_id: 'sp-1', url: '' }] }),
+      { wrapper: createWrapper(createTestQueryClient()) },
+    );
+    await act(async () => {
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+
+    expect(__http.requests).toHaveLength(0);
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.failure).toBeNull();
+  });
+});

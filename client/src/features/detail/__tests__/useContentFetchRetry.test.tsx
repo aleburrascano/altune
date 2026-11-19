@@ -12,6 +12,11 @@ import {
 } from '@features/detail';
 import { createPortWrapper, signInTestUser } from '@testing/queryHarness';
 import type { DetailPort } from '@features/detail';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+
+beforeEach(() => {
+  recordLogs();
+});
 const { __http } = require('@testing/doubles/fetch.js');
 
 const quietDetailPort: DetailPort = { ...httpDetailPort, warn: () => undefined };

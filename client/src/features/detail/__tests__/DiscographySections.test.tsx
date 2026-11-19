@@ -5,6 +5,11 @@ import { DiscographySections } from '@features/detail';
 import { StyleSheet } from 'react-native';
 import { setPlatformOS } from '@testing/setPlatformOS';
 import { WINDOW_WIDTH, setWindowWidth } from '@testing/setWindowWidth';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+
+beforeEach(() => {
+  recordLogs();
+});
 
 beforeEach(() => {
   setWindowWidth(WINDOW_WIDTH.phone);

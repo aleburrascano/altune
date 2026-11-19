@@ -20,7 +20,7 @@ type EnrichmentParams = {
   title: string;
   subtitle?: string | null | undefined;
   mbid?: string | undefined;
-  enabled?: boolean;
+  enabled: boolean;
 };
 
 type EnrichmentReturn<T> = {
@@ -116,7 +116,7 @@ function enrichmentQueryOptions<T>(request: EnrichmentRequest<T>) {
   return {
     queryKey: enrichmentQueryKey(config, params),
     queryFn: enrichmentQueryFn(request),
-    enabled: (params.enabled ?? true) && hasLookupKey(config, params),
+    enabled: params.enabled && hasLookupKey(config, params),
     staleTime: ENRICHMENT_STALE_TIME,
   };
 }

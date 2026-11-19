@@ -23,6 +23,11 @@ import {
   recordingNavigator,
   type RecordingNavigator,
 } from '@features/detail/__tests__/recordingNavigator';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+
+beforeEach(() => {
+  recordLogs();
+});
 
 let navigator: RecordingNavigator;
 

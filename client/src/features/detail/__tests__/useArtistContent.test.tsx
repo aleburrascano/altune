@@ -429,6 +429,7 @@ describe('useArtistContent with no source to ask', () => {
     });
 
     expect(__http.requests).toHaveLength(0);
+    expect(result.current.isLoading).toBe(false);
     expect(result.current.tracksFailure).toBeNull();
     expect(result.current.albumsFailure).toBeNull();
     expect(queryClient.getQueryState(detailKeys.artistContent('', '', ''))).toBeDefined();
@@ -454,5 +455,35 @@ describe('useArtistContent caches per artist', () => {
 
     const key = detailKeys.artistContent('spotify', 'artist-1', 'spotify:artist-1,applemusic:42');
     expect(queryClient.getQueryState(key)?.status).toBe('success');
+  });
+});
+
+describe('useArtistContent under caller control', () => {
+  const { act } = require('@testing-library/react-native');
+  const spotifyArtist = [{ provider: 'spotify', external_id: 'artist-1', url: '' }];
+  const servedPage = { status: 200, json: { top_tracks: servedList, albums: servedList } };
+
+  it('sends nothing while the caller keeps it disabled', async () => {
+    __http.reply(ARTIST_CONTENT_PATH, servedPage);
+    renderHook(() => useArtistContent({ sources: spotifyArtist, enabled: false }), {
+      wrapper: createWrapper(createTestQueryClient()),
+    });
+    await act(async () => {
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+
+    expect(__http.countFor(ARTIST_CONTENT_PATH)).toBe(0);
+  });
+
+  it('asks the server again when the caller retries', async () => {
+    __http.reply(ARTIST_CONTENT_PATH, servedPage);
+    const { result } = renderHook(() => useArtistContent({ sources: spotifyArtist }), {
+      wrapper: createWrapper(createTestQueryClient()),
+    });
+    await waitFor(() => expect(__http.countFor(ARTIST_CONTENT_PATH)).toBe(1));
+
+    act(() => result.current.refetch());
+
+    await waitFor(() => expect(__http.countFor(ARTIST_CONTENT_PATH)).toBe(2));
   });
 });

@@ -9,6 +9,11 @@ import { asTrackId } from '@shared/catalog';
 
 import { ownedTrack, useResolvedOwnedTrack } from '@features/detail';
 import type { OwnedTrack, TrackIdentity } from '@features/detail';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+
+beforeEach(() => {
+  recordLogs();
+});
 
 const SAVED_ID = asTrackId('saved-1');
 const IDENTITY: TrackIdentity = { title: 'Idioteque', artist: 'Radiohead' };

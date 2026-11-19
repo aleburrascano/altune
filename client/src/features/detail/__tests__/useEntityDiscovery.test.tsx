@@ -10,6 +10,11 @@ import {
   signInTestUser,
 } from '@testing/queryHarness';
 import { freezeDate } from '@testing/freezeDate';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+
+beforeEach(() => {
+  recordLogs();
+});
 
 const CLOCK_START = 1_700_000_000_000;
 

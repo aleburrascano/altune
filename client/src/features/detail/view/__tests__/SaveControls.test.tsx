@@ -28,6 +28,11 @@ import {
   createPlaybackWrapper,
   signInTestUser,
 } from '@testing/queryHarness';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+
+beforeEach(() => {
+  recordLogs();
+});
 
 const { __http } = require('@testing/doubles/fetch.js');
 

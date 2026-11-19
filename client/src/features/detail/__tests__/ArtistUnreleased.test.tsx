@@ -21,6 +21,10 @@ import {
   signInTestUser,
 } from '@testing/queryHarness';
 
+beforeEach(() => {
+  recordLogs();
+});
+
 let navigator: RecordingNavigator;
 
 const { __http } = require('@testing/doubles/fetch.js');
@@ -366,6 +370,16 @@ describe('ArtistUnreleased', () => {
     await waitFor(() => expect(__http.countFor(UNRELEASED)).toBe(SECOND_REQUEST));
     await waitFor(() => expect(screen.queryByTestId('detail-unreleased-retry')).toBeNull());
     expect(screen.queryByTestId('detail-unreleased')).toBeNull();
+  });
+
+  it('asks nothing and offers no retry for an artist with no source', async () => {
+    renderSectionFor({ ...ARTIST, sources: [] });
+    await act(async () => {
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+
+    expect(__http.countFor(UNRELEASED)).toBe(0);
+    expect(screen.queryByTestId('detail-unreleased-retry')).toBeNull();
   });
 
   it('drops the loading hint when the artist has none', async () => {

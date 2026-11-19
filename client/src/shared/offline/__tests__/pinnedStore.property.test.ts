@@ -4,6 +4,7 @@ import { usePinnedStore, provideOfflinePort } from '@shared/offline';
 import { apiClientOfflinePort } from '@testing/apiClientPorts';
 import { asTrackId } from '@shared/catalog';
 import { signInTestUser } from '@testing/signInTestUser';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 
 provideOfflinePort(apiClientOfflinePort);
 
@@ -12,6 +13,7 @@ jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.j
 const { __http } = require('@testing/doubles/fetch.js');
 
 beforeEach(async () => {
+  recordLogs();
   await signInTestUser();
   __http.reply('POST /v1/audio-urls', { json: { urls: [] } });
 });
