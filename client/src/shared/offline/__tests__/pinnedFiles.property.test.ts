@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 import { asTrackId } from '@shared/catalog';
-import { createMemoryFileStore } from '@shared/files';
+import { createMemoryFileStore } from '@testing/fakes/files/inMemoryFileStore';
 import { deleteAllPinned, downloadPinned, formatBytes, setPinnedFileStore } from '@shared/offline';
 
 const PINNED_T1 = 'memory://document/offline-audio/t1';

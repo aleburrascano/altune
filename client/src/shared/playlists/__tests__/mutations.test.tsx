@@ -12,8 +12,8 @@ import {
   useCreatePlaylist,
   useCreatePlaylistWithTracks,
   PlaylistsPortProvider,
-  createMemoryPlaylistsPort,
 } from '@shared/playlists';
+import { createMemoryPlaylistsPort } from '@testing/fakes/playlists/inMemoryPlaylistsPort';
 import { ApiError, ContractError, NetworkError } from '@shared/failure';
 import type { PlaylistsPort } from '@shared/playlists';
 import {

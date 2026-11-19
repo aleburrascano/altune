@@ -1,9 +1,13 @@
 import * as FileSystem from 'expo-file-system';
 
 import { loadPersistedOutbox, persistOutbox, setOutboxFileStore } from '@shared/telemetry';
-import { type StoredDirectory, createMemoryFileStore, type MemoryFileStore } from '@shared/files';
+import { type StoredDirectory } from '@shared/files';
+import {
+  createMemoryFileStore,
+  type MemoryFileStore,
+} from '@testing/fakes/files/inMemoryFileStore';
 import type { OutboxEntry } from '@shared/telemetry';
-import { recordLogs, type RecordedLogs } from '@shared/log';
+import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 
 const OUTBOX_SCHEMA_VERSION = 1;
 

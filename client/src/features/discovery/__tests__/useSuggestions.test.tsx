@@ -7,7 +7,7 @@ import { transientRetryOptions } from '@shared/query';
 import { useAutocompleteSuggestions, useSuggestionVisibility } from '@features/discovery';
 import { signInTestUser } from '@testing/signInTestUser';
 import { FeaturePorts, httpFeaturePorts } from '@/mobile';
-import { recordLogs } from '@shared/log';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 const { __http } = require('@testing/doubles/fetch.js');
 
 const SUGGEST = 'GET /v1/discovery/suggest';

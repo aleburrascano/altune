@@ -11,13 +11,15 @@ import { View } from 'react-native';
 import type { AlbumGroup, ArtistGroup } from '@shared/apiClient';
 import {
   type ActiveView,
-  createMemoryLibraryPort,
-  type MemoryLibrarySeed,
   LibraryPortProvider,
   GROUP_PAGE_SIZE,
   useAlbumsView,
   useArtistsView,
 } from '@features/library';
+import {
+  createMemoryLibraryPort,
+  type MemoryLibrarySeed,
+} from '@testing/fakes/library/inMemoryLibraryPort';
 import { SortControl } from '@shared/ui';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 

@@ -18,7 +18,7 @@ import {
   type TrackId,
 } from '@shared/catalog';
 import { ContractError, NetworkError, isAbort } from '@shared/failure';
-import { recordLogs } from '@shared/log';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 import { signedInWith } from '@shared/apiClient/__tests__/sessionLookup';
 
 const { __http } = require('@testing/doubles/fetch.js');

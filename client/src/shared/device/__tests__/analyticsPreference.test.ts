@@ -1,4 +1,7 @@
-import { createMemoryFileStore, type MemoryFileStore } from '@shared/files';
+import {
+  createMemoryFileStore,
+  type MemoryFileStore,
+} from '@testing/fakes/files/inMemoryFileStore';
 
 import {
   setAnalyticsPreferenceFileStore,

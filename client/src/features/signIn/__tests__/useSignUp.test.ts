@@ -1,6 +1,10 @@
 import { act, renderHook } from '@testing-library/react-native';
 
-import { useSignUp, createSupabaseAuthMock, runAsyncAuthHook } from '@features/signIn';
+import { useSignUp } from '@features/signIn';
+import {
+  createSupabaseAuthMock,
+  runAsyncAuthHook,
+} from '@features/signIn/__tests__/testUtils/authTestUtils';
 const AUTH_ACTION_TIMEOUT_MS = 20_000;
 
 const { signUp: supabaseSignUp } = createSupabaseAuthMock('signUp');

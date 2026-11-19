@@ -14,7 +14,7 @@ import {
   type ClearHistoryState,
   type DangerZoneActionKey,
 } from '@features/settings';
-import { recordLogs } from '@shared/log';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 type Opts = Parameters<typeof buildDangerZoneActions>[0];
 
 function usageOf(count: number, bytes: number) {

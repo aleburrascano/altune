@@ -1,7 +1,8 @@
 import { StyleSheet } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { resultFixture, TopResultCard } from '@features/discovery';
+import { TopResultCard } from '@features/discovery';
+import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { darkTheme } from '@shared/ui';
 
 function renderCard() {

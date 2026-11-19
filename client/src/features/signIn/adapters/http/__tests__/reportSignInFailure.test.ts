@@ -3,7 +3,8 @@ import { appVersion } from '@shared/device';
 import { applyKillSwitches } from '@shared/killSwitch';
 import { _resetOutboxForTest, flushOutbox } from '@shared/telemetry';
 
-import { reportSignInFailure, thrownErrorDetail, createSupabaseAuthMock } from '@features/signIn';
+import { reportSignInFailure, thrownErrorDetail } from '@features/signIn';
+import { createSupabaseAuthMock } from '@features/signIn/__tests__/testUtils/authTestUtils';
 const { getSession } = createSupabaseAuthMock('getSession');
 
 const realFetch = global.fetch;

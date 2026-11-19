@@ -13,9 +13,9 @@ import {
   loadPersistedOutbox,
   setOutboxFileStore,
 } from '@shared/telemetry';
-import { createMemoryFileStore } from '@shared/files';
+import { createMemoryFileStore } from '@testing/fakes/files/inMemoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch';
-import { recordLogs } from '@shared/log';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 const { __http } = require('@testing/doubles/fetch.js');
 
 const TELEMETRY_GATED = {

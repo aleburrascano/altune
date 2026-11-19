@@ -14,6 +14,8 @@ import {
   forgetTrack,
   patchTrackInCaches,
   scheduleTrackPatch,
+} from '@shared/events';
+import {
   makeInfinite,
   makePage,
   makePlaylistDetail,
@@ -21,7 +23,7 @@ import {
   newClient,
   registerUnfetchedQuery,
   seedTracksPrefix,
-} from '@shared/events';
+} from '@shared/events/__tests__/trackCacheFixtures';
 import { patchTrackStatus, useTrackStatusStore } from '@shared/acquisition';
 
 import { recordingCache } from '@shared/events/__tests__/recordingCache';

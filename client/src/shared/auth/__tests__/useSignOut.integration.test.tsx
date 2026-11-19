@@ -4,7 +4,7 @@ import { renderHook, act } from '@testing-library/react-native';
 import * as SecureStore from 'expo-secure-store';
 
 import { supabase, useSignOut } from '@shared/auth';
-import { recordLogs } from '@shared/log';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 const { __http } = require('@testing/doubles/fetch.js');
 
 function makeWrapper(queryClient: QueryClient) {

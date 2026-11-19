@@ -13,10 +13,10 @@ import {
   registerPlaybackService,
   playbackService,
   installPlaybackPort,
-  libraryTrack,
-  createMemoryPlaybackPort,
 } from '@features/player';
-import { recordLogs, type RecordedLogs } from '@shared/log';
+import { libraryTrack } from '@features/player/__tests__/fixtures';
+import { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlaybackPort';
+import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 const { __player } = jest.requireMock('react-native-track-player');
 
 type AuthCallback = (event: string, session: Session | null) => void;

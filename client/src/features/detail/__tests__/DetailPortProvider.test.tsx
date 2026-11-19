@@ -1,7 +1,8 @@
 import { renderHook } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import { createMemoryDetailPort, DetailPortProvider, useDetailPort } from '@features/detail';
+import { DetailPortProvider, useDetailPort } from '@features/detail';
+import { createMemoryDetailPort } from '@testing/fakes/detail/inMemoryDetailPort';
 describe('useDetailPort', () => {
   it('throws when no provider is mounted', () => {
     expect(() => renderHook(() => useDetailPort())).toThrow('no detail port provided');

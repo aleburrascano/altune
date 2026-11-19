@@ -1,12 +1,12 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import * as WebBrowser from 'expo-web-browser';
 
+import { OAuthButtons } from '@features/signIn';
 import {
-  OAuthButtons,
   authPortWrapper,
   createAuthPortMock,
   createSupabaseAuthMock,
-} from '@features/signIn';
+} from '@features/signIn/__tests__/testUtils/authTestUtils';
 
 const NETWORK_ERROR_COPY = "Can't reach the server. Check your connection and try again.";
 jest.mock('expo-router', () => ({ useRouter: () => ({ replace: jest.fn() }) }));

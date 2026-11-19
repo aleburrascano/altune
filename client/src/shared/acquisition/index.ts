@@ -56,6 +56,5 @@ export {
   useAcquisitionPort,
 } from '@shared/acquisition/view/AcquisitionPortProvider';
 export type { AcquisitionPort } from '@shared/acquisition/ports/acquisitionPort';
-export { createMemoryAcquisitionPort } from '@shared/acquisition/__tests__/memoryAcquisitionPort';
 export type { AcquisitionPhase } from '@shared/acquisition/state/stagePhase';
 export { deriveBarDisplay } from '@shared/acquisition/ui/barDisplay';

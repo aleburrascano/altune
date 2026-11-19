@@ -58,6 +58,7 @@
     "modules/**/*",
     "jest/*.ts",
     "jest/__tests__/**/*.ts",
+    "jest/fakes/**/*.ts",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
   ],

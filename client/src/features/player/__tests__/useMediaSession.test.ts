@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react-native';
 
-import { usePlaybackRateStore, libraryTrack, useMediaSession } from '@features/player';
+import { usePlaybackRateStore, useMediaSession } from '@features/player';
+import { libraryTrack } from '@features/player/__tests__/fixtures';
 import type { PlaybackContextValue } from '@shared/playback';
 import { makeIdlePlayback } from '@testing/factories';
 

@@ -1,7 +1,8 @@
 import { renderHook, waitFor } from '@testing-library/react-native';
 
 import { httpDetailPort, useAlbumDiscovery, useArtistDiscovery } from '@features/detail';
-import type { DetailPort, DetailWarning } from '@features/detail';
+import type { DetailPort } from '@features/detail';
+import type { DetailWarning } from '@testing/fakes/detail/inMemoryDetailPort';
 import {
   createPortWrapper,
   createTestQueryClient,

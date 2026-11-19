@@ -17,12 +17,11 @@ import {
   isIndexOutOfBounds,
   reportingQueueFailure,
   reportQueueFailure,
-  libraryTrack,
-  previewTrack,
-  createMemoryPlaybackPort,
 } from '@features/player';
+import { libraryTrack, previewTrack } from '@features/player/__tests__/fixtures';
+import { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlaybackPort';
 import { signInTestUser } from '@testing/signInTestUser';
-import { recordLogs, type RecordedLogs } from '@shared/log';
+import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 const QUEUE_OUT_OF_SYNC_MESSAGE = 'The queue fell out of sync. Tap retry to reload it.';
 const QUEUE_UPDATE_FAILED_MESSAGE = "Couldn't update the queue. Tap retry to resync.";
 const QUEUE_OP_TIMEOUT_MS = 15_000;

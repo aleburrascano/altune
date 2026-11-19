@@ -3,7 +3,11 @@ import { asTrackId } from '@shared/catalog';
 import { useTrackStatusStore } from '@shared/acquisition';
 import { runSignOutCleanups } from '@shared/session';
 
-import { useRetryTrack, createMemoryDetailPort, type RecordingDetailPort } from '@features/detail';
+import { useRetryTrack } from '@features/detail';
+import {
+  createMemoryDetailPort,
+  type RecordingDetailPort,
+} from '@testing/fakes/detail/inMemoryDetailPort';
 import { createPortWrapper, createTestQueryClient, signInTestUser } from '@testing/queryHarness';
 
 const { __http } = require('@testing/doubles/fetch.js');

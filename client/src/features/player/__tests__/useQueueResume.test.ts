@@ -20,14 +20,16 @@ import {
   _resetPlaybackHealthForTest,
   flushPlaybackHealth,
   usePlaybackErrorStore,
-  libraryTrack,
-  previewTrack,
-  createMemoryPlaybackPort,
   installPlaybackPort,
   httpPlaybackPort,
 } from '@features/player';
-import { recordLogs, type RecordedLogs } from '@shared/log';
-import { driveAppState, type AppStateDriver } from '@shared/lifecycle';
+import { libraryTrack, previewTrack } from '@features/player/__tests__/fixtures';
+import { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlaybackPort';
+import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
+import {
+  driveAppState,
+  type AppStateDriver,
+} from '@testing/fakes/lifecycle/inMemoryAppStateSource';
 beforeAll(() => {
   installPlaybackPort(httpPlaybackPort);
 });

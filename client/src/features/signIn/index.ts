@@ -17,13 +17,6 @@ export {
 } from '@features/signIn/shell/attemptLockout';
 export type { LockoutAction } from '@features/signIn/shell/attemptLockout';
 export {
-  authPortWrapper,
-  createAuthPortMock,
-  createSupabaseAuthMock,
-  runAsyncAuthHook,
-} from '@features/signIn/__tests__/testUtils/authTestUtils';
-export { createMemoryAuthPort } from '@features/signIn/__tests__/memoryAuthPort';
-export {
   _resetConsumedCredentialForTest,
   completeAuthIntent,
 } from '@features/signIn/adapters/completeAuthIntent';

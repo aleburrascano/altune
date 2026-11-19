@@ -11,8 +11,8 @@ import {
   recoveryUnlock,
   subscribeRecoveryUnlock,
   useRecoveryUnlocked,
-  createSupabaseAuthMock,
 } from '@features/signIn';
+import { createSupabaseAuthMock } from '@features/signIn/__tests__/testUtils/authTestUtils';
 const { getSession, onAuthStateChange, signOut } = createSupabaseAuthMock(
   'getSession',
   'onAuthStateChange',

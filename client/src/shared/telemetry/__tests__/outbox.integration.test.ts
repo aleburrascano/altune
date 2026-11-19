@@ -1,4 +1,4 @@
-import type * as LifecycleNamespace from '@shared/lifecycle';
+import type * as AppStateFake from '@testing/fakes/lifecycle/inMemoryAppStateSource';
 import type * as OutboxNamespace from '@shared/telemetry/outbox';
 import type { OutboxEntry, DiscoveryEvent } from '@shared/telemetry';
 const { __http } = require('@testing/doubles/fetch.js');
@@ -34,7 +34,9 @@ const booted: OutboxModule[] = [];
 
 function bootApp(): OutboxModule {
   configureSession();
-  (require('@shared/lifecycle') as typeof LifecycleNamespace).driveAppState();
+  (
+    require('@testing/fakes/lifecycle/inMemoryAppStateSource') as typeof AppStateFake
+  ).driveAppState();
   const outbox = require('@shared/telemetry/outbox') as OutboxModule;
   booted.push(outbox);
   return outbox;

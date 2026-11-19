@@ -8,9 +8,9 @@ import {
   useArtistContent,
   _resetDetailHealthForTest,
   DetailPortProvider,
-  createMemoryDetailPort,
   flushDetailHealth,
 } from '@features/detail';
+import { createMemoryDetailPort } from '@testing/fakes/detail/inMemoryDetailPort';
 import type { DetailPort } from '@features/detail';
 import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
 import { freezeDate } from '@testing/freezeDate';

@@ -14,7 +14,6 @@ export { httpFavoritesPort } from '@features/discovery/adapters/http/httpFavorit
 export type { DiscoverPort } from '@features/discovery/ports/discoverPort';
 export type { FavoritesPort } from '@features/discovery/ports/favoritesPort';
 export { BlendedSection } from '@features/discovery/view/results/BlendedSection';
-export { resultFixture } from '@features/discovery/__tests__/fixtures';
 export type { ResultsCommonProps } from '@features/discovery/view/results/ResultsList';
 export { buildImpressionRows } from '@features/discovery/core/buildImpressionRows';
 export { DiscoverBody } from '@features/discovery/view/search/DiscoverBody';
@@ -23,7 +22,6 @@ export type {
   DiscoverView,
   SearchCorrection,
 } from '@features/discovery/core/discoverView';
-export { createMemoryDiscoverPort } from '@features/discovery/__tests__/memoryDiscoverPort';
 export {
   useAutocompleteSuggestions,
   useSuggestionVisibility,
@@ -42,7 +40,6 @@ export {
   searchAnnouncement,
   viewForState,
 } from '@features/discovery/core/discoverView';
-export { createMemoryFavoritesPort } from '@features/discovery/__tests__/memoryFavoritesPort';
 export { FilterChips } from '@features/discovery/view/results/FilterChips';
 export { FilteredResults } from '@features/discovery/view/results/FilteredResults';
 export { kindLabel, resultKey, resultSecondaryLine } from '@features/discovery/core/resultDisplay';

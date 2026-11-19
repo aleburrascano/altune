@@ -7,7 +7,8 @@ import { signInTestUser } from '@testing/signInTestUser';
 import { useQueueStore } from '@shared/playback';
 import type { PlaybackTrack } from '@shared/playback';
 
-import { usePlaybackSignals, previewTrack } from '@features/player';
+import { usePlaybackSignals } from '@features/player';
+import { previewTrack } from '@features/player/__tests__/fixtures';
 const { __http } = require('@testing/doubles/fetch.js');
 
 const EVENTS_ROUTE = 'POST /v1/discovery/events';

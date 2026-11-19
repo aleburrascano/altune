@@ -1,6 +1,6 @@
 import { audioRequestHeaders, apiFetch } from '@shared/apiClient';
 import { clearSessionExpired } from '@shared/auth';
-import { recordLogs } from '@shared/log';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 import { signedInWith } from '@shared/apiClient/__tests__/sessionLookup';
 const { __http } = require('@testing/doubles/fetch.js');
 

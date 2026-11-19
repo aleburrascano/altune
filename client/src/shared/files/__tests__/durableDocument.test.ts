@@ -5,9 +5,11 @@ import {
   readVersionedEntries,
   writeDocumentAtomically,
   type SchemaSpec,
+} from '@shared/files';
+import {
   createMemoryFileStore,
   type MemoryFileStore,
-} from '@shared/files';
+} from '@testing/fakes/files/inMemoryFileStore';
 const DIR_URI = 'memory://document/docs';
 const FILE_URI = `${DIR_URI}/doc.json`;
 const TEMP_URI = `${DIR_URI}/doc.json.tmp`;

@@ -3,15 +3,17 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, act, waitFor } from '@testing-library/react-native';
 import { asPlaylistId, asTrackId } from '@shared/catalog';
 import type { Navigator } from '@shared/navigation';
-import { createMemoryNavigator } from '@shared/navigation';
+import { createMemoryNavigator } from '@testing/fakes/navigation/inMemoryNavigator';
 import {
-  createMemoryLibraryPort,
   LibraryPortProvider,
-  recordingDialogs,
-  type RecordingDialogs,
   usePlaylistDelete,
   usePlaylistOfflineAction,
 } from '@features/library';
+import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
+import {
+  recordingDialogs,
+  type RecordingDialogs,
+} from '@features/library/__tests__/recordingDialogs';
 import type { TrackResponse } from '@shared/catalog';
 import { usePinnedStore } from '@shared/offline';
 import { playlistKeys } from '@shared/query';

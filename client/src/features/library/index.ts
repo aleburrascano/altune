@@ -6,7 +6,6 @@ export { SidebarPlaylists } from '@features/library/ui/SidebarPlaylists';
 export { LibraryPortProvider, useLibraryPort } from '@features/library/view/LibraryPortProvider';
 export { httpLibraryPort } from '@features/library/adapters/http/httpLibraryPort';
 export type { LibraryPort } from '@features/library/ports/libraryPort';
-export { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
 export {
   avatarColumns,
   cellSize,
@@ -28,21 +27,6 @@ export type {
 } from '@features/library/view/libraryView';
 export { AlbumsGrid, ArtistsGrid } from '@features/library/view/GroupGrids';
 export { PlaylistsGrid } from '@features/library/view/PlaylistsGrid';
-export {
-  LIBRARY_DERIVED,
-  PLAYLIST_KEY,
-  READY,
-  TRACKS_KEY,
-  deferred,
-  libraryOf,
-  page,
-  pagedIds,
-  playlist,
-  setup,
-  signOutThenLoadUserB,
-  track,
-  userBLibrary,
-} from '@features/library/__tests__/trackMutationFixtures';
 export { useLibraryAlbums, useLibraryArtists } from '@features/library/view/useLibraryGroups';
 export { useLibraryTracks } from '@features/library/view/useLibraryTracks';
 export { featuringDetailRoute, goBackOrToLibrary } from '@features/library/domain/libraryRoutes';
@@ -86,9 +70,6 @@ export { TrackSelectionOverlay } from '@features/library/view/TrackSelectionOver
 export { TracksList } from '@features/library/view/TracksList';
 export { useActiveLibraryView } from '@features/library/view/useActiveLibraryView';
 export { useSelection } from '@features/library/view/useSelection';
-export type { MemoryLibrarySeed } from '@features/library/__tests__/memoryLibraryPort';
-export { recordingDialogs } from '@features/library/__tests__/recordingDialogs';
-export type { RecordingDialogs } from '@features/library/__tests__/recordingDialogs';
 export { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
 export { useDeleteTrack, useDeleteTracks } from '@features/library/view/useDeleteTracks';
 export {

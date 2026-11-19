@@ -16,6 +16,7 @@ const MOBILE_LINT_SETUP = [
   'eslint/rules/no-parent-relative-imports.js',
   'eslint/rules/top-level-function-declarations.js',
   'eslint/rules/no-raw-style-numbers.js',
+  'eslint/rules/no-test-code-in-app.js',
   'tsconfig.json',
 ];
 

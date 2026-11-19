@@ -10,11 +10,9 @@ import { asPlaylistId, asTrackId, toFailed, toPending, toReady } from '@shared/c
 import type { PlaylistDetailResponse, ListTracksResponse } from '@shared/catalog';
 import { libraryKeys, playlistKeys } from '@shared/query';
 
+import { getTrackFromCaches, patchTrackInCaches, scheduleTrackPatch } from '@shared/events';
+import { settleTrackPatches } from '@shared/events/__tests__/settleTrackPatches';
 import {
-  getTrackFromCaches,
-  patchTrackInCaches,
-  scheduleTrackPatch,
-  settleTrackPatches,
   makeInfinite,
   makePage,
   makePlaylistDetail,
@@ -22,7 +20,7 @@ import {
   newClient,
   registerUnfetchedQuery,
   seedTracksPrefix,
-} from '@shared/events';
+} from '@shared/events/__tests__/trackCacheFixtures';
 
 import { recordingCache } from '@shared/events/__tests__/recordingCache';
 

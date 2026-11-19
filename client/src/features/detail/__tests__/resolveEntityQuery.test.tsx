@@ -2,7 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { DiscoveryResult } from '@shared/catalog';
 import type { DetailPort } from '@features/detail';
-import { resolveEntityQuery, createMemoryDetailPort } from '@features/detail';
+import { resolveEntityQuery } from '@features/detail';
+import { createMemoryDetailPort } from '@testing/fakes/detail/inMemoryDetailPort';
 import { createTestQueryClient, createWrapper } from '@testing/queryHarness';
 
 function artist(title: string): DiscoveryResult {

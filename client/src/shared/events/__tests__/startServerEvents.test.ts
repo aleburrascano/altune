@@ -7,7 +7,7 @@ import {
   type ServerEventsClientFactory,
 } from '@shared/events';
 import { runSignOutCleanups } from '@shared/session';
-import { createMemoryFileStore } from '@shared/files';
+import { createMemoryFileStore } from '@testing/fakes/files/inMemoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch';
 import { playlistKeys } from '@shared/query';
 

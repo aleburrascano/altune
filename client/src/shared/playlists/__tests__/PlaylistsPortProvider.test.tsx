@@ -1,11 +1,8 @@
 import { renderHook } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import {
-  createMemoryPlaylistsPort,
-  PlaylistsPortProvider,
-  usePlaylistsPort,
-} from '@shared/playlists';
+import { PlaylistsPortProvider, usePlaylistsPort } from '@shared/playlists';
+import { createMemoryPlaylistsPort } from '@testing/fakes/playlists/inMemoryPlaylistsPort';
 describe('usePlaylistsPort', () => {
   it('throws when no provider is mounted', () => {
     expect(() => renderHook(() => usePlaylistsPort())).toThrow('no playlists port provided');

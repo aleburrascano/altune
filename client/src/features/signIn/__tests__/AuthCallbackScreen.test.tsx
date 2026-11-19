@@ -1,7 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react-native';
 import { Platform } from 'react-native';
 
-import { AuthCallbackScreen, createSupabaseAuthMock } from '@features/signIn';
+import { AuthCallbackScreen } from '@features/signIn';
+import { createSupabaseAuthMock } from '@features/signIn/__tests__/testUtils/authTestUtils';
 const mockRouter = { replace: jest.fn() };
 
 jest.mock('expo-router', () => {

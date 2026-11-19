@@ -1,7 +1,8 @@
 import { renderHook } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import { createMemoryLibraryPort, LibraryPortProvider, useLibraryPort } from '@features/library';
+import { LibraryPortProvider, useLibraryPort } from '@features/library';
+import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
 
 describe('useLibraryPort', () => {
   it('throws when no provider is mounted', () => {

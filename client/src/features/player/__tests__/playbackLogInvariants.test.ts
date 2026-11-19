@@ -13,11 +13,11 @@ import {
   redactPlaybackErrorMessage,
   warnPlayback,
   installPlaybackPort,
-  libraryTrack,
-  createMemoryPlaybackPort,
 } from '@features/player';
+import { libraryTrack } from '@features/player/__tests__/fixtures';
+import { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlaybackPort';
 import { signInTestUser } from '@testing/signInTestUser';
-import { recordLogs, type RecordedLogs } from '@shared/log';
+import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 const { __http } = require('@testing/doubles/fetch.js');
 const HEALTH_ROUTE = 'POST /v1/discovery/events';
 const HTTP_ACCEPTED = 202;

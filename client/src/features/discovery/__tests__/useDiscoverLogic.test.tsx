@@ -10,9 +10,9 @@ import {
   SEARCH_PAGE_SIZE,
   setSearchState,
   DiscoverBody,
-  resultFixture,
   DiscoverPortProvider,
 } from '@features/discovery';
+import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { signInTestUser } from '@testing/signInTestUser';
 import type { DiscoverPort } from '@features/discovery';
 import type { DiscoverySearchResponse } from '@shared/catalog';

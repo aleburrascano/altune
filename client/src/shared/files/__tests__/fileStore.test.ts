@@ -1,4 +1,5 @@
-import { type FileStore, createFileStoreSlot, createMemoryFileStore } from '@shared/files';
+import { type FileStore, createFileStoreSlot } from '@shared/files';
+import { createMemoryFileStore } from '@testing/fakes/files/inMemoryFileStore';
 
 function onProgress(): void {}
 

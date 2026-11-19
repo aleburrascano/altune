@@ -11,12 +11,9 @@ import {
   restoreTrackPlacements,
 } from '@shared/events';
 
-import {
-  useLibraryTracks,
-  createMemoryLibraryPort,
-  track as seededTrack,
-  LibraryPortProvider,
-} from '@features/library';
+import { useLibraryTracks, LibraryPortProvider } from '@features/library';
+import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
+import { track as seededTrack } from '@features/library/__tests__/trackMutationFixtures';
 import type { LibraryPort } from '@features/library';
 
 const SERVICE_UNAVAILABLE = 503;

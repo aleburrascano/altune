@@ -3,7 +3,7 @@ import { apiClientAcquisitionPort } from '@testing/apiClientPorts';
 import { signInTestUser } from '@testing/signInTestUser';
 import { ApiError, ContractError } from '@shared/failure';
 
-import { createMemoryAcquisitionPort } from '@shared/acquisition';
+import { createMemoryAcquisitionPort } from '@testing/fakes/acquisition/inMemoryAcquisitionPort';
 import type { AcquisitionPort } from '@shared/acquisition';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');

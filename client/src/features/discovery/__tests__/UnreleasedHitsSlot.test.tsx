@@ -1,7 +1,8 @@
 import { AccessibilityInfo } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { DiscoverySearchResponse } from '@shared/catalog';
-import { resetSearchState, DiscoverScreen, resultFixture } from '@features/discovery';
+import { resetSearchState, DiscoverScreen } from '@features/discovery';
+import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 import {
   createPlaybackWrapper,

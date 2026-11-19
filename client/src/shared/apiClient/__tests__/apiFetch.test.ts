@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import { apiFetch, ApiError, NetworkError } from '@shared/apiClient';
-import { recordLogs, type RecordedLogs } from '@shared/log';
+import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 import { apiBase } from '@shared/apiConfig';
 import { clearSessionExpired, getSessionExpired, renewSessionCredentials } from '@shared/auth';
 import {

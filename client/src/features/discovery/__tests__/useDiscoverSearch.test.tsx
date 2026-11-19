@@ -12,11 +12,11 @@ import {
   setSearchState,
   useDebouncedSearch,
   useDiscoverSearch,
-  resultFixture,
 } from '@features/discovery';
+import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { signInTestUser } from '@testing/signInTestUser';
 import { FeaturePorts, httpFeaturePorts } from '@/mobile';
-import { recordLogs } from '@shared/log';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
 const SEARCH = 'GET /v1/discovery/search';
