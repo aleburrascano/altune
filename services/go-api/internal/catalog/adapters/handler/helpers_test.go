@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared/requestuser"
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -28,24 +29,95 @@ func asBearer(next http.Handler) http.Handler {
 	})
 }
 
-func trackRoutes(repo *catalog.InMemoryTrackRepo, opts ...func(*catalog.TrackHandler)) chi.Router {
-	return trackRoutesWithBackfill(repo, catalog.NewBackfillFeaturedService(repo, repo, catalog.InMemoryFeaturedResolver{}), opts...)
+type trackDeps struct {
+	scheduler *catalog.InMemoryScheduler
+	backfill  *catalog.BackfillFeaturedService
 }
 
-func trackRoutesWithBackfill(repo *catalog.InMemoryTrackRepo, backfill *catalog.BackfillFeaturedService, opts ...func(*catalog.TrackHandler)) chi.Router {
+func (d trackDeps) addOptions() []func(*catalog.AddTrackService) {
+	if d.scheduler == nil {
+		return nil
+	}
+	return []func(*catalog.AddTrackService){catalog.WithAcquisitionScheduler(d.scheduler)}
+}
+
+func (d trackDeps) backfillFor(repo *catalog.InMemoryTrackRepo) *catalog.BackfillFeaturedService {
+	if d.backfill != nil {
+		return d.backfill
+	}
+	return catalog.NewBackfillFeaturedService(repo, repo, catalog.InMemoryFeaturedResolver{})
+}
+
+func newRouter() chi.Router {
+	router := chi.NewRouter()
+	router.Use(asBearer)
+	return router
+}
+
+func trackRoutes(repo *catalog.InMemoryTrackRepo, opts ...func(*catalog.TrackHandler)) chi.Router {
+	return trackRoutesWith(repo, trackDeps{}, opts...)
+}
+
+func trackRoutesWith(repo *catalog.InMemoryTrackRepo, deps trackDeps, opts ...func(*catalog.TrackHandler)) chi.Router {
+	router := newRouter()
+	mountTracks(router, repo, deps, opts...)
+	return router
+}
+
+func mountTracks(router chi.Router, repo *catalog.InMemoryTrackRepo, deps trackDeps, opts ...func(*catalog.TrackHandler)) {
 	tracks := catalog.NewTrackHandler(
-		catalog.NewAddTrackService(repo),
+		catalog.NewAddTrackService(repo, deps.addOptions()...),
 		catalog.NewListTracksService(repo),
 		catalog.NewGetTrackStatusService(repo),
 		catalog.NewDeleteTrackService(repo, catalog.NewInMemoryAudioStore()),
 		catalog.NewSetTrackNumberService(repo),
-		catalog.NewFeaturedArtistHandler(backfill, catalog.NewListFeaturingService(repo)),
+		catalog.NewFeaturedArtistHandler(deps.backfillFor(repo), catalog.NewListFeaturingService(repo)),
 		opts...,
 	)
-	router := chi.NewRouter()
-	router.Use(asBearer)
 	router.Route("/tracks", func(r chi.Router) { r.Mount("/", tracks.Routes()) })
+}
+
+func playlistRoutes(playlists *catalog.InMemoryPlaylistRepo, tracks *catalog.InMemoryTrackRepo, opts ...func(*catalog.PlaylistHandler)) chi.Router {
+	router := newRouter()
+	mountPlaylists(router, playlists, tracks, opts...)
 	return router
+}
+
+func mountPlaylists(router chi.Router, playlists *catalog.InMemoryPlaylistRepo, tracks *catalog.InMemoryTrackRepo, opts ...func(*catalog.PlaylistHandler)) {
+	h := catalog.NewPlaylistHandler(
+		catalog.NewPlaylistLifecycleService(playlists),
+		catalog.NewPlaylistMembershipService(playlists, tracks),
+		opts...,
+	)
+	router.Mount("/playlists", h.Routes())
+}
+
+func request(t *testing.T, router http.Handler, method, path string, body io.Reader) *httptest.ResponseRecorder {
+	t.Helper()
+	return requestAs(t, router, catalog.FixtureUserId(), method, path, body)
+}
+
+func requestAs(t *testing.T, router http.Handler, user shared.UserId, method, path string, body io.Reader) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(method, path, body)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	return sendAs(router, req, user)
+}
+
+func requestAnonymous(t *testing.T, router http.Handler, method, path string, body io.Reader) *httptest.ResponseRecorder {
+	t.Helper()
+	return sendAnonymous(router, httptest.NewRequest(method, path, body))
+}
+
+func newWriteRig(trackOpts []func(*catalog.TrackHandler), playlistOpts []func(*catalog.PlaylistHandler)) *writeRig {
+	tracks := catalog.NewInMemoryTrackRepo()
+	playlists := catalog.NewInMemoryPlaylistRepo()
+	router := newRouter()
+	mountTracks(router, tracks, trackDeps{}, trackOpts...)
+	mountPlaylists(router, playlists, tracks, playlistOpts...)
+	return &writeRig{router: router, tracks: tracks, playlists: playlists}
 }
 
 func sendAs(router http.Handler, req *http.Request, user shared.UserId) *httptest.ResponseRecorder {
@@ -57,26 +129,6 @@ func sendAnonymous(router http.Handler, req *http.Request) *httptest.ResponseRec
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	return rec
-}
-
-func serve(router http.Handler, method, path string) *httptest.ResponseRecorder {
-	return sendAs(router, httptest.NewRequest(method, path, nil), catalog.FixtureUserId())
-}
-
-func jsonRequest(t *testing.T, method, path string, v any) *http.Request {
-	t.Helper()
-	body, err := json.Marshal(v)
-	if err != nil {
-		t.Fatalf("encode request body: %v", err)
-	}
-	req := httptest.NewRequest(method, path, bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	return req
-}
-
-func postJSON(t *testing.T, router http.Handler, path string, v any) *httptest.ResponseRecorder {
-	t.Helper()
-	return sendAs(router, jsonRequest(t, http.MethodPost, path, v), catalog.FixtureUserId())
 }
 
 func assertStatus(t *testing.T, rec *httptest.ResponseRecorder, want int) {
@@ -131,4 +183,84 @@ func (c *fakeClock) advance(d time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.t = c.t.Add(d)
+}
+
+func assertThrottled(t *testing.T, rec *httptest.ResponseRecorder, wantCode, wantRetryAfter string) {
+	t.Helper()
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429 (body: %s)", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"code":"`+wantCode+`"`) {
+		t.Fatalf("throttled body must carry the %s code, got %q", wantCode, rec.Body.String())
+	}
+	if got := rec.Header().Get("Retry-After"); got != wantRetryAfter {
+		t.Fatalf("Retry-After = %q, want %q", got, wantRetryAfter)
+	}
+}
+
+func assertWriteThrottled(t *testing.T, rec *httptest.ResponseRecorder, wantRetryAfter string) {
+	t.Helper()
+	assertThrottled(t, rec, "catalog.write_rate_limited", wantRetryAfter)
+}
+
+func assertJSON(t *testing.T, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	ct := rec.Header().Get("Content-Type")
+	if ct != "application/json" && ct != "application/json; charset=utf-8" {
+		t.Errorf("Content-Type = %q, want application/json", ct)
+	}
+}
+
+func jsonBody(t *testing.T, v any) *bytes.Buffer {
+	t.Helper()
+	buf := &bytes.Buffer{}
+	if err := json.NewEncoder(buf).Encode(v); err != nil {
+		t.Fatalf("jsonBody: %v", err)
+	}
+	return buf
+}
+
+type writeRig struct {
+	router    chi.Router
+	tracks    *catalog.InMemoryTrackRepo
+	playlists *catalog.InMemoryPlaylistRepo
+}
+
+func newThrottledWriteRig(now func() time.Time) *writeRig {
+	return newWriteRig(
+		[]func(*catalog.TrackHandler){catalog.WithTrackWriteLimiterClock(now)},
+		[]func(*catalog.PlaylistHandler){catalog.WithPlaylistWriteLimiterClock(now)},
+	)
+}
+
+func (rig *writeRig) post(t *testing.T, user shared.UserId, path string, body any) *httptest.ResponseRecorder {
+	t.Helper()
+	return requestAs(t, rig.router, user, http.MethodPost, path, jsonBody(t, body))
+}
+
+func (rig *writeRig) createTrack(t *testing.T, user shared.UserId, title string) *httptest.ResponseRecorder {
+	t.Helper()
+	return rig.post(t, user, "/tracks/", map[string]string{"title": title, "artist": "Artist", "album": "Album"})
+}
+
+func (rig *writeRig) createPlaylist(t *testing.T, user shared.UserId, name string) *httptest.ResponseRecorder {
+	t.Helper()
+	return rig.post(t, user, "/playlists/", map[string]string{"name": name})
+}
+
+func (rig *writeRig) addTrackToPlaylist(t *testing.T, user shared.UserId, playlistId catalog.PlaylistId, trackId catalog.TrackId) *httptest.ResponseRecorder {
+	t.Helper()
+	return rig.post(t, user, "/playlists/"+playlistId.String()+"/tracks", map[string]string{"track_id": trackId.String()})
+}
+
+func (rig *writeRig) addTracksToPlaylist(t *testing.T, user shared.UserId, playlistId catalog.PlaylistId, trackId catalog.TrackId) *httptest.ResponseRecorder {
+	t.Helper()
+	return rig.post(t, user, "/playlists/"+playlistId.String()+"/tracks/batch", map[string][]string{"track_ids": {trackId.String()}})
+}
+
+func (rig *writeRig) seedPlaylistAndTrack(t *testing.T, user shared.UserId) (catalog.PlaylistId, catalog.TrackId) {
+	t.Helper()
+	playlist := catalog.SeedPlaylist(t, rig.playlists, user, "Seeded")
+	track := catalog.SeedTrack(t, rig.tracks, user, "Seeded Track", "Artist", "Album")
+	return playlist.ID, track.ID
 }

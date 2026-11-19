@@ -32,10 +32,10 @@ func TestHandleBackfillFeatured_BackToBackIsThrottled(t *testing.T) {
 	seedTracks(t, repo, "Song")
 	router := trackRoutes(repo)
 
-	first := serve(router, http.MethodPost, "/tracks/featured-backfill")
+	first := request(t, router, http.MethodPost, "/tracks/featured-backfill", nil)
 	assertStatus(t, first, http.StatusOK)
 
-	second := serve(router, http.MethodPost, "/tracks/featured-backfill")
+	second := request(t, router, http.MethodPost, "/tracks/featured-backfill", nil)
 	assertStatus(t, second, http.StatusTooManyRequests)
 	assertErrorCode(t, second, "catalog.backfill_cooling_down")
 }
@@ -45,7 +45,7 @@ func TestHandleBackfillFeatured_ResumesFromTheOffsetQuery(t *testing.T) {
 	seedTracks(t, repo, "One", "Two", "Three")
 	router := trackRoutes(repo)
 
-	rec := serve(router, http.MethodPost, "/tracks/featured-backfill?offset=2")
+	rec := request(t, router, http.MethodPost, "/tracks/featured-backfill?offset=2", nil)
 
 	assertStatus(t, rec, http.StatusOK)
 	var body backfillResponse
@@ -63,10 +63,10 @@ func TestHandleBackfillFeatured_RejectsANegativeOffset(t *testing.T) {
 	seedTracks(t, repo, "Song")
 	router := trackRoutes(repo)
 
-	rejected := serve(router, http.MethodPost, "/tracks/featured-backfill?offset=-1")
+	rejected := request(t, router, http.MethodPost, "/tracks/featured-backfill?offset=-1", nil)
 
 	assertStatus(t, rejected, http.StatusBadRequest)
-	accepted := serve(router, http.MethodPost, "/tracks/featured-backfill")
+	accepted := request(t, router, http.MethodPost, "/tracks/featured-backfill", nil)
 	assertStatus(t, accepted, http.StatusOK)
 }
 
@@ -91,9 +91,9 @@ func TestHandleBackfillFeatured_LogsPartialWorkWhenTheRunFails(t *testing.T) {
 
 	repo := &listFailsAfterFirstPage{InMemoryTrackRepo: catalog.NewInMemoryTrackRepo()}
 	seedTracks(t, repo.InMemoryTrackRepo, "Song")
-	router := trackRoutesWithBackfill(repo.InMemoryTrackRepo, catalog.NewBackfillFeaturedService(repo, repo, catalog.InMemoryFeaturedResolver{}))
+	router := trackRoutesWith(repo.InMemoryTrackRepo, trackDeps{backfill: catalog.NewBackfillFeaturedService(repo, repo, catalog.InMemoryFeaturedResolver{})})
 
-	rec := serve(router, http.MethodPost, "/tracks/featured-backfill")
+	rec := request(t, router, http.MethodPost, "/tracks/featured-backfill", nil)
 
 	assertStatus(t, rec, http.StatusInternalServerError)
 	logged := false
@@ -116,7 +116,7 @@ func TestHandleListFeaturing_RejectsAnUnreadableDeezerID(t *testing.T) {
 
 	for _, query := range []string{"deezer_id=abc", "deezer_id=0", "deezer_id=-5", "name=SZA&deezer_id=abc", "deezer_id=99999999999999999999"} {
 		t.Run(query, func(t *testing.T) {
-			rec := serve(router, http.MethodGet, "/tracks/featuring?"+query)
+			rec := request(t, router, http.MethodGet, "/tracks/featuring?"+query, nil)
 
 			assertStatus(t, rec, http.StatusBadRequest)
 			assertErrorCode(t, rec, "catalog.invalid_deezer_id")
@@ -127,7 +127,7 @@ func TestHandleListFeaturing_RejectsAnUnreadableDeezerID(t *testing.T) {
 func TestHandleListFeaturing_RequiresOneArtistKey(t *testing.T) {
 	router := trackRoutes(catalog.NewInMemoryTrackRepo())
 
-	rec := serve(router, http.MethodGet, "/tracks/featuring")
+	rec := request(t, router, http.MethodGet, "/tracks/featuring", nil)
 
 	assertStatus(t, rec, http.StatusBadRequest)
 	assertErrorCode(t, rec, "catalog.featured_artist_key_required")
@@ -139,7 +139,7 @@ func TestHandleListFeaturing_AcceptsAPositiveDeezerID(t *testing.T) {
 	track.FeaturedArtists = []catalog.FeaturedArtist{catalog.NewFeaturedArtistIdentityOnly("SZA", "", 42)}
 	router := trackRoutes(repo)
 
-	rec := serve(router, http.MethodGet, "/tracks/featuring?deezer_id=42")
+	rec := request(t, router, http.MethodGet, "/tracks/featuring?deezer_id=42", nil)
 
 	assertStatus(t, rec, http.StatusOK)
 	var body struct {
@@ -167,10 +167,10 @@ func TestHandleBackfillFeatured_AnswersWithinTheBudgetAndResumesWithoutCooldown(
 	repo := catalog.NewInMemoryTrackRepo()
 	seedTracks(t, repo, "One", "Two", "Three")
 	backfill := catalog.NewBackfillFeaturedService(repo, repo, &stallsAfterFirstResolver{}, catalog.WithBackfillTimeBudget(50*time.Millisecond))
-	router := trackRoutesWithBackfill(repo, backfill)
+	router := trackRoutesWith(repo, trackDeps{backfill: backfill})
 
 	start := time.Now()
-	first := serve(router, http.MethodPost, "/tracks/featured-backfill")
+	first := request(t, router, http.MethodPost, "/tracks/featured-backfill", nil)
 	if elapsed := time.Since(start); elapsed > 2*time.Second {
 		t.Fatalf("response took %v, want it inside the budget", elapsed)
 	}
@@ -181,6 +181,6 @@ func TestHandleBackfillFeatured_AnswersWithinTheBudgetAndResumesWithoutCooldown(
 		t.Fatalf("response = %+v, want truncated with next offset past the start", body)
 	}
 
-	resumed := serve(router, http.MethodPost, "/tracks/featured-backfill?offset=1")
+	resumed := request(t, router, http.MethodPost, "/tracks/featured-backfill?offset=1", nil)
 	assertStatus(t, resumed, http.StatusOK)
 }

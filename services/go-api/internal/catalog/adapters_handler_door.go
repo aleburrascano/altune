@@ -10,6 +10,23 @@ type (
 	TrackHandler    = handler.TrackHandler
 )
 
+type (
+	AddTrackToPlaylistRequest        = handler.AddTrackToPlaylistRequest
+	AddTracksToPlaylistRequest       = handler.AddTracksToPlaylistRequest
+	AddTracksToPlaylistResponse      = handler.AddTracksToPlaylistResponse
+	CreatePlaylistRequest            = handler.CreatePlaylistRequest
+	CreateTrackRequest               = handler.CreateTrackRequest
+	ListTracksResponse               = handler.ListTracksResponse
+	PlaylistDetailResponse           = handler.PlaylistDetailResponse
+	PlaylistResponse                 = handler.PlaylistResponse
+	RemoveTracksFromPlaylistRequest  = handler.RemoveTracksFromPlaylistRequest
+	RemoveTracksFromPlaylistResponse = handler.RemoveTracksFromPlaylistResponse
+	RenamePlaylistRequest            = handler.RenamePlaylistRequest
+	ReorderTracksRequest             = handler.ReorderTracksRequest
+	SetTrackNumberRequest            = handler.SetTrackNumberRequest
+	TrackResponse                    = handler.TrackResponse
+)
+
 var (
 	NewAudioURLHandler            = handler.NewAudioURLHandler
 	NewFeaturedArtistHandler      = handler.NewFeaturedArtistHandler

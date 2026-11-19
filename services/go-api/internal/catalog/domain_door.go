@@ -53,6 +53,7 @@ type (
 
 const (
 	MaxCatalogSources      = domain.MaxCatalogSources
+	MaxLibraryPageSize     = domain.MaxLibraryPageSize
 	MaxLibrarySearchLength = domain.MaxLibrarySearchLength
 	SortYear               = domain.SortYear
 )

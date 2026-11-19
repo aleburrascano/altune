@@ -1,0 +1,33 @@
+{
+  "removed": [
+    "T1 internal/catalog/adapters/handler/fixtures_test.go imports catalogtest/audio_store_fake.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/fixtures_test.go imports catalogtest/featured_resolver_fake.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/fixtures_test.go imports catalogtest/playlist_repo_fake.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/fixtures_test.go imports catalogtest/scheduler_fake.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/fixtures_test.go imports catalogtest/track_repo_fake.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/fixtures_test.go imports domain/playlist.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/fixtures_test.go imports domain/track.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/fixtures_test.go imports internal/core/featured/featured_artist.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/fixtures_test.go imports internal/core/playlist/playlist_lifecycle.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/fixtures_test.go imports internal/core/playlist/playlist_membership.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/fixtures_test.go imports service/track/add_track.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/fixtures_test.go imports service/track/delete_track.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/fixtures_test.go imports service/track/set_track_number.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/fixtures_test.go imports service/track/track_reads.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/fixtures_test.go is in package handler, so it sees inside the module: use package handler_test and import the door",
+    "T1 internal/catalog/adapters/handler/playlist_handler_test.go imports catalogtest/playlist_repo_fake.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/playlist_handler_test.go imports catalogtest/scheduler_fake.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/playlist_handler_test.go imports catalogtest/track_repo_fake.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/playlist_handler_test.go imports domain/library_lens.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/playlist_handler_test.go imports domain/playlist.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/playlist_handler_test.go imports domain/track.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/playlist_handler_test.go is in package handler, so it sees inside the module: use package handler_test and import the door",
+    "T1 internal/catalog/adapters/handler/track_handler_test.go imports catalogtest/scheduler_fake.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/track_handler_test.go imports catalogtest/track_repo_fake.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/track_handler_test.go imports service/track/add_track.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/track_handler_test.go imports service/track/track_dto.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/track_handler_test.go is in package handler, so it sees inside the module: use package handler_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}

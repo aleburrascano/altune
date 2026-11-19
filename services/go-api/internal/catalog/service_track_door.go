@@ -6,12 +6,15 @@ type (
 	AddTrackInput         = track.AddTrackInput
 	AddTrackService       = track.AddTrackService
 	DeleteTrackService    = track.DeleteTrackService
+	FeaturedArtistDTO     = track.FeaturedArtistDTO
 	GetTrackStatusService = track.GetTrackStatusService
 	ListTracksService     = track.ListTracksService
 	SetTrackNumberService = track.SetTrackNumberService
 )
 
 var ErrLibraryFull = track.ErrLibraryFull
+
+const MaxFeaturedArtistsPerTrack = track.MaxFeaturedArtistsPerTrack
 
 var (
 	NewAddTrackService         = track.NewAddTrackService

@@ -25,7 +25,7 @@ func TestLibraryHandler_NegativeOffsetRejected(t *testing.T) {
 			catalog.SeedTrack(t, repo, catalog.FixtureUserId(), "One", "Metallica", "And Justice for All")
 			router := libraryRoutes(repo)
 
-			rec := serve(router, http.MethodGet, path+"?offset=-1")
+			rec := request(t, router, http.MethodGet, path+"?offset=-1", nil)
 
 			assertStatus(t, rec, http.StatusBadRequest)
 		})
@@ -39,7 +39,7 @@ func TestLibraryHandler_ZeroAndPositiveOffsetStillServed(t *testing.T) {
 			catalog.SeedTrack(t, repo, catalog.FixtureUserId(), "One", "Metallica", "And Justice for All")
 			router := libraryRoutes(repo)
 
-			rec := serve(router, http.MethodGet, path)
+			rec := request(t, router, http.MethodGet, path, nil)
 
 			assertStatus(t, rec, http.StatusOK)
 		})
@@ -64,7 +64,7 @@ func TestLibraryHandler_SearchTermLengthCapped(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			router := libraryRoutes(catalog.NewInMemoryTrackRepo())
 
-			rec := serve(router, http.MethodGet, tt.path+"?q="+url.QueryEscape(tt.q))
+			rec := request(t, router, http.MethodGet, tt.path+"?q="+url.QueryEscape(tt.q), nil)
 
 			assertStatus(t, rec, tt.wantStatus)
 		})
@@ -76,7 +76,7 @@ func TestSearchTermWithNulByteRejected(t *testing.T) {
 		t.Run(path, func(t *testing.T) {
 			router := libraryRoutes(catalog.NewInMemoryTrackRepo())
 
-			rec := serve(router, http.MethodGet, path+"?q=%00")
+			rec := request(t, router, http.MethodGet, path+"?q=%00", nil)
 
 			assertStatus(t, rec, http.StatusBadRequest)
 		})
@@ -84,7 +84,7 @@ func TestSearchTermWithNulByteRejected(t *testing.T) {
 	t.Run("/tracks", func(t *testing.T) {
 		router := trackRoutes(catalog.NewInMemoryTrackRepo())
 
-		rec := serve(router, http.MethodGet, "/tracks?q=%00")
+		rec := request(t, router, http.MethodGet, "/tracks?q=%00", nil)
 
 		assertStatus(t, rec, http.StatusBadRequest)
 	})
@@ -94,7 +94,7 @@ func TestHandleListTracks_SearchTermLengthCapped(t *testing.T) {
 	router := trackRoutes(catalog.NewInMemoryTrackRepo())
 	overCap := strings.Repeat("a", catalog.MaxLibrarySearchLength+1)
 
-	rec := serve(router, http.MethodGet, "/tracks?q="+overCap)
+	rec := request(t, router, http.MethodGet, "/tracks?q="+overCap, nil)
 
 	assertStatus(t, rec, http.StatusBadRequest)
 }

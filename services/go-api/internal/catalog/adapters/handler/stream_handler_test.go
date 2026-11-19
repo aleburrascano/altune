@@ -121,7 +121,7 @@ func TestHandleStreamAudio(t *testing.T) {
 			trackId := tt.setup(t, repo, store)
 			router := streamOnlyRoute(repo, store)
 
-			rec := serve(router, http.MethodGet, "/tracks/"+trackId+"/stream")
+			rec := request(t, router, http.MethodGet, "/tracks/"+trackId+"/stream", nil)
 
 			assertStatus(t, rec, tt.wantStatus)
 			if tt.wantContentType != "" {
@@ -142,7 +142,7 @@ func TestHandleStreamAudio_MissingAudio_SchedulesReacquisition(t *testing.T) {
 	track := seedReady(t, repo, "Gone", "audio/gone.opus")
 	router := streamOnlyRoute(repo, catalog.NewInMemoryAudioStore(), catalog.WithStreamScheduler(sched))
 
-	rec := serve(router, http.MethodGet, "/tracks/"+track.ID.UUID().String()+"/stream")
+	rec := request(t, router, http.MethodGet, "/tracks/"+track.ID.UUID().String()+"/stream", nil)
 
 	assertStatus(t, rec, http.StatusNotFound)
 	if len(sched.TrackIds) != 1 {
@@ -184,7 +184,7 @@ func TestHandleRecover(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := serve(router, http.MethodPost, "/tracks/"+tt.trackId+"/audio/recover")
+			rec := request(t, router, http.MethodPost, "/tracks/"+tt.trackId+"/audio/recover", nil)
 			assertStatus(t, rec, tt.wantStatus)
 		})
 	}
@@ -212,17 +212,17 @@ func TestHandleRecover_FloodFromOnePrincipalIsThrottled(t *testing.T) {
 	path := "/tracks/" + track.ID.UUID().String() + "/audio/recover"
 
 	for i := range streamBurst {
-		if rec := serve(router, http.MethodPost, path); rec.Code != http.StatusAccepted {
+		if rec := request(t, router, http.MethodPost, path, nil); rec.Code != http.StatusAccepted {
 			t.Fatalf("recover %d inside the burst must be accepted, got %d", i, rec.Code)
 		}
 	}
-	assertAudioThrottled(t, serve(router, http.MethodPost, path), "1")
+	assertAudioThrottled(t, request(t, router, http.MethodPost, path, nil), "1")
 
 	if store.probes != streamBurst {
 		t.Fatalf("a throttled recover must not probe storage: %d HEADs, want %d", store.probes, streamBurst)
 	}
 	clock.advance(streamEvery)
-	if rec := serve(router, http.MethodPost, path); rec.Code != http.StatusAccepted {
+	if rec := request(t, router, http.MethodPost, path, nil); rec.Code != http.StatusAccepted {
 		t.Fatalf("a refilled token must admit the next recover, got %d", rec.Code)
 	}
 }
@@ -283,7 +283,7 @@ func TestHandleStreamAudio_MidBodyReadErrorIsLoggedAsTruncated(t *testing.T) {
 	track := seedReady(t, repo, "Half", "audio/half.opus")
 	store.Seed("audio/half.opus", bytes.Repeat([]byte{0x5a}, 4*deliverable))
 
-	rec := serve(router, http.MethodGet, "/tracks/"+track.ID.UUID().String()+"/audio")
+	rec := request(t, router, http.MethodGet, "/tracks/"+track.ID.UUID().String()+"/audio", nil)
 
 	if rec.Body.Len() != deliverable {
 		t.Fatalf("body = %d bytes, want the %d delivered before the read failed", rec.Body.Len(), deliverable)
@@ -311,7 +311,7 @@ func TestHandleStreamAudio_WholeBodyIsLoggedAsServed(t *testing.T) {
 	track := seedReady(t, repo, "Whole", "audio/whole.opus")
 	store.Seed("audio/whole.opus", audio)
 
-	serve(router, http.MethodGet, "/tracks/"+track.ID.UUID().String()+"/audio")
+	request(t, router, http.MethodGet, "/tracks/"+track.ID.UUID().String()+"/audio", nil)
 
 	served := findLogRecord(t, ring, "stream.served")
 	if served.Attrs["outcome"] != "ok" {
@@ -356,7 +356,7 @@ func TestHandleStreamAudio_FramesPrivateAudio(t *testing.T) {
 	store.Seed("audio/framed.opus", bytes.Repeat([]byte{0x5a}, 4096))
 	path := "/tracks/" + track.ID.UUID().String() + "/audio"
 
-	whole := serve(router, http.MethodGet, path)
+	whole := request(t, router, http.MethodGet, path, nil)
 	rangeReq := httptest.NewRequest(http.MethodGet, path, nil)
 	rangeReq.Header.Set("Range", "bytes=1024-2047")
 	ranged := sendAs(router, rangeReq, catalog.FixtureUserId())
