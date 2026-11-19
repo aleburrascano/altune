@@ -596,6 +596,101 @@ func TestWireCatalogScheduler_RecordsOutcomeThroughThePostgresStore(t *testing.T
 	}
 }
 
+type sourceWithNothing struct{}
+
+func (sourceWithNothing) Name() acquisition.SourceName { return "nothing" }
+
+func (sourceWithNothing) Find(context.Context, acquisition.FindRequest) ([]acquisition.AudioCandidate, error) {
+	return nil, nil
+}
+
+func (sourceWithNothing) Fetch(context.Context, acquisition.AudioCandidate, string) (acquisition.FetchedAudio, error) {
+	return acquisition.FetchedAudio{}, errors.New("nothing to fetch")
+}
+
+func insertReadyTrackGradedC(t *testing.T, pool *pgxpool.Pool) (shared.UserId, shared.TrackId) {
+	t.Helper()
+	userID := shared.NewUserId(uuid.New())
+	track, err := catalog.NewTrack(userID, "Song", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	if _, _, err := catalog.NewPgxTrackRepository(pool).Add(context.Background(), track); err != nil {
+		t.Fatalf("insert track: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID.UUID())
+	})
+	if _, err := pool.Exec(context.Background(), `
+UPDATE tracks SET acquisition_status = 'ready', audio_ref = 'stored.mp3',
+	audio_source_url = 'https://www.youtube.com/watch?v=stored', acquisition_available_at = NULL,
+	acquisition_evidence = '{"grade": "C", "in_place_generation": 2}'
+WHERE id = $1`, track.ID.UUID()); err != nil {
+		t.Fatalf("mark ready graded C: %v", err)
+	}
+	return userID, track.ID
+}
+
+type upgradeJobState struct {
+	Kind         string
+	Queued       bool
+	Leased       bool
+	Claims       int
+	UpgradeTries int
+}
+
+func readUpgradeJobState(t *testing.T, pool *pgxpool.Pool, trackID shared.TrackId) upgradeJobState {
+	t.Helper()
+	var s upgradeJobState
+	err := pool.QueryRow(context.Background(), `
+SELECT acquisition_job_kind, acquisition_available_at IS NOT NULL, acquisition_lease_until IS NOT NULL,
+	acquisition_run_attempts, COALESCE((acquisition_evidence->>'upgrade_tries')::int, 0)
+FROM tracks WHERE id = $1`, trackID.UUID()).Scan(&s.Kind, &s.Queued, &s.Leased, &s.Claims, &s.UpgradeTries)
+	if err != nil {
+		t.Fatalf("read upgrade job state: %v", err)
+	}
+	return s
+}
+
+func TestBuildAcquisitionScheduler_AnUpgradeWorkerClaimsAndSettlesAnEnqueuedUpgrade(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newAppTestPool(t)
+	userID, trackID := insertReadyTrackGradedC(t, pool)
+
+	a := &App{
+		cfg:  &config.Config{Env: "test", MusicDir: t.TempDir(), AcquisitionUpgradeConcurrency: 1, AcquisitionUpgradeMaxTries: 3},
+		sem:  make(chan struct{}, 1),
+		pool: pool,
+	}
+	audioStore, err := catalog.FromConfig(a.cfg, slog.Default())
+	if err != nil {
+		t.Fatalf("audio store: %v", err)
+	}
+	ledger := acquisition.NewTrackLedger(catalog.NewPgxTrackRepository(pool))
+	sources := sourceTiers{first: []acquisition.AudioSource{sourceWithNothing{}}}
+	scheduler := a.buildAcquisitionScheduler(t.Context(), observe.NewEventTap(events.NewInProcessBus()),
+		&discovery.Discovery{}, ledger, audioStore, sources, acquisition.AcquisitionVerification{})
+	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
+
+	if err := scheduler.ScheduleUpgrade(context.Background(), userID, trackID); err != nil {
+		t.Fatalf("schedule upgrade: %v", err)
+	}
+
+	want := upgradeJobState{Kind: "acquire", Queued: false, Leased: false, Claims: 1, UpgradeTries: 1}
+	const settleWithin = 15 * time.Second
+	deadline := time.Now().Add(settleWithin)
+	for {
+		got := readUpgradeJobState(t, pool, trackID)
+		if got == want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("upgrade job of track %s after %v = %+v, want %+v (claimed once through the upgrade lane, an attempt noted, the job settled off the queue)", trackID, settleWithin, got, want)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 type scriptedIdentifier struct {
 	acquisition.AudioIdentifier
 	err error
